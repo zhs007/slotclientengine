@@ -62,11 +62,12 @@ describe("game003 runtime query config", () => {
     );
   });
 
-  it("accepts only skin 1 and rejects mismatched legacy gamecode", () => {
+  it("accepts skin 1 or 2 and rejects mismatched legacy gamecode", () => {
     expect(parseGame003QueryConfig(validQuery({ skin: "1" })).skin).toBe("1");
-    for (const skin of ["01", "2", "game003"]) {
+    expect(parseGame003QueryConfig(validQuery({ skin: "2" })).skin).toBe("2");
+    for (const skin of ["01", "3", "game003"]) {
       expect(() => parseGame003QueryConfig(validQuery({ skin }))).toThrow(
-        /skin query parameter must be one of: 1/,
+        /skin query parameter must be exactly "1" or "2"/,
       );
     }
 

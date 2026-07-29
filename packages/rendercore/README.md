@@ -150,9 +150,9 @@ manifest 允许每个 symbol 通过 `animations` 声明状态动画。当前支�
 - `kind: "builtin"`：使用 rendercore 的内置 once 表现，但 `durationSeconds` 必须由 manifest 显式声明。
 - `kind: "static"`：播放一次静态普通态，可用于把某个 once 状态显式配置成无额外动画；`durationSeconds` 必须由 manifest 显式声明。
 - `kind: "vni"`：显式声明 project 路径和 range playback，`loop` 与 Spine 一样由 symbol state lifecycle 编排；once state 必须为 `false`，loop state 必须为 `true`。VNI project 会通过 `@slotclientengine/vnicore` 校验，project 引用的所有 assets 必须能从 Vite asset modules 中解析到 URL。
-- `kind: "spine"`：显式声明 `skeleton`、`atlas`、`texture` 和 `playback`。`skeleton` 必须是 `./*.json`，`atlas` 必须是 `./*.atlas` raw text，`texture` 必须是 `./*.png` URL，`playback.mode` 固定为 `animation`，`animationName` 区分大小写并且必须存在于 skeleton，`loop` 必须符合 state playback 合同；`transform.x/y/scale` 只做显式位置和等比缩放，不做 app 侧推导。
+- `kind: "spine"`：显式声明 `skeleton`、`atlas`、`texture` 和 `playback`。`skeleton` 必须是 `./*.json`，`atlas` 必须是 `./*.atlas` raw text，`texture` 必须是本地 raster filename key（支持 png/jpeg/webp），`playback.mode` 固定为 `animation`，`animationName` 区分大小写并且必须存在于 skeleton，`loop` 必须符合 state playback 合同；`transform.x/y/scale` 只做显式位置和等比缩放，不做 app 侧推导。
 
-`stageRect` 是 editor/export 侧概念，不属于 runtime symbol manifest；manifest 中出现 `stageRect` 会作为未知字段显式失败。缺 manifest、未知 manifest 字段、未知 state、缺贴图、非法 scale、缺 animation `durationSeconds`、缺 VNI project、缺 VNI asset、缺 Spine skeleton/atlas/texture、atlas page 与 texture 文件名不一致或 Spine animation name 不匹配都会显式失败。app 和 viewer 不应复制 manifest parser，也不应在运行时代码里写 `if symbol === "L1"` 这类专属 VNI/Spine 逻辑。
+`stageRect` 是 editor/export 侧概念，不属于 runtime symbol manifest；manifest 中出现 `stageRect` 会作为未知字段显式失败。atlas page 是 atlas 内部 logical name，manifest texture 是 filename key，mapped package 再由 `assets.map.json` 把该 key 解析为 content-addressed physical path；三者不比较 basename。缺 manifest、未知 manifest 字段、未知 state、缺贴图、非法 scale、缺 animation `durationSeconds`、缺 VNI project、缺 VNI asset、缺 Spine skeleton/atlas/texture、atlas page/texture 显式映射不闭合或 Spine animation name 不匹配都会显式失败。app 和 viewer 不应复制 manifest parser，也不应在运行时代码里写 `if symbol === "L1"` 这类专属 VNI/Spine 逻辑。
 
 ## 动画解耦
 

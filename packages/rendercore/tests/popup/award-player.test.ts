@@ -115,6 +115,37 @@ describe("award celebration player", () => {
     player.update(0);
     player.destroy();
   });
+
+  it("allows the host runtime to override preview-only amount formatting", async () => {
+    const player = createAwardCelebrationPlayer({
+      resource: fakeResource(),
+      formatAmount: (amountRaw) => (amountRaw / 100).toFixed(2),
+      layerFactory: ({ layer }) =>
+        fakeLayer(layer.kind === "vni", () => undefined),
+    });
+    await player.init();
+    player.start({ betAmountRaw: 100, winAmountRaw: 123 });
+    player.requestDismiss();
+    expect(player.getSnapshot().formattedAmount).toBe("1.23");
+    player.destroy();
+  });
+
+  it.each([
+    ["empty", () => ""],
+    ["non-string", () => 123 as unknown as string],
+  ])("rejects a %s host amount formatter result", async (_label, formatter) => {
+    const player = createAwardCelebrationPlayer({
+      resource: fakeResource(),
+      formatAmount: formatter,
+      layerFactory: ({ layer }) =>
+        fakeLayer(layer.kind === "vni", () => undefined),
+    });
+    await player.init();
+    expect(() =>
+      player.start({ betAmountRaw: 100, winAmountRaw: 123 }),
+    ).toThrow(/formatter must return a non-empty string/);
+    player.destroy();
+  });
 });
 
 function fakeResource(): PopupPackageResource {

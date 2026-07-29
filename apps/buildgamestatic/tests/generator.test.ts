@@ -214,6 +214,22 @@ describe("buildgamestatic generator", () => {
     expect(result.generated).not.toContain("durationSeconds: 5");
   });
 
+  it("omits optional win amount currency display metadata", async () => {
+    const root = createFixtureRoot();
+    appendWinAmountBlock(root, false);
+
+    const result = await generateGameStaticConfigFile({
+      rootDir: root,
+      inputPath: "apps/game003/config/game-static.yaml",
+      outPath: "apps/game003/src/generated/game-static.generated.ts",
+      gameId: "game003",
+      check: false,
+    });
+
+    expect(result.generated).not.toContain("currency:");
+    expect(result.generated).not.toContain("locale:");
+  });
+
   it("generates optional feature bar manifest, module map and config", async () => {
     const root = createFixtureRoot();
     appendFeatureBarsBlock(root);
@@ -490,16 +506,23 @@ function writeWinAmountFixtureFiles(root: string): void {
   );
 }
 
-function appendWinAmountBlock(root: string): void {
+function appendWinAmountBlock(
+  root: string,
+  includeDisplayMetadata = true,
+): void {
   writeWinAmountFixtureFiles(root);
   const yamlPath = join(root, "apps/game003/config/game-static.yaml");
+  const displayMetadata = includeDisplayMetadata
+    ? `      currency: USD
+      locale: en-US
+`
+    : "";
   writeFileSync(
     yamlPath,
     `${readFileSync(yamlPath, "utf8")}
     winAmount:
       amountScale: 100
-      currency: USD
-      locale: en-US
+${displayMetadata}
       minorCountDurationSeconds: 1.5
       majorCountDurationSeconds: 3
       thresholds:

@@ -49,12 +49,19 @@ describe("symbol editor resource introspection", () => {
         texturePath: "nested/Symbol.png",
       }).skeleton.animationNames,
     ).toContain("start");
+    expect(
+      inspectSymbolSpineBundle({
+        skeleton,
+        atlasText,
+        texturePath: "nested/content-addressed-texture.webp",
+      }).atlas.pageNames,
+    ).toEqual(["Symbol.png"]);
     expect(() =>
       inspectSymbolSpineBundle({
         skeleton,
         atlasText,
-        texturePath: "wrong.png",
+        texturePath: "",
       }),
-    ).toThrow(/must match texture/);
+    ).toThrow(/Invalid texture path/);
   });
 });

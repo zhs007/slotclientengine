@@ -232,6 +232,6 @@ describe("shared official Spine player", () => {
         },
         requiredAnimations: ["BG"],
       }),
-    ).toThrow(/pages must exactly match texture pages/);
+    ).toThrow(/page names must be unique/);
   });
 });

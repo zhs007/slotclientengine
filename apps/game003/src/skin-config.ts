@@ -1,10 +1,14 @@
 import { getSlotGameStaticSkin } from "@slotclientengine/gameframeworks/static-config";
 import {
   createDefaultSymbolAnimationResolver,
+  createSceneLayoutPackageResource,
   createSymbolManifestAnimationResolver,
+  type DecodeImageStringImage,
   type ReelSymbolRenderPriorityMap,
   type ReelSymbolScaleMap,
   type SymbolAnimationResolver,
+  type SceneLayoutPackageResource,
+  type SymbolPackageResource,
 } from "@slotclientengine/rendercore";
 import {
   GAME003_BG_BAR_DISPLAY_SYMBOLS,
@@ -33,9 +37,15 @@ import {
   type Game003SkinId,
 } from "./skin-id.js";
 
-export interface Game003SkinConfig {
-  readonly id: Game003SkinId;
+interface Game003SkinBusinessConfig {
   readonly label: string;
+  readonly winSymbolLoop: Game003WinSymbolLoopConfig;
+  readonly coinOverlay: Game003CoinOverlayConfig;
+}
+
+export interface Game003LegacySkinConfig extends Game003SkinBusinessConfig {
+  readonly id: "1";
+  readonly presentation: Readonly<{ readonly kind: "legacy" }>;
   readonly landscapeBackgroundUrl: string;
   readonly portraitBackgroundUrl: string;
   readonly mainReelBackgroundUrl: string;
@@ -55,9 +65,22 @@ export interface Game003SkinConfig {
   readonly symbolAnimationResolver: SymbolAnimationResolver;
   readonly bgBar: Game003BgBarSkinConfig;
   readonly minecartInteraction: Game003MinecartInteractionConfig;
-  readonly winSymbolLoop: Game003WinSymbolLoopConfig;
-  readonly coinOverlay: Game003CoinOverlayConfig;
 }
+
+export interface Game003SceneLayoutSkinConfig extends Game003SkinBusinessConfig {
+  readonly id: "2";
+  readonly rawGameConfig: unknown;
+  readonly reelsName: string;
+  readonly resource: SceneLayoutPackageResource;
+  readonly symbolPackage: SymbolPackageResource;
+  readonly initialMode: string;
+  readonly awardCelebrationPopup: string;
+  readonly presentation: Readonly<{ readonly kind: "scene-layout" }>;
+}
+
+export type Game003SkinConfig =
+  | Game003LegacySkinConfig
+  | Game003SceneLayoutSkinConfig;
 
 export interface Game003BgBarSkinConfig {
   readonly componentName: "bg-bar";
@@ -85,107 +108,191 @@ const game003Skin1DisplaySymbols = getGame003DisplaySymbolsFromManifest(
   game003StaticSkin1.symbols.requiredStates,
 );
 
-const GAME003_SKIN_CONFIGS: Readonly<Record<Game003SkinId, Game003SkinConfig>> =
-  Object.freeze({
-    "1": Object.freeze({
-      id: parseGame003SkinId("1"),
-      label: game003StaticSkin1.label,
-      landscapeBackgroundUrl:
-        game003StaticSkin1.art.variants.landscape.background.url,
-      portraitBackgroundUrl:
-        game003StaticSkin1.art.variants.portrait.background.url,
-      mainReelBackgroundUrl: game003StaticSkin1.art.mainReelBackground.url,
-      landscapeConveyorUrl: getGame003ConveyorUrl(
-        game003StaticSkin1.art.variants.landscape.conveyor,
-        "landscape",
-      ),
-      portraitConveyorUrl: getGame003ConveyorUrl(
-        game003StaticSkin1.art.variants.portrait.conveyor,
-        "portrait",
-      ),
-      symbolModules: game003StaticSkin1.symbols.pngModules,
-      vniProjectModules: game003StaticSkin1.symbols.vniProjectModules,
-      vniAssetModules: game003StaticSkin1.symbols.vniAssetModules,
-      spineSkeletonModules: game003StaticSkin1.symbols.spineSkeletonModules,
-      spineAtlasModules: game003StaticSkin1.symbols.spineAtlasModules,
-      spineTextureModules: game003StaticSkin1.symbols.spineTextureModules,
-      stateTextureManifest: game003StaticSkin1.symbols.manifest,
-      displaySymbols: game003Skin1DisplaySymbols,
-      emptySymbols: game003StaticSkin1.symbols.emptySymbols,
-      symbolScales: createGame003SymbolScaleMapFromManifest({
-        stateTextureManifest: game003StaticSkin1.symbols.manifest,
-        displaySymbols: game003Skin1DisplaySymbols,
-        requiredStates: game003StaticSkin1.symbols.requiredStates,
-        requireExplicitScale: game003StaticSkin1.symbols.requireExplicitScale,
-      }),
-      symbolRenderPriorities: createGame003SymbolRenderPriorityMapFromManifest({
-        stateTextureManifest: game003StaticSkin1.symbols.manifest,
-        displaySymbols: game003Skin1DisplaySymbols,
-        requiredStates: game003StaticSkin1.symbols.requiredStates,
-      }),
-      symbolAnimationResolver: createSymbolManifestAnimationResolver({
-        manifest: game003StaticSkin1.symbols.manifest,
-        requiredStates: game003StaticSkin1.symbols.requiredStates,
-        vniProjectModules: game003StaticSkin1.symbols.vniProjectModules ?? {},
-        vniAssetModules: game003StaticSkin1.symbols.vniAssetModules ?? {},
-        spineSkeletonModules:
-          game003StaticSkin1.symbols.spineSkeletonModules ?? {},
-        spineAtlasModules: game003StaticSkin1.symbols.spineAtlasModules ?? {},
-        spineTextureModules:
-          game003StaticSkin1.symbols.spineTextureModules ?? {},
-        fallback: game003DefaultAnimationResolver,
-      }),
-      bgBar: Object.freeze({
-        componentName: "bg-bar" as const,
-        queueLength: 5 as const,
-        visibleCount: 4 as const,
-        terminalSlotIndex: 4 as const,
-        emptyFeature: "normal" as const,
-        allowedFeatures: GAME003_BG_BAR_DISPLAY_SYMBOLS,
-        symbolModules: game003StaticSkin1BgBar.symbols.pngModules,
+const GAME003_SKIN1_CONFIG: Game003LegacySkinConfig = Object.freeze({
+  id: "1",
+  presentation: Object.freeze({ kind: "legacy" as const }),
+  label: game003StaticSkin1.label,
+  landscapeBackgroundUrl:
+    game003StaticSkin1.art.variants.landscape.background.url,
+  portraitBackgroundUrl:
+    game003StaticSkin1.art.variants.portrait.background.url,
+  mainReelBackgroundUrl: game003StaticSkin1.art.mainReelBackground.url,
+  landscapeConveyorUrl: getGame003ConveyorUrl(
+    game003StaticSkin1.art.variants.landscape.conveyor,
+    "landscape",
+  ),
+  portraitConveyorUrl: getGame003ConveyorUrl(
+    game003StaticSkin1.art.variants.portrait.conveyor,
+    "portrait",
+  ),
+  symbolModules: game003StaticSkin1.symbols.pngModules,
+  vniProjectModules: game003StaticSkin1.symbols.vniProjectModules,
+  vniAssetModules: game003StaticSkin1.symbols.vniAssetModules,
+  spineSkeletonModules: game003StaticSkin1.symbols.spineSkeletonModules,
+  spineAtlasModules: game003StaticSkin1.symbols.spineAtlasModules,
+  spineTextureModules: game003StaticSkin1.symbols.spineTextureModules,
+  stateTextureManifest: game003StaticSkin1.symbols.manifest,
+  displaySymbols: game003Skin1DisplaySymbols,
+  emptySymbols: game003StaticSkin1.symbols.emptySymbols,
+  symbolScales: createGame003SymbolScaleMapFromManifest({
+    stateTextureManifest: game003StaticSkin1.symbols.manifest,
+    displaySymbols: game003Skin1DisplaySymbols,
+    requiredStates: game003StaticSkin1.symbols.requiredStates,
+    requireExplicitScale: game003StaticSkin1.symbols.requireExplicitScale,
+  }),
+  symbolRenderPriorities: createGame003SymbolRenderPriorityMapFromManifest({
+    stateTextureManifest: game003StaticSkin1.symbols.manifest,
+    displaySymbols: game003Skin1DisplaySymbols,
+    requiredStates: game003StaticSkin1.symbols.requiredStates,
+  }),
+  symbolAnimationResolver: createSymbolManifestAnimationResolver({
+    manifest: game003StaticSkin1.symbols.manifest,
+    requiredStates: game003StaticSkin1.symbols.requiredStates,
+    vniProjectModules: game003StaticSkin1.symbols.vniProjectModules ?? {},
+    vniAssetModules: game003StaticSkin1.symbols.vniAssetModules ?? {},
+    spineSkeletonModules: game003StaticSkin1.symbols.spineSkeletonModules ?? {},
+    spineAtlasModules: game003StaticSkin1.symbols.spineAtlasModules ?? {},
+    spineTextureModules: game003StaticSkin1.symbols.spineTextureModules ?? {},
+    fallback: game003DefaultAnimationResolver,
+  }),
+  bgBar: Object.freeze({
+    componentName: "bg-bar" as const,
+    queueLength: 5 as const,
+    visibleCount: 4 as const,
+    terminalSlotIndex: 4 as const,
+    emptyFeature: "normal" as const,
+    allowedFeatures: GAME003_BG_BAR_DISPLAY_SYMBOLS,
+    symbolModules: game003StaticSkin1BgBar.symbols.pngModules,
+    stateTextureManifest: game003StaticSkin1BgBar.symbols.manifest,
+    displaySymbols: GAME003_BG_BAR_DISPLAY_SYMBOLS,
+    symbolScales: createGame003BgBarSymbolScaleMapFromManifest({
+      stateTextureManifest: game003StaticSkin1BgBar.symbols.manifest,
+      displaySymbols: GAME003_BG_BAR_DISPLAY_SYMBOLS,
+      requireExplicitScale:
+        game003StaticSkin1BgBar.symbols.requireExplicitScale,
+    }),
+    symbolRenderPriorities:
+      createGame003BgBarSymbolRenderPriorityMapFromManifest({
         stateTextureManifest: game003StaticSkin1BgBar.symbols.manifest,
         displaySymbols: GAME003_BG_BAR_DISPLAY_SYMBOLS,
-        symbolScales: createGame003BgBarSymbolScaleMapFromManifest({
-          stateTextureManifest: game003StaticSkin1BgBar.symbols.manifest,
-          displaySymbols: GAME003_BG_BAR_DISPLAY_SYMBOLS,
-          requireExplicitScale:
-            game003StaticSkin1BgBar.symbols.requireExplicitScale,
-        }),
-        symbolRenderPriorities:
-          createGame003BgBarSymbolRenderPriorityMapFromManifest({
-            stateTextureManifest: game003StaticSkin1BgBar.symbols.manifest,
-            displaySymbols: GAME003_BG_BAR_DISPLAY_SYMBOLS,
-          }),
-        symbolAnimationResolver: createSymbolManifestAnimationResolver({
-          manifest: game003StaticSkin1BgBar.symbols.manifest,
-          requiredStates: game003StaticSkin1BgBar.symbols.requiredStates,
-          vniProjectModules: {},
-          vniAssetModules: {},
-          spineSkeletonModules: {},
-          spineAtlasModules: {},
-          spineTextureModules: {},
-          fallback: game003DefaultAnimationResolver,
-        }),
-        layout: game003StaticSkin1BgBar.layout,
       }),
-      minecartInteraction: getGame003MinecartInteractionConfig(
-        game003StaticSkin1.appExtensions,
-      ),
+    symbolAnimationResolver: createSymbolManifestAnimationResolver({
+      manifest: game003StaticSkin1BgBar.symbols.manifest,
+      requiredStates: game003StaticSkin1BgBar.symbols.requiredStates,
+      vniProjectModules: {},
+      vniAssetModules: {},
+      spineSkeletonModules: {},
+      spineAtlasModules: {},
+      spineTextureModules: {},
+      fallback: game003DefaultAnimationResolver,
+    }),
+    layout: game003StaticSkin1BgBar.layout,
+  }),
+  minecartInteraction: getGame003MinecartInteractionConfig(
+    game003StaticSkin1.appExtensions,
+  ),
+  winSymbolLoop: getGame003WinSymbolLoopConfig(
+    game003StaticSkin1.appExtensions,
+  ),
+  coinOverlay: getGame003CoinOverlayConfig(game003StaticSkin1.appExtensions),
+});
+
+export interface Game003SkinResourceOwner {
+  destroy(): Promise<void> | void;
+}
+
+export async function prepareGame003SkinConfig(
+  id: Game003SkinId,
+  options: {
+    readonly minecart2Files?: ReadonlyMap<string, Uint8Array>;
+    readonly decodeImage?: DecodeImageStringImage;
+  } = {},
+): Promise<{
+  readonly skin: Game003SkinConfig;
+  readonly resourceOwner: Game003SkinResourceOwner;
+}> {
+  if (id === "1") {
+    return Object.freeze({
+      skin: GAME003_SKIN1_CONFIG,
+      resourceOwner: Object.freeze({ destroy() {} }),
+    });
+  }
+  if (!options.minecart2Files) {
+    throw new Error("game003 skin=2 requires loaded minecart2 package files.");
+  }
+  const resource = await createSceneLayoutPackageResource({
+    files: options.minecart2Files,
+    ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
+  });
+  try {
+    const gameModes = resource.manifest.gameModes;
+    if (!gameModes) {
+      throw new Error("game003 minecart2 layout must declare gameModes.");
+    }
+    const initialMode = gameModes.modes.find(
+      (mode) => mode.id === gameModes.initialMode,
+    );
+    if (!initialMode?.symbolPackage) {
+      throw new Error(
+        "game003 minecart2 initial mode must declare a symbol package.",
+      );
+    }
+    if (!initialMode.awardCelebrationPopup) {
+      throw new Error(
+        "game003 minecart2 initial mode must declare an award celebration popup.",
+      );
+    }
+    const symbolBinding =
+      resource.manifest.symbolPackages?.[initialMode.symbolPackage];
+    const symbolPackage = resource.symbolPackages[initialMode.symbolPackage];
+    if (!symbolBinding || !symbolPackage) {
+      throw new Error(
+        `game003 minecart2 symbol package "${initialMode.symbolPackage}" is unavailable.`,
+      );
+    }
+    const geometry = resource.manifest.reels.main;
+    if (!geometry || geometry.columns !== 5 || geometry.rows !== 5) {
+      throw new Error("game003 minecart2 reels.main geometry must be 5x5.");
+    }
+    if (
+      symbolBinding.renderMode !== "standard" ||
+      symbolBinding.reelSet !== "bg-reel01"
+    ) {
+      throw new Error(
+        "game003 minecart2 must use standard bg-reel01 presentation.",
+      );
+    }
+    const skin: Game003SceneLayoutSkinConfig = Object.freeze({
+      id: "2",
+      label: "minecart2",
+      rawGameConfig: symbolPackage.rawGameConfig,
+      reelsName: symbolBinding.reelSet,
+      resource,
+      symbolPackage,
+      initialMode: initialMode.id,
+      awardCelebrationPopup: initialMode.awardCelebrationPopup,
       winSymbolLoop: getGame003WinSymbolLoopConfig(
         game003StaticSkin1.appExtensions,
       ),
       coinOverlay: getGame003CoinOverlayConfig(
         game003StaticSkin1.appExtensions,
       ),
-    }),
-  });
-
-export function getGame003SkinConfig(id: Game003SkinId): Game003SkinConfig {
-  const config = GAME003_SKIN_CONFIGS[id];
-  if (!config) {
-    throw new Error(`Unknown game003 skin "${id}".`);
+      presentation: Object.freeze({ kind: "scene-layout" as const }),
+    });
+    return Object.freeze({ skin, resourceOwner: resource });
+  } catch (error) {
+    await resource.destroy();
+    throw error;
   }
-  return config;
+}
+
+export function getGame003SkinConfig(id: "1"): Game003LegacySkinConfig {
+  if (id !== "1") {
+    throw new Error(
+      'game003 skin "2" is prepared from its loaded scene-layout package.',
+    );
+  }
+  return GAME003_SKIN1_CONFIG;
 }
 
 function getGame003ConveyorUrl(

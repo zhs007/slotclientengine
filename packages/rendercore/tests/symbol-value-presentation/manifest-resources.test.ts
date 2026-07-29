@@ -184,6 +184,37 @@ describe("symbol value presentation manifest resources", () => {
     ).toEqual(["Num", "Num", "Num", "Num"]);
   });
 
+  it("reads the atlas page instead of deriving it from a mapped value texture key", () => {
+    const optimizedManifest = structuredClone(manifest);
+    for (const tier of optimizedManifest.symbols.CN.valuePresentation.tiers) {
+      tier.animation.texture = "./content-addressed-value.webp";
+    }
+    const skeletons = Object.fromEntries(
+      ["CN_1", "CN_2", "CN_3", "CN_4"].map((name) => [
+        `./${name}.json`,
+        JSON.parse(readFileSync(new URL(`${name}.json`, root), "utf8")),
+      ]),
+    );
+
+    const resources = createSymbolValuePresentationResourcesFromManifest({
+      manifest: optimizedManifest,
+      requiredStates: ["spinBlur", "disabled"],
+      spineSkeletonModules: skeletons,
+      spineAtlasModules: {
+        "./Symbol.atlas": readFileSync(new URL("Symbol.atlas", root), "utf8"),
+      },
+      spineTextureModules: {
+        "./content-addressed-value.webp": "/assets/physical-hash.webp",
+      },
+      imageStringResourcePool: createImageStringPool(),
+    });
+
+    expect(resources.CN.tiers[0]).toMatchObject({
+      atlasPage: "Symbol.png",
+      textureUrl: "/assets/physical-hash.webp",
+    });
+  });
+
   it("fails when an image-rendered value has no exact image module", () => {
     const skeletons = Object.fromEntries(
       ["CN_1", "CN_2", "CN_3", "CN_4"].map((name) => [

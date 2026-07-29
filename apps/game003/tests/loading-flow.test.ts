@@ -71,6 +71,7 @@ describe("game003 loading flow", () => {
         skin: await import("../src/skin-config.js").then((module) =>
           module.getGame003SkinConfig("1"),
         ),
+        skinResourceOwner: { destroy() {} },
         liveSession,
       },
     });
@@ -83,7 +84,7 @@ describe("game003 loading flow", () => {
     );
     expect(framework.connect).toHaveBeenCalledTimes(1);
     expect(liveSession.connect).not.toHaveBeenCalled();
-    entered.destroy();
+    await entered.destroy();
     expect(framework.destroy).toHaveBeenCalled();
   });
 
@@ -101,7 +102,12 @@ describe("game003 loading flow", () => {
     await expect(
       enterGame003({
         root: document.createElement("div"),
-        prepared: { config, skin, liveSession },
+        prepared: {
+          config,
+          skin,
+          skinResourceOwner: { destroy() {} },
+          liveSession,
+        },
       }),
     ).rejects.toThrow(/framework failed/);
     expect(failingFramework.destroy).toHaveBeenCalled();
@@ -113,7 +119,12 @@ describe("game003 loading flow", () => {
     await expect(
       enterGame003({
         root: document.createElement("div"),
-        prepared: { config, skin, liveSession: thrownLiveSession },
+        prepared: {
+          config,
+          skin,
+          skinResourceOwner: { destroy() {} },
+          liveSession: thrownLiveSession,
+        },
       }),
     ).rejects.toThrow(/create failed/);
     expect(thrownLiveSession.disconnect).toHaveBeenCalled();

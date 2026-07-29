@@ -98,11 +98,6 @@ export function parseSpineBackgroundManifest(
       `background resource texture "${page}"`,
       [".png", ".jpg", ".jpeg", ".webp"],
     );
-    if (getFileName(path) !== page) {
-      throw new BackgroundManifestError(
-        `Background texture path "${path}" must match atlas page "${page}".`,
-      );
-    }
     if (texturePaths.has(path)) {
       throw new BackgroundManifestError(
         `Background resource texture path is duplicated: ${path}.`,

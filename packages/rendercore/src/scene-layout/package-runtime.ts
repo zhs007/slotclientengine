@@ -100,6 +100,7 @@ type ActiveModeTransition =
 export function createSceneLayoutPackageRuntime(options: {
   readonly resource: SceneLayoutPackageResource;
   readonly reelPresentation?: SlotReelPresentationProfileV1;
+  readonly formatPopupAmount?: import("../popup/index.js").PopupAmountFormatter;
   readonly createTransitionPlayer?: (options: {
     readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
   }) => RendercoreSpinePlayer;
@@ -111,6 +112,7 @@ export function createSceneLayoutPackageRuntime(options: {
   return new DefaultSceneLayoutPackageRuntime(
     options.resource,
     options.reelPresentation,
+    options.formatPopupAmount,
     options.createTransitionPlayer,
     options.createVideoTransitionPlayer,
   );
@@ -122,6 +124,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   #manifest: SceneLayoutPackageResource["manifest"];
   readonly #layout;
   readonly #reelPresentation: SlotReelPresentationProfileV1 | null;
+  readonly #formatPopupAmount:
+    | import("../popup/index.js").PopupAmountFormatter
+    | undefined;
   readonly #createTransitionPlayer: (options: {
     readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
   }) => RendercoreSpinePlayer;
@@ -155,6 +160,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   constructor(
     resource: SceneLayoutPackageResource,
     reelPresentation: SlotReelPresentationProfileV1 | undefined,
+    formatPopupAmount:
+      | import("../popup/index.js").PopupAmountFormatter
+      | undefined,
     createTransitionPlayer:
       | ((options: {
           readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
@@ -170,6 +178,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#resource = resource;
     this.#manifest = resource.manifest;
     this.#reelPresentation = reelPresentation ?? null;
+    this.#formatPopupAmount = formatPopupAmount;
     this.#layout = createSceneLayoutRuntime({ resource: resource.layout });
     this.#createTransitionPlayer =
       createTransitionPlayer ??
@@ -248,7 +257,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       for (const [id, resource] of Object.entries(
         this.#resource.popupPackages,
       )) {
-        const popup = createAwardCelebrationPlayer({ resource });
+        const popup = createAwardCelebrationPlayer({
+          resource,
+          formatAmount: this.#formatPopupAmount,
+        });
         await popup.init();
         this.assertAlive();
         this.#popups.set(id, popup);
@@ -484,6 +496,15 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   ) {
     this.assertReady();
     return this.requireReel("main").getVisibleSymbolStateSnapshots(positions);
+  }
+
+  getMainReelSymbolGeometrySnapshots(
+    positions: readonly { readonly x: number; readonly y: number }[],
+  ) {
+    this.assertReady();
+    return this.requireReel("main").getVisibleSymbolGeometrySnapshots(
+      positions,
+    );
   }
 
   hasMainReelSymbolStateCapability(

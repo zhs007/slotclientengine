@@ -8,7 +8,7 @@ import {
   type WinAmountAnimationTier,
 } from "@slotclientengine/rendercore/win-amount";
 import { GAME003_STATIC_CONFIG } from "./generated/game-static.generated.js";
-import { SERVER_USD_AMOUNT_SCALE, formatServerUsdAmount } from "./money.js";
+import { SERVER_AMOUNT_SCALE, formatServerAmount } from "./money.js";
 import type { Game003Layout, Point, Rect } from "./game-layout.js";
 
 const GAME003_STATIC_SKIN = getSlotGameStaticSkin(GAME003_STATIC_CONFIG, "1");
@@ -25,13 +25,13 @@ export function createGame003WinAmountAnimationConfig(
   layout: Game003Layout,
 ): WinAmountAnimationConfig {
   const winAmount = requireGame003WinAmountConfig();
-  if (winAmount.amountScale !== SERVER_USD_AMOUNT_SCALE) {
+  if (winAmount.amountScale !== SERVER_AMOUNT_SCALE) {
     throw new Error(
-      "game003 win amount amountScale must match formatServerUsdAmount.",
+      "game003 win amount amountScale must match formatServerAmount.",
     );
   }
   return Object.freeze({
-    formatter: formatServerUsdAmount,
+    formatter: formatServerAmount,
     minorCountDurationSeconds: winAmount.minorCountDurationSeconds,
     majorCountDurationSeconds: winAmount.majorCountDurationSeconds,
     thresholdMultipliers: Object.freeze({

@@ -2135,12 +2135,6 @@ function validateOfficialSpineAtlasAndSkeleton(options: {
     );
   }
   const atlasPage = atlas.pages[0].name;
-  const textureFileName = getFileNameFromManifestPath(options.spec.texture);
-  if (atlasPage !== textureFileName) {
-    throw new SymbolAssetError(
-      `Symbol "${options.symbol}" ${options.state} Spine atlas page "${atlasPage}" must match texture "${textureFileName}".`,
-    );
-  }
 
   try {
     const skeletonData = new SkeletonJson(
