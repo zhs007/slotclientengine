@@ -197,5 +197,8 @@ function placementMarkup(
     mode === "orientation-focus"
       ? `<label class="visibility"><input type="checkbox" data-layer-visible="${variant}" data-layer-node-id="${escapeHtml(node.id)}" ${placement ? "checked" : ""}/> ${variant} 可见</label>`
       : `<strong>default</strong>`;
-  return `<fieldset><legend>${visibility}</legend>${placement ? `<div class="field-grid">${numberField("x", `nodes.${nodeIndex}.placements.${variant}.x`, placement.x)}${numberField("y", `nodes.${nodeIndex}.placements.${variant}.y`, placement.y)}${numberField("scale", `nodes.${nodeIndex}.placements.${variant}.scale`, placement.scale, 0.01)}</div>` : '<p class="hint">重新启用会创建固定初值 {x:0,y:0,scale:1}。</p>'}</fieldset>`;
+  const hiddenHint = node.hiddenPlacements?.[variant]
+    ? "placement 已保留；重新显示会恢复此前编辑值。"
+    : "首次启用会创建固定初值 {x:0,y:0,scale:1}。";
+  return `<fieldset><legend>${visibility}</legend>${placement ? `<div class="field-grid">${numberField("x", `nodes.${nodeIndex}.placements.${variant}.x`, placement.x)}${numberField("y", `nodes.${nodeIndex}.placements.${variant}.y`, placement.y)}${numberField("scale", `nodes.${nodeIndex}.placements.${variant}.scale`, placement.scale, 0.01)}</div>` : `<p class="hint">${hiddenHint}</p>`}</fieldset>`;
 }

@@ -44,6 +44,8 @@ export function updateTransitionRuntimeUi(
 export function transitionsWorkspaceMarkup(options: {
   readonly project: EditorProject;
   readonly selectedKey: string | null;
+  readonly newFromModeId?: string;
+  readonly newToModeId?: string;
   readonly snapshot: SceneLayoutGameModeSnapshot | null;
   readonly uiState: PreviewTransitionUiState;
 }): string {
@@ -53,7 +55,13 @@ export function transitionsWorkspaceMarkup(options: {
   const modeOptions = options.project.gameModes.modes
     .map(
       (mode) =>
-        `<option value="${escapeHtml(mode.id)}">${escapeHtml(mode.id)}</option>`,
+        `<option value="${escapeHtml(mode.id)}" ${mode.id === options.newFromModeId ? "selected" : ""}>${escapeHtml(mode.id)}</option>`,
+    )
+    .join("");
+  const toModeOptions = options.project.gameModes.modes
+    .map(
+      (mode) =>
+        `<option value="${escapeHtml(mode.id)}" ${mode.id === options.newToModeId ? "selected" : ""}>${escapeHtml(mode.id)}</option>`,
     )
     .join("");
   const rows = options.project.gameModes.transitions.length
@@ -65,7 +73,7 @@ export function transitionsWorkspaceMarkup(options: {
     : '<p class="outline-empty">暂无有向转场；不会自动创建反向边。</p>';
   return `<section class="workspace-panel transitions-workspace" aria-labelledby="transitions-heading">
     <aside class="transition-list"><div class="outline-toolbar"><h2 id="transitions-heading">有向场景转场</h2></div>
-      <div class="transition-create"><label>from<select data-new-transition-from><option value="">必须明确选择</option>${modeOptions}</select></label><label>to<select data-new-transition-to><option value="">必须明确选择</option>${modeOptions}</select></label><button type="button" class="primary" data-create-transition>新建转场</button></div>
+      <div class="transition-create"><label>from<select data-new-transition-from><option value="">必须明确选择</option>${modeOptions}</select></label><label>to<select data-new-transition-to><option value="">必须明确选择</option>${toModeOptions}</select></label><button type="button" class="primary" data-create-transition>新建转场</button></div>
       <div role="listbox" aria-label="场景转场" class="outline-list">${rows}</div>
     </aside>
     <section class="inspector" aria-live="polite">${selected ? transitionInspector(options.project, selected, options.snapshot, options.uiState) : '<div class="empty-state">选择一条转场进行配置。两种 presentation 是严格互斥的 union。</div>'}</section>

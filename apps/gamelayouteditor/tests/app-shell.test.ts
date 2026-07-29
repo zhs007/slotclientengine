@@ -216,6 +216,35 @@ describe("GameLayoutEditorApp workspace", () => {
 
   it("preserves advanced Inspector state and uses one resolution select", async () => {
     const { app, root } = await createApp();
+    const resourceQuery = root.querySelector(
+      "[data-resource-query]",
+    ) as HTMLInputElement;
+    resourceQuery.value = "abcd";
+    resourceQuery.focus();
+    resourceQuery.setSelectionRange(1, 3, "forward");
+    resourceQuery.dispatchEvent(
+      new InputEvent("input", { bubbles: true, data: "d" }),
+    );
+    await Promise.resolve();
+    const restoredQuery = root.querySelector(
+      "[data-resource-query]",
+    ) as HTMLInputElement;
+    expect(document.activeElement).toBe(restoredQuery);
+    expect(restoredQuery.selectionStart).toBe(1);
+    expect(restoredQuery.selectionEnd).toBe(3);
+
+    const composingQuery = restoredQuery;
+    composingQuery.value = "中文";
+    composingQuery.dispatchEvent(
+      new InputEvent("input", {
+        bubbles: true,
+        data: "文",
+        isComposing: true,
+      }),
+    );
+    expect(root.querySelector("[data-resource-query]")).toBe(composingQuery);
+    composingQuery.dispatchEvent(new Event("compositionend"));
+
     (
       root.querySelector('[data-workspace-tab="layout"]') as HTMLButtonElement
     ).click();
@@ -450,7 +479,19 @@ describe("GameLayoutEditorApp workspace", () => {
     previewSpies.getActiveAwardCelebrationSnapshot.mockReturnValue({
       phase: "counting",
     });
+    const dirtyPlacement = root.querySelector(
+      '[data-popup-placement="default"][data-popup-placement-field="x"]',
+    ) as HTMLInputElement;
+    dirtyPlacement.value = "77";
+    dirtyPlacement.dispatchEvent(new InputEvent("input", { bubbles: true }));
     (root.querySelector("[data-play-popup]") as HTMLButtonElement).click();
+    expect(
+      (
+        root.querySelector(
+          '[data-popup-placement="default"][data-popup-placement-field="x"]',
+        ) as HTMLInputElement
+      ).value,
+    ).toBe("77");
     (root.querySelector("[data-advance-popup]") as HTMLButtonElement).click();
     expect(previewSpies.playAwardCelebration).toHaveBeenCalledWith({
       betAmountRaw: 100,
@@ -804,6 +845,19 @@ describe("GameLayoutEditorApp workspace", () => {
       ).toBeTruthy(),
     );
     (root.querySelector('[data-move-layer="-1"]') as HTMLButtonElement).click();
+    const setPortraitPlacement = (
+      field: "x" | "y" | "scale",
+      value: string,
+    ) => {
+      const input = root.querySelector(
+        `[data-number$=".placements.portrait.${field}"]`,
+      ) as HTMLInputElement;
+      input.value = value;
+      input.dispatchEvent(new Event("change"));
+    };
+    setPortraitPlacement("x", "123");
+    setPortraitPlacement("y", "-45");
+    setPortraitPlacement("scale", "0.75");
     const portrait = root.querySelector(
       '[data-layer-visible="portrait"]',
     ) as HTMLInputElement;
@@ -814,6 +868,27 @@ describe("GameLayoutEditorApp workspace", () => {
     ) as HTMLInputElement;
     restored.checked = true;
     restored.dispatchEvent(new Event("change"));
+    expect(
+      (
+        root.querySelector(
+          '[data-number$=".placements.portrait.x"]',
+        ) as HTMLInputElement
+      ).value,
+    ).toBe("123");
+    expect(
+      (
+        root.querySelector(
+          '[data-number$=".placements.portrait.y"]',
+        ) as HTMLInputElement
+      ).value,
+    ).toBe("-45");
+    expect(
+      (
+        root.querySelector(
+          '[data-number$=".placements.portrait.scale"]',
+        ) as HTMLInputElement
+      ).value,
+    ).toBe("0.75");
     const nodeId = root.querySelector("[data-node-id]") as HTMLInputElement;
     nodeId.value = "renamed-layer";
     nodeId.dispatchEvent(new Event("change"));
@@ -895,6 +970,25 @@ describe("GameLayoutEditorApp workspace", () => {
     ) as HTMLSelectElement;
     transitionFrom.value = "BaseGame";
     transitionTo.value = "FreeGame";
+    transitionFrom.dispatchEvent(new Event("change"));
+    transitionTo.dispatchEvent(new Event("change"));
+    expect(transitionTo.value).toBe("FreeGame");
+    (
+      root.querySelector('[data-workspace-tab="layout"]') as HTMLButtonElement
+    ).click();
+    (
+      root.querySelector(
+        '[data-workspace-tab="transitions"]',
+      ) as HTMLButtonElement
+    ).click();
+    expect(
+      (root.querySelector("[data-new-transition-from]") as HTMLSelectElement)
+        .value,
+    ).toBe("BaseGame");
+    expect(
+      (root.querySelector("[data-new-transition-to]") as HTMLSelectElement)
+        .value,
+    ).toBe("FreeGame");
     (
       root.querySelector("[data-create-transition]") as HTMLButtonElement
     ).click();
@@ -1198,6 +1292,13 @@ describe("GameLayoutEditorApp workspace", () => {
         root.querySelector("[data-transition-runtime-status]")?.textContent,
       ).toContain("转场完成，当前状态：FreeGame"),
     );
+    expect(
+      (root.querySelector("[data-game-mode]") as HTMLSelectElement).value,
+    ).toBe("FreeGame");
+    expect(
+      (root.querySelector("[data-preview-game-mode]") as HTMLSelectElement)
+        .value,
+    ).toBe("FreeGame");
     expect(
       (root.querySelector("[data-delete-transition]") as HTMLButtonElement)
         .disabled,
@@ -1800,15 +1901,55 @@ describe("GameLayoutEditorApp workspace", () => {
     )!;
     bSource.value = "fixed-number";
     bSource.dispatchEvent(new Event("change"));
+    const bFixed = root.querySelector<HTMLInputElement>(
+      '[data-other-scene-row="B"] [data-binding-fixed]',
+    )!;
+    bFixed.value = "25";
+    bFixed.dispatchEvent(new Event("change"));
     expect(previewSpies.setOtherSceneBindings).toHaveBeenLastCalledWith(
       expect.arrayContaining([
         expect.objectContaining({
           symbol: "B",
           target: { kind: "legacy-presentation-value" },
-          source: { kind: "fixed-number", value: 1 },
+          source: { kind: "fixed-number", value: 25 },
         }),
       ]),
     );
+    const currentBEnabled = root.querySelector<HTMLInputElement>(
+      '[data-other-scene-row="B"] [data-binding-enabled]',
+    )!;
+    currentBEnabled.checked = false;
+    currentBEnabled.dispatchEvent(new Event("change"));
+    const disabledBEnabled = root.querySelector<HTMLInputElement>(
+      '[data-other-scene-row="B"] [data-binding-enabled]',
+    )!;
+    disabledBEnabled.checked = true;
+    disabledBEnabled.dispatchEvent(new Event("change"));
+    expect(
+      root.querySelector<HTMLSelectElement>(
+        '[data-other-scene-row="B"] [data-binding-source-kind]',
+      )!.value,
+    ).toBe("fixed-number");
+    expect(
+      root.querySelector<HTMLInputElement>(
+        '[data-other-scene-row="B"] [data-binding-fixed]',
+      )!.value,
+    ).toBe("25");
+    const restoredBSource = root.querySelector<HTMLSelectElement>(
+      '[data-other-scene-row="B"] [data-binding-source-kind]',
+    )!;
+    restoredBSource.value = "number-weight-table";
+    restoredBSource.dispatchEvent(new Event("change"));
+    const tableBSource = root.querySelector<HTMLSelectElement>(
+      '[data-other-scene-row="B"] [data-binding-source-kind]',
+    )!;
+    tableBSource.value = "fixed-number";
+    tableBSource.dispatchEvent(new Event("change"));
+    expect(
+      root.querySelector<HTMLInputElement>(
+        '[data-other-scene-row="B"] [data-binding-fixed]',
+      )!.value,
+    ).toBe("25");
     const select = root.querySelector("[data-reel-set]") as HTMLSelectElement;
     select.value = "first";
     select.dispatchEvent(new Event("change"));

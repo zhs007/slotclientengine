@@ -85,6 +85,13 @@ export interface EditorNodeDraft {
   placements: Partial<
     Record<SceneLayoutVariantId, { x: number; y: number; scale: number }>
   >;
+  /**
+   * Editor-only cache for temporarily hidden orientation placements.
+   * Export intentionally serializes only `placements`.
+   */
+  hiddenPlacements?: Partial<
+    Record<SceneLayoutVariantId, { x: number; y: number; scale: number }>
+  >;
 }
 
 export interface EditorSymbolPackageDependency {
