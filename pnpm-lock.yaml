@@ -293,6 +293,9 @@ importers:
       '@slotclientengine/rendercore':
         specifier: workspace:*
         version: link:../../packages/rendercore
+      '@slotclientengine/vnicore':
+        specifier: workspace:*
+        version: link:../../packages/vnicore
       pixi.js:
         specifier: ^8.1.6
         version: 8.17.1

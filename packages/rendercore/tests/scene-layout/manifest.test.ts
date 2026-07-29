@@ -103,6 +103,63 @@ describe("scene layout manifest", () => {
     ).toThrow(/immutable structure/);
   });
 
+  it("parses independent VNI and non-looping Spine layers without allowing unstable backgrounds", () => {
+    const manifest = structuredClone(game002LayoutFixture) as any;
+    manifest.nodes.push(
+      {
+        id: "vni-fx",
+        order: 2,
+        resource: {
+          kind: "vni",
+          project: "assets/fx/runtime.json",
+          loop: false,
+        },
+        placements: { default: { x: 10, y: 20, scale: 0.5 } },
+      },
+      {
+        id: "spine-fx",
+        order: 3,
+        resource: {
+          kind: "spine",
+          skeleton: "assets/fx/fx.json",
+          atlas: "assets/fx/fx.atlas",
+          textures: { "fx.png": "assets/fx/fx.png" },
+          defaultAnimation: "Appear",
+          loop: false,
+        },
+        placements: { default: { x: 30, y: 40, scale: 1 } },
+      },
+    );
+    const parsed = parseSceneLayoutManifest(manifest);
+    expect(parsed.nodes.at(-2)?.resource).toEqual({
+      kind: "vni",
+      project: "assets/fx/runtime.json",
+      loop: false,
+    });
+    const spineResource = parsed.nodes.at(-1)?.resource;
+    expect(
+      spineResource?.kind === "spine" && "loop" in spineResource
+        ? spineResource.loop
+        : undefined,
+    ).toBe(false);
+    expect(collectSceneLayoutAssetPaths(parsed)).toContain(
+      "assets/fx/runtime.json",
+    );
+
+    const unstableBackground = structuredClone(manifest);
+    unstableBackground.adaptation.backgroundNode = "spine-fx";
+    unstableBackground.nodes[0].order = 4;
+    expect(() => parseSceneLayoutManifest(unstableBackground)).toThrow(
+      /must loop/,
+    );
+    const vniBackground = structuredClone(manifest);
+    vniBackground.adaptation.backgroundNode = "vni-fx";
+    vniBackground.nodes[0].order = 4;
+    expect(() => parseSceneLayoutManifest(vniBackground)).toThrow(
+      /cannot be vni/,
+    );
+  });
+
   it("strictly parses generic game modes and multiple reusable popup bindings", () => {
     const parsed = parseSceneLayoutManifest(gameModeManifest());
     expect(parsed.gameModes?.modes.map((mode) => mode.id)).toEqual([

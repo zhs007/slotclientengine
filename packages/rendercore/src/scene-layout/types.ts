@@ -1,4 +1,8 @@
 import type { Container } from "pixi.js";
+import type {
+  AssetUrlManifest,
+  VNIProjectConfig,
+} from "@slotclientengine/vnicore";
 import type { ImageStringResource } from "../image-string/index.js";
 import type { SymbolPackageResource } from "../symbol/package.js";
 import type {
@@ -47,7 +51,7 @@ export interface SceneLayoutSpineLoopResourceSpec {
   readonly atlas: string;
   readonly textures: Readonly<Record<string, string>>;
   readonly defaultAnimation: string;
-  readonly loop: true;
+  readonly loop: boolean;
 }
 
 export interface SceneLayoutSpineStateMachineResourceSpec {
@@ -69,10 +73,17 @@ export interface SceneLayoutImageStringResourceSpec {
   readonly anchor: { readonly x: number; readonly y: number };
 }
 
+export interface SceneLayoutVniResourceSpec {
+  readonly kind: "vni";
+  readonly project: string;
+  readonly loop: boolean;
+}
+
 export type SceneLayoutNodeResourceSpec =
   | SceneLayoutImageResourceSpec
   | SceneLayoutSpineResourceSpec
-  | SceneLayoutImageStringResourceSpec;
+  | SceneLayoutImageStringResourceSpec
+  | SceneLayoutVniResourceSpec;
 
 export interface SceneLayoutNode {
   readonly id: string;
@@ -219,6 +230,15 @@ export interface SceneLayoutResource {
     >
   >;
   readonly imageStringResources: Readonly<Record<string, ImageStringResource>>;
+  readonly vniResources: Readonly<
+    Record<
+      string,
+      {
+        readonly project: VNIProjectConfig;
+        readonly assetUrls: AssetUrlManifest;
+      }
+    >
+  >;
   readonly videoUrls: Readonly<Record<string, string>>;
   destroy(): void;
 }

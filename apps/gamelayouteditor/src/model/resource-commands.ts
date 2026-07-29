@@ -9,6 +9,7 @@ import {
   createBoundedSourceIndex,
   detectRasterAssetType,
   extractBoundedZip,
+  resolvePackagePath,
 } from "@slotclientengine/browserartifactio";
 import {
   assertEditorAssetKey,
@@ -16,6 +17,13 @@ import {
   basenameFromSourcePath,
   normalizeEditorPackageZipEntries,
 } from "@slotclientengine/editorresource";
+import {
+  assertVNIBundleManifest,
+  assertVNIProject,
+  rewriteVNIProjectAssetPaths,
+  validateManifestProjectProfile,
+  validateVNIBundleManifest,
+} from "@slotclientengine/vnicore";
 import {
   activeVariantIds,
   resetVariantGeometry,
@@ -39,6 +47,7 @@ import {
   type EditorResourceReference,
   type EditorSpineLayoutResource,
   type EditorVideoLayoutResource,
+  type EditorVniLayoutResource,
   readEditorSpineMetadata,
 } from "./editor-resource.js";
 
@@ -58,6 +67,126 @@ export const EDITOR_SOURCE_LIMITS = Object.freeze({
   maxEntries: 4096,
   maxFileBytes: 50 * 1024 * 1024,
   maxTotalBytes: 500 * 1024 * 1024,
+});
+
+export interface EditorVniRuntimeProfile {
+  readonly id: string;
+  readonly label: string;
+  readonly assetScale: number;
+}
+
+export function inspectVniBundleProfiles(
+  zipBytes: Uint8Array,
+): readonly EditorVniRuntimeProfile[] | null {
+  const entries = normalizeEditorPackageZipEntries(
+    extractBoundedZip(zipBytes, { limits: LAYOUT_RESOURCE_ZIP_LIMITS }),
+    ["manifest.json"],
+  );
+  const manifestBytes = entries.get("manifest.json");
+  if (!manifestBytes) return null;
+  const manifest = assertVNIBundleManifest(parseJsonBytes(manifestBytes));
+  validateVNIBundleManifest(manifest);
+  const profiles = manifest.exports.flatMap((entry) => {
+    const project = assertVNIProject(
+      parseJsonBytes(requireBytes(entries, entry.path)),
+    );
+    validateManifestProjectProfile(entry, project);
+    for (const asset of project.assets)
+      requireBytes(entries, resolvePackagePath(entry.path, asset.path));
+    return entry.purpose === "runtime"
+      ? [
+          Object.freeze({
+            id: entry.id,
+            label:
+              entry.label ?? `${entry.id} (runtime, scale ${entry.assetScale})`,
+            assetScale: entry.assetScale,
+          }),
+        ]
+      : [];
+  });
+  if (!profiles.length)
+    throw new Error("VNI bundle 未声明 purpose=runtime 的运行发布包。");
+  return Object.freeze(profiles);
+}
+
+export async function importVniBundle(options: {
+  readonly project: EditorProject;
+  readonly zipBytes: Uint8Array;
+  readonly selectedProfileId?: string;
+}): Promise<EditorVniLayoutResource> {
+  const entries = normalizeEditorPackageZipEntries(
+    extractBoundedZip(options.zipBytes, {
+      limits: LAYOUT_RESOURCE_ZIP_LIMITS,
+    }),
+    ["manifest.json"],
+  );
+  const profiles = inspectVniBundleProfiles(options.zipBytes);
+  if (!profiles) throw new Error("VNI bundle ZIP 根目录缺少 manifest.json。");
+  if (profiles.length > 1 && !options.selectedProfileId)
+    throw new Error(
+      `VNI bundle 声明多个 runtime，必须明确选择：${profiles.map(({ id }) => id).join(", ")}。`,
+    );
+  const selectedProfileId = options.selectedProfileId ?? profiles[0]?.id;
+  if (
+    !selectedProfileId ||
+    !profiles.some(({ id }) => id === selectedProfileId)
+  )
+    throw new Error(`VNI runtime 选择无效：${selectedProfileId ?? "未选择"}。`);
+  const manifest = assertVNIBundleManifest(
+    parseJsonBytes(requireBytes(entries, "manifest.json")),
+  );
+  validateVNIBundleManifest(manifest);
+  const entry = manifest.exports.find(
+    ({ id, purpose }) => id === selectedProfileId && purpose === "runtime",
+  )!;
+  const sourceProject = assertVNIProject(
+    parseJsonBytes(requireBytes(entries, entry.path)),
+  );
+  validateManifestProjectProfile(entry, sourceProject);
+  const mapping = new Map<string, string>();
+  for (const asset of sourceProject.assets)
+    mapping.set(asset.path, basenameFromSourcePath(asset.path));
+  assertNoEditorAssetKeyAliases([...mapping.values()]);
+  const flatProject = rewriteVNIProjectAssetPaths(
+    sourceProject,
+    (path) => mapping.get(path)!,
+  );
+  const projectPath = basenameFromSourcePath(entry.path);
+  assertNoEditorAssetKeyAliases([projectPath, ...mapping.values()]);
+  const assets = new Map<string, Uint8Array>([
+    [projectPath, encodeStableJson(flatProject)],
+  ]);
+  for (const asset of sourceProject.assets) {
+    const sourcePath = resolvePackagePath(entry.path, asset.path);
+    const key = mapping.get(asset.path)!;
+    assets.set(key, requireBytes(entries, sourcePath).slice());
+  }
+  const resource: EditorVniLayoutResource = Object.freeze({
+    id: projectPath,
+    kind: "vni",
+    projectPath,
+    project: flatProject,
+    assetPaths: Object.freeze([...mapping.values()].sort()),
+    provenance: {
+      sourceNames: Object.freeze(["manifest.json", entry.path]),
+      sourceKind: "zip" as const,
+      batchLabel: `vni:${entry.id}`,
+    },
+  });
+  const existing = options.project.resources.get(resource.id);
+  const prepared = { resource, assets };
+  if (existing)
+    commitResourceReplacement(options.project, existing, prepared, false);
+  else {
+    assertNewResourceAvailable(options.project, resource);
+    commitNewResource(options.project, prepared);
+  }
+  return resource;
+}
+
+const LAYOUT_RESOURCE_ZIP_LIMITS = Object.freeze({
+  ...EDITOR_SOURCE_LIMITS,
+  maxCompressedBytes: 200 * 1024 * 1024,
 });
 
 export async function importImageStringZip(options: {
@@ -343,6 +472,7 @@ export function addLayerFromResource(options: {
   readonly nodeId: string;
   readonly variants: readonly SceneLayoutVariantId[];
   readonly defaultAnimation?: string;
+  readonly loop?: boolean;
 }): EditorNodeDraft {
   const resource = requireResource(options.project, options.resourceId);
   if (resource.kind === "video")
@@ -358,10 +488,23 @@ export function addLayerFromResource(options: {
     order: nextOrder(options.project),
     resourceId: resource.id,
     ...(resource.kind === "spine"
-      ? { playback: { kind: "loop" as const, animation: defaultAnimation! } }
-      : resource.kind === "image-string"
-        ? { imageString: { text: "", anchor: { x: 0.5, y: 0.5 } } }
-        : {}),
+      ? {
+          playback: {
+            kind: "loop" as const,
+            animation: defaultAnimation!,
+            loop: options.loop ?? true,
+          },
+        }
+      : resource.kind === "vni"
+        ? {
+            playback: {
+              kind: "vni" as const,
+              loop: options.loop ?? true,
+            },
+          }
+        : resource.kind === "image-string"
+          ? { imageString: { text: "", anchor: { x: 0.5, y: 0.5 } } }
+          : {}),
     placements: Object.fromEntries(
       options.variants.map((variant) => [variant, { x: 0, y: 0, scale: 1 }]),
     ),
@@ -375,6 +518,7 @@ export function rebindLayerResource(options: {
   readonly nodeId: string;
   readonly resourceId: string;
   readonly defaultAnimation?: string;
+  readonly loop?: boolean;
 }): void {
   const node = requireLayer(options.project, options.nodeId);
   const resource = requireResource(options.project, options.resourceId);
@@ -388,7 +532,13 @@ export function rebindLayerResource(options: {
   delete node.playback;
   delete node.imageString;
   if (resource.kind === "spine")
-    node.playback = { kind: "loop", animation: defaultAnimation! };
+    node.playback = {
+      kind: "loop",
+      animation: defaultAnimation!,
+      loop: options.loop ?? true,
+    };
+  else if (resource.kind === "vni")
+    node.playback = { kind: "vni", loop: options.loop ?? true };
   else if (resource.kind === "image-string")
     node.imageString = { text: "", anchor: { x: 0.5, y: 0.5 } };
 }
@@ -404,7 +554,11 @@ export function assignBackgroundResource(options: {
 }): EditorNodeDraft {
   assertVariantsAllowed(options.project, [options.variant]);
   const resource = requireResource(options.project, options.resourceId);
-  if (resource.kind === "image-string" || resource.kind === "video")
+  if (
+    resource.kind === "image-string" ||
+    resource.kind === "video" ||
+    resource.kind === "vni"
+  )
     throw new Error(`${resource.kind} 资源不能设为背景。`);
   const animation = validateAnimation(resource, options.defaultAnimation);
   const variant = options.project.variants[options.variant];
@@ -449,7 +603,13 @@ export function assignBackgroundResource(options: {
       order: nextOrder(options.project),
       resourceId: resource.id,
       ...(resource.kind === "spine"
-        ? { playback: { kind: "loop" as const, animation: animation! } }
+        ? {
+            playback: {
+              kind: "loop" as const,
+              animation: animation!,
+              loop: true,
+            },
+          }
         : {}),
       placements: {
         [options.variant]: defaultBackgroundPlacement(
@@ -478,12 +638,12 @@ export function assignBackgroundResource(options: {
     }
     delete node.imageString;
     if (resource.kind === "spine" && resourceChanged)
-      node.playback = { kind: "loop", animation: animation! };
+      node.playback = { kind: "loop", animation: animation!, loop: true };
     else if (resource.kind !== "spine") delete node.playback;
   }
   mode.backgroundNodes[options.variant] = node.id;
   if (resource.kind === "spine")
-    node.playback = { kind: "loop", animation: animation! };
+    node.playback = { kind: "loop", animation: animation!, loop: true };
   if (options.project.gameModes.initialMode === modeId)
     variant.backgroundNode = node.id;
   if (nextSize && (!hasPreviousSize || sizeChanged || options.reinitialize)) {
@@ -617,7 +777,11 @@ export function setNodeDefaultAnimation(
   const resource = requireResource(project, node.resourceId);
   const value = validateAnimation(resource, animation);
   if (!value) throw new Error("图片节点没有 animation。");
-  node.playback = { kind: "loop", animation: value };
+  node.playback = {
+    kind: "loop",
+    animation: value,
+    loop: node.playback?.loop ?? true,
+  };
   synchronizeGameModeNodeStates(project);
 }
 
@@ -633,6 +797,25 @@ export function setNodeSpinePlayback(
   validateEditorSpinePlayback(playback, resource.animationNames, nodeId);
   node.playback = structuredClone(playback);
   synchronizeGameModeNodeStates(project);
+}
+
+export function setNodePlaybackLoop(
+  project: EditorProject,
+  nodeId: string,
+  loop: boolean,
+): void {
+  const node = project.nodes.find((item) => item.id === nodeId);
+  if (!node) throw new Error(`未知节点：${nodeId}`);
+  const resource = requireResource(project, node.resourceId);
+  if (resource.kind !== "spine" && resource.kind !== "vni")
+    throw new Error(`节点 ${nodeId} 不是动画资源。`);
+  if (!node.playback) throw new Error(`节点 ${nodeId} 缺少 playback。`);
+  if (
+    (resource.kind === "spine" && node.playback.kind !== "loop") ||
+    (resource.kind === "vni" && node.playback.kind !== "vni")
+  )
+    throw new Error(`节点 ${nodeId} playback 类型与资源不一致。`);
+  node.playback.loop = loop;
 }
 
 export function setImageStringLayerText(
@@ -763,7 +946,12 @@ function validateAnimation(
   animation: string | undefined,
 ): string | undefined {
   if (resource.kind !== "spine") {
-    if (animation) throw new Error("图片资源不得选择 Spine animation。");
+    if (animation)
+      throw new Error(
+        resource.kind === "image"
+          ? "图片资源不得选择 Spine animation。"
+          : `${resource.kind} 资源不得选择 Spine animation。`,
+      );
     return undefined;
   }
   if (!animation) throw new Error("Spine 节点必须明确选择 default animation。");
@@ -1080,6 +1268,7 @@ function commitResourceReplacement(
       .filter(
         (node) =>
           !node.playback ||
+          node.playback.kind !== "loop" ||
           (() => {
             try {
               validateEditorSpinePlayback(
@@ -1273,6 +1462,23 @@ function encodeStableJson(value: unknown): Uint8Array {
   );
 }
 
+function parseJsonBytes(bytes: Uint8Array): unknown {
+  try {
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch (error) {
+    throw new Error(`JSON/UTF-8 无效：${formatError(error)}`);
+  }
+}
+
+function requireBytes(
+  files: ReadonlyMap<string, Uint8Array>,
+  path: string,
+): Uint8Array {
+  const bytes = files.get(path);
+  if (!bytes) throw new Error(`资源闭包缺少 bytes：${path}`);
+  return bytes;
+}
+
 function sortValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortValue);
   if (!value || typeof value !== "object") return value;
@@ -1325,6 +1531,8 @@ export function describeResource(resource: EditorLayoutResource): string {
     return `${editorResourcePrimaryPath(resource)} · ${Object.keys(resource.manifest.glyphs).length} glyphs · lineHeight ${resource.manifest.metrics.lineHeight}`;
   if (resource.kind === "video")
     return `${resource.path} · ${resource.size.width}×${resource.size.height} · ${resource.durationSeconds.toFixed(3)}s · audio ${String(resource.hasAudio)}`;
+  if (resource.kind === "vni")
+    return `${resource.projectPath} · ${resource.project.stage.width}×${resource.project.stage.height} · ${resource.project.stage.duration}s · ${resource.assetPaths.length} assets`;
   return `${editorResourcePrimaryPath(resource)} · ${resource.animationNames.length} animations${resource.bounds ? ` · export bounds ${resource.bounds.width}×${resource.bounds.height}（非 art size）` : " · 无 export bounds"}`;
 }
 

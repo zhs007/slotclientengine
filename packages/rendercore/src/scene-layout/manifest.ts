@@ -147,6 +147,7 @@ export function collectSceneLayoutAssetPaths(
     const resource = node.resource;
     if (resource.kind === "image") paths.add(resource.path);
     else if (resource.kind === "image-string") paths.add(resource.manifest);
+    else if (resource.kind === "vni") paths.add(resource.project);
     else {
       paths.add(resource.skeleton);
       paths.add(resource.atlas);
@@ -386,7 +387,8 @@ function parseResource(
         ),
       });
     }
-    if (record.loop !== true) fail(`${label}.loop must be true.`);
+    if (typeof record.loop !== "boolean")
+      fail(`${label}.loop must be a boolean.`);
     return deepFreeze({
       kind: "spine" as const,
       skeleton,
@@ -396,7 +398,7 @@ function parseResource(
         record.defaultAnimation,
         `${label}.defaultAnimation`,
       ),
-      loop: true as const,
+      loop: record.loop,
     });
   }
   if (record.kind === "image-string") {
@@ -415,7 +417,21 @@ function parseResource(
       },
     });
   }
-  fail(`${label}.kind must be image, spine, or image-string.`);
+  if (record.kind === "vni") {
+    known(record, ["kind", "project", "loop"], label);
+    if (typeof record.loop !== "boolean")
+      fail(`${label}.loop must be a boolean.`);
+    return deepFreeze({
+      kind: "vni" as const,
+      project: localPath(
+        record.project,
+        `${label}.project`,
+        new Set([".json"]),
+      ),
+      loop: record.loop,
+    });
+  }
+  fail(`${label}.kind must be image, spine, image-string, or vni.`);
 }
 
 function parseSpineStateMachine(
@@ -544,8 +560,19 @@ function validateReferencesAndBounds(
     if (!nodeIds.has(backgroundNode))
       fail(`backgroundNode "${backgroundNode}" does not exist.`);
     const background = nodes.find((node) => node.id === backgroundNode)!;
-    if (background.resource.kind === "image-string")
-      fail(`backgroundNode "${backgroundNode}" cannot be image-string.`);
+    if (
+      background.resource.kind === "image-string" ||
+      background.resource.kind === "vni"
+    )
+      fail(
+        `backgroundNode "${backgroundNode}" cannot be ${background.resource.kind}.`,
+      );
+    if (
+      background.resource.kind === "spine" &&
+      !("stateMachine" in background.resource) &&
+      !background.resource.loop
+    )
+      fail(`backgroundNode "${backgroundNode}" Spine animation must loop.`);
     if (!background.placements[variantId])
       fail(
         `backgroundNode "${backgroundNode}" must be visible in ${variantId}.`,
@@ -671,11 +698,13 @@ function validatePathClosure(nodes: readonly SceneLayoutNode[]): void {
         ? [resource.path]
         : resource.kind === "image-string"
           ? [resource.manifest]
-          : [
-              resource.skeleton,
-              resource.atlas,
-              ...Object.values(resource.textures),
-            ]),
+          : resource.kind === "vni"
+            ? [resource.project]
+            : [
+                resource.skeleton,
+                resource.atlas,
+                ...Object.values(resource.textures),
+              ]),
     );
   }
   try {
@@ -862,9 +891,20 @@ function parseGameModes(
           fail(
             `${label}.backgroundNodes.${variant} references unknown node "${nodeId}".`,
           );
-        if (node.resource.kind === "image-string")
+        if (
+          node.resource.kind === "image-string" ||
+          node.resource.kind === "vni"
+        )
           fail(
-            `${label}.backgroundNodes.${variant} cannot reference image-string node "${nodeId}".`,
+            `${label}.backgroundNodes.${variant} cannot reference ${node.resource.kind} node "${nodeId}".`,
+          );
+        if (
+          node.resource.kind === "spine" &&
+          !("stateMachine" in node.resource) &&
+          !node.resource.loop
+        )
+          fail(
+            `${label}.backgroundNodes.${variant} Spine node "${nodeId}" must loop.`,
           );
         if (!node.placements[variant])
           fail(

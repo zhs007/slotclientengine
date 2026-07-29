@@ -1,4 +1,5 @@
 import { Assets, Container, Graphics, Sprite, type Texture } from "pixi.js";
+import { VNIPlayer } from "@slotclientengine/vnicore";
 import {
   assertValidSpineDeltaSeconds,
   createOfficialSpinePlayer,
@@ -39,6 +40,20 @@ export interface CreateSceneLayoutRuntimeOptions {
     readonly node: SceneLayoutNode;
     readonly resource: SceneLayoutResource["spineResources"][string];
   }) => RendercoreSpinePlayer;
+  readonly createVniPlayer?: (options: {
+    readonly node: SceneLayoutNode;
+    readonly parent: Container;
+    readonly resource: SceneLayoutResource["vniResources"][string];
+  }) => SceneLayoutVniPlayer;
+}
+
+export interface SceneLayoutVniPlayer {
+  init(): Promise<void>;
+  setLoop(loop: boolean): void;
+  play(): void;
+  update(deltaSeconds: number): void;
+  destroy(): void;
+  getDisplayObject(): Container;
 }
 
 interface RuntimeNode {
@@ -48,6 +63,7 @@ interface RuntimeNode {
   readonly before: Container;
   readonly after: Container;
   player: RendercoreSpinePlayer | null;
+  vniPlayer: SceneLayoutVniPlayer | null;
   stateController: SpineStateController | null;
   imageString: RenderImageString | null;
   imageSprite: Sprite | null;
@@ -67,6 +83,9 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   readonly #unloadTexture: (url: string) => Promise<void>;
   readonly #createSpinePlayer: NonNullable<
     CreateSceneLayoutRuntimeOptions["createSpinePlayer"]
+  >;
+  readonly #createVniPlayer: NonNullable<
+    CreateSceneLayoutRuntimeOptions["createVniPlayer"]
   >;
   readonly #nodes: readonly RuntimeNode[];
   readonly #nodesById: ReadonlyMap<string, RuntimeNode>;
@@ -94,6 +113,28 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
           resource: playerOptions.resource,
           createError: (message) => new SceneLayoutError(message),
         }));
+    this.#createVniPlayer =
+      options.createVniPlayer ??
+      ((playerOptions) => {
+        const profile = playerOptions.resource.project.exportProfile;
+        if (!profile || profile.purpose !== "runtime") {
+          throw new SceneLayoutError(
+            `Scene layout VNI node "${playerOptions.node.id}" is missing a runtime exportProfile.`,
+          );
+        }
+        return new VNIPlayer({
+          parent: playerOptions.parent,
+          projectId: playerOptions.node.id,
+          bundleId: options.resource.manifest.id,
+          profileId: profile.id,
+          profilePurpose: profile.purpose,
+          assetScale: profile.assetScale,
+          project: playerOptions.resource.project,
+          assetUrls: playerOptions.resource.assetUrls,
+          autoTick: false,
+          fitPadding: 0,
+        });
+      });
     this.container.label = `scene-layout:${options.resource.manifest.id}`;
     this.container.sortableChildren = false;
     const nodes = options.resource.manifest.nodes.map((spec) => {
@@ -114,6 +155,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
         before,
         after,
         player: null,
+        vniPlayer: null,
         stateController: null,
         imageString: null,
         imageSprite: null,
@@ -201,6 +243,14 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
         node.imageSprite.anchor.set(
           (manifest.coordinateOrigin ?? "top-left") === "center" ? 0.5 : 0,
         );
+      else if (node.vniPlayer)
+        applyVniOrigin(
+          node.vniPlayer,
+          this.#resource.vniResources[
+            node.spec.resource.kind === "vni" ? node.spec.resource.project : ""
+          ],
+          manifest.coordinateOrigin ?? "top-left",
+        );
     return nextSnapshot ? this.applyViewport(nextSnapshot.viewportSize) : null;
   }
 
@@ -216,6 +266,8 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
         const result = node.player.update(deltaSeconds);
         node.stateController?.updateCompleted(result.completed);
       }
+      if (node.vniPlayer && node.slot.renderable)
+        node.vniPlayer.update(deltaSeconds);
     }
   }
 
@@ -382,6 +434,33 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       node.named.addChild(view.container);
       return;
     }
+    if (node.spec.resource.kind === "vni") {
+      const resource = this.#resource.vniResources[node.spec.resource.project];
+      if (!resource) {
+        throw new SceneLayoutError(
+          `Scene layout VNI resource is missing for node "${node.spec.id}".`,
+        );
+      }
+      const host = new Container();
+      host.label = `scene-layout-vni:${node.spec.id}`;
+      node.named.addChild(host);
+      const player = this.#createVniPlayer({
+        node: node.spec,
+        parent: host,
+        resource,
+      });
+      node.vniPlayer = player;
+      await player.init();
+      this.assertAlive();
+      applyVniOrigin(
+        player,
+        resource,
+        this.#manifest.coordinateOrigin ?? "top-left",
+      );
+      player.setLoop(node.spec.resource.loop);
+      player.play();
+      return;
+    }
     const resource = this.#resource.spineResources[node.spec.id];
     if (!resource) {
       throw new SceneLayoutError(
@@ -403,7 +482,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     } else {
       player.play({
         animationName: node.spec.resource.defaultAnimation,
-        loop: true,
+        loop: node.spec.resource.loop,
       });
     }
     node.named.addChild(player.view);
@@ -417,6 +496,8 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       node.stateController = null;
       node.player?.destroy();
       node.player = null;
+      node.vniPlayer?.destroy();
+      node.vniPlayer = null;
       node.imageString?.destroy();
       node.imageString = null;
       node.texture = null;
@@ -483,6 +564,25 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     if (this.#destroyed) {
       throw new SceneLayoutError("Scene layout runtime was destroyed.");
     }
+  }
+}
+
+function applyVniOrigin(
+  player: SceneLayoutVniPlayer,
+  resource: SceneLayoutResource["vniResources"][string] | undefined,
+  origin: "top-left" | "center",
+): void {
+  if (!resource) {
+    throw new SceneLayoutError("Scene layout VNI resource is missing.");
+  }
+  const display = player.getDisplayObject();
+  if (origin === "center") {
+    display.pivot.set(
+      resource.project.stage.width / 2,
+      resource.project.stage.height / 2,
+    );
+  } else {
+    display.pivot.set(0, 0);
   }
 }
 

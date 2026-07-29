@@ -110,6 +110,14 @@ export function rewriteLayoutManifest(
           manifest: rewriteRef(node.resource.manifest, mapping),
         },
       };
+    if (node.resource.kind === "vni")
+      return {
+        ...node,
+        resource: {
+          ...node.resource,
+          project: rewriteRef(node.resource.project, mapping),
+        },
+      };
     return {
       ...node,
       resource: {

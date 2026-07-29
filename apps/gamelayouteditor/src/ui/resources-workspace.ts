@@ -45,7 +45,7 @@ export function resourcesWorkspaceMarkup(options: {
           <button type="button" data-upload-resources>导入资源 / ZIP</button>
         </div>
         <label class="search-field">搜索 id / path<input type="search" data-resource-query value="${escapeHtml(session.resourceQuery)}" /></label>
-        <label>类型<select data-resource-type><option value="all">全部</option><option value="image" ${session.resourceType === "image" ? "selected" : ""}>Image</option><option value="spine" ${session.resourceType === "spine" ? "selected" : ""}>Spine</option><option value="image-string" ${session.resourceType === "image-string" ? "selected" : ""}>Image String</option><option value="video" ${session.resourceType === "video" ? "selected" : ""}>Video</option></select></label>
+        <label>类型<select data-resource-type><option value="all">全部</option><option value="image" ${session.resourceType === "image" ? "selected" : ""}>Image</option><option value="spine" ${session.resourceType === "spine" ? "selected" : ""}>Spine</option><option value="vni" ${session.resourceType === "vni" ? "selected" : ""}>VNI</option><option value="image-string" ${session.resourceType === "image-string" ? "selected" : ""}>Image String</option><option value="video" ${session.resourceType === "video" ? "selected" : ""}>Video</option></select></label>
         <label>引用<select data-resource-status><option value="all">全部</option><option value="referenced" ${session.resourceStatus === "referenced" ? "selected" : ""}>已引用</option><option value="unused" ${session.resourceStatus === "unused" ? "selected" : ""}>未使用</option><option value="error" ${session.resourceStatus === "error" ? "selected" : ""}>错误</option></select></label>
       </div>
       <div class="resource-list" data-resource-list>
@@ -78,7 +78,7 @@ function resourceRowMarkup(
   const preview =
     resource.kind === "image" && thumbnailUrl
       ? `<img src="${escapeHtml(thumbnailUrl)}" alt="" />`
-      : `<span aria-hidden="true">${resource.kind === "spine" ? "SP" : resource.kind === "image-string" ? "TXT" : resource.kind === "video" ? "MP4" : "IMG"}</span>`;
+      : `<span aria-hidden="true">${resource.kind === "spine" ? "SP" : resource.kind === "vni" ? "VNI" : resource.kind === "image-string" ? "TXT" : resource.kind === "video" ? "MP4" : "IMG"}</span>`;
   return `<article class="resource-row" data-resource-row="${escapeHtml(resource.id)}">
     <div class="resource-summary">
       <div class="resource-thumbnail">${preview}</div>
@@ -87,7 +87,7 @@ function resourceRowMarkup(
     </div>
     <div class="resource-actions">
       ${resource.kind === "video" ? "" : `<button type="button" data-resource-add-layer="${escapeHtml(resource.id)}">添加为图层</button>`}
-      ${resource.kind === "image-string" || resource.kind === "video" ? "" : project.mode === "maximized-focus" ? `<button type="button" data-resource-background="default" data-resource-id="${escapeHtml(resource.id)}">设为背景</button>` : `<button type="button" data-resource-background="landscape" data-resource-id="${escapeHtml(resource.id)}">设为横版背景</button><button type="button" data-resource-background="portrait" data-resource-id="${escapeHtml(resource.id)}">设为竖版背景</button>`}
+      ${resource.kind === "image-string" || resource.kind === "video" || resource.kind === "vni" ? "" : project.mode === "maximized-focus" ? `<button type="button" data-resource-background="default" data-resource-id="${escapeHtml(resource.id)}">设为背景</button>` : `<button type="button" data-resource-background="landscape" data-resource-id="${escapeHtml(resource.id)}">设为横版背景</button><button type="button" data-resource-background="portrait" data-resource-id="${escapeHtml(resource.id)}">设为竖版背景</button>`}
       <button type="button" class="danger" data-delete-resource="${escapeHtml(resource.id)}" ${references.length > 0 ? `title="被 ${references.map((reference) => reference.nodeId).join(", ")} 引用"` : ""}>删除</button>
     </div>
     ${expanded ? resourceDetailsMarkup(resource, references) : ""}
@@ -110,9 +110,11 @@ function resourceDetailsMarkup(
                 `<li>${escapeHtml(page)} → ${escapeHtml(path)}</li>`,
             )
             .join("")}`
-        : resource.kind === "video"
-          ? `<li>video: ${escapeHtml(resource.path)}</li><li>${resource.size.width}×${resource.size.height} · ${resource.durationSeconds.toFixed(3)}s · audio ${escapeHtml(String(resource.hasAudio))}</li>`
-          : `<li>manifest: ${escapeHtml(resource.manifestPath)}</li><li>${resource.assetPaths.length} glyph assets</li>`;
+        : resource.kind === "vni"
+          ? `<li>project: ${escapeHtml(resource.projectPath)}</li><li>${resource.project.stage.width}×${resource.project.stage.height} · ${resource.project.stage.duration}s · ${resource.assetPaths.length} assets</li>`
+          : resource.kind === "video"
+            ? `<li>video: ${escapeHtml(resource.path)}</li><li>${resource.size.width}×${resource.size.height} · ${resource.durationSeconds.toFixed(3)}s · audio ${escapeHtml(String(resource.hasAudio))}</li>`
+            : `<li>manifest: ${escapeHtml(resource.manifestPath)}</li><li>${resource.assetPaths.length} glyph assets</li>`;
   const animations =
     resource.kind === "spine"
       ? `<p><strong>Animations：</strong>${resource.animationNames.map(escapeHtml).join(", ")}</p>`

@@ -11,12 +11,17 @@ export function collectLayoutPreviewAssetPaths(
 ): ReadonlySet<string> {
   const paths = new Set(collectSceneLayoutAssetPaths(manifest));
   for (const node of manifest.nodes) {
-    if (node.resource.kind !== "image-string") continue;
-    const manifestPath = node.resource.manifest;
+    if (node.resource.kind !== "image-string" && node.resource.kind !== "vni")
+      continue;
+    const manifestPath =
+      node.resource.kind === "image-string"
+        ? node.resource.manifest
+        : node.resource.project;
     const resource = [...project.resources.values()].find(
       (candidate) =>
-        candidate.kind === "image-string" &&
-        candidate.manifestPath === manifestPath,
+        (candidate.kind === "image-string" &&
+          candidate.manifestPath === manifestPath) ||
+        (candidate.kind === "vni" && candidate.projectPath === manifestPath),
     );
     if (resource)
       for (const path of editorResourcePaths(resource)) paths.add(path);

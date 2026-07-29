@@ -56,8 +56,11 @@ import {
   setImageStringLayerAnchor,
   setImageStringLayerText,
   setNodeDefaultAnimation,
+  setNodePlaybackLoop,
   suggestNodeId,
   importImageStringZip,
+  importVniBundle,
+  inspectVniBundleProfiles,
   uploadImageResource,
   uploadSpineResource,
   uploadVideoResource,
@@ -1382,6 +1385,7 @@ export class GameLayoutEditorApp {
         | "all"
         | "image"
         | "spine"
+        | "vni"
         | "image-string"
         | "video";
       this.renderWorkspace(this.#store.getSnapshot());
@@ -1571,6 +1575,21 @@ export class GameLayoutEditorApp {
                 select.value,
               ),
             `已设置 animation ${select.value}。`,
+          ),
+        ),
+      );
+    panel
+      .querySelectorAll<HTMLInputElement>("[data-layer-loop]")
+      .forEach((input) =>
+        input.addEventListener("change", () =>
+          this.runTransaction(
+            (draft) =>
+              setNodePlaybackLoop(
+                draft,
+                input.dataset.layerLoop!,
+                input.checked,
+              ),
+            input.checked ? "已启用循环播放。" : "已关闭循环播放。",
           ),
         ),
       );
@@ -1832,7 +1851,7 @@ export class GameLayoutEditorApp {
       state.context.kind === "assign-background"
         ? "背景初始 placement 按完整 art size 居中，scale 为 1。不会按文件名或唯一候选自动绑定。"
         : "初始 placement 固定为 { x: 0, y: 0, scale: 1 }。不会按文件名或唯一候选自动绑定。";
-    dialog.innerHTML = `<div class="picker-shell"><header><div><span>Resource Picker</span><h2>${escapeHtml(contextLabel)}</h2></div><button type="button" data-picker-cancel aria-label="关闭资源选择器">×</button></header><div class="picker-toolbar"><label>搜索<input type="search" data-picker-query value="${escapeHtml(state.query)}" /></label><label>类型<select data-picker-type><option value="all">全部</option><option value="image" ${state.type === "image" ? "selected" : ""}>Image</option><option value="spine" ${state.type === "spine" ? "selected" : ""}>Spine</option><option value="image-string" ${state.type === "image-string" ? "selected" : ""}>Image String</option></select></label><button type="button" data-picker-import>导入资源 / ZIP</button></div><div class="picker-body"><div class="picker-candidates" role="listbox" aria-label="可用资源">${candidates.map((candidate) => `<button type="button" role="option" data-picker-candidate="${escapeHtml(candidate.resourceId)}" aria-selected="${candidate.resourceId === state.selectedResourceId}" ${candidate.disabledReason ? `disabled title="${escapeHtml(candidate.disabledReason)}"` : ""}><span class="type-mark">${candidate.kind === "spine" ? "SP" : candidate.kind === "image-string" ? "TXT" : "IMG"}</span><span><strong>${escapeHtml(candidate.resourceId)}</strong><small title="${escapeHtml(candidate.primaryPath)}">${escapeHtml(candidate.primaryPath)}</small><small>${escapeHtml(candidate.summary)} · ${candidate.status} · 引用 ${candidate.referenceCount}</small></span></button>`).join("") || '<p class="empty-state">没有匹配资源；导入后仍需明确选择并确认。</p>'}</div><section class="picker-form">${selected ? `<p><strong>${escapeHtml(selected.id)}</strong><br/><span class="path">${escapeHtml(editorResourcePaths(selected)[0]!)}</span></p>` : "<p>请选择一个 filename-key resource。</p>"}${state.context.kind === "add-layer" ? `<label>node id<input data-picker-node-id value="${escapeHtml(state.nodeId)}" /></label>` : state.context.kind === "assign-background" ? `<p class="hint">背景 node id 将按 ${escapeHtml(state.context.modeId)} / ${escapeHtml(state.context.variant)} 稳定生成。</p>` : ""}${
+    dialog.innerHTML = `<div class="picker-shell"><header><div><span>Resource Picker</span><h2>${escapeHtml(contextLabel)}</h2></div><button type="button" data-picker-cancel aria-label="关闭资源选择器">×</button></header><div class="picker-toolbar"><label>搜索<input type="search" data-picker-query value="${escapeHtml(state.query)}" /></label><label>类型<select data-picker-type><option value="all">全部</option><option value="image" ${state.type === "image" ? "selected" : ""}>Image</option><option value="spine" ${state.type === "spine" ? "selected" : ""}>Spine</option><option value="vni" ${state.type === "vni" ? "selected" : ""}>VNI</option><option value="image-string" ${state.type === "image-string" ? "selected" : ""}>Image String</option></select></label><button type="button" data-picker-import>导入资源 / ZIP</button></div><div class="picker-body"><div class="picker-candidates" role="listbox" aria-label="可用资源">${candidates.map((candidate) => `<button type="button" role="option" data-picker-candidate="${escapeHtml(candidate.resourceId)}" aria-selected="${candidate.resourceId === state.selectedResourceId}" ${candidate.disabledReason ? `disabled title="${escapeHtml(candidate.disabledReason)}"` : ""}><span class="type-mark">${candidate.kind === "spine" ? "SP" : candidate.kind === "vni" ? "VNI" : candidate.kind === "image-string" ? "TXT" : "IMG"}</span><span><strong>${escapeHtml(candidate.resourceId)}</strong><small title="${escapeHtml(candidate.primaryPath)}">${escapeHtml(candidate.primaryPath)}</small><small>${escapeHtml(candidate.summary)} · ${candidate.status} · 引用 ${candidate.referenceCount}</small></span></button>`).join("") || '<p class="empty-state">没有匹配资源；导入后仍需明确选择并确认。</p>'}</div><section class="picker-form">${selected ? `<p><strong>${escapeHtml(selected.id)}</strong><br/><span class="path">${escapeHtml(editorResourcePaths(selected)[0]!)}</span></p>` : "<p>请选择一个 filename-key resource。</p>"}${state.context.kind === "add-layer" ? `<label>node id<input data-picker-node-id value="${escapeHtml(state.nodeId)}" /></label>` : state.context.kind === "assign-background" ? `<p class="hint">背景 node id 将按 ${escapeHtml(state.context.modeId)} / ${escapeHtml(state.context.variant)} 稳定生成。</p>` : ""}${
       state.context.kind === "add-layer" && project.mode === "orientation-focus"
         ? activeVariantIds(project)
             .map(
@@ -2148,6 +2167,7 @@ export class GameLayoutEditorApp {
             "popup.manifest.json",
             "image-string.manifest.json",
             "layout.manifest.json",
+            "manifest.json",
           ],
         );
         if (entries.has("symbols.package.json")) {
@@ -2191,6 +2211,32 @@ export class GameLayoutEditorApp {
           this.#selectedPopupId = imported.manifest.id;
           this.showFeedback(
             `已通过统一导入器提交 Popup ${this.#selectedPopupId}。`,
+          );
+          return;
+        }
+        if (entries.has("manifest.json")) {
+          const profiles = inspectVniBundleProfiles(zipBytes);
+          if (!profiles)
+            throw new Error("VNI bundle ZIP 缺少 runtime profile。");
+          let selectedProfileId = profiles[0]?.id;
+          if (profiles.length > 1) {
+            const choice = window.prompt(
+              `该 VNI bundle 含多个 runtime，请输入 profile id：\n${profiles.map(({ id, label }) => `${id}: ${label}`).join("\n")}`,
+              profiles[0]?.id,
+            );
+            if (choice === null) return;
+            selectedProfileId = choice.trim();
+          }
+          const resource = await importVniBundle({
+            project,
+            zipBytes,
+            selectedProfileId,
+          });
+          if (!confirmImportReview(project, [resource.id], files)) return;
+          this.#store.replace(project);
+          this.selectImportedPickerResource(project, resource.id, fromPicker);
+          this.showFeedback(
+            `导入审查确认 VNI ${resource.id}；未创建任何 node。`,
           );
           return;
         }
@@ -2366,6 +2412,31 @@ export class GameLayoutEditorApp {
             resourceId,
             file: files[0],
           });
+        } else if (current.kind === "vni") {
+          if (files.length !== 1)
+            throw new Error("VNI 替换必须选择一个 bundle ZIP。");
+          const zipBytes = new Uint8Array(await files[0].arrayBuffer());
+          const profiles = inspectVniBundleProfiles(zipBytes);
+          if (!profiles) throw new Error("VNI bundle ZIP 缺少 manifest.json。");
+          let selectedProfileId = profiles[0]?.id;
+          if (profiles.length > 1) {
+            const choice = window.prompt(
+              `该 VNI bundle 含多个 runtime，请输入 profile id：\n${profiles.map(({ id, label }) => `${id}: ${label}`).join("\n")}`,
+              profiles.find(({ id }) => `${id}.json` === resourceId)?.id ??
+                profiles[0]?.id,
+            );
+            if (choice === null) throw new Error("已取消 VNI 替换。");
+            selectedProfileId = choice.trim();
+          }
+          const imported = await importVniBundle({
+            project,
+            zipBytes,
+            selectedProfileId,
+          });
+          if (imported.id !== resourceId)
+            throw new Error(
+              `VNI 替换必须保持 project filename key：期望 ${resourceId}，实际 ${imported.id}。`,
+            );
         } else {
           if (files.length !== 1)
             throw new Error("image-string 替换必须选择一个 ZIP。");

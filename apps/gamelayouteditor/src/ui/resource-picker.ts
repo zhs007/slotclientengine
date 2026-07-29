@@ -15,7 +15,7 @@ import type {
 
 export interface LayoutResourcePickerCandidate {
   readonly resourceId: string;
-  readonly kind: "image" | "spine" | "image-string";
+  readonly kind: "image" | "spine" | "vni" | "image-string";
   readonly primaryPath: string;
   readonly status: "ready" | "incomplete" | "error";
   readonly referenceCount: number;
@@ -86,7 +86,8 @@ function candidateFromResource(
     resource.id,
   ).length;
   const forbidden =
-    context.kind === "assign-background" && resource.kind === "image-string";
+    context.kind === "assign-background" &&
+    (resource.kind === "image-string" || resource.kind === "vni");
   const needsArtSize =
     context.kind === "assign-background" &&
     resource.kind === "spine" &&
@@ -97,7 +98,9 @@ function candidateFromResource(
       ? `${resource.size.width}×${resource.size.height}`
       : resource.kind === "spine"
         ? `${resource.animationNames.length} animations${resource.bounds ? ` · export bounds ${resource.bounds.width}×${resource.bounds.height}（非 art size）` : " · 无 export bounds"}${needsArtSize ? " · 背景需手填 art size" : ""}`
-        : `${Object.keys(resource.manifest.glyphs).length} glyphs · lineHeight ${resource.manifest.metrics.lineHeight}`;
+        : resource.kind === "vni"
+          ? `${resource.project.stage.width}×${resource.project.stage.height} · ${resource.project.stage.duration}s · ${resource.assetPaths.length} assets`
+          : `${Object.keys(resource.manifest.glyphs).length} glyphs · lineHeight ${resource.manifest.metrics.lineHeight}`;
   return Object.freeze({
     resourceId: resource.id,
     kind: resource.kind,
@@ -105,6 +108,6 @@ function candidateFromResource(
     status: needsArtSize ? "incomplete" : "ready",
     referenceCount,
     summary,
-    ...(forbidden ? { disabledReason: "image-string 不能设为背景" } : {}),
+    ...(forbidden ? { disabledReason: `${resource.kind} 不能设为背景` } : {}),
   });
 }

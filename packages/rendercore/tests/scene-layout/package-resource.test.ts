@@ -34,6 +34,39 @@ const imageStringManifest = {
 const dependencyPath =
   "dependencies/image-strings/digits/image-string.manifest.json";
 
+const vniProjectPath = "effects/runtime.json";
+const vniAssetPath = "effects/assets/spark.png";
+const vniProject = {
+  schemaVersion: "VNI_0.020",
+  editor: { name: "VNI", version: "VNI_0.020" },
+  engineTarget: { name: "cocos_creator", version: "3.8.6" },
+  name: "scene-fx",
+  exportProfile: { id: "runtime", purpose: "runtime", assetScale: 1 },
+  stage: {
+    width: 100,
+    height: 200,
+    coordinate: "center",
+    duration: 1,
+    backgroundColor: "#000000",
+  },
+  assets: [
+    {
+      id: "spark",
+      type: "image",
+      path: "assets/spark.png",
+      originalName: "spark.png",
+      width: 1,
+      height: 1,
+      fileWidth: 1,
+      fileHeight: 1,
+      fileScale: 1,
+    },
+  ],
+  layerGroups: [],
+  layers: [],
+  particles: [],
+};
+
 const packageManifest = {
   ...game002LayoutFixture,
   nodes: [
@@ -73,6 +106,174 @@ function packageFiles(): Map<string, Uint8Array> {
 }
 
 describe("scene layout package resources", () => {
+  it("owns the exact direct and mapped VNI closure", async () => {
+    const manifest = {
+      ...game002LayoutFixture,
+      nodes: [
+        game002LayoutFixture.nodes[0],
+        {
+          id: "vni-fx",
+          order: 1,
+          resource: {
+            kind: "vni" as const,
+            project: vniProjectPath,
+            loop: false,
+          },
+          placements: { default: { x: 10, y: 20, scale: 1 } },
+        },
+      ],
+    };
+    const files = new Map<string, Uint8Array>([
+      ["assets/bg.png", new Uint8Array([1])],
+      [vniProjectPath, encode(vniProject)],
+      [vniAssetPath, new Uint8Array([2])],
+    ]);
+    expect(collectSceneLayoutPackagePaths({ manifest, files })).toEqual([
+      "assets/bg.png",
+      "effects/assets/spark.png",
+      "effects/runtime.json",
+    ]);
+
+    const revoke = vi.spyOn(URL, "revokeObjectURL");
+    try {
+      const resource = await createSceneLayoutPackageResource({
+        manifest,
+        files,
+        decodeImage: async () => ({ width: 1, height: 1 }),
+      });
+      expect(
+        resource.layout.vniResources[vniProjectPath]?.assetUrls[
+          "assets/spark.png"
+        ],
+      ).toMatch(/^blob:/u);
+      resource.destroy();
+      expect(revoke).toHaveBeenCalledTimes(2);
+    } finally {
+      revoke.mockRestore();
+    }
+
+    const mappedProject = {
+      ...vniProject,
+      assets: [{ ...vniProject.assets[0], path: "spark.png" }],
+    };
+    const mappedManifest = {
+      ...manifest,
+      nodes: manifest.nodes.map((node) =>
+        node.id === "bg"
+          ? { ...node, resource: { ...node.resource, path: "bg.png" } }
+          : {
+              ...node,
+              resource: { ...node.resource, project: "runtime.json" },
+            },
+      ),
+    };
+    const mappedFiles = new Map<string, Uint8Array>([
+      ["bg.png", new Uint8Array([1])],
+      ["runtime.json", encode(mappedProject)],
+      ["spark.png", new Uint8Array([2])],
+    ]);
+    expect(
+      collectSceneLayoutPackagePaths({
+        manifest: mappedManifest,
+        files: mappedFiles,
+      }),
+    ).toEqual(["bg.png", "runtime.json", "spark.png"]);
+    const mappedPackage = await createMappedPackageFiles({
+      controls: new Map([["layout.manifest.json", encode(mappedManifest)]]),
+      assets: mappedFiles,
+    });
+    const mappedResource = await createSceneLayoutPackageResource({
+      manifest: mappedManifest,
+      files: mappedPackage.files,
+      decodeImage: async () => ({ width: 1, height: 1 }),
+    });
+    mappedResource.destroy();
+
+    expect(() =>
+      collectSceneLayoutPackagePaths({
+        manifest,
+        files: new Map([
+          ...files,
+          [
+            vniProjectPath,
+            encode({
+              ...vniProject,
+              exportProfile: {
+                ...vniProject.exportProfile,
+                purpose: "preview",
+              },
+            }),
+          ],
+        ]),
+      }),
+    ).toThrow(/runtime exportProfile/);
+    expect(() =>
+      collectSceneLayoutPackagePaths({
+        manifest,
+        files: new Map([
+          ...files,
+          [vniProjectPath, encode({ ...vniProject, stage: null })],
+        ]),
+      }),
+    ).toThrow(/VNI project.*invalid/);
+  });
+
+  it("loads a direct VNI package subtree from the CDN", async () => {
+    const manifest = {
+      ...game002LayoutFixture,
+      nodes: [
+        game002LayoutFixture.nodes[0],
+        {
+          id: "vni-fx",
+          order: 1,
+          resource: {
+            kind: "vni" as const,
+            project: vniProjectPath,
+            loop: true,
+          },
+          placements: { default: { x: 0, y: 0, scale: 1 } },
+        },
+        {
+          id: "vni-fx-copy",
+          order: 2,
+          resource: {
+            kind: "vni" as const,
+            project: vniProjectPath,
+            loop: false,
+          },
+          placements: { default: { x: 20, y: 30, scale: 0.5 } },
+        },
+      ],
+    };
+    const responses = new Map<string, Uint8Array>([
+      ["layout.manifest.json", encode(manifest)],
+      ["assets/bg.png", new Uint8Array([1])],
+      [vniProjectPath, encode(vniProject)],
+      [vniAssetPath, new Uint8Array([2])],
+    ]);
+    const requested: string[] = [];
+    const resource = await loadSceneLayoutPackageFromUrl({
+      manifestUrl: "https://cdn.example/layout/layout.manifest.json",
+      fetchImpl: async (input) => {
+        const url = new URL(String(input));
+        const path = url.pathname.split("/layout/")[1]!;
+        requested.push(path);
+        const bytes = responses.get(path);
+        return bytes
+          ? new Response(bytes.slice().buffer)
+          : new Response("missing", { status: 404 });
+      },
+      decodeImage: async () => ({ width: 1, height: 1 }),
+    });
+    expect(requested).toEqual([
+      "layout.manifest.json",
+      "assets/bg.png",
+      "effects/runtime.json",
+      "effects/assets/spark.png",
+    ]);
+    resource.destroy();
+  });
+
   it("owns the exact MP4 closure and revokes its object URL", async () => {
     const videoPath = `assets/${"a".repeat(64)}.mp4`;
     const manifest = {

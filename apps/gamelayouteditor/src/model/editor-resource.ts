@@ -1,6 +1,7 @@
 import type { SceneLayoutVariantId } from "@slotclientengine/rendercore/scene-layout";
 import type { ImageStringManifestV1 } from "@slotclientengine/rendercore/image-string";
 import type { EditorResourceProvenance } from "@slotclientengine/browserartifactio";
+import type { VNIProjectConfig } from "@slotclientengine/vnicore";
 
 export interface EditorImageLayoutResource {
   readonly id: string;
@@ -49,10 +50,20 @@ export interface EditorVideoLayoutResource {
   readonly provenance?: EditorResourceProvenance;
 }
 
+export interface EditorVniLayoutResource {
+  readonly id: string;
+  readonly kind: "vni";
+  readonly projectPath: string;
+  readonly project: VNIProjectConfig;
+  readonly assetPaths: readonly string[];
+  readonly provenance?: EditorResourceProvenance;
+}
+
 export type EditorLayoutResource =
   | EditorImageLayoutResource
   | EditorSpineLayoutResource
   | EditorImageStringLayoutResource
+  | EditorVniLayoutResource
   | EditorVideoLayoutResource;
 
 export interface EditorResourceReference {
@@ -67,6 +78,7 @@ export function editorResourcePrimaryPath(
   if (resource.kind === "image") return resource.path;
   if (resource.kind === "spine") return resource.skeleton;
   if (resource.kind === "video") return resource.path;
+  if (resource.kind === "vni") return resource.projectPath;
   return resource.manifestPath;
 }
 
@@ -81,6 +93,8 @@ export function editorResourcePaths(
       ...Object.values(resource.textures),
     ];
   if (resource.kind === "video") return [resource.path];
+  if (resource.kind === "vni")
+    return [resource.projectPath, ...resource.assetPaths];
   return [resource.manifestPath, ...resource.assetPaths];
 }
 
@@ -89,7 +103,13 @@ export function editorResourceArtSize(
 ): { readonly width: number; readonly height: number } | undefined {
   // A Spine skeleton header describes exported content bounds. It does not
   // declare the scene's art-space canvas, so only raster images are intrinsic.
-  return resource.kind === "image" ? resource.size : undefined;
+  if (resource.kind === "image") return resource.size;
+  if (resource.kind === "vni")
+    return {
+      width: resource.project.stage.width,
+      height: resource.project.stage.height,
+    };
+  return undefined;
 }
 
 export function editorResourceSignature(
@@ -118,6 +138,14 @@ export function editorResourceSignature(
       size: resource.size,
       durationSeconds: resource.durationSeconds,
       hasAudio: resource.hasAudio,
+    });
+  }
+  if (resource.kind === "vni") {
+    return JSON.stringify({
+      kind: resource.kind,
+      projectPath: resource.projectPath,
+      project: resource.project,
+      assetPaths: resource.assetPaths,
     });
   }
   return JSON.stringify({

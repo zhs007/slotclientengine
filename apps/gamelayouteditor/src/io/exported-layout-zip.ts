@@ -18,6 +18,10 @@ import {
 } from "@slotclientengine/rendercore/popup";
 import { createDeterministicZip } from "@slotclientengine/browserartifactio";
 import {
+  assertVNIProject,
+  rewriteVNIProjectAssetPaths,
+} from "@slotclientengine/vnicore";
+import {
   EDITOR_ASSETS_MAP_PATH,
   basenameFromSourcePath,
   commitEditorAssetImport,
@@ -86,6 +90,10 @@ export async function exportLayoutZip(options: {
         (node) =>
           node.resource.kind === "image-string" &&
           node.resource.manifest === path,
+      ) ||
+      manifest.nodes.some(
+        (node) =>
+          node.resource.kind === "vni" && node.resource.project === path,
       )
     )
       continue;
@@ -113,6 +121,20 @@ export async function exportLayoutZip(options: {
         );
     for (const path of collectImageStringAssetPaths(nested))
       add(mapped ? path : `${directory}/${path}`);
+  }
+  for (const node of manifest.nodes) {
+    if (node.resource.kind !== "vni" || closure.has(node.resource.project))
+      continue;
+    add(node.resource.project);
+    const project = assertVNIProject(
+      parseJson(ownedAssets.get(node.resource.project), node.resource.project),
+    );
+    const mapped = !node.resource.project.includes("/");
+    const directory = mapped
+      ? ""
+      : node.resource.project.slice(0, node.resource.project.lastIndexOf("/"));
+    for (const asset of project.assets)
+      add(mapped ? asset.path : `${directory}/${asset.path}`);
   }
   if (manifest.symbolPackage) {
     const files = options.symbolFiles;
@@ -238,6 +260,27 @@ async function flattenLayoutClosure(
       throw new Error(`全局扁平 filename key 冲突：${key}`);
     virtual.set(key, bytes.slice());
   }
+  for (const node of manifest.nodes) {
+    if (node.resource.kind !== "vni") continue;
+    const sourcePath = node.resource.project;
+    const project = assertVNIProject(
+      parseJson(closure.get(sourcePath), sourcePath),
+    );
+    const mapped = !sourcePath.includes("/");
+    const directory = mapped
+      ? ""
+      : sourcePath.slice(0, sourcePath.lastIndexOf("/"));
+    const rewrittenProject = rewriteVNIProjectAssetPaths(
+      project,
+      (path) => mapping.get(mapped ? path : `${directory}/${path}`)!,
+    );
+    virtual.set(
+      mapping.get(sourcePath)!,
+      new TextEncoder().encode(
+        `${JSON.stringify(sortValue(rewrittenProject), null, 2)}\n`,
+      ),
+    );
+  }
   const rewritten = rewriteLayoutManifestFilenameKeys(manifest, mapping);
   const empty = createEmptyEditorAssetWorkspace();
   const review = await reviewEditorAssetImport({
@@ -277,6 +320,11 @@ function rewriteLayoutManifestFilenameKeys(
       return {
         ...node,
         resource: { ...resource, manifest: key(resource.manifest) },
+      };
+    if (resource.kind === "vni")
+      return {
+        ...node,
+        resource: { ...resource, project: key(resource.project) },
       };
     return {
       ...node,

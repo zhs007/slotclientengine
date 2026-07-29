@@ -1,5 +1,11 @@
 import { validateOfficialSpineResource } from "../spine/runtime-player.js";
 import {
+  assertVNIProject,
+  resolveProjectAssetUrls,
+  type AssetUrlManifest,
+  type VNIProjectConfig,
+} from "@slotclientengine/vnicore";
+import {
   loadImageStringResourceFromUrl,
   validateImageStringText,
   type ImageStringResource,
@@ -20,6 +26,15 @@ export interface CreateSceneLayoutResourceOptions {
   readonly videoModules?: Readonly<Record<string, string>>;
   readonly ownedObjectUrls?: readonly string[];
   readonly imageStringResources?: Readonly<Record<string, ImageStringResource>>;
+  readonly vniResources?: Readonly<
+    Record<
+      string,
+      {
+        readonly project: VNIProjectConfig;
+        readonly assetUrls: AssetUrlManifest;
+      }
+    >
+  >;
 }
 
 export function createSceneLayoutResource(
@@ -38,6 +53,16 @@ export function createSceneLayoutResource(
   const imageStringResources: Readonly<Record<string, ImageStringResource>> =
     options.imageStringResources ?? Object.freeze({});
   const imageStringPaths = new Set<string>();
+  const vniResources: Readonly<
+    Record<
+      string,
+      {
+        readonly project: VNIProjectConfig;
+        readonly assetUrls: AssetUrlManifest;
+      }
+    >
+  > = options.vniResources ?? Object.freeze({});
+  const vniProjectPaths = new Set<string>();
   const videoPaths = new Set<string>();
   const imageUrls: Record<string, string> = {};
   const spineResources: Record<
@@ -82,6 +107,24 @@ export function createSceneLayoutResource(
       } catch (error) {
         throw new SceneLayoutError(
           `Scene layout image-string node "${node.id}" is invalid: ${formatError(error)}`,
+        );
+      }
+      continue;
+    }
+    if (node.resource.kind === "vni") {
+      vniProjectPaths.add(node.resource.project);
+      const nested = vniResources[node.resource.project];
+      if (!nested) {
+        throw new SceneLayoutError(
+          `Scene layout VNI resource is missing: ${node.resource.project}.`,
+        );
+      }
+      try {
+        assertRuntimeVniProject(nested.project, node.resource.project);
+        resolveProjectAssetUrls(nested.project, nested.assetUrls);
+      } catch (error) {
+        throw new SceneLayoutError(
+          `Scene layout VNI node "${node.id}" is invalid: ${formatError(error)}`,
         );
       }
       continue;
@@ -198,6 +241,7 @@ export function createSceneLayoutResource(
     skeletonPaths,
     "scene layout skeleton modules",
   );
+  assertExactKeys(vniResources, vniProjectPaths, "scene layout VNI resources");
   assertExactKeys(atlasModules, atlasPaths, "scene layout atlas modules");
   assertExactKeys(textureModules, texturePaths, "scene layout texture modules");
   assertExactKeys(videoModules, videoPaths, "scene layout video modules");
@@ -214,6 +258,7 @@ export function createSceneLayoutResource(
     imageUrls: Object.freeze(imageUrls),
     spineResources: Object.freeze(spineResources),
     imageStringResources: Object.freeze({ ...imageStringResources }),
+    vniResources: Object.freeze({ ...vniResources }),
     videoUrls: Object.freeze(videoUrls),
     destroy(): void {
       if (destroyed) return;
@@ -224,6 +269,18 @@ export function createSceneLayoutResource(
       }
     },
   });
+}
+
+function assertRuntimeVniProject(
+  project: VNIProjectConfig,
+  path: string,
+): void {
+  assertVNIProject(project);
+  if (project.exportProfile?.purpose !== "runtime") {
+    throw new SceneLayoutError(
+      `Scene layout VNI project "${path}" must declare a runtime exportProfile.`,
+    );
+  }
 }
 
 function unreachableVideo(): never {
@@ -267,6 +324,10 @@ export async function loadSceneLayoutResourceFromUrl(options: {
   const videoModules: Record<string, string> = {};
   const ownedObjectUrls: string[] = [];
   const imageStringResources: Record<string, ImageStringResource> = {};
+  const vniResources: Record<
+    string,
+    { readonly project: VNIProjectConfig; readonly assetUrls: AssetUrlManifest }
+  > = {};
   try {
     const resourceByPath = new Map<
       string,
@@ -279,6 +340,7 @@ export async function loadSceneLayoutResourceFromUrl(options: {
         continue;
       }
       if (resource.kind === "image-string") continue;
+      if (resource.kind === "vni") continue;
       resourceByPath.set(resource.skeleton, "skeleton");
       resourceByPath.set(resource.atlas, "atlas");
       for (const path of Object.values(resource.textures)) {
@@ -310,9 +372,41 @@ export async function loadSceneLayoutResourceFromUrl(options: {
           ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
         });
     }
+    for (const node of manifest.nodes) {
+      if (node.resource.kind !== "vni") continue;
+      if (vniResources[node.resource.project]) continue;
+      const projectUrl = resolveContainedAssetUrl(
+        node.resource.project,
+        manifestUrl,
+      );
+      const response = await fetchRequired(fetchImpl, projectUrl);
+      let projectValue: unknown;
+      try {
+        projectValue = JSON.parse(await response.text());
+      } catch (error) {
+        throw new SceneLayoutError(
+          `Scene layout VNI project "${node.resource.project}" is invalid JSON: ${formatError(error)}`,
+        );
+      }
+      const project = assertVNIProject(projectValue);
+      assertRuntimeVniProject(project, node.resource.project);
+      const assetUrls: Record<string, string> = {};
+      for (const asset of project.assets) {
+        const assetUrl = resolveContainedAssetUrl(asset.path, projectUrl);
+        const assetResponse = await fetchRequired(fetchImpl, assetUrl);
+        const objectUrl = URL.createObjectURL(await assetResponse.blob());
+        ownedObjectUrls.push(objectUrl);
+        assetUrls[asset.path] = objectUrl;
+      }
+      vniResources[node.resource.project] = Object.freeze({
+        project,
+        assetUrls: resolveProjectAssetUrls(project, assetUrls),
+      });
+    }
     for (const path of collectSceneLayoutAssetPaths(manifest).filter(
       (path) =>
         !imageStringResources[path] &&
+        !vniResources[path] &&
         path !== manifest.symbolPackage?.manifest,
     )) {
       const assetUrl = resolveContainedAssetUrl(path, manifestUrl);
@@ -375,6 +469,7 @@ export async function loadSceneLayoutResourceFromUrl(options: {
       videoModules,
       ownedObjectUrls,
       imageStringResources,
+      vniResources,
     });
   } catch (error) {
     for (const url of ownedObjectUrls) URL.revokeObjectURL(url);
