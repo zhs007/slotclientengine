@@ -23,6 +23,7 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
   readonly #names: readonly string[];
   readonly #attached = new Set<ActiveNode>();
   #player: RendercoreSpineSlotPlayer | null = null;
+  #owner: object | null = null;
   #destroyed = false;
 
   constructor(options: {
@@ -69,10 +70,15 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
     return this.requireNode(name).renderer.getSnapshot().text;
   }
 
-  activate(state: string, player: RendercoreSpineSlotPlayer): void {
+  activate(
+    state: string,
+    player: RendercoreSpineSlotPlayer,
+    owner: object,
+  ): void {
     this.assertUsable();
     this.detach();
     this.#player = player;
+    this.#owner = owner;
     for (const node of this.#nodes) {
       const target = node.definition.spec.targets.find(
         (candidate) => candidate.state === state,
@@ -87,8 +93,9 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
     }
   }
 
-  deactivate(player: RendercoreSpineSlotPlayer): void {
-    if (this.#destroyed || this.#player !== player) return;
+  deactivate(player: RendercoreSpineSlotPlayer, owner: object): void {
+    if (this.#destroyed || this.#player !== player || this.#owner !== owner)
+      return;
     this.detach();
   }
 
@@ -116,6 +123,7 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
     }
     this.#attached.clear();
     this.#player = null;
+    this.#owner = null;
   }
 
   private requireNode(name: string): ActiveNode {
@@ -141,8 +149,9 @@ export function notifySymbolImageStringSpineActive(
   root: Container,
   state: string,
   player: RendercoreSpineSlotPlayer,
+  owner: object = player,
 ): void {
-  controllers.get(root)?.activate(state, player);
+  controllers.get(root)?.activate(state, player, owner);
 }
 
 export function hasSymbolImageStringController(root: Container): boolean {
@@ -152,8 +161,9 @@ export function hasSymbolImageStringController(root: Container): boolean {
 export function notifySymbolImageStringSpineInactive(
   root: Container,
   player: RendercoreSpineSlotPlayer,
+  owner: object = player,
 ): void {
-  controllers.get(root)?.deactivate(player);
+  controllers.get(root)?.deactivate(player, owner);
 }
 
 export function createSymbolImageStringControllerFactories(

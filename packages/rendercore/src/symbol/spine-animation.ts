@@ -153,6 +153,7 @@ export class SpineSymbolAni implements SymbolAni {
         this.#context.root,
         next.#context.resolvedState,
         slotPlayer,
+        this,
       );
     }
   }
@@ -213,6 +214,7 @@ export class SpineSymbolAni implements SymbolAni {
           this.#context.root,
           this.#context.resolvedState,
           requireSlotPlayer(player, this.#context.symbol),
+          this,
         );
       }
     } catch (error) {
@@ -233,6 +235,7 @@ export class SpineSymbolAni implements SymbolAni {
       notifySymbolImageStringSpineInactive(
         this.#context.root,
         requireSlotPlayer(entry.player, this.#context.symbol),
+        this,
       );
     }
     entry.owners = Math.max(0, entry.owners - 1);

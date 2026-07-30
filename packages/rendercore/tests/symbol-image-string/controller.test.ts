@@ -99,6 +99,16 @@ describe("SymbolImageStringController", () => {
     notifySymbolImageStringSpineInactive(symbol, player);
     expect(player.removeSlotObject).toHaveBeenCalled();
 
+    const previousOwner = {};
+    const currentOwner = {};
+    notifySymbolImageStringSpineActive(symbol, "normal", player, previousOwner);
+    notifySymbolImageStringSpineActive(symbol, "win", player, currentOwner);
+    vi.mocked(player.removeSlotObject).mockClear();
+    notifySymbolImageStringSpineInactive(symbol, player, previousOwner);
+    expect(player.removeSlotObject).not.toHaveBeenCalled();
+    notifySymbolImageStringSpineInactive(symbol, player, currentOwner);
+    expect(player.removeSlotObject).toHaveBeenCalled();
+
     controller.resetForPoolRelease();
     expect(controller.getText("coin-value")).toBe("01");
     controller.destroy();
