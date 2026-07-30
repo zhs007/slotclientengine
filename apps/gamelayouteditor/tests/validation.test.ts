@@ -963,6 +963,7 @@ describe("filename-key layout resource commands", () => {
 
   it("keeps Spine playback per node and requires an exact explicit animation", async () => {
     const project = createNewEditorProject("maximized-focus");
+    await initializeProjectBackground(project);
     await uploadSpineResource({ project, files: spineFiles() });
     expect(() =>
       addLayerFromResource({
@@ -987,10 +988,32 @@ describe("filename-key layout resource commands", () => {
       defaultAnimation: "Win",
     });
     expect(
-      project.nodes.map((node) =>
-        node.playback?.kind === "loop" ? node.playback.animation : "",
-      ),
+      project.nodes
+        .slice(-2)
+        .map((node) =>
+          node.playback?.kind === "loop" ? node.playback.animation : "",
+        ),
     ).toEqual(["Idle", "Win"]);
+    expect(
+      project.nodes.slice(-2).map((node) => node.placements.default),
+    ).toEqual([
+      { x: 1000, y: 1000, scale: 1 },
+      { x: 1000, y: 1000, scale: 1 },
+    ]);
+
+    project.coordinateOrigin = "center";
+    addLayerFromResource({
+      project,
+      resourceId: "hero.json",
+      nodeId: "hero-centered-origin",
+      variants: ["default"],
+      defaultAnimation: "Idle",
+    });
+    expect(project.nodes.at(-1)?.placements.default).toEqual({
+      x: 0,
+      y: 0,
+      scale: 1,
+    });
   });
 
   it("initializes first background geometry and preserves authored geometry across size changes", async () => {

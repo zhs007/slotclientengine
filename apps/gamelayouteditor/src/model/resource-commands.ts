@@ -513,7 +513,10 @@ export function addLayerFromResource(options: {
           ? { imageString: { text: "", anchor: { x: 0.5, y: 0.5 } } }
           : {}),
     placements: Object.fromEntries(
-      options.variants.map((variant) => [variant, { x: 0, y: 0, scale: 1 }]),
+      options.variants.map((variant) => [
+        variant,
+        defaultLayerPlacement(options.project, resource, variant),
+      ]),
     ),
   };
   options.project.nodes.push(node);
@@ -703,6 +706,21 @@ function defaultBackgroundPlacement(
     return { x: artSize.width / 2, y: artSize.height / 2, scale: 1 };
   }
   return { x: 0, y: 0, scale: 1 };
+}
+
+function defaultLayerPlacement(
+  project: Pick<EditorProject, "coordinateOrigin" | "variants">,
+  resource: EditorLayoutResource,
+  variant: SceneLayoutVariantId,
+): { x: number; y: number; scale: number } {
+  if (project.coordinateOrigin === "center" || resource.kind !== "spine")
+    return { x: 0, y: 0, scale: 1 };
+  const artSize = project.variants[variant].artSize;
+  return {
+    x: artSize.width / 2,
+    y: artSize.height / 2,
+    scale: 1,
+  };
 }
 
 export function clearBackground(
