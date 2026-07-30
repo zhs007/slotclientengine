@@ -87,6 +87,7 @@ export type {
   SlotGameLogicFactory,
   SlotGameMaximizedFocusFramePolicy,
   SlotGameMountContext,
+  SlotGameRngConsoleOptions,
   SlotGameSpinRequest,
   SlotGameSpinState,
   SlotGameStateSnapshot,

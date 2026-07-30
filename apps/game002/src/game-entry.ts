@@ -130,6 +130,10 @@ export async function enterGame002(options: {
         labels: createGame002LeoUiLabels(snapshot.translations),
       }),
       buildSpinRequest: () => config.spinRequest,
+      rngConsole: {
+        target: window,
+        log: (message) => console.info(message),
+      },
       onError: (error) => console.error(error),
     });
     await framework.connect();

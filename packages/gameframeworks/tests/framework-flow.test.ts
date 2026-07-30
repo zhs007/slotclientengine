@@ -261,6 +261,89 @@ describe("framework flow", () => {
     expect(new SlotGameRuntimeError("bad")).toBeInstanceOf(Error);
   });
 
+  it("applies a console RNG override to only the next dispatched spin", async () => {
+    const target: Record<string, unknown> = {};
+    const messages: string[] = [];
+    const client = new MockClient();
+    const framework = createSlotGameFramework({
+      root: document.createElement("div"),
+      gameAdapter: new MockAdapter(),
+      live: { serverUrl: "ws://localhost" },
+      betOptions: BET_OPTIONS,
+      clientFactory: () => client,
+      buildSpinRequest: () => ({
+        autonums: -1,
+        lstrand: [99],
+      }),
+      rngConsole: {
+        target,
+        log: (message) => messages.push(message),
+      },
+    });
+    const command = target.rng;
+    if (typeof command !== "function") {
+      throw new Error("rng console command was not installed.");
+    }
+
+    command(8, 61, 41, 33, 13, 729);
+    await expect(framework.spin()).rejects.toThrow(/before connect/);
+    await framework.connect();
+    await framework.spin();
+    await framework.spin();
+
+    expect(client.spinParams).toEqual([
+      {
+        bet: 1,
+        lines: 10,
+        autonums: -1,
+        lstrand: [8, 61, 41, 33, 13, 729],
+      },
+      {
+        bet: 1,
+        lines: 10,
+        autonums: -1,
+        lstrand: [99],
+      },
+    ]);
+    expect(messages).toEqual(["rng(11,22,33)", "rng(11,22,33)"]);
+
+    framework.destroy();
+    expect(target).not.toHaveProperty("rng");
+  });
+
+  it("cleans the console RNG command after constructor or mount failure", async () => {
+    const constructorTarget: Record<string, unknown> = {};
+    expect(() =>
+      createSlotGameFramework({
+        root: document.createElement("div"),
+        gameAdapter: new MockAdapter(),
+        live: { serverUrl: "ws://localhost" },
+        betOptions: [],
+        clientFactory: () => new MockClient(),
+        rngConsole: { target: constructorTarget },
+      }),
+    ).toThrow(/betOptions/);
+    expect(constructorTarget).not.toHaveProperty("rng");
+
+    const mountTarget: Record<string, unknown> = {};
+    const framework = createSlotGameFramework({
+      root: document.createElement("div"),
+      gameAdapter: {
+        mount: () => {
+          throw new Error("mount failed");
+        },
+        playSpin: () => undefined,
+      },
+      live: { serverUrl: "ws://localhost" },
+      betOptions: BET_OPTIONS,
+      clientFactory: () => new MockClient(),
+      rngConsole: { target: mountTarget },
+    });
+    await expect(framework.connect()).rejects.toThrow(/mount failed/);
+    expect(mountTarget).not.toHaveProperty("rng");
+    framework.destroy();
+  });
+
   it("passes frame policy viewport snapshots to the mounted adapter", () => {
     const root = document.createElement("div");
     setRootSize(root, 1125, 2000);

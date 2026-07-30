@@ -125,6 +125,7 @@ export function createMockGameLogic(totalwin = 0): GameLogic {
 
 export class MockClient implements SlotGameClientLike {
   public readonly calls: string[] = [];
+  public readonly spinParams: SpinParams[] = [];
   public readonly listeners = new Map<
     string,
     Set<(...args: unknown[]) => void>
@@ -161,6 +162,7 @@ export class MockClient implements SlotGameClientLike {
   }
 
   async spin(params: SpinParams): Promise<unknown> {
+    this.spinParams.push(params);
     this.calls.push(`spin:${JSON.stringify(params)}`);
     if (this.spinPromise) {
       return this.spinPromise;

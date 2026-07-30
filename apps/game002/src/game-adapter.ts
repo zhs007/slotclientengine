@@ -120,7 +120,7 @@ export interface Game002AdapterOptions {
     options: CreateSymbolValuePresenterOptions,
   ) => SymbolValuePresenter;
   readonly reportFatalError?: (error: Error) => void;
-  readonly logRng?: (message: string) => void;
+  readonly logDiagnostic?: (message: string) => void;
 }
 
 const GAME002_MAX_TICK_DELTA_SECONDS = 1 / 30;
@@ -143,7 +143,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
     options: CreateSymbolCascadePlayerOptions,
   ) => SymbolCascadePlayer;
   readonly #reportFatalError: (error: Error) => void;
-  readonly #logRng: (message: string) => void;
+  readonly #logDiagnostic: (message: string) => void;
   #app: Game002PixiApplication | null = null;
   #worldLayer: Container | null = null;
   #backgroundPlayer: Game002BackgroundPlayer | null = null;
@@ -219,7 +219,8 @@ class Game002PixiAdapter implements SlotGameAdapter {
     this.#createSymbolCascadePlayer =
       options.createSymbolCascadePlayer ?? createSymbolCascadePlayer;
     this.#reportFatalError = options.reportFatalError ?? reportFatalError;
-    this.#logRng = options.logRng ?? ((message) => console.info(message));
+    this.#logDiagnostic =
+      options.logDiagnostic ?? ((message) => console.info(message));
   }
 
   async mount(context: SlotGameMountContext): Promise<void> {
@@ -352,7 +353,6 @@ class Game002PixiAdapter implements SlotGameAdapter {
   }
 
   playSpin(logic: GameLogic): Promise<void> {
-    this.#logRng(`rng ${logic.getRandomNumbers().join(",")}`);
     const runtime = this.#requireRuntime();
     const coordinator = this.#requireRoundCoordinator();
     if (coordinator.getSnapshot().running) {
@@ -402,7 +402,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
       cmSymbolCode,
       coSymbolCode,
       bnSymbolCode,
-      logDiagnostic: this.#logRng,
+      logDiagnostic: this.#logDiagnostic,
     });
     const plan = compileSlotRoundExecutionPlan(
       GAME002_ROUND_FLOW_PROFILE,

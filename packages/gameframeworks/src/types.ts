@@ -142,6 +142,11 @@ export interface SlotGameSpinRequest {
   readonly [key: string]: unknown;
 }
 
+export interface SlotGameRngConsoleOptions {
+  readonly target: object;
+  readonly log?: (message: string) => void;
+}
+
 export type SlotGameSpinState =
   | "idle"
   | "connecting"
@@ -269,6 +274,7 @@ export interface SlotGameFrameworkOptions {
     state: SlotGameStateSnapshot,
     bet: SlotGameBetOption,
   ) => SlotGameSpinRequest;
+  readonly rngConsole?: SlotGameRngConsoleOptions;
   readonly liveSession?: SlotGameLiveSessionLike;
   readonly clientFactory?: SlotGameClientFactory;
   readonly logicFactory?: SlotGameLogicFactory;

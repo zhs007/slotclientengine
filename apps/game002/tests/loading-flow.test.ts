@@ -158,6 +158,10 @@ describe("game002 99 percent finalization and ownership", () => {
         designSize: { width: 1125, height: 2000 },
         framePolicy: expect.objectContaining({ mode: "maximized-focus" }),
         uiFactory: expect.objectContaining({ create: expect.any(Function) }),
+        rngConsole: {
+          target: window,
+          log: expect.any(Function),
+        },
       }),
     );
     const frameworkOptions = frameworkMocks.createSlotGameFramework.mock
