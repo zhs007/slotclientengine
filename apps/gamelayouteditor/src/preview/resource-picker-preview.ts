@@ -22,6 +22,8 @@ export class ResourcePickerPreview {
   #request = 0;
   #identity = "";
   #prepared: PreparedPickerPreview | null = null;
+  #application: Application | null = null;
+  #applicationQueue: Promise<void> = Promise.resolve();
   #destroyed = false;
 
   async show(options: {
@@ -47,11 +49,23 @@ export class ResourcePickerPreview {
     }
     options.host.replaceChildren(emptyPreview("正在准备资源预览…", "loading"));
     try {
-      const prepared = await preparePreview(
-        options.project,
-        options.resource,
-        options.animation,
-      );
+      const resource = options.resource;
+      let prepared: PreparedPickerPreview | null;
+      if (resource.kind === "spine" && options.animation)
+        prepared = await this.prepareAnimated(request, (app) =>
+          prepareSpine(app, options.project, resource, options.animation),
+        );
+      else if (resource.kind === "vni")
+        prepared = await this.prepareAnimated(request, (app) =>
+          prepareVni(app, options.project, resource),
+        );
+      else
+        prepared = await preparePreview(
+          options.project,
+          resource,
+          options.animation,
+        );
+      if (!prepared) return;
       if (this.#destroyed || request !== this.#request) {
         prepared.destroy();
         return;
@@ -80,11 +94,52 @@ export class ResourcePickerPreview {
     if (this.#destroyed) return;
     this.#destroyed = true;
     this.clear();
+    void this.#applicationQueue.finally(() => {
+      const app = this.#application;
+      this.#application = null;
+      if (app) app.destroy(true, { children: true, texture: false });
+    });
   }
 
   private disposePrepared(): void {
     this.#prepared?.destroy();
     this.#prepared = null;
+  }
+
+  private prepareAnimated(
+    request: number,
+    prepare: (app: Application) => Promise<PreparedPickerPreview>,
+  ): Promise<PreparedPickerPreview | null> {
+    const result = this.#applicationQueue
+      .catch(() => undefined)
+      .then(async () => {
+        if (this.#destroyed || request !== this.#request) return null;
+        const app = await this.requireApplication();
+        if (this.#destroyed || request !== this.#request) return null;
+        const prepared = await prepare(app);
+        if (this.#destroyed || request !== this.#request) {
+          prepared.destroy();
+          return null;
+        }
+        return prepared;
+      });
+    this.#applicationQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  private async requireApplication(): Promise<Application> {
+    if (this.#application) return this.#application;
+    const app = new Application();
+    await app.init(previewApplicationOptions());
+    if (this.#destroyed) {
+      app.destroy(true, { children: true, texture: false });
+      throw new Error("资源预览已销毁。");
+    }
+    this.#application = app;
+    return app;
   }
 }
 
@@ -113,9 +168,6 @@ async function preparePreview(
       })),
       `${resource.id} atlas pages`,
     );
-  if (resource.kind === "spine")
-    return prepareSpine(project, resource, animation);
-  if (resource.kind === "vni") return prepareVni(project, resource);
   return {
     element: emptyPreview("video 资源不属于普通图层候选。"),
     destroy() {},
@@ -190,6 +242,7 @@ function prepareContactSheet(
 }
 
 async function prepareSpine(
+  app: Application,
   project: EditorProject,
   resource: Extract<EditorLayoutResource, { readonly kind: "spine" }>,
   animation: string,
@@ -197,12 +250,8 @@ async function prepareSpine(
   if (!resource.animationNames.includes(animation))
     throw new Error(`Spine animation 不存在：${animation}`);
   const urls = new ObjectUrlRegistry();
-  const app = new Application();
   let player: ReturnType<typeof createOfficialSpinePlayer> | null = null;
-  let initialized = false;
   try {
-    await app.init(previewApplicationOptions());
-    initialized = true;
     const skeleton = JSON.parse(
       new TextDecoder("utf-8", { fatal: true }).decode(
         requireAsset(project, resource.skeleton),
@@ -232,28 +281,32 @@ async function prepareSpine(
     app.stage.addChild(player.view);
     fitDisplayObject(player.view, app.canvas.width, app.canvas.height);
     const activePlayer = player;
-    app.ticker.add((ticker) => activePlayer.update(ticker.deltaMS / 1000));
+    const updatePlayer = (ticker: { readonly deltaMS: number }) =>
+      activePlayer.update(ticker.deltaMS / 1000);
+    app.ticker.add(updatePlayer);
+    app.ticker.start();
     const element = canvasPreview(app, `${resource.id} · ${animation}`);
     return {
       element,
       destroy: () => {
         app.ticker.stop();
+        app.ticker.remove(updatePlayer);
         app.stage.removeChild(activePlayer.view);
         activePlayer.destroy();
-        app.destroy(true, { children: true, texture: false });
+        app.canvas.remove();
         urls.destroy();
         element.remove();
       },
     };
   } catch (error) {
     player?.destroy();
-    if (initialized) app.destroy(true, { children: true, texture: false });
     urls.destroy();
     throw error;
   }
 }
 
 async function prepareVni(
+  app: Application,
   project: EditorProject,
   resource: Extract<EditorLayoutResource, { readonly kind: "vni" }>,
 ): Promise<PreparedPickerPreview> {
@@ -261,12 +314,8 @@ async function prepareVni(
   if (!profile || profile.purpose !== "runtime")
     throw new Error("VNI resource 缺少 runtime export profile。");
   const urls = new ObjectUrlRegistry();
-  const app = new Application();
   let player: VNIPlayer | null = null;
-  let initialized = false;
   try {
-    await app.init(previewApplicationOptions());
-    initialized = true;
     const assetUrls = Object.fromEntries(
       resource.project.assets.map((asset) => [
         asset.path,
@@ -293,21 +342,24 @@ async function prepareVni(
     player.setLoop(true);
     player.play();
     const activePlayer = player;
-    app.ticker.add((ticker) => activePlayer.update(ticker.deltaMS / 1000));
+    const updatePlayer = (ticker: { readonly deltaMS: number }) =>
+      activePlayer.update(ticker.deltaMS / 1000);
+    app.ticker.add(updatePlayer);
+    app.ticker.start();
     const element = canvasPreview(app, `${resource.id} timeline`);
     return {
       element,
       destroy: () => {
         app.ticker.stop();
+        app.ticker.remove(updatePlayer);
         activePlayer.destroy();
-        app.destroy(true, { children: true, texture: false });
+        app.canvas.remove();
         urls.destroy();
         element.remove();
       },
     };
   } catch (error) {
     player?.destroy();
-    if (initialized) app.destroy(true, { children: true, texture: false });
     urls.destroy();
     throw error;
   }
@@ -327,6 +379,7 @@ function previewApplicationOptions() {
     height: 280,
     background: "#080d15",
     antialias: true,
+    autoStart: false,
   } as const;
 }
 

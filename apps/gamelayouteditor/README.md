@@ -20,7 +20,7 @@ Spine atlas 的 page 是 atlas 内部逻辑名，texture map 的 value 才是全
 
 一次可上传多个 skeleton JSON，并让它们共享同一份 atlas 与贴图；每个 JSON 会生成独立 Spine 根资源，根资源单向引用共享叶子。整批导入先完整校验再原子提交：任何 JSON、atlas page 或贴图映射失败时都不会留下半批资源。删除或导出单个根资源时只按实际根引用计算闭包，不会反向带上同批但未使用的 sibling JSON。
 
-资源 Picker 的右侧按类型显示预览：图片直接显示，Spine 未选 animation 时显示贴图总览、选中 animation 后播放真实 Spine，VNI 播放真实 timeline，ImgNumber 显示 glyph 总览。预览只使用当前 project bytes，并在切换、关闭或销毁 Picker 时释放 player、ticker 和 Object URL；预览失败会明确提示且不修改 draft。
+资源 Picker 的右侧按类型显示预览：图片直接显示，Spine 未选 animation 时显示贴图总览、选中 animation 后播放真实 Spine，VNI 播放真实 timeline，ImgNumber 显示 glyph 总览。预览只使用当前 project bytes，并在切换、关闭或销毁 Picker 时释放 player、ticker 和 Object URL；动画预览 renderer 在 editor app 生命周期内单例复用，只在 app destroy 时释放，避免关闭 Picker 干扰主布局 renderer。预览失败会明确提示且不修改 draft。
 
 普通 Spine 图层必须精确选择一个 animation，并可独立设置是否循环。普通 VNI 图层播放完整 timeline，也可独立设置是否循环；每个 node 创建独立 player，复用同一资源不会共享播放头。两类动画都复用普通图层的 order、横竖屏可见性和逐 variant `x/y/scale`。方向可见性关闭时，当前编辑会话会保留该方向的 placement，并在重新开启时恢复；隐藏值不进入 production ZIP，重新导入后不可恢复。VNI 不允许充当背景或 mode transition。
 
