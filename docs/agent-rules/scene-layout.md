@@ -16,7 +16,7 @@
 - background node id 按 mode/variant 稳定生成，不从资源名产生 `-2/-3` identity。
 - 相同 logical resource 跨 mode 仍使用独立 node/placement；图片复用已加载 texture，稳定 Spine player 在 mode 切换时保留，不释放/重建。
 - stable Spine background 只使用显式 single loop。未来稳定背景 kind 也遵守 exact-resource 和 stable-node 合同。
-- 普通 scene node 可使用 official Spine 或 runtime VNI：Spine 显式选择 animation/loop，VNI 播放完整 timeline 并显式选择 loop；每个 node 保持独立 player/playhead。VNI 不得作为 background 或 transition。
+- 普通 scene node 可使用 official Spine 或 runtime VNI：Spine 显式选择 animation/loop，VNI 播放完整 timeline 并显式选择 loop；每个 node 保持独立 player/playhead。新建普通 Spine node 的骨架原点放在各 variant art center（`top-left` 坐标写入 `artSize / 2`，`center` 坐标写入 `0,0`），不得要求或使用 skeleton bounds/atlas texture 尺寸；Spine background 仍要求显式完整 art size。VNI 不得作为 background 或 transition。
 - VNI scene node 的 `project.stage` 是 100% art-space 尺寸；top-left 原点对齐 stage 左上角，center 原点对齐 stage 中心。runtime 使用宿主 ticker 手动 update，并跳过不可渲染节点。
 
 ## Symbols binding 与 preview

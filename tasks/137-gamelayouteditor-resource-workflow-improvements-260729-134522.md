@@ -74,7 +74,7 @@
 
 - 大型 VNI、复杂多页 Spine 和连续快速候选切换仍需要用户在目标浏览器与真实美术资源上确认性能和视觉效果。
 - 保留的 geometry 若超出新 art size 会按设计使 draft 校验失败并禁止导出，需要用户显式调整；不会自动修复。
-- 初始实现后续已按用户要求提交为 `4aad430`；本节后续修复当前尚未提交、未 push、未创建 PR。
+- 初始实现已按用户要求提交为 `4aad430`，renderer ownership 后续修复已提交为 `ac70051`；未 push、未创建 PR。
 
 ## 后续修复（2026-07-30T03:27:49Z）
 
@@ -90,3 +90,11 @@
 修复后使用真实 `bg.jpg + H1.json + Symbol.atlas + Symbol.png` 重走“有效背景 → Picker 播放 Idle → 确认添加图层”，图层 Inspector 正常出现，浏览器未新增 Pixi error。
 
 后续修复完成后重新运行 typecheck、lint、166 项测试、build、format check 与 `git diff --check`，全部通过；build 仍只有既有的单 chunk 大于 500 kB 提示。
+
+## 后续修复：普通 Spine 初始位置（2026-07-30）
+
+用户继续验收发现：普通 Spine 图层不再触发 renderer 异常，但新建 placement 仍固定为 `(0, 0, 1)`。在默认 `top-left` 坐标项目中，这会把位于骨架原点周围的内容放到画布左上边界之外，表现为图层存在但看不到。
+
+修复后，新建普通 Spine 图层把骨架原点放在各 variant 的 art center：`top-left` 坐标写入 `(artSize.width / 2, artSize.height / 2, 1)`，`center` 坐标仍写入 `(0, 0, 1)`。该逻辑只使用项目已有 art size，不读取或要求 Spine skeleton bounds/atlas texture 尺寸；Spine 背景仍必须显式填写完整 art size。图片、VNI 和 ImgNumber 的初始 placement 保持不变。
+
+本次修复已通过定向 24 项 validation 测试，以及 gamelayouteditor typecheck、lint、22 个测试文件/166 项测试、build、format check 与 `git diff --check`。按用户约定，浏览器视觉验收留给用户执行。
