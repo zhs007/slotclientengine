@@ -15,12 +15,35 @@ This package is separate from `@slotclientengine/anieditorv5runtime-cc`: `vnicor
 ```ts
 import {
   assertVNIProject,
+  createVNIParticleComboTargetVariant,
   validateVNIProject,
 } from "@slotclientengine/vnicore/core";
-import { VNIPlayer } from "@slotclientengine/vnicore/pixi";
+import {
+  VNIPlayer,
+  VNIPlayerPoolManager,
+} from "@slotclientengine/vnicore/pixi";
 ```
 
 The root import re-exports both `./core` and `./pixi`. The `V5G*` names are legacy schema aliases; new code should prefer `VNI*`.
+
+## Runtime particle_combo targets
+
+`createVNIParticleComboTargetVariant()` creates a fresh validated project and
+returns its effective timing without modifying the authored project. Targets are
+VNI layer-local offsets. The default `preserve-authored-speed` mode uses
+`hypot(authoredTargetX, authoredTargetY) / authoredDuration`; the new duration
+is the new target distance divided by that nominal speed. `fixed-duration`
+uses the caller's positive finite duration and reports the resulting speed.
+The returned time range should be used for playback.
+
+`VNIPlayerPoolManager` owns one bounded idle pool per initialized template
+player. A pool clone shares the template's already loaded textures but owns an
+independent project, display tree, particle state, transport, and listeners.
+`acquire()` returns a lease; `playOnce()` releases it automatically, while
+manual transport must call `release()` in `finally`. Release restores authored
+target/duration, resets runtime state, and detaches the clone. Destroy the
+manager with its host lifetime. The first version intentionally supports only
+enabled `particle_combo` animations selected by exact `layerId + animationId`.
 
 ## Supported Runtime Contract
 

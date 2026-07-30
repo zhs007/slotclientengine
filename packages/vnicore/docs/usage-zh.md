@@ -76,6 +76,38 @@ VNI_0.095 `card_carousel_3d` 只允许挂在 image/sequence layer。所有参数
 
 standalone viewer 需要缩放时，保持 renderer 和 `setViewportSize()` 为真实 mount 尺寸，仅调用 `setViewportScale(0.1)` 等比例缩放 display tree。不要通过缩小 viewport 或 canvas 来模拟 zoom，否则 runtime 裁剪边界也会缩小。
 
+## particle_combo 动态目标与池
+
+模板 player `init()` 后可创建显式 manager，并从该模板的唯一 pool 借出目标变体：
+
+```ts
+const manager = new VNIPlayerPoolManager({
+  maxIdleInstancesPerPlayer: 2,
+});
+const pool = manager.getPool(player);
+const lease = await pool.acquire({
+  animation: { layerId: "particle", animationId: "combo" },
+  target: { x: 900, y: 0 },
+  timing: { mode: "preserve-authored-speed" },
+});
+
+console.log(lease.timing.effectiveDurationSeconds);
+await lease.playOnce(); // 完成后自动归还
+manager.destroy();
+```
+
+target 是 layer-local VNI offset。自动模式只根据 authored target/duration
+计算名义速度，不沿 curve、随机 spawn 或 stagger 计算每颗粒子的真实弧长。
+需要强制时长时使用
+`{ mode: "fixed-duration", durationSeconds: 1 }`，返回的
+`effectiveSpeed` 会反映速度变化。手工控制 `lease.player` 时必须在
+`finally` 调用 `lease.release()`。
+
+clone 只共享已加载的 source/派生 texture；project、display tree、transport、
+particle 和 listener 完全独立。归还会恢复 authored target/duration 并 reset。
+首版只支持启用的 `particle_combo`，零距离自动模式、未知 ref、其它 animation
+type 和非法数值都会显式失败。
+
 ## 生命周期
 
 - `init()`: 加载贴图、校验真实 texture size，把 VNI display tree 挂到宿主 `parent`，初始化 layer 和 particle 容器。

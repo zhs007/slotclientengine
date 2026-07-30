@@ -84,6 +84,8 @@ import type {
   VNIBlendMode,
   VNIProjectConfig,
 } from "../core/types.js";
+import { validateVNIProject } from "../core/validation.js";
+import { VNIPlayerLoadedResources } from "./vni-player-loaded-resources.js";
 
 export type {
   VNIPlayOptions,
@@ -138,6 +140,10 @@ export interface VNIPlayerOptions {
   fitPadding?: number;
   onTimeChange?: (time: number) => void;
   onPlayingChange?: (isPlaying: boolean) => void;
+}
+
+interface VNIPlayerInternalOptions {
+  readonly loadedResources?: VNIPlayerLoadedResources;
 }
 
 export interface VNILayerGroupInfo {
@@ -302,12 +308,15 @@ export class VNIPlayer implements VNIManualPlaybackHost {
   private readonly additiveMatteAssetIds: ReadonlySet<string>;
   private readonly onTimeChange?: (time: number) => void;
   private readonly onPlayingChange?: (isPlaying: boolean) => void;
+  private readonly cloneOptions: VNIPlayerOptions;
   private readonly layerInstances = new Map<string, V5GLayerInstance>();
   private readonly slotContainersByKey = new Map<string, PIXI.Container>();
   private readonly mountedNodesById = new Map<string, VNIMountedNode>();
   private readonly particleRuntime: VNIParticleRuntime;
   private texturesByAssetId: ReadonlyMap<string, PIXI.Texture> = new Map();
   private readonly ownedTextures = new Set<PIXI.Texture>();
+  private loadedResources: VNIPlayerLoadedResources | null = null;
+  private readonly injectedLoadedResources: VNIPlayerLoadedResources | null;
   private readonly safeGlowSpritesByLayer = new Map<string, PIXI.Container[]>();
   private readonly chaserLightSpritesByLayer = new Map<string, PIXI.Sprite[]>();
   private readonly maskSpritesByTargetLayer = new Map<string, PIXI.Sprite>();
@@ -362,14 +371,20 @@ export class VNIPlayer implements VNIManualPlaybackHost {
   private manualSession: VNIManualPlaybackSessionImpl | null = null;
   private manualClockActive = false;
   private manualRangeCompletion: (() => void) | null = null;
+  private destroyed = false;
+  private readonly destroyListeners = new Set<() => void>();
 
-  constructor(options: VNIPlayerOptions) {
+  constructor(
+    options: VNIPlayerOptions,
+    internalOptions: VNIPlayerInternalOptions = {},
+  ) {
     if (options.project.maskCompositeMode === "legacy_alpha") {
       throw new Error(
         "VNI Pixi runtime does not support Cocos-compatible project.maskCompositeMode legacy_alpha; export a Pixi runtime project with precompose_light_alpha.",
       );
     }
     this.parent = options.parent;
+    this.cloneOptions = options;
     this.diagnosticsElement = options.diagnosticsElement;
     this.requestRenderCallback = options.requestRender;
     this.viewport = options.viewport
@@ -394,12 +409,30 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     this.particleRuntime = new VNIParticleRuntime(options.project.layers);
     this.onTimeChange = options.onTimeChange;
     this.onPlayingChange = options.onPlayingChange;
+    this.injectedLoadedResources = internalOptions.loadedResources ?? null;
+    this.loadedResources = this.injectedLoadedResources;
   }
 
   async init(): Promise<void> {
-    this.parent.addChild(this.stageRoot);
+    if (this.destroyed) {
+      throw new Error("Cannot initialize a destroyed VNIPlayer.");
+    }
+    if (this.initialized || this.stageRoot.parent) {
+      throw new Error("VNIPlayer.init() may only be called once.");
+    }
     try {
-      this.texturesByAssetId = await this.loadTextures();
+      this.parent.addChild(this.stageRoot);
+      if (this.injectedLoadedResources) {
+        this.loadedResources = this.injectedLoadedResources;
+        this.texturesByAssetId = this.injectedLoadedResources.texturesByAssetId;
+      } else {
+        this.texturesByAssetId = await this.loadTextures();
+        this.loadedResources = new VNIPlayerLoadedResources(
+          this.texturesByAssetId,
+          new Set(this.ownedTextures),
+        );
+        this.ownedTextures.clear();
+      }
       const layersById = new Map(
         this.project.layers.map((layer) => [layer.id, layer] as const),
       );
@@ -818,6 +851,82 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     return this.stageRoot;
   }
 
+  getProjectSnapshot(): VNIProjectConfig {
+    this.assertInitialized("getProjectSnapshot");
+    return structuredClone(this.project);
+  }
+
+  createLoadedClone(project: VNIProjectConfig): VNIPlayer {
+    this.assertInitialized("createLoadedClone");
+    validateVNIProject(project);
+    assertCompatibleCloneAssets(this.project, project);
+    const resources = this.loadedResources;
+    if (!resources) {
+      throw new Error("VNIPlayer loaded resources are unavailable.");
+    }
+    resources.retain();
+    try {
+      return new VNIPlayer(
+        {
+          ...this.cloneOptions,
+          project,
+          viewport: this.viewport ?? undefined,
+          viewportScale: this.viewportScale,
+          diagnosticsElement: undefined,
+          onTimeChange: undefined,
+          onPlayingChange: undefined,
+        },
+        { loadedResources: resources },
+      );
+    } catch (error) {
+      resources.release();
+      throw error;
+    }
+  }
+
+  /** @internal Owned by VNIPlayerPoolManager lease lifecycle. */
+  resetForPoolReuse(): void {
+    this.assertInitialized("resetForPoolReuse");
+    this.manualSession?.destroy();
+    this.manualSession = null;
+    this.manualClockActive = false;
+    this.manualRangeCompletion = null;
+    this.pause();
+    this.activeRange = null;
+    this.segmentedPlayback = null;
+    this.pendingComplete = null;
+    this.playbackMarkers.clear();
+    this.playbackCompleteListeners.clear();
+    this.playbackMode = "timeline";
+    this.playbackPhase = "idle";
+    this.currentTime = 0;
+    this.loop = true;
+    this.drainPaused = false;
+    this.particleRuntime.reconfigure(this.project.layers);
+    this.clearMountedNodes();
+    this.clearParticles();
+    this.clearRenderEffects();
+    this.clearDeterministicEffects();
+    this.clearChaserLights();
+    this.clearMasks();
+    this.clearSafeGlow();
+    this.renderDeterministicFrame(0);
+  }
+
+  onDestroy(listener: () => void): () => void {
+    if (this.destroyed) {
+      listener();
+      return () => undefined;
+    }
+    this.destroyListeners.add(listener);
+    let disposed = false;
+    return () => {
+      if (disposed) return;
+      disposed = true;
+      this.destroyListeners.delete(listener);
+    };
+  }
+
   setViewportSize(width: number, height: number): void {
     this.viewport = normalizeViewportSize({ width, height });
     this.applyViewportLayout();
@@ -1099,6 +1208,8 @@ export class VNIPlayer implements VNIManualPlaybackHost {
   }
 
   destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
     this.manualSession?.destroy();
     this.manualSession = null;
     this.manualClockActive = false;
@@ -1123,12 +1234,14 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     this.clearDiagnostics();
     this.stageRoot.parent?.removeChild(this.stageRoot);
     this.stageRoot.destroy({ children: true });
-    for (const texture of this.ownedTextures) {
-      texture.destroy(true);
-    }
+    this.loadedResources?.release();
+    this.loadedResources = null;
+    for (const texture of this.ownedTextures) texture.destroy(true);
     this.clearWaveDistortSliceTextures();
     this.ownedTextures.clear();
     this.initialized = false;
+    for (const listener of [...this.destroyListeners]) listener();
+    this.destroyListeners.clear();
   }
 
   private readonly tick = (now: number): void => {
@@ -2977,6 +3090,37 @@ function normalizeViewportScale(value: number): number {
     );
   }
   return value;
+}
+
+function assertCompatibleCloneAssets(
+  template: VNIProjectConfig,
+  clone: VNIProjectConfig,
+): void {
+  if (template.assets.length !== clone.assets.length) {
+    throw new Error(
+      "VNI loaded clone project must have the same assets as its template.",
+    );
+  }
+  const cloneAssetsById = new Map(
+    clone.assets.map((asset) => [asset.id, asset] as const),
+  );
+  for (const asset of template.assets) {
+    const candidate = cloneAssetsById.get(asset.id);
+    if (
+      !candidate ||
+      candidate.type !== asset.type ||
+      candidate.path !== asset.path ||
+      candidate.width !== asset.width ||
+      candidate.height !== asset.height ||
+      candidate.fileWidth !== asset.fileWidth ||
+      candidate.fileHeight !== asset.fileHeight ||
+      candidate.fileScale !== asset.fileScale
+    ) {
+      throw new Error(
+        `VNI loaded clone asset "${asset.id}" does not match its template.`,
+      );
+    }
+  }
 }
 
 export type V5GPlayerOptions = VNIPlayerOptions;
