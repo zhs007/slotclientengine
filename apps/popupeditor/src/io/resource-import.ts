@@ -754,16 +754,23 @@ function imageType(bytes: Uint8Array): {
   extension: "png" | "webp" | "jpg";
   mediaType: "image/png" | "image/webp" | "image/jpeg";
 } | null {
-  if (bytes[0] === 0x89 && decode(bytes.slice(1, 4)) === "PNG")
+  if (matchesBytes(bytes, 0, [0x89, 0x50, 0x4e, 0x47]))
     return { extension: "png", mediaType: "image/png" };
   if (
-    decode(bytes.slice(0, 4)) === "RIFF" &&
-    decode(bytes.slice(8, 12)) === "WEBP"
+    matchesBytes(bytes, 0, [0x52, 0x49, 0x46, 0x46]) &&
+    matchesBytes(bytes, 8, [0x57, 0x45, 0x42, 0x50])
   )
     return { extension: "webp", mediaType: "image/webp" };
-  if (bytes[0] === 0xff && bytes[1] === 0xd8)
+  if (matchesBytes(bytes, 0, [0xff, 0xd8]))
     return { extension: "jpg", mediaType: "image/jpeg" };
   return null;
+}
+function matchesBytes(
+  bytes: Uint8Array,
+  offset: number,
+  expected: readonly number[],
+) {
+  return expected.every((value, index) => bytes[offset + index] === value);
 }
 function imageSize(bytes: Uint8Array, extension: string) {
   if (extension === "png") {

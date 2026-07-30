@@ -233,6 +233,70 @@ describe("popup flat resource discovery", () => {
     expect(selected[0]!.exactKeys).not.toContain("manifest.json");
   });
 
+  it("imports a runtime VNI bundle that contains a JPEG asset", async () => {
+    const root = asset("game003-s1/win-amount");
+    const project = JSON.parse(
+      new TextDecoder().decode(bytes("game003-s1/win-amount/bigwin.json")),
+    ) as {
+      exportProfile: { id: string; purpose: string; assetScale: number };
+      assets: { path: string }[];
+    };
+    project.exportProfile = {
+      id: "runtime_100",
+      purpose: "runtime",
+      assetScale: 1,
+    };
+    const jpegAsset = project.assets[0]!;
+    jpegAsset.path = "assets/photo.jpg";
+    const entries = new Map<string, Uint8Array>([
+      [
+        "manifest.json",
+        new TextEncoder().encode(
+          JSON.stringify({
+            type: "vni_export_bundle",
+            version: "VNI_0.103",
+            exports: [
+              {
+                id: "runtime_100",
+                purpose: "runtime",
+                assetScale: 1,
+                path: "runtime_100/crave_superwin.json",
+              },
+            ],
+          }),
+        ),
+      ],
+      [
+        "runtime_100/crave_superwin.json",
+        new TextEncoder().encode(JSON.stringify(project)),
+      ],
+    ]);
+    for (const child of project.assets)
+      entries.set(
+        `runtime_100/${child.path}`,
+        child === jpegAsset
+          ? bytes("game003-s1/bg1.jpg")
+          : new Uint8Array(readFileSync(resolve(root, child.path))),
+      );
+
+    const review = await discoverPopupResources([
+      sourceFile("jpeg-runtime.zip", createDeterministicZip(entries)),
+    ]);
+
+    expect(review[0]).toMatchObject({
+      kind: "vni",
+      rootKey: "crave_superwin.json",
+      dependencyCount: project.assets.length,
+      selectedProfileId: "runtime_100",
+    });
+    expect(
+      review[0]!.assets.find(({ key }) => key === "photo.jpg"),
+    ).toMatchObject({
+      key: "photo.jpg",
+      mediaType: "image/jpeg",
+    });
+  });
+
   it("rewrites and validates an official Spine 4.3 closure", async () => {
     const review = await discoverPopupResources([
       sourceFile("WL.json", bytes("game003-s1/WL.json")),
@@ -252,6 +316,16 @@ describe("popup flat resource discovery", () => {
     await expect(
       discoverPopupResources([sourceFile("unknown.txt", new Uint8Array([1]))]),
     ).rejects.toThrow(/无法识别、未引用或不完整/);
+    await expect(
+      discoverPopupResources([
+        sourceFile("unknown.bin", new Uint8Array([0xff, 0x00])),
+      ]),
+    ).rejects.toThrow(/无法识别、未引用或不完整/);
+    await expect(
+      discoverPopupResources([
+        sourceFile("invalid.json", new Uint8Array([0xff, 0xfe])),
+      ]),
+    ).rejects.toThrow(/invalid\.json 不是合法 JSON/);
     await expect(
       discoverPopupResources([
         sourceFile("A.PNG", png(1, 1)),
