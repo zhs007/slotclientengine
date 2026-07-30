@@ -7,7 +7,7 @@
 - gamelayouteditor 是 browser-only editing UI，拥有 draft、preview controls、filename-key workspace、受限 ZIP import/export 和 dependency binding。
 - editor 保持 `base: "./"`，可部署到任意静态 CDN 子路径，不依赖 server/API/WebSocket/数据库/登录态/持久化存储。
 - preview 复用 uiframeworks frame viewport 和 rendercore production scene runtime；preview zoom 不进入 manifest，canvas 拖动不修改 layout config。
-- Resource Picker 按资源 kind 提供 typed preview；Spine/VNI 必须复用 production player 语义，图片与 glyph 总览只读取 project-owned bytes。切换、关闭和销毁 Picker 必须释放 player、ticker、renderer 与 Object URL，preview 失败不得修改 draft。
+- Resource Picker 按资源 kind 提供 typed preview；Spine/VNI 必须复用 production player 语义，图片与 glyph 总览只读取 project-owned bytes。切换或关闭 Picker 必须释放 player、ticker 与 Object URL；动画 preview renderer 由 editor app 单例拥有并只在 app destroy 时释放，不得为每次关闭销毁并干扰主布局 renderer。preview 失败不得修改 draft。
 
 ## Mode、variant 与稳定节点
 
