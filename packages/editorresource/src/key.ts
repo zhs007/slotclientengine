@@ -70,6 +70,22 @@ export function canonicalExtensionOfEditorAssetKey(value: string): string {
   return extension === "jpeg" ? "jpg" : extension;
 }
 
+export function allocateEditorAssetKeySuffix(
+  requested: string,
+  occupiedKeys: Iterable<string>,
+): EditorAssetKey {
+  const key = assertEditorAssetKey(requested);
+  const extension = extensionOfEditorAssetKey(key);
+  const stem = key.slice(0, -(extension.length + 1));
+  const occupied = new Set([...occupiedKeys].map(editorAssetKeyCollisionToken));
+  for (let suffix = 1; Number.isSafeInteger(suffix); suffix += 1) {
+    const candidate = assertEditorAssetKey(`${stem}-${suffix}.${extension}`);
+    if (!occupied.has(editorAssetKeyCollisionToken(candidate)))
+      return candidate;
+  }
+  throw new Error(`asset filename key suffix 已耗尽：${key}`);
+}
+
 export function basenameFromSourcePath(path: string): EditorAssetKey {
   if (typeof path !== "string" || path.length === 0)
     throw new Error("source path 必须是非空字符串。");
