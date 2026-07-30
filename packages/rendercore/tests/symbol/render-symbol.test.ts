@@ -48,6 +48,27 @@ const createSizedTexture = (width: number, height: number) => {
 };
 
 describe("RenderSymbol", () => {
+  it("owns presentation values without a visual value controller and clears them on pool release", () => {
+    const renderSymbol = new RenderSymbol({
+      definition: createDefinition(),
+      texture: Texture.WHITE,
+      animationResolver: createTestDefaultSymbolAnimationResolver(),
+    });
+
+    expect(renderSymbol.getPresentationValue()).toBeNull();
+    renderSymbol.setPresentationValue(1);
+    expect(renderSymbol.getPresentationValue()).toBe(1);
+
+    renderSymbol.reset();
+    expect(renderSymbol.getPresentationValue()).toBe(1);
+
+    renderSymbol.resetForPoolRelease();
+    expect(renderSymbol.getPresentationValue()).toBeNull();
+    expect(() => renderSymbol.setPresentationValue(0)).toThrow(
+      /positive safe integer or null/,
+    );
+  });
+
   it("keeps an equivalent live animation timeline across semantic state changes", () => {
     let resets = 0;
     let destroys = 0;

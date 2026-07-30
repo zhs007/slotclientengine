@@ -45,6 +45,7 @@ export class RenderSymbol extends VisualEntity<void> {
   #lastAniKey: string;
   #defaultScaleX = 1;
   #defaultScaleY = 1;
+  #presentationValue: number | null = null;
   #loopCompletionCount = 0;
   #onceCompletionCount = 0;
   #destroyed = false;
@@ -178,8 +179,21 @@ export class RenderSymbol extends VisualEntity<void> {
 
   setPresentationValue(value: number | null): void {
     this.assertNotDestroyed();
-    const previous = this.#valueController?.getValue() ?? null;
-    this.#valueController?.setValue(value);
+    if (value !== null && (!Number.isSafeInteger(value) || value <= 0)) {
+      throw new Error(
+        "Render symbol presentation value must be a positive safe integer or null.",
+      );
+    }
+    const previous = this.#presentationValue;
+    if (this.#valueController) {
+      try {
+        this.#valueController.setValue(value);
+      } finally {
+        this.#presentationValue = this.#valueController.getValue();
+      }
+    } else {
+      this.#presentationValue = value;
+    }
     if (this.#valueController && previous !== value) {
       const before = this.#lastAniKey;
       this.#lastAniKey = "";
@@ -188,7 +202,7 @@ export class RenderSymbol extends VisualEntity<void> {
   }
 
   getPresentationValue(): number | null {
-    return this.#valueController?.getValue() ?? null;
+    return this.#presentationValue;
   }
 
   getImageStringNodeNames(): readonly string[] {
@@ -271,6 +285,7 @@ export class RenderSymbol extends VisualEntity<void> {
     this.#currentAni.destroy?.();
     this.#valueController?.resetForPoolRelease();
     this.#imageStringController?.resetForPoolRelease();
+    this.#presentationValue = null;
     this.#stateMachine.reset();
     this.#lastAniKey = "";
     this.#currentAni = createReleasedSymbolAni();

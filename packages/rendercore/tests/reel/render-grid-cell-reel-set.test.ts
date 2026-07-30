@@ -35,6 +35,20 @@ const DIMMING = Object.freeze({
 }) satisfies GridCellDimmingPattern;
 
 describe("RenderGridCellReelSet", () => {
+  it("retains cascade values for symbols without a visual value controller", () => {
+    const reelSet = createGridReelSet();
+    const values = [
+      [1, null, null],
+      [null, null, null],
+    ];
+
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS, undefined, values);
+    expect(reelSet.getCascadeValues()).toEqual(values);
+
+    reelSet.setVisibleSymbolPresentationValue(0, 0, 2);
+    expect(reelSet.getCascadeValues()[0][0]).toBe(2);
+  });
+
   it("implements stopped visible-symbol presentation with grid-local geometry", () => {
     const reelSet = createGridReelSet();
     reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
@@ -695,7 +709,7 @@ describe("RenderGridCellReelSet", () => {
       [2, 0, 2],
       [1, 1, 0],
     ]);
-    expect(reelSet.getCascadeValues()[1][0]).toBeNull();
+    expect(reelSet.getCascadeValues()[1][0]).toBe(7);
   });
 });
 
