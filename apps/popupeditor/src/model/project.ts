@@ -189,6 +189,26 @@ export function projectToManifest(
   });
 }
 
+export function popupEditorProjectDiagnostics(
+  project: PopupEditorProject,
+): readonly string[] {
+  const incompleteTiers = (
+    ["base", "standard", "bigwin", "superwin", "megawin"] as const
+  ).filter((tierId) => !project.tiers.get(tierId)?.layers.length);
+  if (incompleteTiers.length)
+    return Object.freeze([
+      `项目尚未完成：${incompleteTiers.join("、")} 档位尚未添加图层。资源导入已独立保存；请在“档位”页显式绑定资源。`,
+    ]);
+  try {
+    projectToManifest(project);
+    return Object.freeze([]);
+  } catch (error) {
+    return Object.freeze([
+      error instanceof Error ? error.message : String(error),
+    ]);
+  }
+}
+
 export function addLayer(
   project: PopupEditorProject,
   tierId: AwardTierId,
@@ -359,12 +379,6 @@ export class PopupEditorStore {
   private notify(
     listener: (project: PopupEditorProject, errors: readonly string[]) => void,
   ) {
-    const errors: string[] = [];
-    try {
-      projectToManifest(this.#project);
-    } catch (error) {
-      errors.push(error instanceof Error ? error.message : String(error));
-    }
-    listener(this.#project, Object.freeze(errors));
+    listener(this.#project, popupEditorProjectDiagnostics(this.#project));
   }
 }

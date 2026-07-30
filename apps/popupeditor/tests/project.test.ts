@@ -15,6 +15,7 @@ import {
   createPopupAmountFormat,
   createPopupEditorProject,
   detectPopupAmountFormatPreset,
+  popupEditorProjectDiagnostics,
   projectToManifest,
   removePopupResource,
   resourceReferenceCount,
@@ -44,6 +45,9 @@ describe("popup editor filename-key project", () => {
     expect(() => projectToManifest(project)).toThrow(
       /layers must be non-empty/,
     );
+    expect(popupEditorProjectDiagnostics(project)).toEqual([
+      "项目尚未完成：base、standard、bigwin、superwin、megawin 档位尚未添加图层。资源导入已独立保存；请在“档位”页显式绑定资源。",
+    ]);
   });
 
   it("imports ImgNumber through the common review and exports deterministic mapped ZIPs", async () => {

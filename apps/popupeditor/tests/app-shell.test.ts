@@ -63,14 +63,20 @@ vi.mock("../src/io/resource-import.js", async (original) => {
     inspectVniBundleProfiles: vi.fn(actual.inspectVniBundleProfiles),
     discoverPopupResources: vi.fn(async () => [structuredCloneCandidate()]),
     reviewPopupImportTransaction: vi.fn(async () => transaction),
-    commitImportReview: vi.fn(async (project) => {
-      project.resources.set(candidate.rootKey, {
-        rootKey: candidate.rootKey,
-        kind: candidate.kind,
-        spec: structuredClone(candidate.spec),
-        keys: [...candidate.exactKeys],
-      });
-      project.assets.set(asset.key, { ...asset, bytes: asset.bytes.slice() });
+    commitImportReview: vi.fn(async (project, candidates) => {
+      for (const imported of candidates) {
+        project.resources.set(imported.rootKey, {
+          rootKey: imported.rootKey,
+          kind: imported.kind,
+          spec: structuredClone(imported.spec),
+          keys: [...imported.exactKeys],
+        });
+        for (const importedAsset of imported.assets)
+          project.assets.set(importedAsset.key, {
+            ...importedAsset,
+            bytes: importedAsset.bytes.slice(),
+          });
+      }
       return transaction;
     }),
   };
@@ -261,6 +267,81 @@ describe("PopupEditorApp", () => {
         .at(-1)?.[1]
         ?.vniProfileSelections?.get("multiple-runtimes.zip"),
     ).toBe("runtime_50");
+    app.destroy();
+  });
+
+  it("reports an unbound VNI as imported draft state instead of an import failure", async () => {
+    const { PopupEditorApp } = await import("../src/ui/app-shell.js");
+    const resourceImport = await import("../src/io/resource-import.js");
+    const inspect = vi.mocked(resourceImport.inspectVniBundleProfiles);
+    const discover = vi.mocked(resourceImport.discoverPopupResources);
+    const root = document.querySelector<HTMLElement>("#app")!;
+    const app = new PopupEditorApp(root);
+    await app.init();
+    const importer = root.querySelector<HTMLInputElement>("#import-assets")!;
+    const zip = createDeterministicZip(
+      new Map([["manifest.json", new TextEncoder().encode("{}")]]),
+    );
+    inspect.mockReturnValue([
+      {
+        id: "runtime_100",
+        label: "100% 运行发布包",
+        assetScale: 1,
+        byteLength: 100,
+      },
+    ]);
+    discover.mockResolvedValueOnce([
+      {
+        rootKey: "crave_bigwin.json",
+        kind: "vni",
+        primarySource: "crave_bigwin.zip:runtime_100/crave_bigwin.json",
+        dependencyCount: 1,
+        summary: "900×1600, 3.5s",
+        spec: { kind: "vni", project: "crave_bigwin.json" },
+        assets: [
+          {
+            ...asset,
+            key: "crave_bigwin.json",
+            bytes: new TextEncoder().encode(
+              JSON.stringify({ stage: { duration: 3.5 }, assets: [] }),
+            ),
+          },
+        ],
+        exactKeys: ["crave_bigwin.json"],
+        errors: [],
+        profiles: [
+          {
+            id: "runtime_100",
+            label: "100% 运行发布包",
+            assetScale: 1,
+            byteLength: 100,
+          },
+        ],
+        selectedProfileId: "runtime_100",
+      },
+    ]);
+    Object.defineProperty(importer, "files", {
+      value: [new File([zip.slice().buffer], "crave_bigwin.zip")],
+      configurable: true,
+    });
+    importer.dispatchEvent(new Event("change"));
+    await vi.waitFor(() =>
+      expect(
+        (root.querySelector("#import-review") as HTMLDialogElement).open,
+      ).toBe(true),
+    );
+    root.querySelector<HTMLButtonElement>("#review-confirm")!.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector("#diagnostics")?.textContent).toContain(
+        "资源导入成功。未绑定档位：crave_bigwin.json。",
+      ),
+    );
+    expect(root.querySelector("#diagnostics")?.textContent).toContain(
+      "项目尚未完成：base、standard、bigwin、superwin、megawin",
+    );
+    expect(root.querySelector("#diagnostics")?.textContent).not.toContain(
+      "layers must be non-empty",
+    );
     app.destroy();
   });
 

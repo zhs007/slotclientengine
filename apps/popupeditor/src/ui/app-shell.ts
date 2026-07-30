@@ -407,6 +407,7 @@ export class PopupEditorApp {
             candidate.suggestedTierBindings,
           );
         this.#store.replace(draft);
+        this.#notice = resourceImportNotice(draft, candidates);
         dialog.close();
       });
     this.required("review-cancel").onclick = () => dialog.close();
@@ -424,9 +425,10 @@ export class PopupEditorApp {
     });
   }
   private async action(work: () => Promise<void>) {
+    this.#notice = "";
     try {
       await work();
-      this.#notice = "操作成功";
+      if (!this.#notice) this.#notice = "操作成功";
     } catch (error) {
       this.#notice = error instanceof Error ? error.message : String(error);
     }
@@ -452,7 +454,7 @@ function shell() {
   return `<header><h1>Popup Award Celebration Editor</h1><nav class="primary-tabs" role="tablist" aria-label="编辑区域"><button role="tab" data-tab="resources">资源</button><button role="tab" data-tab="tiers">档位</button><button role="tab" data-tab="project">项目</button></nav></header><main><section class="left"><div id="workspace" role="tabpanel"></div><pre id="diagnostics"></pre></section><aside><div class="preview-controls"><select id="preview-resolution"><option value="1920x1080">1920×1080</option><option value="1080x1920" selected>1080×1920</option><option value="2000x2000">2000×2000</option><option value="custom">custom</option></select><label>width<input id="preview-width" type="number" min="1" value="1080"/></label><label>height<input id="preview-height" type="number" min="1" value="1920"/></label><select id="preview-zoom"><option value="fit">fit</option>${[0.25, 0.5, 0.75, 1, 1.5, 2].map((v) => `<option value="${v}">${v * 100}%</option>`)}</select><label><input id="preview-guides" type="checkbox" checked/>guides</label><label>bet raw<input id="preview-bet" type="number" value="100"/></label><label>win raw<input id="preview-win" type="number" value="5000"/></label><button id="preview-build">Build preview</button><button id="preview-play">Play / Replay</button><button id="preview-advance">Advance</button><button id="preview-dismiss">Dismiss</button><button id="preview-clear">Dismiss immediately</button></div><div id="preview-canvas"></div><output id="preview-status"></output></aside></main><dialog id="vni-runtime-choice"><h2>选择 VNI runtime</h2><p id="vni-runtime-description"></p><label class="vni-runtime-options">运行版本<select id="vni-runtime-select"></select></label><button id="vni-runtime-confirm">确认 runtime</button><button id="vni-runtime-cancel">取消导入</button></dialog><dialog id="import-review"><h2>Import review</h2><div id="review-body"></div><button id="review-confirm">确认并应用建议绑定</button><button id="review-cancel">取消</button></dialog>`;
 }
 function resourcesMarkup(project: PopupEditorProject) {
-  return `<section class="resource-import-panel"><h2>扁平资源库</h2><p>图片、Spine、VNI、ImgNumber ZIP 与 Popup ZIP 统一从这里导入；filename key 保留原始拼写，同名不同 bytes 默认覆盖。</p><div class="resource-actions"><label class="file-action">导入资源<input id="import-assets" type="file" accept="image/png,image/webp,image/jpeg,.json,.atlas,.zip" multiple/></label></div></section><div class="resource-list">${[...project.resources.values()].map((resource) => `<article class="card"><strong>${resource.rootKey}</strong><span>${resource.kind}</span><details><summary>${resource.keys.length} filename keys</summary><code>${resource.keys.join("\n")}</code></details><span>${resourceReferenceCount(project, resource.rootKey)} 个图层绑定</span><button data-delete-resource="${resource.rootKey}">删除</button></article>`).join("") || '<p class="empty-state">尚无资源</p>'}</div>`;
+  return `<section class="resource-import-panel"><h2>扁平资源库</h2><p>图片、Spine、VNI、ImgNumber ZIP 与 Popup ZIP 统一从这里导入；filename key 保留原始拼写，同名不同 bytes 默认覆盖。普通资源导入只入库，不会根据文件名猜测档位；请在导入后到“档位”页显式绑定。</p><div class="resource-actions"><label class="file-action">导入资源<input id="import-assets" type="file" accept="image/png,image/webp,image/jpeg,.json,.atlas,.zip" multiple/></label></div></section><div class="resource-list">${[...project.resources.values()].map((resource) => `<article class="card"><strong>${resource.rootKey}</strong><span>${resource.kind}</span><details><summary>${resource.keys.length} filename keys</summary><code>${resource.keys.join("\n")}</code></details><span>${resourceReferenceCount(project, resource.rootKey)} 个图层绑定</span><button data-delete-resource="${resource.rootKey}">删除</button></article>`).join("") || '<p class="empty-state">尚无资源</p>'}</div>`;
 }
 function tiersMarkup(
   project: PopupEditorProject,
@@ -507,6 +509,27 @@ function candidateBindingSummary(candidate: PopupImportReviewCandidate) {
       )
       .join("；")}`;
   return "建议绑定：无（仅建立资源）";
+}
+
+function resourceImportNotice(
+  project: PopupEditorProject,
+  candidates: readonly PopupImportReviewCandidate[],
+) {
+  const unbound = candidates
+    .filter(({ rootKey }) => resourceReferenceCount(project, rootKey) === 0)
+    .map(({ rootKey }) => rootKey);
+  const incompleteTiers = TIERS.filter(
+    (tierId) => !project.tiers.get(tierId)?.layers.length,
+  );
+  const binding =
+    unbound.length > 0
+      ? `未绑定档位：${unbound.join("、")}。`
+      : "建议绑定已应用。";
+  const completion =
+    incompleteTiers.length > 0
+      ? `项目仍待配置：${incompleteTiers.join("、")}。`
+      : "项目五档图层已完整。";
+  return `资源导入成功。${binding}${completion}`;
 }
 
 function vniTimingSummary(
