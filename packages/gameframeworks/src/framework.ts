@@ -5,6 +5,10 @@ import {
 } from "./errors.js";
 import { createSlotGameLogicResult } from "./logic-result.js";
 import { createSlotGameRoundContext } from "./round-context.js";
+import {
+  createSlotGameRngConsoleController,
+  type SlotGameRngConsoleController,
+} from "./rng-console.js";
 import { requireFiniteBalance, SlotGameLiveSession } from "./session.js";
 import { SlotGameStateStore } from "./state.js";
 import { createDefaultSlotGameUiFactory } from "./ui-adapter.js";
@@ -37,6 +41,7 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
   readonly #ui: SlotGameUi;
   readonly #session: SlotGameLiveSessionLike;
   readonly #mountPromise: Promise<void>;
+  readonly #rngConsole: SlotGameRngConsoleController | null;
   readonly #reportedErrors = new Set<Error>();
   #destroyed = false;
   #lifecycleGeneration = 0;
@@ -45,39 +50,59 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
 
   constructor(options: SlotGameFrameworkOptions) {
     validateFrameworkOptions(options);
-    this.#options = options;
-    this.#state = new SlotGameStateStore({
-      designSize: options.designSize,
-      betOptions: options.betOptions,
-      initialBetIndex: options.initialBetIndex,
-      initialBalance: options.initialBalance,
-      initialWin: options.initialWin,
-      initialMuted: options.initialMuted,
-      initialFastMode: options.initialFastMode,
-      initialAutoMode: options.initialAutoMode,
-    });
-    const commands = this.#createUiCommands();
-    const uiFactory = options.uiFactory ?? createDefaultSlotGameUiFactory();
-    this.#ui = createAndValidateUi(uiFactory, {
-      root: options.root,
-      designSize: this.#state.designSize,
-      framePolicy: options.framePolicy,
-      betOptions: this.#state.betOptions,
-      initialState: this.#state.getState(),
-      brandLabel: options.brandLabel,
-      currency: options.currency,
-      locale: options.locale,
-      formatMoney: options.formatMoney,
-      commands,
-    });
-    this.#session =
-      options.liveSession ??
-      new SlotGameLiveSession({
-        live: options.live,
-        clientFactory: options.clientFactory,
+    this.#rngConsole =
+      options.rngConsole === undefined
+        ? null
+        : createSlotGameRngConsoleController(options.rngConsole);
+    try {
+      this.#options = options;
+      this.#state = new SlotGameStateStore({
+        designSize: options.designSize,
+        betOptions: options.betOptions,
+        initialBetIndex: options.initialBetIndex,
+        initialBalance: options.initialBalance,
+        initialWin: options.initialWin,
+        initialMuted: options.initialMuted,
+        initialFastMode: options.initialFastMode,
+        initialAutoMode: options.initialAutoMode,
       });
-    this.#mountPromise = this.#mountGameAdapter();
-    this.#applyState();
+      const commands = this.#createUiCommands();
+      const uiFactory = options.uiFactory ?? createDefaultSlotGameUiFactory();
+      this.#ui = createAndValidateUi(uiFactory, {
+        root: options.root,
+        designSize: this.#state.designSize,
+        framePolicy: options.framePolicy,
+        betOptions: this.#state.betOptions,
+        initialState: this.#state.getState(),
+        brandLabel: options.brandLabel,
+        currency: options.currency,
+        locale: options.locale,
+        formatMoney: options.formatMoney,
+        commands,
+      });
+      this.#session =
+        options.liveSession ??
+        new SlotGameLiveSession({
+          live: options.live,
+          clientFactory: options.clientFactory,
+        });
+      this.#mountPromise = this.#mountGameAdapter().catch((error: unknown) => {
+        try {
+          this.#rngConsole?.destroy();
+        } catch {
+          // The mount failure remains authoritative.
+        }
+        throw error;
+      });
+      this.#applyState();
+    } catch (error) {
+      try {
+        this.#rngConsole?.destroy();
+      } catch {
+        // The constructor failure remains authoritative.
+      }
+      throw error;
+    }
   }
 
   async connect(): Promise<void> {
@@ -135,11 +160,19 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
       await this.#mountPromise;
       this.#assertOperationActive(generation);
 
-      const params = buildSpinParams(
+      const baseParams = buildSpinParams(
         this.#state.getState(),
         betOption,
         this.#options.buildSpinRequest,
       );
+      const nextRandomNumbers = this.#rngConsole?.takeNext();
+      const params =
+        nextRandomNumbers === undefined
+          ? baseParams
+          : (Object.freeze({
+              ...baseParams,
+              lstrand: nextRandomNumbers,
+            }) as SpinParams);
       const rawResult = await this.#session.spin(params);
       this.#assertOperationActive(generation);
       const balanceAfterSpin = readFiniteBalanceOrNull(
@@ -150,6 +183,7 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
         userInfo: this.#session.getUserInfo(),
         logicFactory: this.#options.logicFactory,
       });
+      this.#rngConsole?.logRandomNumbers(logicResult.logic.getRandomNumbers());
       const round = createSlotGameRoundContext({
         id: ++this.#roundId,
         betOption,
@@ -351,6 +385,7 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
     this.#lifecycleGeneration += 1;
     let firstError: Error | null = null;
     for (const cleanup of [
+      () => this.#rngConsole?.destroy(),
       () => this.#ui.destroy(),
       () => this.#session.disconnect(),
       () => this.#options.gameAdapter.destroy?.(),

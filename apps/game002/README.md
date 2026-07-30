@@ -35,6 +35,18 @@ http://127.0.0.1:5207/?skin=2&gameCode=GAME_CODE&platformToken=TOKEN&businessCod
 
 参数值必须 URL encode。URL query 可能进入地址栏、历史记录、access log 和 Referer，发布环境应使用短期或一次性 token。
 
+### 测试服下一轮 RNG
+
+game002 在正式 framework entry 中显式启用了 gameframeworks 的测试服 RNG
+控制台能力。每次成功解析 spin 后，控制台会输出可直接复制的
+`rng(8,61,41,33,13,729)`；修改数字并执行后，只有下一次实际发出的 spin
+`ctrlparam` 会增加同值 `lstrand`，再下一轮恢复正常请求。
+
+`rng(...)` 只接受一个或多个非负 safe integer。空调用、负数、小数、string 或
+array 参数都会显式失败，并保留之前合法但尚未消费的序列。该入口只用于固定测试服
+局面，不写入 URL/配置/玩家状态，不控制本地公开轮带或 visual phase RNG。
+framework destroy 或页面刷新会清理 command 和 pending 序列。
+
 ## 资源合同
 
 - `skin=2` 的 layout/background/focus/棋盘 geometry/symbols/公开轮带/popup

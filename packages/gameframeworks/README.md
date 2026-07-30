@@ -62,6 +62,44 @@ await framework.connect();
 await framework.spin();
 ```
 
+## 测试服下一轮 RNG
+
+需要测试服务器强制下一轮局面时，consumer 可以显式启用 instance-scoped
+`rngConsole`：
+
+```ts
+const framework = createSlotGameFramework({
+  // 其它正式配置...
+  rngConsole: {
+    target: window,
+    log: (message) => console.info(message),
+  },
+});
+```
+
+framework 会在 target 上安装非枚举的 `rng(...values)`。浏览器控制台输入：
+
+```js
+rng(8, 61, 41, 33, 13, 729);
+```
+
+下一次真正交给 live session 的 spin params 会增加
+`lstrand: [8, 61, 41, 33, 13, 729]`，随后立即清空该 override。before-connect、
+非 idle 或 destroyed 状态下被拒绝的 spin 不消费它；请求一旦交给 session，即使
+网络失败也不会自动恢复，因为无法确认请求是否已经到达服务器。连续合法调用采用
+last-write-wins。
+
+参数必须是一个或多个非负 safe integer；不接受 string、array 参数、空调用或隐式
+转换。非法调用显式失败并保留此前合法的 pending 序列。若
+`buildSpinRequest()` 本身返回 `lstrand`，console override 只在被消费的那一轮覆盖
+它，后续恢复 app 原请求。
+
+每次 GMI 成功解析后，framework 会通过配置的 logger 输出可复制的
+`rng(11,22,33)`。target 已存在 `rng` 时创建 framework 会显式失败，不覆盖宿主；
+`framework.destroy()` 会清空 pending，并且只移除仍属于该实例的 command。
+`rngConsole` 不默认启用，也不能用 server RNG 驱动客户端公开轮带、reel phase 或
+其它视觉随机。
+
 ## 预连接 Session
 
 普通游戏继续直接创建 framework 并调用 `framework.connect()`。如果游戏有独立 loading 首屏，可以先在 loading 的 `99%` 阶段只准备 live session：

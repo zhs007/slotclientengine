@@ -26,6 +26,9 @@
 
 - 客户端 spin 始终使用本地公开轮带。服务器 scene 只覆盖本轮临时 strip 的可见落点窗口；scene 无法反查本地 stop 时不得失败。
 - 不读取、缓存、输出或推断服务器真实轮带，也不消费服务器 randomNumbers 作为本地视觉随机源。
+- 测试服 `lstrand` 只能由 gameframeworks 的显式 opt-in、instance-scoped
+  console contract 覆盖下一次实际发出的 spin；消费后立即清除，不持久化、不自动
+  重放，也不得驱动本地公开轮带、reel phase 或其它 presentation random。
 - `otherScenes` 是变化数据：业务 component 触发但 auxiliary matrix 未变化时可以没有 update。logiccore 不强制每个 component 恰好一份，app 负责区分可推导省略和不可推导的新值。
 - `renderPriority` 只允许非负安全整数，默认 `0`；只影响 Pixi display order，不改变 scene、stop、result、state、金额或点击逻辑。同优先级保持默认稳定顺序。
 
