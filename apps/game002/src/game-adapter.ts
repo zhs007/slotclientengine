@@ -162,6 +162,9 @@ class Game002PixiAdapter implements SlotGameAdapter {
   #freeGamePlayback: Game002FreeGamePlayback | null = null;
   #unsubscribeViewport: (() => void) | null = null;
   #disposeWinAmountAdvanceListener: (() => void) | null = null;
+  #lastPresentationDiagnostic = "";
+  #presentationDiagnosticAgeSeconds = 0;
+  #presentationStallReported = false;
 
   constructor(options: Game002AdapterOptions) {
     const skin = options.skin;
@@ -370,6 +373,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
     ) {
       throw new Error("game002 adapter animation is already in progress.");
     }
+    this.#resetPresentationDiagnostic();
     const betAmountRaw = logic.getBet() * logic.getLines();
     const winAmountRaw = logic.getTotalWin();
     assertValidWinAmountInput(betAmountRaw, winAmountRaw);
@@ -576,6 +580,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
         return;
       }
       coordinator.update(deltaSeconds);
+      this.#reportPresentationProgress(deltaSeconds);
     } catch (error) {
       this.#app?.ticker.stop();
       const failure = error instanceof Error ? error : new Error(String(error));
@@ -591,6 +596,41 @@ class Game002PixiAdapter implements SlotGameAdapter {
       throw new Error("game002 adapter is not mounted.");
     }
     return this.#runtime;
+  }
+
+  #resetPresentationDiagnostic(): void {
+    this.#lastPresentationDiagnostic = "";
+    this.#presentationDiagnosticAgeSeconds = 0;
+    this.#presentationStallReported = false;
+  }
+
+  #reportPresentationProgress(deltaSeconds: number): void {
+    const coordinator = this.#roundCoordinator;
+    const target = this.#roundTarget;
+    if (!coordinator || !target) return;
+    const coordinatorSnapshot = coordinator.getSnapshot();
+    const diagnostic = JSON.stringify({
+      coordinator: coordinatorSnapshot,
+      target: target.getDiagnosticSnapshot(),
+    });
+    if (diagnostic !== this.#lastPresentationDiagnostic) {
+      this.#lastPresentationDiagnostic = diagnostic;
+      this.#presentationDiagnosticAgeSeconds = 0;
+      this.#presentationStallReported = false;
+      this.#logDiagnostic(`presentation progress ${diagnostic}`);
+      return;
+    }
+    if (!coordinatorSnapshot.running) return;
+    this.#presentationDiagnosticAgeSeconds += deltaSeconds;
+    if (
+      this.#presentationDiagnosticAgeSeconds >= 5 &&
+      !this.#presentationStallReported
+    ) {
+      this.#presentationStallReported = true;
+      this.#logDiagnostic(
+        `presentation stalled>=5s ${this.#lastPresentationDiagnostic}`,
+      );
+    }
   }
 
   #requireSymbolCascadePlayer(): SymbolCascadePlayer {
@@ -1435,6 +1475,43 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     if (!this.#completionComplete) return false;
     this.#activity = "idle";
     return true;
+  }
+
+  getDiagnosticSnapshot() {
+    const visual = this.#runtime.getVisualSnapshot();
+    const cascade = this.#cascadePlayer.getSnapshot();
+    return Object.freeze({
+      activity: this.#activity,
+      activeStepIndex:
+        this.#activeTransform?.stepIndex ??
+        this.#activeStage?.stepIndex ??
+        null,
+      runtimeCompleted: this.#runtimeCompleted,
+      winCompleted: this.#winCompleted,
+      completionComplete: this.#completionComplete,
+      reelSpinning: this.#runtime.isSpinning(),
+      anticipation: this.#runtime.getAnticipationSnapshot(),
+      effects: visual.effects
+        ? Object.freeze({
+            prepared: visual.effects.prepared,
+            active: Object.freeze(
+              visual.effects.active.map(({ effectId, x, y }) =>
+                Object.freeze({ effectId, x, y }),
+              ),
+            ),
+            activeCount: visual.effects.activeCount,
+          })
+        : null,
+      cascade: Object.freeze({
+        phase: cascade.phase,
+        currentIndex: cascade.currentIndex,
+        componentName: cascade.componentName,
+        resultIndex: cascade.resultIndex,
+        currentItemIndex: cascade.currentItemIndex,
+        currentItemPosition: cascade.currentItemPosition,
+        summaryCounting: cascade.summaryCounting,
+      }),
+    });
   }
 
   private createDropPlanOptions(
