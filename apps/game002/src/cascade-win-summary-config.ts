@@ -64,6 +64,23 @@ export function resolveGame002WinResultCashAmount(
   return amount;
 }
 
+export function resolveGame002WinResultMultiplier(
+  context: SymbolCascadeGroupContext,
+): number {
+  const { componentName, resultIndex, result } = context.group;
+  const multiplier = result.otherMul;
+  if (
+    typeof multiplier !== "number" ||
+    !Number.isSafeInteger(multiplier) ||
+    multiplier <= 0
+  ) {
+    throw new Error(
+      `${componentName} result[${resultIndex}] otherMul must be a positive safe integer.`,
+    );
+  }
+  return multiplier;
+}
+
 export function formatGame002CashSummary(value: number): string {
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new Error(
@@ -157,7 +174,14 @@ export function createGame002WinSummaryCollectOptions(options: {
       });
       const groupCoinAmount = resolveGame002WinResultCoinAmount(groupContext);
       const groupCashAmount = resolveGame002WinResultCashAmount(groupContext);
-      const weightedCashAmount = itemCoinAmount * groupCashAmount;
+      const resultMultiplier = resolveGame002WinResultMultiplier(groupContext);
+      const multipliedItemCoinAmount = itemCoinAmount * resultMultiplier;
+      if (!Number.isSafeInteger(multipliedItemCoinAmount)) {
+        throw new Error(
+          `game002 cascade item (${context.position.x},${context.position.y}) multiplied coin amount must be a safe integer.`,
+        );
+      }
+      const weightedCashAmount = multipliedItemCoinAmount * groupCashAmount;
       if (
         !Number.isSafeInteger(weightedCashAmount) ||
         weightedCashAmount % groupCoinAmount !== 0

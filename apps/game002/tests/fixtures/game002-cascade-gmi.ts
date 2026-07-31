@@ -100,6 +100,7 @@ export const GAME002_CASCADE_GMI = Object.freeze({
                 cashWin64: 180,
                 coinWin: 0,
                 coinWin64: 18,
+                otherMul: 1,
               }),
               Object.freeze({
                 pos: Object.freeze([1, 4, 1, 5, 0, 5, 2, 5, 2, 4]),
@@ -108,6 +109,7 @@ export const GAME002_CASCADE_GMI = Object.freeze({
                 cashWin64: 30,
                 coinWin: 0,
                 coinWin64: 3,
+                otherMul: 1,
               }),
               Object.freeze({
                 pos: Object.freeze([4, 0, 5, 0, 4, 1, 0, 5]),
@@ -116,6 +118,7 @@ export const GAME002_CASCADE_GMI = Object.freeze({
                 cashWin64: 80,
                 coinWin: 0,
                 coinWin64: 8,
+                otherMul: 1,
               }),
             ]),
             curGameMod: "basic",
