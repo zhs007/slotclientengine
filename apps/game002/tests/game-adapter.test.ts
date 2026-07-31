@@ -305,6 +305,35 @@ describe("game002 task 95 adapter", () => {
     expect(fakeApp.stopped).toBe(true);
     expect(fakeApp.destroyed).toBe(true);
   });
+
+  it("reports a compact presentation snapshot after five seconds without progress", async () => {
+    const diagnostics: string[] = [];
+    const fakeApp = createFakeApplication();
+    const runtime = new FakeRuntime([]);
+    runtime.completeOperations = false;
+    const adapter = createTestAdapter({
+      createApplication: () => fakeApp.app,
+      createRuntime: () => runtime.asRuntime(),
+      logDiagnostic: (message) => diagnostics.push(message),
+    });
+    await adapter.mount(createMountContext());
+    const pending = adapter.playSpin(createCascadeLogic());
+
+    for (let index = 0; index < 160; index += 1) fakeApp.tick(1000);
+
+    expect(diagnostics).toContainEqual(
+      expect.stringContaining(
+        'presentation progress {"coordinator":{"phase":"initial"',
+      ),
+    );
+    expect(diagnostics).toContainEqual(
+      expect.stringMatching(
+        /presentation stalled>=5s .*"activity":"initial".*"reelSpinning":true/,
+      ),
+    );
+    adapter.destroy?.();
+    await expect(pending).rejects.toThrow(/destroyed/);
+  });
 });
 
 function createTestAdapter(options: Omit<Game002AdapterOptions, "skin">) {
