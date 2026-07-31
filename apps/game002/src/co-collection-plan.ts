@@ -32,6 +32,7 @@ export interface Game002CoCollectionPlan {
 
 const COLLECTION_COMPONENTS = Object.freeze([
   GAME002_CASCADE_COMPONENTS.co,
+  GAME002_CASCADE_COMPONENTS.cogencn,
   GAME002_CASCADE_COMPONENTS.win2,
   GAME002_CASCADE_COMPONENTS.bn,
 ]);
@@ -100,12 +101,21 @@ export function compileGame002CoCollectionPlan(options: {
     step.getComponentScenes(GAME002_CASCADE_COMPONENTS.co),
     `step[${stepIndex}] bg-co scene`,
   );
-  const outputValuesRaw = exactlyOne(
+  const coOutputValuesRaw = exactlyOne(
     step.getComponentOtherScenes(GAME002_CASCADE_COMPONENTS.co),
     `step[${stepIndex}] bg-co otherScene`,
   );
+  const generatedCnValuesRaw = exactlyOne(
+    step.getComponentOtherScenes(GAME002_CASCADE_COMPONENTS.cogencn),
+    `step[${stepIndex}] bg-cogencn otherScene`,
+  );
   assertMatrixDimensions(outputScene, inputScene, "bg-co scene");
-  assertMatrixDimensions(outputValuesRaw, inputScene, "bg-co otherScene");
+  assertMatrixDimensions(coOutputValuesRaw, inputScene, "bg-co otherScene");
+  assertMatrixDimensions(
+    generatedCnValuesRaw,
+    inputScene,
+    "bg-cogencn otherScene",
+  );
 
   const usedPositions = new Set<string>();
   const mappedCos = new Set<string>();
@@ -195,11 +205,11 @@ export function compileGame002CoCollectionPlan(options: {
         }),
       );
     }
-    const coOutputValue = decodeOutputValue(
+    const coOutputValue = decodeGeneratedCoOutputValue(
       selectedCode,
-      outputValuesRaw[co.x][co.y],
+      generatedCnValuesRaw[co.x][co.y],
       options.valueSymbolCodes,
-      `step[${stepIndex}] bg-co otherScene[${co.x}][${co.y}]`,
+      `step[${stepIndex}] bg-cogencn otherScene[${co.x}][${co.y}]`,
     );
     setChange(changes, {
       position: co,
@@ -220,6 +230,7 @@ export function compileGame002CoCollectionPlan(options: {
       `step[${stepIndex}] bg-co segment count ${mappedCos.size} does not match triggered CO count ${triggerPositions.length}.`,
     );
   forEachCell(inputScene, (x, y, inputCode) => {
+    const key = `${x},${y}`;
     const change = changes.get(`${x},${y}`);
     const expectedCode = change?.outputCode ?? inputCode;
     const expectedValue = change ? change.outputValue : inputValues[x][y];
@@ -227,15 +238,37 @@ export function compileGame002CoCollectionPlan(options: {
       throw new Error(
         `step[${stepIndex}] bg-co scene[${x}][${y}] differs: actual=${outputScene[x][y]}; expected=${expectedCode}.`,
       );
-    const actualValue = decodeOutputValue(
-      expectedCode,
-      outputValuesRaw[x][y],
+    const isConvertedCo = mappedCos.has(key);
+    const coIntermediateCode = isConvertedCo ? inputCode : expectedCode;
+    const coIntermediateValue = isConvertedCo
+      ? inputValues[x][y]
+      : expectedValue;
+    const actualIntermediateValue = decodeOutputValue(
+      coIntermediateCode,
+      coOutputValuesRaw[x][y],
       options.valueSymbolCodes,
       `step[${stepIndex}] bg-co otherScene[${x}][${y}]`,
     );
-    if (actualValue !== expectedValue)
+    if (actualIntermediateValue !== coIntermediateValue)
       throw new Error(
-        `step[${stepIndex}] bg-co otherScene[${x}][${y}] differs: actual=${String(actualValue)}; expected=${String(expectedValue)}.`,
+        `step[${stepIndex}] bg-co otherScene[${x}][${y}] differs: actual=${String(actualIntermediateValue)}; expected=${String(coIntermediateValue)}.`,
+      );
+    const actualFinalValue = isConvertedCo
+      ? decodeGeneratedCoOutputValue(
+          expectedCode,
+          generatedCnValuesRaw[x][y],
+          options.valueSymbolCodes,
+          `step[${stepIndex}] bg-cogencn otherScene[${x}][${y}]`,
+        )
+      : decodeOutputValue(
+          expectedCode,
+          generatedCnValuesRaw[x][y],
+          options.valueSymbolCodes,
+          `step[${stepIndex}] bg-cogencn otherScene[${x}][${y}]`,
+        );
+    if (actualFinalValue !== expectedValue)
+      throw new Error(
+        `step[${stepIndex}] bg-cogencn otherScene[${x}][${y}] differs: actual=${String(actualFinalValue)}; expected=${String(expectedValue)}.`,
       );
   });
 
@@ -361,6 +394,19 @@ function decodeOutputValue(
   }
   if (raw !== 0 && raw !== -1)
     throw new Error(`${label} must be 0 or -1 for a non-value symbol.`);
+  return null;
+}
+
+function decodeGeneratedCoOutputValue(
+  code: number,
+  raw: number,
+  valueSymbolCodes: ReadonlySet<number>,
+  label: string,
+): SlotRoundPresentationValue {
+  if (valueSymbolCodes.has(code))
+    return decodeOutputValue(code, raw, valueSymbolCodes, label);
+  if (!Number.isSafeInteger(raw))
+    throw new Error(`${label} must be a safe integer.`);
   return null;
 }
 

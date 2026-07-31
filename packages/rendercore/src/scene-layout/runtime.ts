@@ -17,6 +17,7 @@ import {
   parseSceneLayoutManifest,
 } from "./manifest.js";
 import {
+  resolveSceneLayoutArtSpace,
   resolveSceneLayoutReelGrid,
   resolveSceneLayoutViewport,
 } from "./geometry.js";
@@ -95,6 +96,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   readonly #activeNodes = new Map<string, boolean>();
   #manifest: SceneLayoutResource["manifest"];
   #snapshot: SceneLayoutSnapshot | null = null;
+  #artSpaceApplied = false;
   #initializing = false;
   #initialized = false;
   #destroyed = false;
@@ -196,10 +198,22 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
 
   applyViewport(viewportSize: RenderViewportSize): SceneLayoutSnapshot {
     this.assertReady();
-    const snapshot = resolveSceneLayoutViewport({
-      manifest: this.#manifest,
-      viewportSize,
-    });
+    this.#artSpaceApplied = false;
+    return this.applySnapshot(
+      resolveSceneLayoutViewport({
+        manifest: this.#manifest,
+        viewportSize,
+      }),
+    );
+  }
+
+  applyArtSpace(): SceneLayoutSnapshot {
+    this.assertReady();
+    this.#artSpaceApplied = true;
+    return this.applySnapshot(resolveSceneLayoutArtSpace(this.#manifest));
+  }
+
+  private applySnapshot(snapshot: SceneLayoutSnapshot): SceneLayoutSnapshot {
     this.#snapshot = snapshot;
     this.container.position.set(snapshot.worldOffset.x, snapshot.worldOffset.y);
     this.#artMask.clear();
@@ -232,10 +246,12 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     const manifest = parseSceneLayoutManifest(manifestValue);
     assertSceneLayoutGeometryCompatible(this.#manifest, manifest);
     const nextSnapshot = this.#snapshot
-      ? resolveSceneLayoutViewport({
-          manifest,
-          viewportSize: this.#snapshot.viewportSize,
-        })
+      ? this.#artSpaceApplied
+        ? resolveSceneLayoutArtSpace(manifest)
+        : resolveSceneLayoutViewport({
+            manifest,
+            viewportSize: this.#snapshot.viewportSize,
+          })
       : null;
     this.#manifest = manifest;
     for (const node of this.#nodes)
@@ -251,7 +267,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
           ],
           manifest.coordinateOrigin ?? "top-left",
         );
-    return nextSnapshot ? this.applyViewport(nextSnapshot.viewportSize) : null;
+    return nextSnapshot ? this.applySnapshot(nextSnapshot) : null;
   }
 
   update(deltaSeconds: number): void {
@@ -368,6 +384,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     this.container.parent?.removeChild(this.container);
     this.#resource.destroy();
     this.#snapshot = null;
+    this.#artSpaceApplied = false;
     this.#initialized = false;
   }
 

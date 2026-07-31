@@ -49,6 +49,7 @@ describe("game002 CO collection compiler", () => {
     const step = fakeStep({
       "bg-triggerco": { results: [{ pos: [2, 2], symbol: CO }] },
       "bg-co": { raw: { pos }, scenes: [output], otherScenes: [other] },
+      "bg-cogencn": { otherScenes: [other] },
       "bg-win2": {
         results: [
           {
@@ -128,6 +129,7 @@ describe("game002 CO collection compiler", () => {
       results: [{ pos: [1, 1], symbol: OTHER }],
     };
     delete noTriggeredCo.components["bg-co"];
+    delete noTriggeredCo.components["bg-cogencn"];
     delete noTriggeredCo.components["bg-win2"];
     delete noTriggeredCo.components["bg-bn"];
     expect(compileFixture(noTriggeredCo)).toBeNull();
@@ -144,6 +146,12 @@ describe("game002 CO collection compiler", () => {
     delete missingComponent.components["bg-co"];
     expect(() => compileFixture(missingComponent)).toThrow(
       /requires component "bg-co"/,
+    );
+
+    const missingGeneratedCn = validFixture();
+    delete missingGeneratedCn.components["bg-cogencn"];
+    expect(() => compileFixture(missingGeneratedCn)).toThrow(
+      /requires component "bg-cogencn"/,
     );
 
     const invalidRaw = validFixture();
@@ -220,6 +228,18 @@ describe("game002 CO collection compiler", () => {
       /must be 0 or -1 for a non-value symbol/,
     );
 
+    const generatedValueMismatch = validFixture();
+    const changedGeneratedValues = mutable(
+      generatedValueMismatch.components["bg-cogencn"]!.otherScenes![0]!,
+    );
+    changedGeneratedValues[1]![1] = 2;
+    generatedValueMismatch.components["bg-cogencn"]!.otherScenes = [
+      matrix(changedGeneratedValues),
+    ];
+    expect(() => compileFixture(generatedValueMismatch)).toThrow(
+      /bg-cogencn otherScene\[1\]\[1\]/,
+    );
+
     const wrongWinSymbol = validFixture();
     wrongWinSymbol.components["bg-win2"]!.results = [
       { pos: [2, 2], symbol: OTHER, mul: 1 },
@@ -251,13 +271,17 @@ describe("game002 CO collection compiler", () => {
     fixture.inputValues[0]![4] = 8;
     fixture.inputValues[4]![0] = 9;
     fixture.inputValues[4]![4] = 10;
-    const values = mutable(fixture.components["bg-co"]!.otherScenes![0]!);
-    values[1]![2] = 7;
-    values[2]![1] = 8;
-    values[2]![2] = 11;
-    values[2]![3] = 9;
-    values[3]![2] = 10;
-    fixture.components["bg-co"]!.otherScenes = [matrix(values)];
+    const intermediateValues = mutable(
+      fixture.components["bg-co"]!.otherScenes![0]!,
+    );
+    intermediateValues[1]![2] = 7;
+    intermediateValues[2]![1] = 8;
+    intermediateValues[2]![3] = 9;
+    intermediateValues[3]![2] = 10;
+    fixture.components["bg-co"]!.otherScenes = [matrix(intermediateValues)];
+    const generatedValues = mutable(intermediateValues);
+    generatedValues[2]![2] = 11;
+    fixture.components["bg-cogencn"]!.otherScenes = [matrix(generatedValues)];
     fixture.valueSymbolCodes = new Set([SELECTED]);
 
     const plan = compileFixture(fixture);
@@ -313,6 +337,13 @@ function validFixture(): ValidFixture {
     [3, 2],
   ])
     output[x]![y] = SELECTED;
+  const intermediateValues: number[][] = output.map((column) =>
+    column.map((code) => (code === BN ? -1 : 0)),
+  );
+  const generatedValues: number[][] = intermediateValues.map((column) => [
+    ...column,
+  ]);
+  generatedValues[2]![2] = 1;
   return {
     input,
     inputValues: input.map((column) => column.map(() => null)),
@@ -321,13 +352,10 @@ function validFixture(): ValidFixture {
       "bg-co": {
         raw: { pos: validCollectionPos() },
         scenes: [matrix(output)],
-        otherScenes: [
-          matrix(
-            output.map((column) =>
-              column.map((code) => (code === BN ? -1 : 0)),
-            ),
-          ),
-        ],
+        otherScenes: [matrix(intermediateValues)],
+      },
+      "bg-cogencn": {
+        otherScenes: [matrix(generatedValues)],
       },
       "bg-win2": {
         results: [

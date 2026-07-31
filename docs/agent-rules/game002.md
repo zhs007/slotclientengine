@@ -112,6 +112,9 @@
 - CO `feature` 与全部 source `feature1` 同时播放；全部真实 once 完成后 source
   播放 `feature2`，完整 occurrence（含 value/image-string）在 board mask 内移到
   target。全批完成后原子提交 source->BN、target<-source、CO->selected symbol。
+  `bg-co.otherScene` 只校验 vortex 搬运后的中间 value；CO 转为 value symbol 的
+  新 value 必须从后续 `bg-cogencn.otherScene` 取得并校验最终完整矩阵；转为
+  非 value symbol 时该 CO 格的生成数值不进入 presentation value。
   `bg-win2` 进入普通中奖，`bg-bn` 只作为 release-only holes，不参与金额或 carousel。
 - WL/WM/CM multiplier 共用 paired Symbols package 的唯一 ImgNumber dependency，
   formatter 为 exact `x${value}`，Spine slot 为 exact `Mult`；不得使用 `Multi`

@@ -12,8 +12,18 @@ describe("scene layout presentation surface", () => {
   it("enforces initialization and mode contracts", async () => {
     vi.spyOn(Assets, "load").mockResolvedValue(Texture.EMPTY as never);
     vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    const manifest = {
+      ...game002LayoutFixture,
+      coordinateOrigin: "top-left" as const,
+      nodes: [
+        {
+          ...game002LayoutFixture.nodes[0],
+          placements: { default: { x: 1000, y: 1000, scale: 1 } },
+        },
+      ],
+    };
     const resource = await createSceneLayoutPackageResource({
-      manifest: game002LayoutFixture,
+      manifest,
       files: new Map([["assets/bg.png", new Uint8Array([1])]]),
     });
     expect(() =>
@@ -31,6 +41,14 @@ describe("scene layout presentation surface", () => {
     await expect(surface.init()).rejects.toThrow(/only initialize once/);
     surface.applyArtSpace();
     expect(surface.backgroundContainer.position).toMatchObject({ x: 0, y: 0 });
+    expect(
+      surface.backgroundContainer.getChildByLabel("scene-layout:game002", true)
+        ?.position,
+    ).toMatchObject({ x: 0, y: 0 });
+    expect(
+      surface.backgroundContainer.getChildByLabel("scene-layout-slot:bg", true)
+        ?.position,
+    ).toMatchObject({ x: 1000, y: 1000 });
     surface.destroy();
   });
 

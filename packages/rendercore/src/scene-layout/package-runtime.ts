@@ -163,6 +163,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   #preparedTransition: PreparedModeTransition | null = null;
   #activePopupId: string | null = null;
   #viewportSize: RenderViewportSize | null = null;
+  #artSpaceApplied = false;
 
   constructor(
     resource: SceneLayoutPackageResource,
@@ -296,6 +297,21 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   applyViewport(viewportSize: RenderViewportSize): SceneLayoutSnapshot {
     this.assertReady();
     const snapshot = this.#layout.applyViewport(viewportSize);
+    this.#artSpaceApplied = false;
+    return this.applySnapshot(snapshot, viewportSize);
+  }
+
+  applyArtSpace(): SceneLayoutSnapshot {
+    this.assertReady();
+    const snapshot = this.#layout.applyArtSpace();
+    this.#artSpaceApplied = true;
+    return this.applySnapshot(snapshot, snapshot.artSize);
+  }
+
+  private applySnapshot(
+    snapshot: SceneLayoutSnapshot,
+    viewportSize: RenderViewportSize,
+  ): SceneLayoutSnapshot {
     this.#viewportSize = Object.freeze({ ...viewportSize });
     if (this.#reel) {
       const grid = snapshot.reels.main;
@@ -373,7 +389,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#layout.applyGeometryManifest(manifest);
     this.#manifest = manifest;
     if (prepared && nextPreparedSpec) prepared.spec = nextPreparedSpec;
-    return this.#viewportSize ? this.applyViewport(this.#viewportSize) : null;
+    return this.#viewportSize
+      ? this.#artSpaceApplied
+        ? this.applyArtSpace()
+        : this.applyViewport(this.#viewportSize)
+      : null;
   }
 
   update(deltaSeconds: number): void {

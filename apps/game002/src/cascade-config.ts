@@ -7,6 +7,7 @@ export const GAME002_CASCADE_COMPONENTS = Object.freeze({
   win: "bg-win",
   triggerco: "bg-triggerco",
   co: "bg-co",
+  cogencn: "bg-cogencn",
   win2: "bg-win2",
   bn: "bg-bn",
   remove: "bg-remove",

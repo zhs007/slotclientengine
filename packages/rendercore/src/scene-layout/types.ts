@@ -317,6 +317,11 @@ export interface SceneLayoutRuntime {
   readonly container: Container;
   init(): Promise<void>;
   applyViewport(viewportSize: RenderViewportSize): SceneLayoutSnapshot;
+  /**
+   * Applies a maximized-focus layout in its complete authored art space.
+   * This is for hosts that already own the outer viewport/focus transform.
+   */
+  applyArtSpace(): SceneLayoutSnapshot;
   applyGeometryManifest(
     manifest: SceneLayoutManifestV1,
   ): SceneLayoutSnapshot | null;
