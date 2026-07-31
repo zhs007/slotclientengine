@@ -176,6 +176,33 @@ describe("award celebration player", () => {
     player.destroy();
   });
 
+  it("keeps a completed once layer visible until the tier lifecycle ends", async () => {
+    const resource = fakeResource();
+    const player = createAwardCelebrationPlayer({
+      resource,
+      layerFactory: ({ layer }) =>
+        layer.kind === "vni" ? completedOnceLayer() : fakeLayer(false),
+    });
+    await player.init();
+    player.start({ betAmountRaw: 100, winAmountRaw: 1500 });
+    player.requestAdvance();
+    const bigwinContainer = player.container.children[2] as Container;
+    player.update(0.2);
+    expect(player.getSnapshot()).toMatchObject({
+      phase: "counting",
+      activeTierId: "bigwin",
+    });
+    expect(bigwinContainer.visible).toBe(true);
+    player.update(3);
+    expect(player.getSnapshot().phase).toBe("awaiting-dismiss");
+    expect(bigwinContainer.visible).toBe(true);
+    player.requestDismiss();
+    player.update(0);
+    expect(player.getSnapshot().phase).toBe("complete");
+    expect(bigwinContainer.visible).toBe(false);
+    player.destroy();
+  });
+
   it.each([
     ["empty", () => ""],
     ["non-string", () => 123 as unknown as string],
@@ -340,6 +367,34 @@ function fakeLayer(
     rebindAmountLayer() {
       onAmountRebind();
     },
+    destroy() {
+      container.destroy();
+    },
+  };
+}
+
+function completedOnceLayer(): PopupLayerRuntime {
+  const container = new Container();
+  let complete = false;
+  return {
+    container,
+    animated: true,
+    async init() {},
+    enter() {
+      complete = false;
+    },
+    updateAmount() {},
+    update(delta) {
+      if (delta >= 0.1) complete = true;
+    },
+    isLoopReady() {
+      return complete;
+    },
+    requestEnd() {},
+    isEndComplete() {
+      return complete;
+    },
+    applySegment() {},
     destroy() {
       container.destroy();
     },

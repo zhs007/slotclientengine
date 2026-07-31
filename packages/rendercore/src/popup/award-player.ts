@@ -7,6 +7,10 @@ import {
   type AwardCountStage,
 } from "./award-sequence.js";
 import { formatPopupAmount } from "./amount-format.js";
+import {
+  requestPopupVniPlaybackEnd,
+  startPopupVniPlayback,
+} from "./vni-playback.js";
 import type {
   AwardCelebrationPlayer,
   AwardCelebrationSnapshot,
@@ -621,12 +625,7 @@ function defaultLayerFactory(options: {
         elapsed = 0;
         end = false;
         complete = false;
-        player.play({
-          mode: "segmented",
-          loopStart: { unit: "time", at: layer.playback.loopStartTime },
-          loopEnd: { unit: "time", at: layer.playback.loopEndTime },
-          keepParticlesAlive: layer.playback.keepParticlesAlive,
-        });
+        startPopupVniPlayback(player, layer.playback);
         container.visible = true;
       },
       updateAmount() {},
@@ -635,11 +634,13 @@ function defaultLayerFactory(options: {
         player.update(delta);
       },
       isLoopReady() {
-        return elapsed >= layer.playback.loopStartTime || end || complete;
+        return layer.playback.mode === "once"
+          ? complete
+          : elapsed >= layer.playback.loopStartTime || end || complete;
       },
       requestEnd() {
         end = true;
-        player.requestSegmentedPlaybackEnd();
+        requestPopupVniPlaybackEnd(player, layer.playback);
       },
       isEndComplete() {
         return complete;

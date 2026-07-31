@@ -372,8 +372,20 @@ describe("PopupEditorApp", () => {
     expect(root.textContent).toContain("effect.json");
     expect(root.textContent).toContain("Spine.json");
     expect(root.textContent).toContain("BG.PNG");
+    const mode = root.querySelector<HTMLSelectElement>(
+      "[data-vni-playback-mode]",
+    )!;
+    mode.value = "once";
+    mode.dispatchEvent(new Event("change"));
+    expect(root.textContent).toContain("完整单次 0–3s");
+    expect(
+      root.querySelector(
+        `[data-layer-id="${mode.dataset.layerId}"][data-layer-field="loopStartTime"]`,
+      ),
+    ).toBeNull();
     root.querySelector<HTMLButtonElement>('[data-tab="project"]')!.click();
     expect(root.textContent).toContain("game-win");
+    expect(root.textContent).toContain('"mode": "once"');
     app.destroy();
   });
 });

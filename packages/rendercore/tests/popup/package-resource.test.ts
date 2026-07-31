@@ -292,6 +292,17 @@ describe("popup package resource", () => {
       }),
     ).rejects.toThrow(/exceeds project duration/);
 
+    const once = structuredClone(manifest);
+    once.awardCelebration.base.layers.find(
+      (layer: any) => layer.kind === "vni",
+    ).playback = { mode: "once" };
+    const onceResource = await createPopupPackageResource({
+      manifest: once,
+      files,
+      loadTexture: async () => ({ width: 1, height: 1, destroy() {} }) as never,
+    });
+    await onceResource.destroy();
+
     const missingAnimation = structuredClone(manifest);
     missingAnimation.awardCelebration.base.layers.find(
       (layer: any) => layer.kind === "spine",

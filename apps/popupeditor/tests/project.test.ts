@@ -20,6 +20,7 @@ import {
   projectToManifest,
   removePopupResource,
   resourceReferenceCount,
+  setPopupVniPlaybackMode,
 } from "../src/model/project.js";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -223,6 +224,31 @@ describe("popup editor filename-key project", () => {
     ).toMatchObject({
       resource: "effect.json",
       playback: { keepParticlesAlive: false },
+    });
+    const vni = project.tiers
+      .get("bigwin")!
+      .layers.find(({ resource }) => resource === "effect.json")!;
+    setPopupVniPlaybackMode(project, "bigwin", vni.id, "once");
+    expect(
+      project.tiers.get("bigwin")!.layers.find(({ id }) => id === vni.id),
+    ).toMatchObject({ playback: { mode: "once" } });
+    expect(
+      projectToManifest(project).awardCelebration.celebrationTiers[0],
+    ).toMatchObject({
+      layers: expect.arrayContaining([
+        expect.objectContaining({ playback: { mode: "once" } }),
+      ]),
+    });
+    setPopupVniPlaybackMode(project, "bigwin", vni.id, "segmented");
+    expect(
+      project.tiers.get("bigwin")!.layers.find(({ id }) => id === vni.id),
+    ).toMatchObject({
+      playback: {
+        mode: "segmented",
+        loopStartTime: 1,
+        loopEndTime: 2.5,
+        keepParticlesAlive: true,
+      },
     });
   });
 

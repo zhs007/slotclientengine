@@ -571,7 +571,10 @@ function validateAnimationBindings(
       if (layer.kind === "vni") {
         if (resource.kind !== "vni")
           throw new Error("popup VNI resource mismatch.");
-        if (!(layer.playback.loopEndTime <= resource.project.stage.duration))
+        if (
+          layer.playback.mode === "segmented" &&
+          !(layer.playback.loopEndTime <= resource.project.stage.duration)
+        )
           throw new Error(
             `popup VNI layer ${layer.id} loopEndTime exceeds project duration.`,
           );

@@ -10,6 +10,11 @@ VNI bundle 只导入 `purpose=runtime` 的运行发布包：唯一 runtime 自�
 
 新导出的 `<id>-popup.zip` 由根 `popup.manifest.json`、`assets.map.json` 和完整 SHA-256 payload 构成。manifest `resources` key 与 layer `resource` 直接使用 image、Spine skeleton、VNI project 或 image-string manifest 的 filename key。runtime 的 parser、五档 threshold、金额格式和播放生命周期仍由 `rendercore/popup` 拥有。
 
+VNI 图层可显式选择“分段循环”或“完整单次”。分段模式编辑 start/loop/end 边界；
+完整单次模式从 `0` 到 VNI 总时长非循环播放，动画先于金额阶段结束时保持 authored
+最后一帧，到跨档或关闭 Popup 才隐藏。两种模式使用互斥字段，未知或残留字段会阻止
+preview/export。
+
 ImgNumber 图层可显式选择 Popup 根节点或同档 VNI 的文字占位层。选择文字层后，`x/y/scale/anchor` 相对该层编辑并跟随其动画；候选从严格校验的 VNI project 枚举，目标缺失或替换后失效会阻止 preview/export，不会自动换到其它文字层或根节点。
 
 运行：`pnpm --filter popupeditor dev`

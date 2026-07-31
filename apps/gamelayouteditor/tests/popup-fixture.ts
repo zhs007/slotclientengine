@@ -1,4 +1,4 @@
-export function popupFiles() {
+export function popupFiles(options: { readonly onceVni?: boolean } = {}) {
   const characters = [..."$,.0123456789"];
   const glyphs = Object.fromEntries(
     characters.map((character, index) => [
@@ -17,6 +17,14 @@ export function popupFiles() {
     resource: "image-string.manifest.json",
     binding: "win-amount",
     anchor: { x: 0.5, y: 0.5 },
+    transform: { x: 0, y: 0, scale: 1 },
+  };
+  const vniLayer = {
+    id: "effect",
+    kind: "vni",
+    order: 1,
+    resource: "effect.json",
+    playback: { mode: "once" },
     transform: { x: 0, y: 0, scale: 1 },
   };
   const popup = {
@@ -40,6 +48,14 @@ export function popupFiles() {
         kind: "image-string",
         manifest: "image-string.manifest.json",
       },
+      ...(options.onceVni
+        ? {
+            "effect.json": {
+              kind: "vni",
+              project: "effect.json",
+            },
+          }
+        : {}),
     },
     awardCelebration: {
       base: { countDurationSeconds: 1, layers: [amountLayer] },
@@ -49,7 +65,7 @@ export function popupFiles() {
           id: "bigwin",
           thresholdMultiplier: 15,
           countDurationSeconds: 1,
-          layers: [amountLayer],
+          layers: options.onceVni ? [amountLayer, vniLayer] : [amountLayer],
         },
         {
           id: "superwin",
@@ -81,6 +97,34 @@ export function popupFiles() {
       new TextEncoder().encode(JSON.stringify(nested)),
     ],
   ]);
+  if (options.onceVni)
+    files.set(
+      "effect.json",
+      new TextEncoder().encode(
+        JSON.stringify({
+          schemaVersion: "VNI_0.020",
+          editor: { name: "VNI", version: "VNI_0.020" },
+          engineTarget: { name: "cocos_creator", version: "3.8.6" },
+          name: "popup-once",
+          exportProfile: {
+            id: "runtime",
+            purpose: "runtime",
+            assetScale: 1,
+          },
+          stage: {
+            width: 100,
+            height: 100,
+            coordinate: "center",
+            duration: 0.5,
+            backgroundColor: "#000000",
+          },
+          assets: [],
+          layerGroups: [],
+          layers: [],
+          particles: [],
+        }),
+      ),
+    );
   characters.forEach((_, index) =>
     files.set(`g${index}.png`, new Uint8Array([index])),
   );

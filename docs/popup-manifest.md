@@ -15,7 +15,11 @@
   同档 VNI layer 和该 project 内 exact `type="text"` layer；ImgNumber 的 `x/y/scale/anchor`
   相对文字层，继承其 VNI animation、可见性和渲染顺序，`order` 不再决定该金额的视觉 z-order。
   旧 v1 省略 `parent` 唯一规范化为 `popup-root`，未知/失效 target 不回退。
-- VNI 显式保存 `loopStartTime/loopEndTime/keepParticlesAlive`；Spine 显式保存大小写精确且互不相同的 start/loop/end animation。
+- VNI `playback` 是 strict union：`mode="segmented"` 显式保存
+  `loopStartTime/loopEndTime/keepParticlesAlive`；`mode="once"` 不接受这些字段，从 `0`
+  到 project `stage.duration` 非循环播放一次。once 先于金额阶段结束时保持 authored
+  终点采样，直到跨档或 dismiss 才隐藏。Spine 继续显式保存大小写精确且互不相同的
+  start/loop/end animation。
 
 ## 合同骨架
 

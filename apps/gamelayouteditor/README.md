@@ -2,6 +2,10 @@
 
 纯前端 Scene Layout v1 编辑器，覆盖 layout、mode/variant、稳定背景、普通 VNI/Spine 动画图层、Symbols、award-celebration Popup 与 Spine/MP4 有向转场。
 
+award-celebration Popup 作为自包含 dependency 通过 `rendercore/popup` 严格校验并原样
+vendor；内部 VNI 的 segmented/once playback、最后一帧保持和 dismiss 生命周期不在
+Layout Editor 复制或改写。
+
 ## 统一资源工作区
 
 资源 Tab 和上下文 Picker 都调用同一个“导入资源”流程，支持多文件与 ZIP。image、MP4、Spine、VNI runtime bundle、ImgNumber、Symbols 和 Popup 的所有 root/leaf 进入一个扁平 filename-key namespace；ZIP 内目录只用于识别 exact source closure，提交前会被结构化抹平。VNI bundle 只接受 `purpose=runtime` 发布包；只有一个 runtime 时自动选中，多个 runtime 必须明确选择 profile。

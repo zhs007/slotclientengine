@@ -64,6 +64,16 @@ export type PopupImageStringParent =
       readonly vniLayerId: string;
       readonly textLayerId: string;
     };
+export type PopupVniPlayback =
+  | {
+      readonly mode: "segmented";
+      readonly loopStartTime: number;
+      readonly loopEndTime: number;
+      readonly keepParticlesAlive: boolean;
+    }
+  | {
+      readonly mode: "once";
+    };
 export type PopupLayer =
   | (PopupLayerBase & {
       readonly kind: "image";
@@ -78,12 +88,7 @@ export type PopupLayer =
     })
   | (PopupLayerBase & {
       readonly kind: "vni";
-      readonly playback: {
-        readonly mode: "segmented";
-        readonly loopStartTime: number;
-        readonly loopEndTime: number;
-        readonly keepParticlesAlive: boolean;
-      };
+      readonly playback: PopupVniPlayback;
     })
   | (PopupLayerBase & {
       readonly kind: "spine";

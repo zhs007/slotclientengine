@@ -102,6 +102,35 @@ describe("gamelayout popup dependency", () => {
       importPopupPackageZip(createDeterministicZip(invalid)),
     ).rejects.toThrow(/unknown key/);
   });
+
+  it("imports and preserves once VNI playback through the shared popup parser", async () => {
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    const imported = await importPopupPackageZip(
+      createDeterministicZip(
+        await mappedPopupFiles(popupFiles({ onceVni: true })),
+      ),
+      { decodeImage: async () => ({ width: 1, height: 1 }) },
+    );
+    expect(
+      imported.manifest.awardCelebration.celebrationTiers[0]!.layers.find(
+        ({ kind }) => kind === "vni",
+      ),
+    ).toMatchObject({ playback: { mode: "once" } });
+    expect(
+      JSON.parse(
+        new TextDecoder().decode(imported.files.get("popup.manifest.json")),
+      ).awardCelebration.celebrationTiers[0].layers,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ playback: { mode: "once" } }),
+      ]),
+    );
+    load.mockRestore();
+    unload.mockRestore();
+  });
 });
 
 async function mappedPopupFiles(
