@@ -82,6 +82,19 @@ Manual carrier visuals may reference a validated project asset or a host-provide
 
 `VNIPlayer` uses RAF by default. Embedders that already have a game ticker can pass `autoTick: false` and call `update(deltaSeconds)` themselves; this is the path used by `rendercore` symbol animations to keep VNI playback synchronized with Pixi slot updates. `fitPadding` defaults to the existing responsive padding, and can be set to `0` when the host needs VNI stage coordinates to map directly to a host-controlled viewport or mask.
 
+`play()` uses every animation's authored `seed` by default, so the Pixi runtime
+matches the editor preview. Pass `ignoreAuthoredSeed: true` to any `play()`
+mode when a fresh runtime-random distribution is wanted:
+
+```ts
+player.play({ ignoreAuthoredSeed: true });
+```
+
+The generated seeds are stable for that playback's frames, seek/restart,
+pause/resume, loops, and particle drain. A new `play()` range or segmented
+session generates a new distribution; `playRange(...)`, manual playback, and
+pool `playOnce()` remain authored-seed playback APIs.
+
 `VNIPlayer` is runtime-only and never draws the exported stage background. `project.stage.backgroundColor` remains validated schema metadata, but it is not read by the Pixi player; VNI rendering stays transparent and contains only layers, effects, particles, and mounted nodes.
 
 Black-backed JPG or RGB PNG light assets whose image-layer usages are all `add` / `screen` / `lighten` are converted to transparent matte textures during load when decoded pixels have no usable alpha channel. This keeps the exported art files unchanged while preventing Pixi v8 additive blending from writing an opaque black rectangle into transparent host canvases. PNG files that already carry transparent alpha are kept as-is. The conversion uses a transient decode canvas only for texture preprocessing; it is not a `VNIPlayer` render surface and is not appended to the DOM.

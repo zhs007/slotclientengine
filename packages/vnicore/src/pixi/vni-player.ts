@@ -28,6 +28,7 @@ import {
   assertPositiveFinite,
   normalizePlaybackPoint,
   normalizePlaybackRange,
+  normalizeIgnoreAuthoredSeed,
   normalizeSegmentedPlaybackOptions,
   type VNIPlayOptions,
   type VNIPlaybackMode,
@@ -81,6 +82,7 @@ import type { AssetUrlManifest } from "../core/asset-manifest.js";
 import type { SampledLayerState } from "../core/project-sampler.js";
 import type {
   V5GAssetConfig,
+  V5GLayerConfig,
   VNIBlendMode,
   VNIProjectConfig,
 } from "../core/types.js";
@@ -364,6 +366,9 @@ export class VNIPlayer implements VNIManualPlaybackHost {
   private activeRange: ActivePlaybackRange | null = null;
   private segmentedPlayback: VNISegmentedPlaybackSequence | null = null;
   private pendingComplete: VNIPlaybackCompleteContext | null = null;
+  private playbackSeedSessionActive = false;
+  private playbackSamplingLayers: ReadonlyMap<string, V5GLayerConfig> | null =
+    null;
   private readonly playbackMarkers = new Map<string, PlaybackMarker>();
   private readonly playbackCompleteListeners = new Set<
     (event: VNIPlaybackCompleteContext) => void
@@ -745,24 +750,28 @@ export class VNIPlayer implements VNIManualPlaybackHost {
 
   play(options?: VNIPlayOptions): void {
     this.assertLegacyTransportAvailable("play");
+    const ignoreAuthoredSeed = normalizeIgnoreAuthoredSeed(options ?? {});
     if (options?.mode === "range") {
-      this.startRangePlayback(options);
+      this.startRangePlayback(options, ignoreAuthoredSeed);
       return;
     }
     if (options?.mode === "segmented") {
-      this.startSegmentedPlayback(options);
+      this.startSegmentedPlayback(options, ignoreAuthoredSeed);
       return;
     }
-    this.startTimelinePlayback();
+    this.startTimelinePlayback(ignoreAuthoredSeed);
   }
 
-  private startTimelinePlayback(): void {
+  private startTimelinePlayback(ignoreAuthoredSeed: boolean): void {
     if (this.playing) return;
     this.assertInitialized("play");
     if (this.particleRuntime.isDraining()) {
       this.drainPaused = false;
       this.ensureTicker();
       return;
+    }
+    if (!this.playbackSeedSessionActive) {
+      this.startPlaybackSeedSession(ignoreAuthoredSeed);
     }
     this.playbackMode = "timeline";
     this.playbackPhase = "start";
@@ -895,6 +904,7 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     this.activeRange = null;
     this.segmentedPlayback = null;
     this.pendingComplete = null;
+    this.clearPlaybackSeedSession();
     this.playbackMarkers.clear();
     this.playbackCompleteListeners.clear();
     this.playbackMode = "timeline";
@@ -972,7 +982,7 @@ export class VNIPlayer implements VNIManualPlaybackHost {
 
   playRange(options: VNIPlayRangeOptions): void {
     this.assertLegacyTransportAvailable("playRange");
-    this.startRangePlayback(options);
+    this.startRangePlayback(options, false);
   }
 
   requestSegmentedPlaybackEnd(): void {
@@ -991,12 +1001,34 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     }
   }
 
-  private startRangePlayback(options: VNIPlayRangeOptions): void {
+  private startPlaybackSeedSession(ignoreAuthoredSeed: boolean): void {
+    this.playbackSeedSessionActive = true;
+    this.playbackSamplingLayers = ignoreAuthoredSeed
+      ? createRuntimeSeededLayerViews(this.project.layers)
+      : null;
+  }
+
+  private clearPlaybackSeedSession(): void {
+    this.playbackSeedSessionActive = false;
+    this.playbackSamplingLayers = null;
+  }
+
+  private getPlaybackSamplingLayer(layer: V5GLayerConfig): V5GLayerConfig {
+    return this.playbackSamplingLayers?.get(layer.id) ?? layer;
+  }
+
+  private startRangePlayback(
+    options: VNIPlayRangeOptions,
+    ignoreAuthoredSeed?: boolean,
+  ): void {
     this.assertInitialized("playRange");
     const normalized = normalizePlaybackRange(
       options.range,
       this.project.stage.duration,
     );
+    if (ignoreAuthoredSeed !== undefined) {
+      this.startPlaybackSeedSession(ignoreAuthoredSeed);
+    }
     this.segmentedPlayback = null;
     this.pendingComplete = null;
     this.particleRuntime.reset();
@@ -1018,12 +1050,16 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     }
   }
 
-  private startSegmentedPlayback(options: VNISegmentedPlaybackOptions): void {
+  private startSegmentedPlayback(
+    options: VNISegmentedPlaybackOptions,
+    ignoreAuthoredSeed: boolean,
+  ): void {
     this.assertInitialized("play");
     const normalized = normalizeSegmentedPlaybackOptions(
       options,
       this.project.stage.duration,
     );
+    this.startPlaybackSeedSession(ignoreAuthoredSeed);
     this.activeRange = null;
     this.pendingComplete = null;
     this.particleRuntime.reset();
@@ -1103,6 +1139,7 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     this.segmentedPlayback = null;
     this.pendingComplete = null;
     this.drainPaused = false;
+    this.clearPlaybackSeedSession();
     this.particleRuntime.reset();
     const session = new VNIManualPlaybackSessionImpl(this);
     this.manualSession = session;
@@ -1218,6 +1255,7 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     this.activeRange = null;
     this.segmentedPlayback = null;
     this.pendingComplete = null;
+    this.clearPlaybackSeedSession();
     this.playbackMarkers.clear();
     this.playbackCompleteListeners.clear();
     this.particleRuntime.reset();
@@ -1523,6 +1561,7 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     this.renderIfHostDriven();
     const event = this.pendingComplete;
     this.pendingComplete = null;
+    this.clearPlaybackSeedSession();
     const manualCompletion = this.manualRangeCompletion;
     this.manualRangeCompletion = null;
     manualCompletion?.();
@@ -2171,7 +2210,7 @@ export class VNIPlayer implements VNIManualPlaybackHost {
         );
       }
       layers.push({
-        layer: instance.layer,
+        layer: this.getPlaybackSamplingLayer(instance.layer),
         sampledLayer: {
           ...activeSampledLayer,
           transform: transformSampledLayer.transform,
@@ -2365,7 +2404,7 @@ export class VNIPlayer implements VNIManualPlaybackHost {
         this.project.stage.height,
       );
       const effects = sampleRenderEffectSpritesForLayer(
-        instance.layer,
+        this.getPlaybackSamplingLayer(instance.layer),
         sampledLayer,
         instance.textureSize,
         time,
@@ -2578,7 +2617,7 @@ export class VNIPlayer implements VNIManualPlaybackHost {
         );
       }
       const samples = sampleDeterministicEffectSpritesForLayer(
-        instance.layer,
+        this.getPlaybackSamplingLayer(instance.layer),
         sampledLayer,
         instance.textureSize,
         time,
@@ -3051,6 +3090,36 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     delete diagnostics.dataset.vniAssetScale;
     delete diagnostics.dataset.vniProfilePurpose;
   }
+}
+
+function createRuntimeSeededLayerViews(
+  layers: readonly V5GLayerConfig[],
+): ReadonlyMap<string, V5GLayerConfig> {
+  const baseSeed = Math.floor(Math.random() * 0x1_0000_0000) >>> 0;
+  const views = new Map<string, V5GLayerConfig>();
+  for (const layer of layers) {
+    views.set(layer.id, {
+      ...layer,
+      animations: layer.animations.map((animation) => ({
+        ...animation,
+        seed: deriveRuntimeAnimationSeed(baseSeed, layer.id, animation.id),
+      })),
+    });
+  }
+  return views;
+}
+
+function deriveRuntimeAnimationSeed(
+  baseSeed: number,
+  layerId: string,
+  animationId: string,
+): number {
+  let hash = 2166136261 ^ baseSeed;
+  for (const character of `${layerId}\u0000${animationId}`) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
 }
 
 function normalizeFitPadding(value: number | undefined): number | undefined {

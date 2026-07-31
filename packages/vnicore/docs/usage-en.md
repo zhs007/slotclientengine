@@ -291,6 +291,21 @@ unknown refs, unsupported types, automatic zero distances, or invalid numbers.
   events, and the VNI display tree. It does not destroy the host Pixi app,
   renderer, canvas, or parent container.
 
+### Authored and runtime random seeds
+
+`play()` preserves the authored animation `seed` by default, matching the
+editor Pixi preview. To ignore authored seeds for one new playback, pass:
+
+```ts
+player.play({ ignoreAuthoredSeed: true });
+```
+
+The player creates one runtime seed session and derives independent effective
+seeds for each layer animation. The distribution stays stable across frames,
+seek/restart, pause/resume, loops, and particle drain. A fresh range or
+segmented `play()` with this option creates a new distribution. `playRange()`,
+manual playback, and pool `playOnce()` intentionally keep authored seeds.
+
 Timeline completion and visual completion are not the same. Non-looping
 timeline, range, and segmented end playback can enter `particle-draining` after
 the timeline stops. Complete listeners fire only after live particles drain.

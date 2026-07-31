@@ -11,15 +11,24 @@ export interface VNIPlayRangeOptions {
   loop?: boolean;
 }
 
-export interface VNITimelinePlayOptions {
+export interface VNIPlaybackSeedOptions {
+  /**
+   * Use a runtime-generated seed for this playback instead of animation seeds
+   * authored into the VNI project.
+   */
+  ignoreAuthoredSeed?: boolean;
+}
+
+export interface VNITimelinePlayOptions extends VNIPlaybackSeedOptions {
   mode?: "timeline";
 }
 
-export interface VNIRangePlayOptions extends VNIPlayRangeOptions {
+export interface VNIRangePlayOptions
+  extends VNIPlayRangeOptions, VNIPlaybackSeedOptions {
   mode: "range";
 }
 
-export interface VNISegmentedPlaybackOptions {
+export interface VNISegmentedPlaybackOptions extends VNIPlaybackSeedOptions {
   mode: "segmented";
   loopStart: VNIPlaybackPoint;
   loopEnd: VNIPlaybackPoint;
@@ -273,6 +282,16 @@ export function normalizeSegmentedPlaybackOptions(
     duration,
     keepParticlesAlive: options.keepParticlesAlive ?? true,
   };
+}
+
+export function normalizeIgnoreAuthoredSeed(
+  options: VNIPlaybackSeedOptions,
+): boolean {
+  const value = options.ignoreAuthoredSeed;
+  if (value !== undefined && typeof value !== "boolean") {
+    throw new Error("VNI play ignoreAuthoredSeed must be a boolean.");
+  }
+  return value === true;
 }
 
 export function assertPositiveFinite(value: number, path: string): number {

@@ -862,6 +862,81 @@ function getRuntimeCombo(player: VNIPlayer) {
 }
 
 describe("VNIPlayer", () => {
+  it("uses per-play runtime seeds without mutating the authored project", async () => {
+    const player = await createInitializedPlayer({ autoTick: false });
+    const internals = player as unknown as {
+      playbackSamplingLayers: ReadonlyMap<string, V5GLayerConfig> | null;
+    };
+    const authoredSeed =
+      player.getProjectSnapshot().layers[0].animations[0].seed;
+    const random = vi
+      .spyOn(Math, "random")
+      .mockReturnValueOnce(0.125)
+      .mockReturnValueOnce(0.75);
+
+    try {
+      player.play({
+        mode: "range",
+        range: { unit: "time", start: 0, end: 1 },
+        loop: false,
+        ignoreAuthoredSeed: true,
+      });
+      const firstRuntimeSeed = internals.playbackSamplingLayers
+        ?.get("layer-a")
+        ?.animations.find((animation) => animation.id === "combo")?.seed;
+      expect(firstRuntimeSeed).toBeDefined();
+      expect(firstRuntimeSeed).not.toBe(authoredSeed);
+      expect(player.getProjectSnapshot().layers[0].animations[0].seed).toBe(
+        authoredSeed,
+      );
+
+      player.pause();
+      player.play({ ignoreAuthoredSeed: false });
+      expect(
+        internals.playbackSamplingLayers
+          ?.get("layer-a")
+          ?.animations.find((animation) => animation.id === "combo")?.seed,
+      ).toBe(firstRuntimeSeed);
+      expect(random).toHaveBeenCalledTimes(1);
+
+      player.play({
+        mode: "range",
+        range: { unit: "time", start: 0, end: 1 },
+        loop: false,
+        ignoreAuthoredSeed: true,
+      });
+      const secondRuntimeSeed = internals.playbackSamplingLayers
+        ?.get("layer-a")
+        ?.animations.find((animation) => animation.id === "combo")?.seed;
+      expect(secondRuntimeSeed).toBeDefined();
+      expect(secondRuntimeSeed).not.toBe(firstRuntimeSeed);
+
+      player.play({
+        mode: "range",
+        range: { unit: "time", start: 0, end: 1 },
+        loop: false,
+      });
+      expect(internals.playbackSamplingLayers).toBeNull();
+    } finally {
+      random.mockRestore();
+      player.destroy();
+    }
+  });
+
+  it("rejects non-boolean authored seed control before starting playback", async () => {
+    const player = await createInitializedPlayer({ autoTick: false });
+    try {
+      expect(() =>
+        player.play({ ignoreAuthoredSeed: 1 } as unknown as Parameters<
+          VNIPlayer["play"]
+        >[0]),
+      ).toThrow("ignoreAuthoredSeed must be a boolean");
+      expect(player.isPlaying()).toBe(false);
+    } finally {
+      player.destroy();
+    }
+  });
+
   it("reuses loaded particle_combo clones per template and restores authored values", async () => {
     const assetLoadCount = pixiMock.assetsLoad.mock.calls.length;
     const template = await createInitializedPlayer({ autoTick: false });

@@ -118,6 +118,20 @@ type 和非法数值都会显式失败。
 - `setLoop(loop)` / `getLoop()`: 控制普通播放和未显式传 `loop` 的 range 播放。
 - `destroy()`: 停止 RAF、清理 mounted nodes、safe glow overlays、render effects、particles、diagnostics、marker 和 complete listener，并从宿主 parent 移除和销毁 VNI 自己的 display tree；不会销毁宿主 Pixi app、renderer 或 canvas。
 
+### authored seed 与运行期随机
+
+`play()` 默认使用导出 animation 的 `seed`，因此效果与编辑器 Pixi preview 一致。需要本次新播放
+忽略 authored seed 时传入：
+
+```ts
+player.play({ ignoreAuthoredSeed: true });
+```
+
+player 会建立一个 runtime seed session，并为每个 layer animation 派生独立 effective seed。同一次
+播放的逐帧、seek/restart、pause/resume、loop 和 particle drain 都保持这一分布，不会逐帧重新随机；带
+该参数的新 range 或 segmented `play()` 才会重新生成。`playRange()`、manual playback 和 pool
+`playOnce()` 保持 authored seed 语义。
+
 播放到终点和视觉完全结束不是同一件事。非循环 timeline、非循环 range 和 segmented end 段到达终点后会停止发射器并进入 `particle-draining`；已有 live 粒子继续衰减，排空后才进入 `complete` 并触发 `onPlaybackComplete(...)`。`isPlaying()` 在主时间轴停止推进后会是 `false`，但内部 RAF 可能仍会继续驱动粒子排空；使用 `getPlaybackState().isDrainingParticles` 判断排空状态。
 
 ## Range 和事件

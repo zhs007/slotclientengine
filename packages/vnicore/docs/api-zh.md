@@ -138,7 +138,17 @@ listener 和 mounted state，并在进入 idle 前 detach。manager/template des
 - `clearMountedNodes(): void`
 - `destroy(): void`
 
-`play()` 无参数时仍是普通时间轴播放。`play({ mode: "range", range, loop })` 等价于 `playRange(...)`。`play({ mode: "segmented", loopStart, loopEnd, keepParticlesAlive })` 会按 start / loop / end 三段播放；`loopStart === loopEnd` 是停帧 loop，`loopStart < loopEnd` 是区间 loop。`keepParticlesAlive` 开启时，loop phase 的发射器配置跟随 loop 点或 loop 段，但 live 粒子按运行时 delta 继续老化、移动和发射，不会随播放时间停住或回绕。`requestSegmentedPlaybackEnd()` 只允许在 active segmented playback 中调用，否则显式抛错。
+`play()` 无参数时仍是普通时间轴播放。三种 `play()` mode 都可传
+`ignoreAuthoredSeed?: boolean`，默认或 `false` 使用导出 animation 的 `seed`，保持和编辑器 Pixi
+preview 一致；`true` 会为本次新播放生成 runtime seed，忽略 authored seed。runtime seed 在同一次
+播放的逐帧采样、seek/restart、pause/resume、loop 和 particle drain 内稳定，不会逐帧重新随机；新的
+range 或 segmented `play()` 才会重新生成。`playRange(...)`、manual playback 和 pool `playOnce()`
+不接受这个开关，继续使用 authored seed。`play({ mode: "range", range, loop })` 等价于
+`playRange(...)` 的时间范围语义。`play({ mode: "segmented", loopStart, loopEnd, keepParticlesAlive })`
+会按 start / loop / end 三段播放；`loopStart === loopEnd` 是停帧 loop，`loopStart < loopEnd` 是区间
+loop。`keepParticlesAlive` 开启时，loop phase 的发射器配置跟随 loop 点或 loop 段，但 live 粒子按运行时
+delta 继续老化、移动和发射，不会随播放时间停住或回绕。`requestSegmentedPlaybackEnd()` 只允许在
+active segmented playback 中调用，否则显式抛错。
 
 `update(deltaSeconds)` 主要用于测试或宿主手动推进；默认 `play()` 仍然使用 RAF 自动推进。需要接入外部游戏 ticker 时，构造 `VNIPlayer` 时传入 `autoTick: false`，再由宿主每帧调用 `update(deltaSeconds)`。`onPlaybackComplete(...)` 在视觉完全结束后触发，也就是时间轴到终点并且 live 粒子排空后触发；如果终点没有可排空粒子，则可以立即触发。
 
