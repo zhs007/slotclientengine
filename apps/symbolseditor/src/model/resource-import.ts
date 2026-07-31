@@ -24,6 +24,12 @@ export interface PreparedSymbolResourceImport {
   readonly sources: readonly EditorImportSourceFile[];
 }
 
+export interface ClearedSpineAnimationBinding {
+  readonly location: string;
+  readonly animationName: string;
+  readonly skeletonKeys: readonly string[];
+}
+
 export async function prepareSymbolResourceImport(options: {
   readonly project: SymbolEditorProject;
   readonly sources: readonly EditorImportSourceFile[];
@@ -78,6 +84,7 @@ export async function commitSymbolResourceImport(options: {
 }): Promise<{
   readonly project: SymbolEditorProject;
   readonly review: EditorImportReview;
+  readonly clearedAnimations: readonly ClearedSpineAnimationBinding[];
 }> {
   const workspace = await createEditorAssetWorkspace(
     [...options.project.assetLibrary.records.values()].map((record) => ({
@@ -116,6 +123,30 @@ export async function commitSymbolResourceImport(options: {
     ({ path }) => project.assetLibrary.records.get(path)!,
   );
   validateSymbolResourceDiscovery(changed, { requireClosure: false });
+  const overwrittenSkeletonKeys = new Set(
+    review.items.flatMap((item, index) =>
+      item.action === "overwrite" &&
+      options.prepared.records[index]?.kind === "spine-skeleton"
+        ? [item.targetKey]
+        : [],
+    ),
+  );
+  const clearedAnimations = reconcileMissingSpineAnimations(
+    project,
+    overwrittenSkeletonKeys,
+  );
+  if (clearedAnimations.length > 0) {
+    await validateReconciledSpineImport({
+      project,
+      beforeDiagnostics,
+      clearedAnimations,
+    });
+    return Object.freeze({
+      project,
+      review,
+      clearedAnimations: Object.freeze(clearedAnimations),
+    });
+  }
   const newDiagnostics = getProjectDiagnostics(project).filter(
     (diagnostic) => !beforeDiagnostics.has(diagnostic),
   );
@@ -123,7 +154,162 @@ export async function commitSymbolResourceImport(options: {
     throw new Error(`资源替换与现有配置不兼容：\n${newDiagnostics.join("\n")}`);
   if (beforeDiagnostics.size === 0)
     await exportSymbolPackageZip(project, { loadTextures: false });
-  return Object.freeze({ project, review });
+  return Object.freeze({
+    project,
+    review,
+    clearedAnimations: Object.freeze([]),
+  });
+}
+
+async function validateReconciledSpineImport(options: {
+  readonly project: SymbolEditorProject;
+  readonly beforeDiagnostics: ReadonlySet<string>;
+  readonly clearedAnimations: readonly ClearedSpineAnimationBinding[];
+}): Promise<void> {
+  const validationProject = cloneSymbolEditorProject(options.project);
+  for (const binding of options.clearedAnimations) {
+    const animationName = validationAnimationName(validationProject, binding);
+    if (!animationName) return;
+    applyValidationAnimationName(validationProject, binding, animationName);
+  }
+  const newDiagnostics = getProjectDiagnostics(validationProject).filter(
+    (diagnostic) => !options.beforeDiagnostics.has(diagnostic),
+  );
+  if (newDiagnostics.length) {
+    throw new Error(`资源替换与现有配置不兼容：\n${newDiagnostics.join("\n")}`);
+  }
+  if (options.beforeDiagnostics.size === 0)
+    await exportSymbolPackageZip(validationProject, { loadTextures: false });
+}
+
+function validationAnimationName(
+  project: SymbolEditorProject,
+  binding: ClearedSpineAnimationBinding,
+): string | undefined {
+  const [first, ...rest] = binding.skeletonKeys.map((key) =>
+    animationNamesFor(project, key),
+  );
+  return [...(first ?? [])].find((name) =>
+    rest.every((names) => names.has(name)),
+  );
+}
+
+function applyValidationAnimationName(
+  project: SymbolEditorProject,
+  binding: ClearedSpineAnimationBinding,
+  animationName: string,
+): void {
+  const symbol = [...project.symbols.values()].find((candidate) =>
+    binding.location.startsWith(`${candidate.symbol}.`),
+  );
+  if (!symbol) throw new Error(`动画清理目标不存在：${binding.location}。`);
+  const target = binding.location.slice(symbol.symbol.length + 1);
+  if (target === "valuePresentation.normal") {
+    for (const tier of symbol.valuePresentation?.tiers ?? []) {
+      (tier.animation.playback as { animationName: string }).animationName =
+        animationName;
+    }
+    return;
+  }
+  const visual = symbol.states.get(target);
+  if (visual?.kind === "spine" || visual?.kind === "activeSpine") {
+    symbol.states.set(target, { ...visual, animationName });
+    return;
+  }
+  throw new Error(`动画清理目标不是 Spine binding：${binding.location}。`);
+}
+
+function reconcileMissingSpineAnimations(
+  project: SymbolEditorProject,
+  overwrittenSkeletonKeys: ReadonlySet<string>,
+): ClearedSpineAnimationBinding[] {
+  if (overwrittenSkeletonKeys.size === 0) return [];
+  const cleared: ClearedSpineAnimationBinding[] = [];
+  for (const symbol of project.symbols.values()) {
+    for (const [state, visual] of symbol.states) {
+      if (
+        visual.kind !== "spine" ||
+        !overwrittenSkeletonKeys.has(visual.skeletonPath) ||
+        !visual.animationName ||
+        animationNamesFor(project, visual.skeletonPath).has(
+          visual.animationName,
+        )
+      ) {
+        continue;
+      }
+      symbol.states.set(state, { ...visual, animationName: "" });
+      cleared.push({
+        location: `${symbol.symbol}.${state}`,
+        animationName: visual.animationName,
+        skeletonKeys: Object.freeze([visual.skeletonPath]),
+      });
+    }
+
+    const value = symbol.valuePresentation;
+    if (!value) continue;
+    const skeletonKeys = value.tiers.map((tier) =>
+      stripLocalRef(tier.animation.skeleton),
+    );
+    if (!skeletonKeys.some((key) => overwrittenSkeletonKeys.has(key))) continue;
+    const sharedAnimations = intersectAnimationNames(project, skeletonKeys);
+    const normalAnimation = value.tiers[0]?.animation.playback.animationName;
+    if (normalAnimation && !sharedAnimations.has(normalAnimation)) {
+      for (const tier of value.tiers) {
+        (tier.animation.playback as { animationName: string }).animationName =
+          "";
+      }
+      cleared.push({
+        location: `${symbol.symbol}.valuePresentation.normal`,
+        animationName: normalAnimation,
+        skeletonKeys: Object.freeze([...skeletonKeys]),
+      });
+    }
+    for (const [state, visual] of symbol.states) {
+      if (
+        visual.kind !== "activeSpine" ||
+        !visual.animationName ||
+        sharedAnimations.has(visual.animationName)
+      ) {
+        continue;
+      }
+      symbol.states.set(state, { ...visual, animationName: "" });
+      cleared.push({
+        location: `${symbol.symbol}.${state}`,
+        animationName: visual.animationName,
+        skeletonKeys: Object.freeze([...skeletonKeys]),
+      });
+    }
+  }
+  return cleared;
+}
+
+function intersectAnimationNames(
+  project: SymbolEditorProject,
+  skeletonKeys: readonly string[],
+): Set<string> {
+  const [first, ...rest] = skeletonKeys.map((key) =>
+    animationNamesFor(project, key),
+  );
+  if (!first) return new Set();
+  return new Set(
+    [...first].filter((name) => rest.every((names) => names.has(name))),
+  );
+}
+
+function animationNamesFor(
+  project: SymbolEditorProject,
+  skeletonKey: string,
+): Set<string> {
+  return new Set(
+    metadataList(
+      project.assetLibrary.records.get(skeletonKey),
+      "animationNames",
+    ),
+  );
+}
+
+function stripLocalRef(path: string): string {
+  return path.startsWith("./") ? path.slice(2) : path;
 }
 
 export function validateSymbolResourceDiscovery(
@@ -184,8 +370,11 @@ function mediaTypeForKey(key: string): string {
   }
 }
 
-function metadataList(record: EditorAssetRecord, key: string): string[] {
-  const value = record.metadata?.[key];
+function metadataList(
+  record: EditorAssetRecord | undefined,
+  key: string,
+): string[] {
+  const value = record?.metadata?.[key];
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
     : [];

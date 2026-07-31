@@ -10,7 +10,7 @@ symbol code、state、lifecycle、scale、renderPriority、value/cascade 配置�
 
 value-presentation 的编辑顺序固定为“档位 → 状态”：每档只选择 Spine skeleton/atlas/texture 和阈值；normal、win、remove 等动画在状态页选择一次，并要求所有档位存在同名动画。`spinBlur`、`disabled` 等静态 reel state 独立选择图片。ImgNumber 在编辑器中只有一个共享 dependency/slot/transform 节点，固定按动态可视内容中心对齐；稳定 production manifest 仍会把这份配置精确物化到每个 tier binding。
 
-单文件、多文件和通用资源 ZIP 使用同一导入事务；ZIP 内路径在 review 前扁平为原始 basename。同名不同 bytes 必须先 review：可以逐项或批量覆盖，也可以显式保留两份。覆盖保持所有 state/value/node 引用；保留两份在扩展名前使用最小可用 `-1`、`-2` suffix，且新资源不会自动绑定。缺 animation、slot、glyph 或 closure 时整批回滚。大小写合法文件名原样保留，不生成 logical id、目录前缀或静默后缀。unused key 可留在 draft，但不会进入 production closure。
+单文件、多文件和通用资源 ZIP 使用同一导入事务；ZIP 内路径在 review 前扁平为原始 basename。同名不同 bytes 必须先 review：可以逐项或批量覆盖，也可以显式保留两份。覆盖保持所有 state/value/node 引用；保留两份在扩展名前使用最小可用 `-1`、`-2` suffix，且新资源不会自动绑定。唯一例外是被覆盖的有效 Spine skeleton 不再包含已选动画：编辑器只清空受影响的 exact `animationName`，并提示用户重新选择；tiered Spine 的共享 normal/activeSpine 动画按全部档位交集一起处理。slot、glyph、atlas page、closure 或其它不兼容仍整批回滚。大小写合法文件名原样保留，不生成 logical id、目录前缀或静默后缀。unused key 可留在 draft，但不会进入 production closure。
 
 包含 `symbols.package.json` 的 ZIP 是完整 Symbols project，只能单独打开，并在确认后原子替换当前项目；它不会作为普通素材合并。导入和预览分别显示进度与错误，project 已加载但 Pixi/Spine/VNI preview 初始化失败时保留可编辑配置并提供重试，不用空预览掩盖异常。
 
