@@ -16,6 +16,7 @@ import {
   PopupEditorStore,
   projectToManifest,
   resourceReferenceCount,
+  setPopupVniPlaybackMode,
   type PopupEditorProject,
 } from "../model/project.js";
 import {
@@ -224,6 +225,20 @@ export class PopupEditorApp {
             const tierId = input.dataset.thresholdTier as AwardTierId;
             draft.tiers.get(tierId)!.thresholdMultiplier = Number(input.value);
           }),
+        ),
+      );
+    this.#root
+      .querySelectorAll<HTMLSelectElement>("[data-vni-playback-mode]")
+      .forEach((select) =>
+        select.addEventListener("change", () =>
+          this.#store.transact((draft) =>
+            setPopupVniPlaybackMode(
+              draft,
+              this.#tier,
+              select.dataset.layerId!,
+              select.value as "segmented" | "once",
+            ),
+          ),
         ),
       );
     this.#root
@@ -519,7 +534,7 @@ function layerMarkup(
     `<label>${field}<input data-layer-id="${layer.id}" data-layer-field="${field}" type="${type}" ${type === "number" ? 'step="0.1"' : ""} value="${value}"/></label>`;
   const playback =
     layer.kind === "vni"
-      ? `${vniTimingSummary(project, layer)}${input("loopStartTime", layer.playback.loopStartTime)}${input("loopEndTime", layer.playback.loopEndTime)}<label>keepParticlesAlive<input data-layer-id="${layer.id}" data-layer-field="keepParticlesAlive" type="checkbox" ${layer.playback.keepParticlesAlive ? "checked" : ""}/></label>`
+      ? vniPlaybackMarkup(layer, project)
       : layer.kind === "spine"
         ? (["startAnimation", "loopAnimation", "endAnimation"] as const)
             .map((field) => input(field, layer.playback[field], "text"))
@@ -528,6 +543,18 @@ function layerMarkup(
           ? `${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${imageStringParentMarkup(layer, project, tierId)}<p class="amount-layer-note">金额全程显示；五档共享一个 runtime，跨档只切换 resource、transform 和文本。</p>`
           : `${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${(["start", "loop", "end"] as const).map((segment) => `<label>${segment}<input data-layer-id="${layer.id}" data-layer-field="segment-${segment}" type="checkbox" ${layer.visibleSegments.includes(segment) ? "checked" : ""}/></label>`).join("")}`;
   return `<article class="card"><strong>${layer.id}</strong><span>${layer.kind} / ${layer.resource}</span>${input("order", layer.order)}${(["x", "y", "scale"] as const).map((field) => input(field, layer.transform[field])).join("")}${playback}<button data-delete-layer="${layer.id}">删除图层</button></article>`;
+}
+
+function vniPlaybackMarkup(
+  layer: Extract<PopupLayer, { kind: "vni" }>,
+  project: PopupEditorProject,
+) {
+  const mode = `<label>播放模式<select data-vni-playback-mode data-layer-id="${layer.id}"><option value="segmented" ${layer.playback.mode === "segmented" ? "selected" : ""}>分段循环</option><option value="once" ${layer.playback.mode === "once" ? "selected" : ""}>完整单次</option></select></label>`;
+  if (layer.playback.mode === "once")
+    return `${mode}${vniTimingSummary(project, layer)}<p class="amount-layer-note">完整时间轴只播放一次；动画先结束时保持 authored 最后一帧，直到跨档或关闭 Popup。切回分段循环会建立并显示默认分段值。</p>`;
+  const input = (field: string, value: number) =>
+    `<label>${field}<input data-layer-id="${layer.id}" data-layer-field="${field}" type="number" step="0.1" value="${value}"/></label>`;
+  return `${mode}${vniTimingSummary(project, layer)}${input("loopStartTime", layer.playback.loopStartTime)}${input("loopEndTime", layer.playback.loopEndTime)}<label>keepParticlesAlive<input data-layer-id="${layer.id}" data-layer-field="keepParticlesAlive" type="checkbox" ${layer.playback.keepParticlesAlive ? "checked" : ""}/></label><p class="amount-layer-note">切换到完整单次会从导出配置移除当前分段字段。</p>`;
 }
 
 function imageStringParentMarkup(
@@ -603,6 +630,8 @@ function vniTimingSummary(
     };
     const duration = value.stage?.duration;
     if (typeof duration !== "number" || !Number.isFinite(duration)) return "";
+    if (layer.playback.mode === "once")
+      return `<p class="segment-summary"><strong>VNI 总时长 ${duration}s</strong><span>完整单次 0–${duration}s</span><span>完成后保持最后一帧</span></p>`;
     return `<p class="segment-summary"><strong>VNI 总时长 ${duration}s</strong><span>start 0–${layer.playback.loopStartTime}s</span><span>loop ${layer.playback.loopStartTime}–${layer.playback.loopEndTime}s</span><span>end ${layer.playback.loopEndTime}–${duration}s</span></p>`;
   } catch {
     return "";

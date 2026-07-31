@@ -83,6 +83,17 @@ describe("popup manifest", () => {
     ).parent.vniLayerId = "missing";
     expect(() => parsePopupManifest(attached)).toThrow(/parent\.vniLayerId/);
   });
+  it("strictly parses once VNI playback without segmented fields", () => {
+    const value = structuredClone(popupFixture()) as any;
+    value.awardCelebration.celebrationTiers[0].layers[0].playback = {
+      mode: "once",
+    };
+    expect(
+      parsePopupManifest(value).awardCelebration.celebrationTiers[0]!.layers[0],
+    ).toMatchObject({ playback: { mode: "once" } });
+    value.awardCelebration.celebrationTiers[0].layers[0].playback.loopEndTime = 2.5;
+    expect(() => parsePopupManifest(value)).toThrow(/unknown key/);
+  });
   it("rejects unknown fields and requires exactly one always-visible ImgNumber per tier", () => {
     expect(() =>
       parsePopupManifest({ ...popupFixture(), extra: true }),

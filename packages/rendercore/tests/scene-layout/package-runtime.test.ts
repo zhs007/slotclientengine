@@ -293,6 +293,14 @@ function popupLayoutFixture() {
     anchor: { x: 0.5, y: 0.5 },
     transform: { x: 0, y: 0, scale: 1 },
   };
+  const vniLayer = {
+    id: "effect",
+    kind: "vni",
+    order: 1,
+    resource: "effect",
+    playback: { mode: "once" },
+    transform: { x: 0, y: 0, scale: 1 },
+  };
   const popup = {
     version: 1,
     kind: "popup",
@@ -315,6 +323,10 @@ function popupLayoutFixture() {
         manifest:
           "dependencies/image-strings/amount/image-string.manifest.json",
       },
+      effect: {
+        kind: "vni",
+        project: `assets/${"9".repeat(64)}.json`,
+      },
     },
     awardCelebration: {
       base: { countDurationSeconds: 1, layers: [amountLayer] },
@@ -324,7 +336,7 @@ function popupLayoutFixture() {
           id: "bigwin",
           thresholdMultiplier: 15,
           countDurationSeconds: 1,
-          layers: [amountLayer],
+          layers: [amountLayer, vniLayer],
         },
         {
           id: "superwin",
@@ -376,6 +388,31 @@ function popupLayoutFixture() {
     ["assets/bg.png", new Uint8Array([1])],
     [`${prefix}popup.manifest.json`, encode(popup)],
     [`${dependency}image-string.manifest.json`, encode(imageString)],
+    [
+      `${prefix}assets/${"9".repeat(64)}.json`,
+      encode({
+        schemaVersion: "VNI_0.020",
+        editor: { name: "VNI", version: "VNI_0.020" },
+        engineTarget: { name: "cocos_creator", version: "3.8.6" },
+        name: "popup-once",
+        exportProfile: {
+          id: "runtime",
+          purpose: "runtime",
+          assetScale: 1,
+        },
+        stage: {
+          width: 100,
+          height: 100,
+          coordinate: "center",
+          duration: 0.5,
+          backgroundColor: "#000000",
+        },
+        assets: [],
+        layerGroups: [],
+        layers: [],
+        particles: [],
+      }),
+    ],
   ]);
   characters.forEach((_, index) =>
     packageFiles.set(
@@ -868,6 +905,10 @@ describe("scene layout package runtime", () => {
       await runtime.init();
       runtime.applyViewport({ width: 200, height: 100 });
       const popup = runtime.getAwardCelebrationPopup("celebration");
+      expect(
+        resource.popupPackages.celebration.manifest.awardCelebration
+          .celebrationTiers[0]!.layers[1],
+      ).toMatchObject({ playback: { mode: "once" } });
       expect(popup.container.position).toMatchObject({ x: 103, y: 46 });
       expect(popup.container.scale).toMatchObject({ x: 0.8, y: 0.8 });
       runtime.startAwardCelebrationForCurrentMode({

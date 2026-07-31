@@ -361,6 +361,14 @@ function parseLayer(
   if (kind === "vni") {
     keys(record, [...common, "playback"], label);
     const playback = object(record.playback, `${label}.playback`);
+    if (playback.mode === "once") {
+      keys(playback, ["mode"], `${label}.playback`);
+      return freeze({
+        ...base,
+        kind: "vni" as const,
+        playback: { mode: "once" as const },
+      });
+    }
     keys(
       playback,
       ["mode", "loopStartTime", "loopEndTime", "keepParticlesAlive"],

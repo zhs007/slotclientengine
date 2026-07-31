@@ -146,6 +146,14 @@ describe("typed asset reference rewriting", () => {
           transform: { x: 0, y: 0, scale: 1 },
           anchor: { x: 0.5, y: 0.5 },
         },
+        {
+          id: `effect-${id}`,
+          order: 2,
+          resource: "runtime.json",
+          kind: "vni",
+          playback: { mode: "once" },
+          transform: { x: 0, y: 0, scale: 1 },
+        },
       ],
     });
     const popup = rewritePopupManifest(
@@ -176,6 +184,10 @@ describe("typed asset reference rewriting", () => {
             path: "popup.png",
             size: { width: 1, height: 1 },
           },
+          "runtime.json": {
+            kind: "vni",
+            project: "runtime.json",
+          },
         },
         awardCelebration: {
           base: tier("base"),
@@ -194,6 +206,14 @@ describe("typed asset reference rewriting", () => {
       path: "popup.webp",
     });
     expect(popup.awardCelebration.base.layers[0]?.resource).toBe("popup.webp");
+    expect(popup.resources["runtime.hash.json"]).toMatchObject({
+      kind: "vni",
+      project: "runtime.hash.json",
+    });
+    expect(popup.awardCelebration.base.layers[2]).toMatchObject({
+      resource: "runtime.hash.json",
+      playback: { mode: "once" },
+    });
   });
 
   it("rewrites VNI asset.path while preserving authored identity", () => {
