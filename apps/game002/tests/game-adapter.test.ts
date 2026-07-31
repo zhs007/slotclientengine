@@ -15,6 +15,7 @@ import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-
 import {
   assertGame002CascadeResources,
   createGame002Adapter,
+  Game002RoundTarget,
   requestGame002TransformStates,
   type Game002AdapterOptions,
 } from "../src/game-adapter.js";
@@ -195,6 +196,98 @@ describe("game002 task 95 adapter", () => {
       "1,2",
       "5,0",
     ]);
+  });
+
+  it("gives CO ownership priority when a vortex target remains CN", () => {
+    const runtime = new FakeRuntime([]);
+    const target = new Game002RoundTarget({
+      runtime: runtime.asRuntime(),
+      cascadePlayer: new FakeCascadePlayer([], runtime),
+      winAmountPlayer: new FakeWinAmountPlayer([]).asPlayer(),
+      wlSymbolCode: 0,
+      wmSymbolCode: 7,
+      cnSymbolCode: 8,
+      cmSymbolCode: 9,
+    });
+    const position = (y: number) => Object.freeze({ x: 0, y });
+    const inputScene = Object.freeze([Object.freeze([10, 8, 8])]);
+    const inputValues = Object.freeze([Object.freeze([null, 1, 2])]);
+    const outputScene = Object.freeze([Object.freeze([8, 12, 8])]);
+    const outputValues = Object.freeze([Object.freeze([2, null, 1])]);
+    const coChanges = Object.freeze([
+      Object.freeze({ position: position(0), outputCode: 8, outputValue: 2 }),
+      Object.freeze({
+        position: position(1),
+        outputCode: 12,
+        outputValue: null,
+      }),
+      Object.freeze({ position: position(2), outputCode: 8, outputValue: 1 }),
+    ]);
+    const relocations = Object.freeze([
+      Object.freeze({ source: position(1), target: position(2) }),
+    ]);
+    const batch = Object.freeze({
+      stepIndex: 0,
+      wlIncrements: Object.freeze([]),
+      wmReplacements: Object.freeze([]),
+      cnUpdates: Object.freeze([]),
+      cm: null,
+      coCollection: Object.freeze({
+        stepIndex: 0,
+        segments: Object.freeze([
+          Object.freeze({
+            co: position(0),
+            selectedCode: 8,
+            transfers: Object.freeze([
+              Object.freeze({
+                source: position(1),
+                target: position(2),
+                sourceCode: 8,
+                sourceValue: 1,
+              }),
+            ]),
+          }),
+        ]),
+        sourcePositions: Object.freeze([position(1)]),
+        win2Positions: Object.freeze([position(0), position(2)]),
+        transform: Object.freeze({ changes: coChanges, relocations }),
+      }),
+      coReplacements: Object.freeze([]),
+    });
+    const occurrences = Object.freeze([
+      occurrence("co", 10, "CO", null, 0),
+      occurrence("source", 8, "CN", 1, 1),
+      occurrence("target", 8, "CN", 2, 2),
+    ]);
+    const step = Object.freeze({
+      kind: "settled-transform",
+      index: 0,
+      stepIndex: 0,
+      input: Object.freeze({
+        scene: inputScene,
+        values: inputValues,
+        occurrences,
+      }),
+      output: Object.freeze({
+        scene: outputScene,
+        values: outputValues,
+        occurrences: Object.freeze([]),
+      }),
+      changes: Object.freeze([
+        transformChange(occurrences[0], 8, "CN", 2, 0),
+        transformChange(occurrences[1], 12, "BN", null, 1),
+        transformChange(occurrences[2], 8, "CN", 1, 2),
+      ]),
+      relocations,
+    });
+    target.configure({
+      sequence: {} as any,
+      betAmountRaw: 1,
+      winAmountRaw: 1,
+      multiplierBatches: new Map([[0, batch]]),
+    });
+
+    expect(() => target.startSettledTransform(step as any)).not.toThrow();
   });
 
   it("plays the complete fixture with protected WL and one unified fall", async () => {
@@ -456,6 +549,37 @@ function createTestAdapter(options: Omit<Game002AdapterOptions, "skin">) {
   });
 }
 
+function occurrence(
+  id: string,
+  code: number,
+  symbol: string,
+  value: number | null,
+  y: number,
+) {
+  return Object.freeze({
+    id,
+    code,
+    symbol,
+    value,
+    position: Object.freeze({ x: 0, y }),
+  });
+}
+
+function transformChange(
+  input: ReturnType<typeof occurrence>,
+  code: number,
+  symbol: string,
+  value: number | null,
+  y: number,
+) {
+  return Object.freeze({
+    occurrenceId: input.id,
+    position: Object.freeze({ x: 0, y }),
+    input,
+    output: occurrence(`output-${y}`, code, symbol, value, y),
+  });
+}
+
 function createCascadeLogic(value: unknown = GAME002_CASCADE_GMI) {
   return createSlotGameLogicResult(value, {
     bet: { bet: 10, lines: 30, times: 1 },
@@ -686,6 +810,13 @@ class FakeRuntime {
         y: 0,
         inputCode: 7,
         outputCode: 8,
+        commit: () => undefined,
+        rollback: () => undefined,
+        destroy: () => undefined,
+      }),
+      prepareVisibleOccurrenceTransferBatch: () => ({
+        start: () => undefined,
+        setProgress: () => undefined,
         commit: () => undefined,
         rollback: () => undefined,
         destroy: () => undefined,
