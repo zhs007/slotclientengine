@@ -62,6 +62,7 @@ import type {
   V5GAnimationConfig,
   V5GAssetConfig,
   V5GLayerConfig,
+  V5GProjectConfig,
 } from "../core/types.js";
 import type {
   V5GCocosPlaybackCompleteContext,
@@ -287,6 +288,7 @@ export class V5GCocosPlayer<
   private readonly completeListeners: Array<
     (event: V5GCocosPlaybackCompleteContext) => void
   > = [];
+  private readonly destroyListeners = new Set<() => void>();
   private loopIndex = 0;
   private nextPlaybackEventOrder = 0;
   private nextTextBindingVersion = 0;
@@ -311,8 +313,115 @@ export class V5GCocosPlayer<
     return this.isPlaying || this.manualClockActive;
   }
 
+  getProjectSnapshot(): V5GProjectConfig {
+    this.assertInitialized("getProjectSnapshot");
+    return structuredClone(this.options.project);
+  }
+
+  /** @internal Owned by V5GCocosPlayerPoolManager. */
+  createPoolClone(
+    project: V5GProjectConfig,
+  ): V5GCocosPlayer<TNode, TSpriteFrame> {
+    this.assertInitialized("createPoolClone");
+    validateCocosV5GProject(project);
+    assertCompatiblePoolCloneProject(this.options.project, project);
+    return new V5GCocosPlayer({
+      root: this.options.root,
+      project,
+      assets: this.options.assets,
+      driver: this.options.driver,
+      loop: true,
+    });
+  }
+
+  /** @internal Owned by V5GCocosPlayerPoolManager. */
+  assertPoolTemplateAttached(): void {
+    this.assertInitialized("assertPoolTemplateAttached");
+    if (
+      this.options.driver.getParent(this.stageNode as TNode) !==
+      this.options.root
+    ) {
+      throw new Error(
+        "V5GCocosPlayer pool template must be attached to its host root.",
+      );
+    }
+  }
+
+  /** @internal Owned by V5GCocosPlayerPoolManager. */
+  resetForPoolReuse(): void {
+    this.assertInitialized("resetForPoolReuse");
+    this.manualSession?.destroy();
+    this.manualSession = null;
+    this.manualClockActive = false;
+    this.manualRangeCompletion = null;
+    this.activeRange = null;
+    this.segmentedPlayback = null;
+    this.pendingComplete = null;
+    this.clearPlaybackEventRecords();
+    this.completeListeners.length = 0;
+    this.loopIndex = 0;
+    this.drainPaused = false;
+    this.suppressParticleEmission = false;
+    this.forceStopParticlesAfterSegmentEnd = false;
+    this.playbackMode = "timeline";
+    this.playbackPhase = "idle";
+    this.loop = this.options.loop ?? true;
+    this.currentTime = 0;
+    this.particleRuntime.reconfigure(this.options.project.layers);
+    this.clearMountedNodes();
+    this.clearSafeGlowNodes();
+    this.clearChaserLightNodes();
+    this.clearParticles();
+    this.setPlaying(false);
+    this.renderDeterministicFrame(0);
+  }
+
+  /** @internal Owned by V5GCocosPlayerPoolManager. */
+  attachForPoolReuse(): void {
+    this.assertInitialized("attachForPoolReuse");
+    const stage = this.stageNode as TNode;
+    const parent = this.options.driver.getParent(stage);
+    if (parent === this.options.root) return;
+    if (parent !== null) {
+      throw new Error(
+        "V5GCocosPlayer pool clone stage is attached to an unexpected parent.",
+      );
+    }
+    this.options.driver.appendChild(this.options.root, stage);
+  }
+
+  /** @internal Owned by V5GCocosPlayerPoolManager. */
+  detachForPoolReuse(): void {
+    this.assertInitialized("detachForPoolReuse");
+    const stage = this.stageNode as TNode;
+    const parent = this.options.driver.getParent(stage);
+    if (parent === null) return;
+    if (parent !== this.options.root) {
+      throw new Error(
+        "V5GCocosPlayer pool clone stage is attached to an unexpected parent.",
+      );
+    }
+    this.options.driver.removeChild(this.options.root, stage);
+  }
+
+  onDestroy(listener: () => void): () => void {
+    if (typeof listener !== "function") {
+      throw new Error("V5GCocosPlayer.onDestroy listener must be a function.");
+    }
+    this.destroyListeners.add(listener);
+    let disposed = false;
+    return () => {
+      if (disposed) return;
+      disposed = true;
+      this.destroyListeners.delete(listener);
+    };
+  }
+
   init(): void {
     this.assertLegacyTransportAvailable("init");
+    if (this.stageNode !== null) {
+      this.notifyDestroyListeners();
+    }
     this.destroyManagedNodes();
     this.resetPlaybackRuntime();
     validateCocosV5GProject(this.options.project);
@@ -1278,6 +1387,7 @@ export class V5GCocosPlayer<
     this.currentTime = 0;
     this.playbackMode = "timeline";
     this.playbackPhase = "idle";
+    this.notifyDestroyListeners();
   }
 
   private startTimelinePlayback(): void {
@@ -3390,6 +3500,12 @@ export class V5GCocosPlayer<
     this.layerGroupSlots = [];
   }
 
+  private notifyDestroyListeners(): void {
+    const listeners = [...this.destroyListeners];
+    this.destroyListeners.clear();
+    for (const listener of listeners) listener();
+  }
+
   private assertInitialized(apiName = "seek/update"): void {
     if (this.stageNode === null) {
       throw new Error(`V5GCocosPlayer must be initialized before ${apiName}.`);
@@ -3791,4 +3907,35 @@ function normalizeLayerId(layerId: string, apiName: string): string {
     throw new Error(`V5GCocosPlayer.${apiName} layerId must be non-empty.`);
   }
   return normalized;
+}
+
+function assertCompatiblePoolCloneProject(
+  template: V5GProjectConfig,
+  clone: V5GProjectConfig,
+): void {
+  if (template.assets.length !== clone.assets.length) {
+    throw new Error(
+      "V5G Cocos pool clone project must have the same assets as its template.",
+    );
+  }
+  const cloneAssetsById = new Map(
+    clone.assets.map((asset) => [asset.id, asset] as const),
+  );
+  for (const asset of template.assets) {
+    const candidate = cloneAssetsById.get(asset.id);
+    if (
+      !candidate ||
+      candidate.type !== asset.type ||
+      candidate.path !== asset.path ||
+      candidate.width !== asset.width ||
+      candidate.height !== asset.height ||
+      candidate.fileWidth !== asset.fileWidth ||
+      candidate.fileHeight !== asset.fileHeight ||
+      candidate.fileScale !== asset.fileScale
+    ) {
+      throw new Error(
+        `V5G Cocos pool clone asset "${asset.id}" does not match its template.`,
+      );
+    }
+  }
 }

@@ -14,6 +14,7 @@ export * from "./timeline-progress.js";
 export * from "./multi-move.js";
 export * from "./particle-sampler.js";
 export * from "./particle-runtime.js";
+export * from "./particle-combo-variant.js";
 export * from "./playback-sequence.js";
 export * from "./project-sampler.js";
 export * from "./validation.js";

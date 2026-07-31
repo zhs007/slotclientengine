@@ -5,6 +5,7 @@ import lock01Data from "../fixtures/lock_01.json";
 import projectData from "../fixtures/project.json";
 import roundreelData from "../fixtures/roundreel.json";
 import { V5GCocosPlayer } from "../../src/cocos/player";
+import { V5GCocosPlayerPoolManager } from "../../src/cocos/player-pool";
 import { assertV5GProject } from "../../src/core/validation";
 import {
   getCocosBlendModeConfig,
@@ -521,6 +522,46 @@ function particleWallAnimation(
       endScaleMin: 0.3,
       endScaleMax: 0.8,
       fadeOut: true,
+    },
+    ...overrides,
+  };
+}
+
+function particleComboAnimation(
+  overrides: Partial<V5GAnimationConfig> = {},
+): V5GAnimationConfig {
+  return {
+    id: "combo",
+    name: "Combo",
+    type: "particle_combo",
+    startTime: 0,
+    duration: 1.5,
+    enabled: true,
+    seed: 11,
+    params: {
+      count: 5,
+      size: 35,
+      sourceOpacity: 0,
+      spawnMode: 1,
+      spawnRadius: 35,
+      spawnRatio: 0.05,
+      targetX: 600,
+      targetY: 0,
+      travelMode: 1,
+      curve: 100,
+      orbitRadius: 100,
+      orbitTurns: 0,
+      orbitSpeed: 1,
+      orbitRatio: 0.35,
+      staggerRatio: 0.28,
+      trailCount: 4,
+      trailSpacing: 0.045,
+      trailFade: 0.2,
+      vanishMode: 0,
+      vanishRatio: 0.18,
+      flashScale: 1,
+      flashIntensity: 0.5,
+      easing: "easeInOutQuad",
     },
     ...overrides,
   };
@@ -2939,5 +2980,144 @@ describe("V5GCocosPlayer", () => {
     expect(root.destroyed).toBe(false);
     expect(root.children).toHaveLength(0);
     expect(player.playing).toBe(false);
+  });
+
+  it("pools particle_combo clones and restores authored state", async () => {
+    const project = tinyProject({
+      animations: [particleComboAnimation()],
+    });
+    project.stage.duration = 2;
+    const { root, player: template, frames } = makePlayer(project);
+    template.init();
+    const manager = new V5GCocosPlayerPoolManager<FakeNode, FakeSpriteFrame>();
+    const pool = manager.getPool(template);
+
+    expect(pool.listParticleComboAnimations()).toEqual([
+      expect.objectContaining({
+        layerId: "layer-1",
+        animationId: "combo",
+        target: { x: 600, y: 0 },
+        durationSeconds: 1.5,
+        speed: 400,
+      }),
+    ]);
+
+    const first = pool.acquire({
+      animation: { layerId: "layer-1", animationId: "combo" },
+      target: { x: 300, y: 0 },
+    });
+    expect(first.timing.effectiveDurationSeconds).toBe(0.75);
+    expect(root.children).toHaveLength(2);
+    expect(
+      first.player.getProjectSnapshot().layers[0].animations[0].params,
+    ).toMatchObject({ targetX: 300, targetY: 0 });
+
+    const completed = first.playOnce();
+    first.player.update(0.75);
+    first.player.update(0.75);
+    await expect(completed).resolves.toMatchObject({
+      startTime: 0,
+      endTime: 0.75,
+    });
+    expect(pool.getStats()).toEqual({
+      active: 0,
+      idle: 1,
+      created: 1,
+      reused: 0,
+    });
+    expect(root.children).toHaveLength(1);
+    const detachedCloneManager = new V5GCocosPlayerPoolManager<
+      FakeNode,
+      FakeSpriteFrame
+    >();
+    expect(() => detachedCloneManager.getPool(first.player)).toThrow(
+      "template must be attached to its host root",
+    );
+    detachedCloneManager.destroy();
+
+    const second = pool.acquire({
+      animation: { layerId: "layer-1", animationId: "combo" },
+      target: { x: 900, y: 0 },
+      timing: { mode: "fixed-duration", durationSeconds: 1 },
+    });
+    expect(second.player).toBe(first.player);
+    expect(second.timing.effectiveSpeed).toBe(900);
+    expect(pool.getStats()).toMatchObject({
+      active: 1,
+      idle: 0,
+      created: 1,
+      reused: 1,
+    });
+    second.release();
+    expect(root.children).toHaveLength(1);
+    expect(project.layers[0].animations[0].params).toMatchObject({
+      targetX: 600,
+      targetY: 0,
+    });
+    expect(project.layers[0].animations[0].duration).toBe(1.5);
+    expect(frames.get("asset-1")?.destroyed).not.toBe(true);
+    manager.destroy();
+    template.destroy();
+  });
+
+  it("invalidates active pool leases and enforces one manager per template", async () => {
+    const project = tinyProject({
+      animations: [particleComboAnimation()],
+    });
+    project.stage.duration = 2;
+    const { root, player: template, frames } = makePlayer(project);
+    template.init();
+    const firstManager = new V5GCocosPlayerPoolManager<
+      FakeNode,
+      FakeSpriteFrame
+    >();
+    const secondManager = new V5GCocosPlayerPoolManager<
+      FakeNode,
+      FakeSpriteFrame
+    >();
+    const pool = firstManager.getPool(template);
+    expect(() => secondManager.getPool(template)).toThrow(
+      "multiple live pool managers",
+    );
+    const lease = pool.acquire({
+      animation: { layerId: "layer-1", animationId: "combo" },
+      target: { x: 300, y: 0 },
+    });
+    const pending = lease.playOnce();
+    firstManager.destroy();
+    await expect(pending).rejects.toThrow(
+      "pool was destroyed before playback completed",
+    );
+    expect(root.children).toHaveLength(1);
+    expect(frames.get("asset-1")?.destroyed).not.toBe(true);
+    secondManager.destroy();
+    template.destroy();
+  });
+
+  it("destroys a template pool before reinitializing the template", async () => {
+    const project = tinyProject({
+      animations: [particleComboAnimation()],
+    });
+    project.stage.duration = 2;
+    const { root, player: template } = makePlayer(project);
+    template.init();
+    const manager = new V5GCocosPlayerPoolManager<FakeNode, FakeSpriteFrame>();
+    const lease = manager.getPool(template).acquire({
+      animation: { layerId: "layer-1", animationId: "combo" },
+      target: { x: 300, y: 0 },
+    });
+    const pending = lease.playOnce();
+
+    template.init();
+
+    await expect(pending).rejects.toThrow(
+      "pool was destroyed before playback completed",
+    );
+    expect(root.children).toHaveLength(1);
+    expect(() =>
+      manager.getPool(template).listParticleComboAnimations(),
+    ).not.toThrow();
+    manager.destroy();
+    template.destroy();
   });
 });

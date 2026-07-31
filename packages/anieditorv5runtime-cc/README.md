@@ -54,6 +54,48 @@ V5G 动画导出的 Cocos Creator 3.8.6 runtime 包。
 
 遇到未支持能力会直接抛错。runtime 不创建 missing placeholder，不自动猜测资源路径。未知 V5G blend mode 仍会在通用校验失败；已知 blend mode 如果无法写入 Cocos Sprite blend factor 或 material pass blend state，会在 `init()` / `applyBlendMode(...)` 阶段显式抛错，不会静默退回 normal。
 
+## particle_combo 动态目标与池
+
+已初始化的 template player 可以创建显式 pool manager，并借出独立的 `particle_combo` clone：
+
+```ts
+const manager = new V5GCocosPlayerPoolManager({
+  maxIdleInstancesPerPlayer: 2,
+});
+const pool = manager.getPool(player);
+const lease = pool.acquire({
+  animation: {
+    layerId: "layer_image_mr0hscjx_a",
+    animationId: "anim_module_mr0ht7ml_b",
+  },
+  target: { x: 300, y: 0 },
+  timing: { mode: "preserve-authored-speed" },
+});
+const completed = lease.playOnce();
+
+// Cocos runtime 没有隐藏 ticker；Component.update(deltaTime) 必须持续驱动：
+lease.player.update(deltaTime);
+await completed; // 完成并自动归还
+```
+
+target 是 layer-local VNI offset，宿主不要预先翻转 Y。默认时长按 authored 名义速度计算：
+
+```text
+authoredSpeed = hypot(authoredTargetX, authoredTargetY) / authoredDuration
+effectiveDuration = hypot(targetX, targetY) / authoredSpeed
+```
+
+需要固定时长时显式传
+`{ mode: "fixed-duration", durationSeconds: 1 }`；descriptor 会返回 authored/effective
+target、distance、duration、speed 和 playback range。preserve mode 的 authored/effective distance
+必须大于 0；fixed mode 允许零目标但 duration 必须为正有限数。
+
+每个 template 同时只能属于一个 live manager。clone 与 template 共享 host-owned root、driver、asset
+resolver 和 source SpriteFrame，但 project、node tree、transport、particle、event/listener 独立。
+归还会恢复 authored target/duration/stage、清理 lease state 并从 root detach；runtime 不加载 URL，
+也不销毁 atlas、source SpriteFrame、Material 或 host root。手工操作 clone transport 时必须在
+`finally` 调用 `lease.release()`；Component 销毁顺序是 lease → manager → template player。
+
 ## Manual cyclic playback
 
 `card_carousel_3d` 现在支持由宿主控制的 staged transport：普通时间轴播放 intro，主时间轴停在 authored hold point，carousel 按真实 `player.update(deltaTime)` 持续推进未折返的相位，服务器结果准备完成后安全替换隐藏 carrier，再从当前真实相位进入 fast / stop / hold 并动态对齐选中 carrier。该能力属于 Cocos runtime，不依赖 Pixi 或 `@slotclientengine/vnicore`。

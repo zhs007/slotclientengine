@@ -42,6 +42,13 @@ export interface CocosSpriteBlendStateConfig {
   alpha: CocosBlendChannelConfig;
 }
 
+export interface CreateVNIParticleComboTargetVariantOptions {
+  readonly project: V5GProjectConfig;
+  readonly animation: VNIParticleComboAnimationRef;
+  readonly target: VNIParticleComboTarget;
+  readonly timing?: VNIParticleComboTimingMode;
+}
+
 export interface ParticleAnimationRuntimeState {
   animationId: string;
   elapsed: number;
@@ -539,6 +546,22 @@ export interface V5GCocosNodeDriver<TNode, TSpriteFrame> {
   clearAlphaMask?(targetNode: TNode, maskNode: TNode): void;
 }
 
+export interface V5GCocosParticleComboLeaseOptions {
+  readonly animation: VNIParticleComboAnimationRef;
+  readonly target: VNIParticleComboTarget;
+  readonly timing?: VNIParticleComboTimingMode;
+}
+
+export interface V5GCocosParticleComboPlayerLease<
+  TNode = Node,
+  TSpriteFrame = SpriteFrame,
+> {
+  readonly player: V5GCocosPlayer<TNode, TSpriteFrame>;
+  readonly timing: VNIParticleComboTimingDescriptor;
+  playOnce(): Promise<V5GCocosPlaybackCompleteContext>;
+  release(): void;
+}
+
 export interface V5GCocosPlaybackCancelledError {}
 
 export interface V5GCocosPlaybackCompleteContext {
@@ -573,6 +596,20 @@ export interface V5GCocosPlaybackOperation {
 export interface V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   readonly time: number;
   readonly playing: boolean;
+  getProjectSnapshot(): V5GProjectConfig;
+  /** @internal Owned by V5GCocosPlayerPoolManager. */
+  createPoolClone(
+    project: V5GProjectConfig,
+  ): V5GCocosPlayer<TNode, TSpriteFrame>;
+  /** @internal Owned by V5GCocosPlayerPoolManager. */
+  assertPoolTemplateAttached(): void;
+  /** @internal Owned by V5GCocosPlayerPoolManager. */
+  resetForPoolReuse(): void;
+  /** @internal Owned by V5GCocosPlayerPoolManager. */
+  attachForPoolReuse(): void;
+  /** @internal Owned by V5GCocosPlayerPoolManager. */
+  detachForPoolReuse(): void;
+  onDestroy(listener: () => void): () => void;
   init(): void;
   seek(time: number): void;
   update(deltaSeconds: number): void;
@@ -662,6 +699,36 @@ export interface V5GCocosPlayerOptions<
   loop?: boolean;
   onTimeChange?: (time: number) => void;
   onPlayingChange?: (isPlaying: boolean) => void;
+}
+
+export interface V5GCocosPlayerPool<TNode = Node, TSpriteFrame = SpriteFrame> {
+  listParticleComboAnimations(): readonly VNIParticleComboAnimationDescriptor[];
+  getStats(): V5GCocosPlayerPoolStats;
+  acquire(
+    options: V5GCocosParticleComboLeaseOptions,
+  ): V5GCocosParticleComboPlayerLease<TNode, TSpriteFrame>;
+}
+
+export interface V5GCocosPlayerPoolManager<
+  TNode = Node,
+  TSpriteFrame = SpriteFrame,
+> {
+  getPool(
+    template: V5GCocosPlayer<TNode, TSpriteFrame>,
+  ): V5GCocosPlayerPool<TNode, TSpriteFrame>;
+  destroyPool(template: V5GCocosPlayer<TNode, TSpriteFrame>): void;
+  destroy(): void;
+}
+
+export interface V5GCocosPlayerPoolManagerOptions {
+  readonly maxIdleInstancesPerPlayer?: number;
+}
+
+export interface V5GCocosPlayerPoolStats {
+  readonly active: number;
+  readonly idle: number;
+  readonly created: number;
+  readonly reused: number;
 }
 
 export interface V5GCocosRuntimeDiagnostics {
@@ -793,6 +860,7 @@ export interface V5GParticleConfig {
 }
 
 export interface V5GParticleRuntime {
+  reconfigure(projectLayers: readonly V5GLayerConfig[]): void;
   reset(): void;
   forceStopAll(): V5GParticleRuntimeFrame;
   emit(
@@ -1147,6 +1215,52 @@ export interface VNILayerGroupSlot {
   renderIndex: number;
 }
 
+export interface VNIParticleComboAnimationDescriptor extends VNIParticleComboAnimationRef {
+  readonly layerName: string;
+  readonly animationName: string;
+  readonly target: VNIParticleComboTarget;
+  readonly distance: number;
+  readonly durationSeconds: number;
+  readonly speed: number;
+  readonly startTime: number;
+  readonly endTime: number;
+}
+
+export interface VNIParticleComboAnimationRef {
+  readonly layerId: string;
+  readonly animationId: string;
+}
+
+export interface VNIParticleComboTarget {
+  readonly x: number;
+  readonly y: number;
+}
+
+export interface VNIParticleComboTargetVariant {
+  readonly project: V5GProjectConfig;
+  readonly animation: VNIParticleComboAnimationRef;
+  readonly timing: VNIParticleComboTimingDescriptor;
+}
+
+export interface VNIParticleComboTimingDescriptor {
+  readonly mode: VNIParticleComboTimingMode["mode"];
+  readonly authoredTarget: VNIParticleComboTarget;
+  readonly effectiveTarget: VNIParticleComboTarget;
+  readonly authoredDistance: number;
+  readonly effectiveDistance: number;
+  readonly authoredDurationSeconds: number;
+  readonly effectiveDurationSeconds: number;
+  readonly authoredSpeed: number;
+  readonly effectiveSpeed: number;
+  readonly startTime: number;
+  readonly endTime: number;
+  readonly range: {
+    readonly unit: "time";
+    readonly start: number;
+    readonly end: number;
+  };
+}
+
 export interface VNIRenderEffectLayerSampleState {
   layerId: string;
   transform: V5GTransformConfig;
@@ -1487,6 +1601,15 @@ export type VNILayerMaskConfig = V5GLayerMaskConfig;
 export type VNILayerType = V5GLayerType;
 
 export type VNIMaskCompositeMode = V5GMaskCompositeMode;
+
+export type VNIParticleComboTimingMode =
+  | {
+      readonly mode: "preserve-authored-speed";
+    }
+  | {
+      readonly mode: "fixed-duration";
+      readonly durationSeconds: number;
+    };
 
 export type VNIParticleConfig = V5GParticleConfig;
 
@@ -2973,8 +3096,8 @@ function clampChaserNumber(value, min, max) {
 }
 //#endregion
 function createVNICyclicMotionSnapshot(options) {
-  assertFinite$1(options.unwrappedTurns, "cyclic unwrappedTurns");
-  assertFinite$1(
+  assertFinite$2(options.unwrappedTurns, "cyclic unwrappedTurns");
+  assertFinite$2(
     options.velocityTurnsPerSecond,
     "cyclic velocityTurnsPerSecond",
   );
@@ -2996,7 +3119,7 @@ function advanceVNICyclicContinuousMotion(snapshot, deltaSeconds) {
     throw new Error("cyclic deltaSeconds must be a positive finite number.");
   const unwrappedTurns =
     snapshot.unwrappedTurns + snapshot.velocityTurnsPerSecond * deltaSeconds;
-  assertFinite$1(unwrappedTurns, "cyclic advanced unwrappedTurns");
+  assertFinite$2(unwrappedTurns, "cyclic advanced unwrappedTurns");
   return Object.freeze(
     _objectSpread2(_objectSpread2({}, snapshot), {}, { unwrappedTurns }),
   );
@@ -3019,7 +3142,7 @@ function createVNICyclicResolvePlan(options) {
     throw new Error("cyclic direction must be 1 or -1.");
   if (!Number.isSafeInteger(rounds) || rounds < 0)
     throw new Error("cyclic rounds must be a non-negative safe integer.");
-  assertFinite$1(fastRelativeTurns, "cyclic fastRelativeTurns");
+  assertFinite$2(fastRelativeTurns, "cyclic fastRelativeTurns");
   if (
     Math.sign(fastRelativeTurns) !== 0 &&
     Math.sign(fastRelativeTurns) !== direction
@@ -3035,7 +3158,7 @@ function createVNICyclicResolvePlan(options) {
       ? positiveModulo$3(targetModulo - stopStartTurns, 1)
       : -positiveModulo$3(stopStartTurns - targetModulo, 1)) +
     direction * rounds;
-  assertFinite$1(finalTurns, "cyclic finalTurns");
+  assertFinite$2(finalTurns, "cyclic finalTurns");
   return Object.freeze({
     startTurns: snapshot.unwrappedTurns,
     fastRelativeTurns,
@@ -3069,7 +3192,7 @@ function getVNICyclicCarrierAlignmentErrorTurns(
   carrierIndex,
   carrierCount,
 ) {
-  assertFinite$1(turns, "cyclic alignment turns");
+  assertFinite$2(turns, "cyclic alignment turns");
   assertCarrierCount(carrierCount);
   assertCarrierIndex(carrierIndex, carrierCount);
   const phase = positiveModulo$3(turns + carrierIndex / carrierCount, 1);
@@ -3085,7 +3208,7 @@ function assertCarrierIndex(value, carrierCount) {
       `cyclic selectedCarrierIndex must be within 0..${carrierCount - 1}.`,
     );
 }
-function assertFinite$1(value, path) {
+function assertFinite$2(value, path) {
   if (!Number.isFinite(value)) throw new Error(`${path} must be finite.`);
 }
 function positiveModulo$3(value, divisor) {
@@ -6381,6 +6504,10 @@ var V5GParticleRuntime = class {
     _defineProperty(this, "maxDrainDuration", void 0);
     this.maxDrainDuration = getMaxParticleDrainDuration(projectLayers);
   }
+  reconfigure(projectLayers) {
+    this.reset();
+    this.maxDrainDuration = getMaxParticleDrainDuration(projectLayers);
+  }
   reset() {
     this.lastParticles = [];
     this.liveAnimationElapsedByKey.clear();
@@ -6607,311 +6734,6 @@ function getNumberParam$1(animation, key) {
   throw new Error(
     `V5G animation "${animation.id}" ${animation.type} requires numeric param "${key}".`,
   );
-}
-//#endregion
-var V5GSegmentedPlaybackSequence = class {
-  constructor(config) {
-    _defineProperty(this, "loopStartTime", void 0);
-    _defineProperty(this, "loopEndTime", void 0);
-    _defineProperty(this, "duration", void 0);
-    _defineProperty(this, "keepParticlesAlive", void 0);
-    _defineProperty(this, "phase", "start");
-    _defineProperty(this, "currentTime", 0);
-    _defineProperty(this, "loopIndex", 0);
-    _defineProperty(this, "endRequested", false);
-    _defineProperty(this, "loopElapsedTime", 0);
-    this.loopStartTime = config.loopStartTime;
-    this.loopEndTime = config.loopEndTime;
-    this.duration = config.duration;
-    this.keepParticlesAlive = config.keepParticlesAlive;
-  }
-  getCurrentTime() {
-    return this.currentTime;
-  }
-  getPhase() {
-    return this.phase;
-  }
-  getLoopIndex() {
-    return this.loopIndex;
-  }
-  getLoopStartTime() {
-    return this.loopStartTime;
-  }
-  getLoopEndTime() {
-    return this.loopEndTime;
-  }
-  getLoopElapsedTime() {
-    return this.loopElapsedTime;
-  }
-  requestEnd() {
-    if (this.phase !== "start" && this.phase !== "loop")
-      throw new Error(
-        `Cannot request segmented playback end while phase is "${this.phase}".`,
-      );
-    this.endRequested = true;
-    if (this.phase === "loop") {
-      this.phase = "ending";
-      this.currentTime = this.loopEndTime;
-    }
-  }
-  advance(deltaSeconds) {
-    assertPositiveFinite(deltaSeconds, "segmented playback deltaSeconds");
-    const previousTime = this.currentTime;
-    let remaining = deltaSeconds;
-    let timelineEnded = false;
-    while (remaining > 0 && !timelineEnded)
-      if (this.phase === "start") {
-        const timeToLoopStart = this.loopStartTime - this.currentTime;
-        if (remaining < timeToLoopStart) {
-          this.currentTime += remaining;
-          remaining = 0;
-        } else {
-          remaining -= Math.max(timeToLoopStart, 0);
-          this.currentTime = this.loopStartTime;
-          if (this.endRequested) {
-            this.phase = "ending";
-            this.currentTime = this.loopEndTime;
-          } else this.phase = "loop";
-        }
-      } else if (this.phase === "loop") {
-        if (this.endRequested) {
-          this.phase = "ending";
-          this.currentTime = this.loopEndTime;
-          continue;
-        }
-        this.loopElapsedTime += remaining;
-        if (this.loopStartTime === this.loopEndTime) {
-          this.currentTime = this.loopStartTime;
-          remaining = 0;
-        } else {
-          const span = this.loopEndTime - this.loopStartTime;
-          const advanced = this.currentTime + remaining;
-          if (advanced < this.loopEndTime) {
-            this.currentTime = advanced;
-            remaining = 0;
-          } else {
-            const overflow = advanced - this.loopEndTime;
-            this.loopIndex += 1 + Math.floor(overflow / span);
-            this.currentTime = this.loopStartTime + (overflow % span);
-            remaining = 0;
-          }
-        }
-      } else if (this.phase === "ending") {
-        const timeToEnd = this.duration - this.currentTime;
-        if (remaining < timeToEnd) {
-          this.currentTime += remaining;
-          remaining = 0;
-        } else {
-          this.currentTime = this.duration;
-          this.phase = "particle-draining";
-          timelineEnded = true;
-          remaining = 0;
-        }
-      } else remaining = 0;
-    return {
-      previousTime,
-      currentTime: this.currentTime,
-      phase: this.phase,
-      loopIndex: this.loopIndex,
-      timelineEnded,
-    };
-  }
-  markParticleDrainComplete() {
-    if (this.phase === "particle-draining") this.phase = "complete";
-  }
-};
-function normalizePlaybackRange(range, duration) {
-  if (range.unit === "time") {
-    const startTime = assertFiniteNumber(range.start, "playback range start");
-    const endTime = normalizeOptionalEnd(
-      range.end,
-      duration,
-      "playback range end",
-    );
-    assertNormalizedRange(startTime, endTime, duration);
-    return {
-      startTime,
-      endTime,
-    };
-  }
-  const fps = assertPositiveFinite(range.fps, "playback range fps");
-  const startFrame = assertNonNegativeInteger(
-    range.start,
-    "playback range start frame",
-  );
-  const endTime =
-    range.end === void 0 || range.end === -1
-      ? duration
-      : assertNonNegativeInteger(range.end, "playback range end frame") / fps;
-  const startTime = startFrame / fps;
-  assertNormalizedRange(startTime, endTime, duration);
-  return {
-    startTime,
-    endTime,
-  };
-}
-function normalizePlaybackPoint(point, duration, path) {
-  const time =
-    point.unit === "time"
-      ? assertFiniteNumber(point.at, `${path} time`)
-      : assertNonNegativeInteger(point.at, `${path} frame`) /
-        assertPositiveFinite(point.fps, `${path} fps`);
-  if (time < 0 || time > duration)
-    throw new Error(`${path} must be within project duration.`);
-  return time;
-}
-function normalizeSegmentedPlaybackOptions(options, duration) {
-  var _options$keepParticle;
-  const loopStartTime = normalizePlaybackPoint(
-    options.loopStart,
-    duration,
-    "segmented loopStart",
-  );
-  const loopEndTime = normalizePlaybackPoint(
-    options.loopEnd,
-    duration,
-    "segmented loopEnd",
-  );
-  if (loopStartTime > loopEndTime)
-    throw new Error(
-      `Invalid V5G segmented playback: expected 0 <= loopStart <= loopEnd <= ${duration}, got ${loopStartTime}..${loopEndTime}.`,
-    );
-  return {
-    loopStartTime,
-    loopEndTime,
-    duration,
-    keepParticlesAlive:
-      (_options$keepParticle = options.keepParticlesAlive) !== null &&
-      _options$keepParticle !== void 0
-        ? _options$keepParticle
-        : true,
-  };
-}
-function assertPositiveFinite(value, path) {
-  if (!Number.isFinite(value) || value <= 0)
-    throw new Error(`${path} must be a positive finite number.`);
-  return value;
-}
-function normalizeOptionalEnd(value, duration, path) {
-  if (value === void 0 || value === -1) return duration;
-  return assertFiniteNumber(value, path);
-}
-function assertNormalizedRange(startTime, endTime, duration) {
-  if (startTime < 0 || !(startTime < endTime) || endTime > duration)
-    throw new Error(
-      `Invalid V5G playback range: expected 0 <= start < end <= ${duration}, got ${startTime}..${endTime}.`,
-    );
-}
-function assertFiniteNumber(value, path) {
-  if (!Number.isFinite(value))
-    throw new Error(`${path} must be a finite number.`);
-  return value;
-}
-function assertNonNegativeInteger(value, path) {
-  if (!Number.isInteger(value) || value < 0)
-    throw new Error(`${path} must be a non-negative integer.`);
-  return value;
-}
-//#endregion
-var VISUAL_ENTRY_SCALE_THRESHOLD = 0.011;
-function sampleProjectAtTime(project, time) {
-  const clampedTime = roundTo(clampNumber(time, 0, project.stage.duration), 4);
-  return {
-    time: clampedTime,
-    layers: project.layers.map((layer) =>
-      sampleLayerAtTime(layer, clampedTime),
-    ),
-  };
-}
-function sampleLayerAtTime(layer, time) {
-  const basic = sampleBasicAnimationAtTime(layer, time);
-  const sampled = sampleLayerAnimationsAtTime(
-    {
-      transform: basic.transform,
-      opacity: basic.opacity,
-    },
-    layer.animations,
-    time,
-  );
-  const opacity =
-    layer.animations.some(
-      (animation) =>
-        animation.enabled &&
-        isScaleEntryAnimation(animation) &&
-        isSameSampleTime(time, animation.startTime),
-    ) || shouldHideLayerOutsideActiveAnimation(layer.animations, time)
-      ? 0
-      : roundTo(clampNumber(sampled.opacity, 0, 1), 4);
-  const baseOpacity = roundTo(clampNumber(layer.opacity, 0, 1), 4);
-  const activeParticleAnimation =
-    layer.visible && baseOpacity > 0 && hasActiveParticleAnimation(layer, time);
-  const activeChaserLight =
-    layer.visible &&
-    baseOpacity > 0 &&
-    hasActiveChaserLightAnimation(layer, time);
-  const activeRenderEffect =
-    layer.visible &&
-    baseOpacity > 0 &&
-    hasActiveRenderEffectAnimation(layer, time);
-  const activeDeterministicEffect =
-    layer.visible &&
-    baseOpacity > 0 &&
-    hasActiveDeterministicEffectAnimation(layer, time);
-  const activeSafeGlow =
-    layer.visible && baseOpacity > 0 && hasActiveSafeGlowAnimation(layer, time);
-  const activeCardCarousel =
-    layer.visible &&
-    baseOpacity > 0 &&
-    (layer.type === "image" || layer.type === "sequence") &&
-    layer.animations.some(
-      (animation) =>
-        animation.enabled &&
-        getCardCarousel3DProgress(animation, time) !== null,
-    );
-  const visible =
-    layer.visible &&
-    (opacity > 0 ||
-      activeChaserLight ||
-      activeRenderEffect ||
-      activeDeterministicEffect ||
-      activeSafeGlow ||
-      activeCardCarousel);
-  return {
-    layerId: layer.id,
-    transform: sampled.transform,
-    visualRotation: sampled.visualRotation,
-    baseOpacity,
-    opacity,
-    visible,
-    renderImageDisplay: layer.visible && opacity > 0,
-    hasActiveParticleAnimation: activeParticleAnimation,
-    hasActiveChaserLightAnimation: activeChaserLight,
-    hasActiveRenderEffect: activeRenderEffect,
-    hasActiveDeterministicEffect: activeDeterministicEffect,
-    hasActiveSafeGlowAnimation: activeSafeGlow,
-    hasActiveCardCarousel3D: activeCardCarousel,
-    blendMode: layer.blendMode,
-  };
-}
-function isScaleEntryAnimation(animation) {
-  if (animation.type === "scale_up")
-    return (
-      getNumberParam(animation, "fromScaleX") <= VISUAL_ENTRY_SCALE_THRESHOLD ||
-      getNumberParam(animation, "fromScaleY") <= VISUAL_ENTRY_SCALE_THRESHOLD
-    );
-  if (animation.type === "scale_in" || animation.type === "bounce_in")
-    return (
-      getNumberParam(animation, "fromScale") <= VISUAL_ENTRY_SCALE_THRESHOLD
-    );
-  return false;
-}
-function getNumberParam(animation, key) {
-  const value = animation.params[key];
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  return NaN;
-}
-function isSameSampleTime(left, right) {
-  return roundTo(left - right, 4) === 0;
 }
 //#endregion
 var SUPPORTED_EDITOR_NAMES = ["victory_editor_v5_g", "VNI"];
@@ -7355,9 +7177,9 @@ function validateV5GProject(project) {
     throw new Error(
       `Unsupported V5G coordinate mode: ${project.stage.coordinate}.`,
     );
-  assertPositiveFinite$1(project.stage.width, "project.stage.width");
-  assertPositiveFinite$1(project.stage.height, "project.stage.height");
-  assertPositiveFinite$1(project.stage.duration, "project.stage.duration");
+  assertPositiveFinite$2(project.stage.width, "project.stage.width");
+  assertPositiveFinite$2(project.stage.height, "project.stage.height");
+  assertPositiveFinite$2(project.stage.duration, "project.stage.duration");
   parseColorHex(project.stage.backgroundColor);
   if (project.particles.length > 0)
     throw new Error(
@@ -7380,8 +7202,8 @@ function validateV5GProject(project) {
       throw new Error(`Duplicate V5G asset path: ${asset.path}.`);
     if (asset.type !== "image")
       throw new Error(`Unsupported V5G asset type: ${asset.type}.`);
-    assertPositiveFinite$1(asset.width, `asset "${asset.id}" width`);
-    assertPositiveFinite$1(asset.height, `asset "${asset.id}" height`);
+    assertPositiveFinite$2(asset.width, `asset "${asset.id}" width`);
+    assertPositiveFinite$2(asset.height, `asset "${asset.id}" height`);
     validateAssetFileMetadata(asset);
     validateAssetProfileMetadata(asset, project.exportProfile);
     assetsById.set(asset.id, asset);
@@ -7532,7 +7354,7 @@ function validateSequenceLayerConfig(layer, assetsById) {
         `V5G sequence layer "${layer.id}" frame asset "${asset.id}" must be image.`,
       );
   }
-  assertPositiveFinite$1(
+  assertPositiveFinite$2(
     sequence.cycleDuration,
     `sequence layer "${layer.id}" cycleDuration`,
   );
@@ -7553,7 +7375,7 @@ function assertSupportedAnimation(
     Number.POSITIVE_INFINITY,
     `animation "${animation.id}" startTime`,
   );
-  assertPositiveFinite$1(
+  assertPositiveFinite$2(
     animation.duration,
     `animation "${animation.id}" duration`,
   );
@@ -8122,11 +7944,11 @@ function assertTransform(value, path) {
   };
 }
 function validateTransform(transform, path) {
-  assertFinite(transform.x, `${path}.x`);
-  assertFinite(transform.y, `${path}.y`);
-  assertFinite(transform.scaleX, `${path}.scaleX`);
-  assertFinite(transform.scaleY, `${path}.scaleY`);
-  assertFinite(transform.rotation, `${path}.rotation`);
+  assertFinite$1(transform.x, `${path}.x`);
+  assertFinite$1(transform.y, `${path}.y`);
+  assertFinite$1(transform.scaleX, `${path}.scaleX`);
+  assertFinite$1(transform.scaleY, `${path}.scaleY`);
+  assertFinite$1(transform.rotation, `${path}.rotation`);
   assertFiniteRange(transform.anchorX, 0, 1, `${path}.anchorX`);
   assertFiniteRange(transform.anchorY, 0, 1, `${path}.anchorY`);
 }
@@ -8180,11 +8002,11 @@ function assertBoolean(value, path) {
   if (typeof value !== "boolean") throw new Error(`${path} must be a boolean.`);
   return value;
 }
-function assertPositiveFinite$1(value, path) {
+function assertPositiveFinite$2(value, path) {
   if (!Number.isFinite(value) || value <= 0)
     throw new Error(`${path} must be a positive finite number.`);
 }
-function assertFinite(value, path) {
+function assertFinite$1(value, path) {
   if (!Number.isFinite(value))
     throw new Error(`${path} must be a finite number.`);
 }
@@ -8268,6 +8090,483 @@ function assertPositiveInteger(value, path) {
 }
 var assertVNIProject = assertV5GProject;
 var validateVNIProject = validateV5GProject;
+//#endregion
+function listVNIParticleComboTargetAnimations(project) {
+  validateV5GProject(project);
+  const descriptors = [];
+  for (const layer of project.layers)
+    for (const animation of layer.animations) {
+      var _animation$name;
+      if (!animation.enabled || animation.type !== "particle_combo") continue;
+      const target = getParticleComboTarget(animation, layer.id);
+      const durationSeconds = assertPositiveFinite$1(
+        animation.duration,
+        `particle_combo "${animation.id}" duration`,
+      );
+      const distance = Math.hypot(target.x, target.y);
+      descriptors.push(
+        Object.freeze({
+          layerId: layer.id,
+          animationId: animation.id,
+          layerName: layer.name,
+          animationName:
+            (_animation$name = animation.name) !== null &&
+            _animation$name !== void 0
+              ? _animation$name
+              : animation.id,
+          target: freezeTarget(target),
+          distance,
+          durationSeconds,
+          speed: distance / durationSeconds,
+          startTime: animation.startTime,
+          endTime: animation.startTime + durationSeconds,
+        }),
+      );
+    }
+  return Object.freeze(descriptors);
+}
+function createVNIParticleComboTargetVariant(options) {
+  var _options$timing;
+  assertNonEmptyString(options.animation.layerId, "animation.layerId");
+  assertNonEmptyString(options.animation.animationId, "animation.animationId");
+  const effectiveTarget = {
+    x: assertFinite(options.target.x, "target.x"),
+    y: assertFinite(options.target.y, "target.y"),
+  };
+  const timingMode =
+    (_options$timing = options.timing) !== null && _options$timing !== void 0
+      ? _options$timing
+      : { mode: "preserve-authored-speed" };
+  validateV5GProject(options.project);
+  const project = structuredClone(options.project);
+  const { layer, animation } = findParticleComboAnimation(
+    project,
+    options.animation,
+  );
+  const authoredTarget = getParticleComboTarget(animation, layer.id);
+  const authoredDurationSeconds = assertPositiveFinite$1(
+    animation.duration,
+    `particle_combo "${animation.id}" duration`,
+  );
+  const authoredDistance = Math.hypot(authoredTarget.x, authoredTarget.y);
+  const effectiveDistance = Math.hypot(effectiveTarget.x, effectiveTarget.y);
+  const authoredSpeed = authoredDistance / authoredDurationSeconds;
+  let effectiveDurationSeconds;
+  if (timingMode.mode === "preserve-authored-speed") {
+    assertPositiveFinite$1(
+      authoredDistance,
+      `particle_combo "${animation.id}" authored target distance`,
+    );
+    assertPositiveFinite$1(
+      effectiveDistance,
+      `particle_combo "${animation.id}" effective target distance`,
+    );
+    effectiveDurationSeconds = assertPositiveFinite$1(
+      effectiveDistance / authoredSpeed,
+      `particle_combo "${animation.id}" effective duration`,
+    );
+  } else if (timingMode.mode === "fixed-duration")
+    effectiveDurationSeconds = assertPositiveFinite$1(
+      timingMode.durationSeconds,
+      "timing.durationSeconds",
+    );
+  else
+    throw new Error(
+      `Unsupported particle_combo timing mode: ${String(timingMode)}.`,
+    );
+  const effectiveSpeed = effectiveDistance / effectiveDurationSeconds;
+  animation.params.targetX = effectiveTarget.x;
+  animation.params.targetY = effectiveTarget.y;
+  animation.duration = effectiveDurationSeconds;
+  const startTime = animation.startTime;
+  const endTime = startTime + effectiveDurationSeconds;
+  project.stage.duration = Math.max(project.stage.duration, endTime);
+  validateV5GProject(project);
+  return Object.freeze({
+    project,
+    animation: Object.freeze(_objectSpread2({}, options.animation)),
+    timing: Object.freeze({
+      mode: timingMode.mode,
+      authoredTarget: freezeTarget(authoredTarget),
+      effectiveTarget: freezeTarget(effectiveTarget),
+      authoredDistance,
+      effectiveDistance,
+      authoredDurationSeconds,
+      effectiveDurationSeconds,
+      authoredSpeed,
+      effectiveSpeed,
+      startTime,
+      endTime,
+      range: Object.freeze({
+        unit: "time",
+        start: startTime,
+        end: endTime,
+      }),
+    }),
+  });
+}
+function findParticleComboAnimation(project, ref) {
+  const layer = project.layers.find(
+    (candidate) => candidate.id === ref.layerId,
+  );
+  if (!layer) throw new Error(`Unknown VNI layer "${ref.layerId}".`);
+  const animation = layer.animations.find(
+    (candidate) => candidate.id === ref.animationId,
+  );
+  if (!animation)
+    throw new Error(
+      `Unknown VNI animation "${ref.animationId}" on layer "${ref.layerId}".`,
+    );
+  if (animation.type !== "particle_combo")
+    throw new Error(
+      `VNI animation "${ref.animationId}" on layer "${ref.layerId}" must be particle_combo, got "${animation.type}".`,
+    );
+  if (!animation.enabled)
+    throw new Error(
+      `VNI particle_combo "${ref.animationId}" on layer "${ref.layerId}" must be enabled.`,
+    );
+  return {
+    layer,
+    animation,
+  };
+}
+function getParticleComboTarget(animation, layerId) {
+  return {
+    x: assertFinite(
+      animation.params.targetX,
+      `layer "${layerId}" animation "${animation.id}" params.targetX`,
+    ),
+    y: assertFinite(
+      animation.params.targetY,
+      `layer "${layerId}" animation "${animation.id}" params.targetY`,
+    ),
+  };
+}
+function assertFinite(value, path) {
+  if (typeof value !== "number" || !Number.isFinite(value))
+    throw new Error(`${path} must be a finite number.`);
+  return value;
+}
+function assertPositiveFinite$1(value, path) {
+  const number = assertFinite(value, path);
+  if (number <= 0) throw new Error(`${path} must be a positive finite number.`);
+  return number;
+}
+function assertNonEmptyString(value, path) {
+  if (typeof value !== "string" || value.length === 0)
+    throw new Error(`${path} must be a non-empty string.`);
+}
+function freezeTarget(target) {
+  return Object.freeze({
+    x: target.x,
+    y: target.y,
+  });
+}
+//#endregion
+var V5GSegmentedPlaybackSequence = class {
+  constructor(config) {
+    _defineProperty(this, "loopStartTime", void 0);
+    _defineProperty(this, "loopEndTime", void 0);
+    _defineProperty(this, "duration", void 0);
+    _defineProperty(this, "keepParticlesAlive", void 0);
+    _defineProperty(this, "phase", "start");
+    _defineProperty(this, "currentTime", 0);
+    _defineProperty(this, "loopIndex", 0);
+    _defineProperty(this, "endRequested", false);
+    _defineProperty(this, "loopElapsedTime", 0);
+    this.loopStartTime = config.loopStartTime;
+    this.loopEndTime = config.loopEndTime;
+    this.duration = config.duration;
+    this.keepParticlesAlive = config.keepParticlesAlive;
+  }
+  getCurrentTime() {
+    return this.currentTime;
+  }
+  getPhase() {
+    return this.phase;
+  }
+  getLoopIndex() {
+    return this.loopIndex;
+  }
+  getLoopStartTime() {
+    return this.loopStartTime;
+  }
+  getLoopEndTime() {
+    return this.loopEndTime;
+  }
+  getLoopElapsedTime() {
+    return this.loopElapsedTime;
+  }
+  requestEnd() {
+    if (this.phase !== "start" && this.phase !== "loop")
+      throw new Error(
+        `Cannot request segmented playback end while phase is "${this.phase}".`,
+      );
+    this.endRequested = true;
+    if (this.phase === "loop") {
+      this.phase = "ending";
+      this.currentTime = this.loopEndTime;
+    }
+  }
+  advance(deltaSeconds) {
+    assertPositiveFinite(deltaSeconds, "segmented playback deltaSeconds");
+    const previousTime = this.currentTime;
+    let remaining = deltaSeconds;
+    let timelineEnded = false;
+    while (remaining > 0 && !timelineEnded)
+      if (this.phase === "start") {
+        const timeToLoopStart = this.loopStartTime - this.currentTime;
+        if (remaining < timeToLoopStart) {
+          this.currentTime += remaining;
+          remaining = 0;
+        } else {
+          remaining -= Math.max(timeToLoopStart, 0);
+          this.currentTime = this.loopStartTime;
+          if (this.endRequested) {
+            this.phase = "ending";
+            this.currentTime = this.loopEndTime;
+          } else this.phase = "loop";
+        }
+      } else if (this.phase === "loop") {
+        if (this.endRequested) {
+          this.phase = "ending";
+          this.currentTime = this.loopEndTime;
+          continue;
+        }
+        this.loopElapsedTime += remaining;
+        if (this.loopStartTime === this.loopEndTime) {
+          this.currentTime = this.loopStartTime;
+          remaining = 0;
+        } else {
+          const span = this.loopEndTime - this.loopStartTime;
+          const advanced = this.currentTime + remaining;
+          if (advanced < this.loopEndTime) {
+            this.currentTime = advanced;
+            remaining = 0;
+          } else {
+            const overflow = advanced - this.loopEndTime;
+            this.loopIndex += 1 + Math.floor(overflow / span);
+            this.currentTime = this.loopStartTime + (overflow % span);
+            remaining = 0;
+          }
+        }
+      } else if (this.phase === "ending") {
+        const timeToEnd = this.duration - this.currentTime;
+        if (remaining < timeToEnd) {
+          this.currentTime += remaining;
+          remaining = 0;
+        } else {
+          this.currentTime = this.duration;
+          this.phase = "particle-draining";
+          timelineEnded = true;
+          remaining = 0;
+        }
+      } else remaining = 0;
+    return {
+      previousTime,
+      currentTime: this.currentTime,
+      phase: this.phase,
+      loopIndex: this.loopIndex,
+      timelineEnded,
+    };
+  }
+  markParticleDrainComplete() {
+    if (this.phase === "particle-draining") this.phase = "complete";
+  }
+};
+function normalizePlaybackRange(range, duration) {
+  if (range.unit === "time") {
+    const startTime = assertFiniteNumber(range.start, "playback range start");
+    const endTime = normalizeOptionalEnd(
+      range.end,
+      duration,
+      "playback range end",
+    );
+    assertNormalizedRange(startTime, endTime, duration);
+    return {
+      startTime,
+      endTime,
+    };
+  }
+  const fps = assertPositiveFinite(range.fps, "playback range fps");
+  const startFrame = assertNonNegativeInteger(
+    range.start,
+    "playback range start frame",
+  );
+  const endTime =
+    range.end === void 0 || range.end === -1
+      ? duration
+      : assertNonNegativeInteger(range.end, "playback range end frame") / fps;
+  const startTime = startFrame / fps;
+  assertNormalizedRange(startTime, endTime, duration);
+  return {
+    startTime,
+    endTime,
+  };
+}
+function normalizePlaybackPoint(point, duration, path) {
+  const time =
+    point.unit === "time"
+      ? assertFiniteNumber(point.at, `${path} time`)
+      : assertNonNegativeInteger(point.at, `${path} frame`) /
+        assertPositiveFinite(point.fps, `${path} fps`);
+  if (time < 0 || time > duration)
+    throw new Error(`${path} must be within project duration.`);
+  return time;
+}
+function normalizeSegmentedPlaybackOptions(options, duration) {
+  var _options$keepParticle;
+  const loopStartTime = normalizePlaybackPoint(
+    options.loopStart,
+    duration,
+    "segmented loopStart",
+  );
+  const loopEndTime = normalizePlaybackPoint(
+    options.loopEnd,
+    duration,
+    "segmented loopEnd",
+  );
+  if (loopStartTime > loopEndTime)
+    throw new Error(
+      `Invalid V5G segmented playback: expected 0 <= loopStart <= loopEnd <= ${duration}, got ${loopStartTime}..${loopEndTime}.`,
+    );
+  return {
+    loopStartTime,
+    loopEndTime,
+    duration,
+    keepParticlesAlive:
+      (_options$keepParticle = options.keepParticlesAlive) !== null &&
+      _options$keepParticle !== void 0
+        ? _options$keepParticle
+        : true,
+  };
+}
+function assertPositiveFinite(value, path) {
+  if (!Number.isFinite(value) || value <= 0)
+    throw new Error(`${path} must be a positive finite number.`);
+  return value;
+}
+function normalizeOptionalEnd(value, duration, path) {
+  if (value === void 0 || value === -1) return duration;
+  return assertFiniteNumber(value, path);
+}
+function assertNormalizedRange(startTime, endTime, duration) {
+  if (startTime < 0 || !(startTime < endTime) || endTime > duration)
+    throw new Error(
+      `Invalid V5G playback range: expected 0 <= start < end <= ${duration}, got ${startTime}..${endTime}.`,
+    );
+}
+function assertFiniteNumber(value, path) {
+  if (!Number.isFinite(value))
+    throw new Error(`${path} must be a finite number.`);
+  return value;
+}
+function assertNonNegativeInteger(value, path) {
+  if (!Number.isInteger(value) || value < 0)
+    throw new Error(`${path} must be a non-negative integer.`);
+  return value;
+}
+//#endregion
+var VISUAL_ENTRY_SCALE_THRESHOLD = 0.011;
+function sampleProjectAtTime(project, time) {
+  const clampedTime = roundTo(clampNumber(time, 0, project.stage.duration), 4);
+  return {
+    time: clampedTime,
+    layers: project.layers.map((layer) =>
+      sampleLayerAtTime(layer, clampedTime),
+    ),
+  };
+}
+function sampleLayerAtTime(layer, time) {
+  const basic = sampleBasicAnimationAtTime(layer, time);
+  const sampled = sampleLayerAnimationsAtTime(
+    {
+      transform: basic.transform,
+      opacity: basic.opacity,
+    },
+    layer.animations,
+    time,
+  );
+  const opacity =
+    layer.animations.some(
+      (animation) =>
+        animation.enabled &&
+        isScaleEntryAnimation(animation) &&
+        isSameSampleTime(time, animation.startTime),
+    ) || shouldHideLayerOutsideActiveAnimation(layer.animations, time)
+      ? 0
+      : roundTo(clampNumber(sampled.opacity, 0, 1), 4);
+  const baseOpacity = roundTo(clampNumber(layer.opacity, 0, 1), 4);
+  const activeParticleAnimation =
+    layer.visible && baseOpacity > 0 && hasActiveParticleAnimation(layer, time);
+  const activeChaserLight =
+    layer.visible &&
+    baseOpacity > 0 &&
+    hasActiveChaserLightAnimation(layer, time);
+  const activeRenderEffect =
+    layer.visible &&
+    baseOpacity > 0 &&
+    hasActiveRenderEffectAnimation(layer, time);
+  const activeDeterministicEffect =
+    layer.visible &&
+    baseOpacity > 0 &&
+    hasActiveDeterministicEffectAnimation(layer, time);
+  const activeSafeGlow =
+    layer.visible && baseOpacity > 0 && hasActiveSafeGlowAnimation(layer, time);
+  const activeCardCarousel =
+    layer.visible &&
+    baseOpacity > 0 &&
+    (layer.type === "image" || layer.type === "sequence") &&
+    layer.animations.some(
+      (animation) =>
+        animation.enabled &&
+        getCardCarousel3DProgress(animation, time) !== null,
+    );
+  const visible =
+    layer.visible &&
+    (opacity > 0 ||
+      activeChaserLight ||
+      activeRenderEffect ||
+      activeDeterministicEffect ||
+      activeSafeGlow ||
+      activeCardCarousel);
+  return {
+    layerId: layer.id,
+    transform: sampled.transform,
+    visualRotation: sampled.visualRotation,
+    baseOpacity,
+    opacity,
+    visible,
+    renderImageDisplay: layer.visible && opacity > 0,
+    hasActiveParticleAnimation: activeParticleAnimation,
+    hasActiveChaserLightAnimation: activeChaserLight,
+    hasActiveRenderEffect: activeRenderEffect,
+    hasActiveDeterministicEffect: activeDeterministicEffect,
+    hasActiveSafeGlowAnimation: activeSafeGlow,
+    hasActiveCardCarousel3D: activeCardCarousel,
+    blendMode: layer.blendMode,
+  };
+}
+function isScaleEntryAnimation(animation) {
+  if (animation.type === "scale_up")
+    return (
+      getNumberParam(animation, "fromScaleX") <= VISUAL_ENTRY_SCALE_THRESHOLD ||
+      getNumberParam(animation, "fromScaleY") <= VISUAL_ENTRY_SCALE_THRESHOLD
+    );
+  if (animation.type === "scale_in" || animation.type === "bounce_in")
+    return (
+      getNumberParam(animation, "fromScale") <= VISUAL_ENTRY_SCALE_THRESHOLD
+    );
+  return false;
+}
+function getNumberParam(animation, key) {
+  const value = animation.params[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  return NaN;
+}
+function isSameSampleTime(left, right) {
+  return roundTo(left - right, 4) === 0;
+}
 //#endregion
 //#region \0@oxc-project+runtime@0.122.0/helpers/asyncToGenerator.js
 function asyncGeneratorStep(n, t, e, r, o, a, c) {
@@ -10289,7 +10588,7 @@ function getExpectedSpriteFrameSize(asset) {
         : asset.height,
   };
 }
-var V5GCocosPlayer = class {
+var V5GCocosPlayer = class V5GCocosPlayer {
   constructor(options) {
     var _options$loop;
     _defineProperty(this, "options", void 0);
@@ -10327,6 +10626,7 @@ var V5GCocosPlayer = class {
     _defineProperty(this, "playbackEventOrders", []);
     _defineProperty(this, "playbackEventListeners", []);
     _defineProperty(this, "completeListeners", []);
+    _defineProperty(this, "destroyListeners", /* @__PURE__ */ new Set());
     _defineProperty(this, "loopIndex", 0);
     _defineProperty(this, "nextPlaybackEventOrder", 0);
     _defineProperty(this, "nextTextBindingVersion", 0);
@@ -10346,8 +10646,104 @@ var V5GCocosPlayer = class {
   get playing() {
     return this.isPlaying || this.manualClockActive;
   }
+  getProjectSnapshot() {
+    this.assertInitialized("getProjectSnapshot");
+    return structuredClone(this.options.project);
+  }
+  /** @internal Owned by V5GCocosPlayerPoolManager. */
+  createPoolClone(project) {
+    this.assertInitialized("createPoolClone");
+    validateCocosV5GProject(project);
+    assertCompatiblePoolCloneProject(this.options.project, project);
+    return new V5GCocosPlayer({
+      root: this.options.root,
+      project,
+      assets: this.options.assets,
+      driver: this.options.driver,
+      loop: true,
+    });
+  }
+  /** @internal Owned by V5GCocosPlayerPoolManager. */
+  assertPoolTemplateAttached() {
+    this.assertInitialized("assertPoolTemplateAttached");
+    if (this.options.driver.getParent(this.stageNode) !== this.options.root)
+      throw new Error(
+        "V5GCocosPlayer pool template must be attached to its host root.",
+      );
+  }
+  /** @internal Owned by V5GCocosPlayerPoolManager. */
+  resetForPoolReuse() {
+    var _this$manualSession, _this$options$loop;
+    this.assertInitialized("resetForPoolReuse");
+    (_this$manualSession = this.manualSession) === null ||
+      _this$manualSession === void 0 ||
+      _this$manualSession.destroy();
+    this.manualSession = null;
+    this.manualClockActive = false;
+    this.manualRangeCompletion = null;
+    this.activeRange = null;
+    this.segmentedPlayback = null;
+    this.pendingComplete = null;
+    this.clearPlaybackEventRecords();
+    this.completeListeners.length = 0;
+    this.loopIndex = 0;
+    this.drainPaused = false;
+    this.suppressParticleEmission = false;
+    this.forceStopParticlesAfterSegmentEnd = false;
+    this.playbackMode = "timeline";
+    this.playbackPhase = "idle";
+    this.loop =
+      (_this$options$loop = this.options.loop) !== null &&
+      _this$options$loop !== void 0
+        ? _this$options$loop
+        : true;
+    this.currentTime = 0;
+    this.particleRuntime.reconfigure(this.options.project.layers);
+    this.clearMountedNodes();
+    this.clearSafeGlowNodes();
+    this.clearChaserLightNodes();
+    this.clearParticles();
+    this.setPlaying(false);
+    this.renderDeterministicFrame(0);
+  }
+  /** @internal Owned by V5GCocosPlayerPoolManager. */
+  attachForPoolReuse() {
+    this.assertInitialized("attachForPoolReuse");
+    const stage = this.stageNode;
+    const parent = this.options.driver.getParent(stage);
+    if (parent === this.options.root) return;
+    if (parent !== null)
+      throw new Error(
+        "V5GCocosPlayer pool clone stage is attached to an unexpected parent.",
+      );
+    this.options.driver.appendChild(this.options.root, stage);
+  }
+  /** @internal Owned by V5GCocosPlayerPoolManager. */
+  detachForPoolReuse() {
+    this.assertInitialized("detachForPoolReuse");
+    const stage = this.stageNode;
+    const parent = this.options.driver.getParent(stage);
+    if (parent === null) return;
+    if (parent !== this.options.root)
+      throw new Error(
+        "V5GCocosPlayer pool clone stage is attached to an unexpected parent.",
+      );
+    this.options.driver.removeChild(this.options.root, stage);
+  }
+  onDestroy(listener) {
+    if (typeof listener !== "function")
+      throw new Error("V5GCocosPlayer.onDestroy listener must be a function.");
+    this.destroyListeners.add(listener);
+    let disposed = false;
+    return () => {
+      if (disposed) return;
+      disposed = true;
+      this.destroyListeners.delete(listener);
+    };
+  }
   init() {
     this.assertLegacyTransportAvailable("init");
+    if (this.stageNode !== null) this.notifyDestroyListeners();
     this.destroyManagedNodes();
     this.resetPlaybackRuntime();
     validateCocosV5GProject(this.options.project);
@@ -11255,10 +11651,10 @@ var V5GCocosPlayer = class {
     this.loop = loop;
   }
   destroy() {
-    var _this$manualSession;
-    (_this$manualSession = this.manualSession) === null ||
-      _this$manualSession === void 0 ||
-      _this$manualSession.destroy();
+    var _this$manualSession2;
+    (_this$manualSession2 = this.manualSession) === null ||
+      _this$manualSession2 === void 0 ||
+      _this$manualSession2.destroy();
     this.manualSession = null;
     this.manualClockActive = false;
     this.manualRangeCompletion = null;
@@ -11277,6 +11673,7 @@ var V5GCocosPlayer = class {
     this.currentTime = 0;
     this.playbackMode = "timeline";
     this.playbackPhase = "idle";
+    this.notifyDestroyListeners();
   }
   startTimelinePlayback() {
     this.assertInitialized();
@@ -12155,7 +12552,7 @@ var V5GCocosPlayer = class {
   }
   renderCardCarouselSamples(managed, sampledLayer, time) {
     for (const runtime of managed.cardCarouselRuntimes) {
-      var _this$manualSession$g, _this$manualSession2;
+      var _this$manualSession$g, _this$manualSession3;
       const progress = getCardCarousel3DProgress(runtime.animation, time);
       if (
         progress === null ||
@@ -12172,10 +12569,10 @@ var V5GCocosPlayer = class {
       };
       const controlledMotion =
         (_this$manualSession$g =
-          (_this$manualSession2 = this.manualSession) === null ||
-          _this$manualSession2 === void 0
+          (_this$manualSession3 = this.manualSession) === null ||
+          _this$manualSession3 === void 0
             ? void 0
-            : _this$manualSession2.getControlledMotion(ref, time)) !== null &&
+            : _this$manualSession3.getControlledMotion(ref, time)) !== null &&
         _this$manualSession$g !== void 0
           ? _this$manualSession$g
           : void 0;
@@ -13187,6 +13584,11 @@ var V5GCocosPlayer = class {
     this.layerGroups = [];
     this.layerGroupSlots = [];
   }
+  notifyDestroyListeners() {
+    const listeners = [...this.destroyListeners];
+    this.destroyListeners.clear();
+    for (const listener of listeners) listener();
+  }
   assertInitialized(apiName = "seek/update") {
     if (this.stageNode === null)
       throw new Error(`V5GCocosPlayer must be initialized before ${apiName}.`);
@@ -13501,6 +13903,348 @@ function normalizeLayerId(layerId, apiName) {
   if (normalized.length === 0)
     throw new Error(`V5GCocosPlayer.${apiName} layerId must be non-empty.`);
   return normalized;
+}
+function assertCompatiblePoolCloneProject(template, clone) {
+  if (template.assets.length !== clone.assets.length)
+    throw new Error(
+      "V5G Cocos pool clone project must have the same assets as its template.",
+    );
+  const cloneAssetsById = new Map(
+    clone.assets.map((asset) => [asset.id, asset]),
+  );
+  for (const asset of template.assets) {
+    const candidate = cloneAssetsById.get(asset.id);
+    if (
+      !candidate ||
+      candidate.type !== asset.type ||
+      candidate.path !== asset.path ||
+      candidate.width !== asset.width ||
+      candidate.height !== asset.height ||
+      candidate.fileWidth !== asset.fileWidth ||
+      candidate.fileHeight !== asset.fileHeight ||
+      candidate.fileScale !== asset.fileScale
+    )
+      throw new Error(
+        `V5G Cocos pool clone asset "${asset.id}" does not match its template.`,
+      );
+  }
+}
+//#endregion
+var managersByTemplate = /* @__PURE__ */ new WeakMap();
+var V5GCocosPlayerPoolManager = class {
+  constructor(options = {}) {
+    var _options$maxIdleInsta;
+    _defineProperty(this, "pools", /* @__PURE__ */ new Map());
+    _defineProperty(this, "maxIdleInstancesPerPlayer", void 0);
+    _defineProperty(this, "destroyed", false);
+    this.maxIdleInstancesPerPlayer = normalizeMaxIdleInstances(
+      (_options$maxIdleInsta = options.maxIdleInstancesPerPlayer) !== null &&
+        _options$maxIdleInsta !== void 0
+        ? _options$maxIdleInsta
+        : 2,
+    );
+  }
+  getPool(template) {
+    if (this.destroyed)
+      throw new Error(
+        "Cannot get a pool from a destroyed V5GCocosPlayerPoolManager.",
+      );
+    const existing = this.pools.get(template);
+    if (existing) return existing;
+    const currentManager = managersByTemplate.get(template);
+    if (currentManager && currentManager !== this)
+      throw new Error(
+        "A V5GCocosPlayer template cannot be registered with multiple live pool managers.",
+      );
+    const pool = new V5GCocosPlayerPoolImpl(
+      template,
+      this.maxIdleInstancesPerPlayer,
+      () => {
+        this.pools.delete(template);
+        if (managersByTemplate.get(template) === this)
+          managersByTemplate.delete(template);
+      },
+    );
+    managersByTemplate.set(template, this);
+    this.pools.set(template, pool);
+    return pool;
+  }
+  destroyPool(template) {
+    var _this$pools$get;
+    (_this$pools$get = this.pools.get(template)) === null ||
+      _this$pools$get === void 0 ||
+      _this$pools$get.destroy();
+  }
+  destroy() {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    for (const pool of [...this.pools.values()]) pool.destroy();
+    this.pools.clear();
+  }
+};
+var V5GCocosPlayerPoolImpl = class {
+  constructor(template, maxIdleInstances, onDestroy) {
+    _defineProperty(this, "authoredProject", void 0);
+    _defineProperty(this, "idle", []);
+    _defineProperty(this, "active", /* @__PURE__ */ new Set());
+    _defineProperty(this, "disposeTemplateDestroy", void 0);
+    _defineProperty(this, "created", 0);
+    _defineProperty(this, "reused", 0);
+    _defineProperty(this, "destroyed", false);
+    this.template = template;
+    this.maxIdleInstances = maxIdleInstances;
+    this.onDestroy = onDestroy;
+    template.assertPoolTemplateAttached();
+    this.authoredProject = template.getProjectSnapshot();
+    this.disposeTemplateDestroy = template.onDestroy(() => this.destroy());
+  }
+  listParticleComboAnimations() {
+    this.assertAvailable();
+    return listVNIParticleComboTargetAnimations(this.authoredProject);
+  }
+  getStats() {
+    return Object.freeze({
+      active: this.active.size,
+      idle: this.idle.length,
+      created: this.created,
+      reused: this.reused,
+    });
+  }
+  acquire(options) {
+    this.assertAvailable();
+    const variant = createVNIParticleComboTargetVariant({
+      project: this.authoredProject,
+      animation: options.animation,
+      target: options.target,
+      timing: options.timing,
+    });
+    let entry = this.idle.pop();
+    if (entry)
+      try {
+        applyProjectVariant(entry.project, variant.project);
+        entry.player.resetForPoolReuse();
+        entry.player.attachForPoolReuse();
+        this.reused += 1;
+      } catch (error) {
+        entry.player.destroy();
+        throw error;
+      }
+    else {
+      const project = structuredClone(variant.project);
+      const player = this.template.createPoolClone(project);
+      try {
+        player.init();
+        player.resetForPoolReuse();
+      } catch (error) {
+        player.destroy();
+        throw error;
+      }
+      entry = {
+        player,
+        project,
+        generation: 0,
+        lease: null,
+      };
+      this.created += 1;
+    }
+    entry.generation += 1;
+    const lease = new V5GCocosParticleComboPlayerLeaseImpl(
+      this,
+      entry,
+      entry.generation,
+      variant.timing,
+    );
+    entry.lease = lease;
+    this.active.add(entry);
+    return lease;
+  }
+  releaseEntry(entry, generation, lease) {
+    if (
+      entry.generation !== generation ||
+      entry.lease !== lease ||
+      !this.active.delete(entry)
+    )
+      return;
+    entry.lease = null;
+    if (this.destroyed) {
+      entry.player.destroy();
+      return;
+    }
+    try {
+      applyProjectVariant(entry.project, this.authoredProject);
+      entry.player.resetForPoolReuse();
+      entry.player.detachForPoolReuse();
+      if (this.idle.length < this.maxIdleInstances) this.idle.push(entry);
+      else entry.player.destroy();
+    } catch (error) {
+      entry.player.destroy();
+      throw error;
+    }
+  }
+  destroy() {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    this.disposeTemplateDestroy();
+    for (const entry of this.active) {
+      var _entry$lease;
+      (_entry$lease = entry.lease) === null ||
+        _entry$lease === void 0 ||
+        _entry$lease.invalidate();
+      entry.lease = null;
+      entry.player.destroy();
+    }
+    for (const entry of this.idle) entry.player.destroy();
+    this.active.clear();
+    this.idle.length = 0;
+    this.onDestroy();
+  }
+  assertAvailable() {
+    if (this.destroyed)
+      throw new Error("V5GCocosPlayer pool has been destroyed.");
+  }
+};
+var V5GCocosParticleComboPlayerLeaseImpl = class {
+  constructor(pool, entry, generation, timing) {
+    _defineProperty(this, "released", false);
+    _defineProperty(this, "started", false);
+    _defineProperty(this, "disposeCompletion", null);
+    _defineProperty(this, "rejectPending", null);
+    this.pool = pool;
+    this.entry = entry;
+    this.generation = generation;
+    this.timing = timing;
+  }
+  get player() {
+    return this.entry.player;
+  }
+  playOnce() {
+    if (this.released)
+      return Promise.reject(
+        /* @__PURE__ */ new Error("V5G Cocos player pool lease was released."),
+      );
+    if (this.started)
+      return Promise.reject(
+        /* @__PURE__ */ new Error(
+          "V5G Cocos player pool lease playOnce() may only be called once.",
+        ),
+      );
+    this.started = true;
+    return new Promise((resolve, reject) => {
+      this.rejectPending = reject;
+      this.disposeCompletion = this.player.onPlaybackComplete((event) => {
+        var _this$disposeCompleti;
+        if (this.released) return;
+        (_this$disposeCompleti = this.disposeCompletion) === null ||
+          _this$disposeCompleti === void 0 ||
+          _this$disposeCompleti.call(this);
+        this.disposeCompletion = null;
+        try {
+          this.releaseInternal();
+          this.rejectPending = null;
+          resolve(event);
+        } catch (error) {
+          this.rejectPending = null;
+          reject(error);
+        }
+      });
+      try {
+        this.player.playRange({
+          range: this.timing.range,
+          loop: false,
+        });
+      } catch (error) {
+        var _this$disposeCompleti2;
+        (_this$disposeCompleti2 = this.disposeCompletion) === null ||
+          _this$disposeCompleti2 === void 0 ||
+          _this$disposeCompleti2.call(this);
+        this.disposeCompletion = null;
+        this.rejectPending = null;
+        this.releaseInternal();
+        reject(error);
+      }
+    });
+  }
+  release() {
+    var _this$rejectPending, _this$disposeCompleti3;
+    if (this.released) return;
+    (_this$rejectPending = this.rejectPending) === null ||
+      _this$rejectPending === void 0 ||
+      _this$rejectPending.call(
+        this,
+        /* @__PURE__ */ new Error(
+          "V5G Cocos player pool lease was released before playback completed.",
+        ),
+      );
+    this.rejectPending = null;
+    (_this$disposeCompleti3 = this.disposeCompletion) === null ||
+      _this$disposeCompleti3 === void 0 ||
+      _this$disposeCompleti3.call(this);
+    this.disposeCompletion = null;
+    this.releaseInternal();
+  }
+  invalidate() {
+    var _this$rejectPending2, _this$disposeCompleti4;
+    if (this.released) return;
+    this.released = true;
+    (_this$rejectPending2 = this.rejectPending) === null ||
+      _this$rejectPending2 === void 0 ||
+      _this$rejectPending2.call(
+        this,
+        /* @__PURE__ */ new Error(
+          "V5G Cocos player pool was destroyed before playback completed.",
+        ),
+      );
+    this.rejectPending = null;
+    (_this$disposeCompleti4 = this.disposeCompletion) === null ||
+      _this$disposeCompleti4 === void 0 ||
+      _this$disposeCompleti4.call(this);
+    this.disposeCompletion = null;
+  }
+  releaseInternal() {
+    if (this.released) return;
+    this.released = true;
+    this.pool.releaseEntry(this.entry, this.generation, this);
+  }
+};
+function applyProjectVariant(target, source) {
+  target.stage.duration = source.stage.duration;
+  for (const targetLayer of target.layers) {
+    const sourceLayer = findLayer(source, targetLayer.id);
+    for (const targetAnimation of targetLayer.animations) {
+      const sourceAnimation = findAnimation(sourceLayer, targetAnimation.id);
+      if (targetAnimation.type !== sourceAnimation.type)
+        throw new Error(
+          `V5G Cocos pool animation type changed for "${targetAnimation.id}".`,
+        );
+      if (targetAnimation.type !== "particle_combo") continue;
+      targetAnimation.duration = sourceAnimation.duration;
+      targetAnimation.params.targetX = sourceAnimation.params.targetX;
+      targetAnimation.params.targetY = sourceAnimation.params.targetY;
+    }
+  }
+}
+function findLayer(project, layerId) {
+  const layer = project.layers.find((candidate) => candidate.id === layerId);
+  if (!layer)
+    throw new Error(`V5G Cocos pool project is missing layer "${layerId}".`);
+  return layer;
+}
+function findAnimation(layer, animationId) {
+  const animation = layer.animations.find(
+    (candidate) => candidate.id === animationId,
+  );
+  if (!animation)
+    throw new Error(
+      `V5G Cocos pool layer "${layer.id}" is missing animation "${animationId}".`,
+    );
+  return animation;
+}
+function normalizeMaxIdleInstances(value) {
+  if (!Number.isInteger(value) || value < 0)
+    throw new Error(
+      "maxIdleInstancesPerPlayer must be a non-negative integer.",
+    );
+  return value;
 }
 //#endregion
 function createV5GCocosPlayer(options) {
@@ -13824,6 +14568,15 @@ const __standalone_sampleLiveParticleSprites: (
   time: number,
 ) => V5GLiveParticleSpriteSample[] = sampleLiveParticleSprites;
 
+const __standalone_listVNIParticleComboTargetAnimations: (
+  project: V5GProjectConfig,
+) => readonly VNIParticleComboAnimationDescriptor[] =
+  listVNIParticleComboTargetAnimations;
+
+const __standalone_createVNIParticleComboTargetVariant: (
+  options: CreateVNIParticleComboTargetVariantOptions,
+) => VNIParticleComboTargetVariant = createVNIParticleComboTargetVariant;
+
 const __standalone_normalizePlaybackRange: (
   range: V5GPlaybackRange,
   duration: number,
@@ -13969,6 +14722,8 @@ export {
   __standalone_seededRandom as seededRandom,
   __standalone_sampleLiveParticleSprites as sampleLiveParticleSprites,
   V5GParticleRuntime,
+  __standalone_listVNIParticleComboTargetAnimations as listVNIParticleComboTargetAnimations,
+  __standalone_createVNIParticleComboTargetVariant as createVNIParticleComboTargetVariant,
   __standalone_normalizePlaybackRange as normalizePlaybackRange,
   __standalone_normalizePlaybackPoint as normalizePlaybackPoint,
   __standalone_normalizeSegmentedPlaybackOptions as normalizeSegmentedPlaybackOptions,
@@ -13994,4 +14749,5 @@ export {
   __standalone_getCocosRelativeTransform2D as getCocosRelativeTransform2D,
   V5GCocosPlaybackCancelledError,
   V5GCocosManualPlaybackSessionImpl,
+  V5GCocosPlayerPoolManager,
 };

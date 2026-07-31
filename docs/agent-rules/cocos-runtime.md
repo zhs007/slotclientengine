@@ -22,6 +22,14 @@
 
 ## Player 与资源生命周期
 
+- runtime target variant 不得修改 authored template。`particle_combo` 只按
+  `layerId + animationId` 修改 layer-local target；默认时长从 authored target/duration
+  保持名义速度，fixed duration 必须显式配置。
+- Cocos player pool 必须一 initialized template 一 pool，由显式 manager 拥有；clone 共享
+  host-owned root/driver/asset source/SpriteFrame，但不得共享 project、node tree、transport、
+  particle 或 listener。
+- Cocos pool 不创建 ticker；宿主显式 update active clone。归还前恢复 authored 参数与 stage、
+  重算 duration-dependent cache、清理 lease state 并从 host root detach。
 - `legacy_alpha` 使用 Cocos 3.8.6 `Mask.Type.SPRITE_STENCIL`；Mask 必须镜像 source layer 的 SpriteFrame、逻辑尺寸、锚点和 sampled transform，target reparent 后必须换算到 Mask 局部坐标，不能把 stage 坐标直接当局部坐标。
 - wave/card slice 复用 runtime-owned SpriteFrame view，在 destroy 时释放。rotated 或缺 texture/rect/originalSize 的 source 显式失败。
 - `requestSegmentedPlaybackEnd({ forceStopParticles: true })` 必须先让 ending 到尾帧，再清粒子并跳过 drain；立即清理只能走 `forceStopAllParticles()`。

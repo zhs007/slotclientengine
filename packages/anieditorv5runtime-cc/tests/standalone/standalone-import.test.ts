@@ -254,6 +254,9 @@ describe("standalone runtime import", () => {
     ]);
     expect(runtime.createV5GCocosPlayer).toBeTypeOf("function");
     expect(runtime.V5GCocosPlayer).toBeTypeOf("function");
+    expect(runtime.V5GCocosPlayerPoolManager).toBeTypeOf("function");
+    expect(runtime.listVNIParticleComboTargetAnimations).toBeTypeOf("function");
+    expect(runtime.createVNIParticleComboTargetVariant).toBeTypeOf("function");
     expect(runtime.assertV5GProject).toBeTypeOf("function");
     expect(runtime.validateV5GProject).toBeTypeOf("function");
     expect(runtime.validateCocosV5GProject).toBeTypeOf("function");

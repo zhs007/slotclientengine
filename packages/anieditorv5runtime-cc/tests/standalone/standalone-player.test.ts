@@ -5,6 +5,7 @@ import {
   assertV5GProject,
   createV5GCocosPlayer,
   getCocosBlendModeConfig,
+  V5GCocosPlayerPoolManager,
   type V5GAnimationConfig,
   type V5GAssetConfig,
   type V5GLayerConfig,
@@ -142,6 +143,43 @@ function particleWallAnimation(
       fadeOut: true,
     },
     ...overrides,
+  };
+}
+
+function particleComboAnimation(): V5GAnimationConfig {
+  return {
+    id: "combo",
+    name: "Combo",
+    type: "particle_combo",
+    startTime: 0,
+    duration: 1.5,
+    enabled: true,
+    seed: 11,
+    params: {
+      count: 5,
+      size: 35,
+      sourceOpacity: 0,
+      spawnMode: 1,
+      spawnRadius: 35,
+      spawnRatio: 0.05,
+      targetX: 600,
+      targetY: 0,
+      travelMode: 1,
+      curve: 100,
+      orbitRadius: 100,
+      orbitTurns: 0,
+      orbitSpeed: 1,
+      orbitRatio: 0.35,
+      staggerRatio: 0.28,
+      trailCount: 4,
+      trailSpacing: 0.045,
+      trailFade: 0.2,
+      vanishMode: 0,
+      vanishRatio: 0.18,
+      flashScale: 1,
+      flashIntensity: 0.5,
+      easing: "easeInOutQuad",
+    },
   };
 }
 
@@ -1482,6 +1520,40 @@ describe("standalone V5GCocosPlayer", () => {
     session.destroy();
     expect(hostNodes.every((node) => node.isValid)).toBe(true);
   });
+
+  it("runs the generated standalone particle_combo pool API", async () => {
+    const project = tinyProject({
+      animations: [particleComboAnimation()],
+    });
+    project.stage.duration = 2;
+    const { root, player: template, frames } = makePlayer(project);
+    template.init();
+    const manager = new V5GCocosPlayerPoolManager();
+    const pool = manager.getPool(template);
+    const lease = pool.acquire({
+      animation: { layerId: "layer-1", animationId: "combo" },
+      target: { x: 300, y: 0 },
+    });
+
+    expect(lease.timing.effectiveDurationSeconds).toBe(0.75);
+    expect(root.children).toHaveLength(2);
+    const completed = lease.playOnce();
+    lease.player.update(0.75);
+    lease.player.update(0.75);
+    await expect(completed).resolves.toMatchObject({ endTime: 0.75 });
+    expect(pool.getStats()).toEqual({
+      active: 0,
+      idle: 1,
+      created: 1,
+      reused: 0,
+    });
+    expect(root.children).toHaveLength(1);
+    expect(
+      (frames.get("asset-1") as InspectableSpriteFrame | undefined)?.destroyed,
+    ).not.toBe(true);
+    manager.destroy();
+    template.destroy();
+  });
 });
 
 function requireTransform(node: Node): UITransform {
@@ -1505,6 +1577,7 @@ interface InspectableTransform extends UITransform {
 }
 
 interface InspectableSpriteFrame extends SpriteFrame {
+  destroyed?: boolean;
   width?: number;
   height?: number;
   originalSize?: { width: number; height: number };

@@ -43,6 +43,10 @@ import { getSequenceFrameAssetId } from "../../src/core/sequence-layer";
 import { sampleSafeGlowSpritesForLayer } from "../../src/core/safe-glow-sampler";
 import { sampleChaserLightSpritesForLayer } from "../../src/core/chaser-light-sampler";
 import {
+  createVNIParticleComboTargetVariant,
+  listVNIParticleComboTargetAnimations,
+} from "../../src/core/particle-combo-variant";
+import {
   createVNICyclicMotionSnapshot,
   createVNICyclicResolvePlan,
   getVNICyclicCarrierAlignmentErrorTurns,
@@ -79,6 +83,28 @@ const fixtures = [
 const sampleTimes = [0, 0.1, 0.6, 0.8, 1, 2, 4, 4.4];
 
 describe("standalone runtime parity", () => {
+  it("matches particle_combo target variant descriptors", () => {
+    const project = assertV5GProject(multipayData);
+    const [descriptor] = listVNIParticleComboTargetAnimations(project);
+    if (!descriptor) throw new Error("missing particle_combo fixture");
+    const options = {
+      project,
+      animation: {
+        layerId: descriptor.layerId,
+        animationId: descriptor.animationId,
+      },
+      target: { x: 350, y: 0 },
+      timing: { mode: "fixed-duration" as const, durationSeconds: 0.75 },
+    };
+
+    expect(standalone.listVNIParticleComboTargetAnimations(project)).toEqual(
+      listVNIParticleComboTargetAnimations(project),
+    );
+    expect(standalone.createVNIParticleComboTargetVariant(options)).toEqual(
+      createVNIParticleComboTargetVariant(options),
+    );
+  });
+
   it("matches modular runtime validation and project sampling", () => {
     for (const [name, fixture] of fixtures) {
       const modularProject = assertV5GProject(fixture);

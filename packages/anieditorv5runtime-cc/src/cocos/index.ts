@@ -8,6 +8,7 @@ export * from "./node-driver.js";
 export * from "./blend-mode.js";
 export * from "./coordinates.js";
 export * from "./manual-playback.js";
+export * from "./player-pool.js";
 export {
   createCocosNodeDriver,
   type CocosNodeDriverOptions,

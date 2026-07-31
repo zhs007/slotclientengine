@@ -39,9 +39,14 @@ export class V5GParticleRuntime {
   private draining = false;
   private drainElapsed = 0;
   private drainDuration = 0;
-  private readonly maxDrainDuration: number;
+  private maxDrainDuration: number;
 
   constructor(projectLayers: readonly V5GLayerConfig[]) {
+    this.maxDrainDuration = getMaxParticleDrainDuration(projectLayers);
+  }
+
+  reconfigure(projectLayers: readonly V5GLayerConfig[]): void {
+    this.reset();
     this.maxDrainDuration = getMaxParticleDrainDuration(projectLayers);
   }
 

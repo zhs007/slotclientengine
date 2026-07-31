@@ -9,7 +9,9 @@ import {
 import {
   assertV5GProject,
   createV5GCocosPlayer,
+  V5GCocosPlayerPoolManager,
   validateCocosV5GProject,
+  type V5GCocosParticleComboPlayerLease,
   type V5GCocosPlaybackEventContext,
   type V5GCocosManualPlaybackSession,
   type V5GCocosPlaybackState,
@@ -48,6 +50,27 @@ export class V5GPreview extends Component {
   @property(Boolean)
   manualBambooPreview = false;
 
+  @property(Boolean)
+  particleComboTargetPreview = false;
+
+  @property(String)
+  particleComboLayerId = "";
+
+  @property(String)
+  particleComboAnimationId = "";
+
+  @property(Number)
+  particleComboTargetX = 300;
+
+  @property(Number)
+  particleComboTargetY = 0;
+
+  @property(Boolean)
+  particleComboFixedDuration = false;
+
+  @property(Number)
+  particleComboDurationSeconds = 1;
+
   // Each entry is a host-owned complex subtree:
   // Card Content Root -> art Sprite + value Label + decoration child Node.
   @property([Node])
@@ -59,6 +82,8 @@ export class V5GPreview extends Component {
 
   private player: V5GCocosPlayer | null = null;
   private manualSession: V5GCocosManualPlaybackSession<Node> | null = null;
+  private playerPoolManager: V5GCocosPlayerPoolManager | null = null;
+  private particleComboLease: V5GCocosParticleComboPlayerLease | null = null;
   private slotProbeDispose: (() => void) | null = null;
   private lastPlaybackEventId = "";
   private completedPlaybackTasks = 0;
@@ -132,7 +157,9 @@ export class V5GPreview extends Component {
     this.player.onPlaybackComplete(() => {
       this.completedPlaybackTasks += 1;
     });
-    if (this.manualBambooPreview) {
+    if (this.particleComboTargetPreview) {
+      this.runParticleComboTargetPreview();
+    } else if (this.manualBambooPreview) {
       void this.runBambooManualPreview();
     } else if (this.segmentedPreview) {
       const loopStart = Math.max(
@@ -155,6 +182,50 @@ export class V5GPreview extends Component {
         loop: false,
       });
     }
+  }
+
+  private runParticleComboTargetPreview(): void {
+    const player = this.player;
+    if (!player) throw new Error("V5GPreview player is not initialized.");
+    if (
+      this.particleComboLayerId.length === 0 ||
+      this.particleComboAnimationId.length === 0
+    ) {
+      throw new Error(
+        "V5GPreview particle_combo preview requires layerId and animationId.",
+      );
+    }
+    const manager = new V5GCocosPlayerPoolManager();
+    const lease = manager.getPool(player).acquire({
+      animation: {
+        layerId: this.particleComboLayerId,
+        animationId: this.particleComboAnimationId,
+      },
+      target: {
+        x: this.particleComboTargetX,
+        y: this.particleComboTargetY,
+      },
+      timing: this.particleComboFixedDuration
+        ? {
+            mode: "fixed-duration",
+            durationSeconds: this.particleComboDurationSeconds,
+          }
+        : { mode: "preserve-authored-speed" },
+    });
+    this.playerPoolManager = manager;
+    this.particleComboLease = lease;
+    void lease.playOnce().then(
+      () => {
+        if (this.particleComboLease === lease) {
+          this.particleComboLease = null;
+        }
+      },
+      () => {
+        if (this.particleComboLease === lease) {
+          this.particleComboLease = null;
+        }
+      },
+    );
   }
 
   private async runBambooManualPreview(): Promise<void> {
@@ -232,7 +303,12 @@ export class V5GPreview extends Component {
   }
 
   update(deltaTime: number): void {
-    this.player?.update(deltaTime);
+    const lease = this.particleComboLease;
+    if (lease) {
+      lease.player.update(deltaTime);
+    } else {
+      this.player?.update(deltaTime);
+    }
   }
 
   requestSegmentedPlaybackEnd(): void {
@@ -262,6 +338,10 @@ export class V5GPreview extends Component {
     this.slotProbeDispose = null;
     this.manualSession?.destroy();
     this.manualSession = null;
+    this.particleComboLease?.release();
+    this.particleComboLease = null;
+    this.playerPoolManager?.destroy();
+    this.playerPoolManager = null;
     this.player?.destroy();
     this.player = null;
   }
