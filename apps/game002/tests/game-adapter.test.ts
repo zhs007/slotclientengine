@@ -15,6 +15,7 @@ import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-
 import {
   assertGame002CascadeResources,
   createGame002Adapter,
+  requestGame002TransformStates,
   type Game002AdapterOptions,
 } from "../src/game-adapter.js";
 import { createGame002CascadeSequence } from "../src/cascade-sequence.js";
@@ -165,6 +166,35 @@ describe("game002 task 95 adapter", () => {
         getTestGame002SkinConfig(),
       ),
     ).not.toThrow();
+  });
+
+  it("captures CO and vortex source animation baselines as one batch", () => {
+    const runtime = new FakeRuntime([]);
+    const baselines = requestGame002TransformStates(runtime.asRuntime(), [
+      Object.freeze({
+        positions: Object.freeze([{ x: 1, y: 5 }]),
+        state: "feature",
+      }),
+      Object.freeze({
+        positions: Object.freeze([
+          { x: 1, y: 8 },
+          { x: 1, y: 3 },
+          { x: 5, y: 6 },
+          { x: 1, y: 2 },
+          { x: 5, y: 0 },
+        ]),
+        state: "feature1",
+      }),
+    ]);
+
+    expect([...baselines.keys()]).toEqual([
+      "1,5",
+      "1,8",
+      "1,3",
+      "5,6",
+      "1,2",
+      "5,0",
+    ]);
   });
 
   it("plays the complete fixture with protected WL and one unified fall", async () => {

@@ -1576,11 +1576,16 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
       this.completeSettledTransform(step);
       return { completed: true };
     }
-    this.requestTransformState(
-      collection.segments.map((segment) => segment.co),
-      "feature",
-    );
-    this.requestTransformState(collection.sourcePositions, "feature1");
+    this.requestTransformStates([
+      Object.freeze({
+        positions: collection.segments.map((segment) => segment.co),
+        state: "feature",
+      }),
+      Object.freeze({
+        positions: collection.sourcePositions,
+        state: "feature1",
+      }),
+    ]);
     this.#activity = "transform-co-feature";
     return { completed: false };
   }
@@ -1638,19 +1643,19 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     positions: readonly { readonly x: number; readonly y: number }[],
     state: string,
   ): void {
-    this.#runtime.requestVisibleSymbolStates(positions, state, "immediate");
+    this.requestTransformStates([Object.freeze({ positions, state })]);
+  }
+
+  private requestTransformStates(
+    requests: readonly Readonly<{
+      positions: readonly { readonly x: number; readonly y: number }[];
+      state: string;
+    }>[],
+  ): void {
+    const baselines = requestGame002TransformStates(this.#runtime, requests);
     this.#transformCompletionBaselines.clear();
-    for (const snapshot of this.#runtime.getVisibleSymbolStateSnapshots(
-      positions,
-    )) {
-      this.#transformCompletionBaselines.set(
-        `${snapshot.x},${snapshot.y}`,
-        Object.freeze({
-          loop: snapshot.loopCompletionCount ?? 0,
-          once: snapshot.onceCompletionCount ?? 0,
-        }),
-      );
-    }
+    for (const [key, baseline] of baselines)
+      this.#transformCompletionBaselines.set(key, baseline);
   }
 
   private didTransformAnimationComplete(
@@ -2134,6 +2139,45 @@ function createGame002LogicSlice(
     getComponentResults: (stepIndex: number, name: string) =>
       getStep(stepIndex).getComponentResults(name),
   });
+}
+
+export function requestGame002TransformStates(
+  runtime: Pick<
+    Game002ReelRuntime,
+    "requestVisibleSymbolStates" | "getVisibleSymbolStateSnapshots"
+  >,
+  requests: readonly Readonly<{
+    positions: readonly { readonly x: number; readonly y: number }[];
+    state: string;
+  }>[],
+): ReadonlyMap<string, Readonly<{ loop: number; once: number }>> {
+  for (const request of requests)
+    runtime.requestVisibleSymbolStates(
+      request.positions,
+      request.state,
+      "immediate",
+    );
+  const positions = requests.flatMap((request) => request.positions);
+  const expectedKeys = new Set(
+    positions.map((position) => `${position.x},${position.y}`),
+  );
+  const baselines = new Map<string, Readonly<{ loop: number; once: number }>>();
+  for (const snapshot of runtime.getVisibleSymbolStateSnapshots(positions))
+    baselines.set(
+      `${snapshot.x},${snapshot.y}`,
+      Object.freeze({
+        loop: snapshot.loopCompletionCount ?? 0,
+        once: snapshot.onceCompletionCount ?? 0,
+      }),
+    );
+  if (
+    baselines.size !== expectedKeys.size ||
+    [...expectedKeys].some((key) => !baselines.has(key))
+  )
+    throw new Error(
+      "game002 transform state batch did not capture every requested animation baseline.",
+    );
+  return baselines;
 }
 
 function assertValidWinAmountInput(
