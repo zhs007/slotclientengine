@@ -8,6 +8,7 @@ const amountLayer = (scale = 1) => ({
   resource: "amount",
   binding: "win-amount" as const,
   anchor: { x: 0.5, y: 0.5 },
+  parent: { kind: "popup-root" as const },
   transform: { x: 0, y: 100, scale },
 });
 const vniLayer = (id: string, resource: string) => ({

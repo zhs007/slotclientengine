@@ -543,7 +543,29 @@ function validateAnimationBindings(
     manifest.awardCelebration.base,
     manifest.awardCelebration.standard,
     ...manifest.awardCelebration.celebrationTiers,
-  ])
+  ]) {
+    const amount = tier.layers.find(
+      (
+        layer,
+      ): layer is Extract<PopupLayer, { readonly kind: "image-string" }> =>
+        layer.kind === "image-string",
+    )!;
+    const amountParent = amount.parent;
+    if (amountParent.kind === "vni-text-layer") {
+      const target = tier.layers.find(
+        ({ id }) => id === amountParent.vniLayerId,
+      )!;
+      const targetResource = resources[target.resource];
+      if (targetResource?.kind !== "vni")
+        throw new Error("popup ImgNumber VNI parent resource mismatch.");
+      const textLayer = targetResource.project.layers.find(
+        ({ id }) => id === amountParent.textLayerId,
+      );
+      if (!textLayer || textLayer.type !== "text")
+        throw new Error(
+          `popup ImgNumber layer ${amount.id} references missing VNI text layer ${amountParent.textLayerId}.`,
+        );
+    }
     for (const layer of tier.layers) {
       const resource = resources[layer.resource]!;
       if (layer.kind === "vni") {
@@ -567,6 +589,7 @@ function validateAnimationBindings(
         });
       }
     }
+  }
 }
 
 function rewritePopupResourceSpec(

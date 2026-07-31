@@ -10,6 +10,11 @@
 - 档位固定为 `base -> standard -> bigwin -> superwin -> megawin`。`base` 截止 `1×bet`，`standard` 截止 bigwin threshold，后三档 threshold multiplier 显式且严格递增。边界相等时进入对应档，runtime 用 BigInt 比较。
 - 每档必须有非空 `layers`，且必须恰好包含一个 `image-string + win-amount` 图层。金额不参与 `start/loop/end` 可见性：整场只维持一个 renderer/runtime，跨档只更新文本、transform，必要时在同一实例上切换 image-string resource。
 - 每档严格按唯一的 `order` 升序叠放，数值越小越靠下。跨档时单一金额 renderer 会移动到新档容器内对应的 child index，不会固定在全部 VNI 之上。
+- ImgNumber layer 的 `parent` 是 `{ "kind": "popup-root" }` 或
+  `{ "kind": "vni-text-layer", "vniLayerId": "...", "textLayerId": "..." }`。后者只能引用
+  同档 VNI layer 和该 project 内 exact `type="text"` layer；ImgNumber 的 `x/y/scale/anchor`
+  相对文字层，继承其 VNI animation、可见性和渲染顺序，`order` 不再决定该金额的视觉 z-order。
+  旧 v1 省略 `parent` 唯一规范化为 `popup-root`，未知/失效 target 不回退。
 - VNI 显式保存 `loopStartTime/loopEndTime/keepParticlesAlive`；Spine 显式保存大小写精确且互不相同的 start/loop/end animation。
 
 ## 合同骨架

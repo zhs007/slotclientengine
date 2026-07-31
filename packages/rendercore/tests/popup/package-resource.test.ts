@@ -88,6 +88,57 @@ describe("popup package resource", () => {
     await resource.destroy();
   });
 
+  it("requires an exact text layer for an attached ImgNumber", async () => {
+    const { createPopupPackageResource } =
+      await import("../../src/popup/package-resource.js");
+    const { manifest, files } = fixture();
+    const projectPath = (manifest.resources.vni as { project: string }).project;
+    const project = JSON.parse(
+      new TextDecoder().decode(files.get(projectPath)),
+    );
+    project.layers.push({
+      ...project.layers[0],
+      id: "amount-text",
+      name: "Amount text",
+      type: "text",
+      assetId: null,
+      text: "Amount",
+    });
+    files.set(projectPath, new TextEncoder().encode(JSON.stringify(project)));
+    manifest.awardCelebration.base.layers =
+      manifest.awardCelebration.base.layers.map((layer: any) =>
+        layer.kind === "image-string"
+          ? {
+              ...layer,
+              parent: {
+                kind: "vni-text-layer",
+                vniLayerId: "vni",
+                textLayerId: "amount-text",
+              },
+            }
+          : layer,
+      );
+    const resource = await createPopupPackageResource({
+      manifest,
+      files,
+      loadTexture: async () => ({ width: 1, height: 1, destroy() {} }) as never,
+    });
+    await resource.destroy();
+    (
+      manifest.awardCelebration.base.layers.find(
+        (layer: any) => layer.kind === "image-string",
+      ) as any
+    ).parent.textLayerId = "missing";
+    await expect(
+      createPopupPackageResource({
+        manifest,
+        files,
+        loadTexture: async () =>
+          ({ width: 1, height: 1, destroy() {} }) as never,
+      }),
+    ).rejects.toThrow(/missing VNI text layer/);
+  });
+
   it("flattens legacy structured resources and resolves one mapped file closure", async () => {
     const {
       collectMappedPopupAssetKeys,
@@ -351,6 +402,7 @@ function fixture() {
     order: 10,
     resource: "amount",
     binding: "win-amount",
+    parent: { kind: "popup-root" },
     anchor: { x: 0.5, y: 0.5 },
     transform: { x: 0, y: 0, scale: 1 },
   };

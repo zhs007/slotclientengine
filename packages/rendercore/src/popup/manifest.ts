@@ -275,6 +275,18 @@ function parseTier(
   );
   if (layers.filter((layer) => layer.kind === "image-string").length !== 1)
     fail(`${label} 必须恰好包含一个动态 ImgNumber 图层。`);
+  const amount = layers.find(
+    (layer): layer is Extract<PopupLayer, { readonly kind: "image-string" }> =>
+      layer.kind === "image-string",
+  )!;
+  const amountParent = amount.parent;
+  if (amountParent.kind === "vni-text-layer") {
+    const target = layers.find(({ id }) => id === amountParent.vniLayerId);
+    if (!target || target.kind !== "vni")
+      fail(
+        `${label} ImgNumber parent.vniLayerId 必须引用同档 VNI layer：${amountParent.vniLayerId}。`,
+      );
+  }
   return freeze({
     countDurationSeconds: nonNegative(
       record.countDurationSeconds,
@@ -309,13 +321,16 @@ function parseLayer(
     },
   };
   if (kind === "image" || kind === "image-string") {
-    keys(
-      record,
-      kind === "image"
-        ? [...common, "anchor", "visibleSegments"]
-        : [...common, "binding", "anchor"],
-      label,
-    );
+    if (kind === "image")
+      keys(record, [...common, "anchor", "visibleSegments"], label);
+    else
+      keys(
+        record,
+        Object.hasOwn(record, "parent")
+          ? [...common, "binding", "anchor", "parent"]
+          : [...common, "binding", "anchor"],
+        label,
+      );
     if (kind === "image-string" && record.binding !== "win-amount")
       fail(`${label}.binding must be win-amount.`);
     const anchor = object(record.anchor, `${label}.anchor`);
@@ -330,6 +345,7 @@ function parseLayer(
         kind,
         binding: "win-amount" as const,
         anchor: parsedAnchor,
+        parent: parseImageStringParent(record.parent, `${label}.parent`),
       });
     const visibleSegments = parseSegments(
       record.visibleSegments,
@@ -400,6 +416,24 @@ function parseLayer(
     });
   }
   fail(`${label}.kind invalid.`);
+}
+
+function parseImageStringParent(value: unknown, label: string) {
+  if (value === undefined) return freeze({ kind: "popup-root" as const });
+  const record = object(value, label);
+  if (record.kind === "popup-root") {
+    keys(record, ["kind"], label);
+    return freeze({ kind: "popup-root" as const });
+  }
+  if (record.kind === "vni-text-layer") {
+    keys(record, ["kind", "vniLayerId", "textLayerId"], label);
+    return freeze({
+      kind: "vni-text-layer" as const,
+      vniLayerId: nonEmpty(record.vniLayerId, `${label}.vniLayerId`),
+      textLayerId: nonEmpty(record.textLayerId, `${label}.textLayerId`),
+    });
+  }
+  fail(`${label}.kind must be popup-root or vni-text-layer.`);
 }
 
 function parseSegments(value: unknown, label: string): readonly PopupSegment[] {

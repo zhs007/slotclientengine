@@ -7,6 +7,7 @@ import {
   type PopupResourceSpec,
 } from "@slotclientengine/rendercore/popup";
 import type { EditorAssetEntry } from "@slotclientengine/editorresource";
+import { assertVNIProject } from "@slotclientengine/vnicore/core";
 
 export interface PopupEditorResource {
   readonly rootKey: string;
@@ -27,6 +28,11 @@ export interface PopupEditorTierBindingSuggestion {
     readonly loopEndTime: number;
     readonly keepParticlesAlive: boolean;
   };
+}
+export interface PopupVniTextLayerTarget {
+  readonly vniLayerId: string;
+  readonly textLayerId: string;
+  readonly textLayerName: string;
 }
 export interface PopupEditorProject {
   id: string;
@@ -201,12 +207,61 @@ export function popupEditorProjectDiagnostics(
     ]);
   try {
     projectToManifest(project);
+    for (const [tierId, tier] of project.tiers) {
+      const amount = tier.layers.find(
+        (layer): layer is Extract<PopupLayer, { kind: "image-string" }> =>
+          layer.kind === "image-string",
+      );
+      if (!amount) continue;
+      const amountParent = amount.parent;
+      if (amountParent.kind === "popup-root") continue;
+      const matches = getPopupVniTextLayerTargets(project, tierId).some(
+        (target) =>
+          target.vniLayerId === amountParent.vniLayerId &&
+          target.textLayerId === amountParent.textLayerId,
+      );
+      if (!matches)
+        throw new Error(
+          `${tierId} ImgNumber parent 引用的 VNI 文字层不存在：${amountParent.vniLayerId}/${amountParent.textLayerId}。`,
+        );
+    }
     return Object.freeze([]);
   } catch (error) {
     return Object.freeze([
       error instanceof Error ? error.message : String(error),
     ]);
   }
+}
+
+export function getPopupVniTextLayerTargets(
+  project: PopupEditorProject,
+  tierId: AwardTierId,
+): readonly PopupVniTextLayerTarget[] {
+  const tier = project.tiers.get(tierId);
+  if (!tier) throw new Error(`tier 不存在：${tierId}`);
+  const targets: PopupVniTextLayerTarget[] = [];
+  for (const layer of tier.layers) {
+    if (layer.kind !== "vni") continue;
+    const resource = project.resources.get(layer.resource);
+    if (resource?.spec.kind !== "vni")
+      throw new Error(`VNI layer resource 无效：${layer.id}`);
+    const bytes = project.assets.get(resource.spec.project)?.bytes;
+    if (!bytes)
+      throw new Error(`VNI project bytes 缺失：${resource.spec.project}`);
+    const projectConfig = assertVNIProject(
+      JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)),
+    );
+    for (const textLayer of projectConfig.layers)
+      if (textLayer.type === "text")
+        targets.push(
+          Object.freeze({
+            vniLayerId: layer.id,
+            textLayerId: textLayer.id,
+            textLayerName: textLayer.name,
+          }),
+        );
+  }
+  return Object.freeze(targets);
 }
 
 export function addLayer(
@@ -247,6 +302,7 @@ export function addLayer(
       kind: "image-string",
       binding: "win-amount",
       anchor: { x: 0.5, y: 0.5 },
+      parent: { kind: "popup-root" },
     };
   else if (resource.kind === "image")
     layer = {

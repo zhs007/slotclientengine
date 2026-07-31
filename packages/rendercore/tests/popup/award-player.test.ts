@@ -1,5 +1,5 @@
 import { Container, Texture } from "pixi.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createAwardCelebrationPlayer,
   type PopupLayerRuntime,
@@ -116,6 +116,52 @@ describe("award celebration player", () => {
     player.destroy();
   });
 
+  it("mounts the shared ImgNumber into the configured VNI text layer", async () => {
+    const resource = fakeResource();
+    const bigwin = resource.manifest.awardCelebration.celebrationTiers.find(
+      (tier) => tier.id === "bigwin",
+    )!;
+    const amount = bigwin.layers.find(
+      (
+        layer,
+      ): layer is Extract<
+        (typeof bigwin.layers)[number],
+        { kind: "image-string" }
+      > => layer.kind === "image-string",
+    )!;
+    (amount as { parent: unknown }).parent = {
+      kind: "vni-text-layer",
+      vniLayerId: "effect",
+      textLayerId: "amount-text",
+    };
+    const mounts: Container[] = [];
+    const disposes = vi.fn();
+    let amountContainer: Container | undefined;
+    const player = createAwardCelebrationPlayer({
+      resource,
+      layerFactory: ({ layer }) => {
+        const runtime = fakeLayer(layer.kind === "vni");
+        if (layer.kind === "image-string") amountContainer = runtime.container;
+        if (layer.kind !== "vni") return runtime;
+        return {
+          ...runtime,
+          mountNodeToTextLayer({ textLayerId, node }) {
+            expect(textLayerId).toBe("amount-text");
+            mounts.push(node);
+            return disposes;
+          },
+        };
+      },
+    });
+    await player.init();
+    expect(mounts).toHaveLength(1);
+    player.start({ betAmountRaw: 100, winAmountRaw: 2000 });
+    player.requestAdvance();
+    expect(mounts[0]!.children).toEqual([amountContainer]);
+    player.destroy();
+    expect(disposes).toHaveBeenCalledOnce();
+  });
+
   it("allows the host runtime to override preview-only amount formatting", async () => {
     const player = createAwardCelebrationPlayer({
       resource: fakeResource(),
@@ -197,6 +243,7 @@ function staticResource(): PopupPackageResource {
     resource: "amount",
     binding: "win-amount" as const,
     anchor: { x: 0.5, y: 0.5 },
+    parent: { kind: "popup-root" as const },
     transform: { x: 0, y: 0, scale: 1 },
   };
   const manifest = {
