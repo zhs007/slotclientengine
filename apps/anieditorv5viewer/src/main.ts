@@ -6,9 +6,12 @@ import {
 } from "./runtime/uploaded-zip-project";
 import {
   VNIPlayer,
+  VNIPlayerPoolManager,
   type VNIAnimationRuntimeRef,
   type VNIManualPlaybackSession,
+  type VNIParticleComboPlayerLease,
   type VNIPlaybackOperation,
+  type VNIPlayerPool,
   type VNITextLayerTextBinding,
 } from "@slotclientengine/vnicore/pixi";
 import { Application } from "pixi.js";
@@ -73,6 +76,12 @@ async function bootstrap(): Promise<void> {
   let manualPreviewToken = 0;
   let manualPreviewSession: VNIManualPlaybackSession | null = null;
   let manualPreviewOperation: VNIPlaybackOperation | null = null;
+  const playerPoolManager = new VNIPlayerPoolManager({
+    maxIdleInstancesPerPlayer: 2,
+  });
+  let targetPreviewPool: VNIPlayerPool | null = null;
+  let targetPreviewLease: VNIParticleComboPlayerLease | null = null;
+  let targetPreviewToken = 0;
 
   const controls = createViewerControls({
     container: controlsMount,
@@ -84,12 +93,14 @@ async function bootstrap(): Promise<void> {
     },
     onTogglePlay: () => {
       if (!player) return;
+      disposeTargetPreview();
       disposeManualPreview();
       if (player.isPlaying()) player.pause();
       else player.play();
       syncPlaybackState();
     },
     onRestart: () => {
+      disposeTargetPreview();
       disposeManualPreview();
       player?.restart();
       syncPlaybackState();
@@ -99,17 +110,20 @@ async function bootstrap(): Promise<void> {
       syncPlaybackState();
     },
     onSeekStart: () => {
+      disposeTargetPreview();
       disposeManualPreview();
       player?.pause();
       syncPlaybackState();
     },
     onSeek: (time) => {
+      disposeTargetPreview();
       disposeManualPreview();
       player?.seek(time);
       syncPlaybackState();
     },
     onSegmentedStart: (advanced) => {
       if (!player) return;
+      disposeTargetPreview();
       disposeManualPreview();
       try {
         player.play({
@@ -135,7 +149,11 @@ async function bootstrap(): Promise<void> {
       }
     },
     onCyclicPreview: ({ ref, durationSeconds }) => {
+      disposeTargetPreview();
       void runCyclicPreview(ref, durationSeconds);
+    },
+    onTargetPreview: (preview) => {
+      void runTargetPreview(preview);
     },
     onInsertBetweenGroups: (insertion) => {
       const currentPlayer = player;
@@ -374,6 +392,10 @@ async function bootstrap(): Promise<void> {
       controls.setTime(player.getTime());
       syncPlaybackState();
       inspectCyclicAnimations(player);
+      targetPreviewPool = playerPoolManager.getPool(player);
+      controls.setTargetAnimations(
+        targetPreviewPool.listParticleComboAnimations(),
+      );
     } catch (error) {
       nextPlayer?.destroy();
       nextApp.destroy({ removeView: true });
@@ -388,6 +410,7 @@ async function bootstrap(): Promise<void> {
   }
 
   function disposeActivePlayback(): void {
+    disposeTargetPreview();
     disposeManualPreview();
     disposeInsertedNode?.();
     disposeInsertedNode = null;
@@ -409,6 +432,10 @@ async function bootstrap(): Promise<void> {
     controls.setCyclicAnimations([]);
     controls.setCyclicState(null);
     controls.setCyclicError(null);
+    controls.setTargetAnimations([]);
+    controls.setTargetPreviewState(null, null);
+    controls.setTargetError(null);
+    targetPreviewPool = null;
   }
 
   function inspectCyclicAnimations(currentPlayer: VNIPlayer): void {
@@ -493,6 +520,68 @@ async function bootstrap(): Promise<void> {
     }
   }
 
+  async function runTargetPreview(preview: {
+    animation: {
+      readonly layerId: string;
+      readonly animationId: string;
+    };
+    target: { readonly x: number; readonly y: number };
+    timing:
+      | { readonly mode: "preserve-authored-speed" }
+      | {
+          readonly mode: "fixed-duration";
+          readonly durationSeconds: number;
+        };
+  }): Promise<void> {
+    const currentPlayer = player;
+    const currentPool = targetPreviewPool;
+    if (!currentPlayer || !currentPool) return;
+    disposeTargetPreview();
+    disposeManualPreview();
+    const token = ++targetPreviewToken;
+    currentPlayer.pause();
+    currentPlayer.seek(0);
+    currentPlayer.getDisplayObject().visible = false;
+    controls.setTargetError(null);
+    try {
+      const lease = await currentPool.acquire(preview);
+      if (
+        token !== targetPreviewToken ||
+        currentPlayer !== player ||
+        currentPool !== targetPreviewPool
+      ) {
+        lease.release();
+        return;
+      }
+      targetPreviewLease = lease;
+      controls.setTargetPreviewState(lease.timing, currentPool.getStats());
+      await lease.playOnce();
+      if (
+        token !== targetPreviewToken ||
+        currentPlayer !== player ||
+        currentPool !== targetPreviewPool
+      ) {
+        return;
+      }
+      targetPreviewLease = null;
+      currentPlayer.getDisplayObject().visible = true;
+      currentPlayer.seek(0);
+      controls.setTargetPreviewState(lease.timing, currentPool.getStats());
+    } catch (error) {
+      if (
+        token === targetPreviewToken &&
+        currentPlayer === player &&
+        currentPool === targetPreviewPool
+      ) {
+        targetPreviewLease = null;
+        currentPlayer.getDisplayObject().visible = true;
+        currentPlayer.seek(0);
+        controls.setTargetError(getErrorMessage(error));
+        controls.setTargetPreviewState(null, currentPool.getStats());
+      }
+    }
+  }
+
   function assertCurrentManualPreview(
     token: number,
     currentPlayer: VNIPlayer,
@@ -514,6 +603,25 @@ async function bootstrap(): Promise<void> {
     manualPreviewSession?.destroy();
     manualPreviewSession = null;
     controls.setCyclicState(null);
+  }
+
+  function disposeTargetPreview(): void {
+    const hadPreview =
+      targetPreviewLease !== null ||
+      player?.getDisplayObject().visible === false;
+    targetPreviewToken += 1;
+    targetPreviewLease?.release();
+    targetPreviewLease = null;
+    if (player && hadPreview) {
+      player.getDisplayObject().visible = true;
+      player.seek(0);
+    }
+    if (hadPreview) {
+      controls.setTargetPreviewState(
+        null,
+        targetPreviewPool?.getStats() ?? null,
+      );
+    }
   }
 
   function clearTextReplacement(): void {
@@ -551,9 +659,16 @@ async function bootstrap(): Promise<void> {
   }
 
   setStageCanvasScaleIndex(stageCanvasScaleIndex);
-  window.addEventListener("beforeunload", disposeActivePlayback, {
-    once: true,
-  });
+  window.addEventListener(
+    "beforeunload",
+    () => {
+      disposeActivePlayback();
+      playerPoolManager.destroy();
+    },
+    {
+      once: true,
+    },
+  );
 
   function applyStageCanvasViewport(
     app: Application,

@@ -47,6 +47,14 @@ carrier 数量和 identity 固定。`setInitialItems()` 接受已校验 project 
 
 ## core 函数
 
+- `listVNIParticleComboTargetAnimations(project)`：列出启用的
+  `particle_combo` 及其 authored target、名义距离、时长、速度和播放区间。
+- `createVNIParticleComboTargetVariant(options)`：按精确
+  `layerId + animationId` 创建不修改输入的 fresh project。默认
+  `preserve-authored-speed`；也可传
+  `{ mode: "fixed-duration", durationSeconds }`。返回 authored/effective
+  target、distance、duration、speed 和可直接传给 `playRange()` 的 time
+  range。target 是 layer-local VNI offset，不是 Pixi 坐标。
 - `assertVNIProject(value)`: 结构断言并返回 `VNIProjectConfig`。
 - `validateVNIProject(project)`: 验证 schema、stage、asset、layer、animation 和 export profile 契约。
 - `assertVNIBundleManifest(value)` / `validateVNIBundleManifest(manifest)`: bundle manifest 断言和验证。
@@ -80,6 +88,20 @@ carrier 数量和 identity 固定。`setInitialItems()` 接受已校验 project 
 - `resolveProjectAssetUrls(project, manifest)`: 从 manifest 中解析 project 需要的所有 asset URL。
 
 ## Pixi player
+
+`VNIPlayerPoolManager` 是显式生命周期对象。`getPool(template)` 对每个已
+初始化模板返回唯一 pool；同一模板不能同时属于两个活跃 manager。pool 的
+`acquire({ animation, target, timing })` 返回
+`VNIParticleComboPlayerLease`：
+
+- `lease.player` 是共享已加载 texture、但拥有独立 mutable runtime/tree 的 clone；
+- `lease.timing` 是此次变体的完整 timing descriptor；
+- `lease.playOnce()` 播放返回 range，并在视觉完成后自动归还；
+- 手工控制 `lease.player` 时必须在 `finally` 调用幂等 `lease.release()`。
+
+归还会恢复 authored target/duration、重算 particle drain 时长、清除 transport、
+listener 和 mounted state，并在进入 idle 前 detach。manager/template destroy 会
+清理 idle 与 active clone。`maxIdleInstancesPerPlayer` 必须是有限的非负整数。
 
 `VNIPlayer` stable public methods:
 

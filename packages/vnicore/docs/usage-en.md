@@ -242,6 +242,39 @@ export function resolveAssetUrls(project: VNIProjectConfig): AssetUrlManifest {
 `resolveProjectAssetUrls(project, manifest)` fails when a required
 `asset.path` is missing from the manifest.
 
+## Runtime particle_combo Targets And Pooling
+
+After the template player is initialized, create an explicit manager and borrow
+from that template's unique pool:
+
+```ts
+const manager = new VNIPlayerPoolManager({
+  maxIdleInstancesPerPlayer: 2,
+});
+const pool = manager.getPool(player);
+const lease = await pool.acquire({
+  animation: { layerId: "particle", animationId: "combo" },
+  target: { x: 900, y: 0 },
+  timing: { mode: "preserve-authored-speed" },
+});
+
+console.log(lease.timing.effectiveDurationSeconds);
+await lease.playOnce(); // automatically returned on visual completion
+manager.destroy();
+```
+
+The target is a layer-local VNI offset. Automatic timing preserves the nominal
+speed derived from the authored target distance and duration; it does not claim
+constant per-particle arc speed across curves, random spawn, or stagger.
+`fixed-duration` uses a positive finite caller duration and reports the changed
+effective speed. Manual lease transport must call `release()` in `finally`.
+
+Clones share only already loaded source/derived textures. Their projects,
+display trees, transports, particles, and listeners are independent. Return
+restores authored target/duration and resets runtime state. The first version
+supports enabled `particle_combo` animations only and fails explicitly for
+unknown refs, unsupported types, automatic zero distances, or invalid numbers.
+
 ## Lifecycle
 
 - `init()`: loads textures, validates texture sizes, builds the Pixi display

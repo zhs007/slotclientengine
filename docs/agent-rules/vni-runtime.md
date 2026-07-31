@@ -17,6 +17,13 @@
 - basic tracks 先于 preset/particle stack；首尾帧与 editor 采用相同采样语义。
 - viewer/game runtime 不复制 pointsJson、轨迹、位移、角度、visibility、slice、停止规划、效果公式或 private Pixi display tree 操作。
 - editor preview 可接受的逐帧对象创建不得进入 runtime hot path；runtime 使用缓存和池化。
+- runtime target variant 不得修改 authored template。`particle_combo` 首版只按
+  `layerId + animationId` 修改 layer-local target，并从 authored target/duration
+  计算名义速度；fixed duration 必须显式配置。
+- loaded player clone 可共享只读 texture 资源，但不得共享 project、transport、
+  particle、listener 或 display tree 等 mutable state。
+- player pool 必须一 template 一 pool，由显式 manager 统一拥有；归还前恢复
+  authored 参数、重算 duration-dependent cache、清除 lease state 并 detach。
 
 ## Display semantics
 

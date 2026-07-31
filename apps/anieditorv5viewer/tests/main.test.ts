@@ -7,6 +7,7 @@ import { createFixtureZip } from "./fixture-zips";
 const playerMock = vi.hoisted(() => {
   const instances: MockVNIPlayer[] = [];
   const manualCallOrder: string[] = [];
+  const poolAcquires: unknown[] = [];
   const uiTestSlot = {
     afterGroupId: "group_back",
     afterGroupName: "Back",
@@ -41,6 +42,8 @@ const playerMock = vi.hoisted(() => {
     readonly attachTextToTextLayer = vi.fn(() => this.textBinding);
     readonly attachImageToTextLayer = vi.fn(async () => vi.fn());
     readonly clearMountedNodes = vi.fn();
+    readonly displayObject = { visible: true };
+    readonly getDisplayObject = vi.fn(() => this.displayObject);
     readonly manualSessions: MockManualSession[] = [];
     readonly createManualPlaybackSession = vi.fn(() => {
       const session = new MockManualSession(this.options);
@@ -173,6 +176,7 @@ const playerMock = vi.hoisted(() => {
                 enabled: boolean;
                 type: string;
                 startTime: number;
+                duration: number;
                 params: Record<string, unknown>;
               }>;
             }>;
@@ -181,6 +185,130 @@ const playerMock = vi.hoisted(() => {
       ).project;
     }
     return null;
+  }
+
+  class MockPool {
+    private active = 0;
+    private idle = 0;
+    private created = 0;
+    private reused = 0;
+
+    constructor(readonly template: MockVNIPlayer) {}
+
+    readonly listParticleComboAnimations = vi.fn(() => {
+      const project = getMockProject(this.template.options);
+      return (
+        project?.layers.flatMap((layer) =>
+          layer.animations
+            .filter(
+              (animation) =>
+                animation.enabled && animation.type === "particle_combo",
+            )
+            .map((animation) => {
+              const x = Number(animation.params.targetX);
+              const y = Number(animation.params.targetY);
+              const distance = Math.hypot(x, y);
+              return {
+                layerId: layer.id,
+                animationId: animation.id,
+                layerName: layer.name,
+                animationName: animation.name ?? animation.id,
+                target: { x, y },
+                distance,
+                durationSeconds: animation.duration,
+                speed: distance / animation.duration,
+                startTime: animation.startTime,
+                endTime: animation.startTime + animation.duration,
+              };
+            }),
+        ) ?? []
+      );
+    });
+
+    readonly getStats = vi.fn(() => ({
+      active: this.active,
+      idle: this.idle,
+      created: this.created,
+      reused: this.reused,
+    }));
+
+    readonly acquire = vi.fn(
+      async (options: {
+        target: { x: number; y: number };
+        timing:
+          | { mode: "preserve-authored-speed" }
+          | { mode: "fixed-duration"; durationSeconds: number };
+      }) => {
+        poolAcquires.push(options);
+        const descriptor = this.listParticleComboAnimations()[0];
+        const effectiveDistance = Math.hypot(
+          options.target.x,
+          options.target.y,
+        );
+        const duration =
+          options.timing.mode === "fixed-duration"
+            ? options.timing.durationSeconds
+            : effectiveDistance / descriptor.speed;
+        if (this.idle > 0) {
+          this.idle -= 1;
+          this.reused += 1;
+        } else {
+          this.created += 1;
+        }
+        this.active += 1;
+        let released = false;
+        const release = () => {
+          if (released) return;
+          released = true;
+          this.active -= 1;
+          this.idle += 1;
+        };
+        return {
+          player: this.template,
+          timing: {
+            mode: options.timing.mode,
+            authoredTarget: descriptor.target,
+            effectiveTarget: options.target,
+            authoredDistance: descriptor.distance,
+            effectiveDistance,
+            authoredDurationSeconds: descriptor.durationSeconds,
+            effectiveDurationSeconds: duration,
+            authoredSpeed: descriptor.speed,
+            effectiveSpeed: effectiveDistance / duration,
+            startTime: descriptor.startTime,
+            endTime: descriptor.startTime + duration,
+            range: {
+              unit: "time" as const,
+              start: descriptor.startTime,
+              end: descriptor.startTime + duration,
+            },
+          },
+          playOnce: async () => {
+            release();
+            return {
+              startTime: descriptor.startTime,
+              endTime: descriptor.startTime + duration,
+              currentTime: descriptor.startTime + duration,
+              loopIndex: 0,
+            };
+          },
+          release,
+        };
+      },
+    );
+  }
+
+  class MockVNIPlayerPoolManager {
+    readonly pools = new Map<MockVNIPlayer, MockPool>();
+    readonly destroy = vi.fn();
+
+    getPool(template: MockVNIPlayer): MockPool {
+      const existing = this.pools.get(template);
+      if (existing) return existing;
+      const pool = new MockPool(template);
+      this.pools.set(template, pool);
+      return pool;
+    }
   }
 
   function getMockDescriptor(options: unknown) {
@@ -212,7 +340,13 @@ const playerMock = vi.hoisted(() => {
     };
   }
 
-  return { instances, manualCallOrder, MockVNIPlayer };
+  return {
+    instances,
+    manualCallOrder,
+    poolAcquires,
+    MockVNIPlayer,
+    MockVNIPlayerPoolManager,
+  };
 });
 
 const pixiMock = vi.hoisted(() => {
@@ -242,6 +376,7 @@ const pixiMock = vi.hoisted(() => {
 
 vi.mock("@slotclientengine/vnicore/pixi", () => ({
   VNIPlayer: playerMock.MockVNIPlayer,
+  VNIPlayerPoolManager: playerMock.MockVNIPlayerPoolManager,
 }));
 
 vi.mock("pixi.js", () => ({
@@ -253,6 +388,7 @@ afterEach(() => {
   document.body.innerHTML = "";
   playerMock.instances.length = 0;
   playerMock.manualCallOrder.length = 0;
+  playerMock.poolAcquires.length = 0;
   pixiMock.instances.length = 0;
 });
 
@@ -270,7 +406,7 @@ describe("anieditorv5viewer main", () => {
     ).toBe(true);
   });
 
-  it("uses four accessible tabs with keyboard navigation and switches to playback after load", async () => {
+  it("uses five accessible tabs with keyboard navigation and switches to playback after load", async () => {
     await mountViewer();
     const tabs = [
       ...document.querySelectorAll<HTMLButtonElement>('[role="tab"]'),
@@ -278,11 +414,13 @@ describe("anieditorv5viewer main", () => {
     expect(tabs.map((tab) => tab.textContent)).toEqual([
       "项目",
       "播放",
+      "目标预览",
       "组间插入",
       "文字替换",
     ]);
     expect(tabs.map((tab) => tab.getAttribute("aria-selected"))).toEqual([
       "true",
+      "false",
       "false",
       "false",
       "false",
@@ -298,16 +436,16 @@ describe("anieditorv5viewer main", () => {
     tabs[0].dispatchEvent(
       new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }),
     );
-    expect(document.activeElement).toBe(tabs[3]);
-    tabs[3].dispatchEvent(
+    expect(document.activeElement).toBe(tabs[4]);
+    tabs[4].dispatchEvent(
       new KeyboardEvent("keydown", { key: "Home", bubbles: true }),
     );
     expect(document.activeElement).toBe(tabs[0]);
     tabs[0].dispatchEvent(
       new KeyboardEvent("keydown", { key: "End", bubbles: true }),
     );
-    expect(document.activeElement).toBe(tabs[3]);
-    tabs[3].dispatchEvent(
+    expect(document.activeElement).toBe(tabs[4]);
+    tabs[4].dispatchEvent(
       new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
     );
     expect(document.activeElement).toBe(tabs[0]);
@@ -679,6 +817,66 @@ describe("anieditorv5viewer main", () => {
     });
   });
 
+  it("previews particle_combo targets with computed and fixed timing", async () => {
+    await mountViewer();
+    await uploadFile(createParticleComboFile());
+
+    const selector = document.querySelector<HTMLSelectElement>(
+      'select[aria-label="目标预览动画"]',
+    );
+    const targetX = document.querySelector<HTMLInputElement>(
+      'input[aria-label="目标预览 targetX"]',
+    );
+    const timingMode = document.querySelector<HTMLSelectElement>(
+      'select[aria-label="目标预览时间模式"]',
+    );
+    const fixedDuration = document.querySelector<HTMLInputElement>(
+      'input[aria-label="目标预览固定时长"]',
+    );
+    if (!selector || !targetX || !timingMode || !fixedDuration) {
+      throw new Error("Missing target preview controls.");
+    }
+    expect(selector.options).toHaveLength(1);
+    expect(selector.disabled).toBe(false);
+    expect(targetX.value).toBe("600");
+    expect(fixedDuration.disabled).toBe(true);
+    expect(
+      document.querySelector(".target-preview-descriptor")?.textContent,
+    ).toContain("duration 1.50s");
+
+    targetX.value = "1200";
+    targetX.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(
+      document.querySelector(".target-preview-descriptor")?.textContent,
+    ).toContain("duration 3.00s");
+
+    timingMode.value = "fixed-duration";
+    timingMode.dispatchEvent(new Event("change", { bubbles: true }));
+    fixedDuration.value = "2";
+    fixedDuration.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(fixedDuration.disabled).toBe(false);
+    expect(
+      document.querySelector(".target-preview-descriptor")?.textContent,
+    ).toContain("speed 600 units/s");
+
+    getButton("预览目标").click();
+    await flushAsync();
+    expect(playerMock.poolAcquires).toEqual([
+      {
+        animation: {
+          layerId: "layer_image",
+          animationId: "combo",
+        },
+        target: { x: 1200, y: 0 },
+        timing: { mode: "fixed-duration", durationSeconds: 2 },
+      },
+    ]);
+    expect(
+      document.querySelector(".target-preview-descriptor")?.textContent,
+    ).toContain("pool active 0, idle 1, created 1, reused 0");
+    expect(playerMock.instances[0].displayObject.visible).toBe(true);
+  });
+
   it("blocks invalid segmented times before calling runtime", async () => {
     await mountViewer();
     await uploadZipFile("megawin.zip");
@@ -920,6 +1118,49 @@ function createPrecomposeMaskFile(): File {
   });
   delete (project.layers[1] as { text?: string }).text;
   return createZipFile("precompose-mask.zip", project);
+}
+
+function createParticleComboFile(): File {
+  const project = createUiTestProject();
+  project.stage.duration = 2;
+  Object.assign(project.layers[0], {
+    animations: [
+      {
+        id: "combo",
+        name: "Particle Combo",
+        type: "particle_combo",
+        startTime: 0,
+        duration: 1.5,
+        enabled: true,
+        seed: 1,
+        params: {
+          count: 12,
+          size: 42,
+          sourceOpacity: 0,
+          spawnMode: 1,
+          spawnRadius: 90,
+          spawnRatio: 0.18,
+          targetX: 600,
+          targetY: 0,
+          travelMode: 1,
+          curve: 160,
+          orbitRadius: 80,
+          orbitTurns: 1,
+          orbitSpeed: 1,
+          orbitRatio: 0.35,
+          staggerRatio: 0.28,
+          trailCount: 4,
+          trailSpacing: 0.045,
+          trailFade: 0.55,
+          vanishMode: 1,
+          vanishRatio: 0.18,
+          flashScale: 1.6,
+          flashIntensity: 1.4,
+        },
+      },
+    ],
+  });
+  return createZipFile("particle-combo.zip", project);
 }
 
 function createVNI087File(): File {

@@ -270,6 +270,7 @@ vi.mock("pixi.js", () => ({
 }));
 
 import { VNIPlayer } from "../../src/pixi/vni-player";
+import { VNIPlayerPoolManager } from "../../src/pixi/vni-player-pool";
 import {
   applySampledLayerState,
   createLayerInstance,
@@ -856,7 +857,210 @@ async function createInitializedPlayer(
   return player;
 }
 
+function getRuntimeCombo(player: VNIPlayer) {
+  return player.getProjectSnapshot().layers[0].animations[0];
+}
+
 describe("VNIPlayer", () => {
+  it("reuses loaded particle_combo clones per template and restores authored values", async () => {
+    const assetLoadCount = pixiMock.assetsLoad.mock.calls.length;
+    const template = await createInitializedPlayer({ autoTick: false });
+    const manager = new VNIPlayerPoolManager({
+      maxIdleInstancesPerPlayer: 1,
+    });
+    const pool = manager.getPool(template);
+
+    expect(pool.listParticleComboAnimations()).toEqual([
+      expect.objectContaining({
+        layerId: "layer-a",
+        animationId: "combo",
+        target: { x: 320, y: 0 },
+        speed: 200,
+      }),
+    ]);
+
+    const first = await pool.acquire({
+      animation: { layerId: "layer-a", animationId: "combo" },
+      target: { x: 160, y: 0 },
+    });
+    expect(first.timing.effectiveDurationSeconds).toBe(0.8);
+    expect(getRuntimeCombo(first.player).params).toMatchObject({
+      targetX: 160,
+      targetY: 0,
+    });
+    expect(pixiMock.assetsLoad.mock.calls.length - assetLoadCount).toBe(2);
+    first.release();
+    expect(getRuntimeCombo(first.player).params).toMatchObject({
+      targetX: 320,
+      targetY: 0,
+    });
+    expect(pool.getStats()).toEqual({
+      active: 0,
+      idle: 1,
+      created: 1,
+      reused: 0,
+    });
+
+    const second = await pool.acquire({
+      animation: { layerId: "layer-a", animationId: "combo" },
+      target: { x: 640, y: 0 },
+      timing: { mode: "fixed-duration", durationSeconds: 1 },
+    });
+    expect(second.player).toBe(first.player);
+    expect(second.timing.effectiveSpeed).toBe(640);
+    expect(pool.getStats()).toEqual({
+      active: 1,
+      idle: 0,
+      created: 1,
+      reused: 1,
+    });
+    expect(pixiMock.assetsLoad.mock.calls.length - assetLoadCount).toBe(2);
+
+    second.release();
+    template.destroy();
+    expect(() => pool.getStats()).not.toThrow();
+    await expect(
+      pool.acquire({
+        animation: { layerId: "layer-a", animationId: "combo" },
+        target: { x: 1, y: 0 },
+      }),
+    ).rejects.toThrow("destroyed");
+    manager.destroy();
+  });
+
+  it("auto-releases playOnce leases and rejects early release safely", async () => {
+    const template = await createInitializedPlayer({ autoTick: false });
+    const manager = new VNIPlayerPoolManager();
+    const pool = manager.getPool(template);
+    const lease = await pool.acquire({
+      animation: { layerId: "layer-a", animationId: "combo" },
+      target: { x: 160, y: 0 },
+    });
+    const completed = lease.playOnce();
+    lease.player.update(0.8);
+    lease.player.update(0.8);
+    await expect(completed).resolves.toMatchObject({
+      startTime: 0,
+      endTime: 0.8,
+    });
+    expect(pool.getStats()).toMatchObject({ active: 0, idle: 1 });
+
+    const cancelled = await pool.acquire({
+      animation: { layerId: "layer-a", animationId: "combo" },
+      target: { x: 80, y: 0 },
+    });
+    const pending = cancelled.playOnce();
+    cancelled.release();
+    await expect(pending).rejects.toThrow("before playback completed");
+    expect(pool.getStats()).toMatchObject({ active: 0, idle: 1 });
+    manager.destroy();
+    template.destroy();
+  });
+
+  it("enforces one live pool manager per initialized template", async () => {
+    const template = await createInitializedPlayer({ autoTick: false });
+    const firstManager = new VNIPlayerPoolManager();
+    const secondManager = new VNIPlayerPoolManager();
+    const firstPool = firstManager.getPool(template);
+    expect(firstManager.getPool(template)).toBe(firstPool);
+    expect(() => secondManager.getPool(template)).toThrow(
+      "multiple live pool managers",
+    );
+
+    firstManager.destroy();
+    expect(() => secondManager.getPool(template)).not.toThrow();
+    secondManager.destroy();
+    template.destroy();
+  });
+
+  it("invalidates active leases when their template is destroyed", async () => {
+    const template = await createInitializedPlayer({ autoTick: false });
+    const manager = new VNIPlayerPoolManager();
+    const pool = manager.getPool(template);
+    const lease = await pool.acquire({
+      animation: { layerId: "layer-a", animationId: "combo" },
+      target: { x: 160, y: 0 },
+    });
+    const pending = lease.playOnce();
+
+    template.destroy();
+    await expect(pending).rejects.toThrow(
+      "pool was destroyed before playback completed",
+    );
+    expect(pool.getStats()).toMatchObject({ active: 0, idle: 0 });
+    lease.release();
+    manager.destroy();
+  });
+
+  it("rolls back clone init failures without publishing a pool entry", async () => {
+    const template = await createInitializedPlayer({ autoTick: false });
+    const manager = new VNIPlayerPoolManager();
+    const pool = manager.getPool(template);
+    const parent = template.getDisplayObject()
+      .parent as unknown as InstanceType<typeof pixiMock.MockContainer>;
+    const originalAddChild = parent.addChild.bind(parent);
+    parent.addChild = () => {
+      throw new Error("clone mount failed");
+    };
+
+    await expect(
+      pool.acquire({
+        animation: { layerId: "layer-a", animationId: "combo" },
+        target: { x: 160, y: 0 },
+      }),
+    ).rejects.toThrow("clone mount failed");
+    expect(pool.getStats()).toEqual({
+      active: 0,
+      idle: 0,
+      created: 0,
+      reused: 0,
+    });
+
+    parent.addChild = originalAddChild;
+    manager.destroy();
+    template.destroy();
+  });
+
+  it("ignores a stale completion after the clone is borrowed again", async () => {
+    const template = await createInitializedPlayer({ autoTick: false });
+    const manager = new VNIPlayerPoolManager();
+    const pool = manager.getPool(template);
+    const first = await pool.acquire({
+      animation: { layerId: "layer-a", animationId: "combo" },
+      target: { x: 160, y: 0 },
+    });
+    const pending = first.playOnce();
+    const internals = first.player as unknown as {
+      playbackCompleteListeners: Set<
+        (event: {
+          startTime: number;
+          endTime: number;
+          currentTime: number;
+          loopIndex: number;
+        }) => void
+      >;
+    };
+    const staleCompletion = [...internals.playbackCompleteListeners][0];
+    first.release();
+    await expect(pending).rejects.toThrow("before playback completed");
+
+    const second = await pool.acquire({
+      animation: { layerId: "layer-a", animationId: "combo" },
+      target: { x: 640, y: 0 },
+    });
+    staleCompletion({
+      startTime: 0,
+      endTime: 0.8,
+      currentTime: 0.8,
+      loopIndex: 0,
+    });
+    expect(pool.getStats()).toMatchObject({ active: 1, idle: 0 });
+
+    second.release();
+    manager.destroy();
+    template.destroy();
+  });
+
   it("runs manual intro, arbitrary continuous wait, authored selection, and dynamic resolve", async () => {
     const player = await createInitializedPlayer({
       project: createCardCarouselProject(),

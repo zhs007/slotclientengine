@@ -1,8 +1,15 @@
 # anieditorv5viewer
 
-控制区使用“项目 / 播放 / 组间插入 / 文字替换”四个原生可访问 Tab。方向键在 Tab 间循环，Home/End 跳到首尾；切换 Tab 只改变配置可见性，不中断动画。控制区高度有界，active panel 内部滚动，预览 stage 保留主要空间。
+控制区使用“项目 / 播放 / 目标预览 / 组间插入 / 文字替换”五个原生可访问 Tab。方向键在 Tab 间循环，Home/End 跳到首尾；切换 Tab 只改变配置可见性，不中断动画。控制区高度有界，active panel 内部滚动，预览 stage 保留主要空间。
 
 “播放”Tab 的连续周期预览只枚举 public `cyclic-selection` capability。Viewer 从 public authored descriptor 取得默认慢速时长、intro/ending 和 authored target；一次“自动预览”依次执行 intro、连续阶段、authored selection、resolve 和 ending。慢速时长只改变运动路径，`0`、更长等待都仍停在导出 authored target；Viewer 不提供确认、结束循环或可编辑 target。
+
+“目标预览”Tab 只列出 public API 发现的启用 `particle_combo`。targetX/targetY
+是 layer-local VNI offset；“保持原速度”根据 authored target/duration 返回新
+duration，“固定时长”采用输入时长并显示变化后的 speed。预览使用模板
+player 的独立 pool clone；播放完成自动归还并恢复 authored 参数。目标预览、
+普通播放和 manual 连续周期预览互斥，切 profile、重新上传或卸载会先释放
+lease，再销毁 pool/template。
 
 `apps/anieditorv5viewer` is a Vite + TypeScript viewer shell for uploaded VNI zip exports. It no longer bundles local animation JSON or copied image assets; playback starts only after the user selects a `.zip` file in the browser.
 

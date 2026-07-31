@@ -4,6 +4,7 @@ export * from "./animation-sampler.js";
 export * from "./basic-animation.js";
 export * from "./particle-sampler.js";
 export * from "./particle-runtime.js";
+export * from "./particle-combo-variant.js";
 export * from "./chaser-light-sampler.js";
 export * from "./card-carousel-3d.js";
 export * from "./cyclic-selection.js";

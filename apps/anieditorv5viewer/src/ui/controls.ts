@@ -1,13 +1,18 @@
 import type {
   VNILayerGroupSlot,
+  VNIParticleComboAnimationDescriptor,
+  VNIParticleComboTimingDescriptor,
+  VNIParticleComboTimingMode,
   VNIPlaybackRange,
   VNIPlaybackState,
   VNIProjectConfig,
 } from "@slotclientengine/vnicore/core";
+import { createVNIParticleComboTargetVariant } from "@slotclientengine/vnicore/core";
 import type {
   VNIAnimationRuntimeRef,
   VNICyclicAuthoredPreviewDescriptor,
   VNIManualPlaybackState,
+  VNIPlayerPoolStats,
 } from "@slotclientengine/vnicore/pixi";
 
 export interface ViewerControlsProfile {
@@ -62,6 +67,14 @@ export interface ViewerControlsOptions {
     ref: VNIAnimationRuntimeRef;
     durationSeconds: number;
   }) => void;
+  onTargetPreview: (options: {
+    animation: {
+      readonly layerId: string;
+      readonly animationId: string;
+    };
+    target: { readonly x: number; readonly y: number };
+    timing: VNIParticleComboTimingMode;
+  }) => void;
   onInsertBetweenGroups: (options: {
     assetPath: string;
     assetUrl: string;
@@ -96,6 +109,14 @@ export interface ViewerControls {
   setCyclicAnimations(options: readonly ViewerCyclicAnimationOption[]): void;
   setCyclicState(state: VNIManualPlaybackState | null): void;
   setCyclicError(message: string | null): void;
+  setTargetAnimations(
+    animations: readonly VNIParticleComboAnimationDescriptor[],
+  ): void;
+  setTargetPreviewState(
+    timing: VNIParticleComboTimingDescriptor | null,
+    stats: VNIPlayerPoolStats | null,
+  ): void;
+  setTargetError(message: string | null): void;
   setLayerGroupSlots(slots: readonly VNILayerGroupSlot[]): void;
   setInsertionError(message: string | null): void;
   setInsertedNodeActive(active: boolean): void;
@@ -118,6 +139,9 @@ export function createViewerControls(
   let insertedNodeActive = false;
   let textReplacementActive = false;
   let cyclicAnimations: readonly ViewerCyclicAnimationOption[] = [];
+  let targetAnimations: readonly VNIParticleComboAnimationDescriptor[] = [];
+  let targetPreviewTiming: VNIParticleComboTimingDescriptor | null = null;
+  let targetPoolStats: VNIPlayerPoolStats | null = null;
 
   const root = document.createElement("div");
   root.className = "viewer-controls";
@@ -314,6 +338,85 @@ export function createViewerControls(
     cyclicControls,
     cyclicDescriptor,
     cyclicError,
+  );
+
+  const targetPanel = document.createElement("section");
+  targetPanel.className = "target-preview-panel viewer-tab-panel";
+  targetPanel.setAttribute("aria-label", "目标预览");
+  const targetHeader = document.createElement("div");
+  targetHeader.className = "target-preview-header";
+  const targetTitle = document.createElement("strong");
+  targetTitle.textContent = "particle_combo 目标预览";
+  const targetStatus = document.createElement("span");
+  targetStatus.className = "target-preview-status";
+  targetStatus.textContent = "未加载";
+  targetHeader.append(targetTitle, targetStatus);
+  const targetControls = document.createElement("div");
+  targetControls.className = "target-preview-row";
+  const targetAnimationLabel = createFieldLabel(
+    "animation",
+    "target-preview-select",
+  );
+  const targetAnimationSelect = document.createElement("select");
+  targetAnimationSelect.setAttribute("aria-label", "目标预览动画");
+  targetAnimationLabel.appendChild(targetAnimationSelect);
+  const targetXLabel = createFieldLabel("targetX", "target-preview-number");
+  const targetXInput = document.createElement("input");
+  targetXInput.type = "number";
+  targetXInput.step = "1";
+  targetXInput.setAttribute("aria-label", "目标预览 targetX");
+  targetXLabel.appendChild(targetXInput);
+  const targetYLabel = createFieldLabel("targetY", "target-preview-number");
+  const targetYInput = document.createElement("input");
+  targetYInput.type = "number";
+  targetYInput.step = "1";
+  targetYInput.setAttribute("aria-label", "目标预览 targetY");
+  targetYLabel.appendChild(targetYInput);
+  const targetTimingLabel = createFieldLabel("timing", "target-preview-select");
+  const targetTimingSelect = document.createElement("select");
+  targetTimingSelect.setAttribute("aria-label", "目标预览时间模式");
+  for (const [value, label] of [
+    ["preserve-authored-speed", "保持原速度"],
+    ["fixed-duration", "固定时长"],
+  ] as const) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    targetTimingSelect.appendChild(option);
+  }
+  targetTimingLabel.appendChild(targetTimingSelect);
+  const targetDurationLabel = createFieldLabel(
+    "duration",
+    "target-preview-number",
+  );
+  const targetDurationInput = document.createElement("input");
+  targetDurationInput.type = "number";
+  targetDurationInput.min = "0";
+  targetDurationInput.step = "0.1";
+  targetDurationInput.setAttribute("aria-label", "目标预览固定时长");
+  targetDurationLabel.appendChild(targetDurationInput);
+  const targetPreviewButton = document.createElement("button");
+  targetPreviewButton.type = "button";
+  targetPreviewButton.className = "control-button primary";
+  targetPreviewButton.textContent = "预览目标";
+  const targetDescriptor = document.createElement("div");
+  targetDescriptor.className = "target-preview-descriptor";
+  const targetError = document.createElement("div");
+  targetError.className = "target-preview-error";
+  targetError.setAttribute("role", "status");
+  targetControls.append(
+    targetAnimationLabel,
+    targetXLabel,
+    targetYLabel,
+    targetTimingLabel,
+    targetDurationLabel,
+    targetPreviewButton,
+  );
+  targetPanel.append(
+    targetHeader,
+    targetControls,
+    targetDescriptor,
+    targetError,
   );
 
   const insertionPanel = document.createElement("section");
@@ -536,6 +639,27 @@ export function createViewerControls(
     setCyclicError(null);
     options.onCyclicPreview(parsed);
   });
+  targetAnimationSelect.addEventListener("change", () => {
+    applySelectedTargetDefaults();
+    updateTargetPreviewValidation();
+  });
+  targetTimingSelect.addEventListener("change", updateTargetPreviewValidation);
+  targetXInput.addEventListener("input", updateTargetPreviewValidation);
+  targetYInput.addEventListener("input", updateTargetPreviewValidation);
+  targetDurationInput.addEventListener("input", updateTargetPreviewValidation);
+  targetPreviewButton.addEventListener("click", () => {
+    const parsed = parseTargetPreviewInputs();
+    if (!parsed.ok) {
+      setTargetError(parsed.message);
+      return;
+    }
+    setTargetError(null);
+    options.onTargetPreview({
+      animation: parsed.animation,
+      target: parsed.target,
+      timing: parsed.timing,
+    });
+  });
 
   controls.append(playButton, restartButton, loopLabel, timeText, range);
   const projectPanel = document.createElement("section");
@@ -555,6 +679,7 @@ export function createViewerControls(
   const tabDefinitions = [
     { key: "project", label: "项目", panel: projectPanel },
     { key: "playback", label: "播放", panel: playPanel },
+    { key: "target", label: "目标预览", panel: targetPanel },
     { key: "insertion", label: "组间插入", panel: insertionPanel },
     { key: "text", label: "文字替换", panel: textPanel },
   ] as const;
@@ -658,6 +783,19 @@ export function createViewerControls(
     setCyclicError(message): void {
       setCyclicError(message);
     },
+    setTargetAnimations(next): void {
+      targetAnimations = [...next];
+      renderTargetAnimations();
+    },
+    setTargetPreviewState(timing, stats): void {
+      targetPreviewTiming = timing;
+      targetPoolStats = stats;
+      targetStatus.textContent = timing ? "播放完成" : "就绪";
+      renderTargetDescriptor();
+    },
+    setTargetError(message): void {
+      setTargetError(message);
+    },
     setLayerGroupSlots(slots: readonly VNILayerGroupSlot[]): void {
       currentLayerGroupSlots = [...slots];
       renderInsertionSlots();
@@ -697,6 +835,10 @@ export function createViewerControls(
     resetTextReplacementDefaults(null);
     cyclicAnimations = [];
     renderCyclicAnimations();
+    targetAnimations = [];
+    targetPreviewTiming = null;
+    targetPoolStats = null;
+    renderTargetAnimations();
     renderSummary();
     updateLoadedControlAvailability();
   }
@@ -801,6 +943,162 @@ export function createViewerControls(
     updateInsertionControls();
     updateTextReplacementControls();
     updateCyclicValidation();
+    updateTargetPreviewValidation();
+  }
+
+  function renderTargetAnimations(): void {
+    targetAnimationSelect.replaceChildren();
+    if (targetAnimations.length === 0) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "无可修改的 particle_combo";
+      targetAnimationSelect.appendChild(option);
+      targetAnimationSelect.disabled = true;
+      targetXInput.value = "";
+      targetYInput.value = "";
+      targetDurationInput.value = "";
+      targetStatus.textContent = currentProject ? "不支持" : "未加载";
+    } else {
+      for (const animation of targetAnimations) {
+        const option = document.createElement("option");
+        option.value = getAnimationRefValue(animation);
+        option.textContent = `${animation.layerName} / ${animation.animationName}`;
+        targetAnimationSelect.appendChild(option);
+      }
+      targetAnimationSelect.disabled = false;
+      targetAnimationSelect.value = getAnimationRefValue(targetAnimations[0]);
+      targetStatus.textContent = "就绪";
+      applySelectedTargetDefaults();
+    }
+    targetPreviewTiming = null;
+    targetPoolStats = null;
+    setTargetError(null);
+    updateTargetPreviewValidation();
+  }
+
+  function applySelectedTargetDefaults(): void {
+    const selected = getSelectedTargetAnimation();
+    if (!selected) return;
+    targetXInput.value = String(selected.target.x);
+    targetYInput.value = String(selected.target.y);
+    targetDurationInput.value = String(selected.durationSeconds);
+  }
+
+  function getSelectedTargetAnimation():
+    | VNIParticleComboAnimationDescriptor
+    | undefined {
+    return targetAnimations.find(
+      (animation) =>
+        getAnimationRefValue(animation) === targetAnimationSelect.value,
+    );
+  }
+
+  function parseTargetPreviewInputs():
+    | {
+        ok: true;
+        animation: {
+          readonly layerId: string;
+          readonly animationId: string;
+        };
+        target: { readonly x: number; readonly y: number };
+        timing: VNIParticleComboTimingMode;
+      }
+    | { ok: false; message: string } {
+    const selected = getSelectedTargetAnimation();
+    if (!selected) {
+      return {
+        ok: false,
+        message:
+          targetAnimations.length === 0
+            ? "当前项目没有可修改的 particle_combo"
+            : "请选择 particle_combo animation",
+      };
+    }
+    if (!targetXInput.value.trim() || !targetYInput.value.trim()) {
+      return { ok: false, message: "targetX 和 targetY 必须是数字" };
+    }
+    const x = Number(targetXInput.value);
+    const y = Number(targetYInput.value);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      return { ok: false, message: "targetX 和 targetY 必须是有限数字" };
+    }
+    let timing: VNIParticleComboTimingMode;
+    if (targetTimingSelect.value === "preserve-authored-speed") {
+      timing = { mode: "preserve-authored-speed" };
+    } else if (targetTimingSelect.value === "fixed-duration") {
+      if (!targetDurationInput.value.trim()) {
+        return { ok: false, message: "固定时长必须是数字" };
+      }
+      const durationSeconds = Number(targetDurationInput.value);
+      if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+        return { ok: false, message: "固定时长必须是正有限数字" };
+      }
+      timing = { mode: "fixed-duration", durationSeconds };
+    } else {
+      return { ok: false, message: "未知目标预览时间模式" };
+    }
+    return {
+      ok: true,
+      animation: {
+        layerId: selected.layerId,
+        animationId: selected.animationId,
+      },
+      target: { x, y },
+      timing,
+    };
+  }
+
+  function updateTargetPreviewValidation(): void {
+    targetDurationInput.disabled =
+      targetTimingSelect.value !== "fixed-duration" ||
+      targetAnimations.length === 0;
+    const parsed = parseTargetPreviewInputs();
+    targetPreviewButton.disabled = !currentProject || !parsed.ok;
+    if (parsed.ok && currentProject) {
+      try {
+        targetPreviewTiming = createVNIParticleComboTargetVariant({
+          project: currentProject.project,
+          animation: parsed.animation,
+          target: parsed.target,
+          timing: parsed.timing,
+        }).timing;
+        setTargetError(null);
+      } catch (error) {
+        targetPreviewTiming = null;
+        targetPreviewButton.disabled = true;
+        setTargetError(getErrorMessage(error));
+      }
+    } else if (currentProject && targetAnimations.length > 0) {
+      targetPreviewTiming = null;
+      setTargetError(parsed.ok ? null : parsed.message);
+    } else {
+      setTargetError(null);
+    }
+    renderTargetDescriptor();
+  }
+
+  function renderTargetDescriptor(): void {
+    const timing = targetPreviewTiming;
+    if (!timing) {
+      targetDescriptor.textContent = "";
+      return;
+    }
+    const pool = targetPoolStats
+      ? `pool active ${targetPoolStats.active}, idle ${targetPoolStats.idle}, created ${targetPoolStats.created}, reused ${targetPoolStats.reused}`
+      : "pool 尚未借出";
+    targetDescriptor.textContent = [
+      `authored target (${formatNumber(timing.authoredTarget.x)}, ${formatNumber(timing.authoredTarget.y)})`,
+      `effective target (${formatNumber(timing.effectiveTarget.x)}, ${formatNumber(timing.effectiveTarget.y)})`,
+      `duration ${formatTime(timing.effectiveDurationSeconds)}s`,
+      `speed ${formatNumber(timing.effectiveSpeed)} units/s`,
+      `range ${formatPlaybackRange(timing.range)}`,
+      pool,
+    ].join(" · ");
+  }
+
+  function setTargetError(message: string | null): void {
+    targetError.textContent = message ?? "";
+    targetError.classList.toggle("is-visible", Boolean(message));
   }
 
   function selectTab(
@@ -1186,6 +1484,23 @@ function createSummaryStrong(value: string): HTMLElement {
   const element = document.createElement("strong");
   element.textContent = value;
   return element;
+}
+
+function createFieldLabel(text: string, className: string): HTMLLabelElement {
+  const label = document.createElement("label");
+  label.className = className;
+  const caption = document.createElement("span");
+  caption.textContent = text;
+  label.appendChild(caption);
+  return label;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function formatNumber(value: number): string {
+  return Number(value.toFixed(3)).toString();
 }
 
 function getAnimationRefValue(ref: VNIAnimationRuntimeRef): string {

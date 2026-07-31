@@ -462,6 +462,74 @@ select {
   display: block;
 }
 
+.target-preview-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.target-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #f5f7f4;
+}
+
+.target-preview-status {
+  color: #b8c7bf;
+  font-size: 13px;
+}
+
+.target-preview-row {
+  display: grid;
+  grid-template-columns:
+    minmax(220px, 1fr) minmax(110px, 140px) minmax(110px, 140px)
+    minmax(150px, 180px) minmax(120px, 150px) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.target-preview-select,
+.target-preview-number {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: #dbe5df;
+  font-size: 12px;
+}
+
+.target-preview-select select,
+.target-preview-number input {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  color: #f5f7f4;
+  background: #202622;
+  border: 1px solid rgba(216, 224, 216, 0.24);
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.target-preview-descriptor {
+  min-height: 34px;
+  color: #b8c7bf;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.target-preview-error {
+  display: none;
+  min-height: 18px;
+  color: #ffc9c9;
+  font-size: 12px;
+}
+
+.target-preview-error.is-visible {
+  display: block;
+}
+
 .group-insertion-panel {
   display: grid;
   gap: 10px;
@@ -676,6 +744,10 @@ select {
 
   .cyclic-control-row {
     grid-template-columns: 1fr;
+  }
+
+  .target-preview-row {
+    grid-template-columns: 1fr 1fr;
   }
 
   .keep-particles-toggle,
