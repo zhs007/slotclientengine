@@ -39,6 +39,7 @@ import {
   validateV5GProject,
 } from "../../src/core/validation";
 import { sampleProjectAtTime } from "../../src/core/project-sampler";
+import { normalizeIgnoreAuthoredSeed } from "../../src/core/playback-sequence";
 import { getSequenceFrameAssetId } from "../../src/core/sequence-layer";
 import { sampleSafeGlowSpritesForLayer } from "../../src/core/safe-glow-sampler";
 import { sampleChaserLightSpritesForLayer } from "../../src/core/chaser-light-sampler";
@@ -83,6 +84,20 @@ const fixtures = [
 const sampleTimes = [0, 0.1, 0.6, 0.8, 1, 2, 4, 4.4];
 
 describe("standalone runtime parity", () => {
+  it("matches modular authored seed playback normalization", () => {
+    expect(standalone.normalizeIgnoreAuthoredSeed({})).toBe(
+      normalizeIgnoreAuthoredSeed({}),
+    );
+    expect(
+      standalone.normalizeIgnoreAuthoredSeed({ ignoreAuthoredSeed: true }),
+    ).toBe(normalizeIgnoreAuthoredSeed({ ignoreAuthoredSeed: true }));
+    expect(() =>
+      standalone.normalizeIgnoreAuthoredSeed({
+        ignoreAuthoredSeed: 1,
+      } as never),
+    ).toThrow("ignoreAuthoredSeed must be a boolean");
+  });
+
   it("matches particle_combo target variant descriptors", () => {
     const project = assertV5GProject(multipayData);
     const [descriptor] = listVNIParticleComboTargetAnimations(project);

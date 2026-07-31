@@ -7,8 +7,12 @@ const standalonePath = fileURLToPath(
 const screenEffectPath = fileURLToPath(
   new URL("../standalone/effects/vni-screen-alpha.effect", import.meta.url),
 );
+const previewExamplePath = fileURLToPath(
+  new URL("../standalone/V5GPreview.example.ts", import.meta.url),
+);
 const source = readFileSync(standalonePath, "utf8");
 const screenEffectSource = readFileSync(screenEffectPath, "utf8");
+const previewExampleSource = readFileSync(previewExamplePath, "utf8");
 const violations = [];
 
 const importModules = [
@@ -94,6 +98,7 @@ const requiredExports = [
   "export interface VNIParticleComboTargetVariant",
   "export interface CreateVNIParticleComboTargetVariantOptions",
   "export interface V5GPlayRangeOptions",
+  "export interface V5GPlaybackSeedOptions",
   "export interface V5GSegmentedPlaybackOptions",
   "export interface V5GForceStopParticlesOptions",
   "export interface V5GSegmentedPlaybackEndOptions",
@@ -121,6 +126,7 @@ const requiredExports = [
   "export interface V5GCocosCyclicSelectionTransaction",
   "export interface V5GCocosCyclicAuthoredPreviewDescriptor",
   "export type V5GCocosPlaybackRange",
+  "export type V5GCocosPlaybackSeedOptions",
   "export type V5GCocosPlaybackPoint",
   "export type V5GCocosPlayRangeOptions",
   "export type V5GCocosPlaybackMode",
@@ -169,6 +175,7 @@ const requiredExports = [
   "export function listVNIParticleComboTargetAnimations",
   "export function createVNIParticleComboTargetVariant",
   "export function normalizeSegmentedPlaybackOptions",
+  "export function normalizeIgnoreAuthoredSeed",
   "export function hasActiveParticleAnimation",
   "export function opacityToCocosOpacity",
   "export function v5gTransformToCocosPosition",
@@ -233,6 +240,8 @@ const requiredSnippets = [
   "forceStopParticlesAfterSegmentEnd",
   "suppressParticleEmission",
   "forceStopParticles",
+  "ignoreAuthoredSeed?: boolean",
+  "createRuntimeSeededLayerViews",
   "emitPlaybackEventsAtBoundary",
   "dispatchPlaybackEvents",
   "card_carousel_3d",
@@ -270,6 +279,18 @@ if (screenEffectSource.includes("#if USE_TEXTURE")) {
   violations.push(
     "alpha-correct screen Effect must sample the Sprite texture without requiring a Material USE_TEXTURE define",
   );
+}
+
+const requiredPreviewExampleSnippets = [
+  "ignoreAuthoredSeed = false",
+  "ignoreAuthoredSeed: this.ignoreAuthoredSeed",
+  'mode: "range"',
+  'mode: "segmented"',
+];
+for (const expected of requiredPreviewExampleSnippets) {
+  if (!previewExampleSource.includes(expected)) {
+    violations.push(`missing standalone preview example snippet: ${expected}`);
+  }
 }
 
 if (violations.length > 0) {

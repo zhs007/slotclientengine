@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import threeReelMultipay01Data from "../fixtures/3reel_multipay_01.json";
 import threeReelMultipay02Data from "../fixtures/3reel_multipay_02.json";
 import lock01Data from "../fixtures/lock_01.json";
@@ -2980,6 +2980,79 @@ describe("V5GCocosPlayer", () => {
     expect(root.destroyed).toBe(false);
     expect(root.children).toHaveLength(0);
     expect(player.playing).toBe(false);
+  });
+
+  it("uses per-play runtime seeds without mutating authored Cocos projects", () => {
+    const project = tinyProject({
+      animations: [
+        particleWallAnimation(),
+        {
+          id: "wave",
+          type: "wave_distort",
+          startTime: 0,
+          duration: 1,
+          enabled: true,
+          seed: 17,
+          params: {
+            rows: 2,
+            amplitude: 12,
+            frequency: 2,
+            cycles: 1,
+            speed: 1,
+            phaseOffset: 0,
+            verticalBob: 0,
+            alpha: 1,
+            edgeFeather: 0,
+            keepOriginal: false,
+          },
+        },
+      ],
+    });
+    project.schemaVersion = "VNI_0.095";
+    project.editor.version = "VNI_0.095";
+    const { player } = makePlayer(project);
+    player.init();
+    const authoredSeeds = player
+      .getProjectSnapshot()
+      .layers[0].animations.map((animation) => animation.seed);
+    const random = vi.spyOn(Math, "random").mockReturnValueOnce(0.25);
+
+    try {
+      player.play({ ignoreAuthoredSeed: true });
+      const state = player as unknown as {
+        playbackSeedSessionActive: boolean;
+        playbackSamplingLayers: ReadonlyMap<string, V5GLayerConfig> | null;
+      };
+      const runtimeLayer = state.playbackSamplingLayers?.get("layer-1");
+      expect(state.playbackSeedSessionActive).toBe(true);
+      expect(
+        runtimeLayer?.animations.map((animation) => animation.seed),
+      ).not.toEqual(authoredSeeds);
+      expect(
+        player
+          .getProjectSnapshot()
+          .layers[0].animations.map((animation) => animation.seed),
+      ).toEqual(authoredSeeds);
+
+      player.seek(0.5);
+      const firstSessionSeeds = runtimeLayer?.animations.map(
+        (animation) => animation.seed,
+      );
+      player.pause();
+      player.play({ ignoreAuthoredSeed: false });
+      expect(
+        state.playbackSamplingLayers
+          ?.get("layer-1")
+          ?.animations.map((animation) => animation.seed),
+      ).toEqual(firstSessionSeeds);
+      expect(random).toHaveBeenCalledTimes(1);
+
+      player.resetForPoolReuse();
+      expect(state.playbackSeedSessionActive).toBe(false);
+      expect(state.playbackSamplingLayers).toBeNull();
+    } finally {
+      random.mockRestore();
+    }
   });
 
   it("pools particle_combo clones and restores authored state", async () => {

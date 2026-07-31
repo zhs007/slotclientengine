@@ -893,6 +893,14 @@ export interface V5GParticleRuntimeLayer {
   textureSize: TextureSize;
 }
 
+export interface V5GPlaybackSeedOptions {
+  /**
+   * Use a runtime-generated seed for this playback instead of animation seeds
+   * authored into the VNI project.
+   */
+  ignoreAuthoredSeed?: boolean;
+}
+
 export interface V5GPlaybackState {
   mode: V5GPlaybackMode;
   phase: V5GSegmentedPlaybackPhase;
@@ -929,7 +937,8 @@ export interface V5GProjectConfig {
   particles: V5GParticleConfig[];
 }
 
-export interface V5GRangePlayOptions extends V5GPlayRangeOptions {
+export interface V5GRangePlayOptions
+  extends V5GPlayRangeOptions, V5GPlaybackSeedOptions {
   mode: "range";
 }
 
@@ -945,7 +954,7 @@ export interface V5GSegmentedPlaybackEndOptions {
   forceStopParticles?: boolean;
 }
 
-export interface V5GSegmentedPlaybackOptions {
+export interface V5GSegmentedPlaybackOptions extends V5GPlaybackSeedOptions {
   mode: "segmented";
   loopStart: V5GPlaybackPoint;
   loopEnd: V5GPlaybackPoint;
@@ -991,7 +1000,7 @@ export interface V5GStageConfig {
   backgroundColor: string;
 }
 
-export interface V5GTimelinePlayOptions {
+export interface V5GTimelinePlayOptions extends V5GPlaybackSeedOptions {
   mode?: "timeline";
 }
 
@@ -1452,6 +1461,8 @@ export type V5GCocosPlaybackMode = V5GPlaybackMode;
 export type V5GCocosPlaybackPoint = V5GPlaybackPoint;
 
 export type V5GCocosPlaybackRange = V5GPlaybackRange;
+
+export type V5GCocosPlaybackSeedOptions = V5GPlaybackSeedOptions;
 
 export type V5GCocosPlaybackState = V5GPlaybackState;
 
@@ -8441,6 +8452,12 @@ function normalizeSegmentedPlaybackOptions(options, duration) {
         : true,
   };
 }
+function normalizeIgnoreAuthoredSeed(options) {
+  const value = options.ignoreAuthoredSeed;
+  if (value !== void 0 && typeof value !== "boolean")
+    throw new Error("V5G play ignoreAuthoredSeed must be a boolean.");
+  return value === true;
+}
 function assertPositiveFinite(value, path) {
   if (!Number.isFinite(value) || value <= 0)
     throw new Error(`${path} must be a positive finite number.`);
@@ -10620,6 +10637,8 @@ var V5GCocosPlayer = class V5GCocosPlayer {
     _defineProperty(this, "drainPaused", false);
     _defineProperty(this, "suppressParticleEmission", false);
     _defineProperty(this, "forceStopParticlesAfterSegmentEnd", false);
+    _defineProperty(this, "playbackSeedSessionActive", false);
+    _defineProperty(this, "playbackSamplingLayers", null);
     _defineProperty(this, "playbackEventIds", []);
     _defineProperty(this, "playbackEventTimes", []);
     _defineProperty(this, "playbackEventOnceFlags", []);
@@ -10684,6 +10703,7 @@ var V5GCocosPlayer = class V5GCocosPlayer {
     this.activeRange = null;
     this.segmentedPlayback = null;
     this.pendingComplete = null;
+    this.clearPlaybackSeedSession();
     this.clearPlaybackEventRecords();
     this.completeListeners.length = 0;
     this.loopIndex = 0;
@@ -11033,25 +11053,28 @@ var V5GCocosPlayer = class V5GCocosPlayer {
   }
   play(options) {
     this.assertLegacyTransportAvailable("play");
+    const ignoreAuthoredSeed = normalizeIgnoreAuthoredSeed(
+      options !== null && options !== void 0 ? options : {},
+    );
     if (
       (options === null || options === void 0 ? void 0 : options.mode) ===
       "range"
     ) {
-      this.startRangePlayback(options);
+      this.startRangePlayback(options, ignoreAuthoredSeed);
       return;
     }
     if (
       (options === null || options === void 0 ? void 0 : options.mode) ===
       "segmented"
     ) {
-      this.startSegmentedPlayback(options);
+      this.startSegmentedPlayback(options, ignoreAuthoredSeed);
       return;
     }
-    this.startTimelinePlayback();
+    this.startTimelinePlayback(ignoreAuthoredSeed);
   }
   playRange(options) {
     this.assertLegacyTransportAvailable("playRange");
-    this.startRangePlayback(options);
+    this.startRangePlayback(options, false);
   }
   requestSegmentedPlaybackEnd(options) {
     this.assertLegacyTransportAvailable("requestSegmentedPlaybackEnd");
@@ -11464,6 +11487,7 @@ var V5GCocosPlayer = class V5GCocosPlayer {
     this.activeRange = null;
     this.segmentedPlayback = null;
     this.pendingComplete = null;
+    this.clearPlaybackSeedSession();
     this.drainPaused = false;
     const session = new V5GCocosManualPlaybackSessionImpl(this);
     this.manualSession = session;
@@ -11610,6 +11634,7 @@ var V5GCocosPlayer = class V5GCocosPlayer {
     if (!this.manualRangeCompletion) return;
     this.manualRangeCompletion = null;
     this.pendingComplete = null;
+    this.clearPlaybackSeedSession();
     this.particleRuntime.reset();
     this.playbackPhase = "idle";
     this.drainPaused = false;
@@ -11662,6 +11687,7 @@ var V5GCocosPlayer = class V5GCocosPlayer {
     this.activeRange = null;
     this.segmentedPlayback = null;
     this.pendingComplete = null;
+    this.clearPlaybackSeedSession();
     this.clearPlaybackEventRecords();
     this.completeListeners.length = 0;
     this.loopIndex = 0;
@@ -11675,12 +11701,14 @@ var V5GCocosPlayer = class V5GCocosPlayer {
     this.playbackPhase = "idle";
     this.notifyDestroyListeners();
   }
-  startTimelinePlayback() {
+  startTimelinePlayback(ignoreAuthoredSeed) {
     this.assertInitialized();
     if (this.particleRuntime.isDraining()) {
       this.drainPaused = false;
       return;
     }
+    if (!this.playbackSeedSessionActive)
+      this.startPlaybackSeedSession(ignoreAuthoredSeed);
     this.activeRange = null;
     this.segmentedPlayback = null;
     this.pendingComplete = null;
@@ -11700,7 +11728,28 @@ var V5GCocosPlayer = class V5GCocosPlayer {
         loop: this.loop,
       });
   }
-  startRangePlayback(options) {
+  startPlaybackSeedSession(ignoreAuthoredSeed) {
+    this.playbackSeedSessionActive = true;
+    this.playbackSamplingLayers = ignoreAuthoredSeed
+      ? createRuntimeSeededLayerViews(this.options.project.layers)
+      : null;
+  }
+  clearPlaybackSeedSession() {
+    this.playbackSeedSessionActive = false;
+    this.playbackSamplingLayers = null;
+  }
+  getPlaybackSamplingLayer(layer) {
+    var _this$playbackSamplin, _this$playbackSamplin2;
+    return (_this$playbackSamplin =
+      (_this$playbackSamplin2 = this.playbackSamplingLayers) === null ||
+      _this$playbackSamplin2 === void 0
+        ? void 0
+        : _this$playbackSamplin2.get(layer.id)) !== null &&
+      _this$playbackSamplin !== void 0
+      ? _this$playbackSamplin
+      : layer;
+  }
+  startRangePlayback(options, ignoreAuthoredSeed) {
     var _options$loop2;
     this.assertInitialized();
     const range = this.normalizePlaybackRange(
@@ -11711,6 +11760,7 @@ var V5GCocosPlayer = class V5GCocosPlayer {
       (_options$loop2 = options.loop) !== null && _options$loop2 !== void 0
         ? _options$loop2
         : this.loop;
+    this.startPlaybackSeedSession(ignoreAuthoredSeed);
     this.activeRange = _objectSpread2(_objectSpread2({}, range), {}, { loop });
     this.segmentedPlayback = null;
     this.pendingComplete = null;
@@ -11729,12 +11779,13 @@ var V5GCocosPlayer = class V5GCocosPlayer {
       _objectSpread2(_objectSpread2({}, range), {}, { loop }),
     );
   }
-  startSegmentedPlayback(options) {
+  startSegmentedPlayback(options, ignoreAuthoredSeed) {
     this.assertInitialized();
     const normalized = normalizeSegmentedPlaybackOptions(
       options,
       this.options.project.stage.duration,
     );
+    this.startPlaybackSeedSession(ignoreAuthoredSeed);
     this.activeRange = null;
     this.pendingComplete = null;
     this.playbackMode = "segmented";
@@ -12000,6 +12051,7 @@ var V5GCocosPlayer = class V5GCocosPlayer {
       this.drainPaused = false;
       const event = this.pendingComplete;
       this.pendingComplete = null;
+      this.clearPlaybackSeedSession();
       const manualCompletion = this.manualRangeCompletion;
       this.manualRangeCompletion = null;
       if (event) this.emitPlaybackComplete(event);
@@ -12018,6 +12070,7 @@ var V5GCocosPlayer = class V5GCocosPlayer {
     this.clearParticles();
     const event = this.pendingComplete;
     this.pendingComplete = null;
+    this.clearPlaybackSeedSession();
     const manualCompletion = this.manualRangeCompletion;
     this.manualRangeCompletion = null;
     if (event) this.emitPlaybackComplete(event);
@@ -12163,7 +12216,7 @@ var V5GCocosPlayer = class V5GCocosPlayer {
     }
     const textureSize = getExpectedSpriteFrameSize(managed.asset);
     const samples = sampleDeterministicEffectSpritesForLayer(
-      managed.layer,
+      this.getPlaybackSamplingLayer(managed.layer),
       sampledLayer,
       textureSize,
       time,
@@ -12800,7 +12853,7 @@ var V5GCocosPlayer = class V5GCocosPlayer {
           `V5G particle layer "${sampledLayer.layerId}" requires an image asset.`,
         );
       layers.push({
-        layer: managed.layer,
+        layer: this.getPlaybackSamplingLayer(managed.layer),
         sampledLayer,
         textureSize: {
           width: managed.asset.width,
@@ -13832,6 +13885,42 @@ function isSpriteAtlasAssetSource(source) {
 function getLayerGroupSlotKey(slot) {
   return `${slot.afterGroupId}\u0000${slot.beforeGroupId}`;
 }
+function createRuntimeSeededLayerViews(layers) {
+  const baseSeed = Math.floor(Math.random() * 4294967296) >>> 0;
+  const views = /* @__PURE__ */ new Map();
+  for (const layer of layers)
+    views.set(
+      layer.id,
+      _objectSpread2(
+        _objectSpread2({}, layer),
+        {},
+        {
+          animations: layer.animations.map((animation) =>
+            _objectSpread2(
+              _objectSpread2({}, animation),
+              {},
+              {
+                seed: deriveRuntimeAnimationSeed(
+                  baseSeed,
+                  layer.id,
+                  animation.id,
+                ),
+              },
+            ),
+          ),
+        },
+      ),
+    );
+  return views;
+}
+function deriveRuntimeAnimationSeed(baseSeed, layerId, animationId) {
+  let hash = 2166136261 ^ baseSeed;
+  for (const character of `${layerId}\u0000${animationId}`) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
 function normalizeMountedNodes(options) {
   if (options.node !== void 0 && options.nodes !== void 0)
     throw new Error(
@@ -14593,6 +14682,10 @@ const __standalone_normalizeSegmentedPlaybackOptions: (
   duration: number,
 ) => V5GNormalizedSegmentedPlayback = normalizeSegmentedPlaybackOptions;
 
+const __standalone_normalizeIgnoreAuthoredSeed: (
+  options: V5GPlaybackSeedOptions,
+) => boolean = normalizeIgnoreAuthoredSeed;
+
 const __standalone_assertPositiveFinite: (
   value: number,
   path: string,
@@ -14727,6 +14820,7 @@ export {
   __standalone_normalizePlaybackRange as normalizePlaybackRange,
   __standalone_normalizePlaybackPoint as normalizePlaybackPoint,
   __standalone_normalizeSegmentedPlaybackOptions as normalizeSegmentedPlaybackOptions,
+  __standalone_normalizeIgnoreAuthoredSeed as normalizeIgnoreAuthoredSeed,
   __standalone_assertPositiveFinite as assertPositiveFinite,
   V5GSegmentedPlaybackSequence,
   __standalone_sampleProjectAtTime as sampleProjectAtTime,

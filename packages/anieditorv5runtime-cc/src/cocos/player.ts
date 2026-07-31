@@ -42,6 +42,7 @@ import {
 } from "../core/layer-groups.js";
 import {
   V5GSegmentedPlaybackSequence,
+  normalizeIgnoreAuthoredSeed,
   normalizeSegmentedPlaybackOptions,
 } from "../core/playback-sequence.js";
 import { validateCocosV5GProject } from "../core/validation.js";
@@ -278,6 +279,9 @@ export class V5GCocosPlayer<
   private drainPaused = false;
   private suppressParticleEmission = false;
   private forceStopParticlesAfterSegmentEnd = false;
+  private playbackSeedSessionActive = false;
+  private playbackSamplingLayers: ReadonlyMap<string, V5GLayerConfig> | null =
+    null;
   private readonly playbackEventIds: string[] = [];
   private readonly playbackEventTimes: number[] = [];
   private readonly playbackEventOnceFlags: boolean[] = [];
@@ -357,6 +361,7 @@ export class V5GCocosPlayer<
     this.activeRange = null;
     this.segmentedPlayback = null;
     this.pendingComplete = null;
+    this.clearPlaybackSeedSession();
     this.clearPlaybackEventRecords();
     this.completeListeners.length = 0;
     this.loopIndex = 0;
@@ -714,20 +719,21 @@ export class V5GCocosPlayer<
 
   play(options?: V5GCocosPlayOptions): void {
     this.assertLegacyTransportAvailable("play");
+    const ignoreAuthoredSeed = normalizeIgnoreAuthoredSeed(options ?? {});
     if (options?.mode === "range") {
-      this.startRangePlayback(options);
+      this.startRangePlayback(options, ignoreAuthoredSeed);
       return;
     }
     if (options?.mode === "segmented") {
-      this.startSegmentedPlayback(options);
+      this.startSegmentedPlayback(options, ignoreAuthoredSeed);
       return;
     }
-    this.startTimelinePlayback();
+    this.startTimelinePlayback(ignoreAuthoredSeed);
   }
 
   playRange(options: V5GCocosPlayRangeOptions): void {
     this.assertLegacyTransportAvailable("playRange");
-    this.startRangePlayback(options);
+    this.startRangePlayback(options, false);
   }
 
   requestSegmentedPlaybackEnd(
@@ -1176,6 +1182,7 @@ export class V5GCocosPlayer<
     this.activeRange = null;
     this.segmentedPlayback = null;
     this.pendingComplete = null;
+    this.clearPlaybackSeedSession();
     this.drainPaused = false;
     const session = new V5GCocosManualPlaybackSessionImpl(this);
     this.manualSession = session;
@@ -1321,6 +1328,7 @@ export class V5GCocosPlayer<
     if (!this.manualRangeCompletion) return;
     this.manualRangeCompletion = null;
     this.pendingComplete = null;
+    this.clearPlaybackSeedSession();
     this.particleRuntime.reset();
     this.playbackPhase = "idle";
     this.drainPaused = false;
@@ -1376,6 +1384,7 @@ export class V5GCocosPlayer<
     this.activeRange = null;
     this.segmentedPlayback = null;
     this.pendingComplete = null;
+    this.clearPlaybackSeedSession();
     this.clearPlaybackEventRecords();
     this.completeListeners.length = 0;
     this.loopIndex = 0;
@@ -1390,11 +1399,14 @@ export class V5GCocosPlayer<
     this.notifyDestroyListeners();
   }
 
-  private startTimelinePlayback(): void {
+  private startTimelinePlayback(ignoreAuthoredSeed: boolean): void {
     this.assertInitialized();
     if (this.particleRuntime.isDraining()) {
       this.drainPaused = false;
       return;
+    }
+    if (!this.playbackSeedSessionActive) {
+      this.startPlaybackSeedSession(ignoreAuthoredSeed);
     }
     this.activeRange = null;
     this.segmentedPlayback = null;
@@ -1418,13 +1430,33 @@ export class V5GCocosPlayer<
     }
   }
 
-  private startRangePlayback(options: V5GCocosPlayRangeOptions): void {
+  private startPlaybackSeedSession(ignoreAuthoredSeed: boolean): void {
+    this.playbackSeedSessionActive = true;
+    this.playbackSamplingLayers = ignoreAuthoredSeed
+      ? createRuntimeSeededLayerViews(this.options.project.layers)
+      : null;
+  }
+
+  private clearPlaybackSeedSession(): void {
+    this.playbackSeedSessionActive = false;
+    this.playbackSamplingLayers = null;
+  }
+
+  private getPlaybackSamplingLayer(layer: V5GLayerConfig): V5GLayerConfig {
+    return this.playbackSamplingLayers?.get(layer.id) ?? layer;
+  }
+
+  private startRangePlayback(
+    options: V5GCocosPlayRangeOptions,
+    ignoreAuthoredSeed: boolean,
+  ): void {
     this.assertInitialized();
     const range = this.normalizePlaybackRange(
       options.range,
       "V5GCocosPlayer.playRange",
     );
     const loop = options.loop ?? this.loop;
+    this.startPlaybackSeedSession(ignoreAuthoredSeed);
     this.activeRange = {
       ...range,
       loop,
@@ -1448,12 +1480,14 @@ export class V5GCocosPlayer<
 
   private startSegmentedPlayback(
     options: Extract<V5GCocosPlayOptions, { mode: "segmented" }>,
+    ignoreAuthoredSeed: boolean,
   ): void {
     this.assertInitialized();
     const normalized = normalizeSegmentedPlaybackOptions(
       options,
       this.options.project.stage.duration,
     );
+    this.startPlaybackSeedSession(ignoreAuthoredSeed);
     this.activeRange = null;
     this.pendingComplete = null;
     this.playbackMode = "segmented";
@@ -1736,6 +1770,7 @@ export class V5GCocosPlayer<
       this.drainPaused = false;
       const event = this.pendingComplete;
       this.pendingComplete = null;
+      this.clearPlaybackSeedSession();
       const manualCompletion = this.manualRangeCompletion;
       this.manualRangeCompletion = null;
       if (event) {
@@ -1752,6 +1787,7 @@ export class V5GCocosPlayer<
     this.clearParticles();
     const event = this.pendingComplete;
     this.pendingComplete = null;
+    this.clearPlaybackSeedSession();
     const manualCompletion = this.manualRangeCompletion;
     this.manualRangeCompletion = null;
     if (event) {
@@ -1909,7 +1945,7 @@ export class V5GCocosPlayer<
     }
     const textureSize = getExpectedSpriteFrameSize(managed.asset);
     const samples = sampleDeterministicEffectSpritesForLayer(
-      managed.layer,
+      this.getPlaybackSamplingLayer(managed.layer),
       sampledLayer,
       textureSize,
       time,
@@ -2610,7 +2646,7 @@ export class V5GCocosPlayer<
         );
       }
       layers.push({
-        layer: managed.layer,
+        layer: this.getPlaybackSamplingLayer(managed.layer),
         sampledLayer,
         textureSize: {
           width: managed.asset.width,
@@ -3815,6 +3851,36 @@ function isSpriteAtlasAssetSource<TSpriteFrame>(
 
 function getLayerGroupSlotKey(slot: VNILayerGroupSlot): string {
   return `${slot.afterGroupId}\u0000${slot.beforeGroupId}`;
+}
+
+function createRuntimeSeededLayerViews(
+  layers: readonly V5GLayerConfig[],
+): ReadonlyMap<string, V5GLayerConfig> {
+  const baseSeed = Math.floor(Math.random() * 0x1_0000_0000) >>> 0;
+  const views = new Map<string, V5GLayerConfig>();
+  for (const layer of layers) {
+    views.set(layer.id, {
+      ...layer,
+      animations: layer.animations.map((animation) => ({
+        ...animation,
+        seed: deriveRuntimeAnimationSeed(baseSeed, layer.id, animation.id),
+      })),
+    });
+  }
+  return views;
+}
+
+function deriveRuntimeAnimationSeed(
+  baseSeed: number,
+  layerId: string,
+  animationId: string,
+): number {
+  let hash = 2166136261 ^ baseSeed;
+  for (const character of `${layerId}\u0000${animationId}`) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
 }
 
 function normalizeMountedNodes<TNode>(

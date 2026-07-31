@@ -11,15 +11,24 @@ export interface V5GPlayRangeOptions {
   loop?: boolean;
 }
 
-export interface V5GTimelinePlayOptions {
+export interface V5GPlaybackSeedOptions {
+  /**
+   * Use a runtime-generated seed for this playback instead of animation seeds
+   * authored into the VNI project.
+   */
+  ignoreAuthoredSeed?: boolean;
+}
+
+export interface V5GTimelinePlayOptions extends V5GPlaybackSeedOptions {
   mode?: "timeline";
 }
 
-export interface V5GRangePlayOptions extends V5GPlayRangeOptions {
+export interface V5GRangePlayOptions
+  extends V5GPlayRangeOptions, V5GPlaybackSeedOptions {
   mode: "range";
 }
 
-export interface V5GSegmentedPlaybackOptions {
+export interface V5GSegmentedPlaybackOptions extends V5GPlaybackSeedOptions {
   mode: "segmented";
   loopStart: V5GPlaybackPoint;
   loopEnd: V5GPlaybackPoint;
@@ -281,6 +290,16 @@ export function normalizeSegmentedPlaybackOptions(
     duration,
     keepParticlesAlive: options.keepParticlesAlive ?? true,
   };
+}
+
+export function normalizeIgnoreAuthoredSeed(
+  options: V5GPlaybackSeedOptions,
+): boolean {
+  const value = options.ignoreAuthoredSeed;
+  if (value !== undefined && typeof value !== "boolean") {
+    throw new Error("V5G play ignoreAuthoredSeed must be a boolean.");
+  }
+  return value === true;
 }
 
 export function assertPositiveFinite(value: number, path: string): number {

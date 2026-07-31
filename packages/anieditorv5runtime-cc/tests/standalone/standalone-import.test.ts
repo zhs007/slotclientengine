@@ -9,9 +9,11 @@ import type {
   V5GCocosAssetSource,
   V5GCocosCyclicSelectionItem,
   V5GCocosForceStopParticlesOptions,
+  V5GCocosPlaybackSeedOptions,
   V5GCocosSegmentedPlaybackEndOptions,
   V5GCocosSpriteAtlasAssetSource,
   V5GForceStopParticlesOptions,
+  V5GPlaybackSeedOptions,
   V5GLayerConfig,
   V5GSegmentedPlaybackEndOptions,
   V5GTransformConfig,
@@ -71,6 +73,16 @@ describe("standalone runtime import", () => {
 
     expect(cocosForceStopOptions.suppressUntilNextPlayback).toBe(true);
     expect(cocosSegmentedEndOptions.forceStopParticles).toBe(true);
+  });
+
+  it("exports authored seed playback control types and normalizer", () => {
+    const seedOptions: V5GPlaybackSeedOptions = {
+      ignoreAuthoredSeed: true,
+    };
+    const cocosSeedOptions: V5GCocosPlaybackSeedOptions = seedOptions;
+
+    expect(runtime.normalizeIgnoreAuthoredSeed(cocosSeedOptions)).toBe(true);
+    expect(runtime.normalizeIgnoreAuthoredSeed({})).toBe(false);
   });
 
   it("exports the Cocos Node carrier contract", () => {
