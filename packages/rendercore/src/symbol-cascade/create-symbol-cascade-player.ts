@@ -62,6 +62,7 @@ interface SequentialExecutionPlan {
   readonly loopState: string;
   readonly collectState: string;
   readonly removeState: string;
+  readonly retainPrimaryPositionsAfterCollect: boolean;
 }
 
 type ExecutionPlan =
@@ -340,6 +341,13 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
       ) {
         return Object.freeze({ completed: false });
       }
+      if (plan.retainPrimaryPositionsAfterCollect) {
+        if (this.#itemIndex + 1 < plan.items.length) {
+          return this.startCollectItem(plan, this.#itemIndex + 1);
+        }
+        this.hideAmount(this.#index);
+        return this.startPlanAt(this.#index + 1);
+      }
       this.#options.target.requestVisibleSymbolStates(
         [item.context.position],
         plan.removeState,
@@ -449,6 +457,10 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
         snapshot.requestedState === "normal" &&
         snapshot.resolvedState === "normal"
       ) {
+        if (plan.retainPrimaryPositionsAfterCollect) {
+          if (runtime.incrementStarted) runtime.released = true;
+          continue;
+        }
         this.#options.target.requestVisibleSymbolStates(
           [item.context.position],
           plan.removeState,
@@ -718,6 +730,11 @@ function prepareLegacyExecutionPlans(
   return Object.freeze(
     groups.map((group, index) => {
       validateGroup(group, index);
+      if (group.retainPrimaryPositionsAfterCollect === true) {
+        throw new Error(
+          `symbol cascade legacy group ${index} cannot retain primary positions after collect.`,
+        );
+      }
       assertCapabilities(options, group.positions, "win", index);
       assertCapabilities(options, group.removePositions, "remove", index);
       return Object.freeze({
@@ -841,6 +858,11 @@ function prepareSummaryExecutionPlans(
       const group = Object.freeze({ ...entry.group, removePositions });
       const playback = entry.presentation.playback;
       if (playback.mode === "group") {
+        if (group.retainPrimaryPositionsAfterCollect === true) {
+          throw new Error(
+            `symbol cascade group ${sortedIndex} cannot retain primary positions without sequential collect playback.`,
+          );
+        }
         assertCapabilities(
           options,
           group.positions,
@@ -876,9 +898,17 @@ function prepareSummaryExecutionPlans(
         group.removePositions,
         `symbol cascade group ${sortedIndex} removePositions`,
       );
+      const retainPrimaryPositionsAfterCollect =
+        group.retainPrimaryPositionsAfterCollect === true;
+      if (retainPrimaryPositionsAfterCollect && removeKeys.size !== 0) {
+        throw new Error(
+          `symbol cascade sequential group ${sortedIndex} must not remove retained items.`,
+        );
+      }
       if (
-        primaryKeys.size !== removeKeys.size ||
-        [...primaryKeys].some((key) => !removeKeys.has(key))
+        !retainPrimaryPositionsAfterCollect &&
+        (primaryKeys.size !== removeKeys.size ||
+          [...primaryKeys].some((key) => !removeKeys.has(key)))
       ) {
         throw new Error(
           `symbol cascade sequential group ${sortedIndex} must remove every item.`,
@@ -963,6 +993,7 @@ function prepareSummaryExecutionPlans(
         loopState: playback.loopState,
         collectState: playback.collectState,
         removeState: playback.removeState,
+        retainPrimaryPositionsAfterCollect,
       }) satisfies SequentialExecutionPlan;
     }),
   );
@@ -977,6 +1008,14 @@ function validateGroup(group: SymbolCascadeGroup, index: number): void {
   if (!Number.isFinite(group.amount) || group.amount <= 0) {
     throw new Error(
       `symbol cascade group ${index} amount must be finite and positive.`,
+    );
+  }
+  if (
+    group.retainPrimaryPositionsAfterCollect !== undefined &&
+    typeof group.retainPrimaryPositionsAfterCollect !== "boolean"
+  ) {
+    throw new Error(
+      `symbol cascade group ${index} retainPrimaryPositionsAfterCollect must be boolean.`,
     );
   }
   const positionKeys = validatePositions(

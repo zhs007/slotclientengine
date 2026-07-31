@@ -203,6 +203,61 @@ describe("symbol cascade win summary collect", () => {
     player.destroy();
   });
 
+  it("retains sequential collect items when the group explicitly disables removal", () => {
+    const target = new StatefulTarget();
+    const player = createPlayer(target, {
+      sequentialCollectStartIntervalSeconds: 0.5,
+    });
+    const groups = createGroups().map((value) =>
+      value.resultIndex === 2
+        ? Object.freeze({
+            ...value,
+            removePositions: Object.freeze([]),
+            retainPrimaryPositionsAfterCollect: true,
+          })
+        : value,
+    );
+
+    player.start(player.prepare(groups));
+    target.completeOnceStates();
+    player.update(0.35);
+    target.completeOnceStates();
+    player.update(0);
+    target.completeOnceStates();
+    player.update(0.35);
+    target.completeOnceStates();
+    player.update(0);
+    target.completeOnceStates();
+    player.update(0);
+    player.update(0);
+
+    target.resolvePending({ x: 4, y: 0 });
+    player.update(0);
+    target.completeOnceStates();
+    player.update(0.35);
+    player.update(0.15);
+    target.resolvePending({ x: 5, y: 0 });
+    player.update(0);
+    target.completeOnceStates();
+    player.update(0.35);
+    player.update(0.15);
+    target.resolvePending({ x: 4, y: 1 });
+    player.update(0);
+    target.completeOnceStates();
+    player.update(0.35);
+
+    expect(player.getSnapshot()).toMatchObject({
+      phase: "complete",
+      summaryCurrentValue: 29,
+      summaryTargetValue: 29,
+      summaryCounting: false,
+    });
+    expect(target.requests).not.toContain("vanish:4,0");
+    expect(target.requests).not.toContain("vanish:5,0");
+    expect(target.requests).not.toContain("vanish:4,1");
+    expect(target.releases).toEqual(["0,0", "1,0"]);
+  });
+
   it("rejects missing presentations, item drift, bad sorting and capabilities", () => {
     const target = new StatefulTarget();
     const groups = createGroups();
@@ -238,6 +293,18 @@ describe("symbol cascade win summary collect", () => {
         sequentialCollectStartIntervalSeconds: 0,
       }),
     ).toThrow(/sequentialCollectStartIntervalSeconds/);
+    expect(() =>
+      createPlayer(target).prepare(
+        createGroups().map((value) =>
+          value.resultIndex === 2
+            ? {
+                ...value,
+                retainPrimaryPositionsAfterCollect: true,
+              }
+            : value,
+        ),
+      ),
+    ).toThrow(/must not remove retained items/);
   });
 });
 

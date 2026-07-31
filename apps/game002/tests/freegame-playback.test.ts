@@ -77,15 +77,13 @@ describe("game002 FreeGame playback", () => {
         groups: readonly {
           positions: readonly { x: number; y: number }[];
           removePositions: readonly { x: number; y: number }[];
+          retainPrimaryPositionsAfterCollect?: boolean;
         }[],
       ) => {
         expect(groups.length).toBeGreaterThan(0);
         for (const group of groups) {
-          const expectedCnPositions = group.positions.filter(
-            ({ x, y }) => plan.finalScene[x]?.[y] === CODES.CN,
-          );
-          expect(expectedCnPositions.length).toBeGreaterThan(0);
-          expect(group.removePositions).toEqual(expectedCnPositions);
+          expect(group.retainPrimaryPositionsAfterCollect).toBe(true);
+          expect(group.removePositions).toEqual([]);
         }
         expect(
           groups

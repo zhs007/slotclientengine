@@ -454,11 +454,6 @@ class DefaultGame002FreeGamePlayback implements Game002FreeGamePlayback {
     return Object.freeze(
       spin.winResults.map((result, resultIndex) => {
         const positions = parsePositions(result.pos, spin.outputScene);
-        const removePositions = Object.freeze(
-          positions.filter(
-            ({ x, y }) => spin.outputScene[x]?.[y] === this.#codes.CN,
-          ),
-        );
         const base = Object.freeze({
           componentName: "fg-win",
           stepIndex: spin.stepIndex,
@@ -474,7 +469,8 @@ class DefaultGame002FreeGamePlayback implements Game002FreeGamePlayback {
         });
         return Object.freeze({
           ...base,
-          removePositions,
+          removePositions: Object.freeze([]),
+          retainPrimaryPositionsAfterCollect: true,
         });
       }),
     );
