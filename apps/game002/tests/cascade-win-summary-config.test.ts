@@ -4,6 +4,7 @@ import {
   formatGame002CashSummary,
   resolveGame002WinResultCoinAmount,
   resolveGame002WinResultCashAmount,
+  resolveGame002WinResultMultiplier,
   sortGame002CascadeCollectItems,
 } from "../src/cascade-win-summary-config.js";
 
@@ -26,6 +27,13 @@ describe("game002 cascade win summary config", () => {
     expect(() => resolveCash({ cashWin: 1.5 })).toThrow(
       /positive safe integer/,
     );
+    expect(resolveMultiplier({ otherMul: 25 })).toBe(25);
+    expect(() => resolveMultiplier({})).toThrow(
+      /otherMul must be a positive safe integer/,
+    );
+    expect(() => resolveMultiplier({ otherMul: 0 })).toThrow(
+      /otherMul must be a positive safe integer/,
+    );
     expect(formatGame002CashSummary(290)).toBe("$2.90");
     expect(() => formatGame002CashSummary(0)).toThrow(/positive safe integer/);
   });
@@ -46,7 +54,12 @@ describe("game002 cascade win summary config", () => {
   });
 
   it("derives symbol/value/layout callbacks from the live reel runtime", () => {
-    const group = createGroup({ symbol: 8, coinWin64: 8, cashWin64: 80 });
+    const group = createGroup({
+      symbol: 8,
+      coinWin64: 200,
+      cashWin64: 2_000,
+      otherMul: 25,
+    });
     const runtime = {
       layerLayout: {
         rawReelsContentWidth: 720,
@@ -104,15 +117,16 @@ describe("game002 cascade win summary config", () => {
         symbol: "H1",
       }),
     ).toBe(false);
-    expect(options.resolveGroupAmount({ group, groupIndex: 0 })).toBe(80);
-    expect(options.resolveItemAmount(itemContext)).toBe(50);
+    expect(options.resolveGroupAmount({ group, groupIndex: 0 })).toBe(2_000);
+    expect(options.resolveItemAmount(itemContext)).toBe(1_250);
     expect(() =>
       options.resolveItemAmount({
         ...itemContext,
         group: createGroup({
           symbol: 8,
-          coinWin64: 8,
-          cashWin64: 81,
+          coinWin64: 200,
+          cashWin64: 2_001,
+          otherMul: 25,
         }),
       }),
     ).toThrow(/divide.*exactly/);
@@ -140,6 +154,13 @@ function resolveCash(result: Record<string, unknown>) {
   });
 }
 
+function resolveMultiplier(result: Record<string, unknown>) {
+  return resolveGame002WinResultMultiplier({
+    group: createGroup(result),
+    groupIndex: 0,
+  });
+}
+
 function createGroup(result: Record<string, unknown>) {
   return {
     componentName: "bg-win",
@@ -153,6 +174,10 @@ function createGroup(result: Record<string, unknown>) {
 }
 
 function context(position: { x: number; y: number }) {
-  const group = createGroup({ symbol: 8, coinWin64: 8 });
+  const group = createGroup({
+    symbol: 8,
+    coinWin64: 8,
+    otherMul: 1,
+  });
   return { group, groupIndex: 0, position, positionIndex: 0 };
 }

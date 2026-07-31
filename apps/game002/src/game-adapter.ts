@@ -56,9 +56,12 @@ import { createGame002WinAmountLayout } from "./win-amount-config.js";
 import { formatServerUsdAmount } from "./money.js";
 import { GAME002_SYMBOL_WIN_CAROUSEL_OPTIONS } from "./win-symbol-carousel-config.js";
 import { GAME002_CN_VALUE_SYMBOL } from "./cn-value-sequence.js";
-import { createGame002WinSummaryCollectOptions } from "./cascade-win-summary-config.js";
-import { resolveGame002WinResultCashAmount } from "./cascade-win-summary-config.js";
-import { resolveGame002WinResultCoinAmount } from "./cascade-win-summary-config.js";
+import {
+  createGame002WinSummaryCollectOptions,
+  resolveGame002WinResultCashAmount,
+  resolveGame002WinResultCoinAmount,
+  resolveGame002WinResultMultiplier,
+} from "./cascade-win-summary-config.js";
 import {
   createGame002CascadeSequence,
   type Game002CascadeSequence,
@@ -1948,6 +1951,13 @@ export function assertGame002CascadeResources(
         group,
         groupIndex,
       });
+      const resultMultiplier =
+        resultPresentation.playback.mode === "sequentialCollect"
+          ? resolveGame002WinResultMultiplier({
+              group,
+              groupIndex,
+            })
+          : undefined;
       let itemTotal = 0;
       let itemCashTotal = 0;
       const primaryPositionKeys = new Set<string>();
@@ -2008,6 +2018,11 @@ export function assertGame002CascadeResources(
           }
         }
         if (presentation.playback.mode === "sequentialCollect") {
+          if (resultMultiplier === undefined) {
+            throw new Error(
+              `game002 step[${stage.stepIndex}] sequential collect result multiplier is missing.`,
+            );
+          }
           const value = stage.sourceValues[position.x]?.[position.y];
           if (
             typeof value !== "number" ||
@@ -2019,7 +2034,7 @@ export function assertGame002CascadeResources(
             );
           }
           itemTotal += value;
-          const weightedCashAmount = value * groupCashAmount;
+          const weightedCashAmount = value * resultMultiplier * groupCashAmount;
           if (
             !Number.isSafeInteger(weightedCashAmount) ||
             weightedCashAmount % groupCoinAmount !== 0
@@ -2058,6 +2073,17 @@ export function assertGame002CascadeResources(
         }
       }
       if (resultPresentation.playback.mode === "sequentialCollect") {
+        if (resultMultiplier === undefined) {
+          throw new Error(
+            `game002 step[${stage.stepIndex}] sequential collect result multiplier is missing.`,
+          );
+        }
+        const multipliedItemTotal = itemTotal * resultMultiplier;
+        if (!Number.isSafeInteger(multipliedItemTotal)) {
+          throw new Error(
+            `game002 step[${stage.stepIndex}] multiplied collect item sum must be a safe integer.`,
+          );
+        }
         const removePositionKeys = new Set(
           group.removePositions.map(
             (position) => `${position.x},${position.y}`,
@@ -2073,9 +2099,9 @@ export function assertGame002CascadeResources(
             `game002 step[${stage.stepIndex}] sequential collect group must remove every primary item and no companion.`,
           );
         }
-        if (itemTotal !== groupCoinAmount) {
+        if (multipliedItemTotal !== groupCoinAmount) {
           throw new Error(
-            `game002 step[${stage.stepIndex}] collect item sum ${itemTotal} does not match result coin amount ${groupCoinAmount}.`,
+            `game002 step[${stage.stepIndex}] collect item sum ${itemTotal} multiplied by result otherMul ${resultMultiplier} does not match result coin amount ${groupCoinAmount}.`,
           );
         }
         if (itemCashTotal !== groupCashAmount) {

@@ -169,6 +169,39 @@ describe("game002 task 95 adapter", () => {
     ).not.toThrow();
   });
 
+  it("applies result otherMul to sequential CN collection totals", () => {
+    const multiplied = structuredClone(GAME002_CASCADE_GMI) as any;
+    const firstStep = multiplied.gmi.replyPlay.results[0];
+    const cnResult = firstStep.clientData.results[2];
+    cnResult.otherMul = 25;
+    cnResult.coinWin64 = 200;
+    cnResult.cashWin64 = 2_000;
+    firstStep.coinWin = 221;
+    firstStep.cashWin = 2_210;
+    const winComponent =
+      firstStep.clientData.curGameModParam.mapComponents["bg-win"];
+    winComponent.basicComponentData.coinWin = 221;
+    winComponent.basicComponentData.cashWin = 2_210;
+    winComponent.wins = 221;
+    multiplied.totalwin = 2_210;
+
+    const runtime = new FakeRuntime([]);
+    const sequence = createGame002CascadeSequence({
+      logic: createCascadeLogic(multiplied),
+      cnSymbolCode: 8,
+      canRemoveSymbol: ({ code }) => code !== 0,
+      canDropSymbol: ({ code }) => code !== 0,
+    });
+
+    expect(() =>
+      assertGame002CascadeResources(
+        sequence,
+        runtime.asRuntime(),
+        getTestGame002SkinConfig(),
+      ),
+    ).not.toThrow();
+  });
+
   it("captures CO and vortex source animation baselines as one batch", () => {
     const runtime = new FakeRuntime([]);
     const baselines = requestGame002TransformStates(runtime.asRuntime(), [
