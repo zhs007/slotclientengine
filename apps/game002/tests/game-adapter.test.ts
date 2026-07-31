@@ -353,6 +353,15 @@ describe("game002 task 95 adapter", () => {
       adapter.playSpin(createCascadeLogic(invalidCashShare)),
     ).toThrow(/cash share must divide.*exactly/);
     expect(runtime.spinTargets).toEqual([]);
+
+    const invalidComponentWin = structuredClone(GAME002_CASCADE_GMI) as any;
+    invalidComponentWin.gmi.replyPlay.results[0].clientData.curGameModParam.mapComponents[
+      "bg-win"
+    ].wins = 30;
+    expect(() =>
+      adapter.playSpin(createCascadeLogic(invalidComponentWin)),
+    ).toThrow(/bg-win\.wins 30 does not match current result total 29/);
+    expect(runtime.spinTargets).toEqual([]);
   });
 
   it("rejects concurrent play and rejects a pending play on destroy", async () => {
