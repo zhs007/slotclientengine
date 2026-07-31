@@ -4,6 +4,7 @@ import {
 } from "@slotclientengine/browserartifactio";
 import { parseEditorAssetsMap, type EditorAssetsMapV1 } from "./assets-map.js";
 import {
+  allocateEditorAssetKeySuffix,
   assertEditorAssetKey,
   canonicalExtensionOfEditorAssetKey,
   editorAssetKeyCollisionToken,
@@ -44,7 +45,10 @@ export type EditorImportAction =
   | "add"
   | "noop"
   | "overwrite"
+  | "keep-both"
   | "rename-required";
+
+export type EditorImportConflictResolution = "overwrite" | "keep-both";
 
 export interface EditorImportReviewItem {
   readonly incoming: EditorAssetEntry;
@@ -60,6 +64,11 @@ export interface EditorImportReview {
   readonly items: readonly EditorImportReviewItem[];
   readonly blockingErrors: readonly string[];
   readonly canCommit: boolean;
+}
+
+export interface EditorImportResolution {
+  readonly itemIndex: number;
+  readonly resolution: EditorImportConflictResolution;
 }
 
 export interface EditorAssetRewriteAdapter<TProject> {
@@ -78,6 +87,12 @@ export interface EditorAssetRewriteAdapter<TProject> {
 
 export function createEmptyEditorAssetWorkspace(): EditorAssetWorkspace {
   return Object.freeze({ entries: readonlyMap(new Map()) });
+}
+
+export async function createEditorAssetWorkspace(
+  inputs: readonly EditorAssetInput[],
+): Promise<EditorAssetWorkspace> {
+  return freezeWorkspace(await Promise.all(inputs.map(createEditorAssetEntry)));
 }
 
 export function cloneEditorAssetWorkspace(
@@ -208,6 +223,104 @@ export async function commitEditorAssetImport<TProject>(options: {
   await options.adapter.validateProject?.(project, workspace);
   await options.prepare?.(workspace, project);
   return Object.freeze({ workspace, project });
+}
+
+export function resolveEditorAssetImportReview(options: {
+  readonly workspace: EditorAssetWorkspace;
+  readonly review: EditorImportReview;
+  readonly resolutions: readonly EditorImportResolution[];
+}): EditorImportReview {
+  const decisions = new Map<number, EditorImportConflictResolution>();
+  for (const { itemIndex, resolution } of options.resolutions) {
+    if (resolution !== "overwrite" && resolution !== "keep-both")
+      throw new Error(`import resolution 无效：${String(resolution)}`);
+    if (
+      !Number.isSafeInteger(itemIndex) ||
+      itemIndex < 0 ||
+      itemIndex >= options.review.items.length
+    )
+      throw new Error(`import resolution itemIndex 无效：${itemIndex}`);
+    if (decisions.has(itemIndex))
+      throw new Error(`import resolution itemIndex 重复：${itemIndex}`);
+    decisions.set(itemIndex, resolution);
+  }
+
+  const occupied = [...options.workspace.entries.keys()];
+  const items: EditorImportReviewItem[] = [];
+  const blockingErrors: string[] = [];
+  for (const [itemIndex, item] of options.review.items.entries()) {
+    const conflict =
+      item.action === "overwrite" || item.action === "rename-required";
+    if (!conflict) {
+      const resolved = Object.freeze({
+        ...item,
+        errors: Object.freeze([...item.errors]),
+      });
+      items.push(resolved);
+      occupied.push(resolved.targetKey);
+      continue;
+    }
+
+    const decision = decisions.get(itemIndex);
+    if (!decision) {
+      const message = `import item ${item.incoming.key} 的同名冲突尚未解决。`;
+      blockingErrors.push(message);
+      items.push(
+        Object.freeze({
+          ...item,
+          errors: Object.freeze([...item.errors, message]),
+        }),
+      );
+      continue;
+    }
+    if (decision === "overwrite") {
+      if (item.action === "rename-required") {
+        const message = `导入批次内同名不同 bytes 不能互相覆盖：${item.incoming.key}`;
+        blockingErrors.push(message);
+        items.push(
+          Object.freeze({
+            ...item,
+            errors: Object.freeze([message]),
+          }),
+        );
+        continue;
+      }
+      const resolved = Object.freeze({
+        ...item,
+        errors: Object.freeze([]),
+      });
+      items.push(resolved);
+      occupied.push(resolved.targetKey);
+      continue;
+    }
+
+    const targetKey = allocateEditorAssetKeySuffix(item.incoming.key, occupied);
+    const { existing: _existing, ...itemWithoutExisting } = item;
+    const incoming = cloneEntry({
+      ...item.incoming,
+      key: targetKey,
+      payloadPath: allocateContentAddressedPath({
+        digest: item.incoming.sha256,
+        extension: canonicalExtensionOfEditorAssetKey(targetKey),
+      }),
+    });
+    const resolved = Object.freeze({
+      ...itemWithoutExisting,
+      incoming,
+      targetKey,
+      action: "keep-both" as const,
+      references: Object.freeze([]),
+      errors: Object.freeze([]),
+    });
+    items.push(resolved);
+    occupied.push(targetKey);
+  }
+
+  return Object.freeze({
+    items: Object.freeze(items),
+    blockingErrors: Object.freeze(blockingErrors),
+    canCommit: blockingErrors.length === 0,
+  });
 }
 
 export async function renameEditorAsset<TProject>(options: {

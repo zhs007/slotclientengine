@@ -4,12 +4,14 @@ import {
   ephemeralContentFingerprint,
   extractBoundedZip,
 } from "@slotclientengine/browserartifactio";
-import { normalizeEditorPackageZipEntries } from "@slotclientengine/editorresource";
+import {
+  ingestEditorResourceSources,
+  normalizeEditorPackageZipEntries,
+} from "@slotclientengine/editorresource";
 import {
   addCustomStateDefinition,
   addSymbolState,
   createFromGameConfig,
-  cloneSymbolEditorProject,
   createPreviewSnapshot,
   deleteAsset,
   exportSnapshot,
@@ -30,13 +32,16 @@ import {
   removeImageStringDependency,
   renameImportedImageStringDependency,
   setSymbolImageStringNodes,
-  uploadAssetBatch,
   type EditorAssetRecord,
   type EditorBaseVisual,
   type EditorStateVisual,
   type EditorSymbolDraft,
   type SymbolEditorProject,
 } from "../model/editor-project.js";
+import {
+  commitSymbolResourceImport,
+  prepareSymbolResourceImport,
+} from "../model/resource-import.js";
 import { importImageStringDependencyZip } from "../io/image-string-dependency.js";
 import {
   SymbolEditorStore,
@@ -66,6 +71,7 @@ import {
   type SymbolInspectorTab,
   type WorkspaceTab,
 } from "./ui-session.js";
+import { requestSymbolImportReview } from "./import-review-dialog.js";
 
 interface ThumbnailEntry {
   readonly fingerprint: string;
@@ -81,6 +87,9 @@ export class SymbolsEditorApp {
   #preview: SymbolEditorPreview | null = null;
   #unsubscribe: (() => void) | null = null;
   #previewRequest = 0;
+  #importRequest = 0;
+  #importing = false;
+  #previewError = "";
   #previewValue = 1;
   #pickerTrigger: HTMLElement | null = null;
   #feedbackTimer: ReturnType<typeof setTimeout> | null = null;
@@ -110,6 +119,7 @@ export class SymbolsEditorApp {
     this.#unsubscribe?.();
     this.#unsubscribe = null;
     this.#previewRequest += 1;
+    this.#importRequest += 1;
     this.#preview?.destroy();
     this.#preview = null;
     this.closePicker(false);
@@ -206,14 +216,14 @@ export class SymbolsEditorApp {
       panel.innerHTML = `<div class="start-state"><h1>建立 Symbols 项目</h1><p>上传公开 gameconfig.json，或导入已有 symbols ZIP。</p></div>`;
       errors.textContent = "";
       exportButton.disabled = true;
-      uploadButtons.forEach((button) => (button.disabled = false));
+      uploadButtons.forEach((button) => (button.disabled = this.#importing));
       this.requireElement("[data-preview-state]").innerHTML =
         "<option>normal</option>";
       this.#preview?.clearResource();
       this.closePicker(false);
       return;
     }
-    uploadButtons.forEach((button) => (button.disabled = false));
+    uploadButtons.forEach((button) => (button.disabled = this.#importing));
     const project = snapshot.project;
     this.#session.normalize(project);
     this.reconcileThumbnails(project);
@@ -221,7 +231,12 @@ export class SymbolsEditorApp {
       this.thumbnailUrl(project, path),
     );
     errors.replaceChildren(
-      ...snapshot.diagnostics.map((message) =>
+      ...[
+        ...snapshot.diagnostics,
+        ...(this.#previewError
+          ? [`Symbols 预览初始化失败：${this.#previewError}`]
+          : []),
+      ].map((message) =>
         Object.assign(document.createElement("div"), { textContent: message }),
       ),
     );
@@ -1484,34 +1499,71 @@ export class SymbolsEditorApp {
     const files = [...(input.files ?? [])];
     input.value = "";
     if (files.length === 0) return;
+    if (this.#importing) return;
+    this.#importing = true;
+    this.requireElement("[data-upload]").setAttribute("disabled", "");
+    const request = ++this.#importRequest;
+    this.showSuccess(`正在读取 ${files.length} 个 source…`);
     try {
       createBoundedSourceIndex(files, {
         maxEntries: 4096,
         maxFileBytes: 50 * 1024 * 1024,
         maxTotalBytes: 500 * 1024 * 1024,
       });
-      if (files.length === 1 && files[0]!.name.toLowerCase().endsWith(".zip")) {
-        const zipBytes = new Uint8Array(await files[0]!.arrayBuffer());
-        const entries = normalizeEditorPackageZipEntries(
-          extractBoundedZip(zipBytes, {
-            limits: SYMBOL_ZIP_LIMITS,
+      const inspectedZips = await Promise.all(
+        files
+          .filter((file) => file.name.toLowerCase().endsWith(".zip"))
+          .map(async (file) => {
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            const entries = normalizeEditorPackageZipEntries(
+              extractBoundedZip(bytes, { limits: SYMBOL_ZIP_LIMITS }),
+              ["symbols.package.json", "image-string.manifest.json"],
+            );
+            return { file, bytes, entries };
           }),
-          ["symbols.package.json", "image-string.manifest.json"],
-        );
-        if (entries.has("symbols.package.json")) {
-          const imported = await importSymbolPackageZip(zipBytes, {
-            loadTextures: false,
-          });
-          try {
-            this.#session.resetForImport(imported.project);
-            this.#store.replace(imported.project);
-            this.showSuccess("Symbols ZIP 已通过统一导入入口加载");
-          } finally {
-            imported.destroy();
-          }
+      );
+      const projectZip = inspectedZips.find(({ entries }) =>
+        entries.has("symbols.package.json"),
+      );
+      if (projectZip) {
+        if (files.length !== 1)
+          throw new Error(
+            "Symbols project ZIP 必须单独打开，不能与资源混合导入。",
+          );
+        const confirmed =
+          typeof globalThis.window?.confirm !== "function" ||
+          globalThis.window.confirm(
+            `打开 Symbols 项目\n${projectZip.file.name} · ${projectZip.file.size} bytes\n\n确认原子替换当前项目？`,
+          );
+        if (!confirmed) {
+          this.showSuccess("已取消 Symbols 项目导入");
           return;
         }
-        let dependency = await importImageStringDependencyZip(zipBytes);
+        this.showSuccess("正在验证 Symbols project 与 exact closure…");
+        const imported = await importSymbolPackageZip(projectZip.bytes, {
+          loadTextures: false,
+        });
+        try {
+          if (request !== this.#importRequest) return;
+          this.#previewError = "";
+          this.#session.resetForImport(imported.project);
+          this.#store.replace(imported.project);
+          this.showSuccess(
+            `Symbols 项目 ${imported.project.id} 已加载，正在准备预览…`,
+          );
+        } finally {
+          imported.destroy();
+        }
+        return;
+      }
+      const imageStringZip = inspectedZips.find(({ entries }) =>
+        entries.has("image-string.manifest.json"),
+      );
+      if (imageStringZip) {
+        if (files.length !== 1) throw new Error("ImgNumber ZIP 必须单独导入。");
+        let dependency = await importImageStringDependencyZip(
+          imageStringZip.bytes,
+        );
         const currentProject = this.#store.getSnapshot().project;
         if (currentProject?.imageStringDependencies.has(dependency.id)) {
           const nextId = globalThis.window.prompt(
@@ -1530,32 +1582,64 @@ export class SymbolsEditorApp {
         this.showSuccess(
           `已识别并安装 image-string ${dependency.id}；尚未自动绑定。`,
         );
-        this.render(this.#store.getSnapshot());
         return;
       }
-      const values = await Promise.all(
-        files.map(async (file) => ({
-          path: file.name,
-          bytes: new Uint8Array(await file.arrayBuffer()),
-        })),
-      );
+
       const current = this.#store.getSnapshot().project;
       if (!current) throw new Error("请先创建或导入项目。");
-      const candidate = cloneSymbolEditorProject(current);
-      const batchId = uploadAssetBatch(candidate, values);
-      const batch = candidate.assetLibrary.batches.find(
-        (item) => item.id === batchId,
-      )!;
-      const records = batch.paths.map(
-        (path) => candidate.assetLibrary.records.get(path)!,
+      this.showSuccess("正在展开资源并计算同名冲突…");
+      const sources = await ingestEditorResourceSources({
+        files,
+        limits: {
+          files: {
+            maxEntries: 4096,
+            maxFileBytes: 50 * 1024 * 1024,
+            maxTotalBytes: 500 * 1024 * 1024,
+          },
+          zip: SYMBOL_ZIP_LIMITS,
+        },
+      });
+      const prepared = await prepareSymbolResourceImport({
+        project: current,
+        sources,
+      });
+      if (request !== this.#importRequest) return;
+      const hasConflicts = prepared.review.items.some(
+        ({ action }) => action === "overwrite" || action === "rename-required",
       );
-      validateResourceDiscovery(records);
-      if (!confirmSymbolImportReview(records, files)) return;
-      this.#store.replace(candidate);
-      this.showSuccess(`已上传 ${files.length} 个资源；尚未自动绑定`);
+      const resolutions = hasConflicts
+        ? await requestSymbolImportReview(this.#root, prepared.review, {
+            keepBothDisabledItemIndexes: new Set(
+              prepared.review.items.flatMap((_, index) =>
+                prepared.records[index]?.kind === "image" ? [] : [index],
+              ),
+            ),
+          })
+        : [];
+      if (!resolutions) {
+        this.showSuccess("已取消资源导入，项目未修改");
+        return;
+      }
+      this.showSuccess("正在复验现有配置并原子提交…");
+      const result = await commitSymbolResourceImport({
+        project: current,
+        prepared,
+        resolutions,
+      });
+      if (request !== this.#importRequest) return;
+      this.#store.replace(result.project);
+      const changed = result.review.items.filter(
+        ({ action }) => action !== "noop",
+      ).length;
+      this.showSuccess(`已上传 ${changed} 个资源；现有配置保持不变`);
       this.render(this.#store.getSnapshot());
     } catch (error) {
-      this.#store.setExternalError(error);
+      if (request === this.#importRequest) this.#store.setExternalError(error);
+    } finally {
+      if (request === this.#importRequest) {
+        this.#importing = false;
+        this.requireElement("[data-upload]").removeAttribute("disabled");
+      }
     }
   }
 
@@ -1592,11 +1676,16 @@ export class SymbolsEditorApp {
       this.#session.imageStringPreviewTexts,
     );
     const previewSnapshot = createPreviewSnapshot(project);
-    if (!previewSnapshot) {
-      await this.#preview.setResource(null, cells, this.#session.previewState);
-      return;
-    }
     try {
+      if (!previewSnapshot) {
+        await this.#preview.setResource(
+          null,
+          cells,
+          this.#session.previewState,
+        );
+        this.clearPreviewError();
+        return;
+      }
       const resource = await createSymbolPackageResource({
         packageManifest: previewSnapshot.packageManifest,
         files: createSnapshotFiles(previewSnapshot),
@@ -1610,15 +1699,49 @@ export class SymbolsEditorApp {
         cells,
         this.#session.previewState,
       );
+      this.clearPreviewError();
       this.updateZoom(this.#preview.getZoom());
-    } catch {
-      if (request === this.#previewRequest)
-        await this.#preview.setResource(
-          null,
-          cells,
-          this.#session.previewState,
-        );
+    } catch (error) {
+      if (request === this.#previewRequest) {
+        this.#previewError = formatError(error);
+        try {
+          await this.#preview.setResource(
+            null,
+            cells,
+            this.#session.previewState,
+          );
+        } catch (fallbackError) {
+          this.#previewError += `；清理失败：${formatError(fallbackError)}`;
+        }
+        const errors = this.#root.querySelector<HTMLElement>("[data-errors]");
+        if (errors) {
+          const message = document.createElement("div");
+          message.textContent = `Symbols 预览初始化失败：${this.#previewError}`;
+          const retry = document.createElement("button");
+          retry.type = "button";
+          retry.dataset.previewRetry = "";
+          retry.textContent = "重试预览";
+          retry.addEventListener("click", () =>
+            this.refreshPreview(this.#store.getSnapshot()),
+          );
+          errors.replaceChildren(message, retry);
+        }
+      }
     }
+  }
+
+  private clearPreviewError(): void {
+    if (!this.#previewError) return;
+    this.#previewError = "";
+    const errors = this.#root.querySelector<HTMLElement>("[data-errors]");
+    if (errors)
+      errors.replaceChildren(
+        ...this.#store.getSnapshot().diagnostics.map((message) =>
+          Object.assign(document.createElement("div"), {
+            textContent: message,
+          }),
+        ),
+      );
   }
 
   private showSuccess(message: string): void {
@@ -2928,93 +3051,11 @@ function formatBytes(value: number): string {
   return `${(value / 1024 / 1024).toFixed(1)} MiB`;
 }
 
-function validateResourceDiscovery(
-  records: readonly EditorAssetRecord[],
-): void {
-  const diagnostics = records.flatMap((record) =>
-    record.diagnostics.map((diagnostic) => `${record.path}: ${diagnostic}`),
-  );
-  if (diagnostics.length) throw new Error(diagnostics.join("\n"));
-  const byDirectory = new Map<string, EditorAssetRecord[]>();
-  for (const record of records) {
-    const directory = record.path.includes("/")
-      ? record.path.slice(0, record.path.lastIndexOf("/"))
-      : "";
-    const group = byDirectory.get(directory) ?? [];
-    group.push(record);
-    byDirectory.set(directory, group);
-  }
-  for (const [directory, group] of byDirectory) {
-    const skeletons = group.filter(
-      (record) => record.kind === "spine-skeleton",
-    );
-    const atlases = group.filter((record) => record.kind === "spine-atlas");
-    if (skeletons.length || atlases.length) {
-      if (skeletons.length === 0 || atlases.length !== 1) {
-        throw new Error(
-          `目录 ${directory || "."} 的 Spine closure 存在歧义：${skeletons.length} skeleton / ${atlases.length} atlas。`,
-        );
-      }
-      const pages = metadataList(atlases[0]!, "pageNames");
-      for (const page of pages) {
-        const matches = group.filter(
-          (record) =>
-            record.kind === "image" &&
-            record.path.split("/").at(-1)?.toLocaleLowerCase("en-US") ===
-              page.toLocaleLowerCase("en-US"),
-        );
-        if (matches.length !== 1)
-          throw new Error(`Spine atlas page ${page} 缺失或大小写匹配歧义。`);
-      }
-    }
-    for (const project of group.filter(
-      (record) => record.kind === "vni-project",
-    )) {
-      for (const assetPath of metadataList(project, "assetPaths")) {
-        const source = resolveReviewPath(project.path, assetPath);
-        const matches = records.filter(
-          (record) =>
-            record.path.toLocaleLowerCase("en-US") ===
-            source.toLocaleLowerCase("en-US"),
-        );
-        if (matches.length !== 1)
-          throw new Error(`VNI asset ${assetPath} 缺失或大小写匹配歧义。`);
-      }
-    }
-  }
-}
-
-function confirmSymbolImportReview(
-  records: readonly EditorAssetRecord[],
-  files: readonly File[],
-): boolean {
-  const confirm = globalThis.window?.confirm;
-  if (typeof confirm !== "function") return true;
-  const rows = records.map(
-    (record) =>
-      `${record.path} · ${record.kind} · ${metadataList(record, "assetPaths").length + metadataList(record, "pageNames").length} dependencies`,
-  );
-  const total = files.reduce((sum, file) => sum + file.size, 0);
-  return confirm.call(
-    globalThis.window,
-    `导入审查\n${rows.join("\n")}\n未消费文件 0 · ${files.length} files · ${total} bytes\n\n确认只加入资源库？`,
-  );
-}
-
 function metadataList(record: EditorAssetRecord, key: string): string[] {
   const value = record.metadata?.[key];
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
     : [];
-}
-
-function resolveReviewPath(base: string, reference: string): string {
-  const stack = base.split("/").slice(0, -1);
-  for (const segment of reference.split("/")) {
-    if (segment === "..") stack.pop();
-    else if (segment !== "." && segment) stack.push(segment);
-  }
-  return stack.join("/");
 }
 
 function parseContext(value: string): ResourceBindingContext {

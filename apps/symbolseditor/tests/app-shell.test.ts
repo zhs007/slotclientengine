@@ -1,6 +1,9 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createDeterministicZip } from "@slotclientengine/browserartifactio";
+import { createFromGameConfig } from "../src/model/editor-project.js";
+import { exportSymbolPackageZip } from "../src/io/symbol-package-zip.js";
 
 const previewSpies = vi.hoisted(() => ({
   replay: vi.fn(),
@@ -55,7 +58,10 @@ describe("symbols editor app shell", () => {
     await app.init();
   });
 
-  afterEach(() => app.destroy());
+  afterEach(() => {
+    app.destroy();
+    vi.unstubAllGlobals();
+  });
 
   it("keeps project-only actions disabled before a project exists", () => {
     expect(
@@ -79,6 +85,81 @@ describe("symbols editor app shell", () => {
     expect(root.querySelector("[data-symbol-query]")).not.toBeNull();
     expect(root.querySelector("[data-asset-query]")).toBeNull();
     expect(root.querySelector("[data-project-id]")).toBeNull();
+  });
+
+  it("imports generic resource ZIPs and reviews conflicting replacements", async () => {
+    await createProject(root);
+    const upload = root.querySelector<HTMLInputElement>("[data-upload-input]")!;
+    const firstBytes = readFileSync(
+      resolve(process.cwd(), "../../assets/game002-s3/H1.png"),
+    );
+    const zip = createDeterministicZip({ "art/H1.png": firstBytes });
+    Object.defineProperty(upload, "files", {
+      configurable: true,
+      value: [new File([zip as BlobPart], "art.zip")],
+    });
+    upload.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.waitFor(() =>
+      expect(root.textContent).toContain("已上传 1 个资源"),
+    );
+    expect(root.textContent).toContain("H1.png");
+
+    const secondBytes = readFileSync(
+      resolve(process.cwd(), "../../assets/game002-s3/H2.png"),
+    );
+    Object.defineProperty(upload, "files", {
+      configurable: true,
+      value: [new File([secondBytes], "H1.png")],
+    });
+    upload.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.waitFor(() =>
+      expect(root.querySelector("[data-import-review]")).not.toBeNull(),
+    );
+    expect(root.textContent).toContain("替换同名资源（配置不变）");
+    click(root, '[data-import-all="keep-both"]');
+    click(root, "[data-import-confirm]");
+    await vi.waitFor(() => {
+      expect(root.querySelector("[data-import-review]")).toBeNull();
+      expect(root.textContent).toContain("H1-1.png");
+    });
+  });
+
+  it("opens a Symbols project ZIP through an explicit project review", async () => {
+    const source = createFromGameConfig({
+      rawGameConfig: gameConfig,
+      fileName: "task135-shaped.json",
+    });
+    const exported = await exportSymbolPackageZip(source, {
+      loadTextures: false,
+    });
+    const confirm = vi.fn(() => true);
+    vi.stubGlobal("confirm", confirm);
+    const upload = root.querySelector<HTMLInputElement>("[data-upload-input]")!;
+    Object.defineProperty(upload, "files", {
+      configurable: true,
+      value: [
+        new File([exported.bytes as BlobPart], "task135-shaped-symbols.zip"),
+      ],
+    });
+    upload.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.waitFor(() =>
+      expect(root.textContent).toContain("task135-shaped"),
+    );
+    expect(confirm).toHaveBeenCalledWith(
+      expect.stringContaining("原子替换当前项目"),
+    );
+  });
+
+  it("surfaces preview initialization failures instead of silently clearing", async () => {
+    previewSpies.setResource.mockRejectedValueOnce(
+      new Error("preview exploded"),
+    );
+    await createProject(root);
+    await vi.waitFor(() =>
+      expect(root.querySelector("[data-errors]")?.textContent).toContain(
+        "Symbols 预览初始化失败：preview exploded",
+      ),
+    );
   });
 
   it("exposes ARIA tabs and preserves inspector selection across transactions", async () => {

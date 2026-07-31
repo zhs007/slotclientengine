@@ -27,6 +27,7 @@ import {
   renameEditorAsset,
   resolveEditorAssetMapEntry,
   resolveEditorAssetsMapPackage,
+  resolveEditorAssetImportReview,
   reviewEditorAssetImport,
   serializeEditorAssetsMap,
   validateEditorAssetsMapPackage,
@@ -357,6 +358,86 @@ describe("workspace review and transactions", () => {
         adapter,
       }),
     ).rejects.toThrow(/blocking/u);
+  });
+
+  it("resolves workspace conflicts explicitly with deterministic suffixes", async () => {
+    const initial = await committed([
+      { key: "Symbol.png", mediaType: "image/png", bytes: PNG },
+      { key: "Symbol-1.png", mediaType: "image/png", bytes: PNG },
+    ]);
+    const review = await reviewEditorAssetImport({
+      workspace: initial.workspace,
+      incoming: [
+        { key: "symbol.PNG", mediaType: "image/png", bytes: OTHER_PNG },
+        { key: "fresh.png", mediaType: "image/png", bytes: PNG },
+      ],
+      references: {
+        references: [{ key: "Symbol.png", location: "symbols.A.normal" }],
+      },
+    });
+    expect(
+      resolveEditorAssetImportReview({
+        workspace: initial.workspace,
+        review,
+        resolutions: [],
+      }).canCommit,
+    ).toBe(false);
+
+    const resolved = resolveEditorAssetImportReview({
+      workspace: initial.workspace,
+      review,
+      resolutions: [{ itemIndex: 0, resolution: "keep-both" }],
+    });
+    expect(resolved.canCommit).toBe(true);
+    expect(resolved.items[0]).toMatchObject({
+      action: "keep-both",
+      targetKey: "symbol-2.png",
+      references: [],
+    });
+    const result = await commitEditorAssetImport({
+      workspace: initial.workspace,
+      project: { refs: ["Symbol.png"] },
+      review: resolved,
+      adapter,
+    });
+    expect([...result.workspace.entries.keys()].sort()).toEqual([
+      "Symbol-1.png",
+      "Symbol.png",
+      "fresh.png",
+      "symbol-2.png",
+    ]);
+    expect(result.project.refs).toEqual(["Symbol.png"]);
+  });
+
+  it("requires colliding batch members with different bytes to keep both", async () => {
+    const empty = createEmptyEditorAssetWorkspace();
+    const review = await reviewEditorAssetImport({
+      workspace: empty,
+      incoming: [
+        { key: "multi.part.png", mediaType: "image/png", bytes: PNG },
+        {
+          key: "MULTI.PART.png",
+          mediaType: "image/png",
+          bytes: OTHER_PNG,
+        },
+      ],
+    });
+    expect(
+      resolveEditorAssetImportReview({
+        workspace: empty,
+        review,
+        resolutions: [{ itemIndex: 1, resolution: "overwrite" }],
+      }).canCommit,
+    ).toBe(false);
+    const resolved = resolveEditorAssetImportReview({
+      workspace: empty,
+      review,
+      resolutions: [{ itemIndex: 1, resolution: "keep-both" }],
+    });
+    expect(resolved.items.map(({ targetKey }) => targetKey)).toEqual([
+      "multi.part.png",
+      "MULTI.PART-1.png",
+    ]);
   });
 
   it("rolls back when project validation or async prepare fails", async () => {

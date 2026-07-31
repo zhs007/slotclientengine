@@ -319,7 +319,10 @@ export function createFromImportedPackage(options: {
   };
   library.batches.push(importedBatch);
   for (const [path, bytes] of options.assets) {
-    library.records.set(path, createAssetRecord(path, bytes, importedBatch.id));
+    library.records.set(
+      path,
+      createEditorAssetRecord(path, bytes, importedBatch.id),
+    );
   }
   const imageStringDependencies = collectImportedImageStringDependencies(
     options.assets,
@@ -752,7 +755,7 @@ export function installImageStringDependency(
     const vendorPath = path;
     project.assetLibrary.records.set(
       vendorPath,
-      createAssetRecord(vendorPath, bytes, batchId),
+      createEditorAssetRecord(vendorPath, bytes, batchId),
     );
   }
   project.assetLibrary.batches = project.assetLibrary.batches.filter(
@@ -829,7 +832,7 @@ export function uploadAssetBatch(
   }
   const batchId = `upload-${project.nextUploadBatch++}`;
   const records = normalized.map((file) =>
-    createAssetRecord(file.path, file.bytes, batchId),
+    createEditorAssetRecord(file.path, file.bytes, batchId),
   );
   const overwritten = new Set(
     records
@@ -874,7 +877,7 @@ export function replaceAsset(
   if (!existing) throw new Error(`资源不存在：${path}。`);
   project.assetLibrary.records.set(
     path,
-    createAssetRecord(path, bytes, existing.uploadBatchId),
+    createEditorAssetRecord(path, bytes, existing.uploadBatchId),
   );
 }
 
@@ -1396,7 +1399,7 @@ function compileValuePresentation(
   return clone;
 }
 
-function createAssetRecord(
+export function createEditorAssetRecord(
   path: string,
   bytes: Uint8Array,
   uploadBatchId: string,

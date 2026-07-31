@@ -5,7 +5,7 @@
 ## 统一 filename-key workspace
 
 - 四个纯前端编辑器统一使用 `packages/editorresource` 的扁平、大小写敏感 filename-key 工作区。
-- 单一导入入口可混选普通文件和 ZIP；默认同名覆盖，但 review 必须明确列出冲突。
+- 单一导入入口可混选普通文件和 ZIP；同名覆盖必须在 review 明确列出冲突。consumer 可要求用户显式选择覆盖或 keep-both；只有显式 keep-both 才由 shared allocator 分配扩展名前的稳定 suffix，禁止错误时静默改名。
 - workspace 只维护一份全局资源表；app 不实现第二套导入、覆盖或 hash 算法。
 - 导出顶层 `assets.map.json` 将 filename key 映射到完整 SHA-256 content-addressed payload。
 - manifest 只保留 owner-owned 结构语义和 filename-key 引用；不恢复目录上传、logical resource、按类型拆分 importer 或 `dependencies/` 资源目录。
@@ -46,6 +46,7 @@
 ## Symbols Editor
 
 - `apps/symbolseditor` 只拥有 browser editing/IO/UI、typed draft transaction、dependency library、资源引用图、per-symbol state assignment、value/cascade 表单和固定 all-symbol single-state preview。
+- Symbols 资源覆盖保持 owner-owned 配置和 filename-key 引用；candidate bytes 不能满足现有 typed binding 时整批回滚。完整 Symbols project ZIP 只能单独打开，不作为普通资源合并；project 与 preview failure 必须分层显式呈现。
 - app 不执行 sequence/cascade timeline，也不生成 spinBlur/disabled 或其它 state texture。
 - symbol manifest/package parser、arbitrary exact path、sparse state texture、explicit empty animation、Spine/VNI introspection、display-set 交叉验证和 runtime player 属于 rendercore。
 - `empty` 是用户显式选择的 manifest resource kind，不是缺资源 fallback。
