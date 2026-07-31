@@ -23,6 +23,7 @@ export interface SymbolCascadeGroup extends SymbolWinCarouselGroup {
     readonly x: number;
     readonly y: number;
   }[];
+  readonly retainPrimaryPositionsAfterCollect?: boolean;
 }
 
 export interface CreateSymbolCascadePlayerOptions {

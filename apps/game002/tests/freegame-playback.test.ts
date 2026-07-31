@@ -73,10 +73,28 @@ describe("game002 FreeGame playback", () => {
       },
     } as unknown as Game002BackgroundPlayer;
     const cascade = {
-      prepare: (groups: readonly { removePositions: readonly unknown[] }[]) => {
+      prepare: (
+        groups: readonly {
+          positions: readonly { x: number; y: number }[];
+          removePositions: readonly { x: number; y: number }[];
+          retainPrimaryPositionsAfterCollect?: boolean;
+        }[],
+      ) => {
+        expect(groups.length).toBeGreaterThan(0);
+        for (const group of groups) {
+          expect(group.retainPrimaryPositionsAfterCollect).toBe(true);
+          expect(group.removePositions).toEqual([]);
+        }
         expect(
-          groups.every((group) => group.removePositions.length === 0),
+          groups
+            .flatMap((group) => group.positions)
+            .some(({ x, y }) => plan.finalScene[x]?.[y] === CODES.WL),
         ).toBe(true);
+        expect(
+          groups
+            .flatMap((group) => group.removePositions)
+            .some(({ x, y }) => plan.finalScene[x]?.[y] === CODES.WL),
+        ).toBe(false);
         return { groups };
       },
       start: () => events.push("fg-win"),

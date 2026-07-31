@@ -470,6 +470,7 @@ class DefaultGame002FreeGamePlayback implements Game002FreeGamePlayback {
         return Object.freeze({
           ...base,
           removePositions: Object.freeze([]),
+          retainPrimaryPositionsAfterCollect: true,
         });
       }),
     );
