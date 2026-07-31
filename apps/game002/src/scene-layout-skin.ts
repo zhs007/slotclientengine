@@ -14,8 +14,12 @@ import type {
 
 export interface Game002BackgroundPlayer {
   readonly container: Container;
+  readonly transitionContainer?: Container;
   init(): Promise<void>;
   update(deltaSeconds: number): void;
+  getMode?(): string;
+  prepareModeTransition?(modeId: string): Promise<void>;
+  requestMode?(modeId: string): Promise<void>;
   destroy(): void;
 }
 
@@ -45,12 +49,22 @@ function createBackgroundPlayer(
 ): Game002BackgroundPlayer {
   return Object.freeze({
     container: surface.backgroundContainer,
+    transitionContainer: surface.transitionContainer,
     async init(): Promise<void> {
       await surface.init();
       surface.applyArtSpace();
     },
     update(deltaSeconds: number): void {
       surface.update(deltaSeconds);
+    },
+    getMode(): string {
+      return surface.getGameModeSnapshot().stableMode;
+    },
+    prepareModeTransition(modeId: string): Promise<void> {
+      return surface.prepareGameModeTransition(modeId);
+    },
+    requestMode(modeId: string): Promise<void> {
+      return surface.requestGameMode(modeId);
     },
     destroy(): void {
       surface.destroy();

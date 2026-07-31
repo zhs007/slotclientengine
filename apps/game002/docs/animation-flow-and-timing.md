@@ -294,7 +294,22 @@ BaseGame -> FreeGame: BG_FG once -> FG loop
 FreeGame -> BaseGame: FG_BG once -> BG loop
 ```
 
-当前 app 只初始化并持续播放 BaseGame。状态 loop 和 transition 的时长由 `BG.json` 的真实 Spine animation duration 决定，不在 app 中硬编码。
+普通局初始化并持续播放 BaseGame。`bg-triggerfg` 的 WL win once 完成后才请求
+`BG_FG`；FreeGame 最终 CN collect 与 BigWin popup 完整完成后才请求 `FG_BG`。
+两次切换都保留同一个 reel scene。状态 loop 和 transition 的时长由 Layout
+transition 资源的真实 Spine completion/event 决定，不在 app 中硬编码。
+
+FreeGame 单步固定为：
+
+```text
+selective spin（仅非 WL/CN）
+-> AF Feature -> AF Change -> AF 变 CN（如有）
+-> CO Feature + source Feature1
+-> source Feature2 + transfer -> source 变 BN、CO 变 CN（如有）
+-> 下一次 spin
+```
+
+只有最后一步播放 `fg-win` CN collect；该 collect 不 remove symbol。
 
 ## 调整时的检查清单
 

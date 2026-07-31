@@ -19,9 +19,10 @@ import {
 const workspace = resolve(import.meta.dirname, "../../..");
 const downloads = "/Users/zerro/Downloads";
 const taskId = process.env.GAME002_SYMBOL_BUILD_TASK ?? "132";
-if (taskId !== "132" && taskId !== "135")
+if (taskId !== "132" && taskId !== "135" && taskId !== "147")
   throw new Error(`Unsupported game002 Symbols build task "${taskId}".`);
-const isTask135 = taskId === "135";
+const isTask135 = taskId === "135" || taskId === "147";
+const isTask147 = taskId === "147";
 const outputDirectory = resolve(workspace, `tasks/artifacts/${taskId}`);
 const sourceSymbols = new Uint8Array(
   await readFile(resolve(downloads, "crave-symbols-fixed.zip")),
@@ -135,6 +136,20 @@ try {
     }
   }
 
+  if (isTask147) {
+    const af = requireSpineNormal(importedSymbols.project, "AF");
+    for (const [state, animationName] of [
+      ["feature", "Feature"],
+      ["change", "Change"],
+    ] as const) {
+      addSymbolState(importedSymbols.project, "AF", state);
+      setStateVisual(importedSymbols.project, "AF", state, {
+        ...af,
+        animationName,
+      });
+    }
+  }
+
   setSymbolImageStringNodes(importedSymbols.project, "WL", [
     multiplierNode(resource, [
       "normal",
@@ -164,6 +179,11 @@ try {
       "change",
     ]),
   ]);
+  if (isTask147) {
+    setSymbolImageStringNodes(importedSymbols.project, "AF", [
+      freeSpinNode(resource, ["normal", "appear", "feature", "change"]),
+    ]);
+  }
 
   const editProbe = structuredClone(
     importedSymbols.project.symbols.get("CM")!.imageStringNodes,
@@ -200,6 +220,7 @@ try {
   try {
     assertTask132Symbols(reimported.project);
     if (isTask135) assertTask135Symbols(reimported.project);
+    if (isTask147) assertTask147Symbols(reimported.project);
   } finally {
     reimported.destroy();
   }
@@ -220,6 +241,33 @@ try {
   );
 } finally {
   importedSymbols.destroy();
+}
+
+function assertTask147Symbols(
+  project: Awaited<ReturnType<typeof importSymbolPackageZip>>["project"],
+): void {
+  const af = project.symbols.get("AF");
+  const feature = af?.states.get("feature");
+  const change = af?.states.get("change");
+  if (
+    feature?.kind !== "spine" ||
+    feature.animationName !== "Feature" ||
+    change?.kind !== "spine" ||
+    change.animationName !== "Change"
+  )
+    throw new Error("Task 147 AF must bind exact Spine Feature and Change.");
+  const node = af?.imageStringNodes.find(
+    (candidate) => candidate.name === "free-spins",
+  );
+  if (
+    !af ||
+    !node ||
+    node.initialText !== "0" ||
+    node.targets.some((target) => target.slot !== "Mult")
+  )
+    throw new Error(
+      "Task 147 AF ImgNumber must use raw digits in exact slot Mult.",
+    );
 }
 
 function assertTask135Symbols(
@@ -274,6 +322,18 @@ function multiplierNode(resource: string, states: readonly string[]) {
     resource,
     targets: states.map((state) => ({ state, slot: "Mult" })),
     initialText: "x1",
+    anchor: { x: 0.5, y: 0.5 },
+    transform: { x: 0, y: 0, scale: 1 },
+    followSlotColor: true,
+  } as const;
+}
+
+function freeSpinNode(resource: string, states: readonly string[]) {
+  return {
+    name: "free-spins",
+    resource,
+    targets: states.map((state) => ({ state, slot: "Mult" })),
+    initialText: "0",
     anchor: { x: 0.5, y: 0.5 },
     transform: { x: 0, y: 0, scale: 1 },
     followSlotColor: true,

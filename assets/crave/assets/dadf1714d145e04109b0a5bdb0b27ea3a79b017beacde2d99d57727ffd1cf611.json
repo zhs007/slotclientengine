@@ -84,12 +84,34 @@
           "skeleton": "./AF.json",
           "texture": "./Symbol.webp"
         },
+        "change": {
+          "atlas": "./Symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Change",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./AF.json",
+          "texture": "./Symbol.webp"
+        },
         "dropdown": {
           "atlas": "./Symbol.atlas",
           "kind": "spine",
           "playback": {
             "animationName": "Idle",
             "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./AF.json",
+          "texture": "./Symbol.webp"
+        },
+        "feature": {
+          "atlas": "./Symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature",
+            "loop": false,
             "mode": "animation"
           },
           "skeleton": "./AF.json",
@@ -119,6 +141,41 @@
         }
       },
       "disabled": "./AF.disabled.webp",
+      "imageStringNodes": [
+        {
+          "anchor": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "followSlotColor": true,
+          "initialText": "0",
+          "name": "free-spins",
+          "resource": "./wl-wm-multiplier.image-string.manifest.json",
+          "targets": [
+            {
+              "slot": "Mult",
+              "state": "normal"
+            },
+            {
+              "slot": "Mult",
+              "state": "appear"
+            },
+            {
+              "slot": "Mult",
+              "state": "feature"
+            },
+            {
+              "slot": "Mult",
+              "state": "change"
+            }
+          ],
+          "transform": {
+            "scale": 1,
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
       "normal": "./AF.webp",
       "scale": 1,
       "spinBlur": "./AF.spinBlur.webp"

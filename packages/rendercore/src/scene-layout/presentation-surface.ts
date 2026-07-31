@@ -1,12 +1,10 @@
 import { Container } from "pixi.js";
-import {
-  createAwardCelebrationPlayer,
-  type AwardCelebrationPlayer,
-} from "../popup/index.js";
+import type { AwardCelebrationPlayer } from "../popup/index.js";
 import type { RenderViewportSize } from "../viewport/index.js";
 import { SceneLayoutError } from "./errors.js";
-import { createSceneLayoutRuntime } from "./runtime.js";
+import { createSceneLayoutPackageRuntime } from "./package-runtime.js";
 import type {
+  SceneLayoutGameModeSnapshot,
   SceneLayoutGameMode,
   SceneLayoutPackageResource,
   SceneLayoutSnapshot,
@@ -14,6 +12,7 @@ import type {
 
 export interface SceneLayoutPresentationSurface {
   readonly backgroundContainer: Container;
+  readonly transitionContainer: Container;
   readonly popupContainer: Container;
   init(): Promise<void>;
   applyViewport(viewportSize: RenderViewportSize): SceneLayoutSnapshot;
@@ -23,6 +22,9 @@ export interface SceneLayoutPresentationSurface {
    */
   applyArtSpace(): void;
   update(deltaSeconds: number): void;
+  getGameModeSnapshot(): SceneLayoutGameModeSnapshot;
+  prepareGameModeTransition(modeId: string): Promise<void>;
+  requestGameMode(modeId: string): Promise<void>;
   getAwardCelebrationPlayer(id: string): AwardCelebrationPlayer;
   destroy(): void;
 }
@@ -37,13 +39,11 @@ export function createSceneLayoutPresentationSurface(options: {
 
 class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSurface {
   readonly #resource: SceneLayoutPackageResource;
-  readonly #layout;
+  readonly #runtime;
   readonly #initialMode: SceneLayoutGameMode | null;
-  readonly #formatPopupAmount:
-    | import("../popup/index.js").PopupAmountFormatter
-    | undefined;
-  readonly #popups = new Map<string, AwardCelebrationPlayer>();
-  readonly popupContainer = new Container();
+  readonly #backgroundContainer = new Container();
+  readonly #transitionContainer = new Container();
+  readonly #popupContainer = new Container();
   #initialized = false;
   #initializing = false;
   #destroyed = false;
@@ -54,19 +54,32 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
     readonly formatPopupAmount?: import("../popup/index.js").PopupAmountFormatter;
   }) {
     this.#resource = options.resource;
-    this.#layout = createSceneLayoutRuntime({
-      resource: options.resource.layout,
+    this.#runtime = createSceneLayoutPackageRuntime({
+      resource: options.resource,
+      presentationOnly: true,
+      formatPopupAmount: options.formatPopupAmount,
     });
     this.#initialMode = resolveInitialMode(
       options.resource,
       options.initialMode,
     );
-    this.#formatPopupAmount = options.formatPopupAmount;
-    this.popupContainer.label = "scene-layout-presentation-popup-root";
+    this.#backgroundContainer.label =
+      "scene-layout-presentation-background-root";
+    this.#transitionContainer.label =
+      "scene-layout-presentation-transition-root";
+    this.#popupContainer.label = "scene-layout-presentation-popup-root";
   }
 
   get backgroundContainer(): Container {
-    return this.#layout.container;
+    return this.#backgroundContainer;
+  }
+
+  get transitionContainer(): Container {
+    return this.#transitionContainer;
+  }
+
+  get popupContainer(): Container {
+    return this.#popupContainer;
   }
 
   async init(): Promise<void> {
@@ -78,30 +91,22 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
     }
     this.#initializing = true;
     try {
-      await this.#layout.init();
+      await this.#runtime.init();
       this.assertAlive();
       if (this.#initialMode) {
-        const activeNodes = new Set(
-          Object.values(this.#initialMode.backgroundNodes ?? {}),
-        );
-        for (const mode of this.#resource.manifest.gameModes?.modes ?? []) {
-          for (const nodeId of Object.values(mode.backgroundNodes ?? {})) {
-            this.#layout.setNodeActive(nodeId, activeNodes.has(nodeId));
-          }
-        }
+        const mode = this.#runtime.getGameModeSnapshot().stableMode;
+        if (mode !== this.#initialMode.id)
+          throw new SceneLayoutError(
+            `Scene layout presentation initial mode "${this.#initialMode.id}" does not match manifest initial mode "${String(mode)}".`,
+          );
       }
-      for (const [id, resource] of Object.entries(
-        this.#resource.popupPackages,
-      )) {
-        const popup = createAwardCelebrationPlayer({
-          resource,
-          formatAmount: this.#formatPopupAmount,
-        });
-        await popup.init();
-        this.assertAlive();
-        this.#popups.set(id, popup);
-        this.popupContainer.addChild(popup.container);
-      }
+      this.#backgroundContainer.addChild(
+        this.#runtime.getBackgroundPresentation(),
+      );
+      this.#transitionContainer.addChild(
+        this.#runtime.getModeTransitionPresentation(),
+      );
+      this.#popupContainer.addChild(this.#runtime.getPopupPresentation());
       this.#initialized = true;
     } catch (error) {
       this.destroy();
@@ -113,7 +118,7 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
 
   applyViewport(viewportSize: RenderViewportSize): SceneLayoutSnapshot {
     this.assertReady();
-    const snapshot = this.#layout.applyViewport(viewportSize);
+    const snapshot = this.#runtime.applyViewport(viewportSize);
     this.applyPopupPlacements(snapshot.variantId, viewportSize);
     return snapshot;
   }
@@ -127,8 +132,8 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
       );
     }
     const artSize = adaptation.artSize;
-    const snapshot = this.#layout.applyViewport(artSize);
-    this.#layout.container.position.set(0, 0);
+    const snapshot = this.#runtime.applyViewport(artSize);
+    this.#backgroundContainer.position.set(0, 0);
     this.applyPopupPlacements(snapshot.variantId, artSize);
   }
 
@@ -136,7 +141,8 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
     variantId: SceneLayoutSnapshot["variantId"],
     viewportSize: RenderViewportSize,
   ): void {
-    for (const [id, popup] of this.#popups) {
+    for (const id of Object.keys(this.#resource.popupPackages)) {
+      const popup = this.#runtime.getAwardCelebrationPopup(id);
       const binding = this.#resource.manifest.popups?.[id];
       const placement = binding?.placements[variantId];
       if (!binding || !placement) {
@@ -154,28 +160,36 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
 
   update(deltaSeconds: number): void {
     this.assertReady();
-    this.#layout.update(deltaSeconds);
+    this.#runtime.update(deltaSeconds);
+  }
+
+  getGameModeSnapshot(): SceneLayoutGameModeSnapshot {
+    this.assertReady();
+    return this.#runtime.getGameModeSnapshot();
+  }
+
+  prepareGameModeTransition(modeId: string): Promise<void> {
+    this.assertReady();
+    return this.#runtime.prepareGameModeTransition(modeId);
+  }
+
+  requestGameMode(modeId: string): Promise<void> {
+    this.assertReady();
+    return this.#runtime.requestGameMode(modeId);
   }
 
   getAwardCelebrationPlayer(id: string): AwardCelebrationPlayer {
     this.assertReady();
-    const popup = this.#popups.get(id);
-    if (!popup) {
-      throw new SceneLayoutError(
-        `Scene layout award celebration popup "${id}" is unavailable.`,
-      );
-    }
-    return popup;
+    return this.#runtime.getAwardCelebrationPopup(id);
   }
 
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
-    for (const popup of this.#popups.values()) popup.destroy();
-    this.#popups.clear();
-    this.popupContainer.destroy({ children: false });
-    this.#layout.destroy();
-    void this.#resource.destroy();
+    this.#backgroundContainer.destroy({ children: false });
+    this.#transitionContainer.destroy({ children: false });
+    this.#popupContainer.destroy({ children: false });
+    this.#runtime.destroy();
   }
 
   private assertReady(): void {

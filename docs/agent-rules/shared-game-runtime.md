@@ -11,6 +11,8 @@
   overwritten target 与 source replacement；release-only win positions 只加入 holes
   和 release IDs，不得伪造金额组。grid-cell transfer 由 rendercore 以整批
   prepare/start/commit/rollback/destroy transaction 承担。
+- relocation 输出 occurrence 必须按不可变 input occurrence 定位槽位，不得按已经
+  被前序 target 改写的 output id 再查找；source/target 坐标遍历顺序不能改变结果。
 - `packages/rendercore` 的 capability-driven coordinator 是 standard/grid-cell、base/cascade 的共享编排入口，负责 initial、win、remove、dropdown、refill、sequential collect、completion 和 cleanup 边界。
 - settled 后、中奖前的业务转换必须由 logiccore 的中性 immutable transform step
   和 rendercore 的 capability phase 显式表达；共享层只校验 occurrence
@@ -19,7 +21,8 @@
 - symbol package 到 reel registry 的 catalog/value-controller 适配属于 rendercore；
   game app 不从 package bytes 重建 asset 表。layout/background/popup 与 app-owned reel
   组合时使用 rendercore presentation surface，不复制 scene-layout visibility、placement
-  或 popup lifecycle。
+  或 popup lifecycle。需要 mode transition 时，surface 必须委托 package runtime 的
+  prepare/request/event/switch/settle 状态机并公开独立 transition container。
 - 游戏 app 只保留业务 component/value/result resolver、formatter、layout、anticipation 和 typed extension；不得复制 Pixi、Spine、reel、cascade 或 popup 状态机。
 
 ## Reel 与 server 数据边界

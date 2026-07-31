@@ -99,6 +99,11 @@ type ActiveModeTransition =
 
 export function createSceneLayoutPackageRuntime(options: {
   readonly resource: SceneLayoutPackageResource;
+  /**
+   * Keeps mode/background/transition/popup ownership in this runtime while
+   * allowing a host to retain its existing business reel.
+   */
+  readonly presentationOnly?: boolean;
   readonly reelPresentation?: SlotReelPresentationProfileV1;
   readonly formatPopupAmount?: import("../popup/index.js").PopupAmountFormatter;
   readonly createTransitionPlayer?: (options: {
@@ -111,6 +116,7 @@ export function createSceneLayoutPackageRuntime(options: {
 }): SceneLayoutPackageRuntime {
   return new DefaultSceneLayoutPackageRuntime(
     options.resource,
+    options.presentationOnly === true,
     options.reelPresentation,
     options.formatPopupAmount,
     options.createTransitionPlayer,
@@ -121,6 +127,7 @@ export function createSceneLayoutPackageRuntime(options: {
 class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly container: Container;
   readonly #resource: SceneLayoutPackageResource;
+  readonly #presentationOnly: boolean;
   #manifest: SceneLayoutPackageResource["manifest"];
   readonly #layout;
   readonly #reelPresentation: SlotReelPresentationProfileV1 | null;
@@ -159,6 +166,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
 
   constructor(
     resource: SceneLayoutPackageResource,
+    presentationOnly: boolean,
     reelPresentation: SlotReelPresentationProfileV1 | undefined,
     formatPopupAmount:
       | import("../popup/index.js").PopupAmountFormatter
@@ -176,6 +184,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       | undefined,
   ) {
     this.#resource = resource;
+    this.#presentationOnly = presentationOnly;
     this.#manifest = resource.manifest;
     this.#reelPresentation = reelPresentation ?? null;
     this.#formatPopupAmount = formatPopupAmount;
@@ -226,7 +235,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         : null;
       this.commitBackgroundVisibility(initialMode);
       const activeBinding = this.resolveModeSymbolBinding(initialMode);
-      if (activeBinding) {
+      if (activeBinding && !this.#presentationOnly) {
         const initial = options.reels?.main;
         if (!initial)
           throw new SceneLayoutError(
@@ -247,6 +256,13 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           activeBinding.binding,
           initial,
         );
+        this.#activeSymbolPackageId = activeBinding.id;
+        this.#stableSymbolPackageId = activeBinding.id;
+      } else if (activeBinding) {
+        if (options.reels?.main)
+          throw new SceneLayoutError(
+            "Presentation-only scene layout runtime must not receive reels.main input.",
+          );
         this.#activeSymbolPackageId = activeBinding.id;
         this.#stableSymbolPackageId = activeBinding.id;
       } else if (options.reels?.main) {
@@ -575,6 +591,21 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         `Scene layout award celebration popup "${id}" is unavailable.`,
       );
     return popup;
+  }
+
+  getBackgroundPresentation(): Container {
+    this.assertReady();
+    return this.#layout.container;
+  }
+
+  getModeTransitionPresentation(): Container {
+    this.assertReady();
+    return this.#transitionRoot;
+  }
+
+  getPopupPresentation(): Container {
+    this.assertReady();
+    return this.#popupRoot;
   }
 
   getGameModeIds(): readonly string[] {
@@ -921,6 +952,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       );
     const bindingChanged =
       sourceBinding?.id !== targetBinding?.id || recreateReel;
+    if (this.#presentationOnly && bindingChanged)
+      throw new SceneLayoutError(
+        "Presentation-only scene layout runtime requires source and target modes to share one symbol package binding.",
+      );
     const targetInput = options.reels?.main;
     if (!bindingChanged && targetInput)
       throw new SceneLayoutError(

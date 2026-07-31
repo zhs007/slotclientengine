@@ -204,6 +204,13 @@ export interface Game002ReelRuntime {
     sceneName?: string,
     targetPresentationValues?: SymbolPresentationValueMatrix,
   ): GridCellReelSpinPlan;
+  startSelectiveSpin(options: {
+    readonly sourceScene: SceneMatrix;
+    readonly targetScene: SceneMatrix;
+    readonly targetValues: SymbolPresentationValueMatrix;
+    readonly positions: readonly WinResultPosition[];
+    readonly sceneName?: string;
+  }): GridCellReelSpinPlan;
   update(deltaSeconds: number): RenderGridCellReelSetUpdateResult;
   requestVisibleSymbolStates(
     positions: readonly WinResultPosition[],
@@ -405,8 +412,12 @@ export function createGame002ReelRuntime(
   let currentScene: SceneMatrix | null = null;
   let targetScene: SceneMatrix | null = null;
   let finalYs: readonly number[] | null = null;
-  let activeTargetKind: "initial-spin" | "dropdown" | "refill-spin" | null =
-    null;
+  let activeTargetKind:
+    | "initial-spin"
+    | "selective-spin"
+    | "dropdown"
+    | "refill-spin"
+    | null = null;
   let anticipationActive = false;
   let landedTriggerCount = 0;
   let activationCoordinate: Readonly<{ x: number; y: number }> | null = null;
@@ -712,6 +723,78 @@ export function createGame002ReelRuntime(
       reelSet.visible = true;
       return plan;
     },
+    startSelectiveSpin(
+      selectiveOptions: Parameters<Game002ReelRuntime["startSelectiveSpin"]>[0],
+    ): GridCellReelSpinPlan {
+      if (reelSet.getSnapshot().spinning || targetScene)
+        throw new Error("game002 reels already have an active target.");
+      const sceneName =
+        selectiveOptions.sceneName ?? "game002 selective spin scene";
+      const sourceScene = validateGame002Scene(
+        selectiveOptions.sourceScene,
+        `${sceneName} source`,
+      );
+      assertScenesEqual(
+        validateGame002Scene(
+          reelSet.getVisibleScene(),
+          `${sceneName} visible source`,
+        ),
+        sourceScene,
+        `${sceneName} source`,
+      );
+      const validScene = validateGame002Scene(
+        selectiveOptions.targetScene,
+        sceneName,
+      );
+      const selected = new Set(
+        selectiveOptions.positions.map(({ x, y }) => `${x},${y}`),
+      );
+      for (let x = 0; x < GAME002_REEL_COUNT; x += 1)
+        for (let y = 0; y < GAME002_VISIBLE_ROWS; y += 1)
+          if (
+            !selected.has(`${x},${y}`) &&
+            sourceScene[x]![y] !== validScene[x]![y]
+          )
+            throw new Error(`${sceneName} changed held cell (${x},${y}).`);
+      const nextFinalYs = resolveSceneFinalYs(validScene, sceneName);
+      const plan = createGridCellReelSpinPlan({
+        reels,
+        finalYs: nextFinalYs,
+        targetScene: validScene,
+        columns: GAME002_REEL_COUNT,
+        rows: GAME002_VISIBLE_ROWS,
+        order,
+        positions: selectiveOptions.positions,
+        cellReelOffsets: createSpinPhaseOffsets(),
+        direction: config.direction,
+        timing: config.timing,
+        dimming: spinDimming,
+        dimmingActivatedAtStart: false,
+      });
+      const sourceValues = reelSet.getCascadeValues();
+      const sourceFinalYs = finalYs;
+      if (!sourceFinalYs)
+        throw new Error(`${sceneName} source stop coordinates are missing.`);
+      reelSet.releaseVisibleSymbols(selectiveOptions.positions);
+      try {
+        reelSet.spin(plan, {
+          targetPresentationValues: selectiveOptions.targetValues,
+        });
+      } catch (error) {
+        reelSet.resetToScene(
+          sourceScene,
+          sourceFinalYs,
+          undefined,
+          sourceValues,
+        );
+        throw error;
+      }
+      finalYs = nextFinalYs;
+      targetScene = validScene;
+      activeTargetKind = "selective-spin";
+      reelSet.visible = true;
+      return plan;
+    },
     update(deltaSeconds: number): RenderGridCellReelSetUpdateResult {
       const result = reelSet.update(deltaSeconds);
       if (activeTargetKind === "initial-spin") {
@@ -766,6 +849,7 @@ export function createGame002ReelRuntime(
         const visibleScene = reelSet.getVisibleScene();
         if (
           activeTargetKind === "initial-spin" ||
+          activeTargetKind === "selective-spin" ||
           activeTargetKind === "refill-spin"
         ) {
           const fullScene = validateGame002Scene(

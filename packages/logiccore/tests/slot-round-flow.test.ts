@@ -124,17 +124,17 @@ describe("slot round flow profile", () => {
                 changes: [
                   {
                     position: { x: 0, y: 0 },
-                    outputCode: 3,
+                    outputCode: 1,
                     outputValue: null,
                   },
                   {
                     position: { x: 0, y: 1 },
-                    outputCode: 1,
+                    outputCode: 3,
                     outputValue: null,
                   },
                 ],
                 relocations: [
-                  { source: { x: 0, y: 0 }, target: { x: 0, y: 1 } },
+                  { source: { x: 0, y: 1 }, target: { x: 0, y: 0 } },
                 ],
               }
             : [],
@@ -148,11 +148,11 @@ describe("slot round flow profile", () => {
       transform?.kind === "settled-transform" && transform.relocations,
     ).toEqual([
       {
-        occurrenceId: "initial:0:0",
-        overwrittenOccurrenceId: "initial:0:1",
-        sourceReplacementOccurrenceId: "transform:0:0:0",
-        source: { x: 0, y: 0 },
-        target: { x: 0, y: 1 },
+        occurrenceId: "initial:0:1",
+        overwrittenOccurrenceId: "initial:0:0",
+        sourceReplacementOccurrenceId: "transform:0:0:1",
+        source: { x: 0, y: 1 },
+        target: { x: 0, y: 0 },
       },
     ]);
     expect(win?.kind === "win" && win.releaseOnlyPositions).toEqual([

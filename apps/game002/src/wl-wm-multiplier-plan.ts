@@ -561,7 +561,7 @@ export function createGame002WlWmMultiplierCompiler(options: {
                 outputValue,
               }),
             );
-          } else if (cm2cn[x][y] !== code) {
+          } else if (code !== coCode && cm2cn[x][y] !== code) {
             throw new Error(
               `step[${context.stepIndex}] bg-cm2cn changed non-CM occurrence (${x},${y}): actual(server) code=${cm2cn[x][y]}; expected(compiled) unchanged code=${code}.`,
             );
@@ -747,8 +747,87 @@ function resolveIncomingWlIncrements(options: {
   readonly pending: readonly Game002PendingWlIncrement[];
 }): Game002WlIncrementPresentation[] {
   const { context } = options;
+  const declared = context.step.getComponent?.(
+    GAME002_CASCADE_COMPONENTS.posincwl,
+  );
+  if (declared && isRecord(declared.raw)) {
+    const raw = declared.raw.pos;
+    if (!Array.isArray(raw) || raw.length % 2 !== 0)
+      throw new Error(
+        `step[${context.stepIndex}] bg-pos-incwl.pos must contain x/y pairs.`,
+      );
+    const selected: SlotRoundPosition[] = [];
+    const seen = new Set<string>();
+    for (let index = 0; index < raw.length; index += 2) {
+      const x = raw[index];
+      const y = raw[index + 1];
+      if (
+        !Number.isSafeInteger(x) ||
+        !Number.isSafeInteger(y) ||
+        (x as number) < 0 ||
+        (y as number) < 0
+      )
+        throw new Error(
+          `step[${context.stepIndex}] bg-pos-incwl coordinate (${String(x)},${String(y)}) is invalid.`,
+        );
+      const key = `${String(x)},${String(y)}`;
+      if (seen.has(key))
+        throw new Error(
+          `step[${context.stepIndex}] bg-pos-incwl contains duplicate position ${key}.`,
+        );
+      seen.add(key);
+      selected.push(Object.freeze({ x: x as number, y: y as number }));
+    }
+    const hasIncwl = context.step.hasComponent(
+      GAME002_CASCADE_COMPONENTS.incwl,
+    );
+    if (selected.length === 0) {
+      if (hasIncwl)
+        throw new Error(
+          `step[${context.stepIndex}] bg-incwl requires at least one bg-pos-incwl position.`,
+        );
+      return [];
+    }
+    if (!hasIncwl)
+      throw new Error(
+        `step[${context.stepIndex}] bg-pos-incwl requires bg-incwl.`,
+      );
+    const values = readComponentOtherScene({
+      step: context.step,
+      componentName: GAME002_CASCADE_COMPONENTS.incwl,
+      required: true,
+      label: `step[${context.stepIndex}] bg-incwl`,
+      scene: context.input.scene,
+      validateAllValues: false,
+    })!;
+    return selected.map((position) => {
+      const { x, y } = position;
+      const occurrence = context.input.occurrences.find(
+        (candidate) => candidate.position.x === x && candidate.position.y === y,
+      );
+      if (occurrence?.code !== options.wlCode)
+        throw new Error(
+          `step[${context.stepIndex}] bg-pos-incwl position (${x},${y}) must select a settled WL.`,
+        );
+      const inputValue = assertPositiveMultiplier(
+        occurrence.value,
+        `step[${context.stepIndex}] WL (${x},${y}) multiplier`,
+      );
+      const outputValue = addSafe(
+        inputValue,
+        1,
+        `step[${context.stepIndex}] bg-incwl (${x},${y})`,
+      );
+      if (values[x][y] !== outputValue)
+        throw new Error(
+          `step[${context.stepIndex}] bg-incwl[${x}][${y}] differs: actual(server)=${String(values[x][y])}; expected(compiled)=${outputValue} (input WL=${inputValue} + 1).`,
+        );
+      return Object.freeze({ position, inputValue, outputValue });
+    });
+  }
+  const pending = options.pending;
   const hasIncwl = context.step.hasComponent(GAME002_CASCADE_COMPONENTS.incwl);
-  if (options.pending.length === 0) {
+  if (pending.length === 0) {
     if (hasIncwl)
       throw new Error(
         `step[${context.stepIndex}] bg-incwl has no winning WL from the preceding step: actual(server) bg-incwl component=present; expected(compiled) no bg-incwl.`,
@@ -757,7 +836,7 @@ function resolveIncomingWlIncrements(options: {
   }
   if (!hasIncwl)
     throw new Error(
-      `step[${context.stepIndex}] bg-incwl is required for WL that participated in the preceding bg-win: actual(server) bg-incwl component=missing; pending winning WL occurrence(s)=${formatPendingWlIncrements(options.pending)}; expected(server) bg-incwl after dropdown and before refill with otherScene value=current multiplier+1.`,
+      `step[${context.stepIndex}] bg-incwl is required for WL that participated in the preceding bg-win: actual(server) bg-incwl component=missing; pending winning WL occurrence(s)=${formatPendingWlIncrements(pending)}; expected(server) bg-incwl after dropdown and before refill with otherScene value=current multiplier+1.`,
     );
   const values = readComponentOtherScene({
     step: context.step,
@@ -767,7 +846,7 @@ function resolveIncomingWlIncrements(options: {
     scene: context.input.scene,
     validateAllValues: false,
   })!;
-  return options.pending.map((increment) => {
+  return pending.map((increment) => {
     const { x, y } = increment.position;
     const code = context.input.scene[x]?.[y];
     const value = context.input.values[x]?.[y];
@@ -1095,6 +1174,10 @@ function addSafe(left: number, right: number, label: string): number {
   if (!Number.isSafeInteger(result))
     throw new Error(`${label} exceeds the safe integer range.`);
   return result;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function multiplySafe(left: number, right: number, label: string): number {

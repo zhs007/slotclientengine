@@ -63,6 +63,19 @@
 - normal 与 dropdown 指向相同 resource/playback 时保留 player 和时间轴，不 reset/replay 等价 Loop。
 - 所有 step 完成后才播放 global win-amount；播放期间 reel runtime 继续逐帧 update。
 
+## FreeGame
+
+- `bg-triggerfg` 只接受没有其它 BaseGame 赔付的 type-5 WL result；WL win once
+  完成后才进入 Layout transition，转场不得重建 reel 或替换触发 scene。
+- `fg-spin` 的视觉 mask 从 committed scene 的非 WL/CN 格派生；服务器 scene 只
+  提供本步可见落点，`fg-spin.pos` 只作为 feature result set。
+- 每步顺序固定为 `spin -> AF -> CO`。AF number 只取 `fg-rollaf.number`，以 raw
+  digits 显示并计入 `fg-start.lastRespinNum`；AF Change 完成才提交 AF -> CN。
+- FG CO source 只允许 post-AF scene 中的 WL/CN，并复用 rendercore relocation
+  transaction；source 变 BN、target 接收 occurrence/value、CO 变 CN。
+- 只有剩余次数为 0 的最后一步允许 `fg-win`，且只赔付 type-6 CN group；collect
+  不 remove，BigWin complete 后才反向 transition，最终 scene 跨模式保留。
+
 ## WL/WM/CM multiplier 与中奖前转换
 
 - initial spin 和 refill 的动画前落定 scene 先按

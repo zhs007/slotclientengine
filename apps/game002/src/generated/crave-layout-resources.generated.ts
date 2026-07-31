@@ -11,27 +11,27 @@ import resource8Url from "../../../../assets/crave/assets/0eff740496519fcb7c1b8c
 import resource9Url from "../../../../assets/crave/assets/11042af112677f9cb687574ae314e8228bb801f381fd0be867908ed968eb96a2.webp?url";
 import resource10Url from "../../../../assets/crave/assets/11157e0be3e33f48ce4d60b260e6cf6a8ac02e25609362b5a694dd5afdc13f32.json?url";
 import resource11Url from "../../../../assets/crave/assets/14f841a2e52950487b73ab5403fd19ba1e9529458a27041cc2905b75bdf9bcf0.webp?url";
-import resource12Url from "../../../../assets/crave/assets/1bb9ae96e5e09a24d401cd1cdfa62138a6d5381e501de2ff14300f6cfc397119.json?url";
-import resource13Url from "../../../../assets/crave/assets/1bd8ad503506430d6494ab7022a127d05be086d3c90c46185485060438cfd210.webp?url";
-import resource14Url from "../../../../assets/crave/assets/1c26a2f5e4a094d0b666eb4a3bd8f039c775f67c07d12b54878ded920ed4e8fd.webp?url";
-import resource15Url from "../../../../assets/crave/assets/1f1b3120837a15fc1f3191b13d689f3d332aed0e1d1bc05d2ac4be1eb4dbf819.json?url";
-import resource16Url from "../../../../assets/crave/assets/1ff28d5357a72573a04469ce60d8d89ed26099be86b50fe1be500d616c73789a.webp?url";
-import resource17Url from "../../../../assets/crave/assets/21a8099eb5c4048ae0d5d07a09bde17ea892c5f7407e5432082f5598c28ca63d.webp?url";
-import resource18Url from "../../../../assets/crave/assets/225fc13b6d68f2b0445b08eb829d254dbb64bd512447645f51025da0ff497a11.json?url";
-import resource19Url from "../../../../assets/crave/assets/226097d89334ece16aa58620dad88921e652843088fcba91ae02acb297603182.json?url";
-import resource20Url from "../../../../assets/crave/assets/22e8d043c74fe5f956e8c388bc48a1b1e596532876b4146f11611537091fe802.webp?url";
-import resource21Url from "../../../../assets/crave/assets/2317ccb84eb2b75ddb08a07ce0d0bad8b694bb862d0d182b96b3464f61be8f39.webp?url";
-import resource22Url from "../../../../assets/crave/assets/280f3a4194d0038d4925b50b8583df47d02c0879c4ac9bb71e0071c93434059f.webp?url";
-import resource23Url from "../../../../assets/crave/assets/285ede1a60278c363cd2728fde58bbf84da5201bede9d041325a9e2bd408dba7.webp?url";
-import resource24Url from "../../../../assets/crave/assets/290a1834ffca878671769c387cb011cb3d71f9e9d9e4d855d113c6e4d1f617b8.webp?url";
-import resource25Url from "../../../../assets/crave/assets/2b10fe894aacd7ab023ff0204551d237cad05a82dd96af60decb8d64c175c146.webp?url";
-import resource26Url from "../../../../assets/crave/assets/2d607b3553e546935e483facc63ec10ed570c8dbe210f85ac0156c6d20c42a6e.webp?url";
-import resource27Url from "../../../../assets/crave/assets/3323235e6ed1a549835678fd80e94f9b41133ac8a470c8f780d5cfccd97ae5a4.json?url";
-import resource28Url from "../../../../assets/crave/assets/35a1bd6c33e55474bdd8d4d78fd0606ba4914a196565dff66795f4e405684cd4.webp?url";
-import resource29Url from "../../../../assets/crave/assets/39dec6fccfde6ba0aa7a399c87be9fc2c5acfff189f37191f6e2d692a56faafa.json?url";
-import resource30Url from "../../../../assets/crave/assets/3b60142c9a37ba309cc8bdc4b53a6d99794b90bb870ba951d3674a123a9f5f18.webp?url";
-import resource31Url from "../../../../assets/crave/assets/3cd6770c007253dcb0a3acdd21045fcfcee93319dcfeeed50a0813d06b94feee.webp?url";
-import resource32Url from "../../../../assets/crave/assets/3ffff41caccbe9e2a7cd14fe0b7e8ece15483410ff110fcbdabe88f80efb6440.webp?url";
+import resource12Url from "../../../../assets/crave/assets/1bd8ad503506430d6494ab7022a127d05be086d3c90c46185485060438cfd210.webp?url";
+import resource13Url from "../../../../assets/crave/assets/1c26a2f5e4a094d0b666eb4a3bd8f039c775f67c07d12b54878ded920ed4e8fd.webp?url";
+import resource14Url from "../../../../assets/crave/assets/1f1b3120837a15fc1f3191b13d689f3d332aed0e1d1bc05d2ac4be1eb4dbf819.json?url";
+import resource15Url from "../../../../assets/crave/assets/1ff28d5357a72573a04469ce60d8d89ed26099be86b50fe1be500d616c73789a.webp?url";
+import resource16Url from "../../../../assets/crave/assets/21a8099eb5c4048ae0d5d07a09bde17ea892c5f7407e5432082f5598c28ca63d.webp?url";
+import resource17Url from "../../../../assets/crave/assets/225fc13b6d68f2b0445b08eb829d254dbb64bd512447645f51025da0ff497a11.json?url";
+import resource18Url from "../../../../assets/crave/assets/226097d89334ece16aa58620dad88921e652843088fcba91ae02acb297603182.json?url";
+import resource19Url from "../../../../assets/crave/assets/22e8d043c74fe5f956e8c388bc48a1b1e596532876b4146f11611537091fe802.webp?url";
+import resource20Url from "../../../../assets/crave/assets/2317ccb84eb2b75ddb08a07ce0d0bad8b694bb862d0d182b96b3464f61be8f39.webp?url";
+import resource21Url from "../../../../assets/crave/assets/280f3a4194d0038d4925b50b8583df47d02c0879c4ac9bb71e0071c93434059f.webp?url";
+import resource22Url from "../../../../assets/crave/assets/285ede1a60278c363cd2728fde58bbf84da5201bede9d041325a9e2bd408dba7.webp?url";
+import resource23Url from "../../../../assets/crave/assets/290a1834ffca878671769c387cb011cb3d71f9e9d9e4d855d113c6e4d1f617b8.webp?url";
+import resource24Url from "../../../../assets/crave/assets/2b10fe894aacd7ab023ff0204551d237cad05a82dd96af60decb8d64c175c146.webp?url";
+import resource25Url from "../../../../assets/crave/assets/2d607b3553e546935e483facc63ec10ed570c8dbe210f85ac0156c6d20c42a6e.webp?url";
+import resource26Url from "../../../../assets/crave/assets/3323235e6ed1a549835678fd80e94f9b41133ac8a470c8f780d5cfccd97ae5a4.json?url";
+import resource27Url from "../../../../assets/crave/assets/35a1bd6c33e55474bdd8d4d78fd0606ba4914a196565dff66795f4e405684cd4.webp?url";
+import resource28Url from "../../../../assets/crave/assets/39dec6fccfde6ba0aa7a399c87be9fc2c5acfff189f37191f6e2d692a56faafa.json?url";
+import resource29Url from "../../../../assets/crave/assets/3b60142c9a37ba309cc8bdc4b53a6d99794b90bb870ba951d3674a123a9f5f18.webp?url";
+import resource30Url from "../../../../assets/crave/assets/3cd6770c007253dcb0a3acdd21045fcfcee93319dcfeeed50a0813d06b94feee.webp?url";
+import resource31Url from "../../../../assets/crave/assets/3ffff41caccbe9e2a7cd14fe0b7e8ece15483410ff110fcbdabe88f80efb6440.webp?url";
+import resource32Url from "../../../../assets/crave/assets/407fcf808266ff679fa65b29dcfae9e9a97571a5f42d6e3037cc47cf7cb96084.json?url";
 import resource33Url from "../../../../assets/crave/assets/40d8ee4d352f756785cf750edaa51d708f0710ed47b0cf5cc5cdf544b090f521.webp?url";
 import resource34Url from "../../../../assets/crave/assets/41ae45bedf1c1e55bb175c4063bfb204ac40b6c91e31277eb5039c777a70cf54.webp?url";
 import resource35Url from "../../../../assets/crave/assets/425bfbcb70780277bf2ffd0f8eb560224aa1eee7a99996b7f54edd1c50c1e09a.webp?url";
@@ -71,48 +71,48 @@ import resource68Url from "../../../../assets/crave/assets/6db5ea84f6484ec9a83c4
 import resource69Url from "../../../../assets/crave/assets/6f2d8e49ce70fd7e07a337da18d00b96a0e85bcf913558a4231051bb737a7047.json?url";
 import resource70Url from "../../../../assets/crave/assets/6f3e89091a65b9b25764b0be46cd2383d13e8fea68fd4e924373eb07916278de.webp?url";
 import resource71Url from "../../../../assets/crave/assets/6f535ec4d1c91b92a35391d39d07f3a906eb47954402f8ac8bdc401a6c46208e.webp?url";
-import resource72Url from "../../../../assets/crave/assets/6fe4fdd2071159c309a5bf144c24194b0e30f966ebc61e3065d0063820c6fe81.json?url";
-import resource73Url from "../../../../assets/crave/assets/720c4808c887713399fbe6578eab3cbeeefd59640f49ec39590d615eee8a3e99.json?url";
-import resource74Url from "../../../../assets/crave/assets/75f06ed5cfda712eebc0a2f4a080aa28688a6dff28438f1aeb03f3092af70aa3.webp?url";
-import resource75Url from "../../../../assets/crave/assets/783c22523bf3f0a91a5f4bf6bbecb2564593f2e270faaebc4e2b5409c750ca25.webp?url";
-import resource76Url from "../../../../assets/crave/assets/78863fe65c9e5086f382ccbc8ef500d3e2796f0f11828bbd2fd4275e2a127be6.webp?url";
-import resource77Url from "../../../../assets/crave/assets/78b34c8f5e652804828a8615435d94e3587261e7ae7cf79cd9242bfcbc22234e.webp?url";
-import resource78Url from "../../../../assets/crave/assets/79b19cb958351b9893ef36af8bc8b5158091cd92b58ded21b0ec4c032beab7c2.webp?url";
-import resource79Url from "../../../../assets/crave/assets/7b9d005d4abdfceaa6fac98c71978ad3c680ed0059c33cdde9fdd4540abe6f31.webp?url";
-import resource80Url from "../../../../assets/crave/assets/7edafe76c002d982dc949bcf8b9797f7f37a16369b2770207dfad72f9be95b2c.webp?url";
-import resource81Url from "../../../../assets/crave/assets/7f19f237bb7ed048691b830519a2da7c5ab2df9cba0b0f230ec35f847e1c02b4.webp?url";
-import resource82Url from "../../../../assets/crave/assets/7ff58cd3c6d3a1e3a1035d98b641b528f3df850e413f0c3e0bccebb2d2630015.json?url";
-import resource83Url from "../../../../assets/crave/assets/80859640064ab852dfe914189e464fa73cdd0f81db81a7700cbf3231f129ba21.webp?url";
-import resource84Url from "../../../../assets/crave/assets/80aa56f4055ed2bfaa9c673fad19b0c41ecba3f5900730b8f2521751c13c9839.webp?url";
-import resource85Url from "../../../../assets/crave/assets/89d03067d7fb3da5f4f884348f69ddd3ee04d1c36b31a1c02e0f4412ab5feb87.webp?url";
-import resource86Url from "../../../../assets/crave/assets/8a5cbcf3c0c837d4979b34a20d975b61961b7d050eb2608cbc362a71324e7f6c.json?url";
-import resource87Url from "../../../../assets/crave/assets/8adc4f0a69c3232926551f4faa3e497891205d1ec32e96644f02042552ed7d27.webp?url";
-import resource88Url from "../../../../assets/crave/assets/8cf862e779b5015bb46d52c3b11598df2b06eff6b3d09c777c34a0af7465919d.webp?url";
-import resource89Url from "../../../../assets/crave/assets/8f4a6a991ef2bd7faa67d20cc1d5b898f4429128288f5adc16d74a03ef059604.webp?url";
-import resource90Url from "../../../../assets/crave/assets/9632ca7543c10bb5f2ea8a3d413df21fc818c0cfd3b34286dc278b848870d2f5.json?url";
-import resource91Url from "../../../../assets/crave/assets/99b34ea8eb810787cb56de064d8f5c9eb10e95a8cabee400266596cb95ef14c0.webp?url";
-import resource92Url from "../../../../assets/crave/assets/9cfa5c2fb3a9745cf71486f491f89920199d54818fa18272a92f25474245fe14.webp?url";
-import resource93Url from "../../../../assets/crave/assets/9e395695421acaa142ea26fecd809d5aa3b7a63d80df60ee5ec3a05faa008e29.webp?url";
-import resource94Url from "../../../../assets/crave/assets/a17188e5e3a70f1513fc20853dc4e4184cbc50b5be8ce898d7b48227bd7d5331.webp?url";
-import resource95Url from "../../../../assets/crave/assets/a3e6685663e4c79c071d15634df218fd8b83784805597c088d0674fa5b2d78ec.webp?url";
-import resource96Url from "../../../../assets/crave/assets/a90ebcdeab346f4374e5d09d8259601ac77e7987576b8adf31868afa3e025da4.json?url";
-import resource97Url from "../../../../assets/crave/assets/a9b12f118db79a50ba5acd81c06fc76b6044eb75a8854b50842d33e7652555e2.webp?url";
-import resource98Url from "../../../../assets/crave/assets/ae592acc7b114b0d34692ba11604bbdce594f7d861d71e05d859d609047e3c40.json?url";
-import resource99Url from "../../../../assets/crave/assets/b2b42ad3b4840829ff8f2cfd738342ef6c2cda7f3e0124c2437b03ea43c8dbbf.webp?url";
-import resource100Url from "../../../../assets/crave/assets/bd87f461ec02935f64165933b0f4bda3b67e1fa71f52165645eeafc2d323a528.webp?url";
-import resource101Url from "../../../../assets/crave/assets/bfc1e55c7d16e5275ef82e17080f4fa5003ba66ff3768cc13a1dbb4b6350b0d9.webp?url";
-import resource102Url from "../../../../assets/crave/assets/c294643e709cff513f6737f9c4f23b3ad9533e7f2204f6054c2e50a33da1993b.webp?url";
-import resource103Url from "../../../../assets/crave/assets/c3fd822a3345b60088b899deb8b7eb9aaf1d0c92b543d1d4be0b7f3baa5fa9e0.json?url";
-import resource104Url from "../../../../assets/crave/assets/c4aa02e2f3eec0599515c05fc15660d2e2e5730a0bf40a7d4d83e46884d24c41.webp?url";
-import resource105Url from "../../../../assets/crave/assets/c615fa2ae2f61ac0dcfb4bd9a209f046b24c2b4ab82c17ebb77548b7b92699f6.webp?url";
-import resource106Url from "../../../../assets/crave/assets/c6a07a861e1cfdf03b1fd475b71369e2bca280f9ebc3f9c67747b55a18ffea60.webp?url";
-import resource107Url from "../../../../assets/crave/assets/c6e19ff03212d4a45cc07d21896a3ebf80f3ef7e1a43dfa7f59d7bf11c94b394.webp?url";
-import resource108Url from "../../../../assets/crave/assets/cc6d6eb038acbff66bdb8d2e7dc228b053cef527a5b2363aabb2b796c2c210b0.webp?url";
-import resource109Url from "../../../../assets/crave/assets/cdeab1fa3ce7c7643ad8c8cc51e0c185f552b75246ab0c721ca88b47202c7545.webp?url";
-import resource110Url from "../../../../assets/crave/assets/d119f428b0bed7269073dc16dfd73a30c33a7967f9659f3f60af0145aea8a3af.webp?url";
-import resource111Url from "../../../../assets/crave/assets/d28da52e91698718326c0fd3a3ac027417e8542646123fe942c4f8ed902481b8.webp?url";
-import resource112Url from "../../../../assets/crave/assets/d742ac8e1cfd16e7148b709e21f0add41f95e64785e23bdd0df686341133d98e.atlas?url";
-import resource113Url from "../../../../assets/crave/assets/d8823e1b454ba3450f6ea999f6024dac354c6b34e709a7a12d4bc1e78a4a745a.webp?url";
+import resource72Url from "../../../../assets/crave/assets/720c4808c887713399fbe6578eab3cbeeefd59640f49ec39590d615eee8a3e99.json?url";
+import resource73Url from "../../../../assets/crave/assets/75f06ed5cfda712eebc0a2f4a080aa28688a6dff28438f1aeb03f3092af70aa3.webp?url";
+import resource74Url from "../../../../assets/crave/assets/783c22523bf3f0a91a5f4bf6bbecb2564593f2e270faaebc4e2b5409c750ca25.webp?url";
+import resource75Url from "../../../../assets/crave/assets/78863fe65c9e5086f382ccbc8ef500d3e2796f0f11828bbd2fd4275e2a127be6.webp?url";
+import resource76Url from "../../../../assets/crave/assets/78b34c8f5e652804828a8615435d94e3587261e7ae7cf79cd9242bfcbc22234e.webp?url";
+import resource77Url from "../../../../assets/crave/assets/79b19cb958351b9893ef36af8bc8b5158091cd92b58ded21b0ec4c032beab7c2.webp?url";
+import resource78Url from "../../../../assets/crave/assets/7b9d005d4abdfceaa6fac98c71978ad3c680ed0059c33cdde9fdd4540abe6f31.webp?url";
+import resource79Url from "../../../../assets/crave/assets/7edafe76c002d982dc949bcf8b9797f7f37a16369b2770207dfad72f9be95b2c.webp?url";
+import resource80Url from "../../../../assets/crave/assets/7f19f237bb7ed048691b830519a2da7c5ab2df9cba0b0f230ec35f847e1c02b4.webp?url";
+import resource81Url from "../../../../assets/crave/assets/7ff58cd3c6d3a1e3a1035d98b641b528f3df850e413f0c3e0bccebb2d2630015.json?url";
+import resource82Url from "../../../../assets/crave/assets/80859640064ab852dfe914189e464fa73cdd0f81db81a7700cbf3231f129ba21.webp?url";
+import resource83Url from "../../../../assets/crave/assets/80aa56f4055ed2bfaa9c673fad19b0c41ecba3f5900730b8f2521751c13c9839.webp?url";
+import resource84Url from "../../../../assets/crave/assets/89d03067d7fb3da5f4f884348f69ddd3ee04d1c36b31a1c02e0f4412ab5feb87.webp?url";
+import resource85Url from "../../../../assets/crave/assets/8a5cbcf3c0c837d4979b34a20d975b61961b7d050eb2608cbc362a71324e7f6c.json?url";
+import resource86Url from "../../../../assets/crave/assets/8adc4f0a69c3232926551f4faa3e497891205d1ec32e96644f02042552ed7d27.webp?url";
+import resource87Url from "../../../../assets/crave/assets/8cf862e779b5015bb46d52c3b11598df2b06eff6b3d09c777c34a0af7465919d.webp?url";
+import resource88Url from "../../../../assets/crave/assets/8f4a6a991ef2bd7faa67d20cc1d5b898f4429128288f5adc16d74a03ef059604.webp?url";
+import resource89Url from "../../../../assets/crave/assets/9632ca7543c10bb5f2ea8a3d413df21fc818c0cfd3b34286dc278b848870d2f5.json?url";
+import resource90Url from "../../../../assets/crave/assets/99b34ea8eb810787cb56de064d8f5c9eb10e95a8cabee400266596cb95ef14c0.webp?url";
+import resource91Url from "../../../../assets/crave/assets/9cfa5c2fb3a9745cf71486f491f89920199d54818fa18272a92f25474245fe14.webp?url";
+import resource92Url from "../../../../assets/crave/assets/9e395695421acaa142ea26fecd809d5aa3b7a63d80df60ee5ec3a05faa008e29.webp?url";
+import resource93Url from "../../../../assets/crave/assets/a17188e5e3a70f1513fc20853dc4e4184cbc50b5be8ce898d7b48227bd7d5331.webp?url";
+import resource94Url from "../../../../assets/crave/assets/a3e6685663e4c79c071d15634df218fd8b83784805597c088d0674fa5b2d78ec.webp?url";
+import resource95Url from "../../../../assets/crave/assets/a90ebcdeab346f4374e5d09d8259601ac77e7987576b8adf31868afa3e025da4.json?url";
+import resource96Url from "../../../../assets/crave/assets/a9b12f118db79a50ba5acd81c06fc76b6044eb75a8854b50842d33e7652555e2.webp?url";
+import resource97Url from "../../../../assets/crave/assets/ae592acc7b114b0d34692ba11604bbdce594f7d861d71e05d859d609047e3c40.json?url";
+import resource98Url from "../../../../assets/crave/assets/b2b42ad3b4840829ff8f2cfd738342ef6c2cda7f3e0124c2437b03ea43c8dbbf.webp?url";
+import resource99Url from "../../../../assets/crave/assets/bd87f461ec02935f64165933b0f4bda3b67e1fa71f52165645eeafc2d323a528.webp?url";
+import resource100Url from "../../../../assets/crave/assets/bfc1e55c7d16e5275ef82e17080f4fa5003ba66ff3768cc13a1dbb4b6350b0d9.webp?url";
+import resource101Url from "../../../../assets/crave/assets/c294643e709cff513f6737f9c4f23b3ad9533e7f2204f6054c2e50a33da1993b.webp?url";
+import resource102Url from "../../../../assets/crave/assets/c3fd822a3345b60088b899deb8b7eb9aaf1d0c92b543d1d4be0b7f3baa5fa9e0.json?url";
+import resource103Url from "../../../../assets/crave/assets/c4aa02e2f3eec0599515c05fc15660d2e2e5730a0bf40a7d4d83e46884d24c41.webp?url";
+import resource104Url from "../../../../assets/crave/assets/c615fa2ae2f61ac0dcfb4bd9a209f046b24c2b4ab82c17ebb77548b7b92699f6.webp?url";
+import resource105Url from "../../../../assets/crave/assets/c6a07a861e1cfdf03b1fd475b71369e2bca280f9ebc3f9c67747b55a18ffea60.webp?url";
+import resource106Url from "../../../../assets/crave/assets/c6e19ff03212d4a45cc07d21896a3ebf80f3ef7e1a43dfa7f59d7bf11c94b394.webp?url";
+import resource107Url from "../../../../assets/crave/assets/cc6d6eb038acbff66bdb8d2e7dc228b053cef527a5b2363aabb2b796c2c210b0.webp?url";
+import resource108Url from "../../../../assets/crave/assets/cdeab1fa3ce7c7643ad8c8cc51e0c185f552b75246ab0c721ca88b47202c7545.webp?url";
+import resource109Url from "../../../../assets/crave/assets/d119f428b0bed7269073dc16dfd73a30c33a7967f9659f3f60af0145aea8a3af.webp?url";
+import resource110Url from "../../../../assets/crave/assets/d28da52e91698718326c0fd3a3ac027417e8542646123fe942c4f8ed902481b8.webp?url";
+import resource111Url from "../../../../assets/crave/assets/d742ac8e1cfd16e7148b709e21f0add41f95e64785e23bdd0df686341133d98e.atlas?url";
+import resource112Url from "../../../../assets/crave/assets/d8823e1b454ba3450f6ea999f6024dac354c6b34e709a7a12d4bc1e78a4a745a.webp?url";
+import resource113Url from "../../../../assets/crave/assets/dadf1714d145e04109b0a5bdb0b27ea3a79b017beacde2d99d57727ffd1cf611.json?url";
 import resource114Url from "../../../../assets/crave/assets/dcf57ba44081503dd766cbbbb9fd1fc4c146b526c92ad891ec5f1b35f7e64037.webp?url";
 import resource115Url from "../../../../assets/crave/assets/ddf3b8f4b3ff84697a56090317a63877d049cd0505ab3906b3c580f0ef15fdcd.webp?url";
 import resource116Url from "../../../../assets/crave/assets/de4de62677f229456f57aa7707eda3356bcb34d81df7f2978fb28c54d8845413.webp?url";
@@ -155,47 +155,47 @@ export const craveSceneLayoutPhysicalResourceUrls = Object.freeze({
     resource10Url,
   "assets/14f841a2e52950487b73ab5403fd19ba1e9529458a27041cc2905b75bdf9bcf0.webp":
     resource11Url,
-  "assets/1bb9ae96e5e09a24d401cd1cdfa62138a6d5381e501de2ff14300f6cfc397119.json":
-    resource12Url,
   "assets/1bd8ad503506430d6494ab7022a127d05be086d3c90c46185485060438cfd210.webp":
-    resource13Url,
+    resource12Url,
   "assets/1c26a2f5e4a094d0b666eb4a3bd8f039c775f67c07d12b54878ded920ed4e8fd.webp":
-    resource14Url,
+    resource13Url,
   "assets/1f1b3120837a15fc1f3191b13d689f3d332aed0e1d1bc05d2ac4be1eb4dbf819.json":
-    resource15Url,
+    resource14Url,
   "assets/1ff28d5357a72573a04469ce60d8d89ed26099be86b50fe1be500d616c73789a.webp":
-    resource16Url,
+    resource15Url,
   "assets/21a8099eb5c4048ae0d5d07a09bde17ea892c5f7407e5432082f5598c28ca63d.webp":
-    resource17Url,
+    resource16Url,
   "assets/225fc13b6d68f2b0445b08eb829d254dbb64bd512447645f51025da0ff497a11.json":
-    resource18Url,
+    resource17Url,
   "assets/226097d89334ece16aa58620dad88921e652843088fcba91ae02acb297603182.json":
-    resource19Url,
+    resource18Url,
   "assets/22e8d043c74fe5f956e8c388bc48a1b1e596532876b4146f11611537091fe802.webp":
-    resource20Url,
+    resource19Url,
   "assets/2317ccb84eb2b75ddb08a07ce0d0bad8b694bb862d0d182b96b3464f61be8f39.webp":
-    resource21Url,
+    resource20Url,
   "assets/280f3a4194d0038d4925b50b8583df47d02c0879c4ac9bb71e0071c93434059f.webp":
-    resource22Url,
+    resource21Url,
   "assets/285ede1a60278c363cd2728fde58bbf84da5201bede9d041325a9e2bd408dba7.webp":
-    resource23Url,
+    resource22Url,
   "assets/290a1834ffca878671769c387cb011cb3d71f9e9d9e4d855d113c6e4d1f617b8.webp":
-    resource24Url,
+    resource23Url,
   "assets/2b10fe894aacd7ab023ff0204551d237cad05a82dd96af60decb8d64c175c146.webp":
-    resource25Url,
+    resource24Url,
   "assets/2d607b3553e546935e483facc63ec10ed570c8dbe210f85ac0156c6d20c42a6e.webp":
-    resource26Url,
+    resource25Url,
   "assets/3323235e6ed1a549835678fd80e94f9b41133ac8a470c8f780d5cfccd97ae5a4.json":
-    resource27Url,
+    resource26Url,
   "assets/35a1bd6c33e55474bdd8d4d78fd0606ba4914a196565dff66795f4e405684cd4.webp":
-    resource28Url,
+    resource27Url,
   "assets/39dec6fccfde6ba0aa7a399c87be9fc2c5acfff189f37191f6e2d692a56faafa.json":
-    resource29Url,
+    resource28Url,
   "assets/3b60142c9a37ba309cc8bdc4b53a6d99794b90bb870ba951d3674a123a9f5f18.webp":
-    resource30Url,
+    resource29Url,
   "assets/3cd6770c007253dcb0a3acdd21045fcfcee93319dcfeeed50a0813d06b94feee.webp":
-    resource31Url,
+    resource30Url,
   "assets/3ffff41caccbe9e2a7cd14fe0b7e8ece15483410ff110fcbdabe88f80efb6440.webp":
+    resource31Url,
+  "assets/407fcf808266ff679fa65b29dcfae9e9a97571a5f42d6e3037cc47cf7cb96084.json":
     resource32Url,
   "assets/40d8ee4d352f756785cf750edaa51d708f0710ed47b0cf5cc5cdf544b090f521.webp":
     resource33Url,
@@ -275,89 +275,89 @@ export const craveSceneLayoutPhysicalResourceUrls = Object.freeze({
     resource70Url,
   "assets/6f535ec4d1c91b92a35391d39d07f3a906eb47954402f8ac8bdc401a6c46208e.webp":
     resource71Url,
-  "assets/6fe4fdd2071159c309a5bf144c24194b0e30f966ebc61e3065d0063820c6fe81.json":
-    resource72Url,
   "assets/720c4808c887713399fbe6578eab3cbeeefd59640f49ec39590d615eee8a3e99.json":
-    resource73Url,
+    resource72Url,
   "assets/75f06ed5cfda712eebc0a2f4a080aa28688a6dff28438f1aeb03f3092af70aa3.webp":
-    resource74Url,
+    resource73Url,
   "assets/783c22523bf3f0a91a5f4bf6bbecb2564593f2e270faaebc4e2b5409c750ca25.webp":
-    resource75Url,
+    resource74Url,
   "assets/78863fe65c9e5086f382ccbc8ef500d3e2796f0f11828bbd2fd4275e2a127be6.webp":
-    resource76Url,
+    resource75Url,
   "assets/78b34c8f5e652804828a8615435d94e3587261e7ae7cf79cd9242bfcbc22234e.webp":
-    resource77Url,
+    resource76Url,
   "assets/79b19cb958351b9893ef36af8bc8b5158091cd92b58ded21b0ec4c032beab7c2.webp":
-    resource78Url,
+    resource77Url,
   "assets/7b9d005d4abdfceaa6fac98c71978ad3c680ed0059c33cdde9fdd4540abe6f31.webp":
-    resource79Url,
+    resource78Url,
   "assets/7edafe76c002d982dc949bcf8b9797f7f37a16369b2770207dfad72f9be95b2c.webp":
-    resource80Url,
+    resource79Url,
   "assets/7f19f237bb7ed048691b830519a2da7c5ab2df9cba0b0f230ec35f847e1c02b4.webp":
-    resource81Url,
+    resource80Url,
   "assets/7ff58cd3c6d3a1e3a1035d98b641b528f3df850e413f0c3e0bccebb2d2630015.json":
-    resource82Url,
+    resource81Url,
   "assets/80859640064ab852dfe914189e464fa73cdd0f81db81a7700cbf3231f129ba21.webp":
-    resource83Url,
+    resource82Url,
   "assets/80aa56f4055ed2bfaa9c673fad19b0c41ecba3f5900730b8f2521751c13c9839.webp":
-    resource84Url,
+    resource83Url,
   "assets/89d03067d7fb3da5f4f884348f69ddd3ee04d1c36b31a1c02e0f4412ab5feb87.webp":
-    resource85Url,
+    resource84Url,
   "assets/8a5cbcf3c0c837d4979b34a20d975b61961b7d050eb2608cbc362a71324e7f6c.json":
-    resource86Url,
+    resource85Url,
   "assets/8adc4f0a69c3232926551f4faa3e497891205d1ec32e96644f02042552ed7d27.webp":
-    resource87Url,
+    resource86Url,
   "assets/8cf862e779b5015bb46d52c3b11598df2b06eff6b3d09c777c34a0af7465919d.webp":
-    resource88Url,
+    resource87Url,
   "assets/8f4a6a991ef2bd7faa67d20cc1d5b898f4429128288f5adc16d74a03ef059604.webp":
-    resource89Url,
+    resource88Url,
   "assets/9632ca7543c10bb5f2ea8a3d413df21fc818c0cfd3b34286dc278b848870d2f5.json":
-    resource90Url,
+    resource89Url,
   "assets/99b34ea8eb810787cb56de064d8f5c9eb10e95a8cabee400266596cb95ef14c0.webp":
-    resource91Url,
+    resource90Url,
   "assets/9cfa5c2fb3a9745cf71486f491f89920199d54818fa18272a92f25474245fe14.webp":
-    resource92Url,
+    resource91Url,
   "assets/9e395695421acaa142ea26fecd809d5aa3b7a63d80df60ee5ec3a05faa008e29.webp":
-    resource93Url,
+    resource92Url,
   "assets/a17188e5e3a70f1513fc20853dc4e4184cbc50b5be8ce898d7b48227bd7d5331.webp":
-    resource94Url,
+    resource93Url,
   "assets/a3e6685663e4c79c071d15634df218fd8b83784805597c088d0674fa5b2d78ec.webp":
-    resource95Url,
+    resource94Url,
   "assets/a90ebcdeab346f4374e5d09d8259601ac77e7987576b8adf31868afa3e025da4.json":
-    resource96Url,
+    resource95Url,
   "assets/a9b12f118db79a50ba5acd81c06fc76b6044eb75a8854b50842d33e7652555e2.webp":
-    resource97Url,
+    resource96Url,
   "assets/ae592acc7b114b0d34692ba11604bbdce594f7d861d71e05d859d609047e3c40.json":
-    resource98Url,
+    resource97Url,
   "assets/b2b42ad3b4840829ff8f2cfd738342ef6c2cda7f3e0124c2437b03ea43c8dbbf.webp":
-    resource99Url,
+    resource98Url,
   "assets/bd87f461ec02935f64165933b0f4bda3b67e1fa71f52165645eeafc2d323a528.webp":
-    resource100Url,
+    resource99Url,
   "assets/bfc1e55c7d16e5275ef82e17080f4fa5003ba66ff3768cc13a1dbb4b6350b0d9.webp":
-    resource101Url,
+    resource100Url,
   "assets/c294643e709cff513f6737f9c4f23b3ad9533e7f2204f6054c2e50a33da1993b.webp":
-    resource102Url,
+    resource101Url,
   "assets/c3fd822a3345b60088b899deb8b7eb9aaf1d0c92b543d1d4be0b7f3baa5fa9e0.json":
-    resource103Url,
+    resource102Url,
   "assets/c4aa02e2f3eec0599515c05fc15660d2e2e5730a0bf40a7d4d83e46884d24c41.webp":
-    resource104Url,
+    resource103Url,
   "assets/c615fa2ae2f61ac0dcfb4bd9a209f046b24c2b4ab82c17ebb77548b7b92699f6.webp":
-    resource105Url,
+    resource104Url,
   "assets/c6a07a861e1cfdf03b1fd475b71369e2bca280f9ebc3f9c67747b55a18ffea60.webp":
-    resource106Url,
+    resource105Url,
   "assets/c6e19ff03212d4a45cc07d21896a3ebf80f3ef7e1a43dfa7f59d7bf11c94b394.webp":
-    resource107Url,
+    resource106Url,
   "assets/cc6d6eb038acbff66bdb8d2e7dc228b053cef527a5b2363aabb2b796c2c210b0.webp":
-    resource108Url,
+    resource107Url,
   "assets/cdeab1fa3ce7c7643ad8c8cc51e0c185f552b75246ab0c721ca88b47202c7545.webp":
-    resource109Url,
+    resource108Url,
   "assets/d119f428b0bed7269073dc16dfd73a30c33a7967f9659f3f60af0145aea8a3af.webp":
-    resource110Url,
+    resource109Url,
   "assets/d28da52e91698718326c0fd3a3ac027417e8542646123fe942c4f8ed902481b8.webp":
-    resource111Url,
+    resource110Url,
   "assets/d742ac8e1cfd16e7148b709e21f0add41f95e64785e23bdd0df686341133d98e.atlas":
-    resource112Url,
+    resource111Url,
   "assets/d8823e1b454ba3450f6ea999f6024dac354c6b34e709a7a12d4bc1e78a4a745a.webp":
+    resource112Url,
+  "assets/dadf1714d145e04109b0a5bdb0b27ea3a79b017beacde2d99d57727ffd1cf611.json":
     resource113Url,
   "assets/dcf57ba44081503dd766cbbbb9fd1fc4c146b526c92ad891ec5f1b35f7e64037.webp":
     resource114Url,
