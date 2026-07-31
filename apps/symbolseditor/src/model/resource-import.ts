@@ -81,6 +81,10 @@ export async function commitSymbolResourceImport(options: {
   readonly project: SymbolEditorProject;
   readonly prepared: PreparedSymbolResourceImport;
   readonly resolutions: readonly EditorImportResolution[];
+  readonly mutateCandidate?: (
+    project: SymbolEditorProject,
+    review: EditorImportReview,
+  ) => void;
 }): Promise<{
   readonly project: SymbolEditorProject;
   readonly review: EditorImportReview;
@@ -135,6 +139,7 @@ export async function commitSymbolResourceImport(options: {
     project,
     overwrittenSkeletonKeys,
   );
+  options.mutateCandidate?.(project, review);
   if (clearedAnimations.length > 0) {
     await validateReconciledSpineImport({
       project,

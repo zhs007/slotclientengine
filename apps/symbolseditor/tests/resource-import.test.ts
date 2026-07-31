@@ -12,6 +12,7 @@ import {
   commitSymbolResourceImport,
   prepareSymbolResourceImport,
 } from "../src/model/resource-import.js";
+import { applyStateTextureImageBinding } from "../src/model/state-texture-generation.js";
 
 const gameConfig = {
   paytable: { "1": { code: 1, symbol: "A", pays: [1] } },
@@ -336,5 +337,33 @@ describe("symbol resource import transaction", () => {
           (tier) => tier.animation.playback.animationName,
         ),
     ).toEqual(["", ""]);
+  });
+
+  it("applies a resolved state-image binding inside the import transaction", async () => {
+    const project = createFromGameConfig({
+      rawGameConfig: gameConfig,
+      fileName: "gameconfig.json",
+    });
+    const prepared = await prepareSymbolResourceImport({
+      project,
+      sources: [source("A.spinBlur.png", image("H1.png"))],
+    });
+    const result = await commitSymbolResourceImport({
+      project,
+      prepared,
+      resolutions: [],
+      mutateCandidate: (candidate, review) =>
+        applyStateTextureImageBinding(
+          candidate,
+          "A",
+          "spinBlur",
+          review.items[0]!.targetKey,
+        ),
+    });
+    expect(project.symbols.get("A")?.states.has("spinBlur")).toBe(false);
+    expect(result.project.symbols.get("A")?.states.get("spinBlur")).toEqual({
+      kind: "image",
+      imagePath: "A.spinBlur.png",
+    });
   });
 });

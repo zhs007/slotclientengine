@@ -38,6 +38,9 @@
 ## Symbol、Spine 与 image-string
 
 - symbol manifest parser、animation resolver、VNI/official Spine adapter、resource closure、player lifecycle、裁切和 pooling 属于 rendercore。
+- 通用 symbol state texture versioned preset 与 DOM-free RGBA transform 属于
+  rendercore；Node 生成器和纯前端 editor 必须消费同一参数来源。browser image codec、
+  用户选择和 filename-key transaction 留在 editor，不得把用户资源发送到服务端。
 - app/viewer 只能传 manifest、显式 modules、resolver 和 validator；禁止根据 symbol code 写共享分支或直接操作 player/display tree。
 - official Spine Pixi runtime 当前只支持 `4.3.x`。atlas、skeleton、animation 名和版本大小写精确校验；不得恢复 3.8/4.2 adapter 或手写兼容层。
 - normal/win/appear 共享相同 Spine resource 时复用 player，只切换语义 animation；资源、value/tier 或 symbol 真实变化时才按合同重建。

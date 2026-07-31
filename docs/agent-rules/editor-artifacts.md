@@ -47,7 +47,11 @@
 
 - `apps/symbolseditor` 只拥有 browser editing/IO/UI、typed draft transaction、dependency library、资源引用图、per-symbol state assignment、value/cascade 表单和固定 all-symbol single-state preview。
 - Symbols 资源覆盖保持 owner-owned 配置和 filename-key 引用；被覆盖的有效 Spine skeleton 缺少已选 exact animation 时，只清空受影响的 animation selection（tiered shared animation 按全部 tier 一起清空）并显式报告，其它 candidate bytes 不能满足现有 typed binding 时整批回滚。完整 Symbols project ZIP 只能单独打开，不作为普通资源合并；project 与 preview failure 必须分层显式呈现。
-- app 不执行 sequence/cascade timeline，也不生成 spinBlur/disabled 或其它 state texture。
+- app 不执行 sequence/cascade timeline。只有 explicit direct normal image 可由
+  Symbols Editor 在浏览器本地调用 rendercore versioned preset，逐 symbol、逐 state
+  生成并显式绑定 `spinBlur` 或 `disabled`；不抓动画帧、不合成 layered/tiered normal、
+  不批量生成，也不复制像素算法。生成与目标 state“上传并使用”必须进入统一
+  filename-key review/transaction，按该 state 最后一次成功提交生效。
 - symbol manifest/package parser、arbitrary exact path、sparse state texture、explicit empty animation、Spine/VNI introspection、display-set 交叉验证和 runtime player 属于 rendercore。
 - `empty` 是用户显式选择的 manifest resource kind，不是缺资源 fallback。
 - symbols ZIP 包含唯一公开 game config、package `cellSize` 与 exact resource closure；缺失、orphan、版本错配显式失败，不允许 glob 或 filename guess。
@@ -71,5 +75,6 @@
   但不能跳过 manifest、hash、binding 或 closure 校验。
 - popup 内部坐标、tier、layer 和资源只回 popupeditor 编辑。
 - dependency Map 只拥有 validated files；被 mode 引用的 package 随 layout ZIP 精确 vendor 一次，未引用 dependency 排除。
-- 上传资源不会自动绑定 glyph/state/node/background/placement；所有 binding 都要求用户显式选择。
+- 上传资源不会自动绑定 glyph/state/node/background/placement；所有 binding 都要求用户显式选择。目标
+  state 的“上传并使用”本身视为一次显式绑定动作，必须在统一 review 成功后使用 resolved key 绑定。
 - 真实 award ImgNumber 未提供时，game002/game003 保留当前 production win-amount 路径，不用字体、CN digits 或 fixture glyph 冒充迁移完成。

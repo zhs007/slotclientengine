@@ -11,6 +11,11 @@ const previewSpies = vi.hoisted(() => ({
   setResource: vi.fn(async (..._args: unknown[]) => undefined),
 }));
 
+const codecSpies = vi.hoisted(() => ({
+  decode: vi.fn(),
+  encodePng: vi.fn(),
+}));
+
 vi.mock("../src/preview/symbol-preview.js", () => ({
   SymbolEditorPreview: class {
     async init() {}
@@ -36,6 +41,11 @@ vi.mock("../src/preview/symbol-preview.js", () => ({
   },
 }));
 
+vi.mock("../src/io/browser-image-codec.js", () => ({
+  decodeBrowserImage: codecSpies.decode,
+  encodeBrowserPng: codecSpies.encodePng,
+}));
+
 import { SymbolsEditorApp } from "../src/ui/app-shell.js";
 
 const gameConfig = {
@@ -56,6 +66,14 @@ describe("symbols editor app shell", () => {
     document.body.append(root);
     app = new SymbolsEditorApp(root);
     await app.init();
+    codecSpies.decode.mockResolvedValue({
+      width: 1,
+      height: 1,
+      data: new Uint8ClampedArray([255, 0, 0, 255]),
+    });
+    codecSpies.encodePng.mockResolvedValue(
+      readFileSync(resolve(process.cwd(), "../../assets/game003-s1/H1.png")),
+    );
   });
 
   afterEach(() => {
@@ -196,6 +214,122 @@ describe("symbols editor app shell", () => {
       root.querySelector("[data-visual-kind]"),
     );
     expect(root.textContent).toContain("explicit empty");
+  });
+
+  it("generates blur and disabled independently from the selected symbol normal image", async () => {
+    await createProject(root);
+    await uploadImage(root, "H1.png");
+    bindNormalImage(root, "H1.png");
+
+    const blur = root.querySelector<HTMLButtonElement>(
+      '[data-generate-state-texture="spinBlur"]',
+    )!;
+    const disabled = root.querySelector<HTMLButtonElement>(
+      '[data-generate-state-texture="disabled"]',
+    )!;
+    expect(blur.disabled).toBe(false);
+    expect(disabled.disabled).toBe(false);
+
+    blur.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector("[data-feedback]")?.textContent).toContain(
+        "生成并使用 spinBlur",
+      ),
+    );
+    expect(root.querySelector('[data-select-state="spinBlur"]')).not.toBeNull();
+    expect(root.querySelector('[data-select-state="disabled"]')).toBeNull();
+    expect(root.querySelector(".single-state-inspector h2")?.textContent).toBe(
+      "normal",
+    );
+    expect(
+      root.querySelector<HTMLSelectElement>("[data-preview-state]")?.value,
+    ).toBe("spinBlur");
+
+    root
+      .querySelector<HTMLButtonElement>(
+        '[data-generate-state-texture="disabled"]',
+      )!
+      .click();
+    await vi.waitFor(() =>
+      expect(root.querySelector("[data-feedback]")?.textContent).toContain(
+        "生成并使用 disabled",
+      ),
+    );
+    expect(root.querySelector('[data-select-state="disabled"]')).not.toBeNull();
+    expect(codecSpies.decode).toHaveBeenCalledTimes(2);
+    expect(codecSpies.encodePng).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses the last successful generated or manually uploaded state image", async () => {
+    await createProject(root);
+    await uploadImage(root, "H1.png");
+    bindNormalImage(root, "H1.png");
+    click(root, '[data-generate-state-texture="spinBlur"]');
+    await vi.waitFor(() =>
+      expect(root.textContent).toContain("生成并使用 spinBlur"),
+    );
+
+    click(root, '[data-select-state="spinBlur"]');
+    click(root, "[data-open-picker]");
+    expect(root.textContent).toContain("上传并使用");
+    click(root, "[data-picker-upload]");
+    const upload = root.querySelector<HTMLInputElement>("[data-upload-input]")!;
+    const manualBytes = readFileSync(
+      resolve(process.cwd(), "../../assets/game003-s1/H2.png"),
+    );
+    Object.defineProperty(upload, "files", {
+      configurable: true,
+      value: [new File([manualBytes], "manual.png", { type: "image/png" })],
+    });
+    upload.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.waitFor(() =>
+      expect(root.querySelector("[data-feedback]")?.textContent).toContain(
+        "已上传并使用 manual.png",
+      ),
+    );
+    click(root, "[data-picker-cancel]");
+    expect(root.querySelector(".binding-path")?.textContent).toBe("manual.png");
+
+    click(root, '[data-select-state="normal"]');
+    click(root, '[data-generate-state-texture="spinBlur"]');
+    await vi.waitFor(() =>
+      expect(root.textContent).toContain(
+        "已为 A 生成并使用 spinBlur：H1.spinBlur.png",
+      ),
+    );
+    click(root, '[data-select-state="spinBlur"]');
+    expect(root.querySelector(".binding-path")?.textContent).toBe(
+      "H1.spinBlur.png",
+    );
+    expect(root.querySelector('[data-select-state="disabled"]')).toBeNull();
+  });
+
+  it("preserves horizontal state scroll and reveals a newly selected state", async () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    await createProject(root);
+    click(root, '[data-workspace-tab][data-tab-value="symbols"]');
+    click(root, '[data-inspector-tab][data-tab-value="states"]');
+    click(root, "[data-toggle-add-state]");
+    click(root, '[data-add-state-id="win"]');
+    const nav = root.querySelector<HTMLElement>(".state-nav")!;
+    nav.scrollLeft = 137;
+    const included = root.querySelector<HTMLInputElement>(
+      '[data-symbol-included="A"]',
+    )!;
+    included.checked = false;
+    included.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(root.querySelector<HTMLElement>(".state-nav")?.scrollLeft).toBe(137);
+
+    click(root, '[data-select-state="win"]');
+    await Promise.resolve();
+    expect(scrollIntoView).toHaveBeenCalledWith({
+      block: "nearest",
+      inline: "nearest",
+    });
   });
 
   it("offers VNI for normal, once and stable loop states", async () => {
@@ -591,6 +725,34 @@ async function createProject(root: HTMLElement): Promise<void> {
       root.querySelector('[data-workspace-tab][aria-selected="true"]'),
     ).not.toBeNull(),
   );
+}
+
+async function uploadImage(root: HTMLElement, name: string): Promise<void> {
+  const upload = root.querySelector<HTMLInputElement>("[data-upload-input]")!;
+  const bytes = readFileSync(
+    resolve(process.cwd(), `../../assets/game003-s1/${name}`),
+  );
+  Object.defineProperty(upload, "files", {
+    configurable: true,
+    value: [new File([bytes], name, { type: "image/png" })],
+  });
+  upload.dispatchEvent(new Event("change", { bubbles: true }));
+  await vi.waitFor(() =>
+    expect(root.querySelector("[data-feedback]")?.textContent).toContain(
+      "已上传 1 个资源",
+    ),
+  );
+}
+
+function bindNormalImage(root: HTMLElement, path: string): void {
+  click(root, '[data-workspace-tab][data-tab-value="symbols"]');
+  click(root, '[data-inspector-tab][data-tab-value="states"]');
+  const kind = root.querySelector<HTMLSelectElement>("[data-visual-kind]")!;
+  kind.value = "image";
+  kind.dispatchEvent(new Event("change", { bubbles: true }));
+  click(root, "[data-open-picker]");
+  click(root, `[data-picker-candidate="${path}"]`);
+  click(root, "[data-picker-confirm]");
 }
 
 function click(root: HTMLElement, selector: string): void {

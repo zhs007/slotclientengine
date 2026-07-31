@@ -1,4 +1,7 @@
-import { createSymbolPackageResource } from "@slotclientengine/rendercore/symbol";
+import {
+  createSymbolPackageResource,
+  type GeneratedSymbolStateTextureId,
+} from "@slotclientengine/rendercore/symbol";
 import {
   createBoundedSourceIndex,
   ephemeralContentFingerprint,
@@ -7,6 +10,7 @@ import {
 import {
   ingestEditorResourceSources,
   normalizeEditorPackageZipEntries,
+  type EditorImportSourceFile,
 } from "@slotclientengine/editorresource";
 import {
   addCustomStateDefinition,
@@ -44,6 +48,16 @@ import {
 } from "../model/resource-import.js";
 import { importImageStringDependencyZip } from "../io/image-string-dependency.js";
 import {
+  decodeBrowserImage,
+  encodeBrowserPng,
+} from "../io/browser-image-codec.js";
+import {
+  applyStateTextureImageBinding,
+  generateStateTextureImportSource,
+  getStateTextureGenerationAvailability,
+  isGeneratedStateTextureId,
+} from "../model/state-texture-generation.js";
+import {
   SymbolEditorStore,
   type SymbolEditorStoreSnapshot,
 } from "../model/editor-store.js";
@@ -78,12 +92,34 @@ interface ThumbnailEntry {
   readonly url: string;
 }
 
+type UploadIntent =
+  | { readonly kind: "ordinary" }
+  | {
+      readonly kind: "state-image";
+      readonly symbol: string;
+      readonly state: GeneratedSymbolStateTextureId;
+    };
+
+interface ScrollPosition {
+  readonly left: number;
+  readonly top: number;
+}
+
+interface OrdinaryImportOutcome {
+  readonly changed: number;
+  readonly boundPath?: string;
+  readonly clearedAnimations: readonly {
+    readonly location: string;
+    readonly animationName: string;
+  }[];
+}
+
 export class SymbolsEditorApp {
   readonly #root: HTMLElement;
   readonly #store = new SymbolEditorStore();
   readonly #session = new SymbolsEditorUiSession();
   readonly #thumbnails = new Map<string, ThumbnailEntry>();
-  readonly #scrollPositions = new Map<string, number>();
+  readonly #scrollPositions = new Map<string, ScrollPosition>();
   #preview: SymbolEditorPreview | null = null;
   #unsubscribe: (() => void) | null = null;
   #previewRequest = 0;
@@ -92,8 +128,10 @@ export class SymbolsEditorApp {
   #previewError = "";
   #previewValue = 1;
   #pickerTrigger: HTMLElement | null = null;
+  #uploadIntent: UploadIntent = { kind: "ordinary" };
   #feedbackTimer: ReturnType<typeof setTimeout> | null = null;
   #pendingFocusKey = "";
+  #pendingVisibleState = "";
   #destroyed = false;
 
   constructor(root: HTMLElement) {
@@ -135,7 +173,7 @@ export class SymbolsEditorApp {
       this.requireInput("[data-new-input]").click(),
     );
     this.requireElement("[data-upload]").addEventListener("click", () =>
-      this.requireInput("[data-upload-input]").click(),
+      this.openUploadInput({ kind: "ordinary" }),
     );
     this.requireElement("[data-export]").addEventListener(
       "click",
@@ -148,8 +186,20 @@ export class SymbolsEditorApp {
     );
     this.requireElement("[data-upload-input]").addEventListener(
       "change",
-      (event) =>
-        void this.uploadResources(event.currentTarget as HTMLInputElement),
+      (event) => {
+        const intent = this.#uploadIntent;
+        this.#uploadIntent = { kind: "ordinary" };
+        void this.uploadResources(
+          event.currentTarget as HTMLInputElement,
+          intent,
+        );
+      },
+    );
+    this.requireElement("[data-upload-input]").addEventListener(
+      "cancel",
+      () => {
+        this.#uploadIntent = { kind: "ordinary" };
+      },
     );
     this.requireElement("[data-replay]").addEventListener("click", () =>
       this.#preview?.replay(),
@@ -184,6 +234,7 @@ export class SymbolsEditorApp {
           selected?.states.has(this.#session.previewState)
         ) {
           this.#session.selectedState = this.#session.previewState;
+          this.#pendingVisibleState = this.#session.selectedState;
         }
         const snapshot = this.#store.getSnapshot();
         this.render(snapshot);
@@ -319,7 +370,7 @@ export class SymbolsEditorApp {
     panel
       .querySelector<HTMLElement>("[data-import-image-string-inline]")
       ?.addEventListener("click", () =>
-        this.requireInput("[data-upload-input]").click(),
+        this.openUploadInput({ kind: "ordinary" }),
       );
     panel
       .querySelectorAll<HTMLElement>("[data-remove-image-string]")
@@ -392,6 +443,7 @@ export class SymbolsEditorApp {
           if (state && project.symbols.get(symbol ?? "")?.states.has(state)) {
             this.#session.selectedState = state;
             this.#session.previewState = state;
+            this.#pendingVisibleState = state;
           }
           this.#session.workspace = "symbols";
           this.#session.inspector = "states";
@@ -457,6 +509,7 @@ export class SymbolsEditorApp {
           const symbol = project.symbols.get(this.#session.selectedSymbol);
           if (!symbol?.states.has(this.#session.selectedState))
             this.#session.selectedState = "normal";
+          this.#pendingVisibleState = this.#session.selectedState;
           this.render(this.#store.getSnapshot());
         });
       });
@@ -497,6 +550,7 @@ export class SymbolsEditorApp {
             this.#session.previewState = state;
             this.#session.addStateOpen = false;
             this.#pendingFocusKey = "visual-kind";
+            this.#pendingVisibleState = state;
             this.showSuccess(
               `已为 ${this.#session.selectedSymbol} 添加 ${state} 状态`,
             );
@@ -514,6 +568,7 @@ export class SymbolsEditorApp {
         button.addEventListener("click", () => {
           this.#session.selectedState = button.dataset.selectState!;
           this.#session.previewState = this.#session.selectedState;
+          this.#pendingVisibleState = this.#session.selectedState;
           const snapshot = this.#store.getSnapshot();
           this.render(snapshot);
           void this.refreshPreview(snapshot);
@@ -523,6 +578,15 @@ export class SymbolsEditorApp {
       .querySelectorAll<HTMLElement>("[data-state-action]")
       .forEach((button) => {
         button.addEventListener("click", () => this.runStateAction(button));
+      });
+    panel
+      .querySelectorAll<HTMLElement>("[data-generate-state-texture]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          const state = button.dataset.generateStateTexture;
+          if (state && isGeneratedStateTextureId(state))
+            void this.generateStateTexture(state);
+        });
       });
     panel
       .querySelector<HTMLSelectElement>("[data-visual-kind]")
@@ -694,6 +758,7 @@ export class SymbolsEditorApp {
           states[Math.min(oldIndex, states.length - 1)] ??
           states.at(-1) ??
           "normal";
+        this.#pendingVisibleState = this.#session.selectedState;
         if (this.#session.previewState === state)
           this.#session.previewState = this.#session.selectedState;
         const snapshot = this.#store.getSnapshot();
@@ -1439,9 +1504,19 @@ export class SymbolsEditorApp {
       ?.addEventListener("click", () => this.confirmPicker());
     dialog
       .querySelector<HTMLElement>("[data-picker-upload]")
-      ?.addEventListener("click", () =>
-        this.requireInput("[data-upload-input]").click(),
-      );
+      ?.addEventListener("click", () => {
+        const context = picker.context;
+        this.openUploadInput(
+          context.kind === "state-image" &&
+            isGeneratedStateTextureId(context.state)
+            ? {
+                kind: "state-image",
+                symbol: context.symbol,
+                state: context.state,
+              }
+            : { kind: "ordinary" },
+        );
+      });
     dialog.addEventListener(
       "cancel",
       (event) => {
@@ -1478,6 +1553,39 @@ export class SymbolsEditorApp {
     this.#pickerTrigger = null;
   }
 
+  private openUploadInput(intent: UploadIntent): void {
+    if (this.#importing) return;
+    const input = this.requireInput("[data-upload-input]");
+    input.value = "";
+    this.#uploadIntent = intent;
+    input.click();
+  }
+
+  private suspendPickerDialog(): boolean {
+    const dialog = this.#root.querySelector<HTMLDialogElement>(
+      "[data-resource-picker]",
+    );
+    if (!dialog?.open) return false;
+    if (typeof dialog.close === "function") dialog.close();
+    else dialog.removeAttribute("open");
+    return true;
+  }
+
+  private resumePickerDialog(): void {
+    const project = this.#store.getSnapshot().project;
+    if (!project || !this.#session.picker || this.#destroyed) return;
+    this.renderPicker(project);
+    const dialog = this.requireElement(
+      "[data-resource-picker]",
+    ) as HTMLDialogElement;
+    if (typeof dialog.showModal === "function" && !dialog.open)
+      dialog.showModal();
+    else dialog.setAttribute("open", "");
+    queueMicrotask(() =>
+      dialog.querySelector<HTMLInputElement>("[data-picker-query]")?.focus(),
+    );
+  }
+
   private async createProject(input: HTMLInputElement): Promise<void> {
     const file = input.files?.[0];
     input.value = "";
@@ -1495,7 +1603,10 @@ export class SymbolsEditorApp {
     }
   }
 
-  private async uploadResources(input: HTMLInputElement): Promise<void> {
+  private async uploadResources(
+    input: HTMLInputElement,
+    intent: UploadIntent,
+  ): Promise<void> {
     const files = [...(input.files ?? [])];
     input.value = "";
     if (files.length === 0) return;
@@ -1505,6 +1616,13 @@ export class SymbolsEditorApp {
     const request = ++this.#importRequest;
     this.showSuccess(`正在读取 ${files.length} 个 source…`);
     try {
+      if (
+        intent.kind === "state-image" &&
+        (files.length !== 1 ||
+          files[0]!.name.toLocaleLowerCase("en-US").endsWith(".zip"))
+      ) {
+        throw new Error("state 图片“上传并使用”只接受一张普通图片文件。");
+      }
       createBoundedSourceIndex(files, {
         maxEntries: 4096,
         maxFileBytes: 50 * 1024 * 1024,
@@ -1526,6 +1644,8 @@ export class SymbolsEditorApp {
         entries.has("symbols.package.json"),
       );
       if (projectZip) {
+        if (intent.kind !== "ordinary")
+          throw new Error("Symbols project ZIP 不能绑定到单个 state。");
         if (files.length !== 1)
           throw new Error(
             "Symbols project ZIP 必须单独打开，不能与资源混合导入。",
@@ -1560,6 +1680,8 @@ export class SymbolsEditorApp {
         entries.has("image-string.manifest.json"),
       );
       if (imageStringZip) {
+        if (intent.kind !== "ordinary")
+          throw new Error("ImgNumber ZIP 不能绑定到 state 图片。");
         if (files.length !== 1) throw new Error("ImgNumber ZIP 必须单独导入。");
         let dependency = await importImageStringDependencyZip(
           imageStringZip.bytes,
@@ -1585,7 +1707,8 @@ export class SymbolsEditorApp {
         return;
       }
 
-      const current = this.#store.getSnapshot().project;
+      const snapshot = this.#store.getSnapshot();
+      const current = snapshot.project;
       if (!current) throw new Error("请先创建或导入项目。");
       this.showSuccess("正在展开资源并计算同名冲突…");
       const sources = await ingestEditorResourceSources({
@@ -1599,14 +1722,58 @@ export class SymbolsEditorApp {
           zip: SYMBOL_ZIP_LIMITS,
         },
       });
-      const prepared = await prepareSymbolResourceImport({
+      const outcome = await this.importOrdinarySources({
         project: current,
+        baseRevision: snapshot.revision,
         sources,
+        request,
+        ...(intent.kind === "state-image" ? { binding: intent } : {}),
       });
-      if (request !== this.#importRequest) return;
-      const hasConflicts = prepared.review.items.some(
-        ({ action }) => action === "overwrite" || action === "rename-required",
+      if (!outcome) return;
+      this.showSuccess(
+        outcome.boundPath
+          ? `已上传并使用 ${outcome.boundPath}`
+          : outcome.clearedAnimations.length === 0
+            ? `已上传 ${outcome.changed} 个资源；现有配置保持不变`
+            : `已上传 ${outcome.changed} 个资源；已清空 ${outcome.clearedAnimations.length} 个不存在的 Spine 动画：${outcome.clearedAnimations.map(({ location, animationName }) => `${location}（${animationName}）`).join("、")}`,
       );
+      this.render(this.#store.getSnapshot());
+    } catch (error) {
+      if (request === this.#importRequest) this.#store.setExternalError(error);
+    } finally {
+      if (request === this.#importRequest) {
+        this.#importing = false;
+        if (!this.#destroyed)
+          this.requireElement("[data-upload]").removeAttribute("disabled");
+      }
+    }
+  }
+
+  private async importOrdinarySources(options: {
+    readonly project: SymbolEditorProject;
+    readonly baseRevision: number;
+    readonly sources: readonly EditorImportSourceFile[];
+    readonly request: number;
+    readonly binding?: Extract<UploadIntent, { readonly kind: "state-image" }>;
+  }): Promise<OrdinaryImportOutcome | null> {
+    const prepared = await prepareSymbolResourceImport({
+      project: options.project,
+      sources: options.sources,
+    });
+    if (options.request !== this.#importRequest) return null;
+    if (
+      options.binding &&
+      (options.sources.length !== 1 ||
+        prepared.records.length !== 1 ||
+        prepared.records[0]?.kind !== "image")
+    ) {
+      throw new Error("state 图片“上传并使用”必须解析为唯一一张有效图片。");
+    }
+    const hasConflicts = prepared.review.items.some(
+      ({ action }) => action === "overwrite" || action === "rename-required",
+    );
+    const suspended = hasConflicts && this.suspendPickerDialog();
+    try {
       const resolutions = hasConflicts
         ? await requestSymbolImportReview(this.#root, prepared.review, {
             keepBothDisabledItemIndexes: new Set(
@@ -1618,32 +1785,104 @@ export class SymbolsEditorApp {
         : [];
       if (!resolutions) {
         this.showSuccess("已取消资源导入，项目未修改");
-        return;
+        return null;
       }
+      if (options.request !== this.#importRequest) return null;
+      if (this.#store.getSnapshot().revision !== options.baseRevision)
+        throw new Error("资源处理期间项目已变化，请基于最新项目重试。");
       this.showSuccess("正在复验现有配置并原子提交…");
+      let boundPath: string | undefined;
       const result = await commitSymbolResourceImport({
-        project: current,
+        project: options.project,
         prepared,
         resolutions,
+        ...(options.binding
+          ? {
+              mutateCandidate: (candidate, review) => {
+                const item = review.items[0];
+                if (!item)
+                  throw new Error("state 图片导入没有 resolved review item。");
+                boundPath = item.targetKey;
+                applyStateTextureImageBinding(
+                  candidate,
+                  options.binding!.symbol,
+                  options.binding!.state,
+                  boundPath,
+                );
+              },
+            }
+          : {}),
       });
-      if (request !== this.#importRequest) return;
+      if (options.request !== this.#importRequest) return null;
       this.#store.replace(result.project);
-      const changed = result.review.items.filter(
-        ({ action }) => action !== "noop",
-      ).length;
-      const cleared = result.clearedAnimations;
+      if (boundPath && this.#session.picker) {
+        this.#session.picker = {
+          ...this.#session.picker,
+          currentPath: boundPath,
+          selectedPath: boundPath,
+        };
+      }
+      return Object.freeze({
+        changed: result.review.items.filter(({ action }) => action !== "noop")
+          .length,
+        ...(boundPath ? { boundPath } : {}),
+        clearedAnimations: result.clearedAnimations,
+      });
+    } finally {
+      if (suspended) this.resumePickerDialog();
+    }
+  }
+
+  private async generateStateTexture(
+    state: GeneratedSymbolStateTextureId,
+  ): Promise<void> {
+    if (this.#importing) return;
+    const snapshot = this.#store.getSnapshot();
+    if (!snapshot.project) return;
+    this.#importing = true;
+    this.requireElement("[data-upload]").setAttribute("disabled", "");
+    const request = ++this.#importRequest;
+    const symbol = this.#session.selectedSymbol;
+    this.showSuccess(
+      `正在为 ${symbol} 生成 ${state === "spinBlur" ? "模糊图" : "disable 图"}…`,
+    );
+    try {
+      const source = await generateStateTextureImportSource({
+        project: snapshot.project,
+        symbol,
+        state,
+        codec: { decode: decodeBrowserImage, encodePng: encodeBrowserPng },
+      });
+      const outcome = await this.importOrdinarySources({
+        project: snapshot.project,
+        baseRevision: snapshot.revision,
+        sources: [
+          {
+            sourcePath: source.key,
+            key: source.key,
+            bytes: source.bytes,
+            container: "file",
+            containerName: "browser-generation",
+          },
+        ],
+        request,
+        binding: { kind: "state-image", symbol, state },
+      });
+      if (!outcome?.boundPath) return;
+      this.#session.previewState = state;
       this.showSuccess(
-        cleared.length === 0
-          ? `已上传 ${changed} 个资源；现有配置保持不变`
-          : `已上传 ${changed} 个资源；已清空 ${cleared.length} 个不存在的 Spine 动画：${cleared.map(({ location, animationName }) => `${location}（${animationName}）`).join("、")}`,
+        `已为 ${symbol} 生成并使用 ${state}：${outcome.boundPath}`,
       );
-      this.render(this.#store.getSnapshot());
+      const current = this.#store.getSnapshot();
+      this.render(current);
+      void this.refreshPreview(current);
     } catch (error) {
       if (request === this.#importRequest) this.#store.setExternalError(error);
     } finally {
       if (request === this.#importRequest) {
         this.#importing = false;
-        this.requireElement("[data-upload]").removeAttribute("disabled");
+        if (!this.#destroyed)
+          this.requireElement("[data-upload]").removeAttribute("disabled");
       }
     }
   }
@@ -1772,7 +2011,10 @@ export class SymbolsEditorApp {
     for (const element of this.#root.querySelectorAll<HTMLElement>(
       "[data-scroll-key]",
     ))
-      this.#scrollPositions.set(element.dataset.scrollKey!, element.scrollTop);
+      this.#scrollPositions.set(
+        element.dataset.scrollKey!,
+        Object.freeze({ left: element.scrollLeft, top: element.scrollTop }),
+      );
     const active = document.activeElement as HTMLElement | null;
     if (
       !this.#pendingFocusKey &&
@@ -1786,9 +2028,11 @@ export class SymbolsEditorApp {
   private restoreViewState(): void {
     for (const element of this.#root.querySelectorAll<HTMLElement>(
       "[data-scroll-key]",
-    ))
-      element.scrollTop =
-        this.#scrollPositions.get(element.dataset.scrollKey!) ?? 0;
+    )) {
+      const position = this.#scrollPositions.get(element.dataset.scrollKey!);
+      element.scrollLeft = position?.left ?? 0;
+      element.scrollTop = position?.top ?? 0;
+    }
     const key = this.#pendingFocusKey;
     this.#pendingFocusKey = "";
     if (key)
@@ -1797,6 +2041,15 @@ export class SymbolsEditorApp {
           .querySelector<HTMLElement>(`[data-focus-key="${CSS.escape(key)}"]`)
           ?.focus(),
       );
+    const visibleState = this.#pendingVisibleState;
+    this.#pendingVisibleState = "";
+    if (visibleState)
+      queueMicrotask(() => {
+        const selected = [
+          ...this.#root.querySelectorAll<HTMLElement>("[data-select-state]"),
+        ].find((element) => element.dataset.selectState === visibleState);
+        selected?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+      });
   }
 
   private reconcileThumbnails(project: SymbolEditorProject): void {
@@ -2235,14 +2488,19 @@ function statesInspectorMarkup(
   const stateFields = tieredNormal
     ? tierNormalAnimationMarkup(project, symbol)
     : visualFieldsMarkup(project, symbol, state, visual, thumbnail);
+  const generation =
+    state === "normal"
+      ? stateTextureGenerationMarkup(project, symbol.symbol)
+      : "";
   return `<section class="state-editor">
     <div class="state-nav-wrap sticky">
-      <div class="state-nav" aria-label="Symbol states">${symbol.stateOrder.map((id) => stateNavItem(project, symbol, id, id === state)).join("")}</div>
+      <div class="state-nav" aria-label="Symbol states" data-scroll-key="state-nav-${escapeAttr(symbol.symbol)}">${symbol.stateOrder.map((id) => stateNavItem(project, symbol, id, id === state)).join("")}</div>
       <div class="add-state-wrap"><button class="primary" data-toggle-add-state aria-expanded="${session.addStateOpen}">＋ 添加状态</button>${session.addStateOpen ? `<div class="add-state-menu" role="menu">${available.map((item) => `<button role="menuitem" data-add-state-id="${escapeAttr(item.id)}"><strong>${escapeHtml(item.id)}</strong><small>${item.phase} / ${item.playback}</small></button>`).join("") || '<p class="empty">全部项目状态均已添加。</p>'}</div>` : ""}</div>
     </div>
     <article class="single-state-inspector">
       <header><div><h2 data-focus-key="state-heading" tabindex="-1">${escapeHtml(state)}</h2><p>${definition.phase} / ${definition.playback}</p></div>${state === "normal" ? '<span class="lock-label">固定状态</span>' : `<div class="button-row"><button data-state-action="up" data-state="${escapeAttr(state)}" ${index <= 1 ? "disabled" : ""} aria-label="上移 ${escapeAttr(state)}">↑</button><button data-state-action="down" data-state="${escapeAttr(state)}" ${index >= symbol.stateOrder.length - 1 ? "disabled" : ""} aria-label="下移 ${escapeAttr(state)}">↓</button><button data-state-action="remove" data-state="${escapeAttr(state)}">删除</button></div>`}</header>
       <div class="explicit-state-note">${tieredNormal ? "normal 使用当前数值解析出的 Spine 档位；这里只统一选择一次动画。" : tieredAnimated ? "该状态统一切换当前 Spine 档位上的同名动画。" : tiered ? "该 reel state 使用独立静态图片，不进入 Spine 档位动画。" : visual.kind === "empty" || visual.kind === "empty-state" ? "当前是 explicit empty：这是正式配置，不是 fallback。" : "当前 state 已配置资源。"}</div>
+      ${generation}
       ${
         tiered
           ? `<div class="derived-field"><span>Visual kind</span><strong>${tieredAnimated ? "Active Spine（全部档位）" : "独立静态图片"}</strong><small>由档位与 state lifecycle 固定</small></div>`
@@ -2258,6 +2516,26 @@ function statesInspectorMarkup(
       ${stateFields}
     </article>
   </section>`;
+}
+
+function stateTextureGenerationMarkup(
+  project: SymbolEditorProject,
+  symbol: string,
+): string {
+  const actions: Array<[GeneratedSymbolStateTextureId, string]> = [
+    ["spinBlur", "生成模糊图"],
+    ["disabled", "生成 disable 图"],
+  ];
+  return `<section class="state-texture-generation"><div><strong>从 normal 图片生成</strong><small>完全在浏览器本地处理；每次只更新当前 symbol 的一个目标 state。</small></div><div class="button-row">${actions
+    .map(([state, label]) => {
+      const availability = getStateTextureGenerationAvailability(
+        project,
+        symbol,
+        state,
+      );
+      return `<button type="button" data-generate-state-texture="${state}" ${availability.ready ? "" : "disabled"} title="${escapeAttr(availability.ready ? `输出 ${availability.targetKey}` : availability.reason)}">${label}</button>`;
+    })
+    .join("")}</div></section>`;
 }
 
 function stateNavItem(
@@ -2531,7 +2809,9 @@ function resourcePickerMarkup(
     (candidate) =>
       candidate.path === selectedPath && candidate.status === "ready",
   );
-  return `<form method="dialog" class="picker-shell" onsubmit="return false"><header><div><small>选择兼容资源</small><h2>${escapeHtml(getResourceBindingLabel(context))}</h2></div><button type="button" data-picker-cancel aria-label="关闭资源 Picker">×</button></header><div class="picker-toolbar"><input data-picker-query type="search" placeholder="搜索资源 path" value="${escapeAttr(query)}"><button type="button" data-picker-upload>上传新资源</button></div><p class="hint">上传只刷新候选，不会自动绑定。</p><div class="picker-list">${candidates.map((candidate) => `<button type="button" class="picker-row ${candidate.path === selectedPath ? "selected" : ""}" data-picker-candidate="${escapeAttr(candidate.path)}" ${candidate.status === "error" ? "disabled" : ""}><span class="asset-thumb">${thumbnail(candidate.path) ? `<img src="${escapeAttr(thumbnail(candidate.path)!)}" alt="">` : assetIcon(candidate.kind)}</span><span class="asset-main"><span class="path">${escapeHtml(candidate.path)}</span><small>${escapeHtml(candidate.summary)}</small>${candidate.disabledReason ? `<small class="inline-error">${escapeHtml(candidate.disabledReason)}</small>` : ""}</span><span>${candidate.path === selectedPath ? "当前选择" : candidate.status === "ready" ? "可用" : "错误"}</span></button>`).join("") || '<p class="empty">没有兼容资源。</p>'}</div><footer><button type="button" data-picker-cancel>取消</button><button type="button" class="primary" data-picker-confirm ${selectedReady ? "" : "disabled"}>确认绑定</button></footer></form>`;
+  const uploadAndUse =
+    context.kind === "state-image" && isGeneratedStateTextureId(context.state);
+  return `<form method="dialog" class="picker-shell" onsubmit="return false"><header><div><small>选择兼容资源</small><h2>${escapeHtml(getResourceBindingLabel(context))}</h2></div><button type="button" data-picker-cancel aria-label="关闭资源 Picker">×</button></header><div class="picker-toolbar"><input data-picker-query type="search" placeholder="搜索资源 path" value="${escapeAttr(query)}"><button type="button" data-picker-upload>${uploadAndUse ? "上传并使用" : "上传新资源"}</button></div><p class="hint">${uploadAndUse ? "单图通过同名审查后直接绑定当前 state；后一次成功操作生效。" : "上传只刷新候选，不会自动绑定。"}</p><div class="picker-list">${candidates.map((candidate) => `<button type="button" class="picker-row ${candidate.path === selectedPath ? "selected" : ""}" data-picker-candidate="${escapeAttr(candidate.path)}" ${candidate.status === "error" ? "disabled" : ""}><span class="asset-thumb">${thumbnail(candidate.path) ? `<img src="${escapeAttr(thumbnail(candidate.path)!)}" alt="">` : assetIcon(candidate.kind)}</span><span class="asset-main"><span class="path">${escapeHtml(candidate.path)}</span><small>${escapeHtml(candidate.summary)}</small>${candidate.disabledReason ? `<small class="inline-error">${escapeHtml(candidate.disabledReason)}</small>` : ""}</span><span>${candidate.path === selectedPath ? "当前选择" : candidate.status === "ready" ? "可用" : "错误"}</span></button>`).join("") || '<p class="empty">没有兼容资源。</p>'}</div><footer><button type="button" data-picker-cancel>取消</button><button type="button" class="primary" data-picker-confirm ${selectedReady ? "" : "disabled"}>确认绑定</button></footer></form>`;
 }
 
 function createPreviewCells(
