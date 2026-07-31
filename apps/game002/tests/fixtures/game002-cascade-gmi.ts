@@ -143,6 +143,8 @@ export const GAME002_CASCADE_GMI = Object.freeze({
                     coinWin: 29,
                   }),
                   nextComponent: "bg-remove",
+                  wins: 29,
+                  winMulti: 1,
                 }),
                 "bg-remove": Object.freeze({
                   basicComponentData: basic({

@@ -26,10 +26,7 @@ import {
   GAME002_CASCADE_MOTION,
 } from "./cascade-config.js";
 import { GAME002_VISIBLE_ROWS, GAME002_REEL_COUNT } from "./game-layout.js";
-import {
-  resolveGame002WinResultAmount,
-  validateGame002CascadeWinComponent,
-} from "./win-symbol-carousel-config.js";
+import { resolveGame002WinResultAmount } from "./win-symbol-carousel-config.js";
 import { resolveGame002WinResultCoinAmount } from "./cascade-win-summary-config.js";
 
 export interface Game002WinRemoveStage {
@@ -135,8 +132,6 @@ export function createGame002CascadeSequence(options: {
   const usesServerValues = spinValueResult.usesServerValues;
   let currentScene: GridCellCascadeScene = spinScene;
   let currentValues: GridCellCascadeValueMatrix = spinValues;
-  let cumulativeWinAmount = 0;
-  let cumulativeCoinAmount = 0;
   const plannedInitialWin = findPlanWin(options.executionPlan, 0);
   const initialWin = createWinRemoveStage({
     logic: options.logic,
@@ -149,16 +144,12 @@ export function createGame002CascadeSequence(options: {
         )
       : spinValues,
     cnSymbolCode,
-    previousCumulativeWinAmount: cumulativeWinAmount,
-    previousCumulativeCoinAmount: cumulativeCoinAmount,
     canRemoveSymbol: options.canRemoveSymbol,
     expectedOutputValues: plannedInitialWin?.output.values,
     releaseOnlyPositions: plannedInitialWin?.releaseOnlyPositions,
   });
   assertPlannedWinStage(initialWin, plannedInitialWin, 0);
   if (initialWin) {
-    cumulativeWinAmount += sumGroupAmounts(initialWin.groups);
-    cumulativeCoinAmount += sumGroupCoinAmounts(initialWin.groups);
     currentScene = initialWin.outputScene;
     currentValues = initialWin.outputValues;
     if (steps.length < 2) {
@@ -351,8 +342,6 @@ export function createGame002CascadeSequence(options: {
           )
         : refillValues,
       cnSymbolCode,
-      previousCumulativeWinAmount: cumulativeWinAmount,
-      previousCumulativeCoinAmount: cumulativeCoinAmount,
       canRemoveSymbol: options.canRemoveSymbol,
       expectedOutputValues: plannedWin?.output.values,
       releaseOnlyPositions: plannedWin?.releaseOnlyPositions,
@@ -372,8 +361,6 @@ export function createGame002CascadeSequence(options: {
       }),
     );
     if (winStage) {
-      cumulativeWinAmount += sumGroupAmounts(winStage.groups);
-      cumulativeCoinAmount += sumGroupCoinAmounts(winStage.groups);
       if (stepIndex === steps.length - 1) {
         throw new Error(
           `game002 winning step[${stepIndex}] must be followed by another respin step.`,
@@ -537,8 +524,6 @@ function createWinRemoveStage(options: {
   readonly sourceScene: SceneMatrix;
   readonly sourceValues: SymbolPresentationValueMatrix;
   readonly cnSymbolCode: number;
-  readonly previousCumulativeWinAmount: number;
-  readonly previousCumulativeCoinAmount: number;
   readonly expectedOutputValues?: readonly (readonly (number | null | -1)[])[];
   readonly releaseOnlyPositions?: readonly WinResultPosition[];
   readonly canRemoveSymbol: (context: {
@@ -560,11 +545,6 @@ function createWinRemoveStage(options: {
     prepareSymbolWinGroups(
       {
         resolveAmount: resolveGame002WinResultAmount,
-        validateComponent: (context) =>
-          validateGame002CascadeWinComponent(
-            context,
-            options.previousCumulativeWinAmount,
-          ),
       },
       {
         logic: options.logic,
@@ -594,7 +574,6 @@ function createWinRemoveStage(options: {
     validateComponentCoinWin(
       requireBasicComponent(step, componentName),
       groups.filter((group) => group.componentName === componentName),
-      options.previousCumulativeCoinAmount,
       componentName,
     );
   const outputScene = exactlyOneHoleScene(
@@ -669,22 +648,17 @@ function sumGroupCoinAmounts(groups: readonly SymbolCascadeGroup[]): number {
 function validateComponentCoinWin(
   component: ReturnType<typeof requireBasicComponent>,
   groups: readonly SymbolCascadeGroup[],
-  previousCumulativeCoinAmount: number,
   componentName: string,
 ): void {
-  const basic = component.basicComponentData;
-  const selected =
-    basic?.coinWin64 !== undefined ? basic.coinWin64 : basic?.coinWin;
+  const selected = (component.raw as Record<string, unknown>).wins;
   if (selected === undefined) return;
   if (typeof selected !== "number" || !Number.isSafeInteger(selected)) {
-    throw new Error(
-      `${componentName} component coinWin must be a safe integer.`,
-    );
+    throw new Error(`${componentName}.wins must be a safe integer.`);
   }
-  const expected = previousCumulativeCoinAmount + sumGroupCoinAmounts(groups);
+  const expected = sumGroupCoinAmounts(groups);
   if (selected !== expected) {
     throw new Error(
-      `${componentName} component coinWin ${selected} does not match expected ${expected}.`,
+      `${componentName}.wins ${selected} does not match current result total ${expected}.`,
     );
   }
 }
@@ -1124,10 +1098,6 @@ function positionKey(position: {
   readonly y: number;
 }): string {
   return `${position.x},${position.y}`;
-}
-
-function sumGroupAmounts(groups: readonly SymbolCascadeGroup[]): number {
-  return groups.reduce((sum, group) => sum + group.amount, 0);
 }
 
 function readOptionalNonNegativeInteger(

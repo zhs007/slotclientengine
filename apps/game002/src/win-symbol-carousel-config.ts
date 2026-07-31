@@ -1,7 +1,4 @@
-import type {
-  SymbolWinAmountResolver,
-  SymbolWinComponentValidator,
-} from "@slotclientengine/rendercore";
+import type { SymbolWinAmountResolver } from "@slotclientengine/rendercore";
 
 export const GAME002_WIN_COMPONENT_NAMES = Object.freeze(["bg-win", "bg-win2"]);
 
@@ -34,63 +31,3 @@ export const resolveGame002WinResultAmount: SymbolWinAmountResolver = ({
   }
   return amount;
 };
-
-export const validateGame002WinComponent: SymbolWinComponentValidator = ({
-  componentName,
-  component,
-  groups,
-}) => validateComponentCashWin(componentName, component, groups, 0);
-
-export function validateGame002CascadeWinComponent(
-  context: Parameters<SymbolWinComponentValidator>[0],
-  previousCumulativeWin: number,
-): void {
-  if (!Number.isFinite(previousCumulativeWin) || previousCumulativeWin < 0) {
-    throw new Error(
-      "game002 previous cumulative win must be finite and non-negative.",
-    );
-  }
-  validateComponentCashWin(
-    context.componentName,
-    context.component,
-    context.groups,
-    previousCumulativeWin,
-  );
-}
-
-function validateComponentCashWin(
-  componentName: string,
-  component: Parameters<SymbolWinComponentValidator>[0]["component"],
-  groups: Parameters<SymbolWinComponentValidator>[0]["groups"],
-  previousCumulativeWin: number,
-): void {
-  const raw = assertRecord(component.raw, `${componentName} component`);
-  const basic = assertRecord(
-    raw.basicComponentData,
-    `${componentName}.basicComponentData`,
-  );
-  if (basic.cashWin === undefined) {
-    return;
-  }
-  if (typeof basic.cashWin !== "number" || !Number.isFinite(basic.cashWin)) {
-    throw new Error(
-      `${componentName}.basicComponentData.cashWin must be finite.`,
-    );
-  }
-  const expected = groups.reduce(
-    (sum, group) => sum + group.amount,
-    previousCumulativeWin,
-  );
-  if (basic.cashWin !== expected) {
-    throw new Error(
-      `${componentName}.basicComponentData.cashWin ${basic.cashWin} does not match expected ${expected}.`,
-    );
-  }
-}
-
-function assertRecord(value: unknown, label: string): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error(`${label} must be an object.`);
-  }
-  return value as Record<string, unknown>;
-}

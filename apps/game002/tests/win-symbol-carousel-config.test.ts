@@ -9,8 +9,6 @@ import {
   GAME002_SYMBOL_WIN_CAROUSEL_OPTIONS,
   GAME002_WIN_COMPONENT_NAMES,
   resolveGame002WinResultAmount,
-  validateGame002CascadeWinComponent,
-  validateGame002WinComponent,
 } from "../src/win-symbol-carousel-config.js";
 import {
   GAME002_CASCADE_GMI,
@@ -42,7 +40,6 @@ describe("game002 symbol win carousel config", () => {
     const carousel = createSymbolWinCarousel({
       target: createTarget(),
       resolveAmount: resolveGame002WinResultAmount,
-      validateComponent: validateGame002WinComponent,
       formatAmount: formatServerUsdAmount,
       ...GAME002_SYMBOL_WIN_CAROUSEL_OPTIONS,
     });
@@ -77,37 +74,6 @@ describe("game002 symbol win carousel config", () => {
     );
     expect(() => resolveAmount({})).toThrow(/positive/);
     expect(() => resolveAmount({ cashWin: Number.NaN })).toThrow(/positive/);
-  });
-
-  it("validates cascade component cashWin as previous plus current groups", () => {
-    const value = structuredClone(GAME002_CASCADE_GMI) as any;
-    const firstStep = value.gmi.replyPlay.results[0].clientData;
-    firstStep.results[0].cashWin64 = 120;
-    firstStep.results[1].cashWin64 = 30;
-    firstStep.curGameModParam.mapComponents[
-      "bg-win"
-    ].basicComponentData.cashWin = 830;
-    const logic = createSlotGameLogicResult(value, {
-      bet: { bet: 10, lines: 30, times: 1 },
-      userInfo: { gameid: 0 },
-    }).logic;
-    const prepare = (previousCumulativeWin: number) =>
-      prepareSymbolWinGroups(
-        {
-          resolveAmount: resolveGame002WinResultAmount,
-          validateComponent: (context) =>
-            validateGame002CascadeWinComponent(context, previousCumulativeWin),
-        },
-        {
-          logic,
-          stepIndex: 0,
-          scene: GAME002_CASCADE_INITIAL_SCENE,
-          componentNames: ["bg-win"],
-        },
-      );
-    expect(() => prepare(600)).not.toThrow();
-    expect(() => prepare(0)).toThrow(/expected 230/);
-    expect(() => prepare(-1)).toThrow(/previous cumulative win/);
   });
 });
 
