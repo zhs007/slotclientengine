@@ -1,6 +1,7 @@
 import { Application, Container } from "pixi.js";
 import type {
   GameLogic,
+  GameLogicStep,
   SlotRoundDropdownStepPlan,
   SlotRoundCapability,
   SlotRoundExecutionPlan,
@@ -75,6 +76,11 @@ import {
   createGame002WlWmMultiplierCompiler,
   type Game002WlWmMultiplierPresentationBatch,
 } from "./wl-wm-multiplier-plan.js";
+import { compileGame002FreeGamePlan } from "./freegame-plan.js";
+import {
+  createGame002FreeGamePlayback,
+  type Game002FreeGamePlayback,
+} from "./freegame-playback.js";
 
 export type Game002TickerSnapshot = { readonly deltaMS: number };
 export type Game002TickerListener = (ticker: Game002TickerSnapshot) => void;
@@ -153,6 +159,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
   #roundCoordinator: ReturnType<typeof createSlotRoundCoordinator> | null =
     null;
   #roundTarget: Game002RoundTarget | null = null;
+  #freeGamePlayback: Game002FreeGamePlayback | null = null;
   #unsubscribeViewport: (() => void) | null = null;
   #disposeWinAmountAdvanceListener: (() => void) | null = null;
 
@@ -278,6 +285,8 @@ class Game002PixiAdapter implements SlotGameAdapter {
       worldLayer.addChild(backgroundPlayer.container);
       worldLayer.addChild(runtime.mainReelsLayer);
       worldLayer.addChild(symbolCascadePlayer.container);
+      if (backgroundPlayer.transitionContainer)
+        worldLayer.addChild(backgroundPlayer.transitionContainer);
       worldLayer.addChild(winAmountPlayer.container);
       app.stage.addChild(worldLayer);
 
@@ -355,7 +364,10 @@ class Game002PixiAdapter implements SlotGameAdapter {
   playSpin(logic: GameLogic): Promise<void> {
     const runtime = this.#requireRuntime();
     const coordinator = this.#requireRoundCoordinator();
-    if (coordinator.getSnapshot().running) {
+    if (
+      coordinator.getSnapshot().running ||
+      this.#freeGamePlayback?.isRunning()
+    ) {
       throw new Error("game002 adapter animation is already in progress.");
     }
     const betAmountRaw = logic.getBet() * logic.getLines();
@@ -395,6 +407,13 @@ class Game002PixiAdapter implements SlotGameAdapter {
         return [symbol, code];
       }),
     );
+    const triggerStepIndex = logic
+      .getSteps()
+      .findIndex((step) => step.hasComponent("bg-triggerfg"));
+    const baseLogic =
+      triggerStepIndex < 0
+        ? logic
+        : createGame002LogicSlice(logic, triggerStepIndex + 1);
     const multiplierCompiler = createGame002WlWmMultiplierCompiler({
       wlSymbolCode,
       wmSymbolCode,
@@ -406,7 +425,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
     });
     const plan = compileSlotRoundExecutionPlan(
       GAME002_ROUND_FLOW_PROFILE,
-      logic,
+      baseLogic,
       {
         symbolCodes,
         columns: GAME002_REEL_COUNT,
@@ -421,7 +440,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
     );
     multiplierCompiler.assertComplete();
     const sequence = createGame002CascadeSequence({
-      logic,
+      logic: baseLogic,
       cnSymbolCode,
       auxiliaryValueSymbolCodes: [wlSymbolCode, wmSymbolCode, cmSymbolCode],
       executionPlan: plan,
@@ -434,10 +453,35 @@ class Game002PixiAdapter implements SlotGameAdapter {
     });
     assertCascadeResources(sequence, runtime, this.#skin);
     assertGame002PlanMatchesSequence(plan, sequence);
+    const freeGamePlan =
+      triggerStepIndex < 0
+        ? null
+        : compileGame002FreeGamePlan({
+            logic,
+            entryScene: plan.final.scene,
+            entryValues: plan.final.values.map((column) =>
+              Object.freeze(
+                column.map((value) => {
+                  if (value === -1)
+                    throw new Error(
+                      "game002 FreeGame entry values must not contain cascade holes.",
+                    );
+                  return value;
+                }),
+              ),
+            ),
+            symbolCodes: {
+              WL: wlSymbolCode,
+              CN: cnSymbolCode,
+              CO: coSymbolCode,
+              AF: requireGame002SymbolCode(runtime, "AF"),
+              BN: bnSymbolCode,
+            },
+          });
     this.#requireRoundTarget().configure({
       sequence,
       betAmountRaw,
-      winAmountRaw,
+      winAmountRaw: freeGamePlan ? 0 : winAmountRaw,
       multiplierBatches: new Map(
         plan.steps
           .filter((step) => step.kind === "settled-transform")
@@ -453,7 +497,32 @@ class Game002PixiAdapter implements SlotGameAdapter {
           }),
       ),
     });
-    return coordinator.start(plan);
+    if (!freeGamePlan) return coordinator.start(plan);
+    const backgroundPlayer = this.#backgroundPlayer;
+    if (!backgroundPlayer)
+      throw new Error("game002 scene-layout player is not mounted.");
+    const playback = createGame002FreeGamePlayback({
+      plan: freeGamePlan,
+      runtime,
+      cascadePlayer: this.#requireSymbolCascadePlayer(),
+      winAmountPlayer: this.#winAmountPlayer!,
+      backgroundPlayer,
+      betAmountRaw,
+      winAmountRaw,
+      symbolCodes: {
+        AF: requireGame002SymbolCode(runtime, "AF"),
+        CN: cnSymbolCode,
+        CO: coSymbolCode,
+        BN: bnSymbolCode,
+      },
+    });
+    this.#freeGamePlayback = playback;
+    return coordinator
+      .start(plan)
+      .then(() => playback.start())
+      .finally(() => {
+        if (this.#freeGamePlayback === playback) this.#freeGamePlayback = null;
+      });
   }
 
   setFrameworkState(_state: SlotGameStateSnapshot): void {
@@ -461,6 +530,8 @@ class Game002PixiAdapter implements SlotGameAdapter {
   }
 
   destroy(): void {
+    this.#freeGamePlayback?.cleanup();
+    this.#freeGamePlayback = null;
     this.#roundCoordinator?.destroy();
     this.#roundCoordinator = null;
     this.#roundTarget = null;
@@ -493,6 +564,10 @@ class Game002PixiAdapter implements SlotGameAdapter {
       const deltaSeconds = normalizeTickerDeltaSeconds(ticker);
       this.#backgroundPlayer.update(deltaSeconds);
       const coordinator = this.#roundCoordinator;
+      if (this.#freeGamePlayback?.isRunning()) {
+        this.#freeGamePlayback.update(deltaSeconds);
+        return;
+      }
       if (!coordinator?.getSnapshot().running) {
         if (this.#winAmountPlayer?.isPlaying()) {
           this.#winAmountPlayer.update(deltaSeconds);
@@ -1933,6 +2008,57 @@ function isWinAmountBlockingSpin(phase: WinAmountAnimationPhase): boolean {
     phase === "major-counting" ||
     phase === "tier-counting"
   );
+}
+
+function createGame002LogicSlice(
+  source: GameLogic,
+  stepCount: number,
+): GameLogic {
+  if (
+    !Number.isSafeInteger(stepCount) ||
+    stepCount <= 0 ||
+    stepCount > source.getStepCount()
+  )
+    throw new Error(`game002 logic slice stepCount ${stepCount} is invalid.`);
+  const steps = Object.freeze(source.getSteps().slice(0, stepCount));
+  const getStep = (index: number): GameLogicStep => {
+    if (!Number.isSafeInteger(index) || index < 0 || index >= steps.length)
+      throw new RangeError(
+        `game002 sliced step index ${index} is out of range.`,
+      );
+    return steps[index]!;
+  };
+  return Object.freeze({
+    getGameModuleName: () => source.getGameModuleName(),
+    getGameId: () => source.getGameId(),
+    getBet: () => source.getBet(),
+    getLines: () => source.getLines(),
+    getTotalWin: () => source.getTotalWin(),
+    getPlayWin: () => source.getPlayWin(),
+    getRawMessage: () => source.getRawMessage(),
+    getRawGmi: () => source.getRawGmi(),
+    getDefaultScene: () => source.getDefaultScene(),
+    getRandomNumbers: () => source.getRandomNumbers(),
+    getStepCount: () => steps.length,
+    getStep,
+    getSteps: () => steps,
+    getScene: (stepIndex: number, sceneIndex: number) =>
+      getStep(stepIndex).getScene(sceneIndex),
+    getOtherScene: (stepIndex: number, otherSceneIndex: number) =>
+      getStep(stepIndex).getOtherScene(otherSceneIndex),
+    getResult: (stepIndex: number, resultIndex: number) =>
+      getStep(stepIndex).getResult(resultIndex),
+    hasComponent: (stepIndex: number, name: string) =>
+      getStep(stepIndex).hasComponent(name),
+    getComponent: (stepIndex: number, name: string) =>
+      getStep(stepIndex).getComponent(name),
+    getComponentScenes: (stepIndex: number, name: string) =>
+      getStep(stepIndex).getComponentScenes(name),
+    getComponentOtherScenes: (stepIndex: number, name: string) =>
+      getStep(stepIndex).getComponentOtherScenes(name),
+    getComponentResults: (stepIndex: number, name: string) =>
+      getStep(stepIndex).getComponentResults(name),
+  });
 }
 
 function assertValidWinAmountInput(

@@ -548,7 +548,14 @@ export function compileSlotRoundExecutionPlan(
           [
             ...groups.flatMap((group) => group.removePositions),
             ...releaseOnlyPositions,
-          ].map((position) => requireOccurrence(current, position).id),
+          ].map(
+            (position) =>
+              requireOccurrence(
+                current,
+                position,
+                `step[${stepOffset}] released result`,
+              ).id,
+          ),
         ),
         requiredCapabilities: Object.freeze(requiredCapabilities),
       }),
@@ -697,7 +704,11 @@ function compileSettledTransform(
       throw new LogicParseError(
         `step[${stepIndex}] settled transform[${changeIndex}].outputCode is unknown.`,
       );
-    const inputOccurrence = requireOccurrence(input, position);
+    const inputOccurrence = requireOccurrence(
+      input,
+      position,
+      `step[${stepIndex}] settled transform[${changeIndex}]`,
+    );
     const outputValue = normalizeValue(draft.outputValue);
     const relocationSource = relocationByTarget.get(key);
     const relocationTarget = relocationBySource.get(key);
@@ -711,7 +722,11 @@ function compileSettledTransform(
         `step[${stepIndex}] settled transform[${changeIndex}] is a no-op.`,
       );
     const outputId = relocationSource
-      ? requireOccurrence(input, relocationSource).id
+      ? requireOccurrence(
+          input,
+          relocationSource,
+          `step[${stepIndex}] settled transform[${changeIndex}] relocation source`,
+        ).id
       : relocationTarget
         ? `transform:${stepIndex}:${position.x}:${position.y}`
         : inputOccurrence.id;
@@ -723,7 +738,7 @@ function compileSettledTransform(
       value: outputValue,
       position,
     });
-    const occurrenceIndex = outputOccurrences.findIndex(
+    const occurrenceIndex = input.occurrences.findIndex(
       (occurrence) => occurrence.id === inputOccurrence.id,
     );
     outputOccurrences[occurrenceIndex] = outputOccurrence;
@@ -746,20 +761,30 @@ function compileSettledTransform(
           `step[${stepIndex}] settled relocation[${relocationIndex}].${role} must have a transform change.`,
         );
   }
-  const relocations = relocationPairs.map(({ source, target }) => {
-    const sourceInput = requireOccurrence(input, source);
-    const targetInput = requireOccurrence(input, target);
-    const sourceOutput = changes.find(
-      (change) => positionKey(change.position) === positionKey(source),
-    )!.output;
-    return Object.freeze({
-      occurrenceId: sourceInput.id,
-      overwrittenOccurrenceId: targetInput.id,
-      sourceReplacementOccurrenceId: sourceOutput.id,
-      source,
-      target,
-    });
-  });
+  const relocations = relocationPairs.map(
+    ({ source, target }, relocationIndex) => {
+      const sourceInput = requireOccurrence(
+        input,
+        source,
+        `step[${stepIndex}] settled relocation[${relocationIndex}] source`,
+      );
+      const targetInput = requireOccurrence(
+        input,
+        target,
+        `step[${stepIndex}] settled relocation[${relocationIndex}] target`,
+      );
+      const sourceOutput = changes.find(
+        (change) => positionKey(change.position) === positionKey(source),
+      )!.output;
+      return Object.freeze({
+        occurrenceId: sourceInput.id,
+        overwrittenOccurrenceId: targetInput.id,
+        sourceReplacementOccurrenceId: sourceOutput.id,
+        source,
+        target,
+      });
+    },
+  );
   const scene = input.scene.map((column, x) =>
     Object.freeze(
       column.map(
@@ -913,7 +938,11 @@ function compileWinGroups(
   return Object.freeze(
     raw.map((group, groupIndex) => {
       const occurrences = group.positions.map((position) =>
-        requireOccurrence(snapshot, position),
+        requireOccurrence(
+          snapshot,
+          position,
+          `step[${step.getIndex()}] ${group.componentName} result[${group.resultIndex}]`,
+        ),
       );
       const hasValue = occurrences.some((item) =>
         valueSymbols.has(item.symbol),
@@ -939,7 +968,11 @@ function compileWinGroups(
         amount: resolveAmount(profile, group.result, group.resultIndex),
         removePositions: Object.freeze(
           group.positions.filter((position) => {
-            const occurrence = requireOccurrence(snapshot, position);
+            const occurrence = requireOccurrence(
+              snapshot,
+              position,
+              `step[${step.getIndex()}] ${group.componentName} result[${group.resultIndex}] removal`,
+            );
             return (
               lastUse.get(positionKey(position)) === groupIndex &&
               !excluded.has(occurrence.symbol)
@@ -985,7 +1018,11 @@ function compileReleaseOnlyPositions(
           throw new LogicParseError(
             `step[${step.getIndex()}] contains duplicate release-only position ${key}.`,
           );
-        requireOccurrence(snapshot, position);
+        requireOccurrence(
+          snapshot,
+          position,
+          `step[${step.getIndex()}] ${componentName} release-only result[${resultGroup.resultIndex}]`,
+        );
         seen.add(key);
         positions.push(Object.freeze({ x: position.x, y: position.y }));
       }
@@ -1486,6 +1523,7 @@ function snapshotFromOccurrences(
 function requireOccurrence(
   snapshot: SlotRoundOccurrenceSnapshot,
   position: SlotRoundPosition,
+  label = "snapshot",
 ): SlotRoundOccurrence {
   const occurrence = snapshot.occurrences.find(
     (candidate) =>
@@ -1494,7 +1532,7 @@ function requireOccurrence(
   );
   if (!occurrence)
     throw new LogicParseError(
-      `no occurrence exists at (${position.x},${position.y}).`,
+      `${label}: no occurrence exists at (${position.x},${position.y}).`,
     );
   return occurrence;
 }

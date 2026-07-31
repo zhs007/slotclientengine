@@ -14,7 +14,7 @@ import { replaceSymbolDependency } from "../src/model/game-mode-commands.js";
 
 const workspace = resolve(import.meta.dirname, "../../..");
 const taskId = process.env.GAME002_LAYOUT_BUILD_TASK ?? "132";
-if (taskId !== "132" && taskId !== "135")
+if (taskId !== "132" && taskId !== "135" && taskId !== "147")
   throw new Error(`Unsupported game002 Layout build task "${taskId}".`);
 const outputDirectory = resolve(workspace, `tasks/artifacts/${taskId}`);
 const inputLayout = new Uint8Array(

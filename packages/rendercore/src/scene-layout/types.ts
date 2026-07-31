@@ -424,6 +424,12 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   ): void;
   getReelPresentation(reelId: "main"): Container;
   getAwardCelebrationPopup(id: string): AwardCelebrationPlayer;
+  /** Layout-only layer for hosts that own their business reel. */
+  getBackgroundPresentation(): Container;
+  /** Transition overlay layer for hosts that own their business reel. */
+  getModeTransitionPresentation(): Container;
+  /** Popup layer for hosts that own their business reel. */
+  getPopupPresentation(): Container;
   /** Returns the manifest-declared mode ids in their stable declaration order. */
   getGameModeIds(): readonly string[];
   /** Returns the committed mode and any transition target without mutating playback. */

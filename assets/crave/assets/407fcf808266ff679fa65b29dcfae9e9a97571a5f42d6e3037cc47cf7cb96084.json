@@ -22,6 +22,9 @@
           "id": "layer-base-0",
           "kind": "image-string",
           "order": 0,
+          "parent": {
+            "kind": "popup-root"
+          },
           "resource": "image-string.manifest.json",
           "transform": {
             "scale": 1,
@@ -45,6 +48,9 @@
             "id": "layer-bigwin-0",
             "kind": "image-string",
             "order": 0,
+            "parent": {
+              "kind": "popup-root"
+            },
             "resource": "image-string.manifest.json",
             "transform": {
               "scale": 3,
@@ -85,6 +91,9 @@
             "id": "layer-superwin-0",
             "kind": "image-string",
             "order": 0,
+            "parent": {
+              "kind": "popup-root"
+            },
             "resource": "image-string.manifest.json",
             "transform": {
               "scale": 4,
@@ -125,6 +134,9 @@
             "id": "layer-megawin-0",
             "kind": "image-string",
             "order": 0,
+            "parent": {
+              "kind": "popup-root"
+            },
             "resource": "image-string.manifest.json",
             "transform": {
               "scale": 5,
@@ -165,6 +177,9 @@
           "id": "layer-standard-0",
           "kind": "image-string",
           "order": 0,
+          "parent": {
+            "kind": "popup-root"
+          },
           "resource": "image-string.manifest.json",
           "transform": {
             "scale": 2,

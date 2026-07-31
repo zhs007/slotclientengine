@@ -186,8 +186,37 @@ describe("game002 Crave skin", () => {
         expect.arrayContaining(["appear", "feature1", "change"]),
       );
       expect(skin.symbolAnimationCapabilities.CN).toContain("featureChange");
+      expect(skin.symbolAnimationCapabilities.AF).toEqual(
+        expect.arrayContaining(["feature", "change"]),
+      );
       const symbolManifest =
         skin.presentation.symbolPackage.symbolManifest.symbols;
+      expect(symbolManifest.AF?.animations.feature).toMatchObject({
+        kind: "spine",
+        playback: {
+          animationName: "Feature",
+          loop: false,
+        },
+      });
+      expect(symbolManifest.AF?.animations.change).toMatchObject({
+        kind: "spine",
+        playback: {
+          animationName: "Change",
+          loop: false,
+        },
+      });
+      expect(symbolManifest.AF?.imageStringNodes).toMatchObject([
+        {
+          name: "free-spins",
+          initialText: "0",
+          targets: [
+            { state: "normal", slot: "Mult" },
+            { state: "appear", slot: "Mult" },
+            { state: "feature", slot: "Mult" },
+            { state: "change", slot: "Mult" },
+          ],
+        },
+      ]);
       expect(symbolManifest.CM?.animations.feature1).toMatchObject({
         kind: "spine",
         playback: {

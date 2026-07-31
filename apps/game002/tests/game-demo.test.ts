@@ -195,6 +195,54 @@ describe("game002-s3 reel runtime", () => {
     }
   });
 
+  it("spins only selected FreeGame cells and preserves held WL/CN cells", async () => {
+    const runtime = createRuntime(GAME002_SAMPLE_DEFAULT_SCENE);
+    const target = GAME002_SAMPLE_DEFAULT_SCENE.map((column) => [...column]);
+    const positions = [
+      { x: 0, y: 0 },
+      { x: 2, y: 3 },
+      { x: 5, y: 8 },
+    ] as const;
+    target[0]![0] = 3;
+    target[2]![3] = 4;
+    target[5]![8] = 6;
+    const before = runtime.getVisualSnapshot();
+    const values = before.presentationValues.map((column) => [...column]);
+    for (const { x, y } of positions) values[x]![y] = null;
+    const heldWl = { x: 0, y: 5 } as const;
+    const heldCn = GAME002_SAMPLE_DEFAULT_SCENE.flatMap((column, x) =>
+      column.flatMap((code, y) =>
+        code === runtime.gameConfig.getSymbolCode("CN") ? [{ x, y }] : [],
+      ),
+    )[0]!;
+
+    const plan = runtime.startSelectiveSpin({
+      sourceScene: GAME002_SAMPLE_DEFAULT_SCENE,
+      targetScene: target,
+      targetValues: values,
+      positions,
+      sceneName: "FreeGame selective spin",
+    });
+
+    expect(plan.cells.map(({ x, y }) => ({ x, y }))).toEqual(positions);
+    expect(runtime.getVisualSnapshot().visibleScene[heldWl.x]![heldWl.y]).toBe(
+      GAME002_SAMPLE_DEFAULT_SCENE[heldWl.x]![heldWl.y],
+    );
+    expect(runtime.getVisualSnapshot().visibleScene[heldCn.x]![heldCn.y]).toBe(
+      GAME002_SAMPLE_DEFAULT_SCENE[heldCn.x]![heldCn.y],
+    );
+    expect(
+      runtime.getVisualSnapshot().presentationValues[heldCn.x]![heldCn.y],
+    ).toBe(before.presentationValues[heldCn.x]![heldCn.y]);
+    let result = runtime.update(0.05);
+    for (let index = 0; index < 80 && !result.completed; index += 1) {
+      await Promise.resolve();
+      result = runtime.update(0.05);
+    }
+    expect(result.completed).toBe(true);
+    expect(runtime.getVisualSnapshot().visibleScene).toEqual(target);
+  });
+
   it("preserves the 54-cell order, offsets, dimming and stop timing", () => {
     const runtime = createRuntime(GAME002_SAMPLE_DEFAULT_SCENE);
     expect(runtime.config.spinBounceStrength).toBe(0);

@@ -597,10 +597,10 @@
       "byteLength": 2598
     },
     "popup.manifest.json": {
-      "path": "assets/6fe4fdd2071159c309a5bf144c24194b0e30f966ebc61e3065d0063820c6fe81.json",
-      "sha256": "6fe4fdd2071159c309a5bf144c24194b0e30f966ebc61e3065d0063820c6fe81",
+      "path": "assets/407fcf808266ff679fa65b29dcfae9e9a97571a5f42d6e3037cc47cf7cb96084.json",
+      "sha256": "407fcf808266ff679fa65b29dcfae9e9a97571a5f42d6e3037cc47cf7cb96084",
       "mediaType": "application/json",
-      "byteLength": 4788
+      "byteLength": 5146
     },
     "qq_20260708150336_asset_image_mruhr4v9_70.webp": {
       "path": "assets/40d8ee4d352f756785cf750edaa51d708f0710ed47b0cf5cc5cdf544b090f521.webp",
@@ -675,10 +675,10 @@
       "byteLength": 2528
     },
     "symbol-state-textures.manifest.json": {
-      "path": "assets/1bb9ae96e5e09a24d401cd1cdfa62138a6d5381e501de2ff14300f6cfc397119.json",
-      "sha256": "1bb9ae96e5e09a24d401cd1cdfa62138a6d5381e501de2ff14300f6cfc397119",
+      "path": "assets/dadf1714d145e04109b0a5bdb0b27ea3a79b017beacde2d99d57727ffd1cf611.json",
+      "sha256": "dadf1714d145e04109b0a5bdb0b27ea3a79b017beacde2d99d57727ffd1cf611",
       "mediaType": "application/json",
-      "byteLength": 36047
+      "byteLength": 37456
     },
     "Symbol.atlas": {
       "path": "assets/f914335ebe3242cf9ee31a683694a73d114acb8c2c61407b24cf915fc51b6497.atlas",

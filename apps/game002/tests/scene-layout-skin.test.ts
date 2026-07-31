@@ -37,11 +37,15 @@ describe("game002 scene-layout skin adapter", () => {
     };
     const surface = {
       backgroundContainer: new Container(),
+      transitionContainer: new Container(),
       popupContainer: new Container(),
       init: vi.fn().mockResolvedValue(undefined),
       applyViewport: vi.fn(),
       applyArtSpace: vi.fn(),
       update: vi.fn(),
+      getGameModeSnapshot: vi.fn().mockReturnValue({ stableMode: "BaseGame" }),
+      prepareGameModeTransition: vi.fn().mockResolvedValue(undefined),
+      requestGameMode: vi.fn().mockResolvedValue(undefined),
       getAwardCelebrationPlayer: vi.fn().mockReturnValue(popup),
       destroy: vi.fn(),
     };
@@ -60,6 +64,9 @@ describe("game002 scene-layout skin adapter", () => {
     expect(players.backgroundPlayer.container).toBe(
       surface.backgroundContainer,
     );
+    expect(players.backgroundPlayer.transitionContainer).toBe(
+      surface.transitionContainer,
+    );
     expect(players.winAmountPlayer.container).toBe(surface.popupContainer);
 
     await players.backgroundPlayer.init();
@@ -68,6 +75,11 @@ describe("game002 scene-layout skin adapter", () => {
     expect(surface.applyViewport).not.toHaveBeenCalled();
     players.backgroundPlayer.update(1 / 60);
     expect(surface.update).toHaveBeenCalledWith(1 / 60);
+    expect(players.backgroundPlayer.getMode?.()).toBe("BaseGame");
+    await players.backgroundPlayer.prepareModeTransition?.("FreeGame");
+    await players.backgroundPlayer.requestMode?.("FreeGame");
+    expect(surface.prepareGameModeTransition).toHaveBeenCalledWith("FreeGame");
+    expect(surface.requestGameMode).toHaveBeenCalledWith("FreeGame");
 
     const input = { amountRaw: 250 };
     players.winAmountPlayer.start(input as never);

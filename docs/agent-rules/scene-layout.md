@@ -77,4 +77,6 @@
   也不扫描 physical orphan。缺少实际引用、manifest/schema、资源解码和运行能力错误仍须失败。
 - 只需要 layout/background/popup、而 reel 由游戏业务 target 驱动时，使用 rendercore
   presentation surface；surface 仍拥有 mode-aware background visibility、popup placement
-  和 destroy，app 只注入业务触发并组合公开 container。
+  和 destroy，app 只注入业务触发并组合公开 container。业务 reel 自己持有显示对象时，
+  surface 使用 package runtime 的 presentation-only 模式，分层公开
+  background/transition/popup，且不创建第二个 reel。

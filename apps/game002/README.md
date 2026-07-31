@@ -132,6 +132,23 @@ selected symbol。随后 `bg-win2` 走既有金额/中奖流程，`bg-bn` 只在
 保留给服务器其它用途且不参与该 component 的语义校验；目标 multiplier、WM sum、
 CM 乘法、矩阵尺寸和 occurrence continuity 都在画面 mutation 前严格校验。
 
+## FreeGame
+
+包含 `bg-triggerfg` 的 round 会在表现开始前完整编译 BaseGame 尾段和全部 FreeGame
+step。trigger 必须是无其它 `bg-win/bg-win2` 赔付的 type-5 WL result；先播放 WL
+`win`，再走 Layout 的 `BaseGame -> FreeGame` transition，转场前后复用同一 reel 和
+同一触发 scene。
+
+每次 `fg-spin` 只释放并滚动当前 scene 中非 WL、非 CN 的格子，WL/CN occurrence
+与 value 保持不动。落定后严格按 `AF -> CO` 处理：AF 从 `fg-rollaf.number` 显示
+不带 `x` 的免费次数，依次播放 `Feature/Change` 后变 CN；CO 只从 post-AF scene
+的 WL/CN 搬运完整 occurrence/value，source 变 BN、CO 变 CN。`fg-start` 的当前
+次数和剩余次数必须逐步连续，AF number 必须计入同一步剩余次数。
+
+只有末次 spin 的 `fg-win` 可以赔付，且只接受 type-6 CN group。它复用 CN collect
+但不 remove，随后等待 BigWin popup 真正完成，再走 `FreeGame -> BaseGame`
+transition；回到 BaseGame 后仍显示 FreeGame 最终 scene。
+
 ## bg-win 消除级联
 
 `bg-spin/bg-genwm/bg-gencm/bg-genco/bg-gencoins/bg-win/bg-triggerco/bg-co/bg-win2/bg-bn/bg-remove/bg-respin/bg-dropdown/bg-refill` 是 game002 app-owned 映射，只有 `historyComponents` 对应的 `step.hasComponent()` 才代表触发；`historyComponentsEx` 和 map 中的空组件不触发。adapter 预解析全部 steps 后，严格执行初始 spin、逐组 emphasis/win/remove、普通局 dropdown/refill unified fall，或期待局 existing-only dropdown -> refill-hole Nearwin2 sweep -> selective refill spin；任一结构漂移都在启动画面前失败。
