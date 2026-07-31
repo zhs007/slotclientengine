@@ -526,6 +526,12 @@ symbol cascade 的 `WinSummaryCollectOptions.sequentialCollectStartIntervalSecon
 
 状态贴图生成脚本只在 Node 侧使用 `sharp`，不会进入浏览器运行时代码或发布 bundle。`assets/symbols/symbol-composites.json` 可声明多层资源；旧字符串 layer 继续用文件名推导 index，对象 layer 使用显式 `index`、`texture` 和可选 `keyframes`。复合 symbol 会先按 layer 静态 `texture` 顺序合成完整图标，再从合成结果生成 `spinBlur` 和 `disabled`，manifest 的 `normal` 会写为 layered object 并保留对象 layer 的 keyframes。生成器会为每个 symbol 写入显示缩放系数 `scale`，默认值为 `1`，也可以通过 `--scale` 指定；`scale` 必须是有限正数。仓库内生成物应显式写出 `scale`，consumer 应从 manifest 读取，不要维护第二份手写 scale 表。重新生成 manifest 时，生成器会保留旧 manifest 中仍然有效的 `animations` 和显式 `renderPriority`，非法 `renderPriority` 会让生成失败，避免叠放规则被悄悄删掉。当前 viewer/reels 资源可用下面命令生成：
 
+`state-texture-generation-preset.v1.json` 是 state texture 参数的唯一来源。Node/Sharp
+生成脚本和 browser-safe `generateSymbolStateTextureRgba()` 共同消费该 preset；
+后者只接受严格 width/height/RGBA 和单个 `spinBlur|disabled` 目标，不依赖 DOM、
+Pixi、filename 或 symbol 业务。浏览器 editor 自己负责 local image codec、像素预算、
+资源事务和 PNG 输出，不复制 kernel/brightness，也不把用户图片发送到服务器。
+
 ```bash
 pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --symbols S00,S0,S1,S5,S10,SC,RS,X2,X5,X10 --composites assets/symbols/symbol-composites.json --scale 1
 ```

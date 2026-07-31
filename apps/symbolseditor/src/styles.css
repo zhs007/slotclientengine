@@ -631,6 +631,27 @@ details > summary {
   background: #0d1728;
 }
 
+.state-texture-generation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 11px;
+  border: 1px solid #405677;
+  border-radius: 8px;
+  background: #111c2f;
+}
+
+.state-texture-generation > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.state-texture-generation small {
+  color: #9aabc5;
+}
+
 .state-nav-wrap {
   display: flex;
   align-items: flex-start;

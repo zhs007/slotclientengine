@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -7,12 +8,24 @@ const SCRIPT_DIR = fileURLToPath(new URL(".", import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, "../../..");
 const DEFAULT_SYMBOLS_DIR = resolve(REPO_ROOT, "assets/symbols");
 const MANIFEST_FILE_NAME = "symbol-state-textures.manifest.json";
+const GENERATION_PRESET = JSON.parse(
+  readFileSync(
+    fileURLToPath(
+      new URL(
+        "../src/symbol/state-texture-generation-preset.v1.json",
+        import.meta.url,
+      ),
+    ),
+    "utf8",
+  ),
+);
+assertGenerationPreset(GENERATION_PRESET);
 const SPIN_BLUR_STATE = "spinBlur";
 const DISABLED_STATE = "disabled";
 const REQUIRED_STATES = Object.freeze([SPIN_BLUR_STATE, DISABLED_STATE]);
-const SPIN_BLUR_KERNEL_WIDTH = 3;
-const SPIN_BLUR_KERNEL_HEIGHT = 21;
-const DISABLED_BRIGHTNESS = 0.72;
+const SPIN_BLUR_KERNEL_WIDTH = GENERATION_PRESET.states.spinBlur.kernelWidth;
+const SPIN_BLUR_KERNEL_HEIGHT = GENERATION_PRESET.states.spinBlur.kernelHeight;
+const DISABLED_BRIGHTNESS = GENERATION_PRESET.states.disabled.brightness;
 const DEFAULT_SYMBOL_SCALE = 1;
 
 export function parseGenerateSymbolStateTextureArgs(argv) {
@@ -1266,6 +1279,24 @@ function createVerticalBoxBlurKernel(height) {
     }
   }
   return kernel;
+}
+
+function assertGenerationPreset(value) {
+  if (
+    value?.version !== 1 ||
+    value?.states?.spinBlur?.kind !== "verticalBoxBlur" ||
+    value.states.spinBlur.kernelWidth !== 3 ||
+    !Number.isSafeInteger(value.states.spinBlur.kernelHeight) ||
+    value.states.spinBlur.kernelHeight <= 0 ||
+    value.states.spinBlur.kernelHeight % 2 === 0 ||
+    value?.states?.disabled?.kind !== "grayscale" ||
+    typeof value.states.disabled.brightness !== "number" ||
+    !Number.isFinite(value.states.disabled.brightness) ||
+    value.states.disabled.brightness < 0 ||
+    value.states.disabled.brightness > 1
+  ) {
+    throw new Error("Invalid symbol state texture generation preset v1.");
+  }
 }
 
 function readOptionValue(args, index) {

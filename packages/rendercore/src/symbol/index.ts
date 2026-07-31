@@ -14,6 +14,7 @@ export * from "./standalone-catalog.js";
 export * from "./render-symbol.js";
 export * from "./package.js";
 export * from "./materialize-package.js";
+export * from "./state-texture-generation.js";
 export { rewriteVNIProjectAssetPaths } from "@slotclientengine/vnicore/core";
 export type {
   SymbolValuePresentationSpec,

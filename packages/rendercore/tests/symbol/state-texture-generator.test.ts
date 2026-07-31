@@ -165,6 +165,10 @@ describe("generate-symbol-state-textures script", () => {
       expect(manifest.symbols.H1.normal).toBe("./H1.png");
       expect(manifest.symbols.WL.spinBlur).toBe("./WL.spinBlur.png");
       expect(manifest.symbols.H1.disabled).toBe("./H1.disabled.png");
+      expect(manifest.settings).toEqual({
+        spinBlur: { kind: "verticalBoxBlur", kernelHeight: 21 },
+        disabled: { kind: "grayscale", brightness: 0.72 },
+      });
       expect(manifest.symbols.WL.scale).toBe(0.8);
       expect(manifest.symbols.H1.scale).toBe(0.8);
     } finally {

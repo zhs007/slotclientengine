@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "states": {
+    "spinBlur": {
+      "kind": "verticalBoxBlur",
+      "kernelWidth": 3,
+      "kernelHeight": 21
+    },
+    "disabled": {
+      "kind": "grayscale",
+      "brightness": 0.72
+    }
+  }
+}
