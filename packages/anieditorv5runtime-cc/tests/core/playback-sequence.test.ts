@@ -1,11 +1,25 @@
 import { describe, expect, it } from "vitest";
 import {
   V5GSegmentedPlaybackSequence,
+  normalizeIgnoreAuthoredSeed,
   normalizePlaybackRange,
   normalizeSegmentedPlaybackOptions,
 } from "../../src/core/playback-sequence";
 
 describe("playback-sequence", () => {
+  it("normalizes authored seed playback control strictly", () => {
+    expect(normalizeIgnoreAuthoredSeed({})).toBe(false);
+    expect(normalizeIgnoreAuthoredSeed({ ignoreAuthoredSeed: false })).toBe(
+      false,
+    );
+    expect(normalizeIgnoreAuthoredSeed({ ignoreAuthoredSeed: true })).toBe(
+      true,
+    );
+    expect(() =>
+      normalizeIgnoreAuthoredSeed({ ignoreAuthoredSeed: "true" } as never),
+    ).toThrow("ignoreAuthoredSeed must be a boolean");
+  });
+
   it("normalizes segmented playback and defaults keepParticlesAlive to true", () => {
     expect(
       normalizeSegmentedPlaybackOptions(

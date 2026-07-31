@@ -5,6 +5,7 @@ import type {
   V5GPlaybackMode,
   V5GPlaybackPoint,
   V5GPlaybackRange,
+  V5GPlaybackSeedOptions,
   V5GPlaybackState,
   V5GPlayOptions,
   V5GPlayRangeOptions,
@@ -57,6 +58,8 @@ export type V5GCocosPlayerFactoryOptions = Omit<
 };
 
 export type V5GCocosPlaybackRange = V5GPlaybackRange;
+
+export type V5GCocosPlaybackSeedOptions = V5GPlaybackSeedOptions;
 
 export type V5GCocosPlayRangeOptions = V5GPlayRangeOptions;
 

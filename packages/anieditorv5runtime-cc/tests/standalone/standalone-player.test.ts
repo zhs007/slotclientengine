@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Label, Node, Sprite, SpriteFrame, UITransform, UIOpacity } from "cc";
 import roundreelData from "../fixtures/roundreel.json";
 import {
@@ -990,6 +990,52 @@ describe("standalone V5GCocosPlayer", () => {
     expect(inspectNode(stage).destroyed).toBe(true);
     expect(inspectNode(root).destroyed).toBe(false);
     expect(root.children).toHaveLength(0);
+  });
+
+  it("keeps runtime-authored seed control scoped to a standalone play session", () => {
+    const project = tinyProject({
+      animations: [particleWallAnimation()],
+    });
+    const root = new Node("Root");
+    const frames = framesFor(project);
+    const player = createV5GCocosPlayer({
+      root,
+      project,
+      assets: {
+        getSpriteFrame(_assetPath, assetId) {
+          return frames.get(assetId) ?? null;
+        },
+      },
+    });
+    player.init();
+    const authoredSeed =
+      player.getProjectSnapshot().layers[0].animations[0].seed;
+    const random = vi.spyOn(Math, "random").mockReturnValueOnce(0.5);
+
+    try {
+      player.play({ ignoreAuthoredSeed: true });
+      const state = player as unknown as {
+        playbackSamplingLayers: ReadonlyMap<string, V5GLayerConfig> | null;
+      };
+      expect(
+        state.playbackSamplingLayers?.get("layer-1")?.animations[0].seed,
+      ).not.toBe(authoredSeed);
+      player.seek(0.5);
+      const runtimeSeed =
+        state.playbackSamplingLayers?.get("layer-1")?.animations[0].seed;
+      player.pause();
+      player.play({ ignoreAuthoredSeed: false });
+      expect(
+        state.playbackSamplingLayers?.get("layer-1")?.animations[0].seed,
+      ).toBe(runtimeSeed);
+      expect(player.getProjectSnapshot().layers[0].animations[0].seed).toBe(
+        authoredSeed,
+      );
+      expect(random).toHaveBeenCalledTimes(1);
+    } finally {
+      random.mockRestore();
+      player.destroy();
+    }
   });
 
   it("plays time ranges with markers and completion", () => {

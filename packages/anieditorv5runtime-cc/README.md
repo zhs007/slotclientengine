@@ -561,6 +561,21 @@ function getSpineBonePath(bone: sp.spine.Bone): string {
 
 `play()`、`pause()`、`restart()`、`seek(time)`、`setLoop(loop)` 和 `update(deltaTime)` 继续可用。`pause(); play();` 会恢复当前未完成的 range；`restart()` 会清空 range 并回到从 0 秒开始的全时长播放语义。
 
+`play()` 的 timeline、range 和 segmented mode 可传 `ignoreAuthoredSeed?: boolean`。省略或传
+`false` 时，粒子和当前 Cocos 支持的 deterministic effect 继续使用 VNI 导出的 animation `seed`，
+与编辑器 authored 预览一致；传 `true` 时 runtime 只在这次新播放开始时生成 effective seeds。一次
+session 内的 `update`、loop、pause/resume、`seek()`、`restart()`、segmented ending 和 particle drain
+始终复用同一组 seeds，不会逐帧 reroll。播放完成后下一次 `play()` 会按新参数建立 session；需要精确
+复现时应保持默认 authored mode。
+
+```ts
+player.play({ ignoreAuthoredSeed: true });
+```
+
+`ignoreAuthoredSeed` 必须是 boolean；非法值会在播放状态改变前抛错。legacy `playRange()`、manual
+playback 和 pool lease `playOnce()` 继续使用 authored seed。Cocos 当前仍显式拒绝 render effect
+`shatter` / `glow`，本选项不会改变该能力边界。
+
 `play({ mode: "segmented", loopStart, loopEnd, keepParticlesAlive })` 可用于“先播放到 loopStart，再在 loopStart..loopEnd 内循环，最后由宿主请求结束并播放到结尾”的胜利动画流程。`keepParticlesAlive` 默认 `true`，循环段会按真实经过时间推进 live 粒子；设为 `false` 时只按当前时间采样确定性粒子。
 
 在固定点 hold：
