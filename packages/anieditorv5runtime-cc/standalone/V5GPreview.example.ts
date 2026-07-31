@@ -41,6 +41,9 @@ export class V5GPreview extends Component {
   @property(Boolean)
   segmentedPreview = false;
 
+  @property(Boolean)
+  ignoreAuthoredSeed = false;
+
   @property(Number)
   segmentedLoopStart = 0;
 
@@ -175,11 +178,14 @@ export class V5GPreview extends Component {
         loopStart: { unit: "time", at: loopStart },
         loopEnd: { unit: "time", at: loopEnd },
         keepParticlesAlive: true,
+        ignoreAuthoredSeed: this.ignoreAuthoredSeed,
       });
     } else {
-      this.player.playRange({
+      this.player.play({
+        mode: "range",
         range: { unit: "time", start: 0, end: previewEndTime },
         loop: false,
+        ignoreAuthoredSeed: this.ignoreAuthoredSeed,
       });
     }
   }

@@ -31,11 +31,14 @@ packages/anieditorv5runtime-cc/tests/standalone/standalone-player.test.ts
 packages/anieditorv5runtime-cc/tests/standalone/standalone-parity.test.ts
 packages/anieditorv5runtime-cc/scripts/check-standalone.mjs
 packages/anieditorv5runtime-cc/standalone/anieditorv5runtime-cc.ts
+packages/anieditorv5runtime-cc/standalone/V5GPreview.example.ts
 packages/anieditorv5runtime-cc/README.md
 ```
 
-计划无重大偏差。seed session helper 保留在 `V5GCocosPlayer`，未新增源文件；未修改 vnicore、schema、
-fixture、Cocos driver、pool API、lockfile 或领域规则。
+计划偏差：初次实现只在 README 展示 opt-in 用法，用户复核后要求 standalone 示例也提供直接入口；
+因此 `V5GPreview.example.ts` 新增 Inspector 开关并将其传入普通 range/segmented `play()`，checker
+同步固定该交付合同。seed session helper 仍保留在 `V5GCocosPlayer`，未新增源文件，也未修改
+vnicore、schema、fixture、Cocos driver、pool API、lockfile 或领域规则。
 
 ## 验收
 
@@ -61,7 +64,7 @@ PASS  git diff --check
 
 ```text
 path: packages/anieditorv5runtime-cc/standalone.zip
-SHA-256: 46382685883dbf7ae6d4744419d802e07fd4bf1d5f762bd01bd514a2477111c2
+SHA-256: 65cc4099bc7f2f74a7285397f3f57f7d70d4aecabd6b9647add8c433a0cabee7
 ```
 
 `zipinfo -1` 确认 ZIP 仅包含：

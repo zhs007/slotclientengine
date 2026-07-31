@@ -7,8 +7,12 @@ const standalonePath = fileURLToPath(
 const screenEffectPath = fileURLToPath(
   new URL("../standalone/effects/vni-screen-alpha.effect", import.meta.url),
 );
+const previewExamplePath = fileURLToPath(
+  new URL("../standalone/V5GPreview.example.ts", import.meta.url),
+);
 const source = readFileSync(standalonePath, "utf8");
 const screenEffectSource = readFileSync(screenEffectPath, "utf8");
+const previewExampleSource = readFileSync(previewExamplePath, "utf8");
 const violations = [];
 
 const importModules = [
@@ -275,6 +279,18 @@ if (screenEffectSource.includes("#if USE_TEXTURE")) {
   violations.push(
     "alpha-correct screen Effect must sample the Sprite texture without requiring a Material USE_TEXTURE define",
   );
+}
+
+const requiredPreviewExampleSnippets = [
+  "ignoreAuthoredSeed = false",
+  "ignoreAuthoredSeed: this.ignoreAuthoredSeed",
+  'mode: "range"',
+  'mode: "segmented"',
+];
+for (const expected of requiredPreviewExampleSnippets) {
+  if (!previewExampleSource.includes(expected)) {
+    violations.push(`missing standalone preview example snippet: ${expected}`);
+  }
 }
 
 if (violations.length > 0) {

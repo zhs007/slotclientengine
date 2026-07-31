@@ -408,7 +408,12 @@ resolver 返回 `null` 时仍会直接抛错，错误包含 asset id 和 path。
 packages/anieditorv5runtime-cc/standalone/V5GPreview.example.ts
 ```
 
-该示例 Component 不是 runtime 的必需入口；它展示了宿主侧如何用已经准备好的 project 对象、绑定 `SpriteAtlas`、在 `update(deltaTime)` 中调用 `player.update(deltaTime)`，并在 `onDestroy()` 中调用 `player.destroy()`。示例不会调用 `resources.load()`，也不会读取 bundle manifest 或自动选择 `edit_full/runtime_50`。
+该示例 Component 不是 runtime 的必需入口；它展示了宿主侧如何用已经准备好的 project 对象、绑定
+`SpriteAtlas`、在 `update(deltaTime)` 中调用 `player.update(deltaTime)`，并在 `onDestroy()` 中调用
+`player.destroy()`。Inspector 中的 `ignoreAuthoredSeed` 会传入普通 range 和 segmented preview 的
+`play()`；关闭时保持 authored/editor seed，打开时每次新预览使用 runtime seed。particle combo pool
+和 manual preview 仍按各自 authored 合同运行。示例不会调用 `resources.load()`，也不会读取 bundle
+manifest 或自动选择 `edit_full/runtime_50`。
 
 本仓库当前没有执行真实 Cocos Creator 3.8.6 编辑器导入验收；已完成的是 monorepo 内 TypeScript、Vitest fake `cc`、standalone 边界扫描和构建验收。真实编辑器内的 `.meta`、场景绑定、资源导入结果仍需在宿主 Cocos 项目中人工确认。
 
