@@ -131,8 +131,8 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
         "Scene layout art-space presentation requires maximized-focus adaptation.",
       );
     }
-    const artSize = adaptation.artSize;
-    const snapshot = this.#runtime.applyViewport(artSize);
+    const snapshot = this.#runtime.applyArtSpace();
+    const artSize = snapshot.artSize;
     this.#backgroundContainer.position.set(0, 0);
     this.applyPopupPlacements(snapshot.variantId, artSize);
   }

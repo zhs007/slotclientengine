@@ -119,6 +119,45 @@ export function resolveSceneLayoutViewport(options: {
   });
 }
 
+export function resolveSceneLayoutArtSpace(
+  manifestValue: SceneLayoutManifestV1,
+): SceneLayoutSnapshot {
+  const manifest = parseSceneLayoutManifest(manifestValue);
+  if (manifest.adaptation.mode !== "maximized-focus") {
+    throw new SceneLayoutError(
+      "Scene layout art-space projection requires maximized-focus adaptation.",
+    );
+  }
+  const artSize = manifest.adaptation.artSize;
+  const reels: Record<
+    string,
+    ResolvedSceneLayoutReelGrid & {
+      readonly viewportRect: ReturnType<typeof mapArtRectToViewport>;
+    }
+  > = {};
+  for (const reelId of Object.keys(manifest.reels).sort()) {
+    const reel = resolveSceneLayoutReelGrid(manifest, reelId, "default");
+    reels[reelId] = Object.freeze({
+      ...reel,
+      viewportRect: reel.artRect,
+    });
+  }
+  return Object.freeze({
+    artSize,
+    viewportSize: artSize,
+    visibleRect: Object.freeze({
+      x: 0,
+      y: 0,
+      width: artSize.width,
+      height: artSize.height,
+    }),
+    worldOffset: Object.freeze({ x: 0, y: 0 }),
+    focusRectInViewport: manifest.adaptation.focusRect,
+    variantId: "default",
+    reels: Object.freeze(reels),
+  });
+}
+
 export function resolveSceneLayoutReelGrid(
   manifestValue: SceneLayoutManifestV1,
   reelId: string,
