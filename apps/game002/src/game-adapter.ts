@@ -929,48 +929,37 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
       throw new Error(
         `game002 step[${step.stepIndex}] multiplier presentation batch is missing.`,
       );
-    const coCollectionKeys = new Set(
-      (batch.coCollection?.transform.changes ?? []).map(
-        (change) => `${change.position.x},${change.position.y}`,
-      ),
+    const coChangesByKey = new Map(
+      (batch.coCollection?.transform.changes ?? []).map((change) => [
+        `${change.position.x},${change.position.y}`,
+        change,
+      ]),
     );
-    const wmChanges = step.changes.filter(
-      (change) =>
-        change.input.code === this.#wmSymbolCode &&
-        change.output.code === this.#cnSymbolCode,
-    );
-    const wlChanges = step.changes.filter(
-      (change) =>
-        change.input.code === this.#wlSymbolCode &&
-        change.output.code === this.#wlSymbolCode,
-    );
-    const cnChanges = step.changes.filter(
-      (change) =>
-        change.input.code === this.#cnSymbolCode &&
-        change.output.code === this.#cnSymbolCode,
-    );
-    const cmChanges = step.changes.filter(
-      (change) =>
-        change.input.code === this.#cmSymbolCode &&
-        change.output.code === this.#cnSymbolCode,
-    );
-    const coChanges = step.changes.filter((change) =>
-      coCollectionKeys.has(`${change.position.x},${change.position.y}`),
+    const stepChangeKeys = new Set(
+      step.changes.map((change) => `${change.position.x},${change.position.y}`),
     );
     if (
-      wmChanges.length +
-        wlChanges.length +
-        cnChanges.length +
-        cmChanges.length +
-        coChanges.length !==
-      step.changes.length
+      step.changes.some((change) => {
+        const key = `${change.position.x},${change.position.y}`;
+        if (coChangesByKey.has(key)) return false;
+        return !(
+          (change.input.code === this.#wlSymbolCode &&
+            change.output.code === this.#wlSymbolCode) ||
+          (change.input.code === this.#wmSymbolCode &&
+            change.output.code === this.#cnSymbolCode) ||
+          (change.input.code === this.#cnSymbolCode &&
+            change.output.code === this.#cnSymbolCode) ||
+          (change.input.code === this.#cmSymbolCode &&
+            change.output.code === this.#cnSymbolCode)
+        );
+      })
     ) {
       throw new Error(
         `game002 step[${step.stepIndex}] settled transform must contain only WL/CN updates, WM/CM-to-CN replacements and bg-genco CO replacements.`,
       );
     }
     if (
-      wmChanges.length === 0 &&
+      batch.wmReplacements.length === 0 &&
       batch.wlIncrements.length === 0 &&
       batch.cm === null &&
       !batch.coCollection
@@ -978,26 +967,19 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
       throw new Error(
         `game002 step[${step.stepIndex}] multiplier transform has no display operation.`,
       );
-    if (wmChanges.length !== batch.wmReplacements.length)
-      throw new Error(
-        `game002 step[${step.stepIndex}] WM replacement batch does not match the transform.`,
-      );
-    if (cmChanges.length !== (batch.cm ? 1 : 0))
-      throw new Error(
-        `game002 step[${step.stepIndex}] CM replacement batch does not match the transform.`,
-      );
-    if (
-      coChanges.length !== (batch.coCollection?.transform.changes.length ?? 0)
-    )
+    if ([...coChangesByKey.keys()].some((key) => !stepChangeKeys.has(key)))
       throw new Error(
         `game002 step[${step.stepIndex}] CO collection batch does not match the transform.`,
       );
     for (const replacement of batch.wmReplacements) {
       const { x, y } = replacement.position;
+      const coChange = coChangesByKey.get(`${x},${y}`);
       if (
         step.input.scene[x]?.[y] !== this.#wmSymbolCode ||
-        step.output.scene[x]?.[y] !== this.#cnSymbolCode ||
-        step.output.values[x]?.[y] !== replacement.outputValue
+        step.output.scene[x]?.[y] !==
+          (coChange?.outputCode ?? this.#cnSymbolCode) ||
+        step.output.values[x]?.[y] !==
+          (coChange?.outputValue ?? replacement.outputValue)
       )
         throw new Error(
           `game002 step[${step.stepIndex}] WM replacement (${x},${y}) does not match the transform snapshots.`,
@@ -1005,11 +987,14 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     }
     if (batch.cm) {
       const { x, y } = batch.cm.position;
+      const coChange = coChangesByKey.get(`${x},${y}`);
       if (
         step.input.scene[x]?.[y] !== this.#cmSymbolCode ||
         step.input.values[x]?.[y] !== batch.cm.multiplier ||
-        step.output.scene[x]?.[y] !== this.#cnSymbolCode ||
-        step.output.values[x]?.[y] !== batch.cm.outputValue
+        step.output.scene[x]?.[y] !==
+          (coChange?.outputCode ?? this.#cnSymbolCode) ||
+        step.output.values[x]?.[y] !==
+          (coChange?.outputValue ?? batch.cm.outputValue)
       )
         throw new Error(
           `game002 step[${step.stepIndex}] CM replacement (${x},${y}) does not match the transform snapshots.`,
@@ -1048,12 +1033,15 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
           inputCode === this.#wmSymbolCode
             ? wmReplacement?.intermediateValue
             : step.input.values[x]?.[y];
+        const coChange = coChangesByKey.get(`${x},${y}`);
         if (
           (inputCode !== this.#cnSymbolCode &&
             inputCode !== this.#wmSymbolCode) ||
           expectedInputValue !== update.inputValue ||
-          step.output.scene[x]?.[y] !== this.#cnSymbolCode ||
-          step.output.values[x]?.[y] !== update.outputValue
+          step.output.scene[x]?.[y] !==
+            (coChange?.outputCode ?? this.#cnSymbolCode) ||
+          step.output.values[x]?.[y] !==
+            (coChange?.outputValue ?? update.outputValue)
         )
           throw new Error(
             `game002 step[${step.stepIndex}] CN update (${x},${y}) does not match the transform snapshots.`,
@@ -1063,6 +1051,20 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
       throw new Error(
         `game002 step[${step.stepIndex}] CN updates require a CM presentation.`,
       );
+    }
+    for (const increment of batch.wlIncrements) {
+      const { x, y } = increment.position;
+      const coChange = coChangesByKey.get(`${x},${y}`);
+      if (
+        step.input.scene[x]?.[y] !== this.#wlSymbolCode ||
+        step.output.scene[x]?.[y] !==
+          (coChange?.outputCode ?? this.#wlSymbolCode) ||
+        step.output.values[x]?.[y] !==
+          (coChange?.outputValue ?? increment.outputValue)
+      )
+        throw new Error(
+          `game002 step[${step.stepIndex}] WL increment (${x},${y}) does not match the transform snapshots.`,
+        );
     }
     for (const replacement of batch.coCollection?.transform.changes ?? []) {
       const { x, y } = replacement.position;
@@ -1076,17 +1078,17 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
         );
     }
     this.applyMultiplierTexts(step.input);
-    for (const change of wmChanges) {
+    for (const replacement of batch.wmReplacements) {
       for (const state of ["multStart", "multIdle", "multEnd", "change"]) {
         if (
           !this.#runtime.hasVisibleSymbolStateCapability(
-            change.position.x,
-            change.position.y,
+            replacement.position.x,
+            replacement.position.y,
             state,
           )
         ) {
           throw new Error(
-            `game002 WM (${change.position.x},${change.position.y}) has no "${state}" animation capability.`,
+            `game002 WM (${replacement.position.x},${replacement.position.y}) has no "${state}" animation capability.`,
           );
         }
       }
@@ -1159,6 +1161,19 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     const preparedWm: PreparedVisibleOccurrenceReplacement[] = [];
     const preparedCm: PreparedVisibleOccurrenceReplacement[] = [];
     const preparedCo: PreparedVisibleOccurrenceReplacement[] = [];
+    const postMultiplierCnKeys = new Set([
+      ...batch.wmReplacements.map(
+        (replacement) => `${replacement.position.x},${replacement.position.y}`,
+      ),
+      ...(batch.cm ? [`${batch.cm.position.x},${batch.cm.position.y}`] : []),
+    ]);
+    const postMultiplierCodeAt = (position: {
+      readonly x: number;
+      readonly y: number;
+    }) =>
+      postMultiplierCnKeys.has(`${position.x},${position.y}`)
+        ? this.#cnSymbolCode
+        : step.input.scene[position.x][position.y];
     try {
       for (const replacement of batch.wmReplacements) {
         preparedWm.push(
@@ -1198,10 +1213,7 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
             this.#runtime.prepareVisibleOccurrenceReplacement({
               x: replacement.position.x,
               y: replacement.position.y,
-              expectedCode:
-                step.input.scene[replacement.position.x][
-                  replacement.position.y
-                ],
+              expectedCode: postMultiplierCodeAt(replacement.position),
               outputCode: replacement.outputCode,
               outputPresentationValue: replacement.outputValue,
             }),
@@ -1213,6 +1225,14 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
             change,
           ]),
         );
+        const transfersBySource = new Map(
+          batch.coCollection.segments.flatMap((segment) =>
+            segment.transfers.map((transfer) => [
+              `${transfer.source.x},${transfer.source.y}`,
+              transfer,
+            ]),
+          ),
+        );
         this.#preparedCoTransfers =
           this.#runtime.prepareVisibleOccurrenceTransferBatch({
             transfers: relocations.map((relocation) => {
@@ -1223,13 +1243,21 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
                 throw new Error(
                   `game002 CO source (${relocation.source.x},${relocation.source.y}) has no source replacement.`,
                 );
+              const transfer = transfersBySource.get(
+                `${relocation.source.x},${relocation.source.y}`,
+              );
+              if (
+                !transfer ||
+                transfer.sourceCode !== postMultiplierCodeAt(relocation.source)
+              )
+                throw new Error(
+                  `game002 CO source (${relocation.source.x},${relocation.source.y}) does not match the post-multiplier scene.`,
+                );
               return Object.freeze({
                 source: relocation.source,
                 target: relocation.target,
-                expectedSourceCode:
-                  step.input.scene[relocation.source.x][relocation.source.y],
-                expectedTargetCode:
-                  step.input.scene[relocation.target.x][relocation.target.y],
+                expectedSourceCode: transfer.sourceCode,
+                expectedTargetCode: postMultiplierCodeAt(relocation.target),
                 sourceReplacementCode: sourceChange.outputCode,
                 sourceReplacementPresentationValue: sourceChange.outputValue,
               });
