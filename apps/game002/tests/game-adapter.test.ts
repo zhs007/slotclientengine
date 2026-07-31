@@ -256,6 +256,44 @@ describe("game002 task 95 adapter", () => {
     expect(runtime.currentScene).toEqual(GAME002_CASCADE_REFILL_SCENE);
   });
 
+  it("keeps a synchronously completed zero-duration dropdown complete", async () => {
+    const events: string[] = [];
+    const fakeApp = createFakeApplication();
+    const runtime = new FakeRuntime(events);
+    runtime.anticipationActive = true;
+    runtime.dropdownTotalSeconds = 0;
+    runtime.idleUpdateCompleted = false;
+    const adapter = createTestAdapter({
+      createApplication: () => fakeApp.app,
+      createRuntime: () => runtime.asRuntime(),
+      createSymbolCascadePlayer: () => new FakeCascadePlayer(events, runtime),
+      createWinAmountPlayer: () =>
+        new FakeWinAmountPlayer(events, () => runtime.updateCalls).asPlayer(),
+    });
+    await adapter.mount(createMountContext());
+    let settled = false;
+    const pending = Promise.resolve(
+      adapter.playSpin(createCascadeLogic()),
+    ).then(() => {
+      settled = true;
+    });
+
+    for (let index = 0; index < 30 && !settled; index += 1) {
+      fakeApp.tick(16);
+      await Promise.resolve();
+    }
+
+    await pending;
+    expect(events).toEqual(
+      expect.arrayContaining([
+        "dropdown.start",
+        "dropdown.complete",
+        "sweep.start",
+        "refill.complete",
+      ]),
+    );
+  });
+
   it("prevalidates the whole sequence before mutating the reels", async () => {
     const fakeApp = createFakeApplication();
     const runtime = new FakeRuntime([]);
@@ -490,6 +528,8 @@ class FakeRuntime {
     "idle";
   anticipationActive = false;
   completeOperations = true;
+  dropdownTotalSeconds = 0.2;
+  idleUpdateCompleted = true;
   updateCalls = 0;
   symbolState = "normal";
   symbolLoopCompletionCount = 0;
@@ -606,7 +646,7 @@ class FakeRuntime {
           columns: 6,
           rows: 9,
           movements: [],
-          totalSeconds: 0.2,
+          totalSeconds: this.dropdownTotalSeconds,
         };
       },
       createCascadeDropdownPlan: (options: any) => {
@@ -637,8 +677,14 @@ class FakeRuntime {
       },
       startCascadeDrop: (plan: any) => {
         this.currentScene = plan.targetScene as SceneMatrix;
-        this.operation = plan.kind === "dropdown" ? "dropdown" : "fall";
-        this.events.push(`${this.operation}.start`);
+        const operation = plan.kind === "dropdown" ? "dropdown" : "fall";
+        this.events.push(`${operation}.start`);
+        if (plan.totalSeconds === 0) {
+          this.operation = "idle";
+          this.events.push(`${operation}.complete`);
+          return;
+        }
+        this.operation = operation;
       },
       getVisualSnapshot: () => ({
         visible: true,
@@ -658,7 +704,7 @@ class FakeRuntime {
     }
     if (this.operation === "idle" || !this.completeOperations) {
       return {
-        completed: this.operation === "idle",
+        completed: this.operation === "idle" ? this.idleUpdateCompleted : false,
         spinning: this.operation !== "idle",
         startedCells: [],
         landedCells: [],
