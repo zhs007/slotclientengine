@@ -455,7 +455,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
       canDropSymbol: ({ code }) =>
         canGame002CascadeDropSymbol(resolveGame002CascadeSymbol(runtime, code)),
     });
-    assertCascadeResources(sequence, runtime, this.#skin);
+    assertGame002CascadeResources(sequence, runtime, this.#skin);
     assertGame002PlanMatchesSequence(plan, sequence);
     const freeGamePlan =
       triggerStepIndex < 0
@@ -1882,16 +1882,14 @@ function formatMultiplier(value: number | null): string {
   return `x${value}`;
 }
 
-function assertCascadeResources(
+export function assertGame002CascadeResources(
   sequence: Game002CascadeSequence,
   runtime: Game002ReelRuntime,
   skin: Game002SkinConfig,
 ): void {
-  const checkWinStage = (
-    stage: Game002WinRemoveStage | undefined,
-    scene: readonly (readonly number[])[],
-  ) => {
+  const checkWinStage = (stage: Game002WinRemoveStage | undefined) => {
     if (!stage) return;
+    const scene = stage.sourceScene;
     for (const [groupIndex, group] of stage.groups.entries()) {
       const resultCode = group.result.symbol;
       if (typeof resultCode !== "number" || !Number.isSafeInteger(resultCode)) {
@@ -2055,9 +2053,9 @@ function assertCascadeResources(
       }
     }
   };
-  checkWinStage(sequence.initial.winStage, sequence.initial.spinScene);
+  checkWinStage(sequence.initial.winStage);
   for (const stage of sequence.cascades) {
-    checkWinStage(stage.winStage, stage.refillScene);
+    checkWinStage(stage.winStage);
   }
 
   const resource =
