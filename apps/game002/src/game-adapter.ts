@@ -1439,7 +1439,7 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     if (this.#activity === "idle" || this.#activity === "refill-complete")
       return;
     const result = this.#runtime.update(deltaSeconds);
-    this.#runtimeCompleted = result.completed;
+    this.#runtimeCompleted ||= result.completed;
     if (this.#activity === "refill-sweep" && result.completed) {
       const stage = this.requireActiveStage();
       this.#activity = "refill-spin";
