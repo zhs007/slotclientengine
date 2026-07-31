@@ -36,6 +36,10 @@ export interface PopupLayerRuntime {
     readonly resource: PopupPreparedImageString;
     readonly amountText: string;
   }): void;
+  mountNodeToTextLayer?(options: {
+    readonly textLayerId: string;
+    readonly node: Container;
+  }): () => void;
   destroy(): void;
 }
 export type PopupLayerRuntimeFactory = (options: {
@@ -52,6 +56,8 @@ interface TierRuntime {
   readonly amountLayer: Extract<PopupLayer, { readonly kind: "image-string" }>;
   readonly amountResource: PopupPreparedImageString;
   readonly amountChildIndex: number;
+  amountParent: Container;
+  disposeAmountParent?: () => void;
   segment: PopupSegment;
   endRequested: boolean;
 }
@@ -209,10 +215,7 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
     if (this.#destroyed) return;
     this.#destroyed = true;
     detach(this.#amount?.container);
-    for (const tier of this.#tiers.values()) {
-      for (const layer of tier.layers) layer.destroy();
-      tier.container.destroy({ children: false });
-    }
+    for (const tier of this.#tiers.values()) this.destroyTier(tier);
     this.#amount?.destroy();
     this.#amount = null;
     this.#tiers.clear();
@@ -262,6 +265,7 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
           await this.#amount.init();
         }
         const layers: PopupLayerRuntime[] = [];
+        const layersById = new Map<string, PopupLayerRuntime>();
         const tier: TierRuntime = {
           id,
           container,
@@ -269,6 +273,7 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
           amountLayer,
           amountResource,
           amountChildIndex: orderedLayers.indexOf(amountLayer),
+          amountParent: container,
           segment: "start",
           endRequested: false,
         };
@@ -283,17 +288,36 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
             tierId: id,
           });
           layers.push(runtime);
+          layersById.set(layer.id, runtime);
           container.addChild(runtime.container);
         }
         await Promise.all(layers.map((layer) => layer.init()));
+        if (amountLayer.parent.kind === "vni-text-layer") {
+          const target = layersById.get(amountLayer.parent.vniLayerId);
+          if (!target?.mountNodeToTextLayer)
+            throw new Error(
+              `popup ImgNumber VNI parent runtime unavailable: ${amountLayer.parent.vniLayerId}.`,
+            );
+          const amountParent = new Container();
+          amountParent.label = `popup ImgNumber mount ${amountLayer.id}`;
+          let disposeAmountParent: () => void;
+          try {
+            disposeAmountParent = target.mountNodeToTextLayer({
+              textLayerId: amountLayer.parent.textLayerId,
+              node: amountParent,
+            });
+          } catch (error) {
+            amountParent.destroy({ children: false });
+            throw error;
+          }
+          tier.amountParent = amountParent;
+          tier.disposeAmountParent = disposeAmountParent;
+        }
         this.#tiers.set(id, tier);
       }
       this.#initialized = true;
     } catch (error) {
-      for (const tier of created) {
-        for (const layer of tier.layers) layer.destroy();
-        tier.container.destroy({ children: false });
-      }
+      for (const tier of created) this.destroyTier(tier);
       this.#amount?.destroy();
       this.#amount = null;
       throw error;
@@ -318,7 +342,9 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
     tier.container.visible = true;
     for (const layer of tier.layers) layer.enter(this.amountText());
     detach(this.#amount!.container);
-    tier.container.addChildAt(this.#amount!.container, tier.amountChildIndex);
+    if (tier.amountParent === tier.container)
+      tier.container.addChildAt(this.#amount!.container, tier.amountChildIndex);
+    else tier.amountParent.addChild(this.#amount!.container);
     this.#amount!.rebindAmountLayer!({
       layer: tier.amountLayer,
       resource: tier.amountResource,
@@ -402,6 +428,13 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
     this.#ending = [];
     this.#stages = [];
     this.#stageIndex = -1;
+  }
+  private destroyTier(tier: TierRuntime) {
+    tier.disposeAmountParent?.();
+    if (tier.amountParent !== tier.container)
+      tier.amountParent.destroy({ children: false });
+    for (const layer of tier.layers) layer.destroy();
+    tier.container.destroy({ children: false });
   }
   private assertReady() {
     this.assertUsable();
@@ -568,6 +601,7 @@ function defaultLayerFactory(options: {
     let end = false;
     let complete = false;
     let dispose = () => {};
+    let mountIndex = 0;
     return {
       container,
       animated: true,
@@ -611,6 +645,16 @@ function defaultLayerFactory(options: {
         return complete;
       },
       applySegment() {},
+      mountNodeToTextLayer({ textLayerId, node }) {
+        mountIndex += 1;
+        return player.attachNodeToTextLayer({
+          id: `popup-text-mount-${layer.id}-${mountIndex}`,
+          layerId: textLayerId,
+          node,
+          destroyOnDetach: false,
+          hideOriginal: true,
+        });
+      },
       destroy() {
         dispose();
         player.destroy();

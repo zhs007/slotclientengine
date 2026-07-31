@@ -15,11 +15,14 @@ import {
   createPopupAmountFormat,
   createPopupEditorProject,
   detectPopupAmountFormatPreset,
+  getPopupVniTextLayerTargets,
   popupEditorProjectDiagnostics,
   projectToManifest,
   removePopupResource,
   resourceReferenceCount,
 } from "../src/model/project.js";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 describe("popup editor filename-key project", () => {
   it("keeps the five-tier amount contract", () => {
@@ -78,6 +81,9 @@ describe("popup editor filename-key project", () => {
     expect(resourceReferenceCount(project, review[0]!.rootKey)).toBe(5);
     addLayer(project, "base", review[0]!.rootKey);
     expect(project.tiers.get("base")!.layers).toHaveLength(1);
+    expect(project.tiers.get("base")!.layers[0]).toMatchObject({
+      parent: { kind: "popup-root" },
+    });
 
     const first = await exportPopupZip(project, { prepare: false });
     const second = await exportPopupZip(project, { prepare: false });
@@ -218,6 +224,46 @@ describe("popup editor filename-key project", () => {
       resource: "effect.json",
       playback: { keepParticlesAlive: false },
     });
+  });
+
+  it("enumerates only exact text layers from the VNI selected in this tier", () => {
+    const project = createPopupEditorProject();
+    project.resources.set("amount.json", {
+      rootKey: "amount.json",
+      kind: "image-string",
+      spec: { kind: "image-string", manifest: "amount.json" },
+      keys: ["amount.json"],
+    });
+    project.resources.set("number2.json", {
+      rootKey: "number2.json",
+      kind: "vni",
+      spec: { kind: "vni", project: "number2.json" },
+      keys: ["number2.json"],
+    });
+    project.assets.set("number2.json", {
+      key: "number2.json",
+      sha256: "0".repeat(64),
+      payloadPath: `assets/${"0".repeat(64)}.json`,
+      mediaType: "application/json",
+      byteLength: 1,
+      bytes: new Uint8Array(
+        readFileSync(
+          resolve(
+            process.cwd(),
+            "../../packages/vnicore/tests/fixtures/export/number2.json",
+          ),
+        ),
+      ),
+    });
+    addLayer(project, "base", "amount.json");
+    addLayer(project, "base", "number2.json");
+    expect(getPopupVniTextLayerTargets(project, "base")).toEqual([
+      {
+        vniLayerId: "layer-base-1",
+        textLayerId: "layer_text_mqz6k97v_z",
+        textLayerName: "文字",
+      },
+    ]);
   });
 });
 

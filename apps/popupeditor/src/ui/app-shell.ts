@@ -11,6 +11,7 @@ import {
   clonePopupEditorProject,
   createPopupAmountFormat,
   detectPopupAmountFormatPreset,
+  getPopupVniTextLayerTargets,
   removePopupResource,
   PopupEditorStore,
   projectToManifest,
@@ -262,6 +263,33 @@ export class PopupEditorApp {
           }),
         ),
       );
+    this.#root
+      .querySelectorAll<HTMLSelectElement>("[data-image-string-parent]")
+      .forEach((select) =>
+        select.addEventListener("change", () =>
+          this.#store.transact((draft) => {
+            const layer = draft.tiers
+              .get(this.#tier)!
+              .layers.find((item) => item.id === select.dataset.layerId);
+            if (!layer || layer.kind !== "image-string")
+              throw new Error("ImgNumber layer 不存在。");
+            if (select.value === "popup-root") {
+              (layer as any).parent = { kind: "popup-root" };
+              return;
+            }
+            const [vniLayerId, textLayerId] = select.value
+              .split(":", 2)
+              .map(decodeURIComponent);
+            if (!vniLayerId || !textLayerId)
+              throw new Error("VNI 文字层选择无效。");
+            (layer as any).parent = {
+              kind: "vni-text-layer",
+              vniLayerId,
+              textLayerId,
+            };
+          }),
+        ),
+      );
     const id = this.#root.querySelector<HTMLInputElement>("#project-id");
     id?.addEventListener("change", () =>
       this.#store.transact((draft) => {
@@ -462,7 +490,7 @@ function tiersMarkup(
   betRaw: number,
 ) {
   const tier = project.tiers.get(active)!;
-  return `<nav class="tier-tabs" role="tablist" aria-label="获奖档位">${TIERS.map((id) => `<button role="tab" aria-selected="${id === active}" tabindex="${id === active ? 0 : -1}" data-tier="${id}" class="${id === active ? "active" : ""}"><span>${id}</span><small>${project.tiers.get(id)!.layers.length} 层</small></button>`).join("")}</nav><section class="tier-contract"><h2>累计档位合同</h2><p>base：0 &lt; win ≤ 1×bet；standard：1×bet &lt; win &lt; bigwin。达到某个阈值时进入该档，已达到的前序档位会依次累计播放。</p><div class="threshold-grid">${(["bigwin", "superwin", "megawin"] as const).map((id) => `<label><span>${id}</span><input data-threshold-tier="${id}" type="number" min="2" step="1" value="${project.tiers.get(id)!.thresholdMultiplier}"/><small>× bet</small></label>`).join("")}</div><p class="contract-example">当前倍数边界：1× / ${project.tiers.get("bigwin")!.thresholdMultiplier}× / ${project.tiers.get("superwin")!.thresholdMultiplier}× / ${project.tiers.get("megawin")!.thresholdMultiplier}×；等于阈值时进入对应档。</p><p id="tier-boundaries" class="raw-boundaries">${tierBoundarySummary(project, betRaw)}</p></section><section class="tier-editor"><h2>${active}</h2><p class="layer-order-help">order 数值越小越靠下，只控制当前档位内的图层顺序。</p><label>金额计数时长<input id="tier-duration" type="number" step="0.1" min="0" value="${tier.countDurationSeconds}"/><small>秒</small></label><div class="layer-add"><select id="layer-resource">${[...project.resources.values()].map((resource) => `<option value="${resource.rootKey}">${resource.rootKey} (${resource.kind})</option>`)}</select><button data-add-layer ${project.resources.size ? "" : "disabled"}>新增 / 切换图层</button></div>${tier.layers.map((layer) => layerMarkup(layer, project)).join("")}</section>`;
+  return `<nav class="tier-tabs" role="tablist" aria-label="获奖档位">${TIERS.map((id) => `<button role="tab" aria-selected="${id === active}" tabindex="${id === active ? 0 : -1}" data-tier="${id}" class="${id === active ? "active" : ""}"><span>${id}</span><small>${project.tiers.get(id)!.layers.length} 层</small></button>`).join("")}</nav><section class="tier-contract"><h2>累计档位合同</h2><p>base：0 &lt; win ≤ 1×bet；standard：1×bet &lt; win &lt; bigwin。达到某个阈值时进入该档，已达到的前序档位会依次累计播放。</p><div class="threshold-grid">${(["bigwin", "superwin", "megawin"] as const).map((id) => `<label><span>${id}</span><input data-threshold-tier="${id}" type="number" min="2" step="1" value="${project.tiers.get(id)!.thresholdMultiplier}"/><small>× bet</small></label>`).join("")}</div><p class="contract-example">当前倍数边界：1× / ${project.tiers.get("bigwin")!.thresholdMultiplier}× / ${project.tiers.get("superwin")!.thresholdMultiplier}× / ${project.tiers.get("megawin")!.thresholdMultiplier}×；等于阈值时进入对应档。</p><p id="tier-boundaries" class="raw-boundaries">${tierBoundarySummary(project, betRaw)}</p></section><section class="tier-editor"><h2>${active}</h2><p class="layer-order-help">order 数值越小越靠下，只控制当前档位内的图层顺序。</p><label>金额计数时长<input id="tier-duration" type="number" step="0.1" min="0" value="${tier.countDurationSeconds}"/><small>秒</small></label><div class="layer-add"><select id="layer-resource">${[...project.resources.values()].map((resource) => `<option value="${resource.rootKey}">${resource.rootKey} (${resource.kind})</option>`)}</select><button data-add-layer ${project.resources.size ? "" : "disabled"}>新增 / 切换图层</button></div>${tier.layers.map((layer) => layerMarkup(layer, project, active)).join("")}</section>`;
 }
 
 function tierBoundarySummary(project: PopupEditorProject, betRaw: number) {
@@ -482,7 +510,11 @@ function tierBoundarySummary(project: PopupEditorProject, betRaw: number) {
   );
   return `当前 bet raw=${betRaw}：累计计数 raw 0→${rawBoundaries.join("→")}；按金额合同显示为 0→${displayed.join("→")}。`;
 }
-function layerMarkup(layer: PopupLayer, project: PopupEditorProject) {
+function layerMarkup(
+  layer: PopupLayer,
+  project: PopupEditorProject,
+  tierId: AwardTierId,
+) {
   const input = (field: string, value: string | number, type = "number") =>
     `<label>${field}<input data-layer-id="${layer.id}" data-layer-field="${field}" type="${type}" ${type === "number" ? 'step="0.1"' : ""} value="${value}"/></label>`;
   const playback =
@@ -493,9 +525,34 @@ function layerMarkup(layer: PopupLayer, project: PopupEditorProject) {
             .map((field) => input(field, layer.playback[field], "text"))
             .join("")
         : layer.kind === "image-string"
-          ? `${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}<p class="amount-layer-note">金额全程显示；五档共享一个 runtime，跨档只切换 resource、transform 和文本。</p>`
+          ? `${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${imageStringParentMarkup(layer, project, tierId)}<p class="amount-layer-note">金额全程显示；五档共享一个 runtime，跨档只切换 resource、transform 和文本。</p>`
           : `${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${(["start", "loop", "end"] as const).map((segment) => `<label>${segment}<input data-layer-id="${layer.id}" data-layer-field="segment-${segment}" type="checkbox" ${layer.visibleSegments.includes(segment) ? "checked" : ""}/></label>`).join("")}`;
   return `<article class="card"><strong>${layer.id}</strong><span>${layer.kind} / ${layer.resource}</span>${input("order", layer.order)}${(["x", "y", "scale"] as const).map((field) => input(field, layer.transform[field])).join("")}${playback}<button data-delete-layer="${layer.id}">删除图层</button></article>`;
+}
+
+function imageStringParentMarkup(
+  layer: Extract<PopupLayer, { kind: "image-string" }>,
+  project: PopupEditorProject,
+  tierId: AwardTierId,
+) {
+  let targets: ReturnType<typeof getPopupVniTextLayerTargets> = [];
+  try {
+    targets = getPopupVniTextLayerTargets(project, tierId);
+  } catch {
+    // Diagnostics reports the concrete VNI parse failure.
+  }
+  const selected =
+    layer.parent.kind === "popup-root"
+      ? "popup-root"
+      : `${encodeURIComponent(layer.parent.vniLayerId)}:${encodeURIComponent(layer.parent.textLayerId)}`;
+  const options = [
+    `<option value="popup-root">Popup 根节点</option>`,
+    ...targets.map(({ vniLayerId, textLayerId, textLayerName }) => {
+      const value = `${encodeURIComponent(vniLayerId)}:${encodeURIComponent(textLayerId)}`;
+      return `<option value="${value}" ${value === selected ? "selected" : ""}>${vniLayerId} / ${textLayerName} (${textLayerId})</option>`;
+    }),
+  ];
+  return `<label>父节点<select data-image-string-parent data-layer-id="${layer.id}">${options.join("")}</select></label><p class="amount-layer-note">选择 VNI 文字层后，x/y/scale 相对该文字层；渲染顺序由 VNI 文字层决定。</p>`;
 }
 
 function candidateBindingSummary(candidate: PopupImportReviewCandidate) {

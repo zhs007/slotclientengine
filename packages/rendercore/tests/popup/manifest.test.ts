@@ -10,6 +10,9 @@ import { popupFixture } from "./fixtures.js";
 describe("popup manifest", () => {
   it("strictly parses the complete game003-equivalent five-tier contract", () => {
     const manifest = parsePopupManifest(popupFixture());
+    expect(manifest.awardCelebration.base.layers[0]).toMatchObject({
+      parent: { kind: "popup-root" },
+    });
     expect(
       manifest.awardCelebration.celebrationTiers.map((tier) => [
         tier.id,
@@ -45,6 +48,40 @@ describe("popup manifest", () => {
         },
       },
     ]);
+  });
+  it("normalizes legacy ImgNumber root placement and validates exact VNI layer parents", () => {
+    const legacy = structuredClone(popupFixture()) as any;
+    delete legacy.awardCelebration.base.layers[0].parent;
+    expect(
+      parsePopupManifest(legacy).awardCelebration.base.layers[0],
+    ).toMatchObject({
+      parent: { kind: "popup-root" },
+    });
+    const attached = structuredClone(popupFixture()) as any;
+    attached.awardCelebration.celebrationTiers[0].layers.find(
+      (layer: any) => layer.kind === "image-string",
+    ).parent = {
+      kind: "vni-text-layer",
+      vniLayerId: "effect",
+      textLayerId: "text-layer",
+    };
+    expect(
+      parsePopupManifest(
+        attached,
+      ).awardCelebration.celebrationTiers[0].layers.find(
+        (layer) => layer.kind === "image-string",
+      ),
+    ).toMatchObject({
+      parent: {
+        kind: "vni-text-layer",
+        vniLayerId: "effect",
+        textLayerId: "text-layer",
+      },
+    });
+    attached.awardCelebration.celebrationTiers[0].layers.find(
+      (layer: any) => layer.kind === "image-string",
+    ).parent.vniLayerId = "missing";
+    expect(() => parsePopupManifest(attached)).toThrow(/parent\.vniLayerId/);
   });
   it("rejects unknown fields and requires exactly one always-visible ImgNumber per tier", () => {
     expect(() =>

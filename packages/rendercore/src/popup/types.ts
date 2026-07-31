@@ -57,6 +57,13 @@ export interface PopupLayerBase {
   readonly resource: string;
   readonly transform: PopupTransform;
 }
+export type PopupImageStringParent =
+  | { readonly kind: "popup-root" }
+  | {
+      readonly kind: "vni-text-layer";
+      readonly vniLayerId: string;
+      readonly textLayerId: string;
+    };
 export type PopupLayer =
   | (PopupLayerBase & {
       readonly kind: "image";
@@ -67,6 +74,7 @@ export type PopupLayer =
       readonly kind: "image-string";
       readonly binding: "win-amount";
       readonly anchor: PopupAnchor;
+      readonly parent: PopupImageStringParent;
     })
   | (PopupLayerBase & {
       readonly kind: "vni";
