@@ -2,8 +2,10 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  addSymbolState,
   createFromGameConfig,
   setStateVisual,
+  setValuePresentation,
   uploadAssetBatch,
 } from "../src/model/editor-project.js";
 import {
@@ -20,6 +22,60 @@ const image = (name: string) =>
   new Uint8Array(
     readFileSync(resolve(process.cwd(), `../../assets/game002-s3/${name}`)),
   );
+const encode = (value: unknown) =>
+  new TextEncoder().encode(JSON.stringify(value));
+const spineSkeleton = (animations: readonly string[], slots = ["Num"]) =>
+  encode({
+    skeleton: { spine: "4.3.23", width: 160, height: 160 },
+    bones: [{ name: "root" }],
+    slots: slots.map((name) => ({ name, bone: "root" })),
+    skins: [{ name: "default", attachments: {} }],
+    animations: Object.fromEntries(animations.map((name) => [name, {}])),
+  });
+const spineAtlas = new TextEncoder().encode(
+  "Symbol.png\nsize: 1,1\nformat: RGBA8888\nfilter: Linear,Linear\nrepeat: none\n",
+);
+
+function source(key: string, bytes: Uint8Array) {
+  return {
+    sourcePath: key,
+    key,
+    bytes,
+    container: "file" as const,
+    containerName: key,
+  };
+}
+
+function configureSpineProject() {
+  const project = createFromGameConfig({
+    rawGameConfig: gameConfig,
+    fileName: "gameconfig.json",
+  });
+  uploadAssetBatch(project, [
+    { path: "Symbol.json", bytes: spineSkeleton(["Idle", "Win"]) },
+    { path: "Symbol.atlas", bytes: spineAtlas },
+    { path: "Symbol.png", bytes: image("H1.png") },
+  ]);
+  setStateVisual(project, "A", "normal", {
+    kind: "spine",
+    baseVisual: { kind: "empty", width: 160, height: 160 },
+    skeletonPath: "Symbol.json",
+    atlasPath: "Symbol.atlas",
+    texturePath: "Symbol.png",
+    animationName: "Idle",
+    transform: { x: 3, scale: 1.2 },
+  });
+  addSymbolState(project, "A", "win");
+  setStateVisual(project, "A", "win", {
+    kind: "spine",
+    skeletonPath: "Symbol.json",
+    atlasPath: "Symbol.atlas",
+    texturePath: "Symbol.png",
+    animationName: "Win",
+    transform: { y: 4, scale: 0.8 },
+  });
+  return project;
+}
 
 describe("symbol resource import transaction", () => {
   it("overwrites bytes while preserving configured state semantics", async () => {
@@ -100,5 +156,185 @@ describe("symbol resource import transaction", () => {
     expect(result.project.assetLibrary.records.get("H1-2.png")!.bytes).toEqual(
       image("H2.png"),
     );
+  });
+
+  it("clears only missing Spine animation bindings after an overwrite", async () => {
+    const project = configureSpineProject();
+    const beforeNormal = structuredClone(
+      project.symbols.get("A")!.states.get("normal"),
+    );
+    const prepared = await prepareSymbolResourceImport({
+      project,
+      sources: [source("Symbol.json", spineSkeleton(["Idle"]))],
+    });
+    const result = await commitSymbolResourceImport({
+      project,
+      prepared,
+      resolutions: [{ itemIndex: 0, resolution: "overwrite" }],
+    });
+    expect(result.clearedAnimations).toEqual([
+      {
+        location: "A.win",
+        animationName: "Win",
+        skeletonKeys: ["Symbol.json"],
+      },
+    ]);
+    expect(result.project.symbols.get("A")!.states.get("normal")).toEqual(
+      beforeNormal,
+    );
+    expect(result.project.symbols.get("A")!.states.get("win")).toEqual({
+      kind: "spine",
+      skeletonPath: "Symbol.json",
+      atlasPath: "Symbol.atlas",
+      texturePath: "Symbol.png",
+      animationName: "",
+      transform: { y: 4, scale: 0.8 },
+    });
+    expect(project.symbols.get("A")!.states.get("win")).toMatchObject({
+      animationName: "Win",
+    });
+  });
+
+  it("keeps configured Spine animations that still exist after an overwrite", async () => {
+    const project = configureSpineProject();
+    const prepared = await prepareSymbolResourceImport({
+      project,
+      sources: [
+        source("Symbol.json", spineSkeleton(["Idle", "Win", "Appear"])),
+      ],
+    });
+    const result = await commitSymbolResourceImport({
+      project,
+      prepared,
+      resolutions: [{ itemIndex: 0, resolution: "overwrite" }],
+    });
+    expect(result.clearedAnimations).toEqual([]);
+    expect(result.project.symbols.get("A")!.states.get("win")).toMatchObject({
+      animationName: "Win",
+    });
+  });
+
+  it("clears a tiered active Spine animation without changing its normal tier configuration", async () => {
+    const project = createFromGameConfig({
+      rawGameConfig: gameConfig,
+      fileName: "gameconfig.json",
+    });
+    uploadAssetBatch(project, [
+      { path: "Tier1.json", bytes: spineSkeleton(["Idle", "Win"]) },
+      { path: "Tier2.json", bytes: spineSkeleton(["Idle", "Win"]) },
+      { path: "Symbol.atlas", bytes: spineAtlas },
+      { path: "Symbol.png", bytes: image("H1.png") },
+    ]);
+    setValuePresentation(project, "A", {
+      defaultValues: [1],
+      reelStates: {
+        normal: { kind: "transparent", width: 160, height: 160 },
+        states: {},
+      },
+      tiers: [
+        {
+          maxExclusive: 10,
+          animation: {
+            kind: "spine",
+            skeleton: "./Tier1.json",
+            atlas: "./Symbol.atlas",
+            texture: "./Symbol.png",
+            playback: { mode: "animation", animationName: "Idle", loop: true },
+          },
+        },
+        {
+          animation: {
+            kind: "spine",
+            skeleton: "./Tier2.json",
+            atlas: "./Symbol.atlas",
+            texture: "./Symbol.png",
+            playback: { mode: "animation", animationName: "Idle", loop: true },
+          },
+        },
+      ],
+      text: {
+        type: "font",
+        slot: "Num",
+        x: 0,
+        y: 0,
+        fontFamily: "Arial",
+        fontSize: 24,
+        fontWeight: "700",
+        fill: "#ffffff",
+        stroke: "#000000",
+        strokeWidth: 1,
+      },
+    });
+    addSymbolState(project, "A", "win");
+    setStateVisual(project, "A", "win", {
+      kind: "activeSpine",
+      animationName: "Win",
+    });
+    const invalidPrepared = await prepareSymbolResourceImport({
+      project,
+      sources: [source("Tier2.json", spineSkeleton(["Idle"], []))],
+    });
+    await expect(
+      commitSymbolResourceImport({
+        project,
+        prepared: invalidPrepared,
+        resolutions: [{ itemIndex: 0, resolution: "overwrite" }],
+      }),
+    ).rejects.toThrow(/slot "Num" was not found/);
+    expect(project.symbols.get("A")!.states.get("win")).toEqual({
+      kind: "activeSpine",
+      animationName: "Win",
+    });
+    const prepared = await prepareSymbolResourceImport({
+      project,
+      sources: [source("Tier2.json", spineSkeleton(["Idle"]))],
+    });
+    const result = await commitSymbolResourceImport({
+      project,
+      prepared,
+      resolutions: [{ itemIndex: 0, resolution: "overwrite" }],
+    });
+    expect(result.clearedAnimations).toEqual([
+      {
+        location: "A.win",
+        animationName: "Win",
+        skeletonKeys: ["Tier1.json", "Tier2.json"],
+      },
+    ]);
+    expect(
+      result.project.symbols
+        .get("A")!
+        .valuePresentation!.tiers.map(
+          (tier) => tier.animation.playback.animationName,
+        ),
+    ).toEqual(["Idle", "Idle"]);
+    expect(result.project.symbols.get("A")!.states.get("win")).toEqual({
+      kind: "activeSpine",
+      animationName: "",
+    });
+
+    const normalPrepared = await prepareSymbolResourceImport({
+      project: result.project,
+      sources: [source("Tier1.json", spineSkeleton(["Win"]))],
+    });
+    const normalResult = await commitSymbolResourceImport({
+      project: result.project,
+      prepared: normalPrepared,
+      resolutions: [{ itemIndex: 0, resolution: "overwrite" }],
+    });
+    expect(normalResult.clearedAnimations).toEqual([
+      {
+        location: "A.valuePresentation.normal",
+        animationName: "Idle",
+        skeletonKeys: ["Tier1.json", "Tier2.json"],
+      },
+    ]);
+    expect(
+      normalResult.project.symbols
+        .get("A")!
+        .valuePresentation!.tiers.map(
+          (tier) => tier.animation.playback.animationName,
+        ),
+    ).toEqual(["", ""]);
   });
 });

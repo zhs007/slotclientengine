@@ -1631,7 +1631,12 @@ export class SymbolsEditorApp {
       const changed = result.review.items.filter(
         ({ action }) => action !== "noop",
       ).length;
-      this.showSuccess(`已上传 ${changed} 个资源；现有配置保持不变`);
+      const cleared = result.clearedAnimations;
+      this.showSuccess(
+        cleared.length === 0
+          ? `已上传 ${changed} 个资源；现有配置保持不变`
+          : `已上传 ${changed} 个资源；已清空 ${cleared.length} 个不存在的 Spine 动画：${cleared.map(({ location, animationName }) => `${location}（${animationName}）`).join("、")}`,
+      );
       this.render(this.#store.getSnapshot());
     } catch (error) {
       if (request === this.#importRequest) this.#store.setExternalError(error);
