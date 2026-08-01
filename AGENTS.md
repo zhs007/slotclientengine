@@ -50,19 +50,20 @@
 
 根据任务实际影响范围读取下列文件。一个任务跨多个领域时读取对应文件的并集，但不要读取无关领域。
 
-| 路径或功能                                                                                             | 必读规则                                                                                                       |
-| ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
-| `apps/game002`、`assets/game002-*`、`assets/gamecfg002`                                                | `docs/agent-rules/game002.md`、`docs/agent-rules/shared-game-runtime.md`、`docs/agent-rules/loading-ui.md`     |
-| `apps/game003`、`assets/game003-*`、`assets/gamecfg003`                                                | `docs/agent-rules/game003.md`、`docs/agent-rules/shared-game-runtime.md`、`docs/agent-rules/loading-ui.md`     |
-| `apps/gameviewer`、配置驱动 round、scene-layout template runtime                                       | `docs/agent-rules/gameviewer-round-flow.md`、`docs/agent-rules/shared-game-runtime.md`                         |
-| `packages/rendercore`、`logiccore`、`gameframeworks`、`uiframeworks`                                   | `docs/agent-rules/shared-game-runtime.md`；再按实际业务读取 game002、game003、Game Viewer 或 scene-layout 规则 |
-| `apps/gamelayouteditor`、scene layout、mode transition                                                 | `docs/agent-rules/scene-layout.md`、`docs/agent-rules/editor-artifacts.md`                                     |
-| `apps/gamelayoutpkgcli`、Scene Layout production ZIP 后处理、资源分组                                  | `docs/agent-rules/scene-layout.md`、`docs/agent-rules/editor-artifacts.md`                                     |
-| `apps/imgnumbereditor`、`popupeditor`、`symbolseditor`、`packages/editorresource`、`browserartifactio` | `docs/agent-rules/editor-artifacts.md`                                                                         |
-| `packages/rendercore/popup`、award-celebration popup                                                   | `docs/agent-rules/editor-artifacts.md`、`docs/agent-rules/shared-game-runtime.md`                              |
-| `packages/vnicore`、`apps/anieditorv5viewer`、`docs/anieditor5`                                        | `docs/agent-rules/vni-runtime.md`                                                                              |
-| `packages/anieditorv5runtime-cc`                                                                       | `docs/agent-rules/cocos-runtime.md`                                                                            |
-| `packages/gameloading*`、游戏首屏 loading                                                              | `docs/agent-rules/loading-ui.md`                                                                               |
+| 路径或功能                                                                                             | 必读规则                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `apps/game002`、`assets/game002-*`、`assets/gamecfg002`                                                | `docs/agent-rules/game002.md`、`docs/agent-rules/shared-game-runtime.md`、`docs/agent-rules/loading-ui.md`                  |
+| `apps/game003`、`assets/game003-*`、`assets/gamecfg003`                                                | `docs/agent-rules/game003.md`、`docs/agent-rules/shared-game-runtime.md`、`docs/agent-rules/loading-ui.md`                  |
+| `apps/gameviewer`、配置驱动 round、scene-layout template runtime                                       | `docs/agent-rules/gameviewer-round-flow.md`、`docs/agent-rules/shared-game-runtime.md`                                      |
+| `apps/gameviewer2`、本地 scene/otherScene flow、symbol 状态编排                                        | `docs/agent-rules/gameviewer2-local-flow.md`、`docs/agent-rules/shared-game-runtime.md`、`docs/agent-rules/scene-layout.md` |
+| `packages/rendercore`、`logiccore`、`gameframeworks`、`uiframeworks`                                   | `docs/agent-rules/shared-game-runtime.md`；再按实际业务读取 game002、game003、Game Viewer 或 scene-layout 规则              |
+| `apps/gamelayouteditor`、scene layout、mode transition                                                 | `docs/agent-rules/scene-layout.md`、`docs/agent-rules/editor-artifacts.md`                                                  |
+| `apps/gamelayoutpkgcli`、Scene Layout production ZIP 后处理、资源分组                                  | `docs/agent-rules/scene-layout.md`、`docs/agent-rules/editor-artifacts.md`                                                  |
+| `apps/imgnumbereditor`、`popupeditor`、`symbolseditor`、`packages/editorresource`、`browserartifactio` | `docs/agent-rules/editor-artifacts.md`                                                                                      |
+| `packages/rendercore/popup`、award-celebration popup                                                   | `docs/agent-rules/editor-artifacts.md`、`docs/agent-rules/shared-game-runtime.md`                                           |
+| `packages/vnicore`、`apps/anieditorv5viewer`、`docs/anieditor5`                                        | `docs/agent-rules/vni-runtime.md`                                                                                           |
+| `packages/anieditorv5runtime-cc`                                                                       | `docs/agent-rules/cocos-runtime.md`                                                                                         |
+| `packages/gameloading*`、游戏首屏 loading                                                              | `docs/agent-rules/loading-ui.md`                                                                                            |
 
 如果任务只修改文档、任务报告或与上述领域无关的独立 package，不加载领域规则。
 

@@ -17,6 +17,8 @@ export class SymbolStateSequenceController {
   #currentIndex = 0;
   #elapsedSeconds = 0;
   #playing: boolean;
+  readonly #loop: boolean;
+  #completed = false;
 
   constructor(options: SymbolStateSequenceControllerOptions) {
     this.#statesById = validateSymbolStatePreset(
@@ -29,6 +31,8 @@ export class SymbolStateSequenceController {
     }
     this.#steps = options.steps.map((step) => this.normalizeStep(step));
     this.#playing = options.autoplay ?? true;
+    this.#loop = options.loop ?? true;
+    this.#completed = !this.#loop && this.#steps.length === 1;
   }
 
   getSteps(): readonly SymbolSequenceStep[] {
@@ -47,6 +51,10 @@ export class SymbolStateSequenceController {
     return this.#playing;
   }
 
+  isCompleted(): boolean {
+    return this.#completed;
+  }
+
   play(): void {
     this.#playing = true;
   }
@@ -58,11 +66,18 @@ export class SymbolStateSequenceController {
   reset(): void {
     this.#currentIndex = 0;
     this.#elapsedSeconds = 0;
+    this.#completed = !this.#loop && this.#steps.length === 1;
   }
 
   next(): SymbolSequenceStep {
+    if (!this.#loop && this.#currentIndex === this.#steps.length - 1) {
+      this.#completed = true;
+      return this.getCurrentStep();
+    }
     this.#currentIndex = (this.#currentIndex + 1) % this.#steps.length;
     this.#elapsedSeconds = 0;
+    this.#completed =
+      !this.#loop && this.#currentIndex === this.#steps.length - 1;
     return this.getCurrentStep();
   }
 
@@ -73,6 +88,8 @@ export class SymbolStateSequenceController {
     if (insertIndex <= this.#currentIndex) {
       this.#currentIndex += 1;
     }
+    this.#completed =
+      !this.#loop && this.#currentIndex === this.#steps.length - 1;
   }
 
   updateStep(index: number, step: SymbolSequenceStep): void {
@@ -81,6 +98,8 @@ export class SymbolStateSequenceController {
     if (index === this.#currentIndex) {
       this.#elapsedSeconds = 0;
     }
+    this.#completed =
+      !this.#loop && this.#currentIndex === this.#steps.length - 1;
   }
 
   removeStep(index: number): void {
@@ -98,6 +117,8 @@ export class SymbolStateSequenceController {
       this.#currentIndex = this.#steps.length - 1;
     }
     this.#elapsedSeconds = 0;
+    this.#completed =
+      !this.#loop && this.#currentIndex === this.#steps.length - 1;
   }
 
   moveStep(fromIndex: number, toIndex: number): void {
@@ -123,6 +144,8 @@ export class SymbolStateSequenceController {
       this.#currentIndex += 1;
     }
     this.#elapsedSeconds = 0;
+    this.#completed =
+      !this.#loop && this.#currentIndex === this.#steps.length - 1;
   }
 
   update(input: SymbolSequenceUpdateInput): SymbolSequenceUpdateResult {
@@ -183,6 +206,7 @@ export class SymbolStateSequenceController {
       shouldRequestState,
       state: this.getCurrentStep().state,
       currentIndex: this.#currentIndex,
+      completed: this.#completed,
     });
   }
 

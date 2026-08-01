@@ -451,6 +451,29 @@ export class RenderGridCellReelSet extends Container {
     cell.reel.requestVisibleSymbolState(0, state, transitionMode);
   }
 
+  requestLandedVisibleSymbolStates(
+    positions: readonly { readonly x: number; readonly y: number }[],
+    state: SymbolStateId,
+    transitionMode: SymbolStateTransitionMode = "boundary",
+  ): void {
+    for (const position of positions) {
+      const cell = this.getCell(position.x, position.y);
+      if (
+        this.#activeDrop ||
+        this.#activeEffectSweep ||
+        cell.phase !== "completed"
+      )
+        throw new ReelError(
+          `Cannot request landed symbol state while grid cell (${position.x},${position.y}) is spinning.`,
+        );
+      if (!cell.occupied)
+        throw new ReelError(
+          `Cannot request state for empty grid cell (${position.x},${position.y}).`,
+        );
+      cell.reel.requestVisibleSymbolState(0, state, transitionMode);
+    }
+  }
+
   hasVisibleSymbolStateCapability(
     x: number,
     y: number,

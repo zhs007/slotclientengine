@@ -8,6 +8,21 @@ import {
 const preset = createDefaultSymbolStatePreset();
 
 describe("SymbolStateSequenceController", () => {
+  it("can execute a finite choreography without cycling past the final state", () => {
+    const controller = new SymbolStateSequenceController({
+      statePreset: preset,
+      steps: [{ state: "normal", holdSeconds: 0 }, { state: "win" }],
+      loop: false,
+    });
+    expect(controller.update({ deltaSeconds: 0 })).toMatchObject({
+      shouldRequestState: true,
+      state: "win",
+      completed: true,
+    });
+    expect(controller.next()).toEqual({ state: "win" });
+    expect(controller.isCompleted()).toBe(true);
+  });
+
   it("advances stable states by holdSeconds and once states by completion", () => {
     const controller = new SymbolStateSequenceController({
       statePreset: preset,

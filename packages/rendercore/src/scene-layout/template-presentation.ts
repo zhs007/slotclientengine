@@ -141,6 +141,12 @@ export function parseSlotTemplatePresentationProfile(
   });
 }
 
+export function parseSlotReelPresentationProfile(
+  input: unknown,
+): SlotReelPresentationProfileV1 {
+  return deepFreeze(parseReel(input));
+}
+
 export function getSlotReelPresentationCapabilities(
   reel: SlotReelPresentationProfileV1,
 ): SlotReelPresentationCapabilities {

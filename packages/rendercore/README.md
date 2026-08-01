@@ -39,6 +39,14 @@ reel kind 推断 cascade。`createConfiguredSceneLayoutRoundAdapter()` 只串接
 scene-layout、reel、symbol state 与 popup owner，并继续使用 package 内公开本地轮带和
 注入的 Web Crypto phase random。
 
+本地 authoring consumer 可使用 `inspectSceneOtherSceneFlowPackage()`、
+`createDefaultSceneOtherSceneFlowProject()`、`inspectSceneOtherSceneFlowReadiness()` 与
+`createSceneOtherSceneFlowRuntime()`。这组 API 直接复用 production ZIP 中公开轮带、
+number weight table、Symbols state preset 和现有 standard/grid-cell runtime；首个 snapshot
+边执行真实 spin，landing delta 驱动逐格有限状态编排，后续 snapshot 原位提交。
+该 facade 不解析 server round 或 component，也不创建 DOM 配置 UI；runtime owner 负责
+Pixi Application、package resource 与所有 player 的 destroy。
+
 低层 `createSceneLayoutResource()` / `createSceneLayoutRuntime()` 保持用于 layout-only 和自定义 attachment；自包含 production 包使用 `createSceneLayoutPackageResource()` / `loadSceneLayoutPackageFromUrl()` 与 `createSceneLayoutPackageRuntime()`。未声明 `symbolPackage` 的旧 v1 manifest 行为不变，但组合 reel 初始化与 reset API 会显式不可用。
 
 完整 manifest、zip 目录、构建期/CDN 接入和生命周期示例见 [`docs/scene-layout-manifest.md`](../../docs/scene-layout-manifest.md)。

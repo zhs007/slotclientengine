@@ -11,3 +11,5 @@ export * from "./production-zip.js";
 export * from "./template-presentation.js";
 export * from "./configured-round-adapter.js";
 export * from "./presentation-surface.js";
+export * from "./local-scene-authoring.js";
+export * from "./local-scene-flow.js";

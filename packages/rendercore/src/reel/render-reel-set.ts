@@ -17,6 +17,7 @@ import type {
   GridCellCascadeDropPlan,
   GridCellCascadeValueMatrix,
   RenderReelVisibleOccurrence,
+  PreparedVisibleOccurrenceReplacement,
 } from "./types.js";
 import type {
   SymbolStateId,
@@ -203,6 +204,71 @@ export class RenderReelSet extends Container {
     return Object.freeze(this.reels.map((reel) => reel.getVisibleScene()));
   }
 
+  setVisibleSymbolPresentationValue(
+    x: number,
+    y: number,
+    value: number | null,
+  ): void {
+    this.assertStopped("set visible symbol presentation value");
+    this.getReelAt(x).setVisibleSymbolPresentationValue(y, value);
+  }
+
+  prepareVisibleOccurrenceReplacement(options: {
+    readonly x: number;
+    readonly y: number;
+    readonly expectedCode: number;
+    readonly outputCode: number;
+    readonly outputPresentationValue: number | null;
+  }): PreparedVisibleOccurrenceReplacement {
+    this.assertStopped("prepare visible occurrence replacement");
+    const reel = this.getReelAt(options.x);
+    const input = reel.getVisibleSymbolStateSnapshot(options.y);
+    if (input.code !== options.expectedCode)
+      throw new ReelError(
+        `Cannot replace standard reel cell (${options.x},${options.y}): expected code ${options.expectedCode}, received ${input.code}.`,
+      );
+    const output = reel.createDetachedOccurrence(
+      options.outputCode,
+      options.outputPresentationValue,
+    );
+    let state: "prepared" | "committed" | "rolled-back" = "prepared";
+    const rollback = (): void => {
+      if (state !== "prepared") return;
+      reel.releaseDetachedOccurrence(output);
+      state = "rolled-back";
+    };
+    return Object.freeze({
+      x: options.x,
+      y: options.y,
+      inputCode: options.expectedCode,
+      outputCode: options.outputCode,
+      commit: (): void => {
+        if (state === "committed") return;
+        if (state !== "prepared")
+          throw new ReelError(
+            `Cannot commit rolled-back replacement at standard reel cell (${options.x},${options.y}).`,
+          );
+        this.assertStopped("commit visible occurrence replacement");
+        const current = reel.getVisibleSymbolStateSnapshot(options.y);
+        if (current.code !== options.expectedCode)
+          throw new ReelError(
+            `Cannot commit replacement at standard reel cell (${options.x},${options.y}): expected code ${options.expectedCode}, received ${current.code}.`,
+          );
+        const previous = reel.takeVisibleOccurrence(options.y);
+        try {
+          reel.placeVisibleOccurrence(output, options.y);
+        } catch (error) {
+          reel.placeVisibleOccurrence(previous, options.y);
+          throw error;
+        }
+        reel.releaseDetachedOccurrence(previous);
+        state = "committed";
+      },
+      rollback,
+      destroy: rollback,
+    });
+  }
+
   hasVisibleSymbolStateCapability(
     x: number,
     y: number,
@@ -344,6 +410,21 @@ export class RenderReelSet extends Container {
       );
     }
     this.getReelAt(x).requestVisibleSymbolState(y, state, transitionMode);
+  }
+
+  requestLandedVisibleSymbolStates(
+    positions: readonly { readonly x: number; readonly y: number }[],
+    state: SymbolStateId,
+    transitionMode: SymbolStateTransitionMode = "boundary",
+  ): void {
+    for (const position of positions) {
+      const reel = this.getReelAt(position.x);
+      if (reel.getSnapshot().phase !== "stopped")
+        throw new ReelError(
+          `Cannot request landed symbol state while reel ${position.x} is spinning.`,
+        );
+      reel.requestVisibleSymbolState(position.y, state, transitionMode);
+    }
   }
 
   requestVisibleSymbolStates(

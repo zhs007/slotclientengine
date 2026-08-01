@@ -60,12 +60,14 @@ export interface SymbolSequenceUpdateResult {
   readonly shouldRequestState: boolean;
   readonly state: SymbolStateId;
   readonly currentIndex: number;
+  readonly completed: boolean;
 }
 
 export interface SymbolStateSequenceControllerOptions {
   readonly statePreset: SymbolStatePreset;
   readonly steps: readonly SymbolSequenceStep[];
   readonly autoplay?: boolean;
+  readonly loop?: boolean;
 }
 
 export interface SymbolAniUpdateResult {

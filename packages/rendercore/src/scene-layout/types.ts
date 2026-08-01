@@ -400,7 +400,13 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   requestMainReelSymbolStates(
     positions: readonly { readonly x: number; readonly y: number }[],
     state: string,
+    transitionMode?: import("../symbol/index.js").SymbolStateTransitionMode,
   ): void;
+  drainMainReelLandingPositions(): readonly {
+    readonly x: number;
+    readonly y: number;
+  }[];
+  applyMainReelSnapshot(input: SceneLayoutInitialReelScene): void;
   getMainReelSymbolStateSnapshots(
     positions: readonly { readonly x: number; readonly y: number }[],
   ): readonly import("../reel/index.js").RenderVisibleSymbolStateSnapshot[];

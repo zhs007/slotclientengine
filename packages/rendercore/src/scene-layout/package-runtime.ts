@@ -164,6 +164,12 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   #activePopupId: string | null = null;
   #viewportSize: RenderViewportSize | null = null;
   #artSpaceApplied = false;
+  #pendingMainReelLandingPositions: {
+    readonly x: number;
+    readonly y: number;
+  }[] = [];
+  #mainReelLandingKeys = new Set<string>();
+  #mainReelTargetValues: SymbolPresentationValueMatrix | null = null;
 
   constructor(
     resource: SceneLayoutPackageResource,
@@ -399,7 +405,29 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   update(deltaSeconds: number): void {
     this.assertReady();
     this.#layout.update(deltaSeconds);
-    this.#reel?.update(deltaSeconds);
+    if (this.#reel) {
+      const geometry = this.#manifest.reels.main;
+      if (this.#reel instanceof RenderGridCellReelSet) {
+        const result = this.#reel.update(deltaSeconds);
+        for (const position of result.landedCells)
+          this.recordMainReelLanding(position.x, position.y);
+      } else if (geometry) {
+        const result = this.#reel.update(deltaSeconds);
+        for (const x of result.stoppedAxes)
+          for (let y = 0; y < geometry.rows; y++) {
+            if (this.#mainReelTargetValues)
+              this.#reel.setVisibleSymbolPresentationValue(
+                x,
+                y,
+                this.#mainReelTargetValues[x]?.[y] ?? null,
+              );
+            this.recordMainReelLanding(x, y);
+          }
+        if (result.completed) this.#mainReelTargetValues = null;
+      } else {
+        this.#reel.update(deltaSeconds);
+      }
+    }
     for (const popup of this.#popups.values())
       if (popup.isPlaying()) popup.update(deltaSeconds);
     this.updateActiveTransition(deltaSeconds);
@@ -420,11 +448,87 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         "Current scene layout game mode has no symbol package binding.",
       );
     this.applyReelScene(reel, binding.resource, binding.binding, input);
+    this.clearMainReelLandingPositions();
+  }
+
+  applyMainReelSnapshot(input: SceneLayoutInitialReelScene): void {
+    this.assertReady();
+    const reel = this.requireReel("main");
+    if (this.isMainReelSpinning())
+      throw new SceneLayoutError(
+        "Cannot apply a main reel snapshot while spinning.",
+      );
+    const geometry = this.#manifest.reels.main!;
+    const binding = this.resolveModeSymbolBinding(
+      this.#stableMode ? this.requireMode(this.#stableMode) : null,
+    );
+    if (!binding)
+      throw new SceneLayoutError(
+        "Current scene layout game mode has no symbol package binding.",
+      );
+    const scene = validateScene(
+      input.scene,
+      geometry.columns,
+      geometry.rows,
+      binding.resource,
+    );
+    validatePhases(
+      input.localPhaseYs,
+      geometry.columns,
+      binding.resource.gameConfig.getReels(binding.binding.reelSet),
+    );
+    const values = validateValues(
+      input.presentationValues,
+      geometry.columns,
+      geometry.rows,
+    );
+    const current = reel.getVisibleScene();
+    const currentValues = reel
+      .getCascadeValues()
+      .map((column) =>
+        Object.freeze(column.map((value) => (value === -1 ? null : value))),
+      );
+    const replacements: import("../reel/index.js").PreparedVisibleOccurrenceReplacement[] =
+      [];
+    try {
+      for (let x = 0; x < geometry.columns; x++)
+        for (let y = 0; y < geometry.rows; y++)
+          if (current[x]![y] !== scene[x]![y])
+            replacements.push(
+              reel.prepareVisibleOccurrenceReplacement({
+                x,
+                y,
+                expectedCode: current[x]![y]!,
+                outputCode: scene[x]![y]!,
+                outputPresentationValue: values?.[x]?.[y] ?? null,
+              }),
+            );
+      for (const replacement of replacements) replacement.commit();
+      for (let x = 0; x < geometry.columns; x++)
+        for (let y = 0; y < geometry.rows; y++)
+          if (current[x]![y] === scene[x]![y])
+            reel.setVisibleSymbolPresentationValue(
+              x,
+              y,
+              values?.[x]?.[y] ?? null,
+            );
+    } catch (error) {
+      for (const replacement of replacements) replacement.rollback();
+      this.applyReelScene(reel, binding.resource, binding.binding, {
+        scene: current,
+        localPhaseYs: Object.freeze(
+          Array.from({ length: geometry.columns }, () => 0),
+        ),
+        presentationValues: Object.freeze(currentValues),
+      });
+      throw asSceneLayoutError(error);
+    }
   }
 
   spinMainReelToScene(input: SceneLayoutMainReelSpinInput): void {
     this.assertReady();
     const reel = this.requireReel("main");
+    this.clearMainReelLandingPositions();
     const binding = this.resolveModeSymbolBinding(
       this.#stableMode ? this.requireMode(this.#stableMode) : null,
     );
@@ -457,6 +561,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       geometry.columns,
       geometry.rows,
     );
+    this.#mainReelTargetValues =
+      profile.kind === "standard" ? (values ?? null) : null;
     if (profile.kind === "grid-cell") {
       if (!(reel instanceof RenderGridCellReelSet))
         throw new SceneLayoutError(
@@ -522,9 +628,24 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   requestMainReelSymbolStates(
     positions: readonly { readonly x: number; readonly y: number }[],
     state: string,
+    transitionMode: import("../symbol/index.js").SymbolStateTransitionMode = "boundary",
   ): void {
     this.assertReady();
-    this.requireReel("main").requestVisibleSymbolStates(positions, state);
+    const reel = this.requireReel("main");
+    if (this.isMainReelSpinning())
+      reel.requestLandedVisibleSymbolStates(positions, state, transitionMode);
+    else reel.requestVisibleSymbolStates(positions, state, transitionMode);
+  }
+
+  drainMainReelLandingPositions(): readonly {
+    readonly x: number;
+    readonly y: number;
+  }[] {
+    this.assertReady();
+    const positions = Object.freeze(
+      this.#pendingMainReelLandingPositions.splice(0),
+    );
+    return positions;
   }
 
   getMainReelSymbolStateSnapshots(
@@ -895,6 +1016,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     }
     this.#reel?.destroy({ children: true });
     this.#reel = null;
+    this.clearMainReelLandingPositions();
     this.#catalog = null;
     for (const popup of this.#popups.values()) popup.destroy();
     this.#popups.clear();
@@ -1474,6 +1596,19 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         `Scene layout reel presentation "${id}" is unavailable.`,
       );
     return this.#reel;
+  }
+
+  private recordMainReelLanding(x: number, y: number): void {
+    const key = `${x}:${y}`;
+    if (this.#mainReelLandingKeys.has(key)) return;
+    this.#mainReelLandingKeys.add(key);
+    this.#pendingMainReelLandingPositions.push(Object.freeze({ x, y }));
+  }
+
+  private clearMainReelLandingPositions(): void {
+    this.#pendingMainReelLandingPositions.length = 0;
+    this.#mainReelLandingKeys.clear();
+    this.#mainReelTargetValues = null;
   }
 
   private requireGameModes() {
