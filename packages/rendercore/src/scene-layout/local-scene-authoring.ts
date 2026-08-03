@@ -54,7 +54,9 @@ export interface SceneOtherSceneFlowPackageSummary {
     readonly code: number;
     readonly name: string;
     readonly valueCapable: boolean;
+    readonly defaultValues: readonly number[];
     readonly supportedStates: readonly string[];
+    readonly valueRequiredStates: readonly string[];
   }[];
   readonly states: readonly {
     readonly id: string;
@@ -235,10 +237,8 @@ export function createDefaultSceneOtherSceneFlowProject(options: {
   const first = rollSceneFromPublicReels(options.summary, random);
   const second = rollSceneFromPublicReels(options.summary, random);
   const emptyValues = () =>
-    Object.freeze(
-      Array.from({ length: options.summary.columns }, () =>
-        Object.freeze(Array.from({ length: options.summary.rows }, () => null)),
-      ),
+    Array.from({ length: options.summary.columns }, () =>
+      Array.from({ length: options.summary.rows }, () => null),
     );
   const assignments = (id: string) =>
     Object.freeze(
@@ -267,18 +267,67 @@ export function createDefaultSceneOtherSceneFlowProject(options: {
         id: "snapshot-1",
         name: "Snapshot 1 · Initial",
         scene: first,
-        otherScene: emptyValues(),
+        otherScene: fillMissingSymbolValues({
+          summary: options.summary,
+          scene: first,
+          otherScene: emptyValues(),
+          random,
+        }),
         choreographies: assignments("spin"),
       },
       {
         id: "snapshot-2",
         name: "Snapshot 2 · Spin Target",
         scene: second,
-        otherScene: emptyValues(),
+        otherScene: fillMissingSymbolValues({
+          summary: options.summary,
+          scene: second,
+          otherScene: emptyValues(),
+          random,
+        }),
         choreographies: assignments("landing"),
       },
     ],
   });
+}
+
+export function fillMissingSymbolValues(options: {
+  readonly summary: SceneOtherSceneFlowPackageSummary;
+  readonly scene: readonly (readonly number[])[];
+  readonly otherScene: readonly (readonly (number | null)[])[];
+  readonly random?: SceneOtherSceneBoundedRandom;
+}): readonly (readonly (number | null)[])[] {
+  assertDimensions(options.scene, options.summary, "scene");
+  assertDimensions(options.otherScene, options.summary, "otherScene");
+  const symbols = new Map(
+    options.summary.symbols.map((symbol) => [symbol.code, symbol] as const),
+  );
+  const random = options.random ?? secureBoundedRandom;
+  return Object.freeze(
+    options.otherScene.map((column, x) =>
+      Object.freeze(
+        column.map((current, y) => {
+          if (current !== null) return current;
+          const code = options.scene[x]![y]!;
+          const symbol = symbols.get(code);
+          if (!symbol)
+            fail(`scene[${x}][${y}] uses unknown display code ${code}.`);
+          if (!symbol.valueCapable) return null;
+          if (symbol.defaultValues.length === 0)
+            fail(
+              `Value-capable symbol "${symbol.name}" has no default values.`,
+            );
+          return symbol.defaultValues[
+            bounded(
+              random,
+              symbol.defaultValues.length,
+              `symbol "${symbol.name}" default value`,
+            )
+          ]!;
+        }),
+      ),
+    ),
+  );
 }
 
 export function rollSceneFromPublicReels(
@@ -376,13 +425,21 @@ function createPackageSummary(
     const supportedStates = states
       .map((state) => state.id)
       .filter((state) => supportsRequestedState(symbolResource, name, state));
+    const valuePresentation =
+      symbolResource.symbolManifest.symbols[name]?.valuePresentation;
     return Object.freeze({
       code,
       name,
-      valueCapable:
-        symbolResource.symbolManifest.symbols[name]?.valuePresentation !==
-        undefined,
+      valueCapable: valuePresentation !== undefined,
+      defaultValues: Object.freeze([
+        ...(valuePresentation?.defaultValues ?? []),
+      ]),
       supportedStates: Object.freeze(supportedStates),
+      valueRequiredStates: Object.freeze(
+        supportedStates.filter((state) =>
+          requiresPresentationValue(symbolResource, name, state),
+        ),
+      ),
     });
   });
   const tables = Object.fromEntries(
@@ -490,6 +547,13 @@ function validateProjectAgainstPackage(
             fail(
               `snapshots[${snapshotIndex}] cell (${x},${y}) symbol "${symbol.name}" does not support state "${step.state}" from choreography "${choreography.name}".`,
             );
+          else if (
+            symbol.valueRequiredStates.includes(step.state) &&
+            snapshot.otherScene[x]![y] === null
+          )
+            fail(
+              `snapshots[${snapshotIndex}] cell (${x},${y}) symbol "${symbol.name}" state "${step.state}" requires a positive otherScene value for its active Spine provider.`,
+            );
       }
   }
   void resource;
@@ -546,6 +610,37 @@ function supportsRequestedState(
     entry.animations[state] !== undefined ||
     entry.states[state] !== undefined ||
     entry.valuePresentation?.reelStates.states[state] !== undefined
+  );
+}
+
+function requiresPresentationValue(
+  resource: SymbolPackageResource,
+  symbol: string,
+  requested: string,
+): boolean {
+  const entry = resource.symbolManifest.symbols[symbol];
+  if (!entry?.valuePresentation) return false;
+  const equivalences = new Map(
+    (resource.statePreset.equivalences ?? []).map((item) => [
+      item.from,
+      item.to,
+    ]),
+  );
+  const seen = new Set<string>();
+  let state = requested;
+  while (equivalences.has(state)) {
+    if (seen.has(state)) fail(`Symbol state equivalence cycle at "${state}".`);
+    seen.add(state);
+    state = equivalences.get(state)!;
+  }
+  if (
+    requested !== state &&
+    entry.valuePresentation.reelStates.states[requested]
+  )
+    return false;
+  return (
+    state === resource.statePreset.defaultState ||
+    entry.animations[state]?.kind === "activeSpine"
   );
 }
 

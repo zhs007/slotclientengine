@@ -20,13 +20,17 @@ const summary = {
       code: 1,
       name: "A",
       valueCapable: true,
+      defaultValues: [1],
       supportedStates: ["normal", "appear"],
+      valueRequiredStates: ["normal", "appear"],
     },
     {
       code: 2,
       name: "B",
       valueCapable: true,
+      defaultValues: [1],
       supportedStates: ["normal", "appear"],
+      valueRequiredStates: ["normal", "appear"],
     },
   ],
   states: [
@@ -79,6 +83,7 @@ vi.mock("@slotclientengine/rendercore/scene-layout", () => ({
   })),
   parseSceneOtherSceneFlowProject: vi.fn((project) => project),
   rollSceneFromPublicReels: vi.fn(() => [[2], [1]]),
+  fillMissingSymbolValues: vi.fn(({ otherScene }) => otherScene),
   rollOtherSceneValues: vi.fn(() => [[7], [7]]),
 }));
 vi.mock("../src/runtime/launch-channel.js", () => ({

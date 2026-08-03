@@ -1,5 +1,6 @@
 import {
   createDefaultSceneOtherSceneFlowProject,
+  fillMissingSymbolValues,
   inspectSceneOtherSceneFlowPackage,
   inspectSceneOtherSceneFlowReadiness,
   parseSceneOtherSceneFlowProject,
@@ -164,9 +165,17 @@ async function handleAction(
     if (draft.snapshots.length <= 2) throw new Error("至少保留两个场景配置。 ");
     draft.snapshots.splice(index, 1);
   } else if (action === "roll-scene") {
-    draft.snapshots[numberData(element, "index")]!.scene = structuredClone(
+    const snapshot = draft.snapshots[numberData(element, "index")]!;
+    snapshot.scene = structuredClone(
       rollSceneFromPublicReels(state.summary),
     ) as number[][];
+    snapshot.otherScene = structuredClone(
+      fillMissingSymbolValues({
+        summary: state.summary,
+        scene: snapshot.scene,
+        otherScene: snapshot.otherScene,
+      }),
+    ) as (number | null)[][];
   } else if (action === "roll-other") {
     const index = numberData(element, "index");
     const card = element.closest<HTMLElement>("[data-snapshot]")!;
@@ -266,7 +275,16 @@ function handleEdit(
       const snapshot = draft.snapshots[numberData(element, "index")]!;
       const x = numberData(element, "x");
       const y = numberData(element, "y");
-      if (edit === "scene") snapshot.scene[x]![y] = Number(element.value);
+      if (edit === "scene") {
+        snapshot.scene[x]![y] = Number(element.value);
+        snapshot.otherScene = structuredClone(
+          fillMissingSymbolValues({
+            summary: state.summary,
+            scene: snapshot.scene,
+            otherScene: snapshot.otherScene,
+          }),
+        ) as (number | null)[][];
+      }
       if (edit === "other")
         snapshot.otherScene[x]![y] =
           element.value === "" ? null : Number(element.value);

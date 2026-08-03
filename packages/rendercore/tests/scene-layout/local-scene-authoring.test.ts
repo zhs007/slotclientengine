@@ -28,19 +28,25 @@ const summary: SceneOtherSceneFlowPackageSummary = {
       code: 1,
       name: "A",
       valueCapable: true,
+      defaultValues: [5, 10],
       supportedStates: ["normal", "spinBlur", "appear"],
+      valueRequiredStates: ["normal", "appear"],
     },
     {
       code: 2,
       name: "B",
       valueCapable: true,
+      defaultValues: [5, 10],
       supportedStates: ["normal", "spinBlur", "appear"],
+      valueRequiredStates: ["normal", "appear"],
     },
     {
       code: 3,
       name: "C",
       valueCapable: false,
+      defaultValues: [],
       supportedStates: ["normal", "spinBlur", "appear"],
+      valueRequiredStates: [],
     },
   ],
   states: [
@@ -73,6 +79,10 @@ describe("local scene authoring", () => {
     ]);
     expect(project.snapshots[0]!.choreographies[0]![0]).toBe("spin");
     expect(project.snapshots[1]!.choreographies[0]![0]).toBe("landing");
+    expect(project.snapshots[0]!.otherScene).toEqual([
+      [5, 5],
+      [5, null],
+    ]);
   });
 
   it("rolls only from public reels and filters otherScene by symbol", () => {
@@ -92,7 +102,7 @@ describe("local scene authoring", () => {
       fixedValue: 9,
     });
     expect(values[0]![0]).toBe(9);
-    expect(values[0]![1]).toBeNull();
+    expect(values[0]![1]).toBe(5);
   });
 
   it("rejects unknown fields and fewer than two snapshots", () => {
