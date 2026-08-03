@@ -15,15 +15,23 @@ const mocks = vi.hoisted(() => ({
   landings: [] as { x: number; y: number }[],
   initError: null as Error | null,
   applicationInitError: null as Error | null,
+  rendererResize: vi.fn(),
+  runtimeViewport: vi.fn(),
+  resolveFrame: vi.fn(() => ({
+    frameDesignSize: { width: 2000, height: 1200 },
+    cssSize: { width: 1000, height: 600 },
+    offsetX: 100,
+    offsetY: 0,
+  })),
   readiness: null as unknown,
 }));
 
 vi.mock("pixi.js", async (importOriginal) => {
   const original = await importOriginal<typeof import("pixi.js")>();
   class Application {
-    readonly canvas = { setAttribute: vi.fn() };
+    readonly canvas = { setAttribute: vi.fn(), style: {} };
     readonly stage = { addChild: vi.fn() };
-    readonly renderer = { resize: vi.fn() };
+    readonly renderer = { resize: mocks.rendererResize };
     readonly ticker = {
       add: vi.fn((callback: (ticker: { deltaMS: number }) => void) => {
         mocks.tickerCallback = callback;
@@ -112,8 +120,12 @@ vi.mock("../../src/scene-layout/local-scene-authoring.js", () => ({
 }));
 vi.mock("../../src/scene-layout/production-zip.js", () => ({
   loadSceneLayoutPackageFromZipBytes: vi.fn(async () => ({
+    manifest: {},
     destroy: mocks.resourceDestroy,
   })),
+}));
+vi.mock("../../src/scene-layout/geometry.js", () => ({
+  resolveSceneLayoutFrameViewport: mocks.resolveFrame,
 }));
 vi.mock("../../src/scene-layout/package-runtime.js", () => ({
   createSceneLayoutPackageRuntime: vi.fn(() => ({
@@ -122,7 +134,7 @@ vi.mock("../../src/scene-layout/package-runtime.js", () => ({
       if (mocks.initError) throw mocks.initError;
     }),
     update: mocks.runtimeUpdate,
-    applyViewport: vi.fn(),
+    applyViewport: mocks.runtimeViewport,
     resetReelScene: mocks.reset,
     applyMainReelSnapshot: mocks.applySnapshot,
     spinMainReelToScene: vi.fn((input) => {
@@ -166,6 +178,21 @@ describe("local scene flow runtime", () => {
     expect(root.replaceChildren).toHaveBeenCalledOnce();
     mocks.tickerCallback!({ deltaMS: 16 });
     runtime.applyViewport({ width: 800, height: 600 });
+    expect(mocks.resolveFrame).toHaveBeenCalledWith({
+      manifest: {},
+      pageSize: { width: 800, height: 600 },
+    });
+    expect(mocks.rendererResize).toHaveBeenCalledWith(2000, 1200);
+    expect(mocks.runtimeViewport).toHaveBeenCalledWith({
+      width: 2000,
+      height: 1200,
+    });
+    expect(runtime.canvas.style).toMatchObject({
+      left: "100px",
+      top: "0px",
+      width: "1000px",
+      height: "600px",
+    });
     expect(() => runtime.applyViewport({ width: 0, height: 1 })).toThrow(
       /positive/,
     );

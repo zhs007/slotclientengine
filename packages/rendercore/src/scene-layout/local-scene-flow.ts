@@ -14,8 +14,12 @@ import {
   type SceneOtherSceneFlowReadiness,
 } from "./local-scene-authoring.js";
 import { createSceneLayoutPackageRuntime } from "./package-runtime.js";
+import { resolveSceneLayoutFrameViewport } from "./geometry.js";
 import { loadSceneLayoutPackageFromZipBytes } from "./production-zip.js";
-import type { SceneLayoutPackageRuntime } from "./types.js";
+import type {
+  SceneLayoutManifestV1,
+  SceneLayoutPackageRuntime,
+} from "./types.js";
 
 export interface SceneOtherSceneFlowRuntimeSnapshot {
   readonly phase: "ready" | "playing" | "completed" | "destroyed";
@@ -88,6 +92,7 @@ export async function createSceneOtherSceneFlowRuntime(options: {
       application,
       runtime,
       readiness,
+      resource.manifest,
       options.random ?? secureSceneOtherSceneBoundedRandom,
     );
     application.ticker.add((ticker) =>
@@ -107,6 +112,7 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
   readonly readiness: SceneOtherSceneFlowReadiness;
   readonly #application: Application;
   readonly #runtime: SceneLayoutPackageRuntime;
+  readonly #manifest: SceneLayoutManifestV1;
   readonly #random: SceneOtherSceneBoundedRandom;
   readonly #statePreset: SymbolStatePreset;
   #phase: SceneOtherSceneFlowRuntimeSnapshot["phase"] = "ready";
@@ -118,10 +124,12 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
     application: Application,
     runtime: SceneLayoutPackageRuntime,
     readiness: SceneOtherSceneFlowReadiness,
+    manifest: SceneLayoutManifestV1,
     random: SceneOtherSceneBoundedRandom,
   ) {
     this.#application = application;
     this.#runtime = runtime;
+    this.#manifest = manifest;
     this.readiness = readiness;
     this.#random = random;
     this.canvas = application.canvas;
@@ -158,8 +166,22 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
       throw new SceneLayoutError(
         "Preview viewport must have positive finite dimensions.",
       );
-    this.#application.renderer.resize(size.width, size.height);
-    this.#runtime.applyViewport(size);
+    const frame = resolveSceneLayoutFrameViewport({
+      manifest: this.#manifest,
+      pageSize: size,
+    });
+    this.#application.renderer.resize(
+      frame.frameDesignSize.width,
+      frame.frameDesignSize.height,
+    );
+    this.#runtime.applyViewport(frame.frameDesignSize);
+    Object.assign(this.canvas.style, {
+      position: "absolute",
+      left: `${frame.offsetX}px`,
+      top: `${frame.offsetY}px`,
+      width: `${frame.cssSize.width}px`,
+      height: `${frame.cssSize.height}px`,
+    });
   }
 
   getSnapshot(): SceneOtherSceneFlowRuntimeSnapshot {

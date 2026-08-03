@@ -32,9 +32,15 @@ const symbolPackage = {
   symbolManifest: {
     symbols: {
       A: {
-        animations: { spinBlur: {}, appear: {} },
+        animations: {
+          spinBlur: { kind: "builtin" },
+          appear: { kind: "activeSpine" },
+        },
         states: {},
-        valuePresentation: { reelStates: { states: {} } },
+        valuePresentation: {
+          defaultValues: [7],
+          reelStates: { states: { spinBlur: "spin.png" } },
+        },
       },
     },
   },
@@ -92,7 +98,7 @@ const project = {
       id: "s1",
       name: "S1",
       scene: [[1]],
-      otherScene: [[null]],
+      otherScene: [[7]],
       choreographies: [["spin"]],
     },
     {
@@ -125,7 +131,9 @@ describe("local scene readiness", () => {
     });
     expect(summary.symbols[0]).toMatchObject({
       valueCapable: true,
+      defaultValues: [7],
       supportedStates: ["normal", "spinBlur", "appear"],
+      valueRequiredStates: ["normal", "appear"],
     });
     expect(mocks.destroy).toHaveBeenCalledOnce();
   });
@@ -150,6 +158,21 @@ describe("local scene readiness", () => {
         project,
       }),
     ).rejects.toThrow(/64-character/);
+  });
+
+  it("rejects a missing value before an active Spine state can run", async () => {
+    await expect(
+      inspectSceneOtherSceneFlowReadiness({
+        layoutZipBytes: new Uint8Array([1]),
+        project: {
+          ...project,
+          snapshots: project.snapshots.map((snapshot) => ({
+            ...snapshot,
+            otherScene: [[null]],
+          })),
+        },
+      }),
+    ).rejects.toThrow(/requires a positive otherScene value.*active Spine/);
   });
 
   it.each([
