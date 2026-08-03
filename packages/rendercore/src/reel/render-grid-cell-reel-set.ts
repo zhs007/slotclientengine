@@ -52,6 +52,7 @@ interface RuntimeCell {
   fadeOutElapsedMs: number;
   fadeOutStartAlpha: number;
   targetPresentationValue: number | null;
+  targetLandingState: SymbolStateId | null;
   occupied: boolean;
 }
 
@@ -222,6 +223,7 @@ export class RenderGridCellReelSet extends Container {
       cell.fadeOutElapsedMs = 0;
       cell.fadeOutStartAlpha = 0;
       cell.targetPresentationValue = null;
+      cell.targetLandingState = null;
       cell.occupied = true;
       cell.dimOverlay.alpha = 0;
       cell.dimOverlay.y = 0;
@@ -261,6 +263,11 @@ export class RenderGridCellReelSet extends Container {
     }
     const targetPresentationValues = parsePresentationValueMatrix(
       options.targetPresentationValues,
+      this.#columns,
+      this.#rows,
+    );
+    const targetLandingStates = parseStateMatrix(
+      options.targetLandingStates,
       this.#columns,
       this.#rows,
     );
@@ -304,6 +311,10 @@ export class RenderGridCellReelSet extends Container {
       cell.fadeOutStartAlpha = 0;
       cell.targetPresentationValue = planCell
         ? (targetPresentationValues?.[cell.coordinate.x][cell.coordinate.y] ??
+          null)
+        : null;
+      cell.targetLandingState = planCell
+        ? (targetLandingStates?.[cell.coordinate.x]?.[cell.coordinate.y] ??
           null)
         : null;
       cell.dimOverlay.alpha = 0;
@@ -1090,6 +1101,7 @@ export class RenderGridCellReelSet extends Container {
       fadeOutElapsedMs: 0,
       fadeOutStartAlpha: 0,
       targetPresentationValue: null,
+      targetLandingState: null,
       occupied: true,
     };
   }
@@ -1346,7 +1358,7 @@ export class RenderGridCellReelSet extends Container {
           planCell.axisPlan.finalY,
           [cell.targetPresentationValue],
         );
-        resetReelSlotSymbolsAndRequestLandingAppear(cell);
+        resetReelSlotSymbolsAndRequestLandingState(cell);
         this.syncLandedDimming(cell, planCell, plan);
         this.setCellClipMask(cell, false);
         this.syncCellRenderOrder(cell);
@@ -1731,10 +1743,13 @@ function createDimmingRows(
   );
 }
 
-function resetReelSlotSymbolsAndRequestLandingAppear(cell: RuntimeCell): void {
+function resetReelSlotSymbolsAndRequestLandingState(cell: RuntimeCell): void {
   for (const slot of cell.reel.getSlotSnapshots()) {
     slot.symbol?.reset();
-    if (slot.windowY === 0) slot.symbol?.requestLandingAppear();
+    if (slot.windowY !== 0 || !slot.symbol) continue;
+    if (cell.targetLandingState)
+      slot.symbol.requestState(cell.targetLandingState, "immediate");
+    else slot.symbol.requestLandingAppear();
   }
 }
 
@@ -1876,6 +1891,31 @@ function parsePresentationValueMatrix(
             );
           }
           return candidate;
+        }),
+      );
+    }),
+  );
+}
+
+function parseStateMatrix(
+  value: readonly (readonly SymbolStateId[])[] | undefined,
+  columns: number,
+  rows: number,
+): readonly (readonly SymbolStateId[])[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length !== columns)
+    throw new ReelError(`landingStates length must be ${columns}.`);
+  return Object.freeze(
+    value.map((column, x) => {
+      if (!Array.isArray(column) || column.length !== rows)
+        throw new ReelError(`landingStates[${x}] length must be ${rows}.`);
+      return Object.freeze(
+        column.map((state, y) => {
+          if (typeof state !== "string" || state.length === 0)
+            throw new ReelError(
+              `landingStates[${x}][${y}] must be a non-empty string.`,
+            );
+          return state;
         }),
       );
     }),

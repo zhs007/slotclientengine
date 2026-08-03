@@ -382,6 +382,8 @@ export interface SceneLayoutInitialReelScene {
 
 export interface SceneLayoutMainReelSpinInput extends SceneLayoutInitialReelScene {
   readonly random: () => number;
+  /** X-first state matrix applied inside each exact reel landing transaction. */
+  readonly landingStates?: readonly (readonly string[])[];
 }
 
 export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {

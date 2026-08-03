@@ -169,7 +169,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     readonly y: number;
   }[] = [];
   #mainReelLandingKeys = new Set<string>();
-  #mainReelTargetValues: SymbolPresentationValueMatrix | null = null;
 
   constructor(
     resource: SceneLayoutPackageResource,
@@ -415,15 +414,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         const result = this.#reel.update(deltaSeconds);
         for (const x of result.stoppedAxes)
           for (let y = 0; y < geometry.rows; y++) {
-            if (this.#mainReelTargetValues)
-              this.#reel.setVisibleSymbolPresentationValue(
-                x,
-                y,
-                this.#mainReelTargetValues[x]?.[y] ?? null,
-              );
             this.recordMainReelLanding(x, y);
           }
-        if (result.completed) this.#mainReelTargetValues = null;
       } else {
         this.#reel.update(deltaSeconds);
       }
@@ -561,8 +553,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       geometry.columns,
       geometry.rows,
     );
-    this.#mainReelTargetValues =
-      profile.kind === "standard" ? (values ?? null) : null;
+    const landingStates = validateLandingStates(
+      input.landingStates,
+      geometry.columns,
+      geometry.rows,
+    );
     if (profile.kind === "grid-cell") {
       if (!(reel instanceof RenderGridCellReelSet))
         throw new SceneLayoutError(
@@ -596,6 +591,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       });
       reel.spin(plan, {
         ...(values ? { targetPresentationValues: values } : {}),
+        ...(landingStates ? { targetLandingStates: landingStates } : {}),
       });
       return;
     }
@@ -614,7 +610,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       startDelayMs: profile.startDelayMs,
       stopDelayMs: profile.stopDelayMs,
     });
-    reel.spin(plan, { targetVisibleScene: scene });
+    reel.spin(plan, {
+      targetVisibleScene: scene,
+      ...(values ? { targetVisiblePresentationValues: values } : {}),
+      ...(landingStates ? { targetVisibleStates: landingStates } : {}),
+    });
   }
 
   isMainReelSpinning(): boolean {
@@ -1608,7 +1608,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   private clearMainReelLandingPositions(): void {
     this.#pendingMainReelLandingPositions.length = 0;
     this.#mainReelLandingKeys.clear();
-    this.#mainReelTargetValues = null;
   }
 
   private requireGameModes() {
@@ -1723,6 +1722,35 @@ function validateValues(
               `presentationValues[${x}][${y}] must be null or a positive safe integer.`,
             );
           return value;
+        }),
+      );
+    }),
+  );
+}
+
+function validateLandingStates(
+  states: SceneLayoutMainReelSpinInput["landingStates"],
+  columns: number,
+  rows: number,
+): readonly (readonly string[])[] | undefined {
+  if (states === undefined) return undefined;
+  if (!Array.isArray(states) || states.length !== columns)
+    throw new SceneLayoutError(
+      `landingStates must be an x-first ${columns}x${rows} matrix.`,
+    );
+  return Object.freeze(
+    states.map((column, x) => {
+      if (!Array.isArray(column) || column.length !== rows)
+        throw new SceneLayoutError(
+          `landingStates column ${x} must contain ${rows} rows.`,
+        );
+      return Object.freeze(
+        column.map((state, y) => {
+          if (typeof state !== "string" || state.length === 0)
+            throw new SceneLayoutError(
+              `landingStates[${x}][${y}] must be a non-empty string.`,
+            );
+          return state;
         }),
       );
     }),

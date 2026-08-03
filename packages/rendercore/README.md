@@ -44,7 +44,8 @@ scene-layout、reel、symbol state 与 popup owner，并继续使用 package 内
 `createSceneOtherSceneFlowRuntime()`。这组 API 直接复用 production ZIP 中公开轮带、
 number weight table、Symbols state preset 和现有 standard/grid-cell runtime；首个 snapshot
 边执行 strict v2 合并 Spin，固定串联 before-spin、spinning 与 landing-driven
-stopping；后续 snapshot 原位提交。所有可完成序列以 exact `normal`
+stopping；stopping 首状态和 target value 在各 occurrence 的 exact landing transaction
+中一起生效，上层 landing drain 只追踪后续 once completion。后续 snapshot 原位提交。所有可完成序列以 exact `normal`
 结尾，scene 显式选择全格或左上第一格 completion barrier；Spin 始终保留
 reel settle 硬屏障。v1 local-flow project 不做猜测迁移。
 该 facade 不解析 server round 或 component，也不创建 DOM 配置 UI；runtime owner 负责

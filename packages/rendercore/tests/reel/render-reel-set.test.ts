@@ -20,6 +20,57 @@ import {
 } from "./helpers.js";
 
 describe("RenderReelSet", () => {
+  it("starts each target landing state at that axis boundary", () => {
+    const reels = createBasicReels();
+    const reelSet = new RenderReelSet({
+      reels,
+      layout: createBasicLayout(),
+      registry: createBasicRegistry(),
+    });
+    reelSet.resetToVisibleScene(
+      [
+        [1, 2, 1],
+        [2, 1, 2],
+      ],
+      [0, 0],
+    );
+    reelSet.spin(
+      createReelSpinPlan({
+        reels,
+        finalYs: [1, 1],
+        visibleRows: 3,
+        minimumSpinCycles: 1,
+        baseDurationMs: 100,
+        speedSymbolsPerSecond: 100,
+        startDelayMs: 0,
+        stopDelayMs: 100,
+      }),
+      {
+        targetVisibleScene: [
+          [2, 1, 2],
+          [1, 2, 1],
+        ],
+        targetVisiblePresentationValues: [
+          [7, null, null],
+          [null, null, null],
+        ],
+        targetVisibleStates: [
+          ["appear", "appear", "appear"],
+          ["appear", "appear", "appear"],
+        ],
+      },
+    );
+
+    const result = reelSet.update(0.1);
+
+    expect(result).toMatchObject({ completed: false, stoppedAxes: [0] });
+    expect(reelSet.reels[0]!.getVisibleSymbolStateSnapshot(0)).toMatchObject({
+      requestedState: "appear",
+    });
+    expect(reelSet.reels[0]!.getVisiblePresentationValues()[0]).toBe(7);
+    expect(reelSet.reels[1]!.getSnapshot().phase).not.toBe("stopped");
+  });
+
   it("starts and stops axes in order, rejects reentry, and lands on the GMI scene", () => {
     const gameConfig = createGameConfig(game2Config);
     const reels = gameConfig.getReels("reels01");

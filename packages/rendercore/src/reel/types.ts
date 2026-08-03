@@ -270,6 +270,8 @@ export interface RenderReelOptions {
 export interface RenderReelSpinOptions {
   readonly targetVisibleSymbols?: readonly number[];
   readonly targetVisiblePresentationValues?: readonly (number | null)[];
+  /** Requested immediately after the target occurrence is committed at land. */
+  readonly targetVisibleStates?: readonly SymbolStateId[];
 }
 
 export interface ReelSymbolPresentationValueContext {
@@ -395,6 +397,9 @@ export interface RenderSymbolPool {
 
 export interface RenderReelSetSpinOptions {
   readonly targetVisibleScene?: SceneMatrix;
+  readonly targetVisiblePresentationValues?: SymbolPresentationValueMatrix;
+  /** X-first state matrix committed per stopped axis, not after the full set. */
+  readonly targetVisibleStates?: readonly (readonly SymbolStateId[])[];
 }
 
 export interface RenderReelSetUpdateResult {
@@ -516,6 +521,8 @@ export interface GridCellCascadeDropOccurrenceContext {
 
 export interface RenderGridCellReelSetSpinOptions {
   readonly targetPresentationValues?: SymbolPresentationValueMatrix;
+  /** X-first state matrix committed independently at each cell landing. */
+  readonly targetLandingStates?: readonly (readonly SymbolStateId[])[];
 }
 
 export interface RenderGridCellReelSetUpdateResult {

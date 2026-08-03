@@ -277,6 +277,13 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
       scene: target.scene,
       localPhaseYs: zeroPhases(this.readiness.layout.columns),
       presentationValues: target.otherScene,
+      landingStates: target.choreographies.map((column) =>
+        Object.freeze(
+          column.map(
+            (id) => this.requireSpinChoreography(id).stopping[0]!.state,
+          ),
+        ),
+      ),
       random: () => this.#random(0x1_0000_0000) / 0x1_0000_0000,
     });
   }
@@ -288,7 +295,7 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
     const choreography = this.requireSpinChoreography(
       this.currentScene.choreographies[x]![y]!,
     );
-    this.startCompletionSequence(x, y, choreography.stopping);
+    this.startCompletionSequence(x, y, choreography.stopping, true);
   }
 
   private startSettledScene(snapshotIndex: number): void {
@@ -320,8 +327,9 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
     x: number,
     y: number,
     steps: readonly SceneOtherSceneFlowStepV2[],
+    initialStateAlreadyRequested = false,
   ): void {
-    this.requestState(x, y, steps[0]!.state);
+    if (!initialStateAlreadyRequested) this.requestState(x, y, steps[0]!.state);
     if (steps.length === 1) {
       this.#completed.add(cellKey(x, y));
       return;

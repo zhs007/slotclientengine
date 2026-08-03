@@ -16,7 +16,7 @@
 
 ## 播放语义与生命周期
 
-- 第一个 snapshot 到第二个 snapshot 是唯一特殊 Spin 边：source symbol 处理 `beforeSpin`，启转时请求 `spinning`，各真实落点使用 target symbol 执行 `stopping`。standard 的落点粒度是整列内所有格，grid-cell 是单格；两种 completion policy 都不得越过 reel settle 屏障。
+- 第一个 snapshot 到第二个 snapshot 是唯一特殊 Spin 边：source symbol 处理 `beforeSpin`，启转时请求 `spinning`，各真实落点使用 target symbol 执行 `stopping`。`stopping` 首状态和 target value 必须随 spin plan 下沉到 reel 的 exact landing transaction；landing drain 只接管后续 once completion 与 scene barrier，不得等 `update()` 返回后才批量启动首状态。standard 的落点粒度是整列内所有格，grid-cell 是单格；两种 completion policy 都不得越过 reel settle 屏障。
 - 第三个及后续 snapshot 在 settled 边界原位提交 Symbol occurrence/value，再执行该 snapshot 的逐格编排；不伪造 server step/component。
 - 配置器在打开新窗口后仅通过一次性 `MessageChannel` 发送 ZIP bytes、hash 和完整 project。新窗口重新 readiness，并独立拥有及销毁 Pixi application、layout resource、reel 与 Symbol players。
 - Replay 必须回到第一 snapshot 并重走完整流程；不得复用半完成 controller、landing queue 或 spin 状态。

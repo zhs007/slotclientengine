@@ -62,6 +62,7 @@ export class RenderReel extends Container {
   #targetVisibleSymbols: readonly number[] | null = null;
   #staticVisiblePresentationValues: readonly (number | null)[] | null = null;
   #targetVisiblePresentationValues: readonly (number | null)[] | null = null;
+  #targetVisibleStates: readonly SymbolStateId[] | null = null;
   #landed = false;
 
   constructor(options: RenderReelOptions) {
@@ -117,6 +118,11 @@ export class RenderReel extends Container {
       this.layout.visibleRows,
       "targetVisiblePresentationValues",
     );
+    const targetVisibleStates = parseVisibleStates(
+      options.targetVisibleStates,
+      this.layout.visibleRows,
+      "targetVisibleStates",
+    );
 
     this.#plan = plan;
     this.#spinStrip = createTemporaryReelStrip({
@@ -135,6 +141,7 @@ export class RenderReel extends Container {
     this.#targetVisibleSymbols = targetVisibleSymbols ?? null;
     this.#targetVisiblePresentationValues =
       targetVisiblePresentationValues ?? null;
+    this.#targetVisibleStates = targetVisibleStates ?? null;
     this.#spinLocalY = 0;
     this.#elapsedMs = 0;
     this.#phase = "starting";
@@ -198,6 +205,7 @@ export class RenderReel extends Container {
     this.#targetVisibleSymbols = null;
     this.#staticVisiblePresentationValues = null;
     this.#targetVisiblePresentationValues = null;
+    this.#targetVisibleStates = null;
     this.#phase = "stopped";
     this.#landed = true;
     this.y = 0;
@@ -236,6 +244,7 @@ export class RenderReel extends Container {
       );
     this.#targetVisibleSymbols = null;
     this.#targetVisiblePresentationValues = null;
+    this.#targetVisibleStates = null;
     this.#phase = "stopped";
     this.#landed = true;
     this.y = 0;
@@ -697,6 +706,8 @@ export class RenderReel extends Container {
       this.#targetVisiblePresentationValues;
     this.#targetVisibleSymbols = null;
     this.#targetVisiblePresentationValues = null;
+    const targetVisibleStates = this.#targetVisibleStates;
+    this.#targetVisibleStates = null;
     this.#spinStrip = null;
     this.#spinLocalY = 0;
     this.#phase = "stopped";
@@ -704,6 +715,9 @@ export class RenderReel extends Container {
     this.y = 0;
     this.syncClippingForPhase();
     this.renderAtY(plan.finalY, "normal");
+    targetVisibleStates?.forEach((state, y) =>
+      this.requestVisibleSymbolState(y, state, "immediate"),
+    );
   }
 
   private calculateSpinLocalY(progress: number): number {
@@ -838,6 +852,23 @@ function parseVisibleSymbols(
         );
       }
       return code;
+    }),
+  );
+}
+
+function parseVisibleStates(
+  value: readonly SymbolStateId[] | undefined,
+  expectedLength: number,
+  label: string,
+): readonly SymbolStateId[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length !== expectedLength)
+    throw new ReelError(`${label} length must be ${expectedLength}.`);
+  return Object.freeze(
+    value.map((state, index) => {
+      if (typeof state !== "string" || state.length === 0)
+        throw new ReelError(`${label}[${index}] must be a non-empty string.`);
+      return state;
     }),
   );
 }

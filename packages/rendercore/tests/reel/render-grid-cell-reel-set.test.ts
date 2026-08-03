@@ -297,10 +297,15 @@ describe("RenderGridCellReelSet", () => {
     ).toBe(true);
   });
 
-  it("allows a landed cell to start appear while later cells are still spinning", () => {
+  it("starts a configured state at each cell landing while later cells still spin", () => {
     const reelSet = createGridReelSet();
     reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
-    reelSet.spin(createPlan());
+    reelSet.spin(createPlan(), {
+      targetLandingStates: [
+        ["appear", "appear", "appear"],
+        ["appear", "appear", "appear"],
+      ],
+    });
     reelSet.update(0);
 
     const result = reelSet.update(0.18);
@@ -314,12 +319,6 @@ describe("RenderGridCellReelSet", () => {
         .cells.slice(1)
         .some((cell) => cell.phase === "spinning"),
     ).toBe(true);
-
-    reelSet.requestLandedVisibleSymbolStates(
-      result.landedCells,
-      "appear",
-      "immediate",
-    );
 
     expect(reelSet.getSnapshot().cells[0]).toMatchObject({
       phase: "landed",

@@ -107,6 +107,14 @@ export class RenderReelSet extends Container {
       );
     }
     this.assertTargetVisibleScene(options.targetVisibleScene);
+    this.assertTargetVisibleMatrix(
+      options.targetVisiblePresentationValues,
+      "targetVisiblePresentationValues",
+    );
+    this.assertTargetVisibleMatrix(
+      options.targetVisibleStates,
+      "targetVisibleStates",
+    );
 
     this.#spinPlan = plan;
     this.#spinOptions = options;
@@ -585,6 +593,9 @@ export class RenderReelSet extends Container {
       }
       this.reels[axis.x].start(axis, {
         targetVisibleSymbols: this.#spinOptions?.targetVisibleScene?.[axis.x],
+        targetVisiblePresentationValues:
+          this.#spinOptions?.targetVisiblePresentationValues?.[axis.x],
+        targetVisibleStates: this.#spinOptions?.targetVisibleStates?.[axis.x],
       });
       this.#startedAxes.add(axis.x);
     }
@@ -610,6 +621,25 @@ export class RenderReelSet extends Container {
           `targetVisibleScene[${x}] length must be ${this.reels[x].layout.visibleRows}.`,
         );
       }
+    }
+  }
+
+  private assertTargetVisibleMatrix(
+    matrix: readonly (readonly unknown[])[] | undefined,
+    label: string,
+  ): void {
+    if (matrix === undefined) return;
+    if (!Array.isArray(matrix) || matrix.length !== this.reels.length)
+      throw new ReelError(
+        `${label} column count must be ${this.reels.length}.`,
+      );
+    for (const [x, column] of matrix.entries()) {
+      if (!Array.isArray(column))
+        throw new ReelError(`${label}[${x}] must be an array.`);
+      if (column.length !== this.reels[x]!.layout.visibleRows)
+        throw new ReelError(
+          `${label}[${x}] length must be ${this.reels[x]!.layout.visibleRows}.`,
+        );
     }
   }
 }

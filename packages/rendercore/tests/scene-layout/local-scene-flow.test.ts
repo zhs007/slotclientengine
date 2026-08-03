@@ -220,7 +220,10 @@ describe("local scene flow runtime", () => {
 
     mocks.landings.push({ x: 0, y: 0 }, { x: 0, y: 0 });
     mocks.tickerCallback!({ deltaMS: 16 });
-    expect(mocks.requestStates).toHaveBeenCalledWith(
+    expect(mocks.spin).toHaveBeenCalledWith(
+      expect.objectContaining({ landingStates: [["appear"]] }),
+    );
+    expect(mocks.requestStates).not.toHaveBeenCalledWith(
       [{ x: 0, y: 0 }],
       "appear",
       "immediate",

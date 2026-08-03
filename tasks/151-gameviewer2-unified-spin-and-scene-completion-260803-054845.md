@@ -32,7 +32,7 @@
 
 ## 实际文件范围与计划偏差
 
-- 修改范围限定在计划列出的 `apps/gameviewer2`、`packages/rendercore` local scene flow、直接测试、README 和领域规则；未修改 production ZIP schema、reel/symbol public API、其它 app、assets、根工具链或 lockfile。
+- 首次实现的修改范围限定在计划列出的 `apps/gameviewer2`、`packages/rendercore` local scene flow、直接测试、README 和领域规则；未修改 production ZIP schema、其它 app、assets、根工具链或 lockfile。浏览器反馈修正进一步扩展了 reel spin option public API，原因见文末“浏览器反馈修正”。
 - 未新增计划中的独立 `launch-channel.test.ts`：现有 `apps/gameviewer2/tests/project.test.ts` 已直接覆盖 launch payload v2 与旧版本拒绝，避免拆出重复 fixture。
 - `runtime-entry.test.ts` 无需改动；其既有入口合同在 v2 改造后继续通过。
 - 依赖目录缺失时按仓库约定执行了 `CI=true pnpm install --frozen-lockfile`；没有新增依赖或改动 lockfile。
@@ -40,7 +40,7 @@
 ## 自动化验收
 
 - `pnpm --filter @slotclientengine/rendercore --filter gameviewer2 typecheck`：通过。
-- `pnpm --filter @slotclientengine/rendercore test`：通过，`78` files / `614` tests；最终全局 branch coverage `80%`，达到 package 阈值。
+- `pnpm --filter @slotclientengine/rendercore test`：通过，`78` files / `617` tests；最终全局 branch coverage `80.24%`，达到 package 阈值。
 - `pnpm --filter gameviewer2 test`：通过，`4` files / `7` tests。
 - `pnpm --filter @slotclientengine/rendercore --filter gameviewer2 lint`：通过。
 - `pnpm --filter @slotclientengine/rendercore --filter gameviewer2 build`：通过；Vite 仅报告已有的大 chunk 提示。
@@ -60,3 +60,9 @@
 
 - 自动化已经覆盖 schema、runtime 时序和 DOM 顺序；真实 production ZIP 下的视觉尺寸、具体资源动画和交互手感仍需上述浏览器验收确认。
 - v1 项目按设计不兼容且不会自动迁移；已有 v1 文件需要重新创建 v2 项目。
+
+## 浏览器反馈修正
+
+用户首次浏览器验收发现 stopping 的 `appear` 仍在所有格停稳后集中播放。根因是 local flow 在 `reel.update()` 返回并 drain landing 后才请求 stopping 首状态，丢失了底层同一 update 内的 exact landing 边界。
+
+修正后，每格 stopping 首状态和 target value 随 `spinMainReelToScene()` 一起传入 standard / grid-cell reel：standard 在对应轴 land 时启动，grid-cell 在对应 cell land 并替换 occurrence 时启动。上层 landing drain 不再重复请求首状态，只追踪 once completion、最终 `normal` 与 scene 完成策略。浏览器结果仍待用户用原 ZIP 复验。

@@ -522,6 +522,95 @@ describe("scene layout package runtime", () => {
         unload.mockRestore();
       }
     });
+
+    it(`starts configured ${renderMode} stopping state at the first real landing`, async () => {
+      const load = vi
+        .spyOn(Assets, "load")
+        .mockResolvedValue(Texture.WHITE as never);
+      const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+      try {
+        const resource = await createSceneLayoutPackageResource({
+          manifest: layoutManifest(renderMode),
+          files: files(),
+        });
+        const reelPresentation =
+          renderMode === "standard"
+            ? {
+                kind: "standard" as const,
+                version: 1 as const,
+                direction: "forward" as const,
+                speedSymbolsPerSecond: 100,
+                minimumSpinCycles: 1,
+                baseDurationMs: 100,
+                startDelayMs: 0,
+                stopDelayMs: 100,
+                bounceStrength: 0,
+              }
+            : {
+                kind: "grid-cell" as const,
+                version: 1 as const,
+                direction: "forward" as const,
+                order: "top-down-left-right" as const,
+                timing: {
+                  startStepMs: 0,
+                  stopStepMs: 100,
+                  settleAfterLastStartMs: 100,
+                  minimumSpinCycles: 1,
+                  speedSymbolsPerSecond: 100,
+                },
+                bounceStrength: 0,
+              };
+        const runtime = createSceneLayoutPackageRuntime({
+          resource,
+          reelPresentation,
+        });
+        await runtime.init({
+          reels: {
+            main: {
+              scene: [
+                [1, 1],
+                [0, 0],
+              ],
+              localPhaseYs: [0, 0],
+            },
+          },
+        });
+        const target = {
+          scene: [
+            [0, 1],
+            [1, 0],
+          ],
+          localPhaseYs: [0, 0],
+          random: () => 0,
+        };
+        expect(() =>
+          runtime.spinMainReelToScene({
+            ...target,
+            landingStates: [["normal"], ["normal", "normal"]],
+          }),
+        ).toThrow(/2 rows/);
+
+        runtime.spinMainReelToScene({
+          ...target,
+          landingStates: [
+            ["normal", "normal"],
+            ["normal", "normal"],
+          ],
+        });
+        runtime.update(0.1);
+        const landings = runtime.drainMainReelLandingPositions();
+
+        expect(landings).toHaveLength(renderMode === "standard" ? 2 : 1);
+        expect(runtime.isMainReelSpinning()).toBe(true);
+        expect(runtime.getMainReelSymbolStateSnapshots(landings)).toMatchObject(
+          landings.map(() => ({ requestedState: "normal" })),
+        );
+        runtime.destroy();
+      } finally {
+        load.mockRestore();
+        unload.mockRestore();
+      }
+    });
   }
 
   it("requires explicit runtime scene input and rejects incompatible bindings", async () => {
