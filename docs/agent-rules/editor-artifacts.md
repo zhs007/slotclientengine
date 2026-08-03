@@ -9,6 +9,7 @@
 - workspace 只维护一份全局资源表；app 不实现第二套导入、覆盖或 hash 算法。
 - 导出顶层 `assets.map.json` 将 filename key 映射到完整 SHA-256 content-addressed payload。
 - manifest 只保留 owner-owned 结构语义和 filename-key 引用；不恢复目录上传、logical resource、按类型拆分 importer 或 `dependencies/` 资源目录。
+- 编辑器的强制导出必须建模为 manifest 内稳定程序键到 typed root 的显式 binding；不得用 orphan allowlist、UI session 状态或 raw payload 路径替代。取消 binding 后，无其它 owner 引用的资源恢复为不导出。
 - node/package/mode 等业务 identity 和资源列表标签不得从 `assets/<SHA-256>.*` physical payload path 重建；ZIP 往返后继续使用 manifest identity 与 logical filename key。
 
 ## Import boundary

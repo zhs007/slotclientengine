@@ -15,7 +15,11 @@ import {
   collectSceneLayoutAssetPaths,
   parseSceneLayoutManifest,
 } from "./manifest.js";
-import type { SceneLayoutManifestV1, SceneLayoutResource } from "./types.js";
+import type {
+  SceneLayoutManifestV1,
+  SceneLayoutResource,
+  SceneLayoutRuntimeResource,
+} from "./types.js";
 
 export interface CreateSceneLayoutResourceOptions {
   readonly manifest: unknown;
@@ -74,6 +78,7 @@ export function createSceneLayoutResource(
     }
   > = {};
   const videoUrls: Record<string, string> = {};
+  const runtimeResources: Record<string, SceneLayoutRuntimeResource> = {};
 
   for (const node of manifest.nodes) {
     if (node.resource.kind === "image") {
@@ -177,6 +182,112 @@ export function createSceneLayoutResource(
     });
   }
 
+  for (const [key, spec] of Object.entries(manifest.runtimeResources ?? {})) {
+    if (spec.kind === "image") {
+      imagePaths.add(spec.path);
+      const url = requireString(
+        imageModules,
+        spec.path,
+        `scene layout runtime image "${key}"`,
+      );
+      imageUrls[spec.path] = url;
+      runtimeResources[key] = Object.freeze({
+        kind: "image",
+        url,
+        size: spec.size,
+      });
+      continue;
+    }
+    if (spec.kind === "image-string") {
+      imageStringPaths.add(spec.manifest);
+      const nested = imageStringResources[spec.manifest];
+      if (!nested)
+        throw new SceneLayoutError(
+          `Scene layout runtime image-string "${key}" is missing: ${spec.manifest}.`,
+        );
+      nested.assertUsable();
+      runtimeResources[key] = Object.freeze({
+        kind: "image-string",
+        resource: nested,
+      });
+      continue;
+    }
+    if (spec.kind === "vni") {
+      vniProjectPaths.add(spec.project);
+      const nested = vniResources[spec.project];
+      if (!nested)
+        throw new SceneLayoutError(
+          `Scene layout runtime VNI "${key}" is missing: ${spec.project}.`,
+        );
+      try {
+        assertRuntimeVniProject(nested.project, spec.project);
+        resolveProjectAssetUrls(nested.project, nested.assetUrls);
+      } catch (error) {
+        throw new SceneLayoutError(
+          `Scene layout runtime VNI "${key}" is invalid: ${formatError(error)}`,
+        );
+      }
+      runtimeResources[key] = Object.freeze({
+        kind: "vni",
+        project: nested.project,
+        assetUrls: nested.assetUrls,
+      });
+      continue;
+    }
+    if (spec.kind === "video") {
+      videoPaths.add(spec.path);
+      const url = requireString(
+        videoModules,
+        spec.path,
+        `scene layout runtime video "${key}"`,
+      );
+      videoUrls[spec.path] = url;
+      runtimeResources[key] = Object.freeze({
+        kind: "video",
+        url,
+        mimeType: "video/mp4",
+      });
+      continue;
+    }
+    skeletonPaths.add(spec.skeleton);
+    atlasPaths.add(spec.atlas);
+    const skeleton = requireValue(
+      skeletonModules,
+      spec.skeleton,
+      `scene layout runtime Spine "${key}" skeleton`,
+    );
+    const atlasText = requireString(
+      atlasModules,
+      spec.atlas,
+      `scene layout runtime Spine "${key}" atlas`,
+    );
+    const textureUrls: Record<string, string> = {};
+    for (const [page, path] of Object.entries(spec.textures)) {
+      texturePaths.add(path);
+      textureUrls[page] = requireString(
+        textureModules,
+        path,
+        `scene layout runtime Spine "${key}" texture "${page}"`,
+      );
+    }
+    try {
+      validateOfficialSpineResource({
+        resource: { skeleton, atlasText, textureUrls },
+        requiredAnimations: [],
+      });
+    } catch (error) {
+      throw new SceneLayoutError(
+        `Scene layout runtime Spine "${key}" is invalid: ${formatError(error)}`,
+      );
+    }
+    runtimeResources[key] = Object.freeze({
+      kind: "spine",
+      skeleton,
+      atlasText,
+      textureUrls: Object.freeze(textureUrls),
+    });
+  }
+
   for (const transition of manifest.gameModes?.transitions ?? []) {
     const overlay = transition.overlay;
     const spec = overlay.resource;
@@ -260,6 +371,7 @@ export function createSceneLayoutResource(
     imageStringResources: Object.freeze({ ...imageStringResources }),
     vniResources: Object.freeze({ ...vniResources }),
     videoUrls: Object.freeze(videoUrls),
+    runtimeResources: Object.freeze(runtimeResources),
     destroy(): void {
       if (destroyed) return;
       destroyed = true;
@@ -269,6 +381,28 @@ export function createSceneLayoutResource(
       }
     },
   });
+}
+
+export function requireSceneLayoutRuntimeResource<
+  Kind extends SceneLayoutRuntimeResource["kind"],
+>(
+  resource: Pick<SceneLayoutResource, "runtimeResources">,
+  key: string,
+  kind: Kind,
+): Extract<SceneLayoutRuntimeResource, { readonly kind: Kind }> {
+  const resolved = resource.runtimeResources[key];
+  if (!resolved)
+    throw new SceneLayoutError(
+      `Scene layout runtime resource "${key}" was not found.`,
+    );
+  if (resolved.kind !== kind)
+    throw new SceneLayoutError(
+      `Scene layout runtime resource "${key}" must be ${kind}; actual ${resolved.kind}.`,
+    );
+  return resolved as Extract<
+    SceneLayoutRuntimeResource,
+    { readonly kind: Kind }
+  >;
 }
 
 function assertRuntimeVniProject(
@@ -347,6 +481,21 @@ export async function loadSceneLayoutResourceFromUrl(options: {
         resourceByPath.set(path, "texture");
       }
     }
+    for (const resource of Object.values(manifest.runtimeResources ?? {})) {
+      if (resource.kind === "image") {
+        resourceByPath.set(resource.path, "image");
+        continue;
+      }
+      if (resource.kind === "video") {
+        resourceByPath.set(resource.path, "video");
+        continue;
+      }
+      if (resource.kind === "image-string" || resource.kind === "vni") continue;
+      resourceByPath.set(resource.skeleton, "skeleton");
+      resourceByPath.set(resource.atlas, "atlas");
+      for (const path of Object.values(resource.textures))
+        resourceByPath.set(path, "texture");
+    }
     for (const transition of manifest.gameModes?.transitions ?? []) {
       const resource = transition.overlay.resource;
       if (resource.kind === "video") {
@@ -368,6 +517,19 @@ export async function loadSceneLayoutResourceFromUrl(options: {
       imageStringResources[node.resource.manifest] =
         await loadImageStringResourceFromUrl({
           manifestUrl: dependencyUrl,
+          fetchImpl,
+          ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
+        });
+    }
+    for (const resource of Object.values(manifest.runtimeResources ?? {})) {
+      if (
+        resource.kind !== "image-string" ||
+        imageStringResources[resource.manifest]
+      )
+        continue;
+      imageStringResources[resource.manifest] =
+        await loadImageStringResourceFromUrl({
+          manifestUrl: resolveContainedAssetUrl(resource.manifest, manifestUrl),
           fetchImpl,
           ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
         });
@@ -399,6 +561,36 @@ export async function loadSceneLayoutResourceFromUrl(options: {
         assetUrls[asset.path] = objectUrl;
       }
       vniResources[node.resource.project] = Object.freeze({
+        project,
+        assetUrls: resolveProjectAssetUrls(project, assetUrls),
+      });
+    }
+    for (const resource of Object.values(manifest.runtimeResources ?? {})) {
+      if (resource.kind !== "vni" || vniResources[resource.project]) continue;
+      const projectUrl = resolveContainedAssetUrl(
+        resource.project,
+        manifestUrl,
+      );
+      const response = await fetchRequired(fetchImpl, projectUrl);
+      let projectValue: unknown;
+      try {
+        projectValue = JSON.parse(await response.text());
+      } catch (error) {
+        throw new SceneLayoutError(
+          `Scene layout VNI project "${resource.project}" is invalid JSON: ${formatError(error)}`,
+        );
+      }
+      const project = assertVNIProject(projectValue);
+      assertRuntimeVniProject(project, resource.project);
+      const assetUrls: Record<string, string> = {};
+      for (const asset of project.assets) {
+        const assetUrl = resolveContainedAssetUrl(asset.path, projectUrl);
+        const assetResponse = await fetchRequired(fetchImpl, assetUrl);
+        const objectUrl = URL.createObjectURL(await assetResponse.blob());
+        ownedObjectUrls.push(objectUrl);
+        assetUrls[asset.path] = objectUrl;
+      }
+      vniResources[resource.project] = Object.freeze({
         project,
         assetUrls: resolveProjectAssetUrls(project, assetUrls),
       });

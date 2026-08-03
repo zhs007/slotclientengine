@@ -3,6 +3,7 @@ import {
   type SceneLayoutCoordinateOrigin,
   type SceneLayoutManifestV1,
   type SceneLayoutNode,
+  type SceneLayoutRuntimeResourceSpec,
   type SceneLayoutVariantId,
 } from "@slotclientengine/rendercore/scene-layout";
 import {
@@ -173,6 +174,7 @@ export interface EditorProject {
   assets: Map<string, Uint8Array>;
   symbolDependencies: Map<string, EditorSymbolPackageDependency>;
   popupDependencies: Map<string, EditorPopupDependency>;
+  runtimeResourceBindings: Map<string, string>;
   gameModes: {
     initialMode: string;
     modes: EditorGameModeDraft[];
@@ -219,6 +221,7 @@ export function createNewEditorProject(mode: EditorMode): EditorProject {
     assets: new Map(),
     symbolDependencies: new Map(),
     popupDependencies: new Map(),
+    runtimeResourceBindings: new Map(),
     gameModes: {
       initialMode: "BaseGame",
       transitions: [],
@@ -743,6 +746,22 @@ export function editorProjectToManifest(
         ),
       };
     })(),
+    ...(project.runtimeResourceBindings.size > 0
+      ? {
+          runtimeResources: Object.fromEntries(
+            [...project.runtimeResourceBindings]
+              .sort(([left], [right]) => left.localeCompare(right, "en"))
+              .map(([key, resourceId]) => {
+                const resource = project.resources.get(resourceId);
+                if (!resource)
+                  throw new Error(
+                    `程序资源 ${key} 引用了未知资源：${resourceId}`,
+                  );
+                return [key, editorResourceToRuntimeSpec(resource)];
+              }),
+          ),
+        }
+      : {}),
     gameModes: {
       initialMode: project.gameModes.initialMode,
       modes: project.gameModes.modes.map((mode) => ({
@@ -930,6 +949,20 @@ export function manifestToEditorProject(
     resourceIdsBySignature.set(signature, resourceKey);
     return resourceKey;
   };
+  for (const [key, runtimeResource] of Object.entries(
+    parsed.runtimeResources ?? {},
+  )) {
+    const resourceId = registerResource(
+      manifestRuntimeResourceToEditorResource(
+        runtimeResource,
+        assets,
+        videoMetadata,
+      ),
+    );
+    if ([...project.runtimeResourceBindings.values()].includes(resourceId))
+      throw new Error(`导入程序资源 ${key} 重复绑定了资源 ${resourceId}。`);
+    project.runtimeResourceBindings.set(key, resourceId);
+  }
   project.nodes = parsed.nodes.map((node) => {
     const resourceDraft = manifestResourceToEditorResource(
       node.resource,
@@ -1196,6 +1229,7 @@ export function cloneEditorProject(project: EditorProject): EditorProject {
       assets: undefined,
       symbolDependencies: undefined,
       popupDependencies: undefined,
+      runtimeResourceBindings: undefined,
     }),
     resources: new Map(
       [...project.resources].map(([id, resource]) => [
@@ -1218,6 +1252,7 @@ export function cloneEditorProject(project: EditorProject): EditorProject {
         structuredClone(dependency),
       ]),
     ),
+    runtimeResourceBindings: new Map(project.runtimeResourceBindings),
   } as EditorProject;
 }
 
@@ -1403,6 +1438,73 @@ function manifestResourceToEditorResource(
     animationEvents: metadata.animationEvents,
     ...(metadata.bounds ? { bounds: metadata.bounds } : {}),
   };
+}
+
+function editorResourceToRuntimeSpec(
+  resource: EditorLayoutResource,
+): SceneLayoutRuntimeResourceSpec {
+  if (resource.kind === "image")
+    return { kind: "image", path: resource.path, size: resource.size };
+  if (resource.kind === "image-string")
+    return { kind: "image-string", manifest: resource.manifestPath };
+  if (resource.kind === "vni")
+    return { kind: "vni", project: resource.projectPath };
+  if (resource.kind === "video")
+    return { kind: "video", path: resource.path, mimeType: "video/mp4" };
+  return {
+    kind: "spine",
+    skeleton: resource.skeleton,
+    atlas: resource.atlas,
+    textures: resource.textures,
+  };
+}
+
+function manifestRuntimeResourceToEditorResource(
+  resource: SceneLayoutRuntimeResourceSpec,
+  assets: ReadonlyMap<string, Uint8Array>,
+  videoMetadata: ReadonlyMap<
+    string,
+    {
+      readonly width: number;
+      readonly height: number;
+      readonly durationSeconds: number;
+      readonly hasAudio: boolean | "unknown";
+    }
+  >,
+): EditorLayoutResourceDraft {
+  if (resource.kind === "video") {
+    const metadata = videoMetadata.get(resource.path);
+    if (!metadata)
+      throw new Error(`导入程序 video 缺少浏览器 metadata：${resource.path}`);
+    return {
+      kind: "video",
+      path: resource.path,
+      mimeType: "video/mp4",
+      size: { width: metadata.width, height: metadata.height },
+      durationSeconds: metadata.durationSeconds,
+      hasAudio: metadata.hasAudio,
+    };
+  }
+  if (resource.kind === "spine")
+    return manifestResourceToEditorResource(
+      { ...resource, defaultAnimation: "__runtime__", loop: true },
+      assets,
+    );
+  if (resource.kind === "image-string")
+    return manifestResourceToEditorResource(
+      {
+        ...resource,
+        text: "",
+        anchor: { x: 0.5, y: 0.5 },
+      },
+      assets,
+    );
+  if (resource.kind === "vni")
+    return manifestResourceToEditorResource(
+      { ...resource, loop: true },
+      assets,
+    );
+  return manifestResourceToEditorResource(resource, assets);
 }
 
 function collectMappedPopupKeys(

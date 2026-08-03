@@ -42,6 +42,7 @@ import {
 import {
   addLayerFromResource,
   assignBackgroundResource,
+  bindRuntimeResource,
   clearBackground,
   deleteLayoutResource,
   getLayoutResourceReferences,
@@ -62,9 +63,11 @@ import {
   importImageStringZip,
   importVniBundle,
   inspectVniBundleProfiles,
+  getRuntimeResourceKey,
   uploadImageResource,
   uploadSpineResources,
   uploadVideoResource,
+  unbindRuntimeResource,
 } from "../model/resource-commands.js";
 import {
   addGameMode,
@@ -338,6 +341,7 @@ export class GameLayoutEditorApp {
         if (this.#followEditMode) {
           this.#selectedPreviewMode = this.#selectedGameMode;
         }
+        this.reconcileSelectedTransitionForTarget();
         this.renderWorkspace(this.#store.getSnapshot());
         this.renderPopupControls(this.#store.getSnapshot());
         void this.ensurePreviewTransitionPrepared();
@@ -349,6 +353,7 @@ export class GameLayoutEditorApp {
         this.#selectedPreviewMode = (
           event.currentTarget as HTMLSelectElement
         ).value;
+        this.reconcileSelectedTransitionForTarget();
         this.renderPreviewRuntimeControls(
           this.#store.getSnapshot().project,
           this.#preview?.getGameModeSnapshot() ?? null,
@@ -364,6 +369,7 @@ export class GameLayoutEditorApp {
         ).checked;
         if (this.#followEditMode) {
           this.#selectedPreviewMode = this.#selectedGameMode;
+          this.reconcileSelectedTransitionForTarget();
           this.renderPreviewRuntimeControls(
             this.#store.getSnapshot().project,
             this.#preview?.getGameModeSnapshot() ?? null,
@@ -671,6 +677,19 @@ export class GameLayoutEditorApp {
         this.stopPreviewModeMonitor();
         this.renderWorkspace(this.#store.getSnapshot());
       });
+  }
+
+  private reconcileSelectedTransitionForTarget(): void {
+    const snapshot = this.#preview?.getGameModeSnapshot();
+    if (!snapshot || snapshot.phase !== "stable") return;
+    const edge = this.#store
+      .getSnapshot()
+      .project.gameModes.transitions.find(
+        (candidate) =>
+          candidate.fromModeId === snapshot.stableMode &&
+          candidate.toModeId === this.#selectedPreviewMode,
+      );
+    if (edge) this.#session.selectedTransitionKey = transitionKey(edge);
   }
 
   private ensurePreviewTransitionPrepared(): Promise<void> {
@@ -1503,6 +1522,7 @@ export class GameLayoutEditorApp {
       this.#session.resourceStatus = status.value as
         | "all"
         | "referenced"
+        | "runtime"
         | "unused"
         | "error";
       this.renderWorkspace(this.#store.getSnapshot());
@@ -1546,6 +1566,34 @@ export class GameLayoutEditorApp {
             button.dataset.resourceId,
           ),
         ),
+      );
+    panel
+      .querySelectorAll<HTMLButtonElement>("[data-runtime-resource-action]")
+      .forEach((button) =>
+        button.addEventListener("click", () => {
+          const resourceId = button.dataset.runtimeResourceAction!;
+          const project = this.#store.getSnapshot().project;
+          const current = getRuntimeResourceKey(project, resourceId);
+          if (current) {
+            this.runTransaction(
+              (draft) => unbindRuntimeResource(draft, resourceId),
+              `已取消程序资源 ${current}；若无 Scene 引用将不再导出。`,
+            );
+            return;
+          }
+          const input = [
+            ...panel.querySelectorAll<HTMLInputElement>(
+              "[data-runtime-resource-key]",
+            ),
+          ].find(
+            (candidate) => candidate.dataset.runtimeResourceKey === resourceId,
+          );
+          const key = input?.value.trim() ?? "";
+          this.runTransaction(
+            (draft) => bindRuntimeResource(draft, resourceId, key),
+            `已将资源 ${resourceId} 绑定为程序资源 ${key}。`,
+          );
+        }),
       );
     panel
       .querySelectorAll<HTMLButtonElement>("[data-delete-resource]")
@@ -2625,6 +2673,7 @@ export class GameLayoutEditorApp {
       await this.#preview?.setLayout(manifest, assets);
       if (revision === this.#previewRevision) {
         this.#previewReadyProjectRevision = snapshot.revision;
+        this.reconcileSelectedTransitionForTarget();
         this.renderPopupControls(this.#store.getSnapshot());
         await this.ensurePreviewTransitionPrepared();
       }
@@ -2776,7 +2825,7 @@ export class GameLayoutEditorApp {
       const unused = [...snapshot.project.resources.keys()].filter(
         (resourceId) =>
           getLayoutResourceReferences(snapshot.project, resourceId).length ===
-          0,
+            0 && getRuntimeResourceKey(snapshot.project, resourceId) === null,
       ).length;
       this.showFeedback(
         `已导出 ${exported.fileName}；${unused} 个未引用资源未写入 ZIP。`,

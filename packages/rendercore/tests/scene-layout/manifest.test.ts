@@ -103,6 +103,107 @@ describe("scene layout manifest", () => {
     ).toThrow(/immutable structure/);
   });
 
+  it("strictly parses program-owned runtime resources into the asset closure", () => {
+    const manifest = {
+      ...game002LayoutFixture,
+      runtimeResources: {
+        "nearwin.fx": {
+          kind: "spine" as const,
+          skeleton: "assets/symbols/symbols.json",
+          atlas: "assets/symbols/symbols.atlas",
+          textures: { "symbols.png": "assets/symbols/symbols.png" },
+        },
+        "help.image": {
+          kind: "image" as const,
+          path: "assets/help.png",
+          size: { width: 20, height: 10 },
+        },
+        "win.amount": {
+          kind: "image-string" as const,
+          manifest:
+            "dependencies/image-strings/win-amount/image-string.manifest.json",
+        },
+        "spark.vni": {
+          kind: "vni" as const,
+          project: "assets/spark/runtime.json",
+        },
+        "intro.video": {
+          kind: "video" as const,
+          path: "intro.mp4",
+          mimeType: "video/mp4" as const,
+        },
+      },
+    };
+    const parsed = parseSceneLayoutManifest(manifest);
+    expect(parsed.runtimeResources?.["nearwin.fx"]).toMatchObject({
+      kind: "spine",
+      atlas: "assets/symbols/symbols.atlas",
+    });
+    expect(collectSceneLayoutAssetPaths(parsed)).toEqual(
+      expect.arrayContaining([
+        "assets/help.png",
+        "intro.mp4",
+        "assets/spark/runtime.json",
+        "assets/symbols/symbols.json",
+        "assets/symbols/symbols.atlas",
+        "assets/symbols/symbols.png",
+        "dependencies/image-strings/win-amount/image-string.manifest.json",
+      ]),
+    );
+    expect(Object.isFrozen(parsed.runtimeResources)).toBe(true);
+
+    expect(() =>
+      parseSceneLayoutManifest({
+        ...manifest,
+        runtimeResources: {
+          ...manifest.runtimeResources,
+          NearWin: manifest.runtimeResources["nearwin.fx"],
+        },
+      }),
+    ).toThrow(/runtimeResources|key/);
+
+    expect(() =>
+      parseSceneLayoutManifest({
+        ...manifest,
+        runtimeResources: {
+          broken: { kind: "binary", path: "assets/raw.bin" },
+        },
+      }),
+    ).toThrow(/kind/);
+  });
+
+  it("rejects incomplete program resource variants without fallback", () => {
+    const invalidResources = [
+      {},
+      { image: { kind: "image", path: "help.png" } },
+      {
+        spine: {
+          kind: "spine",
+          skeleton: "nearwin.json",
+          atlas: "nearwin.atlas",
+        },
+      },
+      { amount: { kind: "image-string" } },
+      { spark: { kind: "vni" } },
+      { intro: { kind: "video", path: "intro.mp4", mimeType: "video/webm" } },
+      {
+        image: {
+          kind: "image",
+          path: "help.png",
+          size: { width: 1, height: 1 },
+          fallback: "other.png",
+        },
+      },
+    ];
+    for (const runtimeResources of invalidResources)
+      expect(() =>
+        parseSceneLayoutManifest({
+          ...game002LayoutFixture,
+          runtimeResources,
+        }),
+      ).toThrow();
+  });
+
   it("parses independent VNI and non-looping Spine layers without allowing unstable backgrounds", () => {
     const manifest = structuredClone(game002LayoutFixture) as any;
     manifest.nodes.push(

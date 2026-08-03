@@ -56,6 +56,7 @@ describe("scene layout runtime", () => {
           },
         },
         videoUrls: {},
+        runtimeResources: {},
         spineResources: {},
         destroy: vi.fn(),
       },
@@ -110,6 +111,7 @@ describe("scene layout runtime", () => {
       imageUrls: { "assets/bg.png": "background.png" },
       imageStringResources: {},
       videoUrls: {},
+      runtimeResources: {},
       spineResources: {},
       destroy: vi.fn(),
     };
@@ -231,6 +233,7 @@ describe("scene layout runtime", () => {
         imageStringResources: {},
         vniResources: {},
         videoUrls: {},
+        runtimeResources: {},
         spineResources: {
           bg: { skeleton: {}, atlasText: "", textureUrls: {} },
         },
@@ -637,6 +640,7 @@ describe("scene layout runtime", () => {
         imageStringResources: {},
         vniResources: {},
         videoUrls: {},
+        runtimeResources: {},
         spineResources: {
           "base-bg": sharedResource,
           "free-bg": sharedResource,

@@ -49,7 +49,10 @@ export function createSceneLayoutAssetGroups(options: {
   const sharedNodes = options.manifest.nodes.filter(
     (node) => !allBackgroundIds.has(node.id),
   );
-  const sharedRequired = nodeClosure(sharedNodes, options.files);
+  const sharedRequired = sortUnique([
+    ...nodeClosure(sharedNodes, options.files),
+    ...runtimeResourceClosure(options.manifest, options.files),
+  ]);
   const provisional: ProvisionalAssetGroup[] = [
     {
       id: "shared",
@@ -350,6 +353,35 @@ function nodeClosure(
     const resource = node.resource;
     if (resource.kind === "image") keys.add(resource.path);
     else if (resource.kind === "image-string") {
+      keys.add(resource.manifest);
+      const nested = parseImageStringManifest(
+        parseRequiredJson(files, resource.manifest),
+      );
+      for (const key of collectImageStringAssetPaths(nested)) keys.add(key);
+    } else if (resource.kind === "vni") {
+      keys.add(resource.project);
+      const project = assertVNIProject(
+        parseRequiredJson(files, resource.project),
+      );
+      for (const asset of project.assets) keys.add(asset.path);
+    } else {
+      keys.add(resource.skeleton);
+      keys.add(resource.atlas);
+      for (const key of Object.values(resource.textures)) keys.add(key);
+    }
+  }
+  return sortUnique([...keys]);
+}
+
+function runtimeResourceClosure(
+  manifest: SceneLayoutManifestV1,
+  files: ReadonlyMap<string, Uint8Array>,
+): readonly string[] {
+  const keys = new Set<string>();
+  for (const resource of Object.values(manifest.runtimeResources ?? {})) {
+    if (resource.kind === "image" || resource.kind === "video") {
+      keys.add(resource.path);
+    } else if (resource.kind === "image-string") {
       keys.add(resource.manifest);
       const nested = parseImageStringManifest(
         parseRequiredJson(files, resource.manifest),

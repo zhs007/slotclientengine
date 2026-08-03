@@ -26,6 +26,18 @@ export function collectLayoutPreviewAssetPaths(
     if (resource)
       for (const path of editorResourcePaths(resource)) paths.add(path);
   }
+  for (const spec of Object.values(manifest.runtimeResources ?? {})) {
+    if (spec.kind !== "image-string" && spec.kind !== "vni") continue;
+    const root = spec.kind === "image-string" ? spec.manifest : spec.project;
+    const resource = [...project.resources.values()].find(
+      (candidate) =>
+        (candidate.kind === "image-string" &&
+          candidate.manifestPath === root) ||
+        (candidate.kind === "vni" && candidate.projectPath === root),
+    );
+    if (resource)
+      for (const path of editorResourcePaths(resource)) paths.add(path);
+  }
   for (const id of Object.keys(manifest.symbolPackages ?? {})) {
     const dependency = project.symbolDependencies.get(id);
     if (!dependency) throw new Error(`预览缺少 Symbols dependency：${id}`);

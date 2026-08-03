@@ -64,9 +64,35 @@ Game Layout Editor 新导出的所有资源引用是扁平 filename keys：
 
 同一个 filename key 全局只有一份 bytes。多个 package 带来同名不同 bytes 时必须覆盖、取消或显式改名并由 owner 结构化改写，不能按 package id 建 namespace。package/mode/node id 保留业务语义，不作为资源 alias。导出与重新导入不得用 physical hash payload path 重建 node id 或资源列表标签。
 
+## 程序资源
+
+根级可选 `runtimeResources` 是程序按稳定业务键读取、但不一定被 node 或 transition 引用的 typed root：
+
+```json
+{
+  "runtimeResources": {
+    "nearwin.spine": {
+      "kind": "spine",
+      "skeleton": "nearwin.json",
+      "atlas": "symbols.atlas",
+      "textures": { "symbols.png": "symbols.png" }
+    },
+    "help.image": {
+      "kind": "image",
+      "path": "help.png",
+      "size": { "width": 512, "height": 256 }
+    }
+  }
+}
+```
+
+键必须以小写字母或数字开头，且只包含小写字母、数字、点、下划线和连字符。value 只接受现有 image、Spine、VNI、image-string、video 五类严格 spec；程序 Spine 不要求默认 animation，consumer 在实际使用时选择动画。
+
+`SceneLayoutResource.runtimeResources` 和 `SceneLayoutPackageResource.runtimeResources` 保存已准备的 readonly typed 资源。consumer 应调用 `requireSceneLayoutRuntimeResource(resource, key, kind)` 做精确 key/kind 检查，不得猜 filename、basename 或 physical hash path。资源中的 URL、image-string/VNI 对象由父 resource 拥有，父 resource `destroy()` 后不得继续使用。
+
 ## 精确闭包与 loader
 
-`collectSceneLayoutPackagePaths()` 验证 layout 与全部 nested package 的传递 exact closure，包括 VNI project 声明的每个 asset。map 声明的 hash、size、media、payload 和 orphan 均严格验证；map/direct 不得混用。ZIP resource creator、Blob preview 与 `loadSceneLayoutPackageFromUrl()` 使用同一 resolver。父 package 已解析 map 后，VNI/image-string/Symbols/Popup 使用 resolved-files bridge，不要求嵌套 map。
+`collectSceneLayoutPackagePaths()` 验证 layout、程序资源与全部 nested package 的传递 exact closure，包括 VNI project 声明的每个 asset。map 声明的 hash、size、media、payload 和 orphan 均严格验证；map/direct 不得混用。ZIP resource creator、Blob preview 与 `loadSceneLayoutPackageFromUrl()` 使用同一 resolver。父 package 已解析 map 后，VNI/image-string/Symbols/Popup 使用 resolved-files bridge，不要求嵌套 map。
 
 无 map 的合法 legacy direct-path/nested dependency package继续加载。Editor import 会在内存中迁移为 flat keys，再导出新格式；不做 basename runtime fallback、404 探测或宽泛 glob。
 

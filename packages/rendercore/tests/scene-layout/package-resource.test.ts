@@ -109,6 +109,22 @@ describe("scene layout package resources", () => {
   it("owns the exact direct and mapped VNI closure", async () => {
     const manifest = {
       ...game002LayoutFixture,
+      runtimeResources: {
+        "shared.background": {
+          kind: "image" as const,
+          path: "assets/bg.png",
+          size: { width: 2000, height: 2000 },
+        },
+        "spark.vni": {
+          kind: "vni" as const,
+          project: vniProjectPath,
+        },
+        "intro.video": {
+          kind: "video" as const,
+          path: `assets/${"a".repeat(64)}.mp4`,
+          mimeType: "video/mp4" as const,
+        },
+      },
       nodes: [
         game002LayoutFixture.nodes[0],
         {
@@ -127,8 +143,13 @@ describe("scene layout package resources", () => {
       ["assets/bg.png", new Uint8Array([1])],
       [vniProjectPath, encode(vniProject)],
       [vniAssetPath, new Uint8Array([2])],
+      [
+        `assets/${"a".repeat(64)}.mp4`,
+        new Uint8Array([0, 0, 0, 16, 102, 116, 121, 112, 1, 2, 3, 4]),
+      ],
     ]);
     expect(collectSceneLayoutPackagePaths({ manifest, files })).toEqual([
+      `assets/${"a".repeat(64)}.mp4`,
       "assets/bg.png",
       "effects/assets/spark.png",
       "effects/runtime.json",
@@ -146,8 +167,17 @@ describe("scene layout package resources", () => {
           "assets/spark.png"
         ],
       ).toMatch(/^blob:/u);
+      expect(resource.runtimeResources["shared.background"]).toMatchObject({
+        kind: "image",
+      });
+      expect(resource.runtimeResources["spark.vni"]).toMatchObject({
+        kind: "vni",
+      });
+      expect(resource.runtimeResources["intro.video"]).toMatchObject({
+        kind: "video",
+      });
       resource.destroy();
-      expect(revoke).toHaveBeenCalledTimes(2);
+      expect(revoke).toHaveBeenCalledTimes(3);
     } finally {
       revoke.mockRestore();
     }
@@ -158,6 +188,22 @@ describe("scene layout package resources", () => {
     };
     const mappedManifest = {
       ...manifest,
+      runtimeResources: {
+        "shared.background": {
+          kind: "image" as const,
+          path: "bg.png",
+          size: { width: 2000, height: 2000 },
+        },
+        "spark.vni": {
+          kind: "vni" as const,
+          project: "runtime.json",
+        },
+        "intro.video": {
+          kind: "video" as const,
+          path: "intro.mp4",
+          mimeType: "video/mp4" as const,
+        },
+      },
       nodes: manifest.nodes.map((node) =>
         node.id === "bg"
           ? { ...node, resource: { ...node.resource, path: "bg.png" } }
@@ -171,13 +217,17 @@ describe("scene layout package resources", () => {
       ["bg.png", new Uint8Array([1])],
       ["runtime.json", encode(mappedProject)],
       ["spark.png", new Uint8Array([2])],
+      [
+        "intro.mp4",
+        new Uint8Array([0, 0, 0, 16, 102, 116, 121, 112, 1, 2, 3, 4]),
+      ],
     ]);
     expect(
       collectSceneLayoutPackagePaths({
         manifest: mappedManifest,
         files: mappedFiles,
       }),
-    ).toEqual(["bg.png", "runtime.json", "spark.png"]);
+    ).toEqual(["bg.png", "intro.mp4", "runtime.json", "spark.png"]);
     const mappedPackage = await createMappedPackageFiles({
       controls: new Map([["layout.manifest.json", encode(mappedManifest)]]),
       assets: mappedFiles,

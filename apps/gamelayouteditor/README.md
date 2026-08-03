@@ -20,6 +20,8 @@ main reel 只提供横竖屏 `x/y` placement，不提供整体缩放。双背景
 
 同名不同 bytes 默认覆盖，引用不变；冲突只能覆盖、取消或显式改名，不 lowercase、不生成 `-2/-3`、不建立 `dependencies/**` namespace。Symbols/Popup dependency 只保存业务 package id、root key、closure keys 与 placement；bytes 只存在全局 asset workspace。
 
+资源列表可把任一已识别的 image、Spine、VNI、ImgNumber 或 MP4 root 设为“程序资源”。设置时必须填写唯一、稳定的程序键（小写字母或数字开头，只允许小写字母、数字、点、下划线和连字符）；该资源即使没有 Scene 引用也会写入 production ZIP。取消绑定后，若没有其它引用，它恢复为不会导出。程序键和 typed resource spec 保存在 `layout.manifest.json` 的 `runtimeResources`，ZIP 重新导入或图片优化后仍保持不变。
+
 Spine atlas 的 page 是 atlas 内部逻辑名，texture map 的 value 才是全局 filename key。导入时若旧素材名为 `BG.png`、实际字节为 WebP，atlas 仍保留 `BG.png` page，物理 key 规范化为 `BG.webp`，并由 texture map 精确关联；不会伪造 MIME 或改写 atlas 逻辑页。Spine 背景还必须在 Picker 明确填写完整 `art size`，不能从 skeleton export bounds 或 atlas texture 尺寸推导；例如 game002-s3 使用 `2000 × 2000`，初始 placement 为 `(1000, 1000, 1)`。
 
 一次可上传多个 skeleton JSON，并让它们共享同一份 atlas 与贴图；每个 JSON 会生成独立 Spine 根资源，根资源单向引用共享叶子。整批导入先完整校验再原子提交：任何 JSON、atlas page 或贴图映射失败时都不会留下半批资源。删除或导出单个根资源时只按实际根引用计算闭包，不会反向带上同批但未使用的 sibling JSON。
@@ -38,6 +40,8 @@ Spine atlas 的 page 是 atlas 内部逻辑名，texture map 的 value 才是全
 
 转场 Promise 完成后，编辑器还会核对 preview 已稳定显示目标状态；开启“跟随编辑状态”时，主状态 Inspector 与 preview selector 一起同步到该目标。settled snapshot 不一致会明确报错，不显示虚假的完成状态。
 
+每次 stable 状态或 preview 目标变化后，编辑器会按 runtime 的 settled source 重新选择精确的 `source → target` 有向边并准备它。因此 BG → FG 完成后可直接选择 BG 并准备 FG → BG，不需要通过切换分辨率重建 preview。
+
 ## Production ZIP
 
 `<project-id>-layout.zip` 只包含：
@@ -46,7 +50,7 @@ Spine atlas 的 page 是 atlas 内部逻辑名，texture map 的 value 才是全
 - 根 `assets.map.json`；
 - 一个 `assets/<完整 SHA-256>.<ext>` payload 区。
 
-layout、VNI、image-string、Symbols 和 Popup 的全部配置引用均为 filename keys；production export 只写传递可达 exact closure，不写 nested dependency 目录或 unused key。Spine 只要某个 JSON 根被引用，就导出该根及其 atlas/贴图闭包；同批未引用的 sibling JSON 不导出。VNI project 只结构化改写 schema 声明的 asset path。重新导入、Blob preview、package resource 与 CDN URL loader 共享 rendercore map resolver。无 map 的合法 legacy package 继续按 direct-path 合同加载；Editor 导入后升级为新格式。
+layout、VNI、image-string、Symbols、Popup 和程序资源的全部配置引用均为 filename keys；production export 只写传递可达 exact closure，不写 nested dependency 目录或 unused key。Spine 只要某个 JSON 根被 Scene 或程序键引用，就导出该根及其 atlas/贴图闭包；共享 leaf 只写一份，同批未引用的 sibling JSON 不导出。VNI project 只结构化改写 schema 声明的 asset path。重新导入、Blob preview、package resource 与 CDN URL loader 共享 rendercore map resolver。无 map 的合法 legacy package 继续按 direct-path 合同加载；Editor 导入后升级为新格式。
 
 物理 payload 始终可以是 `assets/<SHA-256>.*`，但它只用于内容寻址；重新导入后的图层名称继续来自 `SceneLayoutNode.id`，资源列表继续显示 logical filename key。
 

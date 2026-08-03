@@ -154,6 +154,39 @@ export function rewriteLayoutManifest(
       },
     };
   });
+  const runtimeResources = manifest.runtimeResources
+    ? Object.fromEntries(
+        Object.entries(manifest.runtimeResources).map(([id, resource]) => {
+          if (resource.kind === "image" || resource.kind === "video")
+            return [
+              id,
+              { ...resource, path: rewriteRef(resource.path, mapping) },
+            ];
+          if (resource.kind === "image-string")
+            return [
+              id,
+              {
+                ...resource,
+                manifest: rewriteRef(resource.manifest, mapping),
+              },
+            ];
+          if (resource.kind === "vni")
+            return [
+              id,
+              { ...resource, project: rewriteRef(resource.project, mapping) },
+            ];
+          return [
+            id,
+            {
+              ...resource,
+              skeleton: rewriteRef(resource.skeleton, mapping),
+              atlas: rewriteRef(resource.atlas, mapping),
+              textures: rewriteRecordValues(resource.textures, mapping),
+            },
+          ];
+        }),
+      )
+    : undefined;
   return parseSceneLayoutManifest({
     ...manifest,
     nodes,
@@ -185,6 +218,7 @@ export function rewriteLayoutManifest(
           ),
         }
       : {}),
+    ...(runtimeResources ? { runtimeResources } : {}),
     ...(manifest.gameModes
       ? {
           gameModes: {
