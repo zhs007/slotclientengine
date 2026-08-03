@@ -7,7 +7,7 @@
 1. active skin manifest：唯一支持的 skin2 从 `assets/crave` mapped scene-layout
    package 取得 layout/background/geometry/symbol/ImgNumber/popup。Nearwin
    timing/effect 继续使用显式的
-   `assets/game002-s3/reel.manifest.json` presentation extension。
+   `apps/game002/config/reel-presentation.manifest.json` 中的程序资源键。
 2. `apps/game002/src/*-config.ts` 中的 game002 业务 timing。
 3. Spine/VNI 资源自身的真实 animation duration。
 4. 本文档。
@@ -42,7 +42,7 @@ initial spin
 
 ## Initial spin
 
-配置来源：[`reel.manifest.json`](../../../assets/game002-s3/reel.manifest.json)、[`game-layout.ts`](../src/game-layout.ts)。
+配置来源：[`reel-presentation.manifest.json`](../config/reel-presentation.manifest.json)、[`game-layout.ts`](../src/game-layout.ts)。
 
 ### 普通模式
 
@@ -214,7 +214,7 @@ Release(i)      = i * 0.3s + 0.8333333s
 
 ## Cascade 下落与 refill
 
-下落配置来源：[`cascade-config.ts`](../src/cascade-config.ts)。期待 refill 配置来源：[`reel.manifest.json`](../../../assets/game002-s3/reel.manifest.json)。
+下落配置来源：[`cascade-config.ts`](../src/cascade-config.ts)。期待 refill 配置来源：[`reel-presentation.manifest.json`](../config/reel-presentation.manifest.json)。
 
 ### 非期待 unified fall
 
@@ -269,7 +269,7 @@ survivor 不重新 spin/appear。非期待 unified refill 新增 WL 使盘面第
 
 ## Global win-amount
 
-配置来源：[`win-amount-config.ts`](../src/win-amount-config.ts)、[`win-amount.manifest.json`](../../../assets/game002-s3/win-amount/win-amount.manifest.json)。
+配置来源：Crave Game Layout 包内的 popup package；app 只提供金额格式化与业务触发。
 
 | 档位  | 条件         | 金额计数时长 | VNI segmented timing                           |
 | ----- | ------------ | -----------: | ---------------------------------------------- |
@@ -285,7 +285,7 @@ survivor 不重新 spin/appear。非期待 unified refill 新增 WL 使盘面第
 
 ## Background
 
-配置来源：[`background.manifest.json`](../../../assets/game002-s3/background.manifest.json)。
+配置来源：`assets/crave/layout.manifest.json` 的 scene nodes、mode 和 transition。
 
 ```text
 BaseGame: BG loop

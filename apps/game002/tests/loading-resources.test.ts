@@ -8,7 +8,7 @@ import {
 } from "../src/loading-resources.js";
 
 describe("game002 skin=2 loading resources", () => {
-  it("loads only the mapped Crave closure plus the explicit Nearwin extension", () => {
+  it("loads only the mapped Crave package", () => {
     const resources = createGame002LoadingResources("2");
     const ids = resources.map((resource) => resource.id);
     const urls = resources
@@ -23,14 +23,7 @@ describe("game002 skin=2 loading resources", () => {
       ids.filter((id) => id.startsWith(GAME002_CRAVE_RESOURCE_ID_PREFIX))
         .length,
     ).toBeGreaterThan(120);
-    expect(
-      ids.filter((id) => id.startsWith("game002-reel-effect-spine-skeletons:")),
-    ).toEqual([
-      "game002-reel-effect-spine-skeletons:Nearwin1.json",
-      "game002-reel-effect-spine-skeletons:Nearwin2.json",
-    ]);
-    expect(ids).toContain("game002-symbol-spine-atlas");
-    expect(ids).toContain("game002-symbol-spine-texture");
+    expect(ids.some((id) => id.startsWith("game002-reel-effect"))).toBe(false);
     expect(JSON.stringify(resources)).not.toMatch(
       /token|cookie|serverUrl|gameserv/i,
     );

@@ -73,6 +73,7 @@
 ## Layout Editor dependency
 
 - gamelayouteditor 把 symbols ZIP 和 popup ZIP 当自包含 dependency；每个 active variant 只配置明确 binding 和相对 viewport center 的 popup root `x/y/scale`。
+- Symbols dependency 对 gamelayouteditor 是只读 symbol 状态机合同。Layout Editor 可以校验 package id、cell size、display symbols、公开 reel/state capability 和 exact closure，并调用 production preview；不得提供内部图片、Spine/VNI animation、state layer、ImgNumber/value 或 cascade 的编辑控件，也不得重写这些 owner-owned manifest 字段。
 - Symbols dependency 的导入、预览、替换和 layout ZIP 重导必须保留其完整
   state/ImgNumber multi-target closure；headless authoring 可以显式跳过 texture load，
   但不能跳过 manifest、hash、binding 或 closure 校验。

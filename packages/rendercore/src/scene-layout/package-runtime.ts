@@ -48,6 +48,7 @@ import type {
   SceneLayoutNodeStateSnapshot,
   SceneLayoutPackageResource,
   SceneLayoutPackageRuntime,
+  SceneLayoutLayerId,
   SceneLayoutSnapshot,
   SceneLayoutSymbolPackageBinding,
 } from "./types.js";
@@ -747,6 +748,20 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   getPopupPresentation(): Container {
     this.assertReady();
     return this.#popupRoot;
+  }
+
+  getLayer(id: SceneLayoutLayerId): Container {
+    this.assertReady();
+    switch (id) {
+      case "layout":
+        return this.#layout.container;
+      case "reel":
+        return this.requireReel("main");
+      case "transition":
+        return this.#transitionRoot;
+      case "popup":
+        return this.#popupRoot;
+    }
   }
 
   getGameModeIds(): readonly string[] {

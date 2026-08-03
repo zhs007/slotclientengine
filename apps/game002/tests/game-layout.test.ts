@@ -20,20 +20,15 @@ import {
   validateGame002BoardFrame,
   validateGame002FocusRegion,
 } from "../src/game-layout.js";
-import { GAME002_BACKGROUND_MANIFEST } from "../src/background-config.js";
-import { GAME002_REEL_PRESENTATION_EXTENSION } from "../src/skin-config.js";
+import { GAME002_REEL_MANIFEST } from "../src/skin-config.js";
 
-describe("game002-s3 layout", () => {
+describe("game002 Crave layout", () => {
   it("locks the single s3 art, focus and 6 x 9 board contract", () => {
     const layout = createGame002Layout();
     const reelLayout = createGame002ReelLayout();
     const layerLayout = createGame002ReelLayerLayout(reelLayout, layout);
 
     expect(GAME002_ART_SIZE).toEqual({ width: 2000, height: 2000 });
-    expect(GAME002_ART_SIZE).toBe(GAME002_BACKGROUND_MANIFEST.artSize);
-    expect(GAME002_FOCUS_REGION).toBe(
-      GAME002_BACKGROUND_MANIFEST.adaptation.focusRect,
-    );
     expect(GAME002_REFERENCE_SIZE).toEqual({ width: 1125, height: 2000 });
     expect(GAME002_REFERENCE_VISIBLE_RECT_IN_ART).toEqual({
       x: 437.5,
@@ -155,9 +150,7 @@ describe("game002-s3 layout", () => {
   it("keeps grid timing/dimming stable and validates explicit geometry", () => {
     const dimming = createGame002GridCellDimming(0.5);
     expect(GAME002_GRID_CELL_REEL_ORDER).toBe("top-down-left-right");
-    expect(
-      GAME002_REEL_PRESENTATION_EXTENSION.reelManifest.spin.timing,
-    ).toEqual({
+    expect(GAME002_REEL_MANIFEST.spin.timing).toEqual({
       startStepMs: 16,
       stopStepMs: 16,
       settleAfterLastStartMs: 180,

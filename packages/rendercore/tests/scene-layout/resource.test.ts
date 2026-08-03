@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   createSceneLayoutResource,
@@ -8,6 +6,7 @@ import {
 } from "../../src/scene-layout/index.js";
 import { transitionResourceKey } from "../../src/scene-layout/resource.js";
 import { game002LayoutFixture } from "./fixtures.js";
+import { readCraveJson, readCraveText } from "../crave-fixture.js";
 
 const vniProject = {
   schemaVersion: "VNI_0.020",
@@ -318,14 +317,8 @@ describe("scene layout resources", () => {
   });
 
   it("validates the real game002 official Spine 4.3 BG loop", () => {
-    const root = resolve(__dirname, "../../../../");
-    const skeleton = JSON.parse(
-      readFileSync(resolve(root, "assets/game002-s3/BG.json"), "utf8"),
-    );
-    const atlasText = readFileSync(
-      resolve(root, "assets/game002-s3/BG.atlas"),
-      "utf8",
-    );
+    const skeleton = readCraveJson("bg.json");
+    const atlasText = readCraveText("bg.atlas");
     const pages = [
       "BG.png",
       "BG_2.png",
@@ -428,14 +421,8 @@ describe("scene layout resources", () => {
   });
 
   it("requires the transition switch event exactly once in its animation timeline", () => {
-    const root = resolve(__dirname, "../../../../");
-    const baseSkeleton = JSON.parse(
-      readFileSync(resolve(root, "assets/game002-s3/BG.json"), "utf8"),
-    );
-    const atlasText = readFileSync(
-      resolve(root, "assets/game002-s3/BG.atlas"),
-      "utf8",
-    );
+    const baseSkeleton = readCraveJson("bg.json");
+    const atlasText = readCraveText("bg.atlas");
     const pages = [
       "BG.png",
       "BG_2.png",

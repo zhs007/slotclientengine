@@ -49,7 +49,7 @@ export function getGame002DisplaySymbolsFromManifest(
     )
   ) {
     throw new Error(
-      `game002-s3 manifest symbols must be ${GAME002_EXPECTED_DISPLAY_SYMBOLS.join(",")}, got ${symbols.join(",")}.`,
+      `game002 Crave manifest symbols must be ${GAME002_EXPECTED_DISPLAY_SYMBOLS.join(",")}, got ${symbols.join(",")}.`,
     );
   }
   return symbols;

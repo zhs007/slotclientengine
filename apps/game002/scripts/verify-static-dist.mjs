@@ -10,8 +10,7 @@ const INDEX_HTML = join(DIST_ROOT, "index.html");
 const CRAVE_ROOT = join(REPO_ROOT, "assets/crave");
 const CRAVE_MAP_PATH = join(CRAVE_ROOT, "assets.map.json");
 const CRAVE_LAYOUT_PATH = join(CRAVE_ROOT, "layout.manifest.json");
-const EXTENSION_ROOT = join(REPO_ROOT, "assets/game002-s3");
-const EXTENSION_REEL_MANIFEST = join(EXTENSION_ROOT, "reel.manifest.json");
+const REEL_MANIFEST = join(APP_ROOT, "config/reel-presentation.manifest.json");
 const LEO_UI_ASSET_ROOT = join(REPO_ROOT, "packages/game-ui-leo/src/assets");
 const LEO_UI_ASSETS = Object.freeze([
   "font/Anton-Regular.woff2",
@@ -24,10 +23,6 @@ const LEO_UI_ASSETS = Object.freeze([
   "controls/image-fasplays-off.png",
   "controls/image-background-music.png",
   "controls/image-background-music-off.png",
-]);
-const EXTENSION_EFFECTS = Object.freeze([
-  { id: "anticipation", skeleton: "Nearwin1.json" },
-  { id: "refillSweep", skeleton: "Nearwin2.json" },
 ]);
 const SENSITIVE_VALUES = Object.freeze([
   ["VITE", "GAME002"].join("_"),
@@ -63,7 +58,7 @@ function verify() {
   verifyIndexHtml(indexHtml);
   verifyChunkBoundaries(indexHtml, assetNames);
   verifyCraveSourceContract();
-  verifyPresentationExtensionSourceContract();
+  verifyReelPresentationSourceContract();
   verifyDistAssets(assetNames, bundledJavaScript);
   verifySensitiveValues(listFiles(DIST_ROOT));
 }
@@ -173,37 +168,25 @@ function verifyCraveSourceContract() {
   }
 }
 
-function verifyPresentationExtensionSourceContract() {
-  assertFile(EXTENSION_REEL_MANIFEST);
-  assertFile(join(EXTENSION_ROOT, "Symbol.atlas"));
-  assertFile(join(EXTENSION_ROOT, "Symbol.png"));
-  if (!existsSync(EXTENSION_REEL_MANIFEST)) return;
-  const manifest = JSON.parse(readFileSync(EXTENSION_REEL_MANIFEST, "utf8"));
+function verifyReelPresentationSourceContract() {
+  assertFile(REEL_MANIFEST);
+  if (!existsSync(REEL_MANIFEST)) return;
+  const manifest = JSON.parse(readFileSync(REEL_MANIFEST, "utf8"));
   if (manifest.version !== 1) {
     failures.push("game002 reel presentation extension must use version=1.");
   }
-  for (const effect of EXTENSION_EFFECTS) {
-    const entry = manifest.spin?.cellEffects?.[effect.id];
+  for (const [id, key] of [
+    ["anticipation", "nearwin1"],
+    ["refillSweep", "nearwin2"],
+  ]) {
+    const entry = manifest.spin?.cellEffects?.[id];
     if (
-      entry?.skeleton !== `./${effect.skeleton}` ||
-      entry.atlas !== "./Symbol.atlas" ||
-      entry.texture !== "./Symbol.png" ||
+      entry?.skeleton !== `./${key}` ||
+      entry.atlas !== "./symbol.atlas" ||
+      entry.texture !== "./symbol.png" ||
       entry.animation !== "Loop"
-    ) {
-      failures.push(
-        `game002 reel presentation extension "${effect.id}" binding drifted.`,
-      );
-    }
-    const skeletonPath = join(EXTENSION_ROOT, effect.skeleton);
-    assertFile(skeletonPath);
-    if (!existsSync(skeletonPath)) continue;
-    const skeleton = JSON.parse(readFileSync(skeletonPath, "utf8"));
-    if (!/^4\.3(?:\.|$)/.test(skeleton.skeleton?.spine ?? "")) {
-      failures.push(`${effect.skeleton} must declare Spine 4.3.x.`);
-    }
-    if (!skeleton.animations?.Loop) {
-      failures.push(`${effect.skeleton} is missing exact Loop animation.`);
-    }
+    )
+      failures.push(`game002 reel presentation "${id}" binding drifted.`);
   }
 }
 
@@ -219,7 +202,6 @@ function verifyDistAssets(assetNames, bundledJavaScript) {
     assertOne(assetNames, pattern, label);
   }
   verifyCraveDistClosure(assetNames);
-  verifyPresentationExtensionDistClosure(assetNames);
   verifyLeoGameUiClosure(assetNames, bundledJavaScript);
   if (bundledJavaScript.includes("__game002VisualFixture")) {
     failures.push("production bundle must not include the visual fixture.");
@@ -258,16 +240,6 @@ function verifyCraveDistClosure(assetNames) {
     ),
   ];
   for (const file of files) {
-    assertDistContainsSourceAssetContent(assetNames, file);
-  }
-}
-
-function verifyPresentationExtensionDistClosure(assetNames) {
-  for (const file of [
-    join(EXTENSION_ROOT, "Symbol.atlas"),
-    join(EXTENSION_ROOT, "Symbol.png"),
-    ...EXTENSION_EFFECTS.map((effect) => join(EXTENSION_ROOT, effect.skeleton)),
-  ]) {
     assertDistContainsSourceAssetContent(assetNames, file);
   }
 }

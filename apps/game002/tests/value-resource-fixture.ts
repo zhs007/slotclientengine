@@ -1,15 +1,16 @@
-import rawImageStringManifest from "../../../assets/game002-s3/dependencies/image-strings/cn-digits/image-string.manifest.json";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import rawGameConfig from "../../../assets/gamecfg002/gameconfig.json";
-import rawReelManifest from "../../../assets/game002-s3/reel.manifest.json";
-import rawStateManifest from "../../../assets/game002-s3/symbol-state-textures.manifest.json";
+import rawAssetsMap from "../../../assets/crave/assets.map.json";
 import {
   createDefaultSymbolAnimationResolver,
+  createGridCellEffectResourcesFromManifest,
+  deriveGridCellEffectPoolCapacities,
   createSymbolAnimationCapabilityMapFromManifest,
   createSymbolCascadeWinPresentationMapFromManifest,
   createSymbolLandingAppearSymbolsFromManifest,
   createSymbolStatePresetFromManifest,
   parseImageStringManifest,
-  parseReelManifest,
   parseSymbolStateTextureManifest,
   type SymbolValuePresentationResourceMap,
 } from "@slotclientengine/rendercore";
@@ -24,26 +25,88 @@ import {
   GAME002_REELS_NAME,
 } from "../src/game-layout.js";
 import {
-  GAME002_REEL_PRESENTATION_EXTENSION,
+  GAME002_REEL_MANIFEST,
   type Game002SkinConfig,
 } from "../src/skin-config.js";
 
-const normalModules = import.meta.glob(
-  "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CM,CO,AF,BN}.png",
-  { eager: true, import: "default", query: "?url" },
-) as Record<string, string>;
-const stateModules = import.meta.glob(
-  "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN}.{spinBlur,disabled}.png",
-  { eager: true, import: "default", query: "?url" },
-) as Record<string, string>;
-const spineSkeletonModules = import.meta.glob(
-  "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CM,CO,AF,BN}.json",
-  { eager: true, import: "default" },
-) as Record<string, unknown>;
-const reelEffectSkeletonModules = import.meta.glob(
-  "../../../assets/game002-s3/{Nearwin1,Nearwin2}.json",
-  { eager: true, import: "default" },
-) as Record<string, unknown>;
+const CRAVE_ROOT = resolve(process.cwd(), "../../assets/crave");
+const logicalFiles = rawAssetsMap.files as Record<
+  string,
+  { readonly path: string }
+>;
+const readLogicalJson = (key: string): unknown =>
+  JSON.parse(
+    readFileSync(resolve(CRAVE_ROOT, requireLogicalPath(key)), "utf8"),
+  );
+const readLogicalText = (key: string): string =>
+  readFileSync(resolve(CRAVE_ROOT, requireLogicalPath(key)), "utf8");
+const logicalUrl = (key: string): string =>
+  resolve(CRAVE_ROOT, requireLogicalPath(key));
+const requireLogicalPath = (key: string): string => {
+  const path = logicalFiles[key]?.path;
+  if (!path) throw new Error(`missing Crave logical fixture "${key}"`);
+  return path;
+};
+const expectedSymbols = [
+  "WL",
+  "H1",
+  "H2",
+  "L1",
+  "L2",
+  "L3",
+  "L4",
+  "WM",
+  "CN",
+  "CM",
+  "CO",
+  "AF",
+  "BN",
+] as const;
+const sourceStateManifest = readLogicalJson(
+  "symbol-state-textures.manifest.json",
+) as {
+  readonly symbols: Readonly<Record<string, unknown>>;
+};
+const rawStateManifest = Object.freeze({
+  ...sourceStateManifest,
+  symbols: Object.fromEntries(
+    expectedSymbols.map((symbol) => [
+      symbol,
+      sourceStateManifest.symbols[symbol],
+    ]),
+  ),
+});
+const rawImageStringManifest = readLogicalJson("image-string.manifest.json");
+const displayFixtureSymbols = expectedSymbols.filter(
+  (symbol) => symbol !== "CN",
+);
+const allImageModules = Object.fromEntries(
+  Object.keys(logicalFiles)
+    .filter((key) => /\.(?:webp|png|jpg|jpeg)$/u.test(key))
+    .map((key) => [`./${key}`, logicalUrl(key)]),
+);
+const normalModules = allImageModules;
+const stateModules = allImageModules;
+const spineSkeletonModules = Object.fromEntries(
+  Object.keys(logicalFiles)
+    .filter((key) => key.endsWith(".json"))
+    .map((key) => [`./${key}`, readLogicalJson(key)]),
+);
+const reelEffectSkeletonModules = Object.freeze({
+  "./nearwin1": readLogicalJson("nearwin1.json"),
+  "./nearwin2": readLogicalJson("nearwin2.json"),
+});
+const reelEffectResources = createGridCellEffectResourcesFromManifest({
+  manifest: GAME002_REEL_MANIFEST,
+  skeletonModules: reelEffectSkeletonModules,
+  atlasModules: { "./symbol.atlas": readLogicalText("symbol.atlas") },
+  textureModules: { "./symbol.png": logicalUrl("symbol.webp") },
+});
+const reelEffectPoolCapacities = deriveGridCellEffectPoolCapacities({
+  manifest: GAME002_REEL_MANIFEST,
+  resources: reelEffectResources,
+  cellCount: 54,
+});
 
 type TestGame002SkinConfig = Game002SkinConfig & {
   readonly symbolModules: Record<string, string>;
@@ -58,12 +121,10 @@ export function getTestGame002SkinConfig(): TestGame002SkinConfig {
     label: "test-game002",
     reelsName: GAME002_REELS_NAME,
     rawGameConfig,
-    reelEffectResources:
-      GAME002_REEL_PRESENTATION_EXTENSION.reelEffectResources,
-    reelEffectPoolCapacities:
-      GAME002_REEL_PRESENTATION_EXTENSION.reelEffectPoolCapacities,
+    reelEffectResources,
+    reelEffectPoolCapacities,
     stateTextureManifest: rawStateManifest,
-    reelManifest: parseReelManifest(rawReelManifest),
+    reelManifest: GAME002_REEL_MANIFEST,
     displaySymbols,
     emptySymbols: Object.freeze([]),
     symbolScales: createGame002SymbolScaleMapFromManifest({

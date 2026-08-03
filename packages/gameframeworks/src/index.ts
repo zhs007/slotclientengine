@@ -4,6 +4,18 @@ export {
   compileSlotRoundExecutionPlan,
   createGameConfig,
 } from "@slotclientengine/logiccore";
+export {
+  createSceneLayoutPackageResource,
+  createSceneLayoutPackageRuntime,
+  createSceneLayoutPresentationSurface,
+} from "@slotclientengine/rendercore";
+export type {
+  SceneLayoutLayerId,
+  SceneLayoutPackageResource,
+  SceneLayoutPackageRuntime,
+  SceneLayoutPresentationSurface,
+  SceneLayoutRuntimeResource,
+} from "@slotclientengine/rendercore";
 export type {
   SlotRoundCapability,
   SlotRoundCompileContext,

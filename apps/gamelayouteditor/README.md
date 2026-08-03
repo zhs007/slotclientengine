@@ -6,6 +6,11 @@ award-celebration Popup 作为自包含 dependency 通过 `rendercore/popup` 严
 vendor；内部 VNI 的 segmented/once playback、最后一帧保持和 dismiss 生命周期不在
 Layout Editor 复制或改写。
 
+SymbolsEditor ZIP 同样作为自包含、只读的 symbol 状态机 dependency。Layout Editor 只选择
+package、reelSet、renderMode，并使用 rendercore 的公开 display/state capability 做校验和预览；
+symbol 内部图片、Spine/VNI animation、state layer、value/ImgNumber 和 cascade 只能回
+SymbolsEditor 编辑。
+
 ## 统一资源工作区
 
 资源 Tab 和上下文 Picker 都调用同一个“导入资源”流程，支持多文件与 ZIP。image、MP4、Spine、VNI runtime bundle、ImgNumber、Symbols 和 Popup 的所有 root/leaf 进入一个扁平 filename-key namespace；ZIP 内目录只用于识别 exact source closure，提交前会被结构化抹平。VNI bundle 只接受 `purpose=runtime` 发布包；只有一个 runtime 时自动选中，多个 runtime 必须明确选择 profile。

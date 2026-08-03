@@ -49,18 +49,18 @@
             }
           },
           "resource": {
-            "atlas": "BG.atlas",
+            "atlas": "bg.atlas",
             "kind": "spine",
-            "skeleton": "BG.json",
+            "skeleton": "bg.json",
             "textures": {
-              "BG_2.png": "BG_2.webp",
-              "BG_3.png": "BG_3.webp",
-              "BG_4.png": "BG_4.webp",
-              "BG_5.png": "BG_5.webp",
-              "BG_6.png": "BG_6.webp",
-              "BG_7.png": "BG_7.webp",
-              "BG_8.png": "BG_8.webp",
-              "BG.png": "BG.webp"
+              "BG_2.png": "bg_2.webp",
+              "BG_3.png": "bg_3.webp",
+              "BG_4.png": "bg_4.webp",
+              "BG_5.png": "bg_5.webp",
+              "BG_6.png": "bg_6.webp",
+              "BG_7.png": "bg_7.webp",
+              "BG_8.png": "bg_8.webp",
+              "BG.png": "bg.webp"
             }
           },
           "switchEvent": "Start"
@@ -79,18 +79,18 @@
             }
           },
           "resource": {
-            "atlas": "BG.atlas",
+            "atlas": "bg.atlas",
             "kind": "spine",
-            "skeleton": "BG.json",
+            "skeleton": "bg.json",
             "textures": {
-              "BG_2.png": "BG_2.webp",
-              "BG_3.png": "BG_3.webp",
-              "BG_4.png": "BG_4.webp",
-              "BG_5.png": "BG_5.webp",
-              "BG_6.png": "BG_6.webp",
-              "BG_7.png": "BG_7.webp",
-              "BG_8.png": "BG_8.webp",
-              "BG.png": "BG.webp"
+              "BG_2.png": "bg_2.webp",
+              "BG_3.png": "bg_3.webp",
+              "BG_4.png": "bg_4.webp",
+              "BG_5.png": "bg_5.webp",
+              "BG_6.png": "bg_6.webp",
+              "BG_7.png": "bg_7.webp",
+              "BG_8.png": "bg_8.webp",
+              "BG.png": "bg.webp"
             }
           },
           "switchEvent": "Start"
@@ -99,7 +99,7 @@
       }
     ]
   },
-  "id": "new-layout",
+  "id": "crave",
   "kind": "scene-layout",
   "nodes": [
     {
@@ -113,20 +113,20 @@
         }
       },
       "resource": {
-        "atlas": "BG.atlas",
+        "atlas": "bg.atlas",
         "defaultAnimation": "BG",
         "kind": "spine",
         "loop": true,
-        "skeleton": "BG.json",
+        "skeleton": "bg.json",
         "textures": {
-          "BG_2.png": "BG_2.webp",
-          "BG_3.png": "BG_3.webp",
-          "BG_4.png": "BG_4.webp",
-          "BG_5.png": "BG_5.webp",
-          "BG_6.png": "BG_6.webp",
-          "BG_7.png": "BG_7.webp",
-          "BG_8.png": "BG_8.webp",
-          "BG.png": "BG.webp"
+          "BG_2.png": "bg_2.webp",
+          "BG_3.png": "bg_3.webp",
+          "BG_4.png": "bg_4.webp",
+          "BG_5.png": "bg_5.webp",
+          "BG_6.png": "bg_6.webp",
+          "BG_7.png": "bg_7.webp",
+          "BG_8.png": "bg_8.webp",
+          "BG.png": "bg.webp"
         }
       }
     },
@@ -141,20 +141,20 @@
         }
       },
       "resource": {
-        "atlas": "BG.atlas",
+        "atlas": "bg.atlas",
         "defaultAnimation": "FG",
         "kind": "spine",
         "loop": true,
-        "skeleton": "BG.json",
+        "skeleton": "bg.json",
         "textures": {
-          "BG_2.png": "BG_2.webp",
-          "BG_3.png": "BG_3.webp",
-          "BG_4.png": "BG_4.webp",
-          "BG_5.png": "BG_5.webp",
-          "BG_6.png": "BG_6.webp",
-          "BG_7.png": "BG_7.webp",
-          "BG_8.png": "BG_8.webp",
-          "BG.png": "BG.webp"
+          "BG_2.png": "bg_2.webp",
+          "BG_3.png": "bg_3.webp",
+          "BG_4.png": "bg_4.webp",
+          "BG_5.png": "bg_5.webp",
+          "BG_6.png": "bg_6.webp",
+          "BG_7.png": "bg_7.webp",
+          "BG_8.png": "bg_8.webp",
+          "BG.png": "bg.webp"
         }
       }
     }
@@ -191,6 +191,32 @@
         }
       },
       "rows": 9
+    }
+  },
+  "runtimeResources": {
+    "nearwin1": {
+      "atlas": "symbol.atlas",
+      "kind": "spine",
+      "skeleton": "nearwin1.json",
+      "textures": {
+        "Symbol.png": "symbol.webp"
+      }
+    },
+    "nearwin2": {
+      "atlas": "symbol.atlas",
+      "kind": "spine",
+      "skeleton": "nearwin2.json",
+      "textures": {
+        "Symbol.png": "symbol.webp"
+      }
+    },
+    "nearwin3": {
+      "atlas": "symbol.atlas",
+      "kind": "spine",
+      "skeleton": "nearwin3.json",
+      "textures": {
+        "Symbol.png": "symbol.webp"
+      }
     }
   },
   "symbolPackages": {

@@ -8,8 +8,7 @@
   package；layout、background、focus、grid geometry、symbols、公开本地轮带和
   award popup 只从该包的 manifest/map 取得。`skin=1|3|4|5`、缺失、重复、`01`
   和未知值显式失败，不保留 alias 或默认值。
-- `assets/game002-s3/reel.manifest.json` 的 Nearwin1/2 是 game002 的显式
-  game002 presentation extension，不伪装成 Crave layout closure。
+- `apps/game002/config/reel-presentation.manifest.json` 只保存 game002 转轮时序和程序资源键；Nearwin1/2 的资源只来自 `assets/crave`，通过 typed runtime-resource API 显式 prepare，未请求的 Nearwin3 不 prepare。
 - live server 固定为 `wss://gameserv.rgstest.slammerstudios.com/`；URL 不接受 `serverUrl`，旧参数也显式失败。
 - URL 必须显式提供 `lines=30`，其它值在 loading 99% 配置解析阶段失败。
 - 首屏遵守 `docs/agent-rules/loading-ui.md`；99% 准备 live session，100% 后创建 framework/Pixi，并复用 session。

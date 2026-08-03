@@ -1,5 +1,4 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import reelManifest from "../../../../apps/game002/config/reel-presentation.manifest.json";
 import { Container } from "pixi.js";
 import { describe, expect, it } from "vitest";
 import {
@@ -10,19 +9,13 @@ import {
   type GridCellEffectResource,
 } from "../../src/reel/index.js";
 import type { RendercoreSpinePlayer } from "../../src/spine/runtime-player.js";
+import { readCraveJson, readCraveText } from "../crave-fixture.js";
 
-const ASSET_ROOT = resolve(__dirname, "../../../../assets/game002-s3");
-const RAW_MANIFEST = JSON.parse(
-  readFileSync(resolve(ASSET_ROOT, "reel.manifest.json"), "utf8"),
-) as unknown;
-const RAW_ATLAS = readFileSync(resolve(ASSET_ROOT, "Symbol.atlas"), "utf8");
+const RAW_MANIFEST = reelManifest;
+const RAW_ATLAS = readCraveText("symbol.atlas");
 const SKELETONS = Object.freeze({
-  "../../../assets/game002-s3/Nearwin1.json": JSON.parse(
-    readFileSync(resolve(ASSET_ROOT, "Nearwin1.json"), "utf8"),
-  ),
-  "../../../assets/game002-s3/Nearwin2.json": JSON.parse(
-    readFileSync(resolve(ASSET_ROOT, "Nearwin2.json"), "utf8"),
-  ),
+  "./nearwin1": readCraveJson("nearwin1.json"),
+  "./nearwin2": readCraveJson("nearwin2.json"),
 });
 
 describe("grid cell effect resources and controller", () => {
@@ -32,10 +25,10 @@ describe("grid cell effect resources and controller", () => {
       manifest,
       skeletonModules: SKELETONS,
       atlasModules: {
-        "../../../assets/game002-s3/Symbol.atlas": RAW_ATLAS,
+        "./symbol.atlas": RAW_ATLAS,
       },
       textureModules: {
-        "../../../assets/game002-s3/Symbol.png": "/Symbol.png",
+        "./symbol.png": "/Symbol.png",
       },
     });
     expect(resources.anticipation).toMatchObject({
@@ -80,14 +73,13 @@ describe("grid cell effect resources and controller", () => {
         manifest,
         skeletonModules: {
           ...SKELETONS,
-          "duplicate/Nearwin1.json":
-            SKELETONS["../../../assets/game002-s3/Nearwin1.json"],
+          "duplicate/nearwin1": SKELETONS["./nearwin1"],
         },
         atlasModules: {
-          "../../../assets/game002-s3/Symbol.atlas": RAW_ATLAS,
+          "./symbol.atlas": RAW_ATLAS,
         },
         textureModules: {
-          "../../../assets/game002-s3/Symbol.png": "/Symbol.png",
+          "./symbol.png": "/Symbol.png",
         },
       }),
     ).toThrow(/found 2/);
@@ -137,11 +129,10 @@ describe("grid cell effect resources and controller", () => {
       manifest: parseReelManifest(rawManifest),
       skeletonModules: SKELETONS,
       atlasModules: {
-        "../../../assets/game002-s3/Symbol.atlas": RAW_ATLAS,
+        "./symbol.atlas": RAW_ATLAS,
       },
       textureModules: {
-        "../../../assets/game002-s3/content-addressed-effect.webp":
-          "/assets/physical-hash.webp",
+        "./content-addressed-effect.webp": "/assets/physical-hash.webp",
       },
     });
 

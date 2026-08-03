@@ -1,0 +1,1470 @@
+{
+  "settings": {
+    "additionalStateDefinitions": [
+      {
+        "id": "winStart",
+        "phase": "once",
+        "playback": "once"
+      },
+      {
+        "id": "winLoop",
+        "phase": "stable",
+        "playback": "loop"
+      },
+      {
+        "id": "collect",
+        "phase": "once",
+        "playback": "once"
+      },
+      {
+        "id": "multStart",
+        "phase": "once",
+        "playback": "once"
+      },
+      {
+        "id": "multIdle",
+        "phase": "stable",
+        "playback": "loop"
+      },
+      {
+        "id": "multEnd",
+        "phase": "once",
+        "playback": "once"
+      },
+      {
+        "id": "change",
+        "phase": "once",
+        "playback": "once"
+      },
+      {
+        "id": "feature1",
+        "phase": "once",
+        "playback": "once"
+      },
+      {
+        "id": "featureChange",
+        "phase": "once",
+        "playback": "once"
+      },
+      {
+        "id": "feature",
+        "phase": "once",
+        "playback": "once"
+      },
+      {
+        "id": "feature2",
+        "phase": "once",
+        "playback": "once"
+      }
+    ],
+    "disabled": {
+      "brightness": 0.72,
+      "kind": "grayscale"
+    },
+    "spinBlur": {
+      "kernelHeight": 21,
+      "kind": "verticalBoxBlur"
+    }
+  },
+  "states": [
+    "spinBlur",
+    "disabled"
+  ],
+  "symbols": {
+    "AF": {
+      "animations": {
+        "appear": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./af.json",
+          "texture": "./symbol.webp"
+        },
+        "change": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Change",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./af.json",
+          "texture": "./symbol.webp"
+        },
+        "dropdown": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./af.json",
+          "texture": "./symbol.webp"
+        },
+        "feature": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./af.json",
+          "texture": "./symbol.webp"
+        },
+        "normal": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./af.json",
+          "texture": "./symbol.webp"
+        },
+        "remove": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "End",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./af.json",
+          "texture": "./symbol.webp"
+        }
+      },
+      "disabled": "./af.disabled.webp",
+      "imageStringNodes": [
+        {
+          "anchor": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "followSlotColor": true,
+          "initialText": "0",
+          "name": "free-spins",
+          "resource": "./wl-wm-multiplier.image-string.manifest.json",
+          "targets": [
+            {
+              "slot": "Mult",
+              "state": "normal"
+            },
+            {
+              "slot": "Mult",
+              "state": "appear"
+            },
+            {
+              "slot": "Mult",
+              "state": "feature"
+            },
+            {
+              "slot": "Mult",
+              "state": "change"
+            }
+          ],
+          "transform": {
+            "scale": 1,
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
+      "normal": "./af.webp",
+      "scale": 1,
+      "spinBlur": "./af.spinblur.webp"
+    },
+    "BN": {
+      "animations": {
+        "normal": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./bn.json",
+          "texture": "./symbol.webp"
+        }
+      },
+      "disabled": "./bn.disabled.webp",
+      "normal": "./bn.webp",
+      "scale": 1,
+      "spinBlur": "./bn.spinblur.webp"
+    },
+    "CM": {
+      "animations": {
+        "appear": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./cm.json",
+          "texture": "./symbol.webp"
+        },
+        "change": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Change",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./cm.json",
+          "texture": "./symbol.webp"
+        },
+        "dropdown": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./cm.json",
+          "texture": "./symbol.webp"
+        },
+        "feature1": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature1",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./cm.json",
+          "texture": "./symbol.webp"
+        },
+        "normal": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./cm.json",
+          "texture": "./symbol.webp"
+        },
+        "remove": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "End",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./cm.json",
+          "texture": "./symbol.webp"
+        }
+      },
+      "disabled": "./cm.disabled.webp",
+      "imageStringNodes": [
+        {
+          "anchor": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "followSlotColor": true,
+          "initialText": "x1",
+          "name": "multiplier",
+          "resource": "./wl-wm-multiplier.image-string.manifest.json",
+          "targets": [
+            {
+              "slot": "Mult",
+              "state": "normal"
+            },
+            {
+              "slot": "Mult",
+              "state": "dropdown"
+            },
+            {
+              "slot": "Mult",
+              "state": "appear"
+            },
+            {
+              "slot": "Mult",
+              "state": "feature1"
+            },
+            {
+              "slot": "Mult",
+              "state": "change"
+            }
+          ],
+          "transform": {
+            "scale": 1,
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
+      "normal": "./cm.webp",
+      "scale": 1,
+      "spinBlur": "./cm.spinblur.webp"
+    },
+    "CN": {
+      "animations": {
+        "appear": {
+          "kind": "activeSpine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          }
+        },
+        "collect": {
+          "kind": "activeSpine",
+          "playback": {
+            "animationName": "Collect",
+            "loop": false,
+            "mode": "animation"
+          }
+        },
+        "dropdown": {
+          "kind": "activeSpine",
+          "playback": {
+            "animationName": "Loop",
+            "loop": true,
+            "mode": "animation"
+          }
+        },
+        "feature1": {
+          "kind": "activeSpine",
+          "playback": {
+            "animationName": "Feature1",
+            "loop": false,
+            "mode": "animation"
+          }
+        },
+        "feature2": {
+          "kind": "activeSpine",
+          "playback": {
+            "animationName": "Feature2",
+            "loop": false,
+            "mode": "animation"
+          }
+        },
+        "featureChange": {
+          "kind": "activeSpine",
+          "playback": {
+            "animationName": "Feature_Change",
+            "loop": false,
+            "mode": "animation"
+          }
+        },
+        "remove": {
+          "kind": "activeSpine",
+          "playback": {
+            "animationName": "End",
+            "loop": false,
+            "mode": "animation"
+          }
+        },
+        "winLoop": {
+          "kind": "activeSpine",
+          "playback": {
+            "animationName": "Win",
+            "loop": true,
+            "mode": "animation"
+          }
+        },
+        "winStart": {
+          "kind": "activeSpine",
+          "playback": {
+            "animationName": "Win_Start",
+            "loop": false,
+            "mode": "animation"
+          }
+        }
+      },
+      "cascadeWinPresentation": {
+        "order": 1,
+        "playback": {
+          "collectState": "collect",
+          "loopState": "winLoop",
+          "mode": "sequentialCollect",
+          "removeState": "remove",
+          "startState": "winStart"
+        },
+        "summary": {
+          "mode": "itemAmount"
+        }
+      },
+      "scale": 1,
+      "valuePresentation": {
+        "defaultValues": [
+          1,
+          2,
+          5,
+          10,
+          25,
+          50,
+          100,
+          250,
+          500,
+          1000
+        ],
+        "reelStates": {
+          "disabled": "./cn.disabled.webp",
+          "normal": {
+            "height": 200,
+            "kind": "transparent",
+            "width": 200
+          },
+          "spinBlur": "./cn.spinblur.webp"
+        },
+        "text": {
+          "tiers": [
+            {
+              "anchor": {
+                "x": 0.5,
+                "y": 0.5
+              },
+              "followSlotColor": true,
+              "resource": "./image-string.manifest.json",
+              "slot": "coin",
+              "transform": {
+                "scale": 1,
+                "x": 0,
+                "y": 0
+              }
+            },
+            {
+              "anchor": {
+                "x": 0.5,
+                "y": 0.5
+              },
+              "followSlotColor": true,
+              "resource": "./image-string.manifest.json",
+              "slot": "coin",
+              "transform": {
+                "scale": 1,
+                "x": 0,
+                "y": 0
+              }
+            },
+            {
+              "anchor": {
+                "x": 0.5,
+                "y": 0.5
+              },
+              "followSlotColor": true,
+              "resource": "./image-string.manifest.json",
+              "slot": "coin",
+              "transform": {
+                "scale": 1,
+                "x": 0,
+                "y": 0
+              }
+            },
+            {
+              "anchor": {
+                "x": 0.5,
+                "y": 0.5
+              },
+              "followSlotColor": true,
+              "resource": "./image-string.manifest.json",
+              "slot": "coin",
+              "transform": {
+                "scale": 1,
+                "x": 0,
+                "y": 0
+              }
+            }
+          ],
+          "type": "image-string"
+        },
+        "tiers": [
+          {
+            "animation": {
+              "atlas": "./symbol.atlas",
+              "kind": "spine",
+              "playback": {
+                "animationName": "Loop",
+                "loop": true,
+                "mode": "animation"
+              },
+              "skeleton": "./cn_1.json",
+              "texture": "./symbol.webp"
+            },
+            "maxExclusive": 10
+          },
+          {
+            "animation": {
+              "atlas": "./symbol.atlas",
+              "kind": "spine",
+              "playback": {
+                "animationName": "Loop",
+                "loop": true,
+                "mode": "animation"
+              },
+              "skeleton": "./cn_2.json",
+              "texture": "./symbol.webp"
+            },
+            "maxExclusive": 100
+          },
+          {
+            "animation": {
+              "atlas": "./symbol.atlas",
+              "kind": "spine",
+              "playback": {
+                "animationName": "Loop",
+                "loop": true,
+                "mode": "animation"
+              },
+              "skeleton": "./cn_3.json",
+              "texture": "./symbol.webp"
+            },
+            "maxExclusive": 1000
+          },
+          {
+            "animation": {
+              "atlas": "./symbol.atlas",
+              "kind": "spine",
+              "playback": {
+                "animationName": "Loop",
+                "loop": true,
+                "mode": "animation"
+              },
+              "skeleton": "./cn_4.json",
+              "texture": "./symbol.webp"
+            }
+          }
+        ]
+      }
+    },
+    "CO": {
+      "animations": {
+        "appear": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./co.json",
+          "texture": "./symbol.webp"
+        },
+        "dropdown": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Loop",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./co.json",
+          "texture": "./symbol.webp"
+        },
+        "feature": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./co.json",
+          "texture": "./symbol.webp"
+        },
+        "normal": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Loop",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./co.json",
+          "texture": "./symbol.webp"
+        },
+        "remove": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "End",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./co.json",
+          "texture": "./symbol.webp"
+        }
+      },
+      "disabled": "./co.disabled.webp",
+      "normal": "./co.webp",
+      "scale": 1,
+      "spinBlur": "./co.spinblur.webp"
+    },
+    "H1": {
+      "animations": {
+        "appear": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./h1.json",
+          "texture": "./symbol.webp"
+        },
+        "dropdown": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./h1.json",
+          "texture": "./symbol.webp"
+        },
+        "feature1": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature1",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./h1.json",
+          "texture": "./symbol.webp"
+        },
+        "feature2": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature2",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./h1.json",
+          "texture": "./symbol.webp"
+        },
+        "normal": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./h1.json",
+          "texture": "./symbol.webp"
+        },
+        "remove": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "End",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./h1.json",
+          "texture": "./symbol.webp"
+        },
+        "win": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Win",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./h1.json",
+          "texture": "./symbol.webp"
+        }
+      },
+      "cascadeWinPresentation": {
+        "order": 0,
+        "playback": {
+          "mode": "group",
+          "removeState": "remove",
+          "winState": "win"
+        },
+        "summary": {
+          "mode": "groupAmount"
+        }
+      },
+      "disabled": "./h1.disabled.webp",
+      "normal": "./h1.webp",
+      "scale": 1,
+      "spinBlur": "./h1.spinblur.webp"
+    },
+    "H2": {
+      "animations": {
+        "appear": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./h2.json",
+          "texture": "./symbol.webp"
+        },
+        "dropdown": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./h2.json",
+          "texture": "./symbol.webp"
+        },
+        "feature1": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature1",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./h2.json",
+          "texture": "./symbol.webp"
+        },
+        "feature2": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature2",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./h2.json",
+          "texture": "./symbol.webp"
+        },
+        "normal": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./h2.json",
+          "texture": "./symbol.webp"
+        },
+        "remove": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "End",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./h2.json",
+          "texture": "./symbol.webp"
+        },
+        "win": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Win",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./h2.json",
+          "texture": "./symbol.webp"
+        }
+      },
+      "cascadeWinPresentation": {
+        "order": 0,
+        "playback": {
+          "mode": "group",
+          "removeState": "remove",
+          "winState": "win"
+        },
+        "summary": {
+          "mode": "groupAmount"
+        }
+      },
+      "disabled": "./h2.disabled.webp",
+      "normal": "./h2.webp",
+      "scale": 1,
+      "spinBlur": "./h2.spinblur.webp"
+    },
+    "L1": {
+      "animations": {
+        "appear": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./l1.json",
+          "texture": "./symbol.webp"
+        },
+        "dropdown": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./l1.json",
+          "texture": "./symbol.webp"
+        },
+        "feature1": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature1",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./l1.json",
+          "texture": "./symbol.webp"
+        },
+        "feature2": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature2",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./l1.json",
+          "texture": "./symbol.webp"
+        },
+        "normal": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./l1.json",
+          "texture": "./symbol.webp"
+        },
+        "remove": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "End",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./l1.json",
+          "texture": "./symbol.webp"
+        },
+        "win": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Win",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./l1.json",
+          "texture": "./symbol.webp"
+        }
+      },
+      "cascadeWinPresentation": {
+        "order": 0,
+        "playback": {
+          "mode": "group",
+          "removeState": "remove",
+          "winState": "win"
+        },
+        "summary": {
+          "mode": "groupAmount"
+        }
+      },
+      "disabled": "./l1.disabled.webp",
+      "normal": "./l1.webp",
+      "scale": 1,
+      "spinBlur": "./l1.spinblur.webp"
+    },
+    "L2": {
+      "animations": {
+        "appear": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./l2.json",
+          "texture": "./symbol.webp"
+        },
+        "dropdown": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./l2.json",
+          "texture": "./symbol.webp"
+        },
+        "feature1": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature1",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./l2.json",
+          "texture": "./symbol.webp"
+        },
+        "feature2": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature2",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./l2.json",
+          "texture": "./symbol.webp"
+        },
+        "normal": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./l2.json",
+          "texture": "./symbol.webp"
+        },
+        "remove": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "End",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./l2.json",
+          "texture": "./symbol.webp"
+        },
+        "win": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Win",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./l2.json",
+          "texture": "./symbol.webp"
+        }
+      },
+      "cascadeWinPresentation": {
+        "order": 0,
+        "playback": {
+          "mode": "group",
+          "removeState": "remove",
+          "winState": "win"
+        },
+        "summary": {
+          "mode": "groupAmount"
+        }
+      },
+      "disabled": "./l2.disabled.webp",
+      "normal": "./l2.webp",
+      "scale": 1,
+      "spinBlur": "./l2.spinblur.webp"
+    },
+    "L3": {
+      "animations": {
+        "appear": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./l3.json",
+          "texture": "./symbol.webp"
+        },
+        "dropdown": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./l3.json",
+          "texture": "./symbol.webp"
+        },
+        "feature1": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature1",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./l3.json",
+          "texture": "./symbol.webp"
+        },
+        "feature2": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature2",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./l3.json",
+          "texture": "./symbol.webp"
+        },
+        "normal": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./l3.json",
+          "texture": "./symbol.webp"
+        },
+        "remove": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "End",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./l3.json",
+          "texture": "./symbol.webp"
+        },
+        "win": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Win",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./l3.json",
+          "texture": "./symbol.webp"
+        }
+      },
+      "cascadeWinPresentation": {
+        "order": 0,
+        "playback": {
+          "mode": "group",
+          "removeState": "remove",
+          "winState": "win"
+        },
+        "summary": {
+          "mode": "groupAmount"
+        }
+      },
+      "disabled": "./l3.disabled.webp",
+      "normal": "./l3.webp",
+      "scale": 1,
+      "spinBlur": "./l3.spinblur.webp"
+    },
+    "L4": {
+      "animations": {
+        "appear": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./l4.json",
+          "texture": "./symbol.webp"
+        },
+        "dropdown": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./l4.json",
+          "texture": "./symbol.webp"
+        },
+        "feature1": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature1",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./l4.json",
+          "texture": "./symbol.webp"
+        },
+        "feature2": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature2",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./l4.json",
+          "texture": "./symbol.webp"
+        },
+        "normal": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./l4.json",
+          "texture": "./symbol.webp"
+        },
+        "remove": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "End",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./l4.json",
+          "texture": "./symbol.webp"
+        },
+        "win": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Win",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./l4.json",
+          "texture": "./symbol.webp"
+        }
+      },
+      "cascadeWinPresentation": {
+        "order": 0,
+        "playback": {
+          "mode": "group",
+          "removeState": "remove",
+          "winState": "win"
+        },
+        "summary": {
+          "mode": "groupAmount"
+        }
+      },
+      "disabled": "./l4.disabled.webp",
+      "normal": "./l4.webp",
+      "scale": 1,
+      "spinBlur": "./l4.spinblur.webp"
+    },
+    "WL": {
+      "animations": {
+        "appear": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./wl.json",
+          "texture": "./symbol.webp"
+        },
+        "dropdown": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./wl.json",
+          "texture": "./symbol.webp"
+        },
+        "feature1": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature1",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./wl.json",
+          "texture": "./symbol.webp"
+        },
+        "feature2": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature2",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./wl.json",
+          "texture": "./symbol.webp"
+        },
+        "normal": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./wl.json",
+          "texture": "./symbol.webp"
+        },
+        "remove": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "End",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./wl.json",
+          "texture": "./symbol.webp"
+        },
+        "win": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Win",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./wl.json",
+          "texture": "./symbol.webp"
+        }
+      },
+      "cascadeWinPresentation": {
+        "order": 0,
+        "playback": {
+          "mode": "group",
+          "removeState": "remove",
+          "winState": "win"
+        },
+        "summary": {
+          "mode": "groupAmount"
+        }
+      },
+      "disabled": "./wl.disabled.webp",
+      "imageStringNodes": [
+        {
+          "anchor": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "followSlotColor": true,
+          "initialText": "x1",
+          "name": "multiplier",
+          "resource": "./wl-wm-multiplier.image-string.manifest.json",
+          "targets": [
+            {
+              "slot": "Mult",
+              "state": "normal"
+            },
+            {
+              "slot": "Mult",
+              "state": "dropdown"
+            },
+            {
+              "slot": "Mult",
+              "state": "appear"
+            },
+            {
+              "slot": "Mult",
+              "state": "win"
+            },
+            {
+              "slot": "Mult",
+              "state": "feature1"
+            },
+            {
+              "slot": "Mult",
+              "state": "feature2"
+            }
+          ],
+          "transform": {
+            "scale": 1,
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
+      "normal": "./wl.webp",
+      "renderPriority": 1,
+      "scale": 1,
+      "spinBlur": "./wl.spinblur.webp"
+    },
+    "WM": {
+      "animations": {
+        "appear": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./wm.json",
+          "texture": "./symbol.webp"
+        },
+        "change": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Change",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./wm.json",
+          "texture": "./symbol.webp"
+        },
+        "dropdown": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./wm.json",
+          "texture": "./symbol.webp"
+        },
+        "multEnd": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Mult_End",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./wm.json",
+          "texture": "./symbol.webp"
+        },
+        "multIdle": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Mult_Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./wm.json",
+          "texture": "./symbol.webp"
+        },
+        "multStart": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Mult_Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./wm.json",
+          "texture": "./symbol.webp"
+        },
+        "normal": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./wm.json",
+          "texture": "./symbol.webp"
+        },
+        "remove": {
+          "atlas": "./symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "End",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./wm.json",
+          "texture": "./symbol.webp"
+        }
+      },
+      "disabled": "./wm.disabled.webp",
+      "imageStringNodes": [
+        {
+          "anchor": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "followSlotColor": true,
+          "initialText": "x1",
+          "name": "multiplier",
+          "resource": "./wl-wm-multiplier.image-string.manifest.json",
+          "targets": [
+            {
+              "slot": "Mult",
+              "state": "normal"
+            },
+            {
+              "slot": "Mult",
+              "state": "dropdown"
+            },
+            {
+              "slot": "Mult",
+              "state": "appear"
+            },
+            {
+              "slot": "Mult",
+              "state": "multStart"
+            },
+            {
+              "slot": "Mult",
+              "state": "multIdle"
+            },
+            {
+              "slot": "Mult",
+              "state": "multEnd"
+            },
+            {
+              "slot": "Mult",
+              "state": "change"
+            }
+          ],
+          "transform": {
+            "scale": 1,
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
+      "normal": "./wm.webp",
+      "scale": 1,
+      "spinBlur": "./wm.spinblur.webp"
+    }
+  },
+  "version": 1
+}

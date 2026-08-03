@@ -8,7 +8,7 @@ import {
   readGame002CravePackageFiles,
 } from "../src/loading-resources.js";
 import {
-  GAME002_REEL_PRESENTATION_EXTENSION,
+  GAME002_REEL_MANIFEST,
   prepareGame002SkinConfig,
 } from "../src/skin-config.js";
 
@@ -94,12 +94,7 @@ describe("game002 Crave skin", () => {
         !resource.id.startsWith(GAME002_CRAVE_RESOURCE_ID_PREFIX) &&
         resource.id !== "game002-runtime-module",
     );
-    expect(extensions.map((resource) => resource.id).sort()).toEqual([
-      "game002-reel-effect-spine-skeletons:Nearwin1.json",
-      "game002-reel-effect-spine-skeletons:Nearwin2.json",
-      "game002-symbol-spine-atlas",
-      "game002-symbol-spine-texture",
-    ]);
+    expect(extensions).toEqual([]);
 
     const loaded = new Map<string, unknown>(
       await Promise.all(
@@ -176,9 +171,7 @@ describe("game002 Crave skin", () => {
         ),
       ).toEqual(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]);
 
-      expect(skin.reelManifest).toEqual(
-        GAME002_REEL_PRESENTATION_EXTENSION.reelManifest,
-      );
+      expect(skin.reelManifest).toEqual(GAME002_REEL_MANIFEST);
       expect(skin.displaySymbols).toContain("WM");
       expect(skin.displaySymbols).toContain("WL");
       expect(skin.displaySymbols).toContain("CM");

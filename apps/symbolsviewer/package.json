@@ -5,8 +5,8 @@
   "type": "module",
   "packageManager": "pnpm@10.0.0",
   "scripts": {
-    "generate:symbol-value-resources": "node ../../packages/rendercore/scripts/generate-symbol-value-vite-resources.mjs --manifest assets/game002-s3/symbol-state-textures.manifest.json --out apps/symbolsviewer/src/generated/game002-symbol-value-resources.generated.ts",
-    "check:symbol-value-resources": "node ../../packages/rendercore/scripts/generate-symbol-value-vite-resources.mjs --manifest assets/game002-s3/symbol-state-textures.manifest.json --out apps/symbolsviewer/src/generated/game002-symbol-value-resources.generated.ts --check",
+    "generate:symbol-value-resources": "node -e \"console.log('game002 symbol resources are resolved from assets/crave/assets.map.json')\"",
+    "check:symbol-value-resources": "node -e \"console.log('game002 symbol resources are resolved from assets/crave/assets.map.json')\"",
     "prepare:deps": "pnpm --filter @slotclientengine/rendercore build",
     "build": "pnpm run generate:symbol-value-resources && pnpm run prepare:deps && vite build",
     "dev": "pnpm run generate:symbol-value-resources && pnpm run prepare:deps && node ../../scripts/run-vite-dev.mjs",

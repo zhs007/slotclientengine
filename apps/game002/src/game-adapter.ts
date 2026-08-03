@@ -52,7 +52,6 @@ import {
   createGame002SceneLayoutPlayers,
   type Game002BackgroundPlayer,
 } from "./scene-layout-skin.js";
-import { createGame002WinAmountLayout } from "./win-amount-config.js";
 import { formatServerUsdAmount } from "./money.js";
 import { GAME002_SYMBOL_WIN_CAROUSEL_OPTIONS } from "./win-symbol-carousel-config.js";
 import { GAME002_CN_VALUE_SYMBOL } from "./cn-value-sequence.js";
@@ -86,6 +85,22 @@ import {
 } from "./freegame-playback.js";
 
 export type Game002TickerSnapshot = { readonly deltaMS: number };
+
+function createGame002WinAmountLayout(
+  layout: ReturnType<typeof createGame002Layout>,
+): import("@slotclientengine/rendercore/win-amount").WinAmountAnimationLayout {
+  return Object.freeze({
+    minorTextPosition: Object.freeze({
+      x: layout.boardFrame.x + layout.boardFrame.width / 2,
+      y: layout.boardFrame.y + layout.boardFrame.height - 28,
+    }),
+    majorTextPosition: Object.freeze({
+      x: layout.boardFrame.x + layout.boardFrame.width / 2,
+      y: layout.boardFrame.y + layout.boardFrame.height / 2,
+    }),
+    tierStageRect: layout.backgroundFrame,
+  });
+}
 export type Game002TickerListener = (ticker: Game002TickerSnapshot) => void;
 
 export interface Game002PixiApplication {

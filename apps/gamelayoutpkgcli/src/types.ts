@@ -66,6 +66,14 @@ export type AssetGroupRecord =
     }
   | {
       readonly id: string;
+      readonly kind: "runtime-resource";
+      readonly resourceKey: string;
+      readonly resourceKind: string;
+      readonly requiredAssets: readonly string[];
+      readonly incrementalAssets: readonly string[];
+    }
+  | {
+      readonly id: string;
       readonly kind: "mode";
       readonly modeId: string;
       readonly initial: boolean;

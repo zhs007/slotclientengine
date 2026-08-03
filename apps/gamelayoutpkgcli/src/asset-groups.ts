@@ -49,10 +49,7 @@ export function createSceneLayoutAssetGroups(options: {
   const sharedNodes = options.manifest.nodes.filter(
     (node) => !allBackgroundIds.has(node.id),
   );
-  const sharedRequired = sortUnique([
-    ...nodeClosure(sharedNodes, options.files),
-    ...runtimeResourceClosure(options.manifest, options.files),
-  ]);
+  const sharedRequired = nodeClosure(sharedNodes, options.files);
   const provisional: ProvisionalAssetGroup[] = [
     {
       id: "shared",
@@ -60,6 +57,16 @@ export function createSceneLayoutAssetGroups(options: {
       requiredAssets: sharedRequired,
     },
   ];
+  for (const [resourceKey, resource] of Object.entries(
+    options.manifest.runtimeResources ?? {},
+  ))
+    provisional.push({
+      id: `runtime-resource:${resourceKey}`,
+      kind: "runtime-resource",
+      resourceKey,
+      resourceKind: resource.kind,
+      requiredAssets: runtimeResourceClosure(resource, options.files),
+    });
   for (const mode of gameModes.modes) {
     const nodeIds = new Set(Object.values(mode.backgroundNodes ?? {}));
     const nodes = options.manifest.nodes.filter(
@@ -202,6 +209,8 @@ function finalizeGroup(
   );
   switch (group.kind) {
     case "shared":
+      return { ...group, requiredAssets, incrementalAssets };
+    case "runtime-resource":
       return { ...group, requiredAssets, incrementalAssets };
     case "mode":
       return { ...group, requiredAssets, incrementalAssets };
@@ -374,30 +383,28 @@ function nodeClosure(
 }
 
 function runtimeResourceClosure(
-  manifest: SceneLayoutManifestV1,
+  resource: NonNullable<SceneLayoutManifestV1["runtimeResources"]>[string],
   files: ReadonlyMap<string, Uint8Array>,
 ): readonly string[] {
   const keys = new Set<string>();
-  for (const resource of Object.values(manifest.runtimeResources ?? {})) {
-    if (resource.kind === "image" || resource.kind === "video") {
-      keys.add(resource.path);
-    } else if (resource.kind === "image-string") {
-      keys.add(resource.manifest);
-      const nested = parseImageStringManifest(
-        parseRequiredJson(files, resource.manifest),
-      );
-      for (const key of collectImageStringAssetPaths(nested)) keys.add(key);
-    } else if (resource.kind === "vni") {
-      keys.add(resource.project);
-      const project = assertVNIProject(
-        parseRequiredJson(files, resource.project),
-      );
-      for (const asset of project.assets) keys.add(asset.path);
-    } else {
-      keys.add(resource.skeleton);
-      keys.add(resource.atlas);
-      for (const key of Object.values(resource.textures)) keys.add(key);
-    }
+  if (resource.kind === "image" || resource.kind === "video") {
+    keys.add(resource.path);
+  } else if (resource.kind === "image-string") {
+    keys.add(resource.manifest);
+    const nested = parseImageStringManifest(
+      parseRequiredJson(files, resource.manifest),
+    );
+    for (const key of collectImageStringAssetPaths(nested)) keys.add(key);
+  } else if (resource.kind === "vni") {
+    keys.add(resource.project);
+    const project = assertVNIProject(
+      parseRequiredJson(files, resource.project),
+    );
+    for (const asset of project.assets) keys.add(asset.path);
+  } else {
+    keys.add(resource.skeleton);
+    keys.add(resource.atlas);
+    for (const key of Object.values(resource.textures)) keys.add(key);
   }
   return sortUnique([...keys]);
 }
@@ -430,15 +437,17 @@ function validateGroup(
   const extras =
     kind === "shared"
       ? []
-      : kind === "mode"
-        ? ["modeId", "initial"]
-        : kind === "transition"
-          ? ["ownerMode", "from", "to"]
-          : kind === "symbols"
-            ? ["packageId", "usedByModes"]
-            : kind === "award-celebration"
-              ? ["popupId", "usedByModes"]
-              : null;
+      : kind === "runtime-resource"
+        ? ["resourceKey", "resourceKind"]
+        : kind === "mode"
+          ? ["modeId", "initial"]
+          : kind === "transition"
+            ? ["ownerMode", "from", "to"]
+            : kind === "symbols"
+              ? ["packageId", "usedByModes"]
+              : kind === "award-celebration"
+                ? ["popupId", "usedByModes"]
+                : null;
   if (!extras) throw new Error(`groups[${index}].kind 无效。`);
   exactKeys(group, [...common, ...extras], `groups[${index}]`);
   const id = nonEmptyString(group.id, `groups[${index}].id`);
@@ -456,6 +465,9 @@ function validateGroup(
     throw new Error(`${id}.incrementalAssets 不是 required - initial。`);
   if (kind === "shared") {
     if (id !== "shared") throw new Error("shared group id 必须是 shared。");
+  } else if (kind === "runtime-resource") {
+    nonEmptyString(group.resourceKey, `${id}.resourceKey`);
+    nonEmptyString(group.resourceKind, `${id}.resourceKind`);
   } else if (kind === "mode") {
     nonEmptyString(group.modeId, `${id}.modeId`);
     if (typeof group.initial !== "boolean")

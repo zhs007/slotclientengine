@@ -2,6 +2,7 @@ import {
   assertCanonicalPackagePath,
   assertNoPackagePathCollisions,
   resolvePackagePath,
+  sha256Hex,
 } from "@slotclientengine/browserartifactio";
 import {
   EDITOR_ASSETS_MAP_PATH,
@@ -37,6 +38,7 @@ import {
   parsePopupManifest,
   type PopupPackageResource,
 } from "../popup/index.js";
+import { validateOfficialSpineResource } from "../spine/runtime-player.js";
 import { SceneLayoutError } from "./errors.js";
 import {
   collectSceneLayoutAssetPaths,
@@ -46,6 +48,8 @@ import { createSceneLayoutResource } from "./resource.js";
 import type {
   SceneLayoutManifestV1,
   SceneLayoutPackageResource,
+  SceneLayoutRuntimeResource,
+  SceneLayoutRuntimeResourceSpec,
 } from "./types.js";
 
 const ROOT_MANIFEST = "layout.manifest.json";
@@ -53,6 +57,7 @@ const ROOT_MANIFEST = "layout.manifest.json";
 export function collectSceneLayoutPackagePaths(options: {
   readonly manifest: SceneLayoutManifestV1;
   readonly files: ReadonlyMap<string, Uint8Array>;
+  readonly allowExtraFiles?: boolean;
 }): readonly string[] {
   const manifest = parseSceneLayoutManifest(options.manifest);
   const references = collectSceneLayoutAssetPaths(manifest);
@@ -191,7 +196,7 @@ export function collectSceneLayoutPackagePaths(options: {
   const sortedExpected = [...expected].sort(comparePaths);
   assertNoPackagePathCollisions(sortedExpected);
   const sortedActual = actual.sort(comparePaths);
-  if (!samePaths(sortedExpected, sortedActual)) {
+  if (!options.allowExtraFiles && !samePaths(sortedExpected, sortedActual)) {
     throw new SceneLayoutError(
       `Scene layout package entries must exactly match the transitive closure（传递资源闭包必须精确一致）; expected=${sortedExpected.join(",")}, actual=${sortedActual.join(",")}.`,
     );
@@ -204,6 +209,10 @@ export async function createSceneLayoutPackageResource(options: {
   readonly files: ReadonlyMap<string, Uint8Array>;
   readonly decodeImage?: DecodeImageStringImage;
   readonly loadSymbolTextures?: boolean;
+  readonly lazyRuntimeResources?: boolean;
+  readonly loadRuntimeResourceBytes?: (
+    logicalKey: string,
+  ) => Promise<Uint8Array>;
 }): Promise<SceneLayoutPackageResource> {
   const manifestValue =
     options.manifest ??
@@ -212,12 +221,23 @@ export async function createSceneLayoutPackageResource(options: {
   const files = await resolveSceneLayoutPackageFiles({
     manifest,
     files: options.files,
+    allowMissingRuntimeResources:
+      options.lazyRuntimeResources === true &&
+      options.loadRuntimeResourceBytes !== undefined,
   });
+  const loadRuntimeResourceBytes = options.loadRuntimeResourceBytes
+    ? createVerifiedMappedLogicalLoader(
+        options.files,
+        options.loadRuntimeResourceBytes,
+      )
+    : undefined;
   return createSceneLayoutPackageResourceFromResolvedFiles({
     manifest,
     files,
     ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
     loadSymbolTextures: options.loadSymbolTextures,
+    lazyRuntimeResources: options.lazyRuntimeResources,
+    ...(loadRuntimeResourceBytes ? { loadRuntimeResourceBytes } : {}),
   });
 }
 
@@ -226,13 +246,18 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
   readonly files: ReadonlyMap<string, Uint8Array>;
   readonly decodeImage?: DecodeImageStringImage;
   readonly loadSymbolTextures?: boolean;
+  readonly lazyRuntimeResources?: boolean;
+  readonly loadRuntimeResourceBytes?: (
+    logicalKey: string,
+  ) => Promise<Uint8Array>;
 }): Promise<SceneLayoutPackageResource> {
   const sourceManifestValue =
     options.manifest ??
     parseJsonBytes(requireBytes(options.files, ROOT_MANIFEST), ROOT_MANIFEST);
   const manifest = parseSceneLayoutManifest(sourceManifestValue);
   const files = options.files;
-  collectSceneLayoutPackagePaths({ manifest, files });
+  if (!options.lazyRuntimeResources)
+    collectSceneLayoutPackagePaths({ manifest, files });
   const mapped = isMappedSceneLayoutManifest(manifest);
 
   const imageStrings: Record<string, ImageStringResource> = {};
@@ -273,7 +298,9 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
               : {}),
           });
     }
-    for (const resource of Object.values(manifest.runtimeResources ?? {})) {
+    for (const resource of options.lazyRuntimeResources
+      ? []
+      : Object.values(manifest.runtimeResources ?? {})) {
       if (resource.kind !== "image-string" || imageStrings[resource.manifest])
         continue;
       const nestedFiles = extractPrefixedFiles(
@@ -408,7 +435,9 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
         );
       }
     }
-    for (const resource of Object.values(manifest.runtimeResources ?? {})) {
+    for (const resource of options.lazyRuntimeResources
+      ? []
+      : Object.values(manifest.runtimeResources ?? {})) {
       if (resource.kind === "image-string") continue;
       if (resource.kind === "vni") {
         if (!vniResources[resource.project]) {
@@ -508,8 +537,11 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
       }
     }
 
+    const layoutManifest = options.lazyRuntimeResources
+      ? parseSceneLayoutManifest({ ...manifest, runtimeResources: undefined })
+      : manifest;
     const layout = createSceneLayoutResource({
-      manifest,
+      manifest: layoutManifest,
       imageModules,
       skeletonModules,
       atlasModules,
@@ -519,6 +551,12 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
       vniResources,
       ownedObjectUrls: objectUrls,
     });
+    const runtimeResources: Record<string, SceneLayoutRuntimeResource> = {
+      ...layout.runtimeResources,
+    };
+    const runtimeLoads = new Map<string, Promise<SceneLayoutRuntimeResource>>();
+    const lazyFiles = new Map(files);
+    const lazyImageStrings: ImageStringResource[] = [];
     let destroyed = false;
     return Object.freeze({
       manifest,
@@ -527,7 +565,84 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
       symbolPackage,
       symbolPackages: Object.freeze({ ...symbolPackages }),
       popupPackages: Object.freeze({ ...popupPackages }),
-      runtimeResources: layout.runtimeResources,
+      runtimeResources,
+      getLoadedRuntimeResource<Kind extends SceneLayoutRuntimeResource["kind"]>(
+        key: string,
+        kind: Kind,
+      ) {
+        const resource = runtimeResources[key];
+        if (!resource) return null;
+        assertRuntimeResourceKind(key, resource, kind);
+        return resource as Extract<
+          SceneLayoutRuntimeResource,
+          { readonly kind: Kind }
+        >;
+      },
+      async loadRuntimeResource<
+        Kind extends SceneLayoutRuntimeResource["kind"],
+      >(key: string, kind: Kind) {
+        if (destroyed)
+          throw new SceneLayoutError(
+            "Scene layout package resource was destroyed.",
+          );
+        const loaded = runtimeResources[key];
+        if (loaded) {
+          assertRuntimeResourceKind(key, loaded, kind);
+          return loaded as Extract<
+            SceneLayoutRuntimeResource,
+            { readonly kind: Kind }
+          >;
+        }
+        const spec = manifest.runtimeResources?.[key];
+        if (!spec)
+          throw new SceneLayoutError(
+            `Scene layout runtime resource "${key}" was not found.`,
+          );
+        if (spec.kind !== kind)
+          throw new SceneLayoutError(
+            `Scene layout runtime resource "${key}" must be ${kind}; actual ${spec.kind}.`,
+          );
+        let pending = runtimeLoads.get(key);
+        if (!pending) {
+          const pendingObjectUrls: string[] = [];
+          pending = prepareLazyRuntimeResource({
+            key,
+            spec,
+            files,
+            lazyFiles,
+            loadRuntimeResourceBytes: options.loadRuntimeResourceBytes,
+            mapped,
+            objectUrls: pendingObjectUrls,
+            lazyImageStrings,
+            ...(options.decodeImage
+              ? { decodeImage: options.decodeImage }
+              : {}),
+          }).then(
+            (resource) => {
+              if (destroyed) {
+                for (const url of pendingObjectUrls) URL.revokeObjectURL(url);
+                if (resource.kind === "image-string")
+                  void resource.resource.destroy();
+                throw new SceneLayoutError(
+                  "Scene layout package resource was destroyed during runtime resource loading.",
+                );
+              }
+              objectUrls.push(...pendingObjectUrls);
+              runtimeResources[key] = resource;
+              return resource;
+            },
+            (error: unknown) => {
+              for (const url of pendingObjectUrls) URL.revokeObjectURL(url);
+              throw error;
+            },
+          );
+          runtimeLoads.set(key, pending);
+          void pending.catch(() => runtimeLoads.delete(key));
+        }
+        return pending as Promise<
+          Extract<SceneLayoutRuntimeResource, { readonly kind: Kind }>
+        >;
+      },
       destroy(): void {
         if (destroyed) return;
         destroyed = true;
@@ -536,6 +651,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
         for (const resource of Object.values(symbolPackages))
           resource.destroy();
         for (const popup of Object.values(popupPackages)) void popup.destroy();
+        for (const resource of lazyImageStrings) void resource.destroy();
       },
     });
   } catch (error) {
@@ -550,6 +666,142 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
       ? error
       : new SceneLayoutError(formatError(error));
   }
+}
+
+function assertRuntimeResourceKind<
+  Kind extends SceneLayoutRuntimeResource["kind"],
+>(key: string, resource: SceneLayoutRuntimeResource, kind: Kind): void {
+  if (resource.kind !== kind)
+    throw new SceneLayoutError(
+      `Scene layout runtime resource "${key}" must be ${kind}; actual ${resource.kind}.`,
+    );
+}
+
+async function prepareLazyRuntimeResource(options: {
+  readonly key: string;
+  readonly spec: SceneLayoutRuntimeResourceSpec;
+  readonly files: ReadonlyMap<string, Uint8Array>;
+  readonly lazyFiles: Map<string, Uint8Array>;
+  readonly loadRuntimeResourceBytes?: (
+    logicalKey: string,
+  ) => Promise<Uint8Array>;
+  readonly mapped: boolean;
+  readonly objectUrls: string[];
+  readonly lazyImageStrings: ImageStringResource[];
+  readonly decodeImage?: DecodeImageStringImage;
+}): Promise<SceneLayoutRuntimeResource> {
+  const { key, spec, files, mapped, objectUrls } = options;
+  const requireLazyBytes = async (path: string): Promise<Uint8Array> => {
+    const existing = options.lazyFiles.get(path);
+    if (existing) return existing;
+    if (!options.loadRuntimeResourceBytes)
+      throw new SceneLayoutError(`Missing package file: ${path}.`);
+    const loaded = await options.loadRuntimeResourceBytes(path);
+    options.lazyFiles.set(path, loaded.slice());
+    return loaded;
+  };
+  if (spec.kind === "image")
+    return Object.freeze({
+      kind: "image",
+      url: createObjectUrl(
+        await requireLazyBytes(spec.path),
+        spec.path,
+        objectUrls,
+      ),
+      size: spec.size,
+    });
+  if (spec.kind === "video") {
+    const bytes = await requireLazyBytes(spec.path);
+    if (
+      bytes.byteLength < 12 ||
+      String.fromCharCode(...bytes.slice(4, 8)) !== "ftyp"
+    )
+      throw new SceneLayoutError(
+        `Scene runtime video is not an ISO MP4: ${spec.path}.`,
+      );
+    return Object.freeze({
+      kind: "video",
+      url: createObjectUrl(bytes, spec.path, objectUrls),
+      mimeType: "video/mp4",
+    });
+  }
+  if (spec.kind === "spine") {
+    const skeleton = parseJsonBytes(
+      await requireLazyBytes(spec.skeleton),
+      spec.skeleton,
+    );
+    const atlasText = decodeUtf8(
+      await requireLazyBytes(spec.atlas),
+      spec.atlas,
+    );
+    const textureUrls: Record<string, string> = {};
+    for (const [page, path] of Object.entries(spec.textures))
+      textureUrls[page] = createObjectUrl(
+        await requireLazyBytes(path),
+        path,
+        objectUrls,
+      );
+    try {
+      validateOfficialSpineResource({
+        resource: { skeleton, atlasText, textureUrls },
+        requiredAnimations: [],
+      });
+    } catch (error) {
+      throw new SceneLayoutError(
+        `Scene layout runtime Spine "${key}" is invalid: ${formatError(error)}`,
+      );
+    }
+    return Object.freeze({
+      kind: "spine",
+      skeleton,
+      atlasText,
+      textureUrls: Object.freeze(textureUrls),
+    });
+  }
+  if (spec.kind === "vni") {
+    const project = parseRuntimeVniProject(
+      await requireLazyBytes(spec.project),
+      spec.project,
+    );
+    const assetUrls: Record<string, string> = {};
+    for (const asset of project.assets) {
+      const path = mapped
+        ? asset.path
+        : resolvePackagePath(spec.project, asset.path);
+      assetUrls[asset.path] = createObjectUrl(
+        await requireLazyBytes(path),
+        path,
+        objectUrls,
+      );
+    }
+    return Object.freeze({
+      kind: "vni",
+      project,
+      assetUrls: resolveProjectAssetUrls(project, assetUrls),
+    });
+  }
+  const imageStringManifestBytes = await requireLazyBytes(spec.manifest);
+  const imageStringManifestValue = parseJsonBytes(
+    imageStringManifestBytes,
+    spec.manifest,
+  );
+  if (mapped) {
+    const nested = parseImageStringManifest(imageStringManifestValue);
+    for (const path of collectImageStringAssetPaths(nested))
+      await requireLazyBytes(path);
+  }
+  const resource = mapped
+    ? await createImageStringResourceFromResolvedFiles({
+        manifest: imageStringManifestValue,
+        files: mappedImageStringFiles(options.lazyFiles, spec.manifest),
+        ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
+      })
+    : await createImageStringResourceFromFiles({
+        files: extractPrefixedFiles(files, directoryOf(spec.manifest)),
+        ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
+      });
+  options.lazyImageStrings.push(resource);
+  return Object.freeze({ kind: "image-string", resource });
 }
 
 function parseRuntimeVniProject(
@@ -846,6 +1098,7 @@ function symbolBindings(
 export async function resolveSceneLayoutPackageFiles(options: {
   readonly manifest: unknown;
   readonly files: ReadonlyMap<string, Uint8Array>;
+  readonly allowMissingRuntimeResources?: boolean;
 }): Promise<ReadonlyMap<string, Uint8Array>> {
   const manifest = parseSceneLayoutManifest(options.manifest);
   const mapped = isMappedSceneLayoutManifest(manifest);
@@ -860,16 +1113,78 @@ export async function resolveSceneLayoutPackageFiles(options: {
   const map = decodeEditorAssetsMap(
     requireBytes(options.files, EDITOR_ASSETS_MAP_PATH),
   );
-  const resolved = resolveEditorAssetsMapPackage({
-    map,
-    files: options.files,
-  });
   const virtual = new Map<string, Uint8Array>([
     [ROOT_MANIFEST, requireBytes(options.files, ROOT_MANIFEST).slice()],
   ]);
-  for (const [key, asset] of resolved) virtual.set(key, asset.bytes.slice());
-  collectSceneLayoutPackagePaths({ manifest, files: virtual });
+  if (options.allowMissingRuntimeResources) {
+    for (const [key, entry] of Object.entries(map.files)) {
+      const bytes = options.files.get(entry.path);
+      if (!bytes) continue;
+      if (
+        bytes.byteLength !== entry.byteLength ||
+        (await sha256Hex(bytes)) !== entry.sha256
+      )
+        throw new SceneLayoutError(
+          `Mapped scene layout asset "${key}" failed hash/size validation.`,
+        );
+      virtual.set(key, bytes.slice());
+    }
+    const eagerManifest = parseSceneLayoutManifest({
+      ...manifest,
+      runtimeResources: undefined,
+    });
+    const eagerPaths = collectSceneLayoutPackagePaths({
+      manifest: eagerManifest,
+      files: virtual,
+      allowExtraFiles: true,
+    });
+    const eagerFiles = new Map<string, Uint8Array>([
+      [ROOT_MANIFEST, requireBytes(virtual, ROOT_MANIFEST)],
+    ]);
+    for (const path of eagerPaths)
+      eagerFiles.set(path, requireBytes(virtual, path));
+    collectSceneLayoutPackagePaths({
+      manifest: eagerManifest,
+      files: eagerFiles,
+    });
+    return eagerFiles;
+  } else {
+    const resolved = resolveEditorAssetsMapPackage({
+      map,
+      files: options.files,
+    });
+    for (const [key, asset] of resolved) virtual.set(key, asset.bytes.slice());
+    collectSceneLayoutPackagePaths({ manifest, files: virtual });
+  }
   return virtual;
+}
+
+function createVerifiedMappedLogicalLoader(
+  packageFiles: ReadonlyMap<string, Uint8Array>,
+  load: (logicalKey: string) => Promise<Uint8Array>,
+): (logicalKey: string) => Promise<Uint8Array> {
+  const map = decodeEditorAssetsMap(
+    requireBytes(packageFiles, EDITOR_ASSETS_MAP_PATH),
+  );
+  return async (logicalKey) => {
+    const entry = map.files[logicalKey];
+    if (!entry)
+      throw new SceneLayoutError(
+        `Scene layout runtime logical asset "${logicalKey}" was not found in assets.map.json.`,
+      );
+    const packagedBytes = packageFiles.get(entry.path);
+    const bytes = packagedBytes
+      ? packagedBytes.slice()
+      : await load(logicalKey);
+    if (
+      bytes.byteLength !== entry.byteLength ||
+      (await sha256Hex(bytes)) !== entry.sha256
+    )
+      throw new SceneLayoutError(
+        `Scene layout runtime logical asset "${logicalKey}" failed hash/size validation.`,
+      );
+    return bytes.slice();
+  };
 }
 
 function isMappedSceneLayoutManifest(manifest: SceneLayoutManifestV1): boolean {

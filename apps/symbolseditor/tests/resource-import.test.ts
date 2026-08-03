@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   addSymbolState,
@@ -13,16 +11,14 @@ import {
   prepareSymbolResourceImport,
 } from "../src/model/resource-import.js";
 import { applyStateTextureImageBinding } from "../src/model/state-texture-generation.js";
+import { readCraveFixture } from "./crave-fixture.js";
 
 const gameConfig = {
   paytable: { "1": { code: 1, symbol: "A", pays: [1] } },
   symbolCodes: { A: 1 },
   reels: { main: [[1]] },
 };
-const image = (name: string) =>
-  new Uint8Array(
-    readFileSync(resolve(process.cwd(), `../../assets/game002-s3/${name}`)),
-  );
+const image = (name: string) => readCraveFixture(name);
 const encode = (value: unknown) =>
   new TextEncoder().encode(JSON.stringify(value));
 const spineSkeleton = (animations: readonly string[], slots = ["Num"]) =>
