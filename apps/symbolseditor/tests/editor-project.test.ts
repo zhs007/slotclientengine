@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { parseSymbolStateTextureManifest } from "@slotclientengine/rendercore/symbol";
 import {
   addCustomStateDefinition,
+  addStateAnimationLayer,
   addSymbolState,
   compileSymbolEditorManifest,
   createFromGameConfig,
@@ -199,6 +200,94 @@ describe("symbol editor typed project", () => {
       { path: "effects.json", location: "A.normal" },
       { path: "effects.json", location: "A.win" },
     ]);
+  });
+
+  it("adds layers without re-entering existing image or animation bindings", () => {
+    const project = createFromGameConfig({
+      rawGameConfig: gameConfig,
+      fileName: "legacy.json",
+    });
+    setStateVisual(project, "A", "normal", {
+      kind: "spine",
+      baseVisual: { kind: "image", imagePath: "A.png" },
+      skeletonPath: "symbol.json",
+      atlasPath: "symbol.atlas",
+      texturePath: "symbol.png",
+      animationName: "Idle",
+      transform: { x: 3, scale: 0.8 },
+    });
+    addStateAnimationLayer(project, "A", "normal", {
+      id: "layer-2",
+      placement: "underlay",
+      animation: {
+        kind: "vni",
+        projectPath: "glow.json",
+        startTime: 0,
+        endTime: 1,
+      },
+    });
+    addSymbolState(project, "A", "win");
+    setStateVisual(project, "A", "win", {
+      kind: "image",
+      imagePath: "A-win.png",
+    });
+    addStateAnimationLayer(project, "A", "win", {
+      id: "layer-1",
+      placement: "overlay",
+      animation: {
+        kind: "vni",
+        projectPath: "burst.json",
+        startTime: 0,
+        endTime: 1,
+      },
+    });
+
+    expect(project.symbols.get("A")?.states.get("normal")).toEqual({
+      kind: "composite",
+      base: "normal",
+      baseVisual: { kind: "image", imagePath: "A.png" },
+      layers: [
+        {
+          id: "layer-1",
+          placement: "overlay",
+          animation: {
+            kind: "spine",
+            skeletonPath: "symbol.json",
+            atlasPath: "symbol.atlas",
+            texturePath: "symbol.png",
+            animationName: "Idle",
+            transform: { x: 3, scale: 0.8 },
+          },
+        },
+        {
+          id: "layer-2",
+          placement: "underlay",
+          animation: {
+            kind: "vni",
+            projectPath: "glow.json",
+            startTime: 0,
+            endTime: 1,
+          },
+        },
+      ],
+    });
+    expect(project.symbols.get("A")?.states.get("win")).toEqual({
+      kind: "composite",
+      base: "stateTexture",
+      stateTexturePath: "A-win.png",
+      layers: [
+        {
+          id: "layer-1",
+          placement: "overlay",
+          animation: {
+            kind: "vni",
+            projectPath: "burst.json",
+            startTime: 0,
+            endTime: 1,
+          },
+        },
+      ],
+    });
   });
 
   it("supports all/none/invert while retaining excluded symbol drafts", () => {

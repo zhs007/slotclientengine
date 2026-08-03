@@ -6,7 +6,7 @@
 
 symbol code、state、lifecycle、scale、renderPriority、value/cascade 配置仍是业务身份。image state 引用图片 key；Spine 引用 skeleton/atlas/page keys；VNI 引用 project key；image-string dependency 只记录 root key、manifest 与 closure keys，真实 bytes 只存在全局 asset library。
 
-任意非 value-managed state 可选择多图层动画：base 明确沿用 normal 或使用当前 state 图片，附加层按稳定列表顺序逐项选择 `underlay | overlay` 以及 Spine/VNI 资源与播放参数。层 id 必须唯一且为 lowercase kebab-case；至少保留一层。导入、预览、导出与资源覆盖都按 exact layer binding 处理，不按文件名猜层，也不把多层静默降级成单层。
+任意非 value-managed state 都直接提供“增加动画层”，不要求先把旧 visual 重新选择为多图层类型。首次增加时，现有图片会原样保留为 normal/stateTexture base，现有 Spine/VNI 会原样迁移为第一层，再追加一份待绑定的新层；已导入的旧 ZIP 因此不需要重新录入既有资源。附加层按稳定列表顺序逐项选择 `underlay | overlay` 以及 Spine/VNI 资源与播放参数。层 id 必须唯一且为 lowercase kebab-case；至少保留一层。导入、预览、导出与资源覆盖都按 exact layer binding 处理，不按文件名猜层，也不把多层静默降级成单层。
 
 同一导入批次允许多份 Spine skeleton 共用唯一一份 atlas 及其单页 texture；各 skeleton 仍作为独立资源供 state/value tier 显式选择。缺 skeleton、缺 atlas、多 atlas 或 atlas page 不唯一时继续拒绝整批导入。
 

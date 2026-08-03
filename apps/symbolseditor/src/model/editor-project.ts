@@ -580,6 +580,104 @@ export function setStateVisual(
   draft.states.set(state, cloneValue(visual));
 }
 
+export function addStateAnimationLayer(
+  project: SymbolEditorProject,
+  symbol: string,
+  state: string,
+  layer: EditorCompositeAnimationLayer,
+): void {
+  const draft = requireSymbol(project, symbol);
+  const visual = draft.states.get(state);
+  if (!visual) throw new Error(`${symbol}.${state} 尚未添加。`);
+  if (visual.kind === "composite") {
+    if (visual.layers.some((candidate) => candidate.id === layer.id)) {
+      throw new Error(`${symbol}.${state} 已存在 layer id "${layer.id}"。`);
+    }
+    setStateVisual(project, symbol, state, {
+      ...visual,
+      layers: [...visual.layers, cloneValue(layer)],
+    });
+    return;
+  }
+
+  const existingLayers: EditorCompositeAnimationLayer[] = [];
+  if (visual.kind === "spine" || visual.kind === "vni") {
+    existingLayers.push({
+      id: "layer-1",
+      placement: "overlay",
+      animation:
+        visual.kind === "spine"
+          ? {
+              kind: "spine",
+              skeletonPath: visual.skeletonPath,
+              atlasPath: visual.atlasPath,
+              texturePath: visual.texturePath,
+              animationName: visual.animationName,
+              ...(visual.transform
+                ? { transform: cloneValue(visual.transform) }
+                : {}),
+            }
+          : {
+              kind: "vni",
+              projectPath: visual.projectPath,
+              startTime: visual.startTime,
+              endTime: visual.endTime,
+            },
+    });
+  }
+  if (existingLayers.some((candidate) => candidate.id === layer.id)) {
+    throw new Error(`${symbol}.${state} 已存在 layer id "${layer.id}"。`);
+  }
+
+  let composite: EditorCompositeStateVisual;
+  if (state === "normal") {
+    const baseVisual: EditorBaseVisual =
+      visual.kind === "spine" || visual.kind === "vni"
+        ? (visual.baseVisual ?? {
+            kind: "empty",
+            width: project.cellSize.width,
+            height: project.cellSize.height,
+          })
+        : visual.kind === "image" ||
+            visual.kind === "layered-image" ||
+            visual.kind === "empty"
+          ? visual
+          : unsupportedLayerPromotion(symbol, state, visual.kind);
+    composite = {
+      kind: "composite",
+      base: "normal",
+      baseVisual: cloneValue(baseVisual),
+      layers: [...existingLayers, cloneValue(layer)],
+    };
+  } else if (visual.kind === "image") {
+    composite = {
+      kind: "composite",
+      base: "stateTexture",
+      stateTexturePath: visual.imagePath,
+      layers: [cloneValue(layer)],
+    };
+  } else if (visual.kind === "spine" || visual.kind === "vni") {
+    composite = {
+      kind: "composite",
+      base: "normal",
+      layers: [...existingLayers, cloneValue(layer)],
+    };
+  } else {
+    return unsupportedLayerPromotion(symbol, state, visual.kind);
+  }
+  setStateVisual(project, symbol, state, composite);
+}
+
+function unsupportedLayerPromotion(
+  symbol: string,
+  state: string,
+  kind: EditorStateVisual["kind"],
+): never {
+  throw new Error(
+    `${symbol}.${state} 的 ${kind} 不能无损转换为动画图层；请先配置图片、Spine 或 VNI。`,
+  );
+}
+
 export function addCustomStateDefinition(
   project: SymbolEditorProject,
   definition: Readonly<{

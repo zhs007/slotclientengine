@@ -14,6 +14,7 @@ import {
 } from "@slotclientengine/editorresource";
 import {
   addCustomStateDefinition,
+  addStateAnimationLayer,
   addSymbolState,
   createFromGameConfig,
   createPreviewSnapshot,
@@ -689,6 +690,9 @@ export class SymbolsEditorApp {
           this.runCompositeLayerAction(button),
         );
       });
+    panel
+      .querySelector<HTMLElement>("[data-add-animation-layer]")
+      ?.addEventListener("click", () => this.addAnimationLayer());
     this.bindValueControls(panel);
     this.bindImageStringControls(panel);
     this.bindCascadeControls(panel);
@@ -1053,6 +1057,44 @@ export class SymbolsEditorApp {
           this.#session.selectedSymbol,
           this.#session.selectedState,
           { ...visual, layers },
+        );
+      });
+    } catch (error) {
+      this.#store.setExternalError(error);
+    }
+  }
+
+  private addAnimationLayer(): void {
+    try {
+      this.#store.transact((draft) => {
+        const visual = draft.symbols
+          .get(this.#session.selectedSymbol)!
+          .states.get(this.#session.selectedState)!;
+        const used = new Set(
+          visual.kind === "composite"
+            ? visual.layers.map((layer) => layer.id)
+            : visual.kind === "spine" || visual.kind === "vni"
+              ? ["layer-1"]
+              : [],
+        );
+        let suffix = used.size + 1;
+        while (used.has(`layer-${suffix}`)) suffix += 1;
+        const atlas = getDefaultSpineAtlasBinding(draft);
+        addStateAnimationLayer(
+          draft,
+          this.#session.selectedSymbol,
+          this.#session.selectedState,
+          {
+            id: `layer-${suffix}`,
+            placement: "overlay",
+            animation: {
+              kind: "spine",
+              skeletonPath: "",
+              atlasPath: atlas?.atlasPath ?? "",
+              texturePath: atlas?.texturePath ?? "",
+              animationName: "",
+            },
+          },
         );
       });
     } catch (error) {
@@ -2658,7 +2700,7 @@ function statesInspectorMarkup(
     tiered && (state === "normal" || definition.playback !== "static");
   const stateFields = tieredNormal
     ? tierNormalAnimationMarkup(project, symbol)
-    : visualFieldsMarkup(project, symbol, state, visual, thumbnail);
+    : `${visualFieldsMarkup(project, symbol, state, visual, thumbnail)}${addAnimationLayerMarkup(symbol, state, visual)}`;
   const generation =
     state === "normal"
       ? stateTextureGenerationMarkup(project, symbol.symbol)
@@ -2812,6 +2854,26 @@ function compositeVisualMarkup(
     })
     .join("");
   return `${base}<section class="composite-layer-list"><div class="section-heading"><div><h3>附加动画层</h3><p>underlay 在图标下方，overlay 在图标上方；同组按列表顺序叠放。</p></div><button data-composite-layer-action="add">增加动画层</button></div>${layers}</section>`;
+}
+
+function addAnimationLayerMarkup(
+  symbol: EditorSymbolDraft,
+  state: string,
+  visual: EditorStateVisual,
+): string {
+  if (visual.kind === "composite" || symbol.valuePresentation) return "";
+  const supported =
+    visual.kind === "spine" ||
+    visual.kind === "vni" ||
+    visual.kind === "image" ||
+    (state === "normal" &&
+      (visual.kind === "empty" || visual.kind === "layered-image"));
+  if (!supported) return "";
+  const retained =
+    visual.kind === "spine" || visual.kind === "vni"
+      ? "现有动画会保留为第一层。"
+      : "现有图标会原样保留为 base。";
+  return `<section class="composite-layer-list"><div class="section-heading"><div><h3>附加动画层</h3><p>${retained}无需切换 Visual kind。</p></div><button data-add-animation-layer>增加动画层</button></div></section>`;
 }
 
 function compositeNumberField(
@@ -3075,9 +3137,18 @@ function compatibleVisualKinds(
   symbol: EditorSymbolDraft,
   state: string,
 ): readonly string[] {
+  const currentIsComposite = symbol.states.get(state)?.kind === "composite";
   if (state === "normal")
-    return ["empty", "image", "layered-image", "spine", "vni", "composite"];
-  const kinds = ["empty-state", "image", "spine", "vni", "composite", "static"];
+    return [
+      "empty",
+      "image",
+      "layered-image",
+      "spine",
+      "vni",
+      ...(currentIsComposite ? ["composite"] : []),
+    ];
+  const kinds = ["empty-state", "image", "spine", "vni", "static"];
+  if (currentIsComposite) kinds.push("composite");
   if (state === "appear" || state === "win") kinds.push("builtin");
   if (symbol.valuePresentation) kinds.push("activeSpine");
   return kinds;
