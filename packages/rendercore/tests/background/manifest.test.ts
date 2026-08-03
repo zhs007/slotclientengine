@@ -1,20 +1,52 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import {
   createSpineBackgroundResource,
   parseSpineBackgroundManifest,
 } from "../../src/background/index.js";
+import {
+  readCraveBytes,
+  readCraveJson,
+  readCraveText,
+} from "../crave-fixture.js";
 
-const ASSET_ROOT = resolve(__dirname, "../../../../assets/game002-s3");
-const REAL_MANIFEST = JSON.parse(
-  readFileSync(resolve(ASSET_ROOT, "background.manifest.json"), "utf8"),
-) as unknown;
-const REAL_SKELETON = JSON.parse(
-  readFileSync(resolve(ASSET_ROOT, "BG.json"), "utf8"),
-) as unknown;
-const REAL_ATLAS = readFileSync(resolve(ASSET_ROOT, "BG.atlas"), "utf8");
+const REAL_MANIFEST = {
+  version: 1,
+  kind: "spine",
+  artSize: { width: 2000, height: 2000 },
+  adaptation: {
+    mode: "maximized-focus",
+    focusRect: { x: 580, y: 277, width: 840, height: 1200 },
+  },
+  resource: {
+    skeleton: "./BG.json",
+    atlas: "./BG.atlas",
+    textures: Object.fromEntries(
+      [
+        "BG.png",
+        "BG_2.png",
+        "BG_3.png",
+        "BG_4.png",
+        "BG_5.png",
+        "BG_6.png",
+        "BG_7.png",
+        "BG_8.png",
+      ].map((page) => [page, `./${page}`]),
+    ),
+    transform: { x: 1000, y: 1000, scale: 1 },
+  },
+  initialState: "BaseGame",
+  states: {
+    BaseGame: { animation: "BG" },
+    FreeGame: { animation: "FG" },
+  },
+  transitions: [
+    { from: "BaseGame", to: "FreeGame", animation: "BG_FG" },
+    { from: "FreeGame", to: "BaseGame", animation: "FG_BG" },
+  ],
+} as const;
+const REAL_SKELETON = readCraveJson("bg.json");
+const REAL_ATLAS = readCraveText("bg.atlas");
 const TEXTURE_PAGES = [
   "BG.png",
   "BG_2.png",
@@ -173,9 +205,11 @@ describe("Spine background manifest", () => {
       ),
     );
     for (const page of TEXTURE_PAGES) {
-      const bytes = readFileSync(resolve(ASSET_ROOT, page));
-      expect(bytes.subarray(0, 4).toString("ascii")).toBe("RIFF");
-      expect(bytes.subarray(8, 12).toString("ascii")).toBe("WEBP");
+      const bytes = readCraveBytes(
+        page.toLowerCase().replace(/\.png$/u, ".webp"),
+      );
+      expect(Buffer.from(bytes.subarray(0, 4)).toString("ascii")).toBe("RIFF");
+      expect(Buffer.from(bytes.subarray(8, 12)).toString("ascii")).toBe("WEBP");
       const metadata = await sharp(bytes).metadata();
       expect([metadata.width, metadata.height]).toEqual(
         declaredSizes.get(page),

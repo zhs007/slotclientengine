@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import rawManifest from "../../../../assets/game002-s3/reel.manifest.json";
+import rawManifest from "../../../../apps/game002/config/reel-presentation.manifest.json";
 import { parseReelManifest } from "../../src/reel/index.js";
 
 describe("parseReelManifest", () => {
@@ -18,8 +18,8 @@ describe("parseReelManifest", () => {
           stopStepMs: 100,
         },
         cellEffects: {
-          anticipation: { skeleton: "./Nearwin1.json", loopCount: 1 },
-          refillSweep: { skeleton: "./Nearwin2.json", loopCount: 1 },
+          anticipation: { skeleton: "./nearwin1", loopCount: 1 },
+          refillSweep: { skeleton: "./nearwin2", loopCount: 1 },
         },
       },
       cascade: {

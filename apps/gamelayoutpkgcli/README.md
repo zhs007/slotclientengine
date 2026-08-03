@@ -77,8 +77,9 @@ ZIP 与 JSON 作为一对提交，第二个文件提交失败时会回滚第一�
   还需增加的部分；
 - `optimization`：cwebp 版本、质量、转换数量和 ZIP 前后体积。
 
-分组类型包括 `shared`、`mode`、`transition`、`symbols` 和
-`award-celebration`。模式名不硬编码为 BaseGame/FreeGame。转场由 source mode
+分组类型包括 `shared`、`runtime-resource`、`mode`、`transition`、`symbols` 和
+`award-celebration`。每个 manifest `runtimeResources` 程序键拥有独立的
+`runtime-resource:<key>` 增量闭包，不进入 initial/shared。模式名不硬编码为 BaseGame/FreeGame。转场由 source mode
 拥有：`A -> B` 属于 A，`B -> A` 属于 B。初始集合包含 shared、initial mode、
 initial mode 使用的 symbols，以及 initial mode 发出的转场；Popup 保持独立 group，
 供业务按触发时机决定是否预加载。

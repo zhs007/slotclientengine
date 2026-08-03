@@ -21,6 +21,7 @@
 
 ## Symbols binding 与 preview
 
+- gamelayouteditor 把 SymbolsEditor ZIP 视为自包含、只读的 symbol 状态机 package：只绑定 package id、reelSet、renderMode，并通过 rendercore 的公开状态/能力与 preview API 驱动预览。不得在 Layout Editor 暴露或改写 symbol 内部图片、Spine/VNI animation、state layer、value presentation 或 cascade 配置；这些细节只回 SymbolsEditor 编辑。
 - mode binding 显式拥有 package id、reelSet 和 renderMode。
 - symbols package `cellSize` 必须等于共享 main grid cell size，reel count 等于 columns，公开轮带只含 display symbols；失败不修改 grid 或 auto-fit。
 - preview 从绑定 package 的公开 reel set 按列选择合法 stop 并连续读取 rows。production 使用 Web Crypto，测试可注入随机源，禁止 `Math.random()`。

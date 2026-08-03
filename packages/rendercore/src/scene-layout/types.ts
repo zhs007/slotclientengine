@@ -317,8 +317,18 @@ export interface SceneLayoutPackageResource {
   readonly runtimeResources: Readonly<
     Record<string, SceneLayoutRuntimeResource>
   >;
+  getLoadedRuntimeResource<Kind extends SceneLayoutRuntimeResource["kind"]>(
+    key: string,
+    kind: Kind,
+  ): Extract<SceneLayoutRuntimeResource, { readonly kind: Kind }> | null;
+  loadRuntimeResource<Kind extends SceneLayoutRuntimeResource["kind"]>(
+    key: string,
+    kind: Kind,
+  ): Promise<Extract<SceneLayoutRuntimeResource, { readonly kind: Kind }>>;
   destroy(): Promise<void> | void;
 }
+
+export type SceneLayoutLayerId = "layout" | "reel" | "transition" | "popup";
 
 export interface ResolvedSceneLayoutReelGrid {
   readonly id: string;
@@ -510,6 +520,8 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   getModeTransitionPresentation(): Container;
   /** Popup layer for hosts that own their business reel. */
   getPopupPresentation(): Container;
+  /** Returns a borrowed package-owned layer. Callers must not destroy it. */
+  getLayer(id: SceneLayoutLayerId): Container;
   /** Returns the manifest-declared mode ids in their stable declaration order. */
   getGameModeIds(): readonly string[];
   /** Returns the committed mode and any transition target without mutating playback. */

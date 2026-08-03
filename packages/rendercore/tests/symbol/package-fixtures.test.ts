@@ -10,7 +10,8 @@ describe("production symbol package fixtures", () => {
   it.each([
     {
       id: "game002-s3",
-      assetDirectory: "assets/game002-s3",
+      assetDirectory: "assets/crave",
+      mapped: true,
       gameConfig: "assets/gamecfg002/gameconfig.json",
       cellSize: { width: 120, height: 120 },
       displayCount: 13,
@@ -26,26 +27,46 @@ describe("production symbol package fixtures", () => {
     "validates the exact $id manifest/VNI/Spine/value closure",
     async (fixture) => {
       const repository = resolve(process.cwd(), "../..");
-      const symbolManifestPath = resolve(
-        repository,
-        fixture.assetDirectory,
-        "symbol-state-textures.manifest.json",
-      );
+      const assetRoot = resolve(repository, fixture.assetDirectory);
+      const mappedFiles = fixture.mapped
+        ? (
+            JSON.parse(
+              await readFile(resolve(assetRoot, "assets.map.json"), "utf8"),
+            ) as {
+              readonly files: Readonly<
+                Record<string, { readonly path: string }>
+              >;
+            }
+          ).files
+        : undefined;
+      const symbolManifestPath = mappedFiles
+        ? resolve(
+            assetRoot,
+            mappedFiles["symbol-state-textures.manifest.json"]!.path,
+          )
+        : resolve(assetRoot, "symbol-state-textures.manifest.json");
       const rawSymbolManifest = JSON.parse(
         await readFile(symbolManifestPath, "utf8"),
       );
       const availableFiles = new Map<string, Uint8Array>();
-      const assetRoot = resolve(repository, fixture.assetDirectory);
-      for (const entry of await readdir(assetRoot, {
-        recursive: true,
-        withFileTypes: true,
-      })) {
-        if (!entry.isFile()) continue;
-        const absolute = resolve(entry.parentPath, entry.name);
-        availableFiles.set(
-          relative(assetRoot, absolute).replaceAll("\\", "/"),
-          new Uint8Array(await readFile(absolute)),
-        );
+      if (mappedFiles) {
+        for (const [key, entry] of Object.entries(mappedFiles))
+          availableFiles.set(
+            key,
+            new Uint8Array(await readFile(resolve(assetRoot, entry.path))),
+          );
+      } else {
+        for (const entry of await readdir(assetRoot, {
+          recursive: true,
+          withFileTypes: true,
+        })) {
+          if (!entry.isFile()) continue;
+          const absolute = resolve(entry.parentPath, entry.name);
+          availableFiles.set(
+            relative(assetRoot, absolute).replaceAll("\\", "/"),
+            new Uint8Array(await readFile(absolute)),
+          );
+        }
       }
       const files = new Map<string, Uint8Array>();
       const resources = collectSymbolManifestResourcePaths({

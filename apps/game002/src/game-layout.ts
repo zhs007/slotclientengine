@@ -11,9 +11,13 @@ import {
   type FocusedArtViewport,
   type RenderViewportSize,
 } from "@slotclientengine/rendercore";
-import { GAME002_BACKGROUND_MANIFEST } from "./background-config.js";
+import craveLayoutManifest from "../../../assets/crave/layout.manifest.json";
 
-export const GAME002_ART_SIZE = GAME002_BACKGROUND_MANIFEST.artSize;
+const craveAdaptation = craveLayoutManifest.adaptation;
+if (craveAdaptation.mode !== "maximized-focus")
+  throw new Error('game002 Crave layout adaptation must be "maximized-focus".');
+
+export const GAME002_ART_SIZE = Object.freeze(craveAdaptation.artSize);
 
 export const GAME002_STAGE_SIZE = GAME002_ART_SIZE;
 
@@ -90,8 +94,9 @@ export const GAME002_GRID_LAYOUT = Object.freeze({
   rowGap: 0,
 }) satisfies Game002GridLayout;
 
-export const GAME002_FOCUS_REGION = GAME002_BACKGROUND_MANIFEST.adaptation
-  .focusRect satisfies Game002FocusRegion;
+export const GAME002_FOCUS_REGION = Object.freeze(
+  craveAdaptation.focusRect,
+) satisfies Game002FocusRegion;
 
 export interface Point {
   readonly x: number;

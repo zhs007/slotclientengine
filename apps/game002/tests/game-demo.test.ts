@@ -74,7 +74,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("game002-s3 reel runtime", () => {
+describe("game002 Crave reel runtime", () => {
   it("keeps visual spin phase entropy separate from CN presentation random", () => {
     expect(DEFAULT_GAME002_REEL_CONFIG.spinPhaseRandom).not.toBe(
       DEFAULT_GAME002_REEL_CONFIG.random,
@@ -717,6 +717,8 @@ function createRuntime(
       symbolStatePreset: skin.symbolStatePreset,
       landingAppearSymbols: skin.landingAppearSymbols,
       symbolValuePresentationResources: skin.symbolValuePresentationResources,
+      reelEffectResources: skin.reelEffectResources,
+      reelEffectPoolCapacities: skin.reelEffectPoolCapacities,
       animationResolver: (context) =>
         context.resolvedState === "appear"
           ? new ManualSymbolAni({

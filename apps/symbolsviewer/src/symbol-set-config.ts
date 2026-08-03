@@ -1,8 +1,6 @@
 import rawGame002GameConfig from "../../../assets/gamecfg002/gameconfig.json";
 import rawGame003GameConfig from "../../../assets/gamecfg003/gameconfig.json";
-import game002S3SpineAtlasRaw from "../../../assets/game002-s3/Symbol.atlas?raw";
-import game002S3SpineTextureUrl from "../../../assets/game002-s3/Symbol.png?url";
-import game002S3StateTextureManifest from "../../../assets/game002-s3/symbol-state-textures.manifest.json";
+import craveAssetsMap from "../../../assets/crave/assets.map.json";
 import game003S1L1WinsProject from "../../../assets/game003-s1/L1-wins.json";
 import game003S1L2WinsProject from "../../../assets/game003-s1/L2-wins.json";
 import game003S1L3WinsProject from "../../../assets/game003-s1/L3-wins.json";
@@ -32,15 +30,6 @@ import {
   createSymbolRenderPriorityMapFromManifest,
   createSymbolScaleMapFromManifest,
 } from "./symbol-assets.js";
-import {
-  symbolValueSpineAtlasModules,
-  symbolValueReelStateTextureModules,
-  symbolValueSpineSkeletonModules,
-  symbolValueSpineTextureModules,
-  symbolValueTextImageModules,
-  symbolValueImageStringManifestModules,
-  symbolValueImageStringImageModules,
-} from "./generated/game002-symbol-value-resources.generated.js";
 import {
   createViewerSequenceFromCascadePresentations,
   DEFAULT_VIEWER_SEQUENCE,
@@ -76,34 +65,65 @@ const game003S1Modules = import.meta.glob("../../../assets/game003-s1/*.png", {
   query: "?url",
 }) as Record<string, string>;
 
-const game002S3NormalModules = import.meta.glob(
-  "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CM,CO,AF,BN}.png",
-  { eager: true, import: "default", query: "?url" },
-) as Record<string, string>;
-const game002S3SpinBlurModules = import.meta.glob(
-  "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CM,CO,AF,BN}.spinBlur.png",
-  { eager: true, import: "default", query: "?url" },
-) as Record<string, string>;
-const game002S3DisabledModules = import.meta.glob(
-  "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CM,CO,AF,BN}.disabled.png",
-  { eager: true, import: "default", query: "?url" },
-) as Record<string, string>;
-const game002S3Modules = Object.freeze({
-  ...game002S3NormalModules,
-  ...game002S3SpinBlurModules,
-  ...game002S3DisabledModules,
-  ...symbolValueReelStateTextureModules,
-});
-const game002S3SpineSkeletonModules = import.meta.glob(
-  "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CM,CO,AF,BN}.json",
+const craveJsonPhysicalModules = import.meta.glob(
+  "../../../assets/crave/assets/*.json",
   { eager: true, import: "default" },
 ) as Record<string, unknown>;
-const game002S3SpineAtlasModules = Object.freeze({
-  "../../../assets/game002-s3/Symbol.atlas": game002S3SpineAtlasRaw,
-});
-const game002S3SpineTextureModules = Object.freeze({
-  "../../../assets/game002-s3/Symbol.png": game002S3SpineTextureUrl,
-});
+const craveAtlasPhysicalModules = import.meta.glob(
+  "../../../assets/crave/assets/*.atlas",
+  { eager: true, import: "default", query: "?raw" },
+) as Record<string, string>;
+const craveImagePhysicalModules = import.meta.glob(
+  "../../../assets/crave/assets/*.{webp,png,jpg,jpeg}",
+  { eager: true, import: "default", query: "?url" },
+) as Record<string, string>;
+const craveLogicalJsonModules = mapCraveLogicalModules(
+  craveJsonPhysicalModules,
+);
+const craveLogicalAtlasModules = mapCraveLogicalModules(
+  craveAtlasPhysicalModules,
+);
+const craveLogicalImageModules = mapCraveLogicalModules(
+  craveImagePhysicalModules,
+);
+const game002S3StateTextureManifest = requireCraveModule(
+  craveLogicalJsonModules,
+  "symbol-state-textures.manifest.json",
+);
+const game002S3Modules = filterCraveModules(
+  craveLogicalImageModules,
+  /^(?:wl|h1|h2|l1|l2|l3|l4|wm|cn|cm|co|af|bn)(?:\.spinblur|\.disabled)?\.webp$/u,
+);
+const game002S3SpineSkeletonModules = filterCraveModules(
+  craveLogicalJsonModules,
+  /^(?:wl|h1|h2|l1|l2|l3|l4|wm|cm|co|af|bn)\.json$/u,
+);
+const game002S3SpineAtlasModules = filterCraveModules(
+  craveLogicalAtlasModules,
+  /^symbol\.atlas$/u,
+);
+const game002S3SpineTextureModules = filterCraveModules(
+  craveLogicalImageModules,
+  /^symbol\.webp$/u,
+);
+const symbolValueSpineSkeletonModules = filterCraveModules(
+  craveLogicalJsonModules,
+  /^cn_[1-4]\.json$/u,
+);
+const symbolValueSpineAtlasModules = game002S3SpineAtlasModules;
+const symbolValueSpineTextureModules = game002S3SpineTextureModules;
+const symbolValueTextImageModules = filterCraveModules(
+  craveLogicalImageModules,
+  /^(?:1|2|5|10|25|50|100|250|500|1000)\.webp$/u,
+);
+const symbolValueImageStringManifestModules = filterCraveModules(
+  craveLogicalJsonModules,
+  /^image-string\.manifest\.json$/u,
+);
+const symbolValueImageStringImageModules = filterCraveModules(
+  craveLogicalImageModules,
+  /^[0-9]-1\.webp$/u,
+);
 
 const game003BgBarModules = import.meta.glob(
   "../../../assets/game003-s1/{wild,up}.png",
@@ -295,6 +315,45 @@ export function getSymbolSetConfig(id: string): SymbolSetConfig {
     throw new Error(`Unknown symbolsviewer symbol set "${id}".`);
   }
   return config;
+}
+
+function mapCraveLogicalModules<T>(
+  physicalModules: Readonly<Record<string, T>>,
+): Record<string, T> {
+  const entries = Object.entries(craveAssetsMap.files).flatMap(
+    ([logicalKey, entry]) => {
+      const physical = Object.entries(physicalModules).find(([path]) =>
+        path.endsWith(`/${entry.path}`),
+      )?.[1];
+      return physical === undefined ? [] : [[logicalKey, physical] as const];
+    },
+  );
+  return Object.freeze(Object.fromEntries(entries));
+}
+
+function filterCraveModules<T>(
+  modules: Readonly<Record<string, T>>,
+  logicalKeyPattern: RegExp,
+): Record<string, T> {
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(modules).filter(([logicalKey]) =>
+        logicalKeyPattern.test(logicalKey),
+      ),
+    ),
+  );
+}
+
+function requireCraveModule<T>(
+  modules: Readonly<Record<string, T>>,
+  logicalKey: string,
+): T {
+  const value = modules[logicalKey];
+  if (value === undefined)
+    throw new Error(
+      `Crave package logical resource "${logicalKey}" is unavailable.`,
+    );
+  return value;
 }
 
 export async function prepareSymbolSetConfig(id: string): Promise<{

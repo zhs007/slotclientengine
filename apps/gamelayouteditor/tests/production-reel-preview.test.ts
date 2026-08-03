@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   parseSymbolPackageGameConfig,
   parseSymbolStateTextureManifest,
@@ -9,12 +10,22 @@ import {
   sampleRandomReelScene,
 } from "../src/preview/random-reel-scene.js";
 
+const craveRoot = resolve(process.cwd(), "../../assets/crave");
+const craveMap = JSON.parse(
+  readFileSync(resolve(craveRoot, "assets.map.json"), "utf8"),
+) as { readonly files: Readonly<Record<string, { readonly path: string }>> };
+
+function readCraveJson(key: string): unknown {
+  const path = craveMap.files[key]?.path;
+  if (!path) throw new Error(`Crave fixture "${key}" is unavailable.`);
+  return JSON.parse(readFileSync(resolve(craveRoot, path), "utf8")) as unknown;
+}
+
 describe("production public reel preview compatibility", () => {
   it.each([
     {
       gameConfig: "../../../assets/gamecfg002/gameconfig.json",
-      symbolManifest:
-        "../../../assets/game002-s3/symbol-state-textures.manifest.json",
+      symbolManifest: null,
       reelSet: "reels-001",
       columns: 6,
     },
@@ -30,7 +41,9 @@ describe("production public reel preview compatibility", () => {
     ({ gameConfig, symbolManifest, reelSet, columns }) => {
       const parsedConfig = parseSymbolPackageGameConfig(readJson(gameConfig));
       const manifest = parseSymbolStateTextureManifest(
-        readJson(symbolManifest),
+        symbolManifest
+          ? readJson(symbolManifest)
+          : readCraveJson("symbol-state-textures.manifest.json"),
       );
       const displaySymbols = Object.keys(manifest.symbols);
       const infos = inspectReelSets({

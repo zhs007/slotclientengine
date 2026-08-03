@@ -64,12 +64,22 @@ describe("optimized package flow", () => {
     expect(groups.initialAssets).toEqual([
       "alpha-to-beta.mp4",
       "alpha.webp",
-      "nearwin.webp",
       "shared.webp",
     ]);
     expect(
       groups.groups.find((group) => group.id === "shared")?.requiredAssets,
-    ).toEqual(["nearwin.webp", "shared.webp"]);
+    ).toEqual(["shared.webp"]);
+    expect(
+      groups.groups.find(
+        (group) => group.id === "runtime-resource:nearwin.image",
+      ),
+    ).toMatchObject({
+      kind: "runtime-resource",
+      resourceKey: "nearwin.image",
+      resourceKind: "image",
+      requiredAssets: ["nearwin.webp"],
+      incrementalAssets: ["nearwin.webp"],
+    });
     expect(
       groups.groups.find((group) => group.id === "mode:Beta")
         ?.incrementalAssets,

@@ -72,7 +72,7 @@ import {
   type Game002GridLayout,
   type Game002ReelLayerLayout,
 } from "./game-layout.js";
-import { GAME002_REEL_PRESENTATION_EXTENSION } from "./skin-config.js";
+import { GAME002_REEL_MANIFEST } from "./skin-config.js";
 import {
   assertScenesEqual,
   sceneEquals,
@@ -137,16 +137,14 @@ export const DEFAULT_GAME002_REEL_CONFIG: Game002ReelConfig = Object.freeze({
   focusRegion: GAME002_FOCUS_REGION,
   direction: "forward",
   orderMode: GAME002_GRID_CELL_REEL_ORDER,
-  timing: GAME002_REEL_PRESENTATION_EXTENSION.reelManifest.spin.timing,
-  reelManifest: GAME002_REEL_PRESENTATION_EXTENSION.reelManifest,
-  reelEffectResources: GAME002_REEL_PRESENTATION_EXTENSION.reelEffectResources,
-  reelEffectPoolCapacities:
-    GAME002_REEL_PRESENTATION_EXTENSION.reelEffectPoolCapacities,
+  timing: GAME002_REEL_MANIFEST.spin.timing,
+  reelManifest: GAME002_REEL_MANIFEST,
+  reelEffectResources: Object.freeze({}),
+  reelEffectPoolCapacities: Object.freeze({}),
   dimming: createGame002GridCellDimming(
-    GAME002_REEL_PRESENTATION_EXTENSION.reelManifest.spin.dimmingAlpha,
+    GAME002_REEL_MANIFEST.spin.dimmingAlpha,
   ),
-  spinBounceStrength:
-    GAME002_REEL_PRESENTATION_EXTENSION.reelManifest.spin.bounceStrength,
+  spinBounceStrength: GAME002_REEL_MANIFEST.spin.bounceStrength,
 });
 
 export interface Game002ReelRuntimeOptions {

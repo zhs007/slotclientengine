@@ -133,14 +133,9 @@ describe("symbolsviewer symbol set config", () => {
       [35, 49],
       [34, 48],
     ] as const;
-    vi.spyOn(Assets, "load").mockImplementation(async (source) => {
-      const unresolved = Array.isArray(source) ? source[0] : source;
-      const url =
-        typeof unresolved === "string"
-          ? unresolved
-          : String((unresolved as { src?: unknown } | undefined)?.src ?? "");
-      const digit = Number(/u003([0-9])\.png/u.exec(url)?.[1]);
-      const [width, height] = sizes[digit] ?? [];
+    let glyphIndex = 0;
+    vi.spyOn(Assets, "load").mockImplementation(async () => {
+      const [width, height] = sizes[glyphIndex++] ?? [];
       return { width, height } as never;
     });
     const prepared = await prepareSymbolSetConfig("game002-s3");
@@ -156,14 +151,16 @@ describe("symbolsviewer symbol set config", () => {
       config.requiredStates,
     );
 
-    expect(Object.keys(assets)).toEqual([...GAME002_S3_DISPLAYABLE_SYMBOLS]);
+    expect(Object.keys(assets).sort()).toEqual(
+      [...GAME002_S3_DISPLAYABLE_SYMBOLS].sort(),
+    );
     expect(Object.keys(config.modules)).toHaveLength(38);
     expect(Object.keys(config.spineSkeletonModules ?? {})).toHaveLength(12);
     expect(
       config.symbolValuePresentationResources?.CN.tiers.map(
         (tier) => tier.spec.skeleton,
       ),
-    ).toEqual(["./CN_1.json", "./CN_2.json", "./CN_3.json", "./CN_4.json"]);
+    ).toEqual(["./cn_1.json", "./cn_2.json", "./cn_3.json", "./cn_4.json"]);
     expect(catalog.getValidation()).toMatchObject({
       displayableSymbols: GAME002_S3_DISPLAYABLE_SYMBOLS,
       ignoredAssetsWithoutPaytable: [],

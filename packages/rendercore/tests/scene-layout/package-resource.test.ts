@@ -182,6 +182,27 @@ describe("scene layout package resources", () => {
       revoke.mockRestore();
     }
 
+    const lazy = await createSceneLayoutPackageResource({
+      manifest,
+      files,
+      lazyRuntimeResources: true,
+      decodeImage: async () => ({ width: 1, height: 1 }),
+    });
+    expect(lazy.getLoadedRuntimeResource("intro.video", "video")).toBeNull();
+    const [first, second] = await Promise.all([
+      lazy.loadRuntimeResource("intro.video", "video"),
+      lazy.loadRuntimeResource("intro.video", "video"),
+    ]);
+    expect(first).toBe(second);
+    expect(lazy.getLoadedRuntimeResource("intro.video", "video")).toBe(first);
+    expect(() => lazy.getLoadedRuntimeResource("intro.video", "image")).toThrow(
+      /must be image; actual video/,
+    );
+    await expect(lazy.loadRuntimeResource("missing", "video")).rejects.toThrow(
+      /was not found/,
+    );
+    lazy.destroy();
+
     const mappedProject = {
       ...vniProject,
       assets: [{ ...vniProject.assets[0], path: "spark.png" }],
@@ -238,6 +259,28 @@ describe("scene layout package resources", () => {
       decodeImage: async () => ({ width: 1, height: 1 }),
     });
     mappedResource.destroy();
+    const deferredPath = mappedPackage.map.files["intro.mp4"]!.path;
+    const partialPhysicalFiles = new Map(mappedPackage.files);
+    partialPhysicalFiles.delete(deferredPath);
+    const deferredLoads: string[] = [];
+    const partialResource = await createSceneLayoutPackageResource({
+      manifest: mappedManifest,
+      files: partialPhysicalFiles,
+      lazyRuntimeResources: true,
+      loadRuntimeResourceBytes: async (logicalKey) => {
+        deferredLoads.push(logicalKey);
+        const bytes = mappedFiles.get(logicalKey);
+        if (!bytes) throw new Error(`missing deferred fixture ${logicalKey}`);
+        return bytes;
+      },
+      decodeImage: async () => ({ width: 1, height: 1 }),
+    });
+    expect(
+      partialResource.getLoadedRuntimeResource("intro.video", "video"),
+    ).toBeNull();
+    await partialResource.loadRuntimeResource("intro.video", "video");
+    expect(deferredLoads).toEqual(["intro.mp4"]);
+    partialResource.destroy();
 
     expect(() =>
       collectSceneLayoutPackagePaths({

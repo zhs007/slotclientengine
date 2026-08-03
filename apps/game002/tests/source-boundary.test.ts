@@ -155,7 +155,7 @@ describe("game002 source boundary", () => {
     expect(mainSource).not.toContain("import.meta.env");
   });
 
-  it("packages only game002-s3 assets and no legacy skin resources", () => {
+  it("packages only the Crave gamelayout assets and no legacy skin resources", () => {
     const skinConfigSource = readFileSync(
       join(APP_ROOT, "src/skin-config.ts"),
       "utf8",
@@ -165,21 +165,12 @@ describe("game002 source boundary", () => {
       "utf8",
     );
 
-    const backgroundConfigSource = readFileSync(
-      join(APP_ROOT, "src/background-config.ts"),
-      "utf8",
+    expect(skinConfigSource).toContain(
+      "../config/reel-presentation.manifest.json",
     );
-    expect(backgroundConfigSource).toContain(
-      "assets/game002-s3/background.manifest.json",
-    );
-    expect(skinConfigSource).toContain("assets/game002-s3/reel.manifest.json");
     expect(skinConfigSource).toContain("parseReelManifest");
     expect(skinConfigSource).not.toContain("bounceStrength: 0");
     expect(skinConfigSource).not.toContain("dimmingAlpha: 0.5");
-    expect(backgroundConfigSource).toContain(
-      "{BG,BG_2,BG_3,BG_4,BG_5,BG_6,BG_7,BG_8}.png",
-    );
-    expect(backgroundConfigSource).toContain("spineAtlasPage=");
     for (const legacyPath of [
       "symbols" + "001",
       "symbols" + "002",
@@ -192,7 +183,6 @@ describe("game002 source boundary", () => {
       expect(skinConfigSource).not.toContain(legacyPath);
     }
     expect(skinConfigSource).not.toMatch(/game002-s3\/\*\.(?:png|json)/);
-    expect(backgroundConfigSource).not.toMatch(/game002-s3\/(?:\*|\*\*)/);
     expect(adapterSource).not.toContain('"legacy"');
     expect(adapterSource).not.toContain("backgroundUrl");
     expect(adapterSource).not.toContain("createPositionedSprite");
@@ -224,7 +214,7 @@ describe("game002 source boundary", () => {
 
     expect(skinConfigSource).toContain("return adaptation.focusRect");
     expect(skinConfigSource).toContain("createSceneLayoutPackageResource");
-    expect(layoutSource).toContain("GAME002_BACKGROUND_MANIFEST.artSize");
+    expect(layoutSource).toContain("craveLayoutManifest.adaptation");
     expect(layoutSource).toContain("mapArtRectToViewport");
     expect(layoutSource).toContain("createMaximizedFocusedArtViewportPolicy");
     expect(gameEntrySource).toContain(
@@ -294,8 +284,15 @@ describe("game002 source boundary", () => {
     expect(appSource).not.toMatch(
       /@esotericsoftware\/spine-pixi-v8|\.children\[|getChildAt|state\.setAnimation|clearTracks/,
     );
-    expect(skinConfigSource).toContain("{Nearwin1,Nearwin2}.json");
-    expect(skinConfigSource).not.toMatch(/Nearwin3|WM_Fx/);
+    expect(skinConfigSource).toContain(
+      'loadRuntimeResource("nearwin1", "spine")',
+    );
+    expect(skinConfigSource).toContain(
+      'loadRuntimeResource("nearwin2", "spine")',
+    );
+    expect(skinConfigSource).not.toMatch(
+      /loadRuntimeResource\("nearwin3"|WM_Fx/,
+    );
   });
 
   it("keeps the animation timing guide connected to current game002 contracts", () => {

@@ -54,10 +54,8 @@ framework destroy 或页面刷新会清理 command 和 pending 序列。
   构建期 generator 生成精确 Vite import map并校验每个物理文件的 hash/size/orphan；
   loading 只下载 active skin。Crave CN 使用其 symbols manifest 的 ImgNumber
   `slot: "coin"` 与包内 `0..9` glyph，不使用旧 `Num` binding、完整数值图片或字体。
-- `assets/game002-s3/reel.manifest.json`、Nearwin1/2 是 game002 的显式
-  game002 presentation extension；它保存期待 timing/effect policy，不属于 Crave
-  layout package，也不会被误报为 package fallback。
-- 转轮表现配置：`assets/game002-s3/reel.manifest.json`。当前 `spin.bounceStrength=0`，因此 game002 普通 spin 完全不做上下回弹；`1` 才等价于 rendercore 原始力度。`spin.dimmingAlpha=0.5` 控制实际滚动 occurrence 的格底和 symbol 压暗强度：非期待 initial spin 的 `WL/CN` 都保持全亮；第 2 个真实落地 WL 激活期待的同一边界起，以及期待 selective refill 的整个 spin 期间，都只让 `WL` 保持全亮。cascade 强调阶段也使用 `0.5`。普通逐格 timing、Nearwin effect 资源/transform/loop、2-WL activation timing，以及期待 refill sweep/selective spin 的顺序与 timing 也只来自该 manifest。该 manifest 由 rendercore fail-fast parser 读取并进入 loading/dist 精确闭包，app 不硬编码第二份值。
+- `apps/game002/config/reel-presentation.manifest.json` 保存期待 timing/effect policy 和 `nearwin1/nearwin2` 程序键；实际资源全部来自 Crave package。
+- 转轮表现配置：`apps/game002/config/reel-presentation.manifest.json`。当前 `spin.bounceStrength=0`、`spin.dimmingAlpha=0.5`；普通逐格 timing、Nearwin effect policy、2-WL activation timing 以及 refill 顺序也只来自该 manifest。
 - 可展示 symbol 顺序固定为 `WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN`。
 - symbol package 的 game config、公开本地轮带、state、scale、render priority、
   animation、Spine、ImgNumber 和依赖闭包全部从 Crave package resource/registry
@@ -92,7 +90,7 @@ framework 负责 live、HUD、spin/collect；adapter 负责 Pixi 画面和 grid-
 
 ## 中奖金额
 
-`assets/game002-s3/win-amount` 当前是从 game003 复制的临时 big/super/mega 美术资源。`win-amount.manifest.json` 是 tier project、asset glob、阈值和 segmented 时间的唯一资源来源；app 只配置金额 formatter 和布局，不复制 rendercore 状态机。
+big/super/mega popup 的资源、阈值、动画和布局全部由 Crave package 内的 popup package 管理；app 只配置金额 formatter，不复制 rendercore 状态机。
 
 服务端整数 `100` 显示为 `$1.00`，但 spin/live 协议仍传原始整数。正中奖只在全部级联 step、remove、普通 unified fall 或期待 split refill 和必要的 gencoins 数据边界完成后启动金额动画；win-amount 播放期间 adapter 继续逐帧推进 main reel runtime，因此 CN 与其它 symbol 的 normal Loop 不会被冻结。`playSpin()` 等到金额进入 `awaiting-dismiss` 即可 resolve，不要求用户点击关闭。点击只调用 `requestAdvance()`：用于跳金额、进下一档或从最终等待态播放 dismiss。下一次 spin 会先清理遗留金额。
 

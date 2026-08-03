@@ -8,6 +8,7 @@ import type {
   SceneLayoutGameMode,
   SceneLayoutPackageResource,
   SceneLayoutSnapshot,
+  SceneLayoutLayerId,
 } from "./types.js";
 
 export interface SceneLayoutPresentationSurface {
@@ -26,6 +27,8 @@ export interface SceneLayoutPresentationSurface {
   prepareGameModeTransition(modeId: string): Promise<void>;
   requestGameMode(modeId: string): Promise<void>;
   getAwardCelebrationPlayer(id: string): AwardCelebrationPlayer;
+  getLayer(id: SceneLayoutLayerId): Container;
+  getNode(id: string): Container;
   destroy(): void;
 }
 
@@ -181,6 +184,27 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
   getAwardCelebrationPlayer(id: string): AwardCelebrationPlayer {
     this.assertReady();
     return this.#runtime.getAwardCelebrationPopup(id);
+  }
+
+  getLayer(id: SceneLayoutLayerId): Container {
+    this.assertReady();
+    switch (id) {
+      case "layout":
+        return this.#backgroundContainer;
+      case "transition":
+        return this.#transitionContainer;
+      case "popup":
+        return this.#popupContainer;
+      case "reel":
+        throw new SceneLayoutError(
+          'Scene layout presentation surface layer "reel" is unavailable in presentation-only mode.',
+        );
+    }
+  }
+
+  getNode(id: string): Container {
+    this.assertReady();
+    return this.#runtime.getNode(id);
   }
 
   destroy(): void {

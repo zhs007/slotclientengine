@@ -10,6 +10,7 @@ import {
   getSymbolDisplaySymbolsFromManifest,
   parseSymbolStateTextureManifest,
 } from "../../src/symbol/index.js";
+import { readCraveJson, readCraveText } from "../crave-fixture.js";
 
 const requiredStates = ["spinBlur", "disabled"] as const;
 
@@ -761,7 +762,7 @@ describe("symbol state texture manifest helpers", () => {
     expect(resources.H1?.normal?.textureUrl).toBe("/assets/physical-hash.webp");
   });
 
-  it("validates the current game002-s3 Spine 4.3 resource set without copied fixtures", () => {
+  it("validates the current Crave Spine 4.3 resource set without copied fixtures", () => {
     const manifest = readJsonAsset("symbol-state-textures.manifest.json");
     const spineSkeletonModules = Object.fromEntries(
       [
@@ -778,7 +779,7 @@ describe("symbol state texture manifest helpers", () => {
         "AF",
         "BN",
       ].map((symbol) => [
-        `../../../assets/game002-s3/${symbol}.json`,
+        `../../../assets/crave/${symbol.toLowerCase()}.json`,
         readJsonAsset(`${symbol}.json`),
       ]),
     );
@@ -787,11 +788,10 @@ describe("symbol state texture manifest helpers", () => {
       requiredStates,
       spineSkeletonModules,
       spineAtlasModules: {
-        "../../../assets/game002-s3/Symbol.atlas":
-          readTextAsset("Symbol.atlas"),
+        "../../../assets/crave/symbol.atlas": readTextAsset("Symbol.atlas"),
       },
       spineTextureModules: {
-        "../../../assets/game002-s3/Symbol.png": "/assets/Symbol.png",
+        "../../../assets/crave/symbol.webp": "/assets/Symbol.webp",
       },
     });
 
@@ -1070,12 +1070,9 @@ describe("symbol state texture manifest helpers", () => {
 });
 
 function readTextAsset(fileName: string): string {
-  return readFileSync(
-    new URL(`../../../../assets/game002-s3/${fileName}`, import.meta.url),
-    "utf8",
-  );
+  return readCraveText(fileName.toLowerCase().replace(/\.png$/u, ".webp"));
 }
 
 function readJsonAsset(fileName: string): unknown {
-  return JSON.parse(readTextAsset(fileName)) as unknown;
+  return readCraveJson(fileName.toLowerCase());
 }

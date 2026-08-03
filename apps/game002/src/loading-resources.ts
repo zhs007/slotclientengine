@@ -1,16 +1,23 @@
-import game002SpineAtlasUrl from "../../../assets/game002-s3/Symbol.atlas?url";
-import game002SpineTextureUrl from "../../../assets/game002-s3/Symbol.png?url";
 import type { GameLoadingResource } from "@slotclientengine/gameloading";
 import type { Game002SkinId } from "./skin-id.js";
+import craveAssetsMap from "../../../assets/crave/assets.map.json";
 import { craveSceneLayoutPhysicalResourceUrls } from "./generated/crave-layout-resources.generated.js";
+
+const CRAVE_ASSETS_MAP_FILES: Readonly<
+  Record<string, { readonly path: string }>
+> = craveAssetsMap.files;
+const CRAVE_PHYSICAL_RESOURCE_URLS: Readonly<Record<string, string>> =
+  craveSceneLayoutPhysicalResourceUrls;
 
 export const GAME002_RUNTIME_MODULE_RESOURCE_ID = "game002-runtime-module";
 export const GAME002_CRAVE_RESOURCE_ID_PREFIX = "game002-crave-package:";
-
-const reelEffectSkeletonModules = import.meta.glob(
-  "../../../assets/game002-s3/{Nearwin1,Nearwin2}.json",
-  { eager: true, import: "default", query: "?url" },
-) as Record<string, string>;
+const GAME002_DEFERRED_RUNTIME_PHYSICAL_PATHS = new Set(
+  ["nearwin1.json", "nearwin2.json", "nearwin3.json"].map((key) => {
+    const path = CRAVE_ASSETS_MAP_FILES[key]?.path;
+    if (!path) throw new Error(`game002 Crave map is missing "${key}".`);
+    return path;
+  }),
+);
 
 export interface Game002PreparedLoadingSessionLike {
   readonly readiness: { destroy(): void };
@@ -73,7 +80,8 @@ export function readGame002CravePackageFiles(
   loadedResources: ReadonlyMap<string, unknown>,
 ): ReadonlyMap<string, Uint8Array> {
   const files = new Map<string, Uint8Array>();
-  for (const path of Object.keys(craveSceneLayoutPhysicalResourceUrls)) {
+  for (const path of Object.keys(CRAVE_PHYSICAL_RESOURCE_URLS)) {
+    if (GAME002_DEFERRED_RUNTIME_PHYSICAL_PATHS.has(path)) continue;
     const value = loadedResources.get(
       `${GAME002_CRAVE_RESOURCE_ID_PREFIX}${path}`,
     );
@@ -101,49 +109,16 @@ export function readGame002RuntimeModule(
 }
 
 function createCraveLoadingResources(): readonly GameLoadingResource[] {
-  const packageResources = Object.entries(
-    craveSceneLayoutPhysicalResourceUrls,
-  ).map(([path, url]) =>
-    Object.freeze({
-      id: `${GAME002_CRAVE_RESOURCE_ID_PREFIX}${path}`,
-      url,
-      kind: "binary" as const,
-    }),
-  );
-  const effectSkeletons = Object.entries(reelEffectSkeletonModules)
-    .sort(([left], [right]) => left.localeCompare(right))
+  const packageResources = Object.entries(CRAVE_PHYSICAL_RESOURCE_URLS)
+    .filter(([path]) => !GAME002_DEFERRED_RUNTIME_PHYSICAL_PATHS.has(path))
     .map(([path, url]) =>
       Object.freeze({
-        id: `game002-reel-effect-spine-skeletons:${getBaseName(path)}`,
+        id: `${GAME002_CRAVE_RESOURCE_ID_PREFIX}${path}`,
         url,
+        kind: "binary" as const,
       }),
     );
-  if (effectSkeletons.length !== 2)
-    throw new Error(
-      "game002 Crave presentation extension must contain Nearwin1/2 skeletons.",
-    );
-  return deduplicateGame002LoadingResourceUrls([
-    ...packageResources,
-    Object.freeze({
-      id: "game002-symbol-spine-atlas",
-      url: game002SpineAtlasUrl,
-    }),
-    Object.freeze({
-      id: "game002-symbol-spine-texture",
-      url: game002SpineTextureUrl,
-      weight: 3,
-    }),
-    ...effectSkeletons,
-  ]);
-}
-
-function getBaseName(modulePath: string): string {
-  const name = modulePath.split("/").at(-1);
-  if (!name)
-    throw new Error(
-      `Cannot derive game002 loading basename from "${modulePath}".`,
-    );
-  return name;
+  return deduplicateGame002LoadingResourceUrls(packageResources);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

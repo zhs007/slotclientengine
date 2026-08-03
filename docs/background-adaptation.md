@@ -89,18 +89,15 @@ Spine background manifest 还负责 skeleton/atlas/多页 texture 闭包、初�
 
 ### 3.2 配置入口
 
-app 只向 viewport policy 提交一套 `artSize` 和一个 `focusRect`。对于 game002，这两个值直接来自已解析的 background manifest，而不是在 app 中重写数字：
+app 只向 viewport policy 提交一套 `artSize` 和一个 `focusRect`。对于 game002，这两个值直接来自 gamelayout package 的 layout manifest，而不是在 app 中重写数字：
 
 ```ts
 import { createMaximizedFocusedArtViewportPolicy } from "@slotclientengine/rendercore";
-import { GAME002_BACKGROUND_MANIFEST } from "./background-config.js";
-
-const { artSize } = GAME002_BACKGROUND_MANIFEST;
-const { focusRect } = GAME002_BACKGROUND_MANIFEST.adaptation;
+import { GAME002_ART_SIZE, GAME002_FOCUS_REGION } from "./game-layout.js";
 
 const framePolicy = createMaximizedFocusedArtViewportPolicy({
-  artSize,
-  focusRect,
+  artSize: GAME002_ART_SIZE,
+  focusRect: GAME002_FOCUS_REGION,
 });
 
 const framework = createSlotGameFramework({
@@ -489,7 +486,7 @@ offsetY = 0
 - DOM frame 计算：[`packages/uiframeworks/src/layout.ts`](../packages/uiframeworks/src/layout.ts)
 - framework frame policy 类型：[`packages/gameframeworks/src/types.ts`](../packages/gameframeworks/src/types.ts)
 - game002 单背景示例：[`apps/game002/src/game-layout.ts`](../apps/game002/src/game-layout.ts)
-- game002 Spine 背景配置：[`apps/game002/src/background-config.ts`](../apps/game002/src/background-config.ts)
+- game002 gamelayout package：[`assets/crave/layout.manifest.json`](../assets/crave/layout.manifest.json)
 - rendercore background public API：[`packages/rendercore/src/background`](../packages/rendercore/src/background)
 - game003 双背景示例：[`apps/game003/src/game-layout.ts`](../apps/game003/src/game-layout.ts)
 - game003 YAML 示例：[`apps/game003/config/game-static.yaml`](../apps/game003/config/game-static.yaml)

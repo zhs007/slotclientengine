@@ -23,6 +23,7 @@ import {
   uploadAssetBatch,
 } from "../src/model/editor-project.js";
 import { SymbolEditorStore } from "../src/model/editor-store.js";
+import { readCraveFixtureJson } from "./crave-fixture.js";
 
 const gameConfig = {
   paytable: {
@@ -311,8 +312,7 @@ describe("symbol editor typed project", () => {
       {
         id: "game002",
         config: "../../../assets/gamecfg002/gameconfig.json",
-        manifest:
-          "../../../assets/game002-s3/symbol-state-textures.manifest.json",
+        manifest: null,
       },
       {
         id: "game003",
@@ -324,9 +324,11 @@ describe("symbol editor typed project", () => {
       const rawGameConfig = JSON.parse(
         readFileSync(new URL(fixture.config, import.meta.url), "utf8"),
       );
-      const rawManifest = JSON.parse(
-        readFileSync(new URL(fixture.manifest, import.meta.url), "utf8"),
-      );
+      const rawManifest = fixture.manifest
+        ? JSON.parse(
+            readFileSync(new URL(fixture.manifest, import.meta.url), "utf8"),
+          )
+        : readCraveFixtureJson("symbol-state-textures.manifest.json");
       const project = createFromImportedPackage({
         packageManifest: {
           version: 1,
@@ -356,14 +358,8 @@ describe("symbol editor typed project", () => {
         "utf8",
       ),
     );
-    const rawManifest = JSON.parse(
-      readFileSync(
-        resolve(
-          process.cwd(),
-          "../../assets/game002-s3/symbol-state-textures.manifest.json",
-        ),
-        "utf8",
-      ),
+    const rawManifest = readCraveFixtureJson(
+      "symbol-state-textures.manifest.json",
     );
     const project = createFromImportedPackage({
       packageManifest: {
@@ -397,7 +393,7 @@ describe("symbol editor typed project", () => {
     );
     if (restored.text.type !== "image-string")
       throw new Error("expected game002 CN image-string presentation");
-    (restored.text.tiers[1] as { slot: string }).slot = "coin";
+    (restored.text.tiers[1] as { slot: string }).slot = "other";
     setValuePresentation(project, "CN", restored);
     expect(() => compileSymbolEditorManifest(project)).toThrow(
       /一份共享 slot\/anchor\/transform/,
@@ -414,15 +410,7 @@ describe("symbol editor typed project", () => {
       fileName: "tiered.json",
     });
     const sourceManifest = parseSymbolStateTextureManifest(
-      JSON.parse(
-        readFileSync(
-          resolve(
-            process.cwd(),
-            "../../assets/game002-s3/symbol-state-textures.manifest.json",
-          ),
-          "utf8",
-        ),
-      ),
+      readCraveFixtureJson("symbol-state-textures.manifest.json"),
     );
     setValuePresentation(
       project,

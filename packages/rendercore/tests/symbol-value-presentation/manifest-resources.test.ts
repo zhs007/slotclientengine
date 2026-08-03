@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   createSymbolLandingAppearSymbolsFromManifest,
@@ -6,20 +5,10 @@ import {
   createSymbolValuePresentationResourcesFromManifest,
   parseSymbolStateTextureManifest,
 } from "../../src/index.js";
+import { readCraveJson, readCraveText } from "../crave-fixture.js";
 
-const root = new URL("../../../../assets/game002-s3/", import.meta.url);
-const manifest = JSON.parse(
-  readFileSync(new URL("symbol-state-textures.manifest.json", root), "utf8"),
-);
-const imageStringManifest = JSON.parse(
-  readFileSync(
-    new URL(
-      "dependencies/image-strings/cn-digits/image-string.manifest.json",
-      root,
-    ),
-    "utf8",
-  ),
-);
+const manifest = readCraveJson("symbol-state-textures.manifest.json");
+const imageStringManifest = readCraveJson("image-string.manifest.json");
 
 function createImageStringPool() {
   const resource = Object.freeze({
@@ -132,26 +121,26 @@ describe("symbol value presentation manifest resources", () => {
         displaySymbols: Object.keys(manifest.symbols),
       }),
     ).toEqual([
-      "WL",
+      "AF",
+      "CM",
+      "CN",
+      "CO",
       "H1",
       "H2",
       "L1",
       "L2",
       "L3",
       "L4",
+      "WL",
       "WM",
-      "CN",
-      "CM",
-      "CO",
-      "AF",
     ]);
   });
 
   it("resolves and validates all current official Spine resources", () => {
     const skeletons = Object.fromEntries(
       ["CN_1", "CN_2", "CN_3", "CN_4"].map((name) => [
-        `./${name}.json`,
-        JSON.parse(readFileSync(new URL(`${name}.json`, root), "utf8")),
+        `./${name.toLowerCase()}.json`,
+        readCraveJson(`${name.toLowerCase()}.json`),
       ]),
     );
     const resources = createSymbolValuePresentationResourcesFromManifest({
@@ -159,9 +148,9 @@ describe("symbol value presentation manifest resources", () => {
       requiredStates: ["spinBlur", "disabled"],
       spineSkeletonModules: skeletons,
       spineAtlasModules: {
-        "./Symbol.atlas": readFileSync(new URL("Symbol.atlas", root), "utf8"),
+        "./symbol.atlas": readCraveText("symbol.atlas"),
       },
-      spineTextureModules: { "./Symbol.png": "/Symbol.png" },
+      spineTextureModules: { "./symbol.webp": "/Symbol.webp" },
       textImageModules: Object.fromEntries(
         [1, 2, 5, 10, 25, 50, 100, 250, 500, 1000].map((value) => [
           `./${value}.png`,
@@ -172,16 +161,16 @@ describe("symbol value presentation manifest resources", () => {
     });
     expect(resources.CN.tiers).toHaveLength(4);
     expect(resources.CN.tiers.map((tier) => tier.spec.skeleton)).toEqual([
-      "./CN_1.json",
-      "./CN_2.json",
-      "./CN_3.json",
-      "./CN_4.json",
+      "./cn_1.json",
+      "./cn_2.json",
+      "./cn_3.json",
+      "./cn_4.json",
     ]);
     expect(resources.CN.textImageUrls).toEqual({});
     expect(resources.CN.imageStringTierBindings).toHaveLength(4);
     expect(
       resources.CN.imageStringTierBindings?.map((binding) => binding.slot),
-    ).toEqual(["Num", "Num", "Num", "Num"]);
+    ).toEqual(["coin", "coin", "coin", "coin"]);
   });
 
   it("reads the atlas page instead of deriving it from a mapped value texture key", () => {
@@ -191,8 +180,8 @@ describe("symbol value presentation manifest resources", () => {
     }
     const skeletons = Object.fromEntries(
       ["CN_1", "CN_2", "CN_3", "CN_4"].map((name) => [
-        `./${name}.json`,
-        JSON.parse(readFileSync(new URL(`${name}.json`, root), "utf8")),
+        `./${name.toLowerCase()}.json`,
+        readCraveJson(`${name.toLowerCase()}.json`),
       ]),
     );
 
@@ -201,7 +190,7 @@ describe("symbol value presentation manifest resources", () => {
       requiredStates: ["spinBlur", "disabled"],
       spineSkeletonModules: skeletons,
       spineAtlasModules: {
-        "./Symbol.atlas": readFileSync(new URL("Symbol.atlas", root), "utf8"),
+        "./symbol.atlas": readCraveText("symbol.atlas"),
       },
       spineTextureModules: {
         "./content-addressed-value.webp": "/assets/physical-hash.webp",
@@ -218,8 +207,8 @@ describe("symbol value presentation manifest resources", () => {
   it("fails when an image-rendered value has no exact image module", () => {
     const skeletons = Object.fromEntries(
       ["CN_1", "CN_2", "CN_3", "CN_4"].map((name) => [
-        `./${name}.json`,
-        JSON.parse(readFileSync(new URL(`${name}.json`, root), "utf8")),
+        `./${name.toLowerCase()}.json`,
+        readCraveJson(`${name.toLowerCase()}.json`),
       ]),
     );
     const imageManifest = structuredClone(manifest);
@@ -236,9 +225,9 @@ describe("symbol value presentation manifest resources", () => {
         requiredStates: ["spinBlur", "disabled"],
         spineSkeletonModules: skeletons,
         spineAtlasModules: {
-          "./Symbol.atlas": readFileSync(new URL("Symbol.atlas", root), "utf8"),
+          "./symbol.atlas": readCraveText("symbol.atlas"),
         },
-        spineTextureModules: { "./Symbol.png": "/Symbol.png" },
+        spineTextureModules: { "./symbol.webp": "/Symbol.webp" },
         textImageModules: { "./1.png": "/1.png" },
       }),
     ).toThrow(/value image 2.*missing/i);
@@ -279,9 +268,7 @@ describe("symbol value presentation manifest resources", () => {
   });
 
   it("rejects a configured text slot missing from any tier skeleton", () => {
-    const skeleton = JSON.parse(
-      readFileSync(new URL("CN_1.json", root), "utf8"),
-    );
+    const skeleton = readCraveJson("cn_1.json");
     expect(() =>
       createSymbolValuePresentationResourcesFromManifest({
         manifest: {
@@ -317,7 +304,7 @@ describe("symbol value presentation manifest resources", () => {
         },
         spineSkeletonModules: { "./tier.json": skeleton },
         spineAtlasModules: {
-          "./Symbol.atlas": readFileSync(new URL("Symbol.atlas", root), "utf8"),
+          "./Symbol.atlas": readCraveText("symbol.atlas"),
         },
         spineTextureModules: { "./Symbol.png": "/Symbol.png" },
       }),

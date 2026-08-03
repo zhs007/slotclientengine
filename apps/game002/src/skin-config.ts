@@ -1,6 +1,6 @@
-import game002S3SpineAtlasRaw from "../../../assets/game002-s3/Symbol.atlas?raw";
-import game002S3SpineTextureUrl from "../../../assets/game002-s3/Symbol.png?url";
-import game002S3ReelManifest from "../../../assets/game002-s3/reel.manifest.json";
+import game002ReelManifest from "../config/reel-presentation.manifest.json";
+import craveAssetsMap from "../../../assets/crave/assets.map.json";
+import { craveSceneLayoutPhysicalResourceUrls } from "./generated/crave-layout-resources.generated.js";
 import {
   createGridCellEffectResourcesFromManifest,
   deriveGridCellEffectPoolCapacities,
@@ -31,16 +31,11 @@ import {
   type Game002SkinId,
 } from "./skin-id.js";
 
-const game002NearwinSkeletonModules = import.meta.glob(
-  "../../../assets/game002-s3/{Nearwin1,Nearwin2}.json",
-  { eager: true, import: "default" },
-) as Record<string, unknown>;
-const game002NearwinAtlasModules = Object.freeze({
-  "../../../assets/game002-s3/Symbol.atlas": game002S3SpineAtlasRaw,
-});
-const game002NearwinTextureModules = Object.freeze({
-  "../../../assets/game002-s3/Symbol.png": game002S3SpineTextureUrl,
-});
+const CRAVE_ASSETS_MAP_FILES: Readonly<
+  Record<string, { readonly path: string }>
+> = craveAssetsMap.files;
+const CRAVE_PHYSICAL_RESOURCE_URLS: Readonly<Record<string, string>> =
+  craveSceneLayoutPhysicalResourceUrls;
 
 export interface Game002SkinConfig {
   readonly id: "2";
@@ -77,24 +72,7 @@ export interface Game002SkinResourceOwner {
   destroy(): Promise<void> | void;
 }
 
-export const GAME002_REEL_PRESENTATION_EXTENSION = (() => {
-  const reelManifest = parseReelManifest(game002S3ReelManifest);
-  const reelEffectResources = createGridCellEffectResourcesFromManifest({
-    manifest: reelManifest,
-    skeletonModules: game002NearwinSkeletonModules,
-    atlasModules: game002NearwinAtlasModules,
-    textureModules: game002NearwinTextureModules,
-  });
-  return Object.freeze({
-    reelManifest,
-    reelEffectResources,
-    reelEffectPoolCapacities: deriveGridCellEffectPoolCapacities({
-      manifest: reelManifest,
-      resources: reelEffectResources,
-      cellCount: 6 * 9,
-    }),
-  });
-})();
+export const GAME002_REEL_MANIFEST = parseReelManifest(game002ReelManifest);
 
 export async function prepareGame002SkinConfig(
   id: Game002SkinId,
@@ -122,9 +100,31 @@ async function prepareGame002Skin2Config(
 }> {
   const resource = await createSceneLayoutPackageResource({
     files,
+    lazyRuntimeResources: true,
+    loadRuntimeResourceBytes: loadCraveRuntimeResourceBytes,
     ...(decodeImage ? { decodeImage } : {}),
   });
   try {
+    const [nearwin1, nearwin2] = await Promise.all([
+      resource.loadRuntimeResource("nearwin1", "spine"),
+      resource.loadRuntimeResource("nearwin2", "spine"),
+    ]);
+    const reelEffectResources = createGridCellEffectResourcesFromManifest({
+      manifest: GAME002_REEL_MANIFEST,
+      skeletonModules: Object.freeze({
+        "./nearwin1": nearwin1.skeleton,
+        "./nearwin2": nearwin2.skeleton,
+      }),
+      atlasModules: Object.freeze({ "./symbol.atlas": nearwin1.atlasText }),
+      textureModules: Object.freeze({
+        "./symbol.png": requireSpineTexture(nearwin1, "Symbol.png"),
+      }),
+    });
+    const reelEffectPoolCapacities = deriveGridCellEffectPoolCapacities({
+      manifest: GAME002_REEL_MANIFEST,
+      resources: reelEffectResources,
+      cellCount: 6 * 9,
+    });
     const gameModes = resource.manifest.gameModes;
     if (!gameModes)
       throw new Error("game002 Crave layout must declare gameModes.");
@@ -167,12 +167,10 @@ async function prepareGame002Skin2Config(
       label: "crave",
       reelsName: symbolBinding.reelSet,
       rawGameConfig: symbolPackage.rawGameConfig,
-      reelEffectResources:
-        GAME002_REEL_PRESENTATION_EXTENSION.reelEffectResources,
-      reelEffectPoolCapacities:
-        GAME002_REEL_PRESENTATION_EXTENSION.reelEffectPoolCapacities,
+      reelEffectResources,
+      reelEffectPoolCapacities,
       stateTextureManifest,
-      reelManifest: GAME002_REEL_PRESENTATION_EXTENSION.reelManifest,
+      reelManifest: GAME002_REEL_MANIFEST,
       displaySymbols,
       emptySymbols: Object.freeze([]),
       symbolScales: symbolPackage.symbolScales,
@@ -229,6 +227,42 @@ async function prepareGame002Skin2Config(
     await resource.destroy();
     throw error;
   }
+}
+
+async function loadCraveRuntimeResourceBytes(
+  logicalKey: string,
+): Promise<Uint8Array> {
+  const physicalPath = CRAVE_ASSETS_MAP_FILES[logicalKey]?.path;
+  if (!physicalPath)
+    throw new Error(
+      `game002 Crave logical resource "${logicalKey}" is unavailable.`,
+    );
+  const url = CRAVE_PHYSICAL_RESOURCE_URLS[physicalPath];
+  if (!url)
+    throw new Error(
+      `game002 Crave physical resource "${physicalPath}" is unavailable.`,
+    );
+  const response = await fetch(url);
+  if (!response.ok)
+    throw new Error(
+      `game002 Crave runtime resource fetch failed (${response.status}): ${logicalKey}.`,
+    );
+  return new Uint8Array(await response.arrayBuffer());
+}
+
+function requireSpineTexture(
+  resource: Extract<
+    import("@slotclientengine/rendercore").SceneLayoutRuntimeResource,
+    { readonly kind: "spine" }
+  >,
+  page: string,
+): string {
+  const url = resource.textureUrls[page];
+  if (!url)
+    throw new Error(
+      `game002 runtime Spine texture page "${page}" is unavailable.`,
+    );
+  return url;
 }
 
 function requireMaximizedFocusRegion(
