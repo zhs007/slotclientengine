@@ -51,6 +51,7 @@ import {
   type EditorVniLayoutResource,
   readEditorSpineMetadata,
 } from "./editor-resource.js";
+import { canonicalizeUploadFileName } from "../io/filename-policy.js";
 
 interface PreparedResource {
   readonly resource: EditorLayoutResource;
@@ -467,17 +468,32 @@ export function bindRuntimeResource(
   key: string,
 ): void {
   requireResource(project, resourceId);
-  if (!/^[a-z0-9][a-z0-9._-]*$/u.test(key))
+  const normalizedKey = normalizeRuntimeResourceKey(key);
+  if (!/^[a-z0-9][a-z0-9._-]*$/u.test(normalizedKey))
     throw new Error(
-      "程序资源键必须以小写字母或数字开头，且只包含小写字母、数字、点、下划线和连字符。",
+      "程序资源键转为小写后必须以字母或数字开头，且只包含字母、数字、点、下划线和连字符。",
     );
   const currentKey = getRuntimeResourceKey(project, resourceId);
-  const occupied = project.runtimeResourceBindings.get(key);
+  const occupied = project.runtimeResourceBindings.get(normalizedKey);
   if (occupied && occupied !== resourceId)
-    throw new Error(`程序资源键 ${key} 已绑定资源 ${occupied}。`);
-  if (currentKey === key) return;
+    throw new Error(`程序资源键 ${normalizedKey} 已绑定资源 ${occupied}。`);
+  if (currentKey === normalizedKey) return;
   if (currentKey) project.runtimeResourceBindings.delete(currentKey);
-  project.runtimeResourceBindings.set(key, resourceId);
+  project.runtimeResourceBindings.set(normalizedKey, resourceId);
+}
+
+export function normalizeRuntimeResourceKey(key: string): string {
+  return key.trim().toLocaleLowerCase("en-US");
+}
+
+export function suggestRuntimeResourceKey(resourceId: string): string {
+  const basename = resourceId.includes("/")
+    ? resourceId.split("/").at(-1)!
+    : resourceId;
+  const dot = basename.lastIndexOf(".");
+  return normalizeRuntimeResourceKey(
+    dot > 0 ? basename.slice(0, dot) : basename,
+  );
 }
 
 export function unbindRuntimeResource(
@@ -1095,7 +1111,7 @@ async function prepareImageResource(options: {
   }
   const bytes = new Uint8Array(await options.file.arrayBuffer());
   const type = detectRasterAssetType(bytes);
-  const path = basenameFromSourcePath(options.file.name);
+  const path = canonicalizeUploadFileName(options.file.name);
   if (!path.toLowerCase().endsWith(`.${type.extension}`))
     throw new Error(`图片 filename extension 与内容不一致：${path}`);
   return {
@@ -1186,16 +1202,16 @@ async function prepareSpineResources(options: {
   const atlasBytes = new TextEncoder().encode(
     `${atlasText.replace(/\r\n?/gu, "\n").replace(/\n+$/u, "")}\n`,
   );
-  const atlasPath = basenameFromSourcePath(atlasFile.name);
+  const atlasPath = canonicalizeUploadFileName(atlasFile.name);
   assertNoEditorAssetKeyAliases([
-    ...jsonFiles.map((file) => basenameFromSourcePath(file.name)),
+    ...jsonFiles.map((file) => canonicalizeUploadFileName(file.name)),
     atlasPath,
     ...Object.values(textures),
   ]);
   putAsset(assets, atlasPath, atlasBytes);
   const sourceNames = Object.freeze(options.files.map((file) => file.name));
   const batchLabel = `spine:${jsonFiles
-    .map((file) => basenameFromSourcePath(file.name))
+    .map((file) => canonicalizeUploadFileName(file.name))
     .sort((left, right) => left.localeCompare(right, "en"))
     .join(",")}`;
   const prepared = await Promise.all(
@@ -1242,7 +1258,7 @@ async function prepareSpineResources(options: {
         throw new Error(
           `Spine skeleton ${skeletonFile.name} bounds 必须同时是有限正数，或同时省略。`,
         );
-      const skeletonPath = basenameFromSourcePath(skeletonFile.name);
+      const skeletonPath = canonicalizeUploadFileName(skeletonFile.name);
       const resourceAssets = new Map(assets);
       putAsset(resourceAssets, skeletonPath, encodeStableJson(skeleton));
       const resource: EditorSpineLayoutResource = Object.freeze({
@@ -1352,7 +1368,7 @@ async function prepareVideoResource(options: {
       metadata.hasAudio !== "unknown")
   )
     throw new Error("视频 metadata 的尺寸、时长或 audio 诊断无效。");
-  const path = basenameFromSourcePath(options.file.name);
+  const path = canonicalizeUploadFileName(options.file.name);
   const id = options.resourceId ?? requiredResourceId(options.file.name);
   return {
     resource: {
@@ -1587,7 +1603,7 @@ function decodeVideoFile(file: File): Promise<{
 }
 
 function requiredResourceId(sourceName: string): string {
-  return basenameFromSourcePath(sourceName);
+  return canonicalizeUploadFileName(sourceName);
 }
 
 function inspectAtlasPages(atlasText: string): readonly string[] {
@@ -1614,7 +1630,7 @@ function canonicalRasterFilename(
   sourceName: string,
   detectedExtension: string,
 ): string {
-  const basename = basenameFromSourcePath(sourceName);
+  const basename = canonicalizeUploadFileName(sourceName);
   return `${basename.replace(/\.[^.]*$/u, "")}.${detectedExtension}`;
 }
 

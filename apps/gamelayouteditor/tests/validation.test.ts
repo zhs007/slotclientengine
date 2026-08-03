@@ -214,7 +214,7 @@ describe("filename-key layout resource commands", () => {
       decodeImage,
     });
 
-    bindRuntimeResource(project, "nearwin.png", "nearwin.effect");
+    bindRuntimeResource(project, "nearwin.png", " NearWin.Effect ");
     expect(getRuntimeResourceKey(project, "nearwin.png")).toBe(
       "nearwin.effect",
     );
@@ -228,16 +228,16 @@ describe("filename-key layout resource commands", () => {
     expect(() =>
       bindRuntimeResource(project, "background.png", "nearwin.effect"),
     ).toThrow(/已绑定/);
-    expect(() =>
-      bindRuntimeResource(project, "nearwin.png", "NearWin"),
-    ).toThrow(/程序资源键/);
+    bindRuntimeResource(project, "nearwin.png", "NearWin");
+    expect(getRuntimeResourceKey(project, "nearwin.png")).toBe("nearwin");
+    expect(() => bindRuntimeResource(project, "nearwin.png", "近赢")).toThrow(
+      /程序资源键/,
+    );
 
     const cloned = cloneEditorProject(project);
     unbindRuntimeResource(cloned, "nearwin.png");
     expect(getRuntimeResourceKey(cloned, "nearwin.png")).toBeNull();
-    expect(getRuntimeResourceKey(project, "nearwin.png")).toBe(
-      "nearwin.effect",
-    );
+    expect(getRuntimeResourceKey(project, "nearwin.png")).toBe("nearwin");
   });
 
   it("imports a selected VNI runtime and configures an independent non-looping layer", async () => {
@@ -418,12 +418,11 @@ describe("filename-key layout resource commands", () => {
     const video = await uploadVideoResource({
       project,
       file: new File([mp4Bytes(1)], "BG2FG.MP4", { type: "video/mp4" }),
-      resourceId: "BG2FG.MP4",
       decodeVideo,
     });
     expect(video).toMatchObject({
       kind: "video",
-      path: "BG2FG.MP4",
+      path: "bg2fg.mp4",
       mimeType: "video/mp4",
       size: { width: 1280, height: 720 },
       durationSeconds: 3.625,
@@ -440,7 +439,7 @@ describe("filename-key layout resource commands", () => {
     await uploadVideoResource({
       project,
       file: new File([mp4Bytes(2)], "BG2FG.MP4"),
-      resourceId: "BG2FG.MP4",
+      resourceId: "bg2fg.mp4",
       decodeVideo,
     });
     expect(project.assets.size).toBe(3);
@@ -458,7 +457,7 @@ describe("filename-key layout resource commands", () => {
       fit: "contain",
       fadeOutSeconds: 0.5,
     });
-    setGameModeVideoTransitionResource(project, transition, "BG2FG.MP4");
+    setGameModeVideoTransitionResource(project, transition, "bg2fg.mp4");
     setGameModeVideoTransitionFadeOut(project, transition, 0.5);
     const manifest = editorProjectToManifest(project);
     expect(manifest.gameModes?.transitions).toEqual([
@@ -479,7 +478,7 @@ describe("filename-key layout resource commands", () => {
     expect(() =>
       addLayerFromResource({
         project,
-        resourceId: "BG2FG.MP4",
+        resourceId: "bg2fg.mp4",
         nodeId: "bad-video-layer",
         variants: ["default"],
       }),
@@ -487,17 +486,17 @@ describe("filename-key layout resource commands", () => {
     expect(() =>
       assignBackgroundResource({
         project,
-        resourceId: "BG2FG.MP4",
+        resourceId: "bg2fg.mp4",
         variant: "default",
       }),
     ).toThrow(/video/);
-    expect(() => deleteLayoutResource(project, "BG2FG.MP4")).toThrow(
+    expect(() => deleteLayoutResource(project, "bg2fg.mp4")).toThrow(
       /BaseGame -> FreeGame/,
     );
     await expect(
       replaceVideoResource({
         project,
-        resourceId: "BG2FG.MP4",
+        resourceId: "bg2fg.mp4",
         file: new File([mp4Bytes(3)], "BG2FG.MP4", {
           type: "video/mp4",
         }),
@@ -509,7 +508,7 @@ describe("filename-key layout resource commands", () => {
         }),
       }),
     ).rejects.toThrow(/fadeOutSeconds/);
-    expect(project.resources.get("BG2FG.MP4")).toEqual(video);
+    expect(project.resources.get("bg2fg.mp4")).toEqual(video);
 
     const before = cloneEditorProject(project);
     await expect(
@@ -549,13 +548,13 @@ describe("filename-key layout resource commands", () => {
       decodeImage,
     });
     expect(resource).toMatchObject({
-      id: "BG_2.PNG",
+      id: "bg_2.png",
       kind: "image",
-      path: "BG_2.PNG",
+      path: "bg_2.png",
       size: { width: 2000, height: 2000 },
     });
     expect(project.nodes).toEqual([]);
-    expect(project.resources.get("BG_2.PNG")).toEqual(resource);
+    expect(project.resources.get("bg_2.png")).toEqual(resource);
     expect(resource.kind).toBe("image");
     if (resource.kind !== "image") throw new Error("expected image resource");
     expect(project.assets.get(resource.path)).toEqual(pngBytes(3));
@@ -671,7 +670,7 @@ describe("filename-key layout resource commands", () => {
     const pages = Object.keys(resource.textures);
     const paths = Object.values(resource.textures);
     expect(pages).toEqual(["BG.png", "BG_2.png"]);
-    expect(paths).toEqual(["BG.png", "BG_2.png"]);
+    expect(paths).toEqual(["bg.png", "bg_2.png"]);
     expect(project.assets.get(paths[0]!)).toEqual(texture);
     expect(project.assets.get(paths[1]!)).toEqual(texture);
     const atlasText = new TextDecoder().decode(
@@ -704,9 +703,9 @@ describe("filename-key layout resource commands", () => {
       ],
     });
 
-    expect(resource.textures).toEqual({ "BG.png": "BG.webp" });
+    expect(resource.textures).toEqual({ "BG.png": "bg.webp" });
     expect(project.assets.has("BG.png")).toBe(false);
-    expect(project.assets.get("BG.webp")).toEqual(webpBytes(7));
+    expect(project.assets.get("bg.webp")).toEqual(webpBytes(7));
     const atlasText = new TextDecoder().decode(
       project.assets.get(resource.atlas),
     );
@@ -1389,7 +1388,7 @@ describe("filename-key layout resource commands", () => {
         file: new File([pngBytes(1)], "中奖.png"),
         decodeImage: async () => ({ width: 1, height: 1 }),
       }),
-    ).resolves.toMatchObject({ id: "中奖.png", path: "中奖.png" });
+    ).rejects.toThrow(/只允许 ASCII/);
     await expect(
       uploadImageResource({
         project: createNewEditorProject("maximized-focus"),

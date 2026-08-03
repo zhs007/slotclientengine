@@ -831,6 +831,22 @@ describe("GameLayoutEditorApp workspace", () => {
     app.destroy();
   });
 
+  it("rejects the whole loose-file upload when one filename is non-ASCII", async () => {
+    const fileClick = selectFilesOnce([
+      new File(["a"], "nearwin.png"),
+      new File(["b"], "近赢.png"),
+    ]);
+    const { app, root } = await createApp();
+    (
+      root.querySelector("[data-upload-resources]") as HTMLButtonElement
+    ).click();
+    await vi.waitFor(() => expect(root.textContent).toContain("只允许 ASCII"));
+    expect(commandSpies.uploadImage).not.toHaveBeenCalled();
+    expect(root.querySelectorAll("[data-resource-row]")).toHaveLength(0);
+    fileClick.mockRestore();
+    app.destroy();
+  });
+
   it("edits one selected orientation layer, moves, renames, toggles placement and deletes it", async () => {
     const { app, root } = await createApp();
     (root.querySelector("[data-new-project]") as HTMLButtonElement).click();

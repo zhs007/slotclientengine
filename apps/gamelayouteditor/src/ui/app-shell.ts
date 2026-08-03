@@ -7,10 +7,11 @@ import {
   ephemeralContentFingerprint,
   extractBoundedZip,
 } from "@slotclientengine/browserartifactio";
+import { normalizeEditorPackageZipEntries } from "@slotclientengine/editorresource";
 import {
-  basenameFromSourcePath,
-  normalizeEditorPackageZipEntries,
-} from "@slotclientengine/editorresource";
+  assertCanonicalUploadFileNames,
+  canonicalizeUploadFileName,
+} from "../io/filename-policy.js";
 import { ObjectUrlRegistry } from "../io/object-url-registry.js";
 import { exportLayoutZip } from "../io/exported-layout-zip.js";
 import {
@@ -64,6 +65,7 @@ import {
   importVniBundle,
   inspectVniBundleProfiles,
   getRuntimeResourceKey,
+  normalizeRuntimeResourceKey,
   uploadImageResource,
   uploadSpineResources,
   uploadVideoResource,
@@ -1588,7 +1590,7 @@ export class GameLayoutEditorApp {
           ].find(
             (candidate) => candidate.dataset.runtimeResourceKey === resourceId,
           );
-          const key = input?.value.trim() ?? "";
+          const key = normalizeRuntimeResourceKey(input?.value ?? "");
           this.runTransaction(
             (draft) => bindRuntimeResource(draft, resourceId, key),
             `已将资源 ${resourceId} 绑定为程序资源 ${key}。`,
@@ -2318,6 +2320,7 @@ export class GameLayoutEditorApp {
     );
     if (files.length === 0) return;
     try {
+      assertCanonicalUploadFileNames(files);
       createBoundedSourceIndex(files, {
         maxEntries: 4096,
         maxFileBytes: 50 * 1024 * 1024,
@@ -3475,7 +3478,7 @@ function defaultResourceKey(
   _project: EditorProject,
   sourceName: string,
 ): string {
-  return basenameFromSourcePath(sourceName);
+  return canonicalizeUploadFileName(sourceName);
 }
 
 function confirmImportReview(

@@ -11,7 +11,12 @@ import {
   assertCanonicalPackagePath,
   extractBoundedZip as extractSharedBoundedZip,
 } from "@slotclientengine/browserartifactio";
-import { normalizeEditorPackageZipEntries } from "@slotclientengine/editorresource";
+import {
+  decodeEditorAssetsMap,
+  EDITOR_ASSETS_MAP_PATH,
+  normalizeEditorPackageZipEntries,
+  validateEditorAssetsMapPackage,
+} from "@slotclientengine/editorresource";
 
 export const LAYOUT_ZIP_LIMITS = Object.freeze({
   maxEntries: 4096,
@@ -62,18 +67,44 @@ export async function importLayoutZip(
   } catch (error) {
     throw new Error(`layout.manifest.json 无效：${formatError(error)}`);
   }
+  const mapBytes = files.get(EDITOR_ASSETS_MAP_PATH);
+  if (mapBytes) {
+    const { normalizeMappedLayoutFilenameKeys } =
+      await import("./exported-layout-zip.js");
+    const resolved = await validateEditorAssetsMapPackage({
+      map: decodeEditorAssetsMap(mapBytes),
+      files,
+      allowControlPaths: ["layout.manifest.json"],
+    });
+    const normalized = await normalizeMappedLayoutFilenameKeys(
+      rawManifest,
+      new Map([...resolved].map(([key, entry]) => [key, entry.bytes] as const)),
+    );
+    collectSceneLayoutPackagePaths({
+      manifest: normalized.manifest,
+      files: normalized.assets,
+    });
+    return validateLayoutAssets(
+      normalized.manifest,
+      normalized.assets,
+      options,
+    );
+  }
   const manifest = parseSceneLayoutManifest(rawManifest);
   const resolvedFiles = await resolveSceneLayoutPackageFiles({
     manifest,
     files,
   });
   collectSceneLayoutPackagePaths({ manifest, files: resolvedFiles });
-  const assets = new Map(
+  const sourceAssets = new Map(
     [...resolvedFiles.entries()]
       .filter(([path]) => path !== "layout.manifest.json")
       .map(([path, bytes]) => [path, bytes.slice()] as const),
   );
-  return validateLayoutAssets(manifest, assets, options);
+  const { normalizeLayoutFilenameKeys } =
+    await import("./exported-layout-zip.js");
+  const normalized = await normalizeLayoutFilenameKeys(manifest, sourceAssets);
+  return validateLayoutAssets(normalized.manifest, normalized.assets, options);
 }
 
 export async function validateLayoutAssets(

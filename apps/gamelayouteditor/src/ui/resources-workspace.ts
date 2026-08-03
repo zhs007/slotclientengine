@@ -7,6 +7,7 @@ import {
   describeResource,
   getLayoutResourceReferences,
   getRuntimeResourceKey,
+  suggestRuntimeResourceKey,
 } from "../model/resource-commands.js";
 import type { EditorUiSession } from "./ui-session.js";
 import { escapeHtml, statusText } from "./ui-markup.js";
@@ -93,7 +94,7 @@ function resourceRowMarkup(
     <div class="resource-actions">
       ${resource.kind === "video" ? "" : `<button type="button" data-resource-add-layer="${escapeHtml(resource.id)}">添加为图层</button>`}
       ${resource.kind === "image-string" || resource.kind === "video" || resource.kind === "vni" ? "" : project.mode === "maximized-focus" ? `<button type="button" data-resource-background="default" data-resource-id="${escapeHtml(resource.id)}">设为背景</button>` : `<button type="button" data-resource-background="landscape" data-resource-id="${escapeHtml(resource.id)}">设为横版背景</button><button type="button" data-resource-background="portrait" data-resource-id="${escapeHtml(resource.id)}">设为竖版背景</button>`}
-      <label>程序键<input data-runtime-resource-key="${escapeHtml(resource.id)}" value="${escapeHtml(runtimeKey ?? "")}" placeholder="例如 nearwin" /></label><button type="button" data-runtime-resource-action="${escapeHtml(resource.id)}" data-runtime-bound="${runtimeKey !== null}">${runtimeKey ? "取消强制导出" : "设为程序资源"}</button>
+      <label>程序键<input data-runtime-resource-key="${escapeHtml(resource.id)}" value="${escapeHtml(runtimeKey ?? suggestRuntimeResourceKey(resource.id))}" placeholder="例如 nearwin" /></label><button type="button" data-runtime-resource-action="${escapeHtml(resource.id)}" data-runtime-bound="${runtimeKey !== null}">${runtimeKey ? "取消强制导出" : "设为程序资源"}</button>
       <button type="button" class="danger" data-delete-resource="${escapeHtml(resource.id)}" ${references.length > 0 ? `title="被 ${references.map((reference) => reference.nodeId).join(", ")} 引用"` : ""}>删除</button>
     </div>
     ${expanded ? resourceDetailsMarkup(resource, references, runtimeKey) : ""}
