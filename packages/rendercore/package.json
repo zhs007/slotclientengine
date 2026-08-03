@@ -9,42 +9,52 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
     "./symbol": {
+      "source": "./src/symbol/index.ts",
       "types": "./dist/symbol/index.d.ts",
       "import": "./dist/symbol/index.js"
     },
     "./background": {
+      "source": "./src/background/index.ts",
       "types": "./dist/background/index.d.ts",
       "import": "./dist/background/index.js"
     },
     "./reel": {
+      "source": "./src/reel/index.ts",
       "types": "./dist/reel/index.d.ts",
       "import": "./dist/reel/index.js"
     },
     "./viewport": {
+      "source": "./src/viewport/index.ts",
       "types": "./dist/viewport/index.d.ts",
       "import": "./dist/viewport/index.js"
     },
     "./scene-layout": {
+      "source": "./src/scene-layout/index.ts",
       "types": "./dist/scene-layout/index.d.ts",
       "import": "./dist/scene-layout/index.js"
     },
     "./image-string": {
+      "source": "./src/image-string/index.ts",
       "types": "./dist/image-string/index.d.ts",
       "import": "./dist/image-string/index.js"
     },
     "./symbol-image-string": {
+      "source": "./src/symbol-image-string/index.ts",
       "types": "./dist/symbol-image-string/index.d.ts",
       "import": "./dist/symbol-image-string/index.js"
     },
     "./win-amount": {
+      "source": "./src/win-amount/index.ts",
       "types": "./dist/win-amount/index.d.ts",
       "import": "./dist/win-amount/index.js"
     },
     "./popup": {
+      "source": "./src/popup/index.ts",
       "types": "./dist/popup/index.d.ts",
       "import": "./dist/popup/index.js"
     },

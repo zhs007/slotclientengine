@@ -7,7 +7,7 @@
   "scripts": {
     "prepare:deps": "pnpm --filter @slotclientengine/gameframeworks build",
     "build": "pnpm run prepare:deps && vite build",
-    "dev": "pnpm run prepare:deps && sh -c 'if [ \"$1\" = \"--\" ]; then shift; fi; exec vite \"$@\"' sh",
+    "dev": "pnpm run prepare:deps && node ../../scripts/run-vite-dev.mjs",
     "lint": "eslint .",
     "test": "vitest run --coverage",
     "typecheck": "pnpm run prepare:deps && tsc -p tsconfig.json --noEmit",

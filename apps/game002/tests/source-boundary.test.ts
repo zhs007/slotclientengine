@@ -103,6 +103,33 @@ describe("game002 source boundary", () => {
     );
   });
 
+  it("resolves rendercore source types instead of stale build declarations", () => {
+    const tsconfig = JSON.parse(
+      readFileSync(join(APP_ROOT, "tsconfig.json"), "utf8"),
+    ) as { compilerOptions?: { customConditions?: string[] } };
+    const rendercorePackage = JSON.parse(
+      readFileSync(
+        resolve(APP_ROOT, "../../packages/rendercore/package.json"),
+        "utf8",
+      ),
+    ) as {
+      exports?: Record<string, string | Record<string, string>>;
+    };
+
+    expect(tsconfig.compilerOptions?.customConditions).toContain("source");
+    for (const [subpath, target] of Object.entries(
+      rendercorePackage.exports ?? {},
+    )) {
+      if (subpath === "./package.json" || typeof target === "string") continue;
+      const sourcePath =
+        subpath === "."
+          ? "./src/index.ts"
+          : `./src/${subpath.slice(2)}/index.ts`;
+      expect(Object.keys(target).slice(0, 2)).toEqual(["source", "types"]);
+      expect(target.source).toBe(sourcePath);
+    }
+  });
+
   it("keeps static release config out of build-time env and old defaults", () => {
     const files = [
       ...listFiles(join(APP_ROOT, "src"), (file) => file.endsWith(".ts")),

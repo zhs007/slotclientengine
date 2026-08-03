@@ -11,7 +11,7 @@
     "check:resources": "pnpm run check:crave-layout-resources",
     "prepare:deps": "pnpm --filter @slotclientengine/gameloading build && pnpm --filter @slotclientengine/gameloading-ui-leo build && pnpm --filter @slotclientengine/platformbootstrap build && pnpm --filter @slotclientengine/platformbootstrap-leo build && pnpm --filter @slotclientengine/gameframeworks build && pnpm --filter @slotclientengine/game-ui-leo build && pnpm --filter @slotclientengine/rendercore build",
     "build": "pnpm run generate:resources && pnpm run prepare:deps && vite build",
-    "dev": "pnpm run generate:resources && pnpm run prepare:deps && sh -c 'if [ \"$1\" = \"--\" ]; then shift; fi; exec vite \"$@\"' sh",
+    "dev": "pnpm run generate:resources && pnpm run prepare:deps && node ../../scripts/run-vite-dev.mjs",
     "lint": "eslint .",
     "release:check": "pnpm run check:resources && pnpm run build && node scripts/verify-static-dist.mjs",
     "test": "pnpm run generate:resources && pnpm run prepare:deps && vitest run --coverage",

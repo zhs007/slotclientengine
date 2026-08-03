@@ -13,7 +13,7 @@
     "generate:resources": "pnpm run generate:static-config && pnpm run generate:minecart2-layout-resources",
     "check:resources": "pnpm run check:static-config && pnpm run check:minecart2-layout-resources",
     "build": "pnpm run generate:resources && pnpm run prepare:deps && vite build",
-    "dev": "pnpm run generate:resources && pnpm run prepare:deps && sh -c 'if [ \"$1\" = \"--\" ]; then shift; fi; exec vite \"$@\"' sh",
+    "dev": "pnpm run generate:resources && pnpm run prepare:deps && node ../../scripts/run-vite-dev.mjs",
     "lint": "eslint .",
     "release:check": "pnpm run check:resources && pnpm run build && node scripts/verify-static-dist.mjs",
     "test": "pnpm run generate:resources && pnpm run prepare:deps && vitest run --coverage",
