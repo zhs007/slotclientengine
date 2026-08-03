@@ -166,6 +166,64 @@ describe("typed resource picker", () => {
     expect(store.getSnapshot().revision).toBe(revision);
   });
 
+  it("binds exact resources into a composite animation layer", () => {
+    const project = createProject();
+    setStateVisual(project, "A", "normal", {
+      kind: "composite",
+      base: "normal",
+      baseVisual: { kind: "image", imagePath: "H1.png" },
+      layers: [
+        {
+          id: "front",
+          placement: "overlay",
+          animation: {
+            kind: "spine",
+            skeletonPath: "",
+            atlasPath: "",
+            texturePath: "",
+            animationName: "",
+          },
+        },
+      ],
+    });
+
+    applyResourceBinding(
+      project,
+      {
+        kind: "spine-skeleton",
+        symbol: "A",
+        state: "normal",
+        compositeLayerIndex: 0,
+      },
+      "H1.json",
+    );
+    applyResourceBinding(
+      project,
+      {
+        kind: "spine-atlas",
+        symbol: "A",
+        state: "normal",
+        compositeLayerIndex: 0,
+      },
+      "Symbol.atlas",
+    );
+
+    expect(project.symbols.get("A")?.states.get("normal")).toMatchObject({
+      kind: "composite",
+      layers: [
+        {
+          id: "front",
+          animation: {
+            kind: "spine",
+            skeletonPath: "H1.json",
+            atlasPath: "Symbol.atlas",
+            texturePath: "Symbol.png",
+          },
+        },
+      ],
+    });
+  });
+
   it("query filtering does not mutate the project", () => {
     const project = createProject();
     const before = project.symbols.get("A")?.states.get("normal");

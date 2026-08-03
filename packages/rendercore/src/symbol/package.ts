@@ -291,46 +291,49 @@ export function collectSymbolManifestResourcePaths(options: {
     collectNormal(entry.normal, add);
     for (const statePath of Object.values(entry.states)) add(statePath);
     for (const animation of Object.values(entry.animations)) {
-      if (
-        !animation ||
-        animation.kind === "builtin" ||
-        animation.kind === "static" ||
-        animation.kind === "empty" ||
-        animation.kind === "activeSpine"
-      )
-        continue;
-      if (animation.kind === "vni") {
-        add(animation.project);
-        if (options.files) {
-          const projectPath = resolvePackagePath(
-            manifestPath,
-            animation.project,
-          );
-          const project = parseJsonFile(
-            options.files,
-            projectPath,
-            "VNI project",
-          ) as { assets?: unknown };
-          if (!Array.isArray(project.assets))
-            throw new SymbolAssetError(
-              `VNI project ${projectPath} assets must be an array.`,
-            );
-          for (const [index, rawAsset] of project.assets.entries()) {
-            const asset = assertRecord(
-              rawAsset,
-              `VNI project ${projectPath} assets[${index}]`,
-            );
-            if (typeof asset.path !== "string")
+      if (!animation) continue;
+      const leaves =
+        animation.kind === "composite"
+          ? animation.layers.map((layer) => layer.animation)
+          : [animation];
+      for (const leaf of leaves) {
+        if (
+          leaf.kind === "builtin" ||
+          leaf.kind === "static" ||
+          leaf.kind === "empty" ||
+          leaf.kind === "activeSpine"
+        )
+          continue;
+        if (leaf.kind === "vni") {
+          add(leaf.project);
+          if (options.files) {
+            const projectPath = resolvePackagePath(manifestPath, leaf.project);
+            const project = parseJsonFile(
+              options.files,
+              projectPath,
+              "VNI project",
+            ) as { assets?: unknown };
+            if (!Array.isArray(project.assets))
               throw new SymbolAssetError(
-                `VNI project ${projectPath} asset path must be a string.`,
+                `VNI project ${projectPath} assets must be an array.`,
               );
-            paths.add(resolvePackagePath(projectPath, asset.path));
+            for (const [index, rawAsset] of project.assets.entries()) {
+              const asset = assertRecord(
+                rawAsset,
+                `VNI project ${projectPath} assets[${index}]`,
+              );
+              if (typeof asset.path !== "string")
+                throw new SymbolAssetError(
+                  `VNI project ${projectPath} asset path must be a string.`,
+                );
+              paths.add(resolvePackagePath(projectPath, asset.path));
+            }
           }
+        } else {
+          add(leaf.skeleton);
+          add(leaf.atlas);
+          add(leaf.texture);
         }
-      } else {
-        add(animation.skeleton);
-        add(animation.atlas);
-        add(animation.texture);
       }
     }
     const presentation = entry.valuePresentation;

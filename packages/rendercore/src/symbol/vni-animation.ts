@@ -12,7 +12,9 @@ import {
   resetBaseDisplay,
 } from "./ani.js";
 import { SymbolAnimationError } from "./errors.js";
+import { CompositeSymbolAni } from "./composite-animation.js";
 import {
+  createSymbolCompositeLayerResourceKey,
   createSymbolVniAnimationResourcesFromManifest,
   createSymbolSpineAnimationResourcesFromManifest,
   parseSymbolStateTextureManifest,
@@ -440,6 +442,43 @@ export function createSymbolVniAnimationResolver(options: {
     const spec =
       options.manifestAnimationSpecs?.[context.symbol]?.[context.resolvedState];
     if (spec) {
+      if (spec.kind === "composite") {
+        return new CompositeSymbolAni({
+          context,
+          spec,
+          createAnimation: (layer, layerContext) => {
+            const resourceKey = createSymbolCompositeLayerResourceKey(
+              context.resolvedState,
+              layer.id,
+            );
+            if (layer.animation.kind === "spine") {
+              const resource =
+                options.spineResources?.[context.symbol]?.[resourceKey];
+              if (!resource) {
+                throw new SymbolAnimationError(
+                  `No Spine resource was registered for "${context.symbol}" composite layer "${layer.id}".`,
+                );
+              }
+              return new SpineSymbolAni({
+                context: layerContext,
+                resource,
+                playerFactory: options.spinePlayerFactory,
+              });
+            }
+            const resource = options.resources[context.symbol]?.[resourceKey];
+            if (!resource) {
+              throw new SymbolAnimationError(
+                `No VNI resource was registered for "${context.symbol}" composite layer "${layer.id}".`,
+              );
+            }
+            return new VniSymbolAni({
+              context: layerContext,
+              resource,
+              playerFactory: options.playerFactory,
+            });
+          },
+        });
+      }
       return createManifestSymbolAni(context, spec);
     }
     const normalSpineResource =
@@ -549,6 +588,11 @@ function createManifestSymbolAni(
   if (spec.kind === "spine") {
     throw new SymbolAnimationError(
       `No Spine resource was registered for "${context.symbol}" state "${context.resolvedState}".`,
+    );
+  }
+  if (spec.kind === "composite") {
+    throw new SymbolAnimationError(
+      `No composite resource was registered for "${context.symbol}" state "${context.resolvedState}".`,
     );
   }
   throw new SymbolAnimationError(

@@ -22,9 +22,9 @@
 
 ## 精确闭包
 
-闭包从 manifest 结构化派生，包含 display state、VNI project 与 `assets[].path`、official Spine 4.3 skeleton/atlas/pages、value presentation、image-string node/tier root 与 glyph。缺资源、orphan、animation/slot/glyph 错误、decoded size 漂移或 package resources 不精确都失败；禁止 glob、字符串替换、路径猜测和 fallback。
+闭包从 manifest 结构化派生，包含 display state、composite 的 base 与全部有序 Spine/VNI leaf、VNI project 与 `assets[].path`、official Spine 4.3 skeleton/atlas/pages、value presentation、image-string node/tier root 与 glyph。缺资源、orphan、animation/slot/glyph 错误、decoded size 漂移或 package resources 不精确都失败；禁止 glob、字符串替换、路径猜测和 fallback。
 
-state lifecycle、scale、renderPriority、value/cascade、activeSpine 与 image-string slot 语义不因 container 格式改变。Spine animation 名区分大小写，normal/stable loop 与 once state 仍由 rendercore 校验。VNI 按自身 100% 资源尺寸播放。
+state lifecycle、scale、renderPriority、value/cascade、activeSpine 与 image-string slot 语义不因 container 格式改变。Spine animation 名区分大小写，normal/stable loop 与 once state 仍由 rendercore 校验。Composite 要求一个显式 base 和非空、有唯一 kebab-case id 的有序 leaf 列表；leaf 只能是 Spine/VNI，placement 只能是 underlay/overlay。VNI 按自身 100% 资源尺寸播放。
 
 ## Loader 与兼容
 

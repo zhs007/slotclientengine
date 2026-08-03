@@ -7,6 +7,7 @@ import {
 import { decodeEditorAssetsMap } from "@slotclientengine/editorresource";
 import { describe, expect, it } from "vitest";
 import {
+  addSymbolState,
   createFromGameConfig,
   setStateVisual,
   uploadAssetBatch,
@@ -28,6 +29,23 @@ const imageBytes = () =>
   );
 const encode = (value: unknown) =>
   new TextEncoder().encode(`${JSON.stringify(value)}\n`);
+const vniProject = {
+  schemaVersion: "VNI_0.010",
+  editor: { name: "VNI", version: "VNI_0.010" },
+  engineTarget: { name: "cocos_creator", version: "3.8.6" },
+  name: "symbol-composite",
+  stage: {
+    width: 160,
+    height: 160,
+    coordinate: "center",
+    duration: 1,
+    backgroundColor: "#000000",
+  },
+  assets: [],
+  layerGroups: [],
+  layers: [],
+  particles: [],
+};
 
 describe("symbols zip IO", () => {
   it("exports and imports a deterministic transparent-only package", async () => {
@@ -95,6 +113,73 @@ describe("symbols zip IO", () => {
       imported.project.assetLibrary.records.has("base-wild-final.webp"),
     ).toBe(true);
     expect(imported.project.assetLibrary.records.has("unused.png")).toBe(false);
+    imported.destroy();
+  });
+
+  it("round-trips composite layer order and mapped leaf resources", async () => {
+    const project = createFromGameConfig({
+      rawGameConfig: gameConfig,
+      fileName: "composite.json",
+    });
+    uploadAssetBatch(project, [
+      { path: "A.png", bytes: imageBytes() },
+      { path: "effect.json", bytes: encode(vniProject) },
+    ]);
+    setStateVisual(project, "A", "normal", {
+      kind: "image",
+      imagePath: "A.png",
+    });
+    addSymbolState(project, "A", "win");
+    setStateVisual(project, "A", "win", {
+      kind: "composite",
+      base: "normal",
+      layers: [
+        {
+          id: "back",
+          placement: "underlay",
+          animation: {
+            kind: "vni",
+            projectPath: "effect.json",
+            startTime: 0,
+            endTime: 1,
+          },
+        },
+        {
+          id: "front",
+          placement: "overlay",
+          animation: {
+            kind: "vni",
+            projectPath: "effect.json",
+            startTime: 0,
+            endTime: 1,
+          },
+        },
+      ],
+    });
+
+    const exported = await exportSymbolPackageZip(project, {
+      loadTextures: false,
+    });
+    const imported = await importSymbolPackageZip(exported.bytes, {
+      loadTextures: false,
+    });
+
+    expect(imported.project.symbols.get("A")?.states.get("win")).toMatchObject({
+      kind: "composite",
+      base: "normal",
+      layers: [
+        { id: "back", placement: "underlay" },
+        { id: "front", placement: "overlay" },
+      ],
+    });
+    const files = extractBoundedZip(exported.bytes, {
+      limits: SYMBOL_ZIP_LIMITS,
+    });
+    const assetMap = decodeEditorAssetsMap(files.get("assets.map.json")!);
+    expect(Object.keys(assetMap.files).sort()).toEqual([
+      "A.png",
+      "effect.json",
+    ]);
     imported.destroy();
   });
 

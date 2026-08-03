@@ -17,6 +17,7 @@ import {
   validateSymbolPackageGameConfig,
   type SymbolCascadeWinPresentation,
   type SymbolManifestAnimationSpec,
+  type SymbolManifestCompositeAnimationSpec,
   type SymbolManifestLayeredNormal,
   type SymbolManifestNormal,
   type SymbolManifestSpineAnimationTransform,
@@ -84,24 +85,47 @@ export type EditorBaseVisual =
       readonly layers: readonly EditorImageLayer[];
     };
 
+export interface EditorSpineVisual {
+  readonly kind: "spine";
+  readonly baseVisual?: EditorBaseVisual;
+  readonly skeletonPath: string;
+  readonly atlasPath: string;
+  readonly texturePath: string;
+  readonly animationName: string;
+  readonly transform?: SymbolManifestSpineAnimationTransform;
+}
+
+export interface EditorVniVisual {
+  readonly kind: "vni";
+  readonly baseVisual?: EditorBaseVisual;
+  readonly projectPath: string;
+  readonly startTime: number;
+  readonly endTime: number;
+}
+
+export type EditorCompositeAnimationVisual =
+  | Omit<EditorSpineVisual, "baseVisual">
+  | Omit<EditorVniVisual, "baseVisual">;
+
+export interface EditorCompositeAnimationLayer {
+  readonly id: string;
+  readonly placement: "underlay" | "overlay";
+  readonly animation: EditorCompositeAnimationVisual;
+}
+
+export interface EditorCompositeStateVisual {
+  readonly kind: "composite";
+  readonly base: "normal" | "stateTexture";
+  readonly baseVisual?: EditorBaseVisual;
+  readonly stateTexturePath?: string;
+  readonly layers: readonly EditorCompositeAnimationLayer[];
+}
+
 export type EditorStateVisual =
   | EditorBaseVisual
-  | {
-      readonly kind: "spine";
-      readonly baseVisual?: EditorBaseVisual;
-      readonly skeletonPath: string;
-      readonly atlasPath: string;
-      readonly texturePath: string;
-      readonly animationName: string;
-      readonly transform?: SymbolManifestSpineAnimationTransform;
-    }
-  | {
-      readonly kind: "vni";
-      readonly baseVisual?: EditorBaseVisual;
-      readonly projectPath: string;
-      readonly startTime: number;
-      readonly endTime: number;
-    }
+  | EditorSpineVisual
+  | EditorVniVisual
+  | EditorCompositeStateVisual
   | { readonly kind: "static"; readonly durationSeconds: number }
   | { readonly kind: "builtin"; readonly durationSeconds: number }
   | { readonly kind: "activeSpine"; readonly animationName: string }
@@ -278,6 +302,15 @@ export function createFromImportedPackage(options: {
         animationToVisual(
           animation,
           options.packageManifest.entrypoints.symbolManifest,
+          animation.kind === "composite" && manifestSymbol.states[state]
+            ? {
+                kind: "image",
+                imagePath: resolvePackagePath(
+                  options.packageManifest.entrypoints.symbolManifest,
+                  manifestSymbol.states[state],
+                ),
+              }
+            : undefined,
         ),
       );
       if (!stateOrder.includes(state)) stateOrder.push(state);
@@ -907,15 +940,25 @@ export function getAssetReferences(
       for (const path of collectVisualPaths(visual)) {
         references.push({ path, location: `${symbol.symbol}.${state}` });
       }
-      if (visual.kind === "vni") {
-        const assetPaths = project.assetLibrary.records.get(visual.projectPath)
-          ?.metadata?.assetPaths;
+      const vniProjects =
+        visual.kind === "vni"
+          ? [visual.projectPath]
+          : visual.kind === "composite"
+            ? visual.layers.flatMap((layer) =>
+                layer.animation.kind === "vni"
+                  ? [layer.animation.projectPath]
+                  : [],
+              )
+            : [];
+      for (const projectPath of vniProjects) {
+        const assetPaths =
+          project.assetLibrary.records.get(projectPath)?.metadata?.assetPaths;
         if (Array.isArray(assetPaths)) {
           for (const assetPath of assetPaths) {
             if (typeof assetPath === "string") {
               references.push({
-                path: resolvePackagePath(visual.projectPath, assetPath),
-                location: `${symbol.symbol}.${state} → ${visual.projectPath}`,
+                path: resolvePackagePath(projectPath, assetPath),
+                location: `${symbol.symbol}.${state} → ${projectPath}`,
               });
             }
           }
@@ -967,14 +1010,17 @@ export function compileSymbolEditorManifest(
   for (const state of project.legacyTextureStateOrder) {
     if (
       project.legacyStateSettings[state] !== undefined ||
-      included.some((symbol) => symbol.states.get(state)?.kind === "image")
+      included.some((symbol) => hasStateTextureVisual(symbol.states.get(state)))
     ) {
       addTextureState(state);
     }
   }
   for (const symbol of included) {
     for (const state of symbol.stateOrder) {
-      if (state !== "normal" && symbol.states.get(state)?.kind === "image") {
+      if (
+        state !== "normal" &&
+        hasStateTextureVisual(symbol.states.get(state))
+      ) {
         addTextureState(state);
       }
     }
@@ -1036,6 +1082,16 @@ export function compileSymbolEditorManifest(
             durationSeconds: DEFAULT_EMPTY_STATE_DURATION,
           };
         }
+      } else if (visual.kind === "composite") {
+        if (visual.base === "stateTexture") {
+          if (!visual.stateTexturePath) {
+            throw new Error(
+              `${symbol.symbol}.${state} composite 缺少 state texture base。`,
+            );
+          }
+          entry[state] = toLocalRef(visual.stateTexturePath);
+        }
+        animations[state] = compileAnimation(visual, definition, state)!;
       } else {
         const animation = compileAnimation(visual, definition, state);
         if (animation) animations[state] = animation;
@@ -1281,6 +1337,52 @@ function animationToVisual(
         kind: "activeSpine",
         animationName: animation.playback.animationName,
       };
+    case "composite":
+      return {
+        kind: "composite",
+        base: animation.base.kind,
+        ...(animation.base.kind === "stateTexture"
+          ? baseVisual?.kind === "image"
+            ? { stateTexturePath: baseVisual.imagePath }
+            : {}
+          : baseVisual
+            ? { baseVisual }
+            : {}),
+        layers: animation.layers.map((layer) => ({
+          id: layer.id,
+          placement: layer.placement,
+          animation:
+            layer.animation.kind === "spine"
+              ? {
+                  kind: "spine",
+                  skeletonPath: resolvePackagePath(
+                    manifestPath,
+                    layer.animation.skeleton,
+                  ),
+                  atlasPath: resolvePackagePath(
+                    manifestPath,
+                    layer.animation.atlas,
+                  ),
+                  texturePath: resolvePackagePath(
+                    manifestPath,
+                    layer.animation.texture,
+                  ),
+                  animationName: layer.animation.playback.animationName,
+                  ...(layer.animation.transform
+                    ? { transform: cloneValue(layer.animation.transform) }
+                    : {}),
+                }
+              : {
+                  kind: "vni",
+                  projectPath: resolvePackagePath(
+                    manifestPath,
+                    layer.animation.project,
+                  ),
+                  startTime: layer.animation.playback.startTime,
+                  endTime: layer.animation.playback.endTime,
+                },
+        })),
+      };
     case "empty":
       return {
         kind: "empty-state",
@@ -1337,6 +1439,41 @@ function compileAnimation(
           loop: definition.playback === "loop",
         },
       };
+    case "composite":
+      return {
+        kind: "composite",
+        base: { kind: visual.base },
+        layers: visual.layers.map((layer) => ({
+          id: layer.id,
+          placement: layer.placement,
+          animation:
+            layer.animation.kind === "spine"
+              ? {
+                  kind: "spine",
+                  skeleton: toLocalRef(layer.animation.skeletonPath),
+                  atlas: toLocalRef(layer.animation.atlasPath),
+                  texture: toLocalRef(layer.animation.texturePath),
+                  playback: {
+                    mode: "animation",
+                    animationName: layer.animation.animationName,
+                    loop: state === "normal" || definition.playback === "loop",
+                  },
+                  ...(layer.animation.transform
+                    ? { transform: cloneValue(layer.animation.transform) }
+                    : {}),
+                }
+              : {
+                  kind: "vni",
+                  project: toLocalRef(layer.animation.projectPath),
+                  playback: {
+                    mode: "range",
+                    startTime: layer.animation.startTime,
+                    endTime: layer.animation.endTime,
+                    loop: state === "normal" || definition.playback === "loop",
+                  },
+                },
+        })),
+      } satisfies SymbolManifestCompositeAnimationSpec;
     case "empty-state":
       return { kind: "empty", durationSeconds: visual.durationSeconds };
     case "image":
@@ -1366,7 +1503,20 @@ function getBaseVisual(
       }
     );
   }
+  if (visual.kind === "composite") {
+    if (visual.base !== "normal" || !visual.baseVisual) {
+      throw new Error("normal composite 必须保存明确的 normal base visual。");
+    }
+    return visual.baseVisual;
+  }
   return { kind: "empty", width: cellSize.width, height: cellSize.height };
+}
+
+function hasStateTextureVisual(visual: EditorStateVisual | undefined): boolean {
+  return (
+    visual?.kind === "image" ||
+    (visual?.kind === "composite" && visual.base === "stateTexture")
+  );
 }
 
 function compileBaseVisual(visual: EditorBaseVisual): SymbolManifestNormal {
@@ -1495,6 +1645,20 @@ function collectVisualPaths(visual: EditorStateVisual): readonly string[] {
           visual.baseVisual ?? { kind: "empty", width: 1, height: 1 },
         ),
         visual.projectPath,
+      ];
+    case "composite":
+      return [
+        ...(visual.baseVisual ? collectVisualPaths(visual.baseVisual) : []),
+        ...(visual.stateTexturePath ? [visual.stateTexturePath] : []),
+        ...visual.layers.flatMap((layer) =>
+          layer.animation.kind === "spine"
+            ? [
+                layer.animation.skeletonPath,
+                layer.animation.atlasPath,
+                layer.animation.texturePath,
+              ]
+            : [layer.animation.projectPath],
+        ),
       ];
     default:
       return [];

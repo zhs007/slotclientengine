@@ -379,6 +379,7 @@ function createSpineSymbolPlayerCacheKey(
 ): string {
   return [
     resource.symbol,
+    resource.instanceKey ?? "shared",
     resource.spec.skeleton,
     resource.spec.atlas,
     resource.spec.texture,

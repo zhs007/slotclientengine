@@ -126,6 +126,81 @@ describe("symbol editor typed project", () => {
     expect(() => parseSymbolStateTextureManifest(manifest)).not.toThrow();
   });
 
+  it("round-trips explicit normal/stateTexture composite animation layers", () => {
+    const project = createFromGameConfig({
+      rawGameConfig: gameConfig,
+      fileName: "composite.json",
+    });
+    uploadAssetBatch(project, [
+      { path: "A.png", bytes: imageBytes() },
+      { path: "effects.json", bytes: vniProjectBytes() },
+    ]);
+    setStateVisual(project, "A", "normal", {
+      kind: "composite",
+      base: "normal",
+      baseVisual: { kind: "image", imagePath: "A.png" },
+      layers: [
+        {
+          id: "back-glow",
+          placement: "underlay",
+          animation: {
+            kind: "vni",
+            projectPath: "effects.json",
+            startTime: 0,
+            endTime: 2,
+          },
+        },
+      ],
+    });
+    addSymbolState(project, "A", "win");
+    setStateVisual(project, "A", "win", {
+      kind: "composite",
+      base: "stateTexture",
+      stateTexturePath: "A.png",
+      layers: [
+        {
+          id: "front-burst",
+          placement: "overlay",
+          animation: {
+            kind: "vni",
+            projectPath: "effects.json",
+            startTime: 0,
+            endTime: 2,
+          },
+        },
+      ],
+    });
+
+    const snapshot = exportSnapshot(project);
+    const raw = snapshot.symbolManifest as any;
+    expect(raw.states).toEqual(["win"]);
+    expect(raw.symbols.A.normal).toBe("./A.png");
+    expect(raw.symbols.A.win).toBe("./A.png");
+    expect(raw.symbols.A.animations.normal).toMatchObject({
+      kind: "composite",
+      base: { kind: "normal" },
+      layers: [{ id: "back-glow", placement: "underlay" }],
+    });
+    expect(raw.symbols.A.animations.win).toMatchObject({
+      kind: "composite",
+      base: { kind: "stateTexture" },
+      layers: [{ id: "front-burst", placement: "overlay" }],
+    });
+    const imported = createFromImportedPackage({
+      packageManifest: snapshot.packageManifest,
+      rawGameConfig: snapshot.rawGameConfig,
+      rawSymbolManifest: snapshot.symbolManifest,
+      assets: snapshot.assets,
+    });
+    expect(
+      parseSymbolStateTextureManifest(compileSymbolEditorManifest(imported)),
+    ).toEqual(parseSymbolStateTextureManifest(snapshot.symbolManifest));
+    expect(getAssetReferences(imported, "effects.json")).toEqual([
+      { path: "effects.json", location: "A.normal" },
+      { path: "effects.json", location: "A.win" },
+    ]);
+  });
+
   it("supports all/none/invert while retaining excluded symbol drafts", () => {
     const project = createFromGameConfig({
       rawGameConfig: gameConfig,

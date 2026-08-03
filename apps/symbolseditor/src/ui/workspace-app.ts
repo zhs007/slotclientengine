@@ -660,6 +660,35 @@ export class SymbolsEditorApp {
       .forEach((button) => {
         button.addEventListener("click", () => this.runLayerAction(button));
       });
+    panel
+      .querySelector<HTMLSelectElement>("[data-composite-base]")
+      ?.addEventListener("change", (event) =>
+        this.updateCompositeBase(
+          (event.currentTarget as HTMLSelectElement).value,
+        ),
+      );
+    panel
+      .querySelectorAll<
+        HTMLInputElement | HTMLSelectElement
+      >("[data-composite-layer-field]")
+      .forEach((input) => {
+        input.addEventListener("change", () =>
+          this.updateCompositeLayerField(
+            Number(input.dataset.compositeLayerIndex),
+            input.dataset.compositeLayerField!,
+            input instanceof HTMLInputElement && input.type === "number"
+              ? Number(input.value)
+              : input.value,
+          ),
+        );
+      });
+    panel
+      .querySelectorAll<HTMLElement>("[data-composite-layer-action]")
+      .forEach((button) => {
+        button.addEventListener("click", () =>
+          this.runCompositeLayerAction(button),
+        );
+      });
     this.bindValueControls(panel);
     this.bindImageStringControls(panel);
     this.bindCascadeControls(panel);
@@ -776,7 +805,12 @@ export class SymbolsEditorApp {
         const visual = draft.symbols
           .get(this.#session.selectedSymbol)!
           .states.get(this.#session.selectedState)!;
-        if (visual.kind !== "spine" && visual.kind !== "vni") return;
+        if (
+          visual.kind !== "spine" &&
+          visual.kind !== "vni" &&
+          visual.kind !== "composite"
+        )
+          return;
         const baseVisual: EditorBaseVisual =
           kind === "image"
             ? { kind: "image", imagePath: "" }
@@ -845,7 +879,10 @@ export class SymbolsEditorApp {
           .states.get(state)!;
         const isBase = button.dataset.baseVisual === "true";
         const source =
-          isBase && (visual.kind === "spine" || visual.kind === "vni")
+          isBase &&
+          (visual.kind === "spine" ||
+            visual.kind === "vni" ||
+            visual.kind === "composite")
             ? visual.baseVisual
             : visual;
         if (source?.kind !== "layered-image") return;
@@ -879,9 +916,143 @@ export class SymbolsEditorApp {
           draft,
           this.#session.selectedSymbol,
           state,
-          isBase && (visual.kind === "spine" || visual.kind === "vni")
+          isBase &&
+            (visual.kind === "spine" ||
+              visual.kind === "vni" ||
+              visual.kind === "composite")
             ? { ...visual, baseVisual: layered }
             : layered,
+        );
+      });
+    } catch (error) {
+      this.#store.setExternalError(error);
+    }
+  }
+
+  private updateCompositeBase(base: string): void {
+    try {
+      this.#store.transact((draft) => {
+        const visual = draft.symbols
+          .get(this.#session.selectedSymbol)!
+          .states.get(this.#session.selectedState)!;
+        if (visual.kind !== "composite") return;
+        setStateVisual(
+          draft,
+          this.#session.selectedSymbol,
+          this.#session.selectedState,
+          {
+            ...visual,
+            base: base === "stateTexture" ? "stateTexture" : "normal",
+            ...(base === "stateTexture" && !visual.stateTexturePath
+              ? { stateTexturePath: "" }
+              : {}),
+          },
+        );
+      });
+    } catch (error) {
+      this.#store.setExternalError(error);
+    }
+  }
+
+  private updateCompositeLayerField(
+    index: number,
+    field: string,
+    value: unknown,
+  ): void {
+    try {
+      this.#store.transact((draft) => {
+        const visual = draft.symbols
+          .get(this.#session.selectedSymbol)!
+          .states.get(this.#session.selectedState)!;
+        if (visual.kind !== "composite" || !visual.layers[index]) return;
+        const layers = [...visual.layers];
+        const layer = layers[index]!;
+        if (field === "id" || field === "placement") {
+          layers[index] = { ...layer, [field]: value } as typeof layer;
+        } else if (field === "kind") {
+          const atlas = getDefaultSpineAtlasBinding(draft);
+          layers[index] = {
+            ...layer,
+            animation:
+              value === "vni"
+                ? { kind: "vni", projectPath: "", startTime: 0, endTime: 1 }
+                : {
+                    kind: "spine",
+                    skeletonPath: "",
+                    atlasPath: atlas?.atlasPath ?? "",
+                    texturePath: atlas?.texturePath ?? "",
+                    animationName: "",
+                  },
+          };
+        } else {
+          const animation = structuredClone(
+            layer.animation,
+          ) as unknown as Record<string, unknown>;
+          if (field.startsWith("transform.")) {
+            const transform =
+              animation.transform && typeof animation.transform === "object"
+                ? (animation.transform as Record<string, unknown>)
+                : {};
+            transform[field.slice("transform.".length)] = value;
+            animation.transform = transform;
+          } else animation[field] = value;
+          layers[index] = {
+            ...layer,
+            animation: animation as typeof layer.animation,
+          };
+        }
+        setStateVisual(
+          draft,
+          this.#session.selectedSymbol,
+          this.#session.selectedState,
+          { ...visual, layers },
+        );
+      });
+    } catch (error) {
+      this.#store.setExternalError(error);
+    }
+  }
+
+  private runCompositeLayerAction(button: HTMLElement): void {
+    try {
+      this.#store.transact((draft) => {
+        const visual = draft.symbols
+          .get(this.#session.selectedSymbol)!
+          .states.get(this.#session.selectedState)!;
+        if (visual.kind !== "composite") return;
+        const layers = [...visual.layers];
+        const action = button.dataset.compositeLayerAction;
+        const index = Number(button.dataset.compositeLayerIndex);
+        if (action === "add") {
+          const atlas = getDefaultSpineAtlasBinding(draft);
+          const used = new Set(layers.map((layer) => layer.id));
+          let suffix = layers.length + 1;
+          while (used.has(`layer-${suffix}`)) suffix += 1;
+          layers.push({
+            id: `layer-${suffix}`,
+            placement: "overlay",
+            animation: {
+              kind: "spine",
+              skeletonPath: "",
+              atlasPath: atlas?.atlasPath ?? "",
+              texturePath: atlas?.texturePath ?? "",
+              animationName: "",
+            },
+          });
+        } else if (action === "remove") {
+          if (layers.length <= 1)
+            throw new Error("composite 至少保留一个动画 layer。");
+          layers.splice(index, 1);
+        } else {
+          const target = index + (action === "up" ? -1 : 1);
+          if (target < 0 || target >= layers.length) return;
+          [layers[index], layers[target]] = [layers[target]!, layers[index]!];
+        }
+        setStateVisual(
+          draft,
+          this.#session.selectedSymbol,
+          this.#session.selectedState,
+          { ...visual, layers },
         );
       });
     } catch (error) {
@@ -2591,6 +2762,8 @@ function visualFieldsMarkup(
   }
   if (visual.kind === "vni")
     return `${state === "normal" ? baseVisualMarkup(project, symbol, visual.baseVisual, thumbnail) : ""}${resourceBindingMarkup("VNI project", visual.projectPath, { kind: "vni-project", symbol: symbol.symbol, state })}<div class="form-grid">${numberField("startTime", "Start", visual.startTime)}${numberField("endTime", "End", visual.endTime)}</div>`;
+  if (visual.kind === "composite")
+    return compositeVisualMarkup(project, symbol, state, visual, thumbnail);
   if (visual.kind === "activeSpine")
     return selectField(
       "animationName",
@@ -2609,6 +2782,45 @@ function visualFieldsMarkup(
   if (visual.kind === "empty")
     return `<p class="empty">transparent ${visual.width} × ${visual.height}</p>`;
   return "";
+}
+
+function compositeVisualMarkup(
+  project: SymbolEditorProject,
+  symbol: EditorSymbolDraft,
+  state: string,
+  visual: Extract<EditorStateVisual, { kind: "composite" }>,
+  thumbnail: (path: string) => string | undefined,
+): string {
+  const base =
+    state === "normal"
+      ? baseVisualMarkup(project, symbol, visual.baseVisual, thumbnail)
+      : `<section class="base-visual"><h3>Base visual</h3><label>来源 <select data-composite-base>${option("normal", "沿用 normal", visual.base === "normal")}${option("stateTexture", "当前 state 图片", visual.base === "stateTexture")}</select></label>${visual.base === "stateTexture" ? resourceBindingMarkup("State image", visual.stateTexturePath ?? "", { kind: "state-image", symbol: symbol.symbol, state }, thumbnail(visual.stateTexturePath ?? "")) : '<p class="empty">明确沿用 normal 图标。</p>'}</section>`;
+  const layers = visual.layers
+    .map((layer, index) => {
+      const animation = layer.animation;
+      const fields =
+        animation.kind === "spine"
+          ? (() => {
+              const animations = assetMetadataList(
+                project.assetLibrary.records.get(animation.skeletonPath),
+                "animationNames",
+              );
+              return `${resourceBindingMarkup("Skeleton", animation.skeletonPath, { kind: "spine-skeleton", symbol: symbol.symbol, state, compositeLayerIndex: index })}${resourceBindingMarkup("Atlas", animation.atlasPath, { kind: "spine-atlas", symbol: symbol.symbol, state, compositeLayerIndex: index })}${derivedResourceMarkup("Texture · 由 Atlas page 自动解析", animation.texturePath, thumbnail(animation.texturePath))}<label>Animation <select data-composite-layer-field="animationName" data-composite-layer-index="${index}"><option value="">选择动画…</option>${animations.map((name) => option(name, name, name === animation.animationName)).join("")}</select></label><details class="advanced-fields"><summary>Transform</summary><div class="form-grid">${compositeNumberField(index, "transform.x", "X", animation.transform?.x ?? 0)}${compositeNumberField(index, "transform.y", "Y", animation.transform?.y ?? 0)}${compositeNumberField(index, "transform.scale", "Scale", animation.transform?.scale ?? 1)}</div></details>`;
+            })()
+          : `${resourceBindingMarkup("VNI project", animation.projectPath, { kind: "vni-project", symbol: symbol.symbol, state, compositeLayerIndex: index })}<div class="form-grid">${compositeNumberField(index, "startTime", "Start", animation.startTime)}${compositeNumberField(index, "endTime", "End", animation.endTime)}</div>`;
+      return `<article class="layer-card composite-layer-card"><header><strong>Animation layer ${index + 1}</strong><div class="button-row"><button data-composite-layer-action="up" data-composite-layer-index="${index}" ${index === 0 ? "disabled" : ""}>↑</button><button data-composite-layer-action="down" data-composite-layer-index="${index}" ${index === visual.layers.length - 1 ? "disabled" : ""}>↓</button><button data-composite-layer-action="remove" data-composite-layer-index="${index}" ${visual.layers.length === 1 ? "disabled" : ""}>删除</button></div></header><div class="form-grid"><label>Layer id <input data-composite-layer-field="id" data-composite-layer-index="${index}" value="${escapeAttr(layer.id)}"></label><label>位置 <select data-composite-layer-field="placement" data-composite-layer-index="${index}">${option("underlay", "图标下方", layer.placement === "underlay")}${option("overlay", "图标上方", layer.placement === "overlay")}</select></label><label>动画类型 <select data-composite-layer-field="kind" data-composite-layer-index="${index}">${option("spine", "Spine 4.3", animation.kind === "spine")}${option("vni", "VNI", animation.kind === "vni")}</select></label></div>${fields}</article>`;
+    })
+    .join("");
+  return `${base}<section class="composite-layer-list"><div class="section-heading"><div><h3>附加动画层</h3><p>underlay 在图标下方，overlay 在图标上方；同组按列表顺序叠放。</p></div><button data-composite-layer-action="add">增加动画层</button></div>${layers}</section>`;
+}
+
+function compositeNumberField(
+  index: number,
+  field: string,
+  label: string,
+  value: number,
+): string {
+  return `<label>${label} <input data-composite-layer-field="${escapeAttr(field)}" data-composite-layer-index="${index}" type="number" step="0.01" value="${value}"></label>`;
 }
 
 function tierNormalAnimationMarkup(
@@ -2864,8 +3076,8 @@ function compatibleVisualKinds(
   state: string,
 ): readonly string[] {
   if (state === "normal")
-    return ["empty", "image", "layered-image", "spine", "vni"];
-  const kinds = ["empty-state", "image", "spine", "vni", "static"];
+    return ["empty", "image", "layered-image", "spine", "vni", "composite"];
+  const kinds = ["empty-state", "image", "spine", "vni", "composite", "static"];
   if (state === "appear" || state === "win") kinds.push("builtin");
   if (symbol.valuePresentation) kinds.push("activeSpine");
   return kinds;
@@ -2931,6 +3143,56 @@ function defaultVisualForKind(
           project.symbols.get(symbolName),
         )[0] ?? "",
     };
+  if (kind === "composite") {
+    const current = project.symbols.get(symbolName)?.states.get(state);
+    const baseVisual: EditorBaseVisual =
+      state === "normal"
+        ? current?.kind === "spine" || current?.kind === "vni"
+          ? (current.baseVisual ?? {
+              kind: "empty",
+              width: project.cellSize.width,
+              height: project.cellSize.height,
+            })
+          : current?.kind === "composite"
+            ? (current.baseVisual ?? {
+                kind: "empty",
+                width: project.cellSize.width,
+                height: project.cellSize.height,
+              })
+            : current?.kind === "image" ||
+                current?.kind === "layered-image" ||
+                current?.kind === "empty"
+              ? current
+              : {
+                  kind: "empty",
+                  width: project.cellSize.width,
+                  height: project.cellSize.height,
+                }
+        : {
+            kind: "empty",
+            width: project.cellSize.width,
+            height: project.cellSize.height,
+          };
+    const atlas = getDefaultSpineAtlasBinding(project);
+    return {
+      kind: "composite",
+      base: "normal",
+      ...(state === "normal" ? { baseVisual } : {}),
+      layers: [
+        {
+          id: "layer-1",
+          placement: "overlay",
+          animation: {
+            kind: "spine",
+            skeletonPath: "",
+            atlasPath: atlas?.atlasPath ?? "",
+            texturePath: atlas?.texturePath ?? "",
+            animationName: "",
+          },
+        },
+      ],
+    };
+  }
   if (kind === "builtin")
     return { kind, durationSeconds: state === "win" ? 0.58 : 0.42 };
   return { kind: "static", durationSeconds: 1 / 60 };
@@ -2952,6 +3214,7 @@ function compatibleStates(
       (playback !== "loop" ||
         visual.kind === "vni" ||
         visual.kind === "spine" ||
+        visual.kind === "composite" ||
         visual.kind === "activeSpine")
     );
   });
@@ -3058,12 +3321,32 @@ function getCurrentResourcePath(
     ].replace(/^\.\//u, "");
   const visual = symbol.states.get(context.state)!;
   if (context.kind === "state-image")
-    return visual.kind === "image" ? visual.imagePath : "";
+    return visual.kind === "image"
+      ? visual.imagePath
+      : visual.kind === "composite"
+        ? (visual.stateTexturePath ?? "")
+        : "";
   if (context.kind === "normal-base-image")
-    return (visual.kind === "spine" || visual.kind === "vni") &&
+    return (visual.kind === "spine" ||
+      visual.kind === "vni" ||
+      visual.kind === "composite") &&
       visual.baseVisual?.kind === "image"
       ? visual.baseVisual.imagePath
       : "";
+  if (
+    (context.kind === "spine-skeleton" ||
+      context.kind === "spine-atlas" ||
+      context.kind === "vni-project") &&
+    visual.kind === "composite" &&
+    context.compositeLayerIndex !== undefined
+  ) {
+    const animation = visual.layers[context.compositeLayerIndex]?.animation;
+    if (context.kind === "spine-skeleton")
+      return animation?.kind === "spine" ? animation.skeletonPath : "";
+    if (context.kind === "spine-atlas")
+      return animation?.kind === "spine" ? animation.atlasPath : "";
+    return animation?.kind === "vni" ? animation.projectPath : "";
+  }
   if (context.kind === "spine-skeleton")
     return visual.kind === "spine" ? visual.skeletonPath : "";
   if (context.kind === "spine-atlas")
@@ -3071,7 +3354,10 @@ function getCurrentResourcePath(
   if (context.kind === "vni-project")
     return visual.kind === "vni" ? visual.projectPath : "";
   const source =
-    context.baseVisual && (visual.kind === "spine" || visual.kind === "vni")
+    context.baseVisual &&
+    (visual.kind === "spine" ||
+      visual.kind === "vni" ||
+      visual.kind === "composite")
       ? visual.baseVisual
       : visual;
   if (source?.kind !== "layered-image") return "";
@@ -3128,6 +3414,22 @@ function getStateVisualStatus(
   } else if (visual.kind === "vni") {
     paths.push(visual.projectPath);
     collectBaseVisualPaths(visual.baseVisual, paths);
+  } else if (visual.kind === "composite") {
+    if (visual.layers.length === 0) return "missing";
+    if (visual.base === "stateTexture")
+      paths.push(visual.stateTexturePath ?? "");
+    else collectBaseVisualPaths(visual.baseVisual, paths);
+    for (const layer of visual.layers) {
+      if (!layer.id) return "missing";
+      if (layer.animation.kind === "spine") {
+        paths.push(
+          layer.animation.skeletonPath,
+          layer.animation.atlasPath,
+          layer.animation.texturePath,
+        );
+        if (!layer.animation.animationName) return "missing";
+      } else paths.push(layer.animation.projectPath);
+    }
   }
   if (paths.length === 0 || paths.some((path) => !path)) return "missing";
   for (const path of paths) {
@@ -3303,6 +3605,7 @@ function visualKindLabel(kind: string): string {
         static: "Static",
         builtin: "Builtin",
         activeSpine: "Active Spine",
+        composite: "多图层动画",
         missing: "未配置",
       } as Record<string, string>
     )[kind] ?? kind

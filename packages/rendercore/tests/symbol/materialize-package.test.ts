@@ -315,14 +315,24 @@ describe("symbol package materialization", () => {
           scale: 1,
           animations: {
             win: {
-              kind: "vni",
-              project: "./animation/project.json",
-              playback: {
-                mode: "range",
-                startTime: 0,
-                endTime: 1,
-                loop: false,
-              },
+              kind: "composite",
+              base: { kind: "normal" },
+              layers: [
+                {
+                  id: "front",
+                  placement: "overlay",
+                  animation: {
+                    kind: "vni",
+                    project: "./animation/project.json",
+                    playback: {
+                      mode: "range",
+                      startTime: 0,
+                      endTime: 1,
+                      loop: false,
+                    },
+                  },
+                },
+              ],
             },
           },
         },
@@ -403,7 +413,18 @@ describe("symbol package materialization", () => {
       "project.json",
     ]);
     expect(mapped.rawSymbolManifest).toMatchObject({
-      symbols: { A: { animations: { win: { project: "./project.json" } } } },
+      symbols: {
+        A: {
+          animations: {
+            win: {
+              kind: "composite",
+              layers: [
+                { animation: { kind: "vni", project: "./project.json" } },
+              ],
+            },
+          },
+        },
+      },
     });
   });
 

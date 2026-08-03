@@ -414,6 +414,16 @@ function rewriteAnimation(
   animation: Record<string, unknown>,
   mapping: ReadonlyMap<string, string>,
 ): void {
+  if (animation.kind === "composite" && Array.isArray(animation.layers)) {
+    for (const rawLayer of animation.layers) {
+      const layer = record(rawLayer, "symbol composite animation layer");
+      rewriteAnimation(
+        record(layer.animation, "symbol composite layer animation"),
+        mapping,
+      );
+    }
+    return;
+  }
   if (animation.kind === "vni" && typeof animation.project === "string") {
     animation.project = rewriteRef(animation.project, mapping);
   } else if (animation.kind === "spine") {

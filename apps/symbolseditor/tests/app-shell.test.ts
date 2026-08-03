@@ -353,6 +353,50 @@ describe("symbols editor app shell", () => {
     }
   });
 
+  it("edits ordered underlay and overlay layers for a composite state", async () => {
+    await createProject(root);
+    click(root, '[data-workspace-tab][data-tab-value="symbols"]');
+    click(root, '[data-inspector-tab][data-tab-value="states"]');
+    const kind = root.querySelector<HTMLSelectElement>("[data-visual-kind]")!;
+    kind.value = "composite";
+    kind.dispatchEvent(new Event("change", { bubbles: true }));
+
+    expect(root.querySelectorAll(".composite-layer-card")).toHaveLength(1);
+    expect(
+      root.querySelector<HTMLButtonElement>(
+        '[data-composite-layer-action="remove"]',
+      )?.disabled,
+    ).toBe(true);
+
+    click(root, '[data-composite-layer-action="add"]');
+    expect(root.querySelectorAll(".composite-layer-card")).toHaveLength(2);
+    const secondId = root.querySelector<HTMLInputElement>(
+      '[data-composite-layer-field="id"][data-composite-layer-index="1"]',
+    )!;
+    secondId.value = "glow-back";
+    secondId.dispatchEvent(new Event("change", { bubbles: true }));
+    const secondPlacement = root.querySelector<HTMLSelectElement>(
+      '[data-composite-layer-field="placement"][data-composite-layer-index="1"]',
+    )!;
+    secondPlacement.value = "underlay";
+    secondPlacement.dispatchEvent(new Event("change", { bubbles: true }));
+    click(
+      root,
+      '[data-composite-layer-action="up"][data-composite-layer-index="1"]',
+    );
+
+    expect(
+      root.querySelector<HTMLInputElement>(
+        '[data-composite-layer-field="id"][data-composite-layer-index="0"]',
+      )?.value,
+    ).toBe("glow-back");
+    expect(
+      root.querySelector<HTMLSelectElement>(
+        '[data-composite-layer-field="placement"][data-composite-layer-index="0"]',
+      )?.value,
+    ).toBe("underlay");
+  });
+
   it("defaults the only ready Spine atlas and derives its texture without another picker", async () => {
     await createProject(root);
     const upload = root.querySelector<HTMLInputElement>("[data-upload-input]")!;

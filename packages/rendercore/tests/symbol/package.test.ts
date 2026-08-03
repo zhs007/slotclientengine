@@ -207,6 +207,72 @@ describe("symbol package game config and resources", () => {
     ).rejects.toThrow(/orphan/);
   });
 
+  it("collects every nested composite Spine and VNI leaf", () => {
+    const manifest = {
+      version: 1,
+      states: [],
+      symbols: {
+        A: {
+          normal: "./A.png",
+          animations: {
+            win: {
+              kind: "composite",
+              base: { kind: "normal" },
+              layers: [
+                {
+                  id: "back",
+                  placement: "underlay",
+                  animation: {
+                    kind: "spine",
+                    skeleton: "./FX.json",
+                    atlas: "./FX.atlas",
+                    texture: "./FX.png",
+                    playback: {
+                      mode: "animation",
+                      animationName: "Start",
+                      loop: false,
+                    },
+                  },
+                },
+                {
+                  id: "front",
+                  placement: "overlay",
+                  animation: {
+                    kind: "vni",
+                    project: "./project.json",
+                    playback: {
+                      mode: "range",
+                      startTime: 0,
+                      endTime: 1,
+                      loop: false,
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        },
+      },
+    };
+    const packageFiles = new Map([
+      ["project.json", encode({ assets: [{ path: "project-image.png" }] })],
+    ]);
+
+    expect(
+      collectSymbolManifestResourcePaths({
+        symbolManifest: manifest,
+        files: packageFiles,
+      }),
+    ).toEqual([
+      "A.png",
+      "FX.atlas",
+      "FX.json",
+      "FX.png",
+      "project-image.png",
+      "project.json",
+    ]);
+  });
+
   it("derives the exact nested image-string dependency closure", () => {
     const nestedManifest = {
       version: 1,

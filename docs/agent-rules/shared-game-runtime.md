@@ -38,6 +38,7 @@
 ## Symbol、Spine 与 image-string
 
 - symbol manifest parser、animation resolver、VNI/official Spine adapter、resource closure、player lifecycle、裁切和 pooling 属于 rendercore。
+- composite symbol state 的 base 可见性、underlay/overlay 稳定顺序、每 leaf 独立 player ownership、共享 once/loop completion barrier 与幂等 destroy 属于 rendercore；app/editor 不直接操作其 display tree 或补写时序。
 - 通用 symbol state texture versioned preset 与 DOM-free RGBA transform 属于
   rendercore；Node 生成器和纯前端 editor 必须消费同一参数来源。browser image codec、
   用户选择和 filename-key transaction 留在 editor，不得把用户资源发送到服务端。

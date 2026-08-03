@@ -221,6 +221,26 @@ function applyValidationAnimationName(
     symbol.states.set(target, { ...visual, animationName });
     return;
   }
+  const layerMatch = target.match(/^(.+)\.layers\.([a-z0-9-]+)$/u);
+  if (layerMatch) {
+    const [, state, layerId] = layerMatch;
+    const composite = symbol.states.get(state!);
+    if (composite?.kind === "composite") {
+      const layerIndex = composite.layers.findIndex(
+        (layer) => layer.id === layerId,
+      );
+      const layer = composite.layers[layerIndex];
+      if (layer?.animation.kind === "spine") {
+        const layers = [...composite.layers];
+        layers[layerIndex] = {
+          ...layer,
+          animation: { ...layer.animation, animationName },
+        };
+        symbol.states.set(state!, { ...composite, layers });
+        return;
+      }
+    }
+  }
   throw new Error(`动画清理目标不是 Spine binding：${binding.location}。`);
 }
 
@@ -248,6 +268,35 @@ function reconcileMissingSpineAnimations(
         animationName: visual.animationName,
         skeletonKeys: Object.freeze([visual.skeletonPath]),
       });
+      continue;
+    }
+    for (const [state, visual] of symbol.states) {
+      if (visual.kind !== "composite") continue;
+      let changed = false;
+      const layers = visual.layers.map((layer) => {
+        const animation = layer.animation;
+        if (
+          animation.kind !== "spine" ||
+          !overwrittenSkeletonKeys.has(animation.skeletonPath) ||
+          !animation.animationName ||
+          animationNamesFor(project, animation.skeletonPath).has(
+            animation.animationName,
+          )
+        ) {
+          return layer;
+        }
+        changed = true;
+        cleared.push({
+          location: `${symbol.symbol}.${state}.layers.${layer.id}`,
+          animationName: animation.animationName,
+          skeletonKeys: Object.freeze([animation.skeletonPath]),
+        });
+        return {
+          ...layer,
+          animation: { ...animation, animationName: "" },
+        };
+      });
+      if (changed) symbol.states.set(state, { ...visual, layers });
     }
 
     const value = symbol.valuePresentation;

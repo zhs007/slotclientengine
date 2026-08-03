@@ -30,16 +30,19 @@ export type ResourceBindingContext =
       readonly kind: "spine-skeleton";
       readonly symbol: string;
       readonly state: string;
+      readonly compositeLayerIndex?: number;
     }
   | {
       readonly kind: "spine-atlas";
       readonly symbol: string;
       readonly state: string;
+      readonly compositeLayerIndex?: number;
     }
   | {
       readonly kind: "vni-project";
       readonly symbol: string;
       readonly state: string;
+      readonly compositeLayerIndex?: number;
     }
   | {
       readonly kind: "value-tier-resource";
@@ -246,6 +249,15 @@ export function applyResourceBinding(
   if (!visual) throw new Error(`${context.symbol}.${context.state} 尚未添加。`);
   const next = structuredClone(visual) as EditorStateVisual;
   if (context.kind === "state-image") {
+    if (next.kind === "composite") {
+      if (next.base !== "stateTexture")
+        throw new Error("当前 composite 未选择 state texture base。");
+      setStateVisual(project, context.symbol, context.state, {
+        ...next,
+        stateTexturePath: path,
+      });
+      return;
+    }
     if (next.kind !== "image") throw new Error("当前 state 不是图片资源类型。");
     setStateVisual(project, context.symbol, context.state, {
       ...next,
@@ -254,7 +266,11 @@ export function applyResourceBinding(
     return;
   }
   if (context.kind === "normal-base-image") {
-    if (next.kind !== "spine" && next.kind !== "vni")
+    if (
+      next.kind !== "spine" &&
+      next.kind !== "vni" &&
+      next.kind !== "composite"
+    )
       throw new Error("当前 normal 不支持基础视觉。");
     setStateVisual(project, context.symbol, context.state, {
       ...next,
@@ -264,7 +280,9 @@ export function applyResourceBinding(
   }
   if (context.kind === "layer-texture") {
     const source = context.baseVisual
-      ? next.kind === "spine" || next.kind === "vni"
+      ? next.kind === "spine" ||
+        next.kind === "vni" ||
+        next.kind === "composite"
         ? next.baseVisual
         : undefined
       : next;
@@ -288,13 +306,37 @@ export function applyResourceBinding(
       project,
       context.symbol,
       context.state,
-      context.baseVisual && (next.kind === "spine" || next.kind === "vni")
+      context.baseVisual &&
+        (next.kind === "spine" ||
+          next.kind === "vni" ||
+          next.kind === "composite")
         ? { ...next, baseVisual: layered }
         : layered,
     );
     return;
   }
   if (context.kind === "spine-skeleton") {
+    if (next.kind === "composite") {
+      updateCompositeLayer(project, context, next, (animation) => {
+        if (animation.kind !== "spine")
+          throw new Error("当前 composite layer 不是 Spine 类型。");
+        const binding = animation.atlasPath
+          ? null
+          : getDefaultSpineAtlasBinding(project);
+        return {
+          ...animation,
+          skeletonPath: path,
+          animationName: "",
+          ...(binding
+            ? {
+                atlasPath: binding.atlasPath,
+                texturePath: binding.texturePath,
+              }
+            : {}),
+        };
+      });
+      return;
+    }
     if (next.kind !== "spine") throw new Error("当前 state 不是 Spine 类型。");
     const binding = next.atlasPath
       ? null
@@ -313,6 +355,19 @@ export function applyResourceBinding(
     return;
   }
   if (context.kind === "spine-atlas") {
+    if (next.kind === "composite") {
+      updateCompositeLayer(project, context, next, (animation) => {
+        if (animation.kind !== "spine")
+          throw new Error("当前 composite layer 不是 Spine 类型。");
+        const binding = path ? resolveSpineAtlasBinding(project, path) : null;
+        return {
+          ...animation,
+          atlasPath: binding?.atlasPath ?? "",
+          texturePath: binding?.texturePath ?? "",
+        };
+      });
+      return;
+    }
     if (next.kind !== "spine") throw new Error("当前 state 不是 Spine 类型。");
     const binding = path ? resolveSpineAtlasBinding(project, path) : null;
     setStateVisual(project, context.symbol, context.state, {
@@ -322,11 +377,48 @@ export function applyResourceBinding(
     });
     return;
   }
+  if (next.kind === "composite") {
+    updateCompositeLayer(project, context, next, (animation) => {
+      if (animation.kind !== "vni")
+        throw new Error("当前 composite layer 不是 VNI 类型。");
+      return { ...animation, projectPath: path };
+    });
+    return;
+  }
   if (next.kind !== "vni") throw new Error("当前 state 不是 VNI 类型。");
   setStateVisual(project, context.symbol, context.state, {
     ...next,
     projectPath: path,
   });
+}
+
+function updateCompositeLayer(
+  project: SymbolEditorProject,
+  context: Extract<
+    ResourceBindingContext,
+    { kind: "spine-skeleton" | "spine-atlas" | "vni-project" }
+  >,
+  visual: Extract<EditorStateVisual, { kind: "composite" }>,
+  update: (
+    animation: Extract<
+      EditorStateVisual,
+      { kind: "composite" }
+    >["layers"][number]["animation"],
+  ) => Extract<
+    EditorStateVisual,
+    { kind: "composite" }
+  >["layers"][number]["animation"],
+): void {
+  const index = context.compositeLayerIndex;
+  if (index === undefined || !visual.layers[index]) {
+    throw new Error("composite layer 不存在。");
+  }
+  const layers = [...visual.layers];
+  layers[index] = {
+    ...layers[index]!,
+    animation: update(layers[index]!.animation),
+  };
+  setStateVisual(project, context.symbol, context.state, { ...visual, layers });
 }
 
 function expectedKind(context: ResourceBindingContext): EditorAssetKind {

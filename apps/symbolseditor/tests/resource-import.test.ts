@@ -215,6 +215,62 @@ describe("symbol resource import transaction", () => {
     });
   });
 
+  it("clears only the missing Spine leaf inside a composite state", async () => {
+    const project = configureSpineProject();
+    setStateVisual(project, "A", "win", {
+      kind: "composite",
+      base: "normal",
+      layers: [
+        {
+          id: "back",
+          placement: "underlay",
+          animation: {
+            kind: "spine",
+            skeletonPath: "Symbol.json",
+            atlasPath: "Symbol.atlas",
+            texturePath: "Symbol.png",
+            animationName: "Idle",
+          },
+        },
+        {
+          id: "front",
+          placement: "overlay",
+          animation: {
+            kind: "spine",
+            skeletonPath: "Symbol.json",
+            atlasPath: "Symbol.atlas",
+            texturePath: "Symbol.png",
+            animationName: "Win",
+          },
+        },
+      ],
+    });
+    const prepared = await prepareSymbolResourceImport({
+      project,
+      sources: [source("Symbol.json", spineSkeleton(["Idle"]))],
+    });
+    const result = await commitSymbolResourceImport({
+      project,
+      prepared,
+      resolutions: [{ itemIndex: 0, resolution: "overwrite" }],
+    });
+
+    expect(result.clearedAnimations).toEqual([
+      {
+        location: "A.win.layers.front",
+        animationName: "Win",
+        skeletonKeys: ["Symbol.json"],
+      },
+    ]);
+    expect(result.project.symbols.get("A")!.states.get("win")).toMatchObject({
+      kind: "composite",
+      layers: [
+        { id: "back", animation: { animationName: "Idle" } },
+        { id: "front", animation: { animationName: "" } },
+      ],
+    });
+  });
+
   it("clears a tiered active Spine animation without changing its normal tier configuration", async () => {
     const project = createFromGameConfig({
       rawGameConfig: gameConfig,

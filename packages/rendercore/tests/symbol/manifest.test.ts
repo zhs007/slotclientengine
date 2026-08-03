@@ -159,6 +159,111 @@ function createProject() {
 }
 
 describe("symbol state texture manifest helpers", () => {
+  it("strictly parses additive composite animation layers", () => {
+    const manifest = createManifest() as any;
+    manifest.symbols.SC.animations.win = {
+      kind: "composite",
+      base: { kind: "normal" },
+      layers: [
+        {
+          id: "glow-back",
+          placement: "underlay",
+          animation: {
+            kind: "spine",
+            skeleton: "./H1.json",
+            atlas: "./Symbol.atlas",
+            texture: "./Symbol.png",
+            playback: {
+              mode: "animation",
+              animationName: "Start",
+              loop: false,
+            },
+          },
+        },
+        {
+          id: "burst-front",
+          placement: "overlay",
+          animation: {
+            kind: "vni",
+            project: "./L1-wins.json",
+            playback: {
+              mode: "range",
+              startTime: 0,
+              endTime: 2,
+              loop: false,
+            },
+          },
+        },
+      ],
+    };
+
+    const parsed = parseSymbolStateTextureManifest(manifest);
+
+    expect(parsed.symbols.SC.animations.win).toEqual(
+      expect.objectContaining({
+        kind: "composite",
+        base: { kind: "normal" },
+        layers: [
+          expect.objectContaining({ id: "glow-back", placement: "underlay" }),
+          expect.objectContaining({
+            id: "burst-front",
+            placement: "overlay",
+          }),
+        ],
+      }),
+    );
+  });
+
+  it.each([
+    ["empty layers", (value: any) => (value.layers = []), /non-empty/],
+    [
+      "duplicate id",
+      (value: any) => value.layers.push(structuredClone(value.layers[0])),
+      /duplicate layer id/,
+    ],
+    [
+      "bad placement",
+      (value: any) => (value.layers[0].placement = "middle"),
+      /placement/,
+    ],
+    ["bad id", (value: any) => (value.layers[0].id = "Bad_Id"), /kebab-case/],
+    [
+      "nested composite",
+      (value: any) => (value.layers[0].animation = structuredClone(value)),
+      /cannot contain/,
+    ],
+    [
+      "missing state texture",
+      (value: any) => (value.base.kind = "stateTexture"),
+      /state texture/,
+    ],
+  ])("rejects invalid composite animation: %s", (_label, mutate, pattern) => {
+    const manifest = createManifest() as any;
+    const composite = {
+      kind: "composite",
+      base: { kind: "normal" },
+      layers: [
+        {
+          id: "front",
+          placement: "overlay",
+          animation: {
+            kind: "vni",
+            project: "./L1-wins.json",
+            playback: {
+              mode: "range",
+              startTime: 0,
+              endTime: 2,
+              loop: false,
+            },
+          },
+        },
+      ],
+    };
+    mutate(composite);
+    manifest.symbols.SC.animations.win = composite;
+    expect(() => parseSymbolStateTextureManifest(manifest)).toThrow(pattern);
+  });
+
   it("strictly parses ordered named image-string nodes targeting Spine states", () => {
     const manifest = createManifest() as any;
     manifest.symbols.H1.imageStringNodes = [

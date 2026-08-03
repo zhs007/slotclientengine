@@ -150,6 +150,7 @@ vi.mock("pixi.js", () => ({
 
 import { Container, Sprite, Texture } from "pixi.js";
 import {
+  CompositeSymbolAni,
   SpineNormalFallbackAni,
   VniSymbolAni,
   createSymbolVniAnimationResolver,
@@ -529,6 +530,42 @@ describe("VniSymbolAni", () => {
       }).stateId,
     ).toBe("win");
     expect(fallback).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolves composite leaves into isolated ordered slots", () => {
+    const context = createContext();
+    const resourceKey = "win\u0000glow";
+    const resource = {
+      ...createResource(),
+      state: resourceKey,
+      instanceKey: resourceKey,
+    };
+    const resolver = createSymbolVniAnimationResolver({
+      resources: { L1: { [resourceKey]: resource } },
+      manifestAnimationSpecs: {
+        L1: {
+          win: {
+            kind: "composite",
+            base: { kind: "normal" },
+            layers: [
+              {
+                id: "glow",
+                placement: "overlay",
+                animation: resource.spec,
+              },
+            ],
+          },
+        },
+      },
+      playerFactory: createPlayerFactory().factory,
+    });
+
+    const ani = resolver(context);
+    expect(ani).toBeInstanceOf(CompositeSymbolAni);
+    ani.reset();
+    expect(context.baseLayer.visible).toBe(true);
+    expect(context.overlayLayer.children).toHaveLength(1);
+    ani.destroy?.();
   });
 
   it("keeps requested state texture when an equivalent state has a normal Spine resource", () => {

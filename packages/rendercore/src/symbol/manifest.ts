@@ -117,6 +117,26 @@ export interface SymbolManifestActiveSpineAnimationSpec {
   readonly playback: SymbolManifestAnimationPlaybackSpec;
 }
 
+export interface SymbolManifestCompositeAnimationBaseSpec {
+  readonly kind: "normal" | "stateTexture";
+}
+
+export type SymbolManifestCompositeLayerAnimationSpec =
+  | SymbolManifestVniAnimationSpec
+  | SymbolManifestSpineAnimationSpec;
+
+export interface SymbolManifestCompositeAnimationLayerSpec {
+  readonly id: string;
+  readonly placement: "underlay" | "overlay";
+  readonly animation: SymbolManifestCompositeLayerAnimationSpec;
+}
+
+export interface SymbolManifestCompositeAnimationSpec {
+  readonly kind: "composite";
+  readonly base: SymbolManifestCompositeAnimationBaseSpec;
+  readonly layers: readonly SymbolManifestCompositeAnimationLayerSpec[];
+}
+
 export interface SymbolValuePresentationTextBaseSpec {
   readonly slot: string;
   readonly x: number;
@@ -198,7 +218,8 @@ export type SymbolManifestAnimationSpec =
   | SymbolManifestEmptyAnimationSpec
   | SymbolManifestVniAnimationSpec
   | SymbolManifestSpineAnimationSpec
-  | SymbolManifestActiveSpineAnimationSpec;
+  | SymbolManifestActiveSpineAnimationSpec
+  | SymbolManifestCompositeAnimationSpec;
 
 export type SymbolManifestNormal =
   | string
@@ -295,6 +316,7 @@ export interface SymbolVniAnimationResource {
   readonly spec: SymbolManifestVniAnimationSpec;
   readonly project: VNIProjectConfig;
   readonly assetUrls: AssetUrlManifest;
+  readonly instanceKey?: string;
 }
 
 export type SymbolVniAnimationResourceMap = Readonly<
@@ -312,6 +334,7 @@ export interface SymbolSpineAnimationResource {
   readonly atlasText: string;
   readonly textureUrl: string;
   readonly atlasPage: string;
+  readonly instanceKey?: string;
 }
 
 export type SymbolSpineAnimationResourceMap = Readonly<
@@ -456,6 +479,7 @@ export function parseSymbolStateTextureManifest(
       symbol,
       animationStateSet,
       stateDefinitions,
+      new Set(Object.keys(parsedStates)),
     );
     const imageStringNodes = parseImageStringNodes(
       rawSymbolRecord.imageStringNodes,
@@ -900,20 +924,26 @@ function parsePresentationState(
       `${label} requires symbol animation capability "${state}".`,
     );
   }
-  if (
-    expectedPlayback === "loop" &&
-    !(
-      (animation.kind === "vni" ||
-        animation.kind === "spine" ||
-        animation.kind === "activeSpine") &&
-      animation.playback.loop
-    )
-  ) {
+  if (expectedPlayback === "loop" && !isLoopingManifestAnimation(animation)) {
     throw new SymbolAssetError(
       `${label} requires a looping VNI, Spine or activeSpine animation.`,
     );
   }
   return state;
+}
+
+function isLoopingManifestAnimation(
+  animation: SymbolManifestAnimationSpec,
+): boolean {
+  if (animation.kind === "composite") {
+    return animation.layers.every((layer) => layer.animation.playback.loop);
+  }
+  return (
+    (animation.kind === "vni" ||
+      animation.kind === "spine" ||
+      animation.kind === "activeSpine") &&
+    animation.playback.loop
+  );
 }
 
 export function createSymbolStatePresetFromManifest(
@@ -1442,6 +1472,34 @@ export function createSymbolLandingAppearSymbolsFromManifest(
   );
 }
 
+export function createSymbolCompositeLayerResourceKey(
+  state: SymbolStateId,
+  layerId: string,
+): string {
+  return `${state}\u0000${layerId}`;
+}
+
+function manifestAnimationLeaves(
+  state: SymbolStateId,
+  animation: SymbolManifestAnimationSpec,
+): readonly Readonly<{
+  resourceKey: string;
+  animation: SymbolManifestCompositeLayerAnimationSpec;
+}>[] {
+  if (animation.kind === "spine" || animation.kind === "vni") {
+    return Object.freeze([{ resourceKey: state, animation }]);
+  }
+  if (animation.kind !== "composite") return Object.freeze([]);
+  return Object.freeze(
+    animation.layers.map((layer) =>
+      Object.freeze({
+        resourceKey: createSymbolCompositeLayerResourceKey(state, layer.id),
+        animation: layer.animation,
+      }),
+    ),
+  );
+}
+
 export function createSymbolVniAnimationResourcesFromManifest(
   options: CreateSymbolVniAnimationResourcesOptions,
 ): SymbolVniAnimationResourceMap {
@@ -1455,32 +1513,36 @@ export function createSymbolVniAnimationResourcesFromManifest(
     for (const [state, animation] of Object.entries(
       manifestSymbol.animations,
     )) {
-      if (!animation || animation.kind !== "vni") {
-        continue;
-      }
-      const [projectModulePath, rawProject] = resolveManifestModuleEntry(
-        options.vniProjectModules,
-        animation.project,
-        `Symbol "${symbol}" ${state} VNI project`,
-      );
-      const project = assertVNIProject(rawProject);
-      const assetUrls = resolveProjectAssetUrls(
-        project,
-        createProjectRelativeAssetUrlManifest({
+      if (!animation) continue;
+      for (const leaf of manifestAnimationLeaves(state, animation)) {
+        if (leaf.animation.kind !== "vni") continue;
+        const [projectModulePath, rawProject] = resolveManifestModuleEntry(
+          options.vniProjectModules,
+          leaf.animation.project,
+          `Symbol "${symbol}" ${state} VNI project`,
+        );
+        const project = assertVNIProject(rawProject);
+        const assetUrls = resolveProjectAssetUrls(
           project,
-          projectModulePath,
-          assetModules: options.vniAssetModules,
-          label: `Symbol "${symbol}" ${state} VNI project`,
-        }),
-      );
-      resources[symbol] = resources[symbol] ?? {};
-      resources[symbol][state] = Object.freeze({
-        symbol,
-        state,
-        spec: animation,
-        project,
-        assetUrls,
-      });
+          createProjectRelativeAssetUrlManifest({
+            project,
+            projectModulePath,
+            assetModules: options.vniAssetModules,
+            label: `Symbol "${symbol}" ${state} VNI project`,
+          }),
+        );
+        resources[symbol] = resources[symbol] ?? {};
+        resources[symbol][leaf.resourceKey] = Object.freeze({
+          symbol,
+          state: leaf.resourceKey,
+          spec: leaf.animation,
+          project,
+          assetUrls,
+          ...(animation.kind === "composite"
+            ? { instanceKey: leaf.resourceKey }
+            : {}),
+        });
+      }
     }
   }
 
@@ -1507,57 +1569,64 @@ export function createSymbolSpineAnimationResourcesFromManifest(
     for (const [state, animation] of Object.entries(
       manifestSymbol.animations,
     )) {
-      if (!animation || animation.kind !== "spine") {
-        continue;
-      }
-      const skeleton = resolveManifestModule(
-        options.spineSkeletonModules,
-        animation.skeleton,
-        `Symbol "${symbol}" ${state} Spine skeleton`,
-      );
-      const atlas = resolveManifestModule(
-        options.spineAtlasModules,
-        animation.atlas,
-        `Symbol "${symbol}" ${state} Spine atlas`,
-      );
-      if (typeof atlas !== "string" || atlas.trim().length === 0) {
-        throw new SymbolAssetError(
-          `Symbol "${symbol}" ${state} Spine atlas module must be raw text.`,
+      if (!animation) continue;
+      for (const leaf of manifestAnimationLeaves(state, animation)) {
+        if (leaf.animation.kind !== "spine") continue;
+        const skeleton = resolveManifestModule(
+          options.spineSkeletonModules,
+          leaf.animation.skeleton,
+          `Symbol "${symbol}" ${state} Spine skeleton`,
         );
-      }
-      const texture = resolveManifestModule(
-        options.spineTextureModules,
-        animation.texture,
-        `Symbol "${symbol}" ${state} Spine texture`,
-      );
-      if (typeof texture !== "string" || texture.trim().length === 0) {
-        throw new SymbolAssetError(
-          `Symbol "${symbol}" ${state} Spine texture is missing from modules: ${animation.texture}.`,
+        const atlas = resolveManifestModule(
+          options.spineAtlasModules,
+          leaf.animation.atlas,
+          `Symbol "${symbol}" ${state} Spine atlas`,
         );
-      }
+        if (typeof atlas !== "string" || atlas.trim().length === 0) {
+          throw new SymbolAssetError(
+            `Symbol "${symbol}" ${state} Spine atlas module must be raw text.`,
+          );
+        }
+        const texture = resolveManifestModule(
+          options.spineTextureModules,
+          leaf.animation.texture,
+          `Symbol "${symbol}" ${state} Spine texture`,
+        );
+        if (typeof texture !== "string" || texture.trim().length === 0) {
+          throw new SymbolAssetError(
+            `Symbol "${symbol}" ${state} Spine texture is missing from modules: ${leaf.animation.texture}.`,
+          );
+        }
 
-      const atlasPage = validateSpineAtlasAndSkeleton({
-        symbol,
-        state,
-        spec: animation,
-        skeleton,
-        atlasText: atlas,
-        requiredSlots: manifestSymbol.imageStringNodes.flatMap((node) =>
-          node.targets
-            .filter((target) => target.state === state)
-            .map((target) => target.slot),
-        ),
-      });
-      resources[symbol] = resources[symbol] ?? {};
-      resources[symbol][state] = Object.freeze({
-        symbol,
-        state,
-        spec: animation,
-        skeleton,
-        atlasText: atlas,
-        textureUrl: texture,
-        atlasPage,
-      });
+        const atlasPage = validateSpineAtlasAndSkeleton({
+          symbol,
+          state,
+          spec: leaf.animation,
+          skeleton,
+          atlasText: atlas,
+          requiredSlots:
+            animation.kind === "spine"
+              ? manifestSymbol.imageStringNodes.flatMap((node) =>
+                  node.targets
+                    .filter((target) => target.state === state)
+                    .map((target) => target.slot),
+                )
+              : [],
+        });
+        resources[symbol] = resources[symbol] ?? {};
+        resources[symbol][leaf.resourceKey] = Object.freeze({
+          symbol,
+          state: leaf.resourceKey,
+          spec: leaf.animation,
+          skeleton,
+          atlasText: atlas,
+          textureUrl: texture,
+          atlasPage,
+          ...(animation.kind === "composite"
+            ? { instanceKey: leaf.resourceKey }
+            : {}),
+        });
+      }
     }
   }
 
@@ -1834,6 +1903,7 @@ function parseManifestAnimations(
   symbol: string,
   animationStateSet: ReadonlySet<string>,
   stateDefinitions: ReadonlyMap<string, SymbolStateDefinition>,
+  stateTextureStates: ReadonlySet<string>,
 ): Readonly<Partial<Record<SymbolStateId, SymbolManifestAnimationSpec>>> {
   if (animations === undefined) {
     return Object.freeze({});
@@ -1853,6 +1923,7 @@ function parseManifestAnimations(
       state,
       false,
       stateDefinitions.get(state)?.playback,
+      stateTextureStates,
     );
   }
   return Object.freeze(parsed);
@@ -1864,8 +1935,100 @@ function parseManifestAnimationSpec(
   state: string,
   allowLoopingOnceState = false,
   expectedPlaybackOverride?: SymbolPlaybackKind,
+  stateTextureStates: ReadonlySet<string> = new Set(),
+  allowComposite = true,
 ): SymbolManifestAnimationSpec {
   const record = assertRecord(value, `symbol "${symbol}" ${state} animation`);
+  if (record.kind === "composite") {
+    if (!allowComposite) {
+      throw new SymbolAssetError(
+        `Symbol "${symbol}" ${state} composite animation layers cannot contain composite animations.`,
+      );
+    }
+    assertOnlyKnownKeys(record, `symbol "${symbol}" ${state} animation`, [
+      "kind",
+      "base",
+      "layers",
+    ]);
+    const baseRecord = assertRecord(
+      record.base,
+      `symbol "${symbol}" ${state} composite base`,
+    );
+    assertOnlyKnownKeys(
+      baseRecord,
+      `symbol "${symbol}" ${state} composite base`,
+      ["kind"],
+    );
+    if (baseRecord.kind !== "normal" && baseRecord.kind !== "stateTexture") {
+      throw new SymbolAssetError(
+        `Symbol "${symbol}" ${state} composite base.kind must be "normal" or "stateTexture".`,
+      );
+    }
+    if (state === "normal" && baseRecord.kind !== "normal") {
+      throw new SymbolAssetError(
+        `Symbol "${symbol}" normal composite base must use normal.`,
+      );
+    }
+    if (baseRecord.kind === "stateTexture" && !stateTextureStates.has(state)) {
+      throw new SymbolAssetError(
+        `Symbol "${symbol}" ${state} composite stateTexture base requires an exact state texture.`,
+      );
+    }
+    if (!Array.isArray(record.layers) || record.layers.length === 0) {
+      throw new SymbolAssetError(
+        `Symbol "${symbol}" ${state} composite layers must be a non-empty array.`,
+      );
+    }
+    const ids = new Set<string>();
+    const layers = Object.freeze(
+      record.layers.map((rawLayer, index) => {
+        const label = `symbol "${symbol}" ${state} composite layers[${index}]`;
+        const layer = assertRecord(rawLayer, label);
+        assertOnlyKnownKeys(layer, label, ["id", "placement", "animation"]);
+        const id = assertString(layer.id, `${label}.id`);
+        if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(id)) {
+          throw new SymbolAssetError(
+            `${label}.id must be lowercase ASCII kebab-case.`,
+          );
+        }
+        if (ids.has(id)) {
+          throw new SymbolAssetError(
+            `Symbol "${symbol}" ${state} composite has duplicate layer id "${id}".`,
+          );
+        }
+        ids.add(id);
+        if (layer.placement !== "underlay" && layer.placement !== "overlay") {
+          throw new SymbolAssetError(
+            `${label}.placement must be "underlay" or "overlay".`,
+          );
+        }
+        const animation = parseManifestAnimationSpec(
+          layer.animation,
+          symbol,
+          state,
+          allowLoopingOnceState,
+          expectedPlaybackOverride,
+          stateTextureStates,
+          false,
+        );
+        if (animation.kind !== "spine" && animation.kind !== "vni") {
+          throw new SymbolAssetError(
+            `${label}.animation must be a Spine or VNI animation.`,
+          );
+        }
+        return Object.freeze({
+          id,
+          placement: layer.placement,
+          animation,
+        });
+      }),
+    );
+    return Object.freeze({
+      kind: "composite",
+      base: Object.freeze({ kind: baseRecord.kind }),
+      layers,
+    });
+  }
   if (record.kind === "builtin") {
     assertOnlyKnownKeys(record, `symbol "${symbol}" ${state} animation`, [
       "kind",
@@ -1981,7 +2144,7 @@ function parseManifestAnimationSpec(
   }
   if (record.kind !== "vni") {
     throw new SymbolAssetError(
-      `Symbol "${symbol}" ${state} animation kind must be "builtin", "static", "empty", "vni", "spine" or "activeSpine".`,
+      `Symbol "${symbol}" ${state} animation kind must be "builtin", "static", "empty", "vni", "spine", "activeSpine" or "composite".`,
     );
   }
   assertOnlyKnownKeys(record, `symbol "${symbol}" ${state} animation`, [
@@ -2465,6 +2628,11 @@ function escapeRegExp(value: string): string {
 export function getSymbolPlaybackKindForManifestAnimation(
   spec: SymbolManifestAnimationSpec,
 ): SymbolPlaybackKind {
+  if (spec.kind === "composite") {
+    return spec.layers.every((layer) => layer.animation.playback.loop)
+      ? "loop"
+      : "once";
+  }
   if (
     spec.kind === "builtin" ||
     spec.kind === "static" ||
