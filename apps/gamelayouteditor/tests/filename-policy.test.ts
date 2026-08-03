@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  assertCanonicalUploadFileNames,
   assertCanonicalPackagePath,
   canonicalizeUploadFileName,
   deriveNodeId,
@@ -13,6 +14,29 @@ describe("filename policy", () => {
     expect(deriveNodeId("background")).toBe("background");
     expect(() => canonicalizeUploadFileName("大奖.png")).toThrow(/ASCII/);
     expect(() => deriveNodeId(".PNG")).toThrow(/节点 id/);
+    expect(() =>
+      assertCanonicalUploadFileNames([
+        { name: "Nearwin1.JSON" },
+        { name: "中文.png" },
+      ]),
+    ).toThrow(/ASCII/);
+    expect(() =>
+      assertCanonicalUploadFileNames([
+        { name: "Nearwin1.JSON" },
+        { name: "nearwin1.json" },
+      ]),
+    ).toThrow(/小写化后冲突/);
+    expect(
+      assertCanonicalUploadFileNames([
+        { name: "Nearwin1.JSON" },
+        { name: "Symbol.PNG" },
+      ]),
+    ).toEqual(
+      new Map([
+        ["Nearwin1.JSON", "nearwin1.json"],
+        ["Symbol.PNG", "symbol.png"],
+      ]),
+    );
     expect(() => assertCanonicalPackagePath("assets/../x.png")).toThrow(
       /非法 segment/,
     );

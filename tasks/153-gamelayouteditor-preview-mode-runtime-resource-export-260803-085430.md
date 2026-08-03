@@ -57,3 +57,11 @@ git diff --check
 - 程序资源目前没有 mode ownership，按合同进入 shared/initial，可能增加首包体积；未来按 mode 懒加载需要单独 versioned 设计。
 - 本任务只做文件级 closure/去重，不裁剪 atlas region 或重新打 atlas；单张 atlas 内未使用区域仍需由美术拆包流程处理。
 - consumer 不得在父 package resource `destroy()` 后继续使用其 borrowed URL 或 nested resource。
+
+## 后续修正
+
+根据实际 Nearwin 素材验收反馈，Game Layout Editor 的 loose-file 上传边界进一步收敛：整批文件先验证只含 ASCII 字母、数字、点、下划线和连字符，再统一生成小写 filename key；中文、空格、非法字符或小写后重名会让整批上传在解析前失败。程序键默认由 root filename 去扩展名生成，手工大写输入也统一转为小写，因此不会把大小写错误延迟到 production export。
+
+完整 mapped Editor ZIP 保留兼容迁移能力：map payload 完整性先严格验证，再对旧 logical filename key 执行 NFKC、ASCII 小写、非法 ASCII 转连字符、非 ASCII 转 Unicode code-point token 的确定性规范化。不同 bytes 的归一化重名按稳定顺序追加 `-2/-3`，相同 bytes 共享 key；layout、VNI、image-string、Symbols、Popup 的已知 JSON path 引用同步结构化改写，业务 identity 与 atlas page logical name 保持原值。这样 loose file 在入口拒绝歧义，已有完整包则可安全升级后继续使用。
+
+后续修正验收通过：`gamelayouteditor` 22 files / 170 tests、typecheck、production build、format check 与 `git diff --check`。build 仍只有既有的大 chunk warning；浏览器人工验收仍由用户执行。

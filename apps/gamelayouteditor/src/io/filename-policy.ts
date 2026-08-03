@@ -11,6 +11,24 @@ export function canonicalizeUploadFileName(fileName: string): string {
   return fileName.toLowerCase();
 }
 
+export function assertCanonicalUploadFileNames(
+  files: readonly Pick<File, "name">[],
+): ReadonlyMap<string, string> {
+  const canonicalBySource = new Map<string, string>();
+  const sourceByCanonical = new Map<string, string>();
+  for (const file of files) {
+    const canonical = canonicalizeUploadFileName(file.name);
+    const previous = sourceByCanonical.get(canonical);
+    if (previous !== undefined)
+      throw new Error(
+        `文件名小写化后冲突："${previous}" / "${file.name}" -> "${canonical}"。`,
+      );
+    sourceByCanonical.set(canonical, file.name);
+    canonicalBySource.set(file.name, canonical);
+  }
+  return canonicalBySource;
+}
+
 export function createAssetPath(fileName: string): string {
   return `assets/${canonicalizeUploadFileName(fileName)}`;
 }

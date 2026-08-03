@@ -62,6 +62,8 @@ Game Layout Editor 新导出的所有资源引用是扁平 filename keys：
 
 根 `assets.map.json` 将 layout、VNI、image-string、Symbols、Popup 的全部 root/leaf keys 统一映射到 `assets/<完整 SHA-256>.<ext>`。ZIP 只有两个 root control files 和 hash payload 区；禁止 `dependencies/image-strings/**`、`dependencies/symbols/**`、`dependencies/popups/**`。
 
+Game Layout Editor 导入旧 mapped ZIP 时，在验证 map/hash/size/orphan 后将不符合当前 filename-key 合同的 logical key 做确定性迁移，并同步改写 layout 与已知 nested manifest 的 path 字段；业务 id、animation、symbol state 和 atlas page logical name 不参与文件名迁移。迁移后的再次导出只包含规范化 key。
+
 同一个 filename key 全局只有一份 bytes。多个 package 带来同名不同 bytes 时必须覆盖、取消或显式改名并由 owner 结构化改写，不能按 package id 建 namespace。package/mode/node id 保留业务语义，不作为资源 alias。导出与重新导入不得用 physical hash payload path 重建 node id 或资源列表标签。
 
 ## 程序资源

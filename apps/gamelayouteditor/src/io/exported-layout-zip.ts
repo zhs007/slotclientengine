@@ -16,7 +16,10 @@ import {
   collectPopupPackagePaths,
   parsePopupManifest,
 } from "@slotclientengine/rendercore/popup";
-import { createDeterministicZip } from "@slotclientengine/browserartifactio";
+import {
+  createDeterministicZip,
+  resolvePackagePath,
+} from "@slotclientengine/browserartifactio";
 import {
   assertVNIProject,
   rewriteVNIProjectAssetPaths,
@@ -277,13 +280,66 @@ export async function exportLayoutZip(options: {
   });
 }
 
+export async function normalizeLayoutFilenameKeys(
+  manifest: SceneLayoutManifestV1,
+  closure: ReadonlyMap<string, Uint8Array>,
+): Promise<{
+  readonly manifest: SceneLayoutManifestV1;
+  readonly assets: ReadonlyMap<string, Uint8Array>;
+}> {
+  const flattened = await flattenLayoutClosure(manifest, closure);
+  return Object.freeze({
+    manifest: flattened.manifest,
+    assets: new Map(
+      [...flattened.workspace.entries].map(([key, entry]) => [
+        key,
+        entry.bytes.slice(),
+      ]),
+    ),
+  });
+}
+
+export async function normalizeMappedLayoutFilenameKeys(
+  manifestValue: unknown,
+  logicalAssets: ReadonlyMap<string, Uint8Array>,
+): Promise<{
+  readonly manifest: SceneLayoutManifestV1;
+  readonly assets: ReadonlyMap<string, Uint8Array>;
+}> {
+  const mapping = createCanonicalFilenameMapping(logicalAssets);
+  const rewrite = (reference: string): string =>
+    rewriteMappedReference(reference, mapping);
+  const manifest = parseSceneLayoutManifest(
+    rewriteExactJsonReferences(manifestValue, rewrite),
+  );
+  const assets = new Map<string, Uint8Array>();
+  for (const [sourceKey, sourceBytes] of logicalAssets) {
+    let bytes = sourceBytes.slice();
+    if (sourceKey.toLowerCase().endsWith(".json")) {
+      const raw = parseJson(sourceBytes, sourceKey);
+      if (isPathBearingJson(raw) || looksLikeVniProject(raw))
+        bytes = new TextEncoder().encode(
+          `${JSON.stringify(
+            sortValue(rewriteExactJsonReferences(raw, rewrite)),
+            null,
+            2,
+          )}\n`,
+        );
+    }
+    const key = mapping.get(sourceKey)!;
+    const current = assets.get(key);
+    if (current && !sameBytes(current, bytes))
+      throw new Error(`ZIP filename 规范化冲突：${sourceKey} -> ${key}`);
+    if (!current) assets.set(key, bytes);
+  }
+  return Object.freeze({ manifest, assets });
+}
+
 async function flattenLayoutClosure(
   manifest: SceneLayoutManifestV1,
   closure: ReadonlyMap<string, Uint8Array>,
 ) {
-  const mapping = new Map(
-    [...closure.keys()].map((path) => [path, basenameFromSourcePath(path)]),
-  );
+  const mapping = createCanonicalFilenameMapping(closure);
   const virtual = new Map<string, Uint8Array>();
   for (const [path, bytes] of closure) {
     const key = mapping.get(path)!;
@@ -334,6 +390,30 @@ async function flattenLayoutClosure(
       ),
     );
   }
+  for (const [sourcePath, bytes] of closure) {
+    if (!sourcePath.toLowerCase().endsWith(".json")) continue;
+    const raw = parseJson(bytes, sourcePath);
+    if (!isPathBearingJson(raw) || looksLikeVniProject(raw)) continue;
+    const rewritten = rewriteExactJsonReferences(raw, (reference) => {
+      const direct = rewriteMappedReference(reference, mapping);
+      if (direct !== reference) return direct;
+      if (!sourcePath.includes("/")) return reference;
+      try {
+        const mapped = mapping.get(resolvePackagePath(sourcePath, reference));
+        return mapped
+          ? `${reference.startsWith("./") ? "./" : ""}${mapped}`
+          : reference;
+      } catch {
+        return reference;
+      }
+    });
+    virtual.set(
+      mapping.get(sourcePath)!,
+      new TextEncoder().encode(
+        `${JSON.stringify(sortValue(rewritten), null, 2)}\n`,
+      ),
+    );
+  }
   const rewritten = rewriteLayoutManifestFilenameKeys(manifest, mapping);
   const empty = createEmptyEditorAssetWorkspace();
   const review = await reviewEditorAssetImport({
@@ -358,6 +438,129 @@ async function flattenLayoutClosure(
     })
   ).workspace;
   return { manifest: rewritten, workspace };
+}
+
+function createCanonicalFilenameMapping(
+  closure: ReadonlyMap<string, Uint8Array>,
+): ReadonlyMap<string, string> {
+  const mapping = new Map<string, string>();
+  const allocated = new Map<
+    string,
+    { readonly sourcePath: string; readonly bytes: Uint8Array }
+  >();
+  for (const sourcePath of [...closure.keys()].sort((left, right) =>
+    left.localeCompare(right, "en"),
+  )) {
+    const bytes = closure.get(sourcePath)!;
+    const requested = canonicalizeImportedFilenameKey(
+      basenameFromSourcePath(sourcePath),
+    );
+    let candidate = requested;
+    let suffix = 2;
+    while (true) {
+      const current = allocated.get(candidate);
+      if (!current) break;
+      if (sameBytes(current.bytes, bytes)) {
+        mapping.set(sourcePath, candidate);
+        candidate = "";
+        break;
+      }
+      candidate = appendFilenameSuffix(requested, suffix);
+      suffix += 1;
+    }
+    if (!candidate) continue;
+    allocated.set(candidate, { sourcePath, bytes });
+    mapping.set(sourcePath, candidate);
+  }
+  return mapping;
+}
+
+function canonicalizeImportedFilenameKey(filename: string): string {
+  const normalized = filename.normalize("NFKC");
+  const dot = normalized.lastIndexOf(".");
+  if (dot <= 0 || dot === normalized.length - 1)
+    throw new Error(`ZIP filename key 必须包含扩展名：${filename}`);
+  const stem = canonicalizeImportedFilenamePart(normalized.slice(0, dot));
+  const extension = canonicalizeImportedFilenamePart(normalized.slice(dot + 1));
+  if (!/^[a-z0-9]+$/u.test(extension))
+    throw new Error(`ZIP filename extension 无法规范化：${filename}`);
+  return `${stem || "asset"}.${extension}`;
+}
+
+function canonicalizeImportedFilenamePart(value: string): string {
+  let result = "";
+  for (const character of value) {
+    if (/^[A-Za-z0-9._-]$/u.test(character)) {
+      result += character.toLocaleLowerCase("en-US");
+      continue;
+    }
+    const codePoint = unicodeScalarValue(character);
+    result += codePoint > 0x7f ? `-u${codePoint.toString(16)}-` : "-";
+  }
+  return result
+    .replace(/-+/gu, "-")
+    .replace(/^[-._]+|[-._]+$/gu, "")
+    .replace(/\.{2,}/gu, ".");
+}
+
+function unicodeScalarValue(character: string): number {
+  const first = character.charCodeAt(0);
+  if (character.length === 1) return first;
+  const second = character.charCodeAt(1);
+  return (first - 0xd800) * 0x400 + second - 0xdc00 + 0x10000;
+}
+
+function rewriteMappedReference(
+  reference: string,
+  mapping: ReadonlyMap<string, string>,
+): string {
+  const direct = mapping.get(reference);
+  if (direct) return direct;
+  if (!reference.startsWith("./")) return reference;
+  const relative = mapping.get(reference.slice(2));
+  return relative ? `./${relative}` : reference;
+}
+
+function appendFilenameSuffix(filename: string, suffix: number): string {
+  const dot = filename.lastIndexOf(".");
+  return `${filename.slice(0, dot)}-${suffix}${filename.slice(dot)}`;
+}
+
+function isPathBearingJson(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.kind === "image-string" ||
+    record.kind === "symbol-package" ||
+    record.kind === "popup" ||
+    (record.version === 1 && record.symbols !== undefined)
+  );
+}
+
+function looksLikeVniProject(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.schemaVersion === "string" &&
+    record.stage !== undefined &&
+    Array.isArray(record.assets)
+  );
+}
+
+function rewriteExactJsonReferences(
+  value: unknown,
+  rewrite: (reference: string) => string,
+): unknown {
+  if (typeof value === "string") return rewrite(value);
+  if (Array.isArray(value))
+    return value.map((child) => rewriteExactJsonReferences(child, rewrite));
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, child]) => [
+      key,
+      rewriteExactJsonReferences(child, rewrite),
+    ]),
+  );
 }
 
 function rewriteLayoutManifestFilenameKeys(

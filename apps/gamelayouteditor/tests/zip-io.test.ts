@@ -130,6 +130,7 @@ function compositePackageFixture() {
 describe("layout zip IO", () => {
   it("maps uppercase owned filename keys to lowercase hashed package paths", async () => {
     const key = "BG_2.webp";
+    const canonicalKey = "bg_2.webp";
     const manifest = {
       ...imageManifest,
       adaptation: {
@@ -167,15 +168,17 @@ describe("layout zip IO", () => {
         [...entries.keys()].every((path) => path === path.toLowerCase()),
       ).toBe(true);
       const map = decodeEditorAssetsMap(entries.get("assets.map.json")!);
-      expect(map.files[key]?.path).toMatch(/^assets\/[a-f0-9]{64}\.webp$/u);
-      expect(entries.get(map.files[key]!.path)).toEqual(webp);
+      expect(map.files[canonicalKey]?.path).toMatch(
+        /^assets\/[a-f0-9]{64}\.webp$/u,
+      );
+      expect(entries.get(map.files[canonicalKey]!.path)).toEqual(webp);
       const packedManifest = JSON.parse(
         new TextDecoder().decode(entries.get("layout.manifest.json")),
       );
       expect(
         packedManifest.nodes.map((node: { id: string }) => node.id),
       ).toEqual(["background", "jackpot-title"]);
-      expect(packedManifest.nodes[0].resource.path).toBe(key);
+      expect(packedManifest.nodes[0].resource.path).toBe(canonicalKey);
       const imported = await importLayoutZip(exported.bytes, { decodeImage });
       const project = manifestToEditorProject(
         imported.manifest,
@@ -185,13 +188,72 @@ describe("layout zip IO", () => {
         "background",
         "jackpot-title",
       ]);
-      expect([...project.resources.keys()]).toEqual([key]);
-      expect([...project.resources.keys()]).not.toContain(map.files[key]?.path);
+      expect([...project.resources.keys()]).toEqual([canonicalKey]);
+      expect([...project.resources.keys()]).not.toContain(
+        map.files[canonicalKey]?.path,
+      );
       imported.destroy();
     } finally {
       load.mockRestore();
       unload.mockRestore();
     }
+  });
+
+  it("deterministically migrates Unicode and punctuation filename collisions", async () => {
+    const first = "大奖 BG.PNG";
+    const second = "大奖@BG.PNG";
+    const manifest = {
+      ...imageManifest,
+      nodes: [
+        {
+          ...imageManifest.nodes[0],
+          resource: { ...imageManifest.nodes[0].resource, path: "first.png" },
+        },
+        {
+          ...imageManifest.nodes[0],
+          id: "overlay",
+          order: 1,
+          resource: { ...imageManifest.nodes[0].resource, path: "second.png" },
+        },
+      ],
+    };
+    const exported = await exportLayoutZip({
+      manifest,
+      assets: new Map([
+        ["first.png", new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1])],
+        ["second.png", new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 2])],
+      ]),
+      decodeImage,
+    });
+    const entries = extractBoundedZip(exported.bytes);
+    const sourceMap = decodeEditorAssetsMap(entries.get("assets.map.json")!);
+    entries.set(
+      "assets.map.json",
+      encode({
+        ...sourceMap,
+        files: {
+          [first]: sourceMap.files["first.png"],
+          [second]: sourceMap.files["second.png"],
+        },
+      }),
+    );
+    const legacyManifest = JSON.parse(
+      new TextDecoder().decode(entries.get("layout.manifest.json")),
+    );
+    legacyManifest.nodes[0].resource.path = first;
+    legacyManifest.nodes[1].resource.path = second;
+    entries.set("layout.manifest.json", encode(legacyManifest));
+    const legacyZip = zipSync(Object.fromEntries(entries));
+    const imported = await importLayoutZip(legacyZip, { decodeImage });
+    expect([...imported.assets.keys()].sort()).toEqual([
+      "u5927-u5956-bg-2.png",
+      "u5927-u5956-bg.png",
+    ]);
+    expect(imported.manifest.nodes.map((node) => node.resource)).toEqual([
+      expect.objectContaining({ path: "u5927-u5956-bg.png" }),
+      expect.objectContaining({ path: "u5927-u5956-bg-2.png" }),
+    ]);
+    imported.destroy();
   });
 
   it("deterministically round-trips an owned MP4 video transition without re-encoding", async () => {
@@ -812,7 +874,7 @@ describe("layout zip IO", () => {
     }
   });
 
-  it("preserves legal uppercase filename keys in symbols dependencies", async () => {
+  it("normalizes uppercase filename keys in symbols dependencies", async () => {
     const fixture = compositePackageFixture();
     const legacyManifest = {
       version: 1,
@@ -865,7 +927,7 @@ describe("layout zip IO", () => {
       });
       const entries = extractBoundedZip(exported.bytes);
       const map = decodeEditorAssetsMap(entries.get("assets.map.json")!);
-      expect(map.files).toHaveProperty("A.disabled.png");
+      expect(map.files).toHaveProperty("a.disabled.png");
     } finally {
       load.mockRestore();
       unload.mockRestore();
