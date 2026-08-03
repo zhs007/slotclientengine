@@ -160,7 +160,9 @@ nav span {
 }
 .snapshot-head {
   display: grid;
-  grid-template-columns: 34px minmax(180px, 1fr) auto auto auto;
+  grid-template-columns:
+    34px minmax(180px, 1fr) auto minmax(210px, auto)
+    auto auto;
   gap: 8px;
   align-items: center;
   padding: 10px;
@@ -212,6 +214,14 @@ nav span {
     11px ui-monospace,
     monospace;
 }
+.initial-state,
+.locked-normal {
+  border: 1px solid #2f3d4b;
+  border-radius: 6px;
+  padding: 7px 8px;
+  color: #9fb0c2;
+  background: #0c121a;
+}
 .state-workspace {
   display: grid;
   grid-template-columns: 300px 1fr;
@@ -251,12 +261,37 @@ nav span {
   max-width: 480px;
   color: #91a0b2;
 }
+.kind-badge {
+  display: inline-block;
+  margin-top: 14px;
+  color: #d8ff4f;
+  font:
+    700 11px ui-monospace,
+    monospace;
+  letter-spacing: 0.08em;
+}
+.spin-nodes {
+  margin-top: 26px;
+}
+.fixed-node {
+  display: grid;
+  grid-template-columns: 100px minmax(220px, 1fr);
+  gap: 8px 12px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid #3a4959;
+  background: #14202b;
+}
+.fixed-node small {
+  grid-column: 2;
+  color: #8293a6;
+}
 .timeline {
   margin-top: 30px;
 }
 .step {
   display: grid;
-  grid-template-columns: 34px minmax(220px, 1fr) 120px auto;
+  grid-template-columns: 34px minmax(220px, 1fr) auto;
   align-items: center;
   gap: 10px;
   padding: 13px;
@@ -269,11 +304,11 @@ nav span {
     700 13px ui-monospace,
     monospace;
 }
-.step div {
+.step-actions {
   display: flex;
   gap: 4px;
 }
-.step div button {
+.step-actions button {
   padding: 6px 8px;
 }
 .step-line {

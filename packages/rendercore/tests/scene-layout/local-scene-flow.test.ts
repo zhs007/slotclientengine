@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   spin: vi.fn(),
   spinning: false,
   onceCount: 0,
+  onceCounts: new Map<string, number>(),
   landings: [] as { x: number; y: number }[],
   initError: null as Error | null,
   applicationInitError: null as Error | null,
@@ -49,7 +50,7 @@ vi.mock("pixi.js", async (importOriginal) => {
 
 const project = {
   kind: "scene-other-scene-flow",
-  version: 1,
+  version: 2,
   spin: {
     kind: "standard",
     version: 1,
@@ -63,35 +64,44 @@ const project = {
   },
   choreographies: [
     {
+      kind: "spin",
       id: "spin",
       name: "Spin",
-      steps: [{ state: "normal", holdSeconds: 0 }, { state: "spinBlur" }],
+      beforeSpin: { state: "normal" },
+      spinning: { state: "spinBlur" },
+      stopping: [{ state: "appear" }, { state: "normal" }],
     },
     {
-      id: "landing",
-      name: "Landing",
-      steps: [{ state: "appear" }, { state: "normal" }],
+      kind: "sequence",
+      id: "normal",
+      name: "Normal",
+      steps: [{ state: "normal" }],
     },
-    { id: "normal", name: "Normal", steps: [{ state: "normal" }] },
   ],
   snapshots: [
     {
+      kind: "initial",
       id: "s1",
       name: "S1",
       scene: [[1]],
       otherScene: [[null]],
+    },
+    {
+      kind: "scene",
+      id: "s2",
+      name: "S2",
+      transition: "spin",
+      completionPolicy: "all-cells-normal",
+      scene: [[2]],
+      otherScene: [[5]],
       choreographies: [["spin"]],
     },
     {
-      id: "s2",
-      name: "S2",
-      scene: [[2]],
-      otherScene: [[5]],
-      choreographies: [["landing"]],
-    },
-    {
+      kind: "scene",
       id: "s3",
       name: "S3",
+      transition: "settled",
+      completionPolicy: "all-cells-normal",
       scene: [[1]],
       otherScene: [[null]],
       choreographies: [["normal"]],
@@ -145,9 +155,15 @@ vi.mock("../../src/scene-layout/package-runtime.js", () => ({
     isMainReelSpinning: vi.fn(() => mocks.spinning),
     drainMainReelLandingPositions: vi.fn(() => mocks.landings.splice(0)),
     requestMainReelSymbolStates: mocks.requestStates,
-    getMainReelSymbolStateSnapshots: vi.fn(() => [
-      { onceCompletionCount: mocks.onceCount },
-    ]),
+    getMainReelSymbolStateSnapshots: vi.fn(
+      (positions: readonly { x: number; y: number }[]) => [
+        {
+          onceCompletionCount:
+            mocks.onceCounts.get(`${positions[0]!.x}:${positions[0]!.y}`) ??
+            mocks.onceCount,
+        },
+      ],
+    ),
     destroy: mocks.runtimeDestroy,
   })),
 }));
@@ -159,6 +175,7 @@ describe("local scene flow runtime", () => {
     vi.clearAllMocks();
     mocks.spinning = false;
     mocks.onceCount = 0;
+    mocks.onceCounts.clear();
     mocks.landings = [];
     mocks.tickerCallback = null;
     mocks.initError = null;
@@ -166,7 +183,7 @@ describe("local scene flow runtime", () => {
     mocks.readiness = readiness;
   });
 
-  it("runs source, spin landing, later settled snapshot and replay", async () => {
+  it("runs unified spin nodes, later settled snapshot and replay", async () => {
     const root = { replaceChildren: vi.fn() } as unknown as HTMLElement;
     const runtime = await createSceneOtherSceneFlowRuntime({
       root,
@@ -201,7 +218,7 @@ describe("local scene flow runtime", () => {
     mocks.tickerCallback!({ deltaMS: 16 });
     expect(mocks.spin).toHaveBeenCalledOnce();
 
-    mocks.landings.push({ x: 0, y: 0 });
+    mocks.landings.push({ x: 0, y: 0 }, { x: 0, y: 0 });
     mocks.tickerCallback!({ deltaMS: 16 });
     expect(mocks.requestStates).toHaveBeenCalledWith(
       [{ x: 0, y: 0 }],
@@ -243,6 +260,136 @@ describe("local scene flow runtime", () => {
     expect(mocks.applicationDestroy).toHaveBeenCalledOnce();
   });
 
+  it("waits for reel settle but lets first-cell normal supersede other controllers", async () => {
+    const twoCellProject = {
+      ...project,
+      snapshots: [
+        {
+          ...project.snapshots[0],
+          scene: [[1], [1]],
+          otherScene: [[null], [null]],
+        },
+        {
+          ...project.snapshots[1],
+          completionPolicy: "first-cell-normal",
+          scene: [[2], [2]],
+          otherScene: [[5], [5]],
+          choreographies: [["spin"], ["spin"]],
+        },
+        {
+          ...project.snapshots[2],
+          scene: [[1], [1]],
+          otherScene: [[null], [null]],
+          choreographies: [["normal"], ["normal"]],
+        },
+      ],
+    } as const;
+    mocks.readiness = {
+      ...readiness,
+      layout: { ...readiness.layout, columns: 2 },
+      project: twoCellProject,
+    };
+    const runtime = await createSceneOtherSceneFlowRuntime({
+      root: { replaceChildren: vi.fn() } as unknown as HTMLElement,
+      layoutZipBytes: new Uint8Array([1]),
+      project: twoCellProject,
+    });
+    runtime.play();
+    mocks.landings.push({ x: 0, y: 0 }, { x: 1, y: 0 });
+    mocks.tickerCallback!({ deltaMS: 16 });
+    mocks.onceCounts.set("0:0", 1);
+    mocks.tickerCallback!({ deltaMS: 16 });
+    expect(mocks.applySnapshot).not.toHaveBeenCalled();
+
+    mocks.spinning = false;
+    mocks.tickerCallback!({ deltaMS: 16 });
+    expect(mocks.applySnapshot).toHaveBeenCalledOnce();
+    const requestsAfterAdvance = mocks.requestStates.mock.calls.length;
+
+    mocks.onceCounts.set("1:0", 1);
+    mocks.tickerCallback!({ deltaMS: 16 });
+    expect(mocks.requestStates).toHaveBeenCalledTimes(requestsAfterAdvance);
+    runtime.destroy();
+  });
+
+  it("waits for a once before-spin node without using a timer", async () => {
+    const onceBeforeProject = {
+      ...project,
+      choreographies: [
+        {
+          ...project.choreographies[0],
+          beforeSpin: { state: "appear" },
+        },
+        project.choreographies[1],
+      ],
+    } as const;
+    mocks.readiness = { ...readiness, project: onceBeforeProject };
+    const runtime = await createSceneOtherSceneFlowRuntime({
+      root: { replaceChildren: vi.fn() } as unknown as HTMLElement,
+      layoutZipBytes: new Uint8Array([1]),
+      project: onceBeforeProject,
+    });
+    runtime.play();
+    mocks.tickerCallback!({ deltaMS: 10_000 });
+    expect(mocks.spin).not.toHaveBeenCalled();
+    mocks.onceCount = 1;
+    mocks.tickerCallback!({ deltaMS: 16 });
+    expect(mocks.spin).toHaveBeenCalledOnce();
+    runtime.destroy();
+  });
+
+  it("rejects an invalid post-readiness settled transition", async () => {
+    const invalidProject = {
+      ...project,
+      snapshots: [
+        project.snapshots[0],
+        project.snapshots[1],
+        { ...project.snapshots[2], transition: "spin" },
+      ],
+    } as const;
+    mocks.readiness = { ...readiness, project: invalidProject };
+    const runtime = await createSceneOtherSceneFlowRuntime({
+      root: { replaceChildren: vi.fn() } as unknown as HTMLElement,
+      layoutZipBytes: new Uint8Array([1]),
+      project: invalidProject,
+    });
+    runtime.play();
+    mocks.landings.push({ x: 0, y: 0 });
+    mocks.tickerCallback!({ deltaMS: 16 });
+    mocks.onceCount = 1;
+    mocks.spinning = false;
+    expect(() => mocks.tickerCallback!({ deltaMS: 16 })).toThrow(
+      /not a settled scene state/,
+    );
+    runtime.destroy();
+  });
+
+  it("rejects a post-readiness spin choreography in a settled scene", async () => {
+    const invalidProject = {
+      ...project,
+      snapshots: [
+        project.snapshots[0],
+        project.snapshots[1],
+        { ...project.snapshots[2], choreographies: [["spin"]] },
+      ],
+    } as const;
+    mocks.readiness = { ...readiness, project: invalidProject };
+    const runtime = await createSceneOtherSceneFlowRuntime({
+      root: { replaceChildren: vi.fn() } as unknown as HTMLElement,
+      layoutZipBytes: new Uint8Array([1]),
+      project: invalidProject,
+    });
+    runtime.play();
+    mocks.landings.push({ x: 0, y: 0 });
+    mocks.tickerCallback!({ deltaMS: 16 });
+    mocks.onceCount = 1;
+    mocks.spinning = false;
+    expect(() => mocks.tickerCallback!({ deltaMS: 16 })).toThrow(
+      /must use sequence choreography/,
+    );
+    runtime.destroy();
+  });
+
   it("destroys the resource when application initialization fails", async () => {
     mocks.applicationInitError = new Error("application failed");
     const root = { replaceChildren: vi.fn() } as unknown as HTMLElement;
@@ -257,7 +404,7 @@ describe("local scene flow runtime", () => {
     expect(mocks.runtimeDestroy).not.toHaveBeenCalled();
   });
 
-  it("uses the normal fallback when package metadata has no stable state", async () => {
+  it("does not guess a normal state when readiness metadata is invalid", async () => {
     mocks.readiness = {
       ...readiness,
       layout: {
@@ -271,7 +418,7 @@ describe("local scene flow runtime", () => {
       layoutZipBytes: new Uint8Array([1]),
       project,
     });
-    expect(runtime.getSnapshot().phase).toBe("ready");
+    expect(() => runtime.play()).toThrow(/Unknown state "normal"/);
     runtime.destroy();
   });
 });

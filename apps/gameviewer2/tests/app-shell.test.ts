@@ -7,13 +7,13 @@ const summary = {
   layoutId: "layout",
   initialMode: null,
   columns: 2,
-  rows: 1,
+  rows: 2,
   renderMode: "standard",
   symbolPackageId: "symbols",
   reelSet: "main",
   publicReels: [
-    [1, 2],
-    [2, 1],
+    [1, 2, 1],
+    [2, 1, 2],
   ],
   symbols: [
     {
@@ -21,7 +21,7 @@ const summary = {
       name: "A",
       valueCapable: true,
       defaultValues: [1],
-      supportedStates: ["normal", "appear"],
+      supportedStates: ["normal", "spinBlur", "appear"],
       valueRequiredStates: ["normal", "appear"],
     },
     {
@@ -29,12 +29,13 @@ const summary = {
       name: "B",
       valueCapable: true,
       defaultValues: [1],
-      supportedStates: ["normal", "appear"],
+      supportedStates: ["normal", "spinBlur", "appear"],
       valueRequiredStates: ["normal", "appear"],
     },
   ],
   states: [
     { id: "normal", phase: "stable", playback: "loop" },
+    { id: "spinBlur", phase: "stable", playback: "loop" },
     { id: "appear", phase: "once", playback: "once" },
   ],
   numberWeightTables: { values: [{ value: 5, weight: 1 }] },
@@ -42,7 +43,7 @@ const summary = {
 
 const flow = {
   kind: "scene-other-scene-flow",
-  version: 1,
+  version: 2,
   spin: {
     kind: "standard",
     version: 1,
@@ -55,21 +56,55 @@ const flow = {
     bounceStrength: 0,
   },
   choreographies: [
-    { id: "normal", name: "Normal", steps: [{ state: "normal" }] },
     {
-      id: "landing",
-      name: "Landing",
-      steps: [{ state: "appear" }, { state: "normal" }],
+      kind: "spin",
+      id: "spin",
+      name: "Spin",
+      beforeSpin: { state: "normal" },
+      spinning: { state: "spinBlur" },
+      stopping: [{ state: "appear" }, { state: "normal" }],
+    },
+    {
+      kind: "sequence",
+      id: "normal",
+      name: "Normal",
+      steps: [{ state: "normal" }],
     },
   ],
-  snapshots: [1, 2].map((index) => ({
-    id: `s${index}`,
-    name: `S${index}`,
-    scene: [[1], [2]],
-    otherScene: [[null], [null]],
-    choreographies:
-      index === 1 ? [["normal"], ["normal"]] : [["landing"], ["landing"]],
-  })),
+  snapshots: [
+    {
+      kind: "initial",
+      id: "s1",
+      name: "S1",
+      scene: [
+        [1, 2],
+        [2, 1],
+      ],
+      otherScene: [
+        [null, null],
+        [null, null],
+      ],
+    },
+    {
+      kind: "scene",
+      id: "s2",
+      name: "S2",
+      transition: "spin",
+      completionPolicy: "all-cells-normal",
+      scene: [
+        [2, 1],
+        [1, 2],
+      ],
+      otherScene: [
+        [null, null],
+        [null, null],
+      ],
+      choreographies: [
+        ["spin", "spin"],
+        ["spin", "spin"],
+      ],
+    },
+  ],
 } as const;
 
 const mocks = vi.hoisted(() => ({ launch: vi.fn(), download: vi.fn() }));
@@ -82,9 +117,15 @@ vi.mock("@slotclientengine/rendercore/scene-layout", () => ({
     project,
   })),
   parseSceneOtherSceneFlowProject: vi.fn((project) => project),
-  rollSceneFromPublicReels: vi.fn(() => [[2], [1]]),
+  rollSceneFromPublicReels: vi.fn(() => [
+    [2, 1],
+    [1, 2],
+  ]),
   fillMissingSymbolValues: vi.fn(({ otherScene }) => otherScene),
-  rollOtherSceneValues: vi.fn(() => [[7], [7]]),
+  rollOtherSceneValues: vi.fn(() => [
+    [7, 7],
+    [7, 7],
+  ]),
 }));
 vi.mock("../src/runtime/launch-channel.js", () => ({
   launchRuntimeWindow: mocks.launch,
@@ -113,6 +154,20 @@ describe("gameviewer2 app shell", () => {
     await vi.waitFor(() =>
       expect(root.querySelectorAll(".snapshot")).toHaveLength(2),
     );
+    expect(
+      [
+        ...root.querySelectorAll<HTMLElement>(
+          '[data-snapshot][data-index="0"] [data-cell]',
+        ),
+      ].map((cell) => `${cell.dataset.x},${cell.dataset.y}`),
+    ).toEqual(["0,0", "1,0", "0,1", "1,1"]);
+    expect(
+      root
+        .querySelector<HTMLElement>(
+          '[data-snapshot][data-index="0"] .cell-grid',
+        )!
+        .getAttribute("style"),
+    ).toContain("--columns:2");
 
     click(root, "add-snapshot");
     expect(root.querySelectorAll(".snapshot")).toHaveLength(3);
@@ -122,9 +177,18 @@ describe("gameviewer2 app shell", () => {
     click(card, "roll-other");
     change(root.querySelector<HTMLSelectElement>('[data-edit="scene"]')!, "2");
     change(root.querySelector<HTMLInputElement>('[data-edit="other"]')!, "8");
+    const settled = root.querySelector<HTMLElement>(
+      '[data-snapshot][data-index="2"]',
+    )!;
     change(
-      root.querySelector<HTMLSelectElement>('[data-edit="cell-choreography"]')!,
-      "landing",
+      settled.querySelector<HTMLSelectElement>(
+        '[data-edit="cell-choreography"]',
+      )!,
+      "normal",
+    );
+    change(
+      root.querySelector<HTMLSelectElement>('[data-edit="completion-policy"]')!,
+      "first-cell-normal",
     );
     change(
       root.querySelector<HTMLInputElement>('[data-edit="snapshot-name"]')!,
@@ -145,10 +209,7 @@ describe("gameviewer2 app shell", () => {
       root.querySelector<HTMLSelectElement>('[data-edit="step-state"]')!,
       "appear",
     );
-    change(
-      root.querySelector<HTMLInputElement>('[data-edit="step-hold"]')!,
-      "0.2",
-    );
+    expect(root.querySelector('[data-edit="step-hold"]')).toBeNull();
     click(root, "step-delete");
     click(root, "copy-choreography");
     click(root, "tab-scenes");
@@ -164,7 +225,7 @@ describe("gameviewer2 app shell", () => {
     const input = root.querySelector<HTMLInputElement>("#project-file")!;
     const project = {
       kind: "gameviewer2-project",
-      version: 1,
+      version: 2,
       layoutSha256: "b".repeat(64),
       flow,
     };

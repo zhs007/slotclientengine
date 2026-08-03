@@ -79,34 +79,41 @@ const spin = {
 } as const;
 const project = {
   kind: "scene-other-scene-flow",
-  version: 1,
+  version: 2,
   spin,
   choreographies: [
     {
+      kind: "spin",
       id: "spin",
       name: "Spin",
-      steps: [{ state: "normal", holdSeconds: 0 }, { state: "spinBlur" }],
+      beforeSpin: { state: "normal" },
+      spinning: { state: "spinBlur" },
+      stopping: [{ state: "appear" }, { state: "normal" }],
     },
     {
-      id: "landing",
-      name: "Landing",
-      steps: [{ state: "appear" }, { state: "normal" }],
+      kind: "sequence",
+      id: "normal",
+      name: "Normal",
+      steps: [{ state: "normal" }],
     },
   ],
   snapshots: [
     {
+      kind: "initial",
       id: "s1",
       name: "S1",
       scene: [[1]],
       otherScene: [[7]],
-      choreographies: [["spin"]],
     },
     {
+      kind: "scene",
       id: "s2",
       name: "S2",
+      transition: "spin",
+      completionPolicy: "all-cells-normal",
       scene: [[1]],
       otherScene: [[7]],
-      choreographies: [["landing"]],
+      choreographies: [["spin"]],
     },
   ],
 } as const;
@@ -202,73 +209,65 @@ describe("local scene readiness", () => {
       {
         ...project,
         choreographies: [
-          { id: "spin", name: "Spin", steps: [{ state: "missing" }] },
+          {
+            ...project.choreographies[0],
+            beforeSpin: { state: "missing" },
+          },
+          project.choreographies[1],
         ],
-        snapshots: project.snapshots.map((item) => ({
-          ...item,
-          choreographies: [["spin"]],
-        })),
       },
       /unknown state/,
     ],
     [
-      "once hold",
+      "hold field",
       {
         ...project,
         choreographies: [
           {
-            id: "spin",
-            name: "Spin",
-            steps: [{ state: "appear", holdSeconds: 1 }, { state: "normal" }],
+            ...project.choreographies[0],
+            beforeSpin: { state: "normal", holdSeconds: 1 },
           },
+          project.choreographies[1],
         ],
-        snapshots: project.snapshots.map((item) => ({
-          ...item,
-          choreographies: [["spin"]],
-        })),
       },
-      /must not declare/,
+      /holdSeconds.*not supported/,
     ],
     [
-      "stable hold",
+      "non-stable spinning",
       {
         ...project,
         choreographies: [
           {
-            id: "spin",
-            name: "Spin",
-            steps: [{ state: "normal" }, { state: "spinBlur" }],
+            ...project.choreographies[0],
+            spinning: { state: "appear" },
           },
+          project.choreographies[1],
         ],
-        snapshots: project.snapshots.map((item) => ({
-          ...item,
-          choreographies: [["spin"]],
-        })),
       },
-      /requires holdSeconds/,
+      /spinning state must be stable/,
     ],
     [
-      "once final",
+      "non-normal final",
       {
         ...project,
         choreographies: [
-          { id: "spin", name: "Spin", steps: [{ state: "appear" }] },
+          {
+            ...project.choreographies[0],
+            stopping: [{ state: "appear" }],
+          },
+          project.choreographies[1],
         ],
-        snapshots: project.snapshots.map((item) => ({
-          ...item,
-          choreographies: [["spin"]],
-        })),
       },
-      /end in a stable/,
+      /end with exact state "normal"/,
     ],
     [
       "unknown code",
       {
         ...project,
-        snapshots: project.snapshots.map((item) => ({
-          ...item,
-          scene: [[99]],
-        })),
+        snapshots: [
+          { ...project.snapshots[0], scene: [[99]] },
+          project.snapshots[1],
+        ],
       },
       /unknown display code/,
     ],
@@ -276,15 +275,15 @@ describe("local scene readiness", () => {
       "layout dimensions",
       {
         ...project,
-        snapshots: project.snapshots.map((item) => ({
-          ...item,
-          scene: [[1], [1]],
-          otherScene: [[null], [null]],
-          choreographies: [
-            [item.choreographies[0]![0]!],
-            [item.choreographies[0]![0]!],
-          ],
-        })),
+        snapshots: [
+          project.snapshots[0],
+          {
+            ...project.snapshots[1],
+            scene: [[1], [1]],
+            otherScene: [[null], [null]],
+            choreographies: [["spin"], ["spin"]],
+          },
+        ],
       },
       /must be 1 x 1/,
     ],

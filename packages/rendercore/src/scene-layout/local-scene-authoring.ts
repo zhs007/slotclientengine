@@ -11,31 +11,67 @@ import type {
   SceneLayoutSymbolPackageBinding,
 } from "./types.js";
 
-export interface SceneOtherSceneFlowStepV1 {
+export interface SceneOtherSceneFlowStepV2 {
   readonly state: string;
-  readonly holdSeconds?: number;
 }
 
-export interface SceneOtherSceneFlowChoreographyV1 {
+interface SceneOtherSceneFlowChoreographyBaseV2 {
   readonly id: string;
   readonly name: string;
-  readonly steps: readonly SceneOtherSceneFlowStepV1[];
 }
 
-export interface SceneOtherSceneFlowSnapshotV1 {
+export interface SceneOtherSceneFlowSpinChoreographyV2 extends SceneOtherSceneFlowChoreographyBaseV2 {
+  readonly kind: "spin";
+  readonly beforeSpin: SceneOtherSceneFlowStepV2;
+  readonly spinning: SceneOtherSceneFlowStepV2;
+  readonly stopping: readonly SceneOtherSceneFlowStepV2[];
+}
+
+export interface SceneOtherSceneFlowSequenceChoreographyV2 extends SceneOtherSceneFlowChoreographyBaseV2 {
+  readonly kind: "sequence";
+  readonly steps: readonly SceneOtherSceneFlowStepV2[];
+}
+
+export type SceneOtherSceneFlowChoreographyV2 =
+  | SceneOtherSceneFlowSpinChoreographyV2
+  | SceneOtherSceneFlowSequenceChoreographyV2;
+
+interface SceneOtherSceneFlowSnapshotBaseV2 {
   readonly id: string;
   readonly name: string;
   readonly scene: readonly (readonly number[])[];
   readonly otherScene: readonly (readonly (number | null)[])[];
+}
+
+export interface SceneOtherSceneFlowInitialSnapshotV2 extends SceneOtherSceneFlowSnapshotBaseV2 {
+  readonly kind: "initial";
+}
+
+export type SceneOtherSceneFlowCompletionPolicyV2 =
+  | "all-cells-normal"
+  | "first-cell-normal";
+
+export interface SceneOtherSceneFlowStateSnapshotV2 extends SceneOtherSceneFlowSnapshotBaseV2 {
+  readonly kind: "scene";
+  readonly transition: "spin" | "settled";
+  readonly completionPolicy: SceneOtherSceneFlowCompletionPolicyV2;
   readonly choreographies: readonly (readonly string[])[];
 }
 
-export interface SceneOtherSceneFlowProjectV1 {
+export type SceneOtherSceneFlowSnapshotV2 =
+  | SceneOtherSceneFlowInitialSnapshotV2
+  | SceneOtherSceneFlowStateSnapshotV2;
+
+export interface SceneOtherSceneFlowProjectV2 {
   readonly kind: "scene-other-scene-flow";
-  readonly version: 1;
+  readonly version: 2;
   readonly spin: SlotReelPresentationProfileV1;
-  readonly choreographies: readonly SceneOtherSceneFlowChoreographyV1[];
-  readonly snapshots: readonly SceneOtherSceneFlowSnapshotV1[];
+  readonly choreographies: readonly SceneOtherSceneFlowChoreographyV2[];
+  readonly snapshots: readonly [
+    SceneOtherSceneFlowInitialSnapshotV2,
+    SceneOtherSceneFlowStateSnapshotV2,
+    ...SceneOtherSceneFlowStateSnapshotV2[],
+  ];
 }
 
 export interface SceneOtherSceneFlowPackageSummary {
@@ -72,14 +108,14 @@ export interface SceneOtherSceneFlowReadiness {
   readonly kind: "scene-other-scene-flow-readiness";
   readonly version: 1;
   readonly layout: SceneOtherSceneFlowPackageSummary;
-  readonly project: SceneOtherSceneFlowProjectV1;
+  readonly project: SceneOtherSceneFlowProjectV2;
 }
 
 export type SceneOtherSceneBoundedRandom = (exclusiveMax: number) => number;
 
 export function parseSceneOtherSceneFlowProject(
   input: unknown,
-): SceneOtherSceneFlowProjectV1 {
+): SceneOtherSceneFlowProjectV2 {
   const root = strictRecord(input, "project", [
     "kind",
     "version",
@@ -89,7 +125,7 @@ export function parseSceneOtherSceneFlowProject(
   ]);
   if (root.kind !== "scene-other-scene-flow")
     fail('project.kind must be "scene-other-scene-flow".');
-  if (root.version !== 1) fail("project.version must be 1.");
+  if (root.version !== 2) fail("project.version must be 2.");
   const choreographies = array(root.choreographies, "project.choreographies");
   if (choreographies.length === 0)
     fail("project.choreographies must contain at least one item.");
@@ -97,7 +133,15 @@ export function parseSceneOtherSceneFlowProject(
   const choreographyNames = new Set<string>();
   const parsedChoreographies = choreographies.map((value, index) => {
     const path = `project.choreographies[${index}]`;
-    const record = strictRecord(value, path, ["id", "name", "steps"]);
+    const record = strictRecord(value, path, [
+      "kind",
+      "id",
+      "name",
+      "beforeSpin",
+      "spinning",
+      "stopping",
+      "steps",
+    ]);
     const id = unique(
       nonBlank(record.id, `${path}.id`),
       choreographyIds,
@@ -108,26 +152,33 @@ export function parseSceneOtherSceneFlowProject(
       choreographyNames,
       `${path}.name`,
     );
-    const steps = array(record.steps, `${path}.steps`);
-    if (steps.length === 0) fail(`${path}.steps must not be empty.`);
-    return Object.freeze({
-      id,
-      name,
-      steps: Object.freeze(
-        steps.map((step, stepIndex) => {
-          const stepPath = `${path}.steps[${stepIndex}]`;
-          const item = strictRecord(step, stepPath, ["state", "holdSeconds"]);
-          const holdSeconds =
-            item.holdSeconds === undefined
-              ? undefined
-              : nonNegativeFinite(item.holdSeconds, `${stepPath}.holdSeconds`);
-          return Object.freeze({
-            state: nonBlank(item.state, `${stepPath}.state`),
-            ...(holdSeconds === undefined ? {} : { holdSeconds }),
-          });
-        }),
-      ),
-    });
+    if (record.kind === "spin") {
+      if (record.steps !== undefined)
+        fail(`${path}.steps is not allowed for spin choreography.`);
+      return Object.freeze({
+        kind: "spin" as const,
+        id,
+        name,
+        beforeSpin: parseFlowStep(record.beforeSpin, `${path}.beforeSpin`),
+        spinning: parseFlowStep(record.spinning, `${path}.spinning`),
+        stopping: parseFlowSteps(record.stopping, `${path}.stopping`),
+      });
+    }
+    if (record.kind === "sequence") {
+      if (
+        record.beforeSpin !== undefined ||
+        record.spinning !== undefined ||
+        record.stopping !== undefined
+      )
+        fail(`${path} sequence choreography contains spin-only fields.`);
+      return Object.freeze({
+        kind: "sequence" as const,
+        id,
+        name,
+        steps: parseFlowSteps(record.steps, `${path}.steps`),
+      });
+    }
+    fail(`${path}.kind must be "spin" or "sequence".`);
   });
   const snapshots = array(root.snapshots, "project.snapshots");
   if (snapshots.length < 2)
@@ -136,10 +187,13 @@ export function parseSceneOtherSceneFlowProject(
   const parsedSnapshots = snapshots.map((value, index) => {
     const path = `project.snapshots[${index}]`;
     const record = strictRecord(value, path, [
+      "kind",
       "id",
       "name",
       "scene",
       "otherScene",
+      "transition",
+      "completionPolicy",
       "choreographies",
     ]);
     const scene = numberMatrix(record.scene, `${path}.scene`);
@@ -149,6 +203,31 @@ export function parseSceneOtherSceneFlowProject(
       scene.length,
       scene[0]!.length,
     );
+    const base = {
+      id: unique(nonBlank(record.id, `${path}.id`), snapshotIds, `${path}.id`),
+      name: nonBlank(record.name, `${path}.name`),
+      scene,
+      otherScene,
+    };
+    if (index === 0) {
+      if (record.kind !== "initial") fail(`${path}.kind must be "initial".`);
+      if (
+        record.transition !== undefined ||
+        record.completionPolicy !== undefined ||
+        record.choreographies !== undefined
+      )
+        fail(`${path} initial snapshot contains scene-state fields.`);
+      return Object.freeze({ kind: "initial" as const, ...base });
+    }
+    if (record.kind !== "scene") fail(`${path}.kind must be "scene".`);
+    const transition =
+      index === 1
+        ? exact(record.transition, "spin", `${path}.transition`)
+        : exact(record.transition, "settled", `${path}.transition`);
+    const completionPolicy = parseCompletionPolicy(
+      record.completionPolicy,
+      `${path}.completionPolicy`,
+    );
     const assignments = stringMatrix(
       record.choreographies,
       `${path}.choreographies`,
@@ -156,25 +235,26 @@ export function parseSceneOtherSceneFlowProject(
       scene[0]!.length,
     );
     for (const [x, column] of assignments.entries())
-      for (const [y, id] of column.entries())
-        if (!choreographyIds.has(id))
+      for (const [y, choreographyId] of column.entries())
+        if (!choreographyIds.has(choreographyId))
           fail(
-            `${path}.choreographies[${x}][${y}] references unknown choreography "${id}".`,
+            `${path}.choreographies[${x}][${y}] references unknown choreography "${choreographyId}".`,
           );
     return Object.freeze({
-      id: unique(nonBlank(record.id, `${path}.id`), snapshotIds, `${path}.id`),
-      name: nonBlank(record.name, `${path}.name`),
-      scene,
-      otherScene,
+      kind: "scene" as const,
+      ...base,
+      transition,
+      completionPolicy,
       choreographies: assignments,
     });
   });
   return deepFreeze({
     kind: "scene-other-scene-flow" as const,
-    version: 1 as const,
+    version: 2 as const,
     spin: parseSlotReelPresentationProfile(root.spin),
     choreographies: parsedChoreographies,
-    snapshots: parsedSnapshots,
+    snapshots:
+      parsedSnapshots as unknown as SceneOtherSceneFlowProjectV2["snapshots"],
   });
 }
 
@@ -232,7 +312,7 @@ export async function inspectSceneOtherSceneFlowReadiness(options: {
 export function createDefaultSceneOtherSceneFlowProject(options: {
   readonly summary: SceneOtherSceneFlowPackageSummary;
   readonly random?: SceneOtherSceneBoundedRandom;
-}): SceneOtherSceneFlowProjectV1 {
+}): SceneOtherSceneFlowProjectV2 {
   const random = options.random ?? secureBoundedRandom;
   const first = rollSceneFromPublicReels(options.summary, random);
   const second = rollSceneFromPublicReels(options.summary, random);
@@ -248,22 +328,27 @@ export function createDefaultSceneOtherSceneFlowProject(options: {
     );
   return parseSceneOtherSceneFlowProject({
     kind: "scene-other-scene-flow",
-    version: 1,
+    version: 2,
     spin: defaultSpinProfile(options.summary.renderMode),
     choreographies: [
       {
+        kind: "spin",
         id: "spin",
         name: "Spin",
-        steps: [{ state: "normal", holdSeconds: 0 }, { state: "spinBlur" }],
+        beforeSpin: { state: "normal" },
+        spinning: { state: "spinBlur" },
+        stopping: [{ state: "appear" }, { state: "normal" }],
       },
       {
-        id: "landing",
-        name: "Landing",
-        steps: [{ state: "appear" }, { state: "normal" }],
+        kind: "sequence",
+        id: "normal",
+        name: "Normal",
+        steps: [{ state: "normal" }],
       },
     ],
     snapshots: [
       {
+        kind: "initial",
         id: "snapshot-1",
         name: "Snapshot 1 · Initial",
         scene: first,
@@ -273,11 +358,13 @@ export function createDefaultSceneOtherSceneFlowProject(options: {
           otherScene: emptyValues(),
           random,
         }),
-        choreographies: assignments("spin"),
       },
       {
+        kind: "scene",
         id: "snapshot-2",
         name: "Snapshot 2 · Spin Target",
+        transition: "spin",
+        completionPolicy: "all-cells-normal",
         scene: second,
         otherScene: fillMissingSymbolValues({
           summary: options.summary,
@@ -285,7 +372,7 @@ export function createDefaultSceneOtherSceneFlowProject(options: {
           otherScene: emptyValues(),
           random,
         }),
-        choreographies: assignments("landing"),
+        choreographies: assignments("spin"),
       },
     ],
   });
@@ -352,7 +439,7 @@ export function rollSceneFromPublicReels(
 
 export function rollOtherSceneValues(options: {
   readonly summary: SceneOtherSceneFlowPackageSummary;
-  readonly snapshot: SceneOtherSceneFlowSnapshotV1;
+  readonly snapshot: SceneOtherSceneFlowSnapshotV2;
   readonly symbolNames?: readonly string[];
   readonly weightTableName?: string;
   readonly fixedValue?: number;
@@ -479,7 +566,7 @@ function createPackageSummary(
 }
 
 function validateProjectAgainstPackage(
-  project: SceneOtherSceneFlowProjectV1,
+  project: SceneOtherSceneFlowProjectV2,
   resource: SceneLayoutPackageResource,
   summary: SceneOtherSceneFlowPackageSummary,
 ): void {
@@ -491,29 +578,26 @@ function validateProjectAgainstPackage(
     project.choreographies.map((item) => [item.id, item] as const),
   );
   const stateById = new Map(summary.states.map((state) => [state.id, state]));
+  if (stateById.get("normal")?.phase !== "stable")
+    fail('Symbol state preset must declare exact stable state "normal".');
   for (const choreography of project.choreographies) {
-    for (const [index, step] of choreography.steps.entries()) {
-      const state = stateById.get(step.state);
-      if (!state)
+    if (choreography.kind === "spin") {
+      requireKnownState(
+        choreography.name,
+        "beforeSpin",
+        choreography.beforeSpin,
+      );
+      const spinning = requireKnownState(
+        choreography.name,
+        "spinning",
+        choreography.spinning,
+      );
+      if (spinning.phase !== "stable")
         fail(
-          `Choreography "${choreography.name}" step[${index}] uses unknown state "${step.state}".`,
+          `Spin choreography "${choreography.name}" spinning state must be stable.`,
         );
-      if (state.phase === "once" && step.holdSeconds !== undefined)
-        fail(
-          `Choreography "${choreography.name}" step[${index}] once state must not declare holdSeconds.`,
-        );
-      if (
-        index < choreography.steps.length - 1 &&
-        state.phase === "stable" &&
-        step.holdSeconds === undefined
-      )
-        fail(
-          `Choreography "${choreography.name}" step[${index}] stable state requires holdSeconds.`,
-        );
-    }
-    const last = choreography.steps.at(-1)!;
-    if (stateById.get(last.state)?.phase !== "stable")
-      fail(`Choreography "${choreography.name}" must end in a stable state.`);
+      validateCompletionSteps(choreography.name, choreography.stopping);
+    } else validateCompletionSteps(choreography.name, choreography.steps);
   }
   const codes = new Map(summary.symbols.map((symbol) => [symbol.code, symbol]));
   for (const [snapshotIndex, snapshot] of project.snapshots.entries()) {
@@ -527,11 +611,6 @@ function validateProjectAgainstPackage(
       summary,
       `snapshots[${snapshotIndex}].otherScene`,
     );
-    assertDimensions(
-      snapshot.choreographies,
-      summary,
-      `snapshots[${snapshotIndex}].choreographies`,
-    );
     for (let x = 0; x < summary.columns; x += 1)
       for (let y = 0; y < summary.rows; y += 1) {
         const symbol = codes.get(snapshot.scene[x]![y]!);
@@ -539,24 +618,124 @@ function validateProjectAgainstPackage(
           fail(
             `snapshots[${snapshotIndex}].scene[${x}][${y}] uses unknown display code ${snapshot.scene[x]![y]}.`,
           );
+        validateSymbolSteps(
+          snapshotIndex,
+          x,
+          y,
+          snapshot,
+          symbol,
+          [{ state: "normal" }],
+          "initial normal",
+        );
+      }
+    if (snapshot.kind === "initial") continue;
+    assertDimensions(
+      snapshot.choreographies,
+      summary,
+      `snapshots[${snapshotIndex}].choreographies`,
+    );
+    for (let x = 0; x < summary.columns; x += 1)
+      for (let y = 0; y < summary.rows; y += 1) {
         const choreography = choreographyById.get(
           snapshot.choreographies[x]![y]!,
         )!;
-        for (const step of choreography.steps)
-          if (!symbol.supportedStates.includes(step.state))
-            fail(
-              `snapshots[${snapshotIndex}] cell (${x},${y}) symbol "${symbol.name}" does not support state "${step.state}" from choreography "${choreography.name}".`,
-            );
-          else if (
-            symbol.valueRequiredStates.includes(step.state) &&
-            snapshot.otherScene[x]![y] === null
-          )
-            fail(
-              `snapshots[${snapshotIndex}] cell (${x},${y}) symbol "${symbol.name}" state "${step.state}" requires a positive otherScene value for its active Spine provider.`,
-            );
+        const expectedKind =
+          snapshot.transition === "spin" ? "spin" : "sequence";
+        if (choreography.kind !== expectedKind)
+          fail(
+            `snapshots[${snapshotIndex}].choreographies[${x}][${y}] must reference a ${expectedKind} choreography.`,
+          );
+        if (choreography.kind === "spin") {
+          const source = project.snapshots[snapshotIndex - 1]!;
+          const sourceSymbol = codes.get(source.scene[x]![y]!)!;
+          validateSymbolSteps(
+            snapshotIndex - 1,
+            x,
+            y,
+            source,
+            sourceSymbol,
+            [choreography.beforeSpin, choreography.spinning],
+            choreography.name,
+          );
+          const targetSymbol = codes.get(snapshot.scene[x]![y]!)!;
+          validateSymbolSteps(
+            snapshotIndex,
+            x,
+            y,
+            snapshot,
+            targetSymbol,
+            choreography.stopping,
+            choreography.name,
+          );
+        } else {
+          const targetSymbol = codes.get(snapshot.scene[x]![y]!)!;
+          validateSymbolSteps(
+            snapshotIndex,
+            x,
+            y,
+            snapshot,
+            targetSymbol,
+            choreography.steps,
+            choreography.name,
+          );
+        }
       }
   }
   void resource;
+
+  function requireKnownState(
+    choreographyName: string,
+    label: string,
+    step: SceneOtherSceneFlowStepV2,
+  ): SceneOtherSceneFlowPackageSummary["states"][number] {
+    const state = stateById.get(step.state);
+    if (!state)
+      fail(
+        `Choreography "${choreographyName}" ${label} uses unknown state "${step.state}".`,
+      );
+    return state;
+  }
+
+  function validateCompletionSteps(
+    choreographyName: string,
+    steps: readonly SceneOtherSceneFlowStepV2[],
+  ): void {
+    for (const [index, step] of steps.entries()) {
+      const state = requireKnownState(choreographyName, `step[${index}]`, step);
+      if (index < steps.length - 1 && state.phase !== "once")
+        fail(
+          `Choreography "${choreographyName}" intermediate step[${index}] must be once.`,
+        );
+    }
+    const last = steps.at(-1)!;
+    if (last.state !== "normal")
+      fail(
+        `Choreography "${choreographyName}" must end with exact state "normal".`,
+      );
+  }
+
+  function validateSymbolSteps(
+    snapshotIndex: number,
+    x: number,
+    y: number,
+    snapshot: SceneOtherSceneFlowSnapshotV2,
+    symbol: SceneOtherSceneFlowPackageSummary["symbols"][number],
+    steps: readonly SceneOtherSceneFlowStepV2[],
+    choreographyName: string,
+  ): void {
+    for (const step of steps)
+      if (!symbol.supportedStates.includes(step.state))
+        fail(
+          `snapshots[${snapshotIndex}] cell (${x},${y}) symbol "${symbol.name}" does not support state "${step.state}" from choreography "${choreographyName}".`,
+        );
+      else if (
+        symbol.valueRequiredStates.includes(step.state) &&
+        snapshot.otherScene[x]![y] === null
+      )
+        fail(
+          `snapshots[${snapshotIndex}] cell (${x},${y}) symbol "${symbol.name}" state "${step.state}" requires a positive otherScene value for its active Spine provider.`,
+        );
+  }
 }
 
 function resolveInitialSymbolBinding(resource: SceneLayoutPackageResource): {
@@ -794,6 +973,39 @@ function stringMatrix(
   );
 }
 
+function parseFlowStep(
+  value: unknown,
+  path: string,
+): SceneOtherSceneFlowStepV2 {
+  const record = strictRecord(value, path, ["state"]);
+  return Object.freeze({ state: nonBlank(record.state, `${path}.state`) });
+}
+
+function parseFlowSteps(
+  value: unknown,
+  path: string,
+): readonly SceneOtherSceneFlowStepV2[] {
+  const steps = array(value, path);
+  if (steps.length === 0) fail(`${path} must not be empty.`);
+  return Object.freeze(
+    steps.map((step, index) => parseFlowStep(step, `${path}[${index}]`)),
+  );
+}
+
+function parseCompletionPolicy(
+  value: unknown,
+  path: string,
+): SceneOtherSceneFlowCompletionPolicyV2 {
+  if (value !== "all-cells-normal" && value !== "first-cell-normal")
+    fail(`${path} must be "all-cells-normal" or "first-cell-normal".`);
+  return value;
+}
+
+function exact<T extends string>(value: unknown, expected: T, path: string): T {
+  if (value !== expected) fail(`${path} must be "${expected}".`);
+  return expected;
+}
+
 function strictRecord(
   value: unknown,
   path: string,
@@ -834,12 +1046,6 @@ function nonNegativeSafeInteger(value: unknown, path: string): number {
   if (!Number.isSafeInteger(value) || (value as number) < 0)
     fail(`${path} must be a non-negative safe integer.`);
   return value as number;
-}
-
-function nonNegativeFinite(value: unknown, path: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0)
-    fail(`${path} must be a non-negative finite number.`);
-  return value;
 }
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {

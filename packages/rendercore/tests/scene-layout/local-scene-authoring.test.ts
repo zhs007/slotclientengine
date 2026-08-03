@@ -63,22 +63,33 @@ const summary: SceneOtherSceneFlowPackageSummary = {
 };
 
 describe("local scene authoring", () => {
-  it("creates the required two-snapshot spin and landing defaults", () => {
+  it("creates the required unified spin v2 defaults", () => {
     const project = createDefaultSceneOtherSceneFlowProject({
       summary,
       random: () => 0,
     });
     expect(project.snapshots).toHaveLength(2);
-    expect(
-      project.choreographies.map((item) =>
-        item.steps.map((step) => step.state),
-      ),
-    ).toEqual([
-      ["normal", "spinBlur"],
-      ["appear", "normal"],
-    ]);
-    expect(project.snapshots[0]!.choreographies[0]![0]).toBe("spin");
-    expect(project.snapshots[1]!.choreographies[0]![0]).toBe("landing");
+    expect(project.version).toBe(2);
+    expect(project.choreographies[0]).toMatchObject({
+      kind: "spin",
+      beforeSpin: { state: "normal" },
+      spinning: { state: "spinBlur" },
+      stopping: [{ state: "appear" }, { state: "normal" }],
+    });
+    expect(project.choreographies[1]).toMatchObject({
+      kind: "sequence",
+      steps: [{ state: "normal" }],
+    });
+    expect(project.snapshots[0]).toMatchObject({ kind: "initial" });
+    expect(project.snapshots[1]).toMatchObject({
+      kind: "scene",
+      transition: "spin",
+      completionPolicy: "all-cells-normal",
+      choreographies: [
+        ["spin", "spin"],
+        ["spin", "spin"],
+      ],
+    });
     expect(project.snapshots[0]!.otherScene).toEqual([
       [5, 5],
       [5, null],
@@ -121,6 +132,117 @@ describe("local scene authoring", () => {
     ).toThrow(/at least two/);
   });
 
+  it("strictly distinguishes spin, sequence, initial and settled fields", () => {
+    const valid = createDefaultSceneOtherSceneFlowProject({
+      summary,
+      random: () => 0,
+    });
+    const initial = valid.snapshots[0];
+    const spinTarget = valid.snapshots[1];
+    const normal = valid.choreographies.find(
+      (item) => item.kind === "sequence",
+    )!;
+    const assignments = [
+      [normal.id, normal.id],
+      [normal.id, normal.id],
+    ];
+    expect(
+      parseSceneOtherSceneFlowProject({
+        ...valid,
+        snapshots: [
+          initial,
+          spinTarget,
+          {
+            kind: "scene",
+            id: "settled",
+            name: "Settled",
+            transition: "settled",
+            completionPolicy: "first-cell-normal",
+            scene: initial.scene,
+            otherScene: initial.otherScene,
+            choreographies: assignments,
+          },
+        ],
+      }).snapshots[2],
+    ).toMatchObject({ transition: "settled" });
+
+    const invalids = [
+      {
+        ...valid,
+        choreographies: [
+          { ...valid.choreographies[0], steps: [{ state: "normal" }] },
+          valid.choreographies[1],
+        ],
+      },
+      {
+        ...valid,
+        choreographies: [
+          valid.choreographies[0],
+          { ...valid.choreographies[1], beforeSpin: { state: "normal" } },
+        ],
+      },
+      {
+        ...valid,
+        snapshots: [{ ...initial, kind: "scene" }, spinTarget],
+      },
+      {
+        ...valid,
+        snapshots: [{ ...initial, transition: "spin" }, spinTarget],
+      },
+      {
+        ...valid,
+        snapshots: [initial, { ...spinTarget, kind: "initial" }],
+      },
+      {
+        ...valid,
+        choreographies: [
+          valid.choreographies[0],
+          { ...valid.choreographies[1], kind: "other" },
+        ],
+      },
+      {
+        ...valid,
+        snapshots: [initial, { ...spinTarget, transition: "settled" }],
+      },
+      {
+        ...valid,
+        snapshots: [initial, { ...spinTarget, completionPolicy: "unknown" }],
+      },
+      {
+        ...valid,
+        snapshots: [
+          initial,
+          {
+            ...spinTarget,
+            choreographies: [
+              ["missing", "spin"],
+              ["spin", "spin"],
+            ],
+          },
+        ],
+      },
+      {
+        ...valid,
+        snapshots: [
+          initial,
+          spinTarget,
+          {
+            kind: "scene",
+            id: "bad-settled",
+            name: "Bad Settled",
+            transition: "spin",
+            completionPolicy: "all-cells-normal",
+            scene: initial.scene,
+            otherScene: initial.otherScene,
+            choreographies: assignments,
+          },
+        ],
+      },
+    ];
+    for (const invalid of invalids)
+      expect(() => parseSceneOtherSceneFlowProject(invalid)).toThrow();
+  });
+
   it("strictly rejects malformed project structure at each nested boundary", () => {
     const valid = createDefaultSceneOtherSceneFlowProject({
       summary,
@@ -131,7 +253,7 @@ describe("local scene authoring", () => {
       null,
       [],
       { ...valid, kind: "other" },
-      { ...valid, version: 2 },
+      { ...valid, version: 1 },
       { ...valid, choreographies: "bad" },
       { ...valid, choreographies: [] },
       {
@@ -154,14 +276,14 @@ describe("local scene authoring", () => {
       },
       {
         ...valid,
-        choreographies: [{ ...valid.choreographies[0], steps: [] }],
+        choreographies: [{ ...valid.choreographies[1], steps: [] }],
       },
       {
         ...valid,
         choreographies: [
           {
-            ...valid.choreographies[0],
-            steps: [{ state: "normal", holdSeconds: -1 }],
+            ...valid.choreographies[1],
+            steps: [{ state: "normal", holdSeconds: 0 }],
           },
         ],
       },
@@ -197,21 +319,23 @@ describe("local scene authoring", () => {
       {
         ...valid,
         snapshots: [
-          { ...first, choreographies: [["spin"], ["spin", "missing"]] },
-          valid.snapshots[1],
+          first,
+          {
+            ...valid.snapshots[1],
+            choreographies: [["spin"], ["spin", "missing"]],
+          },
         ],
       },
       {
         ...valid,
         snapshots: [
           {
-            ...first,
+            ...valid.snapshots[1],
             choreographies: [
               ["missing", "spin"],
               ["spin", "spin"],
             ],
           },
-          valid.snapshots[1],
         ],
       },
     ];
