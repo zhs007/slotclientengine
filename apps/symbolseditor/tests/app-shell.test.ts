@@ -357,9 +357,12 @@ describe("symbols editor app shell", () => {
     await createProject(root);
     click(root, '[data-workspace-tab][data-tab-value="symbols"]');
     click(root, '[data-inspector-tab][data-tab-value="states"]');
-    const kind = root.querySelector<HTMLSelectElement>("[data-visual-kind]")!;
-    kind.value = "composite";
-    kind.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(
+      root
+        .querySelector<HTMLSelectElement>("[data-visual-kind]")
+        ?.querySelector('option[value="composite"]'),
+    ).toBeNull();
+    click(root, "[data-add-animation-layer]");
 
     expect(root.querySelectorAll(".composite-layer-card")).toHaveLength(1);
     expect(

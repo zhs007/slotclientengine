@@ -12,6 +12,7 @@
 - exact closure、mapped package materializer 及 Spine/VNI resource builder 递归处理全部 leaf；同资源的 composite layer 使用独立 player instance。
 - 新增 composite runtime owner，稳定挂载 underlay/overlay slots，聚合 once/loop completion，并在 reset/update 失败或 destroy 时幂等清理整组资源。
 - Symbols Editor 新增 composite draft、base selector、layer 新增/删除/换位、Spine/VNI 字段及 exact Picker binding。
+- 后续兼容改进：旧 ZIP 的 image/Spine/VNI state 无需先切换 visual kind；直接“增加动画层”会保留原 base/binding，并把既有 Spine/VNI 迁移为第一层。
 - Spine skeleton 覆盖缺失动画时，只清空对应 composite leaf 的 `animationName` 并报告 exact location。
 - 更新 Symbols Editor、rendercore、Symbol Package 及领域规则文档。
 
