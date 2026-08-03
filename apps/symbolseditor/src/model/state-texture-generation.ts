@@ -37,18 +37,26 @@ export function getStateTextureGenerationAvailability(
       reason: "Spine tier normal 没有唯一的 direct normal 图片。",
     };
   const normal = symbol.states.get("normal");
-  if (normal?.kind !== "image")
+  const normalImagePath =
+    normal?.kind === "image"
+      ? normal.imagePath
+      : (normal?.kind === "spine" || normal?.kind === "vni") &&
+          normal.baseVisual?.kind === "image"
+        ? normal.baseVisual.imagePath
+        : undefined;
+  if (normalImagePath === undefined)
     return {
       ready: false,
-      reason: "只有 direct normal image 可以生成状态贴图。",
+      reason:
+        "只有 direct normal image 或 Spine/VNI normal 的 image base visual 可以生成状态贴图。",
     };
-  if (!normal.imagePath)
+  if (!normalImagePath)
     return { ready: false, reason: "normal 尚未绑定图片。" };
-  const record = project.assetLibrary.records.get(normal.imagePath);
+  const record = project.assetLibrary.records.get(normalImagePath);
   if (record?.kind !== "image")
     return {
       ready: false,
-      reason: `normal 图片资源不存在或类型错误：${normal.imagePath}。`,
+      reason: `normal 图片资源不存在或类型错误：${normalImagePath}。`,
     };
   if (record.diagnostics.length)
     return {
@@ -57,8 +65,8 @@ export function getStateTextureGenerationAvailability(
     };
   return Object.freeze({
     ready: true,
-    normalPath: normal.imagePath,
-    targetKey: generatedStateTextureKey(normal.imagePath, state),
+    normalPath: normalImagePath,
+    targetKey: generatedStateTextureKey(normalImagePath, state),
   });
 }
 

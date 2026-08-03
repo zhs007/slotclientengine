@@ -104,9 +104,65 @@ describe("symbols editor state texture generation", () => {
       getStateTextureGenerationAvailability(project, "A", "spinBlur"),
     ).toEqual({
       ready: false,
-      reason: "只有 direct normal image 可以生成状态贴图。",
+      reason:
+        "只有 direct normal image 或 Spine/VNI normal 的 image base visual 可以生成状态贴图。",
     });
   });
+
+  it.each(["spine", "vni"] as const)(
+    "generates from the image base visual of %s normal",
+    async (kind) => {
+      const project = createProject();
+      const normalBytes = imageBytes();
+      uploadAssetBatch(project, [{ path: "A.png", bytes: normalBytes }]);
+      setStateVisual(
+        project,
+        "A",
+        "normal",
+        kind === "spine"
+          ? {
+              kind,
+              baseVisual: { kind: "image", imagePath: "A.png" },
+              skeletonPath: "A.json",
+              atlasPath: "A.atlas",
+              texturePath: "A.texture.png",
+              animationName: "Idle",
+            }
+          : {
+              kind,
+              baseVisual: { kind: "image", imagePath: "A.png" },
+              projectPath: "A.vni.json",
+              startTime: 0,
+              endTime: 1,
+            },
+      );
+      expect(
+        getStateTextureGenerationAvailability(project, "A", "disabled"),
+      ).toEqual({
+        ready: true,
+        normalPath: "A.png",
+        targetKey: "A.disabled.png",
+      });
+      const decode = vi.fn(async (bytes: Uint8Array) => {
+        expect(bytes).toEqual(normalBytes);
+        return {
+          width: 1,
+          height: 1,
+          data: new Uint8ClampedArray([255, 0, 0, 255]),
+        };
+      });
+      await generateStateTextureImportSource({
+        project,
+        symbol: "A",
+        state: "disabled",
+        codec: {
+          decode,
+          encodePng: async () => imageBytes("H2.png"),
+        },
+      });
+      expect(decode).toHaveBeenCalledOnce();
+    },
+  );
 
   it("exports and reimports the exact generated state image closure", async () => {
     const project = createProject();
