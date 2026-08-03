@@ -161,6 +161,36 @@ export async function validateLayoutAssets(
       URL.revokeObjectURL(url);
     }
   }
+  for (const resource of Object.values(manifest.runtimeResources ?? {})) {
+    if (resource.kind !== "video" || videoMetadata.has(resource.path)) continue;
+    const decodeVideo = options.decodeVideo ?? decodeBrowserVideoUrl;
+    const bytes = assets.get(resource.path)!;
+    if (
+      bytes.byteLength < 12 ||
+      String.fromCharCode(...bytes.slice(4, 8)) !== "ftyp"
+    )
+      throw new Error(
+        `视频文件不是可识别的 ISO MP4（缺少 ftyp header）：${resource.path}`,
+      );
+    const url = URL.createObjectURL(
+      new Blob([bytes as BlobPart], { type: "video/mp4" }),
+    );
+    try {
+      const metadata = await decodeVideo(url);
+      if (
+        !Number.isSafeInteger(metadata.width) ||
+        metadata.width <= 0 ||
+        !Number.isSafeInteger(metadata.height) ||
+        metadata.height <= 0 ||
+        !Number.isFinite(metadata.durationSeconds) ||
+        metadata.durationSeconds <= 0
+      )
+        throw new Error(`视频 metadata 无效：${resource.path}`);
+      videoMetadata.set(resource.path, Object.freeze({ ...metadata }));
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
   const packageResource =
     await createSceneLayoutPackageResourceFromResolvedFiles({
       manifest,

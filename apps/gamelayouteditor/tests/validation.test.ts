@@ -10,6 +10,7 @@ import {
 import {
   addLayerFromResource,
   assignBackgroundResource,
+  bindRuntimeResource,
   clearBackground,
   deleteLayoutResource,
   getLayoutResourceReferences,
@@ -33,6 +34,8 @@ import {
   uploadSpineResource,
   uploadSpineResources,
   uploadVideoResource,
+  getRuntimeResourceKey,
+  unbindRuntimeResource,
 } from "../src/model/resource-commands.js";
 import {
   addGameMode,
@@ -202,6 +205,41 @@ async function initializeProjectBackground(
 }
 
 describe("filename-key layout resource commands", () => {
+  it("binds an otherwise-unused resource to a stable program key", async () => {
+    const project = createNewEditorProject("maximized-focus");
+    await initializeProjectBackground(project);
+    await uploadImageResource({
+      project,
+      file: new File([pngBytes(2)], "nearwin.png"),
+      decodeImage,
+    });
+
+    bindRuntimeResource(project, "nearwin.png", "nearwin.effect");
+    expect(getRuntimeResourceKey(project, "nearwin.png")).toBe(
+      "nearwin.effect",
+    );
+    expect(editorProjectToManifest(project).runtimeResources).toEqual({
+      "nearwin.effect": {
+        kind: "image",
+        path: "nearwin.png",
+        size: { width: 2000, height: 2000 },
+      },
+    });
+    expect(() =>
+      bindRuntimeResource(project, "background.png", "nearwin.effect"),
+    ).toThrow(/已绑定/);
+    expect(() =>
+      bindRuntimeResource(project, "nearwin.png", "NearWin"),
+    ).toThrow(/程序资源键/);
+
+    const cloned = cloneEditorProject(project);
+    unbindRuntimeResource(cloned, "nearwin.png");
+    expect(getRuntimeResourceKey(cloned, "nearwin.png")).toBeNull();
+    expect(getRuntimeResourceKey(project, "nearwin.png")).toBe(
+      "nearwin.effect",
+    );
+  });
+
   it("imports a selected VNI runtime and configures an independent non-looping layer", async () => {
     const project = createNewEditorProject("maximized-focus");
     await initializeProjectBackground(project);

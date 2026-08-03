@@ -450,6 +450,45 @@ export function getLayoutResourceReferences(
   return Object.freeze([...nodes, ...transitions]);
 }
 
+export function getRuntimeResourceKey(
+  project: EditorProject,
+  resourceId: string,
+): string | null {
+  return (
+    [...project.runtimeResourceBindings].find(
+      ([, boundResourceId]) => boundResourceId === resourceId,
+    )?.[0] ?? null
+  );
+}
+
+export function bindRuntimeResource(
+  project: EditorProject,
+  resourceId: string,
+  key: string,
+): void {
+  requireResource(project, resourceId);
+  if (!/^[a-z0-9][a-z0-9._-]*$/u.test(key))
+    throw new Error(
+      "程序资源键必须以小写字母或数字开头，且只包含小写字母、数字、点、下划线和连字符。",
+    );
+  const currentKey = getRuntimeResourceKey(project, resourceId);
+  const occupied = project.runtimeResourceBindings.get(key);
+  if (occupied && occupied !== resourceId)
+    throw new Error(`程序资源键 ${key} 已绑定资源 ${occupied}。`);
+  if (currentKey === key) return;
+  if (currentKey) project.runtimeResourceBindings.delete(currentKey);
+  project.runtimeResourceBindings.set(key, resourceId);
+}
+
+export function unbindRuntimeResource(
+  project: EditorProject,
+  resourceId: string,
+): void {
+  requireResource(project, resourceId);
+  const key = getRuntimeResourceKey(project, resourceId);
+  if (key) project.runtimeResourceBindings.delete(key);
+}
+
 export function deleteLayoutResource(
   project: EditorProject,
   resourceId: string,
@@ -470,6 +509,9 @@ export function deleteLayoutResource(
     );
   }
   project.resources.delete(resourceId);
+  for (const [key, boundResourceId] of project.runtimeResourceBindings)
+    if (boundResourceId === resourceId)
+      project.runtimeResourceBindings.delete(key);
   garbageCollectAssetPaths(project, editorResourcePaths(resource));
 }
 

@@ -774,9 +774,23 @@ describe("GameLayoutEditorApp workspace", () => {
       ) as HTMLButtonElement
     ).click();
     expect(root.textContent).toContain("未引用，不会导出");
+    const runtimeKey = root.querySelector(
+      '[data-runtime-resource-key="alpha.png"]',
+    ) as HTMLInputElement;
+    runtimeKey.value = "nearwin.image";
+    (
+      root.querySelector(
+        '[data-runtime-resource-action="alpha.png"]',
+      ) as HTMLButtonElement
+    ).click();
+    expect(root.textContent).toContain("程序键 nearwin.image");
     const status = root.querySelector(
       "[data-resource-status]",
     ) as HTMLSelectElement;
+    status.value = "runtime";
+    status.dispatchEvent(new Event("change"));
+    expect(root.querySelector('[data-resource-row="alpha.png"]')).toBeTruthy();
+    expect(root.querySelector('[data-resource-row="beta.png"]')).toBeNull();
     status.value = "unused";
     status.dispatchEvent(new Event("change"));
     const query = root.querySelector(
@@ -1350,6 +1364,47 @@ describe("GameLayoutEditorApp workspace", () => {
       (root.querySelector("[data-delete-transition]") as HTMLButtonElement)
         .disabled,
     ).toBe(false);
+
+    const reverseFrom = root.querySelector(
+      "[data-new-transition-from]",
+    ) as HTMLSelectElement;
+    const reverseTo = root.querySelector(
+      "[data-new-transition-to]",
+    ) as HTMLSelectElement;
+    reverseFrom.value = "FreeGame";
+    reverseTo.value = "BaseGame";
+    (
+      root.querySelector("[data-create-transition]") as HTMLButtonElement
+    ).click();
+    const reverseResource = root.querySelector(
+      "[data-transition-resource]",
+    ) as HTMLSelectElement;
+    reverseResource.value = "hero";
+    reverseResource.dispatchEvent(new Event("change"));
+    const reverseAnimation = root.querySelector(
+      "[data-transition-animation]",
+    ) as HTMLSelectElement;
+    reverseAnimation.value = "Bridge";
+    reverseAnimation.dispatchEvent(new Event("change"));
+    const reverseEvent = root.querySelector(
+      "[data-transition-event]",
+    ) as HTMLSelectElement;
+    reverseEvent.value = "SwitchScene";
+    reverseEvent.dispatchEvent(new Event("change"));
+    const previewMode = root.querySelector(
+      "[data-preview-game-mode]",
+    ) as HTMLSelectElement;
+    previewMode.value = "BaseGame";
+    previewMode.dispatchEvent(new Event("change"));
+    await vi.waitFor(() =>
+      expect(previewSpies.prepareGameModeTransition).toHaveBeenCalledTimes(2),
+    );
+    await vi.waitFor(() =>
+      expect(
+        (root.querySelector("[data-request-transition]") as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
+    );
     fileClick.mockRestore();
     app.destroy();
   });

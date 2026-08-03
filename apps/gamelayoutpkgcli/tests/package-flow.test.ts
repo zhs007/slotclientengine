@@ -7,7 +7,12 @@ import { optimizeLayoutPackageFile, resolveCliOptions } from "../src/cli.js";
 import { parseSceneLayoutAssetGroups } from "../src/asset-groups.js";
 import { validateLayoutPackageBytes } from "../src/package-reader.js";
 import type { CwebpRunner } from "../src/types.js";
-import { createMappedLayoutZip, fakeWebp } from "./fixtures.js";
+import {
+  createMappedLayoutZip,
+  fakeWebp,
+  layoutFixture,
+  logicalFixtureFiles,
+} from "./fixtures.js";
 
 const roots: string[] = [];
 
@@ -20,7 +25,25 @@ describe("optimized package flow", () => {
   it("writes a verified WebP package and external initial/delta groups", async () => {
     const root = await makeRoot();
     const input = join(root, "layout.zip");
-    await writeFile(input, await createMappedLayoutZip());
+    await writeFile(
+      input,
+      await createMappedLayoutZip({
+        manifest: {
+          ...layoutFixture(),
+          runtimeResources: {
+            "nearwin.image": {
+              kind: "image",
+              path: "nearwin.png",
+              size: { width: 1, height: 1 },
+            },
+          },
+        },
+        logicalFiles: new Map([
+          ...logicalFixtureFiles(),
+          ["nearwin.png", new Uint8Array([0x89, 0x50, 0x4e, 0x47, 9])],
+        ]),
+      }),
+    );
     const fake = fakeRunner();
     const options = resolveCliOptions({
       inputPath: input,
@@ -28,7 +51,7 @@ describe("optimized package flow", () => {
       cwebpExecutable: "/tool path/cwebp",
     });
     const result = await optimizeLayoutPackageFile(options, fake);
-    expect(result.convertedImageCount).toBe(2);
+    expect(result.convertedImageCount).toBe(3);
     const outputBytes = new Uint8Array(await readFile(result.outputPath));
     const validated = await validateLayoutPackageBytes(outputBytes);
     expect(validated.files.has("alpha.webp")).toBe(true);
@@ -41,8 +64,12 @@ describe("optimized package flow", () => {
     expect(groups.initialAssets).toEqual([
       "alpha-to-beta.mp4",
       "alpha.webp",
+      "nearwin.webp",
       "shared.webp",
     ]);
+    expect(
+      groups.groups.find((group) => group.id === "shared")?.requiredAssets,
+    ).toEqual(["nearwin.webp", "shared.webp"]);
     expect(
       groups.groups.find((group) => group.id === "mode:Beta")
         ?.incrementalAssets,
@@ -51,7 +78,7 @@ describe("optimized package flow", () => {
       groups.groups.find((group) => group.id === "transition:Beta->Alpha")
         ?.incrementalAssets,
     ).toEqual(["beta-to-alpha.mp4"]);
-    expect(fake.encode).toHaveBeenCalledTimes(2);
+    expect(fake.encode).toHaveBeenCalledTimes(3);
     const entries = extractBoundedZip(outputBytes, {
       limits: {
         maxEntries: 32,

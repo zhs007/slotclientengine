@@ -112,6 +112,30 @@ export function collectSceneLayoutPackagePaths(options: {
       throw new SceneLayoutError("Invalid image-string dependency directory.");
     }
   }
+  for (const resource of Object.values(manifest.runtimeResources ?? {})) {
+    if (resource.kind === "vni") {
+      const project = parseRuntimeVniProject(
+        requireBytes(options.files, resource.project),
+        resource.project,
+      );
+      for (const asset of project.assets)
+        expected.add(
+          mapped
+            ? asset.path
+            : resolvePackagePath(resource.project, asset.path),
+        );
+      continue;
+    }
+    if (resource.kind !== "image-string") continue;
+    const nested = parseImageStringManifest(
+      parseJsonBytes(
+        requireBytes(options.files, resource.manifest),
+        resource.manifest,
+      ),
+    );
+    for (const path of collectImageStringAssetPaths(nested))
+      expected.add(mapped ? path : resolvePackagePath(resource.manifest, path));
+  }
 
   for (const [bindingId, binding] of symbolBindings(manifest)) {
     const nestedValue = parseJsonBytes(
@@ -249,6 +273,31 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
               : {}),
           });
     }
+    for (const resource of Object.values(manifest.runtimeResources ?? {})) {
+      if (resource.kind !== "image-string" || imageStrings[resource.manifest])
+        continue;
+      const nestedFiles = extractPrefixedFiles(
+        files,
+        directoryOf(resource.manifest),
+      );
+      imageStrings[resource.manifest] = mapped
+        ? await createImageStringResourceFromResolvedFiles({
+            manifest: parseJsonBytes(
+              requireBytes(files, resource.manifest),
+              resource.manifest,
+            ),
+            files: mappedImageStringFiles(files, resource.manifest),
+            ...(options.decodeImage
+              ? { decodeImage: options.decodeImage }
+              : {}),
+          })
+        : await createImageStringResourceFromFiles({
+            files: nestedFiles,
+            ...(options.decodeImage
+              ? { decodeImage: options.decodeImage }
+              : {}),
+          });
+    }
 
     for (const [bindingId, binding] of symbolBindings(manifest)) {
       const nestedFiles = extractPrefixedFiles(
@@ -359,6 +408,71 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
         );
       }
     }
+    for (const resource of Object.values(manifest.runtimeResources ?? {})) {
+      if (resource.kind === "image-string") continue;
+      if (resource.kind === "vni") {
+        if (!vniResources[resource.project]) {
+          const project = parseRuntimeVniProject(
+            requireBytes(files, resource.project),
+            resource.project,
+          );
+          const assetUrls: Record<string, string> = {};
+          for (const asset of project.assets) {
+            const filePath = mapped
+              ? asset.path
+              : resolvePackagePath(resource.project, asset.path);
+            assetUrls[asset.path] = createObjectUrl(
+              requireBytes(files, filePath),
+              filePath,
+              objectUrls,
+            );
+          }
+          vniResources[resource.project] = Object.freeze({
+            project,
+            assetUrls: resolveProjectAssetUrls(project, assetUrls),
+          });
+        }
+        continue;
+      }
+      if (resource.kind === "image") {
+        imageModules[resource.path] ??= createObjectUrl(
+          requireBytes(files, resource.path),
+          resource.path,
+          objectUrls,
+        );
+        continue;
+      }
+      if (resource.kind === "video") {
+        const bytes = requireBytes(files, resource.path);
+        if (
+          bytes.byteLength < 12 ||
+          String.fromCharCode(...bytes.slice(4, 8)) !== "ftyp"
+        )
+          throw new SceneLayoutError(
+            `Scene runtime video is not an ISO MP4: ${resource.path}.`,
+          );
+        videoModules[resource.path] ??= createObjectUrl(
+          bytes,
+          resource.path,
+          objectUrls,
+        );
+        continue;
+      }
+      skeletonModules[resource.skeleton] ??= parseJsonBytes(
+        requireBytes(files, resource.skeleton),
+        resource.skeleton,
+      );
+      atlasModules[resource.atlas] ??= decodeUtf8(
+        requireBytes(files, resource.atlas),
+        resource.atlas,
+      );
+      for (const path of Object.values(resource.textures))
+        textureModules[path] ??= createObjectUrl(
+          requireBytes(files, path),
+          path,
+          objectUrls,
+        );
+    }
     for (const transition of manifest.gameModes?.transitions ?? []) {
       const resource = transition.overlay.resource;
       if (resource.kind === "video") {
@@ -413,6 +527,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
       symbolPackage,
       symbolPackages: Object.freeze({ ...symbolPackages }),
       popupPackages: Object.freeze({ ...popupPackages }),
+      runtimeResources: layout.runtimeResources,
       destroy(): void {
         if (destroyed) return;
         destroyed = true;
@@ -533,6 +648,35 @@ export async function loadSceneLayoutPackageFromUrl(options: {
     );
     for (const path of collectImageStringAssetPaths(nested)) {
       const full = resolvePackagePath(node.resource.manifest, path);
+      if (files.has(full)) continue;
+      files.set(
+        full,
+        await fetchBytes(fetchImpl, containedUrl(manifestUrl, full)),
+      );
+    }
+  }
+  for (const resource of Object.values(manifest.runtimeResources ?? {})) {
+    if (resource.kind === "vni") {
+      const project = parseRuntimeVniProject(
+        requireBytes(files, resource.project),
+        resource.project,
+      );
+      for (const asset of project.assets) {
+        const full = resolvePackagePath(resource.project, asset.path);
+        if (files.has(full)) continue;
+        files.set(
+          full,
+          await fetchBytes(fetchImpl, containedUrl(manifestUrl, full)),
+        );
+      }
+      continue;
+    }
+    if (resource.kind !== "image-string") continue;
+    const nested = parseImageStringManifest(
+      parseJsonBytes(requireBytes(files, resource.manifest), resource.manifest),
+    );
+    for (const path of collectImageStringAssetPaths(nested)) {
+      const full = resolvePackagePath(resource.manifest, path);
       if (files.has(full)) continue;
       files.set(
         full,

@@ -69,6 +69,27 @@ describe("typed asset reference rewriting", () => {
       project: "runtime.hash.json",
       loop: false,
     });
+
+    const withRuntime = rewriteLayoutManifest(
+      {
+        ...layoutFixture(),
+        runtimeResources: {
+          "nearwin.fx": {
+            kind: "spine",
+            skeleton: "symbol.json",
+            atlas: "symbol.atlas",
+            textures: { "symbol.png": "symbol.png" },
+          },
+        },
+      },
+      mapping,
+    );
+    expect(withRuntime.runtimeResources?.["nearwin.fx"]).toEqual({
+      kind: "spine",
+      skeleton: "symbol.json",
+      atlas: "symbol.atlas",
+      textures: { "symbol.png": "symbol.webp" },
+    });
   });
 
   it("rewrites symbol package and all declared symbol image fields", () => {

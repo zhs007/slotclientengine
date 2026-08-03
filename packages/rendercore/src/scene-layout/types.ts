@@ -85,6 +85,36 @@ export type SceneLayoutNodeResourceSpec =
   | SceneLayoutImageStringResourceSpec
   | SceneLayoutVniResourceSpec;
 
+export interface SceneLayoutRuntimeSpineResourceSpec {
+  readonly kind: "spine";
+  readonly skeleton: string;
+  readonly atlas: string;
+  readonly textures: Readonly<Record<string, string>>;
+}
+
+export interface SceneLayoutRuntimeImageStringResourceSpec {
+  readonly kind: "image-string";
+  readonly manifest: string;
+}
+
+export interface SceneLayoutRuntimeVniResourceSpec {
+  readonly kind: "vni";
+  readonly project: string;
+}
+
+export interface SceneLayoutRuntimeVideoResourceSpec {
+  readonly kind: "video";
+  readonly path: string;
+  readonly mimeType: "video/mp4";
+}
+
+export type SceneLayoutRuntimeResourceSpec =
+  | SceneLayoutImageResourceSpec
+  | SceneLayoutRuntimeSpineResourceSpec
+  | SceneLayoutRuntimeImageStringResourceSpec
+  | SceneLayoutRuntimeVniResourceSpec
+  | SceneLayoutRuntimeVideoResourceSpec;
+
 export interface SceneLayoutNode {
   readonly id: string;
   readonly order: number;
@@ -213,7 +243,38 @@ export interface SceneLayoutManifestV1 {
     Record<string, SceneLayoutSymbolPackageBinding>
   >;
   readonly popups?: Readonly<Record<string, SceneLayoutPopupBinding>>;
+  readonly runtimeResources?: Readonly<
+    Record<string, SceneLayoutRuntimeResourceSpec>
+  >;
   readonly gameModes?: SceneLayoutGameModes;
+}
+
+export type SceneLayoutRuntimeResource =
+  | {
+      readonly kind: "image";
+      readonly url: string;
+      readonly size: RenderViewportSize;
+    }
+  | ({ readonly kind: "spine" } & OfficialSpineRuntimeResource)
+  | {
+      readonly kind: "image-string";
+      readonly resource: ImageStringResource;
+    }
+  | {
+      readonly kind: "vni";
+      readonly project: VNIProjectConfig;
+      readonly assetUrls: AssetUrlManifest;
+    }
+  | {
+      readonly kind: "video";
+      readonly url: string;
+      readonly mimeType: "video/mp4";
+    };
+
+interface OfficialSpineRuntimeResource {
+  readonly skeleton: unknown;
+  readonly atlasText: string;
+  readonly textureUrls: Readonly<Record<string, string>>;
 }
 
 export interface SceneLayoutResource {
@@ -240,6 +301,9 @@ export interface SceneLayoutResource {
     >
   >;
   readonly videoUrls: Readonly<Record<string, string>>;
+  readonly runtimeResources: Readonly<
+    Record<string, SceneLayoutRuntimeResource>
+  >;
   destroy(): void;
 }
 
@@ -250,6 +314,9 @@ export interface SceneLayoutPackageResource {
   readonly symbolPackage: SymbolPackageResource | null;
   readonly symbolPackages: Readonly<Record<string, SymbolPackageResource>>;
   readonly popupPackages: Readonly<Record<string, PopupPackageResource>>;
+  readonly runtimeResources: Readonly<
+    Record<string, SceneLayoutRuntimeResource>
+  >;
   destroy(): Promise<void> | void;
 }
 

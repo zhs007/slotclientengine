@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createSceneLayoutResource,
   loadSceneLayoutResourceFromUrl,
+  requireSceneLayoutRuntimeResource,
 } from "../../src/scene-layout/index.js";
 import { transitionResourceKey } from "../../src/scene-layout/resource.js";
 import { game002LayoutFixture } from "./fixtures.js";
@@ -40,6 +41,105 @@ const vniProject = {
 };
 
 describe("scene layout resources", () => {
+  it("prepares program-owned resources and requires their declared kind", () => {
+    const resource = createSceneLayoutResource({
+      manifest: {
+        ...game002LayoutFixture,
+        runtimeResources: {
+          "nearwin.image": {
+            kind: "image",
+            path: "assets/nearwin.png",
+            size: { width: 1, height: 1 },
+          },
+          "nearwin.spine": {
+            kind: "spine",
+            skeleton: "assets/nearwin.json",
+            atlas: "assets/nearwin.atlas",
+            textures: { "nearwin.png": "assets/nearwin-spine.png" },
+          },
+          "spark.vni": {
+            kind: "vni",
+            project: "effects/runtime.json",
+          },
+          "win.amount": {
+            kind: "image-string",
+            manifest:
+              "dependencies/image-strings/win-amount/image-string.manifest.json",
+          },
+          "intro.video": {
+            kind: "video",
+            path: "intro.mp4",
+            mimeType: "video/mp4",
+          },
+        },
+      },
+      imageModules: {
+        "assets/bg.png": "memory:bg",
+        "assets/nearwin.png": "memory:nearwin",
+      },
+      skeletonModules: {
+        "assets/nearwin.json": {
+          skeleton: { spine: "4.3.23" },
+          animations: {},
+        },
+      },
+      atlasModules: {
+        "assets/nearwin.atlas": "nearwin.png\nsize: 1,1\n",
+      },
+      textureModules: {
+        "assets/nearwin-spine.png": "memory:nearwin-spine",
+      },
+      vniResources: {
+        "effects/runtime.json": {
+          project: vniProject as never,
+          assetUrls: { "assets/spark.png": "memory:spark" },
+        },
+      },
+      imageStringResources: {
+        "dependencies/image-strings/win-amount/image-string.manifest.json": {
+          manifest: {
+            version: 1,
+            kind: "image-string",
+            id: "win-amount",
+            metrics: { lineHeight: 1, letterSpacing: 0 },
+            glyphs: {},
+            fixedAdvanceGroups: [],
+          },
+          textures: {},
+          destroyed: false,
+          assertUsable() {},
+          async destroy() {},
+        },
+      },
+      videoModules: { "intro.mp4": "memory:intro" },
+    });
+    expect(
+      requireSceneLayoutRuntimeResource(resource, "nearwin.image", "image"),
+    ).toMatchObject({ kind: "image", url: "memory:nearwin" });
+    expect(
+      requireSceneLayoutRuntimeResource(resource, "nearwin.spine", "spine"),
+    ).toMatchObject({
+      kind: "spine",
+      textureUrls: { "nearwin.png": "memory:nearwin-spine" },
+    });
+    expect(
+      requireSceneLayoutRuntimeResource(resource, "spark.vni", "vni"),
+    ).toMatchObject({ kind: "vni", project: vniProject });
+    expect(
+      requireSceneLayoutRuntimeResource(resource, "intro.video", "video"),
+    ).toMatchObject({ kind: "video", url: "memory:intro" });
+    expect(
+      requireSceneLayoutRuntimeResource(resource, "win.amount", "image-string"),
+    ).toMatchObject({ kind: "image-string" });
+    expect(() =>
+      requireSceneLayoutRuntimeResource(resource, "nearwin.image", "video"),
+    ).toThrow(/must be video/);
+    expect(() =>
+      requireSceneLayoutRuntimeResource(resource, "missing", "image"),
+    ).toThrow(/missing/);
+    resource.destroy();
+  });
+
   it("validates the exact VNI project and asset URL closure", () => {
     const manifest = {
       ...game002LayoutFixture,

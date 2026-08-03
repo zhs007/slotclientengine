@@ -46,7 +46,7 @@ export interface EditorUiSession {
   selection: LayoutSelection | null;
   resourceQuery: string;
   resourceType: "all" | "image" | "spine" | "vni" | "image-string" | "video";
-  resourceStatus: "all" | "referenced" | "unused" | "error";
+  resourceStatus: "all" | "referenced" | "runtime" | "unused" | "error";
   expandedResourceIds: Set<string>;
   expandedInspectorSections: Set<string>;
   selectedTransitionKey: string | null;

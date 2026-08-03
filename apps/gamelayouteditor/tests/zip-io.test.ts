@@ -1008,14 +1008,31 @@ describe("layout zip IO", () => {
       manifest: {
         ...bothManifest,
         nodes: [imageManifest.nodes[0], bothManifest.nodes[1]!],
+        runtimeResources: {
+          "nearwin.spine": {
+            kind: "spine",
+            skeleton: "assets/hero-win.json",
+            ...shared,
+          },
+        },
       },
-      assets,
+      assets: new Map([
+        ...assets,
+        [
+          "assets/hero-unused.json",
+          encode({
+            skeleton: { spine: "4.3.23" },
+            animations: { Unused: {} },
+          }),
+        ],
+      ]),
       decodeImage,
     });
     const entries = extractBoundedZip(onlyIdle.bytes);
     const map = decodeEditorAssetsMap(entries.get("assets.map.json")!);
     expect(map.files).toHaveProperty("hero-idle.json");
-    expect(map.files).not.toHaveProperty("hero-win.json");
+    expect(map.files).toHaveProperty("hero-win.json");
+    expect(map.files).not.toHaveProperty("hero-unused.json");
     expect(map.files).toHaveProperty("hero-shared.atlas");
     expect(map.files).toHaveProperty("hero.png");
   });

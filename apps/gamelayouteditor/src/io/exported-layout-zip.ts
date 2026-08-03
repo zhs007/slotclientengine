@@ -94,6 +94,11 @@ export async function exportLayoutZip(options: {
       manifest.nodes.some(
         (node) =>
           node.resource.kind === "vni" && node.resource.project === path,
+      ) ||
+      Object.values(manifest.runtimeResources ?? {}).some(
+        (resource) =>
+          (resource.kind === "image-string" && resource.manifest === path) ||
+          (resource.kind === "vni" && resource.project === path),
       )
     )
       continue;
@@ -121,6 +126,33 @@ export async function exportLayoutZip(options: {
         );
     for (const path of collectImageStringAssetPaths(nested))
       add(mapped ? path : `${directory}/${path}`);
+  }
+  for (const resource of Object.values(manifest.runtimeResources ?? {})) {
+    if (resource.kind === "image-string") {
+      if (closure.has(resource.manifest)) continue;
+      add(resource.manifest);
+      const nested = parseImageStringManifest(
+        parseJson(ownedAssets.get(resource.manifest), resource.manifest),
+      );
+      const mapped = !resource.manifest.includes("/");
+      const directory = mapped
+        ? ""
+        : resource.manifest.slice(0, resource.manifest.lastIndexOf("/"));
+      for (const path of collectImageStringAssetPaths(nested))
+        add(mapped ? path : `${directory}/${path}`);
+      continue;
+    }
+    if (resource.kind !== "vni" || closure.has(resource.project)) continue;
+    add(resource.project);
+    const project = assertVNIProject(
+      parseJson(ownedAssets.get(resource.project), resource.project),
+    );
+    const mapped = !resource.project.includes("/");
+    const directory = mapped
+      ? ""
+      : resource.project.slice(0, resource.project.lastIndexOf("/"));
+    for (const asset of project.assets)
+      add(mapped ? asset.path : `${directory}/${asset.path}`);
   }
   for (const node of manifest.nodes) {
     if (node.resource.kind !== "vni" || closure.has(node.resource.project))
@@ -281,6 +313,27 @@ async function flattenLayoutClosure(
       ),
     );
   }
+  for (const resource of Object.values(manifest.runtimeResources ?? {})) {
+    if (resource.kind !== "vni") continue;
+    const sourcePath = resource.project;
+    const project = assertVNIProject(
+      parseJson(closure.get(sourcePath), sourcePath),
+    );
+    const mapped = !sourcePath.includes("/");
+    const directory = mapped
+      ? ""
+      : sourcePath.slice(0, sourcePath.lastIndexOf("/"));
+    const rewrittenProject = rewriteVNIProjectAssetPaths(
+      project,
+      (path) => mapping.get(mapped ? path : `${directory}/${path}`)!,
+    );
+    virtual.set(
+      mapping.get(sourcePath)!,
+      new TextEncoder().encode(
+        `${JSON.stringify(sortValue(rewrittenProject), null, 2)}\n`,
+      ),
+    );
+  }
   const rewritten = rewriteLayoutManifestFilenameKeys(manifest, mapping);
   const empty = createEmptyEditorAssetWorkspace();
   const review = await reviewEditorAssetImport({
@@ -369,6 +422,32 @@ function rewriteLayoutManifestFilenameKeys(
       },
     };
   });
+  const runtimeResources = value.runtimeResources
+    ? Object.fromEntries(
+        Object.entries(value.runtimeResources).map(([id, resource]) => {
+          if (resource.kind === "image" || resource.kind === "video")
+            return [id, { ...resource, path: key(resource.path) }];
+          if (resource.kind === "image-string")
+            return [id, { ...resource, manifest: key(resource.manifest) }];
+          if (resource.kind === "vni")
+            return [id, { ...resource, project: key(resource.project) }];
+          return [
+            id,
+            {
+              ...resource,
+              skeleton: key(resource.skeleton),
+              atlas: key(resource.atlas),
+              textures: Object.fromEntries(
+                Object.entries(resource.textures).map(([page, path]) => [
+                  page,
+                  key(path),
+                ]),
+              ),
+            },
+          ];
+        }),
+      )
+    : undefined;
   return parseSceneLayoutManifest({
     ...value,
     nodes,
@@ -400,6 +479,7 @@ function rewriteLayoutManifestFilenameKeys(
           ),
         }
       : {}),
+    ...(runtimeResources ? { runtimeResources } : {}),
     ...(value.gameModes
       ? {
           gameModes: {
@@ -468,6 +548,9 @@ export async function materializeLayoutOwnedAssets(options: {
     ...(source.gameModes?.transitions ?? [])
       .filter((transition) => transition.overlay.resource.kind === "spine")
       .map((transition) => transition.overlay.resource),
+    ...Object.values(source.runtimeResources ?? {}).filter(
+      (resource) => resource.kind === "spine",
+    ),
   ]) {
     if (resource.kind !== "spine") continue;
     assertSpineAtlasBindings(

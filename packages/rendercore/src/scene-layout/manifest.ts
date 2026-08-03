@@ -14,6 +14,7 @@ import type {
   SceneLayoutPopupBinding,
   SceneLayoutGameModes,
   SceneLayoutGameModeTransition,
+  SceneLayoutRuntimeResourceSpec,
   SceneLayoutVariantId,
 } from "./types.js";
 
@@ -38,6 +39,7 @@ export function parseSceneLayoutManifest(
       "symbolPackage",
       "symbolPackages",
       "popups",
+      "runtimeResources",
       "gameModes",
     ],
     "scene layout manifest",
@@ -102,6 +104,10 @@ export function parseSceneLayoutManifest(
     record.popups === undefined
       ? undefined
       : parsePopupBindings(record.popups, adaptation.mode);
+  const runtimeResources =
+    record.runtimeResources === undefined
+      ? undefined
+      : parseRuntimeResources(record.runtimeResources);
   const gameModes =
     record.gameModes === undefined
       ? undefined
@@ -122,7 +128,7 @@ export function parseSceneLayoutManifest(
     nodeIds,
     reels,
   );
-  validatePathClosure(nodes);
+  validatePathClosure(nodes, runtimeResources);
   return deepFreeze({
     version: 1,
     kind: "scene-layout",
@@ -134,6 +140,7 @@ export function parseSceneLayoutManifest(
     ...(symbolPackage ? { symbolPackage } : {}),
     ...(symbolPackages ? { symbolPackages } : {}),
     ...(popups ? { popups } : {}),
+    ...(runtimeResources ? { runtimeResources } : {}),
     ...(gameModes ? { gameModes } : {}),
   });
 }
@@ -159,6 +166,17 @@ export function collectSceneLayoutAssetPaths(
     paths.add(binding.manifest);
   for (const popup of Object.values(parsed.popups ?? {}))
     paths.add(popup.manifest);
+  for (const resource of Object.values(parsed.runtimeResources ?? {})) {
+    if (resource.kind === "image" || resource.kind === "video")
+      paths.add(resource.path);
+    else if (resource.kind === "image-string") paths.add(resource.manifest);
+    else if (resource.kind === "vni") paths.add(resource.project);
+    else {
+      paths.add(resource.skeleton);
+      paths.add(resource.atlas);
+      for (const path of Object.values(resource.textures)) paths.add(path);
+    }
+  }
   for (const transition of parsed.gameModes?.transitions ?? []) {
     const resource = transition.overlay.resource;
     if (resource.kind === "video") paths.add(resource.path);
@@ -434,6 +452,92 @@ function parseResource(
   fail(`${label}.kind must be image, spine, image-string, or vni.`);
 }
 
+function parseRuntimeResources(
+  value: unknown,
+): Readonly<Record<string, SceneLayoutRuntimeResourceSpec>> {
+  const record = readRecord(value, "scene layout runtimeResources");
+  if (Object.keys(record).length === 0)
+    fail("scene layout runtimeResources must not be empty when present.");
+  const resources: Record<string, SceneLayoutRuntimeResourceSpec> = {};
+  for (const [key, raw] of Object.entries(record)) {
+    identifier(key, "scene layout runtime resource key");
+    const label = `scene layout runtimeResources.${key}`;
+    const resource = readRecord(raw, label);
+    if (resource.kind === "image") {
+      known(resource, ["kind", "path", "size"], label);
+      resources[key] = deepFreeze({
+        kind: "image",
+        path: localPath(resource.path, `${label}.path`, IMAGE_EXTENSIONS),
+        size: size(resource.size, `${label}.size`),
+      });
+      continue;
+    }
+    if (resource.kind === "spine") {
+      known(resource, ["kind", "skeleton", "atlas", "textures"], label);
+      const texturesRecord = readRecord(resource.textures, `${label}.textures`);
+      if (Object.keys(texturesRecord).length === 0)
+        fail(`${label}.textures must not be empty.`);
+      const textures: Record<string, string> = {};
+      for (const [page, rawPath] of Object.entries(texturesRecord)) {
+        if (!PATH_SEGMENT.test(page))
+          fail(`${label}.textures page "${page}" is invalid.`);
+        textures[page] = localPath(
+          rawPath,
+          `${label}.textures.${page}`,
+          IMAGE_EXTENSIONS,
+        );
+      }
+      resources[key] = deepFreeze({
+        kind: "spine",
+        skeleton: localPath(
+          resource.skeleton,
+          `${label}.skeleton`,
+          new Set([".json"]),
+        ),
+        atlas: localPath(resource.atlas, `${label}.atlas`, new Set([".atlas"])),
+        textures,
+      });
+      continue;
+    }
+    if (resource.kind === "image-string") {
+      known(resource, ["kind", "manifest"], label);
+      resources[key] = deepFreeze({
+        kind: "image-string",
+        manifest: imageStringDependencyPath(
+          resource.manifest,
+          `${label}.manifest`,
+        ),
+      });
+      continue;
+    }
+    if (resource.kind === "vni") {
+      known(resource, ["kind", "project"], label);
+      resources[key] = deepFreeze({
+        kind: "vni",
+        project: localPath(
+          resource.project,
+          `${label}.project`,
+          new Set([".json"]),
+        ),
+      });
+      continue;
+    }
+    if (resource.kind === "video") {
+      known(resource, ["kind", "path", "mimeType"], label);
+      if (resource.mimeType !== "video/mp4")
+        fail(`${label}.mimeType must be video/mp4.`);
+      resources[key] = deepFreeze({
+        kind: "video",
+        path: videoOwnedPath(resource.path, `${label}.path`),
+        mimeType: "video/mp4",
+      });
+      continue;
+    }
+    fail(`${label}.kind must be image, spine, image-string, vni, or video.`);
+  }
+  return deepFreeze(resources);
+}
+
 function parseSpineStateMachine(
   value: unknown,
   label: string,
@@ -670,6 +774,7 @@ function sceneLayoutStructure(manifest: SceneLayoutManifestV1): unknown {
     symbolPackage: manifest.symbolPackage,
     symbolPackages: manifest.symbolPackages,
     popups: manifest.popups,
+    runtimeResources: manifest.runtimeResources,
     gameModes: manifest.gameModes
       ? {
           ...manifest.gameModes,
@@ -689,12 +794,30 @@ function sceneLayoutStructure(manifest: SceneLayoutManifestV1): unknown {
   };
 }
 
-function validatePathClosure(nodes: readonly SceneLayoutNode[]): void {
+function validatePathClosure(
+  nodes: readonly SceneLayoutNode[],
+  runtimeResources?: Readonly<Record<string, SceneLayoutRuntimeResourceSpec>>,
+): void {
   const paths: string[] = [];
   for (const node of nodes) {
     const resource = node.resource;
     paths.push(
       ...(resource.kind === "image"
+        ? [resource.path]
+        : resource.kind === "image-string"
+          ? [resource.manifest]
+          : resource.kind === "vni"
+            ? [resource.project]
+            : [
+                resource.skeleton,
+                resource.atlas,
+                ...Object.values(resource.textures),
+              ]),
+    );
+  }
+  for (const resource of Object.values(runtimeResources ?? {})) {
+    paths.push(
+      ...(resource.kind === "image" || resource.kind === "video"
         ? [resource.path]
         : resource.kind === "image-string"
           ? [resource.manifest]
