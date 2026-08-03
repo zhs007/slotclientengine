@@ -2,6 +2,7 @@ import { extractBoundedZip } from "@slotclientengine/browserartifactio";
 import {
   createAwardCelebrationPlayer,
   createPopupPackageResource,
+  formatPopupAmount,
   type AwardCelebrationPlayer,
   type PopupPackageResource,
 } from "@slotclientengine/rendercore/popup";
@@ -9,6 +10,48 @@ import { Application, Graphics } from "pixi.js";
 import type { PopupEditorProject } from "../model/project.js";
 import { exportPopupZip, importPopupZip } from "../io/popup-zip.js";
 import { POPUP_ZIP_LIMITS } from "../io/resource-import.js";
+
+export interface PopupPreviewAmountFormat {
+  readonly fractionDigits: number;
+  readonly useGrouping: boolean;
+}
+
+export const DEFAULT_POPUP_PREVIEW_AMOUNT_FORMAT: PopupPreviewAmountFormat =
+  Object.freeze({ fractionDigits: 0, useGrouping: false });
+
+export function formatPopupPreviewAmount(
+  amountRaw: number,
+  format: PopupPreviewAmountFormat = DEFAULT_POPUP_PREVIEW_AMOUNT_FORMAT,
+): string {
+  const validated = validatePopupPreviewAmountFormat(format);
+  return formatPopupAmount(amountRaw, {
+    rawScale: 1,
+    fractionDigits: validated.fractionDigits,
+    useGrouping: validated.useGrouping,
+    groupSeparator: ",",
+    decimalSeparator: ".",
+    prefix: "",
+    suffix: "",
+    rounding: "floor",
+  });
+}
+
+function validatePopupPreviewAmountFormat(
+  format: PopupPreviewAmountFormat,
+): Readonly<PopupPreviewAmountFormat> {
+  if (
+    !Number.isSafeInteger(format.fractionDigits) ||
+    format.fractionDigits < 0 ||
+    format.fractionDigits > 6
+  )
+    throw new Error("preview 小数位数必须是 0..6 safe integer。");
+  if (typeof format.useGrouping !== "boolean")
+    throw new Error("preview 千位分隔设置必须是 boolean。");
+  return Object.freeze({
+    fractionDigits: format.fractionDigits,
+    useGrouping: format.useGrouping,
+  });
+}
 
 export class PopupPreview {
   readonly #app = new Application();
@@ -22,6 +65,7 @@ export class PopupPreview {
   #zoom: number | "fit" = "fit";
   #showGuides = true;
   #input = { betAmountRaw: 100, winAmountRaw: 5000 };
+  #amountFormat = DEFAULT_POPUP_PREVIEW_AMOUNT_FORMAT;
   constructor(host: HTMLElement, status: HTMLElement) {
     this.#host = host;
     this.#status = status;
@@ -52,7 +96,11 @@ export class PopupPreview {
     });
     await importPopupZip(exported.bytes);
     const resource = await createPopupPackageResource({ files });
-    const player = createAwardCelebrationPlayer({ resource });
+    const player = createAwardCelebrationPlayer({
+      resource,
+      formatAmount: (amountRaw) =>
+        formatPopupPreviewAmount(amountRaw, this.#amountFormat),
+    });
     await player.init();
     this.clear();
     this.#resource = resource;
@@ -63,6 +111,9 @@ export class PopupPreview {
   }
   setInput(betAmountRaw: number, winAmountRaw: number) {
     this.#input = { betAmountRaw, winAmountRaw };
+  }
+  setAmountFormat(format: PopupPreviewAmountFormat) {
+    this.#amountFormat = validatePopupPreviewAmountFormat(format);
   }
   play() {
     if (!this.#player) throw new Error("请先生成有效 production preview。");

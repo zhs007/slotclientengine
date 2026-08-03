@@ -17,4 +17,10 @@ preview/export。
 
 ImgNumber 图层可显式选择 Popup 根节点或同档 VNI 的文字占位层。选择文字层后，`x/y/scale/anchor` 相对该层编辑并跟随其动画；候选从严格校验的 VNI project 枚举，目标缺失或替换后失效会阻止 preview/export，不会自动换到其它文字层或根节点。
 
+预览区可单独设置 ImgNumber 的固定小数位数（默认 `0`，范围 `0..6`）和千位分隔
+（默认关闭）。预览 raw 金额按整数单位显示：例如 raw `1234567` 配置两位小数与分组后
+显示 `1,234,567.00`；小数点固定为 `.`，分组符固定为 `,`。设置只属于当前页面会话，
+不会写入 project、manifest 或 Popup ZIP，也不会由导入恢复；启用的符号缺少对应 glyph 时
+preview 会显式失败。
+
 运行：`pnpm --filter popupeditor dev`

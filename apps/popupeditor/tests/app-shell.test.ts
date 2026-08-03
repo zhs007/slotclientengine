@@ -7,6 +7,16 @@ const preview = {
   destroy: vi.fn(),
   rebuild: vi.fn(async () => {}),
   setInput: vi.fn(),
+  setAmountFormat: vi.fn(
+    (format: { fractionDigits: number; useGrouping: boolean }) => {
+      if (
+        !Number.isSafeInteger(format.fractionDigits) ||
+        format.fractionDigits < 0 ||
+        format.fractionDigits > 6
+      )
+        throw new Error("preview 小数位数必须是 0..6 safe integer。");
+    },
+  ),
   play: vi.fn(),
   advance: vi.fn(),
   dismiss: vi.fn(),
@@ -37,6 +47,10 @@ const candidate = {
 };
 
 vi.mock("../src/preview/popup-preview.js", () => ({
+  DEFAULT_POPUP_PREVIEW_AMOUNT_FORMAT: Object.freeze({
+    fractionDigits: 0,
+    useGrouping: false,
+  }),
   PopupPreview: class {
     constructor() {
       return preview;
@@ -112,6 +126,36 @@ describe("PopupEditorApp", () => {
     const root = document.querySelector<HTMLElement>("#app")!;
     const app = new PopupEditorApp(root);
     await app.init();
+    const fractionDigits = root.querySelector<HTMLInputElement>(
+      "#preview-fraction-digits",
+    )!;
+    const useGrouping = root.querySelector<HTMLInputElement>(
+      "#preview-use-grouping",
+    )!;
+    expect(fractionDigits.value).toBe("0");
+    expect(fractionDigits.min).toBe("0");
+    expect(fractionDigits.max).toBe("6");
+    expect(fractionDigits.step).toBe("1");
+    expect(useGrouping.checked).toBe(false);
+    expect(preview.setAmountFormat).toHaveBeenLastCalledWith({
+      fractionDigits: 0,
+      useGrouping: false,
+    });
+    fractionDigits.value = "3";
+    fractionDigits.dispatchEvent(new Event("change"));
+    useGrouping.checked = true;
+    useGrouping.dispatchEvent(new Event("change"));
+    expect(preview.setAmountFormat).toHaveBeenLastCalledWith({
+      fractionDigits: 3,
+      useGrouping: true,
+    });
+    fractionDigits.value = "";
+    fractionDigits.dispatchEvent(new Event("change"));
+    expect(root.querySelector("#diagnostics")?.textContent).toContain(
+      "preview 小数位数必须是 0..6 safe integer。",
+    );
+    fractionDigits.value = "3";
+    fractionDigits.dispatchEvent(new Event("change"));
     const importer = root.querySelector<HTMLInputElement>("#import-assets")!;
     expect(importer.multiple).toBe(true);
     expect(importer.hasAttribute(`webkit${"directory"}`)).toBe(false);
@@ -167,6 +211,8 @@ describe("PopupEditorApp", () => {
         '[data-project-field="fractionDigits"]',
       )!.value,
     ).toBe("2");
+    expect(fractionDigits.value).toBe("3");
+    expect(useGrouping.checked).toBe(true);
     root.querySelector<HTMLButtonElement>("#preview-build")!.click();
     await vi.waitFor(() => expect(preview.rebuild).toHaveBeenCalled());
     root.querySelector<HTMLButtonElement>("#preview-play")!.click();
@@ -179,6 +225,10 @@ describe("PopupEditorApp", () => {
     await vi.waitFor(() =>
       expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled(),
     );
+    const { exportPopupZip } = await import("../src/io/popup-zip.js");
+    const exportedProject = vi.mocked(exportPopupZip).mock.calls.at(-1)![0];
+    expect(exportedProject.amountFormat.fractionDigits).toBe(2);
+    expect(exportedProject).not.toHaveProperty("previewAmountFormat");
     app.destroy();
     expect(preview.destroy).toHaveBeenCalled();
   });
@@ -350,6 +400,16 @@ describe("PopupEditorApp", () => {
     const root = document.querySelector<HTMLElement>("#app")!;
     const app = new PopupEditorApp(root);
     await app.init();
+    const fractionDigits = root.querySelector<HTMLInputElement>(
+      "#preview-fraction-digits",
+    )!;
+    const useGrouping = root.querySelector<HTMLInputElement>(
+      "#preview-use-grouping",
+    )!;
+    fractionDigits.value = "2";
+    fractionDigits.dispatchEvent(new Event("change"));
+    useGrouping.checked = true;
+    useGrouping.dispatchEvent(new Event("change"));
     const zip = createDeterministicZip(
       new Map([["popup.manifest.json", new TextEncoder().encode("{}")]]),
     );
@@ -368,6 +428,12 @@ describe("PopupEditorApp", () => {
     });
     importer.dispatchEvent(new Event("change"));
     await vi.waitFor(() => expect(window.confirm).toHaveBeenCalled());
+    expect(fractionDigits.value).toBe("2");
+    expect(useGrouping.checked).toBe(true);
+    expect(preview.setAmountFormat).toHaveBeenLastCalledWith({
+      fractionDigits: 2,
+      useGrouping: true,
+    });
     root.querySelector<HTMLButtonElement>('[data-tab="tiers"]')!.click();
     expect(root.textContent).toContain("effect.json");
     expect(root.textContent).toContain("Spine.json");

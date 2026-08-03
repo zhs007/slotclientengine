@@ -52,7 +52,8 @@ const player = {
   destroy: vi.fn(),
 };
 const resource = { destroy: vi.fn() };
-vi.mock("@slotclientengine/rendercore/popup", () => ({
+vi.mock("@slotclientengine/rendercore/popup", async (original) => ({
+  ...(await original<typeof import("@slotclientengine/rendercore/popup")>()),
   createPopupPackageResource: vi.fn(async () => resource),
   createAwardCelebrationPlayer: vi.fn(() => player),
 }));
@@ -70,14 +71,56 @@ describe("PopupPreview", () => {
     document.body.innerHTML = '<div id="host"></div><div id="status"></div>';
     vi.clearAllMocks();
   });
+  it("formats whole preview amounts with fixed decimals and optional grouping", async () => {
+    const { formatPopupPreviewAmount } =
+      await import("../src/preview/popup-preview.js");
+    expect(formatPopupPreviewAmount(0)).toBe("0");
+    expect(
+      formatPopupPreviewAmount(999, {
+        fractionDigits: 2,
+        useGrouping: false,
+      }),
+    ).toBe("999.00");
+    expect(
+      formatPopupPreviewAmount(1000, {
+        fractionDigits: 2,
+        useGrouping: true,
+      }),
+    ).toBe("1,000.00");
+    expect(
+      formatPopupPreviewAmount(1234567, {
+        fractionDigits: 3,
+        useGrouping: true,
+      }),
+    ).toBe("1,234,567.000");
+    expect(() =>
+      formatPopupPreviewAmount(1, {
+        fractionDigits: 7,
+        useGrouping: false,
+      }),
+    ).toThrow(/0\.\.6 safe integer/);
+    expect(() =>
+      formatPopupPreviewAmount(Number.MAX_SAFE_INTEGER + 1, {
+        fractionDigits: 0,
+        useGrouping: false,
+      }),
+    ).toThrow(/non-negative safe integer/);
+  });
   it("uses the production player, freezes input on play, updates snapshots and cleans owners", async () => {
     const { PopupPreview } = await import("../src/preview/popup-preview.js");
+    const { createAwardCelebrationPlayer } =
+      await import("@slotclientengine/rendercore/popup");
     const preview = new PopupPreview(
       document.querySelector("#host")!,
       document.querySelector("#status")!,
     );
     await preview.init();
     await preview.rebuild({} as never);
+    const formatAmount = vi.mocked(createAwardCelebrationPlayer).mock
+      .calls[0]![0].formatAmount!;
+    expect(formatAmount(1234567)).toBe("1234567");
+    preview.setAmountFormat({ fractionDigits: 2, useGrouping: true });
+    expect(formatAmount(1234567)).toBe("1,234,567.00");
     preview.setInput(100, 5000);
     preview.play();
     preview.advance();
