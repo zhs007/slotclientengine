@@ -4,6 +4,7 @@ import {
   createDeterministicZip,
   extractBoundedZip,
 } from "@slotclientengine/browserartifactio";
+import { decodeEditorAssetsMap } from "@slotclientengine/editorresource";
 import { describe, expect, it } from "vitest";
 import {
   createFromGameConfig,
@@ -253,6 +254,92 @@ describe("symbols zip IO", () => {
     });
     reimported.destroy();
     imported.destroy();
+  });
+
+  it("preserves distinct logical keys when symbol and VNI images share bytes", async () => {
+    const sharedImage = imageBytes();
+    const vniProject = new Uint8Array(
+      readFileSync(
+        resolve(process.cwd(), "../../assets/game003-s1/L1-wins.json"),
+      ),
+    );
+    const vniAssetKey = "j1_asset_image_mr1qgfc2_r.png";
+    const resources = ["A-wins.json", "A.png", `assets/${vniAssetKey}`].sort();
+    const legacyZip = createDeterministicZip({
+      "symbols.package.json": encode({
+        version: 1,
+        kind: "symbol-package",
+        id: "same-content-logical-keys",
+        cellSize: { width: 160, height: 160 },
+        entrypoints: {
+          gameConfig: "gameconfig.json",
+          symbolManifest: "symbol-state-textures.manifest.json",
+        },
+        resources,
+      }),
+      "gameconfig.json": encode(gameConfig),
+      "symbol-state-textures.manifest.json": encode({
+        version: 1,
+        states: [],
+        symbols: {
+          A: {
+            normal: "./A.png",
+            scale: 1,
+            animations: {
+              win: {
+                kind: "vni",
+                project: "./A-wins.json",
+                playback: {
+                  mode: "range",
+                  startTime: 0,
+                  endTime: 1,
+                  loop: false,
+                },
+              },
+            },
+          },
+        },
+      }),
+      "A-wins.json": vniProject,
+      "A.png": sharedImage,
+      [`assets/${vniAssetKey}`]: sharedImage,
+    });
+
+    const imported = await importSymbolPackageZip(legacyZip, {
+      loadTextures: false,
+    });
+    const exported = await exportSymbolPackageZip(imported.project, {
+      loadTextures: false,
+    });
+    imported.destroy();
+    const files = extractBoundedZip(exported.bytes, {
+      limits: SYMBOL_ZIP_LIMITS,
+    });
+    const assetsMap = decodeEditorAssetsMap(files.get("assets.map.json")!);
+    expect(Object.keys(assetsMap.files).sort()).toEqual([
+      "A-wins.json",
+      "A.png",
+      vniAssetKey,
+    ]);
+    expect(assetsMap.files["A.png"]?.path).toBe(
+      assetsMap.files[vniAssetKey]?.path,
+    );
+
+    const reimported = await importSymbolPackageZip(exported.bytes, {
+      loadTextures: false,
+    });
+    expect([...reimported.project.assetLibrary.records.keys()].sort()).toEqual([
+      "A-wins.json",
+      "A.png",
+      vniAssetKey,
+    ]);
+    expect(
+      reimported.project.symbols.get("A")?.states.get("win"),
+    ).toMatchObject({
+      kind: "vni",
+      projectPath: "A-wins.json",
+    });
+    reimported.destroy();
   });
 
   it("upgrades legacy full-value images such as 1.png to an exact hash mapping", async () => {
