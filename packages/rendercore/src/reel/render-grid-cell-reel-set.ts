@@ -461,7 +461,7 @@ export class RenderGridCellReelSet extends Container {
       if (
         this.#activeDrop ||
         this.#activeEffectSweep ||
-        cell.phase !== "completed"
+        (cell.phase !== "landed" && cell.phase !== "completed")
       )
         throw new ReelError(
           `Cannot request landed symbol state while grid cell (${position.x},${position.y}) is spinning.`,
