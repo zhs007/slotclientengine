@@ -319,7 +319,8 @@ describe("symbol package game config and resources", () => {
               resource:
                 "./dependencies/image-strings/coin-digits/image-string.manifest.json",
               target: { state: "normal", slot: "Num" },
-              initialText: "01",
+              initialText: "200",
+              specialValueImages: [{ value: 200, image: "./mini.png" }],
               anchor: { x: 0.5, y: 0.5 },
               transform: { x: 0, y: 0, scale: 1 },
               followSlotColor: true,
@@ -332,6 +333,7 @@ describe("symbol package game config and resources", () => {
       "dependencies/image-strings/coin-digits/image-string.manifest.json";
     const packageFiles = new Map<string, Uint8Array>([
       [dependencyPath, encode(nestedManifest)],
+      ["mini.png", new Uint8Array([1])],
     ]);
     expect(
       collectSymbolManifestResourcePaths({
@@ -346,6 +348,7 @@ describe("symbol package game config and resources", () => {
       "dependencies/image-strings/coin-digits/assets/0.png",
       "dependencies/image-strings/coin-digits/assets/1.png",
       dependencyPath,
+      "mini.png",
     ]);
     expect(() =>
       collectSymbolManifestResourcePaths({ symbolManifest: manifest }),

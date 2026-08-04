@@ -1,9 +1,17 @@
 import type { ImageStringResource } from "../image-string/types.js";
-import type { SymbolImageStringNodeSpec } from "../symbol/manifest.js";
+import type {
+  SymbolImageStringNodeSpec,
+  SymbolImageStringSpecialValueImageSpec,
+} from "../symbol/manifest.js";
+import type { Texture } from "pixi.js";
+import type { SymbolImageStringSpecialImageResource } from "./mapped-display.js";
 
 export interface SymbolImageStringNodeResource {
   readonly spec: SymbolImageStringNodeSpec;
   readonly resource: ImageStringResource;
+  readonly specialValueImages?: Readonly<
+    Record<string, SymbolImageStringSpecialImageResource>
+  >;
 }
 
 export type SymbolImageStringResourceMap = Readonly<
@@ -12,6 +20,10 @@ export type SymbolImageStringResourceMap = Readonly<
 
 export interface SymbolImageStringResourcePool {
   readonly resources: ReadonlyMap<string, ImageStringResource>;
+  readonly specialImages: ReadonlyMap<string, Texture>;
   get(resourcePath: string): ImageStringResource;
+  getSpecialImage(imagePath: string): Texture;
   destroy(): Promise<void>;
 }
+
+export type { SymbolImageStringSpecialValueImageSpec };

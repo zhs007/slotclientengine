@@ -1,6 +1,5 @@
 import type { RendercoreSpineSlotPlayer } from "../spine/runtime-player.js";
 import type { Container } from "pixi.js";
-import { createRenderImageString } from "../image-string/render-image-string.js";
 import { SymbolAnimationError } from "../symbol/errors.js";
 import type { RenderSymbol } from "../symbol/render-symbol.js";
 import type { RenderSymbolImageStringController } from "../symbol/types.js";
@@ -8,10 +7,11 @@ import type {
   SymbolImageStringNodeResource,
   SymbolImageStringResourceMap,
 } from "./types.js";
+import { createRenderMappedImageString } from "./mapped-display.js";
 
 interface ActiveNode {
   readonly definition: SymbolImageStringNodeResource;
-  readonly renderer: ReturnType<typeof createRenderImageString>;
+  readonly renderer: ReturnType<typeof createRenderMappedImageString>;
 }
 
 const controllers = new WeakMap<Container, SymbolImageStringController>();
@@ -24,6 +24,8 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
   readonly #attached = new Set<ActiveNode>();
   #player: RendercoreSpineSlotPlayer | null = null;
   #owner: object | null = null;
+  #state: string | null = null;
+  #stateSynchronized = false;
   #destroyed = false;
 
   constructor(options: {
@@ -33,10 +35,11 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
     this.#root = options.root;
     this.#nodes = Object.freeze(
       options.nodes.map((definition) => {
-        const renderer = createRenderImageString({
+        const renderer = createRenderMappedImageString({
           resource: definition.resource,
           text: definition.spec.initialText,
           anchor: definition.spec.anchor,
+          specialValueImages: definition.specialValueImages,
         });
         renderer.container.position.set(
           definition.spec.transform.x,
@@ -67,7 +70,25 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
 
   getText(name: string): string {
     this.assertUsable();
-    return this.requireNode(name).renderer.getSnapshot().text;
+    return this.requireNode(name).renderer.getText();
+  }
+
+  syncState(state: string): void {
+    this.assertUsable();
+    const player = this.#player;
+    const owner = this.#owner;
+    this.#state = state;
+    this.#stateSynchronized = true;
+    this.detachSlot();
+    this.#root.imageStringOverlayLayer.removeChildren();
+    for (const node of this.#nodes) {
+      const direct = node.definition.spec.targets.some(
+        (target) => target.state === state && target.slot === undefined,
+      );
+      if (direct)
+        this.#root.imageStringOverlayLayer.addChild(node.renderer.container);
+    }
+    if (player && owner) this.activate(state, player, owner);
   }
 
   activate(
@@ -76,16 +97,23 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
     owner: object,
   ): void {
     this.assertUsable();
-    this.detach();
+    if (this.#stateSynchronized && state !== this.#state) return;
+    this.#state = state;
+    const slotNodes = this.#nodes.flatMap((node) => {
+      const target = node.definition.spec.targets.find(
+        (candidate) =>
+          candidate.state === state && candidate.slot !== undefined,
+      );
+      return target?.slot ? [{ node, slot: target.slot }] : [];
+    });
+    if (slotNodes.length === 0) return;
+    this.detachSlot();
+    this.#root.imageStringOverlayLayer.removeChildren();
     this.#player = player;
     this.#owner = owner;
-    for (const node of this.#nodes) {
-      const target = node.definition.spec.targets.find(
-        (candidate) => candidate.state === state,
-      );
-      if (!target) continue;
+    for (const { node, slot } of slotNodes) {
       player.attachSlotObject({
-        slot: target.slot,
+        slot,
         object: node.renderer.container,
         followSlotColor: node.definition.spec.followSlotColor,
       });
@@ -96,12 +124,15 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
   deactivate(player: RendercoreSpineSlotPlayer, owner: object): void {
     if (this.#destroyed || this.#player !== player || this.#owner !== owner)
       return;
-    this.detach();
+    this.detachSlot();
   }
 
   resetForPoolRelease(): void {
     this.assertUsable();
-    this.detach();
+    this.#state = null;
+    this.#stateSynchronized = false;
+    this.detachSlot();
+    this.#root.imageStringOverlayLayer.removeChildren();
     for (const node of this.#nodes) {
       node.renderer.setText(node.definition.spec.initialText);
     }
@@ -109,13 +140,16 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
 
   destroy(): void {
     if (this.#destroyed) return;
-    this.detach();
+    this.#state = null;
+    this.#stateSynchronized = false;
+    this.detachSlot();
+    this.#root.imageStringOverlayLayer.removeChildren();
     this.#destroyed = true;
     controllers.delete(this.#root);
     for (const node of this.#nodes) node.renderer.destroy();
   }
 
-  private detach(): void {
+  private detachSlot(): void {
     const player = this.#player;
     if (!player) return;
     for (const node of this.#attached) {

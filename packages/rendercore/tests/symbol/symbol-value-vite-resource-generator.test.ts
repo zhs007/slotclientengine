@@ -162,6 +162,16 @@ describe("symbol value Vite resource generator", () => {
       writeFile(join(root, "page.png"), "png"),
       writeFile(join(root, "value.spinBlur.png"), "png"),
       writeFile(join(root, "value.disabled.png"), "png"),
+      sharp({
+        create: {
+          width: 4,
+          height: 3,
+          channels: 4,
+          background: "#ffffff",
+        },
+      })
+        .png()
+        .toFile(join(root, "mini.png")),
     ]);
     for (const id of ["small", "large"]) {
       const directory = join(root, "dependencies", id);
@@ -211,6 +221,7 @@ describe("symbol value Vite resource generator", () => {
     const manifest = createManifest(["bronze.json", "ruby.json"]);
     manifest.symbols.GOLD.valuePresentation.text = {
       type: "image-string",
+      specialValueImages: [{ value: 200, image: "./mini.png" }],
       tiers: ["small", "large"].map((id) => ({
         resource: `./dependencies/${id}/image-string.manifest.json`,
         slot: `Num-${id}`,
@@ -219,6 +230,7 @@ describe("symbol value Vite resource generator", () => {
         followSlotColor: true,
       })),
     };
+    manifest.symbols.GOLD.valuePresentation.defaultValues.push(200);
     await writeFile(manifestPath, JSON.stringify(manifest));
     await expect(
       generator.generateSymbolValueViteResources({
@@ -226,11 +238,12 @@ describe("symbol value Vite resource generator", () => {
         out: outPath,
         check: false,
       }),
-    ).resolves.toMatchObject({ resourceCount: 12 });
+    ).resolves.toMatchObject({ resourceCount: 13 });
     const source = await readFile(outPath, "utf8");
     expect(source).toContain("symbolValueImageStringManifestModules");
     expect(source).toContain("symbolValueImageStringImageModules");
     expect(source.match(/u0030\.png\?url/gu)).toHaveLength(2);
+    expect(source).toContain("mini.png?url");
     expect(source).not.toContain("value-image");
   });
 

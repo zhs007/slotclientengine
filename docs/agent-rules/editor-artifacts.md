@@ -59,7 +59,8 @@
 - `empty` 是用户显式选择的 manifest resource kind，不是缺资源 fallback。
 - symbols ZIP 包含唯一公开 game config、package `cellSize` 与 exact resource closure；缺失、orphan、版本错配显式失败，不允许 glob 或 filename guess。
 - value presentation 先配置 Spine tier resource，再为所有 tier 统一选择 state animation；静态 reel state 独立绑定图片。
-- symbol-owned ImgNumber node 使用非空、无重复的 exact `{state, slot}` target 集；
+- symbol-owned ImgNumber node 使用非空、无重复的 exact target 集：Spine-backed state 必须是 `{state, slot}`，其他 visual kind 必须是无 slot 的 `{state}` 并挂固定顶层 overlay；composite 不选择内部 leaf；
+- 命名 node 与 value ImgNumber 的特殊值整图使用同一 strict `specialValueImages` 合同；value 唯一、图片进入 exact closure，命中整图与未命中 glyph 之间不提供 fallback；
   dependency/state rename 或删除必须事务性重写并全量复验，失败回滚。UI 必须能查看、
   增删、修改 targets，导出统一写 canonical `targets`，旧单 `target` 仅导入兼容。
 

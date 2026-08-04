@@ -258,6 +258,10 @@ export function collectSymbolManifestResourcePaths(options: {
     readonly resource: string;
     readonly text: string;
     readonly label: string;
+    readonly specialValueImages?: readonly {
+      readonly value: number;
+      readonly image: string;
+    }[];
   }): void => {
     const manifestResourcePath = resolvePackagePath(
       manifestPath,
@@ -277,7 +281,14 @@ export function collectSymbolManifestResourcePaths(options: {
       ),
     );
     try {
-      validateImageStringText(options.text, nested);
+      validateImageStringText(options.text);
+      if (
+        !(options.specialValueImages ?? []).some(
+          (mapping) => String(mapping.value) === options.text,
+        )
+      ) {
+        validateImageStringText(options.text, nested);
+      }
     } catch (error) {
       throw new SymbolAssetError(
         `${options.label} is invalid: ${formatError(error)}.`,
@@ -286,6 +297,7 @@ export function collectSymbolManifestResourcePaths(options: {
     for (const glyphPath of collectImageStringAssetPaths(nested)) {
       paths.add(resolvePackagePath(manifestResourcePath, glyphPath));
     }
+    for (const mapping of options.specialValueImages ?? []) add(mapping.image);
   };
   for (const entry of Object.values(manifest.symbols)) {
     collectNormal(entry.normal, add);
@@ -363,6 +375,7 @@ export function collectSymbolManifestResourcePaths(options: {
             resource: binding.resource,
             text: String(value),
             label: `Value ${value} image-string tier ${tierIndex}`,
+            specialValueImages: presentation.text.specialValueImages,
           });
         }
       }
@@ -372,6 +385,7 @@ export function collectSymbolManifestResourcePaths(options: {
         resource: node.resource,
         text: node.initialText,
         label: `Image-string node "${node.name}" initialText`,
+        specialValueImages: node.specialValueImages,
       });
     }
   }
@@ -481,6 +495,18 @@ export async function createSymbolPackageResourceFromResolvedFiles(options: {
         ? entry.valuePresentation.text.tiers.map((binding) => binding.resource)
         : []),
     ]);
+    const imageStringSpecialImagePaths = Object.values(
+      symbolManifest.symbols,
+    ).flatMap((entry) => [
+      ...entry.imageStringNodes.flatMap((node) =>
+        (node.specialValueImages ?? []).map((mapping) => mapping.image),
+      ),
+      ...(entry.valuePresentation?.text.type === "image-string"
+        ? (entry.valuePresentation.text.specialValueImages ?? []).map(
+            (mapping) => mapping.image,
+          )
+        : []),
+    ]);
     imageStringPool =
       options.loadTextures === false
         ? null
@@ -489,6 +515,7 @@ export async function createSymbolPackageResourceFromResolvedFiles(options: {
             resourcePaths: imageStringResourcePaths,
             imageStringManifests: modules.imageStringManifestModules,
             imageModules: modules.imageModules,
+            specialImagePaths: imageStringSpecialImagePaths,
           });
     const imageStringResources = imageStringPool
       ? createSymbolImageStringResourcesFromPool({

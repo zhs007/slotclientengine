@@ -303,9 +303,9 @@ describe("symbol state texture manifest helpers", () => {
       /canonical local/,
     ],
     [
-      "non-Spine target",
+      "slot on non-Spine target",
       (nodes: any[]) => (nodes[0].target.state = "win"),
-      /Spine/,
+      /only allowed for a Spine-backed state/,
     ],
     [
       "unknown slot field",
@@ -396,6 +396,45 @@ describe("symbol state texture manifest helpers", () => {
     expect(() => parseSymbolStateTextureManifest(manifest)).toThrow(
       /both target and targets/,
     );
+  });
+
+  it("parses direct non-Spine targets and strict special value images", () => {
+    const manifest = createManifest() as any;
+    manifest.symbols.L1.imageStringNodes = [
+      {
+        name: "coin-value",
+        resource:
+          "./dependencies/image-strings/coin-digits/image-string.manifest.json",
+        targets: [{ state: "normal" }, { state: "win" }],
+        initialText: "200",
+        specialValueImages: [
+          { value: 200, image: "./mini.png" },
+          { value: 500, image: "./maxi.webp" },
+        ],
+        anchor: { x: 0.5, y: 0.5 },
+        transform: { x: 0, y: 0, scale: 1 },
+        followSlotColor: false,
+      },
+    ];
+    const parsed = parseSymbolStateTextureManifest(manifest);
+    expect(parsed.symbols.L1.imageStringNodes[0]).toMatchObject({
+      targets: [{ state: "normal" }, { state: "win" }],
+      specialValueImages: [
+        { value: 200, image: "./mini.png" },
+        { value: 500, image: "./maxi.webp" },
+      ],
+    });
+
+    manifest.symbols.L1.imageStringNodes[0].specialValueImages.push({
+      value: 200,
+      image: "./duplicate.png",
+    });
+    expect(() => parseSymbolStateTextureManifest(manifest)).toThrow(
+      /duplicate value/,
+    );
+    manifest.symbols.L1.imageStringNodes[0].specialValueImages.pop();
+    manifest.symbols.L1.imageStringNodes[0].specialValueImages[0].extra = true;
+    expect(() => parseSymbolStateTextureManifest(manifest)).toThrow(/unknown/);
   });
 
   it("rejects a non-array imageStringNodes field", () => {

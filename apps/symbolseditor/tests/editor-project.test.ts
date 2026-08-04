@@ -19,6 +19,7 @@ import {
   setAllSymbolsIncluded,
   setCascadeWinPresentation,
   setStateVisual,
+  setSymbolImageStringNodes,
   setSymbolIncluded,
   setValuePresentation,
   uploadAssetBatch,
@@ -61,6 +62,33 @@ const vniProjectBytes = () =>
   );
 
 describe("symbol editor typed project", () => {
+  it("compiles direct ImgNumber targets and sparse special image mappings", () => {
+    const project = createFromGameConfig({
+      rawGameConfig: gameConfig,
+      fileName: "direct-imgnumber.json",
+    });
+    setSymbolImageStringNodes(project, "A", [
+      {
+        name: "coin-value",
+        resource: "./image-string.manifest.json",
+        targets: [{ state: "normal" }],
+        initialText: "150",
+        specialValueImages: [{ value: 200, image: "./mini.png" }],
+        anchor: { x: 0.5, y: 0.5 },
+        transform: { x: 0, y: 0, scale: 1 },
+        followSlotColor: true,
+      },
+    ]);
+    const raw = compileSymbolEditorManifest(project) as any;
+    expect(raw.symbols.A.imageStringNodes[0]).toMatchObject({
+      targets: [{ state: "normal" }],
+      specialValueImages: [{ value: 200, image: "./mini.png" }],
+    });
+    expect(
+      parseSymbolStateTextureManifest(raw).symbols.A.imageStringNodes[0],
+    ).toMatchObject({ targets: [{ state: "normal" }] });
+  });
+
   it("creates code-ordered symbols with only explicit empty normal and exports no resources", () => {
     const project = createFromGameConfig({
       rawGameConfig: gameConfig,

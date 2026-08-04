@@ -12,14 +12,19 @@ import type {
   SymbolImageStringResourceMap,
   SymbolImageStringResourcePool,
 } from "./types.js";
+import { Assets, type Texture } from "pixi.js";
+import type { SymbolImageStringSpecialValueImageSpec } from "../symbol/manifest.js";
+import type { SymbolImageStringSpecialImageResource } from "./mapped-display.js";
 
 export async function createSymbolImageStringResourcePool(options: {
   readonly symbolManifestPath: string;
   readonly resourcePaths: readonly string[];
   readonly imageStringManifests: Readonly<Record<string, unknown>>;
   readonly imageModules: Readonly<Record<string, string>>;
+  readonly specialImagePaths?: readonly string[];
 }): Promise<SymbolImageStringResourcePool> {
   const shared = new Map<string, ImageStringResource>();
+  const specialImages = new Map<string, Texture>();
   let destroyed = false;
   let destroyPromise: Promise<void> | null = null;
   try {
@@ -64,8 +69,32 @@ export async function createSymbolImageStringResourcePool(options: {
       }
       shared.set(manifestPath, resource);
     }
+    for (const imagePath of options.specialImagePaths ?? []) {
+      const packagePath = resolvePackagePath(
+        options.symbolManifestPath,
+        imagePath,
+      );
+      if (specialImages.has(packagePath)) continue;
+      const module = findModule(options.imageModules, packagePath);
+      if (typeof module !== "string" || module.length === 0) {
+        throw new SymbolAssetError(
+          `Image-string special value image is missing: ${packagePath}.`,
+        );
+      }
+      const texture = (await Assets.load({
+        src: module,
+        parser: "loadTextures",
+      })) as Texture | null | undefined;
+      if (!texture?.source) {
+        throw new SymbolAssetError(
+          `Image-string special value image failed to load: ${packagePath}.`,
+        );
+      }
+      specialImages.set(packagePath, texture);
+    }
     return Object.freeze({
       resources: shared,
+      specialImages,
       get(resourcePath: string): ImageStringResource {
         if (destroyed) {
           throw new SymbolAssetError(
@@ -84,6 +113,24 @@ export async function createSymbolImageStringResourcePool(options: {
         }
         resource.assertUsable();
         return resource;
+      },
+      getSpecialImage(imagePath: string): Texture {
+        if (destroyed) {
+          throw new SymbolAssetError(
+            "Image-string resource pool is destroyed.",
+          );
+        }
+        const packagePath = resolvePackagePath(
+          options.symbolManifestPath,
+          imagePath,
+        );
+        const texture = specialImages.get(packagePath);
+        if (!texture) {
+          throw new SymbolAssetError(
+            `Image-string special value image is not prepared: ${packagePath}.`,
+          );
+        }
+        return texture;
       },
       destroy(): Promise<void> {
         if (destroyPromise) return destroyPromise;
@@ -114,11 +161,18 @@ export async function createSymbolImageStringResources(options: {
   const resourcePaths = Object.values(options.manifest.symbols).flatMap(
     (entry) => entry.imageStringNodes.map((spec) => spec.resource),
   );
+  const specialImagePaths = Object.values(options.manifest.symbols).flatMap(
+    (entry) =>
+      entry.imageStringNodes.flatMap((spec) =>
+        (spec.specialValueImages ?? []).map((mapping) => mapping.image),
+      ),
+  );
   const pool = await createSymbolImageStringResourcePool({
     symbolManifestPath: options.symbolManifestPath,
     resourcePaths,
     imageStringManifests: options.imageStringManifests,
     imageModules: options.imageModules,
+    specialImagePaths,
   });
   try {
     const resources = createSymbolImageStringResourcesFromPool({
@@ -147,14 +201,27 @@ export function createSymbolImageStringResourcesFromPool(options: {
     for (const spec of entry.imageStringNodes) {
       const resource = options.pool.get(spec.resource);
       try {
-        validateImageStringText(spec.initialText, resource.manifest);
+        validateMappedImageStringText(
+          spec.initialText,
+          resource,
+          spec.specialValueImages ?? [],
+        );
       } catch (error) {
         throw new SymbolAssetError(
           `Symbol "${symbol}" image-string node "${spec.name}" initialText is invalid: ${formatError(error)}.`,
         );
       }
       bySymbol[symbol] ??= [];
-      bySymbol[symbol].push(Object.freeze({ spec, resource }));
+      bySymbol[symbol].push(
+        Object.freeze({
+          spec,
+          resource,
+          specialValueImages: createSymbolImageStringSpecialValueImageMap(
+            spec.specialValueImages ?? [],
+            options.pool,
+          ),
+        }),
+      );
     }
   }
   return Object.freeze(
@@ -165,6 +232,33 @@ export function createSymbolImageStringResourcesFromPool(options: {
       ]),
     ),
   );
+}
+
+export function createSymbolImageStringSpecialValueImageMap(
+  mappings: readonly SymbolImageStringSpecialValueImageSpec[],
+  pool: SymbolImageStringResourcePool,
+): Readonly<Record<string, SymbolImageStringSpecialImageResource>> {
+  return Object.freeze(
+    Object.fromEntries(
+      mappings.map((mapping) => [
+        String(mapping.value),
+        Object.freeze({
+          path: mapping.image,
+          texture: pool.getSpecialImage(mapping.image),
+        }),
+      ]),
+    ),
+  );
+}
+
+function validateMappedImageStringText(
+  text: string,
+  resource: ImageStringResource,
+  mappings: readonly SymbolImageStringSpecialValueImageSpec[],
+): void {
+  validateImageStringText(text);
+  if (mappings.some((mapping) => String(mapping.value) === text)) return;
+  validateImageStringText(text, resource.manifest);
 }
 
 function validateLoadedGlyphSizes(

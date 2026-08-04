@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   createFromGameConfig,
   setStateVisual,
+  setSymbolImageStringNodes,
+  setValuePresentation,
   uploadAssetBatch,
 } from "../src/model/editor-project.js";
 import { SymbolEditorStore } from "../src/model/editor-store.js";
@@ -50,6 +52,83 @@ function createProject() {
 }
 
 describe("typed resource picker", () => {
+  it("binds normal images to named and value ImgNumber special mappings", () => {
+    const project = createProject();
+    setSymbolImageStringNodes(project, "A", [
+      {
+        name: "coin-value",
+        resource: "./image-string.manifest.json",
+        targets: [{ state: "normal" }],
+        initialText: "150",
+        specialValueImages: [{ value: 200, image: "" }],
+        anchor: { x: 0.5, y: 0.5 },
+        transform: { x: 0, y: 0, scale: 1 },
+        followSlotColor: true,
+      },
+    ]);
+    applyResourceBinding(
+      project,
+      {
+        kind: "image-string-special-image",
+        symbol: "A",
+        nodeIndex: 0,
+        mappingIndex: 0,
+      },
+      "H1.png",
+    );
+    expect(
+      project.symbols.get("A")?.imageStringNodes[0]?.specialValueImages,
+    ).toEqual([{ value: 200, image: "./H1.png" }]);
+
+    setValuePresentation(project, "A", {
+      defaultValues: [200],
+      reelStates: {
+        normal: { kind: "transparent", width: 160, height: 160 },
+        states: {},
+      },
+      tiers: [
+        {
+          animation: {
+            kind: "spine",
+            skeleton: "./H1.json",
+            atlas: "./Symbol.atlas",
+            texture: "./Symbol.png",
+            playback: {
+              mode: "animation",
+              animationName: "Idle",
+              loop: true,
+            },
+          },
+        },
+      ],
+      text: {
+        type: "image-string",
+        specialValueImages: [{ value: 200, image: "" }],
+        tiers: [
+          {
+            resource: "./image-string.manifest.json",
+            slot: "Num",
+            anchor: { x: 0.5, y: 0.5 },
+            transform: { x: 0, y: 0, scale: 1 },
+            followSlotColor: true,
+          },
+        ],
+      },
+    });
+    applyResourceBinding(
+      project,
+      {
+        kind: "value-image-string-special-image",
+        symbol: "A",
+        mappingIndex: 0,
+      },
+      "Symbol.png",
+    );
+    expect(project.symbols.get("A")?.valuePresentation?.text).toMatchObject({
+      specialValueImages: [{ value: 200, image: "./Symbol.png" }],
+    });
+  });
+
   it("filters image and skeleton contexts without filename guessing", () => {
     const project = createProject();
     const images = getResourcePickerCandidates(project, {

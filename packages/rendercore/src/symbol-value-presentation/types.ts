@@ -1,5 +1,6 @@
 import type { Container } from "pixi.js";
 import type { ImageStringResource } from "../image-string/types.js";
+import type { SymbolImageStringSpecialImageResource } from "../symbol-image-string/mapped-display.js";
 import type { RenderVisibleSymbolGeometrySnapshot } from "../reel/types.js";
 import type {
   SymbolManifestAnimationPlaybackSpec,
@@ -34,6 +35,9 @@ export interface SymbolValuePresentationResource {
   readonly text: SymbolValuePresentationTextSpec;
   readonly textImageUrls: Readonly<Record<number, string>>;
   readonly imageStringTierBindings?: readonly SymbolValuePresentationImageStringTierResource[];
+  readonly imageStringSpecialValueImages?: Readonly<
+    Record<string, SymbolImageStringSpecialImageResource>
+  >;
 }
 
 export interface SymbolValuePresentationImageStringTierResource {

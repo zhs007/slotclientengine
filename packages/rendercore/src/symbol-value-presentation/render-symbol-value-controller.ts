@@ -17,6 +17,10 @@ import {
   assertSymbolValueDisplayResource,
   createSymbolValueDisplay,
 } from "./value-display.js";
+import {
+  notifySymbolImageStringSpineActive,
+  notifySymbolImageStringSpineInactive,
+} from "../symbol-image-string/controller.js";
 
 export function createRenderSymbolValueController(options: {
   readonly root: RenderSymbol;
@@ -143,10 +147,9 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
         object: display.container,
         followSlotColor: binding?.followSlotColor ?? true,
       });
-      this.#root.overlayLayer.addChild(player.view);
       this.#initialized = true;
       this.playActiveAnimation();
-      this.syncVisibility();
+      this.syncPresentationView();
     } catch (error) {
       display?.destroy();
       if (this.#requestId === requestId && this.#player === player) {
@@ -232,6 +235,12 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
     if (player.view.parent !== this.#root.overlayLayer) {
       this.#root.overlayLayer.addChild(player.view);
     }
+    notifySymbolImageStringSpineActive(
+      this.#root,
+      this.#root.getStateSnapshot().resolvedState,
+      player,
+      this,
+    );
     this.syncVisibility();
   }
 
@@ -298,6 +307,9 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
     this.#tier = null;
     this.#display = null;
     this.#root.baseLayer.visible = true;
+    if (player) {
+      notifySymbolImageStringSpineInactive(this.#root, player, this);
+    }
     if (wasInitialized && player && display)
       player.removeSlotObject(display.container);
     display?.destroy();

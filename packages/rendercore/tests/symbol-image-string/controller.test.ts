@@ -36,6 +36,64 @@ afterEach(() => {
 });
 
 describe("SymbolImageStringController", () => {
+  it("renders exact special values as one image and attaches non-Spine states directly", () => {
+    const symbol = createSymbol();
+    const controller = new SymbolImageStringController({
+      root: symbol,
+      nodes: [
+        {
+          spec: {
+            name: "coin-value",
+            resource:
+              "./dependencies/image-strings/digits/image-string.manifest.json",
+            targets: [{ state: "normal" }],
+            initialText: "200",
+            specialValueImages: [
+              { value: 200, image: "./mini.png" },
+              { value: 500, image: "./maxi.png" },
+            ],
+            anchor: { x: 0.5, y: 0.5 },
+            transform: { x: 2, y: 3, scale: 0.5 },
+            followSlotColor: true,
+          },
+          resource: {
+            manifest,
+            textures: {
+              "assets/0.png": Texture.EMPTY,
+              "assets/1.png": Texture.EMPTY,
+            },
+            destroyed: false,
+            assertUsable: () => undefined,
+            destroy: async () => undefined,
+          },
+          specialValueImages: {
+            "200": { path: "mini.png", texture: Texture.WHITE },
+            "500": { path: "maxi.png", texture: Texture.EMPTY },
+          },
+        },
+      ],
+    });
+
+    controller.syncState("normal");
+    const display = symbol.imageStringOverlayLayer.children[0] as Container;
+    expect(display.children).toHaveLength(1);
+    expect(
+      (display.children[0] as unknown as { texture: Texture }).texture,
+    ).toBe(Texture.WHITE);
+    controller.setText("coin-value", "500");
+    expect(
+      (display.children[0] as unknown as { texture: Texture }).texture,
+    ).toBe(Texture.EMPTY);
+    controller.setText("coin-value", "10");
+    expect(display.children).toHaveLength(2);
+    controller.setText("coin-value", "200");
+    expect(display.children).toHaveLength(1);
+    controller.syncState("win");
+    expect(symbol.imageStringOverlayLayer.children).toHaveLength(0);
+    controller.destroy();
+    symbol.destroy();
+  });
+
   it("preserves strings, validates atomically, attaches by state and resets for pool", () => {
     const symbol = createSymbol();
     const controller = new SymbolImageStringController({
@@ -108,6 +166,11 @@ describe("SymbolImageStringController", () => {
     expect(player.removeSlotObject).not.toHaveBeenCalled();
     notifySymbolImageStringSpineInactive(symbol, player, currentOwner);
     expect(player.removeSlotObject).toHaveBeenCalled();
+
+    vi.mocked(player.attachSlotObject).mockClear();
+    notifySymbolImageStringSpineActive(symbol, "normal", player, currentOwner);
+    controller.syncState("normal");
+    expect(player.attachSlotObject).toHaveBeenCalledTimes(2);
 
     controller.resetForPoolRelease();
     expect(controller.getText("coin-value")).toBe("01");
@@ -207,6 +270,46 @@ describe("SymbolImageStringController", () => {
         },
       }),
     ).rejects.toThrow(/size mismatch/);
+  });
+
+  it("prepares special value images once and fails explicitly for missing images", async () => {
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.EMPTY as never);
+    const pool = await createSymbolImageStringResourcePool({
+      symbolManifestPath: "symbol-state-textures.manifest.json",
+      resourcePaths: [],
+      imageStringManifests: {},
+      imageModules: { "mini.png": "/mini.png" },
+      specialImagePaths: ["./mini.png", "./mini.png"],
+    });
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(pool.getSpecialImage("./mini.png")).toBe(Texture.EMPTY);
+    expect(() => pool.getSpecialImage("./missing.png")).toThrow(/not prepared/);
+    await pool.destroy();
+    await pool.destroy();
+    expect(() => pool.getSpecialImage("./mini.png")).toThrow(/destroyed/);
+
+    await expect(
+      createSymbolImageStringResourcePool({
+        symbolManifestPath: "symbol-state-textures.manifest.json",
+        resourcePaths: [],
+        imageStringManifests: {},
+        imageModules: {},
+        specialImagePaths: ["./missing.png"],
+      }),
+    ).rejects.toThrow(/special value image is missing/);
+
+    load.mockResolvedValueOnce(null as never);
+    await expect(
+      createSymbolImageStringResourcePool({
+        symbolManifestPath: "symbol-state-textures.manifest.json",
+        resourcePaths: [],
+        imageStringManifests: {},
+        imageModules: { "broken.png": "/broken.png" },
+        specialImagePaths: ["./broken.png"],
+      }),
+    ).rejects.toThrow(/failed to load/);
   });
 
   it("fails before use when a nested glyph module or initial glyph is missing", async () => {

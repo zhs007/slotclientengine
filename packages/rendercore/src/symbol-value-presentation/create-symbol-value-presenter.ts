@@ -7,6 +7,7 @@ import {
 } from "../spine/runtime-player.js";
 import { SymbolAssetError } from "../symbol/errors.js";
 import {
+  createSymbolImageStringSpecialValueImageMap,
   createSymbolImageStringResourcePool,
   type SymbolImageStringResourcePool,
 } from "../symbol-image-string/index.js";
@@ -186,6 +187,15 @@ export function createSymbolValuePresentationResourcesFromManifest(
               }),
             )
           : Object.freeze([]);
+      const imageStringSpecialValueImages: NonNullable<
+        SymbolValuePresentationResourceMap[string]["imageStringSpecialValueImages"]
+      > =
+        text.type === "image-string"
+          ? createSymbolImageStringSpecialValueImageMap(
+              text.specialValueImages ?? [],
+              options.imageStringResourcePool!,
+            )
+          : Object.freeze({});
       for (const value of presentation.defaultValues) {
         if (text.type !== "image-string") break;
         const tierIndex = resolveTierIndex(tiers, value);
@@ -196,7 +206,11 @@ export function createSymbolValuePresentationResourcesFromManifest(
           );
         }
         try {
-          validateImageStringText(String(value), binding.resource.manifest);
+          const valueText = String(value);
+          validateImageStringText(valueText);
+          if (!imageStringSpecialValueImages[valueText]) {
+            validateImageStringText(valueText, binding.resource.manifest);
+          }
         } catch (error) {
           throw new SymbolAssetError(
             `Symbol "${symbol}" default value ${value} is invalid for image-string tier ${tierIndex}: ${formatError(error)}.`,
@@ -230,6 +244,7 @@ export function createSymbolValuePresentationResourcesFromManifest(
             text,
             textImageUrls,
             imageStringTierBindings,
+            imageStringSpecialValueImages,
           }),
         ] as const,
       ];
@@ -247,12 +262,20 @@ export async function createSymbolValuePresentationResourceBundleFromManifest(
       ? entry.valuePresentation.text.tiers.map((binding) => binding.resource)
       : [],
   );
+  const specialImagePaths = Object.values(manifest.symbols).flatMap((entry) =>
+    entry.valuePresentation?.text.type === "image-string"
+      ? (entry.valuePresentation.text.specialValueImages ?? []).map(
+          (mapping) => mapping.image,
+        )
+      : [],
+  );
   const pool = await createSymbolImageStringResourcePool({
     symbolManifestPath:
       options.symbolManifestPath ?? "symbol-state-textures.manifest.json",
     resourcePaths,
     imageStringManifests: options.imageStringManifestModules ?? {},
     imageModules: options.imageStringImageModules ?? {},
+    specialImagePaths,
   });
   try {
     const resources = createSymbolValuePresentationResourcesFromManifest({

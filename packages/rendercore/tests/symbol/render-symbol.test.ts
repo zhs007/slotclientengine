@@ -130,6 +130,7 @@ describe("RenderSymbol", () => {
       renderSymbol.baseLayer,
       renderSymbol.stateSprite,
       renderSymbol.overlayLayer,
+      renderSymbol.imageStringOverlayLayer,
     ]);
 
     renderSymbol.requestState("appear");

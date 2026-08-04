@@ -135,6 +135,7 @@ export interface RenderSymbolImageStringController {
   getNodeNames(): readonly string[];
   setText(name: string, text: string): void;
   getText(name: string): string;
+  syncState(state: SymbolStateId): void;
   resetForPoolRelease(): void;
   destroy(): void;
 }

@@ -1084,6 +1084,12 @@ export function getAssetReferences(
         path: stripLocalRef(node.resource),
         location: `${symbol.symbol}.imageStringNodes.${node.name}`,
       });
+      for (const mapping of node.specialValueImages ?? []) {
+        references.push({
+          path: stripLocalRef(mapping.image),
+          location: `${symbol.symbol}.imageStringNodes.${node.name}.specialValueImages.${mapping.value}`,
+        });
+      }
     }
   }
   return Object.freeze(
@@ -1197,9 +1203,22 @@ export function compileSymbolEditorManifest(
     }
     if (Object.keys(animations).length > 0) entry.animations = animations;
     if (symbol.imageStringNodes.length > 0) {
-      entry.imageStringNodes = symbol.imageStringNodes.map((node) =>
-        cloneValue(node),
-      );
+      entry.imageStringNodes = symbol.imageStringNodes.map((node) => ({
+        name: node.name,
+        resource: node.resource,
+        targets: node.targets.map((target) =>
+          target.slot === undefined
+            ? { state: target.state }
+            : { state: target.state, slot: target.slot },
+        ),
+        initialText: node.initialText,
+        ...(node.specialValueImages?.length
+          ? { specialValueImages: cloneValue(node.specialValueImages) }
+          : {}),
+        anchor: cloneValue(node.anchor),
+        transform: cloneValue(node.transform),
+        followSlotColor: node.followSlotColor,
+      }));
     }
     if (symbol.cascadeWinPresentation) {
       entry.cascadeWinPresentation = cloneValue(symbol.cascadeWinPresentation);
@@ -1636,6 +1655,12 @@ function compileValuePresentation(
   value: SymbolValuePresentationSpec,
 ): Record<string, unknown> {
   const clone = cloneValue(value) as unknown as Record<string, unknown>;
+  if (
+    value.text.type === "image-string" &&
+    !value.text.specialValueImages?.length
+  ) {
+    delete (clone.text as Record<string, unknown>).specialValueImages;
+  }
   const reelStates = clone.reelStates as Record<string, unknown>;
   const parsedStates = (
     value.reelStates as SymbolValuePresentationSpec["reelStates"]

@@ -33,6 +33,7 @@ export class RenderSymbol extends VisualEntity<void> {
   readonly layers: readonly SymbolVisualLayer[];
   readonly stateSprite: Sprite;
   readonly overlayLayer: Container;
+  readonly imageStringOverlayLayer: Container;
   readonly normalSource: SymbolNormalTextureSource<Texture>;
   readonly renderPriority: number;
   readonly #stateMachine: SymbolStateMachine;
@@ -76,6 +77,7 @@ export class RenderSymbol extends VisualEntity<void> {
     this.sprite = this.layers[0].sprite;
     this.stateSprite = new Sprite(this.texture);
     this.overlayLayer = new Container();
+    this.imageStringOverlayLayer = new Container();
     this.#stateMachine = new SymbolStateMachine(options.definition);
     this.#animationResolver = options.animationResolver;
     this.#landingAppearEnabled = options.landingAppearEnabled ?? false;
@@ -89,6 +91,7 @@ export class RenderSymbol extends VisualEntity<void> {
       this.baseLayer,
       this.stateSprite,
       this.overlayLayer,
+      this.imageStringOverlayLayer,
     );
     this.#valueController = options.valueControllerFactory?.(this) ?? null;
     this.#imageStringController =
@@ -97,6 +100,9 @@ export class RenderSymbol extends VisualEntity<void> {
     this.#lastAniKey = this.createAniKey(this.#stateMachine.getSnapshot());
     this.#currentAni = this.createCurrentAni();
     this.#currentAni.reset();
+    this.#imageStringController?.syncState(
+      this.#stateMachine.getSnapshot().resolvedState,
+    );
   }
 
   init(): void {
@@ -337,11 +343,13 @@ export class RenderSymbol extends VisualEntity<void> {
       // an equivalent animation (for example normal Loop -> dropdown Loop).
       previousAni.adoptContinuation?.(nextAni);
       nextAni.destroy?.();
+      this.#imageStringController?.syncState(snapshot.resolvedState);
       return false;
     }
     this.#currentAni = nextAni;
     this.#currentAni.reset();
     previousAni.destroy?.();
+    this.#imageStringController?.syncState(snapshot.resolvedState);
     return true;
   }
 

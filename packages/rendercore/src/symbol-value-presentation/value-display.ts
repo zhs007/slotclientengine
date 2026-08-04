@@ -1,8 +1,6 @@
 import { Assets, Sprite, Text, type Texture } from "pixi.js";
-import {
-  createRenderImageString,
-  validateImageStringText,
-} from "../image-string/index.js";
+import { validateImageStringText } from "../image-string/index.js";
+import { createRenderMappedImageString } from "../symbol-image-string/mapped-display.js";
 import { SymbolAssetError } from "../symbol/errors.js";
 import type {
   SymbolValueDisplayHandle,
@@ -18,11 +16,11 @@ export async function createSymbolValueDisplay(options: {
   const spec = options.resource.text;
   if (spec.type === "image-string") {
     const binding = requireImageStringBinding(options);
-    validateImageStringText(text, binding.resource.manifest);
-    const renderer = createRenderImageString({
+    const renderer = createRenderMappedImageString({
       resource: binding.resource,
       text,
       anchor: binding.anchor,
+      specialValueImages: options.resource.imageStringSpecialValueImages,
     });
     renderer.container.position.set(binding.transform.x, binding.transform.y);
     renderer.container.scale.set(binding.transform.scale);
@@ -35,7 +33,6 @@ export async function createSymbolValueDisplay(options: {
       },
       resourcePath: binding.resourcePath,
       setText(next: string): void {
-        validateImageStringText(next, binding.resource.manifest);
         renderer.setText(next);
         currentText = next;
       },
@@ -107,7 +104,11 @@ export function assertSymbolValueDisplayResource(options: {
       );
     }
     try {
-      validateImageStringText(String(options.value), binding.resource.manifest);
+      const valueText = String(options.value);
+      validateImageStringText(valueText);
+      if (!options.resource.imageStringSpecialValueImages?.[valueText]) {
+        validateImageStringText(valueText, binding.resource.manifest);
+      }
     } catch (error) {
       throw new SymbolAssetError(
         `Symbol "${options.resource.symbol}" value ${options.value} cannot be rendered by image-string tier ${tierIndex}: ${formatError(error)}.`,

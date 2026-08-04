@@ -112,6 +112,17 @@ function isBindingTargetAvailable(
 ): boolean {
   const symbol = project.symbols.get(context.symbol);
   if (!symbol) return false;
+  if (context.kind === "image-string-special-image")
+    return Boolean(
+      symbol.imageStringNodes[context.nodeIndex]?.specialValueImages?.[
+        context.mappingIndex
+      ],
+    );
+  if (context.kind === "value-image-string-special-image")
+    return Boolean(
+      symbol.valuePresentation?.text.type === "image-string" &&
+      symbol.valuePresentation.text.specialValueImages?.[context.mappingIndex],
+    );
   if (context.kind === "value-tier-resource")
     return context.tierIndex < (symbol.valuePresentation?.tiers.length ?? 0);
   return symbol.states.has(context.state);

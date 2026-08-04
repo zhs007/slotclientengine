@@ -1,6 +1,7 @@
 import { resolvePackagePath } from "@slotclientengine/browserartifactio";
 import {
   setStateVisual,
+  setSymbolImageStringNodes,
   setValuePresentation,
   type EditorAssetKind,
   type EditorStateVisual,
@@ -49,6 +50,17 @@ export type ResourceBindingContext =
       readonly symbol: string;
       readonly tierIndex: number;
       readonly field: "skeleton" | "atlas";
+    }
+  | {
+      readonly kind: "image-string-special-image";
+      readonly symbol: string;
+      readonly nodeIndex: number;
+      readonly mappingIndex: number;
+    }
+  | {
+      readonly kind: "value-image-string-special-image";
+      readonly symbol: string;
+      readonly mappingIndex: number;
     };
 
 export interface ResourcePickerCandidate {
@@ -179,6 +191,10 @@ export function getDefaultSpineAtlasBinding(
 export function getResourceBindingLabel(
   context: ResourceBindingContext,
 ): string {
+  if (context.kind === "image-string-special-image")
+    return `${context.symbol}.imageStringNodes[${context.nodeIndex}].specialValueImages[${context.mappingIndex}]`;
+  if (context.kind === "value-image-string-special-image")
+    return `${context.symbol}.valuePresentation.text.specialValueImages[${context.mappingIndex}]`;
   const target = `${context.symbol}.${"state" in context ? context.state : `tier ${context.tierIndex + 1}`}`;
   const field =
     context.kind === "value-tier-resource"
@@ -200,6 +216,29 @@ export function applyResourceBinding(
     if (!candidate) throw new Error(`资源 ${path} 与当前字段不兼容。`);
     if (candidate.status !== "ready")
       throw new Error(candidate.disabledReason ?? `资源 ${path} 不可绑定。`);
+  }
+  if (
+    context.kind === "image-string-special-image" ||
+    context.kind === "value-image-string-special-image"
+  ) {
+    const symbol = project.symbols.get(context.symbol)!;
+    if (context.kind === "image-string-special-image") {
+      const nodes = structuredClone(symbol.imageStringNodes);
+      const mapping =
+        nodes[context.nodeIndex]?.specialValueImages?.[context.mappingIndex];
+      if (!mapping) throw new Error("ImgNumber 特殊值映射不存在。");
+      (mapping as { image: string }).image = path ? `./${path}` : "";
+      setSymbolImageStringNodes(project, context.symbol, nodes);
+    } else {
+      const value = structuredClone(symbol.valuePresentation!);
+      if (value.text.type !== "image-string")
+        throw new Error("当前数值展示不是 ImgNumber。");
+      const mapping = value.text.specialValueImages?.[context.mappingIndex];
+      if (!mapping) throw new Error("ImgNumber 特殊值映射不存在。");
+      (mapping as { image: string }).image = path ? `./${path}` : "";
+      setValuePresentation(project, context.symbol, value);
+    }
+    return;
   }
   if (context.kind === "value-tier-resource") {
     const symbol = project.symbols.get(context.symbol)!;
@@ -425,7 +464,9 @@ function expectedKind(context: ResourceBindingContext): EditorAssetKind {
   if (
     context.kind === "state-image" ||
     context.kind === "normal-base-image" ||
-    context.kind === "layer-texture"
+    context.kind === "layer-texture" ||
+    context.kind === "image-string-special-image" ||
+    context.kind === "value-image-string-special-image"
   )
     return "image";
   if (
@@ -447,7 +488,20 @@ function requireTarget(
 ): void {
   const symbol = project.symbols.get(context.symbol);
   if (!symbol) throw new Error(`symbol ${context.symbol} 不存在。`);
-  if (context.kind === "value-tier-resource") {
+  if (context.kind === "image-string-special-image") {
+    if (
+      !symbol.imageStringNodes[context.nodeIndex]?.specialValueImages?.[
+        context.mappingIndex
+      ]
+    )
+      throw new Error("ImgNumber 特殊值映射不存在。");
+  } else if (context.kind === "value-image-string-special-image") {
+    if (
+      symbol.valuePresentation?.text.type !== "image-string" ||
+      !symbol.valuePresentation.text.specialValueImages?.[context.mappingIndex]
+    )
+      throw new Error("数值 ImgNumber 特殊值映射不存在。");
+  } else if (context.kind === "value-tier-resource") {
     if (!symbol.valuePresentation?.tiers[context.tierIndex])
       throw new Error(`value tier ${context.tierIndex + 1} 不存在。`);
   } else if (!symbol.states.has(context.state)) {

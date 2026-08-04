@@ -119,6 +119,15 @@ export async function generateSymbolValueViteResources(options) {
         manifestResourcePath,
       );
     }
+    for (const manifestResourcePath of presentation.specialValueImagePaths) {
+      await addResource(
+        resources,
+        seen,
+        manifestRoot,
+        "imageStringGlyph",
+        manifestResourcePath,
+      );
+    }
     const nestedByPath = new Map();
     for (const binding of presentation.imageStringBindings) {
       let nested = nestedByPath.get(binding.resource);
@@ -153,6 +162,7 @@ export async function generateSymbolValueViteResources(options) {
     }
     for (const value of presentation.defaultValues) {
       if (presentation.imageStringBindings.length === 0) break;
+      if (presentation.specialValueImages.has(value)) continue;
       const tierIndex = presentation.tiers.findIndex(
         (tier) => tier.maxExclusive === undefined || value < tier.maxExclusive,
       );
@@ -373,7 +383,7 @@ function validatePresentation(symbol, value, states) {
     text,
     `${symbol}.valuePresentation.text`,
     textType === "image-string"
-      ? ["type", "tiers"]
+      ? ["type", "tiers", "specialValueImages"]
       : textType === "image"
         ? ["type", "slot", "x", "y", "prefix", "images"]
         : [
@@ -423,13 +433,47 @@ function validatePresentation(symbol, value, states) {
     textType === "image-string"
       ? validateImageStringBindings(symbol, text.tiers, tiers.length)
       : [];
+  const specialValueImages =
+    textType === "image-string"
+      ? validateSpecialValueImages(symbol, text.specialValueImages)
+      : new Map();
   return {
     defaultValues,
     reelStateTextures,
     tiers,
     textImagePaths,
     imageStringBindings,
+    specialValueImages,
+    specialValueImagePaths: [...specialValueImages.values()],
   };
+}
+
+function validateSpecialValueImages(symbol, value) {
+  if (value === undefined) return new Map();
+  if (!Array.isArray(value)) {
+    throw new Error(
+      `${symbol}.valuePresentation.text.specialValueImages must be an array.`,
+    );
+  }
+  const mappings = new Map();
+  value.forEach((rawMapping, index) => {
+    const label = `${symbol}.valuePresentation.text.specialValueImages[${index}]`;
+    const mapping = assertRecord(rawMapping, label);
+    assertOnlyKnownKeys(mapping, label, ["value", "image"]);
+    if (!Number.isSafeInteger(mapping.value)) {
+      throw new Error(`${label}.value must be a safe integer.`);
+    }
+    if (mappings.has(mapping.value)) {
+      throw new Error(
+        `${symbol}.valuePresentation.text.specialValueImages values must be unique.`,
+      );
+    }
+    mappings.set(
+      mapping.value,
+      assertManifestImagePath(mapping.image, `${label}.image`),
+    );
+  });
+  return mappings;
 }
 
 function validateValueImagePaths(symbol, text, defaultValues) {
@@ -600,7 +644,7 @@ function resolveManifestResource(root, value, kind) {
   }[kind];
   if (
     kind === "imageStringGlyph"
-      ? ![".png", ".webp"].includes(extname(absolute))
+      ? ![".png", ".jpg", ".jpeg", ".webp"].includes(extname(absolute))
       : extname(absolute) !== expected
   ) {
     throw new Error(`${kind} path must end with ${expected}: ${value}.`);
