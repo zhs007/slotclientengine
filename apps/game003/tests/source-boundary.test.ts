@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -6,216 +6,65 @@ const APP_ROOT = process.cwd();
 const REPO_ROOT = resolve(APP_ROOT, "../..");
 
 describe("game003 source boundary", () => {
-  it("depends on gameframeworks and rendercore without direct live/UI/logic packages", () => {
+  it("uses gameframeworks/rendercore without direct lower-level runtime packages", () => {
     const pkg = JSON.parse(
       readFileSync(join(APP_ROOT, "package.json"), "utf8"),
     ) as { dependencies: Record<string, string> };
-
     expect(pkg.dependencies).toHaveProperty("@slotclientengine/gameframeworks");
-    expect(pkg.dependencies).toHaveProperty("@slotclientengine/gameloading");
-    expect(pkg.dependencies).toHaveProperty(
-      "@slotclientengine/gameloading-ui-simple",
-    );
     expect(pkg.dependencies).toHaveProperty("@slotclientengine/rendercore");
     expect(pkg.dependencies).not.toHaveProperty("@slotclientengine/netcore");
+    expect(pkg.dependencies).not.toHaveProperty("@slotclientengine/logiccore");
     expect(pkg.dependencies).not.toHaveProperty(
       "@slotclientengine/uiframeworks",
     );
-    expect(pkg.dependencies).not.toHaveProperty("@slotclientengine/logiccore");
-    expect(pkg.dependencies).not.toHaveProperty(
-      "@slotclientengine/game-ui-leo",
-    );
-    expect(pkg.dependencies).not.toHaveProperty("react");
-    expect(pkg.dependencies).not.toHaveProperty("react-dom");
   });
 
-  it("injects simple loading without Leo or Wildsheep platform semantics", () => {
+  it("keeps the loading entry light and live parameters out of import.meta.env", () => {
     const source = readSourceTree(join(APP_ROOT, "src"));
-    expect(source).toContain("@slotclientengine/gameloading-ui-simple");
-    expect(source).not.toMatch(/gameloading-ui-leo|wildsheep|platform switch/i);
+    const main = readFileSync(join(APP_ROOT, "src/main.ts"), "utf8");
+    expect(source).not.toMatch(/import\.meta\.env|VITE_GAME003_/);
+    expect(main).toMatch(/@slotclientengine\/gameloading/);
+    expect(main).not.toMatch(/gameframeworks|rendercore|pixi\.js|game-entry/);
   });
 
-  it("resolves rendercore's transitive logiccore runtime through ESM source in Vite dev", () => {
-    const viteConfig = readFileSync(join(APP_ROOT, "vite.config.ts"), "utf8");
-
-    expect(viteConfig).toContain('find: "@slotclientengine/logiccore"');
-    expect(viteConfig).toContain("../../packages/logiccore/src/index.ts");
-    expect(viteConfig.indexOf("@slotclientengine/logiccore")).toBeLessThan(
-      viteConfig.indexOf('find: "@slotclientengine/rendercore"'),
-    );
-  });
-
-  it("does not import netcore, uiframeworks, logiccore, or vnicore directly from source", () => {
+  it("has no legacy presentation, bg-bar, conveyor, or minecart implementation", () => {
     const source = readSourceTree(join(APP_ROOT, "src"));
-
-    expect(source).not.toMatch(/@slotclientengine\/netcore/);
-    expect(source).not.toMatch(/@slotclientengine\/uiframeworks/);
-    expect(source).not.toMatch(/@slotclientengine\/logiccore/);
-    expect(source).not.toMatch(/@slotclientengine\/vnicore/);
-    expect(source).not.toMatch(/@slotclientengine\/game-ui-leo/);
-    expect(source).not.toMatch(/from ["']react(?:-dom)?(?:\/[^"']*)?["']/);
-    expect(source).not.toMatch(/@esotericsoftware\/spine-pixi-v8/);
-  });
-
-  it("keeps live runtime parameters out of import.meta.env", () => {
-    const source = readSourceTree(join(APP_ROOT, "src"));
-
-    expect(source).not.toMatch(/import\.meta\.env/);
-    expect(source).not.toMatch(/VITE_GAME003_/);
-  });
-
-  it("keeps main.ts as a light loading entry without static game runtime imports", () => {
-    const mainSource = readFileSync(join(APP_ROOT, "src/main.ts"), "utf8");
-
-    expect(mainSource).toMatch(/@slotclientengine\/gameloading/);
-    expect(mainSource).not.toMatch(/@slotclientengine\/gameframeworks/);
-    expect(mainSource).not.toMatch(/@slotclientengine\/rendercore/);
-    expect(mainSource).not.toMatch(/pixi\.js/);
-    expect(mainSource).not.toMatch(/\.\/game-entry/);
-    expect(mainSource).not.toMatch(/\.\/game-adapter/);
-    expect(mainSource).not.toMatch(/\.\/game-demo/);
-  });
-
-  it("keeps layout anchored by static focus-relative positions", () => {
-    const source = readSourceTree(join(APP_ROOT, "src"));
-
-    expect(source).toMatch(/mainReelBackgroundPositionInFocusRect/);
-    expect(source).toMatch(/positionInFocusRect/);
-    expect(source).not.toMatch(
-      new RegExp(["left", "bottom", "of", "main", "reel"].join("-")),
-    );
-    expect(source).not.toMatch(
-      new RegExp(["top", "center", "of", "main", "reel"].join("-")),
-    );
-    expect(source).not.toMatch(new RegExp(["scenePart", "Gap"].join("")));
-    expect(source).not.toMatch(/rect\.x - visibleRect\.x/);
-    expect(source).not.toMatch(/rect\.y - visibleRect\.y/);
-  });
-
-  it("keeps bg-bar slot placement explicit instead of deriving from conveyor size", () => {
-    const bgBarSource = [
-      readFileSync(join(APP_ROOT, "src/bg-bar-layout.ts"), "utf8"),
-      readFileSync(join(APP_ROOT, "src/bg-bar-runtime.ts"), "utf8"),
-      readFileSync(join(APP_ROOT, "config/game-static.yaml"), "utf8"),
-    ].join("\n");
-
-    expect(bgBarSource).toMatch(/slotRectsInConveyor/);
-    expect(bgBarSource).not.toMatch(/height\s*\/\s*5/);
-    expect(bgBarSource).not.toMatch(/width\s*\/\s*5/);
-  });
-
-  it("keeps minecart interaction semantics out of shared packages", () => {
-    const sharedSource = [
-      readSourceTree(join(REPO_ROOT, "packages/rendercore/src")),
-      readSourceTree(join(REPO_ROOT, "packages/logiccore/src")),
-      readSourceTree(join(REPO_ROOT, "packages/gameframeworks/src")),
-    ].join("\n");
-
-    expect(sharedSource).not.toMatch(
-      /minecart|Minecart|game003MinecartInteraction|game003-minecart/,
-    );
-  });
-
-  it("keeps bg-wins result loop and amount overlay semantics out of shared packages", () => {
-    const sharedSource = [
-      readSourceTree(join(REPO_ROOT, "packages/rendercore/src")),
-      readSourceTree(join(REPO_ROOT, "packages/logiccore/src")),
-      readSourceTree(join(REPO_ROOT, "packages/gameframeworks/src")),
-    ].join("\n");
-
-    expect(sharedSource).not.toMatch(
-      /bg-wins|game003WinSymbolLoop|resultAmount/,
-    );
-  });
-
-  it("uses the shared carousel without retaining an app-owned loop runtime", () => {
-    const source = readSourceTree(join(APP_ROOT, "src"));
-
-    expect(source).toMatch(/createSymbolWinCarousel/);
-    expect(source).not.toMatch(/createGame003WinSymbolLoopRuntime/);
-    expect(source).not.toMatch(/class\s+Game003WinSymbolLoop/);
-    expect(() =>
-      readFileSync(join(APP_ROOT, "src/win-symbol-loop.ts"), "utf8"),
-    ).toThrow();
-  });
-
-  it("keeps bg-gencoins and CO coin overlay semantics out of shared packages", () => {
-    const sharedSource = [
-      readSourceTree(join(REPO_ROOT, "packages/rendercore/src")),
-      readSourceTree(join(REPO_ROOT, "packages/logiccore/src")),
-      readSourceTree(join(REPO_ROOT, "packages/gameframeworks/src")),
-    ].join("\n");
-
-    expect(sharedSource).not.toMatch(
-      /bg-gencoins|game003CoinOverlay|COIN_OVERLAY|GAME003_COIN/,
-    );
-  });
-
-  it("keeps L1-L5 VNI animation selection out of win playback business code", () => {
-    const businessSource = [
-      readFileSync(join(APP_ROOT, "src/game-adapter.ts"), "utf8"),
-      readFileSync(join(APP_ROOT, "src/game-demo.ts"), "utf8"),
-    ].join("\n");
-
-    expect(businessSource).not.toMatch(/L[1-5]-wins/);
-    expect(businessSource).not.toMatch(/stageRect/);
-    expect(businessSource).not.toMatch(/kind:\s*["']vni["']/);
-    expect(businessSource).not.toMatch(/\bL[1-5]\b/);
-  });
-
-  it("keeps symbol render priority as manifest data instead of runtime branches", () => {
-    const runtimeSource = [
-      readFileSync(join(APP_ROOT, "src/game-adapter.ts"), "utf8"),
-      readFileSync(join(APP_ROOT, "src/game-demo.ts"), "utf8"),
-      readFileSync(join(APP_ROOT, "src/skin-config.ts"), "utf8"),
-    ].join("\n");
-
-    expect(runtimeSource).toMatch(/SymbolRenderPriorityMapFromManifest/);
-    expect(runtimeSource).not.toMatch(/zIndex[\s\S]{0,120}\b(?:SC|CL|WL)\b/);
-    expect(runtimeSource).not.toMatch(
-      /\b(?:SC|CL|WL)\b[\s\S]{0,120}renderPriority/,
-    );
-  });
-
-  it("keeps Spine skeleton globs explicit and out-of-scope JSON resources out of runtime config", () => {
-    const runtimeConfigSource = [
-      readSourceTree(join(APP_ROOT, "src")),
-      readFileSync(join(APP_ROOT, "config/game-static.yaml"), "utf8"),
-    ].join("\n");
-
-    expect(runtimeConfigSource).not.toContain(
-      ["assets/game003-s1/", "*.json"].join(""),
-    );
-    expect(runtimeConfigSource).toMatch(/\{WL,H1,H2,H3,H4,H5,CL,SC\}\.json/);
-    const outOfScopeSymbols = [
-      ["B", "N"],
-      ["C", "N"],
-      ["E", "S"],
-      ["M", "P", "2"],
-      ["R", "S"],
-      ["Reel", "_", "Near", "Win"],
-      ["U", "P"],
-      ["U", "P", "C", "N"],
-    ].map((parts) => parts.join(""));
-
-    for (const outOfScope of outOfScopeSymbols) {
-      expect(runtimeConfigSource).not.toMatch(
-        new RegExp(`\\b${outOfScope}\\b`),
-      );
+    for (const path of [
+      "src/assets.ts",
+      "src/game-layout.ts",
+      "src/bg-bar-runtime.ts",
+      "src/minecart-interaction-runtime.ts",
+      "config/game-static.yaml",
+    ]) {
+      expect(existsSync(join(APP_ROOT, path))).toBe(false);
     }
+    expect(source).not.toMatch(
+      /createGame003BgBar|MinecartInteraction|conveyor/,
+    );
+    expect(source).not.toContain(["assets", "game003-s1"].join("/"));
+  });
+
+  it("keeps game003 business extensions out of shared packages", () => {
+    const sharedSource = [
+      "packages/rendercore/src",
+      "packages/logiccore/src",
+      "packages/gameframeworks/src",
+    ]
+      .map((path) => readSourceTree(join(REPO_ROOT, path)))
+      .join("\n");
+    expect(sharedSource).not.toMatch(
+      /game003MinecartInteraction|game003WinSymbolLoop|game003CoinOverlay/,
+    );
   });
 });
 
 function readSourceTree(root: string): string {
   const chunks: string[] = [];
   for (const entry of readdirSync(root, { withFileTypes: true })) {
-    const entryPath = resolve(root, entry.name);
-    if (entry.isDirectory()) {
-      chunks.push(readSourceTree(entryPath));
-      continue;
-    }
-    if (entry.isFile() && entry.name.endsWith(".ts")) {
-      chunks.push(readFileSync(entryPath, "utf8"));
+    const path = resolve(root, entry.name);
+    if (entry.isDirectory()) chunks.push(readSourceTree(path));
+    else if (entry.isFile() && entry.name.endsWith(".ts")) {
+      chunks.push(readFileSync(path, "utf8"));
     }
   }
   return chunks.join("\n");

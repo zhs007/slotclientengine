@@ -1,11 +1,4 @@
 import { describe, expect, it } from "vitest";
-import bigwinProject from "../../../assets/game003-s1/win-amount/bigwin.json";
-import megawinProject from "../../../assets/game003-s1/win-amount/megawin.json";
-import superwinProject from "../../../assets/game003-s1/win-amount/superwin.json";
-import {
-  GAME003_LOADING_RESOURCE_URLS,
-  game003ExpandGeneratedLoadingResourceUrls,
-} from "../src/generated/game-loading.generated.js";
 import {
   GAME003_MINECART2_RESOURCE_ID_PREFIX,
   GAME003_RUNTIME_MODULE_RESOURCE_ID,
@@ -13,94 +6,17 @@ import {
   readGame003Minecart2PackageFiles,
   readGame003RuntimeModule,
 } from "../src/loading-resources.js";
-import { craveSceneLayoutPhysicalResourceUrls as minecart2SceneLayoutPhysicalResourceUrls } from "../src/generated/minecart2-layout-resources.generated.js";
+import { craveSceneLayoutPhysicalResourceUrls as minecart2ResourceUrls } from "../src/generated/minecart2-layout-resources.generated.js";
 
 describe("game003 loading resources", () => {
-  it("combines generated asset resources with the dynamic runtime module", () => {
-    const resources = createGame003LoadingResources();
-    const ids = resources.map((resource) => resource.id);
-    const urls = resources
-      .map((resource) => resource.url)
-      .filter((url): url is string => typeof url === "string");
-
-    expect(ids.at(-1)).toBe(GAME003_RUNTIME_MODULE_RESOURCE_ID);
-    expect(resources.at(-1)?.load).toBeTypeOf("function");
-    expect(new Set(ids).size).toBe(ids.length);
-    expect(new Set(urls).size).toBe(urls.length);
-    expect(ids).toEqual(
-      expect.arrayContaining([
-        "game003-bg-landscape",
-        "game003-bg-portrait",
-        "game003-scene-parts:conveyor1.png",
-        "game003-scene-parts:conveyor2.png",
-        "game003-scene-parts:mainreelbg.png",
-        "game003-symbol-normal-pngs:SC.png",
-        "game003-symbol-spin-blur-pngs:SC.spinBlur.png",
-        "game003-symbol-disabled-pngs:SC.disabled.png",
-        "game003-symbol-vni-projects:L1-wins.json",
-        "game003-symbol-vni-projects:L2-wins.json",
-        "game003-symbol-vni-projects:L3-wins.json",
-        "game003-symbol-vni-projects:L4-wins.json",
-        "game003-symbol-vni-projects:L5-wins.json",
-        "game003-symbol-spine-skeletons:WL.json",
-        "game003-symbol-spine-skeletons:H1.json",
-        "game003-symbol-spine-skeletons:H5.json",
-        "game003-symbol-spine-skeletons:CL.json",
-        "game003-symbol-spine-skeletons:SC.json",
-        "game003-symbol-spine-atlas",
-        "game003-symbol-spine-texture",
-        "game003-bg-bar-symbol-pngs:up.png",
-        "game003-bg-bar-symbol-pngs:wild.png",
-        "game003-bg-bar-symbol-manifest",
-        "game003-minecart",
-        "game003-win-amount-manifest",
-        "game003-win-amount-vni-projects:bigwin.json",
-        "game003-win-amount-vni-projects:superwin.json",
-        "game003-win-amount-vni-projects:megawin.json",
-      ]),
-    );
-    for (const assetPrefix of [
-      "j1_asset",
-      "k_asset",
-      "q_asset",
-      "j_asset",
-      "10_asset",
-    ]) {
-      expect(
-        ids.some((id) =>
-          id.startsWith(`game003-symbol-vni-assets:${assetPrefix}`),
-        ),
-      ).toBe(true);
-    }
-    expect(
-      getReferencedWinAmountLoadingAssetIds().every((id) => ids.includes(id)),
-    ).toBe(true);
-    const referencedWinAmountAssetIds = [
-      ...getReferencedWinAmountLoadingAssetIds(),
-    ].sort();
-    expect(new Set(referencedWinAmountAssetIds).size).toBe(
-      referencedWinAmountAssetIds.length,
-    );
-    expect(
-      ids
-        .filter((id) => id.startsWith("game003-win-amount-vni-assets:"))
-        .sort(),
-    ).toEqual(referencedWinAmountAssetIds);
-    expect(
-      ids.some((id) => id.startsWith("game003-symbol-spine-skeletons:L1")),
-    ).toBe(false);
-    expect(
-      ids.some((id) => id.startsWith("game003-symbol-spine-skeletons:bg")),
-    ).toBe(false);
-    expect(ids).not.toContain("game003-symbol-normal-pngs:mainreelbg.png");
-  });
-
-  it("loads only the mapped minecart2 folder for skin 2", () => {
+  it("loads only the mapped minecart2 package and runtime module", () => {
     const resources = createGame003LoadingResources("2");
     const packageResources = resources.slice(0, -1);
+
     expect(resources.at(-1)?.id).toBe(GAME003_RUNTIME_MODULE_RESOURCE_ID);
+    expect(resources.at(-1)?.load).toBeTypeOf("function");
     expect(packageResources).toHaveLength(
-      Object.keys(minecart2SceneLayoutPhysicalResourceUrls).length,
+      Object.keys(minecart2ResourceUrls).length,
     );
     expect(
       packageResources.every(
@@ -109,65 +25,29 @@ describe("game003 loading resources", () => {
           resource.kind === "binary",
       ),
     ).toBe(true);
-    expect(
-      packageResources.some((resource) => resource.id === "game003-minecart"),
-    ).toBe(false);
+    expect(() => createGame003LoadingResources("1" as never)).toThrow(
+      /only supports skin "2"/,
+    );
+  });
 
+  it("reconstructs every physical package file and fails on gaps", () => {
+    const packageResources = createGame003LoadingResources().slice(0, -1);
     const loaded = new Map<string, unknown>(
       packageResources.map((resource) => [
         resource.id,
         new Uint8Array([1, 2, 3]).buffer,
       ]),
     );
-    const files = readGame003Minecart2PackageFiles(loaded);
-    expect([...files.keys()].sort()).toEqual(
-      Object.keys(minecart2SceneLayoutPhysicalResourceUrls).sort(),
+
+    expect([...readGame003Minecart2PackageFiles(loaded).keys()].sort()).toEqual(
+      Object.keys(minecart2ResourceUrls).sort(),
     );
     expect(() => readGame003Minecart2PackageFiles(new Map())).toThrow(
       /was not loaded/,
     );
   });
 
-  it("keeps generated glob expansion stable and fail-fast", () => {
-    const expanded = game003ExpandGeneratedLoadingResourceUrls(
-      [],
-      [
-        {
-          id: "group",
-          modules: {
-            "/assets/z.png": "/z.png",
-            "/assets/a.png": "/a.png",
-          },
-          weight: 4,
-        },
-      ],
-    );
-
-    expect(expanded).toEqual([
-      { id: "group:a.png", url: "/a.png", weight: 2 },
-      { id: "group:z.png", url: "/z.png", weight: 2 },
-    ]);
-    expect(() =>
-      game003ExpandGeneratedLoadingResourceUrls(
-        [{ id: "dup:asset.png", url: "/a.png" }],
-        [{ id: "dup", modules: { "/asset.png": "/b.png" } }],
-      ),
-    ).toThrow(/Duplicate loading resource id/);
-    expect(
-      game003ExpandGeneratedLoadingResourceUrls(
-        [{ id: "a", url: "/dup.png" }],
-        [{ id: "b", modules: { "/b.png": "/dup.png" } }],
-      ),
-    ).toEqual([{ id: "a", url: "/dup.png" }]);
-    expect(() =>
-      game003ExpandGeneratedLoadingResourceUrls(
-        [],
-        [{ id: "empty", modules: {} }],
-      ),
-    ).toThrow(/matched no files/);
-  });
-
-  it("exposes a validated runtime module resource", () => {
+  it("validates the dynamically loaded runtime module", () => {
     const runtime = {
       prepareGame003At99: async () => ({ liveSession: { disconnect() {} } }),
       enterGame003: async () => ({ destroy() {} }),
@@ -185,24 +65,8 @@ describe("game003 loading resources", () => {
     ).toThrow(/required exports/);
   });
 
-  it("does not expose runtime secrets through loading resource URLs", () => {
-    const serialized = JSON.stringify(GAME003_LOADING_RESOURCE_URLS);
-
-    expect(serialized).not.toMatch(/token/i);
-    expect(serialized).not.toMatch(/cookie/i);
-    expect(serialized).not.toMatch(/serverUrl/);
-    expect(serialized).not.toMatch(/gameserv/);
+  it("does not expose live credentials in resource URLs", () => {
+    const serialized = JSON.stringify(createGame003LoadingResources());
+    expect(serialized).not.toMatch(/token|cookie|serverUrl|gameserv/i);
   });
 });
-
-function getReferencedWinAmountLoadingAssetIds(): readonly string[] {
-  return [bigwinProject, superwinProject, megawinProject].flatMap((project) =>
-    project.assets.map((asset) => {
-      const filename = asset.path.split("/").at(-1);
-      if (!filename) {
-        throw new Error(`bad win amount asset path ${asset.path}`);
-      }
-      return `game003-win-amount-vni-assets:${filename}`;
-    }),
-  );
-}

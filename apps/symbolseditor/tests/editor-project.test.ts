@@ -25,6 +25,10 @@ import {
 } from "../src/model/editor-project.js";
 import { SymbolEditorStore } from "../src/model/editor-store.js";
 import { readCraveFixtureJson } from "./crave-fixture.js";
+import {
+  readMinecart2LogicalJson,
+  readMinecart2SymbolFixtureBytes,
+} from "../../../test-utils/minecart2-fixtures.js";
 
 const gameConfig = {
   paytable: {
@@ -34,10 +38,7 @@ const gameConfig = {
   symbolCodes: { B: 2, A: 1 },
   reels: { main: [[1, 2]] },
 };
-const imageBytes = () =>
-  new Uint8Array(
-    readFileSync(resolve(process.cwd(), "../../assets/game003-s1/H1.png")),
-  );
+const imageBytes = () => readMinecart2SymbolFixtureBytes("H1.png");
 const vniProjectBytes = () =>
   new TextEncoder().encode(
     JSON.stringify({
@@ -405,18 +406,21 @@ describe("symbol editor typed project", () => {
       },
       {
         id: "game003",
-        config: "../../../assets/gamecfg003/gameconfig.json",
-        manifest:
-          "../../../assets/game003-s1/symbol-state-textures.manifest.json",
+        config: null,
+        manifest: "minecart2",
       },
     ]) {
-      const rawGameConfig = JSON.parse(
-        readFileSync(new URL(fixture.config, import.meta.url), "utf8"),
-      );
-      const rawManifest = fixture.manifest
+      const rawGameConfig = fixture.config
         ? JSON.parse(
-            readFileSync(new URL(fixture.manifest, import.meta.url), "utf8"),
+            readFileSync(new URL(fixture.config, import.meta.url), "utf8"),
           )
+        : readMinecart2LogicalJson("gameconfig.json");
+      const rawManifest = fixture.manifest
+        ? fixture.manifest === "minecart2"
+          ? readMinecart2LogicalJson("symbol-state-textures.manifest.json")
+          : JSON.parse(
+              readFileSync(new URL(fixture.manifest, import.meta.url), "utf8"),
+            )
         : readCraveFixtureJson("symbol-state-textures.manifest.json");
       const project = createFromImportedPackage({
         packageManifest: {

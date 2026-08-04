@@ -14,8 +14,8 @@ gameConfig: assets/gamecfg003/gameconfig.json
 
 `symbols.vniProjectGlob` 和 `symbols.vniAssetGlob` 是可选字段，用于把 manifest 驱动的 VNI symbol 动画资源生成到静态配置模块：
 
-- `vniProjectGlob` 只允许明确目录下的 JSON project glob，例如 `assets/game003-s1/*-wins.json`。
-- `vniAssetGlob` 只允许明确目录下的图片 asset glob，例如 `assets/game003-s1/assets/*.{png,jpg,jpeg,webp}`。
+- `vniProjectGlob` 只允许明确目录下的 JSON project glob，例如 `assets/sample-skin/*-wins.json`。
+- `vniAssetGlob` 只允许明确目录下的图片 asset glob，例如 `assets/sample-skin/assets/*.{png,jpg,jpeg,webp}`。
 - 这两个 glob 只负责静态打包和后续 manifest 解析，不把 token、cookie、服务器真实轮带或玩家下注输入放进 YAML。
 
 ## CLI

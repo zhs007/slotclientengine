@@ -1,15 +1,6 @@
 import rawGame002GameConfig from "../../../assets/gamecfg002/gameconfig.json";
-import rawGame003GameConfig from "../../../assets/gamecfg003/gameconfig.json";
 import craveAssetsMap from "../../../assets/crave/assets.map.json";
-import game003S1L1WinsProject from "../../../assets/game003-s1/L1-wins.json";
-import game003S1L2WinsProject from "../../../assets/game003-s1/L2-wins.json";
-import game003S1L3WinsProject from "../../../assets/game003-s1/L3-wins.json";
-import game003S1L4WinsProject from "../../../assets/game003-s1/L4-wins.json";
-import game003S1L5WinsProject from "../../../assets/game003-s1/L5-wins.json";
-import game003S1SpineAtlasRaw from "../../../assets/game003-s1/Symbol.atlas?raw";
-import game003S1SpineTextureUrl from "../../../assets/game003-s1/Symbol.png?url";
-import game003BgBarStateTextureManifest from "../../../assets/game003-s1/bg-bar-symbol-state-textures.manifest.json";
-import game003S1StateTextureManifest from "../../../assets/game003-s1/symbol-state-textures.manifest.json";
+import minecart2AssetsMap from "../../../assets/minecart2/assets.map.json";
 import {
   createDefaultSymbolAnimationResolver,
   createSymbolManifestAnimationResolver,
@@ -35,7 +26,7 @@ import {
   DEFAULT_VIEWER_SEQUENCE,
 } from "./viewer-sequence.js";
 
-export type SymbolSetId = "game002-s3" | "game003-s1" | "game003-bg-bar";
+export type SymbolSetId = "game002-s3" | "game003-s1";
 
 export interface SymbolSetConfig {
   readonly id: SymbolSetId;
@@ -58,12 +49,6 @@ export interface SymbolSetConfig {
   readonly animationResolver: SymbolAnimationResolver;
   readonly symbolValuePresentationResources?: SymbolValuePresentationResourceMap;
 }
-
-const game003S1Modules = import.meta.glob("../../../assets/game003-s1/*.png", {
-  eager: true,
-  import: "default",
-  query: "?url",
-}) as Record<string, string>;
 
 const craveJsonPhysicalModules = import.meta.glob(
   "../../../assets/crave/assets/*.json",
@@ -124,57 +109,44 @@ const symbolValueImageStringImageModules = filterCraveModules(
   craveLogicalImageModules,
   /^[0-9]-1\.webp$/u,
 );
-
-const game003BgBarModules = import.meta.glob(
-  "../../../assets/game003-s1/{wild,up}.png",
-  {
-    eager: true,
-    import: "default",
-    query: "?url",
-  },
-) as Record<string, string>;
-
-const game003S1VniProjectGlobModules = import.meta.glob(
-  "../../../assets/game003-s1/*-wins.json",
-  {
-    eager: true,
-    import: "default",
-  },
+const minecart2JsonPhysicalModules = import.meta.glob(
+  "../../../assets/minecart2/assets/*.json",
+  { eager: true, import: "default" },
 ) as Record<string, unknown>;
-
-const game003S1VniProjectModules = Object.freeze({
-  ...game003S1VniProjectGlobModules,
-  "../../../assets/game003-s1/L1-wins.json": game003S1L1WinsProject,
-  "../../../assets/game003-s1/L2-wins.json": game003S1L2WinsProject,
-  "../../../assets/game003-s1/L3-wins.json": game003S1L3WinsProject,
-  "../../../assets/game003-s1/L4-wins.json": game003S1L4WinsProject,
-  "../../../assets/game003-s1/L5-wins.json": game003S1L5WinsProject,
-});
-
-const game003S1VniAssetModules = import.meta.glob(
-  "../../../assets/game003-s1/assets/*.{png,jpg,jpeg,webp}",
-  {
-    eager: true,
-    import: "default",
-    query: "?url",
-  },
+const minecart2AtlasPhysicalModules = import.meta.glob(
+  "../../../assets/minecart2/assets/*.atlas",
+  { eager: true, import: "default", query: "?raw" },
 ) as Record<string, string>;
-
-const game003S1SpineSkeletonModules = import.meta.glob(
-  "../../../assets/game003-s1/{WL,H1,H2,H3,H4,H5,CL,SC}.json",
-  {
-    eager: true,
-    import: "default",
-  },
-) as Record<string, unknown>;
-
-const game003S1SpineAtlasModules = Object.freeze({
-  "../../../assets/game003-s1/Symbol.atlas": game003S1SpineAtlasRaw,
-} as const satisfies Record<string, string>);
-
-const game003S1SpineTextureModules = Object.freeze({
-  "../../../assets/game003-s1/Symbol.png": game003S1SpineTextureUrl,
-} as const satisfies Record<string, string>);
+const minecart2ImagePhysicalModules = import.meta.glob(
+  "../../../assets/minecart2/assets/*.{webp,png,jpg,jpeg}",
+  { eager: true, import: "default", query: "?url" },
+) as Record<string, string>;
+const game003S1JsonModules = mapPackageLogicalModules(
+  minecart2AssetsMap,
+  minecart2JsonPhysicalModules,
+);
+const game003S1SpineAtlasModules = mapPackageLogicalModules(
+  minecart2AssetsMap,
+  minecart2AtlasPhysicalModules,
+);
+const game003S1Modules = mapPackageLogicalModules(
+  minecart2AssetsMap,
+  minecart2ImagePhysicalModules,
+);
+const game003S1StateTextureManifest = requirePackageModule(
+  game003S1JsonModules,
+  "symbol-state-textures.manifest.json",
+  "Minecart2",
+);
+const rawGame003GameConfig = requirePackageModule(
+  game003S1JsonModules,
+  "gameconfig.json",
+  "Minecart2",
+);
+const game003S1VniProjectModules = game003S1JsonModules;
+const game003S1VniAssetModules = game003S1Modules;
+const game003S1SpineSkeletonModules = game003S1JsonModules;
+const game003S1SpineTextureModules = game003S1Modules;
 
 const manifestFallbackAnimationResolver =
   createDefaultSymbolAnimationResolver();
@@ -189,13 +161,6 @@ const GAME003_S1_DISPLAYABLE_SYMBOLS = getSymbolDisplaySymbolsFromManifest(
 const GAME002_S3_DISPLAYABLE_SYMBOLS = getSymbolDisplaySymbolsFromManifest(
   game002S3StateTextureManifest,
   { requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES },
-);
-
-const GAME003_BG_BAR_DISPLAYABLE_SYMBOLS = getSymbolDisplaySymbolsFromManifest(
-  game003BgBarStateTextureManifest,
-  {
-    requiredStates: [],
-  },
 );
 
 export const SYMBOL_SET_CONFIGS = Object.freeze([
@@ -273,40 +238,6 @@ export const SYMBOL_SET_CONFIGS = Object.freeze([
     requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
     animationResolver: createLazyGame003AnimationResolver(),
   }),
-  Object.freeze({
-    id: "game003-bg-bar",
-    label: "game003-bg-bar",
-    catalogKind: "standalone",
-    symbolScales: createSymbolScaleMapFromManifest({
-      manifest: game003BgBarStateTextureManifest,
-      displaySymbols: GAME003_BG_BAR_DISPLAYABLE_SYMBOLS,
-      requiredStates: [],
-      requireExplicitScale: true,
-    }),
-    symbolRenderPriorities: createSymbolRenderPriorityMapFromManifest({
-      manifest: game003BgBarStateTextureManifest,
-      displaySymbols: GAME003_BG_BAR_DISPLAYABLE_SYMBOLS,
-      requiredStates: [],
-    }),
-    displaySymbols: GAME003_BG_BAR_DISPLAYABLE_SYMBOLS,
-    modules: game003BgBarModules,
-    manifest: game003BgBarStateTextureManifest,
-    statePreset: createSymbolStatePresetFromManifest(
-      game003BgBarStateTextureManifest,
-    ),
-    defaultSequence: DEFAULT_VIEWER_SEQUENCE,
-    requiredStates: [],
-    animationResolver: createSymbolManifestAnimationResolver({
-      manifest: game003BgBarStateTextureManifest,
-      requiredStates: [],
-      vniProjectModules: {},
-      vniAssetModules: {},
-      spineSkeletonModules: {},
-      spineAtlasModules: {},
-      spineTextureModules: {},
-      fallback: manifestFallbackAnimationResolver,
-    }),
-  }),
 ] satisfies readonly SymbolSetConfig[]);
 
 export function getSymbolSetConfig(id: string): SymbolSetConfig {
@@ -329,6 +260,37 @@ function mapCraveLogicalModules<T>(
     },
   );
   return Object.freeze(Object.fromEntries(entries));
+}
+
+function mapPackageLogicalModules<T>(
+  assetsMap: {
+    readonly files: Readonly<Record<string, { readonly path: string }>>;
+  },
+  physicalModules: Readonly<Record<string, T>>,
+): Record<string, T> {
+  const entries = Object.entries(assetsMap.files).flatMap(
+    ([logicalKey, entry]) => {
+      const physical = Object.entries(physicalModules).find(([path]) =>
+        path.endsWith(`/${entry.path}`),
+      )?.[1];
+      return physical === undefined ? [] : [[logicalKey, physical] as const];
+    },
+  );
+  return Object.freeze(Object.fromEntries(entries));
+}
+
+function requirePackageModule<T>(
+  modules: Readonly<Record<string, T>>,
+  logicalKey: string,
+  label: string,
+): T {
+  const value = modules[logicalKey];
+  if (value === undefined) {
+    throw new Error(
+      `${label} logical resource "${logicalKey}" is unavailable.`,
+    );
+  }
+  return value;
 }
 
 function filterCraveModules<T>(

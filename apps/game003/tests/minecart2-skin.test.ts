@@ -4,6 +4,10 @@ import { Assets, Texture, TextureSource } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
 import { createGame003SceneLayoutPresentation } from "../src/scene-layout-presentation.js";
 import { prepareGame003SkinConfig } from "../src/skin-config.js";
+import {
+  GAME003_DEFAULT_SCENE,
+  GAME003_SPIN_SCENE,
+} from "./fixtures/game003-gmi.js";
 
 const PACKAGE_ROOT = resolve(process.cwd(), "../../assets/minecart2");
 
@@ -71,7 +75,6 @@ describe("game003 minecart2 skin", () => {
         reelsName: "bg-reel01",
         initialMode: "BaseGame",
         awardCelebrationPopup: "award-celebration",
-        presentation: { kind: "scene-layout" },
       });
       expect(skin.resource.manifest.reels.main).toMatchObject({
         columns: 5,
@@ -105,6 +108,66 @@ describe("game003 minecart2 skin", () => {
         phase: "idle",
         displayedAmountRaw: 0,
       });
+
+      expect(
+        presentation.reelRuntime.applyScene(GAME003_DEFAULT_SCENE),
+      ).toHaveLength(5);
+      expect(presentation.reelRuntime.getFinalYs()).toHaveLength(5);
+      expect(
+        presentation.reelRuntime.createSpinPlan(GAME003_SPIN_SCENE).axes,
+      ).toHaveLength(5);
+      presentation.reelRuntime.spinToScene(GAME003_SPIN_SCENE);
+      expect(presentation.reelRuntime.getTargetScene()).toEqual(
+        GAME003_SPIN_SCENE,
+      );
+      expect(presentation.reelRuntime.isSpinning()).toBe(true);
+      let update = presentation.reelRuntime.update(0.1);
+      for (let index = 0; index < 200 && !update.completed; index += 1) {
+        update = presentation.reelRuntime.update(0.1);
+      }
+      expect(update.completed).toBe(true);
+      expect(update.stoppedAxes).toEqual([0, 1, 2, 3, 4]);
+      expect(presentation.reelRuntime.getCurrentScene()).toEqual(
+        GAME003_SPIN_SCENE,
+      );
+      expect(presentation.reelRuntime.getTargetScene()).toBeNull();
+
+      presentation.reelRuntime.requestVisibleSymbolStates(
+        [{ x: 0, y: 0 }],
+        "normal",
+      );
+      expect(
+        presentation.reelRuntime.getVisibleSymbolStateSnapshots([
+          { x: 0, y: 0 },
+        ]),
+      ).toHaveLength(1);
+      presentation.reelRuntime.applyLayout({
+        rawReelsContentWidth: 884,
+        rawReelsContentHeight: 650,
+        x: 1,
+        y: 2,
+        stageVisibleFrame: { x: 0, y: 0, width: 884, height: 650 },
+        viewportVisibleFrame: { x: 0, y: 0, width: 884, height: 650 },
+      });
+      expect(presentation.reelRuntime.layerLayout).toMatchObject({
+        x: 1,
+        y: 2,
+      });
+
+      presentation.winAmountPlayer.start({
+        betAmountRaw: 10,
+        winAmountRaw: 500,
+      });
+      expect(presentation.winAmountPlayer.isPlaying()).toBe(true);
+      expect(presentation.winAmountPlayer.update(0)).toMatchObject({
+        phase: "tier-counting",
+        activeTierId: "base",
+      });
+      presentation.winAmountPlayer.requestAdvance();
+      presentation.winAmountPlayer.requestDismiss();
+      presentation.winAmountPlayer.dismissImmediately();
+      presentation.winAmountPlayer.applyLayout({} as never);
+      presentation.winAmountPlayer.destroy();
     } finally {
       presentation?.destroy();
       await result.resourceOwner.destroy();

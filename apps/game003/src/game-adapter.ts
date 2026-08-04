@@ -1,4 +1,4 @@
-import { Application, Assets, Container, Sprite, type Texture } from "pixi.js";
+import { Application, Container } from "pixi.js";
 import type {
   GameLogic,
   SlotGameAdapter,
@@ -9,28 +9,15 @@ import type {
 } from "@slotclientengine/gameframeworks";
 import {
   createSymbolWinCarousel,
-  type PreparedSymbolWinCarousel,
-  type SymbolAssetMap,
-  type SymbolWinCarousel,
   type CreateSymbolWinCarouselOptions,
+  type PreparedSymbolWinCarousel,
+  type SymbolWinCarousel,
   type VisibleSymbolPresentationTarget,
 } from "@slotclientengine/rendercore";
 import type {
   WinAmountAnimationPhase,
   WinAmountAnimationPlayer,
 } from "@slotclientengine/rendercore/win-amount";
-import {
-  createGame003BgBarSymbolAssetMapFromModules,
-  createGame003SymbolAssetMapFromModules,
-  loadGame003BgBarSymbolTextures,
-  loadGame003SymbolTextures,
-} from "./assets.js";
-import { createGame003BgBarLayout } from "./bg-bar-layout.js";
-import {
-  createGame003BgBarRuntime,
-  type Game003BgBarRuntime,
-} from "./bg-bar-runtime.js";
-import { createGame003BgBarSpinPlan } from "./bg-bar-sequence.js";
 import {
   createGame003CoinOverlayRuntime,
   type Game003CoinOverlayRuntime,
@@ -39,25 +26,15 @@ import {
   createGame003CoinOverlayItems,
   type Game003CoinOverlayItem,
 } from "./coin-overlay-sequence.js";
-import { GAME003_STATIC_CONFIG } from "./generated/game-static.generated.js";
 import {
-  GAME003_ASSET_SIZE,
-  createGame003Layout,
-  createGame003ReelLayerLayout,
-  type Game003Layout,
-} from "./game-layout.js";
-import { getGame003GeneratedLoadingResourceUrl } from "./generated-loading-url.js";
-import { createGame003MinecartInteractionLayout } from "./minecart-interaction-layout.js";
-import {
-  createGame003MinecartInteractionRuntime,
-  type Game003MinecartInteractionRuntime,
-} from "./minecart-interaction-runtime.js";
-import {
-  DEFAULT_GAME003_REEL_CONFIG,
   assertGame003ReelVisualMatchesTarget,
-  createGame003ReelRuntime,
   type Game003ReelRuntime,
 } from "./game-demo.js";
+import { formatServerAmount } from "./money.js";
+import {
+  createGame003SceneLayoutPresentation,
+  type Game003SceneLayoutPresentation,
+} from "./scene-layout-presentation.js";
 import { validateGame003Scene } from "./scene.js";
 import type { Game003SkinConfig } from "./skin-config.js";
 import {
@@ -65,19 +42,6 @@ import {
   resolveGame003WinResultAmount,
   validateGame003WinComponent,
 } from "./win-sequence.js";
-import {
-  createGame003WinAmountLayout,
-  createGame003WinAmountPlayer,
-} from "./win-amount-config.js";
-import { formatServerAmount } from "./money.js";
-import {
-  createGame003SceneLayoutPresentation,
-  type Game003SceneLayoutPresentation,
-} from "./scene-layout-presentation.js";
-import type {
-  Game003LegacySkinConfig,
-  Game003SceneLayoutSkinConfig,
-} from "./skin-config.js";
 
 export type Game003TickerSnapshot = { readonly deltaMS: number };
 export type Game003TickerListener = (ticker: Game003TickerSnapshot) => void;
@@ -103,66 +67,32 @@ export interface Game003PixiApplication {
   destroy(): void;
 }
 
-export interface Game003StaticTextures {
-  readonly landscapeBackground: Texture;
-  readonly portraitBackground: Texture;
-  readonly mainReelBackground: Texture;
-  readonly landscapeConveyor: Texture;
-  readonly portraitConveyor: Texture;
-  readonly minecart: Texture;
-}
-
 export interface Game003AdapterOptions {
   readonly skin: Game003SkinConfig;
   readonly createApplication?: () => Game003PixiApplication;
-  readonly loadStaticTextures?: () => Promise<Game003StaticTextures>;
-  readonly loadSymbolTextures?: () => Promise<SymbolAssetMap>;
-  readonly loadBgBarSymbolTextures?: () => Promise<SymbolAssetMap>;
-  readonly createRuntime?: (symbolAssets: SymbolAssetMap) => Game003ReelRuntime;
-  readonly createBgBarRuntime?: (
-    symbolAssets: SymbolAssetMap,
-  ) => Game003BgBarRuntime;
-  readonly createMinecartInteractionRuntime?: (
-    minecartTexture: Texture,
-    symbolAssets: SymbolAssetMap,
-  ) => Game003MinecartInteractionRuntime;
   readonly createCoinOverlayRuntime?: (
     reelRuntime: Game003ReelRuntime,
   ) => Game003CoinOverlayRuntime;
-  readonly createWinAmountPlayer?: (
-    layout: Game003Layout,
-  ) => WinAmountAnimationPlayer;
   readonly createSymbolWinCarousel?: (
     options: CreateSymbolWinCarouselOptions,
   ) => SymbolWinCarousel;
   readonly createSceneLayoutPresentation?: (
-    skin: Game003SceneLayoutSkinConfig,
+    skin: Game003SkinConfig,
   ) => Promise<Game003SceneLayoutPresentation>;
 }
 
 interface PendingAnimation {
   readonly targetScene: ReturnType<typeof validateGame003Scene>;
   readonly coinOverlayItems: readonly Game003CoinOverlayItem[];
+  readonly preparedWinCarousel: PreparedSymbolWinCarousel;
+  readonly winAmountExpected: boolean;
+  readonly betAmountRaw: number;
+  readonly winAmountRaw: number;
   phase: "spinning" | "win-sequence";
-  preparedWinCarousel: PreparedSymbolWinCarousel;
   winSequenceComplete: boolean;
-  winAmountExpected: boolean;
   winAmountPlaybackComplete: boolean;
-  lastWinAmountPhase?: WinAmountAnimationPhase;
-  bgBarExpected: boolean;
-  minecartExitStarted: boolean;
-  minecartReturnExpected: boolean;
-  minecartReturnStarted: boolean;
-  betAmountRaw: number;
-  winAmountRaw: number;
   resolve(): void;
   reject(error: Error): void;
-}
-
-interface Game003WorldSprites {
-  readonly background: Sprite;
-  readonly mainReelBackground: Sprite;
-  readonly conveyor: Sprite;
 }
 
 const GAME003_MAX_TICK_DELTA_SECONDS = 1 / 30;
@@ -176,36 +106,17 @@ export function createGame003Adapter(
 class Game003PixiAdapter implements SlotGameAdapter {
   readonly #skin: Game003SkinConfig;
   readonly #createApplication: () => Game003PixiApplication;
-  readonly #loadStaticTextures: () => Promise<Game003StaticTextures>;
-  readonly #loadSymbolTextures: () => Promise<SymbolAssetMap>;
-  readonly #loadBgBarSymbolTextures: () => Promise<SymbolAssetMap>;
-  readonly #createRuntime: (symbolAssets: SymbolAssetMap) => Game003ReelRuntime;
-  readonly #createBgBarRuntime: (
-    symbolAssets: SymbolAssetMap,
-  ) => Game003BgBarRuntime;
-  readonly #createMinecartInteractionRuntime: (
-    minecartTexture: Texture,
-    symbolAssets: SymbolAssetMap,
-  ) => Game003MinecartInteractionRuntime;
   readonly #createCoinOverlayRuntime: (
     reelRuntime: Game003ReelRuntime,
   ) => Game003CoinOverlayRuntime;
-  readonly #createWinAmountPlayer: (
-    layout: Game003Layout,
-  ) => WinAmountAnimationPlayer;
   readonly #createSymbolWinCarousel: (
     options: CreateSymbolWinCarouselOptions,
   ) => SymbolWinCarousel;
   readonly #createSceneLayoutPresentation: (
-    skin: Game003SceneLayoutSkinConfig,
+    skin: Game003SkinConfig,
   ) => Promise<Game003SceneLayoutPresentation>;
   #app: Game003PixiApplication | null = null;
-  #staticTextures: Game003StaticTextures | null = null;
-  #worldLayer: Container | null = null;
-  #worldSprites: Game003WorldSprites | null = null;
   #runtime: Game003ReelRuntime | null = null;
-  #bgBarRuntime: Game003BgBarRuntime | null = null;
-  #minecartRuntime: Game003MinecartInteractionRuntime | null = null;
   #coinOverlayRuntime: Game003CoinOverlayRuntime | null = null;
   #winAmountPlayer: WinAmountAnimationPlayer | null = null;
   #winSymbolLoopRuntime: SymbolWinCarousel | null = null;
@@ -218,50 +129,6 @@ class Game003PixiAdapter implements SlotGameAdapter {
     this.#skin = options.skin;
     this.#createApplication =
       options.createApplication ?? createPixiApplication;
-    this.#loadStaticTextures =
-      options.loadStaticTextures ??
-      (() => loadStaticTextures(requireLegacySkin(this.#skin)));
-    this.#loadSymbolTextures =
-      options.loadSymbolTextures ??
-      (() => loadSymbolTextures(requireLegacySkin(this.#skin)));
-    this.#loadBgBarSymbolTextures =
-      options.loadBgBarSymbolTextures ??
-      (() => loadBgBarSymbolTextures(requireLegacySkin(this.#skin)));
-    this.#createRuntime =
-      options.createRuntime ??
-      ((symbolAssets) =>
-        createGame003ReelRuntime({
-          rawGameConfig: GAME003_STATIC_CONFIG.gameConfig,
-          symbolAssets,
-          config: {
-            ...DEFAULT_GAME003_REEL_CONFIG,
-            kind: "normal",
-            emptySymbols: requireLegacySkin(this.#skin).emptySymbols,
-            texturedSymbols: requireLegacySkin(this.#skin).displaySymbols,
-            missingAssetLabel: this.#skin.label,
-            symbolScales: requireLegacySkin(this.#skin).symbolScales,
-            symbolRenderPriorities: requireLegacySkin(this.#skin)
-              .symbolRenderPriorities,
-            animationResolver: requireLegacySkin(this.#skin)
-              .symbolAnimationResolver,
-          },
-        }));
-    this.#createBgBarRuntime =
-      options.createBgBarRuntime ??
-      ((symbolAssets) =>
-        createGame003BgBarRuntime({
-          config: requireLegacySkin(this.#skin).bgBar,
-          symbolAssets,
-        }));
-    this.#createMinecartInteractionRuntime =
-      options.createMinecartInteractionRuntime ??
-      ((minecartTexture, symbolAssets) =>
-        createGame003MinecartInteractionRuntime({
-          config: requireLegacySkin(this.#skin).minecartInteraction,
-          bgBarConfig: requireLegacySkin(this.#skin).bgBar,
-          minecartTexture,
-          symbolAssets,
-        }));
     this.#createCoinOverlayRuntime =
       options.createCoinOverlayRuntime ??
       ((reelRuntime) =>
@@ -269,8 +136,6 @@ class Game003PixiAdapter implements SlotGameAdapter {
           reelRuntime,
           config: this.#skin.coinOverlay,
         }));
-    this.#createWinAmountPlayer =
-      options.createWinAmountPlayer ?? createGame003WinAmountPlayer;
     this.#createSymbolWinCarousel =
       options.createSymbolWinCarousel ?? createSymbolWinCarousel;
     this.#createSceneLayoutPresentation =
@@ -282,7 +147,6 @@ class Game003PixiAdapter implements SlotGameAdapter {
     if (this.#app) {
       throw new Error("game003 adapter is already mounted.");
     }
-
     const app = this.#createApplication();
     const initialViewport = context.getViewport();
     await app.init({
@@ -294,94 +158,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
     });
     context.gameLayer.replaceChildren(app.canvas);
 
-    if (this.#skin.presentation.kind === "scene-layout") {
-      await this.#mountSceneLayout(context, app, initialViewport);
-      return;
-    }
-    const legacySkin = requireLegacySkin(this.#skin);
-    const layout = createGame003Layout({
-      viewportSize: initialViewport.frameDesignSize,
-    });
-    const [staticTextures, symbolTextures, bgBarSymbolTextures] =
-      await Promise.all([
-        this.#loadStaticTextures(),
-        this.#loadSymbolTextures(),
-        this.#loadBgBarSymbolTextures(),
-      ]);
-    const runtime = this.#createRuntime(symbolTextures);
-    runtime.applyLayout(createGame003ReelLayerLayout(runtime.layout, layout));
-    const bgBarRuntime = this.#createBgBarRuntime(bgBarSymbolTextures);
-    bgBarRuntime.applyLayout(
-      createGame003BgBarLayout({ layout, config: legacySkin.bgBar }),
-    );
-    const minecartRuntime = this.#createMinecartInteractionRuntime(
-      staticTextures.minecart,
-      bgBarSymbolTextures,
-    );
-    minecartRuntime.applyLayout(
-      createGame003MinecartInteractionLayout({
-        layout,
-        config: legacySkin.minecartInteraction,
-      }),
-    );
-    const winAmountPlayer = this.#createWinAmountPlayer(layout);
-    const coinOverlayRuntime = this.#createCoinOverlayRuntime(runtime);
-    const winSymbolLoopRuntime = this.#createSymbolWinCarousel({
-      target: runtime,
-      resolveAmount: resolveGame003WinResultAmount,
-      validateComponent: validateGame003WinComponent,
-      formatAmount: formatServerAmount,
-      cyclePauseSeconds: this.#skin.winSymbolLoop.cyclePauseSeconds,
-      amountText: this.#skin.winSymbolLoop.resultAmount,
-    });
-
-    const worldLayer = new Container();
-    const worldSprites = createWorldSprites(staticTextures, layout);
-    worldLayer.addChild(
-      worldSprites.background,
-      worldSprites.conveyor,
-      bgBarRuntime.container,
-      worldSprites.mainReelBackground,
-      runtime.mainReelsLayer,
-      coinOverlayRuntime.container,
-      winSymbolLoopRuntime.container,
-      minecartRuntime.container,
-      winAmountPlayer.container,
-    );
-    app.stage.addChild(worldLayer);
-
-    app.ticker.add(this.#onTick);
-    this.#app = app;
-    this.#staticTextures = staticTextures;
-    this.#worldLayer = worldLayer;
-    this.#worldSprites = worldSprites;
-    this.#runtime = runtime;
-    this.#bgBarRuntime = bgBarRuntime;
-    this.#minecartRuntime = minecartRuntime;
-    this.#coinOverlayRuntime = coinOverlayRuntime;
-    this.#winAmountPlayer = winAmountPlayer;
-    this.#winSymbolLoopRuntime = winSymbolLoopRuntime;
-    const requestWinAmountAdvance = () => {
-      this.#winAmountPlayer?.requestAdvance();
-    };
-    app.canvas.addEventListener("pointerdown", requestWinAmountAdvance);
-    this.#disposeWinAmountAdvanceListener = () => {
-      app.canvas.removeEventListener("pointerdown", requestWinAmountAdvance);
-    };
-    this.#applyViewport(initialViewport);
-    this.#unsubscribeViewport = context.onViewportChange((viewport) => {
-      this.#applyViewport(viewport);
-    });
-  }
-
-  async #mountSceneLayout(
-    context: SlotGameMountContext,
-    app: Game003PixiApplication,
-    initialViewport: SlotGameViewportSnapshot,
-  ): Promise<void> {
-    const sceneLayoutSkin = requireSceneLayoutSkin(this.#skin);
-    const presentation =
-      await this.#createSceneLayoutPresentation(sceneLayoutSkin);
+    const presentation = await this.#createSceneLayoutPresentation(this.#skin);
     try {
       const runtime = presentation.reelRuntime;
       const coinOverlayRuntime = this.#createCoinOverlayRuntime(runtime);
@@ -398,14 +175,15 @@ class Game003PixiAdapter implements SlotGameAdapter {
         winSymbolLoopRuntime.container,
       );
       app.stage.addChild(presentation.packageRuntime.container);
-
       app.ticker.add(this.#onTick);
+
       this.#app = app;
       this.#runtime = runtime;
       this.#coinOverlayRuntime = coinOverlayRuntime;
       this.#winAmountPlayer = presentation.winAmountPlayer;
       this.#winSymbolLoopRuntime = winSymbolLoopRuntime;
       this.#sceneLayoutPresentation = presentation;
+
       const requestWinAmountAdvance = () => {
         this.#winAmountPlayer?.requestAdvance();
       };
@@ -419,6 +197,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
       });
     } catch (error) {
       presentation.destroy();
+      app.destroy();
       throw error;
     }
   }
@@ -426,13 +205,12 @@ class Game003PixiAdapter implements SlotGameAdapter {
   applyInitialState(state: SlotGameInitialState): void {
     const runtime = this.#requireRuntime();
     this.#requireCoinOverlayRuntime().clear();
-    if (state.defaultScene === undefined) {
-      return;
+    if (state.defaultScene !== undefined) {
+      runtime.applyScene(
+        validateGame003Scene(state.defaultScene, "live defaultScene"),
+        "live defaultScene",
+      );
     }
-    runtime.applyScene(
-      validateGame003Scene(state.defaultScene, "live defaultScene"),
-      "live defaultScene",
-    );
   }
 
   playSpin(logic: GameLogic): Promise<void> {
@@ -465,48 +243,30 @@ class Game003PixiAdapter implements SlotGameAdapter {
       scene: targetScene,
       componentNames: GAME003_WIN_COMPONENT_NAMES,
     });
-    const legacyPresentation = this.#skin.presentation.kind === "legacy";
-    const activeBgBarPlan = legacyPresentation
-      ? createGame003BgBarSpinPlan(logic)
-      : null;
-    const minecartReturnExpected =
-      activeBgBarPlan !== null && activeBgBarPlan.features[0] !== "normal";
     const betAmountRaw = logic.getBet() * logic.getLines();
     const winAmountRaw = logic.getTotalWin();
     this.#winSymbolLoopRuntime?.clear();
     this.#requireWinAmountPlayer().dismissImmediately();
-    const minecartExitStarted = legacyPresentation
-      ? this.#requireMinecartRuntime().startExitIfParked()
-      : false;
     runtime.spinToScene(targetScene, "spin main scene");
-    if (activeBgBarPlan) {
-      this.#requireBgBarRuntime().startSpin(activeBgBarPlan);
-    }
 
     return new Promise((resolve, reject) => {
       this.#pendingAnimation = {
         targetScene,
         coinOverlayItems,
-        phase: "spinning",
         preparedWinCarousel,
-        winSequenceComplete: preparedWinCarousel.groupCount === 0,
         winAmountExpected: winAmountRaw > 0,
-        winAmountPlaybackComplete: winAmountRaw <= 0,
-        bgBarExpected: activeBgBarPlan !== null,
-        minecartExitStarted,
-        minecartReturnExpected,
-        minecartReturnStarted: false,
         betAmountRaw,
         winAmountRaw,
+        phase: "spinning",
+        winSequenceComplete: preparedWinCarousel.groupCount === 0,
+        winAmountPlaybackComplete: winAmountRaw <= 0,
         resolve,
         reject,
       };
     });
   }
 
-  setFrameworkState(_state: SlotGameStateSnapshot): void {
-    return undefined;
-  }
+  setFrameworkState(_state: SlotGameStateSnapshot): void {}
 
   destroy(): void {
     this.#rejectPending(new Error("game003 adapter was destroyed."));
@@ -519,18 +279,11 @@ class Game003PixiAdapter implements SlotGameAdapter {
     this.#winSymbolLoopRuntime?.destroy();
     this.#winAmountPlayer?.destroy();
     this.#coinOverlayRuntime?.destroy();
-    this.#minecartRuntime?.destroy();
-    this.#bgBarRuntime?.destroy();
     this.#sceneLayoutPresentation?.destroy();
     this.#app?.canvas.remove();
     this.#app?.destroy();
     this.#app = null;
-    this.#staticTextures = null;
-    this.#worldLayer = null;
-    this.#worldSprites = null;
     this.#runtime = null;
-    this.#bgBarRuntime = null;
-    this.#minecartRuntime = null;
     this.#coinOverlayRuntime = null;
     this.#winAmountPlayer = null;
     this.#winSymbolLoopRuntime = null;
@@ -538,63 +291,40 @@ class Game003PixiAdapter implements SlotGameAdapter {
   }
 
   readonly #onTick: Game003TickerListener = (ticker) => {
-    if (!this.#runtime) {
-      return;
-    }
-
+    if (!this.#runtime) return;
     try {
       const deltaSeconds = normalizeTickerDeltaSeconds(ticker);
       const pending = this.#pendingAnimation;
-      if (!pending) {
-        this.#tickLingeringAnimations(deltaSeconds);
-      } else if (pending.phase === "spinning") {
-        this.#tickSpinPhase(deltaSeconds);
+      if (!pending) this.#tickLingeringAnimations(deltaSeconds);
+      else if (pending.phase === "spinning") {
+        this.#tickSpinPhase(deltaSeconds, pending);
       } else {
-        this.#tickWinSequencePhase(deltaSeconds);
+        this.#tickWinSequencePhase(deltaSeconds, pending);
       }
     } catch (error) {
       const normalizedError =
         error instanceof Error ? error : new Error(String(error));
       this.#app?.ticker.stop();
-      if (this.#pendingAnimation) {
-        this.#rejectPending(normalizedError);
-      } else {
-        throw normalizedError;
-      }
+      if (this.#pendingAnimation) this.#rejectPending(normalizedError);
+      else throw normalizedError;
     }
   };
 
   #tickLingeringAnimations(deltaSeconds: number): void {
-    if (this.#sceneLayoutPresentation) {
-      this.#requireRuntime().update(deltaSeconds);
+    this.#requireRuntime().update(deltaSeconds);
+    if (this.#winAmountPlayer?.isPlaying()) {
+      this.#winAmountPlayer.update(deltaSeconds);
     }
-    const player = this.#winAmountPlayer;
-    if (player?.isPlaying()) {
-      player.update(deltaSeconds);
-    }
-    const winSymbolLoop = this.#winSymbolLoopRuntime;
-    if (winSymbolLoop && winSymbolLoop.getSnapshot().phase !== "idle") {
-      winSymbolLoop.update(deltaSeconds);
+    const carousel = this.#winSymbolLoopRuntime;
+    if (carousel && carousel.getSnapshot().phase !== "idle") {
+      carousel.update(deltaSeconds);
     }
   }
 
-  #tickSpinPhase(deltaSeconds: number): void {
+  #tickSpinPhase(deltaSeconds: number, pending: PendingAnimation): void {
     const runtime = this.#requireRuntime();
-    const pending = this.#pendingAnimation;
-    if (!pending) {
-      return;
-    }
     const result = runtime.update(deltaSeconds);
-    if (
-      pending.bgBarExpected ||
-      pending.minecartExitStarted ||
-      pending.minecartReturnStarted
-    ) {
-      this.#tickBgBarAndMinecart(deltaSeconds, pending);
-    }
-    if (!result.completed) {
-      return;
-    }
+    if (!result.completed) return;
 
     assertGame003ReelVisualMatchesTarget(
       runtime.getVisualSnapshot(),
@@ -607,9 +337,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
         betAmountRaw: pending.betAmountRaw,
         winAmountRaw: pending.winAmountRaw,
       });
-      pending.winAmountPlaybackComplete = false;
     }
-
     pending.phase = "win-sequence";
     if (!pending.winSequenceComplete) {
       this.#requireWinSymbolLoopRuntime().start(pending.preparedWinCarousel);
@@ -617,134 +345,51 @@ class Game003PixiAdapter implements SlotGameAdapter {
     this.#completePendingIfReady(pending);
   }
 
-  #tickWinSequencePhase(deltaSeconds: number): void {
-    const pending = this.#pendingAnimation;
-    if (!pending) {
-      return;
+  #tickWinSequencePhase(deltaSeconds: number, pending: PendingAnimation): void {
+    this.#requireRuntime().update(deltaSeconds);
+    const carousel = this.#requireWinSymbolLoopRuntime();
+    if (carousel.getSnapshot().phase !== "idle") {
+      const result = carousel.update(deltaSeconds);
+      if (result.firstCycleComplete) pending.winSequenceComplete = true;
     }
-    if (this.#sceneLayoutPresentation) {
-      this.#requireRuntime().update(deltaSeconds);
-    }
-
-    const winSymbolLoop = this.#requireWinSymbolLoopRuntime();
-    if (winSymbolLoop.getSnapshot().phase !== "idle") {
-      const result = winSymbolLoop.update(deltaSeconds);
-      if (result.firstCycleComplete) {
-        pending.winSequenceComplete = true;
-      }
-    }
-
     if (pending.winAmountExpected && !pending.winAmountPlaybackComplete) {
       const result = this.#requireWinAmountPlayer().update(deltaSeconds);
-      pending.lastWinAmountPhase = result.phase;
       pending.winAmountPlaybackComplete = !isWinAmountBlockingSpin(
         result.phase,
       );
     }
-    if (
-      pending.bgBarExpected ||
-      pending.minecartExitStarted ||
-      pending.minecartReturnStarted
-    ) {
-      this.#tickBgBarAndMinecart(deltaSeconds, pending);
-    }
     this.#completePendingIfReady(pending);
   }
 
-  #tickBgBarAndMinecart(deltaSeconds: number, pending: PendingAnimation): void {
-    const minecartRuntime = this.#requireMinecartRuntime();
-    const minecartWasPlaying =
-      pending.minecartExitStarted || pending.minecartReturnStarted;
-    if (minecartWasPlaying) {
-      minecartRuntime.update(deltaSeconds);
-    }
-    if (!pending.bgBarExpected) {
-      return;
-    }
-
-    const bgBarResult = this.#requireBgBarRuntime().update(deltaSeconds);
-    const terminalFeature = bgBarResult.terminalFeatureCompleted;
-    if (terminalFeature !== undefined && terminalFeature !== "normal") {
-      if (minecartRuntime.isPlaying()) {
-        throw new Error(
-          "game003 minecart exit must complete before starting the next terminal feature.",
-        );
-      }
-      minecartRuntime.start(terminalFeature);
-      pending.minecartReturnStarted = true;
-      minecartRuntime.update(deltaSeconds);
-    }
-    if (
-      pending.minecartReturnExpected &&
-      bgBarResult.completed &&
-      !pending.minecartReturnStarted
-    ) {
-      throw new Error(
-        "game003 bg-bar completed without a terminal minecart feature event.",
-      );
-    }
-  }
-
-  #completePending(pending: PendingAnimation): void {
-    if (this.#pendingAnimation !== pending) {
-      return;
-    }
-    this.#pendingAnimation = null;
-    pending.resolve();
-  }
-
   #completePendingIfReady(pending: PendingAnimation): void {
-    if (!pending.winSequenceComplete) {
+    if (!pending.winSequenceComplete || !pending.winAmountPlaybackComplete) {
       return;
     }
-    if (pending.winAmountExpected && !pending.winAmountPlaybackComplete) {
-      return;
+    if (this.#pendingAnimation === pending) {
+      this.#pendingAnimation = null;
+      pending.resolve();
     }
-    if (pending.bgBarExpected && this.#requireBgBarRuntime().isPlaying()) {
-      return;
-    }
+  }
+
+  #applyViewport(viewport: SlotGameViewportSnapshot): void {
     if (
-      pending.minecartExitStarted &&
-      this.#requireMinecartRuntime().isPlaying()
+      !this.#app ||
+      !this.#sceneLayoutPresentation ||
+      !this.#coinOverlayRuntime
     ) {
-      return;
+      throw new Error("game003 adapter is not mounted.");
     }
-    if (
-      pending.minecartReturnExpected &&
-      (!pending.minecartReturnStarted ||
-        this.#requireMinecartRuntime().isPlaying())
-    ) {
-      return;
-    }
-    this.#completePending(pending);
+    this.#app.renderer.resize(
+      viewport.frameDesignSize.width,
+      viewport.frameDesignSize.height,
+    );
+    this.#sceneLayoutPresentation.applyViewport(viewport.frameDesignSize);
+    this.#coinOverlayRuntime.refresh();
   }
 
   #requireRuntime(): Game003ReelRuntime {
-    if (!this.#runtime) {
-      throw new Error("game003 adapter is not mounted.");
-    }
+    if (!this.#runtime) throw new Error("game003 adapter is not mounted.");
     return this.#runtime;
-  }
-
-  #requireWinAmountPlayer(): WinAmountAnimationPlayer {
-    if (!this.#winAmountPlayer) {
-      throw new Error("game003 adapter is not mounted.");
-    }
-    return this.#winAmountPlayer;
-  }
-
-  #requireBgBarRuntime(): Game003BgBarRuntime {
-    if (!this.#bgBarRuntime) {
-      throw new Error("game003 adapter is not mounted.");
-    }
-    return this.#bgBarRuntime;
-  }
-
-  #requireMinecartRuntime(): Game003MinecartInteractionRuntime {
-    if (!this.#minecartRuntime) {
-      throw new Error("game003 adapter is not mounted.");
-    }
-    return this.#minecartRuntime;
   }
 
   #requireCoinOverlayRuntime(): Game003CoinOverlayRuntime {
@@ -754,6 +399,13 @@ class Game003PixiAdapter implements SlotGameAdapter {
     return this.#coinOverlayRuntime;
   }
 
+  #requireWinAmountPlayer(): WinAmountAnimationPlayer {
+    if (!this.#winAmountPlayer) {
+      throw new Error("game003 adapter is not mounted.");
+    }
+    return this.#winAmountPlayer;
+  }
+
   #requireWinSymbolLoopRuntime(): SymbolWinCarousel {
     if (!this.#winSymbolLoopRuntime) {
       throw new Error("game003 adapter is not mounted.");
@@ -761,76 +413,9 @@ class Game003PixiAdapter implements SlotGameAdapter {
     return this.#winSymbolLoopRuntime;
   }
 
-  #applyViewport(viewport: SlotGameViewportSnapshot): void {
-    if (this.#sceneLayoutPresentation) {
-      if (
-        !this.#app ||
-        !this.#runtime ||
-        !this.#coinOverlayRuntime ||
-        !this.#winSymbolLoopRuntime
-      ) {
-        throw new Error("game003 adapter is not mounted.");
-      }
-      this.#app.renderer.resize(
-        viewport.frameDesignSize.width,
-        viewport.frameDesignSize.height,
-      );
-      this.#sceneLayoutPresentation.applyViewport(viewport.frameDesignSize);
-      this.#coinOverlayRuntime.refresh();
-      return;
-    }
-    if (
-      !this.#app ||
-      !this.#staticTextures ||
-      !this.#worldLayer ||
-      !this.#worldSprites ||
-      !this.#runtime ||
-      !this.#bgBarRuntime ||
-      !this.#minecartRuntime ||
-      !this.#coinOverlayRuntime ||
-      !this.#winSymbolLoopRuntime
-    ) {
-      throw new Error("game003 adapter is not mounted.");
-    }
-    const layout = createGame003Layout({
-      viewportSize: viewport.frameDesignSize,
-    });
-    this.#app.renderer.resize(
-      layout.viewportSize.width,
-      layout.viewportSize.height,
-    );
-    this.#worldLayer.position.set(layout.worldOffset.x, layout.worldOffset.y);
-    applyWorldSpriteLayout(this.#worldSprites, this.#staticTextures, layout);
-    this.#runtime.applyLayout(
-      createGame003ReelLayerLayout(this.#runtime.layout, layout),
-    );
-    this.#winSymbolLoopRuntime.container.position.set(
-      this.#runtime.layerLayout.x,
-      this.#runtime.layerLayout.y,
-    );
-    this.#coinOverlayRuntime.container.position.set(
-      this.#runtime.layerLayout.x,
-      this.#runtime.layerLayout.y,
-    );
-    this.#coinOverlayRuntime.refresh();
-    const legacySkin = requireLegacySkin(this.#skin);
-    this.#bgBarRuntime.applyLayout(
-      createGame003BgBarLayout({ layout, config: legacySkin.bgBar }),
-    );
-    this.#minecartRuntime.applyLayout(
-      createGame003MinecartInteractionLayout({
-        layout,
-        config: legacySkin.minecartInteraction,
-      }),
-    );
-    this.#winAmountPlayer?.applyLayout(createGame003WinAmountLayout(layout));
-  }
-
   #rejectPending(error: Error): void {
     const pending = this.#pendingAnimation;
-    if (!pending) {
-      return;
-    }
+    if (!pending) return;
     this.#pendingAnimation = null;
     pending.reject(error);
   }
@@ -858,174 +443,28 @@ function createPixiApplication(): Game003PixiApplication {
   return new Application() as unknown as Game003PixiApplication;
 }
 
-async function loadStaticTextures(
-  skin: Game003LegacySkinConfig,
-): Promise<Game003StaticTextures> {
-  const [
-    landscapeBackground,
-    portraitBackground,
-    mainReelBackground,
-    landscapeConveyor,
-    portraitConveyor,
-    minecart,
-  ] = await Promise.all([
-    loadTextureWithSize(
-      "game003 skin 1 bg1.jpg",
-      skin.landscapeBackgroundUrl,
-      GAME003_ASSET_SIZE.landscapeBackground,
-    ),
-    loadTextureWithSize(
-      "game003 skin 1 bg2.jpg",
-      skin.portraitBackgroundUrl,
-      GAME003_ASSET_SIZE.portraitBackground,
-    ),
-    loadTextureWithSize(
-      "game003 skin 1 mainreelbg.png",
-      skin.mainReelBackgroundUrl,
-      GAME003_ASSET_SIZE.mainReelBackground,
-    ),
-    loadTextureWithSize(
-      "game003 skin 1 conveyor1.png",
-      skin.landscapeConveyorUrl,
-      GAME003_ASSET_SIZE.landscapeConveyor,
-    ),
-    loadTextureWithSize(
-      "game003 skin 1 conveyor2.png",
-      skin.portraitConveyorUrl,
-      GAME003_ASSET_SIZE.portraitConveyor,
-    ),
-    loadTextureWithSize(
-      "game003 skin 1 minecart.png",
-      getGame003GeneratedLoadingResourceUrl(
-        skin.minecartInteraction.loadingResourceId,
-      ),
-      skin.minecartInteraction.imageSize,
-    ),
-  ]);
-  return Object.freeze({
-    landscapeBackground,
-    portraitBackground,
-    mainReelBackground,
-    landscapeConveyor,
-    portraitConveyor,
-    minecart,
-  });
-}
-
-async function loadSymbolTextures(
-  skin: Game003LegacySkinConfig,
-): Promise<SymbolAssetMap> {
-  const assetUrls = createGame003SymbolAssetMapFromModules({
-    modules: skin.symbolModules,
-    stateTextureManifest: skin.stateTextureManifest,
-    displaySymbols: skin.displaySymbols,
-  });
-  return loadGame003SymbolTextures(assetUrls);
-}
-
-async function loadBgBarSymbolTextures(
-  skin: Game003LegacySkinConfig,
-): Promise<SymbolAssetMap> {
-  const assetUrls = createGame003BgBarSymbolAssetMapFromModules({
-    modules: skin.bgBar.symbolModules,
-    stateTextureManifest: skin.bgBar.stateTextureManifest,
-    displaySymbols: skin.bgBar.displaySymbols,
-  });
-  return loadGame003BgBarSymbolTextures(assetUrls);
-}
-
-async function loadTextureWithSize(
-  label: string,
-  url: string,
-  expected: { readonly width: number; readonly height: number },
-): Promise<Texture> {
-  const texture = await Assets.load<Texture>(url);
-  const width =
-    texture.width || texture.source?.width || texture.orig?.width || 0;
-  const height =
-    texture.height || texture.source?.height || texture.orig?.height || 0;
-  if (width !== expected.width || height !== expected.height) {
-    throw new Error(
-      `${label} size must be ${expected.width} x ${expected.height}, got ${width} x ${height}.`,
-    );
-  }
-  return texture;
-}
-
-function createWorldSprites(
-  textures: Game003StaticTextures,
-  layout: Game003Layout,
-): Game003WorldSprites {
-  const background = new Sprite(textures.landscapeBackground);
-  const mainReelBackground = new Sprite(textures.mainReelBackground);
-  const conveyor = new Sprite(textures.landscapeConveyor);
-  const sprites = Object.freeze({
-    background,
-    mainReelBackground,
-    conveyor,
-  });
-  applyWorldSpriteLayout(sprites, textures, layout);
-  return sprites;
-}
-
-function applyWorldSpriteLayout(
-  sprites: Game003WorldSprites,
-  textures: Game003StaticTextures,
-  layout: Game003Layout,
-): void {
-  sprites.background.texture =
-    layout.orientation === "portrait"
-      ? textures.portraitBackground
-      : textures.landscapeBackground;
-  sprites.conveyor.texture =
-    layout.orientation === "portrait"
-      ? textures.portraitConveyor
-      : textures.landscapeConveyor;
-  applyRect(sprites.background, layout.backgroundFrame);
-  applyRect(sprites.conveyor, layout.sceneParts.conveyor);
-  applyRect(sprites.mainReelBackground, layout.sceneParts.mainReelBackground);
-}
-
-function applyRect(
-  sprite: Sprite,
-  rect: { readonly x: number; readonly y: number },
-): void {
-  sprite.x = rect.x;
-  sprite.y = rect.y;
-}
-
-function requireLegacySkin(skin: Game003SkinConfig): Game003LegacySkinConfig {
-  if (skin.id !== "1") {
-    throw new Error("game003 legacy presentation requires skin=1.");
-  }
-  return skin;
-}
-
-function requireSceneLayoutSkin(
-  skin: Game003SkinConfig,
-): Game003SceneLayoutSkinConfig {
-  if (skin.id !== "2") {
-    throw new Error("game003 scene-layout presentation requires skin=2.");
-  }
-  return skin;
-}
-
 function createSceneLayoutCarouselTarget(
   runtime: Game003ReelRuntime,
 ): VisibleSymbolPresentationTarget {
-  const target: VisibleSymbolPresentationTarget = {
-    requestVisibleSymbolStates(...args): void {
-      runtime.requestVisibleSymbolStates(args[0], args[1]);
+  return Object.freeze({
+    requestVisibleSymbolStates(
+      positions: readonly { readonly x: number; readonly y: number }[],
+      state: string,
+    ): void {
+      runtime.requestVisibleSymbolStates(positions, state);
     },
-    getVisibleSymbolStateSnapshots(positions) {
+    getVisibleSymbolStateSnapshots(
+      positions: readonly { readonly x: number; readonly y: number }[],
+    ) {
       return runtime.getVisibleSymbolStateSnapshots(positions);
     },
-    getVisibleSymbolGeometrySnapshots(positions) {
+    getVisibleSymbolGeometrySnapshots(
+      positions: readonly { readonly x: number; readonly y: number }[],
+    ) {
       return runtime.getVisibleSymbolGeometrySnapshots(positions);
     },
     update(): void {
-      // The package runtime advances all presentation layers once per adapter tick.
+      // The package runtime advances all presentation layers per adapter tick.
     },
-  };
-  return Object.freeze(target);
+  });
 }

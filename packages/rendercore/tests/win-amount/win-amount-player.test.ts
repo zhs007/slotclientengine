@@ -1,14 +1,20 @@
 import { Container } from "pixi.js";
 import { beforeEach, describe, expect, it } from "vitest";
-import bigwinProject from "../../../../assets/game003-s1/win-amount/bigwin.json";
-import megawinProject from "../../../../assets/game003-s1/win-amount/megawin.json";
-import superwinProject from "../../../../assets/game003-s1/win-amount/superwin.json";
+import {
+  rewriteVNIProjectAssetPaths,
+  type VNIProjectConfig,
+} from "@slotclientengine/vnicore/core";
+import { readMinecart2LogicalJson } from "../../../../test-utils/minecart2-fixtures.js";
 import {
   createWinAmountAnimationPlayer,
   createWinAmountAnimationTiersFromModules,
   type WinAmountVniPlayer,
 } from "../../src/win-amount/index.js";
 import type { VNIPlayerOptions } from "@slotclientengine/vnicore/pixi";
+
+const bigwinProject = readLegacyWinAmountProject("big_win0721.json");
+const superwinProject = readLegacyWinAmountProject("super_win0721.json");
+const megawinProject = readLegacyWinAmountProject("mega_win0721.json");
 
 describe("win amount animation player", () => {
   beforeEach(() => {
@@ -447,14 +453,14 @@ function createTestConfig(
     },
     tiers: createWinAmountAnimationTiersFromModules({
       tierConfigs: [
-        createTierConfig("bigwin", 15, "./bigwin.json"),
-        createTierConfig("superwin", 30, "./superwin.json"),
-        createTierConfig("megawin", 50, "./megawin.json"),
+        createTierConfig("bigwin", 15, "./big_win0721.json"),
+        createTierConfig("superwin", 30, "./super_win0721.json"),
+        createTierConfig("megawin", 50, "./mega_win0721.json"),
       ],
       projectModules: {
-        "/assets/game003-s1/win-amount/bigwin.json": bigwinProject,
-        "/assets/game003-s1/win-amount/superwin.json": superwinProject,
-        "/assets/game003-s1/win-amount/megawin.json": megawinProject,
+        "/fixtures/big_win0721.json": bigwinProject,
+        "/fixtures/super_win0721.json": superwinProject,
+        "/fixtures/mega_win0721.json": megawinProject,
       },
       assetModules: createAssetModules([
         bigwinProject,
@@ -501,11 +507,17 @@ function createAssetModules(
       if (!filename) {
         throw new Error(`bad fixture asset path ${asset.path}`);
       }
-      modules[`/assets/game003-s1/win-amount/assets/${filename}`] =
-        `/generated/${filename}`;
+      modules[`/fixtures/${filename}`] = `/generated/${filename}`;
     }
   }
   return modules;
+}
+
+function readLegacyWinAmountProject(logicalPath: string): VNIProjectConfig {
+  return rewriteVNIProjectAssetPaths(
+    readMinecart2LogicalJson(logicalPath),
+    (assetPath) => `assets/${assetPath.split("/").at(-1)}`,
+  );
 }
 
 async function flushMicrotasks(): Promise<void> {

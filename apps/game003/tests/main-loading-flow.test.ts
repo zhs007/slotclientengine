@@ -33,7 +33,7 @@ vi.mock("../src/loading-resources.js", () => ({
 describe("game003 main loading host flow", () => {
   it("keeps loading and game hosts separate until the runtime enters", async () => {
     document.body.innerHTML = '<div id="app"></div>';
-    window.history.replaceState({}, "", "/?skin=1");
+    window.history.replaceState({}, "", "/?skin=2");
     const loadingHandle = {
       loadedResources: new Map<string, unknown>(),
       start: vi.fn(async () => undefined),
@@ -75,7 +75,7 @@ describe("game003 main loading host flow", () => {
     await capturedLoadingOptions.onEnterGame({ prepareResult });
 
     expect(runtimeModule.prepareGame003At99).toHaveBeenCalledWith({
-      search: "?skin=1",
+      search: "?skin=2",
       loadedResources: expect.any(Map),
       signal: undefined,
     });

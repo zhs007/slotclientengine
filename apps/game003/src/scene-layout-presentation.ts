@@ -19,15 +19,15 @@ import type {
   WinAmountAnimationPlayer,
   WinAmountAnimationUpdateResult,
 } from "@slotclientengine/rendercore/win-amount";
-import {
-  DEFAULT_GAME003_REEL_CONFIG,
-  type Game003ReelRuntime,
-  type Game003ReelVisualSnapshot,
+import type {
+  Game003ReelLayerLayout,
+  Game003ReelRuntime,
+  Game003ReelVisualSnapshot,
 } from "./game-demo.js";
-import type { Game003ReelLayerLayout } from "./game-layout.js";
 import { formatServerAmount } from "./money.js";
+import { GAME003_RUNTIME_CONFIG } from "./runtime-config.js";
 import { validateGame003Scene } from "./scene.js";
-import type { Game003SceneLayoutSkinConfig } from "./skin-config.js";
+import type { Game003SkinConfig } from "./skin-config.js";
 
 export interface Game003SceneLayoutPresentation {
   readonly reelRuntime: Game003ReelRuntime;
@@ -41,7 +41,7 @@ export interface Game003SceneLayoutPresentation {
 }
 
 export async function createGame003SceneLayoutPresentation(
-  skin: Game003SceneLayoutSkinConfig,
+  skin: Game003SkinConfig,
 ): Promise<Game003SceneLayoutPresentation> {
   const geometry = skin.resource.manifest.reels.main;
   if (!geometry || geometry.columns !== 5 || geometry.rows !== 5) {
@@ -66,12 +66,12 @@ export async function createGame003SceneLayoutPresentation(
     reelPresentation: {
       kind: "standard",
       version: 1,
-      direction: "forward",
-      speedSymbolsPerSecond: DEFAULT_GAME003_REEL_CONFIG.speedSymbolsPerSecond,
-      minimumSpinCycles: DEFAULT_GAME003_REEL_CONFIG.minimumSpinCycles,
-      baseDurationMs: DEFAULT_GAME003_REEL_CONFIG.baseDurationMs,
-      startDelayMs: DEFAULT_GAME003_REEL_CONFIG.startDelayMs,
-      stopDelayMs: DEFAULT_GAME003_REEL_CONFIG.stopDelayMs,
+      direction: GAME003_RUNTIME_CONFIG.reel.direction,
+      speedSymbolsPerSecond: GAME003_RUNTIME_CONFIG.reel.speedSymbolsPerSecond,
+      minimumSpinCycles: GAME003_RUNTIME_CONFIG.reel.minimumSpinCycles,
+      baseDurationMs: GAME003_RUNTIME_CONFIG.reel.baseDurationMs,
+      startDelayMs: GAME003_RUNTIME_CONFIG.reel.startDelayMs,
+      stopDelayMs: GAME003_RUNTIME_CONFIG.reel.stopDelayMs,
       bounceStrength: 0,
     },
     formatPopupAmount: formatServerAmount,
@@ -119,18 +119,18 @@ export async function createGame003SceneLayoutPresentation(
       reels,
       finalYs: nextFinalYs,
       visibleRows: geometry.rows,
-      direction: "forward",
-      minimumSpinCycles: DEFAULT_GAME003_REEL_CONFIG.minimumSpinCycles,
-      baseDurationMs: DEFAULT_GAME003_REEL_CONFIG.baseDurationMs,
-      speedSymbolsPerSecond: DEFAULT_GAME003_REEL_CONFIG.speedSymbolsPerSecond,
-      startDelayMs: DEFAULT_GAME003_REEL_CONFIG.startDelayMs,
-      stopDelayMs: DEFAULT_GAME003_REEL_CONFIG.stopDelayMs,
+      direction: GAME003_RUNTIME_CONFIG.reel.direction,
+      minimumSpinCycles: GAME003_RUNTIME_CONFIG.reel.minimumSpinCycles,
+      baseDurationMs: GAME003_RUNTIME_CONFIG.reel.baseDurationMs,
+      speedSymbolsPerSecond: GAME003_RUNTIME_CONFIG.reel.speedSymbolsPerSecond,
+      startDelayMs: GAME003_RUNTIME_CONFIG.reel.startDelayMs,
+      stopDelayMs: GAME003_RUNTIME_CONFIG.reel.stopDelayMs,
     });
   };
 
   const reelRuntime: Game003ReelRuntime = Object.freeze({
     config: Object.freeze({
-      ...DEFAULT_GAME003_REEL_CONFIG,
+      ...GAME003_RUNTIME_CONFIG.reel,
       reelsName: skin.reelsName,
       emptySymbols: Object.freeze([]),
       texturedSymbols: skin.symbolPackage.displaySymbols,

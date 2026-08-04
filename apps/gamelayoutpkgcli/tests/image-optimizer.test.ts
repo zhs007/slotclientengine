@@ -130,4 +130,31 @@ describe("image optimizer", () => {
       }),
     ).rejects.toThrow(/合法 WebP/);
   });
+
+  it("keeps Spine atlas page logical names while converting their bytes", async () => {
+    const result = await optimizeLayoutImages({
+      source: source({
+        "symbol.atlas": {
+          mediaType: "text/plain",
+          bytes: new TextEncoder().encode(
+            "symbol.png\nsize:1,1\nfilter:Linear,Linear\nregion\nbounds:0,0,1,1\n",
+          ),
+        },
+        "symbol.png": {
+          mediaType: "image/png",
+          bytes: new Uint8Array([1]),
+        },
+      }),
+      quality: 80,
+      cwebpExecutable: "cwebp",
+      runner: runner(),
+    });
+
+    expect(result.keyMapping.get("symbol.png")).toBe("symbol.png");
+    expect(result.assets.get("symbol.png")).toMatchObject({
+      converted: true,
+      mediaType: "image/webp",
+    });
+    expect(result.assets.has("symbol.webp")).toBe(false);
+  });
 });

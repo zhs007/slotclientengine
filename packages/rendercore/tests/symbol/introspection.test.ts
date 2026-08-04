@@ -1,5 +1,9 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import {
+  getMinecart2SymbolResourcePath,
+  readMinecart2LogicalJson,
+  readMinecart2LogicalText,
+} from "../../../../test-utils/minecart2-fixtures.js";
 import {
   inspectSymbolSpineAtlas,
   inspectSymbolSpineBundle,
@@ -9,44 +13,37 @@ import {
 
 describe("symbol editor resource introspection", () => {
   it("strictly reports VNI duration, stage and indirect assets", () => {
-    const project = JSON.parse(
-      readFileSync(
-        new URL("../../../../assets/game003-s1/L1-wins.json", import.meta.url),
-        "utf8",
-      ),
-    );
+    const projectPath = (
+      readMinecart2LogicalJson("symbol-state-textures.manifest.json") as any
+    ).symbols.L1.animations.win.project as string;
+    const project = readMinecart2LogicalJson(projectPath);
     expect(inspectSymbolVniProject(project)).toMatchObject({
       schemaVersion: "VNI_0.022",
       durationSeconds: 1,
       stage: { width: 300, height: 300 },
-      assetPaths: ["assets/j1_asset_image_mr1qgfc2_r.png"],
+      assetPaths: expect.arrayContaining([expect.stringMatching(/\.webp$/)]),
     });
   });
 
   it("lists exact Spine animations, slots and atlas pages and validates the bundle", () => {
-    const skeleton = JSON.parse(
-      readFileSync(
-        new URL("../../../../assets/game003-s1/WL.json", import.meta.url),
-        "utf8",
-      ),
+    const skeleton = readMinecart2LogicalJson(
+      getMinecart2SymbolResourcePath("WL", "skeleton"),
     );
-    const atlasText = readFileSync(
-      new URL("../../../../assets/game003-s1/Symbol.atlas", import.meta.url),
-      "utf8",
+    const atlasText = readMinecart2LogicalText(
+      getMinecart2SymbolResourcePath("WL", "atlas"),
     );
+    const texture = getMinecart2SymbolResourcePath("WL", "texture");
     const metadata = inspectSymbolSpineSkeleton(skeleton);
     expect(metadata.version).toBe("4.3.23");
     expect(metadata.animationNames).toContain("Idle");
     expect(metadata.animationNames).toContain("Win");
     expect(metadata.slotNames).toContain("Number");
-    expect(inspectSymbolSpineAtlas(atlasText).pageNames).toEqual([
-      "Symbol.png",
-    ]);
+    expect(inspectSymbolSpineAtlas(atlasText).pageNames).toEqual([texture]);
     expect(
       inspectSymbolSpineBundle({
         skeleton,
         atlasText,
-        texturePath: "nested/Symbol.png",
+        texturePath: `nested/${texture}`,
       }).skeleton.animationNames,
     ).toContain("start");
     expect(
@@ -55,7 +52,7 @@ describe("symbol editor resource introspection", () => {
         atlasText,
         texturePath: "nested/content-addressed-texture.webp",
       }).atlas.pageNames,
-    ).toEqual(["Symbol.png"]);
+    ).toEqual([texture]);
     expect(() =>
       inspectSymbolSpineBundle({
         skeleton,

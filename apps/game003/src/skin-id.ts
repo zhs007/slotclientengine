@@ -1,12 +1,12 @@
-export const GAME003_SUPPORTED_SKINS = Object.freeze(["1", "2"] as const);
+export const GAME003_SUPPORTED_SKINS = Object.freeze(["2"] as const);
 
 export type Game003SkinId = (typeof GAME003_SUPPORTED_SKINS)[number];
 
 export function parseGame003SkinId(value: string): Game003SkinId {
-  if (value === "1" || value === "2") {
+  if (value === "2") {
     return value;
   }
-  throw new Error('skin query parameter must be exactly "1" or "2".');
+  throw new Error('skin query parameter must be exactly "2".');
 }
 
 export function parseGame003SkinQuery(

@@ -40,7 +40,7 @@ export async function buildOptimizedPackage(options: {
     const sha256 = await sha256Hex(asset.bytes);
     const path = allocateContentAddressedPath({
       digest: sha256,
-      extension: canonicalExtensionOfEditorAssetKey(key),
+      extension: getPhysicalExtension(key, asset.mediaType),
     });
     mapEntries[key] = Object.freeze({
       path,
@@ -68,6 +68,11 @@ export async function buildOptimizedPackage(options: {
     assetsMap,
     assets: new Map(options.assets),
   });
+}
+
+function getPhysicalExtension(key: string, mediaType: string): string {
+  if (mediaType === "image/webp") return "webp";
+  return canonicalExtensionOfEditorAssetKey(key);
 }
 
 export async function commitOutputPair(options: {

@@ -53,7 +53,10 @@ export function parseEditorAssetsMap(value: unknown): EditorAssetsMapV1 {
     if (typeof raw.path !== "string")
       throw new Error(`assets map ${key}.path 必须是字符串。`);
     assertCanonicalPackagePath(raw.path, { requireLowercase: true });
-    const extension = canonicalExtensionOfEditorAssetKey(key);
+    const extension = canonicalPhysicalExtension(
+      key,
+      typeof raw.mediaType === "string" ? raw.mediaType : "",
+    );
     const expected = allocateContentAddressedPath({
       digest: raw.sha256,
       extension,
@@ -80,6 +83,12 @@ export function parseEditorAssetsMap(value: unknown): EditorAssetsMapV1 {
     kind: "editor-assets",
     files: Object.freeze(files),
   });
+}
+
+function canonicalPhysicalExtension(key: string, mediaType: string): string {
+  if (mediaType === "image/webp") return "webp";
+  if (mediaType === "image/png") return "png";
+  return canonicalExtensionOfEditorAssetKey(key);
 }
 
 export function serializeEditorAssetsMap(map: EditorAssetsMapV1): Uint8Array {
