@@ -26,9 +26,11 @@ import {
 } from "@slotclientengine/vnicore";
 import {
   activeVariantIds,
+  createDefaultNodePlacement,
   cloneEditorProject,
   resetVariantGeometry,
   type EditorNodeDraft,
+  type EditorNodePlacement,
   type EditorProject,
   type EditorSpineGameModeTransitionDraft,
   type EditorSpinePlaybackDraft,
@@ -758,27 +760,24 @@ function defaultBackgroundPlacement(
   project: Pick<EditorProject, "coordinateOrigin">,
   resource: EditorLayoutResource,
   artSize: { readonly width: number; readonly height: number },
-): { x: number; y: number; scale: number } {
-  if (project.coordinateOrigin === "center") return { x: 0, y: 0, scale: 1 };
+): EditorNodePlacement {
+  if (project.coordinateOrigin === "center")
+    return createDefaultNodePlacement();
   if (resource.kind === "spine" && artSize.width > 0 && artSize.height > 0) {
-    return { x: artSize.width / 2, y: artSize.height / 2, scale: 1 };
+    return createDefaultNodePlacement(artSize.width / 2, artSize.height / 2);
   }
-  return { x: 0, y: 0, scale: 1 };
+  return createDefaultNodePlacement();
 }
 
 function defaultLayerPlacement(
   project: Pick<EditorProject, "coordinateOrigin" | "variants">,
   resource: EditorLayoutResource,
   variant: SceneLayoutVariantId,
-): { x: number; y: number; scale: number } {
+): EditorNodePlacement {
   if (project.coordinateOrigin === "center" || resource.kind !== "spine")
-    return { x: 0, y: 0, scale: 1 };
+    return createDefaultNodePlacement();
   const artSize = project.variants[variant].artSize;
-  return {
-    x: artSize.width / 2,
-    y: artSize.height / 2,
-    scale: 1,
-  };
+  return createDefaultNodePlacement(artSize.width / 2, artSize.height / 2);
 }
 
 export function clearBackground(
@@ -965,8 +964,8 @@ export function setLayerVariantVisibility(
     if (placement) return;
     const remembered = node.hiddenPlacements?.[variant];
     node.placements[variant] = remembered
-      ? { ...remembered }
-      : { x: 0, y: 0, scale: 1 };
+      ? structuredClone(remembered)
+      : createDefaultNodePlacement();
     if (node.hiddenPlacements) {
       delete node.hiddenPlacements[variant];
       if (Object.keys(node.hiddenPlacements).length === 0)
@@ -976,7 +975,7 @@ export function setLayerVariantVisibility(
   }
   if (!placement) return;
   node.hiddenPlacements ??= {};
-  node.hiddenPlacements[variant] = { ...placement };
+  node.hiddenPlacements[variant] = structuredClone(placement);
   delete node.placements[variant];
 }
 

@@ -18,7 +18,15 @@ describe("scene layout presentation surface", () => {
       nodes: [
         {
           ...game002LayoutFixture.nodes[0],
-          placements: { default: { x: 1000, y: 1000, scale: 1 } },
+          placements: {
+            default: {
+              x: 1000,
+              y: 1000,
+              scale: 1,
+              rotation: 90,
+              center: { x: 0.5, y: 0.5 },
+            },
+          },
         },
       ],
     };
@@ -46,9 +54,12 @@ describe("scene layout presentation surface", () => {
         ?.position,
     ).toMatchObject({ x: 0, y: 0 });
     expect(
-      surface.backgroundContainer.getChildByLabel("scene-layout-slot:bg", true)
-        ?.position,
-    ).toMatchObject({ x: 1000, y: 1000 });
+      surface.backgroundContainer.getChildByLabel("scene-layout-slot:bg", true),
+    ).toMatchObject({
+      angle: 90,
+      pivot: { x: 0.5, y: 0.5 },
+      position: { x: 1000.5, y: 1000.5 },
+    });
     surface.destroy();
   });
 

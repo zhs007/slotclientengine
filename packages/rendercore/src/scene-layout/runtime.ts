@@ -26,6 +26,7 @@ import type {
   AttachRelativeOptions,
   ResolvedSceneLayoutReelGrid,
   SceneLayoutNode,
+  SceneLayoutNodePlacement,
   SceneLayoutResource,
   SceneLayoutRuntime,
   SceneLayoutSnapshot,
@@ -227,13 +228,13 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       node.slot.visible = Boolean(placement) && active;
       node.slot.renderable = Boolean(placement) && active;
       if (placement) {
-        const position = resolveNodePlacementPosition(
+        applyNodePlacementTransform(
+          node,
+          this.#resource,
           this.#manifest,
           snapshot.variantId,
           placement,
         );
-        node.slot.position.set(position.x, position.y);
-        node.slot.scale.set(placement.scale);
       }
     }
     return snapshot;
@@ -601,6 +602,94 @@ function applyVniOrigin(
   } else {
     display.pivot.set(0, 0);
   }
+}
+
+function applyNodePlacementTransform(
+  node: RuntimeNode,
+  resource: SceneLayoutResource,
+  manifest: SceneLayoutResource["manifest"],
+  variantId: SceneLayoutVariantId,
+  placement: SceneLayoutNodePlacement,
+): void {
+  const base = resolveNodePlacementPosition(manifest, variantId, placement);
+  const pivot = resolveNodePlacementPivot(
+    node,
+    resource,
+    manifest.coordinateOrigin ?? "top-left",
+    placement,
+  );
+  node.slot.pivot.set(pivot.x, pivot.y);
+  node.slot.scale.set(placement.scale);
+  node.slot.angle = placement.rotation ?? 0;
+  node.slot.position.set(
+    base.x + pivot.x * placement.scale,
+    base.y + pivot.y * placement.scale,
+  );
+}
+
+function resolveNodePlacementPivot(
+  node: RuntimeNode,
+  sceneResource: SceneLayoutResource,
+  coordinateOrigin: "top-left" | "center",
+  placement: SceneLayoutNodePlacement,
+): { readonly x: number; readonly y: number } {
+  const rotation = placement.rotation ?? 0;
+  if (rotation === 0) return { x: 0, y: 0 };
+  const center = placement.center ?? { x: 0.5, y: 0.5 };
+  const resource = node.spec.resource;
+  if (resource.kind === "image") {
+    const origin = coordinateOrigin === "center" ? 0.5 : 0;
+    return {
+      x: (center.x - origin) * resource.size.width,
+      y: (center.y - origin) * resource.size.height,
+    };
+  }
+  if (resource.kind === "vni") {
+    const vni = sceneResource.vniResources[resource.project];
+    if (!vni)
+      throw new SceneLayoutError(
+        `Scene layout VNI resource is missing for node "${node.spec.id}".`,
+      );
+    const origin = coordinateOrigin === "center" ? 0.5 : 0;
+    return {
+      x: (center.x - origin) * vni.project.stage.width,
+      y: (center.y - origin) * vni.project.stage.height,
+    };
+  }
+  if (resource.kind === "image-string") {
+    const snapshot = node.imageString?.getSnapshot();
+    if (!snapshot)
+      throw new SceneLayoutError(
+        `Scene layout image-string node "${node.spec.id}" is not prepared.`,
+      );
+    const bounds = snapshot.visualBounds ?? snapshot.logicalBounds;
+    return validNodePivot(node.spec.id, {
+      x: (center.x - snapshot.anchor.x) * bounds.width,
+      y: (center.y - snapshot.anchor.y) * bounds.height,
+    });
+  }
+  if (center.x === 0.5 && center.y === 0.5) return { x: 0, y: 0 };
+  const view = node.player?.view;
+  if (!view)
+    throw new SceneLayoutError(
+      `Scene layout Spine node "${node.spec.id}" is not prepared.`,
+    );
+  return validNodePivot(node.spec.id, {
+    x: (center.x - 0.5) * view.width,
+    y: (center.y - 0.5) * view.height,
+  });
+}
+
+function validNodePivot(
+  nodeId: string,
+  pivot: { readonly x: number; readonly y: number },
+): { readonly x: number; readonly y: number } {
+  if (!Number.isFinite(pivot.x) || !Number.isFinite(pivot.y)) {
+    throw new SceneLayoutError(
+      `Scene layout node "${nodeId}" produced an invalid rotation center.`,
+    );
+  }
+  return pivot;
 }
 
 function resolveNodePlacementPosition(

@@ -148,7 +148,15 @@ describe("layout zip IO", () => {
           id: "jackpot-title",
           order: 1,
           resource: { ...imageManifest.nodes[0].resource, path: key },
-          placements: { default: { x: 10, y: 10, scale: 1 } },
+          placements: {
+            default: {
+              x: 10,
+              y: 10,
+              scale: 1,
+              rotation: -90,
+              center: { x: 0.25, y: 0.75 },
+            },
+          },
         },
       ],
     };
@@ -179,6 +187,13 @@ describe("layout zip IO", () => {
         packedManifest.nodes.map((node: { id: string }) => node.id),
       ).toEqual(["background", "jackpot-title"]);
       expect(packedManifest.nodes[0].resource.path).toBe(canonicalKey);
+      expect(packedManifest.nodes[1].placements.default).toEqual({
+        x: 10,
+        y: 10,
+        scale: 1,
+        rotation: -90,
+        center: { x: 0.25, y: 0.75 },
+      });
       const imported = await importLayoutZip(exported.bytes, { decodeImage });
       const project = manifestToEditorProject(
         imported.manifest,
@@ -188,6 +203,13 @@ describe("layout zip IO", () => {
         "background",
         "jackpot-title",
       ]);
+      expect(project.nodes[1].placements.default).toEqual({
+        x: 10,
+        y: 10,
+        scale: 1,
+        rotation: -90,
+        center: { x: 0.25, y: 0.75 },
+      });
       expect([...project.resources.keys()]).toEqual([canonicalKey]);
       expect([...project.resources.keys()]).not.toContain(
         map.files[canonicalKey]?.path,

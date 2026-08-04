@@ -24,7 +24,15 @@ describe("scene layout runtime", () => {
             project: "runtime.json",
             loop: false,
           },
-          placements: { default: { x: 100, y: 200, scale: 0.75 } },
+          placements: {
+            default: {
+              x: 100,
+              y: 200,
+              scale: 0.75,
+              rotation: 90,
+              center: { x: 0.5, y: 0.5 },
+            },
+          },
         },
       ],
     });
@@ -68,6 +76,11 @@ describe("scene layout runtime", () => {
     expect(runtime.applyGeometryManifest(manifest)).toBeNull();
     runtime.applyViewport({ width: 2000, height: 2000 });
     expect(display.pivot).toMatchObject({ x: 0, y: 0 });
+    expect(runtime.getNode("vni-fx").parent).toMatchObject({
+      angle: 90,
+      pivot: { x: 200, y: 150 },
+      position: { x: 250, y: 312.5 },
+    });
     expect(player.setLoop).toHaveBeenCalledWith(false);
     expect(player.play).toHaveBeenCalledOnce();
     runtime.update(1 / 60);
@@ -333,7 +346,15 @@ describe("scene layout runtime", () => {
             text: "001",
             anchor: { x: 0, y: 0 },
           },
-          placements: { default: { x: 10, y: 20, scale: 1 } },
+          placements: {
+            default: {
+              x: 10,
+              y: 20,
+              scale: 1,
+              rotation: -90,
+              center: { x: 0.5, y: 0.5 },
+            },
+          },
         },
         {
           id: "second",
@@ -360,6 +381,11 @@ describe("scene layout runtime", () => {
     await runtime.init();
     runtime.applyViewport({ width: 1920, height: 1080 });
     expect(runtime.getImageStringNodeNames()).toEqual(["first", "second"]);
+    expect(runtime.getNode("first").parent).toMatchObject({
+      angle: -90,
+      pivot: { x: 1.5, y: 0.5 },
+      position: { x: 11.5, y: 20.5 },
+    });
     expect(runtime.getImageStringText("first")).toBe("001");
     expect(runtime.getImageStringText("second")).toBe("1");
     runtime.setImageStringText("first", "010");
@@ -555,6 +581,23 @@ describe("scene layout runtime", () => {
     const node = runtime.getNode("bg");
     const sprite = node.children[0] as Sprite;
 
+    const rotated = structuredClone(game002LayoutFixture) as any;
+    rotated.nodes[0].placements.default = {
+      x: 10,
+      y: 20,
+      scale: 2,
+      rotation: 90,
+      center: { x: 0.5, y: 0.5 },
+    };
+    runtime.applyGeometryManifest(rotated);
+    expect(node.parent).toMatchObject({
+      angle: 90,
+      position: { x: 11, y: 21 },
+      pivot: { x: 0.5, y: 0.5 },
+      scale: { x: 2, y: 2 },
+    });
+    expect(loadTexture).toHaveBeenCalledOnce();
+
     const centered = structuredClone(game002LayoutFixture) as any;
     centered.coordinateOrigin = "center";
     centered.nodes[0].placements.default = {
@@ -601,7 +644,15 @@ describe("scene layout runtime", () => {
           id: "base-bg",
           order: 0,
           resource: spineSpec,
-          placements: { default: { x: 0, y: 0, scale: 1 } },
+          placements: {
+            default: {
+              x: 0,
+              y: 0,
+              scale: 1,
+              rotation: 90,
+              center: { x: 0.5, y: 0.5 },
+            },
+          },
         },
         {
           id: "free-bg",
@@ -652,6 +703,10 @@ describe("scene layout runtime", () => {
 
     await runtime.init();
     runtime.applyViewport({ width: 1920, height: 1080 });
+    expect(runtime.getNode("base-bg").parent).toMatchObject({
+      angle: 90,
+      pivot: { x: 0, y: 0 },
+    });
     runtime.setNodeActive("free-bg", false);
     runtime.setNodeActive("base-bg", false);
     runtime.setNodeActive("free-bg", true);

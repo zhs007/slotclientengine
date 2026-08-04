@@ -125,6 +125,11 @@ describe("EditorStore", () => {
       draft.nodes[0]!.placements.default!.x = 4;
     });
     expect(store.getSnapshot().changeKind).toBe("geometry");
+    store.transact((draft) => {
+      draft.nodes[0]!.placements.default!.rotation = -90;
+      draft.nodes[0]!.placements.default!.center = { x: 0.25, y: 0.75 };
+    });
+    expect(store.getSnapshot().changeKind).toBe("geometry");
 
     store.transact((draft) => {
       const resourceId = draft.nodes[0]!.resourceId;
@@ -304,6 +309,8 @@ describe("EditorStore", () => {
       x: 0,
       y: 0,
       scale: 1,
+      rotation: 0,
+      center: { x: 0.5, y: 0.5 },
     });
   });
 

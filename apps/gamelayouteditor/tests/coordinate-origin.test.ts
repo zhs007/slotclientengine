@@ -27,9 +27,23 @@ describe("coordinate origin conversion", () => {
       order: 1,
       resourceId: "spine",
       playback: { kind: "loop", animation: "Idle", loop: true },
-      placements: { default: { x: 70, y: 80, scale: 1 } },
+      placements: {
+        default: {
+          x: 70,
+          y: 80,
+          scale: 1,
+          rotation: 90,
+          center: { x: 0.5, y: 0.5 },
+        },
+      },
       hiddenPlacements: {
-        default: { x: 90, y: 100, scale: 1 },
+        default: {
+          x: 90,
+          y: 100,
+          scale: 1,
+          rotation: -180,
+          center: { x: 0.25, y: 0.75 },
+        },
       },
     });
     const manifestNode = editorProjectToManifest(project).nodes.find(
@@ -61,16 +75,22 @@ describe("coordinate origin conversion", () => {
       x: -49.5,
       y: -49.5,
       scale: 1,
+      rotation: 0,
+      center: { x: 0.5, y: 0.5 },
     });
     expect(project.nodes[1]?.placements.default).toEqual({
       x: 20,
       y: 30,
       scale: 1,
+      rotation: 90,
+      center: { x: 0.5, y: 0.5 },
     });
     expect(project.nodes[1]?.hiddenPlacements?.default).toEqual({
       x: 40,
       y: 50,
       scale: 1,
+      rotation: -180,
+      center: { x: 0.25, y: 0.75 },
     });
     expect(project.reel.placements.default).toEqual({
       x: -7.5,

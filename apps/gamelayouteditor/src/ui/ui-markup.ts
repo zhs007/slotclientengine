@@ -13,8 +13,10 @@ export function numberField(
   path: string,
   value: number,
   step = 1,
+  min?: number,
+  max?: number,
 ): string {
-  return `<label>${escapeHtml(label)}<input type="number" step="${step}" data-number="${escapeHtml(path)}" value="${value}" /></label>`;
+  return `<label>${escapeHtml(label)}<input type="number" step="${step}"${min === undefined ? "" : ` min="${min}"`}${max === undefined ? "" : ` max="${max}"`} data-number="${escapeHtml(path)}" value="${value}" /></label>`;
 }
 
 export function statusText(status: "ready" | "incomplete" | "error"): string {

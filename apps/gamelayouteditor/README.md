@@ -17,7 +17,7 @@ SymbolsEditor 编辑。
 
 node/background/transition 直接引用 filename key 或 typed key 组合。node id、package id、mode id 仍是业务身份，但不是第二个资源 id。多个 mode/variant 可引用同一 `BG.jpg`，覆盖一次即可更新全部 bytes，同时各自的稳定 node id 与 placement 保持独立。
 
-layout 大纲选中普通图层后，preview 使用红框和半透明红色斜线显示当前 variant 中该节点的实时可见范围；斜线裁在渲染区域内，因此图层边界位于画布外时仍有选中提示。黄/绿 focus 与 reel guide 保持原语义。只修改 node/reel placement、focus、art size或坐标类型时走 geometry 更新，复用已加载资源、Spine player、reel 和已抽样 symbols，不重新随机排列。
+layout 大纲选中普通图层后，preview 使用红框和半透明红色斜线显示当前 variant 中该节点的实时可见范围；斜线裁在渲染区域内，因此图层边界位于画布外时仍有选中提示。黄/绿 focus 与 reel guide 保持原语义。普通图层与背景的每个 variant placement 可编辑 `x/y/scale`、顺时针角度 `rotation` 和 `[0,1]` normalized `center`；默认 rotation 为 `0`、center 为 `0.5/0.5`，负角度与超过一圈的角度原样保存。Spine 的默认 center 对应 authored 原点。只修改 node/reel placement、focus、art size或坐标类型时走 geometry 更新，复用已加载资源、Spine player、reel 和已抽样 symbols，不重新随机排列。
 
 项目 Tab 可在“左上角”和“中心”全局坐标间切换。切换会在一次事务中转换普通图层、背景、main reel 和 art-space Spine transition 的现有 placement，视觉位置保持不变；popup 与 video 不参与转换。旧包缺少坐标字段时按左上角读取。
 
@@ -33,7 +33,7 @@ Spine atlas 的 page 是 atlas 内部逻辑名，texture map 的 value 才是全
 
 资源 Picker 的右侧按类型显示预览：图片直接显示，Spine 未选 animation 时显示贴图总览、选中 animation 后播放真实 Spine，VNI 播放真实 timeline，ImgNumber 显示 glyph 总览。预览只使用当前 project bytes，并在切换、关闭或销毁 Picker 时释放 player、ticker 和 Object URL；动画预览 renderer 在 editor app 生命周期内单例复用，只在 app destroy 时释放，避免关闭 Picker 干扰主布局 renderer。预览失败会明确提示且不修改 draft。
 
-普通 Spine 图层必须精确选择一个 animation，并可独立设置是否循环。新建图层时，Spine 的骨架原点默认放在各 variant 的画布中心；它不要求填写或从 skeleton bounds 推导尺寸，左上角坐标项目写入 `artSize / 2`，中心坐标项目写入 `(0, 0)`。普通 VNI 图层播放完整 timeline，也可独立设置是否循环；每个 node 创建独立 player，复用同一资源不会共享播放头。两类动画都复用普通图层的 order、横竖屏可见性和逐 variant `x/y/scale`。方向可见性关闭时，当前编辑会话会保留该方向的 placement，并在重新开启时恢复；隐藏值不进入 production ZIP，重新导入后不可恢复。VNI 不允许充当背景或 mode transition。
+普通 Spine 图层必须精确选择一个 animation，并可独立设置是否循环。新建图层时，Spine 的骨架原点默认放在各 variant 的画布中心；它不要求填写或从 skeleton bounds 推导尺寸，左上角坐标项目写入 `artSize / 2`，中心坐标项目写入 `(0, 0)`。普通 VNI 图层播放完整 timeline，也可独立设置是否循环；每个 node 创建独立 player，复用同一资源不会共享播放头。两类动画都复用普通图层的 order、横竖屏可见性和逐 variant node transform。方向可见性关闭时，当前编辑会话会保留完整 `x/y/scale/rotation/center`，并在重新开启时恢复；隐藏值不进入 production ZIP，重新导入后不可恢复。VNI 不允许充当背景或 mode transition。
 
 替换资源或为现有图层重新绑定资源时，编辑器保留稳定 node id、顺序、横竖屏 placement 与可见性；Spine animation、loop、VNI loop 和 ImgNumber 文本/锚点只在新资源仍兼容时保留，否则要求显式修正。图片或背景素材尺寸变化只更新资源尺寸，不自动重置 reel、focus 或已经编辑的 placement；如果旧几何在新尺寸下不再合法，严格校验会阻止提交并指出问题。
 

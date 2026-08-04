@@ -8,6 +8,9 @@ describe("ui markup", () => {
       'step="1" data-number="x&lt;y"',
     );
     expect(numberField("n", "p", 3, 0.1)).toContain('step="0.1"');
+    expect(numberField("center", "p", 0.5, 0.01, 0, 1)).toContain(
+      'min="0" max="1"',
+    );
   });
   it.each([
     ["ready", "就绪"],

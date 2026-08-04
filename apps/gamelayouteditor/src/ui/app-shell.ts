@@ -1828,6 +1828,18 @@ export class GameLayoutEditorApp {
             /^variants\.(default|landscape|portrait)\.artSize\.(width|height)$/u.exec(
               path,
             );
+          const nodeTransformMatch =
+            /^nodes\.(\d+)\.placements\.(default|landscape|portrait)\.(rotation|center\.[xy])$/u.exec(
+              path,
+            );
+          if (nodeTransformMatch) {
+            const node = draft.nodes[Number(nodeTransformMatch[1])];
+            const placement =
+              node?.placements[nodeTransformMatch[2] as SceneLayoutVariantId];
+            if (!placement) throw new Error(`无效字段路径：${path}`);
+            placement.rotation ??= 0;
+            placement.center ??= { x: 0.5, y: 0.5 };
+          }
           const transitionPlacementMatch =
             /^transition\.(default|landscape|portrait)\.(x|y|scale)$/u.exec(
               path,

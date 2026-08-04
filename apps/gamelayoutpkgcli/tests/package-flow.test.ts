@@ -25,11 +25,28 @@ describe("optimized package flow", () => {
   it("writes a verified WebP package and external initial/delta groups", async () => {
     const root = await makeRoot();
     const input = join(root, "layout.zip");
+    const baseManifest = layoutFixture();
     await writeFile(
       input,
       await createMappedLayoutZip({
         manifest: {
-          ...layoutFixture(),
+          ...baseManifest,
+          nodes: baseManifest.nodes.map((node, index) =>
+            index === 0
+              ? {
+                  ...node,
+                  placements: {
+                    default: {
+                      x: 0,
+                      y: 0,
+                      scale: 1,
+                      rotation: -90,
+                      center: { x: 0.25, y: 0.75 },
+                    },
+                  },
+                }
+              : node,
+          ),
           runtimeResources: {
             "nearwin.image": {
               kind: "image",
@@ -54,6 +71,13 @@ describe("optimized package flow", () => {
     expect(result.convertedImageCount).toBe(3);
     const outputBytes = new Uint8Array(await readFile(result.outputPath));
     const validated = await validateLayoutPackageBytes(outputBytes);
+    expect(validated.manifest.nodes[0]?.placements.default).toEqual({
+      x: 0,
+      y: 0,
+      scale: 1,
+      rotation: -90,
+      center: { x: 0.25, y: 0.75 },
+    });
     expect(validated.files.has("alpha.webp")).toBe(true);
     expect(validated.files.has("beta.webp")).toBe(true);
     expect(validated.files.has("alpha.png")).toBe(false);

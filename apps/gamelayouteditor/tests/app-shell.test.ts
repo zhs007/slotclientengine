@@ -896,7 +896,7 @@ describe("GameLayoutEditorApp workspace", () => {
     );
     (root.querySelector('[data-move-layer="-1"]') as HTMLButtonElement).click();
     const setPortraitPlacement = (
-      field: "x" | "y" | "scale",
+      field: "x" | "y" | "scale" | "rotation" | "center.x" | "center.y",
       value: string,
     ) => {
       const input = root.querySelector(
@@ -908,6 +908,9 @@ describe("GameLayoutEditorApp workspace", () => {
     setPortraitPlacement("x", "123");
     setPortraitPlacement("y", "-45");
     setPortraitPlacement("scale", "0.75");
+    setPortraitPlacement("rotation", "-90");
+    setPortraitPlacement("center.x", "0.25");
+    setPortraitPlacement("center.y", "0.75");
     const portrait = root.querySelector(
       '[data-layer-visible="portrait"]',
     ) as HTMLInputElement;
@@ -936,6 +939,27 @@ describe("GameLayoutEditorApp workspace", () => {
       (
         root.querySelector(
           '[data-number$=".placements.portrait.scale"]',
+        ) as HTMLInputElement
+      ).value,
+    ).toBe("0.75");
+    expect(
+      (
+        root.querySelector(
+          '[data-number$=".placements.portrait.rotation"]',
+        ) as HTMLInputElement
+      ).value,
+    ).toBe("-90");
+    expect(
+      (
+        root.querySelector(
+          '[data-number$=".placements.portrait.center.x"]',
+        ) as HTMLInputElement
+      ).value,
+    ).toBe("0.25");
+    expect(
+      (
+        root.querySelector(
+          '[data-number$=".placements.portrait.center.y"]',
         ) as HTMLInputElement
       ).value,
     ).toBe("0.75");

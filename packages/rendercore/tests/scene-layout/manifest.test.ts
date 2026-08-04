@@ -68,6 +68,13 @@ describe("scene layout manifest", () => {
   it("keeps legacy coordinates compatible and strictly parses center coordinates", () => {
     const legacy = parseSceneLayoutManifest(game002LayoutFixture);
     expect(legacy.coordinateOrigin).toBeUndefined();
+    expect(legacy.nodes[0].placements.default).toEqual({
+      x: 0,
+      y: 0,
+      scale: 1,
+      rotation: 0,
+      center: { x: 0.5, y: 0.5 },
+    });
 
     const centered = structuredClone(game002LayoutFixture) as any;
     centered.coordinateOrigin = "center";
@@ -86,6 +93,35 @@ describe("scene layout manifest", () => {
     expect(() => parseSceneLayoutManifest(unsupportedScale)).toThrow(
       /unknown key/,
     );
+  });
+
+  it("strictly parses node rotation without widening other placement schemas", () => {
+    const rotated = structuredClone(game002LayoutFixture) as any;
+    rotated.nodes[0].placements.default = {
+      x: 10,
+      y: -20,
+      scale: 0.75,
+      rotation: -450,
+      center: { x: 0, y: 1 },
+    };
+    expect(
+      parseSceneLayoutManifest(rotated).nodes[0].placements.default,
+    ).toEqual(rotated.nodes[0].placements.default);
+
+    for (const placement of [
+      { x: 0, y: 0, scale: 1, rotation: Number.NaN },
+      { x: 0, y: 0, scale: 1, center: { x: 0.5 } },
+      { x: 0, y: 0, scale: 1, center: { x: -0.1, y: 0.5 } },
+      { x: 0, y: 0, scale: 1, center: { x: 0.5, y: 1.1 } },
+    ]) {
+      const invalid = structuredClone(game002LayoutFixture) as any;
+      invalid.nodes[0].placements.default = placement;
+      expect(() => parseSceneLayoutManifest(invalid)).toThrow();
+    }
+
+    const popup = gameModeManifest() as any;
+    popup.popups["base-popup"].placements.default.rotation = 90;
+    expect(() => parseSceneLayoutManifest(popup)).toThrow(/unknown key/);
   });
 
   it("accepts geometry-only manifest changes and rejects structural changes", () => {
@@ -792,20 +828,60 @@ describe("scene layout manifest", () => {
     expect(
       manifest.nodes.find((node) => node.id === "majorbk")?.placements,
     ).toEqual({
-      landscape: { x: 620, y: 105, scale: 1 },
-      portrait: { x: 260, y: 405, scale: 1 },
+      landscape: {
+        x: 620,
+        y: 105,
+        scale: 1,
+        rotation: 0,
+        center: { x: 0.5, y: 0.5 },
+      },
+      portrait: {
+        x: 260,
+        y: 405,
+        scale: 1,
+        rotation: 0,
+        center: { x: 0.5, y: 0.5 },
+      },
     });
     expect(
       manifest.nodes.find((node) => node.id === "conveyor1")?.placements,
-    ).toEqual({ landscape: { x: 30, y: 40, scale: 1 } });
+    ).toEqual({
+      landscape: {
+        x: 30,
+        y: 40,
+        scale: 1,
+        rotation: 0,
+        center: { x: 0.5, y: 0.5 },
+      },
+    });
     expect(
       manifest.nodes.find((node) => node.id === "conveyor2")?.placements,
-    ).toEqual({ portrait: { x: 50, y: 60, scale: 1 } });
+    ).toEqual({
+      portrait: {
+        x: 50,
+        y: 60,
+        scale: 1,
+        rotation: 0,
+        center: { x: 0.5, y: 0.5 },
+      },
+    });
     expect(
       manifest.nodes.find((node) => node.id === "mega")?.placements,
     ).toEqual({
-      landscape: { x: 904, y: 116, scale: 1 },
-      portrait: { x: 544, y: 416, scale: 1 },
+      landscape: {
+        x: 904,
+        y: 116,
+        scale: 1,
+        rotation: 0,
+        center: { x: 0.5, y: 0.5 },
+      },
+      portrait: {
+        x: 544,
+        y: 416,
+        scale: 1,
+        rotation: 0,
+        center: { x: 0.5, y: 0.5 },
+      },
     });
   });
 

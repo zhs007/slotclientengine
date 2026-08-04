@@ -23,10 +23,17 @@ export type SceneLayoutOrientationVariantId = Exclude<
   "default"
 >;
 
-export interface SceneLayoutNodePlacement {
+export interface SceneLayoutScaledPlacement {
   readonly x: number;
   readonly y: number;
   readonly scale: number;
+}
+
+export interface SceneLayoutNodePlacement extends SceneLayoutScaledPlacement {
+  /** Clockwise rotation in degrees. Missing legacy values normalize to 0. */
+  readonly rotation?: number;
+  /** Normalized node-local rotation center. Missing legacy values normalize to 0.5/0.5. */
+  readonly center?: Readonly<{ readonly x: number; readonly y: number }>;
 }
 
 export interface SceneLayoutImageResourceSpec {
@@ -148,7 +155,7 @@ export interface SceneLayoutPopupBinding {
   readonly type: "award-celebration";
   readonly manifest: string;
   readonly placements: Readonly<
-    Partial<Record<SceneLayoutVariantId, SceneLayoutNodePlacement>>
+    Partial<Record<SceneLayoutVariantId, SceneLayoutScaledPlacement>>
   >;
 }
 
@@ -175,7 +182,7 @@ export interface SceneLayoutSpineGameModeTransition {
     readonly animation: string;
     readonly switchEvent: string;
     readonly placements: Readonly<
-      Partial<Record<SceneLayoutVariantId, SceneLayoutNodePlacement>>
+      Partial<Record<SceneLayoutVariantId, SceneLayoutScaledPlacement>>
     >;
   };
 }

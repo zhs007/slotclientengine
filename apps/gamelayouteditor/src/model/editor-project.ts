@@ -83,16 +83,26 @@ export interface EditorNodeDraft {
     text: string;
     anchor: { x: number; y: number };
   };
-  placements: Partial<
-    Record<SceneLayoutVariantId, { x: number; y: number; scale: number }>
-  >;
+  placements: Partial<Record<SceneLayoutVariantId, EditorNodePlacement>>;
   /**
    * Editor-only cache for temporarily hidden orientation placements.
    * Export intentionally serializes only `placements`.
    */
-  hiddenPlacements?: Partial<
-    Record<SceneLayoutVariantId, { x: number; y: number; scale: number }>
-  >;
+  hiddenPlacements?: Partial<Record<SceneLayoutVariantId, EditorNodePlacement>>;
+}
+
+export interface EditorNodePlacement {
+  x: number;
+  y: number;
+  scale: number;
+  /** Optional only for legacy/in-memory callers; editor-created drafts always materialize it. */
+  rotation?: number;
+  /** Optional only for legacy/in-memory callers; editor-created drafts always materialize it. */
+  center?: { x: number; y: number };
+}
+
+export function createDefaultNodePlacement(x = 0, y = 0): EditorNodePlacement {
+  return { x, y, scale: 1, rotation: 0, center: { x: 0.5, y: 0.5 } };
 }
 
 export interface EditorSymbolPackageDependency {

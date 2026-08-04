@@ -15,6 +15,7 @@ import type {
   SceneLayoutGameModes,
   SceneLayoutGameModeTransition,
   SceneLayoutRuntimeResourceSpec,
+  SceneLayoutScaledPlacement,
   SceneLayoutVariantId,
 } from "./types.js";
 
@@ -335,6 +336,40 @@ function parseNodePlacement(
   value: unknown,
   label: string,
 ): SceneLayoutNodePlacement {
+  const record = readRecord(value, label);
+  known(record, ["x", "y", "scale", "rotation", "center"], label);
+  const center =
+    record.center === undefined
+      ? { x: 0.5, y: 0.5 }
+      : parseNodeCenter(record.center, `${label}.center`);
+  return deepFreeze({
+    x: finite(record.x, `${label}.x`),
+    y: finite(record.y, `${label}.y`),
+    scale: positive(record.scale, `${label}.scale`),
+    rotation:
+      record.rotation === undefined
+        ? 0
+        : finite(record.rotation, `${label}.rotation`),
+    center,
+  });
+}
+
+function parseNodeCenter(
+  value: unknown,
+  label: string,
+): { readonly x: number; readonly y: number } {
+  const record = readRecord(value, label);
+  known(record, ["x", "y"], label);
+  return deepFreeze({
+    x: unit(record.x, `${label}.x`),
+    y: unit(record.y, `${label}.y`),
+  });
+}
+
+function parseScaledPlacement(
+  value: unknown,
+  label: string,
+): SceneLayoutScaledPlacement {
   const record = readRecord(value, label);
   known(record, ["x", "y", "scale"], label);
   return deepFreeze({
@@ -913,7 +948,7 @@ function parsePopupBindings(
     const placements = Object.fromEntries(
       expected.map((variant) => [
         variant,
-        parseNodePlacement(
+        parseScaledPlacement(
           placementsRecord[variant],
           `${label}.placements.${variant}`,
         ),
@@ -1259,12 +1294,12 @@ function parseGameModeTransitions(
       );
       known(placementsRecord, variants, `${overlayLabel}.placements`);
       const placements: Partial<
-        Record<SceneLayoutVariantId, SceneLayoutNodePlacement>
+        Record<SceneLayoutVariantId, SceneLayoutScaledPlacement>
       > = {};
       for (const variant of variants) {
         if (!Object.hasOwn(placementsRecord, variant))
           fail(`${overlayLabel}.placements.${variant} is required.`);
-        placements[variant] = parseNodePlacement(
+        placements[variant] = parseScaledPlacement(
           placementsRecord[variant],
           `${overlayLabel}.placements.${variant}`,
         );
@@ -1477,6 +1512,7 @@ function nonNegative(value: unknown, label: string): number {
   if (result < 0) fail(`${label} must be non-negative.`);
   return result;
 }
+
 function unit(value: unknown, label: string): number {
   const result = finite(value, label);
   if (result < 0 || result > 1) fail(`${label} must be between 0 and 1.`);

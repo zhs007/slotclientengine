@@ -118,7 +118,7 @@ function backgroundInspector(
   return `<div class="inspector-inner"><div class="inspector-heading" tabindex="-1" data-inspector-heading><span>背景 Inspector</span><h2>${variantId}</h2></div>
     <section class="inspector-section"><h3>资源绑定</h3>${resource && node ? `<p><strong>${escapeHtml(node.id)}</strong> · order ${node.order}</p><p class="path">${escapeHtml(describeResource(resource))}</p>${nodeIdField(node)}${resource.kind === "spine" ? spinePlaybackEditor(resource, node) : ""}` : '<p class="hint">尚未绑定背景资源。</p>'}<div class="button-row"><button type="button" data-choose-background="${variantId}">${resource ? "更换资源" : "选择资源"}</button><button type="button" class="danger" data-clear-background="${variantId}" ${node ? "" : "disabled"}>清除背景</button></div></section>
     <section class="inspector-section"><h3>Art / Focus</h3><div class="field-grid">${numberField("art width", `variants.${variantId}.artSize.width`, variant.artSize.width)}${numberField("art height", `variants.${variantId}.artSize.height`, variant.artSize.height)}</div><p class="derived">focus ${variant.focusRect.x}, ${variant.focusRect.y}, ${variant.focusRect.width} × ${variant.focusRect.height}</p><details data-inspector-section="layout:background:${variantId}:focus" ${session.expandedInspectorSections.has(`layout:background:${variantId}:focus`) ? "open" : ""}><summary>高级 focus 配置</summary><div class="field-grid">${numberField("left", `variants.${variantId}.focusOffsets.left`, variant.focusOffsets.left)}${numberField("top", `variants.${variantId}.focusOffsets.top`, variant.focusOffsets.top)}${numberField("right", `variants.${variantId}.focusOffsets.right`, variant.focusOffsets.right)}${numberField("bottom", `variants.${variantId}.focusOffsets.bottom`, variant.focusOffsets.bottom)}</div>${project.mode === "orientation-focus" ? `<fieldset><legend>frame focus rect</legend><div class="field-grid">${numberField("width", `variants.${variantId}.frameFocusRect.width`, variant.frameFocusRect.width)}${numberField("height", `variants.${variantId}.frameFocusRect.height`, variant.frameFocusRect.height)}</div></fieldset><fieldset><legend>min focus margins</legend><div class="field-grid">${numberField("left", `variants.${variantId}.minFocusMargin.left`, variant.minFocusMargin.left)}${numberField("right", `variants.${variantId}.minFocusMargin.right`, variant.minFocusMargin.right)}${numberField("top", `variants.${variantId}.minFocusMargin.top`, variant.minFocusMargin.top)}${numberField("bottom", `variants.${variantId}.minFocusMargin.bottom`, variant.minFocusMargin.bottom)}</div></fieldset>` : ""}</details></section>
-    ${node ? `<section class="inspector-section"><h3>背景 Placement</h3><p class="hint">Spine 的导出 bounds 不是 art size；居中原点资源通常使用 art 宽高的一半作为 x / y。</p><div class="field-grid">${numberField("x", `nodes.${nodeIndex}.placements.${variantId}.x`, node.placements[variantId]!.x)}${numberField("y", `nodes.${nodeIndex}.placements.${variantId}.y`, node.placements[variantId]!.y)}${numberField("scale", `nodes.${nodeIndex}.placements.${variantId}.scale`, node.placements[variantId]!.scale, 0.01)}</div></section>` : ""}
+    ${node ? `<section class="inspector-section"><h3>背景 Placement</h3><p class="hint">rotation 使用角度；Spine 的 center 0.5 / 0.5 对应 authored 原点。</p>${placementFields(node, nodeIndex, variantId)}</section>` : ""}
   </div>`;
 }
 
@@ -199,6 +199,16 @@ function placementMarkup(
       : `<strong>default</strong>`;
   const hiddenHint = node.hiddenPlacements?.[variant]
     ? "placement 已保留；重新显示会恢复此前编辑值。"
-    : "首次启用会创建固定初值 {x:0,y:0,scale:1}。";
-  return `<fieldset><legend>${visibility}</legend>${placement ? `<div class="field-grid">${numberField("x", `nodes.${nodeIndex}.placements.${variant}.x`, placement.x)}${numberField("y", `nodes.${nodeIndex}.placements.${variant}.y`, placement.y)}${numberField("scale", `nodes.${nodeIndex}.placements.${variant}.scale`, placement.scale, 0.01)}</div>` : `<p class="hint">${hiddenHint}</p>`}</fieldset>`;
+    : "首次启用会创建固定初值 {x:0,y:0,scale:1,rotation:0,center:{x:0.5,y:0.5}}。";
+  return `<fieldset><legend>${visibility}</legend>${placement ? placementFields(node, nodeIndex, variant) : `<p class="hint">${hiddenHint}</p>`}</fieldset>`;
+}
+
+function placementFields(
+  node: EditorNodeDraft,
+  nodeIndex: number,
+  variant: "default" | "landscape" | "portrait",
+): string {
+  const placement = node.placements[variant]!;
+  const base = `nodes.${nodeIndex}.placements.${variant}`;
+  return `<div class="field-grid">${numberField("x", `${base}.x`, placement.x)}${numberField("y", `${base}.y`, placement.y)}${numberField("scale", `${base}.scale`, placement.scale, 0.01)}${numberField("rotation (deg)", `${base}.rotation`, placement.rotation ?? 0)}${numberField("center x", `${base}.center.x`, placement.center?.x ?? 0.5, 0.01, 0, 1)}${numberField("center y", `${base}.center.y`, placement.center?.y ?? 0.5, 0.01, 0, 1)}</div>`;
 }

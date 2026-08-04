@@ -749,7 +749,13 @@ describe("filename-key layout resource commands", () => {
       defaultAnimation: "BG",
     });
     expect(project.variants.default.artSize).toEqual({ width: 0, height: 0 });
-    expect(node.placements.default).toEqual({ x: 0, y: 0, scale: 1 });
+    expect(node.placements.default).toEqual({
+      x: 0,
+      y: 0,
+      scale: 1,
+      rotation: 0,
+      center: { x: 0.5, y: 0.5 },
+    });
 
     setVariantArtSizeDimension(project, "default", "width", 2000);
     setVariantArtSizeDimension(project, "default", "height", 2000);
@@ -758,7 +764,13 @@ describe("filename-key layout resource commands", () => {
       width: 2000,
       height: 2000,
     });
-    expect(node.placements.default).toEqual({ x: 1000, y: 1000, scale: 1 });
+    expect(node.placements.default).toEqual({
+      x: 1000,
+      y: 1000,
+      scale: 1,
+      rotation: 0,
+      center: { x: 0.5, y: 0.5 },
+    });
     expect(project.reel.placements.default).toEqual({
       x: 600,
       y: 760,
@@ -925,12 +937,24 @@ describe("filename-key layout resource commands", () => {
       width: 3744.3176,
       height: 2371.955,
     });
-    expect(node.placements.default).toEqual({ x: 0, y: 0, scale: 1 });
+    expect(node.placements.default).toEqual({
+      x: 0,
+      y: 0,
+      scale: 1,
+      rotation: 0,
+      center: { x: 0.5, y: 0.5 },
+    });
 
     setVariantArtSizeDimension(project, "default", "width", 2000);
     setVariantArtSizeDimension(project, "default", "height", 2000);
 
-    expect(node.placements.default).toEqual({ x: 1000, y: 1000, scale: 1 });
+    expect(node.placements.default).toEqual({
+      x: 1000,
+      y: 1000,
+      scale: 1,
+      rotation: 0,
+      center: { x: 0.5, y: 0.5 },
+    });
     expect(project.reel.placements.default).toEqual({
       x: 600,
       y: 760,
@@ -1034,8 +1058,20 @@ describe("filename-key layout resource commands", () => {
     expect(
       project.nodes.slice(-2).map((node) => node.placements.default),
     ).toEqual([
-      { x: 1000, y: 1000, scale: 1 },
-      { x: 1000, y: 1000, scale: 1 },
+      {
+        x: 1000,
+        y: 1000,
+        scale: 1,
+        rotation: 0,
+        center: { x: 0.5, y: 0.5 },
+      },
+      {
+        x: 1000,
+        y: 1000,
+        scale: 1,
+        rotation: 0,
+        center: { x: 0.5, y: 0.5 },
+      },
     ]);
 
     project.coordinateOrigin = "center";
@@ -1050,6 +1086,8 @@ describe("filename-key layout resource commands", () => {
       x: 0,
       y: 0,
       scale: 1,
+      rotation: 0,
+      center: { x: 0.5, y: 0.5 },
     });
   });
 
@@ -1203,11 +1241,15 @@ describe("filename-key layout resource commands", () => {
       x: 0,
       y: 0,
       scale: 1,
+      rotation: 0,
+      center: { x: 0.5, y: 0.5 },
     });
     project.nodes[0].placements.landscape = {
       x: 123,
       y: -45,
       scale: 0.75,
+      rotation: -180,
+      center: { x: 0.25, y: 0.75 },
     };
     setLayerVariantVisibility(project, "second", "landscape", false);
     expect(project.nodes[0].placements.landscape).toBeUndefined();
@@ -1215,6 +1257,8 @@ describe("filename-key layout resource commands", () => {
       x: 123,
       y: -45,
       scale: 0.75,
+      rotation: -180,
+      center: { x: 0.25, y: 0.75 },
     });
     setLayerVariantVisibility(project, "second", "landscape", false);
     setLayerVariantVisibility(project, "second", "landscape", true);
@@ -1222,6 +1266,8 @@ describe("filename-key layout resource commands", () => {
       x: 123,
       y: -45,
       scale: 0.75,
+      rotation: -180,
+      center: { x: 0.25, y: 0.75 },
     });
     expect(project.nodes[0].hiddenPlacements?.landscape).toBeUndefined();
     setLayerVariantVisibility(project, "second", "landscape", true);
@@ -1229,6 +1275,8 @@ describe("filename-key layout resource commands", () => {
       x: 123,
       y: -45,
       scale: 0.75,
+      rotation: -180,
+      center: { x: 0.25, y: 0.75 },
     });
     renameNode(project, "second", "second");
     expect(() => renameNode(project, "missing", "next")).toThrow(/未知节点/);

@@ -13,6 +13,32 @@
 
 `reels.main.placements.<variant>` 只包含 `x/y`。placement 在 `top-left` 模式表示转轮矩形左上角，在 `center` 模式表示转轮矩形中心相对 art center 的偏移。scene-layout 不提供主转轮整体缩放；横竖屏适配应调整背景素材、art size 和 reel placement。
 
+## Node transform
+
+`nodes[*].placements.<variant>` 的 canonical 结构包含 `x/y/scale/rotation/center`：
+
+```json
+{
+  "x": 120,
+  "y": -30,
+  "scale": 0.8,
+  "rotation": -90,
+  "center": { "x": 0.5, "y": 0.5 }
+}
+```
+
+`rotation` 使用顺时针角度，接受任意有限数，包括负数和大于 `360` 的值，保存时不做取模。
+`center.x/y` 是 `[0,1]` 内的 node-local 归一化旋转中心；`0.5/0.5` 是默认中心。Spine
+节点的 authored 原点就是默认中心，因此 `0.5/0.5` 精确映射到 local `(0,0)`，不从
+skeleton bounds 或 atlas texture 推导另一套中心。image、VNI、image-string 使用各自显式
+size/stage/authored layout 映射 node-local pivot。
+
+旧 v1 node placement 缺少 `rotation` 或 `center` 时，parser 分别规范化为 `0` 和
+`{x:0.5,y:0.5}`，画面不变；新导出写出 canonical 字段。rotation/center 只属于 scene node
+（包括 background node），Popup 与 Spine transition placement 仍只接受 `x/y/scale`，main reel
+仍只接受 `x/y`。transform 由 rendercore node container 统一应用，geometry-only 更新不重建
+texture、Spine/VNI player、reel 或当前 mode。
+
 ```json
 {
   "coordinateOrigin": "center",

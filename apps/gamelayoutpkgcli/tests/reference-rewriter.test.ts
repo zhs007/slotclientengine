@@ -58,7 +58,15 @@ describe("typed asset reference rewriting", () => {
               project: "runtime.json",
               loop: false,
             },
-            placements: { default: { x: 0, y: 0, scale: 1 } },
+            placements: {
+              default: {
+                x: 0,
+                y: 0,
+                scale: 1,
+                rotation: 180,
+                center: { x: 0.25, y: 0.75 },
+              },
+            },
           },
         ],
       },
@@ -68,6 +76,13 @@ describe("typed asset reference rewriting", () => {
       kind: "vni",
       project: "runtime.hash.json",
       loop: false,
+    });
+    expect(withVni.nodes.at(-1)?.placements.default).toEqual({
+      x: 0,
+      y: 0,
+      scale: 1,
+      rotation: 180,
+      center: { x: 0.25, y: 0.75 },
     });
 
     const withRuntime = rewriteLayoutManifest(
