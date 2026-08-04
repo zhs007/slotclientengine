@@ -172,10 +172,11 @@ export async function createPopupPackageResourceFromResolvedFiles(options: {
           kind: "image-string",
           resource: imageStringResource,
         };
-        validateImageStringText(
-          requiredPopupAmountCharacters(manifest.amountFormat).join(""),
-          imageStringResource.manifest,
-        );
+        if (manifest.type === "award-celebration")
+          validateImageStringText(
+            requiredPopupAmountCharacters(manifest.amountFormat).join(""),
+            imageStringResource.manifest,
+          );
       } else if (spec.kind === "image") {
         const url = objectUrl(requireBytes(files, spec.path), spec.path, urls);
         const texture = await (options.loadTexture
@@ -225,9 +226,13 @@ export async function createPopupPackageResourceFromResolvedFiles(options: {
         );
         const spine = { skeleton, atlasText, textureUrls };
         const requiredAnimations =
-          manifest.awardCelebration.celebrationTiers.flatMap(
-            () => [] as string[],
-          );
+          manifest.type === "spine" && manifest.spine.resource === id
+            ? [
+                manifest.spine.playback.startAnimation,
+                manifest.spine.playback.loopAnimation,
+                manifest.spine.playback.endAnimation,
+              ]
+            : [];
         validateOfficialSpineResource({ resource: spine, requiredAnimations });
         prepared[id] = { kind: "spine", resource: spine };
       }
@@ -348,16 +353,30 @@ export function flattenPopupPackageFiles(options: {
         resource: requiredPopupResourceKey(resourceKeys, layer.resource),
       })),
     }) as T;
-  const flattenedManifest = parsePopupManifest({
-    ...manifest,
-    resources,
-    awardCelebration: {
-      base: rewriteLayers(manifest.awardCelebration.base),
-      standard: rewriteLayers(manifest.awardCelebration.standard),
-      celebrationTiers:
-        manifest.awardCelebration.celebrationTiers.map(rewriteLayers),
-    },
-  });
+  const flattenedManifest = parsePopupManifest(
+    manifest.type === "spine"
+      ? {
+          ...manifest,
+          resources,
+          spine: {
+            ...manifest.spine,
+            resource: requiredPopupResourceKey(
+              resourceKeys,
+              manifest.spine.resource,
+            ),
+          },
+        }
+      : {
+          ...manifest,
+          resources,
+          awardCelebration: {
+            base: rewriteLayers(manifest.awardCelebration.base),
+            standard: rewriteLayers(manifest.awardCelebration.standard),
+            celebrationTiers:
+              manifest.awardCelebration.celebrationTiers.map(rewriteLayers),
+          },
+        },
+  );
   const files = new Map<string, Uint8Array>([
     [ROOT, encodeStableJson(flattenedManifest)],
   ]);
@@ -539,6 +558,20 @@ function validateAnimationBindings(
   manifest: PopupManifestV1,
   resources: Readonly<Record<string, PopupPreparedResource>>,
 ) {
+  if (manifest.type === "spine") {
+    const resource = resources[manifest.spine.resource];
+    if (resource?.kind !== "spine")
+      throw new Error("Spine popup resource mismatch.");
+    validateOfficialSpineResource({
+      resource: resource.resource,
+      requiredAnimations: [
+        manifest.spine.playback.startAnimation,
+        manifest.spine.playback.loopAnimation,
+        manifest.spine.playback.endAnimation,
+      ],
+    });
+    return;
+  }
   for (const tier of [
     manifest.awardCelebration.base,
     manifest.awardCelebration.standard,

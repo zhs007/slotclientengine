@@ -8,6 +8,50 @@ import {
 import { popupFixture } from "./fixtures.js";
 
 describe("popup manifest", () => {
+  it("strictly parses a standalone segmented Spine popup", () => {
+    const hash = "a".repeat(64);
+    const manifest = parsePopupManifest({
+      version: 1,
+      kind: "popup",
+      id: "free-game",
+      type: "spine",
+      designViewport: { width: 1080, height: 1920 },
+      resources: {
+        effect: {
+          kind: "spine",
+          skeleton: `assets/${hash}.json`,
+          atlas: `assets/${hash}.atlas`,
+          textures: { "effect.png": `assets/${hash}.png` },
+        },
+      },
+      spine: {
+        resource: "effect",
+        transform: { x: 0, y: 0, scale: 1 },
+        playback: {
+          mode: "segmented-animations",
+          startAnimation: "start",
+          loopAnimation: "loop",
+          endAnimation: "end",
+        },
+      },
+    });
+    expect(manifest.type).toBe("spine");
+    if (manifest.type !== "spine") throw new Error("Expected spine popup.");
+    expect(manifest.spine.playback.loopAnimation).toBe("loop");
+    expect(() =>
+      parsePopupManifest({
+        ...manifest,
+        spine: {
+          ...manifest.spine,
+          playback: {
+            ...manifest.spine.playback,
+            endAnimation: "loop",
+          },
+        },
+      }),
+    ).toThrow(/must be unique/);
+  });
+
   it("strictly parses the complete game003-equivalent five-tier contract", () => {
     const manifest = parsePopupManifest(popupFixture());
     expect(manifest.awardCelebration.base.layers[0]).toMatchObject({
@@ -53,7 +97,8 @@ describe("popup manifest", () => {
     const legacy = structuredClone(popupFixture()) as any;
     delete legacy.awardCelebration.base.layers[0].parent;
     expect(
-      parsePopupManifest(legacy).awardCelebration.base.layers[0],
+      parsePopupManifest(legacy as ReturnType<typeof popupFixture>)
+        .awardCelebration.base.layers[0],
     ).toMatchObject({
       parent: { kind: "popup-root" },
     });
@@ -67,7 +112,7 @@ describe("popup manifest", () => {
     };
     expect(
       parsePopupManifest(
-        attached,
+        attached as ReturnType<typeof popupFixture>,
       ).awardCelebration.celebrationTiers[0].layers.find(
         (layer) => layer.kind === "image-string",
       ),
@@ -89,7 +134,8 @@ describe("popup manifest", () => {
       mode: "once",
     };
     expect(
-      parsePopupManifest(value).awardCelebration.celebrationTiers[0]!.layers[0],
+      parsePopupManifest(value as ReturnType<typeof popupFixture>)
+        .awardCelebration.celebrationTiers[0]!.layers[0],
     ).toMatchObject({ playback: { mode: "once" } });
     value.awardCelebration.celebrationTiers[0].layers[0].playback.loopEndTime = 2.5;
     expect(() => parsePopupManifest(value)).toThrow(/unknown key/);

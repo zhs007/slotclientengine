@@ -1,6 +1,6 @@
 # Popup Editor
 
-纯前端 strict `award-celebration` popup package 编辑器。
+纯前端 strict `award-celebration` 与普通 `spine` popup package 编辑器。
 
 资源 tab 只有一个支持多文件/多 ZIP 的“导入资源”入口，识别 image、official Spine 4.3、VNI、standalone ImgNumber ZIP 和 Popup ZIP。所有 closure 在提交前结构化抹平为 filename keys，普通导入只入库；layer/tier 仍由用户显式绑定。
 
@@ -8,7 +8,7 @@ VNI bundle 只导入 `purpose=runtime` 的运行发布包：唯一 runtime 自�
 
 同名不同 bytes 默认覆盖，review 显示 hash、bytes、动作和受影响 layer；全项目校验或 preview prepare 失败会完整回滚。不存在文件夹入口、任意 logical resource id 或独立 dependency bytes 区。
 
-新导出的 `<id>-popup.zip` 由根 `popup.manifest.json`、`assets.map.json` 和完整 SHA-256 payload 构成。manifest `resources` key 与 layer `resource` 直接使用 image、Spine skeleton、VNI project 或 image-string manifest 的 filename key。runtime 的 parser、五档 threshold、金额格式和播放生命周期仍由 `rendercore/popup` 拥有。
+新导出的 `<id>-popup.zip` 由根 `popup.manifest.json`、`assets.map.json` 和完整 SHA-256 payload 构成。普通 Spine 类型接收一组 JSON、atlas 与若干 PNG，并显式配置 start、loop、end 动画；点击在 loop 边界生效。runtime parser 与两类播放生命周期均由 `rendercore/popup` 拥有。
 
 VNI 图层可显式选择“分段循环”或“完整单次”。分段模式编辑 start/loop/end 边界；
 完整单次模式从 `0` 到 VNI 总时长非循环播放，动画先于金额阶段结束时保持 authored

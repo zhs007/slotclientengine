@@ -177,6 +177,11 @@ export function collectSceneLayoutPackagePaths(options: {
       popup.manifest,
     );
     const nested = parsePopupManifest(nestedValue);
+    if (nested.type !== popup.type) {
+      throw new SceneLayoutError(
+        `Scene layout popup type mismatch at "${popup.manifest}": binding=${popup.type}, nested=${nested.type}.`,
+      );
+    }
     if (!mapped && nested.id !== popup.manifest.split("/").at(-2)) {
       throw new SceneLayoutError(
         `Scene layout popup dependency id mismatch at "${popup.manifest}".`,

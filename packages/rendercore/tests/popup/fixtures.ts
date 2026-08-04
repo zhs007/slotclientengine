@@ -1,4 +1,4 @@
-import type { PopupManifestV1 } from "../../src/popup/index.js";
+import type { AwardCelebrationPopupManifestV1 } from "../../src/popup/index.js";
 
 const digest = "0".repeat(64);
 const amountLayer = (scale = 1) => ({
@@ -25,7 +25,7 @@ const vniLayer = (id: string, resource: string) => ({
   },
 });
 
-export function popupFixture(): PopupManifestV1 {
+export function popupFixture(): AwardCelebrationPopupManifestV1 {
   return {
     version: 1,
     kind: "popup",

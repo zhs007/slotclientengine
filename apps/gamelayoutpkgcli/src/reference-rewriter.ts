@@ -327,6 +327,16 @@ export function rewritePopupManifest(
         return { ...layer, resource: resourceIds.get(resource) ?? resource };
       }),
     }) as T;
+  if (manifest.type === "spine")
+    return parsePopupManifest({
+      ...manifest,
+      resources,
+      spine: {
+        ...manifest.spine,
+        resource:
+          resourceIds.get(manifest.spine.resource) ?? manifest.spine.resource,
+      },
+    });
   return parsePopupManifest({
     ...manifest,
     resources,

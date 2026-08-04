@@ -104,6 +104,13 @@ export type AssetGroupRecord =
       readonly usedByModes: readonly string[];
       readonly requiredAssets: readonly string[];
       readonly incrementalAssets: readonly string[];
+    }
+  | {
+      readonly id: string;
+      readonly kind: "spine-popup";
+      readonly popupId: string;
+      readonly requiredAssets: readonly string[];
+      readonly incrementalAssets: readonly string[];
     };
 
 export interface SceneLayoutAssetGroupsV1 {

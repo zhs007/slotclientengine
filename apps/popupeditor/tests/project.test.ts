@@ -26,6 +26,40 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 describe("popup editor filename-key project", () => {
+  it("exports a standalone Spine popup without award fields", () => {
+    const project = createPopupEditorProject();
+    const hash = "a".repeat(64);
+    project.type = "spine";
+    project.id = "free-game";
+    project.resources.set("effect", {
+      rootKey: "effect",
+      kind: "spine",
+      spec: {
+        kind: "spine",
+        skeleton: `assets/${hash}.json`,
+        atlas: `assets/${hash}.atlas`,
+        textures: { "effect.png": `assets/${hash}.png` },
+      },
+      keys: [
+        `assets/${hash}.json`,
+        `assets/${hash}.atlas`,
+        `assets/${hash}.png`,
+      ],
+    });
+    project.spine.resource = "effect";
+    project.spine.playback = {
+      startAnimation: "start",
+      loopAnimation: "loop",
+      endAnimation: "end",
+    };
+    const manifest = projectToManifest(project);
+    expect(manifest.type).toBe("spine");
+    if (manifest.type !== "spine") throw new Error("Expected spine popup.");
+    expect(manifest.spine.resource).toBe("effect");
+    expect("awardCelebration" in manifest).toBe(false);
+    expect("amountFormat" in manifest).toBe(false);
+  });
+
   it("keeps the five-tier amount contract", () => {
     const project = createPopupEditorProject();
     expect([...project.tiers.keys()]).toEqual([
@@ -134,6 +168,50 @@ describe("popup editor filename-key project", () => {
     expect(project.assets.size).toBe(0);
   });
 
+  it("imports multiple Spine skeleton roots that share one atlas and texture", async () => {
+    const skeleton = (name: string) =>
+      JSON.stringify({
+        skeleton: { spine: "4.3.23", name },
+        bones: [{ name: "root" }],
+        slots: [],
+        skins: [{ name: "default", attachments: {} }],
+        animations: { Start: {}, Loop: {}, End: {} },
+      });
+    const review = await discoverPopupResources([
+      new File([skeleton("free")], "FreeGames.json"),
+      new File([skeleton("bonus")], "BonusGame.json"),
+      new File(
+        ["Pop_ups.png\nsize:1,1\nfilter:Linear,Linear\n"],
+        "Pop_ups.atlas",
+      ),
+      new File([png(1, 1).buffer], "Pop_ups.png"),
+    ]);
+    const spine = review.filter((candidate) => candidate.kind === "spine");
+    expect(spine.map(({ rootKey }) => rootKey).sort()).toEqual([
+      "BonusGame.json",
+      "FreeGames.json",
+    ]);
+    expect(
+      spine.every(
+        (candidate) =>
+          candidate.exactKeys.includes("Pop_ups.atlas") &&
+          candidate.exactKeys.includes("Pop_ups.png"),
+      ),
+    ).toBe(true);
+    const project = createPopupEditorProject();
+    await commitImportReview(project, spine);
+    expect(project.resources.get("FreeGames.json")?.spec).toMatchObject({
+      kind: "spine",
+      atlas: "Pop_ups.atlas",
+      textures: { "Pop_ups.png": "Pop_ups.png" },
+    });
+    expect(project.resources.get("BonusGame.json")?.spec).toMatchObject({
+      kind: "spine",
+      atlas: "Pop_ups.atlas",
+      textures: { "Pop_ups.png": "Pop_ups.png" },
+    });
+  });
+
   it("builds every layer kind and rejects unsafe resource operations", () => {
     const project = createPopupEditorProject();
     project.resources.set("amount.json", {
@@ -232,9 +310,11 @@ describe("popup editor filename-key project", () => {
     expect(
       project.tiers.get("bigwin")!.layers.find(({ id }) => id === vni.id),
     ).toMatchObject({ playback: { mode: "once" } });
-    expect(
-      projectToManifest(project).awardCelebration.celebrationTiers[0],
-    ).toMatchObject({
+    const manifest = projectToManifest(project);
+    expect(manifest.type).toBe("award-celebration");
+    if (manifest.type !== "award-celebration")
+      throw new Error("Expected award celebration popup project.");
+    expect(manifest.awardCelebration.celebrationTiers[0]).toMatchObject({
       layers: expect.arrayContaining([
         expect.objectContaining({ playback: { mode: "once" } }),
       ]),

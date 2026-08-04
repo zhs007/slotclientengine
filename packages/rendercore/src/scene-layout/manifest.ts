@@ -931,8 +931,8 @@ function parsePopupBindings(
     const label = `scene layout popups.${id}`;
     const binding = readRecord(raw, label);
     known(binding, ["type", "manifest", "placements"], label);
-    if (binding.type !== "award-celebration")
-      fail(`${label}.type must be "award-celebration".`);
+    if (binding.type !== "award-celebration" && binding.type !== "spine")
+      fail(`${label}.type must be "award-celebration" or "spine".`);
     const placementsRecord = readRecord(
       binding.placements,
       `${label}.placements`,
@@ -958,7 +958,7 @@ function parsePopupBindings(
     if (manifest.includes("/") && manifest.split("/").at(-2) !== id)
       fail(`${label}.manifest dependency id must equal binding id "${id}".`);
     result[id] = {
-      type: "award-celebration" as const,
+      type: binding.type,
       manifest,
       placements,
     };
@@ -1196,8 +1196,8 @@ function parseGameModes(
       mode.awardCelebrationPopup ? [mode.awardCelebrationPopup] : [],
     ),
   );
-  for (const id of Object.keys(popups ?? {}))
-    if (!referenced.has(id))
+  for (const [id, binding] of Object.entries(popups ?? {}))
+    if (binding.type === "award-celebration" && !referenced.has(id))
       fail(`scene layout popup "${id}" is orphaned by gameModes.`);
   return deepFreeze({ initialMode, modes, transitions });
 }

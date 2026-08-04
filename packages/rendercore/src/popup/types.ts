@@ -114,16 +114,37 @@ export interface AwardCelebrationSpec {
   readonly celebrationTiers: readonly AwardCelebrationTier[];
 }
 
-export interface PopupManifestV1 {
+export interface PopupManifestBaseV1 {
   readonly version: 1;
   readonly kind: "popup";
   readonly id: string;
-  readonly type: "award-celebration";
   readonly designViewport: PopupSize;
-  readonly amountFormat: PopupAmountFormat;
   readonly resources: Readonly<Record<string, PopupResourceSpec>>;
+}
+
+export interface AwardCelebrationPopupManifestV1 extends PopupManifestBaseV1 {
+  readonly type: "award-celebration";
+  readonly amountFormat: PopupAmountFormat;
   readonly awardCelebration: AwardCelebrationSpec;
 }
+
+export interface SpinePopupManifestV1 extends PopupManifestBaseV1 {
+  readonly type: "spine";
+  readonly spine: {
+    readonly resource: string;
+    readonly transform: PopupTransform;
+    readonly playback: {
+      readonly mode: "segmented-animations";
+      readonly startAnimation: string;
+      readonly loopAnimation: string;
+      readonly endAnimation: string;
+    };
+  };
+}
+
+export type PopupManifestV1 =
+  | AwardCelebrationPopupManifestV1
+  | SpinePopupManifestV1;
 
 export interface AwardCelebrationInput {
   readonly betAmountRaw: number;
@@ -169,8 +190,10 @@ export type PopupPreparedResource =
   | PopupPreparedVni
   | PopupPreparedSpine;
 
-export interface PopupPackageResource {
-  readonly manifest: PopupManifestV1;
+export interface PopupPackageResource<
+  TManifest extends PopupManifestV1 = PopupManifestV1,
+> {
+  readonly manifest: TManifest;
   readonly resources: Readonly<Record<string, PopupPreparedResource>>;
   destroy(): void | Promise<void>;
 }
@@ -184,6 +207,25 @@ export interface AwardCelebrationPlayer {
   requestDismiss(): void;
   dismissImmediately(): void;
   getSnapshot(): AwardCelebrationSnapshot;
+  isPlaying(): boolean;
+  destroy(): void;
+}
+
+export type SpinePopupPhase = "idle" | "start" | "loop" | "end" | "complete";
+
+export interface SpinePopupSnapshot {
+  readonly phase: SpinePopupPhase;
+  readonly dismissRequested: boolean;
+}
+
+export interface SpinePopupPlayer {
+  readonly container: Container;
+  init(): Promise<void>;
+  start(): void;
+  update(deltaSeconds: number): SpinePopupSnapshot;
+  requestDismiss(): void;
+  dismissImmediately(): void;
+  getSnapshot(): SpinePopupSnapshot;
   isPlaying(): boolean;
   destroy(): void;
 }

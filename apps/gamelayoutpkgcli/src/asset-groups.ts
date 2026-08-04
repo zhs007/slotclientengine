@@ -124,23 +124,37 @@ export function createSceneLayoutAssetGroups(options: {
     const nested = parsePopupManifest(
       parseRequiredJson(options.files, binding.manifest),
     );
-    provisional.push({
-      id: `award-celebration:${popupId}`,
-      kind: "award-celebration",
-      popupId,
-      usedByModes: sortUnique(
-        gameModes.modes
-          .filter((mode) => mode.awardCelebrationPopup === popupId)
-          .map((mode) => mode.id),
-      ),
-      requiredAssets: sortUnique([
-        binding.manifest,
-        ...collectMappedPopupAssetKeys({
-          manifest: nested,
-          files: options.files,
-        }),
-      ]),
-    });
+    if (nested.type !== binding.type)
+      throw new Error(
+        `Popup ${popupId} binding type ${binding.type} 与 nested ${nested.type} 不一致。`,
+      );
+    const requiredAssets = sortUnique([
+      binding.manifest,
+      ...collectMappedPopupAssetKeys({
+        manifest: nested,
+        files: options.files,
+      }),
+    ]);
+    provisional.push(
+      nested.type === "spine"
+        ? {
+            id: `spine-popup:${popupId}`,
+            kind: "spine-popup" as const,
+            popupId,
+            requiredAssets,
+          }
+        : {
+            id: `award-celebration:${popupId}`,
+            kind: "award-celebration" as const,
+            popupId,
+            requiredAssets,
+            usedByModes: sortUnique(
+              gameModes.modes
+                .filter((mode) => mode.awardCelebrationPopup === popupId)
+                .map((mode) => mode.id),
+            ),
+          },
+    );
   }
 
   const initial = new Set<string>();
@@ -151,7 +165,10 @@ export function createSceneLayoutAssetGroups(options: {
       (group.kind === "transition" &&
         group.ownerMode === gameModes.initialMode) ||
       (group.kind === "symbols" &&
-        group.usedByModes.includes(gameModes.initialMode));
+        group.usedByModes.includes(gameModes.initialMode)) ||
+      (group.kind === "award-celebration" &&
+        group.usedByModes.includes(gameModes.initialMode)) ||
+      group.kind === "spine-popup";
     if (include) for (const key of group.requiredAssets) initial.add(key);
   }
   const initialAssets = sortUnique([...initial]);
@@ -219,6 +236,8 @@ function finalizeGroup(
     case "symbols":
       return { ...group, requiredAssets, incrementalAssets };
     case "award-celebration":
+      return { ...group, requiredAssets, incrementalAssets };
+    case "spine-popup":
       return { ...group, requiredAssets, incrementalAssets };
   }
 }
@@ -447,7 +466,9 @@ function validateGroup(
               ? ["packageId", "usedByModes"]
               : kind === "award-celebration"
                 ? ["popupId", "usedByModes"]
-                : null;
+                : kind === "spine-popup"
+                  ? ["popupId"]
+                  : null;
   if (!extras) throw new Error(`groups[${index}].kind 无效。`);
   exactKeys(group, [...common, ...extras], `groups[${index}]`);
   const id = nonEmptyString(group.id, `groups[${index}].id`);
@@ -475,12 +496,14 @@ function validateGroup(
   } else if (kind === "transition") {
     for (const field of ["ownerMode", "from", "to"])
       nonEmptyString(group[field], `${id}.${field}`);
-  } else {
+  } else if (kind === "symbols" || kind === "award-celebration") {
     nonEmptyString(
       group[kind === "symbols" ? "packageId" : "popupId"],
       `${id} identity`,
     );
     stringArray(group.usedByModes, `${id}.usedByModes`);
+  } else {
+    nonEmptyString(group.popupId, `${id}.popupId`);
   }
   return group as unknown as AssetGroupRecord;
 }

@@ -452,7 +452,7 @@ describe("GameLayoutEditorApp workspace", () => {
 
   it("imports, places, previews and clears an award popup dependency", async () => {
     ioSpies.importPopupPackageZip.mockReturnValue({
-      manifest: { id: "fixture-popup" },
+      manifest: { id: "fixture-popup", type: "award-celebration" },
       files: new Map([["popup.manifest.json", new Uint8Array([1])]]),
     });
     const { app, root } = await createApp();

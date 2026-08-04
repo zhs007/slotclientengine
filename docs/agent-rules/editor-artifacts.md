@@ -40,10 +40,10 @@
 
 ## Popup Editor
 
-- `apps/popupeditor` 只输出 strict `award-celebration` popup package；普通 popup 不在当前范围。
+- `apps/popupeditor` 输出 strict `award-celebration` 或普通 `spine` popup package；两种类型使用互斥 schema，不保留无关字段。
 - VNI export bundle 只把 `purpose=runtime` 作为运行候选：唯一 runtime 自动选择，多个 runtime 才枚举；禁止手输 profile id，`purpose=editing` 不进入候选。
 - popup package 使用完整 SHA-256 content-addressed owned payload，并保持 exact closure。
-- `packages/rendercore/popup` 拥有 popup manifest/parser、image/VNI/official Spine/image-string layer、BigInt threshold sequence、金额格式、点击/dismiss/end drain 和 runtime snapshot；editor/game app 不复制。
+- `packages/rendercore/popup` 拥有 popup manifest/parser、image/VNI/official Spine/image-string layer、BigInt threshold sequence、金额格式、点击/dismiss/end drain、普通 Spine start/loop/end 边界状态机和 runtime snapshot；editor/game app 不复制。
 
 ## Symbols Editor
 
@@ -74,6 +74,7 @@
 ## Layout Editor dependency
 
 - gamelayouteditor 把 symbols ZIP 和 popup ZIP 当自包含 dependency；每个 active variant 只配置明确 binding 和相对 viewport center 的 popup root `x/y/scale`。
+- 普通 Spine popup 导入 gamelayouteditor 后只进入 dependency library；必须显式注册才进入 Scene Layout manifest 与 production ZIP，且不能绑定为 game mode award celebration。
 - Symbols dependency 对 gamelayouteditor 是只读 symbol 状态机合同。Layout Editor 可以校验 package id、cell size、display symbols、公开 reel/state capability 和 exact closure，并调用 production preview；不得提供内部图片、Spine/VNI animation、state layer、ImgNumber/value 或 cascade 的编辑控件，也不得重写这些 owner-owned manifest 字段。
 - Symbols dependency 的导入、预览、替换和 layout ZIP 重导必须保留其完整
   state/ImgNumber multi-target closure；headless authoring 可以显式跳过 texture load，

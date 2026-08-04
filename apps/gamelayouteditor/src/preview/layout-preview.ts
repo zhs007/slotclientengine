@@ -296,6 +296,26 @@ export class LayoutPreview {
     this.#packageRuntime.dismissActiveAwardCelebrationImmediately();
   }
 
+  playSpinePopup(id: string): void {
+    if (!this.#packageRuntime)
+      throw new Error("当前 layout preview 没有 package runtime。");
+    const player = this.#packageRuntime.getSpinePopup(id);
+    player.dismissImmediately();
+    player.start();
+  }
+
+  requestDismissSpinePopup(id: string): void {
+    if (!this.#packageRuntime)
+      throw new Error("当前 layout preview 没有 package runtime。");
+    this.#packageRuntime.getSpinePopup(id).requestDismiss();
+  }
+
+  dismissSpinePopupImmediately(id: string): void {
+    if (!this.#packageRuntime)
+      throw new Error("当前 layout preview 没有 package runtime。");
+    this.#packageRuntime.getSpinePopup(id).dismissImmediately();
+  }
+
   getGameModeIds(): readonly string[] {
     return this.#packageRuntime?.getGameModeIds() ?? Object.freeze([]);
   }

@@ -20,6 +20,7 @@ import {
   setGameModeVideoTransitionFadeOut,
   setGameModeVideoTransitionResource,
   setPopupPlacement,
+  setSpinePopupRegistered,
 } from "../src/model/game-mode-commands.js";
 
 describe("game mode and popup dependency commands", () => {
@@ -104,6 +105,26 @@ describe("game mode and popup dependency commands", () => {
     expect(() => bindGameModePopup(project, "BaseGame", "missing")).toThrow(
       /未知 Popup/,
     );
+  });
+
+  it("requires explicit registration for standalone Spine popups", () => {
+    const project = createNewEditorProject("maximized-focus");
+    const imported = {
+      manifest: { id: "free-game", type: "spine" } as never,
+      files: new Map([["popup.manifest.json", new Uint8Array([1])]]),
+    };
+    importPopupDependency(project, imported);
+    expect(project.registeredSpinePopupIds.size).toBe(0);
+    expect(() => bindGameModePopup(project, "BaseGame", "free-game")).toThrow(
+      /award-celebration/,
+    );
+    setSpinePopupRegistered(project, "free-game", true);
+    expect(project.registeredSpinePopupIds.has("free-game")).toBe(true);
+    expect(() => deletePopupDependency(project, "free-game")).toThrow(
+      /Scene Layout/,
+    );
+    setSpinePopupRegistered(project, "free-game", false);
+    deletePopupDependency(project, "free-game");
   });
 
   it("keeps stable modes state-free and rewrites directed transition references", () => {
@@ -333,7 +354,7 @@ describe("game mode and popup dependency commands", () => {
 
 function popup(id: string, marker: number) {
   return {
-    manifest: { id } as never,
+    manifest: { id, type: "award-celebration" } as never,
     files: new Map([["popup.manifest.json", new Uint8Array([marker])]]),
   };
 }

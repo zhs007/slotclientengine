@@ -114,6 +114,9 @@ describe("gamelayout popup dependency", () => {
       ),
       { decodeImage: async () => ({ width: 1, height: 1 }) },
     );
+    expect(imported.manifest.type).toBe("award-celebration");
+    if (imported.manifest.type !== "award-celebration")
+      throw new Error("Expected award celebration popup fixture.");
     expect(
       imported.manifest.awardCelebration.celebrationTiers[0]!.layers.find(
         ({ kind }) => kind === "vni",

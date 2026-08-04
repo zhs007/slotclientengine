@@ -69,6 +69,55 @@ describe("popup package resource", () => {
     expect(URL.revokeObjectURL).toHaveBeenCalled();
   });
 
+  it("prepares and flattens a standalone Spine popup closure", async () => {
+    const {
+      collectPopupPackagePaths,
+      createPopupPackageResource,
+      flattenPopupPackageFiles,
+    } = await import("../../src/popup/package-resource.js");
+    const award = fixture();
+    const spineSpec = award.manifest.resources.spine;
+    const manifest = {
+      version: 1,
+      kind: "popup",
+      id: "free-game",
+      type: "spine",
+      designViewport: { width: 100, height: 100 },
+      resources: { spine: spineSpec },
+      spine: {
+        resource: "spine",
+        transform: { x: 0, y: 0, scale: 1 },
+        playback: {
+          mode: "segmented-animations",
+          startAnimation: "start",
+          loopAnimation: "Loop",
+          endAnimation: "Win",
+        },
+      },
+    } as const;
+    if (spineSpec.kind !== "spine") throw new Error("Expected spine fixture.");
+    const files = new Map<string, Uint8Array>([
+      [
+        "popup.manifest.json",
+        new TextEncoder().encode(JSON.stringify(manifest)),
+      ],
+      ...[
+        spineSpec.skeleton,
+        spineSpec.atlas,
+        ...Object.values(spineSpec.textures),
+      ].map((path) => [path, award.files.get(path)!] as const),
+    ]);
+    expect(collectPopupPackagePaths({ manifest, files })).toHaveLength(3);
+    const flattened = flattenPopupPackageFiles({ manifest, files });
+    expect(flattened.manifest.type).toBe("spine");
+    const resource = await createPopupPackageResource({
+      manifest,
+      files,
+    });
+    expect(resource.resources.spine.kind).toBe("spine");
+    await resource.destroy();
+  });
+
   it("loads the same exact closure from contained CDN URLs", async () => {
     const { loadPopupPackageFromUrl } =
       await import("../../src/popup/package-resource.js");

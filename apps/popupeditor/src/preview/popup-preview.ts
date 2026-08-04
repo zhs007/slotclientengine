@@ -1,9 +1,11 @@
 import { extractBoundedZip } from "@slotclientengine/browserartifactio";
 import {
   createAwardCelebrationPlayer,
+  createSpinePopupPlayer,
   createPopupPackageResource,
   formatPopupAmount,
   type AwardCelebrationPlayer,
+  type SpinePopupPlayer,
   type PopupPackageResource,
 } from "@slotclientengine/rendercore/popup";
 import { Application, Graphics } from "pixi.js";
@@ -59,7 +61,8 @@ export class PopupPreview {
   readonly #host: HTMLElement;
   readonly #status: HTMLElement;
   #resource: PopupPackageResource | null = null;
-  #player: AwardCelebrationPlayer | null = null;
+  #player: AwardCelebrationPlayer | SpinePopupPlayer | null = null;
+  #type: "award-celebration" | "spine" = "award-celebration";
   #ready = false;
   #size = { width: 1080, height: 1920 };
   #zoom: number | "fit" = "fit";
@@ -82,7 +85,10 @@ export class PopupPreview {
     this.#app.ticker.add((ticker) => {
       if (this.#player?.isPlaying()) {
         const snapshot = this.#player.update(ticker.deltaMS / 1000);
-        this.#status.textContent = `${snapshot.activeTierId ?? "-"} / ${snapshot.activeSegment ?? "-"} / ${snapshot.phase} / ${snapshot.formattedAmount} / layers ${snapshot.activeLayerCount}+${snapshot.endingLayerCount}`;
+        this.#status.textContent =
+          "activeTierId" in snapshot
+            ? `${snapshot.activeTierId ?? "-"} / ${snapshot.activeSegment ?? "-"} / ${snapshot.phase} / ${snapshot.formattedAmount} / layers ${snapshot.activeLayerCount}+${snapshot.endingLayerCount}`
+            : `${snapshot.phase} / dismissRequested=${snapshot.dismissRequested}`;
       }
     });
     this.#ready = true;
@@ -96,15 +102,19 @@ export class PopupPreview {
     });
     await importPopupZip(exported.bytes);
     const resource = await createPopupPackageResource({ files });
-    const player = createAwardCelebrationPlayer({
-      resource,
-      formatAmount: (amountRaw) =>
-        formatPopupPreviewAmount(amountRaw, this.#amountFormat),
-    });
+    const player =
+      resource.manifest.type === "spine"
+        ? createSpinePopupPlayer({ resource })
+        : createAwardCelebrationPlayer({
+            resource,
+            formatAmount: (amountRaw) =>
+              formatPopupPreviewAmount(amountRaw, this.#amountFormat),
+          });
     await player.init();
     this.clear();
     this.#resource = resource;
     this.#player = player;
+    this.#type = resource.manifest.type;
     this.#app.stage.addChildAt(player.container, 0);
     this.layout();
     this.#status.textContent = "production runtime ready";
@@ -118,10 +128,12 @@ export class PopupPreview {
   play() {
     if (!this.#player) throw new Error("请先生成有效 production preview。");
     this.#player.dismissImmediately();
-    this.#player.start(this.#input);
+    if (this.#type === "spine") (this.#player as SpinePopupPlayer).start();
+    else (this.#player as AwardCelebrationPlayer).start(this.#input);
   }
   advance() {
-    this.#player?.requestAdvance();
+    if (this.#player && this.#type === "award-celebration")
+      (this.#player as AwardCelebrationPlayer).requestAdvance();
   }
   dismiss() {
     this.#player?.requestDismiss();

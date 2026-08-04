@@ -11,7 +11,7 @@
 
 ## Mode、variant 与稳定节点
 
-- editor 拥有通用 game mode draft，以及 mode 到独立 per-variant background、symbols package 和 award popup 的显式 binding。
+- editor 拥有通用 game mode draft，以及 mode 到独立 per-variant background、symbols package 和 award popup 的显式 binding；普通 Spine popup 使用独立显式注册，不伪装成 mode award binding。
 - 新 mode 的 background 默认未绑定；每个 variant 明确选择，不继承另一 mode 的 editable node。
 - background node id 按 mode/variant 稳定生成，不从资源名产生 `-2/-3` identity。
 - 相同 logical resource 跨 mode 仍使用独立 node/placement；图片复用已加载 texture，稳定 Spine player 在 mode 切换时保留，不释放/重建。
@@ -73,6 +73,7 @@
 
 - 每个 active variant 只配置 popup root 相对 viewport center 的 `x/y/scale`。
 - popup package 最终 vendor 到 layout ZIP；内部 layer、tier、坐标和资源保持 popup owner 自包含。
+- 普通 Spine popup 的 placement 与注册由 Scene Layout 拥有；start/loop/end 动画名与点击锁存生命周期由 popup package 和 rendercore 拥有。
 - production app 直接消费 editor 导出的 mapped folder 时，构建期必须从根 manifest
   与 `assets.map.json` 生成精确 physical Vite import map，并校验 path/hash/size/orphan；
   禁止宽泛 glob、运行时猜路径或另存业务资源表。
