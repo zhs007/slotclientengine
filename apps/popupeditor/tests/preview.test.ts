@@ -51,7 +51,10 @@ const player = {
   requestDismiss: vi.fn(),
   destroy: vi.fn(),
 };
-const resource = { destroy: vi.fn() };
+const resource = {
+  manifest: { type: "award-celebration" },
+  destroy: vi.fn(),
+};
 vi.mock("@slotclientengine/rendercore/popup", async (original) => ({
   ...(await original<typeof import("@slotclientengine/rendercore/popup")>()),
   createPopupPackageResource: vi.fn(async () => resource),

@@ -2,7 +2,9 @@ import type { LogicReels } from "@slotclientengine/logiccore";
 import { Container, Graphics } from "pixi.js";
 import {
   createAwardCelebrationPlayer,
+  createSpinePopupPlayer,
   type AwardCelebrationPlayer,
+  type SpinePopupPlayer,
 } from "../popup/index.js";
 import {
   RenderGridCellReelSet,
@@ -153,6 +155,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   #targetSymbolPackageId: string | null = null;
   #activeBackgroundNodes: readonly string[] = Object.freeze([]);
   readonly #popups = new Map<string, AwardCelebrationPlayer>();
+  readonly #spinePopups = new Map<string, SpinePopupPlayer>();
   #initialized = false;
   #initializing = false;
   #destroyed = false;
@@ -280,13 +283,18 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       for (const [id, resource] of Object.entries(
         this.#resource.popupPackages,
       )) {
-        const popup = createAwardCelebrationPlayer({
-          resource,
-          formatAmount: this.#formatPopupAmount,
-        });
+        const popup =
+          resource.manifest.type === "spine"
+            ? createSpinePopupPlayer({ resource })
+            : createAwardCelebrationPlayer({
+                resource,
+                formatAmount: this.#formatPopupAmount,
+              });
         await popup.init();
         this.assertAlive();
-        this.#popups.set(id, popup);
+        if (resource.manifest.type === "spine")
+          this.#spinePopups.set(id, popup as SpinePopupPlayer);
+        else this.#popups.set(id, popup as AwardCelebrationPlayer);
         this.#popupRoot.addChild(popup.container);
       }
       this.#stableMode = initialModeId;
@@ -328,6 +336,19 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       this.#reel.position.set(grid.artRect.x, grid.artRect.y);
     }
     for (const [id, popup] of this.#popups) {
+      const binding = this.#manifest.popups?.[id];
+      const placement = binding?.placements[snapshot.variantId];
+      if (!binding || !placement)
+        throw new SceneLayoutError(
+          `Scene layout popup "${id}" has no ${snapshot.variantId} placement.`,
+        );
+      popup.container.position.set(
+        viewportSize.width / 2 + placement.x,
+        viewportSize.height / 2 + placement.y,
+      );
+      popup.container.scale.set(placement.scale);
+    }
+    for (const [id, popup] of this.#spinePopups) {
       const binding = this.#manifest.popups?.[id];
       const placement = binding?.placements[snapshot.variantId];
       if (!binding || !placement)
@@ -422,6 +443,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       }
     }
     for (const popup of this.#popups.values())
+      if (popup.isPlaying()) popup.update(deltaSeconds);
+    for (const popup of this.#spinePopups.values())
       if (popup.isPlaying()) popup.update(deltaSeconds);
     this.updateActiveTransition(deltaSeconds);
     if (
@@ -735,6 +758,16 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     return popup;
   }
 
+  getSpinePopup(id: string): SpinePopupPlayer {
+    this.assertReady();
+    const popup = this.#spinePopups.get(id);
+    if (!popup)
+      throw new SceneLayoutError(
+        `Scene layout Spine popup "${id}" is unavailable.`,
+      );
+    return popup;
+  }
+
   getBackgroundPresentation(): Container {
     this.assertReady();
     return this.#layout.container;
@@ -1035,6 +1068,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#catalog = null;
     for (const popup of this.#popups.values()) popup.destroy();
     this.#popups.clear();
+    for (const popup of this.#spinePopups.values()) popup.destroy();
+    this.#spinePopups.clear();
     this.#videoBlackoutRoot.removeChildren();
     this.#videoBlackout.destroy();
     this.#layout.destroy();

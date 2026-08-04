@@ -35,12 +35,22 @@ export interface PopupVniTextLayerTarget {
   readonly textLayerName: string;
 }
 export interface PopupEditorProject {
+  type: "award-celebration" | "spine";
   id: string;
   designViewport: { width: number; height: number };
   amountFormat: PopupAmountFormat;
   resources: Map<string, PopupEditorResource>;
   assets: Map<string, EditorAssetEntry>;
   tiers: Map<AwardTierId, PopupEditorTier>;
+  spine: {
+    resource: string | null;
+    transform: { x: number; y: number; scale: number };
+    playback: {
+      startAnimation: string;
+      loopAnimation: string;
+      endAnimation: string;
+    };
+  };
 }
 
 export type PopupAmountFormatPresetId = "integer" | "decimal";
@@ -96,6 +106,7 @@ export function createPopupEditorProject(): PopupEditorProject {
     layers: [],
   });
   return {
+    type: "award-celebration",
     id: "award-celebration",
     designViewport: { width: 1080, height: 1920 },
     amountFormat: createPopupAmountFormat("integer"),
@@ -117,6 +128,15 @@ export function createPopupEditorProject(): PopupEditorProject {
         { ...empty(), countDurationSeconds: 2.9, thresholdMultiplier: 50 },
       ],
     ]),
+    spine: {
+      resource: null,
+      transform: { x: 0, y: 0, scale: 1 },
+      playback: {
+        startAnimation: "",
+        loopAnimation: "",
+        endAnimation: "",
+      },
+    },
   };
 }
 
@@ -127,6 +147,7 @@ export function clonePopupEditorProject(
     ...project,
     designViewport: { ...project.designViewport },
     amountFormat: { ...project.amountFormat },
+    spine: structuredClone(project.spine),
     resources: new Map(
       [...project.resources].map(([id, resource]) => [
         id,
@@ -155,6 +176,30 @@ export function clonePopupEditorProject(
 export function projectToManifest(
   project: PopupEditorProject,
 ): PopupManifestV1 {
+  if (project.type === "spine") {
+    const resourceKey = project.spine.resource;
+    if (!resourceKey)
+      throw new Error("普通 Spine Popup 尚未绑定 Spine resource。");
+    const resource = project.resources.get(resourceKey);
+    if (!resource || resource.kind !== "spine")
+      throw new Error(`普通 Spine Popup resource 无效：${resourceKey}`);
+    return parsePopupManifest({
+      version: 1,
+      kind: "popup",
+      id: project.id,
+      type: "spine",
+      designViewport: project.designViewport,
+      resources: { [resourceKey]: resource.spec },
+      spine: {
+        resource: resourceKey,
+        transform: project.spine.transform,
+        playback: {
+          mode: "segmented-animations",
+          ...project.spine.playback,
+        },
+      },
+    });
+  }
   const used = new Set<string>();
   for (const tier of project.tiers.values())
     for (const layer of tier.layers) used.add(layer.resource);
@@ -198,6 +243,16 @@ export function projectToManifest(
 export function popupEditorProjectDiagnostics(
   project: PopupEditorProject,
 ): readonly string[] {
+  if (project.type === "spine") {
+    try {
+      projectToManifest(project);
+      return Object.freeze([]);
+    } catch (error) {
+      return Object.freeze([
+        error instanceof Error ? error.message : String(error),
+      ]);
+    }
+  }
   const incompleteTiers = (
     ["base", "standard", "bigwin", "superwin", "megawin"] as const
   ).filter((tierId) => !project.tiers.get(tierId)?.layers.length);
@@ -402,6 +457,7 @@ export function resourceReferenceCount(
   resourceKey: string,
 ): number {
   let count = 0;
+  if (project.spine.resource === resourceKey) count += 1;
   for (const tier of project.tiers.values())
     count += tier.layers.filter(
       (layer) => layer.resource === resourceKey,

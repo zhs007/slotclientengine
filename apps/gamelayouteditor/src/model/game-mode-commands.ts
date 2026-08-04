@@ -468,8 +468,12 @@ export function bindGameModePopup(
   popupId: string | null,
 ): void {
   const mode = requireMode(project, modeId);
-  if (popupId !== null && !project.popupDependencies.has(popupId))
-    throw new Error(`未知 Popup dependency：${popupId}`);
+  if (popupId !== null) {
+    const dependency = project.popupDependencies.get(popupId);
+    if (!dependency) throw new Error(`未知 Popup dependency：${popupId}`);
+    if (dependency.type !== "award-celebration")
+      throw new Error(`游戏模式获奖庆祝只能绑定 award-celebration Popup。`);
+  }
   mode.awardCelebrationPopupId = popupId;
 }
 
@@ -483,6 +487,7 @@ export function importPopupDependency(
   mergeDependencyAssets(project, imported.files);
   project.popupDependencies.set(id, {
     id,
+    type: imported.manifest.type,
     rootKey: "popup.manifest.json",
     keys: Object.freeze([...imported.files.keys()].sort()),
     placements: Object.fromEntries(
@@ -505,9 +510,14 @@ export function replacePopupDependency(
     throw new Error(
       `替换 Popup id 必须保持 ${id}，实际为 ${imported.manifest.id}。`,
     );
+  if (imported.manifest.type !== current.type)
+    throw new Error(
+      `替换 Popup type 必须保持 ${current.type}，实际为 ${imported.manifest.type}。`,
+    );
   mergeDependencyAssets(project, imported.files);
   project.popupDependencies.set(id, {
     ...current,
+    type: imported.manifest.type,
     rootKey: "popup.manifest.json",
     keys: Object.freeze([...imported.files.keys()].sort()),
   });
@@ -524,7 +534,22 @@ export function deletePopupDependency(
     .map((mode) => mode.id);
   if (users.length)
     throw new Error(`Popup ${id} 仍被游戏模式引用：${users.join(", ")}`);
+  if (project.registeredSpinePopupIds.has(id))
+    throw new Error(`Popup ${id} 仍注册在 Scene Layout。`);
   project.popupDependencies.delete(id);
+}
+
+export function setSpinePopupRegistered(
+  project: EditorProject,
+  id: string,
+  registered: boolean,
+): void {
+  const dependency = project.popupDependencies.get(id);
+  if (!dependency) throw new Error(`未知 Popup dependency：${id}`);
+  if (dependency.type !== "spine")
+    throw new Error(`只有普通 Spine Popup 可以独立注册到 Scene Layout。`);
+  if (registered) project.registeredSpinePopupIds.add(id);
+  else project.registeredSpinePopupIds.delete(id);
 }
 
 export function setPopupPlacement(

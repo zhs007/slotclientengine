@@ -152,7 +152,7 @@ export interface SceneLayoutSymbolPackageBinding {
 }
 
 export interface SceneLayoutPopupBinding {
-  readonly type: "award-celebration";
+  readonly type: "award-celebration" | "spine";
   readonly manifest: string;
   readonly placements: Readonly<
     Partial<Record<SceneLayoutVariantId, SceneLayoutScaledPlacement>>
@@ -521,6 +521,7 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   ): void;
   getReelPresentation(reelId: "main"): Container;
   getAwardCelebrationPopup(id: string): AwardCelebrationPlayer;
+  getSpinePopup(id: string): import("../popup/index.js").SpinePopupPlayer;
   /** Layout-only layer for hosts that own their business reel. */
   getBackgroundPresentation(): Container;
   /** Transition overlay layer for hosts that own their business reel. */

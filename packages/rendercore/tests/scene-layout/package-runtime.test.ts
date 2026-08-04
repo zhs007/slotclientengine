@@ -994,6 +994,13 @@ describe("scene layout package runtime", () => {
       await runtime.init();
       runtime.applyViewport({ width: 200, height: 100 });
       const popup = runtime.getAwardCelebrationPopup("celebration");
+      expect(resource.popupPackages.celebration.manifest.type).toBe(
+        "award-celebration",
+      );
+      if (
+        resource.popupPackages.celebration.manifest.type !== "award-celebration"
+      )
+        throw new Error("Expected award celebration popup fixture.");
       expect(
         resource.popupPackages.celebration.manifest.awardCelebration
           .celebrationTiers[0]!.layers[1],

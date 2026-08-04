@@ -28,6 +28,32 @@ describe("asset-groups v1 parser", () => {
       }),
     ).toThrow(/required - initial/);
   });
+
+  it("accepts a standalone spine-popup group without mode ownership", () => {
+    const valid = fixture();
+    const parsed = parseSceneLayoutAssetGroups({
+      ...valid,
+      initialAssets: ["a.webp", "b.webp"],
+      groups: [
+        ...valid.groups.map((group) =>
+          group.id === "mode:Beta"
+            ? { ...group, incrementalAssets: [] }
+            : group,
+        ),
+        {
+          id: "spine-popup:free-game",
+          kind: "spine-popup",
+          popupId: "free-game",
+          requiredAssets: ["b.webp"],
+          incrementalAssets: [],
+        },
+      ],
+    });
+    expect(parsed.groups.at(-1)).toMatchObject({
+      kind: "spine-popup",
+      popupId: "free-game",
+    });
+  });
 });
 
 function fixture() {

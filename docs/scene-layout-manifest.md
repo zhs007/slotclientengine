@@ -1,6 +1,6 @@
 # Scene Layout Manifest v1
 
-根 sentinel 为 `layout.manifest.json`。schema version 仍为 `1`，支持 `maximized-focus` / `orientation-focus`、image/image-string/official Spine 4.3/runtime VNI node、reels、plural `symbolPackages`、award-celebration `popups`、game modes 与显式有向 transitions。
+根 sentinel 为 `layout.manifest.json`。schema version 仍为 `1`，支持 `maximized-focus` / `orientation-focus`、image/image-string/official Spine 4.3/runtime VNI node、reels、plural `symbolPackages`、award-celebration/普通 Spine `popups`、game modes 与显式有向 transitions。
 
 ## 坐标原点
 
@@ -81,10 +81,17 @@ Game Layout Editor 新导出的所有资源引用是扁平 filename keys：
       "type": "award-celebration",
       "manifest": "popup.manifest.json",
       "placements": { "default": { "x": 0, "y": 0, "scale": 1 } }
+    },
+    "free-game": {
+      "type": "spine",
+      "manifest": "free-game-popup.manifest.json",
+      "placements": { "default": { "x": 0, "y": 0, "scale": 1 } }
     }
   }
 }
 ```
+
+binding `type` 必须与 nested popup manifest 精确一致。game mode 的 `awardCelebrationPopup` 只能引用 `award-celebration`；普通 Spine popup 通过 manifest 中的独立 binding 注册，游戏或编辑器使用 package runtime 的 `getSpinePopup(id)` 获取 typed player。
 
 根 `assets.map.json` 将 layout、VNI、image-string、Symbols、Popup 的全部 root/leaf keys 统一映射到 `assets/<完整 SHA-256>.<ext>`。ZIP 只有两个 root control files 和 hash payload 区；禁止 `dependencies/image-strings/**`、`dependencies/symbols/**`、`dependencies/popups/**`。
 

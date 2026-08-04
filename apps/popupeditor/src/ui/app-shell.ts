@@ -88,7 +88,9 @@ export class PopupEditorApp {
       this.#tab === "resources"
         ? resourcesMarkup(project)
         : this.#tab === "tiers"
-          ? tiersMarkup(project, this.#tier, this.#previewBetRaw)
+          ? project.type === "spine"
+            ? spineMarkup(project)
+            : tiersMarkup(project, this.#tier, this.#previewBetRaw)
           : projectMarkup(project, this.#errors);
     this.required("diagnostics").textContent =
       [this.#notice, ...this.#errors].filter(Boolean).join("\n") ||
@@ -336,6 +338,39 @@ export class PopupEditorApp {
         draft.id = id.value;
       }),
     );
+    const projectType =
+      this.#root.querySelector<HTMLSelectElement>("#project-type");
+    projectType?.addEventListener("change", () =>
+      this.#store.transact((draft) => {
+        draft.type = projectType.value as "award-celebration" | "spine";
+      }),
+    );
+    const spineResource =
+      this.#root.querySelector<HTMLSelectElement>("#spine-resource");
+    spineResource?.addEventListener("change", () =>
+      this.#store.transact((draft) => {
+        draft.spine.resource = spineResource.value || null;
+        draft.spine.playback = {
+          startAnimation: "",
+          loopAnimation: "",
+          endAnimation: "",
+        };
+      }),
+    );
+    this.#root
+      .querySelectorAll<
+        HTMLInputElement | HTMLSelectElement
+      >("[data-spine-popup-field]")
+      .forEach((input) =>
+        input.addEventListener("change", () =>
+          this.#store.transact((draft) => {
+            const field = input.dataset.spinePopupField!;
+            if (["x", "y", "scale"].includes(field))
+              (draft.spine.transform as any)[field] = Number(input.value);
+            else (draft.spine.playback as any)[field] = input.value;
+          }),
+        ),
+      );
     const amountPreset = this.#root.querySelector<HTMLSelectElement>(
       "#amount-format-preset",
     );
@@ -468,12 +503,13 @@ export class PopupEditorApp {
       void this.action(async () => {
         const draft = clonePopupEditorProject(this.#store.project);
         await commitImportReview(draft, candidates);
-        for (const candidate of candidates)
-          applyImportedResourceBindings(
-            draft,
-            candidate.rootKey,
-            candidate.suggestedTierBindings,
-          );
+        if (draft.type === "award-celebration")
+          for (const candidate of candidates)
+            applyImportedResourceBindings(
+              draft,
+              candidate.rootKey,
+              candidate.suggestedTierBindings,
+            );
         this.#store.replace(draft);
         this.#notice = resourceImportNotice(draft, candidates);
         dialog.close();
@@ -519,10 +555,50 @@ export class PopupEditorApp {
 }
 
 function shell() {
-  return `<header><h1>Popup Award Celebration Editor</h1><nav class="primary-tabs" role="tablist" aria-label="编辑区域"><button role="tab" data-tab="resources">资源</button><button role="tab" data-tab="tiers">档位</button><button role="tab" data-tab="project">项目</button></nav></header><main><section class="left"><div id="workspace" role="tabpanel"></div><pre id="diagnostics"></pre></section><aside><div class="preview-controls"><select id="preview-resolution"><option value="1920x1080">1920×1080</option><option value="1080x1920" selected>1080×1920</option><option value="2000x2000">2000×2000</option><option value="custom">custom</option></select><label>width<input id="preview-width" type="number" min="1" value="1080"/></label><label>height<input id="preview-height" type="number" min="1" value="1920"/></label><select id="preview-zoom"><option value="fit">fit</option>${[0.25, 0.5, 0.75, 1, 1.5, 2].map((v) => `<option value="${v}">${v * 100}%</option>`)}</select><label><input id="preview-guides" type="checkbox" checked/>guides</label><label>bet raw<input id="preview-bet" type="number" value="100"/></label><label>win raw<input id="preview-win" type="number" value="5000"/></label><label>小数位数（仅预览）<input id="preview-fraction-digits" type="number" min="0" max="6" step="1" value="0"/></label><label><input id="preview-use-grouping" type="checkbox"/>千位分隔（仅预览）</label><button id="preview-build">Build preview</button><button id="preview-play">Play / Replay</button><button id="preview-advance">Advance</button><button id="preview-dismiss">Dismiss</button><button id="preview-clear">Dismiss immediately</button></div><div id="preview-canvas"></div><output id="preview-status"></output></aside></main><dialog id="vni-runtime-choice"><h2>选择 VNI runtime</h2><p id="vni-runtime-description"></p><label class="vni-runtime-options">运行版本<select id="vni-runtime-select"></select></label><button id="vni-runtime-confirm">确认 runtime</button><button id="vni-runtime-cancel">取消导入</button></dialog><dialog id="import-review"><h2>Import review</h2><div id="review-body"></div><button id="review-confirm">确认并应用建议绑定</button><button id="review-cancel">取消</button></dialog>`;
+  return `<header><h1>Popup Editor</h1><nav class="primary-tabs" role="tablist" aria-label="编辑区域"><button role="tab" data-tab="resources">资源</button><button role="tab" data-tab="tiers">动画 / 档位</button><button role="tab" data-tab="project">项目</button></nav></header><main><section class="left"><div id="workspace" role="tabpanel"></div><pre id="diagnostics"></pre></section><aside><div class="preview-controls"><select id="preview-resolution"><option value="1920x1080">1920×1080</option><option value="1080x1920" selected>1080×1920</option><option value="2000x2000">2000×2000</option><option value="custom">custom</option></select><label>width<input id="preview-width" type="number" min="1" value="1080"/></label><label>height<input id="preview-height" type="number" min="1" value="1920"/></label><select id="preview-zoom"><option value="fit">fit</option>${[0.25, 0.5, 0.75, 1, 1.5, 2].map((v) => `<option value="${v}">${v * 100}%</option>`)}</select><label><input id="preview-guides" type="checkbox" checked/>guides</label><label>bet raw<input id="preview-bet" type="number" value="100"/></label><label>win raw<input id="preview-win" type="number" value="5000"/></label><label>小数位数（仅预览）<input id="preview-fraction-digits" type="number" min="0" max="6" step="1" value="0"/></label><label><input id="preview-use-grouping" type="checkbox"/>千位分隔（仅预览）</label><button id="preview-build">Build preview</button><button id="preview-play">Play / Replay</button><button id="preview-advance">Advance</button><button id="preview-dismiss">Click / Dismiss</button><button id="preview-clear">Dismiss immediately</button></div><div id="preview-canvas"></div><output id="preview-status"></output></aside></main><dialog id="vni-runtime-choice"><h2>选择 VNI runtime</h2><p id="vni-runtime-description"></p><label class="vni-runtime-options">运行版本<select id="vni-runtime-select"></select></label><button id="vni-runtime-confirm">确认 runtime</button><button id="vni-runtime-cancel">取消导入</button></dialog><dialog id="import-review"><h2>Import review</h2><div id="review-body"></div><button id="review-confirm">确认导入</button><button id="review-cancel">取消</button></dialog>`;
 }
 function resourcesMarkup(project: PopupEditorProject) {
-  return `<section class="resource-import-panel"><h2>扁平资源库</h2><p>图片、Spine、VNI、ImgNumber ZIP 与 Popup ZIP 统一从这里导入；filename key 保留原始拼写，同名不同 bytes 默认覆盖。普通资源导入只入库，不会根据文件名猜测档位；请在导入后到“档位”页显式绑定。</p><div class="resource-actions"><label class="file-action">导入资源<input id="import-assets" type="file" accept="image/png,image/webp,image/jpeg,.json,.atlas,.zip" multiple/></label></div></section><div class="resource-list">${[...project.resources.values()].map((resource) => `<article class="card"><strong>${resource.rootKey}</strong><span>${resource.kind}</span><details><summary>${resource.keys.length} filename keys</summary><code>${resource.keys.join("\n")}</code></details><span>${resourceReferenceCount(project, resource.rootKey)} 个图层绑定</span><button data-delete-resource="${resource.rootKey}">删除</button></article>`).join("") || '<p class="empty-state">尚无资源</p>'}</div>`;
+  return `<section class="resource-import-panel"><h2>扁平资源库</h2><p>图片、Spine、VNI、ImgNumber ZIP 与 Popup ZIP 统一从这里导入；filename key 保留原始拼写，同名不同 bytes 默认覆盖。普通资源导入只入库，不会根据文件名猜测用途；请在导入后到“动画 / 档位”页显式绑定。</p><div class="resource-actions"><label class="file-action">导入资源<input id="import-assets" type="file" accept="image/png,image/webp,image/jpeg,.json,.atlas,.zip" multiple/></label></div></section><div class="resource-list">${[...project.resources.values()].map((resource) => `<article class="card"><strong>${resource.rootKey}</strong><span>${resource.kind}</span><details><summary>${resource.keys.length} filename keys</summary><code>${resource.keys.join("\n")}</code></details><span>${resourceReferenceCount(project, resource.rootKey)} 个图层绑定</span><button data-delete-resource="${resource.rootKey}">删除</button></article>`).join("") || '<p class="empty-state">尚无资源</p>'}</div>`;
+}
+
+function spineMarkup(project: PopupEditorProject) {
+  const resources = [...project.resources.values()].filter(
+    (resource) => resource.spec.kind === "spine",
+  );
+  const animations = spineAnimationNames(project);
+  const animationSelect = (
+    field: "startAnimation" | "loopAnimation" | "endAnimation",
+    label: string,
+  ) => {
+    const selected = project.spine.playback[field];
+    return `<label>${label}<select data-spine-popup-field="${field}"><option value="">请选择动画</option>${animations.map((name) => `<option value="${name}" ${name === selected ? "selected" : ""}>${name}</option>`).join("")}</select></label>`;
+  };
+  return `<section class="tier-editor"><h2>普通 Spine 弹窗</h2><p>播放 start 后进入 loop；用户点击会锁存关闭请求，并在当前 loop 播放到边界后进入 end。</p><label>Spine 资源<select id="spine-resource"><option value="">请选择资源</option>${resources.map((resource) => `<option value="${resource.rootKey}" ${resource.rootKey === project.spine.resource ? "selected" : ""}>${resource.rootKey}</option>`).join("")}</select></label><div class="threshold-grid">${(["x", "y", "scale"] as const).map((field) => `<label>${field}<input data-spine-popup-field="${field}" type="number" step="0.1" value="${project.spine.transform[field]}"/></label>`).join("")}</div>${animationSelect("startAnimation", "开始动画")}${animationSelect("loopAnimation", "循环动画")}${animationSelect("endAnimation", "结束动画")}<p class="segment-summary">${project.spine.resource ? (animations.length ? `已从 skeleton JSON 读取 ${animations.length} 个动画。` : "所选 skeleton JSON 没有可用动画。") : "导入并选择一组 Spine JSON、atlas 与 PNG 后配置动画。"}</p></section>`;
+}
+
+function spineAnimationNames(project: PopupEditorProject): readonly string[] {
+  const resourceKey = project.spine.resource;
+  if (!resourceKey) return [];
+  const resource = project.resources.get(resourceKey);
+  if (!resource || resource.spec.kind !== "spine") return [];
+  const bytes = project.assets.get(resource.spec.skeleton)?.bytes;
+  if (!bytes) return [];
+  try {
+    const value = JSON.parse(new TextDecoder().decode(bytes)) as {
+      animations?: unknown;
+    };
+    if (
+      !value.animations ||
+      typeof value.animations !== "object" ||
+      Array.isArray(value.animations)
+    )
+      return [];
+    return Object.keys(value.animations).sort((left, right) =>
+      left.localeCompare(right),
+    );
+  } catch {
+    return [];
+  }
 }
 function tiersMarkup(
   project: PopupEditorProject,
@@ -627,6 +703,8 @@ function resourceImportNotice(
   const unbound = candidates
     .filter(({ rootKey }) => resourceReferenceCount(project, rootKey) === 0)
     .map(({ rootKey }) => rootKey);
+  if (project.type === "spine")
+    return `资源导入成功。${unbound.length ? `尚未绑定：${unbound.join("、")}。` : "Spine 资源已绑定。"}`;
   const incompleteTiers = TIERS.filter(
     (tierId) => !project.tiers.get(tierId)?.layers.length,
   );
@@ -675,5 +753,10 @@ function projectMarkup(project: PopupEditorProject, errors: readonly string[]) {
   ) =>
     `<label>${field}<input data-project-field="${field}" type="${type}" value="${project.amountFormat[field]}" ${type === "checkbox" && project.amountFormat[field] ? "checked" : ""}/></label>`;
   const preset = detectPopupAmountFormatPreset(project.amountFormat);
-  return `<div class="project-actions"><button id="export-project">导出 Popup ZIP</button></div><h2>项目</h2><label>project id<input id="project-id" value="${project.id}"/></label><label>viewport width<input data-project-field="viewport-width" type="number" value="${project.designViewport.width}"/></label><label>viewport height<input data-project-field="viewport-height" type="number" value="${project.designViewport.height}"/></label><h3>金额合同</h3><label>preset<select id="amount-format-preset"><option value="integer" ${preset === "integer" ? "selected" : ""}>纯数字整数（raw 100 → 100）</option><option value="decimal" ${preset === "decimal" ? "selected" : ""}>纯数字两位小数（raw 100 → 1.00）</option><option value="custom" ${preset === "custom" ? "selected" : ""}>自定义</option></select></label><p class="preset-help">整数预设使用 rawScale=1，只要求 glyph 0–9；两位小数预设使用 rawScale=100，要求 glyph 0–9 和 .。两者均不输出货币符号或千分位。</p>${amountInput("rawScale", "number")}${amountInput("fractionDigits", "number")}${amountInput("useGrouping", "checkbox")}${amountInput("groupSeparator")}${amountInput("decimalSeparator")}${amountInput("prefix")}${amountInput("suffix")}<p>rounding: floor（strict contract）</p><h3>五档金额与图层 diagnostics</h3><pre>${errors.join("\n") || "通过"}</pre><h3>Production manifest preview</h3><pre>${manifest}</pre>`;
+  const common = `<div class="project-actions"><button id="export-project">导出 Popup ZIP</button></div><h2>项目</h2><label>弹窗类型<select id="project-type"><option value="award-celebration" ${project.type === "award-celebration" ? "selected" : ""}>获奖庆祝</option><option value="spine" ${project.type === "spine" ? "selected" : ""}>普通 Spine</option></select></label><label>project id<input id="project-id" value="${project.id}"/></label><label>viewport width<input data-project-field="viewport-width" type="number" value="${project.designViewport.width}"/></label><label>viewport height<input data-project-field="viewport-height" type="number" value="${project.designViewport.height}"/></label>`;
+  const amount =
+    project.type === "award-celebration"
+      ? `<h3>金额合同</h3><label>preset<select id="amount-format-preset"><option value="integer" ${preset === "integer" ? "selected" : ""}>纯数字整数（raw 100 → 100）</option><option value="decimal" ${preset === "decimal" ? "selected" : ""}>纯数字两位小数（raw 100 → 1.00）</option><option value="custom" ${preset === "custom" ? "selected" : ""}>自定义</option></select></label><p class="preset-help">整数预设使用 rawScale=1，只要求 glyph 0–9；两位小数预设使用 rawScale=100，要求 glyph 0–9 和 .。两者均不输出货币符号或千分位。</p>${amountInput("rawScale", "number")}${amountInput("fractionDigits", "number")}${amountInput("useGrouping", "checkbox")}${amountInput("groupSeparator")}${amountInput("decimalSeparator")}${amountInput("prefix")}${amountInput("suffix")}<p>rounding: floor（strict contract）</p>`
+      : "";
+  return `${common}${amount}<h3>配置 diagnostics</h3><pre>${errors.join("\n") || "通过"}</pre><h3>Production manifest preview</h3><pre>${manifest}</pre>`;
 }

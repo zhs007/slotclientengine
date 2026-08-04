@@ -1,6 +1,6 @@
 # Popup package v1
 
-`popup.manifest.json` 是获奖庆祝弹窗的唯一 production 合同。独立 `<id>-popup.zip` 最终由 Game Layout Editor 原样 vendor 到 `dependencies/popups/<id>/`。
+`popup.manifest.json` 是获奖庆祝与普通 Spine 弹窗的唯一 production 合同。独立 `<id>-popup.zip` 最终由 Game Layout Editor 原样 vendor 到 Scene Layout package。
 
 ## 坐标、档位与输入
 
@@ -75,6 +75,38 @@
 
 骨架中的空 `layers` 是说明结构的无效占位，不能作为 fixture 或导出物。合法 image-string layer 必须包含 `id/kind/order/resource/binding/anchor/transform`，不接受 `visibleSegments`；image 图层才使用 `visibleSegments`；VNI/Spine 使用各自 playback。
 
+普通 Spine 弹窗使用互斥的 `type="spine"` schema，不包含 `amountFormat` 或 `awardCelebration`：
+
+```json
+{
+  "version": 1,
+  "kind": "popup",
+  "id": "free-game",
+  "type": "spine",
+  "designViewport": { "width": 1080, "height": 1920 },
+  "resources": {
+    "effect": {
+      "kind": "spine",
+      "skeleton": "assets/<sha256>.json",
+      "atlas": "assets/<sha256>.atlas",
+      "textures": { "effect.png": "assets/<sha256>.png" }
+    }
+  },
+  "spine": {
+    "resource": "effect",
+    "transform": { "x": 0, "y": 0, "scale": 1 },
+    "playback": {
+      "mode": "segmented-animations",
+      "startAnimation": "Start",
+      "loopAnimation": "Loop",
+      "endAnimation": "End"
+    }
+  }
+}
+```
+
+三个动画名必须大小写精确、非空且互不相同。`requestDismiss()` 可在 start 或 loop 期间锁存；runtime 必须等 start 完成并在完整 loop 边界后才播放 end。`dismissImmediately()` 是唯一跳过边界的清理入口。
+
 ## 资源、ZIP 与 runtime
 
 owned payload 固定为 `assets/<64位 lowercase sha256>.<canonical-extension>`。VNI project 和 Spine atlas 在叶子路径确定后结构化改写，再对 canonical bytes 求 hash；standalone image-string 保持自包含。parser 递归拒绝 unknown key，ZIP 必须与传递闭包精确相等，并拒绝 traversal、case-fold collision、missing 和 orphan。
@@ -88,6 +120,7 @@ player.update(deltaSeconds);
 player.requestAdvance();
 ```
 
+普通 Spine 类型使用 `createSpinePopupPlayer({ resource })`，调用 `start()`、逐帧 `update(deltaSeconds)` 并把用户点击转发给 `requestDismiss()`。
+
 Popup package 本身不拥有游戏模式，也不声明 BaseGame/FreeGame。scene-layout 负责通用
-mode -> popup binding 与 viewport-center root placement；Popup Editor 继续独占 popup 内部
-tier、layer、金额格式、坐标和资源编辑。
+mode -> award popup binding、普通 Spine popup 显式注册与 viewport-center root placement；Popup Editor 继续独占 popup 内部动画、tier、layer、金额格式、坐标和资源编辑。

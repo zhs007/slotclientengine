@@ -327,7 +327,7 @@ function createCapabilityWarnings(
     "首版不自动触发 game mode 转场；缺少 typed mode resolver 时保持 initial mode。",
   ];
   if (!Object.keys(manifest.popups ?? {}).length)
-    warnings.push("当前 layout 没有 award-celebration popup binding。");
+    warnings.push("当前 layout 没有 popup binding。");
   return Object.freeze(warnings);
 }
 

@@ -1,5 +1,8 @@
 import { Container } from "pixi.js";
-import type { AwardCelebrationPlayer } from "../popup/index.js";
+import type {
+  AwardCelebrationPlayer,
+  SpinePopupPlayer,
+} from "../popup/index.js";
 import type { RenderViewportSize } from "../viewport/index.js";
 import { SceneLayoutError } from "./errors.js";
 import { createSceneLayoutPackageRuntime } from "./package-runtime.js";
@@ -27,6 +30,7 @@ export interface SceneLayoutPresentationSurface {
   prepareGameModeTransition(modeId: string): Promise<void>;
   requestGameMode(modeId: string): Promise<void>;
   getAwardCelebrationPlayer(id: string): AwardCelebrationPlayer;
+  getSpinePopupPlayer(id: string): SpinePopupPlayer;
   getLayer(id: SceneLayoutLayerId): Container;
   getNode(id: string): Container;
   destroy(): void;
@@ -145,8 +149,11 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
     viewportSize: RenderViewportSize,
   ): void {
     for (const id of Object.keys(this.#resource.popupPackages)) {
-      const popup = this.#runtime.getAwardCelebrationPopup(id);
       const binding = this.#resource.manifest.popups?.[id];
+      const popup =
+        binding?.type === "spine"
+          ? this.#runtime.getSpinePopup(id)
+          : this.#runtime.getAwardCelebrationPopup(id);
       const placement = binding?.placements[variantId];
       if (!binding || !placement) {
         throw new SceneLayoutError(
@@ -184,6 +191,11 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
   getAwardCelebrationPlayer(id: string): AwardCelebrationPlayer {
     this.assertReady();
     return this.#runtime.getAwardCelebrationPopup(id);
+  }
+
+  getSpinePopupPlayer(id: string): SpinePopupPlayer {
+    this.assertReady();
+    return this.#runtime.getSpinePopup(id);
   }
 
   getLayer(id: SceneLayoutLayerId): Container {

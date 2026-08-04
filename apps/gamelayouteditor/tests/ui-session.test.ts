@@ -153,9 +153,15 @@ describe("editor UI session and Resource Picker view model", () => {
       "BaseGame",
       createEditorUiSession(),
     );
-    expect(node.placements.landscape).toEqual({ x: 0, y: 0, scale: 1 });
+    expect(node.placements.landscape).toEqual({
+      x: 0,
+      y: 0,
+      scale: 1,
+      rotation: 0,
+      center: { x: 0.5, y: 0.5 },
+    });
     expect(markup).toContain("背景 Placement");
     expect(markup).toContain('data-number="nodes.0.placements.landscape.x"');
-    expect(markup).toContain("Spine 的导出 bounds 不是 art size");
+    expect(markup).toContain("export bounds 3744.3176×2371.955（非 art size）");
   });
 });

@@ -658,6 +658,15 @@ const popupProjectAdapter: EditorAssetRewriteAdapter<PopupEditorProject> = {
   collectReferences(project) {
     return {
       references: [
+        ...(project.spine.resource
+          ? [
+              {
+                key: project.spine.resource,
+                location: "spine.resource",
+                kind: "spine-popup",
+              },
+            ]
+          : []),
         ...[...project.resources].flatMap(([rootKey, resource]) =>
           resource.keys.map((key) => ({
             key,
@@ -676,6 +685,7 @@ const popupProjectAdapter: EditorAssetRewriteAdapter<PopupEditorProject> = {
     };
   },
   renameReferences(project, from, to) {
+    if (project.spine.resource === from) project.spine.resource = to;
     const resource = project.resources.get(from);
     if (resource) {
       project.resources.delete(from);

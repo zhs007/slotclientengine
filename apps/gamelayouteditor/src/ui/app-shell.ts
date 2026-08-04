@@ -94,6 +94,7 @@ import {
   setGameModeVideoTransitionResource,
   setInitialGameMode,
   setPopupPlacement,
+  setSpinePopupRegistered,
 } from "../model/game-mode-commands.js";
 import {
   LayoutPreview,
@@ -403,6 +404,20 @@ export class GameLayoutEditorApp {
         this.renderPopupControls(this.#store.getSnapshot());
       },
     );
+    this.requireElement("[data-register-popup]").addEventListener(
+      "click",
+      () => {
+        if (!this.#selectedPopupId) return;
+        this.runTransaction((project) =>
+          setSpinePopupRegistered(
+            project,
+            this.#selectedPopupId!,
+            !project.registeredSpinePopupIds.has(this.#selectedPopupId!),
+          ),
+        );
+        this.renderPopupControls(this.#store.getSnapshot());
+      },
+    );
     this.requireElement("[data-clear-popup]").addEventListener("click", () => {
       if (!this.#selectedPopupId) return;
       const removedPopupId = this.#selectedPopupId;
@@ -421,10 +436,18 @@ export class GameLayoutEditorApp {
     });
     this.requireElement("[data-play-popup]").addEventListener("click", () => {
       try {
-        this.#preview?.playAwardCelebration({
-          betAmountRaw: Number(this.requireInput("[data-popup-bet]").value),
-          winAmountRaw: Number(this.requireInput("[data-popup-win]").value),
-        });
+        const dependency = this.#selectedPopupId
+          ? this.#store
+              .getSnapshot()
+              .project.popupDependencies.get(this.#selectedPopupId)
+          : undefined;
+        if (dependency?.type === "spine")
+          this.#preview?.playSpinePopup(dependency.id);
+        else
+          this.#preview?.playAwardCelebration({
+            betAmountRaw: Number(this.requireInput("[data-popup-bet]").value),
+            winAmountRaw: Number(this.requireInput("[data-popup-win]").value),
+          });
         this.renderPopupControls(this.#store.getSnapshot());
       } catch (error) {
         this.#store.setExternalError(error);
@@ -434,7 +457,14 @@ export class GameLayoutEditorApp {
       "click",
       () => {
         try {
-          this.#preview?.advanceAwardCelebration();
+          const dependency = this.#selectedPopupId
+            ? this.#store
+                .getSnapshot()
+                .project.popupDependencies.get(this.#selectedPopupId)
+            : undefined;
+          if (dependency?.type === "spine")
+            this.#preview?.requestDismissSpinePopup(dependency.id);
+          else this.#preview?.advanceAwardCelebration();
           this.renderPopupControls(this.#store.getSnapshot());
         } catch (error) {
           this.#store.setExternalError(error);
@@ -444,7 +474,14 @@ export class GameLayoutEditorApp {
     this.requireElement("[data-dismiss-popup]").addEventListener(
       "click",
       () => {
-        this.#preview?.dismissAwardCelebrationImmediately();
+        const dependency = this.#selectedPopupId
+          ? this.#store
+              .getSnapshot()
+              .project.popupDependencies.get(this.#selectedPopupId)
+          : undefined;
+        if (dependency?.type === "spine")
+          this.#preview?.dismissSpinePopupImmediately(dependency.id);
+        else this.#preview?.dismissAwardCelebrationImmediately();
         this.renderPopupControls(this.#store.getSnapshot());
       },
     );
@@ -1087,7 +1124,8 @@ export class GameLayoutEditorApp {
     none.value = "";
     none.textContent = "无庆祝效果";
     popupSelect.replaceChildren(none);
-    for (const id of project.popupDependencies.keys()) {
+    for (const [id, dependency] of project.popupDependencies) {
+      if (dependency.type !== "award-celebration") continue;
       const option = document.createElement("option");
       option.value = id;
       option.textContent = id;
@@ -1124,8 +1162,17 @@ export class GameLayoutEditorApp {
           0,
         )
       : 0;
+    const registerButton = this.requireElement(
+      "[data-register-popup]",
+    ) as HTMLButtonElement;
+    registerButton.disabled = dependency?.type !== "spine";
+    registerButton.textContent = dependency
+      ? project.registeredSpinePopupIds.has(dependency.id)
+        ? "取消注册 Spine Popup"
+        : "注册 Spine Popup"
+      : "注册 Spine Popup";
     this.requireElement("[data-popup-metadata]").textContent = dependency
-      ? `${dependency.id} · ${dependency.keys.length} files · ${totalBytes} bytes · 引用：${references.join(", ") || "无"}`
+      ? `${dependency.id} · ${dependency.type} · ${dependency.keys.length} files · ${totalBytes} bytes · ${dependency.type === "spine" ? `Scene Layout：${project.registeredSpinePopupIds.has(dependency.id) ? "已注册" : "未注册"}` : `引用：${references.join(", ") || "无"}`}`
       : "未导入 Popup dependency。";
     for (const input of this.#root.querySelectorAll<HTMLInputElement>(
       "[data-popup-placement]",
@@ -1283,6 +1330,13 @@ export class GameLayoutEditorApp {
     const previewModeSelect = this.requireSelect("[data-preview-game-mode]");
     const popupSelect = this.requireSelect("[data-mode-popup]");
     const popupSnapshot = this.#preview?.getActiveAwardCelebrationSnapshot?.();
+    const selectedDependency = this.#selectedPopupId
+      ? project.popupDependencies.get(this.#selectedPopupId)
+      : undefined;
+    const selectedSpineReady = Boolean(
+      selectedDependency?.type === "spine" &&
+      project.registeredSpinePopupIds.has(selectedDependency.id),
+    );
     const transitioning = Boolean(
       this.#previewModeBusy || modeSnapshot?.phase === "transitioning",
     );
@@ -1309,17 +1363,22 @@ export class GameLayoutEditorApp {
       (candidate) => candidate.id === modeSnapshot?.stableMode,
     );
     (this.requireElement("[data-play-popup]") as HTMLButtonElement).disabled =
-      Boolean(transitioning || !stableMode?.awardCelebrationPopupId);
+      Boolean(
+        transitioning ||
+        (!stableMode?.awardCelebrationPopupId && !selectedSpineReady),
+      );
     (
       this.requireElement("[data-advance-popup]") as HTMLButtonElement
-    ).disabled = !popupActive;
+    ).disabled = !popupActive && !selectedSpineReady;
     (
       this.requireElement("[data-dismiss-popup]") as HTMLButtonElement
-    ).disabled = !popupActive;
+    ).disabled = !popupActive && !selectedSpineReady;
     this.requireElement("[data-popup-runtime-status]").textContent =
-      modeSnapshot
-        ? `mode ${modeSnapshot.phase}: stable=${modeSnapshot.stableMode} displayed=${modeSnapshot.displayedMode}${modeSnapshot.targetMode ? ` target=${modeSnapshot.targetMode} ${modeSnapshot.transitionPhase}` : ""} · popup=${stableMode?.awardCelebrationPopupId ?? "无"}${popupSnapshot ? ` · ${popupSnapshot.phase}/${popupSnapshot.activeTierId ?? "none"}/${popupSnapshot.activeSegment ?? "none"}` : ""}`
-        : `mode=${mode.id} · popup=${mode.awardCelebrationPopupId ?? "无"}`;
+      selectedSpineReady
+        ? `spine popup ${selectedDependency!.id} · 已注册，可独立播放`
+        : modeSnapshot
+          ? `mode ${modeSnapshot.phase}: stable=${modeSnapshot.stableMode} displayed=${modeSnapshot.displayedMode}${modeSnapshot.targetMode ? ` target=${modeSnapshot.targetMode} ${modeSnapshot.transitionPhase}` : ""} · popup=${stableMode?.awardCelebrationPopupId ?? "无"}${popupSnapshot ? ` · ${popupSnapshot.phase}/${popupSnapshot.activeTierId ?? "none"}/${popupSnapshot.activeSegment ?? "none"}` : ""}`
+          : `mode=${mode.id} · popup=${mode.awardCelebrationPopupId ?? "无"}`;
     const transitionStatus = transitionUiStateText(
       this.#session.previewTransition,
       modeSnapshot,

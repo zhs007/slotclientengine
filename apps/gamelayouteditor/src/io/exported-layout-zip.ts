@@ -222,11 +222,7 @@ export async function exportLayoutZip(options: {
       );
     }
   }
-  const referencedPopupIds = new Set(
-    manifest.gameModes?.modes.flatMap((mode) =>
-      mode.awardCelebrationPopup ? [mode.awardCelebrationPopup] : [],
-    ) ?? Object.keys(manifest.popups ?? {}),
-  );
+  const referencedPopupIds = new Set(Object.keys(manifest.popups ?? {}));
   for (const popupId of referencedPopupIds) {
     const popup = manifest.popups?.[popupId];
     if (!popup) throw new Error(`游戏模式引用了未知 popup binding：${popupId}`);
@@ -239,6 +235,10 @@ export async function exportLayoutZip(options: {
     if (nested.id !== popupId)
       throw new Error(
         `Popup nested id ${nested.id} 与 binding ${popupId} 不一致。`,
+      );
+    if (nested.type !== popup.type)
+      throw new Error(
+        `Popup nested type ${nested.type} 与 binding ${popupId}:${popup.type} 不一致。`,
       );
     const paths = collectPopupPackagePaths({ manifest: nested, files });
     for (const path of ["popup.manifest.json", ...paths])

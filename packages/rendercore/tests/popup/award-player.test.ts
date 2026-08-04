@@ -2,6 +2,7 @@ import { Container, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
 import {
   createAwardCelebrationPlayer,
+  type AwardCelebrationPopupManifestV1,
   type PopupLayerRuntime,
   type PopupPackageResource,
 } from "../../src/popup/index.js";
@@ -221,7 +222,7 @@ describe("award celebration player", () => {
   });
 });
 
-function fakeResource(): PopupPackageResource {
+function fakeResource(): PopupPackageResource<AwardCelebrationPopupManifestV1> {
   const manifest = popupFixture();
   return {
     manifest,
@@ -235,7 +236,7 @@ function fakeResource(): PopupPackageResource {
   };
 }
 
-function staticResource(): PopupPackageResource {
+function staticResource(): PopupPackageResource<AwardCelebrationPopupManifestV1> {
   const chars = [..."$,.0123456789"];
   const glyphs = Object.fromEntries(
     chars.map((character, index) => [

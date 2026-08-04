@@ -1,6 +1,7 @@
 import { assertCanonicalPackagePath } from "@slotclientengine/browserartifactio";
 import { assertEditorAssetKey } from "@slotclientengine/editorresource";
 import type {
+  AwardCelebrationPopupManifestV1,
   AwardCelebrationSpec,
   AwardCelebrationTier,
   AwardTierPresentation,
@@ -9,32 +10,41 @@ import type {
   PopupManifestV1,
   PopupResourceSpec,
   PopupSegment,
+  SpinePopupManifestV1,
 } from "./types.js";
 
 const IDS = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const OWNED_PATH = /^assets\/[a-f0-9]{64}\.(?:png|webp|jpg|jpeg|json|atlas)$/u;
 const SEGMENTS: readonly PopupSegment[] = ["start", "loop", "end"];
 
+export function parsePopupManifest(
+  value: AwardCelebrationPopupManifestV1,
+): AwardCelebrationPopupManifestV1;
+export function parsePopupManifest(
+  value: SpinePopupManifestV1,
+): SpinePopupManifestV1;
+export function parsePopupManifest(value: unknown): PopupManifestV1;
 export function parsePopupManifest(value: unknown): PopupManifestV1 {
   const record = object(value, "popup manifest");
+  const commonKeys = [
+    "version",
+    "kind",
+    "id",
+    "type",
+    "designViewport",
+    "resources",
+  ];
   keys(
     record,
-    [
-      "version",
-      "kind",
-      "id",
-      "type",
-      "designViewport",
-      "amountFormat",
-      "resources",
-      "awardCelebration",
-    ],
+    record.type === "spine"
+      ? [...commonKeys, "spine"]
+      : [...commonKeys, "amountFormat", "awardCelebration"],
     "popup manifest",
   );
   if (record.version !== 1) fail("popup manifest.version must be 1.");
   if (record.kind !== "popup") fail('popup manifest.kind must be "popup".');
-  if (record.type !== "award-celebration")
-    fail('popup manifest.type must be "award-celebration".');
+  if (record.type !== "award-celebration" && record.type !== "spine")
+    fail('popup manifest.type must be "award-celebration" or "spine".');
   const id = identifier(record.id, "popup manifest.id");
   const viewport = object(record.designViewport, "designViewport");
   keys(viewport, ["width", "height"], "designViewport");
@@ -49,6 +59,25 @@ export function parsePopupManifest(value: unknown): PopupManifestV1 {
       );
     resources[resourceId] = parsed;
   }
+  const base = {
+    version: 1 as const,
+    kind: "popup" as const,
+    id,
+    designViewport: {
+      width: positive(viewport.width, "designViewport.width"),
+      height: positive(viewport.height, "designViewport.height"),
+    },
+    resources,
+  };
+  if (record.type === "spine") {
+    const spine = parseSpinePopup(record.spine, resources);
+    const unused = Object.keys(resources).filter(
+      (resourceId) => resourceId !== spine.resource,
+    );
+    if (unused.length)
+      fail(`popup production resources 包含未引用项：${unused.join(", ")}`);
+    return freeze({ ...base, type: "spine" as const, spine });
+  }
   const awardCelebration = parseAwardCelebration(
     record.awardCelebration,
     resources,
@@ -62,17 +91,51 @@ export function parsePopupManifest(value: unknown): PopupManifestV1 {
   if (unused.length)
     fail(`popup production resources 包含未引用项：${unused.join(", ")}`);
   return freeze({
-    version: 1 as const,
-    kind: "popup" as const,
-    id,
+    ...base,
     type: "award-celebration" as const,
-    designViewport: {
-      width: positive(viewport.width, "designViewport.width"),
-      height: positive(viewport.height, "designViewport.height"),
-    },
     amountFormat: parseAmountFormat(record.amountFormat),
-    resources,
     awardCelebration,
+  });
+}
+
+function parseSpinePopup(
+  value: unknown,
+  resources: Readonly<Record<string, PopupResourceSpec>>,
+) {
+  const record = object(value, "spine");
+  keys(record, ["resource", "transform", "playback"], "spine");
+  const resource = resourceKey(record.resource, "spine.resource");
+  if (resources[resource]?.kind !== "spine")
+    fail("spine.resource must reference a spine resource.");
+  const transform = object(record.transform, "spine.transform");
+  keys(transform, ["x", "y", "scale"], "spine.transform");
+  const playback = object(record.playback, "spine.playback");
+  keys(
+    playback,
+    ["mode", "startAnimation", "loopAnimation", "endAnimation"],
+    "spine.playback",
+  );
+  if (playback.mode !== "segmented-animations")
+    fail('spine.playback.mode must be "segmented-animations".');
+  const animations = [
+    nonEmpty(playback.startAnimation, "spine.playback.startAnimation"),
+    nonEmpty(playback.loopAnimation, "spine.playback.loopAnimation"),
+    nonEmpty(playback.endAnimation, "spine.playback.endAnimation"),
+  ];
+  unique(animations, "spine playback animations");
+  return freeze({
+    resource,
+    transform: {
+      x: finite(transform.x, "spine.transform.x"),
+      y: finite(transform.y, "spine.transform.y"),
+      scale: positive(transform.scale, "spine.transform.scale"),
+    },
+    playback: {
+      mode: "segmented-animations" as const,
+      startAnimation: animations[0]!,
+      loopAnimation: animations[1]!,
+      endAnimation: animations[2]!,
+    },
   });
 }
 

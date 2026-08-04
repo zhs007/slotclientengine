@@ -18,6 +18,7 @@ import {
   collectMappedPopupAssetKeys,
   collectPopupPackagePaths,
   parsePopupManifest,
+  type PopupManifestV1,
 } from "@slotclientengine/rendercore/popup";
 import { assertVNIProject } from "@slotclientengine/vnicore";
 import {
@@ -119,6 +120,7 @@ export interface EditorModeSymbolBinding {
 
 export interface EditorPopupDependency {
   readonly id: string;
+  readonly type: PopupManifestV1["type"];
   readonly rootKey: string;
   readonly keys: readonly string[];
   placements: Partial<
@@ -184,6 +186,7 @@ export interface EditorProject {
   assets: Map<string, Uint8Array>;
   symbolDependencies: Map<string, EditorSymbolPackageDependency>;
   popupDependencies: Map<string, EditorPopupDependency>;
+  registeredSpinePopupIds: Set<string>;
   runtimeResourceBindings: Map<string, string>;
   gameModes: {
     initialMode: string;
@@ -231,6 +234,7 @@ export function createNewEditorProject(mode: EditorMode): EditorProject {
     assets: new Map(),
     symbolDependencies: new Map(),
     popupDependencies: new Map(),
+    registeredSpinePopupIds: new Set(),
     runtimeResourceBindings: new Map(),
     gameModes: {
       initialMode: "BaseGame",
@@ -737,6 +741,7 @@ export function editorProjectToManifest(
           mode.awardCelebrationPopupId ? [mode.awardCelebrationPopupId] : [],
         ),
       );
+      for (const id of project.registeredSpinePopupIds) referenced.add(id);
       if (referenced.size === 0) return {};
       return {
         popups: Object.fromEntries(
@@ -747,7 +752,7 @@ export function editorProjectToManifest(
             return [
               id,
               {
-                type: "award-celebration",
+                type: dependency.type,
                 manifest: dependency.rootKey,
                 placements: dependency.placements,
               },
@@ -1140,6 +1145,10 @@ export function manifestToEditorProject(
     );
     if (nested.id !== id)
       throw new Error(`导入 Popup dependency id 不一致：${id}`);
+    if (nested.type !== binding.type)
+      throw new Error(
+        `导入 Popup dependency ${id} 类型不一致：binding=${binding.type}, nested=${nested.type}`,
+      );
     const keys = collectMappedPopupKeys(nested, assets, mapped, prefix);
     const files = new Map<string, Uint8Array>([
       ["popup.manifest.json", rootBytes],
@@ -1154,10 +1163,12 @@ export function manifestToEditorProject(
     collectPopupPackagePaths({ manifest: nested, files });
     project.popupDependencies.set(id, {
       id,
+      type: nested.type,
       rootKey: binding.manifest,
       keys: Object.freeze([binding.manifest, ...keys]),
       placements: structuredClone(binding.placements),
     });
+    if (nested.type === "spine") project.registeredSpinePopupIds.add(id);
   }
   project.gameModes = parsed.gameModes
     ? {
@@ -1239,6 +1250,7 @@ export function cloneEditorProject(project: EditorProject): EditorProject {
       assets: undefined,
       symbolDependencies: undefined,
       popupDependencies: undefined,
+      registeredSpinePopupIds: undefined,
       runtimeResourceBindings: undefined,
     }),
     resources: new Map(
@@ -1262,6 +1274,7 @@ export function cloneEditorProject(project: EditorProject): EditorProject {
         structuredClone(dependency),
       ]),
     ),
+    registeredSpinePopupIds: new Set(project.registeredSpinePopupIds),
     runtimeResourceBindings: new Map(project.runtimeResourceBindings),
   } as EditorProject;
 }

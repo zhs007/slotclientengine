@@ -11,7 +11,7 @@ resource，不要求内层第二份 map。无 map 的合法 legacy direct path �
 
 ## Popup API
 
-`@slotclientengine/rendercore/popup` 提供 strict popup parser、传递资源闭包、files/CDN loader、image/VNI/official Spine/image-string layer、五档 BigInt threshold sequence、点击/dismiss/end drain 和 snapshot。Popup VNI playback 可显式选择 segmented start/loop/end 或 non-loop once 完整时间轴；once 完成后保持 authored 最后一帧，直到 tier 跨档或 Popup 关闭。ImgNumber 可显式作为同档 VNI exact text layer 的子节点，继承 VNI 动画；调用方只提交 bet/win、逐帧 `update()` 和转发点击。
+`@slotclientengine/rendercore/popup` 提供 strict `award-celebration | spine` popup parser、传递资源闭包、files/CDN loader 与 snapshot。普通 Spine popup 使用独立 start→loop→end 状态机：点击请求可提前锁存，只在 loop 完整播放到边界后进入 end。获奖庆祝继续支持 image/VNI/official Spine/image-string layer、五档 BigInt threshold sequence 与金额格式。
 
 ## Image String API
 

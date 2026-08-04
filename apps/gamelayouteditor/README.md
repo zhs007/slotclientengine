@@ -1,10 +1,11 @@
 # Game Layout Editor
 
-纯前端 Scene Layout v1 编辑器，覆盖 layout、mode/variant、稳定背景、普通 VNI/Spine 动画图层、Symbols、award-celebration Popup 与 Spine/MP4 有向转场。
+纯前端 Scene Layout v1 编辑器，覆盖 layout、mode/variant、稳定背景、普通 VNI/Spine 动画图层、Symbols、award-celebration/普通 Spine Popup 与 Spine/MP4 有向转场。
 
 award-celebration Popup 作为自包含 dependency 通过 `rendercore/popup` 严格校验并原样
 vendor；内部 VNI 的 segmented/once playback、最后一帧保持和 dismiss 生命周期不在
 Layout Editor 复制或改写。
+普通 Spine Popup 导入后需在 Popup 工作区显式注册；注册后可配置 placement、预览 start/loop/end 并随 layout vendor。
 
 SymbolsEditor ZIP 同样作为自包含、只读的 symbol 状态机 dependency。Layout Editor 只选择
 package、reelSet、renderMode，并使用 rendercore 的公开 display/state capability 做校验和预览；

@@ -92,9 +92,9 @@ export async function importPopupZip(
   }
   const map = decodeEditorAssetsMap(files.get(EDITOR_ASSETS_MAP_PATH)!);
   const project = createPopupEditorProject();
+  project.type = manifest.type;
   project.id = manifest.id;
   project.designViewport = { ...manifest.designViewport };
-  project.amountFormat = { ...manifest.amountFormat };
   project.resources.clear();
   project.assets.clear();
   for (const key of Object.keys(map.files)) {
@@ -115,6 +115,22 @@ export async function importPopupZip(
       spec: structuredClone(spec),
       keys: resourceClosure(spec, project.assets),
     });
+  if (manifest.type === "spine") {
+    project.spine = {
+      resource: manifest.spine.resource,
+      transform: { ...manifest.spine.transform },
+      playback: {
+        startAnimation: manifest.spine.playback.startAnimation,
+        loopAnimation: manifest.spine.playback.loopAnimation,
+        endAnimation: manifest.spine.playback.endAnimation,
+      },
+    };
+    const closure = popupManifestAssetClosure(manifest, project.assets);
+    if (closure.length !== project.assets.size)
+      throw new Error("popup assets map 包含未引用 entry。");
+    return clonePopupEditorProject(project);
+  }
+  project.amountFormat = { ...manifest.amountFormat };
   project.tiers.set("base", {
     countDurationSeconds: manifest.awardCelebration.base.countDurationSeconds,
     layers: structuredClone([...manifest.awardCelebration.base.layers]),

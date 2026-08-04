@@ -1,7 +1,7 @@
 import type {
   AwardCelebrationInput,
+  AwardCelebrationPopupManifestV1,
   AwardTierId,
-  PopupManifestV1,
 } from "./types.js";
 
 export interface AwardCountStage {
@@ -12,7 +12,7 @@ export interface AwardCountStage {
 }
 
 export function createAwardCountStages(
-  manifest: PopupManifestV1,
+  manifest: AwardCelebrationPopupManifestV1,
   input: AwardCelebrationInput,
 ): readonly AwardCountStage[] {
   validateAwardInput(input);

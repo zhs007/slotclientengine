@@ -14,9 +14,9 @@ import {
 import type {
   AwardCelebrationPlayer,
   AwardCelebrationSnapshot,
+  AwardCelebrationPopupManifestV1,
   AwardTierId,
   PopupLayer,
-  PopupManifestV1,
   PopupAmountFormatter,
   PopupPackageResource,
   PopupPreparedImageString,
@@ -71,12 +71,18 @@ export function createAwardCelebrationPlayer(options: {
   readonly layerFactory?: PopupLayerRuntimeFactory;
   readonly formatAmount?: PopupAmountFormatter | undefined;
 }): AwardCelebrationPlayer {
+  if (options.resource.manifest.type !== "award-celebration")
+    throw new Error(
+      "Award celebration player requires an award-celebration popup package.",
+    );
   return new DefaultAwardCelebrationPlayer(options);
 }
 
 class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
   readonly container = new Container();
-  readonly #resource: PopupPackageResource;
+  readonly #resource: PopupPackageResource & {
+    readonly manifest: AwardCelebrationPopupManifestV1;
+  };
   readonly #factory: PopupLayerRuntimeFactory;
   readonly #formatAmount: PopupAmountFormatter;
   readonly #tiers = new Map<AwardTierId, TierRuntime>();
@@ -97,7 +103,13 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
     readonly layerFactory?: PopupLayerRuntimeFactory;
     readonly formatAmount?: PopupAmountFormatter | undefined;
   }) {
-    this.#resource = options.resource;
+    if (options.resource.manifest.type !== "award-celebration")
+      throw new Error(
+        "Award celebration player requires an award-celebration popup package.",
+      );
+    this.#resource = options.resource as PopupPackageResource & {
+      readonly manifest: AwardCelebrationPopupManifestV1;
+    };
     this.#factory = options.layerFactory ?? defaultLayerFactory;
     this.#formatAmount =
       options.formatAmount ??
