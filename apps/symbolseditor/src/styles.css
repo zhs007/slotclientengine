@@ -908,6 +908,43 @@ details > summary {
   background: #02050bc7;
 }
 
+.vni-runtime-dialog {
+  width: min(560px, calc(100vw - 32px));
+  padding: 0;
+  color: #e8edf7;
+  background: #0b1322;
+  border: 1px solid #435b7e;
+  border-radius: 12px;
+  box-shadow: 0 20px 70px #000c;
+}
+
+.vni-runtime-dialog::backdrop {
+  background: #02050bc7;
+}
+
+.vni-runtime-shell {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+}
+
+.vni-runtime-shell h2,
+.vni-runtime-shell p,
+.vni-runtime-shell small {
+  margin: 0;
+}
+
+.vni-runtime-shell label {
+  display: grid;
+  gap: 8px;
+}
+
+.vni-runtime-shell footer {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
 .import-review-dialog {
   width: min(760px, calc(100vw - 32px));
   max-height: min(760px, calc(100vh - 32px));

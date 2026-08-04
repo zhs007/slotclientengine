@@ -69,6 +69,11 @@ import {
   SYMBOL_ZIP_LIMITS,
 } from "../io/symbol-package-zip.js";
 import {
+  createSymbolVniBundleImportSources,
+  inspectSymbolVniBundleProfiles,
+  type SymbolVniRuntimeProfile,
+} from "../io/vni-bundle-import.js";
+import {
   SymbolEditorPreview,
   type SymbolPreviewCell,
 } from "../preview/symbol-preview.js";
@@ -133,6 +138,7 @@ export class SymbolsEditorApp {
   #feedbackTimer: ReturnType<typeof setTimeout> | null = null;
   #pendingFocusKey = "";
   #pendingVisibleState = "";
+  #cancelVniProfileChoice: (() => void) | null = null;
   #destroyed = false;
 
   constructor(root: HTMLElement) {
@@ -159,6 +165,8 @@ export class SymbolsEditorApp {
     this.#unsubscribe = null;
     this.#previewRequest += 1;
     this.#importRequest += 1;
+    this.#cancelVniProfileChoice?.();
+    this.#cancelVniProfileChoice = null;
     this.#preview?.destroy();
     this.#preview = null;
     this.closePicker(false);
@@ -1848,9 +1856,14 @@ export class SymbolsEditorApp {
             const bytes = new Uint8Array(await file.arrayBuffer());
             const entries = normalizeEditorPackageZipEntries(
               extractBoundedZip(bytes, { limits: SYMBOL_ZIP_LIMITS }),
-              ["symbols.package.json", "image-string.manifest.json"],
+              [
+                "symbols.package.json",
+                "image-string.manifest.json",
+                "manifest.json",
+              ],
             );
-            return { file, bytes, entries };
+            const vniProfiles = inspectSymbolVniBundleProfiles(entries);
+            return { file, bytes, entries, vniProfiles };
           }),
       );
       const projectZip = inspectedZips.find(({ entries }) =>
@@ -1924,17 +1937,46 @@ export class SymbolsEditorApp {
       const current = snapshot.project;
       if (!current) throw new Error("请先创建或导入项目。");
       this.showSuccess("正在展开资源并计算同名冲突…");
-      const sources = await ingestEditorResourceSources({
-        files,
-        limits: {
-          files: {
-            maxEntries: 4096,
-            maxFileBytes: 50 * 1024 * 1024,
-            maxTotalBytes: 500 * 1024 * 1024,
-          },
-          zip: SYMBOL_ZIP_LIMITS,
+      const vniProfileSelections = new Map<File, string>();
+      for (const { file, vniProfiles } of inspectedZips) {
+        if (!vniProfiles) continue;
+        const selected =
+          vniProfiles.length === 1
+            ? vniProfiles[0]!.id
+            : await this.chooseVniRuntimeProfile(file.name, vniProfiles);
+        if (!selected) {
+          this.showSuccess("已取消 VNI runtime 选择，项目未修改");
+          return;
+        }
+        if (request !== this.#importRequest) return;
+        vniProfileSelections.set(file, selected);
+      }
+      const vniFiles = new Set(vniProfileSelections.keys());
+      const ordinaryFiles = files.filter((file) => !vniFiles.has(file));
+      const ordinarySources = ordinaryFiles.length
+        ? await ingestEditorResourceSources({
+            files: ordinaryFiles,
+            limits: {
+              files: {
+                maxEntries: 4096,
+                maxFileBytes: 50 * 1024 * 1024,
+                maxTotalBytes: 500 * 1024 * 1024,
+              },
+              zip: SYMBOL_ZIP_LIMITS,
+            },
+          })
+        : [];
+      const vniSources = inspectedZips.flatMap(
+        ({ file, entries, vniProfiles }) => {
+          if (!vniProfiles) return [];
+          return createSymbolVniBundleImportSources({
+            entries,
+            containerName: file.name,
+            selectedProfileId: vniProfileSelections.get(file),
+          });
         },
-      });
+      );
+      const sources = Object.freeze([...ordinarySources, ...vniSources]);
       const outcome = await this.importOrdinarySources({
         project: current,
         baseRevision: snapshot.revision,
@@ -1960,6 +2002,64 @@ export class SymbolsEditorApp {
           this.requireElement("[data-upload]").removeAttribute("disabled");
       }
     }
+  }
+
+  private chooseVniRuntimeProfile(
+    fileName: string,
+    profiles: readonly SymbolVniRuntimeProfile[],
+  ): Promise<string | null> {
+    const dialog = this.requireElement(
+      "[data-vni-runtime-choice]",
+    ) as HTMLDialogElement;
+    const description = this.requireElement("[data-vni-runtime-description]");
+    const select = this.requireElement(
+      "[data-vni-runtime-select]",
+    ) as HTMLSelectElement;
+    const confirm = this.requireElement(
+      "[data-vni-runtime-confirm]",
+    ) as HTMLButtonElement;
+    const cancel = this.requireElement(
+      "[data-vni-runtime-cancel]",
+    ) as HTMLButtonElement;
+    description.textContent = `${fileName} 包含多个 purpose=runtime 的运行发布包，请明确选择本次导入版本。`;
+    select.replaceChildren(
+      ...profiles.map((profile) => {
+        const option = document.createElement("option");
+        option.value = profile.id;
+        option.textContent = `${profile.label} · ${profile.id} · ${profile.assetScale * 100}% · ${formatBytes(profile.byteLength)}`;
+        return option;
+      }),
+    );
+    return new Promise((resolve) => {
+      let finished = false;
+      const finish = (value: string | null) => {
+        if (finished) return;
+        finished = true;
+        confirm.onclick = null;
+        cancel.onclick = null;
+        dialog.removeEventListener("cancel", onDialogCancel);
+        if (dialog.open) {
+          if (typeof dialog.close === "function") dialog.close();
+          else dialog.removeAttribute("open");
+        }
+        if (this.#cancelVniProfileChoice === cancelChoice)
+          this.#cancelVniProfileChoice = null;
+        resolve(value);
+      };
+      const onDialogCancel = (event: Event) => {
+        event.preventDefault();
+        finish(null);
+      };
+      const cancelChoice = () => finish(null);
+      this.#cancelVniProfileChoice?.();
+      this.#cancelVniProfileChoice = cancelChoice;
+      confirm.onclick = () => finish(select.value);
+      cancel.onclick = () => finish(null);
+      dialog.addEventListener("cancel", onDialogCancel);
+      if (typeof dialog.showModal === "function" && !dialog.open)
+        dialog.showModal();
+      else dialog.setAttribute("open", "");
+    });
   }
 
   private async importOrdinarySources(options: {
@@ -2349,6 +2449,14 @@ function shellMarkup(): string {
       </section>
     </section>
     <dialog class="resource-picker" data-resource-picker></dialog>
+    <dialog class="vni-runtime-dialog" data-vni-runtime-choice>
+      <div class="vni-runtime-shell">
+        <header><div><small>VNI export bundle</small><h2>选择 VNI runtime</h2></div></header>
+        <p data-vni-runtime-description></p>
+        <label>运行版本<select data-vni-runtime-select></select></label>
+        <footer><button type="button" data-vni-runtime-cancel>取消导入</button><button type="button" class="primary" data-vni-runtime-confirm>确认 runtime</button></footer>
+      </div>
+    </dialog>
   </main>`;
 }
 

@@ -21,6 +21,14 @@ value-presentation 的编辑顺序固定为“档位 → 状态”：每档只�
 
 单文件、多文件和通用资源 ZIP 使用同一导入事务；ZIP 内路径在 review 前扁平为原始 basename。同名不同 bytes 必须先 review：可以逐项或批量覆盖，也可以显式保留两份。覆盖保持所有 state/value/node 引用；保留两份在扩展名前使用最小可用 `-1`、`-2` suffix，且普通新资源不会自动绑定；用户从目标 state 执行“上传并使用”时，review 成功后的 resolved key 会显式绑定回该 state。唯一例外是被覆盖的有效 Spine skeleton 不再包含已选动画：编辑器只清空受影响的 exact `animationName`（包括 composite 的 exact leaf），并提示用户重新选择；tiered Spine 的共享 normal/activeSpine 动画按全部档位交集一起处理。slot、glyph、atlas page、closure 或其它不兼容仍整批回滚。大小写合法文件名原样保留，不生成 logical id、目录前缀或静默后缀。unused key 可留在 draft，但不会进入 production closure。
 
+带根 `manifest.json` 的 VNI export bundle 会先按正式 manifest/profile 合同识别，再进入上述
+统一导入事务。只有 `purpose=runtime` 是候选：唯一 runtime 自动选择，多个 runtime 必须在
+受控下拉框中明确选择，`purpose=editing` 不入库。所选 project 及其 exact asset closure 在
+提交前结构化改写为扁平 filename key，保留 VNI `originalName`、asset/layer identity 和
+`exportProfile`；bundle manifest、未选 profile、缺失或 orphan 文件不会成为 workspace
+资源。成功导入只增加可选 VNI project，不按 ZIP 名、project 名或 `originalName` 自动绑定
+symbol/state。
+
 包含 `symbols.package.json` 的 ZIP 是完整 Symbols project，只能单独打开，并在确认后原子替换当前项目；它不会作为普通素材合并。导入和预览分别显示进度与错误，project 已加载但 Pixi/Spine/VNI preview 初始化失败时保留可编辑配置并提供重试，不用空预览掩盖异常。
 
 导出 ZIP 的 symbol manifest 与所有嵌套 VNI/Spine/image-string 引用均为 filename keys；根 `assets.map.json` 将它们映射到 `assets/<完整 SHA-256>.<ext>`。合法 legacy direct-path package 可导入并结构化升级，新导出不含 nested dependency 资源目录。
