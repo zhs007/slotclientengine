@@ -422,16 +422,16 @@ describe("symbol state texture manifest helpers", () => {
         manifest,
         requiredStates,
         modules: {
-          "../../../assets/game003-s1/L1.png": "/L1.png",
-          "../../../assets/game003-s1/L1.spinBlur.png": "/L1.spinBlur.png",
-          "../../../assets/game003-s1/L1.disabled.png": "/L1.disabled.png",
-          "../../../assets/game003-s1/SC-0.png": "/SC-0.png",
-          "../../../assets/game003-s1/SC-1.png": "/SC-1.png",
-          "../../../assets/game003-s1/SC.spinBlur.png": "/SC.spinBlur.png",
-          "../../../assets/game003-s1/SC.disabled.png": "/SC.disabled.png",
-          "../../../assets/game003-s1/H1.png": "/H1.png",
-          "../../../assets/game003-s1/H1.spinBlur.png": "/H1.spinBlur.png",
-          "../../../assets/game003-s1/H1.disabled.png": "/H1.disabled.png",
+          "../../../assets/sample-skin/L1.png": "/L1.png",
+          "../../../assets/sample-skin/L1.spinBlur.png": "/L1.spinBlur.png",
+          "../../../assets/sample-skin/L1.disabled.png": "/L1.disabled.png",
+          "../../../assets/sample-skin/SC-0.png": "/SC-0.png",
+          "../../../assets/sample-skin/SC-1.png": "/SC-1.png",
+          "../../../assets/sample-skin/SC.spinBlur.png": "/SC.spinBlur.png",
+          "../../../assets/sample-skin/SC.disabled.png": "/SC.disabled.png",
+          "../../../assets/sample-skin/H1.png": "/H1.png",
+          "../../../assets/sample-skin/H1.spinBlur.png": "/H1.spinBlur.png",
+          "../../../assets/sample-skin/H1.disabled.png": "/H1.disabled.png",
         },
       }),
     ).toMatchObject({
@@ -619,10 +619,10 @@ describe("symbol state texture manifest helpers", () => {
       manifest: createManifest(),
       requiredStates,
       vniProjectModules: {
-        "../../../assets/game003-s1/L1-wins.json": createProject(),
+        "../../../assets/sample-skin/L1-wins.json": createProject(),
       },
       vniAssetModules: {
-        "../../../assets/game003-s1/assets/l1.png": "/assets/l1.png",
+        "../../../assets/sample-skin/assets/l1.png": "/assets/l1.png",
       },
     });
 
@@ -704,13 +704,13 @@ describe("symbol state texture manifest helpers", () => {
       manifest: createManifest(),
       requiredStates,
       spineSkeletonModules: {
-        "../../../assets/game003-s1/H1.json": skeleton,
+        "../../../assets/sample-skin/H1.json": skeleton,
       },
       spineAtlasModules: {
-        "../../../assets/game003-s1/Symbol.atlas": atlas,
+        "../../../assets/sample-skin/Symbol.atlas": atlas,
       },
       spineTextureModules: {
-        "../../../assets/game003-s1/Symbol.png": "/assets/Symbol.png",
+        "../../../assets/sample-skin/Symbol.png": "/assets/Symbol.png",
       },
     });
 
@@ -746,14 +746,14 @@ describe("symbol state texture manifest helpers", () => {
       manifest,
       requiredStates,
       spineSkeletonModules: {
-        "../../../assets/game003-s1/H1.json": readJsonAsset("H1.json"),
+        "../../../assets/sample-skin/H1.json": readJsonAsset("H1.json"),
       },
       spineAtlasModules: {
-        "../../../assets/game003-s1/Symbol.atlas":
+        "../../../assets/sample-skin/Symbol.atlas":
           readTextAsset("Symbol.atlas"),
       },
       spineTextureModules: {
-        "../../../assets/game003-s1/content-addressed-texture.webp":
+        "../../../assets/sample-skin/content-addressed-texture.webp":
           "/assets/physical-hash.webp",
       },
     });
@@ -950,7 +950,7 @@ describe("symbol state texture manifest helpers", () => {
         manifest,
         requiredStates,
         vniProjectModules: {
-          "../../../assets/game003-s1/L1-wins.json": createProject(),
+          "../../../assets/sample-skin/L1-wins.json": createProject(),
         },
         vniAssetModules: {},
       }),
@@ -968,10 +968,10 @@ describe("symbol state texture manifest helpers", () => {
         requiredStates,
         spineSkeletonModules: {},
         spineAtlasModules: {
-          "../../../assets/game003-s1/Symbol.atlas": atlas,
+          "../../../assets/sample-skin/Symbol.atlas": atlas,
         },
         spineTextureModules: {
-          "../../../assets/game003-s1/Symbol.png": "/assets/Symbol.png",
+          "../../../assets/sample-skin/Symbol.png": "/assets/Symbol.png",
         },
       }),
     ).toThrow(/Spine skeleton is missing/);
@@ -996,13 +996,13 @@ describe("symbol state texture manifest helpers", () => {
         },
         requiredStates,
         spineSkeletonModules: {
-          "../../../assets/game003-s1/H1.json": skeleton,
+          "../../../assets/sample-skin/H1.json": skeleton,
         },
         spineAtlasModules: {
-          "../../../assets/game003-s1/Symbol.atlas": atlas,
+          "../../../assets/sample-skin/Symbol.atlas": atlas,
         },
         spineTextureModules: {
-          "../../../assets/game003-s1/Symbol.png": "/assets/Symbol.png",
+          "../../../assets/sample-skin/Symbol.png": "/assets/Symbol.png",
         },
       }),
     ).toThrow(/missing animation "idle"/);

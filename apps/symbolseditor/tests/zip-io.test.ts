@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { readMinecart2SymbolFixtureBytes } from "../../../test-utils/minecart2-fixtures.js";
 import {
   createDeterministicZip,
   extractBoundedZip,
@@ -24,9 +25,7 @@ const gameConfig = {
   reels: { main: [[0]] },
 };
 const imageBytes = () =>
-  new Uint8Array(
-    readFileSync(resolve(process.cwd(), "../../assets/game003-s1/H1.png")),
-  );
+  new Uint8Array(readMinecart2SymbolFixtureBytes("H1.png"));
 const encode = (value: unknown) =>
   new TextEncoder().encode(`${JSON.stringify(value)}\n`);
 const vniProject = {
@@ -344,12 +343,14 @@ describe("symbols zip IO", () => {
   it("preserves distinct logical keys when symbol and VNI images share bytes", async () => {
     const sharedImage = imageBytes();
     const vniProject = new Uint8Array(
-      readFileSync(
-        resolve(process.cwd(), "../../assets/game003-s1/L1-wins.json"),
-      ),
+      readMinecart2SymbolFixtureBytes("L1-wins.json"),
     );
-    const vniAssetKey = "j1_asset_image_mr1qgfc2_r.png";
-    const resources = ["A-wins.json", "A.png", `assets/${vniAssetKey}`].sort();
+    const parsedVniProject = JSON.parse(
+      new TextDecoder().decode(vniProject),
+    ) as { assets: readonly { path: string }[] };
+    const vniAssetKey = parsedVniProject.assets[0]?.path;
+    if (!vniAssetKey) throw new Error("expected L1 win VNI asset fixture");
+    const resources = ["A-wins.json", "A.png", vniAssetKey].sort();
     const legacyZip = createDeterministicZip({
       "symbols.package.json": encode({
         version: 1,
@@ -387,7 +388,7 @@ describe("symbols zip IO", () => {
       }),
       "A-wins.json": vniProject,
       "A.png": sharedImage,
-      [`assets/${vniAssetKey}`]: sharedImage,
+      [vniAssetKey]: sharedImage,
     });
 
     const imported = await importSymbolPackageZip(legacyZip, {
@@ -401,23 +402,22 @@ describe("symbols zip IO", () => {
       limits: SYMBOL_ZIP_LIMITS,
     });
     const assetsMap = decodeEditorAssetsMap(files.get("assets.map.json")!);
-    expect(Object.keys(assetsMap.files).sort()).toEqual([
-      "A-wins.json",
-      "A.png",
-      vniAssetKey,
-    ]);
-    expect(assetsMap.files["A.png"]?.path).toBe(
-      assetsMap.files[vniAssetKey]?.path,
+    expect(Object.keys(assetsMap.files).sort()).toEqual(
+      ["A-wins.json", "A.png", vniAssetKey].sort(),
+    );
+    expect(assetsMap.files["A.png"]?.sha256).toBe(
+      assetsMap.files[vniAssetKey]?.sha256,
+    );
+    expect(assetsMap.files["A.png"]?.path.replace(/\.[^.]+$/u, "")).toBe(
+      assetsMap.files[vniAssetKey]?.path.replace(/\.[^.]+$/u, ""),
     );
 
     const reimported = await importSymbolPackageZip(exported.bytes, {
       loadTextures: false,
     });
-    expect([...reimported.project.assetLibrary.records.keys()].sort()).toEqual([
-      "A-wins.json",
-      "A.png",
-      vniAssetKey,
-    ]);
+    expect([...reimported.project.assetLibrary.records.keys()].sort()).toEqual(
+      ["A-wins.json", "A.png", vniAssetKey].sort(),
+    );
     expect(
       reimported.project.symbols.get("A")?.states.get("win"),
     ).toMatchObject({

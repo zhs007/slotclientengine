@@ -1,10 +1,9 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDeterministicZip } from "@slotclientengine/browserartifactio";
 import { createFromGameConfig } from "../src/model/editor-project.js";
 import { exportSymbolPackageZip } from "../src/io/symbol-package-zip.js";
 import { readCraveFixture } from "./crave-fixture.js";
+import { readMinecart2SymbolFixtureBytes } from "../../../test-utils/minecart2-fixtures.js";
 
 const previewSpies = vi.hoisted(() => ({
   replay: vi.fn(),
@@ -73,7 +72,7 @@ describe("symbols editor app shell", () => {
       data: new Uint8ClampedArray([255, 0, 0, 255]),
     });
     codecSpies.encodePng.mockResolvedValue(
-      readFileSync(resolve(process.cwd(), "../../assets/game003-s1/H1.png")),
+      readMinecart2SymbolFixtureBytes("H1.png"),
     );
   });
 
@@ -124,7 +123,7 @@ describe("symbols editor app shell", () => {
     const secondBytes = readCraveFixture("H2.png");
     Object.defineProperty(upload, "files", {
       configurable: true,
-      value: [new File([secondBytes], "H1.png")],
+      value: [new File([toArrayBuffer(secondBytes)], "H1.png")],
     });
     upload.dispatchEvent(new Event("change", { bubbles: true }));
     await vi.waitFor(() =>
@@ -271,9 +270,7 @@ describe("symbols editor app shell", () => {
     expect(root.textContent).toContain("上传并使用");
     click(root, "[data-picker-upload]");
     const upload = root.querySelector<HTMLInputElement>("[data-upload-input]")!;
-    const manualBytes = readFileSync(
-      resolve(process.cwd(), "../../assets/game003-s1/H2.png"),
-    );
+    const manualBytes = readMinecart2SymbolFixtureBytes("H2.png");
     Object.defineProperty(upload, "files", {
       configurable: true,
       value: [new File([manualBytes], "manual.png", { type: "image/png" })],
@@ -401,15 +398,7 @@ describe("symbols editor app shell", () => {
     await createProject(root);
     const upload = root.querySelector<HTMLInputElement>("[data-upload-input]")!;
     const files = ["H1.json", "Symbol.atlas", "Symbol.png"].map(
-      (name) =>
-        new File(
-          [
-            readFileSync(
-              resolve(process.cwd(), `../../assets/game003-s1/${name}`),
-            ),
-          ],
-          name,
-        ),
+      (name) => new File([readMinecart2SymbolFixtureBytes(name)], name),
     );
     Object.defineProperty(upload, "files", {
       configurable: true,
@@ -445,7 +434,9 @@ describe("symbols editor app shell", () => {
       "Symbol.atlas",
       "Symbol.png",
     ];
-    const files = names.map((name) => new File([readCraveFixture(name)], name));
+    const files = names.map(
+      (name) => new File([toArrayBuffer(readCraveFixture(name))], name),
+    );
     Object.defineProperty(upload, "files", {
       configurable: true,
       value: files,
@@ -480,10 +471,10 @@ describe("symbols editor app shell", () => {
     Object.defineProperty(upload, "files", {
       configurable: true,
       value: [
-        new File([skeleton], "CN_1.json"),
-        new File([atlas], "Symbol.atlas"),
-        new File([atlas], "Other.atlas"),
-        new File([texture], "Symbol.png"),
+        new File([toArrayBuffer(skeleton)], "CN_1.json"),
+        new File([toArrayBuffer(atlas)], "Symbol.atlas"),
+        new File([toArrayBuffer(atlas)], "Other.atlas"),
+        new File([toArrayBuffer(texture)], "Symbol.png"),
       ],
     });
     upload.dispatchEvent(new Event("change", { bubbles: true }));
@@ -516,9 +507,7 @@ describe("symbols editor app shell", () => {
   it("keeps picker cancel mutation-free and binds only after confirmation", async () => {
     await createProject(root);
     const upload = root.querySelector<HTMLInputElement>("[data-upload-input]")!;
-    const bytes = readFileSync(
-      resolve(process.cwd(), "../../assets/game003-s1/H1.png"),
-    );
+    const bytes = readMinecart2SymbolFixtureBytes("H1.png");
     Object.defineProperty(upload, "files", {
       configurable: true,
       value: [new File([bytes], "H1.png", { type: "image/png" })],
@@ -667,7 +656,9 @@ describe("symbols editor app shell", () => {
     const names = ["CN_1.json", "Symbol.atlas", "Symbol.png"];
     Object.defineProperty(upload, "files", {
       configurable: true,
-      value: names.map((name) => new File([readCraveFixture(name)], name)),
+      value: names.map(
+        (name) => new File([toArrayBuffer(readCraveFixture(name))], name),
+      ),
     });
     upload.dispatchEvent(new Event("change", { bubbles: true }));
     await vi.waitFor(() =>
@@ -747,9 +738,7 @@ async function createProject(root: HTMLElement): Promise<void> {
 
 async function uploadImage(root: HTMLElement, name: string): Promise<void> {
   const upload = root.querySelector<HTMLInputElement>("[data-upload-input]")!;
-  const bytes = readFileSync(
-    resolve(process.cwd(), `../../assets/game003-s1/${name}`),
-  );
+  const bytes = readMinecart2SymbolFixtureBytes(name);
   Object.defineProperty(upload, "files", {
     configurable: true,
     value: [new File([bytes], name, { type: "image/png" })],
@@ -771,6 +760,10 @@ function bindNormalImage(root: HTMLElement, path: string): void {
   click(root, "[data-open-picker]");
   click(root, `[data-picker-candidate="${path}"]`);
   click(root, "[data-picker-confirm]");
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return Uint8Array.from(bytes).buffer;
 }
 
 function click(root: HTMLElement, selector: string): void {

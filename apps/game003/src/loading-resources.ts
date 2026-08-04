@@ -1,8 +1,4 @@
-import type {
-  GameLoadingResource,
-  GameLoadingResourceKind,
-} from "@slotclientengine/gameloading";
-import { GAME003_LOADING_RESOURCE_URLS } from "./generated/game-loading.generated.js";
+import type { GameLoadingResource } from "@slotclientengine/gameloading";
 import { craveSceneLayoutPhysicalResourceUrls as minecart2SceneLayoutPhysicalResourceUrls } from "./generated/minecart2-layout-resources.generated.js";
 import type { Game003SkinId } from "./skin-id.js";
 
@@ -33,14 +29,13 @@ export interface Game003RuntimeModule {
 }
 
 export function createGame003LoadingResources(
-  skin: Game003SkinId = "1",
+  skin: Game003SkinId = "2",
 ): readonly GameLoadingResource[] {
-  const skinResources =
-    skin === "1"
-      ? GAME003_LOADING_RESOURCE_URLS.map(toGameLoadingResource)
-      : createMinecart2LoadingResources();
+  if (skin !== "2") {
+    throw new Error('game003 loading only supports skin "2".');
+  }
   return Object.freeze([
-    ...skinResources,
+    ...createMinecart2LoadingResources(),
     Object.freeze({
       id: GAME003_RUNTIME_MODULE_RESOURCE_ID,
       weight: 10,
@@ -81,22 +76,6 @@ export function readGame003RuntimeModule(
     throw new Error("game003 runtime module is missing required exports.");
   }
   return runtimeModule as unknown as Game003RuntimeModule;
-}
-
-function toGameLoadingResource(resource: {
-  readonly id: string;
-  readonly url: string;
-  readonly kind?: string;
-  readonly weight?: number;
-}): GameLoadingResource {
-  return Object.freeze({
-    id: resource.id,
-    url: resource.url,
-    ...(resource.kind === undefined
-      ? {}
-      : { kind: resource.kind as GameLoadingResourceKind }),
-    ...(resource.weight === undefined ? {} : { weight: resource.weight }),
-  });
 }
 
 function createMinecart2LoadingResources(): readonly GameLoadingResource[] {

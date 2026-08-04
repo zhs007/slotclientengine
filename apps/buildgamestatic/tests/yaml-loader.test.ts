@@ -320,12 +320,12 @@ describe("buildgamestatic YAML loader", () => {
           resources: [
             {
               id: "game003-bg-landscape",
-              path: "assets/game003-s1/bg1.jpg",
+              path: "assets/sample-skin/bg1.jpg",
               weight: 8,
             },
             {
               id: "game003-scene-parts",
-              glob: "assets/game003-s1/{conveyor1,conveyor2,mainreelbg}.png",
+              glob: "assets/sample-skin/{conveyor1,conveyor2,mainreelbg}.png",
               weight: 6,
             },
           ],
@@ -346,8 +346,8 @@ describe("buildgamestatic YAML loader", () => {
           ...createYamlObject(),
           loading: {
             resources: [
-              { id: "dup", path: "assets/game003-s1/bg1.jpg" },
-              { id: "dup", path: "assets/game003-s1/bg2.jpg" },
+              { id: "dup", path: "assets/sample-skin/bg1.jpg" },
+              { id: "dup", path: "assets/sample-skin/bg2.jpg" },
             ],
           },
         },
@@ -362,8 +362,8 @@ describe("buildgamestatic YAML loader", () => {
             resources: [
               {
                 id: "bad",
-                path: "assets/game003-s1/bg1.jpg",
-                glob: "assets/game003-s1/{bg1}.jpg",
+                path: "assets/sample-skin/bg1.jpg",
+                glob: "assets/sample-skin/{bg1}.jpg",
               },
             ],
           },
@@ -376,7 +376,7 @@ describe("buildgamestatic YAML loader", () => {
         {
           ...createYamlObject(),
           loading: {
-            resources: [{ id: "wide", glob: "assets/game003-s1/*.png" }],
+            resources: [{ id: "wide", glob: "assets/sample-skin/*.png" }],
           },
         },
         { rootDir: root, inputPath: "game.yaml" },
@@ -401,8 +401,8 @@ describe("buildgamestatic YAML loader", () => {
       terminalSlotIndex: 4,
       emptyFeature: "empty",
       symbols: {
-        manifest: "assets/game003-s1/feature-bar-symbols.manifest.json",
-        pngGlob: "assets/game003-s1/{bonus,boost}.png",
+        manifest: "assets/sample-skin/feature-bar-symbols.manifest.json",
+        pngGlob: "assets/sample-skin/{bonus,boost}.png",
         requiredStates: [],
       },
       layout: {
@@ -468,8 +468,8 @@ describe("buildgamestatic YAML loader", () => {
             ...createYamlObject().skins["1"],
             symbols: {
               ...createYamlObject().skins["1"].symbols,
-              vniProjectGlob: "assets/game003-s1/*-wins.json",
-              vniAssetGlob: "assets/game003-s1/assets/*.{png,jpg,jpeg,webp}",
+              vniProjectGlob: "assets/sample-skin/*-wins.json",
+              vniAssetGlob: "assets/sample-skin/assets/*.{png,jpg,jpeg,webp}",
             },
           },
         },
@@ -478,18 +478,18 @@ describe("buildgamestatic YAML loader", () => {
     );
 
     expect(valid.skins["1"].symbols).toMatchObject({
-      vniProjectGlob: "assets/game003-s1/*-wins.json",
-      vniAssetGlob: "assets/game003-s1/assets/*.{png,jpg,jpeg,webp}",
+      vniProjectGlob: "assets/sample-skin/*-wins.json",
+      vniAssetGlob: "assets/sample-skin/assets/*.{png,jpg,jpeg,webp}",
     });
 
     for (const [field, value, pattern] of [
       ["vniProjectGlob", "assets/**/*.json", /递归 glob/],
-      ["vniProjectGlob", "assets/game003-s1/*.txt", /JSON glob/],
+      ["vniProjectGlob", "assets/sample-skin/*.txt", /JSON glob/],
       ["vniProjectGlob", "assets/*-wins.json", /仓库根级目录/],
-      ["vniAssetGlob", "assets/game003-s1/assets/*.{png,gif}", /图片资源/],
+      ["vniAssetGlob", "assets/sample-skin/assets/*.{png,gif}", /图片资源/],
       [
         "vniAssetGlob",
-        "assets/game003-s1/assets/**/*.{png,jpg,jpeg,webp}",
+        "assets/sample-skin/assets/**/*.{png,jpg,jpeg,webp}",
         /递归 glob/,
       ],
       ["vniAssetGlob", "assets/*.{png,jpg,jpeg,webp}", /仓库根级目录/],
@@ -525,9 +525,9 @@ describe("buildgamestatic YAML loader", () => {
             symbols: {
               ...createYamlObject().skins["1"].symbols,
               spineSkeletonGlob:
-                "assets/game003-s1/{WL,H1,H2,H3,H4,H5,CL,SC}.json",
-              spineAtlasGlob: "assets/game003-s1/{Symbol}.atlas",
-              spineTextureGlob: "assets/game003-s1/{Symbol}.png",
+                "assets/sample-skin/{WL,H1,H2,H3,H4,H5,CL,SC}.json",
+              spineAtlasGlob: "assets/sample-skin/{Symbol}.atlas",
+              spineTextureGlob: "assets/sample-skin/{Symbol}.png",
             },
           },
         },
@@ -536,9 +536,9 @@ describe("buildgamestatic YAML loader", () => {
     );
 
     expect(valid.skins["1"].symbols).toMatchObject({
-      spineSkeletonGlob: "assets/game003-s1/{WL,H1,H2,H3,H4,H5,CL,SC}.json",
-      spineAtlasGlob: "assets/game003-s1/{Symbol}.atlas",
-      spineTextureGlob: "assets/game003-s1/{Symbol}.png",
+      spineSkeletonGlob: "assets/sample-skin/{WL,H1,H2,H3,H4,H5,CL,SC}.json",
+      spineAtlasGlob: "assets/sample-skin/{Symbol}.atlas",
+      spineTextureGlob: "assets/sample-skin/{Symbol}.png",
     });
 
     expect(() =>
@@ -551,7 +551,7 @@ describe("buildgamestatic YAML loader", () => {
               symbols: {
                 ...createYamlObject().skins["1"].symbols,
                 spineSkeletonGlob:
-                  "assets/game003-s1/{WL,H1,H2,H3,H4,H5,CL,SC}.json",
+                  "assets/sample-skin/{WL,H1,H2,H3,H4,H5,CL,SC}.json",
               },
             },
           },
@@ -564,14 +564,18 @@ describe("buildgamestatic YAML loader", () => {
       ["spineSkeletonGlob", "assets/**/*.json", /递归 glob/],
       [
         "spineSkeletonGlob",
-        ["assets/game003-s1/", "*.json"].join(""),
+        ["assets/sample-skin/", "*.json"].join(""),
         /brace JSON glob/,
       ],
       ["spineSkeletonGlob", "assets/*.{json}", /仓库根级目录/],
-      ["spineAtlasGlob", "assets/game003-s1/*.atlas", /brace atlas glob/],
-      ["spineAtlasGlob", "assets/game003-s1/{Symbol}.json", /brace atlas glob/],
-      ["spineTextureGlob", "assets/game003-s1/*.png", /brace PNG glob/],
-      ["spineTextureGlob", "assets/game003-s1/{Symbol}.jpg", /brace PNG glob/],
+      ["spineAtlasGlob", "assets/sample-skin/*.atlas", /brace atlas glob/],
+      [
+        "spineAtlasGlob",
+        "assets/sample-skin/{Symbol}.json",
+        /brace atlas glob/,
+      ],
+      ["spineTextureGlob", "assets/sample-skin/*.png", /brace PNG glob/],
+      ["spineTextureGlob", "assets/sample-skin/{Symbol}.jpg", /brace PNG glob/],
     ] as const) {
       expect(() =>
         parseGameStaticYamlValue(
@@ -583,9 +587,9 @@ describe("buildgamestatic YAML loader", () => {
                 symbols: {
                   ...createYamlObject().skins["1"].symbols,
                   spineSkeletonGlob:
-                    "assets/game003-s1/{WL,H1,H2,H3,H4,H5,CL,SC}.json",
-                  spineAtlasGlob: "assets/game003-s1/{Symbol}.atlas",
-                  spineTextureGlob: "assets/game003-s1/{Symbol}.png",
+                    "assets/sample-skin/{WL,H1,H2,H3,H4,H5,CL,SC}.json",
+                  spineAtlasGlob: "assets/sample-skin/{Symbol}.atlas",
+                  spineTextureGlob: "assets/sample-skin/{Symbol}.png",
                   [field]: value,
                 },
               },
@@ -609,7 +613,7 @@ describe("buildgamestatic YAML loader", () => {
       amountScale: 100,
       minorCountDurationSeconds: 1.5,
       animations: {
-        manifest: "assets/game003-s1/win-amount/win-amount.manifest.json",
+        manifest: "assets/sample-skin/win-amount/win-amount.manifest.json",
       },
     });
 
@@ -694,7 +698,7 @@ describe("buildgamestatic YAML loader", () => {
         /project\.stage\.duration/,
       ],
     ] as const) {
-      const manifestPath = "assets/game003-s1/win-amount/bad.manifest.json";
+      const manifestPath = "assets/sample-skin/win-amount/bad.manifest.json";
       writeFileSync(join(root, manifestPath), JSON.stringify(manifest), "utf8");
       expect(() =>
         parseGameStaticYamlValue(
@@ -717,25 +721,25 @@ function createFixtureRoot(): string {
   for (const dir of [
     "apps/game003/config",
     "assets/gamecfg003",
-    "assets/game003-s1",
-    "assets/game003-s1/assets",
-    "assets/game003-s1/win-amount",
-    "assets/game003-s1/win-amount/assets",
+    "assets/sample-skin",
+    "assets/sample-skin/assets",
+    "assets/sample-skin/win-amount",
+    "assets/sample-skin/win-amount/assets",
   ]) {
     mkdirSync(join(root, dir), { recursive: true });
   }
   for (const file of [
     "assets/gamecfg003/gameconfig.json",
-    "assets/game003-s1/symbol-state-textures.manifest.json",
-    "assets/game003-s1/feature-bar-symbols.manifest.json",
-    "assets/game003-s1/bonus.png",
-    "assets/game003-s1/boost.png",
-    "assets/game003-s1/bg1.jpg",
-    "assets/game003-s1/bg2.jpg",
-    "assets/game003-s1/mainreelbg.png",
-    "assets/game003-s1/conveyor1.png",
-    "assets/game003-s1/conveyor2.png",
-    "assets/game003-s1/minecart.png",
+    "assets/sample-skin/symbol-state-textures.manifest.json",
+    "assets/sample-skin/feature-bar-symbols.manifest.json",
+    "assets/sample-skin/bonus.png",
+    "assets/sample-skin/boost.png",
+    "assets/sample-skin/bg1.jpg",
+    "assets/sample-skin/bg2.jpg",
+    "assets/sample-skin/mainreelbg.png",
+    "assets/sample-skin/conveyor1.png",
+    "assets/sample-skin/conveyor2.png",
+    "assets/sample-skin/minecart.png",
   ]) {
     writeFileSync(join(root, file), "{}", "utf8");
   }
@@ -771,8 +775,8 @@ function createFeatureBarObject() {
     emptyFeature: "empty",
     allowedFeatures: ["empty", "bonus", "boost"],
     symbols: {
-      manifest: "assets/game003-s1/feature-bar-symbols.manifest.json",
-      pngGlob: "assets/game003-s1/{bonus,boost}.png",
+      manifest: "assets/sample-skin/feature-bar-symbols.manifest.json",
+      pngGlob: "assets/sample-skin/{bonus,boost}.png",
       requireExplicitScale: true,
       requiredStates: [],
     },
@@ -804,13 +808,13 @@ function createFeatureBarObject() {
 function writeWinAmountFixtureFiles(root: string): void {
   for (const file of ["bigwin.json", "superwin.json", "megawin.json"]) {
     writeFileSync(
-      join(root, `assets/game003-s1/win-amount/${file}`),
+      join(root, `assets/sample-skin/win-amount/${file}`),
       JSON.stringify({ stage: { duration: 2.9 }, assets: [] }),
       "utf8",
     );
   }
   writeFileSync(
-    join(root, "assets/game003-s1/win-amount/win-amount.manifest.json"),
+    join(root, "assets/sample-skin/win-amount/win-amount.manifest.json"),
     JSON.stringify(createWinAmountManifest()),
     "utf8",
   );
@@ -844,8 +848,8 @@ function createYamlObject() {
       "1": {
         label: "skin 1",
         symbols: {
-          manifest: "assets/game003-s1/symbol-state-textures.manifest.json",
-          pngGlob: "assets/game003-s1/*.png",
+          manifest: "assets/sample-skin/symbol-state-textures.manifest.json",
+          pngGlob: "assets/sample-skin/*.png",
           emptySymbols: [],
           requireExplicitScale: true,
           requiredStates: ["spinBlur", "disabled"],
@@ -855,7 +859,7 @@ function createYamlObject() {
           variants: {
             landscape: {
               background: {
-                path: "assets/game003-s1/bg1.jpg",
+                path: "assets/sample-skin/bg1.jpg",
                 width: 2000,
                 height: 2000,
               },
@@ -863,7 +867,7 @@ function createYamlObject() {
               frameFocusRect: { width: 1424, height: 1061 },
               mainReelBackgroundPositionInFocusRect: { x: 294, y: -10 },
               conveyor: {
-                path: "assets/game003-s1/conveyor1.png",
+                path: "assets/sample-skin/conveyor1.png",
                 width: 284,
                 height: 775,
                 positionInFocusRect: { x: 0, y: 14.5 },
@@ -871,7 +875,7 @@ function createYamlObject() {
             },
             portrait: {
               background: {
-                path: "assets/game003-s1/bg2.jpg",
+                path: "assets/sample-skin/bg2.jpg",
                 width: 1174,
                 height: 2000,
               },
@@ -880,7 +884,7 @@ function createYamlObject() {
               minFocusMargin: { left: 22, right: 22 },
               mainReelBackgroundPositionInFocusRect: { x: 0, y: 147 },
               conveyor: {
-                path: "assets/game003-s1/conveyor2.png",
+                path: "assets/sample-skin/conveyor2.png",
                 width: 934,
                 height: 227,
                 positionInFocusRect: { x: 98, y: -80 },
@@ -888,7 +892,7 @@ function createYamlObject() {
             },
           },
           mainReelBackground: {
-            path: "assets/game003-s1/mainreelbg.png",
+            path: "assets/sample-skin/mainreelbg.png",
             width: 1130,
             height: 824,
           },
@@ -951,7 +955,7 @@ function createWinAmountObject() {
       majorOffset: { x: 0, y: 0 },
     },
     animations: {
-      manifest: "assets/game003-s1/win-amount/win-amount.manifest.json",
+      manifest: "assets/sample-skin/win-amount/win-amount.manifest.json",
     },
   };
 }
@@ -1017,8 +1021,8 @@ skins:
   "1":
     label: skin 1
     symbols:
-      manifest: assets/game003-s1/symbol-state-textures.manifest.json
-      pngGlob: assets/game003-s1/*.png
+      manifest: assets/sample-skin/symbol-state-textures.manifest.json
+      pngGlob: assets/sample-skin/*.png
       emptySymbols: []
       requireExplicitScale: true
       requiredStates:
@@ -1029,20 +1033,20 @@ skins:
       variants:
         landscape:
           background:
-            path: assets/game003-s1/bg1.jpg
+            path: assets/sample-skin/bg1.jpg
             width: 2000
             height: 2000
           focusRect: { x: 288, y: 588, width: 1424, height: 824 }
           frameFocusRect: { width: 1424, height: 1061 }
           mainReelBackgroundPositionInFocusRect: { x: 294, y: -10 }
           conveyor:
-            path: assets/game003-s1/conveyor1.png
+            path: assets/sample-skin/conveyor1.png
             width: 284
             height: 775
             positionInFocusRect: { x: 0, y: 14.5 }
         portrait:
           background:
-            path: assets/game003-s1/bg2.jpg
+            path: assets/sample-skin/bg2.jpg
             width: 1174
             height: 2000
           focusRect: { x: 22, y: 469.5, width: 1130, height: 1061 }
@@ -1050,12 +1054,12 @@ skins:
           minFocusMargin: { left: 22, right: 22 }
           mainReelBackgroundPositionInFocusRect: { x: 0, y: 147 }
           conveyor:
-            path: assets/game003-s1/conveyor2.png
+            path: assets/sample-skin/conveyor2.png
             width: 934
             height: 227
             positionInFocusRect: { x: 98, y: -80 }
       mainReelBackground:
-        path: assets/game003-s1/mainreelbg.png
+        path: assets/sample-skin/mainreelbg.png
         width: 1130
         height: 824
       reelAreaInMainReelBackground:

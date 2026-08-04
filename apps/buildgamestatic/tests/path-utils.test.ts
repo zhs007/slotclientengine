@@ -31,14 +31,14 @@ describe("buildgamestatic path utils", () => {
     );
 
     expect(findRepoRoot(join(root, "apps/game003/src/generated"))).toBe(root);
-    expect(toImportSpecifier(outPath, "assets/game003-s1/bg1.jpg")).toBe(
-      "../../../../assets/game003-s1/bg1.jpg",
+    expect(toImportSpecifier(outPath, "assets/sample-skin/bg1.jpg")).toBe(
+      "../../../../assets/sample-skin/bg1.jpg",
     );
     expect(
-      toImportSpecifierFromRoot(root, outPath, "assets/game003-s1/bg1.jpg"),
-    ).toBe("../../../../assets/game003-s1/bg1.jpg");
-    expect(getGlobDirectory("assets/game003-s1/*.png")).toBe(
-      "assets/game003-s1",
+      toImportSpecifierFromRoot(root, outPath, "assets/sample-skin/bg1.jpg"),
+    ).toBe("../../../../assets/sample-skin/bg1.jpg");
+    expect(getGlobDirectory("assets/sample-skin/*.png")).toBe(
+      "assets/sample-skin",
     );
   });
 
@@ -62,7 +62,7 @@ describe("buildgamestatic path utils", () => {
     expect(() => assertExtension("bg.txt", [".jpg"], "background")).toThrow(
       /扩展名/,
     );
-    expect(() => getGlobDirectory("assets/game003-s1/*.jpg")).toThrow(
+    expect(() => getGlobDirectory("assets/sample-skin/*.jpg")).toThrow(
       /pngGlob/,
     );
   });
@@ -72,9 +72,9 @@ function createRepoRoot(): string {
   const root = mkdtempSync(join(tmpdir(), "buildgamestatic-path-"));
   roots.push(root);
   mkdirSync(join(root, "apps/game003/src/generated"), { recursive: true });
-  mkdirSync(join(root, "assets/game003-s1"), { recursive: true });
+  mkdirSync(join(root, "assets/sample-skin"), { recursive: true });
   writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []", "utf8");
   writeFileSync(join(root, "package.json"), "{}", "utf8");
-  writeFileSync(join(root, "assets/game003-s1/bg1.jpg"), "", "utf8");
+  writeFileSync(join(root, "assets/sample-skin/bg1.jpg"), "", "utf8");
   return root;
 }

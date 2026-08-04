@@ -4,11 +4,11 @@ import type {
   SlotGameSpinRequest,
 } from "@slotclientengine/gameframeworks";
 import { assertNoRejectedQueryParams } from "@slotclientengine/gameframeworks/static-config";
-import { GAME003_STATIC_CONFIG } from "./generated/game-static.generated.js";
+import { GAME003_RUNTIME_CONFIG } from "./runtime-config.js";
 import { parseGame003SkinId, type Game003SkinId } from "./skin-id.js";
 
-export const GAME003_GAMECODE = GAME003_STATIC_CONFIG.live.gamecode;
-export const GAME003_LIVE_SERVER_URL = GAME003_STATIC_CONFIG.live.serverUrl;
+export const GAME003_GAMECODE = GAME003_RUNTIME_CONFIG.live.gamecode;
+export const GAME003_LIVE_SERVER_URL = GAME003_RUNTIME_CONFIG.live.serverUrl;
 
 export interface Game003QueryConfig {
   readonly skin: Game003SkinId;
@@ -40,7 +40,7 @@ export function parseGame003QueryConfig(
     search instanceof URLSearchParams ? search : new URLSearchParams(search);
   assertNoRejectedQueryParams(
     params,
-    GAME003_STATIC_CONFIG.live.rejectQueryParams,
+    GAME003_RUNTIME_CONFIG.live.rejectQueryParams,
   );
   const skin = parseGame003SkinId(parseRequiredQueryString(params, "skin"));
   const gamecode =

@@ -12,7 +12,6 @@
     "build:task132": "pnpm run prepare:deps && ts-node-esm --project tsconfig.json scripts/build-task132-symbols.ts",
     "build:task135": "pnpm run prepare:deps && ts-node-esm --project tsconfig.json scripts/build-task135-symbols.ts",
     "build:task147": "pnpm run prepare:deps && ts-node-esm --project tsconfig.json scripts/build-task147-symbols.ts",
-    "build:task152": "pnpm --filter buildgamestatic build && pnpm run prepare:deps && node scripts/build-task152-game003-symbols.mjs",
     "lint": "eslint .",
     "test": "vitest run --coverage",
     "typecheck": "pnpm run prepare:deps && tsc -p tsconfig.json --noEmit",

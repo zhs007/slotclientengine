@@ -7,6 +7,7 @@ import {
   assertUniqueEditorAssetKeys,
   canonicalExtensionOfEditorAssetKey,
 } from "@slotclientengine/editorresource";
+import { inspectSymbolSpineAtlas } from "@slotclientengine/rendercore/symbol";
 import type {
   CwebpRunner,
   ImageOptimizationResult,
@@ -65,11 +66,17 @@ export async function optimizeLayoutImages(options: {
 }): Promise<ImageOptimizationResult> {
   const runner = options.runner ?? nodeCwebpRunner;
   const cwebpVersion = await runner.version(options.cwebpExecutable);
+  const atlasPageKeys = collectAtlasPageKeys(options.source.sourceEntries);
   const keyMapping = new Map<string, string>();
+  const convertedKeys = new Set<string>();
   const targetKeys: string[] = [];
   for (const [key, entry] of options.source.sourceEntries) {
     const converted = isConvertible(entry.mediaType, key);
-    const target = converted ? replaceWithWebpExtension(key) : key;
+    const target =
+      converted && !atlasPageKeys.has(key)
+        ? replaceWithWebpExtension(key)
+        : key;
+    if (converted) convertedKeys.add(key);
     keyMapping.set(key, target);
     targetKeys.push(target);
   }
@@ -82,7 +89,7 @@ export async function optimizeLayoutImages(options: {
   try {
     for (const [sourceKey, entry] of options.source.sourceEntries) {
       const key = keyMapping.get(sourceKey)!;
-      const converted = key !== sourceKey;
+      const converted = convertedKeys.has(sourceKey);
       let bytes = entry.bytes.slice();
       if (converted) {
         convertedImageCount += 1;
@@ -128,6 +135,27 @@ export async function optimizeLayoutImages(options: {
     assets: readonlyMap(assets),
     convertedImageCount,
   });
+}
+
+function collectAtlasPageKeys(
+  entries: ValidatedLayoutPackage["sourceEntries"],
+): ReadonlySet<string> {
+  const keys = new Set<string>();
+  for (const [key, entry] of entries) {
+    if (!key.toLowerCase().endsWith(".atlas")) continue;
+    let atlasText: string;
+    try {
+      atlasText = new TextDecoder("utf-8", { fatal: true }).decode(entry.bytes);
+    } catch (error) {
+      throw new Error(
+        `Spine atlas 不是合法 UTF-8：${key} (${formatError(error)})`,
+      );
+    }
+    for (const page of inspectSymbolSpineAtlas(atlasText).pageNames) {
+      if (entries.has(page)) keys.add(page);
+    }
+  }
+  return keys;
 }
 
 function isConvertible(mediaType: string, key: string): boolean {

@@ -37,10 +37,10 @@ describe("buildgamestatic generator", () => {
     expect(first.changed).toBe(true);
     expect(existsSync(outPath)).toBe(true);
     expect(first.generated).toContain(
-      'from "../../../../assets/game003-s1/bg1.jpg?url"',
+      'from "../../../../assets/sample-skin/bg1.jpg?url"',
     );
     expect(first.generated).toMatch(
-      /import\.meta\.glob\(\s+"..\/..\/..\/..\/assets\/game003-s1\/\*\.png"/,
+      /import\.meta\.glob\(\s+"..\/..\/..\/..\/assets\/sample-skin\/\*\.png"/,
     );
     expect(first.generated).not.toContain(root);
     expect(first.generated).not.toMatch(/260630|Date|Math\.random/);
@@ -93,13 +93,15 @@ describe("buildgamestatic generator", () => {
     expect(result.loadingGenerated).toContain("GAME003_LOADING_RESOURCE_URLS");
     expect(result.loadingGenerated).toContain("import.meta.glob");
     expect(result.loadingGenerated).toContain(
-      "assets/game003-s1/{conveyor1,conveyor2,mainreelbg}.png",
+      "assets/sample-skin/{conveyor1,conveyor2,mainreelbg}.png",
     );
     expect(result.loadingGenerated).toContain("game003-minecart");
-    expect(result.loadingGenerated).toContain("assets/game003-s1/minecart.png");
+    expect(result.loadingGenerated).toContain(
+      "assets/sample-skin/minecart.png",
+    );
     expect(result.loadingGenerated).toContain("game003-win-amount-manifest");
     expect(result.loadingGenerated).toContain(
-      "assets/game003-s1/win-amount/win-amount.manifest.json",
+      "assets/sample-skin/win-amount/win-amount.manifest.json",
     );
     expect(result.loadingGenerated).toContain(
       "game003-win-amount-vni-projects",
@@ -131,10 +133,10 @@ describe("buildgamestatic generator", () => {
     expect(result.generated).toContain("game003Skin1VniProjectModules");
     expect(result.generated).toContain("game003Skin1VniAssetModules");
     expect(result.generated).toMatch(
-      /import\.meta\.glob\(\s+"..\/..\/..\/..\/assets\/game003-s1\/\*-wins\.json"/,
+      /import\.meta\.glob\(\s+"..\/..\/..\/..\/assets\/sample-skin\/\*-wins\.json"/,
     );
     expect(result.generated).toMatch(
-      /import\.meta\.glob\(\s+"..\/..\/..\/..\/assets\/game003-s1\/assets\/\*\.{png,jpg,jpeg,webp}"/,
+      /import\.meta\.glob\(\s+"..\/..\/..\/..\/assets\/sample-skin\/assets\/\*\.{png,jpg,jpeg,webp}"/,
     );
     expect(result.generated).toContain(
       "vniProjectModules: game003Skin1VniProjectModules",
@@ -160,19 +162,19 @@ describe("buildgamestatic generator", () => {
     expect(result.generated).toContain("game003Skin1SpineAtlasModules");
     expect(result.generated).toContain("game003Skin1SpineTextureModules");
     expect(result.generated).toMatch(
-      /import\.meta\.glob\(\s+"..\/..\/..\/..\/assets\/game003-s1\/\{WL,H1,H2,H3,H4,H5,CL,SC\}\.json"/,
+      /import\.meta\.glob\(\s+"..\/..\/..\/..\/assets\/sample-skin\/\{WL,H1,H2,H3,H4,H5,CL,SC\}\.json"/,
     );
     expect(result.generated).toContain(
-      'import game003Skin1SpineAtlasModulesRaw0 from "../../../../assets/game003-s1/Symbol.atlas?raw";',
+      'import game003Skin1SpineAtlasModulesRaw0 from "../../../../assets/sample-skin/Symbol.atlas?raw";',
     );
     expect(result.generated).toMatch(
-      /"..\/..\/..\/..\/assets\/game003-s1\/Symbol\.atlas":\s+game003Skin1SpineAtlasModulesRaw0/,
+      /"..\/..\/..\/..\/assets\/sample-skin\/Symbol\.atlas":\s+game003Skin1SpineAtlasModulesRaw0/,
     );
     expect(result.generated).toContain(
-      'import game003Skin1SpineTextureModulesUrl0 from "../../../../assets/game003-s1/Symbol.png?url";',
+      'import game003Skin1SpineTextureModulesUrl0 from "../../../../assets/sample-skin/Symbol.png?url";',
     );
     expect(result.generated).toMatch(
-      /"..\/..\/..\/..\/assets\/game003-s1\/Symbol\.png":\s+game003Skin1SpineTextureModulesUrl0/,
+      /"..\/..\/..\/..\/assets\/sample-skin\/Symbol\.png":\s+game003Skin1SpineTextureModulesUrl0/,
     );
     expect(result.generated).toContain(
       "spineSkeletonModules: game003Skin1SpineSkeletonModules",
@@ -202,10 +204,10 @@ describe("buildgamestatic generator", () => {
     expect(result.generated).toContain("game003Skin1WinAmountManifest");
     expect(result.generated).toContain("winAmount: Object.freeze");
     expect(result.generated).toContain(
-      'from "../../../../assets/game003-s1/win-amount/win-amount.manifest.json"',
+      'from "../../../../assets/sample-skin/win-amount/win-amount.manifest.json"',
     );
     expect(result.generated).toMatch(
-      /import\.meta\.glob\(\s+"..\/..\/..\/..\/assets\/game003-s1\/win-amount\/\{bigwin,superwin,megawin\}\.json"/,
+      /import\.meta\.glob\(\s+"..\/..\/..\/..\/assets\/sample-skin\/win-amount\/\{bigwin,superwin,megawin\}\.json"/,
     );
     expect(result.generated).toContain(
       "manifest: game003Skin1WinAmountManifest",
@@ -252,7 +254,7 @@ describe("buildgamestatic generator", () => {
     expect(result.generated).toContain('componentName: "feature-track"');
     expect(result.generated).toContain("requiredStates: Object.freeze([]");
     expect(result.generated).toMatch(
-      /import\.meta\.glob\(\s+"..\/..\/..\/..\/assets\/game003-s1\/\{bonus,boost\}\.png"/,
+      /import\.meta\.glob\(\s+"..\/..\/..\/..\/assets\/sample-skin\/\{bonus,boost\}\.png"/,
     );
   });
 
@@ -309,10 +311,10 @@ function createFixtureRoot(): string {
     "apps/game003/config",
     "apps/game003/src/generated",
     "assets/gamecfg003",
-    "assets/game003-s1",
-    "assets/game003-s1/assets",
-    "assets/game003-s1/win-amount",
-    "assets/game003-s1/win-amount/assets",
+    "assets/sample-skin",
+    "assets/sample-skin/assets",
+    "assets/sample-skin/win-amount",
+    "assets/sample-skin/win-amount/assets",
   ]) {
     mkdirSync(join(root, dir), { recursive: true });
   }
@@ -320,18 +322,18 @@ function createFixtureRoot(): string {
   writeFileSync(join(root, "package.json"), "{}", "utf8");
   for (const file of [
     "assets/gamecfg003/gameconfig.json",
-    "assets/game003-s1/symbol-state-textures.manifest.json",
-    "assets/game003-s1/feature-bar-symbols.manifest.json",
-    "assets/game003-s1/bonus.png",
-    "assets/game003-s1/boost.png",
-    "assets/game003-s1/bg1.jpg",
-    "assets/game003-s1/bg2.jpg",
-    "assets/game003-s1/mainreelbg.png",
-    "assets/game003-s1/conveyor1.png",
-    "assets/game003-s1/conveyor2.png",
-    "assets/game003-s1/minecart.png",
-    "assets/game003-s1/Symbol.atlas",
-    "assets/game003-s1/Symbol.png",
+    "assets/sample-skin/symbol-state-textures.manifest.json",
+    "assets/sample-skin/feature-bar-symbols.manifest.json",
+    "assets/sample-skin/bonus.png",
+    "assets/sample-skin/boost.png",
+    "assets/sample-skin/bg1.jpg",
+    "assets/sample-skin/bg2.jpg",
+    "assets/sample-skin/mainreelbg.png",
+    "assets/sample-skin/conveyor1.png",
+    "assets/sample-skin/conveyor2.png",
+    "assets/sample-skin/minecart.png",
+    "assets/sample-skin/Symbol.atlas",
+    "assets/sample-skin/Symbol.png",
   ]) {
     writeFileSync(join(root, file), "{}", "utf8");
   }
@@ -361,8 +363,8 @@ skins:
   "1":
     label: skin 1
     symbols:
-      manifest: assets/game003-s1/symbol-state-textures.manifest.json
-      pngGlob: assets/game003-s1/*.png
+      manifest: assets/sample-skin/symbol-state-textures.manifest.json
+      pngGlob: assets/sample-skin/*.png
       emptySymbols: []
       requireExplicitScale: true
       requiredStates: [spinBlur, disabled]
@@ -370,27 +372,27 @@ skins:
       mode: orientation-focus
       variants:
         landscape:
-          background: { path: assets/game003-s1/bg1.jpg, width: 2000, height: 2000 }
+          background: { path: assets/sample-skin/bg1.jpg, width: 2000, height: 2000 }
           focusRect: { x: 288, y: 588, width: 1424, height: 824 }
           frameFocusRect: { width: 1424, height: 1061 }
           mainReelBackgroundPositionInFocusRect: { x: 294, y: -10 }
           conveyor:
-            path: assets/game003-s1/conveyor1.png
+            path: assets/sample-skin/conveyor1.png
             width: 284
             height: 775
             positionInFocusRect: { x: 0, y: 14.5 }
         portrait:
-          background: { path: assets/game003-s1/bg2.jpg, width: 1174, height: 2000 }
+          background: { path: assets/sample-skin/bg2.jpg, width: 1174, height: 2000 }
           focusRect: { x: 22, y: 469.5, width: 1130, height: 1061 }
           frameFocusRect: { width: 1130, height: 1061 }
           minFocusMargin: { left: 22, right: 22 }
           mainReelBackgroundPositionInFocusRect: { x: 0, y: 147 }
           conveyor:
-            path: assets/game003-s1/conveyor2.png
+            path: assets/sample-skin/conveyor2.png
             width: 934
             height: 227
             positionInFocusRect: { x: 98, y: -80 }
-      mainReelBackground: { path: assets/game003-s1/mainreelbg.png, width: 1130, height: 824 }
+      mainReelBackground: { path: assets/sample-skin/mainreelbg.png, width: 1130, height: 824 }
       reelAreaInMainReelBackground: { x: 124, y: 130, reelCount: 5, reelGap: 15, cellWidth: 165, cellHeight: 130 }
 `,
     "utf8",
@@ -429,8 +431,8 @@ function appendFeatureBarsBlock(root: string): void {
         emptyFeature: empty
         allowedFeatures: [empty, bonus, boost]
         symbols:
-          manifest: assets/game003-s1/feature-bar-symbols.manifest.json
-          pngGlob: assets/game003-s1/{bonus,boost}.png
+          manifest: assets/sample-skin/feature-bar-symbols.manifest.json
+          pngGlob: assets/sample-skin/{bonus,boost}.png
           requireExplicitScale: true
           requiredStates: []
         layout:
@@ -461,11 +463,11 @@ function appendVniSymbolGlobs(root: string): void {
   writeFileSync(
     yamlPath,
     readFileSync(yamlPath, "utf8").replace(
-      "      pngGlob: assets/game003-s1/*.png\n",
+      "      pngGlob: assets/sample-skin/*.png\n",
       [
-        "      pngGlob: assets/game003-s1/*.png",
-        "      vniProjectGlob: assets/game003-s1/*-wins.json",
-        "      vniAssetGlob: assets/game003-s1/assets/*.{png,jpg,jpeg,webp}",
+        "      pngGlob: assets/sample-skin/*.png",
+        "      vniProjectGlob: assets/sample-skin/*-wins.json",
+        "      vniAssetGlob: assets/sample-skin/assets/*.{png,jpg,jpeg,webp}",
         "",
       ].join("\n"),
     ),
@@ -478,12 +480,12 @@ function appendSpineSymbolGlobs(root: string): void {
   writeFileSync(
     yamlPath,
     readFileSync(yamlPath, "utf8").replace(
-      "      pngGlob: assets/game003-s1/*.png\n",
+      "      pngGlob: assets/sample-skin/*.png\n",
       [
-        "      pngGlob: assets/game003-s1/*.png",
-        "      spineSkeletonGlob: assets/game003-s1/{WL,H1,H2,H3,H4,H5,CL,SC}.json",
-        "      spineAtlasGlob: assets/game003-s1/{Symbol}.atlas",
-        "      spineTextureGlob: assets/game003-s1/{Symbol}.png",
+        "      pngGlob: assets/sample-skin/*.png",
+        "      spineSkeletonGlob: assets/sample-skin/{WL,H1,H2,H3,H4,H5,CL,SC}.json",
+        "      spineAtlasGlob: assets/sample-skin/{Symbol}.atlas",
+        "      spineTextureGlob: assets/sample-skin/{Symbol}.png",
         "",
       ].join("\n"),
     ),
@@ -494,13 +496,13 @@ function appendSpineSymbolGlobs(root: string): void {
 function writeWinAmountFixtureFiles(root: string): void {
   for (const file of ["bigwin.json", "superwin.json", "megawin.json"]) {
     writeFileSync(
-      join(root, `assets/game003-s1/win-amount/${file}`),
+      join(root, `assets/sample-skin/win-amount/${file}`),
       JSON.stringify({ stage: { duration: 2.9 }, assets: [] }),
       "utf8",
     );
   }
   writeFileSync(
-    join(root, "assets/game003-s1/win-amount/win-amount.manifest.json"),
+    join(root, "assets/sample-skin/win-amount/win-amount.manifest.json"),
     JSON.stringify(createWinAmountManifest()),
     "utf8",
   );
@@ -542,7 +544,7 @@ ${displayMetadata}
         minorOffset: { x: 0, y: -28 }
         majorOffset: { x: 0, y: 0 }
       animations:
-        manifest: assets/game003-s1/win-amount/win-amount.manifest.json
+        manifest: assets/sample-skin/win-amount/win-amount.manifest.json
 `,
     "utf8",
   );
@@ -589,13 +591,13 @@ function appendLoadingBlock(root: string): void {
 loading:
   resources:
     - id: game003-bg-landscape
-      path: assets/game003-s1/bg1.jpg
+      path: assets/sample-skin/bg1.jpg
       weight: 8
     - id: game003-scene-parts
-      glob: assets/game003-s1/{conveyor1,conveyor2,mainreelbg}.png
+      glob: assets/sample-skin/{conveyor1,conveyor2,mainreelbg}.png
       weight: 6
     - id: game003-minecart
-      path: assets/game003-s1/minecart.png
+      path: assets/sample-skin/minecart.png
       weight: 1
 `,
     "utf8",

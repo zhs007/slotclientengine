@@ -157,6 +157,24 @@ describe("assets.map.json", () => {
     expect(entry.payloadPath).toMatch(/\.jpg$/u);
   });
 
+  it("allows an atlas page logical PNG key to map to normalized WebP bytes", () => {
+    const digest = "a".repeat(64);
+    expect(
+      parseEditorAssetsMap({
+        version: 1,
+        kind: "editor-assets",
+        files: {
+          "Symbol.png": {
+            path: `assets/${digest}.webp`,
+            sha256: digest,
+            mediaType: "image/webp",
+            byteLength: 12,
+          },
+        },
+      }).files["Symbol.png"],
+    ).toMatchObject({ path: `assets/${digest}.webp` });
+  });
+
   it.each([
     null,
     {},

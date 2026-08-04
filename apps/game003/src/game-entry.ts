@@ -7,12 +7,6 @@ import {
 import { createSceneLayoutFramePolicy } from "@slotclientengine/rendercore";
 import "@slotclientengine/gameframeworks/styles.css";
 import { createGame003Adapter } from "./game-adapter.js";
-import { GAME003_STATIC_CONFIG } from "./generated/game-static.generated.js";
-import {
-  GAME003_REFERENCE_SIZE,
-  GAME003_SKIN1_PORTRAIT_ART_SIZE,
-  createGame003FramePolicy,
-} from "./game-layout.js";
 import {
   parseGame003FrameworkConfigFromQuery,
   type Game003FrameworkConfig,
@@ -24,6 +18,7 @@ import {
   type Game003SkinResourceOwner,
 } from "./skin-config.js";
 import { readGame003Minecart2PackageFiles } from "./loading-resources.js";
+import { GAME003_RUNTIME_CONFIG } from "./runtime-config.js";
 import "./styles.css";
 
 export interface Game003PreparedLoadingState {
@@ -52,16 +47,11 @@ export async function prepareGame003At99(options: {
   let liveSession: SlotGameLiveSessionLike | null = null;
   try {
     [skinResult, liveSession] = await Promise.all([
-      prepareGame003SkinConfig(
-        config.skin,
-        config.skin === "2"
-          ? {
-              minecart2Files: readGame003Minecart2PackageFiles(
-                options.loadedResources ?? new Map(),
-              ),
-            }
-          : {},
-      ),
+      prepareGame003SkinConfig(config.skin, {
+        minecart2Files: readGame003Minecart2PackageFiles(
+          options.loadedResources ?? new Map(),
+        ),
+      }),
       liveSessionPromise,
     ]);
     if (signal?.aborted) throw createAbortError();
@@ -114,14 +104,12 @@ export async function enterGame003(options: {
     return destroyPromise;
   };
   try {
-    const sceneManifest =
-      options.prepared.skin.id === "2"
-        ? options.prepared.skin.resource.manifest
-        : null;
-    const scenePortraitSize =
-      sceneManifest?.adaptation.mode === "orientation-focus"
-        ? sceneManifest.adaptation.variants.portrait.artSize
-        : null;
+    const sceneManifest = options.prepared.skin.resource.manifest;
+    if (sceneManifest.adaptation.mode !== "orientation-focus") {
+      throw new Error(
+        "game003 minecart2 layout must use orientation-focus adaptation.",
+      );
+    }
     framework = createSlotGameFramework({
       root: options.root,
       gameAdapter: createGame003Adapter({ skin: options.prepared.skin }),
@@ -129,14 +117,9 @@ export async function enterGame003(options: {
       liveSession: options.prepared.liveSession,
       betOptions: options.prepared.config.betOptions,
       initialBetIndex: options.prepared.config.initialBetIndex,
-      designSize:
-        scenePortraitSize ??
-        GAME003_SKIN1_PORTRAIT_ART_SIZE ??
-        GAME003_REFERENCE_SIZE,
-      framePolicy: sceneManifest
-        ? createSceneLayoutFramePolicy(sceneManifest)
-        : createGame003FramePolicy(),
-      brandLabel: GAME003_STATIC_CONFIG.brandLabel,
+      designSize: sceneManifest.adaptation.variants.portrait.artSize,
+      framePolicy: createSceneLayoutFramePolicy(sceneManifest),
+      brandLabel: GAME003_RUNTIME_CONFIG.brandLabel,
       locale: "en-US",
       formatMoney: formatServerAmount,
       buildSpinRequest: () => options.prepared.config.spinRequest,

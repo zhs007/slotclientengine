@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   createFromGameConfig,
@@ -13,6 +11,7 @@ import {
   getResourcePickerCandidates,
   resolveSpineAtlasBinding,
 } from "../src/ui/resource-picker.js";
+import { readMinecart2SymbolFixtureBytes } from "../../../test-utils/minecart2-fixtures.js";
 
 const gameConfig = {
   paytable: { "1": { code: 1, symbol: "A", pays: [1] } },
@@ -21,7 +20,7 @@ const gameConfig = {
 };
 
 const fixture = (path: string) =>
-  new Uint8Array(readFileSync(resolve(process.cwd(), `../../${path}`)));
+  readMinecart2SymbolFixtureBytes(path.split("/").at(-1)!);
 
 function createProject() {
   const project = createFromGameConfig({
@@ -29,18 +28,18 @@ function createProject() {
     fileName: "picker.json",
   });
   uploadAssetBatch(project, [
-    { path: "art/H1.png", bytes: fixture("assets/game003-s1/H1.png") },
+    { path: "art/H1.png", bytes: fixture("assets/sample-skin/H1.png") },
     {
       path: "spine/H1.json",
-      bytes: fixture("assets/game003-s1/H1.json"),
+      bytes: fixture("assets/sample-skin/H1.json"),
     },
     {
       path: "spine/Symbol.atlas",
-      bytes: fixture("assets/game003-s1/Symbol.atlas"),
+      bytes: fixture("assets/sample-skin/Symbol.atlas"),
     },
     {
       path: "spine/Symbol.png",
-      bytes: fixture("assets/game003-s1/Symbol.png"),
+      bytes: fixture("assets/sample-skin/Symbol.png"),
     },
     {
       path: "broken.png",
@@ -123,11 +122,11 @@ describe("typed resource picker", () => {
     uploadAssetBatch(project, [
       {
         path: "other/Symbol.atlas",
-        bytes: fixture("assets/game003-s1/Symbol.atlas"),
+        bytes: fixture("assets/sample-skin/Symbol.atlas"),
       },
       {
         path: "other/Symbol.png",
-        bytes: fixture("assets/game003-s1/Symbol.png"),
+        bytes: fixture("assets/sample-skin/Symbol.png"),
       },
     ]);
     expect(getDefaultSpineAtlasBinding(project)).toEqual({

@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { getGame003SkinConfig } from "../src/skin-config.js";
+import { GAME003_RUNTIME_CONFIG } from "../src/runtime-config.js";
 import { getGame003WinSymbolLoopConfig } from "../src/win-symbol-loop-config.js";
 
 describe("game003 win symbol loop config", () => {
   it("parses the generated app extension", () => {
-    expect(getGame003SkinConfig("1").winSymbolLoop).toEqual({
+    expect(
+      getGame003WinSymbolLoopConfig(GAME003_RUNTIME_CONFIG.appExtensions),
+    ).toEqual({
       cyclePauseSeconds: 1,
       resultAmount: {
         yOffsetRatioFromCellCenter: 0.22,
@@ -76,7 +78,9 @@ describe("game003 win symbol loop config", () => {
 function createRawExtensions() {
   return JSON.parse(
     JSON.stringify({
-      game003WinSymbolLoop: getGame003SkinConfig("1").winSymbolLoop,
+      game003WinSymbolLoop: getGame003WinSymbolLoopConfig(
+        GAME003_RUNTIME_CONFIG.appExtensions,
+      ),
     }),
   ) as {
     readonly game003WinSymbolLoop: ReturnType<

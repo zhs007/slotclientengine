@@ -1,13 +1,29 @@
 import { describe, expect, it } from "vitest";
-import bigwinProject from "../../../../assets/game003-s1/win-amount/bigwin.json";
-import megawinProject from "../../../../assets/game003-s1/win-amount/megawin.json";
-import superwinProject from "../../../../assets/game003-s1/win-amount/superwin.json";
-import winAmountManifest from "../../../../assets/game003-s1/win-amount/win-amount.manifest.json";
+import {
+  rewriteVNIProjectAssetPaths,
+  type VNIProjectConfig,
+} from "@slotclientengine/vnicore/core";
+import { readMinecart2LogicalJson } from "../../../../test-utils/minecart2-fixtures.js";
 import {
   createWinAmountAnimationTiersFromManifestModules,
   createWinAmountAnimationTiersFromModules,
   parseWinAmountAnimationManifest,
 } from "../../src/win-amount/index.js";
+
+const bigwinProject = readLegacyWinAmountProject("big_win0721.json");
+const superwinProject = readLegacyWinAmountProject("super_win0721.json");
+const megawinProject = readLegacyWinAmountProject("mega_win0721.json");
+const winAmountManifest = {
+  version: 1,
+  kind: "vni-win-amount-tiers",
+  projectGlob: "./{big_win0721,super_win0721,mega_win0721}.json",
+  assetGlob: "./assets/*.{png,jpg,jpeg,webp}",
+  tiers: [
+    createTierManifest("bigwin", 15, "./big_win0721.json"),
+    createTierManifest("superwin", 30, "./super_win0721.json"),
+    createTierManifest("megawin", 50, "./mega_win0721.json"),
+  ],
+} as const;
 
 describe("win amount VNI tier resources", () => {
   it("resolves tier projects and clones stage duration without mutating imports", () => {
@@ -18,14 +34,14 @@ describe("win amount VNI tier resources", () => {
 
     const tiers = createWinAmountAnimationTiersFromModules({
       tierConfigs: [
-        createTierConfig("bigwin", 15, "./bigwin.json"),
-        createTierConfig("superwin", 30, "./superwin.json"),
-        createTierConfig("megawin", 50, "./megawin.json"),
+        createTierConfig("bigwin", 15, "./big_win0721.json"),
+        createTierConfig("superwin", 30, "./super_win0721.json"),
+        createTierConfig("megawin", 50, "./mega_win0721.json"),
       ],
       projectModules: {
-        "/assets/game003-s1/win-amount/bigwin.json": bigwinProjectInput,
-        "/assets/game003-s1/win-amount/superwin.json": superwinProjectInput,
-        "/assets/game003-s1/win-amount/megawin.json": megawinProjectInput,
+        "/fixtures/big_win0721.json": bigwinProjectInput,
+        "/fixtures/super_win0721.json": superwinProjectInput,
+        "/fixtures/mega_win0721.json": megawinProjectInput,
       },
       assetModules: createAssetModules([
         bigwinProjectInput,
@@ -53,7 +69,7 @@ describe("win amount VNI tier resources", () => {
     expect(parsed).toMatchObject({
       version: 1,
       kind: "vni-win-amount-tiers",
-      projectGlob: "./{bigwin,superwin,megawin}.json",
+      projectGlob: "./{big_win0721,super_win0721,mega_win0721}.json",
       assetGlob: "./assets/*.{png,jpg,jpeg,webp}",
     });
     expect(parsed.tiers.map((tier) => tier.playback.durationSeconds)).toEqual([
@@ -63,9 +79,9 @@ describe("win amount VNI tier resources", () => {
     const tiers = createWinAmountAnimationTiersFromManifestModules({
       manifest: winAmountManifest,
       projectModules: {
-        "/assets/game003-s1/win-amount/bigwin.json": bigwinProject,
-        "/assets/game003-s1/win-amount/superwin.json": superwinProject,
-        "/assets/game003-s1/win-amount/megawin.json": megawinProject,
+        "/fixtures/big_win0721.json": bigwinProject,
+        "/fixtures/super_win0721.json": superwinProject,
+        "/fixtures/mega_win0721.json": megawinProject,
       },
       assetModules: createAssetModules([
         bigwinProject,
@@ -109,6 +125,165 @@ describe("win amount VNI tier resources", () => {
         ],
       }),
     ).toThrow(/loopStartTime <= loopEndTime <= durationSeconds/);
+    expect(() =>
+      parseWinAmountAnimationManifest({ ...winAmountManifest, version: 2 }),
+    ).toThrow(/version must be 1/);
+    expect(() =>
+      parseWinAmountAnimationManifest({ ...winAmountManifest, kind: "other" }),
+    ).toThrow(/kind must be/);
+    expect(() =>
+      parseWinAmountAnimationManifest({ ...winAmountManifest, tiers: [] }),
+    ).toThrow(/non-empty array/);
+    expect(() =>
+      parseWinAmountAnimationManifest({
+        ...winAmountManifest,
+        assetGlob: "./*.webp",
+      }),
+    ).toThrow(/manifest-local win amount image assets/);
+    expect(() =>
+      parseWinAmountAnimationManifest({
+        ...winAmountManifest,
+        tiers: [
+          winAmountManifest.tiers[0],
+          {
+            ...winAmountManifest.tiers[1],
+            id: winAmountManifest.tiers[0].id,
+          },
+        ],
+        projectGlob: "./{big_win0721,super_win0721}.json",
+      }),
+    ).toThrow(/duplicate value/);
+    expect(() =>
+      parseWinAmountAnimationManifest({
+        ...winAmountManifest,
+        tiers: [
+          winAmountManifest.tiers[0],
+          {
+            ...winAmountManifest.tiers[1],
+            thresholdMultiplier: 15,
+          },
+        ],
+        projectGlob: "./{big_win0721,super_win0721}.json",
+      }),
+    ).toThrow(/strictly increasing/);
+    expect(() =>
+      parseWinAmountAnimationManifest({
+        ...winAmountManifest,
+        tiers: [winAmountManifest.tiers[0]],
+      }),
+    ).toThrow(/must match exactly/);
+    expect(() =>
+      parseWinAmountAnimationManifest({
+        ...winAmountManifest,
+        tiers: [
+          {
+            ...winAmountManifest.tiers[0],
+            playback: {
+              ...winAmountManifest.tiers[0].playback,
+              mode: "once",
+            },
+          },
+        ],
+        projectGlob: "./{big_win0721}.json",
+      }),
+    ).toThrow(/mode must be/);
+    expect(() =>
+      parseWinAmountAnimationManifest({
+        ...winAmountManifest,
+        tiers: [
+          {
+            ...winAmountManifest.tiers[0],
+            playback: {
+              ...winAmountManifest.tiers[0].playback,
+              keepParticlesAlive: "yes",
+            },
+          },
+        ],
+        projectGlob: "./{big_win0721}.json",
+      }),
+    ).toThrow(/must be a boolean/);
+    expect(() => parseWinAmountAnimationManifest(null)).toThrow(
+      /must be an object/,
+    );
+    const { kind: _kind, ...missingKind } = winAmountManifest;
+    expect(() => parseWinAmountAnimationManifest(missingKind)).toThrow(
+      /missing field "kind"/,
+    );
+    expect(() =>
+      parseWinAmountAnimationManifest({
+        ...winAmountManifest,
+        tiers: [
+          {
+            ...winAmountManifest.tiers[0],
+            id: "",
+          },
+        ],
+        projectGlob: "./{big_win0721}.json",
+      }),
+    ).toThrow(/non-empty string/);
+    expect(() =>
+      parseWinAmountAnimationManifest({
+        ...winAmountManifest,
+        tiers: [
+          {
+            ...winAmountManifest.tiers[0],
+            thresholdMultiplier: 0,
+          },
+        ],
+        projectGlob: "./{big_win0721}.json",
+      }),
+    ).toThrow(/finite positive number/);
+    expect(() =>
+      parseWinAmountAnimationManifest({
+        ...winAmountManifest,
+        tiers: [
+          {
+            ...winAmountManifest.tiers[0],
+            project: "./super_win0721.json",
+          },
+        ],
+        projectGlob: "./{big_win0721}.json",
+      }),
+    ).toThrow(/does not cover/);
+    expect(() =>
+      parseWinAmountAnimationManifest({
+        ...winAmountManifest,
+        tiers: [
+          {
+            ...winAmountManifest.tiers[0],
+            project: "big_win0721.json",
+          },
+        ],
+        projectGlob: "./{big_win0721}.json",
+      }),
+    ).toThrow(/must start with/);
+    expect(() =>
+      parseWinAmountAnimationManifest({
+        ...winAmountManifest,
+        tiers: [
+          {
+            ...winAmountManifest.tiers[0],
+            project: "./../big_win0721.json",
+          },
+        ],
+        projectGlob: "./{big_win0721}.json",
+      }),
+    ).toThrow(/must not contain/);
+    expect(() =>
+      parseWinAmountAnimationManifest({
+        ...winAmountManifest,
+        tiers: [
+          {
+            ...winAmountManifest.tiers[0],
+            playback: {
+              ...winAmountManifest.tiers[0].playback,
+              loopStartTime: -1,
+            },
+          },
+        ],
+        projectGlob: "./{big_win0721}.json",
+      }),
+    ).toThrow(/finite non-negative number/);
   });
 
   it("fails fast for missing projects, duplicate basenames, and illegal timing", () => {
@@ -116,9 +291,55 @@ describe("win amount VNI tier resources", () => {
 
     expect(() =>
       createWinAmountAnimationTiersFromModules({
+        tierConfigs: [],
+        projectModules: {},
+        assetModules: {},
+      }),
+    ).toThrow(/must not be empty/);
+    expect(() =>
+      createWinAmountAnimationTiersFromModules({
+        tierConfigs: [createTierConfig("bigwin", 15, "./big_win0721.json")],
+        projectModules: { "/fixtures/big_win0721.json": bigwinProject },
+        assetModules: {
+          "/one/shared.webp": "/one.webp",
+          "/two/shared.webp": "/two.webp",
+        },
+      }),
+    ).toThrow(/Duplicate win amount VNI asset filename/);
+    expect(() =>
+      createWinAmountAnimationTiersFromModules({
+        tierConfigs: [
+          createTierConfig("bigwin", 15, "./big_win0721.json"),
+          createTierConfig("superwin", 15, "./super_win0721.json"),
+        ],
+        projectModules: {
+          "/fixtures/big_win0721.json": bigwinProject,
+          "/fixtures/super_win0721.json": superwinProject,
+        },
+        assetModules: createAssetModules([bigwinProject, superwinProject]),
+      }),
+    ).toThrow(/strictly increasing/);
+
+    const defaultKeepAlive = createTierConfig(
+      "bigwin",
+      15,
+      "./big_win0721.json",
+    );
+    const { keepParticlesAlive: _keepParticlesAlive, ...withoutKeepAlive } =
+      defaultKeepAlive;
+    expect(
+      createWinAmountAnimationTiersFromModules({
+        tierConfigs: [withoutKeepAlive],
+        projectModules: { "/fixtures/big_win0721.json": bigwinProject },
+        assetModules,
+      })[0].keepParticlesAlive,
+    ).toBe(true);
+
+    expect(() =>
+      createWinAmountAnimationTiersFromModules({
         tierConfigs: [createTierConfig("bigwin", 15, "./missing.json")],
         projectModules: {
-          "/assets/game003-s1/win-amount/bigwin.json": bigwinProject,
+          "/fixtures/big_win0721.json": bigwinProject,
         },
         assetModules,
       }),
@@ -139,12 +360,12 @@ describe("win amount VNI tier resources", () => {
       createWinAmountAnimationTiersFromModules({
         tierConfigs: [
           {
-            ...createTierConfig("bigwin", 15, "./bigwin.json"),
+            ...createTierConfig("bigwin", 15, "./big_win0721.json"),
             loopStartTime: -1,
           },
         ],
         projectModules: {
-          "/assets/game003-s1/win-amount/bigwin.json": bigwinProject,
+          "/fixtures/big_win0721.json": bigwinProject,
         },
         assetModules,
       }),
@@ -154,13 +375,13 @@ describe("win amount VNI tier resources", () => {
       createWinAmountAnimationTiersFromModules({
         tierConfigs: [
           {
-            ...createTierConfig("bigwin", 15, "./bigwin.json"),
+            ...createTierConfig("bigwin", 15, "./big_win0721.json"),
             loopStartTime: 4,
             loopEndTime: 3,
           },
         ],
         projectModules: {
-          "/assets/game003-s1/win-amount/bigwin.json": bigwinProject,
+          "/fixtures/big_win0721.json": bigwinProject,
         },
         assetModules,
       }),
@@ -170,12 +391,12 @@ describe("win amount VNI tier resources", () => {
       createWinAmountAnimationTiersFromModules({
         tierConfigs: [
           {
-            ...createTierConfig("bigwin", 15, "./bigwin.json"),
+            ...createTierConfig("bigwin", 15, "./big_win0721.json"),
             durationSeconds: 0,
           },
         ],
         projectModules: {
-          "/assets/game003-s1/win-amount/bigwin.json": bigwinProject,
+          "/fixtures/big_win0721.json": bigwinProject,
         },
         assetModules,
       }),
@@ -185,12 +406,12 @@ describe("win amount VNI tier resources", () => {
       createWinAmountAnimationTiersFromModules({
         tierConfigs: [
           {
-            ...createTierConfig("bigwin", 15, "./bigwin.json"),
-            durationSeconds: 3,
+            ...createTierConfig("bigwin", 15, "./big_win0721.json"),
+            durationSeconds: bigwinProject.stage.duration + 0.1,
           },
         ],
         projectModules: {
-          "/assets/game003-s1/win-amount/bigwin.json": bigwinProject,
+          "/fixtures/big_win0721.json": bigwinProject,
         },
         assetModules,
       }),
@@ -214,6 +435,25 @@ function createTierConfig(
   };
 }
 
+function createTierManifest(
+  id: string,
+  thresholdMultiplier: number,
+  project: string,
+) {
+  return {
+    id,
+    thresholdMultiplier,
+    project,
+    playback: {
+      mode: "segmented",
+      durationSeconds: 2.9,
+      loopStartTime: 1,
+      loopEndTime: 2.5,
+      keepParticlesAlive: true,
+    },
+  } as const;
+}
+
 function createAssetModules(
   projects: ReadonlyArray<{
     readonly assets: readonly { readonly path: string }[];
@@ -226,9 +466,15 @@ function createAssetModules(
       if (!filename) {
         throw new Error(`bad fixture asset path ${asset.path}`);
       }
-      modules[`/assets/game003-s1/win-amount/assets/${filename}`] =
-        `/generated/${filename}`;
+      modules[`/fixtures/${filename}`] = `/generated/${filename}`;
     }
   }
   return modules;
+}
+
+function readLegacyWinAmountProject(logicalPath: string): VNIProjectConfig {
+  return rewriteVNIProjectAssetPaths(
+    readMinecart2LogicalJson(logicalPath),
+    (assetPath) => `assets/${assetPath.split("/").at(-1)}`,
+  );
 }

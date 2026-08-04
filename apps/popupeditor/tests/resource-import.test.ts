@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { createDeterministicZip } from "@slotclientengine/browserartifactio";
 import {
@@ -13,21 +11,23 @@ import {
   PopupEditorStore,
 } from "../src/model/project.js";
 import { importPopupZip } from "../src/io/popup-zip.js";
+import {
+  getMinecart2SymbolResourcePath,
+  readMinecart2LogicalBytes,
+  readMinecart2LogicalJson,
+  readMinecart2SymbolBytes,
+} from "../../../test-utils/minecart2-fixtures.js";
 
 describe("popup flat resource discovery", () => {
   it("rewrites a VNI closure to filename keys and preserves unrelated images", async () => {
-    const projectPath = asset("game003-s1/win-amount/bigwin.json");
-    const projectBytes = new Uint8Array(readFileSync(projectPath));
+    const projectBytes = readMinecart2LogicalBytes("big_win0721.json");
     const project = JSON.parse(new TextDecoder().decode(projectBytes)) as {
       assets: readonly { path: string }[];
     };
     const files = [
       sourceFile("bigwin.json", projectBytes),
       ...project.assets.map(({ path }) =>
-        sourceFile(
-          path,
-          new Uint8Array(readFileSync(resolve(projectPath, "..", path))),
-        ),
+        sourceFile(path, readMinecart2LogicalBytes(path)),
       ),
     ];
     const review = await discoverPopupResources(files);
@@ -41,7 +41,7 @@ describe("popup flat resource discovery", () => {
     const rewritten = new TextDecoder().decode(
       review[0]!.assets.find(({ key }) => key === spec.project)!.bytes,
     );
-    expect(rewritten).not.toContain("assets/");
+    expect(rewritten).not.toContain("../");
     expect(
       JSON.parse(rewritten).assets.every(
         ({ path }: { path: string }) => !path.includes("/"),
@@ -59,27 +59,55 @@ describe("popup flat resource discovery", () => {
   });
 
   it("uses manifest order for the three win-amount profiles and requires explicit source hygiene", async () => {
-    const root = asset("game003-s1/win-amount");
-    const projectNames = ["bigwin.json", "superwin.json", "megawin.json"];
-    const assetPaths = new Set<string>();
+    const projectNames = [
+      "big_win0721.json",
+      "super_win0721.json",
+      "mega_win0721.json",
+    ];
+    const assetPaths = new Map<string, string>();
     const files = [
       sourceFile(
         "win-amount.manifest.json",
-        new Uint8Array(readFileSync(resolve(root, "win-amount.manifest.json"))),
+        new TextEncoder().encode(
+          JSON.stringify({
+            version: 1,
+            kind: "vni-win-amount-tiers",
+            projectGlob: "./{big_win0721,super_win0721,mega_win0721}.json",
+            assetGlob: "./assets/*.{png,jpg,jpeg,webp}",
+            tiers: projectNames.map((project, index) => ({
+              id: ["bigwin", "superwin", "megawin"][index],
+              thresholdMultiplier: [15, 25, 50][index],
+              project: `./${project}`,
+              playback: {
+                mode: "segmented",
+                durationSeconds: [3.55, 3.5, 3.5][index],
+                loopStartTime: 1,
+                loopEndTime: 2.5,
+                keepParticlesAlive: true,
+              },
+            })),
+          }),
+        ),
       ),
     ];
     for (const name of projectNames) {
-      const payload = new Uint8Array(readFileSync(resolve(root, name)));
-      const project = JSON.parse(new TextDecoder().decode(payload)) as {
-        assets: readonly { path: string }[];
+      const project = structuredClone(readMinecart2LogicalJson(name)) as {
+        assets: { path: string }[];
       };
-      files.push(sourceFile(name, payload));
-      for (const child of project.assets) assetPaths.add(child.path);
-    }
-    for (const path of [...assetPaths].sort())
+      for (const child of project.assets) {
+        const originalPath = child.path;
+        const filename = originalPath.split("/").at(-1);
+        if (!filename)
+          throw new Error(`invalid VNI asset path ${originalPath}`);
+        child.path = `assets/${filename}`;
+        assetPaths.set(child.path, originalPath);
+      }
       files.push(
-        sourceFile(path, new Uint8Array(readFileSync(resolve(root, path)))),
+        sourceFile(name, new TextEncoder().encode(JSON.stringify(project))),
       );
+    }
+    for (const [path, originalPath] of [...assetPaths].sort())
+      files.push(sourceFile(path, readMinecart2LogicalBytes(originalPath)));
     const review = await discoverPopupResources(files);
     expect(review.map(({ rootKey }) => rootKey)).toEqual(projectNames);
     expect(
@@ -96,7 +124,7 @@ describe("popup flat resource discovery", () => {
         candidate.suggestedTierBindings,
       );
     expect(project.tiers.get("superwin")!.layers[0]).toMatchObject({
-      resource: "superwin.json",
+      resource: "super_win0721.json",
       playback: { loopStartTime: 1, loopEndTime: 2.5 },
     });
     await expect(
@@ -108,10 +136,7 @@ describe("popup flat resource discovery", () => {
   });
 
   it("defaults to the only runtime and requires selection only for multiple runtimes", async () => {
-    const root = asset("game003-s1/win-amount");
-    const source = JSON.parse(
-      new TextDecoder().decode(bytes("game003-s1/win-amount/bigwin.json")),
-    ) as {
+    const source = readMinecart2LogicalJson("big_win0721.json") as {
       exportProfile: { id: string; purpose: string; assetScale: number };
       assets: readonly { path: string }[];
     };
@@ -172,7 +197,7 @@ describe("popup flat resource discovery", () => {
       for (const child of source.assets)
         entries.set(
           `${directory}/${child.path}`,
-          new Uint8Array(readFileSync(resolve(root, child.path))),
+          readMinecart2LogicalBytes(child.path),
         );
     const zip = createDeterministicZip(entries);
     expect(inspectVniBundleProfiles(zip)?.map(({ id }) => id)).toEqual([
@@ -234,9 +259,8 @@ describe("popup flat resource discovery", () => {
   });
 
   it("imports a runtime VNI bundle that contains a JPEG asset", async () => {
-    const root = asset("game003-s1/win-amount");
-    const project = JSON.parse(
-      new TextDecoder().decode(bytes("game003-s1/win-amount/bigwin.json")),
+    const project = structuredClone(
+      readMinecart2LogicalJson("big_win0721.json"),
     ) as {
       exportProfile: { id: string; purpose: string; assetScale: number };
       assets: { path: string }[];
@@ -274,9 +298,7 @@ describe("popup flat resource discovery", () => {
     for (const child of project.assets)
       entries.set(
         `runtime_100/${child.path}`,
-        child === jpegAsset
-          ? bytes("game003-s1/bg1.jpg")
-          : new Uint8Array(readFileSync(resolve(root, child.path))),
+        child === jpegAsset ? jpeg() : readMinecart2LogicalBytes(child.path),
       );
 
     const review = await discoverPopupResources([
@@ -298,18 +320,25 @@ describe("popup flat resource discovery", () => {
   });
 
   it("rewrites and validates an official Spine 4.3 closure", async () => {
+    const skeleton = getMinecart2SymbolResourcePath("WL", "skeleton");
+    const atlas = getMinecart2SymbolResourcePath("WL", "atlas");
+    const texture = getMinecart2SymbolResourcePath("WL", "texture");
+    const importedTexture = texture.replace(/\.png$/u, ".webp");
+    const importedAtlas = new TextEncoder().encode(
+      new TextDecoder()
+        .decode(readMinecart2SymbolBytes("WL", "atlas"))
+        .replace(texture, importedTexture),
+    );
     const review = await discoverPopupResources([
-      sourceFile("WL.json", bytes("game003-s1/WL.json")),
-      sourceFile("Symbol.atlas", bytes("game003-s1/Symbol.atlas")),
-      sourceFile("Symbol.png", bytes("game003-s1/Symbol.png")),
+      sourceFile(skeleton, readMinecart2SymbolBytes("WL", "skeleton")),
+      sourceFile(atlas, importedAtlas),
+      sourceFile(importedTexture, readMinecart2SymbolBytes("WL", "texture")),
     ]);
-    expect(review[0]).toMatchObject({ kind: "spine", rootKey: "WL.json" });
+    expect(review[0]).toMatchObject({ kind: "spine", rootKey: skeleton });
     expect(review[0]!.summary).toMatch(/animations/);
-    expect(review[0]!.exactKeys).toEqual([
-      "Symbol.atlas",
-      "Symbol.png",
-      "WL.json",
-    ]);
+    expect(review[0]!.exactKeys).toEqual(
+      [atlas, skeleton, importedTexture].sort(),
+    );
   });
 
   it("rejects unknown inputs, aliases, and malformed popup ZIPs", async () => {
@@ -352,14 +381,11 @@ describe("popup flat resource discovery", () => {
   });
 });
 
-function asset(path: string) {
-  return resolve(process.cwd(), "../../assets", path);
-}
-function bytes(path: string) {
-  return new Uint8Array(readFileSync(asset(path)));
-}
 function sourceFile(path: string, payload: Uint8Array): File {
   return new File([payload.slice().buffer], path.split("/").at(-1)!);
+}
+function jpeg() {
+  return new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0xff, 0xd9]);
 }
 function png(width: number, height: number) {
   const data = new Uint8Array(24);

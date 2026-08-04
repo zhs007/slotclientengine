@@ -1,7 +1,11 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMappedPackageFiles } from "../editor-assets-map-fixture.js";
+import {
+  getMinecart2SymbolResourcePath,
+  readMinecart2LogicalBytes,
+  readMinecart2LogicalJson,
+  readMinecart2SymbolBytes,
+} from "../../../../test-utils/minecart2-fixtures.js";
 
 const destroyImageString = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock("../../src/image-string/index.js", async (original) => {
@@ -351,26 +355,24 @@ describe("popup package resource", () => {
 
 function fixture() {
   const hex = (value: number) => value.toString(16).padStart(64, "0");
-  const project = JSON.parse(
-    new TextDecoder().decode(bytes("game003-s1/win-amount/bigwin.json")),
-  );
+  const project = structuredClone(
+    readMinecart2LogicalJson("big_win0721.json"),
+  ) as { assets: Array<{ path: string }> };
   const files = new Map<string, Uint8Array>();
   project.assets.forEach((asset: { path: string }, index: number) => {
     const original = asset.path;
     asset.path = `${hex(index + 10)}.png`;
-    files.set(
-      `assets/${asset.path}`,
-      bytes(`game003-s1/win-amount/${original}`),
-    );
+    files.set(`assets/${asset.path}`, readMinecart2LogicalBytes(original));
   });
   const projectPath = `assets/${hex(1)}.json`;
   files.set(projectPath, new TextEncoder().encode(JSON.stringify(project)));
   const skeletonPath = `assets/${hex(2)}.json`;
   const atlasPath = `assets/${hex(3)}.atlas`;
   const texturePath = `assets/${hex(4)}.png`;
-  files.set(skeletonPath, bytes("game003-s1/WL.json"));
-  files.set(atlasPath, bytes("game003-s1/Symbol.atlas"));
-  files.set(texturePath, bytes("game003-s1/Symbol.png"));
+  const texturePage = getMinecart2SymbolResourcePath("WL", "texture");
+  files.set(skeletonPath, readMinecart2SymbolBytes("WL", "skeleton"));
+  files.set(atlasPath, readMinecart2SymbolBytes("WL", "atlas"));
+  files.set(texturePath, readMinecart2SymbolBytes("WL", "texture"));
   const imagePath = `assets/${hex(5)}.png`;
   files.set(imagePath, new Uint8Array([1]));
   const webpPath = `assets/${hex(6)}.webp`;
@@ -460,7 +462,7 @@ function fixture() {
         kind: "spine",
         skeleton: skeletonPath,
         atlas: atlasPath,
-        textures: { "Symbol.png": texturePath },
+        textures: { [texturePage]: texturePath },
       },
     },
     awardCelebration: {
@@ -576,10 +578,4 @@ function mappedSourceFixture(): ReturnType<typeof fixture> {
     new TextEncoder().encode(JSON.stringify(source.manifest)),
   );
   return source;
-}
-
-function bytes(path: string) {
-  return new Uint8Array(
-    readFileSync(resolve(process.cwd(), "../../assets", path)),
-  );
 }

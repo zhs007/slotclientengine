@@ -139,7 +139,7 @@ function createFixtureRoot(): string {
     "apps/game003/config",
     "apps/game003/src/generated",
     "assets/gamecfg003",
-    "assets/game003-s1",
+    "assets/sample-skin",
   ]) {
     mkdirSync(join(root, dir), { recursive: true });
   }
@@ -147,12 +147,12 @@ function createFixtureRoot(): string {
   writeFileSync(join(root, "package.json"), "{}", "utf8");
   for (const file of [
     "assets/gamecfg003/gameconfig.json",
-    "assets/game003-s1/symbol-state-textures.manifest.json",
-    "assets/game003-s1/bg1.jpg",
-    "assets/game003-s1/bg2.jpg",
-    "assets/game003-s1/mainreelbg.png",
-    "assets/game003-s1/conveyor1.png",
-    "assets/game003-s1/conveyor2.png",
+    "assets/sample-skin/symbol-state-textures.manifest.json",
+    "assets/sample-skin/bg1.jpg",
+    "assets/sample-skin/bg2.jpg",
+    "assets/sample-skin/mainreelbg.png",
+    "assets/sample-skin/conveyor1.png",
+    "assets/sample-skin/conveyor2.png",
   ]) {
     writeFileSync(join(root, file), "{}", "utf8");
   }
@@ -182,8 +182,8 @@ skins:
   "1":
     label: skin 1
     symbols:
-      manifest: assets/game003-s1/symbol-state-textures.manifest.json
-      pngGlob: assets/game003-s1/*.png
+      manifest: assets/sample-skin/symbol-state-textures.manifest.json
+      pngGlob: assets/sample-skin/*.png
       emptySymbols: []
       requireExplicitScale: true
       requiredStates: [spinBlur, disabled]
@@ -191,27 +191,27 @@ skins:
       mode: orientation-focus
       variants:
         landscape:
-          background: { path: assets/game003-s1/bg1.jpg, width: 2000, height: 2000 }
+          background: { path: assets/sample-skin/bg1.jpg, width: 2000, height: 2000 }
           focusRect: { x: 288, y: 588, width: 1424, height: 824 }
           frameFocusRect: { width: 1424, height: 1061 }
           mainReelBackgroundPositionInFocusRect: { x: 294, y: -10 }
           conveyor:
-            path: assets/game003-s1/conveyor1.png
+            path: assets/sample-skin/conveyor1.png
             width: 284
             height: 775
             positionInFocusRect: { x: 0, y: 14.5 }
         portrait:
-          background: { path: assets/game003-s1/bg2.jpg, width: 1174, height: 2000 }
+          background: { path: assets/sample-skin/bg2.jpg, width: 1174, height: 2000 }
           focusRect: { x: 22, y: 469.5, width: 1130, height: 1061 }
           frameFocusRect: { width: 1130, height: 1061 }
           minFocusMargin: { left: 22, right: 22 }
           mainReelBackgroundPositionInFocusRect: { x: 0, y: 147 }
           conveyor:
-            path: assets/game003-s1/conveyor2.png
+            path: assets/sample-skin/conveyor2.png
             width: 934
             height: 227
             positionInFocusRect: { x: 98, y: -80 }
-      mainReelBackground: { path: assets/game003-s1/mainreelbg.png, width: 1130, height: 824 }
+      mainReelBackground: { path: assets/sample-skin/mainreelbg.png, width: 1130, height: 824 }
       reelAreaInMainReelBackground: { x: 124, y: 130, reelCount: 5, reelGap: 15, cellWidth: 165, cellHeight: 130 }
 `,
     "utf8",

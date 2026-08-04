@@ -18,9 +18,10 @@ describe("production symbol package fixtures", () => {
     },
     {
       id: "game003-s1",
-      assetDirectory: "assets/game003-s1",
-      gameConfig: "assets/gamecfg003/gameconfig.json",
-      cellSize: { width: 165, height: 130 },
+      assetDirectory: "assets/minecart2",
+      mapped: true,
+      gameConfig: null,
+      cellSize: { width: 172, height: 130 },
       displayCount: 14,
     },
   ])(
@@ -89,10 +90,13 @@ describe("production symbol package fixtures", () => {
         },
         resources,
       } as const;
-      files.set(
-        "gameconfig.json",
-        new Uint8Array(await readFile(resolve(repository, fixture.gameConfig))),
-      );
+      const gameConfigBytes = fixture.gameConfig
+        ? new Uint8Array(
+            await readFile(resolve(repository, fixture.gameConfig)),
+          )
+        : availableFiles.get("gameconfig.json");
+      if (!gameConfigBytes) throw new Error("Fixture gameconfig is missing.");
+      files.set("gameconfig.json", gameConfigBytes);
       files.set(
         "symbol-state-textures.manifest.json",
         new TextEncoder().encode(JSON.stringify(rawSymbolManifest)),

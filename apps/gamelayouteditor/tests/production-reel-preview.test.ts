@@ -14,6 +14,10 @@ const craveRoot = resolve(process.cwd(), "../../assets/crave");
 const craveMap = JSON.parse(
   readFileSync(resolve(craveRoot, "assets.map.json"), "utf8"),
 ) as { readonly files: Readonly<Record<string, { readonly path: string }>> };
+const minecart2Root = resolve(process.cwd(), "../../assets/minecart2");
+const minecart2Map = JSON.parse(
+  readFileSync(resolve(minecart2Root, "assets.map.json"), "utf8"),
+) as { readonly files: Readonly<Record<string, { readonly path: string }>> };
 
 function readCraveJson(key: string): unknown {
   const path = craveMap.files[key]?.path;
@@ -21,30 +25,35 @@ function readCraveJson(key: string): unknown {
   return JSON.parse(readFileSync(resolve(craveRoot, path), "utf8")) as unknown;
 }
 
+function readMinecart2Json(key: string): unknown {
+  const path = minecart2Map.files[key]?.path;
+  if (!path) throw new Error(`Minecart2 fixture "${key}" is unavailable.`);
+  return JSON.parse(
+    readFileSync(resolve(minecart2Root, path), "utf8"),
+  ) as unknown;
+}
+
 describe("production public reel preview compatibility", () => {
   it.each([
     {
-      gameConfig: "../../../assets/gamecfg002/gameconfig.json",
-      symbolManifest: null,
+      gameConfig: () => readJson("../../../assets/gamecfg002/gameconfig.json"),
+      symbolManifest: () =>
+        readCraveJson("symbol-state-textures.manifest.json"),
       reelSet: "reels-001",
       columns: 6,
     },
     {
-      gameConfig: "../../../assets/gamecfg003/gameconfig.json",
-      symbolManifest:
-        "../../../assets/game003-s1/symbol-state-textures.manifest.json",
+      gameConfig: () => readMinecart2Json("gameconfig.json"),
+      symbolManifest: () =>
+        readMinecart2Json("symbol-state-textures.manifest.json"),
       reelSet: "bg-reel01",
       columns: 5,
     },
   ])(
     "validates and samples $reelSet without reading server reels",
     ({ gameConfig, symbolManifest, reelSet, columns }) => {
-      const parsedConfig = parseSymbolPackageGameConfig(readJson(gameConfig));
-      const manifest = parseSymbolStateTextureManifest(
-        symbolManifest
-          ? readJson(symbolManifest)
-          : readCraveJson("symbol-state-textures.manifest.json"),
-      );
+      const parsedConfig = parseSymbolPackageGameConfig(gameConfig());
+      const manifest = parseSymbolStateTextureManifest(symbolManifest());
       const displaySymbols = Object.keys(manifest.symbols);
       const infos = inspectReelSets({
         gameConfig: parsedConfig.gameConfig,

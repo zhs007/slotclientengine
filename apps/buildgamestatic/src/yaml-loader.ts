@@ -1050,7 +1050,7 @@ function validateSpineSkeletonGlob(
   assertExistingDirectory(rootDir, directory);
   if (!/\/\{[-A-Za-z0-9_,]+\}\.json$/u.test(glob)) {
     throw new Error(
-      `skins.${skinId}.symbols.spineSkeletonGlob 必须是当前资源目录下的 brace JSON glob，例如 assets/game003-s1/{WL,H1,H2,H3,H4,H5,CL,SC}.json。`,
+      `skins.${skinId}.symbols.spineSkeletonGlob 必须是当前资源目录下的 brace JSON glob，例如 assets/sample-skin/{WL,H1,H2,H3,H4,H5,CL,SC}.json。`,
     );
   }
 }
@@ -1073,7 +1073,7 @@ function validateSpineAtlasGlob(
   assertExistingDirectory(rootDir, directory);
   if (!/\/\{[-A-Za-z0-9_,]+\}\.atlas$/u.test(glob)) {
     throw new Error(
-      `skins.${skinId}.symbols.spineAtlasGlob 必须是当前资源目录下的 brace atlas glob，例如 assets/game003-s1/{Symbol}.atlas。`,
+      `skins.${skinId}.symbols.spineAtlasGlob 必须是当前资源目录下的 brace atlas glob，例如 assets/sample-skin/{Symbol}.atlas。`,
     );
   }
 }
@@ -1096,7 +1096,7 @@ function validateSpineTextureGlob(
   assertExistingDirectory(rootDir, directory);
   if (!/\/\{[-A-Za-z0-9_,]+\}\.png$/u.test(glob)) {
     throw new Error(
-      `skins.${skinId}.symbols.spineTextureGlob 必须是当前资源目录下的 brace PNG glob，例如 assets/game003-s1/{Symbol}.png。`,
+      `skins.${skinId}.symbols.spineTextureGlob 必须是当前资源目录下的 brace PNG glob，例如 assets/sample-skin/{Symbol}.png。`,
     );
   }
 }
@@ -1119,7 +1119,7 @@ function validateVniProjectGlob(
   assertExistingDirectory(rootDir, directory);
   if (!/\/\*[-A-Za-z0-9_]*\.json$/u.test(glob)) {
     throw new Error(
-      `skins.${skinId}.symbols.vniProjectGlob 必须是当前资源目录下的 JSON glob，例如 assets/game003-s1/*-wins.json。`,
+      `skins.${skinId}.symbols.vniProjectGlob 必须是当前资源目录下的 JSON glob，例如 assets/sample-skin/*-wins.json。`,
     );
   }
 }

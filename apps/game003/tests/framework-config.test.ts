@@ -11,7 +11,7 @@ describe("game003 runtime query config", () => {
     const query = validQuery({}, { includeGamecode: false });
 
     expect(parseGame003QueryConfig(query)).toEqual({
-      skin: "1",
+      skin: "2",
       token: "TOKEN",
       gamecode: GAME003_GAMECODE,
       businessid: "guest",
@@ -26,7 +26,7 @@ describe("game003 runtime query config", () => {
     });
 
     expect(parseGame003FrameworkConfigFromQuery(query)).toEqual({
-      skin: "1",
+      skin: "2",
       live: {
         serverUrl: GAME003_LIVE_SERVER_URL,
         token: "TOKEN",
@@ -57,17 +57,16 @@ describe("game003 runtime query config", () => {
     expect(() =>
       parseGame003QueryConfig(`${validQuery()}&token=SECOND_TOKEN`),
     ).toThrow(/token query parameter must not be provided more than once/);
-    expect(() => parseGame003QueryConfig(`${validQuery()}&skin=1`)).toThrow(
+    expect(() => parseGame003QueryConfig(`${validQuery()}&skin=2`)).toThrow(
       /skin query parameter must not be provided more than once/,
     );
   });
 
-  it("accepts skin 1 or 2 and rejects mismatched legacy gamecode", () => {
-    expect(parseGame003QueryConfig(validQuery({ skin: "1" })).skin).toBe("1");
+  it("accepts only skin 2 and rejects a mismatched gamecode", () => {
     expect(parseGame003QueryConfig(validQuery({ skin: "2" })).skin).toBe("2");
-    for (const skin of ["01", "3", "game003"]) {
+    for (const skin of ["1", "02", "3", "game003"]) {
       expect(() => parseGame003QueryConfig(validQuery({ skin }))).toThrow(
-        /skin query parameter must be exactly "1" or "2"/,
+        /skin query parameter must be exactly "2"/,
       );
     }
 
@@ -152,7 +151,7 @@ function validParams(
   options: { readonly includeGamecode?: boolean } = {},
 ): URLSearchParams {
   const params = new URLSearchParams({
-    skin: "1",
+    skin: "2",
     token: "TOKEN",
     businessid: "guest",
     clienttype: "web",

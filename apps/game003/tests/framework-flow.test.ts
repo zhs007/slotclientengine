@@ -17,7 +17,7 @@ import {
 describe("game003 framework flow", () => {
   it("uses game003 default spin request and collects only after adapter play resolves", async () => {
     const config = parseGame003FrameworkConfigFromQuery(validQuery());
-    expect(config.skin).toBe("1");
+    expect(config.skin).toBe("2");
     expect(config.live.serverUrl).toBe(GAME003_LIVE_SERVER_URL);
     expect(config.live.gamecode).toBe(GAME003_GAMECODE);
     const client = new FakeClient();
@@ -122,7 +122,7 @@ describe("game003 framework flow", () => {
 
 function validQuery(overrides: Record<string, string> = {}): string {
   return `?${new URLSearchParams({
-    skin: "1",
+    skin: "2",
     token: "TOKEN",
     gamecode: GAME003_GAMECODE,
     businessid: "guest",

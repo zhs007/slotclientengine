@@ -418,11 +418,11 @@ describe("symbolsviewer assets", () => {
           states: {},
         },
         wild: {
-          normal: "/assets/game003-s1/wild.png",
+          normal: "/fixtures/wild.png",
           states: {},
         },
         up: {
-          normal: "/assets/game003-s1/up.png",
+          normal: "/fixtures/up.png",
           states: {},
         },
       },

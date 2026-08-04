@@ -10,13 +10,13 @@
         "backgroundNode": "basegame-landscape-background",
         "focusRect": {
           "height": 940,
-          "width": 2000,
-          "x": 0,
+          "width": 1954,
+          "x": 22,
           "y": 94
         },
         "frameFocusRect": {
           "height": 940,
-          "width": 2000
+          "width": 1954
         }
       },
       "portrait": {
@@ -38,6 +38,7 @@
       }
     }
   },
+  "coordinateOrigin": "top-left",
   "gameModes": {
     "initialMode": "BaseGame",
     "modes": [
@@ -50,9 +51,54 @@
         "id": "BaseGame",
         "nodeStates": {},
         "symbolPackage": "game003-s1"
+      },
+      {
+        "backgroundNodes": {
+          "landscape": "freegame-landscape-background",
+          "portrait": "freegame-portrait-background"
+        },
+        "id": "FreeGame",
+        "nodeStates": {},
+        "symbolPackage": "game003-s1"
+      },
+      {
+        "backgroundNodes": {
+          "landscape": "bonusgame-landscape-background",
+          "portrait": "bonusgame-portrait-background"
+        },
+        "id": "BonusGame",
+        "nodeStates": {},
+        "symbolPackage": "game003-s1"
       }
     ],
-    "transitions": []
+    "transitions": [
+      {
+        "from": "BaseGame",
+        "overlay": {
+          "fadeOutSeconds": 0.5,
+          "fit": "contain",
+          "resource": {
+            "kind": "video",
+            "mimeType": "video/mp4",
+            "path": "video_4.mp4"
+          }
+        },
+        "to": "FreeGame"
+      },
+      {
+        "from": "BaseGame",
+        "overlay": {
+          "fadeOutSeconds": 0.5,
+          "fit": "contain",
+          "resource": {
+            "kind": "video",
+            "mimeType": "video/mp4",
+            "path": "video3.mp4"
+          }
+        },
+        "to": "BonusGame"
+      }
+    ]
   },
   "id": "new-layout",
   "kind": "scene-layout",
@@ -69,7 +115,7 @@
       },
       "resource": {
         "kind": "image",
-        "path": "7994fdac1ae206aa2da94707a503d8e0c5d3e1a56220bb16add6faeaffd867f3.webp",
+        "path": "A4.webp",
         "size": {
           "height": 1125,
           "width": 2000
@@ -88,7 +134,7 @@
       },
       "resource": {
         "kind": "image",
-        "path": "base11.webp",
+        "path": "SD2.webp",
         "size": {
           "height": 2000,
           "width": 1174
@@ -96,8 +142,122 @@
       }
     },
     {
-      "id": "b6",
+      "id": "freegame-landscape-background",
       "order": 2,
+      "placements": {
+        "landscape": {
+          "scale": 1,
+          "x": 0,
+          "y": 0
+        }
+      },
+      "resource": {
+        "kind": "image",
+        "path": "free2.webp",
+        "size": {
+          "height": 1125,
+          "width": 2000
+        }
+      }
+    },
+    {
+      "id": "freegame-portrait-background",
+      "order": 3,
+      "placements": {
+        "portrait": {
+          "scale": 1,
+          "x": 0,
+          "y": 0
+        }
+      },
+      "resource": {
+        "kind": "image",
+        "path": "free3.webp",
+        "size": {
+          "height": 2000,
+          "width": 1174
+        }
+      }
+    },
+    {
+      "id": "bonusgame-landscape-background",
+      "order": 4,
+      "placements": {
+        "landscape": {
+          "scale": 1,
+          "x": 0,
+          "y": 0
+        }
+      },
+      "resource": {
+        "kind": "image",
+        "path": "free1.webp",
+        "size": {
+          "height": 1125,
+          "width": 2000
+        }
+      }
+    },
+    {
+      "id": "bonusgame-portrait-background",
+      "order": 5,
+      "placements": {
+        "portrait": {
+          "scale": 1,
+          "x": 0,
+          "y": 0
+        }
+      },
+      "resource": {
+        "kind": "image",
+        "path": "free4.webp",
+        "size": {
+          "height": 2000,
+          "width": 1174
+        }
+      }
+    },
+    {
+      "id": "gd1",
+      "order": 6,
+      "placements": {
+        "landscape": {
+          "scale": 1,
+          "x": 0,
+          "y": 984
+        }
+      },
+      "resource": {
+        "kind": "image",
+        "path": "GD1.webp",
+        "size": {
+          "height": 149,
+          "width": 2000
+        }
+      }
+    },
+    {
+      "id": "gd2",
+      "order": 7,
+      "placements": {
+        "portrait": {
+          "scale": 1,
+          "x": 0,
+          "y": 1494
+        }
+      },
+      "resource": {
+        "kind": "image",
+        "path": "GD2.webp",
+        "size": {
+          "height": 135,
+          "width": 1180
+        }
+      }
+    },
+    {
+      "id": "b6",
+      "order": 8,
       "placements": {
         "landscape": {
           "scale": 1,
@@ -121,7 +281,7 @@
     },
     {
       "id": "d2",
-      "order": 3,
+      "order": 9,
       "placements": {
         "portrait": {
           "scale": 1,
@@ -140,7 +300,7 @@
     },
     {
       "id": "d1",
-      "order": 4,
+      "order": 10,
       "placements": {
         "portrait": {
           "scale": 1,
@@ -159,7 +319,7 @@
     },
     {
       "id": "7dc083f689092ab3ef36d53f34f96bbe6a6380beb25730b00825710a47eee440",
-      "order": 5,
+      "order": 11,
       "placements": {
         "landscape": {
           "scale": 1,
@@ -178,7 +338,7 @@
     },
     {
       "id": "bee187d3863feb8de735ddc11e4381d3e8384c3e9d3493eef2b151f3c04727bd",
-      "order": 6,
+      "order": 12,
       "placements": {
         "landscape": {
           "scale": 1,
@@ -197,7 +357,7 @@
     },
     {
       "id": "fd66f6f1eb79b96d2e8ac58a20788b5ce6809babb23d84647ca82c5a697e2080",
-      "order": 7,
+      "order": 13,
       "placements": {
         "landscape": {
           "scale": 1,
@@ -221,7 +381,7 @@
     },
     {
       "id": "2a3b14312b68630df119aa32fc410861fcde3c5e04a0cfd3096bccbb9c2e55ad",
-      "order": 8,
+      "order": 14,
       "placements": {
         "landscape": {
           "scale": 1,
@@ -245,7 +405,7 @@
     },
     {
       "id": "8344f2009c6ae78c6dd75562edb248be94521ca9edfe6df9a20de89ab7b43e42",
-      "order": 9,
+      "order": 15,
       "placements": {
         "landscape": {
           "scale": 1,
@@ -269,7 +429,7 @@
     },
     {
       "id": "9ba676a65e7ee29f27e3af0f2075efaad54546971ece268708163128eb2f027f",
-      "order": 10,
+      "order": 16,
       "placements": {
         "landscape": {
           "scale": 1,
@@ -293,7 +453,7 @@
     },
     {
       "id": "467790a895d324579b5f218b6e71e7665e81bf6e7c9a57c1897945fffe03408f",
-      "order": 11,
+      "order": 17,
       "placements": {
         "landscape": {
           "scale": 1,
@@ -317,7 +477,7 @@
     },
     {
       "id": "d1bf7175c00e6fdbd661c39c1c2458616dc57c51d3ba1fd8df7b3e1f549e9cc2",
-      "order": 12,
+      "order": 18,
       "placements": {
         "landscape": {
           "scale": 1,
@@ -341,7 +501,7 @@
     },
     {
       "id": "ae8c1696406cab5daeeda40c44d51fb2dbcbb441c4acc3b28a61e8fd26461e34",
-      "order": 13,
+      "order": 19,
       "placements": {
         "landscape": {
           "scale": 1,
@@ -365,7 +525,7 @@
     },
     {
       "id": "9a3f4d78ffe6a5c8bc4b2b973069adca13725aa2a8d3e831c1d6f59ccacd72cb",
-      "order": 14,
+      "order": 20,
       "placements": {
         "landscape": {
           "scale": 1,
@@ -389,7 +549,7 @@
     },
     {
       "id": "932e18103485cfa6112cbb70f00a5030b7c9fd234d2fab6a7ab7f3ab406adfcb",
-      "order": 15,
+      "order": 21,
       "placements": {
         "landscape": {
           "scale": 1,
@@ -413,7 +573,7 @@
     },
     {
       "id": "82d3d16d974db64d572a42faff4f66114448c22980c591ac4b1c03b5edfd996b",
-      "order": 16,
+      "order": 22,
       "placements": {
         "landscape": {
           "scale": 1,
@@ -437,7 +597,7 @@
     },
     {
       "id": "dbd7baf96994aa0cf361e2e39532c89ddac3b281e6d30ae16b380b05afa10976",
-      "order": 17,
+      "order": 23,
       "placements": {
         "landscape": {
           "scale": 1,
@@ -461,7 +621,7 @@
     },
     {
       "id": "4b8117c67acf1a9a93062a8bb6ce29647ea62d146c02a95386aeb17db8b5e34a",
-      "order": 18,
+      "order": 24,
       "placements": {
         "landscape": {
           "scale": 1,
@@ -485,7 +645,7 @@
     },
     {
       "id": "311f64e66d1f888d26b54dc81efcb6af4f65bd8fb326071025c3c75fc0dce7a6",
-      "order": 19,
+      "order": 25,
       "placements": {
         "landscape": {
           "scale": 1,
@@ -509,7 +669,7 @@
     },
     {
       "id": "e9f9b7f669a8632281b431abe81824f2cd00e7879a6d90662b12646f8881d865",
-      "order": 20,
+      "order": 26,
       "placements": {
         "landscape": {
           "scale": 1,
@@ -533,7 +693,7 @@
     },
     {
       "id": "image-string-manifest",
-      "order": 21,
+      "order": 27,
       "placements": {
         "landscape": {
           "scale": 1,
@@ -558,7 +718,7 @@
     },
     {
       "id": "image-string-manifest-2",
-      "order": 22,
+      "order": 28,
       "placements": {
         "landscape": {
           "scale": 1,
@@ -583,7 +743,7 @@
     },
     {
       "id": "image-string-manifest-3",
-      "order": 23,
+      "order": 29,
       "placements": {
         "landscape": {
           "scale": 1,
@@ -608,7 +768,7 @@
     },
     {
       "id": "image-string-manifest-4",
-      "order": 24,
+      "order": 30,
       "placements": {
         "landscape": {
           "scale": 1,
@@ -633,7 +793,7 @@
     },
     {
       "id": "50550d6f354468ad3a8617ff0d6fea6fe88858bf79fdd1eab1e7755067abf14a",
-      "order": 25,
+      "order": 31,
       "placements": {
         "landscape": {
           "scale": 1,
@@ -652,6 +812,44 @@
         "size": {
           "height": 200,
           "width": 310
+        }
+      }
+    },
+    {
+      "id": "sd1",
+      "order": 32,
+      "placements": {
+        "landscape": {
+          "scale": 1,
+          "x": 0,
+          "y": 990
+        }
+      },
+      "resource": {
+        "kind": "image",
+        "path": "SD1.webp",
+        "size": {
+          "height": 167,
+          "width": 2000
+        }
+      }
+    },
+    {
+      "id": "st2",
+      "order": 33,
+      "placements": {
+        "portrait": {
+          "scale": 1,
+          "x": -4,
+          "y": 1528
+        }
+      },
+      "resource": {
+        "kind": "image",
+        "path": "ST2.webp",
+        "size": {
+          "height": 295,
+          "width": 1181
         }
       }
     }

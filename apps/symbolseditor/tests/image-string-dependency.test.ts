@@ -1,6 +1,7 @@
 import { createDeterministicZip } from "@slotclientengine/browserartifactio";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { readMinecart2SymbolFixtureBytes } from "../../../test-utils/minecart2-fixtures.js";
 import { Texture } from "pixi.js";
 import { describe, expect, it } from "vitest";
 import { importImageStringDependencyZip } from "../src/io/image-string-dependency.js";
@@ -249,9 +250,7 @@ function createFiles(): Map<string, Uint8Array> {
 }
 
 function fixture(name: string): Uint8Array {
-  return new Uint8Array(
-    readFileSync(resolve(process.cwd(), `../../assets/game003-s1/${name}`)),
-  );
+  return new Uint8Array(readMinecart2SymbolFixtureBytes(name));
 }
 
 function glyphBytes(): Uint8Array {

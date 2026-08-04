@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { getGame003CoinOverlayConfig } from "../src/coin-overlay-config.js";
-import { getGame003SkinConfig } from "../src/skin-config.js";
+import { GAME003_RUNTIME_CONFIG } from "../src/runtime-config.js";
 
 describe("game003 coin overlay config", () => {
   it("parses the generated app extension", () => {
-    expect(getGame003SkinConfig("1").coinOverlay).toEqual({
+    expect(
+      getGame003CoinOverlayConfig(GAME003_RUNTIME_CONFIG.appExtensions),
+    ).toEqual({
       componentName: "bg-gencoins",
       coinSymbol: "CO",
       text: {
@@ -124,7 +126,9 @@ describe("game003 coin overlay config", () => {
 function createRawExtensions() {
   return JSON.parse(
     JSON.stringify({
-      game003CoinOverlay: getGame003SkinConfig("1").coinOverlay,
+      game003CoinOverlay: getGame003CoinOverlayConfig(
+        GAME003_RUNTIME_CONFIG.appExtensions,
+      ),
     }),
   ) as {
     readonly game003CoinOverlay: ReturnType<typeof getGame003CoinOverlayConfig>;

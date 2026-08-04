@@ -8,7 +8,6 @@
     "prepare:deps": "pnpm --filter @slotclientengine/editorresource build && pnpm --filter @slotclientengine/vnicore build && pnpm --filter @slotclientengine/rendercore build",
     "dev": "pnpm run prepare:deps && node ../../scripts/run-vite-dev.mjs",
     "build": "pnpm run prepare:deps && vite build",
-    "acceptance:task114": "ts-node-esm --project tsconfig.json scripts/build-task114-acceptance.ts",
     "build:task131": "pnpm run prepare:deps && ts-node-esm --project tsconfig.json scripts/build-task131-layout.ts",
     "build:task132": "pnpm run prepare:deps && ts-node-esm --project tsconfig.json scripts/build-task132-layout.ts",
     "build:task135": "pnpm run prepare:deps && ts-node-esm --project tsconfig.json scripts/build-task135-layout.ts",
