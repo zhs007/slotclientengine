@@ -138,6 +138,61 @@ describe("symbols editor app shell", () => {
     });
   });
 
+  it("imports only the unique runtime closure from a VNI export bundle", async () => {
+    await createProject(root);
+    await uploadVniBundle(root, createVniBundleZip());
+    await vi.waitFor(() =>
+      expect(root.querySelector("[data-feedback]")?.textContent).toContain(
+        "已上传 2 个资源",
+      ),
+    );
+    expect(root.textContent).toContain("l1.json");
+    expect(root.textContent).toContain("a_asset_image.png");
+    expect(root.textContent).not.toContain("manifest.json");
+    expect(root.textContent).not.toContain("edit_full");
+  });
+
+  it("requires an explicit runtime choice and keeps cancellation mutation-free", async () => {
+    await createProject(root);
+    const zip = createVniBundleZip({ extraRuntime: true });
+    await uploadVniBundle(root, zip);
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector<HTMLDialogElement>("[data-vni-runtime-choice]")
+          ?.open,
+      ).toBe(true),
+    );
+    expect(
+      root.querySelectorAll("[data-vni-runtime-select] option"),
+    ).toHaveLength(2);
+    click(root, "[data-vni-runtime-cancel]");
+    await vi.waitFor(() =>
+      expect(root.querySelector("[data-feedback]")?.textContent).toContain(
+        "项目未修改",
+      ),
+    );
+    expect(root.textContent).not.toContain("l1.json");
+
+    await uploadVniBundle(root, zip);
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector<HTMLDialogElement>("[data-vni-runtime-choice]")
+          ?.open,
+      ).toBe(true),
+    );
+    const select = root.querySelector<HTMLSelectElement>(
+      "[data-vni-runtime-select]",
+    )!;
+    select.value = "runtime_50";
+    click(root, "[data-vni-runtime-confirm]");
+    await vi.waitFor(() =>
+      expect(root.querySelector("[data-feedback]")?.textContent).toContain(
+        "已上传 2 个资源",
+      ),
+    );
+    expect(root.textContent).toContain("l1.json");
+  });
+
   it("opens a Symbols project ZIP through an explicit project review", async () => {
     const source = createFromGameConfig({
       rawGameConfig: gameConfig,
@@ -778,4 +833,115 @@ function selectedTab(root: HTMLElement, group: string): string | undefined {
       .querySelector<HTMLElement>(`[data-${group}-tab][aria-selected="true"]`)
       ?.getAttribute("data-tab-value") ?? undefined
   );
+}
+
+async function uploadVniBundle(
+  root: HTMLElement,
+  bytes: Uint8Array,
+): Promise<void> {
+  const upload = root.querySelector<HTMLInputElement>("[data-upload-input]")!;
+  Object.defineProperty(upload, "files", {
+    configurable: true,
+    value: [new File([bytes as BlobPart], "l1.zip")],
+  });
+  upload.dispatchEvent(new Event("change", { bubbles: true }));
+  await Promise.resolve();
+}
+
+function createVniBundleZip(
+  options: { readonly extraRuntime?: boolean } = {},
+): Uint8Array {
+  const image = readCraveFixture("H1.png");
+  const exports = [
+    {
+      id: "edit_full",
+      purpose: "editing",
+      assetScale: 1,
+      path: "edit_full/l1.json",
+    },
+    {
+      id: "runtime_100",
+      purpose: "runtime",
+      assetScale: 1,
+      path: "runtime_100/l1.json",
+    },
+  ];
+  const entries: Record<string, Uint8Array> = {
+    "edit_full/l1.json": encodeJson(
+      createVniProject("edit_full", "editing", 1),
+    ),
+    "edit_full/assets/a_asset_image.png": image,
+    "runtime_100/l1.json": encodeJson(
+      createVniProject("runtime_100", "runtime", 1),
+    ),
+    "runtime_100/assets/a_asset_image.png": image,
+  };
+  if (options.extraRuntime) {
+    exports.push({
+      id: "runtime_50",
+      purpose: "runtime",
+      assetScale: 0.5,
+      path: "runtime_50/l1.json",
+    });
+    entries["runtime_50/l1.json"] = encodeJson(
+      createVniProject("runtime_50", "runtime", 0.5),
+    );
+    entries["runtime_50/assets/a_asset_image.png"] = image;
+  }
+  entries["manifest.json"] = encodeJson({
+    type: "vni_export_bundle",
+    version: "VNI_0.087",
+    exports,
+  });
+  return createDeterministicZip(entries);
+}
+
+function createVniProject(
+  id: string,
+  purpose: "editing" | "runtime",
+  assetScale: number,
+) {
+  return {
+    schemaVersion: "VNI_0.087",
+    editor: { name: "VNI", version: "VNI_0.087" },
+    engineTarget: { name: "cocos_creator", version: "3.8.6" },
+    name: "L1",
+    stage: {
+      width: 300,
+      height: 300,
+      coordinate: "center",
+      duration: 1,
+      backgroundColor: "#000000",
+    },
+    assets: [
+      {
+        id: "asset-image",
+        type: "image",
+        path: "assets/a_asset_image.png",
+        originalName: "A.png",
+        width: 172,
+        height: 130,
+        fileWidth: Math.round(172 * assetScale),
+        fileHeight: Math.round(130 * assetScale),
+        fileScale: assetScale,
+      },
+    ],
+    layerGroups: [
+      {
+        id: "group_default",
+        name: "默认组",
+        visible: true,
+        collapsed: false,
+        order: 0,
+      },
+    ],
+    layers: [],
+    particles: [],
+    exportProfile: { id, purpose, assetScale },
+    maskCompositeMode: "precompose_light_alpha",
+  };
+}
+
+function encodeJson(value: unknown): Uint8Array {
+  return new TextEncoder().encode(JSON.stringify(value));
 }
