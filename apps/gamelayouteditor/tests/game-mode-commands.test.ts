@@ -140,6 +140,15 @@ describe("game mode and popup dependency commands", () => {
     deletePopupDependency(project, "free-game");
   });
 
+  it("allocates a distinct popup root order from 2000", () => {
+    const project = createNewEditorProject("maximized-focus");
+    importPopupDependency(project, popup("base-popup", 1));
+    importPopupDependency(project, popup("free-entry", 2));
+    expect(
+      [...project.popupDependencies.values()].map(({ order }) => order),
+    ).toEqual([2000, 2001]);
+  });
+
   it("binds a Spine popup to one directed Spine transition", () => {
     const project = createNewEditorProject("maximized-focus");
     addGameMode(project, "FreeGame");

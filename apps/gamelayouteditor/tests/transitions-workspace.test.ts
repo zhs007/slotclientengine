@@ -93,6 +93,72 @@ describe("transitions workspace", () => {
     ).toBe(false);
   });
 
+  it("shows the popup root configuration for the popup selected by one exact edge", () => {
+    const project = createNewEditorProject("maximized-focus");
+    project.gameModes.modes.push({
+      id: "FreeGame",
+      backgroundNodes: { default: "background" },
+      nodeStates: {},
+      symbols: null,
+      awardCelebrationPopupId: null,
+    });
+    project.popupDependencies.set("enter-free", {
+      id: "enter-free",
+      type: "spine",
+      rootKey: "enter-free-popup.manifest.json",
+      keys: ["enter-free-popup.manifest.json"],
+      order: 2007,
+      placements: { default: { x: 12, y: 34, scale: 0.8 } },
+    });
+    project.popupDependencies.set("leave-free", {
+      id: "leave-free",
+      type: "spine",
+      rootKey: "leave-free-popup.manifest.json",
+      keys: ["leave-free-popup.manifest.json"],
+      order: 2008,
+      placements: { default: { x: 0, y: 0, scale: 1 } },
+    });
+    project.gameModes.transitions.push({
+      kind: "spine",
+      fromModeId: "BaseGame",
+      toModeId: "FreeGame",
+      resourceId: "",
+      animation: "",
+      switchEvent: "",
+      preludePopupId: "enter-free",
+      placements: { default: { x: 0, y: 0, scale: 1 } },
+    });
+
+    const host = document.createElement("div");
+    host.innerHTML = transitionsWorkspaceMarkup({
+      project,
+      selectedKey: "BaseGame::FreeGame",
+      snapshot: null,
+      uiState: { phase: "idle", message: "请选择预览目标状态。" },
+    });
+
+    const popupSelect = host.querySelector(
+      "[data-transition-prelude-popup]",
+    ) as HTMLSelectElement;
+    expect(popupSelect.value).toBe("enter-free");
+    expect([...popupSelect.options].map((option) => option.value)).toEqual([
+      "",
+      "enter-free",
+      "leave-free",
+    ]);
+    expect(
+      (host.querySelector("[data-transition-popup-order]") as HTMLInputElement)
+        .value,
+    ).toBe("2007");
+    expect(
+      (
+        host.querySelector(
+          '[data-transition-popup-placement="default"][data-transition-popup-placement-field="x"]',
+        ) as HTMLInputElement
+      ).value,
+    ).toBe("12");
+  });
+
   it("lists only video resources and derives fade timing and prepared controls", () => {
     const project = createNewEditorProject("orientation-focus");
     project.gameModes.modes.push({

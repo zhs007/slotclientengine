@@ -236,6 +236,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.container = new Container();
     this.container.label = `scene-layout-package:${resource.manifest.id}`;
     this.#popupRoot.label = "scene-layout-popup-root";
+    this.#popupRoot.sortableChildren = true;
     this.#transitionRoot.label = "scene-transition-overlay";
     this.#videoBlackoutRoot.label = "scene-transition-video-blackout";
     this.#videoBlackout.label = "scene-transition-video-black";
@@ -320,8 +321,15 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         if (resource.manifest.type === "spine")
           this.#spinePopups.set(id, popup as SpinePopupPlayer);
         else this.#popups.set(id, popup as AwardCelebrationPlayer);
+        const binding = this.#manifest.popups?.[id];
+        if (!binding)
+          throw new SceneLayoutError(
+            `Scene layout popup "${id}" has no manifest binding.`,
+          );
+        popup.container.zIndex = binding.order;
         this.#popupRoot.addChild(popup.container);
       }
+      this.#popupRoot.sortChildren();
       this.#stableMode = initialModeId;
       this.#displayedMode = initialModeId;
       this.#initialized = true;

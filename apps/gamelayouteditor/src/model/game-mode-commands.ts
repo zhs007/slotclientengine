@@ -9,6 +9,10 @@ import {
   type EditorProject,
 } from "./editor-project.js";
 import { editorResourcePaths } from "./editor-resource.js";
+import {
+  nextAvailablePopupOrder,
+  setPopupOrder as setEditorPopupOrder,
+} from "./layer-order.js";
 
 const MODE_ID = /^[A-Za-z][A-Za-z0-9_-]*$/u;
 
@@ -132,6 +136,10 @@ export function normalizeGameModeNodeOrders(project: EditorProject): void {
       .flatMap((mode) => Object.values(mode.backgroundNodes))
       .filter(Boolean),
   );
+  if (hasValidAuthoredOrders(project, initialBackgrounds, allBackgrounds)) {
+    project.nodes.sort((left, right) => left.order - right.order);
+    return;
+  }
   const nodes = project.nodes
     .map((node, index) => ({ node, index }))
     .sort((left, right) => {
@@ -168,6 +176,46 @@ export function normalizeGameModeNodeOrders(project: EditorProject): void {
         ? belowStart + index
         : reelOrder + 1 + index - reelInsertionIndex,
   }));
+}
+
+function hasValidAuthoredOrders(
+  project: EditorProject,
+  initialBackgrounds: ReadonlySet<string>,
+  allBackgrounds: ReadonlySet<string>,
+): boolean {
+  const orders = project.nodes.map((node) => node.order);
+  if (orders.some((order) => !Number.isSafeInteger(order))) return false;
+  if (new Set(orders).size !== orders.length) return false;
+  if (
+    project.reel.order !== null &&
+    (!Number.isSafeInteger(project.reel.order) ||
+      orders.includes(project.reel.order))
+  )
+    return false;
+  for (const variant of activeVariantIds(project)) {
+    const visible = project.nodes.filter((node) => node.placements[variant]);
+    const minimum = Math.min(
+      ...visible.map((node) => node.order),
+      Number.POSITIVE_INFINITY,
+    );
+    const initialBackground = visible.find((node) =>
+      initialBackgrounds.has(node.id),
+    );
+    if (initialBackground && initialBackground.order !== minimum) return false;
+    const firstOrdinary = Math.min(
+      ...visible
+        .filter((node) => !allBackgrounds.has(node.id))
+        .map((node) => node.order),
+      Number.POSITIVE_INFINITY,
+    );
+    if (
+      visible.some(
+        (node) => allBackgrounds.has(node.id) && node.order >= firstOrdinary,
+      )
+    )
+      return false;
+  }
+  return true;
 }
 
 export function createGameModeTransition(
@@ -516,6 +564,7 @@ export function importPopupDependency(
     type: imported.manifest.type,
     rootKey: imported.rootKey,
     keys: Object.freeze([...imported.files.keys()].sort()),
+    order: nextAvailablePopupOrder(project),
     placements: Object.fromEntries(
       activeVariantIds(project).map((variantId) => [
         variantId,
@@ -610,6 +659,14 @@ export function setPopupPlacement(
   )
     throw new Error("Popup placement 必须使用有限 x/y 与正数 scale。");
   dependency.placements[variantId] = { ...placement };
+}
+
+export function setPopupOrder(
+  project: EditorProject,
+  popupId: string,
+  order: number,
+): void {
+  setEditorPopupOrder(project, popupId, order);
 }
 
 export function synchronizeGameModeNodeStates(project: EditorProject): void {

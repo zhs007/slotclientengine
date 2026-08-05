@@ -123,6 +123,7 @@ export interface EditorPopupDependency {
   readonly type: PopupManifestV1["type"];
   readonly rootKey: string;
   readonly keys: readonly string[];
+  order: number;
   placements: Partial<
     Record<SceneLayoutVariantId, { x: number; y: number; scale: number }>
   >;
@@ -758,6 +759,7 @@ export function editorProjectToManifest(
               {
                 type: dependency.type,
                 manifest: dependency.rootKey,
+                order: dependency.order,
                 placements: dependency.placements,
               },
             ];
@@ -1173,6 +1175,7 @@ export function manifestToEditorProject(
       type: nested.type,
       rootKey: binding.manifest,
       keys: Object.freeze([binding.manifest, ...keys]),
+      order: binding.order,
       placements: structuredClone(binding.placements),
     });
     const usedAsPrelude = (parsed.gameModes?.transitions ?? []).some(

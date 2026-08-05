@@ -51,6 +51,7 @@ describe("gamelayout popup dependency", () => {
         "fixture-popup": {
           type: "award-celebration" as const,
           manifest: imported.rootKey,
+          order: 2000,
           placements: { default: { x: 12, y: -8, scale: 0.9 } },
         },
       },
@@ -68,6 +69,7 @@ describe("gamelayout popup dependency", () => {
     const project = manifestToEditorProject(manifest, layoutAssets);
     expect(project.popupDependencies.get("fixture-popup")).toMatchObject({
       id: "fixture-popup",
+      order: 2000,
       placements: { default: { x: 12, y: -8, scale: 0.9 } },
     });
     expect(project.assets.has(imported.rootKey)).toBe(true);

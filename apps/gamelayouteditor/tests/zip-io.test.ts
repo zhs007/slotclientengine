@@ -542,11 +542,13 @@ describe("layout zip IO", () => {
         "fixture-popup": {
           type: "award-celebration" as const,
           manifest: "fixture-popup.manifest.json",
+          order: 2000,
           placements: { default: { x: 1, y: 2, scale: 1 } },
         },
         "free-popup": {
           type: "award-celebration" as const,
           manifest: "free-popup.manifest.json",
+          order: 2001,
           placements: { default: { x: -3, y: 4, scale: 0.8 } },
         },
       },

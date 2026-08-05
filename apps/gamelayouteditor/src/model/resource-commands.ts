@@ -54,6 +54,7 @@ import {
   readEditorSpineMetadata,
 } from "./editor-resource.js";
 import { canonicalizeUploadFileName } from "../io/filename-policy.js";
+import { nextAvailableNodeOrder } from "./layer-order.js";
 
 interface PreparedResource {
   readonly resource: EditorLayoutResource;
@@ -1084,10 +1085,7 @@ function validateAnimation(
 }
 
 function nextOrder(project: EditorProject): number {
-  return (
-    project.nodes.reduce((maximum, node) => Math.max(maximum, node.order), -1) +
-    1
-  );
+  return nextAvailableNodeOrder(project);
 }
 
 async function prepareImageResource(options: {
