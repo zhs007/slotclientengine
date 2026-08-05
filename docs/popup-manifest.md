@@ -134,7 +134,7 @@
 
 三个动画名必须大小写精确、非空且互不相同。`requestDismiss()` 可在 start 或 loop 期间锁存；runtime 必须等 start 完成并在完整 loop 边界后才播放 end。`dismissImmediately()` 是唯一跳过边界的清理入口。
 
-`prompt` 是可选的严格单行点击提示。游戏可把已翻译字符串传给 `start(text)`；省略时使用 `defaultText`。字体只接受 package-owned WOFF2/WOFF/TTF/OTF，按 bytes SHA-256 注册和复用；Pixi 文本固定使用该 family，并让浏览器处理 glyph 缺失时的本地字体 fallback。`area.height` 是初始字号，runtime 再按 `area.width/height` 等比缩小，不换行、不扩张区域；进入 end 时隐藏。
+`prompt` 是可选的严格单行点击提示。游戏可把已翻译字符串传给 `start(text)`；省略时使用 `defaultText`。`font` 也是可选字段：缺省时 rendercore 使用 `system-ui, sans-serif`，不创建资源引用、不注册 FontFace，也不向 `assets.map.json` 或 ZIP 写入系统字体；存在时必须引用 package-owned WOFF2/WOFF/TTF/OTF，并按 bytes SHA-256 注册和复用。显式 `null`、空字符串、未知 key 或非 font resource 都会失败。Pixi 文本让浏览器处理 glyph 缺失时的本地字体 fallback。`area.height` 是初始字号，runtime 再按 `area.width/height` 等比缩小，不换行、不扩张区域；进入 end 时隐藏。
 
 `overlays` 可包含 image、official Spine 或 VNI，均显式声明 `order/resource/transform.x/y/scale/rotation`。image 额外声明 anchor 与可见 segment；Spine 声明 start/loop/end 动画；VNI 声明 segmented 或 once playback。prompt 与 overlay order 必须唯一。
 

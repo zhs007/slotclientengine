@@ -67,6 +67,10 @@ h1 {
 .primary-tabs button.active {
   color: #fff;
 }
+.primary-tabs button.active,
+.primary-tabs button[aria-selected="true"] {
+  background: #1b2c55;
+}
 .primary-tabs button.active::after {
   background: #8aa4ff;
 }
@@ -78,6 +82,35 @@ button,
   border-radius: 6px;
   padding: 7px 10px;
   cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    transform 80ms ease;
+}
+button:not(:disabled):hover,
+.file-action:hover {
+  background: #2c3c62;
+  border-color: #7089c5;
+  color: #fff;
+}
+button:not(:disabled):active,
+.file-action:active {
+  background: #405a96;
+  border-color: #9bb1ec;
+  transform: translateY(1px);
+}
+button:focus-visible,
+.file-action:focus-within {
+  outline: 3px solid #91aaff;
+  outline-offset: 2px;
+}
+button:disabled {
+  color: #75819c;
+  background: #151d30;
+  border-color: #28334d;
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 .file-action input[type="file"] {
   display: none;
@@ -202,7 +235,7 @@ pre {
 }
 .tier-tabs button.active {
   color: #fff;
-  background: transparent;
+  background: #1b2c55;
   border-bottom-color: #8aa4ff;
 }
 .tier-tabs button span {
@@ -314,6 +347,22 @@ input {
   border: 1px solid #3b496b;
   padding: 5px;
 }
+input.invalid,
+input[aria-invalid="true"] {
+  border-color: #ff5d75;
+  box-shadow: 0 0 0 1px #ff5d75;
+}
+.field-stack {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+}
+.field-stack .field-error {
+  grid-column: 2;
+  color: #ff8fa1;
+  font-size: 12px;
+  line-height: 1.35;
+}
 #diagnostics {
   position: sticky;
   bottom: 0;
@@ -340,6 +389,13 @@ dialog {
   margin: 12px 0;
   padding: 10px;
   border: 1px solid #34446a;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button,
+  .file-action {
+    transition: none;
+  }
 }
 
 @media (max-width: 980px) {

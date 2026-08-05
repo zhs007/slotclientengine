@@ -41,6 +41,20 @@ describe("popup prompt text", () => {
     prompt.text.destroy();
   });
 
+  it("uses the rendercore system font stack when no package font is set", () => {
+    const prompt = createPopupPromptText({
+      spec: {
+        defaultText: "Continue",
+        fill: "#fff",
+        order: 2,
+        area: { x: 10, y: 20, width: 80, height: 20 },
+      },
+      measureText: () => ({ width: 40, height: 20 }),
+    });
+    expect(prompt.text.style.fontFamily).toEqual(["system-ui", "sans-serif"]);
+    prompt.text.destroy();
+  });
+
   it("rejects invalid metrics and fit areas", () => {
     expect(
       fitPopupPromptScale(

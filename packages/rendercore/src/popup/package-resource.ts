@@ -816,7 +816,11 @@ function rewriteSpineReferences(
       ? {
           prompt: {
             ...spine.prompt,
-            font: requiredPopupResourceKey(mapping, spine.prompt.font),
+            ...(spine.prompt.font
+              ? {
+                  font: requiredPopupResourceKey(mapping, spine.prompt.font),
+                }
+              : {}),
           },
         }
       : {}),

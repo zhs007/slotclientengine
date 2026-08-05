@@ -41,7 +41,7 @@
 ## Popup Editor
 
 - `apps/popupeditor` 输出 strict `award-celebration` 或普通 `spine` popup package；两种类型使用互斥 schema，不保留无关字段。
-- 普通 Spine popup 的可选 prompt 只接受 package-owned WOFF2/WOFF/TTF/OTF、单行默认 string 与显式 area/order；游戏可传入已翻译 string，runtime 不翻译。其 image/Spine/VNI overlay 的 transform、order 与 playback 只在 Popup Editor 编辑。
+- 普通 Spine popup 的可选 prompt 缺省使用 rendercore 系统字体且不进入资源闭包；显式字体只接受 package-owned WOFF2/WOFF/TTF/OTF。prompt 使用单行默认 string 与显式 area/order；游戏可传入已翻译 string，runtime 不翻译。其 image/Spine/VNI overlay 的 transform、order 与 playback 只在 Popup Editor 编辑。
 - VNI export bundle 只把 `purpose=runtime` 作为运行候选：唯一 runtime 自动选择，多个 runtime 才枚举；禁止手输 profile id，`purpose=editing` 不进入候选。
 - popup package 使用完整 SHA-256 content-addressed owned payload，并保持 exact closure。
 - Popup 字体与其它 payload 一样按完整 SHA-256 物理去重；logical filename key 与 owner 引用不得从 hash path 反推或合并。
