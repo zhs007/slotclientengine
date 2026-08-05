@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Container } from "pixi.js";
 import type { RendercoreSpinePlayer } from "../../src/spine/runtime-player.js";
+import type {
+  SpinePopupPhase,
+  SpinePopupPlayer,
+} from "../../src/popup/index.js";
 
 const state = vi.hoisted(() => ({
   runtime: null as any,
@@ -39,10 +43,42 @@ class FakeTransitionPlayer implements RendercoreSpinePlayer {
   }
 }
 
-function packageResource(withEdge = true) {
+class FakeSpinePopupPlayer implements SpinePopupPlayer {
+  readonly container = new Container();
+  phase: SpinePopupPhase = "idle";
+  dismissRequested = false;
+  destroyed = false;
+
+  async init() {}
+  start() {
+    this.phase = "loop";
+    this.dismissRequested = false;
+  }
+  update() {
+    return this.getSnapshot();
+  }
+  requestDismiss() {
+    this.dismissRequested = true;
+  }
+  dismissImmediately() {
+    this.phase = "complete";
+  }
+  getSnapshot() {
+    return { phase: this.phase, dismissRequested: this.dismissRequested };
+  }
+  isPlaying() {
+    return !["idle", "complete"].includes(this.phase);
+  }
+  destroy() {
+    this.destroyed = true;
+  }
+}
+
+function packageResource(withEdge = true, withPrelude = false) {
   const transition = {
     from: "BaseGame",
     to: "FreeGame",
+    ...(withPrelude ? { preludePopup: "free-entry" } : {}),
     overlay: {
       resource: {
         kind: "spine" as const,
@@ -78,6 +114,17 @@ function packageResource(withEdge = true) {
         ],
         transitions: withEdge ? [transition] : [],
       },
+      ...(withPrelude
+        ? {
+            popups: {
+              "free-entry": {
+                type: "spine",
+                manifest: "free-entry-popup.manifest.json",
+                placements: { default: { x: 0, y: 0, scale: 1 } },
+              },
+            },
+          }
+        : {}),
     },
     layout: {
       spineResources: {
@@ -90,22 +137,30 @@ function packageResource(withEdge = true) {
     },
     symbolPackage: null,
     symbolPackages: {},
-    popupPackages: {},
+    popupPackages: withPrelude
+      ? { "free-entry": { manifest: { type: "spine" } } }
+      : {},
     destroy: vi.fn(),
   };
 }
 
-function createRuntime(withEdge = true) {
+function createRuntime(withEdge = true, withPrelude = false) {
   const players: FakeTransitionPlayer[] = [];
+  const popups: FakeSpinePopupPlayer[] = [];
   const runtime = createSceneLayoutPackageRuntime({
-    resource: packageResource(withEdge) as never,
+    resource: packageResource(withEdge, withPrelude) as never,
     createTransitionPlayer: () => {
       const player = new FakeTransitionPlayer();
       players.push(player);
       return player;
     },
+    createSpinePopupPlayer: () => {
+      const popup = new FakeSpinePopupPlayer();
+      popups.push(popup);
+      return popup;
+    },
   });
-  return { runtime, players };
+  return { runtime, players, popups };
 }
 
 describe("scene layout package event-driven game-mode transition", () => {
@@ -237,6 +292,43 @@ describe("scene layout package event-driven game-mode transition", () => {
     runtime.destroy();
     await expect(pending).rejects.toThrow(/destroyed during/);
     expect(players[0].destroyed).toBe(true);
+  });
+
+  it("finishes the optional popup before starting the prepared overlay", async () => {
+    const { runtime, players, popups } = createRuntime(true, true);
+    await runtime.init();
+    const pending = runtime.requestGameMode("FreeGame");
+    await Promise.resolve();
+    expect(popups[0].phase).toBe("loop");
+    expect(players[0].plays).toEqual([]);
+    expect(runtime.getGameModeSnapshot()).toMatchObject({
+      stableMode: "BaseGame",
+      displayedMode: "BaseGame",
+      targetMode: "FreeGame",
+      transitionPhase: "popup",
+      activePreludePopup: "free-entry",
+    });
+
+    runtime.requestDismissGameModePrelude();
+    runtime.requestDismissGameModePrelude();
+    expect(popups[0].dismissRequested).toBe(true);
+    popups[0].phase = "complete";
+    runtime.update(0.1);
+    await Promise.resolve();
+    expect(players[0].plays).toEqual([{ animationName: "BG_FG", loop: false }]);
+    expect(runtime.getGameModeSnapshot()).toMatchObject({
+      stableMode: "BaseGame",
+      transitionPhase: "before-switch",
+      activePreludePopup: null,
+    });
+    players[0].results.push({
+      completed: true,
+      events: [{ name: "SwitchScene" }],
+    });
+    runtime.update(0.1);
+    await pending;
+    expect(runtime.getGameModeSnapshot().stableMode).toBe("FreeGame");
+    runtime.destroy();
   });
 
   it("rejects a second request while the first target is still preparing", async () => {

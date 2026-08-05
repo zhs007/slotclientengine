@@ -42,6 +42,7 @@ describe("layout editor symbols package import", () => {
       loadTextures: false,
     });
     const { resource } = imported;
+    expect(imported.rootKey).toBe("pkg-14-layout-fixture-symbols.package.json");
     expect(resource.packageManifest.cellSize).toEqual({
       width: 120,
       height: 120,
@@ -50,11 +51,13 @@ describe("layout editor symbols package import", () => {
     expect(
       [...imported.files.keys()].every((path) => path === path.toLowerCase()),
     ).toBe(true);
-    expect(resource.packageManifest.resources).toEqual([canonicalImageKey]);
+    expect(resource.packageManifest.resources).toEqual([
+      `pkg-14-layout-fixture-${canonicalImageKey}`,
+    ]);
     expect(resource.rawSymbolManifest).toMatchObject({
       symbols: {
         A: {
-          normal: `./${canonicalImageKey}`,
+          normal: `./pkg-14-layout-fixture-${canonicalImageKey}`,
         },
       },
     });
@@ -98,10 +101,10 @@ describe("layout editor symbols package import", () => {
       loadTextures: false,
     });
     expect(imported.resource.packageManifest.resources).toEqual([
-      "AF.disabled.png",
+      "pkg-14-legacy-symbols-AF.disabled.png",
     ]);
     expect(imported.resource.rawSymbolManifest).toMatchObject({
-      symbols: { AF: { disabled: "./AF.disabled.png" } },
+      symbols: { AF: { disabled: "./pkg-14-legacy-symbols-AF.disabled.png" } },
     });
     imported.resource.destroy();
   });
@@ -183,9 +186,9 @@ describe("layout editor symbols package import", () => {
     expect(imported.resource.packageManifest.id).toBe("finder-symbols");
     expect([...imported.files.keys()]).toEqual(
       expect.arrayContaining([
-        "gameconfig.json",
-        "symbol-state-textures.manifest.json",
-        "symbols.package.json",
+        "pkg-14-finder-symbols-gameconfig.json",
+        "pkg-14-finder-symbols-symbol-state-textures.manifest.json",
+        "pkg-14-finder-symbols-symbols.package.json",
       ]),
     );
     imported.resource.destroy();

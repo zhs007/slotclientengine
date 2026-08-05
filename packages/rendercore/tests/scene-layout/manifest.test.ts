@@ -478,6 +478,65 @@ describe("scene layout manifest", () => {
     }
   });
 
+  it("strictly binds an optional Spine popup before a Spine transition", () => {
+    const value = gameModeManifest() as any;
+    value.popups["free-entry"] = {
+      type: "spine",
+      manifest: "free-entry-popup.manifest.json",
+      placements: { default: { x: 0, y: 0, scale: 1 } },
+    };
+    value.gameModes.transitions = [
+      {
+        from: "BaseGame",
+        to: "FreeGame",
+        preludePopup: "free-entry",
+        overlay: {
+          resource: {
+            kind: "spine",
+            skeleton: "transition.json",
+            atlas: "transition.atlas",
+            textures: { "transition.png": "transition.png" },
+          },
+          animation: "BaseToFree",
+          switchEvent: "SwitchScene",
+          placements: { default: { x: 0, y: 0, scale: 1 } },
+        },
+      },
+    ];
+    const parsed = parseSceneLayoutManifest(value);
+    expect(parsed.gameModes?.transitions?.[0]).toMatchObject({
+      preludePopup: "free-entry",
+    });
+    expect(collectSceneLayoutAssetPaths(parsed)).toContain(
+      "free-entry-popup.manifest.json",
+    );
+
+    const unknown = structuredClone(value);
+    unknown.gameModes.transitions[0].preludePopup = "missing";
+    expect(() => parseSceneLayoutManifest(unknown)).toThrow(/unknown popup/);
+
+    const wrongType = structuredClone(value);
+    wrongType.gameModes.transitions[0].preludePopup = "base-popup";
+    expect(() => parseSceneLayoutManifest(wrongType)).toThrow(/spine popup/);
+
+    const video = structuredClone(value);
+    video.gameModes.transitions[0] = {
+      from: "BaseGame",
+      to: "FreeGame",
+      preludePopup: "free-entry",
+      overlay: {
+        resource: {
+          kind: "video",
+          path: `assets/${"a".repeat(64)}.mp4`,
+          mimeType: "video/mp4",
+        },
+        fit: "contain",
+        fadeOutSeconds: 0.5,
+      },
+    };
+    expect(() => parseSceneLayoutManifest(video)).toThrow(/not supported/);
+  });
+
   it("rejects every invalid game-mode reference and incomplete state mapping", () => {
     type MutableGameModeManifest = {
       gameModes: {

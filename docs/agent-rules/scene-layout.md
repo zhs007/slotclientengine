@@ -11,7 +11,7 @@
 
 ## Mode、variant 与稳定节点
 
-- editor 拥有通用 game mode draft，以及 mode 到独立 per-variant background、symbols package 和 award popup 的显式 binding；普通 Spine popup 使用独立显式注册，不伪装成 mode award binding。
+- editor 拥有通用 game mode draft，以及 mode 到独立 per-variant background、symbols package 和 award popup 的显式 binding；普通 Spine popup 可绑定到一条有向 Spine transition 或独立显式注册，不伪装成 mode award binding。
 - 新 mode 的 background 默认未绑定；每个 variant 明确选择，不继承另一 mode 的 editable node。
 - background node id 按 mode/variant 稳定生成，不从资源名产生 `-2/-3` identity。
 - 相同 logical resource 跨 mode 仍使用独立 node/placement；图片复用已加载 texture，稳定 Spine player 在 mode 切换时保留，不释放/重建。
@@ -30,7 +30,7 @@
 
 ## Directed transition
 
-- transition 是独立有向边，只支持 strict Spine overlay 或 video-blackout union。
+- transition 是独立有向边，只支持 strict Spine overlay 或 video-blackout union。Spine edge 可选 `preludePopup`，必须引用普通 Spine Popup；video edge 显式禁止 prelude。
 - editor 只自动准备当前 stable source 到所选 target 的一条直接边。
 - 缺显式边时不得瞬切、反向复用、自动寻路或回退旧 node state machine。
 - Spine/MP4 使用统一 state-switch action 和中文阶段提示。
@@ -46,7 +46,7 @@
 - transition overlay 使用固定顶层 `scene-transition-overlay`；video blackout 是 viewport-space runtime object，不是 CSS overlay。
 - runtime 在切换前准备完整 target scene；只在 exact Spine event occurrence 或 video media-time `fadeStart` 边界原子切换 background、reel 和 displayed mode。
 - video 不使用 wall-clock fade，不自动静音，也不在 `play()` 拒绝时 fallback。
-- once/ended settle、iOS gesture-safe prepare、trusted-click synchronous play 和当前 mode popup lifecycle 属于 rendercore。
+- once/ended settle、iOS gesture-safe prepare、trusted-click synchronous play 和当前 mode popup lifecycle 属于 rendercore。带 prelude 的 Spine edge 必须先完整完成 popup start→loop→end，再启动已准备 overlay；source mode 在 popup complete 前保持不变。
 - shared code 不硬编码 BaseGame/FreeGame/BonusGame、BG/FG、animation/event 名或业务字段。
 
 ## Resource lifecycle
@@ -64,7 +64,7 @@
 
 - `apps/gamelayoutpkgcli` 只消费当前 filename-key mapped production ZIP；legacy direct-path、mixed package、坏 map、缺失 dependency 和 orphan payload 必须在优化前失败。
 - WebP 后处理必须结构化改写 layout 与 nested owner manifest/VNI 的 typed 图片引用，重新生成完整 content-addressed payload 和 `assets.map.json`，再用 production package parser 复验；不得扫描任意 JSON 字符串猜路径。
-- 资源分组从完整 typed dependency graph 推导，不硬编码 BaseGame、FreeGame、Symbols 或 BigWin 文件名。transition 归属 source mode；initial 集合包含 shared、initial mode、其 symbols 和从 initial mode 发出的 transition。
+- 资源分组从完整 typed dependency graph 推导，不硬编码 BaseGame、FreeGame、Symbols 或 BigWin 文件名。transition 归属 source mode并包含其 prelude Popup closure；initial 集合包含 shared、initial mode、其 symbols 和从 initial mode 发出的 transition。未被 mode、transition 或显式 programmatic binding 引用的 package 不得进入 production ZIP/group。
 - 没有显式 mode ownership 的 runtime resource 归 shared/initial；共享 Spine atlas/texture leaf 可去重，但 leaf 不反向拥有或带入未声明的 sibling skeleton root。
 - 每个 group 同时保存完整 `requiredAssets` 与相对 initial 的 `incrementalAssets`；完整闭包允许重叠，但全部优化资源必须至少被一个 group 覆盖。
 - versioned asset-groups JSON 是 ZIP 外的独立交付物，不进入 production ZIP；它可供后续合图或 loading 优化消费，但 CLI 本身不修改 runtime loading 行为。

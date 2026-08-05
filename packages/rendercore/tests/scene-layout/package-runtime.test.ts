@@ -903,6 +903,7 @@ describe("scene layout package runtime", () => {
         transition: null,
         preparedTargetMode: null,
         transitionKind: null,
+        activePreludePopup: null,
         mediaTimeSeconds: null,
         mediaDurationSeconds: null,
         fadeProgress: null,

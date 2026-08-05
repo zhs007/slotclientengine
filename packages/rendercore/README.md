@@ -11,7 +11,7 @@ resource，不要求内层第二份 map。无 map 的合法 legacy direct path �
 
 ## Popup API
 
-`@slotclientengine/rendercore/popup` 提供 strict `award-celebration | spine` popup parser、传递资源闭包、files/CDN loader 与 snapshot。普通 Spine popup 使用独立 start→loop→end 状态机：点击请求可提前锁存，只在 loop 完整播放到边界后进入 end。获奖庆祝继续支持 image/VNI/official Spine/image-string layer、五档 BigInt threshold sequence 与金额格式。
+`@slotclientengine/rendercore/popup` 提供 strict `award-celebration | spine` popup parser、typed filename-key namespace rewrite、传递资源闭包、files/CDN loader 与 snapshot。普通 Spine popup 使用独立 start→loop→end 状态机：点击请求可提前锁存，只在 loop 完整播放到边界后进入 end。Scene Layout 的 Spine transition 可用 `preludePopup` 复用该 player，并在 complete 后才启动 overlay；video transition 显式禁止 prelude。获奖庆祝继续支持 image/VNI/official Spine/image-string layer、五档 BigInt threshold sequence 与金额格式。
 
 ## Image String API
 

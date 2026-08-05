@@ -80,23 +80,30 @@ export function createSceneLayoutAssetGroups(options: {
       requiredAssets: nodeClosure(nodes, options.files),
     });
   }
-  for (const transition of gameModes.transitions ?? [])
+  for (const transition of gameModes.transitions ?? []) {
+    const preludePopup =
+      "preludePopup" in transition ? transition.preludePopup : undefined;
+    const preludeAssets = preludePopup
+      ? popupClosure(preludePopup, options.manifest, options.files)
+      : [];
     provisional.push({
       id: `transition:${transition.from}->${transition.to}`,
       kind: "transition",
       ownerMode: transition.from,
       from: transition.from,
       to: transition.to,
-      requiredAssets: sortUnique(
-        transition.overlay.resource.kind === "video"
+      requiredAssets: sortUnique([
+        ...(transition.overlay.resource.kind === "video"
           ? [transition.overlay.resource.path]
           : [
               transition.overlay.resource.skeleton,
               transition.overlay.resource.atlas,
               ...Object.values(transition.overlay.resource.textures),
-            ],
-      ),
+            ]),
+        ...preludeAssets,
+      ]),
     });
+  }
 
   for (const binding of symbolBindings(options.manifest, options.files)) {
     const nested = parseSymbolPackageManifest(
@@ -141,6 +148,15 @@ export function createSceneLayoutAssetGroups(options: {
             id: `spine-popup:${popupId}`,
             kind: "spine-popup" as const,
             popupId,
+            usedByTransitions: sortUnique(
+              (gameModes.transitions ?? [])
+                .filter(
+                  (transition) =>
+                    "preludePopup" in transition &&
+                    transition.preludePopup === popupId,
+                )
+                .map((transition) => `${transition.from}->${transition.to}`),
+            ),
             requiredAssets,
           }
         : {
@@ -168,7 +184,11 @@ export function createSceneLayoutAssetGroups(options: {
         group.usedByModes.includes(gameModes.initialMode)) ||
       (group.kind === "award-celebration" &&
         group.usedByModes.includes(gameModes.initialMode)) ||
-      group.kind === "spine-popup";
+      (group.kind === "spine-popup" &&
+        (group.usedByTransitions.length === 0 ||
+          group.usedByTransitions.some((edge) =>
+            edge.startsWith(`${gameModes.initialMode}->`),
+          )));
     if (include) for (const key of group.requiredAssets) initial.add(key);
   }
   const initialAssets = sortUnique([...initial]);
@@ -444,6 +464,22 @@ function symbolBindings(
   }));
 }
 
+function popupClosure(
+  popupId: string,
+  manifest: SceneLayoutManifestV1,
+  files: ReadonlyMap<string, Uint8Array>,
+): readonly string[] {
+  const binding = manifest.popups?.[popupId];
+  if (!binding) throw new Error(`转场引用了未知 Popup binding：${popupId}`);
+  const nested = parsePopupManifest(parseRequiredJson(files, binding.manifest));
+  if (nested.id !== popupId || nested.type !== "spine")
+    throw new Error(`转场 Popup ${popupId} 必须是 id 一致的 spine package。`);
+  return sortUnique([
+    binding.manifest,
+    ...collectMappedPopupAssetKeys({ manifest: nested, files }),
+  ]);
+}
+
 function validateGroup(
   value: unknown,
   index: number,
@@ -467,7 +503,7 @@ function validateGroup(
               : kind === "award-celebration"
                 ? ["popupId", "usedByModes"]
                 : kind === "spine-popup"
-                  ? ["popupId"]
+                  ? ["popupId", "usedByTransitions"]
                   : null;
   if (!extras) throw new Error(`groups[${index}].kind 无效。`);
   exactKeys(group, [...common, ...extras], `groups[${index}]`);
@@ -504,6 +540,7 @@ function validateGroup(
     stringArray(group.usedByModes, `${id}.usedByModes`);
   } else {
     nonEmptyString(group.popupId, `${id}.popupId`);
+    stringArray(group.usedByTransitions, `${id}.usedByTransitions`);
   }
   return group as unknown as AssetGroupRecord;
 }

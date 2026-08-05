@@ -172,6 +172,7 @@ export interface SceneLayoutGameMode {
 export interface SceneLayoutSpineGameModeTransition {
   readonly from: string;
   readonly to: string;
+  readonly preludePopup?: string;
   readonly overlay: {
     readonly resource: {
       readonly kind: "spine";
@@ -437,10 +438,11 @@ export interface SceneLayoutGameModeSnapshot {
   readonly displayedMode: string;
   readonly targetMode: string | null;
   readonly phase: "stable" | "transitioning";
-  readonly transitionPhase: "before-switch" | "after-switch" | null;
+  readonly transitionPhase: "popup" | "before-switch" | "after-switch" | null;
   readonly transition: { readonly from: string; readonly to: string } | null;
   readonly preparedTargetMode: string | null;
   readonly transitionKind: "spine" | "video" | null;
+  readonly activePreludePopup: string | null;
   readonly mediaTimeSeconds: number | null;
   readonly mediaDurationSeconds: number | null;
   readonly fadeProgress: number | null;
@@ -554,6 +556,10 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
     modeId: string,
     options?: SceneLayoutGameModeRequestOptions,
   ): Promise<void>;
+  /** Requests the active transition prelude to finish at its production boundary. */
+  requestDismissGameModePrelude(): void;
+  /** Cancels an active transition prelude and keeps the stable source mode. */
+  dismissGameModePreludeImmediately(): void;
   /** Starts the award-celebration popup explicitly bound to the current stable mode. */
   startAwardCelebrationForCurrentMode(input: {
     readonly betAmountRaw: number;

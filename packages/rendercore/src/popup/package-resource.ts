@@ -421,6 +421,121 @@ export function flattenPopupPackageFiles(options: {
   return { manifest: flattenedManifest, files };
 }
 
+export function namespaceMappedPopupPackageFiles(options: {
+  readonly manifest: unknown;
+  readonly files: ReadonlyMap<string, Uint8Array>;
+  readonly keyPrefix: string;
+}): {
+  readonly manifest: PopupManifestV1;
+  readonly files: ReadonlyMap<string, Uint8Array>;
+  readonly rootKey: string;
+} {
+  const manifest = parsePopupManifest(options.manifest);
+  collectPopupPackagePaths({ manifest, files: options.files });
+  const sourcePaths = collectMappedPopupAssetKeys({
+    manifest,
+    files: options.files,
+  });
+  if (sourcePaths.some((path) => path.includes("/")))
+    throw new Error("Popup namespace 只接受 mapped filename-key package。");
+  const mapping = new Map(
+    sourcePaths.map(
+      (path) =>
+        [path, `${options.keyPrefix}-${basenameFromSourcePath(path)}`] as const,
+    ),
+  );
+  assertNoEditorAssetKeyAliases([...mapping.values()]);
+  const resources: Record<string, PopupResourceSpec> = {};
+  const resourceKeys = new Map<string, string>();
+  for (const [id, spec] of Object.entries(manifest.resources)) {
+    const rewritten = rewritePopupResourceSpec(spec, mapping);
+    const rootKey = popupResourceRoot(rewritten);
+    if (resources[rootKey])
+      throw new Error(`popup resource root filename key 冲突：${rootKey}`);
+    resources[rootKey] = rewritten;
+    resourceKeys.set(id, rootKey);
+  }
+  const rewriteLayers = <T extends { readonly layers: readonly PopupLayer[] }>(
+    tier: T,
+  ): T =>
+    ({
+      ...tier,
+      layers: tier.layers.map((layer) => ({
+        ...layer,
+        resource: requiredPopupResourceKey(resourceKeys, layer.resource),
+      })),
+    }) as T;
+  const rewrittenManifest = parsePopupManifest(
+    manifest.type === "spine"
+      ? {
+          ...manifest,
+          resources,
+          spine: {
+            ...manifest.spine,
+            resource: requiredPopupResourceKey(
+              resourceKeys,
+              manifest.spine.resource,
+            ),
+          },
+        }
+      : {
+          ...manifest,
+          resources,
+          awardCelebration: {
+            base: rewriteLayers(manifest.awardCelebration.base),
+            standard: rewriteLayers(manifest.awardCelebration.standard),
+            celebrationTiers:
+              manifest.awardCelebration.celebrationTiers.map(rewriteLayers),
+          },
+        },
+  );
+  const rootKey = `${options.keyPrefix}-popup.manifest.json`;
+  const files = new Map<string, Uint8Array>([
+    [rootKey, encodeStableJson(rewrittenManifest)],
+  ]);
+  for (const [sourcePath, target] of mapping) {
+    const bytes = requireBytes(options.files, sourcePath);
+    let rewritten = bytes;
+    const imageString = Object.values(manifest.resources).find(
+      (resource) =>
+        resource.kind === "image-string" && resource.manifest === sourcePath,
+    );
+    const vni = Object.values(manifest.resources).find(
+      (resource) => resource.kind === "vni" && resource.project === sourcePath,
+    );
+    const spine = Object.values(manifest.resources).find(
+      (resource) => resource.kind === "spine" && resource.atlas === sourcePath,
+    );
+    if (imageString) {
+      const nested = structuredClone(
+        parseImageStringManifest(parseJson(bytes, sourcePath)),
+      ) as { glyphs: Record<string, { path: string }> };
+      for (const glyph of Object.values(nested.glyphs))
+        glyph.path = requirePopupMapping(mapping, glyph.path);
+      rewritten = encodeStableJson(nested);
+    } else if (vni) {
+      rewritten = encodeStableJson(
+        rewriteVNIProjectAssetPaths(parseJson(bytes, sourcePath), (path) =>
+          requirePopupMapping(mapping, path),
+        ),
+      );
+    } else if (spine) {
+      rewritten = new TextEncoder().encode(
+        rewritePopupAtlas(decode(bytes, sourcePath), sourcePath, mapping),
+      );
+    }
+    putPopupFile(files, target, rewritten);
+  }
+  const validationFiles = new Map(files);
+  validationFiles.set(ROOT, validationFiles.get(rootKey)!);
+  validationFiles.delete(rootKey);
+  collectPopupPackagePaths({
+    manifest: rewrittenManifest,
+    files: validationFiles,
+  });
+  return { manifest: rewrittenManifest, files, rootKey };
+}
+
 export function collectMappedPopupAssetKeys(options: {
   readonly manifest: unknown;
   readonly files: ReadonlyMap<string, Uint8Array>;

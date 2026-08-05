@@ -109,6 +109,7 @@ export type AssetGroupRecord =
       readonly id: string;
       readonly kind: "spine-popup";
       readonly popupId: string;
+      readonly usedByTransitions: readonly string[];
       readonly requiredAssets: readonly string[];
       readonly incrementalAssets: readonly string[];
     };

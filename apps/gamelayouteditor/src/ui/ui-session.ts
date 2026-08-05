@@ -81,7 +81,7 @@ export type PreviewTransitionUiState =
       readonly from: string;
       readonly to: string;
       readonly kind: PreviewTransitionKind;
-      readonly boundary: "before-switch" | "after-switch";
+      readonly boundary: "popup" | "before-switch" | "after-switch";
     }
   | { readonly phase: "complete"; readonly stableMode: string }
   | { readonly phase: "error"; readonly message: string };

@@ -17,6 +17,7 @@ import {
   deleteGameModeTransition,
   setInitialGameMode,
   setGameModeTransitionKind,
+  setGameModeTransitionPreludePopup,
   setGameModeVideoTransitionFadeOut,
   setGameModeVideoTransitionResource,
   setPopupPlacement,
@@ -24,6 +25,17 @@ import {
 } from "../src/model/game-mode-commands.js";
 
 describe("game mode and popup dependency commands", () => {
+  it("keeps different package ids in independent filename-key namespaces", () => {
+    const project = createNewEditorProject("maximized-focus");
+    importPopupDependency(project, popup("base-win", 1));
+    importPopupDependency(project, popup("free-win", 2));
+    expect(project.assets.get("base-win-popup.manifest.json")?.[0]).toBe(1);
+    expect(project.assets.get("free-win-popup.manifest.json")?.[0]).toBe(2);
+    replacePopupDependency(project, "base-win", popup("base-win", 3));
+    expect(project.assets.get("base-win-popup.manifest.json")?.[0]).toBe(3);
+    expect(project.assets.get("free-win-popup.manifest.json")?.[0]).toBe(2);
+  });
+
   it("adds, renames, selects and deletes generic modes atomically", () => {
     const project = createNewEditorProject("maximized-focus");
     addGameMode(project, "FreeGame");
@@ -77,7 +89,7 @@ describe("game mode and popup dependency commands", () => {
     expect(project.popupDependencies.get("celebration")!.placements).toBe(
       placement,
     );
-    expect(project.assets.get("popup.manifest.json")![0]).toBe(9);
+    expect(project.assets.get("celebration-popup.manifest.json")![0]).toBe(9);
     expect(() =>
       replacePopupDependency(project, "celebration", popup("other", 2)),
     ).toThrow(/必须保持/);
@@ -111,7 +123,8 @@ describe("game mode and popup dependency commands", () => {
     const project = createNewEditorProject("maximized-focus");
     const imported = {
       manifest: { id: "free-game", type: "spine" } as never,
-      files: new Map([["popup.manifest.json", new Uint8Array([1])]]),
+      rootKey: "free-game-popup.manifest.json",
+      files: new Map([["free-game-popup.manifest.json", new Uint8Array([1])]]),
     };
     importPopupDependency(project, imported);
     expect(project.registeredSpinePopupIds.size).toBe(0);
@@ -125,6 +138,25 @@ describe("game mode and popup dependency commands", () => {
     );
     setSpinePopupRegistered(project, "free-game", false);
     deletePopupDependency(project, "free-game");
+  });
+
+  it("binds a Spine popup to one directed Spine transition", () => {
+    const project = createNewEditorProject("maximized-focus");
+    addGameMode(project, "FreeGame");
+    createGameModeTransition(project, "BaseGame", "FreeGame");
+    const transition = project.gameModes.transitions[0]!;
+    importPopupDependency(project, {
+      manifest: { id: "free-entry", type: "spine" } as never,
+      rootKey: "free-entry-popup.manifest.json",
+      files: new Map([["free-entry-popup.manifest.json", new Uint8Array([1])]]),
+    });
+    setGameModeTransitionPreludePopup(project, transition, "free-entry");
+    expect(transition).toMatchObject({ preludePopupId: "free-entry" });
+    expect(() => deletePopupDependency(project, "free-entry")).toThrow(
+      /BaseGame -> FreeGame/,
+    );
+    setGameModeTransitionPreludePopup(project, transition, null);
+    deletePopupDependency(project, "free-entry");
   });
 
   it("keeps stable modes state-free and rewrites directed transition references", () => {
@@ -355,7 +387,8 @@ describe("game mode and popup dependency commands", () => {
 function popup(id: string, marker: number) {
   return {
     manifest: { id, type: "award-celebration" } as never,
-    files: new Map([["popup.manifest.json", new Uint8Array([marker])]]),
+    rootKey: `${id}-popup.manifest.json`,
+    files: new Map([[`${id}-popup.manifest.json`, new Uint8Array([marker])]]),
   };
 }
 
@@ -364,6 +397,7 @@ function symbolPackage(id: string, marker: number) {
     resource: {
       packageManifest: { id },
     } as never,
-    files: new Map([["symbols.package.json", new Uint8Array([marker])]]),
+    rootKey: `${id}-symbols.package.json`,
+    files: new Map([[`${id}-symbols.package.json`, new Uint8Array([marker])]]),
   };
 }

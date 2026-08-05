@@ -9,14 +9,17 @@ import {
   collectPopupPackagePaths,
   createPopupPackageResource,
   flattenPopupPackageFiles,
+  namespaceMappedPopupPackageFiles,
   parsePopupManifest,
   resolvePopupPackageFiles,
 } from "@slotclientengine/rendercore/popup";
 import { LAYOUT_ZIP_LIMITS } from "./imported-layout-zip.js";
+import { packageKeyPrefix } from "./package-key-prefix.js";
 
 export interface ImportedPopupPackage {
   readonly manifest: ReturnType<typeof parsePopupManifest>;
   readonly files: ReadonlyMap<string, Uint8Array>;
+  readonly rootKey: string;
 }
 
 export async function importPopupPackageZip(
@@ -54,12 +57,17 @@ export async function importPopupPackageZip(
   });
   await resource.destroy();
   const flattened = flattenPopupPackageFiles({ manifest, files: virtual });
+  const namespaced = namespaceMappedPopupPackageFiles({
+    ...flattened,
+    keyPrefix: packageKeyPrefix(flattened.manifest.id),
+  });
   return Object.freeze({
-    manifest: flattened.manifest,
+    manifest: namespaced.manifest,
     files: new Map(
-      [...flattened.files].map(
+      [...namespaced.files].map(
         ([path, payload]) => [path, payload.slice()] as const,
       ),
     ),
+    rootKey: namespaced.rootKey,
   });
 }

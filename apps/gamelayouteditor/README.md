@@ -7,7 +7,7 @@ vendor；内部 VNI 的 segmented/once playback、最后一帧保持和 dismiss 
 Layout Editor 复制或改写。
 普通 Spine Popup 导入后需在 Popup 工作区显式注册；注册后可配置 placement、预览 start/loop/end 并随 layout vendor。
 
-SymbolsEditor ZIP 同样作为自包含、只读的 symbol 状态机 dependency。Layout Editor 只选择
+SymbolsEditor ZIP 同样作为自包含、只读的 symbol 状态机 dependency；Symbols 与 Popup library 都允许导入多个不同 package id，同 id 再上传进入替换并保留现有 mode/transition binding。Layout Editor 只选择
 package、reelSet、renderMode，并使用 rendercore 的公开 display/state capability 做校验和预览；
 symbol 内部图片、Spine/VNI animation、state layer、value/ImgNumber 和 cascade 只能回
 SymbolsEditor 编辑。
@@ -24,7 +24,7 @@ layout 大纲选中普通图层后，preview 使用红框和半透明红色斜�
 
 main reel 只提供横竖屏 `x/y` placement，不提供整体缩放。双背景适配通过美术调整背景素材宽度、art size 和 reel 位置完成，避免横竖屏分别缩放转轮造成额外布局差异。
 
-原始文件上传在任何资源解析前先整批校验 filename：只允许 ASCII 字母、数字、点、下划线和连字符，并统一转为小写。任一文件包含中文、空格、路径分隔符或其它非法字符，或多个文件小写化后重名，整批上传原子拒绝。合法同名不同 bytes 默认覆盖，引用不变；不生成 `-2/-3`、不建立 `dependencies/**` namespace。完整 Editor ZIP 则在验证 map/hash/size 后统一迁移旧 logical filename key：先做 Unicode NFKC，ASCII 合法字符转小写，空白和 ASCII 标点转 `-`，非 ASCII 字符按 `u<Unicode 十六进制>` 展开，连续分隔符合并并清理首尾；扩展名同样小写且必须能归一为字母数字。归一后不同 bytes 重名时按稳定源路径顺序添加 `-2/-3`，相同 bytes 复用同一 key；layout 及已识别的 VNI、image-string、Symbols、Popup JSON 引用同步结构化改写，业务 id 和 atlas page logical name 不变。Symbols/Popup dependency 只保存业务 package id、root key、closure keys 与 placement；bytes 只存在全局 asset workspace。
+原始文件上传在任何资源解析前先整批校验 filename：只允许 ASCII 字母、数字、点、下划线和连字符，并统一转为小写。任一文件包含中文、空格、路径分隔符或其它非法字符，或多个文件小写化后重名，整批上传原子拒绝。普通资源合法同名不同 bytes 默认覆盖，引用不变；不建立 `dependencies/**` 目录。Symbols/Popup ZIP 先按 standalone schema 校验，再以 manifest id 为稳定前缀物化 root/leaf filename keys，使多个包在同一扁平 workspace 并存；相同物理 bytes 最终仍由 `assets.map.json` 的 SHA-256 payload 去重。同 id 替换只覆盖该 owner 的独占 keys，并在提交后回收无其它 owner 引用的旧 keys。完整 Editor ZIP 则在验证 map/hash/size 后统一迁移旧 logical filename key：先做 Unicode NFKC，ASCII 合法字符转小写，空白和 ASCII 标点转 `-`，非 ASCII 字符按 `u<Unicode 十六进制>` 展开，连续分隔符合并并清理首尾；扩展名同样小写且必须能归一为字母数字。归一后不同 bytes 重名时按稳定源路径顺序添加 `-2/-3`，相同 bytes 复用同一 key；layout 及已识别的 VNI、image-string、Symbols、Popup JSON 引用同步结构化改写，业务 id 和 atlas page logical name 不变。Symbols/Popup dependency 只保存业务 package id、root key、closure keys 与 placement；bytes 只存在全局 asset workspace。
 
 资源列表可把任一已识别的 image、Spine、VNI、ImgNumber 或 MP4 root 设为“程序资源”。程序键默认取 root filename 去扩展名并转小写；手工输入也会 trim 并转小写。最终键必须唯一，以字母或数字开头，且只允许字母、数字、点、下划线和连字符。该资源即使没有 Scene 引用也会写入 production ZIP。取消绑定后，若没有其它引用，它恢复为不会导出。程序键和 typed resource spec 保存在 `layout.manifest.json` 的 `runtimeResources`，ZIP 重新导入或图片优化后仍保持不变。
 
@@ -57,6 +57,8 @@ Spine atlas 的 page 是 atlas 内部逻辑名，texture map 的 value 才是全
 - 一个 `assets/<完整 SHA-256>.<ext>` payload 区。
 
 layout、VNI、image-string、Symbols、Popup 和程序资源的全部配置引用均为 filename keys；production export 只写传递可达 exact closure，不写 nested dependency 目录或 unused key。Spine 只要某个 JSON 根被 Scene 或程序键引用，就导出该根及其 atlas/贴图闭包；共享 leaf 只写一份，同批未引用的 sibling JSON 不导出。VNI project 只结构化改写 schema 声明的 asset path。重新导入、Blob preview、package resource 与 CDN URL loader 共享 rendercore map resolver。无 map 的合法 legacy package 继续按 direct-path 合同加载；Editor 导入后升级为新格式。
+
+每个 mode 可独立选择 Symbols 与 award-celebration Popup。每条 Spine 有向转场还可选择一个普通 Spine `preludePopup`；未选时直接播放 overlay，已选时保持 source mode，复用 Popup 的 start→loop→end 状态机，用户点击后等待完整 end 完成再启动 overlay。video overlay 不允许配置 prelude，以保持有声媒体 trusted-click 合同。
 
 物理 payload 始终可以是 `assets/<SHA-256>.*`，但它只用于内容寻址；重新导入后的图层名称继续来自 `SceneLayoutNode.id`，资源列表继续显示 logical filename key。
 

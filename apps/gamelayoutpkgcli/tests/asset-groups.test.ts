@@ -44,6 +44,7 @@ describe("asset-groups v1 parser", () => {
           id: "spine-popup:free-game",
           kind: "spine-popup",
           popupId: "free-game",
+          usedByTransitions: [],
           requiredAssets: ["b.webp"],
           incrementalAssets: [],
         },

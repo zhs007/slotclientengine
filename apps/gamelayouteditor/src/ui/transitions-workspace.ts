@@ -18,7 +18,7 @@ export function transitionSnapshotText(
   snapshot: SceneLayoutGameModeSnapshot | null,
 ): string {
   if (!snapshot) return "preview 未就绪";
-  return `phase=${snapshot.phase} · stable=${snapshot.stableMode} · displayed=${snapshot.displayedMode} · target=${snapshot.targetMode ?? "none"} · prepared=${snapshot.preparedTargetMode ?? "none"} · kind=${snapshot.transitionKind ?? "none"} · boundary=${snapshot.transitionPhase ?? "stable"} · media=${snapshot.mediaTimeSeconds?.toFixed(3) ?? "-"}/${snapshot.mediaDurationSeconds?.toFixed(3) ?? "-"} · fade=${snapshot.fadeProgress?.toFixed(3) ?? "-"}`;
+  return `phase=${snapshot.phase} · stable=${snapshot.stableMode} · displayed=${snapshot.displayedMode} · target=${snapshot.targetMode ?? "none"} · prepared=${snapshot.preparedTargetMode ?? "none"} · kind=${snapshot.transitionKind ?? "none"} · boundary=${snapshot.transitionPhase ?? "stable"} · prelude=${snapshot.activePreludePopup ?? "none"} · media=${snapshot.mediaTimeSeconds?.toFixed(3) ?? "-"}/${snapshot.mediaDurationSeconds?.toFixed(3) ?? "-"} · fade=${snapshot.fadeProgress?.toFixed(3) ?? "-"}`;
 }
 
 export function updateTransitionRuntimeUi(
@@ -39,6 +39,10 @@ export function updateTransitionRuntimeUi(
     .forEach((control) => {
       control.disabled = true;
     });
+  const dismiss = root.querySelector<HTMLButtonElement>(
+    "[data-dismiss-transition-prelude]",
+  );
+  if (dismiss) dismiss.disabled = snapshot?.transitionPhase !== "popup";
 }
 
 export function transitionsWorkspaceMarkup(options: {
@@ -131,7 +135,7 @@ function transitionInspector(
   return `<div class="inspector-inner"><div class="inspector-heading"><span>Scene Transition Inspector</span><h2>${escapeHtml(transition.fromModeId)} → ${escapeHtml(transition.toModeId)}</h2></div>
     <section class="inspector-section"><h3>Presentation</h3>${kindSelector}<p class="hint">切换类型会原子清除另一分支的全部不兼容字段。</p></section>
     ${body}
-    <section class="inspector-section"><div class="button-row"><button type="button" class="primary" data-request-transition ${canSwitch ? "" : "disabled"}>切换到该状态</button><button type="button" class="danger" data-delete-transition>删除转场</button></div><output data-transition-runtime-status>${escapeHtml(transitionUiStateText(uiState, snapshot))}</output><details><summary>runtime snapshot</summary><code>${snapshotMarkup(snapshot)}</code></details></section>
+    <section class="inspector-section"><div class="button-row"><button type="button" class="primary" data-request-transition ${canSwitch ? "" : "disabled"}>切换到该状态</button><button type="button" data-dismiss-transition-prelude ${snapshot?.transitionPhase === "popup" ? "" : "disabled"}>结束转场前弹窗</button><button type="button" class="danger" data-delete-transition>删除转场</button></div><output data-transition-runtime-status>${escapeHtml(transitionUiStateText(uiState, snapshot))}</output><details><summary>runtime snapshot</summary><code>${snapshotMarkup(snapshot)}</code></details></section>
   </div>`;
 }
 
@@ -143,6 +147,13 @@ function spineInspector(
   const resources = [...project.resources.values()].filter(
     (candidate) => candidate.kind === "spine",
   );
+  const popupOptions = [...project.popupDependencies.values()]
+    .filter((dependency) => dependency.type === "spine")
+    .map(
+      (dependency) =>
+        `<option value="${escapeHtml(dependency.id)}" ${dependency.id === transition.preludePopupId ? "selected" : ""}>${escapeHtml(dependency.id)}</option>`,
+    )
+    .join("");
   const animationOptions =
     resource?.kind === "spine"
       ? resource.animationNames
@@ -176,7 +187,7 @@ function spineInspector(
       return `<fieldset><legend>${variant}</legend><div class="field-grid">${numberField("x", `transition.${variant}.x`, placement.x)}${numberField("y", `transition.${variant}.y`, placement.y)}${numberField("scale", `transition.${variant}.scale`, placement.scale, 0.01)}</div></fieldset>`;
     })
     .join("");
-  return `<section class="inspector-section"><h3>Official Spine once</h3><label>Spine resource<select data-transition-resource><option value="">必须明确选择</option>${resources.map((candidate) => `<option value="${escapeHtml(candidate.id)}" ${candidate.id === transition.resourceId ? "selected" : ""}>${escapeHtml(candidate.id)}</option>`).join("")}</select></label><label>once animation<select data-transition-animation ${resource?.kind === "spine" ? "" : "disabled"}><option value="">必须明确选择</option>${animationOptions}</select></label><label>switch event<select data-transition-event ${transition.animation ? "" : "disabled"}><option value="">必须明确选择</option>${uniqueEvents.map(([name]) => `<option value="${escapeHtml(name)}" ${name === transition.switchEvent ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select></label>${duplicateDiagnostics}<p class="hint">event 边界原子提交完整目标 scene。</p></section><section class="inspector-section"><h3>Art-space Placement</h3>${placements}</section>`;
+  return `<section class="inspector-section"><h3>转场前弹窗（可选）</h3><label>普通 Spine Popup<select data-transition-prelude-popup><option value="">无，直接转场</option>${popupOptions}</select></label><p class="hint">保持当前状态显示；用户点击后等待 loop 边界与 end 完整结束，再播放转场动画。</p></section><section class="inspector-section"><h3>Official Spine once</h3><label>Spine resource<select data-transition-resource><option value="">必须明确选择</option>${resources.map((candidate) => `<option value="${escapeHtml(candidate.id)}" ${candidate.id === transition.resourceId ? "selected" : ""}>${escapeHtml(candidate.id)}</option>`).join("")}</select></label><label>once animation<select data-transition-animation ${resource?.kind === "spine" ? "" : "disabled"}><option value="">必须明确选择</option>${animationOptions}</select></label><label>switch event<select data-transition-event ${transition.animation ? "" : "disabled"}><option value="">必须明确选择</option>${uniqueEvents.map(([name]) => `<option value="${escapeHtml(name)}" ${name === transition.switchEvent ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select></label>${duplicateDiagnostics}<p class="hint">event 边界原子提交完整目标 scene。</p></section><section class="inspector-section"><h3>Art-space Placement</h3>${placements}</section>`;
 }
 
 function videoInspector(
@@ -221,9 +232,11 @@ export function transitionUiStateText(
       ? state.boundary === "before-switch"
         ? "MP4 播放中，等待 fadeStart"
         : "已切换目标场景，MP4 收尾中"
-      : state.boundary === "before-switch"
-        ? "转场播放中，尚未切换场景"
-        : "已切换目标场景，等待 once 完成";
+      : state.boundary === "popup"
+        ? `转场前弹窗 ${snapshot?.activePreludePopup ?? ""} 播放中，等待用户结束`
+        : state.boundary === "before-switch"
+          ? "转场播放中，尚未切换场景"
+          : "已切换目标场景，等待 once 完成";
   if (state.kind !== "video") return base;
   const current = snapshot?.mediaTimeSeconds;
   const duration = snapshot?.mediaDurationSeconds;

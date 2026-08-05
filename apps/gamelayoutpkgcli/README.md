@@ -77,12 +77,12 @@ ZIP 与 JSON 作为一对提交，第二个文件提交失败时会回滚第一�
   还需增加的部分；
 - `optimization`：cwebp 版本、质量、转换数量和 ZIP 前后体积。
 
-分组类型包括 `shared`、`runtime-resource`、`mode`、`transition`、`symbols` 和
-`award-celebration`。每个 manifest `runtimeResources` 程序键拥有独立的
+分组类型包括 `shared`、`runtime-resource`、`mode`、`transition`、`symbols`、
+`award-celebration` 和 `spine-popup`。每个 manifest `runtimeResources` 程序键拥有独立的
 `runtime-resource:<key>` 增量闭包，不进入 initial/shared。模式名不硬编码为 BaseGame/FreeGame。转场由 source mode
 拥有：`A -> B` 属于 A，`B -> A` 属于 B。初始集合包含 shared、initial mode、
-initial mode 使用的 symbols，以及 initial mode 发出的转场；Popup 保持独立 group，
-供业务按触发时机决定是否预加载。
+initial mode 使用的 symbols、award popup，以及 initial mode 发出的转场及其 prelude closure；
+没有 transition owner 的 programmatic Spine Popup 进入 initial，非 initial source 的 transition-only Popup 留在增量组。
 
 资源允许同时出现在多个 `requiredAssets` 闭包中，但每个优化资源必须至少被一个 group
 覆盖。所有列表与 JSON key 都确定性排序；相同输入和相同 cwebp 输出会得到 byte-equal
@@ -96,7 +96,7 @@ dependency、未知资源合同、WebP 目标 key 冲突、cwebp 不可用/失�
 路径已存在。
 
 本工具只结构化改写已知 manifest/VNI 字段，不扫描 JSON 字符串猜测资源路径，也不根据
-文件名推断 BaseGame、FreeGame、Symbols 或 BigWin。
+文件名推断 BaseGame、FreeGame、Symbols 或 BigWin。Spine transition 的分组包含其可选 `preludePopup` 精确闭包；`spine-popup.usedByTransitions` 记录有向边，只有 initial mode 发出的边或显式 programmatic popup 才进入 initial assets。
 
 ## 验收
 

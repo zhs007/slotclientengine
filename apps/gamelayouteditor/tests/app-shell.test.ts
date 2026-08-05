@@ -36,6 +36,7 @@ const previewSpies = vi.hoisted(() => ({
   ),
   cancelPreparedGameModeTransition: vi.fn(),
   requestGameMode: vi.fn(async (): Promise<void> => undefined),
+  requestDismissGameModePrelude: vi.fn(),
   getGameModeSnapshot: vi.fn((): any => null),
   getActiveAwardCelebrationSnapshot: vi.fn((): any => null),
   destroy: vi.fn(),
@@ -141,6 +142,7 @@ vi.mock("../src/preview/layout-preview.js", () => ({
     cancelPreparedGameModeTransition =
       previewSpies.cancelPreparedGameModeTransition;
     requestGameMode = previewSpies.requestGameMode;
+    requestDismissGameModePrelude = previewSpies.requestDismissGameModePrelude;
     getGameModeSnapshot = previewSpies.getGameModeSnapshot;
     getActiveAwardCelebrationSnapshot =
       previewSpies.getActiveAwardCelebrationSnapshot;
@@ -453,7 +455,10 @@ describe("GameLayoutEditorApp workspace", () => {
   it("imports, places, previews and clears an award popup dependency", async () => {
     ioSpies.importPopupPackageZip.mockReturnValue({
       manifest: { id: "fixture-popup", type: "award-celebration" },
-      files: new Map([["popup.manifest.json", new Uint8Array([1])]]),
+      rootKey: "fixture-popup-popup.manifest.json",
+      files: new Map([
+        ["fixture-popup-popup.manifest.json", new Uint8Array([1])],
+      ]),
     });
     const { app, root } = await createApp();
     previewSpies.getGameModeSnapshot.mockReturnValue({
@@ -1975,8 +1980,12 @@ describe("GameLayoutEditorApp workspace", () => {
     };
     ioSpies.importSymbolsZipWithFiles.mockResolvedValueOnce({
       resource,
+      rootKey: "fixture-symbols-symbols.package.json",
       files: new Map([
-        ["symbols.package.json", new TextEncoder().encode("{}")],
+        [
+          "fixture-symbols-symbols.package.json",
+          new TextEncoder().encode("{}"),
+        ],
       ]),
     });
     previewSpies.setSymbolPackage.mockResolvedValueOnce(metadata);

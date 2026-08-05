@@ -8,6 +8,7 @@ import {
   type EditorGameModeDraft,
   type EditorProject,
 } from "./editor-project.js";
+import { editorResourcePaths } from "./editor-resource.js";
 
 const MODE_ID = /^[A-Za-z][A-Za-z0-9_-]*$/u;
 
@@ -187,6 +188,7 @@ export function createGameModeTransition(
     fromModeId,
     toModeId,
     kind: "spine",
+    preludePopupId: null,
     resourceId: "",
     animation: "",
     switchEvent: "",
@@ -211,6 +213,7 @@ export function setGameModeTransitionKind(
     kind === "spine"
       ? {
           kind: "spine",
+          preludePopupId: null,
           fromModeId: transition.fromModeId,
           toModeId: transition.toModeId,
           resourceId: "",
@@ -268,6 +271,21 @@ export function setGameModeTransitionResource(
       transition.switchEvent = "";
     }
   }
+}
+
+export function setGameModeTransitionPreludePopup(
+  project: EditorProject,
+  transition: EditorGameModeTransitionDraft,
+  popupId: string | null,
+): void {
+  if (transition.kind !== "spine")
+    throw new Error("只有 Spine 转场可以配置转场前弹窗。");
+  if (popupId) {
+    const dependency = project.popupDependencies.get(popupId);
+    if (!dependency || dependency.type !== "spine")
+      throw new Error(`转场前弹窗必须是已有普通 Spine Popup：${popupId}`);
+  }
+  transition.preludePopupId = popupId;
 }
 
 export function setGameModeTransitionAnimation(
@@ -389,7 +407,7 @@ export function importSymbolDependency(
   mergeDependencyAssets(project, imported.files);
   project.symbolDependencies.set(id, {
     packageId: id,
-    rootKey: "symbols.package.json",
+    rootKey: imported.rootKey,
     keys: Object.freeze([...imported.files.keys()].sort()),
   });
 }
@@ -408,12 +426,18 @@ export function replaceSymbolDependency(
   for (const mode of project.gameModes.modes)
     if (mode.symbols?.packageId === id)
       validateSymbolBinding(project, imported, mode.symbols.reelSet);
-  mergeDependencyAssets(project, imported.files);
+  const previousKeys = project.symbolDependencies.get(id)!.keys;
+  mergeDependencyAssets(
+    project,
+    imported.files,
+    exclusiveDependencyKeys(project, "symbols", id, previousKeys),
+  );
   project.symbolDependencies.set(id, {
     packageId: id,
-    rootKey: "symbols.package.json",
+    rootKey: imported.rootKey,
     keys: Object.freeze([...imported.files.keys()].sort()),
   });
+  garbageCollectDependencyAssets(project, previousKeys);
 }
 
 export function deleteSymbolDependency(
@@ -427,7 +451,9 @@ export function deleteSymbolDependency(
     .map((mode) => mode.id);
   if (users.length)
     throw new Error(`Symbols ${id} 仍被主状态引用：${users.join(", ")}`);
+  const dependency = project.symbolDependencies.get(id)!;
   project.symbolDependencies.delete(id);
+  garbageCollectDependencyAssets(project, dependency.keys);
 }
 
 export function validateSymbolBinding(
@@ -488,7 +514,7 @@ export function importPopupDependency(
   project.popupDependencies.set(id, {
     id,
     type: imported.manifest.type,
-    rootKey: "popup.manifest.json",
+    rootKey: imported.rootKey,
     keys: Object.freeze([...imported.files.keys()].sort()),
     placements: Object.fromEntries(
       activeVariantIds(project).map((variantId) => [
@@ -514,13 +540,19 @@ export function replacePopupDependency(
     throw new Error(
       `替换 Popup type 必须保持 ${current.type}，实际为 ${imported.manifest.type}。`,
     );
-  mergeDependencyAssets(project, imported.files);
+  const previousKeys = current.keys;
+  mergeDependencyAssets(
+    project,
+    imported.files,
+    exclusiveDependencyKeys(project, "popup", id, previousKeys),
+  );
   project.popupDependencies.set(id, {
     ...current,
     type: imported.manifest.type,
-    rootKey: "popup.manifest.json",
+    rootKey: imported.rootKey,
     keys: Object.freeze([...imported.files.keys()].sort()),
   });
+  garbageCollectDependencyAssets(project, previousKeys);
 }
 
 export function deletePopupDependency(
@@ -536,7 +568,17 @@ export function deletePopupDependency(
     throw new Error(`Popup ${id} 仍被游戏模式引用：${users.join(", ")}`);
   if (project.registeredSpinePopupIds.has(id))
     throw new Error(`Popup ${id} 仍注册在 Scene Layout。`);
+  const transitions = project.gameModes.transitions
+    .filter(
+      (transition) =>
+        transition.kind === "spine" && transition.preludePopupId === id,
+    )
+    .map((transition) => `${transition.fromModeId} -> ${transition.toModeId}`);
+  if (transitions.length)
+    throw new Error(`Popup ${id} 仍被转场引用：${transitions.join(", ")}`);
+  const dependency = project.popupDependencies.get(id)!;
   project.popupDependencies.delete(id);
+  garbageCollectDependencyAssets(project, dependency.keys);
 }
 
 export function setSpinePopupRegistered(
@@ -588,6 +630,7 @@ function assertModeId(id: string): void {
 function mergeDependencyAssets(
   project: EditorProject,
   files: ReadonlyMap<string, Uint8Array>,
+  replaceableKeys: ReadonlySet<string> = new Set(),
 ): void {
   const aliases = new Map(
     [...project.assets.keys()].map((key) => [
@@ -603,7 +646,54 @@ function mergeDependencyAssets(
       throw new Error(
         `全局扁平 filename key 大小写冲突：${existingKey} / ${key}`,
       );
-    project.assets.set(key, bytes.slice());
+    const previous = project.assets.get(key);
+    if (previous && !replaceableKeys.has(key) && !bytesEqual(previous, bytes))
+      throw new Error(`dependency filename key 与已有 bytes 冲突：${key}`);
     aliases.set(key.normalize("NFC").toLocaleLowerCase("en-US"), key);
   }
+  for (const [key, bytes] of files) project.assets.set(key, bytes.slice());
+}
+
+function exclusiveDependencyKeys(
+  project: EditorProject,
+  kind: "symbols" | "popup",
+  id: string,
+  candidates: readonly string[],
+): ReadonlySet<string> {
+  const ownedElsewhere = new Set([
+    ...[...project.resources.values()].flatMap(editorResourcePaths),
+    ...[...project.symbolDependencies]
+      .filter(([candidateId]) => kind !== "symbols" || candidateId !== id)
+      .flatMap(([, dependency]) => dependency.keys),
+    ...[...project.popupDependencies]
+      .filter(([candidateId]) => kind !== "popup" || candidateId !== id)
+      .flatMap(([, dependency]) => dependency.keys),
+  ]);
+  return new Set(candidates.filter((key) => !ownedElsewhere.has(key)));
+}
+
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  return (
+    left.byteLength === right.byteLength &&
+    left.every((value, index) => value === right[index])
+  );
+}
+
+function garbageCollectDependencyAssets(
+  project: EditorProject,
+  candidates: Iterable<string>,
+): void {
+  const retained = new Set([
+    ...[...project.resources.values()].flatMap((resource) =>
+      editorResourcePaths(resource),
+    ),
+    ...[...project.symbolDependencies.values()].flatMap(
+      (dependency) => dependency.keys,
+    ),
+    ...[...project.popupDependencies.values()].flatMap(
+      (dependency) => dependency.keys,
+    ),
+  ]);
+  for (const key of candidates)
+    if (!retained.has(key)) project.assets.delete(key);
 }

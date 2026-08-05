@@ -33,6 +33,7 @@ describe("gamelayout popup dependency", () => {
       { decodeImage: async () => ({ width: 1, height: 1 }) },
     );
     expect(imported.manifest.id).toBe("fixture-popup");
+    expect(imported.rootKey).toBe("pkg-13-fixture-popup-popup.manifest.json");
     const layoutAssets = new Map([
       ["bg.png", assetBytes.get("assets/bg.png")!],
     ]);
@@ -49,7 +50,7 @@ describe("gamelayout popup dependency", () => {
       popups: {
         "fixture-popup": {
           type: "award-celebration" as const,
-          manifest: "popup.manifest.json",
+          manifest: imported.rootKey,
           placements: { default: { x: 12, y: -8, scale: 0.9 } },
         },
       },
@@ -69,11 +70,11 @@ describe("gamelayout popup dependency", () => {
       id: "fixture-popup",
       placements: { default: { x: 12, y: -8, scale: 0.9 } },
     });
-    expect(project.assets.has("popup.manifest.json")).toBe(true);
+    expect(project.assets.has(imported.rootKey)).toBe(true);
     expect(editorProjectToManifest(project).popups).toEqual(manifest.popups);
     const clone = cloneEditorProject(project);
-    clone.assets.get("popup.manifest.json")![0] = 0;
-    expect(project.assets.get("popup.manifest.json")![0]).not.toBe(0);
+    clone.assets.get(imported.rootKey)![0] = 0;
+    expect(project.assets.get(imported.rootKey)![0]).not.toBe(0);
     load.mockRestore();
     unload.mockRestore();
   });
@@ -123,9 +124,8 @@ describe("gamelayout popup dependency", () => {
       ),
     ).toMatchObject({ playback: { mode: "once" } });
     expect(
-      JSON.parse(
-        new TextDecoder().decode(imported.files.get("popup.manifest.json")),
-      ).awardCelebration.celebrationTiers[0].layers,
+      JSON.parse(new TextDecoder().decode(imported.files.get(imported.rootKey)))
+        .awardCelebration.celebrationTiers[0].layers,
     ).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ playback: { mode: "once" } }),

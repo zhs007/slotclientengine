@@ -100,6 +100,16 @@ type ActiveModeTransition =
       readonly player: SceneLayoutTransitionVideoPlayer;
     });
 
+interface ActiveModePrelude {
+  readonly prepared: Extract<
+    PreparedModeTransition,
+    { readonly kind: "spine" }
+  >;
+  readonly popupId: string;
+  readonly resolve: () => void;
+  readonly reject: (error: SceneLayoutError) => void;
+}
+
 export function createSceneLayoutPackageRuntime(options: {
   readonly resource: SceneLayoutPackageResource;
   /**
@@ -112,6 +122,9 @@ export function createSceneLayoutPackageRuntime(options: {
   readonly createTransitionPlayer?: (options: {
     readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
   }) => RendercoreSpinePlayer;
+  readonly createSpinePopupPlayer?: (options: {
+    readonly resource: SceneLayoutPackageResource["popupPackages"][string];
+  }) => SpinePopupPlayer;
   readonly createVideoTransitionPlayer?: (options: {
     readonly url: string;
     readonly fadeOutSeconds: number;
@@ -123,6 +136,7 @@ export function createSceneLayoutPackageRuntime(options: {
     options.reelPresentation,
     options.formatPopupAmount,
     options.createTransitionPlayer,
+    options.createSpinePopupPlayer,
     options.createVideoTransitionPlayer,
   );
 }
@@ -140,6 +154,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #createTransitionPlayer: (options: {
     readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
   }) => RendercoreSpinePlayer;
+  readonly #createSpinePopupPlayer: (options: {
+    readonly resource: SceneLayoutPackageResource["popupPackages"][string];
+  }) => SpinePopupPlayer;
   readonly #createVideoTransitionPlayer: (options: {
     readonly url: string;
     readonly fadeOutSeconds: number;
@@ -164,6 +181,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   #targetMode: string | null = null;
   #modeRequestInProgress = false;
   #activeTransition: ActiveModeTransition | null = null;
+  #activePrelude: ActiveModePrelude | null = null;
   #preparedTransition: PreparedModeTransition | null = null;
   #activePopupId: string | null = null;
   #viewportSize: RenderViewportSize | null = null;
@@ -186,6 +204,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
         }) => RendercoreSpinePlayer)
       | undefined,
+    spinePopupPlayerFactory:
+      | ((options: {
+          readonly resource: SceneLayoutPackageResource["popupPackages"][string];
+        }) => SpinePopupPlayer)
+      | undefined,
     createVideoTransitionPlayer:
       | ((options: {
           readonly url: string;
@@ -206,6 +229,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           resource: options.resource,
           createError: (message) => new SceneLayoutError(message),
         }));
+    this.#createSpinePopupPlayer =
+      spinePopupPlayerFactory ?? createSpinePopupPlayer;
     this.#createVideoTransitionPlayer =
       createVideoTransitionPlayer ?? createSceneLayoutTransitionVideoPlayer;
     this.container = new Container();
@@ -285,7 +310,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       )) {
         const popup =
           resource.manifest.type === "spine"
-            ? createSpinePopupPlayer({ resource })
+            ? this.#createSpinePopupPlayer({ resource })
             : createAwardCelebrationPlayer({
                 resource,
                 formatAmount: this.#formatPopupAmount,
@@ -395,9 +420,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     manifestValue: SceneLayoutPackageResource["manifest"],
   ): SceneLayoutSnapshot | null {
     this.assertReady();
-    if (this.#activeTransition)
+    if (this.#activeTransition || this.#activePrelude)
       throw new SceneLayoutError(
-        "Scene layout geometry cannot change during an active transition.",
+        "Scene layout geometry cannot change during an active transition or prelude.",
       );
     const manifest = parseSceneLayoutManifest(manifestValue);
     assertSceneLayoutGeometryCompatible(this.#manifest, manifest);
@@ -444,8 +469,19 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     }
     for (const popup of this.#popups.values())
       if (popup.isPlaying()) popup.update(deltaSeconds);
-    for (const popup of this.#spinePopups.values())
-      if (popup.isPlaying()) popup.update(deltaSeconds);
+    for (const [id, popup] of this.#spinePopups)
+      if (popup.isPlaying())
+        try {
+          popup.update(deltaSeconds);
+        } catch (error) {
+          if (this.#activePrelude?.popupId === id) {
+            this.failActivePrelude(
+              this.#activePrelude,
+              asSceneLayoutError(error),
+            );
+          } else throw error;
+        }
+    this.updateActivePrelude();
     this.updateActiveTransition(deltaSeconds);
     if (
       this.#activePopupId &&
@@ -810,20 +846,31 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       displayedMode: this.#displayedMode!,
       targetMode: this.#targetMode,
       phase: this.#targetMode ? "transitioning" : "stable",
-      transitionPhase: this.#activeTransition
-        ? this.#activeTransition.switched
-          ? "after-switch"
-          : "before-switch"
-        : null,
-      transition: this.#activeTransition
+      transitionPhase: this.#activePrelude
+        ? "popup"
+        : this.#activeTransition
+          ? this.#activeTransition.switched
+            ? "after-switch"
+            : "before-switch"
+          : null,
+      transition: this.#activePrelude
         ? Object.freeze({
-            from: this.#activeTransition.spec.from,
-            to: this.#activeTransition.spec.to,
+            from: this.#activePrelude.prepared.spec.from,
+            to: this.#activePrelude.prepared.spec.to,
           })
-        : null,
+        : this.#activeTransition
+          ? Object.freeze({
+              from: this.#activeTransition.spec.from,
+              to: this.#activeTransition.spec.to,
+            })
+          : null,
       preparedTargetMode: this.#preparedTransition?.target.id ?? null,
       transitionKind:
-        this.#activeTransition?.kind ?? this.#preparedTransition?.kind ?? null,
+        this.#activePrelude?.prepared.kind ??
+        this.#activeTransition?.kind ??
+        this.#preparedTransition?.kind ??
+        null,
+      activePreludePopup: this.#activePrelude?.popupId ?? null,
       mediaTimeSeconds:
         this.#activeTransition?.kind === "video"
           ? this.#activeTransition.player.currentTimeSeconds
@@ -930,6 +977,24 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       return this.startPreparedVideoTransition(prepared, playPromise);
     }
     return this.startSpineTransition(modeId, options, signature);
+  }
+
+  requestDismissGameModePrelude(): void {
+    this.assertReady();
+    const active = this.#activePrelude;
+    if (!active)
+      throw new SceneLayoutError("No game mode transition prelude is active.");
+    this.getSpinePopup(active.popupId).requestDismiss();
+  }
+
+  dismissGameModePreludeImmediately(): void {
+    this.assertReady();
+    const active = this.#activePrelude;
+    if (!active) return;
+    this.failActivePrelude(
+      active,
+      new SceneLayoutError("Game mode transition prelude was dismissed."),
+    );
   }
 
   startAwardCelebrationForCurrentMode(input: {
@@ -1059,6 +1124,17 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       active.reject(
         new SceneLayoutError(
           "Scene layout package runtime was destroyed during a game mode transition.",
+        ),
+      );
+    }
+    if (this.#activePrelude) {
+      const active = this.#activePrelude;
+      this.#activePrelude = null;
+      this.#spinePopups.get(active.popupId)?.dismissImmediately();
+      this.releasePreparedTransition(active.prepared);
+      active.reject(
+        new SceneLayoutError(
+          "Scene layout package runtime was destroyed during a game mode transition prelude.",
         ),
       );
     }
@@ -1260,7 +1336,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           options,
           signature,
           (ready) => {
-            directlyStarted = this.activatePreparedSpineTransition(ready);
+            directlyStarted = this.activatePreparedSpineRequest(ready);
           },
         );
       } finally {
@@ -1272,7 +1348,40 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         "Prepared transition kind changed unexpectedly.",
       );
     if (directlyStarted) return await directlyStarted;
-    return await this.activatePreparedSpineTransition(prepared);
+    return await this.activatePreparedSpineRequest(prepared);
+  }
+
+  private activatePreparedSpineRequest(
+    prepared: Extract<PreparedModeTransition, { readonly kind: "spine" }>,
+  ): Promise<void> {
+    return "preludePopup" in prepared.spec && prepared.spec.preludePopup
+      ? this.activatePreparedSpinePrelude(prepared, prepared.spec.preludePopup)
+      : this.activatePreparedSpineTransition(prepared);
+  }
+
+  private activatePreparedSpinePrelude(
+    prepared: Extract<PreparedModeTransition, { readonly kind: "spine" }>,
+    popupId: string,
+  ): Promise<void> {
+    this.#preparedTransition = null;
+    const popup = this.getSpinePopup(popupId);
+    try {
+      popup.dismissImmediately();
+      popup.start();
+      this.#targetMode = prepared.target.id;
+      this.#targetSymbolPackageId = prepared.targetSymbolPackageId;
+      return new Promise<void>((resolve, reject) => {
+        this.#activePrelude = {
+          prepared,
+          popupId,
+          resolve,
+          reject,
+        };
+      });
+    } catch (error) {
+      this.releasePreparedTransition(prepared);
+      throw asSceneLayoutError(error);
+    }
   }
 
   private async activatePreparedSpineTransition(
@@ -1401,6 +1510,31 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     } catch (error) {
       this.failActiveTransition(active, asSceneLayoutError(error));
     }
+  }
+
+  private updateActivePrelude(): void {
+    const active = this.#activePrelude;
+    if (!active) return;
+    const popup = this.getSpinePopup(active.popupId);
+    if (popup.getSnapshot().phase !== "complete") return;
+    this.#activePrelude = null;
+    void this.activatePreparedSpineTransition(active.prepared).then(
+      active.resolve,
+      active.reject,
+    );
+  }
+
+  private failActivePrelude(
+    active: ActiveModePrelude,
+    error: SceneLayoutError,
+  ): void {
+    if (this.#activePrelude !== active) return;
+    this.#activePrelude = null;
+    this.getSpinePopup(active.popupId).dismissImmediately();
+    this.releasePreparedTransition(active.prepared);
+    this.#targetMode = null;
+    this.#targetSymbolPackageId = null;
+    active.reject(error);
   }
 
   private updateActiveVideoTransition(

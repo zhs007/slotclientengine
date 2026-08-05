@@ -143,6 +143,7 @@ interface EditorGameModeTransitionBaseDraft {
 
 export interface EditorSpineGameModeTransitionDraft extends EditorGameModeTransitionBaseDraft {
   kind: "spine";
+  preludePopupId?: string | null;
   resourceId: string;
   animation: string;
   switchEvent: string;
@@ -741,6 +742,9 @@ export function editorProjectToManifest(
           mode.awardCelebrationPopupId ? [mode.awardCelebrationPopupId] : [],
         ),
       );
+      for (const transition of project.gameModes.transitions)
+        if (transition.kind === "spine" && transition.preludePopupId)
+          referenced.add(transition.preludePopupId);
       for (const id of project.registeredSpinePopupIds) referenced.add(id);
       if (referenced.size === 0) return {};
       return {
@@ -844,6 +848,9 @@ export function editorProjectToManifest(
           return {
             from: transition.fromModeId,
             to: transition.toModeId,
+            ...(transition.preludePopupId
+              ? { preludePopup: transition.preludePopupId }
+              : {}),
             overlay: {
               resource: {
                 kind: "spine" as const,
@@ -1168,7 +1175,12 @@ export function manifestToEditorProject(
       keys: Object.freeze([binding.manifest, ...keys]),
       placements: structuredClone(binding.placements),
     });
-    if (nested.type === "spine") project.registeredSpinePopupIds.add(id);
+    const usedAsPrelude = (parsed.gameModes?.transitions ?? []).some(
+      (transition) =>
+        "preludePopup" in transition && transition.preludePopup === id,
+    );
+    if (nested.type === "spine" && !usedAsPrelude)
+      project.registeredSpinePopupIds.add(id);
   }
   project.gameModes = parsed.gameModes
     ? {
@@ -1192,6 +1204,10 @@ export function manifestToEditorProject(
             : {
                 ...common,
                 kind: "spine" as const,
+                preludePopupId:
+                  "preludePopup" in transition
+                    ? (transition.preludePopup ?? null)
+                    : null,
                 animation: overlay.animation,
                 switchEvent: overlay.switchEvent,
                 placements: structuredClone(overlay.placements),

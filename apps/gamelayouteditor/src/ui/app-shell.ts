@@ -88,6 +88,7 @@ import {
   setGameModeTransitionAnimation,
   setGameModeTransitionEvent,
   setGameModeTransitionPlacement,
+  setGameModeTransitionPreludePopup,
   setGameModeTransitionResource,
   setGameModeTransitionKind,
   setGameModeVideoTransitionFadeOut,
@@ -1478,6 +1479,19 @@ export class GameLayoutEditorApp {
         });
       });
     panel
+      .querySelector<HTMLSelectElement>("[data-transition-prelude-popup]")
+      ?.addEventListener("change", (event) => {
+        const value = (event.currentTarget as HTMLSelectElement).value || null;
+        this.runTransaction((draft) => {
+          const transition = draft.gameModes.transitions.find(
+            (candidate) =>
+              transitionKey(candidate) === this.#session.selectedTransitionKey,
+          );
+          if (!transition) throw new Error("所选转场已不存在。");
+          setGameModeTransitionPreludePopup(draft, transition, value);
+        });
+      });
+    panel
       .querySelector<HTMLSelectElement>("[data-transition-video-resource]")
       ?.addEventListener("change", (event) => {
         const value = (event.currentTarget as HTMLSelectElement).value;
@@ -1549,6 +1563,15 @@ export class GameLayoutEditorApp {
       .querySelector<HTMLButtonElement>("[data-request-transition]")
       ?.addEventListener("click", () => {
         this.requestPreviewMode(this.#selectedPreviewMode);
+      });
+    panel
+      .querySelector<HTMLButtonElement>("[data-dismiss-transition-prelude]")
+      ?.addEventListener("click", () => {
+        try {
+          this.#preview?.requestDismissGameModePrelude();
+        } catch (error) {
+          this.#store.setExternalError(error);
+        }
       });
     panel
       .querySelector("[data-upload-resources]")

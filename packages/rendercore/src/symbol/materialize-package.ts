@@ -162,19 +162,32 @@ export async function materializeMappedSymbolPackageContents(options: {
   readonly rawGameConfig: unknown;
   readonly rawSymbolManifest: unknown;
   readonly assets: ReadonlyMap<string, Uint8Array>;
+  readonly keyPrefix?: string;
 }): Promise<MaterializedSymbolPackageContents> {
-  const flattened = flattenSymbolAssets(options.assets);
+  const flattened = flattenSymbolAssets(options.assets, options.keyPrefix);
   const rawSymbolManifest = rewriteSymbolManifestPaths(
     options.rawSymbolManifest,
     flattened.mapping,
   );
+  const gameConfigKey = prefixedKey(
+    options.packageManifest.entrypoints.gameConfig,
+    options.keyPrefix,
+  );
+  const symbolManifestKey = prefixedKey(
+    options.packageManifest.entrypoints.symbolManifest,
+    options.keyPrefix,
+  );
   const resources = collectSymbolManifestResourcePaths({
     symbolManifest: rawSymbolManifest,
-    symbolManifestPath: options.packageManifest.entrypoints.symbolManifest,
+    symbolManifestPath: symbolManifestKey,
     files: flattened.assets,
   });
   const packageManifest = parseSymbolPackageManifest({
     ...options.packageManifest,
+    entrypoints: {
+      gameConfig: gameConfigKey,
+      symbolManifest: symbolManifestKey,
+    },
     resources,
   });
   const incoming = resources.map((key) => ({
@@ -233,13 +246,16 @@ export async function materializeMappedSymbolPackageContents(options: {
   });
 }
 
-function flattenSymbolAssets(source: ReadonlyMap<string, Uint8Array>): {
+function flattenSymbolAssets(
+  source: ReadonlyMap<string, Uint8Array>,
+  keyPrefix?: string,
+): {
   readonly mapping: ReadonlyMap<string, string>;
   readonly assets: ReadonlyMap<string, Uint8Array>;
 } {
   const mapping = new Map(
     [...source.keys()].map(
-      (path) => [path, basenameFromSourcePath(path)] as const,
+      (path) => [path, prefixedKey(path, keyPrefix)] as const,
     ),
   );
   assertNoEditorAssetKeyAliases([...new Set(mapping.values())]);
@@ -290,6 +306,11 @@ function flattenSymbolAssets(source: ReadonlyMap<string, Uint8Array>): {
     throw new Error(`symbol asset extension 不支持：${path}`);
   }
   return { mapping, assets };
+}
+
+function prefixedKey(path: string, prefix: string | undefined): string {
+  const basename = basenameFromSourcePath(path);
+  return prefix ? `${prefix}-${basename}` : basename;
 }
 
 function isImageStringLike(value: unknown): boolean {

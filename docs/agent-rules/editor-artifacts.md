@@ -73,8 +73,8 @@
 
 ## Layout Editor dependency
 
-- gamelayouteditor 把 symbols ZIP 和 popup ZIP 当自包含 dependency；每个 active variant 只配置明确 binding 和相对 viewport center 的 popup root `x/y/scale`。
-- 普通 Spine popup 导入 gamelayouteditor 后只进入 dependency library；必须显式注册才进入 Scene Layout manifest 与 production ZIP，且不能绑定为 game mode award celebration。
+- gamelayouteditor 把 symbols ZIP 和 popup ZIP 当可多项并存的自包含 dependency library；standalone 校验后以 manifest id 生成稳定扁平 root/leaf key 并结构化改写 nested reference。同 id 再上传走替换并保留 binding/placement，提交后只 GC 无其它 owner 的旧 key；不同 id 不得互相覆盖 bytes。每个 active variant 只配置明确 binding 和相对 viewport center 的 popup root `x/y/scale`。
+- 普通 Spine popup 导入 gamelayouteditor 后只进入 dependency library；必须由有向 Spine transition 的 `preludePopup` 或显式 programmatic registration 引用才进入 Scene Layout manifest 与 production ZIP，且不能绑定为 game mode award celebration。未引用 Symbols/Popup library item 不导出。
 - Symbols dependency 对 gamelayouteditor 是只读 symbol 状态机合同。Layout Editor 可以校验 package id、cell size、display symbols、公开 reel/state capability 和 exact closure，并调用 production preview；不得提供内部图片、Spine/VNI animation、state layer、ImgNumber/value 或 cascade 的编辑控件，也不得重写这些 owner-owned manifest 字段。
 - Symbols dependency 的导入、预览、替换和 layout ZIP 重导必须保留其完整
   state/ImgNumber multi-target closure；headless authoring 可以显式跳过 texture load，

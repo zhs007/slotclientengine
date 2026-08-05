@@ -1092,6 +1092,8 @@ function parseGameModes(
       fail(
         `${label}.awardCelebrationPopup references unknown popup "${popup}".`,
       );
+    if (popup && popups?.[popup]?.type !== "award-celebration")
+      fail(`${label}.awardCelebrationPopup must reference award-celebration.`);
     return { id, label, mode, backgroundNodes, symbolPackage, popup };
   });
   unique(
@@ -1184,6 +1186,7 @@ function parseGameModes(
     record.transitions ?? [],
     modes,
     adaptation,
+    popups,
   );
   const referencedSymbols = new Set(
     modes.flatMap((mode) => (mode.symbolPackage ? [mode.symbolPackage] : [])),
@@ -1191,11 +1194,16 @@ function parseGameModes(
   for (const id of Object.keys(symbolPackages ?? {}))
     if (!referencedSymbols.has(id))
       fail(`scene layout symbol package "${id}" is orphaned by gameModes.`);
-  const referenced = new Set(
-    modes.flatMap((mode) =>
+  const referenced = new Set([
+    ...modes.flatMap((mode) =>
       mode.awardCelebrationPopup ? [mode.awardCelebrationPopup] : [],
     ),
-  );
+    ...transitions.flatMap((transition) =>
+      "preludePopup" in transition && transition.preludePopup
+        ? [transition.preludePopup]
+        : [],
+    ),
+  ]);
   for (const [id, binding] of Object.entries(popups ?? {}))
     if (binding.type === "award-celebration" && !referenced.has(id))
       fail(`scene layout popup "${id}" is orphaned by gameModes.`);
@@ -1206,6 +1214,7 @@ function parseGameModeTransitions(
   value: unknown,
   modes: readonly import("./types.js").SceneLayoutGameMode[],
   adaptation: SceneLayoutAdaptation,
+  popups: Readonly<Record<string, SceneLayoutPopupBinding>> | undefined,
 ): readonly SceneLayoutGameModeTransition[] {
   if (!Array.isArray(value))
     fail("scene layout gameModes.transitions must be an array.");
@@ -1216,7 +1225,7 @@ function parseGameModeTransitions(
     value.map((raw, index) => {
       const label = `scene layout gameModes.transitions[${index}]`;
       const transition = readRecord(raw, label);
-      known(transition, ["from", "to", "overlay"], label);
+      known(transition, ["from", "to", "preludePopup", "overlay"], label);
       const from = stateIdentifier(transition.from, `${label}.from`);
       const to = stateIdentifier(transition.to, `${label}.to`);
       if (!modeIds.has(from) || !modeIds.has(to))
@@ -1231,6 +1240,8 @@ function parseGameModeTransitions(
       const resourceLabel = `${overlayLabel}.resource`;
       const resource = readRecord(overlay.resource, resourceLabel);
       if (resource.kind === "video") {
+        if (transition.preludePopup !== undefined)
+          fail(`${label}.preludePopup is not supported for video transitions.`);
         known(overlay, ["resource", "fit", "fadeOutSeconds"], overlayLabel);
         known(resource, ["kind", "path", "mimeType"], resourceLabel);
         if (resource.mimeType !== "video/mp4")
@@ -1262,6 +1273,16 @@ function parseGameModeTransitions(
       known(resource, ["kind", "skeleton", "atlas", "textures"], resourceLabel);
       if (resource.kind !== "spine")
         fail(`${resourceLabel}.kind must be spine or video.`);
+      const preludePopup =
+        transition.preludePopup === undefined
+          ? undefined
+          : identifier(transition.preludePopup, `${label}.preludePopup`);
+      if (preludePopup && !popups?.[preludePopup])
+        fail(
+          `${label}.preludePopup references unknown popup "${preludePopup}".`,
+        );
+      if (preludePopup && popups?.[preludePopup]?.type !== "spine")
+        fail(`${label}.preludePopup must reference a spine popup.`);
       const skeleton = localPath(
         resource.skeleton,
         `${resourceLabel}.skeleton`,
@@ -1307,6 +1328,7 @@ function parseGameModeTransitions(
       return deepFreeze({
         from,
         to,
+        ...(preludePopup ? { preludePopup } : {}),
         overlay: {
           resource: { kind: "spine" as const, skeleton, atlas, textures },
           animation: exactName(overlay.animation, `${overlayLabel}.animation`),

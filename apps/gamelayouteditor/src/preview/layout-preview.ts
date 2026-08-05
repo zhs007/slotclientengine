@@ -324,6 +324,12 @@ export class LayoutPreview {
     return this.#packageRuntime?.getGameModeSnapshot() ?? null;
   }
 
+  requestDismissGameModePrelude(): void {
+    if (!this.#packageRuntime)
+      throw new Error("Scene Layout package preview 尚未就绪。");
+    this.#packageRuntime.requestDismissGameModePrelude();
+  }
+
   getActiveAwardCelebrationSnapshot() {
     return this.#packageRuntime?.getActiveAwardCelebrationSnapshot() ?? null;
   }

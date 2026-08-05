@@ -7,6 +7,7 @@ import {
   resolveSymbolPackageFiles,
   type SymbolPackageResource,
 } from "@slotclientengine/rendercore/symbol";
+import { packageKeyPrefix } from "./package-key-prefix.js";
 
 export const SYMBOL_ZIP_LIMITS = Object.freeze({
   maxEntries: 1024,
@@ -18,6 +19,7 @@ export const SYMBOL_ZIP_LIMITS = Object.freeze({
 export interface ImportedSymbolPackage {
   readonly resource: SymbolPackageResource;
   readonly files: ReadonlyMap<string, Uint8Array>;
+  readonly rootKey: string;
 }
 
 export async function importSymbolsZipWithFiles(
@@ -49,11 +51,13 @@ export async function importSymbolsZipWithFiles(
     files,
     loadTextures: false,
   });
+  const keyPrefix = packageKeyPrefix(sourceResource.packageManifest.id);
   const materialized = await materializeMappedSymbolPackageContents({
     packageManifest: sourceResource.packageManifest,
     rawGameConfig: sourceResource.rawGameConfig,
     rawSymbolManifest: sourceResource.rawSymbolManifest,
     assets: sourceResource.assets,
+    keyPrefix,
   });
   sourceResource.destroy();
   const resource = await createSymbolPackageResource({
@@ -65,11 +69,19 @@ export async function importSymbolsZipWithFiles(
     packageManifest: materialized.packageManifest,
     files: materialized.files,
   });
+  const rootKey = `${keyPrefix}-symbols.package.json`;
   return Object.freeze({
     resource,
     files: new Map(
-      [...virtual].map(([path, bytes]) => [path, bytes.slice()] as const),
+      [...virtual].map(
+        ([path, bytes]) =>
+          [
+            path === "symbols.package.json" ? rootKey : path,
+            bytes.slice(),
+          ] as const,
+      ),
     ),
+    rootKey,
   });
 }
 
