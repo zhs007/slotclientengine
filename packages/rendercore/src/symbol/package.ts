@@ -58,6 +58,7 @@ import {
   createSymbolImageStringControllerFactories,
   createSymbolImageStringResourcePool,
   createSymbolImageStringResourcesFromPool,
+  assertCompatibleSymbolImageStringLayouts,
   type SymbolImageStringResourceMap,
   type SymbolImageStringResourcePool,
 } from "../symbol-image-string/index.js";
@@ -263,7 +264,7 @@ export function collectSymbolManifestResourcePaths(options: {
       readonly value: number;
       readonly image: string;
     }[];
-  }): void => {
+  }) => {
     const manifestResourcePath = resolvePackagePath(
       manifestPath,
       options.resource,
@@ -299,6 +300,7 @@ export function collectSymbolManifestResourcePaths(options: {
       paths.add(resolvePackagePath(manifestResourcePath, glyphPath));
     }
     for (const mapping of options.specialValueImages ?? []) add(mapping.image);
+    return nested;
   };
   for (const entry of Object.values(manifest.symbols)) {
     collectNormal(entry.normal, add);
@@ -385,12 +387,25 @@ export function collectSymbolManifestResourcePaths(options: {
       }
     }
     for (const node of entry.imageStringNodes) {
-      addImageStringDependency({
+      const normalImageStringManifest = addImageStringDependency({
         resource: node.resource,
         text: node.initialText,
         label: `Image-string node "${node.name}" initialText`,
         specialValueImages: node.specialValueImages,
       });
+      if (node.spinBlurProfile) {
+        const spinBlurImageStringManifest = addImageStringDependency({
+          resource: node.spinBlurProfile.resource,
+          text: node.initialText,
+          label: `Image-string node "${node.name}" spinBlur initialText`,
+          specialValueImages: node.spinBlurProfile.specialValueImages,
+        });
+        assertCompatibleSymbolImageStringLayouts({
+          normal: normalImageStringManifest,
+          spinBlur: spinBlurImageStringManifest,
+          label: `Image-string node "${node.name}"`,
+        });
+      }
     }
   }
   const sorted = [...paths].sort(comparePaths);
@@ -495,6 +510,9 @@ export async function createSymbolPackageResourceFromResolvedFiles(options: {
       symbolManifest.symbols,
     ).flatMap((entry) => [
       ...entry.imageStringNodes.map((node) => node.resource),
+      ...entry.imageStringNodes.flatMap((node) =>
+        node.spinBlurProfile ? [node.spinBlurProfile.resource] : [],
+      ),
       ...(entry.valuePresentation?.text.type === "image-string"
         ? entry.valuePresentation.tiers.map(
             (_tier, index) =>
@@ -509,7 +527,10 @@ export async function createSymbolPackageResourceFromResolvedFiles(options: {
       symbolManifest.symbols,
     ).flatMap((entry) => [
       ...entry.imageStringNodes.flatMap((node) =>
-        (node.specialValueImages ?? []).map((mapping) => mapping.image),
+        [
+          ...(node.specialValueImages ?? []),
+          ...(node.spinBlurProfile?.specialValueImages ?? []),
+        ].map((mapping) => mapping.image),
       ),
       ...(entry.valuePresentation?.text.type === "image-string"
         ? entry.valuePresentation.tiers.flatMap((_tier, index) => {

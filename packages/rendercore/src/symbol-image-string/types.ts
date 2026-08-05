@@ -13,6 +13,14 @@ export interface SymbolImageStringNodeResource {
   readonly specialValueImages?: Readonly<
     Record<string, SymbolImageStringSpecialImageResource>
   >;
+  readonly spinBlurProfile?: SymbolImageStringPreparedProfile;
+}
+
+export interface SymbolImageStringPreparedProfile {
+  readonly resource: ImageStringResource;
+  readonly specialValueImages?: Readonly<
+    Record<string, SymbolImageStringSpecialImageResource>
+  >;
 }
 
 export type SymbolImageStringResourceMap = Readonly<

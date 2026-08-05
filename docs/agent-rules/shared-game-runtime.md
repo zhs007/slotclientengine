@@ -48,6 +48,7 @@
 - image-string parser、Unicode code-point layout、glyph exact closure、natural/fixed advance、动态 `visualBounds` anchor 和 `setText()` 生命周期属于 rendercore。缺 glyph、slot、resource 或 binding 显式失败，不回退字体、占位图、glob 或路径猜测。
 - value presentation 使用 strict `font | image | image-string` union；新 image-string 每 tier 只声明 JSON resource，并共享 Normal slot/transform/color/special 配置；旧 per-tier 完整 binding 继续兼容。每 occurrence 复用稳定外层 container，同 tier 只 `setText()`。
 - 新 image-string logical node 用一个 `spineSlot` 覆盖全部 top-level Spine state，非 Spine state 仍使用唯一 exact `{state}` target；旧逐 Spine state `{state,slot}` 保持兼容且不扩大覆盖。
+- 命名node的显式`spinBlurProfile`必须与normal ImgNumber布局和special value集合一致；package在画面mutation前prepare两套共享资源，occurrence只保留一个renderer/container并在state边界切换assets。runtime不得解码、生成或按state创建第二个ImgNumber instance；旧无profile target保持既有normal-assets语义。
 - image-string 特殊值整图映射属于 manifest-owned strict sparse config；exact 命中显示整图，未命中继续 glyph layout，二者复用 node transform/anchor/target 与资源生命周期；
   runtime 只挂载当前 resolved state 的目标，同一 renderer/text identity 跨 state
   保持连续。旧单 `target` 只在 parser 边界规范化，canonical 输出使用 `targets`。

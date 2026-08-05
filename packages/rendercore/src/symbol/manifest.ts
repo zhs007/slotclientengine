@@ -218,12 +218,18 @@ export interface SymbolValuePresentationSpec {
 export interface SymbolImageStringNodeSpec {
   readonly name: string;
   readonly resource: string;
+  readonly spinBlurProfile?: SymbolImageStringSpinBlurProfileSpec;
   readonly targets: readonly SymbolImageStringNodeTargetSpec[];
   readonly spineSlot?: string;
   readonly initialText: string;
   readonly anchor: Readonly<{ x: number; y: number }>;
   readonly transform: Readonly<{ x: number; y: number; scale: number }>;
   readonly followSlotColor: boolean;
+  readonly specialValueImages?: readonly SymbolImageStringSpecialValueImageSpec[];
+}
+
+export interface SymbolImageStringSpinBlurProfileSpec {
+  readonly resource: string;
   readonly specialValueImages?: readonly SymbolImageStringSpecialValueImageSpec[];
 }
 
@@ -604,6 +610,7 @@ function parseImageStringNodes(
       assertOnlyKnownKeys(node, label, [
         "name",
         "resource",
+        "spinBlurProfile",
         "target",
         "targets",
         "spineSlot",
@@ -755,9 +762,55 @@ function parseImageStringNodes(
         node.specialValueImages,
         `${label}.specialValueImages`,
       );
+      let spinBlurProfile: SymbolImageStringSpinBlurProfileSpec | undefined;
+      if (node.spinBlurProfile !== undefined) {
+        const profileLabel = `${label}.spinBlurProfile`;
+        const profile = assertRecord(node.spinBlurProfile, profileLabel);
+        assertOnlyKnownKeys(profile, profileLabel, [
+          "resource",
+          "specialValueImages",
+        ]);
+        if (
+          !targets.some((target) => target.state === "spinBlur" && !target.slot)
+        ) {
+          throw new SymbolAssetError(
+            `${profileLabel} requires a non-Spine spinBlur target.`,
+          );
+        }
+        const profileSpecialValueImages = parseImageStringSpecialValueImages(
+          profile.specialValueImages,
+          `${profileLabel}.specialValueImages`,
+        );
+        const normalValues = specialValueImages
+          .map(({ value }) => value)
+          .sort((left, right) => left - right);
+        const blurValues = profileSpecialValueImages
+          .map(({ value }) => value)
+          .sort((left, right) => left - right);
+        if (
+          normalValues.length !== blurValues.length ||
+          normalValues.some(
+            (value, valueIndex) => value !== blurValues[valueIndex],
+          )
+        ) {
+          throw new SymbolAssetError(
+            `${profileLabel}.specialValueImages values must exactly match the normal profile.`,
+          );
+        }
+        spinBlurProfile = Object.freeze({
+          resource: assertImageStringResourcePath(
+            profile.resource,
+            `${profileLabel}.resource`,
+          ),
+          ...(profileSpecialValueImages.length
+            ? { specialValueImages: profileSpecialValueImages }
+            : {}),
+        });
+      }
       return Object.freeze({
         name,
         resource,
+        ...(spinBlurProfile ? { spinBlurProfile } : {}),
         targets,
         ...(spineSlot === undefined ? {} : { spineSlot }),
         initialText,

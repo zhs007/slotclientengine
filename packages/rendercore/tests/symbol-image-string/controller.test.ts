@@ -239,6 +239,63 @@ describe("SymbolImageStringController", () => {
     symbol.destroy();
   });
 
+  it("switches normal and spinBlur assets on one container and sprite", () => {
+    const symbol = createSymbol();
+    const normalResource = createResource(manifest, Texture.EMPTY);
+    const blurManifest = structuredClone(manifest);
+    blurManifest.id = "digits-spin-blur";
+    blurManifest.glyphs["0"].path = "assets/0.blur.png";
+    blurManifest.glyphs["1"].path = "assets/1.blur.png";
+    const blurResource = createResource(blurManifest, Texture.WHITE);
+    const controller = new SymbolImageStringController({
+      root: symbol,
+      nodes: [
+        {
+          spec: {
+            name: "coin-value",
+            resource: "./digits.image-string.manifest.json",
+            targets: [{ state: "normal" }, { state: "spinBlur" }],
+            spinBlurProfile: {
+              resource: "./digits-blur.image-string.manifest.json",
+            },
+            initialText: "01",
+            anchor: { x: 0.5, y: 0.5 },
+            transform: { x: 0, y: 0, scale: 1 },
+            followSlotColor: true,
+          },
+          resource: normalResource,
+          spinBlurProfile: { resource: blurResource },
+        },
+      ],
+    });
+
+    controller.syncState("normal");
+    const display = symbol.imageStringOverlayLayer.children[0] as Container;
+    const sprites = [...display.children];
+    expect(
+      sprites.map(
+        (sprite) => (sprite as unknown as { texture: Texture }).texture,
+      ),
+    ).toEqual([Texture.EMPTY, Texture.EMPTY]);
+    controller.syncState("spinBlur");
+    expect(symbol.imageStringOverlayLayer.children[0]).toBe(display);
+    expect(display.children).toEqual(sprites);
+    expect(
+      sprites.map(
+        (sprite) => (sprite as unknown as { texture: Texture }).texture,
+      ),
+    ).toEqual([Texture.WHITE, Texture.WHITE]);
+    controller.syncState("normal");
+    expect(display.children).toEqual(sprites);
+    expect(
+      sprites.map(
+        (sprite) => (sprite as unknown as { texture: Texture }).texture,
+      ),
+    ).toEqual([Texture.EMPTY, Texture.EMPTY]);
+    controller.destroy();
+    symbol.destroy();
+  });
+
   it("builds an empty resource map and reports a missing nested manifest", async () => {
     await expect(
       createSymbolImageStringResources({
@@ -365,6 +422,70 @@ describe("SymbolImageStringController", () => {
     ).rejects.toThrow(/failed to load/);
   });
 
+  it("prepares compatible spinBlur resources and rejects layout drift", async () => {
+    vi.spyOn(Assets, "load").mockResolvedValue({
+      width: 5,
+      height: 10,
+      source: {},
+    } as never);
+    const path = "./digits.image-string.manifest.json";
+    const blurPath = "./digits-blur.image-string.manifest.json";
+    const blurManifest = structuredClone(manifest);
+    blurManifest.id = "digits-blur";
+    blurManifest.glyphs["0"].path = "assets/0.blur.png";
+    blurManifest.glyphs["1"].path = "assets/1.blur.png";
+    const input = {
+      manifest: {
+        symbols: {
+          A: {
+            imageStringNodes: [
+              {
+                name: "coin-value",
+                resource: path,
+                targets: [{ state: "spinBlur" }],
+                spinBlurProfile: { resource: blurPath },
+                initialText: "01",
+                anchor: { x: 0.5, y: 0.5 },
+                transform: { x: 0, y: 0, scale: 1 },
+                followSlotColor: true,
+              },
+            ],
+          },
+        },
+      } as never,
+      symbolManifestPath: "symbol-state-textures.manifest.json",
+      imageStringManifests: {
+        "digits.image-string.manifest.json": manifest,
+        "digits-blur.image-string.manifest.json": blurManifest,
+      },
+      imageModules: {
+        "assets/0.png": "/0.png",
+        "assets/1.png": "/1.png",
+        "assets/0.blur.png": "/0.blur.png",
+        "assets/1.blur.png": "/1.blur.png",
+      },
+    };
+    const prepared = await createSymbolImageStringResources(input);
+    expect(
+      prepared.resources.A?.[0]?.spinBlurProfile?.resource.manifest.id,
+    ).toBe("digits-blur");
+    await Promise.all(
+      prepared.sharedResources.map((resource) => resource.destroy()),
+    );
+
+    const drifted = structuredClone(blurManifest);
+    drifted.glyphs["1"].offset.x = 1;
+    await expect(
+      createSymbolImageStringResources({
+        ...input,
+        imageStringManifests: {
+          ...input.imageStringManifests,
+          "digits-blur.image-string.manifest.json": drifted,
+        },
+      }),
+    ).rejects.toThrow(/layout must match/);
+  });
+
   it("fails before use when a nested glyph module or initial glyph is missing", async () => {
     const path =
       "./dependencies/image-strings/digits/image-string.manifest.json";
@@ -450,5 +571,20 @@ function createPlayer(): RendercoreSpineSlotPlayer {
     destroy: () => undefined,
     attachSlotObject: vi.fn(),
     removeSlotObject: vi.fn(),
+  };
+}
+
+function createResource(resourceManifest: typeof manifest, texture: Texture) {
+  return {
+    manifest: resourceManifest,
+    textures: Object.fromEntries(
+      Object.values(resourceManifest.glyphs).map((glyph) => [
+        glyph.path,
+        texture,
+      ]),
+    ),
+    destroyed: false,
+    assertUsable: () => undefined,
+    destroy: async () => undefined,
   };
 }

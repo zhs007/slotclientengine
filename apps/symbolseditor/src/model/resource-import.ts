@@ -12,6 +12,7 @@ import {
   createEditorAssetRecord,
   getAssetReferences,
   getProjectDiagnostics,
+  invalidateImageStringSpinBlurProfilesForChangedAssets,
   uploadAssetBatch,
   type EditorAssetRecord,
   type SymbolEditorProject,
@@ -125,6 +126,10 @@ export async function commitSymbolResourceImport(options: {
   if (values.length) uploadAssetBatch(project, values, "导入资源");
   const changed = values.map(
     ({ path }) => project.assetLibrary.records.get(path)!,
+  );
+  invalidateImageStringSpinBlurProfilesForChangedAssets(
+    project,
+    changed.map(({ path }) => path),
   );
   validateSymbolResourceDiscovery(changed, { requireClosure: false });
   const overwrittenSkeletonKeys = new Set(

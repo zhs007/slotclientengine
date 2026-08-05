@@ -4,6 +4,7 @@ import {
   createImageStringResource,
   parseImageStringManifest,
   validateImageStringText,
+  type ImageStringManifestV1,
   type ImageStringResource,
 } from "../image-string/index.js";
 import { SymbolAssetError } from "../symbol/errors.js";
@@ -159,12 +160,19 @@ export async function createSymbolImageStringResources(options: {
   readonly sharedResources: readonly ImageStringResource[];
 }> {
   const resourcePaths = Object.values(options.manifest.symbols).flatMap(
-    (entry) => entry.imageStringNodes.map((spec) => spec.resource),
+    (entry) =>
+      entry.imageStringNodes.flatMap((spec) => [
+        spec.resource,
+        ...(spec.spinBlurProfile ? [spec.spinBlurProfile.resource] : []),
+      ]),
   );
   const specialImagePaths = Object.values(options.manifest.symbols).flatMap(
     (entry) =>
       entry.imageStringNodes.flatMap((spec) =>
-        (spec.specialValueImages ?? []).map((mapping) => mapping.image),
+        [
+          ...(spec.specialValueImages ?? []),
+          ...(spec.spinBlurProfile?.specialValueImages ?? []),
+        ].map((mapping) => mapping.image),
       ),
   );
   const pool = await createSymbolImageStringResourcePool({
@@ -215,6 +223,16 @@ export function createSymbolImageStringResourcesFromPool(options: {
     );
     for (const spec of entry.imageStringNodes) {
       const resource = options.pool.get(spec.resource);
+      const spinBlurResource = spec.spinBlurProfile
+        ? options.pool.get(spec.spinBlurProfile.resource)
+        : undefined;
+      if (spinBlurResource) {
+        assertCompatibleSymbolImageStringLayouts({
+          normal: resource.manifest,
+          spinBlur: spinBlurResource.manifest,
+          label: `Symbol "${symbol}" image-string node "${spec.name}"`,
+        });
+      }
       try {
         validateMappedImageStringText(
           spec.initialText,
@@ -226,6 +244,19 @@ export function createSymbolImageStringResourcesFromPool(options: {
           `Symbol "${symbol}" image-string node "${spec.name}" initialText is invalid: ${formatError(error)}.`,
         );
       }
+      if (spec.spinBlurProfile && spinBlurResource) {
+        try {
+          validateMappedImageStringText(
+            spec.initialText,
+            spinBlurResource,
+            spec.spinBlurProfile.specialValueImages ?? [],
+          );
+        } catch (error) {
+          throw new SymbolAssetError(
+            `Symbol "${symbol}" image-string node "${spec.name}" spinBlur initialText is invalid: ${formatError(error)}.`,
+          );
+        }
+      }
       bySymbol[symbol] ??= [];
       bySymbol[symbol].push(
         Object.freeze({
@@ -236,6 +267,18 @@ export function createSymbolImageStringResourcesFromPool(options: {
             spec.specialValueImages ?? [],
             options.pool,
           ),
+          ...(spec.spinBlurProfile && spinBlurResource
+            ? {
+                spinBlurProfile: Object.freeze({
+                  resource: spinBlurResource,
+                  specialValueImages:
+                    createSymbolImageStringSpecialValueImageMap(
+                      spec.spinBlurProfile.specialValueImages ?? [],
+                      options.pool,
+                    ),
+                }),
+              }
+            : {}),
         }),
       );
     }
@@ -248,6 +291,33 @@ export function createSymbolImageStringResourcesFromPool(options: {
       ]),
     ),
   );
+}
+
+export function assertCompatibleSymbolImageStringLayouts(options: {
+  readonly normal: ImageStringManifestV1;
+  readonly spinBlur: ImageStringManifestV1;
+  readonly label: string;
+}): void {
+  const comparable = (manifest: ImageStringManifestV1) => ({
+    metrics: manifest.metrics,
+    glyphs: Object.fromEntries(
+      Object.entries(manifest.glyphs)
+        .sort(([left], [right]) => left.localeCompare(right, "en"))
+        .map(([character, glyph]) => [
+          character,
+          { size: glyph.size, offset: glyph.offset },
+        ]),
+    ),
+    fixedAdvanceGroups: manifest.fixedAdvanceGroups,
+  });
+  if (
+    JSON.stringify(comparable(options.normal)) !==
+    JSON.stringify(comparable(options.spinBlur))
+  ) {
+    throw new SymbolAssetError(
+      `${options.label} spinBlur ImgNumber layout must match its normal resource.`,
+    );
+  }
 }
 
 export function createSymbolImageStringSpecialValueImageMap(
