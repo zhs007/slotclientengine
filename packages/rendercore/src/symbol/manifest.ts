@@ -611,22 +611,10 @@ function parseImageStringNodes(
         );
       }
       names.add(name);
-      const resource = assertString(node.resource, `${label}.resource`);
-      if (
-        !resource.startsWith("./") ||
-        !resource.endsWith("image-string.manifest.json")
-      ) {
-        throw new SymbolAssetError(
-          `${label}.resource must be a canonical local path to image-string.manifest.json.`,
-        );
-      }
-      try {
-        resolvePackagePath("symbol-state-textures.manifest.json", resource);
-      } catch (error) {
-        throw new SymbolAssetError(
-          `${label}.resource is invalid: ${formatUnknownError(error)}.`,
-        );
-      }
+      const resource = assertImageStringResourcePath(
+        node.resource,
+        `${label}.resource`,
+      );
       if (node.target !== undefined && node.targets !== undefined) {
         throw new SymbolAssetError(
           `${label} must not declare both target and targets.`,
@@ -2619,7 +2607,7 @@ function assertImageStringResourcePath(value: unknown, label: string): string {
   if (
     !path.startsWith("./") ||
     path.includes("\\") ||
-    !path.endsWith("/image-string.manifest.json")
+    !path.endsWith("image-string.manifest.json")
   ) {
     throw new SymbolAssetError(
       `${label} must be a canonical local path to image-string.manifest.json.`,

@@ -84,6 +84,177 @@ describe("symbol package materialization", () => {
     ).rejects.toThrow(/extension/);
   });
 
+  it("rewrites named and value image-string owner references with a package prefix", async () => {
+    const imageString = {
+      version: 1,
+      kind: "image-string",
+      id: "shared-digits",
+      metrics: { lineHeight: 1, letterSpacing: 0 },
+      glyphs: {
+        "0": {
+          path: "glyph-0.png",
+          size: { width: 1, height: 1 },
+          offset: { x: 0, y: 0 },
+        },
+        "1": {
+          path: "glyph-1.png",
+          size: { width: 1, height: 1 },
+          offset: { x: 0, y: 0 },
+        },
+      },
+      fixedAdvanceGroups: [],
+    };
+    const resources = [
+      "digits/glyph-0.png",
+      "digits/glyph-1.png",
+      "digits/image-string.manifest.json",
+      "special.png",
+      "tier.atlas",
+      "tier.json",
+      "tier.png",
+    ].sort();
+    const packageManifest = parseSymbolPackageManifest({
+      version: 1,
+      kind: "symbol-package",
+      id: "nested-imgnumber",
+      cellSize: { width: 160, height: 160 },
+      entrypoints: {
+        gameConfig: "gameconfig.json",
+        symbolManifest: "symbol-state-textures.manifest.json",
+      },
+      resources,
+    });
+    const rawGameConfig = {
+      paytable: {
+        "0": { code: 0, symbol: "A", pays: [1] },
+        "1": { code: 1, symbol: "B", pays: [1] },
+      },
+      symbolCodes: { A: 0, B: 1 },
+      reels: { main: [[0, 1]] },
+    };
+    const rawSymbolManifest = {
+      version: 1,
+      states: [],
+      symbols: {
+        A: {
+          normal: { kind: "transparent", width: 160, height: 160 },
+          scale: 1,
+          imageStringNodes: [
+            {
+              name: "named-value",
+              resource: "./digits/image-string.manifest.json",
+              targets: [{ state: "normal" }],
+              initialText: "0",
+              specialValueImages: [{ value: 200, image: "./special.png" }],
+              anchor: { x: 0.5, y: 0.5 },
+              transform: { x: 0, y: 0, scale: 1 },
+              followSlotColor: true,
+            },
+          ],
+        },
+        B: {
+          scale: 1,
+          valuePresentation: {
+            defaultValues: [1],
+            reelStates: {
+              normal: { kind: "transparent", width: 160, height: 160 },
+            },
+            tiers: [
+              {
+                animation: {
+                  kind: "spine",
+                  skeleton: "./tier.json",
+                  atlas: "./tier.atlas",
+                  texture: "./tier.png",
+                  playback: {
+                    mode: "animation",
+                    animationName: "Loop",
+                    loop: true,
+                  },
+                },
+              },
+            ],
+            text: {
+              type: "image-string",
+              tiers: [
+                {
+                  resource: "./digits/image-string.manifest.json",
+                  slot: "Num",
+                  anchor: { x: 0.5, y: 0.5 },
+                  transform: { x: 0, y: 0, scale: 1 },
+                  followSlotColor: true,
+                },
+              ],
+              specialValueImages: [{ value: 200, image: "./special.png" }],
+            },
+          },
+        },
+      },
+    };
+    const prefix = "pkg-16-nested-imgnumber";
+
+    const mapped = await materializeMappedSymbolPackageContents({
+      packageManifest,
+      rawGameConfig,
+      rawSymbolManifest,
+      assets: new Map([
+        ["digits/glyph-0.png", png],
+        ["digits/glyph-1.png", new Uint8Array([...png, 1])],
+        ["digits/image-string.manifest.json", encode(imageString)],
+        ["special.png", new Uint8Array([...png, 2])],
+        ["tier.atlas", atlas("tier.png")],
+        ["tier.json", encode(spineSkeleton())],
+        ["tier.png", webp],
+      ]),
+      keyPrefix: prefix,
+    });
+
+    expect(mapped.rawSymbolManifest).toMatchObject({
+      symbols: {
+        A: {
+          imageStringNodes: [
+            {
+              name: "named-value",
+              resource: `./${prefix}-image-string.manifest.json`,
+              specialValueImages: [
+                { value: 200, image: `./${prefix}-special.png` },
+              ],
+            },
+          ],
+        },
+        B: {
+          valuePresentation: {
+            text: {
+              type: "image-string",
+              tiers: [{ resource: `./${prefix}-image-string.manifest.json` }],
+              specialValueImages: [
+                { value: 200, image: `./${prefix}-special.png` },
+              ],
+            },
+          },
+        },
+      },
+    });
+    expect(mapped.packageManifest.resources).toEqual([
+      `${prefix}-glyph-0.png`,
+      `${prefix}-glyph-1.png`,
+      `${prefix}-image-string.manifest.json`,
+      `${prefix}-special.png`,
+      `${prefix}-tier.atlas`,
+      `${prefix}-tier.json`,
+      `${prefix}-tier.png`,
+    ]);
+    const nested = JSON.parse(
+      new TextDecoder().decode(
+        mapped.assets.get(`${prefix}-image-string.manifest.json`)!,
+      ),
+    );
+    expect(nested.glyphs).toMatchObject({
+      "0": { path: `${prefix}-glyph-0.png` },
+      "1": { path: `${prefix}-glyph-1.png` },
+    });
+  });
+
   it("rewrites legacy uppercase resource paths to a lowercase hash-flat closure", async () => {
     const packageManifest = parseSymbolPackageManifest({
       version: 1,
