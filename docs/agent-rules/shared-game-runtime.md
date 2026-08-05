@@ -62,6 +62,7 @@
 ## Presentation
 
 - rendercore 拥有通用 symbol win carousel、金额递增、big/super/mega tier、segmented VNI 播放、popup threshold sequence、点击/advance/dismiss/end drain，以及普通 Spine popup 的 start→loop→end 边界状态机和 runtime snapshot。Scene Layout transition prelude 只能编排该 public player，不能在 app/editor 复制点击 latch 或 loop/end 边界。
+- 普通 Spine popup prompt 的单行校验、按 area 等比缩小、package 字体 FontFace hash 复用/释放及 image/Spine/VNI overlay 生命周期属于 rendercore；游戏只向 `start(text?)` 传入已翻译 string，省略时使用 manifest 默认值。
 - component 名、amount resolver、formatter、样式和业务阻塞边界由 app 传入；shared code 不维护游戏专属金额或 symbol 规则。
 - win-amount 进入 `awaiting-dismiss` 后不得继续阻塞 `playSpin()`；下一次 spin 负责清理遗留展示。
 - reel runtime 在金额或 popup 播放期间仍需逐帧 update，不能冻结 active Spine/VNI loop。

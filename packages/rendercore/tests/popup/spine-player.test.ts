@@ -82,6 +82,11 @@ describe("spine popup player", () => {
     expect(() => player.start()).toThrow(/init/);
     await player.init();
     await player.init();
+    expect(() => player.start("unexpected prompt")).toThrow(
+      /does not define a prompt/,
+    );
+    expect(player.getSnapshot().phase).toBe("idle");
+    expect(player.container.visible).toBe(false);
     player.requestDismiss();
     player.dismissImmediately();
     expect(player.update(0).phase).toBe("idle");
@@ -89,6 +94,16 @@ describe("spine popup player", () => {
     expect(() => player.update(Number.NaN)).toThrow(/non-negative/);
     player.destroy();
     expect(() => player.getSnapshot()).toThrow(/destroyed/);
+
+    const failedLeaf = new FakeSpinePlayer();
+    failedLeaf.initError = new Error("init failed");
+    const failed = createSpinePopupPlayer({
+      resource: spineResource(),
+      playerFactory: () => failedLeaf,
+    });
+    await expect(failed.init()).rejects.toThrow(/init failed/);
+    expect(failedLeaf.destroyCount).toBe(1);
+    expect(() => failed.getSnapshot()).toThrow(/destroyed/);
   });
 });
 
@@ -98,7 +113,10 @@ class FakeSpinePlayer implements RendercoreSpinePlayer {
   readonly results: Array<ReturnType<RendercoreSpinePlayer["update"]>> = [];
   resetCount = 0;
   destroyCount = 0;
-  init(): void {}
+  initError?: Error;
+  init(): void {
+    if (this.initError) throw this.initError;
+  }
   play(options: { animationName: string; loop: boolean }): void {
     this.plays.push({ ...options });
   }

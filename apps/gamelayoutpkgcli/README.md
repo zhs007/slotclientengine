@@ -63,6 +63,7 @@ ZIP 与 JSON 作为一对提交，第二个文件提交失败时会回滚第一�
 - `layout.manifest.json` 和 nested image-string、Symbols、Popup、VNI JSON 中受支持的
   typed 图片引用会更新为 WebP filename key；
 - Spine atlas page logical name、VNI `originalName` 和业务 identity 保持不变；
+- Popup 的 WOFF2/WOFF/TTF/OTF 字体引用保持不变，并继续按 payload SHA-256 去重；
 - `assets.map.json` 的 path、SHA-256、media type 和 byte length 按优化后 bytes
   重新生成；
 - 旧图片 payload 和资源分组 JSON 不进入 ZIP。

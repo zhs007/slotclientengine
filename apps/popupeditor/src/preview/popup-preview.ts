@@ -69,6 +69,7 @@ export class PopupPreview {
   #showGuides = true;
   #input = { betAmountRaw: 100, winAmountRaw: 5000 };
   #amountFormat = DEFAULT_POPUP_PREVIEW_AMOUNT_FORMAT;
+  #promptText: string | undefined;
   constructor(host: HTMLElement, status: HTMLElement) {
     this.#host = host;
     this.#status = status;
@@ -125,10 +126,14 @@ export class PopupPreview {
   setAmountFormat(format: PopupPreviewAmountFormat) {
     this.#amountFormat = validatePopupPreviewAmountFormat(format);
   }
+  setPromptText(text: string | undefined) {
+    this.#promptText = text;
+  }
   play() {
     if (!this.#player) throw new Error("请先生成有效 production preview。");
     this.#player.dismissImmediately();
-    if (this.#type === "spine") (this.#player as SpinePopupPlayer).start();
+    if (this.#type === "spine")
+      (this.#player as SpinePopupPlayer).start(this.#promptText);
     else (this.#player as AwardCelebrationPlayer).start(this.#input);
   }
   advance() {

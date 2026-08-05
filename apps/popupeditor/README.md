@@ -2,13 +2,15 @@
 
 纯前端 strict `award-celebration` 与普通 `spine` popup package 编辑器。
 
-资源 tab 只有一个支持多文件/多 ZIP 的“导入资源”入口，识别 image、official Spine 4.3、VNI、standalone ImgNumber ZIP 和 Popup ZIP。所有 closure 在提交前结构化抹平为 filename keys，普通导入只入库；layer/tier 仍由用户显式绑定。
+资源 tab 只有一个支持多文件/多 ZIP 的“导入资源”入口，识别 image、WOFF2/WOFF/TTF/OTF 字体、official Spine 4.3、VNI、standalone ImgNumber ZIP 和 Popup ZIP。字体会校验扩展名与文件签名。所有 closure 在提交前结构化抹平为 filename keys，普通导入只入库；layer/tier 仍由用户显式绑定。
 
 VNI bundle 只导入 `purpose=runtime` 的运行发布包：唯一 runtime 自动选中；只有声明多个 runtime 时才显示下拉选择，不允许手输 profile id。`purpose=editing` 的完整编辑备份不会作为候选，也不会进入资源库；最终只提交所选 runtime project 与精确 assets。`.DS_Store`、未知、orphan、缺失和歧义输入不会被忽略。
 
 同名不同 bytes 默认覆盖，review 显示 hash、bytes、动作和受影响 layer；全项目校验或 preview prepare 失败会完整回滚。不存在文件夹入口、任意 logical resource id 或独立 dependency bytes 区。
 
 新导出的 `<id>-popup.zip` 由根 `popup.manifest.json`、`assets.map.json` 和完整 SHA-256 payload 构成。普通 Spine 类型接收一组 JSON、atlas 与若干 PNG，并显式配置 start、loop、end 动画；点击在 loop 边界生效。runtime parser 与两类播放生命周期均由 `rendercore/popup` 拥有。
+
+普通 Spine 类型还可配置一个单行点击提示：选择 package 字体、默认文案、颜色、order 与渲染区域。预览文案可临时覆盖，留空时显示默认文案；游戏 runtime 可传入已翻译 string。字号以区域高度起步并按区域等比缩小，不换行。可追加任意数量 image、Spine 或 VNI overlay，编辑其位置、缩放、旋转、order 及各类型 playback/可见 segment。
 
 VNI 图层可显式选择“分段循环”或“完整单次”。分段模式编辑 start/loop/end 边界；
 完整单次模式从 `0` 到 VNI 总时长非循环播放，动画先于金额阶段结束时保持 authored

@@ -194,5 +194,7 @@ export function mediaType(key: string): string {
   if (lower.endsWith(".mp4")) return "video/mp4";
   if (lower.endsWith(".json")) return "application/json";
   if (lower.endsWith(".atlas")) return "text/plain";
+  for (const extension of ["woff2", "woff", "ttf", "otf"])
+    if (lower.endsWith(`.${extension}`)) return `font/${extension}`;
   throw new Error(`fixture mediaType missing: ${key}`);
 }

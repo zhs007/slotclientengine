@@ -6,6 +6,7 @@ award-celebration Popup 作为自包含 dependency 通过 `rendercore/popup` 严
 vendor；内部 VNI 的 segmented/once playback、最后一帧保持和 dismiss 生命周期不在
 Layout Editor 复制或改写。
 普通 Spine Popup 导入后需在 Popup 工作区显式注册；注册后可配置 placement、预览 start/loop/end 并随 layout vendor。
+若 package 带单行 prompt，Popup 工作区可输入临时预览文案；留空使用 package 默认值。字体、渲染区域和 image/Spine/VNI overlay 保持只读，须回 Popup Editor 修改。相同字体 bytes 与其它 payload 一样在最终 `assets.map.json` 中按 SHA-256 物理去重。
 
 SymbolsEditor ZIP 同样作为自包含、只读的 symbol 状态机 dependency；Symbols 与 Popup library 都允许导入多个不同 package id，同 id 再上传进入替换并保留现有 mode/transition binding。Layout Editor 只选择
 package、reelSet、renderMode，并使用 rendercore 的公开 display/state capability 做校验和预览；

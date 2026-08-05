@@ -17,6 +17,7 @@ const preview = {
         throw new Error("preview 小数位数必须是 0..6 safe integer。");
     },
   ),
+  setPromptText: vi.fn(),
   play: vi.fn(),
   advance: vi.fn(),
   dismiss: vi.fn(),
@@ -452,6 +453,90 @@ describe("PopupEditorApp", () => {
     root.querySelector<HTMLButtonElement>('[data-tab="project"]')!.click();
     expect(root.textContent).toContain("game-win");
     expect(root.textContent).toContain('"mode": "once"');
+
+    const projectType = root.querySelector<HTMLSelectElement>("#project-type")!;
+    projectType.value = "spine";
+    projectType.dispatchEvent(new Event("change"));
+    root.querySelector<HTMLButtonElement>('[data-tab="tiers"]')!.click();
+    const spineResource =
+      root.querySelector<HTMLSelectElement>("#spine-resource")!;
+    spineResource.value = "Spine.json";
+    spineResource.dispatchEvent(new Event("change"));
+
+    const promptEnabled = root.querySelector<HTMLInputElement>(
+      "#spine-prompt-enabled",
+    )!;
+    promptEnabled.checked = true;
+    promptEnabled.dispatchEvent(new Event("change"));
+    const font = root.querySelector<HTMLSelectElement>("#spine-prompt-font")!;
+    font.value = "Prompt.woff2";
+    font.dispatchEvent(new Event("change"));
+    for (const [field, value] of [
+      ["defaultText", "Continue"],
+      ["fill", "#ffff00"],
+      ["order", "7"],
+      ["x", "100"],
+    ]) {
+      const input = root.querySelector<HTMLInputElement>(
+        `[data-spine-prompt-field="${field}"]`,
+      )!;
+      input.value = value;
+      input.dispatchEvent(new Event("change"));
+    }
+
+    for (const resource of ["BG.PNG", "effect.json", "Spine.json"]) {
+      const overlayResource = root.querySelector<HTMLSelectElement>(
+        "#spine-overlay-resource",
+      )!;
+      overlayResource.value = resource;
+      root.querySelector<HTMLButtonElement>("#add-spine-overlay")!.click();
+    }
+    const imageId = root.querySelector<HTMLInputElement>(
+      '[data-overlay-field="anchor-x"]',
+    )!.dataset.overlayId!;
+    for (const [field, value, checked] of [
+      ["x", "11", false],
+      ["order", "12", false],
+      ["anchor-x", "0.25", false],
+      ["segment-end", "", false],
+    ] as const) {
+      const input = root.querySelector<HTMLInputElement>(
+        `[data-overlay-id="${imageId}"][data-overlay-field="${field}"]`,
+      )!;
+      input.value = value;
+      if (field === "segment-end") input.checked = checked;
+      input.dispatchEvent(new Event("change"));
+    }
+    const loopStart = root.querySelector<HTMLInputElement>(
+      '[data-overlay-field="loopStartTime"]',
+    )!;
+    loopStart.value = "0.5";
+    loopStart.dispatchEvent(new Event("change"));
+    const keepParticles = root.querySelector<HTMLInputElement>(
+      '[data-overlay-field="keepParticlesAlive"]',
+    )!;
+    keepParticles.checked = false;
+    keepParticles.dispatchEvent(new Event("change"));
+    const vniMode = root.querySelector<HTMLSelectElement>(
+      "[data-overlay-vni-mode]",
+    )!;
+    vniMode.value = "once";
+    vniMode.dispatchEvent(new Event("change"));
+    expect(root.textContent).toContain("VNI once");
+    const spineStart = root.querySelector<HTMLInputElement>(
+      '[data-overlay-field="startAnimation"]',
+    )!;
+    spineStart.value = "Start";
+    spineStart.dispatchEvent(new Event("change"));
+    root.querySelector<HTMLButtonElement>("[data-delete-overlay]")!.click();
+
+    const promptPreview =
+      root.querySelector<HTMLInputElement>("#preview-prompt")!;
+    promptPreview.value = "Translated continue";
+    promptPreview.dispatchEvent(new Event("change"));
+    expect(preview.setPromptText).toHaveBeenLastCalledWith(
+      "Translated continue",
+    );
     app.destroy();
   });
 });
@@ -500,6 +585,18 @@ function validProject() {
       textures: { "Spine.png": "Spine.png" },
     },
     keys: ["Spine.json", "Spine.atlas", "Spine.png"],
+  });
+  project.resources.set("Prompt.woff2", {
+    rootKey: "Prompt.woff2",
+    kind: "font",
+    spec: { kind: "font", path: "Prompt.woff2" },
+    keys: ["Prompt.woff2"],
+  });
+  project.assets.set("Prompt.woff2", {
+    ...asset,
+    key: "Prompt.woff2",
+    mediaType: "font/woff2",
+    bytes: new Uint8Array([0x77, 0x4f, 0x46, 0x32]),
   });
   project.assets.set("effect.json", {
     ...asset,

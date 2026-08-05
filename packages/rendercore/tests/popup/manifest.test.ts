@@ -52,6 +52,109 @@ describe("popup manifest", () => {
     ).toThrow(/must be unique/);
   });
 
+  it("parses a single-line prompt and ordered image overlay", () => {
+    const hash = (value: string) => `assets/${value.repeat(64)}`;
+    const manifest = parsePopupManifest({
+      version: 1,
+      kind: "popup",
+      id: "free-game",
+      type: "spine",
+      designViewport: { width: 1080, height: 1920 },
+      resources: {
+        effect: {
+          kind: "spine",
+          skeleton: `${hash("a")}.json`,
+          atlas: `${hash("b")}.atlas`,
+          textures: { "effect.png": `${hash("c")}.png` },
+        },
+        prompt: { kind: "font", path: `${hash("d")}.woff2` },
+        shade: {
+          kind: "image",
+          path: `${hash("e")}.png`,
+          size: { width: 300, height: 100 },
+        },
+      },
+      spine: {
+        resource: "effect",
+        transform: { x: 0, y: 0, scale: 1 },
+        playback: {
+          mode: "segmented-animations",
+          startAnimation: "start",
+          loopAnimation: "loop",
+          endAnimation: "end",
+        },
+        prompt: {
+          font: "prompt",
+          defaultText: "Press any key",
+          fill: "#fff",
+          order: 2,
+          area: { x: 0, y: 400, width: 600, height: 80 },
+        },
+        overlays: [
+          {
+            id: "shade",
+            kind: "image",
+            order: 1,
+            resource: "shade",
+            transform: { x: 0, y: 400, scale: 1, rotation: 5 },
+            anchor: { x: 0.5, y: 0.5 },
+            visibleSegments: ["start", "loop"],
+          },
+        ],
+      },
+    });
+    expect(manifest.type).toBe("spine");
+    if (manifest.type !== "spine") throw new Error("Expected spine popup.");
+    expect(manifest.spine.prompt?.defaultText).toBe("Press any key");
+    expect(manifest.spine.overlays?.[0]?.transform.rotation).toBe(5);
+    expect(collectPopupDirectPaths(manifest)).toContain(`${hash("d")}.woff2`);
+    expect(() =>
+      parsePopupManifest({
+        ...manifest,
+        spine: {
+          ...manifest.spine,
+          prompt: { ...manifest.spine.prompt!, defaultText: "one\ntwo" },
+        },
+      }),
+    ).toThrow(/single line/);
+    const expanded = structuredClone(manifest) as any;
+    expanded.resources.timeline = {
+      kind: "vni",
+      project: `${hash("f")}.json`,
+    };
+    expanded.spine.overlays.push(
+      {
+        id: "timeline",
+        kind: "vni",
+        order: 3,
+        resource: "timeline",
+        transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+        playback: { mode: "once" },
+      },
+      {
+        id: "sparkle",
+        kind: "spine",
+        order: 4,
+        resource: "effect",
+        transform: { x: 0, y: 0, scale: 1, rotation: -5 },
+        playback: {
+          mode: "segmented-animations",
+          startAnimation: "Start",
+          loopAnimation: "Loop",
+          endAnimation: "End",
+        },
+      },
+    );
+    const parsed = parsePopupManifest(expanded);
+    if (parsed.type !== "spine") throw new Error("expected spine popup");
+    expect(parsed.spine.overlays).toHaveLength(3);
+    expanded.spine.overlays[1].order = 2;
+    expect(() => parsePopupManifest(expanded)).toThrow(/order must be unique/);
+    expanded.spine.overlays[1].order = 3;
+    expanded.spine.prompt.font = "shade";
+    expect(() => parsePopupManifest(expanded)).toThrow(/font resource/);
+  });
+
   it("strictly parses the complete game003-equivalent five-tier contract", () => {
     const manifest = parsePopupManifest(popupFixture());
     expect(manifest.awardCelebration.base.layers[0]).toMatchObject({

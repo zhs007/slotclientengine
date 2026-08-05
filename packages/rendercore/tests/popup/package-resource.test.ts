@@ -77,13 +77,17 @@ describe("popup package resource", () => {
     } = await import("../../src/popup/package-resource.js");
     const award = fixture();
     const spineSpec = award.manifest.resources.spine;
+    const promptPath = `assets/${"d".repeat(64)}.woff2`;
     const manifest = {
       version: 1,
       kind: "popup",
       id: "free-game",
       type: "spine",
       designViewport: { width: 100, height: 100 },
-      resources: { spine: spineSpec },
+      resources: {
+        spine: spineSpec,
+        prompt: { kind: "font", path: promptPath },
+      },
       spine: {
         resource: "spine",
         transform: { x: 0, y: 0, scale: 1 },
@@ -92,6 +96,13 @@ describe("popup package resource", () => {
           startAnimation: "start",
           loopAnimation: "Loop",
           endAnimation: "Win",
+        },
+        prompt: {
+          font: "prompt",
+          defaultText: "Continue",
+          fill: "#ffffff",
+          order: 1,
+          area: { x: 0, y: 20, width: 80, height: 10 },
         },
       },
     } as const;
@@ -106,15 +117,18 @@ describe("popup package resource", () => {
         spineSpec.atlas,
         ...Object.values(spineSpec.textures),
       ].map((path) => [path, award.files.get(path)!] as const),
+      [promptPath, new Uint8Array([0x77, 0x4f, 0x46, 0x32])],
     ]);
-    expect(collectPopupPackagePaths({ manifest, files })).toHaveLength(3);
+    expect(collectPopupPackagePaths({ manifest, files })).toHaveLength(4);
     const flattened = flattenPopupPackageFiles({ manifest, files });
     expect(flattened.manifest.type).toBe("spine");
     const resource = await createPopupPackageResource({
       manifest,
       files,
+      loadFont: vi.fn(async () => vi.fn()),
     });
     expect(resource.resources.spine.kind).toBe("spine");
+    expect(resource.resources.prompt.kind).toBe("font");
     await resource.destroy();
   });
 

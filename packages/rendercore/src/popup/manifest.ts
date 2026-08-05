@@ -8,13 +8,16 @@ import type {
   PopupAmountFormat,
   PopupLayer,
   PopupManifestV1,
+  PopupOverlayLayer,
+  PopupPromptSpec,
   PopupResourceSpec,
   PopupSegment,
   SpinePopupManifestV1,
 } from "./types.js";
 
 const IDS = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
-const OWNED_PATH = /^assets\/[a-f0-9]{64}\.(?:png|webp|jpg|jpeg|json|atlas)$/u;
+const OWNED_PATH =
+  /^assets\/[a-f0-9]{64}\.(?:png|webp|jpg|jpeg|json|atlas|woff2|woff|ttf|otf)$/u;
 const SEGMENTS: readonly PopupSegment[] = ["start", "loop", "end"];
 
 export function parsePopupManifest(
@@ -71,8 +74,11 @@ export function parsePopupManifest(value: unknown): PopupManifestV1 {
   };
   if (record.type === "spine") {
     const spine = parseSpinePopup(record.spine, resources);
+    const used = new Set<string>([spine.resource]);
+    if (spine.prompt) used.add(spine.prompt.font);
+    for (const overlay of spine.overlays ?? []) used.add(overlay.resource);
     const unused = Object.keys(resources).filter(
-      (resourceId) => resourceId !== spine.resource,
+      (resourceId) => !used.has(resourceId),
     );
     if (unused.length)
       fail(`popup production resources 包含未引用项：${unused.join(", ")}`);
@@ -103,7 +109,17 @@ function parseSpinePopup(
   resources: Readonly<Record<string, PopupResourceSpec>>,
 ) {
   const record = object(value, "spine");
-  keys(record, ["resource", "transform", "playback"], "spine");
+  keys(
+    record,
+    [
+      "resource",
+      "transform",
+      "playback",
+      ...(Object.hasOwn(record, "prompt") ? ["prompt"] : []),
+      ...(Object.hasOwn(record, "overlays") ? ["overlays"] : []),
+    ],
+    "spine",
+  );
   const resource = resourceKey(record.resource, "spine.resource");
   if (resources[resource]?.kind !== "spine")
     fail("spine.resource must reference a spine resource.");
@@ -123,6 +139,19 @@ function parseSpinePopup(
     nonEmpty(playback.endAnimation, "spine.playback.endAnimation"),
   ];
   unique(animations, "spine playback animations");
+  const prompt = Object.hasOwn(record, "prompt")
+    ? parsePrompt(record.prompt, resources)
+    : undefined;
+  const overlays = Object.hasOwn(record, "overlays")
+    ? parseOverlays(record.overlays, resources)
+    : undefined;
+  unique(
+    [
+      ...(prompt ? [String(prompt.order)] : []),
+      ...(overlays ?? []).map(({ order }) => String(order)),
+    ],
+    "spine prompt/overlay order",
+  );
   return freeze({
     resource,
     transform: {
@@ -136,7 +165,79 @@ function parseSpinePopup(
       loopAnimation: animations[1]!,
       endAnimation: animations[2]!,
     },
+    ...(prompt ? { prompt } : {}),
+    ...(overlays ? { overlays } : {}),
   });
+}
+
+function parsePrompt(
+  value: unknown,
+  resources: Readonly<Record<string, PopupResourceSpec>>,
+): PopupPromptSpec {
+  const record = object(value, "spine.prompt");
+  keys(
+    record,
+    ["font", "defaultText", "fill", "order", "area"],
+    "spine.prompt",
+  );
+  const font = resourceKey(record.font, "spine.prompt.font");
+  if (resources[font]?.kind !== "font")
+    fail("spine.prompt.font must reference a font resource.");
+  const defaultText = nonEmptySingleLine(
+    record.defaultText,
+    "spine.prompt.defaultText",
+  );
+  const fill = nonEmpty(record.fill, "spine.prompt.fill");
+  const area = object(record.area, "spine.prompt.area");
+  keys(area, ["x", "y", "width", "height"], "spine.prompt.area");
+  return freeze({
+    font,
+    defaultText,
+    fill,
+    order: nonNegativeSafe(record.order, "spine.prompt.order"),
+    area: {
+      x: finite(area.x, "spine.prompt.area.x"),
+      y: finite(area.y, "spine.prompt.area.y"),
+      width: positive(area.width, "spine.prompt.area.width"),
+      height: positive(area.height, "spine.prompt.area.height"),
+    },
+  });
+}
+
+function parseOverlays(
+  value: unknown,
+  resources: Readonly<Record<string, PopupResourceSpec>>,
+): readonly PopupOverlayLayer[] {
+  if (!Array.isArray(value)) fail("spine.overlays must be an array.");
+  const overlays = value.map((raw, index) => {
+    const label = `spine.overlays[${index}]`;
+    const record = object(raw, label);
+    if (record.kind === "image-string" || record.kind === "font")
+      fail(`${label}.kind must be image, vni, or spine.`);
+    const transform = object(record.transform, `${label}.transform`);
+    keys(transform, ["x", "y", "scale", "rotation"], `${label}.transform`);
+    const parsed = parseLayer(
+      {
+        ...record,
+        transform: { x: transform.x, y: transform.y, scale: transform.scale },
+      },
+      label,
+      resources,
+    );
+    if (parsed.kind === "image-string") fail(`${label}.kind invalid.`);
+    return freeze({
+      ...parsed,
+      transform: {
+        ...parsed.transform,
+        rotation: finite(transform.rotation, `${label}.transform.rotation`),
+      },
+    }) as PopupOverlayLayer;
+  });
+  unique(
+    overlays.map(({ id }) => id),
+    "spine.overlays.id",
+  );
+  return Object.freeze([...overlays].sort((a, b) => a.order - b.order));
 }
 
 export function collectPopupDirectPaths(
@@ -145,7 +246,8 @@ export function collectPopupDirectPaths(
   const parsed = parsePopupManifest(manifest);
   const result = new Set<string>();
   for (const resource of Object.values(parsed.resources)) {
-    if (resource.kind === "image") result.add(resource.path);
+    if (resource.kind === "image" || resource.kind === "font")
+      result.add(resource.path);
     else if (resource.kind === "image-string") result.add(resource.manifest);
     else if (resource.kind === "vni") result.add(resource.project);
     else {
@@ -215,6 +317,13 @@ function parseResource(value: unknown, label: string): PopupResourceSpec {
       },
     });
   }
+  if (record.kind === "font") {
+    keys(record, ["kind", "path"], label);
+    const fontPath = owned(record.path, `${label}.path`);
+    if (!/\.(?:woff2|woff|ttf|otf)$/iu.test(fontPath))
+      fail(`${label}.path must be a supported font file.`);
+    return freeze({ kind: "font" as const, path: fontPath });
+  }
   if (record.kind === "image-string") {
     keys(record, ["kind", "manifest"], label);
     const manifest = path(record.manifest, `${label}.manifest`);
@@ -254,7 +363,7 @@ function parseResource(value: unknown, label: string): PopupResourceSpec {
       textures,
     });
   }
-  fail(`${label}.kind must be image, image-string, vni, or spine.`);
+  fail(`${label}.kind must be image, font, image-string, vni, or spine.`);
 }
 
 function parseAwardCelebration(
@@ -573,10 +682,17 @@ function resourceKey(value: unknown, label: string): string {
 }
 
 function resourceRoot(resource: PopupResourceSpec): string {
-  if (resource.kind === "image") return resource.path;
+  if (resource.kind === "image" || resource.kind === "font")
+    return resource.path;
   if (resource.kind === "image-string") return resource.manifest;
   if (resource.kind === "vni") return resource.project;
   return resource.skeleton;
+}
+function nonEmptySingleLine(value: unknown, label: string): string {
+  const result = nonEmpty(value, label);
+  if (/[\n\r\u2028\u2029]/u.test(result))
+    fail(`${label} must be a single line.`);
+  return result;
 }
 function printable(value: unknown, label: string): string {
   if (

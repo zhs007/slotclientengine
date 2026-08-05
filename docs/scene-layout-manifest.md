@@ -95,6 +95,8 @@ binding `type` 必须与 nested popup manifest 精确一致。game mode 的 `awa
 
 根 `assets.map.json` 将 layout、VNI、image-string、Symbols、Popup 的全部 root/leaf keys 统一映射到 `assets/<完整 SHA-256>.<ext>`。ZIP 只有两个 root control files 和 hash payload 区；禁止 `dependencies/image-strings/**`、`dependencies/symbols/**`、`dependencies/popups/**`。
 
+普通 Spine Popup 内的 prompt 字体与 image/Spine/VNI overlay 仍属于 nested Popup owner。Game Layout Editor 只读预览 prompt 文案（可临时覆盖，留空使用 Popup 默认值），不改字体、区域、内部位置或 overlay。字体与其它 payload 一样按完整 SHA-256 物理去重：不同 Popup 引用相同 font bytes 时，production ZIP 只保存一个 payload，logical filename key 和各自 manifest 引用仍独立。
+
 Game Layout Editor 导入旧 mapped ZIP 时，在验证 map/hash/size/orphan 后将不符合当前 filename-key 合同的 logical key 做确定性迁移，并同步改写 layout 与已知 nested manifest 的 path 字段；业务 id、animation、symbol state 和 atlas page logical name 不参与文件名迁移。迁移后的再次导出只包含规范化 key。
 
 同一个 filename key 全局只有一份 bytes。多个 Symbols/Popup package 导入时使用包含 manifest id 的稳定扁平 key 前缀并由 owner API 结构化改写 nested reference，不创建 dependency 目录；同 id 再上传替换该 owner，不同 id 不得覆盖彼此 bytes。package/mode/node id 仍保留业务语义，不能作为运行时第二套资源查找表。相同 bytes 的 logical owners 在 `assets.map.json` 中共享一个 physical SHA-256 payload。导出与重新导入不得用 physical hash payload path 重建 node id 或资源列表标签。

@@ -26,6 +26,7 @@ import {
   validateImageStringPackageContents,
   validateOfficialSpineResource,
 } from "@slotclientengine/rendercore";
+import { validatePopupFontBytes } from "@slotclientengine/rendercore/popup";
 import type {
   AwardTierId,
   PopupResourceSpec,
@@ -222,6 +223,12 @@ export async function discoverPopupResources(
       consumed.add(path);
     }
 
+  for (const [path, bytes] of loaded)
+    if (!consumed.has(path) && /\.(?:woff2|woff|ttf|otf)$/iu.test(path)) {
+      candidates.push(await discoverFont(path, bytes));
+      consumed.add(path);
+    }
+
   const unknown = [...loaded.keys()].filter((path) => !consumed.has(path));
   if (unknown.length)
     throw new Error(
@@ -229,7 +236,7 @@ export async function discoverPopupResources(
     );
   if (!candidates.length)
     throw new Error(
-      "导入批次未发现 image、VNI、official Spine 4.3 或 ImgNumber 资源。",
+      "导入批次未发现 image、font、VNI、official Spine 4.3 或 ImgNumber 资源。",
     );
   assertEditorAdapterProfilesChosen(
     candidates.map((candidate) => ({
@@ -397,6 +404,28 @@ async function discoverImage(
     dependencyCount: 0,
     summary: `${size.width}×${size.height} ${media.mediaType}`,
     spec: { kind: "image", path: key, size },
+    assets: [asset],
+  });
+}
+
+async function discoverFont(
+  path: string,
+  bytes: Uint8Array,
+): Promise<PopupImportReviewCandidate> {
+  const format = validatePopupFontBytes(bytes, path);
+  const key = basenameFromSourcePath(path);
+  const asset = await createEditorAssetEntry({
+    key,
+    mediaType: `font/${format}`,
+    bytes,
+  });
+  return candidate({
+    rootKey: key,
+    kind: "font",
+    primarySource: path,
+    dependencyCount: 0,
+    summary: `${format.toUpperCase()} · ${bytes.byteLength} bytes`,
+    spec: { kind: "font", path: key },
     assets: [asset],
   });
 }
@@ -681,11 +710,29 @@ const popupProjectAdapter: EditorAssetRewriteAdapter<PopupEditorProject> = {
             kind: "layer",
           })),
         ),
+        ...(project.spine.prompt.font
+          ? [
+              {
+                key: project.spine.prompt.font,
+                location: "spine.prompt.font",
+                kind: "font",
+              },
+            ]
+          : []),
+        ...project.spine.overlays.map((overlay, index) => ({
+          key: overlay.resource,
+          location: `spine.overlays[${index}].resource`,
+          kind: "overlay",
+        })),
       ],
     };
   },
   renameReferences(project, from, to) {
     if (project.spine.resource === from) project.spine.resource = to;
+    if (project.spine.prompt.font === from) project.spine.prompt.font = to;
+    project.spine.overlays = project.spine.overlays.map((overlay) =>
+      overlay.resource === from ? { ...overlay, resource: to } : overlay,
+    );
     const resource = project.resources.get(from);
     if (resource) {
       project.resources.delete(from);
@@ -715,7 +762,7 @@ function renamePopupSpec(
   from: string,
   to: string,
 ): PopupResourceSpec {
-  if (spec.kind === "image")
+  if (spec.kind === "image" || spec.kind === "font")
     return { ...spec, path: spec.path === from ? to : spec.path };
   if (spec.kind === "image-string")
     return { ...spec, manifest: spec.manifest === from ? to : spec.manifest };

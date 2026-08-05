@@ -73,6 +73,7 @@
 
 - 每个 active variant 只配置 popup root 相对 viewport center 的 `x/y/scale`。
 - popup package 最终 vendor 到 layout ZIP；内部 layer、tier、坐标和资源保持 popup owner 自包含。
+- 普通 Spine popup 的 prompt 字体、area、默认文案与 overlay 在 Scene Layout 中只读；Editor 只允许临时覆盖预览 string。相同字体 bytes 由根 assets map 按 SHA-256 物理去重。
 - 普通 Spine popup 的 placement 与注册由 Scene Layout 拥有；start/loop/end 动画名与点击锁存生命周期由 popup package 和 rendercore 拥有。
 - production app 直接消费 editor 导出的 mapped folder 时，构建期必须从根 manifest
   与 `assets.map.json` 生成 physical Vite import map；禁止宽泛 glob、运行时猜路径

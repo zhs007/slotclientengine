@@ -90,6 +90,15 @@
       "skeleton": "assets/<sha256>.json",
       "atlas": "assets/<sha256>.atlas",
       "textures": { "effect.png": "assets/<sha256>.png" }
+    },
+    "prompt-font": {
+      "kind": "font",
+      "path": "assets/<sha256>.woff2"
+    },
+    "shade": {
+      "kind": "image",
+      "path": "assets/<sha256>.webp",
+      "size": { "width": 900, "height": 180 }
     }
   },
   "spine": {
@@ -100,12 +109,34 @@
       "startAnimation": "Start",
       "loopAnimation": "Loop",
       "endAnimation": "End"
-    }
+    },
+    "prompt": {
+      "font": "prompt-font",
+      "defaultText": "Press any key to continue",
+      "fill": "#ffffff",
+      "order": 20,
+      "area": { "x": 0, "y": 680, "width": 760, "height": 64 }
+    },
+    "overlays": [
+      {
+        "id": "shade",
+        "kind": "image",
+        "order": 10,
+        "resource": "shade",
+        "transform": { "x": 0, "y": 680, "scale": 1, "rotation": 0 },
+        "anchor": { "x": 0.5, "y": 0.5 },
+        "visibleSegments": ["start", "loop"]
+      }
+    ]
   }
 }
 ```
 
 三个动画名必须大小写精确、非空且互不相同。`requestDismiss()` 可在 start 或 loop 期间锁存；runtime 必须等 start 完成并在完整 loop 边界后才播放 end。`dismissImmediately()` 是唯一跳过边界的清理入口。
+
+`prompt` 是可选的严格单行点击提示。游戏可把已翻译字符串传给 `start(text)`；省略时使用 `defaultText`。字体只接受 package-owned WOFF2/WOFF/TTF/OTF，按 bytes SHA-256 注册和复用；Pixi 文本固定使用该 family，并让浏览器处理 glyph 缺失时的本地字体 fallback。`area.height` 是初始字号，runtime 再按 `area.width/height` 等比缩小，不换行、不扩张区域；进入 end 时隐藏。
+
+`overlays` 可包含 image、official Spine 或 VNI，均显式声明 `order/resource/transform.x/y/scale/rotation`。image 额外声明 anchor 与可见 segment；Spine 声明 start/loop/end 动画；VNI 声明 segmented 或 once playback。prompt 与 overlay order 必须唯一。
 
 ## 资源、ZIP 与 runtime
 
@@ -120,7 +151,7 @@ player.update(deltaSeconds);
 player.requestAdvance();
 ```
 
-普通 Spine 类型使用 `createSpinePopupPlayer({ resource })`，调用 `start()`、逐帧 `update(deltaSeconds)` 并把用户点击转发给 `requestDismiss()`。
+普通 Spine 类型使用 `createSpinePopupPlayer({ resource })`，调用 `start(translatedText?)`、逐帧 `update(deltaSeconds)` 并把用户点击转发给 `requestDismiss()`。
 
 Popup package 本身不拥有游戏模式，也不声明 BaseGame/FreeGame。scene-layout 负责通用
 mode -> award popup binding、普通 Spine popup 显式注册与 viewport-center root placement；Popup Editor 继续独占 popup 内部动画、tier、layer、金额格式、坐标和资源编辑。
