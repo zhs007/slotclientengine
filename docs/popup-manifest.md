@@ -9,6 +9,7 @@
 - 游戏只提交 safe integer `betAmountRaw` 和 `winAmountRaw`；preview 的 bet、win、zoom、guides 不进入 manifest。
 - 档位固定为 `base -> standard -> bigwin -> superwin -> megawin`。`base` 截止 `1×bet`，`standard` 截止 bigwin threshold，后三档 threshold multiplier 显式且严格递增。边界相等时进入对应档，runtime 用 BigInt 比较。
 - 每档必须有非空 `layers`，且必须恰好包含一个 `image-string + win-amount` 图层。金额不参与 `start/loop/end` 可见性：整场只维持一个 renderer/runtime，跨档只更新文本、transform，必要时在同一实例上切换 image-string resource。
+- 每档还可声明任意数量的命名 `text` 和 `binding="manual"` ImgNumber。名称在同档唯一；跨档同名节点视为一个逻辑节点且必须保持 kind 一致。`text` 引用 package font，并严格保存单行默认文案、字号、字距、纯色或线性渐变、可选描边/投影、`-180..180` 度弧排、anchor、rotation 与可见 segment。manual ImgNumber 保存默认 string、anchor、rotation 与可见 segment。
 - 每档严格按唯一的 `order` 升序叠放，数值越小越靠下。跨档时单一金额 renderer 会移动到新档容器内对应的 child index，不会固定在全部 VNI 之上。
 - ImgNumber layer 的 `parent` 是 `{ "kind": "popup-root" }` 或
   `{ "kind": "vni-text-layer", "vniLayerId": "...", "textLayerId": "..." }`。后者只能引用
@@ -73,7 +74,7 @@
 }
 ```
 
-骨架中的空 `layers` 是说明结构的无效占位，不能作为 fixture 或导出物。合法 image-string layer 必须包含 `id/kind/order/resource/binding/anchor/transform`，不接受 `visibleSegments`；image 图层才使用 `visibleSegments`；VNI/Spine 使用各自 playback。
+骨架中的空 `layers` 是说明结构的无效占位，不能作为 fixture 或导出物。合法 image-string layer 必须包含 `id/kind/name/order/resource/binding/anchor/transform`；`binding="win-amount"` 的 name 固定为 `win-amount` 且不接受 `visibleSegments`，`binding="manual"` 还必须包含 `defaultText/visibleSegments`。image 与 text 图层使用 `visibleSegments`；VNI/Spine 使用各自 playback。
 
 普通 Spine 弹窗使用互斥的 `type="spine"` schema，不包含 `amountFormat` 或 `awardCelebration`：
 
@@ -136,7 +137,7 @@
 
 `prompt` 是可选的严格单行点击提示。游戏可把已翻译字符串传给 `start(text)`；省略时使用 `defaultText`。字体只接受 package-owned WOFF2/WOFF/TTF/OTF，按 bytes SHA-256 注册和复用；Pixi 文本固定使用该 family，并让浏览器处理 glyph 缺失时的本地字体 fallback。`area.height` 是初始字号，runtime 再按 `area.width/height` 等比缩小，不换行、不扩张区域；进入 end 时隐藏。
 
-`overlays` 可包含 image、official Spine 或 VNI，均显式声明 `order/resource/transform.x/y/scale/rotation`。image 额外声明 anchor 与可见 segment；Spine 声明 start/loop/end 动画；VNI 声明 segmented 或 once playback。prompt 与 overlay order 必须唯一。
+`overlays` 可包含 image、命名 text、命名 manual ImgNumber、official Spine 或 VNI，均显式声明 `order/resource/transform.x/y/scale/rotation`。image/text/ImgNumber 额外声明 anchor 与可见 segment；text 与 award text 共享样式合同，ImgNumber 必须保存默认 string；Spine 声明 start/loop/end 动画；VNI 声明 segmented 或 once playback。prompt 与 overlay order 必须唯一；启用 legacy prompt 时名称 `prompt` 被保留。
 
 ## 资源、ZIP 与 runtime
 
@@ -149,9 +150,15 @@ await player.init();
 player.start({ betAmountRaw: 100, winAmountRaw: 6000 });
 player.update(deltaSeconds);
 player.requestAdvance();
+
+player.getTextNode("congratulations").setText("恭喜获奖！");
+player.getImageStringNode("bonus-count").setText("8");
+player.getImageStringNode(0).resetText();
 ```
 
 普通 Spine 类型使用 `createSpinePopupPlayer({ resource })`，调用 `start(translatedText?)`、逐帧 `update(deltaSeconds)` 并把用户点击转发给 `requestDismiss()`。
+
+两类 player 都提供稳定、只读的 `textNodes` / `imageStringNodes` 清单，以及按 exact name 或各 kind 独立零基 index 查询的 `getTextNode()` / `getImageStringNode()`。handle 的 `setText()` 是原子覆盖并跨档位切换与重复播放保持；`resetText()` 恢复当前 manifest 默认值或 win-amount 自动格式化值。不存在、越界、kind 错误、非法单行文字、ImgNumber 缺 glyph 或已销毁 handle 都显式失败。
 
 Popup package 本身不拥有游戏模式，也不声明 BaseGame/FreeGame。scene-layout 负责通用
 mode -> award popup binding、普通 Spine popup 显式注册与 viewport-center root placement；Popup Editor 继续独占 popup 内部动画、tier、layer、金额格式、坐标和资源编辑。

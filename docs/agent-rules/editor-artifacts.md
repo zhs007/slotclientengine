@@ -41,11 +41,11 @@
 ## Popup Editor
 
 - `apps/popupeditor` 输出 strict `award-celebration` 或普通 `spine` popup package；两种类型使用互斥 schema，不保留无关字段。
-- 普通 Spine popup 的可选 prompt 只接受 package-owned WOFF2/WOFF/TTF/OTF、单行默认 string 与显式 area/order；游戏可传入已翻译 string，runtime 不翻译。其 image/Spine/VNI overlay 的 transform、order 与 playback 只在 Popup Editor 编辑。
+- 普通 Spine popup 的可选 prompt 只接受 package-owned WOFF2/WOFF/TTF/OTF、单行默认 string 与显式 area/order；游戏可传入已翻译 string，runtime 不翻译。award 各档与 Spine overlay 都可声明多个命名系统文字和 manual ImgNumber；系统文字样式、默认 string、transform/order/segment 及 ImgNumber 默认 string 只在 Popup Editor 编辑，每个 award 档仍必须恰好有一个 `win-amount`。
 - VNI export bundle 只把 `purpose=runtime` 作为运行候选：唯一 runtime 自动选择，多个 runtime 才枚举；禁止手输 profile id，`purpose=editing` 不进入候选。
 - popup package 使用完整 SHA-256 content-addressed owned payload，并保持 exact closure。
 - Popup 字体与其它 payload 一样按完整 SHA-256 物理去重；logical filename key 与 owner 引用不得从 hash path 反推或合并。
-- `packages/rendercore/popup` 拥有 popup manifest/parser、image/VNI/official Spine/image-string layer、BigInt threshold sequence、金额格式、点击/dismiss/end drain、普通 Spine start/loop/end 边界状态机和 runtime snapshot；editor/game app 不复制。
+- `packages/rendercore/popup` 拥有 popup manifest/parser、image/VNI/official Spine/image-string/系统文字 layer、字体效果与 grapheme 弧排、按 name/kind-index 的 string node registry、BigInt threshold sequence、金额格式、点击/dismiss/end drain、普通 Spine start/loop/end 边界状态机和 runtime snapshot；editor/game app 不复制。
 
 ## Symbols Editor
 

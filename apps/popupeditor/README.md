@@ -10,7 +10,9 @@ VNI bundle 只导入 `purpose=runtime` 的运行发布包：唯一 runtime 自�
 
 新导出的 `<id>-popup.zip` 由根 `popup.manifest.json`、`assets.map.json` 和完整 SHA-256 payload 构成。普通 Spine 类型接收一组 JSON、atlas 与若干 PNG，并显式配置 start、loop、end 动画；点击在 loop 边界生效。runtime parser 与两类播放生命周期均由 `rendercore/popup` 拥有。
 
-普通 Spine 类型还可配置一个单行点击提示：选择 package 字体、默认文案、颜色、order 与渲染区域。预览文案可临时覆盖，留空时显示默认文案；游戏 runtime 可传入已翻译 string。字号以区域高度起步并按区域等比缩小，不换行。可追加任意数量 image、Spine 或 VNI overlay，编辑其位置、缩放、旋转、order 及各类型 playback/可见 segment。
+普通 Spine 类型还可配置一个单行点击提示：选择 package 字体、默认文案、颜色、order 与渲染区域。预览文案可临时覆盖，留空时显示默认文案；游戏 runtime 可传入已翻译 string。字号以区域高度起步并按区域等比缩小，不换行。可追加任意数量 image、系统文字、ImgNumber、Spine 或 VNI overlay，编辑其位置、缩放、旋转、order 及各类型 playback/可见 segment。
+
+所有获奖档位与普通 Spine overlay 都可添加多个命名系统文字和 manual ImgNumber。系统文字支持单行默认文案、字号、字距、纯色/线性渐变、描边、投影、正负弧度、anchor、旋转与 segment；导入字体后直接作为 text layer 添加。每个获奖档仍必须恰好有一个 `win-amount` ImgNumber，再次添加 ImgNumber 会创建可独立命名和设值的 manual 节点。预览侧栏可按节点 exact name 或各 kind 的零基 index 临时 set/reset string，这些覆盖不写入 ZIP。
 
 VNI 图层可显式选择“分段循环”或“完整单次”。分段模式编辑 start/loop/end 边界；
 完整单次模式从 `0` 到 VNI 总时长非循环播放，动画先于金额阶段结束时保持 authored

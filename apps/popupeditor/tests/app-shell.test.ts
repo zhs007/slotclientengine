@@ -18,6 +18,8 @@ const preview = {
     },
   ),
   setPromptText: vi.fn(),
+  setNodeText: vi.fn(),
+  resetNodeText: vi.fn(),
   play: vi.fn(),
   advance: vi.fn(),
   dismiss: vi.fn(),
@@ -217,6 +219,14 @@ describe("PopupEditorApp", () => {
     root.querySelector<HTMLButtonElement>("#preview-build")!.click();
     await vi.waitFor(() => expect(preview.rebuild).toHaveBeenCalled());
     root.querySelector<HTMLButtonElement>("#preview-play")!.click();
+    root.querySelector<HTMLInputElement>("#preview-node-selector")!.value = "0";
+    root.querySelector<HTMLInputElement>("#preview-node-text")!.value = "777";
+    root.querySelector<HTMLSelectElement>("#preview-node-kind")!.value =
+      "image-string";
+    root.querySelector<HTMLButtonElement>("#preview-node-apply")!.click();
+    root.querySelector<HTMLButtonElement>("#preview-node-reset")!.click();
+    expect(preview.setNodeText).toHaveBeenCalledWith("image-string", 0, "777");
+    expect(preview.resetNodeText).toHaveBeenCalledWith("image-string", 0);
     root.querySelector<HTMLButtonElement>("#preview-advance")!.click();
     root.querySelector<HTMLButtonElement>("#preview-dismiss")!.click();
     root.querySelector<HTMLButtonElement>("#preview-clear")!.click();
@@ -439,6 +449,42 @@ describe("PopupEditorApp", () => {
     expect(root.textContent).toContain("effect.json");
     expect(root.textContent).toContain("Spine.json");
     expect(root.textContent).toContain("BG.PNG");
+    const textLayerId = root.querySelector<HTMLInputElement>(
+      '[data-layer-field="fontSize"]',
+    )!.dataset.layerId!;
+    const textInput = (field: string) =>
+      root.querySelector<HTMLInputElement>(
+        `[data-layer-id="${textLayerId}"][data-layer-field="${field}"]`,
+      )!;
+    for (const [field, value] of [
+      ["name", "congratulations"],
+      ["defaultText", "YOU WIN!"],
+      ["fontSize", "88"],
+      ["letterSpacing", "2"],
+      ["arcDegrees", "35"],
+      ["strokeWidth", "8"],
+      ["shadowAlpha", "0.8"],
+      ["rotation", "5"],
+    ]) {
+      const input = textInput(field);
+      input.value = value;
+      input.dispatchEvent(new Event("change"));
+    }
+    const fillKind = root.querySelector<HTMLSelectElement>(
+      `[data-layer-fill-kind="${textLayerId}"]`,
+    )!;
+    fillKind.value = "linear-gradient";
+    fillKind.dispatchEvent(new Event("change"));
+    for (const [field, value] of [
+      ["fillColor", "#fff1a8"],
+      ["gradientEndColor", "#ff9900"],
+      ["gradientAngle", "45"],
+      ["shadowDistance", "9"],
+    ]) {
+      const input = textInput(field);
+      input.value = value;
+      input.dispatchEvent(new Event("change"));
+    }
     const mode = root.querySelector<HTMLSelectElement>(
       "[data-vni-playback-mode]",
     )!;
@@ -484,7 +530,13 @@ describe("PopupEditorApp", () => {
       input.dispatchEvent(new Event("change"));
     }
 
-    for (const resource of ["BG.PNG", "effect.json", "Spine.json"]) {
+    for (const resource of [
+      "BG.PNG",
+      "effect.json",
+      "Spine.json",
+      "image-string.manifest.json",
+      "Prompt.woff2",
+    ]) {
       const overlayResource = root.querySelector<HTMLSelectElement>(
         "#spine-overlay-resource",
       )!;
@@ -528,6 +580,22 @@ describe("PopupEditorApp", () => {
     )!;
     spineStart.value = "Start";
     spineStart.dispatchEvent(new Event("change"));
+    const overlayText = root.querySelector<HTMLInputElement>(
+      '[data-overlay-field="fontSize"]',
+    )!;
+    const overlayTextId = overlayText.dataset.overlayId!;
+    overlayText.value = "96";
+    overlayText.dispatchEvent(new Event("change"));
+    const overlayFill = root.querySelector<HTMLSelectElement>(
+      `[data-overlay-fill-kind="${overlayTextId}"]`,
+    )!;
+    overlayFill.value = "linear-gradient";
+    overlayFill.dispatchEvent(new Event("change"));
+    const overlayDefault = root.querySelector<HTMLInputElement>(
+      `[data-overlay-id="${overlayTextId}"][data-overlay-field="defaultText"]`,
+    )!;
+    overlayDefault.value = "BONUS!";
+    overlayDefault.dispatchEvent(new Event("change"));
     root.querySelector<HTMLButtonElement>("[data-delete-overlay]")!.click();
 
     const promptPreview =
@@ -607,5 +675,7 @@ function validProject() {
   addLayer(project, "base", "BG.PNG");
   addLayer(project, "base", "effect.json");
   addLayer(project, "base", "Spine.json");
+  addLayer(project, "base", "Prompt.woff2");
+  addLayer(project, "base", candidate.rootKey);
   return project;
 }

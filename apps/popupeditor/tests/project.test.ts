@@ -115,8 +115,12 @@ describe("popup editor filename-key project", () => {
     applyImportedResourceBindings(project, review[0]!.rootKey);
     expect(resourceReferenceCount(project, review[0]!.rootKey)).toBe(5);
     addLayer(project, "base", review[0]!.rootKey);
-    expect(project.tiers.get("base")!.layers).toHaveLength(1);
-    expect(project.tiers.get("base")!.layers[0]).toMatchObject({
+    expect(project.tiers.get("base")!.layers).toHaveLength(2);
+    expect(project.tiers.get("base")!.layers[1]).toMatchObject({
+      name: "imgnumber-1",
+      binding: "manual",
+      defaultText: "0",
+      visibleSegments: ["start", "loop", "end"],
       parent: { kind: "popup-root" },
     });
 
@@ -247,22 +251,39 @@ describe("popup editor filename-key project", () => {
       },
       keys: ["Spine.json", "Spine.atlas", "Spine.png"],
     });
+    project.resources.set("Title.woff2", {
+      rootKey: "Title.woff2",
+      kind: "font",
+      spec: { kind: "font", path: "Title.woff2" },
+      keys: ["Title.woff2"],
+    });
     for (const key of project.resources.keys()) addLayer(project, "base", key);
     expect(project.tiers.get("base")!.layers.map(({ kind }) => kind)).toEqual([
       "image-string",
       "image",
       "vni",
       "spine",
+      "text",
     ]);
+    expect(project.tiers.get("base")!.layers.at(-1)).toMatchObject({
+      name: "text-4",
+      defaultText: "CONGRATULATIONS!",
+      style: {
+        fontSize: 72,
+        fill: { kind: "solid", color: "#ffffff" },
+        stroke: { color: "#a40000", width: 6 },
+        arcDegrees: 0,
+      },
+    });
     addLayer(project, "base", "amount.json");
     expect(
       project.tiers
         .get("base")!
         .layers.filter(({ kind }) => kind === "image-string"),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
     applyImportedResourceBindings(project, "amount.json");
     applyImportedResourceBindings(project, "amount.json");
-    expect(resourceReferenceCount(project, "amount.json")).toBe(5);
+    expect(resourceReferenceCount(project, "amount.json")).toBe(6);
     expect(() => removePopupResource(project, "BG.PNG")).toThrow(/仍被/);
     expect(() => removePopupResource(project, "missing.png")).toThrow(/不存在/);
     expect(() => addLayer(project, "base", "missing.png")).toThrow(

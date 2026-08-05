@@ -11,7 +11,9 @@ resource，不要求内层第二份 map。无 map 的合法 legacy direct path �
 
 ## Popup API
 
-`@slotclientengine/rendercore/popup` 提供 strict `award-celebration | spine` popup parser、typed filename-key namespace rewrite、传递资源闭包、files/CDN loader 与 snapshot。普通 Spine popup 使用独立 start→loop→end 状态机：点击请求可提前锁存，只在 loop 完整播放到边界后进入 end；可选 prompt 接收游戏传入的已翻译单行 string，使用 package-owned 字体并按配置区域自动缩小，还可组合 image/VNI/official Spine overlay。字体按 bytes SHA-256 共享浏览器 FontFace owner，最后一个 package 销毁时释放。Scene Layout 的 Spine transition 可用 `preludePopup` 复用该 player，并在 complete 后才启动 overlay；video transition 显式禁止 prelude。获奖庆祝继续支持 image/VNI/official Spine/image-string layer、五档 BigInt threshold sequence 与金额格式。
+`@slotclientengine/rendercore/popup` 提供 strict `award-celebration | spine` popup parser、typed filename-key namespace rewrite、传递资源闭包、files/CDN loader 与 snapshot。普通 Spine popup 使用独立 start→loop→end 状态机：点击请求可提前锁存，只在 loop 完整播放到边界后进入 end；可选 prompt 接收游戏传入的已翻译单行 string，使用 package-owned 字体并按配置区域自动缩小，还可组合 image、命名系统文字、命名 ImgNumber、VNI 与 official Spine overlay。获奖庆祝支持同样的文字/ImgNumber 节点、五档 BigInt threshold sequence 与金额格式，并要求每档恰好一个 win-amount。字体按 bytes SHA-256 共享浏览器 FontFace owner，最后一个 package 销毁时释放。Scene Layout 的 Spine transition 可用 `preludePopup` 复用该 player，并在 complete 后才启动 overlay；video transition 显式禁止 prelude。
+
+系统文字 renderer 支持字号、字距、纯色/线性渐变、描边、投影、Unicode grapheme 弧排、anchor 与原子 `setText()`。两类 player 都公开稳定的 `textNodes` / `imageStringNodes`，并可按 exact name 或各 kind 零基 index 取得 handle；覆盖 string 跨档位和重复播放保持，`resetText()` 恢复 manifest/自动金额值，destroy 后 handle 失效。
 
 ## Image String API
 

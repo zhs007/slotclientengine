@@ -7,6 +7,8 @@ import {
   type AwardCountStage,
 } from "./award-sequence.js";
 import { formatPopupAmount } from "./amount-format.js";
+import { createPopupStringNodeRegistry } from "./string-node-registry.js";
+import { createPopupStyledText } from "./styled-text.js";
 import {
   requestPopupVniPlaybackEnd,
   startPopupVniPlayback,
@@ -22,11 +24,19 @@ import type {
   PopupPreparedImageString,
   PopupPreparedResource,
   PopupSegment,
+  PopupStringNodeHandle,
+  PopupStringNodeSelector,
 } from "./types.js";
 
 export interface PopupLayerRuntime {
   readonly container: Container;
   readonly animated: boolean;
+  readonly stringNode?: {
+    readonly kind: "text" | "image-string";
+    readonly name: string;
+    readonly defaultText: string;
+    setText(text: string): void;
+  };
   init(): Promise<void>;
   enter(amountText: string): void;
   updateAmount(amountText: string): void;
@@ -57,6 +67,7 @@ interface TierRuntime {
   readonly id: AwardTierId;
   readonly container: Container;
   readonly layers: readonly PopupLayerRuntime[];
+  readonly stringNodes: ReadonlyMap<string, PopupLayerRuntime["stringNode"]>;
   readonly amountLayer: Extract<PopupLayer, { readonly kind: "image-string" }>;
   readonly amountResource: PopupPreparedImageString;
   readonly amountChildIndex: number;
@@ -85,6 +96,7 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
   };
   readonly #factory: PopupLayerRuntimeFactory;
   readonly #formatAmount: PopupAmountFormatter;
+  readonly #nodes: ReturnType<typeof createPopupStringNodeRegistry>;
   readonly #tiers = new Map<AwardTierId, TierRuntime>();
   #initialized = false;
   #initializing: Promise<void> | null = null;
@@ -115,6 +127,23 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
       options.formatAmount ??
       ((amountRaw) =>
         formatPopupAmount(amountRaw, this.#resource.manifest.amountFormat));
+    this.#nodes = createPopupStringNodeRegistry(
+      collectAwardStringNodeDefinitions(this.#resource.manifest),
+    );
+  }
+  get textNodes(): readonly PopupStringNodeHandle[] {
+    return this.#nodes.textNodes;
+  }
+  get imageStringNodes(): readonly PopupStringNodeHandle[] {
+    return this.#nodes.imageStringNodes;
+  }
+  getTextNode(selector: PopupStringNodeSelector): PopupStringNodeHandle {
+    this.assertUsable();
+    return this.#nodes.getTextNode(selector);
+  }
+  getImageStringNode(selector: PopupStringNodeSelector): PopupStringNodeHandle {
+    this.assertUsable();
+    return this.#nodes.getImageStringNode(selector);
   }
   init(): Promise<void> {
     this.assertUsable();
@@ -133,6 +162,7 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
     this.clearPlayback();
     this.#final = input.winAmountRaw;
     this.#displayed = 0;
+    this.#nodes.setAutomaticText("win-amount", this.formatAmount(0));
     this.#stages = createAwardCountStages(this.#resource.manifest, input);
     if (!this.#stages.length) {
       this.#phase = "complete";
@@ -235,6 +265,7 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
     this.#amount?.destroy();
     this.#amount = null;
     this.#tiers.clear();
+    this.#nodes.destroy();
     this.container.destroy({ children: false });
   }
   private async prepare() {
@@ -261,7 +292,7 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
           (
             layer,
           ): layer is Extract<PopupLayer, { readonly kind: "image-string" }> =>
-            layer.kind === "image-string",
+            layer.kind === "image-string" && layer.binding === "win-amount",
         )!;
         const amountResource = this.#resource.resources[amountLayer.resource]!;
         if (amountResource.kind !== "image-string")
@@ -279,6 +310,12 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
             );
           this.#amount.container.visible = false;
           await this.#amount.init();
+          this.#nodes.setTarget(
+            "win-amount",
+            this.#amount.stringNode ?? {
+              setText: (text) => this.#amount!.updateAmount(text),
+            },
+          );
         }
         const layers: PopupLayerRuntime[] = [];
         const layersById = new Map<string, PopupLayerRuntime>();
@@ -286,6 +323,7 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
           id,
           container,
           layers,
+          stringNodes: new Map(),
           amountLayer,
           amountResource,
           amountChildIndex: orderedLayers.indexOf(amountLayer),
@@ -296,7 +334,8 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
         created.push(tier);
         this.container.addChild(container);
         for (const layer of orderedLayers) {
-          if (layer.kind === "image-string") continue;
+          if (layer.kind === "image-string" && layer.binding === "win-amount")
+            continue;
           const runtime = this.#factory({
             layer,
             resource: this.#resource.resources[layer.resource]!,
@@ -305,6 +344,10 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
           });
           layers.push(runtime);
           layersById.set(layer.id, runtime);
+          if (runtime.stringNode)
+            (
+              tier.stringNodes as Map<string, PopupLayerRuntime["stringNode"]>
+            ).set(runtime.stringNode.name, runtime.stringNode);
           container.addChild(runtime.container);
         }
         await Promise.all(layers.map((layer) => layer.init()));
@@ -353,6 +396,7 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
     this.#elapsed = 0;
     this.#displayed = stage.fromAmountRaw;
     const tier = this.#tiers.get(stage.tierId)!;
+    this.activateTierStringNodes(tier);
     tier.segment = "start";
     tier.endRequested = false;
     tier.container.visible = true;
@@ -420,14 +464,32 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
     this.#ending = remaining;
   }
   private updateAmount() {
+    const automatic = this.formatAmount(Math.floor(this.#displayed));
+    this.#nodes.setAutomaticText("win-amount", automatic);
     this.#amount?.updateAmount(this.amountText());
   }
   private amountText() {
-    const text = this.#formatAmount(Math.floor(this.#displayed));
+    return this.#nodes.getImageStringNode("win-amount").text;
+  }
+  private formatAmount(amountRaw: number) {
+    const text = this.#formatAmount(amountRaw);
     if (typeof text !== "string" || text.length === 0) {
       throw new Error("popup amount formatter must return a non-empty string.");
     }
     return text;
+  }
+  private activateTierStringNodes(tier: TierRuntime) {
+    const names = new Set([
+      ...this.#nodes.textNodes.map(({ name }) => name),
+      ...this.#nodes.imageStringNodes
+        .map(({ name }) => name)
+        .filter((name) => name !== "win-amount"),
+    ]);
+    for (const name of names) {
+      const target = tier.stringNodes.get(name) ?? null;
+      if (target) this.#nodes.setAutomaticText(name, target.defaultText);
+      this.#nodes.setTarget(name, target ?? null);
+    }
   }
   private complete() {
     if (this.#active) this.#active.container.visible = false;
@@ -465,6 +527,40 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
   }
 }
 
+function collectAwardStringNodeDefinitions(
+  manifest: AwardCelebrationPopupManifestV1,
+) {
+  const tiers = [
+    manifest.awardCelebration.base,
+    manifest.awardCelebration.standard,
+    ...manifest.awardCelebration.celebrationTiers,
+  ];
+  const result: {
+    kind: "text" | "image-string";
+    name: string;
+    defaultText: string;
+  }[] = [];
+  const names = new Set<string>();
+  for (const tier of tiers)
+    for (const layer of [...tier.layers].sort((a, b) => a.order - b.order)) {
+      if (layer.kind !== "text" && layer.kind !== "image-string") continue;
+      const name = layer.name ?? "win-amount";
+      if (names.has(name)) continue;
+      names.add(name);
+      result.push({
+        kind: layer.kind,
+        name,
+        defaultText:
+          layer.kind === "text"
+            ? layer.defaultText
+            : layer.binding === "manual"
+              ? (layer.defaultText ?? "")
+              : "0",
+      });
+    }
+  return result;
+}
+
 function requestTierEnd(tier: TierRuntime, text: string) {
   tier.endRequested = true;
   for (const layer of tier.layers) layer.requestEnd();
@@ -491,11 +587,16 @@ function defaultLayerFactory(options: {
   readonly tierId: AwardTierId;
 }): PopupLayerRuntime {
   const { layer, resource } = options;
-  if (layer.kind !== resource.kind)
+  if (
+    layer.kind === "text"
+      ? resource.kind !== "font"
+      : layer.kind !== resource.kind
+  )
     throw new Error(`popup layer/resource kind mismatch: ${layer.id}`);
   const container = new Container();
   container.position.set(layer.transform.x, layer.transform.y);
   container.scale.set(layer.transform.scale);
+  container.rotation = ((layer.transform.rotation ?? 0) * Math.PI) / 180;
   if (layer.kind === "image" && resource.kind === "image") {
     const sprite = new Sprite(resource.texture);
     sprite.anchor.set(layer.anchor.x, layer.anchor.y);
@@ -503,19 +604,31 @@ function defaultLayerFactory(options: {
     return staticRuntime(container, layer.visibleSegments);
   }
   if (layer.kind === "image-string" && resource.kind === "image-string") {
+    const initialText =
+      layer.binding === "manual" ? (layer.defaultText ?? "") : "0";
     const renderer = createRenderImageString({
       resource: resource.resource,
-      text: "0",
+      text: initialText,
       anchor: layer.anchor,
     });
     container.addChild(renderer.container);
     return {
       container,
       animated: false,
+      stringNode: {
+        kind: "image-string",
+        name: layer.name ?? "win-amount",
+        defaultText: initialText,
+        setText(text) {
+          renderer.setText(text);
+        },
+      },
       async init() {},
       enter(text) {
-        renderer.setText(text);
-        container.visible = true;
+        if (layer.binding === "win-amount") renderer.setText(text);
+        container.visible =
+          layer.binding === "win-amount" ||
+          (layer.visibleSegments ?? ["start", "loop", "end"]).includes("start");
       },
       updateAmount(text) {
         renderer.setText(text);
@@ -529,7 +642,11 @@ function defaultLayerFactory(options: {
         return true;
       },
       applySegment(_segment, text) {
-        renderer.setText(text);
+        if (layer.binding === "win-amount") renderer.setText(text);
+        else
+          container.visible = (
+            layer.visibleSegments ?? ["start", "loop", "end"]
+          ).includes(_segment);
       },
       rebindAmountLayer({
         layer: nextLayer,
@@ -540,6 +657,49 @@ function defaultLayerFactory(options: {
         renderer.setAnchor(nextLayer.anchor);
         container.position.set(nextLayer.transform.x, nextLayer.transform.y);
         container.scale.set(nextLayer.transform.scale);
+        container.rotation =
+          ((nextLayer.transform.rotation ?? 0) * Math.PI) / 180;
+      },
+      destroy() {
+        renderer.destroy();
+        container.destroy({ children: false });
+      },
+    };
+  }
+  if (layer.kind === "text" && resource.kind === "font") {
+    const renderer = createPopupStyledText({
+      family: resource.family,
+      text: layer.defaultText,
+      style: layer.style,
+      anchor: layer.anchor,
+    });
+    container.addChild(renderer.container);
+    return {
+      container,
+      animated: false,
+      stringNode: {
+        kind: "text",
+        name: layer.name,
+        defaultText: layer.defaultText,
+        setText(text) {
+          renderer.setText(text);
+        },
+      },
+      async init() {},
+      enter() {
+        container.visible = layer.visibleSegments.includes("start");
+      },
+      updateAmount() {},
+      update() {},
+      isLoopReady() {
+        return true;
+      },
+      requestEnd() {},
+      isEndComplete() {
+        return true;
+      },
+      applySegment(segment) {
+        container.visible = layer.visibleSegments.includes(segment);
       },
       destroy() {
         renderer.destroy();

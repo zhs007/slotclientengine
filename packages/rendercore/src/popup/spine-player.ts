@@ -1,14 +1,17 @@
-import { Container } from "pixi.js";
+import { Container, type Text } from "pixi.js";
 import {
   createOfficialSpinePlayer,
   type RendercoreSpinePlayer,
 } from "../spine/runtime-player.js";
 import type {
   PopupPackageResource,
+  PopupStringNodeHandle,
+  PopupStringNodeSelector,
   SpinePopupPlayer,
   SpinePopupSnapshot,
 } from "./types.js";
 import { createPopupPromptText } from "./prompt-text.js";
+import { createPopupStringNodeRegistry } from "./string-node-registry.js";
 import {
   createSpinePopupOverlayRuntime,
   type SpinePopupOverlayRuntime,
@@ -17,6 +20,10 @@ import {
 export function createSpinePopupPlayer(options: {
   readonly resource: PopupPackageResource;
   readonly playerFactory?: () => RendercoreSpinePlayer;
+  readonly measurePromptText?: (text: Text) => {
+    readonly width: number;
+    readonly height: number;
+  };
 }): SpinePopupPlayer {
   if (options.resource.manifest.type !== "spine")
     throw new Error("Spine popup player requires a spine popup package.");
@@ -32,6 +39,7 @@ export function createSpinePopupPlayer(options: {
       readonly manifest: typeof manifest;
     },
     player,
+    options.measurePromptText,
   );
 }
 
@@ -44,6 +52,7 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
   readonly #player: RendercoreSpinePlayer;
   readonly #overlays: readonly SpinePopupOverlayRuntime[];
   readonly #prompt: ReturnType<typeof createPopupPromptText> | null;
+  readonly #nodes: ReturnType<typeof createPopupStringNodeRegistry>;
   #phase: SpinePopupSnapshot["phase"] = "idle";
   #dismissRequested = false;
   #initialized = false;
@@ -57,6 +66,10 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
       >;
     },
     player: RendercoreSpinePlayer,
+    measurePromptText?: (text: Text) => {
+      readonly width: number;
+      readonly height: number;
+    },
   ) {
     const manifest = resource.manifest;
     this.#manifest = manifest;
@@ -92,10 +105,39 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
       this.#prompt = createPopupPromptText({
         spec: prompt,
         family: font.family,
+        measureText: measurePromptText,
       });
       this.#prompt.text.zIndex = prompt.order;
       this.container.addChild(this.#prompt.text);
     } else this.#prompt = null;
+    this.#nodes = createPopupStringNodeRegistry(
+      collectSpineStringNodeDefinitions(manifest),
+    );
+    for (const overlay of this.#overlays)
+      if (overlay.stringNode)
+        this.#nodes.setTarget(overlay.stringNode.name, overlay.stringNode);
+    if (this.#prompt)
+      this.#nodes.setTarget("prompt", {
+        setText: (text) => this.#prompt!.setText(text),
+      });
+  }
+
+  get textNodes(): readonly PopupStringNodeHandle[] {
+    return this.#nodes.textNodes;
+  }
+
+  get imageStringNodes(): readonly PopupStringNodeHandle[] {
+    return this.#nodes.imageStringNodes;
+  }
+
+  getTextNode(selector: PopupStringNodeSelector): PopupStringNodeHandle {
+    this.assertUsable();
+    return this.#nodes.getTextNode(selector);
+  }
+
+  getImageStringNode(selector: PopupStringNodeSelector): PopupStringNodeHandle {
+    this.assertUsable();
+    return this.#nodes.getImageStringNode(selector);
   }
 
   async init(): Promise<void> {
@@ -119,7 +161,10 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
     this.assertReady();
     if (this.isPlaying()) throw new Error("Spine popup is already playing.");
     if (this.#prompt) {
-      this.#prompt.setText(text ?? this.#manifest.spine.prompt!.defaultText);
+      this.#nodes.setAutomaticText(
+        "prompt",
+        text ?? this.#manifest.spine.prompt!.defaultText,
+      );
     } else if (text !== undefined) {
       throw new Error("Spine popup does not define a prompt.");
     }
@@ -196,6 +241,7 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
     this.#player.destroy();
     for (const overlay of this.#overlays) overlay.destroy();
     this.#prompt?.text.destroy();
+    this.#nodes.destroy();
     this.container.destroy({ children: false });
   }
 
@@ -215,4 +261,34 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
   private assertUsable(): void {
     if (this.#destroyed) throw new Error("Spine popup player was destroyed.");
   }
+}
+
+function collectSpineStringNodeDefinitions(
+  manifest: Extract<
+    PopupPackageResource["manifest"],
+    { readonly type: "spine" }
+  >,
+) {
+  const values: {
+    order: number;
+    kind: "text" | "image-string";
+    name: string;
+    defaultText: string;
+  }[] = [];
+  if (manifest.spine.prompt)
+    values.push({
+      order: manifest.spine.prompt.order,
+      kind: "text",
+      name: "prompt",
+      defaultText: manifest.spine.prompt.defaultText,
+    });
+  for (const layer of manifest.spine.overlays ?? [])
+    if (layer.kind === "text" || layer.kind === "image-string")
+      values.push({
+        order: layer.order,
+        kind: layer.kind,
+        name: layer.name,
+        defaultText: layer.defaultText,
+      });
+  return values.sort((a, b) => a.order - b.order);
 }

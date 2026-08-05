@@ -47,6 +47,7 @@ export interface PopupTransform {
   readonly x: number;
   readonly y: number;
   readonly scale: number;
+  readonly rotation?: number;
 }
 export interface PopupOverlayTransform extends PopupTransform {
   readonly rotation: number;
@@ -61,6 +62,41 @@ export interface PopupLayerBase {
   readonly resource: string;
   readonly transform: PopupTransform;
 }
+export interface PopupGradientStop {
+  readonly offset: number;
+  readonly color: string;
+}
+export type PopupTextFill =
+  | { readonly kind: "solid"; readonly color: string }
+  | {
+      readonly kind: "linear-gradient";
+      readonly angleDegrees: number;
+      readonly stops: readonly PopupGradientStop[];
+    };
+export interface PopupTextStyle {
+  readonly fontSize: number;
+  readonly letterSpacing: number;
+  readonly fill: PopupTextFill;
+  readonly stroke?: { readonly color: string; readonly width: number };
+  readonly shadow?: {
+    readonly color: string;
+    readonly alpha: number;
+    readonly blur: number;
+    readonly distance: number;
+    readonly angleDegrees: number;
+  };
+  readonly arcDegrees: number;
+}
+export interface PopupStringNodeHandle {
+  readonly kind: "text" | "image-string";
+  readonly name: string;
+  readonly index: number;
+  readonly text: string;
+  readonly overridden: boolean;
+  setText(text: string): void;
+  resetText(): void;
+}
+export type PopupStringNodeSelector = string | number;
 export type PopupImageStringParent =
   | { readonly kind: "popup-root" }
   | {
@@ -86,9 +122,20 @@ export type PopupLayer =
     })
   | (PopupLayerBase & {
       readonly kind: "image-string";
-      readonly binding: "win-amount";
+      readonly name?: string;
+      readonly binding: "win-amount" | "manual";
+      readonly defaultText?: string;
       readonly anchor: PopupAnchor;
       readonly parent: PopupImageStringParent;
+      readonly visibleSegments?: readonly PopupSegment[];
+    })
+  | (PopupLayerBase & {
+      readonly kind: "text";
+      readonly name: string;
+      readonly defaultText: string;
+      readonly anchor: PopupAnchor;
+      readonly style: PopupTextStyle;
+      readonly visibleSegments: readonly PopupSegment[];
     })
   | (PopupLayerBase & {
       readonly kind: "vni";
@@ -112,6 +159,30 @@ export type PopupOverlayLayer =
       readonly resource: string;
       readonly transform: PopupOverlayTransform;
       readonly anchor: PopupAnchor;
+      readonly visibleSegments: readonly PopupSegment[];
+    }
+  | {
+      readonly id: string;
+      readonly kind: "image-string";
+      readonly name: string;
+      readonly binding: "manual";
+      readonly defaultText: string;
+      readonly order: number;
+      readonly resource: string;
+      readonly transform: PopupOverlayTransform;
+      readonly anchor: PopupAnchor;
+      readonly visibleSegments: readonly PopupSegment[];
+    }
+  | {
+      readonly id: string;
+      readonly kind: "text";
+      readonly name: string;
+      readonly defaultText: string;
+      readonly order: number;
+      readonly resource: string;
+      readonly transform: PopupOverlayTransform;
+      readonly anchor: PopupAnchor;
+      readonly style: PopupTextStyle;
       readonly visibleSegments: readonly PopupSegment[];
     }
   | {
@@ -256,6 +327,8 @@ export interface PopupPackageResource<
 
 export interface AwardCelebrationPlayer {
   readonly container: Container;
+  readonly textNodes: readonly PopupStringNodeHandle[];
+  readonly imageStringNodes: readonly PopupStringNodeHandle[];
   init(): Promise<void>;
   start(input: AwardCelebrationInput): void;
   update(deltaSeconds: number): AwardCelebrationSnapshot;
@@ -264,6 +337,8 @@ export interface AwardCelebrationPlayer {
   dismissImmediately(): void;
   getSnapshot(): AwardCelebrationSnapshot;
   isPlaying(): boolean;
+  getTextNode(selector: PopupStringNodeSelector): PopupStringNodeHandle;
+  getImageStringNode(selector: PopupStringNodeSelector): PopupStringNodeHandle;
   destroy(): void;
 }
 
@@ -276,6 +351,8 @@ export interface SpinePopupSnapshot {
 
 export interface SpinePopupPlayer {
   readonly container: Container;
+  readonly textNodes: readonly PopupStringNodeHandle[];
+  readonly imageStringNodes: readonly PopupStringNodeHandle[];
   init(): Promise<void>;
   start(text?: string): void;
   update(deltaSeconds: number): SpinePopupSnapshot;
@@ -283,5 +360,7 @@ export interface SpinePopupPlayer {
   dismissImmediately(): void;
   getSnapshot(): SpinePopupSnapshot;
   isPlaying(): boolean;
+  getTextNode(selector: PopupStringNodeSelector): PopupStringNodeHandle;
+  getImageStringNode(selector: PopupStringNodeSelector): PopupStringNodeHandle;
   destroy(): void;
 }

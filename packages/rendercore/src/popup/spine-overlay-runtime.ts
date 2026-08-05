@@ -8,6 +8,8 @@ import {
   requestPopupVniPlaybackEnd,
   startPopupVniPlayback,
 } from "./vni-playback.js";
+import { createRenderImageString } from "../image-string/index.js";
+import { createPopupStyledText } from "./styled-text.js";
 import type {
   PopupOverlayLayer,
   PopupPreparedResource,
@@ -16,6 +18,12 @@ import type {
 
 export interface SpinePopupOverlayRuntime {
   readonly container: Container;
+  readonly stringNode?: {
+    readonly kind: "text" | "image-string";
+    readonly name: string;
+    readonly defaultText: string;
+    setText(text: string): void;
+  };
   init(): Promise<void>;
   start(): void;
   update(deltaSeconds: number): void;
@@ -31,7 +39,11 @@ export function createSpinePopupOverlayRuntime(options: {
   readonly vniPlayerFactory?: (parent: Container) => VNIPlayer;
 }): SpinePopupOverlayRuntime {
   const { layer, resource } = options;
-  if (layer.kind !== resource.kind)
+  if (
+    layer.kind === "text"
+      ? resource.kind !== "font"
+      : layer.kind !== resource.kind
+  )
     throw new Error(`popup overlay/resource kind mismatch: ${layer.id}`);
   const container = new Container();
   container.position.set(layer.transform.x, layer.transform.y);
@@ -55,6 +67,69 @@ export function createSpinePopupOverlayRuntime(options: {
       },
       destroy() {
         container.destroy({ children: true });
+      },
+    };
+  }
+  if (layer.kind === "image-string" && resource.kind === "image-string") {
+    const renderer = createRenderImageString({
+      resource: resource.resource,
+      text: layer.defaultText,
+      anchor: layer.anchor,
+    });
+    container.addChild(renderer.container);
+    return {
+      container,
+      stringNode: {
+        kind: "image-string",
+        name: layer.name,
+        defaultText: layer.defaultText,
+        setText(text) {
+          renderer.setText(text);
+        },
+      },
+      async init() {},
+      start() {
+        container.visible = layer.visibleSegments.includes("start");
+      },
+      update() {},
+      applySegment(segment) {
+        container.visible = layer.visibleSegments.includes(segment);
+      },
+      destroy() {
+        renderer.destroy();
+        container.destroy({ children: false });
+      },
+    };
+  }
+  if (layer.kind === "text" && resource.kind === "font") {
+    const renderer = createPopupStyledText({
+      family: resource.family,
+      text: layer.defaultText,
+      style: layer.style,
+      anchor: layer.anchor,
+    });
+    container.addChild(renderer.container);
+    return {
+      container,
+      stringNode: {
+        kind: "text",
+        name: layer.name,
+        defaultText: layer.defaultText,
+        setText(text) {
+          renderer.setText(text);
+        },
+      },
+      async init() {},
+      start() {
+        container.visible = layer.visibleSegments.includes("start");
+      },
+      update() {},
+      applySegment(segment) {
+        container.visible = layer.visibleSegments.includes(segment);
+      },
+      destroy() {
+        renderer.destroy();
+        container.destroy({ children: false });
       },
     };
   }

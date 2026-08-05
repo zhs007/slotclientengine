@@ -105,6 +105,32 @@ describe("spine popup player", () => {
     expect(failedLeaf.destroyCount).toBe(1);
     expect(() => failed.getSnapshot()).toThrow(/destroyed/);
   });
+
+  it("exposes legacy prompt through the exact named text-node API", async () => {
+    const leaf = new FakeSpinePlayer();
+    const player = createSpinePopupPlayer({
+      resource: spineResourceWithPrompt(),
+      playerFactory: () => leaf,
+      measurePromptText: () => ({ width: 300, height: 80 }),
+    });
+    await player.init();
+    expect(player.textNodes.map(({ name, index }) => [name, index])).toEqual([
+      ["prompt", 0],
+    ]);
+    const prompt = player.getTextNode("prompt");
+    prompt.setText("Translated text");
+    player.start();
+    expect(prompt).toMatchObject({
+      text: "Translated text",
+      overridden: true,
+    });
+    player.dismissImmediately();
+    prompt.resetText();
+    expect(prompt.text).toBe("Press any key");
+    expect(() => player.getImageStringNode(0)).toThrow(/out of range/);
+    player.destroy();
+    expect(() => prompt.text).toThrow(/destroyed/);
+  });
 });
 
 class FakeSpinePlayer implements RendercoreSpinePlayer {
@@ -166,5 +192,33 @@ function spineResource(): PopupPackageResource<SpinePopupManifestV1> {
       },
     },
     destroy() {},
+  };
+}
+
+function spineResourceWithPrompt(): PopupPackageResource<SpinePopupManifestV1> {
+  const base = spineResource();
+  return {
+    ...base,
+    manifest: {
+      ...base.manifest,
+      resources: {
+        ...base.manifest.resources,
+        prompt: { kind: "font", path: "assets/prompt.woff2" },
+      },
+      spine: {
+        ...base.manifest.spine,
+        prompt: {
+          font: "prompt",
+          defaultText: "Press any key",
+          fill: "#ffffff",
+          order: 1,
+          area: { x: 0, y: 200, width: 600, height: 80 },
+        },
+      },
+    },
+    resources: {
+      ...base.resources,
+      prompt: { kind: "font", family: "popup-font" },
+    },
   };
 }

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Container } from "pixi.js";
 import type { RendercoreSpinePlayer } from "../../src/spine/runtime-player.js";
 import type {
+  PopupStringNodeHandle,
   SpinePopupPhase,
   SpinePopupPlayer,
 } from "../../src/popup/index.js";
@@ -45,6 +46,8 @@ class FakeTransitionPlayer implements RendercoreSpinePlayer {
 
 class FakeSpinePopupPlayer implements SpinePopupPlayer {
   readonly container = new Container();
+  readonly textNodes: readonly PopupStringNodeHandle[] = [];
+  readonly imageStringNodes: readonly PopupStringNodeHandle[] = [];
   phase: SpinePopupPhase = "idle";
   dismissRequested = false;
   destroyed = false;
@@ -68,6 +71,12 @@ class FakeSpinePopupPlayer implements SpinePopupPlayer {
   }
   isPlaying() {
     return !["idle", "complete"].includes(this.phase);
+  }
+  getTextNode(): PopupStringNodeHandle {
+    throw new Error("no text node");
+  }
+  getImageStringNode(): PopupStringNodeHandle {
+    throw new Error("no image-string node");
   }
   destroy() {
     this.destroyed = true;
