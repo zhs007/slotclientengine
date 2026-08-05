@@ -52,6 +52,12 @@ describe("symbol value presentation manifest resources", () => {
         anchor: { x: 0.5, y: 0.5 },
         transform: { x: index, y: -index, scale: 1 },
         followSlotColor: index !== 1,
+        specialValueImages:
+          index === 0
+            ? [{ value: 200, image: "./small-200.png" }]
+            : index === 2
+              ? [{ value: 500, image: "./large-500.png" }]
+              : [],
       })),
     };
     const parsed = parseSymbolStateTextureManifest(copy);
@@ -64,6 +70,13 @@ describe("symbol value presentation manifest resources", () => {
       "Num2",
     ]);
     expect(Object.isFrozen(text.tiers[0]?.transform)).toBe(true);
+    expect(
+      text.tiers.map((binding) => binding.specialValueImages ?? []),
+    ).toEqual([
+      [{ value: 200, image: "./small-200.png" }],
+      [],
+      [{ value: 500, image: "./large-500.png" }],
+    ]);
 
     for (const mutate of [
       (value: any) => value.text.tiers.pop(),
@@ -80,6 +93,47 @@ describe("symbol value presentation manifest resources", () => {
       mutate(invalid.symbols.GOLD.valuePresentation);
       expect(() => parseSymbolStateTextureManifest(invalid)).toThrow();
     }
+  });
+
+  it("normalizes legacy shared ImgNumber mappings into every tier", () => {
+    const copy = createGenericManifest(3);
+    const text = {
+      type: "image-string",
+      specialValueImages: [{ value: 200, image: "./legacy-200.png" }],
+      tiers: ["small", "medium", "large"].map((id, index) => ({
+        resource: `./dependencies/image-strings/${id}/image-string.manifest.json`,
+        slot: `Num${index}`,
+        anchor: { x: 0.5, y: 0.5 },
+        transform: { x: 0, y: 0, scale: 1 },
+        followSlotColor: true,
+      })),
+    };
+    copy.symbols.GOLD.valuePresentation.text = text;
+
+    const parsed =
+      parseSymbolStateTextureManifest(copy).symbols.GOLD.valuePresentation!
+        .text;
+    if (parsed.type !== "image-string") throw new Error("expected ImgNumber");
+    expect(parsed.tiers.map((binding) => binding.specialValueImages)).toEqual([
+      [{ value: 200, image: "./legacy-200.png" }],
+      [{ value: 200, image: "./legacy-200.png" }],
+      [{ value: 200, image: "./legacy-200.png" }],
+    ]);
+    expect(parsed.tiers[0]?.specialValueImages).not.toBe(
+      parsed.tiers[1]?.specialValueImages,
+    );
+    expect(parsed.tiers[0]?.specialValueImages?.[0]).not.toBe(
+      parsed.tiers[1]?.specialValueImages?.[0],
+    );
+    expect("specialValueImages" in parsed).toBe(false);
+
+    const mixed = structuredClone(copy);
+    mixed.symbols.GOLD.valuePresentation.text.tiers[0].specialValueImages = [
+      { value: 500, image: "./tier-500.png" },
+    ];
+    expect(() => parseSymbolStateTextureManifest(mixed)).toThrow(
+      /must not combine legacy specialValueImages with per-tier specialValueImages/,
+    );
   });
 
   it("parses and deeply freezes the current arbitrary tier configuration", () => {

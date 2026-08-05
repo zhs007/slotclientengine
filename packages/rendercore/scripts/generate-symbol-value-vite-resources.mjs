@@ -162,7 +162,6 @@ export async function generateSymbolValueViteResources(options) {
     }
     for (const value of presentation.defaultValues) {
       if (presentation.imageStringBindings.length === 0) break;
-      if (presentation.specialValueImages.has(value)) continue;
       const tierIndex = presentation.tiers.findIndex(
         (tier) => tier.maxExclusive === undefined || value < tier.maxExclusive,
       );
@@ -173,6 +172,7 @@ export async function generateSymbolValueViteResources(options) {
           `${symbol} default value ${value} has no ImgNumber tier binding.`,
         );
       }
+      if (binding.specialValueImages.has(value)) continue;
       validateImageStringText(
         String(value),
         nested,
@@ -429,48 +429,54 @@ function validatePresentation(symbol, value, states) {
     textType === "image"
       ? validateValueImagePaths(symbol, text, defaultValues)
       : [];
+  const legacySpecialValueImages =
+    textType === "image-string"
+      ? validateSpecialValueImages(
+          `${symbol}.valuePresentation.text.specialValueImages`,
+          text.specialValueImages,
+        )
+      : new Map();
   const imageStringBindings =
     textType === "image-string"
-      ? validateImageStringBindings(symbol, text.tiers, tiers.length)
+      ? validateImageStringBindings(
+          symbol,
+          text.tiers,
+          tiers.length,
+          legacySpecialValueImages,
+          text.specialValueImages !== undefined,
+        )
       : [];
-  const specialValueImages =
-    textType === "image-string"
-      ? validateSpecialValueImages(symbol, text.specialValueImages)
-      : new Map();
   return {
     defaultValues,
     reelStateTextures,
     tiers,
     textImagePaths,
     imageStringBindings,
-    specialValueImages,
-    specialValueImagePaths: [...specialValueImages.values()],
+    specialValueImagePaths: imageStringBindings.flatMap((binding) => [
+      ...binding.specialValueImages.values(),
+    ]),
   };
 }
 
-function validateSpecialValueImages(symbol, value) {
+function validateSpecialValueImages(label, value) {
   if (value === undefined) return new Map();
   if (!Array.isArray(value)) {
-    throw new Error(
-      `${symbol}.valuePresentation.text.specialValueImages must be an array.`,
-    );
+    throw new Error(`${label} must be an array.`);
   }
   const mappings = new Map();
   value.forEach((rawMapping, index) => {
-    const label = `${symbol}.valuePresentation.text.specialValueImages[${index}]`;
-    const mapping = assertRecord(rawMapping, label);
-    assertOnlyKnownKeys(mapping, label, ["value", "image"]);
+    const mappingLabel = `${label}[${index}]`;
+    const mapping = assertRecord(rawMapping, mappingLabel);
+    assertOnlyKnownKeys(mapping, mappingLabel, ["value", "image"]);
     if (!Number.isSafeInteger(mapping.value)) {
-      throw new Error(`${label}.value must be a safe integer.`);
+      throw new Error(`${mappingLabel}.value must be a safe integer.`);
     }
     if (mappings.has(mapping.value)) {
-      throw new Error(
-        `${symbol}.valuePresentation.text.specialValueImages values must be unique.`,
-      );
+      throw new Error(`${label} values must be unique.`);
     }
     mappings.set(
       mapping.value,
-      assertManifestImagePath(mapping.image, `${label}.image`),
+      assertManifestImagePath(mapping.image, `${mappingLabel}.image`),
     );
   });
   return mappings;
@@ -506,7 +512,13 @@ function validateValueImagePaths(symbol, text, defaultValues) {
   );
 }
 
-function validateImageStringBindings(symbol, value, tierCount) {
+function validateImageStringBindings(
+  symbol,
+  value,
+  tierCount,
+  legacySpecialValueImages,
+  hasLegacySpecialValueImages,
+) {
   if (!Array.isArray(value) || value.length !== tierCount) {
     throw new Error(
       `${symbol} value text tiers length must equal valuePresentation tiers length (${tierCount}).`,
@@ -521,7 +533,16 @@ function validateImageStringBindings(symbol, value, tierCount) {
       "anchor",
       "transform",
       "followSlotColor",
+      "specialValueImages",
     ]);
+    if (
+      hasLegacySpecialValueImages &&
+      binding.specialValueImages !== undefined
+    ) {
+      throw new Error(
+        `${symbol}.valuePresentation.text must not combine legacy specialValueImages with per-tier specialValueImages.`,
+      );
+    }
     const resource = assertImageStringResourcePath(
       binding.resource,
       `${label}.resource`,
@@ -567,6 +588,12 @@ function validateImageStringBindings(symbol, value, tierCount) {
       anchor: { x: anchor.x, y: anchor.y },
       transform: { x: transform.x, y: transform.y, scale: transform.scale },
       followSlotColor: binding.followSlotColor,
+      specialValueImages: hasLegacySpecialValueImages
+        ? new Map(legacySpecialValueImages)
+        : validateSpecialValueImages(
+            `${label}.specialValueImages`,
+            binding.specialValueImages,
+          ),
     };
   });
 }

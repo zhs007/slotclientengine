@@ -103,7 +103,6 @@ describe("typed resource picker", () => {
       ],
       text: {
         type: "image-string",
-        specialValueImages: [{ value: 200, image: "" }],
         tiers: [
           {
             resource: "./image-string.manifest.json",
@@ -111,6 +110,7 @@ describe("typed resource picker", () => {
             anchor: { x: 0.5, y: 0.5 },
             transform: { x: 0, y: 0, scale: 1 },
             followSlotColor: true,
+            specialValueImages: [{ value: 200, image: "" }],
           },
         ],
       },
@@ -120,12 +120,17 @@ describe("typed resource picker", () => {
       {
         kind: "value-image-string-special-image",
         symbol: "A",
+        tierIndex: 0,
         mappingIndex: 0,
       },
       "Symbol.png",
     );
     expect(project.symbols.get("A")?.valuePresentation?.text).toMatchObject({
-      specialValueImages: [{ value: 200, image: "./Symbol.png" }],
+      tiers: [
+        {
+          specialValueImages: [{ value: 200, image: "./Symbol.png" }],
+        },
+      ],
     });
   });
 

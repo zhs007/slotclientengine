@@ -183,19 +183,15 @@ export function createSymbolValuePresentationResourcesFromManifest(
                   anchor: binding.anchor,
                   transform: binding.transform,
                   followSlotColor: binding.followSlotColor,
+                  specialValueImages:
+                    createSymbolImageStringSpecialValueImageMap(
+                      binding.specialValueImages ?? [],
+                      pool,
+                    ),
                 });
               }),
             )
           : Object.freeze([]);
-      const imageStringSpecialValueImages: NonNullable<
-        SymbolValuePresentationResourceMap[string]["imageStringSpecialValueImages"]
-      > =
-        text.type === "image-string"
-          ? createSymbolImageStringSpecialValueImageMap(
-              text.specialValueImages ?? [],
-              options.imageStringResourcePool!,
-            )
-          : Object.freeze({});
       for (const value of presentation.defaultValues) {
         if (text.type !== "image-string") break;
         const tierIndex = resolveTierIndex(tiers, value);
@@ -208,7 +204,7 @@ export function createSymbolValuePresentationResourcesFromManifest(
         try {
           const valueText = String(value);
           validateImageStringText(valueText);
-          if (!imageStringSpecialValueImages[valueText]) {
+          if (!binding.specialValueImages[valueText]) {
             validateImageStringText(valueText, binding.resource.manifest);
           }
         } catch (error) {
@@ -244,7 +240,6 @@ export function createSymbolValuePresentationResourcesFromManifest(
             text,
             textImageUrls,
             imageStringTierBindings,
-            imageStringSpecialValueImages,
           }),
         ] as const,
       ];
@@ -264,8 +259,8 @@ export async function createSymbolValuePresentationResourceBundleFromManifest(
   );
   const specialImagePaths = Object.values(manifest.symbols).flatMap((entry) =>
     entry.valuePresentation?.text.type === "image-string"
-      ? (entry.valuePresentation.text.specialValueImages ?? []).map(
-          (mapping) => mapping.image,
+      ? entry.valuePresentation.text.tiers.flatMap((binding) =>
+          (binding.specialValueImages ?? []).map((mapping) => mapping.image),
         )
       : [],
   );

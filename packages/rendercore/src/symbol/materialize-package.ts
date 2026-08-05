@@ -430,6 +430,42 @@ function rewriteValueImagePaths(
   mapping: ReadonlyMap<string, string>,
 ): void {
   const text = record(presentation.text, "valuePresentation.text");
+  if (text.type === "image-string") {
+    if (!Array.isArray(text.tiers)) {
+      throw new Error("valuePresentation.text.tiers 必须是 array。");
+    }
+    const legacySpecialValueImages = text.specialValueImages;
+    for (const rawBinding of text.tiers) {
+      const binding = record(rawBinding, "valuePresentation.text tier binding");
+      if (
+        legacySpecialValueImages !== undefined &&
+        binding.specialValueImages !== undefined
+      ) {
+        throw new Error(
+          "valuePresentation.text 不得同时包含 legacy 与 per-tier specialValueImages。",
+        );
+      }
+      if (typeof binding.resource === "string") {
+        binding.resource = rewriteRef(binding.resource, mapping);
+      }
+      const specialValueImages =
+        binding.specialValueImages ?? legacySpecialValueImages;
+      if (specialValueImages !== undefined) {
+        if (!Array.isArray(specialValueImages)) {
+          throw new Error("specialValueImages 必须是 array。");
+        }
+        binding.specialValueImages = structuredClone(specialValueImages);
+        for (const rawMapping of binding.specialValueImages as unknown[]) {
+          const special = record(rawMapping, "specialValueImages mapping");
+          if (typeof special.image === "string") {
+            special.image = rewriteRef(special.image, mapping);
+          }
+        }
+      }
+    }
+    delete text.specialValueImages;
+    return;
+  }
   if (text.type !== "image") return;
   if (typeof text.prefix === "string") {
     if (!Array.isArray(presentation.defaultValues))

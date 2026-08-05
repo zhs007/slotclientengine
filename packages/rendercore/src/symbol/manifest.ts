@@ -173,12 +173,12 @@ export interface SymbolValuePresentationImageStringTierBindingSpec {
   readonly anchor: Readonly<{ x: number; y: number }>;
   readonly transform: Readonly<{ x: number; y: number; scale: number }>;
   readonly followSlotColor: boolean;
+  readonly specialValueImages?: readonly SymbolImageStringSpecialValueImageSpec[];
 }
 
 export interface SymbolValuePresentationImageStringTextSpec {
   readonly type: "image-string";
   readonly tiers: readonly SymbolValuePresentationImageStringTierBindingSpec[];
-  readonly specialValueImages?: readonly SymbolImageStringSpecialValueImageSpec[];
 }
 
 export type SymbolValuePresentationTextSpec =
@@ -1194,13 +1194,12 @@ function parseValuePresentation(
         `Symbol "${symbol}" valuePresentation.text.tiers length must equal valuePresentation.tiers length (${tiers.length}).`,
       );
     }
-    const specialValueImages = parseImageStringSpecialValueImages(
+    const legacySpecialValueImages = parseImageStringSpecialValueImages(
       text.specialValueImages,
       `symbol "${symbol}" valuePresentation.text.specialValueImages`,
     );
     parsedText = Object.freeze({
       type: "image-string",
-      ...(specialValueImages.length > 0 ? { specialValueImages } : {}),
       tiers: Object.freeze(
         text.tiers.map((rawBinding, index) => {
           const label = `symbol "${symbol}" valuePresentation.text.tiers[${index}]`;
@@ -1211,7 +1210,16 @@ function parseValuePresentation(
             "anchor",
             "transform",
             "followSlotColor",
+            "specialValueImages",
           ]);
+          if (
+            text.specialValueImages !== undefined &&
+            binding.specialValueImages !== undefined
+          ) {
+            throw new SymbolAssetError(
+              `Symbol "${symbol}" valuePresentation.text must not combine legacy specialValueImages with per-tier specialValueImages.`,
+            );
+          }
           const resource = assertImageStringResourcePath(
             binding.resource,
             `${label}.resource`,
@@ -1252,12 +1260,24 @@ function parseValuePresentation(
               `${label}.followSlotColor must be a boolean.`,
             );
           }
+          const specialValueImages =
+            text.specialValueImages === undefined
+              ? parseImageStringSpecialValueImages(
+                  binding.specialValueImages,
+                  `${label}.specialValueImages`,
+                )
+              : Object.freeze(
+                  legacySpecialValueImages.map((mapping) =>
+                    Object.freeze({ ...mapping }),
+                  ),
+                );
           return Object.freeze({
             resource,
             slot,
             anchor,
             transform,
             followSlotColor: binding.followSlotColor,
+            ...(specialValueImages.length > 0 ? { specialValueImages } : {}),
           });
         }),
       ),

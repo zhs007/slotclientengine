@@ -331,9 +331,47 @@ describe("symbol package game config and resources", () => {
     };
     const dependencyPath =
       "dependencies/image-strings/coin-digits/image-string.manifest.json";
+    (manifest.symbols as Record<string, unknown>).C = {
+      scale: 1,
+      valuePresentation: {
+        defaultValues: [200],
+        reelStates: {
+          normal: { kind: "transparent", width: 160, height: 160 },
+        },
+        tiers: [
+          {
+            animation: {
+              kind: "spine",
+              skeleton: "./C.json",
+              atlas: "./C.atlas",
+              texture: "./C.png",
+              playback: {
+                mode: "animation",
+                animationName: "Idle",
+                loop: true,
+              },
+            },
+          },
+        ],
+        text: {
+          type: "image-string",
+          tiers: [
+            {
+              resource: `./${dependencyPath}`,
+              slot: "Num",
+              anchor: { x: 0.5, y: 0.5 },
+              transform: { x: 0, y: 0, scale: 1 },
+              followSlotColor: true,
+              specialValueImages: [{ value: 200, image: "./tier-mini.png" }],
+            },
+          ],
+        },
+      },
+    };
     const packageFiles = new Map<string, Uint8Array>([
       [dependencyPath, encode(nestedManifest)],
       ["mini.png", new Uint8Array([1])],
+      ["tier-mini.png", new Uint8Array([2])],
     ]);
     expect(
       collectSymbolManifestResourcePaths({
@@ -345,10 +383,14 @@ describe("symbol package game config and resources", () => {
       "A.atlas",
       "A.json",
       "A.png",
+      "C.atlas",
+      "C.json",
+      "C.png",
       "dependencies/image-strings/coin-digits/assets/0.png",
       "dependencies/image-strings/coin-digits/assets/1.png",
       dependencyPath,
       "mini.png",
+      "tier-mini.png",
     ]);
     expect(() =>
       collectSymbolManifestResourcePaths({ symbolManifest: manifest }),

@@ -375,7 +375,7 @@ export function collectSymbolManifestResourcePaths(options: {
             resource: binding.resource,
             text: String(value),
             label: `Value ${value} image-string tier ${tierIndex}`,
-            specialValueImages: presentation.text.specialValueImages,
+            specialValueImages: binding.specialValueImages,
           });
         }
       }
@@ -502,8 +502,8 @@ export async function createSymbolPackageResourceFromResolvedFiles(options: {
         (node.specialValueImages ?? []).map((mapping) => mapping.image),
       ),
       ...(entry.valuePresentation?.text.type === "image-string"
-        ? (entry.valuePresentation.text.specialValueImages ?? []).map(
-            (mapping) => mapping.image,
+        ? entry.valuePresentation.text.tiers.flatMap((binding) =>
+            (binding.specialValueImages ?? []).map((mapping) => mapping.image),
           )
         : []),
     ]);

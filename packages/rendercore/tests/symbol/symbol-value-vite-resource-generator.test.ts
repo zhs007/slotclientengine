@@ -221,13 +221,15 @@ describe("symbol value Vite resource generator", () => {
     const manifest = createManifest(["bronze.json", "ruby.json"]);
     manifest.symbols.GOLD.valuePresentation.text = {
       type: "image-string",
-      specialValueImages: [{ value: 200, image: "./mini.png" }],
-      tiers: ["small", "large"].map((id) => ({
+      tiers: ["small", "large"].map((id, index) => ({
         resource: `./dependencies/${id}/image-string.manifest.json`,
         slot: `Num-${id}`,
         anchor: { x: 0.5, y: 0.5 },
         transform: { x: 0, y: 0, scale: 1 },
         followSlotColor: true,
+        ...(index === 1
+          ? { specialValueImages: [{ value: 200, image: "./mini.png" }] }
+          : {}),
       })),
     };
     manifest.symbols.GOLD.valuePresentation.defaultValues.push(200);

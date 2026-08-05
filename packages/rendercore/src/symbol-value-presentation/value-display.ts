@@ -20,7 +20,7 @@ export async function createSymbolValueDisplay(options: {
       resource: binding.resource,
       text,
       anchor: binding.anchor,
-      specialValueImages: options.resource.imageStringSpecialValueImages,
+      specialValueImages: binding.specialValueImages,
     });
     renderer.container.position.set(binding.transform.x, binding.transform.y);
     renderer.container.scale.set(binding.transform.scale);
@@ -106,7 +106,7 @@ export function assertSymbolValueDisplayResource(options: {
     try {
       const valueText = String(options.value);
       validateImageStringText(valueText);
-      if (!options.resource.imageStringSpecialValueImages?.[valueText]) {
+      if (!binding.specialValueImages[valueText]) {
         validateImageStringText(valueText, binding.resource.manifest);
       }
     } catch (error) {

@@ -121,7 +121,8 @@ function isBindingTargetAvailable(
   if (context.kind === "value-image-string-special-image")
     return Boolean(
       symbol.valuePresentation?.text.type === "image-string" &&
-      symbol.valuePresentation.text.specialValueImages?.[context.mappingIndex],
+      symbol.valuePresentation.text.tiers[context.tierIndex]
+        ?.specialValueImages?.[context.mappingIndex],
     );
   if (context.kind === "value-tier-resource")
     return context.tierIndex < (symbol.valuePresentation?.tiers.length ?? 0);
