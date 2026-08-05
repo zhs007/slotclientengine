@@ -34,11 +34,13 @@ describe("scene layout manifest", () => {
       "base-popup": {
         type: "award-celebration" as const,
         manifest: "dependencies/popups/base-popup/popup.manifest.json",
+        order: 2000,
         placements: { default: { x: 0, y: 0, scale: 1 } },
       },
       "free-popup": {
         type: "award-celebration" as const,
         manifest: "dependencies/popups/free-popup/popup.manifest.json",
+        order: 2001,
         placements: { default: { x: 10, y: -20, scale: 0.9 } },
       },
     },
@@ -483,6 +485,7 @@ describe("scene layout manifest", () => {
     value.popups["free-entry"] = {
       type: "spine",
       manifest: "free-entry-popup.manifest.json",
+      order: 2002,
       placements: { default: { x: 0, y: 0, scale: 1 } },
     };
     value.gameModes.transitions = [
@@ -535,6 +538,31 @@ describe("scene layout manifest", () => {
       },
     };
     expect(() => parseSceneLayoutManifest(video)).toThrow(/not supported/);
+  });
+
+  it("normalizes legacy popup order and rejects presentation order conflicts", () => {
+    const legacy = gameModeManifest() as any;
+    delete legacy.popups["free-popup"];
+    legacy.gameModes.modes[1].awardCelebrationPopup = "base-popup";
+    delete legacy.popups["base-popup"].order;
+    expect(parseSceneLayoutManifest(legacy).popups?.["base-popup"]?.order).toBe(
+      2000,
+    );
+
+    const duplicate = gameModeManifest() as any;
+    duplicate.popups["free-popup"].order = 2000;
+    expect(() => parseSceneLayoutManifest(duplicate)).toThrow(
+      /node\/reel\/popup order.*unique/,
+    );
+
+    const belowArt = structuredClone(gameModeManifest()) as any;
+    belowArt.reels.main.order = 999;
+    belowArt.popups["base-popup"].order = 999;
+    expect(() => parseSceneLayoutManifest(belowArt)).toThrow(/order.*unique/);
+    belowArt.popups["base-popup"].order = 500;
+    expect(() => parseSceneLayoutManifest(belowArt)).toThrow(
+      /greater than every node\/reel order/,
+    );
   });
 
   it("rejects every invalid game-mode reference and incomplete state mapping", () => {

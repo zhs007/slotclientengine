@@ -22,6 +22,7 @@ import type {
 const PATH_SEGMENT = /^[A-Za-z0-9._-]+$/;
 const IDENTIFIER = /^[a-z0-9][a-z0-9._-]*$/;
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
+export const DEFAULT_SCENE_LAYOUT_POPUP_ORDER = 2000;
 
 export function parseSceneLayoutManifest(
   value: unknown,
@@ -105,6 +106,7 @@ export function parseSceneLayoutManifest(
     record.popups === undefined
       ? undefined
       : parsePopupBindings(record.popups, adaptation.mode);
+  validatePresentationOrders(nodes, reels.main, popups);
   const runtimeResources =
     record.runtimeResources === undefined
       ? undefined
@@ -930,7 +932,7 @@ function parsePopupBindings(
     identifier(id, "scene layout popup id");
     const label = `scene layout popups.${id}`;
     const binding = readRecord(raw, label);
-    known(binding, ["type", "manifest", "placements"], label);
+    known(binding, ["type", "manifest", "order", "placements"], label);
     if (binding.type !== "award-celebration" && binding.type !== "spine")
       fail(`${label}.type must be "award-celebration" or "spine".`);
     const placementsRecord = readRecord(
@@ -960,10 +962,33 @@ function parsePopupBindings(
     result[id] = {
       type: binding.type,
       manifest,
+      order:
+        binding.order === undefined
+          ? DEFAULT_SCENE_LAYOUT_POPUP_ORDER
+          : safeInteger(binding.order, `${label}.order`),
       placements,
     };
   }
   return deepFreeze(result);
+}
+
+function validatePresentationOrders(
+  nodes: readonly SceneLayoutNode[],
+  main: SceneLayoutReelGrid | undefined,
+  popups: Readonly<Record<string, SceneLayoutPopupBinding>> | undefined,
+): void {
+  const artOrders = [
+    ...nodes.map((node) => node.order),
+    ...(main?.order === undefined ? [] : [main.order]),
+  ];
+  const popupOrders = Object.values(popups ?? {}).map((popup) => popup.order);
+  unique([...artOrders, ...popupOrders], "scene layout node/reel/popup order");
+  const maximumArtOrder = Math.max(...artOrders, Number.MIN_SAFE_INTEGER);
+  for (const [id, popup] of Object.entries(popups ?? {}))
+    if (popup.order <= maximumArtOrder)
+      fail(
+        `scene layout popup "${id}" order must be greater than every node/reel order.`,
+      );
 }
 
 function parseGameModes(

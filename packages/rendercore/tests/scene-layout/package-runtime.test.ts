@@ -367,6 +367,7 @@ function popupLayoutFixture() {
       celebration: {
         type: "award-celebration" as const,
         manifest: "dependencies/popups/celebration/popup.manifest.json",
+        order: 2000,
         placements: { default: { x: 3, y: -4, scale: 0.8 } },
       },
     },
@@ -1008,6 +1009,7 @@ describe("scene layout package runtime", () => {
       ).toMatchObject({ playback: { mode: "once" } });
       expect(popup.container.position).toMatchObject({ x: 103, y: 46 });
       expect(popup.container.scale).toMatchObject({ x: 0.8, y: 0.8 });
+      expect(popup.container.zIndex).toBe(2000);
       runtime.startAwardCelebrationForCurrentMode({
         betAmountRaw: 100,
         winAmountRaw: 6000,
