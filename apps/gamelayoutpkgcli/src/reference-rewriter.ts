@@ -335,6 +335,28 @@ export function rewritePopupManifest(
         ...manifest.spine,
         resource:
           resourceIds.get(manifest.spine.resource) ?? manifest.spine.resource,
+        ...(manifest.spine.prompt
+          ? {
+              prompt: {
+                ...manifest.spine.prompt,
+                ...(manifest.spine.prompt.font
+                  ? {
+                      font:
+                        resourceIds.get(manifest.spine.prompt.font) ??
+                        manifest.spine.prompt.font,
+                    }
+                  : {}),
+              },
+            }
+          : {}),
+        ...(manifest.spine.overlays
+          ? {
+              overlays: manifest.spine.overlays.map((layer) => ({
+                ...layer,
+                resource: resourceIds.get(layer.resource) ?? layer.resource,
+              })),
+            }
+          : {}),
       },
     });
   return parsePopupManifest({

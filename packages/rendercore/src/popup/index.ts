@@ -5,5 +5,6 @@ export * from "./award-sequence.js";
 export * from "./package-resource.js";
 export * from "./award-player.js";
 export * from "./spine-player.js";
+export * from "./styled-text.js";
 export * from "./font-resource.js";
 export * from "./prompt-text.js";

@@ -12,6 +12,7 @@ import type {
   PopupPromptSpec,
   PopupResourceSpec,
   PopupSegment,
+  PopupTextStyle,
   SpinePopupManifestV1,
 } from "./types.js";
 
@@ -152,6 +153,15 @@ function parseSpinePopup(
     ],
     "spine prompt/overlay order",
   );
+  if (
+    prompt &&
+    (overlays ?? []).some(
+      (layer) =>
+        (layer.kind === "text" || layer.kind === "image-string") &&
+        layer.name === "prompt",
+    )
+  )
+    fail("spine string node name prompt is reserved by spine.prompt.");
   return freeze({
     resource,
     transform: {
@@ -215,8 +225,7 @@ function parseOverlays(
   const overlays = value.map((raw, index) => {
     const label = `spine.overlays[${index}]`;
     const record = object(raw, label);
-    if (record.kind === "image-string" || record.kind === "font")
-      fail(`${label}.kind must be image, vni, or spine.`);
+    if (record.kind === "font") fail(`${label}.kind invalid.`);
     const transform = object(record.transform, `${label}.transform`);
     keys(transform, ["x", "y", "scale", "rotation"], `${label}.transform`);
     const parsed = parseLayer(
@@ -227,9 +236,14 @@ function parseOverlays(
       label,
       resources,
     );
-    if (parsed.kind === "image-string") fail(`${label}.kind invalid.`);
+    if (parsed.kind === "image-string" && parsed.binding !== "manual")
+      fail(`${label}.binding must be manual.`);
+    const overlay =
+      parsed.kind === "image-string"
+        ? (({ parent: _parent, ...rest }) => rest)(parsed)
+        : parsed;
     return freeze({
-      ...parsed,
+      ...overlay,
       transform: {
         ...parsed.transform,
         rotation: finite(transform.rotation, `${label}.transform.rotation`),
@@ -240,6 +254,7 @@ function parseOverlays(
     overlays.map(({ id }) => id),
     "spine.overlays.id",
   );
+  validateStringNodeNames(overlays, "spine");
   return Object.freeze([...overlays].sort((a, b) => a.order - b.order));
 }
 
@@ -410,7 +425,7 @@ function parseAwardCelebration(
       ...presentation,
     }) as AwardCelebrationTier;
   });
-  return freeze({
+  const result = freeze({
     base: parseTier(record.base, "awardCelebration.base", resources),
     standard: parseTier(
       record.standard,
@@ -419,6 +434,9 @@ function parseAwardCelebration(
     ),
     celebrationTiers,
   });
+  const variants = allTiers(result).flatMap(({ layers }) => layers);
+  validateStringNodeNames(variants, "awardCelebration", true);
+  return result;
 }
 
 function parseTier(
@@ -448,11 +466,17 @@ function parseTier(
     layers.map(({ order }) => String(order)),
     `${label}.layers.order`,
   );
-  if (layers.filter((layer) => layer.kind === "image-string").length !== 1)
-    fail(`${label} 必须恰好包含一个动态 ImgNumber 图层。`);
+  if (
+    layers.filter(
+      (layer) =>
+        layer.kind === "image-string" && layer.binding === "win-amount",
+    ).length !== 1
+  )
+    fail(`${label} 必须恰好包含一个 win-amount ImgNumber 图层。`);
+  validateStringNodeNames(layers, label);
   const amount = layers.find(
     (layer): layer is Extract<PopupLayer, { readonly kind: "image-string" }> =>
-      layer.kind === "image-string",
+      layer.kind === "image-string" && layer.binding === "win-amount",
   )!;
   const amountParent = amount.parent;
   if (amountParent.kind === "vni-text-layer") {
@@ -481,10 +505,20 @@ function parseLayer(
   const common = ["id", "kind", "order", "resource", "transform"];
   const resourceId = resourceKey(record.resource, `${label}.resource`);
   const resource = resources[resourceId];
-  if (!resource || resource.kind !== kind)
+  const expectedResourceKind = kind === "text" ? "font" : kind;
+  if (!resource || resource.kind !== expectedResourceKind)
     fail(`${label}.resource 必须引用相同 kind 的 resource。`);
   const transform = object(record.transform, `${label}.transform`);
-  keys(transform, ["x", "y", "scale"], `${label}.transform`);
+  keys(
+    transform,
+    [
+      "x",
+      "y",
+      "scale",
+      ...(Object.hasOwn(transform, "rotation") ? ["rotation"] : []),
+    ],
+    `${label}.transform`,
+  );
   const base = {
     id: identifier(record.id, `${label}.id`),
     order: nonNegativeSafe(record.order, `${label}.order`),
@@ -493,6 +527,11 @@ function parseLayer(
       x: finite(transform.x, `${label}.transform.x`),
       y: finite(transform.y, `${label}.transform.y`),
       scale: positive(transform.scale, `${label}.transform.scale`),
+      ...(Object.hasOwn(transform, "rotation")
+        ? {
+            rotation: finite(transform.rotation, `${label}.transform.rotation`),
+          }
+        : {}),
     },
   };
   if (kind === "image" || kind === "image-string") {
@@ -501,27 +540,62 @@ function parseLayer(
     else
       keys(
         record,
-        Object.hasOwn(record, "parent")
-          ? [...common, "binding", "anchor", "parent"]
-          : [...common, "binding", "anchor"],
+        [
+          ...common,
+          ...(Object.hasOwn(record, "name") ? ["name"] : []),
+          "binding",
+          ...(Object.hasOwn(record, "defaultText") ? ["defaultText"] : []),
+          "anchor",
+          ...(Object.hasOwn(record, "parent") ? ["parent"] : []),
+          ...(record.binding === "manual" &&
+          Object.hasOwn(record, "visibleSegments")
+            ? ["visibleSegments"]
+            : []),
+        ],
         label,
       );
-    if (kind === "image-string" && record.binding !== "win-amount")
-      fail(`${label}.binding must be win-amount.`);
+    if (
+      kind === "image-string" &&
+      record.binding !== "win-amount" &&
+      record.binding !== "manual"
+    )
+      fail(`${label}.binding must be win-amount or manual.`);
     const anchor = object(record.anchor, `${label}.anchor`);
     keys(anchor, ["x", "y"], `${label}.anchor`);
     const parsedAnchor = {
       x: unit(anchor.x, `${label}.anchor.x`),
       y: unit(anchor.y, `${label}.anchor.y`),
     };
-    if (kind === "image-string")
+    if (kind === "image-string") {
+      const binding = record.binding as "win-amount" | "manual";
+      const name =
+        binding === "win-amount" && record.name === undefined
+          ? "win-amount"
+          : identifier(record.name, `${label}.name`);
+      if (binding === "win-amount" && name !== "win-amount")
+        fail(`${label}.name must be win-amount for win-amount binding.`);
+      const defaultText =
+        binding === "manual"
+          ? singleLine(record.defaultText, `${label}.defaultText`)
+          : undefined;
       return freeze({
         ...base,
         kind,
-        binding: "win-amount" as const,
+        name,
+        binding,
+        ...(defaultText !== undefined ? { defaultText } : {}),
         anchor: parsedAnchor,
         parent: parseImageStringParent(record.parent, `${label}.parent`),
+        ...(Object.hasOwn(record, "visibleSegments")
+          ? {
+              visibleSegments: parseSegments(
+                record.visibleSegments,
+                `${label}.visibleSegments`,
+              ),
+            }
+          : {}),
       });
+    }
     const visibleSegments = parseSegments(
       record.visibleSegments,
       `${label}.visibleSegments`,
@@ -531,6 +605,30 @@ function parseLayer(
       kind,
       anchor: parsedAnchor,
       visibleSegments,
+    });
+  }
+  if (kind === "text") {
+    keys(
+      record,
+      [...common, "name", "defaultText", "anchor", "style", "visibleSegments"],
+      label,
+    );
+    const anchor = object(record.anchor, `${label}.anchor`);
+    keys(anchor, ["x", "y"], `${label}.anchor`);
+    return freeze({
+      ...base,
+      kind: "text" as const,
+      name: identifier(record.name, `${label}.name`),
+      defaultText: singleLine(record.defaultText, `${label}.defaultText`),
+      anchor: {
+        x: unit(anchor.x, `${label}.anchor.x`),
+        y: unit(anchor.y, `${label}.anchor.y`),
+      },
+      style: parseTextStyle(record.style, `${label}.style`),
+      visibleSegments: parseSegments(
+        record.visibleSegments,
+        `${label}.visibleSegments`,
+      ),
     });
   }
   if (kind === "vni") {
@@ -630,6 +728,116 @@ function parseSegments(value: unknown, label: string): readonly PopupSegment[] {
   unique(values, label);
   return Object.freeze(SEGMENTS.filter((item) => values.includes(item)));
 }
+function parseTextStyle(value: unknown, label: string): PopupTextStyle {
+  const record = object(value, label);
+  keys(
+    record,
+    [
+      "fontSize",
+      "letterSpacing",
+      "fill",
+      ...(Object.hasOwn(record, "stroke") ? ["stroke"] : []),
+      ...(Object.hasOwn(record, "shadow") ? ["shadow"] : []),
+      "arcDegrees",
+    ],
+    label,
+  );
+  const fillRecord = object(record.fill, `${label}.fill`);
+  let fill: PopupTextStyle["fill"];
+  if (fillRecord.kind === "solid") {
+    keys(fillRecord, ["kind", "color"], `${label}.fill`);
+    fill = freeze({
+      kind: "solid" as const,
+      color: hexColor(fillRecord.color, `${label}.fill.color`),
+    });
+  } else if (fillRecord.kind === "linear-gradient") {
+    keys(fillRecord, ["kind", "angleDegrees", "stops"], `${label}.fill`);
+    if (!Array.isArray(fillRecord.stops) || fillRecord.stops.length < 2)
+      fail(`${label}.fill.stops must contain at least two stops.`);
+    const stops = fillRecord.stops.map((raw, index) => {
+      const stopLabel = `${label}.fill.stops[${index}]`;
+      const stop = object(raw, stopLabel);
+      keys(stop, ["offset", "color"], stopLabel);
+      return freeze({
+        offset: unit(stop.offset, `${stopLabel}.offset`),
+        color: hexColor(stop.color, `${stopLabel}.color`),
+      });
+    });
+    if (stops[0]!.offset !== 0 || stops.at(-1)!.offset !== 1)
+      fail(`${label}.fill.stops must start at 0 and end at 1.`);
+    for (let index = 1; index < stops.length; index += 1)
+      if (stops[index]!.offset <= stops[index - 1]!.offset)
+        fail(`${label}.fill.stops offsets must be strictly increasing.`);
+    fill = freeze({
+      kind: "linear-gradient" as const,
+      angleDegrees: finite(
+        fillRecord.angleDegrees,
+        `${label}.fill.angleDegrees`,
+      ),
+      stops,
+    });
+  } else fail(`${label}.fill.kind invalid.`);
+  const stroke = Object.hasOwn(record, "stroke")
+    ? (() => {
+        const raw = object(record.stroke, `${label}.stroke`);
+        keys(raw, ["color", "width"], `${label}.stroke`);
+        return freeze({
+          color: hexColor(raw.color, `${label}.stroke.color`),
+          width: nonNegative(raw.width, `${label}.stroke.width`),
+        });
+      })()
+    : undefined;
+  const shadow = Object.hasOwn(record, "shadow")
+    ? (() => {
+        const raw = object(record.shadow, `${label}.shadow`);
+        keys(
+          raw,
+          ["color", "alpha", "blur", "distance", "angleDegrees"],
+          `${label}.shadow`,
+        );
+        return freeze({
+          color: hexColor(raw.color, `${label}.shadow.color`),
+          alpha: unit(raw.alpha, `${label}.shadow.alpha`),
+          blur: nonNegative(raw.blur, `${label}.shadow.blur`),
+          distance: nonNegative(raw.distance, `${label}.shadow.distance`),
+          angleDegrees: finite(
+            raw.angleDegrees,
+            `${label}.shadow.angleDegrees`,
+          ),
+        });
+      })()
+    : undefined;
+  const arcDegrees = finite(record.arcDegrees, `${label}.arcDegrees`);
+  if (arcDegrees < -180 || arcDegrees > 180)
+    fail(`${label}.arcDegrees must be between -180 and 180.`);
+  return freeze({
+    fontSize: positive(record.fontSize, `${label}.fontSize`),
+    letterSpacing: finite(record.letterSpacing, `${label}.letterSpacing`),
+    fill,
+    ...(stroke ? { stroke } : {}),
+    ...(shadow ? { shadow } : {}),
+    arcDegrees,
+  });
+}
+function validateStringNodeNames(
+  layers: readonly (PopupLayer | PopupOverlayLayer)[],
+  label: string,
+  allowVariants = false,
+) {
+  const kinds = new Map<string, "text" | "image-string">();
+  const seenInLayerGroup = new Set<string>();
+  for (const layer of layers) {
+    if (layer.kind !== "text" && layer.kind !== "image-string") continue;
+    const name = layer.name ?? "win-amount";
+    const existing = kinds.get(name);
+    if (existing && existing !== layer.kind)
+      fail(`${label} string node ${name} must keep the same kind.`);
+    if (!allowVariants && seenInLayerGroup.has(name))
+      fail(`${label} string node names must be unique.`);
+    kinds.set(name, layer.kind);
+    seenInLayerGroup.add(name);
+  }
+}
 function allTiers(spec: AwardCelebrationSpec) {
   return [spec.base, spec.standard, ...spec.celebrationTiers];
 }
@@ -705,6 +913,22 @@ function nonEmptySingleLine(value: unknown, label: string): string {
   if (/[\n\r\u2028\u2029]/u.test(result))
     fail(`${label} must be a single line.`);
   return result;
+}
+function singleLine(value: unknown, label: string): string {
+  const result = printable(value, label);
+  if (result.normalize("NFC") !== result)
+    fail(`${label} must use Unicode NFC.`);
+  if (/[\n\r\u2028\u2029]/u.test(result))
+    fail(`${label} must be a single line.`);
+  return result;
+}
+function hexColor(value: unknown, label: string): string {
+  if (
+    typeof value !== "string" ||
+    !/^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/u.test(value)
+  )
+    fail(`${label} must be canonical lowercase #rrggbb or #rrggbbaa.`);
+  return value;
 }
 function printable(value: unknown, label: string): string {
   if (

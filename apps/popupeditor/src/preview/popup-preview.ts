@@ -129,6 +129,26 @@ export class PopupPreview {
   setPromptText(text: string | undefined) {
     this.#promptText = text;
   }
+  setNodeText(
+    kind: "text" | "image-string",
+    selector: string | number,
+    text: string,
+  ) {
+    if (!this.#player) throw new Error("请先生成有效 production preview。");
+    const handle =
+      kind === "text"
+        ? this.#player.getTextNode(selector)
+        : this.#player.getImageStringNode(selector);
+    handle.setText(text);
+  }
+  resetNodeText(kind: "text" | "image-string", selector: string | number) {
+    if (!this.#player) throw new Error("请先生成有效 production preview。");
+    const handle =
+      kind === "text"
+        ? this.#player.getTextNode(selector)
+        : this.#player.getImageStringNode(selector);
+    handle.resetText();
+  }
   play() {
     if (!this.#player) throw new Error("请先生成有效 production preview。");
     this.#player.dismissImmediately();

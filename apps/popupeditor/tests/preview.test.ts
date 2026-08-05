@@ -50,6 +50,8 @@ const player = {
   requestAdvance: vi.fn(),
   requestDismiss: vi.fn(),
   destroy: vi.fn(),
+  getTextNode: vi.fn(() => ({ setText: vi.fn(), resetText: vi.fn() })),
+  getImageStringNode: vi.fn(() => ({ setText: vi.fn(), resetText: vi.fn() })),
 };
 const resource = {
   manifest: { type: "award-celebration" },
@@ -125,6 +127,12 @@ describe("PopupPreview", () => {
     preview.setAmountFormat({ fractionDigits: 2, useGrouping: true });
     expect(formatAmount(1234567)).toBe("1,234,567.00");
     preview.setInput(100, 5000);
+    preview.setNodeText("text", "heading", "HELLO");
+    preview.setNodeText("image-string", 0, "123");
+    preview.resetNodeText("text", "heading");
+    preview.resetNodeText("image-string", 0);
+    expect(player.getTextNode).toHaveBeenCalledWith("heading");
+    expect(player.getImageStringNode).toHaveBeenCalledWith(0);
     preview.play();
     preview.advance();
     preview.dismiss();

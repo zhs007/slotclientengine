@@ -218,6 +218,83 @@ describe("popup manifest", () => {
       },
     ]);
   });
+  it("parses styled system text and additional manual ImgNumber nodes", () => {
+    const value = structuredClone(popupFixture()) as any;
+    value.resources.heading = {
+      kind: "font",
+      path: `assets/${"f".repeat(64)}.woff2`,
+    };
+    value.awardCelebration.base.layers.push(
+      {
+        id: "heading-base",
+        kind: "text",
+        name: "congratulations",
+        order: 11,
+        resource: "heading",
+        defaultText: "CONGRATULATIONS!",
+        transform: { x: 0, y: -100, scale: 1, rotation: -5 },
+        anchor: { x: 0.5, y: 0.5 },
+        style: {
+          fontSize: 72,
+          letterSpacing: 1,
+          fill: {
+            kind: "linear-gradient",
+            angleDegrees: 90,
+            stops: [
+              { offset: 0, color: "#ffffff" },
+              { offset: 1, color: "#ffd84d" },
+            ],
+          },
+          stroke: { color: "#a40000", width: 6 },
+          shadow: {
+            color: "#000000",
+            alpha: 0.6,
+            blur: 4,
+            distance: 6,
+            angleDegrees: 90,
+          },
+          arcDegrees: 30,
+        },
+        visibleSegments: ["start", "loop"],
+      },
+      {
+        id: "bonus-count",
+        kind: "image-string",
+        name: "bonus-count",
+        binding: "manual",
+        defaultText: "10",
+        order: 12,
+        resource: "amount",
+        transform: { x: 0, y: 200, scale: 1 },
+        anchor: { x: 0.5, y: 0.5 },
+        parent: { kind: "popup-root" },
+        visibleSegments: ["loop"],
+      },
+    );
+    const manifest = parsePopupManifest(value);
+    expect(manifest.type).toBe("award-celebration");
+    if (manifest.type !== "award-celebration")
+      throw new Error("Expected award celebration popup.");
+    expect(manifest.awardCelebration.base.layers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "text",
+          name: "congratulations",
+          style: expect.objectContaining({ arcDegrees: 30 }),
+        }),
+        expect.objectContaining({
+          kind: "image-string",
+          name: "bonus-count",
+          binding: "manual",
+        }),
+      ]),
+    );
+    expect(manifest.awardCelebration.base.layers[0]).toMatchObject({
+      name: "win-amount",
+    });
+    value.awardCelebration.base.layers[1].style.fill.stops[1].offset = 0;
+    expect(() => parsePopupManifest(value)).toThrow(/start at 0 and end at 1/);
+  });
   it("normalizes legacy ImgNumber root placement and validates exact VNI layer parents", () => {
     const legacy = structuredClone(popupFixture()) as any;
     delete legacy.awardCelebration.base.layers[0].parent;

@@ -17,6 +17,11 @@ const mapping = new Map([
   ["popup.png", "popup.webp"],
   ["vni.png", "vni.webp"],
   ["runtime.json", "runtime.hash.json"],
+  ["Title.woff2", "title.hash.woff2"],
+  ["bonus.manifest.json", "bonus.hash.json"],
+  ["effect.json", "effect.hash.json"],
+  ["effect.atlas", "effect.hash.atlas"],
+  ["effect.png", "effect.webp"],
 ]);
 
 describe("typed asset reference rewriting", () => {
@@ -190,6 +195,36 @@ describe("typed asset reference rewriting", () => {
           playback: { mode: "once" },
           transform: { x: 0, y: 0, scale: 1 },
         },
+        {
+          id: `title-${id}`,
+          order: 3,
+          resource: "Title.woff2",
+          kind: "text",
+          name: "congratulations",
+          defaultText: "CONGRATULATIONS!",
+          transform: { x: 0, y: 0, scale: 1, rotation: 4 },
+          anchor: { x: 0.5, y: 0.5 },
+          style: {
+            fontSize: 72,
+            letterSpacing: 1,
+            fill: { kind: "solid", color: "#ffffff" },
+            arcDegrees: 20,
+          },
+          visibleSegments: ["start", "loop"],
+        },
+        {
+          id: `bonus-${id}`,
+          order: 4,
+          resource: "bonus.manifest.json",
+          kind: "image-string",
+          name: "bonus-count",
+          binding: "manual",
+          defaultText: "8",
+          transform: { x: 0, y: 0, scale: 1 },
+          anchor: { x: 0.5, y: 0.5 },
+          parent: { kind: "popup-root" },
+          visibleSegments: ["loop"],
+        },
       ],
     });
     const popup = rewritePopupManifest(
@@ -224,6 +259,11 @@ describe("typed asset reference rewriting", () => {
             kind: "vni",
             project: "runtime.json",
           },
+          "Title.woff2": { kind: "font", path: "Title.woff2" },
+          "bonus.manifest.json": {
+            kind: "image-string",
+            manifest: "bonus.manifest.json",
+          },
         },
         awardCelebration: {
           base: tier("base"),
@@ -253,6 +293,112 @@ describe("typed asset reference rewriting", () => {
       resource: "runtime.hash.json",
       playback: { mode: "once" },
     });
+    expect(popup.awardCelebration.base.layers[3]).toMatchObject({
+      kind: "text",
+      name: "congratulations",
+      resource: "title.hash.woff2",
+      style: { arcDegrees: 20 },
+    });
+    expect(popup.awardCelebration.base.layers[4]).toMatchObject({
+      kind: "image-string",
+      name: "bonus-count",
+      resource: "bonus.hash.json",
+    });
+  });
+
+  it("rewrites Spine prompt and string overlay resources without changing node identity", () => {
+    const popup = rewritePopupManifest(
+      {
+        version: 1,
+        kind: "popup",
+        id: "free-game",
+        type: "spine",
+        designViewport: { width: 100, height: 100 },
+        resources: {
+          "effect.json": {
+            kind: "spine",
+            skeleton: "effect.json",
+            atlas: "effect.atlas",
+            textures: { "effect.png": "effect.png" },
+          },
+          "Title.woff2": { kind: "font", path: "Title.woff2" },
+          "bonus.manifest.json": {
+            kind: "image-string",
+            manifest: "bonus.manifest.json",
+          },
+        },
+        spine: {
+          resource: "effect.json",
+          transform: { x: 0, y: 0, scale: 1 },
+          playback: {
+            mode: "segmented-animations",
+            startAnimation: "Start",
+            loopAnimation: "Loop",
+            endAnimation: "End",
+          },
+          prompt: {
+            font: "Title.woff2",
+            defaultText: "CONTINUE",
+            fill: "#ffffff",
+            order: 0,
+            area: { x: 0, y: 0, width: 80, height: 20 },
+          },
+          overlays: [
+            {
+              id: "bonus",
+              kind: "image-string",
+              name: "bonus-count",
+              binding: "manual",
+              defaultText: "8",
+              order: 1,
+              resource: "bonus.manifest.json",
+              transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+              anchor: { x: 0.5, y: 0.5 },
+              visibleSegments: ["loop"],
+            },
+            {
+              id: "title",
+              kind: "text",
+              name: "heading",
+              defaultText: "BONUS!",
+              order: 2,
+              resource: "Title.woff2",
+              transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+              anchor: { x: 0.5, y: 0.5 },
+              style: {
+                fontSize: 32,
+                letterSpacing: 0,
+                fill: { kind: "solid", color: "#ffffff" },
+                arcDegrees: 0,
+              },
+              visibleSegments: ["start", "loop"],
+            },
+          ],
+        },
+      },
+      mapping,
+    );
+    expect(popup.type).toBe("spine");
+    if (popup.type !== "spine") throw new Error("Expected Spine popup.");
+    expect(popup.spine).toMatchObject({
+      resource: "effect.hash.json",
+      prompt: { font: "title.hash.woff2" },
+      overlays: [
+        { name: "bonus-count", resource: "bonus.hash.json" },
+        { name: "heading", resource: "title.hash.woff2" },
+      ],
+    });
+
+    const systemPrompt = { ...popup.spine.prompt! };
+    delete systemPrompt.font;
+    const systemFontPopup = rewritePopupManifest(
+      { ...popup, spine: { ...popup.spine, prompt: systemPrompt } },
+      mapping,
+    );
+    expect(systemFontPopup.type).toBe("spine");
+    if (systemFontPopup.type !== "spine")
+      throw new Error("Expected Spine popup.");
+    expect(systemFontPopup.spine.prompt).not.toHaveProperty("font");
   });
 
   it("rewrites VNI asset.path while preserving authored identity", () => {

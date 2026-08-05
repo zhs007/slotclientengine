@@ -181,7 +181,10 @@ export async function createPopupPackageResourceFromResolvedFiles(options: {
           kind: "image-string",
           resource: imageStringResource,
         };
-        if (manifest.type === "award-celebration")
+        if (
+          manifest.type === "award-celebration" &&
+          awardAmountResourceIds(manifest).has(id)
+        )
           validateImageStringText(
             requiredPopupAmountCharacters(manifest.amountFormat).join(""),
             imageStringResource.manifest,
@@ -694,7 +697,17 @@ function validateAnimationBindings(
     });
     for (const overlay of manifest.spine.overlays ?? []) {
       const overlayResource = resources[overlay.resource];
-      if (overlay.kind === "spine") {
+      if (overlay.kind === "image-string") {
+        if (overlayResource?.kind !== "image-string")
+          throw new Error("Spine popup ImgNumber overlay resource mismatch.");
+        validateImageStringText(
+          overlay.defaultText,
+          overlayResource.resource.manifest,
+        );
+      } else if (overlay.kind === "text") {
+        if (overlayResource?.kind !== "font")
+          throw new Error("Spine popup text overlay resource mismatch.");
+      } else if (overlay.kind === "spine") {
         if (overlayResource?.kind !== "spine")
           throw new Error("Spine popup overlay resource mismatch.");
         validateOfficialSpineResource({
@@ -728,7 +741,7 @@ function validateAnimationBindings(
       (
         layer,
       ): layer is Extract<PopupLayer, { readonly kind: "image-string" }> =>
-        layer.kind === "image-string",
+        layer.kind === "image-string" && layer.binding === "win-amount",
     )!;
     const amountParent = amount.parent;
     if (amountParent.kind === "vni-text-layer") {
@@ -748,6 +761,16 @@ function validateAnimationBindings(
     }
     for (const layer of tier.layers) {
       const resource = resources[layer.resource]!;
+      if (layer.kind === "image-string" && layer.binding === "manual") {
+        if (resource.kind !== "image-string")
+          throw new Error("popup manual ImgNumber resource mismatch.");
+        validateImageStringText(
+          layer.defaultText ?? "",
+          resource.resource.manifest,
+        );
+      }
+      if (layer.kind === "text" && resource.kind !== "font")
+        throw new Error("popup text resource mismatch.");
       if (layer.kind === "vni") {
         if (resource.kind !== "vni")
           throw new Error("popup VNI resource mismatch.");
@@ -773,6 +796,21 @@ function validateAnimationBindings(
       }
     }
   }
+}
+
+function awardAmountResourceIds(
+  manifest: Extract<PopupManifestV1, { readonly type: "award-celebration" }>,
+): ReadonlySet<string> {
+  const result = new Set<string>();
+  for (const tier of [
+    manifest.awardCelebration.base,
+    manifest.awardCelebration.standard,
+    ...manifest.awardCelebration.celebrationTiers,
+  ])
+    for (const layer of tier.layers)
+      if (layer.kind === "image-string" && layer.binding === "win-amount")
+        result.add(layer.resource);
+  return result;
 }
 
 function rewritePopupResourceSpec(

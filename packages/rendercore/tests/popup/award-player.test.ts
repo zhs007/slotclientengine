@@ -9,6 +9,63 @@ import {
 import { popupFixture } from "./fixtures.js";
 
 describe("award celebration player", () => {
+  it("rejects non-award packages and shares concurrent initialization", async () => {
+    expect(() =>
+      createAwardCelebrationPlayer({
+        resource: {
+          manifest: { type: "spine" } as never,
+          resources: {},
+          destroy() {},
+        },
+      }),
+    ).toThrow(/requires an award-celebration/);
+    const player = createAwardCelebrationPlayer({
+      resource: fakeResource(),
+      layerFactory: ({ layer }) => fakeLayer(layer.kind === "vni"),
+    });
+    const initializing = player.init();
+    expect(player.init()).toBe(initializing);
+    await initializing;
+    expect(player.update(0).phase).toBe("idle");
+    player.destroy();
+
+    const wrongAmount = fakeResource();
+    (wrongAmount.resources as any).amount = {
+      kind: "image",
+      texture: Texture.EMPTY,
+    };
+    const mismatched = createAwardCelebrationPlayer({ resource: wrongAmount });
+    await expect(mismatched.init()).rejects.toThrow(/amount layer\/resource/);
+
+    const noRebind = createAwardCelebrationPlayer({
+      resource: fakeResource(),
+      layerFactory: ({ layer }) => ({
+        ...fakeLayer(layer.kind === "vni"),
+        rebindAmountLayer: undefined,
+      }),
+    });
+    await expect(noRebind.init()).rejects.toThrow(
+      /must support resource rebinding/,
+    );
+
+    const badParent = fakeResource();
+    const bigwin = badParent.manifest.awardCelebration.celebrationTiers[0];
+    const effect = bigwin.layers.find(({ kind }) => kind === "vni")!;
+    const amount = bigwin.layers.find(({ kind }) => kind === "image-string")!;
+    (amount as any).parent = {
+      kind: "vni-text-layer",
+      vniLayerId: effect.id,
+      textLayerId: "amount-text",
+    };
+    const unavailableMount = createAwardCelebrationPlayer({
+      resource: badParent,
+      layerFactory: ({ layer }) => fakeLayer(layer.kind === "vni"),
+    });
+    await expect(unavailableMount.init()).rejects.toThrow(
+      /parent runtime unavailable/,
+    );
+  });
+
   it("preserves verified click tiers, awaiting-dismiss, ending drain, and cleanup", async () => {
     const resource = fakeResource();
     const createdKinds: string[] = [];
@@ -174,6 +231,131 @@ describe("award celebration player", () => {
     player.start({ betAmountRaw: 100, winAmountRaw: 123 });
     player.requestDismiss();
     expect(player.getSnapshot().formattedAmount).toBe("1.23");
+    player.destroy();
+  });
+
+  it("exposes the win amount by name and index with persistent overrides", async () => {
+    const writes: string[] = [];
+    const player = createAwardCelebrationPlayer({
+      resource: fakeResource(),
+      layerFactory: ({ layer }) => {
+        const runtime = fakeLayer(layer.kind === "vni");
+        return layer.kind === "image-string"
+          ? { ...runtime, updateAmount: (text: string) => writes.push(text) }
+          : runtime;
+      },
+    });
+    await player.init();
+    expect(player.imageStringNodes).toHaveLength(1);
+    expect(player.textNodes).toHaveLength(0);
+    const byName = player.getImageStringNode("win-amount");
+    expect(player.getImageStringNode(0)).toBe(byName);
+    byName.setText("999");
+    player.start({ betAmountRaw: 100, winAmountRaw: 123 });
+    player.requestDismiss();
+    expect(player.getSnapshot().formattedAmount).toBe("999");
+    byName.resetText();
+    expect(player.getSnapshot().formattedAmount).toBe("$1.23");
+    expect(() => player.getImageStringNode(1)).toThrow(/out of range/);
+    player.destroy();
+    expect(() => byName.setText("1")).toThrow(/destroyed/);
+    expect(writes).toContain("999");
+  });
+
+  it("rebinds styled text and manual ImgNumber variants by logical name", async () => {
+    const resource = fakeResource();
+    const manifest = resource.manifest as any;
+    manifest.resources.title = { kind: "font", path: "assets/title.woff2" };
+    manifest.resources.bonus = {
+      kind: "image-string",
+      manifest: "dependencies/image-strings/bonus/image-string.manifest.json",
+    };
+    (resource.resources as any).title = { kind: "font", family: "title-font" };
+    (resource.resources as any).bonus = resource.resources.amount;
+    const tiers = [
+      manifest.awardCelebration.base,
+      manifest.awardCelebration.standard,
+      ...manifest.awardCelebration.celebrationTiers,
+    ];
+    tiers.forEach((tier: any, index: number) => {
+      if (index === 1) return;
+      tier.layers.push({
+        id: `title-${index}`,
+        kind: "text",
+        name: "heading",
+        defaultText: `TITLE ${index}`,
+        order: 10,
+        resource: "title",
+        transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+        anchor: { x: 0.5, y: 0.5 },
+        style: {
+          fontSize: 64,
+          letterSpacing: 0,
+          fill: { kind: "solid", color: "#ffffff" },
+          arcDegrees: 0,
+        },
+        visibleSegments: ["start", "loop", "end"],
+      });
+      tier.layers.push({
+        id: `bonus-${index}`,
+        kind: "image-string",
+        name: "bonus",
+        binding: "manual",
+        defaultText: String(index),
+        order: 11,
+        resource: "bonus",
+        transform: { x: 0, y: 0, scale: 1 },
+        anchor: { x: 0.5, y: 0.5 },
+        parent: { kind: "popup-root" },
+        visibleSegments: ["loop"],
+      });
+    });
+    const writes = new Map<string, string[]>();
+    const player = createAwardCelebrationPlayer({
+      resource,
+      layerFactory: ({ layer, tierId }) => {
+        const runtime = fakeLayer(layer.kind === "vni");
+        if (layer.kind !== "text" && layer.kind !== "image-string")
+          return runtime;
+        const key = `${tierId}:${layer.name ?? "win-amount"}`;
+        const targetWrites: string[] = [];
+        writes.set(key, targetWrites);
+        return {
+          ...runtime,
+          stringNode: {
+            kind: layer.kind,
+            name: layer.name ?? "win-amount",
+            defaultText:
+              layer.kind === "text"
+                ? layer.defaultText
+                : layer.binding === "manual"
+                  ? (layer.defaultText ?? "0")
+                  : "0",
+            setText: (text: string) => {
+              targetWrites.push(text);
+            },
+          },
+        };
+      },
+    });
+    await player.init();
+    expect(player.textNodes.map(({ name }) => name)).toEqual(["heading"]);
+    expect(player.imageStringNodes.map(({ name }) => name)).toEqual([
+      "win-amount",
+      "bonus",
+    ]);
+    player.getTextNode("heading").setText("LOCALIZED");
+    player.getImageStringNode("bonus").setText("8");
+    player.start({ betAmountRaw: 100, winAmountRaw: 5000 });
+    player.requestAdvance();
+    expect(writes.get("bigwin:heading")).toContain("LOCALIZED");
+    expect(writes.get("bigwin:bonus")).toContain("8");
+    player.getTextNode("heading").resetText();
+    expect(player.getTextNode("heading").text).toBe("TITLE 2");
+    player.dismissImmediately();
+    player.start({ betAmountRaw: 100, winAmountRaw: 101 });
+    player.requestAdvance();
+    expect(player.getSnapshot().activeTierId).toBe("standard");
     player.destroy();
   });
 

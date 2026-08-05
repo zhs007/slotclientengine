@@ -313,7 +313,7 @@ export function popupEditorProjectDiagnostics(
     for (const [tierId, tier] of project.tiers) {
       const amount = tier.layers.find(
         (layer): layer is Extract<PopupLayer, { kind: "image-string" }> =>
-          layer.kind === "image-string",
+          layer.kind === "image-string" && layer.binding === "win-amount",
       );
       if (!amount) continue;
       const amountParent = amount.parent;
@@ -376,19 +376,8 @@ export function addLayer(
   const tier = project.tiers.get(tierId);
   if (!resource || !tier) throw new Error("resource/tier 不存在。");
   const existingAmount = tier.layers.find(
-    (layer) => layer.kind === "image-string",
+    (layer) => layer.kind === "image-string" && layer.binding === "win-amount",
   );
-  if (resource.kind === "image-string" && existingAmount) {
-    tier.layers = tier.layers.map((layer) =>
-      layer === existingAmount
-        ? {
-            ...existingAmount,
-            resource: resourceKey,
-          }
-        : layer,
-    );
-    return;
-  }
   const order = tier.layers.length
     ? Math.max(...tier.layers.map((layer) => layer.order)) + 1
     : 0;
@@ -396,16 +385,51 @@ export function addLayer(
     id: `layer-${tierId}-${order}`,
     order,
     resource: resourceKey,
-    transform: { x: 0, y: 0, scale: 1 },
+    transform: { x: 0, y: 0, scale: 1, rotation: 0 },
   };
   let layer: PopupLayer;
-  if (resource.kind === "image-string")
+  if (resource.kind === "image-string" && !existingAmount)
     layer = {
       ...base,
       kind: "image-string",
+      name: "win-amount",
       binding: "win-amount",
       anchor: { x: 0.5, y: 0.5 },
       parent: { kind: "popup-root" },
+    };
+  else if (resource.kind === "image-string")
+    layer = {
+      ...base,
+      kind: "image-string",
+      name: `imgnumber-${order}`,
+      binding: "manual",
+      defaultText: "0",
+      anchor: { x: 0.5, y: 0.5 },
+      parent: { kind: "popup-root" },
+      visibleSegments: ["start", "loop", "end"],
+    };
+  else if (resource.kind === "font")
+    layer = {
+      ...base,
+      kind: "text",
+      name: `text-${order}`,
+      defaultText: "CONGRATULATIONS!",
+      anchor: { x: 0.5, y: 0.5 },
+      style: {
+        fontSize: 72,
+        letterSpacing: 0,
+        fill: { kind: "solid", color: "#ffffff" },
+        stroke: { color: "#a40000", width: 6 },
+        shadow: {
+          color: "#000000",
+          alpha: 0.65,
+          blur: 4,
+          distance: 6,
+          angleDegrees: 90,
+        },
+        arcDegrees: 0,
+      },
+      visibleSegments: ["start", "loop", "end"],
     };
   else if (resource.kind === "image")
     layer = {
@@ -481,7 +505,10 @@ export function applyImportedResourceBindings(
       if (
         !project.tiers
           .get(tierId)!
-          .layers.some((layer) => layer.kind === "image-string")
+          .layers.some(
+            (layer) =>
+              layer.kind === "image-string" && layer.binding === "win-amount",
+          )
       )
         addLayer(project, tierId, resourceKey);
     return;

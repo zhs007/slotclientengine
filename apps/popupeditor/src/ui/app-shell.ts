@@ -159,6 +159,32 @@ export class PopupEditorApp {
         previewPrompt.value.length ? previewPrompt.value : undefined,
       ),
     );
+    const nodeKind = this.required<HTMLSelectElement>("preview-node-kind");
+    const nodeSelector = this.required<HTMLInputElement>(
+      "preview-node-selector",
+    );
+    const nodeText = this.required<HTMLInputElement>("preview-node-text");
+    const selectorValue = () =>
+      /^\d+$/u.test(nodeSelector.value)
+        ? Number(nodeSelector.value)
+        : nodeSelector.value;
+    this.required("preview-node-apply").addEventListener("click", () =>
+      this.safe(() =>
+        this.#preview!.setNodeText(
+          nodeKind.value as "text" | "image-string",
+          selectorValue(),
+          nodeText.value,
+        ),
+      ),
+    );
+    this.required("preview-node-reset").addEventListener("click", () =>
+      this.safe(() =>
+        this.#preview!.resetNodeText(
+          nodeKind.value as "text" | "image-string",
+          selectorValue(),
+        ),
+      ),
+    );
     this.required("preview-advance").addEventListener("click", () =>
       this.#preview?.advance(),
     );
@@ -247,8 +273,15 @@ export class PopupEditorApp {
               "spine-overlay-resource",
             );
             const resource = draft.resources.get(select.value);
-            if (!resource || !["image", "spine", "vni"].includes(resource.kind))
-              throw new Error("请选择 image、Spine 或 VNI overlay resource。");
+            if (
+              !resource ||
+              !["image", "font", "image-string", "spine", "vni"].includes(
+                resource.kind,
+              )
+            )
+              throw new Error(
+                "请选择 image、font、ImgNumber、Spine 或 VNI overlay resource。",
+              );
             const order = draft.spine.overlays.length
               ? Math.max(...draft.spine.overlays.map((item) => item.order)) + 1
               : 0;
@@ -266,27 +299,60 @@ export class PopupEditorApp {
                     anchor: { x: 0.5, y: 0.5 },
                     visibleSegments: ["start", "loop", "end"],
                   }
-                : resource.kind === "vni"
+                : resource.kind === "image-string"
                   ? {
                       ...base,
-                      kind: "vni",
-                      playback: {
-                        mode: "segmented",
-                        loopStartTime: 1,
-                        loopEndTime: 2.5,
-                        keepParticlesAlive: true,
-                      },
+                      kind: "image-string",
+                      name: `imgnumber-${order}`,
+                      binding: "manual",
+                      defaultText: "0",
+                      anchor: { x: 0.5, y: 0.5 },
+                      visibleSegments: ["start", "loop", "end"],
                     }
-                  : {
-                      ...base,
-                      kind: "spine",
-                      playback: {
-                        mode: "segmented-animations",
-                        startAnimation: "Start",
-                        loopAnimation: "Loop",
-                        endAnimation: "End",
-                      },
-                    };
+                  : resource.kind === "font"
+                    ? {
+                        ...base,
+                        kind: "text",
+                        name: `text-${order}`,
+                        defaultText: "CONGRATULATIONS!",
+                        anchor: { x: 0.5, y: 0.5 },
+                        style: {
+                          fontSize: 72,
+                          letterSpacing: 0,
+                          fill: { kind: "solid", color: "#ffffff" },
+                          stroke: { color: "#a40000", width: 6 },
+                          shadow: {
+                            color: "#000000",
+                            alpha: 0.65,
+                            blur: 4,
+                            distance: 6,
+                            angleDegrees: 90,
+                          },
+                          arcDegrees: 0,
+                        },
+                        visibleSegments: ["start", "loop", "end"],
+                      }
+                    : resource.kind === "vni"
+                      ? {
+                          ...base,
+                          kind: "vni",
+                          playback: {
+                            mode: "segmented",
+                            loopStartTime: 1,
+                            loopEndTime: 2.5,
+                            keepParticlesAlive: true,
+                          },
+                        }
+                      : {
+                          ...base,
+                          kind: "spine",
+                          playback: {
+                            mode: "segmented-animations",
+                            startAnimation: "Start",
+                            loopAnimation: "Loop",
+                            endAnimation: "End",
+                          },
+                        };
             draft.spine.overlays.push(overlay);
           }),
         ),
@@ -316,8 +382,15 @@ export class PopupEditorApp {
               (overlay.transform as any)[field] = Number(input.value);
             else if (field === "order")
               (overlay as any).order = Number(input.value);
+            else if (["name", "defaultText"].includes(field))
+              (overlay as any)[field] = input.value;
             else if (["anchor-x", "anchor-y"].includes(field))
               (overlay as any).anchor[field.at(-1)!] = Number(input.value);
+            else if (
+              overlay.kind === "text" &&
+              updateTextStyleField(overlay as any, field, input)
+            )
+              return;
             else if (["loopStartTime", "loopEndTime"].includes(field))
               (overlay as any).playback[field] = Number(input.value);
             else if (field === "keepParticlesAlive")
@@ -338,6 +411,20 @@ export class PopupEditorApp {
                 "end",
               ].filter((item) => segments.has(item));
             }
+          }),
+        ),
+      );
+    this.#root
+      .querySelectorAll<HTMLSelectElement>("[data-overlay-fill-kind]")
+      .forEach((select) =>
+        select.addEventListener("change", () =>
+          this.#store.transact((draft) => {
+            const overlay = draft.spine.overlays.find(
+              ({ id }) => id === select.dataset.overlayFillKind,
+            );
+            if (!overlay || overlay.kind !== "text")
+              throw new Error("系统文字 overlay 不存在。");
+            setTextFillKind(overlay as any, select.value);
           }),
         ),
       );
@@ -442,12 +529,19 @@ export class PopupEditorApp {
               (item) => item.id === input.dataset.layerId,
             )!;
             const field = input.dataset.layerField!;
-            if (["x", "y", "scale"].includes(field))
+            if (["x", "y", "scale", "rotation"].includes(field))
               (layer.transform as any)[field] = Number(input.value);
             else if (field === "order")
               (layer as any).order = Number(input.value);
+            else if (["name", "defaultText"].includes(field))
+              (layer as any)[field] = input.value;
             else if (field === "anchor-x" || field === "anchor-y")
               (layer as any).anchor[field.at(-1)!] = Number(input.value);
+            else if (
+              layer.kind === "text" &&
+              updateTextStyleField(layer as any, field, input)
+            )
+              return;
             else if (field === "loopStartTime" || field === "loopEndTime")
               (layer as any).playback[field] = Number(input.value);
             else if (field === "keepParticlesAlive")
@@ -466,6 +560,20 @@ export class PopupEditorApp {
                 (item) => segments.has(item),
               );
             }
+          }),
+        ),
+      );
+    this.#root
+      .querySelectorAll<HTMLSelectElement>("[data-layer-fill-kind]")
+      .forEach((select) =>
+        select.addEventListener("change", () =>
+          this.#store.transact((draft) => {
+            const layer = draft.tiers
+              .get(this.#tier)!
+              .layers.find(({ id }) => id === select.dataset.layerFillKind);
+            if (!layer || layer.kind !== "text")
+              throw new Error("系统文字 layer 不存在。");
+            setTextFillKind(layer as any, select.value);
           }),
         ),
       );
@@ -723,7 +831,7 @@ export class PopupEditorApp {
 }
 
 function shell() {
-  return `<header><h1>Popup Editor</h1><nav class="primary-tabs" role="tablist" aria-label="编辑区域"><button role="tab" data-tab="resources">资源</button><button role="tab" data-tab="tiers">动画 / 档位</button><button role="tab" data-tab="project">项目</button></nav></header><main><section class="left"><div id="workspace" role="tabpanel"></div><pre id="diagnostics"></pre></section><aside><div class="preview-controls"><select id="preview-resolution"><option value="1920x1080">1920×1080</option><option value="1080x1920" selected>1080×1920</option><option value="2000x2000">2000×2000</option><option value="custom">custom</option></select><label>width<input id="preview-width" type="number" min="1" value="1080"/></label><label>height<input id="preview-height" type="number" min="1" value="1920"/></label><select id="preview-zoom"><option value="fit">fit</option>${[0.25, 0.5, 0.75, 1, 1.5, 2].map((v) => `<option value="${v}">${v * 100}%</option>`)}</select><label><input id="preview-guides" type="checkbox" checked/>guides</label><label>bet raw<input id="preview-bet" type="number" value="100"/></label><label>win raw<input id="preview-win" type="number" value="5000"/></label><label>Prompt preview（留空用默认）<input id="preview-prompt" value=""/></label><label>小数位数（仅预览）<input id="preview-fraction-digits" type="number" min="0" max="6" step="1" value="0"/></label><label><input id="preview-use-grouping" type="checkbox"/>千位分隔（仅预览）</label><button id="preview-build">Build preview</button><button id="preview-play">Play / Replay</button><button id="preview-advance">Advance</button><button id="preview-dismiss">Click / Dismiss</button><button id="preview-clear">Dismiss immediately</button></div><div id="preview-canvas"></div><output id="preview-status"></output></aside></main><dialog id="vni-runtime-choice"><h2>选择 VNI runtime</h2><p id="vni-runtime-description"></p><label class="vni-runtime-options">运行版本<select id="vni-runtime-select"></select></label><button id="vni-runtime-confirm">确认 runtime</button><button id="vni-runtime-cancel">取消导入</button></dialog><dialog id="import-review"><h2>Import review</h2><div id="review-body"></div><button id="review-confirm">确认导入</button><button id="review-cancel">取消</button></dialog>`;
+  return `<header><h1>Popup Editor</h1><nav class="primary-tabs" role="tablist" aria-label="编辑区域"><button role="tab" data-tab="resources">资源</button><button role="tab" data-tab="tiers">动画 / 档位</button><button role="tab" data-tab="project">项目</button></nav></header><main><section class="left"><div id="workspace" role="tabpanel"></div><pre id="diagnostics"></pre></section><aside><div class="preview-controls"><select id="preview-resolution"><option value="1920x1080">1920×1080</option><option value="1080x1920" selected>1080×1920</option><option value="2000x2000">2000×2000</option><option value="custom">custom</option></select><label>width<input id="preview-width" type="number" min="1" value="1080"/></label><label>height<input id="preview-height" type="number" min="1" value="1920"/></label><select id="preview-zoom"><option value="fit">fit</option>${[0.25, 0.5, 0.75, 1, 1.5, 2].map((v) => `<option value="${v}">${v * 100}%</option>`)}</select><label><input id="preview-guides" type="checkbox" checked/>guides</label><label>bet raw<input id="preview-bet" type="number" value="100"/></label><label>win raw<input id="preview-win" type="number" value="5000"/></label><label>Prompt preview（留空用默认）<input id="preview-prompt" value=""/></label><label>小数位数（仅预览）<input id="preview-fraction-digits" type="number" min="0" max="6" step="1" value="0"/></label><label><input id="preview-use-grouping" type="checkbox"/>千位分隔（仅预览）</label><button id="preview-build">Build preview</button><button id="preview-play">Play / Replay</button><label>节点类型<select id="preview-node-kind"><option value="text">系统文字</option><option value="image-string">ImgNumber</option></select></label><label>节点 name 或 index<input id="preview-node-selector" value="congratulations"/></label><label>节点预览 string<input id="preview-node-text" value="CONGRATULATIONS!"/></label><button id="preview-node-apply">Set string</button><button id="preview-node-reset">Reset string</button><button id="preview-advance">Advance</button><button id="preview-dismiss">Click / Dismiss</button><button id="preview-clear">Dismiss immediately</button></div><div id="preview-canvas"></div><output id="preview-status"></output></aside></main><dialog id="vni-runtime-choice"><h2>选择 VNI runtime</h2><p id="vni-runtime-description"></p><label class="vni-runtime-options">运行版本<select id="vni-runtime-select"></select></label><button id="vni-runtime-confirm">确认 runtime</button><button id="vni-runtime-cancel">取消导入</button></dialog><dialog id="import-review"><h2>Import review</h2><div id="review-body"></div><button id="review-confirm">确认导入</button><button id="review-cancel">取消</button></dialog>`;
 }
 function resourcesMarkup(project: PopupEditorProject) {
   return `<section class="resource-import-panel"><h2>扁平资源库</h2><p>图片、字体、Spine、VNI、ImgNumber ZIP 与 Popup ZIP 统一从这里导入；filename key 保留原始拼写，同名不同 bytes 默认覆盖。普通资源导入只入库，不会根据文件名猜测用途；请在导入后到“动画 / 档位”页显式绑定。</p><div class="resource-actions"><label class="file-action">导入资源<input id="import-assets" type="file" accept="image/png,image/webp,image/jpeg,.json,.atlas,.zip,.woff2,.woff,.ttf,.otf" multiple/></label></div></section><div class="resource-list">${[...project.resources.values()].map((resource) => `<article class="card"><strong>${resource.rootKey}</strong><span>${resource.kind}</span><details><summary>${resource.keys.length} filename keys</summary><code>${resource.keys.join("\n")}</code></details><span>${resourceReferenceCount(project, resource.rootKey)} 个图层绑定</span><button data-delete-resource="${resource.rootKey}">删除</button></article>`).join("") || '<p class="empty-state">尚无资源</p>'}</div>`;
@@ -738,7 +846,7 @@ function spineMarkup(project: PopupEditorProject) {
     (resource) => resource.kind === "font",
   );
   const overlayResources = [...project.resources.values()].filter((resource) =>
-    ["image", "spine", "vni"].includes(resource.kind),
+    ["image", "font", "image-string", "spine", "vni"].includes(resource.kind),
   );
   const animationSelect = (
     field: "startAnimation" | "loopAnimation" | "endAnimation",
@@ -757,16 +865,155 @@ function overlayMarkup(layer: PopupOverlayLayer) {
   const playback =
     layer.kind === "image"
       ? `${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${(["start", "loop", "end"] as const).map((segment) => `<label>${segment}<input data-overlay-id="${layer.id}" data-overlay-field="segment-${segment}" type="checkbox" ${layer.visibleSegments.includes(segment) ? "checked" : ""}/></label>`).join("")}`
-      : layer.kind === "spine"
-        ? (["startAnimation", "loopAnimation", "endAnimation"] as const)
-            .map((field) => input(field, layer.playback[field], "text"))
-            .join("")
-        : `${`<label>mode<select data-overlay-vni-mode="${layer.id}"><option value="segmented" ${layer.playback.mode === "segmented" ? "selected" : ""}>segmented</option><option value="once" ${layer.playback.mode === "once" ? "selected" : ""}>once</option></select></label>`}${
-            layer.playback.mode === "segmented"
-              ? `${input("loopStartTime", layer.playback.loopStartTime)}${input("loopEndTime", layer.playback.loopEndTime)}<label>keepParticlesAlive<input data-overlay-id="${layer.id}" data-overlay-field="keepParticlesAlive" type="checkbox" ${layer.playback.keepParticlesAlive ? "checked" : ""}/></label>`
-              : `<p>VNI once</p>`
-          }`;
+      : layer.kind === "image-string"
+        ? `${input("name", layer.name, "text")}${input("defaultText", layer.defaultText, "text")}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${segmentControls("overlay", layer.id, layer.visibleSegments)}`
+        : layer.kind === "text"
+          ? `${input("name", layer.name, "text")}${input("defaultText", layer.defaultText, "text")}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${textStyleMarkup("overlay", layer.id, layer.style)}${segmentControls("overlay", layer.id, layer.visibleSegments)}`
+          : layer.kind === "spine"
+            ? (["startAnimation", "loopAnimation", "endAnimation"] as const)
+                .map((field) => input(field, layer.playback[field], "text"))
+                .join("")
+            : `${`<label>mode<select data-overlay-vni-mode="${layer.id}"><option value="segmented" ${layer.playback.mode === "segmented" ? "selected" : ""}>segmented</option><option value="once" ${layer.playback.mode === "once" ? "selected" : ""}>once</option></select></label>`}${
+                layer.playback.mode === "segmented"
+                  ? `${input("loopStartTime", layer.playback.loopStartTime)}${input("loopEndTime", layer.playback.loopEndTime)}<label>keepParticlesAlive<input data-overlay-id="${layer.id}" data-overlay-field="keepParticlesAlive" type="checkbox" ${layer.playback.keepParticlesAlive ? "checked" : ""}/></label>`
+                  : `<p>VNI once</p>`
+              }`;
   return `<article class="card"><strong>${layer.id}</strong><span>${layer.kind} / ${layer.resource}</span>${input("order", layer.order)}${(["x", "y", "scale", "rotation"] as const).map((field) => input(field, layer.transform[field])).join("")}${playback}<button data-delete-overlay="${layer.id}">删除 overlay</button></article>`;
+}
+
+function segmentControls(
+  owner: "overlay" | "layer",
+  id: string,
+  segments: readonly string[],
+) {
+  const idAttribute = owner === "overlay" ? "data-overlay-id" : "data-layer-id";
+  const fieldAttribute =
+    owner === "overlay" ? "data-overlay-field" : "data-layer-field";
+  return (["start", "loop", "end"] as const)
+    .map(
+      (segment) =>
+        `<label>${segment}<input ${idAttribute}="${id}" ${fieldAttribute}="segment-${segment}" type="checkbox" ${segments.includes(segment) ? "checked" : ""}/></label>`,
+    )
+    .join("");
+}
+
+function updateTextStyleField(
+  layer: Extract<PopupOverlayLayer | PopupLayer, { kind: "text" }>,
+  field: string,
+  input: HTMLInputElement,
+): boolean {
+  const mutable = layer as any;
+  if (["fontSize", "letterSpacing", "arcDegrees"].includes(field)) {
+    mutable.style[field] = Number(input.value);
+    return true;
+  }
+  if (field === "fillColor") {
+    if (mutable.style.fill.kind === "solid")
+      mutable.style.fill.color = input.value;
+    else mutable.style.fill.stops[0].color = input.value;
+    return true;
+  }
+  if (field === "gradientEndColor") {
+    if (mutable.style.fill.kind === "linear-gradient")
+      mutable.style.fill.stops[mutable.style.fill.stops.length - 1].color =
+        input.value;
+    return true;
+  }
+  if (field === "gradientAngle") {
+    if (mutable.style.fill.kind === "linear-gradient")
+      mutable.style.fill.angleDegrees = Number(input.value);
+    return true;
+  }
+  if (field === "strokeEnabled") {
+    mutable.style.stroke = input.checked
+      ? (mutable.style.stroke ?? { color: "#000000", width: 4 })
+      : undefined;
+    return true;
+  }
+  if (field === "shadowEnabled") {
+    mutable.style.shadow = input.checked
+      ? (mutable.style.shadow ?? {
+          color: "#000000",
+          alpha: 0.6,
+          blur: 4,
+          distance: 6,
+          angleDegrees: 90,
+        })
+      : undefined;
+    return true;
+  }
+  const strokeFields: Record<string, string> = {
+    strokeColor: "color",
+    strokeWidth: "width",
+  };
+  if (strokeFields[field]) {
+    if (mutable.style.stroke)
+      mutable.style.stroke[strokeFields[field]] =
+        field === "strokeColor" ? input.value : Number(input.value);
+    return true;
+  }
+  const shadowFields: Record<string, string> = {
+    shadowColor: "color",
+    shadowAlpha: "alpha",
+    shadowBlur: "blur",
+    shadowDistance: "distance",
+    shadowAngle: "angleDegrees",
+  };
+  if (shadowFields[field]) {
+    if (mutable.style.shadow)
+      mutable.style.shadow[shadowFields[field]] =
+        field === "shadowColor" ? input.value : Number(input.value);
+    return true;
+  }
+  return false;
+}
+
+function setTextFillKind(
+  layer: Extract<PopupOverlayLayer | PopupLayer, { kind: "text" }>,
+  kind: string,
+) {
+  const mutable = layer as any;
+  const start =
+    mutable.style.fill.kind === "solid"
+      ? mutable.style.fill.color
+      : mutable.style.fill.stops[0].color;
+  mutable.style.fill =
+    kind === "linear-gradient"
+      ? {
+          kind: "linear-gradient",
+          angleDegrees: 90,
+          stops: [
+            { offset: 0, color: start },
+            { offset: 1, color: "#ffd84d" },
+          ],
+        }
+      : { kind: "solid", color: start };
+}
+
+function textStyleMarkup(
+  owner: "overlay" | "layer",
+  id: string,
+  style: Extract<PopupOverlayLayer | PopupLayer, { kind: "text" }>["style"],
+) {
+  const idAttribute = owner === "overlay" ? "data-overlay-id" : "data-layer-id";
+  const fieldAttribute =
+    owner === "overlay" ? "data-overlay-field" : "data-layer-field";
+  const input = (field: string, value: string | number, type = "number") =>
+    `<label>${field}<input ${idAttribute}="${id}" ${fieldAttribute}="${field}" type="${type}" ${type === "number" ? 'step="0.1"' : ""} value="${value}"/></label>`;
+  const gradient =
+    style.fill.kind === "linear-gradient"
+      ? style.fill
+      : {
+          kind: "linear-gradient" as const,
+          angleDegrees: 90,
+          stops: [
+            { offset: 0, color: style.fill.color },
+            { offset: 1, color: style.fill.color },
+          ],
+        };
+  const fillKindAttribute =
+    owner === "overlay" ? "data-overlay-fill-kind" : "data-layer-fill-kind";
+  return `${input("fontSize", style.fontSize)}${input("letterSpacing", style.letterSpacing)}${input("arcDegrees", style.arcDegrees)}<label>fill<select ${fillKindAttribute}="${id}"><option value="solid" ${style.fill.kind === "solid" ? "selected" : ""}>纯色</option><option value="linear-gradient" ${style.fill.kind === "linear-gradient" ? "selected" : ""}>线性渐变</option></select></label>${input("fillColor", style.fill.kind === "solid" ? style.fill.color : style.fill.stops[0]!.color, "text")}${input("gradientEndColor", gradient.stops.at(-1)!.color, "text")}${input("gradientAngle", gradient.angleDegrees)}<label><input ${idAttribute}="${id}" ${fieldAttribute}="strokeEnabled" type="checkbox" ${style.stroke ? "checked" : ""}/>描边</label>${input("strokeColor", style.stroke?.color ?? "#000000", "text")}${input("strokeWidth", style.stroke?.width ?? 0)}<label><input ${idAttribute}="${id}" ${fieldAttribute}="shadowEnabled" type="checkbox" ${style.shadow ? "checked" : ""}/>投影</label>${input("shadowColor", style.shadow?.color ?? "#000000", "text")}${input("shadowAlpha", style.shadow?.alpha ?? 0.6)}${input("shadowBlur", style.shadow?.blur ?? 4)}${input("shadowDistance", style.shadow?.distance ?? 6)}${input("shadowAngle", style.shadow?.angleDegrees ?? 90)}`;
 }
 
 function spineAnimationNames(project: PopupEditorProject): readonly string[] {
@@ -834,9 +1081,11 @@ function layerMarkup(
             .map((field) => input(field, layer.playback[field], "text"))
             .join("")
         : layer.kind === "image-string"
-          ? `${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${imageStringParentMarkup(layer, project, tierId)}<p class="amount-layer-note">金额全程显示；五档共享一个 runtime，跨档只切换 resource、transform 和文本。</p>`
-          : `${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${(["start", "loop", "end"] as const).map((segment) => `<label>${segment}<input data-layer-id="${layer.id}" data-layer-field="segment-${segment}" type="checkbox" ${layer.visibleSegments.includes(segment) ? "checked" : ""}/></label>`).join("")}`;
-  return `<article class="card"><strong>${layer.id}</strong><span>${layer.kind} / ${layer.resource}</span>${input("order", layer.order)}${(["x", "y", "scale"] as const).map((field) => input(field, layer.transform[field])).join("")}${playback}<button data-delete-layer="${layer.id}">删除图层</button></article>`;
+          ? `${input("name", layer.name ?? "win-amount", "text")}${layer.binding === "manual" ? input("defaultText", layer.defaultText ?? "", "text") : ""}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${imageStringParentMarkup(layer, project, tierId)}${layer.binding === "manual" ? segmentControls("layer", layer.id, layer.visibleSegments ?? ["start", "loop", "end"]) : '<p class="amount-layer-note">win-amount 全程显示；五档共享一个 runtime，跨档只切换 resource、transform 和文本。</p>'}`
+          : layer.kind === "text"
+            ? `${input("name", layer.name, "text")}${input("defaultText", layer.defaultText, "text")}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${textStyleMarkup("layer", layer.id, layer.style)}${segmentControls("layer", layer.id, layer.visibleSegments)}`
+            : `${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${(["start", "loop", "end"] as const).map((segment) => `<label>${segment}<input data-layer-id="${layer.id}" data-layer-field="segment-${segment}" type="checkbox" ${layer.visibleSegments.includes(segment) ? "checked" : ""}/></label>`).join("")}`;
+  return `<article class="card"><strong>${layer.id}</strong><span>${layer.kind} / ${layer.resource}</span>${input("order", layer.order)}${(["x", "y", "scale"] as const).map((field) => input(field, layer.transform[field])).join("")}${layer.kind === "text" || layer.kind === "image-string" ? input("rotation", layer.transform.rotation ?? 0) : ""}${playback}<button data-delete-layer="${layer.id}">删除图层</button></article>`;
 }
 
 function vniPlaybackMarkup(
