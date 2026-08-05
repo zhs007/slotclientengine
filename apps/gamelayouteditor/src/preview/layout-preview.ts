@@ -296,12 +296,12 @@ export class LayoutPreview {
     this.#packageRuntime.dismissActiveAwardCelebrationImmediately();
   }
 
-  playSpinePopup(id: string): void {
+  playSpinePopup(id: string, text?: string): void {
     if (!this.#packageRuntime)
       throw new Error("当前 layout preview 没有 package runtime。");
     const player = this.#packageRuntime.getSpinePopup(id);
     player.dismissImmediately();
-    player.start();
+    player.start(text);
   }
 
   requestDismissSpinePopup(id: string): void {

@@ -4,6 +4,7 @@ import {
   type PopupAmountFormat,
   type PopupLayer,
   type PopupManifestV1,
+  type PopupOverlayLayer,
   type PopupResourceSpec,
 } from "@slotclientengine/rendercore/popup";
 import type { EditorAssetEntry } from "@slotclientengine/editorresource";
@@ -50,6 +51,15 @@ export interface PopupEditorProject {
       loopAnimation: string;
       endAnimation: string;
     };
+    prompt: {
+      enabled: boolean;
+      font: string | null;
+      defaultText: string;
+      fill: string;
+      order: number;
+      area: { x: number; y: number; width: number; height: number };
+    };
+    overlays: PopupOverlayLayer[];
   };
 }
 
@@ -136,6 +146,15 @@ export function createPopupEditorProject(): PopupEditorProject {
         loopAnimation: "",
         endAnimation: "",
       },
+      prompt: {
+        enabled: false,
+        font: null,
+        defaultText: "Press any key to continue",
+        fill: "#ffffff",
+        order: 100,
+        area: { x: 0, y: 500, width: 800, height: 80 },
+      },
+      overlays: [],
     },
   };
 }
@@ -189,7 +208,20 @@ export function projectToManifest(
       id: project.id,
       type: "spine",
       designViewport: project.designViewport,
-      resources: { [resourceKey]: resource.spec },
+      resources: Object.fromEntries(
+        [
+          resourceKey,
+          ...(project.spine.prompt.enabled && project.spine.prompt.font
+            ? [project.spine.prompt.font]
+            : []),
+          ...project.spine.overlays.map(({ resource }) => resource),
+        ].map((id) => {
+          const selected = project.resources.get(id);
+          if (!selected)
+            throw new Error(`普通 Spine Popup resource 缺失：${id}`);
+          return [id, selected.spec];
+        }),
+      ),
       spine: {
         resource: resourceKey,
         transform: project.spine.transform,
@@ -197,6 +229,24 @@ export function projectToManifest(
           mode: "segmented-animations",
           ...project.spine.playback,
         },
+        ...(project.spine.prompt.enabled
+          ? {
+              prompt: {
+                font:
+                  project.spine.prompt.font ??
+                  (() => {
+                    throw new Error("普通 Spine Popup prompt 尚未绑定字体。");
+                  })(),
+                defaultText: project.spine.prompt.defaultText,
+                fill: project.spine.prompt.fill,
+                order: project.spine.prompt.order,
+                area: project.spine.prompt.area,
+              },
+            }
+          : {}),
+        ...(project.spine.overlays.length
+          ? { overlays: project.spine.overlays }
+          : {}),
       },
     });
   }
@@ -458,6 +508,11 @@ export function resourceReferenceCount(
 ): number {
   let count = 0;
   if (project.spine.resource === resourceKey) count += 1;
+  if (project.spine.prompt.enabled && project.spine.prompt.font === resourceKey)
+    count += 1;
+  count += project.spine.overlays.filter(
+    (overlay) => overlay.resource === resourceKey,
+  ).length;
   for (const tier of project.tiers.values())
     count += tier.layers.filter(
       (layer) => layer.resource === resourceKey,

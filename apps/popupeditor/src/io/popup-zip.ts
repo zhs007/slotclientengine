@@ -124,6 +124,24 @@ export async function importPopupZip(
         loopAnimation: manifest.spine.playback.loopAnimation,
         endAnimation: manifest.spine.playback.endAnimation,
       },
+      prompt: manifest.spine.prompt
+        ? {
+            enabled: true,
+            font: manifest.spine.prompt.font,
+            defaultText: manifest.spine.prompt.defaultText,
+            fill: manifest.spine.prompt.fill,
+            order: manifest.spine.prompt.order,
+            area: { ...manifest.spine.prompt.area },
+          }
+        : {
+            enabled: false,
+            font: null,
+            defaultText: "Press any key to continue",
+            fill: "#ffffff",
+            order: 100,
+            area: { x: 0, y: 500, width: 800, height: 80 },
+          },
+      overlays: structuredClone([...(manifest.spine.overlays ?? [])]),
     };
     const closure = popupManifestAssetClosure(manifest, project.assets);
     if (closure.length !== project.assets.size)
@@ -166,7 +184,8 @@ function resourceClosure(
   spec: PopupResourceSpec,
   assets: ReadonlyMap<string, { readonly bytes: Uint8Array }>,
 ): readonly string[] {
-  if (spec.kind === "image") return Object.freeze([spec.path]);
+  if (spec.kind === "image" || spec.kind === "font")
+    return Object.freeze([spec.path]);
   if (spec.kind === "spine")
     return Object.freeze([
       spec.skeleton,

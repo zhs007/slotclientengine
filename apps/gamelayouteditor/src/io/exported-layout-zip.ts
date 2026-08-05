@@ -702,6 +702,8 @@ function layoutMediaType(key: string): string {
   if (extension === "mp4") return "video/mp4";
   if (extension === "json") return "application/json";
   if (extension === "atlas") return "text/plain";
+  if (["woff2", "woff", "ttf", "otf"].includes(extension))
+    return `font/${extension}`;
   throw new Error(`layout asset extension 不支持：${key}`);
 }
 

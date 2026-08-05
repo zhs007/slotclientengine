@@ -29,6 +29,7 @@ export type PopupAmountFormatter = (amountRaw: number) => string;
 
 export type PopupResourceSpec =
   | { readonly kind: "image"; readonly path: string; readonly size: PopupSize }
+  | { readonly kind: "font"; readonly path: string }
   | { readonly kind: "image-string"; readonly manifest: string }
   | { readonly kind: "vni"; readonly project: string }
   | {
@@ -46,6 +47,9 @@ export interface PopupTransform {
   readonly x: number;
   readonly y: number;
   readonly scale: number;
+}
+export interface PopupOverlayTransform extends PopupTransform {
+  readonly rotation: number;
 }
 export interface PopupAnchor {
   readonly x: number;
@@ -100,6 +104,51 @@ export type PopupLayer =
       };
     });
 
+export type PopupOverlayLayer =
+  | {
+      readonly id: string;
+      readonly kind: "image";
+      readonly order: number;
+      readonly resource: string;
+      readonly transform: PopupOverlayTransform;
+      readonly anchor: PopupAnchor;
+      readonly visibleSegments: readonly PopupSegment[];
+    }
+  | {
+      readonly id: string;
+      readonly kind: "vni";
+      readonly order: number;
+      readonly resource: string;
+      readonly transform: PopupOverlayTransform;
+      readonly playback: PopupVniPlayback;
+    }
+  | {
+      readonly id: string;
+      readonly kind: "spine";
+      readonly order: number;
+      readonly resource: string;
+      readonly transform: PopupOverlayTransform;
+      readonly playback: {
+        readonly mode: "segmented-animations";
+        readonly startAnimation: string;
+        readonly loopAnimation: string;
+        readonly endAnimation: string;
+      };
+    };
+
+export interface PopupPromptSpec {
+  readonly font: string;
+  readonly defaultText: string;
+  readonly fill: string;
+  readonly order: number;
+  readonly area: {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+  };
+}
+
 export interface AwardTierPresentation {
   readonly countDurationSeconds: number;
   readonly layers: readonly PopupLayer[];
@@ -139,6 +188,8 @@ export interface SpinePopupManifestV1 extends PopupManifestBaseV1 {
       readonly loopAnimation: string;
       readonly endAnimation: string;
     };
+    readonly prompt?: PopupPromptSpec;
+    readonly overlays?: readonly PopupOverlayLayer[];
   };
 }
 
@@ -175,6 +226,10 @@ export interface PopupPreparedImageString {
   readonly kind: "image-string";
   readonly resource: ImageStringResource;
 }
+export interface PopupPreparedFont {
+  readonly kind: "font";
+  readonly family: string;
+}
 export interface PopupPreparedVni {
   readonly kind: "vni";
   readonly project: VNIProjectConfig;
@@ -186,6 +241,7 @@ export interface PopupPreparedSpine {
 }
 export type PopupPreparedResource =
   | PopupPreparedImage
+  | PopupPreparedFont
   | PopupPreparedImageString
   | PopupPreparedVni
   | PopupPreparedSpine;
@@ -221,7 +277,7 @@ export interface SpinePopupSnapshot {
 export interface SpinePopupPlayer {
   readonly container: Container;
   init(): Promise<void>;
-  start(): void;
+  start(text?: string): void;
   update(deltaSeconds: number): SpinePopupSnapshot;
   requestDismiss(): void;
   dismissImmediately(): void;

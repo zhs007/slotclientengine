@@ -514,6 +514,10 @@ export function assertMediaTypeMatchesExtension(
     atlas: ["text/plain", "application/octet-stream"],
     mp4: ["video/mp4"],
     zip: ["application/zip"],
+    woff2: ["font/woff2"],
+    woff: ["font/woff"],
+    ttf: ["font/ttf"],
+    otf: ["font/otf"],
   };
   const expected = allowed[extension];
   if (expected && !expected.includes(mediaType))

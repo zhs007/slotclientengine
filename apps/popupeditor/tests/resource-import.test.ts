@@ -19,6 +19,23 @@ import {
 } from "../../../test-utils/minecart2-fixtures.js";
 
 describe("popup flat resource discovery", () => {
+  it("discovers validated package font files", async () => {
+    const review = await discoverPopupResources([
+      sourceFile("Prompt.woff2", new Uint8Array([0x77, 0x4f, 0x46, 0x32, 1])),
+    ]);
+    expect(review).toHaveLength(1);
+    expect(review[0]).toMatchObject({
+      kind: "font",
+      rootKey: "Prompt.woff2",
+      spec: { kind: "font", path: "Prompt.woff2" },
+    });
+    await expect(
+      discoverPopupResources([
+        sourceFile("Bad.woff2", new TextEncoder().encode("wOFF")),
+      ]),
+    ).rejects.toThrow(/signature/);
+  });
+
   it("rewrites a VNI closure to filename keys and preserves unrelated images", async () => {
     const projectBytes = readMinecart2LogicalBytes("big_win0721.json");
     const project = JSON.parse(new TextDecoder().decode(projectBytes)) as {

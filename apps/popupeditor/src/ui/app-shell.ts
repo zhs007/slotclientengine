@@ -4,6 +4,7 @@ import { formatPopupAmount } from "@slotclientengine/rendercore/popup";
 import type {
   AwardTierId,
   PopupLayer,
+  PopupOverlayLayer,
 } from "@slotclientengine/rendercore/popup";
 import {
   addLayer,
@@ -149,6 +150,12 @@ export class PopupEditorApp {
     this.required("preview-play").addEventListener("click", () =>
       this.safe(() => this.#preview!.play()),
     );
+    const previewPrompt = this.required<HTMLInputElement>("preview-prompt");
+    previewPrompt.addEventListener("change", () =>
+      this.#preview?.setPromptText(
+        previewPrompt.value.length ? previewPrompt.value : undefined,
+      ),
+    );
     this.required("preview-advance").addEventListener("click", () =>
       this.#preview?.advance(),
     );
@@ -198,6 +205,160 @@ export class PopupEditorApp {
           this.#tier = button.dataset.tier as AwardTierId;
           this.renderWorkspace(project);
         }),
+      );
+    const promptEnabled = this.#root.querySelector<HTMLInputElement>(
+      "#spine-prompt-enabled",
+    );
+    promptEnabled?.addEventListener("change", () =>
+      this.#store.transact((draft) => {
+        draft.spine.prompt.enabled = promptEnabled.checked;
+      }),
+    );
+    const promptFont =
+      this.#root.querySelector<HTMLSelectElement>("#spine-prompt-font");
+    promptFont?.addEventListener("change", () =>
+      this.#store.transact((draft) => {
+        draft.spine.prompt.font = promptFont.value || null;
+      }),
+    );
+    this.#root
+      .querySelectorAll<HTMLInputElement>("[data-spine-prompt-field]")
+      .forEach((input) =>
+        input.addEventListener("change", () =>
+          this.#store.transact((draft) => {
+            const field = input.dataset.spinePromptField!;
+            if (["defaultText", "fill"].includes(field))
+              (draft.spine.prompt as any)[field] = input.value;
+            else if (field === "order")
+              draft.spine.prompt.order = Number(input.value);
+            else (draft.spine.prompt.area as any)[field] = Number(input.value);
+          }),
+        ),
+      );
+    this.#root
+      .querySelector<HTMLButtonElement>("#add-spine-overlay")
+      ?.addEventListener("click", () =>
+        this.safe(() =>
+          this.#store.transact((draft) => {
+            const select = this.required<HTMLSelectElement>(
+              "spine-overlay-resource",
+            );
+            const resource = draft.resources.get(select.value);
+            if (!resource || !["image", "spine", "vni"].includes(resource.kind))
+              throw new Error("请选择 image、Spine 或 VNI overlay resource。");
+            const order = draft.spine.overlays.length
+              ? Math.max(...draft.spine.overlays.map((item) => item.order)) + 1
+              : 0;
+            const base = {
+              id: `overlay-${order}`,
+              order,
+              resource: resource.rootKey,
+              transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+            };
+            const overlay: PopupOverlayLayer =
+              resource.kind === "image"
+                ? {
+                    ...base,
+                    kind: "image",
+                    anchor: { x: 0.5, y: 0.5 },
+                    visibleSegments: ["start", "loop", "end"],
+                  }
+                : resource.kind === "vni"
+                  ? {
+                      ...base,
+                      kind: "vni",
+                      playback: {
+                        mode: "segmented",
+                        loopStartTime: 1,
+                        loopEndTime: 2.5,
+                        keepParticlesAlive: true,
+                      },
+                    }
+                  : {
+                      ...base,
+                      kind: "spine",
+                      playback: {
+                        mode: "segmented-animations",
+                        startAnimation: "Start",
+                        loopAnimation: "Loop",
+                        endAnimation: "End",
+                      },
+                    };
+            draft.spine.overlays.push(overlay);
+          }),
+        ),
+      );
+    this.#root
+      .querySelectorAll<HTMLButtonElement>("[data-delete-overlay]")
+      .forEach((button) =>
+        button.addEventListener("click", () =>
+          this.#store.transact((draft) => {
+            draft.spine.overlays = draft.spine.overlays.filter(
+              ({ id }) => id !== button.dataset.deleteOverlay,
+            );
+          }),
+        ),
+      );
+    this.#root
+      .querySelectorAll<HTMLInputElement>("[data-overlay-field]")
+      .forEach((input) =>
+        input.addEventListener("change", () =>
+          this.#store.transact((draft) => {
+            const overlay = draft.spine.overlays.find(
+              ({ id }) => id === input.dataset.overlayId,
+            );
+            if (!overlay) throw new Error("overlay 不存在。");
+            const field = input.dataset.overlayField!;
+            if (["x", "y", "scale", "rotation"].includes(field))
+              (overlay.transform as any)[field] = Number(input.value);
+            else if (field === "order")
+              (overlay as any).order = Number(input.value);
+            else if (["anchor-x", "anchor-y"].includes(field))
+              (overlay as any).anchor[field.at(-1)!] = Number(input.value);
+            else if (["loopStartTime", "loopEndTime"].includes(field))
+              (overlay as any).playback[field] = Number(input.value);
+            else if (field === "keepParticlesAlive")
+              (overlay as any).playback[field] = input.checked;
+            else if (
+              ["startAnimation", "loopAnimation", "endAnimation"].includes(
+                field,
+              )
+            )
+              (overlay as any).playback[field] = input.value;
+            else if (field.startsWith("segment-")) {
+              const segments = new Set((overlay as any).visibleSegments);
+              const segment = field.slice("segment-".length);
+              input.checked ? segments.add(segment) : segments.delete(segment);
+              (overlay as any).visibleSegments = [
+                "start",
+                "loop",
+                "end",
+              ].filter((item) => segments.has(item));
+            }
+          }),
+        ),
+      );
+    this.#root
+      .querySelectorAll<HTMLSelectElement>("[data-overlay-vni-mode]")
+      .forEach((select) =>
+        select.addEventListener("change", () =>
+          this.#store.transact((draft) => {
+            const overlay = draft.spine.overlays.find(
+              ({ id }) => id === select.dataset.overlayVniMode,
+            );
+            if (!overlay || overlay.kind !== "vni")
+              throw new Error("VNI overlay 不存在。");
+            (overlay as any).playback =
+              select.value === "once"
+                ? { mode: "once" }
+                : {
+                    mode: "segmented",
+                    loopStartTime: 1,
+                    loopEndTime: 2.5,
+                    keepParticlesAlive: true,
+                  };
+          }),
+        ),
       );
     this.#root
       .querySelectorAll<HTMLButtonElement>("[data-add-layer]")
@@ -555,10 +716,10 @@ export class PopupEditorApp {
 }
 
 function shell() {
-  return `<header><h1>Popup Editor</h1><nav class="primary-tabs" role="tablist" aria-label="编辑区域"><button role="tab" data-tab="resources">资源</button><button role="tab" data-tab="tiers">动画 / 档位</button><button role="tab" data-tab="project">项目</button></nav></header><main><section class="left"><div id="workspace" role="tabpanel"></div><pre id="diagnostics"></pre></section><aside><div class="preview-controls"><select id="preview-resolution"><option value="1920x1080">1920×1080</option><option value="1080x1920" selected>1080×1920</option><option value="2000x2000">2000×2000</option><option value="custom">custom</option></select><label>width<input id="preview-width" type="number" min="1" value="1080"/></label><label>height<input id="preview-height" type="number" min="1" value="1920"/></label><select id="preview-zoom"><option value="fit">fit</option>${[0.25, 0.5, 0.75, 1, 1.5, 2].map((v) => `<option value="${v}">${v * 100}%</option>`)}</select><label><input id="preview-guides" type="checkbox" checked/>guides</label><label>bet raw<input id="preview-bet" type="number" value="100"/></label><label>win raw<input id="preview-win" type="number" value="5000"/></label><label>小数位数（仅预览）<input id="preview-fraction-digits" type="number" min="0" max="6" step="1" value="0"/></label><label><input id="preview-use-grouping" type="checkbox"/>千位分隔（仅预览）</label><button id="preview-build">Build preview</button><button id="preview-play">Play / Replay</button><button id="preview-advance">Advance</button><button id="preview-dismiss">Click / Dismiss</button><button id="preview-clear">Dismiss immediately</button></div><div id="preview-canvas"></div><output id="preview-status"></output></aside></main><dialog id="vni-runtime-choice"><h2>选择 VNI runtime</h2><p id="vni-runtime-description"></p><label class="vni-runtime-options">运行版本<select id="vni-runtime-select"></select></label><button id="vni-runtime-confirm">确认 runtime</button><button id="vni-runtime-cancel">取消导入</button></dialog><dialog id="import-review"><h2>Import review</h2><div id="review-body"></div><button id="review-confirm">确认导入</button><button id="review-cancel">取消</button></dialog>`;
+  return `<header><h1>Popup Editor</h1><nav class="primary-tabs" role="tablist" aria-label="编辑区域"><button role="tab" data-tab="resources">资源</button><button role="tab" data-tab="tiers">动画 / 档位</button><button role="tab" data-tab="project">项目</button></nav></header><main><section class="left"><div id="workspace" role="tabpanel"></div><pre id="diagnostics"></pre></section><aside><div class="preview-controls"><select id="preview-resolution"><option value="1920x1080">1920×1080</option><option value="1080x1920" selected>1080×1920</option><option value="2000x2000">2000×2000</option><option value="custom">custom</option></select><label>width<input id="preview-width" type="number" min="1" value="1080"/></label><label>height<input id="preview-height" type="number" min="1" value="1920"/></label><select id="preview-zoom"><option value="fit">fit</option>${[0.25, 0.5, 0.75, 1, 1.5, 2].map((v) => `<option value="${v}">${v * 100}%</option>`)}</select><label><input id="preview-guides" type="checkbox" checked/>guides</label><label>bet raw<input id="preview-bet" type="number" value="100"/></label><label>win raw<input id="preview-win" type="number" value="5000"/></label><label>Prompt preview（留空用默认）<input id="preview-prompt" value=""/></label><label>小数位数（仅预览）<input id="preview-fraction-digits" type="number" min="0" max="6" step="1" value="0"/></label><label><input id="preview-use-grouping" type="checkbox"/>千位分隔（仅预览）</label><button id="preview-build">Build preview</button><button id="preview-play">Play / Replay</button><button id="preview-advance">Advance</button><button id="preview-dismiss">Click / Dismiss</button><button id="preview-clear">Dismiss immediately</button></div><div id="preview-canvas"></div><output id="preview-status"></output></aside></main><dialog id="vni-runtime-choice"><h2>选择 VNI runtime</h2><p id="vni-runtime-description"></p><label class="vni-runtime-options">运行版本<select id="vni-runtime-select"></select></label><button id="vni-runtime-confirm">确认 runtime</button><button id="vni-runtime-cancel">取消导入</button></dialog><dialog id="import-review"><h2>Import review</h2><div id="review-body"></div><button id="review-confirm">确认导入</button><button id="review-cancel">取消</button></dialog>`;
 }
 function resourcesMarkup(project: PopupEditorProject) {
-  return `<section class="resource-import-panel"><h2>扁平资源库</h2><p>图片、Spine、VNI、ImgNumber ZIP 与 Popup ZIP 统一从这里导入；filename key 保留原始拼写，同名不同 bytes 默认覆盖。普通资源导入只入库，不会根据文件名猜测用途；请在导入后到“动画 / 档位”页显式绑定。</p><div class="resource-actions"><label class="file-action">导入资源<input id="import-assets" type="file" accept="image/png,image/webp,image/jpeg,.json,.atlas,.zip" multiple/></label></div></section><div class="resource-list">${[...project.resources.values()].map((resource) => `<article class="card"><strong>${resource.rootKey}</strong><span>${resource.kind}</span><details><summary>${resource.keys.length} filename keys</summary><code>${resource.keys.join("\n")}</code></details><span>${resourceReferenceCount(project, resource.rootKey)} 个图层绑定</span><button data-delete-resource="${resource.rootKey}">删除</button></article>`).join("") || '<p class="empty-state">尚无资源</p>'}</div>`;
+  return `<section class="resource-import-panel"><h2>扁平资源库</h2><p>图片、字体、Spine、VNI、ImgNumber ZIP 与 Popup ZIP 统一从这里导入；filename key 保留原始拼写，同名不同 bytes 默认覆盖。普通资源导入只入库，不会根据文件名猜测用途；请在导入后到“动画 / 档位”页显式绑定。</p><div class="resource-actions"><label class="file-action">导入资源<input id="import-assets" type="file" accept="image/png,image/webp,image/jpeg,.json,.atlas,.zip,.woff2,.woff,.ttf,.otf" multiple/></label></div></section><div class="resource-list">${[...project.resources.values()].map((resource) => `<article class="card"><strong>${resource.rootKey}</strong><span>${resource.kind}</span><details><summary>${resource.keys.length} filename keys</summary><code>${resource.keys.join("\n")}</code></details><span>${resourceReferenceCount(project, resource.rootKey)} 个图层绑定</span><button data-delete-resource="${resource.rootKey}">删除</button></article>`).join("") || '<p class="empty-state">尚无资源</p>'}</div>`;
 }
 
 function spineMarkup(project: PopupEditorProject) {
@@ -566,6 +727,12 @@ function spineMarkup(project: PopupEditorProject) {
     (resource) => resource.spec.kind === "spine",
   );
   const animations = spineAnimationNames(project);
+  const fonts = [...project.resources.values()].filter(
+    (resource) => resource.kind === "font",
+  );
+  const overlayResources = [...project.resources.values()].filter((resource) =>
+    ["image", "spine", "vni"].includes(resource.kind),
+  );
   const animationSelect = (
     field: "startAnimation" | "loopAnimation" | "endAnimation",
     label: string,
@@ -573,7 +740,26 @@ function spineMarkup(project: PopupEditorProject) {
     const selected = project.spine.playback[field];
     return `<label>${label}<select data-spine-popup-field="${field}"><option value="">请选择动画</option>${animations.map((name) => `<option value="${name}" ${name === selected ? "selected" : ""}>${name}</option>`).join("")}</select></label>`;
   };
-  return `<section class="tier-editor"><h2>普通 Spine 弹窗</h2><p>播放 start 后进入 loop；用户点击会锁存关闭请求，并在当前 loop 播放到边界后进入 end。</p><label>Spine 资源<select id="spine-resource"><option value="">请选择资源</option>${resources.map((resource) => `<option value="${resource.rootKey}" ${resource.rootKey === project.spine.resource ? "selected" : ""}>${resource.rootKey}</option>`).join("")}</select></label><div class="threshold-grid">${(["x", "y", "scale"] as const).map((field) => `<label>${field}<input data-spine-popup-field="${field}" type="number" step="0.1" value="${project.spine.transform[field]}"/></label>`).join("")}</div>${animationSelect("startAnimation", "开始动画")}${animationSelect("loopAnimation", "循环动画")}${animationSelect("endAnimation", "结束动画")}<p class="segment-summary">${project.spine.resource ? (animations.length ? `已从 skeleton JSON 读取 ${animations.length} 个动画。` : "所选 skeleton JSON 没有可用动画。") : "导入并选择一组 Spine JSON、atlas 与 PNG 后配置动画。"}</p></section>`;
+  const prompt = project.spine.prompt;
+  return `<section class="tier-editor"><h2>普通 Spine 弹窗</h2><p>播放 start 后进入 loop；用户点击会锁存关闭请求，并在当前 loop 播放到边界后进入 end。</p><label>Spine 资源<select id="spine-resource"><option value="">请选择资源</option>${resources.map((resource) => `<option value="${resource.rootKey}" ${resource.rootKey === project.spine.resource ? "selected" : ""}>${resource.rootKey}</option>`).join("")}</select></label><div class="threshold-grid">${(["x", "y", "scale"] as const).map((field) => `<label>${field}<input data-spine-popup-field="${field}" type="number" step="0.1" value="${project.spine.transform[field]}"/></label>`).join("")}</div>${animationSelect("startAnimation", "开始动画")}${animationSelect("loopAnimation", "循环动画")}${animationSelect("endAnimation", "结束动画")}<p class="segment-summary">${project.spine.resource ? (animations.length ? `已从 skeleton JSON 读取 ${animations.length} 个动画。` : "所选 skeleton JSON 没有可用动画。") : "导入并选择一组 Spine JSON、atlas 与 PNG 后配置动画。"}</p><h3>单行点击提示</h3><label><input id="spine-prompt-enabled" type="checkbox" ${prompt.enabled ? "checked" : ""}/>启用提示</label><label>字体<select id="spine-prompt-font"><option value="">请选择字体</option>${fonts.map((font) => `<option value="${font.rootKey}" ${font.rootKey === prompt.font ? "selected" : ""}>${font.rootKey}</option>`).join("")}</select></label><label>默认文案<input data-spine-prompt-field="defaultText" value="${prompt.defaultText}"/></label><label>颜色<input data-spine-prompt-field="fill" value="${prompt.fill}"/></label><div class="threshold-grid">${(["order", "x", "y", "width", "height"] as const).map((field) => `<label>${field}<input data-spine-prompt-field="${field}" type="number" step="0.1" value="${field === "order" ? prompt.order : prompt.area[field]}"/></label>`).join("")}</div><p>文字始终单行，根据区域自动缩放；进入 end 时隐藏。</p><h3>Overlay 图层</h3><div class="layer-add"><select id="spine-overlay-resource">${overlayResources.map((resource) => `<option value="${resource.rootKey}">${resource.rootKey} (${resource.kind})</option>`).join("")}</select><button id="add-spine-overlay" ${overlayResources.length ? "" : "disabled"}>添加 overlay</button></div>${project.spine.overlays.map(overlayMarkup).join("")}</section>`;
+}
+
+function overlayMarkup(layer: PopupOverlayLayer) {
+  const input = (field: string, value: string | number, type = "number") =>
+    `<label>${field}<input data-overlay-id="${layer.id}" data-overlay-field="${field}" type="${type}" ${type === "number" ? 'step="0.1"' : ""} value="${value}"/></label>`;
+  const playback =
+    layer.kind === "image"
+      ? `${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${(["start", "loop", "end"] as const).map((segment) => `<label>${segment}<input data-overlay-id="${layer.id}" data-overlay-field="segment-${segment}" type="checkbox" ${layer.visibleSegments.includes(segment) ? "checked" : ""}/></label>`).join("")}`
+      : layer.kind === "spine"
+        ? (["startAnimation", "loopAnimation", "endAnimation"] as const)
+            .map((field) => input(field, layer.playback[field], "text"))
+            .join("")
+        : `${`<label>mode<select data-overlay-vni-mode="${layer.id}"><option value="segmented" ${layer.playback.mode === "segmented" ? "selected" : ""}>segmented</option><option value="once" ${layer.playback.mode === "once" ? "selected" : ""}>once</option></select></label>`}${
+            layer.playback.mode === "segmented"
+              ? `${input("loopStartTime", layer.playback.loopStartTime)}${input("loopEndTime", layer.playback.loopEndTime)}<label>keepParticlesAlive<input data-overlay-id="${layer.id}" data-overlay-field="keepParticlesAlive" type="checkbox" ${layer.playback.keepParticlesAlive ? "checked" : ""}/></label>`
+              : `<p>VNI once</p>`
+          }`;
+  return `<article class="card"><strong>${layer.id}</strong><span>${layer.kind} / ${layer.resource}</span>${input("order", layer.order)}${(["x", "y", "scale", "rotation"] as const).map((field) => input(field, layer.transform[field])).join("")}${playback}<button data-delete-overlay="${layer.id}">删除 overlay</button></article>`;
 }
 
 function spineAnimationNames(project: PopupEditorProject): readonly string[] {

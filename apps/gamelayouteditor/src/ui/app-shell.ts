@@ -442,9 +442,13 @@ export class GameLayoutEditorApp {
               .getSnapshot()
               .project.popupDependencies.get(this.#selectedPopupId)
           : undefined;
-        if (dependency?.type === "spine")
-          this.#preview?.playSpinePopup(dependency.id);
-        else
+        if (dependency?.type === "spine") {
+          const prompt = this.requireInput("[data-popup-prompt]").value;
+          this.#preview?.playSpinePopup(
+            dependency.id,
+            prompt.length ? prompt : undefined,
+          );
+        } else
           this.#preview?.playAwardCelebration({
             betAmountRaw: Number(this.requireInput("[data-popup-bet]").value),
             winAmountRaw: Number(this.requireInput("[data-popup-win]").value),

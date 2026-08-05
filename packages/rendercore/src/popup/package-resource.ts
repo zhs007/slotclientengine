@@ -28,6 +28,11 @@ import {
 import { validateOfficialSpineResource } from "../spine/runtime-player.js";
 import { collectPopupDirectPaths, parsePopupManifest } from "./manifest.js";
 import { requiredPopupAmountCharacters } from "./amount-format.js";
+import {
+  acquirePopupFont,
+  type PopupFontHandle,
+  type PopupFontLoader,
+} from "./font-resource.js";
 import type {
   PopupManifestV1,
   PopupLayer,
@@ -109,6 +114,7 @@ export async function createPopupPackageResource(options: {
   readonly files: ReadonlyMap<string, Uint8Array>;
   readonly decodeImage?: DecodeImageStringImage;
   readonly loadTexture?: (url: string, path: string) => Promise<Texture>;
+  readonly loadFont?: PopupFontLoader;
 }): Promise<PopupPackageResource> {
   const manifest = parsePopupManifest(
     options.manifest ?? parseJson(requireBytes(options.files, ROOT), ROOT),
@@ -122,6 +128,7 @@ export async function createPopupPackageResource(options: {
     files,
     ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
     ...(options.loadTexture ? { loadTexture: options.loadTexture } : {}),
+    ...(options.loadFont ? { loadFont: options.loadFont } : {}),
   });
 }
 
@@ -130,6 +137,7 @@ export async function createPopupPackageResourceFromResolvedFiles(options: {
   readonly files: ReadonlyMap<string, Uint8Array>;
   readonly decodeImage?: DecodeImageStringImage;
   readonly loadTexture?: (url: string, path: string) => Promise<Texture>;
+  readonly loadFont?: PopupFontLoader;
 }): Promise<PopupPackageResource> {
   const manifest = parsePopupManifest(
     options.manifest ?? parseJson(requireBytes(options.files, ROOT), ROOT),
@@ -142,6 +150,7 @@ export async function createPopupPackageResourceFromResolvedFiles(options: {
   const urls: string[] = [];
   const prepared: Record<string, PopupPreparedResource> = {};
   const ownedTextures = new Set<Texture>();
+  const fonts: PopupFontHandle[] = [];
   try {
     for (const [id, spec] of Object.entries(manifest.resources)) {
       if (spec.kind === "image-string") {
@@ -191,6 +200,14 @@ export async function createPopupPackageResourceFromResolvedFiles(options: {
           );
         ownedTextures.add(texture);
         prepared[id] = { kind: "image", texture };
+      } else if (spec.kind === "font") {
+        const font = await acquirePopupFont({
+          bytes: requireBytes(files, spec.path),
+          path: spec.path,
+          ...(options.loadFont ? { loader: options.loadFont } : {}),
+        });
+        fonts.push(font);
+        prepared[id] = { kind: "font", family: font.family };
       } else if (spec.kind === "vni") {
         const project = assertVNIProject(
           parseJson(requireBytes(files, spec.project), spec.project),
@@ -247,6 +264,7 @@ export async function createPopupPackageResourceFromResolvedFiles(options: {
         destroyed = true;
         for (const value of Object.values(prepared))
           if (value.kind === "image-string") await value.resource.destroy();
+        for (const font of fonts) font.release();
         for (const texture of ownedTextures) texture.destroy(false);
         for (const url of urls) URL.revokeObjectURL(url);
       },
@@ -254,6 +272,7 @@ export async function createPopupPackageResourceFromResolvedFiles(options: {
   } catch (error) {
     for (const value of Object.values(prepared))
       if (value.kind === "image-string") await value.resource.destroy();
+    for (const font of fonts) font.release();
     for (const texture of ownedTextures) texture.destroy(false);
     for (const url of urls) URL.revokeObjectURL(url);
     throw error;
@@ -358,13 +377,7 @@ export function flattenPopupPackageFiles(options: {
       ? {
           ...manifest,
           resources,
-          spine: {
-            ...manifest.spine,
-            resource: requiredPopupResourceKey(
-              resourceKeys,
-              manifest.spine.resource,
-            ),
-          },
+          spine: rewriteSpineReferences(manifest.spine, resourceKeys),
         }
       : {
           ...manifest,
@@ -470,13 +483,7 @@ export function namespaceMappedPopupPackageFiles(options: {
       ? {
           ...manifest,
           resources,
-          spine: {
-            ...manifest.spine,
-            resource: requiredPopupResourceKey(
-              resourceKeys,
-              manifest.spine.resource,
-            ),
-          },
+          spine: rewriteSpineReferences(manifest.spine, resourceKeys),
         }
       : {
           ...manifest,
@@ -685,6 +692,31 @@ function validateAnimationBindings(
         manifest.spine.playback.endAnimation,
       ],
     });
+    for (const overlay of manifest.spine.overlays ?? []) {
+      const overlayResource = resources[overlay.resource];
+      if (overlay.kind === "spine") {
+        if (overlayResource?.kind !== "spine")
+          throw new Error("Spine popup overlay resource mismatch.");
+        validateOfficialSpineResource({
+          resource: overlayResource.resource,
+          requiredAnimations: [
+            overlay.playback.startAnimation,
+            overlay.playback.loopAnimation,
+            overlay.playback.endAnimation,
+          ],
+        });
+      } else if (overlay.kind === "vni") {
+        if (overlayResource?.kind !== "vni")
+          throw new Error("Spine popup VNI overlay resource mismatch.");
+        if (
+          overlay.playback.mode === "segmented" &&
+          overlay.playback.loopEndTime > overlayResource.project.stage.duration
+        )
+          throw new Error(
+            `popup VNI overlay ${overlay.id} loopEndTime exceeds project duration.`,
+          );
+      }
+    }
     return;
   }
   for (const tier of [
@@ -747,7 +779,7 @@ function rewritePopupResourceSpec(
   spec: PopupResourceSpec,
   mapping: ReadonlyMap<string, string>,
 ): PopupResourceSpec {
-  if (spec.kind === "image")
+  if (spec.kind === "image" || spec.kind === "font")
     return { ...spec, path: requirePopupMapping(mapping, spec.path) };
   if (spec.kind === "image-string")
     return { ...spec, manifest: requirePopupMapping(mapping, spec.manifest) };
@@ -767,10 +799,36 @@ function rewritePopupResourceSpec(
 }
 
 function popupResourceRoot(spec: PopupResourceSpec): string {
-  if (spec.kind === "image") return spec.path;
+  if (spec.kind === "image" || spec.kind === "font") return spec.path;
   if (spec.kind === "image-string") return spec.manifest;
   if (spec.kind === "vni") return spec.project;
   return spec.skeleton;
+}
+
+function rewriteSpineReferences(
+  spine: Extract<PopupManifestV1, { readonly type: "spine" }>["spine"],
+  mapping: ReadonlyMap<string, string>,
+) {
+  return {
+    ...spine,
+    resource: requiredPopupResourceKey(mapping, spine.resource),
+    ...(spine.prompt
+      ? {
+          prompt: {
+            ...spine.prompt,
+            font: requiredPopupResourceKey(mapping, spine.prompt.font),
+          },
+        }
+      : {}),
+    ...(spine.overlays
+      ? {
+          overlays: spine.overlays.map((overlay) => ({
+            ...overlay,
+            resource: requiredPopupResourceKey(mapping, overlay.resource),
+          })),
+        }
+      : {}),
+  };
 }
 
 function requiredPopupResourceKey(

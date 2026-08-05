@@ -472,7 +472,7 @@ function rewritePopupResource(
   resource: PopupResourceSpec,
   mapping: ReadonlyMap<string, string>,
 ): PopupResourceSpec {
-  if (resource.kind === "image")
+  if (resource.kind === "image" || resource.kind === "font")
     return { ...resource, path: rewriteRef(resource.path, mapping) };
   if (resource.kind === "image-string")
     return { ...resource, manifest: rewriteRef(resource.manifest, mapping) };
@@ -487,7 +487,8 @@ function rewritePopupResource(
 }
 
 function popupResourceRoot(resource: PopupResourceSpec): string {
-  if (resource.kind === "image") return resource.path;
+  if (resource.kind === "image" || resource.kind === "font")
+    return resource.path;
   if (resource.kind === "image-string") return resource.manifest;
   if (resource.kind === "vni") return resource.project;
   return resource.skeleton;

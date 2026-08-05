@@ -148,6 +148,22 @@ describe("assets.map.json", () => {
     );
   });
 
+  it("keeps distinct font keys while deduplicating identical font bytes", async () => {
+    const fontBytes = bytes(0x77, 0x4f, 0x46, 0x32, 1);
+    const { workspace } = await committed([
+      { key: "PopupA.woff2", mediaType: "font/woff2", bytes: fontBytes },
+      { key: "PopupB.woff2", mediaType: "font/woff2", bytes: fontBytes },
+    ]);
+    const map = createEditorAssetsMapFromWorkspace(workspace);
+    expect(map.files["PopupA.woff2"]!.path).toBe(
+      map.files["PopupB.woff2"]!.path,
+    );
+    expect(map.files["PopupA.woff2"]!.sha256).toBe(
+      map.files["PopupB.woff2"]!.sha256,
+    );
+    expect(materializeEditorAssetPayloads(workspace).size).toBe(1);
+  });
+
   it("uses canonical jpg payload extension for a jpeg key", async () => {
     const entry = await createEditorAssetEntry({
       key: "Photo.JPEG",
