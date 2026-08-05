@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { parseSceneLayoutAssetGroups } from "../src/asset-groups.js";
+import {
+  createSceneLayoutAssetGroups,
+  parseSceneLayoutAssetGroups,
+} from "../src/asset-groups.js";
 
 describe("asset-groups v1 parser", () => {
   it("rejects unknown fields, uncovered assets and wrong deltas", () => {
@@ -55,7 +58,89 @@ describe("asset-groups v1 parser", () => {
       popupId: "free-game",
     });
   });
+
+  it("keeps global layer assets shared and assigns scoped layers to one mode", () => {
+    const keys = ["base.png", "free.png", "shared.png", "free-only.png"];
+    const manifest = {
+      version: 1,
+      kind: "scene-layout",
+      id: "layout",
+      nodes: [
+        imageNode("base-bg", "base.png"),
+        imageNode("free-bg", "free.png"),
+        imageNode("shared", "shared.png"),
+        { ...imageNode("free-only", "free-only.png"), gameMode: "FreeGame" },
+      ],
+      gameModes: {
+        initialMode: "BaseGame",
+        modes: [
+          { id: "BaseGame", backgroundNodes: { default: "base-bg" } },
+          { id: "FreeGame", backgroundNodes: { default: "free-bg" } },
+        ],
+        transitions: [],
+      },
+    } as never;
+    const outputAssets = new Map(
+      keys.map((key) => [
+        key,
+        {
+          key,
+          sourceKey: key,
+          bytes: new Uint8Array([1]),
+          sourceByteLength: 1,
+          converted: false,
+          mediaType: "image/png",
+        },
+      ]),
+    );
+    const groups = createSceneLayoutAssetGroups({
+      manifest,
+      files: new Map(),
+      sourceZipBytes: 4,
+      output: {
+        zipBytes: new Uint8Array(),
+        assets: outputAssets,
+        assetsMap: {
+          version: 1,
+          files: Object.fromEntries(
+            keys.map((key) => [
+              key,
+              {
+                path: key,
+                mediaType: "image/png",
+                sha256: "a".repeat(64),
+                byteLength: 1,
+              },
+            ]),
+          ),
+        },
+      } as never,
+      quality: 80,
+      cwebpVersion: "test",
+      convertedImageCount: 0,
+    });
+    expect(
+      groups.groups.find((group) => group.id === "shared")?.requiredAssets,
+    ).toEqual(["shared.png"]);
+    expect(
+      groups.groups.find((group) => group.id === "mode:BaseGame")
+        ?.requiredAssets,
+    ).toEqual(["base.png", "shared.png"]);
+    expect(
+      groups.groups.find((group) => group.id === "mode:FreeGame")
+        ?.requiredAssets,
+    ).toEqual(["free-only.png", "free.png", "shared.png"]);
+  });
 });
+
+function imageNode(id: string, path: string) {
+  return {
+    id,
+    order: 0,
+    resource: { kind: "image", path, size: { width: 1, height: 1 } },
+    placements: { default: { x: 0, y: 0, scale: 1 } },
+  };
+}
 
 function fixture() {
   const asset = {

@@ -84,6 +84,7 @@ ZIP 与 JSON 作为一对提交，第二个文件提交失败时会回滚第一�
 拥有：`A -> B` 属于 A，`B -> A` 属于 B。初始集合包含 shared、initial mode、
 initial mode 使用的 symbols、award popup，以及 initial mode 发出的转场及其 prelude closure；
 没有 transition owner 的 programmatic Spine Popup 进入 initial，非 initial source 的 transition-only Popup 留在增量组。
+缺少 node `gameMode` 的旧普通图层和显式全局普通图层进入 `shared` 并出现在每个 mode 的完整闭包；绑定单一 `gameMode` 的普通图层只进入 exact mode。背景继续由各 mode 的 `backgroundNodes` 拥有，图层 `order` 不参与资源归属。
 
 资源允许同时出现在多个 `requiredAssets` 闭包中，但每个优化资源必须至少被一个 group
 覆盖。所有列表与 JSON key 都确定性排序；相同输入和相同 cwebp 输出会得到 byte-equal

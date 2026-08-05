@@ -9,6 +9,7 @@ import {
   type SceneLayoutRuntime,
   type SceneLayoutPackageRuntime,
   type SceneLayoutSnapshot,
+  type SceneLayoutVariantId,
 } from "@slotclientengine/rendercore/scene-layout";
 import {
   createSymbolPackageValueControllerFactory,
@@ -322,6 +323,19 @@ export class LayoutPreview {
 
   getGameModeSnapshot() {
     return this.#packageRuntime?.getGameModeSnapshot() ?? null;
+  }
+
+  getCurrentVariantId(): SceneLayoutVariantId | null {
+    return this.#lastLayoutSnapshot?.variantId ?? null;
+  }
+
+  async selectAuthoringGameMode(modeId: string): Promise<void> {
+    if (!this.#packageRuntime)
+      throw new Error("当前 layout preview 没有 package runtime。");
+    await this.#packageRuntime.selectAuthoringGameMode(
+      modeId,
+      this.gameModeRequestOptions(modeId),
+    );
   }
 
   requestDismissGameModePrelude(): void {

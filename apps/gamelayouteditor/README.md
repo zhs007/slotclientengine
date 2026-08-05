@@ -23,6 +23,8 @@ layout 大纲选中普通图层后，preview 使用红框和半透明红色斜�
 
 普通图层的 `order` 可直接输入安全整数，不会因其它编辑被自动压缩重排；main reel 仍可使用默认 `999`，普通图层允许配置到其上方。node、main reel 与 Popup root 的 order 全局不得重复；Popup root 默认从 `2000` 分配且必须高于全部 node/main reel，其值可在 Popup 工作区或引用它的转场中修改。背景和 main reel 继续作为大纲中的特殊项展示。
 
+普通图层默认勾选“所有状态有效”；取消后必须且只能绑定一个大小写精确的主状态。状态范围位于横屏/竖屏可见性外层，实际显示要求状态匹配且当前 variant 存在 placement。当前编辑状态或预览方向下不可见的图层在大纲灰显但仍可选中，隐藏不会删除节点或改变全局 `order`。旧 layout 缺少 node `gameMode` 时继续按全局图层读取和导出。
+
 项目 Tab 可在“左上角”和“中心”全局坐标间切换。切换会在一次事务中转换普通图层、背景、main reel 和 art-space Spine transition 的现有 placement，视觉位置保持不变；popup 与 video 不参与转换。旧包缺少坐标字段时按左上角读取。
 
 main reel 只提供横竖屏 `x/y` placement，不提供整体缩放。双背景适配通过美术调整背景素材宽度、art size 和 reel 位置完成，避免横竖屏分别缩放转轮造成额外布局差异。
@@ -44,6 +46,8 @@ Spine atlas 的 page 是 atlas 内部逻辑名，texture map 的 value 才是全
 ## 主状态与转场
 
 新增 mode 的每个 active variant 背景保持未绑定，必须逐 variant 选择。稳定 Spine 背景只使用显式 single loop；相同资源跨 mode 仍保留独立 node/player/placement，切 mode 不释放重建。
+
+默认开启“跟随编辑状态”时，切换编辑状态会让右侧画布直接选择同一稳定状态，不要求存在转场也不播放 overlay；这是仅供 authoring preview 使用的入口。转场工作区仍通过 production 有向边准备和播放真实转场，两条路径不会互相替代。
 
 转场是显式有向边，只自动准备当前 stable source 到所选 target 的直接边；缺边不瞬切、不反向复用、不寻路。Spine overlay 使用 exact animation/event occurrence；MP4 使用 viewport-space video blackout、真实 media-time fadeStart、trusted-click 调用栈内同步 audible `play()`。两者共享单一状态切换动作、预准备、原子切换与 rollback，保持 Task 116 合同。
 

@@ -35,6 +35,7 @@ const state = vi.hoisted(() => {
     })),
     getActiveAwardCelebrationSnapshot: vi.fn(() => null),
     requestGameMode: vi.fn(async () => undefined),
+    selectAuthoringGameMode: vi.fn(async () => undefined),
     resetReelScene: vi.fn(),
   };
   const pkg = {
@@ -323,6 +324,12 @@ describe("LayoutPreview", () => {
     expect(state.packageRuntime.init).toHaveBeenCalledWith({});
     expect(preview.getGameModeIds()).toEqual(["BaseGame", "FreeGame"]);
     await preview.requestGameMode("FreeGame");
+    await preview.selectAuthoringGameMode("FreeGame");
+    expect(state.packageRuntime.selectAuthoringGameMode).toHaveBeenCalledWith(
+      "FreeGame",
+      {},
+    );
+    expect(preview.getCurrentVariantId()).toBe("default");
     preview.playAwardCelebration({ betAmountRaw: 100, winAmountRaw: 6000 });
     expect(
       state.packageRuntime.dismissActiveAwardCelebrationImmediately,

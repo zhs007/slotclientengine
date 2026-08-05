@@ -125,6 +125,8 @@ export type SceneLayoutRuntimeResourceSpec =
 export interface SceneLayoutNode {
   readonly id: string;
   readonly order: number;
+  /** Missing means the ordinary node is visible in every game mode. */
+  readonly gameMode?: string;
   readonly resource: SceneLayoutNodeResourceSpec;
   readonly placements: Readonly<
     Partial<Record<SceneLayoutVariantId, SceneLayoutNodePlacement>>
@@ -538,6 +540,14 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   getGameModeIds(): readonly string[];
   /** Returns the committed mode and any transition target without mutating playback. */
   getGameModeSnapshot(): SceneLayoutGameModeSnapshot;
+  /**
+   * Selects a stable mode without playing its directed transition.
+   * @internal Game Layout Editor authoring preview only.
+   */
+  selectAuthoringGameMode(
+    modeId: string,
+    options?: SceneLayoutGameModeRequestOptions,
+  ): Promise<void>;
   /**
    * Prepares the complete target scene and transition media without changing
    * the displayed or stable mode. Video transitions must be prepared before

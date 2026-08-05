@@ -475,6 +475,21 @@ h3 {
   background: #14372f;
 }
 
+.outline-group button.is-currently-hidden:not([aria-selected="true"]) {
+  opacity: 0.45;
+  filter: grayscale(0.8);
+}
+
+.layer-state-scope,
+.layer-state-variants {
+  display: grid;
+  gap: 10px;
+}
+
+.layer-state-variants {
+  margin-top: 4px;
+}
+
 .outline-group small,
 .outline-empty {
   overflow: hidden;

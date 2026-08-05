@@ -78,6 +78,8 @@ export type EditorVniPlaybackDraft = {
 export interface EditorNodeDraft {
   id: string;
   order: number;
+  /** Missing means the ordinary layer is effective in every game mode. */
+  gameMode?: string;
   resourceId: string;
   playback?: EditorSpinePlaybackDraft | EditorVniPlaybackDraft;
   imageString?: {
@@ -597,7 +599,12 @@ export function editorProjectToPreviewManifest(
     if (!placement) return null;
     const nodes = project.nodes.flatMap((node) => {
       const nodePlacement = node.placements[available];
-      if (!nodePlacement) return [];
+      if (
+        !nodePlacement ||
+        (node.gameMode !== undefined &&
+          node.gameMode !== project.gameModes.initialMode)
+      )
+        return [];
       try {
         return [
           {
@@ -684,6 +691,7 @@ export function editorProjectToManifest(
     nodes: project.nodes.map((node) => ({
       id: node.id,
       order: node.order,
+      ...(node.gameMode ? { gameMode: node.gameMode } : {}),
       resource: resolveEditorNodeResource(project, node),
       placements: node.placements,
     })),
@@ -996,6 +1004,7 @@ export function manifestToEditorProject(
     return {
       id: node.id,
       order: node.order,
+      ...(node.gameMode ? { gameMode: node.gameMode } : {}),
       resourceId,
       ...(node.resource.kind === "spine"
         ? {

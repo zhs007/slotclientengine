@@ -36,6 +36,18 @@ const previewSpies = vi.hoisted(() => ({
   ),
   cancelPreparedGameModeTransition: vi.fn(),
   requestGameMode: vi.fn(async (): Promise<void> => undefined),
+  selectAuthoringGameMode: vi.fn(async (target: string): Promise<void> => {
+    const current = previewSpies.getGameModeSnapshot();
+    if (current)
+      previewSpies.getGameModeSnapshot.mockReturnValue({
+        ...current,
+        stableMode: target,
+        displayedMode: target,
+        targetMode: null,
+        phase: "stable",
+      });
+  }),
+  getCurrentVariantId: vi.fn(() => "default"),
   requestDismissGameModePrelude: vi.fn(),
   getGameModeSnapshot: vi.fn((): any => null),
   getActiveAwardCelebrationSnapshot: vi.fn((): any => null),
@@ -142,6 +154,8 @@ vi.mock("../src/preview/layout-preview.js", () => ({
     cancelPreparedGameModeTransition =
       previewSpies.cancelPreparedGameModeTransition;
     requestGameMode = previewSpies.requestGameMode;
+    selectAuthoringGameMode = previewSpies.selectAuthoringGameMode;
+    getCurrentVariantId = previewSpies.getCurrentVariantId;
     requestDismissGameModePrelude = previewSpies.requestDismissGameModePrelude;
     getGameModeSnapshot = previewSpies.getGameModeSnapshot;
     getActiveAwardCelebrationSnapshot =
@@ -193,6 +207,20 @@ describe("GameLayoutEditorApp workspace", () => {
     previewSpies.getGameModeSnapshot.mockReturnValue(null);
     previewSpies.getActiveAwardCelebrationSnapshot.mockReturnValue(null);
     previewSpies.requestGameMode.mockResolvedValue(undefined);
+    previewSpies.selectAuthoringGameMode.mockImplementation(
+      async (target: string): Promise<void> => {
+        const current = previewSpies.getGameModeSnapshot();
+        if (current)
+          previewSpies.getGameModeSnapshot.mockReturnValue({
+            ...current,
+            stableMode: target,
+            displayedMode: target,
+            targetMode: null,
+            phase: "stable",
+          });
+      },
+    );
+    previewSpies.getCurrentVariantId.mockReturnValue("default");
     previewSpies.prepareGameModeTransition.mockResolvedValue(undefined);
     previewSpies.setSymbolPackage.mockResolvedValue(null);
     window.confirm = vi.fn(() => true);
@@ -1219,6 +1247,19 @@ describe("GameLayoutEditorApp workspace", () => {
       activeBackgroundNodes: ["background"],
     };
     previewSpies.getGameModeSnapshot.mockImplementation(() => currentSnapshot);
+    previewSpies.selectAuthoringGameMode.mockImplementation(
+      async (target: string) => {
+        currentSnapshot = {
+          ...currentSnapshot,
+          stableMode: target,
+          displayedMode: target,
+          targetMode: null,
+          phase: "stable",
+          preparedTargetMode: null,
+          transitionKind: null,
+        };
+      },
+    );
     previewSpies.prepareGameModeTransition.mockImplementation(
       async (target: string) => {
         currentSnapshot = {
@@ -1305,6 +1346,14 @@ describe("GameLayoutEditorApp workspace", () => {
         "[data-resource-picker] [data-picker-confirm]",
       ) as HTMLButtonElement
     ).click();
+    const editMode = root.querySelector(
+      "[data-game-mode]",
+    ) as HTMLSelectElement;
+    editMode.value = "BaseGame";
+    editMode.dispatchEvent(new Event("change"));
+    await vi.waitFor(() =>
+      expect(previewSpies.getGameModeSnapshot()?.stableMode).toBe("BaseGame"),
+    );
     (
       root.querySelector(
         '[data-workspace-tab="transitions"]',
@@ -1473,6 +1522,20 @@ describe("GameLayoutEditorApp workspace", () => {
       activeBackgroundNodes: ["basegame-default-background"],
     };
     previewSpies.getGameModeSnapshot.mockImplementation(() => currentSnapshot);
+    previewSpies.selectAuthoringGameMode.mockImplementation(
+      async (target: string) => {
+        currentSnapshot = {
+          ...currentSnapshot,
+          stableMode: target,
+          displayedMode: target,
+          targetMode: null,
+          phase: "stable",
+          preparedTargetMode: null,
+          transitionKind: null,
+          mediaDurationSeconds: null,
+        };
+      },
+    );
     let finishFirstPrepare!: () => void;
     const firstPrepare = new Promise<void>((resolve) => {
       finishFirstPrepare = resolve;
@@ -1574,6 +1637,20 @@ describe("GameLayoutEditorApp workspace", () => {
         "[data-resource-picker] [data-picker-confirm]",
       ) as HTMLButtonElement
     ).click();
+
+    const editMode = root.querySelector(
+      "[data-game-mode]",
+    ) as HTMLSelectElement;
+    editMode.value = "BaseGame";
+    editMode.dispatchEvent(new Event("change"));
+    await vi.waitFor(() =>
+      expect(previewSpies.getGameModeSnapshot()?.stableMode).toBe("BaseGame"),
+    );
+    const previewTarget = root.querySelector(
+      "[data-preview-game-mode]",
+    ) as HTMLSelectElement;
+    previewTarget.value = "FreeGame";
+    previewTarget.dispatchEvent(new Event("change"));
 
     await vi.waitFor(() =>
       expect(

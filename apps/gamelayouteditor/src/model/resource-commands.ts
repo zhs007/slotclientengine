@@ -980,6 +980,21 @@ export function setLayerVariantVisibility(
   delete node.placements[variant];
 }
 
+export function setLayerGameMode(
+  project: EditorProject,
+  nodeId: string,
+  gameMode: string | null,
+): void {
+  const node = requireLayer(project, nodeId);
+  if (gameMode === null) {
+    delete node.gameMode;
+    return;
+  }
+  if (!project.gameModes.modes.some((mode) => mode.id === gameMode))
+    throw new Error(`未知游戏模式：${gameMode}`);
+  node.gameMode = gameMode;
+}
+
 export function suggestNodeId(
   project: EditorProject,
   resourceId: string,

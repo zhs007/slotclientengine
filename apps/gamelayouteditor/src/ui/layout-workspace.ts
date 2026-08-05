@@ -4,6 +4,7 @@ import {
   type EditorNodeDraft,
   type EditorProject,
 } from "../model/editor-project.js";
+import type { SceneLayoutVariantId } from "@slotclientengine/rendercore/scene-layout";
 import type { EditorLayoutResource } from "../model/editor-resource.js";
 import { describeResource } from "../model/resource-commands.js";
 import {
@@ -18,6 +19,7 @@ export function layoutWorkspaceMarkup(
   selection: LayoutSelection,
   modeId: string,
   session: EditorUiSession,
+  currentVariant: SceneLayoutVariantId | null = null,
 ): string {
   const backgroundIds = new Set(
     project.gameModes.modes
@@ -46,7 +48,28 @@ export function layoutWorkspaceMarkup(
           )
           .join("")}</div>
         <div class="outline-group"><strong>主转轮</strong>${outlineRow({ key: "reel:main", label: "main", meta: `${project.reel.columns}×${project.reel.rows} · ready`, selected: selection.kind === "reel" })}</div>
-        <div class="outline-group"><strong>图层 · ${layers.length}</strong>${layers.length ? layers.map((node) => outlineRow({ key: `layer:${node.id}`, label: node.id, meta: layerMeta(project, node), selected: selection.kind === "layer" && selection.nodeId === node.id })).join("") : '<span class="outline-empty">暂无普通图层</span>'}</div>
+        <div class="outline-group"><strong>图层 · ${layers.length}</strong>${
+          layers.length
+            ? layers
+                .map((node) => {
+                  const visible = layerVisibleInContext(
+                    node,
+                    modeId,
+                    currentVariant,
+                  );
+                  return outlineRow({
+                    key: `layer:${node.id}`,
+                    label: node.id,
+                    meta: layerMeta(project, node, visible),
+                    selected:
+                      selection.kind === "layer" &&
+                      selection.nodeId === node.id,
+                    muted: !visible,
+                  });
+                })
+                .join("")
+            : '<span class="outline-empty">暂无普通图层</span>'
+        }</div>
       </div>
     </aside>
     <section class="inspector" aria-live="polite">${inspectorMarkup(project, selection, layers, modeId, session)}</section>
@@ -58,8 +81,9 @@ function outlineRow(options: {
   label: string;
   meta: string;
   selected: boolean;
+  muted?: boolean;
 }): string {
-  return `<button type="button" role="option" id="outline-${escapeHtml(options.key)}" data-outline-key="${escapeHtml(options.key)}" aria-selected="${options.selected}"><span>${escapeHtml(options.label)}</span><small>${escapeHtml(options.meta)}</small></button>`;
+  return `<button type="button" role="option" id="outline-${escapeHtml(options.key)}" data-outline-key="${escapeHtml(options.key)}" aria-selected="${options.selected}" ${options.muted ? 'class="is-currently-hidden" data-currently-hidden="true"' : ""}><span>${escapeHtml(options.label)}</span><small>${escapeHtml(options.meta)}</small></button>`;
 }
 
 function backgroundMeta(
@@ -80,9 +104,25 @@ function backgroundMeta(
     : "未知资源 · error";
 }
 
-function layerMeta(project: EditorProject, node: EditorNodeDraft): string {
+function layerMeta(
+  project: EditorProject,
+  node: EditorNodeDraft,
+  visible: boolean,
+): string {
   const resource = project.resources.get(node.resourceId);
-  return `${resource?.kind ?? "unknown"} · order ${node.order} · ${resource ? "ready" : "error"}`;
+  const scope = node.gameMode ? `仅 ${node.gameMode}` : "所有状态";
+  return `${resource?.kind ?? "unknown"} · order ${node.order} · ${scope} · ${visible ? (resource ? "ready" : "error") : "当前状态不显示"}`;
+}
+
+function layerVisibleInContext(
+  node: EditorNodeDraft,
+  modeId: string,
+  variant: SceneLayoutVariantId | null,
+): boolean {
+  return (
+    (node.gameMode === undefined || node.gameMode === modeId) &&
+    (variant === null || Boolean(node.placements[variant]))
+  );
 }
 
 function inspectorMarkup(
@@ -98,7 +138,7 @@ function inspectorMarkup(
   if (selection.kind === "reel") return reelInspector(project, session);
   const node = project.nodes.find((item) => item.id === selection.nodeId);
   return node
-    ? layerInspector(project, node, layers)
+    ? layerInspector(project, node, layers, modeId)
     : '<div class="empty-state">所选图层已不存在。</div>';
 }
 
@@ -142,17 +182,25 @@ function layerInspector(
   project: EditorProject,
   node: EditorNodeDraft,
   layers: readonly EditorNodeDraft[],
+  modeId: string,
 ): string {
   const resource = project.resources.get(node.resourceId);
   const index = project.nodes.findIndex((item) => item.id === node.id);
   const layerIndex = layers.findIndex((item) => item.id === node.id);
-  return `<div class="inspector-inner"><div class="inspector-heading" tabindex="-1" data-inspector-heading><span>图层 Inspector</span><h2>${escapeHtml(node.id)}</h2></div><section class="inspector-section"><h3>身份与资源</h3>${nodeIdField(node)}${numberField("order", `nodes.${index}.order`, node.order)}<p class="path">${resource ? escapeHtml(describeResource(resource)) : "未知资源"}</p><div class="button-row"><button type="button" data-rebind-layer="${escapeHtml(node.id)}">更换资源</button><button type="button" data-move-layer="-1" ${layerIndex <= 0 ? "disabled" : ""}>上移</button><button type="button" data-move-layer="1" ${layerIndex < 0 || layerIndex >= layers.length - 1 ? "disabled" : ""}>下移</button></div><p class="hint">可直接填写高于 main reel 的 order；order 必须唯一，且所有 Popup order 必须更高。</p>${resource?.kind === "spine" ? spinePlaybackEditor(resource, node) : resource?.kind === "vni" ? vniPlaybackEditor(node) : resource?.kind === "image-string" ? imageStringEditor(node) : ""}</section><section class="inspector-section"><h3>方向与 Placement</h3>${activeVariantIds(
+  const modeOptions = project.gameModes.modes
+    .map(
+      (mode) =>
+        `<option value="${escapeHtml(mode.id)}" ${mode.id === node.gameMode ? "selected" : ""}>${escapeHtml(mode.id)}</option>`,
+    )
+    .join("");
+  const scopeLabel = node.gameMode ?? "所有状态";
+  return `<div class="inspector-inner"><div class="inspector-heading" tabindex="-1" data-inspector-heading><span>图层 Inspector</span><h2>${escapeHtml(node.id)}</h2></div><section class="inspector-section"><h3>身份与资源</h3>${nodeIdField(node)}${numberField("order", `nodes.${index}.order`, node.order)}<p class="path">${resource ? escapeHtml(describeResource(resource)) : "未知资源"}</p><div class="button-row"><button type="button" data-rebind-layer="${escapeHtml(node.id)}">更换资源</button><button type="button" data-move-layer="-1" ${layerIndex <= 0 ? "disabled" : ""}>上移</button><button type="button" data-move-layer="1" ${layerIndex < 0 || layerIndex >= layers.length - 1 ? "disabled" : ""}>下移</button></div><p class="hint">可直接填写高于 main reel 的 order；order 必须唯一，且所有 Popup order 必须更高。</p>${resource?.kind === "spine" ? spinePlaybackEditor(resource, node) : resource?.kind === "vni" ? vniPlaybackEditor(node) : resource?.kind === "image-string" ? imageStringEditor(node) : ""}</section><section class="inspector-section"><h3>状态、方向与 Placement</h3><fieldset class="layer-state-scope"><legend>${escapeHtml(scopeLabel)}</legend><label class="visibility"><input type="checkbox" data-layer-global="${escapeHtml(node.id)}" ${node.gameMode === undefined ? "checked" : ""}/> 所有状态有效</label>${node.gameMode === undefined ? "" : `<label>绑定状态<select data-layer-game-mode="${escapeHtml(node.id)}">${modeOptions}</select></label>`}<p class="hint">取消全局后，图层只能绑定一个状态；当前编辑状态为 ${escapeHtml(modeId)}。</p><div class="layer-state-variants">${activeVariantIds(
     project,
   )
     .map((variant) => placementMarkup(node, index, variant, project.mode))
     .join(
       "",
-    )}</section><section class="inspector-section danger-zone"><button type="button" class="danger" data-remove-layer="${escapeHtml(node.id)}">删除图层 ${escapeHtml(node.id)}</button><p>仅删除 node；资源与 bytes 保留在资源库。</p></section></div>`;
+    )}</div></fieldset></section><section class="inspector-section danger-zone"><button type="button" class="danger" data-remove-layer="${escapeHtml(node.id)}">删除图层 ${escapeHtml(node.id)}</button><p>仅删除 node；资源与 bytes 保留在资源库。</p></section></div>`;
 }
 
 function nodeIdField(node: EditorNodeDraft): string {
