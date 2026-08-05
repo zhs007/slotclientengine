@@ -314,6 +314,57 @@ describe("scene layout manifest", () => {
     expect(Object.isFrozen(parsed.gameModes?.modes)).toBe(true);
   });
 
+  it("keeps legacy layers global and strictly validates one optional mode scope", () => {
+    const scoped = structuredClone(gameModeManifest()) as any;
+    scoped.nodes.push({
+      ...game002LayoutFixture.nodes[0],
+      id: "free-only",
+      order: 1,
+      gameMode: "FreeGame",
+      resource: {
+        kind: "image",
+        path: "assets/free-only.png",
+        size: { width: 1, height: 1 },
+      },
+    });
+    const parsed = parseSceneLayoutManifest(scoped);
+    expect(parsed.nodes[0].gameMode).toBeUndefined();
+    expect(parsed.nodes[1].gameMode).toBe("FreeGame");
+
+    const statefulScoped = structuredClone(scoped);
+    statefulScoped.nodes[1].resource = structuredClone(
+      statefulScoped.nodes[0].resource,
+    );
+    statefulScoped.gameModes.modes[1].nodeStates["free-only"] = "FG";
+    expect(() => parseSceneLayoutManifest(statefulScoped)).not.toThrow();
+    statefulScoped.gameModes.modes[0].nodeStates["free-only"] = "BG";
+    expect(() => parseSceneLayoutManifest(statefulScoped)).toThrow(
+      /nodeStates must cover/,
+    );
+
+    const unknown = structuredClone(scoped);
+    unknown.nodes[1].gameMode = "Missing";
+    expect(() => parseSceneLayoutManifest(unknown)).toThrow(/unknown mode/);
+
+    const scopedBackground = structuredClone(scoped);
+    scopedBackground.nodes[0].gameMode = "BaseGame";
+    expect(() => parseSceneLayoutManifest(scopedBackground)).toThrow(
+      /background node.*gameMode/,
+    );
+
+    const noModes = structuredClone(scoped);
+    delete noModes.gameModes;
+    expect(() => parseSceneLayoutManifest(noModes)).toThrow(
+      /requires gameModes/,
+    );
+
+    const changedScope = structuredClone(scoped);
+    changedScope.nodes[1].gameMode = "BonusGame";
+    expect(() =>
+      assertSceneLayoutGeometryCompatible(scoped, changedScope),
+    ).toThrow(/immutable structure/);
+  });
+
   it("parses canonical mode backgrounds and plural symbol bindings strictly", () => {
     const canonical = {
       ...game002LayoutFixture,

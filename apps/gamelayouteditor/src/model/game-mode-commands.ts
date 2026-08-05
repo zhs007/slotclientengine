@@ -44,6 +44,8 @@ export function renameGameMode(
   )
     throw new Error(`游戏模式已存在：${nextId}`);
   mode.id = nextId;
+  for (const node of project.nodes)
+    if (node.gameMode === currentId) node.gameMode = nextId;
   for (const transition of project.gameModes.transitions) {
     if (transition.fromModeId === currentId) transition.fromModeId = nextId;
     if (transition.toModeId === currentId) transition.toModeId = nextId;
@@ -67,6 +69,13 @@ export function deleteGameMode(project: EditorProject, id: string): void {
           (transition) => `${transition.fromModeId} -> ${transition.toModeId}`,
         )
         .join(", ")}`,
+    );
+  const layerReferences = project.nodes
+    .filter((node) => node.gameMode === id)
+    .map((node) => node.id);
+  if (layerReferences.length)
+    throw new Error(
+      `游戏模式 ${id} 仍被普通图层引用：${layerReferences.join(", ")}`,
     );
   const index = project.gameModes.modes.findIndex((mode) => mode.id === id);
   if (index < 0) throw new Error(`未知游戏模式：${id}`);
@@ -108,6 +117,10 @@ export function bindGameModeBackground(
   const mode = requireMode(project, modeId);
   const node = project.nodes.find((candidate) => candidate.id === nodeId);
   if (!node) throw new Error(`未知背景节点：${nodeId}`);
+  if (node.gameMode !== undefined)
+    throw new Error(
+      `背景节点 ${nodeId} 不能绑定普通图层状态 ${node.gameMode}；请先设为所有状态有效。`,
+    );
   const resource = project.resources.get(node.resourceId);
   if (
     !resource ||

@@ -56,6 +56,7 @@ import {
   replaceSpineResource,
   replaceVideoResource,
   setLayerVariantVisibility,
+  setLayerGameMode,
   setImageStringLayerAnchor,
   setImageStringLayerText,
   setNodeDefaultAnimation,
@@ -350,7 +351,9 @@ export class GameLayoutEditorApp {
         this.reconcileSelectedTransitionForTarget();
         this.renderWorkspace(this.#store.getSnapshot());
         this.renderPopupControls(this.#store.getSnapshot());
-        void this.ensurePreviewTransitionPrepared();
+        if (this.#followEditMode)
+          void this.selectAuthoringPreviewMode(this.#selectedGameMode);
+        else void this.ensurePreviewTransitionPrepared();
       },
     );
     this.requireSelect("[data-preview-game-mode]").addEventListener(
@@ -380,7 +383,7 @@ export class GameLayoutEditorApp {
             this.#store.getSnapshot().project,
             this.#preview?.getGameModeSnapshot() ?? null,
           );
-          void this.ensurePreviewTransitionPrepared();
+          void this.selectAuthoringPreviewMode(this.#selectedGameMode);
         }
       },
     );
@@ -670,6 +673,68 @@ export class GameLayoutEditorApp {
     this.#selectedPopupId = null;
     this.#store.replace(createNewEditorProject(mode));
     this.showFeedback("已新建项目。先上传资源，再显式设置背景或添加图层。");
+  }
+
+  private async selectAuthoringPreviewMode(
+    modeId: string,
+    syncPreviewTarget = true,
+  ): Promise<void> {
+    const preview = this.#preview;
+    const projectRevision = this.#store.getSnapshot().revision;
+    const snapshot = preview?.getGameModeSnapshot() ?? null;
+    if (
+      !preview ||
+      !snapshot ||
+      this.#previewReadyProjectRevision !== projectRevision
+    )
+      return;
+    if (this.#previewModeBusy || snapshot.phase === "transitioning") {
+      this.#store.setExternalError(
+        new Error("真实转场进行中，暂时不能切换编辑预览状态。"),
+      );
+      return;
+    }
+    const request = ++this.#previewModeRequest;
+    this.#previewPrepareRequest += 1;
+    this.#previewPrepareIdentity = null;
+    this.#previewModeBusy = true;
+    this.#session.previewTransition = {
+      phase: "idle",
+      message: `正在切换编辑预览到 ${modeId}。`,
+    };
+    this.renderPreviewModeProgress();
+    try {
+      await preview.selectAuthoringGameMode(modeId);
+      if (request !== this.#previewModeRequest || this.#destroyed) return;
+      const settled = preview.getGameModeSnapshot();
+      if (
+        !settled ||
+        settled.phase !== "stable" ||
+        settled.stableMode !== modeId ||
+        settled.displayedMode !== modeId
+      )
+        throw new Error(`编辑预览未稳定在目标状态 ${modeId}。`);
+      if (syncPreviewTarget) this.#selectedPreviewMode = modeId;
+      this.#session.previewTransition = {
+        phase: "complete",
+        stableMode: modeId,
+      };
+      this.#store.clearExternalError();
+    } catch (error) {
+      if (request !== this.#previewModeRequest || this.#destroyed) return;
+      this.#session.previewTransition = {
+        phase: "error",
+        message: formatUiError(error),
+      };
+      this.#store.setExternalError(error);
+    } finally {
+      if (request === this.#previewModeRequest && !this.#destroyed) {
+        this.#previewModeBusy = false;
+        this.renderWorkspace(this.#store.getSnapshot());
+        this.renderPopupControls(this.#store.getSnapshot());
+        await this.ensurePreviewTransitionPrepared();
+      }
+    }
   }
 
   private requestPreviewMode(modeId: string): void {
@@ -1057,6 +1122,7 @@ export class GameLayoutEditorApp {
                 this.#session.selection,
                 this.#selectedGameMode,
                 this.#session,
+                this.#preview?.getCurrentVariantId() ?? null,
               )
             : this.#session.activeTab === "transitions"
               ? transitionsWorkspaceMarkup({
@@ -1271,7 +1337,9 @@ export class GameLayoutEditorApp {
           if (this.#followEditMode)
             this.#selectedPreviewMode = this.#selectedGameMode;
           this.renderWorkspace(this.#store.getSnapshot());
-          void this.ensurePreviewTransitionPrepared();
+          if (this.#followEditMode)
+            void this.selectAuthoringPreviewMode(this.#selectedGameMode);
+          else void this.ensurePreviewTransitionPrepared();
         }),
       );
     dialog
@@ -1290,7 +1358,6 @@ export class GameLayoutEditorApp {
         this.#modeDialogFeedback = `已创建状态 ${id}`;
         if (this.#followEditMode) this.#selectedPreviewMode = id;
         this.renderWorkspace(this.#store.getSnapshot());
-        void this.ensurePreviewTransitionPrepared();
       });
     dialog
       .querySelector<HTMLButtonElement>("[data-rename-game-mode]")!
@@ -1310,7 +1377,6 @@ export class GameLayoutEditorApp {
           this.#selectedPreviewMode = next;
         this.#modeDialogFeedback = `已将状态 ${previous} 重命名为 ${next}`;
         this.renderWorkspace(this.#store.getSnapshot());
-        void this.ensurePreviewTransitionPrepared();
       });
     dialog
       .querySelector<HTMLButtonElement>("[data-set-initial-mode]")!
@@ -1345,7 +1411,6 @@ export class GameLayoutEditorApp {
         this.#modeDialogRenameId = next;
         this.#modeDialogFeedback = `已删除状态 ${removed}`;
         this.renderWorkspace(this.#store.getSnapshot());
-        void this.ensurePreviewTransitionPrepared();
       });
   }
 
@@ -1945,6 +2010,38 @@ export class GameLayoutEditorApp {
         );
       });
     }
+    panel
+      .querySelectorAll<HTMLInputElement>("[data-layer-global]")
+      .forEach((input) =>
+        input.addEventListener("change", () =>
+          this.runTransaction(
+            (draft) =>
+              setLayerGameMode(
+                draft,
+                input.dataset.layerGlobal!,
+                input.checked ? null : this.#selectedGameMode,
+              ),
+            input.checked
+              ? "图层已设为所有状态有效。"
+              : `图层已绑定状态 ${this.#selectedGameMode}。`,
+          ),
+        ),
+      );
+    panel
+      .querySelectorAll<HTMLSelectElement>("[data-layer-game-mode]")
+      .forEach((select) =>
+        select.addEventListener("change", () =>
+          this.runTransaction(
+            (draft) =>
+              setLayerGameMode(
+                draft,
+                select.dataset.layerGameMode!,
+                select.value,
+              ),
+            `图层已绑定状态 ${select.value}。`,
+          ),
+        ),
+      );
     panel
       .querySelectorAll<HTMLInputElement>("[data-layer-visible]")
       .forEach((input) =>
@@ -2855,6 +2952,10 @@ export class GameLayoutEditorApp {
       await this.#preview?.setLayout(manifest, assets);
       if (revision === this.#previewRevision) {
         this.#previewReadyProjectRevision = snapshot.revision;
+        if (this.#followEditMode) {
+          await this.selectAuthoringPreviewMode(this.#selectedGameMode, false);
+          return;
+        }
         this.reconcileSelectedTransitionForTarget();
         this.renderPopupControls(this.#store.getSnapshot());
         await this.ensurePreviewTransitionPrepared();

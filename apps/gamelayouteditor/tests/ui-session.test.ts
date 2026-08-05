@@ -3,7 +3,9 @@ import { createNewEditorProject } from "../src/model/editor-project.js";
 import {
   addLayerFromResource,
   assignBackgroundResource,
+  setLayerGameMode,
 } from "../src/model/resource-commands.js";
+import { addGameMode } from "../src/model/game-mode-commands.js";
 import {
   createResourcePickerState,
   getResourcePickerCandidates,
@@ -163,5 +165,31 @@ describe("editor UI session and Resource Picker view model", () => {
     expect(markup).toContain("背景 Placement");
     expect(markup).toContain('data-number="nodes.0.placements.landscape.x"');
     expect(markup).toContain("export bounds 3744.3176×2371.955（非 art size）");
+  });
+
+  it("renders mode scope above variants and grays layers hidden in the edit context", () => {
+    const project = projectWithResources();
+    addGameMode(project, "FreeGame");
+    addLayerFromResource({
+      project,
+      resourceId: "background",
+      nodeId: "free-only",
+      variants: ["landscape"],
+    });
+    setLayerGameMode(project, "free-only", "FreeGame");
+    const markup = layoutWorkspaceMarkup(
+      project,
+      { kind: "layer", nodeId: "free-only" },
+      "BaseGame",
+      createEditorUiSession(),
+      "portrait",
+    );
+    expect(markup).toContain('data-currently-hidden="true"');
+    expect(markup).toContain('data-layer-global="free-only"');
+    expect(markup).toContain('data-layer-game-mode="free-only"');
+    expect(markup.indexOf("data-layer-global")).toBeLessThan(
+      markup.indexOf("data-layer-visible"),
+    );
+    expect(markup).toContain("仅 FreeGame");
   });
 });

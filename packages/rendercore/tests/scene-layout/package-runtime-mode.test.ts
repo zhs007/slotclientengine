@@ -105,7 +105,12 @@ function packageResource(withEdge = true, withPrelude = false) {
   };
   return {
     manifest: {
-      nodes: [],
+      nodes: [
+        { id: "base-bg", order: 0 },
+        { id: "free-bg", order: 1 },
+        { id: "shared", order: 2 },
+        { id: "free-only", order: 3, gameMode: "FreeGame" },
+      ],
       reels: {},
       gameModes: {
         initialMode: "BaseGame",
@@ -242,6 +247,8 @@ describe("scene layout package event-driven game-mode transition", () => {
     expect(state.runtime.setNodeActive.mock.calls).toEqual([
       ["base-bg", false],
       ["free-bg", true],
+      ["shared", true],
+      ["free-only", true],
     ]);
     expect(runtime.getGameModeSnapshot()).toMatchObject({
       stableMode: "BaseGame",
@@ -260,6 +267,35 @@ describe("scene layout package event-driven game-mode transition", () => {
       transitionPhase: null,
     });
     expect(state.runtime.requestNodeState).not.toHaveBeenCalled();
+    runtime.destroy();
+  });
+
+  it("selects an authoring mode without playing a production transition", async () => {
+    const { runtime, players } = createRuntime();
+    await runtime.init();
+    expect(state.runtime.setNodeActive.mock.calls).toEqual([
+      ["base-bg", true],
+      ["free-bg", false],
+      ["shared", true],
+      ["free-only", false],
+    ]);
+    state.runtime.setNodeActive.mockClear();
+
+    await runtime.selectAuthoringGameMode("FreeGame");
+
+    expect(players).toHaveLength(0);
+    expect(state.runtime.setNodeActive.mock.calls).toEqual([
+      ["base-bg", false],
+      ["free-bg", true],
+      ["shared", true],
+      ["free-only", true],
+    ]);
+    expect(runtime.getGameModeSnapshot()).toMatchObject({
+      stableMode: "FreeGame",
+      displayedMode: "FreeGame",
+      targetMode: null,
+      transitionPhase: null,
+    });
     runtime.destroy();
   });
 

@@ -47,7 +47,7 @@ export function createSceneLayoutAssetGroups(options: {
     ),
   );
   const sharedNodes = options.manifest.nodes.filter(
-    (node) => !allBackgroundIds.has(node.id),
+    (node) => !allBackgroundIds.has(node.id) && node.gameMode === undefined,
   );
   const sharedRequired = nodeClosure(sharedNodes, options.files);
   const provisional: ProvisionalAssetGroup[] = [
@@ -70,7 +70,10 @@ export function createSceneLayoutAssetGroups(options: {
   for (const mode of gameModes.modes) {
     const nodeIds = new Set(Object.values(mode.backgroundNodes ?? {}));
     const nodes = options.manifest.nodes.filter(
-      (node) => nodeIds.has(node.id) || sharedNodes.includes(node),
+      (node) =>
+        nodeIds.has(node.id) ||
+        sharedNodes.includes(node) ||
+        node.gameMode === mode.id,
     );
     provisional.push({
       id: `mode:${mode.id}`,

@@ -39,6 +39,13 @@ describe("game mode and popup dependency commands", () => {
   it("adds, renames, selects and deletes generic modes atomically", () => {
     const project = createNewEditorProject("maximized-focus");
     addGameMode(project, "FreeGame");
+    project.nodes.push({
+      id: "free-only",
+      order: 0,
+      resourceId: "unused",
+      gameMode: "FreeGame",
+      placements: { default: { x: 0, y: 0, scale: 1, rotation: 0 } },
+    });
     expect(project.gameModes.modes.map((mode) => mode.id)).toEqual([
       "BaseGame",
       "FreeGame",
@@ -49,14 +56,18 @@ describe("game mode and popup dependency commands", () => {
     expect(() => addGameMode(project, "FreeGame")).toThrow(/已存在/);
     expect(() => addGameMode(project, "bad id")).toThrow(/必须匹配/);
     renameGameMode(project, "FreeGame", "FG");
+    expect(project.nodes[0].gameMode).toBe("FG");
     renameGameMode(project, "FG", "FG");
     expect(() => renameGameMode(project, "FG", "BaseGame")).toThrow(/已存在/);
     setInitialGameMode(project, "FG");
     expect(project.gameModes.initialMode).toBe("FG");
     renameGameMode(project, "FG", "FreeGame");
+    expect(project.nodes[0].gameMode).toBe("FreeGame");
     expect(project.gameModes.initialMode).toBe("FreeGame");
     expect(() => deleteGameMode(project, "FreeGame")).toThrow(/initial/);
     setInitialGameMode(project, "BaseGame");
+    expect(() => deleteGameMode(project, "FreeGame")).toThrow(/普通图层引用/);
+    project.nodes[0].gameMode = undefined;
     deleteGameMode(project, "FreeGame");
     expect(() => deleteGameMode(project, "BaseGame")).toThrow(/至少/);
     expect(() => renameGameMode(project, "Missing", "Other")).toThrow(/未知/);

@@ -141,6 +141,26 @@ Spine atlas page 是 atlas 内部的逻辑标识，`textures` map 的 value 才�
 
 多个 mode/variant 可以引用同一资源 key，但稳定 background node 与 placement 必须独立；新增 mode 背景未绑定，node id 按 mode/variant 稳定生成。稳定 Spine node 只使用显式 single loop，mode 切换时保留 player 与 exact bytes。
 
+普通 node 可声明 optional、大小写精确的单一状态作用域：
+
+```json
+{
+  "id": "free-only-fx",
+  "order": 1200,
+  "gameMode": "FreeGame",
+  "resource": {
+    "kind": "image",
+    "path": "free-only-fx.png",
+    "size": { "width": 512, "height": 512 }
+  },
+  "placements": {
+    "landscape": { "x": 100, "y": 80, "scale": 1 }
+  }
+}
+```
+
+`gameMode` 缺失表示所有状态有效，并保持旧 v1 manifest/ZIP 的画面和资源归属；不接受空值、未知 mode、大小写 alias 或多个 mode。background node 继续由 `gameModes.modes[*].backgroundNodes` 绑定，禁止同时声明 `gameMode`。普通 node 最终可见性是“当前 stable/displayed mode 匹配（或全局）且当前 variant 有 placement”；隐藏不删除节点、不改变其跨状态、跨方向的全局 `order`。全局/legacy 普通节点归 shared 资源闭包，scoped 普通节点只归 exact mode。
+
 普通 Spine node 声明 exact `defaultAnimation` 和 boolean `loop`。普通 VNI node 声明 runtime project filename key 和 boolean `loop`，播放完整 timeline；同一 project 被多个 node 引用时仍创建独立 player/playhead。VNI node 可使用普通 placement/order/variant visibility，但不得作为 background 或 transition。
 
 transition 是独立有向边：
@@ -151,6 +171,8 @@ transition 是独立有向边：
 `preludePopup` 不能引用 award-celebration，也不能与 video blackout 同时出现；缺省时保持直接转场。每条 `from → to` 边独立保存该引用，因此多个转场可分别不配置、选择同一个或选择不同的普通 Spine Popup。snapshot 的 `transitionPhase` 为 `popup | before-switch | after-switch`，并用 `activePreludePopup` 报告当前前置弹窗。
 
 两分支字段严格互斥。runtime 只准备当前 stable source 到所选 target 的直接边；缺边不瞬切、不反向复用、不寻路。Spine event 或 video media-time fadeStart 边界原子切换 background/reel/displayed mode；prepare/once/ended/play rejection 均可 rollback。audible `play()` 必须在 trusted click 调用栈内同步触发，不自动静音或 wall-clock fallback。
+
+编辑器可以调用独立的 authoring stable-mode selection 来直接查看目标稳定画面；该入口不要求 transition edge，也不播放 overlay，并与 production `requestGameMode()` 分离。它仍使用同一 mode visibility commit；相同 Symbols binding 保留当前 reel/player/sample，不同 binding 必须先提供并成功准备目标公开 scene。
 
 ## 安全与确定性
 

@@ -269,7 +269,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       const initialMode = initialModeId
         ? this.requireMode(initialModeId)
         : null;
-      this.commitBackgroundVisibility(initialMode);
+      this.commitModeVisibility(initialMode);
       const activeBinding = this.resolveModeSymbolBinding(initialMode);
       if (activeBinding && !this.#presentationOnly) {
         const initial = options.reels?.main;
@@ -900,6 +900,97 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         : null,
       activeBackgroundNodes: this.#activeBackgroundNodes,
     });
+  }
+
+  async selectAuthoringGameMode(
+    modeId: string,
+    options: SceneLayoutGameModeRequestOptions = {},
+  ): Promise<void> {
+    this.assertCanPrepareTransition();
+    const target = this.requireMode(modeId);
+    if (modeId === this.#stableMode) {
+      if (options.recreateReel === true || options.reels?.main)
+        throw new SceneLayoutError(
+          "Current authoring game mode must not receive a redundant reel input.",
+        );
+      return;
+    }
+    if (options.recreateReel !== undefined)
+      throw new SceneLayoutError(
+        "Authoring game mode selection does not support recreateReel.",
+      );
+    this.releasePreparedTransition(this.#preparedTransition);
+    this.#preparedTransition = null;
+    const source = this.requireMode(this.#stableMode!);
+    const sourceBinding = this.resolveModeSymbolBinding(source);
+    const targetBinding = this.resolveModeSymbolBinding(target);
+    const bindingChanged = sourceBinding?.id !== targetBinding?.id;
+    if (this.#presentationOnly && bindingChanged)
+      throw new SceneLayoutError(
+        "Presentation-only authoring selection requires source and target modes to share one symbol package binding.",
+      );
+    const targetInput = options.reels?.main;
+    if (!bindingChanged && targetInput)
+      throw new SceneLayoutError(
+        "Authoring modes sharing a symbol package must not receive reels.main input.",
+      );
+    if (bindingChanged && targetBinding && !targetInput)
+      throw new SceneLayoutError(
+        `Scene layout game mode "${target.id}" requires target reels.main input.`,
+      );
+    if (!targetBinding && targetInput)
+      throw new SceneLayoutError(
+        `Scene layout game mode "${target.id}" has no symbol package and must not receive reels.main input.`,
+      );
+    this.#modeRequestInProgress = true;
+    let prepared: PreparedModeTarget | null = null;
+    try {
+      if (bindingChanged && targetBinding) {
+        const catalog = await targetBinding.resource.createCatalog();
+        this.assertReady();
+        const reel = this.createReelPresentation(
+          targetBinding.resource,
+          catalog,
+          targetBinding.binding,
+        );
+        try {
+          this.applyReelScene(
+            reel,
+            targetBinding.resource,
+            targetBinding.binding,
+            targetInput!,
+          );
+        } catch (error) {
+          reel.destroy({ children: true });
+          throw error;
+        }
+        prepared = { reel, catalog };
+      }
+      this.commitModeVisibility(target);
+      if (bindingChanged) {
+        const previous = this.#reel;
+        if (prepared) {
+          this.attachReel(prepared.reel);
+          this.#reel = prepared.reel;
+          this.#catalog = prepared.catalog;
+        } else {
+          this.#reel = null;
+          this.#catalog = null;
+        }
+        prepared = null;
+        this.#activeSymbolPackageId = targetBinding?.id ?? null;
+        previous?.parent?.removeChild(previous);
+        previous?.destroy({ children: true });
+      }
+      this.#stableMode = target.id;
+      this.#displayedMode = target.id;
+      this.#stableSymbolPackageId = this.#activeSymbolPackageId;
+    } catch (error) {
+      prepared?.reel.destroy({ children: true });
+      throw asSceneLayoutError(error);
+    } finally {
+      this.#modeRequestInProgress = false;
+    }
   }
 
   async prepareGameModeTransition(
@@ -1586,7 +1677,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
 
   private commitActiveTransition(active: ActiveModeTransition): void {
     if (active.switched) return;
-    this.commitBackgroundVisibility(active.target);
+    this.commitModeVisibility(active.target);
     if (active.bindingChanged) {
       const previous = this.#reel;
       if (active.prepared) {
@@ -1768,18 +1859,25 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     return { id, binding, resource };
   }
 
-  private commitBackgroundVisibility(mode: SceneLayoutGameMode | null): void {
+  private commitModeVisibility(mode: SceneLayoutGameMode | null): void {
     const modes = this.#manifest.gameModes?.modes ?? [];
-    const candidates = new Set(
+    const backgroundCandidates = new Set(
       modes.flatMap((candidate) =>
         Object.values(candidate.backgroundNodes ?? {}),
       ),
     );
-    if (candidates.size === 0) return;
-    const active = new Set(Object.values(mode?.backgroundNodes ?? {}));
-    for (const nodeId of candidates)
-      this.#layout.setNodeActive(nodeId, active.has(nodeId));
-    this.#activeBackgroundNodes = Object.freeze([...active].sort());
+    const activeBackgrounds = new Set(
+      Object.values(mode?.backgroundNodes ?? {}),
+    );
+    for (const nodeId of backgroundCandidates)
+      this.#layout.setNodeActive(nodeId, activeBackgrounds.has(nodeId));
+    for (const node of this.#manifest.nodes)
+      if (!backgroundCandidates.has(node.id))
+        this.#layout.setNodeActive(
+          node.id,
+          node.gameMode === undefined || node.gameMode === mode?.id,
+        );
+    this.#activeBackgroundNodes = Object.freeze([...activeBackgrounds].sort());
   }
 
   private requireReel(id: "main"): ReelPresentation {

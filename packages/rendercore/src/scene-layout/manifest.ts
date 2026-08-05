@@ -122,6 +122,8 @@ export function parseSceneLayoutManifest(
           symbolPackages,
           popups,
         );
+  if (!gameModes && nodes.some((node) => node.gameMode !== undefined))
+    fail("scene layout node gameMode requires gameModes.");
   if (symbolPackages && !gameModes)
     fail("scene layout symbolPackages requires gameModes.");
   validateReferencesAndBounds(
@@ -303,7 +305,7 @@ function parseNode(
 ): SceneLayoutNode {
   const label = `scene layout node[${index}]`;
   const record = readRecord(value, label);
-  known(record, ["id", "order", "resource", "placements"], label);
+  known(record, ["id", "order", "gameMode", "resource", "placements"], label);
   const placementsRecord = readRecord(record.placements, `${label}.placements`);
   const allowed =
     mode === "maximized-focus" ? ["default"] : ["landscape", "portrait"];
@@ -329,6 +331,9 @@ function parseNode(
   return deepFreeze({
     id: identifier(record.id, `${label}.id`),
     order: safeInteger(record.order, `${label}.order`),
+    ...(record.gameMode === undefined
+      ? {}
+      : { gameMode: stateIdentifier(record.gameMode, `${label}.gameMode`) }),
     resource: parseResource(record.resource, label),
     placements,
   });
@@ -1126,10 +1131,25 @@ function parseGameModes(
     "scene layout game mode id",
   );
   const candidateBackgroundIds = new Set(
-    [...backgroundNodesByMode.values()].flatMap((bindings) =>
-      Object.values(bindings),
-    ),
+    [
+      ...Object.values(adaptationBackgroundNodes(adaptation)),
+      ...[...backgroundNodesByMode.values()].flatMap((bindings) =>
+        Object.values(bindings),
+      ),
+    ].filter((nodeId): nodeId is string => nodeId !== undefined),
   );
+  const modeIds = new Set(parsedHeads.map((mode) => mode.id));
+  for (const node of nodes) {
+    if (node.gameMode === undefined) continue;
+    if (!modeIds.has(node.gameMode))
+      fail(
+        `scene layout node "${node.id}" gameMode references unknown mode "${node.gameMode}".`,
+      );
+    if (candidateBackgroundIds.has(node.id))
+      fail(
+        `scene layout background node "${node.id}" must not declare gameMode.`,
+      );
+  }
   const stateful = nodes.filter(
     (
       node,
@@ -1142,7 +1162,10 @@ function parseGameModes(
   );
   const statefulById = new Map(stateful.map((node) => [node.id, node]));
   const sharedStatefulIds = stateful
-    .filter((node) => !candidateBackgroundIds.has(node.id))
+    .filter(
+      (node) =>
+        !candidateBackgroundIds.has(node.id) && node.gameMode === undefined,
+    )
     .map((node) => node.id);
   const modes = parsedHeads.map(
     ({ id, label, mode, backgroundNodes, symbolPackage, popup }) => {
@@ -1153,9 +1176,25 @@ function parseGameModes(
             statefulById.has(nodeId),
           )
         : [];
+      const activeScopedStatefulIds = canonical
+        ? stateful
+            .filter(
+              (node) =>
+                !candidateBackgroundIds.has(node.id) && node.gameMode === id,
+            )
+            .map((node) => node.id)
+        : [];
       const expectedStatefulIds = canonical
-        ? [...sharedStatefulIds, ...activeStatefulBackgroundIds]
-        : stateful.map((node) => node.id);
+        ? [
+            ...sharedStatefulIds,
+            ...activeScopedStatefulIds,
+            ...activeStatefulBackgroundIds,
+          ]
+        : stateful
+            .filter(
+              (node) => node.gameMode === undefined || node.gameMode === id,
+            )
+            .map((node) => node.id);
       const expectedSet = new Set(expectedStatefulIds);
       if (
         keys.length !== expectedSet.size ||

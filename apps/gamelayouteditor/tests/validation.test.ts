@@ -26,6 +26,7 @@ import {
   replaceSpineResource,
   replaceVideoResource,
   setLayerVariantVisibility,
+  setLayerGameMode,
   setImageStringLayerAnchor,
   setImageStringLayerText,
   setNodeDefaultAnimation,
@@ -1233,6 +1234,18 @@ describe("filename-key layout resource commands", () => {
       nodeId: "second",
       variants: ["portrait"],
     });
+    addGameMode(project, "FreeGame");
+    setLayerGameMode(project, "second", "FreeGame");
+    expect(project.nodes.find((node) => node.id === "second")?.gameMode).toBe(
+      "FreeGame",
+    );
+    expect(() => setLayerGameMode(project, "second", "Missing")).toThrow(
+      /未知游戏模式/,
+    );
+    setLayerGameMode(project, "second", null);
+    expect(
+      project.nodes.find((node) => node.id === "second")?.gameMode,
+    ).toBeUndefined();
     moveLayer(project, "first", -1);
     moveLayer(project, "second", -1);
     expect(project.nodes.map((node) => node.id)).toEqual(["second", "first"]);
