@@ -26,6 +26,8 @@
 
 新命名 ImgNumber 用一个 `spineSlot` 覆盖全部 top-level Spine state，动画决定显隐和运动；`targets[]` 只列 non-Spine exact overlay state。旧逐 state slot target 不迁移、不扩大覆盖。两种数据都在每个 symbol occurrence 内复用同一个稳定 container。
 
+non-Spine `spinBlur` target 可显式声明 `spinBlurProfile`，引用一份布局与normal ImgNumber严格一致的派生dependency和同value集合的模糊特殊图片。普通/模糊root、glyph和special image都由typed reference进入exact closure并参与mapped rewrite；runtime只在同一container/Sprite pool切换已prepare assets。Symbols Editor按普通dependency与versioned preset生成一次并跨node复用；旧无profile target保持原normal-assets行为。
+
 ## Loader 与兼容
 
 `createSymbolPackageResource()`、ZIP/Blob preview 与 URL loader 支持 root map；父 Scene Layout 已验证其全局 map 后使用 resolved-files bridge。map package 不回退 direct path。无 map 的合法 legacy direct package继续加载；Symbols Editor 导入时通过 format owner 结构化抹平 VNI、atlas 和 image-string refs，新导出只写 filename-key + map 格式。

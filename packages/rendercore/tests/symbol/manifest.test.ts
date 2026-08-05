@@ -318,6 +318,43 @@ describe("symbol state texture manifest helpers", () => {
     );
   });
 
+  it("parses an exact spinBlur ImgNumber profile and rejects divergent special values", () => {
+    const manifest = createManifest() as any;
+    manifest.symbols.L1.imageStringNodes = [
+      {
+        name: "coin-value",
+        resource: "./digits.image-string.manifest.json",
+        targets: [{ state: "spinBlur" }],
+        initialText: "1",
+        anchor: { x: 0.5, y: 0.5 },
+        transform: { x: 0, y: 0, scale: 1 },
+        followSlotColor: true,
+        specialValueImages: [{ value: 100, image: "./max.png" }],
+        spinBlurProfile: {
+          resource: "./digits-blur.image-string.manifest.json",
+          specialValueImages: [{ value: 100, image: "./max.blur.png" }],
+        },
+      },
+    ];
+    expect(
+      parseSymbolStateTextureManifest(manifest).symbols.L1.imageStringNodes[0]
+        ?.spinBlurProfile,
+    ).toEqual({
+      resource: "./digits-blur.image-string.manifest.json",
+      specialValueImages: [{ value: 100, image: "./max.blur.png" }],
+    });
+
+    manifest.symbols.L1.imageStringNodes[0].spinBlurProfile.specialValueImages[0].value = 200;
+    expect(() => parseSymbolStateTextureManifest(manifest)).toThrow(
+      /values must exactly match/,
+    );
+    manifest.symbols.L1.imageStringNodes[0].spinBlurProfile.specialValueImages[0].value = 100;
+    manifest.symbols.L1.imageStringNodes[0].targets = [{ state: "win" }];
+    expect(() => parseSymbolStateTextureManifest(manifest)).toThrow(
+      /requires a non-Spine spinBlur target/,
+    );
+  });
+
   it.each([
     [
       "duplicate name",

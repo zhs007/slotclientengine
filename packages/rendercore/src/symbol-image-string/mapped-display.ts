@@ -12,6 +12,12 @@ export interface SymbolImageStringSpecialImageResource {
 
 export interface RenderMappedImageString {
   readonly container: Container;
+  setProfile(options: {
+    readonly resource: ImageStringResource;
+    readonly specialValueImages?: Readonly<
+      Record<string, SymbolImageStringSpecialImageResource>
+    >;
+  }): void;
   setText(text: string): void;
   getText(): string;
   destroy(): void;
@@ -25,7 +31,8 @@ export function createRenderMappedImageString(options: {
     Record<string, SymbolImageStringSpecialImageResource>
   >;
 }): RenderMappedImageString {
-  const specialValueImages: Readonly<
+  let resource = options.resource;
+  let specialValueImages: Readonly<
     Record<string, SymbolImageStringSpecialImageResource>
   > = options.specialValueImages ?? Object.freeze({});
   const glyphs = createRenderImageString({
@@ -42,6 +49,27 @@ export function createRenderMappedImageString(options: {
 
   return Object.freeze({
     container,
+    setProfile(next: {
+      readonly resource: ImageStringResource;
+      readonly specialValueImages?: Readonly<
+        Record<string, SymbolImageStringSpecialImageResource>
+      >;
+    }): void {
+      assertUsable();
+      const nextSpecialValueImages =
+        next.specialValueImages ?? Object.freeze({});
+      if (
+        next.resource === resource &&
+        nextSpecialValueImages === specialValueImages
+      )
+        return;
+      const glyphText = resolveInitialGlyphText(text, nextSpecialValueImages);
+      validateImageStringText(glyphText, next.resource.manifest);
+      glyphs.setResource(next.resource, glyphText);
+      resource = next.resource;
+      specialValueImages = nextSpecialValueImages;
+      commit(text);
+    },
     setText(nextText: string): void {
       assertUsable();
       if (nextText === text) return;
@@ -86,7 +114,7 @@ export function createRenderMappedImageString(options: {
   function assertUsable(): void {
     if (destroyed)
       throw new Error("Mapped image-string display was destroyed.");
-    options.resource.assertUsable();
+    resource.assertUsable();
   }
 }
 

@@ -567,6 +567,8 @@ pnpm --filter reelsviewer dev -- --host 0.0.0.0
 
 symbol 可声明零到多个有唯一 name 的 `imageStringNodes`。新配置用一个 `spineSlot` 自动覆盖全部 top-level Spine/档位 activeSpine state，并只用 `targets[]` 表达 non-Spine exact overlay state；旧逐 Spine state `{state,slot}` target 继续兼容。每个 logical node 在 occurrence 内只有一个稳定 container，state 切换只改变 slot/overlay/hidden attachment 与 `visible/renderable`。
 
+命名 node 可为 non-Spine exact `spinBlur` target 声明 `spinBlurProfile: { resource, specialValueImages? }`。profile 的字符、metrics、glyph size/offset、fixed groups 和特殊值集合必须与 normal profile一致；package prepare一次加载共享资源。state切换调用同一 mapped renderer的`setResource()`并复用container、special Sprite和glyph Sprite pool，不在runtime生成或复制模糊纹理。缺profile的旧target-only node继续按既有normal-assets语义运行。
+
 命名 node 与 `valuePresentation.text.type: "image-string"` 的每个 tier binding 都支持可选 `specialValueImages: [{ value, image }]`。`value` 在所属 node/binding 内是唯一 safe integer，`image` 是 contained local 图片路径；完全匹配 `String(value)` 时整张 Sprite 替代该档 glyph renderer，其他字符串仍严格走该档 glyph closure。映射图片进入 package/Vite 精确闭包并与 glyph 纹理共享资源所有权，切换文本保持所属 binding 的 anchor、transform、target/slot 与 `followSlotColor`。parser 兼容旧的 `valuePresentation.text.specialValueImages`，将其规范化到每档；canonical typed 输出不保留共享字段，新旧位置同时声明会失败。
 
 `RenderSymbol` 公开 `getImageStringNodeNames()`、`setImageStringText(name, text)`、`getImageStringText(name)`。string 原样保存，缺 glyph/控制字符/非 NFC 或 unknown name 时原子失败；节点随目标 state/player attach/detach，保留等价 Loop 时间轴，并受 reel texture 显式优先级约束。consumer 不接触 Spine track、slot 私有对象或 Pixi glyph children。旧 `setPresentationValue()` value-presentation 合同独立保留，不会自动变成命名节点。

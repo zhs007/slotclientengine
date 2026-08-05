@@ -95,6 +95,14 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
     else if (canKeepSharedAttachment) this.#activeState = state;
     this.#root.imageStringOverlayLayer.removeChildren();
     for (const node of this.#nodes) {
+      const profile =
+        state === "spinBlur" && node.definition.spinBlurProfile
+          ? node.definition.spinBlurProfile
+          : node.definition;
+      node.renderer.setProfile({
+        resource: profile.resource,
+        specialValueImages: profile.specialValueImages,
+      });
       const direct = node.definition.spec.targets.some(
         (target) => target.state === state && target.slot === undefined,
       );
@@ -175,6 +183,10 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
     for (const node of this.#nodes) {
       node.renderer.container.visible = false;
       node.renderer.container.renderable = false;
+      node.renderer.setProfile({
+        resource: node.definition.resource,
+        specialValueImages: node.definition.specialValueImages,
+      });
       node.renderer.setText(node.definition.spec.initialText);
     }
   }

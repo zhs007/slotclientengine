@@ -104,11 +104,23 @@ describe("symbol package materialization", () => {
       },
       fixedAdvanceGroups: [],
     };
+    const blurImageString = {
+      ...imageString,
+      id: "shared-digits-spin-blur",
+      glyphs: {
+        "0": { ...imageString.glyphs["0"], path: "blur-glyph-0.png" },
+        "1": { ...imageString.glyphs["1"], path: "blur-glyph-1.png" },
+      },
+    };
     const resources = [
+      "blur-glyph-0.png",
+      "blur-glyph-1.png",
+      "digits-blur.image-string.manifest.json",
       "digits/glyph-0.png",
       "digits/glyph-1.png",
       "digits/image-string.manifest.json",
       "special.png",
+      "special.blur.png",
       "tier.atlas",
       "tier.json",
       "tier.png",
@@ -143,7 +155,13 @@ describe("symbol package materialization", () => {
             {
               name: "named-value",
               resource: "./digits/image-string.manifest.json",
-              targets: [{ state: "normal" }],
+              targets: [{ state: "normal" }, { state: "spinBlur" }],
+              spinBlurProfile: {
+                resource: "./digits-blur.image-string.manifest.json",
+                specialValueImages: [
+                  { value: 200, image: "./special.blur.png" },
+                ],
+              },
               initialText: "0",
               specialValueImages: [{ value: 200, image: "./special.png" }],
               anchor: { x: 0.5, y: 0.5 },
@@ -201,7 +219,11 @@ describe("symbol package materialization", () => {
         ["digits/glyph-0.png", png],
         ["digits/glyph-1.png", new Uint8Array([...png, 1])],
         ["digits/image-string.manifest.json", encode(imageString)],
+        ["blur-glyph-0.png", new Uint8Array([...png, 3])],
+        ["blur-glyph-1.png", new Uint8Array([...png, 4])],
+        ["digits-blur.image-string.manifest.json", encode(blurImageString)],
         ["special.png", new Uint8Array([...png, 2])],
+        ["special.blur.png", new Uint8Array([...png, 5])],
         ["tier.atlas", atlas("tier.png")],
         ["tier.json", encode(spineSkeleton())],
         ["tier.png", webp],
@@ -216,6 +238,12 @@ describe("symbol package materialization", () => {
             {
               name: "named-value",
               resource: `./${prefix}-image-string.manifest.json`,
+              spinBlurProfile: {
+                resource: `./${prefix}-digits-blur.image-string.manifest.json`,
+                specialValueImages: [
+                  { value: 200, image: `./${prefix}-special.blur.png` },
+                ],
+              },
               specialValueImages: [
                 { value: 200, image: `./${prefix}-special.png` },
               ],
@@ -236,9 +264,13 @@ describe("symbol package materialization", () => {
       },
     });
     expect(mapped.packageManifest.resources).toEqual([
+      `${prefix}-blur-glyph-0.png`,
+      `${prefix}-blur-glyph-1.png`,
+      `${prefix}-digits-blur.image-string.manifest.json`,
       `${prefix}-glyph-0.png`,
       `${prefix}-glyph-1.png`,
       `${prefix}-image-string.manifest.json`,
+      `${prefix}-special.blur.png`,
       `${prefix}-special.png`,
       `${prefix}-tier.atlas`,
       `${prefix}-tier.json`,

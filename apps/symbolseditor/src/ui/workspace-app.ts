@@ -59,6 +59,10 @@ import {
   isGeneratedStateTextureId,
 } from "../model/state-texture-generation.js";
 import {
+  generateAndBindImageStringSpinBlur,
+  getImageStringSpinBlurAvailability,
+} from "../model/image-string-spin-blur-generation.js";
+import {
   SymbolEditorStore,
   type SymbolEditorStoreSnapshot,
 } from "../model/editor-store.js";
@@ -1641,6 +1645,15 @@ export class SymbolsEditorApp {
         });
       });
     panel
+      .querySelectorAll<HTMLElement>("[data-generate-image-string-spin-blur]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          void this.generateImageStringSpinBlur(
+            Number(button.dataset.generateImageStringSpinBlur),
+          );
+        });
+      });
+    panel
       .querySelectorAll<HTMLInputElement>("[data-image-string-preview]")
       .forEach((input) => {
         input.addEventListener("input", () => {
@@ -1649,6 +1662,46 @@ export class SymbolsEditorApp {
           void this.refreshPreview(this.#store.getSnapshot());
         });
       });
+  }
+
+  private async generateImageStringSpinBlur(nodeIndex: number): Promise<void> {
+    if (this.#importing) return;
+    const snapshot = this.#store.getSnapshot();
+    if (!snapshot.project) return;
+    this.#importing = true;
+    this.requireElement("[data-upload]").setAttribute("disabled", "");
+    const request = ++this.#importRequest;
+    const symbol = this.#session.selectedSymbol;
+    this.showSuccess(`正在为 ${symbol} 的 ImgNumber 生成模糊资源…`);
+    try {
+      const result = await generateAndBindImageStringSpinBlur({
+        project: snapshot.project,
+        symbol,
+        nodeIndex,
+        codec: { decode: decodeBrowserImage, encodePng: encodeBrowserPng },
+      });
+      if (request !== this.#importRequest) return;
+      if (this.#store.getSnapshot().revision !== snapshot.revision)
+        throw new Error("生成期间项目已变化，请基于最新项目重试。");
+      this.#store.replace(result.project);
+      this.#session.previewState = "spinBlur";
+      this.showSuccess(
+        result.generatedImageCount === 0
+          ? `已复用并绑定模糊 ImgNumber：${result.dependencyId}`
+          : `已生成 ${result.generatedImageCount} 张图片，并为 ${result.boundNodeCount} 个 node 绑定模糊 ImgNumber。`,
+      );
+      const current = this.#store.getSnapshot();
+      this.render(current);
+      void this.refreshPreview(current);
+    } catch (error) {
+      if (request === this.#importRequest) this.#store.setExternalError(error);
+    } finally {
+      if (request === this.#importRequest) {
+        this.#importing = false;
+        if (!this.#destroyed)
+          this.requireElement("[data-upload]").removeAttribute("disabled");
+      }
+    }
   }
 
   private runValueAction(button: HTMLElement, panel: HTMLElement): void {
@@ -2919,6 +2972,18 @@ function imageStringInspectorMarkup(
               (state) => !isImageStringSpineTarget(symbol, state),
             )
           : targetStates;
+        const blurAvailability = getImageStringSpinBlurAvailability(
+          project,
+          symbol.symbol,
+          index,
+        );
+        const blurMarkup = `<section class="state-texture-generation"><div><strong>spinBlur ImgNumber</strong><small>${escapeHtml(
+          blurAvailability.ready
+            ? blurAvailability.alreadyBound
+              ? "已绑定派生模糊 dependency；runtime 将在同一 instance 内切换 assets。"
+              : "将在浏览器本地生成，已有同源派生 dependency 时直接复用。"
+            : blurAvailability.reason,
+        )}</small></div><button type="button" data-generate-image-string-spin-blur="${index}" ${blurAvailability.ready && !blurAvailability.alreadyBound ? "" : "disabled"}>${blurAvailability.ready && blurAvailability.alreadyBound ? "已生成并使用" : "生成并使用模糊 ImgNumber"}</button></section>`;
         return `<article class="node-card"><header><strong>${escapeHtml(node.name)}</strong><div class="button-row"><button data-image-string-node-action="up" data-image-string-node-index="${index}" ${index === 0 ? "disabled" : ""}>↑</button><button data-image-string-node-action="down" data-image-string-node-index="${index}" ${index === symbol.imageStringNodes.length - 1 ? "disabled" : ""}>↓</button><button data-image-string-node-action="remove" data-image-string-node-index="${index}">删除</button></div></header>
         <label>Name <input data-image-string-node-field="name" data-image-string-node-index="${index}" value="${escapeAttr(node.name)}"></label>
         <label>Dependency <select data-image-string-node-field="resource" data-image-string-node-index="${index}"><option value="">请选择 dependency</option>${dependencies.map((dependency) => option(`./${dependency.rootKey}`, `${dependency.id} · ${dependency.rootKey}`, node.resource === `./${dependency.rootKey}`)).join("")}</select></label>
@@ -2941,6 +3006,7 @@ function imageStringInspectorMarkup(
           .join(
             "",
           )}<button type="button" data-image-string-target-add="${index}" ${exactTargetStates.length ? "" : "disabled"}>增加非 Spine target</button></fieldset>
+        ${blurMarkup}
         <fieldset><legend>特殊数值图片</legend><p class="hint">完全匹配该整数时显示整张图片；未匹配的值继续按 glyph 渲染。</p>${(node.specialValueImages ?? []).map((mapping, mappingIndex) => `<div class="form-grid"><label>Value <input type="number" step="1" data-image-string-special-value="${mappingIndex}" data-image-string-node-index="${index}" value="${mapping.value}"></label>${resourceBindingMarkup("Image", mapping.image.replace(/^\.\//u, ""), { kind: "image-string-special-image", symbol: symbol.symbol, nodeIndex: index, mappingIndex })}<button type="button" data-image-string-special-remove="${mappingIndex}" data-image-string-node-index="${index}">删除映射</button></div>`).join("")}<button type="button" data-image-string-special-add="${index}">增加映射</button></fieldset>
         <label>Initial text <input data-image-string-node-field="initialText" data-image-string-node-index="${index}" value="${escapeAttr(node.initialText)}"></label>
         <div class="form-grid"><label>Anchor X <input type="number" min="0" max="1" step="0.01" data-image-string-node-field="anchor.x" data-image-string-node-index="${index}" value="${node.anchor.x}"></label><label>Anchor Y <input type="number" min="0" max="1" step="0.01" data-image-string-node-field="anchor.y" data-image-string-node-index="${index}" value="${node.anchor.y}"></label><label>X <input type="number" step="0.1" data-image-string-node-field="transform.x" data-image-string-node-index="${index}" value="${node.transform.x}"></label><label>Y <input type="number" step="0.1" data-image-string-node-field="transform.y" data-image-string-node-index="${index}" value="${node.transform.y}"></label><label>Scale <input type="number" min="0.01" step="0.01" data-image-string-node-field="transform.scale" data-image-string-node-index="${index}" value="${node.transform.scale}"></label></div>

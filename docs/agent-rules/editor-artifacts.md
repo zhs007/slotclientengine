@@ -62,6 +62,7 @@
 - symbols ZIP 包含唯一公开 game config、package `cellSize` 与 exact resource closure；缺失、orphan、版本错配显式失败，不允许 glob 或 filename guess。
 - value presentation 先配置 Spine tier resource，再为所有 tier 统一选择 state animation；静态 reel state 独立绑定图片。
 - 新 symbol-owned ImgNumber node 只在 Normal 配一个 `spineSlot`，全部 top-level Spine state 自动使用同名 slot；非 Spine state 继续用 exact `{state}` target 控制固定顶层 overlay。旧逐 Spine state target 无损兼容。
+- 命名 ImgNumber 的 non-Spine `spinBlur` profile 由 Symbols Editor 在浏览器本地调用 rendercore versioned preset生成；同一普通dependency只生成一份派生dependency并跨node复用，glyph/special图片按source key去重。生成、library安装和全部eligible binding必须原子提交；source变化使受影响binding失效。runtime不生成像素。
 - 新 value ImgNumber 每 tier 只配置 JSON resource，slot/transform/color/special map 只在 Normal 配一次；旧 per-tier 完整 binding 与旧顶层 special map 可无损导入导出，新旧 variant 不得混写。
   dependency/state rename 或删除必须事务性重写并全量复验，失败回滚。UI 必须能查看、
   增删、修改 targets，导出统一写 canonical `targets`，旧单 `target` 仅导入兼容。

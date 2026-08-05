@@ -805,9 +805,28 @@ export function setSymbolImageStringNodes(
   symbol: string,
   nodes: readonly SymbolImageStringNodeSpec[],
 ): void {
-  requireSymbol(project, symbol).imageStringNodes = nodes.map((node) =>
-    cloneValue(node),
-  );
+  const draft = requireSymbol(project, symbol);
+  draft.imageStringNodes = nodes.map((node, index) => {
+    const next = cloneValue(node);
+    const previous =
+      draft.imageStringNodes.find(
+        (candidate) => candidate.name === node.name,
+      ) ?? draft.imageStringNodes[index];
+    const sourceChanged =
+      previous !== undefined &&
+      (previous.resource !== next.resource ||
+        JSON.stringify(previous.specialValueImages ?? []) !==
+          JSON.stringify(next.specialValueImages ?? []));
+    if (
+      !next.targets.some(
+        (target) => target.state === "spinBlur" && target.slot === undefined,
+      ) ||
+      sourceChanged
+    ) {
+      delete (next as { spinBlurProfile?: unknown }).spinBlurProfile;
+    }
+    return next;
+  });
 }
 
 export function renameImportedImageStringDependency(
@@ -905,6 +924,36 @@ export function installImageStringDependency(
       keys: Object.freeze([...nextPaths].sort(comparePath)),
     }),
   );
+  if (existing && !imageStringDependenciesEqual(existing, dependency)) {
+    invalidateImageStringSpinBlurProfilesForChangedAssets(
+      project,
+      existing.keys,
+    );
+  }
+}
+
+export function invalidateImageStringSpinBlurProfilesForChangedAssets(
+  project: SymbolEditorProject,
+  changedPaths: readonly string[],
+): void {
+  const changed = new Set(changedPaths);
+  for (const symbol of project.symbols.values()) {
+    symbol.imageStringNodes = symbol.imageStringNodes.map((node) => {
+      if (!node.spinBlurProfile) return node;
+      const dependency = [...project.imageStringDependencies.values()].find(
+        (candidate) =>
+          imageStringDependencyMatches(node.resource, candidate.rootKey),
+      );
+      const sourceChanged = dependency?.keys.some((path) => changed.has(path));
+      const specialChanged = (node.specialValueImages ?? []).some((mapping) =>
+        changed.has(stripLocalRef(mapping.image)),
+      );
+      if (!sourceChanged && !specialChanged) return node;
+      const next = cloneValue(node);
+      delete (next as { spinBlurProfile?: unknown }).spinBlurProfile;
+      return next;
+    });
+  }
 }
 
 export function removeImageStringDependency(
@@ -919,6 +968,17 @@ export function removeImageStringDependency(
         imageStringDependencyMatches(node.resource, dependency.rootKey),
       )
       .map((node) => `${symbol.symbol}.imageStringNodes.${node.name}`),
+    ...symbol.imageStringNodes
+      .filter((node) =>
+        imageStringDependencyMatches(
+          node.spinBlurProfile?.resource ?? "",
+          dependency.rootKey,
+        ),
+      )
+      .map(
+        (node) =>
+          `${symbol.symbol}.imageStringNodes.${node.name}.spinBlurProfile`,
+      ),
     ...(symbol.valuePresentation?.text.type === "image-string"
       ? "tierResources" in symbol.valuePresentation.text
         ? symbol.valuePresentation.text.tierResources.flatMap(
@@ -1120,6 +1180,18 @@ export function getAssetReferences(
           location: `${symbol.symbol}.imageStringNodes.${node.name}.specialValueImages.${mapping.value}`,
         });
       }
+      if (node.spinBlurProfile) {
+        references.push({
+          path: node.spinBlurProfile.resource.replace(/^\.\//u, ""),
+          location: `${symbol.symbol}.imageStringNodes.${node.name}.spinBlurProfile`,
+        });
+        for (const mapping of node.spinBlurProfile.specialValueImages ?? []) {
+          references.push({
+            path: mapping.image.replace(/^\.\//u, ""),
+            location: `${symbol.symbol}.imageStringNodes.${node.name}.spinBlurProfile.specialValueImages.${mapping.value}`,
+          });
+        }
+      }
     }
   }
   return Object.freeze(
@@ -1236,6 +1308,9 @@ export function compileSymbolEditorManifest(
       entry.imageStringNodes = symbol.imageStringNodes.map((node) => ({
         name: node.name,
         resource: node.resource,
+        ...(node.spinBlurProfile
+          ? { spinBlurProfile: cloneValue(node.spinBlurProfile) }
+          : {}),
         ...(node.spineSlot ? { spineSlot: node.spineSlot } : {}),
         targets: node.targets.map((target) =>
           target.slot === undefined

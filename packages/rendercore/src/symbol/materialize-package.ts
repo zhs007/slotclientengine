@@ -380,6 +380,15 @@ function rewriteImageStringNodePaths(
     if (typeof node.resource === "string")
       node.resource = rewriteRequiredRef(node.resource, mapping);
     rewriteImageStringSpecialValuePaths(node, mapping);
+    if (node.spinBlurProfile !== undefined) {
+      const profile = record(
+        node.spinBlurProfile,
+        "symbol image-string spinBlur profile",
+      );
+      if (typeof profile.resource === "string")
+        profile.resource = rewriteRequiredRef(profile.resource, mapping);
+      rewriteImageStringSpecialValuePaths(profile, mapping);
+    }
   }
 }
 

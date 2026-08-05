@@ -14,6 +14,8 @@ value-presentation 的编辑顺序固定为“档位 → 状态”：每档选�
 
 新命名 ImgNumber node 使用一个 `spineSlot` 覆盖全部 Spine state；显示、移动和出现时机由 Spine animation 控制。非 Spine state 继续用 exact `targets[]` 决定同一 instance 是否显示在固定顶层 overlay。旧逐 Spine state target 与旧 per-tier 完整 binding 可无损导入、编辑和导出，不会自动扩大状态覆盖。
 
+命名 ImgNumber 配置 non-Spine `spinBlur` target 后，ImgNumber 卡片可在浏览器本地按 rendercore versioned preset 生成并绑定派生模糊 dependency。相同普通 dependency 在项目内只生成和共享一份；glyph 与特殊数值整图按 source key 去重。runtime 预加载 normal/blur profile，并在任务 170 的同一 renderer/container 内切换 assets。普通 dependency 或特殊图片变化会使受影响 binding 失效；旧 target-only package 保持既有 normal-assets 行为并标为 legacy。
+
 当单个 symbol 的 normal 是已绑定且有效的 direct image 时，normal 状态页提供两个互不
 联动的纯前端操作：“生成模糊图”只生成/绑定 `spinBlur`，“生成 disable 图”只生成/
 绑定 `disabled`。图片在浏览器本地 decode、调用 rendercore versioned preset 处理并
