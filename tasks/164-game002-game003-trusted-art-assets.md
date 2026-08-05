@@ -22,7 +22,7 @@ game app 的生成、loading/runtime prepare 和 release check 不得因 hash/si
 - [ ] game002/game003 的 Vite resource generator、`check:resources` 和
       `release:check` 不再将实际 payload 与 map hash/size 比对；两个 app 只打包
       实际引用的 mapped physical files，不用 glob 猜测额外资源。
-- [ ] game002/game003 的 trusted-art consumer 只要求实际被 layout/nested
+- [ ] game002/game003 runtime 只要求实际被 layout/nested
       manifest/runtime-resource 引用的 logical key 能安全路由到存在的文件，
       并能通过对应 Spine/VNI/image/image-string/media parser/decoder；未引用的
       map entry、缺失的未引用 entry 和目录中额外文件不阻断。
@@ -42,9 +42,8 @@ game app 的生成、loading/runtime prepare 和 release check 不得因 hash/si
 
 - rendercore mapped scene-layout runtime 解析中 eager/lazy logical file 装配的
   hash/size 边界统一。
-- scene-layout runtime 的显式“信任当前美术目录”模式，以及专用于 game build 的
-  directory-authoritative Vite resource generator，
-  只由 game002/game003 opt in；它不对未引用文件施加 exact/orphan gate。
+- scene-layout runtime 固定采用 directory-authoritative 路由语义，以及专用于 game
+  build 的 Vite resource generator；两者都不对未引用文件施加 exact/orphan gate。
 - game002/game003 static dist checker 移除对 map hash/byteLength 的内容比对和
   整个美术目录的 orphan/exact-closure 限制，只证明实际引用文件进入 dist。
 - rendercore 定向回归、两个 game package 的集成/发布验收、README 与
@@ -115,16 +114,14 @@ validation` 正来自这一 shared runtime 分支。
 - 仍需检查的只是游戏能否实际运行：被 manifest/runtime logical key 引用的
   path 必须安全、文件必须存在，并通过对应 typed parser/decoder；dist 必须
   包含这些实际使用的最终 bytes。
-- 这是 game002/game003 对直接 vendor 美术目录的明确 policy；不推广到
-  editor 导入/导出、优化 ZIP 或其他 mapped package consumer。
+- runtime 路由与完整性验证是两个独立职责；editor 导入/导出、优化 ZIP 和正式 ZIP
+  边界继续显式验证 integrity。
 
 ### 关键决策
 
-1. **runtime 通过明确 policy 只做必需路由与语义校验。** 为 shared
-   scene-layout package loader 增加中性 `trusted-art` mapped policy（精确名称在实施
-   时固定），由 game002/game003 显式传入。该 policy 以 logical key→safe
-   physical path 作为运行路由，忽略 integrity-only metadata、未引用 map entry 和
-   unmapped extra files；默认/editor/ZIP policy 不变，app 不复制 resolver。
+1. **runtime 固定只做必需路由与语义校验。** shared scene-layout package loader
+   以 logical key→safe physical path 作为运行路由，忽略 integrity-only metadata、
+   未引用 map entry 和 unmapped extra files；不提供容易漏传的 bypass policy。
 2. **game build generator 始终以当前美术目录为权威。** 该脚本的正式调用方只有
    game002/game003，不承担 editor package validation；因此直接跳过 hash/size、
    content-addressed path relation 和 unexpected/orphan file gate，只导入实际可用的
@@ -133,7 +130,7 @@ validation` 正来自这一 shared runtime 分支。
    byte equality，只删除 source-to-map size 比对；game003 将基于 hash 的
    source-to-dist 查找改为 byte equality。这保证最终美术 bytes 进入 dist，又不
    把 map digest 当成内容权威。
-4. **trusted-art 只保留运行所需形状。** game app 只解析 map identity/files 和
+4. **runtime map view 只保留运行所需形状。** game app 只解析 map identity/files 和
    logical key 对应的 safe `assets/` relative path；`sha256`/`byteLength`/content-addressed
    filename relation 即使过时也不阻断。实际引用的资源内容仍须通过其对应
    parser/decoder/runtime capability 校验。
@@ -146,9 +143,9 @@ validation` 正来自这一 shared runtime 分支。
 - **美术目录**：`assets/crave` 和 `assets/minecart2` 中实际被游戏引用的
   files/bytes 是最终运行/发布内容；美术可以替换内容、维护路由或留下
   未引用文件，不被 editor integrity metadata 反向限制。
-- **rendercore runtime**：在 trusted-art policy 下按 safe map path 解析 eager/lazy
-  bytes，只对实际引用闭包执行 nested manifest 和渲染能力检查，忽略额外
-  entries/files 且不重算 map 完整性。
+- **rendercore runtime**：固定按 safe map path 解析 eager/lazy bytes，只对实际引用
+  闭包执行 nested manifest 和渲染能力检查，忽略额外 entries/files 且不重算 map
+  完整性。
 - **build/release**：生成器列出当前 map 中存在的 safe physical files；app checker
   检查实际引用路径可用、generated parity 和最终 bytes 进入 dist，不以未引用
   entry/file 或 map hash/size 阻断。
@@ -213,16 +210,18 @@ generator source formatting 若稳定输出不变，不应重写两个 generated
    - 用定向 fixture 复现 game002 lazy mapped asset 的 hash/size drift 报错，并确认
      game003 eager path 当前已不重复校验；不改写正式资源来造测试。
 
-2. **增加 scene-layout trusted-art runtime policy**
-   - 在 `package-resource.ts` 为 mapped resource options 增加 strict typed policy，不修改默认/
-     editor/ZIP 行为；game002/game003 `skin-config.ts` 显式选择 trusted-art。
-   - trusted-art map view 只取 logical key 与 safe canonical `assets/` path，不因
+2. **分离 runtime 路由与 package integrity 验证**
+   - `package-resource.ts` 的 mapped runtime resolver 不暴露 strict/trusted policy，
+     始终不做 hash/size 比对；game002/game003 不传 bypass 参数。
+   - runtime map view 只取 logical key 与 safe canonical `assets/` path，不因
      `sha256`/`byteLength` 格式、实值或 content-addressed path relation 拒绝。partial
      eager 和 lazy logical loader 不做 bytes hash/size 对比。
    - eager/lazy package 组装只对 manifest 实际引用的 logical closure 要求存在且
      语义有效；未引用 map entry、缺失的未引用 entry 和 unmapped extra files 忽略。
    - 保留 lazy typed kind、各类资源 parser/decoder、prepare/rollback/destroy；不在 app
      复制 resolver 或资源表。
+   - gamelayouteditor 导入沿用显式 `validateEditorAssetsMapPackage()`；production ZIP
+     inspection 在 resolve 前显式调用同一 validator，保证严格边界不依赖 runtime。
 
 3. **收敛两个 game 的 build generator 合同**
    - `generate-scene-layout-vite-resources.mjs` 始终按美术目录权威模式工作，不读取或
@@ -249,8 +248,8 @@ generator source formatting 若稳定输出不变，不应重写两个 generated
    - generator 回归覆盖 hash/size/orphan drift 和 extra files 均被接受，但仍拒绝
      不安全路径，并保持 generated output parity。
    - README 记录美术 bytes 权威、替换 workflow 和仍保留的检查；
-     `game002.md`、`game003.md`、`scene-layout.md` 同步这个稳定的
-     app opt-in/runtime 边界，不写逐文件 hash 或一次性证据。
+     `game002.md`、`game003.md`、`scene-layout.md` 同步 runtime/validator 职责边界，
+     不写逐文件 hash 或一次性证据。
 
 6. **定向验收与报告**
    - 运行 rendercore 定向 typecheck/test，两个 game 的 typecheck/test、
@@ -335,8 +334,8 @@ git diff --check
 - 两个 app README 记录 directory-authoritative workflow：美术可直接替换/
   增加文件，只对实际引用 path 保留安全、存在性和 decoder 检查。
 - `docs/agent-rules/game002.md` 与 `game003.md` 记录两款游戏的稳定例外；
-  `scene-layout.md` 将 runtime policy、game build generator 与 editor validator 的
-  职责边界写清。不修改根 `AGENTS.md`。
+  `scene-layout.md` 将 runtime resolver、game build generator 与显式 integrity
+  validator 的职责边界写清。不修改根 `AGENTS.md`。
 - 本任务执行会话不代替美术修改 generated TS、asset-groups 或 asset payload。
 
 ## 11. 执行报告

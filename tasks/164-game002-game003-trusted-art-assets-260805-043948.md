@@ -2,7 +2,7 @@
 
 ## 结果
 
-game002 与 game003 已显式采用 `trusted-art` 资源策略。两款正式游戏的 runtime、
+game002 与 game003 的 runtime 固定采用 directory-authoritative 资源路由。两款正式游戏的 runtime、
 Vite 资源生成和 release checker 不再用 `assets.map.json` 中的 `sha256`、
 `byteLength`、content-addressed 文件名或目录 exactness 阻断美术交付；额外文件、
 未引用且缺失/格式陈旧的 map entry 也不会阻断游戏。
@@ -15,10 +15,9 @@ Vite 资源生成和 release checker 不再用 `assets.map.json` 中的 `sha256`
 ## 基线与改动范围
 
 - 执行基线：`41279e7c78894b5d0f8d8866e8985e0e36ca2f26`。
-- 在 rendercore scene-layout package resource 中新增显式
-  `editor-package | trusted-art` policy；默认行为保持严格。
-- game002/game003 的 skin config 显式启用 trusted-art runtime 语义；专用 Vite 资源
-  生成脚本和 release checker 直接以当前美术目录为权威。
+- rendercore scene-layout runtime resolver 不再包含 hash/size integrity 分支或
+  bypass policy；game002/game003 无需传参即可使用当前美术 bytes。
+- 专用 Vite 资源生成脚本和 release checker 直接以当前美术目录为权威。
 - 新增 runtime 与 generator 定向测试，覆盖 metadata drift、额外文件、未引用缺失
   entry、unsafe path、实际引用缺失和 lazy load。
 - 更新两款游戏 README 与 game002/game003/scene-layout 领域规则。
@@ -27,7 +26,7 @@ Vite 资源生成和 release checker 不再用 `assets.map.json` 中的 `sha256`
 
 计划外增加了 `apps/game002/src/loading-resources.ts` 的最小适配：原实现会在模块
 初始化时读取所有 deferred entry 的 `path`，导致“未引用且缺失的 map entry”在进入
-trusted-art resolver 前就抛错；现在只收集实际声明了 string path 的 deferred entry。
+runtime resolver 前就抛错；现在只收集实际声明了 string path 的 deferred entry。
 
 环境初始缺少 `node_modules`，按计划执行了
 `CI=true pnpm install --frozen-lockfile`；没有产生 lockfile 变更或新增依赖。
@@ -37,8 +36,8 @@ trusted-art resolver 前就抛错；现在只收集实际声明了 string path �
 以下命令均通过：
 
 - `pnpm --filter @slotclientengine/rendercore typecheck`
-- `pnpm --filter @slotclientengine/rendercore exec vitest run tests/scene-layout/package-resource.test.ts tests/scene-layout/vite-resource-generator.test.ts`
-  —— 最终版本 2 个测试文件、13 个测试通过。
+- `pnpm --filter @slotclientengine/rendercore exec vitest run tests/scene-layout/package-resource.test.ts tests/scene-layout/production-zip.test.ts tests/scene-layout/vite-resource-generator.test.ts`
+  —— 最终版本 3 个测试文件、18 个测试通过。
 - `pnpm --filter game002 --filter game003 typecheck`
 - `pnpm --filter game002 --filter game003 test`
   —— game002 26 个文件/190 个测试，game003 16 个文件/60 个测试通过。
@@ -72,3 +71,8 @@ editor 不使用该脚本后，删除了生成器中无调用方的默认严格�
 `--trust-art-directory` 开关。生成器现在始终忽略 map hash/size、content-addressed
 filename 和目录 exactness；editor/export/optimizer/ZIP 的严格 integrity 校验仍由
 各自 package validator 负责。
+
+进一步核对 Windows runtime 报错后，移除了 `package-resource.ts` 中隐式的默认
+hash/size 分支和 `mappedAssetPolicy` 接口。runtime 现在天然只做安全路由与语义校验；
+gamelayouteditor 已显式调用 `validateEditorAssetsMapPackage()`，production ZIP inspection
+也在 resolve 前显式调用该 validator，因此严格完整性边界保持不变且不再影响 game。
