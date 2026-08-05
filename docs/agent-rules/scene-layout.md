@@ -75,11 +75,13 @@
 - popup package 最终 vendor 到 layout ZIP；内部 layer、tier、坐标和资源保持 popup owner 自包含。
 - 普通 Spine popup 的 placement 与注册由 Scene Layout 拥有；start/loop/end 动画名与点击锁存生命周期由 popup package 和 rendercore 拥有。
 - production app 直接消费 editor 导出的 mapped folder 时，构建期必须从根 manifest
-  与 `assets.map.json` 生成精确 physical Vite import map，并校验 path/hash/size/orphan；
-  禁止宽泛 glob、运行时猜路径或另存业务资源表。
-- path/hash/size/orphan 和 generated parity 属于导出或构建 checker；runtime 只按
-  `assets.map.json` 把 filename key 解析为 payload bytes，不重复计算 byteLength/hash，
-  也不扫描 physical orphan。缺少实际引用、manifest/schema、资源解码和运行能力错误仍须失败。
+  与 `assets.map.json` 生成 physical Vite import map；禁止宽泛 glob、运行时猜路径
+  或另存业务资源表。默认 editor/export/build consumer 仍校验 path/hash/size/orphan。
+- 明确由美术直接维护正式 asset 目录的 game consumer 可 opt in trusted-art policy：
+  `assets.map.json` 只提供 logical key→安全 physical path 路由，当前 files/bytes
+  为权威，不比对 `sha256`/`byteLength`/content-addressed filename，不因未引用
+  entry/file 阻断。实际引用的 path 缺失、manifest/schema、资源解码和运行能力
+  错误仍须失败；policy 必须由 consumer 显式选择，不改变 editor/optimizer/ZIP 默认合同。
 - 只需要 layout/background/popup、而 reel 由游戏业务 target 驱动时，使用 rendercore
   presentation surface；surface 仍拥有 mode-aware background visibility、popup placement
   和 destroy，app 只注入业务触发并组合公开 container。业务 reel 自己持有显示对象时，

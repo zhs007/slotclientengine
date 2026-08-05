@@ -20,7 +20,11 @@ CI=true pnpm --filter game003 generate:minecart2-layout-resources
 CI=true pnpm --filter game003 check:minecart2-layout-resources
 ```
 
-优化 ZIP 必须完整展开到 `assets/minecart2`，不得挑文件覆盖。`assets.map.json` 是 logical path 到内容寻址 payload 的唯一映射，生成的 TypeScript 文件禁止手改。
+首次接收优化 ZIP 时完整展开到 `assets/minecart2`。之后美术可直接替换
+目录中的内容或保留未引用文件，不必为内容替换重新导出整包或同步
+`sha256`/`byteLength`。game003 只使用 `assets.map.json` 的 logical key→安全
+physical path 路由；实际引用文件仍必须存在并通过 manifest/Spine/VNI/image
+decoder。生成的 TypeScript URL 表仍禁止手改。
 
 ## 当前功能边界
 

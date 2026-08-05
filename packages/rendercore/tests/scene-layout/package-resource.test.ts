@@ -106,6 +106,16 @@ function packageFiles(): Map<string, Uint8Array> {
 }
 
 describe("scene layout package resources", () => {
+  it("rejects an unknown mapped asset policy", async () => {
+    await expect(
+      createSceneLayoutPackageResource({
+        manifest: game002LayoutFixture,
+        files: packageFiles(),
+        mappedAssetPolicy: "unknown" as never,
+      }),
+    ).rejects.toThrow(/Unknown scene layout mapped asset policy/);
+  });
+
   it("owns the exact direct and mapped VNI closure", async () => {
     const manifest = {
       ...game002LayoutFixture,
@@ -259,6 +269,49 @@ describe("scene layout package resources", () => {
       decodeImage: async () => ({ width: 1, height: 1 }),
     });
     mappedResource.destroy();
+    const trustedArtFiles = new Map(mappedPackage.files);
+    const trustedArtMap = JSON.parse(
+      new TextDecoder().decode(trustedArtFiles.get("assets.map.json")!),
+    ) as { files: Record<string, Record<string, unknown> | number> };
+    for (const entry of Object.values(trustedArtMap.files)) {
+      if (typeof entry !== "object") continue;
+      entry.sha256 = "stale-art-metadata";
+      entry.byteLength = -1;
+    }
+    trustedArtMap.files["unused.json"] = {
+      path: "assets/missing-unused.json",
+      sha256: null,
+      byteLength: null,
+    };
+    trustedArtMap.files["ignored-invalid-entry.json"] = 5;
+    trustedArtFiles.set("assets.map.json", encode(trustedArtMap));
+    trustedArtFiles.set(
+      mappedPackage.map.files["bg.png"]!.path,
+      new Uint8Array([7, 8]),
+    );
+    trustedArtFiles.set(
+      "assets/artist-notes.txt",
+      new TextEncoder().encode("not used by the game"),
+    );
+    const trustedArtResource = await createSceneLayoutPackageResource({
+      manifest: mappedManifest,
+      files: trustedArtFiles,
+      mappedAssetPolicy: "trusted-art",
+      decodeImage: async () => ({ width: 1, height: 1 }),
+    });
+    trustedArtResource.destroy();
+
+    const missingTrustedArtFiles = new Map(trustedArtFiles);
+    missingTrustedArtFiles.delete(mappedPackage.map.files["bg.png"]!.path);
+    await expect(
+      createSceneLayoutPackageResource({
+        manifest: mappedManifest,
+        files: missingTrustedArtFiles,
+        mappedAssetPolicy: "trusted-art",
+        decodeImage: async () => ({ width: 1, height: 1 }),
+      }),
+    ).rejects.toThrow(/missing: bg\.png/);
+
     const deferredPath = mappedPackage.map.files["intro.mp4"]!.path;
     const partialPhysicalFiles = new Map(mappedPackage.files);
     partialPhysicalFiles.delete(deferredPath);
@@ -281,6 +334,26 @@ describe("scene layout package resources", () => {
     await partialResource.loadRuntimeResource("intro.video", "video");
     expect(deferredLoads).toEqual(["intro.mp4"]);
     partialResource.destroy();
+
+    const trustedPartialFiles = new Map(trustedArtFiles);
+    trustedPartialFiles.delete(deferredPath);
+    const trustedDeferredLoads: string[] = [];
+    const trustedPartialResource = await createSceneLayoutPackageResource({
+      manifest: mappedManifest,
+      files: trustedPartialFiles,
+      mappedAssetPolicy: "trusted-art",
+      lazyRuntimeResources: true,
+      loadRuntimeResourceBytes: async (logicalKey) => {
+        trustedDeferredLoads.push(logicalKey);
+        const bytes = mappedFiles.get(logicalKey);
+        if (!bytes) throw new Error(`missing deferred fixture ${logicalKey}`);
+        return new Uint8Array([...bytes, 99]);
+      },
+      decodeImage: async () => ({ width: 1, height: 1 }),
+    });
+    await trustedPartialResource.loadRuntimeResource("intro.video", "video");
+    expect(trustedDeferredLoads).toEqual(["intro.mp4"]);
+    trustedPartialResource.destroy();
 
     expect(() =>
       collectSceneLayoutPackagePaths({

@@ -12,10 +12,9 @@ const CRAVE_PHYSICAL_RESOURCE_URLS: Readonly<Record<string, string>> =
 export const GAME002_RUNTIME_MODULE_RESOURCE_ID = "game002-runtime-module";
 export const GAME002_CRAVE_RESOURCE_ID_PREFIX = "game002-crave-package:";
 const GAME002_DEFERRED_RUNTIME_PHYSICAL_PATHS = new Set(
-  ["nearwin1.json", "nearwin2.json", "nearwin3.json"].map((key) => {
+  ["nearwin1.json", "nearwin2.json", "nearwin3.json"].flatMap((key) => {
     const path = CRAVE_ASSETS_MAP_FILES[key]?.path;
-    if (!path) throw new Error(`game002 Crave map is missing "${key}".`);
-    return path;
+    return typeof path === "string" ? [path] : [];
   }),
 );
 

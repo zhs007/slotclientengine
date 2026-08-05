@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -54,9 +53,11 @@ function verify() {
 
   const distFiles = listFiles(DIST_ROOT);
   verifySensitiveStrings(distFiles);
-  const distHashes = new Set(distFiles.map(hashFile));
   for (const file of packageFiles) {
-    if (!distHashes.has(hashFile(file))) {
+    const source = readFileSync(file);
+    if (
+      !distFiles.some((candidate) => readFileSync(candidate).equals(source))
+    ) {
       failures.push(
         `dist is missing Minecart2 package content ${relative(MINECART2_ROOT, file)}.`,
       );
@@ -91,42 +92,45 @@ function verifyMinecart2SourceContract() {
     failures.push("Minecart2 asset map must be editor-assets version 1.");
   }
 
-  const physicalPaths = new Set();
   for (const [logicalPath, entry] of Object.entries(map.files ?? {})) {
-    if (
-      typeof entry.path !== "string" ||
-      typeof entry.sha256 !== "string" ||
-      !entry.path.startsWith(`assets/${entry.sha256}.`) ||
-      !Number.isSafeInteger(entry.byteLength)
-    ) {
-      failures.push(`Minecart2 map entry "${logicalPath}" is invalid.`);
-      continue;
-    }
-    physicalPaths.add(entry.path);
-    const file = join(MINECART2_ROOT, entry.path);
-    assertFile(file);
-    if (!existsSync(file)) continue;
-    if (statSync(file).size !== entry.byteLength) {
-      failures.push(`Minecart2 payload "${entry.path}" length drifted.`);
-    }
-    if (hashFile(file) !== entry.sha256) {
-      failures.push(`Minecart2 payload "${entry.path}" hash drifted.`);
-    }
-  }
-  const actual = listFiles(join(MINECART2_ROOT, "assets"))
-    .map((file) => relative(MINECART2_ROOT, file).replaceAll("\\", "/"))
-    .sort();
-  const expected = [...physicalPaths].sort();
-  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-    failures.push(
-      "Minecart2 physical payload closure differs from assets.map.json.",
-    );
+    if (!isRecord(entry) || typeof entry.path !== "string") continue;
+    if (!isSafeArtPath(entry.path))
+      failures.push(
+        `Minecart2 map entry "${logicalPath}" has an unsafe physical path.`,
+      );
   }
   return [
     MINECART2_LAYOUT,
     MINECART2_MAP,
-    ...actual.map((path) => join(MINECART2_ROOT, path)),
+    ...collectPresentArtFiles(MINECART2_ROOT, map),
   ];
+}
+
+function collectPresentArtFiles(root, map) {
+  const files = new Set();
+  for (const entry of Object.values(map.files ?? {})) {
+    if (!isRecord(entry) || typeof entry.path !== "string") continue;
+    if (!isSafeArtPath(entry.path)) continue;
+    const path = join(root, entry.path);
+    if (existsSync(path) && statSync(path).isFile()) files.add(path);
+  }
+  return [...files];
+}
+
+function isSafeArtPath(path) {
+  return (
+    path.startsWith("assets/") &&
+    !path.startsWith("/") &&
+    !path.endsWith("/") &&
+    !path.includes("\\") &&
+    !path
+      .split("/")
+      .some((part) => part === "" || part === "." || part === "..")
+  );
+}
+
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function verifySensitiveStrings(files) {
@@ -155,10 +159,6 @@ function assertDirectory(path) {
   if (!existsSync(path) || !statSync(path).isDirectory()) {
     failures.push(`missing directory ${path}.`);
   }
-}
-
-function hashFile(path) {
-  return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
 function listFiles(root) {
