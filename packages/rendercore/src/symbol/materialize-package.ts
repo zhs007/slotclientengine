@@ -364,9 +364,55 @@ function rewriteSymbolManifestPaths(
         }
       }
       rewriteValueImagePaths(presentation, mapping);
+      rewriteValueImageStringPaths(presentation, mapping);
     }
+    rewriteImageStringNodePaths(entry, mapping);
   }
   return manifest;
+}
+
+function rewriteImageStringNodePaths(
+  entry: Record<string, unknown>,
+  mapping: ReadonlyMap<string, string>,
+): void {
+  if (!Array.isArray(entry.imageStringNodes)) return;
+  for (const rawNode of entry.imageStringNodes) {
+    const node = record(rawNode, "symbol image-string node");
+    if (typeof node.resource === "string")
+      node.resource = rewriteRequiredRef(node.resource, mapping);
+    rewriteImageStringSpecialValuePaths(node, mapping);
+  }
+}
+
+function rewriteValueImageStringPaths(
+  presentation: Record<string, unknown>,
+  mapping: ReadonlyMap<string, string>,
+): void {
+  const text = record(presentation.text, "valuePresentation.text");
+  if (text.type !== "image-string") return;
+  if (Array.isArray(text.tiers)) {
+    for (const rawBinding of text.tiers) {
+      const binding = record(rawBinding, "valuePresentation image-string tier");
+      if (typeof binding.resource === "string")
+        binding.resource = rewriteRequiredRef(binding.resource, mapping);
+    }
+  }
+  rewriteImageStringSpecialValuePaths(text, mapping);
+}
+
+function rewriteImageStringSpecialValuePaths(
+  owner: Record<string, unknown>,
+  mapping: ReadonlyMap<string, string>,
+): void {
+  if (!Array.isArray(owner.specialValueImages)) return;
+  for (const rawSpecialValue of owner.specialValueImages) {
+    const specialValue = record(
+      rawSpecialValue,
+      "image-string special value image",
+    );
+    if (typeof specialValue.image === "string")
+      specialValue.image = rewriteRequiredRef(specialValue.image, mapping);
+  }
 }
 
 function symbolAssetMediaType(key: string): string {

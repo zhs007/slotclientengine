@@ -64,6 +64,106 @@ describe("layout editor symbols package import", () => {
     resource.destroy();
   });
 
+  it("prefixes a symbol-owned ImgNumber manifest and its glyph closure", async () => {
+    const packageManifest = {
+      version: 1,
+      kind: "symbol-package",
+      id: "minecart2",
+      cellSize: { width: 172, height: 130 },
+      entrypoints: {
+        gameConfig: "gameconfig.json",
+        symbolManifest: "symbol-state-textures.manifest.json",
+      },
+      resources: [
+        "new-image-string-2-coin_0000_0.png",
+        "new-image-string-2.image-string.manifest.json",
+      ],
+    };
+    const imageStringManifest = {
+      version: 1,
+      kind: "image-string",
+      id: "new-image-string-2",
+      metrics: { lineHeight: 1, letterSpacing: 0 },
+      glyphs: {
+        "0": {
+          path: "new-image-string-2-coin_0000_0.png",
+          size: { width: 1, height: 1 },
+          offset: { x: 0, y: 0 },
+        },
+      },
+      fixedAdvanceGroups: [],
+    };
+    const zip = createDeterministicZip({
+      "symbols.package.json": encode(packageManifest),
+      "gameconfig.json": encode({
+        paytable: { "0": { code: 0, symbol: "A", pays: [1] } },
+        symbolCodes: { A: 0 },
+        reels: { main: [[0]] },
+      }),
+      "symbol-state-textures.manifest.json": encode({
+        version: 1,
+        states: [],
+        symbols: {
+          A: {
+            normal: { kind: "transparent", width: 172, height: 130 },
+            scale: 1,
+            imageStringNodes: [
+              {
+                name: "image-value",
+                resource: "./new-image-string-2.image-string.manifest.json",
+                targets: [{ state: "normal" }],
+                initialText: "0",
+                anchor: { x: 0.5, y: 0.5 },
+                transform: { x: 0, y: 1, scale: 1 },
+                followSlotColor: true,
+              },
+            ],
+          },
+        },
+      }),
+      "new-image-string-2.image-string.manifest.json":
+        encode(imageStringManifest),
+      "new-image-string-2-coin_0000_0.png": png,
+    });
+
+    const imported = await importSymbolsZipWithFiles(zip, {
+      loadTextures: false,
+    });
+    const prefix = "pkg-9-minecart2";
+    expect(imported.resource.rawSymbolManifest).toMatchObject({
+      symbols: {
+        A: {
+          imageStringNodes: [
+            {
+              name: "image-value",
+              resource: `./${prefix}-new-image-string-2.image-string.manifest.json`,
+            },
+          ],
+        },
+      },
+    });
+    expect(imported.resource.packageManifest.resources).toEqual([
+      `${prefix}-new-image-string-2-coin_0000_0.png`,
+      `${prefix}-new-image-string-2.image-string.manifest.json`,
+    ]);
+    const nested = JSON.parse(
+      new TextDecoder().decode(
+        imported.files.get(
+          `${prefix}-new-image-string-2.image-string.manifest.json`,
+        )!,
+      ),
+    );
+    expect(nested).toMatchObject({
+      id: "new-image-string-2",
+      glyphs: {
+        "0": {
+          path: `${prefix}-new-image-string-2-coin_0000_0.png`,
+        },
+      },
+    });
+    imported.resource.destroy();
+  });
+
   it("migrates legal uppercase filename keys without lowercasing", async () => {
     const packageManifest = {
       version: 1,

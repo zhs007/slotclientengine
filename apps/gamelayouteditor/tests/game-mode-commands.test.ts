@@ -282,6 +282,27 @@ describe("game mode and popup dependency commands", () => {
     expect(project.symbolDependencies.size).toBe(0);
   });
 
+  it("isolates different Symbols owners and replaces only same-id bytes", () => {
+    const project = createNewEditorProject("maximized-focus");
+    const first = symbolPackage("first-symbols", 1);
+    const second = symbolPackage("second-symbols", 2);
+    importSymbolDependency(project, first);
+    importSymbolDependency(project, second);
+
+    expect(project.assets.get(first.rootKey)).toEqual(new Uint8Array([1]));
+    expect(project.assets.get(second.rootKey)).toEqual(new Uint8Array([2]));
+    expect(project.symbolDependencies.size).toBe(2);
+
+    replaceSymbolDependency(
+      project,
+      "first-symbols",
+      symbolPackage("first-symbols", 3),
+    );
+
+    expect(project.assets.get(first.rootKey)).toEqual(new Uint8Array([3]));
+    expect(project.assets.get(second.rootKey)).toEqual(new Uint8Array([2]));
+  });
+
   it("never aliases a new mode to the currently edited background nodes", () => {
     const project = createNewEditorProject("orientation-focus");
     project.gameModes.modes[0]!.backgroundNodes = {
