@@ -920,11 +920,20 @@ export function removeImageStringDependency(
       )
       .map((node) => `${symbol.symbol}.imageStringNodes.${node.name}`),
     ...(symbol.valuePresentation?.text.type === "image-string"
-      ? symbol.valuePresentation.text.tiers.flatMap((binding, index) =>
-          imageStringDependencyMatches(binding.resource, dependency.rootKey)
-            ? [`${symbol.symbol}.valuePresentation.text.tiers[${index}]`]
-            : [],
-        )
+      ? "tierResources" in symbol.valuePresentation.text
+        ? symbol.valuePresentation.text.tierResources.flatMap(
+            (resource, index) =>
+              imageStringDependencyMatches(resource, dependency.rootKey)
+                ? [
+                    `${symbol.symbol}.valuePresentation.text.tierResources[${index}]`,
+                  ]
+                : [],
+          )
+        : symbol.valuePresentation.text.tiers.flatMap((binding, index) =>
+            imageStringDependencyMatches(binding.resource, dependency.rootKey)
+              ? [`${symbol.symbol}.valuePresentation.text.tiers[${index}]`]
+              : [],
+          )
       : []),
   ]);
   if (usedBy.length > 0) {
@@ -1070,18 +1079,34 @@ export function getAssetReferences(
         });
       });
       if (symbol.valuePresentation.text.type === "image-string") {
-        symbol.valuePresentation.text.tiers.forEach((binding, index) => {
-          references.push({
-            path: stripLocalRef(binding.resource),
-            location: `${symbol.symbol}.valuePresentation.text.tiers[${index}]`,
+        const text = symbol.valuePresentation.text;
+        if ("tierResources" in text) {
+          text.tierResources.forEach((resource, index) => {
+            references.push({
+              path: stripLocalRef(resource),
+              location: `${symbol.symbol}.valuePresentation.text.tierResources[${index}]`,
+            });
           });
-          for (const mapping of binding.specialValueImages ?? []) {
+          for (const mapping of text.specialValueImages ?? []) {
             references.push({
               path: stripLocalRef(mapping.image),
-              location: `${symbol.symbol}.valuePresentation.text.tiers[${index}].specialValueImages.${mapping.value}`,
+              location: `${symbol.symbol}.valuePresentation.text.specialValueImages.${mapping.value}`,
             });
           }
-        });
+        } else {
+          text.tiers.forEach((binding, index) => {
+            references.push({
+              path: stripLocalRef(binding.resource),
+              location: `${symbol.symbol}.valuePresentation.text.tiers[${index}]`,
+            });
+            for (const mapping of binding.specialValueImages ?? []) {
+              references.push({
+                path: stripLocalRef(mapping.image),
+                location: `${symbol.symbol}.valuePresentation.text.tiers[${index}].specialValueImages.${mapping.value}`,
+              });
+            }
+          });
+        }
       }
     }
     for (const node of symbol.imageStringNodes) {
@@ -1211,6 +1236,7 @@ export function compileSymbolEditorManifest(
       entry.imageStringNodes = symbol.imageStringNodes.map((node) => ({
         name: node.name,
         resource: node.resource,
+        ...(node.spineSlot ? { spineSlot: node.spineSlot } : {}),
         targets: node.targets.map((target) =>
           target.slot === undefined
             ? { state: target.state }
@@ -1661,10 +1687,17 @@ function compileValuePresentation(
 ): Record<string, unknown> {
   const clone = cloneValue(value) as unknown as Record<string, unknown>;
   if (value.text.type === "image-string") {
-    const text = clone.text as { tiers: Array<Record<string, unknown>> };
-    for (const [index, binding] of text.tiers.entries()) {
-      if (!value.text.tiers[index]?.specialValueImages?.length) {
-        delete binding.specialValueImages;
+    if ("tierResources" in value.text) {
+      const text = clone.text as Record<string, unknown>;
+      if (!value.text.specialValueImages?.length) {
+        delete text.specialValueImages;
+      }
+    } else {
+      const text = clone.text as { tiers: Array<Record<string, unknown>> };
+      for (const [index, binding] of text.tiers.entries()) {
+        if (!value.text.tiers[index]?.specialValueImages?.length) {
+          delete binding.specialValueImages;
+        }
       }
     }
   }
@@ -1871,10 +1904,12 @@ function validateTieredSpineEditorContract(
     );
   }
   if (value.text.type === "image-string") {
-    for (const [index, binding] of value.text.tiers.entries()) {
+    const bindings =
+      "tierResources" in value.text ? [value.text] : value.text.tiers;
+    for (const [index, binding] of bindings.entries()) {
       if (binding.anchor.x !== 0.5 || binding.anchor.y !== 0.5) {
         throw new Error(
-          `${symbol.symbol} 的 ImgNumber tier ${index + 1} 必须以动态内容中心 (0.5, 0.5) 对齐 Spine slot。`,
+          `${symbol.symbol} 的 ImgNumber ${"tierResources" in value.text ? "Normal" : `tier ${index + 1}`} 必须以动态内容中心 (0.5, 0.5) 对齐 Spine slot。`,
         );
       }
     }

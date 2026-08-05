@@ -170,7 +170,7 @@ describe("SymbolImageStringController", () => {
     vi.mocked(player.attachSlotObject).mockClear();
     notifySymbolImageStringSpineActive(symbol, "normal", player, currentOwner);
     controller.syncState("normal");
-    expect(player.attachSlotObject).toHaveBeenCalledTimes(2);
+    expect(player.attachSlotObject).toHaveBeenCalledTimes(1);
 
     controller.resetForPoolRelease();
     expect(controller.getText("coin-value")).toBe("01");
@@ -183,6 +183,59 @@ describe("SymbolImageStringController", () => {
     expect(() =>
       notifySymbolImageStringSpineInactive(symbol, player),
     ).not.toThrow();
+    symbol.destroy();
+  });
+
+  it("keeps one shared container across Spine, hidden and direct states", () => {
+    const symbol = createSymbol();
+    const controller = new SymbolImageStringController({
+      root: symbol,
+      nodes: [
+        {
+          spec: {
+            name: "coin-value",
+            resource:
+              "./dependencies/image-strings/digits/image-string.manifest.json",
+            spineSlot: "Num",
+            targets: [{ state: "win" }],
+            initialText: "01",
+            anchor: { x: 0.5, y: 0.5 },
+            transform: { x: 0, y: 0, scale: 1 },
+            followSlotColor: true,
+          },
+          spineStates: new Set(["normal", "appear"]),
+          resource: {
+            manifest,
+            textures: {
+              "assets/0.png": Texture.EMPTY,
+              "assets/1.png": Texture.EMPTY,
+            },
+            destroyed: false,
+            assertUsable: () => undefined,
+            destroy: async () => undefined,
+          },
+        },
+      ],
+    });
+    const player = createPlayer();
+    const owner = {};
+
+    controller.syncState("normal");
+    notifySymbolImageStringSpineActive(symbol, "normal", player, owner);
+    const display = vi.mocked(player.attachSlotObject).mock.calls[0]![0].object;
+    controller.syncState("appear");
+    notifySymbolImageStringSpineActive(symbol, "appear", player, owner);
+    expect(player.attachSlotObject).toHaveBeenCalledTimes(1);
+    expect(player.removeSlotObject).not.toHaveBeenCalled();
+
+    controller.syncState("disabled");
+    expect(player.removeSlotObject).toHaveBeenCalledWith(display);
+    expect(display.visible).toBe(false);
+    controller.syncState("win");
+    expect(symbol.imageStringOverlayLayer.children).toEqual([display]);
+    expect(display.visible).toBe(true);
+
+    controller.destroy();
     symbol.destroy();
   });
 

@@ -195,7 +195,7 @@ export function getResourceBindingLabel(
   if (context.kind === "image-string-special-image")
     return `${context.symbol}.imageStringNodes[${context.nodeIndex}].specialValueImages[${context.mappingIndex}]`;
   if (context.kind === "value-image-string-special-image")
-    return `${context.symbol}.valuePresentation.text.tiers[${context.tierIndex}].specialValueImages[${context.mappingIndex}]`;
+    return `${context.symbol}.valuePresentation.text.specialValueImages[${context.mappingIndex}]`;
   const target = `${context.symbol}.${"state" in context ? context.state : `tier ${context.tierIndex + 1}`}`;
   const field =
     context.kind === "value-tier-resource"
@@ -234,10 +234,11 @@ export function applyResourceBinding(
       const value = structuredClone(symbol.valuePresentation!);
       if (value.text.type !== "image-string")
         throw new Error("当前数值展示不是 ImgNumber。");
-      const mapping =
-        value.text.tiers[context.tierIndex]?.specialValueImages?.[
-          context.mappingIndex
-        ];
+      const mapping = (
+        "tierResources" in value.text
+          ? value.text
+          : value.text.tiers[context.tierIndex]
+      )?.specialValueImages?.[context.mappingIndex];
       if (!mapping) throw new Error("ImgNumber 特殊值映射不存在。");
       (mapping as { image: string }).image = path ? `./${path}` : "";
       setValuePresentation(project, context.symbol, value);
@@ -257,7 +258,8 @@ export function applyResourceBinding(
       }>;
       text:
         | { type: "font" | "image"; slot: string }
-        | { type: "image-string"; tiers: Array<{ slot: string }> };
+        | { type: "image-string"; tiers: Array<{ slot: string }> }
+        | { type: "image-string"; tierResources: string[]; slot: string };
     };
     const tier = value.tiers[context.tierIndex];
     if (!tier) throw new Error(`value tier ${context.tierIndex + 1} 不存在。`);
@@ -278,8 +280,11 @@ export function applyResourceBinding(
     if (context.field === "skeleton") {
       tier.animation.playback.animationName = "";
       if (value.text.type === "image-string") {
-        const binding = value.text.tiers[context.tierIndex];
-        if (binding) binding.slot = "";
+        if ("tierResources" in value.text) value.text.slot = "";
+        else {
+          const binding = value.text.tiers[context.tierIndex];
+          if (binding) binding.slot = "";
+        }
       } else {
         value.text.slot = "";
       }
@@ -500,9 +505,10 @@ function requireTarget(
     )
       throw new Error("ImgNumber 特殊值映射不存在。");
   } else if (context.kind === "value-image-string-special-image") {
+    const text = symbol.valuePresentation?.text;
     if (
-      symbol.valuePresentation?.text.type !== "image-string" ||
-      !symbol.valuePresentation.text.tiers[context.tierIndex]
+      text?.type !== "image-string" ||
+      !("tierResources" in text ? text : text.tiers[context.tierIndex])
         ?.specialValueImages?.[context.mappingIndex]
     )
       throw new Error("数值 ImgNumber 特殊值映射不存在。");

@@ -8,6 +8,7 @@ import type { SymbolImageStringSpecialImageResource } from "./mapped-display.js"
 
 export interface SymbolImageStringNodeResource {
   readonly spec: SymbolImageStringNodeSpec;
+  readonly spineStates?: ReadonlySet<string>;
   readonly resource: ImageStringResource;
   readonly specialValueImages?: Readonly<
     Record<string, SymbolImageStringSpecialImageResource>

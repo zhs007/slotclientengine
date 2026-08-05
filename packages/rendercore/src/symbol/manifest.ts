@@ -176,10 +176,22 @@ export interface SymbolValuePresentationImageStringTierBindingSpec {
   readonly specialValueImages?: readonly SymbolImageStringSpecialValueImageSpec[];
 }
 
-export interface SymbolValuePresentationImageStringTextSpec {
+export interface SymbolValuePresentationLegacyImageStringTextSpec {
   readonly type: "image-string";
   readonly tiers: readonly SymbolValuePresentationImageStringTierBindingSpec[];
 }
+
+export interface SymbolValuePresentationSharedImageStringTextSpec extends Omit<
+  SymbolValuePresentationImageStringTierBindingSpec,
+  "resource"
+> {
+  readonly type: "image-string";
+  readonly tierResources: readonly string[];
+}
+
+export type SymbolValuePresentationImageStringTextSpec =
+  | SymbolValuePresentationLegacyImageStringTextSpec
+  | SymbolValuePresentationSharedImageStringTextSpec;
 
 export type SymbolValuePresentationTextSpec =
   | SymbolValuePresentationFontTextSpec
@@ -207,6 +219,7 @@ export interface SymbolImageStringNodeSpec {
   readonly name: string;
   readonly resource: string;
   readonly targets: readonly SymbolImageStringNodeTargetSpec[];
+  readonly spineSlot?: string;
   readonly initialText: string;
   readonly anchor: Readonly<{ x: number; y: number }>;
   readonly transform: Readonly<{ x: number; y: number; scale: number }>;
@@ -593,6 +606,7 @@ function parseImageStringNodes(
         "resource",
         "target",
         "targets",
+        "spineSlot",
         "initialText",
         "anchor",
         "transform",
@@ -615,6 +629,23 @@ function parseImageStringNodes(
         node.resource,
         `${label}.resource`,
       );
+      const spineSlot =
+        node.spineSlot === undefined
+          ? undefined
+          : assertString(node.spineSlot, `${label}.spineSlot`);
+      if (spineSlot !== undefined && spineSlot.length === 0) {
+        throw new SymbolAssetError(`${label}.spineSlot must not be empty.`);
+      }
+      if (
+        spineSlot !== undefined &&
+        ![...stateDefinitions.keys()].some((state) =>
+          isSpineBackedImageStringTarget(state, animations, valuePresentation),
+        )
+      ) {
+        throw new SymbolAssetError(
+          `${label}.spineSlot requires at least one Spine-backed state.`,
+        );
+      }
       if (node.target !== undefined && node.targets !== undefined) {
         throw new SymbolAssetError(
           `${label} must not declare both target and targets.`,
@@ -623,10 +654,15 @@ function parseImageStringNodes(
       const rawTargets =
         node.targets === undefined
           ? node.target === undefined
-            ? undefined
+            ? spineSlot === undefined
+              ? undefined
+              : []
             : [node.target]
           : node.targets;
-      if (!Array.isArray(rawTargets) || rawTargets.length === 0) {
+      if (
+        !Array.isArray(rawTargets) ||
+        (rawTargets.length === 0 && spineSlot === undefined)
+      ) {
         throw new SymbolAssetError(
           `${label}.targets must be a non-empty array.`,
         );
@@ -648,6 +684,11 @@ function parseImageStringNodes(
             animations,
             valuePresentation,
           );
+          if (spineSlot !== undefined && spineBacked) {
+            throw new SymbolAssetError(
+              `${targetLabel}.state must be non-Spine when spineSlot is configured.`,
+            );
+          }
           let slot: string | undefined;
           if (spineBacked) {
             slot = assertString(target.slot, `${targetLabel}.slot`);
@@ -718,6 +759,7 @@ function parseImageStringNodes(
         name,
         resource,
         targets,
+        ...(spineSlot === undefined ? {} : { spineSlot }),
         initialText,
         anchor,
         transform,
@@ -733,6 +775,79 @@ function assertStringValue(value: unknown, label: string): string {
     throw new SymbolAssetError(`${label} must be a string.`);
   }
   return value;
+}
+
+function parseImageStringBindingFields(
+  binding: Record<string, unknown>,
+  label: string,
+): Omit<SymbolValuePresentationImageStringTierBindingSpec, "resource"> {
+  const slot = assertString(binding.slot, `${label}.slot`);
+  if (slot.length === 0) {
+    throw new SymbolAssetError(`${label}.slot must not be empty.`);
+  }
+  const anchorRecord = assertRecord(binding.anchor, `${label}.anchor`);
+  assertOnlyKnownKeys(anchorRecord, `${label}.anchor`, ["x", "y"]);
+  let anchor: Readonly<{ x: number; y: number }>;
+  try {
+    anchor = validateImageStringAnchor({
+      x: finiteNumber(anchorRecord.x, `${label}.anchor.x`),
+      y: finiteNumber(anchorRecord.y, `${label}.anchor.y`),
+    });
+  } catch (error) {
+    throw new SymbolAssetError(
+      `${label}.anchor is invalid: ${formatUnknownError(error)}.`,
+    );
+  }
+  const transformRecord = assertRecord(binding.transform, `${label}.transform`);
+  assertOnlyKnownKeys(transformRecord, `${label}.transform`, [
+    "x",
+    "y",
+    "scale",
+  ]);
+  if (typeof binding.followSlotColor !== "boolean") {
+    throw new SymbolAssetError(`${label}.followSlotColor must be a boolean.`);
+  }
+  const specialValueImages = parseImageStringSpecialValueImages(
+    binding.specialValueImages,
+    `${label}.specialValueImages`,
+  );
+  return Object.freeze({
+    slot,
+    anchor,
+    transform: Object.freeze({
+      x: finiteNumber(transformRecord.x, `${label}.transform.x`),
+      y: finiteNumber(transformRecord.y, `${label}.transform.y`),
+      scale: finitePositiveNumber(
+        transformRecord.scale,
+        `${label}.transform.scale`,
+      ),
+    }),
+    followSlotColor: binding.followSlotColor,
+    ...(specialValueImages.length > 0 ? { specialValueImages } : {}),
+  });
+}
+
+export function resolveSymbolValuePresentationImageStringBinding(
+  text: SymbolValuePresentationImageStringTextSpec,
+  tierIndex: number,
+): SymbolValuePresentationImageStringTierBindingSpec | undefined {
+  if (!Number.isSafeInteger(tierIndex) || tierIndex < 0) return undefined;
+  if ("tierResources" in text) {
+    const resource = text.tierResources[tierIndex];
+    return resource === undefined
+      ? undefined
+      : Object.freeze({
+          resource,
+          slot: text.slot,
+          anchor: text.anchor,
+          transform: text.transform,
+          followSlotColor: text.followSlotColor,
+          ...(text.specialValueImages
+            ? { specialValueImages: text.specialValueImages }
+            : {}),
+        });
+  }
+  return text.tiers[tierIndex];
 }
 
 function isSpineBackedImageStringTarget(
@@ -1179,109 +1294,105 @@ function parseValuePresentation(
   }
   let parsedText: SymbolValuePresentationTextSpec;
   if (textType === "image-string") {
-    assertOnlyKnownKeys(text, `symbol "${symbol}" valuePresentation.text`, [
-      "type",
-      "tiers",
-      "specialValueImages",
-    ]);
-    if (!Array.isArray(text.tiers)) {
-      throw new SymbolAssetError(
-        `Symbol "${symbol}" valuePresentation.text.tiers must be an array.`,
-      );
-    }
-    if (text.tiers.length !== tiers.length) {
-      throw new SymbolAssetError(
-        `Symbol "${symbol}" valuePresentation.text.tiers length must equal valuePresentation.tiers length (${tiers.length}).`,
-      );
-    }
-    const legacySpecialValueImages = parseImageStringSpecialValueImages(
-      text.specialValueImages,
-      `symbol "${symbol}" valuePresentation.text.specialValueImages`,
-    );
-    parsedText = Object.freeze({
-      type: "image-string",
-      tiers: Object.freeze(
-        text.tiers.map((rawBinding, index) => {
-          const label = `symbol "${symbol}" valuePresentation.text.tiers[${index}]`;
-          const binding = assertRecord(rawBinding, label);
-          assertOnlyKnownKeys(binding, label, [
-            "resource",
-            "slot",
-            "anchor",
-            "transform",
-            "followSlotColor",
-            "specialValueImages",
-          ]);
-          if (
-            text.specialValueImages !== undefined &&
-            binding.specialValueImages !== undefined
-          ) {
-            throw new SymbolAssetError(
-              `Symbol "${symbol}" valuePresentation.text must not combine legacy specialValueImages with per-tier specialValueImages.`,
-            );
-          }
-          const resource = assertImageStringResourcePath(
-            binding.resource,
-            `${label}.resource`,
-          );
-          const slot = assertString(binding.slot, `${label}.slot`);
-          const anchorRecord = assertRecord(binding.anchor, `${label}.anchor`);
-          assertOnlyKnownKeys(anchorRecord, `${label}.anchor`, ["x", "y"]);
-          let anchor: Readonly<{ x: number; y: number }>;
-          try {
-            anchor = validateImageStringAnchor({
-              x: finiteNumber(anchorRecord.x, `${label}.anchor.x`),
-              y: finiteNumber(anchorRecord.y, `${label}.anchor.y`),
-            });
-          } catch (error) {
-            throw new SymbolAssetError(
-              `${label}.anchor is invalid: ${formatUnknownError(error)}.`,
-            );
-          }
-          const transformRecord = assertRecord(
-            binding.transform,
-            `${label}.transform`,
-          );
-          assertOnlyKnownKeys(transformRecord, `${label}.transform`, [
-            "x",
-            "y",
-            "scale",
-          ]);
-          const transform = Object.freeze({
-            x: finiteNumber(transformRecord.x, `${label}.transform.x`),
-            y: finiteNumber(transformRecord.y, `${label}.transform.y`),
-            scale: finitePositiveNumber(
-              transformRecord.scale,
-              `${label}.transform.scale`,
+    const textLabel = `symbol "${symbol}" valuePresentation.text`;
+    if (text.tierResources !== undefined) {
+      assertOnlyKnownKeys(text, textLabel, [
+        "type",
+        "tierResources",
+        "slot",
+        "anchor",
+        "transform",
+        "followSlotColor",
+        "specialValueImages",
+      ]);
+      if (!Array.isArray(text.tierResources)) {
+        throw new SymbolAssetError(
+          `${textLabel}.tierResources must be an array.`,
+        );
+      }
+      if (text.tierResources.length !== tiers.length) {
+        throw new SymbolAssetError(
+          `${textLabel}.tierResources length must equal valuePresentation.tiers length (${tiers.length}).`,
+        );
+      }
+      const shared = parseImageStringBindingFields(text, textLabel);
+      parsedText = Object.freeze({
+        type: "image-string",
+        tierResources: Object.freeze(
+          text.tierResources.map((resource, index) =>
+            assertImageStringResourcePath(
+              resource,
+              `${textLabel}.tierResources[${index}]`,
             ),
-          });
-          if (typeof binding.followSlotColor !== "boolean") {
-            throw new SymbolAssetError(
-              `${label}.followSlotColor must be a boolean.`,
-            );
-          }
-          const specialValueImages =
-            text.specialValueImages === undefined
-              ? parseImageStringSpecialValueImages(
-                  binding.specialValueImages,
-                  `${label}.specialValueImages`,
-                )
-              : Object.freeze(
-                  legacySpecialValueImages.map((mapping) =>
-                    Object.freeze({ ...mapping }),
-                  ),
-                );
-          return Object.freeze({
-            resource,
-            slot,
-            anchor,
-            transform,
-            followSlotColor: binding.followSlotColor,
-            ...(specialValueImages.length > 0 ? { specialValueImages } : {}),
-          });
-        }),
-      ),
-    });
+          ),
+        ),
+        ...shared,
+      });
+    } else {
+      assertOnlyKnownKeys(text, textLabel, [
+        "type",
+        "tiers",
+        "specialValueImages",
+      ]);
+      if (!Array.isArray(text.tiers)) {
+        throw new SymbolAssetError(`${textLabel}.tiers must be an array.`);
+      }
+      if (text.tiers.length !== tiers.length) {
+        throw new SymbolAssetError(
+          `${textLabel}.tiers length must equal valuePresentation.tiers length (${tiers.length}).`,
+        );
+      }
+      const legacySpecialValueImages = parseImageStringSpecialValueImages(
+        text.specialValueImages,
+        `${textLabel}.specialValueImages`,
+      );
+      parsedText = Object.freeze({
+        type: "image-string",
+        tiers: Object.freeze(
+          text.tiers.map((rawBinding, index) => {
+            const label = `${textLabel}.tiers[${index}]`;
+            const binding = assertRecord(rawBinding, label);
+            assertOnlyKnownKeys(binding, label, [
+              "resource",
+              "slot",
+              "anchor",
+              "transform",
+              "followSlotColor",
+              "specialValueImages",
+            ]);
+            if (
+              text.specialValueImages !== undefined &&
+              binding.specialValueImages !== undefined
+            ) {
+              throw new SymbolAssetError(
+                `Symbol "${symbol}" valuePresentation.text must not combine legacy specialValueImages with per-tier specialValueImages.`,
+              );
+            }
+            const specialValueImages =
+              text.specialValueImages === undefined
+                ? parseImageStringSpecialValueImages(
+                    binding.specialValueImages,
+                    `${label}.specialValueImages`,
+                  )
+                : Object.freeze(
+                    legacySpecialValueImages.map((mapping) =>
+                      Object.freeze({ ...mapping }),
+                    ),
+                  );
+            return Object.freeze({
+              resource: assertImageStringResourcePath(
+                binding.resource,
+                `${label}.resource`,
+              ),
+              ...parseImageStringBindingFields(
+                { ...binding, specialValueImages },
+                label,
+              ),
+            });
+          }),
+        ),
+      });
+    }
   } else if (textType === "image") {
     assertOnlyKnownKeys(text, `symbol "${symbol}" valuePresentation.text`, [
       "type",
@@ -1706,11 +1817,13 @@ export function createSymbolSpineAnimationResourcesFromManifest(
           requiredSlots:
             animation.kind === "spine"
               ? manifestSymbol.imageStringNodes.flatMap((node) =>
-                  node.targets
-                    .filter((target) => target.state === state)
-                    .flatMap((target) =>
-                      target.slot === undefined ? [] : [target.slot],
-                    ),
+                  node.spineSlot
+                    ? [node.spineSlot]
+                    : node.targets
+                        .filter((target) => target.state === state)
+                        .flatMap((target) =>
+                          target.slot === undefined ? [] : [target.slot],
+                        ),
                 )
               : [],
         });

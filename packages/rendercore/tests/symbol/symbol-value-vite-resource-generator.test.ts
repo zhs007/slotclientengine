@@ -247,6 +247,27 @@ describe("symbol value Vite resource generator", () => {
     expect(source.match(/u0030\.png\?url/gu)).toHaveLength(2);
     expect(source).toContain("mini.png?url");
     expect(source).not.toContain("value-image");
+
+    manifest.symbols.GOLD.valuePresentation.text = {
+      type: "image-string",
+      tierResources: ["small", "large"].map(
+        (id) => `./dependencies/${id}/image-string.manifest.json`,
+      ),
+      slot: "Num",
+      anchor: { x: 0.5, y: 0.5 },
+      transform: { x: 0, y: 0, scale: 1 },
+      followSlotColor: true,
+      specialValueImages: [{ value: 200, image: "./mini.png" }],
+    };
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expect(
+      generator.generateSymbolValueViteResources({
+        manifest: manifestPath,
+        out: outPath,
+        check: false,
+      }),
+    ).resolves.toMatchObject({ resourceCount: 13 });
+    expect(await readFile(outPath, "utf8")).toContain("mini.png?url");
   });
 
   it("rejects invalid bounds, unknown fields, non-Spine tiers and path escape", async () => {

@@ -512,7 +512,7 @@ describe("symbol editor typed project", () => {
       parseSymbolStateTextureManifest(rawManifest).symbols.CN
         .valuePresentation!,
     );
-    if (restored.text.type !== "image-string")
+    if (restored.text.type !== "image-string" || !("tiers" in restored.text))
       throw new Error("expected game002 CN image-string presentation");
     const secondBinding = restored.text.tiers[1] as unknown as {
       slot: string;
@@ -526,7 +526,7 @@ describe("symbol editor typed project", () => {
     const compiled = parseSymbolStateTextureManifest(
       compileSymbolEditorManifest(project),
     ).symbols.CN.valuePresentation!;
-    if (compiled.text.type !== "image-string")
+    if (compiled.text.type !== "image-string" || !("tiers" in compiled.text))
       throw new Error("expected image-string presentation");
     expect(compiled.text.tiers[1]).toMatchObject({
       slot: "other",
@@ -534,6 +534,32 @@ describe("symbol editor typed project", () => {
       specialValueImages: [{ value: 250, image: "./mini.png" }],
     });
     expect(compiled.text.tiers[0]?.slot).not.toBe("other");
+
+    const shared = structuredClone(restored) as any;
+    shared.text = {
+      type: "image-string",
+      tierResources: restored.text.tiers.map((binding) => binding.resource),
+      slot: "shared-num",
+      anchor: { x: 0.5, y: 0.5 },
+      transform: { x: 3, y: -4, scale: 0.75 },
+      followSlotColor: true,
+      specialValueImages: [{ value: 250, image: "./mini.png" }],
+    };
+    setValuePresentation(project, "CN", shared);
+    const sharedCompiled = parseSymbolStateTextureManifest(
+      compileSymbolEditorManifest(project),
+    ).symbols.CN.valuePresentation!.text;
+    expect(sharedCompiled).toMatchObject({
+      type: "image-string",
+      slot: "shared-num",
+      transform: { x: 3, y: -4, scale: 0.75 },
+    });
+    expect(
+      sharedCompiled.type === "image-string" &&
+        "tierResources" in sharedCompiled
+        ? sharedCompiled.tierResources
+        : [],
+    ).toHaveLength(restored.tiers.length);
   });
 
   it("derives tiered states as shared active Spine or independent static images", () => {

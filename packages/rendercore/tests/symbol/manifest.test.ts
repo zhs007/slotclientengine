@@ -290,6 +290,34 @@ describe("symbol state texture manifest helpers", () => {
     expect(parsed.symbols.L1.imageStringNodes).toEqual([]);
   });
 
+  it("shares one named ImgNumber slot across Spine states and keeps non-Spine targets exact", () => {
+    const manifest = createManifest() as any;
+    manifest.symbols.H1.imageStringNodes = [
+      {
+        name: "coin-value",
+        resource:
+          "./dependencies/image-strings/coin-digits/image-string.manifest.json",
+        spineSlot: "Num",
+        targets: [{ state: "win" }],
+        initialText: "1",
+        anchor: { x: 0.5, y: 0.5 },
+        transform: { x: 0, y: 0, scale: 1 },
+        followSlotColor: true,
+      },
+    ];
+    const node =
+      parseSymbolStateTextureManifest(manifest).symbols.H1.imageStringNodes[0]!;
+    expect(node.spineSlot).toBe("Num");
+    expect(node.targets).toEqual([{ state: "win" }]);
+
+    manifest.symbols.H1.imageStringNodes[0].targets.push({
+      state: "appear",
+    });
+    expect(() => parseSymbolStateTextureManifest(manifest)).toThrow(
+      /must be non-Spine/,
+    );
+  });
+
   it.each([
     [
       "duplicate name",

@@ -21,6 +21,7 @@ import {
   notifySymbolImageStringSpineActive,
   notifySymbolImageStringSpineInactive,
 } from "../symbol-image-string/controller.js";
+import { Container } from "pixi.js";
 
 export function createRenderSymbolValueController(options: {
   readonly root: RenderSymbol;
@@ -38,9 +39,11 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
   readonly #root: RenderSymbol;
   readonly #resource: SymbolValuePresentationResource;
   readonly #playerFactory: RenderSymbolValuePlayerFactory;
+  readonly #displayRoot = new Container();
   #value: number | null = null;
   #player: ReturnType<typeof createOfficialSpinePlayer> | null = null;
   #tier: SymbolValuePresentationResource["tiers"][number] | null = null;
+  #tierIndex: number | null = null;
   #display: SymbolValueDisplayHandle | null = null;
   #initializationError: unknown = null;
   #requestId = 0;
@@ -67,6 +70,8 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
             textureUrls: { [tier.atlasPage]: tier.textureUrl },
           },
         }));
+    this.#displayRoot.visible = false;
+    this.#displayRoot.renderable = false;
   }
 
   setValue(value: number | null): void {
@@ -77,10 +82,12 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
       );
     }
     if (value === this.#value) return;
-    this.#continuityGeneration += 1;
-    this.clearActive();
-    this.#value = null;
-    if (value === null) return;
+    if (value === null) {
+      this.#continuityGeneration += 1;
+      this.clearActive();
+      this.#value = null;
+      return;
+    }
 
     const tierIndex = this.#resource.tiers.findIndex(
       (candidate) =>
@@ -95,6 +102,17 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
       tierIndex,
       resource: this.#resource,
     });
+    if (
+      tierIndex === this.#tierIndex &&
+      this.#display?.type === "image-string"
+    ) {
+      this.#display.setText(String(value));
+      this.#value = value;
+      return;
+    }
+    this.#continuityGeneration += 1;
+    this.clearActive();
+    this.#value = null;
     let player: RendercoreSpineSlotPlayer | null = null;
     try {
       player = this.#playerFactory({ tier });
@@ -106,6 +124,7 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
     this.#value = value;
     this.#player = player;
     this.#tier = tier;
+    this.#tierIndex = tierIndex;
     this.#display = null;
     const transform = tier.spec.transform;
     player.view.position.set(transform?.x ?? 0, transform?.y ?? 0);
@@ -142,9 +161,13 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
         text.type === "image-string"
           ? this.#resource.imageStringTierBindings?.[tierIndex]
           : undefined;
+      const slotObject =
+        display.type === "image-string"
+          ? this.prepareImageStringDisplayRoot(display)
+          : display.container;
       player.attachSlotObject({
         slot: binding?.slot ?? (text.type === "image-string" ? "" : text.slot),
-        object: display.container,
+        object: slotObject,
         followSlotColor: binding?.followSlotColor ?? true,
       });
       this.#initialized = true;
@@ -212,6 +235,7 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
   destroy(): void {
     if (this.#destroyed) return;
     this.clearActive();
+    this.#displayRoot.destroy({ children: false });
     this.#destroyed = true;
   }
 
@@ -305,15 +329,31 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
     const display = this.#display;
     this.#player = null;
     this.#tier = null;
+    this.#tierIndex = null;
     this.#display = null;
     this.#root.baseLayer.visible = true;
     if (player) {
       notifySymbolImageStringSpineInactive(this.#root, player, this);
     }
     if (wasInitialized && player && display)
-      player.removeSlotObject(display.container);
+      player.removeSlotObject(
+        display.type === "image-string" ? this.#displayRoot : display.container,
+      );
+    this.#displayRoot.removeChildren();
+    this.#displayRoot.visible = false;
+    this.#displayRoot.renderable = false;
     display?.destroy();
     player?.destroy();
+  }
+
+  private prepareImageStringDisplayRoot(
+    display: SymbolValueDisplayHandle,
+  ): Container {
+    this.#displayRoot.removeChildren();
+    this.#displayRoot.addChild(display.container);
+    this.#displayRoot.visible = true;
+    this.#displayRoot.renderable = true;
+    return this.#displayRoot;
   }
 
   private assertNotDestroyed(): void {

@@ -119,11 +119,13 @@ function isBindingTargetAvailable(
       ],
     );
   if (context.kind === "value-image-string-special-image")
-    return Boolean(
-      symbol.valuePresentation?.text.type === "image-string" &&
-      symbol.valuePresentation.text.tiers[context.tierIndex]
-        ?.specialValueImages?.[context.mappingIndex],
-    );
+    if (symbol.valuePresentation?.text.type === "image-string") {
+      const text = symbol.valuePresentation.text;
+      return Boolean(
+        ("tierResources" in text ? text : text.tiers[context.tierIndex])
+          ?.specialValueImages?.[context.mappingIndex],
+      );
+    } else return false;
   if (context.kind === "value-tier-resource")
     return context.tierIndex < (symbol.valuePresentation?.tiers.length ?? 0);
   return symbol.states.has(context.state);

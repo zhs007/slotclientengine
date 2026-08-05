@@ -15,6 +15,7 @@ import { validateImageStringText } from "../image-string/index.js";
 import {
   createSymbolValuePresentationImagePath,
   parseSymbolStateTextureManifest,
+  resolveSymbolValuePresentationImageStringBinding,
   type ParseSymbolStateTextureManifestOptions,
   type SymbolManifestAnimationPlaybackSpec,
 } from "../symbol/manifest.js";
@@ -82,7 +83,10 @@ export function createSymbolValuePresentationResourcesFromManifest(
       const tiers = presentation.tiers.map((tier, index) => {
         const imageStringBinding =
           presentation.text.type === "image-string"
-            ? presentation.text.tiers[index]
+            ? resolveSymbolValuePresentationImageStringBinding(
+                presentation.text,
+                index,
+              )
             : undefined;
         const skeleton = requireModule(
           skeletons,
@@ -125,6 +129,9 @@ export function createSymbolValuePresentationResourcesFromManifest(
                 (presentation.text.type === "image-string"
                   ? ""
                   : presentation.text.slot),
+              ...manifestSymbol.imageStringNodes.flatMap((node) =>
+                node.spineSlot ? [node.spineSlot] : [],
+              ),
             ].filter(Boolean),
           });
         } catch (error) {
@@ -168,7 +175,14 @@ export function createSymbolValuePresentationResourcesFromManifest(
       const imageStringTierBindings =
         text.type === "image-string"
           ? Object.freeze(
-              text.tiers.map((binding, index) => {
+              presentation.tiers.map((_tier, index) => {
+                const binding =
+                  resolveSymbolValuePresentationImageStringBinding(text, index);
+                if (!binding) {
+                  throw new SymbolAssetError(
+                    `Symbol "${symbol}" valuePresentation image-string tier ${index} is missing.`,
+                  );
+                }
                 const pool = options.imageStringResourcePool;
                 if (!pool) {
                   throw new SymbolAssetError(
@@ -254,14 +268,26 @@ export async function createSymbolValuePresentationResourceBundleFromManifest(
   const manifest = parseSymbolStateTextureManifest(options.manifest, options);
   const resourcePaths = Object.values(manifest.symbols).flatMap((entry) =>
     entry.valuePresentation?.text.type === "image-string"
-      ? entry.valuePresentation.text.tiers.map((binding) => binding.resource)
+      ? entry.valuePresentation.tiers.map(
+          (_tier, index) =>
+            resolveSymbolValuePresentationImageStringBinding(
+              entry.valuePresentation!.text as never,
+              index,
+            )!.resource,
+        )
       : [],
   );
   const specialImagePaths = Object.values(manifest.symbols).flatMap((entry) =>
     entry.valuePresentation?.text.type === "image-string"
-      ? entry.valuePresentation.text.tiers.flatMap((binding) =>
-          (binding.specialValueImages ?? []).map((mapping) => mapping.image),
-        )
+      ? entry.valuePresentation.tiers.flatMap((_tier, index) => {
+          const binding = resolveSymbolValuePresentationImageStringBinding(
+            entry.valuePresentation!.text as never,
+            index,
+          )!;
+          return (binding.specialValueImages ?? []).map(
+            (mapping) => mapping.image,
+          );
+        })
       : [],
   );
   const pool = await createSymbolImageStringResourcePool({

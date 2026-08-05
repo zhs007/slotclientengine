@@ -639,7 +639,7 @@ describe("symbols editor app shell", () => {
     expect(root.textContent).toContain("groupAmount");
   });
 
-  it("keeps independent ImgNumber bindings while Spine tiers change", async () => {
+  it("keeps JSON-only tiers and one shared Normal ImgNumber binding", async () => {
     await createProject(root);
     click(root, '[data-workspace-tab][data-tab-value="symbols"]');
     click(root, '[data-inspector-tab][data-tab-value="value"]');
@@ -648,32 +648,29 @@ describe("symbols editor app shell", () => {
       root,
       '[data-value-action="text-type"][data-text-type="image-string"]',
     );
-    expect(root.querySelectorAll(".value-number-tier")).toHaveLength(1);
+    expect(root.querySelectorAll(".value-number-tier")).toHaveLength(2);
     expect(root.querySelector('[data-value-field="text.prefix"]')).toBeNull();
     expect(root.textContent).toContain("未完成");
 
     click(root, '[data-value-action="add-tier"]');
     expect(root.querySelectorAll("[data-tier-index]")).toHaveLength(2);
-    expect(root.querySelectorAll(".value-number-tier")).toHaveLength(2);
-    expect(root.textContent).toContain("动态内容中心对齐");
+    expect(root.querySelectorAll(".value-number-tier")).toHaveLength(3);
+    expect(root.textContent).toContain("Normal 共享配置");
     const slots = root.querySelectorAll<HTMLSelectElement>(
       "[data-value-image-string-field='slot']",
     );
-    expect(slots).toHaveLength(2);
-    expect(slots[1]?.value).toBe("");
+    expect(slots).toHaveLength(1);
+    expect(slots[0]?.value).toBe("");
     const positions = root.querySelectorAll<HTMLInputElement>(
       "[data-value-image-string-field='transform.x']",
     );
     positions[0]!.value = "19";
     positions[0]!.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(
-      root.querySelectorAll<HTMLInputElement>(
-        "[data-value-image-string-field='transform.x']",
-      )[1]?.value,
-    ).toBe("0");
+    expect(positions).toHaveLength(1);
+    expect(positions[0]?.value).toBe("19");
     expect(root.querySelector("[data-value-field^='text.tiers.']")).toBeNull();
     click(root, '[data-value-action="remove-tier"][data-value-index="1"]');
-    expect(root.querySelectorAll(".value-number-tier")).toHaveLength(1);
+    expect(root.querySelectorAll(".value-number-tier")).toHaveLength(2);
 
     click(root, '[data-value-action="text-type"][data-text-type="image"]');
     expect(root.querySelector(".value-number-tier")).toBeNull();

@@ -106,7 +106,7 @@ export function assertSymbolValueDisplayResource(options: {
     try {
       const valueText = String(options.value);
       validateImageStringText(valueText);
-      if (!binding.specialValueImages[valueText]) {
+      if (!binding.specialValueImages?.[valueText]) {
         validateImageStringText(valueText, binding.resource.manifest);
       }
     } catch (error) {

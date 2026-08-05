@@ -237,7 +237,7 @@ describe("render symbol value controller", () => {
     expect(() => symbol.setPresentationValue(25)).toThrow(
       /value 25 has no configured image resource/,
     );
-    expect(symbol.getPresentationValue()).toBeNull();
+    expect(symbol.getPresentationValue()).toBe(5);
     expect(players).toHaveLength(1);
     symbol.destroy();
     loadTexture.mockRestore();
@@ -260,9 +260,15 @@ describe("render symbol value controller", () => {
     });
     const lowDisplay = players[0].attached[0]!.object;
     expect(lowDisplay.children).toHaveLength(1);
-    expect(lowDisplay.position).toMatchObject({ x: 2, y: 3 });
-    expect(lowDisplay.scale).toMatchObject({ x: 0.5, y: 0.5 });
-    expect(lowDisplay.pivot).toMatchObject({ x: 0.5, y: 0.5 });
+    const lowContent = lowDisplay.children[0]!;
+    expect(lowContent.position).toMatchObject({ x: 2, y: 3 });
+    expect(lowContent.scale).toMatchObject({ x: 0.5, y: 0.5 });
+    expect(lowContent.pivot).toMatchObject({ x: 0.5, y: 0.5 });
+
+    symbol.setPresentationValue(2);
+    expect(players).toHaveLength(1);
+    expect(players[0].attached[0]!.object).toBe(lowDisplay);
+    expect(lowDisplay.children[0]?.children).toHaveLength(1);
 
     symbol.setPresentationValue(25);
     await flushPromises();
@@ -271,14 +277,17 @@ describe("render symbol value controller", () => {
       followSlotColor: true,
     });
     const highDisplay = players[1].attached[0]!.object;
-    expect(highDisplay.children).toHaveLength(2);
-    expect(highDisplay.position).toMatchObject({ x: -2, y: -3 });
-    expect(highDisplay.scale).toMatchObject({ x: 2, y: 2 });
-    expect(highDisplay.pivot).toMatchObject({ x: 2, y: 1 });
+    expect(highDisplay).toBe(lowDisplay);
+    expect(highDisplay.children).toHaveLength(1);
+    const highContent = highDisplay.children[0]!;
+    expect(highContent.children).toHaveLength(2);
+    expect(highContent.position).toMatchObject({ x: -2, y: -3 });
+    expect(highContent.scale).toMatchObject({ x: 2, y: 2 });
+    expect(highContent.pivot).toMatchObject({ x: 2, y: 1 });
     expect(players[0].destroyed).toBe(true);
 
     expect(() => symbol.setPresentationValue(13)).toThrow(/缺少 glyph/);
-    expect(symbol.getPresentationValue()).toBeNull();
+    expect(symbol.getPresentationValue()).toBe(25);
     symbol.destroy();
   });
 
@@ -298,8 +307,12 @@ describe("render symbol value controller", () => {
     first.setPresentationValue(1);
     second.setPresentationValue(11);
     await flushPromises();
-    expect(players[0].attached[0]?.object.children).toHaveLength(1);
-    expect(players[1].attached[0]?.object.children).toHaveLength(2);
+    expect(players[0].attached[0]?.object.children[0]?.children).toHaveLength(
+      1,
+    );
+    expect(players[1].attached[0]?.object.children[0]?.children).toHaveLength(
+      2,
+    );
     expect(resource.imageStringTierBindings?.[0]?.resource).toBe(
       resource.imageStringTierBindings?.[1]?.resource,
     );
@@ -318,14 +331,17 @@ describe("render symbol value controller", () => {
 
     symbol.setPresentationValue(1);
     await flushPromises();
-    const lowSpecial = players[0].attached[0]!.object.children[0] as Sprite;
+    const lowSpecial = players[0].attached[0]!.object.children[0]!
+      .children[0] as Sprite;
     expect(lowSpecial.texture).toBe(Texture.EMPTY);
 
     symbol.setPresentationValue(25);
     await flushPromises();
     const highDisplay = players[1].attached[0]!.object;
     expect(highDisplay.children).toHaveLength(1);
-    expect((highDisplay.children[0] as Sprite).texture).toBe(Texture.WHITE);
+    expect((highDisplay.children[0]!.children[0] as Sprite).texture).toBe(
+      Texture.WHITE,
+    );
     symbol.destroy();
   });
 });

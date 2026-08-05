@@ -33,6 +33,7 @@ import {
   createSymbolStatePresetFromManifest,
   createSymbolValuePresentationImagePath,
   parseSymbolStateTextureManifest,
+  resolveSymbolValuePresentationImageStringBinding,
   type ParsedSymbolStateTextureManifest,
   type SymbolManifestNormal,
 } from "./manifest.js";
@@ -365,7 +366,10 @@ export function collectSymbolManifestResourcePaths(options: {
             (tier) =>
               tier.maxExclusive === undefined || value < tier.maxExclusive,
           );
-          const binding = presentation.text.tiers[tierIndex];
+          const binding = resolveSymbolValuePresentationImageStringBinding(
+            presentation.text,
+            tierIndex,
+          );
           if (!binding) {
             throw new SymbolAssetError(
               `Value ${value} has no image-string tier binding.`,
@@ -492,7 +496,13 @@ export async function createSymbolPackageResourceFromResolvedFiles(options: {
     ).flatMap((entry) => [
       ...entry.imageStringNodes.map((node) => node.resource),
       ...(entry.valuePresentation?.text.type === "image-string"
-        ? entry.valuePresentation.text.tiers.map((binding) => binding.resource)
+        ? entry.valuePresentation.tiers.map(
+            (_tier, index) =>
+              resolveSymbolValuePresentationImageStringBinding(
+                entry.valuePresentation!.text as never,
+                index,
+              )!.resource,
+          )
         : []),
     ]);
     const imageStringSpecialImagePaths = Object.values(
@@ -502,9 +512,15 @@ export async function createSymbolPackageResourceFromResolvedFiles(options: {
         (node.specialValueImages ?? []).map((mapping) => mapping.image),
       ),
       ...(entry.valuePresentation?.text.type === "image-string"
-        ? entry.valuePresentation.text.tiers.flatMap((binding) =>
-            (binding.specialValueImages ?? []).map((mapping) => mapping.image),
-          )
+        ? entry.valuePresentation.tiers.flatMap((_tier, index) => {
+            const binding = resolveSymbolValuePresentationImageStringBinding(
+              entry.valuePresentation!.text as never,
+              index,
+            )!;
+            return (binding.specialValueImages ?? []).map(
+              (mapping) => mapping.image,
+            );
+          })
         : []),
     ]);
     imageStringPool =

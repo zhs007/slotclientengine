@@ -21,9 +21,10 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
   readonly #nodes: readonly ActiveNode[];
   readonly #byName: ReadonlyMap<string, ActiveNode>;
   readonly #names: readonly string[];
-  readonly #attached = new Set<ActiveNode>();
+  readonly #attached = new Map<ActiveNode, string>();
   #player: RendercoreSpineSlotPlayer | null = null;
   #owner: object | null = null;
+  #activeState: string | null = null;
   #state: string | null = null;
   #stateSynchronized = false;
   #destroyed = false;
@@ -46,6 +47,8 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
           definition.spec.transform.y,
         );
         renderer.container.scale.set(definition.spec.transform.scale);
+        renderer.container.visible = false;
+        renderer.container.renderable = false;
         return Object.freeze({ definition, renderer });
       }),
     );
@@ -79,16 +82,29 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
     const owner = this.#owner;
     this.#state = state;
     this.#stateSynchronized = true;
-    this.detachSlot();
+    const canKeepSharedAttachment =
+      this.#player !== null &&
+      this.#attached.size > 0 &&
+      [...this.#attached.keys()].every(
+        (node) =>
+          node.definition.spec.spineSlot !== undefined &&
+          node.definition.spineStates?.has(state) === true,
+      );
+    if (this.#activeState !== state && !canKeepSharedAttachment)
+      this.detachSlot();
+    else if (canKeepSharedAttachment) this.#activeState = state;
     this.#root.imageStringOverlayLayer.removeChildren();
     for (const node of this.#nodes) {
       const direct = node.definition.spec.targets.some(
         (target) => target.state === state && target.slot === undefined,
       );
-      if (direct)
+      node.renderer.container.visible = direct || this.#attached.has(node);
+      node.renderer.container.renderable = direct || this.#attached.has(node);
+      if (direct && !this.#attached.has(node))
         this.#root.imageStringOverlayLayer.addChild(node.renderer.container);
     }
-    if (player && owner) this.activate(state, player, owner);
+    if (player && owner && this.#activeState === state)
+      this.activate(state, player, owner);
   }
 
   activate(
@@ -100,24 +116,46 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
     if (this.#stateSynchronized && state !== this.#state) return;
     this.#state = state;
     const slotNodes = this.#nodes.flatMap((node) => {
-      const target = node.definition.spec.targets.find(
-        (candidate) =>
-          candidate.state === state && candidate.slot !== undefined,
-      );
-      return target?.slot ? [{ node, slot: target.slot }] : [];
+      const slot =
+        node.definition.spec.spineSlot ??
+        node.definition.spec.targets.find(
+          (candidate) =>
+            candidate.state === state && candidate.slot !== undefined,
+        )?.slot;
+      return slot ? [{ node, slot }] : [];
     });
-    if (slotNodes.length === 0) return;
+    if (slotNodes.length === 0) {
+      if (this.#activeState === state) this.detachSlot();
+      return;
+    }
+    const samePlayer = this.#player === player;
+    const sameAttachments =
+      samePlayer &&
+      this.#attached.size === slotNodes.length &&
+      slotNodes.every(({ node, slot }) => this.#attached.get(node) === slot);
+    if (sameAttachments) {
+      this.#owner = owner;
+      this.#activeState = state;
+      for (const { node } of slotNodes) {
+        node.renderer.container.visible = true;
+        node.renderer.container.renderable = true;
+      }
+      return;
+    }
     this.detachSlot();
     this.#root.imageStringOverlayLayer.removeChildren();
     this.#player = player;
     this.#owner = owner;
+    this.#activeState = state;
     for (const { node, slot } of slotNodes) {
+      node.renderer.container.visible = true;
+      node.renderer.container.renderable = true;
       player.attachSlotObject({
         slot,
         object: node.renderer.container,
         followSlotColor: node.definition.spec.followSlotColor,
       });
-      this.#attached.add(node);
+      this.#attached.set(node, slot);
     }
   }
 
@@ -131,9 +169,12 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
     this.assertUsable();
     this.#state = null;
     this.#stateSynchronized = false;
+    this.#activeState = null;
     this.detachSlot();
     this.#root.imageStringOverlayLayer.removeChildren();
     for (const node of this.#nodes) {
+      node.renderer.container.visible = false;
+      node.renderer.container.renderable = false;
       node.renderer.setText(node.definition.spec.initialText);
     }
   }
@@ -142,6 +183,7 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
     if (this.#destroyed) return;
     this.#state = null;
     this.#stateSynchronized = false;
+    this.#activeState = null;
     this.detachSlot();
     this.#root.imageStringOverlayLayer.removeChildren();
     this.#destroyed = true;
@@ -152,12 +194,15 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
   private detachSlot(): void {
     const player = this.#player;
     if (!player) return;
-    for (const node of this.#attached) {
+    for (const node of this.#attached.keys()) {
       player.removeSlotObject(node.renderer.container);
+      node.renderer.container.visible = false;
+      node.renderer.container.renderable = false;
     }
     this.#attached.clear();
     this.#player = null;
     this.#owner = null;
+    this.#activeState = null;
   }
 
   private requireNode(name: string): ActiveNode {

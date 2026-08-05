@@ -383,7 +383,17 @@ function validatePresentation(symbol, value, states) {
     text,
     `${symbol}.valuePresentation.text`,
     textType === "image-string"
-      ? ["type", "tiers", "specialValueImages"]
+      ? text.tierResources === undefined
+        ? ["type", "tiers", "specialValueImages"]
+        : [
+            "type",
+            "tierResources",
+            "slot",
+            "anchor",
+            "transform",
+            "followSlotColor",
+            "specialValueImages",
+          ]
       : textType === "image"
         ? ["type", "slot", "x", "y", "prefix", "images"]
         : [
@@ -438,13 +448,20 @@ function validatePresentation(symbol, value, states) {
       : new Map();
   const imageStringBindings =
     textType === "image-string"
-      ? validateImageStringBindings(
-          symbol,
-          text.tiers,
-          tiers.length,
-          legacySpecialValueImages,
-          text.specialValueImages !== undefined,
-        )
+      ? text.tierResources === undefined
+        ? validateImageStringBindings(
+            symbol,
+            text.tiers,
+            tiers.length,
+            legacySpecialValueImages,
+            text.specialValueImages !== undefined,
+          )
+        : validateSharedImageStringBindings(
+            symbol,
+            text,
+            tiers.length,
+            legacySpecialValueImages,
+          )
       : [];
   return {
     defaultValues,
@@ -456,6 +473,35 @@ function validatePresentation(symbol, value, states) {
       ...binding.specialValueImages.values(),
     ]),
   };
+}
+
+function validateSharedImageStringBindings(
+  symbol,
+  text,
+  tierCount,
+  specialValueImages,
+) {
+  if (
+    !Array.isArray(text.tierResources) ||
+    text.tierResources.length !== tierCount
+  ) {
+    throw new Error(
+      `${symbol} value text tierResources length must equal valuePresentation tiers length (${tierCount}).`,
+    );
+  }
+  return validateImageStringBindings(
+    symbol,
+    text.tierResources.map((resource) => ({
+      resource,
+      slot: text.slot,
+      anchor: text.anchor,
+      transform: text.transform,
+      followSlotColor: text.followSlotColor,
+    })),
+    tierCount,
+    specialValueImages,
+    true,
+  );
 }
 
 function validateSpecialValueImages(label, value) {

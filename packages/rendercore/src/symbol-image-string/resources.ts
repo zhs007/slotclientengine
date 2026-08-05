@@ -198,6 +198,21 @@ export function createSymbolImageStringResourcesFromPool(options: {
     SymbolImageStringResourceMap[string][number][]
   > = {};
   for (const [symbol, entry] of Object.entries(options.manifest.symbols)) {
+    const spineStates = new Set(
+      [
+        ...(options.manifest.statePreset?.states.map((state) => state.id) ??
+          []),
+        ...Object.keys(entry.animations ?? {}),
+        ...(entry.valuePresentation ? ["normal"] : []),
+      ].filter((state) => {
+        const animation = entry.animations?.[state];
+        return (
+          animation?.kind === "spine" ||
+          animation?.kind === "activeSpine" ||
+          (state === "normal" && entry.valuePresentation !== undefined)
+        );
+      }),
+    );
     for (const spec of entry.imageStringNodes) {
       const resource = options.pool.get(spec.resource);
       try {
@@ -215,6 +230,7 @@ export function createSymbolImageStringResourcesFromPool(options: {
       bySymbol[symbol].push(
         Object.freeze({
           spec,
+          spineStates,
           resource,
           specialValueImages: createSymbolImageStringSpecialValueImageMap(
             spec.specialValueImages ?? [],

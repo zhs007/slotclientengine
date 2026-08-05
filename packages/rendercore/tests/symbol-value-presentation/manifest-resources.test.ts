@@ -63,7 +63,8 @@ describe("symbol value presentation manifest resources", () => {
     const parsed = parseSymbolStateTextureManifest(copy);
     const text = parsed.symbols.GOLD.valuePresentation?.text;
     expect(text?.type).toBe("image-string");
-    if (text?.type !== "image-string") throw new Error("expected ImgNumber");
+    if (text?.type !== "image-string" || !("tiers" in text))
+      throw new Error("expected legacy ImgNumber");
     expect(text.tiers.map((binding) => binding.slot)).toEqual([
       "Num0",
       "Num1",
@@ -95,6 +96,38 @@ describe("symbol value presentation manifest resources", () => {
     }
   });
 
+  it("parses JSON-only tiers with one shared Normal ImgNumber binding", () => {
+    const copy = createGenericManifest(3);
+    copy.symbols.GOLD.valuePresentation.text = {
+      type: "image-string",
+      tierResources: ["small", "medium", "large"].map(
+        (id) => `./dependencies/image-strings/${id}/image-string.manifest.json`,
+      ),
+      slot: "Num",
+      anchor: { x: 0.5, y: 0.5 },
+      transform: { x: 2, y: -3, scale: 0.75 },
+      followSlotColor: true,
+      specialValueImages: [{ value: 200, image: "./special-200.png" }],
+    };
+    const text =
+      parseSymbolStateTextureManifest(copy).symbols.GOLD.valuePresentation!
+        .text;
+    if (text.type !== "image-string" || !("tierResources" in text))
+      throw new Error("expected shared ImgNumber");
+    expect(text.tierResources).toHaveLength(3);
+    expect(text.slot).toBe("Num");
+    expect(Object.isFrozen(text.tierResources)).toBe(true);
+
+    const mixed = structuredClone(copy);
+    mixed.symbols.GOLD.valuePresentation.text.tiers = [];
+    expect(() => parseSymbolStateTextureManifest(mixed)).toThrow(/unknown/);
+    const misaligned = structuredClone(copy);
+    misaligned.symbols.GOLD.valuePresentation.text.tierResources.pop();
+    expect(() => parseSymbolStateTextureManifest(misaligned)).toThrow(
+      /length must equal/,
+    );
+  });
+
   it("normalizes legacy shared ImgNumber mappings into every tier", () => {
     const copy = createGenericManifest(3);
     const text = {
@@ -113,7 +146,8 @@ describe("symbol value presentation manifest resources", () => {
     const parsed =
       parseSymbolStateTextureManifest(copy).symbols.GOLD.valuePresentation!
         .text;
-    if (parsed.type !== "image-string") throw new Error("expected ImgNumber");
+    if (parsed.type !== "image-string" || !("tiers" in parsed))
+      throw new Error("expected legacy ImgNumber");
     expect(parsed.tiers.map((binding) => binding.specialValueImages)).toEqual([
       [{ value: 200, image: "./legacy-200.png" }],
       [{ value: 200, image: "./legacy-200.png" }],
@@ -158,7 +192,10 @@ describe("symbol value presentation manifest resources", () => {
     });
     expect(Object.isFrozen(presentation?.text)).toBe(true);
     expect(presentation?.text.type).toBe("image-string");
-    if (presentation?.text.type !== "image-string") {
+    if (
+      presentation?.text.type !== "image-string" ||
+      !("tiers" in presentation.text)
+    ) {
       throw new Error("expected current CN presentation to use ImgNumber");
     }
     expect(presentation.text.tiers).toHaveLength(4);
