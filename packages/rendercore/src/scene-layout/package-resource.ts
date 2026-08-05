@@ -212,6 +212,7 @@ export function collectSceneLayoutPackagePaths(options: {
 export async function createSceneLayoutPackageResource(options: {
   readonly manifest?: unknown;
   readonly files: ReadonlyMap<string, Uint8Array>;
+  readonly mappedAssetPolicy?: SceneLayoutMappedAssetPolicy;
   readonly decodeImage?: DecodeImageStringImage;
   readonly loadSymbolTextures?: boolean;
   readonly lazyRuntimeResources?: boolean;
@@ -219,6 +220,7 @@ export async function createSceneLayoutPackageResource(options: {
     logicalKey: string,
   ) => Promise<Uint8Array>;
 }): Promise<SceneLayoutPackageResource> {
+  assertSceneLayoutMappedAssetPolicy(options.mappedAssetPolicy);
   const manifestValue =
     options.manifest ??
     parseJsonBytes(requireBytes(options.files, ROOT_MANIFEST), ROOT_MANIFEST);
@@ -226,14 +228,16 @@ export async function createSceneLayoutPackageResource(options: {
   const files = await resolveSceneLayoutPackageFiles({
     manifest,
     files: options.files,
+    mappedAssetPolicy: options.mappedAssetPolicy,
     allowMissingRuntimeResources:
       options.lazyRuntimeResources === true &&
       options.loadRuntimeResourceBytes !== undefined,
   });
   const loadRuntimeResourceBytes = options.loadRuntimeResourceBytes
-    ? createVerifiedMappedLogicalLoader(
+    ? createMappedLogicalLoader(
         options.files,
         options.loadRuntimeResourceBytes,
+        options.mappedAssetPolicy,
       )
     : undefined;
   return createSceneLayoutPackageResourceFromResolvedFiles({
@@ -244,6 +248,21 @@ export async function createSceneLayoutPackageResource(options: {
     lazyRuntimeResources: options.lazyRuntimeResources,
     ...(loadRuntimeResourceBytes ? { loadRuntimeResourceBytes } : {}),
   });
+}
+
+export type SceneLayoutMappedAssetPolicy = "editor-package" | "trusted-art";
+
+function assertSceneLayoutMappedAssetPolicy(
+  policy: SceneLayoutMappedAssetPolicy | undefined,
+): void {
+  if (
+    policy !== undefined &&
+    policy !== "editor-package" &&
+    policy !== "trusted-art"
+  )
+    throw new SceneLayoutError(
+      `Unknown scene layout mapped asset policy: ${String(policy)}.`,
+    );
 }
 
 export async function createSceneLayoutPackageResourceFromResolvedFiles(options: {
@@ -1104,7 +1123,9 @@ export async function resolveSceneLayoutPackageFiles(options: {
   readonly manifest: unknown;
   readonly files: ReadonlyMap<string, Uint8Array>;
   readonly allowMissingRuntimeResources?: boolean;
+  readonly mappedAssetPolicy?: SceneLayoutMappedAssetPolicy;
 }): Promise<ReadonlyMap<string, Uint8Array>> {
+  assertSceneLayoutMappedAssetPolicy(options.mappedAssetPolicy);
   const manifest = parseSceneLayoutManifest(options.manifest);
   const mapped = isMappedSceneLayoutManifest(manifest);
   const hasMap = options.files.has(EDITOR_ASSETS_MAP_PATH);
@@ -1115,6 +1136,13 @@ export async function resolveSceneLayoutPackageFiles(options: {
         : "Legacy scene layout package must not contain assets.map.json.",
     );
   if (!mapped) return options.files;
+  if (options.mappedAssetPolicy === "trusted-art") {
+    return resolveTrustedArtSceneLayoutPackageFiles({
+      manifest,
+      files: options.files,
+      allowMissingRuntimeResources: options.allowMissingRuntimeResources,
+    });
+  }
   const map = decodeEditorAssetsMap(
     requireBytes(options.files, EDITOR_ASSETS_MAP_PATH),
   );
@@ -1164,10 +1192,23 @@ export async function resolveSceneLayoutPackageFiles(options: {
   return virtual;
 }
 
-function createVerifiedMappedLogicalLoader(
+function createMappedLogicalLoader(
   packageFiles: ReadonlyMap<string, Uint8Array>,
   load: (logicalKey: string) => Promise<Uint8Array>,
+  policy: SceneLayoutMappedAssetPolicy | undefined,
 ): (logicalKey: string) => Promise<Uint8Array> {
+  if (policy === "trusted-art") {
+    const map = decodeTrustedArtAssetsMap(
+      requireBytes(packageFiles, EDITOR_ASSETS_MAP_PATH),
+    );
+    return async (logicalKey) => {
+      const path = requireTrustedArtAssetPath(map, logicalKey);
+      const packagedBytes = packageFiles.get(path);
+      return packagedBytes
+        ? packagedBytes.slice()
+        : (await load(logicalKey)).slice();
+    };
+  }
   const map = decodeEditorAssetsMap(
     requireBytes(packageFiles, EDITOR_ASSETS_MAP_PATH),
   );
@@ -1190,6 +1231,97 @@ function createVerifiedMappedLogicalLoader(
       );
     return bytes.slice();
   };
+}
+
+function resolveTrustedArtSceneLayoutPackageFiles(options: {
+  readonly manifest: SceneLayoutManifestV1;
+  readonly files: ReadonlyMap<string, Uint8Array>;
+  readonly allowMissingRuntimeResources?: boolean;
+}): ReadonlyMap<string, Uint8Array> {
+  const map = decodeTrustedArtAssetsMap(
+    requireBytes(options.files, EDITOR_ASSETS_MAP_PATH),
+  );
+  const virtual = new Map<string, Uint8Array>([
+    [ROOT_MANIFEST, requireBytes(options.files, ROOT_MANIFEST).slice()],
+  ]);
+  for (const key of Object.keys(map.files)) {
+    const path = optionalTrustedArtAssetPath(map, key);
+    if (!path) continue;
+    const bytes = options.files.get(path);
+    if (bytes) virtual.set(key, bytes.slice());
+  }
+  const effectiveManifest = options.allowMissingRuntimeResources
+    ? parseSceneLayoutManifest({
+        ...options.manifest,
+        runtimeResources: undefined,
+      })
+    : options.manifest;
+  const paths = collectSceneLayoutPackagePaths({
+    manifest: effectiveManifest,
+    files: virtual,
+    allowExtraFiles: true,
+  });
+  const requiredFiles = new Map<string, Uint8Array>([
+    [ROOT_MANIFEST, requireBytes(virtual, ROOT_MANIFEST)],
+  ]);
+  for (const path of paths)
+    requiredFiles.set(path, requireBytes(virtual, path));
+  collectSceneLayoutPackagePaths({
+    manifest: effectiveManifest,
+    files: requiredFiles,
+  });
+  return requiredFiles;
+}
+
+interface TrustedArtAssetsMap {
+  readonly files: Readonly<Record<string, unknown>>;
+}
+
+function decodeTrustedArtAssetsMap(bytes: Uint8Array): TrustedArtAssetsMap {
+  const value = parseJsonBytes(bytes, EDITOR_ASSETS_MAP_PATH);
+  if (!isRecord(value))
+    throw new SceneLayoutError(
+      "Trusted art assets.map.json must be an object.",
+    );
+  if (value.version !== 1 || value.kind !== "editor-assets")
+    throw new SceneLayoutError(
+      'Trusted art assets.map.json must declare version=1 and kind="editor-assets".',
+    );
+  if (!isRecord(value.files))
+    throw new SceneLayoutError(
+      "Trusted art assets.map.json files must be an object.",
+    );
+  return Object.freeze({ files: value.files });
+}
+
+function optionalTrustedArtAssetPath(
+  map: TrustedArtAssetsMap,
+  logicalKey: string,
+): string | null {
+  if (!Object.hasOwn(map.files, logicalKey)) return null;
+  const entry = map.files[logicalKey];
+  if (!isRecord(entry) || typeof entry.path !== "string") return null;
+  try {
+    assertCanonicalPackagePath(logicalKey);
+    assertCanonicalPackagePath(entry.path);
+  } catch {
+    return null;
+  }
+  if (logicalKey.includes("/") || !entry.path.startsWith("assets/"))
+    return null;
+  return entry.path;
+}
+
+function requireTrustedArtAssetPath(
+  map: TrustedArtAssetsMap,
+  logicalKey: string,
+): string {
+  const path = optionalTrustedArtAssetPath(map, logicalKey);
+  if (!path)
+    throw new SceneLayoutError(
+      `Scene layout runtime logical asset "${logicalKey}" does not declare a safe trusted-art path.`,
+    );
+  return path;
 }
 
 function isMappedSceneLayoutManifest(manifest: SceneLayoutManifestV1): boolean {
@@ -1333,6 +1465,10 @@ function requireBytes(
       `Scene layout package file is missing: ${path}.`,
     );
   return bytes;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function parseJsonBytes(bytes: Uint8Array, path: string): unknown {

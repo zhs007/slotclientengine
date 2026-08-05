@@ -50,9 +50,12 @@ framework destroy 或页面刷新会清理 command 和 pending 序列。
 ## 资源合同
 
 - `skin=2` 的 layout/background/focus/棋盘 geometry/symbols/公开轮带/popup
-  唯一来自 `assets/crave/layout.manifest.json`、`assets.map.json` 和内容寻址 payload。
-  构建期 generator 生成精确 Vite import map并校验每个物理文件的 hash/size/orphan；
-  loading 只下载 active skin。Crave CN 使用其 symbols manifest 的 ImgNumber
+  唯一来自 `assets/crave/layout.manifest.json`、`assets.map.json` 和当前美术 payload。
+  美术可直接替换 `assets/crave` 中的内容或保留未引用文件；game002 以
+  map 的 logical key→安全 physical path 作为路由，不比对过时的 `sha256`/
+  `byteLength`，也不以 orphan 阻断构建。实际引用文件仍必须存在并通过
+  manifest/Spine/VNI/image decoder，generator 生成精确 Vite imports，loading 只下载
+  active skin。Crave CN 使用其 symbols manifest 的 ImgNumber
   `slot: "coin"` 与包内 `0..9` glyph，不使用旧 `Num` binding、完整数值图片或字体。
 - `apps/game002/config/reel-presentation.manifest.json` 保存期待 timing/effect policy 和 `nearwin1/nearwin2` 程序键；实际资源全部来自 Crave package。
 - 转轮表现配置：`apps/game002/config/reel-presentation.manifest.json`。当前 `spin.bounceStrength=0`、`spin.dimmingAlpha=0.5`；普通逐格 timing、Nearwin effect policy、2-WL activation timing 以及 refill 顺序也只来自该 manifest。

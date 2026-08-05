@@ -100,6 +100,7 @@ async function prepareGame002Skin2Config(
 }> {
   const resource = await createSceneLayoutPackageResource({
     files,
+    mappedAssetPolicy: "trusted-art",
     lazyRuntimeResources: true,
     loadRuntimeResourceBytes: loadCraveRuntimeResourceBytes,
     ...(decodeImage ? { decodeImage } : {}),

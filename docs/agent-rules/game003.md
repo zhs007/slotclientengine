@@ -7,7 +7,11 @@
 - 使用 `apps/game003`，严格只支持显式 `skin=2`。
 - 唯一正式美术、layout、公开轮带、symbol 与 popup 输入是 `assets/minecart2` 的 mapped Scene Layout package；不得新增旧皮肤目录、平铺资源副本或 fallback。
 - package 内部的 `game003-s1` 是稳定 symbol package id，不是仓库路径，也不表示可选皮肤。
-- mapped folder 必须由优化 ZIP 完整替换，`assets.map.json`、payload closure、资源分组与生成的 Vite URL 表必须通过 exact checker；生成物禁止手改。
+- `assets/minecart2` 的当前美术 files/bytes 是 game003 权威交付；首次可由优化
+  ZIP 完整接收，之后允许美术直接替换/增加文件。app/runtime/build 使用
+  trusted-art policy，不比对 map `sha256`/`byteLength`、不因未引用 entry/file
+  阻断；实际引用 logical key 仍必须路由到安全存在的 path 并通过资源 parser/
+  decoder。资源分组和 generated Vite URL 表由对应工具同步，生成物禁止手改。
 - live server 与 gamecode 来自 `config/game-runtime.manifest.json`，URL 中 `serverUrl` 显式失败。
 - 首屏遵守 `loading-ui.md`：99% 准备 package ownership 和 live session，100% 后创建 framework/Pixi；失败与 destroy 都必须释放 resource/session ownership。
 

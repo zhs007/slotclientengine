@@ -139,32 +139,12 @@ function verifyCraveSourceContract() {
       "Crave assets.map.json must declare editor-assets version=1.",
     );
   }
-  const physicalPaths = new Set();
   for (const [key, asset] of Object.entries(map.files ?? {})) {
-    if (
-      typeof asset.path !== "string" ||
-      typeof asset.sha256 !== "string" ||
-      !asset.path.startsWith(`assets/${asset.sha256}.`) ||
-      !Number.isSafeInteger(asset.byteLength)
-    ) {
-      failures.push(`Crave assets.map.json entry "${key}" is invalid.`);
-      continue;
-    }
-    physicalPaths.add(asset.path);
-    const path = join(CRAVE_ROOT, asset.path);
-    assertFile(path);
-    if (existsSync(path) && statSync(path).size !== asset.byteLength) {
-      failures.push(`Crave mapped payload "${asset.path}" length drifted.`);
-    }
-  }
-  const actual = listFiles(join(CRAVE_ROOT, "assets"))
-    .map((path) => relative(CRAVE_ROOT, path).split("\\").join("/"))
-    .sort();
-  const expected = [...physicalPaths].sort();
-  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-    failures.push(
-      "Crave mapped payload folder must exactly match assets.map.json physical paths.",
-    );
+    if (!isRecord(asset) || typeof asset.path !== "string") continue;
+    if (!isSafeArtPath(asset.path))
+      failures.push(
+        `Crave assets.map.json entry "${key}" has an unsafe physical path.`,
+      );
   }
 }
 
@@ -233,15 +213,38 @@ function verifyCraveDistClosure(assetNames) {
   const files = [
     CRAVE_LAYOUT_PATH,
     CRAVE_MAP_PATH,
-    ...new Set(
-      Object.values(map.files ?? {}).map((asset) =>
-        join(CRAVE_ROOT, asset.path),
-      ),
-    ),
+    ...collectPresentArtFiles(CRAVE_ROOT, map),
   ];
   for (const file of files) {
     assertDistContainsSourceAssetContent(assetNames, file);
   }
+}
+
+function collectPresentArtFiles(root, map) {
+  const files = new Set();
+  for (const asset of Object.values(map.files ?? {})) {
+    if (!isRecord(asset) || typeof asset.path !== "string") continue;
+    if (!isSafeArtPath(asset.path)) continue;
+    const path = join(root, asset.path);
+    if (existsSync(path) && statSync(path).isFile()) files.add(path);
+  }
+  return [...files];
+}
+
+function isSafeArtPath(path) {
+  return (
+    path.startsWith("assets/") &&
+    !path.startsWith("/") &&
+    !path.endsWith("/") &&
+    !path.includes("\\") &&
+    !path
+      .split("/")
+      .some((part) => part === "" || part === "." || part === "..")
+  );
+}
+
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function verifyLeoGameUiClosure(assetNames, bundledJavaScript) {

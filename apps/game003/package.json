@@ -6,8 +6,8 @@
   "packageManager": "pnpm@10.0.0",
   "scripts": {
     "prepare:deps": "pnpm --filter @slotclientengine/gameloading build && pnpm --filter @slotclientengine/gameloading-ui-simple build && pnpm --filter @slotclientengine/gameframeworks build && pnpm --filter @slotclientengine/rendercore build",
-    "generate:minecart2-layout-resources": "node ../../packages/rendercore/scripts/generate-scene-layout-vite-resources.mjs --manifest assets/minecart2/layout.manifest.json --out apps/game003/src/generated/minecart2-layout-resources.generated.ts",
-    "check:minecart2-layout-resources": "node ../../packages/rendercore/scripts/generate-scene-layout-vite-resources.mjs --manifest assets/minecart2/layout.manifest.json --out apps/game003/src/generated/minecart2-layout-resources.generated.ts --check",
+    "generate:minecart2-layout-resources": "node ../../packages/rendercore/scripts/generate-scene-layout-vite-resources.mjs --manifest assets/minecart2/layout.manifest.json --out apps/game003/src/generated/minecart2-layout-resources.generated.ts --trust-art-directory",
+    "check:minecart2-layout-resources": "node ../../packages/rendercore/scripts/generate-scene-layout-vite-resources.mjs --manifest assets/minecart2/layout.manifest.json --out apps/game003/src/generated/minecart2-layout-resources.generated.ts --trust-art-directory --check",
     "generate:resources": "pnpm run generate:minecart2-layout-resources",
     "check:resources": "pnpm run check:minecart2-layout-resources",
     "build": "pnpm run generate:resources && pnpm run prepare:deps && vite build",

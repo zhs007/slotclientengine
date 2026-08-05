@@ -54,6 +54,7 @@ export async function prepareGame003SkinConfig(
   }
   const resource = await createSceneLayoutPackageResource({
     files: options.minecart2Files,
+    mappedAssetPolicy: "trusted-art",
     ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
   });
   try {
