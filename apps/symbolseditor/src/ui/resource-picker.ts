@@ -60,6 +60,7 @@ export type ResourceBindingContext =
   | {
       readonly kind: "value-image-string-special-image";
       readonly symbol: string;
+      readonly tierIndex: number;
       readonly mappingIndex: number;
     };
 
@@ -194,7 +195,7 @@ export function getResourceBindingLabel(
   if (context.kind === "image-string-special-image")
     return `${context.symbol}.imageStringNodes[${context.nodeIndex}].specialValueImages[${context.mappingIndex}]`;
   if (context.kind === "value-image-string-special-image")
-    return `${context.symbol}.valuePresentation.text.specialValueImages[${context.mappingIndex}]`;
+    return `${context.symbol}.valuePresentation.text.tiers[${context.tierIndex}].specialValueImages[${context.mappingIndex}]`;
   const target = `${context.symbol}.${"state" in context ? context.state : `tier ${context.tierIndex + 1}`}`;
   const field =
     context.kind === "value-tier-resource"
@@ -233,7 +234,10 @@ export function applyResourceBinding(
       const value = structuredClone(symbol.valuePresentation!);
       if (value.text.type !== "image-string")
         throw new Error("当前数值展示不是 ImgNumber。");
-      const mapping = value.text.specialValueImages?.[context.mappingIndex];
+      const mapping =
+        value.text.tiers[context.tierIndex]?.specialValueImages?.[
+          context.mappingIndex
+        ];
       if (!mapping) throw new Error("ImgNumber 特殊值映射不存在。");
       (mapping as { image: string }).image = path ? `./${path}` : "";
       setValuePresentation(project, context.symbol, value);
@@ -498,7 +502,8 @@ function requireTarget(
   } else if (context.kind === "value-image-string-special-image") {
     if (
       symbol.valuePresentation?.text.type !== "image-string" ||
-      !symbol.valuePresentation.text.specialValueImages?.[context.mappingIndex]
+      !symbol.valuePresentation.text.tiers[context.tierIndex]
+        ?.specialValueImages?.[context.mappingIndex]
     )
       throw new Error("数值 ImgNumber 特殊值映射不存在。");
   } else if (context.kind === "value-tier-resource") {

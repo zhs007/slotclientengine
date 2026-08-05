@@ -24,7 +24,6 @@ import {
   type SymbolPackageGameConfigSymbol,
   type SymbolPackageManifestV1,
   type SymbolImageStringNodeSpec,
-  type SymbolValuePresentationImageStringTierBindingSpec,
   type SymbolValuePresentationSpec,
 } from "@slotclientengine/rendercore/symbol";
 import {
@@ -1076,6 +1075,12 @@ export function getAssetReferences(
             path: stripLocalRef(binding.resource),
             location: `${symbol.symbol}.valuePresentation.text.tiers[${index}]`,
           });
+          for (const mapping of binding.specialValueImages ?? []) {
+            references.push({
+              path: stripLocalRef(mapping.image),
+              location: `${symbol.symbol}.valuePresentation.text.tiers[${index}].specialValueImages.${mapping.value}`,
+            });
+          }
         });
       }
     }
@@ -1655,11 +1660,13 @@ function compileValuePresentation(
   value: SymbolValuePresentationSpec,
 ): Record<string, unknown> {
   const clone = cloneValue(value) as unknown as Record<string, unknown>;
-  if (
-    value.text.type === "image-string" &&
-    !value.text.specialValueImages?.length
-  ) {
-    delete (clone.text as Record<string, unknown>).specialValueImages;
+  if (value.text.type === "image-string") {
+    const text = clone.text as { tiers: Array<Record<string, unknown>> };
+    for (const [index, binding] of text.tiers.entries()) {
+      if (!value.text.tiers[index]?.specialValueImages?.length) {
+        delete binding.specialValueImages;
+      }
+    }
   }
   const reelStates = clone.reelStates as Record<string, unknown>;
   const parsedStates = (
@@ -1864,16 +1871,12 @@ function validateTieredSpineEditorContract(
     );
   }
   if (value.text.type === "image-string") {
-    const [first, ...rest] = value.text.tiers;
-    if (!first || rest.some((binding) => !sameValueBinding(first, binding))) {
-      throw new Error(
-        `${symbol.symbol} 的 ImgNumber 必须使用一份共享 slot/anchor/transform 配置。`,
-      );
-    }
-    if (first.anchor.x !== 0.5 || first.anchor.y !== 0.5) {
-      throw new Error(
-        `${symbol.symbol} 的 ImgNumber 必须以动态内容中心 (0.5, 0.5) 对齐 Spine slot。`,
-      );
+    for (const [index, binding] of value.text.tiers.entries()) {
+      if (binding.anchor.x !== 0.5 || binding.anchor.y !== 0.5) {
+        throw new Error(
+          `${symbol.symbol} 的 ImgNumber tier ${index + 1} 必须以动态内容中心 (0.5, 0.5) 对齐 Spine slot。`,
+        );
+      }
     }
   }
   for (const state of symbol.stateOrder) {
@@ -1892,22 +1895,6 @@ function validateTieredSpineEditorContract(
       );
     }
   }
-}
-
-function sameValueBinding(
-  left: SymbolValuePresentationImageStringTierBindingSpec,
-  right: SymbolValuePresentationImageStringTierBindingSpec,
-): boolean {
-  return (
-    left.resource === right.resource &&
-    left.slot === right.slot &&
-    left.anchor.x === right.anchor.x &&
-    left.anchor.y === right.anchor.y &&
-    left.transform.x === right.transform.x &&
-    left.transform.y === right.transform.y &&
-    left.transform.scale === right.transform.scale &&
-    left.followSlotColor === right.followSlotColor
-  );
 }
 
 function setNestedValue(

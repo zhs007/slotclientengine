@@ -10,9 +10,9 @@ symbol code、state、lifecycle、scale、renderPriority、value/cascade 配置�
 
 同一导入批次允许多份 Spine skeleton 共用唯一一份 atlas 及其单页 texture；各 skeleton 仍作为独立资源供 state/value tier 显式选择。缺 skeleton、缺 atlas、多 atlas 或 atlas page 不唯一时继续拒绝整批导入。
 
-value-presentation 的编辑顺序固定为“档位 → 状态”：每档只选择 Spine skeleton/atlas/texture 和阈值；normal、win、remove 等动画在状态页选择一次，并要求所有档位存在同名动画。`spinBlur`、`disabled` 等静态 reel state 独立选择图片。档位 ImgNumber 在编辑器中只有一个共享 dependency/slot/transform 节点，固定按动态可视内容中心对齐；稳定 production manifest 仍会把这份配置精确物化到每个 tier binding。
+value-presentation 的编辑顺序固定为“档位 → 状态”：每档选择 Spine skeleton/atlas/texture 和阈值；normal、win、remove 等动画在状态页选择一次，并要求所有档位存在同名动画。`spinBlur`、`disabled` 等静态 reel state 独立选择图片。每个档位分别选择 ImgNumber dependency、该档 skeleton 的 exact slot、transform、颜色跟随和特殊数值图片，固定按动态可视内容中心对齐；新增档位创建空 binding，不继承首档或相邻档位。
 
-命名 ImgNumber node 可以绑定任意 symbol state。official Spine 或档位 activeSpine target 必须选择 exact slot；image、layered image、state texture、VNI、composite、builtin/static/empty target 不选内部 leaf 或 slot，而是直接挂到 symbol 的固定顶层 ImgNumber 图层。命名 node 和档位 ImgNumber 都可逐项增加不限数量的 `specialValueImages`：输入值完全匹配安全整数时显示一张完整图片，未匹配值继续逐 glyph 渲染；特殊图片复用原 node 的 target、anchor、transform 和颜色合同，不另设 placement。
+命名 ImgNumber node 可以绑定任意 symbol state。official Spine 或档位 activeSpine target 必须选择 exact slot；image、layered image、state texture、VNI、composite、builtin/static/empty target 不选内部 leaf 或 slot，而是直接挂到 symbol 的固定顶层 ImgNumber 图层。命名 node 和每个档位 ImgNumber binding 都可逐项增加不限数量的 `specialValueImages`：输入值完全匹配安全整数时显示该 node/档位自己的完整图片，未匹配值继续逐 glyph 渲染；特殊图片复用对应 binding 的 target、anchor、transform 和颜色合同，不另设 placement。旧 package 的 `valuePresentation.text.specialValueImages` 会在严格导入时复制到每档，新导出只写 per-tier canonical 字段；新旧字段并存会失败。
 
 当单个 symbol 的 normal 是已绑定且有效的 direct image 时，normal 状态页提供两个互不
 联动的纯前端操作：“生成模糊图”只生成/绑定 `spinBlur`，“生成 disable 图”只生成/

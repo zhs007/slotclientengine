@@ -35,9 +35,6 @@ export interface SymbolValuePresentationResource {
   readonly text: SymbolValuePresentationTextSpec;
   readonly textImageUrls: Readonly<Record<number, string>>;
   readonly imageStringTierBindings?: readonly SymbolValuePresentationImageStringTierResource[];
-  readonly imageStringSpecialValueImages?: Readonly<
-    Record<string, SymbolImageStringSpecialImageResource>
-  >;
 }
 
 export interface SymbolValuePresentationImageStringTierResource {
@@ -47,6 +44,9 @@ export interface SymbolValuePresentationImageStringTierResource {
   readonly anchor: Readonly<{ x: number; y: number }>;
   readonly transform: Readonly<{ x: number; y: number; scale: number }>;
   readonly followSlotColor: boolean;
+  readonly specialValueImages: Readonly<
+    Record<string, SymbolImageStringSpecialImageResource>
+  >;
 }
 
 export interface SymbolValuePresentationResourceBundle {

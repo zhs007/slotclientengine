@@ -472,7 +472,7 @@ describe("symbol editor typed project", () => {
     }
   });
 
-  it("enforces one shared animation and ImgNumber binding across value tiers", () => {
+  it("shares normal animation while preserving independent ImgNumber tier bindings", () => {
     const rawGameConfig = JSON.parse(
       readFileSync(
         resolve(process.cwd(), "../../assets/gamecfg002/gameconfig.json"),
@@ -514,11 +514,26 @@ describe("symbol editor typed project", () => {
     );
     if (restored.text.type !== "image-string")
       throw new Error("expected game002 CN image-string presentation");
-    (restored.text.tiers[1] as { slot: string }).slot = "other";
+    const secondBinding = restored.text.tiers[1] as unknown as {
+      slot: string;
+      transform: { x: number };
+      specialValueImages: Array<{ value: number; image: string }>;
+    };
+    secondBinding.slot = "other";
+    secondBinding.transform.x = 17;
+    secondBinding.specialValueImages = [{ value: 250, image: "./mini.png" }];
     setValuePresentation(project, "CN", restored);
-    expect(() => compileSymbolEditorManifest(project)).toThrow(
-      /一份共享 slot\/anchor\/transform/,
-    );
+    const compiled = parseSymbolStateTextureManifest(
+      compileSymbolEditorManifest(project),
+    ).symbols.CN.valuePresentation!;
+    if (compiled.text.type !== "image-string")
+      throw new Error("expected image-string presentation");
+    expect(compiled.text.tiers[1]).toMatchObject({
+      slot: "other",
+      transform: { x: 17 },
+      specialValueImages: [{ value: 250, image: "./mini.png" }],
+    });
+    expect(compiled.text.tiers[0]?.slot).not.toBe("other");
   });
 
   it("derives tiered states as shared active Spine or independent static images", () => {

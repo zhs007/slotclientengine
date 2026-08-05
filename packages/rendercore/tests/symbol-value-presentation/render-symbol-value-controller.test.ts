@@ -306,6 +306,28 @@ describe("render symbol value controller", () => {
     first.destroy();
     second.destroy();
   });
+
+  it("uses only the selected tier special-value image map", async () => {
+    const players: FakeSlotPlayer[] = [];
+    const symbol = createSymbol(() => {
+      const player = new FakeSlotPlayer();
+      players.push(player);
+      return player;
+    }, createImageStringResource(true));
+    symbol.init();
+
+    symbol.setPresentationValue(1);
+    await flushPromises();
+    const lowSpecial = players[0].attached[0]!.object.children[0] as Sprite;
+    expect(lowSpecial.texture).toBe(Texture.EMPTY);
+
+    symbol.setPresentationValue(25);
+    await flushPromises();
+    const highDisplay = players[1].attached[0]!.object;
+    expect(highDisplay.children).toHaveLength(1);
+    expect((highDisplay.children[0] as Sprite).texture).toBe(Texture.WHITE);
+    symbol.destroy();
+  });
 });
 
 function createSymbol(
@@ -421,7 +443,9 @@ function createResource(): SymbolValuePresentationResource {
   });
 }
 
-function createImageStringResource(): SymbolValuePresentationResource {
+function createImageStringResource(
+  withTierSpecials = false,
+): SymbolValuePresentationResource {
   const base = createResource();
   const digits = Object.freeze({
     manifest: Object.freeze({
@@ -457,6 +481,26 @@ function createImageStringResource(): SymbolValuePresentationResource {
     assertUsable: () => undefined,
     destroy: async () => undefined,
   });
+  const lowSpecialValueImages: Readonly<
+    Record<string, { readonly path: string; readonly texture: Texture }>
+  > = withTierSpecials
+    ? Object.freeze({
+        "1": Object.freeze({
+          path: "./low-1.png",
+          texture: Texture.EMPTY,
+        }),
+      })
+    : Object.freeze({});
+  const highSpecialValueImages: Readonly<
+    Record<string, { readonly path: string; readonly texture: Texture }>
+  > = withTierSpecials
+    ? Object.freeze({
+        "25": Object.freeze({
+          path: "./high-25.png",
+          texture: Texture.WHITE,
+        }),
+      })
+    : Object.freeze({});
   return Object.freeze({
     ...base,
     text: Object.freeze({
@@ -486,6 +530,7 @@ function createImageStringResource(): SymbolValuePresentationResource {
         anchor: Object.freeze({ x: 0.5, y: 0.5 }),
         transform: Object.freeze({ x: 2, y: 3, scale: 0.5 }),
         followSlotColor: false,
+        specialValueImages: lowSpecialValueImages,
       }),
       Object.freeze({
         resourcePath: "./high/image-string.manifest.json",
@@ -494,6 +539,7 @@ function createImageStringResource(): SymbolValuePresentationResource {
         anchor: Object.freeze({ x: 1, y: 1 }),
         transform: Object.freeze({ x: -2, y: -3, scale: 2 }),
         followSlotColor: true,
+        specialValueImages: highSpecialValueImages,
       }),
     ]),
   });

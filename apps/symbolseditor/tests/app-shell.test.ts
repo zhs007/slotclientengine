@@ -639,7 +639,7 @@ describe("symbols editor app shell", () => {
     expect(root.textContent).toContain("groupAmount");
   });
 
-  it("keeps one shared ImgNumber binding while Spine tiers change", async () => {
+  it("keeps independent ImgNumber bindings while Spine tiers change", async () => {
     await createProject(root);
     click(root, '[data-workspace-tab][data-tab-value="symbols"]');
     click(root, '[data-inspector-tab][data-tab-value="value"]');
@@ -654,11 +654,23 @@ describe("symbols editor app shell", () => {
 
     click(root, '[data-value-action="add-tier"]');
     expect(root.querySelectorAll("[data-tier-index]")).toHaveLength(2);
-    expect(root.querySelectorAll(".value-number-tier")).toHaveLength(1);
+    expect(root.querySelectorAll(".value-number-tier")).toHaveLength(2);
     expect(root.textContent).toContain("动态内容中心对齐");
+    const slots = root.querySelectorAll<HTMLSelectElement>(
+      "[data-value-image-string-field='slot']",
+    );
+    expect(slots).toHaveLength(2);
+    expect(slots[1]?.value).toBe("");
+    const positions = root.querySelectorAll<HTMLInputElement>(
+      "[data-value-image-string-field='transform.x']",
+    );
+    positions[0]!.value = "19";
+    positions[0]!.dispatchEvent(new Event("change", { bubbles: true }));
     expect(
-      root.querySelector("[data-shared-value-text-field='slot']"),
-    ).not.toBeNull();
+      root.querySelectorAll<HTMLInputElement>(
+        "[data-value-image-string-field='transform.x']",
+      )[1]?.value,
+    ).toBe("0");
     expect(root.querySelector("[data-value-field^='text.tiers.']")).toBeNull();
     click(root, '[data-value-action="remove-tier"][data-value-index="1"]');
     expect(root.querySelectorAll(".value-number-tier")).toHaveLength(1);

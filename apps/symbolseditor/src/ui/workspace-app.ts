@@ -1209,26 +1209,31 @@ export class SymbolsEditorApp {
         }
       });
     panel
-      .querySelector<HTMLElement>("[data-value-special-add]")
-      ?.addEventListener("click", () => {
-        try {
-          this.#store.transact((draft) => {
-            const symbol = draft.symbols.get(this.#session.selectedSymbol)!;
-            const value = structuredClone(symbol.valuePresentation!);
-            if (value.text.type !== "image-string") return;
-            const mappings = [...(value.text.specialValueImages ?? [])];
-            (
-              value.text as unknown as { specialValueImages: unknown[] }
-            ).specialValueImages = [
-              ...mappings,
-              { value: nextSpecialValue(mappings), image: "" },
-            ];
-            setValuePresentation(draft, symbol.symbol, value);
-          });
-        } catch (error) {
-          this.#store.setExternalError(error);
-        }
-      });
+      .querySelectorAll<HTMLElement>("[data-value-special-add]")
+      .forEach((button) =>
+        button.addEventListener("click", () => {
+          try {
+            this.#store.transact((draft) => {
+              const symbol = draft.symbols.get(this.#session.selectedSymbol)!;
+              const value = structuredClone(symbol.valuePresentation!);
+              if (value.text.type !== "image-string") return;
+              const binding =
+                value.text.tiers[Number(button.dataset.valueSpecialAdd)];
+              if (!binding) throw new Error("ImgNumber 档位不存在。");
+              const mappings = [...(binding.specialValueImages ?? [])];
+              (
+                binding as unknown as { specialValueImages: unknown[] }
+              ).specialValueImages = [
+                ...mappings,
+                { value: nextSpecialValue(mappings), image: "" },
+              ];
+              setValuePresentation(draft, symbol.symbol, value);
+            });
+          } catch (error) {
+            this.#store.setExternalError(error);
+          }
+        }),
+      );
     panel
       .querySelectorAll<HTMLElement>("[data-value-special-remove]")
       .forEach((button) => {
@@ -1237,9 +1242,12 @@ export class SymbolsEditorApp {
             const symbol = draft.symbols.get(this.#session.selectedSymbol)!;
             const value = structuredClone(symbol.valuePresentation!);
             if (value.text.type !== "image-string") return;
+            const binding =
+              value.text.tiers[Number(button.dataset.valueTierIndex)];
+            if (!binding) throw new Error("ImgNumber 档位不存在。");
             (
-              value.text as unknown as { specialValueImages: unknown[] }
-            ).specialValueImages = (value.text.specialValueImages ?? []).filter(
+              binding as unknown as { specialValueImages: unknown[] }
+            ).specialValueImages = (binding.specialValueImages ?? []).filter(
               (_mapping, index) =>
                 index !== Number(button.dataset.valueSpecialRemove),
             );
@@ -1257,7 +1265,8 @@ export class SymbolsEditorApp {
               const value = structuredClone(symbol.valuePresentation!);
               if (value.text.type !== "image-string") return;
               const mapping =
-                value.text.specialValueImages?.[
+                value.text.tiers[Number(input.dataset.valueTierIndex)]
+                  ?.specialValueImages?.[
                   Number(input.dataset.valueSpecialValue)
                 ];
               if (!mapping) throw new Error("ImgNumber 特殊值映射不存在。");
@@ -1293,7 +1302,7 @@ export class SymbolsEditorApp {
     panel
       .querySelectorAll<
         HTMLInputElement | HTMLSelectElement
-      >("[data-shared-value-text-field]")
+      >("[data-value-image-string-field]")
       .forEach((input) => {
         input.addEventListener("change", () => {
           try {
@@ -1304,19 +1313,20 @@ export class SymbolsEditorApp {
                 return;
               const value = structuredClone(presentation);
               if (value.text.type !== "image-string") return;
+              const binding =
+                value.text.tiers[Number(input.dataset.valueTierIndex)];
+              if (!binding) throw new Error("ImgNumber 档位不存在。");
               const next =
                 input instanceof HTMLInputElement && input.type === "checkbox"
                   ? input.checked
                   : input instanceof HTMLInputElement && input.type === "number"
                     ? Number(input.value)
                     : input.value;
-              for (const binding of value.text.tiers) {
-                setObjectPath(
-                  binding as unknown as Record<string, unknown>,
-                  input.dataset.sharedValueTextField!,
-                  next,
-                );
-              }
+              setObjectPath(
+                binding as unknown as Record<string, unknown>,
+                input.dataset.valueImageStringField!,
+                next,
+              );
               setValuePresentation(draft, symbol.symbol, value);
             });
           } catch (error) {
@@ -1676,10 +1686,7 @@ export class SymbolsEditorApp {
           value.tiers.push(clone);
           if (value.text.type === "image-string") {
             (value.text.tiers as Array<Record<string, unknown>>).push(
-              structuredClone(
-                (value.text.tiers as Array<Record<string, unknown>>)[0] ??
-                  createEmptyValueImageStringBinding(),
-              ),
+              createEmptyValueImageStringBinding(),
             );
           }
           this.#session.expandedTier = value.tiers.length - 1;
@@ -1720,7 +1727,6 @@ export class SymbolsEditorApp {
             button.dataset.textType === "image-string"
               ? {
                   type: "image-string",
-                  specialValueImages: [],
                   tiers: value.tiers.map(() =>
                     createEmptyValueImageStringBinding(),
                   ),
@@ -2661,7 +2667,8 @@ function assetsWorkspaceMarkup(
             .map((node) => `${symbol.symbol}.imageStringNodes.${node.name}`),
           ...(symbol.valuePresentation?.text.type === "image-string"
             ? symbol.valuePresentation.text.tiers.flatMap((binding, index) =>
-                binding.resource.includes(`/image-strings/${dependency.id}/`)
+                binding.resource === dependency.rootKey ||
+                binding.resource === `./${dependency.rootKey}`
                   ? [`${symbol.symbol}.valuePresentation.text.tiers[${index}]`]
                   : [],
               )
@@ -3204,28 +3211,46 @@ function valueNumberPresentationMarkup(
   symbol: EditorSymbolDraft,
 ): string {
   const value = symbol.valuePresentation!;
-  const modeButtons = `<div class="button-row"><button data-value-action="text-type" data-text-type="font">Font</button><button data-value-action="text-type" data-text-type="image">完整数值图片</button><button data-value-action="text-type" data-text-type="image-string">ImgNumber（共享节点）</button></div>`;
+  const modeButtons = `<div class="button-row"><button data-value-action="text-type" data-text-type="font">Font</button><button data-value-action="text-type" data-text-type="image">完整数值图片</button><button data-value-action="text-type" data-text-type="image-string">ImgNumber（每档独立）</button></div>`;
   if (value.text.type === "image-string") {
     const dependencies = [...project.imageStringDependencies.values()].sort(
       (left, right) => left.id.localeCompare(right.id, "en"),
     );
-    const binding = value.text.tiers[0]!;
-    const slots = valueSlotOptions(project, symbol);
-    const ready =
-      dependencies.length > 0 &&
-      binding.resource === "./image-string.manifest.json" &&
-      slots.includes(binding.slot);
-    const dependencyOptions = [
-      `<option value="" ${binding.resource ? "" : "selected"}>未选择 dependency</option>`,
-      ...dependencies.map(() =>
-        option(
-          "./image-string.manifest.json",
-          "image-string.manifest.json",
-          binding.resource === "./image-string.manifest.json",
-        ),
-      ),
-    ].join("");
-    return `<section class="number-presentation"><h3>Number presentation</h3>${modeButtons}<p>所有 Spine 档位共用一个 ImgNumber dependency、共同 slot 和中心对齐配置；导出时按稳定 manifest schema 精确物化到每档。</p><article class="tier-card value-number-tier"><header><strong>共享 ImgNumber 节点</strong><span class="status-${ready ? "ready" : "missing"}">${ready ? "就绪" : "未完成"}</span></header><label>ImgNumber dependency <select data-shared-value-text-field="resource">${dependencyOptions}</select></label>${sharedValueSelectField("slot", binding.slot, slots, "全部档位共同 slot")}<div class="derived-field"><span>Alignment</span><strong>动态内容中心对齐</strong><small>字符串变长后仍以实际宽高中心对齐 Spine slot</small></div><div class="form-grid">${sharedValueNumberField("transform.x", binding.transform.x, "X")}${sharedValueNumberField("transform.y", binding.transform.y, "Y")}${sharedValueNumberField("transform.scale", binding.transform.scale, "Scale")}</div><label><input data-shared-value-text-field="followSlotColor" type="checkbox" ${binding.followSlotColor ? "checked" : ""}> Follow slot color</label><fieldset><legend>特殊数值图片</legend><p class="hint">完全匹配整数时整图替代 glyph，位置和 slot 配置保持不变。</p>${(value.text.specialValueImages ?? []).map((mapping, mappingIndex) => `<div class="form-grid"><label>Value <input type="number" step="1" data-value-special-value="${mappingIndex}" value="${mapping.value}"></label>${resourceBindingMarkup("Image", mapping.image.replace(/^\.\//u, ""), { kind: "value-image-string-special-image", symbol: symbol.symbol, mappingIndex })}<button type="button" data-value-special-remove="${mappingIndex}">删除映射</button></div>`).join("")}<button type="button" data-value-special-add>增加映射</button></fieldset></article></section>`;
+    const cards = value.text.tiers
+      .map((binding, tierIndex) => {
+        const slots = valueTierSlotOptions(project, symbol, tierIndex);
+        const dependency = dependencies.find(
+          (candidate) =>
+            binding.resource === candidate.rootKey ||
+            binding.resource === `./${candidate.rootKey}`,
+        );
+        const specialsReady = (binding.specialValueImages ?? []).every(
+          (mapping) =>
+            Boolean(
+              mapping.image &&
+              project.assetLibrary.records.has(
+                mapping.image.replace(/^\.\//u, ""),
+              ),
+            ),
+        );
+        const ready = Boolean(
+          dependency && slots.includes(binding.slot) && specialsReady,
+        );
+        const dependencyOptions = [
+          `<option value="" ${binding.resource ? "" : "selected"}>未选择 dependency</option>`,
+          ...dependencies.map((candidate) =>
+            option(
+              `./${candidate.rootKey}`,
+              `${candidate.id} · ${candidate.rootKey}`,
+              binding.resource === candidate.rootKey ||
+                binding.resource === `./${candidate.rootKey}`,
+            ),
+          ),
+        ].join("");
+        return `<article class="tier-card value-number-tier" data-value-image-string-tier="${tierIndex}"><header><strong>Tier ${tierIndex + 1} ImgNumber</strong><span class="status-${ready ? "ready" : "missing"}">${ready ? "就绪" : "未完成"}</span></header><label>ImgNumber dependency <select data-value-image-string-field="resource" data-value-tier-index="${tierIndex}">${dependencyOptions}</select></label>${tierValueSelectField(tierIndex, "slot", binding.slot, slots, `Tier ${tierIndex + 1} slot`)}<div class="derived-field"><span>Alignment</span><strong>动态内容中心对齐</strong><small>字符串变长后仍以实际宽高中心对齐本档 Spine slot</small></div><div class="form-grid">${tierValueNumberField(tierIndex, "transform.x", binding.transform.x, "X")}${tierValueNumberField(tierIndex, "transform.y", binding.transform.y, "Y")}${tierValueNumberField(tierIndex, "transform.scale", binding.transform.scale, "Scale")}</div><label><input data-value-image-string-field="followSlotColor" data-value-tier-index="${tierIndex}" type="checkbox" ${binding.followSlotColor ? "checked" : ""}> Follow slot color</label><fieldset><legend>特殊数值图片</legend><p class="hint">只对当前档位生效；未命中值严格使用本档 glyph。</p>${(binding.specialValueImages ?? []).map((mapping, mappingIndex) => `<div class="form-grid"><label>Value <input type="number" step="1" data-value-special-value="${mappingIndex}" data-value-tier-index="${tierIndex}" value="${mapping.value}"></label>${resourceBindingMarkup("Image", mapping.image.replace(/^\.\//u, ""), { kind: "value-image-string-special-image", symbol: symbol.symbol, tierIndex, mappingIndex })}<button type="button" data-value-special-remove="${mappingIndex}" data-value-tier-index="${tierIndex}">删除映射</button></div>`).join("")}<button type="button" data-value-special-add="${tierIndex}">增加映射</button></fieldset></article>`;
+      })
+      .join("");
+    return `<section class="number-presentation"><h3>Number presentation</h3>${modeButtons}<p>每个 Spine 档位独立选择 ImgNumber dependency、exact slot 和显示配置，不继承相邻档位。</p><div class="tier-list">${cards}</div></section>`;
   }
   const slots = valueSlotOptions(project, symbol);
   const common = `${valueSelectField("text.slot", value.text.slot, slots, "Slot intersection")}<div class="form-grid">${valueNumberField("text.x", value.text.x, "X")}${valueNumberField("text.y", value.text.y, "Y")}</div>`;
@@ -3578,6 +3603,7 @@ function createEmptyValueImageStringBinding() {
     anchor: { x: 0.5, y: 0.5 },
     transform: { x: 0, y: 0, scale: 1 },
     followSlotColor: true,
+    specialValueImages: [],
   };
 }
 
@@ -3619,6 +3645,21 @@ function valueSlotOptions(
   return [...sets[0]!].filter((name) => sets.every((set) => set.has(name)));
 }
 
+function valueTierSlotOptions(
+  project: SymbolEditorProject,
+  symbol: EditorSymbolDraft,
+  tierIndex: number,
+): readonly string[] {
+  const tier = symbol.valuePresentation?.tiers[tierIndex];
+  if (!tier) return [];
+  return assetMetadataList(
+    project.assetLibrary.records.get(
+      tier.animation.skeleton.replace(/^\.\//u, ""),
+    ),
+    "slotNames",
+  );
+}
+
 function isImageStringSpineTarget(
   symbol: EditorSymbolDraft,
   state: string,
@@ -3652,9 +3693,12 @@ function getCurrentResourcePath(
     );
   if (context.kind === "value-image-string-special-image")
     return symbol.valuePresentation?.text.type === "image-string"
-      ? (symbol.valuePresentation.text.specialValueImages?.[
-          context.mappingIndex
-        ]?.image.replace(/^\.\//u, "") ?? "")
+      ? (symbol.valuePresentation.text.tiers[
+          context.tierIndex
+        ]?.specialValueImages?.[context.mappingIndex]?.image.replace(
+          /^\.\//u,
+          "",
+        ) ?? "")
       : "";
   if (context.kind === "value-tier-resource")
     return symbol.valuePresentation!.tiers[context.tierIndex]!.animation[
@@ -3877,21 +3921,23 @@ function valueSelectField(
   return `<label>${escapeHtml(label)} <select data-value-field="${escapeAttr(field)}"><option value="">选择…</option>${values.map((value) => option(value, value, value === current)).join("")}</select></label>`;
 }
 
-function sharedValueSelectField(
+function tierValueSelectField(
+  tierIndex: number,
   field: string,
   current: string,
   values: readonly string[],
   label: string,
 ): string {
-  return `<label>${escapeHtml(label)} <select data-shared-value-text-field="${escapeAttr(field)}"><option value="">选择…</option>${values.map((value) => option(value, value, value === current)).join("")}</select></label>`;
+  return `<label>${escapeHtml(label)} <select data-value-image-string-field="${escapeAttr(field)}" data-value-tier-index="${tierIndex}"><option value="">选择…</option>${values.map((value) => option(value, value, value === current)).join("")}</select></label>`;
 }
 
-function sharedValueNumberField(
+function tierValueNumberField(
+  tierIndex: number,
   field: string,
   value: number,
   label: string,
 ): string {
-  return `<label>${escapeHtml(label)} <input data-shared-value-text-field="${escapeAttr(field)}" type="number" step="0.01" value="${value}"></label>`;
+  return `<label>${escapeHtml(label)} <input data-value-image-string-field="${escapeAttr(field)}" data-value-tier-index="${tierIndex}" type="number" step="0.01" value="${value}"></label>`;
 }
 
 function setObjectPath(
