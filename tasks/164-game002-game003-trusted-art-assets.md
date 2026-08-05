@@ -42,7 +42,8 @@ game app 的生成、loading/runtime prepare 和 release check 不得因 hash/si
 
 - rendercore mapped scene-layout runtime 解析中 eager/lazy logical file 装配的
   hash/size 边界统一。
-- scene-layout runtime 和 Vite resource generator 的显式“信任当前美术目录”模式，
+- scene-layout runtime 的显式“信任当前美术目录”模式，以及专用于 game build 的
+  directory-authoritative Vite resource generator，
   只由 game002/game003 opt in；它不对未引用文件施加 exact/orphan gate。
 - game002/game003 static dist checker 移除对 map hash/byteLength 的内容比对和
   整个美术目录的 orphan/exact-closure 限制，只证明实际引用文件进入 dist。
@@ -124,11 +125,10 @@ validation` 正来自这一 shared runtime 分支。
    时固定），由 game002/game003 显式传入。该 policy 以 logical key→safe
    physical path 作为运行路由，忽略 integrity-only metadata、未引用 map entry 和
    unmapped extra files；默认/editor/ZIP policy 不变，app 不复制 resolver。
-2. **build 通过显式 opt-in 表达同一美术 policy。** 为 Vite resource generator
-   增加命名明确的 CLI option（如 `--trust-art-directory`），只在
-   game002/game003 generate/check scripts 中传入。opt-in 时跳过 hash/size、
-   content-addressed path relation 和 unexpected/orphan file gate；导入实际可用的 mapped
-   physical files。默认模式保留现有完整性检查。
+2. **game build generator 始终以当前美术目录为权威。** 该脚本的正式调用方只有
+   game002/game003，不承担 editor package validation；因此直接跳过 hash/size、
+   content-addressed path relation 和 unexpected/orphan file gate，只导入实际可用的
+   mapped physical files，不提供容易误用的 strict/trusted CLI 双模式。
 3. **release 以实际 bytes 证明交付。** game002 保留已有 source-to-dist
    byte equality，只删除 source-to-map size 比对；game003 将基于 hash 的
    source-to-dist 查找改为 byte equality。这保证最终美术 bytes 进入 dist，又不
@@ -224,14 +224,14 @@ generator source formatting 若稳定输出不变，不应重写两个 generated
    - 保留 lazy typed kind、各类资源 parser/decoder、prepare/rollback/destroy；不在 app
      复制 resolver 或资源表。
 
-3. **为两个 game 接入显式 build policy**
-   - 为 `generate-scene-layout-vite-resources.mjs` 增加 strict CLI boolean option；
-     默认仍读 bytes 并比对 map hash/size，opt-in 时跳过两项内容对比。
-   - opt-in 只要求 logical key 的 physical path 是 safe `assets/` relative path；忽略
+3. **收敛两个 game 的 build generator 合同**
+   - `generate-scene-layout-vite-resources.mjs` 始终按美术目录权威模式工作，不读取或
+     比对 map hash/size，也不保留无正式调用方的 strict CLI 分支。
+   - generator 只要求 logical key 的 physical path 是 safe `assets/` relative path；忽略
      hash/size/content-addressed relation、不存在的未引用 entry 和未在 map 中的额外文件。
-     默认模式保留现有 exact checks，两种模式都继续 `--check` generated parity。
-   - game002/game003 的 generate 和 check scripts 都显式传入该 option；其他
-     调用方默认行为不变。
+     `--check` 只检查 generated URL 表 parity。
+   - editor/export/optimizer/ZIP 的严格校验继续由各自 package validator 承担，不调用
+     该 game build generator。
 
 4. **调整 app release checker**
    - game002 删除 Crave payload 的 map hash/size/content-addressed 形状限制和目录
@@ -246,9 +246,8 @@ generator source formatting 若稳定输出不变，不应重写两个 generated
    - rendercore mapped fixture 用仍可语义解析、但 bytes/hash/size 与 map 不一致
      的 eager 和 lazy/deferred assets 证明两条 runtime path 都成功；另保留缺
      logical key/payload、坏内容和错 kind 的 strict failure。
-   - generator 回归覆盖默认模式仍拒绝 hash/size/orphan drift；game opt-in
-     模式接受这些 drift 和 extra files，但仍拒绝不安全路径，并保持 generated
-     output parity。
+   - generator 回归覆盖 hash/size/orphan drift 和 extra files 均被接受，但仍拒绝
+     不安全路径，并保持 generated output parity。
    - README 记录美术 bytes 权威、替换 workflow 和仍保留的检查；
      `game002.md`、`game003.md`、`scene-layout.md` 同步这个稳定的
      app opt-in/runtime 边界，不写逐文件 hash 或一次性证据。
@@ -336,8 +335,8 @@ git diff --check
 - 两个 app README 记录 directory-authoritative workflow：美术可直接替换/
   增加文件，只对实际引用 path 保留安全、存在性和 decoder 检查。
 - `docs/agent-rules/game002.md` 与 `game003.md` 记录两款游戏的稳定例外；
-  `scene-layout.md` 将 runtime 不重复校验与 build consumer 显式 opt-in 的边界
-  写清。不修改根 `AGENTS.md`。
+  `scene-layout.md` 将 runtime policy、game build generator 与 editor validator 的
+  职责边界写清。不修改根 `AGENTS.md`。
 - 本任务执行会话不代替美术修改 generated TS、asset-groups 或 asset payload。
 
 ## 11. 执行报告

@@ -76,7 +76,9 @@
 - 普通 Spine popup 的 placement 与注册由 Scene Layout 拥有；start/loop/end 动画名与点击锁存生命周期由 popup package 和 rendercore 拥有。
 - production app 直接消费 editor 导出的 mapped folder 时，构建期必须从根 manifest
   与 `assets.map.json` 生成 physical Vite import map；禁止宽泛 glob、运行时猜路径
-  或另存业务资源表。默认 editor/export/build consumer 仍校验 path/hash/size/orphan。
+  或另存业务资源表。该 game build generator 以当前美术目录为权威，不校验
+  hash/size/content-addressed filename 或 orphan；editor/export/optimizer/ZIP 通过各自
+  的 package validator 保持严格 integrity 合同，不复用该 generator 做校验。
 - 明确由美术直接维护正式 asset 目录的 game consumer 可 opt in trusted-art policy：
   `assets.map.json` 只提供 logical key→安全 physical path 路由，当前 files/bytes
   为权威，不比对 `sha256`/`byteLength`/content-addressed filename，不因未引用

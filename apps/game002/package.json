@@ -5,8 +5,8 @@
   "type": "module",
   "packageManager": "pnpm@10.0.0",
   "scripts": {
-    "generate:crave-layout-resources": "node ../../packages/rendercore/scripts/generate-scene-layout-vite-resources.mjs --manifest assets/crave/layout.manifest.json --out apps/game002/src/generated/crave-layout-resources.generated.ts --trust-art-directory",
-    "check:crave-layout-resources": "node ../../packages/rendercore/scripts/generate-scene-layout-vite-resources.mjs --manifest assets/crave/layout.manifest.json --out apps/game002/src/generated/crave-layout-resources.generated.ts --trust-art-directory --check",
+    "generate:crave-layout-resources": "node ../../packages/rendercore/scripts/generate-scene-layout-vite-resources.mjs --manifest assets/crave/layout.manifest.json --out apps/game002/src/generated/crave-layout-resources.generated.ts",
+    "check:crave-layout-resources": "node ../../packages/rendercore/scripts/generate-scene-layout-vite-resources.mjs --manifest assets/crave/layout.manifest.json --out apps/game002/src/generated/crave-layout-resources.generated.ts --check",
     "generate:resources": "pnpm run generate:crave-layout-resources",
     "check:resources": "pnpm run check:crave-layout-resources",
     "prepare:deps": "pnpm --filter @slotclientengine/gameloading build && pnpm --filter @slotclientengine/gameloading-ui-leo build && pnpm --filter @slotclientengine/platformbootstrap build && pnpm --filter @slotclientengine/platformbootstrap-leo build && pnpm --filter @slotclientengine/gameframeworks build && pnpm --filter @slotclientengine/game-ui-leo build && pnpm --filter @slotclientengine/rendercore build",

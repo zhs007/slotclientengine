@@ -17,8 +17,8 @@ Vite 资源生成和 release checker 不再用 `assets.map.json` 中的 `sha256`
 - 执行基线：`41279e7c78894b5d0f8d8866e8985e0e36ca2f26`。
 - 在 rendercore scene-layout package resource 中新增显式
   `editor-package | trusted-art` policy；默认行为保持严格。
-- game002/game003 的 skin config、Vite 资源生成脚本和 release checker 显式启用
-  trusted-art 语义。
+- game002/game003 的 skin config 显式启用 trusted-art runtime 语义；专用 Vite 资源
+  生成脚本和 release checker 直接以当前美术目录为权威。
 - 新增 runtime 与 generator 定向测试，覆盖 metadata drift、额外文件、未引用缺失
   entry、unsafe path、实际引用缺失和 lazy load。
 - 更新两款游戏 README 与 game002/game003/scene-layout 领域规则。
@@ -38,7 +38,7 @@ trusted-art resolver 前就抛错；现在只收集实际声明了 string path �
 
 - `pnpm --filter @slotclientengine/rendercore typecheck`
 - `pnpm --filter @slotclientengine/rendercore exec vitest run tests/scene-layout/package-resource.test.ts tests/scene-layout/vite-resource-generator.test.ts`
-  —— 2 个测试文件、14 个测试通过。
+  —— 最终版本 2 个测试文件、13 个测试通过。
 - `pnpm --filter game002 --filter game003 typecheck`
 - `pnpm --filter game002 --filter game003 test`
   —— game002 26 个文件/190 个测试，game003 16 个文件/60 个测试通过。
@@ -64,3 +64,11 @@ trusted-art resolver 前就抛错；现在只收集实际声明了 string path �
 取消目录完整性 gate 是本任务的预期取舍，正式交付的视觉内容和动画效果需以上述
 浏览器验收为准。实际引用资源的安全路径、存在性与 decoder failure 仍为严格失败，
 未通过自动降级或猜测路径掩盖错误。
+
+## 后续修正
+
+确认 `generate-scene-layout-vite-resources.mjs` 的正式调用方只有 game002/game003，
+editor 不使用该脚本后，删除了生成器中无调用方的默认严格分支及
+`--trust-art-directory` 开关。生成器现在始终忽略 map hash/size、content-addressed
+filename 和目录 exactness；editor/export/optimizer/ZIP 的严格 integrity 校验仍由
+各自 package validator 负责。

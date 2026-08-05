@@ -7,7 +7,6 @@ interface GeneratorOptions {
   readonly manifest: string;
   readonly out: string;
   readonly check: boolean;
-  readonly trustArtDirectory: boolean;
 }
 
 interface GeneratorModule {
@@ -30,7 +29,7 @@ afterEach(async () => {
 });
 
 describe("scene layout Vite resource generator", () => {
-  it("parses the trusted art directory option explicitly", async () => {
+  it("parses generator options", async () => {
     const generator = await loadGenerator();
     expect(
       generator.parseSceneLayoutResourceArgs([
@@ -38,38 +37,13 @@ describe("scene layout Vite resource generator", () => {
         "assets/art/layout.manifest.json",
         "--out",
         "apps/game/src/generated.ts",
-        "--trust-art-directory",
         "--check",
       ]),
     ).toEqual({
       check: true,
-      trustArtDirectory: true,
       manifest: "assets/art/layout.manifest.json",
       out: "apps/game/src/generated.ts",
     });
-  });
-
-  it("keeps default hash and size validation", async () => {
-    const generator = await loadGenerator();
-    const digest = "0".repeat(64);
-    const path = `assets/${digest}.json`;
-    const fixture = await createFixture({
-      files: {
-        "art.json": mappedEntry(path, {
-          sha256: digest,
-          byteLength: 999,
-        }),
-      },
-      payloads: { [path]: "art delivery\n" },
-    });
-    await expect(
-      generator.generateSceneLayoutViteResources({
-        manifest: fixture.manifest,
-        out: fixture.out,
-        check: false,
-        trustArtDirectory: false,
-      }),
-    ).rejects.toThrow(/byteLength mismatch/);
   });
 
   it("trusts present art bytes and ignores unused or extra files", async () => {
@@ -98,7 +72,6 @@ describe("scene layout Vite resource generator", () => {
       manifest: fixture.manifest,
       out: fixture.out,
       check: false,
-      trustArtDirectory: true,
     });
     const source = await readFile(fixture.out, "utf8");
     expect(source).toContain("assets/art.json?url");
@@ -109,7 +82,6 @@ describe("scene layout Vite resource generator", () => {
         manifest: fixture.manifest,
         out: fixture.out,
         check: true,
-        trustArtDirectory: true,
       }),
     ).resolves.toMatchObject({ resourceCount: 3 });
   });
@@ -127,7 +99,6 @@ describe("scene layout Vite resource generator", () => {
         manifest: fixture.manifest,
         out: fixture.out,
         check: false,
-        trustArtDirectory: true,
       }),
     ).rejects.toThrow(/canonical relative package path/);
   });
@@ -167,16 +138,4 @@ async function createFixture(options: {
     await writeFile(join(packageRoot, path), contents);
   }
   return { manifest, out };
-}
-
-function mappedEntry(
-  path: string,
-  overrides: { readonly sha256: string; readonly byteLength: number },
-) {
-  return {
-    path,
-    sha256: overrides.sha256,
-    mediaType: "application/json",
-    byteLength: overrides.byteLength,
-  };
 }
