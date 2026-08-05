@@ -5,6 +5,7 @@ import {
   loadSceneLayoutPackageFromZipBytes,
   SCENE_LAYOUT_PRODUCTION_ZIP_LIMITS,
 } from "../../src/scene-layout/index.js";
+import { createMappedPackageFiles } from "../editor-assets-map-fixture.js";
 import { game002LayoutFixture } from "./fixtures.js";
 
 const encode = (value: unknown) =>
@@ -109,5 +110,27 @@ describe("scene-layout production ZIP", () => {
     await expect(
       inspectSceneLayoutPackageZipBytes({ zipBytes: invalidManifest }),
     ).rejects.toThrow(/layout.manifest.json is invalid/);
+  });
+
+  it("explicitly validates mapped package integrity at the ZIP boundary", async () => {
+    const mappedManifest = {
+      ...game002LayoutFixture,
+      nodes: game002LayoutFixture.nodes.map((node) => ({
+        ...node,
+        resource: { ...node.resource, path: "bg.png" },
+      })),
+    };
+    const mapped = await createMappedPackageFiles({
+      controls: new Map([["layout.manifest.json", encode(mappedManifest)]]),
+      assets: new Map([["bg.png", new Uint8Array([1, 2, 3])]]),
+    });
+    const drifted = new Map(mapped.files);
+    drifted.set(mapped.map.files["bg.png"]!.path, new Uint8Array([9]));
+
+    await expect(
+      inspectSceneLayoutPackageZipBytes({
+        zipBytes: createDeterministicZip(drifted),
+      }),
+    ).rejects.toThrow(/byteLength|SHA-256/);
   });
 });

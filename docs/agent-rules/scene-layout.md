@@ -79,12 +79,16 @@
 - Popup root order 由 Scene Layout binding 拥有，可由 editor 修改；rendercore 在当前 scene 的顶层 Popup root 中按 order 排序，不为转场 Popup 创建独立 scene。
 - production app 直接消费 editor 导出的 mapped folder 时，构建期必须从根 manifest
   与 `assets.map.json` 生成 physical Vite import map；禁止宽泛 glob、运行时猜路径
-  或另存业务资源表。默认 editor/export/build consumer 仍校验 path/hash/size/orphan。
-- 明确由美术直接维护正式 asset 目录的 game consumer 可 opt in trusted-art policy：
-  `assets.map.json` 只提供 logical key→安全 physical path 路由，当前 files/bytes
-  为权威，不比对 `sha256`/`byteLength`/content-addressed filename，不因未引用
-  entry/file 阻断。实际引用的 path 缺失、manifest/schema、资源解码和运行能力
-  错误仍须失败；policy 必须由 consumer 显式选择，不改变 editor/optimizer/ZIP 默认合同。
+  或另存业务资源表。该 game build generator 以当前美术目录为权威，不校验
+  hash/size/content-addressed filename 或 orphan；editor/export/optimizer/ZIP 通过各自
+  的 package validator 保持严格 integrity 合同，不复用该 generator 做校验。
+- scene-layout runtime resolver 只把 `assets.map.json` 用作 logical key→安全
+  physical path 路由，当前 files/bytes 为权威；不得在 runtime 比对 `sha256`/
+  `byteLength`/content-addressed filename，也不因未引用 entry/file 阻断。实际引用的
+  path 缺失、manifest/schema、资源解码和运行能力错误仍须失败。
+- hash/size/path/orphan integrity 属于 editor/import/export/optimizer/production ZIP
+  边界，必须由这些边界显式调用 `validateEditorAssetsMapPackage()`；不得把验证隐藏
+  在 runtime resolver 的默认分支或依赖 game app 传 bypass policy。
 - 只需要 layout/background/popup、而 reel 由游戏业务 target 驱动时，使用 rendercore
   presentation surface；surface 仍拥有 mode-aware background visibility、popup placement
   和 destroy，app 只注入业务触发并组合公开 container。业务 reel 自己持有显示对象时，

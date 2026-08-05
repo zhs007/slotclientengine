@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { access, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,15 +10,11 @@ const ASSETS_MAP = "assets.map.json";
 export function parseSceneLayoutResourceArgs(argv) {
   const args = [...argv];
   while (args[0] === "--") args.shift();
-  const options = { check: false, trustArtDirectory: false };
+  const options = { check: false };
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === "--check") {
       options.check = true;
-      continue;
-    }
-    if (arg === "--trust-art-directory") {
-      options.trustArtDirectory = true;
       continue;
     }
     if (arg === "--manifest" || arg === "--out") {
@@ -47,10 +42,7 @@ export async function generateSceneLayoutViteResources(options) {
     throw new Error(`Scene layout manifest must be named ${ROOT_MANIFEST}.`);
   }
   const mapPath = resolve(packageRoot, ASSETS_MAP);
-  const map = validateAssetsMap(
-    JSON.parse(await readFile(mapPath, "utf8")),
-    options.trustArtDirectory === true,
-  );
+  const map = validateAssetsMap(JSON.parse(await readFile(mapPath, "utf8")));
   JSON.parse(await readFile(manifestPath, "utf8"));
 
   const declaredPhysicalPaths = [
@@ -58,42 +50,9 @@ export async function generateSceneLayoutViteResources(options) {
   ].sort(comparePaths);
   const diskPaths = await collectFiles(packageRoot);
   const diskPathSet = new Set(diskPaths);
-  const physicalPaths = options.trustArtDirectory
-    ? declaredPhysicalPaths.filter((path) => diskPathSet.has(path))
-    : declaredPhysicalPaths;
-  if (!options.trustArtDirectory) {
-    const expectedDiskPaths = new Set([
-      ROOT_MANIFEST,
-      ASSETS_MAP,
-      ...physicalPaths,
-    ]);
-    const unexpected = diskPaths.filter((path) => !expectedDiskPaths.has(path));
-    const missing = [...expectedDiskPaths].filter(
-      (path) => !diskPathSet.has(path),
-    );
-    if (unexpected.length > 0 || missing.length > 0) {
-      throw new Error(
-        `Scene layout mapped folder must exactly match assets.map.json; missing=${missing.join(",")}, unexpected=${unexpected.join(",")}.`,
-      );
-    }
-  }
-
-  if (!options.trustArtDirectory) {
-    for (const [key, asset] of Object.entries(map.files)) {
-      const bytes = await readFile(resolve(packageRoot, asset.path));
-      if (bytes.byteLength !== asset.byteLength) {
-        throw new Error(
-          `assets.map.json file "${key}" byteLength mismatch for "${asset.path}".`,
-        );
-      }
-      const digest = createHash("sha256").update(bytes).digest("hex");
-      if (digest !== asset.sha256) {
-        throw new Error(
-          `assets.map.json file "${key}" sha256 mismatch for "${asset.path}".`,
-        );
-      }
-    }
-  }
+  const physicalPaths = declaredPhysicalPaths.filter((path) =>
+    diskPathSet.has(path),
+  );
 
   const source = await format(
     renderSource({
@@ -130,10 +89,8 @@ export async function generateSceneLayoutViteResources(options) {
   });
 }
 
-function validateAssetsMap(value, trustArtDirectory) {
+function validateAssetsMap(value) {
   const map = assertRecord(value, ASSETS_MAP);
-  if (!trustArtDirectory)
-    assertKeys(map, ["version", "kind", "files"], ASSETS_MAP);
   if (map.version !== 1) throw new Error("assets.map.json version must be 1.");
   if (map.kind !== "editor-assets") {
     throw new Error('assets.map.json kind must be "editor-assets".');
@@ -141,83 +98,27 @@ function validateAssetsMap(value, trustArtDirectory) {
   const rawFiles = assertRecord(map.files, "assets.map.json files");
   const files = {};
   for (const [key, rawAsset] of Object.entries(rawFiles)) {
-    if (trustArtDirectory) {
-      try {
-        assertCanonicalPath(key, `assets.map.json key "${key}"`);
-      } catch {
-        continue;
-      }
-      if (key.includes("/")) continue;
-    } else {
+    try {
       assertCanonicalPath(key, `assets.map.json key "${key}"`);
+    } catch {
+      continue;
     }
+    if (key.includes("/")) continue;
     if (
-      trustArtDirectory &&
-      (typeof rawAsset !== "object" ||
-        rawAsset === null ||
-        Array.isArray(rawAsset))
+      typeof rawAsset !== "object" ||
+      rawAsset === null ||
+      Array.isArray(rawAsset)
     )
       continue;
     const asset = assertRecord(rawAsset, `assets.map.json file "${key}"`);
-    if (!trustArtDirectory)
-      assertKeys(
-        asset,
-        ["path", "sha256", "mediaType", "byteLength"],
-        `assets.map.json file "${key}"`,
-      );
-    if (trustArtDirectory && typeof asset.path !== "string") continue;
+    if (typeof asset.path !== "string") continue;
     assertCanonicalPath(asset.path, `assets.map.json file "${key}".path`);
     if (!asset.path.startsWith("assets/")) {
       throw new Error(
         `assets.map.json file "${key}".path must be below assets/.`,
       );
     }
-    if (
-      (!trustArtDirectory && typeof asset.sha256 !== "string") ||
-      (!trustArtDirectory && !/^[a-f0-9]{64}$/u.test(asset.sha256))
-    ) {
-      throw new Error(
-        `assets.map.json file "${key}".sha256 must be lowercase SHA-256.`,
-      );
-    }
-    if (
-      !trustArtDirectory &&
-      !asset.path.startsWith(`assets/${asset.sha256}.`) &&
-      asset.path !== `assets/${asset.sha256}`
-    ) {
-      throw new Error(
-        `assets.map.json file "${key}".path must be content-addressed by sha256.`,
-      );
-    }
-    if (
-      !trustArtDirectory &&
-      (typeof asset.mediaType !== "string" || asset.mediaType.length === 0)
-    ) {
-      throw new Error(
-        `assets.map.json file "${key}".mediaType must be non-empty.`,
-      );
-    }
-    if (
-      !trustArtDirectory &&
-      (!Number.isSafeInteger(asset.byteLength) || asset.byteLength < 0)
-    ) {
-      throw new Error(
-        `assets.map.json file "${key}".byteLength must be a non-negative safe integer.`,
-      );
-    }
-    files[key] = Object.freeze({
-      path: asset.path,
-      ...(trustArtDirectory
-        ? {}
-        : {
-            sha256: asset.sha256,
-            mediaType: asset.mediaType,
-            byteLength: asset.byteLength,
-          }),
-    });
-  }
-  if (!trustArtDirectory && Object.keys(files).length === 0) {
-    throw new Error("assets.map.json files must not be empty.");
+    files[key] = Object.freeze({ path: asset.path });
   }
   return Object.freeze({ files: Object.freeze(files) });
 }
@@ -270,19 +171,6 @@ function assertRecord(value, label) {
     throw new Error(`${label} must be an object.`);
   }
   return value;
-}
-
-function assertKeys(record, expected, label) {
-  const actual = Object.keys(record).sort(comparePaths);
-  const wanted = [...expected].sort(comparePaths);
-  if (
-    actual.length !== wanted.length ||
-    actual.some((key, index) => key !== wanted[index])
-  ) {
-    throw new Error(
-      `${label} keys must be exactly ${wanted.join(",")}; received ${actual.join(",")}.`,
-    );
-  }
 }
 
 function assertCanonicalPath(value, label) {
