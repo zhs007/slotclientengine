@@ -5,7 +5,7 @@
 award-celebration Popup 作为自包含 dependency 通过 `rendercore/popup` 严格校验并原样
 vendor；内部 VNI 的 segmented/once playback、最后一帧保持和 dismiss 生命周期不在
 Layout Editor 复制或改写。
-普通 Spine Popup 导入后需在 Popup 工作区显式注册；注册后可配置 placement、预览 start/loop/end 并随 layout vendor。
+普通 Spine Popup 导入后可直接在具体 Spine 转场中选择；Popup 工作区的显式注册只用于 programmatic 播放。Popup root 的 placement、order 与 start/loop/end 预览由 Layout Editor 配置并随 layout vendor。
 若 package 带单行 prompt，Popup 工作区可输入临时预览文案；留空使用 package 默认值。字体、渲染区域和 image/Spine/VNI overlay 保持只读，须回 Popup Editor 修改。相同字体 bytes 与其它 payload 一样在最终 `assets.map.json` 中按 SHA-256 物理去重。
 
 SymbolsEditor ZIP 同样作为自包含、只读的 symbol 状态机 dependency；Symbols 与 Popup library 都允许导入多个不同 package id，同 id 再上传进入替换并保留现有 mode/transition binding。Layout Editor 只选择
@@ -20,6 +20,8 @@ SymbolsEditor 编辑。
 node/background/transition 直接引用 filename key 或 typed key 组合。node id、package id、mode id 仍是业务身份，但不是第二个资源 id。多个 mode/variant 可引用同一 `BG.jpg`，覆盖一次即可更新全部 bytes，同时各自的稳定 node id 与 placement 保持独立。
 
 layout 大纲选中普通图层后，preview 使用红框和半透明红色斜线显示当前 variant 中该节点的实时可见范围；斜线裁在渲染区域内，因此图层边界位于画布外时仍有选中提示。黄/绿 focus 与 reel guide 保持原语义。普通图层与背景的每个 variant placement 可编辑 `x/y/scale`、顺时针角度 `rotation` 和 `[0,1]` normalized `center`；默认 rotation 为 `0`、center 为 `0.5/0.5`，负角度与超过一圈的角度原样保存。Spine 的默认 center 对应 authored 原点。只修改 node/reel placement、focus、art size或坐标类型时走 geometry 更新，复用已加载资源、Spine player、reel 和已抽样 symbols，不重新随机排列。
+
+普通图层的 `order` 可直接输入安全整数，不会因其它编辑被自动压缩重排；main reel 仍可使用默认 `999`，普通图层允许配置到其上方。node、main reel 与 Popup root 的 order 全局不得重复；Popup root 默认从 `2000` 分配且必须高于全部 node/main reel，其值可在 Popup 工作区或引用它的转场中修改。背景和 main reel 继续作为大纲中的特殊项展示。
 
 项目 Tab 可在“左上角”和“中心”全局坐标间切换。切换会在一次事务中转换普通图层、背景、main reel 和 art-space Spine transition 的现有 placement，视觉位置保持不变；popup 与 video 不参与转换。旧包缺少坐标字段时按左上角读取。
 
@@ -59,7 +61,7 @@ Spine atlas 的 page 是 atlas 内部逻辑名，texture map 的 value 才是全
 
 layout、VNI、image-string、Symbols、Popup 和程序资源的全部配置引用均为 filename keys；production export 只写传递可达 exact closure，不写 nested dependency 目录或 unused key。Spine 只要某个 JSON 根被 Scene 或程序键引用，就导出该根及其 atlas/贴图闭包；共享 leaf 只写一份，同批未引用的 sibling JSON 不导出。VNI project 只结构化改写 schema 声明的 asset path。重新导入、Blob preview、package resource 与 CDN URL loader 共享 rendercore map resolver。无 map 的合法 legacy package 继续按 direct-path 合同加载；Editor 导入后升级为新格式。
 
-每个 mode 可独立选择 Symbols 与 award-celebration Popup。每条 Spine 有向转场还可选择一个普通 Spine `preludePopup`；未选时直接播放 overlay，已选时保持 source mode，复用 Popup 的 start→loop→end 状态机，用户点击后等待完整 end 完成再启动 overlay。video overlay 不允许配置 prelude，以保持有声媒体 trusted-click 合同。
+每个 mode 可独立选择 Symbols 与 award-celebration Popup。每条 Spine 有向转场独立选择一个普通 Spine `preludePopup`，所以多个转场可以不配置或分别使用不同 Popup；未选时直接播放 overlay，已选时保持 source mode，复用 Popup 的 start→loop→end 状态机，用户点击后等待完整 end 完成再启动 overlay。该 Popup 直接渲染在当前状态的顶层 Popup root，不建立独立 scene；video overlay 不允许配置 prelude，以保持有声媒体 trusted-click 合同。
 
 物理 payload 始终可以是 `assets/<SHA-256>.*`，但它只用于内容寻址；重新导入后的图层名称继续来自 `SceneLayoutNode.id`，资源列表继续显示 logical filename key。
 

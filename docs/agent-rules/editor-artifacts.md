@@ -41,7 +41,7 @@
 ## Popup Editor
 
 - `apps/popupeditor` 输出 strict `award-celebration` 或普通 `spine` popup package；两种类型使用互斥 schema，不保留无关字段。
-- 普通 Spine popup 的可选 prompt 只接受 package-owned WOFF2/WOFF/TTF/OTF、单行默认 string 与显式 area/order；游戏可传入已翻译 string，runtime 不翻译。award 各档与 Spine overlay 都可声明多个命名系统文字和 manual ImgNumber；系统文字样式、默认 string、transform/order/segment 及 ImgNumber 默认 string 只在 Popup Editor 编辑，每个 award 档仍必须恰好有一个 `win-amount`。
+- 普通 Spine popup 的可选 prompt 缺省使用 rendercore 系统字体且不进入资源闭包；显式字体只接受 package-owned WOFF2/WOFF/TTF/OTF。prompt 使用单行默认 string 与显式 area/order；游戏可传入已翻译 string，runtime 不翻译。award 各档与 Spine overlay 都可声明多个命名系统文字和 manual ImgNumber；系统文字样式、默认 string、transform/order/segment 及 ImgNumber 默认 string 只在 Popup Editor 编辑，每个 award 档仍必须恰好有一个 `win-amount`。其它 image/Spine/VNI overlay 的 transform、order 与 playback 同样只在 Popup Editor 编辑。
 - VNI export bundle 只把 `purpose=runtime` 作为运行候选：唯一 runtime 自动选择，多个 runtime 才枚举；禁止手输 profile id，`purpose=editing` 不进入候选。
 - popup package 使用完整 SHA-256 content-addressed owned payload，并保持 exact closure。
 - Popup 字体与其它 payload 一样按完整 SHA-256 物理去重；logical filename key 与 owner 引用不得从 hash path 反推或合并。
@@ -75,8 +75,8 @@
 
 ## Layout Editor dependency
 
-- gamelayouteditor 把 symbols ZIP 和 popup ZIP 当可多项并存的自包含 dependency library；standalone 校验后以 manifest id 生成稳定扁平 root/leaf key 并结构化改写 nested reference。同 id 再上传走替换并保留 binding/placement，提交后只 GC 无其它 owner 的旧 key；不同 id 不得互相覆盖 bytes。每个 active variant 只配置明确 binding 和相对 viewport center 的 popup root `x/y/scale`。
-- 普通 Spine popup 导入 gamelayouteditor 后只进入 dependency library；必须由有向 Spine transition 的 `preludePopup` 或显式 programmatic registration 引用才进入 Scene Layout manifest 与 production ZIP，且不能绑定为 game mode award celebration。未引用 Symbols/Popup library item 不导出。
+- gamelayouteditor 把 symbols ZIP 和 popup ZIP 当可多项并存的自包含 dependency library；standalone 校验后以 manifest id 生成稳定扁平 root/leaf key 并结构化改写 nested reference。同 id 再上传走替换并保留 binding/placement/order，提交后只 GC 无其它 owner 的旧 key；不同 id 不得互相覆盖 bytes。每个 active variant 只配置明确 binding 和相对 viewport center 的 popup root `x/y/scale`；root order 可编辑且必须高于全部 scene node/main reel。
+- 普通 Spine popup 导入 gamelayouteditor 后只进入 dependency library；每条有向 Spine transition 可独立选择不同的 `preludePopup`，或由显式 programmatic registration 引用，之后才进入 Scene Layout manifest 与 production ZIP；不能绑定为 game mode award celebration。未引用 Symbols/Popup library item 不导出。
 - Symbols dependency 对 gamelayouteditor 是只读 symbol 状态机合同。Layout Editor 可以校验 package id、cell size、display symbols、公开 reel/state capability 和 exact closure，并调用 production preview；不得提供内部图片、Spine/VNI animation、state layer、ImgNumber/value 或 cascade 的编辑控件，也不得重写这些 owner-owned manifest 字段。
 - Symbols dependency 的导入、预览、替换和 layout ZIP 重导必须保留其完整
   state/ImgNumber multi-target closure；headless authoring 可以显式跳过 texture load，

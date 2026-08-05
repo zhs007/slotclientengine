@@ -94,9 +94,11 @@ import {
   setGameModeVideoTransitionFadeOut,
   setGameModeVideoTransitionResource,
   setInitialGameMode,
+  setPopupOrder,
   setPopupPlacement,
   setSpinePopupRegistered,
 } from "../model/game-mode-commands.js";
+import { setNodeOrder, setReelOrder } from "../model/layer-order.js";
 import {
   LayoutPreview,
   type SymbolPackagePreviewSnapshot,
@@ -402,6 +404,26 @@ export class GameLayoutEditorApp {
       (event) => {
         this.#selectedPopupId =
           (event.currentTarget as HTMLSelectElement).value || null;
+        this.renderPopupControls(this.#store.getSnapshot());
+      },
+    );
+    this.requireInput("[data-popup-order]").addEventListener(
+      "change",
+      (event) => {
+        const popupId = this.#selectedPopupId;
+        if (!popupId) {
+          this.#store.setExternalError(
+            new Error("尚未选择 popup dependency。"),
+          );
+          return;
+        }
+        this.runTransaction((project) =>
+          setPopupOrder(
+            project,
+            popupId,
+            Number((event.currentTarget as HTMLInputElement).value),
+          ),
+        );
         this.renderPopupControls(this.#store.getSnapshot());
       },
     );
@@ -1179,6 +1201,9 @@ export class GameLayoutEditorApp {
     this.requireElement("[data-popup-metadata]").textContent = dependency
       ? `${dependency.id} · ${dependency.type} · ${dependency.keys.length} files · ${totalBytes} bytes · ${dependency.type === "spine" ? `Scene Layout：${project.registeredSpinePopupIds.has(dependency.id) ? "已注册" : "未注册"}` : `引用：${references.join(", ") || "无"}`}`
       : "未导入 Popup dependency。";
+    const popupOrderInput = this.requireInput("[data-popup-order]");
+    popupOrderInput.disabled = !dependency;
+    popupOrderInput.value = String(dependency?.order ?? 2000);
     for (const input of this.#root.querySelectorAll<HTMLInputElement>(
       "[data-popup-placement]",
     )) {
@@ -1495,6 +1520,55 @@ export class GameLayoutEditorApp {
           setGameModeTransitionPreludePopup(draft, transition, value);
         });
       });
+    panel
+      .querySelector<HTMLInputElement>("[data-transition-popup-order]")
+      ?.addEventListener("change", (event) => {
+        const value = Number((event.currentTarget as HTMLInputElement).value);
+        this.runTransaction((draft) => {
+          const transition = draft.gameModes.transitions.find(
+            (candidate) =>
+              transitionKey(candidate) === this.#session.selectedTransitionKey,
+          );
+          if (!transition || transition.kind !== "spine")
+            throw new Error("所选 Spine 转场已不存在。");
+          if (!transition.preludePopupId)
+            throw new Error("当前转场未配置前置 Popup。");
+          setPopupOrder(draft, transition.preludePopupId, value);
+        });
+      });
+    panel
+      .querySelectorAll<HTMLInputElement>("[data-transition-popup-placement]")
+      .forEach((input) =>
+        input.addEventListener("change", () => {
+          const variant = input.dataset
+            .transitionPopupPlacement as SceneLayoutVariantId;
+          const field = input.dataset.transitionPopupPlacementField as
+            | "x"
+            | "y"
+            | "scale";
+          this.runTransaction((draft) => {
+            const transition = draft.gameModes.transitions.find(
+              (candidate) =>
+                transitionKey(candidate) ===
+                this.#session.selectedTransitionKey,
+            );
+            if (!transition || transition.kind !== "spine")
+              throw new Error("所选 Spine 转场已不存在。");
+            if (!transition.preludePopupId)
+              throw new Error("当前转场未配置前置 Popup。");
+            const dependency = draft.popupDependencies.get(
+              transition.preludePopupId,
+            );
+            const placement = dependency?.placements[variant];
+            if (!dependency || !placement)
+              throw new Error(`Popup ${variant} placement 缺失。`);
+            setPopupPlacement(draft, dependency.id, variant, {
+              ...placement,
+              [field]: Number(input.value),
+            });
+          });
+        }),
+      );
     panel
       .querySelector<HTMLSelectElement>("[data-transition-video-resource]")
       ?.addEventListener("change", (event) => {
@@ -1918,6 +1992,7 @@ export class GameLayoutEditorApp {
             /^nodes\.(\d+)\.placements\.(default|landscape|portrait)\.(rotation|center\.[xy])$/u.exec(
               path,
             );
+          const nodeOrderMatch = /^nodes\.(\d+)\.order$/u.exec(path);
           if (nodeTransformMatch) {
             const node = draft.nodes[Number(nodeTransformMatch[1])];
             const placement =
@@ -1930,7 +2005,13 @@ export class GameLayoutEditorApp {
             /^transition\.(default|landscape|portrait)\.(x|y|scale)$/u.exec(
               path,
             );
-          if (transitionPlacementMatch) {
+          if (nodeOrderMatch) {
+            const node = draft.nodes[Number(nodeOrderMatch[1])];
+            if (!node) throw new Error(`无效字段路径：${path}`);
+            setNodeOrder(draft, node.id, Number(input.value));
+          } else if (path === "reel.order") {
+            setReelOrder(draft, Number(input.value));
+          } else if (transitionPlacementMatch) {
             const transition = draft.gameModes.transitions.find(
               (candidate) =>
                 transitionKey(candidate) ===

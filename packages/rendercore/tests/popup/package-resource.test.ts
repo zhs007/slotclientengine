@@ -130,6 +130,36 @@ describe("popup package resource", () => {
     expect(resource.resources.spine.kind).toBe("spine");
     expect(resource.resources.prompt.kind).toBe("font");
     await resource.destroy();
+
+    const systemManifest = structuredClone(manifest) as any;
+    delete systemManifest.spine.prompt.font;
+    delete systemManifest.resources.prompt;
+    const systemFiles = new Map(files);
+    systemFiles.delete(promptPath);
+    systemFiles.set(
+      "popup.manifest.json",
+      new TextEncoder().encode(JSON.stringify(systemManifest)),
+    );
+    expect(
+      collectPopupPackagePaths({
+        manifest: systemManifest,
+        files: systemFiles,
+      }),
+    ).toHaveLength(3);
+    const flattenedSystem = flattenPopupPackageFiles({
+      manifest: systemManifest,
+      files: systemFiles,
+    });
+    expect(flattenedSystem.manifest.type).toBe("spine");
+    if (flattenedSystem.manifest.type !== "spine")
+      throw new Error("Expected Spine popup.");
+    expect(flattenedSystem.manifest.spine.prompt).not.toHaveProperty("font");
+    const systemResource = await createPopupPackageResource({
+      manifest: systemManifest,
+      files: systemFiles,
+    });
+    expect(systemResource.resources).not.toHaveProperty("prompt");
+    await systemResource.destroy();
   });
 
   it("loads the same exact closure from contained CDN URLs", async () => {

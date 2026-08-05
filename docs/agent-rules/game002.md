@@ -8,10 +8,10 @@
   package；layout、background、focus、grid geometry、symbols、公开本地轮带和
   award popup 只从该包的 manifest/map 取得。`skin=1|3|4|5`、缺失、重复、`01`
   和未知值显式失败，不保留 alias 或默认值。
-- `assets/crave` 的当前美术 files/bytes 是 game002 权威交付；app/runtime/build
-  使用 trusted-art policy，不比对 map `sha256`/`byteLength`、不因未引用 entry/file
-  阻断。实际引用的 logical key 仍必须路由到安全存在的 path，并通过对应资源
-  parser/decoder；不猜测未声明资源。
+- `assets/crave` 的当前美术 files/bytes 是 game002 权威交付；game runtime/build
+  天然不比对 map `sha256`/`byteLength`、不因未引用 entry/file 阻断，不依赖 app
+  传 policy 才关闭 integrity gate。实际引用的 logical key 仍必须路由到安全存在的
+  path，并通过对应资源 parser/decoder；不猜测未声明资源。
 - `apps/game002/config/reel-presentation.manifest.json` 只保存 game002 转轮时序和程序资源键；Nearwin1/2 的资源只来自 `assets/crave`，通过 typed runtime-resource API 显式 prepare，未请求的 Nearwin3 不 prepare。
 - live server 固定为 `wss://gameserv.rgstest.slammerstudios.com/`；URL 不接受 `serverUrl`，旧参数也显式失败。
 - URL 必须显式提供 `lines=30`，其它值在 loading 99% 配置解析阶段失败。

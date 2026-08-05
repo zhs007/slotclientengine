@@ -208,7 +208,7 @@ export type PopupOverlayLayer =
     };
 
 export interface PopupPromptSpec {
-  readonly font: string;
+  readonly font?: string;
   readonly defaultText: string;
   readonly fill: string;
   readonly order: number;

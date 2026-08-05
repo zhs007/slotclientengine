@@ -2,6 +2,10 @@ import { Text } from "pixi.js";
 import type { PopupPromptSpec } from "./types.js";
 
 const LINE_TERMINATOR = /[\n\r\u2028\u2029]/u;
+export const DEFAULT_POPUP_PROMPT_FONT_FAMILY = Object.freeze([
+  "system-ui",
+  "sans-serif",
+]);
 
 export function validatePopupPromptText(value: string, label = "prompt text") {
   if (typeof value !== "string" || value.trim().length === 0)
@@ -13,7 +17,7 @@ export function validatePopupPromptText(value: string, label = "prompt text") {
 
 export function createPopupPromptText(options: {
   readonly spec: PopupPromptSpec;
-  readonly family: string;
+  readonly family?: string;
   readonly measureText?: (text: Text) => {
     readonly width: number;
     readonly height: number;
@@ -23,7 +27,9 @@ export function createPopupPromptText(options: {
     text: options.spec.defaultText,
     anchor: 0.5,
     style: {
-      fontFamily: [options.family, "sans-serif"],
+      fontFamily: options.family
+        ? [options.family, "sans-serif"]
+        : [...DEFAULT_POPUP_PROMPT_FONT_FAMILY],
       fontSize: options.spec.area.height,
       fill: options.spec.fill,
       wordWrap: false,

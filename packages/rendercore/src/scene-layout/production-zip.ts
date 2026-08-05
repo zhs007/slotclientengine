@@ -3,6 +3,11 @@ import {
   extractBoundedZip,
   type BoundedZipLimits,
 } from "@slotclientengine/browserartifactio";
+import {
+  decodeEditorAssetsMap,
+  EDITOR_ASSETS_MAP_PATH,
+  validateEditorAssetsMapPackage,
+} from "@slotclientengine/editorresource";
 import type { DecodeImageStringImage } from "../image-string/index.js";
 import { SceneLayoutError } from "./errors.js";
 import {
@@ -57,6 +62,13 @@ export async function inspectSceneLayoutPackageZipBytes(options: {
     );
   }
   const manifest = parseSceneLayoutManifest(rawManifest);
+  const mapBytes = files.get(EDITOR_ASSETS_MAP_PATH);
+  if (mapBytes)
+    await validateEditorAssetsMapPackage({
+      map: decodeEditorAssetsMap(mapBytes),
+      files,
+      allowControlPaths: [ROOT_MANIFEST],
+    });
   const resolved = await resolveSceneLayoutPackageFiles({ manifest, files });
   collectSceneLayoutPackagePaths({ manifest, files: resolved });
   const totalBytes = [...files.values()].reduce(

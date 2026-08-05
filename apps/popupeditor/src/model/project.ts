@@ -232,11 +232,9 @@ export function projectToManifest(
         ...(project.spine.prompt.enabled
           ? {
               prompt: {
-                font:
-                  project.spine.prompt.font ??
-                  (() => {
-                    throw new Error("普通 Spine Popup prompt 尚未绑定字体。");
-                  })(),
+                ...(project.spine.prompt.font
+                  ? { font: project.spine.prompt.font }
+                  : {}),
                 defaultText: project.spine.prompt.defaultText,
                 fill: project.spine.prompt.fill,
                 order: project.spine.prompt.order,

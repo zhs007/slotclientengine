@@ -124,6 +124,62 @@ describe("PopupEditorApp", () => {
     });
   });
 
+  it("validates project ids immediately and preserves semantic button states", async () => {
+    const { PopupEditorApp } = await import("../src/ui/app-shell.js");
+    const root = document.querySelector<HTMLElement>("#app")!;
+    const app = new PopupEditorApp(root);
+    await app.init();
+
+    const resourceTab = root.querySelector<HTMLButtonElement>(
+      '[data-tab="resources"]',
+    )!;
+    const projectTab = root.querySelector<HTMLButtonElement>(
+      '[data-tab="project"]',
+    )!;
+    expect(resourceTab.getAttribute("aria-selected")).toBe("true");
+    expect(projectTab.getAttribute("aria-selected")).toBe("false");
+    expect(
+      root.querySelector("#preview-build")?.hasAttribute("aria-selected"),
+    ).toBe(false);
+
+    projectTab.click();
+    expect(projectTab.getAttribute("aria-selected")).toBe("true");
+    expect(resourceTab.getAttribute("aria-selected")).toBe("false");
+    const id = root.querySelector<HTMLInputElement>("#project-id")!;
+    expect(id.getAttribute("aria-invalid")).toBe("false");
+    id.value = "Bad_Id";
+    id.dispatchEvent(new Event("input"));
+    expect(id.getAttribute("aria-invalid")).toBe("true");
+    expect(id.classList.contains("invalid")).toBe(true);
+    expect(id.validationMessage).toContain("lowercase kebab-case");
+    expect(root.querySelector<HTMLElement>("#project-id-error")!.hidden).toBe(
+      false,
+    );
+    expect(preview.rebuild).not.toHaveBeenCalled();
+    id.dispatchEvent(new Event("change"));
+    const rerenderedInvalid =
+      root.querySelector<HTMLInputElement>("#project-id")!;
+    expect(rerenderedInvalid.getAttribute("aria-invalid")).toBe("true");
+    expect(rerenderedInvalid.validationMessage).toContain(
+      "lowercase kebab-case",
+    );
+
+    rerenderedInvalid.value = "bad-id";
+    rerenderedInvalid.dispatchEvent(new Event("input"));
+    expect(rerenderedInvalid.getAttribute("aria-invalid")).toBe("false");
+    expect(rerenderedInvalid.validationMessage).toBe("");
+    rerenderedInvalid.dispatchEvent(new Event("change"));
+    expect(root.querySelector<HTMLInputElement>("#project-id")!.value).toBe(
+      "bad-id",
+    );
+
+    root.querySelector<HTMLButtonElement>('[data-tab="tiers"]')!.click();
+    expect(
+      root.querySelector<HTMLButtonElement>("[data-add-layer]")!.disabled,
+    ).toBe(true);
+    app.destroy();
+  });
+
   it("uses one flat import entry, reviews atomically, and drives tiers and preview", async () => {
     const { PopupEditorApp } = await import("../src/ui/app-shell.js");
     const root = document.querySelector<HTMLElement>("#app")!;
@@ -515,6 +571,7 @@ describe("PopupEditorApp", () => {
     promptEnabled.checked = true;
     promptEnabled.dispatchEvent(new Event("change"));
     const font = root.querySelector<HTMLSelectElement>("#spine-prompt-font")!;
+    expect(font.options[0]!.textContent).toContain("系统字体");
     font.value = "Prompt.woff2";
     font.dispatchEvent(new Event("change"));
     for (const [field, value] of [

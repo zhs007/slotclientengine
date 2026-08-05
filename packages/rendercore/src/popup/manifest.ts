@@ -49,7 +49,7 @@ export function parsePopupManifest(value: unknown): PopupManifestV1 {
   if (record.kind !== "popup") fail('popup manifest.kind must be "popup".');
   if (record.type !== "award-celebration" && record.type !== "spine")
     fail('popup manifest.type must be "award-celebration" or "spine".');
-  const id = identifier(record.id, "popup manifest.id");
+  const id = validatePopupId(record.id);
   const viewport = object(record.designViewport, "designViewport");
   keys(viewport, ["width", "height"], "designViewport");
   const resourcesRecord = object(record.resources, "resources");
@@ -76,7 +76,7 @@ export function parsePopupManifest(value: unknown): PopupManifestV1 {
   if (record.type === "spine") {
     const spine = parseSpinePopup(record.spine, resources);
     const used = new Set<string>([spine.resource]);
-    if (spine.prompt) used.add(spine.prompt.font);
+    if (spine.prompt?.font) used.add(spine.prompt.font);
     for (const overlay of spine.overlays ?? []) used.add(overlay.resource);
     const unused = Object.keys(resources).filter(
       (resourceId) => !used.has(resourceId),
@@ -185,13 +185,16 @@ function parsePrompt(
   resources: Readonly<Record<string, PopupResourceSpec>>,
 ): PopupPromptSpec {
   const record = object(value, "spine.prompt");
+  const hasFont = Object.hasOwn(record, "font");
   keys(
     record,
-    ["font", "defaultText", "fill", "order", "area"],
+    [...(hasFont ? ["font"] : []), "defaultText", "fill", "order", "area"],
     "spine.prompt",
   );
-  const font = resourceKey(record.font, "spine.prompt.font");
-  if (resources[font]?.kind !== "font")
+  const font = hasFont
+    ? resourceKey(record.font, "spine.prompt.font")
+    : undefined;
+  if (font && resources[font]?.kind !== "font")
     fail("spine.prompt.font must reference a font resource.");
   const defaultText = nonEmptySingleLine(
     record.defaultText,
@@ -201,7 +204,7 @@ function parsePrompt(
   const area = object(record.area, "spine.prompt.area");
   keys(area, ["x", "y", "width", "height"], "spine.prompt.area");
   return freeze({
-    font,
+    ...(font ? { font } : {}),
     defaultText,
     fill,
     order: nonNegativeSafe(record.order, "spine.prompt.order"),
@@ -855,6 +858,15 @@ function keys(
     if (!Object.hasOwn(record, key)) fail(`${label} missing key: ${key}`);
 }
 function identifier(value: unknown, label: string): string {
+  if (typeof value !== "string" || !IDS.test(value))
+    fail(`${label} must be a lowercase kebab-case id.`);
+  return value;
+}
+
+export function validatePopupId(
+  value: unknown,
+  label = "popup manifest.id",
+): string {
   if (typeof value !== "string" || !IDS.test(value))
     fail(`${label} must be a lowercase kebab-case id.`);
   return value;

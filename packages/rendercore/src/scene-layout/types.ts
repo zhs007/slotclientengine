@@ -154,6 +154,8 @@ export interface SceneLayoutSymbolPackageBinding {
 export interface SceneLayoutPopupBinding {
   readonly type: "award-celebration" | "spine";
   readonly manifest: string;
+  /** Root presentation order. Missing legacy v1 values normalize to 2000. */
+  readonly order: number;
   readonly placements: Readonly<
     Partial<Record<SceneLayoutVariantId, SceneLayoutScaledPlacement>>
   >;

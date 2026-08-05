@@ -62,7 +62,7 @@
 ## Presentation
 
 - rendercore 拥有通用 symbol win carousel、金额递增、big/super/mega tier、segmented VNI 播放、popup threshold sequence、点击/advance/dismiss/end drain，以及普通 Spine popup 的 start→loop→end 边界状态机和 runtime snapshot。Scene Layout transition prelude 只能编排该 public player，不能在 app/editor 复制点击 latch 或 loop/end 边界。
-- popup 系统文字的单行/NFC 校验、字号/颜色/渐变/描边/投影/grapheme 弧排、package 字体 FontFace hash 复用/释放及 image/ImgNumber/Spine/VNI overlay 生命周期属于 rendercore。游戏通过 player 的 exact name 或各 kind 零基 index handle 原子 set/reset string；普通 Spine legacy prompt 仍可由 `start(text?)` 传入已翻译 string。
+- popup 系统文字的单行/NFC 校验、字号/颜色/渐变/描边/投影/grapheme 弧排、显式 package 字体 FontFace hash 复用/释放及 image/ImgNumber/Spine/VNI overlay 生命周期属于 rendercore；普通 Spine prompt 缺省使用 `system-ui/sans-serif`，系统字体不建模为 package 资源。游戏通过 player 的 exact name 或各 kind 零基 index handle 原子 set/reset string；legacy prompt 仍可由 `start(text?)` 传入已翻译 string，省略时使用 manifest 默认值。
 - component 名、amount resolver、formatter、样式和业务阻塞边界由 app 传入；shared code 不维护游戏专属金额或 symbol 规则。
 - win-amount 进入 `awaiting-dismiss` 后不得继续阻塞 `playSpin()`；下一次 spin 负责清理遗留展示。
 - reel runtime 在金额或 popup 播放期间仍需逐帧 update，不能冻结 active Spine/VNI loop。
@@ -72,6 +72,7 @@
 - rendercore 拥有 strict scene-layout manifest parsing、exact asset closure、named-node attachment、focus/reel geometry、variant application、mode-aware visibility 和 production runtime。
 - `SceneLayoutPackageResource.loadRuntimeResource(key, kind)` 是包内程序资源的 typed async prepare 边界；同 key 并发请求复用同一 Promise，kind/未知 key 精确失败，`getLoadedRuntimeResource` 只返回已成功 prepare 的资源。
 - package runtime 稳定图层 id 仅为 `layout | reel | transition | popup`；`getLayer()` 和 `getNode()` 返回 borrowed container，调用方不得 destroy 或改写内部层级。presentation-only runtime 请求 `reel` 显式失败。
+- scene-layout node、main reel 与 Popup binding order 必须是全局唯一安全整数；Popup order 必须高于全部 art/reel order，并在当前 scene 的 `popup` layer 内排序。旧单 Popup v1 缺少 order 时规范化为 `2000`，多个缺省 Popup 的重复值显式失败。
 - `gamelayoutpkgcli` 为每个 runtime resource 输出独立增量组，未请求程序资源不得并入 initial/shared。
 - `columnGap`/`rowGap` 等 manifest geometry 必须一致作用于 standard/grid-cell reel、mask、effect、cascade 和 geometry snapshot。
 - 游戏静态 YAML 只承载可发布的美术和静态配置，不承载 token、cookie、服务器真实轮带或本轮下注。

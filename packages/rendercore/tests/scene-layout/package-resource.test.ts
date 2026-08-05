@@ -106,16 +106,6 @@ function packageFiles(): Map<string, Uint8Array> {
 }
 
 describe("scene layout package resources", () => {
-  it("rejects an unknown mapped asset policy", async () => {
-    await expect(
-      createSceneLayoutPackageResource({
-        manifest: game002LayoutFixture,
-        files: packageFiles(),
-        mappedAssetPolicy: "unknown" as never,
-      }),
-    ).rejects.toThrow(/Unknown scene layout mapped asset policy/);
-  });
-
   it("owns the exact direct and mapped VNI closure", async () => {
     const manifest = {
       ...game002LayoutFixture,
@@ -296,7 +286,6 @@ describe("scene layout package resources", () => {
     const trustedArtResource = await createSceneLayoutPackageResource({
       manifest: mappedManifest,
       files: trustedArtFiles,
-      mappedAssetPolicy: "trusted-art",
       decodeImage: async () => ({ width: 1, height: 1 }),
     });
     trustedArtResource.destroy();
@@ -307,7 +296,6 @@ describe("scene layout package resources", () => {
       createSceneLayoutPackageResource({
         manifest: mappedManifest,
         files: missingTrustedArtFiles,
-        mappedAssetPolicy: "trusted-art",
         decodeImage: async () => ({ width: 1, height: 1 }),
       }),
     ).rejects.toThrow(/missing: bg\.png/);
@@ -341,7 +329,6 @@ describe("scene layout package resources", () => {
     const trustedPartialResource = await createSceneLayoutPackageResource({
       manifest: mappedManifest,
       files: trustedPartialFiles,
-      mappedAssetPolicy: "trusted-art",
       lazyRuntimeResources: true,
       loadRuntimeResourceBytes: async (logicalKey) => {
         trustedDeferredLoads.push(logicalKey);

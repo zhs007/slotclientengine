@@ -52,12 +52,60 @@ describe("popup editor filename-key project", () => {
       loopAnimation: "loop",
       endAnimation: "end",
     };
+    project.spine.prompt.enabled = true;
     const manifest = projectToManifest(project);
     expect(manifest.type).toBe("spine");
     if (manifest.type !== "spine") throw new Error("Expected spine popup.");
     expect(manifest.spine.resource).toBe("effect");
+    expect(manifest.spine.prompt).not.toHaveProperty("font");
+    expect(Object.keys(manifest.resources)).toEqual(["effect"]);
     expect("awardCelebration" in manifest).toBe(false);
     expect("amountFormat" in manifest).toBe(false);
+  });
+
+  it("round-trips a system-font prompt without adding a font to the Popup ZIP", async () => {
+    const skeleton = JSON.stringify({
+      skeleton: { spine: "4.3.23" },
+      bones: [{ name: "root" }],
+      slots: [],
+      skins: [{ name: "default", attachments: {} }],
+      animations: { Start: {}, Loop: {}, End: {} },
+    });
+    const review = await discoverPopupResources([
+      new File([skeleton], "Spine.json"),
+      new File(["Spine.png\nsize:1,1\nfilter:Linear,Linear\n"], "Spine.atlas"),
+      new File([png(1, 1).buffer], "Spine.png"),
+    ]);
+    const project = createPopupEditorProject();
+    project.type = "spine";
+    project.id = "free-game";
+    await commitImportReview(project, review);
+    project.spine.resource = "Spine.json";
+    project.spine.playback = {
+      startAnimation: "Start",
+      loopAnimation: "Loop",
+      endAnimation: "End",
+    };
+    project.spine.prompt.enabled = true;
+
+    const exported = await exportPopupZip(project, { prepare: false });
+    const entries = extractBoundedZip(exported.bytes, {
+      limits: POPUP_ZIP_LIMITS,
+    });
+    const manifest = JSON.parse(
+      new TextDecoder().decode(entries.get("popup.manifest.json")),
+    );
+    expect(manifest.spine.prompt).not.toHaveProperty("font");
+    expect(Object.values(manifest.resources)).not.toContainEqual(
+      expect.objectContaining({ kind: "font" }),
+    );
+    expect(
+      [...entries.keys()].some((path) => /\.(?:woff2?|ttf|otf)$/u.test(path)),
+    ).toBe(false);
+
+    const imported = await importPopupZip(exported.bytes, { prepare: false });
+    expect(imported.spine.prompt.font).toBeNull();
+    expect(projectToManifest(imported)).toEqual(projectToManifest(project));
   });
 
   it("keeps the five-tier amount contract", () => {

@@ -4,10 +4,19 @@ import {
   formatPopupAmount,
   parsePopupManifest,
   requiredPopupAmountCharacters,
+  validatePopupId,
 } from "../../src/popup/index.js";
 import { popupFixture } from "./fixtures.js";
 
 describe("popup manifest", () => {
+  it("exposes the exact popup id contract for authoring validation", () => {
+    expect(validatePopupId("free-game", "project id")).toBe("free-game");
+    for (const value of ["", "Free-game", "free_game", "free--game", "-free"])
+      expect(() => validatePopupId(value, "project id")).toThrow(
+        /lowercase kebab-case/,
+      );
+  });
+
   it("strictly parses a standalone segmented Spine popup", () => {
     const hash = "a".repeat(64);
     const manifest = parsePopupManifest({
@@ -153,6 +162,19 @@ describe("popup manifest", () => {
     expanded.spine.overlays[1].order = 3;
     expanded.spine.prompt.font = "shade";
     expect(() => parsePopupManifest(expanded)).toThrow(/font resource/);
+
+    const systemFont = structuredClone(manifest) as any;
+    delete systemFont.spine.prompt.font;
+    delete systemFont.resources.prompt;
+    const parsedSystemFont = parsePopupManifest(systemFont);
+    if (parsedSystemFont.type !== "spine")
+      throw new Error("expected spine popup");
+    expect(parsedSystemFont.spine.prompt).not.toHaveProperty("font");
+    expect(collectPopupDirectPaths(parsedSystemFont)).not.toContain(
+      `${hash("d")}.woff2`,
+    );
+    systemFont.spine.prompt.font = null;
+    expect(() => parsePopupManifest(systemFont)).toThrow(/spine\.prompt\.font/);
   });
 
   it("strictly parses the complete game003-equivalent five-tier contract", () => {

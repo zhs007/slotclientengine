@@ -99,12 +99,12 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
     });
     const prompt = manifest.spine.prompt;
     if (prompt) {
-      const font = resource.resources[prompt.font];
-      if (font?.kind !== "font")
+      const font = prompt.font ? resource.resources[prompt.font] : undefined;
+      if (prompt.font && font?.kind !== "font")
         throw new Error("Spine popup prompt font resource mismatch.");
       this.#prompt = createPopupPromptText({
         spec: prompt,
-        family: font.family,
+        ...(font?.kind === "font" ? { family: font.family } : {}),
         measureText: measurePromptText,
       });
       this.#prompt.text.zIndex = prompt.order;

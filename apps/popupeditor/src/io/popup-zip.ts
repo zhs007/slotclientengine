@@ -127,7 +127,7 @@ export async function importPopupZip(
       prompt: manifest.spine.prompt
         ? {
             enabled: true,
-            font: manifest.spine.prompt.font,
+            font: manifest.spine.prompt.font ?? null,
             defaultText: manifest.spine.prompt.defaultText,
             fill: manifest.spine.prompt.fill,
             order: manifest.spine.prompt.order,

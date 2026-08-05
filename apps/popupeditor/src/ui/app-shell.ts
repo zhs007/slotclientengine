@@ -1,6 +1,9 @@
 import { extractBoundedZip } from "@slotclientengine/browserartifactio";
 import { normalizeEditorPackageZipEntries } from "@slotclientengine/editorresource";
-import { formatPopupAmount } from "@slotclientengine/rendercore/popup";
+import {
+  formatPopupAmount,
+  validatePopupId,
+} from "@slotclientengine/rendercore/popup";
 import type {
   AwardTierId,
   PopupLayer,
@@ -602,11 +605,15 @@ export class PopupEditorApp {
         ),
       );
     const id = this.#root.querySelector<HTMLInputElement>("#project-id");
-    id?.addEventListener("change", () =>
-      this.#store.transact((draft) => {
-        draft.id = id.value;
-      }),
-    );
+    if (id) {
+      syncProjectIdValidity(id);
+      id.addEventListener("input", () => syncProjectIdValidity(id));
+      id.addEventListener("change", () =>
+        this.#store.transact((draft) => {
+          draft.id = id.value;
+        }),
+      );
+    }
     const projectType =
       this.#root.querySelector<HTMLSelectElement>("#project-type");
     projectType?.addEventListener("change", () =>
@@ -849,7 +856,7 @@ function spineMarkup(project: PopupEditorProject) {
     return `<label>${label}<select data-spine-popup-field="${field}"><option value="">请选择动画</option>${animations.map((name) => `<option value="${name}" ${name === selected ? "selected" : ""}>${name}</option>`).join("")}</select></label>`;
   };
   const prompt = project.spine.prompt;
-  return `<section class="tier-editor"><h2>普通 Spine 弹窗</h2><p>播放 start 后进入 loop；用户点击会锁存关闭请求，并在当前 loop 播放到边界后进入 end。</p><label>Spine 资源<select id="spine-resource"><option value="">请选择资源</option>${resources.map((resource) => `<option value="${resource.rootKey}" ${resource.rootKey === project.spine.resource ? "selected" : ""}>${resource.rootKey}</option>`).join("")}</select></label><div class="threshold-grid">${(["x", "y", "scale"] as const).map((field) => `<label>${field}<input data-spine-popup-field="${field}" type="number" step="0.1" value="${project.spine.transform[field]}"/></label>`).join("")}</div>${animationSelect("startAnimation", "开始动画")}${animationSelect("loopAnimation", "循环动画")}${animationSelect("endAnimation", "结束动画")}<p class="segment-summary">${project.spine.resource ? (animations.length ? `已从 skeleton JSON 读取 ${animations.length} 个动画。` : "所选 skeleton JSON 没有可用动画。") : "导入并选择一组 Spine JSON、atlas 与 PNG 后配置动画。"}</p><h3>单行点击提示</h3><label><input id="spine-prompt-enabled" type="checkbox" ${prompt.enabled ? "checked" : ""}/>启用提示</label><label>字体<select id="spine-prompt-font"><option value="">请选择字体</option>${fonts.map((font) => `<option value="${font.rootKey}" ${font.rootKey === prompt.font ? "selected" : ""}>${font.rootKey}</option>`).join("")}</select></label><label>默认文案<input data-spine-prompt-field="defaultText" value="${prompt.defaultText}"/></label><label>颜色<input data-spine-prompt-field="fill" value="${prompt.fill}"/></label><div class="threshold-grid">${(["order", "x", "y", "width", "height"] as const).map((field) => `<label>${field}<input data-spine-prompt-field="${field}" type="number" step="0.1" value="${field === "order" ? prompt.order : prompt.area[field]}"/></label>`).join("")}</div><p>文字始终单行，根据区域自动缩放；进入 end 时隐藏。</p><h3>Overlay 图层</h3><div class="layer-add"><select id="spine-overlay-resource">${overlayResources.map((resource) => `<option value="${resource.rootKey}">${resource.rootKey} (${resource.kind})</option>`).join("")}</select><button id="add-spine-overlay" ${overlayResources.length ? "" : "disabled"}>添加 overlay</button></div>${project.spine.overlays.map(overlayMarkup).join("")}</section>`;
+  return `<section class="tier-editor"><h2>普通 Spine 弹窗</h2><p>播放 start 后进入 loop；用户点击会锁存关闭请求，并在当前 loop 播放到边界后进入 end。</p><label>Spine 资源<select id="spine-resource"><option value="">请选择资源</option>${resources.map((resource) => `<option value="${resource.rootKey}" ${resource.rootKey === project.spine.resource ? "selected" : ""}>${resource.rootKey}</option>`).join("")}</select></label><div class="threshold-grid">${(["x", "y", "scale"] as const).map((field) => `<label>${field}<input data-spine-popup-field="${field}" type="number" step="0.1" value="${project.spine.transform[field]}"/></label>`).join("")}</div>${animationSelect("startAnimation", "开始动画")}${animationSelect("loopAnimation", "循环动画")}${animationSelect("endAnimation", "结束动画")}<p class="segment-summary">${project.spine.resource ? (animations.length ? `已从 skeleton JSON 读取 ${animations.length} 个动画。` : "所选 skeleton JSON 没有可用动画。") : "导入并选择一组 Spine JSON、atlas 与 PNG 后配置动画。"}</p><h3>单行点击提示</h3><label><input id="spine-prompt-enabled" type="checkbox" ${prompt.enabled ? "checked" : ""}/>启用提示</label><label>字体<select id="spine-prompt-font"><option value="">系统字体（默认，不打包）</option>${fonts.map((font) => `<option value="${font.rootKey}" ${font.rootKey === prompt.font ? "selected" : ""}>${font.rootKey}</option>`).join("")}</select></label><label>默认文案<input data-spine-prompt-field="defaultText" value="${prompt.defaultText}"/></label><label>颜色<input data-spine-prompt-field="fill" value="${prompt.fill}"/></label><div class="threshold-grid">${(["order", "x", "y", "width", "height"] as const).map((field) => `<label>${field}<input data-spine-prompt-field="${field}" type="number" step="0.1" value="${field === "order" ? prompt.order : prompt.area[field]}"/></label>`).join("")}</div><p>文字始终单行，根据区域自动缩放；进入 end 时隐藏。</p><h3>Overlay 图层</h3><div class="layer-add"><select id="spine-overlay-resource">${overlayResources.map((resource) => `<option value="${resource.rootKey}">${resource.rootKey} (${resource.kind})</option>`).join("")}</select><button id="add-spine-overlay" ${overlayResources.length ? "" : "disabled"}>添加 overlay</button></div>${project.spine.overlays.map(overlayMarkup).join("")}</section>`;
 }
 
 function overlayMarkup(layer: PopupOverlayLayer) {
@@ -1188,10 +1195,32 @@ function projectMarkup(project: PopupEditorProject, errors: readonly string[]) {
   ) =>
     `<label>${field}<input data-project-field="${field}" type="${type}" value="${project.amountFormat[field]}" ${type === "checkbox" && project.amountFormat[field] ? "checked" : ""}/></label>`;
   const preset = detectPopupAmountFormatPreset(project.amountFormat);
-  const common = `<div class="project-actions"><button id="export-project">导出 Popup ZIP</button></div><h2>项目</h2><label>弹窗类型<select id="project-type"><option value="award-celebration" ${project.type === "award-celebration" ? "selected" : ""}>获奖庆祝</option><option value="spine" ${project.type === "spine" ? "selected" : ""}>普通 Spine</option></select></label><label>project id<input id="project-id" value="${project.id}"/></label><label>viewport width<input data-project-field="viewport-width" type="number" value="${project.designViewport.width}"/></label><label>viewport height<input data-project-field="viewport-height" type="number" value="${project.designViewport.height}"/></label>`;
+  const idError = popupIdValidationError(project.id);
+  const common = `<div class="project-actions"><button id="export-project">导出 Popup ZIP</button></div><h2>项目</h2><label>弹窗类型<select id="project-type"><option value="award-celebration" ${project.type === "award-celebration" ? "selected" : ""}>获奖庆祝</option><option value="spine" ${project.type === "spine" ? "selected" : ""}>普通 Spine</option></select></label><label class="field-stack">project id<input id="project-id" value="${project.id}" aria-invalid="${String(Boolean(idError))}" aria-describedby="project-id-error" class="${idError ? "invalid" : ""}"/><small id="project-id-error" class="field-error" ${idError ? "" : "hidden"}>${idError}</small></label><label>viewport width<input data-project-field="viewport-width" type="number" value="${project.designViewport.width}"/></label><label>viewport height<input data-project-field="viewport-height" type="number" value="${project.designViewport.height}"/></label>`;
   const amount =
     project.type === "award-celebration"
       ? `<h3>金额合同</h3><label>preset<select id="amount-format-preset"><option value="integer" ${preset === "integer" ? "selected" : ""}>纯数字整数（raw 100 → 100）</option><option value="decimal" ${preset === "decimal" ? "selected" : ""}>纯数字两位小数（raw 100 → 1.00）</option><option value="custom" ${preset === "custom" ? "selected" : ""}>自定义</option></select></label><p class="preset-help">整数预设使用 rawScale=1，只要求 glyph 0–9；两位小数预设使用 rawScale=100，要求 glyph 0–9 和 .。两者均不输出货币符号或千分位。</p>${amountInput("rawScale", "number")}${amountInput("fractionDigits", "number")}${amountInput("useGrouping", "checkbox")}${amountInput("groupSeparator")}${amountInput("decimalSeparator")}${amountInput("prefix")}${amountInput("suffix")}<p>rounding: floor（strict contract）</p>`
       : "";
   return `${common}${amount}<h3>配置 diagnostics</h3><pre>${errors.join("\n") || "通过"}</pre><h3>Production manifest preview</h3><pre>${manifest}</pre>`;
+}
+
+function popupIdValidationError(value: string): string {
+  try {
+    validatePopupId(value, "project id");
+    return "";
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
+function syncProjectIdValidity(input: HTMLInputElement): void {
+  const error = popupIdValidationError(input.value);
+  input.classList.toggle("invalid", Boolean(error));
+  input.setAttribute("aria-invalid", String(Boolean(error)));
+  input.setCustomValidity(error);
+  const output =
+    input.ownerDocument.querySelector<HTMLElement>("#project-id-error");
+  if (!output) return;
+  output.textContent = error;
+  output.hidden = !error;
 }

@@ -154,6 +154,25 @@ function spineInspector(
         `<option value="${escapeHtml(dependency.id)}" ${dependency.id === transition.preludePopupId ? "selected" : ""}>${escapeHtml(dependency.id)}</option>`,
     )
     .join("");
+  const popupDependency = transition.preludePopupId
+    ? project.popupDependencies.get(transition.preludePopupId)
+    : undefined;
+  const popupConfiguration = popupDependency
+    ? `<label>Popup root order<input type="number" step="1" data-transition-popup-order value="${popupDependency.order}" /></label>${activeVariantIds(
+        project,
+      )
+        .map((variant) => {
+          const placement = popupDependency.placements[variant] ?? {
+            x: 0,
+            y: 0,
+            scale: 1,
+          };
+          return `<fieldset><legend>${variant} viewport center root</legend><div class="field-grid"><label>x<input type="number" data-transition-popup-placement="${variant}" data-transition-popup-placement-field="x" value="${placement.x}" /></label><label>y<input type="number" data-transition-popup-placement="${variant}" data-transition-popup-placement-field="y" value="${placement.y}" /></label><label>scale<input type="number" min="0.01" step="0.01" data-transition-popup-placement="${variant}" data-transition-popup-placement-field="scale" value="${placement.scale}" /></label></div></fieldset>`;
+        })
+        .join(
+          "",
+        )}<p class="hint">root order/placement 属于 Popup binding；其它转场可选择不同 Popup。</p>`
+    : "";
   const animationOptions =
     resource?.kind === "spine"
       ? resource.animationNames
@@ -187,7 +206,7 @@ function spineInspector(
       return `<fieldset><legend>${variant}</legend><div class="field-grid">${numberField("x", `transition.${variant}.x`, placement.x)}${numberField("y", `transition.${variant}.y`, placement.y)}${numberField("scale", `transition.${variant}.scale`, placement.scale, 0.01)}</div></fieldset>`;
     })
     .join("");
-  return `<section class="inspector-section"><h3>转场前弹窗（可选）</h3><label>普通 Spine Popup<select data-transition-prelude-popup><option value="">无，直接转场</option>${popupOptions}</select></label><p class="hint">保持当前状态显示；用户点击后等待 loop 边界与 end 完整结束，再播放转场动画。</p></section><section class="inspector-section"><h3>Official Spine once</h3><label>Spine resource<select data-transition-resource><option value="">必须明确选择</option>${resources.map((candidate) => `<option value="${escapeHtml(candidate.id)}" ${candidate.id === transition.resourceId ? "selected" : ""}>${escapeHtml(candidate.id)}</option>`).join("")}</select></label><label>once animation<select data-transition-animation ${resource?.kind === "spine" ? "" : "disabled"}><option value="">必须明确选择</option>${animationOptions}</select></label><label>switch event<select data-transition-event ${transition.animation ? "" : "disabled"}><option value="">必须明确选择</option>${uniqueEvents.map(([name]) => `<option value="${escapeHtml(name)}" ${name === transition.switchEvent ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select></label>${duplicateDiagnostics}<p class="hint">event 边界原子提交完整目标 scene。</p></section><section class="inspector-section"><h3>Art-space Placement</h3>${placements}</section>`;
+  return `<section class="inspector-section"><h3>转场前弹窗（可选）</h3><label>普通 Spine Popup<select data-transition-prelude-popup><option value="">无，直接转场</option>${popupOptions}</select></label><p class="hint">此选择只属于 ${escapeHtml(transition.fromModeId)} → ${escapeHtml(transition.toModeId)}；保持当前状态显示，点击后等待完整 end，再播放转场。</p>${popupConfiguration}</section><section class="inspector-section"><h3>Official Spine once</h3><label>Spine resource<select data-transition-resource><option value="">必须明确选择</option>${resources.map((candidate) => `<option value="${escapeHtml(candidate.id)}" ${candidate.id === transition.resourceId ? "selected" : ""}>${escapeHtml(candidate.id)}</option>`).join("")}</select></label><label>once animation<select data-transition-animation ${resource?.kind === "spine" ? "" : "disabled"}><option value="">必须明确选择</option>${animationOptions}</select></label><label>switch event<select data-transition-event ${transition.animation ? "" : "disabled"}><option value="">必须明确选择</option>${uniqueEvents.map(([name]) => `<option value="${escapeHtml(name)}" ${name === transition.switchEvent ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select></label>${duplicateDiagnostics}<p class="hint">event 边界原子提交完整目标 scene。</p></section><section class="inspector-section"><h3>Art-space Placement</h3>${placements}</section>`;
 }
 
 function videoInspector(

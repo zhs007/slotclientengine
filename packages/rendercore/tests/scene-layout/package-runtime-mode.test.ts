@@ -129,6 +129,7 @@ function packageResource(withEdge = true, withPrelude = false) {
               "free-entry": {
                 type: "spine",
                 manifest: "free-entry-popup.manifest.json",
+                order: 2000,
                 placements: { default: { x: 0, y: 0, scale: 1 } },
               },
             },

@@ -18,6 +18,7 @@
 - stable Spine background 只使用显式 single loop。未来稳定背景 kind 也遵守 exact-resource 和 stable-node 合同。
 - 普通 scene node 可使用 official Spine 或 runtime VNI：Spine 显式选择 animation/loop，VNI 播放完整 timeline 并显式选择 loop；每个 node 保持独立 player/playhead。新建普通 Spine node 的骨架原点放在各 variant art center（`top-left` 坐标写入 `artSize / 2`，`center` 坐标写入 `0,0`），不得要求或使用 skeleton bounds/atlas texture 尺寸；Spine background 仍要求显式完整 art size。VNI 不得作为 background 或 transition。
 - VNI scene node 的 `project.stage` 是 100% art-space 尺寸；top-left 原点对齐 stage 左上角，center 原点对齐 stage 中心。runtime 使用宿主 ticker 手动 update，并跳过不可渲染节点。
+- 普通 scene node 和 main reel 的 order 可由用户显式编辑并保留稀疏值；node、main reel、Popup root 的 order 全局唯一。Popup root 默认从 `2000` 分配且必须高于全部 node/main reel。背景与 main reel 在 editor 大纲中继续特殊展示，不以此禁止普通 node 跨越 reel order。
 
 ## Symbols binding 与 preview
 
@@ -30,7 +31,7 @@
 
 ## Directed transition
 
-- transition 是独立有向边，只支持 strict Spine overlay 或 video-blackout union。Spine edge 可选 `preludePopup`，必须引用普通 Spine Popup；video edge 显式禁止 prelude。
+- transition 是独立有向边，只支持 strict Spine overlay 或 video-blackout union。每条 Spine edge 独立保存可选 `preludePopup`，必须引用普通 Spine Popup；不同 edge 可不配置或引用不同 Popup，video edge 显式禁止 prelude。
 - editor 只自动准备当前 stable source 到所选 target 的一条直接边。
 - 缺显式边时不得瞬切、反向复用、自动寻路或回退旧 node state machine。
 - Spine/MP4 使用统一 state-switch action 和中文阶段提示。
@@ -75,14 +76,19 @@
 - popup package 最终 vendor 到 layout ZIP；内部 layer、tier、坐标和资源保持 popup owner 自包含。
 - popup 的系统文字样式、命名文字/ImgNumber 默认 string、award 内部档位和普通 Spine prompt/overlay 在 Scene Layout 中只读；Editor 只允许按公开 node handle 临时覆盖预览 string。相同字体 bytes 由根 assets map 按 SHA-256 物理去重。
 - 普通 Spine popup 的 placement 与注册由 Scene Layout 拥有；start/loop/end 动画名与点击锁存生命周期由 popup package 和 rendercore 拥有。
+- Popup root order 由 Scene Layout binding 拥有，可由 editor 修改；rendercore 在当前 scene 的顶层 Popup root 中按 order 排序，不为转场 Popup 创建独立 scene。
 - production app 直接消费 editor 导出的 mapped folder 时，构建期必须从根 manifest
   与 `assets.map.json` 生成 physical Vite import map；禁止宽泛 glob、运行时猜路径
-  或另存业务资源表。默认 editor/export/build consumer 仍校验 path/hash/size/orphan。
-- 明确由美术直接维护正式 asset 目录的 game consumer 可 opt in trusted-art policy：
-  `assets.map.json` 只提供 logical key→安全 physical path 路由，当前 files/bytes
-  为权威，不比对 `sha256`/`byteLength`/content-addressed filename，不因未引用
-  entry/file 阻断。实际引用的 path 缺失、manifest/schema、资源解码和运行能力
-  错误仍须失败；policy 必须由 consumer 显式选择，不改变 editor/optimizer/ZIP 默认合同。
+  或另存业务资源表。该 game build generator 以当前美术目录为权威，不校验
+  hash/size/content-addressed filename 或 orphan；editor/export/optimizer/ZIP 通过各自
+  的 package validator 保持严格 integrity 合同，不复用该 generator 做校验。
+- scene-layout runtime resolver 只把 `assets.map.json` 用作 logical key→安全
+  physical path 路由，当前 files/bytes 为权威；不得在 runtime 比对 `sha256`/
+  `byteLength`/content-addressed filename，也不因未引用 entry/file 阻断。实际引用的
+  path 缺失、manifest/schema、资源解码和运行能力错误仍须失败。
+- hash/size/path/orphan integrity 属于 editor/import/export/optimizer/production ZIP
+  边界，必须由这些边界显式调用 `validateEditorAssetsMapPackage()`；不得把验证隐藏
+  在 runtime resolver 的默认分支或依赖 game app 传 bypass policy。
 - 只需要 layout/background/popup、而 reel 由游戏业务 target 驱动时，使用 rendercore
   presentation surface；surface 仍拥有 mode-aware background visibility、popup placement
   和 destroy，app 只注入业务触发并组合公开 container。业务 reel 自己持有显示对象时，

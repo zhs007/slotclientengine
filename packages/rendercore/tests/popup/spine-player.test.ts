@@ -1,11 +1,24 @@
 import { Container } from "pixi.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { RendercoreSpinePlayer } from "../../src/spine/runtime-player.js";
 import {
   createSpinePopupPlayer,
   type PopupPackageResource,
   type SpinePopupManifestV1,
 } from "../../src/popup/index.js";
+
+const promptSetText = vi.hoisted(() => vi.fn());
+const createPromptText = vi.hoisted(() => vi.fn());
+vi.mock("../../src/popup/prompt-text.js", async (original) => {
+  const actual =
+    await original<typeof import("../../src/popup/prompt-text.js")>();
+  const { Container: PromptContainer } = await import("pixi.js");
+  createPromptText.mockImplementation(() => ({
+    text: new PromptContainer(),
+    setText: promptSetText,
+  }));
+  return { ...actual, createPopupPromptText: createPromptText };
+});
 
 describe("spine popup player", () => {
   it("latches an early click and exits only on the next loop boundary", async () => {
@@ -52,6 +65,39 @@ describe("spine popup player", () => {
     player.destroy();
     player.destroy();
     expect(leaf.destroyCount).toBe(1);
+  });
+
+  it("renders a prompt with the rendercore system font without a prepared font resource", async () => {
+    const leaf = new FakeSpinePlayer();
+    const resource = spineResource();
+    const promptResource: PopupPackageResource<SpinePopupManifestV1> = {
+      ...resource,
+      manifest: {
+        ...resource.manifest,
+        spine: {
+          ...resource.manifest.spine,
+          prompt: {
+            defaultText: "Continue",
+            fill: "#fff",
+            order: 2,
+            area: { x: 0, y: 20, width: 200, height: 20 },
+          },
+        },
+      },
+    };
+    const player = createSpinePopupPlayer({
+      resource: promptResource,
+      playerFactory: () => leaf,
+    });
+    expect(createPromptText).toHaveBeenCalledWith({
+      spec: promptResource.manifest.spine.prompt,
+    });
+    expect(player.container.children).toHaveLength(2);
+    await player.init();
+    player.start("Translated continue");
+    expect(promptSetText).toHaveBeenCalledWith("Translated continue");
+    expect(player.container.visible).toBe(true);
+    player.destroy();
   });
 
   it("fails strictly for wrong packages and invalid lifecycle calls", async () => {

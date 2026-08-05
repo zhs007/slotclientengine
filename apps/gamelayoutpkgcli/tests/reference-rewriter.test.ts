@@ -388,6 +388,17 @@ describe("typed asset reference rewriting", () => {
         { name: "heading", resource: "title.hash.woff2" },
       ],
     });
+
+    const systemPrompt = { ...popup.spine.prompt! };
+    delete systemPrompt.font;
+    const systemFontPopup = rewritePopupManifest(
+      { ...popup, spine: { ...popup.spine, prompt: systemPrompt } },
+      mapping,
+    );
+    expect(systemFontPopup.type).toBe("spine");
+    if (systemFontPopup.type !== "spine")
+      throw new Error("Expected Spine popup.");
+    expect(systemFontPopup.spine.prompt).not.toHaveProperty("font");
   });
 
   it("rewrites VNI asset.path while preserving authored identity", () => {

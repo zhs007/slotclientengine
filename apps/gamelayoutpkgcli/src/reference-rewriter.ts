@@ -339,9 +339,13 @@ export function rewritePopupManifest(
           ? {
               prompt: {
                 ...manifest.spine.prompt,
-                font:
-                  resourceIds.get(manifest.spine.prompt.font) ??
-                  manifest.spine.prompt.font,
+                ...(manifest.spine.prompt.font
+                  ? {
+                      font:
+                        resourceIds.get(manifest.spine.prompt.font) ??
+                        manifest.spine.prompt.font,
+                    }
+                  : {}),
               },
             }
           : {}),
