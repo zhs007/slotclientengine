@@ -1,6 +1,10 @@
-import { extractBoundedZip } from "@slotclientengine/browserartifactio";
+import {
+  extractBoundedZip,
+  sha256Hex,
+} from "@slotclientengine/browserartifactio";
 import {
   decodeEditorAssetsMap,
+  editorAssetKeyCollisionToken,
   EDITOR_ASSETS_MAP_PATH,
   normalizeEditorPackageZipEntries,
   validateEditorAssetsMapPackage,
@@ -20,6 +24,30 @@ export interface ImportedPopupPackage {
   readonly manifest: ReturnType<typeof parsePopupManifest>;
   readonly files: ReadonlyMap<string, Uint8Array>;
   readonly rootKey: string;
+  readonly sourceSpineAssets: readonly ImportedPopupSpineAsset[];
+}
+
+export interface ImportedPopupSpineAsset {
+  readonly resourceKey: string;
+  readonly kind: "atlas" | "texture";
+  readonly key: string;
+  readonly sha256: string;
+}
+
+export interface LayoutSpineAssetForPopupReview {
+  readonly resourceId: string;
+  readonly kind: "atlas" | "texture";
+  readonly key: string;
+  readonly bytes: Uint8Array;
+}
+
+export interface PopupSpineAssetConflict {
+  readonly popupResourceKey: string;
+  readonly popupAssetKey: string;
+  readonly popupSha256: string;
+  readonly layoutResourceId: string;
+  readonly layoutAssetKey: string;
+  readonly layoutSha256: string;
 }
 
 export async function importPopupPackageZip(
@@ -57,6 +85,7 @@ export async function importPopupPackageZip(
   });
   await resource.destroy();
   const flattened = flattenPopupPackageFiles({ manifest, files: virtual });
+  const sourceSpineAssets = await collectImportedPopupSpineAssets(flattened);
   const namespaced = namespaceMappedPopupPackageFiles({
     ...flattened,
     keyPrefix: packageKeyPrefix(flattened.manifest.id),
@@ -69,5 +98,90 @@ export async function importPopupPackageZip(
       ),
     ),
     rootKey: namespaced.rootKey,
+    sourceSpineAssets,
   });
+}
+
+export async function findPopupSpineAssetConflicts(options: {
+  readonly imported: ImportedPopupPackage;
+  readonly layoutAssets: readonly LayoutSpineAssetForPopupReview[];
+}): Promise<readonly PopupSpineAssetConflict[]> {
+  const layout = await Promise.all(
+    options.layoutAssets.map(async (asset) => ({
+      ...asset,
+      sha256: await sha256Hex(asset.bytes),
+    })),
+  );
+  const conflicts: PopupSpineAssetConflict[] = [];
+  for (const popupAsset of options.imported.sourceSpineAssets) {
+    const token = editorAssetKeyCollisionToken(popupAsset.key);
+    for (const layoutAsset of layout) {
+      if (layoutAsset.kind !== popupAsset.kind) continue;
+      if (editorAssetKeyCollisionToken(layoutAsset.key) !== token) continue;
+      if (layoutAsset.sha256 === popupAsset.sha256) continue;
+      conflicts.push(
+        Object.freeze({
+          popupResourceKey: popupAsset.resourceKey,
+          popupAssetKey: popupAsset.key,
+          popupSha256: popupAsset.sha256,
+          layoutResourceId: layoutAsset.resourceId,
+          layoutAssetKey: layoutAsset.key,
+          layoutSha256: layoutAsset.sha256,
+        }),
+      );
+    }
+  }
+  return Object.freeze(
+    conflicts.sort((left, right) =>
+      [left.layoutResourceId, left.layoutAssetKey, left.popupResourceKey]
+        .join("\u0000")
+        .localeCompare(
+          [
+            right.layoutResourceId,
+            right.layoutAssetKey,
+            right.popupResourceKey,
+          ].join("\u0000"),
+          "en",
+        ),
+    ),
+  );
+}
+
+async function collectImportedPopupSpineAssets(options: {
+  readonly manifest: ReturnType<typeof parsePopupManifest>;
+  readonly files: ReadonlyMap<string, Uint8Array>;
+}): Promise<readonly ImportedPopupSpineAsset[]> {
+  const assets: ImportedPopupSpineAsset[] = [];
+  for (const [resourceKey, resource] of Object.entries(
+    options.manifest.resources,
+  )) {
+    if (resource.kind !== "spine") continue;
+    for (const [kind, key] of [
+      ["atlas", resource.atlas],
+      ...Object.values(resource.textures).map(
+        (path) => ["texture", path] as const,
+      ),
+    ] as const) {
+      const bytes = options.files.get(key);
+      if (!bytes) throw new Error(`Popup Spine review 缺少资源：${key}`);
+      assets.push(
+        Object.freeze({
+          resourceKey,
+          kind,
+          key,
+          sha256: await sha256Hex(bytes),
+        }),
+      );
+    }
+  }
+  return Object.freeze(
+    assets.sort((left, right) =>
+      [left.resourceKey, left.kind, left.key]
+        .join("\u0000")
+        .localeCompare(
+          [right.resourceKey, right.kind, right.key].join("\u0000"),
+          "en",
+        ),
+    ),
+  );
 }

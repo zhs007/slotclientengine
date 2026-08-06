@@ -19,7 +19,12 @@ import {
   LAYOUT_ZIP_LIMITS,
 } from "../io/imported-layout-zip.js";
 import { importSymbolsZipWithFiles } from "../io/imported-symbol-package.js";
-import { importPopupPackageZip } from "../io/imported-popup-package.js";
+import {
+  findPopupSpineAssetConflicts,
+  importPopupPackageZip,
+  type LayoutSpineAssetForPopupReview,
+  type PopupSpineAssetConflict,
+} from "../io/imported-popup-package.js";
 import {
   createSymbolPackageResource,
   parseSymbolPackageManifest,
@@ -2662,11 +2667,22 @@ export class GameLayoutEditorApp {
         }
         if (entries.has("popup.manifest.json")) {
           const imported = await importPopupPackageZip(zipBytes);
+          const conflicts = await findPopupSpineAssetConflicts({
+            imported,
+            layoutAssets: collectLayoutSpineAssetsForPopupReview(project),
+          });
+          if (
+            !confirmDependencyImportReview(
+              "Popup",
+              imported.files,
+              files,
+              conflicts,
+            )
+          )
+            return;
           if (project.popupDependencies.has(imported.manifest.id))
             replacePopupDependency(project, imported.manifest.id, imported);
           else importPopupDependency(project, imported);
-          if (!confirmDependencyImportReview("Popup", imported.files, files))
-            return;
           this.#store.replace(project);
           this.#selectedPopupId = imported.manifest.id;
           this.showFeedback(
@@ -3791,6 +3807,7 @@ function confirmDependencyImportReview(
   kind: "Symbols" | "Popup",
   dependencyFiles: ReadonlyMap<string, Uint8Array>,
   sourceFiles: readonly File[],
+  popupSpineConflicts: readonly PopupSpineAssetConflict[] = [],
 ): boolean {
   const confirm = globalThis.window?.confirm;
   if (typeof confirm !== "function") return true;
@@ -3798,10 +3815,56 @@ function confirmDependencyImportReview(
     (sum, value) => sum + value.byteLength,
     0,
   );
+  const conflictReview = popupSpineConflicts.length
+    ? `\n\n检测到 Popup Spine 与 Layout Spine 同名但 SHA-256 不同：\n${popupSpineConflicts
+        .map(
+          (conflict) =>
+            `${conflict.layoutResourceId} · ${conflict.layoutAssetKey} [${conflict.layoutSha256}] <- ${conflict.popupResourceKey} · ${conflict.popupAssetKey} [${conflict.popupSha256}]`,
+        )
+        .join(
+          "\n",
+        )}\n\n取消：不导入，可先手动替换 Layout Spine 整组。\n确定：保留 Layout 现有资源，继续作为独立 Popup package 导入。`
+    : "";
   return confirm.call(
     globalThis.window,
-    `导入审查\n${kind} · ${dependencyFiles.size} filename keys · ${bytes} bytes\n${sourceFiles.length} source file(s)\n\n确认提交到同一扁平资源库？`,
+    `导入审查\n${kind} · ${dependencyFiles.size} filename keys · ${bytes} bytes\n${sourceFiles.length} source file(s)${conflictReview}\n\n确认提交到同一扁平资源库？`,
   );
+}
+
+function collectLayoutSpineAssetsForPopupReview(
+  project: EditorProject,
+): readonly LayoutSpineAssetForPopupReview[] {
+  const result: LayoutSpineAssetForPopupReview[] = [];
+  for (const resource of project.resources.values()) {
+    if (resource.kind !== "spine") continue;
+    const assets = [
+      { kind: "atlas" as const, key: resource.atlas },
+      ...Object.values(resource.textures).map((key) => ({
+        kind: "texture" as const,
+        key,
+      })),
+    ];
+    const seen = new Set<string>();
+    for (const asset of assets) {
+      const identity = `${asset.kind}\u0000${asset.key}`;
+      if (seen.has(identity)) continue;
+      seen.add(identity);
+      const bytes = project.assets.get(asset.key);
+      if (!bytes)
+        throw new Error(
+          `Layout Spine ${resource.id} 导入审查缺少资源：${asset.key}`,
+        );
+      result.push(
+        Object.freeze({
+          resourceId: resource.id,
+          kind: asset.kind,
+          key: asset.key,
+          bytes,
+        }),
+      );
+    }
+  }
+  return Object.freeze(result);
 }
 
 function editorResourcePrimaryPathForReview(

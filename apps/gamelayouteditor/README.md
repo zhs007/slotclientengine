@@ -31,6 +31,8 @@ main reel 只提供横竖屏 `x/y` placement，不提供整体缩放。双背景
 
 原始文件上传在任何资源解析前先整批校验 filename：只允许 ASCII 字母、数字、点、下划线和连字符，并统一转为小写。任一文件包含中文、空格、路径分隔符或其它非法字符，或多个文件小写化后重名，整批上传原子拒绝。普通资源合法同名不同 bytes 默认覆盖，引用不变；不建立 `dependencies/**` 目录。Symbols/Popup ZIP 先按 standalone schema 校验，再以 manifest id 为稳定前缀物化 root/leaf filename keys，使多个包在同一扁平 workspace 并存；相同物理 bytes 最终仍由 `assets.map.json` 的 SHA-256 payload 去重。同 id 替换只覆盖该 owner 的独占 keys，并在提交后回收无其它 owner 引用的旧 keys。完整 Editor ZIP 则在验证 map/hash/size 后统一迁移旧 logical filename key：先做 Unicode NFKC，ASCII 合法字符转小写，空白和 ASCII 标点转 `-`，非 ASCII 字符按 `u<Unicode 十六进制>` 展开，连续分隔符合并并清理首尾；扩展名同样小写且必须能归一为字母数字。归一后不同 bytes 重名时按稳定源路径顺序添加 `-2/-3`，相同 bytes 复用同一 key；layout 及已识别的 VNI、image-string、Symbols、Popup JSON 引用同步结构化改写，业务 id 和 atlas page logical name 不变。Symbols/Popup dependency 只保存业务 package id、root key、closure keys 与 placement；bytes 只存在全局 asset workspace。
 
+Popup Spine 的 atlas page logical name 不随物理 filename key 前缀化。导入提交前会用完整 SHA-256 比较 Popup 与 Layout 自有 Spine 中同名的 atlas/texture；同名不同 bytes 时列出冲突，由用户取消整次导入或确认继续隔离导入，不自动覆盖、改名或推断 skeleton JSON 兼容性。
+
 资源列表可把任一已识别的 image、Spine、VNI、ImgNumber 或 MP4 root 设为“程序资源”。程序键默认取 root filename 去扩展名并转小写；手工输入也会 trim 并转小写。最终键必须唯一，以字母或数字开头，且只允许字母、数字、点、下划线和连字符。该资源即使没有 Scene 引用也会写入 production ZIP。取消绑定后，若没有其它引用，它恢复为不会导出。程序键和 typed resource spec 保存在 `layout.manifest.json` 的 `runtimeResources`，ZIP 重新导入或图片优化后仍保持不变。
 
 Spine atlas 的 page 是 atlas 内部逻辑名，texture map 的 value 才是全局 filename key。导入时若旧素材名为 `BG.png`、实际字节为 WebP，atlas 仍保留 `BG.png` page，物理 key 规范化为 `BG.webp`，并由 texture map 精确关联；不会伪造 MIME 或改写 atlas 逻辑页。Spine 背景还必须在 Picker 明确填写完整 `art size`，不能从 skeleton export bounds 或 atlas texture 尺寸推导；例如 game002-s3 使用 `2000 × 2000`，初始 placement 为 `(1000, 1000, 1)`。

@@ -406,9 +406,6 @@ export function flattenPopupPackageFiles(options: {
     const vni = Object.values(manifest.resources).find(
       (resource) => resource.kind === "vni" && resource.project === sourcePath,
     );
-    const spine = Object.values(manifest.resources).find(
-      (resource) => resource.kind === "spine" && resource.atlas === sourcePath,
-    );
     if (imageString) {
       const nested = structuredClone(
         parseImageStringManifest(parseJson(bytes, sourcePath)),
@@ -424,11 +421,6 @@ export function flattenPopupPackageFiles(options: {
         rewriteVNIProjectAssetPaths(parseJson(bytes, sourcePath), (path) =>
           requirePopupMapping(mapping, resolvePackagePath(sourcePath, path)),
         ),
-      );
-    } else if (spine) {
-      const text = decode(bytes, sourcePath);
-      rewritten = new TextEncoder().encode(
-        rewritePopupAtlas(text, sourcePath, mapping),
       );
     }
     putPopupFile(files, target, rewritten);
@@ -513,9 +505,6 @@ export function namespaceMappedPopupPackageFiles(options: {
     const vni = Object.values(manifest.resources).find(
       (resource) => resource.kind === "vni" && resource.project === sourcePath,
     );
-    const spine = Object.values(manifest.resources).find(
-      (resource) => resource.kind === "spine" && resource.atlas === sourcePath,
-    );
     if (imageString) {
       const nested = structuredClone(
         parseImageStringManifest(parseJson(bytes, sourcePath)),
@@ -528,10 +517,6 @@ export function namespaceMappedPopupPackageFiles(options: {
         rewriteVNIProjectAssetPaths(parseJson(bytes, sourcePath), (path) =>
           requirePopupMapping(mapping, path),
         ),
-      );
-    } else if (spine) {
-      rewritten = new TextEncoder().encode(
-        rewritePopupAtlas(decode(bytes, sourcePath), sourcePath, mapping),
       );
     }
     putPopupFile(files, target, rewritten);
@@ -889,22 +874,6 @@ function requirePopupMapping(
   const target = mapping.get(path);
   if (!target) throw new Error(`popup 结构化资源依赖未物化：${path}`);
   return target;
-}
-
-function rewritePopupAtlas(
-  text: string,
-  atlasPath: string,
-  mapping: ReadonlyMap<string, string>,
-): string {
-  const lines = text.replace(/\r\n?/gu, "\n").split("\n");
-  return `${lines
-    .map((line) => {
-      if (!line || /^\s/u.test(line) || line.includes(":")) return line;
-      const source = resolvePackagePath(atlasPath, line);
-      return mapping.get(source) ?? line;
-    })
-    .join("\n")
-    .replace(/\n+$/u, "")}\n`;
 }
 
 function encodeStableJson(value: unknown): Uint8Array {

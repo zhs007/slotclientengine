@@ -136,6 +136,7 @@ describe("game mode and popup dependency commands", () => {
       manifest: { id: "free-game", type: "spine" } as never,
       rootKey: "free-game-popup.manifest.json",
       files: new Map([["free-game-popup.manifest.json", new Uint8Array([1])]]),
+      sourceSpineAssets: [],
     };
     importPopupDependency(project, imported);
     expect(project.registeredSpinePopupIds.size).toBe(0);
@@ -169,6 +170,7 @@ describe("game mode and popup dependency commands", () => {
       manifest: { id: "free-entry", type: "spine" } as never,
       rootKey: "free-entry-popup.manifest.json",
       files: new Map([["free-entry-popup.manifest.json", new Uint8Array([1])]]),
+      sourceSpineAssets: [],
     });
     setGameModeTransitionPreludePopup(project, transition, "free-entry");
     expect(transition).toMatchObject({ preludePopupId: "free-entry" });
@@ -439,6 +441,7 @@ function popup(id: string, marker: number) {
     manifest: { id, type: "award-celebration" } as never,
     rootKey: `${id}-popup.manifest.json`,
     files: new Map([[`${id}-popup.manifest.json`, new Uint8Array([marker])]]),
+    sourceSpineAssets: [],
   };
 }
 

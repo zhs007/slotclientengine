@@ -12,7 +12,10 @@ import {
 import { describe, expect, it } from "vitest";
 import { Assets, Texture } from "pixi.js";
 import { vi } from "vitest";
-import { importPopupPackageZip } from "../src/io/imported-popup-package.js";
+import {
+  findPopupSpineAssetConflicts,
+  importPopupPackageZip,
+} from "../src/io/imported-popup-package.js";
 import {
   cloneEditorProject,
   editorProjectToManifest,
@@ -20,6 +23,10 @@ import {
 } from "../src/model/editor-project.js";
 import { assetBytes, imageManifest } from "./fixtures.js";
 import { popupFiles } from "./popup-fixture.js";
+import {
+  getMinecart2SymbolResourcePath,
+  readMinecart2SymbolBytes,
+} from "../../../test-utils/minecart2-fixtures.js";
 
 describe("gamelayout popup dependency", () => {
   it("strictly imports a self-contained popup and round-trips binding placement", async () => {
@@ -106,6 +113,68 @@ describe("gamelayout popup dependency", () => {
     ).rejects.toThrow(/unknown key/);
   });
 
+  it("imports multi-page Spine pages without namespacing their logical names", async () => {
+    const popup = spinePopupFiles();
+    const imported = await importPopupPackageZip(
+      createDeterministicZip(await mappedPopupFiles(popup)),
+    );
+    expect(imported.sourceSpineAssets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "atlas", key: "BG.atlas" }),
+        expect.objectContaining({ kind: "texture", key: "BG.png" }),
+        expect.objectContaining({ kind: "texture", key: "BG_2.png" }),
+      ]),
+    );
+    const spine = imported.manifest.resources["pkg-2-fg-FG.json"];
+    expect(spine).toMatchObject({
+      kind: "spine",
+      atlas: "pkg-2-fg-BG.atlas",
+      textures: {
+        "BG.png": "pkg-2-fg-BG.png",
+        "BG_2.png": "pkg-2-fg-BG_2.png",
+      },
+    });
+    expect(
+      readAtlasPageNames(
+        new TextDecoder().decode(imported.files.get("pkg-2-fg-BG.atlas")),
+      ),
+    ).toEqual(["BG.png", "BG_2.png"]);
+
+    await expect(
+      findPopupSpineAssetConflicts({
+        imported,
+        layoutAssets: [
+          {
+            resourceId: "bg.json",
+            kind: "atlas",
+            key: "bg.atlas",
+            bytes: popup.get("BG.atlas")!,
+          },
+        ],
+      }),
+    ).resolves.toEqual([]);
+    await expect(
+      findPopupSpineAssetConflicts({
+        imported,
+        layoutAssets: [
+          {
+            resourceId: "bg.json",
+            kind: "atlas",
+            key: "bg.atlas",
+            bytes: new Uint8Array([1, 2, 3]),
+          },
+        ],
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        popupResourceKey: "FG.json",
+        popupAssetKey: "BG.atlas",
+        layoutResourceId: "bg.json",
+        layoutAssetKey: "bg.atlas",
+      }),
+    ]);
+  });
+
   it("imports and preserves once VNI playback through the shared popup parser", async () => {
     const load = vi
       .spyOn(Assets, "load")
@@ -148,7 +217,7 @@ async function mappedPopupFiles(
       .map(([key, bytes]) =>
         createEditorAssetEntry({
           key,
-          mediaType: key.endsWith(".json") ? "application/json" : "image/png",
+          mediaType: popupMediaType(key),
           bytes,
         }),
       ),
@@ -176,4 +245,68 @@ async function mappedPopupFiles(
     ] as const,
     ["popup.manifest.json", root] as const,
   ]);
+}
+
+function spinePopupFiles(): Map<string, Uint8Array> {
+  const sourcePage = getMinecart2SymbolResourcePath("WL", "texture");
+  const atlas = new TextDecoder()
+    .decode(readMinecart2SymbolBytes("WL", "atlas"))
+    .replace(sourcePage, "BG.png");
+  const manifest = {
+    version: 1,
+    kind: "popup",
+    id: "fg",
+    type: "spine",
+    designViewport: { width: 100, height: 100 },
+    resources: {
+      "FG.json": {
+        kind: "spine",
+        skeleton: "FG.json",
+        atlas: "BG.atlas",
+        textures: {
+          "BG.png": "BG.png",
+          "BG_2.png": "BG_2.png",
+        },
+      },
+    },
+    spine: {
+      resource: "FG.json",
+      transform: { x: 0, y: 0, scale: 1 },
+      playback: {
+        mode: "segmented-animations",
+        startAnimation: "start",
+        loopAnimation: "Loop",
+        endAnimation: "Win",
+      },
+    },
+  };
+  return new Map([
+    ["popup.manifest.json", new TextEncoder().encode(JSON.stringify(manifest))],
+    ["FG.json", readMinecart2SymbolBytes("WL", "skeleton")],
+    [
+      "BG.atlas",
+      new TextEncoder().encode(
+        `${atlas.replace(/\n+$/u, "")}\n\nBG_2.png\nsize: 1,1\nfilter: Linear,Linear\n`,
+      ),
+    ],
+    ["BG.png", readMinecart2SymbolBytes("WL", "texture")],
+    ["BG_2.png", new Uint8Array([1])],
+  ]);
+}
+
+function popupMediaType(key: string): string {
+  if (key.endsWith(".json")) return "application/json";
+  if (key.endsWith(".atlas")) return "text/plain";
+  return "image/png";
+}
+
+function readAtlasPageNames(atlasText: string): readonly string[] {
+  const lines = atlasText.replace(/\r\n?/gu, "\n").split("\n");
+  return lines.filter((line, index) => {
+    if (!line || /^\s/u.test(line) || line.includes(":")) return false;
+    return lines
+      .slice(index + 1)
+      .find((candidate) => candidate.length > 0)
+      ?.startsWith("size:");
+  });
 }
