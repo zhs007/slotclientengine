@@ -72,6 +72,11 @@ Editor 不新增按钮或私有点击阶段判断；预览 Canvas 与游戏 cons
 点击。现已把主预览 Canvas 的 stylesheet 与初始化 inline style 都改为 `pointer-events: auto`，并增加
 LayoutPreview DOM 回归断言；阶段分派仍只存在 RenderCore。
 
+第三次浏览器反馈暴露 Popup filename-key 规范化只重写 JSON value、未重写 `resources` object key：
+`pkg-2-fg-FG.json` 的 skeleton value 被规范化成 `pkg-2-fg-fg.json` 后，旧 object key 违反 compound
+resource identity。现新增 RenderCore Popup 专用结构化重写，并在 Layout export/migration 两条路径使用；
+resource key、root value 和 layer/spine reference 同步改写，texture page logical key 与 atlas bytes 不变。
+
 ## 浏览器验收交接
 
 请在浏览器按以下步骤复验：

@@ -174,6 +174,7 @@ describe("popup package resource", () => {
     const {
       createPopupPackageResourceFromResolvedFiles,
       namespaceMappedPopupPackageFiles,
+      rewritePopupManifestFilenameKeys,
     } = await import("../../src/popup/package-resource.js");
     const source = multiPageSpinePopupFixture();
     const namespaced = namespaceMappedPopupPackageFiles({
@@ -194,6 +195,23 @@ describe("popup package resource", () => {
       namespaced.files.get("pkg-2-fg-BG.atlas"),
     );
     expect(readAtlasPageNames(atlasText)).toEqual(["BG.png", "BG_2.png"]);
+
+    const lowercase = rewritePopupManifestFilenameKeys({
+      manifest: namespaced.manifest,
+      rewrite: (key) => key.toLowerCase(),
+    });
+    expect(lowercase.resources["pkg-2-fg-fg.json"]).toMatchObject({
+      kind: "spine",
+      skeleton: "pkg-2-fg-fg.json",
+      atlas: "pkg-2-fg-bg.atlas",
+      textures: {
+        "BG.png": "pkg-2-fg-bg.png",
+        "BG_2.png": "pkg-2-fg-bg_2.png",
+      },
+    });
+    if (lowercase.type !== "spine")
+      throw new Error("Expected rewritten Spine popup.");
+    expect(lowercase.spine.resource).toBe("pkg-2-fg-fg.json");
 
     const files = popupFilesWithCanonicalRoot(namespaced);
     const resource = await createPopupPackageResourceFromResolvedFiles({
