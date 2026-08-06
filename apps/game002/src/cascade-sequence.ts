@@ -4,7 +4,7 @@ import type {
   OtherSceneMatrix,
   SceneMatrix,
   SlotRoundDropdownStepPlan,
-  SlotOperationPlanV1,
+  SlotOperationPlanV2,
   SlotRoundRefillStepPlan,
   SlotRoundWinStepPlan,
   WinResultPosition,
@@ -68,7 +68,7 @@ export function createGame002CascadeSequence(options: {
   readonly logic: GameLogic;
   readonly cnSymbolCode: number;
   readonly auxiliaryValueSymbolCodes?: readonly number[];
-  readonly executionPlan?: SlotOperationPlanV1;
+  readonly executionPlan?: SlotOperationPlanV2;
   readonly canRemoveSymbol: (context: {
     readonly stepIndex: number;
     readonly x: number;
@@ -109,14 +109,17 @@ export function createGame002CascadeSequence(options: {
     initialStep.getComponentScenes(GAME002_CASCADE_COMPONENTS.spin),
     "step[0] bg-spin",
   );
+  const plannedInitial = options.executionPlan
+    ? requireInitialLanding(options.executionPlan)
+    : null;
   const settledSpinScene =
-    options.executionPlan?.initial.scene ??
+    plannedInitial?.scene ??
     resolveGeneratedMultiplierScene(initialStep, serverSpinScene, "step[0]");
   const spinScene = settledSpinScene;
   const spinValueResult = options.executionPlan
     ? Object.freeze({
         values: asFullPresentationValues(
-          options.executionPlan.initial.values,
+          plannedInitial!.values,
           "step[0] execution-plan initial values",
         ),
         usesServerValues: true,
@@ -407,22 +410,31 @@ export function createGame002CascadeSequence(options: {
   });
 }
 
+function requireInitialLanding(plan: SlotOperationPlanV2) {
+  const landing = plan.operations.find(
+    (operation) => operation.effect === "scene-landing",
+  );
+  if (!landing)
+    throw new Error("game002 execution plan has no initial scene landing.");
+  return landing.output;
+}
+
 function findPlanDropdown(
-  plan: SlotOperationPlanV1 | undefined,
+  plan: SlotOperationPlanV2 | undefined,
   stepIndex: number,
 ): SlotRoundDropdownStepPlan | undefined {
   return findProfileStep(plan, "slot:dropdown", "dropdown", stepIndex);
 }
 
 function findPlanRefill(
-  plan: SlotOperationPlanV1 | undefined,
+  plan: SlotOperationPlanV2 | undefined,
   stepIndex: number,
 ): SlotRoundRefillStepPlan | undefined {
   return findProfileStep(plan, "slot:refill", "refill", stepIndex);
 }
 
 function findPlanWin(
-  plan: SlotOperationPlanV1 | undefined,
+  plan: SlotOperationPlanV2 | undefined,
   stepIndex: number,
 ): SlotRoundWinStepPlan | undefined {
   return findProfileStep(plan, "slot:win-remove", "win", stepIndex);
@@ -431,7 +443,7 @@ function findPlanWin(
 function findProfileStep<
   Step extends { readonly kind: string; readonly stepIndex: number },
 >(
-  plan: SlotOperationPlanV1 | undefined,
+  plan: SlotOperationPlanV2 | undefined,
   operationKind: string,
   stepKind: Step["kind"],
   stepIndex: number,

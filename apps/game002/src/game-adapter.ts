@@ -8,8 +8,11 @@ import type {
   SlotRoundRefillStepPlan,
   SlotRoundSettledTransformStepPlan,
   SlotRoundWinStepPlan,
-  SlotOperationBase,
-  SlotOperationPlanV1,
+  SlotOperationV2,
+  SlotOperationDefinitionV2,
+  SlotOperationDraftV2,
+  SlotOperationPlanV2,
+  SlotStateMutationOperation,
   SlotOperationSnapshot,
   SlotGameAdapter,
   SlotGameInitialState,
@@ -18,9 +21,10 @@ import type {
   SlotGameViewportSnapshot,
 } from "@slotclientengine/gameframeworks";
 import {
-  compileSlotRoundOperationPlan,
-  freezeSlotOperationPlan,
-  validateSlotOperationPlan,
+  compileConfiguredSlotRoundOperationPlanV2,
+  createBuiltinSlotOperationDefinitionsV2,
+  deriveSlotStateMutations,
+  finalizeSlotOperationPlanV2,
 } from "@slotclientengine/gameframeworks";
 import {
   assertSymbolValueDisplayResource,
@@ -478,7 +482,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
       bnSymbolCode,
       logDiagnostic: this.#logDiagnostic,
     });
-    const plan = compileSlotRoundOperationPlan(
+    const plan = compileConfiguredSlotRoundOperationPlanV2(
       GAME002_ROUND_FLOW_PROFILE,
       baseLogic,
       {
@@ -536,7 +540,15 @@ class Game002PixiAdapter implements SlotGameAdapter {
           });
     const transformPayloads = new Map(
       plan.operations
-        .filter((operation) => operation.kind === "slot:settled-transform")
+        .filter(
+          (operation) =>
+            operation.effect === "state-mutation" &&
+            (
+              operation.payload as {
+                readonly step?: SlotRoundSettledTransformStepPlan;
+              }
+            ).step?.kind === "settled-transform",
+        )
         .map((operation) => {
           const step = (
             operation.payload as {
@@ -558,26 +570,24 @@ class Game002PixiAdapter implements SlotGameAdapter {
       betAmountRaw,
       winAmountRaw: freeGamePlan ? 0 : winAmountRaw,
     });
-    const operationPlan = attachGame002TransformOperationPayloads({
+    const completePlan = compileGame002OperationPlanV2({
       plan,
       payloads: transformPayloads,
       symbolCodes,
+      ...(freeGamePlan
+        ? {
+            freeGamePlan,
+            betAmountRaw,
+            winAmountRaw,
+            freeGameSymbolCodes: {
+              AF: requireGame002SymbolCode(runtime, "AF"),
+              CN: cnSymbolCode,
+              CO: coSymbolCode,
+              BN: bnSymbolCode,
+            },
+          }
+        : {}),
     });
-    const completePlan = freeGamePlan
-      ? appendGame002FreeGameOperation({
-          base: operationPlan,
-          freeGamePlan,
-          symbolCodes,
-          betAmountRaw,
-          winAmountRaw,
-          freeGameSymbolCodes: {
-            AF: requireGame002SymbolCode(runtime, "AF"),
-            CN: cnSymbolCode,
-            CO: coSymbolCode,
-            BN: bnSymbolCode,
-          },
-        })
-      : operationPlan;
     return coordinator.start(completePlan);
   }
 
@@ -725,14 +735,26 @@ class Game002PixiAdapter implements SlotGameAdapter {
   }
 }
 
-function attachGame002TransformOperationPayloads(options: {
-  readonly plan: SlotOperationPlanV1;
+export function compileGame002OperationPlanV2(options: {
+  readonly plan: SlotOperationPlanV2;
   readonly payloads: ReadonlyMap<number, Game002TransformOperationPayload>;
   readonly symbolCodes: Readonly<Record<string, number>>;
-}): SlotOperationPlanV1 {
+  readonly freeGamePlan?: Game002FreeGamePlan;
+  readonly betAmountRaw?: number;
+  readonly winAmountRaw?: number;
+  readonly freeGameSymbolCodes?: Game002FreeGameOperationPayload["symbolCodes"];
+}): SlotOperationPlanV2 {
   let transformCount = 0;
   const expanded = options.plan.operations.flatMap((operation) => {
-    if (operation.kind !== "slot:settled-transform") return operation;
+    if (
+      operation.effect !== "state-mutation" ||
+      (
+        operation.payload as {
+          readonly step?: SlotRoundSettledTransformStepPlan;
+        }
+      ).step?.kind !== "settled-transform"
+    )
+      return operation;
     transformCount += 1;
     const step = (
       operation.payload as { readonly step?: SlotRoundSettledTransformStepPlan }
@@ -757,29 +779,129 @@ function attachGame002TransformOperationPayloads(options: {
     throw new Error(
       "game002 transform operation payload count does not match the plan.",
     );
-  const operations = expanded.map((operation, operationIndex) => ({
-    ...operation,
-    operationIndex,
-  }));
-  const plan = freezeSlotOperationPlan({
-    ...options.plan,
-    operations,
-    requiredCapabilities: Object.freeze([
-      ...new Set(operations.flatMap((item) => item.requiredCapabilities)),
+  if (options.freeGamePlan) {
+    if (
+      options.betAmountRaw === undefined ||
+      options.winAmountRaw === undefined ||
+      !options.freeGameSymbolCodes
+    )
+      throw new Error("game002 FreeGame operation inputs are incomplete.");
+    const input = expanded.reduceRight<SlotOperationSnapshot | null>(
+      (snapshot, operation) =>
+        snapshot ??
+        (operation.effect === "presentation" ? null : operation.output),
+      null,
+    );
+    if (!input)
+      throw new Error(
+        "game002 FreeGame operation requires an established scene.",
+      );
+    const output = game002FreeGameFinalSnapshot(
+      options.freeGamePlan,
+      options.symbolCodes,
+    );
+    expanded.push({
+      id: "game002:freegame:0",
+      kind: "game002:freegame",
+      version: 2,
+      effect: "state-mutation",
+      operationIndex: expanded.length,
+      source: Object.freeze({
+        kind: "server-component" as const,
+        stepIndex: options.freeGamePlan.triggerStepIndex,
+        bindings: Object.freeze({}),
+      }),
+      input,
+      output,
+      mutations: deriveSlotStateMutations(input, output),
+      payload: Object.freeze({
+        plan: options.freeGamePlan,
+        betAmountRaw: options.betAmountRaw,
+        winAmountRaw: options.winAmountRaw,
+        symbolCodes: options.freeGameSymbolCodes,
+      } satisfies Game002FreeGameOperationPayload),
+      requiredCapabilities: Object.freeze(["game002:freegame"]),
+      commit: "atomic",
+    });
+  }
+  return finalizeGame002Operations(expanded, options.symbolCodes);
+}
+
+function finalizeGame002Operations(
+  operations: readonly SlotOperationV2[],
+  symbolCodes: Readonly<Record<string, number>>,
+): SlotOperationPlanV2 {
+  const builtins = createBuiltinSlotOperationDefinitionsV2();
+  const definitions = new Map<string, SlotOperationDefinitionV2>(
+    builtins.map((definition) => [
+      `${definition.kind}@${definition.version}`,
+      definition,
     ]),
-  });
-  validateSlotOperationPlan(plan, {
-    symbolCodes: options.symbolCodes,
+  );
+  for (const operation of operations) {
+    const key = `${operation.kind}@${operation.version}`;
+    const existing = definitions.get(key);
+    if (existing) {
+      if (existing.effect !== operation.effect)
+        throw new Error(`${key} changes effect within one game002 plan.`);
+      continue;
+    }
+    definitions.set(
+      key,
+      Object.freeze({
+        kind: operation.kind,
+        version: operation.version,
+        effect: operation.effect,
+        requiredCapabilities: operation.requiredCapabilities,
+        ...(operation.effect === "scene-landing"
+          ? {}
+          : { requiresEstablishedScene: true }),
+      }),
+    );
+  }
+  return finalizeSlotOperationPlanV2({
+    drafts: operations.map(operationToDraft),
+    definitions: [...definitions.values()],
+    symbolCodes,
     columns: GAME002_REEL_COUNT,
     rows: GAME002_VISIBLE_ROWS,
   });
-  return plan;
+}
+
+function operationToDraft(operation: SlotOperationV2): SlotOperationDraftV2 {
+  const common = {
+    kind: operation.kind,
+    version: operation.version,
+    source: operation.source,
+    payload: operation.payload,
+    businessKey: operation.id,
+  };
+  switch (operation.effect) {
+    case "scene-landing":
+      return { ...common, effect: operation.effect, output: operation.output };
+    case "presentation":
+      return {
+        ...common,
+        effect: operation.effect,
+        ...(operation.targets === undefined
+          ? {}
+          : { targets: operation.targets }),
+      };
+    case "state-mutation":
+      return {
+        ...common,
+        effect: operation.effect,
+        input: operation.input,
+        output: operation.output,
+        mutations: operation.mutations,
+      };
+  }
 }
 
 function createGame002TransformOperationRegistrations(
   target: Game002RoundTarget,
 ) {
-  const requirePayload = (operation: SlotOperationBase) => {
+  const requirePayload = (operation: SlotOperationV2) => {
     const payload = operation.payload as {
       readonly step?: SlotRoundSettledTransformStepPlan;
       readonly transform?: Game002TransformOperationPayload;
@@ -799,7 +921,7 @@ function createGame002TransformOperationRegistrations(
       phase: payload.phase,
     };
   };
-  const handler: SlotOperationHandler<SlotOperationBase, SlotOperationBase> = {
+  const handler: SlotOperationHandler<SlotOperationV2, SlotOperationV2> = {
     preflight: (operation) => {
       requirePayload(operation);
     },
@@ -823,14 +945,24 @@ function createGame002TransformOperationRegistrations(
     rollback: () => target.cleanup(),
     destroy: () => undefined,
   };
-  return GAME002_TRANSFORM_PHASES.map((phase) =>
+  return [
+    ...GAME002_TRANSFORM_PHASES.map((phase) =>
+      Object.freeze({
+        kind: `game002:${phase}`,
+        version: 2,
+        effect: "state-mutation" as const,
+        requiredCapabilities: new Set([`game002:${phase}`]),
+        handler,
+      }),
+    ),
     Object.freeze({
-      kind: `game002:${phase}`,
-      version: 1,
-      requiredCapabilities: new Set([`game002:${phase}`]),
+      kind: "game002:wild-multiplier-presentation",
+      version: 2,
+      effect: "presentation" as const,
+      requiredCapabilities: new Set(["game002:wild-multiplier-presentation"]),
       handler,
     }),
-  );
+  ];
 }
 
 interface Game002FreeGameOperationPayload {
@@ -863,11 +995,11 @@ const GAME002_TRANSFORM_PHASES: readonly Game002TransformPhase[] = [
 ];
 
 export function expandGame002TransformOperation(options: {
-  readonly operation: SlotOperationBase;
+  readonly operation: SlotStateMutationOperation;
   readonly step: SlotRoundSettledTransformStepPlan;
   readonly transform: Game002TransformOperationPayload;
   readonly symbolCodes: Readonly<Record<string, number>>;
-}): readonly SlotOperationBase[] {
+}): readonly SlotOperationV2[] {
   const { operation, step, transform } = options;
   const wlCode = options.symbolCodes.WL!;
   const wmCode = options.symbolCodes.WM!;
@@ -877,17 +1009,36 @@ export function expandGame002TransformOperation(options: {
     Object.entries(options.symbolCodes).map(([name, code]) => [code, name]),
   );
   let current = operation.input;
-  const phases: SlotOperationBase[] = [];
+  const phases: SlotOperationV2[] = [];
   const append = (
     phase: Game002TransformPhase,
     output: SlotOperationSnapshot,
   ) => {
+    if (JSON.stringify(current) === JSON.stringify(output)) {
+      if (phase !== "wild-multiplier")
+        throw new Error(`game002:${phase} unexpectedly produced no mutation.`);
+      phases.push({
+        id: `${operation.id}:${phase}:presentation`,
+        kind: `game002:${phase}-presentation`,
+        version: 2,
+        operationIndex: operation.operationIndex,
+        source: operation.source,
+        effect: "presentation",
+        payload: Object.freeze({ step, transform, phase }),
+        requiredCapabilities: Object.freeze([`game002:${phase}-presentation`]),
+        commit: "atomic",
+      });
+      return;
+    }
     phases.push({
       ...operation,
       id: `${operation.id}:${phase}`,
       kind: `game002:${phase}`,
+      version: 2,
+      effect: "state-mutation",
       input: current,
       output,
+      mutations: deriveSlotStateMutations(current, output),
       payload: Object.freeze({ step, transform, phase }),
       requiredCapabilities: Object.freeze([`game002:${phase}`]),
     });
@@ -1033,57 +1184,6 @@ function applyGame002AtomicChanges(
   });
 }
 
-function appendGame002FreeGameOperation(options: {
-  readonly base: SlotOperationPlanV1;
-  readonly freeGamePlan: Game002FreeGamePlan;
-  readonly symbolCodes: Readonly<Record<string, number>>;
-  readonly betAmountRaw: number;
-  readonly winAmountRaw: number;
-  readonly freeGameSymbolCodes: Game002FreeGameOperationPayload["symbolCodes"];
-}): SlotOperationPlanV1 {
-  const output = game002FreeGameFinalSnapshot(
-    options.freeGamePlan,
-    options.symbolCodes,
-  );
-  const operation: SlotOperationBase = {
-    id: "game002:freegame:0",
-    kind: "game002:freegame",
-    version: 1,
-    operationIndex: options.base.operations.length,
-    source: Object.freeze({
-      kind: "server-component" as const,
-      stepIndex: options.freeGamePlan.triggerStepIndex,
-      bindings: Object.freeze({}),
-    }),
-    input: options.base.final,
-    output,
-    payload: Object.freeze({
-      plan: options.freeGamePlan,
-      betAmountRaw: options.betAmountRaw,
-      winAmountRaw: options.winAmountRaw,
-      symbolCodes: options.freeGameSymbolCodes,
-    } satisfies Game002FreeGameOperationPayload),
-    requiredCapabilities: Object.freeze(["game002:freegame"]),
-    commit: "atomic",
-  };
-  const plan = freezeSlotOperationPlan({
-    kind: "slot-operation-plan" as const,
-    version: 1 as const,
-    initial: options.base.initial,
-    operations: Object.freeze([...options.base.operations, operation]),
-    final: output,
-    requiredCapabilities: Object.freeze([
-      ...new Set([...options.base.requiredCapabilities, "game002:freegame"]),
-    ]),
-  });
-  validateSlotOperationPlan(plan, {
-    symbolCodes: options.symbolCodes,
-    columns: GAME002_REEL_COUNT,
-    rows: GAME002_VISIBLE_ROWS,
-  });
-  return plan;
-}
-
 function game002FreeGameFinalSnapshot(
   plan: Game002FreeGamePlan,
   symbolCodes: Readonly<Record<string, number>>,
@@ -1127,7 +1227,7 @@ function createGame002FreeGameOperationRegistration(options: {
     failure: Error | null;
   }
   const createPlayback = (
-    operation: SlotOperationBase,
+    operation: SlotOperationV2,
   ): Game002FreeGamePlayback => {
     const payload = operation.payload as Game002FreeGameOperationPayload;
     if (!payload?.plan || !payload.symbolCodes)
@@ -1143,7 +1243,7 @@ function createGame002FreeGameOperationRegistration(options: {
       symbolCodes: payload.symbolCodes,
     });
   };
-  const handler: SlotOperationHandler<SlotOperationBase, Prepared> = {
+  const handler: SlotOperationHandler<SlotOperationV2, Prepared> = {
     preflight: (operation) => createPlayback(operation).preflight(),
     prepare: (operation) => ({
       playback: createPlayback(operation),
@@ -1171,7 +1271,8 @@ function createGame002FreeGameOperationRegistration(options: {
   };
   return Object.freeze({
     kind: "game002:freegame",
-    version: 1,
+    version: 2,
+    effect: "state-mutation" as const,
     requiredCapabilities: new Set(["game002:freegame"]),
     handler,
   });
@@ -2350,14 +2451,18 @@ export class Game002RoundTarget {
 }
 
 function assertGame002PlanMatchesSequence(
-  plan: SlotOperationPlanV1,
+  plan: SlotOperationPlanV2,
   sequence: Game002CascadeSequence,
 ): void {
-  if (!sceneEquals(plan.initial.scene, sequence.initial.spinScene))
+  const initial = plan.operations.find(
+    (operation) => operation.effect === "scene-landing",
+  );
+  if (!initial) throw new Error("game002 operation plan has no scene landing.");
+  if (!sceneEquals(initial.output.scene, sequence.initial.spinScene))
     throw new Error(
       "game002 shared plan initial scene diverged from sequence.",
     );
-  if (!matrixEquals(plan.initial.values, sequence.initial.spinValues))
+  if (!matrixEquals(initial.output.values, sequence.initial.spinValues))
     throw new Error(
       "game002 shared plan initial values diverged from sequence.",
     );
@@ -2421,7 +2526,7 @@ function assertGame002PlanMatchesSequence(
 }
 
 function assertGame002WinPlanMatchesStage(
-  plan: SlotOperationPlanV1,
+  plan: SlotOperationPlanV2,
   stage: Game002WinRemoveStage | undefined,
   stepIndex: number,
 ): void {
@@ -2462,7 +2567,7 @@ function assertGame002WinPlanMatchesStage(
 }
 
 function getProfileSteps<Step>(
-  plan: SlotOperationPlanV1,
+  plan: SlotOperationPlanV2,
   operationKind: string,
 ): readonly Step[] {
   return plan.operations

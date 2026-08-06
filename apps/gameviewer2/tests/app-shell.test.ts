@@ -184,6 +184,9 @@ describe("gameviewer2 app shell", () => {
     const settled = root.querySelector<HTMLElement>(
       '[data-snapshot][data-index="2"]',
     )!;
+    settled
+      .querySelectorAll<HTMLInputElement>('[data-edit="other"]')
+      .forEach((input) => change(input, "8"));
     change(
       settled.querySelector<HTMLSelectElement>(
         '[data-edit="cell-choreography"]',
@@ -225,8 +228,11 @@ describe("gameviewer2 app shell", () => {
       root.querySelector<HTMLTextAreaElement>(
         '[data-edit="operation-payload"]',
       )!.value,
-    ).toContain('"output"');
+    ).toBe("{}");
     click(root, "tab-scenes");
+    expect(
+      root.querySelector<HTMLButtonElement>('[data-action="export"]')!.disabled,
+    ).toBe(false);
     click(root, "export");
     expect(mocks.download).toHaveBeenCalledOnce();
     click(root, "preview");
@@ -249,9 +255,7 @@ describe("gameviewer2 app shell", () => {
     });
     input.dispatchEvent(new Event("change"));
     await vi.waitFor(() =>
-      expect(root.textContent).toContain(
-        "升级 v2 项目前必须先导入其 layout ZIP",
-      ),
+      expect(root.textContent).toContain("升级旧项目前必须先导入其 layout ZIP"),
     );
   });
 });

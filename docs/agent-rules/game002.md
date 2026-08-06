@@ -68,7 +68,7 @@
 
 ## FreeGame
 
-- 同一 server response 的 BaseGame 与 FreeGame 必须属于同一 `SlotOperationPlanV1` 和同一
+- 同一 server response 的 BaseGame 与 FreeGame 必须属于同一 `SlotOperationPlanV2` 和同一
   coordinator execution。不得在 BaseGame completion Promise 后再启动第二份 round plan；
   FreeGame operation payload 必须在首次 mutation 前完成 scene/value/component preflight。
 

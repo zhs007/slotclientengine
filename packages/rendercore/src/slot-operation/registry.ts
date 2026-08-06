@@ -17,6 +17,12 @@ class DefaultSlotOperationHandlerRegistry implements SlotOperationHandlerRegistr
       throw new Error(`Duplicate slot operation handler ${key}.`);
     if (!(registration.requiredCapabilities instanceof Set))
       throw new Error(`${key} requiredCapabilities must be a Set.`);
+    if (
+      registration.effect !== "scene-landing" &&
+      registration.effect !== "presentation" &&
+      registration.effect !== "state-mutation"
+    )
+      throw new Error(`${key} effect is invalid.`);
     this.#registrations.set(key, registration);
   }
 

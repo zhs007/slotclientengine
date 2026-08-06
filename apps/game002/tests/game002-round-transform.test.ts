@@ -3,6 +3,7 @@ import type {
   SlotRoundOccurrenceSnapshot,
   SlotRoundSettledTransformStepPlan,
 } from "@slotclientengine/gameframeworks";
+import { deriveSlotStateMutations } from "@slotclientengine/gameframeworks";
 import type { SymbolCascadePlayer } from "@slotclientengine/rendercore";
 import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-amount";
 import {
@@ -38,16 +39,17 @@ describe("Game002RoundTarget multiplier transform", () => {
       symbolCodes: symbolCodes(),
     });
     expect(phases.map((item) => item.kind)).toEqual([
-      "game002:wild-multiplier",
+      "game002:wild-multiplier-presentation",
       "game002:wm-to-cn",
       "game002:coin-multiplier",
       "game002:cm-to-cn",
     ]);
-    expect(phases.at(-1)!.output).toEqual(step.output);
-    phases
+    const mutations = phases.filter((item) => item.effect === "state-mutation");
+    expect(mutations.at(-1)!.output).toEqual(step.output);
+    mutations
       .slice(1)
       .forEach((item, index) =>
-        expect(item.input).toEqual(phases[index]!.output),
+        expect(item.input).toEqual(mutations[index]!.output),
       );
 
     const wlScene = createScene(1);
@@ -587,8 +589,9 @@ class TransformRuntime {
 function transformOperation(step: SlotRoundSettledTransformStepPlan) {
   return {
     id: "transform:1",
-    kind: "slot:settled-transform",
-    version: 1,
+    kind: "slot:state-mutation",
+    version: 2,
+    effect: "state-mutation" as const,
     operationIndex: 0,
     source: {
       kind: "server-component" as const,
@@ -597,8 +600,9 @@ function transformOperation(step: SlotRoundSettledTransformStepPlan) {
     },
     input: step.input,
     output: step.output,
+    mutations: deriveSlotStateMutations(step.input, step.output),
     payload: { step },
-    requiredCapabilities: ["slot:settled-transform"],
+    requiredCapabilities: ["slot:state-mutation"],
     commit: "atomic" as const,
   };
 }

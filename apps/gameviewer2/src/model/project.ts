@@ -4,7 +4,7 @@ import {
 } from "@slotclientengine/rendercore/scene-layout";
 import {
   parseSlotOperationAuthoringProject,
-  type SlotOperationAuthoringProjectV1,
+  type SlotOperationAuthoringProjectV2,
 } from "@slotclientengine/slotoperationauthoring";
 
 export interface GameViewer2ProjectFileV2 {
@@ -19,16 +19,24 @@ export interface GameViewer2ProjectFileV3 {
   readonly version: 3;
   readonly layoutSha256: string;
   readonly flow: SceneOtherSceneFlowProjectV2;
-  readonly operations: SlotOperationAuthoringProjectV1;
+  readonly operations: unknown;
+}
+
+export interface GameViewer2ProjectFileV4 {
+  readonly kind: "gameviewer2-project";
+  readonly version: 4;
+  readonly layoutSha256: string;
+  readonly flow: SceneOtherSceneFlowProjectV2;
+  readonly operations: SlotOperationAuthoringProjectV2;
 }
 
 export function parseGameViewer2ProjectFile(
   input: unknown,
-): GameViewer2ProjectFileV3 {
+): GameViewer2ProjectFileV4 {
   const record = projectRecord(input);
-  if (record.kind !== "gameviewer2-project" || record.version !== 3)
+  if (record.kind !== "gameviewer2-project" || record.version !== 4)
     throw new Error(
-      "不是 Game Viewer 2 v3 项目文件；v2 必须通过显式升级后才能预览。",
+      "不是 Game Viewer 2 v4 项目文件；旧项目必须显式升级并审阅 effect。",
     );
   rejectUnknown(record, [
     "kind",
@@ -39,10 +47,32 @@ export function parseGameViewer2ProjectFile(
   ]);
   return Object.freeze({
     kind: "gameviewer2-project",
-    version: 3,
+    version: 4,
     layoutSha256: parseHash(record.layoutSha256),
     flow: parseSceneOtherSceneFlowProject(record.flow),
     operations: parseSlotOperationAuthoringProject(record.operations),
+  });
+}
+
+export function parseGameViewer2ProjectFileV3(
+  input: unknown,
+): GameViewer2ProjectFileV3 {
+  const record = projectRecord(input);
+  rejectUnknown(record, [
+    "kind",
+    "version",
+    "layoutSha256",
+    "flow",
+    "operations",
+  ]);
+  if (record.kind !== "gameviewer2-project" || record.version !== 3)
+    throw new Error("不是 Game Viewer 2 v3 项目文件。");
+  return Object.freeze({
+    kind: "gameviewer2-project",
+    version: 3,
+    layoutSha256: parseHash(record.layoutSha256),
+    flow: parseSceneOtherSceneFlowProject(record.flow),
+    operations: record.operations,
   });
 }
 
@@ -67,14 +97,14 @@ export function cloneFlowProject(
   return structuredClone(project);
 }
 
-export function downloadProject(project: GameViewer2ProjectFileV3): void {
+export function downloadProject(project: GameViewer2ProjectFileV4): void {
   const blob = new Blob([`${JSON.stringify(project, null, 2)}\n`], {
     type: "application/json",
   });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = "gameviewer2-project-v3.json";
+  anchor.download = "gameviewer2-project-v4.json";
   anchor.click();
   URL.revokeObjectURL(url);
 }

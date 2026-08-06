@@ -1,7 +1,7 @@
 import {
   toSlotOperationKey,
-  type SlotOperationBase,
-  type SlotOperationPlanV1,
+  type SlotOperationPlanV2,
+  type SlotOperationV2,
 } from "@slotclientengine/logiccore";
 import type {
   SlotOperationCleanupReason,
@@ -14,7 +14,7 @@ import type {
 } from "./types.js";
 
 interface ActivePreparedOperation {
-  readonly operation: SlotOperationBase;
+  readonly operation: SlotOperationV2;
   readonly registration: SlotOperationHandlerRegistration;
   readonly handler: SlotOperationHandler;
   readonly prepared: unknown;
@@ -31,7 +31,7 @@ export function createSlotOperationCoordinator(
 class DefaultSlotOperationCoordinator implements SlotOperationCoordinator {
   readonly #options: SlotOperationCoordinatorOptions;
   #phase: SlotOperationCoordinatorPhase = "idle";
-  #plan: SlotOperationPlanV1 | null = null;
+  #plan: SlotOperationPlanV2 | null = null;
   #cursor = 0;
   #active: ActivePreparedOperation | null = null;
   #resolve: (() => void) | null = null;
@@ -41,7 +41,7 @@ class DefaultSlotOperationCoordinator implements SlotOperationCoordinator {
     this.#options = options;
   }
 
-  start(plan: SlotOperationPlanV1): Promise<void> {
+  start(plan: SlotOperationPlanV2): Promise<void> {
     try {
       if (this.#phase === "destroyed")
         throw new Error("Slot operation coordinator is destroyed.");
@@ -80,7 +80,11 @@ class DefaultSlotOperationCoordinator implements SlotOperationCoordinator {
         return;
       active.handler.commit(active.prepared);
       active.committed = true;
-      this.#options.assertSnapshot?.(active.operation.output, active.operation);
+      if (active.operation.effect !== "presentation")
+        this.#options.assertSnapshot?.(
+          active.operation.output,
+          active.operation,
+        );
       this.destroyPrepared(active);
       this.#active = null;
       this.#cursor += 1;
@@ -150,14 +154,14 @@ class DefaultSlotOperationCoordinator implements SlotOperationCoordinator {
     if (cleanupError) throw cleanupError;
   }
 
-  private preflight(plan: SlotOperationPlanV1): void {
+  private preflight(plan: SlotOperationPlanV2): void {
     if (
       plan.kind !== "slot-operation-plan" ||
-      plan.version !== 1 ||
+      plan.version !== 2 ||
       !Object.isFrozen(plan)
     )
       throw new Error(
-        "Slot operation coordinator requires an immutable V1 plan.",
+        "Slot operation coordinator requires an immutable V2 plan.",
       );
     for (const operation of plan.operations) {
       const key = toSlotOperationKey(operation.kind, operation.version);
@@ -167,6 +171,10 @@ class DefaultSlotOperationCoordinator implements SlotOperationCoordinator {
       );
       if (!registration)
         throw new Error(`Missing slot operation handler ${key}.`);
+      if (registration.effect !== operation.effect)
+        throw new Error(
+          `${key} handler effect ${registration.effect} does not match operation effect ${operation.effect}.`,
+        );
       for (const capability of operation.requiredCapabilities)
         if (!registration.requiredCapabilities.has(capability))
           throw new Error(

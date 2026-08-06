@@ -2,7 +2,10 @@ export {
   finalizeSlotOperationAuthoringDraft,
   finalizeSlotOperationAuthoringProject,
 } from "./finalizer.js";
-export { parseSlotOperationAuthoringProject } from "./project.js";
+export {
+  parseSlotOperationAuthoringProject,
+  upgradeSlotOperationAuthoringProjectV1,
+} from "./project.js";
 export {
   suggestDropdownMovements,
   suggestOccurrenceRelocations,
@@ -13,3 +16,4 @@ export {
   suggestValueUpdates,
 } from "./suggestions.js";
 export type * from "./types.js";
+export { deriveSlotStateMutations } from "@slotclientengine/logiccore";

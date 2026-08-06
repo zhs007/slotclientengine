@@ -1,7 +1,6 @@
 # 可扩展 Slot Operation Plan 设计
 
-> 状态：Task 173 代码重构已实施，浏览器人工验收待执行；本文是
-> `SlotOperationPlanV1` 的目标架构合同。
+> 状态：历史合同（Task 173）；已由 Task 178 的 `SlotOperationPlanV2` 取代，不是当前 API。
 > `logiccore` 负责可信 IR/finalize，`rendercore` 负责实例级 registry/coordinator，
 > 本地 snapshot 推导只存在于 `@slotclientengine/slotoperationauthoring`。
 

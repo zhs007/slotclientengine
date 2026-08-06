@@ -1,10 +1,12 @@
 # Slot Operation Effect Model 与游戏显式编排重构
 
-> 状态：下一阶段设计提案，尚未实施。
+> 状态：Task 178 的 V2 runtime、consumer 与 authoring 切换已实施；本文是当前
+> `SlotOperationPlanV2` 架构合同。配置型 consumer 暂时仍通过
+> `compileConfiguredSlotRoundOperationPlanV2()` 生成 V2 trace，后续必须把这段固定排列下沉到
+> consumer，不能把它扩展成新的 shared 业务编排层。
 >
-> 本文建立在 `SlotOperationPlanV1` 已落地的基础上，描述下一次破坏性重构的目标。
-> V1 继续以 `docs/slot-operation-plan.md` 为当前合同；本文提议的新结构暂称
-> `SlotOperationPlanV2`，不得在消费者迁移完成前以兼容 alias 静默替换 V1。
+> V1 public/runtime 路径已删除；历史设计只保留在 `docs/slot-operation-plan.md`，不得恢复
+> compatibility alias 或双轨执行。
 
 ## 结论
 

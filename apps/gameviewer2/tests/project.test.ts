@@ -68,7 +68,7 @@ const snapshot = {
 } as const;
 const operations = {
   kind: "slot-operation-authoring-project",
-  version: 1,
+  version: 2,
   snapshots: [
     { id: "s1", snapshot },
     {
@@ -86,9 +86,9 @@ const operations = {
       review: "complete",
       drafts: [
         {
-          id: "edge",
+          effect: "scene-landing",
           kind: "slot:spin",
-          version: 1,
+          version: 2,
           source: {
             kind: "snapshot-authored",
             inputSnapshotId: "s1",
@@ -96,7 +96,12 @@ const operations = {
             suggestions: [],
             edits: [],
           },
-          payload: { output: snapshot },
+          output: {
+            ...snapshot,
+            occurrences: [{ ...snapshot.occurrences[0], id: "s2:0:0" }],
+          },
+          payload: {},
+          businessKey: "s1:s2",
         },
       ],
     },
@@ -107,7 +112,7 @@ describe("gameviewer2 project boundaries", () => {
   it("strictly parses project metadata and local flow", () => {
     const parsed = parseGameViewer2ProjectFile({
       kind: "gameviewer2-project",
-      version: 3,
+      version: 4,
       layoutSha256: "a".repeat(64),
       flow,
       operations,
@@ -122,7 +127,7 @@ describe("gameviewer2 project boundaries", () => {
     expect(
       parseLaunchPayload({
         kind: "gameviewer2-launch",
-        version: 3,
+        version: 4,
         layoutSha256: "b".repeat(64),
         layoutZip: new ArrayBuffer(2),
         project: flow,
@@ -130,7 +135,7 @@ describe("gameviewer2 project boundaries", () => {
       }).layoutZip.byteLength,
     ).toBe(2);
     expect(() =>
-      parseLaunchPayload({ kind: "gameviewer2-launch", version: 3 }),
+      parseLaunchPayload({ kind: "gameviewer2-launch", version: 4 }),
     ).toThrow(/ZIP/);
     expect(() =>
       parseGameViewer2ProjectFile({
@@ -139,6 +144,6 @@ describe("gameviewer2 project boundaries", () => {
         layoutSha256: "a".repeat(64),
         flow,
       }),
-    ).toThrow(/v3/);
+    ).toThrow(/v4/);
   });
 });

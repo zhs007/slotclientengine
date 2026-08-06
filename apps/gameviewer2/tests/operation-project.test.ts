@@ -26,9 +26,9 @@ describe("gameviewer2 operation project", () => {
     expect(
       project.edges.map((edge) => edge.drafts.map((draft) => draft.kind)),
     ).toEqual([
-      ["slot:spin"],
-      ["slot:replace-occurrences"],
-      ["slot:update-values"],
+      ["slot:scene-landing", "slot:spin"],
+      ["slot:state-mutation"],
+      ["slot:state-mutation"],
     ]);
     const plan = finalizeSlotOperationAuthoringProject({
       project,
@@ -56,7 +56,7 @@ describe("gameviewer2 operation project", () => {
     ).toThrow(/requires review/);
   });
 
-  it("marks manual payload edits pending and only accepts exact edge closure", () => {
+  it("marks manual payload metadata edits pending without changing effect closure", () => {
     const project = createGameViewer2OperationProject({
       summary: summary as never,
       review: "complete",
@@ -66,16 +66,15 @@ describe("gameviewer2 operation project", () => {
       project,
       edgeIndex: 1,
       draftIndex: 0,
-      payload: { replacements: [] },
+      payload: { note: "reviewed" },
     });
     expect(invalid.edges[1]!.review).toBe("required");
-    expect(() =>
-      acceptGameViewer2OperationEdge({
-        project: invalid,
-        edgeIndex: 1,
-        summary: summary as never,
-      }),
-    ).toThrow(/must not be empty/);
+    const acceptedMetadata = acceptGameViewer2OperationEdge({
+      project: invalid,
+      edgeIndex: 1,
+      summary: summary as never,
+    });
+    expect(acceptedMetadata.edges[1]!.review).toBe("complete");
 
     const accepted = acceptGameViewer2OperationEdge({
       project,

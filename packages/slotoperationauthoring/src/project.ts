@@ -1,17 +1,17 @@
 import {
   assertPlainData,
-  type SlotOperationDraft,
+  type SlotOperationDraftV2,
   type SlotOperationSnapshot,
 } from "@slotclientengine/logiccore";
 import type {
   SlotOperationAuthoringEdge,
-  SlotOperationAuthoringProjectV1,
+  SlotOperationAuthoringProjectV2,
   SlotOperationAuthoringSnapshot,
 } from "./types.js";
 
 export function parseSlotOperationAuthoringProject(
   value: unknown,
-): SlotOperationAuthoringProjectV1 {
+): SlotOperationAuthoringProjectV2 {
   assertPlainData(value, "project");
   const root = strictRecord(value, "project", [
     "kind",
@@ -19,8 +19,8 @@ export function parseSlotOperationAuthoringProject(
     "snapshots",
     "edges",
   ]);
-  if (root.kind !== "slot-operation-authoring-project" || root.version !== 1)
-    throw new Error("project must be slot-operation-authoring-project V1.");
+  if (root.kind !== "slot-operation-authoring-project" || root.version !== 2)
+    throw new Error("project must be slot-operation-authoring-project V2.");
   if (!Array.isArray(root.snapshots) || root.snapshots.length < 2)
     throw new Error("project.snapshots must contain at least two items.");
   const ids = new Set<string>();
@@ -65,22 +65,80 @@ export function parseSlotOperationAuthoringProject(
       throw new Error(
         `project.edges[${index}] must connect adjacent snapshots.`,
       );
-    if (!Array.isArray(record.drafts) || record.drafts.length === 0)
-      throw new Error(`project.edges[${index}].drafts must not be empty.`);
+    if (!Array.isArray(record.drafts))
+      throw new Error(`project.edges[${index}].drafts must be an array.`);
     if (record.review !== "required" && record.review !== "complete")
       throw new Error(`project.edges[${index}].review is invalid.`);
     return Object.freeze({
       inputSnapshotId,
       outputSnapshotId,
-      drafts: Object.freeze(record.drafts as SlotOperationDraft[]),
+      drafts: Object.freeze(record.drafts as SlotOperationDraftV2[]),
       review: record.review,
     });
   });
   return deepFreeze({
     kind: "slot-operation-authoring-project" as const,
-    version: 1 as const,
+    version: 2 as const,
     snapshots:
-      snapshots as unknown as SlotOperationAuthoringProjectV1["snapshots"],
+      snapshots as unknown as SlotOperationAuthoringProjectV2["snapshots"],
+    edges,
+  });
+}
+
+export function upgradeSlotOperationAuthoringProjectV1(
+  value: unknown,
+): SlotOperationAuthoringProjectV2 {
+  assertPlainData(value, "project");
+  const root = strictRecord(value, "project", [
+    "kind",
+    "version",
+    "snapshots",
+    "edges",
+  ]);
+  if (root.kind !== "slot-operation-authoring-project" || root.version !== 1)
+    throw new Error("project must be slot-operation-authoring-project V1.");
+  if (!Array.isArray(root.snapshots) || root.snapshots.length < 2)
+    throw new Error("project.snapshots must contain at least two items.");
+  const snapshots = root.snapshots.map((item, index) => {
+    const record = strictRecord(item, `project.snapshots[${index}]`, [
+      "id",
+      "snapshot",
+    ]);
+    return Object.freeze({
+      id: nonBlank(record.id, `project.snapshots[${index}].id`),
+      snapshot: record.snapshot as SlotOperationSnapshot,
+    });
+  });
+  if (!Array.isArray(root.edges) || root.edges.length !== snapshots.length - 1)
+    throw new Error(
+      "project.edges must contain exactly one edge per adjacent snapshot pair.",
+    );
+  const edges = root.edges.map((item, index) => {
+    const record = strictRecord(item, `project.edges[${index}]`, [
+      "inputSnapshotId",
+      "outputSnapshotId",
+      "drafts",
+      "review",
+    ]);
+    if (
+      record.inputSnapshotId !== snapshots[index]!.id ||
+      record.outputSnapshotId !== snapshots[index + 1]!.id
+    )
+      throw new Error(
+        `project.edges[${index}] must connect adjacent snapshots.`,
+      );
+    return Object.freeze({
+      inputSnapshotId: snapshots[index]!.id,
+      outputSnapshotId: snapshots[index + 1]!.id,
+      drafts: Object.freeze([]),
+      review: "required" as const,
+    });
+  });
+  return deepFreeze({
+    kind: "slot-operation-authoring-project" as const,
+    version: 2 as const,
+    snapshots:
+      snapshots as unknown as SlotOperationAuthoringProjectV2["snapshots"],
     edges,
   });
 }

@@ -1,9 +1,7 @@
 import { LogicParseError } from "../errors";
-import { cloneAndFreeze, isRecord } from "../validation";
+import { isRecord } from "../validation";
 import type {
-  SlotOperationBase,
   SlotOperationOccurrence,
-  SlotOperationPlanV1,
   SlotOperationPosition,
   SlotOperationSnapshot,
 } from "./types";
@@ -116,64 +114,6 @@ export function validateSlotOperationSnapshot(
   }
 }
 
-export function validateSlotOperationPlan(
-  plan: SlotOperationPlanV1,
-  options: {
-    readonly symbolCodes: Readonly<Record<string, number>>;
-    readonly columns: number;
-    readonly rows: number;
-  },
-): void {
-  if (plan.kind !== "slot-operation-plan" || plan.version !== 1)
-    throw new LogicParseError("slot operation plan must be V1.");
-  validateSlotOperationSnapshot(plan.initial, {
-    ...options,
-    path: "plan.initial",
-  });
-  const ids = new Set<string>();
-  let current = plan.initial;
-  const required = new Set<string>();
-  for (const [index, operation] of plan.operations.entries()) {
-    validateSlotOperation(operation, index, options);
-    if (operation.operationIndex !== index)
-      throw new LogicParseError(
-        `plan.operations[${index}].operationIndex must be ${index}.`,
-      );
-    if (ids.has(operation.id))
-      throw new LogicParseError(
-        `plan contains duplicate operation id "${operation.id}".`,
-      );
-    ids.add(operation.id);
-    if (!snapshotsEqual(current, operation.input))
-      throw new LogicParseError(
-        `plan.operations[${index}].input is not continuous.`,
-      );
-    current = operation.output;
-    for (const capability of operation.requiredCapabilities)
-      required.add(capability);
-  }
-  if (!snapshotsEqual(current, plan.final))
-    throw new LogicParseError(
-      "plan.final does not match the final operation output.",
-    );
-  if (
-    !stringArraysEqual(
-      [...required].sort(),
-      [...plan.requiredCapabilities].sort(),
-    )
-  )
-    throw new LogicParseError(
-      "plan.requiredCapabilities does not match operations.",
-    );
-}
-
-export function freezeSlotOperationPlan<T extends SlotOperationPlanV1>(
-  plan: T,
-): T {
-  assertPlainData(plan, "plan");
-  return cloneAndFreeze(plan);
-}
-
 export function assertPlainData(value: unknown, path: string): void {
   const active = new Set<object>();
   const visit = (candidate: unknown, candidatePath: string): void => {
@@ -215,52 +155,6 @@ export function assertPlainData(value: unknown, path: string): void {
   visit(value, path);
 }
 
-function validateSlotOperation(
-  operation: SlotOperationBase,
-  index: number,
-  options: {
-    readonly symbolCodes: Readonly<Record<string, number>>;
-    readonly columns: number;
-    readonly rows: number;
-  },
-): void {
-  const path = `plan.operations[${index}]`;
-  validateSlotOperationKindVersion(operation.kind, operation.version, path);
-  if (typeof operation.id !== "string" || !operation.id.trim())
-    throw new LogicParseError(`${path}.id must not be blank.`);
-  if (operation.commit !== "atomic")
-    throw new LogicParseError(`${path}.commit must be "atomic".`);
-  validateCapabilities(
-    operation.requiredCapabilities,
-    `${path}.requiredCapabilities`,
-  );
-  validateSlotOperationSnapshot(operation.input, {
-    ...options,
-    path: `${path}.input`,
-  });
-  validateSlotOperationSnapshot(operation.output, {
-    ...options,
-    path: `${path}.output`,
-  });
-  assertPlainData(operation.source, `${path}.source`);
-  assertPlainData(operation.payload, `${path}.payload`);
-}
-
-function validateCapabilities(values: readonly string[], path: string): void {
-  if (!Array.isArray(values))
-    throw new LogicParseError(`${path} must be an array.`);
-  const seen = new Set<string>();
-  for (const [index, value] of values.entries()) {
-    if (typeof value !== "string" || !KIND_PATTERN.test(value))
-      throw new LogicParseError(
-        `${path}[${index}] must be namespaced kebab-case.`,
-      );
-    if (seen.has(value))
-      throw new LogicParseError(`${path} contains duplicate "${value}".`);
-    seen.add(value);
-  }
-}
-
 function validatePosition(
   value: SlotOperationPosition,
   columns: number,
@@ -288,21 +182,4 @@ function validatePresentationValue(value: unknown, path: string): void {
 
 function positionKey(position: SlotOperationPosition): string {
   return `${position.x},${position.y}`;
-}
-
-function snapshotsEqual(
-  left: SlotOperationSnapshot,
-  right: SlotOperationSnapshot,
-): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function stringArraysEqual(
-  left: readonly string[],
-  right: readonly string[],
-): boolean {
-  return (
-    left.length === right.length &&
-    left.every((value, index) => value === right[index])
-  );
 }

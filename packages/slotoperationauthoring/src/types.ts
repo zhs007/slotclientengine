@@ -1,7 +1,7 @@
 import type {
   AuthoringEditEvidence,
   AuthoringSuggestionEvidence,
-  SlotOperationDraft,
+  SlotOperationDraftV2,
   SlotOperationPosition,
   SlotOperationSnapshot,
 } from "@slotclientengine/logiccore";
@@ -64,13 +64,13 @@ export interface SlotOperationAuthoringSnapshot {
 export interface SlotOperationAuthoringEdge {
   readonly inputSnapshotId: string;
   readonly outputSnapshotId: string;
-  readonly drafts: readonly SlotOperationDraft[];
+  readonly drafts: readonly SlotOperationDraftV2[];
   readonly review: "required" | "complete";
 }
 
-export interface SlotOperationAuthoringProjectV1 {
+export interface SlotOperationAuthoringProjectV2 {
   readonly kind: "slot-operation-authoring-project";
-  readonly version: 1;
+  readonly version: 2;
   readonly snapshots: readonly [
     SlotOperationAuthoringSnapshot,
     SlotOperationAuthoringSnapshot,

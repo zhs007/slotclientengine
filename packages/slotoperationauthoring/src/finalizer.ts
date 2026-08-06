@@ -1,25 +1,51 @@
 import {
-  createBuiltinSlotOperationDefinitions,
-  finalizeAuthoredSlotOperationPlan,
-  type SlotOperationDefinition,
-  type SlotOperationDraft,
-  type SlotOperationPlanV1,
+  createBuiltinSlotOperationDefinitionsV2,
+  finalizeSlotOperationPlanV2,
+  generateSceneLandingOperation,
+  type SlotOperationDefinitionV2,
+  type SlotOperationDraftV2,
+  type SlotOperationPlanV2,
   type SlotOperationSnapshot,
 } from "@slotclientengine/logiccore";
-import type { SlotOperationAuthoringProjectV1 } from "./types.js";
+import type { SlotOperationAuthoringProjectV2 } from "./types.js";
 
 export function finalizeSlotOperationAuthoringDraft(options: {
   readonly initial: SlotOperationSnapshot;
-  readonly drafts: readonly SlotOperationDraft[];
+  readonly drafts: readonly SlotOperationDraftV2[];
   readonly symbolCodes: Readonly<Record<string, number>>;
   readonly columns: number;
   readonly rows: number;
-  readonly definitions?: readonly SlotOperationDefinition[];
-}): SlotOperationPlanV1 {
-  return finalizeAuthoredSlotOperationPlan({
-    initial: options.initial,
-    drafts: options.drafts,
-    definitions: options.definitions ?? createBuiltinSlotOperationDefinitions(),
+  readonly definitions?: readonly SlotOperationDefinitionV2[];
+}): SlotOperationPlanV2 {
+  const source = {
+    kind: "snapshot-authored" as const,
+    inputSnapshotId: "initial",
+    outputSnapshotId: "initial",
+    suggestions: [
+      {
+        field: "effect",
+        status: "exact" as const,
+        candidateCount: 1,
+        diagnostics: [],
+      },
+    ],
+    edits: [],
+  };
+  const drafts =
+    options.drafts[0]?.effect === "scene-landing"
+      ? options.drafts
+      : [
+          generateSceneLandingOperation({
+            source,
+            output: options.initial,
+            businessKey: "authoring-initial",
+          }),
+          ...options.drafts,
+        ];
+  return finalizeSlotOperationPlanV2({
+    drafts,
+    definitions:
+      options.definitions ?? createBuiltinSlotOperationDefinitionsV2(),
     symbolCodes: options.symbolCodes,
     columns: options.columns,
     rows: options.rows,
@@ -27,12 +53,12 @@ export function finalizeSlotOperationAuthoringDraft(options: {
 }
 
 export function finalizeSlotOperationAuthoringProject(options: {
-  readonly project: SlotOperationAuthoringProjectV1;
+  readonly project: SlotOperationAuthoringProjectV2;
   readonly symbolCodes: Readonly<Record<string, number>>;
   readonly columns: number;
   readonly rows: number;
-  readonly definitions?: readonly SlotOperationDefinition[];
-}): SlotOperationPlanV1 {
+  readonly definitions?: readonly SlotOperationDefinitionV2[];
+}): SlotOperationPlanV2 {
   const pending = options.project.edges.findIndex(
     (edge) => edge.review !== "complete",
   );

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  createBuiltinSlotOperationDefinitions,
-  finalizeAuthoredSlotOperationPlan,
+  createBuiltinSlotOperationDefinitionsV2,
+  finalizeSlotOperationPlanV2,
+  generateSceneLandingOperation,
   type SlotOperationSnapshot,
 } from "@slotclientengine/logiccore";
 import {
@@ -15,9 +16,10 @@ describe("slot operation coordinator", () => {
     const events: string[] = [];
     const registry = createSlotOperationHandlerRegistry();
     registry.register({
-      kind: "slot:win",
-      version: 1,
-      requiredCapabilities: new Set(["slot:win"]),
+      kind: "slot:scene-landing",
+      version: 2,
+      effect: "scene-landing" as const,
+      requiredCapabilities: new Set(["slot:scene-landing"]),
       handler: handler(events),
     });
     const coordinator = createSlotOperationCoordinator({
@@ -56,9 +58,10 @@ describe("slot operation coordinator", () => {
     const events: string[] = [];
     const registry = createSlotOperationHandlerRegistry();
     registry.register({
-      kind: "slot:win",
-      version: 1,
-      requiredCapabilities: new Set(["slot:win"]),
+      kind: "slot:scene-landing",
+      version: 2,
+      effect: "scene-landing",
+      requiredCapabilities: new Set(["slot:scene-landing"]),
       handler: handler(events, true),
     });
     const coordinator = createSlotOperationCoordinator({
@@ -95,9 +98,10 @@ describe("slot operation coordinator", () => {
     const events: string[] = [];
     const registry = createSlotOperationHandlerRegistry();
     registry.register({
-      kind: "slot:win",
-      version: 1,
-      requiredCapabilities: new Set(["slot:win"]),
+      kind: "slot:scene-landing",
+      version: 2,
+      effect: "scene-landing",
+      requiredCapabilities: new Set(["slot:scene-landing"]),
       handler: {
         ...handler(events),
         prepare: () => {
@@ -122,9 +126,10 @@ describe("slot operation coordinator", () => {
   it("normalizes non-Error handler failures", async () => {
     const registry = createSlotOperationHandlerRegistry();
     registry.register({
-      kind: "slot:win",
-      version: 1,
-      requiredCapabilities: new Set(["slot:win"]),
+      kind: "slot:scene-landing",
+      version: 2,
+      effect: "scene-landing",
+      requiredCapabilities: new Set(["slot:scene-landing"]),
       handler: {
         ...handler([]),
         prepare: () => {
@@ -142,8 +147,9 @@ describe("slot operation coordinator", () => {
   it("rejects capability mismatches and mutable plans before cleanup", async () => {
     const registry = createSlotOperationHandlerRegistry();
     registry.register({
-      kind: "slot:win",
-      version: 1,
+      kind: "slot:scene-landing",
+      version: 2,
+      effect: "scene-landing",
       requiredCapabilities: new Set(),
       handler: handler([]),
     });
@@ -155,7 +161,7 @@ describe("slot operation coordinator", () => {
       /missing required capability/,
     );
     await expect(coordinator.start({ ...plan() })).rejects.toThrow(
-      /immutable V1 plan/,
+      /immutable V2 plan/,
     );
   });
 
@@ -163,9 +169,10 @@ describe("slot operation coordinator", () => {
     const events: string[] = [];
     const registry = createSlotOperationHandlerRegistry();
     registry.register({
-      kind: "slot:win",
-      version: 1,
-      requiredCapabilities: new Set(["slot:win"]),
+      kind: "slot:scene-landing",
+      version: 2,
+      effect: "scene-landing",
+      requiredCapabilities: new Set(["slot:scene-landing"]),
       handler: { ...handler(events), update: () => ({ completed: false }) },
     });
     const coordinator = createSlotOperationCoordinator({
@@ -183,17 +190,18 @@ describe("slot operation coordinator", () => {
   it("enforces exact instance registry keys", () => {
     const registry = createSlotOperationHandlerRegistry();
     const registration = {
-      kind: "slot:win",
-      version: 1,
-      requiredCapabilities: new Set(["slot:win"]),
+      kind: "slot:scene-landing",
+      version: 2,
+      effect: "scene-landing" as const,
+      requiredCapabilities: new Set(["slot:scene-landing"]),
       handler: handler([]),
     };
     registry.register(registration);
-    expect(registry.has("slot:win", 1)).toBe(true);
-    expect(registry.get("slot:win", 1)).toBe(registration);
+    expect(registry.has("slot:scene-landing", 2)).toBe(true);
+    expect(registry.get("slot:scene-landing", 2)).toBe(registration);
     expect(() => registry.register(registration)).toThrow(/Duplicate/);
     registry.clear();
-    expect(registry.has("slot:win", 1)).toBe(false);
+    expect(registry.has("slot:scene-landing", 2)).toBe(false);
     expect(() =>
       registry.register({
         ...registration,
@@ -205,9 +213,10 @@ describe("slot operation coordinator", () => {
   it("validates update deltas and coordinator ownership", async () => {
     const registry = createSlotOperationHandlerRegistry();
     registry.register({
-      kind: "slot:win",
-      version: 1,
-      requiredCapabilities: new Set(["slot:win"]),
+      kind: "slot:scene-landing",
+      version: 2,
+      effect: "scene-landing",
+      requiredCapabilities: new Set(["slot:scene-landing"]),
       handler: { ...handler([]), update: () => ({ completed: false }) },
     });
     const coordinator = createSlotOperationCoordinator({
@@ -227,9 +236,10 @@ describe("slot operation coordinator", () => {
   it("reports rollback and destroy failures together", async () => {
     const registry = createSlotOperationHandlerRegistry();
     registry.register({
-      kind: "slot:win",
-      version: 1,
-      requiredCapabilities: new Set(["slot:win"]),
+      kind: "slot:scene-landing",
+      version: 2,
+      effect: "scene-landing",
+      requiredCapabilities: new Set(["slot:scene-landing"]),
       handler: {
         ...handler([]),
         update: () => {
@@ -257,9 +267,10 @@ describe("slot operation coordinator", () => {
   it("surfaces cleanup and destroy callback failures", async () => {
     const registry = createSlotOperationHandlerRegistry();
     registry.register({
-      kind: "slot:win",
-      version: 1,
-      requiredCapabilities: new Set(["slot:win"]),
+      kind: "slot:scene-landing",
+      version: 2,
+      effect: "scene-landing",
+      requiredCapabilities: new Set(["slot:scene-landing"]),
       handler: { ...handler([]), update: () => ({ completed: false }) },
     });
     const cleanupCoordinator = createSlotOperationCoordinator({
@@ -289,9 +300,10 @@ describe("slot operation coordinator", () => {
     const events: string[] = [];
     const registry = createSlotOperationHandlerRegistry();
     registry.register({
-      kind: "slot:win",
-      version: 1,
-      requiredCapabilities: new Set(["slot:win"]),
+      kind: "slot:scene-landing",
+      version: 2,
+      effect: "scene-landing",
+      requiredCapabilities: new Set(["slot:scene-landing"]),
       handler: handler(events),
     });
     const coordinator = createSlotOperationCoordinator({
@@ -311,9 +323,10 @@ describe("slot operation coordinator", () => {
   it("fails explicitly if a preflight mutates away its instance handler", async () => {
     const registry = createSlotOperationHandlerRegistry();
     registry.register({
-      kind: "slot:win",
-      version: 1,
-      requiredCapabilities: new Set(["slot:win"]),
+      kind: "slot:scene-landing",
+      version: 2,
+      effect: "scene-landing",
+      requiredCapabilities: new Set(["slot:scene-landing"]),
       handler: { ...handler([]), preflight: () => registry.clear() },
     });
     const coordinator = createSlotOperationCoordinator({
@@ -328,9 +341,10 @@ describe("slot operation coordinator", () => {
   it("preserves a lone prepared-state destroy failure", async () => {
     const registry = createSlotOperationHandlerRegistry();
     registry.register({
-      kind: "slot:win",
-      version: 1,
-      requiredCapabilities: new Set(["slot:win"]),
+      kind: "slot:scene-landing",
+      version: 2,
+      effect: "scene-landing",
+      requiredCapabilities: new Set(["slot:scene-landing"]),
       handler: {
         ...handler([]),
         update: () => {
@@ -374,13 +388,9 @@ function handler(events: string[], failUpdate = false): SlotOperationHandler {
 
 function plan() {
   const initial = snapshot();
-  return finalizeAuthoredSlotOperationPlan({
-    initial,
+  return finalizeSlotOperationPlanV2({
     drafts: [
-      {
-        id: "win",
-        kind: "slot:win",
-        version: 1,
+      generateSceneLandingOperation({
         source: {
           kind: "snapshot-authored",
           inputSnapshotId: "a",
@@ -395,10 +405,10 @@ function plan() {
           ],
           edits: [],
         },
-        payload: {},
-      },
+        output: initial,
+      }),
     ],
-    definitions: createBuiltinSlotOperationDefinitions(),
+    definitions: createBuiltinSlotOperationDefinitionsV2(),
     symbolCodes: { A: 0 },
     columns: 1,
     rows: 1,

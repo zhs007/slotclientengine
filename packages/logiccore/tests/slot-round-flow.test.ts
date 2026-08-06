@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  compileSlotRoundOperationPlan,
+  compileConfiguredSlotRoundOperationPlanV2,
   type GameLogic,
   type GameLogicStep,
   parseServerGameAuthoringSummary,
@@ -402,7 +402,7 @@ describe("slot round execution compiler", () => {
             ]
           : [],
     };
-    const plan = compileSlotRoundOperationPlan(
+    const plan = compileConfiguredSlotRoundOperationPlanV2(
       profile,
       createRoundLogic({}),
       context,
@@ -416,7 +416,7 @@ describe("slot round execution compiler", () => {
     );
     expect(plan.operations.map((operation) => operation.kind)).toEqual([
       "slot:spin",
-      "slot:settled-transform",
+      "slot:state-mutation",
       "slot:win-remove",
       "slot:dropdown",
       "slot:refill",
@@ -425,10 +425,14 @@ describe("slot round execution compiler", () => {
     expect(
       plan.operations.map((operation) => operation.operationIndex),
     ).toEqual([0, 1, 2, 3, 4, 5]);
-    expect(plan.final).toEqual(plan.operations.at(-1)?.output);
+    expect(plan.final).toEqual(
+      plan.operations.findLast(
+        (operation) => operation.effect !== "presentation",
+      )?.output,
+    );
     expect(Object.isFrozen(plan)).toBe(true);
 
-    const withoutCompletion = compileSlotRoundOperationPlan(
+    const withoutCompletion = compileConfiguredSlotRoundOperationPlanV2(
       profile,
       createRoundLogic({}),
       context,
