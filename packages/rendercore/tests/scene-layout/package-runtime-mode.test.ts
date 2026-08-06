@@ -354,6 +354,7 @@ describe("scene layout package event-driven game-mode transition", () => {
   it("finishes the optional popup before starting the prepared overlay", async () => {
     const { runtime, players, popups } = createRuntime(true, true);
     await runtime.init();
+    runtime.applyViewport({ width: 800, height: 600 });
     const pending = runtime.requestGameMode("FreeGame");
     await Promise.resolve();
     expect(popups[0].phase).toBe("loop");
@@ -366,12 +367,15 @@ describe("scene layout package event-driven game-mode transition", () => {
       activePreludePopup: "free-entry",
     });
 
-    runtime.requestDismissGameModePrelude();
-    runtime.requestDismissGameModePrelude();
+    const popupPresentation = runtime.getPopupPresentation();
+    expect(popupPresentation.eventMode).toBe("static");
+    expect(popupPresentation.hitArea?.contains(799, 599)).toBe(true);
+    popupPresentation.emit("pointerdown", {} as never);
     expect(popups[0].dismissRequested).toBe(true);
     popups[0].phase = "complete";
     runtime.update(0.1);
     await Promise.resolve();
+    expect(popupPresentation.eventMode).toBe("none");
     expect(players[0].plays).toEqual([{ animationName: "BG_FG", loop: false }]);
     expect(runtime.getGameModeSnapshot()).toMatchObject({
       stableMode: "BaseGame",

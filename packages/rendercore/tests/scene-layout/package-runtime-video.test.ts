@@ -253,13 +253,15 @@ describe("scene layout package video-blackout transition", () => {
       transitionKind: "video",
       transitionPhase: "awaiting-video-start",
     });
-    const started = runtime.startPendingGameModeVideo();
+    const popupPresentation = runtime.getPopupPresentation();
+    expect(popupPresentation.eventMode).toBe("static");
+    popupPresentation.emit("pointerdown", {} as never);
     expect(player.playCalls).toBe(1);
+    expect(popupPresentation.eventMode).toBe("none");
     await Promise.resolve();
     player.currentTimeSeconds = 4;
     player.ended = true;
     runtime.update(0);
-    await started;
     await pending;
     expect(runtime.getGameModeSnapshot().stableMode).toBe("FreeGame");
     runtime.destroy();

@@ -52,6 +52,21 @@ Layout 现有资源，并继续把 Popup 作为独立 package 导入。该流程
 - 为满足 `ImportedPopupPackage` 新增的导入审查元数据，补充了既有 command test fixture；无生产模型或
   layout manifest 字段变化。
 
+## 浏览器反馈跟进
+
+用户在浏览器复验时发现转场 Popup 进入 loop 后，点击预览 Canvas 不会播放 end，转场因此无法继续。
+已把 pointer 处理补到 RenderCore Scene Layout package runtime 的共享 Popup presentation：
+
+- active transition prelude 或 award celebration 时，以当前 viewport 作为 Pixi hit area 接收
+  `pointerdown`；idle 后立即恢复 `eventMode=none`，不拦截普通画面点击。
+- transition prelude 点击锁存普通 Spine Popup 的 end 请求；Popup complete 后继续原 none/Spine
+  transition。
+- video prelude complete 后保持 active pointer layer，第二次 trusted pointer 同步启动等待中的视频。
+- award celebration 的 Canvas pointer 复用既有 advance 状态机。
+
+跟进验收通过 RenderCore 3 个定向 test files、25 tests，以及 RenderCore typecheck 与定向 ESLint。
+Editor 不新增按钮或私有点击阶段判断；预览 Canvas 与游戏 consumer 共用 RenderCore interaction。
+
 ## 浏览器验收交接
 
 请在浏览器按以下步骤复验：
