@@ -6,7 +6,7 @@
 - ImgNumber runtime 仅允许 shared `spineSlot` 在当前已准备的 Spine state 中 attach；late player 初始化不再从 `spinBlur`、`disabled` 等 direct overlay 抢走 renderer。
 - `RenderSymbol` 在 requested state 有显式 state texture 时，用 requested state 驱动 ImgNumber presentation；从 direct/static state 返回 Spine state 时先同步 ImgNumber state，再激活 Spine player。
 - Spine player 沿用 exact resource cache：同资源状态切换只切 animation；不同资源或不同 value tier 才重建。新增回归测试保护该合同，未新增 schema 或第二份资源映射。
-- 每个 value tier 卡新增 session-only 预览数值和当前档位标识。数值按档位区间严格校验，非法输入保留上一次有效预览；移动、删除、改阈值和项目重置会同步清理或重新派生 session 状态。
+- 按用户后续澄清，整个 value-managed symbol 只保留一个 session-only 预览数值。该数值由 threshold 自动命中档位，UI 标识当前档位；非法输入保留上一次有效预览，移动、删除或改阈值后使用同一数值重新解析。
 - preview cell 按 symbol 使用当前 tier 的预览值，旧的全局 toolbar value 输入已移除；预览值不进入 manifest、ZIP 或 undo transaction。
 - 同步更新 Symbols Editor/rendercore README，以及 editor artifact/shared runtime 的稳定规则。
 
@@ -33,7 +33,7 @@ packages/rendercore/tests/symbol-value-presentation/render-symbol-value-controll
 
 - 没有修改 Spine cache/value controller 的 production ownership 实现；现有 exact-resource cache 已满足同资源单 player，只补充组合场景回归保护。
 - 计划外最小修改 `packages/rendercore/src/symbol/render-symbol.ts`：定向测试证明 `spinBlur`/`disabled` 会经 state equivalence resolve 为 normal，导致 exact non-Spine ImgNumber target 未激活；同时返回 Spine 时旧的 reset/sync 顺序会错过新 player attachment。修复保持 symbol manifest 和 public schema 不变。
-- 为了让 slot helper 可直接测试，补充修改 `apps/symbolseditor/src/ui/app-shell.ts`；为了呈现当前预览档位，补充修改 `apps/symbolseditor/src/styles.css`。二者均为 app 内部适配。
+- 为了让 slot helper 可直接测试，补充修改 `apps/symbolseditor/src/ui/app-shell.ts`；为了呈现 threshold 自动命中的当前预览档位，补充修改 `apps/symbolseditor/src/styles.css`。二者均为 app 内部适配。
 - 未修改 lockfile、生成物、正式 assets、根工具链或根 `AGENTS.md`。
 
 ## 3. 自动化验收
@@ -57,7 +57,7 @@ git diff --check
 
 ## 4. 人工验收
 
-未完成真实浏览器中的 Spine 4.3、模糊 ImgNumber、多档资源视觉验收，也未用 DevTools 实测 player/container 数量。自动化已覆盖 slot 交集、late-init attachment、requested/resolved state、同资源 player continuity、档位区间和 session 重置，但不能替代真实资源的可见性、模糊外观和闪帧检查。
+未完成真实浏览器中的 Spine 4.3、模糊 ImgNumber、多档资源视觉验收，也未用 DevTools 实测 player/container 数量。自动化已覆盖 slot 交集、late-init attachment、requested/resolved state、同资源 player continuity、统一预览数值的 threshold 自动选档和 session 重置，但不能替代真实资源的可见性、模糊外观和闪帧检查。
 
 ## 5. 剩余风险与未完成项
 

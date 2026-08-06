@@ -73,22 +73,21 @@ describe("symbols editor UI session", () => {
     expect(session.transientMessage).toBe("");
   });
 
-  it("keeps validated per-tier preview values in session only", () => {
+  it("keeps one preview value per symbol and derives the active tier", () => {
     const project = createProject();
     configureValueTiers(project, "A");
     configureValueTiers(project, "B");
     const session = new SymbolsEditorUiSession();
     session.resetForNewProject(project);
 
-    expect(session.getTierPreviewValue(project, "A", 0)).toBe(5);
-    expect(session.getTierPreviewValue(project, "A", 1)).toBe(25);
     expect(session.getPreviewValue(project, "A")).toBe(5);
+    expect(session.getActivePreviewTier(project, "A")).toBe(0);
 
-    session.setTierPreviewValue(project, "A", 1, 42);
+    session.setPreviewValue(project, "A", 42);
     expect(session.getActivePreviewTier(project, "A")).toBe(1);
     expect(session.getPreviewValue(project, "A")).toBe(42);
-    expect(() => session.setTierPreviewValue(project, "A", 1, 9)).toThrow(
-      /Tier 2.*\[10, \+∞\)/,
+    expect(() => session.setPreviewValue(project, "A", 0)).toThrow(
+      /positive safe integer/,
     );
     expect(session.getPreviewValue(project, "A")).toBe(42);
     expect(session.getPreviewValue(project, "B")).toBe(5);
@@ -102,7 +101,11 @@ describe("symbols editor UI session", () => {
       ],
     };
     session.normalize(project);
-    expect(session.getTierPreviewValue(project, "A", 1)).toBe(50);
+    expect(session.getPreviewValue(project, "A")).toBe(42);
+    expect(session.getActivePreviewTier(project, "A")).toBe(0);
+
+    session.setPreviewValue(project, "A", 50);
+    expect(session.getActivePreviewTier(project, "A")).toBe(1);
 
     session.resetForImport(project);
     expect(session.getActivePreviewTier(project, "A")).toBe(0);

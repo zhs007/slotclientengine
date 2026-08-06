@@ -14,8 +14,8 @@
 - 已配置 exact non-Spine `spinBlur` / `disabled` target 的命名 ImgNumber 在预览中可见；
   `spinBlur` 使用已 prepare 的模糊 profile，`disabled` 沿用 normal profile，二者均复用
   同一个 renderer/container。
-- 每个 value tier 可在档位卡中设置并启用一个只用于当前编辑会话的预览数值，预览同时
-  命中该档 Spine、该档 ImgNumber JSON 和输入的实际 string。
+- 每个 value-managed symbol 只设置一个当前编辑会话的预览数值，由 threshold 自动命中档位，
+  并同时预览该档 Spine、该档 ImgNumber JSON 和输入的实际 string。
 
 ### 完成定义
 
@@ -32,9 +32,9 @@
       ImgNumber 从 direct overlay 抢回不可见 Spine slot；来回切换不创建第二个 ImgNumber。
 - [ ] `spinBlur` 显示模糊 ImgNumber profile，`disabled` 显示 normal ImgNumber profile；
       manual preview string、特殊值映射、slot transform 和颜色合同保持不变。
-- [ ] 每个 tier 卡可输入属于该 tier 区间的 positive safe integer 并将其设为当前预览；
-      UI 明确标识当前预览档位，非法或越界值显式报错且不替换上一次有效预览。
-- [ ] tier 预览值只保存在 `SymbolsEditorUiSession`，新建/打开项目时重置，不进入
+- [ ] 整个 value 配置只显示一个 positive safe integer 预览输入；UI 根据 threshold 自动标识
+      当前预览档位，非法值显式报错且不替换上一次有效预览。
+- [ ] per-symbol 预览值只保存在 `SymbolsEditorUiSession`，新建/打开项目时重置，不进入
       symbol manifest、package ZIP、资源闭包或 undo transaction。
 - [ ] Symbols ZIP canonical/legacy round-trip、任务 170 的 shared Normal 合同、任务 171
       的 blur dependency 去重以及无 ImgNumber symbol 的行为保持不变。
@@ -116,8 +116,8 @@ git status --short --untracked-files=all: clean
   同一 active value tier 时复用一个 official player；不同资源不能为了数量少而错误复用。
 - `spinBlur` 的“生成模糊 ImgNumber”只决定 profile assets；node 是否在某状态显示仍由 exact
   non-Spine target 决定。`disabled` 没有派生 profile时显示 normal assets，不静默隐藏。
-- “档位配置预览数值”解释为每张 tier 卡的 preview-only input。输入成功后该 symbol 的预览
-  使用该值，进而由现有 threshold resolver 命中 tier，并把同一个值传给该 tier ImgNumber。
+- 用户进一步澄清“档位配置预览数值”为整个 value 配置唯一的 preview-only input。输入成功后
+  由现有 threshold resolver 自动命中 tier，并把同一个值传给该 tier ImgNumber。
 
 ### 关键决策
 
@@ -131,17 +131,17 @@ git status --short --untracked-files=all: clean
    - canonical `spineSlot` 只有在 `definition.spineStates.has(state)` 时可交给 player；legacy
      `{state, slot}` 仍按 exact target工作。late/stale activation不得覆盖direct overlay/hidden状态。
 4. **预览值属于 UI session，不属于 draft。**
-   - session 为 symbol/tier 保存最后一个有效预览值和当前激活 tier；初值优先使用落在该区间的
-     `defaultValues`，否则用区间内最小正整数。
-   - 输入必须为 positive safe integer 且满足前一档上界 `<= value < 本档 maxExclusive`；最后一档
-     只校验下界。阈值、tier移动/删除后由 session normalize丢弃失效项并重新派生，不修改manifest。
+   - session 为每个 symbol 保存一个最后有效预览值；初值优先使用第一个合法 `defaultValues`，
+     否则使用 `1`。
+   - 输入必须为 positive safe integer。active tier 每次由当前 threshold 解析，不保存第二份档位状态；
+     阈值或 tier 顺序改变时同一数值自然重新命中，不修改 manifest。
 5. **preview cell 按 symbol取值。**
    - 移除单一 `#previewValue` 作为全项目事实来源；无 value presentation的symbol不携带value。
    - toolbar不保留与档位卡冲突的第二套可编辑value；state、replay、zoom行为不变。
 
 ## 5. 职责与合同
 
-- **Symbols Editor UI**：枚举 exact metadata、维护 preview-only tier value、显示当前 tier/错误，
+- **Symbols Editor UI**：枚举 exact metadata、维护 per-symbol preview-only value、显示当前 tier/错误，
   并把 per-symbol value与manual string传给现有 preview API。
 - **rendercore**：拥有 Spine player cache、value tier player、slot attach/detach、profile切换和
   renderer/container生命周期；editor不接触Pixi内部display tree。
@@ -216,15 +216,15 @@ request guard，才允许修改上列对应 runtime 文件；这属于计划内�
      normal↔spinBlur↔disabled↔normal往返；断言container identity、profile textures、attach/remove次数。
    - 复验现有top-level cache和同tier active Spine测试仍只创建一个player；不同tier继续重建。
 
-4. **实现档位内预览数值**
-   - 在`SymbolsEditorUiSession`增加per-symbol/per-tier preview value与active tier状态、区间校验、
-     normalize/reset；它不经过store transaction。
-   - 每张tier卡显示preview input、区间和当前标识。有效变更立即刷新preview并选中该tier；非法值
-     显式呈现且保留旧有效值。
+4. **实现统一预览数值**
+   - 在`SymbolsEditorUiSession`增加per-symbol preview value、positive-safe-integer校验和
+     normalize/reset；它不经过store transaction，不单独保存active tier。
+   - value配置顶部只显示一个preview input；有效变更立即按threshold刷新preview并标出命中tier，
+     非法值显式呈现且保留旧有效值。
    - `createPreviewCells()`按symbol解析active preview value，传给现有
      `RenderSymbol.setPresentationValue()`；manual named string继续独立传入。
-   - tier新增、删除、移动或threshold改变后清理失效session key并确定有效current tier；移除/替换
-     toolbar旧全局value输入，避免双重来源。
+   - tier新增、删除、移动或threshold改变后用同一值重新解析current tier；移除/替换toolbar旧全局
+     value输入，避免双重来源。
 
 5. **同步测试、文档与规则**
    - UI测试覆盖preview值不写入export snapshot/ZIP、不同symbol互不串值、边界值选择正确tier、
@@ -273,8 +273,8 @@ git diff --check
    profile；反复切normal/spinBlur/disabled，确认两种非Spine状态均显示，blur外观只在spinBlur生效。
 3. 使用DevTools/debug spy检查上述切换始终是一个ImgNumber container、同资源一个Spine player；
    改成不同Spine资源时旧player被释放且新player只创建一次。
-4. 导入至少两档且每档ImgNumber JSON外观不同的value symbol；在每张tier卡分别输入边界内数值，
-   确认当前tier Spine和该档ImgNumber/string一起变化，越界值报错且画面保留上次有效结果。
+4. 导入至少两档且每档ImgNumber JSON外观不同的value symbol；在统一预览输入中填写各档边界值，
+   确认threshold自动选择的Spine和该档ImgNumber/string一起变化，非法值报错且保留上次有效结果。
 5. 导出并重导Symbols ZIP，确认preview-only数值没有进入包，正式state/ImgNumber配置无损。
 
 ### 独立验收建议
@@ -302,7 +302,7 @@ git diff --check
 ## 10. 生成物、文档与规则
 
 - 本任务不修改YAML或生成文件，不运行symbol/game生成器。
-- `apps/symbolseditor/README.md`记录普通/tier slot交集和档位内preview-only value工作流。
+- `apps/symbolseditor/README.md`记录普通/tier slot交集和统一preview-only value工作流。
 - `packages/rendercore/README.md`澄清shared slot只在Spine-backed state attach、late init不得覆盖direct
   overlay，以及exact同资源player复用边界。
 - `editor-artifacts.md`与`shared-game-runtime.md`只更新稳定职责/生命周期，不记录具体fixture或执行证据。
@@ -333,7 +333,7 @@ date -u +%y%m%d-%H%M%S
   快速normal↔static往返时出现一次错误detach/attach。
 - same-resource cache按manifest exact路径/resource identity工作；相同bytes但不同logical key不会
   自动合并，这是ownership正确性而非性能缺陷。
-- preview tier值可能因threshold编辑、tier移动/删除而失效；session normalize必须避免旧index串档。
+- threshold编辑、tier移动/删除会改变同一preview value命中的档位；UI必须在下一次render直接重新解析。
 - 自动化可证明identity和attachment调用，但不能证明真实Spine slot可见性、blur外观或闪帧。
 
 ### 假设
@@ -350,7 +350,7 @@ date -u +%y%m%d-%H%M%S
 
 - [ ] 普通/tier Spine slot交集、同资源player复用和不同资源重建均符合计划。
 - [ ] spinBlur/disabled在同步与late-init顺序下可见且只用一个ImgNumber container。
-- [ ] 每档preview value、区间校验、per-symbol隔离与session-only边界满足需求。
+- [ ] 统一preview value、threshold自动选档、per-symbol隔离与session-only边界满足需求。
 - [ ] legacy target、canonical schema、blur dependency、ZIP闭包和无关consumer未回归。
 - [ ] 实际修改未超范围，或偏差已在报告说明。
 - [ ] README和两个领域规则已同步，未修改根规则/生成物/lockfile。

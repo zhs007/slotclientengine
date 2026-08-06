@@ -10,7 +10,7 @@ symbol code、state、lifecycle、scale、renderPriority、value/cascade 配置�
 
 同一导入批次允许多份 Spine skeleton 共用唯一一份 atlas 及其单页 texture；各 skeleton 仍作为独立资源供 state/value tier 显式选择。缺 skeleton、缺 atlas、多 atlas 或 atlas page 不唯一时继续拒绝整批导入。
 
-value-presentation 的编辑顺序固定为“档位 → 状态”：每档选择 Spine skeleton/atlas/texture、阈值和 ImgNumber JSON；normal、win、remove 等动画在状态页选择一次，并要求所有档位存在同名动画。ImgNumber 的 exact slot、transform、颜色跟随和特殊数值图片只在 Normal 配置一次，并由全部档位和 Spine state 共用；`spinBlur`、`disabled` 等静态 reel state 仍独立选择图片。每张档位卡可以设置一个严格落在本档阈值区间内的预览数值，预览据此同时选择 Spine tier 与该档 ImgNumber；这些值只属于当前 UI session，新建或打开项目时重置，不进入 manifest 或 ZIP。
+value-presentation 的编辑顺序固定为“档位 → 状态”：每档选择 Spine skeleton/atlas/texture、阈值和 ImgNumber JSON；normal、win、remove 等动画在状态页选择一次，并要求所有档位存在同名动画。ImgNumber 的 exact slot、transform、颜色跟随和特殊数值图片只在 Normal 配置一次，并由全部档位和 Spine state 共用；`spinBlur`、`disabled` 等静态 reel state 仍独立选择图片。整个 symbol 只设置一个预览数值，预览根据档位阈值自动选择对应 Spine tier 与 ImgNumber；该值只属于当前 UI session，新建或打开项目时重置，不进入 manifest 或 ZIP。
 
 新命名 ImgNumber node 使用一个 `spineSlot` 覆盖全部 Spine state；普通 symbol 的候选 slot 是全部 top-level Spine state skeleton 的交集，value-managed symbol 则是全部 tier skeleton 的交集，交集为空时不猜首项。显示、移动和出现时机由 Spine animation 控制。非 Spine state 继续用 exact `targets[]` 决定同一 instance 是否显示在固定顶层 overlay。旧逐 Spine state target 与旧 per-tier 完整 binding 可无损导入、编辑和导出，不会自动扩大状态覆盖。
 

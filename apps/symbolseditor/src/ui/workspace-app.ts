@@ -1187,16 +1187,15 @@ export class SymbolsEditorApp {
 
   private bindValueControls(panel: HTMLElement): void {
     panel
-      .querySelectorAll<HTMLInputElement>("[data-tier-preview-value]")
+      .querySelectorAll<HTMLInputElement>("[data-value-preview]")
       .forEach((input) => {
         input.addEventListener("change", () => {
           const snapshot = this.#store.getSnapshot();
           if (!snapshot.project) return;
           try {
-            this.#session.setTierPreviewValue(
+            this.#session.setPreviewValue(
               snapshot.project,
               this.#session.selectedSymbol,
-              Number(input.dataset.tierPreviewValue),
               Number(input.value),
             );
             this.render(snapshot);
@@ -1368,7 +1367,7 @@ export class SymbolsEditorApp {
           const symbolName = this.#session.selectedSymbol;
           this.#store.transact((draft) => {
             setValuePresentation(draft, symbolName, undefined);
-            this.#session.clearTierPreview(symbolName);
+            this.#session.clearPreviewValue(symbolName);
           });
         } catch (error) {
           this.#store.setExternalError(error);
@@ -1724,7 +1723,6 @@ export class SymbolsEditorApp {
         };
         const action = button.dataset.valueAction!;
         const index = Number(button.dataset.valueIndex);
-        const previousTierCount = value.tiers.length;
         if (action === "add-default") {
           const candidate = Number(
             panel.querySelector<HTMLInputElement>("[data-new-default]")!.value,
@@ -1840,18 +1838,6 @@ export class SymbolsEditorApp {
                   };
         }
         setValuePresentation(draft, symbol.symbol, value as never);
-        if (action === "remove-tier")
-          this.#session.removeTierPreview(
-            symbol.symbol,
-            index,
-            previousTierCount,
-          );
-        else if (action === "move-tier")
-          this.#session.moveTierPreview(
-            symbol.symbol,
-            index,
-            Number(button.dataset.direction),
-          );
       });
     } catch (error) {
       this.#store.setExternalError(error);
@@ -3328,10 +3314,16 @@ function valueInspectorMarkup(
   const value = symbol.valuePresentation;
   if (!value)
     return `<section class="empty-feature"><h2>Spine 档位</h2><p>先按数值范围配置各档 Spine 资源，再到“状态”中为全部档位统一选择动画。</p><button class="primary" data-enable-value>启用 Spine 档位</button></section>`;
+  const previewValue = session.getPreviewValue(project, symbol.symbol);
+  const activePreviewTier = session.getActivePreviewTier(
+    project,
+    symbol.symbol,
+  );
   return `<section class="value-editor"><div class="section-heading"><div><h2>Spine 档位</h2><p>每档只配置 skeleton / atlas / texture 与阈值；状态动画在下一步统一配置。</p></div><button data-disable-value>停用</button></div>
+    <section class="tier-preview active"><label>预览数值 <input data-value-preview type="number" min="1" step="1" value="${previewValue}"></label><span class="status-ready">当前命中 Tier ${activePreviewTier + 1}</span><small>输入一个数值，由档位阈值自动选择 Spine 与 ImgNumber；仅当前编辑会话生效</small></section>
     <h3>Default values</h3><div class="compact-list">${value.defaultValues.map((candidate, index) => `<div class="form-row"><input data-value-field="defaultValues.${index}" data-value-type="number" type="number" min="1" step="1" value="${candidate}"><button data-value-action="move-default" data-value-index="${index}" data-direction="-1" aria-label="上移 value">↑</button><button data-value-action="move-default" data-value-index="${index}" data-direction="1" aria-label="下移 value">↓</button><button data-value-action="remove-default" data-value-index="${index}">删除</button></div>`).join("")}</div><div class="form-row"><input data-new-default type="number" min="1" step="1" value="1"><button data-value-action="add-default">增加 value</button></div>
     <h3>Reel normal</h3><div class="form-grid">${valueNumberField("reelStates.normal.width", value.reelStates.normal.width, "Width")}${valueNumberField("reelStates.normal.height", value.reelStates.normal.height, "Height")}</div>
-    <h3>Spine tiers</h3><div class="tier-list">${value.tiers.map((tier, index) => valueTierMarkup(project, symbol, tier, index, session, session.expandedTier === index, thumbnail)).join("")}</div><button data-value-action="add-tier">增加 tier</button>
+    <h3>Spine tiers</h3><div class="tier-list">${value.tiers.map((tier, index) => valueTierMarkup(project, symbol, tier, index, index === activePreviewTier, session.expandedTier === index, thumbnail)).join("")}</div><button data-value-action="add-tier">增加 tier</button>
     <p class="hint">档位资源完成后，进入“状态”统一选择 normal / win / remove 等动画；静态模糊图在对应状态单独配置。</p>
     ${valueNumberPresentationMarkup(project, symbol)}
   </section>`;
@@ -3457,7 +3449,7 @@ function valueTierMarkup(
   symbol: EditorSymbolDraft,
   tier: NonNullable<EditorSymbolDraft["valuePresentation"]>["tiers"][number],
   index: number,
-  session: SymbolsEditorUiSession,
+  activePreview: boolean,
   expanded: boolean,
   thumbnail: (path: string) => string | undefined,
 ): string {
@@ -3465,19 +3457,7 @@ function valueTierMarkup(
   const atlas = tier.animation.atlas.replace(/^\.\//u, "");
   const texture = tier.animation.texture.replace(/^\.\//u, "");
   const ready = Boolean(skeleton && atlas && texture);
-  const previewValue = session.getTierPreviewValue(
-    project,
-    symbol.symbol,
-    index,
-  );
-  const activePreview =
-    session.getActivePreviewTier(project, symbol.symbol) === index;
-  const lower =
-    index === 0 ? 1 : symbol.valuePresentation!.tiers[index - 1]!.maxExclusive!;
-  const upper = tier.maxExclusive;
-  const previewRange =
-    upper === undefined ? `[${lower}, +∞)` : `[${lower}, ${upper})`;
-  return `<details class="tier-card" data-tier-index="${index}" ${expanded ? "open" : ""}><summary><strong>Tier ${index + 1}</strong><span>${index < (symbol.valuePresentation?.tiers.length ?? 0) - 1 ? `&lt; ${tier.maxExclusive}` : "unbounded"}</span><span class="status-${ready ? "ready" : "missing"}">${ready ? "资源就绪" : "未完成"}</span></summary><div class="tier-body"><section class="tier-preview ${activePreview ? "active" : ""}"><label>预览数值 <input data-tier-preview-value="${index}" type="number" min="${lower}" ${upper === undefined ? "" : `max="${upper - 1}"`} step="1" value="${previewValue}"></label><span class="status-${activePreview ? "ready" : "missing"}">${activePreview ? "当前预览档位" : "输入后预览此档"}</span><small>有效区间 ${previewRange}；仅当前编辑会话生效</small></section>${index < symbol.valuePresentation!.tiers.length - 1 ? valueNumberField(`tiers.${index}.maxExclusive`, tier.maxExclusive!, "maxExclusive") : '<p class="empty">最终 tier 无上界</p>'}${resourceBindingMarkup("Skeleton", skeleton, { kind: "value-tier-resource", symbol: symbol.symbol, tierIndex: index, field: "skeleton" })}${resourceBindingMarkup("Atlas", atlas, { kind: "value-tier-resource", symbol: symbol.symbol, tierIndex: index, field: "atlas" })}${derivedResourceMarkup("Texture · 由 Atlas page 自动解析", texture, thumbnail(texture))}<details class="advanced-fields"><summary>Transform</summary><div class="form-grid">${valueNumberField(`tiers.${index}.animation.transform.x`, tier.animation.transform?.x ?? 0, "X")}${valueNumberField(`tiers.${index}.animation.transform.y`, tier.animation.transform?.y ?? 0, "Y")}${valueNumberField(`tiers.${index}.animation.transform.scale`, tier.animation.transform?.scale ?? 1, "Scale")}</div></details><div class="button-row"><button data-value-action="move-tier" data-value-index="${index}" data-direction="-1" ${index === 0 ? "disabled" : ""}>↑</button><button data-value-action="move-tier" data-value-index="${index}" data-direction="1" ${index === symbol.valuePresentation!.tiers.length - 1 ? "disabled" : ""}>↓</button><button data-value-action="remove-tier" data-value-index="${index}">删除 tier</button></div></div></details>`;
+  return `<details class="tier-card ${activePreview ? "active-preview" : ""}" data-tier-index="${index}" ${expanded ? "open" : ""}><summary><strong>Tier ${index + 1}</strong><span>${index < (symbol.valuePresentation?.tiers.length ?? 0) - 1 ? `&lt; ${tier.maxExclusive}` : "unbounded"}</span>${activePreview ? '<span class="status-ready">当前预览档位</span>' : ""}<span class="status-${ready ? "ready" : "missing"}">${ready ? "资源就绪" : "未完成"}</span></summary><div class="tier-body">${index < symbol.valuePresentation!.tiers.length - 1 ? valueNumberField(`tiers.${index}.maxExclusive`, tier.maxExclusive!, "maxExclusive") : '<p class="empty">最终 tier 无上界</p>'}${resourceBindingMarkup("Skeleton", skeleton, { kind: "value-tier-resource", symbol: symbol.symbol, tierIndex: index, field: "skeleton" })}${resourceBindingMarkup("Atlas", atlas, { kind: "value-tier-resource", symbol: symbol.symbol, tierIndex: index, field: "atlas" })}${derivedResourceMarkup("Texture · 由 Atlas page 自动解析", texture, thumbnail(texture))}<details class="advanced-fields"><summary>Transform</summary><div class="form-grid">${valueNumberField(`tiers.${index}.animation.transform.x`, tier.animation.transform?.x ?? 0, "X")}${valueNumberField(`tiers.${index}.animation.transform.y`, tier.animation.transform?.y ?? 0, "Y")}${valueNumberField(`tiers.${index}.animation.transform.scale`, tier.animation.transform?.scale ?? 1, "Scale")}</div></details><div class="button-row"><button data-value-action="move-tier" data-value-index="${index}" data-direction="-1" ${index === 0 ? "disabled" : ""}>↑</button><button data-value-action="move-tier" data-value-index="${index}" data-direction="1" ${index === symbol.valuePresentation!.tiers.length - 1 ? "disabled" : ""}>↓</button><button data-value-action="remove-tier" data-value-index="${index}">删除 tier</button></div></div></details>`;
 }
 
 function cascadeInspectorMarkup(
