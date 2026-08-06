@@ -779,7 +779,7 @@ describe("symbols editor app shell", () => {
     ).not.toBeNull();
   });
 
-  it("previews the selected tier value with its configured Spine", async () => {
+  it("uses one preview value to select the configured tier", async () => {
     await createProject(root);
     const upload = root.querySelector<HTMLInputElement>("[data-upload-input]")!;
     const names = ["CN_1.json", "Symbol.atlas", "Symbol.png"];
@@ -815,13 +815,13 @@ describe("symbols editor app shell", () => {
 
     click(root, '[data-inspector-tab][data-tab-value="value"]');
     click(root, '[data-value-action="add-tier"]');
-    const tierPreviewValues = root.querySelectorAll<HTMLInputElement>(
-      "[data-tier-preview-value]",
+    const previewValues = root.querySelectorAll<HTMLInputElement>(
+      "[data-value-preview]",
     );
-    expect(tierPreviewValues).toHaveLength(2);
+    expect(previewValues).toHaveLength(1);
     expect(root.querySelector("[data-preview-value]")).toBeNull();
-    tierPreviewValues[1]!.value = "25";
-    tierPreviewValues[1]!.dispatchEvent(new Event("change", { bubbles: true }));
+    previewValues[0]!.value = "25";
+    previewValues[0]!.dispatchEvent(new Event("change", { bubbles: true }));
 
     await vi.waitFor(() => {
       const cells = previewSpies.setResource.mock.calls.at(-1)?.[1] as
@@ -833,20 +833,40 @@ describe("symbols editor app shell", () => {
       });
     });
     expect(root.textContent).toContain("当前预览档位");
+    expect(
+      root.querySelector('[data-tier-index="1"].active-preview'),
+    ).not.toBeNull();
 
     const activeValue = root.querySelector<HTMLInputElement>(
-      '[data-tier-preview-value="1"]',
+      "[data-value-preview]",
     )!;
     activeValue.value = "5";
     activeValue.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(
+      root.querySelector('[data-tier-index="0"].active-preview'),
+    ).not.toBeNull();
+    await vi.waitFor(() => {
+      const cells = previewSpies.setResource.mock.calls.at(-1)?.[1] as
+        | Array<Record<string, unknown>>
+        | undefined;
+      expect(cells?.find((cell) => cell.symbol === "A")).toMatchObject({
+        value: 5,
+      });
+    });
+
+    const invalidValue = root.querySelector<HTMLInputElement>(
+      "[data-value-preview]",
+    )!;
+    invalidValue.value = "0";
+    invalidValue.dispatchEvent(new Event("change", { bubbles: true }));
     expect(root.querySelector("[data-errors]")?.textContent).toContain(
-      "Tier 2 区间 [10, +∞)",
+      "positive safe integer",
     );
     const cells = previewSpies.setResource.mock.calls.at(-1)?.[1] as
       | Array<Record<string, unknown>>
       | undefined;
     expect(cells?.find((cell) => cell.symbol === "A")).toMatchObject({
-      value: 25,
+      value: 5,
     });
   });
 
