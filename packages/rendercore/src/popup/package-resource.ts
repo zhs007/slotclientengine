@@ -312,6 +312,20 @@ export async function resolvePopupPackageFiles(options: {
   return virtual;
 }
 
+export function rewritePopupManifestFilenameKeys(options: {
+  readonly manifest: unknown;
+  readonly rewrite: (filenameKey: string) => string;
+}): PopupManifestV1 {
+  const manifest = parsePopupManifest(options.manifest);
+  const mapping = new Map(
+    [...new Set(collectPopupDirectPaths(manifest))].map(
+      (path) => [path, options.rewrite(path)] as const,
+    ),
+  );
+  assertNoEditorAssetKeyAliases([...mapping.values()]);
+  return rewritePopupManifestWithMapping(manifest, mapping);
+}
+
 export function flattenPopupPackageFiles(options: {
   readonly manifest: unknown;
   readonly files: ReadonlyMap<string, Uint8Array>;
@@ -355,44 +369,7 @@ export function flattenPopupPackageFiles(options: {
     ),
   );
   assertNoEditorAssetKeyAliases([...new Set(mapping.values())]);
-  const resources: Record<string, PopupResourceSpec> = {};
-  const resourceKeys = new Map<string, string>();
-  for (const [id, spec] of Object.entries(manifest.resources)) {
-    const rewritten = rewritePopupResourceSpec(spec, mapping);
-    const rootKey = popupResourceRoot(rewritten);
-    if (resources[rootKey])
-      throw new Error(`popup resource root filename key 冲突：${rootKey}`);
-    resources[rootKey] = rewritten;
-    resourceKeys.set(id, rootKey);
-  }
-  const rewriteLayers = <T extends { readonly layers: readonly PopupLayer[] }>(
-    tier: T,
-  ): T =>
-    ({
-      ...tier,
-      layers: tier.layers.map((layer) => ({
-        ...layer,
-        resource: requiredPopupResourceKey(resourceKeys, layer.resource),
-      })),
-    }) as T;
-  const flattenedManifest = parsePopupManifest(
-    manifest.type === "spine"
-      ? {
-          ...manifest,
-          resources,
-          spine: rewriteSpineReferences(manifest.spine, resourceKeys),
-        }
-      : {
-          ...manifest,
-          resources,
-          awardCelebration: {
-            base: rewriteLayers(manifest.awardCelebration.base),
-            standard: rewriteLayers(manifest.awardCelebration.standard),
-            celebrationTiers:
-              manifest.awardCelebration.celebrationTiers.map(rewriteLayers),
-          },
-        },
-  );
+  const flattenedManifest = rewritePopupManifestWithMapping(manifest, mapping);
   const files = new Map<string, Uint8Array>([
     [ROOT, encodeStableJson(flattenedManifest)],
   ]);
@@ -453,44 +430,7 @@ export function namespaceMappedPopupPackageFiles(options: {
     ),
   );
   assertNoEditorAssetKeyAliases([...mapping.values()]);
-  const resources: Record<string, PopupResourceSpec> = {};
-  const resourceKeys = new Map<string, string>();
-  for (const [id, spec] of Object.entries(manifest.resources)) {
-    const rewritten = rewritePopupResourceSpec(spec, mapping);
-    const rootKey = popupResourceRoot(rewritten);
-    if (resources[rootKey])
-      throw new Error(`popup resource root filename key 冲突：${rootKey}`);
-    resources[rootKey] = rewritten;
-    resourceKeys.set(id, rootKey);
-  }
-  const rewriteLayers = <T extends { readonly layers: readonly PopupLayer[] }>(
-    tier: T,
-  ): T =>
-    ({
-      ...tier,
-      layers: tier.layers.map((layer) => ({
-        ...layer,
-        resource: requiredPopupResourceKey(resourceKeys, layer.resource),
-      })),
-    }) as T;
-  const rewrittenManifest = parsePopupManifest(
-    manifest.type === "spine"
-      ? {
-          ...manifest,
-          resources,
-          spine: rewriteSpineReferences(manifest.spine, resourceKeys),
-        }
-      : {
-          ...manifest,
-          resources,
-          awardCelebration: {
-            base: rewriteLayers(manifest.awardCelebration.base),
-            standard: rewriteLayers(manifest.awardCelebration.standard),
-            celebrationTiers:
-              manifest.awardCelebration.celebrationTiers.map(rewriteLayers),
-          },
-        },
-  );
+  const rewrittenManifest = rewritePopupManifestWithMapping(manifest, mapping);
   const rootKey = `${options.keyPrefix}-popup.manifest.json`;
   const files = new Map<string, Uint8Array>([
     [rootKey, encodeStableJson(rewrittenManifest)],
@@ -819,6 +759,50 @@ function rewritePopupResourceSpec(
       ]),
     ),
   };
+}
+
+function rewritePopupManifestWithMapping(
+  manifest: PopupManifestV1,
+  mapping: ReadonlyMap<string, string>,
+): PopupManifestV1 {
+  const resources: Record<string, PopupResourceSpec> = {};
+  const resourceKeys = new Map<string, string>();
+  for (const [id, spec] of Object.entries(manifest.resources)) {
+    const rewritten = rewritePopupResourceSpec(spec, mapping);
+    const rootKey = popupResourceRoot(rewritten);
+    if (resources[rootKey])
+      throw new Error(`popup resource root filename key 冲突：${rootKey}`);
+    resources[rootKey] = rewritten;
+    resourceKeys.set(id, rootKey);
+  }
+  const rewriteLayers = <T extends { readonly layers: readonly PopupLayer[] }>(
+    tier: T,
+  ): T =>
+    ({
+      ...tier,
+      layers: tier.layers.map((layer) => ({
+        ...layer,
+        resource: requiredPopupResourceKey(resourceKeys, layer.resource),
+      })),
+    }) as T;
+  return parsePopupManifest(
+    manifest.type === "spine"
+      ? {
+          ...manifest,
+          resources,
+          spine: rewriteSpineReferences(manifest.spine, resourceKeys),
+        }
+      : {
+          ...manifest,
+          resources,
+          awardCelebration: {
+            base: rewriteLayers(manifest.awardCelebration.base),
+            standard: rewriteLayers(manifest.awardCelebration.standard),
+            celebrationTiers:
+              manifest.awardCelebration.celebrationTiers.map(rewriteLayers),
+          },
+        },
+  );
 }
 
 function popupResourceRoot(spec: PopupResourceSpec): string {
