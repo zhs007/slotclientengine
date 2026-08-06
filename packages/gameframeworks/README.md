@@ -296,7 +296,7 @@ pnpm --filter @slotclientengine/gameframeworks build
 pnpm --filter @slotclientengine/gameframeworks format:check
 ```
 
-正式游戏可从 facade 使用 `compileSlotOperationPlan`、`SlotOperationPlanV1`、
-`freezeSlotOperationPlan` 与 validation 类型/函数；本地 suggestion/finalize 不从 facade
+正式游戏可从 facade 使用 `SlotOperationPlanV2`、strict server view、V2 generators、
+mutation derivation 与 `finalizeSlotOperationPlanV2`；本地 suggestion/review 不从 facade
 导出，避免 authoring 代码进入 live game bundle。render execution 使用 rendercore 的
-实例级 operation registry/coordinator。
+effect-exact 实例级 operation registry/coordinator。

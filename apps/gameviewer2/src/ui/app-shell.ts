@@ -13,12 +13,13 @@ import {
 } from "@slotclientengine/rendercore/scene-layout";
 import {
   finalizeSlotOperationAuthoringProject,
-  type SlotOperationAuthoringProjectV1,
+  type SlotOperationAuthoringProjectV2,
 } from "@slotclientengine/slotoperationauthoring";
 import {
   downloadProject,
   parseGameViewer2ProjectFile,
   parseGameViewer2ProjectFileV2,
+  parseGameViewer2ProjectFileV3,
 } from "../model/project.js";
 import {
   acceptGameViewer2OperationEdge,
@@ -42,7 +43,7 @@ interface EditorState {
   layoutBytes: Uint8Array | null;
   summary: SceneOtherSceneFlowPackageSummary | null;
   flow: SceneOtherSceneFlowProjectV2 | null;
-  operations: SlotOperationAuthoringProjectV1 | null;
+  operations: SlotOperationAuthoringProjectV2 | null;
   projectHash: string | null;
   tab: "scenes" | "states" | "operations";
   selectedChoreography: string | null;
@@ -96,20 +97,29 @@ export function createGameViewer2AppShell(root: HTMLElement): void {
         try {
           parsed = parseGameViewer2ProjectFile(raw);
         } catch (error) {
-          const legacy = parseGameViewer2ProjectFileV2(raw);
+          let legacy;
+          let legacyVersion: 2 | 3;
+          try {
+            legacy = parseGameViewer2ProjectFileV3(raw);
+            legacyVersion = 3;
+          } catch {
+            legacy = parseGameViewer2ProjectFileV2(raw);
+            legacyVersion = 2;
+          }
           if (!state.summary)
-            throw new Error("升级 v2 项目前必须先导入其 layout ZIP。");
+            throw new Error("升级旧项目前必须先导入其 layout ZIP。");
           parsed = {
-            ...legacy,
-            version: 3 as const,
+            kind: "gameviewer2-project" as const,
+            version: 4 as const,
+            layoutSha256: legacy.layoutSha256,
+            flow: legacy.flow,
             operations: createGameViewer2OperationProject({
               flow: legacy.flow,
               summary: state.summary,
               review: "required",
             }),
           };
-          state.status =
-            "v2 项目已转换为待审阅 v3 草稿；请显式接受 operation 输出后再预览或导出。";
+          state.status = `v${legacyVersion} 项目已转换为待审阅 v4 草稿；请显式确认 effect 后再预览或导出。`;
           void error;
         }
         if (state.summary && parsed.layoutSha256 !== state.summary.sha256)
@@ -119,7 +129,7 @@ export function createGameViewer2AppShell(root: HTMLElement): void {
         state.projectHash = parsed.layoutSha256;
         state.selectedChoreography = parsed.flow.choreographies[0]!.id;
         if (parsed.operations.edges.every((edge) => edge.review === "complete"))
-          state.status = "v3 本地项目已导入；预览前会重新执行完整校验。";
+          state.status = "v4 本地项目已导入；预览前会重新执行完整校验。";
       });
     });
     root.querySelectorAll<HTMLElement>("[data-action]").forEach((element) => {
@@ -183,7 +193,7 @@ async function handleAction(
     void operationPlan;
     downloadProject({
       kind: "gameviewer2-project",
-      version: 3,
+      version: 4,
       layoutSha256: state.summary.sha256,
       flow: state.flow,
       operations: state.operations!,
@@ -214,7 +224,7 @@ async function handleAction(
       const operationPlan = requireFinalizedOperationPlan(state);
       launchRuntimeWindow({
         kind: "gameviewer2-launch",
-        version: 3,
+        version: 4,
         layoutSha256: readiness.layout.sha256,
         layoutZip: state.layoutBytes.slice().buffer,
         project: readiness.project,
@@ -470,7 +480,7 @@ function shellHtml(state: EditorState): string {
   </main>`;
 }
 
-function operationsHtml(project: SlotOperationAuthoringProjectV1): string {
+function operationsHtml(project: SlotOperationAuthoringProjectV2): string {
   return `<section class="operation-workspace"><div class="section-heading"><div><h2>Operation authoring</h2><p>按执行顺序编辑已注册 kind 与完整 payload；positions、pairing、result、order、amount 均保存在 payload。每条 edge 必须独立校验并接受。</p></div></div><div class="operation-edges">${project.edges
     .map(
       (edge, edgeIndex) =>
@@ -486,7 +496,7 @@ function operationsHtml(project: SlotOperationAuthoringProjectV1): string {
                     )
                     .join("")
                 : `<li><strong>server source</strong><small>本地编辑器不可修改此来源。</small></li>`;
-            return `<div class="operation-draft"><div class="operation-fields"><label>kind<select data-edit="operation-kind" data-edge="${edgeIndex}" data-draft="${draftIndex}">${GAMEVIEWER2_OPERATION_KINDS.map((kind) => `<option value="${kind}" ${draft.kind === kind ? "selected" : ""}>${kind}</option>`).join("")}</select></label><label>id<input value="${escapeHtml(draft.id)}" disabled></label></div><label>payload JSON<textarea data-edit="operation-payload" data-edge="${edgeIndex}" data-draft="${draftIndex}" rows="10">${escapeHtml(JSON.stringify(draft.payload, null, 2))}</textarea></label><ul class="operation-evidence">${evidence}</ul></div>`;
+            return `<div class="operation-draft"><div class="operation-fields"><label>kind<select data-edit="operation-kind" data-edge="${edgeIndex}" data-draft="${draftIndex}">${GAMEVIEWER2_OPERATION_KINDS.map((kind) => `<option value="${kind}" ${draft.kind === kind ? "selected" : ""}>${kind}</option>`).join("")}</select></label><label>business key<input value="${escapeHtml(draft.businessKey ?? "finalizer-generated")}" disabled></label></div><label>payload JSON<textarea data-edit="operation-payload" data-edge="${edgeIndex}" data-draft="${draftIndex}" rows="10">${escapeHtml(JSON.stringify(draft.payload, null, 2))}</textarea></label><ul class="operation-evidence">${evidence}</ul></div>`;
           })
           .join("")}</article>`,
     )

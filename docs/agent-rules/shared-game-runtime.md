@@ -5,8 +5,8 @@
 ## 依赖与职责
 
 - `packages/gameframeworks` 是后续游戏默认 facade，整合 UI、网络、logic 数据流和 production scene-layout API。
-- `packages/logiccore` 只拥有通用 server round/component/result/otherScenes 解析、索引校验、strict profile 和不可变 `SlotOperationPlanV1`；业务 component、symbol 和金额语义由 app 注入。
-- operation kind/version、source evidence、input/output occurrence closure 和 plan final closure
+- `packages/logiccore` 只拥有通用 server round/component/result/otherScenes 解析、strict selector/generator、mutation reducer 和不可变 `SlotOperationPlanV2` finalizer；业务 component、symbol、金额语义与最终排列由 app 注入。
+- operation kind/version/effect、source evidence、state-mutation occurrence closure 和 plan final closure
   必须由 logiccore strict compiler/finalizer 证明。正式 server source 与本地
   snapshot-authored source 不得互相 fallback；本地 suggestion 只存在于独立
   `slotoperationauthoring` package。
@@ -21,6 +21,8 @@
   base/cascade 的共享编排入口。必须在 next-spin cleanup 与首次 mutation 前预检完整 plan；
   handler 按 prepare/start/update/commit/rollback/destroy 生命周期执行，不使用进程级 registry、
   kind alias 或首项 fallback。
+- registry 必须精确注册 kind/version/effect；scene landing 与 state mutation commit 后校验
+  output snapshot，presentation 不读取或提交不存在的 output。
 - settled 后、中奖前的业务转换必须由 logiccore 的中性 immutable transform step
   和 rendercore 的 capability phase 显式表达；共享层只校验 occurrence
   code/value continuity 与 prepare/commit/rollback，不认识业务 symbol、component

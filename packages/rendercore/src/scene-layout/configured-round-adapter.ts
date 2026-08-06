@@ -1,5 +1,5 @@
 import {
-  compileSlotRoundOperationPlan,
+  compileConfiguredSlotRoundOperationPlanV2,
   type GameLogic,
   type SceneMatrix,
   type SlotRoundCapability,
@@ -220,7 +220,7 @@ class DefaultConfiguredSceneLayoutRoundAdapter implements ConfiguredSceneLayoutR
           return [symbol, code];
         }),
       );
-      const plan = compileSlotRoundOperationPlan(
+      const plan = compileConfiguredSlotRoundOperationPlanV2(
         this.#roundFlow,
         logic,
         {

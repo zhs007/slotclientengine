@@ -485,7 +485,9 @@ describe("local scene flow runtime", () => {
     });
     runtime.play();
     mocks.tickerCallback!({ deltaMS: 16 });
-    expect(mocks.applySnapshot).toHaveBeenCalledOnce();
+    mocks.tickerCallback!({ deltaMS: 16 });
+    mocks.tickerCallback!({ deltaMS: 16 });
+    expect(mocks.applySnapshot).not.toHaveBeenCalled();
     expect(mocks.spin).toHaveBeenCalledOnce();
     runtime.destroy();
   });
@@ -516,17 +518,17 @@ function withLeadingOperation(
   plan: ReturnType<typeof operationPlanFor>,
   source: Record<string, unknown>,
 ) {
-  const kind =
-    source.kind === "snapshot-authored" ? "slot:spin" : "slot:collect";
+  const kind = "slot:win";
   const leading = {
-    ...plan.operations[0],
     id: "leading-operation",
     kind,
+    version: 2,
+    effect: "presentation",
     operationIndex: 0,
     source,
-    input: plan.initial,
-    output: plan.initial,
+    payload: {},
     requiredCapabilities: [kind],
+    commit: "atomic",
   };
   const operations = [leading, ...plan.operations].map(
     (operation, operationIndex) => ({ ...operation, operationIndex }),
@@ -560,43 +562,75 @@ function operationPlanFor(
     values: readonly (readonly (number | null)[])[];
     occurrences: never[];
   } = initialSnapshot;
-  const operations = targets.map((target, index) => {
-    if (target.kind !== "scene") throw new Error("target must be a scene");
-    const output = {
-      scene: options.outputMismatch && index === 0 ? [[99]] : target.scene,
-      values: target.otherScene,
-      occurrences: [],
-    };
-    const operation = {
-      id: `operation-${index}`,
-      kind: target.transition === "spin" ? "slot:spin" : "slot:update-values",
-      version: 1,
-      operationIndex: index,
+  const operations: Record<string, unknown>[] = [
+    {
+      id: "operation-initial",
+      kind: "slot:scene-landing",
+      version: 2,
+      effect: "scene-landing",
+      operationIndex: 0,
       source: {
         kind: "snapshot-authored",
-        inputSnapshotId: value.snapshots[index]!.id,
-        outputSnapshotId: target.id,
+        inputSnapshotId: initial.id,
+        outputSnapshotId: initial.id,
         suggestions: [],
         edits: [],
       },
-      input,
-      output,
+      output: initialSnapshot,
       payload: {},
-      requiredCapabilities: [
-        target.transition === "spin" ? "slot:spin" : "slot:update-values",
-      ],
+      requiredCapabilities: ["slot:scene-landing"],
       commit: "atomic",
-    };
-    input = output;
-    return operation;
-  });
+    },
+  ];
+  operations.push(
+    ...targets.map((target, index) => {
+      if (target.kind !== "scene") throw new Error("target must be a scene");
+      const output = {
+        scene: options.outputMismatch && index === 0 ? [[99]] : target.scene,
+        values: target.otherScene,
+        occurrences: [],
+      };
+      const operation = {
+        id: `operation-${index}`,
+        kind:
+          target.transition === "spin" ? "slot:spin" : "slot:state-mutation",
+        version: 2,
+        effect:
+          target.transition === "spin" ? "scene-landing" : "state-mutation",
+        operationIndex: index + 1,
+        source: {
+          kind: "snapshot-authored",
+          inputSnapshotId: value.snapshots[index]!.id,
+          outputSnapshotId: target.id,
+          suggestions: [],
+          edits: [],
+        },
+        ...(target.transition === "spin"
+          ? {}
+          : { input, mutations: [{ kind: "test" }] }),
+        output,
+        payload: {},
+        requiredCapabilities: [
+          target.transition === "spin" ? "slot:spin" : "slot:state-mutation",
+        ],
+        commit: "atomic",
+      };
+      input = output;
+      return operation;
+    }),
+  );
   return deepFreeze({
     kind: "slot-operation-plan",
-    version: 1,
-    initial: initialSnapshot,
+    version: 2,
     operations,
-    final: operations.at(-1)?.output ?? initialSnapshot,
-    requiredCapabilities: ["slot:spin", "slot:update-values"],
+    final:
+      (operations.at(-1)?.output as typeof initialSnapshot | undefined) ??
+      initialSnapshot,
+    requiredCapabilities: [
+      "slot:scene-landing",
+      "slot:spin",
+      "slot:state-mutation",
+    ],
   });
 }
 

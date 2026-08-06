@@ -1,7 +1,7 @@
 import { Application } from "pixi.js";
 import type {
-  SlotOperationBase,
-  SlotOperationPlanV1,
+  SlotOperationPlanV2,
+  SlotOperationV2,
 } from "@slotclientengine/logiccore";
 import {
   createSlotOperationCoordinator,
@@ -61,7 +61,7 @@ export async function createSceneOtherSceneFlowRuntime(options: {
   readonly layoutZipBytes: Uint8Array;
   readonly expectedLayoutSha256?: string;
   readonly project: SceneOtherSceneFlowProjectV2 | unknown;
-  readonly operationPlan?: SlotOperationPlanV1;
+  readonly operationPlan?: SlotOperationPlanV2;
   readonly random?: SceneOtherSceneBoundedRandom;
 }): Promise<SceneOtherSceneFlowRuntime> {
   const readiness = await inspectSceneOtherSceneFlowReadiness({
@@ -124,13 +124,20 @@ export async function createSceneOtherSceneFlowRuntime(options: {
 }
 
 function assertOperationPlanMatchesFlow(
-  plan: SlotOperationPlanV1,
+  plan: SlotOperationPlanV2,
   project: SceneOtherSceneFlowProjectV2,
 ): void {
   const initial = project.snapshots[0];
+  const firstLanding = plan.operations.find(
+    (operation) => operation.effect === "scene-landing",
+  );
+  if (!firstLanding)
+    throw new SceneLayoutError("Operation plan has no scene landing.");
   if (
-    JSON.stringify(plan.initial.scene) !== JSON.stringify(initial.scene) ||
-    JSON.stringify(plan.initial.values) !== JSON.stringify(initial.otherScene)
+    JSON.stringify(firstLanding.output.scene) !==
+      JSON.stringify(initial.scene) ||
+    JSON.stringify(firstLanding.output.values) !==
+      JSON.stringify(initial.otherScene)
   )
     throw new SceneLayoutError(
       "Operation plan initial snapshot does not match the local flow.",
@@ -140,12 +147,17 @@ function assertOperationPlanMatchesFlow(
       .reverse()
       .find(
         (item) =>
+          item.effect !== "presentation" &&
           item.source.kind === "snapshot-authored" &&
           item.source.outputSnapshotId === snapshot.id,
       );
     if (!operation)
       throw new SceneLayoutError(
         `Operation plan has no finalized edge for snapshot "${snapshot.id}".`,
+      );
+    if (operation.effect === "presentation")
+      throw new SceneLayoutError(
+        `Operation plan edge for snapshot "${snapshot.id}" does not establish state.`,
       );
     if (
       JSON.stringify(operation.output.scene) !==
@@ -167,7 +179,7 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
   readonly #manifest: SceneLayoutManifestV1;
   readonly #random: SceneOtherSceneBoundedRandom;
   readonly #statePhases: ReadonlyMap<string, "stable" | "once">;
-  readonly #operationPlan: SlotOperationPlanV1 | null;
+  readonly #operationPlan: SlotOperationPlanV2 | null;
   readonly #operationCoordinator: ReturnType<
     typeof createSlotOperationCoordinator
   > | null;
@@ -187,7 +199,7 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
     readiness: SceneOtherSceneFlowReadiness,
     manifest: SceneLayoutManifestV1,
     random: SceneOtherSceneBoundedRandom,
-    operationPlan?: SlotOperationPlanV1,
+    operationPlan?: SlotOperationPlanV2,
   ) {
     this.#application = application;
     this.#runtime = runtime;
@@ -201,6 +213,7 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
     );
     this.#lastOperationBySnapshotId = new Map(
       (operationPlan?.operations ?? []).flatMap((operation) =>
+        operation.effect !== "presentation" &&
         operation.source.kind === "snapshot-authored"
           ? [
               [
@@ -340,7 +353,7 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
     if (this.#completed.size === this.cellCount) this.beginReelSpin();
   }
 
-  private createOperationCoordinator(plan: SlotOperationPlanV1) {
+  private createOperationCoordinator(plan: SlotOperationPlanV2) {
     const registry = createSlotOperationHandlerRegistry();
     const registered = new Set<string>();
     for (const operation of plan.operations) {
@@ -359,12 +372,13 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
       registry.register({
         kind: operation.kind,
         version: operation.version,
+        effect: operation.effect,
         requiredCapabilities: capabilities,
         handler: {
           preflight: (item) => this.preflightOperation(item),
-          prepare: (item): SlotOperationBase => item,
-          start: (item: SlotOperationBase) => this.startOperation(item),
-          update: (item: SlotOperationBase) => ({
+          prepare: (item): SlotOperationV2 => item,
+          start: (item: SlotOperationV2) => this.startOperation(item),
+          update: (item: SlotOperationV2) => ({
             completed: this.isOperationComplete(item),
           }),
           commit: () => undefined,
@@ -380,7 +394,7 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
     });
   }
 
-  private preflightOperation(operation: SlotOperationBase): void {
+  private preflightOperation(operation: SlotOperationV2): void {
     if (operation.source.kind !== "snapshot-authored")
       throw new SceneLayoutError(
         `Local flow operation ${operation.id} must use snapshot-authored source evidence.`,
@@ -389,13 +403,16 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
     const snapshotIndex = this.readiness.project.snapshots.findIndex(
       (snapshot) => snapshot.id === source.outputSnapshotId,
     );
-    if (snapshotIndex <= 0)
+    if (
+      snapshotIndex < 0 ||
+      (snapshotIndex === 0 && operation.effect !== "scene-landing")
+    )
       throw new SceneLayoutError(
         `Local flow operation ${operation.id} targets unknown snapshot "${source.outputSnapshotId}".`,
       );
   }
 
-  private startOperation(operation: SlotOperationBase): void {
+  private startOperation(operation: SlotOperationV2): void {
     if (operation.source.kind !== "snapshot-authored")
       throw new SceneLayoutError(
         `Operation ${operation.id} has invalid local source.`,
@@ -405,10 +422,22 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
       (snapshot) => snapshot.id === source.outputSnapshotId,
     );
     const snapshot = this.readiness.project.snapshots[snapshotIndex]!;
+    if (snapshot.kind === "initial") {
+      if (operation.effect !== "scene-landing")
+        throw new SceneLayoutError(
+          `Operation ${operation.id} must establish the initial snapshot by scene landing.`,
+        );
+      this.#flowPhase = "instant";
+      return;
+    }
     if (snapshot.kind !== "scene")
       throw new SceneLayoutError(
         `Operation ${operation.id} output is not a scene snapshot.`,
       );
+    if (operation.effect === "presentation") {
+      this.#flowPhase = "instant";
+      return;
+    }
     const isLast =
       this.#lastOperationBySnapshotId.get(snapshot.id) ===
       operation.operationIndex;
@@ -437,7 +466,7 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
   }
 
   private startSettledOperation(
-    operation: SlotOperationBase,
+    operation: Exclude<SlotOperationV2, { readonly effect: "presentation" }>,
     snapshotIndex: number,
   ): void {
     const snapshot = this.readiness.project.snapshots[snapshotIndex]!;
@@ -464,7 +493,7 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
       }
   }
 
-  private isOperationComplete(_operation: SlotOperationBase): boolean {
+  private isOperationComplete(_operation: SlotOperationV2): boolean {
     if (this.#flowPhase === "instant") return true;
     if (this.#flowPhase === "before-spin") {
       if (this.#completed.size === this.cellCount) this.beginReelSpin();

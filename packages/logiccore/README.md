@@ -259,13 +259,12 @@ pnpm install
 
 `parseSlotRoundFlowProfile(input, { activeSymbols })` 严格解析 V1 component role、cascade block 与 symbol policy。policy 数组必须显式存在、无重复，并按 active symbol package 的大小写精确 code 校验；未知字段、版本、component role 冲突和未知 symbol 都会失败。
 
-`compileSlotRoundOperationPlan(profile, logic, context)` 是 renderer-free 纯函数。它在画面开始前一次性校验全部 step、scene/result/otherScene 索引、remove hole、dropdown occurrence 一一映射、held occurrence、refill closure 与 value authority，输出深冻结的稳定 operation plan。编译器不依赖 Pixi、DOM 或动画实现，也不认识任何游戏 component/symbol 名。
+`compileConfiguredSlotRoundOperationPlanV2(profile, logic, context)` 是配置型 consumer 的 renderer-free V2 入口。它在画面开始前一次性校验全部 step、scene/result/otherScene 索引、remove hole、dropdown occurrence 一一映射、held occurrence、refill closure 与 value authority。
 
 ## Slot operation plan
 
-`compileSlotOperationPlan()` 从正式 `GameLogic`、纯 program compiler 和 exact
-kind/version definitions 构造 `SlotOperationPlanV1`；`finalizeAuthoredSlotOperationPlan()`
-只接受 `snapshot-authored` source 且所有 suggestion 必须为 `exact`。两条路径共用
-snapshot occurrence closure、operation chain/final closure、plain-data/cycle 检查和
-deep-freeze。built-in 包含 spin、win、collect、remove、dropdown、refill、value update、
-replacement 与 relocation；游戏业务通过显式 definition 注入，不在 logiccore 写 symbol 分支。
+`SlotOperationPlanV2` 以 `scene-landing | presentation | state-mutation` 区分 effect。
+`finalizeSlotOperationPlanV2()` 保持调用方给定顺序，生成稳定 id/index、聚合 capability，
+并验证 source evidence、scene establishment、mutation closure、plain data 与 deep freeze。
+Spin landing 只含 output；Win/Completion presentation 不携带伪 input/output；只有 mutation
+声明 input/output/mutations。游戏业务通过显式 V2 definition 注入，不在 logiccore 写 symbol 分支。

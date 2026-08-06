@@ -3,22 +3,20 @@ import type {
   SceneOtherSceneFlowProjectV2,
 } from "@slotclientengine/rendercore/scene-layout";
 import type {
-  SlotOperationAuthoringProjectV1,
+  SlotOperationAuthoringProjectV2,
   SlotOperationAuthoringEdge,
-  SlotOperationAuthoringSnapshot,
 } from "@slotclientengine/slotoperationauthoring";
-import { finalizeSlotOperationAuthoringDraft } from "@slotclientengine/slotoperationauthoring";
+import {
+  deriveSlotStateMutations,
+  finalizeSlotOperationAuthoringDraft,
+} from "@slotclientengine/slotoperationauthoring";
 
 export const GAMEVIEWER2_OPERATION_KINDS = Object.freeze([
   "slot:spin",
+  "slot:scene-landing",
+  "slot:state-mutation",
   "slot:win",
-  "slot:collect",
-  "slot:remove",
-  "slot:update-values",
-  "slot:replace-occurrences",
-  "slot:relocate-occurrences",
-  "slot:dropdown",
-  "slot:refill",
+  "slot:completion",
 ] as const);
 
 export type GameViewer2OperationKind =
@@ -28,11 +26,11 @@ export function createGameViewer2OperationProject(options: {
   readonly flow: SceneOtherSceneFlowProjectV2;
   readonly summary: SceneOtherSceneFlowPackageSummary;
   readonly review: "required" | "complete";
-}): SlotOperationAuthoringProjectV1 {
+}): SlotOperationAuthoringProjectV2 {
   const names = new Map(
     options.summary.symbols.map((item) => [item.code, item.name]),
   );
-  const snapshots: SlotOperationAuthoringSnapshot[] = [
+  const snapshots: SlotOperationAuthoringProjectV2["snapshots"][number][] = [
     Object.freeze({
       id: options.flow.snapshots[0].id,
       snapshot: snapshotFromFlow(options.flow.snapshots[0], names),
@@ -77,86 +75,51 @@ export function createGameViewer2OperationProject(options: {
         ),
       });
     const drafts: SlotOperationAuthoringEdge["drafts"][number][] = [];
+    if (index === 0)
+      drafts.push(
+        Object.freeze({
+          effect: "scene-landing" as const,
+          kind: "slot:scene-landing",
+          version: 2,
+          source: Object.freeze({
+            ...source("initial-scene"),
+            outputSnapshotId: input.id,
+          }),
+          output: input.snapshot,
+          payload: Object.freeze({}),
+          businessKey: `initial:${input.id}`,
+        }),
+      );
     let output;
     if (target.transition === "spin") {
       output = snapshotFromFlow(target, names);
       drafts.push(
         Object.freeze({
-          id: `spin:${input.id}:${target.id}`,
+          effect: "scene-landing" as const,
           kind: "slot:spin",
-          version: 1,
+          version: 2,
           source: source("output"),
-          payload: Object.freeze({ output }),
+          output,
+          payload: Object.freeze({}),
+          businessKey: `${input.id}:${target.id}`,
         }),
       );
     } else {
-      const replacements = target.scene.flatMap((column, x) =>
-        column.flatMap((code, y) =>
-          code === input.snapshot.scene[x]![y]
-            ? []
-            : [
-                Object.freeze({
-                  position: Object.freeze({ x, y }),
-                  code,
-                  value: target.otherScene[x]![y]!,
-                  identity: "replace" as const,
-                }),
-              ],
-        ),
-      );
-      const replacementId = `replace:${input.id}:${target.id}`;
-      let current = input.snapshot;
-      if (replacements.length > 0) {
+      output = snapshotFromFlow(target, names);
+      if (JSON.stringify(input.snapshot) !== JSON.stringify(output))
         drafts.push(
           Object.freeze({
-            id: replacementId,
-            kind: "slot:replace-occurrences",
-            version: 1,
-            source: source("replacements"),
-            payload: Object.freeze({
-              replacements: Object.freeze(replacements),
-            }),
-          }),
-        );
-        current = applyReplacements(
-          current,
-          target,
-          replacements,
-          replacementId,
-          names,
-        );
-      }
-      const updates = target.otherScene.flatMap((column, x) =>
-        column.flatMap((value, y) =>
-          target.scene[x]![y] === input.snapshot.scene[x]![y] &&
-          value !== current.values[x]![y]
-            ? [Object.freeze({ position: Object.freeze({ x, y }), value })]
-            : [],
-        ),
-      );
-      if (updates.length > 0) {
-        drafts.push(
-          Object.freeze({
-            id: `values:${input.id}:${target.id}`,
-            kind: "slot:update-values",
-            version: 1,
-            source: source("values"),
-            payload: Object.freeze({ updates: Object.freeze(updates) }),
-          }),
-        );
-        current = applyUpdates(current, updates);
-      }
-      if (drafts.length === 0)
-        drafts.push(
-          Object.freeze({
-            id: `collect:${input.id}:${target.id}`,
-            kind: "slot:collect",
-            version: 1,
-            source: source("no-change"),
+            effect: "state-mutation" as const,
+            kind: "slot:state-mutation",
+            version: 2,
+            source: source("mutations"),
+            input: input.snapshot,
+            output,
+            mutations: deriveSlotStateMutations(input.snapshot, output),
             payload: Object.freeze({}),
+            businessKey: `${input.id}:${target.id}`,
           }),
         );
-      output = current;
     }
     snapshots.push(Object.freeze({ id: target.id, snapshot: output }));
     return Object.freeze({
@@ -168,10 +131,10 @@ export function createGameViewer2OperationProject(options: {
   });
   return Object.freeze({
     kind: "slot-operation-authoring-project",
-    version: 1,
+    version: 2,
     snapshots: Object.freeze(
       snapshots,
-    ) as SlotOperationAuthoringProjectV1["snapshots"],
+    ) as SlotOperationAuthoringProjectV2["snapshots"],
     edges: Object.freeze(edges),
   });
 }
@@ -187,12 +150,12 @@ export function operationSymbolCodes(
 }
 
 export function updateGameViewer2OperationDraft(options: {
-  readonly project: SlotOperationAuthoringProjectV1;
+  readonly project: SlotOperationAuthoringProjectV2;
   readonly edgeIndex: number;
   readonly draftIndex: number;
   readonly kind?: GameViewer2OperationKind;
   readonly payload?: unknown;
-}): SlotOperationAuthoringProjectV1 {
+}): SlotOperationAuthoringProjectV2 {
   const project = structuredClone(options.project);
   const edge = project.edges[options.edgeIndex];
   const draft = edge?.drafts[options.draftIndex];
@@ -221,14 +184,14 @@ export function updateGameViewer2OperationDraft(options: {
   return Object.freeze({
     ...project,
     edges,
-  }) as SlotOperationAuthoringProjectV1;
+  }) as SlotOperationAuthoringProjectV2;
 }
 
 export function acceptGameViewer2OperationEdge(options: {
-  readonly project: SlotOperationAuthoringProjectV1;
+  readonly project: SlotOperationAuthoringProjectV2;
   readonly edgeIndex: number;
   readonly summary: SceneOtherSceneFlowPackageSummary;
-}): SlotOperationAuthoringProjectV1 {
+}): SlotOperationAuthoringProjectV2 {
   const edge = options.project.edges[options.edgeIndex];
   if (!edge) throw new Error("Operation edge 索引不存在。");
   const input = options.project.snapshots.find(
@@ -278,7 +241,7 @@ export function acceptGameViewer2OperationEdge(options: {
   return Object.freeze({
     ...options.project,
     edges,
-  }) as SlotOperationAuthoringProjectV1;
+  }) as SlotOperationAuthoringProjectV2;
 }
 
 function snapshotFromFlow(
@@ -306,81 +269,6 @@ function snapshotFromFlow(
             }),
           ];
         }),
-      ),
-    ),
-  });
-}
-
-function applyReplacements(
-  input: SlotOperationAuthoringSnapshot["snapshot"],
-  target: SceneOtherSceneFlowProjectV2["snapshots"][number],
-  replacements: readonly {
-    readonly position: { readonly x: number; readonly y: number };
-  }[],
-  draftId: string,
-  names: ReadonlyMap<number, string>,
-) {
-  const changed = new Set(
-    replacements.map((item) => `${item.position.x},${item.position.y}`),
-  );
-  return Object.freeze({
-    scene: target.scene,
-    values: input.values.map((column, x) =>
-      Object.freeze(
-        column.map((value, y) =>
-          changed.has(`${x},${y}`) ? target.otherScene[x]![y]! : value,
-        ),
-      ),
-    ),
-    occurrences: Object.freeze(
-      input.occurrences.map((occurrence) => {
-        const { x, y } = occurrence.position;
-        if (!changed.has(`${x},${y}`)) return occurrence;
-        const code = target.scene[x]![y]!;
-        return Object.freeze({
-          ...occurrence,
-          id: `replace:${draftId}:${x}:${y}`,
-          code,
-          symbol: names.get(code)!,
-          value: target.otherScene[x]![y]!,
-        });
-      }),
-    ),
-  });
-}
-
-function applyUpdates(
-  input: SlotOperationAuthoringSnapshot["snapshot"],
-  updates: readonly {
-    readonly position: { readonly x: number; readonly y: number };
-    readonly value: number | null;
-  }[],
-) {
-  const values = new Map(
-    updates.map((item) => [
-      `${item.position.x},${item.position.y}`,
-      item.value,
-    ]),
-  );
-  return Object.freeze({
-    scene: input.scene,
-    values: input.values.map((column, x) =>
-      Object.freeze(
-        column.map((value, y) =>
-          values.has(`${x},${y}`) ? values.get(`${x},${y}`)! : value,
-        ),
-      ),
-    ),
-    occurrences: Object.freeze(
-      input.occurrences.map((occurrence) =>
-        values.has(`${occurrence.position.x},${occurrence.position.y}`)
-          ? Object.freeze({
-              ...occurrence,
-              value: values.get(
-                `${occurrence.position.x},${occurrence.position.y}`,
-              )!,
-            })
-          : occurrence,
       ),
     ),
   });

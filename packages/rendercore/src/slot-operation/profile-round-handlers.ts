@@ -1,5 +1,5 @@
 import type {
-  SlotOperationBase,
+  SlotOperationV2,
   SlotRoundCapability,
   SlotRoundDropdownStepPlan,
   SlotRoundRefillStepPlan,
@@ -51,6 +51,7 @@ export function registerSlotRoundProfileOperationHandlers(options: {
     "slot:win-remove",
     createWinHandler(options.target),
   );
+  register(options.registry, "slot:win", createWinHandler(options.target));
   register(
     options.registry,
     "slot:dropdown",
@@ -58,15 +59,22 @@ export function registerSlotRoundProfileOperationHandlers(options: {
   );
   register(
     options.registry,
+    "slot:dropdown-presentation",
+    createDropdownHandler(options.target),
+  );
+  register(
+    options.registry,
     "slot:refill",
     createRefillHandler(options.target),
   );
+  register(
+    options.registry,
+    "slot:refill-presentation",
+    createRefillHandler(options.target),
+  );
   if (!options.skipSettledTransform)
-    register(
-      options.registry,
-      "slot:settled-transform",
-      createTransformHandler(options.target),
-    );
+    for (const kind of ["slot:state-mutation", "slot:settled-presentation"])
+      register(options.registry, kind, createTransformHandler(options.target));
   register(
     options.registry,
     "slot:completion",
@@ -81,7 +89,17 @@ function register(
 ): void {
   registry.register({
     kind,
-    version: 1,
+    version: 2,
+    effect:
+      kind === "slot:spin"
+        ? "scene-landing"
+        : kind === "slot:win" ||
+            kind === "slot:completion" ||
+            kind === "slot:settled-presentation" ||
+            kind === "slot:dropdown-presentation" ||
+            kind === "slot:refill-presentation"
+          ? "presentation"
+          : "state-mutation",
     requiredCapabilities: new Set([kind]),
     handler,
   });
@@ -91,7 +109,11 @@ function createSpinHandler(
   target: SlotRoundPresentationCapabilityTarget,
 ): SlotOperationHandler {
   return immediateLifecycle({
-    start: (operation) => target.startInitialSpin(operation.output),
+    start: (operation) => {
+      if (operation.effect !== "scene-landing")
+        throw new Error("slot:spin must be a scene-landing operation.");
+      target.startInitialSpin(operation.output);
+    },
     update: (deltaSeconds) => {
       target.update(deltaSeconds);
       return target.isInitialSpinComplete();
@@ -174,10 +196,10 @@ function createCompletionHandler(
 }
 
 function immediateLifecycle(options: {
-  readonly preflight?: (operation: SlotOperationBase) => void;
-  readonly start: (operation: SlotOperationBase) => void;
+  readonly preflight?: (operation: SlotOperationV2) => void;
+  readonly start: (operation: SlotOperationV2) => void;
   readonly update: (deltaSeconds: number) => boolean;
-}): SlotOperationHandler<SlotOperationBase, SlotOperationBase> {
+}): SlotOperationHandler<SlotOperationV2, SlotOperationV2> {
   return {
     preflight: (operation) => options.preflight?.(operation),
     prepare: (operation) => operation,
@@ -191,7 +213,7 @@ function immediateLifecycle(options: {
   };
 }
 
-function requireStep<Step>(operation: SlotOperationBase): Step {
+function requireStep<Step>(operation: SlotOperationV2): Step {
   const step = (operation.payload as { readonly step?: Step }).step;
   if (!step) throw new Error(`${operation.kind} payload.step is missing.`);
   return step;

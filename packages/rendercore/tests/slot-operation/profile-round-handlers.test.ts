@@ -12,8 +12,8 @@ describe("configured profile operation handlers", () => {
       target: target() as never,
       skipSettledTransform: true,
     });
-    expect(registry.has("slot:settled-transform", 1)).toBe(false);
-    expect(registry.has("slot:spin", 1)).toBe(true);
+    expect(registry.has("slot:state-mutation", 2)).toBe(false);
+    expect(registry.has("slot:spin", 2)).toBe(true);
   });
 
   it("strictly rejects missing step payloads and target methods", () => {
@@ -25,15 +25,15 @@ describe("configured profile operation handlers", () => {
     const operation = { kind: "slot:spin", payload: {} };
     expect(() =>
       registry
-        .get("slot:settled-transform", 1)!
+        .get("slot:state-mutation", 2)!
         .handler.preflight(operation as never),
     ).toThrow(/no settled-transform handler/);
     expect(() =>
-      registry.get("slot:win-remove", 1)!.handler.start(operation as never),
+      registry.get("slot:win-remove", 2)!.handler.start(operation as never),
     ).toThrow(/payload.step/);
     expect(() =>
       registry
-        .get("slot:win-remove", 1)!
+        .get("slot:win-remove", 2)!
         .handler.preflight({ ...operation, payload: { step: {} } } as never),
     ).not.toThrow();
   });
@@ -51,9 +51,9 @@ describe("configured profile operation handlers", () => {
       payload: { step: {} },
       output: {},
     } as never;
-    registry.get("slot:win-remove", 1)!.handler.preflight(operation);
+    registry.get("slot:win-remove", 2)!.handler.preflight(operation);
     expect(preflightWin).toHaveBeenCalledOnce();
-    const completion = registry.get("slot:completion", 1)!.handler;
+    const completion = registry.get("slot:completion", 2)!.handler;
     completion.start(operation);
     expect(completion.update(operation, 0).completed).toBe(true);
   });
@@ -82,10 +82,10 @@ describe("configured profile operation handlers", () => {
     });
     const step = { stepIndex: 1 };
     const transformOperation = {
-      kind: "slot:settled-transform",
+      kind: "slot:state-mutation",
       payload: { step },
     } as never;
-    const transform = registry.get("slot:settled-transform", 1)!.handler;
+    const transform = registry.get("slot:state-mutation", 2)!.handler;
     transform.preflight(transformOperation);
     transform.start(transformOperation);
     expect(transform.update(transformOperation, 0.1).completed).toBe(false);
@@ -96,7 +96,7 @@ describe("configured profile operation handlers", () => {
       kind: "slot:completion",
       payload: {},
     } as never;
-    const completion = registry.get("slot:completion", 1)!.handler;
+    const completion = registry.get("slot:completion", 2)!.handler;
     completion.start(completionOperation);
     expect(completion.update(completionOperation, 0.1).completed).toBe(false);
     expect(completion.update(completionOperation, 0.1).completed).toBe(true);
@@ -112,9 +112,9 @@ describe("configured profile operation handlers", () => {
     const dropdown = { kind: "slot:dropdown", payload: {} } as never;
     const refill = { kind: "slot:refill", payload: {} } as never;
     expect(() =>
-      registry.get("slot:dropdown", 1)!.handler.start(dropdown),
+      registry.get("slot:dropdown", 2)!.handler.start(dropdown),
     ).toThrow(/slot:dropdown payload.step/);
-    expect(() => registry.get("slot:refill", 1)!.handler.start(refill)).toThrow(
+    expect(() => registry.get("slot:refill", 2)!.handler.start(refill)).toThrow(
       /slot:refill payload.step/,
     );
   });

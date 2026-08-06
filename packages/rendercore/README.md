@@ -595,10 +595,11 @@ grid-cell 级联以 `-1` 作为中间态空洞。`createGridCellCascadeDropPlan(
 
 ## Slot operation coordinator
 
-`createSlotOperationHandlerRegistry()` 是 runtime 实例 owner；kind/version 重复注册和未知
+`createSlotOperationHandlerRegistry()` 是 runtime 实例 owner；kind/version/effect 不匹配、重复注册和未知
 handler 精确失败。`createSlotOperationCoordinator()` 在 next-spin cleanup 与首次 mutation
 前预检完整 immutable plan 及每个 capability，然后逐 operation 执行
-`prepare → start/update → commit → snapshot assert → destroy`。未提交 operation 失败执行
+`prepare → start/update → commit → destroy`；只有 scene landing/state mutation 在 commit 后
+执行 snapshot assert，presentation 不访问 output。未提交 operation 失败执行
 rollback/destroy/fatal cleanup；已提交 operation 不伪装成整轮倒放。旧固定 round
 coordinator 已从 public surface 删除。
 
