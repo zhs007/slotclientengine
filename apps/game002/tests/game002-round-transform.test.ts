@@ -3,156 +3,12 @@ import type {
   SlotRoundOccurrenceSnapshot,
   SlotRoundSettledTransformStepPlan,
 } from "@slotclientengine/gameframeworks";
-import { deriveSlotStateMutations } from "@slotclientengine/gameframeworks";
 import type { SymbolCascadePlayer } from "@slotclientengine/rendercore";
 import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-amount";
-import {
-  expandGame002TransformOperation,
-  Game002RoundTarget,
-} from "../src/game-adapter.js";
+import { Game002RoundTarget } from "../src/game-adapter.js";
 import type { Game002ReelRuntime } from "../src/game-demo.js";
 
 describe("Game002RoundTarget multiplier transform", () => {
-  it("expands multiplier and CO state commits into continuous atomic operations", () => {
-    const scene = createScene(1);
-    scene[0][0] = 1;
-    scene[1][0] = 7;
-    scene[2][0] = 8;
-    scene[3][0] = 9;
-    const step = createWmCmTransformStep(scene);
-    const phases = expandGame002TransformOperation({
-      operation: transformOperation(step),
-      step,
-      transform: {
-        stepIndex: 1,
-        wlIncrements: [],
-        wmReplacements: [
-          { position: { x: 1, y: 0 }, intermediateValue: 4, outputValue: 8 },
-        ],
-        cnUpdates: [
-          { position: { x: 1, y: 0 }, inputValue: 4, outputValue: 8 },
-          { position: { x: 2, y: 0 }, inputValue: 5, outputValue: 10 },
-        ],
-        cm: { position: { x: 3, y: 0 }, multiplier: 2, outputValue: 7 },
-        coReplacements: [],
-      },
-      symbolCodes: symbolCodes(),
-    });
-    expect(phases.map((item) => item.kind)).toEqual([
-      "game002:wild-multiplier-presentation",
-      "game002:wm-to-cn",
-      "game002:coin-multiplier",
-      "game002:cm-to-cn",
-    ]);
-    const mutations = phases.filter((item) => item.effect === "state-mutation");
-    expect(mutations.at(-1)!.output).toEqual(step.output);
-    mutations
-      .slice(1)
-      .forEach((item, index) =>
-        expect(item.input).toEqual(mutations[index]!.output),
-      );
-
-    const wlScene = createScene(1);
-    wlScene[1][0] = 1;
-    const wlStep = createWlIncrementStep(wlScene);
-    expect(
-      expandGame002TransformOperation({
-        operation: transformOperation(wlStep),
-        step: wlStep,
-        transform: {
-          stepIndex: 1,
-          wlIncrements: [
-            { position: { x: 0, y: 0 }, inputValue: 2, outputValue: 3 },
-          ],
-          wmReplacements: [],
-          cnUpdates: [],
-          cm: null,
-          coReplacements: [],
-        },
-        symbolCodes: symbolCodes(),
-      }).map((item) => item.kind),
-    ).toEqual(["game002:wl-increment"]);
-
-    const coScene = createScene(1);
-    const coStep = createCoTransformStep(coScene);
-    expect(
-      expandGame002TransformOperation({
-        operation: transformOperation(coStep),
-        step: coStep,
-        transform: {
-          stepIndex: 1,
-          wlIncrements: [],
-          wmReplacements: [],
-          cnUpdates: [],
-          cm: null,
-          coCollection: {} as never,
-          coReplacements: [],
-        },
-        symbolCodes: { ...symbolCodes(), CO: 6, BN: 10 },
-      }).map((item) => item.kind),
-    ).toEqual(["game002:co-collect"]);
-  });
-
-  it("rejects incomplete or invalid atomic transform decompositions", () => {
-    const scene = createScene(1);
-    scene[1][0] = 1;
-    const step = createWlIncrementStep(scene);
-    const base = {
-      operation: transformOperation(step),
-      step,
-      symbolCodes: symbolCodes(),
-    };
-    expect(() =>
-      expandGame002TransformOperation({
-        ...base,
-        transform: {
-          stepIndex: 1,
-          wlIncrements: [],
-          wmReplacements: [],
-          cnUpdates: [],
-          cm: null,
-          coReplacements: [],
-        },
-      }),
-    ).toThrow(/no atomic operation/);
-    expect(() =>
-      expandGame002TransformOperation({
-        ...base,
-        transform: {
-          stepIndex: 1,
-          wlIncrements: [
-            { position: { x: 0, y: 0 }, inputValue: 2, outputValue: 4 },
-          ],
-          wmReplacements: [],
-          cnUpdates: [],
-          cm: null,
-          coReplacements: [],
-        },
-      }),
-    ).toThrow(/does not close/);
-
-    const cmScene = createScene(1);
-    cmScene[0][0] = 1;
-    cmScene[1][0] = 9;
-    cmScene[2][0] = 8;
-    const cmStep = createCmTransformStep(cmScene);
-    expect(() =>
-      expandGame002TransformOperation({
-        operation: transformOperation(cmStep),
-        step: cmStep,
-        transform: {
-          stepIndex: 1,
-          wlIncrements: [],
-          wmReplacements: [],
-          cnUpdates: [],
-          cm: { position: { x: 0, y: 0 }, multiplier: 2, outputValue: 7 },
-          coReplacements: [],
-        },
-        symbolCodes: symbolCodes(),
-      }),
-    ).toThrow(/CM phase input/);
-  });
-
   it("rejects an out-of-order or mismatched atomic presentation session", () => {
     const runtime = new TransformRuntime();
     const target = new Game002RoundTarget({
@@ -586,31 +442,6 @@ class TransformRuntime {
   }
 }
 
-function transformOperation(step: SlotRoundSettledTransformStepPlan) {
-  return {
-    id: "transform:1",
-    kind: "slot:state-mutation",
-    version: 2,
-    effect: "state-mutation" as const,
-    operationIndex: 0,
-    source: {
-      kind: "server-component" as const,
-      stepIndex: 1,
-      bindings: {},
-    },
-    input: step.input,
-    output: step.output,
-    mutations: deriveSlotStateMutations(step.input, step.output),
-    payload: { step },
-    requiredCapabilities: ["slot:state-mutation"],
-    commit: "atomic" as const,
-  };
-}
-
-function symbolCodes() {
-  return { WL: 0, A: 1, CO: 6, WM: 7, CN: 8, CM: 9, BN: 10 };
-}
-
 function createTransformStep(): SlotRoundSettledTransformStepPlan {
   const input = createSnapshot(createScene(1), 7, 3, 2);
   const outputScene = createScene(1);
@@ -780,34 +611,6 @@ function createWmCmTransformStep(
         });
       }),
     ),
-    requiredCapabilities: Object.freeze(["settled-transform"] as const),
-  });
-}
-
-function createCoTransformStep(
-  scene: readonly (readonly number[])[],
-): SlotRoundSettledTransformStepPlan {
-  const values = scene.map((column) => column.map(() => null));
-  const input = createGenericSnapshot(scene, values);
-  const outputScene = scene.map((column) => [...column]);
-  outputScene[2][0] = 10;
-  const output = createGenericSnapshot(outputScene, values);
-  const position = Object.freeze({ x: 2, y: 0 });
-  const occurrenceId = "o-2-0";
-  return Object.freeze({
-    kind: "settled-transform",
-    index: 0,
-    stepIndex: 1,
-    input,
-    output,
-    changes: Object.freeze([
-      Object.freeze({
-        occurrenceId,
-        position,
-        input: input.occurrences.find((item) => item.id === occurrenceId)!,
-        output: output.occurrences.find((item) => item.id === occurrenceId)!,
-      }),
-    ]),
     requiredCapabilities: Object.freeze(["settled-transform"] as const),
   });
 }

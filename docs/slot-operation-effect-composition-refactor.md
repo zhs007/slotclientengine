@@ -1,7 +1,8 @@
 # Slot Operation Effect Model 与游戏显式编排重构
 
 > 状态：Task 178 的 V2 runtime、consumer 与 authoring 切换已实施；本文是当前
-> `SlotOperationPlanV2` 架构合同。配置型 consumer 暂时仍通过
+> `SlotOperationPlanV2` 架构合同。Game002 已改为自主调用原子 generator 并直接排列
+> BaseGame、transform 与显式 FreeGame operations；配置型 consumer 暂时仍通过
 > `compileConfiguredSlotRoundOperationPlanV2()` 生成 V2 trace，后续必须把这段固定排列下沉到
 > consumer，不能把它扩展成新的 shared 业务编排层。
 >
@@ -10,7 +11,7 @@
 
 ## 结论
 
-下一阶段应把“服务器数据解析”和“最终 operation 编排”从当前固定 profile compiler 中拆开：
+当前合同把“服务器数据解析”和“最终 operation 编排”从固定 profile compiler 中拆开：
 
 - `logiccore` 提供 strict component selector、无状态 operation generator、snapshot mutation
   算法和最终 plan finalizer；
@@ -38,9 +39,9 @@ flowchart LR
     coordinator --> runtime["Reel / Symbol / Popup runtime"]
 ```
 
-## 当前问题
+## 已移除的旧问题
 
-当前正式 round 编译大致分为两遍：
+Task 178 首版的 Game002 round 编译曾分为两遍：
 
 1. `logiccore.compileSlotRoundOperationPlan()` 根据固定 profile 遍历 server round，生成
    `spin -> win -> dropdown -> refill -> settled-transform -> completion`；

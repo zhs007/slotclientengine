@@ -2,13 +2,15 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  compileConfiguredSlotRoundOperationPlanV2,
   createSlotGameLogicResult,
   type GameLogic,
 } from "@slotclientengine/gameframeworks";
 import { compileGame002FreeGamePlan } from "../src/freegame-plan.js";
-import { GAME002_ROUND_FLOW_PROFILE } from "../src/cascade-config.js";
-import { createGame002WlWmMultiplierCompiler } from "../src/wl-wm-multiplier-plan.js";
+import {
+  compileGame002BaseGameOperationPlan,
+  compileGame002RoundOperationPlan,
+} from "../src/game002-operation-compiler.js";
+import type { Game002ReelRuntime } from "../src/game-demo.js";
 
 const SAMPLE_RESULTS = JSON.parse(
   readFileSync(
@@ -24,48 +26,67 @@ const CODES = Object.freeze({
   AF: 11,
   BN: 12,
 });
+const DISPLAY_SYMBOLS = Object.freeze([
+  "WL",
+  "H1",
+  "H2",
+  "L1",
+  "L2",
+  "L3",
+  "L4",
+  "WM",
+  "CN",
+  "CM",
+  "CO",
+  "AF",
+  "BN",
+]);
+
+function compilerRuntime() {
+  return {
+    gameConfig: {
+      getSymbolCode: (symbol: string) => DISPLAY_SYMBOLS.indexOf(symbol),
+    },
+  } as Game002ReelRuntime;
+}
 
 describe("game002 FreeGame plan", () => {
+  it("serializes FreeGame as explicit frontend operations without server steps", () => {
+    const compilation = compileGame002RoundOperationPlan({
+      logic: createSampleLogic(),
+      runtime: compilerRuntime(),
+      displaySymbols: DISPLAY_SYMBOLS,
+    });
+    const kinds = compilation.plan.operations.map(
+      (operation) => operation.kind,
+    );
+    expect(kinds).toContain("game002:freegame-trigger");
+    expect(kinds).toContain("game002:freegame-enter");
+    expect(
+      kinds.filter((kind) => kind === "game002:freegame-spin"),
+    ).toHaveLength(10);
+    expect(kinds).toContain("game002:freegame-af");
+    expect(kinds).toContain("game002:freegame-co");
+    expect(kinds).toContain("game002:freegame-win");
+    expect(kinds).toContain("game002:freegame-popup");
+    expect(kinds.at(-1)).toBe("game002:freegame-exit");
+    expect(
+      compilation.plan.operations.some(
+        (operation) =>
+          Object.prototype.hasOwnProperty.call(operation.payload, "step") ||
+          Object.prototype.hasOwnProperty.call(operation.payload, "stepIndex"),
+      ),
+    ).toBe(false);
+  });
+
   it("compiles the complete authoritative 18-step sample before playback", () => {
     const logic = createSampleLogic();
-    const compiler = createGame002WlWmMultiplierCompiler({
-      wlSymbolCode: CODES.WL,
-      wmSymbolCode: 7,
-      cnSymbolCode: CODES.CN,
-      cmSymbolCode: 9,
-      coSymbolCode: CODES.CO,
-      bnSymbolCode: CODES.BN,
-    });
-    const basePlan = compileConfiguredSlotRoundOperationPlanV2(
-      GAME002_ROUND_FLOW_PROFILE,
-      sliceLogic(logic, 8),
-      {
-        symbolCodes: {
-          WL: 0,
-          H1: 1,
-          H2: 2,
-          L1: 3,
-          L2: 4,
-          L3: 5,
-          L4: 6,
-          WM: 7,
-          CN: 8,
-          CM: 9,
-          CO: 10,
-          AF: 11,
-          BN: 12,
-        },
-        columns: 6,
-        rows: 9,
-        resolveSettledScene: (context) => compiler.resolveSettledScene(context),
-        hydrateSettledValues: (context) =>
-          compiler.hydrateSettledValues(context),
-        compileSettledTransform: (context) =>
-          compiler.compileSettledTransform(context),
-      },
-      { includeCompletion: false },
-    );
-    compiler.assertComplete();
+    const basePlan = compileGame002BaseGameOperationPlan({
+      logic: sliceLogic(logic, 8),
+      runtime: compilerRuntime(),
+      displaySymbols: DISPLAY_SYMBOLS,
+      includeWinAmount: false,
+    }).plan;
     const plan = compileGame002FreeGamePlan({
       logic,
       entryScene: basePlan.final.scene,

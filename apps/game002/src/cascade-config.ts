@@ -1,5 +1,4 @@
 import type { GridCellCascadeMotionOptions } from "@slotclientengine/rendercore/reel";
-import type { SlotRoundFlowProfileV1 } from "@slotclientengine/gameframeworks";
 
 export const GAME002_CASCADE_COMPONENTS = Object.freeze({
   spin: "bg-spin",
@@ -48,58 +47,18 @@ export const GAME002_CASCADE_PRESENTATION = Object.freeze({
   startPresentationsWithEmphasis: true,
 });
 
-export const GAME002_ROUND_FLOW_PROFILE = Object.freeze({
-  kind: "slot-round-flow",
-  version: 1,
-  components: {
-    spin: GAME002_CASCADE_COMPONENTS.spin,
-    wins: [GAME002_CASCADE_COMPONENTS.win, GAME002_CASCADE_COMPONENTS.win2],
-    valueUpdates: [GAME002_CASCADE_COMPONENTS.gencoins],
-  },
-  cascade: {
-    kind: "cascade",
-    version: 1,
-    components: {
-      remove: GAME002_CASCADE_COMPONENTS.remove,
-      dropdown: GAME002_CASCADE_COMPONENTS.dropdown,
-      refill: GAME002_CASCADE_COMPONENTS.refill,
-      stepMarker: GAME002_CASCADE_COMPONENTS.respin,
-      releaseOnlyWins: [GAME002_CASCADE_COMPONENTS.bn],
-    },
-    symbols: {
-      emptyCode: -1,
-      removeExcludedSymbols: ["WL"],
-      dropHeldSymbols: ["WL"],
-      valueSymbols: ["CN"],
-      sequentialWinCompanionSymbols: ["WL"],
-    },
-    amount: {
-      coinFields: ["coinWin64", "coinWin", "mul"],
-      cashFields: ["cashWin64", "cashWin", "mul"],
-      cashUnit: "cents",
-    },
-  },
-  amount: {
-    coinFields: ["coinWin64", "coinWin", "mul"],
-    cashFields: ["cashWin64", "cashWin", "mul"],
-    cashUnit: "cents",
-  },
-} as const satisfies SlotRoundFlowProfileV1);
+const GAME002_REMOVE_EXCLUDED_SYMBOLS = new Set(["WL"]);
+const GAME002_DROP_HELD_SYMBOLS = new Set(["WL"]);
+const GAME002_SEQUENTIAL_WIN_COMPANION_SYMBOLS = new Set(["WL"]);
 
 export function canGame002CascadeRemoveSymbol(symbol: string): boolean {
-  return !GAME002_ROUND_FLOW_PROFILE.cascade.symbols.removeExcludedSymbols.includes(
-    symbol as "WL",
-  );
+  return !GAME002_REMOVE_EXCLUDED_SYMBOLS.has(symbol);
 }
 
 export function canGame002CascadeDropSymbol(symbol: string): boolean {
-  return !GAME002_ROUND_FLOW_PROFILE.cascade.symbols.dropHeldSymbols.includes(
-    symbol as "WL",
-  );
+  return !GAME002_DROP_HELD_SYMBOLS.has(symbol);
 }
 
 export function isGame002SequentialWinCompanionSymbol(symbol: string): boolean {
-  return GAME002_ROUND_FLOW_PROFILE.cascade.symbols.sequentialWinCompanionSymbols.includes(
-    symbol as "WL",
-  );
+  return GAME002_SEQUENTIAL_WIN_COMPANION_SYMBOLS.has(symbol);
 }

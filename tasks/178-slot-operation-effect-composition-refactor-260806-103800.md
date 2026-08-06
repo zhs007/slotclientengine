@@ -57,3 +57,24 @@ slot:settled-transform
 - 把 `compileConfiguredSlotRoundOperationPlanV2()` 的固定 profile 排列分别下沉到 configured scene-layout consumer 与 game002 strict selector/generator compiler，随后删除 LogicCore bridge，才能完全满足“shared package 不拥有最终业务顺序”的目标。
 - 需要携带真实 production ZIP/旧 viewer project 完成 Game Viewer 2 人工验收，并在可控 live/视觉 fixture 中复验 game002 普通 Spin、cascade、WL/WM/CM/CN/CO、FreeGame、下一轮 cleanup 与中途失败恢复。
 - 按计划，本次跨包 public contract、schema 与事务生命周期改动仍建议独立复验。
+
+## 2026-08-06 Game002 编排收口
+
+- LogicCore 新增 `genSpinOperation`、`genWinOperation`、`genRemoveOperation`、
+  `genDropdownOperation`、`genRefillOperation` 及 snapshot change/value helpers；这些 API
+  只生成原子 draft，不决定游戏调用顺序。
+- Game002 新增自主 round compiler，直接遍历 server steps 并排列 Spin、Win、Remove、
+  Dropdown、Refill、WL/WM/CM/CN/CO、WinAmount operations；生产 `playSpin()` 只在 `try/catch`
+  中调用一次 compiler 后启动 coordinator，不再做 bet/symbol/component 基础检查。
+- 删除 Game002 的 profile plan → `settled-transform` flatMap → 二次 finalizer 流程；handler
+  只读取 operation 自带的 snapshot/groups/fall/transform payload，不再读取 `payload.step` 或
+  按 stepIndex 回查 cascade sequence。
+- FreeGame 不再是单个 opaque operation，权威 18-step 样例会生成 trigger、enter、10 次 spin、
+  AF、CO、final win、popup、exit 等显式 operations，由 coordinator 逐项播放；旧的独立
+  FreeGame playback 状态机及其测试已经删除，不再保留第二条播放路径。
+- 自动化结果：LogicCore 定向 typecheck 与 generator tests 通过；game002 typecheck 通过；
+  game002 全量 `25 files / 191 tests` 通过；`git diff --check` 在提交前再次执行。
+
+仍保留的兼容范围：`createGame002CascadeSequence()` 仅供旧定向测试与资源校验 helper 使用，
+不再参与生产 plan 编译或播放；configured scene-layout consumer 仍使用 shared configured compiler，
+其下沉不属于本次针对 Game002 反馈的收口。

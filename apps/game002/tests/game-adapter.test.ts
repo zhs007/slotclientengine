@@ -558,7 +558,7 @@ describe("game002 task 95 adapter", () => {
 
     expect(diagnostics).toContainEqual(
       expect.stringContaining(
-        'presentation progress {"coordinator":{"phase":"running","operationIndex":0,"operationKey":"slot:spin@2"',
+        'presentation progress {"coordinator":{"phase":"running","operationIndex":0,"operationKey":"game002:spin@2"',
       ),
     );
     expect(diagnostics).toContainEqual(

@@ -37,6 +37,7 @@ export interface Game002WinRemoveStage {
   readonly outputScene: GridCellCascadeScene;
   readonly outputValues: GridCellCascadeValueMatrix;
   readonly removedNum: number | null;
+  readonly releaseOnlyPositions: readonly WinResultPosition[];
 }
 
 export interface Game002CascadeStage {
@@ -62,6 +63,189 @@ export interface Game002CascadeSequence {
   readonly cascades: readonly Game002CascadeStage[];
   readonly finalScene: SceneMatrix;
   readonly finalValues: SymbolPresentationValueMatrix;
+}
+
+export interface Game002SpinOperationData {
+  readonly scene: SceneMatrix;
+  readonly values: SymbolPresentationValueMatrix;
+  readonly usesServerValues: boolean;
+}
+
+export interface Game002FallOperationData {
+  readonly sourceScene: GridCellCascadeScene;
+  readonly sourceValues: GridCellCascadeValueMatrix;
+  readonly dropdownScene: GridCellCascadeScene;
+  readonly dropdownValues: GridCellCascadeValueMatrix;
+  readonly refillPositions: readonly WinResultPosition[];
+  readonly refillScene: SceneMatrix;
+  readonly refillValues: SymbolPresentationValueMatrix;
+}
+
+export function readGame002SpinOperationData(options: {
+  readonly logic: GameLogic;
+  readonly cnSymbolCode: number;
+  readonly auxiliaryValueSymbolCodes?: readonly number[];
+}): Game002SpinOperationData {
+  const step = options.logic.getSteps()[0];
+  if (!step) throw new Error("game002 spin requires server step[0].");
+  requireTriggered(step, GAME002_CASCADE_COMPONENTS.spin);
+  const serverScene = exactlyOneFullScene(
+    step.getComponentScenes(GAME002_CASCADE_COMPONENTS.spin),
+    "step[0] bg-spin",
+  );
+  const scene = resolveGeneratedMultiplierScene(step, serverScene, "step[0]");
+  const valueResult = readFinalValues({
+    step,
+    scene,
+    cnSymbolCode: options.cnSymbolCode,
+    auxiliaryValueSymbolCodes: new Set(options.auxiliaryValueSymbolCodes ?? []),
+    required: false,
+  });
+  return Object.freeze({
+    scene,
+    values: valueResult.values,
+    usesServerValues: valueResult.usesServerValues,
+  });
+}
+
+export function readGame002FallOperationData(options: {
+  readonly step: GameLogicStep;
+  readonly sourceScene: GridCellCascadeScene;
+  readonly sourceValues: GridCellCascadeValueMatrix;
+  readonly cnSymbolCode: number;
+  readonly auxiliaryValueSymbolCodes?: readonly number[];
+  readonly canDropSymbol: (context: {
+    readonly stepIndex: number;
+    readonly x: number;
+    readonly y: number;
+    readonly code: number;
+    readonly presentationValue: number | null;
+  }) => boolean;
+}): Game002FallOperationData {
+  const stepIndex = options.step.getIndex();
+  requireTriggered(options.step, GAME002_CASCADE_COMPONENTS.respin);
+  requireTriggered(options.step, GAME002_CASCADE_COMPONENTS.dropdown);
+  requireTriggered(options.step, GAME002_CASCADE_COMPONENTS.refill);
+  const dropdown = requireBasicComponent(
+    options.step,
+    GAME002_CASCADE_COMPONENTS.dropdown,
+  );
+  const srcIndexes = parseIndexArray(
+    dropdown.basicComponentData?.srcScenes,
+    `step[${stepIndex}] bg-dropdown.srcScenes`,
+  );
+  if (srcIndexes.length !== 1)
+    throw new Error(
+      `step[${stepIndex}] bg-dropdown.srcScenes must contain exactly one index.`,
+    );
+  const serverSourceScene = parseHoleScene(
+    options.step.getScene(srcIndexes[0]!),
+    `step[${stepIndex}] bg-dropdown source`,
+  );
+  assertMatrixEqual(
+    serverSourceScene,
+    options.sourceScene,
+    `step[${stepIndex}] dropdown source scene`,
+  );
+  const dropdownScene = exactlyOneHoleScene(
+    options.step.getComponentScenes(GAME002_CASCADE_COMPONENTS.dropdown),
+    `step[${stepIndex}] bg-dropdown`,
+  );
+  const derivedDropdownValues = deriveGridCellCascadeSettledValues({
+    sourceScene: options.sourceScene,
+    sourceValues: options.sourceValues,
+    settledScene: dropdownScene,
+    canDropOccurrence: ({ x, sourceY, code, presentationValue }) =>
+      options.canDropSymbol({
+        stepIndex,
+        x,
+        y: sourceY,
+        code,
+        presentationValue,
+      }),
+  });
+  const dropdownOther = optionalOtherScene(
+    options.step.getComponentOtherScenes(GAME002_CASCADE_COMPONENTS.dropdown),
+    `step[${stepIndex}] bg-dropdown`,
+    false,
+  );
+  const dropdownValues = derivedDropdownValues;
+  if (dropdownOther)
+    validateExpectedOtherSceneValues(
+      dropdownOther,
+      dropdownValues,
+      `step[${stepIndex}] bg-dropdown values`,
+    );
+  const refill = requireBasicComponent(
+    options.step,
+    GAME002_CASCADE_COMPONENTS.refill,
+  );
+  const refillPositions = parsePositions(
+    refill.basicComponentData?.pos,
+    `step[${stepIndex}] bg-refill.pos`,
+  );
+  assertPositionsAreExactlyHoles(
+    refillPositions,
+    dropdownScene,
+    `step[${stepIndex}] bg-refill.pos`,
+  );
+  const serverRefillScene = exactlyOneFullScene(
+    options.step.getComponentScenes(GAME002_CASCADE_COMPONENTS.refill),
+    `step[${stepIndex}] bg-refill`,
+  );
+  const refillScene = resolveGeneratedMultiplierScene(
+    options.step,
+    serverRefillScene,
+    `step[${stepIndex}]`,
+  );
+  validateRefillScene(dropdownScene, refillScene, refillPositions, stepIndex);
+  const refillValueResult = readFinalValues({
+    step: options.step,
+    scene: refillScene,
+    cnSymbolCode: options.cnSymbolCode,
+    auxiliaryValueSymbolCodes: new Set(options.auxiliaryValueSymbolCodes ?? []),
+    required: refillPositions.some(
+      ({ x, y }) => refillScene[x]?.[y] === options.cnSymbolCode,
+    ),
+    fallbackValues: createCarriedRefillValues(dropdownValues, refillPositions),
+  });
+  validateCarriedValues(
+    dropdownScene,
+    dropdownValues,
+    refillScene,
+    refillValueResult.values,
+    new Set(refillPositions.map(positionKey)),
+    stepIndex,
+  );
+  createGridCellCascadeDropPlan({
+    sourceScene: options.sourceScene,
+    sourceValues: options.sourceValues,
+    settledScene: dropdownScene,
+    settledValues: dropdownValues,
+    targetScene: refillScene,
+    targetValues: refillValueResult.values,
+    refillPositions,
+    canDropOccurrence: ({ x, sourceY, code, presentationValue }) =>
+      options.canDropSymbol({
+        stepIndex,
+        x,
+        y: sourceY,
+        code,
+        presentationValue,
+      }),
+    cellHeight: 1,
+    rowGap: 0,
+    motion: GAME002_CASCADE_MOTION,
+  });
+  return Object.freeze({
+    sourceScene: options.sourceScene,
+    sourceValues: options.sourceValues,
+    dropdownScene,
+    dropdownValues,
+    refillPositions,
+    refillScene,
+    refillValues: refillValueResult.values,
+  });
 }
 
 export function createGame002CascadeSequence(options: {
@@ -136,7 +320,7 @@ export function createGame002CascadeSequence(options: {
   let currentScene: GridCellCascadeScene = spinScene;
   let currentValues: GridCellCascadeValueMatrix = spinValues;
   const plannedInitialWin = findPlanWin(options.executionPlan, 0);
-  const initialWin = createWinRemoveStage({
+  const initialWin = readGame002WinOperationData({
     logic: options.logic,
     step: initialStep,
     sourceScene: plannedInitialWin?.input.scene ?? spinScene,
@@ -334,7 +518,7 @@ export function createGame002CascadeSequence(options: {
       motion: GAME002_CASCADE_MOTION,
     });
     const plannedWin = findPlanWin(options.executionPlan, stepIndex);
-    const winStage = createWinRemoveStage({
+    const winStage = readGame002WinOperationData({
       logic: options.logic,
       step,
       sourceScene: plannedWin?.input.scene ?? refillScene,
@@ -538,7 +722,7 @@ function matrixEquals(
   );
 }
 
-function createWinRemoveStage(options: {
+export function readGame002WinOperationData(options: {
   readonly logic: GameLogic;
   readonly step: GameLogicStep;
   readonly sourceScene: SceneMatrix;
@@ -614,15 +798,20 @@ function createWinRemoveStage(options: {
         options.expectedOutputValues,
         `step[${stepIndex}] execution-plan remove values`,
       )
-    : removeOther
-      ? parseHoleValues(
-          removeOther,
-          outputScene,
-          options.cnSymbolCode,
-          `step[${stepIndex}] bg-remove values`,
-        )
-      : derivedOutputValues;
-  if (removeOther && options.expectedOutputValues) {
+    : derivedOutputValues;
+  const releaseOnlyPositions =
+    options.releaseOnlyPositions ??
+    Object.freeze(
+      step
+        .getComponentResults("bg-bn")
+        .flatMap((result, resultIndex) =>
+          parsePositions(
+            result.pos,
+            `step[${stepIndex}] bg-bn result[${resultIndex}].pos`,
+          ),
+        ),
+    );
+  if (removeOther) {
     validateExpectedOtherSceneValues(
       removeOther,
       outputValues,
@@ -635,7 +824,7 @@ function createWinRemoveStage(options: {
     outputScene,
     outputValues,
     groups,
-    options.releaseOnlyPositions ?? [],
+    releaseOnlyPositions,
     stepIndex,
   );
   const remove = requireBasicComponent(step, GAME002_CASCADE_COMPONENTS.remove);
@@ -651,13 +840,30 @@ function createWinRemoveStage(options: {
     outputScene,
     outputValues,
     removedNum,
+    releaseOnlyPositions,
   });
 }
 
 function sumGroupCoinAmounts(groups: readonly SymbolCascadeGroup[]): number {
   let total = 0;
   for (const [groupIndex, group] of groups.entries()) {
-    total += resolveGame002WinResultCoinAmount({ group, groupIndex });
+    const hasFinalCoinAmount = [
+      group.result.coinWin64,
+      group.result.coinWin,
+    ].some(
+      (value) =>
+        typeof value === "number" && Number.isSafeInteger(value) && value > 0,
+    );
+    const rawMultiplier = group.result.otherMul;
+    const multiplier =
+      !hasFinalCoinAmount &&
+      typeof rawMultiplier === "number" &&
+      Number.isSafeInteger(rawMultiplier) &&
+      rawMultiplier > 0
+        ? rawMultiplier
+        : 1;
+    total +=
+      resolveGame002WinResultCoinAmount({ group, groupIndex }) * multiplier;
     if (!Number.isSafeInteger(total)) {
       throw new Error("game002 cascade coin total exceeds safe integer range.");
     }
@@ -726,14 +932,28 @@ function readFinalValues(options: {
       usesServerValues: false,
     });
   }
+  const parsed = parseFullValues(
+    other,
+    options.scene,
+    options.cnSymbolCode,
+    options.auxiliaryValueSymbolCodes,
+    `${label} values`,
+  );
+  const values = options.fallbackValues
+    ? Object.freeze(
+        parsed.map((column, x) =>
+          Object.freeze(
+            column.map((value, y) =>
+              options.auxiliaryValueSymbolCodes.has(options.scene[x]![y]!)
+                ? options.fallbackValues![x]![y]!
+                : value,
+            ),
+          ),
+        ),
+      )
+    : parsed;
   return Object.freeze({
-    values: parseFullValues(
-      other,
-      options.scene,
-      options.cnSymbolCode,
-      options.auxiliaryValueSymbolCodes,
-      `${label} values`,
-    ),
+    values,
     usesServerValues: true,
   });
 }
@@ -870,7 +1090,7 @@ function validateRemoveOutput(
       outputValues[x][y] !== sourceValues[x][y]
     ) {
       throw new Error(
-        `step[${stepIndex}] bg-remove changed non-winning occurrence (${x},${y}).`,
+        `step[${stepIndex}] bg-remove changed non-winning occurrence (${x},${y}) from code/value ${sourceScene[x][y]}/${String(sourceValues[x][y])} to ${outputScene[x][y]}/${String(outputValues[x][y])}.`,
       );
     }
   });

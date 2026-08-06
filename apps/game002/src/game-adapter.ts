@@ -6,25 +6,15 @@ import type {
   SlotRoundCapability,
   SlotRoundOccurrenceSnapshot,
   SlotRoundRefillStepPlan,
-  SlotRoundSettledTransformStepPlan,
   SlotRoundWinStepPlan,
   SlotOperationV2,
-  SlotOperationDefinitionV2,
-  SlotOperationDraftV2,
   SlotOperationPlanV2,
-  SlotStateMutationOperation,
   SlotOperationSnapshot,
   SlotGameAdapter,
   SlotGameInitialState,
   SlotGameMountContext,
   SlotGameStateSnapshot,
   SlotGameViewportSnapshot,
-} from "@slotclientengine/gameframeworks";
-import {
-  compileConfiguredSlotRoundOperationPlanV2,
-  createBuiltinSlotOperationDefinitionsV2,
-  deriveSlotStateMutations,
-  finalizeSlotOperationPlanV2,
 } from "@slotclientengine/gameframeworks";
 import {
   assertSymbolValueDisplayResource,
@@ -37,7 +27,6 @@ import {
   type SymbolCascadePlayer,
   createSlotOperationCoordinator,
   createSlotOperationHandlerRegistry,
-  registerSlotRoundProfileOperationHandlers,
   type SlotOperationHandler,
   type PreparedVisibleOccurrenceReplacement,
   type PreparedGridCellVisibleOccurrenceTransferBatch,
@@ -47,8 +36,6 @@ import type {
   WinAmountAnimationPlayer,
 } from "@slotclientengine/rendercore/win-amount";
 import {
-  GAME002_REEL_COUNT,
-  GAME002_VISIBLE_ROWS,
   createGame002GridCellDimming,
   createGame002Layout,
 } from "./game-layout.js";
@@ -74,30 +61,27 @@ import {
   resolveGame002WinResultMultiplier,
 } from "./cascade-win-summary-config.js";
 import {
-  createGame002CascadeSequence,
+  type Game002CascadeStage,
   type Game002CascadeSequence,
   type Game002WinRemoveStage,
 } from "./cascade-sequence.js";
 import {
   GAME002_CASCADE_MOTION,
   GAME002_CASCADE_PRESENTATION,
-  GAME002_ROUND_FLOW_PROFILE,
   canGame002CascadeDropSymbol,
-  canGame002CascadeRemoveSymbol,
   isGame002SequentialWinCompanionSymbol,
 } from "./cascade-config.js";
+import { type Game002TransformOperationPayload } from "./wl-wm-multiplier-plan.js";
 import {
-  createGame002WlWmMultiplierCompiler,
-  type Game002TransformOperationPayload,
-} from "./wl-wm-multiplier-plan.js";
-import {
-  compileGame002FreeGamePlan,
-  type Game002FreeGamePlan,
-} from "./freegame-plan.js";
-import {
-  createGame002FreeGamePlayback,
-  type Game002FreeGamePlayback,
-} from "./freegame-playback.js";
+  compileGame002RoundOperationPlan,
+  type Game002FallPayload,
+  type Game002FreeGameOperationPayload,
+  type Game002TransformPayload,
+  type Game002WinPayload,
+  type Game002RemovePayload,
+  type Game002SpinPayload,
+} from "./game002-operation-compiler.js";
+import { Game002FreeGameOperationTarget } from "./freegame-operation-target.js";
 
 export type Game002TickerSnapshot = { readonly deltaMS: number };
 
@@ -192,7 +176,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
   #roundCoordinator: ReturnType<typeof createSlotOperationCoordinator> | null =
     null;
   #roundTarget: Game002RoundTarget | null = null;
-  #freeGamePlayback: Game002FreeGamePlayback | null = null;
+  #freeGameOperationTarget: Game002FreeGameOperationTarget | null = null;
   #unsubscribeViewport: (() => void) | null = null;
   #disposeWinAmountAdvanceListener: (() => void) | null = null;
   #lastPresentationDiagnostic = "";
@@ -342,29 +326,32 @@ class Game002PixiAdapter implements SlotGameAdapter {
         cmSymbolCode: requireGame002SymbolCode(runtime, "CM"),
       });
       const registry = createSlotOperationHandlerRegistry();
-      registerSlotRoundProfileOperationHandlers({
-        registry,
-        target: this.#roundTarget,
-        skipSettledTransform: true,
-      });
-      for (const registration of createGame002TransformOperationRegistrations(
+      for (const registration of createGame002OperationRegistrations(
         this.#roundTarget,
       ))
         registry.register(registration);
-      registry.register(
-        createGame002FreeGameOperationRegistration({
-          runtime,
-          cascadePlayer: symbolCascadePlayer,
-          winAmountPlayer,
-          backgroundPlayer,
-          setActive: (playback) => {
-            this.#freeGamePlayback = playback;
-          },
-        }),
-      );
+      this.#freeGameOperationTarget = new Game002FreeGameOperationTarget({
+        runtime,
+        cascadePlayer: symbolCascadePlayer,
+        winAmountPlayer,
+        backgroundPlayer,
+        codes: {
+          AF: requireGame002SymbolCode(runtime, "AF"),
+          CN: requireGame002SymbolCode(runtime, "CN"),
+          CO: requireGame002SymbolCode(runtime, "CO"),
+          BN: requireGame002SymbolCode(runtime, "BN"),
+        },
+      });
+      for (const registration of createGame002FreeGameOperationRegistrations(
+        this.#freeGameOperationTarget,
+      ))
+        registry.register(registration);
       this.#roundCoordinator = createSlotOperationCoordinator({
         registry,
-        cleanup: () => this.#roundTarget?.cleanup(),
+        cleanup: () => {
+          this.#roundTarget?.cleanup();
+          this.#freeGameOperationTarget?.cleanup();
+        },
       });
       app.ticker.add(this.#onTick);
       tickerAdded = true;
@@ -422,173 +409,25 @@ class Game002PixiAdapter implements SlotGameAdapter {
   playSpin(logic: GameLogic): Promise<void> {
     const runtime = this.#requireRuntime();
     const coordinator = this.#requireRoundCoordinator();
-    if (
-      coordinator.getSnapshot().running ||
-      this.#freeGamePlayback?.isRunning()
-    ) {
+    if (coordinator.getSnapshot().running) {
       throw new Error("game002 adapter animation is already in progress.");
     }
     this.#resetPresentationDiagnostic();
-    const betAmountRaw = logic.getBet() * logic.getLines();
-    const winAmountRaw = logic.getTotalWin();
-    assertValidWinAmountInput(betAmountRaw, winAmountRaw);
-    const cnSymbolCode = runtime.gameConfig.getSymbolCode(
-      GAME002_CN_VALUE_SYMBOL,
-    );
-    if (cnSymbolCode === undefined) {
-      throw new Error("game002 game config is missing CN symbol code.");
+    try {
+      const compiled = compileGame002RoundOperationPlan({
+        logic,
+        runtime,
+        displaySymbols: this.#skin.displaySymbols,
+        logDiagnostic: this.#logDiagnostic,
+      });
+      assertGame002OperationResources(compiled.plan, runtime, this.#skin);
+      return coordinator.start(compiled.plan);
+    } catch (error) {
+      this.#logDiagnostic(
+        `game002 operation plan compile failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error;
     }
-    const wlSymbolCode = runtime.gameConfig.getSymbolCode("WL");
-    if (wlSymbolCode === undefined) {
-      throw new Error("game002 game config is missing WL symbol code.");
-    }
-    const wmSymbolCode = runtime.gameConfig.getSymbolCode("WM");
-    if (wmSymbolCode === undefined) {
-      throw new Error("game002 game config is missing WM symbol code.");
-    }
-    const cmSymbolCode = runtime.gameConfig.getSymbolCode("CM");
-    if (cmSymbolCode === undefined) {
-      throw new Error("game002 game config is missing CM symbol code.");
-    }
-    const coSymbolCode = runtime.gameConfig.getSymbolCode("CO");
-    if (coSymbolCode === undefined) {
-      throw new Error("game002 game config is missing CO symbol code.");
-    }
-    const bnSymbolCode = runtime.gameConfig.getSymbolCode("BN");
-    if (bnSymbolCode === undefined) {
-      throw new Error("game002 game config is missing BN symbol code.");
-    }
-    const symbolCodes = Object.fromEntries(
-      this.#skin.displaySymbols.map((symbol) => {
-        const code = runtime.gameConfig.getSymbolCode(symbol);
-        if (code === undefined)
-          throw new Error(`game002 display symbol "${symbol}" has no code.`);
-        return [symbol, code];
-      }),
-    );
-    const triggerStepIndex = logic
-      .getSteps()
-      .findIndex((step) => step.hasComponent("bg-triggerfg"));
-    const baseLogic =
-      triggerStepIndex < 0
-        ? logic
-        : createGame002LogicSlice(logic, triggerStepIndex + 1);
-    const multiplierCompiler = createGame002WlWmMultiplierCompiler({
-      wlSymbolCode,
-      wmSymbolCode,
-      cnSymbolCode,
-      cmSymbolCode,
-      coSymbolCode,
-      bnSymbolCode,
-      logDiagnostic: this.#logDiagnostic,
-    });
-    const plan = compileConfiguredSlotRoundOperationPlanV2(
-      GAME002_ROUND_FLOW_PROFILE,
-      baseLogic,
-      {
-        symbolCodes,
-        columns: GAME002_REEL_COUNT,
-        rows: GAME002_VISIBLE_ROWS,
-        resolveSettledScene: (context) =>
-          multiplierCompiler.resolveSettledScene(context),
-        hydrateSettledValues: (context) =>
-          multiplierCompiler.hydrateSettledValues(context),
-        compileSettledTransform: (context) =>
-          multiplierCompiler.compileSettledTransform(context),
-      },
-      { includeCompletion: triggerStepIndex < 0 && winAmountRaw > 0 },
-    );
-    multiplierCompiler.assertComplete();
-    const sequence = createGame002CascadeSequence({
-      logic: baseLogic,
-      cnSymbolCode,
-      auxiliaryValueSymbolCodes: [wlSymbolCode, wmSymbolCode, cmSymbolCode],
-      executionPlan: plan,
-      canRemoveSymbol: ({ code }) =>
-        canGame002CascadeRemoveSymbol(
-          resolveGame002CascadeSymbol(runtime, code),
-        ),
-      canDropSymbol: ({ code }) =>
-        canGame002CascadeDropSymbol(resolveGame002CascadeSymbol(runtime, code)),
-    });
-    assertGame002CascadeResources(sequence, runtime, this.#skin);
-    assertGame002PlanMatchesSequence(plan, sequence);
-    const freeGamePlan =
-      triggerStepIndex < 0
-        ? null
-        : compileGame002FreeGamePlan({
-            logic,
-            entryScene: plan.final.scene,
-            entryValues: plan.final.values.map((column) =>
-              Object.freeze(
-                column.map((value) => {
-                  if (value === -1)
-                    throw new Error(
-                      "game002 FreeGame entry values must not contain cascade holes.",
-                    );
-                  return value;
-                }),
-              ),
-            ),
-            symbolCodes: {
-              WL: wlSymbolCode,
-              CN: cnSymbolCode,
-              CO: coSymbolCode,
-              AF: requireGame002SymbolCode(runtime, "AF"),
-              BN: bnSymbolCode,
-            },
-          });
-    const transformPayloads = new Map(
-      plan.operations
-        .filter(
-          (operation) =>
-            operation.effect === "state-mutation" &&
-            (
-              operation.payload as {
-                readonly step?: SlotRoundSettledTransformStepPlan;
-              }
-            ).step?.kind === "settled-transform",
-        )
-        .map((operation) => {
-          const step = (
-            operation.payload as {
-              readonly step: SlotRoundSettledTransformStepPlan;
-            }
-          ).step;
-          const payload = multiplierCompiler.getOperationPayload(
-            step.stepIndex,
-          );
-          if (!payload)
-            throw new Error(
-              `game002 step[${step.stepIndex}] transform operation payload is missing.`,
-            );
-          return [step.stepIndex, payload] as const;
-        }),
-    );
-    this.#requireRoundTarget().configure({
-      sequence,
-      betAmountRaw,
-      winAmountRaw: freeGamePlan ? 0 : winAmountRaw,
-    });
-    const completePlan = compileGame002OperationPlanV2({
-      plan,
-      payloads: transformPayloads,
-      symbolCodes,
-      ...(freeGamePlan
-        ? {
-            freeGamePlan,
-            betAmountRaw,
-            winAmountRaw,
-            freeGameSymbolCodes: {
-              AF: requireGame002SymbolCode(runtime, "AF"),
-              CN: cnSymbolCode,
-              CO: coSymbolCode,
-              BN: bnSymbolCode,
-            },
-          }
-        : {}),
-    });
-    return coordinator.start(completePlan);
   }
 
   setFrameworkState(_state: SlotGameStateSnapshot): void {
@@ -596,11 +435,10 @@ class Game002PixiAdapter implements SlotGameAdapter {
   }
 
   destroy(): void {
-    this.#freeGamePlayback?.cleanup();
-    this.#freeGamePlayback = null;
     this.#roundCoordinator?.destroy();
     this.#roundCoordinator = null;
     this.#roundTarget = null;
+    this.#freeGameOperationTarget = null;
     this.#unsubscribeViewport?.();
     this.#unsubscribeViewport = null;
     this.#disposeWinAmountAdvanceListener?.();
@@ -706,11 +544,6 @@ class Game002PixiAdapter implements SlotGameAdapter {
     return this.#roundCoordinator;
   }
 
-  #requireRoundTarget(): Game002RoundTarget {
-    if (!this.#roundTarget) throw new Error("game002 adapter is not mounted.");
-    return this.#roundTarget;
-  }
-
   #applyViewport(viewport: SlotGameViewportSnapshot): void {
     if (!this.#app || !this.#worldLayer) {
       throw new Error("game002 adapter is not mounted.");
@@ -735,191 +568,104 @@ class Game002PixiAdapter implements SlotGameAdapter {
   }
 }
 
-export function compileGame002OperationPlanV2(options: {
-  readonly plan: SlotOperationPlanV2;
-  readonly payloads: ReadonlyMap<number, Game002TransformOperationPayload>;
-  readonly symbolCodes: Readonly<Record<string, number>>;
-  readonly freeGamePlan?: Game002FreeGamePlan;
-  readonly betAmountRaw?: number;
-  readonly winAmountRaw?: number;
-  readonly freeGameSymbolCodes?: Game002FreeGameOperationPayload["symbolCodes"];
-}): SlotOperationPlanV2 {
-  let transformCount = 0;
-  const expanded = options.plan.operations.flatMap((operation) => {
-    if (
-      operation.effect !== "state-mutation" ||
-      (
-        operation.payload as {
-          readonly step?: SlotRoundSettledTransformStepPlan;
-        }
-      ).step?.kind !== "settled-transform"
-    )
-      return operation;
-    transformCount += 1;
-    const step = (
-      operation.payload as { readonly step?: SlotRoundSettledTransformStepPlan }
-    ).step;
-    if (!step)
-      throw new Error(
-        "game002 settled transform operation is missing its server step.",
-      );
-    const transform = options.payloads.get(step.stepIndex);
-    if (!transform)
-      throw new Error(
-        `game002 step[${step.stepIndex}] transform operation payload is missing.`,
-      );
-    return expandGame002TransformOperation({
-      operation,
-      step,
-      transform,
-      symbolCodes: options.symbolCodes,
-    });
+function createGame002OperationRegistrations(target: Game002RoundTarget) {
+  const lifecycle = (options: {
+    readonly start: (operation: SlotOperationV2) => void;
+    readonly update: (
+      operation: SlotOperationV2,
+      deltaSeconds: number,
+    ) => boolean;
+    readonly preflight?: (operation: SlotOperationV2) => void;
+  }): SlotOperationHandler<SlotOperationV2, SlotOperationV2> => ({
+    preflight: (operation) => options.preflight?.(operation),
+    prepare: (operation) => operation,
+    start: (operation) => options.start(operation),
+    update: (operation, deltaSeconds) => ({
+      completed: options.update(operation, deltaSeconds),
+    }),
+    commit: () => undefined,
+    rollback: () => target.cleanup(),
+    destroy: () => undefined,
   });
-  if (transformCount !== options.payloads.size)
-    throw new Error(
-      "game002 transform operation payload count does not match the plan.",
-    );
-  if (options.freeGamePlan) {
-    if (
-      options.betAmountRaw === undefined ||
-      options.winAmountRaw === undefined ||
-      !options.freeGameSymbolCodes
-    )
-      throw new Error("game002 FreeGame operation inputs are incomplete.");
-    const input = expanded.reduceRight<SlotOperationSnapshot | null>(
-      (snapshot, operation) =>
-        snapshot ??
-        (operation.effect === "presentation" ? null : operation.output),
-      null,
-    );
-    if (!input)
-      throw new Error(
-        "game002 FreeGame operation requires an established scene.",
-      );
-    const output = game002FreeGameFinalSnapshot(
-      options.freeGamePlan,
-      options.symbolCodes,
-    );
-    expanded.push({
-      id: "game002:freegame:0",
-      kind: "game002:freegame",
+  const registration = (
+    kind: string,
+    effect: SlotOperationV2["effect"],
+    handler: SlotOperationHandler<SlotOperationV2, SlotOperationV2>,
+  ) =>
+    Object.freeze({
+      kind,
       version: 2,
-      effect: "state-mutation",
-      operationIndex: expanded.length,
-      source: Object.freeze({
-        kind: "server-component" as const,
-        stepIndex: options.freeGamePlan.triggerStepIndex,
-        bindings: Object.freeze({}),
-      }),
-      input,
-      output,
-      mutations: deriveSlotStateMutations(input, output),
-      payload: Object.freeze({
-        plan: options.freeGamePlan,
-        betAmountRaw: options.betAmountRaw,
-        winAmountRaw: options.winAmountRaw,
-        symbolCodes: options.freeGameSymbolCodes,
-      } satisfies Game002FreeGameOperationPayload),
-      requiredCapabilities: Object.freeze(["game002:freegame"]),
-      commit: "atomic",
+      effect,
+      requiredCapabilities: new Set([kind]),
+      handler,
     });
-  }
-  return finalizeGame002Operations(expanded, options.symbolCodes);
-}
-
-function finalizeGame002Operations(
-  operations: readonly SlotOperationV2[],
-  symbolCodes: Readonly<Record<string, number>>,
-): SlotOperationPlanV2 {
-  const builtins = createBuiltinSlotOperationDefinitionsV2();
-  const definitions = new Map<string, SlotOperationDefinitionV2>(
-    builtins.map((definition) => [
-      `${definition.kind}@${definition.version}`,
-      definition,
-    ]),
-  );
-  for (const operation of operations) {
-    const key = `${operation.kind}@${operation.version}`;
-    const existing = definitions.get(key);
-    if (existing) {
-      if (existing.effect !== operation.effect)
-        throw new Error(`${key} changes effect within one game002 plan.`);
-      continue;
-    }
-    definitions.set(
-      key,
-      Object.freeze({
-        kind: operation.kind,
-        version: operation.version,
-        effect: operation.effect,
-        requiredCapabilities: operation.requiredCapabilities,
-        ...(operation.effect === "scene-landing"
-          ? {}
-          : { requiresEstablishedScene: true }),
-      }),
-    );
-  }
-  return finalizeSlotOperationPlanV2({
-    drafts: operations.map(operationToDraft),
-    definitions: [...definitions.values()],
-    symbolCodes,
-    columns: GAME002_REEL_COUNT,
-    rows: GAME002_VISIBLE_ROWS,
+  const spin = lifecycle({
+    start: (operation) => {
+      if (operation.effect !== "scene-landing")
+        throw new Error("game002:spin must establish a scene.");
+      const payload = operation.payload as Game002SpinPayload;
+      target.startInitialSpin(payload.scene);
+    },
+    update: (_operation, deltaSeconds) => {
+      target.update(deltaSeconds);
+      return target.isInitialSpinComplete();
+    },
   });
-}
-
-function operationToDraft(operation: SlotOperationV2): SlotOperationDraftV2 {
-  const common = {
-    kind: operation.kind,
-    version: operation.version,
-    source: operation.source,
-    payload: operation.payload,
-    businessKey: operation.id,
-  };
-  switch (operation.effect) {
-    case "scene-landing":
-      return { ...common, effect: operation.effect, output: operation.output };
-    case "presentation":
-      return {
-        ...common,
-        effect: operation.effect,
-        ...(operation.targets === undefined
-          ? {}
-          : { targets: operation.targets }),
+  const win = lifecycle({
+    start: (operation) =>
+      target.startWinGroups((operation.payload as Game002WinPayload).groups),
+    update: (_operation, deltaSeconds) => {
+      target.update(deltaSeconds);
+      return target.updateWin(deltaSeconds).completed;
+    },
+  });
+  const remove = lifecycle({
+    start: (operation) =>
+      target.applyReleaseOnlyPositions(
+        (operation.payload as Game002RemovePayload).releaseOnlyPositions,
+      ),
+    update: () => true,
+  });
+  const dropdown = lifecycle({
+    start: (operation) =>
+      target.startDropdownData(operation.payload as Game002FallPayload),
+    update: (_operation, deltaSeconds) => {
+      target.update(deltaSeconds);
+      return target.isDropdownComplete();
+    },
+  });
+  const refill = lifecycle({
+    start: (operation) => {
+      if (operation.effect !== "state-mutation")
+        throw new Error("game002:refill must mutate state.");
+      target.startRefillData(
+        operation.payload as Game002FallPayload,
+        operation.output,
+      );
+    },
+    update: (_operation, deltaSeconds) => {
+      target.update(deltaSeconds);
+      return target.isRefillComplete();
+    },
+  });
+  const completion = lifecycle({
+    start: (operation) => {
+      const payload = operation.payload as {
+        readonly betAmountRaw: number;
+        readonly winAmountRaw: number;
       };
-    case "state-mutation":
-      return {
-        ...common,
-        effect: operation.effect,
-        input: operation.input,
-        output: operation.output,
-        mutations: operation.mutations,
-      };
-  }
-}
-
-function createGame002TransformOperationRegistrations(
-  target: Game002RoundTarget,
-) {
+      target.startCompletionAmounts(payload.betAmountRaw, payload.winAmountRaw);
+    },
+    update: (_operation, deltaSeconds) => {
+      target.update(deltaSeconds);
+      return target.isCompletionComplete();
+    },
+  });
   const requirePayload = (operation: SlotOperationV2) => {
-    const payload = operation.payload as {
-      readonly step?: SlotRoundSettledTransformStepPlan;
-      readonly transform?: Game002TransformOperationPayload;
-      readonly phase?: Game002TransformPhase;
-    };
-    if (!payload.step || !payload.transform || !payload.phase)
-      throw new Error(
-        "game002 settled transform operation payload is invalid.",
-      );
-    if (payload.step.stepIndex !== payload.transform.stepIndex)
-      throw new Error(
-        "game002 settled transform step and payload indexes do not match.",
-      );
-    return {
-      step: payload.step,
-      transform: payload.transform,
-      phase: payload.phase,
-    };
+    const payload = operation.payload as Game002TransformPayload;
+    if (!payload?.transform || !payload.phase || !payload.transformInput)
+      throw new Error("game002 atomic transform operation payload is invalid.");
+    return payload;
   };
   const handler: SlotOperationHandler<SlotOperationV2, SlotOperationV2> = {
     preflight: (operation) => {
@@ -928,11 +674,7 @@ function createGame002TransformOperationRegistrations(
     prepare: (operation) => operation,
     start: (operation) => {
       const payload = requirePayload(operation);
-      target.startAtomicTransformOperation(
-        payload.step,
-        payload.transform,
-        payload.phase,
-      );
+      target.startAtomicTransformPayload(payload);
     },
     update: (_operation, deltaSeconds) => {
       target.update(deltaSeconds);
@@ -946,6 +688,12 @@ function createGame002TransformOperationRegistrations(
     destroy: () => undefined,
   };
   return [
+    registration("game002:spin", "scene-landing", spin),
+    registration("game002:win", "presentation", win),
+    registration("game002:remove", "state-mutation", remove),
+    registration("game002:dropdown", "state-mutation", dropdown),
+    registration("game002:refill", "state-mutation", refill),
+    registration("game002:win-amount", "presentation", completion),
     ...GAME002_TRANSFORM_PHASES.map((phase) =>
       Object.freeze({
         kind: `game002:${phase}`,
@@ -965,18 +713,6 @@ function createGame002TransformOperationRegistrations(
   ];
 }
 
-interface Game002FreeGameOperationPayload {
-  readonly plan: Game002FreeGamePlan;
-  readonly betAmountRaw: number;
-  readonly winAmountRaw: number;
-  readonly symbolCodes: Readonly<{
-    AF: number;
-    CN: number;
-    CO: number;
-    BN: number;
-  }>;
-}
-
 type Game002TransformPhase =
   | "wl-increment"
   | "wild-multiplier"
@@ -994,288 +730,133 @@ const GAME002_TRANSFORM_PHASES: readonly Game002TransformPhase[] = [
   "co-collect",
 ];
 
-export function expandGame002TransformOperation(options: {
-  readonly operation: SlotStateMutationOperation;
-  readonly step: SlotRoundSettledTransformStepPlan;
-  readonly transform: Game002TransformOperationPayload;
-  readonly symbolCodes: Readonly<Record<string, number>>;
-}): readonly SlotOperationV2[] {
-  const { operation, step, transform } = options;
-  const wlCode = options.symbolCodes.WL!;
-  const wmCode = options.symbolCodes.WM!;
-  const cnCode = options.symbolCodes.CN!;
-  const cmCode = options.symbolCodes.CM!;
-  const names = new Map(
-    Object.entries(options.symbolCodes).map(([name, code]) => [code, name]),
-  );
-  let current = operation.input;
-  const phases: SlotOperationV2[] = [];
-  const append = (
-    phase: Game002TransformPhase,
-    output: SlotOperationSnapshot,
-  ) => {
-    if (JSON.stringify(current) === JSON.stringify(output)) {
-      if (phase !== "wild-multiplier")
-        throw new Error(`game002:${phase} unexpectedly produced no mutation.`);
-      phases.push({
-        id: `${operation.id}:${phase}:presentation`,
-        kind: `game002:${phase}-presentation`,
-        version: 2,
-        operationIndex: operation.operationIndex,
-        source: operation.source,
-        effect: "presentation",
-        payload: Object.freeze({ step, transform, phase }),
-        requiredCapabilities: Object.freeze([`game002:${phase}-presentation`]),
-        commit: "atomic",
-      });
-      return;
-    }
-    phases.push({
-      ...operation,
-      id: `${operation.id}:${phase}`,
-      kind: `game002:${phase}`,
-      version: 2,
-      effect: "state-mutation",
-      input: current,
-      output,
-      mutations: deriveSlotStateMutations(current, output),
-      payload: Object.freeze({ step, transform, phase }),
-      requiredCapabilities: Object.freeze([`game002:${phase}`]),
-    });
-    current = output;
-  };
-  if (transform.wlIncrements.length > 0)
-    append(
-      "wl-increment",
-      applyGame002AtomicChanges(
-        current,
-        transform.wlIncrements.map((item) => ({
-          position: item.position,
-          code: wlCode,
-          value: item.outputValue,
-        })),
-        names,
-      ),
-    );
-  if (transform.wmReplacements.length > 0) {
-    const wmTotal = step.input.occurrences
-      .filter((item) => item.code === wmCode)
-      .reduce((sum, item) => sum + (item.value ?? 0), 0);
-    const wildUpdates = current.occurrences
-      .filter((item) => item.code === wlCode)
-      .map((item) => ({
-        position: item.position,
-        code: wlCode,
-        value: (item.value ?? 0) + wmTotal,
-      }));
-    append(
-      "wild-multiplier",
-      applyGame002AtomicChanges(current, wildUpdates, names),
-    );
-    append(
-      "wm-to-cn",
-      applyGame002AtomicChanges(
-        current,
-        transform.wmReplacements.map((item) => ({
-          position: item.position,
-          code: cnCode,
-          value: item.intermediateValue,
-        })),
-        names,
-      ),
-    );
-  }
-  if (transform.cnUpdates.length > 0)
-    append(
-      "coin-multiplier",
-      applyGame002AtomicChanges(
-        current,
-        transform.cnUpdates.map((item) => ({
-          position: item.position,
-          code: cnCode,
-          value: item.outputValue,
-        })),
-        names,
-      ),
-    );
-  if (transform.cm)
-    append(
-      "cm-to-cn",
-      applyGame002AtomicChanges(
-        current,
-        [
-          {
-            position: transform.cm.position,
-            code: cnCode,
-            value: transform.cm.outputValue,
-          },
-        ],
-        names,
-      ),
-    );
-  if (transform.coCollection) append("co-collect", operation.output);
-  if (phases.length === 0)
-    throw new Error(
-      `game002 step[${step.stepIndex}] transform has no atomic operation.`,
-    );
-  if (
-    transform.cm &&
-    step.input.scene[transform.cm.position.x]?.[transform.cm.position.y] !==
-      cmCode
-  )
-    throw new Error(
-      `game002 step[${step.stepIndex}] CM phase input is invalid.`,
-    );
-  if (JSON.stringify(current) !== JSON.stringify(operation.output))
-    throw new Error(
-      `game002 step[${step.stepIndex}] atomic transform does not close to the server output.`,
-    );
-  return Object.freeze(phases);
-}
-
-function applyGame002AtomicChanges(
-  input: SlotOperationSnapshot,
-  changes: readonly {
-    readonly position: { readonly x: number; readonly y: number };
-    readonly code: number;
-    readonly value: number | null;
-  }[],
-  names: ReadonlyMap<number, string>,
-): SlotOperationSnapshot {
-  const byPosition = new Map(
-    changes.map((change) => [
-      `${change.position.x},${change.position.y}`,
-      change,
-    ]),
-  );
-  const occurrences = input.occurrences.map((occurrence) => {
-    const change = byPosition.get(
-      `${occurrence.position.x},${occurrence.position.y}`,
-    );
-    if (!change) return occurrence;
-    const symbol = names.get(change.code);
-    if (!symbol)
-      throw new Error(
-        `game002 atomic transform uses unknown code ${change.code}.`,
-      );
-    return Object.freeze({
-      ...occurrence,
-      code: change.code,
-      symbol,
-      value: change.value,
-    });
-  });
-  return Object.freeze({
-    scene: Object.freeze(
-      input.scene.map((column, x) =>
-        Object.freeze(
-          column.map((code, y) => byPosition.get(`${x},${y}`)?.code ?? code),
-        ),
-      ),
-    ),
-    values: Object.freeze(
-      input.values.map((column, x) =>
-        Object.freeze(
-          column.map((value, y) => byPosition.get(`${x},${y}`)?.value ?? value),
-        ),
-      ),
-    ),
-    occurrences: Object.freeze(occurrences),
-  });
-}
-
-function game002FreeGameFinalSnapshot(
-  plan: Game002FreeGamePlan,
-  symbolCodes: Readonly<Record<string, number>>,
-): SlotOperationSnapshot {
-  const names = new Map(
-    Object.entries(symbolCodes).map(([name, code]) => [code, name]),
-  );
-  return Object.freeze({
-    scene: plan.finalScene,
-    values: plan.finalValues,
-    occurrences: Object.freeze(
-      plan.finalScene.flatMap((column, x) =>
-        column.map((code, y) => {
-          const symbol = names.get(code);
-          if (!symbol)
-            throw new Error(
-              `game002 FreeGame final scene uses unknown code ${code}.`,
-            );
-          return Object.freeze({
-            id: `game002:freegame-final:${x}:${y}`,
-            code,
-            symbol,
-            value: plan.finalValues[x]![y]!,
-            position: Object.freeze({ x, y }),
-          });
-        }),
-      ),
-    ),
-  });
-}
-
-function createGame002FreeGameOperationRegistration(options: {
-  readonly runtime: Game002ReelRuntime;
-  readonly cascadePlayer: SymbolCascadePlayer;
-  readonly winAmountPlayer: WinAmountAnimationPlayer;
-  readonly backgroundPlayer: Game002BackgroundPlayer;
-  readonly setActive: (playback: Game002FreeGamePlayback | null) => void;
-}) {
-  interface Prepared {
-    readonly playback: Game002FreeGamePlayback;
-    failure: Error | null;
-  }
-  const createPlayback = (
-    operation: SlotOperationV2,
-  ): Game002FreeGamePlayback => {
+function createGame002FreeGameOperationRegistrations(
+  target: Game002FreeGameOperationTarget,
+) {
+  const requirePayload = (operation: SlotOperationV2) => {
     const payload = operation.payload as Game002FreeGameOperationPayload;
-    if (!payload?.plan || !payload.symbolCodes)
-      throw new Error("game002:freegame payload is invalid.");
-    return createGame002FreeGamePlayback({
-      plan: payload.plan,
-      runtime: options.runtime,
-      cascadePlayer: options.cascadePlayer,
-      winAmountPlayer: options.winAmountPlayer,
-      backgroundPlayer: options.backgroundPlayer,
-      betAmountRaw: payload.betAmountRaw,
-      winAmountRaw: payload.winAmountRaw,
-      symbolCodes: payload.symbolCodes,
-    });
+    if (!payload?.kind)
+      throw new Error(`${operation.kind} FreeGame payload is invalid.`);
+    return payload;
   };
-  const handler: SlotOperationHandler<SlotOperationV2, Prepared> = {
-    preflight: (operation) => createPlayback(operation).preflight(),
-    prepare: (operation) => ({
-      playback: createPlayback(operation),
-      failure: null,
+  const handler: SlotOperationHandler<SlotOperationV2, SlotOperationV2> = {
+    preflight: (operation) => target.preflight(requirePayload(operation)),
+    prepare: (operation) => operation,
+    start: (operation) => target.start(requirePayload(operation)),
+    update: (_operation, deltaSeconds) => target.update(deltaSeconds),
+    commit: () => undefined,
+    rollback: () => target.cleanup(),
+    destroy: () => undefined,
+  };
+  return [
+    ["game002:freegame-trigger", "presentation"],
+    ["game002:freegame-enter", "presentation"],
+    ["game002:freegame-spin", "state-mutation"],
+    ["game002:freegame-af", "state-mutation"],
+    ["game002:freegame-co", "state-mutation"],
+    ["game002:freegame-win", "presentation"],
+    ["game002:freegame-popup", "presentation"],
+    ["game002:freegame-exit", "presentation"],
+  ].map(([kind, effect]) =>
+    Object.freeze({
+      kind: kind!,
+      version: 2,
+      effect: effect as "presentation" | "state-mutation",
+      requiredCapabilities: new Set([kind!]),
+      handler,
     }),
-    start: (prepared) => {
-      options.setActive(prepared.playback);
-      void prepared.playback.start().catch((error: unknown) => {
-        prepared.failure =
-          error instanceof Error ? error : new Error(String(error));
-      });
-    },
-    update: (prepared, deltaSeconds) => {
-      if (prepared.failure) throw prepared.failure;
-      prepared.playback.update(deltaSeconds);
-      if (prepared.failure) throw prepared.failure;
-      return { completed: !prepared.playback.isRunning() };
-    },
-    commit: () => options.setActive(null),
-    rollback: (prepared) => prepared.playback.cleanup(),
-    destroy: (prepared) => {
-      prepared.playback.cleanup();
-      options.setActive(null);
-    },
+  );
+}
+
+function fallStepKey(fall: Game002FallPayload): string {
+  return fall.flowKey;
+}
+
+function createSyntheticTransformStep(
+  payload: Game002TransformPayload,
+): Game002TransformSession {
+  const occurrenceAt = (
+    snapshot: SlotOperationSnapshot,
+    position: { readonly x: number; readonly y: number },
+    label: string,
+  ) => {
+    const occurrence = snapshot.occurrences.find(
+      (item) =>
+        item.position.x === position.x && item.position.y === position.y,
+    );
+    if (!occurrence)
+      throw new Error(
+        `${payload.flowKey} ${label} occurrence (${position.x},${position.y}) is missing.`,
+      );
+    return occurrence;
   };
-  return Object.freeze({
-    kind: "game002:freegame",
-    version: 2,
-    effect: "state-mutation" as const,
-    requiredCapabilities: new Set(["game002:freegame"]),
-    handler,
+  const changes = payload.transformChanges.map((change) => {
+    const input = occurrenceAt(
+      payload.transformInput,
+      change.position,
+      "input",
+    );
+    const output = occurrenceAt(payload.finalOutput, change.position, "output");
+    return Object.freeze({
+      occurrenceId: input.id,
+      position: change.position,
+      input,
+      output,
+    });
   });
+  const relocations = payload.transformRelocations.map((relocation) => {
+    const source = occurrenceAt(
+      payload.transformInput,
+      relocation.source,
+      "relocation source",
+    );
+    const overwritten = occurrenceAt(
+      payload.transformInput,
+      relocation.target,
+      "relocation target",
+    );
+    const replacement = occurrenceAt(
+      payload.finalOutput,
+      relocation.source,
+      "source replacement",
+    );
+    return Object.freeze({
+      occurrenceId: source.id,
+      overwrittenOccurrenceId: overwritten.id,
+      sourceReplacementOccurrenceId: replacement.id,
+      source: relocation.source,
+      target: relocation.target,
+    });
+  });
+  const flowIndex = Number(payload.flowKey.split(":").at(-1));
+  if (!Number.isSafeInteger(flowIndex) || flowIndex < 0)
+    throw new Error(`${payload.flowKey} has an invalid operation flow key.`);
+  return Object.freeze({
+    stepIndex: flowIndex,
+    input: payload.transformInput,
+    output: payload.finalOutput,
+    changes: Object.freeze(changes),
+    relocations: Object.freeze(relocations),
+  });
+}
+
+interface Game002TransformSession {
+  readonly stepIndex: number;
+  readonly input: SlotOperationSnapshot;
+  readonly output: SlotOperationSnapshot;
+  readonly changes: readonly {
+    readonly occurrenceId: string;
+    readonly position: { readonly x: number; readonly y: number };
+    readonly input: SlotOperationSnapshot["occurrences"][number];
+    readonly output: SlotOperationSnapshot["occurrences"][number];
+  }[];
+  readonly relocations?: readonly {
+    readonly occurrenceId: string;
+    readonly overwrittenOccurrenceId: string;
+    readonly sourceReplacementOccurrenceId: string;
+    readonly source: { readonly x: number; readonly y: number };
+    readonly target: { readonly x: number; readonly y: number };
+  }[];
 }
 
 export class Game002RoundTarget {
@@ -1285,7 +866,6 @@ export class Game002RoundTarget {
     "remove",
     "dropdown",
     "refill",
-    "settled-transform",
     "sequential-collect",
   ]);
   readonly #runtime: Game002ReelRuntime;
@@ -1326,6 +906,7 @@ export class Game002RoundTarget {
     | "transform-co-transfer"
     | "completion" = "idle";
   #activeStage: Game002CascadeSequence["cascades"][number] | null = null;
+  #activeFall: Game002FallPayload | null = null;
   #runtimeCompleted = false;
   #winCompleted = false;
   #activeReleaseOnlyPositions: readonly {
@@ -1333,10 +914,10 @@ export class Game002RoundTarget {
     readonly y: number;
   }[] = [];
   #completionComplete = true;
-  #unifiedSteps = new Set<number>();
+  #unifiedSteps = new Set<number | string>();
   #initialSnapshot: SlotRoundOccurrenceSnapshot | null = null;
   #refillSnapshot: SlotRoundOccurrenceSnapshot | null = null;
-  #activeTransform: SlotRoundSettledTransformStepPlan | null = null;
+  #activeTransform: Game002TransformSession | null = null;
   #activeMultiplierBatch: Game002TransformOperationPayload | null = null;
   #preparedWmReplacements: PreparedVisibleOccurrenceReplacement[] = [];
   #preparedCmReplacements: PreparedVisibleOccurrenceReplacement[] = [];
@@ -1383,6 +964,7 @@ export class Game002RoundTarget {
     this.#runtime.resetPresentationState();
     this.#activity = "idle";
     this.#activeStage = null;
+    this.#activeFall = null;
     this.#runtimeCompleted = false;
     this.#winCompleted = false;
     this.#activeReleaseOnlyPositions = [];
@@ -1405,7 +987,6 @@ export class Game002RoundTarget {
   }
 
   startInitialSpin(snapshot: SlotRoundOccurrenceSnapshot): void {
-    const sequence = this.requireRound().sequence;
     this.#activity = "initial";
     this.#runtimeCompleted = false;
     this.#initialSnapshot = snapshot;
@@ -1426,8 +1007,8 @@ export class Game002RoundTarget {
     this.applyMultiplierTexts(snapshot);
     assertGame002ReelVisualMatchesTarget(
       this.#runtime.getVisualSnapshot(),
-      this.requireRound().sequence.initial.spinScene,
-      "completed game002 cascade initial spin",
+      snapshot.scene,
+      "completed game002 initial spin",
     );
     this.#activity = "idle";
     this.#initialSnapshot = null;
@@ -1441,6 +1022,20 @@ export class Game002RoundTarget {
     this.#activeReleaseOnlyPositions = step.releaseOnlyPositions ?? [];
     this.#activity = "win";
     this.#cascadePlayer.start(prepared);
+  }
+
+  startWinGroups(groups: Game002WinPayload["groups"]): void {
+    const prepared = this.#cascadePlayer.prepare(groups);
+    this.#winCompleted = false;
+    this.#activeReleaseOnlyPositions = [];
+    this.#activity = "win";
+    this.#cascadePlayer.start(prepared);
+  }
+
+  applyReleaseOnlyPositions(
+    positions: Game002RemovePayload["releaseOnlyPositions"],
+  ): void {
+    if (positions.length > 0) this.#runtime.releaseVisibleSymbols(positions);
   }
 
   updateWin(_deltaSeconds: number): { readonly completed: boolean } {
@@ -1468,20 +1063,33 @@ export class Game002RoundTarget {
     this.#runtime.startCascadeDrop(plan);
   }
 
+  startDropdownData(fall: Game002FallPayload): void {
+    this.#activeFall = fall;
+    const planOptions = this.createDropPlanOptionsFromFall(fall);
+    const anticipation = this.#runtime.isAnticipationActive();
+    const plan = anticipation
+      ? this.#runtime.createCascadeDropdownPlan(planOptions)
+      : this.#runtime.createCascadeDropPlan(planOptions);
+    this.#activity = anticipation ? "dropdown-only" : "dropdown-unified";
+    if (!anticipation) this.#unifiedSteps.add(fallStepKey(fall));
+    this.#runtimeCompleted = plan.totalSeconds === 0;
+    this.#runtime.startCascadeDrop(plan);
+  }
+
   isDropdownComplete(): boolean {
-    const stage = this.requireActiveStage();
+    const stage = this.activeFallView();
     if (!this.#runtimeCompleted) return false;
     if (this.#activity === "dropdown-unified")
       assertGame002ReelVisualMatchesTarget(
         this.#runtime.getVisualSnapshot(),
         stage.refillScene,
-        `completed game002 cascade step[${stage.stepIndex}] unified fall`,
+        `completed game002 ${stage.label} unified fall`,
       );
     else {
       const current = this.#runtime.getCurrentScene();
       if (!current || !sceneEquals(current, stage.dropdownScene))
         throw new Error(
-          `completed game002 cascade step[${stage.stepIndex}] dropdown scene does not match.`,
+          `completed game002 ${stage.label} dropdown scene does not match.`,
         );
     }
     this.#activity = "idle";
@@ -1502,8 +1110,24 @@ export class Game002RoundTarget {
     this.#runtime.startRefillEffectSweep(stage.refillPositions);
   }
 
+  startRefillData(
+    fall: Game002FallPayload,
+    output: SlotOperationSnapshot,
+  ): void {
+    this.#activeFall = fall;
+    this.#runtimeCompleted = false;
+    this.#refillSnapshot = output;
+    if (this.#unifiedSteps.has(fallStepKey(fall))) {
+      this.#activity = "refill-complete";
+      this.#runtimeCompleted = true;
+      return;
+    }
+    this.#activity = "refill-sweep";
+    this.#runtime.startRefillEffectSweep(fall.refillPositions);
+  }
+
   isRefillComplete(): boolean {
-    const stage = this.requireActiveStage();
+    const stage = this.activeFallView();
     if (this.#activity === "refill-complete") {
       this.applyRequiredRefillMultiplierTexts();
       this.#activity = "idle";
@@ -1514,7 +1138,7 @@ export class Game002RoundTarget {
     assertGame002ReelVisualMatchesTarget(
       this.#runtime.getVisualSnapshot(),
       stage.refillScene,
-      `completed game002 cascade step[${stage.stepIndex}] selective refill`,
+      `completed game002 ${stage.label} selective refill`,
     );
     this.applyRequiredRefillMultiplierTexts();
     this.#activity = "idle";
@@ -1522,7 +1146,7 @@ export class Game002RoundTarget {
   }
 
   startSettledTransformOperation(
-    step: SlotRoundSettledTransformStepPlan,
+    step: Game002TransformSession,
     batch: Game002TransformOperationPayload,
   ): void {
     if (this.#activity !== "idle")
@@ -2097,7 +1721,7 @@ export class Game002RoundTarget {
   }
 
   startAtomicTransformOperation(
-    step: SlotRoundSettledTransformStepPlan,
+    step: Game002TransformSession,
     batch: Game002TransformOperationPayload,
     phase: Game002TransformPhase,
   ): void {
@@ -2153,6 +1777,17 @@ export class Game002RoundTarget {
     );
   }
 
+  startAtomicTransformPayload(payload: Game002TransformPayload): void {
+    const step = this.#activeTransform ?? createSyntheticTransformStep(payload);
+    const batch =
+      this.#activeMultiplierBatch ??
+      (Object.freeze({
+        ...payload.transform,
+        stepIndex: step.stepIndex,
+      }) as Game002TransformOperationPayload);
+    this.startAtomicTransformOperation(step, batch, payload.phase);
+  }
+
   updateAtomicTransformOperation(
     deltaSeconds: number,
     phase: Game002TransformPhase,
@@ -2176,7 +1811,7 @@ export class Game002RoundTarget {
     const result = this.#runtime.update(deltaSeconds);
     this.#runtimeCompleted ||= result.completed;
     if (this.#activity === "refill-sweep" && result.completed) {
-      const stage = this.requireActiveStage();
+      const stage = this.activeFallView();
       this.#activity = "refill-spin";
       this.#runtimeCompleted = false;
       this.#runtime.startSelectiveRefillSpin({
@@ -2185,7 +1820,7 @@ export class Game002RoundTarget {
         targetScene: stage.refillScene,
         targetValues: stage.refillValues,
         refillPositions: stage.refillPositions,
-        sceneName: `game002 cascade step[${stage.stepIndex}] selective refill`,
+        sceneName: `game002 ${stage.label} selective refill`,
       });
     }
   }
@@ -2204,6 +1839,18 @@ export class Game002RoundTarget {
       betAmountRaw: round.betAmountRaw,
       winAmountRaw: round.winAmountRaw,
     });
+  }
+
+  startCompletionAmounts(betAmountRaw: number, winAmountRaw: number): void {
+    this.#cascadePlayer.clear();
+    if (winAmountRaw <= 0) {
+      this.#completionComplete = true;
+      this.#activity = "idle";
+      return;
+    }
+    this.#completionComplete = false;
+    this.#activity = "completion";
+    this.#winAmountPlayer.start({ betAmountRaw, winAmountRaw });
   }
 
   isCompletionComplete(): boolean {
@@ -2268,6 +1915,25 @@ export class Game002RoundTarget {
     };
   }
 
+  private createDropPlanOptionsFromFall(
+    fall: Game002FallPayload,
+  ): Parameters<Game002ReelRuntime["createCascadeDropPlan"]>[0] {
+    return {
+      sourceScene: fall.sourceScene,
+      sourceValues: fall.sourceValues,
+      settledScene: fall.dropdownScene,
+      settledValues: fall.dropdownValues,
+      targetScene: fall.refillScene,
+      targetValues: fall.refillValues,
+      refillPositions: fall.refillPositions,
+      canDropOccurrence: ({ code }) =>
+        canGame002CascadeDropSymbol(
+          resolveGame002CascadeSymbol(this.#runtime, code),
+        ),
+      motion: GAME002_CASCADE_MOTION,
+    };
+  }
+
   private applyRequiredRefillMultiplierTexts(): void {
     const snapshot = this.#refillSnapshot;
     if (!snapshot)
@@ -2277,7 +1943,7 @@ export class Game002RoundTarget {
   }
 
   private startWmOrCm(
-    step: SlotRoundSettledTransformStepPlan,
+    step: Game002TransformSession,
     batch: Game002TransformOperationPayload,
   ): { readonly completed: boolean } {
     if (batch.wmReplacements.length === 0)
@@ -2291,7 +1957,7 @@ export class Game002RoundTarget {
   }
 
   private startCmOrComplete(
-    step: SlotRoundSettledTransformStepPlan,
+    step: Game002TransformSession,
     batch: Game002TransformOperationPayload,
   ): { readonly completed: boolean } {
     if (!batch.cm) {
@@ -2303,7 +1969,7 @@ export class Game002RoundTarget {
   }
 
   private startCoOrComplete(
-    step: SlotRoundSettledTransformStepPlan,
+    step: Game002TransformSession,
     batch: Game002TransformOperationPayload,
   ): { readonly completed: boolean } {
     const collection = batch.coCollection;
@@ -2325,9 +1991,7 @@ export class Game002RoundTarget {
     return { completed: false };
   }
 
-  private completeSettledTransform(
-    step: SlotRoundSettledTransformStepPlan,
-  ): void {
+  private completeSettledTransform(step: Game002TransformSession): void {
     if (
       this.#preparedWmReplacements.length > 0 ||
       this.#preparedCmReplacements.length > 0
@@ -2443,168 +2107,24 @@ export class Game002RoundTarget {
     return this.#activeStage;
   }
 
+  private activeFallView() {
+    if (this.#activeFall)
+      return Object.freeze({
+        ...this.#activeFall,
+        label: this.#activeFall.flowKey,
+      });
+    const stage = this.requireActiveStage();
+    return Object.freeze({
+      ...stage,
+      label: `cascade step[${stage.stepIndex}]`,
+    });
+  }
+
   private requireRound() {
     if (!this.#round)
       throw new Error("game002 round target is not configured.");
     return this.#round;
   }
-}
-
-function assertGame002PlanMatchesSequence(
-  plan: SlotOperationPlanV2,
-  sequence: Game002CascadeSequence,
-): void {
-  const initial = plan.operations.find(
-    (operation) => operation.effect === "scene-landing",
-  );
-  if (!initial) throw new Error("game002 operation plan has no scene landing.");
-  if (!sceneEquals(initial.output.scene, sequence.initial.spinScene))
-    throw new Error(
-      "game002 shared plan initial scene diverged from sequence.",
-    );
-  if (!matrixEquals(initial.output.values, sequence.initial.spinValues))
-    throw new Error(
-      "game002 shared plan initial values diverged from sequence.",
-    );
-  if (!sceneEquals(plan.final.scene, sequence.finalScene))
-    throw new Error("game002 shared plan final scene diverged from sequence.");
-  if (!matrixEquals(plan.final.values, sequence.finalValues))
-    throw new Error("game002 shared plan final values diverged from sequence.");
-  const plannedCascadeIndexes = getProfileSteps<SlotRoundDropdownStepPlan>(
-    plan,
-    "slot:dropdown",
-  ).map((step) => step.stepIndex);
-  const sequenceCascadeIndexes = sequence.cascades.map(
-    (stage) => stage.stepIndex,
-  );
-  if (
-    plannedCascadeIndexes.length !== sequenceCascadeIndexes.length ||
-    plannedCascadeIndexes.some(
-      (value, index) => value !== sequenceCascadeIndexes[index],
-    )
-  )
-    throw new Error(
-      "game002 shared plan cascade order diverged from sequence.",
-    );
-  assertGame002WinPlanMatchesStage(
-    plan,
-    sequence.initial.winStage,
-    sequence.initial.stepIndex,
-  );
-  for (const stage of sequence.cascades) {
-    const dropdown = getProfileSteps<SlotRoundDropdownStepPlan>(
-      plan,
-      "slot:dropdown",
-    ).find((step) => step.stepIndex === stage.stepIndex);
-    const refill = getProfileSteps<SlotRoundRefillStepPlan>(
-      plan,
-      "slot:refill",
-    ).find((step) => step.stepIndex === stage.stepIndex);
-    if (
-      !dropdown ||
-      !sceneEquals(dropdown.input.scene, stage.removedSourceScene) ||
-      !matrixEquals(dropdown.input.values, stage.removedSourceValues) ||
-      !sceneEquals(dropdown.output.scene, stage.dropdownScene) ||
-      !matrixEquals(dropdown.output.values, stage.dropdownValues)
-    )
-      throw new Error(
-        `game002 shared plan step[${stage.stepIndex}] dropdown trace diverged from sequence.`,
-      );
-    if (
-      !refill ||
-      !sceneEquals(refill.input.scene, stage.dropdownScene) ||
-      !matrixEquals(refill.input.values, stage.dropdownValues) ||
-      !sceneEquals(refill.output.scene, stage.refillScene) ||
-      !matrixEquals(refill.output.values, stage.refillValues) ||
-      refill.movements.length !== stage.refillPositions.length
-    )
-      throw new Error(
-        `game002 shared plan step[${stage.stepIndex}] refill trace diverged from sequence.`,
-      );
-    assertGame002WinPlanMatchesStage(plan, stage.winStage, stage.stepIndex);
-  }
-}
-
-function assertGame002WinPlanMatchesStage(
-  plan: SlotOperationPlanV2,
-  stage: Game002WinRemoveStage | undefined,
-  stepIndex: number,
-): void {
-  const planned = getProfileSteps<SlotRoundWinStepPlan>(
-    plan,
-    "slot:win-remove",
-  ).find((step) => step.stepIndex === stepIndex);
-  if (!stage) {
-    if (planned)
-      throw new Error(
-        `game002 shared plan step[${stepIndex}] has an unexpected win trace.`,
-      );
-    return;
-  }
-  if (
-    !planned ||
-    !sceneEquals(planned.input.scene, stage.sourceScene) ||
-    !matrixEquals(planned.input.values, stage.sourceValues) ||
-    !sceneEquals(planned.output.scene, stage.outputScene) ||
-    !matrixEquals(planned.output.values, stage.outputValues) ||
-    planned.groups.length !== stage.groups.length
-  )
-    throw new Error(
-      `game002 shared plan step[${stepIndex}] win/remove trace diverged from sequence.`,
-    );
-  for (const [groupIndex, group] of stage.groups.entries()) {
-    const plannedGroup = planned.groups[groupIndex];
-    if (
-      !plannedGroup ||
-      plannedGroup.amount !== group.amount ||
-      !samePositionTrace(plannedGroup.positions, group.positions) ||
-      !samePositionTrace(plannedGroup.removePositions, group.removePositions)
-    )
-      throw new Error(
-        `game002 shared plan step[${stepIndex}] group[${groupIndex}] trace diverged from sequence.`,
-      );
-  }
-}
-
-function getProfileSteps<Step>(
-  plan: SlotOperationPlanV2,
-  operationKind: string,
-): readonly Step[] {
-  return plan.operations
-    .filter((operation) => operation.kind === operationKind)
-    .map((operation) => {
-      const step = (operation.payload as { readonly step?: Step }).step;
-      if (!step)
-        throw new Error(`${operation.kind} operation payload.step is missing.`);
-      return step;
-    });
-}
-
-function samePositionTrace(
-  left: readonly { readonly x: number; readonly y: number }[],
-  right: readonly { readonly x: number; readonly y: number }[],
-): boolean {
-  return (
-    left.length === right.length &&
-    left.every(
-      (position, index) =>
-        position.x === right[index]?.x && position.y === right[index]?.y,
-    )
-  );
-}
-
-function matrixEquals(
-  left: readonly (readonly unknown[])[],
-  right: readonly (readonly unknown[])[],
-): boolean {
-  return (
-    left.length === right.length &&
-    left.every(
-      (column, x) =>
-        column.length === right[x]?.length &&
-        column.every((value, y) => value === right[x]?.[y]),
-    )
-  );
 }
 
 function requireGame002SymbolCode(
@@ -2880,63 +2400,98 @@ export function assertGame002CascadeResources(
   }
 }
 
+function assertGame002OperationResources(
+  plan: SlotOperationPlanV2,
+  runtime: Game002ReelRuntime,
+  skin: Game002SkinConfig,
+): void {
+  let current: SlotOperationSnapshot | null = null;
+  const winStages: Game002WinRemoveStage[] = [];
+  const fullValues: SlotOperationSnapshot["values"][] = [];
+  for (const operation of plan.operations) {
+    if (operation.effect !== "presentation") current = operation.output;
+    if (
+      operation.kind === "game002:spin" ||
+      operation.kind === "game002:refill"
+    ) {
+      if (operation.effect === "presentation")
+        throw new Error(`${operation.kind} cannot be a presentation.`);
+      fullValues.push(operation.output.values);
+    }
+    if (operation.kind !== "game002:win") continue;
+    if (!current)
+      throw new Error("game002 win operation has no established scene.");
+    const groups = (operation.payload as Game002WinPayload).groups;
+    winStages.push(
+      Object.freeze({
+        stepIndex: operation.operationIndex,
+        groups,
+        sourceScene: current.scene,
+        sourceValues: current.values as Game002WinRemoveStage["sourceValues"],
+        outputScene: current.scene as Game002WinRemoveStage["outputScene"],
+        outputValues: current.values as Game002WinRemoveStage["outputValues"],
+        removedNum: null,
+        releaseOnlyPositions: Object.freeze([]),
+      }),
+    );
+  }
+  if (!current)
+    throw new Error("game002 operation plan has no established scene.");
+  const initialValues = fullValues[0];
+  if (!initialValues)
+    throw new Error("game002 operation plan has no spin values.");
+  assertGame002CascadeResources(
+    Object.freeze({
+      initial: Object.freeze({
+        stepIndex: 0 as const,
+        spinScene:
+          plan.operations.find(
+            (operation) => operation.kind === "game002:spin",
+          )!.effect === "scene-landing"
+            ? (
+                plan.operations.find(
+                  (operation) => operation.kind === "game002:spin",
+                ) as Extract<SlotOperationV2, { effect: "scene-landing" }>
+              ).output.scene
+            : current.scene,
+        spinValues:
+          initialValues as Game002CascadeSequence["initial"]["spinValues"],
+        usesServerValues: true,
+        ...(winStages[0] ? { winStage: winStages[0] } : {}),
+      }),
+      cascades: Object.freeze(
+        fullValues.slice(1).map((values, index) =>
+          Object.freeze({
+            stepIndex: index + 1,
+            removedSourceScene:
+              current.scene as Game002CascadeStage["removedSourceScene"],
+            removedSourceValues:
+              current.values as Game002CascadeStage["removedSourceValues"],
+            dropdownScene:
+              current.scene as Game002CascadeStage["dropdownScene"],
+            dropdownValues:
+              current.values as Game002CascadeStage["dropdownValues"],
+            refillPositions: Object.freeze([]),
+            refillScene: current.scene,
+            refillValues: values as Game002CascadeStage["refillValues"],
+            ...(winStages[index + 1] ? { winStage: winStages[index + 1] } : {}),
+          }),
+        ),
+      ),
+      finalScene: current.scene,
+      finalValues: current.values as Game002CascadeSequence["finalValues"],
+    }),
+    runtime,
+    skin,
+  );
+}
+
 function isWinAmountBlockingSpin(phase: WinAmountAnimationPhase): boolean {
   return (
     phase === "minor-counting" ||
     phase === "major-counting" ||
     phase === "tier-counting"
   );
-}
-
-function createGame002LogicSlice(
-  source: GameLogic,
-  stepCount: number,
-): GameLogic {
-  if (
-    !Number.isSafeInteger(stepCount) ||
-    stepCount <= 0 ||
-    stepCount > source.getStepCount()
-  )
-    throw new Error(`game002 logic slice stepCount ${stepCount} is invalid.`);
-  const steps = Object.freeze(source.getSteps().slice(0, stepCount));
-  const getStep = (index: number): GameLogicStep => {
-    if (!Number.isSafeInteger(index) || index < 0 || index >= steps.length)
-      throw new RangeError(
-        `game002 sliced step index ${index} is out of range.`,
-      );
-    return steps[index]!;
-  };
-  return Object.freeze({
-    getGameModuleName: () => source.getGameModuleName(),
-    getGameId: () => source.getGameId(),
-    getBet: () => source.getBet(),
-    getLines: () => source.getLines(),
-    getTotalWin: () => source.getTotalWin(),
-    getPlayWin: () => source.getPlayWin(),
-    getRawMessage: () => source.getRawMessage(),
-    getRawGmi: () => source.getRawGmi(),
-    getDefaultScene: () => source.getDefaultScene(),
-    getRandomNumbers: () => source.getRandomNumbers(),
-    getStepCount: () => steps.length,
-    getStep,
-    getSteps: () => steps,
-    getScene: (stepIndex: number, sceneIndex: number) =>
-      getStep(stepIndex).getScene(sceneIndex),
-    getOtherScene: (stepIndex: number, otherSceneIndex: number) =>
-      getStep(stepIndex).getOtherScene(otherSceneIndex),
-    getResult: (stepIndex: number, resultIndex: number) =>
-      getStep(stepIndex).getResult(resultIndex),
-    hasComponent: (stepIndex: number, name: string) =>
-      getStep(stepIndex).hasComponent(name),
-    getComponent: (stepIndex: number, name: string) =>
-      getStep(stepIndex).getComponent(name),
-    getComponentScenes: (stepIndex: number, name: string) =>
-      getStep(stepIndex).getComponentScenes(name),
-    getComponentOtherScenes: (stepIndex: number, name: string) =>
-      getStep(stepIndex).getComponentOtherScenes(name),
-    getComponentResults: (stepIndex: number, name: string) =>
-      getStep(stepIndex).getComponentResults(name),
-  });
 }
 
 export function requestGame002TransformStates(
@@ -2976,18 +2531,6 @@ export function requestGame002TransformStates(
       "game002 transform state batch did not capture every requested animation baseline.",
     );
   return baselines;
-}
-
-function assertValidWinAmountInput(
-  betAmountRaw: number,
-  winAmountRaw: number,
-): void {
-  if (!Number.isFinite(betAmountRaw) || betAmountRaw <= 0) {
-    throw new Error("game002 bet amount must be a finite positive number.");
-  }
-  if (!Number.isFinite(winAmountRaw) || winAmountRaw < 0) {
-    throw new Error("game002 win amount must be a finite non-negative number.");
-  }
 }
 
 function resolveGame002CascadeSymbol(

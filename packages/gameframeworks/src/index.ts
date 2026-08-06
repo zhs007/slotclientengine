@@ -1,11 +1,19 @@
 import "./styles.css";
 
 export {
+  applySlotOperationChanges,
+  applySlotOperationValueUpdates,
   compileConfiguredSlotRoundOperationPlanV2,
   createGameConfig,
   createBuiltinSlotOperationDefinitionsV2,
   deriveSlotStateMutations,
   finalizeSlotOperationPlanV2,
+  genDropdownOperation,
+  genRefillOperation,
+  genRemoveOperation,
+  genSpinOperation,
+  genWinOperation,
+  createSlotOperationSnapshot,
 } from "@slotclientengine/logiccore";
 export {
   createSceneLayoutPackageResource,
@@ -21,11 +29,14 @@ export type {
 } from "@slotclientengine/rendercore";
 export type {
   SlotOperationPlanV2,
+  SlotOperationSource,
   SlotOperationDefinitionV2,
   SlotOperationDraftV2,
   SlotStateMutationOperation,
   SlotOperationV2,
   SlotOperationSnapshot,
+  SlotStateMutationDraftV2,
+  SlotStateMutation,
   SlotRoundCapability,
   SlotRoundCompileContext,
   SlotRoundDropdownStepPlan,
