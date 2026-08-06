@@ -565,7 +565,7 @@ pnpm --filter reelsviewer dev -- --host 0.0.0.0
 
 ## Symbol image-string nodes
 
-symbol 可声明零到多个有唯一 name 的 `imageStringNodes`。新配置用一个 `spineSlot` 自动覆盖全部 top-level Spine/档位 activeSpine state，并只用 `targets[]` 表达 non-Spine exact overlay state；旧逐 Spine state `{state,slot}` target 继续兼容。每个 logical node 在 occurrence 内只有一个稳定 container，state 切换只改变 slot/overlay/hidden attachment 与 `visible/renderable`。
+symbol 可声明零到多个有唯一 name 的 `imageStringNodes`。新配置用一个 `spineSlot` 自动覆盖全部 top-level Spine/档位 activeSpine state，并只用 `targets[]` 表达 non-Spine exact overlay state；旧逐 Spine state `{state,slot}` target 继续兼容。每个 logical node 在 occurrence 内只有一个稳定 container，state 切换只改变 slot/overlay/hidden attachment 与 `visible/renderable`。shared `spineSlot` 只有在当前 presentation state 确实由 prepared Spine 支持时才能 attach；晚到的 player init 不得把 exact direct overlay 抢回不可见 slot。
 
 命名 node 可为 non-Spine exact `spinBlur` target 声明 `spinBlurProfile: { resource, specialValueImages? }`。profile 的字符、metrics、glyph size/offset、fixed groups 和特殊值集合必须与 normal profile一致；package prepare一次加载共享资源。state切换调用同一 mapped renderer的`setResource()`并复用container、special Sprite和glyph Sprite pool，不在runtime生成或复制模糊纹理。缺profile的旧target-only node继续按既有normal-assets语义运行。
 
@@ -579,7 +579,7 @@ symbol manifest 可为任意 symbol 声明可选 `valuePresentation`。新 image
 
 reel 可为每个本地 symbol occurrence 携带可选 presentation value。`TemporaryReelStrip` 会把 current endpoint、公开本地轮带中间 occurrence 和 target endpoint 的值与 code 一起冻结；`RenderSymbol` 的通用 value controller 据此直接在实际 reel slot 内播放命中 tier 的 Spine，并把文字只创建、attach 一次。normal/appear/win/remove/dropdown 都在同一 tier player 上切 animation，slot object 不重建；只有 value 真正改变、occurrence release 或 destroy 才 detach/destroy。
 
-当 requested state 通过 equivalence 解析到 normal、但 requested state 自身有显式 reel texture（例如 `spinBlur`）时，显式 texture 优先，active Spine 不得在异步 init 完成后把它隐藏。回到真正的 active-Spine state 后才重新显示 tier player。相同 active Spine resource/playback 跨 semantic state 复用时间轴时，animation 必须同步新的 semantic playback；official Spine player 会逐次上报真实 loop completion，以便状态机在 loop boundary 推进 pending once state。
+当 requested state 通过 equivalence 解析到 normal、但 requested state 自身有显式 reel texture（例如 `spinBlur` 或 `disabled`）时，显式 texture 优先，ImgNumber exact target 同样使用 requested presentation state；active Spine 不得在异步 init 完成后把 texture 或 direct ImgNumber 隐藏。回到真正的 active-Spine state 前先同步 ImgNumber attachment 资格，再重新显示 tier player。相同 active Spine resource/playback 跨 semantic state 复用时间轴时，animation 必须同步新的 semantic playback；official Spine player 会逐次上报真实 loop completion，以便状态机在 loop boundary 推进 pending once state。
 
 ## 通用 symbol cascade 与 grid-cell 级联
 

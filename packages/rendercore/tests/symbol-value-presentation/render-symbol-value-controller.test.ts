@@ -9,6 +9,7 @@ import {
   createRenderSymbolValueController,
   type SymbolValuePresentationResource,
 } from "../../src/symbol-value-presentation/index.js";
+import { SymbolImageStringController } from "../../src/symbol-image-string/index.js";
 
 describe("render symbol value controller", () => {
   it("selects tiers, binds text to the configured slot and cleans up on value changes", async () => {
@@ -156,6 +157,66 @@ describe("render symbol value controller", () => {
     symbol.requestState("spinBlur");
     expect(player.view.visible).toBe(false);
     expect(symbol.stateSprite.visible).toBe(true);
+    symbol.destroy();
+  });
+
+  it("does not let late value-player init steal a direct ImgNumber overlay", async () => {
+    let finish!: () => void;
+    const player = new FakeSlotPlayer(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const imageString = createNamedImageStringResource();
+    const symbol = createSymbol(
+      () => player,
+      createResource(),
+      (root) =>
+        new SymbolImageStringController({
+          root,
+          nodes: [
+            {
+              spec: {
+                name: "coin-value",
+                resource: "./digits.image-string.manifest.json",
+                spineSlot: "Num",
+                targets: [{ state: "spinBlur" }, { state: "disabled" }],
+                initialText: "1",
+                anchor: { x: 0.5, y: 0.5 },
+                transform: { x: 0, y: 0, scale: 1 },
+                followSlotColor: true,
+              },
+              spineStates: new Set([
+                "normal",
+                "appear",
+                "win",
+                "remove",
+                "collect",
+                "dropdown",
+              ]),
+              resource: imageString,
+            },
+          ],
+        }),
+    );
+    symbol.init();
+    symbol.setPresentationValue(1);
+    symbol.requestState("spinBlur");
+    const display = symbol.imageStringOverlayLayer.children[0]!;
+    expect(display.visible).toBe(true);
+
+    finish();
+    await flushPromises();
+    expect(symbol.imageStringOverlayLayer.children).toEqual([display]);
+    expect(player.attached.some(({ object }) => object === display)).toBe(
+      false,
+    );
+
+    symbol.requestState("disabled");
+    expect(symbol.imageStringOverlayLayer.children).toEqual([display]);
+    symbol.returnToDefaultState();
+    expect(player.attached.some(({ object }) => object === display)).toBe(true);
+    expect(symbol.imageStringOverlayLayer.children).toEqual([]);
     symbol.destroy();
   });
 
@@ -351,6 +412,9 @@ function createSymbol(
     tier: SymbolValuePresentationResource["tiers"][number],
   ) => RendercoreSpineSlotPlayer,
   resource: SymbolValuePresentationResource = createResource(),
+  imageStringControllerFactory?: (
+    root: RenderSymbol,
+  ) => SymbolImageStringController,
 ): RenderSymbol {
   let symbol!: RenderSymbol;
   symbol = new RenderSymbol({
@@ -362,20 +426,24 @@ function createSymbol(
       states: [
         { id: "normal", phase: "stable", playback: "static" },
         { id: "spinBlur", phase: "stable", playback: "static" },
+        { id: "disabled", phase: "stable", playback: "static" },
         { id: "appear", phase: "once", playback: "once" },
         { id: "win", phase: "once", playback: "once" },
         { id: "remove", phase: "once", playback: "once" },
         { id: "collect", phase: "once", playback: "once" },
         { id: "dropdown", phase: "stable", playback: "loop" },
       ],
-      equivalences: [{ from: "spinBlur", to: "normal" }],
+      equivalences: [
+        { from: "spinBlur", to: "normal" },
+        { from: "disabled", to: "normal" },
+      ],
     },
     texture: {
       kind: "transparent",
       width: 200,
       height: 200,
     },
-    stateTextures: { spinBlur: Texture.WHITE },
+    stateTextures: { spinBlur: Texture.WHITE, disabled: Texture.EMPTY },
     animationResolver: createDefaultSymbolAnimationResolver(),
     animationCapabilities: ["appear", "win", "remove", "collect", "dropdown"],
     landingAppearEnabled: true,
@@ -385,8 +453,32 @@ function createSymbol(
         resource,
         playerFactory: ({ tier }) => createPlayer(tier),
       }),
+    imageStringControllerFactory,
   });
   return symbol;
+}
+
+function createNamedImageStringResource() {
+  return Object.freeze({
+    manifest: Object.freeze({
+      version: 1 as const,
+      kind: "image-string" as const,
+      id: "digits",
+      metrics: Object.freeze({ lineHeight: 1, letterSpacing: 0 }),
+      glyphs: Object.freeze({
+        "1": Object.freeze({
+          path: "assets/1.png",
+          size: Object.freeze({ width: 1, height: 1 }),
+          offset: Object.freeze({ x: 0, y: 0 }),
+        }),
+      }),
+      fixedAdvanceGroups: Object.freeze([]),
+    }),
+    textures: Object.freeze({ "assets/1.png": Texture.WHITE }),
+    destroyed: false,
+    assertUsable: () => undefined,
+    destroy: async () => undefined,
+  });
 }
 
 function createResource(): SymbolValuePresentationResource {

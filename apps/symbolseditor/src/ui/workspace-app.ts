@@ -136,7 +136,6 @@ export class SymbolsEditorApp {
   #importRequest = 0;
   #importing = false;
   #previewError = "";
-  #previewValue = 1;
   #pickerTrigger: HTMLElement | null = null;
   #uploadIntent: UploadIntent = { kind: "ordinary" };
   #feedbackTimer: ReturnType<typeof setTimeout> | null = null;
@@ -252,15 +251,6 @@ export class SymbolsEditorApp {
         const snapshot = this.#store.getSnapshot();
         this.render(snapshot);
         void this.refreshPreview(snapshot);
-      },
-    );
-    this.requireElement("[data-preview-value]").addEventListener(
-      "change",
-      (event) => {
-        const value = Number((event.currentTarget as HTMLInputElement).value);
-        if (Number.isSafeInteger(value) && value > 0)
-          this.#previewValue = value;
-        void this.refreshPreview(this.#store.getSnapshot());
       },
     );
   }
@@ -1197,6 +1187,26 @@ export class SymbolsEditorApp {
 
   private bindValueControls(panel: HTMLElement): void {
     panel
+      .querySelectorAll<HTMLInputElement>("[data-tier-preview-value]")
+      .forEach((input) => {
+        input.addEventListener("change", () => {
+          const snapshot = this.#store.getSnapshot();
+          if (!snapshot.project) return;
+          try {
+            this.#session.setTierPreviewValue(
+              snapshot.project,
+              this.#session.selectedSymbol,
+              Number(input.dataset.tierPreviewValue),
+              Number(input.value),
+            );
+            this.render(snapshot);
+            void this.refreshPreview(snapshot);
+          } catch (error) {
+            this.#store.setExternalError(error);
+          }
+        });
+      });
+    panel
       .querySelector<HTMLElement>("[data-enable-value]")
       ?.addEventListener("click", () => {
         try {
@@ -1355,13 +1365,11 @@ export class SymbolsEditorApp {
       .querySelector<HTMLElement>("[data-disable-value]")
       ?.addEventListener("click", () => {
         try {
-          this.#store.transact((draft) =>
-            setValuePresentation(
-              draft,
-              this.#session.selectedSymbol,
-              undefined,
-            ),
-          );
+          const symbolName = this.#session.selectedSymbol;
+          this.#store.transact((draft) => {
+            setValuePresentation(draft, symbolName, undefined);
+            this.#session.clearTierPreview(symbolName);
+          });
         } catch (error) {
           this.#store.setExternalError(error);
         }
@@ -1716,6 +1724,7 @@ export class SymbolsEditorApp {
         };
         const action = button.dataset.valueAction!;
         const index = Number(button.dataset.valueIndex);
+        const previousTierCount = value.tiers.length;
         if (action === "add-default") {
           const candidate = Number(
             panel.querySelector<HTMLInputElement>("[data-new-default]")!.value,
@@ -1831,6 +1840,18 @@ export class SymbolsEditorApp {
                   };
         }
         setValuePresentation(draft, symbol.symbol, value as never);
+        if (action === "remove-tier")
+          this.#session.removeTierPreview(
+            symbol.symbol,
+            index,
+            previousTierCount,
+          );
+        else if (action === "move-tier")
+          this.#session.moveTierPreview(
+            symbol.symbol,
+            index,
+            Number(button.dataset.direction),
+          );
       });
     } catch (error) {
       this.#store.setExternalError(error);
@@ -2441,7 +2462,7 @@ export class SymbolsEditorApp {
     const cells = createPreviewCells(
       project,
       this.#session.previewState,
-      this.#previewValue,
+      (symbol) => this.#session.getPreviewValue(project, symbol),
       this.#session.imageStringPreviewTexts,
     );
     const previewSnapshot = createPreviewSnapshot(project);
@@ -2652,7 +2673,6 @@ function shellMarkup(): string {
         <div class="preview-toolbar">
           <label>预览 state <select data-preview-state><option>normal</option></select></label>
           <button data-replay>Replay</button>
-          <label>Value <input data-preview-value type="number" min="1" step="1" value="1"></label>
           <button data-fit>适配全部</button><button data-zoom-out aria-label="缩小">−</button>
           <input data-zoom aria-label="预览缩放" type="range" min="0.25" max="4" step="0.05" value="1">
           <button data-zoom-in aria-label="放大">＋</button><span data-zoom-label>100%</span>
@@ -2966,7 +2986,7 @@ function imageStringInspectorMarkup(
         const previewText =
           session.imageStringPreviewTexts.get(previewKey) ?? node.initialText;
         const sharedSpine = node.spineSlot !== undefined;
-        const commonSlots = valueSlotOptions(project, symbol);
+        const commonSlots = getSharedSpineSlotOptions(project, symbol);
         const exactTargetStates = sharedSpine
           ? targetStates.filter(
               (state) => !isImageStringSpineTarget(symbol, state),
@@ -3311,7 +3331,7 @@ function valueInspectorMarkup(
   return `<section class="value-editor"><div class="section-heading"><div><h2>Spine 档位</h2><p>每档只配置 skeleton / atlas / texture 与阈值；状态动画在下一步统一配置。</p></div><button data-disable-value>停用</button></div>
     <h3>Default values</h3><div class="compact-list">${value.defaultValues.map((candidate, index) => `<div class="form-row"><input data-value-field="defaultValues.${index}" data-value-type="number" type="number" min="1" step="1" value="${candidate}"><button data-value-action="move-default" data-value-index="${index}" data-direction="-1" aria-label="上移 value">↑</button><button data-value-action="move-default" data-value-index="${index}" data-direction="1" aria-label="下移 value">↓</button><button data-value-action="remove-default" data-value-index="${index}">删除</button></div>`).join("")}</div><div class="form-row"><input data-new-default type="number" min="1" step="1" value="1"><button data-value-action="add-default">增加 value</button></div>
     <h3>Reel normal</h3><div class="form-grid">${valueNumberField("reelStates.normal.width", value.reelStates.normal.width, "Width")}${valueNumberField("reelStates.normal.height", value.reelStates.normal.height, "Height")}</div>
-    <h3>Spine tiers</h3><div class="tier-list">${value.tiers.map((tier, index) => valueTierMarkup(project, symbol, tier, index, session.expandedTier === index, thumbnail)).join("")}</div><button data-value-action="add-tier">增加 tier</button>
+    <h3>Spine tiers</h3><div class="tier-list">${value.tiers.map((tier, index) => valueTierMarkup(project, symbol, tier, index, session, session.expandedTier === index, thumbnail)).join("")}</div><button data-value-action="add-tier">增加 tier</button>
     <p class="hint">档位资源完成后，进入“状态”统一选择 normal / win / remove 等动画；静态模糊图在对应状态单独配置。</p>
     ${valueNumberPresentationMarkup(project, symbol)}
   </section>`;
@@ -3437,6 +3457,7 @@ function valueTierMarkup(
   symbol: EditorSymbolDraft,
   tier: NonNullable<EditorSymbolDraft["valuePresentation"]>["tiers"][number],
   index: number,
+  session: SymbolsEditorUiSession,
   expanded: boolean,
   thumbnail: (path: string) => string | undefined,
 ): string {
@@ -3444,7 +3465,19 @@ function valueTierMarkup(
   const atlas = tier.animation.atlas.replace(/^\.\//u, "");
   const texture = tier.animation.texture.replace(/^\.\//u, "");
   const ready = Boolean(skeleton && atlas && texture);
-  return `<details class="tier-card" data-tier-index="${index}" ${expanded ? "open" : ""}><summary><strong>Tier ${index + 1}</strong><span>${index < (symbol.valuePresentation?.tiers.length ?? 0) - 1 ? `&lt; ${tier.maxExclusive}` : "unbounded"}</span><span class="status-${ready ? "ready" : "missing"}">${ready ? "资源就绪" : "未完成"}</span></summary><div class="tier-body">${index < symbol.valuePresentation!.tiers.length - 1 ? valueNumberField(`tiers.${index}.maxExclusive`, tier.maxExclusive!, "maxExclusive") : '<p class="empty">最终 tier 无上界</p>'}${resourceBindingMarkup("Skeleton", skeleton, { kind: "value-tier-resource", symbol: symbol.symbol, tierIndex: index, field: "skeleton" })}${resourceBindingMarkup("Atlas", atlas, { kind: "value-tier-resource", symbol: symbol.symbol, tierIndex: index, field: "atlas" })}${derivedResourceMarkup("Texture · 由 Atlas page 自动解析", texture, thumbnail(texture))}<details class="advanced-fields"><summary>Transform</summary><div class="form-grid">${valueNumberField(`tiers.${index}.animation.transform.x`, tier.animation.transform?.x ?? 0, "X")}${valueNumberField(`tiers.${index}.animation.transform.y`, tier.animation.transform?.y ?? 0, "Y")}${valueNumberField(`tiers.${index}.animation.transform.scale`, tier.animation.transform?.scale ?? 1, "Scale")}</div></details><div class="button-row"><button data-value-action="move-tier" data-value-index="${index}" data-direction="-1" ${index === 0 ? "disabled" : ""}>↑</button><button data-value-action="move-tier" data-value-index="${index}" data-direction="1" ${index === symbol.valuePresentation!.tiers.length - 1 ? "disabled" : ""}>↓</button><button data-value-action="remove-tier" data-value-index="${index}">删除 tier</button></div></div></details>`;
+  const previewValue = session.getTierPreviewValue(
+    project,
+    symbol.symbol,
+    index,
+  );
+  const activePreview =
+    session.getActivePreviewTier(project, symbol.symbol) === index;
+  const lower =
+    index === 0 ? 1 : symbol.valuePresentation!.tiers[index - 1]!.maxExclusive!;
+  const upper = tier.maxExclusive;
+  const previewRange =
+    upper === undefined ? `[${lower}, +∞)` : `[${lower}, ${upper})`;
+  return `<details class="tier-card" data-tier-index="${index}" ${expanded ? "open" : ""}><summary><strong>Tier ${index + 1}</strong><span>${index < (symbol.valuePresentation?.tiers.length ?? 0) - 1 ? `&lt; ${tier.maxExclusive}` : "unbounded"}</span><span class="status-${ready ? "ready" : "missing"}">${ready ? "资源就绪" : "未完成"}</span></summary><div class="tier-body"><section class="tier-preview ${activePreview ? "active" : ""}"><label>预览数值 <input data-tier-preview-value="${index}" type="number" min="${lower}" ${upper === undefined ? "" : `max="${upper - 1}"`} step="1" value="${previewValue}"></label><span class="status-${activePreview ? "ready" : "missing"}">${activePreview ? "当前预览档位" : "输入后预览此档"}</span><small>有效区间 ${previewRange}；仅当前编辑会话生效</small></section>${index < symbol.valuePresentation!.tiers.length - 1 ? valueNumberField(`tiers.${index}.maxExclusive`, tier.maxExclusive!, "maxExclusive") : '<p class="empty">最终 tier 无上界</p>'}${resourceBindingMarkup("Skeleton", skeleton, { kind: "value-tier-resource", symbol: symbol.symbol, tierIndex: index, field: "skeleton" })}${resourceBindingMarkup("Atlas", atlas, { kind: "value-tier-resource", symbol: symbol.symbol, tierIndex: index, field: "atlas" })}${derivedResourceMarkup("Texture · 由 Atlas page 自动解析", texture, thumbnail(texture))}<details class="advanced-fields"><summary>Transform</summary><div class="form-grid">${valueNumberField(`tiers.${index}.animation.transform.x`, tier.animation.transform?.x ?? 0, "X")}${valueNumberField(`tiers.${index}.animation.transform.y`, tier.animation.transform?.y ?? 0, "Y")}${valueNumberField(`tiers.${index}.animation.transform.scale`, tier.animation.transform?.scale ?? 1, "Scale")}</div></details><div class="button-row"><button data-value-action="move-tier" data-value-index="${index}" data-direction="-1" ${index === 0 ? "disabled" : ""}>↑</button><button data-value-action="move-tier" data-value-index="${index}" data-direction="1" ${index === symbol.valuePresentation!.tiers.length - 1 ? "disabled" : ""}>↓</button><button data-value-action="remove-tier" data-value-index="${index}">删除 tier</button></div></div></details>`;
 }
 
 function cascadeInspectorMarkup(
@@ -3499,7 +3532,7 @@ function resourcePickerMarkup(
 function createPreviewCells(
   project: SymbolEditorProject,
   state: string,
-  previewValue: number,
+  previewValueForSymbol: (symbol: string) => number,
   previewTexts: ReadonlyMap<string, string> = new Map(),
 ): readonly SymbolPreviewCell[] {
   return getIncludedSymbols(project).map((symbol) => {
@@ -3523,7 +3556,9 @@ function createPreviewCells(
       symbol: symbol.symbol,
       code: symbol.code,
       status: "configured",
-      ...(symbol.valuePresentation ? { value: previewValue } : {}),
+      ...(symbol.valuePresentation
+        ? { value: previewValueForSymbol(symbol.symbol) }
+        : {}),
       ...(symbol.imageStringNodes.length > 0
         ? {
             imageStringTexts: Object.freeze(
@@ -3786,6 +3821,28 @@ function valueSlotOptions(
         ),
       ),
   );
+  if (!sets.length) return [];
+  return [...sets[0]!].filter((name) => sets.every((set) => set.has(name)));
+}
+
+export function getSharedSpineSlotOptions(
+  project: SymbolEditorProject,
+  symbol: EditorSymbolDraft,
+): readonly string[] {
+  if (symbol.valuePresentation) return valueSlotOptions(project, symbol);
+  const sets = symbol.stateOrder.flatMap((state) => {
+    const visual = symbol.states.get(state);
+    return visual?.kind === "spine"
+      ? [
+          new Set(
+            assetMetadataList(
+              project.assetLibrary.records.get(visual.skeletonPath),
+              "slotNames",
+            ),
+          ),
+        ]
+      : [];
+  });
   if (!sets.length) return [];
   return [...sets[0]!].filter((name) => sets.every((set) => set.has(name)));
 }

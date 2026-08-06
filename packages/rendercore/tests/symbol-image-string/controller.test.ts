@@ -234,6 +234,11 @@ describe("SymbolImageStringController", () => {
     controller.syncState("win");
     expect(symbol.imageStringOverlayLayer.children).toEqual([display]);
     expect(display.visible).toBe(true);
+    vi.mocked(player.attachSlotObject).mockClear();
+    notifySymbolImageStringSpineActive(symbol, "win", player, owner);
+    expect(player.attachSlotObject).not.toHaveBeenCalled();
+    expect(symbol.imageStringOverlayLayer.children).toEqual([display]);
+    expect(display.visible).toBe(true);
 
     controller.destroy();
     symbol.destroy();

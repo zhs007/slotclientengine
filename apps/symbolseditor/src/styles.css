@@ -809,6 +809,27 @@ details > summary {
   padding: 2px 10px 10px;
 }
 
+.tier-preview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 10px;
+  margin: 8px 0 12px;
+  padding: 9px;
+  background: #111e31;
+  border: 1px solid #304664;
+  border-radius: 7px;
+}
+
+.tier-preview.active {
+  border-color: #3b9d83;
+  box-shadow: inset 3px 0 #59d9b0;
+}
+
+.tier-preview small {
+  grid-column: 1 / -1;
+  color: #8799b7;
+}
+
 .closure-list {
   display: grid;
   gap: 4px;

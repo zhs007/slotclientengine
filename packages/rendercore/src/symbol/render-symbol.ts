@@ -101,7 +101,7 @@ export class RenderSymbol extends VisualEntity<void> {
     this.#currentAni = this.createCurrentAni();
     this.#currentAni.reset();
     this.#imageStringController?.syncState(
-      this.#stateMachine.getSnapshot().resolvedState,
+      this.getImageStringPresentationState(this.#stateMachine.getSnapshot()),
     );
   }
 
@@ -343,14 +343,27 @@ export class RenderSymbol extends VisualEntity<void> {
       // an equivalent animation (for example normal Loop -> dropdown Loop).
       previousAni.adoptContinuation?.(nextAni);
       nextAni.destroy?.();
-      this.#imageStringController?.syncState(snapshot.resolvedState);
+      this.#imageStringController?.syncState(
+        this.getImageStringPresentationState(snapshot),
+      );
       return false;
     }
     this.#currentAni = nextAni;
+    this.#imageStringController?.syncState(
+      this.getImageStringPresentationState(snapshot),
+    );
     this.#currentAni.reset();
     previousAni.destroy?.();
-    this.#imageStringController?.syncState(snapshot.resolvedState);
     return true;
+  }
+
+  private getImageStringPresentationState(
+    snapshot: SymbolStateSnapshot,
+  ): SymbolStateId {
+    return snapshot.requestedState !== snapshot.resolvedState &&
+      this.stateTextures[snapshot.requestedState]
+      ? snapshot.requestedState
+      : snapshot.resolvedState;
   }
 
   private createCurrentAni(): SymbolAni {

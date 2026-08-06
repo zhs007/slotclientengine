@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDeterministicZip } from "@slotclientengine/browserartifactio";
-import { createFromGameConfig } from "../src/model/editor-project.js";
+import {
+  createFromGameConfig,
+  type EditorAssetRecord,
+} from "../src/model/editor-project.js";
 import { exportSymbolPackageZip } from "../src/io/symbol-package-zip.js";
 import { readCraveFixture } from "./crave-fixture.js";
 import { readMinecart2SymbolFixtureBytes } from "../../../test-utils/minecart2-fixtures.js";
@@ -46,7 +49,10 @@ vi.mock("../src/io/browser-image-codec.js", () => ({
   encodeBrowserPng: codecSpies.encodePng,
 }));
 
-import { SymbolsEditorApp } from "../src/ui/app-shell.js";
+import {
+  SymbolsEditorApp,
+  getSharedSpineSlotOptions,
+} from "../src/ui/app-shell.js";
 
 const gameConfig = {
   paytable: {
@@ -680,6 +686,65 @@ describe("symbols editor app shell", () => {
     expect(root.querySelector('[data-value-field^="text.tiers."]')).toBeNull();
   });
 
+  it("intersects shared slots across ordinary Spine states and value tiers", () => {
+    const project = createFromGameConfig({
+      rawGameConfig: gameConfig,
+      fileName: "shared-slots.json",
+    });
+    const symbol = project.symbols.get("A")!;
+    symbol.stateOrder = ["normal", "win"];
+    symbol.states.set("normal", createSpineVisual("normal.json", "Idle"));
+    symbol.states.set("win", createSpineVisual("win.json", "Win"));
+    project.assetLibrary.records.set(
+      "normal.json",
+      createSpineMetadataRecord("normal.json", ["Body", "Num", "Shared"]),
+    );
+    project.assetLibrary.records.set(
+      "win.json",
+      createSpineMetadataRecord("win.json", ["Num", "Shared", "WinOnly"]),
+    );
+    expect(getSharedSpineSlotOptions(project, symbol)).toEqual([
+      "Num",
+      "Shared",
+    ]);
+
+    symbol.valuePresentation = {
+      defaultValues: [1],
+      reelStates: {
+        normal: { kind: "transparent", width: 160, height: 160 },
+        states: {},
+      },
+      tiers: [
+        {
+          maxExclusive: 10,
+          animation: createSpineManifestAnimation("tier-low.json"),
+        },
+        { animation: createSpineManifestAnimation("tier-high.json") },
+      ],
+      text: {
+        type: "font",
+        slot: "Num",
+        x: 0,
+        y: 0,
+        fontFamily: "Arial",
+        fontSize: 24,
+        fontWeight: "700",
+        fill: "#fff",
+        stroke: "#000",
+        strokeWidth: 1,
+      },
+    };
+    project.assetLibrary.records.set(
+      "tier-low.json",
+      createSpineMetadataRecord("tier-low.json", ["TierOnly", "Num"]),
+    );
+    project.assetLibrary.records.set(
+      "tier-high.json",
+      createSpineMetadataRecord("tier-high.json", ["Num", "HighOnly"]),
+    );
+    expect(getSharedSpineSlotOptions(project, symbol)).toEqual(["Num"]);
+  });
+
   it("orders tier setup before states and derives tiered state visual kinds", async () => {
     await createProject(root);
     click(root, '[data-workspace-tab][data-tab-value="symbols"]');
@@ -714,7 +779,7 @@ describe("symbols editor app shell", () => {
     ).not.toBeNull();
   });
 
-  it("renders tiered Spine normal as configured instead of transparent empty", async () => {
+  it("previews the selected tier value with its configured Spine", async () => {
     await createProject(root);
     const upload = root.querySelector<HTMLInputElement>("[data-upload-input]")!;
     const names = ["CN_1.json", "Symbol.atlas", "Symbol.png"];
@@ -748,14 +813,40 @@ describe("symbols editor app shell", () => {
     animation.value = "Loop";
     animation.dispatchEvent(new Event("change", { bubbles: true }));
 
+    click(root, '[data-inspector-tab][data-tab-value="value"]');
+    click(root, '[data-value-action="add-tier"]');
+    const tierPreviewValues = root.querySelectorAll<HTMLInputElement>(
+      "[data-tier-preview-value]",
+    );
+    expect(tierPreviewValues).toHaveLength(2);
+    expect(root.querySelector("[data-preview-value]")).toBeNull();
+    tierPreviewValues[1]!.value = "25";
+    tierPreviewValues[1]!.dispatchEvent(new Event("change", { bubbles: true }));
+
     await vi.waitFor(() => {
       const cells = previewSpies.setResource.mock.calls.at(-1)?.[1] as
         | Array<Record<string, unknown>>
         | undefined;
       expect(cells?.find((cell) => cell.symbol === "A")).toMatchObject({
         status: "configured",
-        value: 1,
+        value: 25,
       });
+    });
+    expect(root.textContent).toContain("当前预览档位");
+
+    const activeValue = root.querySelector<HTMLInputElement>(
+      '[data-tier-preview-value="1"]',
+    )!;
+    activeValue.value = "5";
+    activeValue.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(root.querySelector("[data-errors]")?.textContent).toContain(
+      "Tier 2 区间 [10, +∞)",
+    );
+    const cells = previewSpies.setResource.mock.calls.at(-1)?.[1] as
+      | Array<Record<string, unknown>>
+      | undefined;
+    expect(cells?.find((cell) => cell.symbol === "A")).toMatchObject({
+      value: 25,
     });
   });
 
@@ -842,6 +933,45 @@ function selectedTab(root: HTMLElement, group: string): string | undefined {
       .querySelector<HTMLElement>(`[data-${group}-tab][aria-selected="true"]`)
       ?.getAttribute("data-tab-value") ?? undefined
   );
+}
+
+function createSpineVisual(skeletonPath: string, animationName: string) {
+  return {
+    kind: "spine" as const,
+    skeletonPath,
+    atlasPath: "symbol.atlas",
+    texturePath: "symbol.png",
+    animationName,
+  };
+}
+
+function createSpineManifestAnimation(skeleton: string) {
+  return {
+    kind: "spine" as const,
+    skeleton: `./${skeleton}`,
+    atlas: "./symbol.atlas",
+    texture: "./symbol.png",
+    playback: {
+      mode: "animation" as const,
+      animationName: "Loop",
+      loop: true,
+    },
+  };
+}
+
+function createSpineMetadataRecord(
+  path: string,
+  slotNames: readonly string[],
+): EditorAssetRecord {
+  return {
+    path,
+    bytes: new Uint8Array(),
+    kind: "spine-skeleton",
+    size: 0,
+    uploadBatchId: "test",
+    metadata: { slotNames },
+    diagnostics: [],
+  };
 }
 
 async function uploadVniBundle(
