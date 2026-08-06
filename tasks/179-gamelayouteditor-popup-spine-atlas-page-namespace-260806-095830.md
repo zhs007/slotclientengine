@@ -67,6 +67,11 @@ Layout 现有资源，并继续把 Popup 作为独立 package 导入。该流程
 跟进验收通过 RenderCore 3 个定向 test files、25 tests，以及 RenderCore typecheck 与定向 ESLint。
 Editor 不新增按钮或私有点击阶段判断；预览 Canvas 与游戏 consumer 共用 RenderCore interaction。
 
+第二次浏览器反馈确认共享 runtime 虽已具备 pointer handler，但 Editor 样式中的
+`.preview-page canvas { pointer-events: none; }` 在 DOM 层截断了事件，Pixi EventSystem 因而完全收不到
+点击。现已把主预览 Canvas 的 stylesheet 与初始化 inline style 都改为 `pointer-events: auto`，并增加
+LayoutPreview DOM 回归断言；阶段分派仍只存在 RenderCore。
+
 ## 浏览器验收交接
 
 请在浏览器按以下步骤复验：

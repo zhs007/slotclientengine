@@ -129,6 +129,7 @@ export class LayoutPreview {
       antialias: true,
     });
     this.#app.canvas.setAttribute("aria-label", "布局预览画布");
+    this.#app.canvas.style.pointerEvents = "auto";
     this.#host.replaceChildren(this.#app.canvas);
     this.#selectionOutline.label = "editor-selected-layer-outline";
     this.#selectionOutline.eventMode = "none";
