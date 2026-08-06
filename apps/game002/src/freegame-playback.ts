@@ -33,6 +33,7 @@ type PlaybackStage =
   | "failed";
 
 export interface Game002FreeGamePlayback {
+  preflight(): void;
   start(): Promise<void>;
   update(deltaSeconds: number): void;
   isRunning(): boolean;
@@ -281,7 +282,7 @@ class DefaultGame002FreeGamePlayback implements Game002FreeGamePlayback {
     this.fail(new Error("game002 FreeGame playback was cleaned up."));
   }
 
-  private preflight(): void {
+  preflight(): void {
     this.requireSymbolState("WL", "win");
     this.requireSymbolState("AF", "feature");
     this.requireSymbolState("AF", "change");

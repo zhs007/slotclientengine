@@ -5,10 +5,190 @@ import type {
 } from "@slotclientengine/gameframeworks";
 import type { SymbolCascadePlayer } from "@slotclientengine/rendercore";
 import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-amount";
-import { Game002RoundTarget } from "../src/game-adapter.js";
+import {
+  expandGame002TransformOperation,
+  Game002RoundTarget,
+} from "../src/game-adapter.js";
 import type { Game002ReelRuntime } from "../src/game-demo.js";
 
 describe("Game002RoundTarget multiplier transform", () => {
+  it("expands multiplier and CO state commits into continuous atomic operations", () => {
+    const scene = createScene(1);
+    scene[0][0] = 1;
+    scene[1][0] = 7;
+    scene[2][0] = 8;
+    scene[3][0] = 9;
+    const step = createWmCmTransformStep(scene);
+    const phases = expandGame002TransformOperation({
+      operation: transformOperation(step),
+      step,
+      transform: {
+        stepIndex: 1,
+        wlIncrements: [],
+        wmReplacements: [
+          { position: { x: 1, y: 0 }, intermediateValue: 4, outputValue: 8 },
+        ],
+        cnUpdates: [
+          { position: { x: 1, y: 0 }, inputValue: 4, outputValue: 8 },
+          { position: { x: 2, y: 0 }, inputValue: 5, outputValue: 10 },
+        ],
+        cm: { position: { x: 3, y: 0 }, multiplier: 2, outputValue: 7 },
+        coReplacements: [],
+      },
+      symbolCodes: symbolCodes(),
+    });
+    expect(phases.map((item) => item.kind)).toEqual([
+      "game002:wild-multiplier",
+      "game002:wm-to-cn",
+      "game002:coin-multiplier",
+      "game002:cm-to-cn",
+    ]);
+    expect(phases.at(-1)!.output).toEqual(step.output);
+    phases
+      .slice(1)
+      .forEach((item, index) =>
+        expect(item.input).toEqual(phases[index]!.output),
+      );
+
+    const wlScene = createScene(1);
+    wlScene[1][0] = 1;
+    const wlStep = createWlIncrementStep(wlScene);
+    expect(
+      expandGame002TransformOperation({
+        operation: transformOperation(wlStep),
+        step: wlStep,
+        transform: {
+          stepIndex: 1,
+          wlIncrements: [
+            { position: { x: 0, y: 0 }, inputValue: 2, outputValue: 3 },
+          ],
+          wmReplacements: [],
+          cnUpdates: [],
+          cm: null,
+          coReplacements: [],
+        },
+        symbolCodes: symbolCodes(),
+      }).map((item) => item.kind),
+    ).toEqual(["game002:wl-increment"]);
+
+    const coScene = createScene(1);
+    const coStep = createCoTransformStep(coScene);
+    expect(
+      expandGame002TransformOperation({
+        operation: transformOperation(coStep),
+        step: coStep,
+        transform: {
+          stepIndex: 1,
+          wlIncrements: [],
+          wmReplacements: [],
+          cnUpdates: [],
+          cm: null,
+          coCollection: {} as never,
+          coReplacements: [],
+        },
+        symbolCodes: { ...symbolCodes(), CO: 6, BN: 10 },
+      }).map((item) => item.kind),
+    ).toEqual(["game002:co-collect"]);
+  });
+
+  it("rejects incomplete or invalid atomic transform decompositions", () => {
+    const scene = createScene(1);
+    scene[1][0] = 1;
+    const step = createWlIncrementStep(scene);
+    const base = {
+      operation: transformOperation(step),
+      step,
+      symbolCodes: symbolCodes(),
+    };
+    expect(() =>
+      expandGame002TransformOperation({
+        ...base,
+        transform: {
+          stepIndex: 1,
+          wlIncrements: [],
+          wmReplacements: [],
+          cnUpdates: [],
+          cm: null,
+          coReplacements: [],
+        },
+      }),
+    ).toThrow(/no atomic operation/);
+    expect(() =>
+      expandGame002TransformOperation({
+        ...base,
+        transform: {
+          stepIndex: 1,
+          wlIncrements: [
+            { position: { x: 0, y: 0 }, inputValue: 2, outputValue: 4 },
+          ],
+          wmReplacements: [],
+          cnUpdates: [],
+          cm: null,
+          coReplacements: [],
+        },
+      }),
+    ).toThrow(/does not close/);
+
+    const cmScene = createScene(1);
+    cmScene[0][0] = 1;
+    cmScene[1][0] = 9;
+    cmScene[2][0] = 8;
+    const cmStep = createCmTransformStep(cmScene);
+    expect(() =>
+      expandGame002TransformOperation({
+        operation: transformOperation(cmStep),
+        step: cmStep,
+        transform: {
+          stepIndex: 1,
+          wlIncrements: [],
+          wmReplacements: [],
+          cnUpdates: [],
+          cm: { position: { x: 0, y: 0 }, multiplier: 2, outputValue: 7 },
+          coReplacements: [],
+        },
+        symbolCodes: symbolCodes(),
+      }),
+    ).toThrow(/CM phase input/);
+  });
+
+  it("rejects an out-of-order or mismatched atomic presentation session", () => {
+    const runtime = new TransformRuntime();
+    const target = new Game002RoundTarget({
+      runtime: runtime.asRuntime(),
+      cascadePlayer: {} as SymbolCascadePlayer,
+      winAmountPlayer: {} as WinAmountAnimationPlayer,
+      wlSymbolCode: 0,
+      wmSymbolCode: 7,
+      cnSymbolCode: 8,
+      cmSymbolCode: 9,
+    });
+    const step = createTransformStep();
+    const batch = {
+      stepIndex: 1,
+      wlIncrements: [],
+      wmReplacements: [
+        { position: { x: 1, y: 0 }, intermediateValue: 9, outputValue: 9 },
+      ],
+      cnUpdates: [],
+      cm: null,
+      coReplacements: [],
+    } as const;
+    target.configure({
+      sequence: {} as never,
+      betAmountRaw: 0,
+      winAmountRaw: 0,
+    });
+    expect(() =>
+      target.startAtomicTransformOperation(step, batch, "wm-to-cn"),
+    ).toThrow(/must start/);
+    target.startAtomicTransformOperation(step, batch, "wild-multiplier");
+    expect(() =>
+      target.startAtomicTransformOperation(step, { ...batch }, "wm-to-cn"),
+    ).toThrow(/does not match/);
+    expect(() =>
+      target.startAtomicTransformOperation(step, batch, "coin-multiplier"),
+    ).toThrow(/cannot start/);
+  });
   it("waits for real animation edges before updating WL, changing WM and committing CN", () => {
     const runtime = new TransformRuntime();
     const target = new Game002RoundTarget({
@@ -25,50 +205,51 @@ describe("Game002RoundTarget multiplier transform", () => {
       sequence: {} as never,
       betAmountRaw: 0,
       winAmountRaw: 0,
-      multiplierBatches: new Map([
-        [
-          step.stepIndex,
-          Object.freeze({
-            stepIndex: step.stepIndex,
-            wlIncrements: Object.freeze([]),
-            wmReplacements: Object.freeze([
-              Object.freeze({
-                position: Object.freeze({ x: 1, y: 0 }),
-                intermediateValue: 9,
-                outputValue: 9,
-              }),
-            ]),
-            cnUpdates: Object.freeze([]),
-            cm: null,
-            coReplacements: Object.freeze([]),
-          }),
-        ],
-      ]),
     });
-
-    target.startSettledTransform(step);
+    const batch = {
+      stepIndex: step.stepIndex,
+      wlIncrements: [],
+      wmReplacements: [
+        { position: { x: 1, y: 0 }, intermediateValue: 9, outputValue: 9 },
+      ],
+      cnUpdates: [],
+      cm: null,
+      coReplacements: [],
+    } as const;
+    target.startAtomicTransformOperation(step, batch, "wild-multiplier");
     expect(runtime.events).toEqual([
       "text:0,0=x2",
       "text:1,0=x3",
       "prepare:1,0:7->8",
       "state:multStart",
     ]);
-    expect(target.updateSettledTransform(0).completed).toBe(false);
+    expect(
+      target.updateAtomicTransformOperation(0, "wild-multiplier").completed,
+    ).toBe(false);
 
     runtime.advanceOnce();
-    expect(target.updateSettledTransform(0).completed).toBe(false);
+    expect(
+      target.updateAtomicTransformOperation(0, "wild-multiplier").completed,
+    ).toBe(true);
     expect(runtime.events.slice(-2)).toEqual(["text:0,0=x5", "state:multIdle"]);
 
+    target.startAtomicTransformOperation(step, batch, "wm-to-cn");
     runtime.advanceLoop();
-    expect(target.updateSettledTransform(0).completed).toBe(false);
+    expect(target.updateAtomicTransformOperation(0, "wm-to-cn").completed).toBe(
+      false,
+    );
     expect(runtime.events.at(-1)).toBe("state:multEnd");
 
     runtime.advanceOnce();
-    expect(target.updateSettledTransform(0).completed).toBe(false);
+    expect(target.updateAtomicTransformOperation(0, "wm-to-cn").completed).toBe(
+      false,
+    );
     expect(runtime.events.at(-1)).toBe("state:change");
 
     runtime.advanceOnce();
-    expect(target.updateSettledTransform(0).completed).toBe(true);
+    expect(target.updateAtomicTransformOperation(0, "wm-to-cn").completed).toBe(
+      true,
+    );
     expect(runtime.events.at(-1)).toBe("commit:1,0:8");
     expect(runtime.scene[1][0]).toBe(8);
   });
@@ -91,35 +272,27 @@ describe("Game002RoundTarget multiplier transform", () => {
       sequence: {} as never,
       betAmountRaw: 0,
       winAmountRaw: 0,
-      multiplierBatches: new Map([
-        [
-          1,
-          {
-            stepIndex: 1,
-            wlIncrements: [
-              {
-                position: { x: 0, y: 0 },
-                inputValue: 2,
-                outputValue: 3,
-              },
-            ],
-            wmReplacements: [],
-            cnUpdates: [],
-            cm: null,
-            coReplacements: [],
-          },
-        ],
-      ]),
     });
-
-    target.startSettledTransform(step);
+    const batch = {
+      stepIndex: 1,
+      wlIncrements: [
+        { position: { x: 0, y: 0 }, inputValue: 2, outputValue: 3 },
+      ],
+      wmReplacements: [],
+      cnUpdates: [],
+      cm: null,
+      coReplacements: [],
+    } as const;
+    target.startAtomicTransformOperation(step, batch, "wl-increment");
     expect(runtime.events).toEqual([
       "text:0,0=x2",
       "text:0,0=x3",
       "state:appear",
     ]);
     runtime.advanceOnce();
-    expect(target.updateSettledTransform(0).completed).toBe(true);
+    expect(
+      target.updateAtomicTransformOperation(0, "wl-increment").completed,
+    ).toBe(true);
   });
 
   it("plays the complete WM sequence and commits CN when the board has no WL", () => {
@@ -140,28 +313,17 @@ describe("Game002RoundTarget multiplier transform", () => {
       sequence: {} as never,
       betAmountRaw: 0,
       winAmountRaw: 0,
-      multiplierBatches: new Map([
-        [
-          step.stepIndex,
-          {
-            stepIndex: step.stepIndex,
-            wlIncrements: [],
-            wmReplacements: [
-              {
-                position: { x: 1, y: 0 },
-                intermediateValue: 11,
-                outputValue: 11,
-              },
-            ],
-            cnUpdates: [],
-            cm: null,
-            coReplacements: [],
-          },
-        ],
-      ]),
     });
-
-    target.startSettledTransform(step);
+    target.startSettledTransformOperation(step, {
+      stepIndex: step.stepIndex,
+      wlIncrements: [],
+      wmReplacements: [
+        { position: { x: 1, y: 0 }, intermediateValue: 11, outputValue: 11 },
+      ],
+      cnUpdates: [],
+      cm: null,
+      coReplacements: [],
+    });
     expect(runtime.events).toEqual([
       "text:1,0=x4",
       "prepare:1,0:7->8",
@@ -201,32 +363,16 @@ describe("Game002RoundTarget multiplier transform", () => {
       sequence: {} as never,
       betAmountRaw: 0,
       winAmountRaw: 0,
-      multiplierBatches: new Map([
-        [
-          step.stepIndex,
-          {
-            stepIndex: step.stepIndex,
-            wlIncrements: [],
-            wmReplacements: [],
-            cnUpdates: [
-              {
-                position: { x: 2, y: 0 },
-                inputValue: 5,
-                outputValue: 10,
-              },
-            ],
-            cm: {
-              position: { x: 1, y: 0 },
-              multiplier: 2,
-              outputValue: 7,
-            },
-            coReplacements: [],
-          },
-        ],
-      ]),
     });
-
-    target.startSettledTransform(step);
+    const batch = {
+      stepIndex: step.stepIndex,
+      wlIncrements: [],
+      wmReplacements: [],
+      cnUpdates: [{ position: { x: 2, y: 0 }, inputValue: 5, outputValue: 10 }],
+      cm: { position: { x: 1, y: 0 }, multiplier: 2, outputValue: 7 },
+      coReplacements: [],
+    } as const;
+    target.startAtomicTransformOperation(step, batch, "coin-multiplier");
     expect(runtime.events).toEqual([
       "text:1,0=x2",
       "prepare:1,0:9->8",
@@ -234,15 +380,23 @@ describe("Game002RoundTarget multiplier transform", () => {
     ]);
 
     runtime.advanceOnce();
-    expect(target.updateSettledTransform(0).completed).toBe(false);
+    expect(
+      target.updateAtomicTransformOperation(0, "coin-multiplier").completed,
+    ).toBe(false);
     expect(runtime.events.at(-1)).toBe("state:featureChange");
 
     runtime.advanceOnce();
-    expect(target.updateSettledTransform(0).completed).toBe(false);
+    expect(
+      target.updateAtomicTransformOperation(0, "coin-multiplier").completed,
+    ).toBe(true);
+
+    target.startAtomicTransformOperation(step, batch, "cm-to-cn");
     expect(runtime.events.at(-1)).toBe("state:change");
 
     runtime.advanceOnce();
-    expect(target.updateSettledTransform(0).completed).toBe(true);
+    expect(target.updateAtomicTransformOperation(0, "cm-to-cn").completed).toBe(
+      true,
+    );
     expect(runtime.events.at(-1)).toBe("commit:1,0:8");
     expect(runtime.scene[1][0]).toBe(8);
   });
@@ -268,65 +422,58 @@ describe("Game002RoundTarget multiplier transform", () => {
       sequence: {} as never,
       betAmountRaw: 0,
       winAmountRaw: 0,
-      multiplierBatches: new Map([
-        [
-          step.stepIndex,
-          {
-            stepIndex: step.stepIndex,
-            wlIncrements: [],
-            wmReplacements: [
-              {
-                position: { x: 1, y: 0 },
-                intermediateValue: 4,
-                outputValue: 8,
-              },
-            ],
-            cnUpdates: [
-              {
-                position: { x: 1, y: 0 },
-                inputValue: 4,
-                outputValue: 8,
-              },
-              {
-                position: { x: 2, y: 0 },
-                inputValue: 5,
-                outputValue: 10,
-              },
-            ],
-            cm: {
-              position: { x: 3, y: 0 },
-              multiplier: 2,
-              outputValue: 7,
-            },
-            coReplacements: [],
-          },
-        ],
-      ]),
     });
-
-    target.startSettledTransform(step);
+    const batch = {
+      stepIndex: step.stepIndex,
+      wlIncrements: [],
+      wmReplacements: [
+        { position: { x: 1, y: 0 }, intermediateValue: 4, outputValue: 8 },
+      ],
+      cnUpdates: [
+        { position: { x: 1, y: 0 }, inputValue: 4, outputValue: 8 },
+        { position: { x: 2, y: 0 }, inputValue: 5, outputValue: 10 },
+      ],
+      cm: { position: { x: 3, y: 0 }, multiplier: 2, outputValue: 7 },
+      coReplacements: [],
+    } as const;
+    target.startAtomicTransformOperation(step, batch, "wild-multiplier");
     expect(runtime.events.at(-1)).toBe("state:multStart");
     runtime.advanceOnce();
-    expect(target.updateSettledTransform(0).completed).toBe(false);
+    expect(
+      target.updateAtomicTransformOperation(0, "wild-multiplier").completed,
+    ).toBe(true);
+    target.startAtomicTransformOperation(step, batch, "wm-to-cn");
     runtime.advanceLoop();
-    expect(target.updateSettledTransform(0).completed).toBe(false);
+    expect(target.updateAtomicTransformOperation(0, "wm-to-cn").completed).toBe(
+      false,
+    );
     runtime.advanceOnce();
-    expect(target.updateSettledTransform(0).completed).toBe(false);
+    expect(target.updateAtomicTransformOperation(0, "wm-to-cn").completed).toBe(
+      false,
+    );
     runtime.advanceOnce();
-    expect(target.updateSettledTransform(0).completed).toBe(false);
-    expect(runtime.events.slice(-2)).toEqual([
-      "commit:1,0:8",
-      "state:feature1",
-    ]);
+    expect(target.updateAtomicTransformOperation(0, "wm-to-cn").completed).toBe(
+      true,
+    );
+    expect(runtime.events.at(-1)).toBe("commit:1,0:8");
 
+    target.startAtomicTransformOperation(step, batch, "coin-multiplier");
+    expect(runtime.events.at(-1)).toBe("state:feature1");
     runtime.advanceOnce();
-    expect(target.updateSettledTransform(0).completed).toBe(false);
+    expect(
+      target.updateAtomicTransformOperation(0, "coin-multiplier").completed,
+    ).toBe(false);
     expect(runtime.events.at(-1)).toBe("state:featureChange");
     runtime.advanceOnce();
-    expect(target.updateSettledTransform(0).completed).toBe(false);
+    expect(
+      target.updateAtomicTransformOperation(0, "coin-multiplier").completed,
+    ).toBe(true);
+    target.startAtomicTransformOperation(step, batch, "cm-to-cn");
     expect(runtime.events.at(-1)).toBe("state:change");
     runtime.advanceOnce();
-    expect(target.updateSettledTransform(0).completed).toBe(true);
+    expect(target.updateAtomicTransformOperation(0, "cm-to-cn").completed).toBe(
+      true,
+    );
     expect(runtime.events.at(-1)).toBe("commit:3,0:8");
   });
 });
@@ -435,6 +582,29 @@ class TransformRuntime {
       }),
     } as unknown as Game002ReelRuntime;
   }
+}
+
+function transformOperation(step: SlotRoundSettledTransformStepPlan) {
+  return {
+    id: "transform:1",
+    kind: "slot:settled-transform",
+    version: 1,
+    operationIndex: 0,
+    source: {
+      kind: "server-component" as const,
+      stepIndex: 1,
+      bindings: {},
+    },
+    input: step.input,
+    output: step.output,
+    payload: { step },
+    requiredCapabilities: ["slot:settled-transform"],
+    commit: "atomic" as const,
+  };
+}
+
+function symbolCodes() {
+  return { WL: 0, A: 1, CO: 6, WM: 7, CN: 8, CM: 9, BN: 10 };
 }
 
 function createTransformStep(): SlotRoundSettledTransformStepPlan {

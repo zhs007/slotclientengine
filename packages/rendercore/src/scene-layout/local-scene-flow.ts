@@ -1,4 +1,12 @@
 import { Application } from "pixi.js";
+import type {
+  SlotOperationBase,
+  SlotOperationPlanV1,
+} from "@slotclientengine/logiccore";
+import {
+  createSlotOperationCoordinator,
+  createSlotOperationHandlerRegistry,
+} from "../slot-operation/index.js";
 import type { RenderViewportSize } from "../viewport/index.js";
 import { SceneLayoutError } from "./errors.js";
 import {
@@ -46,13 +54,14 @@ interface ActiveCellSequence {
   onceCompletionCount: number;
 }
 
-type FlowPhase = "idle" | "before-spin" | "spinning" | "settled";
+type FlowPhase = "idle" | "instant" | "before-spin" | "spinning" | "settled";
 
 export async function createSceneOtherSceneFlowRuntime(options: {
   readonly root: HTMLElement;
   readonly layoutZipBytes: Uint8Array;
   readonly expectedLayoutSha256?: string;
   readonly project: SceneOtherSceneFlowProjectV2 | unknown;
+  readonly operationPlan?: SlotOperationPlanV1;
   readonly random?: SceneOtherSceneBoundedRandom;
 }): Promise<SceneOtherSceneFlowRuntime> {
   const readiness = await inspectSceneOtherSceneFlowReadiness({
@@ -62,6 +71,8 @@ export async function createSceneOtherSceneFlowRuntime(options: {
       : {}),
     project: options.project,
   });
+  if (options.operationPlan)
+    assertOperationPlanMatchesFlow(options.operationPlan, readiness.project);
   const resource = await loadSceneLayoutPackageFromZipBytes({
     zipBytes: options.layoutZipBytes,
     loadSymbolTextures: true,
@@ -98,6 +109,7 @@ export async function createSceneOtherSceneFlowRuntime(options: {
       readiness,
       resource.manifest,
       options.random ?? secureSceneOtherSceneBoundedRandom,
+      options.operationPlan,
     );
     application.ticker.add((ticker) =>
       controller.update(ticker.deltaMS / 1000),
@@ -111,6 +123,42 @@ export async function createSceneOtherSceneFlowRuntime(options: {
   }
 }
 
+function assertOperationPlanMatchesFlow(
+  plan: SlotOperationPlanV1,
+  project: SceneOtherSceneFlowProjectV2,
+): void {
+  const initial = project.snapshots[0];
+  if (
+    JSON.stringify(plan.initial.scene) !== JSON.stringify(initial.scene) ||
+    JSON.stringify(plan.initial.values) !== JSON.stringify(initial.otherScene)
+  )
+    throw new SceneLayoutError(
+      "Operation plan initial snapshot does not match the local flow.",
+    );
+  for (const snapshot of project.snapshots.slice(1)) {
+    const operation = [...plan.operations]
+      .reverse()
+      .find(
+        (item) =>
+          item.source.kind === "snapshot-authored" &&
+          item.source.outputSnapshotId === snapshot.id,
+      );
+    if (!operation)
+      throw new SceneLayoutError(
+        `Operation plan has no finalized edge for snapshot "${snapshot.id}".`,
+      );
+    if (
+      JSON.stringify(operation.output.scene) !==
+        JSON.stringify(snapshot.scene) ||
+      JSON.stringify(operation.output.values) !==
+        JSON.stringify(snapshot.otherScene)
+    )
+      throw new SceneLayoutError(
+        `Operation plan output for snapshot "${snapshot.id}" does not match the local flow.`,
+      );
+  }
+}
+
 class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
   readonly canvas: HTMLCanvasElement;
   readonly readiness: SceneOtherSceneFlowReadiness;
@@ -119,6 +167,11 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
   readonly #manifest: SceneLayoutManifestV1;
   readonly #random: SceneOtherSceneBoundedRandom;
   readonly #statePhases: ReadonlyMap<string, "stable" | "once">;
+  readonly #operationPlan: SlotOperationPlanV1 | null;
+  readonly #operationCoordinator: ReturnType<
+    typeof createSlotOperationCoordinator
+  > | null;
+  readonly #lastOperationBySnapshotId: ReadonlyMap<string, number>;
   #phase: SceneOtherSceneFlowRuntimeSnapshot["phase"] = "ready";
   #flowPhase: FlowPhase = "idle";
   #snapshotIndex = 0;
@@ -126,6 +179,7 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
   #active = new Map<string, ActiveCellSequence>();
   #completed = new Set<string>();
   #started = new Set<string>();
+  #operationFailure: Error | null = null;
 
   constructor(
     application: Application,
@@ -133,16 +187,33 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
     readiness: SceneOtherSceneFlowReadiness,
     manifest: SceneLayoutManifestV1,
     random: SceneOtherSceneBoundedRandom,
+    operationPlan?: SlotOperationPlanV1,
   ) {
     this.#application = application;
     this.#runtime = runtime;
     this.#manifest = manifest;
     this.readiness = readiness;
     this.#random = random;
+    this.#operationPlan = operationPlan ?? null;
     this.canvas = application.canvas;
     this.#statePhases = new Map(
       readiness.layout.states.map((state) => [state.id, state.phase]),
     );
+    this.#lastOperationBySnapshotId = new Map(
+      (operationPlan?.operations ?? []).flatMap((operation) =>
+        operation.source.kind === "snapshot-authored"
+          ? [
+              [
+                operation.source.outputSnapshotId,
+                operation.operationIndex,
+              ] as const,
+            ]
+          : [],
+      ),
+    );
+    this.#operationCoordinator = operationPlan
+      ? this.createOperationCoordinator(operationPlan)
+      : null;
   }
 
   play(): void {
@@ -150,7 +221,17 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
     if (this.#phase === "playing") return;
     if (this.#phase === "completed") this.reset();
     this.#phase = "playing";
-    this.startSpinTarget();
+    if (this.#operationCoordinator && this.#operationPlan) {
+      this.#operationFailure = null;
+      void this.#operationCoordinator
+        .start(this.#operationPlan)
+        .catch((error: unknown) => {
+          this.#operationFailure =
+            error instanceof Error ? error : new Error(String(error));
+        });
+    } else {
+      this.startSpinTarget();
+    }
   }
 
   replay(): void {
@@ -198,8 +279,19 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
 
   update(deltaSeconds: number): void {
     if (this.#phase === "destroyed") return;
-    this.#runtime.update(deltaSeconds);
+    if (this.#operationFailure) throw this.#operationFailure;
+    if (!this.#operationCoordinator) this.#runtime.update(deltaSeconds);
     if (this.#phase !== "playing") return;
+
+    if (this.#operationCoordinator) {
+      this.#operationCoordinator.update(deltaSeconds);
+      if (this.#operationCoordinator.getSnapshot().phase === "complete") {
+        this.#phase = "completed";
+        this.#flowPhase = "idle";
+      }
+      if (this.#operationFailure) throw this.#operationFailure;
+      return;
+    }
 
     if (this.#flowPhase === "spinning")
       for (const position of this.#runtime.drainMainReelLandingPositions())
@@ -230,6 +322,7 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
     if (this.#phase === "destroyed") return;
     this.#phase = "destroyed";
     this.retireGeneration();
+    this.#operationCoordinator?.destroy();
     this.#runtime.destroy();
     this.#application.destroy(true, { children: true, texture: false });
   }
@@ -245,6 +338,152 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
         this.startBeforeSpin(x, y, choreography.beforeSpin);
       }
     if (this.#completed.size === this.cellCount) this.beginReelSpin();
+  }
+
+  private createOperationCoordinator(plan: SlotOperationPlanV1) {
+    const registry = createSlotOperationHandlerRegistry();
+    const registered = new Set<string>();
+    for (const operation of plan.operations) {
+      const key = `${operation.kind}@${operation.version}`;
+      if (registered.has(key)) continue;
+      registered.add(key);
+      const capabilities = new Set(
+        plan.operations
+          .filter(
+            (item) =>
+              item.kind === operation.kind &&
+              item.version === operation.version,
+          )
+          .flatMap((item) => item.requiredCapabilities),
+      );
+      registry.register({
+        kind: operation.kind,
+        version: operation.version,
+        requiredCapabilities: capabilities,
+        handler: {
+          preflight: (item) => this.preflightOperation(item),
+          prepare: (item): SlotOperationBase => item,
+          start: (item: SlotOperationBase) => this.startOperation(item),
+          update: (item: SlotOperationBase) => ({
+            completed: this.isOperationComplete(item),
+          }),
+          commit: () => undefined,
+          rollback: () => this.retireGeneration(),
+          destroy: () => undefined,
+        },
+      });
+    }
+    return createSlotOperationCoordinator({
+      registry,
+      updateRuntime: (deltaSeconds) => this.#runtime.update(deltaSeconds),
+      cleanup: () => this.retireGeneration(),
+    });
+  }
+
+  private preflightOperation(operation: SlotOperationBase): void {
+    if (operation.source.kind !== "snapshot-authored")
+      throw new SceneLayoutError(
+        `Local flow operation ${operation.id} must use snapshot-authored source evidence.`,
+      );
+    const source = operation.source;
+    const snapshotIndex = this.readiness.project.snapshots.findIndex(
+      (snapshot) => snapshot.id === source.outputSnapshotId,
+    );
+    if (snapshotIndex <= 0)
+      throw new SceneLayoutError(
+        `Local flow operation ${operation.id} targets unknown snapshot "${source.outputSnapshotId}".`,
+      );
+  }
+
+  private startOperation(operation: SlotOperationBase): void {
+    if (operation.source.kind !== "snapshot-authored")
+      throw new SceneLayoutError(
+        `Operation ${operation.id} has invalid local source.`,
+      );
+    const source = operation.source;
+    const snapshotIndex = this.readiness.project.snapshots.findIndex(
+      (snapshot) => snapshot.id === source.outputSnapshotId,
+    );
+    const snapshot = this.readiness.project.snapshots[snapshotIndex]!;
+    if (snapshot.kind !== "scene")
+      throw new SceneLayoutError(
+        `Operation ${operation.id} output is not a scene snapshot.`,
+      );
+    const isLast =
+      this.#lastOperationBySnapshotId.get(snapshot.id) ===
+      operation.operationIndex;
+    if (!isLast) {
+      this.#runtime.applyMainReelSnapshot({
+        scene: operation.output.scene,
+        localPhaseYs: zeroPhases(this.readiness.layout.columns),
+        presentationValues: operation.output.values,
+      });
+      this.beginGeneration(snapshotIndex, "instant");
+      return;
+    }
+    if (snapshot.transition === "spin") {
+      this.beginGeneration(snapshotIndex, "before-spin");
+      for (let x = 0; x < this.readiness.layout.columns; x++)
+        for (let y = 0; y < this.readiness.layout.rows; y++) {
+          const choreography = this.requireSpinChoreography(
+            snapshot.choreographies[x]![y]!,
+          );
+          this.startBeforeSpin(x, y, choreography.beforeSpin);
+        }
+      if (this.#completed.size === this.cellCount) this.beginReelSpin();
+      return;
+    }
+    this.startSettledOperation(operation, snapshotIndex);
+  }
+
+  private startSettledOperation(
+    operation: SlotOperationBase,
+    snapshotIndex: number,
+  ): void {
+    const snapshot = this.readiness.project.snapshots[snapshotIndex]!;
+    if (snapshot.kind !== "scene" || snapshot.transition !== "settled")
+      throw new SceneLayoutError(
+        `Snapshot ${snapshotIndex} is not a settled scene state.`,
+      );
+    this.#runtime.applyMainReelSnapshot({
+      scene: operation.output.scene,
+      localPhaseYs: zeroPhases(this.readiness.layout.columns),
+      presentationValues: operation.output.values,
+    });
+    this.beginGeneration(snapshotIndex, "settled");
+    for (let x = 0; x < this.readiness.layout.columns; x++)
+      for (let y = 0; y < this.readiness.layout.rows; y++) {
+        const choreography = this.requireChoreography(
+          snapshot.choreographies[x]![y]!,
+        );
+        if (choreography.kind !== "sequence")
+          throw new SceneLayoutError(
+            `Snapshot ${snapshotIndex} cell (${x},${y}) must use sequence choreography.`,
+          );
+        this.startCompletionSequence(x, y, choreography.steps);
+      }
+  }
+
+  private isOperationComplete(_operation: SlotOperationBase): boolean {
+    if (this.#flowPhase === "instant") return true;
+    if (this.#flowPhase === "before-spin") {
+      if (this.#completed.size === this.cellCount) this.beginReelSpin();
+      return false;
+    }
+    if (this.#flowPhase === "spinning") {
+      for (const position of this.#runtime.drainMainReelLandingPositions())
+        this.startStopping(position.x, position.y);
+      this.updateSequences();
+      return (
+        !this.#runtime.isMainReelSpinning() &&
+        this.completionPolicySatisfied(this.currentScene)
+      );
+    }
+    if (this.#flowPhase === "settled") {
+      this.updateSequences();
+      return this.completionPolicySatisfied(this.currentScene);
+    }
+    return false;
   }
 
   private startBeforeSpin(
@@ -431,6 +670,7 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
     this.#snapshotIndex = 0;
     this.#flowPhase = "idle";
     this.#phase = "ready";
+    this.#operationFailure = null;
   }
 
   private requestState(x: number, y: number, state: string): void {

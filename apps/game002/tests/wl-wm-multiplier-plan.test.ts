@@ -212,7 +212,7 @@ describe("game002 WL/WM multiplier compiler", () => {
         }),
       ),
     ).toEqual([{ position: { x: 0, y: 0 }, outputCode: WL, outputValue: 3 }]);
-    expect(compiler.getPresentationBatch(1)).toEqual({
+    expect(compiler.getOperationPayload(1)).toEqual({
       stepIndex: 1,
       wlIncrements: [
         {
@@ -273,7 +273,7 @@ describe("game002 WL/WM multiplier compiler", () => {
         }),
       ),
     ).toEqual([{ position: { x: 0, y: 0 }, outputCode: WL, outputValue: 3 }]);
-    expect(compiler.getPresentationBatch(2)?.wlIncrements).toEqual([
+    expect(compiler.getOperationPayload(2)?.wlIncrements).toEqual([
       {
         position: { x: 0, y: 0 },
         inputValue: 2,
@@ -475,14 +475,14 @@ describe("game002 WL/WM multiplier compiler", () => {
       { position: { x: 0, y: 0 }, outputCode: CN, outputValue: 8 },
       { position: { x: 1, y: 0 }, outputCode: CN, outputValue: 7 },
     ]);
-    expect(compiler.getPresentationBatch(0)?.wmReplacements).toEqual([
+    expect(compiler.getOperationPayload(0)?.wmReplacements).toEqual([
       {
         position: { x: 0, y: 0 },
         intermediateValue: 4,
         outputValue: 8,
       },
     ]);
-    expect(compiler.getPresentationBatch(0)?.cm).toEqual({
+    expect(compiler.getOperationPayload(0)?.cm).toEqual({
       position: { x: 1, y: 0 },
       multiplier: 2,
       outputValue: 7,
@@ -516,7 +516,7 @@ describe("game002 WL/WM multiplier compiler", () => {
       }),
     ).toEqual(generatedCoScene);
     expect(compiler.compileSettledTransform(context)).toEqual([]);
-    expect(compiler.getPresentationBatch(0)).toBeUndefined();
+    expect(compiler.getOperationPayload(0)).toBeUndefined();
   });
 
   it("keeps WM until bg-wm2cn and reconciles bg-genco only after the CN value exists", () => {
@@ -543,7 +543,7 @@ describe("game002 WL/WM multiplier compiler", () => {
     expect(compiler.compileSettledTransform(context)).toEqual([
       { position: { x: 0, y: 0 }, outputCode: CN, outputValue: 500 },
     ]);
-    expect(compiler.getPresentationBatch(0)).toMatchObject({
+    expect(compiler.getOperationPayload(0)).toMatchObject({
       wmReplacements: [
         {
           position: { x: 0, y: 0 },
@@ -635,7 +635,7 @@ describe("game002 WL/WM multiplier compiler", () => {
       { position: { x: 0, y: 1 }, outputCode: CN, outputValue: 10 },
       { position: { x: 1, y: 0 }, outputCode: CN, outputValue: 7 },
     ]);
-    expect(compiler.getPresentationBatch(1)).toEqual({
+    expect(compiler.getOperationPayload(1)).toEqual({
       stepIndex: 1,
       wlIncrements: [],
       wmReplacements: [

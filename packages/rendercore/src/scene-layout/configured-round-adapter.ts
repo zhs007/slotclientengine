@@ -1,10 +1,9 @@
 import {
-  compileSlotRoundExecutionPlan,
+  compileSlotRoundOperationPlan,
   type GameLogic,
   type SceneMatrix,
   type SlotRoundCapability,
   type SlotRoundDropdownStepPlan,
-  type SlotRoundExecutionPlan,
   type SlotRoundOccurrenceSnapshot,
   type SlotRoundRefillStepPlan,
   type SlotRoundFlowProfileV1,
@@ -13,9 +12,10 @@ import {
 } from "@slotclientengine/logiccore";
 import { Application } from "pixi.js";
 import {
-  createSlotRoundCoordinator,
-  type SlotRoundPresentationCapabilityTarget,
-} from "../slot-round/index.js";
+  createSlotOperationCoordinator,
+  createSlotOperationHandlerRegistry,
+  registerSlotRoundProfileOperationHandlers,
+} from "../slot-operation/index.js";
 import type {
   GridCellCascadeDropMovement,
   GridCellCascadeDropPlan,
@@ -94,7 +94,7 @@ class DefaultConfiguredSceneLayoutRoundAdapter implements ConfiguredSceneLayoutR
   #app: Application | null = null;
   #runtime: SceneLayoutPackageRuntime | null = null;
   #unsubscribeViewport: (() => void) | null = null;
-  #coordinator: ReturnType<typeof createSlotRoundCoordinator> | null = null;
+  #coordinator: ReturnType<typeof createSlotOperationCoordinator> | null = null;
   #destroyed = false;
   #resourceOwned = true;
 
@@ -182,7 +182,12 @@ class DefaultConfiguredSceneLayoutRoundAdapter implements ConfiguredSceneLayoutR
         createLocalPhases: () => this.createLocalPhases(),
         random: this.#random,
       });
-      this.#coordinator = createSlotRoundCoordinator({ target });
+      const registry = createSlotOperationHandlerRegistry();
+      registerSlotRoundProfileOperationHandlers({ registry, target });
+      this.#coordinator = createSlotOperationCoordinator({
+        registry,
+        cleanup: (reason) => target.cleanup(reason),
+      });
       this.applyViewport({
         width: app.renderer.width,
         height: app.renderer.height,
@@ -215,11 +220,16 @@ class DefaultConfiguredSceneLayoutRoundAdapter implements ConfiguredSceneLayoutR
           return [symbol, code];
         }),
       );
-      const plan = compileSlotRoundExecutionPlan(this.#roundFlow, logic, {
-        symbolCodes,
-        columns: geometry.columns,
-        rows: geometry.rows,
-      });
+      const plan = compileSlotRoundOperationPlan(
+        this.#roundFlow,
+        logic,
+        {
+          symbolCodes,
+          columns: geometry.columns,
+          rows: geometry.rows,
+        },
+        { includeCompletion: false },
+      );
       const completion = this.requireCoordinator().start(plan);
       return completion.then(() => {
         if (this.#presentation.flow.popup.enabled && logic.getTotalWin() > 0)
@@ -300,7 +310,9 @@ class DefaultConfiguredSceneLayoutRoundAdapter implements ConfiguredSceneLayoutR
     return this.#runtime;
   }
 
-  private requireCoordinator(): ReturnType<typeof createSlotRoundCoordinator> {
+  private requireCoordinator(): ReturnType<
+    typeof createSlotOperationCoordinator
+  > {
     if (!this.#coordinator)
       throw new SceneLayoutError(
         "Configured scene-layout adapter has no round coordinator.",
@@ -316,7 +328,7 @@ class DefaultConfiguredSceneLayoutRoundAdapter implements ConfiguredSceneLayoutR
   }
 }
 
-class ConfiguredRoundTarget implements SlotRoundPresentationCapabilityTarget {
+class ConfiguredRoundTarget {
   readonly capabilities: ReadonlySet<SlotRoundCapability>;
   readonly #runtime: SceneLayoutPackageRuntime;
   readonly #symbolResource: SymbolPackageResource;
@@ -364,43 +376,45 @@ class ConfiguredRoundTarget implements SlotRoundPresentationCapabilityTarget {
         : null;
   }
 
-  preflight(plan: SlotRoundExecutionPlan): void {
-    for (const step of plan.steps) {
-      if (step.kind !== "win") continue;
-      if (
-        step.groups.some((group) => group.sequentialCollect) &&
-        !this.#cascadePlayer
-      )
-        throw new SceneLayoutError(
-          "Configured round requires sequential collect presentation.flow version 2.",
+  preflightWin(step: SlotRoundWinStepPlan): void {
+    if (
+      step.groups.some((group) => group.sequentialCollect) &&
+      !this.#cascadePlayer
+    )
+      throw new SceneLayoutError(
+        "Configured round requires sequential collect presentation.flow version 2.",
+      );
+    if (this.#cascadePlayer) {
+      this.preflightCascadePresentations(step);
+      return;
+    }
+    for (const group of step.groups) {
+      for (const position of group.positions) {
+        const occurrence = requirePlanOccurrence(step.input, position);
+        this.assertSymbolStateCapability(
+          occurrence.symbol,
+          this.#presentation.flow.symbolStates.win,
+          `step[${step.stepIndex}] win (${position.x},${position.y})`,
         );
-      if (this.#cascadePlayer) {
-        this.preflightCascadePresentations(step);
-        continue;
       }
-      for (const group of step.groups) {
-        for (const position of group.positions) {
-          const occurrence = requirePlanOccurrence(step.input, position);
-          this.assertSymbolStateCapability(
-            occurrence.symbol,
-            this.#presentation.flow.symbolStates.win,
-            `step[${step.stepIndex}] win (${position.x},${position.y})`,
-          );
-        }
-        for (const position of group.removePositions) {
-          const occurrence = requirePlanOccurrence(step.input, position);
-          this.assertSymbolStateCapability(
-            occurrence.symbol,
-            this.#presentation.flow.symbolStates.remove,
-            `step[${step.stepIndex}] remove (${position.x},${position.y})`,
-          );
-        }
+      for (const position of group.removePositions) {
+        const occurrence = requirePlanOccurrence(step.input, position);
+        this.assertSymbolStateCapability(
+          occurrence.symbol,
+          this.#presentation.flow.symbolStates.remove,
+          `step[${step.stepIndex}] remove (${position.x},${position.y})`,
+        );
       }
     }
   }
 
   cleanup(
-    reason: import("../slot-round/index.js").SlotRoundCleanupReason,
+    reason:
+      | "next-spin"
+      | "compile-failure"
+      | "execution-failure"
+      | "fatal"
+      | "destroy",
   ): void {
     if (reason === "destroy") this.#cascadePlayer?.destroy();
     else this.#cascadePlayer?.clear();

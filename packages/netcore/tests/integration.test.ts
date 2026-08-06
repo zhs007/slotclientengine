@@ -12,7 +12,7 @@ describe('SlotcraftClient Integration Tests', () => {
 
   const getClient = (overrides: Partial<SlotcraftClientOptions> = {}) => {
     const options: SlotcraftClientOptions = {
-      url: `ws://localhost:${port}`,
+      url: `ws://127.0.0.1:${port}`,
       reconnectDelay: 10,
       requestTimeout: 100,
       logger: null, // Disable logs for cleaner test output

@@ -1,16 +1,20 @@
 import type { SceneOtherSceneFlowProjectV2 } from "@slotclientengine/rendercore/scene-layout";
+import type { finalizeSlotOperationAuthoringProject } from "@slotclientengine/slotoperationauthoring";
 
-export interface GameViewer2LaunchPayloadV2 {
+export interface GameViewer2LaunchPayloadV3 {
   readonly kind: "gameviewer2-launch";
-  readonly version: 2;
+  readonly version: 3;
   readonly layoutSha256: string;
   readonly layoutZip: ArrayBuffer;
   readonly project: SceneOtherSceneFlowProjectV2;
+  readonly operationPlan: ReturnType<
+    typeof finalizeSlotOperationAuthoringProject
+  >;
 }
 
-const HANDSHAKE = "gameviewer2-channel-v2";
+const HANDSHAKE = "gameviewer2-channel-v3";
 
-export function launchRuntimeWindow(payload: GameViewer2LaunchPayloadV2): void {
+export function launchRuntimeWindow(payload: GameViewer2LaunchPayloadV3): void {
   const target = window.open(`${window.location.pathname}?runtime=1`, "_blank");
   if (!target) throw new Error("浏览器阻止了预览窗口，请允许弹出窗口。");
   const channel = new MessageChannel();
@@ -27,7 +31,7 @@ export function launchRuntimeWindow(payload: GameViewer2LaunchPayloadV2): void {
   );
 }
 
-export function receiveRuntimePayload(): Promise<GameViewer2LaunchPayloadV2> {
+export function receiveRuntimePayload(): Promise<GameViewer2LaunchPayloadV3> {
   return new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       window.removeEventListener("message", onMessage);
@@ -58,11 +62,11 @@ export function receiveRuntimePayload(): Promise<GameViewer2LaunchPayloadV2> {
   });
 }
 
-export function parseLaunchPayload(input: unknown): GameViewer2LaunchPayloadV2 {
+export function parseLaunchPayload(input: unknown): GameViewer2LaunchPayloadV3 {
   if (typeof input !== "object" || input === null)
     throw new Error("预览数据无效。");
-  const value = input as Partial<GameViewer2LaunchPayloadV2>;
-  if (value.kind !== "gameviewer2-launch" || value.version !== 2)
+  const value = input as Partial<GameViewer2LaunchPayloadV3>;
+  if (value.kind !== "gameviewer2-launch" || value.version !== 3)
     throw new Error("预览协议版本不受支持。");
   if (!(value.layoutZip instanceof ArrayBuffer))
     throw new Error("预览数据缺少 layout ZIP。");
@@ -72,5 +76,7 @@ export function parseLaunchPayload(input: unknown): GameViewer2LaunchPayloadV2 {
   )
     throw new Error("预览 layout hash 无效。");
   if (!value.project) throw new Error("预览数据缺少流程项目。");
-  return value as GameViewer2LaunchPayloadV2;
+  if (!value.operationPlan)
+    throw new Error("预览数据缺少 finalized operation plan。");
+  return value as GameViewer2LaunchPayloadV3;
 }

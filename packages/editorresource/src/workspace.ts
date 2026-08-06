@@ -295,7 +295,8 @@ export function resolveEditorAssetImportReview(options: {
     }
 
     const targetKey = allocateEditorAssetKeySuffix(item.incoming.key, occupied);
-    const { existing: _existing, ...itemWithoutExisting } = item;
+    const { existing, ...itemWithoutExisting } = item;
+    void existing;
     const incoming = cloneEntry({
       ...item.incoming,
       key: targetKey,

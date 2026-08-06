@@ -593,9 +593,14 @@ grid-cell 级联以 `-1` 作为中间态空洞。`createGridCellCascadeDropPlan(
 
 `scripts/generate-symbol-value-vite-resources.mjs` 为 consumer 生成 tier Spine、`reelStates` PNG，以及 image 模式完整值图片或 image-string 模式 nested manifest/glyph 的 Vite 可静态分析精确 imports、module maps 和 loading URL；共享 dependency 去重，decoded glyph 尺寸也在生成时核对。`--check` 检查漂移。状态贴图 generator 会严格保留并验证三种互斥分支，确保重生成不丢 tier binding、不写回 value-managed symbol 的顶层 normal/state。
 
-## 通用 round coordinator
+## Slot operation coordinator
 
-`createSlotRoundCoordinator()` 只消费 logiccore 已编译且冻结的 execution plan 和 capability target。启动前会完整预检 `spin / visible-symbol-states / remove / dropdown / refill / sequential-collect` 能力，预检成功后才执行 next-spin cleanup 和 initial mutation；执行异常统一进入 fatal cleanup，destroy/重复 cleanup 幂等。
+`createSlotOperationHandlerRegistry()` 是 runtime 实例 owner；kind/version 重复注册和未知
+handler 精确失败。`createSlotOperationCoordinator()` 在 next-spin cleanup 与首次 mutation
+前预检完整 immutable plan 及每个 capability，然后逐 operation 执行
+`prepare → start/update → commit → snapshot assert → destroy`。未提交 operation 失败执行
+rollback/destroy/fatal cleanup；已提交 operation 不伪装成整轮倒放。旧固定 round
+coordinator 已从 public surface 删除。
 
 standard `RenderReelSet` 与 grid-cell `RenderGridCellReelSet` 都提供真实 cascade movement：release 后保留 surviving renderer identity、presentation value 和等价 animation playback，dropdown 按编译 movement 落位，refill 只创建 hole occurrence。scene-layout configured adapter 使用同一 coordinator，不再用最终 scene reset 跳过 remove/drop/refill。金额 resolver、symbol policy、component 名和游戏 extension 仍留在 app/config。
 

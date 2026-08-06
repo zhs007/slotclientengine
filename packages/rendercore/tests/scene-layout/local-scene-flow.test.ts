@@ -190,6 +190,7 @@ describe("local scene flow runtime", () => {
       layoutZipBytes: new Uint8Array([1]),
       expectedLayoutSha256: "a".repeat(64),
       project,
+      operationPlan: operationPlanFor(project) as never,
       random: () => 0,
     });
     expect(root.replaceChildren).toHaveBeenCalledOnce();
@@ -424,4 +425,186 @@ describe("local scene flow runtime", () => {
     expect(() => runtime.play()).toThrow(/Unknown state "normal"/);
     runtime.destroy();
   });
+
+  it("requires every finalized operation checkpoint to match the local flow", async () => {
+    const root = { replaceChildren: vi.fn() } as unknown as HTMLElement;
+    await expect(
+      createSceneOtherSceneFlowRuntime({
+        root,
+        layoutZipBytes: new Uint8Array([1]),
+        project,
+        operationPlan: operationPlanFor(project, {
+          initialMismatch: true,
+        }) as never,
+      }),
+    ).rejects.toThrow(/initial snapshot/);
+    await expect(
+      createSceneOtherSceneFlowRuntime({
+        root,
+        layoutZipBytes: new Uint8Array([1]),
+        project,
+        operationPlan: operationPlanFor(project, { omitFinal: true }) as never,
+      }),
+    ).rejects.toThrow(/no finalized edge/);
+    await expect(
+      createSceneOtherSceneFlowRuntime({
+        root,
+        layoutZipBytes: new Uint8Array([1]),
+        project,
+        operationPlan: operationPlanFor(project, {
+          outputMismatch: true,
+        }) as never,
+      }),
+    ).rejects.toThrow(/does not match the local flow/);
+  });
+
+  it("accepts a matching finalized operation checkpoint chain", async () => {
+    const runtime = await createSceneOtherSceneFlowRuntime({
+      root: { replaceChildren: vi.fn() } as unknown as HTMLElement,
+      layoutZipBytes: new Uint8Array([1]),
+      project,
+      operationPlan: operationPlanFor(project) as never,
+    });
+    runtime.destroy();
+  });
+
+  it("executes intermediate authored operations before the edge choreography", async () => {
+    const plan = operationPlanFor(project);
+    const operationPlan = withLeadingOperation(plan, {
+      kind: "snapshot-authored",
+      inputSnapshotId: "s1",
+      outputSnapshotId: "s2",
+      suggestions: [],
+      edits: [],
+    });
+    const runtime = await createSceneOtherSceneFlowRuntime({
+      root: { replaceChildren: vi.fn() } as unknown as HTMLElement,
+      layoutZipBytes: new Uint8Array([1]),
+      project,
+      operationPlan: operationPlan as never,
+    });
+    runtime.play();
+    mocks.tickerCallback!({ deltaMS: 16 });
+    expect(mocks.applySnapshot).toHaveBeenCalledOnce();
+    expect(mocks.spin).toHaveBeenCalledOnce();
+    runtime.destroy();
+  });
+
+  it("rejects non-authored operations during coordinator preflight", async () => {
+    const plan = operationPlanFor(project);
+    const operationPlan = withLeadingOperation(plan, {
+      kind: "server-component",
+      stepIndex: 0,
+      bindings: {},
+    });
+    const runtime = await createSceneOtherSceneFlowRuntime({
+      root: { replaceChildren: vi.fn() } as unknown as HTMLElement,
+      layoutZipBytes: new Uint8Array([1]),
+      project,
+      operationPlan: operationPlan as never,
+    });
+    runtime.play();
+    await Promise.resolve();
+    expect(() => mocks.tickerCallback!({ deltaMS: 16 })).toThrow(
+      /snapshot-authored/,
+    );
+    runtime.destroy();
+  });
 });
+
+function withLeadingOperation(
+  plan: ReturnType<typeof operationPlanFor>,
+  source: Record<string, unknown>,
+) {
+  const kind =
+    source.kind === "snapshot-authored" ? "slot:spin" : "slot:collect";
+  const leading = {
+    ...plan.operations[0],
+    id: "leading-operation",
+    kind,
+    operationIndex: 0,
+    source,
+    input: plan.initial,
+    output: plan.initial,
+    requiredCapabilities: [kind],
+  };
+  const operations = [leading, ...plan.operations].map(
+    (operation, operationIndex) => ({ ...operation, operationIndex }),
+  );
+  return deepFreeze({
+    ...plan,
+    operations,
+    requiredCapabilities: [...plan.requiredCapabilities, kind],
+  });
+}
+
+function operationPlanFor(
+  value: typeof project,
+  options: {
+    initialMismatch?: boolean;
+    omitFinal?: boolean;
+    outputMismatch?: boolean;
+  } = {},
+) {
+  const initial = value.snapshots[0];
+  const initialSnapshot = {
+    scene: options.initialMismatch ? [[99]] : initial.scene,
+    values: initial.otherScene,
+    occurrences: [],
+  };
+  const targets = options.omitFinal
+    ? value.snapshots.slice(1, -1)
+    : value.snapshots.slice(1);
+  let input: {
+    scene: readonly (readonly number[])[];
+    values: readonly (readonly (number | null)[])[];
+    occurrences: never[];
+  } = initialSnapshot;
+  const operations = targets.map((target, index) => {
+    if (target.kind !== "scene") throw new Error("target must be a scene");
+    const output = {
+      scene: options.outputMismatch && index === 0 ? [[99]] : target.scene,
+      values: target.otherScene,
+      occurrences: [],
+    };
+    const operation = {
+      id: `operation-${index}`,
+      kind: target.transition === "spin" ? "slot:spin" : "slot:update-values",
+      version: 1,
+      operationIndex: index,
+      source: {
+        kind: "snapshot-authored",
+        inputSnapshotId: value.snapshots[index]!.id,
+        outputSnapshotId: target.id,
+        suggestions: [],
+        edits: [],
+      },
+      input,
+      output,
+      payload: {},
+      requiredCapabilities: [
+        target.transition === "spin" ? "slot:spin" : "slot:update-values",
+      ],
+      commit: "atomic",
+    };
+    input = output;
+    return operation;
+  });
+  return deepFreeze({
+    kind: "slot-operation-plan",
+    version: 1,
+    initial: initialSnapshot,
+    operations,
+    final: operations.at(-1)?.output ?? initialSnapshot,
+    requiredCapabilities: ["slot:spin", "slot:update-values"],
+  });
+}
+
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const item of Object.values(value as Record<string, unknown>))
+      deepFreeze(item);
+  }
+  return value;
+}

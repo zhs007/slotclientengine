@@ -22,7 +22,7 @@ export {
   validateSlotRoundFlowCatalogCompatibility,
   validateSlotRoundFlowSymbolCatalog,
 } from "./slot-round-flow";
-export { compileSlotRoundExecutionPlan } from "./slot-round-plan";
+export * from "./slot-operation/index";
 export * from "./types";
 export type {
   ServerAuthoringParameter,
@@ -44,8 +44,6 @@ export type {
   SlotRoundCapability,
   SlotRoundCompileContext,
   SlotRoundDropdownStepPlan,
-  SlotRoundExecutionPlan,
-  SlotRoundExecutionStep,
   SlotRoundMovementPlan,
   SlotRoundOccurrence,
   SlotRoundOccurrenceSnapshot,

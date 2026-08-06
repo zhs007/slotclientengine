@@ -132,7 +132,11 @@ vi.mock("../src/runtime/launch-channel.js", () => ({
 }));
 vi.mock("../src/model/project.js", () => ({
   downloadProject: mocks.download,
-  parseGameViewer2ProjectFile: vi.fn((project) => project),
+  parseGameViewer2ProjectFile: vi.fn((project) => {
+    if (project.version !== 3) throw new Error("v3 required");
+    return project;
+  }),
+  parseGameViewer2ProjectFileV2: vi.fn((project) => project),
 }));
 
 import { createGameViewer2AppShell } from "../src/ui/app-shell.js";
@@ -212,6 +216,16 @@ describe("gameviewer2 app shell", () => {
     expect(root.querySelector('[data-edit="step-hold"]')).toBeNull();
     click(root, "step-delete");
     click(root, "copy-choreography");
+    click(root, "tab-operations");
+    expect(root.querySelectorAll(".operation-edge")).toHaveLength(2);
+    expect(root.textContent).toContain(
+      "positions、pairing、result、order、amount",
+    );
+    expect(
+      root.querySelector<HTMLTextAreaElement>(
+        '[data-edit="operation-payload"]',
+      )!.value,
+    ).toContain('"output"');
     click(root, "tab-scenes");
     click(root, "export");
     expect(mocks.download).toHaveBeenCalledOnce();
@@ -219,7 +233,7 @@ describe("gameviewer2 app shell", () => {
     await vi.waitFor(() => expect(mocks.launch).toHaveBeenCalledOnce());
   });
 
-  it("reports a mismatched imported project", async () => {
+  it("requires the layout before explicitly upgrading a v2 project", async () => {
     const root = document.createElement("div");
     createGameViewer2AppShell(root);
     const input = root.querySelector<HTMLInputElement>("#project-file")!;
@@ -235,7 +249,9 @@ describe("gameviewer2 app shell", () => {
     });
     input.dispatchEvent(new Event("change"));
     await vi.waitFor(() =>
-      expect(root.textContent).toContain("本地项目已导入"),
+      expect(root.textContent).toContain(
+        "升级 v2 项目前必须先导入其 layout ZIP",
+      ),
     );
   });
 });

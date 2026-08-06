@@ -53,13 +53,64 @@ const flow = {
   ],
 } as const;
 
+const snapshot = {
+  scene: [[1]],
+  values: [[null]],
+  occurrences: [
+    {
+      id: "s:0:0",
+      code: 1,
+      symbol: "A",
+      value: null,
+      position: { x: 0, y: 0 },
+    },
+  ],
+} as const;
+const operations = {
+  kind: "slot-operation-authoring-project",
+  version: 1,
+  snapshots: [
+    { id: "s1", snapshot },
+    {
+      id: "s2",
+      snapshot: {
+        ...snapshot,
+        occurrences: [{ ...snapshot.occurrences[0], id: "s2:0:0" }],
+      },
+    },
+  ],
+  edges: [
+    {
+      inputSnapshotId: "s1",
+      outputSnapshotId: "s2",
+      review: "complete",
+      drafts: [
+        {
+          id: "edge",
+          kind: "slot:spin",
+          version: 1,
+          source: {
+            kind: "snapshot-authored",
+            inputSnapshotId: "s1",
+            outputSnapshotId: "s2",
+            suggestions: [],
+            edits: [],
+          },
+          payload: { output: snapshot },
+        },
+      ],
+    },
+  ],
+} as const;
+
 describe("gameviewer2 project boundaries", () => {
   it("strictly parses project metadata and local flow", () => {
     const parsed = parseGameViewer2ProjectFile({
       kind: "gameviewer2-project",
-      version: 2,
+      version: 3,
       layoutSha256: "a".repeat(64),
       flow,
+      operations,
     });
     expect(parsed.flow.snapshots).toHaveLength(2);
     expect(() =>
@@ -71,14 +122,15 @@ describe("gameviewer2 project boundaries", () => {
     expect(
       parseLaunchPayload({
         kind: "gameviewer2-launch",
-        version: 2,
+        version: 3,
         layoutSha256: "b".repeat(64),
         layoutZip: new ArrayBuffer(2),
         project: flow,
+        operationPlan: {},
       }).layoutZip.byteLength,
     ).toBe(2);
     expect(() =>
-      parseLaunchPayload({ kind: "gameviewer2-launch", version: 2 }),
+      parseLaunchPayload({ kind: "gameviewer2-launch", version: 3 }),
     ).toThrow(/ZIP/);
     expect(() =>
       parseGameViewer2ProjectFile({
@@ -87,6 +139,6 @@ describe("gameviewer2 project boundaries", () => {
         layoutSha256: "a".repeat(64),
         flow,
       }),
-    ).toThrow(/v2/);
+    ).toThrow(/v3/);
   });
 });
