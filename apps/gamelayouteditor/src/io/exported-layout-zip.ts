@@ -394,7 +394,7 @@ async function flattenLayoutClosure(
     if (!sourcePath.toLowerCase().endsWith(".json")) continue;
     const raw = parseJson(bytes, sourcePath);
     if (!isPathBearingJson(raw) || looksLikeVniProject(raw)) continue;
-    const rewritten = rewriteExactJsonReferences(raw, (reference) => {
+    const rewrite = (reference: string): string => {
       const direct = rewriteMappedReference(reference, mapping);
       if (direct !== reference) return direct;
       if (!sourcePath.includes("/")) return reference;
@@ -406,7 +406,10 @@ async function flattenLayoutClosure(
       } catch {
         return reference;
       }
-    });
+    };
+    const rewritten = isSymbolPackageJson(raw)
+      ? rewriteSymbolPackageManifestFilenameKeys(raw, mapping)
+      : rewriteExactJsonReferences(raw, rewrite);
     virtual.set(
       mapping.get(sourcePath)!,
       new TextEncoder().encode(
@@ -415,6 +418,7 @@ async function flattenLayoutClosure(
     );
   }
   const rewritten = rewriteLayoutManifestFilenameKeys(manifest, mapping);
+  collectSceneLayoutPackagePaths({ manifest: rewritten, files: virtual });
   const empty = createEmptyEditorAssetWorkspace();
   const review = await reviewEditorAssetImport({
     workspace: empty,
@@ -535,6 +539,38 @@ function isPathBearingJson(value: unknown): boolean {
     record.kind === "popup" ||
     (record.version === 1 && record.symbols !== undefined)
   );
+}
+
+function isSymbolPackageJson(value: unknown): boolean {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    (value as { readonly kind?: unknown }).kind === "symbol-package",
+  );
+}
+
+function rewriteSymbolPackageManifestFilenameKeys(
+  value: unknown,
+  mapping: ReadonlyMap<string, string>,
+): unknown {
+  const source = parseSymbolPackageManifest(value);
+  const key = (path: string): string => {
+    const target = mapping.get(path);
+    if (!target)
+      throw new Error(`Symbols package filename key 未进入导出闭包：${path}`);
+    return target;
+  };
+  return parseSymbolPackageManifest({
+    ...source,
+    entrypoints: {
+      gameConfig: key(source.entrypoints.gameConfig),
+      symbolManifest: key(source.entrypoints.symbolManifest),
+    },
+    resources: source.resources
+      .map(key)
+      .sort((left, right) => left.localeCompare(right, "en")),
+  });
 }
 
 function looksLikeVniProject(value: unknown): boolean {

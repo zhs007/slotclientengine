@@ -2,6 +2,7 @@ import { strToU8, zipSync } from "fflate";
 import { Assets, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
 import { decodeEditorAssetsMap } from "@slotclientengine/editorresource";
+import { parseSymbolPackageManifest } from "@slotclientengine/rendercore/symbol";
 import {
   exportLayoutZip,
   materializeLayoutOwnedAssets,
@@ -952,6 +953,88 @@ describe("layout zip IO", () => {
       const entries = extractBoundedZip(exported.bytes);
       const map = decodeEditorAssetsMap(entries.get("assets.map.json")!);
       expect(map.files).toHaveProperty("a.disabled.png");
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
+  });
+
+  it("re-sorts symbol package resources after filename-key normalization", async () => {
+    const fixture = compositePackageFixture();
+    const sourceResources = ["A-+.png", "A-1.png"].sort((left, right) =>
+      left.localeCompare(right, "en"),
+    );
+    const symbolPackage = {
+      version: 1,
+      kind: "symbol-package",
+      id: "demo-symbols",
+      cellSize: { width: 20, height: 20 },
+      entrypoints: {
+        gameConfig: "gameconfig.json",
+        symbolManifest: "symbol-state-textures.manifest.json",
+      },
+      resources: sourceResources,
+    };
+    const symbolManifest = {
+      version: 1,
+      states: ["disabled"],
+      symbols: {
+        A: {
+          normal: "./A-+.png",
+          disabled: "./A-1.png",
+          scale: 1,
+        },
+      },
+    };
+    const symbolFiles = new Map(fixture.symbolFiles);
+    symbolFiles.set("symbols.package.json", encode(symbolPackage));
+    symbolFiles.set(
+      "symbol-state-textures.manifest.json",
+      encode(symbolManifest),
+    );
+    symbolFiles.delete("a.png");
+    symbolFiles.set(
+      "A-+.png",
+      new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 5]),
+    );
+    symbolFiles.set(
+      "A-1.png",
+      new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 6]),
+    );
+
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    try {
+      const exported = await exportLayoutZip({
+        manifest: fixture.manifest,
+        assets: fixture.assets,
+        symbolFilesById: new Map([["demo-symbols", symbolFiles]]),
+        decodeImage,
+        loadSymbolTextures: false,
+      });
+      const entries = extractBoundedZip(exported.bytes);
+      const packedPackage = JSON.parse(
+        new TextDecoder().decode(mappedEntry(entries, "symbols.package.json")!),
+      );
+      const parsedPackage = parseSymbolPackageManifest(packedPackage);
+      expect(parsedPackage.resources).toEqual(
+        [...parsedPackage.resources].sort((left, right) =>
+          left.localeCompare(right, "en"),
+        ),
+      );
+      expect(parsedPackage.resources).toEqual(["a-1.png", "a.png"]);
+
+      const imported = await importLayoutZip(exported.bytes, {
+        decodeImage,
+        loadSymbolTextures: false,
+      });
+      expect(imported.manifest.adaptation).toEqual(fixture.manifest.adaptation);
+      expect(imported.manifest.symbolPackages).toEqual(
+        fixture.manifest.symbolPackages,
+      );
+      imported.destroy();
     } finally {
       load.mockRestore();
       unload.mockRestore();
