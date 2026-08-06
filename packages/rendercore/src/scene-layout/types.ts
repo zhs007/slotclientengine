@@ -173,10 +173,17 @@ export interface SceneLayoutGameMode {
   readonly awardCelebrationPopup?: string;
 }
 
-export interface SceneLayoutSpineGameModeTransition {
+interface SceneLayoutGameModeTransitionBase {
   readonly from: string;
   readonly to: string;
   readonly preludePopup?: string;
+}
+
+export interface SceneLayoutNoneGameModeTransition extends SceneLayoutGameModeTransitionBase {
+  readonly overlay: { readonly kind: "none" };
+}
+
+export interface SceneLayoutSpineGameModeTransition extends SceneLayoutGameModeTransitionBase {
   readonly overlay: {
     readonly resource: {
       readonly kind: "spine";
@@ -192,9 +199,7 @@ export interface SceneLayoutSpineGameModeTransition {
   };
 }
 
-export interface SceneLayoutVideoGameModeTransition {
-  readonly from: string;
-  readonly to: string;
+export interface SceneLayoutVideoGameModeTransition extends SceneLayoutGameModeTransitionBase {
   readonly overlay: {
     readonly resource: {
       readonly kind: "video";
@@ -207,6 +212,7 @@ export interface SceneLayoutVideoGameModeTransition {
 }
 
 export type SceneLayoutGameModeTransition =
+  | SceneLayoutNoneGameModeTransition
   | SceneLayoutSpineGameModeTransition
   | SceneLayoutVideoGameModeTransition;
 
@@ -442,10 +448,15 @@ export interface SceneLayoutGameModeSnapshot {
   readonly displayedMode: string;
   readonly targetMode: string | null;
   readonly phase: "stable" | "transitioning";
-  readonly transitionPhase: "popup" | "before-switch" | "after-switch" | null;
+  readonly transitionPhase:
+    | "popup"
+    | "awaiting-video-start"
+    | "before-switch"
+    | "after-switch"
+    | null;
   readonly transition: { readonly from: string; readonly to: string } | null;
   readonly preparedTargetMode: string | null;
-  readonly transitionKind: "spine" | "video" | null;
+  readonly transitionKind: "none" | "spine" | "video" | null;
   readonly activePreludePopup: string | null;
   readonly mediaTimeSeconds: number | null;
   readonly mediaDurationSeconds: number | null;
@@ -568,6 +579,8 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
     modeId: string,
     options?: SceneLayoutGameModeRequestOptions,
   ): Promise<void>;
+  /** Starts a video held after a completed transition prelude. Call from a trusted gesture. */
+  startPendingGameModeVideo(): Promise<void>;
   /** Requests the active transition prelude to finish at its production boundary. */
   requestDismissGameModePrelude(): void;
   /** Cancels an active transition prelude and keeps the stable source mode. */

@@ -208,15 +208,24 @@ describe("game mode and popup dependency commands", () => {
     });
     addGameMode(project, "FreeGame");
     createGameModeTransition(project, "BaseGame", "FreeGame");
-    const video = setGameModeTransitionKind(
+    project.gameModes.transitions[0]!.preludePopupId = "shared-prelude";
+    const none = setGameModeTransitionKind(
       project,
       project.gameModes.transitions[0]!,
-      "video",
+      "none",
     );
+    expect(none).toEqual({
+      kind: "none",
+      fromModeId: "BaseGame",
+      toModeId: "FreeGame",
+      preludePopupId: "shared-prelude",
+    });
+    const video = setGameModeTransitionKind(project, none, "video");
     setGameModeVideoTransitionResource(project, video, "clip");
     setGameModeVideoTransitionFadeOut(project, video, 0.5);
     expect(video).not.toHaveProperty("animation");
     expect(video).not.toHaveProperty("placements");
+    expect(video.preludePopupId).toBe("shared-prelude");
     expect(() =>
       setGameModeVideoTransitionFadeOut(project, video, 3.625),
     ).toThrow(/小于视频实际时长/);

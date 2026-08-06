@@ -372,6 +372,12 @@ export class LayoutPreview {
     );
   }
 
+  async startPendingGameModeVideo(): Promise<void> {
+    if (!this.#packageRuntime)
+      throw new Error("当前 layout preview 没有 package runtime。");
+    await this.#packageRuntime.startPendingGameModeVideo();
+  }
+
   private gameModeRequestOptions(modeId: string) {
     const current = this.#packageRuntime!.getGameModeSnapshot();
     const sourceBinding = resolveModeSymbolBinding(

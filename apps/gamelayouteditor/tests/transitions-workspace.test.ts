@@ -74,6 +74,14 @@ describe("transitions workspace", () => {
       },
     });
 
+    expect(
+      [
+        ...(host.querySelector("[data-transition-kind]") as HTMLSelectElement)
+          .options,
+      ].map((option) => option.value),
+    ).toEqual(["none", "spine", "video"]);
+    expect(host.querySelector("[data-transition-prelude-popup]")).toBeTruthy();
+
     expect(host.querySelector("select[data-transition-resource]")).toBeTruthy();
     expect(
       host.querySelector("select[data-transition-animation]"),

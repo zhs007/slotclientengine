@@ -503,9 +503,9 @@ describe("scene layout manifest", () => {
       },
     ];
     const parsed = parseSceneLayoutManifest(value);
-    expect(parsed.gameModes?.transitions?.[0].overlay.resource.kind).toBe(
-      "video",
-    );
+    expect(parsed.gameModes?.transitions?.[0]).toMatchObject({
+      overlay: { resource: { kind: "video" } },
+    });
     expect(collectSceneLayoutAssetPaths(parsed)).toContain(
       `assets/${hash}.mp4`,
     );
@@ -588,7 +588,41 @@ describe("scene layout manifest", () => {
         fadeOutSeconds: 0.5,
       },
     };
-    expect(() => parseSceneLayoutManifest(video)).toThrow(/not supported/);
+    expect(
+      parseSceneLayoutManifest(video).gameModes?.transitions?.[0],
+    ).toMatchObject({
+      preludePopup: "free-entry",
+      overlay: { resource: { kind: "video" } },
+    });
+  });
+
+  it("parses an explicit no-effect transition with an optional Spine popup", () => {
+    const value = gameModeManifest() as any;
+    value.popups["free-entry"] = {
+      type: "spine",
+      manifest: "free-entry-popup.manifest.json",
+      order: 2002,
+      placements: { default: { x: 0, y: 0, scale: 1 } },
+    };
+    value.gameModes.transitions = [
+      {
+        from: "BaseGame",
+        to: "FreeGame",
+        preludePopup: "free-entry",
+        overlay: { kind: "none" },
+      },
+    ];
+    const parsed = parseSceneLayoutManifest(value);
+    expect(parsed.gameModes?.transitions?.[0]).toMatchObject({
+      preludePopup: "free-entry",
+      overlay: { kind: "none" },
+    });
+    expect(Object.isFrozen(parsed.gameModes?.transitions?.[0].overlay)).toBe(
+      true,
+    );
+    const invalid = structuredClone(value);
+    invalid.gameModes.transitions[0].overlay.resource = { kind: "video" };
+    expect(() => parseSceneLayoutManifest(invalid)).toThrow(/unknown key/);
   });
 
   it("normalizes legacy popup order and rejects presentation order conflicts", () => {

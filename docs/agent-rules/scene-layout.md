@@ -32,7 +32,7 @@
 
 ## Directed transition
 
-- transition 是独立有向边，只支持 strict Spine overlay 或 video-blackout union。每条 Spine edge 独立保存可选 `preludePopup`，必须引用普通 Spine Popup；不同 edge 可不配置或引用不同 Popup，video edge 显式禁止 prelude。
+- transition 是独立有向边，使用 explicit none、strict Spine overlay 或 video-blackout union。每条 edge 独立保存可选 `preludePopup`，必须引用普通 Spine Popup；不同 edge 可不配置或引用不同 Popup。none 仍要求显式边和完整 target prepare，不是缺边 fallback。
 - editor 只自动准备当前 stable source 到所选 target 的一条直接边。
 - 缺显式边时不得瞬切、反向复用、自动寻路或回退旧 node state machine。
 - Spine/MP4 使用统一 state-switch action 和中文阶段提示。
@@ -46,10 +46,10 @@
 - main reel per-variant placement 只允许 `x/y`，不提供整体 scale；横竖屏适配通过背景素材、art size 和 reel placement 完成，不改写转轮或 per-symbol scale。
 - geometry-only manifest 更新必须先校验 immutable structure，再原子提交并复用 texture、Spine player、当前 mode、reel 与 scene；资源、topology、binding 或 transition 结构变化必须走完整 prepare/commit。
 - transition overlay 使用固定顶层 `scene-transition-overlay`；video blackout 是 viewport-space runtime object，不是 CSS overlay。
-- runtime 在切换前准备完整 target scene；只在 exact Spine event occurrence 或 video media-time `fadeStart` 边界原子切换 background、reel 和 displayed mode。
+- runtime 在切换前准备完整 target scene；只在 none direct commit、exact Spine event occurrence 或 video media-time `fadeStart` 边界原子切换 background、reel 和 displayed mode。
 - editor 的 authoring stable-mode selection 必须与 production `requestGameMode()` 隔离：它不要求 directed edge、不播放 overlay，并用同一 visibility commit 同步背景、scoped 普通节点与 displayed mode；相同 symbols binding 不重建或重新抽样，prepare 失败不得留下半切换状态。
 - video 不使用 wall-clock fade，不自动静音，也不在 `play()` 拒绝时 fallback。
-- once/ended settle、iOS gesture-safe prepare、trusted-click synchronous play 和当前 mode popup lifecycle 属于 rendercore。带 prelude 的 Spine edge 必须先完整完成 popup start→loop→end，再启动已准备 overlay；source mode 在 popup complete 前保持不变。
+- once/ended settle、iOS gesture-safe prepare、trusted-click synchronous play 和当前 mode popup lifecycle 属于 rendercore。带 prelude 的任意 edge 必须先完整完成 popup start→loop→end，再继续效果；source mode 在 popup complete 前保持不变。带 prelude 的 video 在 complete 后显式等待第二次 trusted gesture，不得预播、静音或与 Popup end 并行。
 - shared code 不硬编码 BaseGame/FreeGame/BonusGame、BG/FG、animation/event 名或业务字段。
 
 ## Resource lifecycle

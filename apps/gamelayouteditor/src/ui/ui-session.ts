@@ -66,7 +66,7 @@ export interface OtherSceneBindingDraft {
   fixedNumber: string;
 }
 
-export type PreviewTransitionKind = "spine" | "video";
+export type PreviewTransitionKind = "none" | "spine" | "video";
 
 export type PreviewTransitionUiState =
   | { readonly phase: "idle"; readonly message: string }
@@ -81,7 +81,11 @@ export type PreviewTransitionUiState =
       readonly from: string;
       readonly to: string;
       readonly kind: PreviewTransitionKind;
-      readonly boundary: "popup" | "before-switch" | "after-switch";
+      readonly boundary:
+        | "popup"
+        | "awaiting-video-start"
+        | "before-switch"
+        | "after-switch";
     }
   | { readonly phase: "complete"; readonly stableMode: string }
   | { readonly phase: "error"; readonly message: string };

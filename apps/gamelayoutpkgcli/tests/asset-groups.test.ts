@@ -77,7 +77,13 @@ describe("asset-groups v1 parser", () => {
           { id: "BaseGame", backgroundNodes: { default: "base-bg" } },
           { id: "FreeGame", backgroundNodes: { default: "free-bg" } },
         ],
-        transitions: [],
+        transitions: [
+          {
+            from: "BaseGame",
+            to: "FreeGame",
+            overlay: { kind: "none" },
+          },
+        ],
       },
     } as never;
     const outputAssets = new Map(
@@ -130,6 +136,11 @@ describe("asset-groups v1 parser", () => {
       groups.groups.find((group) => group.id === "mode:FreeGame")
         ?.requiredAssets,
     ).toEqual(["free-only.png", "free.png", "shared.png"]);
+    expect(
+      groups.groups.find(
+        (group) => group.id === "transition:BaseGame->FreeGame",
+      )?.requiredAssets,
+    ).toEqual([]);
   });
 });
 

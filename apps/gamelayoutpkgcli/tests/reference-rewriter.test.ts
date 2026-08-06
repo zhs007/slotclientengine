@@ -110,6 +110,28 @@ describe("typed asset reference rewriting", () => {
       atlas: "symbol.atlas",
       textures: { "symbol.png": "symbol.webp" },
     });
+
+    const withNone = rewriteLayoutManifest(
+      {
+        ...layoutFixture(),
+        gameModes: {
+          ...layoutFixture().gameModes!,
+          transitions: [
+            {
+              from: "Alpha",
+              to: "Beta",
+              overlay: { kind: "none" },
+            },
+          ],
+        },
+      },
+      mapping,
+    );
+    expect(withNone.gameModes?.transitions?.[0]).toEqual({
+      from: "Alpha",
+      to: "Beta",
+      overlay: { kind: "none" },
+    });
   });
 
   it("rewrites symbol package and all declared symbol image fields", () => {

@@ -1548,6 +1548,7 @@ export class GameLayoutEditorApp {
       .querySelector<HTMLSelectElement>("[data-transition-kind]")
       ?.addEventListener("change", (event) => {
         const value = (event.currentTarget as HTMLSelectElement).value as
+          | "none"
           | "spine"
           | "video";
         this.runTransaction((draft) => {
@@ -1594,8 +1595,7 @@ export class GameLayoutEditorApp {
             (candidate) =>
               transitionKey(candidate) === this.#session.selectedTransitionKey,
           );
-          if (!transition || transition.kind !== "spine")
-            throw new Error("所选 Spine 转场已不存在。");
+          if (!transition) throw new Error("所选转场已不存在。");
           if (!transition.preludePopupId)
             throw new Error("当前转场未配置前置 Popup。");
           setPopupOrder(draft, transition.preludePopupId, value);
@@ -1617,8 +1617,7 @@ export class GameLayoutEditorApp {
                 transitionKey(candidate) ===
                 this.#session.selectedTransitionKey,
             );
-            if (!transition || transition.kind !== "spine")
-              throw new Error("所选 Spine 转场已不存在。");
+            if (!transition) throw new Error("所选转场已不存在。");
             if (!transition.preludePopupId)
               throw new Error("当前转场未配置前置 Popup。");
             const dependency = draft.popupDependencies.get(
@@ -1705,6 +1704,15 @@ export class GameLayoutEditorApp {
     panel
       .querySelector<HTMLButtonElement>("[data-request-transition]")
       ?.addEventListener("click", () => {
+        if (
+          this.#preview?.getGameModeSnapshot()?.transitionPhase ===
+          "awaiting-video-start"
+        ) {
+          void this.#preview.startPendingGameModeVideo().catch((error) => {
+            this.#store.setExternalError(error);
+          });
+          return;
+        }
         this.requestPreviewMode(this.#selectedPreviewMode);
       });
     panel

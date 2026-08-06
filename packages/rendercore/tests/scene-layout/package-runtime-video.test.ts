@@ -47,6 +47,35 @@ class FakeVideoPlayer implements SceneLayoutTransitionVideoPlayer {
   }
 }
 
+class FakePreludePopup {
+  readonly container = new Container();
+  phase: "idle" | "loop" | "complete" = "idle";
+  async init() {}
+  start() {
+    this.phase = "loop";
+  }
+  update() {
+    return this.getSnapshot();
+  }
+  requestDismiss() {}
+  dismissImmediately() {
+    this.phase = "complete";
+  }
+  getSnapshot() {
+    return { phase: this.phase, dismissRequested: false };
+  }
+  isPlaying() {
+    return this.phase === "loop";
+  }
+  getTextNode() {
+    throw new Error("no text node");
+  }
+  getImageStringNode() {
+    throw new Error("no image-string node");
+  }
+  destroy() {}
+}
+
 function snapshot() {
   return {
     variantId: "default",
@@ -55,7 +84,7 @@ function snapshot() {
   };
 }
 
-function createRuntime(player: FakeVideoPlayer) {
+function createRuntime(player: FakeVideoPlayer, prelude?: FakePreludePopup) {
   const hash = "b".repeat(64);
   return createSceneLayoutPackageRuntime({
     resource: {
@@ -80,6 +109,7 @@ function createRuntime(player: FakeVideoPlayer) {
             {
               from: "BaseGame",
               to: "FreeGame",
+              ...(prelude ? { preludePopup: "free-entry" } : {}),
               overlay: {
                 resource: {
                   kind: "video",
@@ -92,6 +122,18 @@ function createRuntime(player: FakeVideoPlayer) {
             },
           ],
         },
+        ...(prelude
+          ? {
+              popups: {
+                "free-entry": {
+                  type: "spine",
+                  manifest: "free-entry-popup.manifest.json",
+                  order: 2000,
+                  placements: { default: { x: 0, y: 0, scale: 1 } },
+                },
+              },
+            }
+          : {}),
       },
       layout: {
         spineResources: {},
@@ -99,10 +141,13 @@ function createRuntime(player: FakeVideoPlayer) {
       },
       symbolPackage: null,
       symbolPackages: {},
-      popupPackages: {},
+      popupPackages: prelude
+        ? { "free-entry": { manifest: { type: "spine" } } }
+        : {},
       destroy: vi.fn(),
     } as never,
     createVideoTransitionPlayer: () => player,
+    ...(prelude ? { createSpinePopupPlayer: () => prelude as never } : {}),
   });
 }
 
@@ -185,6 +230,38 @@ describe("scene layout package video-blackout transition", () => {
     });
     expect(player.destroyed).toBe(true);
     expect(runtime.container.children.at(-1)?.visible).toBe(false);
+    runtime.destroy();
+  });
+
+  it("waits for a second trusted gesture after a video prelude completes", async () => {
+    const player = new FakeVideoPlayer();
+    const popup = new FakePreludePopup();
+    const runtime = createRuntime(player, popup);
+    await runtime.init();
+    runtime.applyViewport({ width: 600, height: 800 });
+    await runtime.prepareGameModeTransition("FreeGame");
+    const pending = runtime.requestGameMode("FreeGame");
+    expect(player.playCalls).toBe(0);
+    expect(runtime.getGameModeSnapshot()).toMatchObject({
+      transitionPhase: "popup",
+      activePreludePopup: "free-entry",
+    });
+    popup.phase = "complete";
+    runtime.update(0.1);
+    expect(runtime.getGameModeSnapshot()).toMatchObject({
+      stableMode: "BaseGame",
+      transitionKind: "video",
+      transitionPhase: "awaiting-video-start",
+    });
+    const started = runtime.startPendingGameModeVideo();
+    expect(player.playCalls).toBe(1);
+    await Promise.resolve();
+    player.currentTimeSeconds = 4;
+    player.ended = true;
+    runtime.update(0);
+    await started;
+    await pending;
+    expect(runtime.getGameModeSnapshot().stableMode).toBe("FreeGame");
     runtime.destroy();
   });
 

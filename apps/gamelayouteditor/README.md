@@ -65,7 +65,7 @@ Spine atlas 的 page 是 atlas 内部逻辑名，texture map 的 value 才是全
 
 layout、VNI、image-string、Symbols、Popup 和程序资源的全部配置引用均为 filename keys；production export 只写传递可达 exact closure，不写 nested dependency 目录或 unused key。Spine 只要某个 JSON 根被 Scene 或程序键引用，就导出该根及其 atlas/贴图闭包；共享 leaf 只写一份，同批未引用的 sibling JSON 不导出。VNI project 只结构化改写 schema 声明的 asset path。重新导入、Blob preview、package resource 与 CDN URL loader 共享 rendercore map resolver。无 map 的合法 legacy package 继续按 direct-path 合同加载；Editor 导入后升级为新格式。
 
-每个 mode 可独立选择 Symbols 与 award-celebration Popup。每条 Spine 有向转场独立选择一个普通 Spine `preludePopup`，所以多个转场可以不配置或分别使用不同 Popup；未选时直接播放 overlay，已选时保持 source mode，复用 Popup 的 start→loop→end 状态机，用户点击后等待完整 end 完成再启动 overlay。该 Popup 直接渲染在当前状态的顶层 Popup root，不建立独立 scene；video overlay 不允许配置 prelude，以保持有声媒体 trusted-click 合同。
+每个 mode 可独立选择 Symbols 与 award-celebration Popup。每条有向转场显式选择无效果、Spine 顶层特效或黑场视频，并可独立选择“无”或一个普通 Spine `preludePopup`；切换效果类型会保留 Popup binding。未选 Popup 时直接执行效果，无效果分支在目标 scene prepare 成功后原子切换；已选时保持 source mode，复用 Popup 的 start→loop→end 状态机，完整 end 后再继续效果。带 Popup 的视频随后进入等待阶段，必须由第二次真实点击启动有声媒体。Popup 直接渲染在当前状态的顶层 Popup root，不建立独立 scene。
 
 物理 payload 始终可以是 `assets/<SHA-256>.*`，但它只用于内容寻址；重新导入后的图层名称继续来自 `SceneLayoutNode.id`，资源列表继续显示 logical filename key。
 

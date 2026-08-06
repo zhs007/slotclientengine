@@ -183,6 +183,7 @@ export function collectSceneLayoutAssetPaths(
     }
   }
   for (const transition of parsed.gameModes?.transitions ?? []) {
+    if ("kind" in transition.overlay) continue;
     const resource = transition.overlay.resource;
     if (resource.kind === "video") paths.add(resource.path);
     else {
@@ -1301,11 +1302,28 @@ function parseGameModeTransitions(
       pairs.add(pair);
       const overlayLabel = `${label}.overlay`;
       const overlay = readRecord(transition.overlay, overlayLabel);
+      const preludePopup =
+        transition.preludePopup === undefined
+          ? undefined
+          : identifier(transition.preludePopup, `${label}.preludePopup`);
+      if (preludePopup && !popups?.[preludePopup])
+        fail(
+          `${label}.preludePopup references unknown popup "${preludePopup}".`,
+        );
+      if (preludePopup && popups?.[preludePopup]?.type !== "spine")
+        fail(`${label}.preludePopup must reference a spine popup.`);
+      if (overlay.kind === "none") {
+        known(overlay, ["kind"], overlayLabel);
+        return deepFreeze({
+          from,
+          to,
+          ...(preludePopup ? { preludePopup } : {}),
+          overlay: { kind: "none" as const },
+        });
+      }
       const resourceLabel = `${overlayLabel}.resource`;
       const resource = readRecord(overlay.resource, resourceLabel);
       if (resource.kind === "video") {
-        if (transition.preludePopup !== undefined)
-          fail(`${label}.preludePopup is not supported for video transitions.`);
         known(overlay, ["resource", "fit", "fadeOutSeconds"], overlayLabel);
         known(resource, ["kind", "path", "mimeType"], resourceLabel);
         if (resource.mimeType !== "video/mp4")
@@ -1315,6 +1333,7 @@ function parseGameModeTransitions(
         return deepFreeze({
           from,
           to,
+          ...(preludePopup ? { preludePopup } : {}),
           overlay: {
             resource: {
               kind: "video" as const,
@@ -1337,16 +1356,6 @@ function parseGameModeTransitions(
       known(resource, ["kind", "skeleton", "atlas", "textures"], resourceLabel);
       if (resource.kind !== "spine")
         fail(`${resourceLabel}.kind must be spine or video.`);
-      const preludePopup =
-        transition.preludePopup === undefined
-          ? undefined
-          : identifier(transition.preludePopup, `${label}.preludePopup`);
-      if (preludePopup && !popups?.[preludePopup])
-        fail(
-          `${label}.preludePopup references unknown popup "${preludePopup}".`,
-        );
-      if (preludePopup && popups?.[preludePopup]?.type !== "spine")
-        fail(`${label}.preludePopup must reference a spine popup.`);
       const skeleton = localPath(
         resource.skeleton,
         `${resourceLabel}.skeleton`,
