@@ -96,13 +96,15 @@ export function createSceneLayoutAssetGroups(options: {
       from: transition.from,
       to: transition.to,
       requiredAssets: sortUnique([
-        ...(transition.overlay.resource.kind === "video"
-          ? [transition.overlay.resource.path]
-          : [
-              transition.overlay.resource.skeleton,
-              transition.overlay.resource.atlas,
-              ...Object.values(transition.overlay.resource.textures),
-            ]),
+        ...("kind" in transition.overlay
+          ? []
+          : transition.overlay.resource.kind === "video"
+            ? [transition.overlay.resource.path]
+            : [
+                transition.overlay.resource.skeleton,
+                transition.overlay.resource.atlas,
+                ...Object.values(transition.overlay.resource.textures),
+              ]),
         ...preludeAssets,
       ]),
     });

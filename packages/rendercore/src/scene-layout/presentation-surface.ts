@@ -29,6 +29,7 @@ export interface SceneLayoutPresentationSurface {
   getGameModeSnapshot(): SceneLayoutGameModeSnapshot;
   prepareGameModeTransition(modeId: string): Promise<void>;
   requestGameMode(modeId: string): Promise<void>;
+  startPendingGameModeVideo(): Promise<void>;
   getAwardCelebrationPlayer(id: string): AwardCelebrationPlayer;
   getSpinePopupPlayer(id: string): SpinePopupPlayer;
   getLayer(id: SceneLayoutLayerId): Container;
@@ -186,6 +187,11 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
   requestGameMode(modeId: string): Promise<void> {
     this.assertReady();
     return this.#runtime.requestGameMode(modeId);
+  }
+
+  startPendingGameModeVideo(): Promise<void> {
+    this.assertReady();
+    return this.#runtime.startPendingGameModeVideo();
   }
 
   getAwardCelebrationPlayer(id: string): AwardCelebrationPlayer {

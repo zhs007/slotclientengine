@@ -634,6 +634,7 @@ function rewriteLayoutManifestFilenameKeys(
     };
   });
   const transitions = value.gameModes?.transitions?.map((transition) => {
+    if ("kind" in transition.overlay) return transition;
     const resource = transition.overlay.resource;
     if (resource.kind === "video")
       return {
@@ -786,9 +787,12 @@ export async function materializeLayoutOwnedAssets(options: {
     ...source.nodes
       .filter((node) => node.resource.kind === "spine")
       .map((node) => node.resource),
-    ...(source.gameModes?.transitions ?? [])
-      .filter((transition) => transition.overlay.resource.kind === "spine")
-      .map((transition) => transition.overlay.resource),
+    ...(source.gameModes?.transitions ?? []).flatMap((transition) =>
+      !("kind" in transition.overlay) &&
+      transition.overlay.resource.kind === "spine"
+        ? [transition.overlay.resource]
+        : [],
+    ),
     ...Object.values(source.runtimeResources ?? {}).filter(
       (resource) => resource.kind === "spine",
     ),

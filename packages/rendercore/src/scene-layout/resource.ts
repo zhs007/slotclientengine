@@ -290,6 +290,7 @@ export function createSceneLayoutResource(
 
   for (const transition of manifest.gameModes?.transitions ?? []) {
     const overlay = transition.overlay;
+    if ("kind" in overlay) continue;
     const spec = overlay.resource;
     if (spec.kind === "video") {
       videoPaths.add(spec.path);
@@ -497,6 +498,7 @@ export async function loadSceneLayoutResourceFromUrl(options: {
         resourceByPath.set(path, "texture");
     }
     for (const transition of manifest.gameModes?.transitions ?? []) {
+      if ("kind" in transition.overlay) continue;
       const resource = transition.overlay.resource;
       if (resource.kind === "video") {
         resourceByPath.set(resource.path, "video");

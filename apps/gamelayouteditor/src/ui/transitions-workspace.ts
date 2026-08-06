@@ -43,6 +43,11 @@ export function updateTransitionRuntimeUi(
     "[data-dismiss-transition-prelude]",
   );
   if (dismiss) dismiss.disabled = snapshot?.transitionPhase !== "popup";
+  const start = root.querySelector<HTMLButtonElement>(
+    "[data-request-transition]",
+  );
+  if (start)
+    start.disabled = snapshot?.transitionPhase !== "awaiting-video-start";
 }
 
 export function transitionsWorkspaceMarkup(options: {
@@ -89,9 +94,13 @@ function transitionRow(
   transition: EditorGameModeTransitionDraft,
   selected: EditorGameModeTransitionDraft | undefined,
 ): string {
-  const resource = project.resources.get(transition.resourceId);
+  const resource =
+    "resourceId" in transition
+      ? project.resources.get(transition.resourceId)
+      : undefined;
   let ready = false;
-  if (transition.kind === "spine" && resource?.kind === "spine") {
+  if (transition.kind === "none") ready = true;
+  else if (transition.kind === "spine" && resource?.kind === "spine") {
     try {
       validateEditorTransitionEvent(resource, transition);
       ready = activeVariantIds(project).every(
@@ -106,10 +115,18 @@ function transitionRow(
       transition.fadeOutSeconds < resource.durationSeconds;
   }
   const summary =
-    transition.kind === "spine"
-      ? `${transition.animation || "未选择 animation"} · ${transition.switchEvent || "未选择 event"}`
-      : `${resource?.kind === "video" ? resource.id : "未选择 MP4"} · fade ${transition.fadeOutSeconds}s`;
-  return `<button type="button" role="option" data-transition-key="${escapeHtml(transitionKey(transition))}" aria-selected="${selected === transition}"><span>${escapeHtml(transition.fromModeId)} → ${escapeHtml(transition.toModeId)}</span><small>${transition.kind === "video" ? "黑场视频" : "Spine 顶层特效"} · ${escapeHtml(summary)} · ${ready ? "ready" : "error"}</small></button>`;
+    transition.kind === "none"
+      ? "直接切换目标状态"
+      : transition.kind === "spine"
+        ? `${transition.animation || "未选择 animation"} · ${transition.switchEvent || "未选择 event"}`
+        : `${resource?.kind === "video" ? resource.id : "未选择 MP4"} · fade ${transition.fadeOutSeconds}s`;
+  const label =
+    transition.kind === "none"
+      ? "无效果"
+      : transition.kind === "video"
+        ? "黑场视频"
+        : "Spine 顶层特效";
+  return `<button type="button" role="option" data-transition-key="${escapeHtml(transitionKey(transition))}" aria-selected="${selected === transition}"><span>${escapeHtml(transition.fromModeId)} → ${escapeHtml(transition.toModeId)}</span><small>${label} · ${escapeHtml(summary)} · ${ready ? "ready" : "error"}</small></button>`;
 }
 
 function transitionInspector(
@@ -118,11 +135,13 @@ function transitionInspector(
   snapshot: SceneLayoutGameModeSnapshot | null,
   uiState: PreviewTransitionUiState,
 ): string {
-  const kindSelector = `<label>presentation type<select data-transition-kind><option value="spine" ${transition.kind === "spine" ? "selected" : ""}>Spine 顶层特效</option><option value="video" ${transition.kind === "video" ? "selected" : ""}>黑场视频</option></select></label>`;
+  const kindSelector = `<label>presentation type<select data-transition-kind><option value="none" ${transition.kind === "none" ? "selected" : ""}>无效果</option><option value="spine" ${transition.kind === "spine" ? "selected" : ""}>Spine 顶层特效</option><option value="video" ${transition.kind === "video" ? "selected" : ""}>黑场视频</option></select></label>`;
   const body =
-    transition.kind === "spine"
-      ? spineInspector(project, transition)
-      : videoInspector(project, transition);
+    transition.kind === "none"
+      ? '<section class="inspector-section"><h3>无效果</h3><p class="hint">不创建 presentation object；目标 scene 准备成功后直接原子切换状态。</p></section>'
+      : transition.kind === "spine"
+        ? spineInspector(project, transition)
+        : videoInspector(project, transition);
   const stableAtSource =
     snapshot?.phase === "stable" &&
     snapshot.stableMode === transition.fromModeId;
@@ -132,21 +151,22 @@ function transitionInspector(
     uiState.from === transition.fromModeId &&
     uiState.to === transition.toModeId &&
     uiState.kind === transition.kind;
+  const awaitingVideoStart =
+    snapshot?.transitionPhase === "awaiting-video-start" &&
+    snapshot.transition?.from === transition.fromModeId &&
+    snapshot.transition.to === transition.toModeId;
   return `<div class="inspector-inner"><div class="inspector-heading"><span>Scene Transition Inspector</span><h2>${escapeHtml(transition.fromModeId)} → ${escapeHtml(transition.toModeId)}</h2></div>
     <section class="inspector-section"><h3>Presentation</h3>${kindSelector}<p class="hint">切换类型会原子清除另一分支的全部不兼容字段。</p></section>
+    ${popupInspector(project, transition)}
     ${body}
-    <section class="inspector-section"><div class="button-row"><button type="button" class="primary" data-request-transition ${canSwitch ? "" : "disabled"}>切换到该状态</button><button type="button" data-dismiss-transition-prelude ${snapshot?.transitionPhase === "popup" ? "" : "disabled"}>结束转场前弹窗</button><button type="button" class="danger" data-delete-transition>删除转场</button></div><output data-transition-runtime-status>${escapeHtml(transitionUiStateText(uiState, snapshot))}</output><details><summary>runtime snapshot</summary><code>${snapshotMarkup(snapshot)}</code></details></section>
+    <section class="inspector-section"><div class="button-row"><button type="button" class="primary" data-request-transition ${canSwitch || awaitingVideoStart ? "" : "disabled"}>${awaitingVideoStart ? "开始视频转场" : "切换到该状态"}</button><button type="button" data-dismiss-transition-prelude ${snapshot?.transitionPhase === "popup" ? "" : "disabled"}>结束转场前弹窗</button><button type="button" class="danger" data-delete-transition>删除转场</button></div><output data-transition-runtime-status>${escapeHtml(transitionUiStateText(uiState, snapshot))}</output><details><summary>runtime snapshot</summary><code>${snapshotMarkup(snapshot)}</code></details></section>
   </div>`;
 }
 
-function spineInspector(
+function popupInspector(
   project: EditorProject,
-  transition: Extract<EditorGameModeTransitionDraft, { kind: "spine" }>,
+  transition: EditorGameModeTransitionDraft,
 ): string {
-  const resource = project.resources.get(transition.resourceId);
-  const resources = [...project.resources.values()].filter(
-    (candidate) => candidate.kind === "spine",
-  );
   const popupOptions = [...project.popupDependencies.values()]
     .filter((dependency) => dependency.type === "spine")
     .map(
@@ -157,7 +177,7 @@ function spineInspector(
   const popupDependency = transition.preludePopupId
     ? project.popupDependencies.get(transition.preludePopupId)
     : undefined;
-  const popupConfiguration = popupDependency
+  const configuration = popupDependency
     ? `<label>Popup root order<input type="number" step="1" data-transition-popup-order value="${popupDependency.order}" /></label>${activeVariantIds(
         project,
       )
@@ -173,6 +193,17 @@ function spineInspector(
           "",
         )}<p class="hint">root order/placement 属于 Popup binding；其它转场可选择不同 Popup。</p>`
     : "";
+  return `<section class="inspector-section"><h3>转场前弹窗（可选）</h3><label>普通 Spine Popup<select data-transition-prelude-popup><option value="">无，不弹出</option>${popupOptions}</select></label><p class="hint">此选择只属于 ${escapeHtml(transition.fromModeId)} → ${escapeHtml(transition.toModeId)}；Popup 完整结束后再继续当前效果。</p>${configuration}</section>`;
+}
+
+function spineInspector(
+  project: EditorProject,
+  transition: Extract<EditorGameModeTransitionDraft, { kind: "spine" }>,
+): string {
+  const resource = project.resources.get(transition.resourceId);
+  const resources = [...project.resources.values()].filter(
+    (candidate) => candidate.kind === "spine",
+  );
   const animationOptions =
     resource?.kind === "spine"
       ? resource.animationNames
@@ -206,7 +237,7 @@ function spineInspector(
       return `<fieldset><legend>${variant}</legend><div class="field-grid">${numberField("x", `transition.${variant}.x`, placement.x)}${numberField("y", `transition.${variant}.y`, placement.y)}${numberField("scale", `transition.${variant}.scale`, placement.scale, 0.01)}</div></fieldset>`;
     })
     .join("");
-  return `<section class="inspector-section"><h3>转场前弹窗（可选）</h3><label>普通 Spine Popup<select data-transition-prelude-popup><option value="">无，直接转场</option>${popupOptions}</select></label><p class="hint">此选择只属于 ${escapeHtml(transition.fromModeId)} → ${escapeHtml(transition.toModeId)}；保持当前状态显示，点击后等待完整 end，再播放转场。</p>${popupConfiguration}</section><section class="inspector-section"><h3>Official Spine once</h3><label>Spine resource<select data-transition-resource><option value="">必须明确选择</option>${resources.map((candidate) => `<option value="${escapeHtml(candidate.id)}" ${candidate.id === transition.resourceId ? "selected" : ""}>${escapeHtml(candidate.id)}</option>`).join("")}</select></label><label>once animation<select data-transition-animation ${resource?.kind === "spine" ? "" : "disabled"}><option value="">必须明确选择</option>${animationOptions}</select></label><label>switch event<select data-transition-event ${transition.animation ? "" : "disabled"}><option value="">必须明确选择</option>${uniqueEvents.map(([name]) => `<option value="${escapeHtml(name)}" ${name === transition.switchEvent ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select></label>${duplicateDiagnostics}<p class="hint">event 边界原子提交完整目标 scene。</p></section><section class="inspector-section"><h3>Art-space Placement</h3>${placements}</section>`;
+  return `<section class="inspector-section"><h3>Official Spine once</h3><label>Spine resource<select data-transition-resource><option value="">必须明确选择</option>${resources.map((candidate) => `<option value="${escapeHtml(candidate.id)}" ${candidate.id === transition.resourceId ? "selected" : ""}>${escapeHtml(candidate.id)}</option>`).join("")}</select></label><label>once animation<select data-transition-animation ${resource?.kind === "spine" ? "" : "disabled"}><option value="">必须明确选择</option>${animationOptions}</select></label><label>switch event<select data-transition-event ${transition.animation ? "" : "disabled"}><option value="">必须明确选择</option>${uniqueEvents.map(([name]) => `<option value="${escapeHtml(name)}" ${name === transition.switchEvent ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select></label>${duplicateDiagnostics}<p class="hint">event 边界原子提交完整目标 scene。</p></section><section class="inspector-section"><h3>Art-space Placement</h3>${placements}</section>`;
 }
 
 function videoInspector(
@@ -238,24 +269,36 @@ export function transitionUiStateText(
   if (state.phase === "preparing")
     return state.kind === "video"
       ? `开始准备 MP4 与目标场景：${state.from} → ${state.to}`
-      : `正在准备目标场景与 Spine 转场：${state.from} → ${state.to}`;
+      : state.kind === "none"
+        ? `正在准备目标场景：${state.from} → ${state.to}`
+        : `正在准备目标场景与 Spine 转场：${state.from} → ${state.to}`;
   if (state.phase === "ready")
     return state.kind === "video"
       ? `MP4 媒体可播放，目标场景已准备：${state.from} → ${state.to}`
-      : `Spine 转场已准备，可切换：${state.from} → ${state.to}`;
+      : state.kind === "none"
+        ? `目标场景已准备，可直接切换：${state.from} → ${state.to}`
+        : `Spine 转场已准备，可切换：${state.from} → ${state.to}`;
   if (state.phase === "starting")
-    return state.kind === "video" ? "开始 MP4 转场" : "开始 Spine 转场";
+    return state.kind === "video"
+      ? "开始 MP4 转场"
+      : state.kind === "none"
+        ? "直接切换目标状态"
+        : "开始 Spine 转场";
   if (state.phase !== "transitioning") return "转场状态未知。";
   const base =
-    state.kind === "video"
-      ? state.boundary === "before-switch"
-        ? "MP4 播放中，等待 fadeStart"
-        : "已切换目标场景，MP4 收尾中"
-      : state.boundary === "popup"
-        ? `转场前弹窗 ${snapshot?.activePreludePopup ?? ""} 播放中，等待用户结束`
-        : state.boundary === "before-switch"
-          ? "转场播放中，尚未切换场景"
-          : "已切换目标场景，等待 once 完成";
+    state.boundary === "popup"
+      ? `转场前弹窗 ${snapshot?.activePreludePopup ?? ""} 播放中，等待用户结束`
+      : state.boundary === "awaiting-video-start"
+        ? "转场前弹窗已完成，等待用户点击开始视频"
+        : state.kind === "video"
+          ? state.boundary === "before-switch"
+            ? "MP4 播放中，等待 fadeStart"
+            : "已切换目标场景，MP4 收尾中"
+          : state.kind === "none"
+            ? "正在原子切换目标状态"
+            : state.boundary === "before-switch"
+              ? "转场播放中，尚未切换场景"
+              : "已切换目标场景，等待 once 完成";
   if (state.kind !== "video") return base;
   const current = snapshot?.mediaTimeSeconds;
   const duration = snapshot?.mediaDurationSeconds;

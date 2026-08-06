@@ -265,36 +265,40 @@ export function createGameModeTransition(
 export function setGameModeTransitionKind(
   project: EditorProject,
   transition: EditorGameModeTransitionDraft,
-  kind: "spine" | "video",
+  kind: "none" | "spine" | "video",
 ): EditorGameModeTransitionDraft {
   if (transition.kind === kind) return transition;
   const index = project.gameModes.transitions.indexOf(transition);
   if (index < 0) throw new Error("所选转场已不存在。");
+  const common = {
+    fromModeId: transition.fromModeId,
+    toModeId: transition.toModeId,
+    preludePopupId: transition.preludePopupId,
+  };
   const replacement: EditorGameModeTransitionDraft =
-    kind === "spine"
-      ? {
-          kind: "spine",
-          preludePopupId: null,
-          fromModeId: transition.fromModeId,
-          toModeId: transition.toModeId,
-          resourceId: "",
-          animation: "",
-          switchEvent: "",
-          placements: Object.fromEntries(
-            activeVariantIds(project).map((variant) => [
-              variant,
-              { x: 0, y: 0, scale: 1 },
-            ]),
-          ),
-        }
-      : {
-          kind: "video",
-          fromModeId: transition.fromModeId,
-          toModeId: transition.toModeId,
-          resourceId: "",
-          fit: "contain",
-          fadeOutSeconds: 0.5,
-        };
+    kind === "none"
+      ? { ...common, kind: "none" }
+      : kind === "spine"
+        ? {
+            ...common,
+            kind: "spine",
+            resourceId: "",
+            animation: "",
+            switchEvent: "",
+            placements: Object.fromEntries(
+              activeVariantIds(project).map((variant) => [
+                variant,
+                { x: 0, y: 0, scale: 1 },
+              ]),
+            ),
+          }
+        : {
+            ...common,
+            kind: "video",
+            resourceId: "",
+            fit: "contain",
+            fadeOutSeconds: 0.5,
+          };
   project.gameModes.transitions[index] = replacement;
   return replacement;
 }
@@ -339,8 +343,6 @@ export function setGameModeTransitionPreludePopup(
   transition: EditorGameModeTransitionDraft,
   popupId: string | null,
 ): void {
-  if (transition.kind !== "spine")
-    throw new Error("只有 Spine 转场可以配置转场前弹窗。");
   if (popupId) {
     const dependency = project.popupDependencies.get(popupId);
     if (!dependency || dependency.type !== "spine")
@@ -631,10 +633,7 @@ export function deletePopupDependency(
   if (project.registeredSpinePopupIds.has(id))
     throw new Error(`Popup ${id} 仍注册在 Scene Layout。`);
   const transitions = project.gameModes.transitions
-    .filter(
-      (transition) =>
-        transition.kind === "spine" && transition.preludePopupId === id,
-    )
+    .filter((transition) => transition.preludePopupId === id)
     .map((transition) => `${transition.fromModeId} -> ${transition.toModeId}`);
   if (transitions.length)
     throw new Error(`Popup ${id} 仍被转场引用：${transitions.join(", ")}`);

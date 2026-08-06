@@ -93,7 +93,7 @@ Game Layout Editor 新导出的所有资源引用是扁平 filename keys：
 }
 ```
 
-binding `type` 必须与 nested popup manifest 精确一致。`order` 是 Popup root 的安全整数显示顺序，必须与全部 node、main reel 和其它 Popup order 唯一，并高于全部 node/main reel；旧单 Popup v1 缺省时规范化为 `2000`，多个缺省值造成重复时显式失败。game mode 的 `awardCelebrationPopup` 只能引用 `award-celebration`；普通 Spine popup 可作为独立 programmatic binding，也可由 Spine transition 的可选 `preludePopup` 引用。package runtime 先保持 source mode 播放 popup，`requestDismissGameModePrelude()` 只转发点击结束请求，popup 完整到达 complete 后才启动 overlay。
+binding `type` 必须与 nested popup manifest 精确一致。`order` 是 Popup root 的安全整数显示顺序，必须与全部 node、main reel 和其它 Popup order 唯一，并高于全部 node/main reel；旧单 Popup v1 缺省时规范化为 `2000`，多个缺省值造成重复时显式失败。game mode 的 `awardCelebrationPopup` 只能引用 `award-celebration`；普通 Spine popup 可作为独立 programmatic binding，也可由任意效果 transition 的可选 `preludePopup` 引用。package runtime 先保持 source mode 播放 popup，`requestDismissGameModePrelude()` 只转发点击结束请求，popup 完整到达 complete 后才继续当前转场效果。
 
 根 `assets.map.json` 将 layout、VNI、image-string、Symbols、Popup 的全部 root/leaf keys 统一映射到 `assets/<完整 SHA-256>.<ext>`。ZIP 只有两个 root control files 和 hash payload 区；禁止 `dependencies/image-strings/**`、`dependencies/symbols/**`、`dependencies/popups/**`。
 
@@ -165,12 +165,13 @@ Spine atlas page 是 atlas 内部的逻辑标识，`textures` map 的 value 才�
 
 transition 是独立有向边：
 
+- 无效果分支显式写为 `"overlay": { "kind": "none" }`，不得携带 resource、animation、placement、fit 或 fade 字段；目标 scene prepare 成功后直接原子提交状态；
 - Spine overlay 声明 skeleton/atlas/page filename keys、exact animation、exact single event occurrence 与 per-variant placement；边可额外声明引用普通 Spine Popup binding 的 `preludePopup`，popup complete 前不得启动 overlay 或切换 source mode；
 - video blackout 声明 MP4 filename key、`mimeType: "video/mp4"`、`fit: "contain"` 与小于真实 duration 的 positive `fadeOutSeconds`。
 
-`preludePopup` 不能引用 award-celebration，也不能与 video blackout 同时出现；缺省时保持直接转场。每条 `from → to` 边独立保存该引用，因此多个转场可分别不配置、选择同一个或选择不同的普通 Spine Popup。snapshot 的 `transitionPhase` 为 `popup | before-switch | after-switch`，并用 `activePreludePopup` 报告当前前置弹窗。
+`preludePopup` 不能引用 award-celebration，但可用于无效果、Spine 或 video；缺省时不弹 Popup。每条 `from → to` 边独立保存该引用，因此多个转场可分别不配置、选择同一个或选择不同的普通 Spine Popup。snapshot 的 `transitionKind` 为 `none | spine | video`，`transitionPhase` 为 `popup | awaiting-video-start | before-switch | after-switch`，并用 `activePreludePopup` 报告当前前置弹窗。
 
-两分支字段严格互斥。runtime 只准备当前 stable source 到所选 target 的直接边；缺边不瞬切、不反向复用、不寻路。Spine event 或 video media-time fadeStart 边界原子切换 background/reel/displayed mode；prepare/once/ended/play rejection 均可 rollback。audible `play()` 必须在 trusted click 调用栈内同步触发，不自动静音或 wall-clock fallback。
+三分支字段严格互斥。runtime 只准备当前 stable source 到所选 target 的直接边；缺边不瞬切、不反向复用、不寻路。Spine event、video media-time fadeStart 或 none direct commit 边界原子切换 background/reel/displayed mode；prepare/once/ended/play rejection 均可 rollback。audible `play()` 必须在 trusted click 调用栈内同步触发，不自动静音或 wall-clock fallback。带 Popup 的 video 在 Popup complete 后进入 `awaiting-video-start`，宿主必须从第二次真实用户手势直接调用 `startPendingGameModeVideo()`。
 
 编辑器可以调用独立的 authoring stable-mode selection 来直接查看目标稳定画面；该入口不要求 transition edge，也不播放 overlay，并与 production `requestGameMode()` 分离。它仍使用同一 mode visibility commit；相同 Symbols binding 保留当前 reel/player/sample，不同 binding 必须先提供并成功准备目标公开 scene。
 

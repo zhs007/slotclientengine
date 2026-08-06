@@ -383,7 +383,10 @@ describe("layout zip IO", () => {
     });
     const importedOverlay =
       imported.manifest.gameModes!.transitions![0]!.overlay;
-    if (importedOverlay.resource.kind !== "video")
+    if (
+      !("resource" in importedOverlay) ||
+      importedOverlay.resource.kind !== "video"
+    )
       throw new Error("expected video transition");
     const videoPath = importedOverlay.resource.path;
     expect(mappedEntry(firstEntries, videoPath)).toEqual(mp4);
@@ -495,8 +498,8 @@ describe("layout zip IO", () => {
         switchEvent: "SwitchBack",
       },
     ]);
-    const resourceIds = project.gameModes.transitions.map(
-      (item) => item.resourceId,
+    const resourceIds = project.gameModes.transitions.map((item) =>
+      "resourceId" in item ? item.resourceId : "",
     );
     expect(new Set(resourceIds).size).toBe(1);
     expect(project.resources.get(resourceIds[0])).toMatchObject({

@@ -142,11 +142,11 @@ export interface EditorGameModeDraft {
 interface EditorGameModeTransitionBaseDraft {
   fromModeId: string;
   toModeId: string;
+  preludePopupId?: string | null;
 }
 
 export interface EditorSpineGameModeTransitionDraft extends EditorGameModeTransitionBaseDraft {
   kind: "spine";
-  preludePopupId?: string | null;
   resourceId: string;
   animation: string;
   switchEvent: string;
@@ -162,7 +162,12 @@ export interface EditorVideoGameModeTransitionDraft extends EditorGameModeTransi
   fadeOutSeconds: number;
 }
 
+export interface EditorNoneGameModeTransitionDraft extends EditorGameModeTransitionBaseDraft {
+  kind: "none";
+}
+
 export type EditorGameModeTransitionDraft =
+  | EditorNoneGameModeTransitionDraft
   | EditorSpineGameModeTransitionDraft
   | EditorVideoGameModeTransitionDraft;
 
@@ -752,7 +757,7 @@ export function editorProjectToManifest(
         ),
       );
       for (const transition of project.gameModes.transitions)
-        if (transition.kind === "spine" && transition.preludePopupId)
+        if (transition.preludePopupId)
           referenced.add(transition.preludePopupId);
       for (const id of project.registeredSpinePopupIds) referenced.add(id);
       if (referenced.size === 0) return {};
@@ -822,6 +827,15 @@ export function editorProjectToManifest(
           );
         })
         .map((transition) => {
+          if (transition.kind === "none")
+            return {
+              from: transition.fromModeId,
+              to: transition.toModeId,
+              ...(transition.preludePopupId
+                ? { preludePopup: transition.preludePopupId }
+                : {}),
+              overlay: { kind: "none" as const },
+            };
           const resource = project.resources.get(transition.resourceId);
           if (transition.kind === "video") {
             if (!resource || resource.kind !== "video")
@@ -839,6 +853,9 @@ export function editorProjectToManifest(
             return {
               from: transition.fromModeId,
               to: transition.toModeId,
+              ...(transition.preludePopupId
+                ? { preludePopup: transition.preludePopupId }
+                : {}),
               overlay: {
                 resource: {
                   kind: "video" as const,
@@ -1041,6 +1058,7 @@ export function manifestToEditorProject(
   const transitionResourceIds = new Map<string, string>();
   for (const transition of parsed.gameModes?.transitions ?? []) {
     const overlay = transition.overlay;
+    if ("kind" in overlay) continue;
     let draft: EditorLayoutResourceDraft;
     if ("fadeOutSeconds" in overlay) {
       const metadata = videoMetadata.get(overlay.resource.path);
@@ -1202,28 +1220,30 @@ export function manifestToEditorProject(
           const common = {
             fromModeId: transition.from,
             toModeId: transition.to,
-            resourceId: transitionResourceIds.get(
-              `${transition.from}\u0000${transition.to}`,
-            )!,
+            preludePopupId: transition.preludePopup ?? null,
           };
-          return "fadeOutSeconds" in overlay
-            ? {
-                ...common,
-                kind: "video" as const,
-                fit: "contain" as const,
-                fadeOutSeconds: overlay.fadeOutSeconds,
-              }
-            : {
-                ...common,
-                kind: "spine" as const,
-                preludePopupId:
-                  "preludePopup" in transition
-                    ? (transition.preludePopup ?? null)
-                    : null,
-                animation: overlay.animation,
-                switchEvent: overlay.switchEvent,
-                placements: structuredClone(overlay.placements),
-              };
+          return "kind" in overlay
+            ? { ...common, kind: "none" as const }
+            : "fadeOutSeconds" in overlay
+              ? {
+                  ...common,
+                  kind: "video" as const,
+                  resourceId: transitionResourceIds.get(
+                    `${transition.from}\u0000${transition.to}`,
+                  )!,
+                  fit: "contain" as const,
+                  fadeOutSeconds: overlay.fadeOutSeconds,
+                }
+              : {
+                  ...common,
+                  kind: "spine" as const,
+                  resourceId: transitionResourceIds.get(
+                    `${transition.from}\u0000${transition.to}`,
+                  )!,
+                  animation: overlay.animation,
+                  switchEvent: overlay.switchEvent,
+                  placements: structuredClone(overlay.placements),
+                };
         }),
         modes: parsed.gameModes.modes.map((mode) => ({
           id: mode.id,
