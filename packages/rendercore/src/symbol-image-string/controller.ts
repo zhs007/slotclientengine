@@ -125,7 +125,10 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
     this.#state = state;
     const slotNodes = this.#nodes.flatMap((node) => {
       const slot =
-        node.definition.spec.spineSlot ??
+        (node.definition.spec.spineSlot !== undefined &&
+        node.definition.spineStates?.has(state) === true
+          ? node.definition.spec.spineSlot
+          : undefined) ??
         node.definition.spec.targets.find(
           (candidate) =>
             candidate.state === state && candidate.slot !== undefined,

@@ -1,1 +1,4 @@
-export { SymbolsEditorApp } from "./workspace-app.js";
+export {
+  SymbolsEditorApp,
+  getSharedSpineSlotOptions,
+} from "./workspace-app.js";

@@ -72,4 +72,86 @@ describe("symbols editor UI session", () => {
     expect(session.picker).toBeNull();
     expect(session.transientMessage).toBe("");
   });
+
+  it("keeps validated per-tier preview values in session only", () => {
+    const project = createProject();
+    configureValueTiers(project, "A");
+    configureValueTiers(project, "B");
+    const session = new SymbolsEditorUiSession();
+    session.resetForNewProject(project);
+
+    expect(session.getTierPreviewValue(project, "A", 0)).toBe(5);
+    expect(session.getTierPreviewValue(project, "A", 1)).toBe(25);
+    expect(session.getPreviewValue(project, "A")).toBe(5);
+
+    session.setTierPreviewValue(project, "A", 1, 42);
+    expect(session.getActivePreviewTier(project, "A")).toBe(1);
+    expect(session.getPreviewValue(project, "A")).toBe(42);
+    expect(() => session.setTierPreviewValue(project, "A", 1, 9)).toThrow(
+      /Tier 2.*\[10, \+∞\)/,
+    );
+    expect(session.getPreviewValue(project, "A")).toBe(42);
+    expect(session.getPreviewValue(project, "B")).toBe(5);
+
+    const presentation = project.symbols.get("A")!.valuePresentation!;
+    project.symbols.get("A")!.valuePresentation = {
+      ...presentation,
+      tiers: [
+        { ...presentation.tiers[0]!, maxExclusive: 50 },
+        presentation.tiers[1]!,
+      ],
+    };
+    session.normalize(project);
+    expect(session.getTierPreviewValue(project, "A", 1)).toBe(50);
+
+    session.resetForImport(project);
+    expect(session.getActivePreviewTier(project, "A")).toBe(0);
+    expect(session.getPreviewValue(project, "A")).toBe(5);
+  });
 });
+
+function configureValueTiers(
+  project: ReturnType<typeof createProject>,
+  symbolName: string,
+): void {
+  project.symbols.get(symbolName)!.valuePresentation = {
+    defaultValues: [5, 25],
+    reelStates: {
+      normal: { kind: "transparent", width: 160, height: 160 },
+      states: {},
+    },
+    tiers: [
+      {
+        maxExclusive: 10,
+        animation: {
+          kind: "spine",
+          skeleton: "./low.json",
+          atlas: "./symbol.atlas",
+          texture: "./symbol.png",
+          playback: { mode: "animation", animationName: "Loop", loop: true },
+        },
+      },
+      {
+        animation: {
+          kind: "spine",
+          skeleton: "./high.json",
+          atlas: "./symbol.atlas",
+          texture: "./symbol.png",
+          playback: { mode: "animation", animationName: "Loop", loop: true },
+        },
+      },
+    ],
+    text: {
+      type: "font",
+      slot: "Num",
+      x: 0,
+      y: 0,
+      fontFamily: "Arial",
+      fontSize: 24,
+      fontWeight: "700",
+      fill: "#fff",
+      stroke: "#000",
+      strokeWidth: 1,
+    },
+  };
+}
