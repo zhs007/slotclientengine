@@ -135,6 +135,14 @@ CM 乘法、矩阵尺寸和 occurrence continuity 都在画面 mutation 前严�
 
 ## FreeGame
 
+一次 `playSpin(logic)` 只启动一份 `SlotOperationPlanV1`。BaseGame operations、
+multiplier/CO transform payload 与 `game002:freegame@1` 由同一个 coordinator 持有；
+FreeGame 不再在 BaseGame Promise 完成后启动第二份 playback contract。transform payload
+直接携带 WL increment、WM replacement、CN update、CM 和 CO collection 事实，Target
+不再用 stepIndex 查询 presentation batch。profile transform 在进入 coordinator 前展开为
+`wl-increment`、`wild-multiplier`、`wm-to-cn`、`coin-multiplier`、`cm-to-cn` 与
+`co-collect` exact operations；缺席阶段不生成 operation，每个实际 visual commit 后才推进。
+
 包含 `bg-triggerfg` 的 round 会在表现开始前完整编译 BaseGame 尾段和全部 FreeGame
 step。trigger 必须是无其它 `bg-win/bg-win2` 赔付的 type-5 WL result；先播放 WL
 `win`，再走 Layout 的 `BaseGame -> FreeGame` transition，转场前后复用同一 reel 和

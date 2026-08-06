@@ -27,9 +27,9 @@ export interface Game002WlWmMultiplierCompiler {
   ):
     | readonly SlotRoundSettledTransformChangeDraft[]
     | SlotRoundSettledTransformDraft;
-  getPresentationBatch(
+  getOperationPayload(
     stepIndex: number,
-  ): Game002WlWmMultiplierPresentationBatch | undefined;
+  ): Game002TransformOperationPayload | undefined;
   assertComplete(): void;
 }
 
@@ -47,7 +47,7 @@ interface Game002PendingWlIncrement extends Game002WlIncrementPresentation {
   readonly symbol: string;
 }
 
-export interface Game002WlWmMultiplierPresentationBatch {
+export interface Game002TransformOperationPayload {
   readonly stepIndex: number;
   readonly wlIncrements: readonly Game002WlIncrementPresentation[];
   readonly wmReplacements: readonly Game002WmReplacementPresentation[];
@@ -119,10 +119,7 @@ export function createGame002WlWmMultiplierCompiler(options: {
     );
   }
   let pendingWlIncrements: Game002PendingWlIncrement[] = [];
-  const presentationBatches = new Map<
-    number,
-    Game002WlWmMultiplierPresentationBatch
-  >();
+  const operationPayloads = new Map<number, Game002TransformOperationPayload>();
   const logDiagnostic = options.logDiagnostic ?? (() => undefined);
 
   return Object.freeze({
@@ -660,7 +657,7 @@ export function createGame002WlWmMultiplierCompiler(options: {
         coCollection === null
       )
         return Object.freeze([]);
-      presentationBatches.set(
+      operationPayloads.set(
         context.stepIndex,
         Object.freeze({
           stepIndex: context.stepIndex,
@@ -683,8 +680,8 @@ export function createGame002WlWmMultiplierCompiler(options: {
       });
     },
 
-    getPresentationBatch(stepIndex: number) {
-      return presentationBatches.get(stepIndex);
+    getOperationPayload(stepIndex: number) {
+      return operationPayloads.get(stepIndex);
     },
 
     assertComplete() {

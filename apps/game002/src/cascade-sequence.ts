@@ -4,7 +4,7 @@ import type {
   OtherSceneMatrix,
   SceneMatrix,
   SlotRoundDropdownStepPlan,
-  SlotRoundExecutionPlan,
+  SlotOperationPlanV1,
   SlotRoundRefillStepPlan,
   SlotRoundWinStepPlan,
   WinResultPosition,
@@ -68,7 +68,7 @@ export function createGame002CascadeSequence(options: {
   readonly logic: GameLogic;
   readonly cnSymbolCode: number;
   readonly auxiliaryValueSymbolCodes?: readonly number[];
-  readonly executionPlan?: SlotRoundExecutionPlan;
+  readonly executionPlan?: SlotOperationPlanV1;
   readonly canRemoveSymbol: (context: {
     readonly stepIndex: number;
     readonly x: number;
@@ -408,33 +408,41 @@ export function createGame002CascadeSequence(options: {
 }
 
 function findPlanDropdown(
-  plan: SlotRoundExecutionPlan | undefined,
+  plan: SlotOperationPlanV1 | undefined,
   stepIndex: number,
 ): SlotRoundDropdownStepPlan | undefined {
-  return plan?.steps.find(
-    (step): step is SlotRoundDropdownStepPlan =>
-      step.kind === "dropdown" && step.stepIndex === stepIndex,
-  );
+  return findProfileStep(plan, "slot:dropdown", "dropdown", stepIndex);
 }
 
 function findPlanRefill(
-  plan: SlotRoundExecutionPlan | undefined,
+  plan: SlotOperationPlanV1 | undefined,
   stepIndex: number,
 ): SlotRoundRefillStepPlan | undefined {
-  return plan?.steps.find(
-    (step): step is SlotRoundRefillStepPlan =>
-      step.kind === "refill" && step.stepIndex === stepIndex,
-  );
+  return findProfileStep(plan, "slot:refill", "refill", stepIndex);
 }
 
 function findPlanWin(
-  plan: SlotRoundExecutionPlan | undefined,
+  plan: SlotOperationPlanV1 | undefined,
   stepIndex: number,
 ): SlotRoundWinStepPlan | undefined {
-  return plan?.steps.find(
-    (step): step is SlotRoundWinStepPlan =>
-      step.kind === "win" && step.stepIndex === stepIndex,
-  );
+  return findProfileStep(plan, "slot:win-remove", "win", stepIndex);
+}
+
+function findProfileStep<
+  Step extends { readonly kind: string; readonly stepIndex: number },
+>(
+  plan: SlotOperationPlanV1 | undefined,
+  operationKind: string,
+  stepKind: Step["kind"],
+  stepIndex: number,
+): Step | undefined {
+  return plan?.operations
+    .filter((candidate) => candidate.kind === operationKind)
+    .map((candidate) => (candidate.payload as { readonly step?: Step }).step)
+    .find(
+      (step): step is Step =>
+        step?.kind === stepKind && step.stepIndex === stepIndex,
+    );
 }
 
 function assertPlannedWinStage(

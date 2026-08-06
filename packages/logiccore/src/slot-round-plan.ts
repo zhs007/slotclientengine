@@ -121,17 +121,17 @@ export interface SlotRoundSettledTransformStepPlan {
   readonly requiredCapabilities: readonly ["settled-transform"];
 }
 
-export type SlotRoundExecutionStep =
+export type SlotRoundProfileStepTrace =
   | SlotRoundWinStepPlan
   | SlotRoundDropdownStepPlan
   | SlotRoundRefillStepPlan
   | SlotRoundSettledTransformStepPlan;
 
-export interface SlotRoundExecutionPlan {
+interface SlotRoundProfileTrace {
   readonly kind: "slot-round-execution-plan";
   readonly version: 1;
   readonly initial: SlotRoundOccurrenceSnapshot;
-  readonly steps: readonly SlotRoundExecutionStep[];
+  readonly steps: readonly SlotRoundProfileStepTrace[];
   readonly final: SlotRoundOccurrenceSnapshot;
   readonly requiredCapabilities: readonly SlotRoundCapability[];
 }
@@ -200,11 +200,11 @@ export interface SlotRoundCompileContext {
  * Compiles all server-owned scene, result and value data before presentation
  * mutation. The returned object contains no renderer objects or callbacks.
  */
-export function compileSlotRoundExecutionPlan(
+export function compileSlotRoundProfileTrace(
   profile: SlotRoundFlowProfileV1,
   round: GameLogic,
   context: SlotRoundCompileContext,
-): SlotRoundExecutionPlan {
+): SlotRoundProfileTrace {
   const symbolNames = parseSymbolCodes(context.symbolCodes);
   validateSlotRoundFlowSymbolCatalog(profile, {
     activeSymbols: [...symbolNames.values()],
@@ -260,7 +260,7 @@ export function compileSlotRoundExecutionPlan(
   });
   let current = createInitialSnapshot(initialScene, initialValues, symbolNames);
   let initial = current;
-  const execution: SlotRoundExecutionStep[] = [];
+  const execution: SlotRoundProfileStepTrace[] = [];
   let planIndex = 0;
 
   for (let stepOffset = 0; stepOffset < steps.length; stepOffset += 1) {

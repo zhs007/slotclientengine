@@ -68,6 +68,10 @@
 
 ## FreeGame
 
+- 同一 server response 的 BaseGame 与 FreeGame 必须属于同一 `SlotOperationPlanV1` 和同一
+  coordinator execution。不得在 BaseGame completion Promise 后再启动第二份 round plan；
+  FreeGame operation payload 必须在首次 mutation 前完成 scene/value/component preflight。
+
 - `bg-triggerfg` 只接受没有其它 BaseGame 赔付的 type-5 WL result；WL win once
   完成后才进入 Layout transition，转场不得重建 reel 或替换触发 scene。
 - `fg-spin` 的视觉 mask 从 committed scene 的非 WL/CN 格派生；服务器 scene 只
@@ -80,6 +84,13 @@
   不 remove，BigWin complete 后才反向 transition，最终 scene 跨模式保留。
 
 ## WL/WM/CM multiplier 与中奖前转换
+
+- WL/WM/CM/CO 的权威业务事实必须随对应 operation payload 保存；Target 不按 stepIndex
+  查询 presentation batch。纯动画 `Start/Idle/End` 可保留 handler 私有 phase，但每个
+  scene/value/occurrence commit 必须服从 operation input/output 与 rollback 边界。
+- profile transform 必须在 coordinator 前展开为按需出现的 `game002:wl-increment`、
+  `game002:wild-multiplier`、`game002:wm-to-cn`、`game002:coin-multiplier`、
+  `game002:cm-to-cn`、`game002:co-collect` exact operations；不得重新压回单个 final diff。
 
 - initial spin 和 refill 的动画前落定 scene 先按
   `bg-gencm > bg-genwm > bg-spin/bg-refill` 合成 multiplier 输入，再把

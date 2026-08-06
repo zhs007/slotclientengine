@@ -12,9 +12,22 @@ import {
   type SceneOtherSceneFlowStateSnapshotV2,
 } from "@slotclientengine/rendercore/scene-layout";
 import {
+  finalizeSlotOperationAuthoringProject,
+  type SlotOperationAuthoringProjectV1,
+} from "@slotclientengine/slotoperationauthoring";
+import {
   downloadProject,
   parseGameViewer2ProjectFile,
+  parseGameViewer2ProjectFileV2,
 } from "../model/project.js";
+import {
+  acceptGameViewer2OperationEdge,
+  createGameViewer2OperationProject,
+  GAMEVIEWER2_OPERATION_KINDS,
+  operationSymbolCodes,
+  updateGameViewer2OperationDraft,
+  type GameViewer2OperationKind,
+} from "../model/operation-project.js";
 import { launchRuntimeWindow } from "../runtime/launch-channel.js";
 
 type Mutable<T> = {
@@ -29,8 +42,9 @@ interface EditorState {
   layoutBytes: Uint8Array | null;
   summary: SceneOtherSceneFlowPackageSummary | null;
   flow: SceneOtherSceneFlowProjectV2 | null;
+  operations: SlotOperationAuthoringProjectV1 | null;
   projectHash: string | null;
-  tab: "scenes" | "states";
+  tab: "scenes" | "states" | "operations";
   selectedChoreography: string | null;
   status: string;
   error: boolean;
@@ -41,6 +55,7 @@ export function createGameViewer2AppShell(root: HTMLElement): void {
     layoutBytes: null,
     summary: null,
     flow: null,
+    operations: null,
     projectHash: null,
     tab: "scenes",
     selectedChoreography: null,
@@ -64,6 +79,11 @@ export function createGameViewer2AppShell(root: HTMLElement): void {
         ) {
           state.flow = createDefaultSceneOtherSceneFlowProject({ summary });
           state.projectHash = summary.sha256;
+          state.operations = createGameViewer2OperationProject({
+            flow: state.flow,
+            summary,
+            review: "complete",
+          });
         }
         state.selectedChoreography = state.flow.choreographies[0]?.id ?? null;
         state.status = `${summary.layoutId} · ${summary.columns}×${summary.rows} · ${summary.renderMode}`;
@@ -71,15 +91,35 @@ export function createGameViewer2AppShell(root: HTMLElement): void {
     });
     bindFileInput(root, "project-file", async (file) => {
       await perform(state, render, async () => {
-        const parsed = parseGameViewer2ProjectFile(
-          JSON.parse(await file.text()),
-        );
+        const raw = JSON.parse(await file.text());
+        let parsed;
+        try {
+          parsed = parseGameViewer2ProjectFile(raw);
+        } catch (error) {
+          const legacy = parseGameViewer2ProjectFileV2(raw);
+          if (!state.summary)
+            throw new Error("升级 v2 项目前必须先导入其 layout ZIP。");
+          parsed = {
+            ...legacy,
+            version: 3 as const,
+            operations: createGameViewer2OperationProject({
+              flow: legacy.flow,
+              summary: state.summary,
+              review: "required",
+            }),
+          };
+          state.status =
+            "v2 项目已转换为待审阅 v3 草稿；请显式接受 operation 输出后再预览或导出。";
+          void error;
+        }
         if (state.summary && parsed.layoutSha256 !== state.summary.sha256)
           throw new Error("项目引用的 layout hash 与当前 ZIP 不一致。");
         state.flow = parsed.flow;
+        state.operations = parsed.operations;
         state.projectHash = parsed.layoutSha256;
         state.selectedChoreography = parsed.flow.choreographies[0]!.id;
-        state.status = "本地项目已导入；预览前会重新执行完整校验。";
+        if (parsed.operations.edges.every((edge) => edge.review === "complete"))
+          state.status = "v3 本地项目已导入；预览前会重新执行完整校验。";
       });
     });
     root.querySelectorAll<HTMLElement>("[data-action]").forEach((element) => {
@@ -100,11 +140,15 @@ export function createGameViewer2AppShell(root: HTMLElement): void {
       );
     });
     root
-      .querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-edit]")
+      .querySelectorAll<
+        HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+      >("[data-edit]")
       .forEach((element) => {
-        element.addEventListener("change", () =>
-          handleEdit(element, state, render),
-        );
+        element.addEventListener("change", () => {
+          if (element.dataset.edit?.startsWith("operation-"))
+            handleOperationEdit(element, state, render);
+          else handleEdit(element, state, render);
+        });
       });
   };
   render();
@@ -116,8 +160,17 @@ async function handleAction(
   state: EditorState,
   render: () => void,
 ): Promise<void> {
-  if (action === "tab-scenes" || action === "tab-states") {
-    state.tab = action === "tab-scenes" ? "scenes" : "states";
+  if (
+    action === "tab-scenes" ||
+    action === "tab-states" ||
+    action === "tab-operations"
+  ) {
+    state.tab =
+      action === "tab-scenes"
+        ? "scenes"
+        : action === "tab-states"
+          ? "states"
+          : "operations";
     render();
     return;
   }
@@ -126,12 +179,28 @@ async function handleAction(
     state.flow,
   ) as unknown as Mutable<SceneOtherSceneFlowProjectV2>;
   if (action === "export") {
+    const operationPlan = requireFinalizedOperationPlan(state);
+    void operationPlan;
     downloadProject({
       kind: "gameviewer2-project",
-      version: 2,
+      version: 3,
       layoutSha256: state.summary.sha256,
       flow: state.flow,
+      operations: state.operations!,
     });
+    return;
+  }
+  if (action === "accept-operation-edge") {
+    if (!state.operations)
+      throw new Error("项目缺少 operation authoring 数据。");
+    state.operations = acceptGameViewer2OperationEdge({
+      project: state.operations,
+      edgeIndex: numberData(element, "edge"),
+      summary: state.summary,
+    });
+    state.status = "该 operation edge 已通过严格编译与 snapshot 闭合校验。";
+    state.error = false;
+    render();
     return;
   }
   if (action === "preview") {
@@ -142,12 +211,14 @@ async function handleAction(
         expectedLayoutSha256: state.summary!.sha256,
         project: state.flow,
       });
+      const operationPlan = requireFinalizedOperationPlan(state);
       launchRuntimeWindow({
         kind: "gameviewer2-launch",
-        version: 2,
+        version: 3,
         layoutSha256: readiness.layout.sha256,
         layoutZip: state.layoutBytes.slice().buffer,
         project: readiness.project,
+        operationPlan,
       });
       state.status = "预览配置已通过一次性 MessageChannel 发送到新窗口。";
     });
@@ -265,13 +336,18 @@ async function handleAction(
       steps.splice(index + 1, 0, steps.splice(index, 1)[0]!);
   }
   state.flow = parseSceneOtherSceneFlowProject(draft);
+  state.operations = createGameViewer2OperationProject({
+    flow: state.flow,
+    summary: state.summary,
+    review: "complete",
+  });
   state.projectHash = state.summary.sha256;
   state.error = false;
   render();
 }
 
 function handleEdit(
-  element: HTMLInputElement | HTMLSelectElement,
+  element: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
   state: EditorState,
   render: () => void,
 ): void {
@@ -332,6 +408,11 @@ function handleEdit(
       steps[index]!.state = element.value;
     }
     state.flow = parseSceneOtherSceneFlowProject(draft);
+    state.operations = createGameViewer2OperationProject({
+      flow: state.flow,
+      summary: state.summary,
+      review: "complete",
+    });
     state.projectHash = state.summary.sha256;
     state.error = false;
   } catch (error) {
@@ -341,14 +422,75 @@ function handleEdit(
   render();
 }
 
+function handleOperationEdit(
+  element: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
+  state: EditorState,
+  render: () => void,
+): void {
+  if (!state.operations) return;
+  try {
+    const edit = element.dataset.edit;
+    const edgeIndex = numberData(element, "edge");
+    const draftIndex = numberData(element, "draft");
+    if (edit === "operation-kind") {
+      if (!GAMEVIEWER2_OPERATION_KINDS.includes(element.value as never))
+        throw new Error(`Operation kind ${element.value} 未在本地注册。`);
+      state.operations = updateGameViewer2OperationDraft({
+        project: state.operations,
+        edgeIndex,
+        draftIndex,
+        kind: element.value as GameViewer2OperationKind,
+      });
+    } else if (edit === "operation-payload") {
+      state.operations = updateGameViewer2OperationDraft({
+        project: state.operations,
+        edgeIndex,
+        draftIndex,
+        payload: JSON.parse(element.value),
+      });
+    }
+    state.status = "Operation 草稿已修改；必须重新接受对应 edge。";
+    state.error = false;
+  } catch (error) {
+    state.status = error instanceof Error ? error.message : String(error);
+    state.error = true;
+  }
+  render();
+}
+
 function shellHtml(state: EditorState): string {
+  const pendingReview =
+    state.operations?.edges.some((edge) => edge.review !== "complete") ?? false;
   return `<main class="app-shell">
     <header><div><p class="eyebrow">RENDERCORE · LOCAL ONLY</p><h1>Game Viewer 2</h1><p>scene / otherScene 流程与 Symbol 状态编排</p></div>
-      <div class="toolbar"><label class="button">导入 Layout ZIP<input id="layout-file" type="file" accept=".zip,application/zip"></label><label class="button">导入项目<input id="project-file" type="file" accept=".json,application/json"></label><button data-action="export" ${state.flow ? "" : "disabled"}>导出项目</button><button class="primary" data-action="preview" ${state.flow && state.layoutBytes ? "" : "disabled"}>新窗口预览</button></div>
+      <div class="toolbar"><label class="button">导入 Layout ZIP<input id="layout-file" type="file" accept=".zip,application/zip"></label><label class="button">导入项目<input id="project-file" type="file" accept=".json,application/json"></label><button data-action="export" ${state.flow && !pendingReview ? "" : "disabled"}>导出项目</button><button class="primary" data-action="preview" ${state.flow && state.layoutBytes && !pendingReview ? "" : "disabled"}>新窗口预览</button></div>
     </header>
     <div class="status ${state.error ? "error" : ""}">${escapeHtml(state.status)}</div>
-    ${state.flow && state.summary ? `<nav><button class="${state.tab === "scenes" ? "active" : ""}" data-action="tab-scenes">场景配置链 <span>${state.flow.snapshots.length}</span></button><button class="${state.tab === "states" ? "active" : ""}" data-action="tab-states">状态编排 <span>${state.flow.choreographies.length}</span></button></nav>${state.tab === "scenes" ? scenesHtml(state.flow, state.summary) : statesHtml(state.flow, state.summary, state.selectedChoreography)}` : emptyHtml()}
+    ${state.flow && state.summary && state.operations ? `<nav><button class="${state.tab === "scenes" ? "active" : ""}" data-action="tab-scenes">场景配置链 <span>${state.flow.snapshots.length}</span></button><button class="${state.tab === "states" ? "active" : ""}" data-action="tab-states">状态编排 <span>${state.flow.choreographies.length}</span></button><button class="${state.tab === "operations" ? "active" : ""}" data-action="tab-operations">Operations <span>${state.operations.edges.length}</span></button></nav>${state.tab === "scenes" ? scenesHtml(state.flow, state.summary) : state.tab === "states" ? statesHtml(state.flow, state.summary, state.selectedChoreography) : operationsHtml(state.operations)}` : emptyHtml()}
   </main>`;
+}
+
+function operationsHtml(project: SlotOperationAuthoringProjectV1): string {
+  return `<section class="operation-workspace"><div class="section-heading"><div><h2>Operation authoring</h2><p>按执行顺序编辑已注册 kind 与完整 payload；positions、pairing、result、order、amount 均保存在 payload。每条 edge 必须独立校验并接受。</p></div></div><div class="operation-edges">${project.edges
+    .map(
+      (edge, edgeIndex) =>
+        `<article class="operation-edge" data-operation-edge="${edgeIndex}"><div class="operation-edge-head"><div><strong>${escapeHtml(edge.inputSnapshotId)} → ${escapeHtml(edge.outputSnapshotId)}</strong><span class="review ${edge.review}">${edge.review.toUpperCase()}</span></div><button data-action="accept-operation-edge" data-edge="${edgeIndex}">${edge.review === "complete" ? "重新校验" : "校验并接受"}</button></div>${edge.drafts
+          .map((draft, draftIndex) => {
+            const source = draft.source;
+            const evidence =
+              source.kind === "snapshot-authored"
+                ? source.suggestions
+                    .map(
+                      (item) =>
+                        `<li><strong>${escapeHtml(item.field)}</strong><span class="suggestion ${item.status}">${item.status}</span><span>candidates=${item.candidateCount}</span>${item.diagnostics.map((message) => `<small>${escapeHtml(message)}</small>`).join("")}</li>`,
+                    )
+                    .join("")
+                : `<li><strong>server source</strong><small>本地编辑器不可修改此来源。</small></li>`;
+            return `<div class="operation-draft"><div class="operation-fields"><label>kind<select data-edit="operation-kind" data-edge="${edgeIndex}" data-draft="${draftIndex}">${GAMEVIEWER2_OPERATION_KINDS.map((kind) => `<option value="${kind}" ${draft.kind === kind ? "selected" : ""}>${kind}</option>`).join("")}</select></label><label>id<input value="${escapeHtml(draft.id)}" disabled></label></div><label>payload JSON<textarea data-edit="operation-payload" data-edge="${edgeIndex}" data-draft="${draftIndex}" rows="10">${escapeHtml(JSON.stringify(draft.payload, null, 2))}</textarea></label><ul class="operation-evidence">${evidence}</ul></div>`;
+          })
+          .join("")}</article>`,
+    )
+    .join("")}</div></section>`;
 }
 
 function scenesHtml(
@@ -517,6 +659,17 @@ function numberData(element: HTMLElement, name: string): number {
   const value = Number(element.dataset[name]);
   if (!Number.isSafeInteger(value)) throw new Error(`缺少 ${name} 索引。`);
   return value;
+}
+
+function requireFinalizedOperationPlan(state: EditorState) {
+  if (!state.operations || !state.summary)
+    throw new Error("项目缺少 operation authoring 数据。");
+  return finalizeSlotOperationAuthoringProject({
+    project: state.operations,
+    symbolCodes: operationSymbolCodes(state.summary),
+    columns: state.summary.columns,
+    rows: state.summary.rows,
+  });
 }
 
 function uniqueId(prefix: string, used: readonly string[]): string {

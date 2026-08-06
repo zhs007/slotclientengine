@@ -5,12 +5,13 @@ import { describe, expect, it } from "vitest";
 const appRoot = resolve(__dirname, "..");
 
 describe("gameviewer2 source boundary", () => {
-  it("depends on rendercore without server or component frameworks", () => {
+  it("depends on rendercore and operation authoring without server or component frameworks", () => {
     const manifest = JSON.parse(
       readFileSync(resolve(appRoot, "package.json"), "utf8"),
     );
     expect(manifest.dependencies).toEqual({
       "@slotclientengine/rendercore": "workspace:*",
+      "@slotclientengine/slotoperationauthoring": "workspace:*",
     });
     const source = [
       "src/main.ts",

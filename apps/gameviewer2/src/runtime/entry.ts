@@ -14,6 +14,7 @@ export async function startRuntimeWindow(root: HTMLElement): Promise<void> {
       layoutZipBytes: new Uint8Array(payload.layoutZip),
       expectedLayoutSha256: payload.layoutSha256,
       project: payload.project,
+      operationPlan: payload.operationPlan,
     });
     const resize = () =>
       runtime.applyViewport({

@@ -1,12 +1,37 @@
 # 可扩展 Slot Operation Plan 设计
 
-> 状态：架构提案，尚未实现。本文描述 `logiccore`、游戏 app、`rendercore` 与
-> Game Viewer 2 未来统一到 typed operation execution plan 的目标边界，不代表当前
-> `SlotRoundExecutionPlan` 已具备这些接口。
+> 状态：Task 173 代码重构已实施，浏览器人工验收待执行；本文是
+> `SlotOperationPlanV1` 的目标架构合同。
+> `logiccore` 负责可信 IR/finalize，`rendercore` 负责实例级 registry/coordinator，
+> 本地 snapshot 推导只存在于 `@slotclientengine/slotoperationauthoring`。
+
+## 当前正式 API
+
+- `logiccore/slot-operation`：`compileSlotOperationPlan()`、
+  `finalizeAuthoredSlotOperationPlan()`、strict component selector、built-in definitions、
+  snapshot/plan validation 与 deep freeze。
+- `@slotclientengine/slotoperationauthoring`：exact/ambiguous/unresolved suggestion、strict
+  project parser 和 review-gated finalizer；不得被正式游戏 runtime 依赖。
+- `rendercore/slot-operation`：实例级 exact kind/version registry、完整 plan preflight、
+  `prepare/start/update/commit/rollback/destroy` coordinator 与 cell choreography executor。
+- Game Viewer 2 外层项目为 v3；v2 只能显式升级为 `review: required` 草稿。launch v3
+  必须携带 finalized operation plan，runtime 在加载画面资源前核对全部 checkpoint。
+  Operations 编辑器逐 edge 显示 suggestion/candidate/diagnostic，并允许编辑本地注册 kind 与
+  完整 payload；任何修改重新进入 required，只有编译结果与目标 snapshot 精确闭合才能接受。
+- game002 的 BaseGame 和同一 server response 的 FreeGame 由同一个 coordinator 顺序执行；
+  FreeGame 是 `game002:freegame@1`，multiplier/CO 事实随 transform operation payload 携带。
+
+configured adapter 与 game002 已直接调用 `compileSlotRoundOperationPlan()`；旧 public
+`SlotRoundExecutionPlan`、compiler、adapter 和 fixed coordinator export 已删除。配置 profile
+trace 仍是 `logiccore` 的私有编译实现，rendercore 只保留具名 profile presentation handler。
+game002 会把私有 profile transform trace 展开为 WL increment、wild multiplier、WM→CN、
+coin multiplier、CM→CN 与 CO collect 原子 operation；每个 visual commit 都由对应 handler
+暂停/提交后再进入下一项。Game Viewer 2 finalized plan 由同一 coordinator 执行，settled
+画面只从 `operation.output` 提交；snapshot 项目只负责 choreography 与 authoring checkpoint。
 
 ## 背景
 
-当前 `SlotRoundExecutionPlan` 由 `logiccore` 编译，固定包含 `win`、`dropdown`、
+此前 `SlotRoundExecutionPlan` 由 `logiccore` 编译，固定包含 `win`、`dropdown`、
 `refill` 和 `settled-transform` 四种 execution step。该模型已经能够在画面 mutation
 前验证完整 round、保存 occurrence identity，并由 `rendercore` coordinator 顺序播放。
 
@@ -22,7 +47,7 @@ game002 可能依次执行：
 7. source 转为 BN，CO 转为 selected symbol；
 8. 进入后续 win、collect 和 remove。
 
-当前实现把这些状态变化压缩到一个 `settled-transform` 的最终 `input/output`，中间
+旧实现把这些状态变化压缩到一个 `settled-transform` 的最终 `input/output`，中间
 数据保存在 game002 presentation batch，顺序与 commit barrier 则由
 `Game002RoundTarget` 状态机隐式表达。这能支持当前固定流程，但 plan 本身不能完整
 回答中间状态、操作依赖、原子提交边界和 operation-specific capability。
@@ -113,7 +138,9 @@ interface SlotOperationBase<
 一轮 plan：
 
 ```ts
-interface SlotOperationPlan<Operation extends SlotOperationBase<any, any, any, any>> {
+interface SlotOperationPlan<
+  Operation extends SlotOperationBase<any, any, any, any>,
+> {
   readonly kind: "slot-operation-plan";
   readonly version: 1;
   readonly initial: SlotRoundOccurrenceSnapshot;
@@ -277,17 +304,17 @@ game002:co-collect@1
 
 建议首批内置：
 
-| Kind                         | 语义                                                       |
-| ---------------------------- | ---------------------------------------------------------- |
-| `slot:spin@1`                | 使用本地公开轮带滚动并落定到权威 target snapshot           |
-| `slot:win@1`                 | 规范化 result group、amount、occurrence 和 presentation role |
-| `slot:remove@1`              | release occurrence 并生成 hole                             |
-| `slot:dropdown@1`            | 保持 occurrence identity 的列内移动和 held occurrence      |
-| `slot:refill@1`              | 只在 hole 创建新 occurrence                                |
-| `slot:update-values@1`       | 保持 occurrence/code，只更新 presentation value            |
-| `slot:replace-occurrences@1` | 原位替换 code/value，显式定义 identity policy               |
-| `slot:relocate-occurrences@1`| 跨格搬运 source identity，保存 overwritten/replacement     |
-| `slot:collect@1`             | 规范化 collect item/group、顺序和金额分配                  |
+| Kind                          | 语义                                                         |
+| ----------------------------- | ------------------------------------------------------------ |
+| `slot:spin@1`                 | 使用本地公开轮带滚动并落定到权威 target snapshot             |
+| `slot:win@1`                  | 规范化 result group、amount、occurrence 和 presentation role |
+| `slot:remove@1`               | release occurrence 并生成 hole                               |
+| `slot:dropdown@1`             | 保持 occurrence identity 的列内移动和 held occurrence        |
+| `slot:refill@1`               | 只在 hole 创建新 occurrence                                  |
+| `slot:update-values@1`        | 保持 occurrence/code，只更新 presentation value              |
+| `slot:replace-occurrences@1`  | 原位替换 code/value，显式定义 identity policy                |
+| `slot:relocate-occurrences@1` | 跨格搬运 source identity，保存 overwritten/replacement       |
+| `slot:collect@1`              | 规范化 collect item/group、顺序和金额分配                    |
 
 `wild-multiplier`、`coin-multiplier`、`CO` 等包含具体游戏业务的类型不进入
 logiccore built-in。简单游戏可以组合通用 operation；需要整体动画和事务边界时由游戏
@@ -387,22 +414,22 @@ interface AuthoredOperationProof<Value> {
 
 ### 可推导边界
 
-| 数据                               | Scene 是否足以推导                                  |
-| ---------------------------------- | --------------------------------------------------- |
-| remove hole positions              | 可以                                                |
-| refill hole positions              | 可以                                                |
-| code replacement positions         | 可以                                                |
-| value update positions             | 可以                                                |
-| dropdown movement                  | 给定 held/order policy 后通常可以                   |
-| occurrence relocation              | 唯一时可预填；多解时交给人工选择                    |
-| win result positions               | 不一定；缺失部分由人工补录                          |
-| result 分组与 usedResults 顺序      | 不可以；由人工编排                                  |
-| cash/coin amount                    | 不可以；需要人工提供                                |
-| sequential collect 业务顺序        | 不一定；由人工确认或重排                            |
-| CO source-target 配对               | 通常不可以；由人工配对                              |
-| multiplier 来源                    | 不可以；需要人工提供                                |
-| scene 不变时需要播放的 symbol state| 不可以；由人工选择 choreography                     |
-| 业务触发原因                       | 不可以；由人工选择 operation kind                   |
+| 数据                                | Scene 是否足以推导                |
+| ----------------------------------- | --------------------------------- |
+| remove hole positions               | 可以                              |
+| refill hole positions               | 可以                              |
+| code replacement positions          | 可以                              |
+| value update positions              | 可以                              |
+| dropdown movement                   | 给定 held/order policy 后通常可以 |
+| occurrence relocation               | 唯一时可预填；多解时交给人工选择  |
+| win result positions                | 不一定；缺失部分由人工补录        |
+| result 分组与 usedResults 顺序      | 不可以；由人工编排                |
+| cash/coin amount                    | 不可以；需要人工提供              |
+| sequential collect 业务顺序         | 不一定；由人工确认或重排          |
+| CO source-target 配对               | 通常不可以；由人工配对            |
+| multiplier 来源                     | 不可以；需要人工提供              |
+| scene 不变时需要播放的 symbol state | 不可以；由人工选择 choreography   |
+| 业务触发原因                        | 不可以；由人工选择 operation kind |
 
 Scene diff 只能证明状态效果，不能自动恢复业务意图。非唯一推导不得根据遍历顺序、首
 项、相邻格或 symbol code 相同等条件自动选一个；它应保留全部合法候选并交给人工编辑。
@@ -500,15 +527,15 @@ Game Viewer 2 当前的 `scene-other-scene-flow` 已经具备：
 
 其概念映射为：
 
-| Game Viewer 2                         | Operation plan                         |
-| ------------------------------------- | -------------------------------------- |
-| 上一个 snapshot                       | `operation.input`                      |
-| 当前 snapshot                         | `operation.output`                     |
-| `scene`                               | output symbol codes                    |
-| `otherScene`                          | output presentation values             |
-| `transition: spin | settled`          | operation kind/handler                 |
-| `choreographies[x][y]`                | cell presentation assignment           |
-| `completionPolicy`                    | handler completion barrier             |
+| Game Viewer 2          | Operation plan               |
+| ---------------------- | ---------------------------- | ---------------------- |
+| 上一个 snapshot        | `operation.input`            |
+| 当前 snapshot          | `operation.output`           |
+| `scene`                | output symbol codes          |
+| `otherScene`           | output presentation values   |
+| `transition: spin      | settled`                     | operation kind/handler |
+| `choreographies[x][y]` | cell presentation assignment |
+| `completionPolicy`     | handler completion barrier   |
 
 Game Viewer 2 不应为了本地推导而依赖 server framework。推导能力由独立 authoring
 package 提供；可以经 rendercore local-flow/operation authoring facade 暴露，也可以在
@@ -522,12 +549,7 @@ Game Viewer 2 的工作流是“建议 -> 人工编辑 -> strict finalize”，�
 const suggestion = suggestSettledOperation({
   input: previousSnapshot,
   output: currentSnapshot,
-  allowedEffects: [
-    "update-values",
-    "replace-occurrences",
-    "remove",
-    "refill",
-  ],
+  allowedEffects: ["update-values", "replace-occurrences", "remove", "refill"],
   choreography: currentSnapshot.choreographies,
   completionPolicy: currentSnapshot.completionPolicy,
 });

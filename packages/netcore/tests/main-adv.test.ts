@@ -25,7 +25,7 @@ describe('SlotcraftClient Advanced Tests', () => {
     server = new MockServer();
     port = await server.start();
     const options: SlotcraftClientOptions = {
-      url: `ws://localhost:${port}`,
+      url: `ws://127.0.0.1:${port}`,
       reconnectDelay: 10,
       requestTimeout: 100,
       logger: null,
@@ -34,10 +34,10 @@ describe('SlotcraftClient Advanced Tests', () => {
   });
 
   afterEach(() => {
-    if (client.getState() !== ConnectionState.DISCONNECTED) {
+    if (client && client.getState() !== ConnectionState.DISCONNECTED) {
       client.disconnect();
     }
-    server.stop();
+    server?.stop();
     vi.clearAllMocks();
   });
 
@@ -164,7 +164,7 @@ describe('SlotcraftClient Advanced Tests', () => {
   it('should allow callers to disable intermediate auto-collect', async () => {
     client.disconnect();
     client = new SlotcraftClient({
-      url: `ws://localhost:${port}`,
+      url: `ws://127.0.0.1:${port}`,
       reconnectDelay: 10,
       requestTimeout: 100,
       logger: null,

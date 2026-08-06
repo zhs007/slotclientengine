@@ -5,7 +5,11 @@
 ## 依赖与职责
 
 - `packages/gameframeworks` 是后续游戏默认 facade，整合 UI、网络、logic 数据流和 production scene-layout API。
-- `packages/logiccore` 只拥有通用 server round/component/result/otherScenes 解析、索引校验、strict profile 和不可变 execution plan；业务 component、symbol 和金额语义由 app 注入。
+- `packages/logiccore` 只拥有通用 server round/component/result/otherScenes 解析、索引校验、strict profile 和不可变 `SlotOperationPlanV1`；业务 component、symbol 和金额语义由 app 注入。
+- operation kind/version、source evidence、input/output occurrence closure 和 plan final closure
+  必须由 logiccore strict compiler/finalizer 证明。正式 server source 与本地
+  snapshot-authored source 不得互相 fallback；本地 suggestion 只存在于独立
+  `slotoperationauthoring` package。
 - 所有配置驱动 round 必须在任何画面 mutation 前完整编译。component role、remove/drop/value/sequential companion policy 只能来自 strict versioned profile，并按 active symbol package 大小写精确校验。
 - settled transform 的跨格 relocation 必须显式保存 source occurrence identity、
   overwritten target 与 source replacement；release-only win positions 只加入 holes
@@ -13,7 +17,10 @@
   prepare/start/commit/rollback/destroy transaction 承担。
 - relocation 输出 occurrence 必须按不可变 input occurrence 定位槽位，不得按已经
   被前序 target 改写的 output id 再查找；source/target 坐标遍历顺序不能改变结果。
-- `packages/rendercore` 的 capability-driven coordinator 是 standard/grid-cell、base/cascade 的共享编排入口，负责 initial、win、remove、dropdown、refill、sequential collect、completion 和 cleanup 边界。
+- `packages/rendercore` 的实例级 operation registry/coordinator 是 standard/grid-cell、
+  base/cascade 的共享编排入口。必须在 next-spin cleanup 与首次 mutation 前预检完整 plan；
+  handler 按 prepare/start/update/commit/rollback/destroy 生命周期执行，不使用进程级 registry、
+  kind alias 或首项 fallback。
 - settled 后、中奖前的业务转换必须由 logiccore 的中性 immutable transform step
   和 rendercore 的 capability phase 显式表达；共享层只校验 occurrence
   code/value continuity 与 prepare/commit/rollback，不认识业务 symbol、component

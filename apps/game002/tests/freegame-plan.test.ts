@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  compileSlotRoundExecutionPlan,
+  compileSlotRoundOperationPlan,
   createSlotGameLogicResult,
   type GameLogic,
 } from "@slotclientengine/gameframeworks";
@@ -36,7 +36,7 @@ describe("game002 FreeGame plan", () => {
       coSymbolCode: CODES.CO,
       bnSymbolCode: CODES.BN,
     });
-    const basePlan = compileSlotRoundExecutionPlan(
+    const basePlan = compileSlotRoundOperationPlan(
       GAME002_ROUND_FLOW_PROFILE,
       sliceLogic(logic, 8),
       {
@@ -63,6 +63,7 @@ describe("game002 FreeGame plan", () => {
         compileSettledTransform: (context) =>
           compiler.compileSettledTransform(context),
       },
+      { includeCompletion: false },
     );
     compiler.assertComplete();
     const plan = compileGame002FreeGamePlan({

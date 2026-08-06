@@ -4,18 +4,24 @@ import type {
   GameLogicStep,
   SlotRoundDropdownStepPlan,
   SlotRoundCapability,
-  SlotRoundExecutionPlan,
   SlotRoundOccurrenceSnapshot,
   SlotRoundRefillStepPlan,
   SlotRoundSettledTransformStepPlan,
   SlotRoundWinStepPlan,
+  SlotOperationBase,
+  SlotOperationPlanV1,
+  SlotOperationSnapshot,
   SlotGameAdapter,
   SlotGameInitialState,
   SlotGameMountContext,
   SlotGameStateSnapshot,
   SlotGameViewportSnapshot,
 } from "@slotclientengine/gameframeworks";
-import { compileSlotRoundExecutionPlan } from "@slotclientengine/gameframeworks";
+import {
+  compileSlotRoundOperationPlan,
+  freezeSlotOperationPlan,
+  validateSlotOperationPlan,
+} from "@slotclientengine/gameframeworks";
 import {
   assertSymbolValueDisplayResource,
   createSymbolCascadePlayer,
@@ -25,8 +31,10 @@ import {
   type SymbolWinCarousel,
   type SymbolValuePresenter,
   type SymbolCascadePlayer,
-  createSlotRoundCoordinator,
-  type SlotRoundPresentationCapabilityTarget,
+  createSlotOperationCoordinator,
+  createSlotOperationHandlerRegistry,
+  registerSlotRoundProfileOperationHandlers,
+  type SlotOperationHandler,
   type PreparedVisibleOccurrenceReplacement,
   type PreparedGridCellVisibleOccurrenceTransferBatch,
 } from "@slotclientengine/rendercore";
@@ -76,9 +84,12 @@ import {
 } from "./cascade-config.js";
 import {
   createGame002WlWmMultiplierCompiler,
-  type Game002WlWmMultiplierPresentationBatch,
+  type Game002TransformOperationPayload,
 } from "./wl-wm-multiplier-plan.js";
-import { compileGame002FreeGamePlan } from "./freegame-plan.js";
+import {
+  compileGame002FreeGamePlan,
+  type Game002FreeGamePlan,
+} from "./freegame-plan.js";
 import {
   createGame002FreeGamePlayback,
   type Game002FreeGamePlayback,
@@ -174,7 +185,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
   #runtime: Game002ReelRuntime | null = null;
   #winAmountPlayer: WinAmountAnimationPlayer | null = null;
   #symbolCascadePlayer: SymbolCascadePlayer | null = null;
-  #roundCoordinator: ReturnType<typeof createSlotRoundCoordinator> | null =
+  #roundCoordinator: ReturnType<typeof createSlotOperationCoordinator> | null =
     null;
   #roundTarget: Game002RoundTarget | null = null;
   #freeGamePlayback: Game002FreeGamePlayback | null = null;
@@ -326,8 +337,30 @@ class Game002PixiAdapter implements SlotGameAdapter {
         cnSymbolCode: requireGame002SymbolCode(runtime, "CN"),
         cmSymbolCode: requireGame002SymbolCode(runtime, "CM"),
       });
-      this.#roundCoordinator = createSlotRoundCoordinator({
+      const registry = createSlotOperationHandlerRegistry();
+      registerSlotRoundProfileOperationHandlers({
+        registry,
         target: this.#roundTarget,
+        skipSettledTransform: true,
+      });
+      for (const registration of createGame002TransformOperationRegistrations(
+        this.#roundTarget,
+      ))
+        registry.register(registration);
+      registry.register(
+        createGame002FreeGameOperationRegistration({
+          runtime,
+          cascadePlayer: symbolCascadePlayer,
+          winAmountPlayer,
+          backgroundPlayer,
+          setActive: (playback) => {
+            this.#freeGamePlayback = playback;
+          },
+        }),
+      );
+      this.#roundCoordinator = createSlotOperationCoordinator({
+        registry,
+        cleanup: () => this.#roundTarget?.cleanup(),
       });
       app.ticker.add(this.#onTick);
       tickerAdded = true;
@@ -445,7 +478,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
       bnSymbolCode,
       logDiagnostic: this.#logDiagnostic,
     });
-    const plan = compileSlotRoundExecutionPlan(
+    const plan = compileSlotRoundOperationPlan(
       GAME002_ROUND_FLOW_PROFILE,
       baseLogic,
       {
@@ -459,6 +492,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
         compileSettledTransform: (context) =>
           multiplierCompiler.compileSettledTransform(context),
       },
+      { includeCompletion: triggerStepIndex < 0 && winAmountRaw > 0 },
     );
     multiplierCompiler.assertComplete();
     const sequence = createGame002CascadeSequence({
@@ -500,51 +534,51 @@ class Game002PixiAdapter implements SlotGameAdapter {
               BN: bnSymbolCode,
             },
           });
+    const transformPayloads = new Map(
+      plan.operations
+        .filter((operation) => operation.kind === "slot:settled-transform")
+        .map((operation) => {
+          const step = (
+            operation.payload as {
+              readonly step: SlotRoundSettledTransformStepPlan;
+            }
+          ).step;
+          const payload = multiplierCompiler.getOperationPayload(
+            step.stepIndex,
+          );
+          if (!payload)
+            throw new Error(
+              `game002 step[${step.stepIndex}] transform operation payload is missing.`,
+            );
+          return [step.stepIndex, payload] as const;
+        }),
+    );
     this.#requireRoundTarget().configure({
       sequence,
       betAmountRaw,
       winAmountRaw: freeGamePlan ? 0 : winAmountRaw,
-      multiplierBatches: new Map(
-        plan.steps
-          .filter((step) => step.kind === "settled-transform")
-          .map((step) => {
-            const batch = multiplierCompiler.getPresentationBatch(
-              step.stepIndex,
-            );
-            if (!batch)
-              throw new Error(
-                `game002 step[${step.stepIndex}] multiplier presentation batch is missing.`,
-              );
-            return [step.stepIndex, batch] as const;
-          }),
-      ),
     });
-    if (!freeGamePlan) return coordinator.start(plan);
-    const backgroundPlayer = this.#backgroundPlayer;
-    if (!backgroundPlayer)
-      throw new Error("game002 scene-layout player is not mounted.");
-    const playback = createGame002FreeGamePlayback({
-      plan: freeGamePlan,
-      runtime,
-      cascadePlayer: this.#requireSymbolCascadePlayer(),
-      winAmountPlayer: this.#winAmountPlayer!,
-      backgroundPlayer,
-      betAmountRaw,
-      winAmountRaw,
-      symbolCodes: {
-        AF: requireGame002SymbolCode(runtime, "AF"),
-        CN: cnSymbolCode,
-        CO: coSymbolCode,
-        BN: bnSymbolCode,
-      },
+    const operationPlan = attachGame002TransformOperationPayloads({
+      plan,
+      payloads: transformPayloads,
+      symbolCodes,
     });
-    this.#freeGamePlayback = playback;
-    return coordinator
-      .start(plan)
-      .then(() => playback.start())
-      .finally(() => {
-        if (this.#freeGamePlayback === playback) this.#freeGamePlayback = null;
-      });
+    const completePlan = freeGamePlan
+      ? appendGame002FreeGameOperation({
+          base: operationPlan,
+          freeGamePlan,
+          symbolCodes,
+          betAmountRaw,
+          winAmountRaw,
+          freeGameSymbolCodes: {
+            AF: requireGame002SymbolCode(runtime, "AF"),
+            CN: cnSymbolCode,
+            CO: coSymbolCode,
+            BN: bnSymbolCode,
+          },
+        })
+      : operationPlan;
+    return coordinator.start(completePlan);
   }
 
   setFrameworkState(_state: SlotGameStateSnapshot): void {
@@ -586,10 +620,6 @@ class Game002PixiAdapter implements SlotGameAdapter {
       const deltaSeconds = normalizeTickerDeltaSeconds(ticker);
       this.#backgroundPlayer.update(deltaSeconds);
       const coordinator = this.#roundCoordinator;
-      if (this.#freeGamePlayback?.isRunning()) {
-        this.#freeGamePlayback.update(deltaSeconds);
-        return;
-      }
       if (!coordinator?.getSnapshot().running) {
         if (this.#winAmountPlayer?.isPlaying()) {
           this.#winAmountPlayer.update(deltaSeconds);
@@ -658,7 +688,9 @@ class Game002PixiAdapter implements SlotGameAdapter {
     return this.#symbolCascadePlayer;
   }
 
-  #requireRoundCoordinator(): ReturnType<typeof createSlotRoundCoordinator> {
+  #requireRoundCoordinator(): ReturnType<
+    typeof createSlotOperationCoordinator
+  > {
     if (!this.#roundCoordinator)
       throw new Error("game002 adapter is not mounted.");
     return this.#roundCoordinator;
@@ -693,7 +725,459 @@ class Game002PixiAdapter implements SlotGameAdapter {
   }
 }
 
-export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget {
+function attachGame002TransformOperationPayloads(options: {
+  readonly plan: SlotOperationPlanV1;
+  readonly payloads: ReadonlyMap<number, Game002TransformOperationPayload>;
+  readonly symbolCodes: Readonly<Record<string, number>>;
+}): SlotOperationPlanV1 {
+  let transformCount = 0;
+  const expanded = options.plan.operations.flatMap((operation) => {
+    if (operation.kind !== "slot:settled-transform") return operation;
+    transformCount += 1;
+    const step = (
+      operation.payload as { readonly step?: SlotRoundSettledTransformStepPlan }
+    ).step;
+    if (!step)
+      throw new Error(
+        "game002 settled transform operation is missing its server step.",
+      );
+    const transform = options.payloads.get(step.stepIndex);
+    if (!transform)
+      throw new Error(
+        `game002 step[${step.stepIndex}] transform operation payload is missing.`,
+      );
+    return expandGame002TransformOperation({
+      operation,
+      step,
+      transform,
+      symbolCodes: options.symbolCodes,
+    });
+  });
+  if (transformCount !== options.payloads.size)
+    throw new Error(
+      "game002 transform operation payload count does not match the plan.",
+    );
+  const operations = expanded.map((operation, operationIndex) => ({
+    ...operation,
+    operationIndex,
+  }));
+  const plan = freezeSlotOperationPlan({
+    ...options.plan,
+    operations,
+    requiredCapabilities: Object.freeze([
+      ...new Set(operations.flatMap((item) => item.requiredCapabilities)),
+    ]),
+  });
+  validateSlotOperationPlan(plan, {
+    symbolCodes: options.symbolCodes,
+    columns: GAME002_REEL_COUNT,
+    rows: GAME002_VISIBLE_ROWS,
+  });
+  return plan;
+}
+
+function createGame002TransformOperationRegistrations(
+  target: Game002RoundTarget,
+) {
+  const requirePayload = (operation: SlotOperationBase) => {
+    const payload = operation.payload as {
+      readonly step?: SlotRoundSettledTransformStepPlan;
+      readonly transform?: Game002TransformOperationPayload;
+      readonly phase?: Game002TransformPhase;
+    };
+    if (!payload.step || !payload.transform || !payload.phase)
+      throw new Error(
+        "game002 settled transform operation payload is invalid.",
+      );
+    if (payload.step.stepIndex !== payload.transform.stepIndex)
+      throw new Error(
+        "game002 settled transform step and payload indexes do not match.",
+      );
+    return {
+      step: payload.step,
+      transform: payload.transform,
+      phase: payload.phase,
+    };
+  };
+  const handler: SlotOperationHandler<SlotOperationBase, SlotOperationBase> = {
+    preflight: (operation) => {
+      requirePayload(operation);
+    },
+    prepare: (operation) => operation,
+    start: (operation) => {
+      const payload = requirePayload(operation);
+      target.startAtomicTransformOperation(
+        payload.step,
+        payload.transform,
+        payload.phase,
+      );
+    },
+    update: (_operation, deltaSeconds) => {
+      target.update(deltaSeconds);
+      return target.updateAtomicTransformOperation(
+        deltaSeconds,
+        requirePayload(_operation).phase,
+      );
+    },
+    commit: () => undefined,
+    rollback: () => target.cleanup(),
+    destroy: () => undefined,
+  };
+  return GAME002_TRANSFORM_PHASES.map((phase) =>
+    Object.freeze({
+      kind: `game002:${phase}`,
+      version: 1,
+      requiredCapabilities: new Set([`game002:${phase}`]),
+      handler,
+    }),
+  );
+}
+
+interface Game002FreeGameOperationPayload {
+  readonly plan: Game002FreeGamePlan;
+  readonly betAmountRaw: number;
+  readonly winAmountRaw: number;
+  readonly symbolCodes: Readonly<{
+    AF: number;
+    CN: number;
+    CO: number;
+    BN: number;
+  }>;
+}
+
+type Game002TransformPhase =
+  | "wl-increment"
+  | "wild-multiplier"
+  | "wm-to-cn"
+  | "coin-multiplier"
+  | "cm-to-cn"
+  | "co-collect";
+
+const GAME002_TRANSFORM_PHASES: readonly Game002TransformPhase[] = [
+  "wl-increment",
+  "wild-multiplier",
+  "wm-to-cn",
+  "coin-multiplier",
+  "cm-to-cn",
+  "co-collect",
+];
+
+export function expandGame002TransformOperation(options: {
+  readonly operation: SlotOperationBase;
+  readonly step: SlotRoundSettledTransformStepPlan;
+  readonly transform: Game002TransformOperationPayload;
+  readonly symbolCodes: Readonly<Record<string, number>>;
+}): readonly SlotOperationBase[] {
+  const { operation, step, transform } = options;
+  const wlCode = options.symbolCodes.WL!;
+  const wmCode = options.symbolCodes.WM!;
+  const cnCode = options.symbolCodes.CN!;
+  const cmCode = options.symbolCodes.CM!;
+  const names = new Map(
+    Object.entries(options.symbolCodes).map(([name, code]) => [code, name]),
+  );
+  let current = operation.input;
+  const phases: SlotOperationBase[] = [];
+  const append = (
+    phase: Game002TransformPhase,
+    output: SlotOperationSnapshot,
+  ) => {
+    phases.push({
+      ...operation,
+      id: `${operation.id}:${phase}`,
+      kind: `game002:${phase}`,
+      input: current,
+      output,
+      payload: Object.freeze({ step, transform, phase }),
+      requiredCapabilities: Object.freeze([`game002:${phase}`]),
+    });
+    current = output;
+  };
+  if (transform.wlIncrements.length > 0)
+    append(
+      "wl-increment",
+      applyGame002AtomicChanges(
+        current,
+        transform.wlIncrements.map((item) => ({
+          position: item.position,
+          code: wlCode,
+          value: item.outputValue,
+        })),
+        names,
+      ),
+    );
+  if (transform.wmReplacements.length > 0) {
+    const wmTotal = step.input.occurrences
+      .filter((item) => item.code === wmCode)
+      .reduce((sum, item) => sum + (item.value ?? 0), 0);
+    const wildUpdates = current.occurrences
+      .filter((item) => item.code === wlCode)
+      .map((item) => ({
+        position: item.position,
+        code: wlCode,
+        value: (item.value ?? 0) + wmTotal,
+      }));
+    append(
+      "wild-multiplier",
+      applyGame002AtomicChanges(current, wildUpdates, names),
+    );
+    append(
+      "wm-to-cn",
+      applyGame002AtomicChanges(
+        current,
+        transform.wmReplacements.map((item) => ({
+          position: item.position,
+          code: cnCode,
+          value: item.intermediateValue,
+        })),
+        names,
+      ),
+    );
+  }
+  if (transform.cnUpdates.length > 0)
+    append(
+      "coin-multiplier",
+      applyGame002AtomicChanges(
+        current,
+        transform.cnUpdates.map((item) => ({
+          position: item.position,
+          code: cnCode,
+          value: item.outputValue,
+        })),
+        names,
+      ),
+    );
+  if (transform.cm)
+    append(
+      "cm-to-cn",
+      applyGame002AtomicChanges(
+        current,
+        [
+          {
+            position: transform.cm.position,
+            code: cnCode,
+            value: transform.cm.outputValue,
+          },
+        ],
+        names,
+      ),
+    );
+  if (transform.coCollection) append("co-collect", operation.output);
+  if (phases.length === 0)
+    throw new Error(
+      `game002 step[${step.stepIndex}] transform has no atomic operation.`,
+    );
+  if (
+    transform.cm &&
+    step.input.scene[transform.cm.position.x]?.[transform.cm.position.y] !==
+      cmCode
+  )
+    throw new Error(
+      `game002 step[${step.stepIndex}] CM phase input is invalid.`,
+    );
+  if (JSON.stringify(current) !== JSON.stringify(operation.output))
+    throw new Error(
+      `game002 step[${step.stepIndex}] atomic transform does not close to the server output.`,
+    );
+  return Object.freeze(phases);
+}
+
+function applyGame002AtomicChanges(
+  input: SlotOperationSnapshot,
+  changes: readonly {
+    readonly position: { readonly x: number; readonly y: number };
+    readonly code: number;
+    readonly value: number | null;
+  }[],
+  names: ReadonlyMap<number, string>,
+): SlotOperationSnapshot {
+  const byPosition = new Map(
+    changes.map((change) => [
+      `${change.position.x},${change.position.y}`,
+      change,
+    ]),
+  );
+  const occurrences = input.occurrences.map((occurrence) => {
+    const change = byPosition.get(
+      `${occurrence.position.x},${occurrence.position.y}`,
+    );
+    if (!change) return occurrence;
+    const symbol = names.get(change.code);
+    if (!symbol)
+      throw new Error(
+        `game002 atomic transform uses unknown code ${change.code}.`,
+      );
+    return Object.freeze({
+      ...occurrence,
+      code: change.code,
+      symbol,
+      value: change.value,
+    });
+  });
+  return Object.freeze({
+    scene: Object.freeze(
+      input.scene.map((column, x) =>
+        Object.freeze(
+          column.map((code, y) => byPosition.get(`${x},${y}`)?.code ?? code),
+        ),
+      ),
+    ),
+    values: Object.freeze(
+      input.values.map((column, x) =>
+        Object.freeze(
+          column.map((value, y) => byPosition.get(`${x},${y}`)?.value ?? value),
+        ),
+      ),
+    ),
+    occurrences: Object.freeze(occurrences),
+  });
+}
+
+function appendGame002FreeGameOperation(options: {
+  readonly base: SlotOperationPlanV1;
+  readonly freeGamePlan: Game002FreeGamePlan;
+  readonly symbolCodes: Readonly<Record<string, number>>;
+  readonly betAmountRaw: number;
+  readonly winAmountRaw: number;
+  readonly freeGameSymbolCodes: Game002FreeGameOperationPayload["symbolCodes"];
+}): SlotOperationPlanV1 {
+  const output = game002FreeGameFinalSnapshot(
+    options.freeGamePlan,
+    options.symbolCodes,
+  );
+  const operation: SlotOperationBase = {
+    id: "game002:freegame:0",
+    kind: "game002:freegame",
+    version: 1,
+    operationIndex: options.base.operations.length,
+    source: Object.freeze({
+      kind: "server-component" as const,
+      stepIndex: options.freeGamePlan.triggerStepIndex,
+      bindings: Object.freeze({}),
+    }),
+    input: options.base.final,
+    output,
+    payload: Object.freeze({
+      plan: options.freeGamePlan,
+      betAmountRaw: options.betAmountRaw,
+      winAmountRaw: options.winAmountRaw,
+      symbolCodes: options.freeGameSymbolCodes,
+    } satisfies Game002FreeGameOperationPayload),
+    requiredCapabilities: Object.freeze(["game002:freegame"]),
+    commit: "atomic",
+  };
+  const plan = freezeSlotOperationPlan({
+    kind: "slot-operation-plan" as const,
+    version: 1 as const,
+    initial: options.base.initial,
+    operations: Object.freeze([...options.base.operations, operation]),
+    final: output,
+    requiredCapabilities: Object.freeze([
+      ...new Set([...options.base.requiredCapabilities, "game002:freegame"]),
+    ]),
+  });
+  validateSlotOperationPlan(plan, {
+    symbolCodes: options.symbolCodes,
+    columns: GAME002_REEL_COUNT,
+    rows: GAME002_VISIBLE_ROWS,
+  });
+  return plan;
+}
+
+function game002FreeGameFinalSnapshot(
+  plan: Game002FreeGamePlan,
+  symbolCodes: Readonly<Record<string, number>>,
+): SlotOperationSnapshot {
+  const names = new Map(
+    Object.entries(symbolCodes).map(([name, code]) => [code, name]),
+  );
+  return Object.freeze({
+    scene: plan.finalScene,
+    values: plan.finalValues,
+    occurrences: Object.freeze(
+      plan.finalScene.flatMap((column, x) =>
+        column.map((code, y) => {
+          const symbol = names.get(code);
+          if (!symbol)
+            throw new Error(
+              `game002 FreeGame final scene uses unknown code ${code}.`,
+            );
+          return Object.freeze({
+            id: `game002:freegame-final:${x}:${y}`,
+            code,
+            symbol,
+            value: plan.finalValues[x]![y]!,
+            position: Object.freeze({ x, y }),
+          });
+        }),
+      ),
+    ),
+  });
+}
+
+function createGame002FreeGameOperationRegistration(options: {
+  readonly runtime: Game002ReelRuntime;
+  readonly cascadePlayer: SymbolCascadePlayer;
+  readonly winAmountPlayer: WinAmountAnimationPlayer;
+  readonly backgroundPlayer: Game002BackgroundPlayer;
+  readonly setActive: (playback: Game002FreeGamePlayback | null) => void;
+}) {
+  interface Prepared {
+    readonly playback: Game002FreeGamePlayback;
+    failure: Error | null;
+  }
+  const createPlayback = (
+    operation: SlotOperationBase,
+  ): Game002FreeGamePlayback => {
+    const payload = operation.payload as Game002FreeGameOperationPayload;
+    if (!payload?.plan || !payload.symbolCodes)
+      throw new Error("game002:freegame payload is invalid.");
+    return createGame002FreeGamePlayback({
+      plan: payload.plan,
+      runtime: options.runtime,
+      cascadePlayer: options.cascadePlayer,
+      winAmountPlayer: options.winAmountPlayer,
+      backgroundPlayer: options.backgroundPlayer,
+      betAmountRaw: payload.betAmountRaw,
+      winAmountRaw: payload.winAmountRaw,
+      symbolCodes: payload.symbolCodes,
+    });
+  };
+  const handler: SlotOperationHandler<SlotOperationBase, Prepared> = {
+    preflight: (operation) => createPlayback(operation).preflight(),
+    prepare: (operation) => ({
+      playback: createPlayback(operation),
+      failure: null,
+    }),
+    start: (prepared) => {
+      options.setActive(prepared.playback);
+      void prepared.playback.start().catch((error: unknown) => {
+        prepared.failure =
+          error instanceof Error ? error : new Error(String(error));
+      });
+    },
+    update: (prepared, deltaSeconds) => {
+      if (prepared.failure) throw prepared.failure;
+      prepared.playback.update(deltaSeconds);
+      if (prepared.failure) throw prepared.failure;
+      return { completed: !prepared.playback.isRunning() };
+    },
+    commit: () => options.setActive(null),
+    rollback: (prepared) => prepared.playback.cleanup(),
+    destroy: (prepared) => {
+      prepared.playback.cleanup();
+      options.setActive(null);
+    },
+  };
+  return Object.freeze({
+    kind: "game002:freegame",
+    version: 1,
+    requiredCapabilities: new Set(["game002:freegame"]),
+    handler,
+  });
+}
+
+export class Game002RoundTarget {
   readonly capabilities: ReadonlySet<SlotRoundCapability> = new Set([
     "spin",
     "visible-symbol-states",
@@ -714,10 +1198,6 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     readonly sequence: Game002CascadeSequence;
     readonly betAmountRaw: number;
     readonly winAmountRaw: number;
-    readonly multiplierBatches: ReadonlyMap<
-      number,
-      Game002WlWmMultiplierPresentationBatch
-    >;
   } | null = null;
   #activity:
     | "idle"
@@ -729,13 +1209,18 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     | "refill-sweep"
     | "refill-spin"
     | "transform-wl-start"
+    | "transform-wait-wm"
     | "transform-mult-start"
     | "transform-mult-idle"
     | "transform-mult-end"
     | "transform-wm-change"
+    | "transform-wait-wm-replace"
+    | "transform-wait-cm"
     | "transform-cm-feature"
     | "transform-cn-feature-change"
+    | "transform-wait-cm-replace"
     | "transform-cm-change"
+    | "transform-wait-co"
     | "transform-co-feature"
     | "transform-co-transfer"
     | "completion" = "idle";
@@ -751,7 +1236,7 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
   #initialSnapshot: SlotRoundOccurrenceSnapshot | null = null;
   #refillSnapshot: SlotRoundOccurrenceSnapshot | null = null;
   #activeTransform: SlotRoundSettledTransformStepPlan | null = null;
-  #activeMultiplierBatch: Game002WlWmMultiplierPresentationBatch | null = null;
+  #activeMultiplierBatch: Game002TransformOperationPayload | null = null;
   #preparedWmReplacements: PreparedVisibleOccurrenceReplacement[] = [];
   #preparedCmReplacements: PreparedVisibleOccurrenceReplacement[] = [];
   #preparedCoReplacements: PreparedVisibleOccurrenceReplacement[] = [];
@@ -785,10 +1270,6 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     readonly sequence: Game002CascadeSequence;
     readonly betAmountRaw: number;
     readonly winAmountRaw: number;
-    readonly multiplierBatches: ReadonlyMap<
-      number,
-      Game002WlWmMultiplierPresentationBatch
-    >;
   }): void {
     if (this.#activity !== "idle")
       throw new Error("game002 round target is already active.");
@@ -939,13 +1420,15 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     return true;
   }
 
-  startSettledTransform(step: SlotRoundSettledTransformStepPlan): void {
+  startSettledTransformOperation(
+    step: SlotRoundSettledTransformStepPlan,
+    batch: Game002TransformOperationPayload,
+  ): void {
     if (this.#activity !== "idle")
       throw new Error("game002 settled transform cannot start while active.");
-    const batch = this.requireRound().multiplierBatches.get(step.stepIndex);
-    if (!batch)
+    if (batch.stepIndex !== step.stepIndex)
       throw new Error(
-        `game002 step[${step.stepIndex}] multiplier presentation batch is missing.`,
+        `game002 transform payload stepIndex does not match step[${step.stepIndex}].`,
       );
     const coChangesByKey = new Map(
       (batch.coCollection?.transform.changes ?? []).map((change) => [
@@ -1322,6 +1805,15 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
   updateSettledTransform(_deltaSeconds: number): {
     readonly completed: boolean;
   } {
+    return this.updateSettledTransformPhase(_deltaSeconds, null);
+  }
+
+  private updateSettledTransformPhase(
+    _deltaSeconds: number,
+    stopAfter: Game002TransformPhase | null,
+  ): {
+    readonly completed: boolean;
+  } {
     const step = this.#activeTransform;
     if (!step) throw new Error("game002 settled transform is not active.");
     const batch = this.#activeMultiplierBatch;
@@ -1336,6 +1828,14 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
       );
       if (!this.didTransformAnimationComplete(positions, "once"))
         return { completed: false };
+      if (stopAfter === "wl-increment") {
+        if (isLastTransformPhase(batch, "wl-increment")) {
+          this.completeSettledTransform(step);
+          return { completed: true };
+        }
+        this.#activity = "transform-wait-wm";
+        return { completed: true };
+      }
       return this.startWmOrCm(step, batch);
     }
     if (this.#activity === "transform-mult-start") {
@@ -1356,6 +1856,10 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
         );
       }
       this.requestTransformState(wmPositions, "multIdle");
+      if (stopAfter === "wild-multiplier") {
+        this.#activity = "transform-wait-wm-replace";
+        return { completed: true };
+      }
       this.#activity = "transform-mult-idle";
       return { completed: false };
     }
@@ -1390,6 +1894,14 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
           throw new Error(
             `game002 CN (${update.position.x},${update.position.y}) has no "featureChange" animation capability.`,
           );
+      if (stopAfter === "wm-to-cn") {
+        if (isLastTransformPhase(batch, "wm-to-cn")) {
+          this.completeSettledTransform(step);
+          return { completed: true };
+        }
+        this.#activity = "transform-wait-cm";
+        return { completed: true };
+      }
       return this.startCmOrComplete(step, batch);
     }
     if (this.#activity === "transform-cm-feature") {
@@ -1422,6 +1934,10 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
         )
       )
         return { completed: false };
+      if (stopAfter === "coin-multiplier") {
+        this.#activity = "transform-wait-cm-replace";
+        return { completed: true };
+      }
       const cm = requireCmPresentation(batch);
       this.requestTransformState([cm.position], "change");
       this.#activity = "transform-cm-change";
@@ -1434,6 +1950,14 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
       for (const replacement of this.#preparedCmReplacements)
         replacement.commit();
       this.#preparedCmReplacements = [];
+      if (stopAfter === "cm-to-cn") {
+        if (isLastTransformPhase(batch, "cm-to-cn")) {
+          this.completeSettledTransform(step);
+          return { completed: true };
+        }
+        this.#activity = "transform-wait-co";
+        return { completed: true };
+      }
       return this.startCoOrComplete(step, batch);
     }
     if (this.#activity === "transform-co-feature") {
@@ -1471,6 +1995,70 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     throw new Error("game002 settled transform activity is invalid.");
   }
 
+  startAtomicTransformOperation(
+    step: SlotRoundSettledTransformStepPlan,
+    batch: Game002TransformOperationPayload,
+    phase: Game002TransformPhase,
+  ): void {
+    if (!this.#activeTransform) {
+      const expected = firstTransformPhase(batch);
+      if (phase !== expected)
+        throw new Error(
+          `game002 transform must start with ${expected}; received ${phase}.`,
+        );
+      this.startSettledTransformOperation(step, batch);
+      return;
+    }
+    if (
+      this.#activeTransform.stepIndex !== step.stepIndex ||
+      this.#activeMultiplierBatch !== batch
+    )
+      throw new Error(
+        "game002 atomic transform session does not match its payload.",
+      );
+    if (this.#activity === "transform-wait-wm" && phase === "wild-multiplier") {
+      this.startWmOrCm(step, batch);
+      return;
+    }
+    if (
+      this.#activity === "transform-wait-wm-replace" &&
+      phase === "wm-to-cn"
+    ) {
+      this.#activity = "transform-mult-idle";
+      return;
+    }
+    if (
+      this.#activity === "transform-wait-cm" &&
+      (phase === "coin-multiplier" || phase === "cm-to-cn")
+    ) {
+      this.startCmOrComplete(step, batch);
+      return;
+    }
+    if (
+      this.#activity === "transform-wait-cm-replace" &&
+      phase === "cm-to-cn"
+    ) {
+      const cm = requireCmPresentation(batch);
+      this.requestTransformState([cm.position], "change");
+      this.#activity = "transform-cm-change";
+      return;
+    }
+    if (this.#activity === "transform-wait-co" && phase === "co-collect") {
+      this.startCoOrComplete(step, batch);
+      return;
+    }
+    throw new Error(
+      `game002 cannot start atomic phase ${phase} from activity ${this.#activity}.`,
+    );
+  }
+
+  updateAtomicTransformOperation(
+    deltaSeconds: number,
+    phase: Game002TransformPhase,
+  ): { readonly completed: boolean } {
+    return this.updateSettledTransformPhase(deltaSeconds, phase);
+  }
+
   update(deltaSeconds: number): void {
     if (this.#activity === "win") {
       this.#winCompleted = this.#cascadePlayer.update(deltaSeconds).completed;
@@ -1501,7 +2089,7 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     }
   }
 
-  startCompletion(_plan: SlotRoundExecutionPlan): void {
+  startCompletion(): void {
     const round = this.requireRound();
     this.#cascadePlayer.clear();
     if (round.winAmountRaw <= 0) {
@@ -1589,7 +2177,7 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
 
   private startWmOrCm(
     step: SlotRoundSettledTransformStepPlan,
-    batch: Game002WlWmMultiplierPresentationBatch,
+    batch: Game002TransformOperationPayload,
   ): { readonly completed: boolean } {
     if (batch.wmReplacements.length === 0)
       return this.startCmOrComplete(step, batch);
@@ -1603,7 +2191,7 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
 
   private startCmOrComplete(
     step: SlotRoundSettledTransformStepPlan,
-    batch: Game002WlWmMultiplierPresentationBatch,
+    batch: Game002TransformOperationPayload,
   ): { readonly completed: boolean } {
     if (!batch.cm) {
       return this.startCoOrComplete(step, batch);
@@ -1615,7 +2203,7 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
 
   private startCoOrComplete(
     step: SlotRoundSettledTransformStepPlan,
-    batch: Game002WlWmMultiplierPresentationBatch,
+    batch: Game002TransformOperationPayload,
   ): { readonly completed: boolean } {
     const collection = batch.coCollection;
     if (!collection) {
@@ -1762,7 +2350,7 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
 }
 
 function assertGame002PlanMatchesSequence(
-  plan: SlotRoundExecutionPlan,
+  plan: SlotOperationPlanV1,
   sequence: Game002CascadeSequence,
 ): void {
   if (!sceneEquals(plan.initial.scene, sequence.initial.spinScene))
@@ -1777,9 +2365,10 @@ function assertGame002PlanMatchesSequence(
     throw new Error("game002 shared plan final scene diverged from sequence.");
   if (!matrixEquals(plan.final.values, sequence.finalValues))
     throw new Error("game002 shared plan final values diverged from sequence.");
-  const plannedCascadeIndexes = plan.steps
-    .filter((step) => step.kind === "dropdown")
-    .map((step) => step.stepIndex);
+  const plannedCascadeIndexes = getProfileSteps<SlotRoundDropdownStepPlan>(
+    plan,
+    "slot:dropdown",
+  ).map((step) => step.stepIndex);
   const sequenceCascadeIndexes = sequence.cascades.map(
     (stage) => stage.stepIndex,
   );
@@ -1798,14 +2387,14 @@ function assertGame002PlanMatchesSequence(
     sequence.initial.stepIndex,
   );
   for (const stage of sequence.cascades) {
-    const dropdown = plan.steps.find(
-      (step): step is SlotRoundDropdownStepPlan =>
-        step.kind === "dropdown" && step.stepIndex === stage.stepIndex,
-    );
-    const refill = plan.steps.find(
-      (step): step is SlotRoundRefillStepPlan =>
-        step.kind === "refill" && step.stepIndex === stage.stepIndex,
-    );
+    const dropdown = getProfileSteps<SlotRoundDropdownStepPlan>(
+      plan,
+      "slot:dropdown",
+    ).find((step) => step.stepIndex === stage.stepIndex);
+    const refill = getProfileSteps<SlotRoundRefillStepPlan>(
+      plan,
+      "slot:refill",
+    ).find((step) => step.stepIndex === stage.stepIndex);
     if (
       !dropdown ||
       !sceneEquals(dropdown.input.scene, stage.removedSourceScene) ||
@@ -1832,14 +2421,14 @@ function assertGame002PlanMatchesSequence(
 }
 
 function assertGame002WinPlanMatchesStage(
-  plan: SlotRoundExecutionPlan,
+  plan: SlotOperationPlanV1,
   stage: Game002WinRemoveStage | undefined,
   stepIndex: number,
 ): void {
-  const planned = plan.steps.find(
-    (step): step is SlotRoundWinStepPlan =>
-      step.kind === "win" && step.stepIndex === stepIndex,
-  );
+  const planned = getProfileSteps<SlotRoundWinStepPlan>(
+    plan,
+    "slot:win-remove",
+  ).find((step) => step.stepIndex === stepIndex);
   if (!stage) {
     if (planned)
       throw new Error(
@@ -1870,6 +2459,20 @@ function assertGame002WinPlanMatchesStage(
         `game002 shared plan step[${stepIndex}] group[${groupIndex}] trace diverged from sequence.`,
       );
   }
+}
+
+function getProfileSteps<Step>(
+  plan: SlotOperationPlanV1,
+  operationKind: string,
+): readonly Step[] {
+  return plan.operations
+    .filter((operation) => operation.kind === operationKind)
+    .map((operation) => {
+      const step = (operation.payload as { readonly step?: Step }).step;
+      if (!step)
+        throw new Error(`${operation.kind} operation payload.step is missing.`);
+      return step;
+    });
 }
 
 function samePositionTrace(
@@ -1909,7 +2512,7 @@ function requireGame002SymbolCode(
   return code;
 }
 
-function requireCmPresentation(batch: Game002WlWmMultiplierPresentationBatch) {
+function requireCmPresentation(batch: Game002TransformOperationPayload) {
   if (!batch.cm)
     throw new Error(
       `game002 step[${batch.stepIndex}] CM presentation is missing.`,
@@ -1917,7 +2520,28 @@ function requireCmPresentation(batch: Game002WlWmMultiplierPresentationBatch) {
   return batch.cm;
 }
 
-function requireCoCollection(batch: Game002WlWmMultiplierPresentationBatch) {
+function firstTransformPhase(
+  batch: Game002TransformOperationPayload,
+): Game002TransformPhase {
+  if (batch.wlIncrements.length > 0) return "wl-increment";
+  if (batch.wmReplacements.length > 0) return "wild-multiplier";
+  if (batch.cnUpdates.length > 0) return "coin-multiplier";
+  if (batch.cm) return "cm-to-cn";
+  if (batch.coCollection) return "co-collect";
+  throw new Error("game002 transform payload has no atomic phase.");
+}
+
+function isLastTransformPhase(
+  batch: Game002TransformOperationPayload,
+  phase: Game002TransformPhase,
+): boolean {
+  if (batch.coCollection) return phase === "co-collect";
+  if (batch.cm) return phase === "cm-to-cn";
+  if (batch.wmReplacements.length > 0) return phase === "wm-to-cn";
+  return phase === "wl-increment";
+}
+
+function requireCoCollection(batch: Game002TransformOperationPayload) {
   if (!batch.coCollection)
     throw new Error(
       `game002 step[${batch.stepIndex}] CO collection presentation is missing.`,

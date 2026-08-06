@@ -317,10 +317,11 @@ describe("game002 task 95 adapter", () => {
       sequence: {} as any,
       betAmountRaw: 1,
       winAmountRaw: 1,
-      multiplierBatches: new Map([[0, batch]]),
     });
 
-    expect(() => target.startSettledTransform(step as any)).not.toThrow();
+    expect(() =>
+      target.startSettledTransformOperation(step as any, batch),
+    ).not.toThrow();
   });
 
   it("plays the complete fixture with protected WL and one unified fall", async () => {
@@ -557,7 +558,7 @@ describe("game002 task 95 adapter", () => {
 
     expect(diagnostics).toContainEqual(
       expect.stringContaining(
-        'presentation progress {"coordinator":{"phase":"initial"',
+        'presentation progress {"coordinator":{"phase":"running","operationIndex":0,"operationKey":"slot:spin@1"',
       ),
     );
     expect(diagnostics).toContainEqual(

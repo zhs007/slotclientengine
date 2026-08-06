@@ -1,8 +1,11 @@
 import "./styles.css";
 
 export {
-  compileSlotRoundExecutionPlan,
+  compileSlotRoundOperationPlan,
+  compileSlotOperationPlan,
   createGameConfig,
+  freezeSlotOperationPlan,
+  validateSlotOperationPlan,
 } from "@slotclientengine/logiccore";
 export {
   createSceneLayoutPackageResource,
@@ -17,11 +20,12 @@ export type {
   SceneLayoutRuntimeResource,
 } from "@slotclientengine/rendercore";
 export type {
+  SlotOperationBase,
+  SlotOperationPlanV1,
+  SlotOperationSnapshot,
   SlotRoundCapability,
   SlotRoundCompileContext,
   SlotRoundDropdownStepPlan,
-  SlotRoundExecutionPlan,
-  SlotRoundExecutionStep,
   SlotRoundMovementPlan,
   SlotRoundOccurrence,
   SlotRoundOccurrenceSnapshot,

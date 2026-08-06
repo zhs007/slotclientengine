@@ -21,14 +21,13 @@ const OWNED_PATH =
   /^assets\/[a-f0-9]{64}\.(?:png|webp|jpg|jpeg|json|atlas|woff2|woff|ttf|otf)$/u;
 const SEGMENTS: readonly PopupSegment[] = ["start", "loop", "end"];
 
-export function parsePopupManifest(
-  value: AwardCelebrationPopupManifestV1,
-): AwardCelebrationPopupManifestV1;
-export function parsePopupManifest(
-  value: SpinePopupManifestV1,
-): SpinePopupManifestV1;
-export function parsePopupManifest(value: unknown): PopupManifestV1;
-export function parsePopupManifest(value: unknown): PopupManifestV1 {
+interface ParsePopupManifest {
+  (value: AwardCelebrationPopupManifestV1): AwardCelebrationPopupManifestV1;
+  (value: SpinePopupManifestV1): SpinePopupManifestV1;
+  (value: unknown): PopupManifestV1;
+}
+
+export const parsePopupManifest = ((value: unknown): PopupManifestV1 => {
   const record = object(value, "popup manifest");
   const commonKeys = [
     "version",
@@ -103,7 +102,7 @@ export function parsePopupManifest(value: unknown): PopupManifestV1 {
     amountFormat: parseAmountFormat(record.amountFormat),
     awardCelebration,
   });
-}
+}) as ParsePopupManifest;
 
 function parseSpinePopup(
   value: unknown,

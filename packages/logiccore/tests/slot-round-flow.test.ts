@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
-  compileSlotRoundExecutionPlan,
+  compileSlotRoundOperationPlan,
   type GameLogic,
   type GameLogicStep,
   parseServerGameAuthoringSummary,
   parseSlotRoundFlowProfile,
   validateSlotRoundFlowCatalogCompatibility,
 } from "../src";
+import { compileSlotRoundProfileTrace } from "../src/slot-round-plan";
 
 const base = {
   kind: "slot-round-flow",
@@ -113,7 +114,7 @@ describe("slot round flow profile", () => {
       },
       results: [],
     });
-    const plan = compileSlotRoundExecutionPlan(
+    const plan = compileSlotRoundProfileTrace(
       profile,
       { getSteps: () => [step0, step1] } as unknown as GameLogic,
       {
@@ -385,12 +386,67 @@ describe("slot round execution compiler", () => {
     },
   });
 
+  it("compiles configured profile traces directly into operation IR", () => {
+    const context = {
+      symbolCodes: { A: 0, H: 1, V: 2 },
+      columns: 1,
+      rows: 3,
+      compileSettledTransform: ({ stepIndex }: { stepIndex: number }) =>
+        stepIndex === 0
+          ? [
+              {
+                position: { x: 0, y: 1 },
+                outputCode: 0,
+                outputValue: 7,
+              },
+            ]
+          : [],
+    };
+    const plan = compileSlotRoundOperationPlan(
+      profile,
+      createRoundLogic({}),
+      context,
+      {
+        resolveSource: (step) => ({
+          kind: "server-component",
+          stepIndex: step?.stepIndex ?? 0,
+          bindings: {},
+        }),
+      },
+    );
+    expect(plan.operations.map((operation) => operation.kind)).toEqual([
+      "slot:spin",
+      "slot:settled-transform",
+      "slot:win-remove",
+      "slot:dropdown",
+      "slot:refill",
+      "slot:completion",
+    ]);
+    expect(
+      plan.operations.map((operation) => operation.operationIndex),
+    ).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(plan.final).toEqual(plan.operations.at(-1)?.output);
+    expect(Object.isFrozen(plan)).toBe(true);
+
+    const withoutCompletion = compileSlotRoundOperationPlan(
+      profile,
+      createRoundLogic({}),
+      context,
+      { includeCompletion: false },
+    );
+    expect(withoutCompletion.operations.at(-1)?.kind).toBe("slot:refill");
+    expect(withoutCompletion.operations[0]?.source).toMatchObject({
+      kind: "server-component",
+      stepIndex: 0,
+    });
+  });
+
   it("compiles stable identity, held movement and value continuity before mutation", () => {
     const logic = createRoundLogic({
       refillScene: [[0, 2, 1]],
       refillPos: [0, 0],
     });
-    const plan = compileSlotRoundExecutionPlan(profile, logic, {
+    const plan = compileSlotRoundProfileTrace(profile, logic, {
       symbolCodes: { A: 0, H: 1, V: 2 },
       columns: 1,
       rows: 3,
@@ -421,7 +477,7 @@ describe("slot round execution compiler", () => {
   });
 
   it("hydrates settled values and compiles a neutral transform before win", () => {
-    const plan = compileSlotRoundExecutionPlan(profile, createRoundLogic({}), {
+    const plan = compileSlotRoundProfileTrace(profile, createRoundLogic({}), {
       symbolCodes: { A: 0, H: 1, V: 2 },
       hydrateSettledValues: ({ stepIndex }) =>
         stepIndex === 0 ? [{ position: { x: 0, y: 1 }, value: 3 }] : [],
@@ -461,7 +517,7 @@ describe("slot round execution compiler", () => {
       initialSettledScene: [[2, 3, 1]],
       refillSettledScene: [[3, 2, 1]],
     });
-    const plan = compileSlotRoundExecutionPlan(profile, logic, {
+    const plan = compileSlotRoundProfileTrace(profile, logic, {
       symbolCodes: { A: 0, H: 1, V: 2, WM: 3 },
       resolveSettledScene: ({ step, inputScene }) =>
         step.getComponentScenes("settled")[0] ?? inputScene,
@@ -479,7 +535,7 @@ describe("slot round execution compiler", () => {
       refillPos: [0, 0],
     });
     expect(() =>
-      compileSlotRoundExecutionPlan(profile, logic, {
+      compileSlotRoundProfileTrace(profile, logic, {
         symbolCodes: { A: 0, H: 1, V: 2 },
       }),
     ).toThrow(/missing authoritative value for "V"/);
@@ -487,7 +543,7 @@ describe("slot round execution compiler", () => {
 
   it("fails a held occurrence mismatch and an empty-code catalog conflict", () => {
     expect(() =>
-      compileSlotRoundExecutionPlan(
+      compileSlotRoundProfileTrace(
         profile,
         createRoundLogic({
           dropdownScene: [[-1, 1, 2]],
@@ -498,7 +554,7 @@ describe("slot round execution compiler", () => {
       ),
     ).toThrow(/held occurrence/);
     expect(() =>
-      compileSlotRoundExecutionPlan(
+      compileSlotRoundProfileTrace(
         parseSlotRoundFlowProfile({
           ...profile,
           cascade: {
@@ -514,7 +570,7 @@ describe("slot round execution compiler", () => {
 
   it("rejects remove/refill/value drift and unapproved companions", () => {
     expect(() =>
-      compileSlotRoundExecutionPlan(
+      compileSlotRoundProfileTrace(
         profile,
         createRoundLogic({ initialValues: [[0, 0, 0]] }),
         { symbolCodes: { A: 0, H: 1, V: 2 } },
@@ -523,7 +579,7 @@ describe("slot round execution compiler", () => {
       /initial values\[0\]\[0\] value must be a positive safe integer: actual\(server\)=0; scene symbol="V", code=2\./,
     );
     expect(() =>
-      compileSlotRoundExecutionPlan(
+      compileSlotRoundProfileTrace(
         profile,
         createRoundLogic({ removedScene: [[2, 0, 1]] }),
         { symbolCodes: { A: 0, H: 1, V: 2 } },
@@ -532,7 +588,7 @@ describe("slot round execution compiler", () => {
       /step\[0\] remove scene does not match compiled occurrence state: 1 cell difference\(s\): \(0,1\) actual\(server\)=0, expected\(compiled\)=-1; omitted difference\(s\)=0\./,
     );
     expect(() =>
-      compileSlotRoundExecutionPlan(
+      compileSlotRoundProfileTrace(
         profile,
         createRoundLogic({ refillPos: [0, 1] }),
         { symbolCodes: { A: 0, H: 1, V: 2 } },
@@ -541,7 +597,7 @@ describe("slot round execution compiler", () => {
       /must match dropdown holes exactly: missing actual\(server\) position\(s\)=\[0,0\]; unexpected actual\(server\) position\(s\)=\[0,1\]/,
     );
     expect(() =>
-      compileSlotRoundExecutionPlan(
+      compileSlotRoundProfileTrace(
         profile,
         createRoundLogic({ dropdownValues: [[-1, 9, 0]] }),
         { symbolCodes: { A: 0, H: 1, V: 2 } },
@@ -558,7 +614,7 @@ describe("slot round execution compiler", () => {
       },
     });
     expect(() =>
-      compileSlotRoundExecutionPlan(
+      compileSlotRoundProfileTrace(
         noCompanion,
         createRoundLogic({ resultPos: [0, 0, 0, 2] }),
         { symbolCodes: { A: 0, H: 1, V: 2 } },
@@ -567,7 +623,7 @@ describe("slot round execution compiler", () => {
   });
 
   it("accepts authoritative refill values and rejects carried value overwrite", () => {
-    const authoritative = compileSlotRoundExecutionPlan(
+    const authoritative = compileSlotRoundProfileTrace(
       profile,
       createRoundLogic({
         refillScene: [[2, 2, 1]],
@@ -578,7 +634,7 @@ describe("slot round execution compiler", () => {
     );
     expect(authoritative.final.values).toEqual([[7, 5, null]]);
     expect(() =>
-      compileSlotRoundExecutionPlan(
+      compileSlotRoundProfileTrace(
         profile,
         createRoundLogic({
           refillValues: [[0, 6, 0]],
@@ -589,7 +645,7 @@ describe("slot round execution compiler", () => {
   });
 
   it("accepts server-owned values on sequential companions without collecting them", () => {
-    const plan = compileSlotRoundExecutionPlan(
+    const plan = compileSlotRoundProfileTrace(
       profile,
       createRoundLogic({
         initialValues: [[5, 0, 7]],
@@ -613,7 +669,7 @@ describe("slot round execution compiler", () => {
       },
     });
     expect(() =>
-      compileSlotRoundExecutionPlan(unknownPolicy, createRoundLogic({}), {
+      compileSlotRoundProfileTrace(unknownPolicy, createRoundLogic({}), {
         symbolCodes: { A: 0, H: 1, V: 2 },
       }),
     ).toThrow(/unknown active symbol "UNKNOWN"/);

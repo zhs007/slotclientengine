@@ -21,8 +21,9 @@ export class MockServer {
    * @returns {Promise<number>} A promise that resolves with the port number.
    */
   public start(port: number = 0): Promise<number> {
-    return new Promise((resolve) => {
-      this.wss = new WebSocketServer({ port });
+    return new Promise((resolve, reject) => {
+      this.wss = new WebSocketServer({ host: '127.0.0.1', port });
+      this.wss.once('error', reject);
 
       this.wss.on('connection', (ws: WebSocket) => {
         this.clients.add(ws);
@@ -46,6 +47,7 @@ export class MockServer {
 
       this.wss.on('listening', () => {
         const port = (this.wss?.address() as AddressInfo).port;
+        this.wss?.removeListener('error', reject);
         resolve(port);
       });
     });

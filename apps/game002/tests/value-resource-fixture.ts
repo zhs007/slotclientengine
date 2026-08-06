@@ -177,6 +177,9 @@ function createTestValueResources(
   if (!presentation || presentation.text.type !== "image-string") {
     throw new Error("game002 CN test fixture requires ImgNumber.");
   }
+  if (!("tiers" in presentation.text)) {
+    throw new Error("game002 CN test fixture requires legacy tier bindings.");
+  }
   const imageStringResource = Object.freeze({
     manifest: parseImageStringManifest(rawImageStringManifest),
     textures: Object.freeze({}),
@@ -222,6 +225,7 @@ function createTestValueResources(
             anchor: binding.anchor,
             transform: binding.transform,
             followSlotColor: binding.followSlotColor,
+            specialValueImages: Object.freeze({}),
           }),
         ),
       ),
