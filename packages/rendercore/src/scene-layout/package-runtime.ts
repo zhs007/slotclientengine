@@ -1,5 +1,5 @@
 import type { LogicReels } from "@slotclientengine/logiccore";
-import { Container, Graphics } from "pixi.js";
+import { Container, Graphics, Rectangle } from "pixi.js";
 import {
   createAwardCelebrationPlayer,
   createSpinePopupPlayer,
@@ -192,6 +192,19 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     readonly y: number;
   }[] = [];
   #mainReelLandingKeys = new Set<string>();
+  readonly #onPopupPointerDown = () => {
+    const prelude = this.#activePrelude;
+    if (prelude?.phase === "popup") {
+      this.requestDismissGameModePrelude();
+      return;
+    }
+    if (prelude?.phase === "awaiting-video-start") {
+      void this.startPendingGameModeVideo().catch(() => {});
+      return;
+    }
+    const awardId = this.#activePopupId ?? this.playingPopupId();
+    if (awardId) this.getAwardCelebrationPopup(awardId).requestAdvance();
+  };
 
   constructor(
     resource: SceneLayoutPackageResource,
@@ -238,6 +251,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.container.label = `scene-layout-package:${resource.manifest.id}`;
     this.#popupRoot.label = "scene-layout-popup-root";
     this.#popupRoot.sortableChildren = true;
+    this.#popupRoot.eventMode = "none";
+    this.#popupRoot.on("pointerdown", this.#onPopupPointerDown);
     this.#transitionRoot.label = "scene-transition-overlay";
     this.#videoBlackoutRoot.label = "scene-transition-video-blackout";
     this.#videoBlackout.label = "scene-transition-video-black";
@@ -361,6 +376,12 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     viewportSize: RenderViewportSize,
   ): SceneLayoutSnapshot {
     this.#viewportSize = Object.freeze({ ...viewportSize });
+    this.#popupRoot.hitArea = new Rectangle(
+      0,
+      0,
+      viewportSize.width,
+      viewportSize.height,
+    );
     if (this.#reel) {
       const grid = snapshot.reels.main;
       if (!grid)
@@ -495,8 +516,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     if (
       this.#activePopupId &&
       !this.#popups.get(this.#activePopupId)?.isPlaying()
-    )
+    ) {
       this.#activePopupId = null;
+      this.refreshPopupPointerInteraction();
+    }
   }
 
   resetReelScene(reelId: "main", input: SceneLayoutInitialReelScene): void {
@@ -1106,6 +1129,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       return Promise.reject(asSceneLayoutError(error));
     }
     this.#activePrelude = null;
+    this.refreshPopupPointerInteraction();
     this.#preparedTransition = active.prepared;
     const continuation = this.startPreparedVideoTransition(
       active.prepared,
@@ -1162,7 +1186,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       );
     const popup = this.getAwardCelebrationPopup(mode.awardCelebrationPopup);
     popup.start(input);
-    if (popup.isPlaying()) this.#activePopupId = mode.awardCelebrationPopup;
+    if (popup.isPlaying()) {
+      this.#activePopupId = mode.awardCelebrationPopup;
+      this.refreshPopupPointerInteraction();
+    }
   }
 
   requestAdvanceAwardCelebration(): void {
@@ -1178,6 +1205,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     if (!id) return;
     this.getAwardCelebrationPopup(id).dismissImmediately();
     this.#activePopupId = null;
+    this.refreshPopupPointerInteraction();
   }
 
   getActiveAwardCelebrationSnapshot() {
@@ -1266,6 +1294,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     if (this.#activePrelude) {
       const active = this.#activePrelude;
       this.#activePrelude = null;
+      this.refreshPopupPointerInteraction();
       this.#spinePopups.get(active.popupId)?.dismissImmediately();
       this.releasePreparedTransition(active.prepared);
       active.reject(
@@ -1515,6 +1544,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           resolve,
           reject,
         };
+        this.refreshPopupPointerInteraction();
       });
     } catch (error) {
       this.releasePreparedTransition(prepared);
@@ -1715,6 +1745,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       return;
     }
     this.#activePrelude = null;
+    this.refreshPopupPointerInteraction();
     const continuation =
       active.prepared.kind === "none"
         ? this.activatePreparedNoneTransition(active.prepared)
@@ -1728,11 +1759,17 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   ): void {
     if (this.#activePrelude !== active) return;
     this.#activePrelude = null;
+    this.refreshPopupPointerInteraction();
     this.getSpinePopup(active.popupId).dismissImmediately();
     this.releasePreparedTransition(active.prepared);
     this.#targetMode = null;
     this.#targetSymbolPackageId = null;
     active.reject(error);
+  }
+
+  private refreshPopupPointerInteraction(): void {
+    this.#popupRoot.eventMode =
+      this.#activePrelude || this.#activePopupId ? "static" : "none";
   }
 
   private updateActiveVideoTransition(
