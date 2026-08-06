@@ -1083,6 +1083,23 @@ details > summary {
   border-bottom: 0;
 }
 
+.value-tier-imgnumber {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid #385172;
+  border-radius: 8px;
+  background: #0e192a;
+}
+
+.value-tier-imgnumber > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
 @media (min-width: 1440px) {
   .workspace {
     grid-template-columns: minmax(560px, min(43vw, 720px)) minmax(0, 1fr);

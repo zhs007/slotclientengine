@@ -98,6 +98,9 @@ describe("symbol value presentation manifest resources", () => {
 
   it("parses JSON-only tiers with one shared Normal ImgNumber binding", () => {
     const copy = createGenericManifest(3);
+    copy.states = ["spinBlur"];
+    copy.symbols.GOLD.valuePresentation.reelStates.spinBlur =
+      "./gold.spin-blur.png";
     copy.symbols.GOLD.valuePresentation.text = {
       type: "image-string",
       tierResources: ["small", "medium", "large"].map(
@@ -108,6 +111,14 @@ describe("symbol value presentation manifest resources", () => {
       transform: { x: 2, y: -3, scale: 0.75 },
       followSlotColor: true,
       specialValueImages: [{ value: 200, image: "./special-200.png" }],
+      tierSpinBlurProfiles: [
+        {
+          resource: "./small-blur/image-string.manifest.json",
+          specialValueImages: [{ value: 200, image: "./special-200.blur.png" }],
+        },
+        null,
+        null,
+      ],
     };
     const text =
       parseSymbolStateTextureManifest(copy).symbols.GOLD.valuePresentation!
@@ -117,6 +128,8 @@ describe("symbol value presentation manifest resources", () => {
     expect(text.tierResources).toHaveLength(3);
     expect(text.slot).toBe("Num");
     expect(Object.isFrozen(text.tierResources)).toBe(true);
+    expect(text.tierSpinBlurProfiles?.[0]?.resource).toContain("small-blur");
+    expect(text.tierSpinBlurProfiles?.[1]).toBeNull();
 
     const mixed = structuredClone(copy);
     mixed.symbols.GOLD.valuePresentation.text.tiers = [];
@@ -125,6 +138,12 @@ describe("symbol value presentation manifest resources", () => {
     misaligned.symbols.GOLD.valuePresentation.text.tierResources.pop();
     expect(() => parseSymbolStateTextureManifest(misaligned)).toThrow(
       /length must equal/,
+    );
+    const mismatchedBlur = structuredClone(copy);
+    mismatchedBlur.symbols.GOLD.valuePresentation.text.tierSpinBlurProfiles[0].specialValueImages =
+      [];
+    expect(() => parseSymbolStateTextureManifest(mismatchedBlur)).toThrow(
+      /exactly match/,
     );
   });
 

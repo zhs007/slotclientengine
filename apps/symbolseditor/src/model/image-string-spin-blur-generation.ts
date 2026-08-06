@@ -9,6 +9,7 @@ import type { ImageStringManifestV1 } from "@slotclientengine/rendercore/image-s
 import {
   cloneSymbolEditorProject,
   installImageStringDependency,
+  setValuePresentation,
   setSymbolImageStringNodes,
   uploadAssetBatch,
   type ImportedEditorImageStringDependency,
@@ -23,6 +24,141 @@ export interface ImageStringSpinBlurCodec {
 export type ImageStringSpinBlurAvailability =
   | { readonly ready: true; readonly alreadyBound: boolean }
   | { readonly ready: false; readonly reason: string };
+
+export function getValueImageStringSpinBlurAvailability(
+  project: SymbolEditorProject,
+  symbolName: string,
+  tierIndex: number,
+): ImageStringSpinBlurAvailability {
+  try {
+    const shadow = createValueTierGenerationShadow(
+      project,
+      symbolName,
+      tierIndex,
+    );
+    return getImageStringSpinBlurAvailability(
+      shadow.project,
+      symbolName,
+      shadow.nodeIndex,
+    );
+  } catch (error) {
+    return {
+      ready: false,
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export async function generateAndBindValueImageStringSpinBlur(options: {
+  readonly project: SymbolEditorProject;
+  readonly symbol: string;
+  readonly tierIndex: number;
+  readonly codec: ImageStringSpinBlurCodec;
+}): Promise<{
+  readonly project: SymbolEditorProject;
+  readonly dependencyId: string;
+  readonly generatedImageCount: number;
+}> {
+  const shadow = createValueTierGenerationShadow(
+    options.project,
+    options.symbol,
+    options.tierIndex,
+  );
+  const generated = await generateAndBindImageStringSpinBlur({
+    project: shadow.project,
+    symbol: options.symbol,
+    nodeIndex: shadow.nodeIndex,
+    codec: options.codec,
+  });
+  const profile = generated.project.symbols.get(options.symbol)!
+    .imageStringNodes[shadow.nodeIndex]?.spinBlurProfile;
+  if (!profile) throw new Error("档位模糊 ImgNumber profile 未生成。");
+
+  for (const original of options.project.symbols.values()) {
+    generated.project.symbols.get(original.symbol)!.imageStringNodes =
+      structuredClone(original.imageStringNodes);
+  }
+  const symbol = generated.project.symbols.get(options.symbol)!;
+  const presentation = structuredClone(symbol.valuePresentation!);
+  if (presentation.text.type !== "image-string") {
+    throw new Error("当前档位没有 ImgNumber 配置。");
+  }
+  if ("tierResources" in presentation.text) {
+    const profiles = [
+      ...(presentation.text.tierSpinBlurProfiles ??
+        presentation.tiers.map(() => null)),
+    ];
+    profiles[options.tierIndex] = profile;
+    (
+      presentation.text as typeof presentation.text & {
+        tierSpinBlurProfiles: typeof profiles;
+      }
+    ).tierSpinBlurProfiles = profiles;
+  } else {
+    const binding = presentation.text.tiers[options.tierIndex];
+    if (!binding) throw new Error("ImgNumber 档位不存在。");
+    (
+      binding as typeof binding & { spinBlurProfile: typeof profile }
+    ).spinBlurProfile = profile;
+  }
+  setValuePresentation(generated.project, options.symbol, presentation);
+  return Object.freeze({
+    project: generated.project,
+    dependencyId: generated.dependencyId,
+    generatedImageCount: generated.generatedImageCount,
+  });
+}
+
+function createValueTierGenerationShadow(
+  project: SymbolEditorProject,
+  symbolName: string,
+  tierIndex: number,
+): { readonly project: SymbolEditorProject; readonly nodeIndex: number } {
+  const original = project.symbols.get(symbolName);
+  const presentation = original?.valuePresentation;
+  if (!original || !presentation) throw new Error("档位 symbol 不存在。");
+  if (presentation.text.type !== "image-string") {
+    throw new Error("当前档位没有 ImgNumber 配置。");
+  }
+  if (!project.stateDefinitions.some((state) => state.id === "spinBlur")) {
+    throw new Error("请先添加 exact spinBlur state。");
+  }
+  const binding =
+    "tierResources" in presentation.text
+      ? {
+          resource: presentation.text.tierResources[tierIndex],
+          specialValueImages: presentation.text.specialValueImages,
+          spinBlurProfile:
+            presentation.text.tierSpinBlurProfiles?.[tierIndex] ?? undefined,
+        }
+      : presentation.text.tiers[tierIndex];
+  if (!binding?.resource)
+    throw new Error("请先选择本档 ImgNumber dependency。");
+  const dependency = findDependency(project, binding.resource);
+  if (!dependency) throw new Error("本档 ImgNumber dependency 不存在。");
+  const initialText = Object.keys(dependency.manifest.glyphs)[0];
+  if (!initialText) throw new Error("本档 ImgNumber 没有 glyph。");
+  const shadow = cloneSymbolEditorProject(project);
+  for (const symbol of shadow.symbols.values()) symbol.imageStringNodes = [];
+  shadow.symbols.get(symbolName)!.imageStringNodes = [
+    {
+      name: "value-tier-blur",
+      resource: binding.resource,
+      ...(binding.spinBlurProfile
+        ? { spinBlurProfile: binding.spinBlurProfile }
+        : {}),
+      targets: [{ state: "spinBlur" }],
+      initialText,
+      anchor: { x: 0.5, y: 0.5 },
+      transform: { x: 0, y: 0, scale: 1 },
+      followSlotColor: false,
+      ...(binding.specialValueImages?.length
+        ? { specialValueImages: binding.specialValueImages }
+        : {}),
+    },
+  ];
+  return Object.freeze({ project: shadow, nodeIndex: 0 });
+}
 
 export function getImageStringSpinBlurAvailability(
   project: SymbolEditorProject,

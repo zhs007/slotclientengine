@@ -130,34 +130,48 @@ export async function generateSymbolValueViteResources(options) {
     }
     const nestedByPath = new Map();
     for (const binding of presentation.imageStringBindings) {
-      let nested = nestedByPath.get(binding.resource);
-      if (!nested) {
-        const manifestResource = await addResource(
-          resources,
-          seen,
-          manifestRoot,
-          "imageStringManifest",
-          binding.resource,
-        );
-        nested = validateImageStringManifest(
-          JSON.parse(await readFile(manifestResource.absolutePath, "utf8")),
-          binding.resource,
-        );
-        nestedByPath.set(binding.resource, nested);
-        for (const glyph of Object.values(nested.glyphs)) {
-          const glyphManifestPath = resolveNestedManifestPath(
-            binding.resource,
-            glyph.path,
-          );
-          const glyphResource = await addResource(
+      for (const profile of [binding, binding.spinBlurProfile].filter(
+        Boolean,
+      )) {
+        let nested = nestedByPath.get(profile.resource);
+        if (!nested) {
+          const manifestResource = await addResource(
             resources,
             seen,
             manifestRoot,
-            "imageStringGlyph",
-            glyphManifestPath,
+            "imageStringManifest",
+            profile.resource,
           );
-          await validateGlyphImageSize(glyphResource.absolutePath, glyph.size);
+          nested = validateImageStringManifest(
+            JSON.parse(await readFile(manifestResource.absolutePath, "utf8")),
+            profile.resource,
+          );
+          nestedByPath.set(profile.resource, nested);
+          for (const glyph of Object.values(nested.glyphs)) {
+            const glyphManifestPath = resolveNestedManifestPath(
+              profile.resource,
+              glyph.path,
+            );
+            const glyphResource = await addResource(
+              resources,
+              seen,
+              manifestRoot,
+              "imageStringGlyph",
+              glyphManifestPath,
+            );
+            await validateGlyphImageSize(
+              glyphResource.absolutePath,
+              glyph.size,
+            );
+          }
         }
+      }
+      if (binding.spinBlurProfile) {
+        assertMatchingImageStringLayouts(
+          nestedByPath.get(binding.resource),
+          nestedByPath.get(binding.spinBlurProfile.resource),
+          `${symbol} value ImgNumber tier`,
+        );
       }
     }
     for (const value of presentation.defaultValues) {
@@ -388,6 +402,7 @@ function validatePresentation(symbol, value, states) {
         : [
             "type",
             "tierResources",
+            "tierSpinBlurProfiles",
             "slot",
             "anchor",
             "transform",
@@ -471,6 +486,9 @@ function validatePresentation(symbol, value, states) {
     imageStringBindings,
     specialValueImagePaths: imageStringBindings.flatMap((binding) => [
       ...binding.specialValueImages.values(),
+      ...(binding.spinBlurProfile
+        ? binding.spinBlurProfile.specialValueImages.values()
+        : []),
     ]),
   };
 }
@@ -489,10 +507,23 @@ function validateSharedImageStringBindings(
       `${symbol} value text tierResources length must equal valuePresentation tiers length (${tierCount}).`,
     );
   }
+  let profiles;
+  if (text.tierSpinBlurProfiles !== undefined) {
+    if (
+      !Array.isArray(text.tierSpinBlurProfiles) ||
+      text.tierSpinBlurProfiles.length !== tierCount
+    ) {
+      throw new Error(
+        `${symbol} value text tierSpinBlurProfiles length must equal valuePresentation tiers length (${tierCount}).`,
+      );
+    }
+    profiles = text.tierSpinBlurProfiles;
+  }
   return validateImageStringBindings(
     symbol,
-    text.tierResources.map((resource) => ({
+    text.tierResources.map((resource, index) => ({
       resource,
+      ...(profiles?.[index] ? { spinBlurProfile: profiles[index] } : {}),
       slot: text.slot,
       anchor: text.anchor,
       transform: text.transform,
@@ -575,6 +606,7 @@ function validateImageStringBindings(
     const binding = assertRecord(rawBinding, label);
     assertOnlyKnownKeys(binding, label, [
       "resource",
+      "spinBlurProfile",
       "slot",
       "anchor",
       "transform",
@@ -630,6 +662,20 @@ function validateImageStringBindings(
     }
     return {
       resource,
+      ...(binding.spinBlurProfile
+        ? {
+            spinBlurProfile: validateSpinBlurProfile(
+              binding.spinBlurProfile,
+              `${label}.spinBlurProfile`,
+              hasLegacySpecialValueImages
+                ? legacySpecialValueImages
+                : validateSpecialValueImages(
+                    `${label}.specialValueImages`,
+                    binding.specialValueImages,
+                  ),
+            ),
+          }
+        : {}),
       slot: binding.slot,
       anchor: { x: anchor.x, y: anchor.y },
       transform: { x: transform.x, y: transform.y, scale: transform.scale },
@@ -642,6 +688,52 @@ function validateImageStringBindings(
           ),
     };
   });
+}
+
+function validateSpinBlurProfile(value, label, normalSpecialValueImages) {
+  const profile = assertRecord(value, label);
+  assertOnlyKnownKeys(profile, label, ["resource", "specialValueImages"]);
+  const specialValueImages = validateSpecialValueImages(
+    `${label}.specialValueImages`,
+    profile.specialValueImages,
+  );
+  const normalValues = [...normalSpecialValueImages.keys()].sort(
+    (left, right) => left - right,
+  );
+  const blurValues = [...specialValueImages.keys()].sort(
+    (left, right) => left - right,
+  );
+  if (
+    normalValues.length !== blurValues.length ||
+    normalValues.some((entry, index) => entry !== blurValues[index])
+  ) {
+    throw new Error(`${label} special values must match normal profile.`);
+  }
+  return {
+    resource: assertImageStringResourcePath(
+      profile.resource,
+      `${label}.resource`,
+    ),
+    specialValueImages,
+  };
+}
+
+function assertMatchingImageStringLayouts(normal, spinBlur, label) {
+  const comparable = (manifest) => ({
+    metrics: manifest.metrics,
+    glyphs: Object.fromEntries(
+      Object.entries(manifest.glyphs).map(([character, glyph]) => [
+        character,
+        { size: glyph.size, offset: glyph.offset },
+      ]),
+    ),
+    fixedAdvanceGroups: manifest.fixedAdvanceGroups,
+  });
+  if (
+    JSON.stringify(comparable(normal)) !== JSON.stringify(comparable(spinBlur))
+  ) {
+    throw new Error(`${label} spinBlur layout must match normal resource.`);
+  }
 }
 
 function assertImageStringResourcePath(value, label) {

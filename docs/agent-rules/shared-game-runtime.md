@@ -53,7 +53,7 @@
 - official Spine Pixi runtime 当前只支持 `4.3.x`。atlas、skeleton、animation 名和版本大小写精确校验；不得恢复 3.8/4.2 adapter 或手写兼容层。
 - normal/win/appear 共享相同 Spine resource 时复用 player，只切换语义 animation；资源、value/tier 或 symbol 真实变化时才按合同重建。
 - image-string parser、Unicode code-point layout、glyph exact closure、natural/fixed advance、动态 `visualBounds` anchor 和 `setText()` 生命周期属于 rendercore。缺 glyph、slot、resource 或 binding 显式失败，不回退字体、占位图、glob 或路径猜测。
-- value presentation 使用 strict `font | image | image-string` union；新 image-string 每 tier 只声明 JSON resource，并共享 Normal slot/transform/color/special 配置；旧 per-tier 完整 binding 继续兼容。每 occurrence 复用稳定外层 container，同 tier 只 `setText()`。
+- value presentation 使用 strict `font | image | image-string` union；新 image-string 每 tier 声明 normal JSON resource及可选explicit non-Spine `spinBlur` profile，并共享 Normal slot/transform/color/special配置；旧per-tier完整binding继续兼容。profile必须与normal layout/special集合一致，package在mutation前prepare exact closure；每occurrence复用稳定外层container，同tier改值只`setText()`，state切换只切profile和slot/overlay attachment。
 - 新 image-string logical node 用一个 `spineSlot` 覆盖全部 top-level Spine state，非 Spine state 仍使用唯一 exact `{state}` target；旧逐 Spine state `{state,slot}` 保持兼容且不扩大覆盖。
 - requested state 因 equivalence 解析到 normal、但自身有显式 state texture 时，ImgNumber attachment 使用 requested presentation state；shared `spineSlot` 只允许 attach 到 prepared Spine state，late init 不得覆盖 exact non-Spine direct overlay。回到 Spine state 前先同步 attachment 资格，同一 renderer/container 保持连续。
 - 命名node的显式`spinBlurProfile`必须与normal ImgNumber布局和special value集合一致；package在画面mutation前prepare两套共享资源，occurrence只保留一个renderer/container并在state边界切换assets。runtime不得解码、生成或按state创建第二个ImgNumber instance；旧无profile target保持既有normal-assets语义。

@@ -60,7 +60,9 @@ import {
 } from "../model/state-texture-generation.js";
 import {
   generateAndBindImageStringSpinBlur,
+  generateAndBindValueImageStringSpinBlur,
   getImageStringSpinBlurAvailability,
+  getValueImageStringSpinBlurAvailability,
 } from "../model/image-string-spin-blur-generation.js";
 import {
   SymbolEditorStore,
@@ -1661,6 +1663,15 @@ export class SymbolsEditorApp {
         });
       });
     panel
+      .querySelectorAll<HTMLElement>("[data-generate-value-spin-blur]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          void this.generateValueImageStringSpinBlur(
+            Number(button.dataset.generateValueSpinBlur),
+          );
+        });
+      });
+    panel
       .querySelectorAll<HTMLInputElement>("[data-image-string-preview]")
       .forEach((input) => {
         input.addEventListener("input", () => {
@@ -1696,6 +1707,51 @@ export class SymbolsEditorApp {
         result.generatedImageCount === 0
           ? `已复用并绑定模糊 ImgNumber：${result.dependencyId}`
           : `已生成 ${result.generatedImageCount} 张图片，并为 ${result.boundNodeCount} 个 node 绑定模糊 ImgNumber。`,
+      );
+      const current = this.#store.getSnapshot();
+      this.render(current);
+      void this.refreshPreview(current);
+    } catch (error) {
+      if (request === this.#importRequest) this.#store.setExternalError(error);
+    } finally {
+      if (request === this.#importRequest) {
+        this.#importing = false;
+        if (!this.#destroyed)
+          this.requireElement("[data-upload]").removeAttribute("disabled");
+      }
+    }
+  }
+
+  private async generateValueImageStringSpinBlur(
+    tierIndex: number,
+  ): Promise<void> {
+    if (this.#importing) return;
+    const snapshot = this.#store.getSnapshot();
+    if (!snapshot.project) return;
+    this.#importing = true;
+    this.requireElement("[data-upload]").setAttribute("disabled", "");
+    const request = ++this.#importRequest;
+    const symbol = this.#session.selectedSymbol;
+    this.showSuccess(
+      `正在为 ${symbol} 的 Tier ${tierIndex + 1} ImgNumber 生成模糊资源…`,
+    );
+    try {
+      const result = await generateAndBindValueImageStringSpinBlur({
+        project: snapshot.project,
+        symbol,
+        tierIndex,
+        codec: { decode: decodeBrowserImage, encodePng: encodeBrowserPng },
+      });
+      if (request !== this.#importRequest) return;
+      if (this.#store.getSnapshot().revision !== snapshot.revision) {
+        throw new Error("生成期间项目已变化，请基于最新项目重试。");
+      }
+      this.#store.replace(result.project);
+      this.#session.previewState = "spinBlur";
+      this.showSuccess(
+        result.generatedImageCount === 0
+          ? `已复用并绑定 Tier ${tierIndex + 1} 模糊 ImgNumber：${result.dependencyId}`
+          : `已生成 ${result.generatedImageCount} 张图片并绑定 Tier ${tierIndex + 1} 模糊 ImgNumber。`,
       );
       const current = this.#store.getSnapshot();
       this.render(current);
@@ -1766,6 +1822,12 @@ export class SymbolsEditorApp {
               (value.text.tiers as Array<Record<string, unknown>>).push(
                 createEmptyValueImageStringBinding(),
               );
+            if (
+              "tierResources" in value.text &&
+              Array.isArray(value.text.tierSpinBlurProfiles)
+            ) {
+              (value.text.tierSpinBlurProfiles as unknown[]).push(null);
+            }
           }
           this.#session.expandedTier = value.tiers.length - 1;
         } else if (action === "remove-tier") {
@@ -1776,6 +1838,12 @@ export class SymbolsEditorApp {
             if ("tierResources" in value.text)
               (value.text.tierResources as unknown[]).splice(index, 1);
             else (value.text.tiers as unknown[]).splice(index, 1);
+            if (
+              "tierResources" in value.text &&
+              Array.isArray(value.text.tierSpinBlurProfiles)
+            ) {
+              (value.text.tierSpinBlurProfiles as unknown[]).splice(index, 1);
+            }
           }
           delete value.tiers.at(-1)!.maxExclusive;
         } else if (action === "move-tier") {
@@ -1791,6 +1859,16 @@ export class SymbolsEditorApp {
               index,
               Number(button.dataset.direction),
             );
+            if (
+              "tierResources" in value.text &&
+              Array.isArray(value.text.tierSpinBlurProfiles)
+            ) {
+              moveArrayItem(
+                value.text.tierSpinBlurProfiles as unknown[],
+                index,
+                Number(button.dataset.direction),
+              );
+            }
           }
           value.tiers.forEach((tier, tierIndex) => {
             if (tierIndex === value.tiers.length - 1) delete tier.maxExclusive;
@@ -3336,33 +3414,9 @@ function valueNumberPresentationMarkup(
   const value = symbol.valuePresentation!;
   const modeButtons = `<div class="button-row"><button data-value-action="text-type" data-text-type="font">Font</button><button data-value-action="text-type" data-text-type="image">完整数值图片</button><button data-value-action="text-type" data-text-type="image-string">ImgNumber（每档独立）</button></div>`;
   if (value.text.type === "image-string") {
-    const dependencies = [...project.imageStringDependencies.values()].sort(
-      (left, right) => left.id.localeCompare(right.id, "en"),
-    );
     if ("tierResources" in value.text) {
       const text = value.text;
       const slots = valueSlotOptions(project, symbol);
-      const resourceCards = text.tierResources
-        .map((resource, tierIndex) => {
-          const dependency = dependencies.find(
-            (candidate) =>
-              resource === candidate.rootKey ||
-              resource === `./${candidate.rootKey}`,
-          );
-          const dependencyOptions = [
-            `<option value="" ${resource ? "" : "selected"}>未选择 dependency</option>`,
-            ...dependencies.map((candidate) =>
-              option(
-                `./${candidate.rootKey}`,
-                `${candidate.id} · ${candidate.rootKey}`,
-                resource === candidate.rootKey ||
-                  resource === `./${candidate.rootKey}`,
-              ),
-            ),
-          ].join("");
-          return `<article class="tier-card value-number-tier"><header><strong>Tier ${tierIndex + 1} ImgNumber JSON</strong><span class="status-${dependency ? "ready" : "missing"}">${dependency ? "就绪" : "未完成"}</span></header><label>ImgNumber dependency <select data-value-image-string-field="resource" data-value-tier-index="${tierIndex}">${dependencyOptions}</select></label></article>`;
-        })
-        .join("");
       const specialsReady = (text.specialValueImages ?? []).every((mapping) =>
         Boolean(
           mapping.image &&
@@ -3371,43 +3425,9 @@ function valueNumberPresentationMarkup(
       );
       const normalReady = slots.includes(text.slot) && specialsReady;
       const normalCard = `<article class="tier-card value-number-tier"><header><strong>Normal 共享配置</strong><span class="status-${normalReady ? "ready" : "missing"}">${normalReady ? "就绪" : "未完成"}</span></header>${tierValueSelectField(0, "slot", text.slot, slots, "所有 Spine 档位共用 slot")}<div class="derived-field"><span>状态控制</span><strong>所有 Spine state 使用同名 slot</strong><small>显示、移动与弹出时机完全由 Spine animation 决定</small></div><div class="form-grid">${tierValueNumberField(0, "transform.x", text.transform.x, "X")}${tierValueNumberField(0, "transform.y", text.transform.y, "Y")}${tierValueNumberField(0, "transform.scale", text.transform.scale, "Scale")}</div><label><input data-value-image-string-field="followSlotColor" data-value-tier-index="0" type="checkbox" ${text.followSlotColor ? "checked" : ""}> Follow slot color</label><fieldset><legend>特殊数值图片</legend><p class="hint">共享给全部档位；未命中值使用当前档位 glyph。</p>${(text.specialValueImages ?? []).map((mapping, mappingIndex) => `<div class="form-grid"><label>Value <input type="number" step="1" data-value-special-value="${mappingIndex}" data-value-tier-index="0" value="${mapping.value}"></label>${resourceBindingMarkup("Image", mapping.image.replace(/^\.\//u, ""), { kind: "value-image-string-special-image", symbol: symbol.symbol, tierIndex: 0, mappingIndex })}<button type="button" data-value-special-remove="${mappingIndex}" data-value-tier-index="0">删除映射</button></div>`).join("")}<button type="button" data-value-special-add="0">增加映射</button></fieldset></article>`;
-      return `<section class="number-presentation"><h3>Number presentation</h3>${modeButtons}<p>每档只选择 ImgNumber JSON；slot、位置、颜色与特殊值只在 Normal 配置一次。</p><div class="tier-list">${resourceCards}${normalCard}</div></section>`;
+      return `<section class="number-presentation"><h3>ImgNumber 共享 Normal 配置</h3>${modeButtons}<p>每档 JSON 与模糊状态在对应 Spine 档位内编辑；slot、位置、颜色与特殊值只在此配置一次。</p><div class="tier-list">${normalCard}</div></section>`;
     }
-    const cards = value.text.tiers
-      .map((binding, tierIndex) => {
-        const slots = valueTierSlotOptions(project, symbol, tierIndex);
-        const dependency = dependencies.find(
-          (candidate) =>
-            binding.resource === candidate.rootKey ||
-            binding.resource === `./${candidate.rootKey}`,
-        );
-        const specialsReady = (binding.specialValueImages ?? []).every(
-          (mapping) =>
-            Boolean(
-              mapping.image &&
-              project.assetLibrary.records.has(
-                mapping.image.replace(/^\.\//u, ""),
-              ),
-            ),
-        );
-        const ready = Boolean(
-          dependency && slots.includes(binding.slot) && specialsReady,
-        );
-        const dependencyOptions = [
-          `<option value="" ${binding.resource ? "" : "selected"}>未选择 dependency</option>`,
-          ...dependencies.map((candidate) =>
-            option(
-              `./${candidate.rootKey}`,
-              `${candidate.id} · ${candidate.rootKey}`,
-              binding.resource === candidate.rootKey ||
-                binding.resource === `./${candidate.rootKey}`,
-            ),
-          ),
-        ].join("");
-        return `<article class="tier-card value-number-tier" data-value-image-string-tier="${tierIndex}"><header><strong>Tier ${tierIndex + 1} ImgNumber</strong><span class="status-${ready ? "ready" : "missing"}">${ready ? "就绪" : "未完成"}</span></header><label>ImgNumber dependency <select data-value-image-string-field="resource" data-value-tier-index="${tierIndex}">${dependencyOptions}</select></label>${tierValueSelectField(tierIndex, "slot", binding.slot, slots, `Tier ${tierIndex + 1} slot`)}<div class="derived-field"><span>Alignment</span><strong>动态内容中心对齐</strong><small>字符串变长后仍以实际宽高中心对齐本档 Spine slot</small></div><div class="form-grid">${tierValueNumberField(tierIndex, "transform.x", binding.transform.x, "X")}${tierValueNumberField(tierIndex, "transform.y", binding.transform.y, "Y")}${tierValueNumberField(tierIndex, "transform.scale", binding.transform.scale, "Scale")}</div><label><input data-value-image-string-field="followSlotColor" data-value-tier-index="${tierIndex}" type="checkbox" ${binding.followSlotColor ? "checked" : ""}> Follow slot color</label><fieldset><legend>特殊数值图片</legend><p class="hint">只对当前档位生效；未命中值严格使用本档 glyph。</p>${(binding.specialValueImages ?? []).map((mapping, mappingIndex) => `<div class="form-grid"><label>Value <input type="number" step="1" data-value-special-value="${mappingIndex}" data-value-tier-index="${tierIndex}" value="${mapping.value}"></label>${resourceBindingMarkup("Image", mapping.image.replace(/^\.\//u, ""), { kind: "value-image-string-special-image", symbol: symbol.symbol, tierIndex, mappingIndex })}<button type="button" data-value-special-remove="${mappingIndex}" data-value-tier-index="${tierIndex}">删除映射</button></div>`).join("")}<button type="button" data-value-special-add="${tierIndex}">增加映射</button></fieldset></article>`;
-      })
-      .join("");
-    return `<section class="number-presentation"><h3>Number presentation</h3>${modeButtons}<p class="hint">Legacy：各档保留原有独立 dependency、slot 与显示配置，避免改变旧数据语义。</p><div class="tier-list">${cards}</div></section>`;
+    return `<section class="number-presentation"><h3>Number presentation</h3>${modeButtons}<p class="hint">Legacy：各档原有独立 dependency、slot 与显示配置已放回对应 Spine 档位卡，不自动迁移或广播。</p></section>`;
   }
   const slots = valueSlotOptions(project, symbol);
   const common = `${valueSelectField("text.slot", value.text.slot, slots, "Slot intersection")}<div class="form-grid">${valueNumberField("text.x", value.text.x, "X")}${valueNumberField("text.y", value.text.y, "Y")}</div>`;
@@ -3457,7 +3477,61 @@ function valueTierMarkup(
   const atlas = tier.animation.atlas.replace(/^\.\//u, "");
   const texture = tier.animation.texture.replace(/^\.\//u, "");
   const ready = Boolean(skeleton && atlas && texture);
-  return `<details class="tier-card ${activePreview ? "active-preview" : ""}" data-tier-index="${index}" ${expanded ? "open" : ""}><summary><strong>Tier ${index + 1}</strong><span>${index < (symbol.valuePresentation?.tiers.length ?? 0) - 1 ? `&lt; ${tier.maxExclusive}` : "unbounded"}</span>${activePreview ? '<span class="status-ready">当前预览档位</span>' : ""}<span class="status-${ready ? "ready" : "missing"}">${ready ? "资源就绪" : "未完成"}</span></summary><div class="tier-body">${index < symbol.valuePresentation!.tiers.length - 1 ? valueNumberField(`tiers.${index}.maxExclusive`, tier.maxExclusive!, "maxExclusive") : '<p class="empty">最终 tier 无上界</p>'}${resourceBindingMarkup("Skeleton", skeleton, { kind: "value-tier-resource", symbol: symbol.symbol, tierIndex: index, field: "skeleton" })}${resourceBindingMarkup("Atlas", atlas, { kind: "value-tier-resource", symbol: symbol.symbol, tierIndex: index, field: "atlas" })}${derivedResourceMarkup("Texture · 由 Atlas page 自动解析", texture, thumbnail(texture))}<details class="advanced-fields"><summary>Transform</summary><div class="form-grid">${valueNumberField(`tiers.${index}.animation.transform.x`, tier.animation.transform?.x ?? 0, "X")}${valueNumberField(`tiers.${index}.animation.transform.y`, tier.animation.transform?.y ?? 0, "Y")}${valueNumberField(`tiers.${index}.animation.transform.scale`, tier.animation.transform?.scale ?? 1, "Scale")}</div></details><div class="button-row"><button data-value-action="move-tier" data-value-index="${index}" data-direction="-1" ${index === 0 ? "disabled" : ""}>↑</button><button data-value-action="move-tier" data-value-index="${index}" data-direction="1" ${index === symbol.valuePresentation!.tiers.length - 1 ? "disabled" : ""}>↓</button><button data-value-action="remove-tier" data-value-index="${index}">删除 tier</button></div></div></details>`;
+  return `<details class="tier-card ${activePreview ? "active-preview" : ""}" data-tier-index="${index}" ${expanded ? "open" : ""}><summary><strong>Tier ${index + 1}</strong><span>${index < (symbol.valuePresentation?.tiers.length ?? 0) - 1 ? `&lt; ${tier.maxExclusive}` : "unbounded"}</span>${activePreview ? '<span class="status-ready">当前预览档位</span>' : ""}<span class="status-${ready ? "ready" : "missing"}">${ready ? "Spine 就绪" : "Spine 未完成"}</span></summary><div class="tier-body">${index < symbol.valuePresentation!.tiers.length - 1 ? valueNumberField(`tiers.${index}.maxExclusive`, tier.maxExclusive!, "maxExclusive") : '<p class="empty">最终 tier 无上界</p>'}${resourceBindingMarkup("Skeleton", skeleton, { kind: "value-tier-resource", symbol: symbol.symbol, tierIndex: index, field: "skeleton" })}${resourceBindingMarkup("Atlas", atlas, { kind: "value-tier-resource", symbol: symbol.symbol, tierIndex: index, field: "atlas" })}${derivedResourceMarkup("Texture · 由 Atlas page 自动解析", texture, thumbnail(texture))}${valueTierImageStringMarkup(project, symbol, index)}<details class="advanced-fields"><summary>Spine Transform</summary><div class="form-grid">${valueNumberField(`tiers.${index}.animation.transform.x`, tier.animation.transform?.x ?? 0, "X")}${valueNumberField(`tiers.${index}.animation.transform.y`, tier.animation.transform?.y ?? 0, "Y")}${valueNumberField(`tiers.${index}.animation.transform.scale`, tier.animation.transform?.scale ?? 1, "Scale")}</div></details><div class="button-row"><button data-value-action="move-tier" data-value-index="${index}" data-direction="-1" ${index === 0 ? "disabled" : ""}>↑</button><button data-value-action="move-tier" data-value-index="${index}" data-direction="1" ${index === symbol.valuePresentation!.tiers.length - 1 ? "disabled" : ""}>↓</button><button data-value-action="remove-tier" data-value-index="${index}">删除 tier</button></div></div></details>`;
+}
+
+function valueTierImageStringMarkup(
+  project: SymbolEditorProject,
+  symbol: EditorSymbolDraft,
+  tierIndex: number,
+): string {
+  const text = symbol.valuePresentation?.text;
+  if (text?.type !== "image-string") return "";
+  const dependencies = [...project.imageStringDependencies.values()].sort(
+    (left, right) => left.id.localeCompare(right.id, "en"),
+  );
+  const binding =
+    "tierResources" in text
+      ? {
+          resource: text.tierResources[tierIndex] ?? "",
+          spinBlurProfile: text.tierSpinBlurProfiles?.[tierIndex] ?? undefined,
+        }
+      : text.tiers[tierIndex];
+  if (!binding) return '<p class="status-missing">ImgNumber 档位缺失</p>';
+  const dependency = dependencies.find(
+    (candidate) =>
+      binding.resource === candidate.rootKey ||
+      binding.resource === `./${candidate.rootKey}`,
+  );
+  const dependencyOptions = [
+    `<option value="" ${binding.resource ? "" : "selected"}>未选择 dependency</option>`,
+    ...dependencies.map((candidate) =>
+      option(
+        `./${candidate.rootKey}`,
+        `${candidate.id} · ${candidate.rootKey}`,
+        binding.resource === candidate.rootKey ||
+          binding.resource === `./${candidate.rootKey}`,
+      ),
+    ),
+  ].join("");
+  const availability = getValueImageStringSpinBlurAvailability(
+    project,
+    symbol.symbol,
+    tierIndex,
+  );
+  const blurBound = Boolean(binding.spinBlurProfile);
+  const blurStatus = availability.ready
+    ? blurBound
+      ? "已绑定模糊 profile"
+      : "可生成并绑定"
+    : availability.reason;
+  const blurButtonDisabled =
+    !availability.ready || availability.alreadyBound ? "disabled" : "";
+  const sharedMarkup = `<section class="value-tier-imgnumber"><header><strong>Tier ${tierIndex + 1} ImgNumber</strong><span class="status-${dependency ? "ready" : "missing"}">${dependency ? "Normal 就绪" : "Normal 未完成"}</span><span class="status-${blurBound ? "ready" : "missing"}">${blurBound ? "spinBlur 已绑定" : "spinBlur 未绑定"}</span></header><label>Normal ImgNumber dependency <select data-value-image-string-field="resource" data-value-tier-index="${tierIndex}">${dependencyOptions}</select></label><section class="state-texture-generation"><div><strong>spinBlur ImgNumber</strong><small>${escapeHtml(blurStatus)}</small></div><button type="button" data-generate-value-spin-blur="${tierIndex}" ${blurButtonDisabled}>${blurBound ? "已生成并绑定" : "生成并绑定模糊 ImgNumber"}</button></section>`;
+  if ("tierResources" in text) return `${sharedMarkup}</section>`;
+  const legacy = text.tiers[tierIndex]!;
+  const slots = valueTierSlotOptions(project, symbol, tierIndex);
+  return `${sharedMarkup}${tierValueSelectField(tierIndex, "slot", legacy.slot, slots, `Tier ${tierIndex + 1} slot`)}<div class="derived-field"><span>Alignment</span><strong>动态内容中心对齐</strong></div><div class="form-grid">${tierValueNumberField(tierIndex, "transform.x", legacy.transform.x, "X")}${tierValueNumberField(tierIndex, "transform.y", legacy.transform.y, "Y")}${tierValueNumberField(tierIndex, "transform.scale", legacy.transform.scale, "Scale")}</div><label><input data-value-image-string-field="followSlotColor" data-value-tier-index="${tierIndex}" type="checkbox" ${legacy.followSlotColor ? "checked" : ""}> Follow slot color</label><fieldset><legend>特殊数值图片</legend>${(legacy.specialValueImages ?? []).map((mapping, mappingIndex) => `<div class="form-grid"><label>Value <input type="number" step="1" data-value-special-value="${mappingIndex}" data-value-tier-index="${tierIndex}" value="${mapping.value}"></label>${resourceBindingMarkup("Image", mapping.image.replace(/^\.\//u, ""), { kind: "value-image-string-special-image", symbol: symbol.symbol, tierIndex, mappingIndex })}<button type="button" data-value-special-remove="${mappingIndex}" data-value-tier-index="${tierIndex}">删除映射</button></div>`).join("")}<button type="button" data-value-special-add="${tierIndex}">增加映射</button></fieldset></section>`;
 }
 
 function cascadeInspectorMarkup(

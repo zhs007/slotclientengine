@@ -654,13 +654,18 @@ describe("symbols editor app shell", () => {
       root,
       '[data-value-action="text-type"][data-text-type="image-string"]',
     );
-    expect(root.querySelectorAll(".value-number-tier")).toHaveLength(2);
+    expect(root.querySelectorAll(".value-tier-imgnumber")).toHaveLength(1);
+    expect(root.querySelectorAll(".value-number-tier")).toHaveLength(1);
+    expect(
+      root.querySelectorAll("[data-generate-value-spin-blur]"),
+    ).toHaveLength(1);
     expect(root.querySelector('[data-value-field="text.prefix"]')).toBeNull();
     expect(root.textContent).toContain("未完成");
 
     click(root, '[data-value-action="add-tier"]');
     expect(root.querySelectorAll("[data-tier-index]")).toHaveLength(2);
-    expect(root.querySelectorAll(".value-number-tier")).toHaveLength(3);
+    expect(root.querySelectorAll(".value-tier-imgnumber")).toHaveLength(2);
+    expect(root.querySelectorAll(".value-number-tier")).toHaveLength(1);
     expect(root.textContent).toContain("Normal 共享配置");
     const slots = root.querySelectorAll<HTMLSelectElement>(
       "[data-value-image-string-field='slot']",
@@ -676,7 +681,7 @@ describe("symbols editor app shell", () => {
     expect(positions[0]?.value).toBe("19");
     expect(root.querySelector("[data-value-field^='text.tiers.']")).toBeNull();
     click(root, '[data-value-action="remove-tier"][data-value-index="1"]');
-    expect(root.querySelectorAll(".value-number-tier")).toHaveLength(2);
+    expect(root.querySelectorAll(".value-tier-imgnumber")).toHaveLength(1);
 
     click(root, '[data-value-action="text-type"][data-text-type="image"]');
     expect(root.querySelector(".value-number-tier")).toBeNull();

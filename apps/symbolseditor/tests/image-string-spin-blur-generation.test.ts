@@ -8,11 +8,14 @@ import {
   createFromGameConfig,
   installImageStringDependency,
   setSymbolImageStringNodes,
+  setValuePresentation,
   uploadAssetBatch,
 } from "../src/model/editor-project.js";
 import {
   generateAndBindImageStringSpinBlur,
+  generateAndBindValueImageStringSpinBlur,
   getImageStringSpinBlurAvailability,
+  getValueImageStringSpinBlurAvailability,
 } from "../src/model/image-string-spin-blur-generation.js";
 
 describe("ImgNumber spinBlur generation", () => {
@@ -115,7 +118,101 @@ describe("ImgNumber spinBlur generation", () => {
       reason: "ImgNumber node 不存在。",
     });
   });
+
+  it("generates and binds value ImgNumber blur per tier while reusing bytes", async () => {
+    const dependency = await importImageStringDependencyZip(createZip(), {
+      decodeImage: async () => ({ width: 172, height: 130 }),
+      loadTexture: async () => Texture.EMPTY,
+    });
+    const project = createFromGameConfig({
+      fileName: "gameconfig.json",
+      rawGameConfig: {
+        paytable: { "0": { code: 0, symbol: "A", pays: [0] } },
+        symbolCodes: { A: 0 },
+        reels: { main: [[0]] },
+      },
+    });
+    installImageStringDependency(project, dependency);
+    addSymbolState(project, "A", "spinBlur");
+    setValuePresentation(project, "A", {
+      defaultValues: [1, 10],
+      reelStates: {
+        normal: { kind: "transparent", width: 100, height: 100 },
+        states: { spinBlur: "./A.spinBlur.png" },
+      },
+      tiers: [
+        {
+          maxExclusive: 10,
+          animation: createTierAnimation("low"),
+        },
+        { animation: createTierAnimation("high") },
+      ],
+      text: {
+        type: "image-string",
+        tierResources: [
+          "./image-string.manifest.json",
+          "./image-string.manifest.json",
+        ],
+        slot: "Num",
+        anchor: { x: 0.5, y: 0.5 },
+        transform: { x: 0, y: 0, scale: 1 },
+        followSlotColor: true,
+      },
+    });
+    expect(getValueImageStringSpinBlurAvailability(project, "A", 0)).toEqual({
+      ready: true,
+      alreadyBound: false,
+    });
+    const decode = vi.fn(async () => ({
+      width: 1,
+      height: 1,
+      data: new Uint8ClampedArray([10, 20, 30, 255]),
+    }));
+    const encodePng = vi.fn(async () => imageBytes("H2.png"));
+    const first = await generateAndBindValueImageStringSpinBlur({
+      project,
+      symbol: "A",
+      tierIndex: 0,
+      codec: { decode, encodePng },
+    });
+    const firstText = first.project.symbols.get("A")!.valuePresentation!.text;
+    if (!("tierResources" in firstText))
+      throw new Error("expected shared text");
+    expect(firstText.tierSpinBlurProfiles?.[0]?.resource).toBeTruthy();
+    expect(firstText.tierSpinBlurProfiles?.[1]).toBeNull();
+    expect(first.project.symbols.get("A")!.imageStringNodes).toEqual([]);
+
+    decode.mockClear();
+    const second = await generateAndBindValueImageStringSpinBlur({
+      project: first.project,
+      symbol: "A",
+      tierIndex: 1,
+      codec: { decode, encodePng },
+    });
+    const secondText = second.project.symbols.get("A")!.valuePresentation!.text;
+    if (!("tierResources" in secondText))
+      throw new Error("expected shared text");
+    expect(second.generatedImageCount).toBe(0);
+    expect(secondText.tierSpinBlurProfiles?.[1]?.resource).toBe(
+      secondText.tierSpinBlurProfiles?.[0]?.resource,
+    );
+    expect(decode).not.toHaveBeenCalled();
+  });
 });
+
+function createTierAnimation(id: string) {
+  return {
+    kind: "spine" as const,
+    skeleton: `./${id}.json`,
+    atlas: `./${id}.atlas`,
+    texture: `./${id}.png`,
+    playback: {
+      mode: "animation" as const,
+      animationName: "Idle",
+      loop: true,
+    },
+  };
+}
 
 function createZip(): Uint8Array {
   const encode = (value: unknown) =>

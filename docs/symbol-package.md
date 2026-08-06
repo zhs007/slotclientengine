@@ -22,7 +22,7 @@
 
 ## 精确闭包
 
-闭包从 manifest 结构化派生，包含 display state、Spine/VNI、value presentation、image-string root/glyph 与 `specialValueImages`。新 value ImgNumber 用 `tierResources[]` 逐档声明 JSON，并共享一份 Normal slot/transform/color/special 配置；旧 per-tier 完整 binding 和旧顶层 special map 保持兼容。新旧 variant 混写、tier 数量错位、缺资源/slot/glyph 或不精确 closure 都显式失败。
+闭包从 manifest 结构化派生，包含 display state、Spine/VNI、value presentation、image-string root/glyph 与 `specialValueImages`。新 value ImgNumber 用 `tierResources[]` 逐档声明 normal JSON，并可用等长 `tierSpinBlurProfiles[]` 的 object/null 项绑定该档 exact non-Spine `spinBlur`；全部档位仍共享一份 Normal slot/transform/color/special 配置。旧 per-tier 完整 binding、其可选 `spinBlurProfile` 和旧顶层 special map保持兼容。新旧 variant混写、tier/profile数量错位、normal/blur layout或special集合不一致、缺资源/slot/glyph或不精确closure都显式失败。
 
 新命名 ImgNumber 用一个 `spineSlot` 覆盖全部 top-level Spine state，动画决定显隐和运动；`targets[]` 只列 non-Spine exact overlay state。旧逐 state slot target 不迁移、不扩大覆盖。两种数据都在每个 symbol occurrence 内复用同一个稳定 container。
 

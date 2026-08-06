@@ -45,6 +45,8 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
   #tier: SymbolValuePresentationResource["tiers"][number] | null = null;
   #tierIndex: number | null = null;
   #display: SymbolValueDisplayHandle | null = null;
+  #presentationState = "normal";
+  #attachedToPlayer = false;
   #initializationError: unknown = null;
   #requestId = 0;
   #initialized = false;
@@ -156,20 +158,9 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
         return;
       }
       this.#display = display;
-      const text = this.#resource.text;
-      const binding =
-        text.type === "image-string"
-          ? this.#resource.imageStringTierBindings?.[tierIndex]
-          : undefined;
-      const slotObject =
-        display.type === "image-string"
-          ? this.prepareImageStringDisplayRoot(display)
-          : display.container;
-      player.attachSlotObject({
-        slot: binding?.slot ?? (text.type === "image-string" ? "" : text.slot),
-        object: slotObject,
-        followSlotColor: binding?.followSlotColor ?? true,
-      });
+      if (display.type === "image-string") {
+        this.prepareImageStringDisplayRoot(display);
+      }
       this.#initialized = true;
       this.playActiveAnimation();
       this.syncPresentationView();
@@ -183,6 +174,12 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
 
   getValue(): number | null {
     return this.#value;
+  }
+
+  syncState(state: string): void {
+    this.assertNotDestroyed();
+    this.#presentationState = state;
+    this.syncPresentationView();
   }
 
   createActiveSpineAnimation(
@@ -265,7 +262,64 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
       player,
       this,
     );
+    this.syncValueAttachment();
     this.syncVisibility();
+  }
+
+  private syncValueAttachment(): void {
+    const player = this.#player;
+    const display = this.#display;
+    const tierIndex = this.#tierIndex;
+    if (!player || !display || tierIndex === null) return;
+    const binding = this.#resource.imageStringTierBindings?.[tierIndex];
+    const directSpinBlur =
+      display.type === "image-string" &&
+      this.#presentationState === "spinBlur" &&
+      binding?.spinBlurProfile !== undefined;
+    if (directSpinBlur) {
+      display.setProfile?.("spinBlur");
+      this.detachDisplayFromPlayer();
+      if (this.#displayRoot.parent !== this.#root.imageStringOverlayLayer) {
+        this.#root.imageStringOverlayLayer.addChild(this.#displayRoot);
+      }
+      this.#displayRoot.visible = true;
+      this.#displayRoot.renderable = true;
+      return;
+    }
+    display.setProfile?.("normal");
+    if (this.#displayRoot.parent === this.#root.imageStringOverlayLayer) {
+      this.#root.imageStringOverlayLayer.removeChild(this.#displayRoot);
+    }
+    const attachToSpine =
+      this.#activeAnimation !== null && this.#activePlayback !== null;
+    if (attachToSpine && !this.#attachedToPlayer) {
+      const text = this.#resource.text;
+      player.attachSlotObject({
+        slot: binding?.slot ?? (text.type === "image-string" ? "" : text.slot),
+        object:
+          display.type === "image-string"
+            ? this.#displayRoot
+            : display.container,
+        followSlotColor: binding?.followSlotColor ?? true,
+      });
+      this.#attachedToPlayer = true;
+    } else if (!attachToSpine) {
+      this.detachDisplayFromPlayer();
+      if (display.type === "image-string") {
+        this.#displayRoot.visible = false;
+        this.#displayRoot.renderable = false;
+      }
+    }
+  }
+
+  private detachDisplayFromPlayer(): void {
+    if (!this.#attachedToPlayer || !this.#player || !this.#display) return;
+    this.#player.removeSlotObject(
+      this.#display.type === "image-string"
+        ? this.#displayRoot
+        : this.#display.container,
+    );
+    this.#attachedToPlayer = false;
   }
 
   activate(
@@ -305,6 +359,7 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
     if (this.#activeAnimation !== animation) return;
     this.#activeAnimation = null;
     this.#activePlayback = null;
+    this.syncValueAttachment();
     this.syncVisibility();
   }
 
@@ -327,6 +382,7 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
     this.#activePlayback = null;
     const player = this.#player;
     const display = this.#display;
+    if (wasInitialized && player && display) this.detachDisplayFromPlayer();
     this.#player = null;
     this.#tier = null;
     this.#tierIndex = null;
@@ -335,10 +391,9 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
     if (player) {
       notifySymbolImageStringSpineInactive(this.#root, player, this);
     }
-    if (wasInitialized && player && display)
-      player.removeSlotObject(
-        display.type === "image-string" ? this.#displayRoot : display.container,
-      );
+    if (this.#displayRoot.parent === this.#root.imageStringOverlayLayer) {
+      this.#root.imageStringOverlayLayer.removeChild(this.#displayRoot);
+    }
     this.#displayRoot.removeChildren();
     this.#displayRoot.visible = false;
     this.#displayRoot.renderable = false;

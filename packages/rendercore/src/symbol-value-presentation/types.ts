@@ -47,6 +47,13 @@ export interface SymbolValuePresentationImageStringTierResource {
   readonly specialValueImages: Readonly<
     Record<string, SymbolImageStringSpecialImageResource>
   >;
+  readonly spinBlurProfile?: Readonly<{
+    resourcePath: string;
+    resource: ImageStringResource;
+    specialValueImages: Readonly<
+      Record<string, SymbolImageStringSpecialImageResource>
+    >;
+  }>;
 }
 
 export interface SymbolValuePresentationResourceBundle {
@@ -59,6 +66,7 @@ export interface SymbolValueDisplayHandle {
   readonly type: "font" | "image" | "image-string";
   readonly text: string;
   readonly resourcePath?: string;
+  setProfile?(profile: "normal" | "spinBlur"): void;
   setText(text: string): void;
   destroy(): void;
 }

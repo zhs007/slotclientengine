@@ -25,6 +25,7 @@ export async function createSymbolValueDisplay(options: {
     renderer.container.position.set(binding.transform.x, binding.transform.y);
     renderer.container.scale.set(binding.transform.scale);
     let currentText = text;
+    let currentProfile: "normal" | "spinBlur" = "normal";
     return Object.freeze({
       container: renderer.container,
       type: "image-string" as const,
@@ -32,6 +33,21 @@ export async function createSymbolValueDisplay(options: {
         return currentText;
       },
       resourcePath: binding.resourcePath,
+      setProfile(profile: "normal" | "spinBlur"): void {
+        if (profile === currentProfile) return;
+        if (profile === "spinBlur" && !binding.spinBlurProfile) {
+          throw new SymbolAssetError(
+            `Symbol "${options.resource.symbol}" image-string tier ${options.tierIndex} has no spinBlur profile.`,
+          );
+        }
+        const next =
+          profile === "spinBlur" ? binding.spinBlurProfile! : binding;
+        renderer.setProfile({
+          resource: next.resource,
+          specialValueImages: next.specialValueImages,
+        });
+        currentProfile = profile;
+      },
       setText(next: string): void {
         renderer.setText(next);
         currentText = next;

@@ -258,6 +258,13 @@ describe("symbol value Vite resource generator", () => {
       transform: { x: 0, y: 0, scale: 1 },
       followSlotColor: true,
       specialValueImages: [{ value: 200, image: "./mini.png" }],
+      tierSpinBlurProfiles: [
+        {
+          resource: "./dependencies/small/image-string.manifest.json",
+          specialValueImages: [{ value: 200, image: "./mini.png" }],
+        },
+        null,
+      ],
     };
     await writeFile(manifestPath, JSON.stringify(manifest));
     await expect(

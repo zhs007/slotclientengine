@@ -295,7 +295,7 @@ describe("symbol package game config and resources", () => {
     };
     const manifest = {
       version: 1,
-      states: [],
+      states: ["spinBlur"],
       symbols: {
         A: {
           normal: "./A.png",
@@ -363,6 +363,10 @@ describe("symbol package game config and resources", () => {
               transform: { x: 0, y: 0, scale: 1 },
               followSlotColor: true,
               specialValueImages: [{ value: 200, image: "./tier-mini.png" }],
+              spinBlurProfile: {
+                resource: `./${dependencyPath}`,
+                specialValueImages: [{ value: 200, image: "./tier-mini.png" }],
+              },
             },
           ],
         },

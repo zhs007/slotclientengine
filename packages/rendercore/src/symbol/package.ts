@@ -377,12 +377,25 @@ export function collectSymbolManifestResourcePaths(options: {
               `Value ${value} has no image-string tier binding.`,
             );
           }
-          addImageStringDependency({
+          const normalManifest = addImageStringDependency({
             resource: binding.resource,
             text: String(value),
             label: `Value ${value} image-string tier ${tierIndex}`,
             specialValueImages: binding.specialValueImages,
           });
+          if (binding.spinBlurProfile) {
+            const spinBlurManifest = addImageStringDependency({
+              resource: binding.spinBlurProfile.resource,
+              text: String(value),
+              label: `Value ${value} image-string tier ${tierIndex} spinBlur`,
+              specialValueImages: binding.spinBlurProfile.specialValueImages,
+            });
+            assertCompatibleSymbolImageStringLayouts({
+              normal: normalManifest,
+              spinBlur: spinBlurManifest,
+              label: `Value ${value} image-string tier ${tierIndex}`,
+            });
+          }
         }
       }
     }
@@ -514,13 +527,18 @@ export async function createSymbolPackageResourceFromResolvedFiles(options: {
         node.spinBlurProfile ? [node.spinBlurProfile.resource] : [],
       ),
       ...(entry.valuePresentation?.text.type === "image-string"
-        ? entry.valuePresentation.tiers.map(
-            (_tier, index) =>
-              resolveSymbolValuePresentationImageStringBinding(
-                entry.valuePresentation!.text as never,
-                index,
-              )!.resource,
-          )
+        ? entry.valuePresentation.tiers.flatMap((_tier, index) => {
+            const binding = resolveSymbolValuePresentationImageStringBinding(
+              entry.valuePresentation!.text as never,
+              index,
+            )!;
+            return [
+              binding.resource,
+              ...(binding.spinBlurProfile
+                ? [binding.spinBlurProfile.resource]
+                : []),
+            ];
+          })
         : []),
     ]);
     const imageStringSpecialImagePaths = Object.values(
@@ -538,9 +556,10 @@ export async function createSymbolPackageResourceFromResolvedFiles(options: {
               entry.valuePresentation!.text as never,
               index,
             )!;
-            return (binding.specialValueImages ?? []).map(
-              (mapping) => mapping.image,
-            );
+            return [
+              ...(binding.specialValueImages ?? []),
+              ...(binding.spinBlurProfile?.specialValueImages ?? []),
+            ].map((mapping) => mapping.image);
           })
         : []),
     ]);

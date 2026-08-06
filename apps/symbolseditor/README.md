@@ -10,11 +10,13 @@ symbol code、state、lifecycle、scale、renderPriority、value/cascade 配置�
 
 同一导入批次允许多份 Spine skeleton 共用唯一一份 atlas 及其单页 texture；各 skeleton 仍作为独立资源供 state/value tier 显式选择。缺 skeleton、缺 atlas、多 atlas 或 atlas page 不唯一时继续拒绝整批导入。
 
-value-presentation 的编辑顺序固定为“档位 → 状态”：每档选择 Spine skeleton/atlas/texture、阈值和 ImgNumber JSON；normal、win、remove 等动画在状态页选择一次，并要求所有档位存在同名动画。ImgNumber 的 exact slot、transform、颜色跟随和特殊数值图片只在 Normal 配置一次，并由全部档位和 Spine state 共用；`spinBlur`、`disabled` 等静态 reel state 仍独立选择图片。整个 symbol 只设置一个预览数值，预览根据档位阈值自动选择对应 Spine tier 与 ImgNumber；该值只属于当前 UI session，新建或打开项目时重置，不进入 manifest 或 ZIP。
+value-presentation 的编辑顺序固定为“档位 → 状态”：每张档位卡同时选择 Spine skeleton/atlas/texture、阈值、normal ImgNumber JSON，并可为该档生成和绑定 exact non-Spine `spinBlur` profile；normal、win、remove 等动画在状态页选择一次，并要求所有档位存在同名动画。ImgNumber 的 exact slot、transform、颜色跟随和特殊数值图片仍只在 Normal 配置一次，并由全部档位和 Spine state 共用；`spinBlur` symbol 本体静态图仍独立选择。整个 symbol 只设置一个预览数值，预览根据档位阈值自动选择对应 Spine tier 与 normal/blur ImgNumber；该值只属于当前 UI session，新建或打开项目时重置，不进入 manifest 或 ZIP。
 
 新命名 ImgNumber node 使用一个 `spineSlot` 覆盖全部 Spine state；普通 symbol 的候选 slot 是全部 top-level Spine state skeleton 的交集，value-managed symbol 则是全部 tier skeleton 的交集，交集为空时不猜首项。显示、移动和出现时机由 Spine animation 控制。非 Spine state 继续用 exact `targets[]` 决定同一 instance 是否显示在固定顶层 overlay。旧逐 Spine state target 与旧 per-tier 完整 binding 可无损导入、编辑和导出，不会自动扩大状态覆盖。
 
 命名 ImgNumber 配置 non-Spine `spinBlur` target 后，ImgNumber 卡片可在浏览器本地按 rendercore versioned preset 生成并绑定派生模糊 dependency。相同普通 dependency 在项目内只生成和共享一份；glyph 与特殊数值整图按 source key 去重。runtime 预加载 normal/blur profile，并在任务 170 的同一 renderer/container 内切换 assets。普通 dependency 或特殊图片变化会使受影响 binding 失效；旧 target-only package 保持既有 normal-assets 行为并标为 legacy。
+
+value ImgNumber 的每个档位也可显式生成并绑定自己的 `spinBlurProfile`。操作只绑定当前档位；其它同源档位或命名 node 复用已生成 dependency 时不重复处理像素。运行时先按 value 命中档位，再让同一稳定 ImgNumber root 在该档 Spine slot 与顶层 spinBlur overlay 间切换；未绑定档位不会借用相邻档或 normal assets。
 
 当单个 symbol 的 normal 是已绑定且有效的 direct image 时，normal 状态页提供两个互不
 联动的纯前端操作：“生成模糊图”只生成/绑定 `spinBlur`，“生成 disable 图”只生成/

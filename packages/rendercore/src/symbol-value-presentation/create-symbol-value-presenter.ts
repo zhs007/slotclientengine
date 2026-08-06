@@ -7,6 +7,7 @@ import {
 } from "../spine/runtime-player.js";
 import { SymbolAssetError } from "../symbol/errors.js";
 import {
+  assertCompatibleSymbolImageStringLayouts,
   createSymbolImageStringSpecialValueImageMap,
   createSymbolImageStringResourcePool,
   type SymbolImageStringResourcePool,
@@ -190,6 +191,16 @@ export function createSymbolValuePresentationResourcesFromManifest(
                   );
                 }
                 const resource = pool.get(binding.resource);
+                const spinBlurResource = binding.spinBlurProfile
+                  ? pool.get(binding.spinBlurProfile.resource)
+                  : undefined;
+                if (spinBlurResource) {
+                  assertCompatibleSymbolImageStringLayouts({
+                    normal: resource.manifest,
+                    spinBlur: spinBlurResource.manifest,
+                    label: `Symbol "${symbol}" valuePresentation image-string tier ${index}`,
+                  });
+                }
                 return Object.freeze({
                   resourcePath: binding.resource,
                   resource,
@@ -202,6 +213,19 @@ export function createSymbolValuePresentationResourcesFromManifest(
                       binding.specialValueImages ?? [],
                       pool,
                     ),
+                  ...(binding.spinBlurProfile && spinBlurResource
+                    ? {
+                        spinBlurProfile: Object.freeze({
+                          resourcePath: binding.spinBlurProfile.resource,
+                          resource: spinBlurResource,
+                          specialValueImages:
+                            createSymbolImageStringSpecialValueImageMap(
+                              binding.spinBlurProfile.specialValueImages ?? [],
+                              pool,
+                            ),
+                        }),
+                      }
+                    : {}),
                 });
               }),
             )

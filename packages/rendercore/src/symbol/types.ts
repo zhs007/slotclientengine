@@ -123,6 +123,7 @@ export interface RenderSymbolUpdateResult {
 export interface RenderSymbolValueController {
   setValue(value: number | null): void;
   getValue(): number | null;
+  syncState(state: SymbolStateId): void;
   createActiveSpineAnimation(
     context: SymbolAnimationContext,
     playback?: SymbolManifestAnimationPlaybackSpec,

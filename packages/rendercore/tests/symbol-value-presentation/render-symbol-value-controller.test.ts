@@ -220,6 +220,36 @@ describe("render symbol value controller", () => {
     symbol.destroy();
   });
 
+  it("moves one value ImgNumber display between the tier slot and spinBlur overlay", async () => {
+    const player = new FakeSlotPlayer();
+    const symbol = createSymbol(
+      () => player,
+      createImageStringResource(false, true),
+    );
+    symbol.init();
+    symbol.setPresentationValue(1);
+    await flushPromises();
+    const displayRoot = player.attached[0]!.object;
+    expect((displayRoot.children[0]!.children[0] as Sprite).texture).toBe(
+      Texture.WHITE,
+    );
+
+    symbol.requestState("spinBlur");
+    expect(player.removed).toEqual([displayRoot]);
+    expect(symbol.imageStringOverlayLayer.children).toEqual([displayRoot]);
+    expect((displayRoot.children[0]!.children[0] as Sprite).texture).toBe(
+      Texture.EMPTY,
+    );
+
+    symbol.returnToDefaultState();
+    expect(symbol.imageStringOverlayLayer.children).toEqual([]);
+    expect(player.attached.at(-1)?.object).toBe(displayRoot);
+    expect((displayRoot.children[0]!.children[0] as Sprite).texture).toBe(
+      Texture.WHITE,
+    );
+    symbol.destroy();
+  });
+
   it("reports active Spine loop boundaries so a pending collect can start", async () => {
     const player = new FakeSlotPlayer();
     const symbol = createSymbol(() => player);
@@ -553,6 +583,7 @@ function createResource(): SymbolValuePresentationResource {
 
 function createImageStringResource(
   withTierSpecials = false,
+  withSpinBlur = false,
 ): SymbolValuePresentationResource {
   const base = createResource();
   const digits = Object.freeze({
@@ -639,6 +670,22 @@ function createImageStringResource(
         transform: Object.freeze({ x: 2, y: 3, scale: 0.5 }),
         followSlotColor: false,
         specialValueImages: lowSpecialValueImages,
+        ...(withSpinBlur
+          ? {
+              spinBlurProfile: Object.freeze({
+                resourcePath: "./low-blur/image-string.manifest.json",
+                resource: Object.freeze({
+                  ...digits,
+                  textures: Object.freeze({
+                    "assets/1.png": Texture.EMPTY,
+                    "assets/2.png": Texture.EMPTY,
+                    "assets/5.png": Texture.EMPTY,
+                  }),
+                }),
+                specialValueImages: Object.freeze({}),
+              }),
+            }
+          : {}),
       }),
       Object.freeze({
         resourcePath: "./high/image-string.manifest.json",

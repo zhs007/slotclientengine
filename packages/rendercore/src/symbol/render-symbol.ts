@@ -103,6 +103,9 @@ export class RenderSymbol extends VisualEntity<void> {
     this.#imageStringController?.syncState(
       this.getImageStringPresentationState(this.#stateMachine.getSnapshot()),
     );
+    this.#valueController?.syncState(
+      this.getImageStringPresentationState(this.#stateMachine.getSnapshot()),
+    );
   }
 
   init(): void {
@@ -346,10 +349,16 @@ export class RenderSymbol extends VisualEntity<void> {
       this.#imageStringController?.syncState(
         this.getImageStringPresentationState(snapshot),
       );
+      this.#valueController?.syncState(
+        this.getImageStringPresentationState(snapshot),
+      );
       return false;
     }
     this.#currentAni = nextAni;
     this.#imageStringController?.syncState(
+      this.getImageStringPresentationState(snapshot),
+    );
+    this.#valueController?.syncState(
       this.getImageStringPresentationState(snapshot),
     );
     this.#currentAni.reset();

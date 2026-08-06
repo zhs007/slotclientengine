@@ -953,6 +953,55 @@ export function invalidateImageStringSpinBlurProfilesForChangedAssets(
       delete (next as { spinBlurProfile?: unknown }).spinBlurProfile;
       return next;
     });
+    const presentation = symbol.valuePresentation;
+    if (presentation?.text.type !== "image-string") continue;
+    const text = presentation.text;
+    if ("tierResources" in text) {
+      const specialChanged = (text.specialValueImages ?? []).some((mapping) =>
+        changed.has(stripLocalRef(mapping.image)),
+      );
+      const profiles = text.tierSpinBlurProfiles?.map((profile, index) => {
+        if (!profile) return null;
+        const dependency = [...project.imageStringDependencies.values()].find(
+          (candidate) =>
+            imageStringDependencyMatches(
+              text.tierResources[index] ?? "",
+              candidate.rootKey,
+            ),
+        );
+        return specialChanged ||
+          dependency?.keys.some((path) => changed.has(path))
+          ? null
+          : profile;
+      });
+      if (
+        profiles?.some(
+          (profile, index) => profile !== text.tierSpinBlurProfiles?.[index],
+        )
+      ) {
+        (
+          text as typeof text & { tierSpinBlurProfiles: typeof profiles }
+        ).tierSpinBlurProfiles = profiles;
+      }
+    } else {
+      for (const binding of text.tiers) {
+        if (!binding.spinBlurProfile) continue;
+        const dependency = [...project.imageStringDependencies.values()].find(
+          (candidate) =>
+            imageStringDependencyMatches(binding.resource, candidate.rootKey),
+        );
+        const changedSource = dependency?.keys.some((path) =>
+          changed.has(path),
+        );
+        const changedSpecial = (binding.specialValueImages ?? []).some(
+          (mapping) => changed.has(stripLocalRef(mapping.image)),
+        );
+        if (changedSource || changedSpecial) {
+          delete (binding as typeof binding & { spinBlurProfile?: unknown })
+            .spinBlurProfile;
+        }
+      }
+    }
   }
 }
 
@@ -982,18 +1031,44 @@ export function removeImageStringDependency(
     ...(symbol.valuePresentation?.text.type === "image-string"
       ? "tierResources" in symbol.valuePresentation.text
         ? symbol.valuePresentation.text.tierResources.flatMap(
-            (resource, index) =>
-              imageStringDependencyMatches(resource, dependency.rootKey)
+            (resource, index) => [
+              ...(imageStringDependencyMatches(resource, dependency.rootKey)
                 ? [
                     `${symbol.symbol}.valuePresentation.text.tierResources[${index}]`,
                   ]
-                : [],
+                : []),
+              ...(imageStringDependencyMatches(
+                (
+                  symbol.valuePresentation!.text as {
+                    tierSpinBlurProfiles?: readonly ({
+                      readonly resource: string;
+                    } | null)[];
+                  }
+                ).tierSpinBlurProfiles?.[index]?.resource ?? "",
+                dependency.rootKey,
+              )
+                ? [
+                    `${symbol.symbol}.valuePresentation.text.tierSpinBlurProfiles[${index}]`,
+                  ]
+                : []),
+            ],
           )
-        : symbol.valuePresentation.text.tiers.flatMap((binding, index) =>
-            imageStringDependencyMatches(binding.resource, dependency.rootKey)
+        : symbol.valuePresentation.text.tiers.flatMap((binding, index) => [
+            ...(imageStringDependencyMatches(
+              binding.resource,
+              dependency.rootKey,
+            )
               ? [`${symbol.symbol}.valuePresentation.text.tiers[${index}]`]
-              : [],
-          )
+              : []),
+            ...(imageStringDependencyMatches(
+              binding.spinBlurProfile?.resource ?? "",
+              dependency.rootKey,
+            )
+              ? [
+                  `${symbol.symbol}.valuePresentation.text.tiers[${index}].spinBlurProfile`,
+                ]
+              : []),
+          ])
       : []),
   ]);
   if (usedBy.length > 0) {

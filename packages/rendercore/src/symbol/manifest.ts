@@ -169,6 +169,7 @@ export type SymbolValuePresentationImageTextSpec =
 
 export interface SymbolValuePresentationImageStringTierBindingSpec {
   readonly resource: string;
+  readonly spinBlurProfile?: SymbolImageStringSpinBlurProfileSpec;
   readonly slot: string;
   readonly anchor: Readonly<{ x: number; y: number }>;
   readonly transform: Readonly<{ x: number; y: number; scale: number }>;
@@ -183,10 +184,11 @@ export interface SymbolValuePresentationLegacyImageStringTextSpec {
 
 export interface SymbolValuePresentationSharedImageStringTextSpec extends Omit<
   SymbolValuePresentationImageStringTierBindingSpec,
-  "resource"
+  "resource" | "spinBlurProfile"
 > {
   readonly type: "image-string";
   readonly tierResources: readonly string[];
+  readonly tierSpinBlurProfiles?: readonly (SymbolImageStringSpinBlurProfileSpec | null)[];
 }
 
 export type SymbolValuePresentationImageStringTextSpec =
@@ -891,6 +893,9 @@ export function resolveSymbolValuePresentationImageStringBinding(
       ? undefined
       : Object.freeze({
           resource,
+          ...(text.tierSpinBlurProfiles?.[tierIndex]
+            ? { spinBlurProfile: text.tierSpinBlurProfiles[tierIndex] }
+            : {}),
           slot: text.slot,
           anchor: text.anchor,
           transform: text.transform,
@@ -901,6 +906,65 @@ export function resolveSymbolValuePresentationImageStringBinding(
         });
   }
   return text.tiers[tierIndex];
+}
+
+function parseValueTierSpinBlurProfiles(
+  value: unknown,
+  tierCount: number,
+  normalSpecialValueImages: readonly SymbolImageStringSpecialValueImageSpec[],
+  textLabel: string,
+): readonly (SymbolImageStringSpinBlurProfileSpec | null)[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length !== tierCount) {
+    throw new SymbolAssetError(
+      `${textLabel}.tierSpinBlurProfiles length must equal valuePresentation.tiers length (${tierCount}).`,
+    );
+  }
+  return Object.freeze(
+    value.map((profile, index) =>
+      profile === null
+        ? null
+        : parseValueSpinBlurProfile(
+            profile,
+            normalSpecialValueImages,
+            `${textLabel}.tierSpinBlurProfiles[${index}]`,
+          ),
+    ),
+  );
+}
+
+function parseValueSpinBlurProfile(
+  value: unknown,
+  normalSpecialValueImages: readonly SymbolImageStringSpecialValueImageSpec[],
+  label: string,
+): SymbolImageStringSpinBlurProfileSpec {
+  const profile = assertRecord(value, label);
+  assertOnlyKnownKeys(profile, label, ["resource", "specialValueImages"]);
+  const specialValueImages = parseImageStringSpecialValueImages(
+    profile.specialValueImages,
+    `${label}.specialValueImages`,
+  );
+  const normalValues = normalSpecialValueImages
+    .map(({ value }) => value)
+    .sort((left, right) => left - right);
+  const blurValues = specialValueImages
+    .map(({ value }) => value)
+    .sort((left, right) => left - right);
+  if (
+    normalValues.length !== blurValues.length ||
+    normalValues.some((normalValue, index) => normalValue !== blurValues[index])
+  ) {
+    throw new SymbolAssetError(
+      `${label}.specialValueImages values must exactly match the normal profile.`,
+    );
+  }
+  return Object.freeze({
+    resource: assertImageStringResourcePath(
+      profile.resource,
+      `${label}.resource`,
+    ),
+    ...(specialValueImages.length ? { specialValueImages } : {}),
+  });
 }
 
 function isSpineBackedImageStringTarget(
@@ -1352,6 +1416,7 @@ function parseValuePresentation(
       assertOnlyKnownKeys(text, textLabel, [
         "type",
         "tierResources",
+        "tierSpinBlurProfiles",
         "slot",
         "anchor",
         "transform",
@@ -1369,6 +1434,20 @@ function parseValuePresentation(
         );
       }
       const shared = parseImageStringBindingFields(text, textLabel);
+      const tierSpinBlurProfiles = parseValueTierSpinBlurProfiles(
+        text.tierSpinBlurProfiles,
+        tiers.length,
+        shared.specialValueImages ?? [],
+        textLabel,
+      );
+      if (
+        tierSpinBlurProfiles?.some((profile) => profile !== null) &&
+        !states.includes("spinBlur")
+      ) {
+        throw new SymbolAssetError(
+          `${textLabel}.tierSpinBlurProfiles requires the exact spinBlur state.`,
+        );
+      }
       parsedText = Object.freeze({
         type: "image-string",
         tierResources: Object.freeze(
@@ -1379,6 +1458,7 @@ function parseValuePresentation(
             ),
           ),
         ),
+        ...(tierSpinBlurProfiles ? { tierSpinBlurProfiles } : {}),
         ...shared,
       });
     } else {
@@ -1407,6 +1487,7 @@ function parseValuePresentation(
             const binding = assertRecord(rawBinding, label);
             assertOnlyKnownKeys(binding, label, [
               "resource",
+              "spinBlurProfile",
               "slot",
               "anchor",
               "transform",
@@ -1432,11 +1513,28 @@ function parseValuePresentation(
                       Object.freeze({ ...mapping }),
                     ),
                   );
+            if (
+              binding.spinBlurProfile !== undefined &&
+              !states.includes("spinBlur")
+            ) {
+              throw new SymbolAssetError(
+                `${label}.spinBlurProfile requires the exact spinBlur state.`,
+              );
+            }
             return Object.freeze({
               resource: assertImageStringResourcePath(
                 binding.resource,
                 `${label}.resource`,
               ),
+              ...(binding.spinBlurProfile === undefined
+                ? {}
+                : {
+                    spinBlurProfile: parseValueSpinBlurProfile(
+                      binding.spinBlurProfile,
+                      specialValueImages,
+                      `${label}.spinBlurProfile`,
+                    ),
+                  }),
               ...parseImageStringBindingFields(
                 { ...binding, specialValueImages },
                 label,

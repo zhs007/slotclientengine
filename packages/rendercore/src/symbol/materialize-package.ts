@@ -430,6 +430,19 @@ function rewriteValueImagePaths(
           : resource,
       );
       rewriteImageStringSpecialValuePaths(text, mapping);
+      if (Array.isArray(text.tierSpinBlurProfiles)) {
+        for (const rawProfile of text.tierSpinBlurProfiles) {
+          if (rawProfile === null) continue;
+          const profile = record(
+            rawProfile,
+            "valuePresentation.text tier spinBlur profile",
+          );
+          if (typeof profile.resource === "string") {
+            profile.resource = rewriteRequiredRef(profile.resource, mapping);
+          }
+          rewriteImageStringSpecialValuePaths(profile, mapping);
+        }
+      }
       return;
     }
     if (!Array.isArray(text.tiers)) {
@@ -441,6 +454,16 @@ function rewriteValueImagePaths(
         binding.resource = rewriteRef(binding.resource, mapping);
       }
       rewriteImageStringSpecialValuePaths(binding, mapping);
+      if (binding.spinBlurProfile !== undefined) {
+        const profile = record(
+          binding.spinBlurProfile,
+          "valuePresentation.text tier spinBlur profile",
+        );
+        if (typeof profile.resource === "string") {
+          profile.resource = rewriteRequiredRef(profile.resource, mapping);
+        }
+        rewriteImageStringSpecialValuePaths(profile, mapping);
+      }
     }
     rewriteImageStringSpecialValuePaths(text, mapping);
     return;
