@@ -7,8 +7,10 @@ import {
 } from "@slotclientengine/gameframeworks";
 import { compileGame002FreeGamePlan } from "../src/freegame-plan.js";
 import {
+  compileGame002OperationPlanFromFacts,
   compileGame002BaseGameOperationPlan,
   compileGame002RoundOperationPlan,
+  decodeGame002RoundFacts,
 } from "../src/game002-operation-compiler.js";
 import type { Game002ReelRuntime } from "../src/game002-reel-controller.js";
 
@@ -52,11 +54,18 @@ function compilerRuntime() {
 
 describe("game002 FreeGame plan", () => {
   it("serializes FreeGame as explicit frontend operations without server steps", () => {
-    const compilation = compileGame002RoundOperationPlan({
-      logic: createSampleLogic(),
+    const logic = createSampleLogic();
+    const options = {
+      logic,
       runtime: compilerRuntime(),
       displaySymbols: DISPLAY_SYMBOLS,
-    });
+    } as const;
+    const facts = decodeGame002RoundFacts(options);
+    const compilation = compileGame002OperationPlanFromFacts(facts);
+    expect(Object.isFrozen(facts)).toBe(true);
+    expect(Object.isFrozen(facts.atomicOperations)).toBe(true);
+    expect(facts.atomicOperations.every(Object.isFrozen)).toBe(true);
+    expect(compilation).toEqual(compileGame002RoundOperationPlan(options));
     const kinds = compilation.plan.operations.map(
       (operation) => operation.kind,
     );
@@ -242,7 +251,7 @@ describe("game002 FreeGame plan", () => {
       mutate: (raw: ReturnType<typeof createSampleMessage>) => {
         components(raw, 7)["fg-start"]!.lastRespinNum = 0;
       },
-      error: /lastRespinNum must be positive/,
+      error: /lastRespinNum must be >= 1/,
     },
     {
       name: "missing spin protocol",
@@ -263,7 +272,7 @@ describe("game002 FreeGame plan", () => {
       mutate: (raw: ReturnType<typeof createSampleMessage>) => {
         components(raw, 9)["fg-start"]!.curRespinNum = -1;
       },
-      error: /non-negative safe integer/,
+      error: /must be >= 0/,
     },
     {
       name: "FreeGame source continuity drift",
@@ -351,7 +360,7 @@ describe("game002 FreeGame plan", () => {
         const valueIndex = basic(raw, 9, "fg-spin").usedOtherScenes[0]!;
         otherSceneColumns(raw, 9, valueIndex).pop();
       },
-      error: /dimensions do not match/,
+      error: /width differs/,
     },
     {
       name: "partial AF protocol",
@@ -365,7 +374,7 @@ describe("game002 FreeGame plan", () => {
       mutate: (raw: ReturnType<typeof createSampleMessage>) => {
         components(raw, 8)["fg-rollaf"]!.number = 0;
       },
-      error: /fg-rollaf.number must be positive/,
+      error: /fg-rollaf.number must be >= 1/,
     },
     {
       name: "AF replacement position drift",

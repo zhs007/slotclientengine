@@ -6,6 +6,15 @@ import type {
   WinResultPosition,
 } from "@slotclientengine/gameframeworks";
 import {
+  assertExactMatrixEqual as assertMatrixEqual,
+  assertExactMatrixShape as assertDimensions,
+  forEachMatrixCell as forEachCell,
+  parseExactPositionPairs,
+  requireSafeInteger,
+  requireSafeIntegerArray,
+  slotOperationPositionKey as positionKey,
+} from "@slotclientengine/gameframeworks";
+import {
   createLastUseRemoveGroups,
   prepareSymbolWinGroups,
   type SymbolCascadeGroup,
@@ -23,7 +32,11 @@ import {
 } from "./cascade-config.js";
 import { GAME002_VISIBLE_ROWS, GAME002_REEL_COUNT } from "./game-layout.js";
 import { resolveGame002WinResultAmount } from "./win-symbol-carousel-config.js";
-import { resolveGame002WinResultCoinAmount } from "./cascade-win-summary-config.js";
+import {
+  resolveGame002WinResultCashAmount,
+  resolveGame002WinResultCoinAmount,
+  resolveGame002WinResultMultiplier,
+} from "./cascade-win-summary-config.js";
 
 export interface Game002WinOperationData {
   readonly stepIndex: number;
@@ -101,9 +114,10 @@ export function readGame002FallOperationData(options: {
     options.step,
     GAME002_CASCADE_COMPONENTS.dropdown,
   );
-  const srcIndexes = parseIndexArray(
+  const srcIndexes = requireSafeIntegerArray(
     dropdown.basicComponentData?.srcScenes,
     `step[${stepIndex}] bg-dropdown.srcScenes`,
+    { minimum: 0 },
   );
   if (srcIndexes.length !== 1)
     throw new Error(
@@ -153,6 +167,7 @@ export function readGame002FallOperationData(options: {
   );
   const refillPositions = parsePositions(
     refill.basicComponentData?.pos,
+    dropdownScene,
     `step[${stepIndex}] bg-refill.pos`,
   );
   assertPositionsAreExactlyHoles(
@@ -302,6 +317,12 @@ export function readGame002WinOperationData(options: {
       },
     },
   );
+  validateSequentialCollectGroups(
+    groups,
+    options.sourceScene,
+    options.sourceValues,
+    options.cnSymbolCode,
+  );
   for (const componentName of winComponentNames)
     validateComponentCoinWin(
       requireBasicComponent(step, componentName),
@@ -335,6 +356,7 @@ export function readGame002WinOperationData(options: {
         .flatMap((result, resultIndex) =>
           parsePositions(
             result.pos,
+            options.sourceScene,
             `step[${stepIndex}] bg-bn result[${resultIndex}].pos`,
           ),
         ),
@@ -370,6 +392,40 @@ export function readGame002WinOperationData(options: {
     removedNum,
     releaseOnlyPositions,
   });
+}
+
+function validateSequentialCollectGroups(
+  groups: readonly SymbolCascadeGroup[],
+  scene: SceneMatrix,
+  values: SymbolPresentationValueMatrix,
+  cnCode: number,
+): void {
+  for (const [groupIndex, group] of groups.entries()) {
+    if (group.result.symbol !== cnCode) continue;
+    const context = { group, groupIndex };
+    const coinAmount = resolveGame002WinResultCoinAmount(context);
+    const cashAmount = resolveGame002WinResultCashAmount(context);
+    const multiplier = resolveGame002WinResultMultiplier(context);
+    for (const { x, y } of group.removePositions) {
+      if (scene[x]?.[y] !== cnCode)
+        throw new Error(
+          `${group.componentName} result[${group.resultIndex}] collect item (${x},${y}) must be CN.`,
+        );
+      const value = requireSafeInteger(
+        values[x]?.[y],
+        `${group.componentName} result[${group.resultIndex}] item (${x},${y}) value`,
+        { minimum: 1 },
+      );
+      const weightedCash = value * multiplier * cashAmount;
+      if (
+        !Number.isSafeInteger(weightedCash) ||
+        weightedCash % coinAmount !== 0
+      )
+        throw new Error(
+          `${group.componentName} result[${group.resultIndex}] item (${x},${y}) cash share must divide the result cash amount exactly.`,
+        );
+    }
+  }
 }
 
 function sumGroupCoinAmounts(groups: readonly SymbolCascadeGroup[]): number {
@@ -704,7 +760,7 @@ function exactlyOneFullScene(
         );
       return Object.freeze(
         column.map((code, y) =>
-          assertNonNegativeSafeInteger(code, `${label}[${x}][${y}]`),
+          requireSafeInteger(code, `${label}[${x}][${y}]`, { minimum: 0 }),
         ),
       );
     }),
@@ -760,27 +816,10 @@ function optionalOtherScene(
 
 function parsePositions(
   value: unknown,
+  scene: readonly (readonly unknown[])[],
   label: string,
 ): readonly WinResultPosition[] {
-  if (!Array.isArray(value) || value.length === 0 || value.length % 2 !== 0) {
-    throw new Error(`${label} must contain non-empty x/y pairs.`);
-  }
-  const positions: WinResultPosition[] = [];
-  const seen = new Set<string>();
-  for (let index = 0; index < value.length; index += 2) {
-    const x = assertNonNegativeSafeInteger(value[index], `${label}[${index}]`);
-    const y = assertNonNegativeSafeInteger(
-      value[index + 1],
-      `${label}[${index + 1}]`,
-    );
-    if (x >= GAME002_REEL_COUNT || y >= GAME002_VISIBLE_ROWS)
-      throw new Error(`${label} coordinate (${x},${y}) is out of range.`);
-    const key = `${x},${y}`;
-    if (seen.has(key)) throw new Error(`${label} contains duplicate ${key}.`);
-    seen.add(key);
-    positions.push(Object.freeze({ x, y }));
-  }
-  return Object.freeze(positions);
+  return parseExactPositionPairs(value, scene, label, { nonEmpty: true });
 }
 
 function assertPositionsAreExactlyHoles(
@@ -816,68 +855,10 @@ function requireBasicComponent(step: GameLogicStep, name: string) {
   return component;
 }
 
-function parseIndexArray(value: unknown, label: string): readonly number[] {
-  if (!Array.isArray(value)) throw new Error(`${label} must be an array.`);
-  return Object.freeze(
-    value.map((candidate, index) =>
-      assertNonNegativeSafeInteger(candidate, `${label}[${index}]`),
-    ),
-  );
-}
-
-function assertDimensions(
-  value: readonly (readonly unknown[])[],
-  scene: readonly (readonly unknown[])[],
-  label: string,
-): void {
-  if (!Array.isArray(value) || value.length !== scene.length)
-    throw new Error(`${label} width must match scene.`);
-  value.forEach((column, x) => {
-    if (!Array.isArray(column) || column.length !== scene[x].length)
-      throw new Error(`${label}[${x}] height must match scene.`);
-  });
-}
-
-function assertMatrixEqual(
-  actual: readonly (readonly unknown[])[],
-  expected: readonly (readonly unknown[])[],
-  label: string,
-): void {
-  if (
-    actual.length !== expected.length ||
-    actual.some(
-      (column, x) =>
-        column.length !== expected[x]?.length ||
-        column.some((value, y) => value !== expected[x]?.[y]),
-    )
-  )
-    throw new Error(`${label} does not match previous cascade output.`);
-}
-
-function forEachCell(
-  scene: readonly (readonly unknown[])[],
-  callback: (x: number, y: number) => void,
-): void {
-  scene.forEach((column, x) => column.forEach((_value, y) => callback(x, y)));
-}
-
-function positionKey(position: {
-  readonly x: number;
-  readonly y: number;
-}): string {
-  return `${position.x},${position.y}`;
-}
-
 function readOptionalNonNegativeInteger(
   value: unknown,
   label: string,
 ): number | null {
   if (value === undefined) return null;
-  return assertNonNegativeSafeInteger(value, label);
-}
-
-function assertNonNegativeSafeInteger(value: unknown, label: string): number {
-  if (!Number.isSafeInteger(value) || (value as number) < 0)
-    throw new Error(`${label} must be a non-negative safe integer.`);
-  return value as number;
+  return requireSafeInteger(value, label, { minimum: 0 });
 }

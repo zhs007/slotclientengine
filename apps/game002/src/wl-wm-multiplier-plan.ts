@@ -9,6 +9,14 @@ import type {
   SlotRoundSettledValueDraft,
   SlotRoundPosition,
 } from "@slotclientengine/gameframeworks";
+import {
+  assertExactMatrixEqual as assertSceneEqual,
+  assertExactMatrixShape,
+  forEachMatrixCell as forEachCell,
+  parseExactPositionPairs,
+  requireSafeInteger,
+  slotOperationPositionKey as positionKey,
+} from "@slotclientengine/gameframeworks";
 import { GAME002_CASCADE_COMPONENTS } from "./cascade-config.js";
 import {
   compileGame002CoCollectionPlan,
@@ -743,33 +751,11 @@ function resolveIncomingWlIncrements(options: {
     GAME002_CASCADE_COMPONENTS.posincwl,
   );
   if (declared && isRecord(declared.raw)) {
-    const raw = declared.raw.pos;
-    if (!Array.isArray(raw) || raw.length % 2 !== 0)
-      throw new Error(
-        `step[${context.stepIndex}] bg-pos-incwl.pos must contain x/y pairs.`,
-      );
-    const selected: SlotRoundPosition[] = [];
-    const seen = new Set<string>();
-    for (let index = 0; index < raw.length; index += 2) {
-      const x = raw[index];
-      const y = raw[index + 1];
-      if (
-        !Number.isSafeInteger(x) ||
-        !Number.isSafeInteger(y) ||
-        (x as number) < 0 ||
-        (y as number) < 0
-      )
-        throw new Error(
-          `step[${context.stepIndex}] bg-pos-incwl coordinate (${String(x)},${String(y)}) is invalid.`,
-        );
-      const key = `${String(x)},${String(y)}`;
-      if (seen.has(key))
-        throw new Error(
-          `step[${context.stepIndex}] bg-pos-incwl contains duplicate position ${key}.`,
-        );
-      seen.add(key);
-      selected.push(Object.freeze({ x: x as number, y: y as number }));
-    }
+    const selected = parseExactPositionPairs(
+      declared.raw.pos,
+      context.input.scene,
+      `step[${context.stepIndex}] bg-pos-incwl.pos`,
+    );
     const hasIncwl = context.step.hasComponent(
       GAME002_CASCADE_COMPONENTS.incwl,
     );
@@ -890,24 +876,13 @@ function readWinningWlPositions(options: {
   for (const [resultIndex, result] of options.context.step
     .getComponentResults(GAME002_CASCADE_COMPONENTS.win)
     .entries()) {
-    if (result.pos.length === 0 || result.pos.length % 2 !== 0)
-      throw new Error(
-        `step[${options.context.stepIndex}] bg-win result[${resultIndex}].pos must contain non-empty x/y pairs.`,
-      );
-    for (let index = 0; index < result.pos.length; index += 2) {
-      const x = result.pos[index];
-      const y = result.pos[index + 1];
-      if (
-        !Number.isSafeInteger(x) ||
-        !Number.isSafeInteger(y) ||
-        x < 0 ||
-        y < 0 ||
-        x >= options.context.input.scene.length ||
-        y >= (options.context.input.scene[x]?.length ?? 0)
-      )
-        throw new Error(
-          `step[${options.context.stepIndex}] bg-win result[${resultIndex}] coordinate (${String(x)},${String(y)}) is invalid.`,
-        );
+    const selected = parseExactPositionPairs(
+      result.pos,
+      options.context.input.scene,
+      `step[${options.context.stepIndex}] bg-win result[${resultIndex}].pos`,
+      { nonEmpty: true },
+    );
+    for (const { x, y } of selected) {
       if (options.context.input.scene[x][y] === options.wlCode)
         positions.add(`${x},${y}`);
     }
@@ -1063,30 +1038,11 @@ function assertMatrixShape(
   label: string,
   validateAllValues = true,
 ): void {
-  if (matrix.length !== scene.length)
-    throw new Error(
-      `${label} width differs: actual(server) columns=${matrix.length}; expected(scene) columns=${scene.length}.`,
+  assertExactMatrixShape(matrix, scene, label);
+  if (validateAllValues)
+    forEachCell(matrix, (x, y, value) =>
+      requireSafeInteger(value, `${label}[${x}][${y}]`, { minimum: 0 }),
     );
-  matrix.forEach((column, x) => {
-    if (column.length !== scene[x].length)
-      throw new Error(
-        `${label}[${x}] height differs: actual(server) rows=${column.length}; expected(scene) rows=${scene[x].length}.`,
-      );
-    if (!validateAllValues) return;
-    column.forEach((value, y) => {
-      if (!Number.isSafeInteger(value) || value < 0)
-        throw new Error(`${label}[${x}][${y}] must be non-negative.`);
-    });
-  });
-}
-
-function forEachCell(
-  scene: SceneMatrix,
-  callback: (x: number, y: number, code: number) => void,
-): void {
-  scene.forEach((column, x) =>
-    column.forEach((code, y) => callback(x, y, code)),
-  );
 }
 
 function overlayGeneratedCo(options: {
@@ -1130,35 +1086,14 @@ function requireConfiguredCode(
   return code;
 }
 
-function assertSceneEqual(
-  actual: SceneMatrix,
-  expected: SceneMatrix,
-  label: string,
-): void {
-  forEachCell(expected, (x, y, code) => {
-    if (actual[x]?.[y] !== code)
-      throw new Error(
-        `${label}[${x}][${y}] differs: actual=${String(actual[x]?.[y])}; expected=${code}.`,
-      );
-  });
-}
-
-function positionKey(position: SlotRoundPosition): string {
-  return `${position.x},${position.y}`;
-}
-
 function assertPositiveMultiplier(value: unknown, label: string): number {
-  if (!Number.isSafeInteger(value) || (value as number) <= 0)
-    throw new Error(
-      `${label} must be a positive safe integer; actual=${String(value)}.`,
-    );
-  return value as number;
+  return requireSafeInteger(value, label, { minimum: 1 });
 }
 
 function assertCode(value: number, symbol: string): number {
-  if (!Number.isSafeInteger(value) || value < 0)
-    throw new Error(`game002 ${symbol} symbol code is invalid.`);
-  return value;
+  return requireSafeInteger(value, `game002 ${symbol} symbol code`, {
+    minimum: 0,
+  });
 }
 
 function addSafe(left: number, right: number, label: string): number {

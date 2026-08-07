@@ -160,9 +160,7 @@ describe("game002 CO collection compiler", () => {
 
     const invalidPos = validFixture();
     invalidPos.components["bg-co"]!.raw = { pos: "bad" };
-    expect(() => compileFixture(invalidPos)).toThrow(
-      /must be an integer array/,
-    );
+    expect(() => compileFixture(invalidPos)).toThrow(/must be an array/);
 
     const emptySegment = validFixture();
     emptySegment.components["bg-co"]!.raw = { pos: [-1] };

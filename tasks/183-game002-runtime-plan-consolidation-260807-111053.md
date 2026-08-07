@@ -2,8 +2,9 @@
 
 ## 结论
 
-本次完成了 Task 183 的核心 runtime ownership 与 WM/CM/CO presentation 收敛，但没有把原计划中的
-single-pass `Game002RoundFacts` 和 FreeGame target 全部迁移完，因此本报告不把任务标记为完整完成。
+本次完成了 Task 183 的核心 runtime ownership 与 WM/CM/CO presentation 收敛，后续提交又将 FreeGame
+target 迁入同一 transaction runner，并增加 single-pass frozen `Game002RoundFacts` 边界。浏览器验收和
+两项仓库既有自动门槛仍未闭合，因此本报告不把整项验收标记为完成。
 浏览器人工验收按用户要求交由用户执行。
 
 ## 已完成
@@ -19,16 +20,22 @@ single-pass `Game002RoundFacts` 和 FreeGame target 全部迁移完，因此本�
   `operationPayloads/getOperationPayload` cache；settled compiler 一次返回 draft 与 payload。
 - rendercore 新增 await/commit/progress transaction runner，具备全量 preflight、AbortSignal、late-settlement
   隔离、rollback/destroy 和并行 animation barrier；旧 counter choreography executor及其测试删除。
+- FreeGame trigger/transition/AF/CO 已迁入同一个 transaction runner；删除专用 AF/CO phase、playback
+  AbortController、prepared replacement/transfer arrays 与 progress 字段。
+- `decodeGame002RoundFacts()` 一次消费 raw `GameLogic` 并返回 frozen operation facts；
+  `compileGame002OperationPlanFromFacts()` 只执行 final closure，不读取 raw step/component。
 - logiccore 新增通用 exact scene/otherScene/result/matrix/position/occurrence/safe-integer 校验。
+- 后续收敛将 `Game002RoundFacts` 缩为 atomic operations、金额与 symbol codes；删除复制的静态 definitions 与
+  aggregate final snapshot，并移除 adapter 对完整 plan/resource/win group 的二次深度 preflight。唯一缺失的
+  sequential collect 现金整除业务校验已前移到 win plan decoder，执行能力错误交给 target/runner 统一失败路径。
 - gameframeworks facade 导出 transaction runner；README、game002/shared runtime/scene-layout 领域规则和
   source-boundary 同步更新。
 
 ## 保留项与偏差
 
-- 尚未建立计划中的唯一 deep-frozen `Game002RoundFacts`。`game002-operation-compiler.ts` 仍直接组合
-  `GameLogic` 与 app-owned raw decoder；`operation-data.ts`、`wl-wm-multiplier-plan.ts`、
-  `co-collection-plan.ts`、`freegame-plan.ts` 仍承担现有 strict 协议校验。
-- `Game002FreeGameOperationTarget` 仍保留其 AF/CO state machine，尚未迁入共享 transaction runner。
+- `operation-data.ts`、`wl-wm-multiplier-plan.ts`、`co-collection-plan.ts`、`freegame-plan.ts` 仍作为
+  `Game002RoundFacts` decoder 的 component-specific strict 实现保留；它们没有 production target consumer。
+  本次没有为追求文件删除而把同样公式机械搬入一个超大文件。
 - reel controller 仍包含 game002 anticipation/Nearwin/public-strip/cascade 业务状态；本次只删除重复 display
   root/ownership forwarding，没有以拆文件冒充删除。
 - 未执行独立 agent 验收；当前执行环境规则禁止未由用户明确要求的 sub-agent。浏览器验收待用户完成。
@@ -42,6 +49,7 @@ single-pass `Game002RoundFacts` 和 FreeGame target 全部迁移完，因此本�
   `game-demo.ts` 1322 行，`game002-scene-runtime.ts` 146 行对应删除的旧 presentation wrapper 132 行。
 - 新增共享实现：logiccore exact-data 165 行；rendercore transaction runner 406 行。
 - `game-adapter.ts`：2368 行降为 1853 行；transform 测试 906 行降为 455 行，并保留最终行为断言。
+- 后续收敛后 `apps/game002/src` 为 9,798 行（基线 10,783，净减 985）；`game-adapter.ts` 为 1,583 行。
 - `assets/**`、game002 config、manifest/schema、`pnpm-lock.yaml`、根 package/tooling 均无修改。
 
 ## 自动验收
@@ -71,7 +79,5 @@ BaseGame→FreeGame→BaseGame reel identity；popup/transition 层级；横竖�
 
 ## 后续建议
 
-继续 Task 183 时应单独完成两项，不恢复旧轨：
-
-1. 将 raw component selection 集中为 immutable `Game002RoundFacts`，再删除四个分散 decoder/plan 文件。
-2. 将 FreeGame AF/CO target 映射为同一个 transaction program，删除剩余专用 phase state machine。
+若后续继续压缩代码，应只提取多个 decoder 真实共用的 strict selection/validation primitive；不要为了
+删除文件，把 game002 component 公式机械搬进单一大模块或下沉到 shared package。

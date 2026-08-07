@@ -5,7 +5,6 @@ import type {
   SlotRoundCapability,
   SlotRoundOccurrenceSnapshot,
   SlotOperationV2,
-  SlotOperationPlanV2,
   SlotOperationSnapshot,
   SlotGameAdapter,
   SlotGameInitialState,
@@ -17,7 +16,6 @@ import type {
 } from "@slotclientengine/gameframeworks";
 import { createPresentationTransactionRunner } from "@slotclientengine/gameframeworks";
 import {
-  assertSymbolValueDisplayResource,
   createSymbolCascadePlayer,
   type CreateSymbolCascadePlayerOptions,
   type CreateSymbolWinCarouselOptions,
@@ -52,18 +50,11 @@ import {
 } from "./game002-scene-runtime.js";
 import { formatServerUsdAmount } from "./money.js";
 import { GAME002_SYMBOL_WIN_CAROUSEL_OPTIONS } from "./win-symbol-carousel-config.js";
-import { GAME002_CN_VALUE_SYMBOL } from "./cn-value-sequence.js";
-import {
-  createGame002WinSummaryCollectOptions,
-  resolveGame002WinResultCashAmount,
-  resolveGame002WinResultCoinAmount,
-  resolveGame002WinResultMultiplier,
-} from "./cascade-win-summary-config.js";
+import { createGame002WinSummaryCollectOptions } from "./cascade-win-summary-config.js";
 import {
   GAME002_CASCADE_MOTION,
   GAME002_CASCADE_PRESENTATION,
   canGame002CascadeDropSymbol,
-  isGame002SequentialWinCompanionSymbol,
 } from "./cascade-config.js";
 import { type Game002TransformOperationPayload } from "./wl-wm-multiplier-plan.js";
 import {
@@ -427,11 +418,6 @@ class Game002PixiAdapter implements SlotGameAdapter {
         displaySymbols: this.#packageConfig.displaySymbols,
         logDiagnostic: this.#logDiagnostic,
       });
-      assertGame002OperationResources(
-        compiled.plan,
-        runtime,
-        this.#packageConfig,
-      );
       return coordinator.start(compiled.plan);
     } catch (error) {
       this.#logDiagnostic(
@@ -748,7 +734,7 @@ function createGame002FreeGameOperationRegistrations(
   const handler: SlotOperationHandler<SlotOperationV2, SlotOperationV2> = {
     preflight: (operation) => target.preflight(requirePayload(operation)),
     prepare: (operation) => operation,
-    start: (operation) => target.start(requirePayload(operation)),
+    start: (operation) => target.start(requirePayload(operation), operation),
     update: (_operation, deltaSeconds) => target.update(deltaSeconds),
     commit: () => undefined,
     rollback: () => target.cleanup(),
@@ -989,14 +975,9 @@ export class Game002RoundTarget {
   }
 
   preflightAtomicTransform(
-    operation: SlotOperationV2,
+    _operation: SlotOperationV2,
     payload: Game002TransformPayload,
   ): void {
-    if (
-      payload.phase !== "wild-multiplier" &&
-      operation.effect !== "state-mutation"
-    )
-      throw new Error(`${operation.kind} must mutate state.`);
     const requireStates = (
       positions: readonly { readonly x: number; readonly y: number }[],
       states: readonly string[],
@@ -1061,7 +1042,6 @@ export class Game002RoundTarget {
       this.#transformRunner.getSnapshot().running
     )
       throw new Error("game002 atomic transform cannot start while active.");
-    this.preflightAtomicTransform(operation, payload);
     const commands = this.createAtomicTransformCommands(operation, payload);
     this.#activity = "atomic-transform";
     this.#atomicTransformOperation = operation;
@@ -1087,12 +1067,6 @@ export class Game002RoundTarget {
     if (this.#transformPlaybackFailure) throw this.#transformPlaybackFailure;
     if (this.#transformRunner.getSnapshot().phase !== "complete")
       return { completed: false };
-    if (operation.effect === "state-mutation")
-      assertGame002ReelVisualMatchesTarget(
-        this.#runtime.getVisualSnapshot(),
-        operation.output.scene,
-        `completed ${operation.kind}`,
-      );
     this.#atomicTransformOperation = null;
     this.#activity = "idle";
     return { completed: true };
@@ -1146,7 +1120,7 @@ export class Game002RoundTarget {
             destroy: () => undefined,
           }),
       });
-    const mutation = this.requireAtomicMutation(operation, payload.phase);
+    const mutation = operation.effect === "state-mutation" ? operation : null;
     switch (payload.phase) {
       case "wl-increment": {
         const positions = payload.increments.map((item) => item.position);
@@ -1258,15 +1232,6 @@ export class Game002RoundTarget {
           awaitStates,
         );
     }
-  }
-
-  private requireAtomicMutation(
-    operation: SlotOperationV2,
-    phase: Game002TransformPhase,
-  ): Extract<SlotOperationV2, { readonly effect: "state-mutation" }> | null {
-    if (operation.effect === "state-mutation") return operation;
-    if (phase === "wild-multiplier") return null;
-    throw new Error(`${operation.kind} must mutate state.`);
   }
 
   private replacementCommit(options: {
@@ -1570,241 +1535,6 @@ function formatMultiplier(value: number | null): string {
       "game002 multiplier value must be a positive safe integer.",
     );
   return `x${value}`;
-}
-
-export function assertGame002OperationResources(
-  plan: SlotOperationPlanV2,
-  runtime: Game002ReelRuntime,
-  packageConfig: Game002PackageConfig,
-): void {
-  const checkWinStage = (stage: {
-    readonly stepIndex: number;
-    readonly groups: Game002WinPayload["groups"];
-    readonly sourceScene: SlotOperationSnapshot["scene"];
-    readonly sourceValues: SlotOperationSnapshot["values"];
-  }) => {
-    const scene = stage.sourceScene;
-    for (const [groupIndex, group] of stage.groups.entries()) {
-      const resultCode = group.result.symbol;
-      if (typeof resultCode !== "number" || !Number.isSafeInteger(resultCode)) {
-        throw new Error(
-          `game002 step[${stage.stepIndex}] group[${groupIndex}] result symbol code is invalid.`,
-        );
-      }
-      const resultSymbol =
-        runtime.gameConfig.getPaytableEntry(resultCode)?.symbol;
-      const resultPresentation = resultSymbol
-        ? packageConfig.cascadeWinPresentations[resultSymbol]
-        : undefined;
-      if (!resultSymbol || !resultPresentation) {
-        throw new Error(
-          `game002 step[${stage.stepIndex}] group[${groupIndex}] result symbol has no cascade presentation.`,
-        );
-      }
-      const groupCoinAmount = resolveGame002WinResultCoinAmount({
-        group,
-        groupIndex,
-      });
-      const groupCashAmount = resolveGame002WinResultCashAmount({
-        group,
-        groupIndex,
-      });
-      const resultMultiplier =
-        resultPresentation.playback.mode === "sequentialCollect"
-          ? resolveGame002WinResultMultiplier({
-              group,
-              groupIndex,
-            })
-          : undefined;
-      let itemTotal = 0;
-      let itemCashTotal = 0;
-      const primaryPositionKeys = new Set<string>();
-      for (const position of group.positions) {
-        const code = scene[position.x]?.[position.y];
-        const symbol =
-          code === undefined
-            ? undefined
-            : runtime.gameConfig.getPaytableEntry(code)?.symbol;
-        if (!symbol) {
-          throw new Error(
-            `game002 step[${stage.stepIndex}] group[${groupIndex}] position (${position.x},${position.y}) has no symbol.`,
-          );
-        }
-        const presentation = packageConfig.cascadeWinPresentations[symbol];
-        if (!presentation) {
-          throw new Error(
-            `game002 step[${stage.stepIndex}] group[${groupIndex}] position (${position.x},${position.y}) symbol ${symbol} has no cascade presentation.`,
-          );
-        }
-        const isPrimary =
-          JSON.stringify(presentation) === JSON.stringify(resultPresentation);
-        if (!isPrimary) {
-          if (
-            resultPresentation.playback.mode !== "sequentialCollect" ||
-            presentation.playback.mode !== "group" ||
-            !isGame002SequentialWinCompanionSymbol(symbol)
-          ) {
-            throw new Error(
-              `game002 step[${stage.stepIndex}] group[${groupIndex}] position (${position.x},${position.y}) symbol ${symbol} has an incompatible cascade presentation.`,
-            );
-          }
-          if (
-            !packageConfig.symbolAnimationCapabilities[symbol]?.includes(
-              presentation.playback.winState,
-            )
-          ) {
-            throw new Error(
-              `game002 step[${stage.stepIndex}] group[${groupIndex}] companion (${position.x},${position.y}) symbol ${symbol} has no ${presentation.playback.winState} animation.`,
-            );
-          }
-          continue;
-        }
-        primaryPositionKeys.add(`${position.x},${position.y}`);
-        const states =
-          presentation.playback.mode === "group"
-            ? [presentation.playback.winState]
-            : [
-                presentation.playback.startState,
-                presentation.playback.loopState,
-                presentation.playback.collectState,
-              ];
-        for (const state of states) {
-          if (
-            !packageConfig.symbolAnimationCapabilities[symbol]?.includes(state)
-          ) {
-            throw new Error(
-              `game002 step[${stage.stepIndex}] group[${groupIndex}] position (${position.x},${position.y}) symbol ${symbol} has no ${state} animation.`,
-            );
-          }
-        }
-        if (presentation.playback.mode === "sequentialCollect") {
-          if (resultMultiplier === undefined) {
-            throw new Error(
-              `game002 step[${stage.stepIndex}] sequential collect result multiplier is missing.`,
-            );
-          }
-          const value = stage.sourceValues[position.x]?.[position.y];
-          if (
-            typeof value !== "number" ||
-            !Number.isSafeInteger(value) ||
-            value <= 0
-          ) {
-            throw new Error(
-              `game002 step[${stage.stepIndex}] collect item (${position.x},${position.y}) value must be a positive safe integer.`,
-            );
-          }
-          itemTotal += value;
-          const weightedCashAmount = value * resultMultiplier * groupCashAmount;
-          if (
-            !Number.isSafeInteger(weightedCashAmount) ||
-            weightedCashAmount % groupCoinAmount !== 0
-          ) {
-            throw new Error(
-              `game002 step[${stage.stepIndex}] collect item (${position.x},${position.y}) cash share must divide the result cash amount exactly.`,
-            );
-          }
-          itemCashTotal += weightedCashAmount / groupCoinAmount;
-        }
-      }
-      for (const position of group.removePositions) {
-        const key = `${position.x},${position.y}`;
-        if (!primaryPositionKeys.has(key)) {
-          throw new Error(
-            `game002 step[${stage.stepIndex}] group[${groupIndex}] remove position (${position.x},${position.y}) is not a primary win position.`,
-          );
-        }
-        const code = scene[position.x]?.[position.y];
-        const symbol =
-          code === undefined
-            ? undefined
-            : runtime.gameConfig.getPaytableEntry(code)?.symbol;
-        const presentation = symbol
-          ? packageConfig.cascadeWinPresentations[symbol]
-          : undefined;
-        const removeState = presentation?.playback.removeState;
-        if (
-          !symbol ||
-          !removeState ||
-          !packageConfig.symbolAnimationCapabilities[symbol]?.includes(
-            removeState,
-          )
-        ) {
-          throw new Error(
-            `game002 step[${stage.stepIndex}] group[${groupIndex}] remove position (${position.x},${position.y}) has no remove animation.`,
-          );
-        }
-      }
-      if (resultPresentation.playback.mode === "sequentialCollect") {
-        if (resultMultiplier === undefined) {
-          throw new Error(
-            `game002 step[${stage.stepIndex}] sequential collect result multiplier is missing.`,
-          );
-        }
-        const multipliedItemTotal = itemTotal * resultMultiplier;
-        if (!Number.isSafeInteger(multipliedItemTotal)) {
-          throw new Error(
-            `game002 step[${stage.stepIndex}] multiplied collect item sum must be a safe integer.`,
-          );
-        }
-        const removePositionKeys = new Set(
-          group.removePositions.map(
-            (position) => `${position.x},${position.y}`,
-          ),
-        );
-        if (
-          removePositionKeys.size !== primaryPositionKeys.size ||
-          [...primaryPositionKeys].some(
-            (position) => !removePositionKeys.has(position),
-          )
-        ) {
-          throw new Error(
-            `game002 step[${stage.stepIndex}] sequential collect group must remove every primary item and no companion.`,
-          );
-        }
-        if (multipliedItemTotal !== groupCoinAmount) {
-          throw new Error(
-            `game002 step[${stage.stepIndex}] collect item sum ${itemTotal} multiplied by result otherMul ${resultMultiplier} does not match result coin amount ${groupCoinAmount}.`,
-          );
-        }
-        if (itemCashTotal !== groupCashAmount) {
-          throw new Error(
-            `game002 step[${stage.stepIndex}] collect item cash sum ${itemCashTotal} does not match result cash amount ${groupCashAmount}.`,
-          );
-        }
-      }
-    }
-  };
-  const resource =
-    packageConfig.symbolValuePresentationResources[GAME002_CN_VALUE_SYMBOL];
-  if (!resource)
-    throw new Error("game002 CN valuePresentation resource is missing.");
-  let current: SlotOperationSnapshot | null = null;
-  let hasSpin = false;
-  for (const operation of plan.operations) {
-    if (operation.effect !== "presentation") {
-      current = operation.output;
-      hasSpin ||= operation.kind === "game002:spin";
-      for (const column of operation.output.values) {
-        for (const value of column) {
-          if (value !== null && value !== -1)
-            assertSymbolValueDisplayResource({ value, resource });
-        }
-      }
-    }
-    if (operation.kind !== "game002:win") continue;
-    if (!current)
-      throw new Error("game002 win operation has no established scene.");
-    checkWinStage({
-      stepIndex: operation.operationIndex,
-      groups: (operation.payload as Game002WinPayload).groups,
-      sourceScene: current.scene,
-      sourceValues: current.values,
-    });
-  }
-  if (!current)
-    throw new Error("game002 operation plan has no established scene.");
-  if (!hasSpin)
-    throw new Error("game002 operation plan has no spin operation.");
 }
 
 function isWinAmountBlockingSpin(phase: WinAmountAnimationPhase): boolean {

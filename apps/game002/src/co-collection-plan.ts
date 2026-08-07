@@ -7,6 +7,17 @@ import type {
   SlotRoundSettledTransformChangeDraft,
   SlotRoundSettledTransformDraft,
 } from "@slotclientengine/gameframeworks";
+import {
+  forEachMatrixCell as forEachCell,
+  slotOperationPositionKey as positionKey,
+  assertExactMatrixShape as assertMatrixDimensions,
+  assertExactPositionSet as assertPositionSetEqual,
+  findMatrixValuePositions as findCodePositions,
+  parseExactPositionPairs as parsePairs,
+  requireExactlyOne as exactlyOne,
+  requireSafeIntegerArray,
+  validatePositionInMatrix as validatePosition,
+} from "@slotclientengine/gameframeworks";
 import { GAME002_CASCADE_COMPONENTS } from "./cascade-config.js";
 
 export interface Game002CoTransfer {
@@ -74,6 +85,7 @@ export function compileGame002CoCollectionPlan(options: {
         result.pos,
         inputScene,
         `step[${stepIndex}] bg-triggerco result[${index}].pos`,
+        { nonEmpty: true },
       ),
     )
     .filter(({ x, y }) => inputScene[x]?.[y] === options.coSymbolCode);
@@ -95,7 +107,10 @@ export function compileGame002CoCollectionPlan(options: {
   if (!coComponent)
     throw new Error(`step[${stepIndex}] bg-co component is missing.`);
   const raw = asRecord(coComponent.raw, `step[${stepIndex}] bg-co`);
-  const encoded = asIntegerArray(raw.pos, `step[${stepIndex}] bg-co.pos`);
+  const encoded = requireSafeIntegerArray(
+    raw.pos,
+    `step[${stepIndex}] bg-co.pos`,
+  );
   const encodedSegments = splitTransferSegments(encoded, stepIndex);
   const outputScene = exactlyOne(
     step.getComponentScenes(GAME002_CASCADE_COMPONENTS.co),
@@ -132,11 +147,13 @@ export function compileGame002CoCollectionPlan(options: {
           { x: sourceX, y: sourceY },
           inputScene,
           `step[${stepIndex}] bg-co segment[${segmentIndex}] transfer[${transferIndex}].source`,
+          { rangeMessage: "is out of range" },
         );
         const target = validatePosition(
           { x: targetX, y: targetY },
           inputScene,
           `step[${stepIndex}] bg-co segment[${segmentIndex}] transfer[${transferIndex}].target`,
+          { rangeMessage: "is out of range" },
         );
         for (const [role, position] of [
           ["source", source],
@@ -288,6 +305,7 @@ export function compileGame002CoCollectionPlan(options: {
         result.pos,
         outputScene,
         `step[${stepIndex}] bg-win2 result[${resultIndex}].pos`,
+        { nonEmpty: true },
       );
     });
   const requiredWin2 = new Set(
@@ -313,12 +331,14 @@ export function compileGame002CoCollectionPlan(options: {
         result.pos,
         outputScene,
         `step[${stepIndex}] bg-bn result[${resultIndex}].pos`,
+        { nonEmpty: true },
       ),
     );
   assertPositionSetEqual(
     bnPositions,
     sourcePositions,
     `step[${stepIndex}] bg-bn positions`,
+    { mismatchMessage: "must exactly match the collected source positions" },
   );
   return Object.freeze({
     stepIndex,
@@ -422,14 +442,6 @@ function assertComponentsAbsent(
     );
 }
 
-function exactlyOne<T>(values: readonly T[], label: string): T {
-  if (values.length !== 1)
-    throw new Error(
-      `${label} must contain exactly one entry; received ${values.length}.`,
-    );
-  return values[0]!;
-}
-
 function asRecord(
   value: unknown,
   label: string,
@@ -437,81 +449,6 @@ function asRecord(
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error(`${label} must be an object.`);
   return value as Readonly<Record<string, unknown>>;
-}
-
-function asIntegerArray(value: unknown, label: string): readonly number[] {
-  if (
-    !Array.isArray(value) ||
-    value.some((item) => !Number.isSafeInteger(item))
-  )
-    throw new Error(`${label} must be an integer array.`);
-  return Object.freeze([...value]) as readonly number[];
-}
-
-function parsePairs(
-  values: readonly number[],
-  scene: SceneMatrix,
-  label: string,
-): readonly SlotRoundPosition[] {
-  if (!Array.isArray(values) || values.length === 0 || values.length % 2 !== 0)
-    throw new Error(`${label} must contain non-empty x/y pairs.`);
-  return Object.freeze(
-    Array.from({ length: values.length / 2 }, (_unused, index) =>
-      validatePosition(
-        { x: values[index * 2]!, y: values[index * 2 + 1]! },
-        scene,
-        `${label}[${index}]`,
-      ),
-    ),
-  );
-}
-
-function validatePosition(
-  position: SlotRoundPosition,
-  scene: SceneMatrix,
-  label: string,
-): SlotRoundPosition {
-  if (
-    !Number.isSafeInteger(position.x) ||
-    !Number.isSafeInteger(position.y) ||
-    position.x < 0 ||
-    position.y < 0 ||
-    position.x >= scene.length ||
-    position.y >= scene[position.x]!.length
-  )
-    throw new Error(`${label} is out of range.`);
-  return Object.freeze({ x: position.x, y: position.y });
-}
-
-function findCodePositions(
-  scene: SceneMatrix,
-  code: number,
-): readonly SlotRoundPosition[] {
-  return Object.freeze(
-    scene.flatMap((column, x) =>
-      column.flatMap((cellCode, y) =>
-        cellCode === code ? [Object.freeze({ x, y })] : [],
-      ),
-    ),
-  );
-}
-
-function assertPositionSetEqual(
-  actual: readonly SlotRoundPosition[],
-  expected: readonly SlotRoundPosition[],
-  label: string,
-): void {
-  const actualKeys = new Set(actual.map(positionKey));
-  const expectedKeys = new Set(expected.map(positionKey));
-  if (
-    actualKeys.size !== actual.length ||
-    expectedKeys.size !== expected.length ||
-    actualKeys.size !== expectedKeys.size ||
-    [...expectedKeys].some((key) => !actualKeys.has(key))
-  )
-    throw new Error(
-      `${label} must exactly match the collected source positions.`,
-    );
 }
 
 function setChange(
@@ -533,29 +470,4 @@ function isEightNeighbor(
   const dx = Math.abs(center.x - position.x);
   const dy = Math.abs(center.y - position.y);
   return dx <= 1 && dy <= 1 && dx + dy > 0;
-}
-
-function positionKey(position: SlotRoundPosition): string {
-  return `${position.x},${position.y}`;
-}
-
-function assertMatrixDimensions(
-  matrix: readonly (readonly unknown[])[],
-  scene: SceneMatrix,
-  label: string,
-): void {
-  if (
-    matrix.length !== scene.length ||
-    matrix.some((column, x) => column.length !== scene[x]!.length)
-  )
-    throw new Error(`${label} dimensions do not match the settled scene.`);
-}
-
-function forEachCell(
-  scene: SceneMatrix,
-  visitor: (x: number, y: number, code: number) => void,
-): void {
-  scene.forEach((column, x) =>
-    column.forEach((code, y) => visitor(x, y, code)),
-  );
 }
