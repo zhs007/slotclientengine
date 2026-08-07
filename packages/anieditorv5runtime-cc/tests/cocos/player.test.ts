@@ -6,6 +6,11 @@ import projectData from "../fixtures/project.json";
 import roundreelData from "../fixtures/roundreel.json";
 import { V5GCocosPlayer } from "../../src/cocos/player";
 import { V5GCocosPlayerPoolManager } from "../../src/cocos/player-pool";
+import {
+  isV5GCocosPlaybackCancelledError,
+  V5GCocosPlaybackCancelledError,
+  type V5GCocosManualPlaybackSession,
+} from "../../src/cocos/manual-playback";
 import { assertV5GProject } from "../../src/core/validation";
 import {
   getCocosBlendModeConfig,
@@ -782,6 +787,24 @@ function getFirstParticleContainer(root: FakeNode): FakeNode {
 }
 
 describe("V5GCocosPlayer", () => {
+  it("classifies only runtime-owned manual playback cancellation errors", () => {
+    const cancellation = new V5GCocosPlaybackCancelledError();
+
+    expect(isV5GCocosPlaybackCancelledError(cancellation)).toBe(true);
+    expect(
+      isV5GCocosPlaybackCancelledError(
+        new Error("V5G Cocos manual playback operation was cancelled."),
+      ),
+    ).toBe(false);
+    expect(
+      isV5GCocosPlaybackCancelledError({
+        name: "V5GCocosPlaybackCancelledError",
+        code: cancellation.code,
+      }),
+    ).toBe(false);
+    expect(isV5GCocosPlaybackCancelledError(null)).toBe(false);
+  });
+
   it("creates stage content and particle roots without a background node", () => {
     const project = sampleProject();
     const { root, player } = makePlayer(project);
@@ -2605,6 +2628,114 @@ describe("V5GCocosPlayer", () => {
       expect(frame?.destroyed).toBe(true);
     }
     expect(frames.get("asset-1")?.destroyed).not.toBe(true);
+  });
+
+  it("isolates superseded manual rounds and releases captures across repeated restarts", async () => {
+    const { driver, frames, player } = makePlayer(manualCardCarouselProject());
+    player.init();
+    const source = frames.get("asset-1") as FakeSpriteFrame;
+    const hostNodes = [0, 1, 2].map((index) =>
+      complexCarrierNode(`restart-card-${index}`, source),
+    );
+    let generation = 0;
+    let currentSession: V5GCocosManualPlaybackSession<FakeNode> | null = null;
+    const completedGenerations: number[] = [];
+    const cancelledGenerations: number[] = [];
+
+    const runRound = async (): Promise<void> => {
+      const roundGeneration = ++generation;
+      currentSession?.destroy();
+      const session = player.createManualPlaybackSession();
+      currentSession = session;
+      try {
+        const cyclic = session
+          .getAnimation({ layerId: "layer-1", animationId: "cards" })
+          .requireCyclicSelection();
+        const descriptor = cyclic.getAuthoredPreviewDescriptor();
+        await cyclic.setInitialItems(
+          hostNodes.map((node, index) => ({
+            key: `restart-item-${index}`,
+            visual: {
+              kind: "node" as const,
+              node,
+              width: 100,
+              height: 50,
+              revision: `round-${roundGeneration}`,
+            },
+          })),
+        ).ready;
+        await session.playRange({ range: descriptor.introRange }).completed;
+        const hold = session.holdTimeline({
+          at: descriptor.continuousHoldPoint,
+        });
+        cyclic.startContinuousPhase({
+          phaseId: descriptor.continuousPhaseId,
+        });
+        try {
+          await session.advanceFor({ durationSeconds: 1.5 }).completed;
+          await cyclic.prepareSelection({
+            selectedItem: { key: "restart-item-1" },
+          }).committed;
+          if (generation !== roundGeneration || currentSession !== session) {
+            throw new V5GCocosPlaybackCancelledError(
+              "Superseded manual playback round.",
+            );
+          }
+          hold.release();
+          cyclic.startResolvePhase();
+          await session.playRange({
+            range: descriptor.endingRange,
+            preserveRuntimeAnimationState: true,
+          }).completed;
+          if (generation !== roundGeneration || currentSession !== session) {
+            throw new V5GCocosPlaybackCancelledError(
+              "Superseded manual playback round.",
+            );
+          }
+          completedGenerations.push(roundGeneration);
+        } finally {
+          hold.release();
+        }
+      } catch (error) {
+        if (
+          isV5GCocosPlaybackCancelledError(error) &&
+          (generation !== roundGeneration || currentSession !== session)
+        ) {
+          cancelledGenerations.push(roundGeneration);
+          return;
+        }
+        throw error;
+      } finally {
+        session.destroy();
+        if (currentSession === session) currentSession = null;
+      }
+    };
+
+    const rounds: Promise<void>[] = [];
+    for (let round = 0; round < 20; round += 1) {
+      rounds.push(runRound());
+      await flushPromiseJobs();
+      player.update(0.2);
+      await flushPromiseJobs();
+    }
+    for (let step = 0; step < 6; step += 1) {
+      player.update(2);
+      await flushPromiseJobs();
+    }
+    await Promise.all(rounds);
+
+    expect(cancelledGenerations).toEqual(
+      Array.from({ length: 19 }, (_, index) => index + 1),
+    );
+    expect(completedGenerations).toEqual([20]);
+    expect(currentSession).toBeNull();
+    expect(driver.captureCount).toBe(60);
+    expect(driver.capturedReleaseCount).toBe(60);
+    expect(hostNodes.every((node) => !node.destroyed)).toBe(true);
+    expect(player.getRuntimeDiagnostics()).toMatchObject({
+      cardCarouselCardPoolSize: 3,
+      cardCarouselSlicePoolSize: 12,
+    });
   });
 
   it("runs host-driven manual hold, continuous selection, and dynamic resolve", async () => {

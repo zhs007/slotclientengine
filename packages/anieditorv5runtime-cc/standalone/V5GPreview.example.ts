@@ -9,6 +9,8 @@ import {
 import {
   assertV5GProject,
   createV5GCocosPlayer,
+  isV5GCocosPlaybackCancelledError,
+  V5GCocosPlaybackCancelledError,
   V5GCocosPlayerPoolManager,
   validateCocosV5GProject,
   type V5GCocosParticleComboPlayerLease,
@@ -16,6 +18,7 @@ import {
   type V5GCocosManualPlaybackSession,
   type V5GCocosPlaybackState,
   type V5GCocosPlayer,
+  type V5GCocosTimelineHoldHandle,
 } from "./anieditorv5runtime-cc";
 
 // Copy effects/vni-screen-alpha.effect into the same Cocos project, create a
@@ -90,6 +93,9 @@ export class V5GPreview extends Component {
   private slotProbeDispose: (() => void) | null = null;
   private lastPlaybackEventId = "";
   private completedPlaybackTasks = 0;
+  private manualRunGeneration = 0;
+  private manualPreviewDestroyed = false;
+  private manualPreviewError: unknown = null;
 
   start(): void {
     if (!this.root) {
@@ -163,7 +169,7 @@ export class V5GPreview extends Component {
     if (this.particleComboTargetPreview) {
       this.runParticleComboTargetPreview();
     } else if (this.manualBambooPreview) {
-      void this.runBambooManualPreview();
+      this.observeBambooManualPreview(this.restartBambooManualPreview());
     } else if (this.segmentedPreview) {
       const loopStart = Math.max(
         0,
@@ -234,7 +240,18 @@ export class V5GPreview extends Component {
     );
   }
 
-  private async runBambooManualPreview(): Promise<void> {
+  public restartBambooManualPreview(): Promise<void> {
+    if (this.manualPreviewDestroyed) {
+      throw new Error("V5GPreview manual preview is destroyed.");
+    }
+    const generation = ++this.manualRunGeneration;
+    this.manualPreviewError = null;
+    this.manualSession?.destroy();
+    this.manualSession = null;
+    return this.runBambooManualPreview(generation);
+  }
+
+  private async runBambooManualPreview(generation: number): Promise<void> {
     const player = this.player;
     if (!player) throw new Error("V5GPreview player is not initialized.");
     if (this.bambooCarrierNodes.length !== 13) {
@@ -244,6 +261,7 @@ export class V5GPreview extends Component {
     }
     const session = player.createManualPlaybackSession();
     this.manualSession = session;
+    let hold: V5GCocosTimelineHoldHandle | null = null;
     try {
       const cyclic = session
         .getAnimation({
@@ -264,9 +282,11 @@ export class V5GPreview extends Component {
           },
         })),
       ).ready;
+      this.assertManualRunCurrent(generation, session);
 
       await session.playRange({ range: descriptor.introRange }).completed;
-      const hold = session.holdTimeline({
+      this.assertManualRunCurrent(generation, session);
+      hold = session.holdTimeline({
         at: descriptor.continuousHoldPoint,
       });
       cyclic.startContinuousPhase({
@@ -276,6 +296,7 @@ export class V5GPreview extends Component {
       // Fixture for waiting on user/server work without timers: update(deltaTime)
       // advances this operation while the authored timeline remains at 1.5s.
       await session.advanceFor({ durationSeconds: 1.5 }).completed;
+      this.assertManualRunCurrent(generation, session);
       const transaction = this.bambooReplacementNode
         ? cyclic.prepareSelection({
             selectedItem: {
@@ -293,19 +314,64 @@ export class V5GPreview extends Component {
             selectedItem: { key: "bamboo-card-07" },
           });
       await transaction.committed;
+      this.assertManualRunCurrent(generation, session);
 
       hold.release();
+      hold = null;
       cyclic.startResolvePhase();
       await session.playRange({
         range: descriptor.endingRange,
         preserveRuntimeAnimationState: true,
       }).completed;
+      this.assertManualRunCurrent(generation, session);
+    } catch (error) {
+      if (
+        isV5GCocosPlaybackCancelledError(error) &&
+        (this.manualPreviewDestroyed ||
+          generation !== this.manualRunGeneration ||
+          this.manualSession !== session)
+      ) {
+        return;
+      }
+      throw error;
     } finally {
+      hold?.release();
       session.destroy();
       if (this.manualSession === session) {
         this.manualSession = null;
       }
     }
+  }
+
+  private assertManualRunCurrent(
+    generation: number,
+    session: V5GCocosManualPlaybackSession<Node>,
+  ): void {
+    if (
+      this.manualPreviewDestroyed ||
+      generation !== this.manualRunGeneration ||
+      this.manualSession !== session
+    ) {
+      throw new V5GCocosPlaybackCancelledError(
+        "V5GPreview manual playback round was superseded.",
+      );
+    }
+  }
+
+  private observeBambooManualPreview(task: Promise<void>): void {
+    void task.catch((error: unknown) => {
+      if (
+        isV5GCocosPlaybackCancelledError(error) &&
+        this.manualPreviewDestroyed
+      ) {
+        return;
+      }
+      this.manualPreviewError = error;
+    });
+  }
+
+  public getManualPreviewError(): unknown {
+    return this.manualPreviewError;
   }
 
   update(deltaTime: number): void {
@@ -340,6 +406,8 @@ export class V5GPreview extends Component {
   }
 
   onDestroy(): void {
+    this.manualPreviewDestroyed = true;
+    this.manualRunGeneration += 1;
     this.slotProbeDispose?.();
     this.slotProbeDispose = null;
     this.manualSession?.destroy();

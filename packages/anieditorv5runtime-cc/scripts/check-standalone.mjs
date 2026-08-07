@@ -154,6 +154,7 @@ const requiredExports = [
   "export class V5GCocosPlayer",
   "export class V5GCocosPlayerPoolManager",
   "export class V5GCocosPlaybackCancelledError",
+  "export function isV5GCocosPlaybackCancelledError",
   "export function createV5GCocosPlayer",
   "export function getCocosBlendModeConfig",
   "export function assertV5GProject",

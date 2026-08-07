@@ -100,6 +100,17 @@ describe("standalone runtime import", () => {
     expect(item.visual.width).toBe(720);
   });
 
+  it("exports the manual playback cancellation classifier", () => {
+    const cancellation = new runtime.V5GCocosPlaybackCancelledError();
+
+    expect(runtime.isV5GCocosPlaybackCancelledError(cancellation)).toBe(true);
+    expect(
+      runtime.isV5GCocosPlaybackCancelledError(
+        new Error("V5G Cocos manual playback operation was cancelled."),
+      ),
+    ).toBe(false);
+  });
+
   it("exports safe_glow sample types with inherited blend modes", () => {
     const layer: VNISafeGlowLayerSampleState = {
       layerId: "layer",

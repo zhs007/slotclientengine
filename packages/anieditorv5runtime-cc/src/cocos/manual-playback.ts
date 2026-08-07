@@ -155,11 +155,26 @@ export interface V5GCocosManualPlaybackSession<TNode> {
   destroy(): void;
 }
 
+const V5G_COCOS_PLAYBACK_CANCELLED_ERROR_CODE =
+  "V5G_COCOS_PLAYBACK_CANCELLED" as const;
+
 export class V5GCocosPlaybackCancelledError extends Error {
+  readonly code = V5G_COCOS_PLAYBACK_CANCELLED_ERROR_CODE;
+
   constructor(message = "V5G Cocos manual playback operation was cancelled.") {
     super(message);
     this.name = "V5GCocosPlaybackCancelledError";
   }
+}
+
+export function isV5GCocosPlaybackCancelledError(
+  error: unknown,
+): error is V5GCocosPlaybackCancelledError {
+  return (
+    error instanceof Error &&
+    (error as { readonly code?: unknown }).code ===
+      V5G_COCOS_PLAYBACK_CANCELLED_ERROR_CODE
+  );
 }
 
 export interface V5GCocosCardCarouselManualRuntime<TSpriteFrame> {

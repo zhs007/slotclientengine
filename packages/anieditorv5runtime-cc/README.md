@@ -196,6 +196,69 @@ production carrier 不是 Sprite-only contract。`node` 可以是包含 Sprite�
 
 manual session active 时，`play()`、legacy `playRange()`、`seek()`、`restart()`、`pause()` 和 segmented transport 会显式失败。Cocos runtime 不创建 RAF、Tween、schedule 或 timer；宿主必须继续在 Component `update(deltaTime)` 中调用 `player.update(deltaTime)`。`update(0)` 是合法 no-op，`advanceFor()` 也只累计这些真实 delta。
 
+取消 pending manual operation 时，`completed`、`ready` 或 `committed` 会按合同 reject
+`V5GCocosPlaybackCancelledError`。这是为了阻止旧异步流程把取消误当成成功继续执行；不要按 error
+message、空 `catch` 或全局 `unhandledrejection` 吞掉它。重复开始新一轮时，宿主应在 destroy 旧
+session 前递增 generation，每个 async flow 只使用自己的 local session，并在每次 `await` 后确认
+generation 和 session identity：
+
+```ts
+import {
+  isV5GCocosPlaybackCancelledError,
+  V5GCocosPlaybackCancelledError,
+  type V5GCocosManualPlaybackSession,
+} from "./anieditorv5runtime-cc";
+
+let generation = 0;
+let destroying = false;
+let currentSession: V5GCocosManualPlaybackSession<Node> | null = null;
+
+function restartRound(): Promise<void> {
+  const roundGeneration = ++generation;
+  currentSession?.destroy();
+  const session = player.createManualPlaybackSession();
+  currentSession = session;
+  return runRound(roundGeneration, session);
+}
+
+async function runRound(
+  roundGeneration: number,
+  session: V5GCocosManualPlaybackSession<Node>,
+): Promise<void> {
+  try {
+    // setInitialItems -> intro -> hold/continuous -> selection -> ending
+    await runManualStages(session);
+    if (roundGeneration !== generation || currentSession !== session) {
+      throw new V5GCocosPlaybackCancelledError(
+        "Manual playback round was superseded.",
+      );
+    }
+  } catch (error) {
+    const superseded =
+      destroying ||
+      roundGeneration !== generation ||
+      currentSession !== session;
+    if (!isV5GCocosPlaybackCancelledError(error) || !superseded) throw error;
+  } finally {
+    session.destroy();
+    if (currentSession === session) currentSession = null;
+  }
+}
+
+function destroyHost(): void {
+  destroying = true;
+  generation += 1;
+  currentSession?.destroy();
+  currentSession = null;
+  player.destroy();
+}
+```
+
+调用 `restartRound()` 的 fire-and-forget 入口仍应注册 rejection handler，用日志或业务错误通道报告
+非 cancellation 错误。拆成 `prepare`、`appear`、`slowLoop`、`result` 多个公开 async 方法的游戏也
+遵守同一规则：每个方法在进入时捕获 local generation/session，每个 `await` 后验证仍是当前轮；旧轮
+`finally` 只能清理自己的 session 和宿主 Node，不能读取后再销毁已经指向新轮的共享字段。
+
 ## Layer group slot
 
 runtime 初始化后会创建 group-aware tree：

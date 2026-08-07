@@ -5,6 +5,8 @@ import {
   assertV5GProject,
   createV5GCocosPlayer,
   getCocosBlendModeConfig,
+  isV5GCocosPlaybackCancelledError,
+  V5GCocosPlaybackCancelledError,
   V5GCocosPlayerPoolManager,
   type V5GAnimationConfig,
   type V5GAssetConfig,
@@ -1565,6 +1567,45 @@ describe("standalone V5GCocosPlayer", () => {
     });
     session.destroy();
     expect(hostNodes.every((node) => node.isValid)).toBe(true);
+  });
+
+  it("cancels and immediately replaces a standalone manual session", async () => {
+    const project = tinyProject({
+      animations: [cardCarouselAnimation()],
+    });
+    project.schemaVersion = "VNI_0.095";
+    project.editor.version = "VNI_0.095";
+    project.stage.duration = 2;
+    const { player } = makePlayer(project);
+    player.init();
+
+    const first = player.createManualPlaybackSession();
+    const firstCyclic = first
+      .getAnimation({ layerId: "layer-1", animationId: "cards" })
+      .requireCyclicSelection();
+    firstCyclic.adoptAuthoredItems();
+    const firstDescriptor = firstCyclic.getAuthoredPreviewDescriptor();
+    const hold = first.holdTimeline({
+      at: firstDescriptor.continuousHoldPoint,
+    });
+    firstCyclic.startContinuousPhase({
+      phaseId: firstDescriptor.continuousPhaseId,
+    });
+    const advance = first.advanceFor({ durationSeconds: 1.5 });
+
+    first.destroy();
+    hold.release();
+    const second = player.createManualPlaybackSession();
+
+    await expect(advance.completed).rejects.toBeInstanceOf(
+      V5GCocosPlaybackCancelledError,
+    );
+    expect(
+      isV5GCocosPlaybackCancelledError(new V5GCocosPlaybackCancelledError()),
+    ).toBe(true);
+    expect(second.getState().phase).toBe("idle");
+    second.destroy();
+    player.destroy();
   });
 
   it("runs the generated standalone particle_combo pool API", async () => {

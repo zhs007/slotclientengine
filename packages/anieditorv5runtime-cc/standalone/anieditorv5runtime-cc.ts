@@ -562,7 +562,9 @@ export interface V5GCocosParticleComboPlayerLease<
   release(): void;
 }
 
-export interface V5GCocosPlaybackCancelledError {}
+export interface V5GCocosPlaybackCancelledError {
+  code;
+}
 
 export interface V5GCocosPlaybackCompleteContext {
   startTime: number;
@@ -9456,12 +9458,20 @@ function divideByParentScale(value, parentScale) {
   return Math.abs(parentScale) > 1e-8 ? value / parentScale : 0;
 }
 //#endregion
+var V5G_COCOS_PLAYBACK_CANCELLED_ERROR_CODE = "V5G_COCOS_PLAYBACK_CANCELLED";
 var V5GCocosPlaybackCancelledError = class extends Error {
   constructor(message = "V5G Cocos manual playback operation was cancelled.") {
     super(message);
+    _defineProperty(this, "code", V5G_COCOS_PLAYBACK_CANCELLED_ERROR_CODE);
     this.name = "V5GCocosPlaybackCancelledError";
   }
 };
+function isV5GCocosPlaybackCancelledError(error) {
+  return (
+    error instanceof Error &&
+    error.code === V5G_COCOS_PLAYBACK_CANCELLED_ERROR_CODE
+  );
+}
 var CYCLIC_CAPABILITIES = Object.freeze([
   "continuous-phase",
   "replaceable-carriers",
@@ -14749,6 +14759,10 @@ const __standalone_getCocosRelativeTransform2D: (
   parent: V5GTransformConfig,
 ) => CocosRelativeTransform2D = getCocosRelativeTransform2D;
 
+const __standalone_isV5GCocosPlaybackCancelledError: (
+  error: unknown,
+) => error is V5GCocosPlaybackCancelledError = isV5GCocosPlaybackCancelledError;
+
 export {
   __standalone_editorToPixi as editorToPixi,
   __standalone_pixiToEditor as pixiToEditor,
@@ -14841,6 +14855,7 @@ export {
   __standalone_v5gTransformToCocosPosition as v5gTransformToCocosPosition,
   __standalone_opacityToCocosOpacity as opacityToCocosOpacity,
   __standalone_getCocosRelativeTransform2D as getCocosRelativeTransform2D,
+  __standalone_isV5GCocosPlaybackCancelledError as isV5GCocosPlaybackCancelledError,
   V5GCocosPlaybackCancelledError,
   V5GCocosManualPlaybackSessionImpl,
   V5GCocosPlayerPoolManager,

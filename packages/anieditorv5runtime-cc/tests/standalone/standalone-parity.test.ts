@@ -17,6 +17,10 @@ import scatter2Data from "../fixtures/scatter2.json";
 import superwinData from "../fixtures/superwin.json";
 import { V5GCocosPlayer } from "../../src/cocos/player";
 import {
+  isV5GCocosPlaybackCancelledError,
+  V5GCocosPlaybackCancelledError,
+} from "../../src/cocos/manual-playback";
+import {
   getCocosBlendModeConfig,
   type CocosBlendModeConfig,
 } from "../../src/cocos/blend-mode";
@@ -84,6 +88,20 @@ const fixtures = [
 const sampleTimes = [0, 0.1, 0.6, 0.8, 1, 2, 4, 4.4];
 
 describe("standalone runtime parity", () => {
+  it("matches modular manual playback cancellation classification", () => {
+    const modularError = new V5GCocosPlaybackCancelledError();
+    const standaloneError = new standalone.V5GCocosPlaybackCancelledError();
+
+    expect(isV5GCocosPlaybackCancelledError(modularError)).toBe(true);
+    expect(isV5GCocosPlaybackCancelledError(standaloneError)).toBe(true);
+    expect(standalone.isV5GCocosPlaybackCancelledError(standaloneError)).toBe(
+      true,
+    );
+    expect(standalone.isV5GCocosPlaybackCancelledError(modularError)).toBe(
+      true,
+    );
+  });
+
   it("matches modular authored seed playback normalization", () => {
     expect(standalone.normalizeIgnoreAuthoredSeed({})).toBe(
       normalizeIgnoreAuthoredSeed({}),
