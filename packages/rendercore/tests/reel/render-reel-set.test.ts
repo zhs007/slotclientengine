@@ -8,7 +8,10 @@ import {
   createReelSpinPlan,
   createReelSymbolRegistry,
 } from "../../src/reel/index.js";
-import type { VisibleSymbolPresentationTarget } from "../../src/reel/index.js";
+import type {
+  AwaitableVisibleSymbolPresentationTarget,
+  VisibleSymbolPresentationTarget,
+} from "../../src/reel/index.js";
 import {
   createTestSymbolAnimationResolver,
   createTextureSet,
@@ -20,6 +23,101 @@ import {
 } from "./helpers.js";
 
 describe("RenderReelSet", () => {
+  it("preflights and awaits a multi-state batch on standard reels", async () => {
+    const reelSet = new RenderReelSet({
+      reels: createBasicReels(),
+      layout: createBasicLayout(),
+      registry: createBasicRegistry(),
+    });
+    reelSet.resetToVisibleScene(
+      [
+        [1, 2, 1],
+        [2, 1, 2],
+      ],
+      [0, 0],
+    );
+    const target: AwaitableVisibleSymbolPresentationTarget = reelSet;
+    const requests = [
+      {
+        positions: [{ x: 0, y: 0 }],
+        state: "appear",
+        options: {
+          transitionMode: "immediate",
+          completion: "once-complete",
+        },
+      },
+      {
+        positions: [{ x: 1, y: 0 }],
+        state: "win",
+        options: {
+          transitionMode: "immediate",
+          completion: "once-complete",
+        },
+      },
+    ] as const;
+
+    let completed = false;
+    const playback = target.playVisibleSymbolStateBatch(requests).then(() => {
+      completed = true;
+    });
+    reelSet.update(0.43);
+    await Promise.resolve();
+    expect(completed).toBe(false);
+    reelSet.update(0.16);
+    await playback;
+    expect(completed).toBe(true);
+
+    expect(() => target.playVisibleSymbolStateBatch([])).toThrow(
+      /batch must not be empty/,
+    );
+    expect(() =>
+      target.playVisibleSymbolStateBatch([
+        {
+          positions: [],
+          state: "win",
+          options: { completion: "once-complete" },
+        },
+      ]),
+    ).toThrow(/positions must not be empty/);
+    expect(() =>
+      target.playVisibleSymbolStateBatch([
+        requests[0],
+        {
+          ...requests[1],
+          positions: requests[0].positions,
+        },
+      ]),
+    ).toThrow(/duplicate position/);
+
+    expect(() =>
+      target.playVisibleSymbolStateBatch([
+        requests[0],
+        {
+          positions: [{ x: 1, y: 0 }],
+          state: "win",
+          options: {
+            transitionMode: "immediate",
+            completion: "next-loop-complete",
+          },
+        },
+      ]),
+    ).toThrow(/expected "loop"/);
+    expect(
+      target.getVisibleSymbolStateSnapshots([{ x: 0, y: 0 }])[0]
+        ?.requestedState,
+    ).toBe("normal");
+
+    vi.spyOn(
+      reelSet.reels[1]!,
+      "playVisibleSymbolState",
+    ).mockImplementationOnce(() => {
+      throw new Error("second standard reel playback did not start");
+    });
+    await expect(target.playVisibleSymbolStateBatch(requests)).rejects.toThrow(
+      "second standard reel playback did not start",
+    );
+  });
+
   it("starts each target landing state at that axis boundary", () => {
     const reels = createBasicReels();
     const reelSet = new RenderReelSet({

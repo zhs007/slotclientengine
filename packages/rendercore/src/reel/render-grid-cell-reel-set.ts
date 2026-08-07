@@ -29,6 +29,8 @@ import type {
   GridCellVisibleOccurrenceTransfer,
   ReelSymbolRegistry,
   SymbolPresentationValueMatrix,
+  VisibleSymbolStatePlaybackBatchOptions,
+  VisibleSymbolStatePlaybackRequest,
   RenderReelVisibleOccurrence,
 } from "./types.js";
 import type { GridCellEffectController } from "./grid-cell-effect-player.js";
@@ -681,30 +683,73 @@ export class RenderGridCellReelSet extends Container {
     state: SymbolStateId,
     options: SymbolStatePlaybackOptions,
   ): Promise<void> {
+    return this.playVisibleSymbolStateBatch(
+      [
+        {
+          positions,
+          state,
+          options: {
+            completion: options.completion,
+            ...(options.transitionMode
+              ? { transitionMode: options.transitionMode }
+              : {}),
+          },
+        },
+      ],
+      options.signal ? { signal: options.signal } : undefined,
+    );
+  }
+
+  playVisibleSymbolStateBatch(
+    requests: readonly VisibleSymbolStatePlaybackRequest[],
+    options?: VisibleSymbolStatePlaybackBatchOptions,
+  ): Promise<void> {
     this.assertStopped("play visible symbol states");
-    const normalized = normalizePositions(positions, this.#columns, this.#rows);
-    const cells = normalized.map((position) => {
-      const cell = this.getCell(position.x, position.y);
-      if (!cell.occupied) {
-        throw new ReelError(
-          `Cannot play state for empty grid cell (${position.x},${position.y}).`,
-        );
-      }
-      return { position, cell };
-    });
-    for (const { cell } of cells) {
-      cell.reel.validateVisibleSymbolStatePlayback(0, state, options);
+    if (requests.length === 0) {
+      throw new ReelError(
+        "Visible symbol state playback batch must not be empty.",
+      );
     }
+    const positionKeys = new Set<string>();
+    const prepared = requests.flatMap((request) =>
+      normalizePositions(request.positions, this.#columns, this.#rows).map(
+        (position) => {
+          const key = `${position.x},${position.y}`;
+          if (positionKeys.has(key)) {
+            throw new ReelError(
+              `Visible symbol state playback batch contains duplicate position (${key}).`,
+            );
+          }
+          positionKeys.add(key);
+          const cell = this.getCell(position.x, position.y);
+          if (!cell.occupied) {
+            throw new ReelError(
+              `Cannot play state for empty grid cell (${position.x},${position.y}).`,
+            );
+          }
+          const playbackOptions: SymbolStatePlaybackOptions = {
+            ...request.options,
+            ...(options?.signal ? { signal: options.signal } : {}),
+          };
+          cell.reel.validateVisibleSymbolStatePlayback(
+            0,
+            request.state,
+            playbackOptions,
+          );
+          return { cell, request };
+        },
+      ),
+    );
     return startSymbolStatePlaybackBatch(
-      cells.map(
-        ({ cell }) =>
+      prepared.map(
+        ({ cell, request }) =>
           (signal) =>
-            cell.reel.playVisibleSymbolState(0, state, {
-              ...options,
+            cell.reel.playVisibleSymbolState(0, request.state, {
+              ...request.options,
               signal,
             }),
       ),
-      options.signal,
+      options?.signal,
     );
   }
 

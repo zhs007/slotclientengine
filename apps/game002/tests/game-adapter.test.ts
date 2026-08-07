@@ -740,6 +740,11 @@ class FakeRuntime {
       ) => {
         this.symbolState = state;
       },
+      playVisibleSymbolStateBatch: async (
+        requests: readonly { readonly state: string }[],
+      ) => {
+        for (const request of requests) this.symbolState = request.state;
+      },
       getVisibleSymbolStateSnapshots: (positions: readonly TestPosition[]) =>
         positions.map((position: TestPosition) => ({
           ...position,

@@ -66,6 +66,20 @@ describe("RenderGridCellReelSet", () => {
         completion: "once-complete",
       }),
     ).toThrow(/duplicate grid position/);
+    expect(() =>
+      target.playVisibleSymbolStateBatch([
+        {
+          positions: [positions[0]],
+          state: "appear",
+          options: { completion: "once-complete" },
+        },
+        {
+          positions: [positions[0]],
+          state: "win",
+          options: { completion: "once-complete" },
+        },
+      ]),
+    ).toThrow(/duplicate position/);
 
     const releasedPlayback = target.playVisibleSymbolStates(
       [positions[0]],

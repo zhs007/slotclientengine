@@ -338,18 +338,27 @@ export class Game002FreeGameOperationTarget {
     sources: readonly WinResultPosition[],
   ): void {
     this.startSymbolPlayback((signal) =>
-      Promise.all([
-        this.#runtime.playVisibleSymbolStates(co, "feature", {
-          transitionMode: "immediate",
-          completion: "once-complete",
-          signal,
-        }),
-        this.#runtime.playVisibleSymbolStates(sources, "feature1", {
-          transitionMode: "immediate",
-          completion: "once-complete",
-          signal,
-        }),
-      ]).then(() => undefined),
+      this.#runtime.playVisibleSymbolStateBatch(
+        [
+          {
+            positions: co,
+            state: "feature",
+            options: {
+              transitionMode: "immediate",
+              completion: "once-complete",
+            },
+          },
+          {
+            positions: sources,
+            state: "feature1",
+            options: {
+              transitionMode: "immediate",
+              completion: "once-complete",
+            },
+          },
+        ],
+        { signal },
+      ),
     );
   }
 

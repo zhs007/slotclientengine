@@ -395,6 +395,32 @@ class FakeRuntime {
         this.playbacks.push({ signal, resolve, reject });
       }),
   );
+  playVisibleSymbolStateBatch = vi.fn(
+    (
+      requests: readonly Readonly<{
+        positions: readonly { readonly x: number; readonly y: number }[];
+        state: string;
+        options: Readonly<{ completion: string }>;
+      }>[],
+      options?: Readonly<{ signal?: AbortSignal }>,
+    ) => {
+      const started: Promise<void>[] = [];
+      try {
+        for (const request of requests) {
+          const playback = this.playVisibleSymbolStates(
+            request.positions,
+            request.state,
+            { ...request.options, signal: options?.signal },
+          );
+          void playback.catch(() => undefined);
+          started.push(playback);
+        }
+      } catch (error) {
+        return Promise.reject(error);
+      }
+      return Promise.all(started).then(() => undefined);
+    },
+  );
 
   resolvePlayback(): void {
     this.playbacks.shift()?.resolve();

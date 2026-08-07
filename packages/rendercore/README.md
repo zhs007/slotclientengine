@@ -209,6 +209,8 @@ await reelSet.playVisibleSymbolStates(positions, "win", {
 
 批量调用会先校验全部坐标、状态和完成语义，再开始播放，避免部分提交。外部 `requestState()`、reset、回池、destroy 或 `AbortSignal` 会拒绝尚未完成的 Promise；调用方必须处理拒绝。旧 completion snapshot 只保留兼容与诊断用途，不应用于新的业务轮询。
 
+同一业务阶段需要为不同坐标组播放不同 state 时，使用一次 `playVisibleSymbolStateBatch(requests, { signal })`。它会跨全部 request 检查空组、越界、重复坐标、occupied symbol 和 completion/state 匹配，再统一启动；不要在 app 中用多次 `playVisibleSymbolStates()` 裸组 `Promise.all`，否则无法保证跨组 preflight。
+
 `createNamedSymbolAnimationResolver()` 支持用“名字 + 参数”绑定动画 profile：
 
 ```ts

@@ -3,7 +3,11 @@ import type {
   SlotRoundOccurrenceSnapshot,
   SlotRoundSettledTransformStepPlan,
 } from "@slotclientengine/gameframeworks";
-import type { SymbolCascadePlayer } from "@slotclientengine/rendercore";
+import type {
+  SymbolCascadePlayer,
+  VisibleSymbolStatePlaybackBatchOptions,
+  VisibleSymbolStatePlaybackRequest,
+} from "@slotclientengine/rendercore";
 import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-amount";
 import { Game002RoundTarget } from "../src/game-adapter.js";
 import type { Game002ReelRuntime } from "../src/game-demo.js";
@@ -396,9 +400,11 @@ describe("Game002RoundTarget multiplier transform", () => {
     );
     synchronousRuntime.failNextSynchronously = true;
     const synchronousTarget = createTarget(synchronousRuntime);
-    expect(() =>
-      synchronousTarget.startSettledTransformOperation(step, batch),
-    ).toThrow("transform playback did not start");
+    synchronousTarget.startSettledTransformOperation(step, batch);
+    await flushPlayback();
+    expect(() => synchronousTarget.updateSettledTransform(0)).toThrow(
+      "transform playback did not start",
+    );
     synchronousTarget.cleanup();
 
     const abortedRuntime = new TransformRuntime(
@@ -411,6 +417,14 @@ describe("Game002RoundTarget multiplier transform", () => {
     abortedTarget.cleanup();
     expect(signal.aborted).toBe(true);
     abortedRuntime.advanceOnce();
+    await flushPlayback();
+
+    const cancelledRuntime = new TransformRuntime(
+      scene.map((column) => [...column]),
+    );
+    const cancelledTarget = createTarget(cancelledRuntime);
+    cancelledTarget.startSettledTransformOperation(step, batch);
+    cancelledTarget.cleanup();
     await flushPlayback();
   });
 });
@@ -459,6 +473,51 @@ class TransformRuntime {
   }
 
   asRuntime(): Game002ReelRuntime {
+    const playVisibleSymbolStates = (
+      _positions: readonly { x: number; y: number }[],
+      state: string,
+      options: {
+        completion: "entered" | "once-complete" | "next-loop-complete";
+        signal?: AbortSignal;
+      },
+    ) => {
+      if (this.failNextSynchronously) {
+        this.failNextSynchronously = false;
+        throw new Error("transform playback did not start");
+      }
+      this.#state = state;
+      this.events.push(`state:${state}`);
+      const completion = options.completion;
+      if (completion === "entered") return Promise.resolve();
+      return new Promise<void>((resolve, reject) => {
+        const entry: PendingTransformPlayback = {
+          completion,
+          resolve,
+          reject,
+          ...(options.signal ? { signal: options.signal } : {}),
+        };
+        const abortListener = options.signal
+          ? () => {
+              if (this.ignoreAbort) return;
+              this.#pending = this.#pending.filter(
+                (candidate) => candidate !== entry,
+              );
+              reject(
+                options.signal?.reason instanceof Error
+                  ? options.signal.reason
+                  : new Error("test symbol playback aborted"),
+              );
+            }
+          : undefined;
+        if (abortListener) {
+          Object.assign(entry, { abortListener });
+          options.signal!.addEventListener("abort", abortListener, {
+            once: true,
+          });
+        }
+        this.#pending.push(entry);
+      });
+    };
     return {
       resetPresentationState: () => undefined,
       setVisibleSymbolPresentationValue: (
@@ -482,50 +541,26 @@ class TransformRuntime {
         this.#state = state;
         this.events.push(`state:${state}`);
       },
-      playVisibleSymbolStates: (
-        _positions: readonly { x: number; y: number }[],
-        state: string,
-        options: {
-          completion: "entered" | "once-complete" | "next-loop-complete";
-          signal?: AbortSignal;
-        },
+      playVisibleSymbolStates,
+      playVisibleSymbolStateBatch: (
+        requests: readonly VisibleSymbolStatePlaybackRequest[],
+        options?: VisibleSymbolStatePlaybackBatchOptions,
       ) => {
-        if (this.failNextSynchronously) {
-          this.failNextSynchronously = false;
-          throw new Error("transform playback did not start");
-        }
-        this.#state = state;
-        this.events.push(`state:${state}`);
-        const completion = options.completion;
-        if (completion === "entered") return Promise.resolve();
-        return new Promise<void>((resolve, reject) => {
-          const entry: PendingTransformPlayback = {
-            completion,
-            resolve,
-            reject,
-            ...(options.signal ? { signal: options.signal } : {}),
-          };
-          const abortListener = options.signal
-            ? () => {
-                if (this.ignoreAbort) return;
-                this.#pending = this.#pending.filter(
-                  (candidate) => candidate !== entry,
-                );
-                reject(
-                  options.signal?.reason instanceof Error
-                    ? options.signal.reason
-                    : new Error("test symbol playback aborted"),
-                );
-              }
-            : undefined;
-          if (abortListener) {
-            Object.assign(entry, { abortListener });
-            options.signal!.addEventListener("abort", abortListener, {
-              once: true,
-            });
+        const started: Promise<void>[] = [];
+        try {
+          for (const request of requests) {
+            const playback = playVisibleSymbolStates(
+              request.positions,
+              request.state,
+              { ...request.options, signal: options?.signal },
+            );
+            void playback.catch(() => undefined);
+            started.push(playback);
           }
-          this.#pending.push(entry);
-        });
+        } catch (error) {
+          return Promise.reject(error);
+        }
+        return Promise.all(started).then(() => undefined);
       },
       getVisibleSymbolStateSnapshots: (
         positions: readonly { x: number; y: number }[],

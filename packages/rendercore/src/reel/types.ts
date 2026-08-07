@@ -373,6 +373,20 @@ export interface AwaitableVisibleSymbolPresentationTarget extends VisibleSymbolP
     state: SymbolStateId,
     options: SymbolStatePlaybackOptions,
   ): Promise<void>;
+  playVisibleSymbolStateBatch(
+    requests: readonly VisibleSymbolStatePlaybackRequest[],
+    options?: VisibleSymbolStatePlaybackBatchOptions,
+  ): Promise<void>;
+}
+
+export interface VisibleSymbolStatePlaybackRequest {
+  readonly positions: readonly { readonly x: number; readonly y: number }[];
+  readonly state: SymbolStateId;
+  readonly options: Omit<SymbolStatePlaybackOptions, "signal">;
+}
+
+export interface VisibleSymbolStatePlaybackBatchOptions {
+  readonly signal?: AbortSignal;
 }
 
 export interface RenderReelSetOptions {

@@ -1976,19 +1976,17 @@ export class Game002RoundTarget {
     this.#transformPlaybackComplete = false;
     this.#transformPlaybackFailure = null;
     try {
-      const playback = Promise.all(
-        requests.map((request) =>
-          this.#runtime.playVisibleSymbolStates(
-            request.positions,
-            request.state,
-            {
-              transitionMode: "immediate",
-              completion: request.completion,
-              signal: controller.signal,
-            },
-          ),
-        ),
-      ).then(() => undefined);
+      const playback = this.#runtime.playVisibleSymbolStateBatch(
+        requests.map((request) => ({
+          positions: request.positions,
+          state: request.state,
+          options: {
+            transitionMode: "immediate",
+            completion: request.completion,
+          },
+        })),
+        { signal: controller.signal },
+      );
       void this.trackTransformPlayback(generation, playback);
     } catch (error) {
       controller.abort(error);

@@ -36,6 +36,8 @@ import {
   type RenderVisibleSymbolGeometrySnapshot,
   type RenderVisibleSymbolStateSnapshot,
   type SymbolPresentationValueMatrix,
+  type VisibleSymbolStatePlaybackBatchOptions,
+  type VisibleSymbolStatePlaybackRequest,
 } from "@slotclientengine/rendercore/reel";
 import {
   createDefaultSymbolAnimationResolver,
@@ -211,6 +213,10 @@ export interface Game002ReelRuntime {
     positions: readonly WinResultPosition[],
     state: SymbolStateId,
     options: SymbolStatePlaybackOptions,
+  ): Promise<void>;
+  playVisibleSymbolStateBatch(
+    requests: readonly VisibleSymbolStatePlaybackRequest[],
+    options?: VisibleSymbolStatePlaybackBatchOptions,
   ): Promise<void>;
   getVisibleSymbolStateSnapshots(
     positions: readonly WinResultPosition[],
@@ -843,6 +849,12 @@ export function createGame002ReelRuntime(
       options: SymbolStatePlaybackOptions,
     ): Promise<void> {
       return reelSet.playVisibleSymbolStates(positions, state, options);
+    },
+    playVisibleSymbolStateBatch(
+      requests: readonly VisibleSymbolStatePlaybackRequest[],
+      options?: VisibleSymbolStatePlaybackBatchOptions,
+    ): Promise<void> {
+      return reelSet.playVisibleSymbolStateBatch(requests, options);
     },
     getVisibleSymbolStateSnapshots(
       positions: readonly WinResultPosition[],

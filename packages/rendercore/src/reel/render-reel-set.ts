@@ -8,6 +8,8 @@ import { startSymbolStatePlaybackBatch } from "./symbol-state-playback.js";
 import type {
   ReelSpinPlan,
   RenderReelSetOptions,
+  VisibleSymbolStatePlaybackBatchOptions,
+  VisibleSymbolStatePlaybackRequest,
   RenderReelSetSpinOptions,
   RenderReelSetSnapshot,
   RenderReelSetUpdateResult,
@@ -457,34 +459,75 @@ export class RenderReelSet extends Container {
     state: SymbolStateId,
     options: SymbolStatePlaybackOptions,
   ): Promise<void> {
+    return this.playVisibleSymbolStateBatch(
+      [
+        {
+          positions,
+          state,
+          options: {
+            completion: options.completion,
+            ...(options.transitionMode
+              ? { transitionMode: options.transitionMode }
+              : {}),
+          },
+        },
+      ],
+      options.signal ? { signal: options.signal } : undefined,
+    );
+  }
+
+  playVisibleSymbolStateBatch(
+    requests: readonly VisibleSymbolStatePlaybackRequest[],
+    options?: VisibleSymbolStatePlaybackBatchOptions,
+  ): Promise<void> {
     this.assertStopped("play visible symbol states");
-    if (positions.length === 0) {
+    if (requests.length === 0) {
       throw new ReelError(
-        "Visible symbol playback positions must not be empty.",
+        "Visible symbol state playback batch must not be empty.",
       );
     }
-    const normalized = normalizeCascadePositions(
-      positions,
-      this.reels.length,
-      this.reels[0]?.layout.visibleRows ?? 0,
-    );
-    const reels = normalized.map((position) => ({
-      position,
-      reel: this.getReelAt(position.x),
-    }));
-    for (const { position, reel } of reels) {
-      reel.validateVisibleSymbolStatePlayback(position.y, state, options);
-    }
+    const positionKeys = new Set<string>();
+    const prepared = requests.flatMap((request) => {
+      if (request.positions.length === 0) {
+        throw new ReelError(
+          "Visible symbol playback positions must not be empty.",
+        );
+      }
+      return normalizeCascadePositions(
+        request.positions,
+        this.reels.length,
+        this.reels[0]?.layout.visibleRows ?? 0,
+      ).map((position) => {
+        const key = `${position.x},${position.y}`;
+        if (positionKeys.has(key)) {
+          throw new ReelError(
+            `Visible symbol state playback batch contains duplicate position (${key}).`,
+          );
+        }
+        positionKeys.add(key);
+        const reel = this.getReelAt(position.x);
+        const playbackOptions: SymbolStatePlaybackOptions = {
+          ...request.options,
+          ...(options?.signal ? { signal: options.signal } : {}),
+        };
+        reel.validateVisibleSymbolStatePlayback(
+          position.y,
+          request.state,
+          playbackOptions,
+        );
+        return { position, reel, request };
+      });
+    });
     return startSymbolStatePlaybackBatch(
-      reels.map(
-        ({ position, reel }) =>
+      prepared.map(
+        ({ position, reel, request }) =>
           (signal) =>
-            reel.playVisibleSymbolState(position.y, state, {
-              ...options,
+            reel.playVisibleSymbolState(position.y, request.state, {
+              ...request.options,
               signal,
             }),
       ),
-      options.signal,
+      options?.signal,
     );
   }
 

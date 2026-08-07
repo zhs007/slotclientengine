@@ -11,7 +11,7 @@
 - `RenderSymbol.playState(state, options)` 的 `completion` 必须显式为 `entered | once-complete | next-loop-complete`，且必须与目标 state playback 匹配。
 - Promise 只由目标 state 的真实 update 边界完成；outgoing loop、旧 generation 或坐标上的后继 symbol 不会完成当前等待。
 - `AbortSignal`、外部 `requestState()`、return-to-default、reset、pool release 和 destroy 会拒绝未完成等待。
-- standard reel set 与 grid-cell reel set 的 `playVisibleSymbolStates(...)` 会先校验整个批次，再并行启动 exact symbol waiter；同步或异步失败会取消兄弟请求。
+- standard reel set 与 grid-cell reel set 的 `playVisibleSymbolStates(...)` 支持单 state 批次，`playVisibleSymbolStateBatch(...)` 支持多个不同 state 的原子批次；两者都会先校验整个批次，再并行启动 exact symbol waiter，同步或异步失败会取消兄弟请求。
 - 旧 fire-and-forget API 与 completion snapshot 暂留兼容，game002 production source 已由 boundary test 禁止重新使用 counter baseline。
 
 ## 实际修改
@@ -40,7 +40,7 @@ tasks/181-rendercore-awaitable-symbol-state-playback-260807-072308.md
 | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `pnpm --filter @slotclientengine/rendercore build`    | 通过                                                                                                                                                                |
 | `pnpm --filter @slotclientengine/rendercore test`     | 未通过：86 files / 699 tests 通过，5 tests + 1 suite 因当前 HEAD 的 `assets/crave/assets.map.json` 缺少 `symbol-state-textures.manifest.json`、`h1.json` 映射而失败 |
-| rendercore 排除上述 3 个缺失夹具测试文件的全套 Vitest | 通过：86 files / 664 tests                                                                                                                                          |
+| rendercore 排除上述 3 个缺失夹具测试文件的全套 Vitest | 通过：86 files / 665 tests                                                                                                                                          |
 | `pnpm --filter game002 typecheck`                     | 通过                                                                                                                                                                |
 | `pnpm --filter game002 test`                          | 通过：24 files / 180 tests；statements 85.15%，branches 80.03%，functions 88.51%，lines 85.90%                                                                      |
 | `pnpm --filter game002 build`                         | 通过；只有既有 chunk size warning                                                                                                                                   |

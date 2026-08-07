@@ -40,9 +40,16 @@ describe("game002 source boundary", () => {
     const source = readSourceTree(join(APP_ROOT, "src"));
 
     expect(source).toContain("playVisibleSymbolStates");
+    expect(source).toContain("playVisibleSymbolStateBatch");
     expect(source).not.toMatch(
       /loopCompletionCount|onceCompletionCount|CompletionBaselines|captureBaselines/,
     );
+    for (const file of ["game-adapter.ts", "freegame-operation-target.ts"]) {
+      const content = readFileSync(join(APP_ROOT, "src", file), "utf8");
+      expect(content).not.toMatch(
+        /Promise\.all\([\s\S]{0,500}playVisibleSymbolStates/,
+      );
+    }
   });
 
   it("keeps game002 runtime dependencies on the framework facade and renderer only", () => {
