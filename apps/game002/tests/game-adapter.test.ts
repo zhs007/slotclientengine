@@ -13,13 +13,11 @@ import type {
 import type { SpineBackgroundPlayer } from "@slotclientengine/rendercore/background";
 import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-amount";
 import {
-  assertGame002CascadeResources,
   createGame002Adapter,
   Game002RoundTarget,
   requestGame002TransformStates,
   type Game002AdapterOptions,
 } from "../src/game-adapter.js";
-import { createGame002CascadeSequence } from "../src/cascade-sequence.js";
 import type { Game002ReelRuntime } from "../src/game-demo.js";
 import { getTestGame002SkinConfig } from "./value-resource-fixture.js";
 import {
@@ -140,68 +138,6 @@ describe("game002 task 95 adapter", () => {
     });
   });
 
-  it("preflights wins against the post-transform scene", () => {
-    const runtime = new FakeRuntime([]);
-    const sequence = createGame002CascadeSequence({
-      logic: createCascadeLogic(),
-      cnSymbolCode: 8,
-      canRemoveSymbol: ({ code }) => code !== 0,
-      canDropSymbol: ({ code }) => code !== 0,
-    });
-    const spinSceneWithPreTransformWm = sequence.initial.spinScene.map(
-      (column, x) =>
-        Object.freeze(column.map((code, y) => (x === 4 && y === 0 ? 7 : code))),
-    );
-    const transformedSequence = Object.freeze({
-      ...sequence,
-      initial: Object.freeze({
-        ...sequence.initial,
-        spinScene: Object.freeze(spinSceneWithPreTransformWm),
-      }),
-    });
-
-    expect(() =>
-      assertGame002CascadeResources(
-        transformedSequence,
-        runtime.asRuntime(),
-        getTestGame002SkinConfig(),
-      ),
-    ).not.toThrow();
-  });
-
-  it("applies result otherMul to sequential CN collection totals", () => {
-    const multiplied = structuredClone(GAME002_CASCADE_GMI) as any;
-    const firstStep = multiplied.gmi.replyPlay.results[0];
-    const cnResult = firstStep.clientData.results[2];
-    cnResult.otherMul = 25;
-    cnResult.coinWin64 = 200;
-    cnResult.cashWin64 = 2_000;
-    firstStep.coinWin = 221;
-    firstStep.cashWin = 2_210;
-    const winComponent =
-      firstStep.clientData.curGameModParam.mapComponents["bg-win"];
-    winComponent.basicComponentData.coinWin = 221;
-    winComponent.basicComponentData.cashWin = 2_210;
-    winComponent.wins = 221;
-    multiplied.totalwin = 2_210;
-
-    const runtime = new FakeRuntime([]);
-    const sequence = createGame002CascadeSequence({
-      logic: createCascadeLogic(multiplied),
-      cnSymbolCode: 8,
-      canRemoveSymbol: ({ code }) => code !== 0,
-      canDropSymbol: ({ code }) => code !== 0,
-    });
-
-    expect(() =>
-      assertGame002CascadeResources(
-        sequence,
-        runtime.asRuntime(),
-        getTestGame002SkinConfig(),
-      ),
-    ).not.toThrow();
-  });
-
   it("captures CO and vortex source animation baselines as one batch", () => {
     const runtime = new FakeRuntime([]);
     const baselines = requestGame002TransformStates(runtime.asRuntime(), [
@@ -313,12 +249,6 @@ describe("game002 task 95 adapter", () => {
       ]),
       relocations,
     });
-    target.configure({
-      sequence: {} as any,
-      betAmountRaw: 1,
-      winAmountRaw: 1,
-    });
-
     expect(() =>
       target.startSettledTransformOperation(step as any, batch),
     ).not.toThrow();
@@ -558,7 +488,7 @@ describe("game002 task 95 adapter", () => {
 
     expect(diagnostics).toContainEqual(
       expect.stringContaining(
-        'presentation progress {"coordinator":{"phase":"running","operationIndex":0,"operationKey":"slot:spin@2"',
+        'presentation progress {"coordinator":{"phase":"running","operationIndex":0,"operationKey":"game002:spin@2"',
       ),
     );
     expect(diagnostics).toContainEqual(
