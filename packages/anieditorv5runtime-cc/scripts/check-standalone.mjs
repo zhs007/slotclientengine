@@ -52,6 +52,10 @@ const forbiddenPatterns = [
     "ES2016 includes() is not allowed in the ES2015 standalone runtime",
   ],
   [
+    /for\s*\(const listener of listeners\)/u,
+    "destroy listeners must use the Cocos-safe indexed snapshot loop",
+  ],
+  [
     /\bV5GBundleManifest\b/u,
     "bundle manifest APIs are not part of Cocos runtime",
   ],
@@ -243,6 +247,8 @@ const requiredSnippets = [
   "forceStopParticles",
   "ignoreAuthoredSeed?: boolean",
   "createRuntimeSeededLayerViews",
+  "destroyListeners.splice(0)",
+  "const listener = listeners[index]",
   "emitPlaybackEventsAtBoundary",
   "dispatchPlaybackEvents",
   "card_carousel_3d",

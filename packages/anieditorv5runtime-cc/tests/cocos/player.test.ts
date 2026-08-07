@@ -3113,6 +3113,24 @@ describe("V5GCocosPlayer", () => {
     expect(player.playing).toBe(false);
   });
 
+  it("notifies destroy listeners through a disposable indexed snapshot", () => {
+    const { player } = makePlayer(tinyProject());
+    player.init();
+    const calls: string[] = [];
+    const removed = () => calls.push("removed");
+    const disposeRemoved = player.onDestroy(removed);
+    player.onDestroy(removed);
+    player.onDestroy(() => calls.push("kept"));
+
+    disposeRemoved();
+    player.destroy();
+
+    expect(calls).toEqual(["kept"]);
+    expect(() => player.onDestroy(null as never)).toThrow(
+      "listener must be a function",
+    );
+  });
+
   it("uses per-play runtime seeds without mutating authored Cocos projects", () => {
     const project = tinyProject({
       animations: [

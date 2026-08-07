@@ -994,6 +994,19 @@ describe("standalone V5GCocosPlayer", () => {
     expect(root.children).toHaveLength(0);
   });
 
+  it("notifies standalone destroy listeners without Set iteration", () => {
+    const { player } = makePlayer();
+    player.init();
+    const calls: string[] = [];
+    const disposeRemoved = player.onDestroy(() => calls.push("removed"));
+    player.onDestroy(() => calls.push("kept"));
+
+    disposeRemoved();
+    player.destroy();
+
+    expect(calls).toEqual(["kept"]);
+  });
+
   it("keeps runtime-authored seed control scoped to a standalone play session", () => {
     const project = tinyProject({
       animations: [particleWallAnimation()],

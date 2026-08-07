@@ -292,7 +292,7 @@ export class V5GCocosPlayer<
   private readonly completeListeners: Array<
     (event: V5GCocosPlaybackCompleteContext) => void
   > = [];
-  private readonly destroyListeners = new Set<() => void>();
+  private readonly destroyListeners: Array<() => void> = [];
   private loopIndex = 0;
   private nextPlaybackEventOrder = 0;
   private nextTextBindingVersion = 0;
@@ -413,12 +413,15 @@ export class V5GCocosPlayer<
     if (typeof listener !== "function") {
       throw new Error("V5GCocosPlayer.onDestroy listener must be a function.");
     }
-    this.destroyListeners.add(listener);
+    if (this.destroyListeners.indexOf(listener) < 0) {
+      this.destroyListeners.push(listener);
+    }
     let disposed = false;
     return () => {
       if (disposed) return;
       disposed = true;
-      this.destroyListeners.delete(listener);
+      const index = this.destroyListeners.indexOf(listener);
+      if (index >= 0) this.destroyListeners.splice(index, 1);
     };
   }
 
@@ -3537,9 +3540,16 @@ export class V5GCocosPlayer<
   }
 
   private notifyDestroyListeners(): void {
-    const listeners = [...this.destroyListeners];
-    this.destroyListeners.clear();
-    for (const listener of listeners) listener();
+    const listeners = this.destroyListeners.splice(0);
+    for (let index = 0; index < listeners.length; index += 1) {
+      const listener = listeners[index];
+      if (typeof listener !== "function") {
+        throw new Error(
+          "V5GCocosPlayer destroy listener registry is corrupted.",
+        );
+      }
+      listener();
+    }
   }
 
   private assertInitialized(apiName = "seek/update"): void {

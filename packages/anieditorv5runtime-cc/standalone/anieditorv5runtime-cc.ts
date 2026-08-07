@@ -10655,7 +10655,7 @@ var V5GCocosPlayer = class V5GCocosPlayer {
     _defineProperty(this, "playbackEventOrders", []);
     _defineProperty(this, "playbackEventListeners", []);
     _defineProperty(this, "completeListeners", []);
-    _defineProperty(this, "destroyListeners", /* @__PURE__ */ new Set());
+    _defineProperty(this, "destroyListeners", []);
     _defineProperty(this, "loopIndex", 0);
     _defineProperty(this, "nextPlaybackEventOrder", 0);
     _defineProperty(this, "nextTextBindingVersion", 0);
@@ -10763,12 +10763,14 @@ var V5GCocosPlayer = class V5GCocosPlayer {
   onDestroy(listener) {
     if (typeof listener !== "function")
       throw new Error("V5GCocosPlayer.onDestroy listener must be a function.");
-    this.destroyListeners.add(listener);
+    if (this.destroyListeners.indexOf(listener) < 0)
+      this.destroyListeners.push(listener);
     let disposed = false;
     return () => {
       if (disposed) return;
       disposed = true;
-      this.destroyListeners.delete(listener);
+      const index = this.destroyListeners.indexOf(listener);
+      if (index >= 0) this.destroyListeners.splice(index, 1);
     };
   }
   init() {
@@ -13648,9 +13650,15 @@ var V5GCocosPlayer = class V5GCocosPlayer {
     this.layerGroupSlots = [];
   }
   notifyDestroyListeners() {
-    const listeners = [...this.destroyListeners];
-    this.destroyListeners.clear();
-    for (const listener of listeners) listener();
+    const listeners = this.destroyListeners.splice(0);
+    for (let index = 0; index < listeners.length; index += 1) {
+      const listener = listeners[index];
+      if (typeof listener !== "function")
+        throw new Error(
+          "V5GCocosPlayer destroy listener registry is corrupted.",
+        );
+      listener();
+    }
   }
   assertInitialized(apiName = "seek/update") {
     if (this.stageNode === null)

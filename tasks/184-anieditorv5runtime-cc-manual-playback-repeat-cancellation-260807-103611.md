@@ -6,6 +6,10 @@
 restart-safe 示例和回归测试已完成。自动化验收全部通过；本地没有 Cocos Creator，真实 Creator 3.8.6
 / Web Desktop 验收按用户要求留待用户执行。
 
+用户首次真实更新后又暴露 `notifyDestroyListeners()` 在 Cocos System.register 产物中调用 iterator
+`.value()` 的异常。本报告已同步后续修复：destroy listener registry 改为数组快照与索引调用，生成
+代码不再使用 `Set + spread + for...of`。
+
 故障根因不是累计到固定次数后的 runtime 计数错误。新一轮调用
 `GambleRoll.resetManualState()` 时，旧轮若仍在等待 `completed` / `ready` / `committed`，session destroy
 会按任务 126 合同 reject `V5GCocosPlaybackCancelledError`。旧 async wrapper 没有终端分类该预期取消，
@@ -27,10 +31,10 @@ restart-safe 示例和回归测试已完成。自动化验收全部通过；本�
   - fire-and-forget `start()` 的非取消错误保存为可查询 `manualPreviewError`。
 - README 增加重复 restart、Component destroy、错误分类和多公开 async 阶段的集成合同。
 - standalone checker、generated runtime、import/parity/player tests 已同步。
-
-`packages/anieditorv5runtime-cc/src/cocos/player.ts` 未修改：新增压力测试证明 session destroy 会同步
-detach，下一 session 可立即建立，旧 capture/range callback 不污染新 session。按计划不为制造 diff
-改写已正确的 ownership 代码。
+- `V5GCocosPlayer` 的 destroy listener 从 `Set` 改为保持原去重语义的数组；dispose 使用索引删除，
+  notify 先 `splice(0)` 取得一次性快照，再以 numeric index 校验并调用 listener。
+- standalone checker 禁止回退到 `for (const listener of listeners)`，并要求生成物包含数组快照与索引
+  读取。
 
 ## 测试与资源结果
 
@@ -46,11 +50,15 @@ standalone 额外验证 pending `advanceFor()` 被 destroy 后，旧 Promise 按
 可立即创建新 session。分类测试覆盖普通同文案 `Error`、伪造 name/code plain object、null 和
 modular/standalone 交叉实例；只有 runtime cancellation Error 被识别。
 
+destroy listener 回归覆盖 disposer、同 listener 重复注册去重、exactly-once 通知、非法 listener
+fail-fast，以及 generated standalone 的 indexed notification；不再生成截图中的 iterator
+`r.value()` 调用形态。
+
 最终自动化命令：
 
 ```text
 pnpm --dir packages/anieditorv5runtime-cc standalone:build       PASS
-pnpm --dir packages/anieditorv5runtime-cc test                   PASS (21 files / 238 tests)
+pnpm --dir packages/anieditorv5runtime-cc test                   PASS (21 files / 240 tests)
 pnpm --dir packages/anieditorv5runtime-cc typecheck              PASS
 pnpm --dir packages/anieditorv5runtime-cc build                  PASS
 pnpm --dir packages/anieditorv5runtime-cc standalone:check       PASS
@@ -73,8 +81,8 @@ standalone/effects/vni-screen-alpha.effect
 ```
 
 ```text
-size: 91684 bytes
-SHA-256: 75ec01b024b5d78cb3f8326477022daaedd472148a9ea6f380314b8f30c0c0a4
+size: 91709 bytes
+SHA-256: 185c5d7985d8039fcc9630f1d4fa06ecf299e14c95a0525a9c58cf1775070dc8
 ```
 
 该 ZIP 受仓库 `*.zip` ignore 规则管理，不出现在普通 tracked diff 中。
@@ -101,7 +109,9 @@ SHA-256: 75ec01b024b5d78cb3f8326477022daaedd472148a9ea6f380314b8f30c0c0a4
 
 ## 计划偏差与剩余项
 
-- 未修改 `player.ts`，原因是测试证明现有 detach/late callback/rollback 合同正确。
+- 原计划仅在测试证明 player lifecycle 缺口时修改 `player.ts`。真实 Cocos 更新后的新堆栈证明 destroy
+  listener 的 `Set + spread + for...of` 生成形态存在兼容缺口，因此按证据扩大到该最小实现；manual
+  session detach/capture rollback 逻辑本身未改。
 - 测试合并到既有 modular/standalone player test，没有新增独立 test 文件。
 - 没有 Cocos Creator 环境，因此真实视觉、浏览器事件循环和 GPU 资源验收待用户执行；fake Cocos
   结果未冒充该验收。
