@@ -1,0 +1,122 @@
+{
+  "fixedAdvanceGroups": [],
+  "glyphs": {
+    "0": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-10-game002-s3-new-image-string-5-0.webp",
+      "size": {
+        "height": 49,
+        "width": 36
+      }
+    },
+    "1": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-10-game002-s3-new-image-string-5-1.webp",
+      "size": {
+        "height": 48,
+        "width": 30
+      }
+    },
+    "2": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-10-game002-s3-new-image-string-5-2.webp",
+      "size": {
+        "height": 48,
+        "width": 36
+      }
+    },
+    "3": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-10-game002-s3-new-image-string-5-3.webp",
+      "size": {
+        "height": 49,
+        "width": 36
+      }
+    },
+    "4": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-10-game002-s3-new-image-string-5-4.webp",
+      "size": {
+        "height": 48,
+        "width": 35
+      }
+    },
+    "5": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-10-game002-s3-new-image-string-5-5.webp",
+      "size": {
+        "height": 49,
+        "width": 32
+      }
+    },
+    "6": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-10-game002-s3-new-image-string-5-6.webp",
+      "size": {
+        "height": 49,
+        "width": 34
+      }
+    },
+    "7": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-10-game002-s3-new-image-string-5-7.webp",
+      "size": {
+        "height": 48,
+        "width": 34
+      }
+    },
+    "8": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-10-game002-s3-new-image-string-5-8.webp",
+      "size": {
+        "height": 49,
+        "width": 35
+      }
+    },
+    "9": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-10-game002-s3-new-image-string-5-9.webp",
+      "size": {
+        "height": 48,
+        "width": 34
+      }
+    }
+  },
+  "id": "new-image-string-5",
+  "kind": "image-string",
+  "metrics": {
+    "letterSpacing": 0,
+    "lineHeight": 64
+  },
+  "version": 1
+}

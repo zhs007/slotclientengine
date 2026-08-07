@@ -1,0 +1,1625 @@
+{
+  "settings": {
+    "additionalStateDefinitions": [
+      {
+        "id": "winStart",
+        "phase": "once",
+        "playback": "once"
+      },
+      {
+        "id": "winLoop",
+        "phase": "stable",
+        "playback": "loop"
+      },
+      {
+        "id": "collect",
+        "phase": "once",
+        "playback": "once"
+      },
+      {
+        "id": "multStart",
+        "phase": "once",
+        "playback": "once"
+      },
+      {
+        "id": "multIdle",
+        "phase": "stable",
+        "playback": "loop"
+      },
+      {
+        "id": "multEnd",
+        "phase": "once",
+        "playback": "once"
+      },
+      {
+        "id": "change",
+        "phase": "once",
+        "playback": "once"
+      },
+      {
+        "id": "feature1",
+        "phase": "once",
+        "playback": "once"
+      },
+      {
+        "id": "featureChange",
+        "phase": "once",
+        "playback": "once"
+      },
+      {
+        "id": "feature",
+        "phase": "once",
+        "playback": "once"
+      },
+      {
+        "id": "feature2",
+        "phase": "once",
+        "playback": "once"
+      },
+      {
+        "id": "Feature5",
+        "phase": "once",
+        "playback": "once"
+      },
+      {
+        "id": "NearWin",
+        "phase": "stable",
+        "playback": "loop"
+      },
+      {
+        "id": "Reel_NearWin",
+        "phase": "stable",
+        "playback": "loop"
+      },
+      {
+        "id": "Reel_NearWin_Start",
+        "phase": "once",
+        "playback": "once"
+      },
+      {
+        "id": "Reel_NearWin_End",
+        "phase": "once",
+        "playback": "once"
+      },
+      {
+        "id": "Feature3",
+        "phase": "once",
+        "playback": "once"
+      },
+      {
+        "id": "Feature3_Lighteffect",
+        "phase": "once",
+        "playback": "once"
+      },
+      {
+        "id": "Collect",
+        "phase": "once",
+        "playback": "once"
+      },
+      {
+        "id": "Feature4",
+        "phase": "once",
+        "playback": "once"
+      }
+    ],
+    "disabled": {
+      "brightness": 0.72,
+      "kind": "grayscale"
+    },
+    "spinBlur": {
+      "kernelHeight": 21,
+      "kind": "verticalBoxBlur"
+    }
+  },
+  "states": [
+    "spinBlur",
+    "disabled"
+  ],
+  "symbols": {
+    "AF": {
+      "animations": {
+        "appear": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-af.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "change": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Change",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-af.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "dropdown": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Loop",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-af.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "feature": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Loop",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-af.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "Feature4": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature4",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-af.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "normal": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Loop",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-af.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "remove": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Loop",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-af.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        }
+      },
+      "disabled": "./pkg-10-game002-s3-af.disabled.webp",
+      "imageStringNodes": [
+        {
+          "anchor": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "followSlotColor": true,
+          "initialText": "+1",
+          "name": "free-spins",
+          "resource": "./pkg-10-game002-s3-new-image-string-4.image-string.manifest.json",
+          "targets": [
+            {
+              "slot": "Mult",
+              "state": "normal"
+            },
+            {
+              "slot": "Mult",
+              "state": "appear"
+            },
+            {
+              "slot": "Mult",
+              "state": "feature"
+            },
+            {
+              "slot": "Mult",
+              "state": "change"
+            }
+          ],
+          "transform": {
+            "scale": 1,
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
+      "normal": "./pkg-10-game002-s3-af.webp",
+      "scale": 1,
+      "spinBlur": "./pkg-10-game002-s3-af_spinblur.webp"
+    },
+    "BN": {
+      "animations": {
+        "normal": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-bn.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        }
+      },
+      "disabled": "./pkg-10-game002-s3-bn.disabled.webp",
+      "normal": "./pkg-10-game002-s3-bn.webp",
+      "scale": 1,
+      "spinBlur": "./pkg-10-game002-s3-bn.spinblur.webp"
+    },
+    "CM": {
+      "animations": {
+        "appear": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-cm.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "change": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Loop",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-cm.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "dropdown": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Loop",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-cm.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "feature1": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Loop",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-cm.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "Feature3": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature3",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-cm.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "Feature3_Lighteffect": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature3_Lighteffect",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-cm.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "normal": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Loop",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-cm.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "remove": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Loop",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-cm.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        }
+      },
+      "disabled": "./pkg-10-game002-s3-cm.disabled.webp",
+      "imageStringNodes": [
+        {
+          "anchor": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "followSlotColor": true,
+          "initialText": "x1",
+          "name": "multiplier",
+          "resource": "./pkg-10-game002-s3-new-image-string-3.image-string.manifest.json",
+          "targets": [
+            {
+              "slot": "Mult",
+              "state": "normal"
+            },
+            {
+              "slot": "Mult",
+              "state": "dropdown"
+            },
+            {
+              "slot": "Mult",
+              "state": "appear"
+            },
+            {
+              "slot": "Mult",
+              "state": "feature1"
+            },
+            {
+              "slot": "Mult",
+              "state": "change"
+            }
+          ],
+          "transform": {
+            "scale": 1,
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
+      "normal": "./pkg-10-game002-s3-cm.webp",
+      "scale": 1,
+      "spinBlur": "./pkg-10-game002-s3-cm_spinblur.webp"
+    },
+    "CN": {
+      "animations": {
+        "appear": {
+          "kind": "activeSpine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          }
+        },
+        "collect": {
+          "kind": "activeSpine",
+          "playback": {
+            "animationName": "Collect",
+            "loop": false,
+            "mode": "animation"
+          }
+        },
+        "dropdown": {
+          "kind": "activeSpine",
+          "playback": {
+            "animationName": "Loop",
+            "loop": true,
+            "mode": "animation"
+          }
+        },
+        "feature1": {
+          "kind": "activeSpine",
+          "playback": {
+            "animationName": "Feature1",
+            "loop": false,
+            "mode": "animation"
+          }
+        },
+        "feature2": {
+          "kind": "activeSpine",
+          "playback": {
+            "animationName": "Feature2",
+            "loop": false,
+            "mode": "animation"
+          }
+        },
+        "featureChange": {
+          "kind": "activeSpine",
+          "playback": {
+            "animationName": "Feature_Change",
+            "loop": false,
+            "mode": "animation"
+          }
+        },
+        "remove": {
+          "kind": "activeSpine",
+          "playback": {
+            "animationName": "End",
+            "loop": false,
+            "mode": "animation"
+          }
+        },
+        "winLoop": {
+          "kind": "activeSpine",
+          "playback": {
+            "animationName": "Win",
+            "loop": true,
+            "mode": "animation"
+          }
+        },
+        "winStart": {
+          "kind": "activeSpine",
+          "playback": {
+            "animationName": "Win_Start",
+            "loop": false,
+            "mode": "animation"
+          }
+        }
+      },
+      "cascadeWinPresentation": {
+        "order": 1,
+        "playback": {
+          "collectState": "collect",
+          "loopState": "winLoop",
+          "mode": "sequentialCollect",
+          "removeState": "remove",
+          "startState": "winStart"
+        },
+        "summary": {
+          "mode": "itemAmount"
+        }
+      },
+      "scale": 1,
+      "valuePresentation": {
+        "defaultValues": [
+          1,
+          2,
+          5,
+          10,
+          25,
+          50,
+          100,
+          250,
+          500,
+          1000
+        ],
+        "reelStates": {
+          "disabled": "./pkg-10-game002-s3-cn.disabled.webp",
+          "normal": {
+            "height": 200,
+            "kind": "transparent",
+            "width": 200
+          },
+          "spinBlur": "./pkg-10-game002-s3-cn.spinblur.webp"
+        },
+        "text": {
+          "tiers": [
+            {
+              "anchor": {
+                "x": 0.5,
+                "y": 0.5
+              },
+              "followSlotColor": true,
+              "resource": "./pkg-10-game002-s3-new-image-string-5.image-string.manifest.json",
+              "slot": "coin",
+              "transform": {
+                "scale": 1,
+                "x": 0,
+                "y": 0
+              }
+            },
+            {
+              "anchor": {
+                "x": 0.5,
+                "y": 0.5
+              },
+              "followSlotColor": true,
+              "resource": "./pkg-10-game002-s3-new-image-string-6.image-string.manifest.json",
+              "slot": "coin",
+              "transform": {
+                "scale": 1,
+                "x": 0,
+                "y": 0
+              }
+            },
+            {
+              "anchor": {
+                "x": 0.5,
+                "y": 0.5
+              },
+              "followSlotColor": false,
+              "resource": "./pkg-10-game002-s3-new-image-string-7.image-string.manifest.json",
+              "slot": "coin",
+              "transform": {
+                "scale": 1,
+                "x": 0,
+                "y": 0
+              }
+            },
+            {
+              "anchor": {
+                "x": 0.5,
+                "y": 0.5
+              },
+              "followSlotColor": true,
+              "resource": "./pkg-10-game002-s3-new-image-string-7.image-string.manifest.json",
+              "slot": "coin",
+              "transform": {
+                "scale": 0.8,
+                "x": 0,
+                "y": 0
+              }
+            }
+          ],
+          "type": "image-string"
+        },
+        "tiers": [
+          {
+            "animation": {
+              "atlas": "./pkg-10-game002-s3-symbol.atlas",
+              "kind": "spine",
+              "playback": {
+                "animationName": "Loop",
+                "loop": true,
+                "mode": "animation"
+              },
+              "skeleton": "./pkg-10-game002-s3-cn_1.json",
+              "texture": "./pkg-10-game002-s3-symbol.webp"
+            },
+            "maxExclusive": 10
+          },
+          {
+            "animation": {
+              "atlas": "./pkg-10-game002-s3-symbol.atlas",
+              "kind": "spine",
+              "playback": {
+                "animationName": "Loop",
+                "loop": true,
+                "mode": "animation"
+              },
+              "skeleton": "./pkg-10-game002-s3-cn_2.json",
+              "texture": "./pkg-10-game002-s3-symbol.webp"
+            },
+            "maxExclusive": 100
+          },
+          {
+            "animation": {
+              "atlas": "./pkg-10-game002-s3-symbol.atlas",
+              "kind": "spine",
+              "playback": {
+                "animationName": "Loop",
+                "loop": true,
+                "mode": "animation"
+              },
+              "skeleton": "./pkg-10-game002-s3-cn_3.json",
+              "texture": "./pkg-10-game002-s3-symbol.webp"
+            },
+            "maxExclusive": 1000
+          },
+          {
+            "animation": {
+              "atlas": "./pkg-10-game002-s3-symbol.atlas",
+              "kind": "spine",
+              "playback": {
+                "animationName": "Loop",
+                "loop": true,
+                "mode": "animation"
+              },
+              "skeleton": "./pkg-10-game002-s3-cn_4.json",
+              "texture": "./pkg-10-game002-s3-symbol.webp"
+            }
+          }
+        ]
+      }
+    },
+    "CO": {
+      "animations": {
+        "appear": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-co.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "collect": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Collect",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-co.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "dropdown": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Loop",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-co.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "feature": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Loop",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-co.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "normal": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Loop",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-co.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "remove": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Loop",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-co.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        }
+      },
+      "disabled": "./pkg-10-game002-s3-co.disabled.webp",
+      "normal": "./pkg-10-game002-s3-co.webp",
+      "scale": 1,
+      "spinBlur": "./pkg-10-game002-s3-co_spinblur.webp"
+    },
+    "H1": {
+      "animations": {
+        "appear": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-h1.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "dropdown": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-h1.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "feature1": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature1",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-h1.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "feature2": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature2",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-h1.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "normal": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-h1.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "remove": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "End",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-h1.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "win": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Win",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-h1.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        }
+      },
+      "cascadeWinPresentation": {
+        "order": 0,
+        "playback": {
+          "mode": "group",
+          "removeState": "remove",
+          "winState": "win"
+        },
+        "summary": {
+          "mode": "groupAmount"
+        }
+      },
+      "disabled": "./pkg-10-game002-s3-h1.disabled.webp",
+      "normal": "./pkg-10-game002-s3-h1.webp",
+      "scale": 1,
+      "spinBlur": "./pkg-10-game002-s3-h1.spinblur.webp"
+    },
+    "H2": {
+      "animations": {
+        "appear": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-h2.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "dropdown": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-h2.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "feature1": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature1",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-h2.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "feature2": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature2",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-h2.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "normal": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-h2.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "remove": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "End",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-h2.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "win": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Win",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-h2.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        }
+      },
+      "cascadeWinPresentation": {
+        "order": 0,
+        "playback": {
+          "mode": "group",
+          "removeState": "remove",
+          "winState": "win"
+        },
+        "summary": {
+          "mode": "groupAmount"
+        }
+      },
+      "disabled": "./pkg-10-game002-s3-h2.disabled.webp",
+      "normal": "./pkg-10-game002-s3-h2.webp",
+      "scale": 1,
+      "spinBlur": "./pkg-10-game002-s3-h2.spinblur.webp"
+    },
+    "L1": {
+      "animations": {
+        "appear": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l1.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "dropdown": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l1.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "feature1": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature1",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l1.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "feature2": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature2",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l1.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "normal": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l1.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "remove": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "End",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l1.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "win": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Win",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l1.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        }
+      },
+      "cascadeWinPresentation": {
+        "order": 0,
+        "playback": {
+          "mode": "group",
+          "removeState": "remove",
+          "winState": "win"
+        },
+        "summary": {
+          "mode": "groupAmount"
+        }
+      },
+      "disabled": "./pkg-10-game002-s3-l1.disabled.webp",
+      "normal": "./pkg-10-game002-s3-l1.webp",
+      "scale": 1,
+      "spinBlur": "./pkg-10-game002-s3-l1.spinblur.webp"
+    },
+    "L2": {
+      "animations": {
+        "appear": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l2.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "dropdown": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l2.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "feature1": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature1",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l2.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "feature2": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature2",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l2.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "normal": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l2.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "remove": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "End",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l2.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "win": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Win",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l2.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        }
+      },
+      "cascadeWinPresentation": {
+        "order": 0,
+        "playback": {
+          "mode": "group",
+          "removeState": "remove",
+          "winState": "win"
+        },
+        "summary": {
+          "mode": "groupAmount"
+        }
+      },
+      "disabled": "./pkg-10-game002-s3-l2.disabled.webp",
+      "normal": "./pkg-10-game002-s3-l2.webp",
+      "scale": 1,
+      "spinBlur": "./pkg-10-game002-s3-l2.spinblur.webp"
+    },
+    "L3": {
+      "animations": {
+        "appear": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l3.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "dropdown": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l3.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "feature1": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature1",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l3.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "feature2": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature2",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l3.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "normal": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l3.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "remove": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "End",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l3.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "win": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Win",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l3.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        }
+      },
+      "cascadeWinPresentation": {
+        "order": 0,
+        "playback": {
+          "mode": "group",
+          "removeState": "remove",
+          "winState": "win"
+        },
+        "summary": {
+          "mode": "groupAmount"
+        }
+      },
+      "disabled": "./pkg-10-game002-s3-l3.disabled.webp",
+      "normal": "./pkg-10-game002-s3-l3.webp",
+      "scale": 1,
+      "spinBlur": "./pkg-10-game002-s3-l3.spinblur.webp"
+    },
+    "L4": {
+      "animations": {
+        "appear": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l4.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "dropdown": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l4.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "feature1": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature1",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l4.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "feature2": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature2",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l4.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "normal": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l4.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "remove": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "End",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l4.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "win": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Win",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-l4.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        }
+      },
+      "cascadeWinPresentation": {
+        "order": 0,
+        "playback": {
+          "mode": "group",
+          "removeState": "remove",
+          "winState": "win"
+        },
+        "summary": {
+          "mode": "groupAmount"
+        }
+      },
+      "disabled": "./pkg-10-game002-s3-l4.disabled.webp",
+      "normal": "./pkg-10-game002-s3-l4.webp",
+      "scale": 1,
+      "spinBlur": "./pkg-10-game002-s3-l4.spinblur.webp"
+    },
+    "WL": {
+      "animations": {
+        "appear": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-wl.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "dropdown": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Loop",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-wl.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "feature1": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature1",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-wl.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "feature2": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature2",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-wl.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "Feature5": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature5",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-wl.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "NearWin": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "NearWin",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-wl.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "normal": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Loop",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-wl.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "Reel_NearWin": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Reel_NearWin",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-wl.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "Reel_NearWin_End": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Reel_NearWin_End",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-wl.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "Reel_NearWin_Start": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Reel_NearWin_Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-wl.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "remove": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Loop",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-wl.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "win": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Win",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-wl.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        }
+      },
+      "cascadeWinPresentation": {
+        "order": 0,
+        "playback": {
+          "mode": "group",
+          "removeState": "remove",
+          "winState": "win"
+        },
+        "summary": {
+          "mode": "groupAmount"
+        }
+      },
+      "disabled": "./pkg-10-game002-s3-wl.disabled.webp",
+      "imageStringNodes": [
+        {
+          "anchor": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "followSlotColor": true,
+          "initialText": "x2",
+          "name": "multiplier",
+          "resource": "./pkg-10-game002-s3-new-image-string-2.image-string.manifest.json",
+          "targets": [
+            {
+              "slot": "Mult",
+              "state": "normal"
+            },
+            {
+              "slot": "Mult",
+              "state": "dropdown"
+            },
+            {
+              "slot": "Mult",
+              "state": "appear"
+            },
+            {
+              "slot": "Mult",
+              "state": "win"
+            },
+            {
+              "slot": "Mult",
+              "state": "feature1"
+            },
+            {
+              "slot": "Mult",
+              "state": "feature2"
+            }
+          ],
+          "transform": {
+            "scale": 1,
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
+      "normal": "./pkg-10-game002-s3-wl.webp",
+      "renderPriority": 1,
+      "scale": 1,
+      "spinBlur": "./pkg-10-game002-s3-wl_spinblur.webp"
+    },
+    "WM": {
+      "animations": {
+        "appear": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-wm.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "change": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Change",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-wm.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "dropdown": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Loop",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-wm.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "Feature5": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature5",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-wm.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "multEnd": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Loop",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-wm.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "multIdle": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Loop",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-wm.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "multStart": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Loop",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-wm.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "normal": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Loop",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-wm.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        },
+        "remove": {
+          "atlas": "./pkg-10-game002-s3-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Loop",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-10-game002-s3-wm.json",
+          "texture": "./pkg-10-game002-s3-symbol.webp"
+        }
+      },
+      "disabled": "./pkg-10-game002-s3-wm.disabled.webp",
+      "imageStringNodes": [
+        {
+          "anchor": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "followSlotColor": true,
+          "initialText": "x1",
+          "name": "multiplier",
+          "resource": "./pkg-10-game002-s3-new-image-string-2.image-string.manifest.json",
+          "targets": [
+            {
+              "slot": "Mult",
+              "state": "normal"
+            },
+            {
+              "slot": "Mult",
+              "state": "dropdown"
+            },
+            {
+              "slot": "Mult",
+              "state": "appear"
+            },
+            {
+              "slot": "Mult",
+              "state": "multStart"
+            },
+            {
+              "slot": "Mult",
+              "state": "multIdle"
+            },
+            {
+              "slot": "Mult",
+              "state": "multEnd"
+            },
+            {
+              "slot": "Mult",
+              "state": "change"
+            }
+          ],
+          "transform": {
+            "scale": 1,
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
+      "normal": "./pkg-10-game002-s3-wm.webp",
+      "scale": 1,
+      "spinBlur": "./pkg-10-game002-s3-wm_spinblur.webp"
+    }
+  },
+  "version": 1
+}

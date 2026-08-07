@@ -18,7 +18,7 @@
     "initialMode": "BaseGame",
     "modes": [
       {
-        "awardCelebrationPopup": "bigwin2",
+        "awardCelebrationPopup": "award-celebration",
         "backgroundNodes": {
           "default": "basegame-background"
         },
@@ -65,6 +65,7 @@
           },
           "switchEvent": "Start"
         },
+        "preludePopup": "fg",
         "to": "FreeGame"
       },
       {
@@ -95,11 +96,12 @@
           },
           "switchEvent": "Start"
         },
+        "preludePopup": "congratulations",
         "to": "BaseGame"
       }
     ]
   },
-  "id": "crave",
+  "id": "new-layout",
   "kind": "scene-layout",
   "nodes": [
     {
@@ -107,6 +109,11 @@
       "order": 0,
       "placements": {
         "default": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 1000,
           "y": 1000
@@ -135,6 +142,11 @@
       "order": 1,
       "placements": {
         "default": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 1000,
           "y": 1000
@@ -160,8 +172,21 @@
     }
   ],
   "popups": {
+    "award-celebration": {
+      "manifest": "pkg-17-award-celebration-popup.manifest.json",
+      "order": 2001,
+      "placements": {
+        "default": {
+          "scale": 1,
+          "x": 0,
+          "y": -120
+        }
+      },
+      "type": "award-celebration"
+    },
     "bigwin2": {
       "manifest": "popup.manifest.json",
+      "order": 2000,
       "placements": {
         "default": {
           "scale": 1,
@@ -170,6 +195,30 @@
         }
       },
       "type": "award-celebration"
+    },
+    "congratulations": {
+      "manifest": "pkg-15-congratulations-popup.manifest.json",
+      "order": 2003,
+      "placements": {
+        "default": {
+          "scale": 1,
+          "x": 0,
+          "y": 0
+        }
+      },
+      "type": "spine"
+    },
+    "fg": {
+      "manifest": "pkg-2-fg-popup.manifest.json",
+      "order": 2002,
+      "placements": {
+        "default": {
+          "scale": 1,
+          "x": 0,
+          "y": 0
+        }
+      },
+      "type": "spine"
     }
   },
   "reels": {
@@ -221,7 +270,7 @@
   },
   "symbolPackages": {
     "game002-s3": {
-      "manifest": "symbols.package.json",
+      "manifest": "pkg-10-game002-s3-symbols.package.json",
       "reel": "main",
       "reelSet": "reels-001",
       "renderMode": "grid-cell"

@@ -1,0 +1,71 @@
+{
+  "designViewport": {
+    "height": 1920,
+    "width": 1080
+  },
+  "id": "congratulations",
+  "kind": "popup",
+  "resources": {
+    "pkg-15-congratulations-congratulations.json": {
+      "atlas": "pkg-15-congratulations-bg.atlas",
+      "kind": "spine",
+      "skeleton": "pkg-15-congratulations-congratulations.json",
+      "textures": {
+        "BG_2.png": "pkg-15-congratulations-bg_2.webp",
+        "BG_3.png": "pkg-15-congratulations-bg_3.webp",
+        "BG_4.png": "pkg-15-congratulations-bg_4.webp",
+        "BG_5.png": "pkg-15-congratulations-bg_5.webp",
+        "BG_6.png": "pkg-15-congratulations-bg_6.webp",
+        "BG_7.png": "pkg-15-congratulations-bg_7.webp",
+        "BG_8.png": "pkg-15-congratulations-bg_8.webp",
+        "BG.png": "pkg-15-congratulations-bg.webp"
+      }
+    },
+    "pkg-15-congratulations-image-string.manifest.json": {
+      "kind": "image-string",
+      "manifest": "pkg-15-congratulations-image-string.manifest.json"
+    }
+  },
+  "spine": {
+    "overlays": [
+      {
+        "anchor": {
+          "x": 0.5,
+          "y": 0.5
+        },
+        "binding": "manual",
+        "defaultText": "68.89",
+        "id": "overlay-0",
+        "kind": "image-string",
+        "name": "imgnumber-0",
+        "order": 999,
+        "resource": "pkg-15-congratulations-image-string.manifest.json",
+        "transform": {
+          "rotation": 0,
+          "scale": 0.8,
+          "x": 0,
+          "y": 72
+        },
+        "visibleSegments": [
+          "start",
+          "loop",
+          "end"
+        ]
+      }
+    ],
+    "playback": {
+      "endAnimation": "End",
+      "loopAnimation": "Loop",
+      "mode": "segmented-animations",
+      "startAnimation": "Start"
+    },
+    "resource": "pkg-15-congratulations-congratulations.json",
+    "transform": {
+      "scale": 1,
+      "x": 0,
+      "y": 0
+    }
+  },
+  "type": "spine",
+  "version": 1
+}
