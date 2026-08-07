@@ -6,9 +6,19 @@ import type {
   WinResult,
 } from "@slotclientengine/gameframeworks";
 import {
+  assertExactMatrixEqual as assertMatrixEqual,
+  assertExactMatrixShape as assertDimensions,
+  assertExactPositionSet as assertPositionSetEqual,
+  decodePositionInMatrix as position,
   forEachMatrixCell as forEachCell,
+  parseExactPositionPairs,
   slotOperationPositionKey as positionKey,
 } from "@slotclientengine/gameframeworks";
+
+const positionsFromFlat = (raw: unknown, scene: SceneMatrix, label: string) =>
+  parseExactPositionPairs(raw, scene, label, {
+    rangeMessage: "is out of bounds",
+  });
 
 export type Game002FreeGameValueMatrix = readonly (readonly (
   | number
@@ -326,6 +336,7 @@ function compileAf(options: {
     positions,
     declaredPositions,
     `step[${options.stepIndex}] fg-af2cn.pos`,
+    { mismatchMessage: "does not match its trigger positions" },
   );
   const outputScene = exactlyOneComponentScene(
     options.step,
@@ -404,12 +415,14 @@ function compileCo(options: {
         sourceY,
         options.inputScene,
         `step[${options.stepIndex}] fg-vortex source`,
+        { rangeMessage: "is out of bounds" },
       );
       const target = position(
         targetX,
         targetY,
         options.inputScene,
         `step[${options.stepIndex}] fg-vortex target`,
+        { rangeMessage: "is out of bounds" },
       );
       for (const candidate of [source, target]) {
         const key = positionKey(candidate);
@@ -577,38 +590,6 @@ function positionsFromResults(
   );
 }
 
-function positionsFromFlat(
-  raw: unknown,
-  scene: SceneMatrix,
-  label: string,
-): readonly SlotRoundPosition[] {
-  if (!Array.isArray(raw) || raw.length % 2 !== 0)
-    throw new Error(`${label} must contain x/y pairs.`);
-  const positions: SlotRoundPosition[] = [];
-  const seen = new Set<string>();
-  for (let index = 0; index < raw.length; index += 2) {
-    const value = position(raw[index], raw[index + 1], scene, label);
-    const key = positionKey(value);
-    if (seen.has(key)) throw new Error(`${label} contains duplicate ${key}.`);
-    seen.add(key);
-    positions.push(value);
-  }
-  return Object.freeze(positions);
-}
-
-function position(
-  rawX: unknown,
-  rawY: unknown,
-  scene: SceneMatrix,
-  label: string,
-): SlotRoundPosition {
-  const x = nonNegativeInteger(rawX, `${label}.x`);
-  const y = nonNegativeInteger(rawY, `${label}.y`);
-  if (scene[x]?.[y] === undefined)
-    throw new Error(`${label} position (${x},${y}) is out of bounds.`);
-  return Object.freeze({ x, y });
-}
-
 function nonHeldPositions(
   scene: SceneMatrix,
   wlCode: number,
@@ -697,17 +678,6 @@ function assertCodes(
       throw new Error(`${label} (${x},${y}) must use symbol code ${expected}.`);
 }
 
-function assertPositionSetEqual(
-  left: readonly SlotRoundPosition[],
-  right: readonly SlotRoundPosition[],
-  label: string,
-): void {
-  const a = new Set(left.map(positionKey));
-  const b = new Set(right.map(positionKey));
-  if (a.size !== b.size || [...a].some((key) => !b.has(key)))
-    throw new Error(`${label} does not match its trigger positions.`);
-}
-
 function validateScene(scene: SceneMatrix, label: string): SceneMatrix {
   if (!Array.isArray(scene) || scene.length === 0)
     throw new Error(`${label} must contain columns.`);
@@ -721,32 +691,6 @@ function validateScene(scene: SceneMatrix, label: string): SceneMatrix {
         throw new Error(`${label}[${x}][${y}] has invalid symbol code.`);
   }
   return scene;
-}
-
-function assertDimensions(
-  actual: readonly (readonly unknown[])[],
-  expected: readonly (readonly unknown[])[],
-  label: string,
-): void {
-  if (
-    actual.length !== expected.length ||
-    actual.some((column, x) => column.length !== expected[x]!.length)
-  )
-    throw new Error(`${label} dimensions do not match the scene.`);
-}
-
-function assertMatrixEqual(
-  actual: readonly (readonly unknown[])[],
-  expected: readonly (readonly unknown[])[],
-  label: string,
-): void {
-  assertDimensions(actual, expected, label);
-  forEachCell(expected, (x, y, value) => {
-    if (actual[x]![y] !== value)
-      throw new Error(
-        `${label}[${x}][${y}] differs: actual=${String(actual[x]![y])}; expected=${String(value)}.`,
-      );
-  });
 }
 
 function mutableScene(scene: SceneMatrix): number[][] {

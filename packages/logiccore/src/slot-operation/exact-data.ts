@@ -80,6 +80,7 @@ export function assertExactPositionSet(
   actual: readonly SlotOperationPosition[],
   expected: readonly SlotOperationPosition[],
   label: string,
+  options: { readonly mismatchMessage?: string } = {},
 ): void {
   const actualKeys = uniquePositionKeys(actual, `${label} actual`);
   const expectedKeys = uniquePositionKeys(expected, `${label} expected`);
@@ -87,7 +88,9 @@ export function assertExactPositionSet(
     actualKeys.size !== expectedKeys.size ||
     [...actualKeys].some((key) => !expectedKeys.has(key))
   )
-    throw new LogicParseError(`${label} position set differs.`);
+    throw new LogicParseError(
+      `${label} ${options.mismatchMessage ?? "position set differs"}.`,
+    );
 }
 
 export function requireOccurrenceAt(
@@ -112,6 +115,7 @@ export function validatePositionInMatrix(
   position: SlotOperationPosition,
   matrix: readonly (readonly unknown[])[],
   label: string,
+  options: { readonly rangeMessage?: string } = {},
 ): SlotOperationPosition {
   if (
     !Number.isSafeInteger(position.x) ||
@@ -122,9 +126,70 @@ export function validatePositionInMatrix(
     position.y >= (matrix[position.x]?.length ?? 0)
   )
     throw new LogicParseError(
-      `${label} position ${slotOperationPositionKey(position)} is out of range.`,
+      `${label} position ${slotOperationPositionKey(position)} ${options.rangeMessage ?? "is out of range"}.`,
     );
   return position;
+}
+
+export function decodePositionInMatrix(
+  rawX: unknown,
+  rawY: unknown,
+  matrix: readonly (readonly unknown[])[],
+  label: string,
+  options: { readonly rangeMessage?: string } = {},
+): SlotOperationPosition {
+  return Object.freeze(
+    validatePositionInMatrix(
+      {
+        x: requireSafeInteger(rawX, `${label}.x`, { minimum: 0 }),
+        y: requireSafeInteger(rawY, `${label}.y`, { minimum: 0 }),
+      },
+      matrix,
+      label,
+      options,
+    ),
+  );
+}
+
+export function parseExactPositionPairs(
+  raw: unknown,
+  matrix: readonly (readonly unknown[])[],
+  label: string,
+  options: {
+    readonly nonEmpty?: boolean;
+    readonly rangeMessage?: string;
+  } = {},
+): readonly SlotOperationPosition[] {
+  if (
+    !Array.isArray(raw) ||
+    raw.length % 2 !== 0 ||
+    (options.nonEmpty === true && raw.length === 0)
+  )
+    throw new LogicParseError(
+      `${label} must contain ${options.nonEmpty === true ? "non-empty " : ""}x/y pairs.`,
+    );
+  const positions = Array.from({ length: raw.length / 2 }, (_value, index) =>
+    decodePositionInMatrix(
+      raw[index * 2],
+      raw[index * 2 + 1],
+      matrix,
+      `${label}[${index}]`,
+      options,
+    ),
+  );
+  uniquePositionKeys(positions, label);
+  return Object.freeze(positions);
+}
+
+export function findMatrixValuePositions<T>(
+  matrix: readonly (readonly T[])[],
+  value: T,
+): readonly SlotOperationPosition[] {
+  const positions: SlotOperationPosition[] = [];
+  forEachMatrixCell(matrix, (x, y, candidate) => {
+    if (candidate === value) positions.push(Object.freeze({ x, y }));
+  });
+  return Object.freeze(positions);
 }
 
 export function requireSafeInteger(

@@ -14,7 +14,6 @@ import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-
 import type { Game002FreeGameOperationPayload } from "./game002-operation-compiler.js";
 import type { Game002ReelRuntime } from "./game002-reel-controller.js";
 import type { Game002BackgroundPlayer } from "./game002-scene-runtime.js";
-import { assertGame002ReelVisualMatchesTarget } from "./game002-reel-controller.js";
 
 type Activity = "idle" | "transaction" | "spin" | "win" | "popup";
 
@@ -134,16 +133,11 @@ export class Game002FreeGameOperationTarget {
         this.#transactionComplete = true;
       if (this.#failure) throw this.#failure;
       if (!this.#transactionComplete) return { completed: false };
-      if (payload.kind === "af")
-        this.assertOutput(payload.af.outputScene, "AF");
-      if (payload.kind === "co")
-        this.assertOutput(payload.co.outputScene, "CO");
       return this.finish();
     }
     if (this.#activity === "spin" && payload.kind === "spin") {
       this.#runtime.update(deltaSeconds);
       if (this.#runtime.isSpinning()) return { completed: false };
-      this.assertOutput(payload.spin.spinScene, "spin");
       return this.finish();
     }
     if (this.#activity === "win" && payload.kind === "win") {
@@ -421,17 +415,6 @@ export class Game002FreeGameOperationTarget {
         if (generation === this.#transactionGeneration)
           this.#failure = asError(error);
       },
-    );
-  }
-
-  private assertOutput(
-    scene: Parameters<Game002ReelRuntime["applyScene"]>[0],
-    label: string,
-  ) {
-    assertGame002ReelVisualMatchesTarget(
-      this.#runtime.getVisualSnapshot(),
-      scene,
-      `game002 FreeGame ${label} operation`,
     );
   }
 

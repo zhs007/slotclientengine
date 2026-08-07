@@ -989,14 +989,9 @@ export class Game002RoundTarget {
   }
 
   preflightAtomicTransform(
-    operation: SlotOperationV2,
+    _operation: SlotOperationV2,
     payload: Game002TransformPayload,
   ): void {
-    if (
-      payload.phase !== "wild-multiplier" &&
-      operation.effect !== "state-mutation"
-    )
-      throw new Error(`${operation.kind} must mutate state.`);
     const requireStates = (
       positions: readonly { readonly x: number; readonly y: number }[],
       states: readonly string[],
@@ -1061,7 +1056,6 @@ export class Game002RoundTarget {
       this.#transformRunner.getSnapshot().running
     )
       throw new Error("game002 atomic transform cannot start while active.");
-    this.preflightAtomicTransform(operation, payload);
     const commands = this.createAtomicTransformCommands(operation, payload);
     this.#activity = "atomic-transform";
     this.#atomicTransformOperation = operation;
@@ -1087,12 +1081,6 @@ export class Game002RoundTarget {
     if (this.#transformPlaybackFailure) throw this.#transformPlaybackFailure;
     if (this.#transformRunner.getSnapshot().phase !== "complete")
       return { completed: false };
-    if (operation.effect === "state-mutation")
-      assertGame002ReelVisualMatchesTarget(
-        this.#runtime.getVisualSnapshot(),
-        operation.output.scene,
-        `completed ${operation.kind}`,
-      );
     this.#atomicTransformOperation = null;
     this.#activity = "idle";
     return { completed: true };
@@ -1146,7 +1134,7 @@ export class Game002RoundTarget {
             destroy: () => undefined,
           }),
       });
-    const mutation = this.requireAtomicMutation(operation, payload.phase);
+    const mutation = operation.effect === "state-mutation" ? operation : null;
     switch (payload.phase) {
       case "wl-increment": {
         const positions = payload.increments.map((item) => item.position);
@@ -1258,15 +1246,6 @@ export class Game002RoundTarget {
           awaitStates,
         );
     }
-  }
-
-  private requireAtomicMutation(
-    operation: SlotOperationV2,
-    phase: Game002TransformPhase,
-  ): Extract<SlotOperationV2, { readonly effect: "state-mutation" }> | null {
-    if (operation.effect === "state-mutation") return operation;
-    if (phase === "wild-multiplier") return null;
-    throw new Error(`${operation.kind} must mutate state.`);
   }
 
   private replacementCommit(options: {

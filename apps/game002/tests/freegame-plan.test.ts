@@ -360,7 +360,7 @@ describe("game002 FreeGame plan", () => {
         const valueIndex = basic(raw, 9, "fg-spin").usedOtherScenes[0]!;
         otherSceneColumns(raw, 9, valueIndex).pop();
       },
-      error: /dimensions do not match/,
+      error: /width differs/,
     },
     {
       name: "partial AF protocol",

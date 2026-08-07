@@ -6,6 +6,8 @@ import type {
   WinResultPosition,
 } from "@slotclientengine/gameframeworks";
 import {
+  assertExactMatrixEqual as assertMatrixEqual,
+  assertExactMatrixShape as assertDimensions,
   forEachMatrixCell as forEachCell,
   slotOperationPositionKey as positionKey,
 } from "@slotclientengine/gameframeworks";
@@ -827,35 +829,6 @@ function parseIndexArray(value: unknown, label: string): readonly number[] {
       assertNonNegativeSafeInteger(candidate, `${label}[${index}]`),
     ),
   );
-}
-
-function assertDimensions(
-  value: readonly (readonly unknown[])[],
-  scene: readonly (readonly unknown[])[],
-  label: string,
-): void {
-  if (!Array.isArray(value) || value.length !== scene.length)
-    throw new Error(`${label} width must match scene.`);
-  value.forEach((column, x) => {
-    if (!Array.isArray(column) || column.length !== scene[x].length)
-      throw new Error(`${label}[${x}] height must match scene.`);
-  });
-}
-
-function assertMatrixEqual(
-  actual: readonly (readonly unknown[])[],
-  expected: readonly (readonly unknown[])[],
-  label: string,
-): void {
-  if (
-    actual.length !== expected.length ||
-    actual.some(
-      (column, x) =>
-        column.length !== expected[x]?.length ||
-        column.some((value, y) => value !== expected[x]?.[y]),
-    )
-  )
-    throw new Error(`${label} does not match previous cascade output.`);
 }
 
 function readOptionalNonNegativeInteger(

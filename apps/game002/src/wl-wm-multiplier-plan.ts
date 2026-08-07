@@ -10,6 +10,7 @@ import type {
   SlotRoundPosition,
 } from "@slotclientengine/gameframeworks";
 import {
+  assertExactMatrixEqual as assertSceneEqual,
   forEachMatrixCell as forEachCell,
   slotOperationPositionKey as positionKey,
 } from "@slotclientengine/gameframeworks";
@@ -1123,19 +1124,6 @@ function requireConfiguredCode(
       `step[${stepIndex}] requires an explicit ${symbol} symbol code.`,
     );
   return code;
-}
-
-function assertSceneEqual(
-  actual: SceneMatrix,
-  expected: SceneMatrix,
-  label: string,
-): void {
-  forEachCell(expected, (x, y, code) => {
-    if (actual[x]?.[y] !== code)
-      throw new Error(
-        `${label}[${x}][${y}] differs: actual=${String(actual[x]?.[y])}; expected=${code}.`,
-      );
-  });
 }
 
 function assertPositiveMultiplier(value: unknown, label: string): number {
