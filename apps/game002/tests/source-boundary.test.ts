@@ -371,7 +371,7 @@ describe("game002 source boundary", () => {
     );
     const summarySource = [
       readFileSync(join(APP_ROOT, "src/cascade-win-summary-config.ts"), "utf8"),
-      readFileSync(join(APP_ROOT, "src/cascade-sequence.ts"), "utf8"),
+      readFileSync(join(APP_ROOT, "src/operation-data.ts"), "utf8"),
     ].join("\n");
     expect(summarySource).not.toMatch(/querySelector|document\.|\.children\[/);
     expect(appSource).not.toContain("@esotericsoftware/spine-pixi-v8");

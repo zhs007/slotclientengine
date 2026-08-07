@@ -24,8 +24,8 @@ import {
   readGame002SpinOperationData,
   readGame002WinOperationData,
   type Game002FallOperationData,
-  type Game002WinRemoveStage,
-} from "./cascade-sequence.js";
+  type Game002WinOperationData,
+} from "./operation-data.js";
 import {
   canGame002CascadeDropSymbol,
   canGame002CascadeRemoveSymbol,
@@ -50,7 +50,7 @@ export interface Game002SpinPayload {
 }
 
 export interface Game002WinPayload {
-  readonly groups: Game002WinRemoveStage["groups"];
+  readonly groups: Game002WinOperationData["groups"];
 }
 
 export interface Game002RemovePayload {
