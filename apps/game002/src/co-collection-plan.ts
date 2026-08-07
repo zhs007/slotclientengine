@@ -14,6 +14,8 @@ import {
   assertExactPositionSet as assertPositionSetEqual,
   findMatrixValuePositions as findCodePositions,
   parseExactPositionPairs as parsePairs,
+  requireExactlyOne as exactlyOne,
+  requireSafeIntegerArray,
   validatePositionInMatrix as validatePosition,
 } from "@slotclientengine/gameframeworks";
 import { GAME002_CASCADE_COMPONENTS } from "./cascade-config.js";
@@ -105,7 +107,10 @@ export function compileGame002CoCollectionPlan(options: {
   if (!coComponent)
     throw new Error(`step[${stepIndex}] bg-co component is missing.`);
   const raw = asRecord(coComponent.raw, `step[${stepIndex}] bg-co`);
-  const encoded = asIntegerArray(raw.pos, `step[${stepIndex}] bg-co.pos`);
+  const encoded = requireSafeIntegerArray(
+    raw.pos,
+    `step[${stepIndex}] bg-co.pos`,
+  );
   const encodedSegments = splitTransferSegments(encoded, stepIndex);
   const outputScene = exactlyOne(
     step.getComponentScenes(GAME002_CASCADE_COMPONENTS.co),
@@ -437,14 +442,6 @@ function assertComponentsAbsent(
     );
 }
 
-function exactlyOne<T>(values: readonly T[], label: string): T {
-  if (values.length !== 1)
-    throw new Error(
-      `${label} must contain exactly one entry; received ${values.length}.`,
-    );
-  return values[0]!;
-}
-
 function asRecord(
   value: unknown,
   label: string,
@@ -452,15 +449,6 @@ function asRecord(
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error(`${label} must be an object.`);
   return value as Readonly<Record<string, unknown>>;
-}
-
-function asIntegerArray(value: unknown, label: string): readonly number[] {
-  if (
-    !Array.isArray(value) ||
-    value.some((item) => !Number.isSafeInteger(item))
-  )
-    throw new Error(`${label} must be an integer array.`);
-  return Object.freeze([...value]) as readonly number[];
 }
 
 function setChange(

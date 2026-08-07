@@ -251,7 +251,7 @@ describe("game002 FreeGame plan", () => {
       mutate: (raw: ReturnType<typeof createSampleMessage>) => {
         components(raw, 7)["fg-start"]!.lastRespinNum = 0;
       },
-      error: /lastRespinNum must be positive/,
+      error: /lastRespinNum must be >= 1/,
     },
     {
       name: "missing spin protocol",
@@ -272,7 +272,7 @@ describe("game002 FreeGame plan", () => {
       mutate: (raw: ReturnType<typeof createSampleMessage>) => {
         components(raw, 9)["fg-start"]!.curRespinNum = -1;
       },
-      error: /non-negative safe integer/,
+      error: /must be >= 0/,
     },
     {
       name: "FreeGame source continuity drift",
@@ -374,7 +374,7 @@ describe("game002 FreeGame plan", () => {
       mutate: (raw: ReturnType<typeof createSampleMessage>) => {
         components(raw, 8)["fg-rollaf"]!.number = 0;
       },
-      error: /fg-rollaf.number must be positive/,
+      error: /fg-rollaf.number must be >= 1/,
     },
     {
       name: "AF replacement position drift",

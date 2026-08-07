@@ -207,12 +207,26 @@ export function requireSafeInteger(
   return result;
 }
 
-function requireExactlyOne<T>(values: readonly T[], label: string): T {
+export function requireExactlyOne<T>(values: readonly T[], label: string): T {
   if (values.length !== 1)
     throw new LogicParseError(
       `${label} expected exactly one entry, got ${values.length}.`,
     );
   return values[0]!;
+}
+
+export function requireSafeIntegerArray(
+  value: unknown,
+  label: string,
+  options: { readonly minimum?: number; readonly maximum?: number } = {},
+): readonly number[] {
+  if (!Array.isArray(value))
+    throw new LogicParseError(`${label} must be an array.`);
+  return Object.freeze(
+    value.map((item, index) =>
+      requireSafeInteger(item, `${label}[${index}]`, options),
+    ),
+  );
 }
 
 function uniquePositionKeys(

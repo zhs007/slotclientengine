@@ -9,6 +9,7 @@ import {
   requireExactlyOneScene,
   requireOccurrenceAt,
   requireSafeInteger,
+  requireSafeIntegerArray,
   type ComponentSelection,
   type SlotOperationSnapshot,
 } from "../../src/index";
@@ -144,5 +145,13 @@ describe("slot operation exact data", () => {
     expect(() => requireSafeInteger(5, "value", { maximum: 4 })).toThrow(
       /<= 4/,
     );
+    expect(requireSafeIntegerArray([0, 2], "values", { minimum: 0 })).toEqual([
+      0, 2,
+    ]);
+    expect(() => requireSafeIntegerArray("bad", "values")).toThrow(
+      /must be an array/,
+    );
+    expect(() => requireSafeIntegerArray([1, -1], "values", { minimum: 0 }))
+      .toThrow(/values\[1\].*>= 0/);
   });
 });

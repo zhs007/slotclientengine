@@ -12,6 +12,7 @@ import {
   decodePositionInMatrix as position,
   forEachMatrixCell as forEachCell,
   parseExactPositionPairs,
+  requireSafeInteger,
   slotOperationPositionKey as positionKey,
 } from "@slotclientengine/gameframeworks";
 
@@ -721,15 +722,11 @@ function componentNumber(
 }
 
 function positiveInteger(value: unknown, label: string): number {
-  const result = nonNegativeInteger(value, label);
-  if (result === 0) throw new Error(`${label} must be positive.`);
-  return result;
+  return requireSafeInteger(value, label, { minimum: 1 });
 }
 
 function nonNegativeInteger(value: unknown, label: string): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
-    throw new Error(`${label} must be a non-negative safe integer.`);
-  return value;
+  return requireSafeInteger(value, label, { minimum: 0 });
 }
 
 function isEightNeighbor(

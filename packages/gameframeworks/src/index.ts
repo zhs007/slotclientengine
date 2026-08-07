@@ -10,6 +10,8 @@ export {
   findMatrixValuePositions,
   forEachMatrixCell,
   requireSafeInteger,
+  requireSafeIntegerArray,
+  requireExactlyOne,
   parseExactPositionPairs,
   slotOperationPositionKey,
   validatePositionInMatrix,

@@ -9,6 +9,9 @@ import {
   assertExactMatrixEqual as assertMatrixEqual,
   assertExactMatrixShape as assertDimensions,
   forEachMatrixCell as forEachCell,
+  parseExactPositionPairs,
+  requireSafeInteger,
+  requireSafeIntegerArray,
   slotOperationPositionKey as positionKey,
 } from "@slotclientengine/gameframeworks";
 import {
@@ -107,9 +110,10 @@ export function readGame002FallOperationData(options: {
     options.step,
     GAME002_CASCADE_COMPONENTS.dropdown,
   );
-  const srcIndexes = parseIndexArray(
+  const srcIndexes = requireSafeIntegerArray(
     dropdown.basicComponentData?.srcScenes,
     `step[${stepIndex}] bg-dropdown.srcScenes`,
+    { minimum: 0 },
   );
   if (srcIndexes.length !== 1)
     throw new Error(
@@ -159,6 +163,7 @@ export function readGame002FallOperationData(options: {
   );
   const refillPositions = parsePositions(
     refill.basicComponentData?.pos,
+    dropdownScene,
     `step[${stepIndex}] bg-refill.pos`,
   );
   assertPositionsAreExactlyHoles(
@@ -341,6 +346,7 @@ export function readGame002WinOperationData(options: {
         .flatMap((result, resultIndex) =>
           parsePositions(
             result.pos,
+            options.sourceScene,
             `step[${stepIndex}] bg-bn result[${resultIndex}].pos`,
           ),
         ),
@@ -710,7 +716,7 @@ function exactlyOneFullScene(
         );
       return Object.freeze(
         column.map((code, y) =>
-          assertNonNegativeSafeInteger(code, `${label}[${x}][${y}]`),
+          requireSafeInteger(code, `${label}[${x}][${y}]`, { minimum: 0 }),
         ),
       );
     }),
@@ -766,27 +772,10 @@ function optionalOtherScene(
 
 function parsePositions(
   value: unknown,
+  scene: readonly (readonly unknown[])[],
   label: string,
 ): readonly WinResultPosition[] {
-  if (!Array.isArray(value) || value.length === 0 || value.length % 2 !== 0) {
-    throw new Error(`${label} must contain non-empty x/y pairs.`);
-  }
-  const positions: WinResultPosition[] = [];
-  const seen = new Set<string>();
-  for (let index = 0; index < value.length; index += 2) {
-    const x = assertNonNegativeSafeInteger(value[index], `${label}[${index}]`);
-    const y = assertNonNegativeSafeInteger(
-      value[index + 1],
-      `${label}[${index + 1}]`,
-    );
-    if (x >= GAME002_REEL_COUNT || y >= GAME002_VISIBLE_ROWS)
-      throw new Error(`${label} coordinate (${x},${y}) is out of range.`);
-    const key = `${x},${y}`;
-    if (seen.has(key)) throw new Error(`${label} contains duplicate ${key}.`);
-    seen.add(key);
-    positions.push(Object.freeze({ x, y }));
-  }
-  return Object.freeze(positions);
+  return parseExactPositionPairs(value, scene, label, { nonEmpty: true });
 }
 
 function assertPositionsAreExactlyHoles(
@@ -822,25 +811,10 @@ function requireBasicComponent(step: GameLogicStep, name: string) {
   return component;
 }
 
-function parseIndexArray(value: unknown, label: string): readonly number[] {
-  if (!Array.isArray(value)) throw new Error(`${label} must be an array.`);
-  return Object.freeze(
-    value.map((candidate, index) =>
-      assertNonNegativeSafeInteger(candidate, `${label}[${index}]`),
-    ),
-  );
-}
-
 function readOptionalNonNegativeInteger(
   value: unknown,
   label: string,
 ): number | null {
   if (value === undefined) return null;
-  return assertNonNegativeSafeInteger(value, label);
-}
-
-function assertNonNegativeSafeInteger(value: unknown, label: string): number {
-  if (!Number.isSafeInteger(value) || (value as number) < 0)
-    throw new Error(`${label} must be a non-negative safe integer.`);
-  return value as number;
+  return requireSafeInteger(value, label, { minimum: 0 });
 }
