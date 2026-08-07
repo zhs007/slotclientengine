@@ -1,433 +1,180 @@
 import { describe, expect, it } from "vitest";
 import type {
-  SlotRoundOccurrenceSnapshot,
-  SlotRoundSettledTransformStepPlan,
+  SlotOperationSnapshot,
+  SlotOperationV2,
 } from "@slotclientengine/gameframeworks";
+import type { SymbolCascadePlayer } from "@slotclientengine/rendercore";
 import type {
-  SymbolCascadePlayer,
   VisibleSymbolStatePlaybackBatchOptions,
   VisibleSymbolStatePlaybackRequest,
 } from "@slotclientengine/rendercore";
 import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-amount";
 import { Game002RoundTarget } from "../src/game-adapter.js";
-import type { Game002ReelRuntime } from "../src/game-demo.js";
+import type { Game002TransformPayload } from "../src/game002-operation-compiler.js";
+import type { Game002ReelRuntime } from "../src/game002-reel-controller.js";
 
-describe("Game002RoundTarget multiplier transform", () => {
-  it("rejects an out-of-order or mismatched atomic presentation session", () => {
+describe("Game002RoundTarget atomic multiplier programs", () => {
+  it("runs wild-multiplier and WM replacement as independent atomic programs", async () => {
     const runtime = new TransformRuntime();
-    const target = new Game002RoundTarget({
-      runtime: runtime.asRuntime(),
-      cascadePlayer: {} as SymbolCascadePlayer,
-      winAmountPlayer: {} as WinAmountAnimationPlayer,
-      wlSymbolCode: 0,
-      wmSymbolCode: 7,
-      cnSymbolCode: 8,
-      cmSymbolCode: 9,
+    const target = createTarget(runtime);
+    const input = createSnapshot(createScene(1), 7, 3, 2);
+    const wildOutput = createSnapshot(createScene(1), 7, 3, 5);
+    const wild = operation("game002:wild-multiplier", input, wildOutput, {
+      phase: "wild-multiplier",
+      wmPositions: [{ x: 1, y: 0 }],
     });
-    const step = createTransformStep();
-    const batch = {
-      stepIndex: 1,
-      wlIncrements: [],
-      wmReplacements: [
-        { position: { x: 1, y: 0 }, intermediateValue: 9, outputValue: 9 },
-      ],
-      cnUpdates: [],
-      cm: null,
-      coReplacements: [],
-    } as const;
-    expect(() =>
-      target.startAtomicTransformOperation(step, batch, "wm-to-cn"),
-    ).toThrow(/must start/);
-    target.startAtomicTransformOperation(step, batch, "wild-multiplier");
-    expect(() =>
-      target.startAtomicTransformOperation(step, { ...batch }, "wm-to-cn"),
-    ).toThrow(/does not match/);
-    expect(() =>
-      target.startAtomicTransformOperation(step, batch, "coin-multiplier"),
-    ).toThrow(/cannot start/);
-  });
-  it("waits for real animation edges before updating WL, changing WM and committing CN", async () => {
-    const runtime = new TransformRuntime();
-    const target = new Game002RoundTarget({
-      runtime: runtime.asRuntime(),
-      cascadePlayer: {} as SymbolCascadePlayer,
-      winAmountPlayer: {} as WinAmountAnimationPlayer,
-      wlSymbolCode: 0,
-      wmSymbolCode: 7,
-      cnSymbolCode: 8,
-      cmSymbolCode: 9,
-    });
-    const step = createTransformStep();
-    const batch = {
-      stepIndex: step.stepIndex,
-      wlIncrements: [],
-      wmReplacements: [
-        { position: { x: 1, y: 0 }, intermediateValue: 9, outputValue: 9 },
-      ],
-      cnUpdates: [],
-      cm: null,
-      coReplacements: [],
-    } as const;
-    target.startAtomicTransformOperation(step, batch, "wild-multiplier");
-    expect(runtime.events).toEqual([
-      "text:0,0=x2",
-      "text:1,0=x3",
-      "prepare:1,0:7->8",
-      "state:multStart",
-    ]);
-    expect(
-      target.updateAtomicTransformOperation(0, "wild-multiplier").completed,
-    ).toBe(false);
 
+    target.startAtomicTransform(wild, wild.payload as Game002TransformPayload);
+    expect(runtime.events).toEqual(["state:multStart"]);
     runtime.advanceOnce();
     await flushPlayback();
-    expect(
-      target.updateAtomicTransformOperation(0, "wild-multiplier").completed,
-    ).toBe(true);
-    expect(runtime.events.slice(-2)).toEqual(["text:0,0=x5", "state:multIdle"]);
-
-    target.startAtomicTransformOperation(step, batch, "wm-to-cn");
+    expect(runtime.events).toContain("state:multIdle");
     runtime.advanceLoop();
     await flushPlayback();
-    expect(target.updateAtomicTransformOperation(0, "wm-to-cn").completed).toBe(
-      false,
-    );
-    expect(runtime.events.at(-1)).toBe("state:multEnd");
+    expect(target.updateAtomicTransform(wild).completed).toBe(true);
 
+    const outputScene = createScene(1);
+    outputScene[1][0] = 8;
+    const wmOutput = createSnapshot(outputScene, 8, 9, 5);
+    const wm = operation("game002:wm-to-cn", wildOutput, wmOutput, {
+      phase: "wm-to-cn",
+      replacements: [
+        {
+          position: { x: 1, y: 0 },
+          intermediateValue: 9,
+          outputValue: 9,
+        },
+      ],
+    });
+    target.startAtomicTransform(wm, wm.payload as Game002TransformPayload);
     runtime.advanceOnce();
     await flushPlayback();
-    expect(target.updateAtomicTransformOperation(0, "wm-to-cn").completed).toBe(
-      false,
-    );
     expect(runtime.events.at(-1)).toBe("state:change");
-
     runtime.advanceOnce();
     await flushPlayback();
-    expect(target.updateAtomicTransformOperation(0, "wm-to-cn").completed).toBe(
-      true,
-    );
-    expect(runtime.events.at(-1)).toBe("commit:1,0:8");
+    expect(target.updateAtomicTransform(wm).completed).toBe(true);
     expect(runtime.scene[1][0]).toBe(8);
   });
 
-  it("plays WL Start for deferred bg-incwl even when the settled batch has no WM", async () => {
-    const scene = createScene(1);
-    scene[1][0] = 1;
-    const runtime = new TransformRuntime(scene);
-    const target = new Game002RoundTarget({
-      runtime: runtime.asRuntime(),
-      cascadePlayer: {} as SymbolCascadePlayer,
-      winAmountPlayer: {} as WinAmountAnimationPlayer,
-      wlSymbolCode: 0,
-      wmSymbolCode: 7,
-      cnSymbolCode: 8,
-      cmSymbolCode: 9,
-    });
-    const step = createWlIncrementStep(scene);
-    const batch = {
-      stepIndex: 1,
-      wlIncrements: [
-        { position: { x: 0, y: 0 }, inputValue: 2, outputValue: 3 },
+  it("plays WL increment only from its minimal payload", async () => {
+    const runtime = new TransformRuntime();
+    const target = createTarget(runtime);
+    const input = createSnapshot(createScene(1), 7, 3, 2);
+    const output = createSnapshot(createScene(1), 7, 3, 3);
+    const operationValue = operation("game002:wl-increment", input, output, {
+      phase: "wl-increment",
+      increments: [
+        {
+          position: { x: 0, y: 0 },
+          inputValue: 2,
+          outputValue: 3,
+        },
       ],
-      wmReplacements: [],
-      cnUpdates: [],
-      cm: null,
-      coReplacements: [],
-    } as const;
-    target.startAtomicTransformOperation(step, batch, "wl-increment");
-    expect(runtime.events).toEqual([
-      "text:0,0=x2",
-      "text:0,0=x3",
-      "state:appear",
-    ]);
+    });
+
+    target.startAtomicTransform(
+      operationValue,
+      operationValue.payload as Game002TransformPayload,
+    );
+    expect(runtime.events).toContain("text:0,0=x3");
     runtime.advanceOnce();
     await flushPlayback();
-    expect(
-      target.updateAtomicTransformOperation(0, "wl-increment").completed,
-    ).toBe(true);
+    expect(target.updateAtomicTransform(operationValue).completed).toBe(true);
   });
 
-  it("plays the complete WM sequence and commits CN when the board has no WL", async () => {
-    const scene = createScene(1);
-    scene[0][0] = 1;
-    const runtime = new TransformRuntime(scene);
-    const target = new Game002RoundTarget({
-      runtime: runtime.asRuntime(),
-      cascadePlayer: {} as SymbolCascadePlayer,
-      winAmountPlayer: {} as WinAmountAnimationPlayer,
-      wlSymbolCode: 0,
-      wmSymbolCode: 7,
-      cnSymbolCode: 8,
-      cmSymbolCode: 9,
+  it("aborts playback and restores the operation input on cleanup", async () => {
+    const runtime = new TransformRuntime();
+    const target = createTarget(runtime);
+    const input = createSnapshot(createScene(1), 7, 3, 2);
+    const output = createSnapshot(createScene(1), 7, 3, 5);
+    const operationValue = operation("game002:wild-multiplier", input, output, {
+      phase: "wild-multiplier",
+      wmPositions: [{ x: 1, y: 0 }],
     });
-    const step = createWmOnlyTransformStep(scene);
-    target.startSettledTransformOperation(step, {
-      stepIndex: step.stepIndex,
-      wlIncrements: [],
-      wmReplacements: [
-        { position: { x: 1, y: 0 }, intermediateValue: 11, outputValue: 11 },
-      ],
-      cnUpdates: [],
-      cm: null,
-      coReplacements: [],
-    });
-    expect(runtime.events).toEqual([
-      "text:1,0=x4",
-      "prepare:1,0:7->8",
-      "state:multStart",
-    ]);
-    runtime.advanceOnce();
-    await flushPlayback();
-    expect(target.updateSettledTransform(0).completed).toBe(false);
-    expect(runtime.events.at(-1)).toBe("state:multIdle");
-    runtime.advanceLoop();
-    await flushPlayback();
-    expect(target.updateSettledTransform(0).completed).toBe(false);
-    expect(runtime.events.at(-1)).toBe("state:multEnd");
-    runtime.advanceOnce();
-    await flushPlayback();
-    expect(target.updateSettledTransform(0).completed).toBe(false);
-    expect(runtime.events.at(-1)).toBe("state:change");
-    runtime.advanceOnce();
-    await flushPlayback();
-    expect(target.updateSettledTransform(0).completed).toBe(true);
-    expect(runtime.events.at(-1)).toBe("commit:1,0:8");
-  });
-
-  it("plays CM Feature1, changes all CN values, then converts CM to CN", async () => {
-    const scene = createScene(1);
-    scene[0][0] = 1;
-    scene[1][0] = 9;
-    scene[2][0] = 8;
-    const runtime = new TransformRuntime(scene);
-    const target = new Game002RoundTarget({
-      runtime: runtime.asRuntime(),
-      cascadePlayer: {} as SymbolCascadePlayer,
-      winAmountPlayer: {} as WinAmountAnimationPlayer,
-      wlSymbolCode: 0,
-      wmSymbolCode: 7,
-      cnSymbolCode: 8,
-      cmSymbolCode: 9,
-    });
-    const step = createCmTransformStep(scene);
-    const batch = {
-      stepIndex: step.stepIndex,
-      wlIncrements: [],
-      wmReplacements: [],
-      cnUpdates: [{ position: { x: 2, y: 0 }, inputValue: 5, outputValue: 10 }],
-      cm: { position: { x: 1, y: 0 }, multiplier: 2, outputValue: 7 },
-      coReplacements: [],
-    } as const;
-    target.startAtomicTransformOperation(step, batch, "coin-multiplier");
-    expect(runtime.events).toEqual([
-      "text:1,0=x2",
-      "prepare:1,0:9->8",
-      "state:feature1",
-    ]);
-
-    runtime.advanceOnce();
-    await flushPlayback();
-    expect(
-      target.updateAtomicTransformOperation(0, "coin-multiplier").completed,
-    ).toBe(false);
-    expect(runtime.events.at(-1)).toBe("state:featureChange");
-
-    runtime.advanceOnce();
-    await flushPlayback();
-    expect(
-      target.updateAtomicTransformOperation(0, "coin-multiplier").completed,
-    ).toBe(true);
-
-    target.startAtomicTransformOperation(step, batch, "cm-to-cn");
-    expect(runtime.events.at(-1)).toBe("state:change");
-
-    runtime.advanceOnce();
-    await flushPlayback();
-    expect(target.updateAtomicTransformOperation(0, "cm-to-cn").completed).toBe(
-      true,
+    target.startAtomicTransform(
+      operationValue,
+      operationValue.payload as Game002TransformPayload,
     );
-    expect(runtime.events.at(-1)).toBe("commit:1,0:8");
-    expect(runtime.scene[1][0]).toBe(8);
-  });
-
-  it("commits WM before starting CM and completes CM before the transform", async () => {
-    const scene = createScene(1);
-    scene[0][0] = 1;
-    scene[1][0] = 7;
-    scene[2][0] = 8;
-    scene[3][0] = 9;
-    const runtime = new TransformRuntime(scene);
-    const target = new Game002RoundTarget({
-      runtime: runtime.asRuntime(),
-      cascadePlayer: {} as SymbolCascadePlayer,
-      winAmountPlayer: {} as WinAmountAnimationPlayer,
-      wlSymbolCode: 0,
-      wmSymbolCode: 7,
-      cnSymbolCode: 8,
-      cmSymbolCode: 9,
-    });
-    const step = createWmCmTransformStep(scene);
-    const batch = {
-      stepIndex: step.stepIndex,
-      wlIncrements: [],
-      wmReplacements: [
-        { position: { x: 1, y: 0 }, intermediateValue: 4, outputValue: 8 },
-      ],
-      cnUpdates: [
-        { position: { x: 1, y: 0 }, inputValue: 4, outputValue: 8 },
-        { position: { x: 2, y: 0 }, inputValue: 5, outputValue: 10 },
-      ],
-      cm: { position: { x: 3, y: 0 }, multiplier: 2, outputValue: 7 },
-      coReplacements: [],
-    } as const;
-    target.startAtomicTransformOperation(step, batch, "wild-multiplier");
-    expect(runtime.events.at(-1)).toBe("state:multStart");
-    runtime.advanceOnce();
-    await flushPlayback();
-    expect(
-      target.updateAtomicTransformOperation(0, "wild-multiplier").completed,
-    ).toBe(true);
-    target.startAtomicTransformOperation(step, batch, "wm-to-cn");
-    runtime.advanceLoop();
-    await flushPlayback();
-    expect(target.updateAtomicTransformOperation(0, "wm-to-cn").completed).toBe(
-      false,
-    );
-    runtime.advanceOnce();
-    await flushPlayback();
-    expect(target.updateAtomicTransformOperation(0, "wm-to-cn").completed).toBe(
-      false,
-    );
-    runtime.advanceOnce();
-    await flushPlayback();
-    expect(target.updateAtomicTransformOperation(0, "wm-to-cn").completed).toBe(
-      true,
-    );
-    expect(runtime.events.at(-1)).toBe("commit:1,0:8");
-
-    target.startAtomicTransformOperation(step, batch, "coin-multiplier");
-    expect(runtime.events.at(-1)).toBe("state:feature1");
-    runtime.advanceOnce();
-    await flushPlayback();
-    expect(
-      target.updateAtomicTransformOperation(0, "coin-multiplier").completed,
-    ).toBe(false);
-    expect(runtime.events.at(-1)).toBe("state:featureChange");
-    runtime.advanceOnce();
-    await flushPlayback();
-    expect(
-      target.updateAtomicTransformOperation(0, "coin-multiplier").completed,
-    ).toBe(true);
-    target.startAtomicTransformOperation(step, batch, "cm-to-cn");
-    expect(runtime.events.at(-1)).toBe("state:change");
-    runtime.advanceOnce();
-    await flushPlayback();
-    expect(target.updateAtomicTransformOperation(0, "cm-to-cn").completed).toBe(
-      true,
-    );
-    expect(runtime.events.at(-1)).toBe("commit:3,0:8");
-  });
-
-  it("surfaces transform playback failures and cancels pending playback on cleanup", async () => {
-    const createTarget = (runtime: TransformRuntime) =>
-      new Game002RoundTarget({
-        runtime: runtime.asRuntime(),
-        cascadePlayer: { clear: () => undefined } as SymbolCascadePlayer,
-        winAmountPlayer: {
-          dismissImmediately: () => undefined,
-        } as WinAmountAnimationPlayer,
-        wlSymbolCode: 0,
-        wmSymbolCode: 7,
-        cnSymbolCode: 8,
-        cmSymbolCode: 9,
-      });
-    const scene = createScene(1);
-    scene[0][0] = 1;
-    const step = createWmOnlyTransformStep(scene);
-    const batch = {
-      stepIndex: step.stepIndex,
-      wlIncrements: [],
-      wmReplacements: [
-        { position: { x: 1, y: 0 }, intermediateValue: 11, outputValue: 11 },
-      ],
-      cnUpdates: [],
-      cm: null,
-      coReplacements: [],
-    } as const;
-
-    const rejectedRuntime = new TransformRuntime(
-      scene.map((column) => [...column]),
-    );
-    const rejectedTarget = createTarget(rejectedRuntime);
-    rejectedTarget.startSettledTransformOperation(step, batch);
-    expect(() =>
-      (
-        rejectedTarget as unknown as {
-          completeSettledTransform(
-            session: SlotRoundSettledTransformStepPlan,
-          ): void;
-        }
-      ).completeSettledTransform(step),
-    ).toThrow(/uncommitted replacements/);
-    expect(() =>
-      (
-        rejectedTarget as unknown as {
-          requestTransformStates(requests: readonly never[]): void;
-        }
-      ).requestTransformStates([]),
-    ).toThrow(/another playback is pending/);
-    rejectedRuntime.rejectPending(new Error("transform playback failed"));
-    await flushPlayback();
-    expect(() => rejectedTarget.updateSettledTransform(0)).toThrow(
-      "transform playback failed",
-    );
-    rejectedTarget.cleanup();
-
-    const stringFailureRuntime = new TransformRuntime(
-      scene.map((column) => [...column]),
-    );
-    const stringFailureTarget = createTarget(stringFailureRuntime);
-    stringFailureTarget.startSettledTransformOperation(step, batch);
-    stringFailureRuntime.rejectPending("string transform failure");
-    await flushPlayback();
-    expect(() => stringFailureTarget.updateSettledTransform(0)).toThrow(
-      "string transform failure",
-    );
-    stringFailureTarget.cleanup();
-
-    const synchronousRuntime = new TransformRuntime(
-      scene.map((column) => [...column]),
-    );
-    synchronousRuntime.failNextSynchronously = true;
-    const synchronousTarget = createTarget(synchronousRuntime);
-    synchronousTarget.startSettledTransformOperation(step, batch);
-    await flushPlayback();
-    expect(() => synchronousTarget.updateSettledTransform(0)).toThrow(
-      "transform playback did not start",
-    );
-    synchronousTarget.cleanup();
-
-    const abortedRuntime = new TransformRuntime(
-      scene.map((column) => [...column]),
-    );
-    abortedRuntime.ignoreAbort = true;
-    const abortedTarget = createTarget(abortedRuntime);
-    abortedTarget.startSettledTransformOperation(step, batch);
-    const signal = abortedRuntime.pendingSignals[0]!;
-    abortedTarget.cleanup();
+    const signal = runtime.pendingSignals[0]!;
+    target.cleanup();
     expect(signal.aborted).toBe(true);
-    abortedRuntime.advanceOnce();
     await flushPlayback();
+    expect(runtime.scene).toEqual(input.scene);
+  });
 
-    const cancelledRuntime = new TransformRuntime(
-      scene.map((column) => [...column]),
-    );
-    const cancelledTarget = createTarget(cancelledRuntime);
-    cancelledTarget.startSettledTransformOperation(step, batch);
-    cancelledTarget.cleanup();
-    await flushPlayback();
+  it("rejects missing animation capability before presentation mutation", () => {
+    const runtime = new TransformRuntime();
+    runtime.missingState = "change";
+    const target = createTarget(runtime);
+    const input = createSnapshot(createScene(1), 7, 3, 2);
+    const outputScene = createScene(1);
+    outputScene[1][0] = 8;
+    const output = createSnapshot(outputScene, 8, 9, 2);
+    const operationValue = operation("game002:wm-to-cn", input, output, {
+      phase: "wm-to-cn",
+      replacements: [
+        {
+          position: { x: 1, y: 0 },
+          intermediateValue: 9,
+          outputValue: 9,
+        },
+      ],
+    });
+    expect(() =>
+      target.preflightAtomicTransform(
+        operationValue,
+        operationValue.payload as Game002TransformPayload,
+      ),
+    ).toThrow(/no "change"/);
+    expect(runtime.events).toEqual([]);
   });
 });
+
+function createTarget(runtime: TransformRuntime): Game002RoundTarget {
+  return new Game002RoundTarget({
+    runtime: runtime.asRuntime(),
+    cascadePlayer: { clear: () => undefined } as SymbolCascadePlayer,
+    winAmountPlayer: {
+      dismissImmediately: () => undefined,
+    } as WinAmountAnimationPlayer,
+    wlSymbolCode: 0,
+    wmSymbolCode: 7,
+    cnSymbolCode: 8,
+    cmSymbolCode: 9,
+  });
+}
+
+function operation(
+  kind: string,
+  input: SlotOperationSnapshot,
+  output: SlotOperationSnapshot,
+  payload: Game002TransformPayload,
+): SlotOperationV2 {
+  return Object.freeze({
+    kind,
+    version: 2,
+    effect: "state-mutation",
+    source: Object.freeze({
+      kind: "server-component",
+      stepIndex: 1,
+      bindings: Object.freeze({}),
+    }),
+    payload: Object.freeze(payload),
+    input,
+    output,
+    mutations: Object.freeze([]),
+    requiredCapabilities: Object.freeze([kind]),
+    businessKey: kind,
+    operationIndex: 0,
+  }) as unknown as SlotOperationV2;
+}
+
+async function flushPlayback(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}
 
 interface PendingTransformPlayback {
   readonly completion: "once-complete" | "next-loop-complete";
@@ -440,6 +187,7 @@ interface PendingTransformPlayback {
 class TransformRuntime {
   readonly events: string[] = [];
   readonly scene: number[][];
+  missingState: string | null = null;
   failNextSynchronously = false;
   ignoreAbort = false;
   #loop = 0;
@@ -520,6 +268,15 @@ class TransformRuntime {
     };
     return {
       resetPresentationState: () => undefined,
+      getCurrentScene: () => this.scene,
+      applyScene: (scene: readonly (readonly number[])[]) => {
+        this.scene.splice(
+          0,
+          this.scene.length,
+          ...scene.map((column) => [...column]),
+        );
+        return Object.freeze(scene.map(() => 0));
+      },
       setVisibleSymbolPresentationValue: (
         _x: number,
         _y: number,
@@ -533,7 +290,11 @@ class TransformRuntime {
       ) => {
         this.events.push(`text:${x},${y}=${text}`);
       },
-      hasVisibleSymbolStateCapability: () => true,
+      hasVisibleSymbolStateCapability: (
+        _x: number,
+        _y: number,
+        state: string,
+      ) => state !== this.missingState,
       requestVisibleSymbolStates: (
         _positions: readonly { x: number; y: number }[],
         state: string,
@@ -643,217 +404,12 @@ class TransformRuntime {
   }
 }
 
-function createTransformStep(): SlotRoundSettledTransformStepPlan {
-  const input = createSnapshot(createScene(1), 7, 3, 2);
-  const outputScene = createScene(1);
-  outputScene[1][0] = 8;
-  const output = createSnapshot(outputScene, 8, 9, 5);
-  const wlInput = input.occurrences.find((item) => item.position.x === 0)!;
-  const wmInput = input.occurrences.find((item) => item.position.x === 1)!;
-  const wlOutput = output.occurrences.find((item) => item.position.x === 0)!;
-  const cnOutput = output.occurrences.find((item) => item.position.x === 1)!;
-  return Object.freeze({
-    kind: "settled-transform",
-    index: 0,
-    stepIndex: 1,
-    input,
-    output,
-    changes: Object.freeze([
-      Object.freeze({
-        occurrenceId: wlInput.id,
-        position: wlInput.position,
-        input: wlInput,
-        output: wlOutput,
-      }),
-      Object.freeze({
-        occurrenceId: wmInput.id,
-        position: wmInput.position,
-        input: wmInput,
-        output: cnOutput,
-      }),
-    ]),
-    requiredCapabilities: Object.freeze(["settled-transform"] as const),
-  });
-}
-
-function createWlIncrementStep(
-  scene: readonly (readonly number[])[],
-): SlotRoundSettledTransformStepPlan {
-  const input = createSnapshot(scene, 1, 0, 2);
-  const output = createSnapshot(scene, 1, 0, 3);
-  const wlInput = input.occurrences.find((item) => item.position.x === 0)!;
-  const wlOutput = output.occurrences.find((item) => item.position.x === 0)!;
-  return Object.freeze({
-    kind: "settled-transform",
-    index: 0,
-    stepIndex: 1,
-    input,
-    output,
-    changes: Object.freeze([
-      Object.freeze({
-        occurrenceId: wlInput.id,
-        position: wlInput.position,
-        input: wlInput,
-        output: wlOutput,
-      }),
-    ]),
-    requiredCapabilities: Object.freeze(["settled-transform"] as const),
-  });
-}
-
-function createWmOnlyTransformStep(
-  scene: readonly (readonly number[])[],
-): SlotRoundSettledTransformStepPlan {
-  const inputValues = createScene<number | null>(null);
-  inputValues[1][0] = 4;
-  const input = createGenericSnapshot(scene, inputValues);
-  const outputScene = scene.map((column) => [...column]);
-  outputScene[1][0] = 8;
-  const outputValues = createScene<number | null>(null);
-  outputValues[1][0] = 11;
-  const output = createGenericSnapshot(outputScene, outputValues);
-  const wmInput = input.occurrences.find(
-    (item) => item.position.x === 1 && item.position.y === 0,
-  )!;
-  const cnOutput = output.occurrences.find(
-    (item) => item.position.x === 1 && item.position.y === 0,
-  )!;
-  return Object.freeze({
-    kind: "settled-transform",
-    index: 0,
-    stepIndex: 1,
-    input,
-    output,
-    changes: Object.freeze([
-      Object.freeze({
-        occurrenceId: wmInput.id,
-        position: wmInput.position,
-        input: wmInput,
-        output: cnOutput,
-      }),
-    ]),
-    requiredCapabilities: Object.freeze(["settled-transform"] as const),
-  });
-}
-
-function createCmTransformStep(
-  scene: readonly (readonly number[])[],
-): SlotRoundSettledTransformStepPlan {
-  const inputValues = createScene<number | null>(null);
-  inputValues[1][0] = 2;
-  inputValues[2][0] = 5;
-  const input = createGenericSnapshot(scene, inputValues);
-  const outputScene = scene.map((column) => [...column]);
-  outputScene[1][0] = 8;
-  const outputValues = createScene<number | null>(null);
-  outputValues[1][0] = 7;
-  outputValues[2][0] = 10;
-  const output = createGenericSnapshot(outputScene, outputValues);
-  const positions = [
-    Object.freeze({ x: 1, y: 0 }),
-    Object.freeze({ x: 2, y: 0 }),
-  ];
-  return Object.freeze({
-    kind: "settled-transform",
-    index: 0,
-    stepIndex: 1,
-    input,
-    output,
-    changes: Object.freeze(
-      positions.map((position) => {
-        const occurrenceId = `o-${position.x}-${position.y}`;
-        return Object.freeze({
-          occurrenceId,
-          position,
-          input: input.occurrences.find((item) => item.id === occurrenceId)!,
-          output: output.occurrences.find((item) => item.id === occurrenceId)!,
-        });
-      }),
-    ),
-    requiredCapabilities: Object.freeze(["settled-transform"] as const),
-  });
-}
-
-function createWmCmTransformStep(
-  scene: readonly (readonly number[])[],
-): SlotRoundSettledTransformStepPlan {
-  const inputValues = createScene<number | null>(null);
-  inputValues[1][0] = 3;
-  inputValues[2][0] = 5;
-  inputValues[3][0] = 2;
-  const input = createGenericSnapshot(scene, inputValues);
-  const outputScene = scene.map((column) => [...column]);
-  outputScene[1][0] = 8;
-  outputScene[3][0] = 8;
-  const outputValues = createScene<number | null>(null);
-  outputValues[1][0] = 8;
-  outputValues[2][0] = 10;
-  outputValues[3][0] = 7;
-  const output = createGenericSnapshot(outputScene, outputValues);
-  const positions = [
-    Object.freeze({ x: 1, y: 0 }),
-    Object.freeze({ x: 2, y: 0 }),
-    Object.freeze({ x: 3, y: 0 }),
-  ];
-  return Object.freeze({
-    kind: "settled-transform",
-    index: 0,
-    stepIndex: 1,
-    input,
-    output,
-    changes: Object.freeze(
-      positions.map((position) => {
-        const occurrenceId = `o-${position.x}-${position.y}`;
-        return Object.freeze({
-          occurrenceId,
-          position,
-          input: input.occurrences.find((item) => item.id === occurrenceId)!,
-          output: output.occurrences.find((item) => item.id === occurrenceId)!,
-        });
-      }),
-    ),
-    requiredCapabilities: Object.freeze(["settled-transform"] as const),
-  });
-}
-
-function createGenericSnapshot(
-  scene: readonly (readonly number[])[],
-  values: readonly (readonly (number | null)[])[],
-): SlotRoundOccurrenceSnapshot {
-  return Object.freeze({
-    scene,
-    values,
-    occurrences: Object.freeze(
-      scene.flatMap((column, x) =>
-        column.map((code, y) =>
-          Object.freeze({
-            id: `o-${x}-${y}`,
-            code,
-            symbol:
-              code === 0
-                ? "WL"
-                : code === 7
-                  ? "WM"
-                  : code === 8
-                    ? "CN"
-                    : code === 9
-                      ? "CM"
-                      : "A",
-            value: values[x][y],
-            position: Object.freeze({ x, y }),
-          }),
-        ),
-      ),
-    ),
-  });
-}
-
 function createSnapshot(
   scene: readonly (readonly number[])[],
   transformedCode: number,
   transformedValue: number,
   wlValue: number,
-): SlotRoundOccurrenceSnapshot {
+): SlotOperationSnapshot {
   const occurrences = scene.flatMap((column, x) =>
     column.map((code, y) => ({
       id: `o-${x}-${y}`,
@@ -887,7 +443,7 @@ function createSnapshot(
       ),
     ),
     occurrences,
-  }) as SlotRoundOccurrenceSnapshot;
+  }) as SlotOperationSnapshot;
 }
 
 function createScene<T>(fill: T): T[][] {
@@ -896,11 +452,4 @@ function createScene<T>(fill: T): T[][] {
       x === 0 && y === 0 ? (0 as T) : x === 1 && y === 0 ? (7 as T) : fill,
     ),
   );
-}
-
-async function flushPlayback(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
 }

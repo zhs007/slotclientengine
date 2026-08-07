@@ -28,8 +28,9 @@
   code/value continuity 与 prepare/commit/rollback，不认识业务 symbol、component
   或动画名。没有 transform 的 consumer trace 保持不变。
 - symbol package 到 reel registry 的 catalog/value-controller 适配属于 rendercore；
-  game app 不从 package bytes 重建 asset 表。layout/background/popup 与 app-owned reel
-  组合时使用 rendercore presentation surface，不复制 scene-layout visibility、placement
+  game app 不从 package bytes 重建 asset 表。完整 package runtime 必须拥有唯一 root/reel、manifest
+  placement/order 与 overlay attachment；确实只消费 layout/background/popup 且不需要 package main reel 的
+  consumer 才使用 rendercore presentation surface，不复制 scene-layout visibility、placement
   或 popup lifecycle。需要 mode transition 时，surface 必须委托 package runtime 的
   prepare/request/event/switch/settle 状态机并公开独立 transition container。
 - 游戏 app 只保留业务 component/value/result resolver、formatter、layout、anticipation 和 typed extension；不得复制 Pixi、Spine、reel、cascade 或 popup 状态机。

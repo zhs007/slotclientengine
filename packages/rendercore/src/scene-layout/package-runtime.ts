@@ -124,6 +124,14 @@ export function createSceneLayoutPackageRuntime(options: {
    */
   readonly presentationOnly?: boolean;
   readonly reelPresentation?: SlotReelPresentationProfileV1;
+  readonly gridCellPresentation?: {
+    readonly createEffectController?: () => import("../reel/index.js").GridCellEffectController;
+    readonly presentationValueResolver?: import("../reel/index.js").GridCellSymbolPresentationValueResolver;
+  };
+  /** Typed factory for a business-configured grid-cell reel transferred to package ownership. */
+  readonly createGridCellReel?: () => RenderGridCellReelSet;
+  /** The host advances an injected main reel and drains its update result. */
+  readonly hostUpdatesMainReel?: boolean;
   readonly formatPopupAmount?: import("../popup/index.js").PopupAmountFormatter;
   readonly createTransitionPlayer?: (options: {
     readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
@@ -140,6 +148,9 @@ export function createSceneLayoutPackageRuntime(options: {
     options.resource,
     options.presentationOnly === true,
     options.reelPresentation,
+    options.gridCellPresentation,
+    options.createGridCellReel,
+    options.hostUpdatesMainReel === true,
     options.formatPopupAmount,
     options.createTransitionPlayer,
     options.createSpinePopupPlayer,
@@ -154,6 +165,14 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   #manifest: SceneLayoutPackageResource["manifest"];
   readonly #layout;
   readonly #reelPresentation: SlotReelPresentationProfileV1 | null;
+  readonly #gridCellPresentation:
+    | {
+        readonly createEffectController?: () => import("../reel/index.js").GridCellEffectController;
+        readonly presentationValueResolver?: import("../reel/index.js").GridCellSymbolPresentationValueResolver;
+      }
+    | undefined;
+  readonly #createGridCellReel: (() => RenderGridCellReelSet) | undefined;
+  readonly #hostUpdatesMainReel: boolean;
   readonly #formatPopupAmount:
     | import("../popup/index.js").PopupAmountFormatter
     | undefined;
@@ -172,6 +191,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #videoBlackoutRoot = new Container();
   readonly #videoBlackout = new Graphics();
   #reel: ReelPresentation | null = null;
+  #mainReelSceneCommitted = false;
+  readonly #mainReelOverlays = new Set<Container>();
   #catalog: SymbolCatalogModel | null = null;
   #activeSymbolPackageId: string | null = null;
   #stableSymbolPackageId: string | null = null;
@@ -208,6 +229,14 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     resource: SceneLayoutPackageResource,
     presentationOnly: boolean,
     reelPresentation: SlotReelPresentationProfileV1 | undefined,
+    gridCellPresentation:
+      | {
+          readonly createEffectController?: () => import("../reel/index.js").GridCellEffectController;
+          readonly presentationValueResolver?: import("../reel/index.js").GridCellSymbolPresentationValueResolver;
+        }
+      | undefined,
+    createGridCellReel: (() => RenderGridCellReelSet) | undefined,
+    hostUpdatesMainReel: boolean,
     formatPopupAmount:
       | import("../popup/index.js").PopupAmountFormatter
       | undefined,
@@ -232,6 +261,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#presentationOnly = presentationOnly;
     this.#manifest = resource.manifest;
     this.#reelPresentation = reelPresentation ?? null;
+    this.#gridCellPresentation = gridCellPresentation;
+    this.#createGridCellReel = createGridCellReel;
+    this.#hostUpdatesMainReel = hostUpdatesMainReel;
     this.#formatPopupAmount = formatPopupAmount;
     this.#layout = createSceneLayoutRuntime({ resource: resource.layout });
     this.#createTransitionPlayer =
@@ -287,25 +319,39 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       const activeBinding = this.resolveModeSymbolBinding(initialMode);
       if (activeBinding && !this.#presentationOnly) {
         const initial = options.reels?.main;
-        if (!initial)
-          throw new SceneLayoutError(
-            "Scene layout package runtime requires initial reels.main input.",
-          );
         const symbolPackage = activeBinding.resource;
-        this.#catalog = await symbolPackage.createCatalog();
-        this.assertAlive();
-        this.#reel = this.createReelPresentation(
-          symbolPackage,
-          this.#catalog,
-          activeBinding.binding,
-        );
+        if (this.#createGridCellReel) {
+          if (activeBinding.binding.renderMode !== "grid-cell")
+            throw new SceneLayoutError(
+              "Injected grid-cell reel requires a grid-cell symbol binding.",
+            );
+          this.#reel = this.#createGridCellReel();
+          this.#catalog = null;
+        } else {
+          this.#catalog = await symbolPackage.createCatalog();
+          this.assertAlive();
+          this.#reel = this.createReelPresentation(
+            symbolPackage,
+            this.#catalog,
+            activeBinding.binding,
+          );
+        }
+        if (!this.#createGridCellReel) {
+          await this.prepareReelPresentation(this.#reel);
+          this.assertAlive();
+        }
         this.attachReel(this.#reel);
-        this.applyReelScene(
-          this.#reel,
-          symbolPackage,
-          activeBinding.binding,
-          initial,
-        );
+        if (initial) {
+          this.applyReelScene(
+            this.#reel,
+            symbolPackage,
+            activeBinding.binding,
+            initial,
+          );
+          this.#mainReelSceneCommitted = true;
+        } else {
+          this.#reel.visible = false;
+        }
         this.#activeSymbolPackageId = activeBinding.id;
         this.#stableSymbolPackageId = activeBinding.id;
       } else if (activeBinding) {
@@ -380,13 +426,19 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       viewportSize.width,
       viewportSize.height,
     );
-    if (this.#reel) {
+    if (
+      this.#reel &&
+      this.#mainReelSceneCommitted &&
+      !this.#hostUpdatesMainReel
+    ) {
       const grid = snapshot.reels.main;
       if (!grid)
         throw new SceneLayoutError(
           'Bound scene layout reel "main" is missing.',
         );
       this.#reel.position.set(grid.artRect.x, grid.artRect.y);
+      for (const overlay of this.#mainReelOverlays)
+        overlay.position.set(grid.artRect.x, grid.artRect.y);
     }
     for (const [id, popup] of this.#popups) {
       const binding = this.#manifest.popups?.[id];
@@ -521,8 +573,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   }
 
   resetReelScene(reelId: "main", input: SceneLayoutInitialReelScene): void {
-    this.assertAlive();
-    const reel = this.requireReel(reelId);
+    this.assertReady();
+    const reel = this.requirePreparedReel(reelId);
     const mode = this.#stableMode ? this.requireMode(this.#stableMode) : null;
     const binding = this.resolveModeSymbolBinding(mode);
     if (!binding)
@@ -530,7 +582,41 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         "Current scene layout game mode has no symbol package binding.",
       );
     this.applyReelScene(reel, binding.resource, binding.binding, input);
+    reel.visible = true;
+    this.#mainReelSceneCommitted = true;
     this.clearMainReelLandingPositions();
+  }
+
+  hasCommittedMainReelScene(): boolean {
+    this.assertReady();
+    return this.#mainReelSceneCommitted;
+  }
+
+  acknowledgeMainReelSceneCommit(): void {
+    this.assertReady();
+    if (!this.#createGridCellReel)
+      throw new SceneLayoutError(
+        "Main reel scene acknowledgement requires an ownership-transferred reel.",
+      );
+    if (this.#mainReelSceneCommitted)
+      throw new SceneLayoutError("Main reel scene is already committed.");
+    const reel = this.requirePreparedReel("main");
+    const binding = this.resolveModeSymbolBinding(
+      this.#stableMode ? this.requireMode(this.#stableMode) : null,
+    );
+    if (!binding)
+      throw new SceneLayoutError(
+        "Current scene layout game mode has no symbol package binding.",
+      );
+    const geometry = this.#manifest.reels.main!;
+    validateScene(
+      reel.getVisibleScene(),
+      geometry.columns,
+      geometry.rows,
+      binding.resource,
+    );
+    reel.visible = true;
+    this.#mainReelSceneCommitted = true;
   }
 
   applyMainReelSnapshot(input: SceneLayoutInitialReelScene): void {
@@ -727,6 +813,76 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     else reel.requestVisibleSymbolStates(positions, state, transitionMode);
   }
 
+  playMainReelSymbolStateBatch(
+    requests: readonly import("../reel/index.js").VisibleSymbolStatePlaybackRequest[],
+    options?: import("../reel/index.js").VisibleSymbolStatePlaybackBatchOptions,
+  ): Promise<void> {
+    this.assertReady();
+    return this.requireReel("main").playVisibleSymbolStateBatch(
+      requests,
+      options,
+    );
+  }
+
+  setMainReelSymbolPresentationValue(
+    x: number,
+    y: number,
+    value: number | null,
+  ): void {
+    this.assertReady();
+    this.requireReel("main").setVisibleSymbolPresentationValue(x, y, value);
+  }
+
+  setMainReelSymbolImageStringText(
+    x: number,
+    y: number,
+    name: string,
+    text: string,
+  ): void {
+    this.assertReady();
+    const reel = this.requireReel("main");
+    if (!(reel instanceof RenderGridCellReelSet))
+      throw new SceneLayoutError(
+        "Visible symbol image-string text requires a grid-cell main reel.",
+      );
+    reel.setVisibleSymbolImageStringText(x, y, name, text);
+  }
+
+  getMainReelSymbolImageStringText(x: number, y: number, name: string): string {
+    this.assertReady();
+    const reel = this.requireReel("main");
+    if (!(reel instanceof RenderGridCellReelSet))
+      throw new SceneLayoutError(
+        "Visible symbol image-string text requires a grid-cell main reel.",
+      );
+    return reel.getVisibleSymbolImageStringText(x, y, name);
+  }
+
+  prepareMainReelVisibleOccurrenceReplacement(options: {
+    readonly x: number;
+    readonly y: number;
+    readonly expectedCode: number;
+    readonly outputCode: number;
+    readonly outputPresentationValue: number | null;
+  }) {
+    this.assertReady();
+    return this.requireReel("main").prepareVisibleOccurrenceReplacement(
+      options,
+    );
+  }
+
+  prepareMainReelVisibleOccurrenceTransferBatch(options: {
+    readonly transfers: readonly import("../reel/index.js").GridCellVisibleOccurrenceTransfer[];
+  }) {
+    this.assertReady();
+    const reel = this.requireReel("main");
+    if (!(reel instanceof RenderGridCellReelSet))
+      throw new SceneLayoutError(
+        "Visible occurrence transfer requires a grid-cell main reel.",
+      );
+    return reel.prepareVisibleOccurrenceTransferBatch(options);
+  }
+
   drainMainReelLandingPositions(): readonly {
     readonly x: number;
     readonly y: number;
@@ -807,6 +963,55 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   ): void {
     this.assertReady();
     this.requireReel("main").startCascadeDrop(plan);
+  }
+
+  startMainReelGridCellSpin(
+    plan: import("../reel/index.js").GridCellReelSpinPlan,
+    options?: import("../reel/index.js").RenderGridCellReelSetSpinOptions,
+  ): void {
+    this.assertReady();
+    const reel = this.requireReel("main");
+    if (!(reel instanceof RenderGridCellReelSet))
+      throw new SceneLayoutError(
+        "Custom grid-cell spin requires a grid-cell main reel.",
+      );
+    this.clearMainReelLandingPositions();
+    reel.spin(plan, options);
+  }
+
+  startMainReelEffectSweep(
+    plan: import("../reel/index.js").GridCellEffectSweepPlan,
+  ): void {
+    this.assertReady();
+    const reel = this.requireReel("main");
+    if (!(reel instanceof RenderGridCellReelSet))
+      throw new SceneLayoutError(
+        "Effect sweep requires a grid-cell main reel.",
+      );
+    reel.startEffectSweep(plan);
+  }
+
+  attachMainReelOverlay(overlay: Container): () => void {
+    this.assertReady();
+    if (overlay.parent)
+      throw new SceneLayoutError(
+        "Main reel overlay must be detached before attach.",
+      );
+    const reel = this.requirePreparedReel("main");
+    const parent = reel.parent;
+    if (!parent)
+      throw new SceneLayoutError("Main reel presentation is not attached.");
+    const reelIndex = parent.getChildIndex(reel);
+    parent.addChildAt(overlay, reelIndex + 1 + this.#mainReelOverlays.size);
+    overlay.position.copyFrom(reel.position);
+    this.#mainReelOverlays.add(overlay);
+    let attached = true;
+    return () => {
+      if (!attached) return;
+      attached = false;
+      this.#mainReelOverlays.delete(overlay);
+      overlay.parent?.removeChild(overlay);
+    };
   }
 
   getReelPresentation(reelId: "main"): Container {
@@ -1024,6 +1229,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           targetBinding.binding,
         );
         try {
+          await this.prepareReelPresentation(reel);
+          this.assertReady();
           this.applyReelScene(
             reel,
             targetBinding.resource,
@@ -1043,9 +1250,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           this.attachReel(prepared.reel);
           this.#reel = prepared.reel;
           this.#catalog = prepared.catalog;
+          this.#mainReelSceneCommitted = true;
         } else {
           this.#reel = null;
           this.#catalog = null;
+          this.#mainReelSceneCommitted = false;
         }
         prepared = null;
         this.#activeSymbolPackageId = targetBinding?.id ?? null;
@@ -1353,6 +1562,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     }
     this.#reel?.destroy({ children: true });
     this.#reel = null;
+    this.#mainReelSceneCommitted = false;
+    for (const overlay of this.#mainReelOverlays)
+      overlay.parent?.removeChild(overlay);
+    this.#mainReelOverlays.clear();
     this.clearMainReelLandingPositions();
     this.#catalog = null;
     for (const popup of this.#popups.values()) popup.destroy();
@@ -1461,6 +1674,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           targetBinding.binding,
         );
         try {
+          await this.prepareReelPresentation(reel);
+          this.assertAlive();
           this.applyReelScene(
             reel,
             targetBinding.resource,
@@ -1876,9 +2091,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         this.attachReel(active.prepared.reel);
         this.#reel = active.prepared.reel;
         this.#catalog = active.prepared.catalog;
+        this.#mainReelSceneCommitted = true;
       } else {
         this.#reel = null;
         this.#catalog = null;
+        this.#mainReelSceneCommitted = false;
       }
       this.#activeSymbolPackageId = this.#targetSymbolPackageId;
       if (previous) {
@@ -1965,7 +2182,23 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       ...(this.#reelPresentation?.kind === "grid-cell"
         ? { bounceStrength: this.#reelPresentation.bounceStrength }
         : {}),
+      ...(this.#gridCellPresentation?.createEffectController
+        ? {
+            effectController:
+              this.#gridCellPresentation.createEffectController(),
+          }
+        : {}),
+      ...(this.#gridCellPresentation?.presentationValueResolver
+        ? {
+            presentationValueResolver:
+              this.#gridCellPresentation.presentationValueResolver,
+          }
+        : {}),
     });
+  }
+
+  private async prepareReelPresentation(reel: ReelPresentation): Promise<void> {
+    if (reel instanceof RenderGridCellReelSet) await reel.prepareEffects();
   }
 
   private applyReelScene(
@@ -2072,6 +2305,15 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   }
 
   private requireReel(id: "main"): ReelPresentation {
+    const reel = this.requirePreparedReel(id);
+    if (!this.#mainReelSceneCommitted)
+      throw new SceneLayoutError(
+        'Scene layout reel presentation "main" has no committed initial scene.',
+      );
+    return reel;
+  }
+
+  private requirePreparedReel(id: "main"): ReelPresentation {
     if (id !== "main" || !this.#reel)
       throw new SceneLayoutError(
         `Scene layout reel presentation "${id}" is unavailable.`,

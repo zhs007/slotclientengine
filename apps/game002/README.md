@@ -140,10 +140,14 @@ CM 乘法、矩阵尺寸和 occurrence continuity 都在画面 mutation 前严�
 一次 `playSpin(logic)` 只启动一份 `SlotOperationPlanV2`。BaseGame operations、
 multiplier/CO transform payload 与 `game002:freegame@2` 由同一个 coordinator 持有；
 FreeGame 不再在 BaseGame Promise 完成后启动第二份 playback contract。transform payload
-直接携带 WL increment、WM replacement、CN update、CM 和 CO collection 事实，Target
-不再用 stepIndex 查询 presentation batch。游戏侧 compiler 在进入 coordinator 前形成
+已拆成 WL increment、WM、WM→CN、CM、CM→CN、CO 的 strict 最小 evidence union，Target
+不再用 stepIndex 查询 presentation batch，也没有 mutable payload cache。游戏侧 compiler 在进入 coordinator 前形成
 `wl-increment`、`wild-multiplier-presentation`、`wm-to-cn`、`coin-multiplier`、`cm-to-cn` 与
 `co-collect` exact operations；缺席阶段不生成 operation，每个实际 visual commit 后才推进。
+
+运行时 stage 只挂完整 Scene Layout package root。package runtime 按 manifest order/placement
+拥有唯一 main reel，首次 `defaultScene` commit 前保持 deferred/uncommitted；cascade 通过 main-reel
+overlay attach API 借用接入。background、reel、transition、popup 不再由 app 用 `worldLayer` 手工排序。
 
 包含 `bg-triggerfg` 的 round 会在表现开始前完整编译 BaseGame 尾段和全部 FreeGame
 step。trigger 必须是无其它 `bg-win/bg-win2` 赔付的 type-5 WL result；先播放 WL

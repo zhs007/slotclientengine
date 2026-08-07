@@ -223,7 +223,17 @@ describe("game002 source boundary", () => {
     expect(adapterSource).toContain(
       "packageConfig.presentation.symbolRegistry",
     );
-    expect(adapterSource).toContain("createGame002SceneLayoutPlayers");
+    expect(adapterSource).toContain("createGame002SceneRuntime");
+    expect(adapterSource).not.toContain("createGame002SceneLayoutPlayers");
+    expect(adapterSource).not.toContain("worldLayer");
+    expect(adapterSource).not.toContain("presentationOnly");
+    expect(adapterSource).not.toContain("mainReelsLayer");
+    const multiplierCompilerSource = readFileSync(
+      join(APP_ROOT, "src/wl-wm-multiplier-plan.ts"),
+      "utf8",
+    );
+    expect(multiplierCompilerSource).not.toContain("operationPayloads");
+    expect(multiplierCompilerSource).not.toContain("getOperationPayload");
   });
 
   it("keeps skin focus regions explicit and delegates art rect mapping to rendercore", () => {
@@ -270,7 +280,10 @@ describe("game002 source boundary", () => {
   });
 
   it("delegates per-spin local reel phase shuffling to rendercore", () => {
-    const source = readFileSync(join(APP_ROOT, "src/game-demo.ts"), "utf8");
+    const source = readFileSync(
+      join(APP_ROOT, "src/game002-reel-controller.ts"),
+      "utf8",
+    );
 
     expect(source).toContain("createShuffledGridCellReelOffsetMatrix");
     expect(source).toContain("random: config.spinPhaseRandom");

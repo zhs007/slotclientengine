@@ -2,18 +2,19 @@ import { Container } from "pixi.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  createSurface: vi.fn(),
+  createRuntime: vi.fn(),
 }));
 
 vi.mock("@slotclientengine/rendercore", () => ({
-  createSceneLayoutPresentationSurface: mocks.createSurface,
+  createSceneLayoutPackageRuntime: mocks.createRuntime,
+  RenderGridCellReelSet: class {},
 }));
 
-import { createGame002SceneLayoutPlayers } from "../src/scene-layout-presentation.js";
+import { createGame002SceneRuntime } from "../src/game002-scene-runtime.js";
 
 describe("game002 scene-layout presentation adapter", () => {
   beforeEach(() => {
-    mocks.createSurface.mockReset();
+    mocks.createRuntime.mockReset();
   });
 
   it("adapts the shared surface and award popup to game002 players", async () => {
@@ -35,62 +36,60 @@ describe("game002 scene-layout presentation adapter", () => {
       dismissImmediately: vi.fn(),
       isPlaying: vi.fn().mockReturnValue(true),
     };
-    const surface = {
-      backgroundContainer: new Container(),
-      transitionContainer: new Container(),
-      popupContainer: new Container(),
+    const runtime = {
+      container: new Container(),
       init: vi.fn().mockResolvedValue(undefined),
-      applyViewport: vi.fn(),
       applyArtSpace: vi.fn(),
       update: vi.fn(),
       getGameModeSnapshot: vi.fn().mockReturnValue({ stableMode: "BaseGame" }),
       prepareGameModeTransition: vi.fn().mockResolvedValue(undefined),
       requestGameMode: vi.fn().mockResolvedValue(undefined),
+      acknowledgeMainReelSceneCommit: vi.fn(),
+      attachMainReelOverlay: vi.fn().mockReturnValue(() => undefined),
       bindPopupInput: vi.fn().mockReturnValue(() => undefined),
       requestPrimaryPopupInteraction: vi
         .fn()
         .mockReturnValue({ handled: false }),
-      getAwardCelebrationPlayer: vi.fn().mockReturnValue(popup),
+      getAwardCelebrationPopup: vi.fn().mockReturnValue(popup),
       destroy: vi.fn(),
     };
-    mocks.createSurface.mockReturnValue(surface);
+    mocks.createRuntime.mockReturnValue(runtime);
     const resource = { id: "crave-resource" };
+    const reel = new Container();
 
-    const players = createGame002SceneLayoutPlayers({
+    const players = createGame002SceneRuntime({
       resource: resource as never,
       initialMode: "BaseGame",
       awardCelebrationPopup: "award",
+      reel: reel as never,
     });
-    expect(mocks.createSurface).toHaveBeenCalledWith({
+    expect(mocks.createRuntime).toHaveBeenCalledWith({
       resource,
-      initialMode: "BaseGame",
+      createGridCellReel: expect.any(Function),
+      hostUpdatesMainReel: true,
     });
-    expect(players.backgroundPlayer.container).toBe(
-      surface.backgroundContainer,
-    );
-    expect(players.backgroundPlayer.transitionContainer).toBe(
-      surface.transitionContainer,
-    );
-    expect(players.winAmountPlayer.container).toBe(surface.popupContainer);
+    expect(players.backgroundPlayer.container).toBe(runtime.container);
+    expect(players.winAmountPlayer.container).toBe(runtime.container);
 
     await players.backgroundPlayer.init();
-    expect(surface.init).toHaveBeenCalledOnce();
-    expect(surface.applyArtSpace).toHaveBeenCalledOnce();
-    expect(surface.applyViewport).not.toHaveBeenCalled();
+    expect(runtime.init).toHaveBeenCalledOnce();
+    expect(runtime.applyArtSpace).toHaveBeenCalledOnce();
     players.backgroundPlayer.update(1 / 60);
-    expect(surface.update).toHaveBeenCalledWith(1 / 60);
+    expect(runtime.update).toHaveBeenCalledWith(1 / 60);
     expect(players.backgroundPlayer.getMode?.()).toBe("BaseGame");
     await players.backgroundPlayer.prepareModeTransition?.("FreeGame");
     await players.backgroundPlayer.requestMode?.("FreeGame");
-    expect(surface.prepareGameModeTransition).toHaveBeenCalledWith("FreeGame");
-    expect(surface.requestGameMode).toHaveBeenCalledWith("FreeGame");
+    expect(runtime.prepareGameModeTransition).toHaveBeenCalledWith("FreeGame");
+    expect(runtime.requestGameMode).toHaveBeenCalledWith("FreeGame");
+    players.backgroundPlayer.acknowledgeReelSceneCommit();
+    expect(runtime.acknowledgeMainReelSceneCommit).toHaveBeenCalledOnce();
     const inputBinding = {
       canvas: new EventTarget(),
       keyboardTarget: new EventTarget(),
       onError: vi.fn(),
     };
     players.backgroundPlayer.bindPopupInput(inputBinding);
-    expect(surface.bindPopupInput).toHaveBeenCalledWith(inputBinding);
+    expect(runtime.bindPopupInput).toHaveBeenCalledWith(inputBinding);
     expect(players.backgroundPlayer.requestPrimaryPopupInteraction()).toEqual({
       handled: false,
     });
@@ -118,10 +117,10 @@ describe("game002 scene-layout presentation adapter", () => {
     expect(popup.requestAdvance).toHaveBeenCalledOnce();
     expect(popup.requestDismiss).toHaveBeenCalledOnce();
     expect(popup.dismissImmediately).toHaveBeenCalledOnce();
-    expect(surface.destroy).not.toHaveBeenCalled();
+    expect(runtime.destroy).not.toHaveBeenCalled();
 
     players.backgroundPlayer.destroy();
-    expect(surface.destroy).toHaveBeenCalledOnce();
-    expect(surface.getAwardCelebrationPlayer).toHaveBeenCalledWith("award");
+    expect(runtime.destroy).toHaveBeenCalledOnce();
+    expect(runtime.getAwardCelebrationPopup).toHaveBeenCalledWith("award");
   });
 });

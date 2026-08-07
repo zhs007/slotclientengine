@@ -31,7 +31,7 @@ import {
   canGame002CascadeRemoveSymbol,
 } from "./cascade-config.js";
 import { GAME002_REEL_COUNT, GAME002_VISIBLE_ROWS } from "./game-layout.js";
-import type { Game002ReelRuntime } from "./game-demo.js";
+import type { Game002ReelRuntime } from "./game002-reel-controller.js";
 import {
   compileGame002FreeGamePlan,
   type Game002FreeGameAfPlan,
@@ -64,25 +64,32 @@ export interface Game002FallPayload extends Game002FallOperationData {
   readonly flowKey: string;
 }
 
-export interface Game002TransformPayload {
-  readonly flowKey: string;
-  readonly phase:
-    | "wl-increment"
-    | "wild-multiplier"
-    | "wm-to-cn"
-    | "coin-multiplier"
-    | "cm-to-cn"
-    | "co-collect";
-  readonly transform: Omit<Game002TransformOperationPayload, "stepIndex">;
-  readonly transformInput: SlotOperationSnapshot;
-  readonly transformChanges: ReturnType<
-    typeof normalizeTransformDraft
-  >["changes"];
-  readonly transformRelocations: ReturnType<
-    typeof normalizeTransformDraft
-  >["relocations"];
-  readonly finalOutput: SlotOperationSnapshot;
-}
+export type Game002TransformPayload =
+  | Readonly<{
+      phase: "wl-increment";
+      increments: Game002TransformOperationPayload["wlIncrements"];
+    }>
+  | Readonly<{
+      phase: "wild-multiplier";
+      wmPositions: readonly { readonly x: number; readonly y: number }[];
+    }>
+  | Readonly<{
+      phase: "wm-to-cn";
+      replacements: Game002TransformOperationPayload["wmReplacements"];
+    }>
+  | Readonly<{
+      phase: "coin-multiplier";
+      cm: NonNullable<Game002TransformOperationPayload["cm"]>;
+      updates: Game002TransformOperationPayload["cnUpdates"];
+    }>
+  | Readonly<{
+      phase: "cm-to-cn";
+      cm: NonNullable<Game002TransformOperationPayload["cm"]>;
+    }>
+  | Readonly<{
+      phase: "co-collect";
+      collection: NonNullable<Game002TransformOperationPayload["coCollection"]>;
+    }>;
 
 export interface Game002BaseGameCompilation {
   readonly plan: SlotOperationPlanV2;
@@ -435,12 +442,14 @@ function compileGame002BaseDrafts(
       drafts.push(mutationWithOutput(rawRefill, hydrated, fallPayload));
       current = hydrated;
     }
-    const transformDraft = multiplierCompiler.compileSettledTransform({
+    const transformCompilation = multiplierCompiler.compileSettledTransform({
       stepIndex: serverStepIndex,
       step,
       input: current,
     });
-    const normalizedTransform = normalizeTransformDraft(transformDraft);
+    const normalizedTransform = normalizeTransformDraft(
+      transformCompilation.draft,
+    );
     if (
       normalizedTransform.changes.length > 0 ||
       normalizedTransform.relocations.length > 0
@@ -452,7 +461,7 @@ function compileGame002BaseDrafts(
         symbolCodes,
         replacementIdPrefix: `${flowKey}:transform`,
       });
-      const transform = multiplierCompiler.getOperationPayload(serverStepIndex);
+      const transform = transformCompilation.payload;
       if (!transform)
         throw new Error(`${flowKey} has transform changes without a payload.`);
       const atomic = genGame002AtomicTransformOperations({
@@ -462,8 +471,6 @@ function compileGame002BaseDrafts(
         symbolCodes,
         source: serverSource(serverStepIndex, "game002-transform"),
         flowKey,
-        transformChanges: normalizedTransform.changes,
-        transformRelocations: normalizedTransform.relocations,
       });
       drafts.push(...atomic);
       current = finalOutput;
@@ -533,12 +540,6 @@ function genGame002AtomicTransformOperations(options: {
   readonly symbolCodes: Readonly<Record<string, number>>;
   readonly source: SlotOperationSource;
   readonly flowKey: string;
-  readonly transformChanges: ReturnType<
-    typeof normalizeTransformDraft
-  >["changes"];
-  readonly transformRelocations: ReturnType<
-    typeof normalizeTransformDraft
-  >["relocations"];
 }): readonly SlotOperationDraftV2[] {
   const transform = Object.freeze({
     wlIncrements: options.transform.wlIncrements,
@@ -548,9 +549,7 @@ function genGame002AtomicTransformOperations(options: {
     ...(options.transform.coCollection
       ? { coCollection: options.transform.coCollection }
       : {}),
-    coReplacements: options.transform.coReplacements,
   });
-  const transformInput = options.input;
   const codes = {
     WL: requireCode(options.symbolCodes, "WL"),
     WM: requireCode(options.symbolCodes, "WM"),
@@ -559,26 +558,16 @@ function genGame002AtomicTransformOperations(options: {
   };
   let current = options.input;
   const drafts: SlotOperationDraftV2[] = [];
-  const payloadFor = (phase: Game002TransformPayload["phase"]) =>
-    Object.freeze({
-      flowKey: options.flowKey,
-      phase,
-      transform,
-      transformInput,
-      transformChanges: options.transformChanges,
-      transformRelocations: options.transformRelocations,
-      finalOutput: options.finalOutput,
-    });
   const append = (
-    phase: Game002TransformPayload["phase"],
+    payload: Game002TransformPayload,
     output: SlotOperationSnapshot,
   ) => {
+    const phase = payload.phase;
     if (snapshotsEqual(current, output)) {
       if (phase !== "wild-multiplier")
         throw new Error(`${options.flowKey}:${phase} is an unexpected no-op.`);
       return;
     }
-    const payload = payloadFor(phase);
     const draft: SlotStateMutationDraftV2 = Object.freeze({
       kind: `game002:${phase}`,
       version: 2,
@@ -595,7 +584,10 @@ function genGame002AtomicTransformOperations(options: {
   };
   if (transform.wlIncrements.length > 0)
     append(
-      "wl-increment",
+      Object.freeze({
+        phase: "wl-increment",
+        increments: transform.wlIncrements,
+      }),
       applyChanges(
         current,
         transform.wlIncrements.map((item) => ({
@@ -619,7 +611,12 @@ function genGame002AtomicTransformOperations(options: {
       }));
     if (wildUpdates.length > 0)
       append(
-        "wild-multiplier",
+        Object.freeze({
+          phase: "wild-multiplier",
+          wmPositions: Object.freeze(
+            transform.wmReplacements.map((item) => item.position),
+          ),
+        }),
         applyChanges(current, wildUpdates, options.symbolCodes),
       );
     else
@@ -627,12 +624,20 @@ function genGame002AtomicTransformOperations(options: {
         genWinOperation({
           kind: "game002:wild-multiplier-presentation",
           source: options.source,
-          payload: payloadFor("wild-multiplier"),
+          payload: Object.freeze({
+            phase: "wild-multiplier",
+            wmPositions: Object.freeze(
+              transform.wmReplacements.map((item) => item.position),
+            ),
+          }) satisfies Game002TransformPayload,
           businessKey: `${options.flowKey}:wild-multiplier`,
         }),
       );
     append(
-      "wm-to-cn",
+      Object.freeze({
+        phase: "wm-to-cn",
+        replacements: transform.wmReplacements,
+      }),
       applyChanges(
         current,
         transform.wmReplacements.map((item) => ({
@@ -646,7 +651,11 @@ function genGame002AtomicTransformOperations(options: {
   }
   if (transform.cnUpdates.length > 0)
     append(
-      "coin-multiplier",
+      Object.freeze({
+        phase: "coin-multiplier",
+        cm: transform.cm!,
+        updates: transform.cnUpdates,
+      }),
       applyChanges(
         current,
         transform.cnUpdates.map((item) => ({
@@ -659,7 +668,7 @@ function genGame002AtomicTransformOperations(options: {
     );
   if (transform.cm)
     append(
-      "cm-to-cn",
+      Object.freeze({ phase: "cm-to-cn", cm: transform.cm }),
       applyChanges(
         current,
         [
@@ -672,7 +681,14 @@ function genGame002AtomicTransformOperations(options: {
         options.symbolCodes,
       ),
     );
-  if (transform.coCollection) append("co-collect", options.finalOutput);
+  if (transform.coCollection)
+    append(
+      Object.freeze({
+        phase: "co-collect",
+        collection: transform.coCollection,
+      }),
+      options.finalOutput,
+    );
   if (drafts.length === 0)
     throw new Error(`${options.flowKey} transform produced no operations.`);
   if (!snapshotsEqual(current, options.finalOutput))

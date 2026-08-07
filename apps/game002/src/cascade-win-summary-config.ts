@@ -4,7 +4,7 @@ import type {
   SymbolCascadeResolvedPositionContext,
   WinSummaryCollectOptions,
 } from "@slotclientengine/rendercore";
-import type { Game002ReelRuntime } from "./game-demo.js";
+import type { Game002ReelRuntime } from "./game002-reel-controller.js";
 import { isGame002SequentialWinCompanionSymbol } from "./cascade-config.js";
 import { formatServerUsdAmount } from "./money.js";
 import type { Game002PackageConfig } from "./package-config.js";

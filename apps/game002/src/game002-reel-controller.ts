@@ -148,6 +148,8 @@ export interface Game002ReelRuntimeOptions {
   readonly symbolRegistry: ReelSymbolRegistry;
   readonly initialScene?: SceneMatrix;
   readonly config?: Game002ReelConfig;
+  /** False when Scene Layout package runtime owns the injected main reel lifecycle. */
+  readonly ownsReel?: boolean;
 }
 
 export interface Game002ReelVisualSnapshot {
@@ -174,7 +176,7 @@ export interface Game002ReelRuntime {
   readonly config: Game002ReelConfig;
   readonly gameConfig: LogicGameConfig;
   readonly layout: ReelLayout;
-  readonly mainReelsLayer: Container;
+  readonly mainReelPresentation: Container;
   readonly layerLayout: Game002ReelLayerLayout;
   prepare(): Promise<void> | void;
   resetPresentationState(): void;
@@ -565,7 +567,7 @@ export function createGame002ReelRuntime(
     config,
     gameConfig,
     layout,
-    mainReelsLayer: reelSet,
+    mainReelPresentation: reelSet,
     layerLayout,
     prepare(): Promise<void> | void {
       return effectPreparation;
@@ -582,7 +584,7 @@ export function createGame002ReelRuntime(
       landedTriggerCount = 0;
       activationCoordinate = null;
       pendingUnifiedRefillAnticipationPlan = null;
-      reelSet.destroy({ children: true });
+      if (options.ownsReel !== false) reelSet.destroy({ children: true });
     },
     isAnticipationActive(): boolean {
       return anticipationActive;

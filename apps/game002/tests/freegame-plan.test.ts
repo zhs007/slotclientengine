@@ -10,7 +10,7 @@ import {
   compileGame002BaseGameOperationPlan,
   compileGame002RoundOperationPlan,
 } from "../src/game002-operation-compiler.js";
-import type { Game002ReelRuntime } from "../src/game-demo.js";
+import type { Game002ReelRuntime } from "../src/game002-reel-controller.js";
 
 const SAMPLE_RESULTS = JSON.parse(
   readFileSync(

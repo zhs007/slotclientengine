@@ -2,6 +2,8 @@
 
 `gameframeworks` 是后续 slot 游戏默认 facade。游戏侧默认只依赖 `@slotclientengine/gameframeworks`，由本包整合 `uiframeworks` HUD、`netcore` live session 和 `logiccore` 的 `GameLogic`。
 
+facade 同时公开 Scene Layout package runtime 与 presentation transaction runner 的 app-facing factory/type；游戏可以注入 typed 业务 controller 和 operation program，但无需从 package 内部 display tree 重建 root/reel 层级。
+
 ## Scene-layout 零代码模板
 
 `@slotclientengine/gameframeworks/scene-layout-template` 是 app-facing 的唯一模板入口。
