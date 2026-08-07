@@ -48,6 +48,7 @@
 
 - symbol manifest parser、animation resolver、VNI/official Spine adapter、resource closure、player lifecycle、裁切和 pooling 属于 rendercore。
 - composite symbol state 的 base 可见性、underlay/overlay 稳定顺序、每 leaf 独立 player ownership、共享 once/loop completion barrier 与幂等 destroy 属于 rendercore；app/editor 不直接操作其 display tree 或补写时序。
+- symbol 状态完成边界由 rendercore 的 awaitable playback API 表达，宿主 ticker 仍逐帧调用 update 推进。app 不轮询 loop/once completion counter；批量播放必须先完整预检，AbortSignal、reset、回池、destroy 或外部状态取代必须拒绝未完成等待。
 - 通用 symbol state texture versioned preset 与 DOM-free RGBA transform 属于
   rendercore；Node 生成器和纯前端 editor 必须消费同一参数来源。browser image codec、
   用户选择和 filename-key transaction 留在 editor，不得把用户资源发送到服务端。

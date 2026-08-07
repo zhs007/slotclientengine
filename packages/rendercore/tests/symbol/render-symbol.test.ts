@@ -48,6 +48,150 @@ const createSizedTexture = (width: number, height: number) => {
 };
 
 describe("RenderSymbol", () => {
+  it("awaits entered and real once completion while update remains the time source", async () => {
+    const renderSymbol = new RenderSymbol({
+      definition: createDefinition(),
+      texture: Texture.WHITE,
+      animationResolver: createTestDefaultSymbolAnimationResolver(),
+    });
+
+    await renderSymbol.playState("spinBlur", {
+      transitionMode: "immediate",
+      completion: "entered",
+    });
+    expect(renderSymbol.getStateSnapshot()).toMatchObject({
+      requestedState: "spinBlur",
+      resolvedState: "normal",
+    });
+
+    let completed = false;
+    const playback = renderSymbol
+      .playState("appear", {
+        transitionMode: "immediate",
+        completion: "once-complete",
+      })
+      .then(() => {
+        completed = true;
+      });
+    renderSymbol.update(0.41);
+    await Promise.resolve();
+    expect(completed).toBe(false);
+    renderSymbol.update(0.02);
+    await playback;
+    expect(renderSymbol.getStateSnapshot()).toMatchObject({
+      requestedState: "normal",
+      resolvedState: "normal",
+    });
+  });
+
+  it("does not count an outgoing loop as the requested target loop", async () => {
+    const preset = createDefaultSymbolStatePreset();
+    const renderSymbol = new RenderSymbol({
+      definition: createSymbolDefinitionFromPreset({
+        code: 1,
+        symbol: "S00",
+        pays: [0, 2, 4],
+        preset: {
+          ...preset,
+          states: [
+            ...preset.states,
+            { id: "loop2", phase: "stable", playback: "loop" },
+          ],
+        },
+      }),
+      texture: Texture.WHITE,
+      animationResolver: (context) =>
+        new ManualSymbolAni({
+          stateId: context.resolvedState,
+          playback: context.state.playback,
+          durationSeconds: 0.5,
+        }),
+    });
+    renderSymbol.requestState("dropdown", "immediate");
+    let completed = false;
+    const playback = renderSymbol
+      .playState("loop2", {
+        transitionMode: "boundary",
+        completion: "next-loop-complete",
+      })
+      .then(() => {
+        completed = true;
+      });
+
+    renderSymbol.update(0.5);
+    await Promise.resolve();
+    expect(renderSymbol.getStateSnapshot().requestedState).toBe("loop2");
+    expect(completed).toBe(false);
+
+    renderSymbol.update(0.5);
+    await playback;
+    expect(completed).toBe(true);
+  });
+
+  it("rejects incompatible completion modes before changing state", () => {
+    const renderSymbol = new RenderSymbol({
+      definition: createDefinition(),
+      texture: Texture.WHITE,
+      animationResolver: createTestDefaultSymbolAnimationResolver(),
+    });
+
+    expect(() =>
+      renderSymbol.playState("appear", {
+        transitionMode: "immediate",
+        completion: "next-loop-complete",
+      }),
+    ).toThrow(/expected "loop"/);
+    expect(renderSymbol.getStateSnapshot().requestedState).toBe("normal");
+  });
+
+  it("rejects pending playback on abort, reset, pool release and destroy", async () => {
+    const createSymbol = () =>
+      new RenderSymbol({
+        definition: createDefinition(),
+        texture: Texture.WHITE,
+        animationResolver: createTestDefaultSymbolAnimationResolver(),
+      });
+
+    const aborted = createSymbol();
+    const controller = new AbortController();
+    const abortPlayback = aborted.playState("appear", {
+      transitionMode: "immediate",
+      completion: "once-complete",
+      signal: controller.signal,
+    });
+    const abortAssertion = expect(abortPlayback).rejects.toThrow("cancelled");
+    controller.abort(new Error("cancelled"));
+    await abortAssertion;
+
+    const reset = createSymbol();
+    const resetPlayback = reset.playState("appear", {
+      transitionMode: "immediate",
+      completion: "once-complete",
+    });
+    const resetAssertion = expect(resetPlayback).rejects.toThrow(/reset/);
+    reset.reset();
+    await resetAssertion;
+
+    const released = createSymbol();
+    const releasePlayback = released.playState("appear", {
+      transitionMode: "immediate",
+      completion: "once-complete",
+    });
+    const releaseAssertion =
+      expect(releasePlayback).rejects.toThrow(/pool release/);
+    released.resetForPoolRelease();
+    await releaseAssertion;
+
+    const destroyed = createSymbol();
+    const destroyPlayback = destroyed.playState("appear", {
+      transitionMode: "immediate",
+      completion: "once-complete",
+    });
+    const destroyAssertion = expect(destroyPlayback).rejects.toThrow(/destroy/);
+    destroyed.destroy();
+    await destroyAssertion;
+  });
+
   it("owns presentation values without a visual value controller and clears them on pool release", () => {
     const renderSymbol = new RenderSymbol({
       definition: createDefinition(),

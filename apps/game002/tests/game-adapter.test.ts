@@ -15,7 +15,6 @@ import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-
 import {
   createGame002Adapter,
   Game002RoundTarget,
-  requestGame002TransformStates,
   type Game002AdapterOptions,
 } from "../src/game-adapter.js";
 import type { Game002ReelRuntime } from "../src/game-demo.js";
@@ -138,35 +137,6 @@ describe("game002 task 95 adapter", () => {
     });
   });
 
-  it("captures CO and vortex source animation baselines as one batch", () => {
-    const runtime = new FakeRuntime([]);
-    const baselines = requestGame002TransformStates(runtime.asRuntime(), [
-      Object.freeze({
-        positions: Object.freeze([{ x: 1, y: 5 }]),
-        state: "feature",
-      }),
-      Object.freeze({
-        positions: Object.freeze([
-          { x: 1, y: 8 },
-          { x: 1, y: 3 },
-          { x: 5, y: 6 },
-          { x: 1, y: 2 },
-          { x: 5, y: 0 },
-        ]),
-        state: "feature1",
-      }),
-    ]);
-
-    expect([...baselines.keys()]).toEqual([
-      "1,5",
-      "1,8",
-      "1,3",
-      "5,6",
-      "1,2",
-      "5,0",
-    ]);
-  });
-
   it("gives CO ownership priority when a vortex target remains CN", () => {
     const runtime = new FakeRuntime([]);
     const target = new Game002RoundTarget({
@@ -281,9 +251,9 @@ describe("game002 task 95 adapter", () => {
     expect(runtime.spinTargets[0]).toEqual(GAME002_CASCADE_INITIAL_SCENE);
     expect(runtime.spinValues[0]).toBeDefined();
 
-    for (let index = 0; index < 12 && !settled; index += 1) {
+    for (let index = 0; index < 30 && !settled; index += 1) {
       fakeApp.tick(16);
-      await Promise.resolve();
+      await flushPlayback();
     }
     await pending;
 
@@ -513,6 +483,13 @@ function createTestAdapter(
       new FakeCascadePlayer([], playerOptions.target).asPlayer(),
     ...options,
   });
+}
+
+async function flushPlayback(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
 }
 
 function occurrence(
@@ -752,6 +729,12 @@ class FakeRuntime {
       update: () => this.update(),
       isSpinning: () => this.operation !== "idle",
       requestVisibleSymbolStates: (
+        _positions: readonly TestPosition[],
+        state: string,
+      ) => {
+        this.symbolState = state;
+      },
+      playVisibleSymbolStates: async (
         _positions: readonly TestPosition[],
         state: string,
       ) => {

@@ -8,8 +8,18 @@ import type { SymbolManifestAnimationPlaybackSpec } from "./manifest.js";
 
 export type SymbolStateId = string;
 export type SymbolStateTransitionMode = "boundary" | "immediate";
+export type SymbolStatePlaybackCompletion =
+  | "entered"
+  | "once-complete"
+  | "next-loop-complete";
 export type SymbolStatePhase = "stable" | "once";
 export type SymbolPlaybackKind = "loop" | "static" | "once";
+
+export interface SymbolStatePlaybackOptions {
+  readonly completion: SymbolStatePlaybackCompletion;
+  readonly transitionMode?: SymbolStateTransitionMode;
+  readonly signal?: AbortSignal;
+}
 
 export interface SymbolStateDefinition {
   readonly id: SymbolStateId;

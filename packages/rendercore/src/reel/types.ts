@@ -9,6 +9,7 @@ import type {
   SymbolAnimationResolver,
   SymbolAssetMap,
   SymbolStateId,
+  SymbolStatePlaybackOptions,
   SymbolStatePreset,
   SymbolStateTransitionMode,
   SymbolTexturePolicy,
@@ -364,6 +365,14 @@ export interface VisibleSymbolPresentationTarget {
     positions: readonly { readonly x: number; readonly y: number }[],
   ): readonly RenderVisibleSymbolGeometrySnapshot[];
   update(deltaSeconds: number): unknown;
+}
+
+export interface AwaitableVisibleSymbolPresentationTarget extends VisibleSymbolPresentationTarget {
+  playVisibleSymbolStates(
+    positions: readonly { readonly x: number; readonly y: number }[],
+    state: SymbolStateId,
+    options: SymbolStatePlaybackOptions,
+  ): Promise<void>;
 }
 
 export interface RenderReelSetOptions {

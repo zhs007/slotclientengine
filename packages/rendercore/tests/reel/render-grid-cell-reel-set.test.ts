@@ -8,6 +8,7 @@ import {
   createGridCellCascadeDropPlan,
   type GridCellDimmingPattern,
   type GridCellReelSpinTiming,
+  type AwaitableVisibleSymbolPresentationTarget,
   type VisibleSymbolPresentationTarget,
 } from "../../src/reel/index.js";
 import { createBasicRegistry, createBasicReels } from "./helpers.js";
@@ -35,6 +36,51 @@ const DIMMING = Object.freeze({
 }) satisfies GridCellDimmingPattern;
 
 describe("RenderGridCellReelSet", () => {
+  it("awaits a preflighted visible-symbol batch and rejects release-bound playback", async () => {
+    const reelSet = createGridReelSet();
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
+    const target: AwaitableVisibleSymbolPresentationTarget = reelSet;
+    const positions = Object.freeze([
+      Object.freeze({ x: 1, y: 1 }),
+      Object.freeze({ x: 0, y: 2 }),
+    ]);
+    let completed = false;
+    const playback = target
+      .playVisibleSymbolStates(positions, "win", {
+        transitionMode: "immediate",
+        completion: "once-complete",
+      })
+      .then(() => {
+        completed = true;
+      });
+    reelSet.update(0.57);
+    await Promise.resolve();
+    expect(completed).toBe(false);
+    reelSet.update(0.02);
+    await playback;
+    expect(completed).toBe(true);
+
+    expect(() =>
+      target.playVisibleSymbolStates([positions[0], positions[0]], "win", {
+        transitionMode: "immediate",
+        completion: "once-complete",
+      }),
+    ).toThrow(/duplicate grid position/);
+
+    const releasedPlayback = target.playVisibleSymbolStates(
+      [positions[0]],
+      "win",
+      {
+        transitionMode: "immediate",
+        completion: "once-complete",
+      },
+    );
+    const releaseAssertion =
+      expect(releasedPlayback).rejects.toThrow(/pool release|destroy/);
+    reelSet.releaseVisibleSymbols([positions[0]]);
+    await releaseAssertion;
+  });
+
   it("retains cascade values for symbols without a visual value controller", () => {
     const reelSet = createGridReelSet();
     const values = [

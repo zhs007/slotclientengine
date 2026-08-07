@@ -917,10 +917,10 @@ export class Game002RoundTarget {
   #preparedCoTransfers: PreparedGridCellVisibleOccurrenceTransferBatch | null =
     null;
   #coTransferProgress = 0;
-  #transformCompletionBaselines = new Map<
-    string,
-    Readonly<{ loop: number; once: number }>
-  >();
+  #transformPlaybackGeneration = 0;
+  #transformPlaybackComplete = true;
+  #transformPlaybackFailure: Error | null = null;
+  #transformPlaybackAbort: AbortController | null = null;
 
   constructor(options: {
     readonly runtime: Game002ReelRuntime;
@@ -941,6 +941,13 @@ export class Game002RoundTarget {
   }
 
   cleanup(): void {
+    this.#transformPlaybackGeneration += 1;
+    this.#transformPlaybackAbort?.abort(
+      new Error("game002 transform playback was interrupted by cleanup."),
+    );
+    this.#transformPlaybackAbort = null;
+    this.#transformPlaybackComplete = true;
+    this.#transformPlaybackFailure = null;
     this.#cascadePlayer.clear();
     this.#winAmountPlayer.dismissImmediately();
     this.#runtime.resetPresentationState();
@@ -964,7 +971,6 @@ export class Game002RoundTarget {
     this.#preparedCoReplacements = [];
     this.#preparedCoTransfers = null;
     this.#coTransferProgress = 0;
-    this.#transformCompletionBaselines.clear();
   }
 
   startInitialSpin(snapshot: SlotRoundOccurrenceSnapshot): void {
@@ -1464,7 +1470,7 @@ export class Game002RoundTarget {
           formatMultiplier(increment.outputValue),
         );
       }
-      this.requestTransformState(positions, "appear");
+      this.requestTransformState(positions, "appear", "once-complete");
       this.#activity = "transform-wl-start";
       return;
     }
@@ -1495,8 +1501,7 @@ export class Game002RoundTarget {
       const positions = batch.wlIncrements.map(
         (increment) => increment.position,
       );
-      if (!this.didTransformAnimationComplete(positions, "once"))
-        return { completed: false };
+      if (!this.didTransformAnimationComplete()) return { completed: false };
       if (stopAfter === "wl-increment") {
         if (isLastTransformPhase(batch, "wl-increment")) {
           this.completeSettledTransform(step);
@@ -1508,8 +1513,7 @@ export class Game002RoundTarget {
       return this.startWmOrCm(step, batch);
     }
     if (this.#activity === "transform-mult-start") {
-      if (!this.didTransformAnimationComplete(wmPositions, "once"))
-        return { completed: false };
+      if (!this.didTransformAnimationComplete()) return { completed: false };
       for (const change of step.changes) {
         if (change.input.code !== this.#wlSymbolCode) continue;
         this.#runtime.setVisibleSymbolPresentationValue(
@@ -1524,7 +1528,7 @@ export class Game002RoundTarget {
           formatMultiplier(change.output.value),
         );
       }
-      this.requestTransformState(wmPositions, "multIdle");
+      this.requestTransformState(wmPositions, "multIdle", "next-loop-complete");
       if (stopAfter === "wild-multiplier") {
         this.#activity = "transform-wait-wm-replace";
         return { completed: true };
@@ -1533,22 +1537,19 @@ export class Game002RoundTarget {
       return { completed: false };
     }
     if (this.#activity === "transform-mult-idle") {
-      if (!this.didTransformAnimationComplete(wmPositions, "loop"))
-        return { completed: false };
-      this.requestTransformState(wmPositions, "multEnd");
+      if (!this.didTransformAnimationComplete()) return { completed: false };
+      this.requestTransformState(wmPositions, "multEnd", "once-complete");
       this.#activity = "transform-mult-end";
       return { completed: false };
     }
     if (this.#activity === "transform-mult-end") {
-      if (!this.didTransformAnimationComplete(wmPositions, "once"))
-        return { completed: false };
-      this.requestTransformState(wmPositions, "change");
+      if (!this.didTransformAnimationComplete()) return { completed: false };
+      this.requestTransformState(wmPositions, "change", "once-complete");
       this.#activity = "transform-wm-change";
       return { completed: false };
     }
     if (this.#activity === "transform-wm-change") {
-      if (!this.didTransformAnimationComplete(wmPositions, "once"))
-        return { completed: false };
+      if (!this.didTransformAnimationComplete()) return { completed: false };
       for (const replacement of this.#preparedWmReplacements)
         replacement.commit();
       this.#preparedWmReplacements = [];
@@ -1575,8 +1576,7 @@ export class Game002RoundTarget {
     }
     if (this.#activity === "transform-cm-feature") {
       const cm = requireCmPresentation(batch);
-      if (!this.didTransformAnimationComplete([cm.position], "once"))
-        return { completed: false };
+      if (!this.didTransformAnimationComplete()) return { completed: false };
       for (const update of batch.cnUpdates)
         this.#runtime.setVisibleSymbolPresentationValue(
           update.position.x,
@@ -1584,38 +1584,32 @@ export class Game002RoundTarget {
           update.outputValue,
         );
       if (batch.cnUpdates.length === 0) {
-        this.requestTransformState([cm.position], "change");
+        this.requestTransformState([cm.position], "change", "once-complete");
         this.#activity = "transform-cm-change";
       } else {
         this.requestTransformState(
           batch.cnUpdates.map((update) => update.position),
           "featureChange",
+          "once-complete",
         );
         this.#activity = "transform-cn-feature-change";
       }
       return { completed: false };
     }
     if (this.#activity === "transform-cn-feature-change") {
-      if (
-        !this.didTransformAnimationComplete(
-          batch.cnUpdates.map((update) => update.position),
-          "once",
-        )
-      )
-        return { completed: false };
+      if (!this.didTransformAnimationComplete()) return { completed: false };
       if (stopAfter === "coin-multiplier") {
         this.#activity = "transform-wait-cm-replace";
         return { completed: true };
       }
       const cm = requireCmPresentation(batch);
-      this.requestTransformState([cm.position], "change");
+      this.requestTransformState([cm.position], "change", "once-complete");
       this.#activity = "transform-cm-change";
       return { completed: false };
     }
     if (this.#activity === "transform-cm-change") {
       const cm = requireCmPresentation(batch);
-      if (!this.didTransformAnimationComplete([cm.position], "once"))
-        return { completed: false };
+      if (!this.didTransformAnimationComplete()) return { completed: false };
       for (const replacement of this.#preparedCmReplacements)
         replacement.commit();
       this.#preparedCmReplacements = [];
@@ -1635,9 +1629,12 @@ export class Game002RoundTarget {
         ...collection.segments.map((segment) => segment.co),
         ...collection.sourcePositions,
       ];
-      if (!this.didTransformAnimationComplete(positions, "once"))
-        return { completed: false };
-      this.requestTransformState(collection.sourcePositions, "feature2");
+      if (!this.didTransformAnimationComplete()) return { completed: false };
+      this.requestTransformState(
+        collection.sourcePositions,
+        "feature2",
+        "once-complete",
+      );
       this.#preparedCoTransfers?.start();
       this.#coTransferProgress = 0;
       this.#activity = "transform-co-transfer";
@@ -1645,10 +1642,7 @@ export class Game002RoundTarget {
     }
     if (this.#activity === "transform-co-transfer") {
       const collection = requireCoCollection(batch);
-      const completed = this.didTransformAnimationComplete(
-        collection.sourcePositions,
-        "once",
-      );
+      const completed = this.didTransformAnimationComplete();
       if (!completed) {
         this.#coTransferProgress = Math.min(
           0.9,
@@ -1708,7 +1702,7 @@ export class Game002RoundTarget {
       phase === "cm-to-cn"
     ) {
       const cm = requireCmPresentation(batch);
-      this.requestTransformState([cm.position], "change");
+      this.requestTransformState([cm.position], "change", "once-complete");
       this.#activity = "transform-cm-change";
       return;
     }
@@ -1857,6 +1851,7 @@ export class Game002RoundTarget {
     this.requestTransformState(
       batch.wmReplacements.map((replacement) => replacement.position),
       "multStart",
+      "once-complete",
     );
     this.#activity = "transform-mult-start";
     return { completed: false };
@@ -1869,7 +1864,11 @@ export class Game002RoundTarget {
     if (!batch.cm) {
       return this.startCoOrComplete(step, batch);
     }
-    this.requestTransformState([batch.cm.position], "feature1");
+    this.requestTransformState(
+      [batch.cm.position],
+      "feature1",
+      "once-complete",
+    );
     this.#activity = "transform-cm-feature";
     return { completed: false };
   }
@@ -1887,10 +1886,12 @@ export class Game002RoundTarget {
       Object.freeze({
         positions: collection.segments.map((segment) => segment.co),
         state: "feature",
+        completion: "once-complete",
       }),
       Object.freeze({
         positions: collection.sourcePositions,
         state: "feature1",
+        completion: "once-complete",
       }),
     ]);
     this.#activity = "transform-co-feature";
@@ -1918,7 +1919,9 @@ export class Game002RoundTarget {
     );
     this.#activeTransform = null;
     this.#activeMultiplierBatch = null;
-    this.#transformCompletionBaselines.clear();
+    this.#transformPlaybackAbort = null;
+    this.#transformPlaybackComplete = true;
+    this.#transformPlaybackFailure = null;
     this.#activity = "idle";
   }
 
@@ -1947,40 +1950,74 @@ export class Game002RoundTarget {
   private requestTransformState(
     positions: readonly { readonly x: number; readonly y: number }[],
     state: string,
+    completion: "once-complete" | "next-loop-complete",
   ): void {
-    this.requestTransformStates([Object.freeze({ positions, state })]);
+    this.requestTransformStates([
+      Object.freeze({ positions, state, completion }),
+    ]);
   }
 
   private requestTransformStates(
     requests: readonly Readonly<{
       positions: readonly { readonly x: number; readonly y: number }[];
       state: string;
+      completion: "once-complete" | "next-loop-complete";
     }>[],
   ): void {
-    const baselines = requestGame002TransformStates(this.#runtime, requests);
-    this.#transformCompletionBaselines.clear();
-    for (const [key, baseline] of baselines)
-      this.#transformCompletionBaselines.set(key, baseline);
+    if (!this.#transformPlaybackComplete) {
+      throw new Error(
+        "game002 cannot start symbol state playback while another playback is pending.",
+      );
+    }
+    this.#transformPlaybackAbort?.abort();
+    const controller = new AbortController();
+    const generation = ++this.#transformPlaybackGeneration;
+    this.#transformPlaybackAbort = controller;
+    this.#transformPlaybackComplete = false;
+    this.#transformPlaybackFailure = null;
+    try {
+      const playback = Promise.all(
+        requests.map((request) =>
+          this.#runtime.playVisibleSymbolStates(
+            request.positions,
+            request.state,
+            {
+              transitionMode: "immediate",
+              completion: request.completion,
+              signal: controller.signal,
+            },
+          ),
+        ),
+      ).then(() => undefined);
+      void this.trackTransformPlayback(generation, playback);
+    } catch (error) {
+      controller.abort(error);
+      this.#transformPlaybackComplete = true;
+      this.#transformPlaybackAbort = null;
+      throw error;
+    }
   }
 
-  private didTransformAnimationComplete(
-    positions: readonly { readonly x: number; readonly y: number }[],
-    kind: "loop" | "once",
-  ): boolean {
-    return this.#runtime
-      .getVisibleSymbolStateSnapshots(positions)
-      .every((snapshot) => {
-        const baseline = this.#transformCompletionBaselines.get(
-          `${snapshot.x},${snapshot.y}`,
-        );
-        if (!baseline)
-          throw new Error(
-            `game002 transform animation baseline is missing for (${snapshot.x},${snapshot.y}).`,
-          );
-        return kind === "loop"
-          ? (snapshot.loopCompletionCount ?? 0) > baseline.loop
-          : (snapshot.onceCompletionCount ?? 0) > baseline.once;
-      });
+  private async trackTransformPlayback(
+    generation: number,
+    playback: Promise<void>,
+  ): Promise<void> {
+    try {
+      await playback;
+      if (generation !== this.#transformPlaybackGeneration) return;
+      this.#transformPlaybackComplete = true;
+      this.#transformPlaybackAbort = null;
+    } catch (error) {
+      if (generation !== this.#transformPlaybackGeneration) return;
+      this.#transformPlaybackComplete = true;
+      this.#transformPlaybackFailure = asError(error);
+      this.#transformPlaybackAbort = null;
+    }
+  }
+
+  private didTransformAnimationComplete(): boolean {
+    if (this.#transformPlaybackFailure) throw this.#transformPlaybackFailure;
+    return this.#transformPlaybackComplete;
   }
 
   private activeFallView() {
@@ -2291,45 +2328,6 @@ function isWinAmountBlockingSpin(phase: WinAmountAnimationPhase): boolean {
   );
 }
 
-export function requestGame002TransformStates(
-  runtime: Pick<
-    Game002ReelRuntime,
-    "requestVisibleSymbolStates" | "getVisibleSymbolStateSnapshots"
-  >,
-  requests: readonly Readonly<{
-    positions: readonly { readonly x: number; readonly y: number }[];
-    state: string;
-  }>[],
-): ReadonlyMap<string, Readonly<{ loop: number; once: number }>> {
-  for (const request of requests)
-    runtime.requestVisibleSymbolStates(
-      request.positions,
-      request.state,
-      "immediate",
-    );
-  const positions = requests.flatMap((request) => request.positions);
-  const expectedKeys = new Set(
-    positions.map((position) => `${position.x},${position.y}`),
-  );
-  const baselines = new Map<string, Readonly<{ loop: number; once: number }>>();
-  for (const snapshot of runtime.getVisibleSymbolStateSnapshots(positions))
-    baselines.set(
-      `${snapshot.x},${snapshot.y}`,
-      Object.freeze({
-        loop: snapshot.loopCompletionCount ?? 0,
-        once: snapshot.onceCompletionCount ?? 0,
-      }),
-    );
-  if (
-    baselines.size !== expectedKeys.size ||
-    [...expectedKeys].some((key) => !baselines.has(key))
-  )
-    throw new Error(
-      "game002 transform state batch did not capture every requested animation baseline.",
-    );
-  return baselines;
-}
-
 function resolveGame002CascadeSymbol(
   runtime: Game002ReelRuntime,
   code: number,
@@ -2339,6 +2337,10 @@ function resolveGame002CascadeSymbol(
     throw new Error(`game002 cascade symbol code ${code} is not in paytable.`);
   }
   return symbol;
+}
+
+function asError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
 }
 
 function normalizeTickerDeltaSeconds(ticker: Game002TickerSnapshot): number {

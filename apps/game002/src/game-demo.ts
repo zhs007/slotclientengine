@@ -44,6 +44,7 @@ import {
   type ReelSymbolScaleMap,
   type SymbolAnimationResolver,
   type SymbolStateId,
+  type SymbolStatePlaybackOptions,
   type SymbolStatePreset,
   type SymbolStateTransitionMode,
   type SymbolValuePresentationResourceMap,
@@ -206,6 +207,11 @@ export interface Game002ReelRuntime {
     state: SymbolStateId,
     transitionMode?: SymbolStateTransitionMode,
   ): void;
+  playVisibleSymbolStates(
+    positions: readonly WinResultPosition[],
+    state: SymbolStateId,
+    options: SymbolStatePlaybackOptions,
+  ): Promise<void>;
   getVisibleSymbolStateSnapshots(
     positions: readonly WinResultPosition[],
   ): readonly RenderVisibleSymbolStateSnapshot[];
@@ -830,6 +836,13 @@ export function createGame002ReelRuntime(
       transitionMode: SymbolStateTransitionMode = "boundary",
     ): void {
       reelSet.requestVisibleSymbolStates(positions, state, transitionMode);
+    },
+    playVisibleSymbolStates(
+      positions: readonly WinResultPosition[],
+      state: SymbolStateId,
+      options: SymbolStatePlaybackOptions,
+    ): Promise<void> {
+      return reelSet.playVisibleSymbolStates(positions, state, options);
     },
     getVisibleSymbolStateSnapshots(
       positions: readonly WinResultPosition[],

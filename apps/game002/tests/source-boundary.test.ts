@@ -36,6 +36,15 @@ describe("game002 source boundary", () => {
     }
   });
 
+  it("awaits rendercore symbol playback instead of polling completion counters", () => {
+    const source = readSourceTree(join(APP_ROOT, "src"));
+
+    expect(source).toContain("playVisibleSymbolStates");
+    expect(source).not.toMatch(
+      /loopCompletionCount|onceCompletionCount|CompletionBaselines|captureBaselines/,
+    );
+  });
+
   it("keeps game002 runtime dependencies on the framework facade and renderer only", () => {
     const packageJson = JSON.parse(
       readFileSync(join(APP_ROOT, "package.json"), "utf8"),

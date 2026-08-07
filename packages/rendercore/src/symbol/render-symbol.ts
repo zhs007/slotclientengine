@@ -12,6 +12,8 @@ import type {
   SymbolAnimationContext,
   SymbolNormalTextureSource,
   SymbolStateId,
+  SymbolStatePlaybackCompletion,
+  SymbolStatePlaybackOptions,
   SymbolStateSnapshot,
   SymbolStateTransitionMode,
   SymbolVisualLayer,
@@ -19,6 +21,18 @@ import type {
   RenderSymbolImageStringController,
 } from "./types.js";
 import type { SymbolManifestAnimationPlaybackSpec } from "./manifest.js";
+
+interface ActiveSymbolStatePlayback {
+  readonly id: number;
+  readonly requestedState: SymbolStateId;
+  readonly resolvedState: SymbolStateId;
+  readonly completion: SymbolStatePlaybackCompletion;
+  readonly resolve: () => void;
+  readonly reject: (error: Error) => void;
+  readonly signal?: AbortSignal;
+  readonly abortListener?: () => void;
+  entered: boolean;
+}
 
 export class RenderSymbol extends VisualEntity<void> {
   readonly code: number;
@@ -49,6 +63,8 @@ export class RenderSymbol extends VisualEntity<void> {
   #presentationValue: number | null = null;
   #loopCompletionCount = 0;
   #onceCompletionCount = 0;
+  #playbackSequence = 0;
+  #activePlayback: ActiveSymbolStatePlayback | null = null;
   #destroyed = false;
 
   constructor(options: RenderSymbolOptions) {
@@ -160,13 +176,125 @@ export class RenderSymbol extends VisualEntity<void> {
     state: string,
     transitionMode: SymbolStateTransitionMode = "boundary",
   ): void {
+    this.cancelActivePlayback(
+      new SymbolAnimationError(
+        `Render symbol "${this.symbol}" state playback was superseded by requestState("${state}").`,
+      ),
+    );
     const before = this.createAniKey(this.#stateMachine.getSnapshot());
     this.#stateMachine.requestState(state, transitionMode);
     this.syncAniIfNeeded(before);
   }
 
+  validateStatePlayback(
+    state: SymbolStateId,
+    options: SymbolStatePlaybackOptions,
+  ): void {
+    this.assertNotDestroyed();
+    if (this.#activePlayback) {
+      throw new SymbolAnimationError(
+        `Render symbol "${this.symbol}" already has an active state playback.`,
+      );
+    }
+    const transitionMode = options.transitionMode ?? "boundary";
+    if (transitionMode !== "boundary" && transitionMode !== "immediate") {
+      throw new SymbolAnimationError(
+        `Unknown symbol state transition mode "${String(transitionMode)}".`,
+      );
+    }
+    if (
+      options.completion !== "entered" &&
+      options.completion !== "once-complete" &&
+      options.completion !== "next-loop-complete"
+    ) {
+      throw new SymbolAnimationError(
+        `Unknown symbol state playback completion "${String(options.completion)}".`,
+      );
+    }
+    const resolvedState = this.#stateMachine.resolveState(state);
+    const playback =
+      this.#stateMachine.getStateDefinition(resolvedState).playback;
+    if (options.completion === "once-complete" && playback !== "once") {
+      throw new SymbolAnimationError(
+        `Symbol state "${state}" resolves to playback "${playback}", expected "once" for once-complete.`,
+      );
+    }
+    if (options.completion === "next-loop-complete" && playback !== "loop") {
+      throw new SymbolAnimationError(
+        `Symbol state "${state}" resolves to playback "${playback}", expected "loop" for next-loop-complete.`,
+      );
+    }
+    const current = this.#stateMachine.getSnapshot();
+    if (
+      transitionMode === "boundary" &&
+      current.isOnce &&
+      current.requestedState !== state
+    ) {
+      throw new SymbolAnimationError(
+        `Cannot await boundary transition to symbol state "${state}" while once state "${current.requestedState}" is active.`,
+      );
+    }
+    if (options.signal?.aborted) {
+      throw toPlaybackError(
+        options.signal.reason,
+        `Render symbol "${this.symbol}" state playback was aborted before it started.`,
+      );
+    }
+  }
+
+  playState(
+    state: SymbolStateId,
+    options: SymbolStatePlaybackOptions,
+  ): Promise<void> {
+    this.validateStatePlayback(state, options);
+    const before = this.createAniKey(this.#stateMachine.getSnapshot());
+    this.#stateMachine.requestState(
+      state,
+      options.transitionMode ?? "boundary",
+    );
+    this.syncAniIfNeeded(before);
+
+    let resolve!: () => void;
+    let reject!: (error: Error) => void;
+    const promise = new Promise<void>((resolvePromise, rejectPromise) => {
+      resolve = resolvePromise;
+      reject = rejectPromise;
+    });
+    const id = ++this.#playbackSequence;
+    const abortListener = options.signal
+      ? () => {
+          if (this.#activePlayback?.id !== id) return;
+          this.cancelActivePlayback(
+            toPlaybackError(
+              options.signal?.reason,
+              `Render symbol "${this.symbol}" state playback was aborted.`,
+            ),
+          );
+        }
+      : undefined;
+    this.#activePlayback = {
+      id,
+      requestedState: state,
+      resolvedState: this.#stateMachine.resolveState(state),
+      completion: options.completion,
+      resolve,
+      reject,
+      ...(options.signal ? { signal: options.signal } : {}),
+      ...(abortListener ? { abortListener } : {}),
+      entered: false,
+    };
+    options.signal?.addEventListener("abort", abortListener!, { once: true });
+    this.markActivePlaybackEntered(this.#stateMachine.getSnapshot());
+    return promise;
+  }
+
   returnToDefaultState(): void {
     this.assertNotDestroyed();
+    this.cancelActivePlayback(
+      new SymbolAnimationError(
+        `Render symbol "${this.symbol}" state playback was interrupted by returnToDefaultState().`,
+      ),
+    );
     const before = this.createAniKey(this.#stateMachine.getSnapshot());
     this.#stateMachine.reset();
     this.syncAniIfNeeded(before);
@@ -253,31 +381,48 @@ export class RenderSymbol extends VisualEntity<void> {
 
   update(deltaSeconds: number): RenderSymbolUpdateResult {
     assertValidDeltaSeconds(deltaSeconds);
-    const before = this.createAniKey(this.#stateMachine.getSnapshot());
-    const aniResult = this.#currentAni.update(deltaSeconds);
-    if (aniResult.loopCompleted) {
-      this.#loopCompletionCount += 1;
-      this.#stateMachine.notifyLoopComplete();
-    }
-    if (aniResult.onceCompleted) {
-      this.#onceCompletionCount += 1;
-      this.#stateMachine.notifyOnceComplete();
-    }
+    try {
+      const beforeSnapshot = this.#stateMachine.getSnapshot();
+      const before = this.createAniKey(beforeSnapshot);
+      const aniResult = this.#currentAni.update(deltaSeconds);
+      if (aniResult.loopCompleted) {
+        this.#loopCompletionCount += 1;
+        this.#stateMachine.notifyLoopComplete();
+      }
+      if (aniResult.onceCompleted) {
+        this.#onceCompletionCount += 1;
+        this.#stateMachine.notifyOnceComplete();
+      }
 
-    const stateChanged = this.syncAniIfNeeded(before);
-    const snapshot = this.#stateMachine.getSnapshot();
+      const stateChanged = this.syncAniIfNeeded(before);
+      const snapshot = this.#stateMachine.getSnapshot();
+      this.advanceActivePlayback(beforeSnapshot, snapshot, aniResult);
 
-    return Object.freeze({
-      requestedState: snapshot.requestedState,
-      resolvedState: snapshot.resolvedState,
-      loopCompleted: aniResult.loopCompleted,
-      onceCompleted: aniResult.onceCompleted,
-      stateChanged,
-    });
+      return Object.freeze({
+        requestedState: snapshot.requestedState,
+        resolvedState: snapshot.resolvedState,
+        loopCompleted: aniResult.loopCompleted,
+        onceCompleted: aniResult.onceCompleted,
+        stateChanged,
+      });
+    } catch (error) {
+      this.cancelActivePlayback(
+        toPlaybackError(
+          error,
+          `Render symbol "${this.symbol}" state playback failed during update.`,
+        ),
+      );
+      throw error;
+    }
   }
 
   reset(): void {
     this.assertNotDestroyed();
+    this.cancelActivePlayback(
+      new SymbolAnimationError(
+        `Render symbol "${this.symbol}" state playback was interrupted by reset().`,
+      ),
+    );
     this.#loopCompletionCount = 0;
     this.#onceCompletionCount = 0;
     this.#stateMachine.reset();
@@ -289,6 +434,11 @@ export class RenderSymbol extends VisualEntity<void> {
 
   resetForPoolRelease(): void {
     this.assertNotDestroyed();
+    this.cancelActivePlayback(
+      new SymbolAnimationError(
+        `Render symbol "${this.symbol}" state playback was interrupted by pool release.`,
+      ),
+    );
     this.#loopCompletionCount = 0;
     this.#onceCompletionCount = 0;
     this.#currentAni.destroy?.();
@@ -315,6 +465,11 @@ export class RenderSymbol extends VisualEntity<void> {
     if (this.#destroyed) {
       return;
     }
+    this.cancelActivePlayback(
+      new SymbolAnimationError(
+        `Render symbol "${this.symbol}" state playback was interrupted by destroy().`,
+      ),
+    );
     this.#destroyed = true;
     this.#currentAni.destroy?.();
     this.#valueController?.destroy();
@@ -444,6 +599,72 @@ export class RenderSymbol extends VisualEntity<void> {
     });
   }
 
+  private advanceActivePlayback(
+    before: SymbolStateSnapshot,
+    after: SymbolStateSnapshot,
+    result: Readonly<{ loopCompleted: boolean; onceCompleted: boolean }>,
+  ): void {
+    const active = this.#activePlayback;
+    if (!active) return;
+    const wasTarget = this.isActivePlaybackTarget(active, before);
+    const enteredNow = this.markActivePlaybackEntered(after);
+    if (!this.#activePlayback || enteredNow) return;
+    if (!active.entered || !wasTarget) return;
+    if (active.completion === "once-complete" && result.onceCompleted) {
+      this.resolveActivePlayback();
+    } else if (
+      active.completion === "next-loop-complete" &&
+      result.loopCompleted
+    ) {
+      this.resolveActivePlayback();
+    }
+  }
+
+  private markActivePlaybackEntered(snapshot: SymbolStateSnapshot): boolean {
+    const active = this.#activePlayback;
+    if (
+      !active ||
+      active.entered ||
+      !this.isActivePlaybackTarget(active, snapshot)
+    ) {
+      return false;
+    }
+    active.entered = true;
+    if (active.completion === "entered") this.resolveActivePlayback();
+    return true;
+  }
+
+  private isActivePlaybackTarget(
+    active: ActiveSymbolStatePlayback,
+    snapshot: SymbolStateSnapshot,
+  ): boolean {
+    return (
+      snapshot.pendingState === null &&
+      snapshot.requestedState === active.requestedState &&
+      snapshot.resolvedState === active.resolvedState
+    );
+  }
+
+  private resolveActivePlayback(): void {
+    const active = this.detachActivePlayback();
+    active?.resolve();
+  }
+
+  private cancelActivePlayback(error: Error): void {
+    const active = this.detachActivePlayback();
+    active?.reject(error);
+  }
+
+  private detachActivePlayback(): ActiveSymbolStatePlayback | null {
+    const active = this.#activePlayback;
+    if (!active) return null;
+    this.#activePlayback = null;
+    if (active.signal && active.abortListener) {
+      active.signal.removeEventListener("abort", active.abortListener);
+    }
+    return active;
+  }
+
   private assertNotDestroyed(): void {
     if (this.#destroyed) {
       throw new SymbolAnimationError(
@@ -451,6 +672,10 @@ export class RenderSymbol extends VisualEntity<void> {
       );
     }
   }
+}
+
+function toPlaybackError(value: unknown, fallback: string): Error {
+  return value instanceof Error ? value : new SymbolAnimationError(fallback);
 }
 
 function createReleasedSymbolAni(): SymbolAni {

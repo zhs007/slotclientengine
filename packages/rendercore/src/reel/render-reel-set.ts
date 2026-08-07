@@ -4,6 +4,7 @@ import { ReelError } from "./errors.js";
 import { assertLayoutMatchesReels } from "./layout.js";
 import { RenderReel } from "./render-reel.js";
 import { createRenderSymbolPool } from "./render-symbol-pool.js";
+import { startSymbolStatePlaybackBatch } from "./symbol-state-playback.js";
 import type {
   ReelSpinPlan,
   RenderReelSetOptions,
@@ -21,6 +22,7 @@ import type {
 } from "./types.js";
 import type {
   SymbolStateId,
+  SymbolStatePlaybackOptions,
   SymbolStateTransitionMode,
 } from "../symbol/index.js";
 
@@ -448,6 +450,42 @@ export class RenderReelSet extends Container {
         transitionMode,
       );
     }
+  }
+
+  playVisibleSymbolStates(
+    positions: readonly { readonly x: number; readonly y: number }[],
+    state: SymbolStateId,
+    options: SymbolStatePlaybackOptions,
+  ): Promise<void> {
+    this.assertStopped("play visible symbol states");
+    if (positions.length === 0) {
+      throw new ReelError(
+        "Visible symbol playback positions must not be empty.",
+      );
+    }
+    const normalized = normalizeCascadePositions(
+      positions,
+      this.reels.length,
+      this.reels[0]?.layout.visibleRows ?? 0,
+    );
+    const reels = normalized.map((position) => ({
+      position,
+      reel: this.getReelAt(position.x),
+    }));
+    for (const { position, reel } of reels) {
+      reel.validateVisibleSymbolStatePlayback(position.y, state, options);
+    }
+    return startSymbolStatePlaybackBatch(
+      reels.map(
+        ({ position, reel }) =>
+          (signal) =>
+            reel.playVisibleSymbolState(position.y, state, {
+              ...options,
+              signal,
+            }),
+      ),
+      options.signal,
+    );
   }
 
   getVisibleSymbolStateSnapshot(

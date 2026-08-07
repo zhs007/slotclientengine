@@ -197,6 +197,18 @@ resolver context 同时包含 `requestedState` 和 `resolvedState`，所以调�
 
 `createSymbolManifestAnimationResolver()` 会优先使用 manifest 声明的 animation，再回落到调用方传入的 fallback resolver。VNI animation 直接把 `VNIPlayer` 的 Pixi display tree 挂到当前 symbol 的 `overlayLayer` 中；runtime 不创建隐藏 canvas、canvas-to-texture、额外 renderer、`stageRect` viewport 或 mask。VNI root 按 project stage 中心对齐，project 的 stage background 不会作为 symbol 动画背景绘制。VNI 与 Spine 都把资源和 lifecycle 编排分离：normal/stable loop 使用循环 playback，once state 使用单次 playback，VNI stable/loop 在真实 range loop boundary 上报 `loopCompleted`。Spine animation 由 rendercore 的 Spine adapter 解析 atlas/skeleton/texture，并把 display tree 挂到同一个 `overlayLayer`，不由 app 侧直接 import Spine parser 或播放状态机；rendercore 只接受 Spine `4.3.x` skeleton，并使用锁定在 `4.3.x` 的官方 Pixi v8 runtime。3.8、4.2、未知版本、malformed skeleton 或 runtime major/minor 不匹配都会显式失败。composite 为每个 leaf 建立独立 player slot，按声明顺序挂到共享 underlay/overlay，并统一拥有 reset、完成 barrier 与 destroy。对 `normal.kind: "spine"` 的 symbol，如果 `appear` / `win` 没有 manifest animation，resolver 只退回该 symbol 自身 normal Spine 展示并按当前 once 状态完成，不退回通用 builtin/default 动画；manifest 中显式声明的 Spine animation name 仍必须真实存在且大小写完全一致。动画生命周期由 `RenderSymbol.update(deltaSeconds)` 推进。manifest Spine、active value Spine 与 VNI ani 都提供实际资源/playback 的 continuity key；状态名改变但 key 相同时，`RenderSymbol` 保留当前 player 和时间轴，不 reset/replay 等价动画。reset、value/tier 改变或 key 不同仍销毁旧 ani 并创建新 ani。
 
+业务编排等待 symbol 状态时使用 `RenderSymbol.playState(state, options)`，reel 消费方使用 `playVisibleSymbolStates(positions, state, options)`。Promise 只表达完成边界，动画仍由宿主逐帧调用 `update(deltaSeconds)` 推进；`completion` 必须显式选择进入状态、once 完成或目标 loop 的下一次完整边界：
+
+```ts
+await reelSet.playVisibleSymbolStates(positions, "win", {
+  transitionMode: "immediate",
+  completion: "once-complete",
+  signal,
+});
+```
+
+批量调用会先校验全部坐标、状态和完成语义，再开始播放，避免部分提交。外部 `requestState()`、reset、回池、destroy 或 `AbortSignal` 会拒绝尚未完成的 Promise；调用方必须处理拒绝。旧 completion snapshot 只保留兼容与诊断用途，不应用于新的业务轮询。
+
 `createNamedSymbolAnimationResolver()` 支持用“名字 + 参数”绑定动画 profile：
 
 ```ts

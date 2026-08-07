@@ -32,7 +32,9 @@ export class Game002FreeGameOperationTarget {
   #payload: Game002FreeGameOperationPayload | null = null;
   #complete = true;
   #failure: Error | null = null;
-  #baselines = new Map<string, number>();
+  #symbolPlaybackGeneration = 0;
+  #symbolPlaybackComplete = true;
+  #symbolPlaybackAbort: AbortController | null = null;
   #afReplacements: PreparedVisibleOccurrenceReplacement[] = [];
   #coReplacements: PreparedVisibleOccurrenceReplacement[] = [];
   #coTransfers: PreparedGridCellVisibleOccurrenceTransferBatch | null = null;
@@ -153,8 +155,7 @@ export class Game002FreeGameOperationTarget {
     )
       this.#runtime.update(deltaSeconds);
     if (this.#activity === "trigger" && payload.kind === "trigger") {
-      if (!this.animationComplete(payload.positions))
-        return { completed: false };
+      if (!this.animationComplete()) return { completed: false };
       this.#runtime.requestVisibleSymbolStates(
         payload.positions,
         "normal",
@@ -190,6 +191,12 @@ export class Game002FreeGameOperationTarget {
   }
 
   cleanup(): void {
+    this.#symbolPlaybackGeneration += 1;
+    this.#symbolPlaybackAbort?.abort(
+      new Error("game002 FreeGame symbol playback was interrupted by cleanup."),
+    );
+    this.#symbolPlaybackAbort = null;
+    this.#symbolPlaybackComplete = true;
     for (const replacement of this.#afReplacements) replacement.rollback();
     for (const replacement of this.#coReplacements) replacement.rollback();
     this.#coTransfers?.rollback();
@@ -240,14 +247,12 @@ export class Game002FreeGameOperationTarget {
     payload: Extract<Game002FreeGameOperationPayload, { kind: "af" }>,
   ) {
     if (this.#activity === "af-feature") {
-      if (!this.animationComplete(payload.af.positions))
-        return { completed: false };
+      if (!this.animationComplete()) return { completed: false };
       this.startAnimation(payload.af.positions, "change");
       this.#activity = "af-change";
       return { completed: false };
     }
-    if (!this.animationComplete(payload.af.positions))
-      return { completed: false };
+    if (!this.animationComplete()) return { completed: false };
     for (const replacement of this.#afReplacements) replacement.commit();
     this.#afReplacements = [];
     assertGame002ReelVisualMatchesTarget(
@@ -302,19 +307,15 @@ export class Game002FreeGameOperationTarget {
     payload: Extract<Game002FreeGameOperationPayload, { kind: "co" }>,
     deltaSeconds: number,
   ) {
-    const positions = [
-      ...payload.co.coPositions,
-      ...payload.co.sourcePositions,
-    ];
     if (this.#activity === "co-feature") {
-      if (!this.animationComplete(positions)) return { completed: false };
+      if (!this.animationComplete()) return { completed: false };
       this.startAnimation(payload.co.sourcePositions, "feature2");
       this.#coTransfers?.start();
       this.#coProgress = 0;
       this.#activity = "co-transfer";
       return { completed: false };
     }
-    if (!this.animationComplete(payload.co.sourcePositions)) {
+    if (!this.animationComplete()) {
       this.#coProgress = Math.min(0.9, this.#coProgress + deltaSeconds * 2);
       this.#coTransfers?.setProgress(this.#coProgress);
       return { completed: false };
@@ -336,41 +337,78 @@ export class Game002FreeGameOperationTarget {
     co: readonly WinResultPosition[],
     sources: readonly WinResultPosition[],
   ): void {
-    this.#runtime.requestVisibleSymbolStates(co, "feature", "immediate");
-    this.#runtime.requestVisibleSymbolStates(sources, "feature1", "immediate");
-    this.captureBaselines([...co, ...sources]);
+    this.startSymbolPlayback((signal) =>
+      Promise.all([
+        this.#runtime.playVisibleSymbolStates(co, "feature", {
+          transitionMode: "immediate",
+          completion: "once-complete",
+          signal,
+        }),
+        this.#runtime.playVisibleSymbolStates(sources, "feature1", {
+          transitionMode: "immediate",
+          completion: "once-complete",
+          signal,
+        }),
+      ]).then(() => undefined),
+    );
   }
 
   private startAnimation(
     positions: readonly WinResultPosition[],
     state: string,
   ): void {
-    this.#runtime.requestVisibleSymbolStates(positions, state, "immediate");
-    this.captureBaselines(positions);
+    this.startSymbolPlayback((signal) =>
+      this.#runtime.playVisibleSymbolStates(positions, state, {
+        transitionMode: "immediate",
+        completion: "once-complete",
+        signal,
+      }),
+    );
   }
 
-  private captureBaselines(positions: readonly WinResultPosition[]): void {
-    this.#baselines.clear();
-    for (const snapshot of this.#runtime.getVisibleSymbolStateSnapshots(
-      positions,
-    ))
-      this.#baselines.set(
-        `${snapshot.x},${snapshot.y}`,
-        snapshot.onceCompletionCount ?? 0,
+  private startSymbolPlayback(
+    start: (signal: AbortSignal) => Promise<void>,
+  ): void {
+    if (!this.#symbolPlaybackComplete) {
+      throw new Error(
+        "game002 FreeGame cannot start symbol playback while another playback is pending.",
       );
+    }
+    this.#symbolPlaybackAbort?.abort();
+    const controller = new AbortController();
+    const generation = ++this.#symbolPlaybackGeneration;
+    this.#symbolPlaybackAbort = controller;
+    this.#symbolPlaybackComplete = false;
+    try {
+      void this.trackSymbolPlayback(generation, start(controller.signal));
+    } catch (error) {
+      controller.abort(error);
+      this.#symbolPlaybackAbort = null;
+      this.#symbolPlaybackComplete = true;
+      throw error;
+    }
   }
 
-  private animationComplete(positions: readonly WinResultPosition[]): boolean {
-    return this.#runtime
-      .getVisibleSymbolStateSnapshots(positions)
-      .every((snapshot) => {
-        const baseline = this.#baselines.get(`${snapshot.x},${snapshot.y}`);
-        if (baseline === undefined)
-          throw new Error(
-            `game002 FreeGame animation baseline (${snapshot.x},${snapshot.y}) is missing.`,
-          );
-        return (snapshot.onceCompletionCount ?? 0) > baseline;
-      });
+  private async trackSymbolPlayback(
+    generation: number,
+    playback: Promise<void>,
+  ): Promise<void> {
+    try {
+      await playback;
+      if (generation !== this.#symbolPlaybackGeneration) return;
+      this.#symbolPlaybackComplete = true;
+      this.#symbolPlaybackAbort = null;
+    } catch (error) {
+      if (generation !== this.#symbolPlaybackGeneration) return;
+      this.#symbolPlaybackComplete = true;
+      this.#symbolPlaybackAbort = null;
+      this.#failure = asError(error);
+    }
+  }
+
+  private animationComplete(): boolean {
+    if (this.#failure) throw this.#failure;
+    return this.#symbolPlaybackComplete;
   }
 
   private finishIfComplete() {

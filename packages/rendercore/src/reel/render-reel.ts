@@ -26,6 +26,7 @@ import type { LogicReels } from "@slotclientengine/logiccore";
 import type {
   RenderSymbol,
   SymbolStateId,
+  SymbolStatePlaybackOptions,
   SymbolStateTransitionMode,
 } from "../symbol/index.js";
 
@@ -408,6 +409,28 @@ export class RenderReel extends Container {
     slot.symbol.requestState(state, transitionMode);
   }
 
+  validateVisibleSymbolStatePlayback(
+    windowY: number,
+    state: SymbolStateId,
+    options: SymbolStatePlaybackOptions,
+  ): void {
+    this.getVisiblePlayableSymbol(windowY, state).validateStatePlayback(
+      state,
+      options,
+    );
+  }
+
+  playVisibleSymbolState(
+    windowY: number,
+    state: SymbolStateId,
+    options: SymbolStatePlaybackOptions,
+  ): Promise<void> {
+    return this.getVisiblePlayableSymbol(windowY, state).playState(
+      state,
+      options,
+    );
+  }
+
   setVisibleSymbolPresentationValue(
     windowY: number,
     value: number | null,
@@ -481,6 +504,19 @@ export class RenderReel extends Container {
       cellWidth: this.layout.cellWidth,
       cellHeight: this.layout.cellHeight,
     });
+  }
+
+  private getVisiblePlayableSymbol(
+    windowY: number,
+    state: SymbolStateId,
+  ): RenderSymbol {
+    const slot = this.getVisibleSlot(windowY);
+    if (slot.kind === "empty" || !slot.symbol) {
+      throw new ReelError(
+        `Cannot play state "${state}" for empty visible symbol at reel ${this.xIndex}, y ${windowY}.`,
+      );
+    }
+    return slot.symbol;
   }
 
   getSnapshot(): RenderReelSnapshot {

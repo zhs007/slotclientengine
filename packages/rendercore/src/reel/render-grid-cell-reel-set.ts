@@ -1,6 +1,7 @@
 import { Container, Graphics } from "pixi.js";
 import { assertValidDeltaSeconds } from "../symbol/ani.js";
 import { ReelError } from "./errors.js";
+import { startSymbolStatePlaybackBatch } from "./symbol-state-playback.js";
 import { normalizeGridCellReelOffsetMatrix } from "./grid-cell-reel-offsets.js";
 import { resolveGridCellDimmingAlpha } from "./grid-cell-spin-plan.js";
 import { createReelLayout } from "./layout.js";
@@ -34,6 +35,7 @@ import type { GridCellEffectController } from "./grid-cell-effect-player.js";
 import type { LogicReels, SceneMatrix } from "@slotclientengine/logiccore";
 import type {
   SymbolStateId,
+  SymbolStatePlaybackOptions,
   SymbolStateTransitionMode,
 } from "../symbol/index.js";
 
@@ -672,6 +674,38 @@ export class RenderGridCellReelSet extends Container {
         transitionMode,
       );
     }
+  }
+
+  playVisibleSymbolStates(
+    positions: readonly { readonly x: number; readonly y: number }[],
+    state: SymbolStateId,
+    options: SymbolStatePlaybackOptions,
+  ): Promise<void> {
+    this.assertStopped("play visible symbol states");
+    const normalized = normalizePositions(positions, this.#columns, this.#rows);
+    const cells = normalized.map((position) => {
+      const cell = this.getCell(position.x, position.y);
+      if (!cell.occupied) {
+        throw new ReelError(
+          `Cannot play state for empty grid cell (${position.x},${position.y}).`,
+        );
+      }
+      return { position, cell };
+    });
+    for (const { cell } of cells) {
+      cell.reel.validateVisibleSymbolStatePlayback(0, state, options);
+    }
+    return startSymbolStatePlaybackBatch(
+      cells.map(
+        ({ cell }) =>
+          (signal) =>
+            cell.reel.playVisibleSymbolState(0, state, {
+              ...options,
+              signal,
+            }),
+      ),
+      options.signal,
+    );
   }
 
   setVisibleSymbolPresentationValue(
