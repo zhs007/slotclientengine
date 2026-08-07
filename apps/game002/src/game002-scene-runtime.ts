@@ -1,10 +1,11 @@
 import type { Container } from "pixi.js";
 import {
-  createSceneLayoutPresentationSurface,
+  createSceneLayoutPackageRuntime,
+  RenderGridCellReelSet,
   type PopupInteractionDispatchResult,
   type SceneLayoutPackageResource,
+  type SceneLayoutPackageRuntime,
   type SceneLayoutPopupInputBindingOptions,
-  type SceneLayoutPresentationSurface,
 } from "@slotclientengine/rendercore";
 import type {
   WinAmountAnimationInput,
@@ -16,79 +17,92 @@ import type {
 
 export interface Game002BackgroundPlayer {
   readonly container: Container;
-  readonly transitionContainer?: Container;
   init(): Promise<void>;
   update(deltaSeconds: number): void;
   getMode?(): string;
   prepareModeTransition?(modeId: string): Promise<void>;
   requestMode?(modeId: string): Promise<void>;
+  acknowledgeReelSceneCommit(): void;
+  attachReelOverlay(overlay: Container): () => void;
   bindPopupInput(options: SceneLayoutPopupInputBindingOptions): () => void;
   requestPrimaryPopupInteraction(): PopupInteractionDispatchResult;
   destroy(): void;
 }
 
-export function createGame002SceneLayoutPlayers(options: {
+export function createGame002SceneRuntime(options: {
   readonly resource: SceneLayoutPackageResource;
   readonly initialMode: string;
   readonly awardCelebrationPopup: string;
+  readonly reel: RenderGridCellReelSet;
 }): {
   readonly backgroundPlayer: Game002BackgroundPlayer;
   readonly winAmountPlayer: WinAmountAnimationPlayer;
 } {
-  const surface = createSceneLayoutPresentationSurface({
+  const runtime = createSceneLayoutPackageRuntime({
     resource: options.resource,
-    initialMode: options.initialMode,
+    createGridCellReel: () => options.reel,
+    hostUpdatesMainReel: true,
   });
   return Object.freeze({
-    backgroundPlayer: createBackgroundPlayer(surface),
+    backgroundPlayer: createBackgroundPlayer(runtime, options.initialMode),
     winAmountPlayer: createPopupAmountPlayer(
-      surface,
+      runtime,
       options.awardCelebrationPopup,
     ),
   });
 }
 
 function createBackgroundPlayer(
-  surface: SceneLayoutPresentationSurface,
+  runtime: SceneLayoutPackageRuntime,
+  initialMode: string,
 ): Game002BackgroundPlayer {
   return Object.freeze({
-    container: surface.backgroundContainer,
-    transitionContainer: surface.transitionContainer,
+    container: runtime.container,
     async init(): Promise<void> {
-      await surface.init();
-      surface.applyArtSpace();
+      await runtime.init();
+      runtime.applyArtSpace();
+      if (runtime.getGameModeSnapshot().stableMode !== initialMode)
+        throw new Error(
+          `game002 initial mode "${initialMode}" does not match Scene Layout.`,
+        );
     },
     update(deltaSeconds: number): void {
-      surface.update(deltaSeconds);
+      runtime.update(deltaSeconds);
     },
     getMode(): string {
-      return surface.getGameModeSnapshot().stableMode;
+      return runtime.getGameModeSnapshot().stableMode;
     },
     prepareModeTransition(modeId: string): Promise<void> {
-      return surface.prepareGameModeTransition(modeId);
+      return runtime.prepareGameModeTransition(modeId);
     },
     requestMode(modeId: string): Promise<void> {
-      return surface.requestGameMode(modeId);
+      return runtime.requestGameMode(modeId);
+    },
+    acknowledgeReelSceneCommit(): void {
+      runtime.acknowledgeMainReelSceneCommit();
+    },
+    attachReelOverlay(overlay: Container): () => void {
+      return runtime.attachMainReelOverlay(overlay);
     },
     bindPopupInput(options: SceneLayoutPopupInputBindingOptions): () => void {
-      return surface.bindPopupInput(options);
+      return runtime.bindPopupInput(options);
     },
     requestPrimaryPopupInteraction(): PopupInteractionDispatchResult {
-      return surface.requestPrimaryPopupInteraction();
+      return runtime.requestPrimaryPopupInteraction();
     },
     destroy(): void {
-      surface.destroy();
+      runtime.destroy();
     },
   });
 }
 
 function createPopupAmountPlayer(
-  surface: SceneLayoutPresentationSurface,
+  runtime: SceneLayoutPackageRuntime,
   popupId: string,
 ): WinAmountAnimationPlayer {
-  const getPlayer = () => surface.getAwardCelebrationPlayer(popupId);
+  const getPlayer = () => runtime.getAwardCelebrationPopup(popupId);
   return Object.freeze({
-    container: surface.popupContainer,
+    container: runtime.container,
     start(input: WinAmountAnimationInput): void {
       getPlayer().start(input);
     },

@@ -261,6 +261,8 @@ pnpm install
 
 `compileConfiguredSlotRoundOperationPlanV2(profile, logic, context)` 是配置型 consumer 的 renderer-free V2 入口。它在画面开始前一次性校验全部 step、scene/result/otherScene 索引、remove hole、dropdown occurrence 一一映射、held occurrence、refill closure 与 value authority。
 
+`slot-operation/exact-data` 提供不含游戏业务名的 strict cardinality、matrix、position、occurrence 与 safe-integer 校验。游戏 decoder 用这些 primitive 一次选择服务器数据；不存在、重复、尺寸漂移或坐标越界都会携带调用方给出的 source path 失败，不提供首项默认值。
+
 ## Slot operation plan
 
 `SlotOperationPlanV2` 以 `scene-landing | presentation | state-mutation` 区分 effect。

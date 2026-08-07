@@ -55,6 +55,10 @@ Pixi Application、package resource 与所有 player 的 destroy。
 
 低层 `createSceneLayoutResource()` / `createSceneLayoutRuntime()` 保持用于 layout-only 和自定义 attachment；自包含 production 包使用 `createSceneLayoutPackageResource()` / `loadSceneLayoutPackageFromUrl()` 与 `createSceneLayoutPackageRuntime()`。未声明 `symbolPackage` 的旧 v1 manifest 行为不变，但组合 reel 初始化与 reset API 会显式不可用。
 
+完整 package runtime 可以 deferred prepare main reel：首次合法 scene commit 前 reel 不可见，scene/value/spin API 会严格失败。业务自定义 grid-cell controller 可通过 ownership-transfer factory 注入，package 仍拥有唯一 reel、manifest placement/order 和最终 destroy；cascade 等借用 overlay 通过 typed attach disposer 接入，保持在 transition/popup 下方。
+
+`createPresentationTransactionRunner()` 执行完整 preflight 后的线性 await/commit/progress program。await 使用 `AbortSignal` 隔离迟到完成，prepared transaction 明确 commit/rollback/destroy，progress 可并行等待 animation barrier；业务 app 只映射 operation evidence，不复制通用 phase 轮询器。
+
 普通 Scene Layout node 可省略 `gameMode` 表示跨全部状态存在，或声明一个 exact mode id；旧 v1 node 因缺少该字段自然保持全局可见。package runtime 在初始化和 production transition switch commit 时一起更新 mode background 与 scoped 普通 node，可见性再与当前 variant placement 组合。编辑器预览可调用独立的 `selectAuthoringGameMode()` 直接选择稳定状态；该 API 不查找或播放 transition，且不会为相同 Symbols binding 重建 reel 或重新抽样。
 
 完整 manifest、zip 目录、构建期/CDN 接入和生命周期示例见 [`docs/scene-layout-manifest.md`](../../docs/scene-layout-manifest.md)。

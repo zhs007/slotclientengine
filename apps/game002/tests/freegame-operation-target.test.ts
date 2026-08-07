@@ -7,8 +7,8 @@ import type {
 import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-amount";
 import { Game002FreeGameOperationTarget } from "../src/freegame-operation-target.js";
 import type { Game002FreeGameOperationPayload } from "../src/game002-operation-compiler.js";
-import type { Game002ReelRuntime } from "../src/game-demo.js";
-import type { Game002BackgroundPlayer } from "../src/scene-layout-presentation.js";
+import type { Game002ReelRuntime } from "../src/game002-reel-controller.js";
+import type { Game002BackgroundPlayer } from "../src/game002-scene-runtime.js";
 import {
   GAME002_REEL_COUNT,
   GAME002_VISIBLE_ROWS,

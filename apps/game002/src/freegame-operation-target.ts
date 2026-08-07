@@ -6,9 +6,9 @@ import type {
 } from "@slotclientengine/rendercore";
 import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-amount";
 import type { Game002FreeGameOperationPayload } from "./game002-operation-compiler.js";
-import type { Game002ReelRuntime } from "./game-demo.js";
-import type { Game002BackgroundPlayer } from "./scene-layout-presentation.js";
-import { assertGame002ReelVisualMatchesTarget } from "./game-demo.js";
+import type { Game002ReelRuntime } from "./game002-reel-controller.js";
+import type { Game002BackgroundPlayer } from "./game002-scene-runtime.js";
+import { assertGame002ReelVisualMatchesTarget } from "./game002-reel-controller.js";
 
 type Activity =
   | "idle"

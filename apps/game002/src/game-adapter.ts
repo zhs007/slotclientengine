@@ -12,7 +12,10 @@ import type {
   SlotGameMountContext,
   SlotGameStateSnapshot,
   SlotGameViewportSnapshot,
+  AwaitPresentationCommand,
+  PresentationTransactionCommand,
 } from "@slotclientengine/gameframeworks";
+import { createPresentationTransactionRunner } from "@slotclientengine/gameframeworks";
 import {
   assertSymbolValueDisplayResource,
   createSymbolCascadePlayer,
@@ -24,9 +27,8 @@ import {
   type SymbolCascadePlayer,
   createSlotOperationCoordinator,
   createSlotOperationHandlerRegistry,
+  RenderGridCellReelSet,
   type SlotOperationHandler,
-  type PreparedVisibleOccurrenceReplacement,
-  type PreparedGridCellVisibleOccurrenceTransferBatch,
 } from "@slotclientengine/rendercore";
 import type {
   WinAmountAnimationPhase,
@@ -41,13 +43,13 @@ import {
   assertGame002ReelVisualMatchesTarget,
   createGame002ReelRuntime,
   type Game002ReelRuntime,
-} from "./game-demo.js";
+} from "./game002-reel-controller.js";
 import { sceneEquals, validateGame002Scene } from "./scene.js";
 import type { Game002PackageConfig } from "./package-config.js";
 import {
-  createGame002SceneLayoutPlayers,
+  createGame002SceneRuntime,
   type Game002BackgroundPlayer,
-} from "./scene-layout-presentation.js";
+} from "./game002-scene-runtime.js";
 import { formatServerUsdAmount } from "./money.js";
 import { GAME002_SYMBOL_WIN_CAROUSEL_OPTIONS } from "./win-symbol-carousel-config.js";
 import { GAME002_CN_VALUE_SYMBOL } from "./cn-value-sequence.js";
@@ -160,7 +162,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
   readonly #reportFatalError: (error: Error) => void;
   readonly #logDiagnostic: (message: string) => void;
   #app: Game002PixiApplication | null = null;
-  #worldLayer: Container | null = null;
+  #presentationRoot: Container | null = null;
   #backgroundPlayer: Game002BackgroundPlayer | null = null;
   #runtime: Game002ReelRuntime | null = null;
   #winAmountPlayer: WinAmountAnimationPlayer | null = null;
@@ -171,6 +173,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
   #freeGameOperationTarget: Game002FreeGameOperationTarget | null = null;
   #unsubscribeViewport: (() => void) | null = null;
   #disposePopupInputBinding: (() => void) | null = null;
+  #disposeReelOverlay: (() => void) | null = null;
   #lastPresentationDiagnostic = "";
   #presentationDiagnosticAgeSeconds = 0;
   #presentationStallReported = false;
@@ -178,26 +181,33 @@ class Game002PixiAdapter implements SlotGameAdapter {
   constructor(options: Game002AdapterOptions) {
     const packageConfig = options.packageConfig;
     let sceneLayoutPlayers:
-      | ReturnType<typeof createGame002SceneLayoutPlayers>
+      | ReturnType<typeof createGame002SceneRuntime>
       | undefined;
+    let sceneLayoutReelRuntime: Game002ReelRuntime | undefined;
     this.#packageConfig = packageConfig;
     this.#createApplication =
       options.createApplication ?? createPixiApplication;
     this.#createBackgroundPlayer =
       options.createBackgroundPlayer ??
       (() => {
-        sceneLayoutPlayers = createGame002SceneLayoutPlayers({
+        const reel = sceneLayoutReelRuntime?.mainReelPresentation;
+        if (!(reel instanceof RenderGridCellReelSet))
+          throw new Error(
+            "game002 Scene Layout requires the prepared grid-cell main reel.",
+          );
+        sceneLayoutPlayers = createGame002SceneRuntime({
           resource: packageConfig.presentation.resource,
           initialMode: packageConfig.presentation.initialMode,
           awardCelebrationPopup:
             packageConfig.presentation.awardCelebrationPopup,
+          reel,
         });
         return sceneLayoutPlayers.backgroundPlayer;
       });
     this.#createRuntime =
       options.createRuntime ??
       (() => {
-        return createGame002ReelRuntime({
+        const runtime = createGame002ReelRuntime({
           gameConfig: packageConfig.presentation.symbolPackage.gameConfig,
           symbolRegistry: packageConfig.presentation.symbolRegistry,
           config: {
@@ -225,7 +235,10 @@ class Game002PixiAdapter implements SlotGameAdapter {
             gridLayout: packageConfig.gridLayout,
             focusRegion: packageConfig.focusRegion,
           },
+          ownsReel: false,
         });
+        sceneLayoutReelRuntime = runtime;
+        return runtime;
       });
     this.#createWinAmountPlayer =
       options.createWinAmountPlayer ??
@@ -270,10 +283,10 @@ class Game002PixiAdapter implements SlotGameAdapter {
         gridLayout: this.#packageConfig.gridLayout,
         focusRegion: this.#packageConfig.focusRegion,
       });
-      backgroundPlayer = this.#createBackgroundPlayer();
-      await backgroundPlayer.init();
       runtime = this.#createRuntime();
       await runtime.prepare();
+      backgroundPlayer = this.#createBackgroundPlayer();
+      await backgroundPlayer.init();
       winAmountPlayer = this.#createWinAmountPlayer(layout);
       symbolCascadePlayer = this.#createSymbolCascadePlayer({
         target: runtime,
@@ -291,21 +304,14 @@ class Game002PixiAdapter implements SlotGameAdapter {
           packageConfig: this.#packageConfig,
         }),
       });
-      symbolCascadePlayer.container.position.set(
-        runtime.layerLayout.x,
-        runtime.layerLayout.y,
+      const disposeReelOverlay = backgroundPlayer.attachReelOverlay(
+        symbolCascadePlayer.container,
       );
-      const worldLayer = new Container();
-      worldLayer.addChild(backgroundPlayer.container);
-      worldLayer.addChild(runtime.mainReelsLayer);
-      worldLayer.addChild(symbolCascadePlayer.container);
-      if (backgroundPlayer.transitionContainer)
-        worldLayer.addChild(backgroundPlayer.transitionContainer);
-      worldLayer.addChild(winAmountPlayer.container);
-      app.stage.addChild(worldLayer);
+      app.stage.addChild(backgroundPlayer.container);
 
       this.#app = app;
-      this.#worldLayer = worldLayer;
+      this.#presentationRoot = backgroundPlayer.container;
+      this.#disposeReelOverlay = disposeReelOverlay;
       this.#backgroundPlayer = backgroundPlayer;
       this.#runtime = runtime;
       this.#winAmountPlayer = winAmountPlayer;
@@ -375,12 +381,14 @@ class Game002PixiAdapter implements SlotGameAdapter {
       app.ticker.stop();
       winAmountPlayer?.destroy();
       symbolCascadePlayer?.destroy();
+      this.#disposeReelOverlay?.();
+      this.#disposeReelOverlay = null;
       runtime?.destroy();
       backgroundPlayer?.destroy();
       app.canvas.remove();
       app.destroy();
       this.#app = null;
-      this.#worldLayer = null;
+      this.#presentationRoot = null;
       this.#backgroundPlayer = null;
       this.#runtime = null;
       this.#winAmountPlayer = null;
@@ -402,6 +410,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
       validateGame002Scene(state.defaultScene, "live defaultScene"),
       "live defaultScene",
     );
+    this.#backgroundPlayer?.acknowledgeReelSceneCommit();
   }
 
   playSpin(logic: GameLogic): Promise<void> {
@@ -445,6 +454,8 @@ class Game002PixiAdapter implements SlotGameAdapter {
     this.#unsubscribeViewport = null;
     this.#disposePopupInputBinding?.();
     this.#disposePopupInputBinding = null;
+    this.#disposeReelOverlay?.();
+    this.#disposeReelOverlay = null;
     this.#app?.ticker.remove(this.#onTick);
     this.#app?.ticker.stop();
     this.#winAmountPlayer?.destroy();
@@ -454,7 +465,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
     this.#app?.canvas.remove();
     this.#app?.destroy();
     this.#app = null;
-    this.#worldLayer = null;
+    this.#presentationRoot = null;
     this.#backgroundPlayer = null;
     this.#runtime = null;
     this.#winAmountPlayer = null;
@@ -547,7 +558,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
   }
 
   #applyViewport(viewport: SlotGameViewportSnapshot): void {
-    if (!this.#app || !this.#worldLayer) {
+    if (!this.#app || !this.#presentationRoot) {
       throw new Error("game002 adapter is not mounted.");
     }
     const layout = createGame002Layout({
@@ -559,13 +570,10 @@ class Game002PixiAdapter implements SlotGameAdapter {
       layout.viewportSize.width,
       layout.viewportSize.height,
     );
-    this.#worldLayer.position.set(layout.worldOffset.x, layout.worldOffset.y);
-    if (this.#runtime && this.#symbolCascadePlayer) {
-      this.#symbolCascadePlayer.container.position.set(
-        this.#runtime.layerLayout.x,
-        this.#runtime.layerLayout.y,
-      );
-    }
+    this.#presentationRoot.position.set(
+      layout.worldOffset.x,
+      layout.worldOffset.y,
+    );
     this.#winAmountPlayer?.applyLayout(createGame002WinAmountLayout(layout));
   }
 }
@@ -665,25 +673,21 @@ function createGame002OperationRegistrations(target: Game002RoundTarget) {
   });
   const requirePayload = (operation: SlotOperationV2) => {
     const payload = operation.payload as Game002TransformPayload;
-    if (!payload?.transform || !payload.phase || !payload.transformInput)
+    if (!payload?.phase)
       throw new Error("game002 atomic transform operation payload is invalid.");
     return payload;
   };
   const handler: SlotOperationHandler<SlotOperationV2, SlotOperationV2> = {
-    preflight: (operation) => {
-      requirePayload(operation);
-    },
+    preflight: (operation) =>
+      target.preflightAtomicTransform(operation, requirePayload(operation)),
     prepare: (operation) => operation,
     start: (operation) => {
       const payload = requirePayload(operation);
-      target.startAtomicTransformPayload(payload);
+      target.startAtomicTransform(operation, payload);
     },
     update: (_operation, deltaSeconds) => {
       target.update(deltaSeconds);
-      return target.updateAtomicTransformOperation(
-        deltaSeconds,
-        requirePayload(_operation).phase,
-      );
+      return target.updateAtomicTransform(_operation);
     },
     commit: () => undefined,
     rollback: () => target.cleanup(),
@@ -774,93 +778,6 @@ function fallStepKey(fall: Game002FallPayload): string {
   return fall.flowKey;
 }
 
-function createSyntheticTransformStep(
-  payload: Game002TransformPayload,
-): Game002TransformSession {
-  const occurrenceAt = (
-    snapshot: SlotOperationSnapshot,
-    position: { readonly x: number; readonly y: number },
-    label: string,
-  ) => {
-    const occurrence = snapshot.occurrences.find(
-      (item) =>
-        item.position.x === position.x && item.position.y === position.y,
-    );
-    if (!occurrence)
-      throw new Error(
-        `${payload.flowKey} ${label} occurrence (${position.x},${position.y}) is missing.`,
-      );
-    return occurrence;
-  };
-  const changes = payload.transformChanges.map((change) => {
-    const input = occurrenceAt(
-      payload.transformInput,
-      change.position,
-      "input",
-    );
-    const output = occurrenceAt(payload.finalOutput, change.position, "output");
-    return Object.freeze({
-      occurrenceId: input.id,
-      position: change.position,
-      input,
-      output,
-    });
-  });
-  const relocations = payload.transformRelocations.map((relocation) => {
-    const source = occurrenceAt(
-      payload.transformInput,
-      relocation.source,
-      "relocation source",
-    );
-    const overwritten = occurrenceAt(
-      payload.transformInput,
-      relocation.target,
-      "relocation target",
-    );
-    const replacement = occurrenceAt(
-      payload.finalOutput,
-      relocation.source,
-      "source replacement",
-    );
-    return Object.freeze({
-      occurrenceId: source.id,
-      overwrittenOccurrenceId: overwritten.id,
-      sourceReplacementOccurrenceId: replacement.id,
-      source: relocation.source,
-      target: relocation.target,
-    });
-  });
-  const flowIndex = Number(payload.flowKey.split(":").at(-1));
-  if (!Number.isSafeInteger(flowIndex) || flowIndex < 0)
-    throw new Error(`${payload.flowKey} has an invalid operation flow key.`);
-  return Object.freeze({
-    stepIndex: flowIndex,
-    input: payload.transformInput,
-    output: payload.finalOutput,
-    changes: Object.freeze(changes),
-    relocations: Object.freeze(relocations),
-  });
-}
-
-interface Game002TransformSession {
-  readonly stepIndex: number;
-  readonly input: SlotOperationSnapshot;
-  readonly output: SlotOperationSnapshot;
-  readonly changes: readonly {
-    readonly occurrenceId: string;
-    readonly position: { readonly x: number; readonly y: number };
-    readonly input: SlotOperationSnapshot["occurrences"][number];
-    readonly output: SlotOperationSnapshot["occurrences"][number];
-  }[];
-  readonly relocations?: readonly {
-    readonly occurrenceId: string;
-    readonly overwrittenOccurrenceId: string;
-    readonly sourceReplacementOccurrenceId: string;
-    readonly source: { readonly x: number; readonly y: number };
-    readonly target: { readonly x: number; readonly y: number };
-  }[];
-}
-
 export class Game002RoundTarget {
   readonly capabilities: ReadonlySet<SlotRoundCapability> = new Set([
     "spin",
@@ -886,21 +803,7 @@ export class Game002RoundTarget {
     | "refill-complete"
     | "refill-sweep"
     | "refill-spin"
-    | "transform-wl-start"
-    | "transform-wait-wm"
-    | "transform-mult-start"
-    | "transform-mult-idle"
-    | "transform-mult-end"
-    | "transform-wm-change"
-    | "transform-wait-wm-replace"
-    | "transform-wait-cm"
-    | "transform-cm-feature"
-    | "transform-cn-feature-change"
-    | "transform-wait-cm-replace"
-    | "transform-cm-change"
-    | "transform-wait-co"
-    | "transform-co-feature"
-    | "transform-co-transfer"
+    | "atomic-transform"
     | "completion" = "idle";
   #activeFall: Game002FallPayload | null = null;
   #runtimeCompleted = false;
@@ -913,18 +816,10 @@ export class Game002RoundTarget {
   #unifiedSteps = new Set<number | string>();
   #initialSnapshot: SlotRoundOccurrenceSnapshot | null = null;
   #refillSnapshot: SlotRoundOccurrenceSnapshot | null = null;
-  #activeTransform: Game002TransformSession | null = null;
-  #activeMultiplierBatch: Game002TransformOperationPayload | null = null;
-  #preparedWmReplacements: PreparedVisibleOccurrenceReplacement[] = [];
-  #preparedCmReplacements: PreparedVisibleOccurrenceReplacement[] = [];
-  #preparedCoReplacements: PreparedVisibleOccurrenceReplacement[] = [];
-  #preparedCoTransfers: PreparedGridCellVisibleOccurrenceTransferBatch | null =
-    null;
-  #coTransferProgress = 0;
-  #transformPlaybackGeneration = 0;
-  #transformPlaybackComplete = true;
+  readonly #transformRunner = createPresentationTransactionRunner();
+  #transformProgramId = 0;
   #transformPlaybackFailure: Error | null = null;
-  #transformPlaybackAbort: AbortController | null = null;
+  #atomicTransformOperation: SlotOperationV2 | null = null;
 
   constructor(options: {
     readonly runtime: Game002ReelRuntime;
@@ -945,13 +840,18 @@ export class Game002RoundTarget {
   }
 
   cleanup(): void {
-    this.#transformPlaybackGeneration += 1;
-    this.#transformPlaybackAbort?.abort(
-      new Error("game002 transform playback was interrupted by cleanup."),
-    );
-    this.#transformPlaybackAbort = null;
-    this.#transformPlaybackComplete = true;
+    if (this.#transformRunner.getSnapshot().running)
+      this.#transformRunner.cleanup("next-program");
+    this.#transformProgramId += 1;
     this.#transformPlaybackFailure = null;
+    const atomic = this.#atomicTransformOperation;
+    this.#atomicTransformOperation = null;
+    if (atomic?.effect === "state-mutation" && this.#runtime.getCurrentScene())
+      this.#runtime.applyScene(
+        atomic.input.scene,
+        "game002 atomic transform rollback",
+        atomic.input.values as Parameters<Game002ReelRuntime["applyScene"]>[2],
+      );
     this.#cascadePlayer.clear();
     this.#winAmountPlayer.dismissImmediately();
     this.#runtime.resetPresentationState();
@@ -964,17 +864,6 @@ export class Game002RoundTarget {
     this.#unifiedSteps.clear();
     this.#initialSnapshot = null;
     this.#refillSnapshot = null;
-    this.#activeTransform = null;
-    this.#activeMultiplierBatch = null;
-    for (const prepared of this.#preparedWmReplacements) prepared.rollback();
-    for (const prepared of this.#preparedCmReplacements) prepared.rollback();
-    for (const prepared of this.#preparedCoReplacements) prepared.rollback();
-    this.#preparedCoTransfers?.rollback();
-    this.#preparedWmReplacements = [];
-    this.#preparedCmReplacements = [];
-    this.#preparedCoReplacements = [];
-    this.#preparedCoTransfers = null;
-    this.#coTransferProgress = 0;
   }
 
   startInitialSpin(snapshot: SlotRoundOccurrenceSnapshot): void {
@@ -1099,642 +988,425 @@ export class Game002RoundTarget {
     return true;
   }
 
-  startSettledTransformOperation(
-    step: Game002TransformSession,
-    batch: Game002TransformOperationPayload,
+  preflightAtomicTransform(
+    operation: SlotOperationV2,
+    payload: Game002TransformPayload,
   ): void {
-    if (this.#activity !== "idle")
-      throw new Error("game002 settled transform cannot start while active.");
-    if (batch.stepIndex !== step.stepIndex)
-      throw new Error(
-        `game002 transform payload stepIndex does not match step[${step.stepIndex}].`,
-      );
-    const coChangesByKey = new Map(
-      (batch.coCollection?.transform.changes ?? []).map((change) => [
-        `${change.position.x},${change.position.y}`,
-        change,
-      ]),
-    );
-    const stepChangeKeys = new Set(
-      step.changes.map((change) => `${change.position.x},${change.position.y}`),
-    );
     if (
-      step.changes.some((change) => {
-        const key = `${change.position.x},${change.position.y}`;
-        if (coChangesByKey.has(key)) return false;
-        return !(
-          (change.input.code === this.#wlSymbolCode &&
-            change.output.code === this.#wlSymbolCode) ||
-          (change.input.code === this.#wmSymbolCode &&
-            change.output.code === this.#cnSymbolCode) ||
-          (change.input.code === this.#cnSymbolCode &&
-            change.output.code === this.#cnSymbolCode) ||
-          (change.input.code === this.#cmSymbolCode &&
-            change.output.code === this.#cnSymbolCode)
-        );
-      })
-    ) {
-      throw new Error(
-        `game002 step[${step.stepIndex}] settled transform must contain only WL/CN updates, WM/CM-to-CN replacements and bg-genco CO replacements.`,
-      );
-    }
-    if (
-      batch.wmReplacements.length === 0 &&
-      batch.wlIncrements.length === 0 &&
-      batch.cm === null &&
-      !batch.coCollection
+      payload.phase !== "wild-multiplier" &&
+      operation.effect !== "state-mutation"
     )
-      throw new Error(
-        `game002 step[${step.stepIndex}] multiplier transform has no display operation.`,
-      );
-    if ([...coChangesByKey.keys()].some((key) => !stepChangeKeys.has(key)))
-      throw new Error(
-        `game002 step[${step.stepIndex}] CO collection batch does not match the transform.`,
-      );
-    for (const replacement of batch.wmReplacements) {
-      const { x, y } = replacement.position;
-      const coChange = coChangesByKey.get(`${x},${y}`);
-      if (
-        step.input.scene[x]?.[y] !== this.#wmSymbolCode ||
-        step.output.scene[x]?.[y] !==
-          (coChange?.outputCode ?? this.#cnSymbolCode) ||
-        step.output.values[x]?.[y] !==
-          (coChange?.outputValue ?? replacement.outputValue)
-      )
-        throw new Error(
-          `game002 step[${step.stepIndex}] WM replacement (${x},${y}) does not match the transform snapshots.`,
-        );
-    }
-    if (batch.cm) {
-      const { x, y } = batch.cm.position;
-      const coChange = coChangesByKey.get(`${x},${y}`);
-      if (
-        step.input.scene[x]?.[y] !== this.#cmSymbolCode ||
-        step.input.values[x]?.[y] !== batch.cm.multiplier ||
-        step.output.scene[x]?.[y] !==
-          (coChange?.outputCode ?? this.#cnSymbolCode) ||
-        step.output.values[x]?.[y] !==
-          (coChange?.outputValue ?? batch.cm.outputValue)
-      )
-        throw new Error(
-          `game002 step[${step.stepIndex}] CM replacement (${x},${y}) does not match the transform snapshots.`,
-        );
-      const expectedCnPositions = step.input.occurrences.filter(
-        (occurrence) =>
-          occurrence.code === this.#cnSymbolCode ||
-          occurrence.code === this.#wmSymbolCode,
-      );
-      const expectedCnKeys = new Set(
-        expectedCnPositions.map(
-          (occurrence) => `${occurrence.position.x},${occurrence.position.y}`,
-        ),
-      );
-      const actualCnKeys = new Set(
-        batch.cnUpdates.map(
-          (update) => `${update.position.x},${update.position.y}`,
-        ),
-      );
-      if (
-        expectedCnKeys.size !== batch.cnUpdates.length ||
-        actualCnKeys.size !== batch.cnUpdates.length ||
-        [...expectedCnKeys].some((key) => !actualCnKeys.has(key))
-      )
-        throw new Error(
-          `game002 step[${step.stepIndex}] CN update batch does not cover every intermediate CN.`,
-        );
-      for (const update of batch.cnUpdates) {
-        const { x, y } = update.position;
-        const inputCode = step.input.scene[x]?.[y];
-        const wmReplacement = batch.wmReplacements.find(
-          (replacement) =>
-            replacement.position.x === x && replacement.position.y === y,
-        );
-        const expectedInputValue =
-          inputCode === this.#wmSymbolCode
-            ? wmReplacement?.intermediateValue
-            : step.input.values[x]?.[y];
-        const coChange = coChangesByKey.get(`${x},${y}`);
-        if (
-          (inputCode !== this.#cnSymbolCode &&
-            inputCode !== this.#wmSymbolCode) ||
-          expectedInputValue !== update.inputValue ||
-          step.output.scene[x]?.[y] !==
-            (coChange?.outputCode ?? this.#cnSymbolCode) ||
-          step.output.values[x]?.[y] !==
-            (coChange?.outputValue ?? update.outputValue)
-        )
-          throw new Error(
-            `game002 step[${step.stepIndex}] CN update (${x},${y}) does not match the transform snapshots.`,
-          );
-      }
-    } else if (batch.cnUpdates.length > 0) {
-      throw new Error(
-        `game002 step[${step.stepIndex}] CN updates require a CM presentation.`,
-      );
-    }
-    for (const increment of batch.wlIncrements) {
-      const { x, y } = increment.position;
-      const coChange = coChangesByKey.get(`${x},${y}`);
-      if (
-        step.input.scene[x]?.[y] !== this.#wlSymbolCode ||
-        step.output.scene[x]?.[y] !==
-          (coChange?.outputCode ?? this.#wlSymbolCode) ||
-        step.output.values[x]?.[y] !==
-          (coChange?.outputValue ?? increment.outputValue)
-      )
-        throw new Error(
-          `game002 step[${step.stepIndex}] WL increment (${x},${y}) does not match the transform snapshots.`,
-        );
-    }
-    for (const replacement of batch.coCollection?.transform.changes ?? []) {
-      const { x, y } = replacement.position;
-      if (
-        step.input.scene[x]?.[y] === undefined ||
-        step.output.scene[x]?.[y] !== replacement.outputCode ||
-        step.output.values[x]?.[y] !== replacement.outputValue
-      )
-        throw new Error(
-          `game002 step[${step.stepIndex}] CO collection change (${x},${y}) does not match the transform snapshots.`,
-        );
-    }
-    this.applyMultiplierTexts(step.input);
-    for (const replacement of batch.wmReplacements) {
-      for (const state of ["multStart", "multIdle", "multEnd", "change"]) {
-        if (
-          !this.#runtime.hasVisibleSymbolStateCapability(
-            replacement.position.x,
-            replacement.position.y,
-            state,
-          )
-        ) {
-          throw new Error(
-            `game002 WM (${replacement.position.x},${replacement.position.y}) has no "${state}" animation capability.`,
-          );
-        }
-      }
-    }
-    for (const increment of batch.wlIncrements) {
-      if (
-        !this.#runtime.hasVisibleSymbolStateCapability(
-          increment.position.x,
-          increment.position.y,
-          "appear",
-        )
-      )
-        throw new Error(
-          `game002 WL (${increment.position.x},${increment.position.y}) has no "appear" Start animation capability.`,
-        );
-    }
-    if (batch.cm) {
-      for (const state of ["feature1", "change"]) {
-        if (
-          !this.#runtime.hasVisibleSymbolStateCapability(
-            batch.cm.position.x,
-            batch.cm.position.y,
-            state,
-          )
-        )
-          throw new Error(
-            `game002 CM (${batch.cm.position.x},${batch.cm.position.y}) has no "${state}" animation capability.`,
-          );
-      }
-    }
-    for (const update of batch.cnUpdates) {
-      const inputCode =
-        step.input.scene[update.position.x]?.[update.position.y];
-      if (
-        inputCode === this.#cnSymbolCode &&
-        !this.#runtime.hasVisibleSymbolStateCapability(
-          update.position.x,
-          update.position.y,
-          "featureChange",
-        )
-      )
-        throw new Error(
-          `game002 CN (${update.position.x},${update.position.y}) has no "featureChange" animation capability.`,
-        );
-    }
-    for (const segment of batch.coCollection?.segments ?? []) {
-      if (
-        !this.#runtime.hasVisibleSymbolStateCapability(
-          segment.co.x,
-          segment.co.y,
-          "feature",
-        )
-      )
-        throw new Error(
-          `game002 CO (${segment.co.x},${segment.co.y}) has no "feature" animation capability.`,
-        );
-      for (const transfer of segment.transfers)
-        for (const state of ["feature1", "feature2"])
+      throw new Error(`${operation.kind} must mutate state.`);
+    const requireStates = (
+      positions: readonly { readonly x: number; readonly y: number }[],
+      states: readonly string[],
+    ) => {
+      for (const position of positions)
+        for (const state of states)
           if (
             !this.#runtime.hasVisibleSymbolStateCapability(
-              transfer.source.x,
-              transfer.source.y,
+              position.x,
+              position.y,
               state,
             )
           )
             throw new Error(
-              `game002 CO source (${transfer.source.x},${transfer.source.y}) has no "${state}" animation capability.`,
+              `game002 ${payload.phase} symbol (${position.x},${position.y}) has no "${state}" animation capability.`,
             );
-    }
-    const preparedWm: PreparedVisibleOccurrenceReplacement[] = [];
-    const preparedCm: PreparedVisibleOccurrenceReplacement[] = [];
-    const preparedCo: PreparedVisibleOccurrenceReplacement[] = [];
-    const postMultiplierCnKeys = new Set([
-      ...batch.wmReplacements.map(
-        (replacement) => `${replacement.position.x},${replacement.position.y}`,
-      ),
-      ...(batch.cm ? [`${batch.cm.position.x},${batch.cm.position.y}`] : []),
-    ]);
-    const postMultiplierCodeAt = (position: {
-      readonly x: number;
-      readonly y: number;
-    }) =>
-      postMultiplierCnKeys.has(`${position.x},${position.y}`)
-        ? this.#cnSymbolCode
-        : step.input.scene[position.x][position.y];
-    try {
-      for (const replacement of batch.wmReplacements) {
-        preparedWm.push(
-          this.#runtime.prepareVisibleOccurrenceReplacement({
-            x: replacement.position.x,
-            y: replacement.position.y,
-            expectedCode: this.#wmSymbolCode,
-            outputCode: this.#cnSymbolCode,
-            outputPresentationValue: replacement.intermediateValue,
-          }),
+    };
+    switch (payload.phase) {
+      case "wl-increment":
+        requireStates(
+          payload.increments.map((item) => item.position),
+          ["appear"],
         );
+        return;
+      case "wild-multiplier":
+        requireStates(payload.wmPositions, ["multStart", "multIdle"]);
+        return;
+      case "wm-to-cn":
+        requireStates(
+          payload.replacements.map((item) => item.position),
+          ["multEnd", "change"],
+        );
+        return;
+      case "coin-multiplier":
+        requireStates([payload.cm.position], ["feature1"]);
+        requireStates(
+          payload.updates.map((item) => item.position),
+          ["featureChange"],
+        );
+        return;
+      case "cm-to-cn":
+        requireStates([payload.cm.position], ["change"]);
+        return;
+      case "co-collect":
+        requireStates(
+          payload.collection.segments.map((segment) => segment.co),
+          ["feature"],
+        );
+        requireStates(payload.collection.sourcePositions, [
+          "feature1",
+          "feature2",
+        ]);
+    }
+  }
+
+  startAtomicTransform(
+    operation: SlotOperationV2,
+    payload: Game002TransformPayload,
+  ): void {
+    if (
+      this.#activity !== "idle" ||
+      this.#transformRunner.getSnapshot().running
+    )
+      throw new Error("game002 atomic transform cannot start while active.");
+    this.preflightAtomicTransform(operation, payload);
+    const commands = this.createAtomicTransformCommands(operation, payload);
+    this.#activity = "atomic-transform";
+    this.#atomicTransformOperation = operation;
+    this.#transformPlaybackFailure = null;
+    const programId = ++this.#transformProgramId;
+    const completion = this.#transformRunner.start(
+      Object.freeze({ commands: Object.freeze(commands) }),
+    );
+    void completion.catch((error: unknown) => {
+      if (programId === this.#transformProgramId)
+        this.#transformPlaybackFailure = asError(error);
+    });
+  }
+
+  updateAtomicTransform(operation: SlotOperationV2): {
+    readonly completed: boolean;
+  } {
+    if (
+      this.#activity !== "atomic-transform" ||
+      this.#atomicTransformOperation !== operation
+    )
+      throw new Error("game002 atomic transform operation is not active.");
+    if (this.#transformPlaybackFailure) throw this.#transformPlaybackFailure;
+    if (this.#transformRunner.getSnapshot().phase !== "complete")
+      return { completed: false };
+    if (operation.effect === "state-mutation")
+      assertGame002ReelVisualMatchesTarget(
+        this.#runtime.getVisualSnapshot(),
+        operation.output.scene,
+        `completed ${operation.kind}`,
+      );
+    this.#atomicTransformOperation = null;
+    this.#activity = "idle";
+    return { completed: true };
+  }
+
+  private createAtomicTransformCommands(
+    operation: SlotOperationV2,
+    payload: Game002TransformPayload,
+  ): PresentationTransactionCommand[] {
+    const awaitStates = (
+      requests: readonly {
+        readonly positions: readonly {
+          readonly x: number;
+          readonly y: number;
+        }[];
+        readonly state: string;
+        readonly completion: "once-complete" | "next-loop-complete";
+      }[],
+    ): import("@slotclientengine/rendercore").AwaitPresentationCommand =>
+      Object.freeze({
+        kind: "await",
+        preflight: () => undefined,
+        start: (signal: AbortSignal) =>
+          this.#runtime.playVisibleSymbolStateBatch(
+            requests.map((request) => ({
+              positions: request.positions,
+              state: request.state,
+              options: {
+                transitionMode: "immediate",
+                completion: request.completion,
+              },
+            })),
+            { signal },
+          ),
+      });
+    const state = (
+      positions: readonly { readonly x: number; readonly y: number }[],
+      name: string,
+      completion: "once-complete" | "next-loop-complete" = "once-complete",
+    ) => awaitStates([{ positions, state: name, completion }]);
+    const commit = (
+      apply: () => void,
+    ): import("@slotclientengine/rendercore").CommitPresentationCommand =>
+      Object.freeze({
+        kind: "commit",
+        preflight: () => undefined,
+        prepare: () =>
+          Object.freeze({
+            commit: apply,
+            rollback: () => undefined,
+            destroy: () => undefined,
+          }),
+      });
+    const mutation = this.requireAtomicMutation(operation, payload.phase);
+    switch (payload.phase) {
+      case "wl-increment": {
+        const positions = payload.increments.map((item) => item.position);
+        return [
+          commit(() => {
+            for (const item of payload.increments) {
+              this.#runtime.setVisibleSymbolPresentationValue(
+                item.position.x,
+                item.position.y,
+                item.outputValue,
+              );
+              this.#runtime.setVisibleSymbolImageStringText(
+                item.position.x,
+                item.position.y,
+                "multiplier",
+                formatMultiplier(item.outputValue),
+              );
+            }
+          }),
+          state(positions, "appear"),
+        ];
       }
-      if (batch.cm)
-        preparedCm.push(
-          this.#runtime.prepareVisibleOccurrenceReplacement({
-            x: batch.cm.position.x,
-            y: batch.cm.position.y,
+      case "wild-multiplier": {
+        const commands: PresentationTransactionCommand[] = [
+          state(payload.wmPositions, "multStart"),
+        ];
+        if (mutation)
+          commands.push(
+            commit(() => {
+              for (const occurrence of mutation.output.occurrences) {
+                const input = mutation.input.occurrences.find(
+                  (candidate) => candidate.id === occurrence.id,
+                );
+                if (
+                  input?.code !== this.#wlSymbolCode ||
+                  input.value === occurrence.value
+                )
+                  continue;
+                this.#runtime.setVisibleSymbolPresentationValue(
+                  occurrence.position.x,
+                  occurrence.position.y,
+                  occurrence.value,
+                );
+                this.#runtime.setVisibleSymbolImageStringText(
+                  occurrence.position.x,
+                  occurrence.position.y,
+                  "multiplier",
+                  formatMultiplier(occurrence.value),
+                );
+              }
+            }),
+          );
+        commands.push(
+          state(payload.wmPositions, "multIdle", "next-loop-complete"),
+        );
+        return commands;
+      }
+      case "wm-to-cn":
+        return [
+          state(
+            payload.replacements.map((item) => item.position),
+            "multEnd",
+          ),
+          state(
+            payload.replacements.map((item) => item.position),
+            "change",
+          ),
+          ...payload.replacements.map((item) =>
+            this.replacementCommit({
+              x: item.position.x,
+              y: item.position.y,
+              expectedCode: this.#wmSymbolCode,
+              outputCode: this.#cnSymbolCode,
+              outputPresentationValue: item.intermediateValue,
+            }),
+          ),
+        ];
+      case "coin-multiplier":
+        return [
+          state([payload.cm.position], "feature1"),
+          commit(() => {
+            for (const item of payload.updates)
+              this.#runtime.setVisibleSymbolPresentationValue(
+                item.position.x,
+                item.position.y,
+                item.outputValue,
+              );
+          }),
+          state(
+            payload.updates.map((item) => item.position),
+            "featureChange",
+          ),
+        ];
+      case "cm-to-cn":
+        return [
+          state([payload.cm.position], "change"),
+          this.replacementCommit({
+            x: payload.cm.position.x,
+            y: payload.cm.position.y,
             expectedCode: this.#cmSymbolCode,
             outputCode: this.#cnSymbolCode,
-            outputPresentationValue: batch.cm.outputValue,
+            outputPresentationValue: payload.cm.outputValue,
           }),
+        ];
+      case "co-collect":
+        return this.createCoCollectionCommands(
+          mutation!,
+          payload.collection,
+          awaitStates,
         );
-      const relocations = batch.coCollection?.transform.relocations ?? [];
-      const relocatedPositions = new Set(
-        relocations.flatMap((relocation) => [
-          `${relocation.source.x},${relocation.source.y}`,
-          `${relocation.target.x},${relocation.target.y}`,
+    }
+  }
+
+  private requireAtomicMutation(
+    operation: SlotOperationV2,
+    phase: Game002TransformPhase,
+  ): Extract<SlotOperationV2, { readonly effect: "state-mutation" }> | null {
+    if (operation.effect === "state-mutation") return operation;
+    if (phase === "wild-multiplier") return null;
+    throw new Error(`${operation.kind} must mutate state.`);
+  }
+
+  private replacementCommit(options: {
+    readonly x: number;
+    readonly y: number;
+    readonly expectedCode: number;
+    readonly outputCode: number;
+    readonly outputPresentationValue: number | null;
+  }): import("@slotclientengine/rendercore").CommitPresentationCommand {
+    return Object.freeze({
+      kind: "commit",
+      preflight: () => undefined,
+      prepare: () => this.#runtime.prepareVisibleOccurrenceReplacement(options),
+    });
+  }
+
+  private createCoCollectionCommands(
+    operation: Extract<SlotOperationV2, { readonly effect: "state-mutation" }>,
+    collection: NonNullable<Game002TransformOperationPayload["coCollection"]>,
+    awaitStates: (
+      requests: readonly {
+        readonly positions: readonly {
+          readonly x: number;
+          readonly y: number;
+        }[];
+        readonly state: string;
+        readonly completion: "once-complete" | "next-loop-complete";
+      }[],
+    ) => AwaitPresentationCommand,
+  ): PresentationTransactionCommand[] {
+    const relocations = collection.transform.relocations ?? [];
+    const relocationKeys = new Set(
+      relocations.flatMap((item) => [
+        `${item.source.x},${item.source.y}`,
+        `${item.target.x},${item.target.y}`,
+      ]),
+    );
+    const changes = new Map(
+      collection.transform.changes.map((item) => [
+        `${item.position.x},${item.position.y}`,
+        item,
+      ]),
+    );
+    const transfers = new Map(
+      collection.segments.flatMap((segment) =>
+        segment.transfers.map((item) => [
+          `${item.source.x},${item.source.y}`,
+          item,
         ]),
-      );
-      for (const replacement of batch.coCollection?.transform.changes ?? [])
-        if (
-          !relocatedPositions.has(
-            `${replacement.position.x},${replacement.position.y}`,
-          )
-        )
-          preparedCo.push(
-            this.#runtime.prepareVisibleOccurrenceReplacement({
-              x: replacement.position.x,
-              y: replacement.position.y,
-              expectedCode: postMultiplierCodeAt(replacement.position),
-              outputCode: replacement.outputCode,
-              outputPresentationValue: replacement.outputValue,
-            }),
-          );
-      if (batch.coCollection) {
-        const changes = new Map(
-          batch.coCollection.transform.changes.map((change) => [
-            `${change.position.x},${change.position.y}`,
-            change,
-          ]),
-        );
-        const transfersBySource = new Map(
-          batch.coCollection.segments.flatMap((segment) =>
-            segment.transfers.map((transfer) => [
-              `${transfer.source.x},${transfer.source.y}`,
-              transfer,
-            ]),
+      ),
+    );
+    return [
+      awaitStates([
+        {
+          positions: collection.segments.map((segment) => segment.co),
+          state: "feature",
+          completion: "once-complete",
+        },
+        {
+          positions: collection.sourcePositions,
+          state: "feature1",
+          completion: "once-complete",
+        },
+      ]),
+      Object.freeze({
+        kind: "progress" as const,
+        durationSeconds: 0.5,
+        preflight: () => undefined,
+        await: (signal: AbortSignal) =>
+          this.#runtime.playVisibleSymbolStates(
+            collection.sourcePositions,
+            "feature2",
+            {
+              transitionMode: "immediate",
+              completion: "once-complete",
+              signal,
+            },
           ),
-        );
-        this.#preparedCoTransfers =
-          this.#runtime.prepareVisibleOccurrenceTransferBatch({
-            transfers: relocations.map((relocation) => {
-              const sourceChange = changes.get(
-                `${relocation.source.x},${relocation.source.y}`,
-              );
-              if (!sourceChange)
-                throw new Error(
-                  `game002 CO source (${relocation.source.x},${relocation.source.y}) has no source replacement.`,
-                );
-              const transfer = transfersBySource.get(
-                `${relocation.source.x},${relocation.source.y}`,
-              );
-              if (
-                !transfer ||
-                transfer.sourceCode !== postMultiplierCodeAt(relocation.source)
-              )
-                throw new Error(
-                  `game002 CO source (${relocation.source.x},${relocation.source.y}) does not match the post-multiplier scene.`,
-                );
-              return Object.freeze({
-                source: relocation.source,
-                target: relocation.target,
-                expectedSourceCode: transfer.sourceCode,
-                expectedTargetCode: postMultiplierCodeAt(relocation.target),
-                sourceReplacementCode: sourceChange.outputCode,
-                sourceReplacementPresentationValue: sourceChange.outputValue,
-              });
-            }),
+        prepare: () => {
+          const replacements = collection.transform.changes
+            .filter(
+              (item) =>
+                !relocationKeys.has(`${item.position.x},${item.position.y}`),
+            )
+            .map((item) =>
+              this.#runtime.prepareVisibleOccurrenceReplacement({
+                x: item.position.x,
+                y: item.position.y,
+                expectedCode:
+                  operation.input.scene[item.position.x]![item.position.y]!,
+                outputCode: item.outputCode,
+                outputPresentationValue: item.outputValue,
+              }),
+            );
+          const transfer =
+            relocations.length === 0
+              ? null
+              : this.#runtime.prepareVisibleOccurrenceTransferBatch({
+                  transfers: relocations.map((item) => {
+                    const sourceChange = changes.get(
+                      `${item.source.x},${item.source.y}`,
+                    );
+                    const evidence = transfers.get(
+                      `${item.source.x},${item.source.y}`,
+                    );
+                    if (!sourceChange || !evidence)
+                      throw new Error(
+                        `game002 CO source (${item.source.x},${item.source.y}) evidence is incomplete.`,
+                      );
+                    return Object.freeze({
+                      source: item.source,
+                      target: item.target,
+                      expectedSourceCode: evidence.sourceCode,
+                      expectedTargetCode:
+                        operation.input.scene[item.target.x]![item.target.y]!,
+                      sourceReplacementCode: sourceChange.outputCode,
+                      sourceReplacementPresentationValue:
+                        sourceChange.outputValue,
+                    });
+                  }),
+                });
+          return Object.freeze({
+            start: () => transfer?.start(),
+            setProgress: (progress: number) => transfer?.setProgress(progress),
+            commit: () => {
+              transfer?.commit();
+              for (const replacement of replacements) replacement.commit();
+            },
+            rollback: () => {
+              transfer?.rollback();
+              for (const replacement of replacements) replacement.rollback();
+            },
+            destroy: () => {
+              transfer?.destroy();
+              for (const replacement of replacements) replacement.destroy();
+            },
           });
-      }
-    } catch (error) {
-      for (const replacement of preparedWm) replacement.rollback();
-      for (const replacement of preparedCm) replacement.rollback();
-      for (const replacement of preparedCo) replacement.rollback();
-      this.#preparedCoTransfers?.rollback();
-      this.#preparedCoTransfers = null;
-      throw error;
-    }
-    this.#preparedWmReplacements = preparedWm;
-    this.#preparedCmReplacements = preparedCm;
-    this.#preparedCoReplacements = preparedCo;
-    this.#activeTransform = step;
-    this.#activeMultiplierBatch = batch;
-    if (batch.wlIncrements.length > 0) {
-      const positions = batch.wlIncrements.map(
-        (increment) => increment.position,
-      );
-      for (const increment of batch.wlIncrements) {
-        this.#runtime.setVisibleSymbolPresentationValue(
-          increment.position.x,
-          increment.position.y,
-          increment.outputValue,
-        );
-        this.#runtime.setVisibleSymbolImageStringText(
-          increment.position.x,
-          increment.position.y,
-          "multiplier",
-          formatMultiplier(increment.outputValue),
-        );
-      }
-      this.requestTransformState(positions, "appear", "once-complete");
-      this.#activity = "transform-wl-start";
-      return;
-    }
-    this.startWmOrCm(step, batch);
-  }
-
-  updateSettledTransform(_deltaSeconds: number): {
-    readonly completed: boolean;
-  } {
-    return this.updateSettledTransformPhase(_deltaSeconds, null);
-  }
-
-  private updateSettledTransformPhase(
-    _deltaSeconds: number,
-    stopAfter: Game002TransformPhase | null,
-  ): {
-    readonly completed: boolean;
-  } {
-    const step = this.#activeTransform;
-    if (!step) throw new Error("game002 settled transform is not active.");
-    const batch = this.#activeMultiplierBatch;
-    if (!batch)
-      throw new Error("game002 multiplier presentation batch is missing.");
-    const wmPositions = batch.wmReplacements.map(
-      (replacement) => replacement.position,
-    );
-    if (this.#activity === "transform-wl-start") {
-      const positions = batch.wlIncrements.map(
-        (increment) => increment.position,
-      );
-      if (!this.didTransformAnimationComplete()) return { completed: false };
-      if (stopAfter === "wl-increment") {
-        if (isLastTransformPhase(batch, "wl-increment")) {
-          this.completeSettledTransform(step);
-          return { completed: true };
-        }
-        this.#activity = "transform-wait-wm";
-        return { completed: true };
-      }
-      return this.startWmOrCm(step, batch);
-    }
-    if (this.#activity === "transform-mult-start") {
-      if (!this.didTransformAnimationComplete()) return { completed: false };
-      for (const change of step.changes) {
-        if (change.input.code !== this.#wlSymbolCode) continue;
-        this.#runtime.setVisibleSymbolPresentationValue(
-          change.position.x,
-          change.position.y,
-          change.output.value,
-        );
-        this.#runtime.setVisibleSymbolImageStringText(
-          change.position.x,
-          change.position.y,
-          "multiplier",
-          formatMultiplier(change.output.value),
-        );
-      }
-      this.requestTransformState(wmPositions, "multIdle", "next-loop-complete");
-      if (stopAfter === "wild-multiplier") {
-        this.#activity = "transform-wait-wm-replace";
-        return { completed: true };
-      }
-      this.#activity = "transform-mult-idle";
-      return { completed: false };
-    }
-    if (this.#activity === "transform-mult-idle") {
-      if (!this.didTransformAnimationComplete()) return { completed: false };
-      this.requestTransformState(wmPositions, "multEnd", "once-complete");
-      this.#activity = "transform-mult-end";
-      return { completed: false };
-    }
-    if (this.#activity === "transform-mult-end") {
-      if (!this.didTransformAnimationComplete()) return { completed: false };
-      this.requestTransformState(wmPositions, "change", "once-complete");
-      this.#activity = "transform-wm-change";
-      return { completed: false };
-    }
-    if (this.#activity === "transform-wm-change") {
-      if (!this.didTransformAnimationComplete()) return { completed: false };
-      for (const replacement of this.#preparedWmReplacements)
-        replacement.commit();
-      this.#preparedWmReplacements = [];
-      for (const update of batch.cnUpdates)
-        if (
-          !this.#runtime.hasVisibleSymbolStateCapability(
-            update.position.x,
-            update.position.y,
-            "featureChange",
-          )
-        )
-          throw new Error(
-            `game002 CN (${update.position.x},${update.position.y}) has no "featureChange" animation capability.`,
-          );
-      if (stopAfter === "wm-to-cn") {
-        if (isLastTransformPhase(batch, "wm-to-cn")) {
-          this.completeSettledTransform(step);
-          return { completed: true };
-        }
-        this.#activity = "transform-wait-cm";
-        return { completed: true };
-      }
-      return this.startCmOrComplete(step, batch);
-    }
-    if (this.#activity === "transform-cm-feature") {
-      const cm = requireCmPresentation(batch);
-      if (!this.didTransformAnimationComplete()) return { completed: false };
-      for (const update of batch.cnUpdates)
-        this.#runtime.setVisibleSymbolPresentationValue(
-          update.position.x,
-          update.position.y,
-          update.outputValue,
-        );
-      if (batch.cnUpdates.length === 0) {
-        this.requestTransformState([cm.position], "change", "once-complete");
-        this.#activity = "transform-cm-change";
-      } else {
-        this.requestTransformState(
-          batch.cnUpdates.map((update) => update.position),
-          "featureChange",
-          "once-complete",
-        );
-        this.#activity = "transform-cn-feature-change";
-      }
-      return { completed: false };
-    }
-    if (this.#activity === "transform-cn-feature-change") {
-      if (!this.didTransformAnimationComplete()) return { completed: false };
-      if (stopAfter === "coin-multiplier") {
-        this.#activity = "transform-wait-cm-replace";
-        return { completed: true };
-      }
-      const cm = requireCmPresentation(batch);
-      this.requestTransformState([cm.position], "change", "once-complete");
-      this.#activity = "transform-cm-change";
-      return { completed: false };
-    }
-    if (this.#activity === "transform-cm-change") {
-      const cm = requireCmPresentation(batch);
-      if (!this.didTransformAnimationComplete()) return { completed: false };
-      for (const replacement of this.#preparedCmReplacements)
-        replacement.commit();
-      this.#preparedCmReplacements = [];
-      if (stopAfter === "cm-to-cn") {
-        if (isLastTransformPhase(batch, "cm-to-cn")) {
-          this.completeSettledTransform(step);
-          return { completed: true };
-        }
-        this.#activity = "transform-wait-co";
-        return { completed: true };
-      }
-      return this.startCoOrComplete(step, batch);
-    }
-    if (this.#activity === "transform-co-feature") {
-      const collection = requireCoCollection(batch);
-      const positions = [
-        ...collection.segments.map((segment) => segment.co),
-        ...collection.sourcePositions,
-      ];
-      if (!this.didTransformAnimationComplete()) return { completed: false };
-      this.requestTransformState(
-        collection.sourcePositions,
-        "feature2",
-        "once-complete",
-      );
-      this.#preparedCoTransfers?.start();
-      this.#coTransferProgress = 0;
-      this.#activity = "transform-co-transfer";
-      return { completed: false };
-    }
-    if (this.#activity === "transform-co-transfer") {
-      const collection = requireCoCollection(batch);
-      const completed = this.didTransformAnimationComplete();
-      if (!completed) {
-        this.#coTransferProgress = Math.min(
-          0.9,
-          this.#coTransferProgress + _deltaSeconds * 2,
-        );
-        this.#preparedCoTransfers?.setProgress(this.#coTransferProgress);
-        return { completed: false };
-      }
-      this.#preparedCoTransfers?.setProgress(1);
-      this.completeSettledTransform(step);
-      return { completed: true };
-    }
-    throw new Error("game002 settled transform activity is invalid.");
-  }
-
-  startAtomicTransformOperation(
-    step: Game002TransformSession,
-    batch: Game002TransformOperationPayload,
-    phase: Game002TransformPhase,
-  ): void {
-    if (!this.#activeTransform) {
-      const expected = firstTransformPhase(batch);
-      if (phase !== expected)
-        throw new Error(
-          `game002 transform must start with ${expected}; received ${phase}.`,
-        );
-      this.startSettledTransformOperation(step, batch);
-      return;
-    }
-    if (
-      this.#activeTransform.stepIndex !== step.stepIndex ||
-      this.#activeMultiplierBatch !== batch
-    )
-      throw new Error(
-        "game002 atomic transform session does not match its payload.",
-      );
-    if (this.#activity === "transform-wait-wm" && phase === "wild-multiplier") {
-      this.startWmOrCm(step, batch);
-      return;
-    }
-    if (
-      this.#activity === "transform-wait-wm-replace" &&
-      phase === "wm-to-cn"
-    ) {
-      this.#activity = "transform-mult-idle";
-      return;
-    }
-    if (
-      this.#activity === "transform-wait-cm" &&
-      (phase === "coin-multiplier" || phase === "cm-to-cn")
-    ) {
-      this.startCmOrComplete(step, batch);
-      return;
-    }
-    if (
-      this.#activity === "transform-wait-cm-replace" &&
-      phase === "cm-to-cn"
-    ) {
-      const cm = requireCmPresentation(batch);
-      this.requestTransformState([cm.position], "change", "once-complete");
-      this.#activity = "transform-cm-change";
-      return;
-    }
-    if (this.#activity === "transform-wait-co" && phase === "co-collect") {
-      this.startCoOrComplete(step, batch);
-      return;
-    }
-    throw new Error(
-      `game002 cannot start atomic phase ${phase} from activity ${this.#activity}.`,
-    );
-  }
-
-  startAtomicTransformPayload(payload: Game002TransformPayload): void {
-    const step = this.#activeTransform ?? createSyntheticTransformStep(payload);
-    const batch =
-      this.#activeMultiplierBatch ??
-      (Object.freeze({
-        ...payload.transform,
-        stepIndex: step.stepIndex,
-      }) as Game002TransformOperationPayload);
-    this.startAtomicTransformOperation(step, batch, payload.phase);
-  }
-
-  updateAtomicTransformOperation(
-    deltaSeconds: number,
-    phase: Game002TransformPhase,
-  ): { readonly completed: boolean } {
-    return this.updateSettledTransformPhase(deltaSeconds, phase);
+        },
+      }),
+    ];
   }
 
   update(deltaSeconds: number): void {
@@ -1751,6 +1423,7 @@ export class Game002RoundTarget {
     if (this.#activity === "idle" || this.#activity === "refill-complete")
       return;
     const result = this.#runtime.update(deltaSeconds);
+    this.#transformRunner.update(deltaSeconds);
     this.#runtimeCompleted ||= result.completed;
     if (this.#activity === "refill-sweep" && result.completed) {
       const stage = this.activeFallView();
@@ -1790,7 +1463,10 @@ export class Game002RoundTarget {
     const cascade = this.#cascadePlayer.getSnapshot();
     return Object.freeze({
       activity: this.#activity,
-      activeStepIndex: this.#activeTransform?.stepIndex ?? null,
+      activeStepIndex:
+        this.#atomicTransformOperation?.source.kind === "server-component"
+          ? this.#atomicTransformOperation.source.stepIndex
+          : null,
       runtimeCompleted: this.#runtimeCompleted,
       winCompleted: this.#winCompleted,
       completionComplete: this.#completionComplete,
@@ -1846,89 +1522,6 @@ export class Game002RoundTarget {
     this.#refillSnapshot = null;
   }
 
-  private startWmOrCm(
-    step: Game002TransformSession,
-    batch: Game002TransformOperationPayload,
-  ): { readonly completed: boolean } {
-    if (batch.wmReplacements.length === 0)
-      return this.startCmOrComplete(step, batch);
-    this.requestTransformState(
-      batch.wmReplacements.map((replacement) => replacement.position),
-      "multStart",
-      "once-complete",
-    );
-    this.#activity = "transform-mult-start";
-    return { completed: false };
-  }
-
-  private startCmOrComplete(
-    step: Game002TransformSession,
-    batch: Game002TransformOperationPayload,
-  ): { readonly completed: boolean } {
-    if (!batch.cm) {
-      return this.startCoOrComplete(step, batch);
-    }
-    this.requestTransformState(
-      [batch.cm.position],
-      "feature1",
-      "once-complete",
-    );
-    this.#activity = "transform-cm-feature";
-    return { completed: false };
-  }
-
-  private startCoOrComplete(
-    step: Game002TransformSession,
-    batch: Game002TransformOperationPayload,
-  ): { readonly completed: boolean } {
-    const collection = batch.coCollection;
-    if (!collection) {
-      this.completeSettledTransform(step);
-      return { completed: true };
-    }
-    this.requestTransformStates([
-      Object.freeze({
-        positions: collection.segments.map((segment) => segment.co),
-        state: "feature",
-        completion: "once-complete",
-      }),
-      Object.freeze({
-        positions: collection.sourcePositions,
-        state: "feature1",
-        completion: "once-complete",
-      }),
-    ]);
-    this.#activity = "transform-co-feature";
-    return { completed: false };
-  }
-
-  private completeSettledTransform(step: Game002TransformSession): void {
-    if (
-      this.#preparedWmReplacements.length > 0 ||
-      this.#preparedCmReplacements.length > 0
-    )
-      throw new Error(
-        `game002 step[${step.stepIndex}] multiplier transform completed with uncommitted replacements.`,
-      );
-    this.#preparedCoTransfers?.commit();
-    this.#preparedCoTransfers = null;
-    for (const replacement of this.#preparedCoReplacements)
-      replacement.commit();
-    this.#preparedCoReplacements = [];
-    this.#coTransferProgress = 0;
-    assertGame002ReelVisualMatchesTarget(
-      this.#runtime.getVisualSnapshot(),
-      step.output.scene,
-      `completed game002 step[${step.stepIndex}] multiplier transform`,
-    );
-    this.#activeTransform = null;
-    this.#activeMultiplierBatch = null;
-    this.#transformPlaybackAbort = null;
-    this.#transformPlaybackComplete = true;
-    this.#transformPlaybackFailure = null;
-    this.#activity = "idle";
-  }
-
   private applyMultiplierTexts(snapshot: SlotRoundOccurrenceSnapshot): void {
     for (const occurrence of snapshot.occurrences) {
       if (
@@ -1951,77 +1544,6 @@ export class Game002RoundTarget {
     }
   }
 
-  private requestTransformState(
-    positions: readonly { readonly x: number; readonly y: number }[],
-    state: string,
-    completion: "once-complete" | "next-loop-complete",
-  ): void {
-    this.requestTransformStates([
-      Object.freeze({ positions, state, completion }),
-    ]);
-  }
-
-  private requestTransformStates(
-    requests: readonly Readonly<{
-      positions: readonly { readonly x: number; readonly y: number }[];
-      state: string;
-      completion: "once-complete" | "next-loop-complete";
-    }>[],
-  ): void {
-    if (!this.#transformPlaybackComplete) {
-      throw new Error(
-        "game002 cannot start symbol state playback while another playback is pending.",
-      );
-    }
-    this.#transformPlaybackAbort?.abort();
-    const controller = new AbortController();
-    const generation = ++this.#transformPlaybackGeneration;
-    this.#transformPlaybackAbort = controller;
-    this.#transformPlaybackComplete = false;
-    this.#transformPlaybackFailure = null;
-    try {
-      const playback = this.#runtime.playVisibleSymbolStateBatch(
-        requests.map((request) => ({
-          positions: request.positions,
-          state: request.state,
-          options: {
-            transitionMode: "immediate",
-            completion: request.completion,
-          },
-        })),
-        { signal: controller.signal },
-      );
-      void this.trackTransformPlayback(generation, playback);
-    } catch (error) {
-      controller.abort(error);
-      this.#transformPlaybackComplete = true;
-      this.#transformPlaybackAbort = null;
-      throw error;
-    }
-  }
-
-  private async trackTransformPlayback(
-    generation: number,
-    playback: Promise<void>,
-  ): Promise<void> {
-    try {
-      await playback;
-      if (generation !== this.#transformPlaybackGeneration) return;
-      this.#transformPlaybackComplete = true;
-      this.#transformPlaybackAbort = null;
-    } catch (error) {
-      if (generation !== this.#transformPlaybackGeneration) return;
-      this.#transformPlaybackComplete = true;
-      this.#transformPlaybackFailure = asError(error);
-      this.#transformPlaybackAbort = null;
-    }
-  }
-
-  private didTransformAnimationComplete(): boolean {
-    if (this.#transformPlaybackFailure) throw this.#transformPlaybackFailure;
-    return this.#transformPlaybackComplete;
-  }
-
   private activeFallView() {
     const stage = this.#activeFall;
     if (!stage) throw new Error("game002 fall operation is not active.");
@@ -2040,43 +1562,6 @@ function requireGame002SymbolCode(
   if (code === undefined)
     throw new Error(`game002 game config is missing ${symbol} symbol code.`);
   return code;
-}
-
-function requireCmPresentation(batch: Game002TransformOperationPayload) {
-  if (!batch.cm)
-    throw new Error(
-      `game002 step[${batch.stepIndex}] CM presentation is missing.`,
-    );
-  return batch.cm;
-}
-
-function firstTransformPhase(
-  batch: Game002TransformOperationPayload,
-): Game002TransformPhase {
-  if (batch.wlIncrements.length > 0) return "wl-increment";
-  if (batch.wmReplacements.length > 0) return "wild-multiplier";
-  if (batch.cnUpdates.length > 0) return "coin-multiplier";
-  if (batch.cm) return "cm-to-cn";
-  if (batch.coCollection) return "co-collect";
-  throw new Error("game002 transform payload has no atomic phase.");
-}
-
-function isLastTransformPhase(
-  batch: Game002TransformOperationPayload,
-  phase: Game002TransformPhase,
-): boolean {
-  if (batch.coCollection) return phase === "co-collect";
-  if (batch.cm) return phase === "cm-to-cn";
-  if (batch.wmReplacements.length > 0) return phase === "wm-to-cn";
-  return phase === "wl-increment";
-}
-
-function requireCoCollection(batch: Game002TransformOperationPayload) {
-  if (!batch.coCollection)
-    throw new Error(
-      `game002 step[${batch.stepIndex}] CO collection presentation is missing.`,
-    );
-  return batch.coCollection;
 }
 
 function formatMultiplier(value: number | null): string {

@@ -94,6 +94,8 @@
 - WL/WM/CM/CO 的权威业务事实必须随对应 operation payload 保存；Target 不按 stepIndex
   查询 presentation batch。纯动画 `Start/Idle/End` 可保留 handler 私有 phase，但每个
   scene/value/occurrence commit 必须服从 operation input/output 与 rollback 边界。
+- WL/WM/CM/CO operation payload 必须是按 phase 区分的最小 evidence union；multiplier compiler 不得维护 stepIndex payload cache。presentation 使用共享 await/commit/progress transaction runner，app 不恢复 aggregate transform session。
+- game002 stage 只挂完整 Scene Layout package root；package runtime 拥有唯一 main reel 与 manifest order/placement，defaultScene commit 前保持 deferred，cascade 只经 typed overlay attach 接入。
 - game002 compiler 必须直接生成按需出现的 `game002:wl-increment`、
   `game002:wild-multiplier`、`game002:wm-to-cn`、`game002:coin-multiplier`、
   `game002:cm-to-cn`、`game002:co-collect` exact operations；不得先生成 profile

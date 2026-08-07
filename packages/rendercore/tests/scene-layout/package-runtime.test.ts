@@ -625,9 +625,23 @@ describe("scene layout package runtime", () => {
         files: files(),
       });
       const runtime = createSceneLayoutPackageRuntime({ resource });
-      await expect(runtime.init()).rejects.toThrow(
-        /requires initial reels.main/,
+      await runtime.init();
+      expect(runtime.hasCommittedMainReelScene()).toBe(false);
+      expect(() => runtime.getMainReelSceneSnapshot()).toThrow(
+        /no committed initial scene/,
       );
+      runtime.resetReelScene("main", {
+        scene: [
+          [0, 1],
+          [1, 0],
+        ],
+        localPhaseYs: [0, 0],
+      });
+      expect(runtime.hasCommittedMainReelScene()).toBe(true);
+      expect(runtime.getMainReelSceneSnapshot()).toEqual([
+        [0, 1],
+        [1, 0],
+      ]);
 
       await expect(
         createSceneLayoutPackageResource({

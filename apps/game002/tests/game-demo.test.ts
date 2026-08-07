@@ -67,7 +67,7 @@ import {
   DEFAULT_GAME002_REEL_CONFIG,
   assertGame002ReelVisualMatchesTarget,
   createGame002ReelRuntime,
-} from "../src/game-demo.js";
+} from "../src/game002-reel-controller.js";
 import { getTestGame002PackageConfig } from "./value-resource-fixture.js";
 
 beforeEach(() => {
@@ -132,11 +132,11 @@ describe("game002 Crave reel runtime", () => {
   it("keeps reels hidden until a live scene and renders BN as a real symbol", () => {
     const runtime = createRuntime();
 
-    expect(runtime.mainReelsLayer.visible).toBe(false);
+    expect(runtime.mainReelPresentation.visible).toBe(false);
     expect(runtime.config.emptySymbols).toEqual([]);
     expect(runtime.config.texturedSymbols).toContain("BN");
     runtime.applyScene(GAME002_SAMPLE_DEFAULT_SCENE, "default");
-    expect(runtime.mainReelsLayer.visible).toBe(true);
+    expect(runtime.mainReelPresentation.visible).toBe(true);
     expect(runtime.getFinalYs()).toEqual(GAME002_SAMPLE_DEFAULT_STOP_Y);
     assertGame002ReelVisualMatchesTarget(
       runtime.getVisualSnapshot(),
@@ -315,7 +315,7 @@ describe("game002 Crave reel runtime", () => {
     expect(runtime.getVisualSnapshot().requestedStates.flat()).toContain(
       "spinBlur",
     );
-    const reelSet = runtime.mainReelsLayer as RenderGridCellReelSet;
+    const reelSet = runtime.mainReelPresentation as RenderGridCellReelSet;
     expect(
       reelSet
         .getSnapshot()

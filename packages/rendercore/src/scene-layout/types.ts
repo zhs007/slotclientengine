@@ -499,6 +499,10 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
       Partial<Record<"main", SceneLayoutInitialReelScene>>
     >;
   }): Promise<void>;
+  /** True only after the first exact server-authorized main scene is committed. */
+  hasCommittedMainReelScene(): boolean;
+  /** Confirms that an ownership-transferred host reel has atomically committed its initial scene. */
+  acknowledgeMainReelSceneCommit(): void;
   resetReelScene(reelId: "main", input: SceneLayoutInitialReelScene): void;
   /**
    * Starts the manifest-selected reel presentation against a server target
@@ -511,6 +515,32 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
     state: string,
     transitionMode?: import("../symbol/index.js").SymbolStateTransitionMode,
   ): void;
+  playMainReelSymbolStateBatch(
+    requests: readonly import("../reel/index.js").VisibleSymbolStatePlaybackRequest[],
+    options?: import("../reel/index.js").VisibleSymbolStatePlaybackBatchOptions,
+  ): Promise<void>;
+  setMainReelSymbolPresentationValue(
+    x: number,
+    y: number,
+    value: number | null,
+  ): void;
+  setMainReelSymbolImageStringText(
+    x: number,
+    y: number,
+    name: string,
+    text: string,
+  ): void;
+  getMainReelSymbolImageStringText(x: number, y: number, name: string): string;
+  prepareMainReelVisibleOccurrenceReplacement(options: {
+    readonly x: number;
+    readonly y: number;
+    readonly expectedCode: number;
+    readonly outputCode: number;
+    readonly outputPresentationValue: number | null;
+  }): import("../reel/index.js").PreparedVisibleOccurrenceReplacement;
+  prepareMainReelVisibleOccurrenceTransferBatch(options: {
+    readonly transfers: readonly import("../reel/index.js").GridCellVisibleOccurrenceTransfer[];
+  }): import("../reel/index.js").PreparedGridCellVisibleOccurrenceTransferBatch;
   drainMainReelLandingPositions(): readonly {
     readonly x: number;
     readonly y: number;
@@ -542,6 +572,15 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   startMainReelCascadeDrop(
     plan: import("../reel/index.js").GridCellCascadeDropPlan,
   ): void;
+  startMainReelGridCellSpin(
+    plan: import("../reel/index.js").GridCellReelSpinPlan,
+    options?: import("../reel/index.js").RenderGridCellReelSetSpinOptions,
+  ): void;
+  startMainReelEffectSweep(
+    plan: import("../reel/index.js").GridCellEffectSweepPlan,
+  ): void;
+  /** Attaches a borrowed reel-space overlay above the main reel and below transitions/popups. */
+  attachMainReelOverlay(overlay: Container): () => void;
   getReelPresentation(reelId: "main"): Container;
   getAwardCelebrationPopup(id: string): AwardCelebrationPlayer;
   getSpinePopup(id: string): import("../popup/index.js").SpinePopupPlayer;

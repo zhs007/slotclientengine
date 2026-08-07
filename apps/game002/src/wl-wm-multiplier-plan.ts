@@ -24,13 +24,15 @@ export interface Game002WlWmMultiplierCompiler {
   ): readonly SlotRoundSettledValueDraft[];
   compileSettledTransform(
     context: SlotRoundSettledCompileContext,
-  ):
+  ): Game002SettledTransformCompilation;
+  assertComplete(): void;
+}
+
+export interface Game002SettledTransformCompilation {
+  readonly draft:
     | readonly SlotRoundSettledTransformChangeDraft[]
     | SlotRoundSettledTransformDraft;
-  getOperationPayload(
-    stepIndex: number,
-  ): Game002TransformOperationPayload | undefined;
-  assertComplete(): void;
+  readonly payload: Game002TransformOperationPayload | null;
 }
 
 export interface Game002WlIncrementPresentation {
@@ -54,8 +56,6 @@ export interface Game002TransformOperationPayload {
   readonly cnUpdates: readonly Game002CnValueUpdatePresentation[];
   readonly cm: Game002CmPresentation | null;
   readonly coCollection?: Game002CoCollectionPlan | null;
-  /** @deprecated Task 135 settles CO before presentation. */
-  readonly coReplacements: readonly Game002CoReplacementPresentation[];
 }
 
 export interface Game002WmReplacementPresentation {
@@ -74,12 +74,6 @@ export interface Game002CmPresentation {
   readonly position: SlotRoundPosition;
   readonly multiplier: number;
   readonly outputValue: number;
-}
-
-export interface Game002CoReplacementPresentation {
-  readonly position: SlotRoundPosition;
-  readonly inputCode: number;
-  readonly outputCode: number;
 }
 
 export function createGame002WlWmMultiplierCompiler(options: {
@@ -119,7 +113,6 @@ export function createGame002WlWmMultiplierCompiler(options: {
     );
   }
   let pendingWlIncrements: Game002PendingWlIncrement[] = [];
-  const operationPayloads = new Map<number, Game002TransformOperationPayload>();
   const logDiagnostic = options.logDiagnostic ?? (() => undefined);
 
   return Object.freeze({
@@ -656,32 +649,34 @@ export function createGame002WlWmMultiplierCompiler(options: {
         cm.length === 0 &&
         coCollection === null
       )
-        return Object.freeze([]);
-      operationPayloads.set(
-        context.stepIndex,
-        Object.freeze({
-          stepIndex: context.stepIndex,
-          wlIncrements: Object.freeze(incomingWlIncrements),
-          wmReplacements: Object.freeze(
-            wmReplacementDrafts.map((replacement) =>
-              Object.freeze({ ...replacement }),
-            ),
+        return Object.freeze({
+          draft: Object.freeze([]),
+          payload: null,
+        });
+      const payload = Object.freeze({
+        stepIndex: context.stepIndex,
+        wlIncrements: Object.freeze(incomingWlIncrements),
+        wmReplacements: Object.freeze(
+          wmReplacementDrafts.map((replacement) =>
+            Object.freeze({ ...replacement }),
           ),
-          cnUpdates: Object.freeze(cnUpdates),
-          cm: cmPresentation,
-          ...(coCollection ? { coCollection } : {}),
-          coReplacements: Object.freeze([]),
-        }),
-      );
-      if (!coCollection) return Object.freeze(drafts);
-      return Object.freeze({
-        changes: Object.freeze(drafts),
-        relocations: coCollection.transform.relocations,
+        ),
+        cnUpdates: Object.freeze(cnUpdates),
+        cm: cmPresentation,
+        ...(coCollection ? { coCollection } : {}),
       });
-    },
-
-    getOperationPayload(stepIndex: number) {
-      return operationPayloads.get(stepIndex);
+      if (!coCollection)
+        return Object.freeze({
+          draft: Object.freeze(drafts),
+          payload,
+        });
+      return Object.freeze({
+        draft: Object.freeze({
+          changes: Object.freeze(drafts),
+          relocations: coCollection.transform.relocations,
+        }),
+        payload,
+      });
     },
 
     assertComplete() {

@@ -16,8 +16,8 @@ import {
   Game002RoundTarget,
   type Game002AdapterOptions,
 } from "../src/game-adapter.js";
-import type { Game002BackgroundPlayer } from "../src/scene-layout-presentation.js";
-import type { Game002ReelRuntime } from "../src/game-demo.js";
+import type { Game002BackgroundPlayer } from "../src/game002-scene-runtime.js";
+import type { Game002ReelRuntime } from "../src/game002-reel-controller.js";
 import { getTestGame002PackageConfig } from "./value-resource-fixture.js";
 import {
   GAME002_CASCADE_DROPDOWN_SCENE,
@@ -117,17 +117,8 @@ describe("game002 task 95 adapter", () => {
 
     await adapter.mount(createMountContext());
 
-    const world = fakeApp.stage.children[0] as Container;
-    expect(world.children).toEqual([
-      expect.any(Container),
-      runtime.mainReelsLayer,
-      cascade.container,
-      winAmount.container,
-    ]);
-    expect(cascade.container.position).toMatchObject({
-      x: runtime.layerLayout.x,
-      y: runtime.layerLayout.y,
-    });
+    const presentationRoot = fakeApp.stage.children[0] as Container;
+    expect(presentationRoot.children).toEqual([cascade.container]);
     expect(cascadeOptions?.winSummaryCollect).toMatchObject({
       countDurationSeconds: 0.35,
       sequentialCollectStartIntervalSeconds: 0.3,
@@ -206,7 +197,6 @@ describe("game002 task 95 adapter", () => {
         win2Positions: Object.freeze([position(0), position(2)]),
         transform: Object.freeze({ changes: coChanges, relocations }),
       }),
-      coReplacements: Object.freeze([]),
     });
     const occurrences = Object.freeze([
       occurrence("co", 10, "CO", null, 0),
@@ -234,8 +224,28 @@ describe("game002 task 95 adapter", () => {
       ]),
       relocations,
     });
+    const operation = Object.freeze({
+      kind: "game002:co-collect",
+      version: 2,
+      effect: "state-mutation",
+      source: Object.freeze({
+        kind: "server-component",
+        stepIndex: 0,
+        bindings: Object.freeze({}),
+      }),
+      input: step.input,
+      output: step.output,
+      mutations: Object.freeze([]),
+      payload: Object.freeze({
+        phase: "co-collect",
+        collection: batch.coCollection!,
+      }),
+    });
     expect(() =>
-      target.startSettledTransformOperation(step as any, batch),
+      target.preflightAtomicTransform(
+        operation as any,
+        operation.payload as any,
+      ),
     ).not.toThrow();
   });
 
@@ -653,6 +663,11 @@ class FakeBackgroundPlayer {
       container: this.container,
       init: async () => undefined,
       update: () => undefined,
+      acknowledgeReelSceneCommit: () => undefined,
+      attachReelOverlay: (overlay) => {
+        this.container.addChild(overlay);
+        return () => overlay.parent?.removeChild(overlay);
+      },
       bindPopupInput: ({ canvas, keyboardTarget, onError }) => {
         this.#onPopupInputError = onError;
         const handle = (event: Event) => this.popupInputs.push(event);
@@ -671,7 +686,7 @@ class FakeBackgroundPlayer {
 }
 
 class FakeRuntime {
-  readonly mainReelsLayer = new Container();
+  readonly mainReelPresentation = new Container();
   readonly layerLayout = Object.freeze({
     x: 21,
     y: 34,
@@ -727,7 +742,7 @@ class FakeRuntime {
       "BN",
     ];
     return {
-      mainReelsLayer: this.mainReelsLayer,
+      mainReelPresentation: this.mainReelPresentation,
       layerLayout: this.layerLayout,
       prepare: () => undefined,
       resetPresentationState: () => undefined,
