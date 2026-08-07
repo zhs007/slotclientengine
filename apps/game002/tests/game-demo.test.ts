@@ -43,9 +43,13 @@ vi.mock(
 );
 
 import rawGameConfig from "../../../assets/gamecfg002/gameconfig.json";
-import { createSlotGameLogicResult } from "@slotclientengine/gameframeworks";
+import {
+  createGameConfig,
+  createSlotGameLogicResult,
+} from "@slotclientengine/gameframeworks";
 import {
   createDefaultSymbolAnimationResolver,
+  createReelSymbolRegistry,
   ManualSymbolAni,
   RenderGridCellReelSet,
   type SymbolAssetMap,
@@ -64,7 +68,7 @@ import {
   assertGame002ReelVisualMatchesTarget,
   createGame002ReelRuntime,
 } from "../src/game-demo.js";
-import { getTestGame002SkinConfig } from "./value-resource-fixture.js";
+import { getTestGame002PackageConfig } from "./value-resource-fixture.js";
 
 beforeEach(() => {
   vi.spyOn(Assets, "load").mockResolvedValue(Texture.WHITE as never);
@@ -144,7 +148,7 @@ describe("game002 Crave reel runtime", () => {
   it("assigns manifest default values to initial and temporary CN symbols", () => {
     const runtime = createRuntime();
     const candidates = new Set(
-      getTestGame002SkinConfig().symbolValuePresentationResources.CN
+      getTestGame002PackageConfig().symbolValuePresentationResources.CN
         .defaultValues,
     );
     const cnCode = runtime.gameConfig.getSymbolCode("CN");
@@ -697,48 +701,63 @@ function createRuntime(
     readonly dimming?: (typeof DEFAULT_GAME002_REEL_CONFIG)["dimming"];
   } = {},
 ) {
-  const skin = getTestGame002SkinConfig();
+  const skin = getTestGame002PackageConfig();
   const normalResolver = createDefaultSymbolAnimationResolver();
-  return createGame002ReelRuntime({
-    rawGameConfig,
-    symbolAssets: createSymbolAssets(skin.displaySymbols),
-    ...(initialScene === undefined ? {} : { initialScene }),
-    config: {
-      ...DEFAULT_GAME002_REEL_CONFIG,
-      random: options.presentationRandom ?? DEFAULT_GAME002_REEL_CONFIG.random,
-      spinPhaseRandom:
-        options.spinPhaseRandom ?? DEFAULT_GAME002_REEL_CONFIG.spinPhaseRandom,
-      dimming: options.dimming ?? DEFAULT_GAME002_REEL_CONFIG.dimming,
-      texturedSymbols: skin.displaySymbols,
-      emptySymbols: [],
-      symbolScales: skin.symbolScales,
-      symbolRenderPriorities: skin.symbolRenderPriorities,
-      symbolAnimationCapabilities: skin.symbolAnimationCapabilities,
-      symbolStatePreset: skin.symbolStatePreset,
-      landingAppearSymbols: skin.landingAppearSymbols,
-      symbolValuePresentationResources: skin.symbolValuePresentationResources,
-      reelEffectResources: skin.reelEffectResources,
-      reelEffectPoolCapacities: skin.reelEffectPoolCapacities,
-      animationResolver: (context) =>
-        context.resolvedState === "appear"
+  const gameConfig = createGameConfig(rawGameConfig);
+  const config = {
+    ...DEFAULT_GAME002_REEL_CONFIG,
+    random: options.presentationRandom ?? DEFAULT_GAME002_REEL_CONFIG.random,
+    spinPhaseRandom:
+      options.spinPhaseRandom ?? DEFAULT_GAME002_REEL_CONFIG.spinPhaseRandom,
+    dimming: options.dimming ?? DEFAULT_GAME002_REEL_CONFIG.dimming,
+    texturedSymbols: skin.displaySymbols,
+    emptySymbols: [],
+    symbolScales: skin.symbolScales,
+    symbolRenderPriorities: skin.symbolRenderPriorities,
+    symbolAnimationCapabilities: skin.symbolAnimationCapabilities,
+    symbolStatePreset: skin.symbolStatePreset,
+    landingAppearSymbols: skin.landingAppearSymbols,
+    symbolValuePresentationResources: skin.symbolValuePresentationResources,
+    reelEffectResources: skin.reelEffectResources,
+    reelEffectPoolCapacities: skin.reelEffectPoolCapacities,
+    animationResolver: (context: Parameters<typeof normalResolver>[0]) =>
+      context.resolvedState === "appear"
+        ? new ManualSymbolAni({
+            stateId: "appear",
+            playback: "once",
+            durationSeconds: 0.1,
+          })
+        : context.resolvedState === "dropdown"
           ? new ManualSymbolAni({
-              stateId: "appear",
-              playback: "once",
-              durationSeconds: 0.1,
+              stateId: "dropdown",
+              playback: "loop",
             })
-          : context.resolvedState === "dropdown"
+          : context.resolvedState === "win"
             ? new ManualSymbolAni({
-                stateId: "dropdown",
-                playback: "loop",
+                stateId: "win",
+                playback: "once",
+                durationSeconds: 0.1,
               })
-            : context.resolvedState === "win"
-              ? new ManualSymbolAni({
-                  stateId: "win",
-                  playback: "once",
-                  durationSeconds: 0.1,
-                })
-              : normalResolver(context),
-    },
+            : normalResolver(context),
+  };
+  const symbolRegistry = createReelSymbolRegistry({
+    gameConfig,
+    assets: createSymbolAssets(skin.displaySymbols),
+    emptySymbols: config.emptySymbols,
+    symbolScales: config.symbolScales,
+    symbolRenderPriorities: config.symbolRenderPriorities,
+    symbolAnimationCapabilities: config.symbolAnimationCapabilities,
+    statePreset: config.symbolStatePreset,
+    landingAppearSymbols: config.landingAppearSymbols,
+    animationResolver: config.animationResolver,
+    texturePolicy: { requiredStateTextures: ["spinBlur", "disabled"] },
+    valuePresentationResources: config.symbolValuePresentationResources,
+  });
+  return createGame002ReelRuntime({
+    gameConfig,
+    symbolRegistry,
+    ...(initialScene === undefined ? {} : { initialScene }),
+    config,
   });
 }
 

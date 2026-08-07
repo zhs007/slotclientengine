@@ -8,7 +8,6 @@ import {
   type Game002PreparedLoadingSessionLike,
   type Game002RuntimeModule,
 } from "./loading-resources.js";
-import { parseGame002SkinQuery } from "./skin-id.js";
 import "./styles.css";
 
 const root = document.getElementById("app");
@@ -33,9 +32,7 @@ const loading = createGameLoading<
   root: loadingHost,
   ui: createLeoGameLoadingUi(),
   maxConcurrentResources: 4,
-  resources: createGame002LoadingResources(
-    parseGame002SkinQuery(window.location.search),
-  ),
+  resources: createGame002LoadingResources(),
   readiness: {
     start: async ({ signal }) => {
       const bootstrap = await import("./game002-bootstrap.js");

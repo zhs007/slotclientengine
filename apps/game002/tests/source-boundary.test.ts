@@ -157,7 +157,7 @@ describe("game002 source boundary", () => {
 
   it("packages only the Crave gamelayout assets and no legacy skin resources", () => {
     const skinConfigSource = readFileSync(
-      join(APP_ROOT, "src/skin-config.ts"),
+      join(APP_ROOT, "src/package-config.ts"),
       "utf8",
     );
     const adapterSource = readFileSync(
@@ -186,8 +186,12 @@ describe("game002 source boundary", () => {
     expect(adapterSource).not.toContain('"legacy"');
     expect(adapterSource).not.toContain("backgroundUrl");
     expect(adapterSource).not.toContain("createPositionedSprite");
-    expect(adapterSource).not.toContain("skin.presentation.symbolModules");
-    expect(adapterSource).toContain("skin.presentation.symbolRegistry");
+    expect(adapterSource).not.toContain(
+      "packageConfig.presentation.symbolModules",
+    );
+    expect(adapterSource).toContain(
+      "packageConfig.presentation.symbolRegistry",
+    );
     expect(adapterSource).toContain("createGame002SceneLayoutPlayers");
   });
 
@@ -204,7 +208,7 @@ describe("game002 source boundary", () => {
       "utf8",
     );
     const skinConfigSource = readFileSync(
-      join(APP_ROOT, "src/skin-config.ts"),
+      join(APP_ROOT, "src/package-config.ts"),
       "utf8",
     );
     const bannedMappingPairs = Object.freeze([
@@ -218,7 +222,7 @@ describe("game002 source boundary", () => {
     expect(layoutSource).toContain("mapArtRectToViewport");
     expect(layoutSource).toContain("createMaximizedFocusedArtViewportPolicy");
     expect(gameEntrySource).toContain(
-      "createGame002FramePolicy(options.prepared.skin.focusRegion)",
+      "options.prepared.packageConfig.focusRegion",
     );
     expect(skinConfigSource).not.toContain("frameFocusRect");
     expect(layoutSource).not.toMatch(/focusRegion\s*\?\?/);
@@ -271,7 +275,7 @@ describe("game002 source boundary", () => {
     );
     const appSource = readSourceTree(join(APP_ROOT, "src"));
     const skinConfigSource = readFileSync(
-      join(APP_ROOT, "src/skin-config.ts"),
+      join(APP_ROOT, "src/package-config.ts"),
       "utf8",
     );
 

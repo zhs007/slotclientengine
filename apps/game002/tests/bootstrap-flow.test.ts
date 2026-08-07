@@ -169,7 +169,6 @@ function deferred<T>() {
 
 function validQuery(overrides: Record<string, string> = {}): string {
   return `?${new URLSearchParams({
-    skin: "2",
     platformToken: "FAKE_TOKEN",
     gameCode: "GAME_CODE",
     businessCode: "business",

@@ -20,7 +20,7 @@ import {
   validateGame002BoardFrame,
   validateGame002FocusRegion,
 } from "../src/game-layout.js";
-import { GAME002_REEL_MANIFEST } from "../src/skin-config.js";
+import { GAME002_REEL_MANIFEST } from "../src/package-config.js";
 
 describe("game002 Crave layout", () => {
   it("locks the single s3 art, focus and 6 x 9 board contract", () => {

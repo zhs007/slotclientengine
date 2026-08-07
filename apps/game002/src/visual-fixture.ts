@@ -5,14 +5,12 @@ import {
   createGame002LoadingResources,
   readGame002CravePackageFiles,
 } from "./loading-resources.js";
-import { parseGame002SkinQuery } from "./skin-id.js";
-import { prepareGame002SkinConfig } from "./skin-config.js";
+import { prepareGame002PackageConfig } from "./package-config.js";
 
 declare global {
   interface Window {
     __game002VisualFixture?: Readonly<{
       ready: boolean;
-      skin: string;
       scene: readonly (readonly number[])[];
       destroy(): Promise<void>;
     }>;
@@ -29,23 +27,20 @@ void start().catch((error: unknown) => {
 });
 
 async function start(): Promise<void> {
-  const skinId = parseGame002SkinQuery(window.location.search);
-  const loadedResources =
-    skinId === "2" ? await loadCravePackageResources() : new Map();
-  const prepared = await prepareGame002SkinConfig(
-    skinId,
-    skinId === "2"
-      ? { craveFiles: readGame002CravePackageFiles(loadedResources) }
-      : {},
-  );
-  const gameConfig = createGameConfig(prepared.skin.rawGameConfig);
-  const reels = gameConfig.getReels(prepared.skin.reelsName);
+  const loadedResources = await loadCravePackageResources();
+  const prepared = await prepareGame002PackageConfig({
+    craveFiles: readGame002CravePackageFiles(loadedResources),
+  });
+  const gameConfig = createGameConfig(prepared.packageConfig.rawGameConfig);
+  const reels = gameConfig.getReels(prepared.packageConfig.reelsName);
   const scene = Object.freeze(
     Array.from({ length: reels.getReelCount() }, (_, x) =>
       Object.freeze(Array.from({ length: 9 }, (_, y) => reels.get(x, y))),
     ),
   );
-  const adapter = createGame002Adapter({ skin: prepared.skin });
+  const adapter = createGame002Adapter({
+    packageConfig: prepared.packageConfig,
+  });
   try {
     const frameDesignSize = readFrameSize();
     await adapter.mount!({
@@ -79,10 +74,9 @@ async function start(): Promise<void> {
       balance: 0,
       defaultScene: scene,
     });
-    status.textContent = `ready skin=${skinId} ${frameDesignSize.width}x${frameDesignSize.height}`;
+    status.textContent = `ready ${frameDesignSize.width}x${frameDesignSize.height}`;
     window.__game002VisualFixture = Object.freeze({
       ready: true,
-      skin: skinId,
       scene,
       async destroy(): Promise<void> {
         adapter.destroy?.();
@@ -107,7 +101,7 @@ function requireElement(id: string): HTMLElement {
 async function loadCravePackageResources(): Promise<
   ReadonlyMap<string, unknown>
 > {
-  const resources = createGame002LoadingResources("2").filter((resource) =>
+  const resources = createGame002LoadingResources().filter((resource) =>
     resource.id.startsWith(GAME002_CRAVE_RESOURCE_ID_PREFIX),
   );
   return new Map(

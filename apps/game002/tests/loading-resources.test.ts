@@ -7,9 +7,9 @@ import {
   readGame002RuntimeModule,
 } from "../src/loading-resources.js";
 
-describe("game002 skin=2 loading resources", () => {
+describe("game002 package loading resources", () => {
   it("loads only the mapped Crave package", () => {
-    const resources = createGame002LoadingResources("2");
+    const resources = createGame002LoadingResources();
     const ids = resources.map((resource) => resource.id);
     const urls = resources
       .map((resource) => resource.url)

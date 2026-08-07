@@ -5,13 +5,13 @@ import {
   parseGame002LaunchQuery,
 } from "../src/framework-config.js";
 import type { Game002ReadinessResult } from "../src/game002-bootstrap.js";
-import { getTestGame002SkinConfig } from "./value-resource-fixture.js";
+import { getTestGame002PackageConfig } from "./value-resource-fixture.js";
 
 const frameworkMocks = vi.hoisted(() => ({
   createSlotGameFramework: vi.fn(),
 }));
-const skinMocks = vi.hoisted(() => ({
-  prepareGame002SkinConfig: vi.fn(),
+const packageMocks = vi.hoisted(() => ({
+  prepareGame002PackageConfig: vi.fn(),
   readGame002CravePackageFiles: vi.fn(() => new Map()),
 }));
 
@@ -23,11 +23,12 @@ vi.mock("@slotclientengine/gameframeworks", async (importOriginal) => {
     createSlotGameFramework: frameworkMocks.createSlotGameFramework,
   };
 });
-vi.mock("../src/skin-config.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/skin-config.js")>();
+vi.mock("../src/package-config.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../src/package-config.js")>();
   return {
     ...actual,
-    prepareGame002SkinConfig: skinMocks.prepareGame002SkinConfig,
+    prepareGame002PackageConfig: packageMocks.prepareGame002PackageConfig,
   };
 });
 vi.mock("../src/loading-resources.js", async (importOriginal) => {
@@ -35,7 +36,7 @@ vi.mock("../src/loading-resources.js", async (importOriginal) => {
     await importOriginal<typeof import("../src/loading-resources.js")>();
   return {
     ...actual,
-    readGame002CravePackageFiles: skinMocks.readGame002CravePackageFiles,
+    readGame002CravePackageFiles: packageMocks.readGame002CravePackageFiles,
   };
 });
 
@@ -43,14 +44,14 @@ describe("game002 99 percent finalization and ownership", () => {
   beforeEach(() => {
     frameworkMocks.createSlotGameFramework.mockReset();
     const resourceOwner = { destroy: vi.fn(async () => undefined) };
-    skinMocks.prepareGame002SkinConfig.mockReset();
-    skinMocks.prepareGame002SkinConfig.mockResolvedValue({
-      skin: getTestGame002SkinConfig(),
+    packageMocks.prepareGame002PackageConfig.mockReset();
+    packageMocks.prepareGame002PackageConfig.mockResolvedValue({
+      packageConfig: getTestGame002PackageConfig(),
       resourceOwner,
     });
   });
 
-  it("finalizes skin only after an already prepared platform/session result", async () => {
+  it("finalizes the package only after an already prepared platform/session result", async () => {
     const sizes = [
       [36, 49],
       [26, 48],
@@ -82,7 +83,7 @@ describe("game002 99 percent finalization and ownership", () => {
       signal: new AbortController().signal,
     });
     expect(prepared.readiness).toBe(readiness);
-    expect(prepared.skin.id).toBe("2");
+    expect(prepared.packageConfig.label).toBe("test-game002");
     expect(readiness.destroy).not.toHaveBeenCalled();
     await prepared.resourceOwner.destroy();
     loadTexture.mockRestore();
@@ -121,7 +122,7 @@ describe("game002 99 percent finalization and ownership", () => {
 
   it("injects platform presentation/preferences and cleans entered ownership", async () => {
     const config = parseGame002LaunchQuery(validQuery());
-    const skin = getTestGame002SkinConfig();
+    const packageConfig = getTestGame002PackageConfig();
     const readiness = createReadiness(config, {
       presentation: {
         brandLabel: "game002",
@@ -140,7 +141,7 @@ describe("game002 99 percent finalization and ownership", () => {
       root: document.createElement("div"),
       prepared: {
         readiness,
-        skin,
+        packageConfig,
         resourceOwner: valueBundle,
       },
     });
@@ -184,7 +185,7 @@ describe("game002 99 percent finalization and ownership", () => {
   });
 
   it("returns a shared rejecting destroy promise without skipping later cleanup", async () => {
-    const skin = getTestGame002SkinConfig();
+    const packageConfig = getTestGame002PackageConfig();
     const readiness = createReadiness();
     const framework = createFramework();
     framework.destroy.mockImplementation(() => {
@@ -200,7 +201,7 @@ describe("game002 99 percent finalization and ownership", () => {
       root: document.createElement("div"),
       prepared: {
         readiness,
-        skin,
+        packageConfig,
         resourceOwner: valueBundle,
       },
     });
@@ -215,7 +216,7 @@ describe("game002 99 percent finalization and ownership", () => {
   });
 
   it("cleans framework, platform and bundle when framework connect fails", async () => {
-    const skin = getTestGame002SkinConfig();
+    const packageConfig = getTestGame002PackageConfig();
     const { enterGame002 } = await import("../src/game-entry.js");
     const readiness = createReadiness();
     const valueBundle = {
@@ -231,7 +232,7 @@ describe("game002 99 percent finalization and ownership", () => {
         root: document.createElement("div"),
         prepared: {
           readiness,
-          skin,
+          packageConfig,
           resourceOwner: valueBundle,
         },
       });
@@ -311,7 +312,6 @@ function createFramework() {
 
 function validQuery(): string {
   return `?${new URLSearchParams({
-    skin: "2",
     token: "FAKE_TOKEN",
     gamecode: "GAME_CODE",
     businessid: "guest",

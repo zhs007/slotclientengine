@@ -9,9 +9,9 @@ vi.mock("@slotclientengine/rendercore", () => ({
   createSceneLayoutPresentationSurface: mocks.createSurface,
 }));
 
-import { createGame002SceneLayoutPlayers } from "../src/scene-layout-skin.js";
+import { createGame002SceneLayoutPlayers } from "../src/scene-layout-presentation.js";
 
-describe("game002 scene-layout skin adapter", () => {
+describe("game002 scene-layout presentation adapter", () => {
   beforeEach(() => {
     mocks.createSurface.mockReset();
   });

@@ -2,11 +2,11 @@
 
 动画状态切换、业务时序和配置来源汇总见 [`docs/animation-flow-and-timing.md`](./docs/animation-flow-and-timing.md)。调整动画节奏时应同步更新该文档、对应 source contract 和测试。
 
-`game002` 是基于 Pixi、`@slotclientengine/gameframeworks`、`@slotclientengine/gameloading` 和 `@slotclientengine/rendercore` 的 live slot app，并通过 `@slotclientengine/platformbootstrap-leo` 获取只读平台初始化 snapshot、通过 `@slotclientengine/game-ui-leo` 注入独立 Leo 游戏内 HUD。URL 只支持显式 `skin=2`，严格消费 `gamelayouteditor` 导出的 `assets/crave` mapped scene-layout package；`skin=1|3|4|5`、缺失、重复、`01` 和旧 `serverUrl` query 都会显式失败。
+`game002` 是基于 Pixi、`@slotclientengine/gameframeworks`、`@slotclientengine/gameloading` 和 `@slotclientengine/rendercore` 的 live slot app，并通过 `@slotclientengine/platformbootstrap-leo` 获取只读平台初始化 snapshot、通过 `@slotclientengine/game-ui-leo` 注入独立 Leo 游戏内 HUD。运行时只有一个 Gamelayouteditor Scene Layout 包，不再提供 skin 选择；CDN 部署的是 `assets/crave` 解包目录，浏览器按 manifest/map 加载文件，不下载或解压 ZIP。旧 `skin` 与 `serverUrl` query 都会显式失败。
 
 ## 启动与 live 边界
 
-首屏由 `packages/gameloading` controller 承载，并显式注入零运行时依赖的 `@slotclientengine/gameloading-ui-leo`。Loading UI 挂载后，`readiness.start()` 通过独立 bootstrap chunk 严格解析一次 query，并让 Leo provider 与唯一 `prepareSlotGameLiveSession()` 同 CDN 资源并行。资源进度只表示 `0..99%` 的真实资源完成度；99% 是 platform snapshot、translation/setting、已 enter 的 live session、visual readiness 与 skin/resource validation 的 join barrier，不是请求起点。全部完成后才发布 100%、创建 framework/Pixi，并把同一个 prepared session 交给 framework。任一分支失败都会 abort 并清理其它已完成 owner；不会创建第二条 WebSocket。
+首屏由 `packages/gameloading` controller 承载，并显式注入零运行时依赖的 `@slotclientengine/gameloading-ui-leo`。Loading UI 挂载后，`readiness.start()` 通过独立 bootstrap chunk 严格解析一次 query，并让 Leo provider 与唯一 `prepareSlotGameLiveSession()` 同 CDN 资源并行。资源进度只表示 `0..99%` 的真实资源完成度；99% 是 platform snapshot、translation/setting、已 enter 的 live session、visual readiness 与 package/resource validation 的 join barrier，不是请求起点。全部完成后才发布 100%、创建 framework/Pixi，并把同一个 prepared session 交给 framework。任一分支失败都会 abort 并清理其它已完成 owner；不会创建第二条 WebSocket。
 
 100% 后的正式 `game-entry` 才加载 React、ReactDOM 和 `@slotclientengine/game-ui-leo/styles.css`，并在 `createSlotGameFramework()` 中注入 per-instance Leo factory。Leo HUD 与默认 UI 复用 `uiframeworks` 的同一 frame/viewport host，只消费 framework snapshot 并调用 typed commands；session、spin、presentation、collect、balance reconciliation 和 adapter 生命周期仍完全属于 framework。initial loading chunk 不包含 React 或 Leo 游戏内资产。
 
@@ -18,7 +18,7 @@ live server 固定为 `wss://gameserv.rgstest.slammerstudios.com/`。launcher ca
 
 | 参数                                                                                   | 合同                                            |
 | -------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| `skin`                                                                                 | 必须且只能为 `1` 或 `2`                         |
+| `skin`                                                                                 | 已移除；传入即失败                              |
 | `gameCode/gamecode`、`platformToken/token`、`businessCode/businessid`、`lang/language` | 每组至少一个；双写必须相等                      |
 | `jurisdiction`、`clienttype`                                                           | 必填非空字符串                                  |
 | `configUrl`、`license`、`currency`                                                     | 可选 launcher 参数                              |
@@ -30,7 +30,7 @@ live server 固定为 `wss://gameserv.rgstest.slammerstudios.com/`。launcher ca
 示例：
 
 ```text
-http://127.0.0.1:5207/?skin=2&gameCode=GAME_CODE&platformToken=TOKEN&businessCode=guest&clienttype=web&jurisdiction=MT&lang=en&bet=5&lines=30&times=1&autonums=-1&requestTimeoutMs=30000
+http://127.0.0.1:5207/?gameCode=GAME_CODE&platformToken=TOKEN&businessCode=guest&clienttype=web&jurisdiction=MT&lang=en&bet=5&lines=30&times=1&autonums=-1&requestTimeoutMs=30000
 ```
 
 参数值必须 URL encode。URL query 可能进入地址栏、历史记录、access log 和 Referer，发布环境应使用短期或一次性 token。
@@ -49,20 +49,22 @@ framework destroy 或页面刷新会清理 command 和 pending 序列。
 
 ## 资源合同
 
-- `skin=2` 的 layout/background/focus/棋盘 geometry/symbols/公开轮带/popup
+- 唯一 Scene Layout 包的 layout/background/focus/棋盘 geometry/symbols/公开轮带/popup
   唯一来自 `assets/crave/layout.manifest.json`、`assets.map.json` 和当前美术 payload。
   美术可直接替换 `assets/crave` 中的内容或保留未引用文件；game002 以
   map 的 logical key→安全 physical path 作为路由，不比对过时的 `sha256`/
   `byteLength`，也不以 orphan 阻断构建。实际引用文件仍必须存在并通过
   manifest/Spine/VNI/image decoder，generator 生成精确 Vite imports，loading 只下载
-  active skin。Crave CN 使用其 symbols manifest 的 ImgNumber
+  当前包。Crave CN 使用其 symbols manifest 的 ImgNumber
   `slot: "coin"` 与包内 `0..9` glyph，不使用旧 `Num` binding、完整数值图片或字体。
 - `apps/game002/config/reel-presentation.manifest.json` 保存期待 timing/effect policy 和 `nearwin1/nearwin2` 程序键；实际资源全部来自 Crave package。
 - 转轮表现配置：`apps/game002/config/reel-presentation.manifest.json`。当前 `spin.bounceStrength=0`、`spin.dimmingAlpha=0.5`；普通逐格 timing、Nearwin effect policy、2-WL activation timing 以及 refill 顺序也只来自该 manifest。
 - 可展示 symbol 顺序固定为 `WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN`。
 - symbol package 的 game config、公开本地轮带、state、scale、render priority、
   animation、Spine、ImgNumber 和依赖闭包全部从 Crave package resource/registry
-  取得；app 不从 filename 或旧 manifest 重建第二份表。
+  取得；app 不从 filename 或旧 manifest 重建第二份表，也不保留 raw symbol asset
+  loader。棋盘行列、cell、gap、placement 与 reel set 名同样直接从 layout manifest
+  派生，不在 app 维护第二份布局数值。
 
 ## CN otherScene value presentation
 
@@ -181,8 +183,8 @@ dropdown 请求仍是通用 symbol state，但 `RenderSymbol` 会比较切换前
 ## 开发与发布
 
 真实 renderer 的本地资源 smoke 可打开
-`/visual-fixture.html?skin=2`；该入口使用正式
-skin prepare、adapter、公开本地轮带与 Pixi/Spine ticker，但不连接 live，也不进入
+`/visual-fixture.html`；该入口使用正式
+package prepare、adapter、公开本地轮带与 Pixi/Spine ticker，但不连接 live，也不进入
 production build。它只能证明资源、geometry、mask、background、symbol 和 resize
 装配；期待/cascade/CN collect/popup 仍由自动化 fixture 与真实 live 分开验收。
 
@@ -198,4 +200,4 @@ pnpm --filter game002 release:check
 
 生产产物在 `apps/game002/dist/`。`release:check` 除既有背景、symbol、effect 和 win-amount 合同外，还逐档校验 CN tier skeleton/slot、nested image-string v1 exact source closure、glyph decoded size 与 source/dist 字节；并断言旧完整值图片不进入 dist。所有 glyph texture 在 loading 99% 前闭合，100% 后才创建 player/framework/Pixi。
 
-常见显式失败包括：query 缺失/重复/非法、旧 skin 或 `serverUrl`、资源或 loading closure 缺项、manifest unknown field/路径/尺寸/focus/state/transition 非法、Spine 非 4.3、atlas page/texture/animation 不匹配、并发背景切换、scene 不是 `6 x 9`、未知 symbol、金额输入非法、最终可见 scene 不一致、live/collect 失败。不得切换到静态背景、首帧、mock、旧 skin、placeholder、BN 兜底或 Spine 4.2/3.8 fallback。
+常见显式失败包括：query 缺失/重复/非法、已移除的 `skin` 或 `serverUrl`、资源或 loading closure 缺项、manifest unknown field/路径/尺寸/focus/state/transition 非法、Spine 非 4.3、atlas page/texture/animation 不匹配、并发背景切换、scene 不是 `6 x 9`、未知 symbol、金额输入非法、最终可见 scene 不一致、live/collect 失败。不得切换到静态背景、首帧、mock、旧资源、placeholder、BN 兜底或 Spine 4.2/3.8 fallback。

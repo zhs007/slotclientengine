@@ -17,7 +17,6 @@ describe("game002 strict launch query", () => {
       mode: "real",
     });
     expect(config).toMatchObject({
-      skin: "2",
       live: {
         serverUrl: GAME002_LIVE_SERVER_URL,
         token: "FAKE_TOKEN",
@@ -80,10 +79,9 @@ describe("game002 strict launch query", () => {
     ).toThrow(/serverUrl query parameter is not supported/);
   });
 
-  it("validates skin and numeric app parameters without leaking credentials", () => {
-    expect(parseGame002LaunchQuery(validQuery({ skin: "2" })).skin).toBe("2");
-    expect(() => parseGame002LaunchQuery(validQuery({ skin: "5" }))).toThrow(
-      /skin query parameter must be exactly "2"/,
+  it("rejects the removed skin selector and validates numeric app parameters", () => {
+    expect(() => parseGame002LaunchQuery(validQuery({ skin: "2" }))).toThrow(
+      /skin query parameter is not supported/,
     );
     expect(() => parseGame002LaunchQuery(validQuery({ bet: "0" }))).toThrow(
       /bet query parameter/,
@@ -91,11 +89,6 @@ describe("game002 strict launch query", () => {
     expect(() =>
       parseGame002LaunchQuery(validQuery({ autonums: "1.2" })),
     ).toThrow(/autonums query parameter must be an integer/);
-    try {
-      parseGame002LaunchQuery(validQuery({ skin: "5", token: "FAKE_SECRET" }));
-    } catch (error) {
-      expect(String(error)).not.toContain("FAKE_SECRET");
-    }
   });
 
   it("parses fun and replay modes without changing the live transport", () => {
@@ -119,7 +112,6 @@ function validQuery(
   overrides: Record<string, string | undefined> = {},
 ): string {
   const values: Record<string, string> = {
-    skin: "2",
     token: "FAKE_TOKEN",
     gamecode: "GAME_CODE",
     businessid: "guest",

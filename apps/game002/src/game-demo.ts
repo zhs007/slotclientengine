@@ -1,8 +1,7 @@
 import { type Container } from "pixi.js";
-import {
-  createGameConfig,
-  type LogicGameConfig,
-  type SceneMatrix,
+import type {
+  LogicGameConfig,
+  SceneMatrix,
 } from "@slotclientengine/gameframeworks";
 import {
   RenderGridCellReelSet,
@@ -13,7 +12,6 @@ import {
   createGridCellCascadeDropdownPlan,
   createGridCellEffectController,
   createShuffledGridCellReelOffsetMatrix,
-  createReelSymbolRegistry,
   type GridCellDimmingPattern,
   type GridCellOrderMode,
   type GridCellReelSpinPlan,
@@ -45,17 +43,12 @@ import {
   type ReelSymbolRenderPriorityMap,
   type ReelSymbolScaleMap,
   type SymbolAnimationResolver,
-  type SymbolAssetMap,
   type SymbolStateId,
   type SymbolStatePreset,
   type SymbolStateTransitionMode,
   type SymbolValuePresentationResourceMap,
 } from "@slotclientengine/rendercore";
 import type { WinResultPosition } from "@slotclientengine/gameframeworks";
-import {
-  GAME002_EMPTY_SYMBOLS,
-  GAME002_REQUIRED_STATE_TEXTURES,
-} from "./assets.js";
 import {
   GAME002_REEL_COUNT,
   GAME002_REELS_NAME,
@@ -72,7 +65,7 @@ import {
   type Game002GridLayout,
   type Game002ReelLayerLayout,
 } from "./game-layout.js";
-import { GAME002_REEL_MANIFEST } from "./skin-config.js";
+import { GAME002_REEL_MANIFEST } from "./package-config.js";
 import {
   assertScenesEqual,
   sceneEquals,
@@ -121,7 +114,7 @@ function randomGame002SpinPhase(): number {
 
 export const DEFAULT_GAME002_REEL_CONFIG: Game002ReelConfig = Object.freeze({
   reelsName: GAME002_REELS_NAME,
-  emptySymbols: GAME002_EMPTY_SYMBOLS,
+  emptySymbols: Object.freeze([]),
   texturedSymbols: Object.freeze([]),
   missingAssetLabel: "game002 runtime",
   symbolScales: Object.freeze({}),
@@ -148,10 +141,8 @@ export const DEFAULT_GAME002_REEL_CONFIG: Game002ReelConfig = Object.freeze({
 });
 
 export interface Game002ReelRuntimeOptions {
-  readonly rawGameConfig?: unknown;
-  readonly symbolAssets?: SymbolAssetMap;
-  readonly gameConfig?: LogicGameConfig;
-  readonly symbolRegistry?: ReelSymbolRegistry;
+  readonly gameConfig: LogicGameConfig;
+  readonly symbolRegistry: ReelSymbolRegistry;
   readonly initialScene?: SceneMatrix;
   readonly config?: Game002ReelConfig;
 }
@@ -298,31 +289,7 @@ export function createGame002ReelRuntime(
   options: Game002ReelRuntimeOptions,
 ): Game002ReelRuntime {
   const config = options.config ?? DEFAULT_GAME002_REEL_CONFIG;
-  const usesPackageRegistry =
-    options.gameConfig !== undefined || options.symbolRegistry !== undefined;
-  const usesLegacyAssets =
-    options.rawGameConfig !== undefined || options.symbolAssets !== undefined;
-  if (usesPackageRegistry === usesLegacyAssets) {
-    throw new Error(
-      "game002 reel runtime requires exactly one complete symbol source.",
-    );
-  }
-  if (usesPackageRegistry && (!options.gameConfig || !options.symbolRegistry)) {
-    throw new Error(
-      "game002 package symbol source requires gameConfig and symbolRegistry.",
-    );
-  }
-  if (
-    usesLegacyAssets &&
-    (options.rawGameConfig === undefined || !options.symbolAssets)
-  ) {
-    throw new Error(
-      "game002 legacy symbol source requires rawGameConfig and symbolAssets.",
-    );
-  }
-  const gameConfig = usesPackageRegistry
-    ? options.gameConfig!
-    : createGameConfig(options.rawGameConfig);
+  const gameConfig = options.gameConfig;
   const reels = gameConfig.getReels(config.reelsName);
   const spinDimming = Object.freeze({
     resolveDimmingAlpha: (code: number, activated: boolean) => {
@@ -339,27 +306,11 @@ export function createGame002ReelRuntime(
   }) satisfies GridCellDimmingPattern;
   if (reels.getReelCount() !== GAME002_REEL_COUNT) {
     throw new Error(
-      `game002 reels "${config.reelsName}" must contain 6 reels.`,
+      `game002 reels "${config.reelsName}" must contain ${GAME002_REEL_COUNT} reels.`,
     );
   }
 
-  const registry = usesPackageRegistry
-    ? options.symbolRegistry!
-    : createReelSymbolRegistry({
-        gameConfig,
-        assets: options.symbolAssets!,
-        emptySymbols: config.emptySymbols,
-        symbolScales: config.symbolScales,
-        symbolRenderPriorities: config.symbolRenderPriorities,
-        symbolAnimationCapabilities: config.symbolAnimationCapabilities,
-        statePreset: config.symbolStatePreset,
-        landingAppearSymbols: config.landingAppearSymbols,
-        animationResolver: config.animationResolver,
-        texturePolicy: {
-          requiredStateTextures: GAME002_REQUIRED_STATE_TEXTURES,
-        },
-        valuePresentationResources: config.symbolValuePresentationResources,
-      });
+  const registry = options.symbolRegistry;
   assertConfiguredTexturedSymbolsAvailable(registry.getValidation(), config);
   const layout = createGame002ReelLayout(config.gridLayout);
   const layerLayout = createGame002ReelLayerLayout(
@@ -1201,9 +1152,7 @@ function assertRenderableSceneCodes(
 }
 
 function assertConfiguredTexturedSymbolsAvailable(
-  validation: ReturnType<
-    ReturnType<typeof createReelSymbolRegistry>["getValidation"]
-  >,
+  validation: ReturnType<ReelSymbolRegistry["getValidation"]>,
   config: Game002ReelConfig,
 ): void {
   const available = new Set(validation.texturedSymbols);

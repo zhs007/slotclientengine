@@ -1,5 +1,4 @@
 import type { GameLoadingResource } from "@slotclientengine/gameloading";
-import type { Game002SkinId } from "./skin-id.js";
 import craveAssetsMap from "../../../assets/crave/assets.map.json";
 import { craveSceneLayoutPhysicalResourceUrls } from "./generated/crave-layout-resources.generated.js";
 
@@ -61,10 +60,7 @@ export function deduplicateGame002LoadingResourceUrls(
   return Object.freeze(resources);
 }
 
-export function createGame002LoadingResources(
-  skin: Game002SkinId = "2",
-): readonly GameLoadingResource[] {
-  if (skin !== "2") throw new Error('game002 loading only supports skin "2".');
+export function createGame002LoadingResources(): readonly GameLoadingResource[] {
   return Object.freeze([
     ...createCraveLoadingResources(),
     Object.freeze({
