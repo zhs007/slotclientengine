@@ -7,7 +7,7 @@ import type {
 import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-amount";
 import type { Game002FreeGameOperationPayload } from "./game002-operation-compiler.js";
 import type { Game002ReelRuntime } from "./game-demo.js";
-import type { Game002BackgroundPlayer } from "./scene-layout-skin.js";
+import type { Game002BackgroundPlayer } from "./scene-layout-presentation.js";
 import { assertGame002ReelVisualMatchesTarget } from "./game-demo.js";
 
 type Activity =

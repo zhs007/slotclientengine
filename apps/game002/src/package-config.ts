@@ -25,11 +25,6 @@ import {
   type SymbolValuePresentationResourceMap,
 } from "@slotclientengine/rendercore";
 import type { Game002FocusRegion, Game002GridLayout } from "./game-layout.js";
-import {
-  GAME002_SUPPORTED_SKINS,
-  parseGame002SkinId,
-  type Game002SkinId,
-} from "./skin-id.js";
 
 const CRAVE_ASSETS_MAP_FILES: Readonly<
   Record<string, { readonly path: string }>
@@ -37,8 +32,7 @@ const CRAVE_ASSETS_MAP_FILES: Readonly<
 const CRAVE_PHYSICAL_RESOURCE_URLS: Readonly<Record<string, string>> =
   craveSceneLayoutPhysicalResourceUrls;
 
-export interface Game002SkinConfig {
-  readonly id: "2";
+export interface Game002PackageConfig {
   readonly label: string;
   readonly reelsName: string;
   readonly rawGameConfig: unknown;
@@ -68,35 +62,32 @@ export interface Game002SkinConfig {
   }>;
 }
 
-export interface Game002SkinResourceOwner {
+export interface Game002PackageResourceOwner {
   destroy(): Promise<void> | void;
 }
 
 export const GAME002_REEL_MANIFEST = parseReelManifest(game002ReelManifest);
 
-export async function prepareGame002SkinConfig(
-  id: Game002SkinId,
+export async function prepareGame002PackageConfig(
   options: {
     readonly craveFiles?: ReadonlyMap<string, Uint8Array>;
     readonly decodeImage?: DecodeImageStringImage;
   } = {},
 ): Promise<{
-  readonly skin: Game002SkinConfig;
-  readonly resourceOwner: Game002SkinResourceOwner;
+  readonly packageConfig: Game002PackageConfig;
+  readonly resourceOwner: Game002PackageResourceOwner;
 }> {
-  if (id !== "2")
-    throw new Error('game002 production configuration only supports skin "2".');
   if (!options.craveFiles)
-    throw new Error("game002 skin=2 requires loaded Crave package files.");
-  return prepareGame002Skin2Config(options.craveFiles, options.decodeImage);
+    throw new Error("game002 requires loaded Crave package files.");
+  return prepareGame002Package(options.craveFiles, options.decodeImage);
 }
 
-async function prepareGame002Skin2Config(
+async function prepareGame002Package(
   files: ReadonlyMap<string, Uint8Array>,
   decodeImage?: DecodeImageStringImage,
 ): Promise<{
-  readonly skin: Game002SkinConfig;
-  readonly resourceOwner: Game002SkinResourceOwner;
+  readonly packageConfig: Game002PackageConfig;
+  readonly resourceOwner: Game002PackageResourceOwner;
 }> {
   const resource = await createSceneLayoutPackageResource({
     files,
@@ -162,8 +153,7 @@ async function prepareGame002Skin2Config(
     const displaySymbols = symbolPackage.displaySymbols;
     const stateTextureManifest = symbolPackage.rawSymbolManifest;
     const symbolRegistry = await createSymbolPackageReelRegistry(symbolPackage);
-    const skin: Game002SkinConfig = Object.freeze({
-      id: "2",
+    const packageConfig: Game002PackageConfig = Object.freeze({
       label: "crave",
       reelsName: symbolBinding.reelSet,
       rawGameConfig: symbolPackage.rawGameConfig,
@@ -222,7 +212,7 @@ async function prepareGame002Skin2Config(
         awardCelebrationPopup: initialMode.awardCelebrationPopup,
       }),
     });
-    return Object.freeze({ skin, resourceOwner: resource });
+    return Object.freeze({ packageConfig, resourceOwner: resource });
   } catch (error) {
     await resource.destroy();
     throw error;
@@ -275,5 +265,3 @@ function requireMaximizedFocusRegion(
     );
   return adaptation.focusRect;
 }
-
-export { GAME002_SUPPORTED_SKINS, parseGame002SkinId, type Game002SkinId };

@@ -8,17 +8,15 @@ import {
   deriveGridCellEffectPoolCapacities,
   createSymbolAnimationCapabilityMapFromManifest,
   createSymbolCascadeWinPresentationMapFromManifest,
+  createSymbolRenderPriorityMapFromManifest,
+  createSymbolScaleMapFromManifest,
   createSymbolLandingAppearSymbolsFromManifest,
   createSymbolStatePresetFromManifest,
+  getSymbolDisplaySymbolsFromManifest,
   parseImageStringManifest,
   parseSymbolStateTextureManifest,
   type SymbolValuePresentationResourceMap,
 } from "@slotclientengine/rendercore";
-import {
-  createGame002SymbolRenderPriorityMapFromManifest,
-  createGame002SymbolScaleMapFromManifest,
-  getGame002DisplaySymbolsFromManifest,
-} from "../src/assets.js";
 import {
   GAME002_FOCUS_REGION,
   GAME002_GRID_LAYOUT,
@@ -26,8 +24,8 @@ import {
 } from "../src/game-layout.js";
 import {
   GAME002_REEL_MANIFEST,
-  type Game002SkinConfig,
-} from "../src/skin-config.js";
+  type Game002PackageConfig,
+} from "../src/package-config.js";
 
 const CRAVE_ROOT = resolve(process.cwd(), "../../assets/crave");
 const logicalFiles = rawAssetsMap.files as Record<
@@ -108,16 +106,17 @@ const reelEffectPoolCapacities = deriveGridCellEffectPoolCapacities({
   cellCount: 54,
 });
 
-type TestGame002SkinConfig = Game002SkinConfig & {
+type TestGame002PackageConfig = Game002PackageConfig & {
   readonly symbolModules: Record<string, string>;
   readonly spineSkeletonModules: Record<string, unknown>;
   readonly reelEffectSkeletonModules: Record<string, unknown>;
 };
 
-export function getTestGame002SkinConfig(): TestGame002SkinConfig {
-  const displaySymbols = getGame002DisplaySymbolsFromManifest(rawStateManifest);
+export function getTestGame002PackageConfig(): TestGame002PackageConfig {
+  const displaySymbols = getSymbolDisplaySymbolsFromManifest(rawStateManifest, {
+    requiredStates: ["spinBlur", "disabled"],
+  });
   return Object.freeze({
-    id: "2",
     label: "test-game002",
     reelsName: GAME002_REELS_NAME,
     rawGameConfig,
@@ -127,14 +126,16 @@ export function getTestGame002SkinConfig(): TestGame002SkinConfig {
     reelManifest: GAME002_REEL_MANIFEST,
     displaySymbols,
     emptySymbols: Object.freeze([]),
-    symbolScales: createGame002SymbolScaleMapFromManifest({
-      stateTextureManifest: rawStateManifest,
+    symbolScales: createSymbolScaleMapFromManifest({
+      manifest: rawStateManifest,
       displaySymbols,
+      requiredStates: ["spinBlur", "disabled"],
       requireExplicitScale: true,
     }),
-    symbolRenderPriorities: createGame002SymbolRenderPriorityMapFromManifest({
-      stateTextureManifest: rawStateManifest,
+    symbolRenderPriorities: createSymbolRenderPriorityMapFromManifest({
+      manifest: rawStateManifest,
       displaySymbols,
+      requiredStates: ["spinBlur", "disabled"],
     }),
     symbolAnimationCapabilities: createSymbolAnimationCapabilityMapFromManifest(
       {
@@ -164,8 +165,8 @@ export function getTestGame002SkinConfig(): TestGame002SkinConfig {
     reelEffectSkeletonModules: Object.freeze(reelEffectSkeletonModules),
     presentation: Object.freeze({
       kind: "scene-layout",
-    }) as Game002SkinConfig["presentation"],
-  } satisfies TestGame002SkinConfig);
+    }) as Game002PackageConfig["presentation"],
+  } satisfies TestGame002PackageConfig);
 }
 
 function createTestValueResources(

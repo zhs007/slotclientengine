@@ -4,7 +4,7 @@ import type {
 } from "@slotclientengine/rendercore";
 
 /**
- * Production symbol scales and priorities are loaded from the skin=2 Symbols
+ * Production symbol scales and priorities are loaded from the Scene Layout symbol package
  * package. These empty defaults are only used before a package config is
  * supplied and must never become a second business table.
  */

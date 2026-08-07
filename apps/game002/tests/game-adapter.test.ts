@@ -19,7 +19,7 @@ import {
   type Game002AdapterOptions,
 } from "../src/game-adapter.js";
 import type { Game002ReelRuntime } from "../src/game-demo.js";
-import { getTestGame002SkinConfig } from "./value-resource-fixture.js";
+import { getTestGame002PackageConfig } from "./value-resource-fixture.js";
 import {
   GAME002_CASCADE_DROPDOWN_SCENE,
   GAME002_CASCADE_GMI,
@@ -501,9 +501,11 @@ describe("game002 task 95 adapter", () => {
   });
 });
 
-function createTestAdapter(options: Omit<Game002AdapterOptions, "skin">) {
+function createTestAdapter(
+  options: Omit<Game002AdapterOptions, "packageConfig">,
+) {
   return createGame002Adapter({
-    skin: getTestGame002SkinConfig(),
+    packageConfig: getTestGame002PackageConfig(),
     logDiagnostic: () => undefined,
     createBackgroundPlayer: () => new FakeBackgroundPlayer().asPlayer(),
     createWinAmountPlayer: () => new FakeWinAmountPlayer([]).asPlayer(),

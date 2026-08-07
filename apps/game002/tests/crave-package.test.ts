@@ -9,8 +9,8 @@ import {
 } from "../src/loading-resources.js";
 import {
   GAME002_REEL_MANIFEST,
-  prepareGame002SkinConfig,
-} from "../src/skin-config.js";
+  prepareGame002PackageConfig,
+} from "../src/package-config.js";
 
 interface AssetsMapFixture {
   readonly files: Readonly<Record<string, Readonly<{ readonly path: string }>>>;
@@ -34,7 +34,7 @@ const CRAVE_ROOT = resolve(process.cwd(), "../../assets/crave");
 let objectUrlCounter = 0;
 let objectUrlBlobs = new Map<string, Blob>();
 
-describe("game002 Crave skin", () => {
+describe("game002 Crave package", () => {
   beforeEach(() => {
     objectUrlCounter = 0;
     objectUrlBlobs = new Map();
@@ -80,8 +80,8 @@ describe("game002 Crave skin", () => {
     vi.unstubAllGlobals();
   });
 
-  it("loads only the exact mapped physical package for skin=2", async () => {
-    const resources = createGame002LoadingResources("2");
+  it("loads only the exact mapped physical package", async () => {
+    const resources = createGame002LoadingResources();
     const packageResources = resources.filter((resource) =>
       resource.id.startsWith(GAME002_CRAVE_RESOURCE_ID_PREFIX),
     );
@@ -119,41 +119,40 @@ describe("game002 Crave skin", () => {
     );
   });
 
-  it("prepares skin=2 geometry, CM multiplier states and CN coin states", async () => {
+  it("prepares package geometry, CM multiplier states and CN coin states", async () => {
     const files = await readCravePackageFiles();
-    const prepared = await prepareGame002SkinConfig("2", {
+    const prepared = await prepareGame002PackageConfig({
       craveFiles: files,
       decodeImage: readPngSize,
     });
     try {
-      const { skin } = prepared;
-      expect(skin.id).toBe("2");
-      expect(skin.label).toBe("crave");
-      expect(skin.gridLayout).toEqual({
+      const { packageConfig } = prepared;
+      expect(packageConfig.label).toBe("crave");
+      expect(packageConfig.gridLayout).toEqual({
         boardFrame: { x: 640, y: 337, width: 720, height: 1080 },
         cellWidth: 120,
         cellHeight: 120,
         columnGap: 0,
         rowGap: 0,
       });
-      expect(skin.focusRegion).toEqual({
+      expect(packageConfig.focusRegion).toEqual({
         x: 580,
         y: 277,
         width: 840,
         height: 1200,
       });
-      expect(skin.presentation.kind).toBe("scene-layout");
-      if (skin.presentation.kind !== "scene-layout") {
+      expect(packageConfig.presentation.kind).toBe("scene-layout");
+      if (packageConfig.presentation.kind !== "scene-layout") {
         throw new Error("expected scene-layout presentation");
       }
-      expect(skin.presentation.initialMode).toBe("BaseGame");
-      expect(skin.presentation.awardCelebrationPopup).toBe("bigwin2");
-      expect(skin.reelsName).toBe("reels-001");
+      expect(packageConfig.presentation.initialMode).toBe("BaseGame");
+      expect(packageConfig.presentation.awardCelebrationPopup).toBe("bigwin2");
+      expect(packageConfig.reelsName).toBe("reels-001");
       expect(
-        skin.presentation.symbolRegistry.getEntryBySymbol("CN"),
+        packageConfig.presentation.symbolRegistry.getEntryBySymbol("CN"),
       ).toMatchObject({ symbol: "CN", kind: "textured" });
 
-      const cn = skin.symbolValuePresentationResources.CN;
+      const cn = packageConfig.symbolValuePresentationResources.CN;
       expect(cn?.text.type).toBe("image-string");
       expect(
         cn?.imageStringTierBindings?.map((binding) => binding.slot),
@@ -171,19 +170,21 @@ describe("game002 Crave skin", () => {
         ),
       ).toEqual(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]);
 
-      expect(skin.reelManifest).toEqual(GAME002_REEL_MANIFEST);
-      expect(skin.displaySymbols).toContain("WM");
-      expect(skin.displaySymbols).toContain("WL");
-      expect(skin.displaySymbols).toContain("CM");
-      expect(skin.symbolAnimationCapabilities.CM).toEqual(
+      expect(packageConfig.reelManifest).toEqual(GAME002_REEL_MANIFEST);
+      expect(packageConfig.displaySymbols).toContain("WM");
+      expect(packageConfig.displaySymbols).toContain("WL");
+      expect(packageConfig.displaySymbols).toContain("CM");
+      expect(packageConfig.symbolAnimationCapabilities.CM).toEqual(
         expect.arrayContaining(["appear", "feature1", "change"]),
       );
-      expect(skin.symbolAnimationCapabilities.CN).toContain("featureChange");
-      expect(skin.symbolAnimationCapabilities.AF).toEqual(
+      expect(packageConfig.symbolAnimationCapabilities.CN).toContain(
+        "featureChange",
+      );
+      expect(packageConfig.symbolAnimationCapabilities.AF).toEqual(
         expect.arrayContaining(["feature", "change"]),
       );
       const symbolManifest =
-        skin.presentation.symbolPackage.symbolManifest.symbols;
+        packageConfig.presentation.symbolPackage.symbolManifest.symbols;
       expect(symbolManifest.AF?.animations.feature).toMatchObject({
         kind: "spine",
         playback: {
@@ -249,7 +250,7 @@ describe("game002 Crave skin", () => {
   });
 
   it("rejects incomplete game002-specific Crave bindings", async () => {
-    await expect(prepareGame002SkinConfig("2")).rejects.toThrow(
+    await expect(prepareGame002PackageConfig()).rejects.toThrow(
       /requires loaded Crave package files/,
     );
     await expectInvalidCraveManifest((manifest) => {
@@ -274,10 +275,9 @@ describe("game002 Crave skin", () => {
         close: vi.fn(),
       };
     });
-    const prepared = await prepareGame002SkinConfig("2", {
+    const prepared = await prepareGame002PackageConfig({
       craveFiles: await readCravePackageFiles(),
     });
-    expect(prepared.skin.id).toBe("2");
     await prepared.resourceOwner.destroy();
   });
 });
@@ -296,7 +296,7 @@ async function expectInvalidCraveManifest(
     new TextEncoder().encode(JSON.stringify(manifest)),
   );
   await expect(
-    prepareGame002SkinConfig("2", {
+    prepareGame002PackageConfig({
       craveFiles: files,
       decodeImage: readPngSize,
     }),

@@ -14,17 +14,17 @@ import {
 import { createServerCurrencyAmountFormatter } from "./money.js";
 import { createGame002LeoUiLabels } from "./platform-ui.js";
 import {
-  prepareGame002SkinConfig,
-  type Game002SkinConfig,
-  type Game002SkinResourceOwner,
-} from "./skin-config.js";
+  prepareGame002PackageConfig,
+  type Game002PackageConfig,
+  type Game002PackageResourceOwner,
+} from "./package-config.js";
 import { readGame002CravePackageFiles } from "./loading-resources.js";
 import "./styles.css";
 
 export interface Game002PreparedLoadingState {
   readonly readiness: Game002ReadinessResult;
-  readonly skin: Game002SkinConfig;
-  readonly resourceOwner: Game002SkinResourceOwner;
+  readonly packageConfig: Game002PackageConfig;
+  readonly resourceOwner: Game002PackageResourceOwner;
 }
 
 export interface Game002EnteredGame {
@@ -39,17 +39,14 @@ export async function finalizeGame002At99(options: {
 }): Promise<Game002PreparedLoadingState> {
   try {
     if (options.signal.aborted) throw createAbortError();
-    const skinResult = await prepareGame002SkinConfig(
-      options.readinessResult.config.skin,
-      {
-        craveFiles: readGame002CravePackageFiles(
-          options.loadedResources ?? new Map(),
-        ),
-      },
-    );
+    const packageResult = await prepareGame002PackageConfig({
+      craveFiles: readGame002CravePackageFiles(
+        options.loadedResources ?? new Map(),
+      ),
+    });
     if (options.signal.aborted) {
       try {
-        await skinResult.resourceOwner.destroy();
+        await packageResult.resourceOwner.destroy();
       } catch {
         // The abort remains authoritative after best-effort cleanup.
       }
@@ -57,8 +54,8 @@ export async function finalizeGame002At99(options: {
     }
     return Object.freeze({
       readiness: options.readinessResult,
-      skin: skinResult.skin,
-      resourceOwner: skinResult.resourceOwner,
+      packageConfig: packageResult.packageConfig,
+      resourceOwner: packageResult.resourceOwner,
     });
   } catch (error) {
     try {
@@ -109,7 +106,9 @@ export async function enterGame002(options: {
   try {
     framework = createSlotGameFramework({
       root: options.root,
-      gameAdapter: createGame002Adapter({ skin: options.prepared.skin }),
+      gameAdapter: createGame002Adapter({
+        packageConfig: options.prepared.packageConfig,
+      }),
       live: config.live,
       liveSession,
       betOptions: config.betOptions,
@@ -118,7 +117,9 @@ export async function enterGame002(options: {
       initialFastMode: snapshot.initialPreferences.fastMode,
       initialAutoMode: snapshot.initialPreferences.autoMode,
       designSize: GAME002_REFERENCE_SIZE,
-      framePolicy: createGame002FramePolicy(options.prepared.skin.focusRegion),
+      framePolicy: createGame002FramePolicy(
+        options.prepared.packageConfig.focusRegion,
+      ),
       brandLabel: snapshot.presentation.brandLabel,
       currency: snapshot.presentation.currency,
       locale: snapshot.presentation.locale,

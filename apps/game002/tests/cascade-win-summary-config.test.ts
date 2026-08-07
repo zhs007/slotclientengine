@@ -89,7 +89,7 @@ describe("game002 cascade win summary config", () => {
     } as const;
     const options = createGame002WinSummaryCollectOptions({
       runtime,
-      skin: {
+      packageConfig: {
         cascadeWinPresentations: { VALUE: presentation },
       } as any,
     });

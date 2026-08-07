@@ -43,11 +43,11 @@ import {
   type Game002ReelRuntime,
 } from "./game-demo.js";
 import { sceneEquals, validateGame002Scene } from "./scene.js";
-import type { Game002SkinConfig } from "./skin-config.js";
+import type { Game002PackageConfig } from "./package-config.js";
 import {
   createGame002SceneLayoutPlayers,
   type Game002BackgroundPlayer,
-} from "./scene-layout-skin.js";
+} from "./scene-layout-presentation.js";
 import { formatServerUsdAmount } from "./money.js";
 import { GAME002_SYMBOL_WIN_CAROUSEL_OPTIONS } from "./win-symbol-carousel-config.js";
 import { GAME002_CN_VALUE_SYMBOL } from "./cn-value-sequence.js";
@@ -116,7 +116,7 @@ export interface Game002PixiApplication {
 }
 
 export interface Game002AdapterOptions {
-  readonly skin: Game002SkinConfig;
+  readonly packageConfig: Game002PackageConfig;
   readonly createApplication?: () => Game002PixiApplication;
   readonly createBackgroundPlayer?: () => Game002BackgroundPlayer;
   readonly createRuntime?: () => Game002ReelRuntime;
@@ -147,7 +147,7 @@ export function createGame002Adapter(
 }
 
 class Game002PixiAdapter implements SlotGameAdapter {
-  readonly #skin: Game002SkinConfig;
+  readonly #packageConfig: Game002PackageConfig;
   readonly #createApplication: () => Game002PixiApplication;
   readonly #createBackgroundPlayer: () => Game002BackgroundPlayer;
   readonly #createRuntime: () => Game002ReelRuntime;
@@ -176,20 +176,21 @@ class Game002PixiAdapter implements SlotGameAdapter {
   #presentationStallReported = false;
 
   constructor(options: Game002AdapterOptions) {
-    const skin = options.skin;
+    const packageConfig = options.packageConfig;
     let sceneLayoutPlayers:
       | ReturnType<typeof createGame002SceneLayoutPlayers>
       | undefined;
-    this.#skin = skin;
+    this.#packageConfig = packageConfig;
     this.#createApplication =
       options.createApplication ?? createPixiApplication;
     this.#createBackgroundPlayer =
       options.createBackgroundPlayer ??
       (() => {
         sceneLayoutPlayers = createGame002SceneLayoutPlayers({
-          resource: skin.presentation.resource,
-          initialMode: skin.presentation.initialMode,
-          awardCelebrationPopup: skin.presentation.awardCelebrationPopup,
+          resource: packageConfig.presentation.resource,
+          initialMode: packageConfig.presentation.initialMode,
+          awardCelebrationPopup:
+            packageConfig.presentation.awardCelebrationPopup,
         });
         return sceneLayoutPlayers.backgroundPlayer;
       });
@@ -197,31 +198,32 @@ class Game002PixiAdapter implements SlotGameAdapter {
       options.createRuntime ??
       (() => {
         return createGame002ReelRuntime({
-          gameConfig: skin.presentation.symbolPackage.gameConfig,
-          symbolRegistry: skin.presentation.symbolRegistry,
+          gameConfig: packageConfig.presentation.symbolPackage.gameConfig,
+          symbolRegistry: packageConfig.presentation.symbolRegistry,
           config: {
             ...DEFAULT_GAME002_REEL_CONFIG,
-            reelsName: skin.reelsName,
-            emptySymbols: skin.emptySymbols,
-            texturedSymbols: skin.displaySymbols,
-            missingAssetLabel: skin.label,
-            symbolScales: skin.symbolScales,
-            symbolRenderPriorities: skin.symbolRenderPriorities,
-            symbolAnimationCapabilities: skin.symbolAnimationCapabilities,
-            symbolStatePreset: skin.symbolStatePreset,
-            animationResolver: skin.symbolAnimationResolver,
+            reelsName: packageConfig.reelsName,
+            emptySymbols: packageConfig.emptySymbols,
+            texturedSymbols: packageConfig.displaySymbols,
+            missingAssetLabel: packageConfig.label,
+            symbolScales: packageConfig.symbolScales,
+            symbolRenderPriorities: packageConfig.symbolRenderPriorities,
+            symbolAnimationCapabilities:
+              packageConfig.symbolAnimationCapabilities,
+            symbolStatePreset: packageConfig.symbolStatePreset,
+            animationResolver: packageConfig.symbolAnimationResolver,
             symbolValuePresentationResources:
-              skin.symbolValuePresentationResources,
-            timing: skin.reelManifest.spin.timing,
-            reelManifest: skin.reelManifest,
-            reelEffectResources: skin.reelEffectResources,
-            reelEffectPoolCapacities: skin.reelEffectPoolCapacities,
+              packageConfig.symbolValuePresentationResources,
+            timing: packageConfig.reelManifest.spin.timing,
+            reelManifest: packageConfig.reelManifest,
+            reelEffectResources: packageConfig.reelEffectResources,
+            reelEffectPoolCapacities: packageConfig.reelEffectPoolCapacities,
             dimming: createGame002GridCellDimming(
-              skin.reelManifest.spin.dimmingAlpha,
+              packageConfig.reelManifest.spin.dimmingAlpha,
             ),
-            spinBounceStrength: skin.reelManifest.spin.bounceStrength,
-            gridLayout: skin.gridLayout,
-            focusRegion: skin.focusRegion,
+            spinBounceStrength: packageConfig.reelManifest.spin.bounceStrength,
+            gridLayout: packageConfig.gridLayout,
+            focusRegion: packageConfig.focusRegion,
           },
         });
       });
@@ -265,8 +267,8 @@ class Game002PixiAdapter implements SlotGameAdapter {
       context.gameLayer.replaceChildren(app.canvas);
 
       const layout = createGame002Layout({
-        gridLayout: this.#skin.gridLayout,
-        focusRegion: this.#skin.focusRegion,
+        gridLayout: this.#packageConfig.gridLayout,
+        focusRegion: this.#packageConfig.focusRegion,
       });
       backgroundPlayer = this.#createBackgroundPlayer();
       await backgroundPlayer.init();
@@ -286,7 +288,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
           GAME002_CASCADE_PRESENTATION.startPresentationsWithEmphasis,
         winSummaryCollect: createGame002WinSummaryCollectOptions({
           runtime,
-          skin: this.#skin,
+          packageConfig: this.#packageConfig,
         }),
       });
       symbolCascadePlayer.container.position.set(
@@ -409,10 +411,14 @@ class Game002PixiAdapter implements SlotGameAdapter {
       const compiled = compileGame002RoundOperationPlan({
         logic,
         runtime,
-        displaySymbols: this.#skin.displaySymbols,
+        displaySymbols: this.#packageConfig.displaySymbols,
         logDiagnostic: this.#logDiagnostic,
       });
-      assertGame002OperationResources(compiled.plan, runtime, this.#skin);
+      assertGame002OperationResources(
+        compiled.plan,
+        runtime,
+        this.#packageConfig,
+      );
       return coordinator.start(compiled.plan);
     } catch (error) {
       this.#logDiagnostic(
@@ -542,8 +548,8 @@ class Game002PixiAdapter implements SlotGameAdapter {
     }
     const layout = createGame002Layout({
       viewportSize: viewport.frameDesignSize,
-      gridLayout: this.#skin.gridLayout,
-      focusRegion: this.#skin.focusRegion,
+      gridLayout: this.#packageConfig.gridLayout,
+      focusRegion: this.#packageConfig.focusRegion,
     });
     this.#app.renderer.resize(
       layout.viewportSize.width,
@@ -2045,7 +2051,7 @@ function formatMultiplier(value: number | null): string {
 export function assertGame002OperationResources(
   plan: SlotOperationPlanV2,
   runtime: Game002ReelRuntime,
-  skin: Game002SkinConfig,
+  packageConfig: Game002PackageConfig,
 ): void {
   const checkWinStage = (stage: {
     readonly stepIndex: number;
@@ -2064,7 +2070,7 @@ export function assertGame002OperationResources(
       const resultSymbol =
         runtime.gameConfig.getPaytableEntry(resultCode)?.symbol;
       const resultPresentation = resultSymbol
-        ? skin.cascadeWinPresentations[resultSymbol]
+        ? packageConfig.cascadeWinPresentations[resultSymbol]
         : undefined;
       if (!resultSymbol || !resultPresentation) {
         throw new Error(
@@ -2100,7 +2106,7 @@ export function assertGame002OperationResources(
             `game002 step[${stage.stepIndex}] group[${groupIndex}] position (${position.x},${position.y}) has no symbol.`,
           );
         }
-        const presentation = skin.cascadeWinPresentations[symbol];
+        const presentation = packageConfig.cascadeWinPresentations[symbol];
         if (!presentation) {
           throw new Error(
             `game002 step[${stage.stepIndex}] group[${groupIndex}] position (${position.x},${position.y}) symbol ${symbol} has no cascade presentation.`,
@@ -2119,7 +2125,7 @@ export function assertGame002OperationResources(
             );
           }
           if (
-            !skin.symbolAnimationCapabilities[symbol]?.includes(
+            !packageConfig.symbolAnimationCapabilities[symbol]?.includes(
               presentation.playback.winState,
             )
           ) {
@@ -2139,7 +2145,9 @@ export function assertGame002OperationResources(
                 presentation.playback.collectState,
               ];
         for (const state of states) {
-          if (!skin.symbolAnimationCapabilities[symbol]?.includes(state)) {
+          if (
+            !packageConfig.symbolAnimationCapabilities[symbol]?.includes(state)
+          ) {
             throw new Error(
               `game002 step[${stage.stepIndex}] group[${groupIndex}] position (${position.x},${position.y}) symbol ${symbol} has no ${state} animation.`,
             );
@@ -2187,13 +2195,15 @@ export function assertGame002OperationResources(
             ? undefined
             : runtime.gameConfig.getPaytableEntry(code)?.symbol;
         const presentation = symbol
-          ? skin.cascadeWinPresentations[symbol]
+          ? packageConfig.cascadeWinPresentations[symbol]
           : undefined;
         const removeState = presentation?.playback.removeState;
         if (
           !symbol ||
           !removeState ||
-          !skin.symbolAnimationCapabilities[symbol]?.includes(removeState)
+          !packageConfig.symbolAnimationCapabilities[symbol]?.includes(
+            removeState,
+          )
         ) {
           throw new Error(
             `game002 step[${stage.stepIndex}] group[${groupIndex}] remove position (${position.x},${position.y}) has no remove animation.`,
@@ -2241,7 +2251,7 @@ export function assertGame002OperationResources(
     }
   };
   const resource =
-    skin.symbolValuePresentationResources[GAME002_CN_VALUE_SYMBOL];
+    packageConfig.symbolValuePresentationResources[GAME002_CN_VALUE_SYMBOL];
   if (!resource)
     throw new Error("game002 CN valuePresentation resource is missing.");
   let current: SlotOperationSnapshot | null = null;

@@ -16,6 +16,8 @@ import craveLayoutManifest from "../../../assets/crave/layout.manifest.json";
 const craveAdaptation = craveLayoutManifest.adaptation;
 if (craveAdaptation.mode !== "maximized-focus")
   throw new Error('game002 Crave layout adaptation must be "maximized-focus".');
+const craveMainReel = craveLayoutManifest.reels.main;
+const craveMainReelPlacement = craveMainReel.placements.default;
 
 export const GAME002_ART_SIZE = Object.freeze(craveAdaptation.artSize);
 
@@ -33,10 +35,10 @@ export const GAME002_REFERENCE_VISIBLE_RECT_IN_ART = Object.freeze({
   height: 2000,
 });
 
-export const GAME002_REELS_NAME = "reels-001";
-export const GAME002_REEL_COUNT = 6;
-export const GAME002_VISIBLE_ROWS = 9;
-export const GAME002_CELL_SIZE = 120;
+export const GAME002_REELS_NAME = requireCraveReelsName();
+export const GAME002_REEL_COUNT = craveMainReel.columns;
+export const GAME002_VISIBLE_ROWS = craveMainReel.rows;
+export const GAME002_CELL_SIZE = craveMainReel.cellSize.width;
 export const GAME002_GRID_CELL_REEL_ORDER =
   "top-down-left-right" satisfies GridCellOrderMode;
 const GAME002_NORMAL_BRIGHT_SPIN_SYMBOLS = new Set(["WL", "CN"]);
@@ -73,10 +75,14 @@ export function createGame002GridCellDimming(
 }
 
 export const GAME002_BOARD_FRAME = Object.freeze({
-  x: 640,
-  y: 337,
-  width: 720,
-  height: 1080,
+  x: craveMainReelPlacement.x,
+  y: craveMainReelPlacement.y,
+  width:
+    craveMainReel.columns * craveMainReel.cellSize.width +
+    (craveMainReel.columns - 1) * craveMainReel.gap.x,
+  height:
+    craveMainReel.rows * craveMainReel.cellSize.height +
+    (craveMainReel.rows - 1) * craveMainReel.gap.y,
 });
 
 export const GAME002_BOARD_FRAME_IN_REFERENCE = Object.freeze({
@@ -88,10 +94,10 @@ export const GAME002_BOARD_FRAME_IN_REFERENCE = Object.freeze({
 
 export const GAME002_GRID_LAYOUT = Object.freeze({
   boardFrame: GAME002_BOARD_FRAME,
-  cellWidth: GAME002_CELL_SIZE,
-  cellHeight: GAME002_CELL_SIZE,
-  columnGap: 0,
-  rowGap: 0,
+  cellWidth: craveMainReel.cellSize.width,
+  cellHeight: craveMainReel.cellSize.height,
+  columnGap: craveMainReel.gap.x,
+  rowGap: craveMainReel.gap.y,
 }) satisfies Game002GridLayout;
 
 export const GAME002_FOCUS_REGION = Object.freeze(
@@ -155,6 +161,26 @@ export interface Game002ReelLayerLayout {
 }
 
 type Game002LayoutInput = RenderViewportSize | Game002LayoutOptions;
+
+function requireCraveReelsName(): string {
+  const gameModes = craveLayoutManifest.gameModes;
+  const initialMode = gameModes.modes.find(
+    (mode) => mode.id === gameModes.initialMode,
+  );
+  if (!initialMode?.symbolPackage)
+    throw new Error(
+      "game002 Crave initial mode must declare a symbol package.",
+    );
+  const symbolPackages: Readonly<
+    Record<string, Readonly<{ readonly reelSet: string }>>
+  > = craveLayoutManifest.symbolPackages;
+  const symbolPackage = symbolPackages[initialMode.symbolPackage];
+  if (!symbolPackage)
+    throw new Error(
+      `game002 Crave symbol package "${initialMode.symbolPackage}" is unavailable.`,
+    );
+  return symbolPackage.reelSet;
+}
 
 export function calculateGame002FrameScale(
   viewportWidth: number,

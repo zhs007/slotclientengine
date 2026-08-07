@@ -104,7 +104,6 @@ describe("game002 framework flow", () => {
 
   it("uses game002 default spin request and collects only after adapter play resolves", async () => {
     const config = parseGame002LaunchQuery(validQuery());
-    expect(config.skin).toBe("2");
     expect(config.live.serverUrl).toBe(GAME002_LIVE_SERVER_URL);
     expect(config.live.gamecode).toBe("GAME_CODE");
     const client = new FakeClient();
@@ -151,7 +150,6 @@ describe("game002 framework flow", () => {
 
   it("passes live defaultScene to the adapter without inventing one", async () => {
     const config = parseGame002LaunchQuery(validQuery());
-    expect(config.skin).toBe("2");
     expect(config.live.gamecode).toBe("GAME_CODE");
     const client = new FakeClient();
     client.userInfo.defaultScene = GAME002_SAMPLE_DEFAULT_SCENE;
@@ -211,7 +209,6 @@ describe("game002 framework flow", () => {
 
 function validQuery(overrides: Record<string, string> = {}): string {
   return `?${new URLSearchParams({
-    skin: "2",
     token: "TOKEN",
     gamecode: "GAME_CODE",
     businessid: "guest",

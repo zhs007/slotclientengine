@@ -7,7 +7,7 @@ import type {
 import type { Game002ReelRuntime } from "./game-demo.js";
 import { isGame002SequentialWinCompanionSymbol } from "./cascade-config.js";
 import { formatServerUsdAmount } from "./money.js";
-import type { Game002SkinConfig } from "./skin-config.js";
+import type { Game002PackageConfig } from "./package-config.js";
 
 export const GAME002_CASCADE_WIN_SUMMARY_STYLE = Object.freeze({
   fontSize: 48,
@@ -104,11 +104,11 @@ export function sortGame002CascadeCollectItems(
 
 export function createGame002WinSummaryCollectOptions(options: {
   readonly runtime: Game002ReelRuntime;
-  readonly skin: Game002SkinConfig;
+  readonly packageConfig: Game002PackageConfig;
 }): WinSummaryCollectOptions {
-  const { runtime, skin } = options;
+  const { runtime, packageConfig } = options;
   return Object.freeze({
-    presentations: skin.cascadeWinPresentations,
+    presentations: packageConfig.cascadeWinPresentations,
     resolveGroupSymbol: (context: SymbolCascadeGroupContext) => {
       const resultCode = context.group.result.symbol;
       if (

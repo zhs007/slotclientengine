@@ -7,7 +7,6 @@ import {
   parseLeoLauncherParameters,
   type LeoLauncherParameters,
 } from "@slotclientengine/platformbootstrap-leo";
-import { parseGame002SkinQuery, type Game002SkinId } from "./skin-id.js";
 
 export const GAME002_LIVE_SERVER_URL =
   "wss://gameserv.rgstest.slammerstudios.com/";
@@ -19,7 +18,6 @@ export interface Game002LaunchConfig {
   readonly betOptions: readonly SlotGameBetOption[];
   readonly initialBetIndex: 0;
   readonly spinRequest: SlotGameSpinRequest;
-  readonly skin: Game002SkinId;
 }
 
 export function parseGame002LaunchQuery(
@@ -28,8 +26,8 @@ export function parseGame002LaunchQuery(
   const params =
     search instanceof URLSearchParams ? search : new URLSearchParams(search);
   rejectUnsupportedQueryParameter(params, "serverUrl");
+  rejectUnsupportedQueryParameter(params, "skin");
   const platform = parseLeoLauncherParameters(params);
-  const skin = parseGame002SkinQuery(params);
   const clienttype = parseRequiredQueryString(params, "clienttype");
   const bet = parsePositiveQueryNumber(params, "bet");
   const lines = parsePositiveQueryNumber(params, "lines");
@@ -57,7 +55,6 @@ export function parseGame002LaunchQuery(
     betOptions: Object.freeze([betOption]),
     initialBetIndex: 0,
     spinRequest: Object.freeze({ bet, lines, times, autonums }),
-    skin,
   });
 }
 
@@ -66,9 +63,7 @@ function rejectUnsupportedQueryParameter(
   name: string,
 ): void {
   if (params.has(name)) {
-    throw new Error(
-      `${name} query parameter is not supported; game002 uses a fixed live server.`,
-    );
+    throw new Error(`${name} query parameter is not supported by game002.`);
   }
 }
 
