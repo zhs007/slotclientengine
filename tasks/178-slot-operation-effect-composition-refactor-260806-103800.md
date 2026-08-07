@@ -73,8 +73,14 @@ slot:settled-transform
   AF、CO、final win、popup、exit 等显式 operations，由 coordinator 逐项播放；旧的独立
   FreeGame playback 状态机及其测试已经删除，不再保留第二条播放路径。
 - 自动化结果：LogicCore 定向 typecheck 与 generator tests 通过；game002 typecheck 通过；
-  game002 全量 `25 files / 191 tests` 通过；`git diff --check` 在提交前再次执行。
+  game002 全量 `24 files / 178 tests` 通过；`git diff --check` 在提交前再次执行。
 
-仍保留的兼容范围：`createGame002CascadeSequence()` 仅供旧定向测试与资源校验 helper 使用，
-不再参与生产 plan 编译或播放；configured scene-layout consumer 仍使用 shared configured compiler，
-其下沉不属于本次针对 Game002 反馈的收口。
+## 2026-08-07 Game002 Sequence 兼容层清理
+
+- 资源预检直接遍历最终 operation plan，以非 presentation operation 的 output snapshot 校验
+  value display resource，并用当前 snapshot 与 `game002:win` payload 校验中奖表现资源。
+- 删除 `Game002CascadeSequence`、`Game002CascadeStage`、
+  `createGame002CascadeSequence()`、对应旧定向测试，以及 `Game002RoundTarget` 中只服务旧
+  sequence 的 configure/start/find 入口。Game002 生产与测试均不再保留 sequence 数据适配路径。
+- configured scene-layout consumer 仍使用 shared configured compiler；其下沉不属于本次针对
+  Game002 反馈的收口。

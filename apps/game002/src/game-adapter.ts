@@ -2,11 +2,8 @@ import { Application, Container } from "pixi.js";
 import type {
   GameLogic,
   GameLogicStep,
-  SlotRoundDropdownStepPlan,
   SlotRoundCapability,
   SlotRoundOccurrenceSnapshot,
-  SlotRoundRefillStepPlan,
-  SlotRoundWinStepPlan,
   SlotOperationV2,
   SlotOperationPlanV2,
   SlotOperationSnapshot,
@@ -60,11 +57,6 @@ import {
   resolveGame002WinResultCoinAmount,
   resolveGame002WinResultMultiplier,
 } from "./cascade-win-summary-config.js";
-import {
-  type Game002CascadeStage,
-  type Game002CascadeSequence,
-  type Game002WinRemoveStage,
-} from "./cascade-sequence.js";
 import {
   GAME002_CASCADE_MOTION,
   GAME002_CASCADE_PRESENTATION,
@@ -875,11 +867,6 @@ export class Game002RoundTarget {
   readonly #wmSymbolCode: number;
   readonly #cnSymbolCode: number;
   readonly #cmSymbolCode: number;
-  #round: {
-    readonly sequence: Game002CascadeSequence;
-    readonly betAmountRaw: number;
-    readonly winAmountRaw: number;
-  } | null = null;
   #activity:
     | "idle"
     | "initial"
@@ -905,7 +892,6 @@ export class Game002RoundTarget {
     | "transform-co-feature"
     | "transform-co-transfer"
     | "completion" = "idle";
-  #activeStage: Game002CascadeSequence["cascades"][number] | null = null;
   #activeFall: Game002FallPayload | null = null;
   #runtimeCompleted = false;
   #winCompleted = false;
@@ -948,22 +934,11 @@ export class Game002RoundTarget {
     this.#cmSymbolCode = options.cmSymbolCode;
   }
 
-  configure(round: {
-    readonly sequence: Game002CascadeSequence;
-    readonly betAmountRaw: number;
-    readonly winAmountRaw: number;
-  }): void {
-    if (this.#activity !== "idle")
-      throw new Error("game002 round target is already active.");
-    this.#round = round;
-  }
-
   cleanup(): void {
     this.#cascadePlayer.clear();
     this.#winAmountPlayer.dismissImmediately();
     this.#runtime.resetPresentationState();
     this.#activity = "idle";
-    this.#activeStage = null;
     this.#activeFall = null;
     this.#runtimeCompleted = false;
     this.#winCompleted = false;
@@ -1015,15 +990,6 @@ export class Game002RoundTarget {
     return true;
   }
 
-  startWin(step: SlotRoundWinStepPlan): void {
-    const stage = this.findWinStage(step.stepIndex);
-    const prepared = this.#cascadePlayer.prepare(stage.groups);
-    this.#winCompleted = false;
-    this.#activeReleaseOnlyPositions = step.releaseOnlyPositions ?? [];
-    this.#activity = "win";
-    this.#cascadePlayer.start(prepared);
-  }
-
   startWinGroups(groups: Game002WinPayload["groups"]): void {
     const prepared = this.#cascadePlayer.prepare(groups);
     this.#winCompleted = false;
@@ -1047,20 +1013,6 @@ export class Game002RoundTarget {
     this.#activeReleaseOnlyPositions = [];
     this.#activity = "idle";
     return { completed: true };
-  }
-
-  startDropdown(step: SlotRoundDropdownStepPlan): void {
-    const stage = this.findCascadeStage(step.stepIndex);
-    this.#activeStage = stage;
-    const planOptions = this.createDropPlanOptions(stage);
-    const anticipation = this.#runtime.isAnticipationActive();
-    const plan = anticipation
-      ? this.#runtime.createCascadeDropdownPlan(planOptions)
-      : this.#runtime.createCascadeDropPlan(planOptions);
-    this.#activity = anticipation ? "dropdown-only" : "dropdown-unified";
-    if (!anticipation) this.#unifiedSteps.add(step.stepIndex);
-    this.#runtimeCompleted = plan.totalSeconds === 0;
-    this.#runtime.startCascadeDrop(plan);
   }
 
   startDropdownData(fall: Game002FallPayload): void {
@@ -1094,20 +1046,6 @@ export class Game002RoundTarget {
     }
     this.#activity = "idle";
     return true;
-  }
-
-  startRefill(step: SlotRoundRefillStepPlan): void {
-    const stage = this.findCascadeStage(step.stepIndex);
-    this.#activeStage = stage;
-    this.#runtimeCompleted = false;
-    this.#refillSnapshot = step.output;
-    if (this.#unifiedSteps.has(step.stepIndex)) {
-      this.#activity = "refill-complete";
-      this.#runtimeCompleted = true;
-      return;
-    }
-    this.#activity = "refill-sweep";
-    this.#runtime.startRefillEffectSweep(stage.refillPositions);
   }
 
   startRefillData(
@@ -1825,22 +1763,6 @@ export class Game002RoundTarget {
     }
   }
 
-  startCompletion(): void {
-    const round = this.requireRound();
-    this.#cascadePlayer.clear();
-    if (round.winAmountRaw <= 0) {
-      this.#completionComplete = true;
-      this.#activity = "idle";
-      return;
-    }
-    this.#completionComplete = false;
-    this.#activity = "completion";
-    this.#winAmountPlayer.start({
-      betAmountRaw: round.betAmountRaw,
-      winAmountRaw: round.winAmountRaw,
-    });
-  }
-
   startCompletionAmounts(betAmountRaw: number, winAmountRaw: number): void {
     this.#cascadePlayer.clear();
     if (winAmountRaw <= 0) {
@@ -1864,10 +1786,7 @@ export class Game002RoundTarget {
     const cascade = this.#cascadePlayer.getSnapshot();
     return Object.freeze({
       activity: this.#activity,
-      activeStepIndex:
-        this.#activeTransform?.stepIndex ??
-        this.#activeStage?.stepIndex ??
-        null,
+      activeStepIndex: this.#activeTransform?.stepIndex ?? null,
       runtimeCompleted: this.#runtimeCompleted,
       winCompleted: this.#winCompleted,
       completionComplete: this.#completionComplete,
@@ -1894,25 +1813,6 @@ export class Game002RoundTarget {
         summaryCounting: cascade.summaryCounting,
       }),
     });
-  }
-
-  private createDropPlanOptions(
-    stage: Game002CascadeSequence["cascades"][number],
-  ): Parameters<Game002ReelRuntime["createCascadeDropPlan"]>[0] {
-    return {
-      sourceScene: stage.removedSourceScene,
-      sourceValues: stage.removedSourceValues,
-      settledScene: stage.dropdownScene,
-      settledValues: stage.dropdownValues,
-      targetScene: stage.refillScene,
-      targetValues: stage.refillValues,
-      refillPositions: stage.refillPositions,
-      canDropOccurrence: ({ code }) =>
-        canGame002CascadeDropSymbol(
-          resolveGame002CascadeSymbol(this.#runtime, code),
-        ),
-      motion: GAME002_CASCADE_MOTION,
-    };
   }
 
   private createDropPlanOptionsFromFall(
@@ -2077,53 +1977,13 @@ export class Game002RoundTarget {
       });
   }
 
-  private findWinStage(stepIndex: number): Game002WinRemoveStage {
-    const sequence = this.requireRound().sequence;
-    const stage =
-      stepIndex === 0
-        ? sequence.initial.winStage
-        : sequence.cascades.find(
-            (candidate) => candidate.stepIndex === stepIndex,
-          )?.winStage;
-    if (!stage)
-      throw new Error(`game002 step[${stepIndex}] win stage is missing.`);
-    return stage;
-  }
-
-  private findCascadeStage(
-    stepIndex: number,
-  ): Game002CascadeSequence["cascades"][number] {
-    const stage = this.requireRound().sequence.cascades.find(
-      (candidate) => candidate.stepIndex === stepIndex,
-    );
-    if (!stage)
-      throw new Error(`game002 cascade step[${stepIndex}] is missing.`);
-    return stage;
-  }
-
-  private requireActiveStage(): Game002CascadeSequence["cascades"][number] {
-    if (!this.#activeStage)
-      throw new Error("game002 cascade stage is not active.");
-    return this.#activeStage;
-  }
-
   private activeFallView() {
-    if (this.#activeFall)
-      return Object.freeze({
-        ...this.#activeFall,
-        label: this.#activeFall.flowKey,
-      });
-    const stage = this.requireActiveStage();
+    const stage = this.#activeFall;
+    if (!stage) throw new Error("game002 fall operation is not active.");
     return Object.freeze({
       ...stage,
-      label: `cascade step[${stage.stepIndex}]`,
+      label: stage.flowKey,
     });
-  }
-
-  private requireRound() {
-    if (!this.#round)
-      throw new Error("game002 round target is not configured.");
-    return this.#round;
   }
 }
 
@@ -2182,13 +2042,17 @@ function formatMultiplier(value: number | null): string {
   return `x${value}`;
 }
 
-export function assertGame002CascadeResources(
-  sequence: Game002CascadeSequence,
+export function assertGame002OperationResources(
+  plan: SlotOperationPlanV2,
   runtime: Game002ReelRuntime,
   skin: Game002SkinConfig,
 ): void {
-  const checkWinStage = (stage: Game002WinRemoveStage | undefined) => {
-    if (!stage) return;
+  const checkWinStage = (stage: {
+    readonly stepIndex: number;
+    readonly groups: Game002WinPayload["groups"];
+    readonly sourceScene: SlotOperationSnapshot["scene"];
+    readonly sourceValues: SlotOperationSnapshot["values"];
+  }) => {
     const scene = stage.sourceScene;
     for (const [groupIndex, group] of stage.groups.entries()) {
       const resultCode = group.result.symbol;
@@ -2376,114 +2240,37 @@ export function assertGame002CascadeResources(
       }
     }
   };
-  checkWinStage(sequence.initial.winStage);
-  for (const stage of sequence.cascades) {
-    checkWinStage(stage.winStage);
-  }
-
   const resource =
     skin.symbolValuePresentationResources[GAME002_CN_VALUE_SYMBOL];
   if (!resource)
     throw new Error("game002 CN valuePresentation resource is missing.");
-  const matrices = [
-    sequence.initial.spinValues,
-    ...sequence.cascades.map((stage) => stage.refillValues),
-  ];
-  for (const matrix of matrices) {
-    for (const column of matrix) {
-      for (const value of column) {
-        if (value !== null) {
-          assertSymbolValueDisplayResource({ value, resource });
+  let current: SlotOperationSnapshot | null = null;
+  let hasSpin = false;
+  for (const operation of plan.operations) {
+    if (operation.effect !== "presentation") {
+      current = operation.output;
+      hasSpin ||= operation.kind === "game002:spin";
+      for (const column of operation.output.values) {
+        for (const value of column) {
+          if (value !== null && value !== -1)
+            assertSymbolValueDisplayResource({ value, resource });
         }
       }
-    }
-  }
-}
-
-function assertGame002OperationResources(
-  plan: SlotOperationPlanV2,
-  runtime: Game002ReelRuntime,
-  skin: Game002SkinConfig,
-): void {
-  let current: SlotOperationSnapshot | null = null;
-  const winStages: Game002WinRemoveStage[] = [];
-  const fullValues: SlotOperationSnapshot["values"][] = [];
-  for (const operation of plan.operations) {
-    if (operation.effect !== "presentation") current = operation.output;
-    if (
-      operation.kind === "game002:spin" ||
-      operation.kind === "game002:refill"
-    ) {
-      if (operation.effect === "presentation")
-        throw new Error(`${operation.kind} cannot be a presentation.`);
-      fullValues.push(operation.output.values);
     }
     if (operation.kind !== "game002:win") continue;
     if (!current)
       throw new Error("game002 win operation has no established scene.");
-    const groups = (operation.payload as Game002WinPayload).groups;
-    winStages.push(
-      Object.freeze({
-        stepIndex: operation.operationIndex,
-        groups,
-        sourceScene: current.scene,
-        sourceValues: current.values as Game002WinRemoveStage["sourceValues"],
-        outputScene: current.scene as Game002WinRemoveStage["outputScene"],
-        outputValues: current.values as Game002WinRemoveStage["outputValues"],
-        removedNum: null,
-        releaseOnlyPositions: Object.freeze([]),
-      }),
-    );
+    checkWinStage({
+      stepIndex: operation.operationIndex,
+      groups: (operation.payload as Game002WinPayload).groups,
+      sourceScene: current.scene,
+      sourceValues: current.values,
+    });
   }
   if (!current)
     throw new Error("game002 operation plan has no established scene.");
-  const initialValues = fullValues[0];
-  if (!initialValues)
-    throw new Error("game002 operation plan has no spin values.");
-  assertGame002CascadeResources(
-    Object.freeze({
-      initial: Object.freeze({
-        stepIndex: 0 as const,
-        spinScene:
-          plan.operations.find(
-            (operation) => operation.kind === "game002:spin",
-          )!.effect === "scene-landing"
-            ? (
-                plan.operations.find(
-                  (operation) => operation.kind === "game002:spin",
-                ) as Extract<SlotOperationV2, { effect: "scene-landing" }>
-              ).output.scene
-            : current.scene,
-        spinValues:
-          initialValues as Game002CascadeSequence["initial"]["spinValues"],
-        usesServerValues: true,
-        ...(winStages[0] ? { winStage: winStages[0] } : {}),
-      }),
-      cascades: Object.freeze(
-        fullValues.slice(1).map((values, index) =>
-          Object.freeze({
-            stepIndex: index + 1,
-            removedSourceScene:
-              current.scene as Game002CascadeStage["removedSourceScene"],
-            removedSourceValues:
-              current.values as Game002CascadeStage["removedSourceValues"],
-            dropdownScene:
-              current.scene as Game002CascadeStage["dropdownScene"],
-            dropdownValues:
-              current.values as Game002CascadeStage["dropdownValues"],
-            refillPositions: Object.freeze([]),
-            refillScene: current.scene,
-            refillValues: values as Game002CascadeStage["refillValues"],
-            ...(winStages[index + 1] ? { winStage: winStages[index + 1] } : {}),
-          }),
-        ),
-      ),
-      finalScene: current.scene,
-      finalValues: current.values as Game002CascadeSequence["finalValues"],
-    }),
-    runtime,
-    skin,
-  );
+  if (!hasSpin)
+    throw new Error("game002 operation plan has no spin operation.");
 }
 
 function isWinAmountBlockingSpin(phase: WinAmountAnimationPhase): boolean {

@@ -31,11 +31,6 @@ describe("Game002RoundTarget multiplier transform", () => {
       cm: null,
       coReplacements: [],
     } as const;
-    target.configure({
-      sequence: {} as never,
-      betAmountRaw: 0,
-      winAmountRaw: 0,
-    });
     expect(() =>
       target.startAtomicTransformOperation(step, batch, "wm-to-cn"),
     ).toThrow(/must start/);
@@ -59,11 +54,6 @@ describe("Game002RoundTarget multiplier transform", () => {
       cmSymbolCode: 9,
     });
     const step = createTransformStep();
-    target.configure({
-      sequence: {} as never,
-      betAmountRaw: 0,
-      winAmountRaw: 0,
-    });
     const batch = {
       stepIndex: step.stepIndex,
       wlIncrements: [],
@@ -126,11 +116,6 @@ describe("Game002RoundTarget multiplier transform", () => {
       cmSymbolCode: 9,
     });
     const step = createWlIncrementStep(scene);
-    target.configure({
-      sequence: {} as never,
-      betAmountRaw: 0,
-      winAmountRaw: 0,
-    });
     const batch = {
       stepIndex: 1,
       wlIncrements: [
@@ -167,11 +152,6 @@ describe("Game002RoundTarget multiplier transform", () => {
       cmSymbolCode: 9,
     });
     const step = createWmOnlyTransformStep(scene);
-    target.configure({
-      sequence: {} as never,
-      betAmountRaw: 0,
-      winAmountRaw: 0,
-    });
     target.startSettledTransformOperation(step, {
       stepIndex: step.stepIndex,
       wlIncrements: [],
@@ -217,11 +197,6 @@ describe("Game002RoundTarget multiplier transform", () => {
       cmSymbolCode: 9,
     });
     const step = createCmTransformStep(scene);
-    target.configure({
-      sequence: {} as never,
-      betAmountRaw: 0,
-      winAmountRaw: 0,
-    });
     const batch = {
       stepIndex: step.stepIndex,
       wlIncrements: [],
@@ -276,11 +251,6 @@ describe("Game002RoundTarget multiplier transform", () => {
       cmSymbolCode: 9,
     });
     const step = createWmCmTransformStep(scene);
-    target.configure({
-      sequence: {} as never,
-      betAmountRaw: 0,
-      winAmountRaw: 0,
-    });
     const batch = {
       stepIndex: step.stepIndex,
       wlIncrements: [],
