@@ -82,5 +82,8 @@ slot:settled-transform
 - 删除 `Game002CascadeSequence`、`Game002CascadeStage`、
   `createGame002CascadeSequence()`、对应旧定向测试，以及 `Game002RoundTarget` 中只服务旧
   sequence 的 configure/start/find 入口。Game002 生产与测试均不再保留 sequence 数据适配路径。
+- 将残留的 `cascade-sequence.ts` 更名为 `operation-data.ts`，并将
+  `Game002WinRemoveStage` 更名为 `Game002WinOperationData`；该模块现在只把服务器 component
+  读取为原子 operation 编译数据，不再表达 stage/sequence 流程结构。
 - configured scene-layout consumer 仍使用 shared configured compiler；其下沉不属于本次针对
   Game002 反馈的收口。

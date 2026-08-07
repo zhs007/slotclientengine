@@ -25,7 +25,7 @@ import { GAME002_VISIBLE_ROWS, GAME002_REEL_COUNT } from "./game-layout.js";
 import { resolveGame002WinResultAmount } from "./win-symbol-carousel-config.js";
 import { resolveGame002WinResultCoinAmount } from "./cascade-win-summary-config.js";
 
-export interface Game002WinRemoveStage {
+export interface Game002WinOperationData {
   readonly stepIndex: number;
   readonly groups: readonly SymbolCascadeGroup[];
   readonly sourceScene: SceneMatrix;
@@ -264,7 +264,7 @@ export function readGame002WinOperationData(options: {
     readonly y: number;
     readonly code: number;
   }) => boolean;
-}): Game002WinRemoveStage | undefined {
+}): Game002WinOperationData | undefined {
   const { step } = options;
   const stepIndex = step.getIndex();
   const winComponentNames = [
