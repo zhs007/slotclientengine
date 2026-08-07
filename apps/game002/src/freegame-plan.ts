@@ -5,6 +5,10 @@ import type {
   SlotRoundPosition,
   WinResult,
 } from "@slotclientengine/gameframeworks";
+import {
+  forEachMatrixCell as forEachCell,
+  slotOperationPositionKey as positionKey,
+} from "@slotclientengine/gameframeworks";
 
 export type Game002FreeGameValueMatrix = readonly (readonly (
   | number
@@ -745,15 +749,6 @@ function assertMatrixEqual(
   });
 }
 
-function forEachCell<T>(
-  matrix: readonly (readonly T[])[],
-  visit: (x: number, y: number, value: T) => void,
-): void {
-  matrix.forEach((column, x) =>
-    column.forEach((value, y) => visit(x, y, value)),
-  );
-}
-
 function mutableScene(scene: SceneMatrix): number[][] {
   return scene.map((column) => [...column]);
 }
@@ -800,10 +795,6 @@ function isEightNeighbor(
   const dx = Math.abs(center.x - candidate.x);
   const dy = Math.abs(center.y - candidate.y);
   return dx <= 1 && dy <= 1 && dx + dy > 0;
-}
-
-function positionKey(position: SlotRoundPosition): string {
-  return `${position.x},${position.y}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

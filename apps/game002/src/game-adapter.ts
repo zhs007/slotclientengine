@@ -748,7 +748,7 @@ function createGame002FreeGameOperationRegistrations(
   const handler: SlotOperationHandler<SlotOperationV2, SlotOperationV2> = {
     preflight: (operation) => target.preflight(requirePayload(operation)),
     prepare: (operation) => operation,
-    start: (operation) => target.start(requirePayload(operation)),
+    start: (operation) => target.start(requirePayload(operation), operation),
     update: (_operation, deltaSeconds) => target.update(deltaSeconds),
     commit: () => undefined,
     rollback: () => target.cleanup(),

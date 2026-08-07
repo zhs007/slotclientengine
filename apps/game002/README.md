@@ -144,6 +144,13 @@ FreeGame 不再在 BaseGame Promise 完成后启动第二份 playback contract�
 不再用 stepIndex 查询 presentation batch，也没有 mutable payload cache。游戏侧 compiler 在进入 coordinator 前形成
 `wl-increment`、`wild-multiplier-presentation`、`wm-to-cn`、`coin-multiplier`、`cm-to-cn` 与
 `co-collect` exact operations；缺席阶段不生成 operation，每个实际 visual commit 后才推进。
+BaseGame multiplier/CO 与 FreeGame trigger/transition/AF/CO 共用同一个 rendercore transaction
+runner 合同；FreeGame target 不再保存 AF/CO prepared arrays、AbortController 或专用 progress phase。
+
+`decodeGame002RoundFacts()` 在任何 presentation mutation 前消费完整 `GameLogic`，闭合 BaseGame、
+multiplier/CO 与 FreeGame 的 scene/value/occurrence continuity，返回不含 raw step/component 的 frozen
+facts；`compileGame002OperationPlanFromFacts()` 只负责 V2 final closure。component 专属 decoder 文件继续
+保留严格协议公式，但不再由 target 或 final compiler 二次读取。
 
 运行时 stage 只挂完整 Scene Layout package root。package runtime 按 manifest order/placement
 拥有唯一 main reel，首次 `defaultScene` commit 前保持 deferred/uncommitted；cascade 通过 main-reel

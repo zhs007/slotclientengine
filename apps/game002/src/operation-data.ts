@@ -6,6 +6,10 @@ import type {
   WinResultPosition,
 } from "@slotclientengine/gameframeworks";
 import {
+  forEachMatrixCell as forEachCell,
+  slotOperationPositionKey as positionKey,
+} from "@slotclientengine/gameframeworks";
+import {
   createLastUseRemoveGroups,
   prepareSymbolWinGroups,
   type SymbolCascadeGroup,
@@ -852,20 +856,6 @@ function assertMatrixEqual(
     )
   )
     throw new Error(`${label} does not match previous cascade output.`);
-}
-
-function forEachCell(
-  scene: readonly (readonly unknown[])[],
-  callback: (x: number, y: number) => void,
-): void {
-  scene.forEach((column, x) => column.forEach((_value, y) => callback(x, y)));
-}
-
-function positionKey(position: {
-  readonly x: number;
-  readonly y: number;
-}): string {
-  return `${position.x},${position.y}`;
 }
 
 function readOptionalNonNegativeInteger(

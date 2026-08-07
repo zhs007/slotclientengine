@@ -9,6 +9,10 @@ import type {
   SlotRoundSettledValueDraft,
   SlotRoundPosition,
 } from "@slotclientengine/gameframeworks";
+import {
+  forEachMatrixCell as forEachCell,
+  slotOperationPositionKey as positionKey,
+} from "@slotclientengine/gameframeworks";
 import { GAME002_CASCADE_COMPONENTS } from "./cascade-config.js";
 import {
   compileGame002CoCollectionPlan,
@@ -1080,15 +1084,6 @@ function assertMatrixShape(
   });
 }
 
-function forEachCell(
-  scene: SceneMatrix,
-  callback: (x: number, y: number, code: number) => void,
-): void {
-  scene.forEach((column, x) =>
-    column.forEach((code, y) => callback(x, y, code)),
-  );
-}
-
 function overlayGeneratedCo(options: {
   readonly step: GameLogicStep;
   readonly stepIndex: number;
@@ -1141,10 +1136,6 @@ function assertSceneEqual(
         `${label}[${x}][${y}] differs: actual=${String(actual[x]?.[y])}; expected=${code}.`,
       );
   });
-}
-
-function positionKey(position: SlotRoundPosition): string {
-  return `${position.x},${position.y}`;
 }
 
 function assertPositiveMultiplier(value: unknown, label: string): number {

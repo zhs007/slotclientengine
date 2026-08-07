@@ -55,9 +55,9 @@ describe("Game002FreeGameOperationTarget", () => {
     fixture.runtime.playVisibleSymbolStates.mockImplementationOnce(() => {
       throw new Error("playback did not start");
     });
-    expect(() => fixture.target.start(payload)).toThrow(
-      "playback did not start",
-    );
+    fixture.target.start(payload);
+    await flushPlayback();
+    expect(() => fixture.target.update(0.1)).toThrow("playback did not start");
     fixture.target.cleanup();
   });
 
@@ -117,7 +117,8 @@ describe("Game002FreeGameOperationTarget", () => {
     expect(fixture.runtime.transfer.setProgress).toHaveBeenCalledWith(0.4);
     fixture.runtime.resolveAllPlaybacks();
     await flushPlayback();
-    expect(fixture.target.update(0.1)).toEqual({ completed: true });
+    expect(fixture.target.update(0.1)).toEqual({ completed: false });
+    expect(fixture.target.update(0.2)).toEqual({ completed: true });
     expect(fixture.runtime.transfer.commit).toHaveBeenCalledOnce();
   });
 
@@ -231,7 +232,7 @@ describe("Game002FreeGameOperationTarget", () => {
     fixture.target.cleanup();
   });
 
-  it("rolls back partially prepared AF and CO transactions", () => {
+  it("rolls back partially prepared AF and CO transactions", async () => {
     const afFixture = createFixture();
     const firstReplacement = {
       commit: vi.fn(),
@@ -242,17 +243,21 @@ describe("Game002FreeGameOperationTarget", () => {
       .mockImplementationOnce(() => {
         throw new Error("AF prepare failed");
       });
-    expect(() =>
-      afFixture.target.start({
-        kind: "af",
-        af: {
-          positions: [POSITION, { x: 1, y: 0 }],
-          addedFreeSpins: 1,
-          outputScene: createScene(CODES.CN),
-          outputValues: createValues(1),
-        },
-      }),
-    ).toThrow("AF prepare failed");
+    afFixture.target.start({
+      kind: "af",
+      af: {
+        positions: [POSITION, { x: 1, y: 0 }],
+        addedFreeSpins: 1,
+        outputScene: createScene(CODES.CN),
+        outputValues: createValues(1),
+      },
+    });
+    afFixture.runtime.resolvePlayback();
+    await flushPlayback();
+    afFixture.target.update(0.1);
+    afFixture.runtime.resolvePlayback();
+    await flushPlayback();
+    expect(() => afFixture.target.update(0.1)).toThrow("AF prepare failed");
     expect(firstReplacement.rollback).toHaveBeenCalledOnce();
     afFixture.target.cleanup();
 
@@ -262,18 +267,21 @@ describe("Game002FreeGameOperationTarget", () => {
         throw new Error("CO transfer prepare failed");
       },
     );
-    expect(() =>
-      coFixture.target.start({
-        kind: "co",
-        co: {
-          coPositions: [POSITION],
-          sourcePositions: [{ x: 1, y: 0 }],
-          transfers: [],
-          outputScene: createScene(CODES.CN),
-          outputValues: createValues(1),
-        },
-      }),
-    ).toThrow("CO transfer prepare failed");
+    coFixture.target.start({
+      kind: "co",
+      co: {
+        coPositions: [POSITION],
+        sourcePositions: [{ x: 1, y: 0 }],
+        transfers: [],
+        outputScene: createScene(CODES.CN),
+        outputValues: createValues(1),
+      },
+    });
+    coFixture.runtime.resolveAllPlaybacks();
+    await flushPlayback();
+    expect(() => coFixture.target.update(0.1)).toThrow(
+      "CO transfer prepare failed",
+    );
     expect(
       coFixture.runtime.replacements.at(-1)!.rollback,
     ).toHaveBeenCalledOnce();

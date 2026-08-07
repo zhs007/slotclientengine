@@ -106,7 +106,7 @@ interface Game002CompilerOptions {
   readonly logDiagnostic?: (message: string) => void;
 }
 
-interface Game002BaseDraftCompilation {
+export interface Game002RoundFacts {
   readonly drafts: readonly SlotOperationDraftV2[];
   readonly definitions: readonly SlotOperationDefinitionV2[];
   readonly final: SlotOperationSnapshot;
@@ -143,11 +143,20 @@ export function compileGame002RoundOperationPlan(options: {
   readonly displaySymbols: readonly string[];
   readonly logDiagnostic?: (message: string) => void;
 }): Game002BaseGameCompilation {
+  return compileGame002OperationPlanFromFacts(decodeGame002RoundFacts(options));
+}
+
+export function decodeGame002RoundFacts(options: {
+  readonly logic: GameLogic;
+  readonly runtime: Game002ReelRuntime;
+  readonly displaySymbols: readonly string[];
+  readonly logDiagnostic?: (message: string) => void;
+}): Game002RoundFacts {
   const triggerStepIndex = options.logic
     .getSteps()
     .findIndex((step) => step.hasComponent("bg-triggerfg"));
-  if (triggerStepIndex < 0) return compileGame002BaseGameOperationPlan(options);
-  const base = compileGame002BaseDrafts({
+  if (triggerStepIndex < 0) return decodeGame002BaseRoundFacts(options);
+  const base = decodeGame002BaseRoundFacts({
     ...options,
     logic: sliceGameLogic(options.logic, triggerStepIndex + 1),
     includeWinAmount: false,
@@ -285,15 +294,10 @@ export function compileGame002RoundOperationPlan(options: {
     "game002:freegame-exit",
     Object.freeze({ kind: "transition", mode: "BaseGame" }),
   );
-  const plan = finalizeSlotOperationPlanV2({
-    drafts,
-    definitions: base.definitions,
-    symbolCodes: base.symbolCodes,
-    columns: GAME002_REEL_COUNT,
-    rows: GAME002_VISIBLE_ROWS,
-  });
   return Object.freeze({
-    plan,
+    drafts: Object.freeze(drafts),
+    definitions: base.definitions,
+    final: current,
     betAmountRaw: base.betAmountRaw,
     winAmountRaw: base.winAmountRaw,
     symbolCodes: base.symbolCodes,
@@ -303,25 +307,32 @@ export function compileGame002RoundOperationPlan(options: {
 export function compileGame002BaseGameOperationPlan(
   options: Game002CompilerOptions,
 ): Game002BaseGameCompilation {
-  const compilation = compileGame002BaseDrafts(options);
+  return compileGame002OperationPlanFromFacts(
+    decodeGame002BaseRoundFacts(options),
+  );
+}
+
+export function compileGame002OperationPlanFromFacts(
+  facts: Game002RoundFacts,
+): Game002BaseGameCompilation {
   const plan = finalizeSlotOperationPlanV2({
-    drafts: compilation.drafts,
-    definitions: compilation.definitions,
-    symbolCodes: compilation.symbolCodes,
+    drafts: facts.drafts,
+    definitions: facts.definitions,
+    symbolCodes: facts.symbolCodes,
     columns: GAME002_REEL_COUNT,
     rows: GAME002_VISIBLE_ROWS,
   });
   return Object.freeze({
     plan,
-    betAmountRaw: compilation.betAmountRaw,
-    winAmountRaw: compilation.winAmountRaw,
-    symbolCodes: compilation.symbolCodes,
+    betAmountRaw: facts.betAmountRaw,
+    winAmountRaw: facts.winAmountRaw,
+    symbolCodes: facts.symbolCodes,
   });
 }
 
-function compileGame002BaseDrafts(
+function decodeGame002BaseRoundFacts(
   options: Game002CompilerOptions,
-): Game002BaseDraftCompilation {
+): Game002RoundFacts {
   const betAmountRaw = options.logic.getBet() * options.logic.getLines();
   const winAmountRaw = options.logic.getTotalWin();
   const symbolCodes = readSymbolCodes(options.runtime, options.displaySymbols);

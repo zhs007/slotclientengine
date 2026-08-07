@@ -1,4 +1,10 @@
-import type { WinResultPosition } from "@slotclientengine/gameframeworks";
+import {
+  createPresentationTransactionRunner,
+  type PresentationTransactionCommand,
+  type PresentationTransactionProgram,
+  type SlotOperationV2,
+  type WinResultPosition,
+} from "@slotclientengine/gameframeworks";
 import type {
   PreparedGridCellVisibleOccurrenceTransferBatch,
   PreparedVisibleOccurrenceReplacement,
@@ -10,17 +16,7 @@ import type { Game002ReelRuntime } from "./game002-reel-controller.js";
 import type { Game002BackgroundPlayer } from "./game002-scene-runtime.js";
 import { assertGame002ReelVisualMatchesTarget } from "./game002-reel-controller.js";
 
-type Activity =
-  | "idle"
-  | "trigger"
-  | "transition"
-  | "spin"
-  | "af-feature"
-  | "af-change"
-  | "co-feature"
-  | "co-transfer"
-  | "win"
-  | "popup";
+type Activity = "idle" | "transaction" | "spin" | "win" | "popup";
 
 export class Game002FreeGameOperationTarget {
   readonly #runtime: Game002ReelRuntime;
@@ -28,17 +24,14 @@ export class Game002FreeGameOperationTarget {
   readonly #winAmountPlayer: WinAmountAnimationPlayer;
   readonly #backgroundPlayer: Game002BackgroundPlayer;
   readonly #codes: Readonly<{ AF: number; CN: number; CO: number; BN: number }>;
+  readonly #transactionRunner = createPresentationTransactionRunner();
   #activity: Activity = "idle";
   #payload: Game002FreeGameOperationPayload | null = null;
-  #complete = true;
+  #operation: SlotOperationV2 | null = null;
+  #transactionGeneration = 0;
+  #transactionComplete = true;
+  #progressCommandIndex: number | null = null;
   #failure: Error | null = null;
-  #symbolPlaybackGeneration = 0;
-  #symbolPlaybackComplete = true;
-  #symbolPlaybackAbort: AbortController | null = null;
-  #afReplacements: PreparedVisibleOccurrenceReplacement[] = [];
-  #coReplacements: PreparedVisibleOccurrenceReplacement[] = [];
-  #coTransfers: PreparedGridCellVisibleOccurrenceTransferBatch | null = null;
-  #coProgress = 0;
 
   constructor(options: {
     readonly runtime: Game002ReelRuntime;
@@ -88,28 +81,16 @@ export class Game002FreeGameOperationTarget {
     }
   }
 
-  start(payload: Game002FreeGameOperationPayload): void {
+  start(
+    payload: Game002FreeGameOperationPayload,
+    operation: SlotOperationV2 | null = null,
+  ): void {
     if (this.#activity !== "idle")
       throw new Error("game002 FreeGame operation target is already active.");
     this.#payload = payload;
-    this.#complete = false;
+    this.#operation = operation;
     this.#failure = null;
     switch (payload.kind) {
-      case "trigger":
-        this.startAnimation(payload.positions, "win");
-        this.#activity = "trigger";
-        return;
-      case "transition":
-        this.#activity = "transition";
-        void this.#backgroundPlayer.prepareModeTransition!(payload.mode)
-          .then(() => this.#backgroundPlayer.requestMode!(payload.mode))
-          .then(() => {
-            this.#complete = true;
-          })
-          .catch((error: unknown) => {
-            this.#failure = asError(error);
-          });
-        return;
       case "spin":
         this.#runtime.startSelectiveSpin({
           sourceScene: payload.spin.inputScene,
@@ -120,12 +101,6 @@ export class Game002FreeGameOperationTarget {
         });
         this.#activity = "spin";
         return;
-      case "af":
-        this.startAf(payload);
-        return;
-      case "co":
-        this.startCo(payload);
-        return;
       case "win":
         this.#cascadePlayer.start(this.#cascadePlayer.prepare(payload.groups));
         this.#activity = "win";
@@ -134,6 +109,8 @@ export class Game002FreeGameOperationTarget {
         this.#winAmountPlayer.start(payload);
         this.#activity = "popup";
         return;
+      default:
+        this.startTransaction(this.createTransactionProgram(payload));
     }
   }
 
@@ -142,38 +119,33 @@ export class Game002FreeGameOperationTarget {
     const payload = this.#payload;
     if (!payload)
       throw new Error("game002 FreeGame operation payload is missing.");
-    if (this.#activity === "transition") return this.finishIfComplete();
-    if (
-      [
-        "trigger",
-        "spin",
-        "af-feature",
-        "af-change",
-        "co-feature",
-        "co-transfer",
-      ].includes(this.#activity)
-    )
+    if (this.#activity === "transaction") {
       this.#runtime.update(deltaSeconds);
-    if (this.#activity === "trigger" && payload.kind === "trigger") {
-      if (!this.animationComplete()) return { completed: false };
-      this.#runtime.requestVisibleSymbolStates(
-        payload.positions,
-        "normal",
-        "immediate",
-      );
+      const transaction = this.#transactionRunner.getSnapshot();
+      if (transaction.commandKind === "progress") {
+        if (this.#progressCommandIndex === transaction.commandIndex)
+          this.#transactionRunner.update(deltaSeconds);
+        else this.#progressCommandIndex = transaction.commandIndex;
+      } else {
+        this.#progressCommandIndex = null;
+        this.#transactionRunner.update(deltaSeconds);
+      }
+      if (this.#transactionRunner.getSnapshot().phase === "complete")
+        this.#transactionComplete = true;
+      if (this.#failure) throw this.#failure;
+      if (!this.#transactionComplete) return { completed: false };
+      if (payload.kind === "af")
+        this.assertOutput(payload.af.outputScene, "AF");
+      if (payload.kind === "co")
+        this.assertOutput(payload.co.outputScene, "CO");
       return this.finish();
     }
     if (this.#activity === "spin" && payload.kind === "spin") {
+      this.#runtime.update(deltaSeconds);
       if (this.#runtime.isSpinning()) return { completed: false };
-      assertGame002ReelVisualMatchesTarget(
-        this.#runtime.getVisualSnapshot(),
-        payload.spin.spinScene,
-        "game002 FreeGame operation spin",
-      );
+      this.assertOutput(payload.spin.spinScene, "spin");
       return this.finish();
     }
-    if (payload.kind === "af") return this.updateAf(payload);
-    if (payload.kind === "co") return this.updateCo(payload, deltaSeconds);
     if (this.#activity === "win" && payload.kind === "win") {
       if (!this.#cascadePlayer.update(deltaSeconds).completed)
         return { completed: false };
@@ -191,244 +163,283 @@ export class Game002FreeGameOperationTarget {
   }
 
   cleanup(): void {
-    this.#symbolPlaybackGeneration += 1;
-    this.#symbolPlaybackAbort?.abort(
-      new Error("game002 FreeGame symbol playback was interrupted by cleanup."),
-    );
-    this.#symbolPlaybackAbort = null;
-    this.#symbolPlaybackComplete = true;
-    for (const replacement of this.#afReplacements) replacement.rollback();
-    for (const replacement of this.#coReplacements) replacement.rollback();
-    this.#coTransfers?.rollback();
-    this.#afReplacements = [];
-    this.#coReplacements = [];
-    this.#coTransfers = null;
+    this.#transactionGeneration += 1;
+    if (this.#transactionRunner.getSnapshot().running)
+      this.#transactionRunner.cleanup("next-program");
+    this.#transactionComplete = true;
+    this.#progressCommandIndex = null;
     this.#cascadePlayer.clear();
     this.#winAmountPlayer.dismissImmediately();
+    const operation = this.#operation;
+    if (
+      operation?.effect === "state-mutation" &&
+      this.#runtime.getCurrentScene()
+    )
+      this.#runtime.applyScene(
+        operation.input.scene,
+        "game002 FreeGame transaction rollback",
+        operation.input.values as Parameters<
+          Game002ReelRuntime["applyScene"]
+        >[2],
+      );
     this.#payload = null;
+    this.#operation = null;
     this.#activity = "idle";
-    this.#complete = true;
     this.#failure = null;
   }
 
-  private startAf(
-    payload: Extract<Game002FreeGameOperationPayload, { kind: "af" }>,
-  ): void {
-    const prepared: PreparedVisibleOccurrenceReplacement[] = [];
-    try {
-      for (const position of payload.af.positions) {
-        this.#runtime.setVisibleSymbolImageStringText(
-          position.x,
-          position.y,
-          "free-spins",
-          String(payload.af.addedFreeSpins),
-        );
-        prepared.push(
-          this.#runtime.prepareVisibleOccurrenceReplacement({
-            x: position.x,
-            y: position.y,
-            expectedCode: this.#codes.AF,
-            outputCode: this.#codes.CN,
-            outputPresentationValue:
-              payload.af.outputValues[position.x]![position.y]!,
-          }),
-        );
-      }
-    } catch (error) {
-      for (const replacement of prepared) replacement.rollback();
-      throw error;
-    }
-    this.#afReplacements = prepared;
-    this.startAnimation(payload.af.positions, "feature");
-    this.#activity = "af-feature";
-  }
-
-  private updateAf(
-    payload: Extract<Game002FreeGameOperationPayload, { kind: "af" }>,
-  ) {
-    if (this.#activity === "af-feature") {
-      if (!this.animationComplete()) return { completed: false };
-      this.startAnimation(payload.af.positions, "change");
-      this.#activity = "af-change";
-      return { completed: false };
-    }
-    if (!this.animationComplete()) return { completed: false };
-    for (const replacement of this.#afReplacements) replacement.commit();
-    this.#afReplacements = [];
-    assertGame002ReelVisualMatchesTarget(
-      this.#runtime.getVisualSnapshot(),
-      payload.af.outputScene,
-      "game002 FreeGame AF operation",
-    );
-    return this.finish();
-  }
-
-  private startCo(
-    payload: Extract<Game002FreeGameOperationPayload, { kind: "co" }>,
-  ): void {
-    const replacements: PreparedVisibleOccurrenceReplacement[] = [];
-    try {
-      for (const position of payload.co.coPositions)
-        replacements.push(
-          this.#runtime.prepareVisibleOccurrenceReplacement({
-            x: position.x,
-            y: position.y,
-            expectedCode: this.#codes.CO,
-            outputCode: this.#codes.CN,
-            outputPresentationValue:
-              payload.co.outputValues[position.x]![position.y]!,
-          }),
-        );
-      this.#coTransfers = this.#runtime.prepareVisibleOccurrenceTransferBatch({
-        transfers: payload.co.transfers.map((transfer) => ({
-          source: transfer.source,
-          target: transfer.target,
-          expectedSourceCode: transfer.sourceCode,
-          expectedTargetCode: transfer.targetCode,
-          sourceReplacementCode: this.#codes.BN,
-          sourceReplacementPresentationValue: null,
-        })),
+  private createTransactionProgram(
+    payload: Exclude<
+      Game002FreeGameOperationPayload,
+      { kind: "spin" | "win" | "popup" }
+    >,
+  ): PresentationTransactionProgram {
+    const commands: PresentationTransactionCommand[] = [];
+    if (payload.kind === "trigger") {
+      commands.push(
+        this.awaitStates(payload.positions, "win"),
+        this.commit(() =>
+          this.#runtime.requestVisibleSymbolStates(
+            payload.positions,
+            "normal",
+            "immediate",
+          ),
+        ),
+      );
+    } else if (payload.kind === "transition") {
+      commands.push({
+        kind: "await",
+        preflight: () => this.preflight(payload),
+        start: async () => {
+          await this.#backgroundPlayer.prepareModeTransition!(payload.mode);
+          await this.#backgroundPlayer.requestMode!(payload.mode);
+        },
       });
-    } catch (error) {
-      for (const replacement of replacements) replacement.rollback();
-      this.#coTransfers?.rollback();
-      this.#coTransfers = null;
-      throw error;
-    }
-    this.#coReplacements = replacements;
-    this.startMixedCoAnimation(
-      payload.co.coPositions,
-      payload.co.sourcePositions,
-    );
-    this.#activity = "co-feature";
-  }
-
-  private updateCo(
-    payload: Extract<Game002FreeGameOperationPayload, { kind: "co" }>,
-    deltaSeconds: number,
-  ) {
-    if (this.#activity === "co-feature") {
-      if (!this.animationComplete()) return { completed: false };
-      this.startAnimation(payload.co.sourcePositions, "feature2");
-      this.#coTransfers?.start();
-      this.#coProgress = 0;
-      this.#activity = "co-transfer";
-      return { completed: false };
-    }
-    if (!this.animationComplete()) {
-      this.#coProgress = Math.min(0.9, this.#coProgress + deltaSeconds * 2);
-      this.#coTransfers?.setProgress(this.#coProgress);
-      return { completed: false };
-    }
-    this.#coTransfers?.setProgress(1);
-    this.#coTransfers?.commit();
-    this.#coTransfers = null;
-    for (const replacement of this.#coReplacements) replacement.commit();
-    this.#coReplacements = [];
-    assertGame002ReelVisualMatchesTarget(
-      this.#runtime.getVisualSnapshot(),
-      payload.co.outputScene,
-      "game002 FreeGame CO operation",
-    );
-    return this.finish();
-  }
-
-  private startMixedCoAnimation(
-    co: readonly WinResultPosition[],
-    sources: readonly WinResultPosition[],
-  ): void {
-    this.startSymbolPlayback((signal) =>
-      this.#runtime.playVisibleSymbolStateBatch(
-        [
-          {
-            positions: co,
-            state: "feature",
-            options: {
-              transitionMode: "immediate",
-              completion: "once-complete",
-            },
-          },
-          {
-            positions: sources,
-            state: "feature1",
-            options: {
-              transitionMode: "immediate",
-              completion: "once-complete",
-            },
-          },
-        ],
-        { signal },
-      ),
-    );
-  }
-
-  private startAnimation(
-    positions: readonly WinResultPosition[],
-    state: string,
-  ): void {
-    this.startSymbolPlayback((signal) =>
-      this.#runtime.playVisibleSymbolStates(positions, state, {
-        transitionMode: "immediate",
-        completion: "once-complete",
-        signal,
-      }),
-    );
-  }
-
-  private startSymbolPlayback(
-    start: (signal: AbortSignal) => Promise<void>,
-  ): void {
-    if (!this.#symbolPlaybackComplete) {
-      throw new Error(
-        "game002 FreeGame cannot start symbol playback while another playback is pending.",
+    } else if (payload.kind === "af") {
+      commands.push(
+        this.commit(() => {
+          for (const position of payload.af.positions)
+            this.#runtime.setVisibleSymbolImageStringText(
+              position.x,
+              position.y,
+              "free-spins",
+              String(payload.af.addedFreeSpins),
+            );
+        }),
+        this.awaitStates(payload.af.positions, "feature"),
+        this.awaitStates(payload.af.positions, "change"),
+        this.prepareReplacements(payload.af.positions, (position) => ({
+          x: position.x,
+          y: position.y,
+          expectedCode: this.#codes.AF,
+          outputCode: this.#codes.CN,
+          outputPresentationValue:
+            payload.af.outputValues[position.x]![position.y]!,
+        })),
+      );
+    } else {
+      commands.push(
+        {
+          kind: "await",
+          preflight: () => undefined,
+          start: (signal) =>
+            this.#runtime.playVisibleSymbolStateBatch(
+              [
+                {
+                  positions: payload.co.coPositions,
+                  state: "feature",
+                  options: {
+                    transitionMode: "immediate",
+                    completion: "once-complete",
+                  },
+                },
+                {
+                  positions: payload.co.sourcePositions,
+                  state: "feature1",
+                  options: {
+                    transitionMode: "immediate",
+                    completion: "once-complete",
+                  },
+                },
+              ],
+              { signal },
+            ),
+        },
+        this.prepareCoTransfer(payload),
       );
     }
-    this.#symbolPlaybackAbort?.abort();
-    const controller = new AbortController();
-    const generation = ++this.#symbolPlaybackGeneration;
-    this.#symbolPlaybackAbort = controller;
-    this.#symbolPlaybackComplete = false;
-    try {
-      void this.trackSymbolPlayback(generation, start(controller.signal));
-    } catch (error) {
-      controller.abort(error);
-      this.#symbolPlaybackAbort = null;
-      this.#symbolPlaybackComplete = true;
-      throw error;
-    }
+    return Object.freeze({ commands: Object.freeze(commands) });
   }
 
-  private async trackSymbolPlayback(
-    generation: number,
-    playback: Promise<void>,
-  ): Promise<void> {
-    try {
-      await playback;
-      if (generation !== this.#symbolPlaybackGeneration) return;
-      this.#symbolPlaybackComplete = true;
-      this.#symbolPlaybackAbort = null;
-    } catch (error) {
-      if (generation !== this.#symbolPlaybackGeneration) return;
-      this.#symbolPlaybackComplete = true;
-      this.#symbolPlaybackAbort = null;
-      this.#failure = asError(error);
-    }
+  private awaitStates(
+    positions: readonly WinResultPosition[],
+    state: string,
+  ): PresentationTransactionCommand {
+    return Object.freeze({
+      kind: "await" as const,
+      preflight: () => undefined,
+      start: (signal: AbortSignal) =>
+        this.#runtime.playVisibleSymbolStates(positions, state, {
+          transitionMode: "immediate",
+          completion: "once-complete",
+          signal,
+        }),
+    });
   }
 
-  private animationComplete(): boolean {
-    if (this.#failure) throw this.#failure;
-    return this.#symbolPlaybackComplete;
+  private commit(commit: () => void): PresentationTransactionCommand {
+    return Object.freeze({
+      kind: "commit" as const,
+      preflight: () => undefined,
+      prepare: () => ({
+        commit,
+        rollback: () => undefined,
+        destroy: () => undefined,
+      }),
+    });
   }
 
-  private finishIfComplete() {
-    if (this.#failure) throw this.#failure;
-    return this.#complete ? this.finish() : { completed: false };
+  private prepareReplacements(
+    positions: readonly WinResultPosition[],
+    options: (
+      position: WinResultPosition,
+    ) => Parameters<
+      Game002ReelRuntime["prepareVisibleOccurrenceReplacement"]
+    >[0],
+  ): PresentationTransactionCommand {
+    return Object.freeze({
+      kind: "commit" as const,
+      preflight: () => undefined,
+      prepare: () => {
+        const prepared: PreparedVisibleOccurrenceReplacement[] = [];
+        try {
+          for (const position of positions)
+            prepared.push(
+              this.#runtime.prepareVisibleOccurrenceReplacement(
+                options(position),
+              ),
+            );
+        } catch (error) {
+          for (const replacement of prepared.toReversed())
+            replacement.rollback();
+          throw error;
+        }
+        return {
+          commit: () => {
+            for (const replacement of prepared) replacement.commit();
+          },
+          rollback: () => {
+            for (const replacement of prepared.toReversed())
+              replacement.rollback();
+          },
+          destroy: () => undefined,
+        };
+      },
+    });
+  }
+
+  private prepareCoTransfer(
+    payload: Extract<Game002FreeGameOperationPayload, { kind: "co" }>,
+  ): PresentationTransactionCommand {
+    return Object.freeze({
+      kind: "progress" as const,
+      durationSeconds: 0.5,
+      preflight: () => undefined,
+      await: (signal: AbortSignal) =>
+        this.#runtime.playVisibleSymbolStates(
+          payload.co.sourcePositions,
+          "feature2",
+          {
+            transitionMode: "immediate",
+            completion: "once-complete",
+            signal,
+          },
+        ),
+      prepare: () => {
+        const replacements: PreparedVisibleOccurrenceReplacement[] = [];
+        let transfer: PreparedGridCellVisibleOccurrenceTransferBatch | null =
+          null;
+        try {
+          for (const position of payload.co.coPositions)
+            replacements.push(
+              this.#runtime.prepareVisibleOccurrenceReplacement({
+                x: position.x,
+                y: position.y,
+                expectedCode: this.#codes.CO,
+                outputCode: this.#codes.CN,
+                outputPresentationValue:
+                  payload.co.outputValues[position.x]![position.y]!,
+              }),
+            );
+          transfer = this.#runtime.prepareVisibleOccurrenceTransferBatch({
+            transfers: payload.co.transfers.map((item) => ({
+              source: item.source,
+              target: item.target,
+              expectedSourceCode: item.sourceCode,
+              expectedTargetCode: item.targetCode,
+              sourceReplacementCode: this.#codes.BN,
+              sourceReplacementPresentationValue: null,
+            })),
+          });
+        } catch (error) {
+          transfer?.rollback();
+          for (const replacement of replacements.toReversed())
+            replacement.rollback();
+          throw error;
+        }
+        const preparedTransfer = transfer;
+        return {
+          start: () => preparedTransfer.start(),
+          setProgress: (progress: number) =>
+            preparedTransfer.setProgress(progress),
+          commit: () => {
+            preparedTransfer.commit();
+            for (const replacement of replacements) replacement.commit();
+          },
+          rollback: () => {
+            preparedTransfer.rollback();
+            for (const replacement of replacements.toReversed())
+              replacement.rollback();
+          },
+          destroy: () => undefined,
+        };
+      },
+    });
+  }
+
+  private startTransaction(program: PresentationTransactionProgram): void {
+    this.#activity = "transaction";
+    this.#transactionComplete = false;
+    this.#progressCommandIndex = null;
+    const generation = ++this.#transactionGeneration;
+    void this.#transactionRunner.start(program).then(
+      () => {
+        if (generation === this.#transactionGeneration)
+          this.#transactionComplete = true;
+      },
+      (error: unknown) => {
+        if (generation === this.#transactionGeneration)
+          this.#failure = asError(error);
+      },
+    );
+  }
+
+  private assertOutput(
+    scene: Parameters<Game002ReelRuntime["applyScene"]>[0],
+    label: string,
+  ) {
+    assertGame002ReelVisualMatchesTarget(
+      this.#runtime.getVisualSnapshot(),
+      scene,
+      `game002 FreeGame ${label} operation`,
+    );
   }
 
   private finish() {
     this.#payload = null;
+    this.#operation = null;
     this.#activity = "idle";
-    this.#complete = true;
+    this.#transactionComplete = true;
     return { completed: true };
   }
 }

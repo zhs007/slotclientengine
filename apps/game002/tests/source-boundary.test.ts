@@ -234,6 +234,30 @@ describe("game002 source boundary", () => {
     );
     expect(multiplierCompilerSource).not.toContain("operationPayloads");
     expect(multiplierCompilerSource).not.toContain("getOperationPayload");
+    const operationCompilerSource = readFileSync(
+      join(APP_ROOT, "src/game002-operation-compiler.ts"),
+      "utf8",
+    );
+    expect(operationCompilerSource).toContain("decodeGame002RoundFacts");
+    expect(operationCompilerSource).toContain(
+      "compileGame002OperationPlanFromFacts",
+    );
+    const freeGameTargetSource = readFileSync(
+      join(APP_ROOT, "src/freegame-operation-target.ts"),
+      "utf8",
+    );
+    expect(freeGameTargetSource).toContain(
+      "createPresentationTransactionRunner",
+    );
+    for (const legacyState of [
+      "af-feature",
+      "af-change",
+      "co-feature",
+      "co-transfer",
+      "#coProgress",
+      "#coReplacements",
+    ])
+      expect(freeGameTargetSource).not.toContain(legacyState);
   });
 
   it("keeps skin focus regions explicit and delegates art rect mapping to rendercore", () => {

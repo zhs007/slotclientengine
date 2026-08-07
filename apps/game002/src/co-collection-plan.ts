@@ -7,6 +7,10 @@ import type {
   SlotRoundSettledTransformChangeDraft,
   SlotRoundSettledTransformDraft,
 } from "@slotclientengine/gameframeworks";
+import {
+  forEachMatrixCell as forEachCell,
+  slotOperationPositionKey as positionKey,
+} from "@slotclientengine/gameframeworks";
 import { GAME002_CASCADE_COMPONENTS } from "./cascade-config.js";
 
 export interface Game002CoTransfer {
@@ -535,10 +539,6 @@ function isEightNeighbor(
   return dx <= 1 && dy <= 1 && dx + dy > 0;
 }
 
-function positionKey(position: SlotRoundPosition): string {
-  return `${position.x},${position.y}`;
-}
-
 function assertMatrixDimensions(
   matrix: readonly (readonly unknown[])[],
   scene: SceneMatrix,
@@ -549,13 +549,4 @@ function assertMatrixDimensions(
     matrix.some((column, x) => column.length !== scene[x]!.length)
   )
     throw new Error(`${label} dimensions do not match the settled scene.`);
-}
-
-function forEachCell(
-  scene: SceneMatrix,
-  visitor: (x: number, y: number, code: number) => void,
-): void {
-  scene.forEach((column, x) =>
-    column.forEach((code, y) => visitor(x, y, code)),
-  );
 }

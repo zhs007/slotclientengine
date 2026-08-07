@@ -7,8 +7,10 @@ import {
 } from "@slotclientengine/gameframeworks";
 import { compileGame002FreeGamePlan } from "../src/freegame-plan.js";
 import {
+  compileGame002OperationPlanFromFacts,
   compileGame002BaseGameOperationPlan,
   compileGame002RoundOperationPlan,
+  decodeGame002RoundFacts,
 } from "../src/game002-operation-compiler.js";
 import type { Game002ReelRuntime } from "../src/game002-reel-controller.js";
 
@@ -52,11 +54,18 @@ function compilerRuntime() {
 
 describe("game002 FreeGame plan", () => {
   it("serializes FreeGame as explicit frontend operations without server steps", () => {
-    const compilation = compileGame002RoundOperationPlan({
-      logic: createSampleLogic(),
+    const logic = createSampleLogic();
+    const options = {
+      logic,
       runtime: compilerRuntime(),
       displaySymbols: DISPLAY_SYMBOLS,
-    });
+    } as const;
+    const facts = decodeGame002RoundFacts(options);
+    const compilation = compileGame002OperationPlanFromFacts(facts);
+    expect(Object.isFrozen(facts)).toBe(true);
+    expect(Object.isFrozen(facts.drafts)).toBe(true);
+    expect(facts.drafts.every(Object.isFrozen)).toBe(true);
+    expect(compilation).toEqual(compileGame002RoundOperationPlan(options));
     const kinds = compilation.plan.operations.map(
       (operation) => operation.kind,
     );

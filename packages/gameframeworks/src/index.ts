@@ -3,6 +3,8 @@ import "./styles.css";
 export {
   applySlotOperationChanges,
   applySlotOperationValueUpdates,
+  forEachMatrixCell,
+  slotOperationPositionKey,
   compileConfiguredSlotRoundOperationPlanV2,
   createGameConfig,
   createBuiltinSlotOperationDefinitionsV2,
