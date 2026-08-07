@@ -1,9 +1,12 @@
 import { extractBoundedZip } from "@slotclientengine/browserartifactio";
 import {
+  bindPopupInteractionInput,
   createAwardCelebrationPlayer,
   createSpinePopupPlayer,
   createPopupPackageResource,
   formatPopupAmount,
+  handledPopupInteraction,
+  unhandledPopupInteraction,
   type AwardCelebrationPlayer,
   type SpinePopupPlayer,
   type PopupPackageResource,
@@ -70,6 +73,7 @@ export class PopupPreview {
   #input = { betAmountRaw: 100, winAmountRaw: 5000 };
   #amountFormat = DEFAULT_POPUP_PREVIEW_AMOUNT_FORMAT;
   #promptText: string | undefined;
+  #disposePopupInputBinding: (() => void) | null = null;
   constructor(host: HTMLElement, status: HTMLElement) {
     this.#host = host;
     this.#status = status;
@@ -82,6 +86,20 @@ export class PopupPreview {
       antialias: true,
     });
     this.#host.replaceChildren(this.#app.canvas);
+    const keyboardTarget = this.#app.canvas.ownerDocument.defaultView;
+    if (!keyboardTarget)
+      throw new Error(
+        "Popup preview canvas 缺少 browser window input target。",
+      );
+    this.#disposePopupInputBinding = bindPopupInteractionInput({
+      canvas: this.#app.canvas,
+      keyboardTarget,
+      dispatch: () => this.requestPrimaryPopupInteraction(),
+      onError: (error) => {
+        this.#status.textContent =
+          error instanceof Error ? error.message : String(error);
+      },
+    });
     this.#app.stage.addChild(this.#guides);
     this.#app.ticker.add((ticker) => {
       if (this.#player?.isPlaying()) {
@@ -178,6 +196,8 @@ export class PopupPreview {
     this.layout();
   }
   destroy() {
+    this.#disposePopupInputBinding?.();
+    this.#disposePopupInputBinding = null;
     this.clear();
     this.#guides.destroy();
     this.#app.destroy(true);
@@ -210,6 +230,13 @@ export class PopupPreview {
         .lineTo(screen.width / 2, screen.height / 2 + 20)
         .stroke({ color: 0xffcc66, width: 1 });
     }
+  }
+  private requestPrimaryPopupInteraction() {
+    if (!this.#player?.isPlaying()) return unhandledPopupInteraction();
+    if (this.#type === "award-celebration")
+      (this.#player as AwardCelebrationPlayer).requestAdvance();
+    else (this.#player as SpinePopupPlayer).requestDismiss();
+    return handledPopupInteraction();
   }
   private clear() {
     this.#player?.destroy();

@@ -46,6 +46,10 @@ describe("game002 scene-layout presentation adapter", () => {
       getGameModeSnapshot: vi.fn().mockReturnValue({ stableMode: "BaseGame" }),
       prepareGameModeTransition: vi.fn().mockResolvedValue(undefined),
       requestGameMode: vi.fn().mockResolvedValue(undefined),
+      bindPopupInput: vi.fn().mockReturnValue(() => undefined),
+      requestPrimaryPopupInteraction: vi
+        .fn()
+        .mockReturnValue({ handled: false }),
       getAwardCelebrationPlayer: vi.fn().mockReturnValue(popup),
       destroy: vi.fn(),
     };
@@ -80,6 +84,16 @@ describe("game002 scene-layout presentation adapter", () => {
     await players.backgroundPlayer.requestMode?.("FreeGame");
     expect(surface.prepareGameModeTransition).toHaveBeenCalledWith("FreeGame");
     expect(surface.requestGameMode).toHaveBeenCalledWith("FreeGame");
+    const inputBinding = {
+      canvas: new EventTarget(),
+      keyboardTarget: new EventTarget(),
+      onError: vi.fn(),
+    };
+    players.backgroundPlayer.bindPopupInput(inputBinding);
+    expect(surface.bindPopupInput).toHaveBeenCalledWith(inputBinding);
+    expect(players.backgroundPlayer.requestPrimaryPopupInteraction()).toEqual({
+      handled: false,
+    });
 
     const input = { amountRaw: 250 };
     players.winAmountPlayer.start(input as never);

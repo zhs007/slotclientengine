@@ -254,10 +254,19 @@ describe("scene layout package video-blackout transition", () => {
       transitionPhase: "awaiting-video-start",
     });
     const popupPresentation = runtime.getPopupPresentation();
-    expect(popupPresentation.eventMode).toBe("static");
-    popupPresentation.emit("pointerdown", {} as never);
+    const canvas = new EventTarget();
+    const keyboard = new EventTarget();
+    const errors: unknown[] = [];
+    runtime.bindPopupInput({
+      canvas,
+      keyboardTarget: keyboard,
+      onError: (error) => errors.push(error),
+    });
+    expect(popupPresentation.eventMode).toBe("none");
+    keyboard.dispatchEvent(new Event("keydown"));
     expect(player.playCalls).toBe(1);
     expect(popupPresentation.eventMode).toBe("none");
+    expect(errors).toEqual([]);
     await Promise.resolve();
     player.currentTimeSeconds = 4;
     player.ended = true;

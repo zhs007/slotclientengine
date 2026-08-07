@@ -475,6 +475,12 @@ export interface SceneLayoutGameModeRequestOptions {
   >;
 }
 
+export interface SceneLayoutPopupInputBindingOptions {
+  readonly canvas: EventTarget;
+  readonly keyboardTarget: EventTarget;
+  readonly onError: (error: unknown) => void;
+}
+
 export interface SceneLayoutInitialReelScene {
   readonly scene: readonly (readonly number[])[];
   readonly localPhaseYs: readonly number[];
@@ -545,6 +551,10 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   getModeTransitionPresentation(): Container;
   /** Popup layer for hosts that own their business reel. */
   getPopupPresentation(): Container;
+  /** Routes whole-canvas pointer and keyboard input through the active Popup. */
+  bindPopupInput(options: SceneLayoutPopupInputBindingOptions): () => void;
+  /** Performs the active Popup phase's single primary interaction. */
+  requestPrimaryPopupInteraction(): import("../popup/index.js").PopupInteractionDispatchResult;
   /** Returns a borrowed package-owned layer. Callers must not destroy it. */
   getLayer(id: SceneLayoutLayerId): Container;
   /** Returns the manifest-declared mode ids in their stable declaration order. */

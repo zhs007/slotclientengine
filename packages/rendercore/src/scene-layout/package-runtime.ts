@@ -1,9 +1,13 @@
 import type { LogicReels } from "@slotclientengine/logiccore";
 import { Container, Graphics, Rectangle } from "pixi.js";
 import {
+  bindPopupInteractionInput,
   createAwardCelebrationPlayer,
   createSpinePopupPlayer,
+  handledPopupInteraction,
+  unhandledPopupInteraction,
   type AwardCelebrationPlayer,
+  type PopupInteractionDispatchResult,
   type SpinePopupPlayer,
 } from "../popup/index.js";
 import {
@@ -50,6 +54,7 @@ import type {
   SceneLayoutNodeStateSnapshot,
   SceneLayoutPackageResource,
   SceneLayoutPackageRuntime,
+  SceneLayoutPopupInputBindingOptions,
   SceneLayoutLayerId,
   SceneLayoutSnapshot,
   SceneLayoutSymbolPackageBinding,
@@ -192,18 +197,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     readonly y: number;
   }[] = [];
   #mainReelLandingKeys = new Set<string>();
+  #disposePopupInputBinding: (() => void) | null = null;
   readonly #onPopupPointerDown = () => {
-    const prelude = this.#activePrelude;
-    if (prelude?.phase === "popup") {
-      this.requestDismissGameModePrelude();
-      return;
-    }
-    if (prelude?.phase === "awaiting-video-start") {
-      void this.startPendingGameModeVideo().catch(() => {});
-      return;
-    }
-    const awardId = this.#activePopupId ?? this.playingPopupId();
-    if (awardId) this.getAwardCelebrationPopup(awardId).requestAdvance();
+    const result = this.requestPrimaryPopupInteraction();
+    if (result.handled && result.completion)
+      void result.completion.catch(() => {});
   };
 
   constructor(
@@ -851,6 +849,54 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     return this.#popupRoot;
   }
 
+  bindPopupInput(options: SceneLayoutPopupInputBindingOptions): () => void {
+    this.assertReady();
+    if (this.#disposePopupInputBinding)
+      throw new SceneLayoutError("Scene layout Popup input is already bound.");
+    this.#popupRoot.off("pointerdown", this.#onPopupPointerDown);
+    this.refreshPopupPointerInteraction();
+    let disposeNative: () => void;
+    try {
+      disposeNative = bindPopupInteractionInput({
+        ...options,
+        dispatch: () => this.requestPrimaryPopupInteraction(),
+      });
+    } catch (error) {
+      this.#popupRoot.on("pointerdown", this.#onPopupPointerDown);
+      this.refreshPopupPointerInteraction();
+      throw error;
+    }
+    let disposed = false;
+    const dispose = () => {
+      if (disposed) return;
+      disposed = true;
+      disposeNative();
+      if (this.#disposePopupInputBinding !== dispose) return;
+      this.#disposePopupInputBinding = null;
+      if (this.#destroyed) return;
+      this.#popupRoot.on("pointerdown", this.#onPopupPointerDown);
+      this.refreshPopupPointerInteraction();
+    };
+    this.#disposePopupInputBinding = dispose;
+    this.refreshPopupPointerInteraction();
+    return dispose;
+  }
+
+  requestPrimaryPopupInteraction(): PopupInteractionDispatchResult {
+    this.assertReady();
+    const prelude = this.#activePrelude;
+    if (prelude?.phase === "popup") {
+      this.requestDismissGameModePrelude();
+      return handledPopupInteraction();
+    }
+    if (prelude?.phase === "awaiting-video-start")
+      return handledPopupInteraction(this.startPendingGameModeVideo());
+    const awardId = this.#activePopupId ?? this.playingPopupId();
+    if (!awardId) return unhandledPopupInteraction();
+    this.getAwardCelebrationPopup(awardId).requestAdvance();
+    return handledPopupInteraction();
+  }
+
   getLayer(id: SceneLayoutLayerId): Container {
     this.assertReady();
     switch (id) {
@@ -1278,6 +1324,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
+    this.#disposePopupInputBinding?.();
+    this.#disposePopupInputBinding = null;
     this.releasePreparedTransition(this.#preparedTransition);
     this.#preparedTransition = null;
     if (this.#activeTransition) {
@@ -1769,7 +1817,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
 
   private refreshPopupPointerInteraction(): void {
     this.#popupRoot.eventMode =
-      this.#activePrelude || this.#activePopupId ? "static" : "none";
+      !this.#disposePopupInputBinding &&
+      (this.#activePrelude || this.#activePopupId)
+        ? "static"
+        : "none";
   }
 
   private updateActiveVideoTransition(

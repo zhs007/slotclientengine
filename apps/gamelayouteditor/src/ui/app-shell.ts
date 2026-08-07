@@ -199,7 +199,9 @@ export class GameLayoutEditorApp {
     this.#root.innerHTML = shellMarkup();
     const previewHost = this.requireElement("[data-preview-host]");
     const diagnostics = this.requireElement("[data-preview-diagnostics]");
-    this.#preview = new LayoutPreview(previewHost, diagnostics);
+    this.#preview = new LayoutPreview(previewHost, diagnostics, {
+      onPopupInputError: (error) => this.#store.setExternalError(error),
+    });
     await this.#preview.init();
     this.bindStaticActions();
     this.#unsubscribe = this.#store.subscribe((snapshot) => {
@@ -813,6 +815,20 @@ export class GameLayoutEditorApp {
         this.stopPreviewModeMonitor();
         this.renderWorkspace(this.#store.getSnapshot());
       });
+  }
+
+  private requestPreviewPopupInteraction(): void {
+    try {
+      const result = this.#preview?.requestPrimaryPopupInteraction();
+      if (!result?.handled)
+        throw new Error("当前 preview 没有可处理的 Popup 操作。");
+      if (result.completion)
+        void result.completion.catch((error) => {
+          this.#store.setExternalError(error);
+        });
+    } catch (error) {
+      this.#store.setExternalError(error);
+    }
   }
 
   private reconcileSelectedTransitionForTarget(): void {
@@ -1713,9 +1729,7 @@ export class GameLayoutEditorApp {
           this.#preview?.getGameModeSnapshot()?.transitionPhase ===
           "awaiting-video-start"
         ) {
-          void this.#preview.startPendingGameModeVideo().catch((error) => {
-            this.#store.setExternalError(error);
-          });
+          this.requestPreviewPopupInteraction();
           return;
         }
         this.requestPreviewMode(this.#selectedPreviewMode);
@@ -1723,11 +1737,7 @@ export class GameLayoutEditorApp {
     panel
       .querySelector<HTMLButtonElement>("[data-dismiss-transition-prelude]")
       ?.addEventListener("click", () => {
-        try {
-          this.#preview?.requestDismissGameModePrelude();
-        } catch (error) {
-          this.#store.setExternalError(error);
-        }
+        this.requestPreviewPopupInteraction();
       });
     panel
       .querySelector("[data-upload-resources]")

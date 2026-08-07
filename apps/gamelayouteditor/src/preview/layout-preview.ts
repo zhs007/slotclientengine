@@ -11,6 +11,7 @@ import {
   type SceneLayoutSnapshot,
   type SceneLayoutVariantId,
 } from "@slotclientengine/rendercore/scene-layout";
+import type { PopupInteractionDispatchResult } from "@slotclientengine/rendercore/popup";
 import {
   createSymbolPackageValueControllerFactory,
   type RenderSymbol,
@@ -107,15 +108,25 @@ export class LayoutPreview {
   );
   #packageScenes = new Map<string, RandomReelSceneSnapshot>();
   #selectedLayerId: string | null = null;
+  readonly #onPopupInputError: (error: unknown) => void;
+  #disposePopupInputBinding: (() => void) | null = null;
 
   constructor(
     host: HTMLElement,
     diagnostics: HTMLElement,
-    options: { readonly randomSource?: RandomUint32Source } = {},
+    options: {
+      readonly randomSource?: RandomUint32Source;
+      readonly onPopupInputError?: (error: unknown) => void;
+    } = {},
   ) {
     this.#host = host;
     this.#diagnostics = diagnostics;
     this.#randomSource = options.randomSource ?? null;
+    this.#onPopupInputError =
+      options.onPopupInputError ??
+      ((error) => {
+        console.error(error);
+      });
     this.#symbolOverlay.sortableChildren = true;
   }
 
@@ -249,12 +260,37 @@ export class LayoutPreview {
       nextPackage.destroy();
       return;
     }
+    let disposePopupInputBinding: (() => void) | null = null;
+    if (needsPackageRuntime) {
+      const keyboardTarget = this.#app.canvas.ownerDocument.defaultView;
+      if (!keyboardTarget) {
+        nextRuntime.destroy();
+        nextPackage.destroy();
+        throw new Error(
+          "布局 preview canvas 缺少 browser window input target。",
+        );
+      }
+      try {
+        disposePopupInputBinding = (
+          nextRuntime as SceneLayoutPackageRuntime
+        ).bindPopupInput({
+          canvas: this.#app.canvas,
+          keyboardTarget,
+          onError: this.#onPopupInputError,
+        });
+      } catch (error) {
+        nextRuntime.destroy();
+        nextPackage.destroy();
+        throw error;
+      }
+    }
     this.clearRuntime();
     this.#package = nextPackage;
     this.#runtime = nextRuntime;
     this.#packageRuntime = needsPackageRuntime
       ? (nextRuntime as SceneLayoutPackageRuntime)
       : null;
+    this.#disposePopupInputBinding = disposePopupInputBinding;
     this.#manifest = manifest;
     this.#packageScenes = packageScenes;
     this.#app.stage.addChildAt(nextRuntime.container, 0);
@@ -339,10 +375,10 @@ export class LayoutPreview {
     );
   }
 
-  requestDismissGameModePrelude(): void {
+  requestPrimaryPopupInteraction(): PopupInteractionDispatchResult {
     if (!this.#packageRuntime)
       throw new Error("Scene Layout package preview 尚未就绪。");
-    this.#packageRuntime.requestDismissGameModePrelude();
+    return this.#packageRuntime.requestPrimaryPopupInteraction();
   }
 
   getActiveAwardCelebrationSnapshot() {
@@ -371,12 +407,6 @@ export class LayoutPreview {
       modeId,
       this.gameModeRequestOptions(modeId),
     );
-  }
-
-  async startPendingGameModeVideo(): Promise<void> {
-    if (!this.#packageRuntime)
-      throw new Error("当前 layout preview 没有 package runtime。");
-    await this.#packageRuntime.startPendingGameModeVideo();
   }
 
   private gameModeRequestOptions(modeId: string) {
@@ -848,6 +878,8 @@ export class LayoutPreview {
   }
 
   private clearRuntime(): void {
+    this.#disposePopupInputBinding?.();
+    this.#disposePopupInputBinding = null;
     this.#runtime?.destroy();
     this.#runtime = null;
     this.#packageRuntime = null;

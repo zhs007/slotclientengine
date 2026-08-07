@@ -1,6 +1,7 @@
 import { Container } from "pixi.js";
 import type {
   AwardCelebrationPlayer,
+  PopupInteractionDispatchResult,
   SpinePopupPlayer,
 } from "../popup/index.js";
 import type { RenderViewportSize } from "../viewport/index.js";
@@ -10,6 +11,7 @@ import type {
   SceneLayoutGameModeSnapshot,
   SceneLayoutGameMode,
   SceneLayoutPackageResource,
+  SceneLayoutPopupInputBindingOptions,
   SceneLayoutSnapshot,
   SceneLayoutLayerId,
 } from "./types.js";
@@ -30,6 +32,8 @@ export interface SceneLayoutPresentationSurface {
   prepareGameModeTransition(modeId: string): Promise<void>;
   requestGameMode(modeId: string): Promise<void>;
   startPendingGameModeVideo(): Promise<void>;
+  bindPopupInput(options: SceneLayoutPopupInputBindingOptions): () => void;
+  requestPrimaryPopupInteraction(): PopupInteractionDispatchResult;
   getAwardCelebrationPlayer(id: string): AwardCelebrationPlayer;
   getSpinePopupPlayer(id: string): SpinePopupPlayer;
   getLayer(id: SceneLayoutLayerId): Container;
@@ -192,6 +196,16 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
   startPendingGameModeVideo(): Promise<void> {
     this.assertReady();
     return this.#runtime.startPendingGameModeVideo();
+  }
+
+  bindPopupInput(options: SceneLayoutPopupInputBindingOptions): () => void {
+    this.assertReady();
+    return this.#runtime.bindPopupInput(options);
+  }
+
+  requestPrimaryPopupInteraction(): PopupInteractionDispatchResult {
+    this.assertReady();
+    return this.#runtime.requestPrimaryPopupInteraction();
   }
 
   getAwardCelebrationPlayer(id: string): AwardCelebrationPlayer {

@@ -8,3 +8,4 @@ export * from "./spine-player.js";
 export * from "./styled-text.js";
 export * from "./font-resource.js";
 export * from "./prompt-text.js";
+export * from "./input-binding.js";

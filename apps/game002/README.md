@@ -97,7 +97,7 @@ framework 负责 live、HUD、spin/collect；adapter 负责 Pixi 画面和 grid-
 
 big/super/mega popup 的资源、阈值、动画和布局全部由 Crave package 内的 popup package 管理；app 只配置金额 formatter，不复制 rendercore 状态机。
 
-服务端整数 `100` 显示为 `$1.00`，但 spin/live 协议仍传原始整数。正中奖只在全部级联 step、remove、普通 unified fall 或期待 split refill 和必要的 gencoins 数据边界完成后启动金额动画；win-amount 播放期间 adapter 继续逐帧推进 main reel runtime，因此 CN 与其它 symbol 的 normal Loop 不会被冻结。`playSpin()` 等到金额进入 `awaiting-dismiss` 即可 resolve，不要求用户点击关闭。点击只调用 `requestAdvance()`：用于跳金额、进下一档或从最终等待态播放 dismiss。下一次 spin 会先清理遗留金额。
+服务端整数 `100` 显示为 `$1.00`，但 spin/live 协议仍传原始整数。正中奖只在全部级联 step、remove、普通 unified fall 或期待 split refill 和必要的 gencoins 数据边界完成后启动金额动画；win-amount 播放期间 adapter 继续逐帧推进 main reel runtime，因此 CN 与其它 symbol 的 normal Loop 不会被冻结。`playSpin()` 等到金额进入 `awaiting-dismiss` 即可 resolve，不要求用户点击关闭。game002 将完整 canvas 与 window keyboard 绑定到 shared Scene Layout Popup input；active award 的 pointer/key 只调用一次 `requestAdvance()`，转场 prelude 走同一 rendercore 分派，idle 输入透传。下一次 spin 会先清理遗留金额。
 
 ## WL/WM/CM multiplier
 

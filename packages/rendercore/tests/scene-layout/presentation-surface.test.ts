@@ -60,6 +60,22 @@ describe("scene layout presentation surface", () => {
       pivot: { x: 0.5, y: 0.5 },
       position: { x: 1000.5, y: 1000.5 },
     });
+    const canvas = new EventTarget();
+    const keyboard = new EventTarget();
+    const errors: unknown[] = [];
+    const disposeInput = surface.bindPopupInput({
+      canvas,
+      keyboardTarget: keyboard,
+      onError: (error) => errors.push(error),
+    });
+    const idlePointer = new Event("pointerdown", { cancelable: true });
+    canvas.dispatchEvent(idlePointer);
+    expect(idlePointer.defaultPrevented).toBe(false);
+    expect(surface.requestPrimaryPopupInteraction()).toEqual({
+      handled: false,
+    });
+    expect(errors).toEqual([]);
+    disposeInput();
     surface.destroy();
   });
 

@@ -10,13 +10,13 @@ import type {
   SymbolCascadeGroup,
   SymbolCascadePlayer,
 } from "@slotclientengine/rendercore";
-import type { SpineBackgroundPlayer } from "@slotclientengine/rendercore/background";
 import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-amount";
 import {
   createGame002Adapter,
   Game002RoundTarget,
   type Game002AdapterOptions,
 } from "../src/game-adapter.js";
+import type { Game002BackgroundPlayer } from "../src/scene-layout-presentation.js";
 import type { Game002ReelRuntime } from "../src/game-demo.js";
 import { getTestGame002PackageConfig } from "./value-resource-fixture.js";
 import {
@@ -33,7 +33,9 @@ type TestPosition = { readonly x: number; readonly y: number };
 describe("game002 task 95 adapter", () => {
   it("fails lifecycle misuse and resolves a terminal zero-win spin without cascade", async () => {
     const events: string[] = [];
+    const fatalErrors: Error[] = [];
     const fakeApp = createFakeApplication();
+    const background = new FakeBackgroundPlayer();
     const runtime = new FakeRuntime(events);
     const cascade = new FakeCascadePlayer(events, runtime);
     const winAmount = new FakeWinAmountPlayer(
@@ -42,9 +44,11 @@ describe("game002 task 95 adapter", () => {
     );
     const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
+      createBackgroundPlayer: () => background.asPlayer(),
       createRuntime: () => runtime.asRuntime(),
       createSymbolCascadePlayer: () => cascade,
       createWinAmountPlayer: () => winAmount.asPlayer(),
+      reportFatalError: (error) => fatalErrors.push(error),
     });
     expect(() => adapter.playSpin(createTerminalLogic())).toThrow(
       /not mounted/,
@@ -64,7 +68,15 @@ describe("game002 task 95 adapter", () => {
     adapter.setFrameworkState?.(context.getState());
     fakeApp.tick(16);
     fakeApp.canvas.dispatchEvent(new Event("pointerdown"));
-    expect(winAmount.advanceRequests).toBe(1);
+    window.dispatchEvent(new Event("keydown"));
+    expect(background.popupInputs).toHaveLength(2);
+    const popupError = new Error("popup input failed");
+    background.reportPopupError(popupError);
+    background.reportPopupError("popup input failed as text");
+    expect(fatalErrors).toEqual([
+      popupError,
+      new Error("popup input failed as text"),
+    ]);
 
     const pending = adapter.playSpin(createTerminalLogic());
     fakeApp.tick(1000);
@@ -78,6 +90,9 @@ describe("game002 task 95 adapter", () => {
     expect(runtime.spinValues.at(-1)).toBeDefined();
     adapter.destroy?.();
     adapter.destroy?.();
+    fakeApp.canvas.dispatchEvent(new Event("pointerdown"));
+    window.dispatchEvent(new Event("keydown"));
+    expect(background.popupInputs).toHaveLength(2);
   });
 
   it("mounts the single cascade amount owner between reels and win amount", async () => {
@@ -626,17 +641,30 @@ function createFakeApplication() {
 
 class FakeBackgroundPlayer {
   readonly container = new Container();
-  asPlayer(): SpineBackgroundPlayer {
+  readonly popupInputs: Event[] = [];
+  #onPopupInputError: ((error: unknown) => void) | null = null;
+
+  reportPopupError(error: unknown): void {
+    this.#onPopupInputError?.(error);
+  }
+
+  asPlayer(): Game002BackgroundPlayer {
     return {
       container: this.container,
       init: async () => undefined,
       update: () => undefined,
-      requestState: async () => undefined,
-      getSnapshot: () => ({
-        stableState: "BaseGame",
-        targetState: null,
-        phase: "stable",
-      }),
+      bindPopupInput: ({ canvas, keyboardTarget, onError }) => {
+        this.#onPopupInputError = onError;
+        const handle = (event: Event) => this.popupInputs.push(event);
+        canvas.addEventListener("pointerdown", handle);
+        keyboardTarget.addEventListener("keydown", handle);
+        return () => {
+          canvas.removeEventListener("pointerdown", handle);
+          keyboardTarget.removeEventListener("keydown", handle);
+          this.#onPopupInputError = null;
+        };
+      },
+      requestPrimaryPopupInteraction: () => ({ handled: false }),
       destroy: () => undefined,
     };
   }

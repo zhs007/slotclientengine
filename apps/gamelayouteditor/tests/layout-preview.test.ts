@@ -34,6 +34,28 @@ const state = vi.hoisted(() => {
       phase: "stable",
     })),
     getActiveAwardCelebrationSnapshot: vi.fn(() => null),
+    requestPrimaryPopupInteraction: vi.fn(() => ({ handled: true })),
+    bindPopupInput: vi.fn(
+      (options: {
+        canvas: EventTarget;
+        keyboardTarget: EventTarget;
+        onError: (error: unknown) => void;
+      }) => {
+        const handle = () => {
+          try {
+            packageRuntime.requestPrimaryPopupInteraction();
+          } catch (error) {
+            options.onError(error);
+          }
+        };
+        options.canvas.addEventListener("pointerdown", handle);
+        options.keyboardTarget.addEventListener("keydown", handle);
+        return () => {
+          options.canvas.removeEventListener("pointerdown", handle);
+          options.keyboardTarget.removeEventListener("keydown", handle);
+        };
+      },
+    ),
     requestGameMode: vi.fn(async () => undefined),
     selectAuthoringGameMode: vi.fn(async () => undefined),
     resetReelScene: vi.fn(),
@@ -323,6 +345,12 @@ describe("LayoutPreview", () => {
     };
     await preview.setLayout(manifest, assetBytes);
     expect(state.packageRuntime.init).toHaveBeenCalledWith({});
+    expect(state.packageRuntime.bindPopupInput).toHaveBeenCalledOnce();
+    state.canvas.dispatchEvent(new Event("pointerdown"));
+    window.dispatchEvent(new Event("keydown"));
+    expect(
+      state.packageRuntime.requestPrimaryPopupInteraction,
+    ).toHaveBeenCalledTimes(2);
     expect(preview.getGameModeIds()).toEqual(["BaseGame", "FreeGame"]);
     await preview.requestGameMode("FreeGame");
     await preview.selectAuthoringGameMode("FreeGame");
@@ -348,6 +376,11 @@ describe("LayoutPreview", () => {
     });
     expect(preview.getActiveAwardCelebrationSnapshot()).toBeNull();
     preview.destroy();
+    state.canvas.dispatchEvent(new Event("pointerdown"));
+    window.dispatchEvent(new Event("keydown"));
+    expect(
+      state.packageRuntime.requestPrimaryPopupInteraction,
+    ).toHaveBeenCalledTimes(2);
   });
 
   it("passes default presentation values to the combined package runtime", async () => {

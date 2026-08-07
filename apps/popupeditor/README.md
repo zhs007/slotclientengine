@@ -8,7 +8,7 @@ VNI bundle 只导入 `purpose=runtime` 的运行发布包：唯一 runtime 自�
 
 同名不同 bytes 默认覆盖，review 显示 hash、bytes、动作和受影响 layer；全项目校验或 preview prepare 失败会完整回滚。不存在文件夹入口、任意 logical resource id 或独立 dependency bytes 区。
 
-新导出的 `<id>-popup.zip` 由根 `popup.manifest.json`、`assets.map.json` 和完整 SHA-256 payload 构成。普通 Spine 类型接收一组 JSON、atlas 与若干 PNG，并显式配置 start、loop、end 动画；点击在 loop 边界生效。runtime parser 与两类播放生命周期均由 `rendercore/popup` 拥有。
+新导出的 `<id>-popup.zip` 由根 `popup.manifest.json`、`assets.map.json` 和完整 SHA-256 payload 构成。普通 Spine 类型接收一组 JSON、atlas 与若干 PNG，并显式配置 start、loop、end 动画；点击在 loop 边界生效。production preview 复用 `rendercore/popup` 的完整 canvas/keyboard binding：award 执行一次 advance，普通 Spine 锁存 dismiss，idle 输入透传。runtime parser、输入绑定与两类播放生命周期均由 `rendercore/popup` 拥有。
 
 普通 Spine 类型还可配置一个单行点击提示：字体默认使用 rendercore 的 `system-ui, sans-serif`，不会写入资源表或 ZIP；显式选择 package 字体时才携带 WOFF2/WOFF/TTF/OTF。默认文案、颜色、order 与渲染区域均可编辑，预览文案可临时覆盖，留空时显示默认文案；游戏 runtime 可传入已翻译 string。字号以区域高度起步并按区域等比缩小，不换行。可追加任意数量 image、系统文字、ImgNumber、Spine 或 VNI overlay，编辑其位置、缩放、旋转、order 及各类型 playback/可见 segment。
 

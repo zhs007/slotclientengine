@@ -48,7 +48,7 @@ const previewSpies = vi.hoisted(() => ({
       });
   }),
   getCurrentVariantId: vi.fn(() => "default"),
-  requestDismissGameModePrelude: vi.fn(),
+  requestPrimaryPopupInteraction: vi.fn(() => ({ handled: true })),
   getGameModeSnapshot: vi.fn((): any => null),
   getActiveAwardCelebrationSnapshot: vi.fn((): any => null),
   destroy: vi.fn(),
@@ -157,7 +157,8 @@ vi.mock("../src/preview/layout-preview.js", () => ({
     requestGameMode = previewSpies.requestGameMode;
     selectAuthoringGameMode = previewSpies.selectAuthoringGameMode;
     getCurrentVariantId = previewSpies.getCurrentVariantId;
-    requestDismissGameModePrelude = previewSpies.requestDismissGameModePrelude;
+    requestPrimaryPopupInteraction =
+      previewSpies.requestPrimaryPopupInteraction;
     getGameModeSnapshot = previewSpies.getGameModeSnapshot;
     getActiveAwardCelebrationSnapshot =
       previewSpies.getActiveAwardCelebrationSnapshot;

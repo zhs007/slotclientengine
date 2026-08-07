@@ -170,7 +170,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
   #roundTarget: Game002RoundTarget | null = null;
   #freeGameOperationTarget: Game002FreeGameOperationTarget | null = null;
   #unsubscribeViewport: (() => void) | null = null;
-  #disposeWinAmountAdvanceListener: (() => void) | null = null;
+  #disposePopupInputBinding: (() => void) | null = null;
   #lastPresentationDiagnostic = "";
   #presentationDiagnosticAgeSeconds = 0;
   #presentationStallReported = false;
@@ -349,13 +349,17 @@ class Game002PixiAdapter implements SlotGameAdapter {
       });
       app.ticker.add(this.#onTick);
       tickerAdded = true;
-      const requestWinAmountAdvance = () => {
-        this.#winAmountPlayer?.requestAdvance();
-      };
-      app.canvas.addEventListener("pointerdown", requestWinAmountAdvance);
-      this.#disposeWinAmountAdvanceListener = () => {
-        app.canvas.removeEventListener("pointerdown", requestWinAmountAdvance);
-      };
+      const keyboardTarget = app.canvas.ownerDocument.defaultView;
+      if (!keyboardTarget)
+        throw new Error("game002 canvas has no browser window input target.");
+      this.#disposePopupInputBinding = backgroundPlayer.bindPopupInput({
+        canvas: app.canvas,
+        keyboardTarget,
+        onError: (error) =>
+          this.#reportFatalError(
+            error instanceof Error ? error : new Error(String(error)),
+          ),
+      });
       this.#applyViewport(initialViewport);
       this.#unsubscribeViewport = context.onViewportChange((viewport) => {
         this.#applyViewport(viewport);
@@ -363,8 +367,8 @@ class Game002PixiAdapter implements SlotGameAdapter {
     } catch (error) {
       this.#unsubscribeViewport?.();
       this.#unsubscribeViewport = null;
-      this.#disposeWinAmountAdvanceListener?.();
-      this.#disposeWinAmountAdvanceListener = null;
+      this.#disposePopupInputBinding?.();
+      this.#disposePopupInputBinding = null;
       if (tickerAdded) {
         app.ticker.remove(this.#onTick);
       }
@@ -439,8 +443,8 @@ class Game002PixiAdapter implements SlotGameAdapter {
     this.#freeGameOperationTarget = null;
     this.#unsubscribeViewport?.();
     this.#unsubscribeViewport = null;
-    this.#disposeWinAmountAdvanceListener?.();
-    this.#disposeWinAmountAdvanceListener = null;
+    this.#disposePopupInputBinding?.();
+    this.#disposePopupInputBinding = null;
     this.#app?.ticker.remove(this.#onTick);
     this.#app?.ticker.stop();
     this.#winAmountPlayer?.destroy();

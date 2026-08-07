@@ -368,10 +368,26 @@ describe("scene layout package event-driven game-mode transition", () => {
     });
 
     const popupPresentation = runtime.getPopupPresentation();
-    expect(popupPresentation.eventMode).toBe("static");
+    const canvas = new EventTarget();
+    const keyboard = new EventTarget();
+    const errors: unknown[] = [];
+    const disposeInput = runtime.bindPopupInput({
+      canvas,
+      keyboardTarget: keyboard,
+      onError: (error) => errors.push(error),
+    });
+    expect(popupPresentation.eventMode).toBe("none");
     expect(popupPresentation.hitArea?.contains(799, 599)).toBe(true);
-    popupPresentation.emit("pointerdown", {} as never);
+    canvas.dispatchEvent(new Event("pointerdown"));
     expect(popups[0].dismissRequested).toBe(true);
+    expect(errors).toEqual([]);
+    expect(() =>
+      runtime.bindPopupInput({
+        canvas,
+        keyboardTarget: keyboard,
+        onError: () => undefined,
+      }),
+    ).toThrow(/already bound/);
     popups[0].phase = "complete";
     runtime.update(0.1);
     await Promise.resolve();
@@ -388,6 +404,8 @@ describe("scene layout package event-driven game-mode transition", () => {
     });
     runtime.update(0.1);
     await pending;
+    disposeInput();
+    disposeInput();
     expect(runtime.getGameModeSnapshot().stableMode).toBe("FreeGame");
     runtime.destroy();
   });

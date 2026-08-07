@@ -61,6 +61,7 @@ vi.mock("@slotclientengine/rendercore/popup", async (original) => ({
   ...(await original<typeof import("@slotclientengine/rendercore/popup")>()),
   createPopupPackageResource: vi.fn(async () => resource),
   createAwardCelebrationPlayer: vi.fn(() => player),
+  createSpinePopupPlayer: vi.fn(() => player),
 }));
 vi.mock("../src/io/popup-zip.js", () => ({
   exportPopupZip: vi.fn(async () => ({ bytes: new Uint8Array([1]) })),
@@ -74,6 +75,7 @@ vi.mock("@slotclientengine/browserartifactio", async (original) => ({
 describe("PopupPreview", () => {
   beforeEach(() => {
     document.body.innerHTML = '<div id="host"></div><div id="status"></div>';
+    resource.manifest.type = "award-celebration";
     vi.clearAllMocks();
   });
   it("formats whole preview amounts with fixed decimals and optional grouping", async () => {
@@ -134,6 +136,9 @@ describe("PopupPreview", () => {
     expect(player.getTextNode).toHaveBeenCalledWith("heading");
     expect(player.getImageStringNode).toHaveBeenCalledWith(0);
     preview.play();
+    canvas.dispatchEvent(new Event("pointerdown"));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "A" }));
+    expect(player.requestAdvance).toHaveBeenCalledTimes(2);
     preview.advance();
     preview.dismiss();
     preview.dismissImmediately();
@@ -146,7 +151,28 @@ describe("PopupPreview", () => {
     callback({ deltaMS: 16 });
     expect(document.querySelector("#status")!.textContent).toContain("base");
     preview.destroy();
+    canvas.dispatchEvent(new Event("pointerdown"));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "B" }));
+    expect(player.requestAdvance).toHaveBeenCalledTimes(3);
     expect(player.destroy).toHaveBeenCalled();
     expect(resource.destroy).toHaveBeenCalled();
+  });
+
+  it("dismisses a playing Spine Popup from canvas or keyboard input", async () => {
+    resource.manifest.type = "spine";
+    const { PopupPreview } = await import("../src/preview/popup-preview.js");
+    const preview = new PopupPreview(
+      document.querySelector("#host")!,
+      document.querySelector("#status")!,
+    );
+    await preview.init();
+    await preview.rebuild({} as never);
+    preview.play();
+
+    canvas.dispatchEvent(new Event("pointerdown"));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+    expect(player.requestDismiss).toHaveBeenCalledTimes(2);
+
+    preview.destroy();
   });
 });

@@ -6,7 +6,7 @@
 
 - gamelayouteditor 是 browser-only editing UI，拥有 draft、preview controls、filename-key workspace、受限 ZIP import/export 和 dependency binding。
 - editor 保持 `base: "./"`，可部署到任意静态 CDN 子路径，不依赖 server/API/WebSocket/数据库/登录态/持久化存储。
-- preview 复用 uiframeworks frame viewport 和 rendercore production scene runtime；preview zoom 不进入 manifest，canvas 拖动不修改 layout config。主预览 Canvas 必须允许 pointer event 到达 Pixi EventSystem，以复用 rendercore 的 Popup 点击生命周期；不得用 CSS `pointer-events: none` 截断 production interaction。
+- preview 复用 uiframeworks frame viewport 和 rendercore production scene runtime；preview zoom 不进入 manifest，canvas 拖动不修改 layout config。主预览必须把真实 canvas 与 window keyboard target 绑定到 rendercore Popup input；不得用 CSS `pointer-events: none` 截断 production interaction，也不得依赖 editor overlay 的 Pixi hit-test 顺序。
 - Resource Picker 按资源 kind 提供 typed preview；Spine/VNI 必须复用 production player 语义，图片与 glyph 总览只读取 project-owned bytes。切换或关闭 Picker 必须释放 player、ticker 与 Object URL；动画 preview renderer 由 editor app 单例拥有并只在 app destroy 时释放，不得为每次关闭销毁并干扰主布局 renderer。preview 失败不得修改 draft。
 
 ## Mode、variant 与稳定节点
@@ -50,7 +50,7 @@
 - editor 的 authoring stable-mode selection 必须与 production `requestGameMode()` 隔离：它不要求 directed edge、不播放 overlay，并用同一 visibility commit 同步背景、scoped 普通节点与 displayed mode；相同 symbols binding 不重建或重新抽样，prepare 失败不得留下半切换状态。
 - video 不使用 wall-clock fade，不自动静音，也不在 `play()` 拒绝时 fallback。
 - once/ended settle、iOS gesture-safe prepare、trusted-click synchronous play 和当前 mode popup lifecycle 属于 rendercore。带 prelude 的任意 edge 必须先完整完成 popup start→loop→end，再继续效果；source mode 在 popup complete 前保持不变。带 prelude 的 video 在 complete 后显式等待第二次 trusted gesture，不得预播、静音或与 Popup end 并行。
-- Scene Layout Popup presentation 在 active prelude 或 award celebration 期间必须由 rendercore 以当前 viewport hit area 直接接收 `pointerdown`：prelude 锁存 end 请求，award celebration 执行 advance，等待中的 video 在第二次 trusted pointer 同步启动。Popup idle 后必须停止拦截 pointer；editor 与游戏 app 不复制这套点击分派或 Popup 阶段判断。
+- Scene Layout Popup presentation 在 active prelude 或 award celebration 期间必须由 rendercore 的 host-bound input 接收完整 canvas `pointerdown` 与 window 非 repeat `keydown`：prelude 锁存 end 请求，award celebration 执行 advance，等待中的 video 在第二次 trusted gesture 同步启动。显式 DOM binding 期间不得同时走 Pixi fallback；Popup idle 后必须透传输入，editor 与游戏 app 不复制分派或阶段判断。
 - shared code 不硬编码 BaseGame/FreeGame/BonusGame、BG/FG、animation/event 名或业务字段。
 
 ## Resource lifecycle

@@ -1,7 +1,9 @@
 import type { Container } from "pixi.js";
 import {
   createSceneLayoutPresentationSurface,
+  type PopupInteractionDispatchResult,
   type SceneLayoutPackageResource,
+  type SceneLayoutPopupInputBindingOptions,
   type SceneLayoutPresentationSurface,
 } from "@slotclientengine/rendercore";
 import type {
@@ -20,6 +22,8 @@ export interface Game002BackgroundPlayer {
   getMode?(): string;
   prepareModeTransition?(modeId: string): Promise<void>;
   requestMode?(modeId: string): Promise<void>;
+  bindPopupInput(options: SceneLayoutPopupInputBindingOptions): () => void;
+  requestPrimaryPopupInteraction(): PopupInteractionDispatchResult;
   destroy(): void;
 }
 
@@ -65,6 +69,12 @@ function createBackgroundPlayer(
     },
     requestMode(modeId: string): Promise<void> {
       return surface.requestGameMode(modeId);
+    },
+    bindPopupInput(options: SceneLayoutPopupInputBindingOptions): () => void {
+      return surface.bindPopupInput(options);
+    },
+    requestPrimaryPopupInteraction(): PopupInteractionDispatchResult {
+      return surface.requestPrimaryPopupInteraction();
     },
     destroy(): void {
       surface.destroy();
