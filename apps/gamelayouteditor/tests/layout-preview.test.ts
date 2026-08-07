@@ -268,6 +268,7 @@ describe("LayoutPreview", () => {
     document.body.append(parent, diagnostics);
     const preview = new LayoutPreview(host, diagnostics);
     await preview.init();
+    expect(state.canvas.style.pointerEvents).toBe("auto");
     await preview.setLayout(imageManifest, assetBytes);
     preview.setPageSize({ width: 800, height: 600 });
     preview.setZoom(1.5);

@@ -1031,8 +1031,11 @@ describe("scene layout package runtime", () => {
       expect(
         runtime.getActiveAwardCelebrationSnapshot()!.displayedAmountRaw,
       ).toBeGreaterThan(0);
-      runtime.requestAdvanceAwardCelebration();
+      const popupPresentation = runtime.getPopupPresentation();
+      expect(popupPresentation.eventMode).toBe("static");
+      popupPresentation.emit("pointerdown", {} as never);
       runtime.dismissActiveAwardCelebrationImmediately();
+      expect(popupPresentation.eventMode).toBe("none");
       expect(runtime.getActiveAwardCelebrationSnapshot()).toBeNull();
       await completeModeRequest(runtime, "FreeGame");
       expect(() =>

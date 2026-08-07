@@ -443,7 +443,10 @@ export function getLayoutResourceReferences(
       });
     });
   const transitions = project.gameModes.transitions
-    .filter((transition) => transition.resourceId === resourceId)
+    .filter(
+      (transition) =>
+        "resourceId" in transition && transition.resourceId === resourceId,
+    )
     .map((transition) =>
       Object.freeze({
         nodeId: `${transition.fromModeId} -> ${transition.toModeId}`,

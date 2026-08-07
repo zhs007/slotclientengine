@@ -136,6 +136,7 @@ describe("game mode and popup dependency commands", () => {
       manifest: { id: "free-game", type: "spine" } as never,
       rootKey: "free-game-popup.manifest.json",
       files: new Map([["free-game-popup.manifest.json", new Uint8Array([1])]]),
+      sourceSpineAssets: [],
     };
     importPopupDependency(project, imported);
     expect(project.registeredSpinePopupIds.size).toBe(0);
@@ -169,6 +170,7 @@ describe("game mode and popup dependency commands", () => {
       manifest: { id: "free-entry", type: "spine" } as never,
       rootKey: "free-entry-popup.manifest.json",
       files: new Map([["free-entry-popup.manifest.json", new Uint8Array([1])]]),
+      sourceSpineAssets: [],
     });
     setGameModeTransitionPreludePopup(project, transition, "free-entry");
     expect(transition).toMatchObject({ preludePopupId: "free-entry" });
@@ -208,15 +210,24 @@ describe("game mode and popup dependency commands", () => {
     });
     addGameMode(project, "FreeGame");
     createGameModeTransition(project, "BaseGame", "FreeGame");
-    const video = setGameModeTransitionKind(
+    project.gameModes.transitions[0]!.preludePopupId = "shared-prelude";
+    const none = setGameModeTransitionKind(
       project,
       project.gameModes.transitions[0]!,
-      "video",
+      "none",
     );
+    expect(none).toEqual({
+      kind: "none",
+      fromModeId: "BaseGame",
+      toModeId: "FreeGame",
+      preludePopupId: "shared-prelude",
+    });
+    const video = setGameModeTransitionKind(project, none, "video");
     setGameModeVideoTransitionResource(project, video, "clip");
     setGameModeVideoTransitionFadeOut(project, video, 0.5);
     expect(video).not.toHaveProperty("animation");
     expect(video).not.toHaveProperty("placements");
+    expect(video.preludePopupId).toBe("shared-prelude");
     expect(() =>
       setGameModeVideoTransitionFadeOut(project, video, 3.625),
     ).toThrow(/小于视频实际时长/);
@@ -430,6 +441,7 @@ function popup(id: string, marker: number) {
     manifest: { id, type: "award-celebration" } as never,
     rootKey: `${id}-popup.manifest.json`,
     files: new Map([[`${id}-popup.manifest.json`, new Uint8Array([marker])]]),
+    sourceSpineAssets: [],
   };
 }
 

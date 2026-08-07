@@ -59,6 +59,7 @@ const ioSpies = vi.hoisted(() => ({
   exportZip: vi.fn(),
   importSymbolsZipWithFiles: vi.fn(),
   importPopupPackageZip: vi.fn(),
+  findPopupSpineAssetConflicts: vi.fn(async (): Promise<unknown[]> => []),
 }));
 
 const commandSpies = vi.hoisted(() => {
@@ -184,6 +185,7 @@ vi.mock("../src/io/imported-symbol-package.js", () => ({
 
 vi.mock("../src/io/imported-popup-package.js", () => ({
   importPopupPackageZip: ioSpies.importPopupPackageZip,
+  findPopupSpineAssetConflicts: ioSpies.findPopupSpineAssetConflicts,
 }));
 
 vi.mock("../src/model/resource-commands.js", async (importOriginal) => {
@@ -223,6 +225,7 @@ describe("GameLayoutEditorApp workspace", () => {
     previewSpies.getCurrentVariantId.mockReturnValue("default");
     previewSpies.prepareGameModeTransition.mockResolvedValue(undefined);
     previewSpies.setSymbolPackage.mockResolvedValue(null);
+    ioSpies.findPopupSpineAssetConflicts.mockResolvedValue([]);
     window.confirm = vi.fn(() => true);
     window.prompt = vi.fn((_message, defaultValue) => defaultValue ?? null);
   });
@@ -571,6 +574,73 @@ describe("GameLayoutEditorApp workspace", () => {
       root.querySelector("[data-upload-resources]") as HTMLButtonElement
     ).click();
     await vi.waitFor(() => expect(root.textContent).toContain("bad popup"));
+    fileClick.mockRestore();
+    app.destroy();
+  });
+
+  it("lets the user cancel or continue a Popup Spine same-name hash conflict", async () => {
+    ioSpies.importPopupPackageZip.mockResolvedValue({
+      manifest: { id: "fg", type: "spine" },
+      rootKey: "pkg-2-fg-popup.manifest.json",
+      files: new Map([["pkg-2-fg-popup.manifest.json", new Uint8Array([1])]]),
+      sourceSpineAssets: [],
+    });
+    ioSpies.findPopupSpineAssetConflicts.mockResolvedValue([
+      {
+        popupResourceKey: "FG.json",
+        popupAssetKey: "BG.atlas",
+        popupSha256: "b".repeat(64),
+        layoutResourceId: "bg.json",
+        layoutAssetKey: "bg.atlas",
+        layoutSha256: "a".repeat(64),
+      },
+    ]);
+    const confirm = vi
+      .fn((_message?: string) => true)
+      .mockReturnValueOnce(false);
+    window.confirm = confirm;
+    const { app, root } = await createApp();
+    const popupZip = zipSync({
+      "popup.manifest.json": strToU8("{}"),
+    });
+
+    let fileClick = selectFilesOnce([
+      new File([popupZip as BlobPart], "fg-popup.zip"),
+    ]);
+    (
+      root.querySelector("[data-upload-resources]") as HTMLButtonElement
+    ).click();
+    await vi.waitFor(() =>
+      expect(ioSpies.findPopupSpineAssetConflicts).toHaveBeenCalledOnce(),
+    );
+    expect(
+      [
+        ...(root.querySelector("[data-popup-dependency]") as HTMLSelectElement)
+          .options,
+      ].some(({ value }) => value === "fg"),
+    ).toBe(false);
+    expect(confirm.mock.calls[0]![0]).toContain(
+      "Popup Spine 与 Layout Spine 同名但 SHA-256 不同",
+    );
+    expect(confirm.mock.calls[0]![0]).toContain("取消：不导入");
+    expect(confirm.mock.calls[0]![0]).toContain("确定：保留 Layout 现有资源");
+    fileClick.mockRestore();
+
+    fileClick = selectFilesOnce([
+      new File([popupZip as BlobPart], "fg-popup.zip"),
+    ]);
+    (
+      root.querySelector("[data-upload-resources]") as HTMLButtonElement
+    ).click();
+    await vi.waitFor(() =>
+      expect(
+        [
+          ...(
+            root.querySelector("[data-popup-dependency]") as HTMLSelectElement
+          ).options,
+        ].some(({ value }) => value === "fg"),
+      ).toBe(true),
+    );
     fileClick.mockRestore();
     app.destroy();
   });

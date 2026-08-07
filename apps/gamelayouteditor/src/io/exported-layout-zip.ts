@@ -15,6 +15,7 @@ import {
 import {
   collectPopupPackagePaths,
   parsePopupManifest,
+  rewritePopupManifestFilenameKeys,
 } from "@slotclientengine/rendercore/popup";
 import {
   createDeterministicZip,
@@ -320,7 +321,14 @@ export async function normalizeMappedLayoutFilenameKeys(
       if (isPathBearingJson(raw) || looksLikeVniProject(raw))
         bytes = new TextEncoder().encode(
           `${JSON.stringify(
-            sortValue(rewriteExactJsonReferences(raw, rewrite)),
+            sortValue(
+              isPopupPackageJson(raw)
+                ? rewritePopupManifestFilenameKeys({
+                    manifest: raw,
+                    rewrite,
+                  })
+                : rewriteExactJsonReferences(raw, rewrite),
+            ),
             null,
             2,
           )}\n`,
@@ -409,7 +417,9 @@ async function flattenLayoutClosure(
     };
     const rewritten = isSymbolPackageJson(raw)
       ? rewriteSymbolPackageManifestFilenameKeys(raw, mapping)
-      : rewriteExactJsonReferences(raw, rewrite);
+      : isPopupPackageJson(raw)
+        ? rewritePopupManifestFilenameKeys({ manifest: raw, rewrite })
+        : rewriteExactJsonReferences(raw, rewrite);
     virtual.set(
       mapping.get(sourcePath)!,
       new TextEncoder().encode(
@@ -550,6 +560,15 @@ function isSymbolPackageJson(value: unknown): boolean {
   );
 }
 
+function isPopupPackageJson(value: unknown): boolean {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    (value as { readonly kind?: unknown }).kind === "popup",
+  );
+}
+
 function rewriteSymbolPackageManifestFilenameKeys(
   value: unknown,
   mapping: ReadonlyMap<string, string>,
@@ -634,6 +653,7 @@ function rewriteLayoutManifestFilenameKeys(
     };
   });
   const transitions = value.gameModes?.transitions?.map((transition) => {
+    if ("kind" in transition.overlay) return transition;
     const resource = transition.overlay.resource;
     if (resource.kind === "video")
       return {
@@ -786,9 +806,12 @@ export async function materializeLayoutOwnedAssets(options: {
     ...source.nodes
       .filter((node) => node.resource.kind === "spine")
       .map((node) => node.resource),
-    ...(source.gameModes?.transitions ?? [])
-      .filter((transition) => transition.overlay.resource.kind === "spine")
-      .map((transition) => transition.overlay.resource),
+    ...(source.gameModes?.transitions ?? []).flatMap((transition) =>
+      !("kind" in transition.overlay) &&
+      transition.overlay.resource.kind === "spine"
+        ? [transition.overlay.resource]
+        : [],
+    ),
     ...Object.values(source.runtimeResources ?? {}).filter(
       (resource) => resource.kind === "spine",
     ),

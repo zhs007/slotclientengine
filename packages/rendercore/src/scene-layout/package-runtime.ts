@@ -1,5 +1,5 @@
 import type { LogicReels } from "@slotclientengine/logiccore";
-import { Container, Graphics } from "pixi.js";
+import { Container, Graphics, Rectangle } from "pixi.js";
 import {
   createAwardCelebrationPlayer,
   createSpinePopupPlayer,
@@ -75,6 +75,9 @@ interface PreparedModeTransitionBase {
 
 type PreparedModeTransition =
   | (PreparedModeTransitionBase & {
+      readonly kind: "none";
+    })
+  | (PreparedModeTransitionBase & {
       readonly kind: "spine";
       readonly player: RendercoreSpinePlayer;
     })
@@ -101,11 +104,9 @@ type ActiveModeTransition =
     });
 
 interface ActiveModePrelude {
-  readonly prepared: Extract<
-    PreparedModeTransition,
-    { readonly kind: "spine" }
-  >;
+  readonly prepared: PreparedModeTransition;
   readonly popupId: string;
+  phase: "popup" | "awaiting-video-start";
   readonly resolve: () => void;
   readonly reject: (error: SceneLayoutError) => void;
 }
@@ -191,6 +192,19 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     readonly y: number;
   }[] = [];
   #mainReelLandingKeys = new Set<string>();
+  readonly #onPopupPointerDown = () => {
+    const prelude = this.#activePrelude;
+    if (prelude?.phase === "popup") {
+      this.requestDismissGameModePrelude();
+      return;
+    }
+    if (prelude?.phase === "awaiting-video-start") {
+      void this.startPendingGameModeVideo().catch(() => {});
+      return;
+    }
+    const awardId = this.#activePopupId ?? this.playingPopupId();
+    if (awardId) this.getAwardCelebrationPopup(awardId).requestAdvance();
+  };
 
   constructor(
     resource: SceneLayoutPackageResource,
@@ -237,6 +251,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.container.label = `scene-layout-package:${resource.manifest.id}`;
     this.#popupRoot.label = "scene-layout-popup-root";
     this.#popupRoot.sortableChildren = true;
+    this.#popupRoot.eventMode = "none";
+    this.#popupRoot.on("pointerdown", this.#onPopupPointerDown);
     this.#transitionRoot.label = "scene-transition-overlay";
     this.#videoBlackoutRoot.label = "scene-transition-video-blackout";
     this.#videoBlackout.label = "scene-transition-video-black";
@@ -360,6 +376,12 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     viewportSize: RenderViewportSize,
   ): SceneLayoutSnapshot {
     this.#viewportSize = Object.freeze({ ...viewportSize });
+    this.#popupRoot.hitArea = new Rectangle(
+      0,
+      0,
+      viewportSize.width,
+      viewportSize.height,
+    );
     if (this.#reel) {
       const grid = snapshot.reels.main;
       if (!grid)
@@ -494,8 +516,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     if (
       this.#activePopupId &&
       !this.#popups.get(this.#activePopupId)?.isPlaying()
-    )
+    ) {
       this.#activePopupId = null;
+      this.refreshPopupPointerInteraction();
+    }
   }
 
   resetReelScene(reelId: "main", input: SceneLayoutInitialReelScene): void {
@@ -855,7 +879,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       targetMode: this.#targetMode,
       phase: this.#targetMode ? "transitioning" : "stable",
       transitionPhase: this.#activePrelude
-        ? "popup"
+        ? this.#activePrelude.phase
         : this.#activeTransition
           ? this.#activeTransition.switched
             ? "after-switch"
@@ -1052,7 +1076,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       return Promise.reject(asSceneLayoutError(error));
     }
     const signature = requestOptionsSignature(options);
-    if (transition.overlay.resource.kind === "video") {
+    if (
+      !("kind" in transition.overlay) &&
+      transition.overlay.resource.kind === "video"
+    ) {
       const prepared = this.#preparedTransition;
       if (
         prepared?.kind !== "video" ||
@@ -1064,6 +1091,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
             `Video scene transition to "${modeId}" must be prepared before the trusted user gesture.`,
           ),
         );
+      if (transition.preludePopup)
+        return this.activatePreparedPrelude(prepared, transition.preludePopup);
       // This call is intentionally made before any await or visible mutation.
       let playPromise: Promise<void>;
       try {
@@ -1075,13 +1104,45 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       }
       return this.startPreparedVideoTransition(prepared, playPromise);
     }
+    if ("kind" in transition.overlay)
+      return this.startNoneTransition(modeId, options, signature);
     return this.startSpineTransition(modeId, options, signature);
+  }
+
+  startPendingGameModeVideo(): Promise<void> {
+    this.assertReady();
+    const active = this.#activePrelude;
+    if (
+      active?.phase !== "awaiting-video-start" ||
+      active.prepared.kind !== "video"
+    )
+      return Promise.reject(
+        new SceneLayoutError(
+          "No completed game mode prelude is awaiting video start.",
+        ),
+      );
+    let playPromise: Promise<void>;
+    try {
+      playPromise = active.prepared.player.play();
+    } catch (error) {
+      this.failActivePrelude(active, asSceneLayoutError(error));
+      return Promise.reject(asSceneLayoutError(error));
+    }
+    this.#activePrelude = null;
+    this.refreshPopupPointerInteraction();
+    this.#preparedTransition = active.prepared;
+    const continuation = this.startPreparedVideoTransition(
+      active.prepared,
+      playPromise,
+    );
+    void continuation.then(active.resolve, active.reject);
+    return continuation;
   }
 
   requestDismissGameModePrelude(): void {
     this.assertReady();
     const active = this.#activePrelude;
-    if (!active)
+    if (!active || active.phase !== "popup")
       throw new SceneLayoutError("No game mode transition prelude is active.");
     this.getSpinePopup(active.popupId).requestDismiss();
   }
@@ -1125,7 +1186,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       );
     const popup = this.getAwardCelebrationPopup(mode.awardCelebrationPopup);
     popup.start(input);
-    if (popup.isPlaying()) this.#activePopupId = mode.awardCelebrationPopup;
+    if (popup.isPlaying()) {
+      this.#activePopupId = mode.awardCelebrationPopup;
+      this.refreshPopupPointerInteraction();
+    }
   }
 
   requestAdvanceAwardCelebration(): void {
@@ -1141,6 +1205,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     if (!id) return;
     this.getAwardCelebrationPopup(id).dismissImmediately();
     this.#activePopupId = null;
+    this.refreshPopupPointerInteraction();
   }
 
   getActiveAwardCelebrationSnapshot() {
@@ -1229,6 +1294,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     if (this.#activePrelude) {
       const active = this.#activePrelude;
       this.#activePrelude = null;
+      this.refreshPopupPointerInteraction();
       this.#spinePopups.get(active.popupId)?.dismissImmediately();
       this.releasePreparedTransition(active.prepared);
       active.reject(
@@ -1369,6 +1435,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         optionsSignature,
       };
       const overlay = transition.overlay;
+      if ("kind" in overlay) return { ...common, kind: "none" as const };
       if ("fadeOutSeconds" in overlay) {
         const url = this.#resource.layout.videoUrls[overlay.resource.path];
         if (!url)
@@ -1454,12 +1521,12 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     prepared: Extract<PreparedModeTransition, { readonly kind: "spine" }>,
   ): Promise<void> {
     return "preludePopup" in prepared.spec && prepared.spec.preludePopup
-      ? this.activatePreparedSpinePrelude(prepared, prepared.spec.preludePopup)
+      ? this.activatePreparedPrelude(prepared, prepared.spec.preludePopup)
       : this.activatePreparedSpineTransition(prepared);
   }
 
-  private activatePreparedSpinePrelude(
-    prepared: Extract<PreparedModeTransition, { readonly kind: "spine" }>,
+  private activatePreparedPrelude(
+    prepared: PreparedModeTransition,
     popupId: string,
   ): Promise<void> {
     this.#preparedTransition = null;
@@ -1473,12 +1540,69 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         this.#activePrelude = {
           prepared,
           popupId,
+          phase: "popup",
           resolve,
           reject,
         };
+        this.refreshPopupPointerInteraction();
       });
     } catch (error) {
       this.releasePreparedTransition(prepared);
+      throw asSceneLayoutError(error);
+    }
+  }
+
+  private async startNoneTransition(
+    modeId: string,
+    options: SceneLayoutGameModeRequestOptions,
+    signature: string,
+  ): Promise<void> {
+    this.assertCanPrepareTransition();
+    let prepared = this.#preparedTransition;
+    if (
+      prepared?.kind !== "none" ||
+      prepared.target.id !== modeId ||
+      prepared.optionsSignature !== signature
+    ) {
+      this.releasePreparedTransition(prepared);
+      this.#preparedTransition = null;
+      this.#modeRequestInProgress = true;
+      try {
+        prepared = await this.buildPreparedTransition(
+          modeId,
+          options,
+          signature,
+        );
+      } finally {
+        this.#modeRequestInProgress = false;
+      }
+    }
+    if (prepared.kind !== "none")
+      throw new SceneLayoutError(
+        "Prepared transition kind changed unexpectedly.",
+      );
+    return prepared.spec.preludePopup
+      ? this.activatePreparedPrelude(prepared, prepared.spec.preludePopup)
+      : this.activatePreparedNoneTransition(prepared);
+  }
+
+  private async activatePreparedNoneTransition(
+    prepared: Extract<PreparedModeTransition, { readonly kind: "none" }>,
+  ): Promise<void> {
+    this.#preparedTransition = null;
+    this.#targetMode = prepared.target.id;
+    this.#targetSymbolPackageId = prepared.targetSymbolPackageId;
+    try {
+      this.commitPreparedTarget(prepared);
+      this.#stableMode = prepared.target.id;
+      this.#displayedMode = prepared.target.id;
+      this.#stableSymbolPackageId = this.#activeSymbolPackageId;
+      this.#targetMode = null;
+      this.#targetSymbolPackageId = null;
+    } catch (error) {
+      prepared.prepared?.reel.destroy({ children: true });
+      this.#targetMode = null;
+      this.#targetSymbolPackageId = null;
       throw asSceneLayoutError(error);
     }
   }
@@ -1575,7 +1699,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     prepared: PreparedModeTransition | null,
   ): void {
     if (!prepared) return;
-    prepared.player.destroy();
+    if (prepared.kind !== "none") prepared.player.destroy();
     prepared.prepared?.reel.destroy({ children: true });
   }
 
@@ -1616,11 +1740,17 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     if (!active) return;
     const popup = this.getSpinePopup(active.popupId);
     if (popup.getSnapshot().phase !== "complete") return;
+    if (active.prepared.kind === "video") {
+      active.phase = "awaiting-video-start";
+      return;
+    }
     this.#activePrelude = null;
-    void this.activatePreparedSpineTransition(active.prepared).then(
-      active.resolve,
-      active.reject,
-    );
+    this.refreshPopupPointerInteraction();
+    const continuation =
+      active.prepared.kind === "none"
+        ? this.activatePreparedNoneTransition(active.prepared)
+        : this.activatePreparedSpineTransition(active.prepared);
+    void continuation.then(active.resolve, active.reject);
   }
 
   private failActivePrelude(
@@ -1629,11 +1759,17 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   ): void {
     if (this.#activePrelude !== active) return;
     this.#activePrelude = null;
+    this.refreshPopupPointerInteraction();
     this.getSpinePopup(active.popupId).dismissImmediately();
     this.releasePreparedTransition(active.prepared);
     this.#targetMode = null;
     this.#targetSymbolPackageId = null;
     active.reject(error);
+  }
+
+  private refreshPopupPointerInteraction(): void {
+    this.#popupRoot.eventMode =
+      this.#activePrelude || this.#activePopupId ? "static" : "none";
   }
 
   private updateActiveVideoTransition(
@@ -1677,6 +1813,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
 
   private commitActiveTransition(active: ActiveModeTransition): void {
     if (active.switched) return;
+    this.commitPreparedTarget(active);
+    active.switched = true;
+  }
+
+  private commitPreparedTarget(active: PreparedModeTransitionBase): void {
     this.commitModeVisibility(active.target);
     if (active.bindingChanged) {
       const previous = this.#reel;
@@ -1695,7 +1836,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       }
     }
     this.#displayedMode = active.target.id;
-    active.switched = true;
   }
 
   private completeActiveTransition(active: ActiveModeTransition): void {

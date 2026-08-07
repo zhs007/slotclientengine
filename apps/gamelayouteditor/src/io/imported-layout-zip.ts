@@ -158,6 +158,7 @@ export async function validateLayoutAssets(
   >();
   for (const transition of manifest.gameModes?.transitions ?? []) {
     const overlay = transition.overlay;
+    if ("kind" in overlay) continue;
     if (!("fadeOutSeconds" in overlay)) continue;
     if (videoMetadata.has(overlay.resource.path)) continue;
     const decodeVideo = options.decodeVideo ?? decodeBrowserVideoUrl;

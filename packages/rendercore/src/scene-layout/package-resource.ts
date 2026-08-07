@@ -500,6 +500,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
         );
     }
     for (const transition of manifest.gameModes?.transitions ?? []) {
+      if ("kind" in transition.overlay) continue;
       const resource = transition.overlay.resource;
       if (resource.kind === "video") {
         const bytes = requireBytes(files, resource.path);

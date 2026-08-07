@@ -4,6 +4,7 @@ import {
   cloneEditorProject,
   createNewEditorProject,
   editorProjectToManifest,
+  manifestToEditorProject,
   resetVariantGeometry,
   setVariantArtSizeDimension,
 } from "../src/model/editor-project.js";
@@ -454,6 +455,7 @@ describe("filename-key layout resource commands", () => {
       kind: "video",
       fromModeId: "BaseGame",
       toModeId: "FreeGame",
+      preludePopupId: null,
       resourceId: "",
       fit: "contain",
       fadeOutSeconds: 0.5,
@@ -523,6 +525,36 @@ describe("filename-key layout resource commands", () => {
       }),
     ).rejects.toThrow(/ftyp/);
     expect(project).toEqual(before);
+  });
+
+  it("exports an explicit no-effect transition without a resource", async () => {
+    const project = createNewEditorProject("maximized-focus");
+    await initializeProjectBackground(project);
+    addGameMode(project, "FreeGame");
+    bindGameModeBackground(project, "FreeGame", "default", "background");
+    createGameModeTransition(project, "BaseGame", "FreeGame");
+    setGameModeTransitionKind(
+      project,
+      project.gameModes.transitions[0]!,
+      "none",
+    );
+    const manifest = editorProjectToManifest(project);
+    expect(manifest.gameModes?.transitions).toEqual([
+      {
+        from: "BaseGame",
+        to: "FreeGame",
+        overlay: { kind: "none" },
+      },
+    ]);
+    expect(
+      manifestToEditorProject(manifest, project.assets).gameModes
+        .transitions[0],
+    ).toEqual({
+      kind: "none",
+      fromModeId: "BaseGame",
+      toModeId: "FreeGame",
+      preludePopupId: null,
+    });
   });
 
   it("keeps stable Spine nodes on a single explicit loop", async () => {

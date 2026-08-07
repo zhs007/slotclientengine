@@ -28,6 +28,7 @@ interface MutableCraveLayoutManifest {
       columns: number;
     };
   };
+  popups?: Record<string, unknown>;
 }
 
 const CRAVE_ROOT = resolve(process.cwd(), "../../assets/crave");
@@ -146,7 +147,9 @@ describe("game002 Crave package", () => {
         throw new Error("expected scene-layout presentation");
       }
       expect(packageConfig.presentation.initialMode).toBe("BaseGame");
-      expect(packageConfig.presentation.awardCelebrationPopup).toBe("bigwin2");
+      expect(packageConfig.presentation.awardCelebrationPopup).toBe(
+        "award-celebration",
+      );
       expect(packageConfig.reelsName).toBe("reels-001");
       expect(
         packageConfig.presentation.symbolRegistry.getEntryBySymbol("CN"),
@@ -188,7 +191,7 @@ describe("game002 Crave package", () => {
       expect(symbolManifest.AF?.animations.feature).toMatchObject({
         kind: "spine",
         playback: {
-          animationName: "Feature",
+          animationName: "Loop",
           loop: false,
         },
       });
@@ -202,7 +205,7 @@ describe("game002 Crave package", () => {
       expect(symbolManifest.AF?.imageStringNodes).toMatchObject([
         {
           name: "free-spins",
-          initialText: "0",
+          initialText: "+1",
           targets: [
             { state: "normal", slot: "Mult" },
             { state: "appear", slot: "Mult" },
@@ -214,14 +217,14 @@ describe("game002 Crave package", () => {
       expect(symbolManifest.CM?.animations.feature1).toMatchObject({
         kind: "spine",
         playback: {
-          animationName: "Feature1",
+          animationName: "Loop",
           loop: false,
         },
       });
       expect(symbolManifest.CM?.animations.change).toMatchObject({
         kind: "spine",
         playback: {
-          animationName: "Change",
+          animationName: "Loop",
           loop: false,
         },
       });
@@ -260,7 +263,9 @@ describe("game002 Crave package", () => {
       delete manifest.gameModes!.modes[0].symbolPackage;
     }, /must declare a symbol package/);
     await expectInvalidCraveManifest((manifest) => {
+      const popup = manifest.gameModes!.modes[0].awardCelebrationPopup!;
       delete manifest.gameModes!.modes[0].awardCelebrationPopup;
+      delete manifest.popups?.[popup];
     }, /must declare an award celebration popup/);
     await expectInvalidCraveManifest((manifest) => {
       manifest.reels.main.columns = 5;

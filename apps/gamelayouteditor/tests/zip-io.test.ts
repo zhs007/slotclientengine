@@ -2,10 +2,12 @@ import { strToU8, zipSync } from "fflate";
 import { Assets, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
 import { decodeEditorAssetsMap } from "@slotclientengine/editorresource";
+import { parsePopupManifest } from "@slotclientengine/rendercore/popup";
 import { parseSymbolPackageManifest } from "@slotclientengine/rendercore/symbol";
 import {
   exportLayoutZip,
   materializeLayoutOwnedAssets,
+  normalizeMappedLayoutFilenameKeys,
 } from "../src/io/exported-layout-zip.js";
 import {
   extractBoundedZip,
@@ -129,6 +131,70 @@ function compositePackageFixture() {
 }
 
 describe("layout zip IO", () => {
+  it("normalizes Popup resource keys together with uppercase root references", async () => {
+    const popupManifest = {
+      version: 1,
+      kind: "popup",
+      id: "fg",
+      type: "spine",
+      designViewport: { width: 100, height: 100 },
+      resources: {
+        "pkg-2-fg-FG.json": {
+          kind: "spine",
+          skeleton: "pkg-2-fg-FG.json",
+          atlas: "pkg-2-fg-BG.atlas",
+          textures: { "BG.png": "pkg-2-fg-BG.png" },
+        },
+      },
+      spine: {
+        resource: "pkg-2-fg-FG.json",
+        transform: { x: 0, y: 0, scale: 1 },
+        playback: {
+          mode: "segmented-animations",
+          startAnimation: "start",
+          loopAnimation: "loop",
+          endAnimation: "end",
+        },
+      },
+    };
+    const normalized = await normalizeMappedLayoutFilenameKeys(
+      {
+        ...imageManifest,
+        popups: {
+          fg: {
+            type: "spine",
+            manifest: "pkg-2-fg-popup.manifest.json",
+            order: 2000,
+            placements: { default: { x: 0, y: 0, scale: 1 } },
+          },
+        },
+      },
+      new Map([
+        ["assets/bg.png", assetBytes.get("assets/bg.png")!],
+        ["pkg-2-fg-popup.manifest.json", encode(popupManifest)],
+        ["pkg-2-fg-FG.json", encode({ skeleton: { spine: "4.3.0" } })],
+        ["pkg-2-fg-BG.atlas", new Uint8Array([1])],
+        ["pkg-2-fg-BG.png", new Uint8Array([2])],
+      ]),
+    );
+    const rewritten = parsePopupManifest(
+      JSON.parse(
+        new TextDecoder().decode(
+          normalized.assets.get("pkg-2-fg-popup.manifest.json"),
+        ),
+      ),
+    );
+    expect(rewritten.resources["pkg-2-fg-fg.json"]).toMatchObject({
+      kind: "spine",
+      skeleton: "pkg-2-fg-fg.json",
+      atlas: "pkg-2-fg-bg.atlas",
+      textures: { "BG.png": "pkg-2-fg-bg.png" },
+    });
+    if (rewritten.type !== "spine")
+      throw new Error("Expected normalized Spine popup.");
+    expect(rewritten.spine.resource).toBe("pkg-2-fg-fg.json");
+  });
+
   it("maps uppercase owned filename keys to lowercase hashed package paths", async () => {
     const key = "BG_2.webp";
     const canonicalKey = "bg_2.webp";
@@ -383,7 +449,10 @@ describe("layout zip IO", () => {
     });
     const importedOverlay =
       imported.manifest.gameModes!.transitions![0]!.overlay;
-    if (importedOverlay.resource.kind !== "video")
+    if (
+      !("resource" in importedOverlay) ||
+      importedOverlay.resource.kind !== "video"
+    )
       throw new Error("expected video transition");
     const videoPath = importedOverlay.resource.path;
     expect(mappedEntry(firstEntries, videoPath)).toEqual(mp4);
@@ -495,8 +564,8 @@ describe("layout zip IO", () => {
         switchEvent: "SwitchBack",
       },
     ]);
-    const resourceIds = project.gameModes.transitions.map(
-      (item) => item.resourceId,
+    const resourceIds = project.gameModes.transitions.map((item) =>
+      "resourceId" in item ? item.resourceId : "",
     );
     expect(new Set(resourceIds).size).toBe(1);
     expect(project.resources.get(resourceIds[0])).toMatchObject({

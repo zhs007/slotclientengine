@@ -98,7 +98,7 @@ dependency、未知资源合同、WebP 目标 key 冲突、cwebp 不可用/失�
 路径已存在。
 
 本工具只结构化改写已知 manifest/VNI 字段，不扫描 JSON 字符串猜测资源路径，也不根据
-文件名推断 BaseGame、FreeGame、Symbols 或 BigWin。Popup binding 的 root `order` 在优化重写中原样保留。Spine transition 的分组包含其可选 `preludePopup` 精确闭包；`spine-popup.usedByTransitions` 记录每条精确有向边（不同边可引用不同 Popup），只有 initial mode 发出的边或显式 programmatic popup 才进入 initial assets。
+文件名推断 BaseGame、FreeGame、Symbols 或 BigWin。Popup binding 的 root `order` 在优化重写中原样保留。无效果、Spine 与 video transition 的分组都包含其可选 `preludePopup` 精确闭包；无效果本身不增加资源。`spine-popup.usedByTransitions` 记录每条精确有向边（不同边可引用不同 Popup），只有 initial mode 发出的边或显式 programmatic popup 才进入 initial assets。
 
 ## 验收
 

@@ -1,0 +1,67 @@
+{
+  "fixedAdvanceGroups": [],
+  "glyphs": {
+    "0": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-10-game002-s3-new-image-string-3-0.webp",
+      "size": {
+        "height": 49,
+        "width": 36
+      }
+    },
+    "1": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-10-game002-s3-new-image-string-3-1.webp",
+      "size": {
+        "height": 49,
+        "width": 29
+      }
+    },
+    "2": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-10-game002-s3-new-image-string-3-2.webp",
+      "size": {
+        "height": 49,
+        "width": 36
+      }
+    },
+    "5": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-10-game002-s3-new-image-string-3-5.webp",
+      "size": {
+        "height": 49,
+        "width": 32
+      }
+    },
+    "x": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-10-game002-s3-new-image-string-3-x.webp",
+      "size": {
+        "height": 49,
+        "width": 35
+      }
+    }
+  },
+  "id": "new-image-string-3",
+  "kind": "image-string",
+  "metrics": {
+    "letterSpacing": 0,
+    "lineHeight": 64
+  },
+  "version": 1
+}

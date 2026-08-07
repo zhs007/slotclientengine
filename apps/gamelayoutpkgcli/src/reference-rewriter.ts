@@ -129,6 +129,7 @@ export function rewriteLayoutManifest(
     };
   });
   const transitions = manifest.gameModes?.transitions?.map((transition) => {
+    if ("kind" in transition.overlay) return transition;
     const resource = transition.overlay.resource;
     if (resource.kind === "video")
       return {

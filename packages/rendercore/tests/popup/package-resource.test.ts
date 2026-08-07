@@ -122,6 +122,14 @@ describe("popup package resource", () => {
     expect(collectPopupPackagePaths({ manifest, files })).toHaveLength(4);
     const flattened = flattenPopupPackageFiles({ manifest, files });
     expect(flattened.manifest.type).toBe("spine");
+    const flattenedSpine = Object.values(flattened.manifest.resources).find(
+      (resource) => resource.kind === "spine",
+    );
+    if (!flattenedSpine || flattenedSpine.kind !== "spine")
+      throw new Error("Expected flattened Spine resource.");
+    expect(flattened.files.get(flattenedSpine.atlas)).toEqual(
+      files.get(spineSpec.atlas),
+    );
     const resource = await createPopupPackageResource({
       manifest,
       files,
@@ -160,6 +168,71 @@ describe("popup package resource", () => {
     });
     expect(systemResource.resources).not.toHaveProperty("prompt");
     await systemResource.destroy();
+  });
+
+  it("namespaces physical Spine keys without changing logical atlas pages", async () => {
+    const {
+      createPopupPackageResourceFromResolvedFiles,
+      namespaceMappedPopupPackageFiles,
+      rewritePopupManifestFilenameKeys,
+    } = await import("../../src/popup/package-resource.js");
+    const source = multiPageSpinePopupFixture();
+    const namespaced = namespaceMappedPopupPackageFiles({
+      ...source,
+      keyPrefix: "pkg-2-fg",
+    });
+    const spine = namespaced.manifest.resources["pkg-2-fg-FG.json"];
+    expect(spine).toMatchObject({
+      kind: "spine",
+      skeleton: "pkg-2-fg-FG.json",
+      atlas: "pkg-2-fg-BG.atlas",
+      textures: {
+        "BG.png": "pkg-2-fg-BG.png",
+        "BG_2.png": "pkg-2-fg-BG_2.png",
+      },
+    });
+    const atlasText = new TextDecoder().decode(
+      namespaced.files.get("pkg-2-fg-BG.atlas"),
+    );
+    expect(readAtlasPageNames(atlasText)).toEqual(["BG.png", "BG_2.png"]);
+
+    const lowercase = rewritePopupManifestFilenameKeys({
+      manifest: namespaced.manifest,
+      rewrite: (key) => key.toLowerCase(),
+    });
+    expect(lowercase.resources["pkg-2-fg-fg.json"]).toMatchObject({
+      kind: "spine",
+      skeleton: "pkg-2-fg-fg.json",
+      atlas: "pkg-2-fg-bg.atlas",
+      textures: {
+        "BG.png": "pkg-2-fg-bg.png",
+        "BG_2.png": "pkg-2-fg-bg_2.png",
+      },
+    });
+    if (lowercase.type !== "spine")
+      throw new Error("Expected rewritten Spine popup.");
+    expect(lowercase.spine.resource).toBe("pkg-2-fg-fg.json");
+
+    const files = popupFilesWithCanonicalRoot(namespaced);
+    const resource = await createPopupPackageResourceFromResolvedFiles({
+      manifest: namespaced.manifest,
+      files,
+    });
+    await resource.destroy();
+
+    const invalidFiles = new Map(files);
+    invalidFiles.set(
+      "pkg-2-fg-BG.atlas",
+      new TextEncoder().encode(
+        atlasText.replace(/^BG\.png$/mu, "pkg-2-fg-BG.png"),
+      ),
+    );
+    await expect(
+      createPopupPackageResourceFromResolvedFiles({
+        manifest: namespaced.manifest,
+        files: invalidFiles,
+      }),
+    ).rejects.toThrow(/pages must exactly match texture pages/);
   });
 
   it("loads the same exact closure from contained CDN URLs", async () => {
@@ -671,4 +744,74 @@ function mappedSourceFixture(): ReturnType<typeof fixture> {
     new TextEncoder().encode(JSON.stringify(source.manifest)),
   );
   return source;
+}
+
+function multiPageSpinePopupFixture() {
+  const sourcePage = getMinecart2SymbolResourcePath("WL", "texture");
+  const logicalPages = ["BG.png", "BG_2.png"];
+  const skeleton = "FG.json";
+  const atlas = "BG.atlas";
+  const textures = Object.fromEntries(logicalPages.map((page) => [page, page]));
+  const atlasText = new TextDecoder()
+    .decode(readMinecart2SymbolBytes("WL", "atlas"))
+    .replace(sourcePage, logicalPages[0]!);
+  const manifest = {
+    version: 1,
+    kind: "popup",
+    id: "fg",
+    type: "spine",
+    designViewport: { width: 100, height: 100 },
+    resources: {
+      [skeleton]: {
+        kind: "spine",
+        skeleton,
+        atlas,
+        textures,
+      },
+    },
+    spine: {
+      resource: skeleton,
+      transform: { x: 0, y: 0, scale: 1 },
+      playback: {
+        mode: "segmented-animations",
+        startAnimation: "start",
+        loopAnimation: "Loop",
+        endAnimation: "Win",
+      },
+    },
+  } as const;
+  const files = new Map<string, Uint8Array>([
+    ["popup.manifest.json", new TextEncoder().encode(JSON.stringify(manifest))],
+    [skeleton, readMinecart2SymbolBytes("WL", "skeleton")],
+    [
+      atlas,
+      new TextEncoder().encode(
+        `${atlasText.replace(/\n+$/u, "")}\n\n${logicalPages[1]}\nsize: 1,1\nfilter: Linear,Linear\n`,
+      ),
+    ],
+    [textures[logicalPages[0]!]!, readMinecart2SymbolBytes("WL", "texture")],
+    [textures[logicalPages[1]!]!, new Uint8Array([1])],
+  ]);
+  return { manifest, files };
+}
+
+function popupFilesWithCanonicalRoot(options: {
+  readonly rootKey: string;
+  readonly files: ReadonlyMap<string, Uint8Array>;
+}): ReadonlyMap<string, Uint8Array> {
+  const files = new Map(options.files);
+  files.set("popup.manifest.json", files.get(options.rootKey)!);
+  files.delete(options.rootKey);
+  return files;
+}
+
+function readAtlasPageNames(atlasText: string): readonly string[] {
+  const lines = atlasText.replace(/\r\n?/gu, "\n").split("\n");
+  return lines.filter((line, index) => {
+    if (!line || /^\s/u.test(line) || line.includes(":")) return false;
+    return lines
+      .slice(index + 1)
+      .find((candidate) => candidate.length > 0)
+      ?.startsWith("size:");
+  });
 }

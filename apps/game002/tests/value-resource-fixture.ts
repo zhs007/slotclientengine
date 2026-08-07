@@ -61,7 +61,7 @@ const expectedSymbols = [
   "BN",
 ] as const;
 const sourceStateManifest = readLogicalJson(
-  "symbol-state-textures.manifest.json",
+  resolveInitialSymbolManifestKey(),
 ) as {
   readonly symbols: Readonly<Record<string, unknown>>;
 };
@@ -105,6 +105,39 @@ const reelEffectPoolCapacities = deriveGridCellEffectPoolCapacities({
   resources: reelEffectResources,
   cellCount: 54,
 });
+
+function resolveInitialSymbolManifestKey(): string {
+  const layout = JSON.parse(
+    readFileSync(resolve(CRAVE_ROOT, "layout.manifest.json"), "utf8"),
+  ) as {
+    readonly gameModes?: {
+      readonly initialMode: string;
+      readonly modes: readonly {
+        readonly id: string;
+        readonly symbolPackage?: string;
+      }[];
+    };
+    readonly symbolPackages?: Readonly<
+      Record<string, { readonly manifest: string }>
+    >;
+  };
+  const initialMode = layout.gameModes?.modes.find(
+    (mode) => mode.id === layout.gameModes?.initialMode,
+  );
+  const packageKey = initialMode?.symbolPackage;
+  const packageManifestKey = packageKey
+    ? layout.symbolPackages?.[packageKey]?.manifest
+    : undefined;
+  if (!packageManifestKey)
+    throw new Error("Crave fixture is missing its initial symbol package.");
+  const packageManifest = readLogicalJson(packageManifestKey) as {
+    readonly entrypoints?: { readonly symbolManifest?: string };
+  };
+  const symbolManifestKey = packageManifest.entrypoints?.symbolManifest;
+  if (!symbolManifestKey)
+    throw new Error("Crave fixture symbol package has no symbol manifest.");
+  return symbolManifestKey;
+}
 
 type TestGame002PackageConfig = Game002PackageConfig & {
   readonly symbolModules: Record<string, string>;
