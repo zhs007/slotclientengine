@@ -407,7 +407,7 @@ describe("game002 task 95 adapter", () => {
     );
   });
 
-  it("prevalidates the whole sequence before mutating the reels", async () => {
+  it("validates the business sequence in the plan before reel mutation", async () => {
     const fakeApp = createFakeApplication();
     const runtime = new FakeRuntime([]);
     const adapter = createTestAdapter({

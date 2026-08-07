@@ -149,8 +149,10 @@ runner 合同；FreeGame target 不再保存 AF/CO prepared arrays、AbortContro
 
 `decodeGame002RoundFacts()` 在任何 presentation mutation 前消费完整 `GameLogic`，闭合 BaseGame、
 multiplier/CO 与 FreeGame 的 scene/value/occurrence continuity，返回不含 raw step/component 的 frozen
-facts；`compileGame002OperationPlanFromFacts()` 只负责 V2 final closure。component 专属 decoder 文件继续
-保留严格协议公式，但不再由 target 或 final compiler 二次读取。
+facts。facts 只保留 atomic operations、金额与 symbol codes，不再复制静态 definitions 或 aggregate final
+snapshot；`compileGame002OperationPlanFromFacts()` 只补 V2 definitions 与 final closure。component 专属 decoder
+文件继续保留严格协议公式，但不再由 target 或 final compiler 二次读取。adapter 也不再遍历完整 plan
+重复校验 resource/win group；执行能力错误由 target/transaction runner 抛出并进入统一失败路径。
 
 运行时 stage 只挂完整 Scene Layout package root。package runtime 按 manifest order/placement
 拥有唯一 main reel，首次 `defaultScene` commit 前保持 deferred/uncommitted；cascade 通过 main-reel

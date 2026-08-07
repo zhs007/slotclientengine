@@ -25,6 +25,9 @@ target 迁入同一 transaction runner，并增加 single-pass frozen `Game002Ro
 - `decodeGame002RoundFacts()` 一次消费 raw `GameLogic` 并返回 frozen operation facts；
   `compileGame002OperationPlanFromFacts()` 只执行 final closure，不读取 raw step/component。
 - logiccore 新增通用 exact scene/otherScene/result/matrix/position/occurrence/safe-integer 校验。
+- 后续收敛将 `Game002RoundFacts` 缩为 atomic operations、金额与 symbol codes；删除复制的静态 definitions 与
+  aggregate final snapshot，并移除 adapter 对完整 plan/resource/win group 的二次深度 preflight。唯一缺失的
+  sequential collect 现金整除业务校验已前移到 win plan decoder，执行能力错误交给 target/runner 统一失败路径。
 - gameframeworks facade 导出 transaction runner；README、game002/shared runtime/scene-layout 领域规则和
   source-boundary 同步更新。
 
@@ -46,6 +49,7 @@ target 迁入同一 transaction runner，并增加 single-pass frozen `Game002Ro
   `game-demo.ts` 1322 行，`game002-scene-runtime.ts` 146 行对应删除的旧 presentation wrapper 132 行。
 - 新增共享实现：logiccore exact-data 165 行；rendercore transaction runner 406 行。
 - `game-adapter.ts`：2368 行降为 1853 行；transform 测试 906 行降为 455 行，并保留最终行为断言。
+- 后续收敛后 `apps/game002/src` 为 9,798 行（基线 10,783，净减 985）；`game-adapter.ts` 为 1,583 行。
 - `assets/**`、game002 config、manifest/schema、`pnpm-lock.yaml`、根 package/tooling 均无修改。
 
 ## 自动验收

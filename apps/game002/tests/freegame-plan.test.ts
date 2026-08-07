@@ -63,8 +63,8 @@ describe("game002 FreeGame plan", () => {
     const facts = decodeGame002RoundFacts(options);
     const compilation = compileGame002OperationPlanFromFacts(facts);
     expect(Object.isFrozen(facts)).toBe(true);
-    expect(Object.isFrozen(facts.drafts)).toBe(true);
-    expect(facts.drafts.every(Object.isFrozen)).toBe(true);
+    expect(Object.isFrozen(facts.atomicOperations)).toBe(true);
+    expect(facts.atomicOperations.every(Object.isFrozen)).toBe(true);
     expect(compilation).toEqual(compileGame002RoundOperationPlan(options));
     const kinds = compilation.plan.operations.map(
       (operation) => operation.kind,

@@ -32,7 +32,11 @@ import {
 } from "./cascade-config.js";
 import { GAME002_VISIBLE_ROWS, GAME002_REEL_COUNT } from "./game-layout.js";
 import { resolveGame002WinResultAmount } from "./win-symbol-carousel-config.js";
-import { resolveGame002WinResultCoinAmount } from "./cascade-win-summary-config.js";
+import {
+  resolveGame002WinResultCashAmount,
+  resolveGame002WinResultCoinAmount,
+  resolveGame002WinResultMultiplier,
+} from "./cascade-win-summary-config.js";
 
 export interface Game002WinOperationData {
   readonly stepIndex: number;
@@ -313,6 +317,12 @@ export function readGame002WinOperationData(options: {
       },
     },
   );
+  validateSequentialCollectGroups(
+    groups,
+    options.sourceScene,
+    options.sourceValues,
+    options.cnSymbolCode,
+  );
   for (const componentName of winComponentNames)
     validateComponentCoinWin(
       requireBasicComponent(step, componentName),
@@ -382,6 +392,40 @@ export function readGame002WinOperationData(options: {
     removedNum,
     releaseOnlyPositions,
   });
+}
+
+function validateSequentialCollectGroups(
+  groups: readonly SymbolCascadeGroup[],
+  scene: SceneMatrix,
+  values: SymbolPresentationValueMatrix,
+  cnCode: number,
+): void {
+  for (const [groupIndex, group] of groups.entries()) {
+    if (group.result.symbol !== cnCode) continue;
+    const context = { group, groupIndex };
+    const coinAmount = resolveGame002WinResultCoinAmount(context);
+    const cashAmount = resolveGame002WinResultCashAmount(context);
+    const multiplier = resolveGame002WinResultMultiplier(context);
+    for (const { x, y } of group.removePositions) {
+      if (scene[x]?.[y] !== cnCode)
+        throw new Error(
+          `${group.componentName} result[${group.resultIndex}] collect item (${x},${y}) must be CN.`,
+        );
+      const value = requireSafeInteger(
+        values[x]?.[y],
+        `${group.componentName} result[${group.resultIndex}] item (${x},${y}) value`,
+        { minimum: 1 },
+      );
+      const weightedCash = value * multiplier * cashAmount;
+      if (
+        !Number.isSafeInteger(weightedCash) ||
+        weightedCash % coinAmount !== 0
+      )
+        throw new Error(
+          `${group.componentName} result[${group.resultIndex}] item (${x},${y}) cash share must divide the result cash amount exactly.`,
+        );
+    }
+  }
 }
 
 function sumGroupCoinAmounts(groups: readonly SymbolCascadeGroup[]): number {

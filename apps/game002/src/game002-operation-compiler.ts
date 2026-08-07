@@ -107,9 +107,7 @@ interface Game002CompilerOptions {
 }
 
 export interface Game002RoundFacts {
-  readonly drafts: readonly SlotOperationDraftV2[];
-  readonly definitions: readonly SlotOperationDefinitionV2[];
-  readonly final: SlotOperationSnapshot;
+  readonly atomicOperations: readonly SlotOperationDraftV2[];
   readonly betAmountRaw: number;
   readonly winAmountRaw: number;
   readonly symbolCodes: Readonly<Record<string, number>>;
@@ -168,10 +166,11 @@ export function decodeGame002RoundFacts(options: {
     AF: requireCode(base.symbolCodes, "AF"),
     BN: requireCode(base.symbolCodes, "BN"),
   };
+  const baseFinal = requireLastAtomicOutput(base.atomicOperations);
   const free = compileGame002FreeGamePlan({
     logic: options.logic,
-    entryScene: base.final.scene,
-    entryValues: base.final.values.map((column) =>
+    entryScene: baseFinal.scene,
+    entryValues: baseFinal.values.map((column) =>
       Object.freeze(
         column.map((value) => {
           if (value === -1)
@@ -183,8 +182,8 @@ export function decodeGame002RoundFacts(options: {
     symbolCodes: codes,
   });
   if (!free) throw new Error("game002 FreeGame trigger plan is missing.");
-  const drafts: SlotOperationDraftV2[] = [...base.drafts];
-  let current = base.final;
+  const drafts: SlotOperationDraftV2[] = [...base.atomicOperations];
+  let current = baseFinal;
   const source = serverSource(free.triggerStepIndex, "freegame");
   const appendPresentation = (
     kind: string,
@@ -295,9 +294,7 @@ export function decodeGame002RoundFacts(options: {
     Object.freeze({ kind: "transition", mode: "BaseGame" }),
   );
   return Object.freeze({
-    drafts: Object.freeze(drafts),
-    definitions: base.definitions,
-    final: current,
+    atomicOperations: Object.freeze(drafts),
     betAmountRaw: base.betAmountRaw,
     winAmountRaw: base.winAmountRaw,
     symbolCodes: base.symbolCodes,
@@ -316,8 +313,8 @@ export function compileGame002OperationPlanFromFacts(
   facts: Game002RoundFacts,
 ): Game002BaseGameCompilation {
   const plan = finalizeSlotOperationPlanV2({
-    drafts: facts.drafts,
-    definitions: facts.definitions,
+    drafts: facts.atomicOperations,
+    definitions: game002Definitions(),
     symbolCodes: facts.symbolCodes,
     columns: GAME002_REEL_COUNT,
     rows: GAME002_VISIBLE_ROWS,
@@ -356,7 +353,6 @@ function decodeGame002BaseRoundFacts(
     logDiagnostic: options.logDiagnostic,
   });
   const drafts: SlotOperationDraftV2[] = [];
-  const definitions = game002Definitions();
   const spinData = readGame002SpinOperationData({
     logic: options.logic,
     cnSymbolCode: codes.CN,
@@ -535,13 +531,25 @@ function decodeGame002BaseRoundFacts(
   if (winCount === 0 && winAmountRaw > 0)
     throw new Error("game002 positive total win has no win operation.");
   return Object.freeze({
-    drafts: Object.freeze(drafts),
-    definitions,
-    final: current,
+    atomicOperations: Object.freeze(drafts),
     betAmountRaw,
     winAmountRaw,
     symbolCodes,
   });
+}
+
+function requireLastAtomicOutput(
+  operations: readonly SlotOperationDraftV2[],
+): SlotOperationSnapshot {
+  for (let index = operations.length - 1; index >= 0; index -= 1) {
+    const operation = operations[index]!;
+    if (
+      operation.effect === "scene-landing" ||
+      operation.effect === "state-mutation"
+    )
+      return operation.output;
+  }
+  throw new Error("game002 round facts contain no state output.");
 }
 
 function genGame002AtomicTransformOperations(options: {
