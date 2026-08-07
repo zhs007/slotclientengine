@@ -181,7 +181,7 @@ function verifyDistAssets(assetNames, bundledJavaScript) {
   ]) {
     assertOne(assetNames, pattern, label);
   }
-  verifyCraveDistClosure(assetNames);
+  verifyCraveDistClosure();
   verifyLeoGameUiClosure(assetNames, bundledJavaScript);
   if (bundledJavaScript.includes("__game002VisualFixture")) {
     failures.push("production bundle must not include the visual fixture.");
@@ -207,7 +207,7 @@ function verifyDistAssets(assetNames, bundledJavaScript) {
   }
 }
 
-function verifyCraveDistClosure(assetNames) {
+function verifyCraveDistClosure() {
   if (!existsSync(CRAVE_MAP_PATH)) return;
   const map = JSON.parse(readFileSync(CRAVE_MAP_PATH, "utf8"));
   const files = [
@@ -216,7 +216,19 @@ function verifyCraveDistClosure(assetNames) {
     ...collectPresentArtFiles(CRAVE_ROOT, map),
   ];
   for (const file of files) {
-    assertDistContainsSourceAssetContent(assetNames, file);
+    assertDistContainsCraveFile(file);
+  }
+}
+
+function assertDistContainsCraveFile(sourcePath) {
+  const relativePath = relative(CRAVE_ROOT, sourcePath);
+  const distPath = join(DIST_ROOT, relativePath);
+  if (!existsSync(distPath) || !statSync(distPath).isFile()) {
+    failures.push(`dist is missing unpacked Crave file ${relativePath}.`);
+    return;
+  }
+  if (!readFileSync(distPath).equals(readFileSync(sourcePath))) {
+    failures.push(`dist Crave file content drifted: ${relativePath}.`);
   }
 }
 

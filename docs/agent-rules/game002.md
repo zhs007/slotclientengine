@@ -8,6 +8,10 @@
   显式失败。运行时固定读取 CDN 上 `assets/crave` 的解包目录，按 manifest/map
   加载文件，不下载或在浏览器解压 ZIP。layout、background、focus、grid geometry、
   symbols、公开本地轮带、transition 和 award popup 只从该包取得。
+- 解包目录不得生成逐文件 TypeScript `?url` import。Vite dev/build 与 CDN 均原样
+  提供 package root；替换编辑器导出后，loading 从 `assets.map.json` 的 physical
+  path 动态生成去重 URL。不存在的 orphan physical path 可延迟到实际引用时失败，
+  不得让过期生成源码在 Vite import-analysis 阶段阻断。
 - `assets/crave` 的当前美术 files/bytes 是 game002 权威交付；game runtime/build
   天然不比对 map `sha256`/`byteLength`、不因未引用 entry/file 阻断，不依赖 app
   传 policy 才关闭 integrity gate。实际引用的 logical key 仍必须路由到安全存在的

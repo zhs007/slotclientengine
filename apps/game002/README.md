@@ -10,7 +10,7 @@
 
 100% 后的正式 `game-entry` 才加载 React、ReactDOM 和 `@slotclientengine/game-ui-leo/styles.css`，并在 `createSlotGameFramework()` 中注入 per-instance Leo factory。Leo HUD 与默认 UI 复用 `uiframeworks` 的同一 frame/viewport host，只消费 framework snapshot 并调用 typed commands；session、spin、presentation、collect、balance reconciliation 和 adapter 生命周期仍完全属于 framework。initial loading chunk 不包含 React 或 Leo 游戏内资产。
 
-loading 资源 ID 必须唯一且 URL 不能为空。Vite 发布构建允许把内容相同的多个逻辑图片合并为同一个产物 URL；这种情况下 loading 清单保留第一个资源并只预加载该 URL 一次，不能把生产态 content-addressed URL 合并误判成资源重复。运行时的 VNI project 仍保留各自的逻辑资源路径映射。
+loading 资源 ID 必须唯一且 URL 不能为空。Vite 开发和发布环境把 `assets/crave` 作为解包静态目录原样提供；game002 从 `assets.map.json` 的 physical path 动态生成 URL，相同 physical path 只加载一次。替换 Gamelayouteditor 导出目录不再生成 TypeScript 或逐文件 `?url` import。运行时的 VNI project 仍保留各自的逻辑资源路径映射。
 
 manifest 精确引用的 CN valuePresentation Pixi 纹理（共享 `Symbol.png`、`CN.spinBlur.png`、`CN.disabled.png` 和 `cn-digits` glyph）在 loading 0%–99% 阶段通过动态 Pixi `Assets.load()` 注册；99% 回调只最终构造可销毁 value resource bundle，唯一 live session 已在 early readiness 中并行准备。这样 defaultScene 创建 value controller 时直接复用 Pixi Cache，不会先显示透明 CN 再补数字；任一准备失败会回滚 platform handle、session 与 bundle。
 
@@ -54,8 +54,8 @@ framework destroy 或页面刷新会清理 command 和 pending 序列。
   美术可直接替换 `assets/crave` 中的内容或保留未引用文件；game002 以
   map 的 logical key→安全 physical path 作为路由，不比对过时的 `sha256`/
   `byteLength`，也不以 orphan 阻断构建。实际引用文件仍必须存在并通过
-  manifest/Spine/VNI/image decoder，generator 生成精确 Vite imports，loading 只下载
-  当前包。Crave CN 使用其 symbols manifest 的 ImgNumber
+  manifest/Spine/VNI/image decoder；Vite/CDN 原样提供解包目录，loading 根据 map
+  并行下载当前包。Crave CN 使用其 symbols manifest 的 ImgNumber
   `slot: "coin"` 与包内 `0..9` glyph，不使用旧 `Num` binding、完整数值图片或字体。
 - `apps/game002/config/reel-presentation.manifest.json` 保存期待 timing/effect policy 和 `nearwin1/nearwin2` 程序键；实际资源全部来自 Crave package。
 - 转轮表现配置：`apps/game002/config/reel-presentation.manifest.json`。当前 `spin.bounceStrength=0`、`spin.dimmingAlpha=0.5`；普通逐格 timing、Nearwin effect policy、2-WL activation timing 以及 refill 顺序也只来自该 manifest。

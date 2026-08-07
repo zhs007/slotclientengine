@@ -1,21 +1,15 @@
-import type { GameLoadingResource } from "@slotclientengine/gameloading";
-import craveAssetsMap from "../../../assets/crave/assets.map.json";
-import { craveSceneLayoutPhysicalResourceUrls } from "./generated/crave-layout-resources.generated.js";
-
-const CRAVE_ASSETS_MAP_FILES: Readonly<
-  Record<string, { readonly path: string }>
-> = craveAssetsMap.files;
-const CRAVE_PHYSICAL_RESOURCE_URLS: Readonly<Record<string, string>> =
-  craveSceneLayoutPhysicalResourceUrls;
+import type {
+  GameLoadingResource,
+  GameLoadingResourceContext,
+} from "@slotclientengine/gameloading";
+import {
+  GAME002_CRAVE_DEFERRED_PHYSICAL_PATHS,
+  listGame002CravePhysicalPaths,
+  resolveGame002CraveResourceUrl,
+} from "./crave-package-paths.js";
 
 export const GAME002_RUNTIME_MODULE_RESOURCE_ID = "game002-runtime-module";
 export const GAME002_CRAVE_RESOURCE_ID_PREFIX = "game002-crave-package:";
-const GAME002_DEFERRED_RUNTIME_PHYSICAL_PATHS = new Set(
-  ["nearwin1.json", "nearwin2.json", "nearwin3.json"].flatMap((key) => {
-    const path = CRAVE_ASSETS_MAP_FILES[key]?.path;
-    return typeof path === "string" ? [path] : [];
-  }),
-);
 
 export interface Game002PreparedLoadingSessionLike {
   readonly readiness: { destroy(): void };
@@ -75,11 +69,12 @@ export function readGame002CravePackageFiles(
   loadedResources: ReadonlyMap<string, unknown>,
 ): ReadonlyMap<string, Uint8Array> {
   const files = new Map<string, Uint8Array>();
-  for (const path of Object.keys(CRAVE_PHYSICAL_RESOURCE_URLS)) {
-    if (GAME002_DEFERRED_RUNTIME_PHYSICAL_PATHS.has(path)) continue;
+  for (const path of listGame002CravePhysicalPaths()) {
+    if (GAME002_CRAVE_DEFERRED_PHYSICAL_PATHS.has(path)) continue;
     const value = loadedResources.get(
       `${GAME002_CRAVE_RESOURCE_ID_PREFIX}${path}`,
     );
+    if (value === null) continue;
     if (!(value instanceof ArrayBuffer))
       throw new Error(
         `game002 Crave package resource "${path}" was not loaded.`,
@@ -104,16 +99,33 @@ export function readGame002RuntimeModule(
 }
 
 function createCraveLoadingResources(): readonly GameLoadingResource[] {
-  const packageResources = Object.entries(CRAVE_PHYSICAL_RESOURCE_URLS)
-    .filter(([path]) => !GAME002_DEFERRED_RUNTIME_PHYSICAL_PATHS.has(path))
-    .map(([path, url]) =>
+  const packageResources = listGame002CravePhysicalPaths()
+    .filter((path) => !GAME002_CRAVE_DEFERRED_PHYSICAL_PATHS.has(path))
+    .map((path) =>
       Object.freeze({
         id: `${GAME002_CRAVE_RESOURCE_ID_PREFIX}${path}`,
-        url,
+        url: resolveGame002CraveResourceUrl(path),
         kind: "binary" as const,
+        load: ({ signal }: GameLoadingResourceContext) =>
+          loadCravePackageFile(path, signal),
       }),
     );
   return deduplicateGame002LoadingResourceUrls(packageResources);
+}
+
+async function loadCravePackageFile(
+  path: string,
+  signal: AbortSignal,
+): Promise<ArrayBuffer | null> {
+  const response = await fetch(resolveGame002CraveResourceUrl(path), {
+    signal,
+  });
+  if (response.status === 404 && path.startsWith("assets/")) return null;
+  if (!response.ok)
+    throw new Error(
+      `game002 Crave package fetch failed (${response.status}): ${path}.`,
+    );
+  return response.arrayBuffer();
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

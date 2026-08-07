@@ -156,21 +156,26 @@ describe("game002 source boundary", () => {
   });
 
   it("packages only the Crave gamelayout assets and no legacy skin resources", () => {
-    const skinConfigSource = readFileSync(
+    const packageConfigSource = readFileSync(
       join(APP_ROOT, "src/package-config.ts"),
       "utf8",
     );
+    const loadingSource = readFileSync(
+      join(APP_ROOT, "src/loading-resources.ts"),
+      "utf8",
+    );
+    const viteSource = readFileSync(join(APP_ROOT, "vite.config.ts"), "utf8");
     const adapterSource = readFileSync(
       join(APP_ROOT, "src/game-adapter.ts"),
       "utf8",
     );
 
-    expect(skinConfigSource).toContain(
+    expect(packageConfigSource).toContain(
       "../config/reel-presentation.manifest.json",
     );
-    expect(skinConfigSource).toContain("parseReelManifest");
-    expect(skinConfigSource).not.toContain("bounceStrength: 0");
-    expect(skinConfigSource).not.toContain("dimmingAlpha: 0.5");
+    expect(packageConfigSource).toContain("parseReelManifest");
+    expect(packageConfigSource).not.toContain("bounceStrength: 0");
+    expect(packageConfigSource).not.toContain("dimmingAlpha: 0.5");
     for (const legacyPath of [
       "symbols" + "001",
       "symbols" + "002",
@@ -180,9 +185,19 @@ describe("game002 source boundary", () => {
       ["game002", "bgfull"].join("/"),
       ["assets", "game003", "bg"].join("/"),
     ]) {
-      expect(skinConfigSource).not.toContain(legacyPath);
+      expect(packageConfigSource).not.toContain(legacyPath);
     }
-    expect(skinConfigSource).not.toMatch(/game002-s3\/\*\.(?:png|json)/);
+    expect(packageConfigSource).not.toMatch(/game002-s3\/\*\.(?:png|json)/);
+    expect(loadingSource).not.toMatch(/generated|\?url/);
+    expect(packageConfigSource).not.toMatch(/generated|\?url/);
+    expect(
+      existsSync(
+        join(APP_ROOT, "src/generated/crave-layout-resources.generated.ts"),
+      ),
+    ).toBe(false);
+    expect(viteSource).toContain(
+      'publicDir: resolve(__dirname, "../../assets/crave")',
+    );
     expect(adapterSource).not.toContain('"legacy"');
     expect(adapterSource).not.toContain("backgroundUrl");
     expect(adapterSource).not.toContain("createPositionedSprite");

@@ -1,6 +1,4 @@
 import game002ReelManifest from "../config/reel-presentation.manifest.json";
-import craveAssetsMap from "../../../assets/crave/assets.map.json";
-import { craveSceneLayoutPhysicalResourceUrls } from "./generated/crave-layout-resources.generated.js";
 import {
   createGridCellEffectResourcesFromManifest,
   deriveGridCellEffectPoolCapacities,
@@ -25,12 +23,10 @@ import {
   type SymbolValuePresentationResourceMap,
 } from "@slotclientengine/rendercore";
 import type { Game002FocusRegion, Game002GridLayout } from "./game-layout.js";
-
-const CRAVE_ASSETS_MAP_FILES: Readonly<
-  Record<string, { readonly path: string }>
-> = craveAssetsMap.files;
-const CRAVE_PHYSICAL_RESOURCE_URLS: Readonly<Record<string, string>> =
-  craveSceneLayoutPhysicalResourceUrls;
+import {
+  GAME002_CRAVE_ASSETS_MAP_FILES,
+  resolveGame002CraveResourceUrl,
+} from "./crave-package-paths.js";
 
 export interface Game002PackageConfig {
   readonly label: string;
@@ -222,16 +218,12 @@ async function prepareGame002Package(
 async function loadCraveRuntimeResourceBytes(
   logicalKey: string,
 ): Promise<Uint8Array> {
-  const physicalPath = CRAVE_ASSETS_MAP_FILES[logicalKey]?.path;
+  const physicalPath = GAME002_CRAVE_ASSETS_MAP_FILES[logicalKey]?.path;
   if (!physicalPath)
     throw new Error(
       `game002 Crave logical resource "${logicalKey}" is unavailable.`,
     );
-  const url = CRAVE_PHYSICAL_RESOURCE_URLS[physicalPath];
-  if (!url)
-    throw new Error(
-      `game002 Crave physical resource "${physicalPath}" is unavailable.`,
-    );
+  const url = resolveGame002CraveResourceUrl(physicalPath);
   const response = await fetch(url);
   if (!response.ok)
     throw new Error(
