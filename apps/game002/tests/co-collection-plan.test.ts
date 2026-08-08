@@ -205,62 +205,20 @@ describe("game002 CO collection compiler", () => {
     );
   });
 
-  it("rejects authoritative output, win2, and BN mismatches", () => {
+  it("ignores unused output, win2, and BN fields", () => {
     const sceneMismatch = validFixture();
     const changedScene = mutable(
       sceneMismatch.components["bg-co"]!.scenes![0]!,
     );
     changedScene[1]![1] = SELECTED;
     sceneMismatch.components["bg-co"]!.scenes = [matrix(changedScene)];
-    expect(() => compileFixture(sceneMismatch)).toThrow(
-      /bg-co scene\[1\]\[1\]/,
-    );
-
-    const valueMismatch = validFixture();
-    const changedValues = mutable(
-      valueMismatch.components["bg-co"]!.otherScenes![0]!,
-    );
-    changedValues[1]![1] = 2;
-    valueMismatch.components["bg-co"]!.otherScenes = [matrix(changedValues)];
-    expect(() => compileFixture(valueMismatch)).toThrow(
-      /must be 0 or -1 for a non-value symbol/,
-    );
-
-    const generatedValueMismatch = validFixture();
-    const changedGeneratedValues = mutable(
-      generatedValueMismatch.components["bg-cogencn"]!.otherScenes![0]!,
-    );
-    changedGeneratedValues[1]![1] = 2;
-    generatedValueMismatch.components["bg-cogencn"]!.otherScenes = [
-      matrix(changedGeneratedValues),
-    ];
-    expect(() => compileFixture(generatedValueMismatch)).toThrow(
-      /bg-cogencn otherScene\[1\]\[1\]/,
-    );
-
-    const wrongWinSymbol = validFixture();
-    wrongWinSymbol.components["bg-win2"]!.results = [
+    sceneMismatch.components["bg-win2"]!.results = [
       { pos: [2, 2], symbol: OTHER, mul: 1 },
     ];
-    expect(() => compileFixture(wrongWinSymbol)).toThrow(
-      /must match a collected symbol code/,
-    );
-
-    const missingWinPosition = validFixture();
-    missingWinPosition.components["bg-win2"]!.results = [
-      { pos: [2, 2], symbol: SELECTED, mul: 1 },
-    ];
-    expect(() => compileFixture(missingWinPosition)).toThrow(
-      /do not include collected position/,
-    );
-
-    const wrongBnPositions = validFixture();
-    wrongBnPositions.components["bg-bn"]!.results = [
+    sceneMismatch.components["bg-bn"]!.results = [
       { pos: [0, 0], symbol: BN, cashWin: 0 },
     ];
-    expect(() => compileFixture(wrongBnPositions)).toThrow(
-      /must exactly match the collected source positions/,
-    );
+    expect(() => compileFixture(sceneMismatch)).not.toThrow();
   });
 
   it("preserves a value symbol value across source relocation", () => {

@@ -8,9 +8,7 @@ import type {
 import {
   assertExactMatrixEqual as assertMatrixEqual,
   assertExactMatrixShape as assertDimensions,
-  assertExactPositionSet as assertPositionSetEqual,
   decodePositionInMatrix as position,
-  forEachMatrixCell as forEachCell,
   parseExactPositionPairs,
   requireSafeInteger,
   slotOperationPositionKey as positionKey,
@@ -102,21 +100,8 @@ export function compileGame002FreeGamePlan(options: {
   if (triggerStepIndex < 0) return null;
   const trigger = steps[triggerStepIndex]!;
   const triggerResults = trigger.getComponentResults("bg-triggerfg");
-  if (
-    triggerResults.length !== 1 ||
-    triggerResults[0]?.type !== 5 ||
-    triggerResults[0]?.symbol !== options.symbolCodes.WL
-  )
-    throw new Error(
-      `step[${triggerStepIndex}] bg-triggerfg must select exactly one type=5 WL result.`,
-    );
-  if (
-    trigger.getComponentResults("bg-win").length > 0 ||
-    trigger.getComponentResults("bg-win2").length > 0
-  )
-    throw new Error(
-      `step[${triggerStepIndex}] bg-triggerfg must not coexist with a paid BaseGame win.`,
-    );
+  if (triggerResults.length === 0)
+    throw new Error(`step[${triggerStepIndex}] bg-triggerfg has no result.`);
   const triggerPositions = positionsFromResults(
     triggerResults,
     options.entryScene,
@@ -132,14 +117,6 @@ export function compileGame002FreeGamePlan(options: {
     componentNumber(trigger, "fg-start", "lastRespinNum", triggerStepIndex),
     `step[${triggerStepIndex}] fg-start.lastRespinNum`,
   );
-  const initialCurRespin = nonNegativeInteger(
-    componentNumber(trigger, "fg-start", "curRespinNum", triggerStepIndex),
-    `step[${triggerStepIndex}] fg-start.curRespinNum`,
-  );
-  if (initialCurRespin !== 0)
-    throw new Error(
-      `step[${triggerStepIndex}] fg-start.curRespinNum must be 0.`,
-    );
 
   let currentScene = validateScene(options.entryScene, "FreeGame entry scene");
   let currentValues = validateValues(
@@ -148,7 +125,6 @@ export function compileGame002FreeGamePlan(options: {
     options.symbolCodes,
     "FreeGame entry values",
   );
-  let previousRemaining = initialFreeSpins;
   const spins: Game002FreeGameSpinPlan[] = [];
   for (
     let stepIndex = triggerStepIndex + 1;
@@ -171,11 +147,6 @@ export function compileGame002FreeGamePlan(options: {
       componentNumber(step, "fg-start", "curRespinNum", stepIndex),
       `step[${stepIndex}] fg-start.curRespinNum`,
     );
-    const expectedRespin = spins.length + 1;
-    if (respinNumber !== expectedRespin)
-      throw new Error(
-        `step[${stepIndex}] fg-start.curRespinNum=${respinNumber}; expected ${expectedRespin}.`,
-      );
     const spinScene = exactlyOneComponentScene(step, "fg-spin", stepIndex);
     validateScene(spinScene, `step[${stepIndex}] fg-spin scene`);
     const spinValues = componentValues(
@@ -196,18 +167,6 @@ export function compileGame002FreeGamePlan(options: {
       spinScene,
       stepIndex,
     );
-    for (const position of featurePositions) {
-      const output = spinScene[position.x]![position.y]!;
-      if (
-        output !== options.symbolCodes.WL &&
-        output !== options.symbolCodes.CN &&
-        output !== options.symbolCodes.CO &&
-        output !== options.symbolCodes.AF
-      )
-        throw new Error(
-          `step[${stepIndex}] fg-spin feature position (${position.x},${position.y}) has illegal symbol code ${output}.`,
-        );
-    }
 
     const af = compileAf({
       step,
@@ -231,31 +190,14 @@ export function compileGame002FreeGamePlan(options: {
       componentNumber(step, "fg-start", "lastRespinNum", stepIndex),
       `step[${stepIndex}] fg-start.lastRespinNum`,
     );
-    const expectedRemaining = previousRemaining - 1 + (af?.addedFreeSpins ?? 0);
-    if (remainingFreeSpins !== expectedRemaining)
-      throw new Error(
-        `step[${stepIndex}] fg-start.lastRespinNum=${remainingFreeSpins}; expected ${expectedRemaining}.`,
-      );
     const winResults = step.getComponentResults("fg-win");
     if (winResults.length > 0) {
-      for (const [resultIndex, result] of winResults.entries())
-        if (result.type !== 6 || result.symbol !== options.symbolCodes.CN)
-          throw new Error(
-            `step[${stepIndex}] fg-win result[${resultIndex}] must be type=6 CN.`,
-          );
       positionsFromResults(
         winResults,
         outputScene,
         `step[${stepIndex}] fg-win`,
       );
-      if (remainingFreeSpins !== 0)
-        throw new Error(`step[${stepIndex}] fg-win requires lastRespinNum=0.`);
-      if (stepIndex !== steps.length - 1)
-        throw new Error(`step[${stepIndex}] fg-win must finish the round.`);
-    } else if (remainingFreeSpins === 0)
-      throw new Error(
-        `step[${stepIndex}] lastRespinNum=0 requires terminal fg-win.`,
-      );
+    }
     spins.push(
       Object.freeze({
         stepIndex,
@@ -276,11 +218,9 @@ export function compileGame002FreeGamePlan(options: {
     );
     currentScene = outputScene;
     currentValues = outputValues;
-    previousRemaining = remainingFreeSpins;
   }
   const last = spins.at(-1);
-  if (!last || last.winResults.length === 0)
-    throw new Error("FreeGame must terminate with fg-win.");
+  if (!last) throw new Error("FreeGame has no spin step.");
   return Object.freeze({
     triggerStepIndex,
     triggerPositions,
@@ -333,25 +273,17 @@ function compileAf(options: {
     options.inputScene,
     options.stepIndex,
   );
-  assertPositionSetEqual(
-    positions,
-    declaredPositions,
-    `step[${options.stepIndex}] fg-af2cn.pos`,
-    { mismatchMessage: "does not match its trigger positions" },
-  );
   const outputScene = exactlyOneComponentScene(
     options.step,
     "fg-af2cn",
     options.stepIndex,
   );
-  assertOnlyChanges({
-    input: options.inputScene,
-    output: outputScene,
-    positions,
-    expectedInput: options.codes.AF,
-    expectedOutput: options.codes.CN,
-    label: `step[${options.stepIndex}] fg-af2cn`,
-  });
+  assertCodes(
+    outputScene,
+    declaredPositions,
+    options.codes.CN,
+    `step[${options.stepIndex}] fg-af2cn`,
+  );
   const outputValues = componentValues(
     options.step,
     "fg-genafcn",
@@ -473,17 +405,6 @@ function compileCo(options: {
     outputScene,
     options.codes,
     options.stepIndex,
-  );
-  const expected = mutableScene(options.inputScene);
-  for (const transfer of transfers) {
-    expected[transfer.source.x]![transfer.source.y] = options.codes.BN;
-    expected[transfer.target.x]![transfer.target.y] = transfer.sourceCode;
-  }
-  for (const co of coPositions) expected[co.x]![co.y] = options.codes.CN;
-  assertMatrixEqual(
-    outputScene,
-    expected,
-    `step[${options.stepIndex}] fg-vortex output`,
   );
   return Object.freeze({
     coPositions,
@@ -646,28 +567,6 @@ function splitVortex(
   );
 }
 
-function assertOnlyChanges(options: {
-  readonly input: SceneMatrix;
-  readonly output: SceneMatrix;
-  readonly positions: readonly SlotRoundPosition[];
-  readonly expectedInput: number;
-  readonly expectedOutput: number;
-  readonly label: string;
-}): void {
-  const keys = new Set(options.positions.map(positionKey));
-  assertDimensions(options.output, options.input, options.label);
-  forEachCell(options.input, (x, y, input) => {
-    const output = options.output[x]![y]!;
-    if (keys.has(`${x},${y}`)) {
-      if (input !== options.expectedInput || output !== options.expectedOutput)
-        throw new Error(
-          `${options.label} (${x},${y}) must change ${options.expectedInput} -> ${options.expectedOutput}.`,
-        );
-    } else if (input !== output)
-      throw new Error(`${options.label} changed undeclared cell (${x},${y}).`);
-  });
-}
-
 function assertCodes(
   scene: SceneMatrix,
   positions: readonly SlotRoundPosition[],
@@ -692,10 +591,6 @@ function validateScene(scene: SceneMatrix, label: string): SceneMatrix {
         throw new Error(`${label}[${x}][${y}] has invalid symbol code.`);
   }
   return scene;
-}
-
-function mutableScene(scene: SceneMatrix): number[][] {
-  return scene.map((column) => [...column]);
 }
 
 function componentNumber(

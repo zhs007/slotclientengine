@@ -232,11 +232,11 @@ describe("Game002FreeGameOperationTarget", () => {
     fixture.target.cleanup();
   });
 
-  it("rolls back partially prepared AF and CO transactions", async () => {
+  it("destroys partially prepared AF and CO resources", async () => {
     const afFixture = createFixture();
     const firstReplacement = {
       commit: vi.fn(),
-      rollback: vi.fn(),
+      destroy: vi.fn(),
     } as unknown as PreparedVisibleOccurrenceReplacement;
     afFixture.runtime.prepareVisibleOccurrenceReplacement
       .mockReturnValueOnce(firstReplacement)
@@ -258,7 +258,7 @@ describe("Game002FreeGameOperationTarget", () => {
     afFixture.runtime.resolvePlayback();
     await flushPlayback();
     expect(() => afFixture.target.update(0.1)).toThrow("AF prepare failed");
-    expect(firstReplacement.rollback).toHaveBeenCalledOnce();
+    expect(firstReplacement.destroy).toHaveBeenCalledOnce();
     afFixture.target.cleanup();
 
     const coFixture = createFixture();
@@ -283,7 +283,7 @@ describe("Game002FreeGameOperationTarget", () => {
       "CO transfer prepare failed",
     );
     expect(
-      coFixture.runtime.replacements.at(-1)!.rollback,
+      coFixture.runtime.replacements.at(-1)!.destroy,
     ).toHaveBeenCalledOnce();
     coFixture.target.cleanup();
   });
@@ -381,7 +381,7 @@ class FakeRuntime {
   prepareVisibleOccurrenceReplacement = vi.fn(() => {
     const replacement = {
       commit: vi.fn(),
-      rollback: vi.fn(),
+      destroy: vi.fn(),
     } as unknown as PreparedVisibleOccurrenceReplacement;
     this.replacements.push(replacement);
     return replacement;
@@ -450,7 +450,7 @@ function createTransfer(): PreparedGridCellVisibleOccurrenceTransferBatch {
     start: vi.fn(),
     setProgress: vi.fn(),
     commit: vi.fn(),
-    rollback: vi.fn(),
+    destroy: vi.fn(),
   } as unknown as PreparedGridCellVisibleOccurrenceTransferBatch;
 }
 

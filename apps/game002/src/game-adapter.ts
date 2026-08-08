@@ -18,10 +18,6 @@ import { createPresentationTransactionRunner } from "@slotclientengine/gameframe
 import {
   createSymbolCascadePlayer,
   type CreateSymbolCascadePlayerOptions,
-  type CreateSymbolWinCarouselOptions,
-  type CreateSymbolValuePresenterOptions,
-  type SymbolWinCarousel,
-  type SymbolValuePresenter,
   type SymbolCascadePlayer,
   createSlotOperationCoordinator,
   createSlotOperationHandlerRegistry,
@@ -119,14 +115,6 @@ export interface Game002AdapterOptions {
   readonly createSymbolCascadePlayer?: (
     options: CreateSymbolCascadePlayerOptions,
   ) => SymbolCascadePlayer;
-  /** @deprecated task 95 uses createSymbolCascadePlayer. */
-  readonly createSymbolWinCarousel?: (
-    options: CreateSymbolWinCarouselOptions,
-  ) => SymbolWinCarousel;
-  /** @deprecated task 95 no longer creates a detached value presenter. */
-  readonly createSymbolValuePresenter?: (
-    options: CreateSymbolValuePresenterOptions,
-  ) => SymbolValuePresenter;
   readonly reportFatalError?: (error: Error) => void;
   readonly logDiagnostic?: (message: string) => void;
 }
@@ -168,6 +156,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
   #lastPresentationDiagnostic = "";
   #presentationDiagnosticAgeSeconds = 0;
   #presentationStallReported = false;
+  #roundExecutionFailed = false;
 
   constructor(options: Game002AdapterOptions) {
     const packageConfig = options.packageConfig;
@@ -252,6 +241,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
     if (this.#app) {
       throw new Error("game002 adapter is already mounted.");
     }
+    this.#roundExecutionFailed = false;
 
     const app = this.#createApplication();
     let backgroundPlayer: Game002BackgroundPlayer | null = null;
@@ -405,6 +395,11 @@ class Game002PixiAdapter implements SlotGameAdapter {
   }
 
   playSpin(logic: GameLogic): Promise<void> {
+    if (this.#roundExecutionFailed) {
+      throw new Error(
+        "game002 presentation stopped after a previous round failure; reinitialize the game before spinning again.",
+      );
+    }
     const runtime = this.#requireRuntime();
     const coordinator = this.#requireRoundCoordinator();
     if (coordinator.getSnapshot().running) {
@@ -481,6 +476,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
       const failure = error instanceof Error ? error : new Error(String(error));
       const hadPendingAnimation =
         this.#roundCoordinator?.getSnapshot().running === true;
+      if (hadPendingAnimation) this.#roundExecutionFailed = true;
       this.#roundCoordinator?.cleanup("execution-failure");
       if (!hadPendingAnimation) this.#reportFatalError(failure);
     }
@@ -580,7 +576,7 @@ function createGame002OperationRegistrations(target: Game002RoundTarget) {
       completed: options.update(operation, deltaSeconds),
     }),
     commit: () => undefined,
-    rollback: () => target.cleanup(),
+    rollback: () => undefined,
     destroy: () => undefined,
   });
   const registration = (
@@ -659,16 +655,16 @@ function createGame002OperationRegistrations(target: Game002RoundTarget) {
   });
   const requirePayload = (operation: SlotOperationV2) => {
     const payload = operation.payload as Game002TransformPayload;
-    if (!payload?.phase)
+    if (!payload || !Array.isArray(payload.wlIncrements))
       throw new Error("game002 atomic transform operation payload is invalid.");
     return payload;
   };
   const handler: SlotOperationHandler<SlotOperationV2, SlotOperationV2> = {
-    preflight: (operation) =>
-      target.preflightAtomicTransform(operation, requirePayload(operation)),
+    preflight: () => undefined,
     prepare: (operation) => operation,
     start: (operation) => {
       const payload = requirePayload(operation);
+      target.preflightAtomicTransform(operation, payload);
       target.startAtomicTransform(operation, payload);
     },
     update: (_operation, deltaSeconds) => {
@@ -676,7 +672,7 @@ function createGame002OperationRegistrations(target: Game002RoundTarget) {
       return target.updateAtomicTransform(_operation);
     },
     commit: () => undefined,
-    rollback: () => target.cleanup(),
+    rollback: () => undefined,
     destroy: () => undefined,
   };
   return [
@@ -686,41 +682,15 @@ function createGame002OperationRegistrations(target: Game002RoundTarget) {
     registration("game002:dropdown", "state-mutation", dropdown),
     registration("game002:refill", "state-mutation", refill),
     registration("game002:win-amount", "presentation", completion),
-    ...GAME002_TRANSFORM_PHASES.map((phase) =>
-      Object.freeze({
-        kind: `game002:${phase}`,
-        version: 2,
-        effect: "state-mutation" as const,
-        requiredCapabilities: new Set([`game002:${phase}`]),
-        handler,
-      }),
-    ),
     Object.freeze({
-      kind: "game002:wild-multiplier-presentation",
+      kind: "game002:transform",
       version: 2,
-      effect: "presentation" as const,
-      requiredCapabilities: new Set(["game002:wild-multiplier-presentation"]),
+      effect: "state-mutation" as const,
+      requiredCapabilities: new Set(["game002:transform"]),
       handler,
     }),
   ];
 }
-
-type Game002TransformPhase =
-  | "wl-increment"
-  | "wild-multiplier"
-  | "wm-to-cn"
-  | "coin-multiplier"
-  | "cm-to-cn"
-  | "co-collect";
-
-const GAME002_TRANSFORM_PHASES: readonly Game002TransformPhase[] = [
-  "wl-increment",
-  "wild-multiplier",
-  "wm-to-cn",
-  "coin-multiplier",
-  "cm-to-cn",
-  "co-collect",
-];
 
 function createGame002FreeGameOperationRegistrations(
   target: Game002FreeGameOperationTarget,
@@ -732,12 +702,16 @@ function createGame002FreeGameOperationRegistrations(
     return payload;
   };
   const handler: SlotOperationHandler<SlotOperationV2, SlotOperationV2> = {
-    preflight: (operation) => target.preflight(requirePayload(operation)),
+    preflight: () => undefined,
     prepare: (operation) => operation,
-    start: (operation) => target.start(requirePayload(operation), operation),
+    start: (operation) => {
+      const payload = requirePayload(operation);
+      target.preflight(payload);
+      target.start(payload);
+    },
     update: (_operation, deltaSeconds) => target.update(deltaSeconds),
     commit: () => undefined,
-    rollback: () => target.cleanup(),
+    rollback: () => undefined,
     destroy: () => undefined,
   };
   return [
@@ -794,10 +768,6 @@ export class Game002RoundTarget {
   #activeFall: Game002FallPayload | null = null;
   #runtimeCompleted = false;
   #winCompleted = false;
-  #activeReleaseOnlyPositions: readonly {
-    readonly x: number;
-    readonly y: number;
-  }[] = [];
   #completionComplete = true;
   #unifiedSteps = new Set<number | string>();
   #initialSnapshot: SlotRoundOccurrenceSnapshot | null = null;
@@ -830,14 +800,7 @@ export class Game002RoundTarget {
       this.#transformRunner.cleanup("next-program");
     this.#transformProgramId += 1;
     this.#transformPlaybackFailure = null;
-    const atomic = this.#atomicTransformOperation;
     this.#atomicTransformOperation = null;
-    if (atomic?.effect === "state-mutation" && this.#runtime.getCurrentScene())
-      this.#runtime.applyScene(
-        atomic.input.scene,
-        "game002 atomic transform rollback",
-        atomic.input.values as Parameters<Game002ReelRuntime["applyScene"]>[2],
-      );
     this.#cascadePlayer.clear();
     this.#winAmountPlayer.dismissImmediately();
     this.#runtime.resetPresentationState();
@@ -845,7 +808,6 @@ export class Game002RoundTarget {
     this.#activeFall = null;
     this.#runtimeCompleted = false;
     this.#winCompleted = false;
-    this.#activeReleaseOnlyPositions = [];
     this.#completionComplete = true;
     this.#unifiedSteps.clear();
     this.#initialSnapshot = null;
@@ -884,7 +846,6 @@ export class Game002RoundTarget {
   startWinGroups(groups: Game002WinPayload["groups"]): void {
     const prepared = this.#cascadePlayer.prepare(groups);
     this.#winCompleted = false;
-    this.#activeReleaseOnlyPositions = [];
     this.#activity = "win";
     this.#cascadePlayer.start(prepared);
   }
@@ -899,9 +860,6 @@ export class Game002RoundTarget {
     if (this.#activity !== "win")
       throw new Error("game002 win stage is not active.");
     if (!this.#winCompleted) return { completed: false };
-    if (this.#activeReleaseOnlyPositions.length > 0)
-      this.#runtime.releaseVisibleSymbols(this.#activeReleaseOnlyPositions);
-    this.#activeReleaseOnlyPositions = [];
     this.#activity = "idle";
     return { completed: true };
   }
@@ -992,44 +950,31 @@ export class Game002RoundTarget {
             )
           )
             throw new Error(
-              `game002 ${payload.phase} symbol (${position.x},${position.y}) has no "${state}" animation capability.`,
+              `game002 transform symbol (${position.x},${position.y}) has no "${state}" animation capability.`,
             );
     };
-    switch (payload.phase) {
-      case "wl-increment":
-        requireStates(
-          payload.increments.map((item) => item.position),
-          ["appear"],
-        );
-        return;
-      case "wild-multiplier":
-        requireStates(payload.wmPositions, ["multStart", "multIdle"]);
-        return;
-      case "wm-to-cn":
-        requireStates(
-          payload.replacements.map((item) => item.position),
-          ["multEnd", "change"],
-        );
-        return;
-      case "coin-multiplier":
-        requireStates([payload.cm.position], ["feature1"]);
-        requireStates(
-          payload.updates.map((item) => item.position),
-          ["featureChange"],
-        );
-        return;
-      case "cm-to-cn":
-        requireStates([payload.cm.position], ["change"]);
-        return;
-      case "co-collect":
-        requireStates(
-          payload.collection.segments.map((segment) => segment.co),
-          ["feature"],
-        );
-        requireStates(payload.collection.sourcePositions, [
-          "feature1",
-          "feature2",
-        ]);
+    requireStates(
+      payload.wlIncrements.map((item) => item.position),
+      ["appear"],
+    );
+    const wmPositions = payload.wmReplacements.map((item) => item.position);
+    requireStates(wmPositions, ["multStart", "multIdle", "multEnd", "change"]);
+    if (payload.cm) {
+      requireStates([payload.cm.position], ["feature1", "change"]);
+      requireStates(
+        payload.cnUpdates.map((item) => item.position),
+        ["featureChange"],
+      );
+    }
+    if (payload.coCollection) {
+      requireStates(
+        payload.coCollection.segments.map(({ co }) => co),
+        ["feature"],
+      );
+      requireStates(payload.coCollection.sourcePositions, [
+        "feature1",
+        "feature2",
+      ]);
     }
   }
 
@@ -1120,89 +1065,44 @@ export class Game002RoundTarget {
             destroy: () => undefined,
           }),
       });
-    const mutation = operation.effect === "state-mutation" ? operation : null;
-    switch (payload.phase) {
-      case "wl-increment": {
-        const positions = payload.increments.map((item) => item.position);
-        return [
-          commit(() => {
-            for (const item of payload.increments) {
-              this.#runtime.setVisibleSymbolPresentationValue(
-                item.position.x,
-                item.position.y,
-                item.outputValue,
-              );
-              this.#runtime.setVisibleSymbolImageStringText(
-                item.position.x,
-                item.position.y,
-                "multiplier",
-                formatMultiplier(item.outputValue),
-              );
-            }
+    if (operation.effect !== "state-mutation")
+      throw new Error("game002 transform must mutate state.");
+    const commands: PresentationTransactionCommand[] = [];
+    if (payload.wlIncrements.length > 0) {
+      commands.push(
+        commit(() => this.applyWlValues(payload.wlIncrements)),
+        state(
+          payload.wlIncrements.map(({ position }) => position),
+          "appear",
+        ),
+      );
+    }
+    if (payload.wmReplacements.length > 0) {
+      const positions = payload.wmReplacements.map(({ position }) => position);
+      commands.push(state(positions, "multStart"));
+      if (payload.wlUpdates.length > 0)
+        commands.push(commit(() => this.applyWlValues(payload.wlUpdates)));
+      commands.push(
+        state(positions, "multIdle", "next-loop-complete"),
+        state(positions, "multEnd"),
+        state(positions, "change"),
+        ...payload.wmReplacements.map((item) =>
+          this.replacementCommit({
+            x: item.position.x,
+            y: item.position.y,
+            expectedCode: this.#wmSymbolCode,
+            outputCode: this.#cnSymbolCode,
+            outputPresentationValue: item.intermediateValue,
           }),
-          state(positions, "appear"),
-        ];
-      }
-      case "wild-multiplier": {
-        const commands: PresentationTransactionCommand[] = [
-          state(payload.wmPositions, "multStart"),
-        ];
-        if (mutation)
-          commands.push(
-            commit(() => {
-              for (const occurrence of mutation.output.occurrences) {
-                const input = mutation.input.occurrences.find(
-                  (candidate) => candidate.id === occurrence.id,
-                );
-                if (
-                  input?.code !== this.#wlSymbolCode ||
-                  input.value === occurrence.value
-                )
-                  continue;
-                this.#runtime.setVisibleSymbolPresentationValue(
-                  occurrence.position.x,
-                  occurrence.position.y,
-                  occurrence.value,
-                );
-                this.#runtime.setVisibleSymbolImageStringText(
-                  occurrence.position.x,
-                  occurrence.position.y,
-                  "multiplier",
-                  formatMultiplier(occurrence.value),
-                );
-              }
-            }),
-          );
+        ),
+      );
+    }
+    if (payload.cm) {
+      commands.push(state([payload.cm.position], "feature1"));
+      if (payload.cnUpdates.length > 0)
         commands.push(
-          state(payload.wmPositions, "multIdle", "next-loop-complete"),
-        );
-        return commands;
-      }
-      case "wm-to-cn":
-        return [
-          state(
-            payload.replacements.map((item) => item.position),
-            "multEnd",
-          ),
-          state(
-            payload.replacements.map((item) => item.position),
-            "change",
-          ),
-          ...payload.replacements.map((item) =>
-            this.replacementCommit({
-              x: item.position.x,
-              y: item.position.y,
-              expectedCode: this.#wmSymbolCode,
-              outputCode: this.#cnSymbolCode,
-              outputPresentationValue: item.intermediateValue,
-            }),
-          ),
-        ];
-      case "coin-multiplier":
-        return [
-          state([payload.cm.position], "feature1"),
           commit(() => {
-            for (const item of payload.updates)
+            for (const item of payload.cnUpdates)
               this.#runtime.setVisibleSymbolPresentationValue(
                 item.position.x,
                 item.position.y,
@@ -1210,27 +1110,45 @@ export class Game002RoundTarget {
               );
           }),
           state(
-            payload.updates.map((item) => item.position),
+            payload.cnUpdates.map(({ position }) => position),
             "featureChange",
           ),
-        ];
-      case "cm-to-cn":
-        return [
-          state([payload.cm.position], "change"),
-          this.replacementCommit({
-            x: payload.cm.position.x,
-            y: payload.cm.position.y,
-            expectedCode: this.#cmSymbolCode,
-            outputCode: this.#cnSymbolCode,
-            outputPresentationValue: payload.cm.outputValue,
-          }),
-        ];
-      case "co-collect":
-        return this.createCoCollectionCommands(
-          mutation!,
-          payload.collection,
-          awaitStates,
         );
+      commands.push(
+        state([payload.cm.position], "change"),
+        this.replacementCommit({
+          x: payload.cm.position.x,
+          y: payload.cm.position.y,
+          expectedCode: this.#cmSymbolCode,
+          outputCode: this.#cnSymbolCode,
+          outputPresentationValue: payload.cm.outputValue,
+        }),
+      );
+    }
+    if (payload.coCollection)
+      commands.push(
+        ...this.createCoCollectionCommands(
+          operation,
+          payload.coCollection,
+          awaitStates,
+        ),
+      );
+    return commands;
+  }
+
+  private applyWlValues(items: Game002TransformPayload["wlIncrements"]): void {
+    for (const item of items) {
+      this.#runtime.setVisibleSymbolPresentationValue(
+        item.position.x,
+        item.position.y,
+        item.outputValue,
+      );
+      this.#runtime.setVisibleSymbolImageStringText(
+        item.position.x,
+        item.position.y,
+        "multiplier",
+        formatMultiplier(item.outputValue),
+      );
     }
   }
 
@@ -1360,10 +1278,7 @@ export class Game002RoundTarget {
               transfer?.commit();
               for (const replacement of replacements) replacement.commit();
             },
-            rollback: () => {
-              transfer?.rollback();
-              for (const replacement of replacements) replacement.rollback();
-            },
+            rollback: () => undefined,
             destroy: () => {
               transfer?.destroy();
               for (const replacement of replacements) replacement.destroy();

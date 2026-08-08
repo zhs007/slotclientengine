@@ -14,45 +14,47 @@ import type { Game002TransformPayload } from "../src/game002-operation-compiler.
 import type { Game002ReelRuntime } from "../src/game002-reel-controller.js";
 
 describe("Game002RoundTarget atomic multiplier programs", () => {
-  it("runs wild-multiplier and WM replacement as independent atomic programs", async () => {
+  it("runs WM animation and replacement as one operation", async () => {
     const runtime = new TransformRuntime();
     const target = createTarget(runtime);
     const input = createSnapshot(createScene(1), 7, 3, 2);
-    const wildOutput = createSnapshot(createScene(1), 7, 3, 5);
-    const wild = operation("game002:wild-multiplier", input, wildOutput, {
-      phase: "wild-multiplier",
-      wmPositions: [{ x: 1, y: 0 }],
-    });
+    const outputScene = createScene(1);
+    outputScene[1][0] = 8;
+    const output = createSnapshot(outputScene, 8, 9, 5);
+    const value = operation(
+      "game002:transform",
+      input,
+      output,
+      transform({
+        wlUpdates: [
+          { position: { x: 0, y: 0 }, inputValue: 2, outputValue: 5 },
+        ],
+        wmReplacements: [
+          {
+            position: { x: 1, y: 0 },
+            intermediateValue: 9,
+            outputValue: 9,
+          },
+        ],
+      }),
+    );
 
-    target.startAtomicTransform(wild, wild.payload as Game002TransformPayload);
+    target.startAtomicTransform(
+      value,
+      value.payload as Game002TransformPayload,
+    );
     expect(runtime.events).toEqual(["state:multStart"]);
     runtime.advanceOnce();
     await flushPlayback();
     expect(runtime.events).toContain("state:multIdle");
     runtime.advanceLoop();
     await flushPlayback();
-    expect(target.updateAtomicTransform(wild).completed).toBe(true);
-
-    const outputScene = createScene(1);
-    outputScene[1][0] = 8;
-    const wmOutput = createSnapshot(outputScene, 8, 9, 5);
-    const wm = operation("game002:wm-to-cn", wildOutput, wmOutput, {
-      phase: "wm-to-cn",
-      replacements: [
-        {
-          position: { x: 1, y: 0 },
-          intermediateValue: 9,
-          outputValue: 9,
-        },
-      ],
-    });
-    target.startAtomicTransform(wm, wm.payload as Game002TransformPayload);
     runtime.advanceOnce();
     await flushPlayback();
     expect(runtime.events.at(-1)).toBe("state:change");
     runtime.advanceOnce();
     await flushPlayback();
-    expect(target.updateAtomicTransform(wm).completed).toBe(true);
+    expect(target.updateAtomicTransform(value).completed).toBe(true);
     expect(runtime.scene[1][0]).toBe(8);
   });
 
@@ -61,16 +63,20 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
     const target = createTarget(runtime);
     const input = createSnapshot(createScene(1), 7, 3, 2);
     const output = createSnapshot(createScene(1), 7, 3, 3);
-    const operationValue = operation("game002:wl-increment", input, output, {
-      phase: "wl-increment",
-      increments: [
-        {
-          position: { x: 0, y: 0 },
-          inputValue: 2,
-          outputValue: 3,
-        },
-      ],
-    });
+    const operationValue = operation(
+      "game002:transform",
+      input,
+      output,
+      transform({
+        wlIncrements: [
+          {
+            position: { x: 0, y: 0 },
+            inputValue: 2,
+            outputValue: 3,
+          },
+        ],
+      }),
+    );
 
     target.startAtomicTransform(
       operationValue,
@@ -82,15 +88,25 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
     expect(target.updateAtomicTransform(operationValue).completed).toBe(true);
   });
 
-  it("aborts playback and restores the operation input on cleanup", async () => {
+  it("aborts playback without restoring a prior snapshot", async () => {
     const runtime = new TransformRuntime();
     const target = createTarget(runtime);
     const input = createSnapshot(createScene(1), 7, 3, 2);
     const output = createSnapshot(createScene(1), 7, 3, 5);
-    const operationValue = operation("game002:wild-multiplier", input, output, {
-      phase: "wild-multiplier",
-      wmPositions: [{ x: 1, y: 0 }],
-    });
+    const operationValue = operation(
+      "game002:transform",
+      input,
+      output,
+      transform({
+        wmReplacements: [
+          {
+            position: { x: 1, y: 0 },
+            intermediateValue: 9,
+            outputValue: 9,
+          },
+        ],
+      }),
+    );
     target.startAtomicTransform(
       operationValue,
       operationValue.payload as Game002TransformPayload,
@@ -110,16 +126,20 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
     const outputScene = createScene(1);
     outputScene[1][0] = 8;
     const output = createSnapshot(outputScene, 8, 9, 2);
-    const operationValue = operation("game002:wm-to-cn", input, output, {
-      phase: "wm-to-cn",
-      replacements: [
-        {
-          position: { x: 1, y: 0 },
-          intermediateValue: 9,
-          outputValue: 9,
-        },
-      ],
-    });
+    const operationValue = operation(
+      "game002:transform",
+      input,
+      output,
+      transform({
+        wmReplacements: [
+          {
+            position: { x: 1, y: 0 },
+            intermediateValue: 9,
+            outputValue: 9,
+          },
+        ],
+      }),
+    );
     expect(() =>
       target.preflightAtomicTransform(
         operationValue,
@@ -129,6 +149,20 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
     expect(runtime.events).toEqual([]);
   });
 });
+
+function transform(
+  values: Partial<Game002TransformPayload>,
+): Game002TransformPayload {
+  return Object.freeze({
+    stepIndex: 1,
+    wlIncrements: Object.freeze([]),
+    wlUpdates: Object.freeze([]),
+    wmReplacements: Object.freeze([]),
+    cnUpdates: Object.freeze([]),
+    cm: null,
+    ...values,
+  });
+}
 
 function createTarget(runtime: TransformRuntime): Game002RoundTarget {
   return new Game002RoundTarget({

@@ -1,19 +1,17 @@
 import {
   applySlotOperationChanges,
   applySlotOperationValueUpdates,
-  createBuiltinSlotOperationDefinitionsV2,
   createSlotOperationSnapshot,
   deriveSlotStateMutations,
-  finalizeSlotOperationPlanV2,
   genDropdownOperation,
   genRefillOperation,
   genRemoveOperation,
   genSpinOperation,
   genWinOperation,
   type GameLogic,
-  type SlotOperationDefinitionV2,
   type SlotOperationDraftV2,
   type SlotOperationPlanV2,
+  type SlotOperationV2,
   type SlotOperationSnapshot,
   type SlotOperationSource,
   type SlotStateMutationDraftV2,
@@ -64,32 +62,7 @@ export interface Game002FallPayload extends Game002FallOperationData {
   readonly flowKey: string;
 }
 
-export type Game002TransformPayload =
-  | Readonly<{
-      phase: "wl-increment";
-      increments: Game002TransformOperationPayload["wlIncrements"];
-    }>
-  | Readonly<{
-      phase: "wild-multiplier";
-      wmPositions: readonly { readonly x: number; readonly y: number }[];
-    }>
-  | Readonly<{
-      phase: "wm-to-cn";
-      replacements: Game002TransformOperationPayload["wmReplacements"];
-    }>
-  | Readonly<{
-      phase: "coin-multiplier";
-      cm: NonNullable<Game002TransformOperationPayload["cm"]>;
-      updates: Game002TransformOperationPayload["cnUpdates"];
-    }>
-  | Readonly<{
-      phase: "cm-to-cn";
-      cm: NonNullable<Game002TransformOperationPayload["cm"]>;
-    }>
-  | Readonly<{
-      phase: "co-collect";
-      collection: NonNullable<Game002TransformOperationPayload["coCollection"]>;
-    }>;
+export type Game002TransformPayload = Game002TransformOperationPayload;
 
 export interface Game002BaseGameCompilation {
   readonly plan: SlotOperationPlanV2;
@@ -106,11 +79,12 @@ interface Game002CompilerOptions {
   readonly logDiagnostic?: (message: string) => void;
 }
 
-export interface Game002RoundFacts {
+interface Game002DraftCompilation {
   readonly atomicOperations: readonly SlotOperationDraftV2[];
   readonly betAmountRaw: number;
   readonly winAmountRaw: number;
   readonly symbolCodes: Readonly<Record<string, number>>;
+  readonly final: SlotOperationSnapshot;
 }
 
 export type Game002FreeGameOperationPayload =
@@ -141,23 +115,14 @@ export function compileGame002RoundOperationPlan(options: {
   readonly displaySymbols: readonly string[];
   readonly logDiagnostic?: (message: string) => void;
 }): Game002BaseGameCompilation {
-  return compileGame002OperationPlanFromFacts(decodeGame002RoundFacts(options));
-}
-
-export function decodeGame002RoundFacts(options: {
-  readonly logic: GameLogic;
-  readonly runtime: Game002ReelRuntime;
-  readonly displaySymbols: readonly string[];
-  readonly logDiagnostic?: (message: string) => void;
-}): Game002RoundFacts {
   const triggerStepIndex = options.logic
     .getSteps()
     .findIndex((step) => step.hasComponent("bg-triggerfg"));
-  if (triggerStepIndex < 0) return decodeGame002BaseRoundFacts(options);
-  const base = decodeGame002BaseRoundFacts({
+  if (triggerStepIndex < 0) return compileGame002BaseGameOperationPlan(options);
+  const base = compileGame002BaseDrafts({
     ...options,
-    logic: sliceGameLogic(options.logic, triggerStepIndex + 1),
     includeWinAmount: false,
+    stepLimit: triggerStepIndex + 1,
   });
   const codes = {
     WL: requireCode(base.symbolCodes, "WL"),
@@ -166,7 +131,7 @@ export function decodeGame002RoundFacts(options: {
     AF: requireCode(base.symbolCodes, "AF"),
     BN: requireCode(base.symbolCodes, "BN"),
   };
-  const baseFinal = requireLastAtomicOutput(base.atomicOperations);
+  const baseFinal = base.final;
   const free = compileGame002FreeGamePlan({
     logic: options.logic,
     entryScene: baseFinal.scene,
@@ -293,32 +258,25 @@ export function decodeGame002RoundFacts(options: {
     "game002:freegame-exit",
     Object.freeze({ kind: "transition", mode: "BaseGame" }),
   );
-  return Object.freeze({
+  return createGame002Compilation({
     atomicOperations: Object.freeze(drafts),
     betAmountRaw: base.betAmountRaw,
     winAmountRaw: base.winAmountRaw,
     symbolCodes: base.symbolCodes,
+    final: current,
   });
 }
 
 export function compileGame002BaseGameOperationPlan(
   options: Game002CompilerOptions,
 ): Game002BaseGameCompilation {
-  return compileGame002OperationPlanFromFacts(
-    decodeGame002BaseRoundFacts(options),
-  );
+  return createGame002Compilation(compileGame002BaseDrafts(options));
 }
 
-export function compileGame002OperationPlanFromFacts(
-  facts: Game002RoundFacts,
+function createGame002Compilation(
+  facts: Game002DraftCompilation,
 ): Game002BaseGameCompilation {
-  const plan = finalizeSlotOperationPlanV2({
-    drafts: facts.atomicOperations,
-    definitions: game002Definitions(),
-    symbolCodes: facts.symbolCodes,
-    columns: GAME002_REEL_COUNT,
-    rows: GAME002_VISIBLE_ROWS,
-  });
+  const plan = createGame002OperationPlan(facts.atomicOperations);
   return Object.freeze({
     plan,
     betAmountRaw: facts.betAmountRaw,
@@ -327,9 +285,9 @@ export function compileGame002OperationPlanFromFacts(
   });
 }
 
-function decodeGame002BaseRoundFacts(
-  options: Game002CompilerOptions,
-): Game002RoundFacts {
+function compileGame002BaseDrafts(
+  options: Game002CompilerOptions & { readonly stepLimit?: number },
+): Game002DraftCompilation {
   const betAmountRaw = options.logic.getBet() * options.logic.getLines();
   const winAmountRaw = options.logic.getTotalWin();
   const symbolCodes = readSymbolCodes(options.runtime, options.displaySymbols);
@@ -341,7 +299,7 @@ function decodeGame002BaseRoundFacts(
     CO: requireCode(symbolCodes, "CO"),
     BN: requireCode(symbolCodes, "BN"),
   };
-  const steps = options.logic.getSteps();
+  const steps = options.logic.getSteps().slice(0, options.stepLimit);
   if (steps.length === 0) throw new Error("game002 round has no server steps.");
   const multiplierCompiler = createGame002WlWmMultiplierCompiler({
     wlSymbolCode: codes.WL,
@@ -475,7 +433,6 @@ function decodeGame002BaseRoundFacts(
         input: current,
         finalOutput,
         transform,
-        symbolCodes,
         source: serverSource(serverStepIndex, "game002-transform"),
         flowKey,
       });
@@ -535,196 +492,30 @@ function decodeGame002BaseRoundFacts(
     betAmountRaw,
     winAmountRaw,
     symbolCodes,
+    final: current,
   });
-}
-
-function requireLastAtomicOutput(
-  operations: readonly SlotOperationDraftV2[],
-): SlotOperationSnapshot {
-  for (let index = operations.length - 1; index >= 0; index -= 1) {
-    const operation = operations[index]!;
-    if (
-      operation.effect === "scene-landing" ||
-      operation.effect === "state-mutation"
-    )
-      return operation.output;
-  }
-  throw new Error("game002 round facts contain no state output.");
 }
 
 function genGame002AtomicTransformOperations(options: {
   readonly input: SlotOperationSnapshot;
   readonly finalOutput: SlotOperationSnapshot;
   readonly transform: Game002TransformOperationPayload;
-  readonly symbolCodes: Readonly<Record<string, number>>;
   readonly source: SlotOperationSource;
   readonly flowKey: string;
 }): readonly SlotOperationDraftV2[] {
-  const transform = Object.freeze({
-    wlIncrements: options.transform.wlIncrements,
-    wmReplacements: options.transform.wmReplacements,
-    cnUpdates: options.transform.cnUpdates,
-    cm: options.transform.cm,
-    ...(options.transform.coCollection
-      ? { coCollection: options.transform.coCollection }
-      : {}),
-  });
-  const codes = {
-    WL: requireCode(options.symbolCodes, "WL"),
-    WM: requireCode(options.symbolCodes, "WM"),
-    CN: requireCode(options.symbolCodes, "CN"),
-    CM: requireCode(options.symbolCodes, "CM"),
-  };
-  let current = options.input;
-  const drafts: SlotOperationDraftV2[] = [];
-  const append = (
-    payload: Game002TransformPayload,
-    output: SlotOperationSnapshot,
-  ) => {
-    const phase = payload.phase;
-    if (snapshotsEqual(current, output)) {
-      if (phase !== "wild-multiplier")
-        throw new Error(`${options.flowKey}:${phase} is an unexpected no-op.`);
-      return;
-    }
-    const draft: SlotStateMutationDraftV2 = Object.freeze({
-      kind: `game002:${phase}`,
+  return Object.freeze([
+    Object.freeze({
+      kind: "game002:transform",
       version: 2,
       effect: "state-mutation",
       source: options.source,
-      input: current,
-      output,
-      mutations: deriveSlotStateMutations(current, output),
-      payload,
-      businessKey: `${options.flowKey}:${phase}`,
-    });
-    drafts.push(draft);
-    current = output;
-  };
-  if (transform.wlIncrements.length > 0)
-    append(
-      Object.freeze({
-        phase: "wl-increment",
-        increments: transform.wlIncrements,
-      }),
-      applyChanges(
-        current,
-        transform.wlIncrements.map((item) => ({
-          position: item.position,
-          outputCode: codes.WL,
-          outputValue: item.outputValue,
-        })),
-        options.symbolCodes,
-      ),
-    );
-  if (transform.wmReplacements.length > 0) {
-    const wmTotal = current.occurrences
-      .filter((occurrence) => occurrence.code === codes.WM)
-      .reduce((sum, occurrence) => sum + (occurrence.value ?? 0), 0);
-    const wildUpdates = current.occurrences
-      .filter((occurrence) => occurrence.code === codes.WL)
-      .map((occurrence) => ({
-        position: occurrence.position,
-        outputCode: codes.WL,
-        outputValue: (occurrence.value ?? 0) + wmTotal,
-      }));
-    if (wildUpdates.length > 0)
-      append(
-        Object.freeze({
-          phase: "wild-multiplier",
-          wmPositions: Object.freeze(
-            transform.wmReplacements.map((item) => item.position),
-          ),
-        }),
-        applyChanges(current, wildUpdates, options.symbolCodes),
-      );
-    else
-      drafts.push(
-        genWinOperation({
-          kind: "game002:wild-multiplier-presentation",
-          source: options.source,
-          payload: Object.freeze({
-            phase: "wild-multiplier",
-            wmPositions: Object.freeze(
-              transform.wmReplacements.map((item) => item.position),
-            ),
-          }) satisfies Game002TransformPayload,
-          businessKey: `${options.flowKey}:wild-multiplier`,
-        }),
-      );
-    append(
-      Object.freeze({
-        phase: "wm-to-cn",
-        replacements: transform.wmReplacements,
-      }),
-      applyChanges(
-        current,
-        transform.wmReplacements.map((item) => ({
-          position: item.position,
-          outputCode: codes.CN,
-          outputValue: item.intermediateValue,
-        })),
-        options.symbolCodes,
-      ),
-    );
-  }
-  if (transform.cnUpdates.length > 0)
-    append(
-      Object.freeze({
-        phase: "coin-multiplier",
-        cm: transform.cm!,
-        updates: transform.cnUpdates,
-      }),
-      applyChanges(
-        current,
-        transform.cnUpdates.map((item) => ({
-          position: item.position,
-          outputCode: codes.CN,
-          outputValue: item.outputValue,
-        })),
-        options.symbolCodes,
-      ),
-    );
-  if (transform.cm)
-    append(
-      Object.freeze({ phase: "cm-to-cn", cm: transform.cm }),
-      applyChanges(
-        current,
-        [
-          {
-            position: transform.cm.position,
-            outputCode: codes.CN,
-            outputValue: transform.cm.outputValue,
-          },
-        ],
-        options.symbolCodes,
-      ),
-    );
-  if (transform.coCollection)
-    append(
-      Object.freeze({
-        phase: "co-collect",
-        collection: transform.coCollection,
-      }),
-      options.finalOutput,
-    );
-  if (drafts.length === 0)
-    throw new Error(`${options.flowKey} transform produced no operations.`);
-  if (!snapshotsEqual(current, options.finalOutput))
-    throw new Error(`${options.flowKey} atomic transform does not close.`);
-  return Object.freeze(drafts);
-}
-
-function applyChanges(
-  input: SlotOperationSnapshot,
-  changes: readonly {
-    readonly position: { readonly x: number; readonly y: number };
-    readonly outputCode: number;
-    readonly outputValue: number | null;
-  }[],
-  symbolCodes: Readonly<Record<string, number>>,
-): SlotOperationSnapshot {
-  return applySlotOperationChanges({ input, changes, symbolCodes });
+      input: options.input,
+      output: options.finalOutput,
+      mutations: deriveSlotStateMutations(options.input, options.finalOutput),
+      payload: options.transform,
+      businessKey: `${options.flowKey}:transform`,
+    }) satisfies SlotStateMutationDraftV2,
+  ]);
 }
 
 function mutationWithOutput<Payload>(
@@ -808,56 +599,52 @@ function normalizeTransformDraft(
     : (draft as import("@slotclientengine/gameframeworks").SlotRoundSettledTransformDraft);
 }
 
-function game002Definitions(): readonly SlotOperationDefinitionV2[] {
-  const definitions = new Map(
-    createBuiltinSlotOperationDefinitionsV2().map((definition) => [
-      `${definition.kind}@${definition.version}`,
-      definition,
+function createGame002OperationPlan(
+  drafts: readonly SlotOperationDraftV2[],
+): SlotOperationPlanV2 {
+  const operations: SlotOperationV2[] = [];
+  let final: SlotOperationSnapshot | null = null;
+  for (const [operationIndex, draft] of drafts.entries()) {
+    const envelope = {
+      id: `game002:${operationIndex}:${draft.businessKey ?? draft.kind}`,
+      kind: draft.kind,
+      version: draft.version,
+      operationIndex,
+      source: draft.source,
+      payload: draft.payload,
+      requiredCapabilities: Object.freeze([draft.kind]),
+      commit: "atomic" as const,
+    };
+    const operation = Object.freeze(
+      draft.effect === "scene-landing"
+        ? { ...envelope, effect: draft.effect, output: draft.output }
+        : draft.effect === "state-mutation"
+          ? {
+              ...envelope,
+              effect: draft.effect,
+              input: draft.input,
+              output: draft.output,
+              mutations: draft.mutations,
+            }
+          : {
+              ...envelope,
+              effect: draft.effect,
+              ...(draft.targets ? { targets: draft.targets } : {}),
+            },
+    ) as SlotOperationV2;
+    operations.push(operation);
+    if (operation.effect !== "presentation") final = operation.output;
+  }
+  if (!final) throw new Error("game002 operation plan has no scene operation.");
+  return Object.freeze({
+    kind: "slot-operation-plan",
+    version: 2,
+    operations: Object.freeze(operations),
+    final,
+    requiredCapabilities: Object.freeze([
+      ...new Set(operations.map((operation) => operation.kind)),
     ]),
-  );
-  for (const [kind, effect] of [
-    ["game002:spin", "scene-landing"],
-    ["game002:win", "presentation"],
-    ["game002:remove", "state-mutation"],
-    ["game002:dropdown", "state-mutation"],
-    ["game002:refill", "state-mutation"],
-    ["game002:wl-increment", "state-mutation"],
-    ["game002:wild-multiplier", "state-mutation"],
-    ["game002:wild-multiplier-presentation", "presentation"],
-    ["game002:wm-to-cn", "state-mutation"],
-    ["game002:coin-multiplier", "state-mutation"],
-    ["game002:cm-to-cn", "state-mutation"],
-    ["game002:co-collect", "state-mutation"],
-    ["game002:win-amount", "presentation"],
-    ["game002:freegame-trigger", "presentation"],
-    ["game002:freegame-enter", "presentation"],
-    ["game002:freegame-spin", "state-mutation"],
-    ["game002:freegame-af", "state-mutation"],
-    ["game002:freegame-co", "state-mutation"],
-    ["game002:freegame-win", "presentation"],
-    ["game002:freegame-popup", "presentation"],
-    ["game002:freegame-exit", "presentation"],
-  ] as const)
-    definitions.set(
-      `${kind}@2`,
-      Object.freeze({
-        kind,
-        version: 2,
-        effect,
-        requiredCapabilities: Object.freeze([kind]),
-        ...(effect === "scene-landing"
-          ? {}
-          : { requiresEstablishedScene: true }),
-      }),
-    );
-  return Object.freeze([...definitions.values()]);
-}
-
-function snapshotsEqual(
-  left: SlotOperationSnapshot,
-  right: SlotOperationSnapshot,
-): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
+  });
 }
 
 function createFreeGameWinGroups(
@@ -906,50 +693,4 @@ function parseResultPositions(
       return Object.freeze({ x, y });
     }),
   );
-}
-
-function sliceGameLogic(source: GameLogic, length: number): GameLogic {
-  if (
-    !Number.isSafeInteger(length) ||
-    length <= 0 ||
-    length > source.getStepCount()
-  )
-    throw new Error(`game002 logic slice length ${length} is invalid.`);
-  const steps = Object.freeze(source.getSteps().slice(0, length));
-  const getStep = (index: number) => {
-    const step = steps[index];
-    if (!step) throw new Error(`game002 step[${index}] is out of range.`);
-    return step;
-  };
-  return Object.freeze({
-    getGameModuleName: () => source.getGameModuleName(),
-    getGameId: () => source.getGameId(),
-    getBet: () => source.getBet(),
-    getLines: () => source.getLines(),
-    getTotalWin: () => source.getTotalWin(),
-    getPlayWin: () => source.getPlayWin(),
-    getRawMessage: () => source.getRawMessage(),
-    getRawGmi: () => source.getRawGmi(),
-    getDefaultScene: () => source.getDefaultScene(),
-    getRandomNumbers: () => source.getRandomNumbers(),
-    getStepCount: () => steps.length,
-    getSteps: () => steps,
-    getStep,
-    hasComponent: (stepIndex: number, name: string) =>
-      getStep(stepIndex).hasComponent(name),
-    getComponent: (stepIndex: number, name: string) =>
-      getStep(stepIndex).getComponent(name),
-    getComponentResults: (stepIndex: number, name: string) =>
-      getStep(stepIndex).getComponentResults(name),
-    getComponentScenes: (stepIndex: number, name: string) =>
-      getStep(stepIndex).getComponentScenes(name),
-    getComponentOtherScenes: (stepIndex: number, name: string) =>
-      getStep(stepIndex).getComponentOtherScenes(name),
-    getScene: (stepIndex: number, sceneIndex: number) =>
-      getStep(stepIndex).getScene(sceneIndex),
-    getOtherScene: (stepIndex: number, sceneIndex: number) =>
-      getStep(stepIndex).getOtherScene(sceneIndex),
-    getResult: (stepIndex: number, resultIndex: number) =>
-      getStep(stepIndex).getResult(resultIndex),
-  });
 }

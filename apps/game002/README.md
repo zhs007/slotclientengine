@@ -132,44 +132,40 @@ selected symbol。随后 `bg-win2` 走既有金额/中奖流程，`bg-bn` 只在
 边界 release，不生成零金额 carousel group。
 
 各 multiplier component 只读取当前操作所需的目标 symbol cell，非目标 cell
-保留给服务器其它用途且不参与该 component 的语义校验；目标 multiplier、WM sum、
-CM 乘法、矩阵尺寸和 occurrence continuity 都在画面 mutation 前严格校验。
+保留给服务器其它用途且不参与该 component 的语义校验。客户端检查必需 component、
+矩阵尺寸、目标坐标和正整数值；WM sum、CM 乘法等业务公式由服务器负责，客户端不重复推导。
 
 ## FreeGame
 
 一次 `playSpin(logic)` 只启动一份 `SlotOperationPlanV2`。BaseGame operations、
 multiplier/CO transform payload 与 `game002:freegame@2` 由同一个 coordinator 持有；
 FreeGame 不再在 BaseGame Promise 完成后启动第二份 playback contract。transform payload
-已拆成 WL increment、WM、WM→CN、CM、CM→CN、CO 的 strict 最小 evidence union，Target
-不再用 stepIndex 查询 presentation batch，也没有 mutable payload cache。游戏侧 compiler 在进入 coordinator 前形成
-`wl-increment`、`wild-multiplier-presentation`、`wm-to-cn`、`coin-multiplier`、`cm-to-cn` 与
-`co-collect` exact operations；缺席阶段不生成 operation，每个实际 visual commit 后才推进。
+直接携带 WL increment、WM、WM→CN、CM、CM→CN、CO 的最小数据，Target
+不再用 stepIndex 查询 presentation batch，也没有 mutable payload cache。游戏侧 compiler 对每个
+settled step 只生成一份 `game002:transform`；缺席子流程不制造空 operation，每个实际 visual commit 后才推进。
 BaseGame multiplier/CO 与 FreeGame trigger/transition/AF/CO 共用同一个 rendercore transaction
 runner 合同；FreeGame target 不再保存 AF/CO prepared arrays、AbortController 或专用 progress phase。
 
-`decodeGame002RoundFacts()` 在任何 presentation mutation 前消费完整 `GameLogic`，闭合 BaseGame、
-multiplier/CO 与 FreeGame 的 scene/value/occurrence continuity，返回不含 raw step/component 的 frozen
-facts。facts 只保留 atomic operations、金额与 symbol codes，不再复制静态 definitions 或 aggregate final
-snapshot；`compileGame002OperationPlanFromFacts()` 只补 V2 definitions 与 final closure。component 专属 decoder
-文件继续保留严格协议公式，但不再由 target 或 final compiler 二次读取。adapter 也不再遍历完整 plan
-重复校验 resource/win group；执行能力错误由 target/transaction runner 抛出并进入统一失败路径。
+compiler 直接把当前 round 编译成 frozen operations，不再先制造整轮 facts、复制 `GameLogic` 或做第二次
+finalize。每一步只解析该 operation 即将消费的 component；执行能力在 operation 启动时检查，失败后停止
+本轮且禁止继续 spin，必须由宿主显式重建或重新同步，不回滚到本轮输入 snapshot。
 
 运行时 stage 只挂完整 Scene Layout package root。package runtime 按 manifest order/placement
 拥有唯一 main reel，首次 `defaultScene` commit 前保持 deferred/uncommitted；cascade 通过 main-reel
 overlay attach API 借用接入。background、reel、transition、popup 不再由 app 用 `worldLayer` 手工排序。
 
-包含 `bg-triggerfg` 的 round 会在表现开始前完整编译 BaseGame 尾段和全部 FreeGame
-step。trigger 必须是无其它 `bg-win/bg-win2` 赔付的 type-5 WL result；先播放 WL
+包含 `bg-triggerfg` 的 round 会按服务器顺序生成 BaseGame 尾段和 FreeGame operations。
+trigger 提供有效坐标即可；先播放 WL
 `win`，再走 Layout 的 `BaseGame -> FreeGame` transition，转场前后复用同一 reel 和
 同一触发 scene。
 
 每次 `fg-spin` 只释放并滚动当前 scene 中非 WL、非 CN 的格子，WL/CN occurrence
-与 value 保持不动。落定后严格按 `AF -> CO` 处理：AF 从 `fg-rollaf.number` 显示
+与 value 保持不动。落定后按 `AF -> CO` 处理：AF 从 `fg-rollaf.number` 显示
 不带 `x` 的免费次数，依次播放 `Feature/Change` 后变 CN；CO 只从 post-AF scene
-的 WL/CN 搬运完整 occurrence/value，source 变 BN、CO 变 CN。`fg-start` 的当前
-次数和剩余次数必须逐步连续，AF number 必须计入同一步剩余次数。
+的 WL/CN 搬运完整 occurrence/value，source 变 BN、CO 变 CN。`fg-start` 的计数直接用于
+界面显示，不在客户端重算整轮次数公式。
 
-只有末次 spin 的 `fg-win` 可以赔付，且只接受 type-6 CN group。它复用 CN collect
+`fg-win` 在所在 spin 作为中奖表现播放。它复用 CN collect
 但不 remove，随后等待 BigWin popup 真正完成，再走 `FreeGame -> BaseGame`
 transition；回到 BaseGame 后仍显示 FreeGame 最终 scene。
 
@@ -177,9 +173,9 @@ transition；回到 BaseGame 后仍显示 FreeGame 最终 scene。
 
 `bg-spin/bg-genwm/bg-gencm/bg-genco/bg-gencoins/bg-win/bg-triggerco/bg-co/bg-win2/bg-bn/bg-remove/bg-respin/bg-dropdown/bg-refill` 是 game002 app-owned 映射，只有 `historyComponents` 对应的 `step.hasComponent()` 才代表触发；`historyComponentsEx` 和 map 中的空组件不触发。adapter 预解析全部 steps 后，严格执行初始 spin、逐组 emphasis/win/remove、普通局 dropdown/refill unified fall，或期待局 existing-only dropdown -> refill-hole Nearwin2 sweep -> selective refill spin；任一结构漂移都在启动画面前失败。
 
-每个 result 的全部 `pos` 会在主转轮停稳后按 manifest presentation 执行。现有单组现金 overlay 与底部临时汇总都严格使用 `cashWin64 !== undefined ? cashWin64 : cashWin`；汇总要求 result cash 为 positive safe integer cents，并复用 `formatServerUsdAmount` 除以 `100` 显示。不能从 bet、lines、component total 或 `totalwin` 推导。`bg-win.basicComponentData.cashWin/coinWin` 只在字段存在时作为累计协议证据，不能替代 result 权威字段。
+每个 result 的全部 `pos` 会在主转轮停稳后按 manifest presentation 执行。现有单组现金 overlay 与底部临时汇总都使用 `cashWin64 !== undefined ? cashWin64 : cashWin`，并复用 `formatServerUsdAmount` 除以 `100` 显示。`bg-win.basicComponentData.cashWin/coinWin` 只作为服务器附加信息透传，客户端不再用它重算 result 总额。
 
-普通 symbol 与 WL 在 manifest 配置 `order=0/group/groupAmount`，CN 配置 `order=1/sequentialCollect/itemAmount`；因此服务器 `usedResults` 即使把 CN 放在前面，实际播放仍稳定为全部普通组后再 coin group，同 order 内保持服务器相对顺序。普通组请求 win 的同一边界把该 result cash cents 用 `0.35s` 计数加入 summary，动画和计数都完成后才 remove。coin group 先让全部 CN 同时 `Win_Start`，完成后全部进入 `Win` loop，再按 `y`、后 `x` 的屏幕行优先顺序逐枚 `Collect`；四档 CN 官方动画均为 `Collect=0.3333333s`、`End=0.5s`，相邻 Collect 固定按 `0.3s` 起播间隔推进，并在 cadence 边界立即中断当前 CN 自己的 `Win` loop 开始 `Collect`，不再等待多个 CN 的同步 loop boundary 而成组起播。前一枚 Collect 尚未结束时下一枚已经起播，End/release 也不阻塞后续 Collect，允许尾段重叠。未轮到的 CN 保持 Win loop，每枚 CN 只有真实 resolved state 进入 collect 后才按 `itemCoin/groupCoin * groupCash` 把精确 cents 加入 summary；自身 Collect 完成后仍正常播放 End，End 完成后 release 消失。逐格 coin value 总和必须精确等于 result coin amount，cash 份额不能整除时显式失败。参与 coin 判定的 WL 只与 CN start 同播自身 win，之后回 normal，不进入 collect/remove。
+普通 symbol 与 WL 在 manifest 配置 `order=0/group/groupAmount`，CN 配置 `order=1/sequentialCollect/itemAmount`；因此服务器 `usedResults` 即使把 CN 放在前面，实际播放仍稳定为全部普通组后再 coin group，同 order 内保持服务器相对顺序。普通组请求 win 的同一边界把该 result cash cents 用 `0.35s` 计数加入 summary，动画和计数都完成后才 remove。coin group 先让全部 CN 同时 `Win_Start`，完成后全部进入 `Win` loop，再按 `y`、后 `x` 的屏幕行优先顺序逐枚 `Collect`；四档 CN 官方动画均为 `Collect=0.3333333s`、`End=0.5s`，相邻 Collect 固定按 `0.3s` 起播间隔推进。未轮到的 CN 保持 Win loop，每枚 CN 进入 collect 后按服务器 result 金额推进 summary；自身 Collect 完成后仍正常播放 End，End 完成后 release 消失。客户端不再用逐格 coin value 反算 result 金额。参与 coin 判定的 WL 只与 CN start 同播自身 win，之后回 normal，不进入 collect/remove。
 
 summary 是 cascade container 内的 Pixi Text，位置从 reel layer 尺寸派生为 `(boardWidth/2, boardHeight+36)`，样式为 `48/900/#fff7d6/#5a2500/6`。值为 0 时完全隐藏；跨普通组、coin、fall 和后续 step 保留累计，全部 cascade 完成后在 global cash win-amount 启动前清零隐藏。单组 cash overlay、临时 cash summary 与最终 global cash amount 使用相同 cents formatter，但生命周期各自独立。
 
@@ -187,7 +183,7 @@ summary 是 cascade container 内的 Pixi Text，位置从 reel layer 尺寸派�
 
 未激活期待时，dropdown 与 refill 仍合并为一次 rendercore fall：幸存 occurrence 和新增 symbol 同时从上向下移动，不进入 spin/appear 流程。已激活期待时，每个 cascade step 先只搬运既有 occurrence 到带 hole 的 dropdown scene；随后按 `y desc/x asc`、`80ms` 起播间隔在 hole 上预扫一次 Nearwin2，等待最后一个真实 loop completion；最后只让 empty hole 使用本地公开轮带 selective spin。selective spin 从最左侧有 hole 列的最下 hole 起步，以“列内向上序号 + 有 hole 的列从左向右序号”作为 wave index：起点先动，下一层的起点上方与下一列最下 hole 同时动，再逐层向右上扩散；同一层共享 `16ms` start group 边界，Nearwin1 与 landing 的稳定顺序按 wave、层内从左向右推进，cadence 为 `100ms`。每格在 landing 前约 `0.6666667s` 起播 Nearwin1 并真实播放 1 次，播放完立即落地；整体 `settleAfterLastStartMs=800`，新 symbol 继续走 manifest appear。两条路径都保留整板 mask、WL fixed/renderPriority、CN value/occurrence continuity；期待 selective spin 不重启 survivor player。refill 新增 CN 时必须使用当前 step `bg-gencoins` 的服务端值，不能随机覆盖。
 
-`bg-remove`、`bg-dropdown` 和 `bg-refill` 的 `usedOtherScenes` 都遵守服务端 delta 语义：矩阵没有独立变化时允许省略。remove value holes 从权威 remove scene 与 source occurrence 推导；dropdown value 搬运由 rendercore 通用 occurrence 算法推导；refill intermediate otherScene 只在存在时校验尺寸。服务器若提供任一矩阵，仍必须最多一份并通过完整一致性校验。只有 refill 新增 CN 这种无法从旧 occurrence 推导的新 raw value，才要求 `bg-gencoins` 提供 otherScene。
+`bg-remove`、`bg-dropdown` 和 `bg-refill` 的 `usedOtherScenes` 遵守服务端 delta 语义：矩阵没有独立变化时允许省略。remove value holes 从 remove scene 与 source occurrence 推导；dropdown value 搬运由 rendercore 通用 occurrence 算法推导；refill 只校验当前操作消费的数据。只有 refill 新增 CN 这种无法从旧 occurrence 推导的新 raw value，才要求 `bg-gencoins` 提供 otherScene。
 
 dropdown 请求仍是通用 symbol state，但 `RenderSymbol` 会比较切换前后实际动画的 continuity key。底层 Spine/VNI 资源与 playback 完全相同时只更新状态语义，保留当前 player 和时间轴，不 reset/replay；因此 CN 的 normal `Loop` 进入 dropdown `Loop` 时持续播放，其它 normal/dropdown 相同的动画也自动获得相同行为。动画名、资源、transform 或 playback 不同则照常切换；reset、value/tier 变化仍强制重建，不能误复用旧时间轴。
 

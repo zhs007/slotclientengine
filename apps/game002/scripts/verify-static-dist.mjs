@@ -314,19 +314,6 @@ function assertDistContainsAssetExactlyOnce(assetNames, sourcePath, label) {
   }
 }
 
-function assertDistContainsSourceAssetContent(assetNames, sourcePath) {
-  const source = readFileSync(sourcePath);
-  if (
-    !assetNames.some((name) =>
-      readFileSync(join(DIST_ASSETS, name)).equals(source),
-    )
-  ) {
-    failures.push(
-      `dist/assets is missing source asset content for ${relative(REPO_ROOT, sourcePath)}.`,
-    );
-  }
-}
-
 function assertOne(assetNames, pattern, label) {
   const matches = assetNames.filter((name) => pattern.test(name));
   if (matches.length !== 1) {

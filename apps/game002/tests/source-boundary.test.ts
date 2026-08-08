@@ -238,10 +238,8 @@ describe("game002 source boundary", () => {
       join(APP_ROOT, "src/game002-operation-compiler.ts"),
       "utf8",
     );
-    expect(operationCompilerSource).toContain("decodeGame002RoundFacts");
-    expect(operationCompilerSource).toContain(
-      "compileGame002OperationPlanFromFacts",
-    );
+    expect(operationCompilerSource).not.toContain("decodeGame002RoundFacts");
+    expect(operationCompilerSource).not.toContain("sliceGameLogic");
     const freeGameTargetSource = readFileSync(
       join(APP_ROOT, "src/freegame-operation-target.ts"),
       "utf8",

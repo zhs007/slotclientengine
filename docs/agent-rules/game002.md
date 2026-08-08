@@ -75,8 +75,17 @@
 - 同一 server response 的 BaseGame 与 FreeGame 必须属于同一 `SlotOperationPlanV2` 和同一
   coordinator execution。不得在 BaseGame completion Promise 后再启动第二份 round plan；
   FreeGame 必须展开为 trigger、transition、spin、AF、CO、win、popup 等显式 operation；不得
-  重新封装为一个内部推进全部阶段的 opaque operation。首次 mutation 前必须完成全部
-  scene/value/component 与 handler capability preflight。
+  重新封装为一个内部推进全部阶段的 opaque operation。plan generation 只负责按服务器已出现的
+  component 排列 operation 并携带本步所需数据，不在首次 mutation 前重新证明整轮业务公式或 final
+  closure；每个 operation 开始前只校验本步安全执行所需的 scene shape、position、目标 symbol、value
+  和 animation/resource capability。
+
+- game002 spin flow 使用 fail-stop、无 rollback 模型。所有权威 scene/value mutation 必须推迟到对应
+  animation 完成边界并同步原子提交；prepare/playback/commit 任一失败立即停止当前 round、禁止继续
+  后续 operation 或下一次 spin，并交由显式重新初始化/重新同步恢复。cleanup 只取消 pending playback、
+  input 和临时资源，不恢复 operation input snapshot。未参与当前 operation 的额外 server field、component
+  或 matrix cell 不作为失败条件；当前 operation 必需的数据缺失、越界、类型非法或目标 symbol 不匹配仍
+  显式失败。只有显式声明为 best-effort 且不改变 scene/value 的装饰效果允许跳过。
 
 - `bg-triggerfg` 只接受没有其它 BaseGame 赔付的 type-5 WL result；WL win once
   完成后才进入 Layout transition，转场不得重建 reel 或替换触发 scene。
@@ -93,13 +102,12 @@
 
 - WL/WM/CM/CO 的权威业务事实必须随对应 operation payload 保存；Target 不按 stepIndex
   查询 presentation batch。纯动画 `Start/Idle/End` 可保留 handler 私有 phase，但每个
-  scene/value/occurrence commit 必须服从 operation input/output 与 rollback 边界。
-- WL/WM/CM/CO operation payload 必须是按 phase 区分的最小 evidence union；multiplier compiler 不得维护 stepIndex payload cache。presentation 使用共享 await/commit/progress transaction runner，app 不恢复 aggregate transform session。
+  scene/value/occurrence commit 必须服从 operation input/output，并在失败时进入统一 fail-stop。
+- WL/WM/CM/CO 使用每个 settled step 一份最小 transform payload；multiplier compiler 不得维护 stepIndex payload cache。presentation 使用共享 await/commit/progress transaction runner。
 - game002 stage 只挂完整 Scene Layout package root；package runtime 拥有唯一 main reel 与 manifest order/placement，defaultScene commit 前保持 deferred，cascade 只经 typed overlay attach 接入。
-- game002 compiler 必须直接生成按需出现的 `game002:wl-increment`、
-  `game002:wild-multiplier`、`game002:wm-to-cn`、`game002:coin-multiplier`、
-  `game002:cm-to-cn`、`game002:co-collect` exact operations；不得先生成 profile
-  `settled-transform` 再二次展开，也不得重新压回单个 final diff。
+- game002 compiler 对每个 settled step 只生成一份按需出现的 `game002:transform`，
+  payload 直接携带本步实际存在的 WL、WM、CM、CO 子流程；不得先生成 profile
+  再由 runtime 重算公式，也不得为缺席子流程制造空 operation。
 
 - initial spin 和 refill 的动画前落定 scene 先按
   `bg-gencm > bg-genwm > bg-spin/bg-refill` 合成 multiplier 输入，再把
@@ -121,8 +129,8 @@
 - 同批 WM 并行执行 `Mult_Start` once、`Mult_Idle` 一个真实 loop、`Mult_End`
   once、`Change` once；进入 `Mult_Idle` 时提交全部 WL multiplier 显示更新。
 - `Change` 完成边界才原子提交 `bg-wm2cn.scene` 的原位置 WM -> CN replacement，
-  新 CN value 只取 `bg-genwmcn.otherScene`；prepare 或动画失败必须 rollback，
-  不得重建无关 symbol。
+  新 CN value 只取 `bg-genwmcn.otherScene`；prepare 或动画失败必须停止当前 round，
+  不继续执行后续 operation。
 - WM 全流程提交完成后才处理 CM。CM 先播放 `Feature1` once；完成边界按
   `bg-updcn.otherScene` 将当时全部 CN（包含本批 WM 新转出的 CN）严格更新为
   当前值乘唯一 CM multiplier，并同步播放 CN `Feature_Change` once。

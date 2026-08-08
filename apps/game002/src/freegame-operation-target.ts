@@ -2,7 +2,6 @@ import {
   createPresentationTransactionRunner,
   type PresentationTransactionCommand,
   type PresentationTransactionProgram,
-  type SlotOperationV2,
   type WinResultPosition,
 } from "@slotclientengine/gameframeworks";
 import type {
@@ -26,7 +25,6 @@ export class Game002FreeGameOperationTarget {
   readonly #transactionRunner = createPresentationTransactionRunner();
   #activity: Activity = "idle";
   #payload: Game002FreeGameOperationPayload | null = null;
-  #operation: SlotOperationV2 | null = null;
   #transactionGeneration = 0;
   #transactionComplete = true;
   #progressCommandIndex: number | null = null;
@@ -80,14 +78,10 @@ export class Game002FreeGameOperationTarget {
     }
   }
 
-  start(
-    payload: Game002FreeGameOperationPayload,
-    operation: SlotOperationV2 | null = null,
-  ): void {
+  start(payload: Game002FreeGameOperationPayload): void {
     if (this.#activity !== "idle")
       throw new Error("game002 FreeGame operation target is already active.");
     this.#payload = payload;
-    this.#operation = operation;
     this.#failure = null;
     switch (payload.kind) {
       case "spin":
@@ -164,20 +158,7 @@ export class Game002FreeGameOperationTarget {
     this.#progressCommandIndex = null;
     this.#cascadePlayer.clear();
     this.#winAmountPlayer.dismissImmediately();
-    const operation = this.#operation;
-    if (
-      operation?.effect === "state-mutation" &&
-      this.#runtime.getCurrentScene()
-    )
-      this.#runtime.applyScene(
-        operation.input.scene,
-        "game002 FreeGame transaction rollback",
-        operation.input.values as Parameters<
-          Game002ReelRuntime["applyScene"]
-        >[2],
-      );
     this.#payload = null;
-    this.#operation = null;
     this.#activity = "idle";
     this.#failure = null;
   }
@@ -315,18 +296,17 @@ export class Game002FreeGameOperationTarget {
             );
         } catch (error) {
           for (const replacement of prepared.toReversed())
-            replacement.rollback();
+            replacement.destroy();
           throw error;
         }
         return {
           commit: () => {
             for (const replacement of prepared) replacement.commit();
           },
-          rollback: () => {
-            for (const replacement of prepared.toReversed())
-              replacement.rollback();
+          rollback: () => undefined,
+          destroy: () => {
+            for (const replacement of prepared) replacement.destroy();
           },
-          destroy: () => undefined,
         };
       },
     });
@@ -376,9 +356,9 @@ export class Game002FreeGameOperationTarget {
             })),
           });
         } catch (error) {
-          transfer?.rollback();
+          transfer?.destroy();
           for (const replacement of replacements.toReversed())
-            replacement.rollback();
+            replacement.destroy();
           throw error;
         }
         const preparedTransfer = transfer;
@@ -390,12 +370,11 @@ export class Game002FreeGameOperationTarget {
             preparedTransfer.commit();
             for (const replacement of replacements) replacement.commit();
           },
-          rollback: () => {
-            preparedTransfer.rollback();
-            for (const replacement of replacements.toReversed())
-              replacement.rollback();
+          rollback: () => undefined,
+          destroy: () => {
+            preparedTransfer.destroy();
+            for (const replacement of replacements) replacement.destroy();
           },
-          destroy: () => undefined,
         };
       },
     });
@@ -420,7 +399,6 @@ export class Game002FreeGameOperationTarget {
 
   private finish() {
     this.#payload = null;
-    this.#operation = null;
     this.#activity = "idle";
     this.#transactionComplete = true;
     return { completed: true };

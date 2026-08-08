@@ -225,7 +225,7 @@ describe("game002 task 95 adapter", () => {
       relocations,
     });
     const operation = Object.freeze({
-      kind: "game002:co-collect",
+      kind: "game002:transform",
       version: 2,
       effect: "state-mutation",
       source: Object.freeze({
@@ -237,8 +237,13 @@ describe("game002 task 95 adapter", () => {
       output: step.output,
       mutations: Object.freeze([]),
       payload: Object.freeze({
-        phase: "co-collect",
-        collection: batch.coCollection!,
+        stepIndex: 0,
+        wlIncrements: [],
+        wlUpdates: [],
+        wmReplacements: [],
+        cnUpdates: [],
+        cm: null,
+        coCollection: batch.coCollection!,
       }),
     });
     expect(() =>
@@ -407,7 +412,7 @@ describe("game002 task 95 adapter", () => {
     );
   });
 
-  it("validates the business sequence in the plan before reel mutation", async () => {
+  it("validates only data needed to build the next operation", async () => {
     const fakeApp = createFakeApplication();
     const runtime = new FakeRuntime([]);
     const adapter = createTestAdapter({
@@ -423,27 +428,13 @@ describe("game002 task 95 adapter", () => {
     expect(() => adapter.playSpin(createCascadeLogic(invalid))).toThrow();
     expect(runtime.spinTargets).toEqual([]);
 
-    const invalidCashShare = structuredClone(GAME002_CASCADE_GMI) as any;
-    const firstStep = invalidCashShare.gmi.replyPlay.results[0];
-    firstStep.cashWin = 291;
-    firstStep.clientData.results[2].cashWin64 = 81;
-    firstStep.clientData.curGameModParam.mapComponents[
-      "bg-win"
-    ].basicComponentData.cashWin = 291;
-    invalidCashShare.totalwin = 291;
-    expect(() =>
-      adapter.playSpin(createCascadeLogic(invalidCashShare)),
-    ).toThrow(/cash share must divide.*exactly/);
-    expect(runtime.spinTargets).toEqual([]);
-
-    const invalidComponentWin = structuredClone(GAME002_CASCADE_GMI) as any;
-    invalidComponentWin.gmi.replyPlay.results[0].clientData.curGameModParam.mapComponents[
+    const extraServerFields = structuredClone(GAME002_CASCADE_GMI) as any;
+    extraServerFields.gmi.replyPlay.results[0].clientData.curGameModParam.mapComponents[
       "bg-win"
     ].wins = 30;
     expect(() =>
-      adapter.playSpin(createCascadeLogic(invalidComponentWin)),
-    ).toThrow(/bg-win\.wins 30 does not match current result total 29/);
-    expect(runtime.spinTargets).toEqual([]);
+      adapter.playSpin(createCascadeLogic(extraServerFields)),
+    ).not.toThrow();
   });
 
   it("rejects concurrent play and rejects a pending play on destroy", async () => {

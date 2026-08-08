@@ -1,6 +1,5 @@
 import type {
   GameLogicStep,
-  OtherSceneMatrix,
   SceneMatrix,
   SlotRoundPosition,
   SlotRoundPresentationValue,
@@ -8,10 +7,8 @@ import type {
   SlotRoundSettledTransformDraft,
 } from "@slotclientengine/gameframeworks";
 import {
-  forEachMatrixCell as forEachCell,
   slotOperationPositionKey as positionKey,
   assertExactMatrixShape as assertMatrixDimensions,
-  assertExactPositionSet as assertPositionSetEqual,
   findMatrixValuePositions as findCodePositions,
   parseExactPositionPairs as parsePairs,
   requireExactlyOne as exactlyOne,
@@ -37,7 +34,6 @@ export interface Game002CoCollectionPlan {
   readonly stepIndex: number;
   readonly segments: readonly Game002CoCollectionSegment[];
   readonly sourcePositions: readonly SlotRoundPosition[];
-  readonly win2Positions: readonly SlotRoundPosition[];
   readonly transform: SlotRoundSettledTransformDraft;
 }
 
@@ -116,16 +112,11 @@ export function compileGame002CoCollectionPlan(options: {
     step.getComponentScenes(GAME002_CASCADE_COMPONENTS.co),
     `step[${stepIndex}] bg-co scene`,
   );
-  const coOutputValuesRaw = exactlyOne(
-    step.getComponentOtherScenes(GAME002_CASCADE_COMPONENTS.co),
-    `step[${stepIndex}] bg-co otherScene`,
-  );
   const generatedCnValuesRaw = exactlyOne(
     step.getComponentOtherScenes(GAME002_CASCADE_COMPONENTS.cogencn),
     `step[${stepIndex}] bg-cogencn otherScene`,
   );
   assertMatrixDimensions(outputScene, inputScene, "bg-co scene");
-  assertMatrixDimensions(coOutputValuesRaw, inputScene, "bg-co otherScene");
   assertMatrixDimensions(
     generatedCnValuesRaw,
     inputScene,
@@ -174,11 +165,19 @@ export function compileGame002CoCollectionPlan(options: {
           throw new Error(
             `step[${stepIndex}] bg-co source ${positionKey(source)} cannot be CO or BN.`,
           );
+        const sourceValue = inputValues[source.x][source.y];
+        if (
+          options.valueSymbolCodes.has(sourceCode) &&
+          (!Number.isSafeInteger(sourceValue) || (sourceValue ?? 0) <= 0)
+        )
+          throw new Error(
+            `step[${stepIndex}] bg-co source ${positionKey(source)} value must be positive.`,
+          );
         return Object.freeze({
           source,
           target,
           sourceCode,
-          sourceValue: inputValues[source.x][source.y],
+          sourceValue,
         });
       },
     );
@@ -242,109 +241,13 @@ export function compileGame002CoCollectionPlan(options: {
     );
   }
 
-  if (mappedCos.size !== triggerPositions.length)
-    throw new Error(
-      `step[${stepIndex}] bg-co segment count ${mappedCos.size} does not match triggered CO count ${triggerPositions.length}.`,
-    );
-  forEachCell(inputScene, (x, y, inputCode) => {
-    const key = `${x},${y}`;
-    const change = changes.get(`${x},${y}`);
-    const expectedCode = change?.outputCode ?? inputCode;
-    const expectedValue = change ? change.outputValue : inputValues[x][y];
-    if (outputScene[x][y] !== expectedCode)
-      throw new Error(
-        `step[${stepIndex}] bg-co scene[${x}][${y}] differs: actual=${outputScene[x][y]}; expected=${expectedCode}.`,
-      );
-    const isConvertedCo = mappedCos.has(key);
-    const coIntermediateCode = isConvertedCo ? inputCode : expectedCode;
-    const coIntermediateValue = isConvertedCo
-      ? inputValues[x][y]
-      : expectedValue;
-    const actualIntermediateValue = decodeOutputValue(
-      coIntermediateCode,
-      coOutputValuesRaw[x][y],
-      options.valueSymbolCodes,
-      `step[${stepIndex}] bg-co otherScene[${x}][${y}]`,
-    );
-    if (actualIntermediateValue !== coIntermediateValue)
-      throw new Error(
-        `step[${stepIndex}] bg-co otherScene[${x}][${y}] differs: actual=${String(actualIntermediateValue)}; expected=${String(coIntermediateValue)}.`,
-      );
-    const actualFinalValue = isConvertedCo
-      ? decodeGeneratedCoOutputValue(
-          expectedCode,
-          generatedCnValuesRaw[x][y],
-          options.valueSymbolCodes,
-          `step[${stepIndex}] bg-cogencn otherScene[${x}][${y}]`,
-        )
-      : decodeOutputValue(
-          expectedCode,
-          generatedCnValuesRaw[x][y],
-          options.valueSymbolCodes,
-          `step[${stepIndex}] bg-cogencn otherScene[${x}][${y}]`,
-        );
-    if (actualFinalValue !== expectedValue)
-      throw new Error(
-        `step[${stepIndex}] bg-cogencn otherScene[${x}][${y}] differs: actual=${String(actualFinalValue)}; expected=${String(expectedValue)}.`,
-      );
-  });
-
-  const win2Positions = step
-    .getComponentResults(GAME002_CASCADE_COMPONENTS.win2)
-    .flatMap((result, resultIndex) => {
-      const symbol = result.symbol;
-      if (
-        typeof symbol !== "number" ||
-        !Number.isSafeInteger(symbol) ||
-        !segments.some((segment) => segment.selectedCode === symbol)
-      )
-        throw new Error(
-          `step[${stepIndex}] bg-win2 result[${resultIndex}].symbol must match a collected symbol code.`,
-        );
-      return parsePairs(
-        result.pos,
-        outputScene,
-        `step[${stepIndex}] bg-win2 result[${resultIndex}].pos`,
-        { nonEmpty: true },
-      );
-    });
-  const requiredWin2 = new Set(
-    segments.flatMap((segment) => [
-      positionKey(segment.co),
-      ...segment.transfers.map((transfer) => positionKey(transfer.target)),
-    ]),
-  );
-  const actualWin2 = new Set(win2Positions.map(positionKey));
-  for (const key of requiredWin2)
-    if (!actualWin2.has(key))
-      throw new Error(
-        `step[${stepIndex}] bg-win2 results do not include collected position ${key}.`,
-      );
-
   const sourcePositions = segments.flatMap((segment) =>
     segment.transfers.map((transfer) => transfer.source),
-  );
-  const bnPositions = step
-    .getComponentResults(GAME002_CASCADE_COMPONENTS.bn)
-    .flatMap((result, resultIndex) =>
-      parsePairs(
-        result.pos,
-        outputScene,
-        `step[${stepIndex}] bg-bn result[${resultIndex}].pos`,
-        { nonEmpty: true },
-      ),
-    );
-  assertPositionSetEqual(
-    bnPositions,
-    sourcePositions,
-    `step[${stepIndex}] bg-bn positions`,
-    { mismatchMessage: "must exactly match the collected source positions" },
   );
   return Object.freeze({
     stepIndex,
     segments: Object.freeze(segments),
     sourcePositions: Object.freeze(sourcePositions),
-    win2Positions: Object.freeze(win2Positions),
     transform: Object.freeze({
       changes: Object.freeze(
         inputScene.flatMap((column, x) =>
@@ -400,31 +303,17 @@ function splitTransferSegments(
   );
 }
 
-function decodeOutputValue(
-  code: number,
-  raw: number,
-  valueSymbolCodes: ReadonlySet<number>,
-  label: string,
-): SlotRoundPresentationValue {
-  if (!Number.isSafeInteger(raw))
-    throw new Error(`${label} must be a safe integer.`);
-  if (valueSymbolCodes.has(code)) {
-    if (raw <= 0) throw new Error(`${label} must be positive.`);
-    return raw;
-  }
-  if (raw !== 0 && raw !== -1)
-    throw new Error(`${label} must be 0 or -1 for a non-value symbol.`);
-  return null;
-}
-
 function decodeGeneratedCoOutputValue(
   code: number,
   raw: number,
   valueSymbolCodes: ReadonlySet<number>,
   label: string,
 ): SlotRoundPresentationValue {
-  if (valueSymbolCodes.has(code))
-    return decodeOutputValue(code, raw, valueSymbolCodes, label);
+  if (valueSymbolCodes.has(code)) {
+    if (!Number.isSafeInteger(raw) || raw <= 0)
+      throw new Error(`${label} must be a positive safe integer.`);
+    return raw;
+  }
   if (!Number.isSafeInteger(raw))
     throw new Error(`${label} must be a safe integer.`);
   return null;
