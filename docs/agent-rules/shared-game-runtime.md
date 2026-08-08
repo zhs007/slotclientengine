@@ -10,6 +10,10 @@
   必须由 logiccore strict compiler/finalizer 证明。正式 server source 与本地
   snapshot-authored source 不得互相 fallback；本地 suggestion 只存在于独立
   `slotoperationauthoring` package。
+- 结构相同的业务变化统一使用 logiccore `SlotChgOperation`/`genChg`：普通变化只保存
+  `pos`，驱动变化保存 `mainPos + pos`，跨格转移保存 `mainPos + routes`。operation
+  kind 选择具体 render program；payload 不得重复保存业务 symbol 名、input/output
+  code/value 或第二份 changes。只有动画驱动者时允许 `pos` 为空且 input/output 相同。
 - 所有配置驱动 round 必须在任何画面 mutation 前完整编译。component role、remove/drop/value/sequential companion policy 只能来自 strict versioned profile，并按 active symbol package 大小写精确校验。
 - settled transform 的跨格 relocation 必须显式保存 source occurrence identity、
   overwritten target 与 source replacement；release-only win positions 只加入 holes

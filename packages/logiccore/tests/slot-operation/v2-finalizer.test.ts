@@ -120,6 +120,33 @@ describe("SlotOperationPlanV2 finalizer", () => {
     ).toEqual(snapshot(1, 3, "inserted"));
   });
 
+  it("keeps a keyed no-op change in the plan", () => {
+    const input = snapshot(0, 1, "a");
+    const source = authored("initial", "same");
+    const plan = finalizeSlotOperationPlanV2({
+      drafts: [
+        generateSceneLandingOperation({ source, output: input }),
+        {
+          effect: "state-mutation",
+          kind: "slot:state-mutation",
+          version: 2,
+          source,
+          payload: { type: "driven-change", mainPos: [], pos: [] },
+          input,
+          output: input,
+          mutations: [],
+        },
+      ],
+      definitions: createBuiltinSlotOperationDefinitionsV2(),
+      symbolCodes: SYMBOL_CODES,
+      columns: 1,
+      rows: 1,
+    });
+
+    expect(plan.operations[1]!.effect).toBe("state-mutation");
+    expect(plan.final).toEqual(input);
+  });
+
   it("rejects malformed V2 envelopes, evidence and targets", () => {
     const source = authored("a", "b");
     const landing = generateSceneLandingOperation({

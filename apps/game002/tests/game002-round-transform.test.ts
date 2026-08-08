@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type {
-  SlotOperationSnapshot,
-  SlotOperationV2,
-} from "@slotclientengine/gameframeworks";
+import type { SlotOperationSnapshot } from "@slotclientengine/gameframeworks";
 import type { SymbolCascadePlayer } from "@slotclientengine/rendercore";
 import type {
   VisibleSymbolStatePlaybackBatchOptions,
@@ -11,50 +8,44 @@ import type {
 import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-amount";
 import { Game002RoundTarget } from "../src/game-adapter.js";
 import type { Game002TransformPayload } from "../src/game002-operation-compiler.js";
+import type { Game002TransformOperation } from "../src/game002-operation-compiler.js";
 import type { Game002ReelRuntime } from "../src/game002-reel-controller.js";
 
 describe("Game002RoundTarget atomic multiplier programs", () => {
-  it("runs WM animation and replacement as one operation", async () => {
+  it("runs WM animation and replacement as independent operations", async () => {
     const runtime = new TransformRuntime();
     const target = createTarget(runtime);
     const input = createSnapshot(createScene(1), 7, 3, 2);
-    const outputScene = createScene(1);
-    outputScene[1][0] = 8;
-    const output = createSnapshot(outputScene, 8, 9, 5);
-    const value = operation(
-      "game002:transform",
-      input,
-      output,
-      transform({
-        wlUpdates: [
-          { position: { x: 0, y: 0 }, inputValue: 2, outputValue: 5 },
-        ],
-        wmReplacements: [
-          {
-            position: { x: 1, y: 0 },
-            intermediateValue: 9,
-            outputValue: 9,
-          },
-        ],
-      }),
-    );
+    const wildOutput = createSnapshot(createScene(1), 7, 3, 5);
+    const wild = operation("game002:wild-multiplier", input, wildOutput, {
+      type: "driven-change",
+      mainPos: [{ x: 1, y: 0 }],
+      pos: [{ x: 0, y: 0 }],
+    });
 
-    target.startAtomicTransform(
-      value,
-      value.payload as Game002TransformPayload,
-    );
+    target.startAtomicTransform(wild);
     expect(runtime.events).toEqual(["state:multStart"]);
     runtime.advanceOnce();
     await flushPlayback();
     expect(runtime.events).toContain("state:multIdle");
     runtime.advanceLoop();
     await flushPlayback();
+    expect(target.updateAtomicTransform(wild).completed).toBe(true);
+
+    const outputScene = createScene(1);
+    outputScene[1][0] = 8;
+    const wmOutput = createSnapshot(outputScene, 8, 9, 5);
+    const wm = operation("game002:wm-to-cn", wildOutput, wmOutput, {
+      type: "change",
+      pos: [{ x: 1, y: 0 }],
+    });
+    target.startAtomicTransform(wm);
     runtime.advanceOnce();
     await flushPlayback();
     expect(runtime.events.at(-1)).toBe("state:change");
     runtime.advanceOnce();
     await flushPlayback();
-    expect(target.updateAtomicTransform(value).completed).toBe(true);
+    expect(target.updateAtomicTransform(wm).completed).toBe(true);
     expect(runtime.scene[1][0]).toBe(8);
   });
 
@@ -63,25 +54,12 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
     const target = createTarget(runtime);
     const input = createSnapshot(createScene(1), 7, 3, 2);
     const output = createSnapshot(createScene(1), 7, 3, 3);
-    const operationValue = operation(
-      "game002:transform",
-      input,
-      output,
-      transform({
-        wlIncrements: [
-          {
-            position: { x: 0, y: 0 },
-            inputValue: 2,
-            outputValue: 3,
-          },
-        ],
-      }),
-    );
+    const operationValue = operation("game002:wl-increment", input, output, {
+      type: "change",
+      pos: [{ x: 0, y: 0 }],
+    });
 
-    target.startAtomicTransform(
-      operationValue,
-      operationValue.payload as Game002TransformPayload,
-    );
+    target.startAtomicTransform(operationValue);
     expect(runtime.events).toContain("text:0,0=x3");
     runtime.advanceOnce();
     await flushPlayback();
@@ -93,24 +71,12 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
     const target = createTarget(runtime);
     const input = createSnapshot(createScene(1), 7, 3, 2);
     const output = createSnapshot(createScene(1), 7, 3, 5);
-    const operationValue = operation(
-      "game002:transform",
-      input,
-      output,
-      transform({
-        wmReplacements: [
-          {
-            position: { x: 1, y: 0 },
-            intermediateValue: 9,
-            outputValue: 9,
-          },
-        ],
-      }),
-    );
-    target.startAtomicTransform(
-      operationValue,
-      operationValue.payload as Game002TransformPayload,
-    );
+    const operationValue = operation("game002:wild-multiplier", input, output, {
+      type: "driven-change",
+      mainPos: [{ x: 1, y: 0 }],
+      pos: [{ x: 0, y: 0 }],
+    });
+    target.startAtomicTransform(operationValue);
     const signal = runtime.pendingSignals[0]!;
     target.cleanup();
     expect(signal.aborted).toBe(true);
@@ -126,43 +92,16 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
     const outputScene = createScene(1);
     outputScene[1][0] = 8;
     const output = createSnapshot(outputScene, 8, 9, 2);
-    const operationValue = operation(
-      "game002:transform",
-      input,
-      output,
-      transform({
-        wmReplacements: [
-          {
-            position: { x: 1, y: 0 },
-            intermediateValue: 9,
-            outputValue: 9,
-          },
-        ],
-      }),
+    const operationValue = operation("game002:wm-to-cn", input, output, {
+      type: "change",
+      pos: [{ x: 1, y: 0 }],
+    });
+    expect(() => target.preflightAtomicTransform(operationValue)).toThrow(
+      /no "change"/,
     );
-    expect(() =>
-      target.preflightAtomicTransform(
-        operationValue,
-        operationValue.payload as Game002TransformPayload,
-      ),
-    ).toThrow(/no "change"/);
     expect(runtime.events).toEqual([]);
   });
 });
-
-function transform(
-  values: Partial<Game002TransformPayload>,
-): Game002TransformPayload {
-  return Object.freeze({
-    stepIndex: 1,
-    wlIncrements: Object.freeze([]),
-    wlUpdates: Object.freeze([]),
-    wmReplacements: Object.freeze([]),
-    cnUpdates: Object.freeze([]),
-    cm: null,
-    ...values,
-  });
-}
 
 function createTarget(runtime: TransformRuntime): Game002RoundTarget {
   return new Game002RoundTarget({
@@ -173,7 +112,6 @@ function createTarget(runtime: TransformRuntime): Game002RoundTarget {
     } as WinAmountAnimationPlayer,
     wlSymbolCode: 0,
     wmSymbolCode: 7,
-    cnSymbolCode: 8,
     cmSymbolCode: 9,
   });
 }
@@ -183,7 +121,7 @@ function operation(
   input: SlotOperationSnapshot,
   output: SlotOperationSnapshot,
   payload: Game002TransformPayload,
-): SlotOperationV2 {
+): Game002TransformOperation {
   return Object.freeze({
     kind,
     version: 2,
@@ -200,7 +138,7 @@ function operation(
     requiredCapabilities: Object.freeze([kind]),
     businessKey: kind,
     operationIndex: 0,
-  }) as unknown as SlotOperationV2;
+  }) as unknown as Game002TransformOperation;
 }
 
 async function flushPlayback(): Promise<void> {

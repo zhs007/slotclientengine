@@ -4,6 +4,7 @@ import {
   createSlotOperationSnapshot,
   deriveSlotStateMutations,
   genDropdownOperation,
+  genChg,
   genRefillOperation,
   genRemoveOperation,
   genSpinOperation,
@@ -14,6 +15,8 @@ import {
   type SlotOperationV2,
   type SlotOperationSnapshot,
   type SlotOperationSource,
+  type SlotChgOperation,
+  type SlotChgPayload,
   type SlotStateMutationDraftV2,
   type SlotStateMutation,
 } from "@slotclientengine/gameframeworks";
@@ -62,7 +65,17 @@ export interface Game002FallPayload extends Game002FallOperationData {
   readonly flowKey: string;
 }
 
-export type Game002TransformPayload = Game002TransformOperationPayload;
+export type Game002TransformPayload = SlotChgPayload;
+export type Game002TransformKey =
+  | "wl-increment"
+  | "wild-multiplier"
+  | "wm-to-cn"
+  | "coin-multiplier"
+  | "cm-to-cn"
+  | "co-collect";
+export type Game002TransformOperationKind = `game002:${Game002TransformKey}`;
+export type Game002TransformOperation =
+  SlotChgOperation<Game002TransformOperationKind>;
 
 export interface Game002BaseGameCompilation {
   readonly plan: SlotOperationPlanV2;
@@ -419,25 +432,18 @@ function compileGame002BaseDrafts(
       normalizedTransform.changes.length > 0 ||
       normalizedTransform.relocations.length > 0
     ) {
-      const finalOutput = applySlotOperationChanges({
-        input: current,
-        changes: normalizedTransform.changes,
-        relocations: normalizedTransform.relocations,
-        symbolCodes,
-        replacementIdPrefix: `${flowKey}:transform`,
-      });
       const transform = transformCompilation.payload;
       if (!transform)
         throw new Error(`${flowKey} has transform changes without a payload.`);
       const atomic = genGame002AtomicTransformOperations({
         input: current,
-        finalOutput,
         transform,
+        symbolCodes,
         source: serverSource(serverStepIndex, "game002-transform"),
         flowKey,
       });
-      drafts.push(...atomic);
-      current = finalOutput;
+      drafts.push(...atomic.drafts);
+      current = atomic.output;
     }
     const win = readGame002WinOperationData({
       logic: options.logic,
@@ -498,24 +504,131 @@ function compileGame002BaseDrafts(
 
 function genGame002AtomicTransformOperations(options: {
   readonly input: SlotOperationSnapshot;
-  readonly finalOutput: SlotOperationSnapshot;
   readonly transform: Game002TransformOperationPayload;
+  readonly symbolCodes: Readonly<Record<string, number>>;
   readonly source: SlotOperationSource;
   readonly flowKey: string;
-}): readonly SlotOperationDraftV2[] {
-  return Object.freeze([
-    Object.freeze({
-      kind: "game002:transform",
-      version: 2,
-      effect: "state-mutation",
-      source: options.source,
-      input: options.input,
-      output: options.finalOutput,
-      mutations: deriveSlotStateMutations(options.input, options.finalOutput),
-      payload: options.transform,
-      businessKey: `${options.flowKey}:transform`,
-    }) satisfies SlotStateMutationDraftV2,
-  ]);
+}): Readonly<{
+  drafts: readonly SlotOperationDraftV2[];
+  output: SlotOperationSnapshot;
+}> {
+  const codes = {
+    WL: requireCode(options.symbolCodes, "WL"),
+    CN: requireCode(options.symbolCodes, "CN"),
+  };
+  const drafts: SlotOperationDraftV2[] = [];
+  let current = options.input;
+  const common = (
+    kind: Game002TransformKey,
+    changes: readonly {
+      readonly position: { readonly x: number; readonly y: number };
+      readonly outputCode: number;
+      readonly outputValue: number | null;
+    }[],
+  ) => ({
+    kind: `game002:${kind}`,
+    source: options.source,
+    input: current,
+    changes,
+    symbolCodes: options.symbolCodes,
+    replacementIdPrefix: `${options.flowKey}:transform`,
+    businessKey: `${options.flowKey}:${kind}`,
+  });
+  const appendChange = (
+    kind: Game002TransformKey,
+    changes: readonly {
+      readonly position: { readonly x: number; readonly y: number };
+      readonly outputCode: number;
+      readonly outputValue: number | null;
+    }[],
+  ) => {
+    const draft = genChg({ ...common(kind, changes), type: "change" });
+    drafts.push(draft);
+    current = draft.output;
+  };
+  const appendDriven = (
+    kind: Game002TransformKey,
+    mainPos: readonly { readonly x: number; readonly y: number }[],
+    changes: readonly {
+      readonly position: { readonly x: number; readonly y: number };
+      readonly outputCode: number;
+      readonly outputValue: number | null;
+    }[],
+  ) => {
+    const draft = genChg({
+      ...common(kind, changes),
+      type: "driven-change",
+      mainPos,
+    });
+    drafts.push(draft);
+    current = draft.output;
+  };
+
+  if (options.transform.wlIncrements.length > 0)
+    appendChange(
+      "wl-increment",
+      options.transform.wlIncrements.map((item) => ({
+        position: item.position,
+        outputCode: codes.WL,
+        outputValue: item.outputValue,
+      })),
+    );
+
+  if (options.transform.wmReplacements.length > 0) {
+    const wmPositions = Object.freeze(
+      options.transform.wmReplacements.map(({ position }) => position),
+    );
+    appendDriven(
+      "wild-multiplier",
+      wmPositions,
+      options.transform.wlUpdates.map((item) => ({
+        position: item.position,
+        outputCode: codes.WL,
+        outputValue: item.outputValue,
+      })),
+    );
+    appendChange(
+      "wm-to-cn",
+      options.transform.wmReplacements.map((item) => ({
+        position: item.position,
+        outputCode: codes.CN,
+        outputValue: item.intermediateValue,
+      })),
+    );
+  }
+
+  if (options.transform.cnUpdates.length > 0)
+    appendDriven(
+      "coin-multiplier",
+      [options.transform.cm!.position],
+      options.transform.cnUpdates.map((item) => ({
+        position: item.position,
+        outputCode: codes.CN,
+        outputValue: item.outputValue,
+      })),
+    );
+
+  if (options.transform.cm)
+    appendChange("cm-to-cn", [
+      {
+        position: options.transform.cm.position,
+        outputCode: codes.CN,
+        outputValue: options.transform.cm.outputValue,
+      },
+    ]);
+
+  if (options.transform.coCollection) {
+    const collection = options.transform.coCollection;
+    const draft = genChg({
+      ...common("co-collect", collection.transform.changes),
+      type: "transfer",
+      mainPos: collection.segments.map(({ co }) => co),
+      routes: collection.transform.relocations ?? [],
+    });
+    drafts.push(draft);
+    current = draft.output;
+  }
+  return Object.freeze({ drafts: Object.freeze(drafts), output: current });
 }
 
 function mutationWithOutput<Payload>(

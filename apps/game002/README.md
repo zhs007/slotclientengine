@@ -139,10 +139,11 @@ selected symbol。随后 `bg-win2` 走既有金额/中奖流程，`bg-bn` 只在
 
 一次 `playSpin(logic)` 只启动一份 `SlotOperationPlanV2`。BaseGame operations、
 multiplier/CO transform payload 与 `game002:freegame@2` 由同一个 coordinator 持有；
-FreeGame 不再在 BaseGame Promise 完成后启动第二份 playback contract。transform payload
-直接携带 WL increment、WM、WM→CN、CM、CM→CN、CO 的最小数据，Target
-不再用 stepIndex 查询 presentation batch，也没有 mutable payload cache。游戏侧 compiler 对每个
-settled step 只生成一份 `game002:transform`；缺席子流程不制造空 operation，每个实际 visual commit 后才推进。
+FreeGame 不再在 BaseGame Promise 完成后启动第二份 playback contract。WL increment、
+WM、WM→CN、CM、CM→CN、CO 共用 logiccore `SlotChgOperation` 结构，payload 只保存
+`pos`、`mainPos + pos` 或 `mainPos + routes`；code/value 直接读取 operation input/output。
+Target 不再用 stepIndex 或 payload phase 分流，而是按 operation key 挂接渲染程序；缺席阶段
+不生成 operation，每个实际 visual commit 后才推进。
 BaseGame multiplier/CO 与 FreeGame trigger/transition/AF/CO 共用同一个 rendercore transaction
 runner 合同；FreeGame target 不再保存 AF/CO prepared arrays、AbortController 或专用 progress phase。
 

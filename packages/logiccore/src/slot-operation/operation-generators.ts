@@ -7,6 +7,8 @@ import type {
 } from "./types";
 import { deriveSlotStateMutations } from "./mutation-derivation";
 import type {
+  SlotChgPayload,
+  SlotChgRoute,
   SlotPresentationDraftV2,
   SlotPresentationTarget,
   SlotSceneLandingDraftV2,
@@ -81,6 +83,83 @@ export function genWinOperation<Kind extends string, Payload>(
       ? {}
       : { businessKey: options.businessKey }),
   });
+}
+
+interface GenChgCommon<Kind extends string> {
+  readonly kind: Kind;
+  readonly source: SlotOperationSource;
+  readonly input: SlotOperationSnapshot;
+  readonly changes: readonly SlotOperationChangeDraft[];
+  readonly symbolCodes: Readonly<Record<string, number>>;
+  readonly replacementIdPrefix?: string;
+  readonly businessKey?: string;
+}
+
+export function genChg<Kind extends string>(
+  options: GenChgCommon<Kind> &
+    (
+      | { readonly type: "change" }
+      | {
+          readonly type: "driven-change";
+          readonly mainPos: readonly SlotOperationPosition[];
+        }
+      | {
+          readonly type: "transfer";
+          readonly mainPos: readonly SlotOperationPosition[];
+          readonly routes: readonly SlotChgRoute[];
+        }
+    ),
+): SlotStateMutationDraftV2<Kind, 2, SlotStateMutation, SlotChgPayload> {
+  const pos = freezePositions(
+    options.changes.map(({ position }) => position),
+    options.input.scene,
+    "chg.pos",
+  );
+  const mainPos =
+    options.type === "change"
+      ? undefined
+      : freezePositions(options.mainPos, options.input.scene, "chg.mainPos");
+  const routes =
+    options.type === "transfer"
+      ? Object.freeze(
+          options.routes.map((route, index) =>
+            Object.freeze({
+              source: freezePosition(
+                route.source,
+                options.input.scene,
+                `chg.routes[${index}].source`,
+              ),
+              target: freezePosition(
+                route.target,
+                options.input.scene,
+                `chg.routes[${index}].target`,
+              ),
+            }),
+          ),
+        )
+      : undefined;
+  const payload =
+    options.type === "change"
+      ? Object.freeze({ type: options.type, pos })
+      : options.type === "driven-change"
+        ? Object.freeze({ type: options.type, mainPos: mainPos!, pos })
+        : Object.freeze({
+            type: options.type,
+            mainPos: mainPos!,
+            routes: routes!,
+          });
+  const output = applySlotOperationChanges({
+    input: options.input,
+    changes: options.changes,
+    ...(routes === undefined ? {} : { relocations: routes }),
+    symbolCodes: options.symbolCodes,
+    replacementIdPrefix: options.replacementIdPrefix,
+  });
+  return mutationDraft(
+    { ...options, payload },
+    output,
+    options.changes.length === 0,
+  );
 }
 
 export function genRemoveOperation<Kind extends string, Payload>(
@@ -422,6 +501,7 @@ function mutationDraft<Kind extends string, Payload>(
     readonly input: SlotOperationSnapshot;
   },
   output: SlotOperationSnapshot,
+  allowNoop = false,
 ): SlotStateMutationDraftV2<Kind, 2, SlotStateMutation, Payload> {
   return Object.freeze({
     kind: options.kind,
@@ -430,7 +510,9 @@ function mutationDraft<Kind extends string, Payload>(
     source: options.source,
     input: options.input,
     output,
-    mutations: deriveSlotStateMutations(options.input, output),
+    mutations: allowNoop
+      ? Object.freeze([])
+      : deriveSlotStateMutations(options.input, output),
     payload: options.payload,
     ...(options.businessKey === undefined
       ? {}
@@ -518,6 +600,35 @@ function validatePosition(
   )
     throw new LogicParseError(`${label} position is out of range.`);
   return position;
+}
+
+function freezePosition(
+  position: SlotOperationPosition,
+  scene: readonly (readonly number[])[],
+  label: string,
+): SlotOperationPosition {
+  const valid = validatePosition(position, scene, label);
+  return Object.freeze({ x: valid.x, y: valid.y });
+}
+
+function freezePositions(
+  positions: readonly SlotOperationPosition[],
+  scene: readonly (readonly number[])[],
+  label: string,
+): readonly SlotOperationPosition[] {
+  const keys = new Set<string>();
+  return Object.freeze(
+    positions.map((position, index) => {
+      const frozen = freezePosition(position, scene, `${label}[${index}]`);
+      const key = `${frozen.x},${frozen.y}`;
+      if (keys.has(key))
+        throw new LogicParseError(
+          `${label} contains duplicate position ${key}.`,
+        );
+      keys.add(key);
+      return frozen;
+    }),
+  );
 }
 
 function normalizeValue(value: number | null | -1): number | null {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  genChg,
   genDropdownOperation,
   genRefillOperation,
   genRemoveOperation,
@@ -76,5 +77,62 @@ describe("atomic slot operation generators", () => {
     ]);
     expect(refill.output.occurrences[0]!.id).toContain("refill");
     expect(refill.output.scene).toEqual([[1, 0, 0]]);
+  });
+
+  it("builds keyed change, driven-change and transfer operations", () => {
+    const input = genSpinOperation({
+      source,
+      scene: [[0, 1, 0]],
+      values: [[1, 2, 3]],
+      symbolCodes: symbols,
+      payload: {},
+    }).output;
+    const change = genChg({
+      kind: "game:value-change",
+      type: "change",
+      source,
+      input,
+      changes: [{ position: { x: 0, y: 0 }, outputCode: 0, outputValue: 4 }],
+      symbolCodes: symbols,
+    });
+    const driven = genChg({
+      kind: "game:driven-change",
+      type: "driven-change",
+      source,
+      input: change.output,
+      mainPos: [{ x: 0, y: 1 }],
+      changes: [],
+      symbolCodes: symbols,
+    });
+    const transfer = genChg({
+      kind: "game:transfer",
+      type: "transfer",
+      source,
+      input: driven.output,
+      mainPos: [{ x: 0, y: 1 }],
+      routes: [{ source: { x: 0, y: 0 }, target: { x: 0, y: 2 } }],
+      changes: [
+        { position: { x: 0, y: 0 }, outputCode: 0, outputValue: 3 },
+        { position: { x: 0, y: 2 }, outputCode: 0, outputValue: 4 },
+      ],
+      symbolCodes: symbols,
+    });
+
+    expect(change.payload).toEqual({
+      type: "change",
+      pos: [{ x: 0, y: 0 }],
+    });
+    expect(driven.payload).toEqual({
+      type: "driven-change",
+      mainPos: [{ x: 0, y: 1 }],
+      pos: [],
+    });
+    expect(driven.mutations).toEqual([]);
+    expect(transfer.payload).toEqual({
+      type: "transfer",
+      mainPos: [{ x: 0, y: 1 }],
+      routes: [{ source: { x: 0, y: 0 }, target: { x: 0, y: 2 } }],
+    });
+    expect(transfer.output.values).toEqual([[3, 2, 4]]);
   });
 });

@@ -109,17 +109,20 @@ export function finalizeSlotOperationPlanV2(
           ...dimensions,
           path: `drafts[${operationIndex}].output`,
         });
-        const reduced = definition.reduceMutations
-          ? definition.reduceMutations({
-              input: draft.input,
-              mutations: draft.mutations,
-              ...dimensions,
-            })
-          : applySlotStateMutations({
-              input: draft.input,
-              mutations: draft.mutations,
-              ...dimensions,
-            });
+        const reduced =
+          draft.mutations.length === 0
+            ? draft.input
+            : definition.reduceMutations
+              ? definition.reduceMutations({
+                  input: draft.input,
+                  mutations: draft.mutations,
+                  ...dimensions,
+                })
+              : applySlotStateMutations({
+                  input: draft.input,
+                  mutations: draft.mutations,
+                  ...dimensions,
+                });
         if (!snapshotsEqual(reduced, draft.output))
           throw new LogicParseError(
             `drafts[${operationIndex}].mutations do not produce the declared output.`,

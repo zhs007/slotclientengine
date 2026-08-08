@@ -100,14 +100,19 @@
 
 ## WL/WM/CM multiplier 与中奖前转换
 
-- WL/WM/CM/CO 的权威业务事实必须随对应 operation payload 保存；Target 不按 stepIndex
-  查询 presentation batch。纯动画 `Start/Idle/End` 可保留 handler 私有 phase，但每个
-  scene/value/occurrence commit 必须服从 operation input/output，并在失败时进入统一 fail-stop。
-- WL/WM/CM/CO 使用每个 settled step 一份最小 transform payload；multiplier compiler 不得维护 stepIndex payload cache。presentation 使用共享 await/commit/progress transaction runner。
+- WL/WM/CM/CO 的权威 code/value 只保存在对应 operation input/output；Target 不按
+  stepIndex 查询 presentation batch。纯动画 `Start/Idle/End` 可保留 handler 私有
+  phase，但每个 scene/value/occurrence commit 必须服从 operation input/output，并在失败时进入统一 fail-stop。
+- WL/WM/CM/CO 共用一个 `SlotChgOperation` 类型，只按坐标关系使用 `pos`、
+  `mainPos + pos` 或 `mainPos + routes`。具体 operation key 挂接对应 render program，
+  payload 不得加入 WL/WM/CM/CO 字段或 `phase` 分流。multiplier compiler 不得维护
+  stepIndex payload cache；presentation 使用共享 await/commit/progress transaction runner。
 - game002 stage 只挂完整 Scene Layout package root；package runtime 拥有唯一 main reel 与 manifest order/placement，defaultScene commit 前保持 deferred，cascade 只经 typed overlay attach 接入。
-- game002 compiler 对每个 settled step 只生成一份按需出现的 `game002:transform`，
-  payload 直接携带本步实际存在的 WL、WM、CM、CO 子流程；不得先生成 profile
-  再由 runtime 重算公式，也不得为缺席子流程制造空 operation。
+- game002 compiler 直接生成按需出现的 `game002:wl-increment`、
+  `game002:wild-multiplier`、`game002:wm-to-cn`、`game002:coin-multiplier`、
+  `game002:cm-to-cn`、`game002:co-collect` operations；不得先生成 aggregate
+  transform 再由 runtime 拆 phase。缺席阶段不得生成 operation；WM 已触发但没有
+  WL 数值变化时仍生成 input/output 相同、`pos` 为空的 keyed change operation。
 
 - initial spin 和 refill 的动画前落定 scene 先按
   `bg-gencm > bg-genwm > bg-spin/bg-refill` 合成 multiplier 输入，再把

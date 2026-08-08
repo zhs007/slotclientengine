@@ -94,6 +94,37 @@ export type SlotStateMutation =
   | SlotValueUpdateMutation
   | SlotInsertMutation;
 
+export interface SlotChgPositionPayload {
+  readonly type: "change";
+  readonly pos: readonly SlotOperationPosition[];
+}
+
+export interface SlotChgDrivenPayload {
+  readonly type: "driven-change";
+  readonly mainPos: readonly SlotOperationPosition[];
+  readonly pos: readonly SlotOperationPosition[];
+}
+
+export interface SlotChgRoute {
+  readonly source: SlotOperationPosition;
+  readonly target: SlotOperationPosition;
+}
+
+export interface SlotChgTransferPayload {
+  readonly type: "transfer";
+  readonly mainPos: readonly SlotOperationPosition[];
+  readonly routes: readonly SlotChgRoute[];
+}
+
+/**
+ * Generic coordinate relationships for a change operation. The operation key
+ * selects the presentation; this payload only describes affected positions.
+ */
+export type SlotChgPayload =
+  | SlotChgPositionPayload
+  | SlotChgDrivenPayload
+  | SlotChgTransferPayload;
+
 export interface SlotStateMutationOperation<
   Kind extends string = string,
   Version extends number = number,
@@ -105,6 +136,9 @@ export interface SlotStateMutationOperation<
   readonly output: SlotOperationSnapshot;
   readonly mutations: readonly Mutation[];
 }
+
+export type SlotChgOperation<Kind extends string = string> =
+  SlotStateMutationOperation<Kind, 2, SlotStateMutation, SlotChgPayload>;
 
 export type SlotOperationV2 =
   | SlotSceneLandingOperation
@@ -171,6 +205,9 @@ export interface SlotStateMutationDraftV2<
   readonly output: SlotOperationSnapshot;
   readonly mutations: readonly Mutation[];
 }
+
+export type SlotChgDraftV2<Kind extends string = string> =
+  SlotStateMutationDraftV2<Kind, 2, SlotStateMutation, SlotChgPayload>;
 
 export type SlotOperationDraftV2 =
   | SlotSceneLandingDraftV2

@@ -6,6 +6,8 @@ import type {
   SlotRoundOccurrenceSnapshot,
   SlotOperationV2,
   SlotOperationSnapshot,
+  SlotChgPayload,
+  SlotChgTransferPayload,
   SlotGameAdapter,
   SlotGameInitialState,
   SlotGameMountContext,
@@ -52,12 +54,12 @@ import {
   GAME002_CASCADE_PRESENTATION,
   canGame002CascadeDropSymbol,
 } from "./cascade-config.js";
-import { type Game002TransformOperationPayload } from "./wl-wm-multiplier-plan.js";
 import {
   compileGame002RoundOperationPlan,
   type Game002FallPayload,
   type Game002FreeGameOperationPayload,
-  type Game002TransformPayload,
+  type Game002TransformOperation,
+  type Game002TransformKey,
   type Game002WinPayload,
   type Game002RemovePayload,
   type Game002SpinPayload,
@@ -303,7 +305,6 @@ class Game002PixiAdapter implements SlotGameAdapter {
         winAmountPlayer,
         wlSymbolCode: requireGame002SymbolCode(runtime, "WL"),
         wmSymbolCode: requireGame002SymbolCode(runtime, "WM"),
-        cnSymbolCode: requireGame002SymbolCode(runtime, "CN"),
         cmSymbolCode: requireGame002SymbolCode(runtime, "CM"),
       });
       const registry = createSlotOperationHandlerRegistry();
@@ -653,19 +654,13 @@ function createGame002OperationRegistrations(target: Game002RoundTarget) {
       return target.isCompletionComplete();
     },
   });
-  const requirePayload = (operation: SlotOperationV2) => {
-    const payload = operation.payload as Game002TransformPayload;
-    if (!payload || !Array.isArray(payload.wlIncrements))
-      throw new Error("game002 atomic transform operation payload is invalid.");
-    return payload;
-  };
   const handler: SlotOperationHandler<SlotOperationV2, SlotOperationV2> = {
     preflight: () => undefined,
     prepare: (operation) => operation,
     start: (operation) => {
-      const payload = requirePayload(operation);
-      target.preflightAtomicTransform(operation, payload);
-      target.startAtomicTransform(operation, payload);
+      const chg = requireGame002ChgOperation(operation);
+      target.preflightAtomicTransform(chg);
+      target.startAtomicTransform(chg);
     },
     update: (_operation, deltaSeconds) => {
       target.update(deltaSeconds);
@@ -682,15 +677,26 @@ function createGame002OperationRegistrations(target: Game002RoundTarget) {
     registration("game002:dropdown", "state-mutation", dropdown),
     registration("game002:refill", "state-mutation", refill),
     registration("game002:win-amount", "presentation", completion),
-    Object.freeze({
-      kind: "game002:transform",
-      version: 2,
-      effect: "state-mutation" as const,
-      requiredCapabilities: new Set(["game002:transform"]),
-      handler,
-    }),
+    ...GAME002_TRANSFORM_KEYS.map((key) =>
+      Object.freeze({
+        kind: `game002:${key}`,
+        version: 2,
+        effect: "state-mutation" as const,
+        requiredCapabilities: new Set([`game002:${key}`]),
+        handler,
+      }),
+    ),
   ];
 }
+
+const GAME002_TRANSFORM_KEYS: readonly Game002TransformKey[] = [
+  "wl-increment",
+  "wild-multiplier",
+  "wm-to-cn",
+  "coin-multiplier",
+  "cm-to-cn",
+  "co-collect",
+];
 
 function createGame002FreeGameOperationRegistrations(
   target: Game002FreeGameOperationTarget,
@@ -752,7 +758,6 @@ export class Game002RoundTarget {
   readonly #winAmountPlayer: WinAmountAnimationPlayer;
   readonly #wlSymbolCode: number;
   readonly #wmSymbolCode: number;
-  readonly #cnSymbolCode: number;
   readonly #cmSymbolCode: number;
   #activity:
     | "idle"
@@ -783,7 +788,6 @@ export class Game002RoundTarget {
     readonly winAmountPlayer: WinAmountAnimationPlayer;
     readonly wlSymbolCode: number;
     readonly wmSymbolCode: number;
-    readonly cnSymbolCode: number;
     readonly cmSymbolCode: number;
   }) {
     this.#runtime = options.runtime;
@@ -791,7 +795,6 @@ export class Game002RoundTarget {
     this.#winAmountPlayer = options.winAmountPlayer;
     this.#wlSymbolCode = options.wlSymbolCode;
     this.#wmSymbolCode = options.wmSymbolCode;
-    this.#cnSymbolCode = options.cnSymbolCode;
     this.#cmSymbolCode = options.cmSymbolCode;
   }
 
@@ -932,10 +935,7 @@ export class Game002RoundTarget {
     return true;
   }
 
-  preflightAtomicTransform(
-    _operation: SlotOperationV2,
-    payload: Game002TransformPayload,
-  ): void {
+  preflightAtomicTransform(operation: Game002TransformOperation): void {
     const requireStates = (
       positions: readonly { readonly x: number; readonly y: number }[],
       states: readonly string[],
@@ -950,44 +950,59 @@ export class Game002RoundTarget {
             )
           )
             throw new Error(
-              `game002 transform symbol (${position.x},${position.y}) has no "${state}" animation capability.`,
+              `${operation.kind} symbol (${position.x},${position.y}) has no "${state}" animation capability.`,
             );
     };
-    requireStates(
-      payload.wlIncrements.map((item) => item.position),
-      ["appear"],
-    );
-    const wmPositions = payload.wmReplacements.map((item) => item.position);
-    requireStates(wmPositions, ["multStart", "multIdle", "multEnd", "change"]);
-    if (payload.cm) {
-      requireStates([payload.cm.position], ["feature1", "change"]);
-      requireStates(
-        payload.cnUpdates.map((item) => item.position),
-        ["featureChange"],
-      );
-    }
-    if (payload.coCollection) {
-      requireStates(
-        payload.coCollection.segments.map(({ co }) => co),
-        ["feature"],
-      );
-      requireStates(payload.coCollection.sourcePositions, [
-        "feature1",
-        "feature2",
-      ]);
+    switch (operation.kind) {
+      case "game002:wl-increment":
+        requireStates(requireGame002ChgPayload(operation, "change").pos, [
+          "appear",
+        ]);
+        return;
+      case "game002:wild-multiplier":
+        requireStates(
+          requireGame002ChgPayload(operation, "driven-change").mainPos,
+          ["multStart", "multIdle"],
+        );
+        return;
+      case "game002:wm-to-cn":
+        requireStates(requireGame002ChgPayload(operation, "change").pos, [
+          "multEnd",
+          "change",
+        ]);
+        return;
+      case "game002:coin-multiplier": {
+        const payload = requireGame002ChgPayload(operation, "driven-change");
+        requireStates(payload.mainPos, ["feature1"]);
+        requireStates(payload.pos, ["featureChange"]);
+        return;
+      }
+      case "game002:cm-to-cn":
+        requireStates(requireGame002ChgPayload(operation, "change").pos, [
+          "change",
+        ]);
+        return;
+      case "game002:co-collect": {
+        const payload = requireGame002ChgPayload(operation, "transfer");
+        requireStates(payload.mainPos, ["feature"]);
+        requireStates(
+          payload.routes.map(({ source }) => source),
+          ["feature1", "feature2"],
+        );
+        return;
+      }
+      default:
+        throw new Error(`${operation.kind} is not a game002 change operation.`);
     }
   }
 
-  startAtomicTransform(
-    operation: SlotOperationV2,
-    payload: Game002TransformPayload,
-  ): void {
+  startAtomicTransform(operation: Game002TransformOperation): void {
     if (
       this.#activity !== "idle" ||
       this.#transformRunner.getSnapshot().running
     )
       throw new Error("game002 atomic transform cannot start while active.");
-    const commands = this.createAtomicTransformCommands(operation, payload);
+    const commands = this.createAtomicTransformCommands(operation);
     this.#activity = "atomic-transform";
     this.#atomicTransformOperation = operation;
     this.#transformPlaybackFailure = null;
@@ -1018,8 +1033,7 @@ export class Game002RoundTarget {
   }
 
   private createAtomicTransformCommands(
-    operation: SlotOperationV2,
-    payload: Game002TransformPayload,
+    operation: Game002TransformOperation,
   ): PresentationTransactionCommand[] {
     const awaitStates = (
       requests: readonly {
@@ -1065,91 +1079,105 @@ export class Game002RoundTarget {
             destroy: () => undefined,
           }),
       });
-    if (operation.effect !== "state-mutation")
-      throw new Error("game002 transform must mutate state.");
-    const commands: PresentationTransactionCommand[] = [];
-    if (payload.wlIncrements.length > 0) {
-      commands.push(
-        commit(() => this.applyWlValues(payload.wlIncrements)),
-        state(
-          payload.wlIncrements.map(({ position }) => position),
-          "appear",
-        ),
-      );
-    }
-    if (payload.wmReplacements.length > 0) {
-      const positions = payload.wmReplacements.map(({ position }) => position);
-      commands.push(state(positions, "multStart"));
-      if (payload.wlUpdates.length > 0)
-        commands.push(commit(() => this.applyWlValues(payload.wlUpdates)));
-      commands.push(
-        state(positions, "multIdle", "next-loop-complete"),
-        state(positions, "multEnd"),
-        state(positions, "change"),
-        ...payload.wmReplacements.map((item) =>
-          this.replacementCommit({
-            x: item.position.x,
-            y: item.position.y,
-            expectedCode: this.#wmSymbolCode,
-            outputCode: this.#cnSymbolCode,
-            outputPresentationValue: item.intermediateValue,
-          }),
-        ),
-      );
-    }
-    if (payload.cm) {
-      commands.push(state([payload.cm.position], "feature1"));
-      if (payload.cnUpdates.length > 0)
-        commands.push(
+    switch (operation.kind) {
+      case "game002:wl-increment": {
+        const payload = requireGame002ChgPayload(operation, "change");
+        return [
+          commit(() => this.applyWlValues(operation, payload.pos)),
+          state(payload.pos, "appear"),
+        ];
+      }
+      case "game002:wild-multiplier": {
+        const payload = requireGame002ChgPayload(operation, "driven-change");
+        const commands: PresentationTransactionCommand[] = [
+          state(payload.mainPos, "multStart"),
+        ];
+        if (payload.pos.length > 0)
+          commands.push(
+            commit(() => this.applyWlValues(operation, payload.pos)),
+          );
+        commands.push(state(payload.mainPos, "multIdle", "next-loop-complete"));
+        return commands;
+      }
+      case "game002:wm-to-cn": {
+        const payload = requireGame002ChgPayload(operation, "change");
+        return [
+          state(payload.pos, "multEnd"),
+          state(payload.pos, "change"),
+          ...payload.pos.map((position) =>
+            this.replacementCommitFromOperation(operation, position),
+          ),
+        ];
+      }
+      case "game002:coin-multiplier": {
+        const payload = requireGame002ChgPayload(operation, "driven-change");
+        return [
+          state(payload.mainPos, "feature1"),
           commit(() => {
-            for (const item of payload.cnUpdates)
+            for (const position of payload.pos)
               this.#runtime.setVisibleSymbolPresentationValue(
-                item.position.x,
-                item.position.y,
-                item.outputValue,
+                position.x,
+                position.y,
+                operationOutputCell(operation, position).value,
               );
           }),
-          state(
-            payload.cnUpdates.map(({ position }) => position),
-            "featureChange",
+          state(payload.pos, "featureChange"),
+        ];
+      }
+      case "game002:cm-to-cn": {
+        const payload = requireGame002ChgPayload(operation, "change");
+        return [
+          state(payload.pos, "change"),
+          ...payload.pos.map((position) =>
+            this.replacementCommitFromOperation(operation, position),
           ),
-        );
-      commands.push(
-        state([payload.cm.position], "change"),
-        this.replacementCommit({
-          x: payload.cm.position.x,
-          y: payload.cm.position.y,
-          expectedCode: this.#cmSymbolCode,
-          outputCode: this.#cnSymbolCode,
-          outputPresentationValue: payload.cm.outputValue,
-        }),
-      );
-    }
-    if (payload.coCollection)
-      commands.push(
-        ...this.createCoCollectionCommands(
-          operation,
-          payload.coCollection,
+        ];
+      }
+      case "game002:co-collect":
+        return this.createCoCollectionCommands(
+          requireGame002MutationOperation(operation),
+          requireGame002ChgPayload(operation, "transfer"),
           awaitStates,
-        ),
-      );
-    return commands;
+        );
+      default:
+        throw new Error(`${operation.kind} is not a game002 change operation.`);
+    }
   }
 
-  private applyWlValues(items: Game002TransformPayload["wlIncrements"]): void {
-    for (const item of items) {
+  private applyWlValues(
+    operation: Game002TransformOperation,
+    positions: readonly { readonly x: number; readonly y: number }[],
+  ): void {
+    for (const position of positions) {
+      const value = operationOutputCell(operation, position).value;
       this.#runtime.setVisibleSymbolPresentationValue(
-        item.position.x,
-        item.position.y,
-        item.outputValue,
+        position.x,
+        position.y,
+        value,
       );
       this.#runtime.setVisibleSymbolImageStringText(
-        item.position.x,
-        item.position.y,
+        position.x,
+        position.y,
         "multiplier",
-        formatMultiplier(item.outputValue),
+        formatMultiplier(value),
       );
     }
+  }
+
+  private replacementCommitFromOperation(
+    operation: Game002TransformOperation,
+    position: { readonly x: number; readonly y: number },
+  ): import("@slotclientengine/rendercore").CommitPresentationCommand {
+    const mutation = requireGame002MutationOperation(operation);
+    const input = operationInputCell(mutation, position);
+    const output = operationOutputCell(mutation, position);
+    return this.replacementCommit({
+      x: position.x,
+      y: position.y,
+      expectedCode: input.code,
+      outputCode: output.code,
+      outputPresentationValue: output.value,
+    });
   }
 
   private replacementCommit(options: {
@@ -1168,7 +1196,7 @@ export class Game002RoundTarget {
 
   private createCoCollectionCommands(
     operation: Extract<SlotOperationV2, { readonly effect: "state-mutation" }>,
-    collection: NonNullable<Game002TransformOperationPayload["coCollection"]>,
+    payload: SlotChgTransferPayload,
     awaitStates: (
       requests: readonly {
         readonly positions: readonly {
@@ -1180,36 +1208,16 @@ export class Game002RoundTarget {
       }[],
     ) => AwaitPresentationCommand,
   ): PresentationTransactionCommand[] {
-    const relocations = collection.transform.relocations ?? [];
-    const relocationKeys = new Set(
-      relocations.flatMap((item) => [
-        `${item.source.x},${item.source.y}`,
-        `${item.target.x},${item.target.y}`,
-      ]),
-    );
-    const changes = new Map(
-      collection.transform.changes.map((item) => [
-        `${item.position.x},${item.position.y}`,
-        item,
-      ]),
-    );
-    const transfers = new Map(
-      collection.segments.flatMap((segment) =>
-        segment.transfers.map((item) => [
-          `${item.source.x},${item.source.y}`,
-          item,
-        ]),
-      ),
-    );
+    const sourcePositions = payload.routes.map(({ source }) => source);
     return [
       awaitStates([
         {
-          positions: collection.segments.map((segment) => segment.co),
+          positions: payload.mainPos,
           state: "feature",
           completion: "once-complete",
         },
         {
-          positions: collection.sourcePositions,
+          positions: sourcePositions,
           state: "feature1",
           completion: "once-complete",
         },
@@ -1219,55 +1227,38 @@ export class Game002RoundTarget {
         durationSeconds: 0.5,
         preflight: () => undefined,
         await: (signal: AbortSignal) =>
-          this.#runtime.playVisibleSymbolStates(
-            collection.sourcePositions,
-            "feature2",
-            {
-              transitionMode: "immediate",
-              completion: "once-complete",
-              signal,
-            },
-          ),
+          this.#runtime.playVisibleSymbolStates(sourcePositions, "feature2", {
+            transitionMode: "immediate",
+            completion: "once-complete",
+            signal,
+          }),
         prepare: () => {
-          const replacements = collection.transform.changes
-            .filter(
-              (item) =>
-                !relocationKeys.has(`${item.position.x},${item.position.y}`),
-            )
-            .map((item) =>
-              this.#runtime.prepareVisibleOccurrenceReplacement({
-                x: item.position.x,
-                y: item.position.y,
-                expectedCode:
-                  operation.input.scene[item.position.x]![item.position.y]!,
-                outputCode: item.outputCode,
-                outputPresentationValue: item.outputValue,
-              }),
-            );
+          const replacements = payload.mainPos.map((position) => {
+            const input = operationInputCell(operation, position);
+            const output = operationOutputCell(operation, position);
+            return this.#runtime.prepareVisibleOccurrenceReplacement({
+              x: position.x,
+              y: position.y,
+              expectedCode: input.code,
+              outputCode: output.code,
+              outputPresentationValue: output.value,
+            });
+          });
           const transfer =
-            relocations.length === 0
+            payload.routes.length === 0
               ? null
               : this.#runtime.prepareVisibleOccurrenceTransferBatch({
-                  transfers: relocations.map((item) => {
-                    const sourceChange = changes.get(
-                      `${item.source.x},${item.source.y}`,
-                    );
-                    const evidence = transfers.get(
-                      `${item.source.x},${item.source.y}`,
-                    );
-                    if (!sourceChange || !evidence)
-                      throw new Error(
-                        `game002 CO source (${item.source.x},${item.source.y}) evidence is incomplete.`,
-                      );
+                  transfers: payload.routes.map(({ source, target }) => {
+                    const inputSource = operationInputCell(operation, source);
+                    const inputTarget = operationInputCell(operation, target);
+                    const outputSource = operationOutputCell(operation, source);
                     return Object.freeze({
-                      source: item.source,
-                      target: item.target,
-                      expectedSourceCode: evidence.sourceCode,
-                      expectedTargetCode:
-                        operation.input.scene[item.target.x]![item.target.y]!,
-                      sourceReplacementCode: sourceChange.outputCode,
-                      sourceReplacementPresentationValue:
-                        sourceChange.outputValue,
+                      source,
+                      target,
+                      expectedSourceCode: inputSource.code,
+                      expectedTargetCode: inputTarget.code,
+                      sourceReplacementCode: outputSource.code,
+                      sourceReplacementPresentationValue: outputSource.value,
                     });
                   }),
                 });
@@ -1442,6 +1433,68 @@ function requireGame002SymbolCode(
   if (code === undefined)
     throw new Error(`game002 game config is missing ${symbol} symbol code.`);
   return code;
+}
+
+type Game002MutationOperation = Extract<
+  SlotOperationV2,
+  { readonly effect: "state-mutation" }
+>;
+
+function requireGame002MutationOperation(
+  operation: SlotOperationV2,
+): Game002MutationOperation {
+  if (operation.effect !== "state-mutation")
+    throw new Error(`${operation.kind} must be a state-mutation operation.`);
+  return operation;
+}
+
+function requireGame002ChgOperation(
+  operation: SlotOperationV2,
+): Game002TransformOperation {
+  const mutation = requireGame002MutationOperation(operation);
+  if (
+    !GAME002_TRANSFORM_KEYS.some((key) => operation.kind === `game002:${key}`)
+  )
+    throw new Error(`${operation.kind} is not a game002 change operation.`);
+  const payload = mutation.payload as SlotChgPayload;
+  if (
+    !payload ||
+    !["change", "driven-change", "transfer"].includes(payload.type)
+  )
+    throw new Error(`${operation.kind} change payload is invalid.`);
+  return mutation as Game002TransformOperation;
+}
+
+function requireGame002ChgPayload<Type extends SlotChgPayload["type"]>(
+  operation: Game002TransformOperation,
+  type: Type,
+): Extract<SlotChgPayload, { readonly type: Type }> {
+  requireGame002MutationOperation(operation);
+  const payload = operation.payload as SlotChgPayload;
+  if (!payload || payload.type !== type)
+    throw new Error(`${operation.kind} must use a ${type} payload.`);
+  return payload as Extract<SlotChgPayload, { readonly type: Type }>;
+}
+
+function operationInputCell(
+  operation: Game002MutationOperation,
+  position: { readonly x: number; readonly y: number },
+) {
+  return Object.freeze({
+    code: operation.input.scene[position.x]![position.y]!,
+    value: operation.input.values[position.x]![position.y]!,
+  });
+}
+
+function operationOutputCell(
+  operation: SlotOperationV2,
+  position: { readonly x: number; readonly y: number },
+) {
+  const mutation = requireGame002MutationOperation(operation);
+  return Object.freeze({
+    code: mutation.output.scene[position.x]![position.y]!,
+    value: mutation.output.values[position.x]![position.y]!,
+  });
 }
 
 function formatMultiplier(value: number | null): string {

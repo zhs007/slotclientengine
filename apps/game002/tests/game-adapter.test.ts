@@ -151,7 +151,6 @@ describe("game002 task 95 adapter", () => {
       winAmountPlayer: new FakeWinAmountPlayer([]).asPlayer(),
       wlSymbolCode: 0,
       wmSymbolCode: 7,
-      cnSymbolCode: 8,
       cmSymbolCode: 9,
     });
     const position = (y: number) => Object.freeze({ x: 0, y });
@@ -159,45 +158,9 @@ describe("game002 task 95 adapter", () => {
     const inputValues = Object.freeze([Object.freeze([null, 1, 2])]);
     const outputScene = Object.freeze([Object.freeze([8, 12, 8])]);
     const outputValues = Object.freeze([Object.freeze([2, null, 1])]);
-    const coChanges = Object.freeze([
-      Object.freeze({ position: position(0), outputCode: 8, outputValue: 2 }),
-      Object.freeze({
-        position: position(1),
-        outputCode: 12,
-        outputValue: null,
-      }),
-      Object.freeze({ position: position(2), outputCode: 8, outputValue: 1 }),
-    ]);
     const relocations = Object.freeze([
       Object.freeze({ source: position(1), target: position(2) }),
     ]);
-    const batch = Object.freeze({
-      stepIndex: 0,
-      wlIncrements: Object.freeze([]),
-      wmReplacements: Object.freeze([]),
-      cnUpdates: Object.freeze([]),
-      cm: null,
-      coCollection: Object.freeze({
-        stepIndex: 0,
-        segments: Object.freeze([
-          Object.freeze({
-            co: position(0),
-            selectedCode: 8,
-            transfers: Object.freeze([
-              Object.freeze({
-                source: position(1),
-                target: position(2),
-                sourceCode: 8,
-                sourceValue: 1,
-              }),
-            ]),
-          }),
-        ]),
-        sourcePositions: Object.freeze([position(1)]),
-        win2Positions: Object.freeze([position(0), position(2)]),
-        transform: Object.freeze({ changes: coChanges, relocations }),
-      }),
-    });
     const occurrences = Object.freeze([
       occurrence("co", 10, "CO", null, 0),
       occurrence("source", 8, "CN", 1, 1),
@@ -225,7 +188,7 @@ describe("game002 task 95 adapter", () => {
       relocations,
     });
     const operation = Object.freeze({
-      kind: "game002:transform",
+      kind: "game002:co-collect",
       version: 2,
       effect: "state-mutation",
       source: Object.freeze({
@@ -237,20 +200,13 @@ describe("game002 task 95 adapter", () => {
       output: step.output,
       mutations: Object.freeze([]),
       payload: Object.freeze({
-        stepIndex: 0,
-        wlIncrements: [],
-        wlUpdates: [],
-        wmReplacements: [],
-        cnUpdates: [],
-        cm: null,
-        coCollection: batch.coCollection!,
+        type: "transfer",
+        mainPos: Object.freeze([position(0)]),
+        routes: relocations,
       }),
     });
     expect(() =>
-      target.preflightAtomicTransform(
-        operation as any,
-        operation.payload as any,
-      ),
+      target.preflightAtomicTransform(operation as any),
     ).not.toThrow();
   });
 
