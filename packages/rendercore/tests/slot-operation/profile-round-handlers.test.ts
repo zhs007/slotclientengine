@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createSlotOperationHandlerRegistry,
   registerSlotRoundProfileOperationHandlers,
+  type SlotOperationExecutionContext,
 } from "../../src/slot-operation/index.js";
 
 describe("configured profile operation handlers", () => {
@@ -16,49 +17,24 @@ describe("configured profile operation handlers", () => {
     expect(registry.has("slot:spin", 2)).toBe(true);
   });
 
-  it("strictly rejects missing step payloads and target methods", () => {
+  it("rejects missing step payloads and target methods when the operation starts", async () => {
     const registry = createSlotOperationHandlerRegistry();
     registerSlotRoundProfileOperationHandlers({
       registry,
       target: target() as never,
     });
-    const operation = { kind: "slot:spin", payload: {} };
-    expect(() =>
+    const operation = { kind: "slot:spin", payload: {} } as never;
+    await expect(
       registry
         .get("slot:state-mutation", 2)!
-        .handler.preflight(operation as never),
-    ).toThrow(/no settled-transform handler/);
-    expect(() =>
-      registry.get("slot:win-remove", 2)!.handler.start(operation as never),
-    ).toThrow(/payload.step/);
-    expect(() =>
-      registry
-        .get("slot:win-remove", 2)!
-        .handler.preflight({ ...operation, payload: { step: {} } } as never),
-    ).not.toThrow();
+        .handler.start(operation, context()),
+    ).rejects.toThrow(/no settled-transform handler/);
+    await expect(
+      registry.get("slot:win-remove", 2)!.handler.start(operation, context()),
+    ).rejects.toThrow(/payload.step/);
   });
 
-  it("runs optional win preflight and no-op completion branches", () => {
-    const preflightWin = vi.fn();
-    const registry = createSlotOperationHandlerRegistry();
-    registerSlotRoundProfileOperationHandlers({
-      registry,
-      target: { ...target(), preflightWin } as never,
-      skipSettledTransform: true,
-    });
-    const operation = {
-      kind: "slot:win-remove",
-      payload: { step: {} },
-      output: {},
-    } as never;
-    registry.get("slot:win-remove", 2)!.handler.preflight(operation);
-    expect(preflightWin).toHaveBeenCalledOnce();
-    const completion = registry.get("slot:completion", 2)!.handler;
-    completion.start(operation);
-    expect(completion.update(operation, 0).completed).toBe(true);
-  });
-
-  it("runs transform and asynchronous completion lifecycle branches", () => {
+  it("runs transform and completion as async frame chains", async () => {
     const startSettledTransform = vi.fn();
     const updateSettledTransform = vi
       .fn()
@@ -81,44 +57,78 @@ describe("configured profile operation handlers", () => {
       } as never,
     });
     const step = { stepIndex: 1 };
-    const transformOperation = {
-      kind: "slot:state-mutation",
-      payload: { step },
-    } as never;
-    const transform = registry.get("slot:state-mutation", 2)!.handler;
-    transform.preflight(transformOperation);
-    transform.start(transformOperation);
-    expect(transform.update(transformOperation, 0.1).completed).toBe(false);
-    expect(transform.update(transformOperation, 0.1).completed).toBe(true);
+    await registry.get("slot:state-mutation", 2)!.handler.start(
+      {
+        kind: "slot:state-mutation",
+        payload: { step },
+      } as never,
+      context([0.1, 0.1]),
+    );
     expect(startSettledTransform).toHaveBeenCalledWith(step);
+    expect(updateSettledTransform).toHaveBeenCalledTimes(2);
 
-    const completionOperation = {
-      kind: "slot:completion",
-      payload: {},
-    } as never;
-    const completion = registry.get("slot:completion", 2)!.handler;
-    completion.start(completionOperation);
-    expect(completion.update(completionOperation, 0.1).completed).toBe(false);
-    expect(completion.update(completionOperation, 0.1).completed).toBe(true);
+    await registry
+      .get("slot:completion", 2)!
+      .handler.start(
+        { kind: "slot:completion", payload: {} } as never,
+        context([0.1, 0.1]),
+      );
     expect(startCompletion).toHaveBeenCalledWith();
+    expect(isCompletionComplete).toHaveBeenCalledTimes(2);
   });
 
-  it("strictly rejects missing dropdown and refill step payloads", () => {
+  it("runs immediate completion without transaction boilerplate", async () => {
+    const registry = createSlotOperationHandlerRegistry();
+    registerSlotRoundProfileOperationHandlers({
+      registry,
+      target: target() as never,
+      skipSettledTransform: true,
+    });
+    await registry
+      .get("slot:completion", 2)!
+      .handler.start(
+        { kind: "slot:completion", payload: {} } as never,
+        context(),
+      );
+  });
+
+  it("rejects missing dropdown and refill step payloads", async () => {
     const registry = createSlotOperationHandlerRegistry();
     registerSlotRoundProfileOperationHandlers({
       registry,
       target: target() as never,
     });
-    const dropdown = { kind: "slot:dropdown", payload: {} } as never;
-    const refill = { kind: "slot:refill", payload: {} } as never;
-    expect(() =>
-      registry.get("slot:dropdown", 2)!.handler.start(dropdown),
-    ).toThrow(/slot:dropdown payload.step/);
-    expect(() => registry.get("slot:refill", 2)!.handler.start(refill)).toThrow(
-      /slot:refill payload.step/,
-    );
+    await expect(
+      registry
+        .get("slot:dropdown", 2)!
+        .handler.start(
+          { kind: "slot:dropdown", payload: {} } as never,
+          context(),
+        ),
+    ).rejects.toThrow(/slot:dropdown payload.step/);
+    await expect(
+      registry
+        .get("slot:refill", 2)!
+        .handler.start(
+          { kind: "slot:refill", payload: {} } as never,
+          context(),
+        ),
+    ).rejects.toThrow(/slot:refill payload.step/);
   });
 });
+
+function context(
+  deltas: readonly number[] = [0],
+): SlotOperationExecutionContext {
+  return {
+    signal: new AbortController().signal,
+    async waitForFrame(update): Promise<void> {
+      for (const delta of deltas) if (update(delta)) return;
+      throw new Error("test frame chain did not complete");
+    },
+    delay: async () => undefined,
+  };
+}
 
 function target() {
   return {

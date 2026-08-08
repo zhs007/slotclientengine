@@ -57,7 +57,7 @@ Pixi Application、package resource 与所有 player 的 destroy。
 
 完整 package runtime 可以 deferred prepare main reel：首次合法 scene commit 前 reel 不可见，scene/value/spin API 会严格失败。业务自定义 grid-cell controller 可通过 ownership-transfer factory 注入，package 仍拥有唯一 reel、manifest placement/order 和最终 destroy；cascade 等借用 overlay 通过 typed attach disposer 接入，保持在 transition/popup 下方。
 
-`createPresentationTransactionRunner()` 执行完整 preflight 后的线性 await/commit/progress program。await 使用 `AbortSignal` 隔离迟到完成，prepared transaction 明确 commit/rollback/destroy，progress 可并行等待 animation barrier；业务 app 只映射 operation evidence，不复制通用 phase 轮询器。
+slot operation handler 只实现一个异步 `start(operation, context)`。业务 app 可直接用 `await` 组合动画、逐格 mutation、`context.delay()` 和 `context.waitForFrame()`；coordinator 只负责精确分派、顺序推进、abort 与 fail-stop，不在 render 重做 plan preflight，也不提供通用 transaction phase runner。
 
 普通 Scene Layout node 可省略 `gameMode` 表示跨全部状态存在，或声明一个 exact mode id；旧 v1 node 因缺少该字段自然保持全局可见。package runtime 在初始化和 production transition switch commit 时一起更新 mode background 与 scoped 普通 node，可见性再与当前 variant placement 组合。编辑器预览可调用独立的 `selectAuthoringGameMode()` 直接选择稳定状态；该 API 不查找或播放 transition，且不会为相同 Symbols binding 重建 reel 或重新抽样。
 
@@ -613,13 +613,13 @@ grid-cell 级联以 `-1` 作为中间态空洞。`createGridCellCascadeDropPlan(
 
 ## Slot operation coordinator
 
-`createSlotOperationHandlerRegistry()` 是 runtime 实例 owner；kind/version/effect 不匹配、重复注册和未知
-handler 精确失败。`createSlotOperationCoordinator()` 在 next-spin cleanup 与首次 mutation
-前预检完整 immutable plan 及每个 capability，然后逐 operation 执行
-`prepare → start/update → commit → destroy`；只有 scene landing/state mutation 在 commit 后
-执行 snapshot assert，presentation 不访问 output。未提交 operation 失败执行
-rollback/destroy/fatal cleanup；已提交 operation 不伪装成整轮倒放。旧固定 round
-coordinator 已从 public surface 删除。
+`createSlotOperationHandlerRegistry()` 是 runtime 实例 owner；kind/version 不匹配、重复注册和未知
+handler 精确失败。`createSlotOperationCoordinator()` 直接接受上游已编译、已验证的 immutable plan，
+按顺序调用每个 handler 的异步 `start`。执行上下文提供 `AbortSignal`、逐帧等待和延迟；宿主 ticker
+继续统一推进 runtime。render mutation 只在实际变更的坐标检查 input/output continuity，不做全局
+snapshot assert。任一调用失败都会 abort pending playback、执行 fail-stop cleanup 并拒绝本轮 Promise，
+不会 rollback 已经完成的 mutation。旧固定 round coordinator 和 presentation transaction runner
+已从 public surface 删除。
 
 standard `RenderReelSet` 与 grid-cell `RenderGridCellReelSet` 都提供真实 cascade movement：release 后保留 surviving renderer identity、presentation value 和等价 animation playback，dropdown 按编译 movement 落位，refill 只创建 hole occurrence。scene-layout configured adapter 使用同一 coordinator，不再用最终 scene reset 跳过 remove/drop/refill。金额 resolver、symbol policy、component 名和游戏 extension 仍留在 app/config。
 

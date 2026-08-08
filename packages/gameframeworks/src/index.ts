@@ -29,16 +29,11 @@ export {
   createSlotOperationSnapshot,
 } from "@slotclientengine/logiccore";
 export {
-  createPresentationTransactionRunner,
   createSceneLayoutPackageResource,
   createSceneLayoutPackageRuntime,
   createSceneLayoutPresentationSurface,
 } from "@slotclientengine/rendercore";
 export type {
-  AwaitPresentationCommand,
-  PresentationTransactionCommand,
-  PresentationTransactionProgram,
-  PresentationTransactionRunner,
   SceneLayoutLayerId,
   SceneLayoutPackageResource,
   SceneLayoutPackageRuntime,

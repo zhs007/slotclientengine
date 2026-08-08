@@ -238,6 +238,11 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
       this.#operationFailure = null;
       void this.#operationCoordinator
         .start(this.#operationPlan)
+        .then(() => {
+          if (this.#phase !== "playing") return;
+          this.#phase = "completed";
+          this.#flowPhase = "idle";
+        })
         .catch((error: unknown) => {
           this.#operationFailure =
             error instanceof Error ? error : new Error(String(error));
@@ -360,30 +365,14 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
       const key = `${operation.kind}@${operation.version}`;
       if (registered.has(key)) continue;
       registered.add(key);
-      const capabilities = new Set(
-        plan.operations
-          .filter(
-            (item) =>
-              item.kind === operation.kind &&
-              item.version === operation.version,
-          )
-          .flatMap((item) => item.requiredCapabilities),
-      );
       registry.register({
         kind: operation.kind,
         version: operation.version,
-        effect: operation.effect,
-        requiredCapabilities: capabilities,
         handler: {
-          preflight: (item) => this.preflightOperation(item),
-          prepare: (item): SlotOperationV2 => item,
-          start: (item: SlotOperationV2) => this.startOperation(item),
-          update: (item: SlotOperationV2) => ({
-            completed: this.isOperationComplete(item),
-          }),
-          commit: () => undefined,
-          rollback: () => this.retireGeneration(),
-          destroy: () => undefined,
+          start: async (item, context) => {
+            this.startOperation(item);
+            await context.waitForFrame(() => this.isOperationComplete(item));
+          },
         },
       });
     }
@@ -392,24 +381,6 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
       updateRuntime: (deltaSeconds) => this.#runtime.update(deltaSeconds),
       cleanup: () => this.retireGeneration(),
     });
-  }
-
-  private preflightOperation(operation: SlotOperationV2): void {
-    if (operation.source.kind !== "snapshot-authored")
-      throw new SceneLayoutError(
-        `Local flow operation ${operation.id} must use snapshot-authored source evidence.`,
-      );
-    const source = operation.source;
-    const snapshotIndex = this.readiness.project.snapshots.findIndex(
-      (snapshot) => snapshot.id === source.outputSnapshotId,
-    );
-    if (
-      snapshotIndex < 0 ||
-      (snapshotIndex === 0 && operation.effect !== "scene-landing")
-    )
-      throw new SceneLayoutError(
-        `Local flow operation ${operation.id} targets unknown snapshot "${source.outputSnapshotId}".`,
-      );
   }
 
   private startOperation(operation: SlotOperationV2): void {

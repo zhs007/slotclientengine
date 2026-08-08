@@ -244,8 +244,11 @@ describe("game002 source boundary", () => {
       join(APP_ROOT, "src/freegame-operation-target.ts"),
       "utf8",
     );
-    expect(freeGameTargetSource).toContain(
+    expect(freeGameTargetSource).not.toContain(
       "createPresentationTransactionRunner",
+    );
+    expect(freeGameTargetSource).not.toMatch(
+      /\bpreflight\s*[:(]|\bprepare\s*:|\brollback\s*[:(]/,
     );
     for (const legacyState of [
       "af-feature",

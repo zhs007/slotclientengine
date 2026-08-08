@@ -13,10 +13,7 @@ import type {
   SlotGameMountContext,
   SlotGameStateSnapshot,
   SlotGameViewportSnapshot,
-  AwaitPresentationCommand,
-  PresentationTransactionCommand,
 } from "@slotclientengine/gameframeworks";
-import { createPresentationTransactionRunner } from "@slotclientengine/gameframeworks";
 import {
   createSymbolCascadePlayer,
   type CreateSymbolCascadePlayerOptions,
@@ -25,6 +22,7 @@ import {
   createSlotOperationHandlerRegistry,
   RenderGridCellReelSet,
   type SlotOperationHandler,
+  type SlotOperationExecutionContext,
 } from "@slotclientengine/rendercore";
 import type {
   WinAmountAnimationPhase,
@@ -330,6 +328,8 @@ class Game002PixiAdapter implements SlotGameAdapter {
         registry.register(registration);
       this.#roundCoordinator = createSlotOperationCoordinator({
         registry,
+        updateRuntime: (deltaSeconds) =>
+          this.#roundTarget?.update(deltaSeconds),
         cleanup: () => {
           this.#roundTarget?.cleanup();
           this.#freeGameOperationTarget?.cleanup();
@@ -562,72 +562,56 @@ class Game002PixiAdapter implements SlotGameAdapter {
 }
 
 function createGame002OperationRegistrations(target: Game002RoundTarget) {
-  const lifecycle = (options: {
+  const frameDriven = (options: {
     readonly start: (operation: SlotOperationV2) => void;
     readonly update: (
       operation: SlotOperationV2,
       deltaSeconds: number,
     ) => boolean;
-    readonly preflight?: (operation: SlotOperationV2) => void;
-  }): SlotOperationHandler<SlotOperationV2, SlotOperationV2> => ({
-    preflight: (operation) => options.preflight?.(operation),
-    prepare: (operation) => operation,
-    start: (operation) => options.start(operation),
-    update: (operation, deltaSeconds) => ({
-      completed: options.update(operation, deltaSeconds),
-    }),
-    commit: () => undefined,
-    rollback: () => undefined,
-    destroy: () => undefined,
+  }): SlotOperationHandler<SlotOperationV2> => ({
+    async start(operation, context): Promise<void> {
+      options.start(operation);
+      await context.waitForFrame((deltaSeconds) =>
+        options.update(operation, deltaSeconds),
+      );
+    },
   });
   const registration = (
     kind: string,
-    effect: SlotOperationV2["effect"],
-    handler: SlotOperationHandler<SlotOperationV2, SlotOperationV2>,
+    handler: SlotOperationHandler<SlotOperationV2>,
   ) =>
     Object.freeze({
       kind,
       version: 2,
-      effect,
-      requiredCapabilities: new Set([kind]),
       handler,
     });
-  const spin = lifecycle({
+  const spin = frameDriven({
     start: (operation) => {
       if (operation.effect !== "scene-landing")
         throw new Error("game002:spin must establish a scene.");
       const payload = operation.payload as Game002SpinPayload;
       target.startInitialSpin(payload.scene);
     },
-    update: (_operation, deltaSeconds) => {
-      target.update(deltaSeconds);
-      return target.isInitialSpinComplete();
-    },
+    update: () => target.isInitialSpinComplete(),
   });
-  const win = lifecycle({
+  const win = frameDriven({
     start: (operation) =>
       target.startWinGroups((operation.payload as Game002WinPayload).groups),
-    update: (_operation, deltaSeconds) => {
-      target.update(deltaSeconds);
-      return target.updateWin(deltaSeconds).completed;
-    },
+    update: () => target.updateWin().completed,
   });
-  const remove = lifecycle({
+  const remove = frameDriven({
     start: (operation) =>
       target.applyReleaseOnlyPositions(
         (operation.payload as Game002RemovePayload).releaseOnlyPositions,
       ),
     update: () => true,
   });
-  const dropdown = lifecycle({
+  const dropdown = frameDriven({
     start: (operation) =>
       target.startDropdownData(operation.payload as Game002FallPayload),
-    update: (_operation, deltaSeconds) => {
-      target.update(deltaSeconds);
-      return target.isDropdownComplete();
-    },
+    update: () => target.isDropdownComplete(),
   });
-  const refill = lifecycle({
+  const refill = frameDriven({
     start: (operation) => {
       if (operation.effect !== "state-mutation")
         throw new Error("game002:refill must mutate state.");
@@ -636,12 +620,9 @@ function createGame002OperationRegistrations(target: Game002RoundTarget) {
         operation.output,
       );
     },
-    update: (_operation, deltaSeconds) => {
-      target.update(deltaSeconds);
-      return target.isRefillComplete();
-    },
+    update: () => target.isRefillComplete(),
   });
-  const completion = lifecycle({
+  const completion = frameDriven({
     start: (operation) => {
       const payload = operation.payload as {
         readonly betAmountRaw: number;
@@ -649,40 +630,26 @@ function createGame002OperationRegistrations(target: Game002RoundTarget) {
       };
       target.startCompletionAmounts(payload.betAmountRaw, payload.winAmountRaw);
     },
-    update: (_operation, deltaSeconds) => {
-      target.update(deltaSeconds);
-      return target.isCompletionComplete();
-    },
+    update: () => target.isCompletionComplete(),
   });
-  const handler: SlotOperationHandler<SlotOperationV2, SlotOperationV2> = {
-    preflight: () => undefined,
-    prepare: (operation) => operation,
-    start: (operation) => {
-      const chg = requireGame002ChgOperation(operation);
-      target.preflightAtomicTransform(chg);
-      target.startAtomicTransform(chg);
-    },
-    update: (_operation, deltaSeconds) => {
-      target.update(deltaSeconds);
-      return target.updateAtomicTransform(_operation);
-    },
-    commit: () => undefined,
-    rollback: () => undefined,
-    destroy: () => undefined,
+  const handler: SlotOperationHandler<SlotOperationV2> = {
+    start: (operation, context) =>
+      target.startAtomicTransform(
+        requireGame002ChgOperation(operation),
+        context,
+      ),
   };
   return [
-    registration("game002:spin", "scene-landing", spin),
-    registration("game002:win", "presentation", win),
-    registration("game002:remove", "state-mutation", remove),
-    registration("game002:dropdown", "state-mutation", dropdown),
-    registration("game002:refill", "state-mutation", refill),
-    registration("game002:win-amount", "presentation", completion),
+    registration("game002:spin", spin),
+    registration("game002:win", win),
+    registration("game002:remove", remove),
+    registration("game002:dropdown", dropdown),
+    registration("game002:refill", refill),
+    registration("game002:win-amount", completion),
     ...GAME002_TRANSFORM_KEYS.map((key) =>
       Object.freeze({
         kind: `game002:${key}`,
         version: 2,
-        effect: "state-mutation" as const,
-        requiredCapabilities: new Set([`game002:${key}`]),
         handler,
       }),
     ),
@@ -707,34 +674,23 @@ function createGame002FreeGameOperationRegistrations(
       throw new Error(`${operation.kind} FreeGame payload is invalid.`);
     return payload;
   };
-  const handler: SlotOperationHandler<SlotOperationV2, SlotOperationV2> = {
-    preflight: () => undefined,
-    prepare: (operation) => operation,
-    start: (operation) => {
-      const payload = requirePayload(operation);
-      target.preflight(payload);
-      target.start(payload);
-    },
-    update: (_operation, deltaSeconds) => target.update(deltaSeconds),
-    commit: () => undefined,
-    rollback: () => undefined,
-    destroy: () => undefined,
+  const handler: SlotOperationHandler<SlotOperationV2> = {
+    start: (operation, context) =>
+      target.start(requirePayload(operation), context),
   };
   return [
-    ["game002:freegame-trigger", "presentation"],
-    ["game002:freegame-enter", "presentation"],
-    ["game002:freegame-spin", "state-mutation"],
-    ["game002:freegame-af", "state-mutation"],
-    ["game002:freegame-co", "state-mutation"],
-    ["game002:freegame-win", "presentation"],
-    ["game002:freegame-popup", "presentation"],
-    ["game002:freegame-exit", "presentation"],
-  ].map(([kind, effect]) =>
+    "game002:freegame-trigger",
+    "game002:freegame-enter",
+    "game002:freegame-spin",
+    "game002:freegame-af",
+    "game002:freegame-co",
+    "game002:freegame-win",
+    "game002:freegame-popup",
+    "game002:freegame-exit",
+  ].map((kind) =>
     Object.freeze({
-      kind: kind!,
+      kind,
       version: 2,
-      effect: effect as "presentation" | "state-mutation",
-      requiredCapabilities: new Set([kind!]),
       handler,
     }),
   );
@@ -777,9 +733,6 @@ export class Game002RoundTarget {
   #unifiedSteps = new Set<number | string>();
   #initialSnapshot: SlotRoundOccurrenceSnapshot | null = null;
   #refillSnapshot: SlotRoundOccurrenceSnapshot | null = null;
-  readonly #transformRunner = createPresentationTransactionRunner();
-  #transformProgramId = 0;
-  #transformPlaybackFailure: Error | null = null;
   #atomicTransformOperation: SlotOperationV2 | null = null;
 
   constructor(options: {
@@ -799,10 +752,6 @@ export class Game002RoundTarget {
   }
 
   cleanup(): void {
-    if (this.#transformRunner.getSnapshot().running)
-      this.#transformRunner.cleanup("next-program");
-    this.#transformProgramId += 1;
-    this.#transformPlaybackFailure = null;
     this.#atomicTransformOperation = null;
     this.#cascadePlayer.clear();
     this.#winAmountPlayer.dismissImmediately();
@@ -859,7 +808,7 @@ export class Game002RoundTarget {
     if (positions.length > 0) this.#runtime.releaseVisibleSymbols(positions);
   }
 
-  updateWin(_deltaSeconds: number): { readonly completed: boolean } {
+  updateWin(): { readonly completed: boolean } {
     if (this.#activity !== "win")
       throw new Error("game002 win stage is not active.");
     if (!this.#winCompleted) return { completed: false };
@@ -935,213 +884,100 @@ export class Game002RoundTarget {
     return true;
   }
 
-  preflightAtomicTransform(operation: Game002TransformOperation): void {
-    const requireStates = (
-      positions: readonly { readonly x: number; readonly y: number }[],
-      states: readonly string[],
-    ) => {
-      for (const position of positions)
-        for (const state of states)
-          if (
-            !this.#runtime.hasVisibleSymbolStateCapability(
-              position.x,
-              position.y,
-              state,
-            )
-          )
-            throw new Error(
-              `${operation.kind} symbol (${position.x},${position.y}) has no "${state}" animation capability.`,
-            );
-    };
-    switch (operation.kind) {
-      case "game002:wl-increment":
-        requireStates(requireGame002ChgPayload(operation, "change").pos, [
-          "appear",
-        ]);
-        return;
-      case "game002:wild-multiplier":
-        requireStates(
-          requireGame002ChgPayload(operation, "driven-change").mainPos,
-          ["multStart", "multIdle"],
-        );
-        return;
-      case "game002:wm-to-cn":
-        requireStates(requireGame002ChgPayload(operation, "change").pos, [
-          "multEnd",
-          "change",
-        ]);
-        return;
-      case "game002:coin-multiplier": {
-        const payload = requireGame002ChgPayload(operation, "driven-change");
-        requireStates(payload.mainPos, ["feature1"]);
-        requireStates(payload.pos, ["featureChange"]);
-        return;
-      }
-      case "game002:cm-to-cn":
-        requireStates(requireGame002ChgPayload(operation, "change").pos, [
-          "change",
-        ]);
-        return;
-      case "game002:co-collect": {
-        const payload = requireGame002ChgPayload(operation, "transfer");
-        requireStates(payload.mainPos, ["feature"]);
-        requireStates(
-          payload.routes.map(({ source }) => source),
-          ["feature1", "feature2"],
-        );
-        return;
-      }
-      default:
-        throw new Error(`${operation.kind} is not a game002 change operation.`);
-    }
-  }
-
-  startAtomicTransform(operation: Game002TransformOperation): void {
-    if (
-      this.#activity !== "idle" ||
-      this.#transformRunner.getSnapshot().running
-    )
+  async startAtomicTransform(
+    operation: Game002TransformOperation,
+    context: SlotOperationExecutionContext,
+  ): Promise<void> {
+    if (this.#activity !== "idle")
       throw new Error("game002 atomic transform cannot start while active.");
-    const commands = this.createAtomicTransformCommands(operation);
     this.#activity = "atomic-transform";
     this.#atomicTransformOperation = operation;
-    this.#transformPlaybackFailure = null;
-    const programId = ++this.#transformProgramId;
-    const completion = this.#transformRunner.start(
-      Object.freeze({ commands: Object.freeze(commands) }),
-    );
-    void completion.catch((error: unknown) => {
-      if (programId === this.#transformProgramId)
-        this.#transformPlaybackFailure = asError(error);
-    });
-  }
-
-  updateAtomicTransform(operation: SlotOperationV2): {
-    readonly completed: boolean;
-  } {
-    if (
-      this.#activity !== "atomic-transform" ||
-      this.#atomicTransformOperation !== operation
-    )
-      throw new Error("game002 atomic transform operation is not active.");
-    if (this.#transformPlaybackFailure) throw this.#transformPlaybackFailure;
-    if (this.#transformRunner.getSnapshot().phase !== "complete")
-      return { completed: false };
-    this.#atomicTransformOperation = null;
-    this.#activity = "idle";
-    return { completed: true };
-  }
-
-  private createAtomicTransformCommands(
-    operation: Game002TransformOperation,
-  ): PresentationTransactionCommand[] {
-    const awaitStates = (
-      requests: readonly {
-        readonly positions: readonly {
-          readonly x: number;
-          readonly y: number;
-        }[];
-        readonly state: string;
-        readonly completion: "once-complete" | "next-loop-complete";
-      }[],
-    ): import("@slotclientengine/rendercore").AwaitPresentationCommand =>
-      Object.freeze({
-        kind: "await",
-        preflight: () => undefined,
-        start: (signal: AbortSignal) =>
-          this.#runtime.playVisibleSymbolStateBatch(
-            requests.map((request) => ({
-              positions: request.positions,
-              state: request.state,
-              options: {
-                transitionMode: "immediate",
-                completion: request.completion,
-              },
-            })),
-            { signal },
-          ),
-      });
-    const state = (
-      positions: readonly { readonly x: number; readonly y: number }[],
-      name: string,
-      completion: "once-complete" | "next-loop-complete" = "once-complete",
-    ) => awaitStates([{ positions, state: name, completion }]);
-    const commit = (
-      apply: () => void,
-    ): import("@slotclientengine/rendercore").CommitPresentationCommand =>
-      Object.freeze({
-        kind: "commit",
-        preflight: () => undefined,
-        prepare: () =>
-          Object.freeze({
-            commit: apply,
-            rollback: () => undefined,
-            destroy: () => undefined,
-          }),
-      });
-    switch (operation.kind) {
-      case "game002:wl-increment": {
-        const payload = requireGame002ChgPayload(operation, "change");
-        return [
-          commit(() => this.applyWlValues(operation, payload.pos)),
-          state(payload.pos, "appear"),
-        ];
-      }
-      case "game002:wild-multiplier": {
-        const payload = requireGame002ChgPayload(operation, "driven-change");
-        const commands: PresentationTransactionCommand[] = [
-          state(payload.mainPos, "multStart"),
-        ];
-        if (payload.pos.length > 0)
-          commands.push(
-            commit(() => this.applyWlValues(operation, payload.pos)),
+    try {
+      switch (operation.kind) {
+        case "game002:wl-increment": {
+          const payload = requireGame002ChgPayload(operation, "change");
+          this.applyWlValues(operation, payload.pos);
+          await this.playStates(payload.pos, "appear", context.signal);
+          return;
+        }
+        case "game002:wild-multiplier": {
+          const payload = requireGame002ChgPayload(operation, "driven-change");
+          await this.playStates(payload.mainPos, "multStart", context.signal);
+          this.applyWlValues(operation, payload.pos);
+          await this.playStates(
+            payload.mainPos,
+            "multIdle",
+            context.signal,
+            "next-loop-complete",
           );
-        commands.push(state(payload.mainPos, "multIdle", "next-loop-complete"));
-        return commands;
-      }
-      case "game002:wm-to-cn": {
-        const payload = requireGame002ChgPayload(operation, "change");
-        return [
-          state(payload.pos, "multEnd"),
-          state(payload.pos, "change"),
-          ...payload.pos.map((position) =>
-            this.replacementCommitFromOperation(operation, position),
-          ),
-        ];
-      }
-      case "game002:coin-multiplier": {
-        const payload = requireGame002ChgPayload(operation, "driven-change");
-        return [
-          state(payload.mainPos, "feature1"),
-          commit(() => {
-            for (const position of payload.pos)
+          return;
+        }
+        case "game002:wm-to-cn": {
+          const payload = requireGame002ChgPayload(operation, "change");
+          await this.playStates(payload.pos, "multEnd", context.signal);
+          await this.playStates(payload.pos, "change", context.signal);
+          for (const position of payload.pos)
+            this.replaceFromOperation(operation, position);
+          return;
+        }
+        case "game002:coin-multiplier": {
+          const payload = requireGame002ChgPayload(operation, "driven-change");
+          await this.playStates(payload.mainPos, "feature1", context.signal);
+          await Promise.all(
+            payload.pos.map(async (position) => {
+              await this.playStates(
+                [position],
+                "featureChange",
+                context.signal,
+              );
               this.#runtime.setVisibleSymbolPresentationValue(
                 position.x,
                 position.y,
                 operationOutputCell(operation, position).value,
               );
-          }),
-          state(payload.pos, "featureChange"),
-        ];
+            }),
+          );
+          return;
+        }
+        case "game002:cm-to-cn": {
+          const payload = requireGame002ChgPayload(operation, "change");
+          for (const position of payload.pos) {
+            await this.playStates([position], "change", context.signal);
+            this.replaceFromOperation(operation, position);
+          }
+          return;
+        }
+        case "game002:co-collect":
+          await this.runCoCollection(
+            requireGame002MutationOperation(operation),
+            requireGame002ChgPayload(operation, "transfer"),
+            context,
+          );
+          return;
+        default:
+          throw new Error(
+            `${operation.kind} is not a game002 change operation.`,
+          );
       }
-      case "game002:cm-to-cn": {
-        const payload = requireGame002ChgPayload(operation, "change");
-        return [
-          state(payload.pos, "change"),
-          ...payload.pos.map((position) =>
-            this.replacementCommitFromOperation(operation, position),
-          ),
-        ];
+    } finally {
+      if (this.#atomicTransformOperation === operation) {
+        this.#atomicTransformOperation = null;
+        this.#activity = "idle";
       }
-      case "game002:co-collect":
-        return this.createCoCollectionCommands(
-          requireGame002MutationOperation(operation),
-          requireGame002ChgPayload(operation, "transfer"),
-          awaitStates,
-        );
-      default:
-        throw new Error(`${operation.kind} is not a game002 change operation.`);
     }
+  }
+
+  private playStates(
+    positions: readonly { readonly x: number; readonly y: number }[],
+    state: string,
+    signal: AbortSignal,
+    completion: "once-complete" | "next-loop-complete" = "once-complete",
+  ): Promise<void> {
+    return this.#runtime.playVisibleSymbolStates(positions, state, {
+      transitionMode: "immediate",
+      completion,
+      signal,
+    });
   }
 
   private applyWlValues(
@@ -1164,14 +1000,14 @@ export class Game002RoundTarget {
     }
   }
 
-  private replacementCommitFromOperation(
-    operation: Game002TransformOperation,
+  private replaceFromOperation(
+    operation: Game002MutationOperation,
     position: { readonly x: number; readonly y: number },
-  ): import("@slotclientengine/rendercore").CommitPresentationCommand {
+  ): void {
     const mutation = requireGame002MutationOperation(operation);
     const input = operationInputCell(mutation, position);
     const output = operationOutputCell(mutation, position);
-    return this.replacementCommit({
+    this.#runtime.replaceVisibleOccurrence({
       x: position.x,
       y: position.y,
       expectedCode: input.code,
@@ -1180,104 +1016,53 @@ export class Game002RoundTarget {
     });
   }
 
-  private replacementCommit(options: {
-    readonly x: number;
-    readonly y: number;
-    readonly expectedCode: number;
-    readonly outputCode: number;
-    readonly outputPresentationValue: number | null;
-  }): import("@slotclientengine/rendercore").CommitPresentationCommand {
-    return Object.freeze({
-      kind: "commit",
-      preflight: () => undefined,
-      prepare: () => this.#runtime.prepareVisibleOccurrenceReplacement(options),
-    });
-  }
-
-  private createCoCollectionCommands(
+  private async runCoCollection(
     operation: Extract<SlotOperationV2, { readonly effect: "state-mutation" }>,
     payload: SlotChgTransferPayload,
-    awaitStates: (
-      requests: readonly {
-        readonly positions: readonly {
-          readonly x: number;
-          readonly y: number;
-        }[];
-        readonly state: string;
-        readonly completion: "once-complete" | "next-loop-complete";
-      }[],
-    ) => AwaitPresentationCommand,
-  ): PresentationTransactionCommand[] {
+    context: SlotOperationExecutionContext,
+  ): Promise<void> {
     const sourcePositions = payload.routes.map(({ source }) => source);
-    return [
-      awaitStates([
+    await this.#runtime.playVisibleSymbolStateBatch(
+      [
         {
           positions: payload.mainPos,
           state: "feature",
-          completion: "once-complete",
+          options: {
+            transitionMode: "immediate",
+            completion: "once-complete",
+          },
         },
         {
           positions: sourcePositions,
           state: "feature1",
-          completion: "once-complete",
-        },
-      ]),
-      Object.freeze({
-        kind: "progress" as const,
-        durationSeconds: 0.5,
-        preflight: () => undefined,
-        await: (signal: AbortSignal) =>
-          this.#runtime.playVisibleSymbolStates(sourcePositions, "feature2", {
+          options: {
             transitionMode: "immediate",
             completion: "once-complete",
-            signal,
-          }),
-        prepare: () => {
-          const replacements = payload.mainPos.map((position) => {
-            const input = operationInputCell(operation, position);
-            const output = operationOutputCell(operation, position);
-            return this.#runtime.prepareVisibleOccurrenceReplacement({
-              x: position.x,
-              y: position.y,
-              expectedCode: input.code,
-              outputCode: output.code,
-              outputPresentationValue: output.value,
-            });
-          });
-          const transfer =
-            payload.routes.length === 0
-              ? null
-              : this.#runtime.prepareVisibleOccurrenceTransferBatch({
-                  transfers: payload.routes.map(({ source, target }) => {
-                    const inputSource = operationInputCell(operation, source);
-                    const inputTarget = operationInputCell(operation, target);
-                    const outputSource = operationOutputCell(operation, source);
-                    return Object.freeze({
-                      source,
-                      target,
-                      expectedSourceCode: inputSource.code,
-                      expectedTargetCode: inputTarget.code,
-                      sourceReplacementCode: outputSource.code,
-                      sourceReplacementPresentationValue: outputSource.value,
-                    });
-                  }),
-                });
-          return Object.freeze({
-            start: () => transfer?.start(),
-            setProgress: (progress: number) => transfer?.setProgress(progress),
-            commit: () => {
-              transfer?.commit();
-              for (const replacement of replacements) replacement.commit();
-            },
-            rollback: () => undefined,
-            destroy: () => {
-              transfer?.destroy();
-              for (const replacement of replacements) replacement.destroy();
-            },
-          });
+          },
         },
+      ],
+      { signal: context.signal },
+    );
+    await this.#runtime.transferVisibleOccurrences({
+      transfers: payload.routes.map(({ source, target }) => {
+        const inputSource = operationInputCell(operation, source);
+        const inputTarget = operationInputCell(operation, target);
+        const outputSource = operationOutputCell(operation, source);
+        return Object.freeze({
+          source,
+          target,
+          expectedSourceCode: inputSource.code,
+          expectedTargetCode: inputTarget.code,
+          sourceReplacementCode: outputSource.code,
+          sourceReplacementPresentationValue: outputSource.value,
+        });
       }),
-    ];
+      durationSeconds: 0.5,
+      barrier: this.playStates(sourcePositions, "feature2", context.signal),
+      waitForFrame: context.waitForFrame,
+    });
+    for (const position of payload.mainPos)
+      this.replaceFromOperation(operation, position);
   }
 
   update(deltaSeconds: number): void {
@@ -1291,10 +1076,9 @@ export class Game002RoundTarget {
       this.#completionComplete = !isWinAmountBlockingSpin(result.phase);
       return;
     }
-    if (this.#activity === "idle" || this.#activity === "refill-complete")
-      return;
+    if (this.#activity === "refill-complete") return;
     const result = this.#runtime.update(deltaSeconds);
-    this.#transformRunner.update(deltaSeconds);
+    if (this.#activity === "idle") return;
     this.#runtimeCompleted ||= result.completed;
     if (this.#activity === "refill-sweep" && result.completed) {
       const stage = this.activeFallView();

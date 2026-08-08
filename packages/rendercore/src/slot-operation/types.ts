@@ -1,6 +1,5 @@
 import type {
   SlotOperationPlanV2,
-  SlotOperationSnapshot,
   SlotOperationV2,
 } from "@slotclientengine/logiccore";
 
@@ -12,29 +11,25 @@ export type SlotOperationCleanupReason =
 
 export interface SlotOperationHandler<
   Operation extends SlotOperationV2 = SlotOperationV2,
-  Prepared = unknown,
 > {
-  preflight(operation: Operation): void;
-  prepare(operation: Operation): Prepared;
-  start(prepared: Prepared): void;
-  update(
-    prepared: Prepared,
-    deltaSeconds: number,
-  ): { readonly completed: boolean };
-  commit(prepared: Prepared): void;
-  rollback(prepared: Prepared): void;
-  destroy(prepared: Prepared): void;
+  start(
+    operation: Operation,
+    context: SlotOperationExecutionContext,
+  ): Promise<void> | void;
+}
+
+export interface SlotOperationExecutionContext {
+  readonly signal: AbortSignal;
+  waitForFrame(update: (deltaSeconds: number) => boolean): Promise<void>;
+  delay(seconds: number): Promise<void>;
 }
 
 export interface SlotOperationHandlerRegistration<
   Operation extends SlotOperationV2 = SlotOperationV2,
-  Prepared = unknown,
 > {
   readonly kind: Operation["kind"];
   readonly version: Operation["version"];
-  readonly effect: Operation["effect"];
-  readonly requiredCapabilities: ReadonlySet<string>;
-  readonly handler: SlotOperationHandler<Operation, Prepared>;
+  readonly handler: SlotOperationHandler<Operation>;
 }
 
 export interface SlotOperationHandlerRegistry {
@@ -73,11 +68,4 @@ export interface SlotOperationCoordinatorOptions {
   readonly registry: SlotOperationHandlerRegistry;
   cleanup(reason: SlotOperationCleanupReason): void;
   updateRuntime?(deltaSeconds: number): void;
-  assertSnapshot?(
-    expected: SlotOperationSnapshot,
-    operation: Extract<
-      SlotOperationV2,
-      { readonly effect: "scene-landing" | "state-mutation" }
-    >,
-  ): void;
 }

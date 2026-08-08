@@ -10,6 +10,7 @@ import type {
 import type {
   SlotOperationHandler,
   SlotOperationHandlerRegistry,
+  SlotOperationExecutionContext,
 } from "./types.js";
 
 type ProfileCleanupReason =
@@ -25,7 +26,6 @@ interface SlotRoundPresentationCapabilityTarget {
   startInitialSpin(snapshot: SlotRoundOccurrenceSnapshot): void;
   isInitialSpinComplete(): boolean;
   startWin(step: SlotRoundWinStepPlan): void;
-  preflightWin?(step: SlotRoundWinStepPlan): void;
   updateWin(deltaSeconds: number): { readonly completed: boolean };
   startDropdown(step: SlotRoundDropdownStepPlan): void;
   isDropdownComplete(): boolean;
@@ -90,17 +90,6 @@ function register(
   registry.register({
     kind,
     version: 2,
-    effect:
-      kind === "slot:spin"
-        ? "scene-landing"
-        : kind === "slot:win" ||
-            kind === "slot:completion" ||
-            kind === "slot:settled-presentation" ||
-            kind === "slot:dropdown-presentation" ||
-            kind === "slot:refill-presentation"
-          ? "presentation"
-          : "state-mutation",
-    requiredCapabilities: new Set([kind]),
     handler,
   });
 }
@@ -108,7 +97,7 @@ function register(
 function createSpinHandler(
   target: SlotRoundPresentationCapabilityTarget,
 ): SlotOperationHandler {
-  return immediateLifecycle({
+  return frameDrivenHandler({
     start: (operation) => {
       if (operation.effect !== "scene-landing")
         throw new Error("slot:spin must be a scene-landing operation.");
@@ -124,9 +113,7 @@ function createSpinHandler(
 function createWinHandler(
   target: SlotRoundPresentationCapabilityTarget,
 ): SlotOperationHandler {
-  return immediateLifecycle({
-    preflight: (operation) =>
-      target.preflightWin?.(requireStep<SlotRoundWinStepPlan>(operation)),
+  return frameDrivenHandler({
     start: (operation) =>
       target.startWin(requireStep<SlotRoundWinStepPlan>(operation)),
     update: (deltaSeconds) => {
@@ -139,7 +126,7 @@ function createWinHandler(
 function createDropdownHandler(
   target: SlotRoundPresentationCapabilityTarget,
 ): SlotOperationHandler {
-  return immediateLifecycle({
+  return frameDrivenHandler({
     start: (operation) =>
       target.startDropdown(requireStep<SlotRoundDropdownStepPlan>(operation)),
     update: (deltaSeconds) => {
@@ -152,7 +139,7 @@ function createDropdownHandler(
 function createRefillHandler(
   target: SlotRoundPresentationCapabilityTarget,
 ): SlotOperationHandler {
-  return immediateLifecycle({
+  return frameDrivenHandler({
     start: (operation) =>
       target.startRefill(requireStep<SlotRoundRefillStepPlan>(operation)),
     update: (deltaSeconds) => {
@@ -165,17 +152,16 @@ function createRefillHandler(
 function createTransformHandler(
   target: SlotRoundPresentationCapabilityTarget,
 ): SlotOperationHandler {
-  return immediateLifecycle({
-    preflight: () => {
+  return frameDrivenHandler({
+    start: (operation) => {
       if (!target.startSettledTransform || !target.updateSettledTransform)
         throw new Error(
           "Slot round profile target has no settled-transform handler.",
         );
-    },
-    start: (operation) =>
       target.startSettledTransform!(
         requireStep<SlotRoundSettledTransformStepPlan>(operation),
-      ),
+      );
+    },
     update: (deltaSeconds) => {
       target.update(deltaSeconds);
       return target.updateSettledTransform!(deltaSeconds).completed;
@@ -186,7 +172,7 @@ function createTransformHandler(
 function createCompletionHandler(
   target: SlotRoundPresentationCapabilityTarget,
 ): SlotOperationHandler {
-  return immediateLifecycle({
+  return frameDrivenHandler({
     start: () => target.startCompletion?.(),
     update: (deltaSeconds) => {
       target.update(deltaSeconds);
@@ -195,21 +181,18 @@ function createCompletionHandler(
   });
 }
 
-function immediateLifecycle(options: {
-  readonly preflight?: (operation: SlotOperationV2) => void;
+function frameDrivenHandler(options: {
   readonly start: (operation: SlotOperationV2) => void;
   readonly update: (deltaSeconds: number) => boolean;
-}): SlotOperationHandler<SlotOperationV2, SlotOperationV2> {
+}): SlotOperationHandler<SlotOperationV2> {
   return {
-    preflight: (operation) => options.preflight?.(operation),
-    prepare: (operation) => operation,
-    start: (operation) => options.start(operation),
-    update: (_operation, deltaSeconds) => ({
-      completed: options.update(deltaSeconds),
-    }),
-    commit: () => undefined,
-    rollback: () => undefined,
-    destroy: () => undefined,
+    async start(
+      operation: SlotOperationV2,
+      context: SlotOperationExecutionContext,
+    ): Promise<void> {
+      options.start(operation);
+      await context.waitForFrame(options.update);
+    },
   };
 }
 

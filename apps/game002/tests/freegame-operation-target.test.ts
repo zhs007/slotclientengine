@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type {
-  PreparedGridCellVisibleOccurrenceTransferBatch,
-  PreparedVisibleOccurrenceReplacement,
+  SlotOperationExecutionContext,
   SymbolCascadePlayer,
 } from "@slotclientengine/rendercore";
 import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-amount";
@@ -18,77 +17,78 @@ const CODES = Object.freeze({ AF: 10, CN: 11, CO: 12, BN: 13 });
 const POSITION = Object.freeze({ x: 0, y: 0 });
 
 describe("Game002FreeGameOperationTarget", () => {
-  it("awaits trigger playback and cancels pending playback during cleanup", async () => {
+  it("runs trigger as one awaited animation and mutation chain", async () => {
     const fixture = createFixture();
     const payload = { kind: "trigger", positions: [POSITION] } as const;
 
-    fixture.target.preflight(payload);
-    fixture.target.start(payload);
-    expect(fixture.target.update(0.1)).toEqual({ completed: false });
+    const completion = fixture.target.start(payload, fixture.context);
+    expect(fixture.runtime.playbacks).toHaveLength(1);
+    fixture.runtime.resolveAllPlaybacks();
+    await completion;
 
-    fixture.runtime.resolvePlayback();
-    await flushPlayback();
-    expect(fixture.target.update(0.1)).toEqual({ completed: true });
     expect(fixture.runtime.requestVisibleSymbolStates).toHaveBeenCalledWith(
       payload.positions,
       "normal",
       "immediate",
     );
-
-    fixture.target.start(payload);
-    const signal = fixture.runtime.playbacks.at(-1)!.signal;
-    fixture.target.cleanup();
-    expect(signal.aborted).toBe(true);
-    expect(fixture.target.update).toBeDefined();
   });
 
-  it("surfaces rejected and synchronously failed symbol playback", async () => {
-    const fixture = createFixture();
-    const payload = { kind: "trigger", positions: [POSITION] } as const;
+  it("propagates playback rejection and abort", async () => {
+    const failed = createFixture();
+    const failure = failed.target.start(
+      { kind: "trigger", positions: [POSITION] },
+      failed.context,
+    );
+    failed.runtime.rejectPlayback(new Error("playback failed"));
+    await expect(failure).rejects.toThrow("playback failed");
 
-    fixture.target.start(payload);
-    fixture.runtime.rejectPlayback(new Error("playback failed"));
-    await flushPlayback();
-    expect(() => fixture.target.update(0.1)).toThrow("playback failed");
-    fixture.target.cleanup();
-
-    fixture.runtime.playVisibleSymbolStates.mockImplementationOnce(() => {
-      throw new Error("playback did not start");
-    });
-    fixture.target.start(payload);
-    await flushPlayback();
-    expect(() => fixture.target.update(0.1)).toThrow("playback did not start");
-    fixture.target.cleanup();
+    const aborted = createFixture();
+    const completion = aborted.target.start(
+      { kind: "trigger", positions: [POSITION] },
+      aborted.context,
+    );
+    aborted.frames.abort();
+    await expect(completion).rejects.toThrow("playback aborted");
   });
 
-  it("runs AF and CO replacement transactions across awaited phases", async () => {
+  it("animates AF and replaces each affected occurrence locally", async () => {
     const fixture = createFixture();
     const scene = createScene(CODES.CN);
-    fixture.runtime.visibleScene = scene;
-    const af: Game002FreeGameOperationPayload = {
+    const payload: Game002FreeGameOperationPayload = {
       kind: "af",
       af: {
-        positions: [POSITION],
+        positions: [POSITION, { x: 1, y: 0 }],
         addedFreeSpins: 3,
         outputScene: scene,
         outputValues: createValues(3),
       },
     };
 
-    fixture.target.preflight(af);
-    fixture.target.start(af);
-    expect(fixture.target.update(0.1)).toEqual({ completed: false });
-    fixture.runtime.resolvePlayback();
+    const completion = fixture.target.start(payload, fixture.context);
+    fixture.runtime.resolveAllPlaybacks();
     await flushPlayback();
-    expect(fixture.target.update(0.1)).toEqual({ completed: false });
-    expect(fixture.target.update(0.1)).toEqual({ completed: false });
-    fixture.runtime.resolvePlayback();
-    await flushPlayback();
-    expect(fixture.target.update(0.1)).toEqual({ completed: true });
-    expect(fixture.runtime.replacements[0]!.commit).toHaveBeenCalledOnce();
-    fixture.target.cleanup();
+    fixture.runtime.resolveAllPlaybacks();
+    await completion;
 
-    const co: Game002FreeGameOperationPayload = {
+    expect(
+      fixture.runtime.setVisibleSymbolImageStringText,
+    ).toHaveBeenCalledTimes(2);
+    expect(fixture.runtime.replaceVisibleOccurrence).toHaveBeenCalledTimes(2);
+    expect(fixture.runtime.replaceVisibleOccurrence).toHaveBeenNthCalledWith(
+      1,
+      {
+        x: 0,
+        y: 0,
+        expectedCode: CODES.AF,
+        outputCode: CODES.CN,
+        outputPresentationValue: 3,
+      },
+    );
+  });
+
+  it("runs CO feature playback, movement barrier and local replacements", async () => {
+    const fixture = createFixture();
+    const payload: Game002FreeGameOperationPayload = {
       kind: "co",
       co: {
         coPositions: [POSITION],
@@ -102,214 +102,93 @@ describe("Game002FreeGameOperationTarget", () => {
             targetCode: CODES.CO,
           },
         ],
-        outputScene: scene,
+        outputScene: createScene(CODES.CN),
         outputValues: createValues(2),
       },
     };
-    fixture.target.preflight(co);
-    fixture.target.start(co);
-    expect(fixture.target.update(0.1)).toEqual({ completed: false });
+
+    const completion = fixture.target.start(payload, fixture.context);
     fixture.runtime.resolveAllPlaybacks();
     await flushPlayback();
-    expect(fixture.target.update(0.1)).toEqual({ completed: false });
-    expect(fixture.runtime.transfer.start).toHaveBeenCalledOnce();
-    expect(fixture.target.update(0.2)).toEqual({ completed: false });
-    expect(fixture.runtime.transfer.setProgress).toHaveBeenCalledWith(0.4);
     fixture.runtime.resolveAllPlaybacks();
     await flushPlayback();
-    expect(fixture.target.update(0.1)).toEqual({ completed: false });
-    expect(fixture.target.update(0.2)).toEqual({ completed: true });
-    expect(fixture.runtime.transfer.commit).toHaveBeenCalledOnce();
+    fixture.frames.frame(0.5);
+    await completion;
+
+    expect(fixture.runtime.transferVisibleOccurrences).toHaveBeenCalledOnce();
+    expect(fixture.runtime.replaceVisibleOccurrence).toHaveBeenCalledWith({
+      x: 0,
+      y: 0,
+      expectedCode: CODES.CO,
+      outputCode: CODES.CN,
+      outputPresentationValue: 2,
+    });
   });
 
-  it("runs transition, selective spin, win and popup activities", async () => {
+  it("runs transition, spin, win and popup with frame promises", async () => {
     const fixture = createFixture();
     const scene = createScene(CODES.CN);
-    fixture.runtime.visibleScene = scene;
 
-    fixture.target.preflight({ kind: "transition", mode: "FreeGame" });
-    fixture.target.start({ kind: "transition", mode: "FreeGame" });
-    expect(fixture.target.update(0.1)).toEqual({ completed: false });
-    await flushPlayback();
-    expect(fixture.target.update(0.1)).toEqual({ completed: true });
+    await fixture.target.start(
+      { kind: "transition", mode: "FreeGame" },
+      fixture.context,
+    );
     expect(fixture.background.requestMode).toHaveBeenCalledWith("FreeGame");
 
-    fixture.target.start({
-      kind: "spin",
-      spin: {
-        inputScene: scene,
-        inputValues: createValues(null),
-        spinScene: scene,
-        spinValues: createValues(null),
-        respinNumber: 1,
-        remainingFreeSpins: 2,
-        spinPositions: [POSITION],
-        featurePositions: [],
-        outputScene: scene,
-        outputValues: createValues(null),
-      },
-    });
-    expect(fixture.target.update(0.1)).toEqual({ completed: false });
-    fixture.runtime.spinning = false;
-    expect(fixture.target.update(0.1)).toEqual({ completed: true });
-
-    fixture.target.start({ kind: "win", groups: [] });
-    expect(fixture.target.update(0.1)).toEqual({ completed: false });
-    fixture.cascade.completed = true;
-    expect(fixture.target.update(0.1)).toEqual({ completed: true });
-
-    fixture.target.start({ kind: "popup", betAmountRaw: 1, winAmountRaw: 2 });
-    expect(fixture.target.update(0.1)).toEqual({ completed: false });
-    fixture.winAmount.complete = true;
-    expect(fixture.target.update(0.1)).toEqual({ completed: true });
-  });
-
-  it("preflights required transition and symbol capabilities", () => {
-    const fixture = createFixture();
-    const missingTransition = createFixture({ transitionSupport: false });
-
-    expect(() =>
-      missingTransition.target.preflight({
-        kind: "transition",
-        mode: "FreeGame",
-      }),
-    ).toThrow(/mode transition support is missing/);
-    fixture.runtime.config.symbolAnimationCapabilities.AF = [];
-    expect(() =>
-      fixture.target.preflight({
-        kind: "af",
-        af: {
-          positions: [POSITION],
-          addedFreeSpins: 1,
-          outputScene: createScene(CODES.CN),
-          outputValues: createValues(1),
-        },
-      }),
-    ).toThrow(/symbol AF has no "feature" state/);
-
-    const missingRequestMode = createFixture();
-    missingRequestMode.background.requestMode = undefined;
-    expect(() =>
-      missingRequestMode.target.preflight({
-        kind: "transition",
-        mode: "FreeGame",
-      }),
-    ).toThrow(/mode transition support is missing/);
-
-    for (const [symbol, state] of [
-      ["CO", "feature"],
-      ["WL", "feature1"],
-      ["WL", "feature2"],
-      ["CN", "feature1"],
-      ["CN", "feature2"],
-    ] as const) {
-      const capabilityFixture = createFixture();
-      capabilityFixture.runtime.config.symbolAnimationCapabilities[symbol] =
-        capabilityFixture.runtime.config.symbolAnimationCapabilities[
-          symbol
-        ].filter((candidate) => candidate !== state);
-      expect(() =>
-        capabilityFixture.target.preflight({
-          kind: "co",
-          co: {
-            coPositions: [POSITION],
-            sourcePositions: [{ x: 1, y: 0 }],
-            transfers: [],
-            outputScene: createScene(CODES.CN),
-            outputValues: createValues(1),
-          },
-        }),
-      ).toThrow(new RegExp(`symbol ${symbol} has no "${state}" state`));
-    }
-  });
-
-  it("rejects starting a second operation while one is active", () => {
-    const fixture = createFixture();
-    const payload = { kind: "trigger", positions: [POSITION] } as const;
-    expect(() => fixture.target.update(0.1)).toThrow(/payload is missing/);
-    fixture.target.start(payload);
-    expect(() => fixture.target.start(payload)).toThrow(/already active/);
-    fixture.target.cleanup();
-  });
-
-  it("destroys partially prepared AF and CO resources", async () => {
-    const afFixture = createFixture();
-    const firstReplacement = {
-      commit: vi.fn(),
-      destroy: vi.fn(),
-    } as unknown as PreparedVisibleOccurrenceReplacement;
-    afFixture.runtime.prepareVisibleOccurrenceReplacement
-      .mockReturnValueOnce(firstReplacement)
-      .mockImplementationOnce(() => {
-        throw new Error("AF prepare failed");
-      });
-    afFixture.target.start({
-      kind: "af",
-      af: {
-        positions: [POSITION, { x: 1, y: 0 }],
-        addedFreeSpins: 1,
-        outputScene: createScene(CODES.CN),
-        outputValues: createValues(1),
-      },
-    });
-    afFixture.runtime.resolvePlayback();
-    await flushPlayback();
-    afFixture.target.update(0.1);
-    afFixture.runtime.resolvePlayback();
-    await flushPlayback();
-    expect(() => afFixture.target.update(0.1)).toThrow("AF prepare failed");
-    expect(firstReplacement.destroy).toHaveBeenCalledOnce();
-    afFixture.target.cleanup();
-
-    const coFixture = createFixture();
-    coFixture.runtime.prepareVisibleOccurrenceTransferBatch.mockImplementationOnce(
-      () => {
-        throw new Error("CO transfer prepare failed");
-      },
-    );
-    coFixture.target.start({
-      kind: "co",
-      co: {
-        coPositions: [POSITION],
-        sourcePositions: [{ x: 1, y: 0 }],
-        transfers: [],
-        outputScene: createScene(CODES.CN),
-        outputValues: createValues(1),
-      },
-    });
-    coFixture.runtime.resolveAllPlaybacks();
-    await flushPlayback();
-    expect(() => coFixture.target.update(0.1)).toThrow(
-      "CO transfer prepare failed",
-    );
-    expect(
-      coFixture.runtime.replacements.at(-1)!.destroy,
-    ).toHaveBeenCalledOnce();
-    coFixture.target.cleanup();
-  });
-
-  it("surfaces asynchronous transition failure and accepts no-op preflight kinds", async () => {
-    const fixture = createFixture();
-    vi.mocked(fixture.background.prepareModeTransition!).mockRejectedValueOnce(
-      "transition failed",
-    );
-    fixture.target.start({ kind: "transition", mode: "FreeGame" });
-    await flushPlayback();
-    expect(() => fixture.target.update(0.1)).toThrow("transition failed");
-    fixture.target.cleanup();
-
-    for (const payload of [
+    const spin = fixture.target.start(
       {
         kind: "spin",
-        spin: {} as never,
+        spin: {
+          inputScene: scene,
+          inputValues: createValues(null),
+          spinScene: scene,
+          spinValues: createValues(null),
+          respinNumber: 1,
+          remainingFreeSpins: 2,
+          spinPositions: [POSITION],
+          featurePositions: [],
+          outputScene: scene,
+          outputValues: createValues(null),
+        },
       },
+      fixture.context,
+    );
+    fixture.runtime.spinning = false;
+    fixture.frames.frame(0.1);
+    await spin;
+
+    const win = fixture.target.start(
       { kind: "win", groups: [] },
-      { kind: "popup", betAmountRaw: 1, winAmountRaw: 1 },
-    ] as const) {
-      expect(() =>
-        fixture.target.preflight(payload as Game002FreeGameOperationPayload),
-      ).not.toThrow();
-    }
+      fixture.context,
+    );
+    fixture.cascade.completed = true;
+    fixture.frames.frame(0.1);
+    await win;
+
+    const popup = fixture.target.start(
+      { kind: "popup", betAmountRaw: 1, winAmountRaw: 2 },
+      fixture.context,
+    );
+    fixture.winAmount.complete = true;
+    fixture.frames.frame(0.1);
+    await popup;
+  });
+
+  it("checks transition support only when that operation executes", async () => {
+    const fixture = createFixture({ transitionSupport: false });
+    await expect(
+      fixture.target.start(
+        { kind: "transition", mode: "FreeGame" },
+        fixture.context,
+      ),
+    ).rejects.toThrow(/mode transition support is missing/);
+  });
+
+  it("cleans active presentation owners without operation destroy hooks", () => {
+    const fixture = createFixture();
+    fixture.target.cleanup();
+    expect(fixture.cascade.clear).toHaveBeenCalledOnce();
+    expect(fixture.winAmount.dismissImmediately).toHaveBeenCalledOnce();
   });
 });
 
@@ -338,6 +217,7 @@ function createFixture(options: { transitionSupport?: boolean } = {}) {
     requestMode:
       options.transitionSupport === false ? undefined : vi.fn(async () => {}),
   };
+  const frames = new TestFrameContext();
   const target = new Game002FreeGameOperationTarget({
     runtime: runtime as unknown as Game002ReelRuntime,
     cascadePlayer: cascade as unknown as SymbolCascadePlayer,
@@ -345,48 +225,73 @@ function createFixture(options: { transitionSupport?: boolean } = {}) {
     backgroundPlayer: background as Game002BackgroundPlayer,
     codes: CODES,
   });
-  return { target, runtime, cascade, winAmount, background };
+  return {
+    target,
+    runtime,
+    cascade,
+    winAmount,
+    background,
+    frames,
+    context: frames.context,
+  };
+}
+
+class TestFrameContext {
+  readonly #abort = new AbortController();
+  readonly #waiters: Array<{
+    update: (deltaSeconds: number) => boolean;
+    resolve: () => void;
+    reject: (error: Error) => void;
+  }> = [];
+  readonly context: SlotOperationExecutionContext = {
+    signal: this.#abort.signal,
+    waitForFrame: (update) =>
+      new Promise<void>((resolve, reject) => {
+        this.#waiters.push({ update, resolve, reject });
+      }),
+    delay: async () => undefined,
+  };
+
+  frame(deltaSeconds: number): void {
+    for (const waiter of this.#waiters.splice(0)) {
+      if (waiter.update(deltaSeconds)) waiter.resolve();
+      else this.#waiters.push(waiter);
+    }
+  }
+
+  abort(): void {
+    this.#abort.abort();
+    for (const waiter of this.#waiters.splice(0))
+      waiter.reject(new Error("frame wait aborted"));
+  }
 }
 
 class FakeRuntime {
-  config = {
-    symbolAnimationCapabilities: {
-      WL: ["win", "feature1", "feature2"],
-      AF: ["feature", "change"],
-      CO: ["feature"],
-      CN: ["feature1", "feature2"],
-    },
-  };
-  visibleScene = createScene(CODES.CN);
   spinning = false;
   playbacks: Array<{
     signal: AbortSignal;
     resolve: () => void;
     reject: (error: Error) => void;
   }> = [];
-  replacements: PreparedVisibleOccurrenceReplacement[] = [];
-  transfer = createTransfer();
-  update = vi.fn();
   requestVisibleSymbolStates = vi.fn();
   setVisibleSymbolImageStringText = vi.fn();
+  replaceVisibleOccurrence = vi.fn();
   startSelectiveSpin = vi.fn(() => {
     this.spinning = true;
     return {};
   });
   isSpinning = vi.fn(() => this.spinning);
-  getVisualSnapshot = vi.fn(() => ({
-    visible: true,
-    visibleScene: this.visibleScene,
-  }));
-  prepareVisibleOccurrenceReplacement = vi.fn(() => {
-    const replacement = {
-      commit: vi.fn(),
-      destroy: vi.fn(),
-    } as unknown as PreparedVisibleOccurrenceReplacement;
-    this.replacements.push(replacement);
-    return replacement;
-  });
-  prepareVisibleOccurrenceTransferBatch = vi.fn(() => this.transfer);
+  transferVisibleOccurrences = vi.fn(
+    async (options: {
+      barrier?: Promise<void>;
+      waitForFrame: (
+        update: (deltaSeconds: number) => boolean,
+      ) => Promise<void>;
+    }) => {
+      await options.barrier;
+      await options.waitForFrame(() => true);
+    },
+  );
   playVisibleSymbolStates = vi.fn(
     (
       _positions: readonly { readonly x: number; readonly y: number }[],
@@ -411,47 +316,25 @@ class FakeRuntime {
         options: Readonly<{ completion: string }>;
       }>[],
       options?: Readonly<{ signal?: AbortSignal }>,
-    ) => {
-      const started: Promise<void>[] = [];
-      try {
-        for (const request of requests) {
-          const playback = this.playVisibleSymbolStates(
-            request.positions,
-            request.state,
-            { ...request.options, signal: options?.signal },
-          );
-          void playback.catch(() => undefined);
-          started.push(playback);
-        }
-      } catch (error) {
-        return Promise.reject(error);
-      }
-      return Promise.all(started).then(() => undefined);
-    },
+    ) =>
+      Promise.all(
+        requests.map((request) =>
+          this.playVisibleSymbolStates(request.positions, request.state, {
+            ...request.options,
+            signal: options?.signal,
+          }),
+        ),
+      ).then(() => undefined),
   );
 
-  resolvePlayback(): void {
-    this.playbacks.shift()?.resolve();
-  }
-
   resolveAllPlaybacks(): void {
-    for (const playback of this.playbacks.splice(0)) {
+    for (const playback of this.playbacks.splice(0))
       if (!playback.signal.aborted) playback.resolve();
-    }
   }
 
   rejectPlayback(error: Error): void {
     this.playbacks.pop()!.reject(error);
   }
-}
-
-function createTransfer(): PreparedGridCellVisibleOccurrenceTransferBatch {
-  return {
-    start: vi.fn(),
-    setProgress: vi.fn(),
-    commit: vi.fn(),
-    destroy: vi.fn(),
-  } as unknown as PreparedGridCellVisibleOccurrenceTransferBatch;
 }
 
 function createScene(code: number): readonly (readonly number[])[] {

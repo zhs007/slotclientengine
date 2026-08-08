@@ -17,20 +17,22 @@
 - 所有配置驱动 round 必须在任何画面 mutation 前完整编译。component role、remove/drop/value/sequential companion policy 只能来自 strict versioned profile，并按 active symbol package 大小写精确校验。
 - settled transform 的跨格 relocation 必须显式保存 source occurrence identity、
   overwritten target 与 source replacement；release-only win positions 只加入 holes
-  和 release IDs，不得伪造金额组。grid-cell transfer 由 rendercore 以整批
-  prepare/start/commit/rollback/destroy transaction 承担。
+  和 release IDs，不得伪造金额组。grid-cell transfer 的租约、临时 display 与回池由
+  rendercore 内部拥有，对 app 只暴露一次异步调用；Promise settle 或 abort 后必须释放。
 - relocation 输出 occurrence 必须按不可变 input occurrence 定位槽位，不得按已经
   被前序 target 改写的 output id 再查找；source/target 坐标遍历顺序不能改变结果。
 - `packages/rendercore` 的实例级 operation registry/coordinator 是 standard/grid-cell、
-  base/cascade 的共享编排入口。必须在 next-spin cleanup 与首次 mutation 前预检完整 plan；
-  handler 按 prepare/start/update/commit/rollback/destroy 生命周期执行，不使用进程级 registry、
-  kind alias 或首项 fallback。
-- registry 必须精确注册 kind/version/effect；scene landing 与 state mutation commit 后校验
-  output snapshot，presentation 不读取或提交不存在的 output。
+  base/cascade 的共享编排入口。coordinator 直接接受 logiccore 已编译、已验证的 immutable plan，
+  精确按 kind/version 调用单一异步 `start`；handler 可在调用链中等待动画、帧或延迟，不再拥有
+  preflight/prepare/update/commit/rollback/destroy 生命周期，也不使用进程级 registry、kind alias
+  或首项 fallback。
+- render 只在 mutation 即将发生时检查当前 operation 涉及的坐标与 input/output continuity，
+  不重新验证完整 plan 或全局 output snapshot。Promise 成功后推进下一 operation；失败后立即
+  fail-stop 并取消 pending playback，不倒放已经完成的动画或 mutation。
 - settled 后、中奖前的业务转换必须由 logiccore 的中性 immutable transform step
-  和 rendercore 的 capability phase 显式表达；共享层只校验 occurrence
-  code/value continuity 与 prepare/commit/rollback，不认识业务 symbol、component
-  或动画名。没有 transform 的 consumer trace 保持不变。
+  和 app-owned 异步调用链显式表达；每次 mutation 只校验受影响 occurrence 的 code/value
+  continuity，共享层不认识业务 symbol、component 或动画名。没有 transform 的 consumer
+  trace 保持不变。
 - symbol package 到 reel registry 的 catalog/value-controller 适配属于 rendercore；
   game app 不从 package bytes 重建 asset 表。完整 package runtime 必须拥有唯一 root/reel、manifest
   placement/order 与 overlay attachment；确实只消费 layout/background/popup 且不需要 package main reel 的
@@ -38,6 +40,10 @@
   或 popup lifecycle。需要 mode transition 时，surface 必须委托 package runtime 的
   prepare/request/event/switch/settle 状态机并公开独立 transition container。
 - 游戏 app 只保留业务 component/value/result resolver、formatter、layout、anticipation 和 typed extension；不得复制 Pixi、Spine、reel、cascade 或 popup 状态机。
+- shared package 测试必须使用包内自包含的最小数据验证 parser、binding、player 和 lifecycle
+  合同，不得读取任一游戏的 `assets/` 美术交付。只校验当前 Gamelayout 文件、bytes、
+  manifest/map 闭包或动画清单的测试不属于 shared package；美术交付作为 Gamelayout
+  权威输入，由实际 loading/runtime 消费边界按引用解析并显式失败。
 
 ## Reel 与 server 数据边界
 

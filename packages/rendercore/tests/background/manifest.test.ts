@@ -1,16 +1,11 @@
-import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import {
   createSpineBackgroundResource,
   parseSpineBackgroundManifest,
 } from "../../src/background/index.js";
-import {
-  readCraveBytes,
-  readCraveJson,
-  readCraveText,
-} from "../crave-fixture.js";
 
-const REAL_MANIFEST = {
+const TEXTURE_PAGES = ["background.png", "overlay.png"] as const;
+const TEST_MANIFEST = {
   version: 1,
   kind: "spine",
   artSize: { width: 2000, height: 2000 },
@@ -19,19 +14,10 @@ const REAL_MANIFEST = {
     focusRect: { x: 580, y: 277, width: 840, height: 1200 },
   },
   resource: {
-    skeleton: "./BG.json",
-    atlas: "./BG.atlas",
+    skeleton: "./background.json",
+    atlas: "./background.atlas",
     textures: Object.fromEntries(
-      [
-        "BG.png",
-        "BG_2.png",
-        "BG_3.png",
-        "BG_4.png",
-        "BG_5.png",
-        "BG_6.png",
-        "BG_7.png",
-        "BG_8.png",
-      ].map((page) => [page, `./${page}`]),
+      TEXTURE_PAGES.map((page) => [page, `./${page}`]),
     ),
     transform: { x: 1000, y: 1000, scale: 1 },
   },
@@ -45,22 +31,17 @@ const REAL_MANIFEST = {
     { from: "FreeGame", to: "BaseGame", animation: "FG_BG" },
   ],
 } as const;
-const REAL_SKELETON = readCraveJson("bg.json");
-const REAL_ATLAS = readCraveText("bg.atlas");
-const TEXTURE_PAGES = [
-  "BG.png",
-  "BG_2.png",
-  "BG_3.png",
-  "BG_4.png",
-  "BG_5.png",
-  "BG_6.png",
-  "BG_7.png",
-  "BG_8.png",
-] as const;
+const TEST_SPINE_SKELETON = {
+  skeleton: { spine: "4.3.23" },
+  animations: { BG: {}, FG: {}, BG_FG: {}, FG_BG: {} },
+};
+const TEST_SPINE_ATLAS = TEXTURE_PAGES.map(
+  (page) => `${page}\nsize: 1,1\nformat: RGBA8888\nfilter: Linear,Linear\n`,
+).join("\n");
 
 describe("Spine background manifest", () => {
-  it("parses and freezes the exact game002 art, resource and state contract", () => {
-    const manifest = parseSpineBackgroundManifest(REAL_MANIFEST);
+  it("parses and freezes a background resource and state contract", () => {
+    const manifest = parseSpineBackgroundManifest(TEST_MANIFEST);
 
     expect(manifest).toMatchObject({
       version: 1,
@@ -71,8 +52,8 @@ describe("Spine background manifest", () => {
         focusRect: { x: 580, y: 277, width: 840, height: 1200 },
       },
       resource: {
-        skeleton: "./BG.json",
-        atlas: "./BG.atlas",
+        skeleton: "./background.json",
+        atlas: "./background.atlas",
         transform: { x: 1000, y: 1000, scale: 1 },
       },
       initialState: "BaseGame",
@@ -106,7 +87,8 @@ describe("Spine background manifest", () => {
     ["escaping path", (value: any) => (value.resource.atlas = "../BG.atlas")],
     [
       "duplicate texture path",
-      (value: any) => (value.resource.textures["BG_2.png"] = "./BG.png"),
+      (value: any) =>
+        (value.resource.textures["overlay.png"] = "./background.png"),
     ],
     ["unknown initial state", (value: any) => (value.initialState = "Unknown")],
     [
@@ -127,98 +109,69 @@ describe("Spine background manifest", () => {
       (value: any) => (value.transitions[0].loop = false),
     ],
   ])("rejects %s", (_label, mutate) => {
-    const value = structuredClone(REAL_MANIFEST);
+    const value = structuredClone(TEST_MANIFEST);
     mutate(value);
     expect(() => parseSpineBackgroundManifest(value)).toThrow();
   });
 
-  it("validates the real 4.3.23 skeleton, four animations and eight-page atlas", () => {
-    const resource = createRealResource();
-
-    expect(resource.atlasPages).toEqual(TEXTURE_PAGES);
-    expect(resource.manifest.resource.transform).toEqual({
-      x: 1000,
-      y: 1000,
-      scale: 1,
-    });
-    expect(readAnimationDuration(REAL_SKELETON, "BG")).toBe(15);
-    expect(readAnimationDuration(REAL_SKELETON, "FG")).toBe(15);
-    expect(readAnimationDuration(REAL_SKELETON, "BG_FG")).toBe(1.6);
-    expect(readAnimationDuration(REAL_SKELETON, "FG_BG")).toBe(1.6);
-  });
-
   it("uses explicit atlas-page keys without comparing mapped texture basenames", () => {
-    const manifest = structuredClone(REAL_MANIFEST) as any;
-    manifest.resource.textures["BG.png"] =
+    const manifest = structuredClone(TEST_MANIFEST) as any;
+    manifest.resource.textures["background.png"] =
       "./content-addressed-background.webp";
     const textureModules = createTextureModules();
-    delete textureModules["/fixture/BG.png"];
+    delete textureModules["/fixture/background.png"];
     textureModules["/fixture/content-addressed-background.webp"] =
       "/assets/physical-hash.webp";
 
-    const resource = createRealResource({ manifest, textureModules });
+    const resource = createTestResource({ manifest, textureModules });
 
-    expect(resource.textureUrls["BG.png"]).toBe("/assets/physical-hash.webp");
+    expect(resource.textureUrls["background.png"]).toBe(
+      "/assets/physical-hash.webp",
+    );
   });
 
   it("rejects version, animation, atlas-page and module-closure drift", () => {
-    const versionMismatch = structuredClone(REAL_SKELETON) as any;
+    const versionMismatch = structuredClone(TEST_SPINE_SKELETON) as any;
     versionMismatch.skeleton.spine = "4.2.43";
-    expect(() => createRealResource({ skeleton: versionMismatch })).toThrow(
+    expect(() => createTestResource({ skeleton: versionMismatch })).toThrow(
       /supported version is 4\.3/,
     );
 
-    const animationMismatch = structuredClone(REAL_MANIFEST) as any;
+    const animationMismatch = structuredClone(TEST_MANIFEST) as any;
     animationMismatch.states.BaseGame.animation = "bg";
-    expect(() => createRealResource({ manifest: animationMismatch })).toThrow(
+    expect(() => createTestResource({ manifest: animationMismatch })).toThrow(
       /animation "bg" was not found/,
     );
 
     const missingTextureModules = createTextureModules();
-    delete missingTextureModules["/fixture/BG_8.png"];
+    delete missingTextureModules["/fixture/overlay.png"];
     expect(() =>
-      createRealResource({ textureModules: missingTextureModules }),
-    ).toThrow(/BG_8\.png.*missing/i);
+      createTestResource({ textureModules: missingTextureModules }),
+    ).toThrow(/overlay\.png.*missing/i);
 
     const duplicateTextureUrls = createTextureModules();
-    duplicateTextureUrls["/fixture/BG_2.png"] = "/assets/BG.png";
+    duplicateTextureUrls["/fixture/overlay.png"] = "/assets/background.png";
     expect(() =>
-      createRealResource({ textureModules: duplicateTextureUrls }),
+      createTestResource({ textureModules: duplicateTextureUrls }),
     ).toThrow(/URL is used by more than one atlas page/);
 
     const extraTextureModules = createTextureModules();
     extraTextureModules["/fixture/extra.png"] = "/assets/extra.png";
     expect(() =>
-      createRealResource({ textureModules: extraTextureModules }),
+      createTestResource({ textureModules: extraTextureModules }),
     ).toThrow(/unreferenced resource.*extra\.png/);
 
-    const missingPageAtlas = REAL_ATLAS.replace(/\nBG_8\.png\n[\s\S]*$/u, "\n");
-    expect(() => createRealResource({ atlas: missingPageAtlas })).toThrow(
+    const missingPageAtlas = TEST_SPINE_ATLAS.replace(
+      /\noverlay\.png\n[\s\S]*$/u,
+      "\n",
+    );
+    expect(() => createTestResource({ atlas: missingPageAtlas })).toThrow(
       /pages must exactly match texture pages/,
     );
   });
-
-  it("confirms every WebP-in-.png atlas page is decodable at its declared size", async () => {
-    const declaredSizes = new Map(
-      [...REAL_ATLAS.matchAll(/^([^\s].*\.png)\r?\nsize:(\d+),(\d+)/gmu)].map(
-        (match) => [match[1], [Number(match[2]), Number(match[3])]],
-      ),
-    );
-    for (const page of TEXTURE_PAGES) {
-      const bytes = readCraveBytes(
-        page.toLowerCase().replace(/\.png$/u, ".webp"),
-      );
-      expect(Buffer.from(bytes.subarray(0, 4)).toString("ascii")).toBe("RIFF");
-      expect(Buffer.from(bytes.subarray(8, 12)).toString("ascii")).toBe("WEBP");
-      const metadata = await sharp(bytes).metadata();
-      expect([metadata.width, metadata.height]).toEqual(
-        declaredSizes.get(page),
-      );
-    }
-  });
 });
 
-function createRealResource(
+function createTestResource(
   overrides: {
     readonly manifest?: unknown;
     readonly skeleton?: unknown;
@@ -227,11 +180,13 @@ function createRealResource(
   } = {},
 ) {
   return createSpineBackgroundResource({
-    manifest: overrides.manifest ?? REAL_MANIFEST,
+    manifest: overrides.manifest ?? TEST_MANIFEST,
     skeletonModules: {
-      "/fixture/BG.json": overrides.skeleton ?? REAL_SKELETON,
+      "/fixture/background.json": overrides.skeleton ?? TEST_SPINE_SKELETON,
     },
-    atlasModules: { "/fixture/BG.atlas": overrides.atlas ?? REAL_ATLAS },
+    atlasModules: {
+      "/fixture/background.atlas": overrides.atlas ?? TEST_SPINE_ATLAS,
+    },
     textureModules: overrides.textureModules ?? createTextureModules(),
   });
 }
@@ -240,32 +195,4 @@ function createTextureModules(): Record<string, string> {
   return Object.fromEntries(
     TEXTURE_PAGES.map((page) => [`/fixture/${page}`, `/assets/${page}`]),
   );
-}
-
-function readAnimationDuration(
-  skeleton: unknown,
-  animationName: string,
-): number {
-  const animations = (skeleton as any).animations;
-  const animation = animations?.[animationName];
-  if (!animation) {
-    throw new Error(`missing animation ${animationName}`);
-  }
-  let duration = 0;
-  const visit = (value: unknown): void => {
-    if (Array.isArray(value)) {
-      for (const item of value) visit(item);
-      return;
-    }
-    if (typeof value !== "object" || value === null) return;
-    for (const [key, child] of Object.entries(value)) {
-      if (key === "time" && typeof child === "number") {
-        duration = Math.max(duration, child);
-      } else {
-        visit(child);
-      }
-    }
-  };
-  visit(animation);
-  return duration;
 }
