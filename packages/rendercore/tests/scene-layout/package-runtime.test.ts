@@ -883,6 +883,47 @@ describe("scene layout package runtime", () => {
     }
   });
 
+  it("does not advance an injected main reel when the host owns its update loop", async () => {
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    try {
+      const resource = await createSceneLayoutPackageResource({
+        manifest: layoutManifest("grid-cell"),
+        files: files(),
+      });
+      const runtime = createSceneLayoutPackageRuntime({
+        resource,
+        hostUpdatesMainReel: true,
+      });
+      await runtime.init({
+        reels: {
+          main: {
+            scene: [
+              [1, 1],
+              [0, 0],
+            ],
+            localPhaseYs: [0, 0],
+          },
+        },
+      });
+      const reel = runtime.getReelPresentation("main");
+      expect(reel).toBeInstanceOf(RenderGridCellReelSet);
+      if (!(reel instanceof RenderGridCellReelSet))
+        throw new Error("Expected a grid-cell main reel.");
+      const update = vi.spyOn(reel, "update");
+
+      runtime.update(1 / 60);
+
+      expect(update).not.toHaveBeenCalled();
+      runtime.destroy();
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
+  });
+
   it("owns generic game-mode snapshots and rejects popup fallbacks", async () => {
     const load = vi
       .spyOn(Assets, "load")

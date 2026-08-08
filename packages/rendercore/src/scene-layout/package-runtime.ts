@@ -531,7 +531,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   update(deltaSeconds: number): void {
     this.assertReady();
     this.#layout.update(deltaSeconds);
-    if (this.#reel) {
+    if (this.#reel && !this.#hostUpdatesMainReel) {
       const geometry = this.#manifest.reels.main;
       if (this.#reel instanceof RenderGridCellReelSet) {
         const result = this.#reel.update(deltaSeconds);
