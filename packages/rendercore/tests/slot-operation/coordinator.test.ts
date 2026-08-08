@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createBuiltinSlotOperationDefinitionsV2,
   finalizeSlotOperationPlanV2,
@@ -12,41 +12,40 @@ import {
 } from "../../src/slot-operation/index.js";
 
 describe("slot operation coordinator", () => {
-  it("preflights the complete plan before cleanup and executes transaction lifecycle", async () => {
+  it("executes one async start chain and advances frame waits", async () => {
     const events: string[] = [];
     const registry = createSlotOperationHandlerRegistry();
     registry.register({
       kind: "slot:scene-landing",
       version: 2,
-      effect: "scene-landing" as const,
-      requiredCapabilities: new Set(["slot:scene-landing"]),
-      handler: handler(events),
+      handler: {
+        async start(_operation, context) {
+          events.push("start");
+          await context.waitForFrame((deltaSeconds) => {
+            events.push(`frame:${deltaSeconds}`);
+            return true;
+          });
+          events.push("complete");
+        },
+      },
     });
     const coordinator = createSlotOperationCoordinator({
       registry,
       cleanup: (reason) => events.push(`cleanup:${reason}`),
-      assertSnapshot: () => events.push("assert"),
+      updateRuntime: () => events.push("runtime"),
     });
 
     const completion = coordinator.start(plan());
-    expect(events).toEqual([
-      "preflight",
-      "cleanup:next-spin",
-      "prepare",
-      "start",
-    ]);
+    expect(events).toEqual(["cleanup:next-spin", "start"]);
     coordinator.update(0.016);
     await completion;
 
     expect(events).toEqual([
-      "preflight",
       "cleanup:next-spin",
-      "prepare",
       "start",
-      "update",
-      "commit",
-      "assert",
-      "destroy",
+      "runtime",
+      "frame:0.016",
+      "complete",
     ]);
     expect(coordinator.getSnapshot()).toMatchObject({
       phase: "complete",
@@ -54,85 +53,62 @@ describe("slot operation coordinator", () => {
     });
   });
 
-  it("rolls back and destroys the active operation when update fails", async () => {
-    const events: string[] = [];
+  it("supports ticker-driven delays without a handler update method", async () => {
     const registry = createSlotOperationHandlerRegistry();
+    const completed = vi.fn();
     registry.register({
       kind: "slot:scene-landing",
       version: 2,
-      effect: "scene-landing",
-      requiredCapabilities: new Set(["slot:scene-landing"]),
-      handler: handler(events, true),
-    });
-    const coordinator = createSlotOperationCoordinator({
-      registry,
-      cleanup: (reason) => events.push(`cleanup:${reason}`),
-    });
-
-    const completion = coordinator.start(plan());
-    coordinator.update(0.016);
-
-    await expect(completion).rejects.toThrow("update failed");
-    expect(events.slice(-3)).toEqual([
-      "rollback",
-      "destroy",
-      "cleanup:execution-failure",
-    ]);
-    expect(coordinator.getSnapshot().phase).toBe("fatal");
-  });
-
-  it("rejects missing handlers before next-spin cleanup", async () => {
-    const events: string[] = [];
-    const coordinator = createSlotOperationCoordinator({
-      registry: createSlotOperationHandlerRegistry(),
-      cleanup: (reason) => events.push(reason),
-    });
-
-    await expect(coordinator.start(plan())).rejects.toThrow(
-      /Missing slot operation handler/,
-    );
-    expect(events).toEqual([]);
-  });
-
-  it("enters fatal cleanup when prepare fails after next-spin cleanup", async () => {
-    const events: string[] = [];
-    const registry = createSlotOperationHandlerRegistry();
-    registry.register({
-      kind: "slot:scene-landing",
-      version: 2,
-      effect: "scene-landing",
-      requiredCapabilities: new Set(["slot:scene-landing"]),
       handler: {
-        ...handler(events),
-        prepare: () => {
-          throw new Error("prepare failed");
+        async start(_operation, context) {
+          await context.delay(0.1);
+          completed();
         },
       },
     });
     const coordinator = createSlotOperationCoordinator({
       registry,
-      cleanup: (reason) => events.push(`cleanup:${reason}`),
+      cleanup: () => undefined,
     });
 
-    await expect(coordinator.start(plan())).rejects.toThrow("prepare failed");
-    expect(events).toEqual([
-      "preflight",
-      "cleanup:next-spin",
-      "cleanup:execution-failure",
-    ]);
-    expect(coordinator.getSnapshot().phase).toBe("fatal");
+    const completion = coordinator.start(plan());
+    coordinator.update(0.04);
+    coordinator.update(0.04);
+    expect(completed).not.toHaveBeenCalled();
+    coordinator.update(0.03);
+    await completion;
+    expect(completed).toHaveBeenCalledOnce();
   });
 
-  it("normalizes non-Error handler failures", async () => {
+  it("fails stop when an async handler rejects", async () => {
+    const events: string[] = [];
     const registry = createSlotOperationHandlerRegistry();
     registry.register({
       kind: "slot:scene-landing",
       version: 2,
-      effect: "scene-landing",
-      requiredCapabilities: new Set(["slot:scene-landing"]),
       handler: {
-        ...handler([]),
-        prepare: () => {
+        start: async () => {
+          throw new Error("start failed");
+        },
+      },
+    });
+    const coordinator = createSlotOperationCoordinator({
+      registry,
+      cleanup: (reason) => events.push(reason),
+    });
+
+    await expect(coordinator.start(plan())).rejects.toThrow("start failed");
+    expect(events).toEqual(["next-spin", "execution-failure"]);
+    expect(coordinator.getSnapshot().phase).toBe("fatal");
+  });
+
+  it("normalizes non-Error synchronous handler failures", async () => {
+    const registry = createSlotOperationHandlerRegistry();
+    registry.register({
+      kind: "slot:scene-landing",
+      version: 2,
+      handler: {
+        start: () => {
           throw "string failure";
         },
       },
@@ -144,47 +120,41 @@ describe("slot operation coordinator", () => {
     await expect(coordinator.start(plan())).rejects.toThrow("string failure");
   });
 
-  it("rejects capability mismatches and mutable plans before cleanup", async () => {
+  it("treats missing renderer wiring as an execution failure", async () => {
+    const events: string[] = [];
+    const coordinator = createSlotOperationCoordinator({
+      registry: createSlotOperationHandlerRegistry(),
+      cleanup: (reason) => events.push(reason),
+    });
+
+    await expect(coordinator.start(plan())).rejects.toThrow(
+      /Missing slot operation handler/,
+    );
+    expect(events).toEqual(["next-spin", "execution-failure"]);
+  });
+
+  it("aborts an active async chain on cleanup", async () => {
     const registry = createSlotOperationHandlerRegistry();
+    let signal: AbortSignal | null = null;
     registry.register({
       kind: "slot:scene-landing",
       version: 2,
-      effect: "scene-landing",
-      requiredCapabilities: new Set(),
-      handler: handler([]),
+      handler: {
+        async start(_operation, context) {
+          signal = context.signal;
+          await context.waitForFrame(() => false);
+        },
+      },
     });
     const coordinator = createSlotOperationCoordinator({
       registry,
       cleanup: () => undefined,
     });
-    await expect(coordinator.start(plan())).rejects.toThrow(
-      /missing required capability/,
-    );
-    await expect(coordinator.start({ ...plan() })).rejects.toThrow(
-      /immutable V2 plan/,
-    );
-  });
-
-  it("interrupts active prepared state exactly once", async () => {
-    const events: string[] = [];
-    const registry = createSlotOperationHandlerRegistry();
-    registry.register({
-      kind: "slot:scene-landing",
-      version: 2,
-      effect: "scene-landing",
-      requiredCapabilities: new Set(["slot:scene-landing"]),
-      handler: { ...handler(events), update: () => ({ completed: false }) },
-    });
-    const coordinator = createSlotOperationCoordinator({
-      registry,
-      cleanup: (reason) => events.push(`cleanup:${reason}`),
-    });
     const completion = coordinator.start(plan());
     coordinator.cleanup("fatal");
-    coordinator.cleanup("fatal");
     await expect(completion).rejects.toThrow(/fatal/);
-    expect(events.filter((event) => event === "rollback")).toHaveLength(1);
-    expect(events.filter((event) => event === "destroy")).toHaveLength(1);
+    expect(signal!.aborted).toBe(true);
+    coordinator.cleanup("fatal");
   });
 
   it("enforces exact instance registry keys", () => {
@@ -192,9 +162,7 @@ describe("slot operation coordinator", () => {
     const registration = {
       kind: "slot:scene-landing",
       version: 2,
-      effect: "scene-landing" as const,
-      requiredCapabilities: new Set(["slot:scene-landing"]),
-      handler: handler([]),
+      handler: handler(),
     };
     registry.register(registration);
     expect(registry.has("slot:scene-landing", 2)).toBe(true);
@@ -202,22 +170,16 @@ describe("slot operation coordinator", () => {
     expect(() => registry.register(registration)).toThrow(/Duplicate/);
     registry.clear();
     expect(registry.has("slot:scene-landing", 2)).toBe(false);
-    expect(() =>
-      registry.register({
-        ...registration,
-        requiredCapabilities: [] as unknown as Set<string>,
-      }),
-    ).toThrow(/must be a Set/);
   });
 
-  it("validates update deltas and coordinator ownership", async () => {
+  it("validates frame deltas and coordinator ownership", async () => {
     const registry = createSlotOperationHandlerRegistry();
     registry.register({
       kind: "slot:scene-landing",
       version: 2,
-      effect: "scene-landing",
-      requiredCapabilities: new Set(["slot:scene-landing"]),
-      handler: { ...handler([]), update: () => ({ completed: false }) },
+      handler: {
+        start: (_operation, context) => context.waitForFrame(() => false),
+      },
     });
     const coordinator = createSlotOperationCoordinator({
       registry,
@@ -233,157 +195,47 @@ describe("slot operation coordinator", () => {
     await expect(coordinator.start(plan())).rejects.toThrow(/destroyed/);
   });
 
-  it("reports rollback and destroy failures together", async () => {
+  it("surfaces cleanup callback failures", async () => {
     const registry = createSlotOperationHandlerRegistry();
     registry.register({
       kind: "slot:scene-landing",
       version: 2,
-      effect: "scene-landing",
-      requiredCapabilities: new Set(["slot:scene-landing"]),
       handler: {
-        ...handler([]),
-        update: () => {
-          throw new Error("update");
-        },
-        rollback: () => {
-          throw new Error("rollback");
-        },
-        destroy: () => {
-          throw new Error("destroy");
-        },
+        start: (_operation, context) => context.waitForFrame(() => false),
       },
     });
     const coordinator = createSlotOperationCoordinator({
-      registry,
-      cleanup: () => undefined,
-    });
-    const completion = coordinator.start(plan());
-    coordinator.update(0);
-    await expect(completion).rejects.toThrow(
-      /execution and cleanup both failed/,
-    );
-  });
-
-  it("surfaces cleanup and destroy callback failures", async () => {
-    const registry = createSlotOperationHandlerRegistry();
-    registry.register({
-      kind: "slot:scene-landing",
-      version: 2,
-      effect: "scene-landing",
-      requiredCapabilities: new Set(["slot:scene-landing"]),
-      handler: { ...handler([]), update: () => ({ completed: false }) },
-    });
-    const cleanupCoordinator = createSlotOperationCoordinator({
       registry,
       cleanup: (reason) => {
         if (reason === "fatal") throw new Error("cleanup callback");
       },
     });
-    const cleanupCompletion = cleanupCoordinator.start(plan());
-    expect(() => cleanupCoordinator.cleanup("fatal")).toThrow(
-      "cleanup callback",
-    );
-    await expect(cleanupCompletion).rejects.toThrow(/cleanup failed/);
-
-    const destroyCoordinator = createSlotOperationCoordinator({
-      registry,
-      cleanup: (reason) => {
-        if (reason === "destroy") throw new Error("destroy callback");
-      },
-    });
-    const destroyCompletion = destroyCoordinator.start(plan());
-    expect(() => destroyCoordinator.destroy()).toThrow("destroy callback");
-    await expect(destroyCompletion).rejects.toThrow(/destroy failed/);
-  });
-
-  it("does not roll back an operation after commit when snapshot assertion fails", async () => {
-    const events: string[] = [];
-    const registry = createSlotOperationHandlerRegistry();
-    registry.register({
-      kind: "slot:scene-landing",
-      version: 2,
-      effect: "scene-landing",
-      requiredCapabilities: new Set(["slot:scene-landing"]),
-      handler: handler(events),
-    });
-    const coordinator = createSlotOperationCoordinator({
-      registry,
-      cleanup: () => undefined,
-      assertSnapshot: () => {
-        throw new Error("snapshot mismatch");
-      },
-    });
     const completion = coordinator.start(plan());
-    coordinator.update(0);
-    await expect(completion).rejects.toThrow("snapshot mismatch");
-    expect(events).toContain("destroy");
-    expect(events).not.toContain("rollback");
+    expect(() => coordinator.cleanup("fatal")).toThrow("cleanup callback");
+    await expect(completion).rejects.toThrow(/cleanup failed/);
   });
 
-  it("fails explicitly if a preflight mutates away its instance handler", async () => {
+  it("rejects invalid delay values through the operation chain", async () => {
     const registry = createSlotOperationHandlerRegistry();
     registry.register({
       kind: "slot:scene-landing",
       version: 2,
-      effect: "scene-landing",
-      requiredCapabilities: new Set(["slot:scene-landing"]),
-      handler: { ...handler([]), preflight: () => registry.clear() },
+      handler: {
+        start: (_operation, context) => context.delay(-1),
+      },
     });
     const coordinator = createSlotOperationCoordinator({
       registry,
       cleanup: () => undefined,
     });
     await expect(coordinator.start(plan())).rejects.toThrow(
-      /Handler disappeared/,
-    );
-  });
-
-  it("preserves a lone prepared-state destroy failure", async () => {
-    const registry = createSlotOperationHandlerRegistry();
-    registry.register({
-      kind: "slot:scene-landing",
-      version: 2,
-      effect: "scene-landing",
-      requiredCapabilities: new Set(["slot:scene-landing"]),
-      handler: {
-        ...handler([]),
-        update: () => {
-          throw new Error("update");
-        },
-        destroy: () => {
-          throw new Error("destroy only");
-        },
-      },
-    });
-    const coordinator = createSlotOperationCoordinator({
-      registry,
-      cleanup: () => undefined,
-    });
-    const completion = coordinator.start(plan());
-    coordinator.update(0);
-    await expect(completion).rejects.toThrow(
-      /execution and cleanup both failed/,
+      /delay seconds must be finite and non-negative/,
     );
   });
 });
 
-function handler(events: string[], failUpdate = false): SlotOperationHandler {
-  return {
-    preflight: () => events.push("preflight"),
-    prepare: () => {
-      events.push("prepare");
-      return {};
-    },
-    start: () => events.push("start"),
-    update: () => {
-      events.push("update");
-      if (failUpdate) throw new Error("update failed");
-      return { completed: true };
-    },
-    commit: () => events.push("commit"),
-    rollback: () => events.push("rollback"),
-    destroy: () => events.push("destroy"),
-  };
+function handler(): SlotOperationHandler {
+  return { start: () => undefined };
 }
 
 function plan() {

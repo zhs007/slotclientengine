@@ -10,9 +10,14 @@ import {
   getSymbolDisplaySymbolsFromManifest,
   parseSymbolStateTextureManifest,
 } from "../../src/symbol/index.js";
-import { readCraveJson, readCraveText } from "../crave-fixture.js";
 
 const requiredStates = ["spinBlur", "disabled"] as const;
+const TEST_SPINE_SKELETON = {
+  skeleton: { spine: "4.3.23" },
+  animations: { Idle: {}, Start: {} },
+};
+const TEST_SPINE_ATLAS =
+  "Symbol.png\nsize: 1,1\nformat: RGBA8888\nfilter: Linear,Linear\n";
 
 function createManifest() {
   return {
@@ -802,8 +807,8 @@ describe("symbol state texture manifest helpers", () => {
   });
 
   it("builds Spine animation resources from manifest modules and validates exact animation names", () => {
-    const skeleton = readJsonAsset("H1.json");
-    const atlas = readTextAsset("Symbol.atlas");
+    const skeleton = TEST_SPINE_SKELETON;
+    const atlas = TEST_SPINE_ATLAS;
     const resources = createSymbolSpineAnimationResourcesFromManifest({
       manifest: createManifest(),
       requiredStates,
@@ -850,11 +855,10 @@ describe("symbol state texture manifest helpers", () => {
       manifest,
       requiredStates,
       spineSkeletonModules: {
-        "../../../assets/sample-skin/H1.json": readJsonAsset("H1.json"),
+        "../../../assets/sample-skin/H1.json": TEST_SPINE_SKELETON,
       },
       spineAtlasModules: {
-        "../../../assets/sample-skin/Symbol.atlas":
-          readTextAsset("Symbol.atlas"),
+        "../../../assets/sample-skin/Symbol.atlas": TEST_SPINE_ATLAS,
       },
       spineTextureModules: {
         "../../../assets/sample-skin/content-addressed-texture.webp":
@@ -864,87 +868,6 @@ describe("symbol state texture manifest helpers", () => {
 
     expect(resources.H1?.normal?.atlasPage).toBe("Symbol.png");
     expect(resources.H1?.normal?.textureUrl).toBe("/assets/physical-hash.webp");
-  });
-
-  it("validates the current Crave Spine 4.3 resource set without copied fixtures", () => {
-    const manifest = readJsonAsset("symbol-state-textures.manifest.json");
-    const spineSkeletonModules = Object.fromEntries(
-      [
-        "WL",
-        "H1",
-        "H2",
-        "L1",
-        "L2",
-        "L3",
-        "L4",
-        "WM",
-        "CM",
-        "CO",
-        "AF",
-        "BN",
-      ].map((symbol) => [
-        `../../../assets/crave/${symbol.toLowerCase()}.json`,
-        readJsonAsset(`${symbol}.json`),
-      ]),
-    );
-    const resources = createSymbolSpineAnimationResourcesFromManifest({
-      manifest,
-      requiredStates,
-      spineSkeletonModules,
-      spineAtlasModules: {
-        "../../../assets/crave/symbol.atlas": readTextAsset("Symbol.atlas"),
-      },
-      spineTextureModules: {
-        "../../../assets/crave/symbol.webp": "/assets/Symbol.webp",
-      },
-    });
-
-    expect(Object.keys(resources).sort()).toEqual([
-      "AF",
-      "BN",
-      "CM",
-      "CO",
-      "H1",
-      "H2",
-      "L1",
-      "L2",
-      "L3",
-      "L4",
-      "WL",
-      "WM",
-    ]);
-    expect(resources.WL?.appear?.spec.playback.animationName).toBe("Start");
-    expect(resources.H1?.appear?.spec.playback.animationName).toBe("Start");
-    for (const symbol of ["BN"]) {
-      expect(resources[symbol]?.appear).toBeUndefined();
-    }
-    for (const symbol of ["WL", "H1", "H2", "L1", "L2", "L3", "L4"]) {
-      expect(resources[symbol]?.normal?.spec.playback).toEqual({
-        mode: "animation",
-        animationName: "Idle",
-        loop: true,
-      });
-      expect(resources[symbol]?.win?.spec.playback).toEqual({
-        mode: "animation",
-        animationName: "Win",
-        loop: false,
-      });
-      expect(resources[symbol]?.normal?.atlasPage).toBe("Symbol.png");
-      expect(resources[symbol]?.win?.atlasPage).toBe("Symbol.png");
-    }
-    for (const symbol of ["WM", "CM", "AF"]) {
-      expect(resources[symbol]?.normal?.spec.playback.animationName).toBe(
-        "Idle",
-      );
-      expect(resources[symbol]?.appear?.spec.playback.animationName).toBe(
-        "Start",
-      );
-      expect(resources[symbol]?.win).toBeUndefined();
-    }
-    expect(resources.CO?.normal?.spec.playback.animationName).toBe("Loop");
-    expect(resources.CO?.appear?.spec.playback.animationName).toBe("Start");
-    expect(resources.CO?.win).toBeUndefined();
-    expect(resources.BN?.normal?.spec.playback.animationName).toBe("Idle");
   });
 
   it("fails fast for invalid schema and missing VNI resources", () => {
@@ -1063,8 +986,8 @@ describe("symbol state texture manifest helpers", () => {
 
   it("fails fast for malformed Spine specs and missing Spine modules", () => {
     const manifest = createManifest();
-    const skeleton = readJsonAsset("H1.json");
-    const atlas = readTextAsset("Symbol.atlas");
+    const skeleton = TEST_SPINE_SKELETON;
+    const atlas = TEST_SPINE_ATLAS;
 
     expect(() =>
       createSymbolSpineAnimationResourcesFromManifest({
@@ -1172,11 +1095,3 @@ describe("symbol state texture manifest helpers", () => {
     ).toThrow(/transform.scale/);
   });
 });
-
-function readTextAsset(fileName: string): string {
-  return readCraveText(fileName.toLowerCase().replace(/\.png$/u, ".webp"));
-}
-
-function readJsonAsset(fileName: string): unknown {
-  return readCraveJson(fileName.toLowerCase());
-}

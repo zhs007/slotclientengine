@@ -474,6 +474,16 @@ function createHarness() {
   };
 }
 
+async function runTicks(
+  harness: ReturnType<typeof createHarness>,
+  count = 1,
+): Promise<void> {
+  for (let index = 0; index < count; index += 1) {
+    harness.runTick();
+    await Promise.resolve();
+  }
+}
+
 describe("configured scene-layout round adapter", () => {
   it("mounts, applies the initial scene, and drains spin/win/refill in order", async () => {
     const { resource, destroy } = createResource();
@@ -493,13 +503,13 @@ describe("configured scene-layout round adapter", () => {
       frameDesignSize: { width: 640, height: 360 },
     });
     const round = adapter.playSpin(createLogic());
-    harness.runTick();
+    await runTicks(harness);
     harness.setSpinning(false);
-    harness.runTick();
+    await runTicks(harness);
     harness.setOnce(true);
-    harness.runTick();
+    await runTicks(harness);
     harness.setOnce(false);
-    for (let index = 0; index < 50; index += 1) harness.runTick();
+    await runTicks(harness, 50);
     expect(harness.runtime.requestMainReelSymbolStates).toHaveBeenCalledTimes(
       2,
     );
@@ -593,7 +603,7 @@ describe("configured scene-layout round adapter", () => {
       }),
     );
     harness.setSpinning(false);
-    for (let index = 0; index < 100; index += 1) harness.runTick();
+    await runTicks(harness, 100);
     await round;
     const requested = harness.reelPresentation.requestVisibleSymbolStates.mock
       .calls as unknown as readonly [readonly unknown[], string][];
@@ -686,7 +696,7 @@ describe("configured scene-layout round adapter", () => {
     await expect(activeRound).rejects.toThrow(/destroyed/);
   });
 
-  it("rejects a plan-specific symbol capability before spin mutation", async () => {
+  it("does not repeat loading capability validation before spin", async () => {
     const { resource } = createResource();
     const symbolResource = resource.symbolPackage as unknown as {
       symbolManifest: {
@@ -711,12 +721,10 @@ describe("configured scene-layout round adapter", () => {
     await adapter.mount(harness.context);
     await adapter.applyInitialState({ defaultScene: initialScene });
 
-    await expect(adapter.playSpin(createLogic())).rejects.toThrow(
-      /S1.*no explicit "win"/,
-    );
-    expect(harness.runtime.spinMainReelToScene).not.toHaveBeenCalled();
-    expect(harness.runtime.clearMainReelSymbolDimming).not.toHaveBeenCalled();
+    const round = adapter.playSpin(createLogic());
+    expect(harness.runtime.spinMainReelToScene).toHaveBeenCalledOnce();
     adapter.destroy();
+    await expect(round).rejects.toThrow(/destroyed/);
   });
 
   it("completes a non-cascade round with no win results", async () => {
@@ -741,7 +749,7 @@ describe("configured scene-layout round adapter", () => {
     await adapter.applyInitialState({ defaultScene: initialScene });
     const round = adapter.playSpin(createLogic({ includeWin: false }));
     harness.setSpinning(false);
-    harness.runTick();
+    await runTicks(harness);
     await round;
     expect(harness.runtime.requestMainReelSymbolStates).not.toHaveBeenCalled();
     expect(harness.runtime.startMainReelCascadeDrop).not.toHaveBeenCalled();
@@ -806,7 +814,7 @@ describe("configured scene-layout round adapter", () => {
       harness.runtime.startAwardCelebrationForCurrentMode,
     ).not.toHaveBeenCalled();
     harness.setSpinning(false);
-    harness.runTick();
+    await runTicks(harness);
     await round;
     expect(
       harness.runtime.startAwardCelebrationForCurrentMode,
@@ -817,7 +825,7 @@ describe("configured scene-layout round adapter", () => {
     adapter.destroy();
   });
 
-  it("fails when a settled cascade snapshot diverges from the compiled plan", async () => {
+  it("does not perform a global snapshot assertion after a mutation", async () => {
     const { resource } = createResource();
     const harness = createHarness();
     (
@@ -836,10 +844,13 @@ describe("configured scene-layout round adapter", () => {
     await adapter.applyInitialState({ defaultScene: initialScene });
     const round = adapter.playSpin(createLogic());
     harness.setSpinning(false);
-    for (let index = 0; index < 50; index += 1) harness.runTick();
-    await expect(round).rejects.toThrow(
-      /refill scene does not match compiled plan/,
-    );
+    await runTicks(harness, 50);
+    await round;
+    expect(harness.runtime.startMainReelCascadeDrop).toHaveBeenCalledTimes(2);
+    expect(harness.runtime.getMainReelSceneSnapshot()).toEqual([
+      [-1, 2],
+      [3, 4],
+    ]);
     adapter.destroy();
   });
 
@@ -1011,7 +1022,7 @@ describe("configured scene-layout round adapter", () => {
     await expect(round).rejects.toThrow(/destroyed/);
   });
 
-  it("rejects an unknown planned symbol and missing reel geometry", async () => {
+  it("leaves symbol validation to loading but still requires reel geometry", async () => {
     const { resource } = createResource();
     const symbols = (
       resource.symbolPackage as unknown as {
@@ -1029,10 +1040,10 @@ describe("configured scene-layout round adapter", () => {
     });
     await adapter.mount(harness.context);
     await adapter.applyInitialState({ defaultScene: initialScene });
-    await expect(adapter.playSpin(createLogic())).rejects.toThrow(
-      /unknown symbol "S1"/,
-    );
+    const round = adapter.playSpin(createLogic());
+    expect(harness.runtime.spinMainReelToScene).toHaveBeenCalledOnce();
     adapter.destroy();
+    await expect(round).rejects.toThrow(/destroyed/);
 
     const { resource: geometryResource } = createResource();
     const geometryHarness = createHarness();
@@ -1095,7 +1106,7 @@ describe("configured scene-layout round adapter", () => {
     await adapter.applyInitialState({ defaultScene: initialScene });
 
     const round = adapter.playSpin(createLogic());
-    harness.runTick();
+    await runTicks(harness);
     await expect(round).rejects.toThrow(/frame-update-failure/);
     adapter.destroy();
   });

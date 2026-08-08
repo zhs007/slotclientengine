@@ -6,7 +6,6 @@ import {
 } from "../../src/scene-layout/index.js";
 import { transitionResourceKey } from "../../src/scene-layout/resource.js";
 import { game002LayoutFixture } from "./fixtures.js";
-import { readCraveJson, readCraveText } from "../crave-fixture.js";
 
 const vniProject = {
   schemaVersion: "VNI_0.020",
@@ -316,123 +315,15 @@ describe("scene layout resources", () => {
     ).toThrow(/non-empty string/);
   });
 
-  it("validates the real game002 official Spine 4.3 BG loop", () => {
-    const skeleton = readCraveJson("bg.json");
-    const atlasText = readCraveText("bg.atlas");
-    const pages = [
-      "BG.png",
-      "BG_2.png",
-      "BG_3.png",
-      "BG_4.png",
-      "BG_5.png",
-      "BG_6.png",
-      "BG_7.png",
-      "BG_8.png",
-    ];
-    const textures = Object.fromEntries(
-      pages.map((page) => [page, `assets/bg/${page}`]),
-    );
-    const manifest = {
-      ...game002LayoutFixture,
-      nodes: [
-        {
-          id: "bg",
-          order: 0,
-          resource: {
-            kind: "spine",
-            skeleton: "assets/bg/bg.json",
-            atlas: "assets/bg/bg.atlas",
-            textures,
-            defaultAnimation: "BG",
-            loop: true,
-          },
-          placements: { default: { x: 0, y: 0, scale: 1 } },
-        },
-      ],
-    } as const;
-    const resource = createSceneLayoutResource({
-      manifest,
-      skeletonModules: { "assets/bg/bg.json": skeleton },
-      atlasModules: { "assets/bg/bg.atlas": atlasText },
-      textureModules: Object.fromEntries(
-        pages.map((page) => [
-          `assets/bg/${page}`,
-          `memory:${page.toLowerCase()}`,
-        ]),
-      ),
-    });
-    expect(resource.spineResources.bg).toBeDefined();
-    resource.destroy();
-    resource.destroy();
-    const sharedTexturePath = "assets/bg/shared.webp";
-    const deduplicatedTextures = {
-      ...textures,
-      "BG.png": sharedTexturePath,
-      "BG_2.png": sharedTexturePath,
-    };
-    const deduplicatedManifest = {
-      ...manifest,
-      nodes: [
-        {
-          ...manifest.nodes[0],
-          resource: {
-            ...manifest.nodes[0].resource,
-            textures: deduplicatedTextures,
-          },
-        },
-      ],
-    } as const;
-    const deduplicated = createSceneLayoutResource({
-      manifest: deduplicatedManifest,
-      skeletonModules: { "assets/bg/bg.json": skeleton },
-      atlasModules: { "assets/bg/bg.atlas": atlasText },
-      textureModules: Object.fromEntries(
-        [...new Set(Object.values(deduplicatedTextures))].map((path) => [
-          path,
-          `memory:${path}`,
-        ]),
-      ),
-    });
-    expect(deduplicated.spineResources.bg?.textureUrls["BG.png"]).toBe(
-      deduplicated.spineResources.bg?.textureUrls["BG_2.png"],
-    );
-    deduplicated.destroy();
-    expect(() =>
-      createSceneLayoutResource({
-        manifest: {
-          ...manifest,
-          nodes: [
-            {
-              ...manifest.nodes[0],
-              resource: {
-                ...manifest.nodes[0].resource,
-                defaultAnimation: "bg",
-              },
-            },
-          ],
-        },
-        skeletonModules: { "assets/bg/bg.json": skeleton },
-        atlasModules: { "assets/bg/bg.atlas": atlasText },
-        textureModules: Object.fromEntries(
-          pages.map((page) => [`assets/bg/${page}`, `memory:${page}`]),
-        ),
-      }),
-    ).toThrow(/animation "bg" was not found/);
-  });
-
   it("requires the transition switch event exactly once in its animation timeline", () => {
-    const baseSkeleton = readCraveJson("bg.json");
-    const atlasText = readCraveText("bg.atlas");
-    const pages = [
-      "BG.png",
-      "BG_2.png",
-      "BG_3.png",
-      "BG_4.png",
-      "BG_5.png",
-      "BG_6.png",
-      "BG_7.png",
-      "BG_8.png",
-    ];
+    const baseSkeleton = {
+      skeleton: { spine: "4.3.23" },
+      events: {},
+      animations: { BG: {}, BG_FG: {} },
+    };
+    const atlasText =
+      "BG.png\nsize: 1,1\nformat: RGBA8888\nfilter: Linear,Linear\n";
+    const pages = ["BG.png"];
     const textures = Object.fromEntries(
       pages.map((page) => [page, `assets/bg/${page}`]),
     );

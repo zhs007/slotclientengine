@@ -24,8 +24,6 @@ import {
   type GridCellEffectResourceMap,
   type GridCellEffectSweepPlan,
   type ParsedReelManifest,
-  type PreparedVisibleOccurrenceReplacement,
-  type PreparedGridCellVisibleOccurrenceTransferBatch,
   type GridCellVisibleOccurrenceTransfer,
   type ReelLayout,
   type ReelSymbolRegistry,
@@ -235,16 +233,21 @@ export interface Game002ReelRuntime {
     text: string,
   ): void;
   getVisibleSymbolImageStringText(x: number, y: number, name: string): string;
-  prepareVisibleOccurrenceReplacement(options: {
+  replaceVisibleOccurrence(options: {
     readonly x: number;
     readonly y: number;
     readonly expectedCode: number;
     readonly outputCode: number;
     readonly outputPresentationValue: number | null;
-  }): PreparedVisibleOccurrenceReplacement;
-  prepareVisibleOccurrenceTransferBatch(options: {
+  }): void;
+  transferVisibleOccurrences(options: {
     readonly transfers: readonly GridCellVisibleOccurrenceTransfer[];
-  }): PreparedGridCellVisibleOccurrenceTransferBatch;
+    readonly durationSeconds: number;
+    readonly barrier: Promise<void>;
+    readonly waitForFrame: (
+      update: (deltaSeconds: number) => boolean,
+    ) => Promise<void>;
+  }): Promise<void>;
   getVisibleSymbolGeometrySnapshots(
     positions: readonly WinResultPosition[],
   ): readonly RenderVisibleSymbolGeometrySnapshot[];
@@ -885,41 +888,65 @@ export function createGame002ReelRuntime(
     ): string {
       return reelSet.getVisibleSymbolImageStringText(x, y, name);
     },
-    prepareVisibleOccurrenceReplacement(replacementOptions: {
+    replaceVisibleOccurrence(replacementOptions: {
       readonly x: number;
       readonly y: number;
       readonly expectedCode: number;
       readonly outputCode: number;
       readonly outputPresentationValue: number | null;
     }) {
-      const prepared =
+      const replacement =
         reelSet.prepareVisibleOccurrenceReplacement(replacementOptions);
-      return Object.freeze({
-        ...prepared,
-        commit(): void {
-          prepared.commit();
-          currentScene = validateGame002Scene(
-            reelSet.getVisibleScene(),
-            "game002 committed visible occurrence replacement",
-          );
-        },
-      });
+      try {
+        replacement.commit();
+        currentScene = validateGame002Scene(
+          reelSet.getVisibleScene(),
+          "game002 committed visible occurrence replacement",
+        );
+      } finally {
+        replacement.destroy();
+      }
     },
-    prepareVisibleOccurrenceTransferBatch(transferOptions: {
+    async transferVisibleOccurrences(transferOptions: {
       readonly transfers: readonly GridCellVisibleOccurrenceTransfer[];
-    }) {
-      const prepared =
-        reelSet.prepareVisibleOccurrenceTransferBatch(transferOptions);
-      return Object.freeze({
-        ...prepared,
-        commit(): void {
-          prepared.commit();
-          currentScene = validateGame002Scene(
-            reelSet.getVisibleScene(),
-            "game002 committed visible occurrence transfer batch",
-          );
-        },
+      readonly durationSeconds: number;
+      readonly barrier: Promise<void>;
+      readonly waitForFrame: (
+        update: (deltaSeconds: number) => boolean,
+      ) => Promise<void>;
+    }): Promise<void> {
+      const transfer = reelSet.prepareVisibleOccurrenceTransferBatch({
+        transfers: transferOptions.transfers,
       });
+      try {
+        transfer.start();
+        let elapsedSeconds = 0;
+        let barrierComplete = false;
+        await Promise.all([
+          transferOptions.barrier.then(() => {
+            barrierComplete = true;
+          }),
+          transferOptions.waitForFrame((deltaSeconds) => {
+            elapsedSeconds += deltaSeconds;
+            const elapsedProgress = Math.min(
+              elapsedSeconds / transferOptions.durationSeconds,
+              1,
+            );
+            const progress = barrierComplete
+              ? elapsedProgress
+              : Math.min(elapsedProgress, 0.9);
+            transfer.setProgress(progress);
+            return progress >= 1;
+          }),
+        ]);
+        transfer.commit();
+        currentScene = validateGame002Scene(
+          reelSet.getVisibleScene(),
+          "game002 committed visible occurrence transfer batch",
+        );
+      } finally {
+        transfer.destroy();
+      }
     },
     getVisibleSymbolGeometrySnapshots(
       positions: readonly WinResultPosition[],

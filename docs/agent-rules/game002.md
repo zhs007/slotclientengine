@@ -75,13 +75,12 @@
 - 同一 server response 的 BaseGame 与 FreeGame 必须属于同一 `SlotOperationPlanV2` 和同一
   coordinator execution。不得在 BaseGame completion Promise 后再启动第二份 round plan；
   FreeGame 必须展开为 trigger、transition、spin、AF、CO、win、popup 等显式 operation；不得
-  重新封装为一个内部推进全部阶段的 opaque operation。plan generation 只负责按服务器已出现的
-  component 排列 operation 并携带本步所需数据，不在首次 mutation 前重新证明整轮业务公式或 final
-  closure；每个 operation 开始前只校验本步安全执行所需的 scene shape、position、value
-  和 animation/resource capability。
+  重新封装为一个内部推进全部阶段的 opaque operation。render 直接认可 logiccore 生成的 plan，
+  不再预检整轮业务公式、final closure、scene shape 或资源能力；mutation 发生时只检查当前 operation
+  当前坐标的 input/output continuity。
 
-- game002 spin flow 使用 fail-stop、无 rollback 模型。所有权威 scene/value mutation 必须推迟到对应
-  animation 完成边界并同步原子提交；prepare/playback/commit 任一失败立即停止当前 round、禁止继续
+- game002 spin flow 使用 fail-stop、无 rollback 模型。所有权威 scene/value mutation 必须位于对应
+  animation 完成边界；调用链任一步失败立即停止当前 round、禁止继续
   后续 operation 或下一次 spin，并交由显式重新初始化/重新同步恢复。cleanup 只取消 pending playback、
   input 和临时资源，不恢复 operation input snapshot。未参与当前 operation 的额外 server field、component
   或 matrix cell 不作为失败条件；当前 operation 必需的数据缺失、越界或类型非法仍
@@ -94,20 +93,20 @@
 - 每步顺序固定为 `spin -> AF -> CO`。AF number 只取 `fg-rollaf.number`，以 raw
   digits 显示并计入 `fg-start.lastRespinNum`；AF Change 完成才提交 AF -> CN。
 - FG CO 将 `fg-triggerco` 坐标作为 `mainPos`，将 `fg-vortex.pos` 四元组作为 routes，
-  并复用 rendercore relocation transaction；source、target、CO 的最终 code/value 只取
-  对应 operation output，不在 plan 中重算 symbol 业务规则。
+  source、target、CO 的 code/value 直接取 operation input/output，不在 render 中重算业务规则。
+  app 异步调用 rendercore transfer，资源租约在调用结束时内部回池。
 - 只有剩余次数为 0 的最后一步允许 `fg-win`，且只赔付 type-6 CN group；collect
   不 remove，BigWin complete 后才反向 transition，最终 scene 跨模式保留。
 
 ## WL/WM/CM multiplier 与中奖前转换
 
 - WL/WM/CM/CO 的权威 code/value 只保存在对应 operation input/output；Target 不按
-  stepIndex 查询 presentation batch。纯动画 `Start/Idle/End` 可保留 handler 私有
-  phase，但每个 scene/value/occurrence commit 必须服从 operation input/output，并在失败时进入统一 fail-stop。
+  stepIndex 查询 presentation batch。每个 operation 由一个直接的异步调用链表达动画、
+  延迟和 mutation；mutation 必须服从 operation input/output，并在失败时进入统一 fail-stop。
 - WL/WM/CM/CO 共用一个 `SlotChgOperation` 类型，只按坐标关系使用 `pos`、
   `mainPos + pos` 或 `mainPos + routes`。具体 operation key 挂接对应 render program，
   payload 不得加入 WL/WM/CM/CO 字段或 `phase` 分流。multiplier compiler 不得维护
-  stepIndex payload cache；presentation 使用共享 await/commit/progress transaction runner。
+  stepIndex payload cache；game002 自己组合 Promise/await 调用链，不引入通用 transaction runner。
 - game002 stage 只挂完整 Scene Layout package root；package runtime 拥有唯一 main reel 与 manifest order/placement，defaultScene commit 前保持 deferred，cascade 只经 typed overlay attach 接入。
 - game002 compiler 直接生成按需出现的 `game002:wl-increment`、
   `game002:wild-multiplier`、`game002:wm-to-cn`、`game002:coin-multiplier`、
@@ -134,12 +133,12 @@
   WM multiplier 之和。盘面没有 WL 时仍完整处理 WM，只有 WL 更新阶段为空。
 - 同批 WM 并行执行 `Mult_Start` once、`Mult_Idle` 一个真实 loop、`Mult_End`
   once、`Change` once；进入 `Mult_Idle` 时提交全部 WL multiplier 显示更新。
-- `Change` 完成边界才原子提交 `bg-wm2cn.scene` 的原位置 WM -> CN replacement，
-  新 CN value 只取 `bg-genwmcn.otherScene`；prepare 或动画失败必须停止当前 round，
+- `Change` 完成边界才应用 `bg-wm2cn.scene` 的原位置 WM -> CN replacement，
+  新 CN value 只取 `bg-genwmcn.otherScene`；动画或 mutation 失败必须停止当前 round，
   不继续执行后续 operation。
-- WM 全流程提交完成后才处理 CM。CM 先播放 `Feature1` once；完成边界按
-  `bg-updcn.otherScene` 将当时全部 CN（包含本批 WM 新转出的 CN）严格更新为
-  当前值乘唯一 CM multiplier，并同步播放 CN `Feature_Change` once。
+- WM 全流程完成后才处理 CM。CM 先播放 `Feature1` once；随后每个受影响 CN 都执行
+  自己的 `Feature_Change` await 链，并在该格动画完成后立刻按 `bg-updcn.otherScene`
+  更新该格值。各格调用链可以并行，也可按明确 presentation 时序插入 delay；不得做全盘复核。
 - 全部 CN `Feature_Change` 完成后播放 CM `Change` once；完成边界才按
   `bg-cm2cn.scene` 原子提交该 CM -> CN，且新 CN value 只取
   `bg-gencmcn.otherScene`。CM 全流程完成后才允许开始中奖；无 CM 时不得制造空阶段。

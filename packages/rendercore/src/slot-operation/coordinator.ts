@@ -9,17 +9,15 @@ import type {
   SlotOperationCoordinatorOptions,
   SlotOperationCoordinatorPhase,
   SlotOperationCoordinatorSnapshot,
-  SlotOperationHandler,
-  SlotOperationHandlerRegistration,
+  SlotOperationExecutionContext,
 } from "./types.js";
 
-interface ActivePreparedOperation {
-  readonly operation: SlotOperationV2;
-  readonly registration: SlotOperationHandlerRegistration;
-  readonly handler: SlotOperationHandler;
-  readonly prepared: unknown;
-  committed: boolean;
-  destroyed: boolean;
+interface FrameWaiter {
+  readonly signal: AbortSignal;
+  readonly update: (deltaSeconds: number) => boolean;
+  readonly resolve: () => void;
+  readonly reject: (error: Error) => void;
+  readonly onAbort: () => void;
 }
 
 export function createSlotOperationCoordinator(
@@ -30,10 +28,12 @@ export function createSlotOperationCoordinator(
 
 class DefaultSlotOperationCoordinator implements SlotOperationCoordinator {
   readonly #options: SlotOperationCoordinatorOptions;
+  readonly #frameWaiters = new Set<FrameWaiter>();
   #phase: SlotOperationCoordinatorPhase = "idle";
   #plan: SlotOperationPlanV2 | null = null;
   #cursor = 0;
-  #active: ActivePreparedOperation | null = null;
+  #generation = 0;
+  #activeAbort: AbortController | null = null;
   #resolve: (() => void) | null = null;
   #reject: ((error: Error) => void) | null = null;
 
@@ -47,20 +47,16 @@ class DefaultSlotOperationCoordinator implements SlotOperationCoordinator {
         throw new Error("Slot operation coordinator is destroyed.");
       if (this.#plan)
         throw new Error("Slot operation coordinator is already running.");
-      this.preflight(plan);
       this.#options.cleanup("next-spin");
       this.#plan = plan;
       this.#cursor = 0;
       this.#phase = "running";
+      this.#generation += 1;
       const promise = new Promise<void>((resolve, reject) => {
         this.#resolve = resolve;
         this.#reject = reject;
       });
-      try {
-        this.startCurrent();
-      } catch (error) {
-        this.fail(asError(error));
-      }
+      this.startCurrent();
       return promise;
     } catch (error) {
       return Promise.reject(asError(error));
@@ -75,20 +71,10 @@ class DefaultSlotOperationCoordinator implements SlotOperationCoordinator {
     if (!this.#plan || this.#phase !== "running") return;
     try {
       this.#options.updateRuntime?.(deltaSeconds);
-      const active = this.requireActive();
-      if (!active.handler.update(active.prepared, deltaSeconds).completed)
-        return;
-      active.handler.commit(active.prepared);
-      active.committed = true;
-      if (active.operation.effect !== "presentation")
-        this.#options.assertSnapshot?.(
-          active.operation.output,
-          active.operation,
-        );
-      this.destroyPrepared(active);
-      this.#active = null;
-      this.#cursor += 1;
-      this.startCurrent();
+      for (const waiter of [...this.#frameWaiters]) {
+        if (waiter.signal.aborted) continue;
+        if (waiter.update(deltaSeconds)) this.resolveFrameWaiter(waiter);
+      }
     } catch (error) {
       this.fail(asError(error));
     }
@@ -101,8 +87,8 @@ class DefaultSlotOperationCoordinator implements SlotOperationCoordinator {
       `Slot operation plan was interrupted by ${reason} cleanup.`,
     );
     let cleanupError: Error | null = null;
+    this.retireActive(interruption);
     try {
-      this.rollbackAndDestroyActive();
       this.#options.cleanup(reason);
     } catch (error) {
       cleanupError = asError(error);
@@ -136,8 +122,8 @@ class DefaultSlotOperationCoordinator implements SlotOperationCoordinator {
     const reject = this.#reject;
     const interruption = new Error("Slot operation coordinator was destroyed.");
     let cleanupError: Error | null = null;
+    this.retireActive(interruption);
     try {
-      this.rollbackAndDestroyActive();
       this.#options.cleanup("destroy");
     } catch (error) {
       cleanupError = asError(error);
@@ -154,36 +140,6 @@ class DefaultSlotOperationCoordinator implements SlotOperationCoordinator {
     if (cleanupError) throw cleanupError;
   }
 
-  private preflight(plan: SlotOperationPlanV2): void {
-    if (
-      plan.kind !== "slot-operation-plan" ||
-      plan.version !== 2 ||
-      !Object.isFrozen(plan)
-    )
-      throw new Error(
-        "Slot operation coordinator requires an immutable V2 plan.",
-      );
-    for (const operation of plan.operations) {
-      const key = toSlotOperationKey(operation.kind, operation.version);
-      const registration = this.#options.registry.get(
-        operation.kind,
-        operation.version,
-      );
-      if (!registration)
-        throw new Error(`Missing slot operation handler ${key}.`);
-      if (registration.effect !== operation.effect)
-        throw new Error(
-          `${key} handler effect ${registration.effect} does not match operation effect ${operation.effect}.`,
-        );
-      for (const capability of operation.requiredCapabilities)
-        if (!registration.requiredCapabilities.has(capability))
-          throw new Error(
-            `${key} handler is missing required capability "${capability}".`,
-          );
-      registration.handler.preflight(operation);
-    }
-  }
-
   private startCurrent(): void {
     const operation = this.#plan?.operations[this.#cursor];
     if (!operation) {
@@ -197,27 +153,102 @@ class DefaultSlotOperationCoordinator implements SlotOperationCoordinator {
       operation.version,
     );
     if (!registration)
-      throw new Error(
-        `Handler disappeared for ${operation.kind}@${operation.version}.`,
+      return this.fail(
+        new Error(
+          `Missing slot operation handler ${toSlotOperationKey(operation.kind, operation.version)}.`,
+        ),
       );
-    const handler = registration.handler as SlotOperationHandler;
-    const prepared = handler.prepare(operation);
-    this.#active = {
-      operation,
-      registration,
-      handler,
-      prepared,
-      committed: false,
-      destroyed: false,
-    };
-    handler.start(prepared);
+    const generation = this.#generation;
+    const abort = new AbortController();
+    this.#activeAbort = abort;
+    const context = this.createExecutionContext(abort.signal);
+    let completion: Promise<void> | void;
+    try {
+      completion = registration.handler.start(operation, context);
+    } catch (error) {
+      this.fail(asError(error));
+      return;
+    }
+    void Promise.resolve(completion).then(
+      () => {
+        if (
+          generation !== this.#generation ||
+          this.#phase !== "running" ||
+          this.#plan?.operations[this.#cursor] !== operation
+        )
+          return;
+        this.#activeAbort = null;
+        this.#cursor += 1;
+        this.startCurrent();
+      },
+      (error: unknown) => {
+        if (
+          generation !== this.#generation ||
+          this.#phase !== "running" ||
+          this.#plan?.operations[this.#cursor] !== operation
+        )
+          return;
+        this.fail(asError(error));
+      },
+    );
+  }
+
+  private createExecutionContext(
+    signal: AbortSignal,
+  ): SlotOperationExecutionContext {
+    return Object.freeze({
+      signal,
+      waitForFrame: (update: (deltaSeconds: number) => boolean) =>
+        this.createFrameWaiter(signal, update),
+      delay: (seconds: number) => {
+        if (!Number.isFinite(seconds) || seconds < 0)
+          return Promise.reject(
+            new Error(
+              "Slot operation delay seconds must be finite and non-negative.",
+            ),
+          );
+        let remaining = seconds;
+        return this.createFrameWaiter(signal, (deltaSeconds) => {
+          remaining -= deltaSeconds;
+          return remaining <= 0;
+        });
+      },
+    });
+  }
+
+  private createFrameWaiter(
+    signal: AbortSignal,
+    update: (deltaSeconds: number) => boolean,
+  ): Promise<void> {
+    if (signal.aborted)
+      return Promise.reject(new Error("Slot operation was aborted."));
+    return new Promise<void>((resolve, reject) => {
+      const waiter: FrameWaiter = {
+        signal,
+        update,
+        resolve,
+        reject,
+        onAbort: () => {
+          this.#frameWaiters.delete(waiter);
+          reject(new Error("Slot operation was aborted."));
+        },
+      };
+      signal.addEventListener("abort", waiter.onAbort, { once: true });
+      this.#frameWaiters.add(waiter);
+    });
+  }
+
+  private resolveFrameWaiter(waiter: FrameWaiter): void {
+    if (!this.#frameWaiters.delete(waiter)) return;
+    waiter.signal.removeEventListener("abort", waiter.onAbort);
+    waiter.resolve();
   }
 
   private fail(error: Error): void {
     const reject = this.#reject;
     let rejection = error;
+    this.retireActive(error);
     try {
-      this.rollbackAndDestroyActive();
       this.#options.cleanup("execution-failure");
     } catch (cleanupError) {
       rejection = new AggregateError(
@@ -229,49 +260,21 @@ class DefaultSlotOperationCoordinator implements SlotOperationCoordinator {
     reject?.(rejection);
   }
 
-  private rollbackAndDestroyActive(): void {
-    const active = this.#active;
-    if (!active) return;
-    let rollbackError: Error | null = null;
-    if (!active.committed) {
-      try {
-        active.handler.rollback(active.prepared);
-      } catch (error) {
-        rollbackError = asError(error);
-      }
+  private retireActive(reason: Error): void {
+    this.#generation += 1;
+    this.#activeAbort?.abort(reason);
+    this.#activeAbort = null;
+    for (const waiter of [...this.#frameWaiters]) {
+      waiter.signal.removeEventListener("abort", waiter.onAbort);
+      waiter.reject(reason);
     }
-    try {
-      this.destroyPrepared(active);
-    } catch (error) {
-      const destroyError = asError(error);
-      if (rollbackError)
-        throw new AggregateError(
-          [rollbackError, destroyError],
-          "Slot operation rollback and destroy both failed.",
-        );
-      throw destroyError;
-    } finally {
-      this.#active = null;
-    }
-    if (rollbackError) throw rollbackError;
-  }
-
-  private destroyPrepared(active: ActivePreparedOperation): void {
-    if (active.destroyed) return;
-    active.destroyed = true;
-    active.handler.destroy(active.prepared);
-  }
-
-  private requireActive(): ActivePreparedOperation {
-    if (!this.#active)
-      throw new Error("Slot operation prepared state is missing.");
-    return this.#active;
+    this.#frameWaiters.clear();
   }
 
   private clear(phase: SlotOperationCoordinatorPhase): void {
     this.#plan = null;
     this.#cursor = 0;
-    this.#active = null;
+    this.#activeAbort = null;
     this.#resolve = null;
     this.#reject = null;
     this.#phase = phase;

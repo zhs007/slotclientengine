@@ -145,8 +145,10 @@ WM、WM→CN、CM、CM→CN、CO 共用 logiccore `SlotChgOperation` 结构，pa
 `pos`、`mainPos + pos` 或 `mainPos + routes`；code/value 直接读取 operation input/output。
 Target 不再用 stepIndex 或 payload phase 分流，而是按 operation key 挂接渲染程序；缺席阶段
 不生成 operation，每个实际 visual commit 后才推进。
-BaseGame multiplier/CO 与 FreeGame trigger/transition/AF/CO 共用同一个 rendercore transaction
-runner 合同；FreeGame target 不再保存 AF/CO prepared arrays、AbortController 或专用 progress phase。
+BaseGame multiplier/CO 与 FreeGame trigger/transition/AF/CO 都是 game002 自己的直接异步调用链；
+handler 只实现 `start`，动画、逐格 mutation、可选 delay 和 transfer 都在 Promise 链中表达。
+transfer 的临时 display/租约由 rendercore 内部回池，FreeGame target 不保存 prepared arrays、
+AbortController 或专用 progress phase。
 
 compiler 直接把当前 round 编译成 frozen operations，不再先制造整轮 facts、复制 `GameLogic` 或做第二次
 finalize。每一步只解析该 operation 即将消费的 component；执行能力在 operation 启动时检查，失败后停止

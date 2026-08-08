@@ -1,14 +1,10 @@
-import {
-  createPresentationTransactionRunner,
-  type PresentationTransactionCommand,
-  type PresentationTransactionProgram,
-  type SlotOperationV2,
-  type SlotStateMutationOperation,
-  type WinResultPosition,
+import type {
+  SlotOperationV2,
+  SlotStateMutationOperation,
+  WinResultPosition,
 } from "@slotclientengine/gameframeworks";
 import type {
-  PreparedGridCellVisibleOccurrenceTransferBatch,
-  PreparedVisibleOccurrenceReplacement,
+  SlotOperationExecutionContext,
   SymbolCascadePlayer,
 } from "@slotclientengine/rendercore";
 import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-amount";
@@ -16,20 +12,11 @@ import type { Game002FreeGameOperationPayload } from "./game002-operation-compil
 import type { Game002ReelRuntime } from "./game002-reel-controller.js";
 import type { Game002BackgroundPlayer } from "./game002-scene-runtime.js";
 
-type Activity = "idle" | "transaction" | "spin" | "win" | "popup";
-
 export class Game002FreeGameOperationTarget {
   readonly #runtime: Game002ReelRuntime;
   readonly #cascadePlayer: SymbolCascadePlayer;
   readonly #winAmountPlayer: WinAmountAnimationPlayer;
   readonly #backgroundPlayer: Game002BackgroundPlayer;
-  readonly #transactionRunner = createPresentationTransactionRunner();
-  #activity: Activity = "idle";
-  #payload: Game002FreeGameOperationPayload | null = null;
-  #transactionGeneration = 0;
-  #transactionComplete = true;
-  #progressCommandIndex: number | null = null;
-  #failure: Error | null = null;
 
   constructor(options: {
     readonly runtime: Game002ReelRuntime;
@@ -43,374 +30,146 @@ export class Game002FreeGameOperationTarget {
     this.#backgroundPlayer = options.backgroundPlayer;
   }
 
-  preflight(payload: Game002FreeGameOperationPayload): void {
-    if (payload.kind === "transition") {
-      if (
-        !this.#backgroundPlayer.prepareModeTransition ||
-        !this.#backgroundPlayer.requestMode
-      )
-        throw new Error("game002 FreeGame mode transition support is missing.");
-      return;
-    }
-    const capabilities = this.#runtime.config.symbolAnimationCapabilities;
-    const requireState = (symbol: string, state: string) => {
-      if (!capabilities[symbol]?.includes(state))
-        throw new Error(
-          `game002 FreeGame symbol ${symbol} has no "${state}" state.`,
-        );
-    };
-    if (payload.kind === "trigger") requireState("WL", "win");
-    if (payload.kind === "af") {
-      requireState("AF", "feature");
-      requireState("AF", "change");
-    }
-    if (payload.kind === "co") {
-      requireState("CO", "feature");
-      for (const symbol of ["WL", "CN"])
-        for (const state of ["feature1", "feature2"])
-          requireState(symbol, state);
-    }
-  }
-
-  start(
+  async start(
     operation: SlotOperationV2,
     payload: Game002FreeGameOperationPayload,
-  ): void {
-    if (this.#activity !== "idle")
-      throw new Error("game002 FreeGame operation target is already active.");
-    this.#payload = payload;
-    this.#failure = null;
+    context: SlotOperationExecutionContext,
+  ): Promise<void> {
     switch (payload.kind) {
+      case "trigger":
+        await this.playStates(payload.positions, "win", context.signal);
+        this.#runtime.requestVisibleSymbolStates(
+          payload.positions,
+          "normal",
+          "immediate",
+        );
+        return;
+      case "transition": {
+        const prepare = this.#backgroundPlayer.prepareModeTransition;
+        const request = this.#backgroundPlayer.requestMode;
+        if (!prepare || !request)
+          throw new Error(
+            "game002 FreeGame mode transition support is missing.",
+          );
+        await prepare(payload.mode);
+        await request(payload.mode);
+        return;
+      }
       case "spin": {
-        const spin = requireMutation(operation);
+        const mutation = requireMutation(operation);
         this.#runtime.startSelectiveSpin({
-          sourceScene: spin.input.scene,
-          targetScene: spin.output.scene,
-          targetValues: spin.output.values,
+          sourceScene: mutation.input.scene,
+          targetScene: mutation.output.scene,
+          targetValues: mutation.output.values,
           positions: payload.spinPositions,
           sceneName: "game002 FreeGame operation spin",
         });
-        this.#activity = "spin";
+        await context.waitForFrame(() => !this.#runtime.isSpinning());
+        return;
+      }
+      case "af": {
+        const mutation = requireMutation(operation);
+        for (const position of payload.positions)
+          this.#runtime.setVisibleSymbolImageStringText(
+            position.x,
+            position.y,
+            "free-spins",
+            String(payload.addedFreeSpins),
+          );
+        await this.playStates(payload.positions, "feature", context.signal);
+        await this.playStates(payload.positions, "change", context.signal);
+        for (const position of payload.positions)
+          this.#runtime.replaceVisibleOccurrence({
+            x: position.x,
+            y: position.y,
+            expectedCode: mutation.input.scene[position.x]![position.y]!,
+            outputCode: mutation.output.scene[position.x]![position.y]!,
+            outputPresentationValue:
+              mutation.output.values[position.x]![position.y]!,
+          });
+        return;
+      }
+      case "co": {
+        const mutation = requireMutation(operation);
+        const sourcePositions = payload.routes.map(({ source }) => source);
+        await this.#runtime.playVisibleSymbolStateBatch(
+          [
+            {
+              positions: payload.mainPos,
+              state: "feature",
+              options: {
+                transitionMode: "immediate",
+                completion: "once-complete",
+              },
+            },
+            {
+              positions: sourcePositions,
+              state: "feature1",
+              options: {
+                transitionMode: "immediate",
+                completion: "once-complete",
+              },
+            },
+          ],
+          { signal: context.signal },
+        );
+        await this.#runtime.transferVisibleOccurrences({
+          transfers: payload.routes.map(({ source, target }) => ({
+            source,
+            target,
+            expectedSourceCode: mutation.input.scene[source.x]![source.y]!,
+            expectedTargetCode: mutation.input.scene[target.x]![target.y]!,
+            sourceReplacementCode: mutation.output.scene[source.x]![source.y]!,
+            sourceReplacementPresentationValue: null,
+          })),
+          durationSeconds: 0.5,
+          barrier: this.playStates(sourcePositions, "feature2", context.signal),
+          waitForFrame: context.waitForFrame,
+        });
+        for (const position of payload.mainPos)
+          this.#runtime.replaceVisibleOccurrence({
+            x: position.x,
+            y: position.y,
+            expectedCode: mutation.input.scene[position.x]![position.y]!,
+            outputCode: mutation.output.scene[position.x]![position.y]!,
+            outputPresentationValue:
+              mutation.output.values[position.x]![position.y]!,
+          });
         return;
       }
       case "win":
         this.#cascadePlayer.start(this.#cascadePlayer.prepare(payload.groups));
-        this.#activity = "win";
+        await context.waitForFrame(
+          (deltaSeconds) => this.#cascadePlayer.update(deltaSeconds).completed,
+        );
+        this.#cascadePlayer.clear();
         return;
       case "popup":
         this.#winAmountPlayer.start(payload);
-        this.#activity = "popup";
-        return;
-      default:
-        this.startTransaction(
-          this.createTransactionProgram(operation, payload),
+        await context.waitForFrame(
+          (deltaSeconds) =>
+            this.#winAmountPlayer.update(deltaSeconds).phase === "complete",
         );
+        return;
     }
-  }
-
-  update(deltaSeconds: number): { readonly completed: boolean } {
-    if (this.#failure) throw this.#failure;
-    const payload = this.#payload;
-    if (!payload)
-      throw new Error("game002 FreeGame operation payload is missing.");
-    if (this.#activity === "transaction") {
-      this.#runtime.update(deltaSeconds);
-      const transaction = this.#transactionRunner.getSnapshot();
-      if (transaction.commandKind === "progress") {
-        if (this.#progressCommandIndex === transaction.commandIndex)
-          this.#transactionRunner.update(deltaSeconds);
-        else this.#progressCommandIndex = transaction.commandIndex;
-      } else {
-        this.#progressCommandIndex = null;
-        this.#transactionRunner.update(deltaSeconds);
-      }
-      if (this.#transactionRunner.getSnapshot().phase === "complete")
-        this.#transactionComplete = true;
-      if (this.#failure) throw this.#failure;
-      if (!this.#transactionComplete) return { completed: false };
-      return this.finish();
-    }
-    if (this.#activity === "spin" && payload.kind === "spin") {
-      this.#runtime.update(deltaSeconds);
-      if (this.#runtime.isSpinning()) return { completed: false };
-      return this.finish();
-    }
-    if (this.#activity === "win" && payload.kind === "win") {
-      if (!this.#cascadePlayer.update(deltaSeconds).completed)
-        return { completed: false };
-      this.#cascadePlayer.clear();
-      return this.finish();
-    }
-    if (this.#activity === "popup" && payload.kind === "popup") {
-      if (this.#winAmountPlayer.update(deltaSeconds).phase !== "complete")
-        return { completed: false };
-      return this.finish();
-    }
-    throw new Error(
-      `game002 FreeGame operation activity ${this.#activity} is invalid.`,
-    );
   }
 
   cleanup(): void {
-    this.#transactionGeneration += 1;
-    if (this.#transactionRunner.getSnapshot().running)
-      this.#transactionRunner.cleanup("next-program");
-    this.#transactionComplete = true;
-    this.#progressCommandIndex = null;
     this.#cascadePlayer.clear();
     this.#winAmountPlayer.dismissImmediately();
-    this.#payload = null;
-    this.#activity = "idle";
-    this.#failure = null;
   }
 
-  private createTransactionProgram(
-    operation: SlotOperationV2,
-    payload: Exclude<
-      Game002FreeGameOperationPayload,
-      { kind: "spin" | "win" | "popup" }
-    >,
-  ): PresentationTransactionProgram {
-    const commands: PresentationTransactionCommand[] = [];
-    if (payload.kind === "trigger") {
-      commands.push(
-        this.awaitStates(payload.positions, "win"),
-        this.commit(() =>
-          this.#runtime.requestVisibleSymbolStates(
-            payload.positions,
-            "normal",
-            "immediate",
-          ),
-        ),
-      );
-    } else if (payload.kind === "transition") {
-      commands.push({
-        kind: "await",
-        preflight: () => this.preflight(payload),
-        start: async () => {
-          await this.#backgroundPlayer.prepareModeTransition!(payload.mode);
-          await this.#backgroundPlayer.requestMode!(payload.mode);
-        },
-      });
-    } else if (payload.kind === "af") {
-      const mutation = requireMutation(operation);
-      commands.push(
-        this.commit(() => {
-          for (const position of payload.positions)
-            this.#runtime.setVisibleSymbolImageStringText(
-              position.x,
-              position.y,
-              "free-spins",
-              String(payload.addedFreeSpins),
-            );
-        }),
-        this.awaitStates(payload.positions, "feature"),
-        this.awaitStates(payload.positions, "change"),
-        this.prepareReplacements(payload.positions, (position) => ({
-          x: position.x,
-          y: position.y,
-          expectedCode: mutation.input.scene[position.x]![position.y]!,
-          outputCode: mutation.output.scene[position.x]![position.y]!,
-          outputPresentationValue:
-            mutation.output.values[position.x]![position.y]!,
-        })),
-      );
-    } else {
-      const sourcePositions = payload.routes.map(({ source }) => source);
-      commands.push(
-        {
-          kind: "await",
-          preflight: () => undefined,
-          start: (signal) =>
-            this.#runtime.playVisibleSymbolStateBatch(
-              [
-                {
-                  positions: payload.mainPos,
-                  state: "feature",
-                  options: {
-                    transitionMode: "immediate",
-                    completion: "once-complete",
-                  },
-                },
-                {
-                  positions: sourcePositions,
-                  state: "feature1",
-                  options: {
-                    transitionMode: "immediate",
-                    completion: "once-complete",
-                  },
-                },
-              ],
-              { signal },
-            ),
-        },
-        this.prepareCoTransfer(operation, payload),
-      );
-    }
-    return Object.freeze({ commands: Object.freeze(commands) });
-  }
-
-  private awaitStates(
+  private playStates(
     positions: readonly WinResultPosition[],
     state: string,
-  ): PresentationTransactionCommand {
-    return Object.freeze({
-      kind: "await" as const,
-      preflight: () => undefined,
-      start: (signal: AbortSignal) =>
-        this.#runtime.playVisibleSymbolStates(positions, state, {
-          transitionMode: "immediate",
-          completion: "once-complete",
-          signal,
-        }),
+    signal: AbortSignal,
+  ): Promise<void> {
+    return this.#runtime.playVisibleSymbolStates(positions, state, {
+      transitionMode: "immediate",
+      completion: "once-complete",
+      signal,
     });
   }
-
-  private commit(commit: () => void): PresentationTransactionCommand {
-    return Object.freeze({
-      kind: "commit" as const,
-      preflight: () => undefined,
-      prepare: () => ({
-        commit,
-        rollback: () => undefined,
-        destroy: () => undefined,
-      }),
-    });
-  }
-
-  private prepareReplacements(
-    positions: readonly WinResultPosition[],
-    options: (
-      position: WinResultPosition,
-    ) => Parameters<
-      Game002ReelRuntime["prepareVisibleOccurrenceReplacement"]
-    >[0],
-  ): PresentationTransactionCommand {
-    return Object.freeze({
-      kind: "commit" as const,
-      preflight: () => undefined,
-      prepare: () => {
-        const prepared: PreparedVisibleOccurrenceReplacement[] = [];
-        try {
-          for (const position of positions)
-            prepared.push(
-              this.#runtime.prepareVisibleOccurrenceReplacement(
-                options(position),
-              ),
-            );
-        } catch (error) {
-          for (const replacement of prepared.toReversed())
-            replacement.destroy();
-          throw error;
-        }
-        return {
-          commit: () => {
-            for (const replacement of prepared) replacement.commit();
-          },
-          rollback: () => undefined,
-          destroy: () => {
-            for (const replacement of prepared) replacement.destroy();
-          },
-        };
-      },
-    });
-  }
-
-  private prepareCoTransfer(
-    operation: SlotOperationV2,
-    payload: Extract<Game002FreeGameOperationPayload, { kind: "co" }>,
-  ): PresentationTransactionCommand {
-    const mutation = requireMutation(operation);
-    const sourcePositions = payload.routes.map(({ source }) => source);
-    return Object.freeze({
-      kind: "progress" as const,
-      durationSeconds: 0.5,
-      preflight: () => undefined,
-      await: (signal: AbortSignal) =>
-        this.#runtime.playVisibleSymbolStates(sourcePositions, "feature2", {
-          transitionMode: "immediate",
-          completion: "once-complete",
-          signal,
-        }),
-      prepare: () => {
-        const replacements: PreparedVisibleOccurrenceReplacement[] = [];
-        let transfer: PreparedGridCellVisibleOccurrenceTransferBatch | null =
-          null;
-        try {
-          for (const position of payload.mainPos)
-            replacements.push(
-              this.#runtime.prepareVisibleOccurrenceReplacement({
-                x: position.x,
-                y: position.y,
-                expectedCode: mutation.input.scene[position.x]![position.y]!,
-                outputCode: mutation.output.scene[position.x]![position.y]!,
-                outputPresentationValue:
-                  mutation.output.values[position.x]![position.y]!,
-              }),
-            );
-          transfer = this.#runtime.prepareVisibleOccurrenceTransferBatch({
-            transfers: payload.routes.map(({ source, target }) => ({
-              source,
-              target,
-              expectedSourceCode: mutation.input.scene[source.x]![source.y]!,
-              expectedTargetCode: mutation.input.scene[target.x]![target.y]!,
-              sourceReplacementCode:
-                mutation.output.scene[source.x]![source.y]!,
-              sourceReplacementPresentationValue: null,
-            })),
-          });
-        } catch (error) {
-          transfer?.destroy();
-          for (const replacement of replacements.toReversed())
-            replacement.destroy();
-          throw error;
-        }
-        const preparedTransfer = transfer;
-        return {
-          start: () => preparedTransfer.start(),
-          setProgress: (progress: number) =>
-            preparedTransfer.setProgress(progress),
-          commit: () => {
-            preparedTransfer.commit();
-            for (const replacement of replacements) replacement.commit();
-          },
-          rollback: () => undefined,
-          destroy: () => {
-            preparedTransfer.destroy();
-            for (const replacement of replacements) replacement.destroy();
-          },
-        };
-      },
-    });
-  }
-
-  private startTransaction(program: PresentationTransactionProgram): void {
-    this.#activity = "transaction";
-    this.#transactionComplete = false;
-    this.#progressCommandIndex = null;
-    const generation = ++this.#transactionGeneration;
-    void this.#transactionRunner.start(program).then(
-      () => {
-        if (generation === this.#transactionGeneration)
-          this.#transactionComplete = true;
-      },
-      (error: unknown) => {
-        if (generation === this.#transactionGeneration)
-          this.#failure = asError(error);
-      },
-    );
-  }
-
-  private finish() {
-    this.#payload = null;
-    this.#activity = "idle";
-    this.#transactionComplete = true;
-    return { completed: true };
-  }
-}
-
-function asError(error: unknown): Error {
-  return error instanceof Error ? error : new Error(String(error));
 }
 
 function requireMutation(

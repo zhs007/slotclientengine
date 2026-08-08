@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { SlotOperationSnapshot } from "@slotclientengine/gameframeworks";
 import type { SymbolCascadePlayer } from "@slotclientengine/rendercore";
+import type { SlotOperationExecutionContext } from "@slotclientengine/rendercore";
 import type {
   VisibleSymbolStatePlaybackBatchOptions,
   VisibleSymbolStatePlaybackRequest,
@@ -23,14 +24,14 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
       pos: [{ x: 0, y: 0 }],
     });
 
-    target.startAtomicTransform(wild);
+    const wildCompletion = target.startAtomicTransform(wild, context());
     expect(runtime.events).toEqual(["state:multStart"]);
     runtime.advanceOnce();
     await flushPlayback();
     expect(runtime.events).toContain("state:multIdle");
     runtime.advanceLoop();
     await flushPlayback();
-    expect(target.updateAtomicTransform(wild).completed).toBe(true);
+    await wildCompletion;
 
     const outputScene = createScene(1);
     outputScene[1][0] = 8;
@@ -39,13 +40,13 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
       type: "change",
       pos: [{ x: 1, y: 0 }],
     });
-    target.startAtomicTransform(wm);
+    const wmCompletion = target.startAtomicTransform(wm, context());
     runtime.advanceOnce();
     await flushPlayback();
     expect(runtime.events.at(-1)).toBe("state:change");
     runtime.advanceOnce();
     await flushPlayback();
-    expect(target.updateAtomicTransform(wm).completed).toBe(true);
+    await wmCompletion;
     expect(runtime.scene[1][0]).toBe(8);
   });
 
@@ -59,11 +60,11 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
       pos: [{ x: 0, y: 0 }],
     });
 
-    target.startAtomicTransform(operationValue);
+    const completion = target.startAtomicTransform(operationValue, context());
     expect(runtime.events).toContain("text:0,0=x3");
     runtime.advanceOnce();
     await flushPlayback();
-    expect(target.updateAtomicTransform(operationValue).completed).toBe(true);
+    await completion;
   });
 
   it("aborts playback without restoring a prior snapshot", async () => {
@@ -76,15 +77,20 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
       mainPos: [{ x: 1, y: 0 }],
       pos: [{ x: 0, y: 0 }],
     });
-    target.startAtomicTransform(operationValue);
+    const abort = new AbortController();
+    const completion = target.startAtomicTransform(
+      operationValue,
+      context(abort),
+    );
     const signal = runtime.pendingSignals[0]!;
+    abort.abort();
     target.cleanup();
     expect(signal.aborted).toBe(true);
-    await flushPlayback();
+    await expect(completion).rejects.toThrow(/aborted/);
     expect(runtime.scene).toEqual(input.scene);
   });
 
-  it("rejects missing animation capability before presentation mutation", () => {
+  it("rejects a missing animation when the affected position starts", async () => {
     const runtime = new TransformRuntime();
     runtime.missingState = "change";
     const target = createTarget(runtime);
@@ -96,20 +102,218 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
       type: "change",
       pos: [{ x: 1, y: 0 }],
     });
-    expect(() => target.preflightAtomicTransform(operationValue)).toThrow(
-      /no "change"/,
+    const completion = target.startAtomicTransform(operationValue, context());
+    runtime.advanceOnce();
+    await expect(completion).rejects.toThrow(/no "change"/);
+    expect(runtime.events).toEqual(["state:multEnd"]);
+  });
+
+  it("animates and mutates every CN in its own coin-multiplier chain", async () => {
+    const runtime = new TransformRuntime();
+    const target = createTarget(runtime);
+    const input = createSnapshot(createScene(1), 8, 3, 2);
+    const output = createSnapshot(createScene(1), 8, 6, 2);
+    const operationValue = operation("game002:coin-multiplier", input, output, {
+      type: "driven-change",
+      mainPos: [{ x: 2, y: 0 }],
+      pos: [{ x: 1, y: 0 }],
+    });
+
+    const completion = target.startAtomicTransform(operationValue, context());
+    expect(runtime.events).toEqual(["state:feature1"]);
+    runtime.advanceOnce();
+    await flushPlayback();
+    expect(runtime.events.at(-1)).toBe("state:featureChange");
+    expect(runtime.events).not.toContain("value:1,0=6");
+    runtime.advanceOnce();
+    await completion;
+    expect(runtime.events.at(-1)).toBe("value:1,0=6");
+  });
+
+  it("runs CM replacement and CO transfer as direct async chains", async () => {
+    const runtime = new TransformRuntime();
+    const target = createTarget(runtime);
+    const cmScene = createScene(1);
+    cmScene[1][0] = 9;
+    runtime.scene[1]![0] = 9;
+    const cmOutputScene = cmScene.map((column) => [...column]);
+    cmOutputScene[1]![0] = 8;
+    const cm = operation(
+      "game002:cm-to-cn",
+      createSnapshot(cmScene, 9, 4, 2),
+      createSnapshot(cmOutputScene, 8, 4, 2),
+      { type: "change", pos: [{ x: 1, y: 0 }] },
     );
-    expect(runtime.events).toEqual([]);
+
+    const cmCompletion = target.startAtomicTransform(cm, context());
+    runtime.advanceOnce();
+    await cmCompletion;
+    expect(runtime.scene[1]![0]).toBe(8);
+
+    const inputScene = createScene(1);
+    inputScene[1]![0] = 8;
+    inputScene[2]![0] = 10;
+    runtime.scene[2]![0] = 10;
+    const outputScene = inputScene.map((column) => [...column]);
+    outputScene[1]![0] = 12;
+    outputScene[2]![0] = 8;
+    outputScene[3]![0] = 8;
+    const inputValues = createScene<number | null>(null);
+    inputValues[1]![0] = 4;
+    const outputValues = createScene<number | null>(null);
+    outputValues[2]![0] = 4;
+    outputValues[3]![0] = 4;
+    const co = operation(
+      "game002:co-collect",
+      createExactSnapshot(inputScene, inputValues),
+      createExactSnapshot(outputScene, outputValues),
+      {
+        type: "transfer",
+        mainPos: [{ x: 2, y: 0 }],
+        routes: [{ source: { x: 1, y: 0 }, target: { x: 3, y: 0 } }],
+      },
+    );
+
+    const coCompletion = target.startAtomicTransform(co, context());
+    runtime.advanceOnce();
+    await flushPlayback();
+    expect(runtime.events).toContain("transfer:1");
+    runtime.advanceOnce();
+    await coCompletion;
+    expect(runtime.scene[1]![0]).toBe(12);
+    expect(runtime.scene[2]![0]).toBe(8);
+    expect(runtime.scene[3]![0]).toBe(8);
+  });
+
+  it("rejects concurrent and unknown transform programs", async () => {
+    const runtime = new TransformRuntime();
+    const target = createTarget(runtime);
+    const snapshot = createSnapshot(createScene(1), 7, 3, 2);
+    const active = target.startAtomicTransform(
+      operation("game002:wild-multiplier", snapshot, snapshot, {
+        type: "driven-change",
+        mainPos: [{ x: 1, y: 0 }],
+        pos: [],
+      }),
+      context(),
+    );
+    await expect(
+      target.startAtomicTransform(
+        operation("game002:wl-increment", snapshot, snapshot, {
+          type: "change",
+          pos: [],
+        }),
+        context(),
+      ),
+    ).rejects.toThrow(/cannot start while active/);
+    runtime.rejectPending(new Error("stop active transform"));
+    await expect(active).rejects.toThrow(/stop active transform/);
+
+    await expect(
+      target.startAtomicTransform(
+        operation("game002:unknown", snapshot, snapshot, {
+          type: "change",
+          pos: [],
+        }),
+        context(),
+      ),
+    ).rejects.toThrow(/not a game002 change operation/);
+  });
+
+  it("fails locally for invalid active-operation inputs", async () => {
+    const runtime = new TransformRuntime();
+    const target = createTarget(runtime);
+    const snapshot = createSnapshot(createScene(1), 7, 3, 2);
+
+    expect(() => target.isInitialSpinComplete()).toThrow(/not active/);
+    expect(() => target.updateWin()).toThrow(/not active/);
+    expect(() => target.isDropdownComplete()).toThrow(/not active/);
+    target.applyReleaseOnlyPositions([]);
+    target.applyReleaseOnlyPositions([{ x: 0, y: 0 }]);
+    target.startCompletionAmounts(1, 0);
+    expect(target.isCompletionComplete()).toBe(true);
+    target.startCompletionAmounts(1, 1);
+    expect(target.isCompletionComplete()).toBe(false);
+    target.cleanup();
+
+    const fall = {
+      flowKey: "edge-fall",
+      sourceScene: createScene(1),
+      sourceValues: createScene<number | null>(null),
+      dropdownScene: createScene(2),
+      dropdownValues: createScene<number | null>(null),
+      refillScene: createScene(3),
+      refillValues: createScene<number | null>(null),
+      refillPositions: [],
+    } as never;
+    target.startDropdownData(fall);
+    expect(target.isDropdownComplete()).toBe(false);
+    target.cleanup();
+    runtime.anticipation = true;
+    target.startDropdownData(fall);
+    expect(() => target.isDropdownComplete()).toThrow(/does not match/);
+    target.cleanup();
+
+    const presentation = {
+      ...operation("game002:wl-increment", snapshot, snapshot, {
+        type: "change",
+        pos: [],
+      }),
+      effect: "presentation",
+    } as unknown as Game002TransformOperation;
+    await expect(
+      target.startAtomicTransform(presentation, context()),
+    ).rejects.toThrow(/state-mutation/);
+
+    for (const payload of [
+      undefined,
+      { type: "driven-change", mainPos: [], pos: [] },
+    ])
+      await expect(
+        target.startAtomicTransform(
+          {
+            ...operation("game002:wl-increment", snapshot, snapshot, {
+              type: "change",
+              pos: [],
+            }),
+            payload,
+          } as unknown as Game002TransformOperation,
+          context(),
+        ),
+      ).rejects.toThrow(/must use a change payload/);
+
+    for (const value of [null, 0, 1.5]) {
+      const output = createSnapshot(
+        createScene(1),
+        7,
+        3,
+        value as unknown as number,
+      );
+      await expect(
+        target.startAtomicTransform(
+          operation("game002:wl-increment", snapshot, output, {
+            type: "change",
+            pos: [{ x: 0, y: 0 }],
+          }),
+          context(),
+        ),
+      ).rejects.toThrow(/positive safe integer/);
+    }
   });
 });
 
 function createTarget(runtime: TransformRuntime): Game002RoundTarget {
   return new Game002RoundTarget({
     runtime: runtime.asRuntime(),
-    cascadePlayer: { clear: () => undefined } as SymbolCascadePlayer,
+    cascadePlayer: {
+      clear: () => undefined,
+      prepare: () => ({}),
+      start: () => undefined,
+    } as unknown as SymbolCascadePlayer,
     winAmountPlayer: {
       dismissImmediately: () => undefined,
-    } as WinAmountAnimationPlayer,
+      start: () => undefined,
+    } as unknown as WinAmountAnimationPlayer,
     wlSymbolCode: 0,
     wmSymbolCode: 7,
     cmSymbolCode: 9,
@@ -162,6 +366,7 @@ class TransformRuntime {
   missingState: string | null = null;
   failNextSynchronously = false;
   ignoreAbort = false;
+  anticipation = false;
   #loop = 0;
   #once = 0;
   #state = "normal";
@@ -205,6 +410,8 @@ class TransformRuntime {
         this.failNextSynchronously = false;
         throw new Error("transform playback did not start");
       }
+      if (state === this.missingState)
+        throw new Error(`transform position has no "${state}" animation`);
       this.#state = state;
       this.events.push(`state:${state}`);
       const completion = options.completion;
@@ -240,6 +447,11 @@ class TransformRuntime {
     };
     return {
       resetPresentationState: () => undefined,
+      spinToScene: () => undefined,
+      isAnticipationActive: () => this.anticipation,
+      createCascadeDropPlan: () => ({ totalSeconds: 1 }),
+      createCascadeDropdownPlan: () => ({ totalSeconds: 0 }),
+      startCascadeDrop: () => undefined,
       getCurrentScene: () => this.scene,
       applyScene: (scene: readonly (readonly number[])[]) => {
         this.scene.splice(
@@ -250,10 +462,12 @@ class TransformRuntime {
         return Object.freeze(scene.map(() => 0));
       },
       setVisibleSymbolPresentationValue: (
-        _x: number,
-        _y: number,
-        _value: number,
-      ) => {},
+        x: number,
+        y: number,
+        value: number,
+      ) => {
+        this.events.push(`value:${x},${y}=${value}`);
+      },
       setVisibleSymbolImageStringText: (
         x: number,
         y: number,
@@ -309,30 +523,50 @@ class TransformRuntime {
           loopCompletionCount: this.#loop,
           onceCompletionCount: this.#once,
         })),
-      prepareVisibleOccurrenceReplacement: (options: {
+      replaceVisibleOccurrence: (options: {
         x: number;
         y: number;
         expectedCode: number;
         outputCode: number;
         outputPresentationValue: number | null;
       }) => {
+        if (this.scene[options.x][options.y] !== options.expectedCode)
+          throw new Error("replacement input mismatch");
+        this.scene[options.x][options.y] = options.outputCode;
         this.events.push(
-          `prepare:${options.x},${options.y}:${options.expectedCode}->${options.outputCode}`,
+          `replace:${options.x},${options.y}:${options.outputCode}`,
         );
-        return {
-          x: options.x,
-          y: options.y,
-          inputCode: options.expectedCode,
-          outputCode: options.outputCode,
-          commit: () => {
-            this.scene[options.x][options.y] = options.outputCode;
-            this.events.push(
-              `commit:${options.x},${options.y}:${options.outputCode}`,
-            );
-          },
-          rollback: () => undefined,
-          destroy: () => undefined,
-        };
+      },
+      releaseVisibleSymbols: () => undefined,
+      transferVisibleOccurrences: async (options: {
+        transfers: readonly {
+          source: { x: number; y: number };
+          target: { x: number; y: number };
+          expectedSourceCode: number;
+          expectedTargetCode: number;
+          sourceReplacementCode: number;
+        }[];
+        barrier: Promise<void>;
+        waitForFrame: (
+          update: (deltaSeconds: number) => boolean,
+        ) => Promise<void>;
+      }) => {
+        this.events.push(`transfer:${options.transfers.length}`);
+        await options.barrier;
+        await options.waitForFrame(() => true);
+        for (const transfer of options.transfers) {
+          if (
+            this.scene[transfer.source.x]![transfer.source.y] !==
+              transfer.expectedSourceCode ||
+            this.scene[transfer.target.x]![transfer.target.y] !==
+              transfer.expectedTargetCode
+          )
+            throw new Error("transfer input mismatch");
+          this.scene[transfer.target.x]![transfer.target.y] =
+            transfer.expectedSourceCode;
+          this.scene[transfer.source.x]![transfer.source.y] =
+            transfer.sourceReplacementCode;
+        }
       },
       getVisualSnapshot: () => ({
         visible: true,
@@ -376,6 +610,16 @@ class TransformRuntime {
   }
 }
 
+function context(abort = new AbortController()): SlotOperationExecutionContext {
+  return {
+    signal: abort.signal,
+    waitForFrame: async (update) => {
+      if (!update(0.5)) throw new Error("test frame did not complete");
+    },
+    delay: async () => undefined,
+  };
+}
+
 function createSnapshot(
   scene: readonly (readonly number[])[],
   transformedCode: number,
@@ -415,6 +659,25 @@ function createSnapshot(
       ),
     ),
     occurrences,
+  }) as SlotOperationSnapshot;
+}
+
+function createExactSnapshot(
+  scene: readonly (readonly number[])[],
+  values: readonly (readonly (number | null)[])[],
+): SlotOperationSnapshot {
+  return Object.freeze({
+    scene,
+    values,
+    occurrences: scene.flatMap((column, x) =>
+      column.map((code, y) => ({
+        id: `exact-${x}-${y}`,
+        code,
+        symbol: `S${code}`,
+        value: values[x]![y]!,
+        position: { x, y },
+      })),
+    ),
   }) as SlotOperationSnapshot;
 }
 

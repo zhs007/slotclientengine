@@ -376,38 +376,6 @@ class ConfiguredRoundTarget {
         : null;
   }
 
-  preflightWin(step: SlotRoundWinStepPlan): void {
-    if (
-      step.groups.some((group) => group.sequentialCollect) &&
-      !this.#cascadePlayer
-    )
-      throw new SceneLayoutError(
-        "Configured round requires sequential collect presentation.flow version 2.",
-      );
-    if (this.#cascadePlayer) {
-      this.preflightCascadePresentations(step);
-      return;
-    }
-    for (const group of step.groups) {
-      for (const position of group.positions) {
-        const occurrence = requirePlanOccurrence(step.input, position);
-        this.assertSymbolStateCapability(
-          occurrence.symbol,
-          this.#presentation.flow.symbolStates.win,
-          `step[${step.stepIndex}] win (${position.x},${position.y})`,
-        );
-      }
-      for (const position of group.removePositions) {
-        const occurrence = requirePlanOccurrence(step.input, position);
-        this.assertSymbolStateCapability(
-          occurrence.symbol,
-          this.#presentation.flow.symbolStates.remove,
-          `step[${step.stepIndex}] remove (${position.x},${position.y})`,
-        );
-      }
-    }
-  }
-
   cleanup(
     reason:
       | "next-spin"
@@ -524,7 +492,6 @@ class ConfiguredRoundTarget {
     if (!this.#dropdown)
       throw new SceneLayoutError("No configured dropdown step is active.");
     if (this.#runtime.isMainReelSpinning()) return false;
-    assertRuntimeSnapshot(this.#runtime, this.#dropdown.output, "dropdown");
     this.#dropdown = null;
     return true;
   }
@@ -540,7 +507,6 @@ class ConfiguredRoundTarget {
     if (!this.#refill)
       throw new SceneLayoutError("No configured refill step is active.");
     if (this.#runtime.isMainReelSpinning()) return false;
-    assertRuntimeSnapshot(this.#runtime, this.#refill.output, "refill");
     this.#refill = null;
     return true;
   }
@@ -601,57 +567,6 @@ class ConfiguredRoundTarget {
     return player;
   }
 
-  private preflightCascadePresentations(step: SlotRoundWinStepPlan): void {
-    for (const group of step.groups) {
-      const groupSymbol = this.resolveResultSymbol(
-        group.result,
-        group.resultIndex,
-      );
-      const groupPresentation =
-        this.#symbolResource.symbolManifest.symbols[groupSymbol]
-          ?.cascadeWinPresentation;
-      if (!groupPresentation)
-        throw new SceneLayoutError(
-          `Configured round step[${step.stepIndex}] result[${group.resultIndex}] symbol "${groupSymbol}" has no cascade win presentation.`,
-        );
-      if (
-        group.sequentialCollect &&
-        groupPresentation.playback.mode !== "sequentialCollect"
-      )
-        throw new SceneLayoutError(
-          `Configured round step[${step.stepIndex}] value result symbol "${groupSymbol}" is not sequentialCollect.`,
-        );
-      for (const position of group.positions) {
-        const occurrence = requirePlanOccurrence(step.input, position);
-        const presentation =
-          this.#symbolResource.symbolManifest.symbols[occurrence.symbol]
-            ?.cascadeWinPresentation;
-        if (!presentation)
-          throw new SceneLayoutError(
-            `Configured round step[${step.stepIndex}] symbol "${occurrence.symbol}" has no cascade win presentation.`,
-          );
-      }
-      if (group.sequentialCollect) {
-        let cashShareTotal = 0;
-        for (const occurrenceId of group.primaryValueOccurrenceIds) {
-          const occurrence = requirePlanOccurrenceById(
-            step.input,
-            occurrenceId,
-          );
-          cashShareTotal += resolveConfiguredCollectCashShare({
-            group,
-            itemValue: occurrence.value,
-            amount: this.#roundFlow.cascade?.amount,
-          });
-        }
-        if (cashShareTotal !== group.amount)
-          throw new SceneLayoutError(
-            `Configured round step[${step.stepIndex}] collect cash shares ${cashShareTotal} do not match group amount ${group.amount}.`,
-          );
-      }
-    }
-  }
-
   private resolveGroupSymbol(context: SymbolCascadeGroupContext): string {
     return this.resolveResultSymbol(
       context.group.result,
@@ -703,28 +618,6 @@ class ConfiguredRoundTarget {
       throw new SceneLayoutError("Configured collect step is not active.");
     return this.#playerStep;
   }
-
-  private assertSymbolStateCapability(
-    symbol: string,
-    state: string,
-    label: string,
-  ): void {
-    const entry = this.#symbolResource.symbolManifest.symbols[symbol];
-    if (!entry)
-      throw new SceneLayoutError(
-        `Configured round ${label} uses unknown symbol "${symbol}".`,
-      );
-    if (
-      state === this.#symbolResource.statePreset.defaultState ||
-      entry.animations[state] ||
-      entry.states[state] ||
-      entry.valuePresentation?.reelStates.states[state]
-    )
-      return;
-    throw new SceneLayoutError(
-      `Configured round ${label} symbol "${symbol}" has no explicit "${state}" presentation capability.`,
-    );
-  }
 }
 
 function requireInitialSymbolResource(resource: SceneLayoutPackageResource) {
@@ -754,20 +647,6 @@ function requirePlanOccurrence(
   if (!occurrence)
     throw new SceneLayoutError(
       `Configured round has no occurrence at (${position.x},${position.y}).`,
-    );
-  return occurrence;
-}
-
-function requirePlanOccurrenceById(
-  snapshot: SlotRoundOccurrenceSnapshot,
-  occurrenceId: string,
-) {
-  const occurrence = snapshot.occurrences.find(
-    (candidate) => candidate.id === occurrenceId,
-  );
-  if (!occurrence)
-    throw new SceneLayoutError(
-      `Configured round has no occurrence "${occurrenceId}".`,
     );
   return occurrence;
 }
@@ -934,41 +813,6 @@ function toPresentationValues(
       Object.freeze(column.map((value) => (value === -1 ? null : value))),
     ),
   );
-}
-
-function assertRuntimeSnapshot(
-  runtime: SceneLayoutPackageRuntime,
-  expected: SlotRoundOccurrenceSnapshot,
-  label: string,
-): void {
-  assertMatrixEqual(
-    runtime.getMainReelSceneSnapshot(),
-    expected.scene,
-    `${label} scene`,
-  );
-  assertMatrixEqual(
-    runtime.getMainReelCascadeValues(),
-    expected.values,
-    `${label} values`,
-  );
-}
-
-function assertMatrixEqual(
-  actual: readonly (readonly unknown[])[],
-  expected: readonly (readonly unknown[])[],
-  label: string,
-): void {
-  if (
-    actual.length !== expected.length ||
-    actual.some(
-      (column, x) =>
-        column.length !== expected[x]?.length ||
-        column.some((value, y) => value !== expected[x]?.[y]),
-    )
-  )
-    throw new SceneLayoutError(
-      `Configured round ${label} does not match compiled plan.`,
-    );
 }
 
 function secureRandom(): number {

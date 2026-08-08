@@ -170,6 +170,12 @@ vi.mock("../../src/scene-layout/package-runtime.js", () => ({
 
 import { createSceneOtherSceneFlowRuntime } from "../../src/scene-layout/local-scene-flow.js";
 
+async function runOperationTick(deltaMS = 16): Promise<void> {
+  mocks.tickerCallback!({ deltaMS });
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 describe("local scene flow runtime", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -216,11 +222,11 @@ describe("local scene flow runtime", () => {
     );
     runtime.play();
     runtime.play();
-    mocks.tickerCallback!({ deltaMS: 16 });
+    await runOperationTick();
     expect(mocks.spin).toHaveBeenCalledOnce();
 
     mocks.landings.push({ x: 0, y: 0 }, { x: 0, y: 0 });
-    mocks.tickerCallback!({ deltaMS: 16 });
+    await runOperationTick();
     expect(mocks.spin).toHaveBeenCalledWith(
       expect.objectContaining({ landingStates: [["appear"]] }),
     );
@@ -231,9 +237,9 @@ describe("local scene flow runtime", () => {
     );
     mocks.onceCount = 1;
     mocks.spinning = false;
-    mocks.tickerCallback!({ deltaMS: 16 });
+    await runOperationTick();
     expect(mocks.applySnapshot).toHaveBeenCalledOnce();
-    mocks.tickerCallback!({ deltaMS: 16 });
+    await runOperationTick();
     expect(runtime.getSnapshot()).toMatchObject({
       phase: "completed",
       snapshotIndex: 2,
@@ -484,15 +490,15 @@ describe("local scene flow runtime", () => {
       operationPlan: operationPlan as never,
     });
     runtime.play();
-    mocks.tickerCallback!({ deltaMS: 16 });
-    mocks.tickerCallback!({ deltaMS: 16 });
-    mocks.tickerCallback!({ deltaMS: 16 });
+    await runOperationTick();
+    await runOperationTick();
+    await runOperationTick();
     expect(mocks.applySnapshot).not.toHaveBeenCalled();
     expect(mocks.spin).toHaveBeenCalledOnce();
     runtime.destroy();
   });
 
-  it("rejects non-authored operations during coordinator preflight", async () => {
+  it("rejects a non-authored operation when that operation starts", async () => {
     const plan = operationPlanFor(project);
     const operationPlan = withLeadingOperation(plan, {
       kind: "server-component",
@@ -506,9 +512,9 @@ describe("local scene flow runtime", () => {
       operationPlan: operationPlan as never,
     });
     runtime.play();
-    await Promise.resolve();
+    await runOperationTick();
     expect(() => mocks.tickerCallback!({ deltaMS: 16 })).toThrow(
-      /snapshot-authored/,
+      /invalid local source/,
     );
     runtime.destroy();
   });

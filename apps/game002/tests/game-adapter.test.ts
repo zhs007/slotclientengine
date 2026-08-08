@@ -77,6 +77,12 @@ describe("game002 task 95 adapter", () => {
       popupError,
       new Error("popup input failed as text"),
     ]);
+    fakeApp.tick(Number.NaN);
+    fakeApp.tick(-1);
+    expect(fatalErrors.slice(-2).map((error) => error.message)).toEqual([
+      "game002 ticker deltaMS must be a finite non-negative number.",
+      "game002 ticker deltaMS must be a finite non-negative number.",
+    ]);
 
     const pending = adapter.playSpin(createTerminalLogic());
     fakeApp.tick(1000);
@@ -141,73 +147,6 @@ describe("game002 task 95 adapter", () => {
       nonWinningDimmingAlpha: 0.5,
       startPresentationsWithEmphasis: true,
     });
-  });
-
-  it("gives CO ownership priority when a vortex target remains CN", () => {
-    const runtime = new FakeRuntime([]);
-    const target = new Game002RoundTarget({
-      runtime: runtime.asRuntime(),
-      cascadePlayer: new FakeCascadePlayer([], runtime),
-      winAmountPlayer: new FakeWinAmountPlayer([]).asPlayer(),
-      wlSymbolCode: 0,
-      wmSymbolCode: 7,
-      cmSymbolCode: 9,
-    });
-    const position = (y: number) => Object.freeze({ x: 0, y });
-    const inputScene = Object.freeze([Object.freeze([10, 8, 8])]);
-    const inputValues = Object.freeze([Object.freeze([null, 1, 2])]);
-    const outputScene = Object.freeze([Object.freeze([8, 12, 8])]);
-    const outputValues = Object.freeze([Object.freeze([2, null, 1])]);
-    const relocations = Object.freeze([
-      Object.freeze({ source: position(1), target: position(2) }),
-    ]);
-    const occurrences = Object.freeze([
-      occurrence("co", 10, "CO", null, 0),
-      occurrence("source", 8, "CN", 1, 1),
-      occurrence("target", 8, "CN", 2, 2),
-    ]);
-    const step = Object.freeze({
-      kind: "settled-transform",
-      index: 0,
-      stepIndex: 0,
-      input: Object.freeze({
-        scene: inputScene,
-        values: inputValues,
-        occurrences,
-      }),
-      output: Object.freeze({
-        scene: outputScene,
-        values: outputValues,
-        occurrences: Object.freeze([]),
-      }),
-      changes: Object.freeze([
-        transformChange(occurrences[0], 8, "CN", 2, 0),
-        transformChange(occurrences[1], 12, "BN", null, 1),
-        transformChange(occurrences[2], 8, "CN", 1, 2),
-      ]),
-      relocations,
-    });
-    const operation = Object.freeze({
-      kind: "game002:co-collect",
-      version: 2,
-      effect: "state-mutation",
-      source: Object.freeze({
-        kind: "server-component",
-        stepIndex: 0,
-        bindings: Object.freeze({}),
-      }),
-      input: step.input,
-      output: step.output,
-      mutations: Object.freeze([]),
-      payload: Object.freeze({
-        type: "transfer",
-        mainPos: Object.freeze([position(0)]),
-        routes: relocations,
-      }),
-    });
-    expect(() =>
-      target.preflightAtomicTransform(operation as any),
-    ).not.toThrow();
   });
 
   it("plays the complete fixture with protected WL and one unified fall", async () => {
@@ -391,6 +330,21 @@ describe("game002 task 95 adapter", () => {
     expect(() =>
       adapter.playSpin(createCascadeLogic(extraServerFields)),
     ).not.toThrow();
+  });
+
+  it("does not globally validate a FreeGame-only symbol during mount", async () => {
+    const fakeApp = createFakeApplication();
+    const runtime = new FakeRuntime([]);
+    runtime.missingSymbol = "BN";
+    const adapter = createTestAdapter({
+      createApplication: () => fakeApp.app,
+      createRuntime: () => runtime.asRuntime(),
+    });
+
+    await expect(adapter.mount(createMountContext())).resolves.toBeUndefined();
+    expect(fakeApp.stopped).toBe(false);
+    expect(fakeApp.destroyed).toBe(false);
+    adapter.destroy?.();
   });
 
   it("rejects concurrent play and rejects a pending play on destroy", async () => {
@@ -661,6 +615,7 @@ class FakeRuntime {
   symbolState = "normal";
   symbolLoopCompletionCount = 0;
   symbolOnceCompletionCount = 0;
+  missingSymbol: string | null = null;
 
   constructor(events: string[]) {
     this.events = events;
@@ -701,7 +656,8 @@ class FakeRuntime {
       }),
       getCurrentScene: () => this.currentScene,
       gameConfig: {
-        getSymbolCode: (symbol: string) => symbols.indexOf(symbol),
+        getSymbolCode: (symbol: string) =>
+          symbol === this.missingSymbol ? undefined : symbols.indexOf(symbol),
         getPaytableEntry: (code: number) => ({ symbol: symbols[code] }),
       },
       applyScene: (scene: SceneMatrix) => {
@@ -749,22 +705,8 @@ class FakeRuntime {
       setVisibleSymbolPresentationValue: () => undefined,
       setVisibleSymbolImageStringText: () => undefined,
       getVisibleSymbolImageStringText: () => "x1",
-      prepareVisibleOccurrenceReplacement: () => ({
-        x: 0,
-        y: 0,
-        inputCode: 7,
-        outputCode: 8,
-        commit: () => undefined,
-        rollback: () => undefined,
-        destroy: () => undefined,
-      }),
-      prepareVisibleOccurrenceTransferBatch: () => ({
-        start: () => undefined,
-        setProgress: () => undefined,
-        commit: () => undefined,
-        rollback: () => undefined,
-        destroy: () => undefined,
-      }),
+      replaceVisibleOccurrence: () => undefined,
+      transferVisibleOccurrences: async () => undefined,
       getVisibleSymbolGeometrySnapshots: (positions: readonly TestPosition[]) =>
         positions.map((position: TestPosition) => ({
           ...position,

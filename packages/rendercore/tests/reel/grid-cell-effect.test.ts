@@ -1,4 +1,3 @@
-import reelManifest from "../../../../apps/game002/config/reel-presentation.manifest.json";
 import { Container } from "pixi.js";
 import { describe, expect, it } from "vitest";
 import {
@@ -9,57 +8,97 @@ import {
   type GridCellEffectResource,
 } from "../../src/reel/index.js";
 import type { RendercoreSpinePlayer } from "../../src/spine/runtime-player.js";
-import { readCraveJson, readCraveText } from "../crave-fixture.js";
 
-const RAW_MANIFEST = reelManifest;
-const RAW_ATLAS = readCraveText("symbol.atlas");
-const SKELETONS = Object.freeze({
-  "./nearwin1": readCraveJson("nearwin1.json"),
-  "./nearwin2": readCraveJson("nearwin2.json"),
-});
+const TEST_REEL_MANIFEST = {
+  version: 1,
+  spin: {
+    bounceStrength: 0,
+    dimmingAlpha: 0.5,
+    timing: {
+      startStepMs: 10,
+      stopStepMs: 10,
+      settleAfterLastStartMs: 0,
+      minimumSpinCycles: 1,
+      speedSymbolsPerSecond: 10,
+    },
+    cellEffects: {
+      pulse: {
+        skeleton: "./pulse.json",
+        atlas: "./pulse.atlas",
+        texture: "./pulse.png",
+        animation: "Loop",
+        loopCount: 1,
+        finishBeforeStopMs: 0,
+        transform: { x: 0, y: 0, scale: 1 },
+      },
+    },
+    anticipation: {
+      effect: "pulse",
+      triggerLandedCount: 2,
+      firstFollowingStopDelayMs: 0,
+      stopStepMs: 100,
+    },
+  },
+  cascade: {
+    anticipationRefill: {
+      sweep: {
+        effect: "pulse",
+        loopCount: 1,
+        startStepMs: 100,
+        order: "left-right-bottom-up",
+      },
+      spin: {
+        effect: "pulse",
+        order: "bottom-left-up-right-wave",
+        startStepMs: 10,
+        stopStepMs: 100,
+        settleAfterLastStartMs: 0,
+        minimumSpinCycles: 1,
+        speedSymbolsPerSecond: 10,
+      },
+    },
+  },
+};
+const TEST_EFFECT_SKELETON = {
+  skeleton: { spine: "4.3.23" },
+  bones: [{ name: "root" }],
+  animations: {
+    Loop: { bones: { root: { rotate: [{ time: 0 }, { time: 0.5 }] } } },
+  },
+};
+const TEST_EFFECT_ATLAS =
+  "effect.png\nsize: 1,1\nformat: RGBA8888\nfilter: Linear,Linear\n";
 
 describe("grid cell effect resources and controller", () => {
-  it("validates exact real Spine resources, durations and schedule-derived pools", () => {
-    const manifest = parseReelManifest(RAW_MANIFEST);
+  it("builds generic effect resources and derives bounded pool capacities", () => {
+    const manifest = parseReelManifest(TEST_REEL_MANIFEST);
     const resources = createGridCellEffectResourcesFromManifest({
       manifest,
-      skeletonModules: SKELETONS,
-      atlasModules: {
-        "./symbol.atlas": RAW_ATLAS,
-      },
-      textureModules: {
-        "./symbol.png": "/Symbol.png",
-      },
+      skeletonModules: { "./pulse.json": TEST_EFFECT_SKELETON },
+      atlasModules: { "./pulse.atlas": TEST_EFFECT_ATLAS },
+      textureModules: { "./pulse.png": "/effect.png" },
     });
-    expect(resources.anticipation).toMatchObject({
+
+    expect(resources.pulse).toMatchObject({
       animationName: "Loop",
+      durationSeconds: 0.5,
+      officialDurationSeconds: 0.5,
       loopCount: 1,
     });
-    expect(resources.anticipation!.durationSeconds).toBeCloseTo(0.6666667, 6);
-    expect(resources.anticipation!.officialDurationSeconds).toBe(
-      0.6666666865348816,
-    );
-    expect(resources.refillSweep).toMatchObject({
-      animationName: "Loop",
-      loopCount: 1,
-    });
-    expect(resources.refillSweep!.durationSeconds).toBeCloseTo(0.4, 6);
-    expect(resources.refillSweep!.officialDurationSeconds).toBe(
-      0.4000000059604645,
-    );
-    expect(
-      resources.refillSweep!.completionBoundaryAdjustmentSeconds,
-    ).toBeGreaterThan(
-      resources.refillSweep!.officialDurationSeconds -
-        resources.refillSweep!.durationSeconds,
-    );
     expect(
       deriveGridCellEffectPoolCapacities({
         manifest,
         resources,
-        cellCount: 54,
+        cellCount: 10,
       }),
-    ).toEqual({ anticipation: 7, refillSweep: 5 });
+    ).toEqual({ pulse: 5 });
+    expect(() =>
+      deriveGridCellEffectPoolCapacities({
+        manifest,
+        resources,
+        cellCount: 0,
+      }),
+    ).toThrow(/cellCount/);
     expect(() =>
       createGridCellEffectResourcesFromManifest({
         manifest,
@@ -72,72 +111,39 @@ describe("grid cell effect resources and controller", () => {
       createGridCellEffectResourcesFromManifest({
         manifest,
         skeletonModules: {
-          ...SKELETONS,
-          "duplicate/nearwin1": SKELETONS["./nearwin1"],
+          "./pulse.json": TEST_EFFECT_SKELETON,
+          "duplicate/pulse.json": TEST_EFFECT_SKELETON,
         },
-        atlasModules: {
-          "./symbol.atlas": RAW_ATLAS,
-        },
-        textureModules: {
-          "./symbol.png": "/Symbol.png",
-        },
+        atlasModules: { "./pulse.atlas": TEST_EFFECT_ATLAS },
+        textureModules: { "./pulse.png": "/effect.png" },
       }),
     ).toThrow(/found 2/);
-    expect(() =>
-      deriveGridCellEffectPoolCapacities({
-        manifest,
-        resources,
-        cellCount: 0,
-      }),
-    ).toThrow(/cellCount/);
-
-    const players: FakePlayer[] = [];
-    const controller = createGridCellEffectController({
-      resources: { refillSweep: resources.refillSweep! },
-      capacities: { refillSweep: 1 },
-      columns: 1,
-      rows: 1,
-      cellWidth: 10,
-      cellHeight: 10,
-      createPlayer: (resource) => {
-        const player = new FakePlayer(resource.officialDurationSeconds);
-        players.push(player);
-        return player;
-      },
-    });
-    controller.prepare();
-    controller.startScheduledEffect({
-      effectId: "refillSweep",
-      position: { x: 0, y: 0 },
-      loopCount: 1,
-    });
-    expect(controller.update(resources.refillSweep!.durationSeconds)).toEqual({
-      completed: [{ effectId: "refillSweep", x: 0, y: 0 }],
-    });
-    expect(players[0]!.maxElapsed).toBeGreaterThanOrEqual(
-      resources.refillSweep!.officialDurationSeconds,
-    );
-    controller.destroy();
   });
 
-  it("reads the single atlas page instead of deriving it from the mapped texture key", () => {
-    const rawManifest = structuredClone(RAW_MANIFEST) as any;
-    for (const effect of Object.values(rawManifest.spin.cellEffects) as any[]) {
-      effect.texture = "./content-addressed-effect.webp";
-    }
-    const resources = createGridCellEffectResourcesFromManifest({
-      manifest: parseReelManifest(rawManifest),
-      skeletonModules: SKELETONS,
-      atlasModules: {
-        "./symbol.atlas": RAW_ATLAS,
+  it("binds the declared texture module to the atlas page", () => {
+    const manifest = parseReelManifest({
+      ...TEST_REEL_MANIFEST,
+      spin: {
+        ...TEST_REEL_MANIFEST.spin,
+        cellEffects: {
+          pulse: {
+            ...TEST_REEL_MANIFEST.spin.cellEffects.pulse,
+            texture: "./content-addressed-effect.webp",
+          },
+        },
       },
+    });
+    const resources = createGridCellEffectResourcesFromManifest({
+      manifest,
+      skeletonModules: { "./pulse.json": TEST_EFFECT_SKELETON },
+      atlasModules: { "./pulse.atlas": TEST_EFFECT_ATLAS },
       textureModules: {
         "./content-addressed-effect.webp": "/assets/physical-hash.webp",
       },
     });
 
-    expect(resources.anticipation?.playerResource.textureUrls).toEqual({
-      "Symbol.png": "/assets/physical-hash.webp",
+    expect(resources.pulse?.playerResource.textureUrls).toEqual({
+      "effect.png": "/assets/physical-hash.webp",
     });
   });
 
