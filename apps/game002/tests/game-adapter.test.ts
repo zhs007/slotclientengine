@@ -778,6 +778,7 @@ class FakeRuntime {
         spinning: this.operation !== "idle",
         visibleScene: this.currentScene,
         requestedStates: [],
+        cells: [],
       }),
       destroy: () => undefined,
     } as unknown as Game002ReelRuntime;

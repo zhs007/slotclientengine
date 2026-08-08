@@ -156,6 +156,7 @@ export interface Game002ReelVisualSnapshot {
   readonly visibleScene: SceneMatrix;
   readonly requestedStates: readonly (readonly (string | null)[])[];
   readonly presentationValues: SymbolPresentationValueMatrix;
+  readonly cells: ReturnType<RenderGridCellReelSet["getSnapshot"]>["cells"];
   readonly reelCount: number;
   readonly gridCellCount: number;
   readonly layerX: number;
@@ -622,6 +623,7 @@ export function createGame002ReelRuntime(
           gridSnapshot.cells,
           (cell) => cell.presentationValue,
         ),
+        cells: gridSnapshot.cells,
         reelCount: GAME002_REEL_COUNT,
         gridCellCount: gridSnapshot.cells.length,
         layerX: reelSet.x,

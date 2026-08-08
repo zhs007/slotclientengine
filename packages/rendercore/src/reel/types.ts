@@ -572,6 +572,9 @@ export interface RenderGridCellReelCellSnapshot {
   readonly dimmingAlpha: number;
   readonly symbolDimmingAlpha: number;
   readonly requestedState: string | null;
+  readonly resolvedState: string | null;
+  readonly isOnce: boolean;
+  readonly onceCompletionCount: number | null;
   readonly visibleSymbol: number;
   readonly presentationValue: number | null;
   readonly occupied: boolean;

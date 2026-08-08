@@ -1577,6 +1577,9 @@ export class RenderGridCellReelSet extends Container {
         dimmingAlpha: 0,
         symbolDimmingAlpha: 0,
         requestedState: null,
+        resolvedState: null,
+        isOnce: false,
+        onceCompletionCount: null,
         visibleSymbol: -1,
         presentationValue: null,
         occupied: false,
@@ -1607,6 +1610,11 @@ export class RenderGridCellReelSet extends Container {
       dimmingAlpha: this.getVisibleDimmingAlpha(cell),
       symbolDimmingAlpha: this.getVisibleSymbolBrightness(cell),
       requestedState: slot?.requestedState ?? null,
+      resolvedState: slot?.resolvedState ?? null,
+      isOnce: slot?.isOnce ?? false,
+      onceCompletionCount:
+        slot?.symbol?.getAnimationCompletionSnapshot().onceCompletionCount ??
+        null,
       visibleSymbol,
       presentationValue: slot?.presentationValue ?? null,
       occupied: true,

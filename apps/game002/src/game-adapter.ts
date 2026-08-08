@@ -1123,6 +1123,24 @@ export class Game002RoundTarget {
       winCompleted: this.#winCompleted,
       completionComplete: this.#completionComplete,
       reelSpinning: this.#runtime.isSpinning(),
+      pendingReelCells: Object.freeze(
+        visual.cells
+          .filter((cell) => cell.phase !== "completed" && cell.phase !== "idle")
+          .map((cell) =>
+            Object.freeze({
+              x: cell.x,
+              y: cell.y,
+              phase: cell.phase,
+              symbolCode: cell.visibleSymbol,
+              presentationValue: cell.presentationValue,
+              requestedState: cell.requestedState,
+              resolvedState: cell.resolvedState,
+              isOnce: cell.isOnce,
+              onceCompletionCount: cell.onceCompletionCount,
+              dimmingAlpha: cell.dimmingAlpha,
+            }),
+          ),
+      ),
       anticipation: this.#runtime.getAnticipationSnapshot(),
       effects: visual.effects
         ? Object.freeze({
