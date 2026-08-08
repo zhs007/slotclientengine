@@ -533,8 +533,6 @@ function withLeadingOperation(
     operationIndex: 0,
     source,
     payload: {},
-    requiredCapabilities: [kind],
-    commit: "atomic",
   };
   const operations = [leading, ...plan.operations].map(
     (operation, operationIndex) => ({ ...operation, operationIndex }),
@@ -542,7 +540,6 @@ function withLeadingOperation(
   return deepFreeze({
     ...plan,
     operations,
-    requiredCapabilities: [...plan.requiredCapabilities, kind],
   });
 }
 
@@ -558,16 +555,10 @@ function operationPlanFor(
   const initialSnapshot = {
     scene: options.initialMismatch ? [[99]] : initial.scene,
     values: initial.otherScene,
-    occurrences: [],
   };
   const targets = options.omitFinal
     ? value.snapshots.slice(1, -1)
     : value.snapshots.slice(1);
-  let input: {
-    scene: readonly (readonly number[])[];
-    values: readonly (readonly (number | null)[])[];
-    occurrences: never[];
-  } = initialSnapshot;
   const operations: Record<string, unknown>[] = [
     {
       id: "operation-initial",
@@ -584,8 +575,6 @@ function operationPlanFor(
       },
       output: initialSnapshot,
       payload: {},
-      requiredCapabilities: ["slot:scene-landing"],
-      commit: "atomic",
     },
   ];
   operations.push(
@@ -594,7 +583,6 @@ function operationPlanFor(
       const output = {
         scene: options.outputMismatch && index === 0 ? [[99]] : target.scene,
         values: target.otherScene,
-        occurrences: [],
       };
       const operation = {
         id: `operation-${index}`,
@@ -611,17 +599,9 @@ function operationPlanFor(
           suggestions: [],
           edits: [],
         },
-        ...(target.transition === "spin"
-          ? {}
-          : { input, mutations: [{ kind: "test" }] }),
         output,
         payload: {},
-        requiredCapabilities: [
-          target.transition === "spin" ? "slot:spin" : "slot:state-mutation",
-        ],
-        commit: "atomic",
       };
-      input = output;
       return operation;
     }),
   );
@@ -632,11 +612,6 @@ function operationPlanFor(
     final:
       (operations.at(-1)?.output as typeof initialSnapshot | undefined) ??
       initialSnapshot,
-    requiredCapabilities: [
-      "slot:scene-landing",
-      "slot:spin",
-      "slot:state-mutation",
-    ],
   });
 }
 

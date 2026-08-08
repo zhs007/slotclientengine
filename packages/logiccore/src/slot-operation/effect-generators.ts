@@ -4,7 +4,6 @@ import type {
   SlotPresentationDraftV2,
   SlotPresentationTarget,
   SlotSceneLandingDraftV2,
-  SlotStateMutation,
   SlotStateMutationDraftV2,
 } from "./v2-types";
 import type { SlotOperationSnapshot, SlotOperationSource } from "./types";
@@ -71,26 +70,22 @@ export function generateCompletionPresentation(options: {
   return presentation("slot:completion", options);
 }
 
-export function generateDropdownMutation(options: {
+export function generateDropdownOperation(options: {
   readonly source: SlotOperationSource;
-  readonly input: SlotOperationSnapshot;
   readonly output: SlotOperationSnapshot;
-  readonly mutations: readonly SlotStateMutation[];
   readonly payload?: unknown;
   readonly businessKey?: string;
 }): SlotStateMutationDraftV2<"slot:dropdown", 2> {
-  return mutation("slot:dropdown", options);
+  return stateOperation("slot:dropdown", options);
 }
 
-export function generateRefillMutation(options: {
+export function generateRefillOperation(options: {
   readonly source: SlotOperationSource;
-  readonly input: SlotOperationSnapshot;
   readonly output: SlotOperationSnapshot;
-  readonly mutations: readonly SlotStateMutation[];
   readonly payload?: unknown;
   readonly businessKey?: string;
 }): SlotStateMutationDraftV2<"slot:refill", 2> {
-  return mutation("slot:refill", options);
+  return stateOperation("slot:refill", options);
 }
 
 export function compactOperations(
@@ -110,7 +105,6 @@ function definition(
     kind,
     version: 2,
     effect,
-    requiredCapabilities: Object.freeze([kind]),
     ...(effect === "presentation" || effect === "state-mutation"
       ? { requiresEstablishedScene }
       : {}),
@@ -161,13 +155,11 @@ function presentation<Kind extends string>(
   });
 }
 
-function mutation<Kind extends string>(
+function stateOperation<Kind extends string>(
   kind: Kind,
   options: {
     readonly source: SlotOperationSource;
-    readonly input: SlotOperationSnapshot;
     readonly output: SlotOperationSnapshot;
-    readonly mutations: readonly SlotStateMutation[];
     readonly payload?: unknown;
     readonly businessKey?: string;
   },
@@ -177,9 +169,7 @@ function mutation<Kind extends string>(
     kind,
     version: 2 as const,
     source: options.source,
-    input: options.input,
     output: options.output,
-    mutations: options.mutations,
     payload: options.payload ?? Object.freeze({}),
     ...(options.businessKey === undefined
       ? {}

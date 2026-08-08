@@ -11,18 +11,9 @@ export interface SlotOperationPosition {
   readonly y: number;
 }
 
-export interface SlotOperationOccurrence {
-  readonly id: string;
-  readonly code: number;
-  readonly symbol: string;
-  readonly value: SlotOperationPresentationValue;
-  readonly position: SlotOperationPosition;
-}
-
 export interface SlotOperationSnapshot {
   readonly scene: SceneMatrix;
   readonly values: SlotOperationValueMatrix;
-  readonly occurrences: readonly SlotOperationOccurrence[];
 }
 
 export interface IndexedSceneSelection {

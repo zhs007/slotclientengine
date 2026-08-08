@@ -24,7 +24,8 @@
 - 第三个及后续 snapshot 在 settled 边界原位提交 Symbol occurrence/value，再执行该 snapshot 的逐格编排；不伪造 server step/component。
 - finalized V2 plan 必须由 rendercore 实例级 operation coordinator 执行；初始 snapshot 由
   scene landing 建立，settled scene/value 只能从 state mutation 的 `operation.output` 提交，
-  presentation 不提交 scene。
+  presentation 不提交 scene。authoring plan 不保存 occurrence identity、operation input 或通用
+  mutation list；coordinator 将上一 state output 作为 `context.input` 交给 render handler。
 - 配置器在打开新窗口后仅通过一次性 `MessageChannel` 发送 ZIP bytes、hash、flow 和
   finalized operation plan。新窗口先核对 plan initial/edge checkpoint，再重新 readiness，
   并独立拥有及销毁 Pixi application、layout resource、reel 与 Symbol players。

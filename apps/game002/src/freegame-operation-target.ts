@@ -1,5 +1,6 @@
 import type {
   SlotOperationV2,
+  SlotOperationSnapshot,
   SlotStateMutationOperation,
   WinResultPosition,
 } from "@slotclientengine/gameframeworks";
@@ -57,8 +58,9 @@ export class Game002FreeGameOperationTarget {
       }
       case "spin": {
         const mutation = requireMutation(operation);
+        const input = requireInput(operation, context);
         this.#runtime.startSelectiveSpin({
-          sourceScene: mutation.input.scene,
+          sourceScene: input.scene,
           targetScene: mutation.output.scene,
           targetValues: mutation.output.values,
           positions: payload.spinPositions,
@@ -69,6 +71,7 @@ export class Game002FreeGameOperationTarget {
       }
       case "af": {
         const mutation = requireMutation(operation);
+        const input = requireInput(operation, context);
         for (const position of payload.positions)
           this.#runtime.setVisibleSymbolImageStringText(
             position.x,
@@ -82,7 +85,7 @@ export class Game002FreeGameOperationTarget {
           this.#runtime.replaceVisibleOccurrence({
             x: position.x,
             y: position.y,
-            expectedCode: mutation.input.scene[position.x]![position.y]!,
+            expectedCode: input.scene[position.x]![position.y]!,
             outputCode: mutation.output.scene[position.x]![position.y]!,
             outputPresentationValue:
               mutation.output.values[position.x]![position.y]!,
@@ -91,6 +94,7 @@ export class Game002FreeGameOperationTarget {
       }
       case "co": {
         const mutation = requireMutation(operation);
+        const input = requireInput(operation, context);
         const sourcePositions = payload.routes.map(({ source }) => source);
         await this.#runtime.playVisibleSymbolStateBatch(
           [
@@ -117,8 +121,8 @@ export class Game002FreeGameOperationTarget {
           transfers: payload.routes.map(({ source, target }) => ({
             source,
             target,
-            expectedSourceCode: mutation.input.scene[source.x]![source.y]!,
-            expectedTargetCode: mutation.input.scene[target.x]![target.y]!,
+            expectedSourceCode: input.scene[source.x]![source.y]!,
+            expectedTargetCode: input.scene[target.x]![target.y]!,
             sourceReplacementCode: mutation.output.scene[source.x]![source.y]!,
             sourceReplacementPresentationValue: null,
           })),
@@ -130,7 +134,7 @@ export class Game002FreeGameOperationTarget {
           this.#runtime.replaceVisibleOccurrence({
             x: position.x,
             y: position.y,
-            expectedCode: mutation.input.scene[position.x]![position.y]!,
+            expectedCode: input.scene[position.x]![position.y]!,
             outputCode: mutation.output.scene[position.x]![position.y]!,
             outputPresentationValue:
               mutation.output.values[position.x]![position.y]!,
@@ -178,4 +182,13 @@ function requireMutation(
   if (operation.effect !== "state-mutation")
     throw new Error(`${operation.kind} must be a state-mutation operation.`);
   return operation;
+}
+
+function requireInput(
+  operation: SlotOperationV2,
+  context: SlotOperationExecutionContext,
+): SlotOperationSnapshot {
+  if (!context.input)
+    throw new Error(`${operation.kind} requires an established input scene.`);
+  return context.input;
 }

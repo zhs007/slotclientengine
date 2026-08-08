@@ -1,7 +1,6 @@
 import {
   applySlotOperationValueUpdates,
   createSlotOperationSnapshot,
-  deriveSlotStateMutations,
   genDropdownOperation,
   genChg,
   genRefillOperation,
@@ -18,7 +17,6 @@ import {
   type SlotChgPayload,
   type SlotChgRoute,
   type SlotStateMutationDraftV2,
-  type SlotStateMutation,
 } from "@slotclientengine/gameframeworks";
 import {
   readGame002FallOperationData,
@@ -45,10 +43,6 @@ import {
   type Game002TransformKey,
 } from "./wl-wm-multiplier-plan.js";
 export type { Game002TransformKey } from "./wl-wm-multiplier-plan.js";
-
-export interface Game002SpinPayload {
-  readonly scene: SlotOperationSnapshot;
-}
 
 export interface Game002WinPayload {
   readonly groups: Game002WinOperationData["groups"];
@@ -189,9 +183,7 @@ export function compileGame002RoundOperationPlan(options: {
         version: 2 as const,
         source,
         payload,
-        input: current,
         output,
-        mutations: deriveSlotStateMutations(current, output),
         businessKey: `freegame:${drafts.length}:${kind}`,
       }),
     );
@@ -210,7 +202,6 @@ export function compileGame002RoundOperationPlan(options: {
       scene: spin.spinScene,
       values: spin.spinValues,
       symbolCodes: base.symbolCodes,
-      occurrenceIdPrefix: `game002:freegame:${spinIndex}:spin`,
     });
     appendMutation(
       "game002:freegame-spin",
@@ -228,7 +219,6 @@ export function compileGame002RoundOperationPlan(options: {
         scene: spin.af.outputScene,
         values: spin.af.outputValues,
         symbolCodes: base.symbolCodes,
-        occurrenceIdPrefix: `game002:freegame:${spinIndex}:af`,
       });
       appendMutation(
         "game002:freegame-af",
@@ -245,7 +235,6 @@ export function compileGame002RoundOperationPlan(options: {
         scene: spin.co.outputScene,
         values: spin.co.outputValues,
         symbolCodes: base.symbolCodes,
-        occurrenceIdPrefix: `game002:freegame:${spinIndex}:co`,
       });
       appendMutation(
         "game002:freegame-co",
@@ -341,33 +330,25 @@ function compileGame002BaseDrafts(
     kind: "spin",
     inputScene: spinData.scene,
   });
+  const rawInitialSnapshot = createSlotOperationSnapshot({
+    scene: initialScene,
+    values: spinData.values,
+    symbolCodes,
+  });
   const initialSnapshot = hydrateSnapshot({
-    input: createSlotOperationSnapshot({
-      scene: initialScene,
-      values: spinData.values,
-      symbolCodes,
-      occurrenceIdPrefix: "game002:spin",
-    }),
+    input: rawInitialSnapshot,
     updates: multiplierCompiler.hydrateSettledValues({
       stepIndex: 0,
       step: steps[0]!,
-      input: createSlotOperationSnapshot({
-        scene: initialScene,
-        values: spinData.values,
-        symbolCodes,
-        occurrenceIdPrefix: "game002:spin",
-      }),
+      input: rawInitialSnapshot,
     }),
   });
   drafts.push(
     genSpinOperation({
       kind: "game002:spin",
       source: serverSource(0, "bg-spin"),
-      scene: initialSnapshot.scene,
-      values: initialSnapshot.values,
-      symbolCodes,
-      occurrenceIdPrefix: "game002:spin",
-      payload: Object.freeze({ scene: initialSnapshot }),
+      output: initialSnapshot,
+      payload: Object.freeze({}),
       businessKey: "spin",
     }),
   );
@@ -392,7 +373,7 @@ function compileGame002BaseDrafts(
         input: current,
         outputScene: fall.dropdownScene,
         outputValues: fall.dropdownValues,
-        heldSymbols: ["WL"],
+        heldCodes: [codes.WL],
         payload: fallPayload,
         businessKey: `${flowKey}:dropdown`,
       });
@@ -411,7 +392,6 @@ function compileGame002BaseDrafts(
         outputValues: fall.refillValues,
         positions: fall.refillPositions,
         symbolCodes,
-        occurrenceIdPrefix: `${flowKey}:refill`,
         payload: fallPayload,
         businessKey: `${flowKey}:refill`,
       });
@@ -517,7 +497,6 @@ function genGame002AtomicTransformOperations(options: {
       input: current,
       changes: phase.changes,
       symbolCodes: options.symbolCodes,
-      replacementIdPrefix: `${options.flowKey}:transform`,
       businessKey: `${options.flowKey}:${phase.key}`,
     } as const;
     const draft = genChg({
@@ -539,14 +518,13 @@ function genGame002AtomicTransformOperations(options: {
 }
 
 function mutationWithOutput<Payload>(
-  draft: SlotStateMutationDraftV2<string, 2, SlotStateMutation, Payload>,
+  draft: SlotStateMutationDraftV2<string, 2, Payload>,
   output: SlotOperationSnapshot,
   payload: Payload,
 ): SlotStateMutationDraftV2 {
   return Object.freeze({
     ...draft,
     output,
-    mutations: deriveSlotStateMutations(draft.input, output),
     payload,
   });
 }
@@ -622,8 +600,6 @@ function createGame002OperationPlan(
       operationIndex,
       source: draft.source,
       payload: draft.payload,
-      requiredCapabilities: Object.freeze([draft.kind]),
-      commit: "atomic" as const,
     };
     const operation = Object.freeze(
       draft.effect === "scene-landing"
@@ -632,9 +608,7 @@ function createGame002OperationPlan(
           ? {
               ...envelope,
               effect: draft.effect,
-              input: draft.input,
               output: draft.output,
-              mutations: draft.mutations,
             }
           : {
               ...envelope,
@@ -651,9 +625,6 @@ function createGame002OperationPlan(
     version: 2,
     operations: Object.freeze(operations),
     final,
-    requiredCapabilities: Object.freeze([
-      ...new Set(operations.map((operation) => operation.kind)),
-    ]),
   });
 }
 

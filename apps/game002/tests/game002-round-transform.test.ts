@@ -18,13 +18,13 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
     const target = createTarget(runtime);
     const input = createSnapshot(createScene(1), 7, 3, 2);
     const wildOutput = createSnapshot(createScene(1), 7, 3, 5);
-    const wild = operation("game002:wild-multiplier", input, wildOutput, {
+    const wild = operation("game002:wild-multiplier", wildOutput, {
       type: "driven-change",
       mainPos: [{ x: 1, y: 0 }],
       pos: [{ x: 0, y: 0 }],
     });
 
-    const wildCompletion = target.startAtomicTransform(wild, context());
+    const wildCompletion = target.startAtomicTransform(wild, context(input));
     expect(runtime.events).toEqual(["state:multStart"]);
     runtime.advanceOnce();
     await flushPlayback();
@@ -36,11 +36,11 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
     const outputScene = createScene(1);
     outputScene[1][0] = 8;
     const wmOutput = createSnapshot(outputScene, 8, 9, 5);
-    const wm = operation("game002:wm-to-cn", wildOutput, wmOutput, {
+    const wm = operation("game002:wm-to-cn", wmOutput, {
       type: "change",
       pos: [{ x: 1, y: 0 }],
     });
-    const wmCompletion = target.startAtomicTransform(wm, context());
+    const wmCompletion = target.startAtomicTransform(wm, context(wildOutput));
     runtime.advanceOnce();
     await flushPlayback();
     expect(runtime.events.at(-1)).toBe("state:change");
@@ -55,12 +55,15 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
     const target = createTarget(runtime);
     const input = createSnapshot(createScene(1), 7, 3, 2);
     const output = createSnapshot(createScene(1), 7, 3, 3);
-    const operationValue = operation("game002:wl-increment", input, output, {
+    const operationValue = operation("game002:wl-increment", output, {
       type: "change",
       pos: [{ x: 0, y: 0 }],
     });
 
-    const completion = target.startAtomicTransform(operationValue, context());
+    const completion = target.startAtomicTransform(
+      operationValue,
+      context(input),
+    );
     expect(runtime.events).toContain("text:0,0=x3");
     runtime.advanceOnce();
     await flushPlayback();
@@ -72,7 +75,7 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
     const target = createTarget(runtime);
     const input = createSnapshot(createScene(1), 7, 3, 2);
     const output = createSnapshot(createScene(1), 7, 3, 5);
-    const operationValue = operation("game002:wild-multiplier", input, output, {
+    const operationValue = operation("game002:wild-multiplier", output, {
       type: "driven-change",
       mainPos: [{ x: 1, y: 0 }],
       pos: [{ x: 0, y: 0 }],
@@ -80,7 +83,7 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
     const abort = new AbortController();
     const completion = target.startAtomicTransform(
       operationValue,
-      context(abort),
+      context(input, abort),
     );
     const signal = runtime.pendingSignals[0]!;
     abort.abort();
@@ -98,11 +101,14 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
     const outputScene = createScene(1);
     outputScene[1][0] = 8;
     const output = createSnapshot(outputScene, 8, 9, 2);
-    const operationValue = operation("game002:wm-to-cn", input, output, {
+    const operationValue = operation("game002:wm-to-cn", output, {
       type: "change",
       pos: [{ x: 1, y: 0 }],
     });
-    const completion = target.startAtomicTransform(operationValue, context());
+    const completion = target.startAtomicTransform(
+      operationValue,
+      context(input),
+    );
     runtime.advanceOnce();
     await expect(completion).rejects.toThrow(/no "change"/);
     expect(runtime.events).toEqual(["state:multEnd"]);
@@ -113,13 +119,16 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
     const target = createTarget(runtime);
     const input = createSnapshot(createScene(1), 8, 3, 2);
     const output = createSnapshot(createScene(1), 8, 6, 2);
-    const operationValue = operation("game002:coin-multiplier", input, output, {
+    const operationValue = operation("game002:coin-multiplier", output, {
       type: "driven-change",
       mainPos: [{ x: 2, y: 0 }],
       pos: [{ x: 1, y: 0 }],
     });
 
-    const completion = target.startAtomicTransform(operationValue, context());
+    const completion = target.startAtomicTransform(
+      operationValue,
+      context(input),
+    );
     expect(runtime.events).toEqual(["state:feature1"]);
     runtime.advanceOnce();
     await flushPlayback();
@@ -140,12 +149,14 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
     cmOutputScene[1]![0] = 8;
     const cm = operation(
       "game002:cm-to-cn",
-      createSnapshot(cmScene, 9, 4, 2),
       createSnapshot(cmOutputScene, 8, 4, 2),
       { type: "change", pos: [{ x: 1, y: 0 }] },
     );
 
-    const cmCompletion = target.startAtomicTransform(cm, context());
+    const cmCompletion = target.startAtomicTransform(
+      cm,
+      context(createSnapshot(cmScene, 9, 4, 2)),
+    );
     runtime.advanceOnce();
     await cmCompletion;
     expect(runtime.scene[1]![0]).toBe(8);
@@ -165,7 +176,6 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
     outputValues[3]![0] = 4;
     const co = operation(
       "game002:co-collect",
-      createExactSnapshot(inputScene, inputValues),
       createExactSnapshot(outputScene, outputValues),
       {
         type: "transfer",
@@ -174,7 +184,10 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
       },
     );
 
-    const coCompletion = target.startAtomicTransform(co, context());
+    const coCompletion = target.startAtomicTransform(
+      co,
+      context(createExactSnapshot(inputScene, inputValues)),
+    );
     runtime.advanceOnce();
     await flushPlayback();
     expect(runtime.events).toContain("transfer:1");
@@ -190,20 +203,20 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
     const target = createTarget(runtime);
     const snapshot = createSnapshot(createScene(1), 7, 3, 2);
     const active = target.startAtomicTransform(
-      operation("game002:wild-multiplier", snapshot, snapshot, {
+      operation("game002:wild-multiplier", snapshot, {
         type: "driven-change",
         mainPos: [{ x: 1, y: 0 }],
         pos: [],
       }),
-      context(),
+      context(snapshot),
     );
     await expect(
       target.startAtomicTransform(
-        operation("game002:wl-increment", snapshot, snapshot, {
+        operation("game002:wl-increment", snapshot, {
           type: "change",
           pos: [],
         }),
-        context(),
+        context(snapshot),
       ),
     ).rejects.toThrow(/cannot start while active/);
     runtime.rejectPending(new Error("stop active transform"));
@@ -211,11 +224,11 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
 
     await expect(
       target.startAtomicTransform(
-        operation("game002:unknown", snapshot, snapshot, {
+        operation("game002:unknown", snapshot, {
           type: "change",
           pos: [],
         }),
-        context(),
+        context(snapshot),
       ),
     ).rejects.toThrow(/not a game002 change operation/);
   });
@@ -255,14 +268,14 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
     target.cleanup();
 
     const presentation = {
-      ...operation("game002:wl-increment", snapshot, snapshot, {
+      ...operation("game002:wl-increment", snapshot, {
         type: "change",
         pos: [],
       }),
       effect: "presentation",
     } as unknown as Game002TransformOperation;
     await expect(
-      target.startAtomicTransform(presentation, context()),
+      target.startAtomicTransform(presentation, context(snapshot)),
     ).rejects.toThrow(/state-mutation/);
 
     for (const payload of [
@@ -272,13 +285,13 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
       await expect(
         target.startAtomicTransform(
           {
-            ...operation("game002:wl-increment", snapshot, snapshot, {
+            ...operation("game002:wl-increment", snapshot, {
               type: "change",
               pos: [],
             }),
             payload,
           } as unknown as Game002TransformOperation,
-          context(),
+          context(snapshot),
         ),
       ).rejects.toThrow(/must use a change payload/);
 
@@ -291,11 +304,11 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
       );
       await expect(
         target.startAtomicTransform(
-          operation("game002:wl-increment", snapshot, output, {
+          operation("game002:wl-increment", output, {
             type: "change",
             pos: [{ x: 0, y: 0 }],
           }),
-          context(),
+          context(snapshot),
         ),
       ).rejects.toThrow(/positive safe integer/);
     }
@@ -322,7 +335,6 @@ function createTarget(runtime: TransformRuntime): Game002RoundTarget {
 
 function operation(
   kind: string,
-  input: SlotOperationSnapshot,
   output: SlotOperationSnapshot,
   payload: Game002TransformPayload,
 ): Game002TransformOperation {
@@ -336,10 +348,7 @@ function operation(
       bindings: Object.freeze({}),
     }),
     payload: Object.freeze(payload),
-    input,
     output,
-    mutations: Object.freeze([]),
-    requiredCapabilities: Object.freeze([kind]),
     businessKey: kind,
     operationIndex: 0,
   }) as unknown as Game002TransformOperation;
@@ -610,8 +619,12 @@ class TransformRuntime {
   }
 }
 
-function context(abort = new AbortController()): SlotOperationExecutionContext {
+function context(
+  input: SlotOperationSnapshot,
+  abort = new AbortController(),
+): SlotOperationExecutionContext {
   return {
+    input,
     signal: abort.signal,
     waitForFrame: async (update) => {
       if (!update(0.5)) throw new Error("test frame did not complete");
@@ -626,27 +639,6 @@ function createSnapshot(
   transformedValue: number,
   wlValue: number,
 ): SlotOperationSnapshot {
-  const occurrences = scene.flatMap((column, x) =>
-    column.map((code, y) => ({
-      id: `o-${x}-${y}`,
-      code: x === 1 && y === 0 ? transformedCode : code,
-      symbol:
-        x === 0 && y === 0
-          ? "WL"
-          : x === 1 && y === 0
-            ? transformedCode === 7
-              ? "WM"
-              : "CN"
-            : "A",
-      value:
-        x === 0 && y === 0
-          ? wlValue
-          : x === 1 && y === 0
-            ? transformedValue
-            : null,
-      position: { x, y },
-    })),
-  );
   return Object.freeze({
     scene,
     values: scene.map((column, x) =>
@@ -658,7 +650,6 @@ function createSnapshot(
             : null,
       ),
     ),
-    occurrences,
   }) as SlotOperationSnapshot;
 }
 
@@ -669,15 +660,6 @@ function createExactSnapshot(
   return Object.freeze({
     scene,
     values,
-    occurrences: scene.flatMap((column, x) =>
-      column.map((code, y) => ({
-        id: `exact-${x}-${y}`,
-        code,
-        symbol: `S${code}`,
-        value: values[x]![y]!,
-        position: { x, y },
-      })),
-    ),
   }) as SlotOperationSnapshot;
 }
 

@@ -19,7 +19,7 @@ export interface SceneCellChange {
   readonly outputCode: number;
 }
 
-export interface OccurrenceValueUpdate {
+export interface CellValueUpdate {
   readonly position: SlotOperationPosition;
   readonly inputValue: number | null;
   readonly outputValue: number | null;
@@ -32,19 +32,18 @@ export interface SymbolReplacement {
   readonly outputValue: number | null;
 }
 
-export interface OccurrenceMovement {
-  readonly occurrenceId: string;
+export interface PositionMovement {
   readonly source: SlotOperationPosition;
   readonly target: SlotOperationPosition;
 }
 
 export interface DropdownDerivation {
-  readonly movements: readonly OccurrenceMovement[];
-  readonly heldOccurrenceIds: readonly string[];
+  readonly movements: readonly PositionMovement[];
+  readonly heldPositions: readonly SlotOperationPosition[];
 }
 
 export interface RelocationDerivation {
-  readonly movements: readonly OccurrenceMovement[];
+  readonly movements: readonly PositionMovement[];
 }
 
 export interface AuthoredOperationProof<Value> {

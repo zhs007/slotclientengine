@@ -1,9 +1,9 @@
 import type {
   SlotOperationV2,
+  SlotOperationSnapshot,
   SlotRoundCapability,
   SlotRoundDropdownStepPlan,
   SlotRoundRefillStepPlan,
-  SlotRoundOccurrenceSnapshot,
   SlotRoundSettledTransformStepPlan,
   SlotRoundWinStepPlan,
 } from "@slotclientengine/logiccore";
@@ -23,7 +23,7 @@ type ProfileCleanupReason =
 interface SlotRoundPresentationCapabilityTarget {
   readonly capabilities: ReadonlySet<SlotRoundCapability>;
   cleanup(reason?: ProfileCleanupReason): void;
-  startInitialSpin(snapshot: SlotRoundOccurrenceSnapshot): void;
+  startInitialSpin(snapshot: SlotOperationSnapshot): void;
   isInitialSpinComplete(): boolean;
   startWin(step: SlotRoundWinStepPlan): void;
   updateWin(deltaSeconds: number): { readonly completed: boolean };

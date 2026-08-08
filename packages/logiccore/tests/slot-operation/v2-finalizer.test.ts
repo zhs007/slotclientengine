@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  applySlotStateMutations,
   createBuiltinSlotOperationDefinitionsV2,
   finalizeSlotOperationPlanV2,
   generateCompletionPresentation,
@@ -13,7 +12,7 @@ import {
 const SYMBOL_CODES = Object.freeze({ A: 0, B: 1 });
 
 describe("SlotOperationPlanV2 finalizer", () => {
-  it("keeps presentation snapshot-free and validates mutation closure", () => {
+  it("keeps presentation snapshot-free and threads final outputs", () => {
     const initial = snapshot(0, 1, "a");
     const output = snapshot(0, 2, "a");
     const source = authored("initial", "final");
@@ -26,7 +25,7 @@ describe("SlotOperationPlanV2 finalizer", () => {
           version: 2,
           source,
           payload: {},
-          targets: [{ position: { x: 0, y: 0 }, occurrenceId: "a" }],
+          targets: [{ position: { x: 0, y: 0 } }],
         },
         {
           effect: "state-mutation",
@@ -34,17 +33,7 @@ describe("SlotOperationPlanV2 finalizer", () => {
           version: 2,
           source,
           payload: {},
-          input: initial,
           output,
-          mutations: [
-            {
-              kind: "value-update",
-              position: { x: 0, y: 0 },
-              occurrenceId: "a",
-              inputValue: 1,
-              outputValue: 2,
-            },
-          ],
         },
         generateCompletionPresentation({ source }),
       ],
@@ -95,31 +84,6 @@ describe("SlotOperationPlanV2 finalizer", () => {
     ).toThrow(/requires an established scene/);
   });
 
-  it("supports strict insertion into a hole", () => {
-    const input: SlotOperationSnapshot = {
-      scene: [[-1]],
-      values: [[-1]],
-      occurrences: [],
-    };
-    expect(
-      applySlotStateMutations({
-        input,
-        mutations: [
-          {
-            kind: "insert",
-            position: { x: 0, y: 0 },
-            occurrenceId: "inserted",
-            outputCode: 1,
-            outputValue: 3,
-          },
-        ],
-        symbolCodes: SYMBOL_CODES,
-        columns: 1,
-        rows: 1,
-      }),
-    ).toEqual(snapshot(1, 3, "inserted"));
-  });
-
   it("keeps a keyed no-op change in the plan", () => {
     const input = snapshot(0, 1, "a");
     const source = authored("initial", "same");
@@ -132,9 +96,7 @@ describe("SlotOperationPlanV2 finalizer", () => {
           version: 2,
           source,
           payload: { type: "driven-change", mainPos: [], pos: [] },
-          input,
           output: input,
-          mutations: [],
         },
       ],
       definitions: createBuiltinSlotOperationDefinitionsV2(),
@@ -177,6 +139,29 @@ describe("SlotOperationPlanV2 finalizer", () => {
     expect(() => finalize([{ ...landing, effect: "presentation" }])).toThrow(
       /does not match/,
     );
+    expect(() =>
+      finalize([
+        {
+          ...landing,
+          output: { ...landing.output, occurrences: [] },
+        },
+      ]),
+    ).toThrow(/occurrences is not supported/);
+    expect(() =>
+      finalize([
+        landing,
+        {
+          effect: "state-mutation",
+          kind: "slot:state-mutation",
+          version: 2,
+          source,
+          payload: {},
+          input: landing.output,
+          output: landing.output,
+          mutations: [],
+        },
+      ]),
+    ).toThrow(/input is not supported/);
     expect(() => finalize([])).toThrow(/must establish a scene/);
     expect(() =>
       finalize([landing, { ...landing, businessKey: "same" }]),
@@ -211,20 +196,11 @@ describe("SlotOperationPlanV2 finalizer", () => {
 function snapshot(
   code: number,
   value: number,
-  id: string,
+  _id: string,
 ): SlotOperationSnapshot {
   return {
     scene: [[code]],
     values: [[value]],
-    occurrences: [
-      {
-        id,
-        code,
-        symbol: code === 0 ? "A" : "B",
-        value,
-        position: { x: 0, y: 0 },
-      },
-    ],
   };
 }
 

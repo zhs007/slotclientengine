@@ -1,5 +1,6 @@
 import type {
   SlotOperationPlanV2,
+  SlotOperationSnapshot,
   SlotOperationV2,
 } from "@slotclientengine/logiccore";
 
@@ -20,6 +21,8 @@ export interface SlotOperationHandler<
 
 export interface SlotOperationExecutionContext {
   readonly signal: AbortSignal;
+  /** Expected state produced by the previous state operation, or null before landing. */
+  readonly input: SlotOperationSnapshot | null;
   waitForFrame(update: (deltaSeconds: number) => boolean): Promise<void>;
   delay(seconds: number): Promise<void>;
 }

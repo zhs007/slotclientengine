@@ -1,6 +1,7 @@
 import {
   toSlotOperationKey,
   type SlotOperationPlanV2,
+  type SlotOperationSnapshot,
   type SlotOperationV2,
 } from "@slotclientengine/logiccore";
 import type {
@@ -32,6 +33,7 @@ class DefaultSlotOperationCoordinator implements SlotOperationCoordinator {
   #phase: SlotOperationCoordinatorPhase = "idle";
   #plan: SlotOperationPlanV2 | null = null;
   #cursor = 0;
+  #current: SlotOperationSnapshot | null = null;
   #generation = 0;
   #activeAbort: AbortController | null = null;
   #resolve: (() => void) | null = null;
@@ -50,6 +52,7 @@ class DefaultSlotOperationCoordinator implements SlotOperationCoordinator {
       this.#options.cleanup("next-spin");
       this.#plan = plan;
       this.#cursor = 0;
+      this.#current = null;
       this.#phase = "running";
       this.#generation += 1;
       const promise = new Promise<void>((resolve, reject) => {
@@ -161,7 +164,7 @@ class DefaultSlotOperationCoordinator implements SlotOperationCoordinator {
     const generation = this.#generation;
     const abort = new AbortController();
     this.#activeAbort = abort;
-    const context = this.createExecutionContext(abort.signal);
+    const context = this.createExecutionContext(abort.signal, this.#current);
     let completion: Promise<void> | void;
     try {
       completion = registration.handler.start(operation, context);
@@ -178,6 +181,8 @@ class DefaultSlotOperationCoordinator implements SlotOperationCoordinator {
         )
           return;
         this.#activeAbort = null;
+        if (operation.effect !== "presentation")
+          this.#current = operation.output;
         this.#cursor += 1;
         this.startCurrent();
       },
@@ -195,9 +200,11 @@ class DefaultSlotOperationCoordinator implements SlotOperationCoordinator {
 
   private createExecutionContext(
     signal: AbortSignal,
+    input: SlotOperationSnapshot | null,
   ): SlotOperationExecutionContext {
     return Object.freeze({
       signal,
+      input,
       waitForFrame: (update: (deltaSeconds: number) => boolean) =>
         this.createFrameWaiter(signal, update),
       delay: (seconds: number) => {
@@ -274,6 +281,7 @@ class DefaultSlotOperationCoordinator implements SlotOperationCoordinator {
   private clear(phase: SlotOperationCoordinatorPhase): void {
     this.#plan = null;
     this.#cursor = 0;
+    this.#current = null;
     this.#activeAbort = null;
     this.#resolve = null;
     this.#reject = null;

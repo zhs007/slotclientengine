@@ -75,7 +75,6 @@ describe("Game002FreeGameOperationTarget", () => {
     const operation = mutationOperation(
       "game002:freegame-af",
       payload,
-      inputScene,
       outputScene,
       createValues(3),
     );
@@ -83,7 +82,10 @@ describe("Game002FreeGameOperationTarget", () => {
     const completion = fixture.target.start(
       operation,
       payload,
-      fixture.context,
+      fixture.frames.contextFor({
+        scene: inputScene,
+        values: createValues(null),
+      }),
     );
     fixture.runtime.resolveAllPlaybacks();
     await flushPlayback();
@@ -123,7 +125,6 @@ describe("Game002FreeGameOperationTarget", () => {
     const operation = mutationOperation(
       "game002:freegame-co",
       payload,
-      inputScene,
       outputScene,
       createValues(2),
     );
@@ -131,7 +132,10 @@ describe("Game002FreeGameOperationTarget", () => {
     const completion = fixture.target.start(
       operation,
       payload,
-      fixture.context,
+      fixture.frames.contextFor({
+        scene: inputScene,
+        values: createValues(null),
+      }),
     );
     fixture.runtime.resolveAllPlaybacks();
     await flushPlayback();
@@ -190,11 +194,10 @@ describe("Game002FreeGameOperationTarget", () => {
         "game002:freegame-spin",
         spinPayload,
         scene,
-        scene,
         createValues(null),
       ),
       spinPayload,
-      fixture.context,
+      fixture.frames.contextFor({ scene, values: createValues(null) }),
     );
     fixture.runtime.spinning = false;
     fixture.frames.frame(0.1);
@@ -315,6 +318,7 @@ class TestFrameContext {
     reject: (error: Error) => void;
   }> = [];
   readonly context: SlotOperationExecutionContext = {
+    input: null,
     signal: this.#abort.signal,
     waitForFrame: (update) =>
       new Promise<void>((resolve, reject) => {
@@ -322,6 +326,12 @@ class TestFrameContext {
       }),
     delay: async () => undefined,
   };
+
+  contextFor(
+    input: NonNullable<SlotOperationExecutionContext["input"]>,
+  ): SlotOperationExecutionContext {
+    return { ...this.context, input };
+  }
 
   frame(deltaSeconds: number): void {
     for (const waiter of this.#waiters.splice(0)) {
@@ -422,7 +432,6 @@ function presentationOperation(
 function mutationOperation(
   kind: string,
   payload: Game002FreeGameOperationPayload,
-  inputScene: readonly (readonly number[])[],
   outputScene: readonly (readonly number[])[],
   outputValues: readonly (readonly (number | null)[])[],
 ): SlotOperationV2 {
@@ -430,7 +439,6 @@ function mutationOperation(
     kind,
     effect: "state-mutation",
     payload,
-    input: { scene: inputScene, values: createValues(null) },
     output: { scene: outputScene, values: outputValues },
   } as unknown as SlotOperationV2;
 }

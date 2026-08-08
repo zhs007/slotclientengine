@@ -389,10 +389,10 @@ operation。人工编辑是本地 authoring 的显式数据来源，不是 silen
 suggestSceneChanges(options): AuthoringSuggestion<readonly SceneCellChange[]>;
 suggestRemovePositions(options): AuthoringSuggestion<readonly SlotRoundPosition[]>;
 suggestRefillPositions(options): AuthoringSuggestion<readonly SlotRoundPosition[]>;
-suggestValueUpdates(options): AuthoringSuggestion<readonly OccurrenceValueUpdate[]>;
+suggestValueUpdates(options): AuthoringSuggestion<readonly CellValueUpdate[]>;
 suggestSymbolReplacements(options): AuthoringSuggestion<readonly SymbolReplacement[]>;
 suggestDropdownMovements(options): AuthoringSuggestion<DropdownDerivation>;
-suggestOccurrenceRelocations(options): AuthoringSuggestion<RelocationDerivation>;
+suggestPositionRelocations(options): AuthoringSuggestion<RelocationDerivation>;
 ```
 
 编辑完成后由 finalizer 输出 proof，而不只输出 `pos`：

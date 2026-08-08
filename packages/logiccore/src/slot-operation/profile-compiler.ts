@@ -13,7 +13,6 @@ import {
   generateCompletionPresentation,
   generateSpinOperation,
 } from "./effect-generators";
-import { deriveSlotStateMutations } from "./mutation-derivation";
 import { finalizeSlotOperationPlanV2 } from "./v2-finalizer";
 
 export interface SlotRoundOperationCompileOptions {
@@ -71,9 +70,7 @@ export function compileConfiguredSlotRoundOperationPlanV2(
       drafts.push({
         ...common,
         effect: "state-mutation",
-        input,
         output,
-        mutations: deriveSlotStateMutations(input, output),
       });
   }
   if (options.includeCompletion !== false)
@@ -106,7 +103,6 @@ function canonicalOperationSnapshot(
         ),
       ),
     ),
-    occurrences: snapshot.occurrences,
   });
 }
 
@@ -127,8 +123,8 @@ function profileOperationKind(
 }
 
 function snapshotsEqual(
-  left: SlotRoundProfileStepTrace["input"],
-  right: SlotRoundProfileStepTrace["output"],
+  left: SlotOperationSnapshot,
+  right: SlotOperationSnapshot,
 ): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }

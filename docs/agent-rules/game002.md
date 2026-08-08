@@ -76,13 +76,13 @@
   coordinator execution。不得在 BaseGame completion Promise 后再启动第二份 round plan；
   FreeGame 必须展开为 trigger、transition、spin、AF、CO、win、popup 等显式 operation；不得
   重新封装为一个内部推进全部阶段的 opaque operation。render 直接认可 logiccore 生成的 plan，
-  不再预检整轮业务公式、final closure、scene shape 或资源能力；mutation 发生时只检查当前 operation
-  当前坐标的 input/output continuity。
+  不再预检整轮业务公式、final closure、scene shape 或资源能力；画面变化时只检查当前 operation
+  当前坐标的 `context.input`/`operation.output` continuity。
 
 - game002 spin flow 使用 fail-stop、无 rollback 模型。所有权威 scene/value mutation 必须位于对应
   animation 完成边界；调用链任一步失败立即停止当前 round、禁止继续
   后续 operation 或下一次 spin，并交由显式重新初始化/重新同步恢复。cleanup 只取消 pending playback、
-  input 和临时资源，不恢复 operation input snapshot。未参与当前 operation 的额外 server field、component
+  handler wait 和临时资源，不恢复 operation 开始前的 snapshot。未参与当前 operation 的额外 server field、component
   或 matrix cell 不作为失败条件；当前 operation 必需的数据缺失、越界或类型非法仍
   显式失败。只有显式声明为 best-effort 且不改变 scene/value 的装饰效果允许跳过。
 
@@ -93,16 +93,17 @@
 - 每步顺序固定为 `spin -> AF -> CO`。AF number 只取 `fg-rollaf.number`，以 raw
   digits 显示并计入 `fg-start.lastRespinNum`；AF Change 完成才提交 AF -> CN。
 - FG CO 将 `fg-triggerco` 坐标作为 `mainPos`，将 `fg-vortex.pos` 四元组作为 routes，
-  source、target、CO 的 code/value 直接取 operation input/output，不在 render 中重算业务规则。
+  source、target、CO 的 code/value 直接取 `context.input`/`operation.output`，不在 render 中重算业务规则。
   app 异步调用 rendercore transfer，资源租约在调用结束时内部回池。
 - 只有剩余次数为 0 的最后一步允许 `fg-win`，且只赔付 type-6 CN group；collect
   不 remove，BigWin complete 后才反向 transition，最终 scene 跨模式保留。
 
 ## WL/WM/CM multiplier 与中奖前转换
 
-- WL/WM/CM/CO 的权威 code/value 只保存在对应 operation input/output；Target 不按
+- WL/WM/CM/CO 的权威新 code/value 只保存在对应 `operation.output`，前态由 coordinator 通过
+  `context.input` 提供；Target 不按
   stepIndex 查询 presentation batch。每个 operation 由一个直接的异步调用链表达动画、
-  延迟和 mutation；mutation 必须服从 operation input/output，并在失败时进入统一 fail-stop。
+  延迟和画面提交；提交边界与粒度由该 render program 决定，并在失败时进入统一 fail-stop。
 - WL/WM/CM/CO 共用一个 `SlotChgOperation` 类型，只按坐标关系使用 `pos`、
   `mainPos + pos` 或 `mainPos + routes`。具体 operation key 挂接对应 render program，
   payload 不得加入 WL/WM/CM/CO 字段或 `phase` 分流。multiplier compiler 不得维护
@@ -112,7 +113,7 @@
   `game002:wild-multiplier`、`game002:wm-to-cn`、`game002:coin-multiplier`、
   `game002:cm-to-cn`、`game002:co-collect` operations；不得先生成 aggregate
   transform 再由 runtime 拆 phase。缺席阶段不得生成 operation；WM 已触发但没有
-  WL 数值变化时仍生成 input/output 相同、`pos` 为空的 keyed change operation。
+  WL 数值变化时仍生成 output 与前态相同、`pos` 为空的 keyed change operation。
 
 - initial spin 和 refill 的动画前落定 scene 先按
   `bg-gencm > bg-genwm > bg-spin/bg-refill` 合成 multiplier 输入，再把

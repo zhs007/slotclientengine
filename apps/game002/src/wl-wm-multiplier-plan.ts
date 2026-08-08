@@ -2,8 +2,8 @@ import type {
   GameLogicStep,
   OtherSceneMatrix,
   SceneMatrix,
+  SlotOperationSnapshot,
   SlotRoundPosition,
-  SlotRoundSettledCompileContext,
   SlotRoundSettledSceneCompileContext,
   SlotRoundSettledTransformChangeDraft,
   SlotRoundSettledTransformRelocationDraft,
@@ -18,6 +18,12 @@ import {
 } from "@slotclientengine/gameframeworks";
 import { GAME002_CASCADE_COMPONENTS } from "./cascade-config.js";
 import { compileGame002CoCollectionPlan } from "./co-collection-plan.js";
+
+interface Game002SettledCompileContext {
+  readonly stepIndex: number;
+  readonly step: GameLogicStep;
+  readonly input: SlotOperationSnapshot;
+}
 
 export type Game002TransformKey =
   | "wl-increment"
@@ -104,7 +110,7 @@ export function createGame002WlWmMultiplierCompiler(options: {
       return settled;
     },
 
-    hydrateSettledValues(context: SlotRoundSettledCompileContext) {
+    hydrateSettledValues(context: Game002SettledCompileContext) {
       const values = (name: string) =>
         otherScene(context.step, name, context.input.scene);
       const valuesByCode = new Map<number, OtherSceneMatrix | undefined>([
@@ -113,22 +119,26 @@ export function createGame002WlWmMultiplierCompiler(options: {
         [cmCode, values(GAME002_CASCADE_COMPONENTS.setcm)],
       ]);
       const drafts: SlotRoundSettledValueDraft[] = [];
-      for (const occurrence of context.input.occurrences) {
-        if (occurrence.value !== null) continue;
-        const values = valuesByCode.get(occurrence.code);
-        if (!values) continue;
-        const { x, y } = occurrence.position;
-        drafts.push(
-          Object.freeze({
-            position: occurrence.position,
-            value: positive(values[x]![y], `step[${context.stepIndex}] value`),
-          }),
-        );
-      }
+      context.input.scene.forEach((column, x) =>
+        column.forEach((code, y) => {
+          if (context.input.values[x]![y] !== null) return;
+          const values = valuesByCode.get(code);
+          if (!values) return;
+          drafts.push(
+            Object.freeze({
+              position: Object.freeze({ x, y }),
+              value: positive(
+                values[x]![y],
+                `step[${context.stepIndex}] value`,
+              ),
+            }),
+          );
+        }),
+      );
       return Object.freeze(drafts);
     },
 
-    compileSettledTransform(context: SlotRoundSettledCompileContext) {
+    compileSettledTransform(context: Game002SettledCompileContext) {
       const phases: Game002SettledTransformPhase[] = [];
       const values = context.input.values.map((column) => [...column]);
       const wlIncrements = readWildIncrementChanges(
@@ -141,11 +151,9 @@ export function createGame002WlWmMultiplierCompiler(options: {
       if (wlIncrements.length > 0)
         phases.push(changePhase("wl-increment", wlIncrements));
 
-      const wmOccurrences = context.input.occurrences.filter(
-        (item) => item.code === wmCode,
-      );
+      const wmPositions = findMatrixValuePositions(context.input.scene, wmCode);
       let intermediateScene = context.input.scene;
-      if (wmOccurrences.length > 0) {
+      if (wmPositions.length > 0) {
         const updatedWilds = otherScene(
           context.step,
           GAME002_CASCADE_COMPONENTS.updwl,
@@ -153,22 +161,14 @@ export function createGame002WlWmMultiplierCompiler(options: {
         );
         const wlUpdates = updatedWilds
           ? changesAt(
-              context.input.occurrences
-                .filter(({ code }) => code === wlCode)
-                .map(({ position }) => position),
+              findMatrixValuePositions(context.input.scene, wlCode),
               context.input.scene,
               updatedWilds,
               `step[${context.stepIndex}] bg-updwl`,
             )
           : [];
         applyChanges(values, wlUpdates);
-        phases.push(
-          drivenPhase(
-            "wild-multiplier",
-            wmOccurrences.map(({ position }) => position),
-            wlUpdates,
-          ),
-        );
+        phases.push(drivenPhase("wild-multiplier", wmPositions, wlUpdates));
         intermediateScene = scene(
           context.step,
           GAME002_CASCADE_COMPONENTS.wm2cn,
@@ -182,7 +182,7 @@ export function createGame002WlWmMultiplierCompiler(options: {
           true,
         )!;
         const wmChanges = changesAt(
-          wmOccurrences.map(({ position }) => position),
+          wmPositions,
           intermediateScene,
           generated,
           `step[${context.stepIndex}] bg-genwmcn`,
@@ -197,10 +197,11 @@ export function createGame002WlWmMultiplierCompiler(options: {
           ) ?? intermediateScene;
       }
 
-      const cmOccurrence = context.input.occurrences.find(
-        (item) => item.code === cmCode,
-      );
-      if (cmOccurrence) {
+      const cmPosition = findMatrixValuePositions(
+        context.input.scene,
+        cmCode,
+      )[0];
+      if (cmPosition) {
         const updatedCoins = otherScene(
           context.step,
           GAME002_CASCADE_COMPONENTS.updcn,
@@ -216,9 +217,7 @@ export function createGame002WlWmMultiplierCompiler(options: {
           : [];
         applyChanges(values, cnUpdates);
         if (cnUpdates.length > 0)
-          phases.push(
-            drivenPhase("coin-multiplier", [cmOccurrence.position], cnUpdates),
-          );
+          phases.push(drivenPhase("coin-multiplier", [cmPosition], cnUpdates));
         const cmOutputScene = scene(
           context.step,
           GAME002_CASCADE_COMPONENTS.cm2cn,
@@ -232,7 +231,7 @@ export function createGame002WlWmMultiplierCompiler(options: {
           true,
         )!;
         const cmChanges = changesAt(
-          [cmOccurrence.position],
+          [cmPosition],
           cmOutputScene,
           generated,
           `step[${context.stepIndex}] bg-gencmcn`,
@@ -330,7 +329,7 @@ function transferPhase(
 }
 
 function readWildIncrementChanges(
-  context: SlotRoundSettledCompileContext,
+  context: Game002SettledCompileContext,
   wlCode: number,
   pending: readonly SlotRoundPosition[],
 ): readonly SlotRoundSettledTransformChangeDraft[] {
@@ -343,9 +342,7 @@ function readWildIncrementChanges(
   const positions = uniquePositions(
     pending.length > 0
       ? pending
-      : context.input.occurrences
-          .filter((item) => item.code === wlCode)
-          .map((item) => item.position),
+      : findMatrixValuePositions(context.input.scene, wlCode),
   );
   return Object.freeze(
     positions.map((position) =>
@@ -359,7 +356,7 @@ function readWildIncrementChanges(
 }
 
 function winningWildPositions(
-  context: SlotRoundSettledCompileContext,
+  context: Game002SettledCompileContext,
   wlCode: number,
 ): readonly SlotRoundPosition[] {
   const results = context.step.getComponentResults(

@@ -80,6 +80,54 @@ describe("slot operation coordinator", () => {
     expect(completed).toHaveBeenCalledOnce();
   });
 
+  it("passes the previous state output to the next render handler", async () => {
+    const registry = createSlotOperationHandlerRegistry();
+    const inputs: Array<SlotOperationSnapshot | null> = [];
+    for (const kind of ["slot:scene-landing", "slot:dropdown"])
+      registry.register({
+        kind,
+        version: 2,
+        handler: {
+          start: (_operation, context) => {
+            inputs.push(context.input);
+          },
+        },
+      });
+    const coordinator = createSlotOperationCoordinator({
+      registry,
+      cleanup: () => undefined,
+    });
+    const initial = snapshot();
+    const output = Object.freeze({
+      scene: Object.freeze([Object.freeze([1])]),
+      values: Object.freeze([Object.freeze([2])]),
+    });
+    const operationPlan = finalizeSlotOperationPlanV2({
+      drafts: [
+        generateSceneLandingOperation({
+          source: authoredSource(),
+          output: initial,
+        }),
+        {
+          kind: "slot:dropdown",
+          version: 2,
+          effect: "state-mutation",
+          source: authoredSource(),
+          output,
+          payload: {},
+        },
+      ],
+      definitions: createBuiltinSlotOperationDefinitionsV2(),
+      symbolCodes: { A: 0, B: 1 },
+      columns: 1,
+      rows: 1,
+    });
+
+    await coordinator.start(operationPlan);
+
+    expect(inputs).toEqual([null, initial]);
+  });
+
   it("fails stop when an async handler rejects", async () => {
     const events: string[] = [];
     const registry = createSlotOperationHandlerRegistry();
@@ -243,20 +291,7 @@ function plan() {
   return finalizeSlotOperationPlanV2({
     drafts: [
       generateSceneLandingOperation({
-        source: {
-          kind: "snapshot-authored",
-          inputSnapshotId: "a",
-          outputSnapshotId: "b",
-          suggestions: [
-            {
-              field: "win",
-              status: "exact",
-              candidateCount: 1,
-              diagnostics: [],
-            },
-          ],
-          edits: [],
-        },
+        source: authoredSource(),
         output: initial,
       }),
     ],
@@ -271,14 +306,22 @@ function snapshot(): SlotOperationSnapshot {
   return Object.freeze({
     scene: Object.freeze([Object.freeze([0])]),
     values: Object.freeze([Object.freeze([null])]),
-    occurrences: Object.freeze([
-      Object.freeze({
-        id: "a",
-        code: 0,
-        symbol: "A",
-        value: null,
-        position: Object.freeze({ x: 0, y: 0 }),
-      }),
-    ]),
   });
+}
+
+function authoredSource() {
+  return {
+    kind: "snapshot-authored" as const,
+    inputSnapshotId: "a",
+    outputSnapshotId: "b",
+    suggestions: [
+      {
+        field: "win",
+        status: "exact" as const,
+        candidateCount: 1,
+        diagnostics: [],
+      },
+    ],
+    edits: [],
+  };
 }

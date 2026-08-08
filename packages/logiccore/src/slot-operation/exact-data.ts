@@ -4,9 +4,7 @@ import type {
   IndexedOtherSceneSelection,
   IndexedResultSelection,
   IndexedSceneSelection,
-  SlotOperationOccurrence,
   SlotOperationPosition,
-  SlotOperationSnapshot,
 } from "./types";
 import type { SlotChgRoute } from "./v2-types";
 
@@ -92,24 +90,6 @@ export function assertExactPositionSet(
     throw new LogicParseError(
       `${label} ${options.mismatchMessage ?? "position set differs"}.`,
     );
-}
-
-export function requireOccurrenceAt(
-  snapshot: SlotOperationSnapshot,
-  position: SlotOperationPosition,
-  label: string,
-): SlotOperationOccurrence {
-  validatePositionInMatrix(position, snapshot.scene, label);
-  const matches = snapshot.occurrences.filter(
-    (occurrence) =>
-      occurrence.position.x === position.x &&
-      occurrence.position.y === position.y,
-  );
-  if (matches.length !== 1)
-    throw new LogicParseError(
-      `${label} expected exactly one occurrence at ${slotOperationPositionKey(position)}, got ${matches.length}.`,
-    );
-  return matches[0]!;
 }
 
 export function validatePositionInMatrix(

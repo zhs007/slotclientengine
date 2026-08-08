@@ -122,6 +122,7 @@ function context(
 ): SlotOperationExecutionContext {
   return {
     signal: new AbortController().signal,
+    input: null,
     async waitForFrame(update): Promise<void> {
       for (const delta of deltas) if (update(delta)) return;
       throw new Error("test frame chain did not complete");

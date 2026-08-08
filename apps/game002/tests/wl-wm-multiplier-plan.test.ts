@@ -3,8 +3,7 @@ import type {
   GameLogicStep,
   OtherSceneMatrix,
   SceneMatrix,
-  SlotRoundOccurrenceSnapshot,
-  SlotRoundSettledCompileContext,
+  SlotOperationSnapshot,
 } from "@slotclientengine/gameframeworks";
 import { createGame002WlWmMultiplierCompiler } from "../src/wl-wm-multiplier-plan.js";
 
@@ -243,14 +242,14 @@ function compiler() {
 
 function createContext(options: {
   stepIndex: number;
-  snapshot: SlotRoundOccurrenceSnapshot;
+  snapshot: SlotOperationSnapshot;
   otherScenes?: Readonly<Record<string, OtherSceneMatrix>>;
   scenes?: Readonly<Record<string, SceneMatrix>>;
   extraComponents?: readonly string[];
   results?: Readonly<
     Record<string, readonly { readonly pos: readonly number[] }[]>
   >;
-}): SlotRoundSettledCompileContext {
+}) {
   const otherScenes = options.otherScenes ?? {};
   const scenes = options.scenes ?? {};
   const names = new Set([
@@ -276,32 +275,10 @@ function createContext(options: {
 function snapshot(
   scene: SceneMatrix,
   values: readonly (readonly (number | null)[])[],
-): SlotRoundOccurrenceSnapshot {
+): SlotOperationSnapshot {
   return Object.freeze({
     scene,
     values: matrix(values),
-    occurrences: Object.freeze(
-      scene.flatMap((column, x) =>
-        column.map((code, y) =>
-          Object.freeze({
-            id: `o-${x}-${y}`,
-            code,
-            symbol:
-              code === WL
-                ? "WL"
-                : code === WM
-                  ? "WM"
-                  : code === CN
-                    ? "CN"
-                    : code === CM
-                      ? "CM"
-                      : "A",
-            value: values[x]![y]!,
-            position: Object.freeze({ x, y }),
-          }),
-        ),
-      ),
-    ),
   });
 }
 

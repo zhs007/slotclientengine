@@ -8,7 +8,7 @@ export {
 } from "./project.js";
 export {
   suggestDropdownMovements,
-  suggestOccurrenceRelocations,
+  suggestPositionRelocations,
   suggestRefillPositions,
   suggestRemovePositions,
   suggestSceneChanges,
@@ -16,4 +16,3 @@ export {
   suggestValueUpdates,
 } from "./suggestions.js";
 export type * from "./types.js";
-export { deriveSlotStateMutations } from "@slotclientengine/logiccore";

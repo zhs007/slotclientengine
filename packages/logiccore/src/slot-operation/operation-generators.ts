@@ -1,18 +1,15 @@
 import { LogicParseError } from "../errors";
 import type {
-  SlotOperationOccurrence,
   SlotOperationPosition,
   SlotOperationSnapshot,
   SlotOperationSource,
 } from "./types";
-import { deriveSlotStateMutations } from "./mutation-derivation";
 import type {
   SlotChgPayload,
   SlotChgRoute,
   SlotPresentationDraftV2,
   SlotPresentationTarget,
   SlotSceneLandingDraftV2,
-  SlotStateMutation,
   SlotStateMutationDraftV2,
 } from "./v2-types";
 
@@ -41,24 +38,15 @@ export function genSpinOperation<
 >(
   options: OperationGeneratorCommon<Payload> & {
     readonly kind?: Kind;
-    readonly scene: readonly (readonly number[])[];
-    readonly values: SnapshotMatrix;
-    readonly symbolCodes: Readonly<Record<string, number>>;
-    readonly occurrenceIdPrefix?: string;
+    readonly output: SlotOperationSnapshot;
   },
 ): SlotSceneLandingDraftV2<Kind, 2, Payload> {
-  const output = createSlotOperationSnapshot({
-    scene: options.scene,
-    values: options.values,
-    symbolCodes: options.symbolCodes,
-    occurrenceIdPrefix: options.occurrenceIdPrefix ?? "spin",
-  });
   return Object.freeze({
     kind: (options.kind ?? "slot:spin") as Kind,
     version: 2 as const,
     effect: "scene-landing" as const,
     source: options.source,
-    output,
+    output: freezeSnapshot(options.output.scene, options.output.values),
     payload: options.payload,
     ...(options.businessKey === undefined
       ? {}
@@ -91,7 +79,6 @@ interface GenChgCommon<Kind extends string> {
   readonly input: SlotOperationSnapshot;
   readonly changes: readonly SlotOperationChangeDraft[];
   readonly symbolCodes: Readonly<Record<string, number>>;
-  readonly replacementIdPrefix?: string;
   readonly businessKey?: string;
 }
 
@@ -109,7 +96,7 @@ export function genChg<Kind extends string>(
           readonly routes: readonly SlotChgRoute[];
         }
     ),
-): SlotStateMutationDraftV2<Kind, 2, SlotStateMutation, SlotChgPayload> {
+): SlotStateMutationDraftV2<Kind, 2, SlotChgPayload> {
   const pos = freezePositions(
     options.changes.map(({ position }) => position),
     options.input.scene,
@@ -148,17 +135,14 @@ export function genChg<Kind extends string>(
             mainPos: mainPos!,
             routes: routes!,
           });
-  const output = applySlotOperationChanges({
-    input: options.input,
-    changes: options.changes,
-    ...(routes === undefined ? {} : { relocations: routes }),
-    symbolCodes: options.symbolCodes,
-    replacementIdPrefix: options.replacementIdPrefix,
-  });
-  return mutationDraft(
+  return stateDraft(
     { ...options, payload },
-    output,
-    options.changes.length === 0,
+    applySlotOperationChanges({
+      input: options.input,
+      changes: options.changes,
+      ...(routes === undefined ? {} : { relocations: routes }),
+      symbolCodes: options.symbolCodes,
+    }),
   );
 }
 
@@ -170,11 +154,10 @@ export function genRemoveOperation<Kind extends string, Payload>(
     readonly outputValues: SnapshotMatrix;
     readonly emptyCode?: number;
   },
-): SlotStateMutationDraftV2<Kind, 2, SlotStateMutation, Payload> {
+): SlotStateMutationDraftV2<Kind, 2, Payload> {
   const emptyCode = options.emptyCode ?? -1;
   assertSnapshotShape(options.outputScene, options.outputValues, "remove");
-  const occurrences = options.input.occurrences.filter((occurrence) => {
-    const { x, y } = occurrence.position;
+  forEachCell(options.input.scene, (x, y, inputCode) => {
     const outputCode = options.outputScene[x]?.[y];
     const outputValue = options.outputValues[x]?.[y];
     if (outputCode === emptyCode) {
@@ -182,20 +165,18 @@ export function genRemoveOperation<Kind extends string, Payload>(
         throw new LogicParseError(
           `remove output value at (${x},${y}) must use emptyCode ${emptyCode}.`,
         );
-      return false;
+      return;
     }
-    if (outputCode !== occurrence.code || outputValue !== occurrence.value)
-      throw new LogicParseError(
-        `remove changed retained occurrence "${occurrence.id}" at (${x},${y}).`,
-      );
-    return true;
+    if (
+      outputCode !== inputCode ||
+      outputValue !== options.input.values[x]?.[y]
+    )
+      throw new LogicParseError(`remove changed retained cell at (${x},${y}).`);
   });
-  const output = freezeSnapshot(
-    options.outputScene,
-    options.outputValues,
-    occurrences,
+  return stateDraft(
+    options,
+    freezeSnapshot(options.outputScene, options.outputValues),
   );
-  return mutationDraft(options, output);
 }
 
 export function genDropdownOperation<Kind extends string, Payload>(
@@ -204,67 +185,63 @@ export function genDropdownOperation<Kind extends string, Payload>(
     readonly input: SlotOperationSnapshot;
     readonly outputScene: readonly (readonly number[])[];
     readonly outputValues: SnapshotMatrix;
-    readonly heldSymbols?: readonly string[];
+    readonly heldCodes?: readonly number[];
     readonly emptyCode?: number;
   },
-): SlotStateMutationDraftV2<Kind, 2, SlotStateMutation, Payload> {
+): SlotStateMutationDraftV2<Kind, 2, Payload> {
   const emptyCode = options.emptyCode ?? -1;
-  const heldSymbols = new Set(options.heldSymbols ?? []);
+  const heldCodes = new Set(options.heldCodes ?? []);
   assertSnapshotShape(options.outputScene, options.outputValues, "dropdown");
-  const occurrences: SlotOperationOccurrence[] = [];
   for (let x = 0; x < options.outputScene.length; x += 1) {
-    const source = options.input.occurrences
-      .filter((occurrence) => occurrence.position.x === x)
-      .sort((left, right) => left.position.y - right.position.y);
-    const held = source.filter((occurrence) =>
-      heldSymbols.has(occurrence.symbol),
+    const source = options.input.scene[x]!.flatMap((code, y) =>
+      code === emptyCode
+        ? []
+        : [
+            {
+              code,
+              value: options.input.values[x]![y]!,
+              y,
+              held: heldCodes.has(code),
+            },
+          ],
     );
-    const heldRows = new Set(held.map((occurrence) => occurrence.position.y));
-    for (const occurrence of held) {
-      const { y } = occurrence.position;
+    const heldRows = new Set(
+      source.filter((cell) => cell.held).map((cell) => cell.y),
+    );
+    for (const cell of source.filter((candidate) => candidate.held))
       if (
-        options.outputScene[x]?.[y] !== occurrence.code ||
-        options.outputValues[x]?.[y] !== occurrence.value
+        options.outputScene[x]?.[cell.y] !== cell.code ||
+        options.outputValues[x]?.[cell.y] !== cell.value
       )
         throw new LogicParseError(
-          `dropdown changed held occurrence "${occurrence.id}" at (${x},${y}).`,
+          `dropdown changed held cell at (${x},${cell.y}).`,
         );
-      occurrences.push(occurrence);
-    }
     const targets = options.outputScene[x]!.flatMap((code, y) =>
-      code === emptyCode || heldRows.has(y) ? [] : [{ code, y }],
+      code === emptyCode || heldRows.has(y)
+        ? []
+        : [{ code, value: options.outputValues[x]![y]!, y }],
     );
-    const moving = source.filter(
-      (occurrence) => !heldSymbols.has(occurrence.symbol),
-    );
+    const moving = source.filter((cell) => !cell.held);
     if (targets.length !== moving.length)
       throw new LogicParseError(
-        `dropdown column ${x} contains ${targets.length} targets for ${moving.length} movable occurrences.`,
+        `dropdown column ${x} contains ${targets.length} targets for ${moving.length} movable cells.`,
       );
-    moving.forEach((occurrence, index) => {
+    moving.forEach((cell, index) => {
       const target = targets[index]!;
       if (
-        target.code !== occurrence.code ||
-        target.y < occurrence.position.y ||
-        options.outputValues[x]?.[target.y] !== occurrence.value
+        target.code !== cell.code ||
+        target.value !== cell.value ||
+        target.y < cell.y
       )
         throw new LogicParseError(
-          `dropdown cannot move occurrence "${occurrence.id}" to (${x},${target.y}).`,
+          `dropdown cannot move cell (${x},${cell.y}) to (${x},${target.y}).`,
         );
-      occurrences.push(
-        Object.freeze({
-          ...occurrence,
-          position: Object.freeze({ x, y: target.y }),
-        }),
-      );
     });
   }
-  const output = freezeSnapshot(
-    options.outputScene,
-    options.outputValues,
-    occurrences,
+  return stateDraft(
+    options,
+    freezeSnapshot(options.outputScene, options.outputValues),
   );
-  return mutationDraft(options, output);
 }
 
 export function genRefillOperation<Kind extends string, Payload>(
@@ -275,16 +252,14 @@ export function genRefillOperation<Kind extends string, Payload>(
     readonly outputValues: SnapshotMatrix;
     readonly positions: readonly SlotOperationPosition[];
     readonly symbolCodes: Readonly<Record<string, number>>;
-    readonly occurrenceIdPrefix?: string;
     readonly emptyCode?: number;
   },
-): SlotStateMutationDraftV2<Kind, 2, SlotStateMutation, Payload> {
+): SlotStateMutationDraftV2<Kind, 2, Payload> {
   const emptyCode = options.emptyCode ?? -1;
-  const names = symbolNames(options.symbolCodes);
+  const knownCodes = knownSymbolCodes(options.symbolCodes);
   const keys = new Set<string>();
-  const occurrences = [...options.input.occurrences];
   assertSnapshotShape(options.outputScene, options.outputValues, "refill");
-  for (const [index, position] of options.positions.entries()) {
+  for (const position of options.positions) {
     const { x, y } = validatePosition(position, options.outputScene, "refill");
     const key = `${x},${y}`;
     if (keys.has(key))
@@ -293,70 +268,40 @@ export function genRefillOperation<Kind extends string, Payload>(
     if (options.input.scene[x]?.[y] !== emptyCode)
       throw new LogicParseError(`refill position ${key} is not a hole.`);
     const code = options.outputScene[x]![y]!;
-    const symbol = names.get(code);
-    if (!symbol)
+    if (!knownCodes.has(code))
       throw new LogicParseError(
         `refill position ${key} uses unknown code ${code}.`,
       );
-    const value = normalizeValue(options.outputValues[x]![y]!);
-    occurrences.push(
-      Object.freeze({
-        id: `${options.occurrenceIdPrefix ?? "refill"}:${index}:${x}:${y}`,
-        code,
-        symbol,
-        value,
-        position: Object.freeze({ x, y }),
-      }),
-    );
+    normalizeValue(options.outputValues[x]![y]!);
   }
-  options.outputScene.forEach((column, x) =>
-    column.forEach((_code, y) => {
-      if (keys.has(`${x},${y}`)) return;
-      if (
-        options.outputScene[x]![y] !== options.input.scene[x]?.[y] ||
-        options.outputValues[x]![y] !== options.input.values[x]?.[y]
-      )
-        throw new LogicParseError(
-          `refill changed carried occurrence at (${x},${y}).`,
-        );
-    }),
+  forEachCell(options.outputScene, (x, y) => {
+    if (keys.has(`${x},${y}`)) return;
+    if (
+      options.outputScene[x]![y] !== options.input.scene[x]?.[y] ||
+      options.outputValues[x]![y] !== options.input.values[x]?.[y]
+    )
+      throw new LogicParseError(`refill changed carried cell at (${x},${y}).`);
+  });
+  return stateDraft(
+    options,
+    freezeSnapshot(options.outputScene, options.outputValues),
   );
-  const output = freezeSnapshot(
-    options.outputScene,
-    options.outputValues,
-    occurrences,
-  );
-  return mutationDraft(options, output);
 }
 
 export function createSlotOperationSnapshot(options: {
   readonly scene: readonly (readonly number[])[];
   readonly values: SnapshotMatrix;
   readonly symbolCodes: Readonly<Record<string, number>>;
-  readonly occurrenceIdPrefix: string;
 }): SlotOperationSnapshot {
   assertSnapshotShape(options.scene, options.values, "snapshot");
-  const names = symbolNames(options.symbolCodes);
-  const occurrences = options.scene.flatMap((column, x) =>
-    column.flatMap((code, y) => {
-      if (code === -1) return [];
-      const symbol = names.get(code);
-      if (!symbol)
-        throw new LogicParseError(
-          `snapshot scene at (${x},${y}) uses unknown code ${code}.`,
-        );
-      return [
-        Object.freeze({
-          id: `${options.occurrenceIdPrefix}:${x}:${y}`,
-          code,
-          symbol,
-          value: normalizeValue(options.values[x]![y]!),
-          position: Object.freeze({ x, y }),
-        }),
-      ];
-    }),
-  );
-  return freezeSnapshot(options.scene, options.values, occurrences);
+  const knownCodes = knownSymbolCodes(options.symbolCodes);
+  forEachCell(options.scene, (x, y, code) => {
+    if (code !== -1 && !knownCodes.has(code))
+      throw new LogicParseError(
+        `snapshot scene at (${x},${y}) uses unknown code ${code}.`,
+      );
+  });
+  return freezeSnapshot(options.scene, options.values);
 }
 
 export function applySlotOperationChanges(options: {
@@ -364,9 +309,8 @@ export function applySlotOperationChanges(options: {
   readonly changes: readonly SlotOperationChangeDraft[];
   readonly relocations?: readonly SlotOperationRelocationDraft[];
   readonly symbolCodes: Readonly<Record<string, number>>;
-  readonly replacementIdPrefix?: string;
 }): SlotOperationSnapshot {
-  const names = symbolNames(options.symbolCodes);
+  const knownCodes = knownSymbolCodes(options.symbolCodes);
   const changes = new Map<string, SlotOperationChangeDraft>();
   for (const change of options.changes) {
     const position = validatePosition(
@@ -377,10 +321,11 @@ export function applySlotOperationChanges(options: {
     const key = `${position.x},${position.y}`;
     if (changes.has(key))
       throw new LogicParseError(`changes contains duplicate position ${key}.`);
-    if (!names.has(change.outputCode))
+    if (!knownCodes.has(change.outputCode))
       throw new LogicParseError(
         `change ${key} uses unknown code ${change.outputCode}.`,
       );
+    validatePresentationValue(change.outputValue, `change ${key}`);
     changes.set(key, change);
   }
   const relocationSources = new Map<string, SlotOperationPosition>();
@@ -415,35 +360,6 @@ export function applySlotOperationChanges(options: {
     relocationSources.set(sourceKey, target);
     relocationTargets.set(targetKey, source);
   }
-  const inputByPosition = new Map(
-    options.input.occurrences.map((occurrence) => [
-      `${occurrence.position.x},${occurrence.position.y}`,
-      occurrence,
-    ]),
-  );
-  const occurrences = options.input.occurrences.map((occurrence) => {
-    const key = `${occurrence.position.x},${occurrence.position.y}`;
-    const change = changes.get(key);
-    if (!change) return occurrence;
-    const relocationSource = relocationTargets.get(key);
-    const relocationTarget = relocationSources.get(key);
-    const outputId = relocationSource
-      ? inputByPosition.get(`${relocationSource.x},${relocationSource.y}`)?.id
-      : relocationTarget
-        ? `${options.replacementIdPrefix ?? "replacement"}:${key}`
-        : occurrence.id;
-    if (!outputId)
-      throw new LogicParseError(
-        `change ${key} cannot resolve its output occurrence.`,
-      );
-    return Object.freeze({
-      ...occurrence,
-      id: outputId,
-      code: change.outputCode,
-      symbol: names.get(change.outputCode)!,
-      value: change.outputValue,
-    });
-  });
   const scene = options.input.scene.map((column, x) =>
     Object.freeze(
       column.map((code, y) => changes.get(`${x},${y}`)?.outputCode ?? code),
@@ -454,7 +370,7 @@ export function applySlotOperationChanges(options: {
       column.map((value, y) => changes.get(`${x},${y}`)?.outputValue ?? value),
     ),
   );
-  return freezeSnapshot(scene, values, occurrences);
+  return freezeSnapshot(scene, values);
 }
 
 export function applySlotOperationValueUpdates(options: {
@@ -471,6 +387,7 @@ export function applySlotOperationValueUpdates(options: {
       options.input.scene,
       "value update",
     );
+    validatePresentationValue(update.value, "value update");
     const key = `${position.x},${position.y}`;
     if (updates.has(key))
       throw new LogicParseError(
@@ -486,33 +403,19 @@ export function applySlotOperationValueUpdates(options: {
       ),
     ),
   );
-  const occurrences = options.input.occurrences.map((occurrence) => {
-    const key = `${occurrence.position.x},${occurrence.position.y}`;
-    return updates.has(key)
-      ? Object.freeze({ ...occurrence, value: updates.get(key)! })
-      : occurrence;
-  });
-  return freezeSnapshot(options.input.scene, values, occurrences);
+  return freezeSnapshot(options.input.scene, values);
 }
 
-function mutationDraft<Kind extends string, Payload>(
-  options: OperationGeneratorCommon<Payload> & {
-    readonly kind: Kind;
-    readonly input: SlotOperationSnapshot;
-  },
+function stateDraft<Kind extends string, Payload>(
+  options: OperationGeneratorCommon<Payload> & { readonly kind: Kind },
   output: SlotOperationSnapshot,
-  allowNoop = false,
-): SlotStateMutationDraftV2<Kind, 2, SlotStateMutation, Payload> {
+): SlotStateMutationDraftV2<Kind, 2, Payload> {
   return Object.freeze({
     kind: options.kind,
     version: 2 as const,
     effect: "state-mutation" as const,
     source: options.source,
-    input: options.input,
     output,
-    mutations: allowNoop
-      ? Object.freeze([])
-      : deriveSlotStateMutations(options.input, output),
     payload: options.payload,
     ...(options.businessKey === undefined
       ? {}
@@ -523,18 +426,11 @@ function mutationDraft<Kind extends string, Payload>(
 function freezeSnapshot(
   scene: readonly (readonly number[])[],
   values: SnapshotMatrix,
-  occurrences: readonly SlotOperationOccurrence[],
 ): SlotOperationSnapshot {
+  assertSnapshotShape(scene, values, "snapshot");
   return Object.freeze({
     scene: Object.freeze(scene.map((column) => Object.freeze([...column]))),
     values: Object.freeze(values.map((column) => Object.freeze([...column]))),
-    occurrences: Object.freeze(
-      [...occurrences].sort(
-        (left, right) =>
-          left.position.x - right.position.x ||
-          left.position.y - right.position.y,
-      ),
-    ),
   });
 }
 
@@ -566,23 +462,33 @@ function assertSnapshotShape(
         throw new LogicParseError(
           `${label} occupied cell (${x},${y}) cannot use value -1.`,
         );
+      if (!Number.isSafeInteger(code) || code < -1)
+        throw new LogicParseError(
+          `${label} scene (${x},${y}) code must be a safe integer >= -1.`,
+        );
+      if (code !== -1) validatePresentationValue(value, `${label} (${x},${y})`);
     });
   });
 }
 
-function symbolNames(
+function validatePresentationValue(value: unknown, label: string): void {
+  if (value !== null && (!Number.isSafeInteger(value) || (value as number) < 0))
+    throw new LogicParseError(`${label} value must be null or non-negative.`);
+}
+
+function knownSymbolCodes(
   symbolCodes: Readonly<Record<string, number>>,
-): ReadonlyMap<number, string> {
-  const names = new Map<number, string>();
+): ReadonlySet<number> {
+  const knownCodes = new Set<number>();
   for (const [symbol, code] of Object.entries(symbolCodes)) {
     if (!symbol.trim() || !Number.isSafeInteger(code) || code < 0)
       throw new LogicParseError(`invalid symbol code entry ${symbol}.`);
-    if (names.has(code))
+    if (knownCodes.has(code))
       throw new LogicParseError(`duplicate symbol code ${code}.`);
-    names.set(code, symbol);
+    knownCodes.add(code);
   }
-  if (names.size === 0) throw new LogicParseError("symbolCodes is empty.");
-  return names;
+  if (knownCodes.size === 0) throw new LogicParseError("symbolCodes is empty.");
+  return knownCodes;
 }
 
 function validatePosition(
@@ -632,5 +538,16 @@ function freezePositions(
 }
 
 function normalizeValue(value: number | null | -1): number | null {
-  return value === -1 ? null : value;
+  if (value === -1) return null;
+  validatePresentationValue(value, "snapshot");
+  return value;
+}
+
+function forEachCell<T>(
+  matrix: readonly (readonly T[])[],
+  visit: (x: number, y: number, value: T) => void,
+): void {
+  matrix.forEach((column, x) =>
+    column.forEach((value, y) => visit(x, y, value)),
+  );
 }

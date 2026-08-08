@@ -48,6 +48,15 @@ describe("game002 FreeGame plan", () => {
     expect(kinds).toContain("game002:freegame-af");
     expect(kinds).toContain("game002:freegame-co");
     expect(kinds.at(-1)).toBe("game002:freegame-exit");
+    expect(compilation.plan).not.toHaveProperty("requiredCapabilities");
+    for (const operation of compilation.plan.operations) {
+      expect(operation).not.toHaveProperty("input");
+      expect(operation).not.toHaveProperty("mutations");
+      expect(operation).not.toHaveProperty("commit");
+      expect(operation).not.toHaveProperty("requiredCapabilities");
+      if (operation.effect !== "presentation")
+        expect(operation.output).not.toHaveProperty("occurrences");
+    }
   });
 
   it("compiles the sample FG, AF and CO sequence", () => {

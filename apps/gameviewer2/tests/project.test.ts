@@ -56,28 +56,13 @@ const flow = {
 const snapshot = {
   scene: [[1]],
   values: [[null]],
-  occurrences: [
-    {
-      id: "s:0:0",
-      code: 1,
-      symbol: "A",
-      value: null,
-      position: { x: 0, y: 0 },
-    },
-  ],
 } as const;
 const operations = {
   kind: "slot-operation-authoring-project",
   version: 2,
   snapshots: [
     { id: "s1", snapshot },
-    {
-      id: "s2",
-      snapshot: {
-        ...snapshot,
-        occurrences: [{ ...snapshot.occurrences[0], id: "s2:0:0" }],
-      },
-    },
+    { id: "s2", snapshot },
   ],
   edges: [
     {
@@ -96,10 +81,7 @@ const operations = {
             suggestions: [],
             edits: [],
           },
-          output: {
-            ...snapshot,
-            occurrences: [{ ...snapshot.occurrences[0], id: "s2:0:0" }],
-          },
+          output: snapshot,
           payload: {},
           businessKey: "s1:s2",
         },

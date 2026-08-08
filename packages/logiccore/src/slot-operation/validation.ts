@@ -1,10 +1,6 @@
 import { LogicParseError } from "../errors";
 import { isRecord } from "../validation";
-import type {
-  SlotOperationOccurrence,
-  SlotOperationPosition,
-  SlotOperationSnapshot,
-} from "./types";
+import type { SlotOperationSnapshot } from "./types";
 
 const KIND_PATTERN = /^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)+$/u;
 
@@ -39,6 +35,11 @@ export function validateSlotOperationSnapshot(
 ): void {
   assertPlainData(snapshot, options.path);
   const { columns, rows, path } = options;
+  const unknownField = Object.keys(snapshot).find(
+    (field) => field !== "scene" && field !== "values",
+  );
+  if (unknownField)
+    throw new LogicParseError(`${path}.${unknownField} is not supported.`);
   if (!Array.isArray(snapshot.scene) || snapshot.scene.length !== columns)
     throw new LogicParseError(`${path}.scene must contain ${columns} columns.`);
   if (!Array.isArray(snapshot.values) || snapshot.values.length !== columns)
@@ -48,37 +49,6 @@ export function validateSlotOperationSnapshot(
   const symbolsByCode = new Map(
     Object.entries(options.symbolCodes).map(([symbol, code]) => [code, symbol]),
   );
-  const occurrenceByPosition = new Map<string, SlotOperationOccurrence>();
-  const occurrenceIds = new Set<string>();
-  if (!Array.isArray(snapshot.occurrences))
-    throw new LogicParseError(`${path}.occurrences must be an array.`);
-  for (const [index, occurrence] of snapshot.occurrences.entries()) {
-    const occurrencePath = `${path}.occurrences[${index}]`;
-    if (!occurrence.id.trim())
-      throw new LogicParseError(`${occurrencePath}.id must not be blank.`);
-    if (occurrenceIds.has(occurrence.id))
-      throw new LogicParseError(
-        `${path} contains duplicate occurrence id "${occurrence.id}".`,
-      );
-    occurrenceIds.add(occurrence.id);
-    validatePosition(
-      occurrence.position,
-      columns,
-      rows,
-      `${occurrencePath}.position`,
-    );
-    const key = positionKey(occurrence.position);
-    if (occurrenceByPosition.has(key))
-      throw new LogicParseError(
-        `${path} contains duplicate occurrence position ${key}.`,
-      );
-    if (symbolsByCode.get(occurrence.code) !== occurrence.symbol)
-      throw new LogicParseError(
-        `${occurrencePath} code/symbol does not match symbolCodes.`,
-      );
-    validatePresentationValue(occurrence.value, `${occurrencePath}.value`);
-    occurrenceByPosition.set(key, occurrence);
-  }
   for (let x = 0; x < columns; x += 1) {
     const sceneColumn = snapshot.scene[x];
     const valueColumn = snapshot.values[x];
@@ -93,9 +63,8 @@ export function validateSlotOperationSnapshot(
     for (let y = 0; y < rows; y += 1) {
       const code = sceneColumn[y];
       const value = valueColumn[y];
-      const occurrence = occurrenceByPosition.get(`${x},${y}`);
       if (code === -1) {
-        if (value !== -1 || occurrence)
+        if (value !== -1)
           throw new LogicParseError(
             `${path}[${x}][${y}] hole closure is invalid.`,
           );
@@ -106,10 +75,6 @@ export function validateSlotOperationSnapshot(
           `${path}.scene[${x}][${y}] uses unknown code ${code}.`,
         );
       validatePresentationValue(value, `${path}.values[${x}][${y}]`);
-      if (!occurrence || occurrence.code !== code || occurrence.value !== value)
-        throw new LogicParseError(
-          `${path}[${x}][${y}] occurrence closure is invalid.`,
-        );
     }
   }
 }
@@ -155,31 +120,9 @@ export function assertPlainData(value: unknown, path: string): void {
   visit(value, path);
 }
 
-function validatePosition(
-  value: SlotOperationPosition,
-  columns: number,
-  rows: number,
-  path: string,
-): void {
-  if (
-    !value ||
-    !Number.isSafeInteger(value.x) ||
-    !Number.isSafeInteger(value.y) ||
-    value.x < 0 ||
-    value.y < 0 ||
-    value.x >= columns ||
-    value.y >= rows
-  )
-    throw new LogicParseError(`${path} is out of bounds.`);
-}
-
 function validatePresentationValue(value: unknown, path: string): void {
   if (value !== null && (!Number.isSafeInteger(value) || (value as number) < 0))
     throw new LogicParseError(
       `${path} must be null or a non-negative safe integer.`,
     );
-}
-
-function positionKey(position: SlotOperationPosition): string {
-  return `${position.x},${position.y}`;
 }

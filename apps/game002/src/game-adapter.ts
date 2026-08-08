@@ -3,7 +3,6 @@ import type {
   GameLogic,
   GameLogicStep,
   SlotRoundCapability,
-  SlotRoundOccurrenceSnapshot,
   SlotOperationV2,
   SlotOperationSnapshot,
   SlotChgPayload,
@@ -60,7 +59,6 @@ import {
   type Game002TransformKey,
   type Game002WinPayload,
   type Game002RemovePayload,
-  type Game002SpinPayload,
 } from "./game002-operation-compiler.js";
 import { Game002FreeGameOperationTarget } from "./freegame-operation-target.js";
 
@@ -557,14 +555,17 @@ class Game002PixiAdapter implements SlotGameAdapter {
 
 function createGame002OperationRegistrations(target: Game002RoundTarget) {
   const frameDriven = (options: {
-    readonly start: (operation: SlotOperationV2) => void;
+    readonly start: (
+      operation: SlotOperationV2,
+      context: SlotOperationExecutionContext,
+    ) => void;
     readonly update: (
       operation: SlotOperationV2,
       deltaSeconds: number,
     ) => boolean;
   }): SlotOperationHandler<SlotOperationV2> => ({
     async start(operation, context): Promise<void> {
-      options.start(operation);
+      options.start(operation, context);
       await context.waitForFrame((deltaSeconds) =>
         options.update(operation, deltaSeconds),
       );
@@ -583,8 +584,7 @@ function createGame002OperationRegistrations(target: Game002RoundTarget) {
     start: (operation) => {
       if (operation.effect !== "scene-landing")
         throw new Error("game002:spin must establish a scene.");
-      const payload = operation.payload as Game002SpinPayload;
-      target.startInitialSpin(payload.scene);
+      target.startInitialSpin(operation.output);
     },
     update: () => target.isInitialSpinComplete(),
   });
@@ -725,8 +725,8 @@ export class Game002RoundTarget {
   #winCompleted = false;
   #completionComplete = true;
   #unifiedSteps = new Set<number | string>();
-  #initialSnapshot: SlotRoundOccurrenceSnapshot | null = null;
-  #refillSnapshot: SlotRoundOccurrenceSnapshot | null = null;
+  #initialSnapshot: SlotOperationSnapshot | null = null;
+  #refillSnapshot: SlotOperationSnapshot | null = null;
   #atomicTransformOperation: SlotOperationV2 | null = null;
 
   constructor(options: {
@@ -760,7 +760,7 @@ export class Game002RoundTarget {
     this.#refillSnapshot = null;
   }
 
-  startInitialSpin(snapshot: SlotRoundOccurrenceSnapshot): void {
+  startInitialSpin(snapshot: SlotOperationSnapshot): void {
     this.#activity = "initial";
     this.#runtimeCompleted = false;
     this.#initialSnapshot = snapshot;
@@ -884,6 +884,7 @@ export class Game002RoundTarget {
   ): Promise<void> {
     if (this.#activity !== "idle")
       throw new Error("game002 atomic transform cannot start while active.");
+    const input = requireOperationInput(operation, context);
     this.#activity = "atomic-transform";
     this.#atomicTransformOperation = operation;
     try {
@@ -911,7 +912,7 @@ export class Game002RoundTarget {
           await this.playStates(payload.pos, "multEnd", context.signal);
           await this.playStates(payload.pos, "change", context.signal);
           for (const position of payload.pos)
-            this.replaceFromOperation(operation, position);
+            this.replaceFromOperation(input, operation, position);
           return;
         }
         case "game002:coin-multiplier": {
@@ -937,7 +938,7 @@ export class Game002RoundTarget {
           const payload = requireGame002ChgPayload(operation, "change");
           for (const position of payload.pos) {
             await this.playStates([position], "change", context.signal);
-            this.replaceFromOperation(operation, position);
+            this.replaceFromOperation(input, operation, position);
           }
           return;
         }
@@ -945,6 +946,7 @@ export class Game002RoundTarget {
           await this.runCoCollection(
             requireGame002MutationOperation(operation),
             requireGame002ChgPayload(operation, "transfer"),
+            input,
             context,
           );
           return;
@@ -995,12 +997,12 @@ export class Game002RoundTarget {
   }
 
   private replaceFromOperation(
+    inputSnapshot: SlotOperationSnapshot,
     operation: Game002MutationOperation,
     position: { readonly x: number; readonly y: number },
   ): void {
-    const mutation = requireGame002MutationOperation(operation);
-    const input = operationInputCell(mutation, position);
-    const output = operationOutputCell(mutation, position);
+    const input = operationInputCell(inputSnapshot, position);
+    const output = operationOutputCell(operation, position);
     this.#runtime.replaceVisibleOccurrence({
       x: position.x,
       y: position.y,
@@ -1013,6 +1015,7 @@ export class Game002RoundTarget {
   private async runCoCollection(
     operation: Extract<SlotOperationV2, { readonly effect: "state-mutation" }>,
     payload: SlotChgTransferPayload,
+    inputSnapshot: SlotOperationSnapshot,
     context: SlotOperationExecutionContext,
   ): Promise<void> {
     const sourcePositions = payload.routes.map(({ source }) => source);
@@ -1039,8 +1042,8 @@ export class Game002RoundTarget {
     );
     await this.#runtime.transferVisibleOccurrences({
       transfers: payload.routes.map(({ source, target }) => {
-        const inputSource = operationInputCell(operation, source);
-        const inputTarget = operationInputCell(operation, target);
+        const inputSource = operationInputCell(inputSnapshot, source);
+        const inputTarget = operationInputCell(inputSnapshot, target);
         const outputSource = operationOutputCell(operation, source);
         return Object.freeze({
           source,
@@ -1056,7 +1059,7 @@ export class Game002RoundTarget {
       waitForFrame: context.waitForFrame,
     });
     for (const position of payload.mainPos)
-      this.replaceFromOperation(operation, position);
+      this.replaceFromOperation(inputSnapshot, operation, position);
   }
 
   update(deltaSeconds: number): void {
@@ -1171,26 +1174,27 @@ export class Game002RoundTarget {
     this.#refillSnapshot = null;
   }
 
-  private applyMultiplierTexts(snapshot: SlotRoundOccurrenceSnapshot): void {
-    for (const occurrence of snapshot.occurrences) {
-      if (
-        occurrence.code !== this.#wlSymbolCode &&
-        occurrence.code !== this.#wmSymbolCode &&
-        occurrence.code !== this.#cmSymbolCode
-      )
-        continue;
-      this.#runtime.setVisibleSymbolPresentationValue(
-        occurrence.position.x,
-        occurrence.position.y,
-        occurrence.value,
-      );
-      this.#runtime.setVisibleSymbolImageStringText(
-        occurrence.position.x,
-        occurrence.position.y,
-        "multiplier",
-        formatMultiplier(occurrence.value),
-      );
-    }
+  private applyMultiplierTexts(snapshot: SlotOperationSnapshot): void {
+    snapshot.scene.forEach((column, x) =>
+      column.forEach((code, y) => {
+        if (
+          code !== this.#wlSymbolCode &&
+          code !== this.#wmSymbolCode &&
+          code !== this.#cmSymbolCode
+        )
+          return;
+        const value = snapshot.values[x]![y];
+        if (value === -1)
+          throw new Error(`game002 multiplier (${x},${y}) is a hole.`);
+        this.#runtime.setVisibleSymbolPresentationValue(x, y, value);
+        this.#runtime.setVisibleSymbolImageStringText(
+          x,
+          y,
+          "multiplier",
+          formatMultiplier(value),
+        );
+      }),
+    );
   }
 
   private activeFallView() {
@@ -1255,13 +1259,22 @@ function requireGame002ChgPayload<Type extends SlotChgPayload["type"]>(
 }
 
 function operationInputCell(
-  operation: Game002MutationOperation,
+  input: SlotOperationSnapshot,
   position: { readonly x: number; readonly y: number },
 ) {
   return Object.freeze({
-    code: operation.input.scene[position.x]![position.y]!,
-    value: operation.input.values[position.x]![position.y]!,
+    code: input.scene[position.x]![position.y]!,
+    value: input.values[position.x]![position.y]!,
   });
+}
+
+function requireOperationInput(
+  operation: SlotOperationV2,
+  context: SlotOperationExecutionContext,
+): SlotOperationSnapshot {
+  if (!context.input)
+    throw new Error(`${operation.kind} requires an established input scene.`);
+  return context.input;
 }
 
 function operationOutputCell(

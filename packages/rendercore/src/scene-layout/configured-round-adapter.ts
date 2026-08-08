@@ -2,6 +2,7 @@ import {
   compileConfiguredSlotRoundOperationPlanV2,
   type GameLogic,
   type SceneMatrix,
+  type SlotOperationSnapshot,
   type SlotRoundCapability,
   type SlotRoundDropdownStepPlan,
   type SlotRoundOccurrenceSnapshot,
@@ -394,7 +395,7 @@ class ConfiguredRoundTarget {
     this.#runtime.dismissActiveAwardCelebrationImmediately();
   }
 
-  startInitialSpin(snapshot: SlotRoundOccurrenceSnapshot): void {
+  startInitialSpin(snapshot: SlotOperationSnapshot): void {
     this.#runtime.spinMainReelToScene({
       scene: snapshot.scene,
       presentationValues: toPresentationValues(snapshot.values),

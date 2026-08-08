@@ -5,7 +5,8 @@
 在全部 edge `review: complete` 且 strict finalizer 闭合前，预览与导出禁用。
 
 首个 authored snapshot 由 scene landing 建立；相邻 snapshot 会生成 spin landing 或显式
-state mutation evidence，相同 snapshot 不自动生成 presentation placeholder。
+state output evidence，相同 snapshot 不自动生成 presentation placeholder。state operation 不保存
+通用 mutation 列表；坐标级提交由预览 render handler 决定。
 Operations 页签显示每条 edge 的 suggestion 状态、候选数和 diagnostics，并允许逐 draft 修改
 本地注册 kind 与完整 payload JSON。payload 可显式表达 positions、relocation pairing、result、
 order、amount；修改后 edge 恢复为 `review: required`，只有 strict compile 与目标 snapshot 精确

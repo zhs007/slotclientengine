@@ -8,11 +8,9 @@ import {
   requireExactlyOneOtherScene,
   requireExactlyOneResult,
   requireExactlyOneScene,
-  requireOccurrenceAt,
   requireSafeInteger,
   requireSafeIntegerArray,
   type ComponentSelection,
-  type SlotOperationSnapshot,
 } from "../../src/index";
 
 describe("slot operation exact data", () => {
@@ -67,7 +65,7 @@ describe("slot operation exact data", () => {
     ).not.toThrow();
   });
 
-  it("validates exact position sets and occurrence lookup", () => {
+  it("validates exact position sets", () => {
     expect(() =>
       assertExactPositionSet(
         [
@@ -94,47 +92,6 @@ describe("slot operation exact data", () => {
         "positions",
       ),
     ).toThrow(/duplicate/);
-    const snapshot: SlotOperationSnapshot = Object.freeze({
-      scene,
-      values: Object.freeze([Object.freeze([null, null])]),
-      occurrences: Object.freeze([
-        Object.freeze({
-          id: "a",
-          code: 2,
-          symbol: "B",
-          value: null,
-          position: Object.freeze({ x: 0, y: 1 }),
-        }),
-      ]),
-    });
-    expect(requireOccurrenceAt(snapshot, { x: 0, y: 1 }, "target").id).toBe(
-      "a",
-    );
-    expect(() =>
-      requireOccurrenceAt(snapshot, { x: 0, y: 0 }, "target"),
-    ).toThrow(/got 0/);
-    expect(() =>
-      requireOccurrenceAt(snapshot, { x: 1, y: 0 }, "target"),
-    ).toThrow(/out of range/);
-    expect(() =>
-      requireOccurrenceAt(snapshot, { x: -1, y: 0 }, "target"),
-    ).toThrow(/out of range/);
-    expect(() =>
-      requireOccurrenceAt(snapshot, { x: 0, y: 2 }, "target"),
-    ).toThrow(/out of range/);
-    expect(() =>
-      requireOccurrenceAt(snapshot, { x: 0.5, y: 0 }, "target"),
-    ).toThrow(/out of range/);
-    expect(() =>
-      requireOccurrenceAt(
-        {
-          ...snapshot,
-          occurrences: [...snapshot.occurrences, snapshot.occurrences[0]!],
-        },
-        { x: 0, y: 1 },
-        "target",
-      ),
-    ).toThrow(/got 2/);
   });
 
   it("requires bounded safe integers", () => {

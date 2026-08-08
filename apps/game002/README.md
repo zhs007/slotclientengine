@@ -142,11 +142,11 @@ value presentation 移到 target。source、target 和 CO 的最终 symbol 以�
 multiplier/CO transform payload 与 `game002:freegame@2` 由同一个 coordinator 持有；
 FreeGame 不再在 BaseGame Promise 完成后启动第二份 playback contract。WL increment、
 WM、WM→CN、CM、CM→CN、CO 共用 logiccore `SlotChgOperation` 结构，payload 只保存
-`pos`、`mainPos + pos` 或 `mainPos + routes`；code/value 直接读取 operation input/output。
+`pos`、`mainPos + pos` 或 `mainPos + routes`；旧值读取 `context.input`，新值读取 `operation.output`。
 Target 不再用 stepIndex 或 payload phase 分流，而是按 operation key 挂接渲染程序；缺席阶段
 不生成 operation，每个实际 visual commit 后才推进。
 BaseGame multiplier/CO 与 FreeGame trigger/transition/AF/CO 都是 game002 自己的直接异步调用链；
-handler 只实现 `start`，动画、逐格 mutation、可选 delay 和 transfer 都在 Promise 链中表达。
+handler 只实现 `start`，动画、逐格或批量提交、可选 delay 和 transfer 都在 Promise 链中表达。
 transfer 的临时 display/租约由 rendercore 内部回池，FreeGame target 不保存 prepared arrays、
 AbortController 或专用 progress phase。
 
@@ -166,8 +166,8 @@ trigger 提供有效坐标即可；先播放 WL
 每次 `fg-spin` 只释放并滚动当前 scene 中非 WL、非 CN 的格子，WL/CN occurrence
 与 value 保持不动。落定后按 `AF -> CO` 处理：AF 从 `fg-rollaf.number` 显示
 不带 `x` 的免费次数并依次播放 `Feature/Change`；CO 使用 `mainPos + routes` 搬运完整
-occurrence/value。AF、CO 的 payload 不再复制 scene/value，渲染直接读取 operation
-input/output；最终 symbol/value 以服务器 output 为准。`fg-start` 的计数直接用于界面显示，
+occurrence/value。AF、CO 的 payload 不再复制 scene/value，渲染直接读取 `context.input` 与
+`operation.output`；最终 symbol/value 以服务器 output 为准。`fg-start` 的计数直接用于界面显示，
 不在客户端重算整轮次数公式。
 
 `fg-win` 在所在 spin 作为中奖表现播放。它复用 CN collect

@@ -5,32 +5,34 @@
 ## 依赖与职责
 
 - `packages/gameframeworks` 是后续游戏默认 facade，整合 UI、网络、logic 数据流和 production scene-layout API。
-- `packages/logiccore` 只拥有通用 server round/component/result/otherScenes 解析、strict selector/generator、mutation reducer 和不可变 `SlotOperationPlanV2` finalizer；业务 component、symbol、金额语义与最终排列由 app 注入。
-- operation kind/version/effect、source evidence、state-mutation occurrence closure 和 plan final closure
+- `packages/logiccore` 只拥有通用 server round/component/result/otherScenes 解析、strict selector/generator、scene/value output 校验和不可变 `SlotOperationPlanV2` finalizer；业务 component、symbol、金额语义与渲染提交粒度由 app 注入。logiccore 不提供通用画面 mutation DSL 或 renderer identity。
+- operation kind/version/effect、source evidence、state output 和 plan final closure
   必须由 logiccore strict compiler/finalizer 证明。正式 server source 与本地
   snapshot-authored source 不得互相 fallback；本地 suggestion 只存在于独立
   `slotoperationauthoring` package。
 - 结构相同的业务变化统一使用 logiccore `SlotChgOperation`/`genChg`：普通变化只保存
   `pos`，驱动变化保存 `mainPos + pos`，跨格转移保存 `mainPos + routes`。operation
-  kind 选择具体 render program；payload 不得重复保存业务 symbol 名、input/output
-  code/value 或第二份 changes。只有动画驱动者时允许 `pos` 为空且 input/output 相同。
+  kind 选择具体 render program；payload 不得重复保存业务 symbol 名、output code/value
+  或第二份 changes。前态由 coordinator 作为 `context.input` 提供；只有动画驱动者时允许
+  `pos` 为空且 output 与前态相同。
 - 所有配置驱动 round 必须在任何画面 mutation 前完整编译。component role、remove/drop/value/sequential companion policy 只能来自 strict versioned profile，并按 active symbol package 大小写精确校验。
-- settled transform 的跨格 relocation 必须显式保存 source occurrence identity、
-  overwritten target 与 source replacement；release-only win positions 只加入 holes
-  和 release IDs，不得伪造金额组。grid-cell transfer 的租约、临时 display 与回池由
+- settled transform 的跨格变化在 operation payload 只保存 source/target 坐标关系；
+  overwritten target 与 source replacement 从 `context.input` 和 `operation.output` 读取。
+  release-only win positions 只加入 holes 和 release IDs，不得伪造金额组。grid-cell transfer 的租约、临时 display 与回池由
   rendercore 内部拥有，对 app 只暴露一次异步调用；Promise settle 或 abort 后必须释放。
-- relocation 输出 occurrence 必须按不可变 input occurrence 定位槽位，不得按已经
-  被前序 target 改写的 output id 再查找；source/target 坐标遍历顺序不能改变结果。
+- rendercore 内部 relocation 必须按操作开始时的不可变坐标快照定位槽位，不得按已经
+  被前序 target 改写的显示对象再查找；source/target 坐标遍历顺序不能改变结果。
 - `packages/rendercore` 的实例级 operation registry/coordinator 是 standard/grid-cell、
   base/cascade 的共享编排入口。coordinator 直接接受 logiccore 已编译、已验证的 immutable plan，
   精确按 kind/version 调用单一异步 `start`；handler 可在调用链中等待动画、帧或延迟，不再拥有
   preflight/prepare/update/commit/rollback/destroy 生命周期，也不使用进程级 registry、kind alias
-  或首项 fallback。
-- render 只在 mutation 即将发生时检查当前 operation 涉及的坐标与 input/output continuity，
-  不重新验证完整 plan 或全局 output snapshot。Promise 成功后推进下一 operation；失败后立即
+  或首项 fallback。coordinator 在每个非 presentation operation 成功后保存其 output，并把它作为
+  下一 handler 的 `context.input`；plan 不重复携带 input。
+- render handler 自己决定动画边界、逐格或批量提交，并在实际变化前检查涉及坐标的
+  `context.input`/`operation.output` continuity；不重新验证完整 plan。Promise 成功后推进下一 operation；失败后立即
   fail-stop 并取消 pending playback，不倒放已经完成的动画或 mutation。
-- settled 后、中奖前的业务转换必须由 logiccore 的中性 immutable transform step
-  和 app-owned 异步调用链显式表达；每次 mutation 只校验受影响 occurrence 的 code/value
+- settled 后、中奖前的业务转换必须由 logiccore 的中性 immutable output operation
+  和 app-owned 异步调用链显式表达；每次提交只校验受影响坐标的 code/value
   continuity，共享层不认识业务 symbol、component 或动画名。没有 transform 的 consumer
   trace 保持不变。
 - symbol package 到 reel registry 的 catalog/value-controller 适配属于 rendercore；

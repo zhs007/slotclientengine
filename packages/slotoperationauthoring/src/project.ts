@@ -33,9 +33,14 @@ export function parseSlotOperationAuthoringProject(
       const id = nonBlank(record.id, `project.snapshots[${index}].id`);
       if (ids.has(id)) throw new Error(`duplicate snapshot id "${id}".`);
       ids.add(id);
+      const snapshot = strictRecord(
+        record.snapshot,
+        `project.snapshots[${index}].snapshot`,
+        ["scene", "values"],
+      );
       return Object.freeze({
         id,
-        snapshot: record.snapshot as SlotOperationSnapshot,
+        snapshot: snapshot as unknown as SlotOperationSnapshot,
       });
     },
   );
@@ -104,9 +109,17 @@ export function upgradeSlotOperationAuthoringProjectV1(
       "id",
       "snapshot",
     ]);
+    const snapshot = strictRecord(
+      record.snapshot,
+      `project.snapshots[${index}].snapshot`,
+      ["scene", "values", "occurrences"],
+    );
     return Object.freeze({
       id: nonBlank(record.id, `project.snapshots[${index}].id`),
-      snapshot: record.snapshot as SlotOperationSnapshot,
+      snapshot: Object.freeze({
+        scene: snapshot.scene,
+        values: snapshot.values,
+      }) as SlotOperationSnapshot,
     });
   });
   if (!Array.isArray(root.edges) || root.edges.length !== snapshots.length - 1)

@@ -261,12 +261,13 @@ pnpm install
 
 `compileConfiguredSlotRoundOperationPlanV2(profile, logic, context)` 是配置型 consumer 的 renderer-free V2 入口。它在画面开始前一次性校验全部 step、scene/result/otherScene 索引、remove hole、dropdown occurrence 一一映射、held occurrence、refill closure 与 value authority。
 
-`slot-operation/exact-data` 提供不含游戏业务名的 strict cardinality、matrix、position、occurrence 与 safe-integer 校验。游戏 decoder 用这些 primitive 一次选择服务器数据；不存在、重复、尺寸漂移或坐标越界都会携带调用方给出的 source path 失败，不提供首项默认值。
+`slot-operation/exact-data` 提供不含游戏业务名的 strict cardinality、matrix、position 与 safe-integer 校验。游戏 decoder 用这些 primitive 一次选择服务器数据；不存在、重复、尺寸漂移或坐标越界都会携带调用方给出的 source path 失败，不提供首项默认值。
 
 ## Slot operation plan
 
 `SlotOperationPlanV2` 以 `scene-landing | presentation | state-mutation` 区分 effect。
-`finalizeSlotOperationPlanV2()` 保持调用方给定顺序，生成稳定 id/index、聚合 capability，
-并验证 source evidence、scene establishment、mutation closure、plain data 与 deep freeze。
-Spin landing 只含 output；Win/Completion presentation 不携带伪 input/output；只有 mutation
-声明 input/output/mutations。游戏业务通过显式 V2 definition 注入，不在 logiccore 写 symbol 分支。
+`finalizeSlotOperationPlanV2()` 保持调用方给定顺序，生成稳定 id/index，并验证 source evidence、
+scene establishment、每个 state output、plain data 与 deep freeze。snapshot 只包含 x-first
+`scene/values`，不携带 renderer occurrence identity。Spin landing 和 state mutation 只声明 output；
+Win/Completion presentation 不携带伪 snapshot。前态由 render coordinator 按执行顺序提供，
+动画边界与逐格/批量提交由具体 handler 决定。游戏业务通过显式 V2 definition 注入，不在 logiccore 写 symbol 分支。

@@ -1,13 +1,12 @@
 import type {
-  SlotOperationOccurrence,
   SlotOperationPosition,
   SlotOperationSnapshot,
 } from "@slotclientengine/logiccore";
 import type {
   AuthoringSuggestion,
+  CellValueUpdate,
   DropdownDerivation,
-  OccurrenceMovement,
-  OccurrenceValueUpdate,
+  PositionMovement,
   RelocationDerivation,
   SceneCellChange,
   SymbolReplacement,
@@ -45,9 +44,9 @@ export function suggestRefillPositions(options: {
 export function suggestValueUpdates(options: {
   readonly input: SlotOperationSnapshot;
   readonly output: SlotOperationSnapshot;
-}): AuthoringSuggestion<readonly OccurrenceValueUpdate[]> {
+}): AuthoringSuggestion<readonly CellValueUpdate[]> {
   assertSameDimensions(options.input, options.output);
-  const updates: OccurrenceValueUpdate[] = [];
+  const updates: CellValueUpdate[] = [];
   forEachPosition(options.input, (position) => {
     if (
       options.input.scene[position.x]![position.y] !== -1 &&
@@ -97,7 +96,7 @@ export function suggestSymbolReplacements(options: {
 export function suggestDropdownMovements(options: {
   readonly input: SlotOperationSnapshot;
   readonly output: SlotOperationSnapshot;
-  readonly heldOccurrenceIds?: readonly string[];
+  readonly heldPositions?: readonly SlotOperationPosition[];
 }): AuthoringSuggestion<DropdownDerivation> {
   const movement = suggestMovements(options.input, options.output);
   return Object.freeze({
@@ -106,16 +105,14 @@ export function suggestDropdownMovements(options: {
       movement.candidates.map((movements) =>
         Object.freeze({
           movements,
-          heldOccurrenceIds: Object.freeze([
-            ...(options.heldOccurrenceIds ?? []),
-          ]),
+          heldPositions: Object.freeze([...(options.heldPositions ?? [])]),
         }),
       ),
     ),
   });
 }
 
-export function suggestOccurrenceRelocations(options: {
+export function suggestPositionRelocations(options: {
   readonly input: SlotOperationSnapshot;
   readonly output: SlotOperationSnapshot;
 }): AuthoringSuggestion<RelocationDerivation> {
@@ -131,16 +128,27 @@ export function suggestOccurrenceRelocations(options: {
 function suggestMovements(
   input: SlotOperationSnapshot,
   output: SlotOperationSnapshot,
-): AuthoringSuggestion<readonly OccurrenceMovement[]> {
+): AuthoringSuggestion<readonly PositionMovement[]> {
   assertSameDimensions(input, output);
-  const outputOccurrences = output.occurrences.filter((candidate) => {
-    const samePosition = occurrenceAt(input, candidate.position);
-    return !samePosition || !sameOccurrenceValue(samePosition, candidate);
+  const outputCells = occupiedCells(output).filter((candidate) => {
+    const samePosition = cellAt(input, candidate.position);
+    return !samePosition || !sameCellValue(samePosition, candidate);
   });
-  if (outputOccurrences.length === 0)
+  if (outputCells.length === 0)
     return exact(Object.freeze([]), allPositions(input));
-  const candidateLists = outputOccurrences.map((target) =>
-    input.occurrences.filter(
+  const stablePositions = new Set(
+    occupiedCells(input)
+      .filter((cell) => {
+        const target = cellAt(output, cell.position);
+        return target !== undefined && sameCellValue(cell, target);
+      })
+      .map((cell) => positionKey(cell.position)),
+  );
+  const inputCells = occupiedCells(input).filter(
+    (cell) => !stablePositions.has(positionKey(cell.position)),
+  );
+  const candidateLists = outputCells.map((target) =>
+    inputCells.filter(
       (source) =>
         source.code === target.code &&
         source.value === target.value &&
@@ -153,12 +161,12 @@ function suggestMovements(
       candidates: Object.freeze([]),
       inspectedPositions: allPositions(input),
       diagnostics: Object.freeze([
-        "At least one output occurrence has no source with the same code and value.",
+        "At least one output cell has no source with the same code and value.",
       ]),
     });
-  const assignments: OccurrenceMovement[][] = [];
+  const assignments: PositionMovement[][] = [];
   enumerateAssignments(
-    outputOccurrences,
+    outputCells,
     candidateLists,
     0,
     [],
@@ -171,7 +179,7 @@ function suggestMovements(
       candidates: Object.freeze([]),
       inspectedPositions: allPositions(input),
       diagnostics: Object.freeze([
-        "No disjoint occurrence movement assignment exists.",
+        "No disjoint position movement assignment exists.",
       ]),
     });
   return Object.freeze({
@@ -190,12 +198,12 @@ function suggestMovements(
 }
 
 function enumerateAssignments(
-  targets: readonly SlotOperationOccurrence[],
-  candidates: readonly (readonly SlotOperationOccurrence[])[],
+  targets: readonly SnapshotCell[],
+  candidates: readonly (readonly SnapshotCell[])[],
   index: number,
-  current: readonly OccurrenceMovement[],
+  current: readonly PositionMovement[],
   used: ReadonlySet<string>,
-  output: OccurrenceMovement[][],
+  output: PositionMovement[][],
 ): void {
   if (output.length >= 256) return;
   if (index === targets.length) {
@@ -204,7 +212,8 @@ function enumerateAssignments(
   }
   const target = targets[index]!;
   for (const source of candidates[index]!) {
-    if (used.has(source.id)) continue;
+    const sourceKey = positionKey(source.position);
+    if (used.has(sourceKey)) continue;
     enumerateAssignments(
       targets,
       candidates,
@@ -212,12 +221,11 @@ function enumerateAssignments(
       [
         ...current,
         Object.freeze({
-          occurrenceId: source.id,
           source: source.position,
           target: target.position,
         }),
       ],
-      new Set([...used, source.id]),
+      new Set([...used, sourceKey]),
       output,
     );
   }
@@ -284,19 +292,44 @@ function forEachPosition(
   );
 }
 
-function occurrenceAt(
+interface SnapshotCell {
+  readonly code: number;
+  readonly value: number | null;
+  readonly position: SlotOperationPosition;
+}
+
+function occupiedCells(
   snapshot: SlotOperationSnapshot,
-  position: SlotOperationPosition,
-): SlotOperationOccurrence | undefined {
-  return snapshot.occurrences.find(
-    (item) => item.position.x === position.x && item.position.y === position.y,
+): readonly SnapshotCell[] {
+  return Object.freeze(
+    snapshot.scene.flatMap((column, x) =>
+      column.flatMap((code, y) =>
+        code === -1
+          ? []
+          : [
+              Object.freeze({
+                code,
+                value: snapshot.values[x]![y] as number | null,
+                position: Object.freeze({ x, y }),
+              }),
+            ],
+      ),
+    ),
   );
 }
 
-function sameOccurrenceValue(
-  left: SlotOperationOccurrence,
-  right: SlotOperationOccurrence,
-): boolean {
+function cellAt(
+  snapshot: SlotOperationSnapshot,
+  position: SlotOperationPosition,
+): SnapshotCell | undefined {
+  const code = snapshot.scene[position.x]?.[position.y];
+  const value = snapshot.values[position.x]?.[position.y];
+  if (code === undefined || code === -1 || value === undefined || value === -1)
+    return undefined;
+  return Object.freeze({ code, value, position });
+}
+
+function sameCellValue(left: SnapshotCell, right: SnapshotCell): boolean {
   return left.code === right.code && left.value === right.value;
 }
 

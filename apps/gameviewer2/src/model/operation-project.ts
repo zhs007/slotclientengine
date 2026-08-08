@@ -6,10 +6,7 @@ import type {
   SlotOperationAuthoringProjectV2,
   SlotOperationAuthoringEdge,
 } from "@slotclientengine/slotoperationauthoring";
-import {
-  deriveSlotStateMutations,
-  finalizeSlotOperationAuthoringDraft,
-} from "@slotclientengine/slotoperationauthoring";
+import { finalizeSlotOperationAuthoringDraft } from "@slotclientengine/slotoperationauthoring";
 
 export const GAMEVIEWER2_OPERATION_KINDS = Object.freeze([
   "slot:spin",
@@ -112,10 +109,8 @@ export function createGameViewer2OperationProject(options: {
             effect: "state-mutation" as const,
             kind: "slot:state-mutation",
             version: 2,
-            source: source("mutations"),
-            input: input.snapshot,
+            source: source("output"),
             output,
-            mutations: deriveSlotStateMutations(input.snapshot, output),
             payload: Object.freeze({}),
             businessKey: `${input.id}:${target.id}`,
           }),
@@ -248,28 +243,16 @@ function snapshotFromFlow(
   value: SceneOtherSceneFlowProjectV2["snapshots"][number],
   names: ReadonlyMap<number, string>,
 ) {
+  value.scene.forEach((column) =>
+    column.forEach((code) => {
+      if (!names.has(code))
+        throw new Error(
+          `Snapshot ${value.id} uses unknown symbol code ${code}.`,
+        );
+    }),
+  );
   return Object.freeze({
     scene: value.scene,
     values: value.otherScene,
-    occurrences: Object.freeze(
-      value.scene.flatMap((column, x) =>
-        column.flatMap((code, y) => {
-          const symbol = names.get(code);
-          if (!symbol)
-            throw new Error(
-              `Snapshot ${value.id} uses unknown symbol code ${code}.`,
-            );
-          return [
-            Object.freeze({
-              id: `${value.id}:${x}:${y}`,
-              code,
-              symbol,
-              value: value.otherScene[x]![y]!,
-              position: Object.freeze({ x, y }),
-            }),
-          ];
-        }),
-      ),
-    ),
   });
 }

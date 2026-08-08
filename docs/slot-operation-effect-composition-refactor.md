@@ -1,7 +1,9 @@
 # Slot Operation Effect Model 与游戏显式编排重构
 
-> 状态：Task 178 的 V2 runtime、consumer 与 authoring 切换已实施；本文是当前
-> `SlotOperationPlanV2` 架构合同。Game002 已改为自主调用原子 generator 并直接排列
+> 状态：历史设计记录。Task 178 的 V2 runtime、consumer 与 authoring 切换已实施，但本文
+> 保留了最初的 occurrence/mutation-closure 方案，不是当前 `SlotOperationPlanV2` 合同。
+> 当前 V2 已移除 occurrence identity、operation input 和通用 mutation list；以
+> `docs/agent-rules/shared-game-runtime.md` 与 `packages/logiccore/README.md` 为准。Game002 已改为自主调用原子 generator 并直接排列
 > BaseGame、transform 与显式 FreeGame operations；配置型 consumer 暂时仍通过
 > `compileConfiguredSlotRoundOperationPlanV2()` 生成 V2 trace，后续必须把这段固定排列下沉到
 > consumer，不能把它扩展成新的 shared 业务编排层。

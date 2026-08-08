@@ -17,10 +17,8 @@ export type * from "./v2-types";
 export * from "./effect-generators";
 export * from "./exact-data";
 export * from "./server-view";
-export * from "./mutation-derivation";
 export * from "./operation-generators";
 export {
-  applySlotStateMutations,
   finalizeSlotOperationPlanV2,
   type FinalizeSlotOperationPlanV2Options,
 } from "./v2-finalizer";

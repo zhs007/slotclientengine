@@ -12,11 +12,11 @@ describe("slot operation authoring project", () => {
       snapshots: [
         {
           id: "a",
-          snapshot: { scene: [[0]], values: [[null]], occurrences: [] },
+          snapshot: { scene: [[0]], values: [[null]] },
         },
         {
           id: "b",
-          snapshot: { scene: [[0]], values: [[null]], occurrences: [] },
+          snapshot: { scene: [[0]], values: [[null]] },
         },
       ],
       edges: [
@@ -36,7 +36,7 @@ describe("slot operation authoring project", () => {
                 suggestions: [],
                 edits: [],
               },
-              output: { scene: [[0]], values: [[null]], occurrences: [] },
+              output: { scene: [[0]], values: [[null]] },
               payload: {},
               businessKey: "a:b",
             },
@@ -71,7 +71,19 @@ describe("slot operation authoring project", () => {
   });
 
   it("upgrades V1 snapshots without inferring operation effects", () => {
-    const snapshot = { scene: [[0]], values: [[null]], occurrences: [] };
+    const snapshot = {
+      scene: [[0]],
+      values: [[null]],
+      occurrences: [
+        {
+          id: "legacy:0:0",
+          code: 0,
+          symbol: "A",
+          value: null,
+          position: { x: 0, y: 0 },
+        },
+      ],
+    };
     const upgraded = upgradeSlotOperationAuthoringProjectV1({
       kind: "slot-operation-authoring-project",
       version: 1,
@@ -92,5 +104,6 @@ describe("slot operation authoring project", () => {
       version: 2,
       edges: [{ review: "required", drafts: [] }],
     });
+    expect(upgraded.snapshots[0].snapshot).not.toHaveProperty("occurrences");
   });
 });

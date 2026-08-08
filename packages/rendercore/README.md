@@ -615,8 +615,8 @@ grid-cell 级联以 `-1` 作为中间态空洞。`createGridCellCascadeDropPlan(
 
 `createSlotOperationHandlerRegistry()` 是 runtime 实例 owner；kind/version 不匹配、重复注册和未知
 handler 精确失败。`createSlotOperationCoordinator()` 直接接受上游已编译、已验证的 immutable plan，
-按顺序调用每个 handler 的异步 `start`。执行上下文提供 `AbortSignal`、逐帧等待和延迟；宿主 ticker
-继续统一推进 runtime。render mutation 只在实际变更的坐标检查 input/output continuity，不做全局
+按顺序调用每个 handler 的异步 `start`。执行上下文提供上一 state output `input`、`AbortSignal`、逐帧等待和延迟；宿主 ticker
+继续统一推进 runtime。plan 只保存每步 output，不携带通用 mutation DSL；render handler 决定动画检查点与提交粒度，并只在实际变更的坐标检查 input/output continuity，不做全局
 snapshot assert。任一调用失败都会 abort pending playback、执行 fail-stop cleanup 并拒绝本轮 Promise，
 不会 rollback 已经完成的 mutation。旧固定 round coordinator 和 presentation transaction runner
 已从 public surface 删除。

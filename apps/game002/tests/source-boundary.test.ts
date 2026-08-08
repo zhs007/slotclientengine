@@ -52,6 +52,14 @@ describe("game002 source boundary", () => {
     }
   });
 
+  it("keeps renderer identity and generic mutation lists out of game002 plans", () => {
+    const source = readSourceTree(join(APP_ROOT, "src"));
+    expect(source).not.toMatch(
+      /SlotOperationOccurrence|deriveSlotStateMutations|applySlotStateMutations|occurrenceIdPrefix|replacementIdPrefix/,
+    );
+    expect(source).not.toMatch(/\bmutations\s*:/);
+  });
+
   it("keeps game002 runtime dependencies on the framework facade and renderer only", () => {
     const packageJson = JSON.parse(
       readFileSync(join(APP_ROOT, "package.json"), "utf8"),
