@@ -2,6 +2,8 @@ import {
   createPresentationTransactionRunner,
   type PresentationTransactionCommand,
   type PresentationTransactionProgram,
+  type SlotOperationV2,
+  type SlotStateMutationOperation,
   type WinResultPosition,
 } from "@slotclientengine/gameframeworks";
 import type {
@@ -21,7 +23,6 @@ export class Game002FreeGameOperationTarget {
   readonly #cascadePlayer: SymbolCascadePlayer;
   readonly #winAmountPlayer: WinAmountAnimationPlayer;
   readonly #backgroundPlayer: Game002BackgroundPlayer;
-  readonly #codes: Readonly<{ AF: number; CN: number; CO: number; BN: number }>;
   readonly #transactionRunner = createPresentationTransactionRunner();
   #activity: Activity = "idle";
   #payload: Game002FreeGameOperationPayload | null = null;
@@ -35,18 +36,11 @@ export class Game002FreeGameOperationTarget {
     readonly cascadePlayer: SymbolCascadePlayer;
     readonly winAmountPlayer: WinAmountAnimationPlayer;
     readonly backgroundPlayer: Game002BackgroundPlayer;
-    readonly codes: Readonly<{
-      AF: number;
-      CN: number;
-      CO: number;
-      BN: number;
-    }>;
   }) {
     this.#runtime = options.runtime;
     this.#cascadePlayer = options.cascadePlayer;
     this.#winAmountPlayer = options.winAmountPlayer;
     this.#backgroundPlayer = options.backgroundPlayer;
-    this.#codes = options.codes;
   }
 
   preflight(payload: Game002FreeGameOperationPayload): void {
@@ -78,22 +72,27 @@ export class Game002FreeGameOperationTarget {
     }
   }
 
-  start(payload: Game002FreeGameOperationPayload): void {
+  start(
+    operation: SlotOperationV2,
+    payload: Game002FreeGameOperationPayload,
+  ): void {
     if (this.#activity !== "idle")
       throw new Error("game002 FreeGame operation target is already active.");
     this.#payload = payload;
     this.#failure = null;
     switch (payload.kind) {
-      case "spin":
+      case "spin": {
+        const spin = requireMutation(operation);
         this.#runtime.startSelectiveSpin({
-          sourceScene: payload.spin.inputScene,
-          targetScene: payload.spin.spinScene,
-          targetValues: payload.spin.spinValues,
-          positions: payload.spin.spinPositions,
+          sourceScene: spin.input.scene,
+          targetScene: spin.output.scene,
+          targetValues: spin.output.values,
+          positions: payload.spinPositions,
           sceneName: "game002 FreeGame operation spin",
         });
         this.#activity = "spin";
         return;
+      }
       case "win":
         this.#cascadePlayer.start(this.#cascadePlayer.prepare(payload.groups));
         this.#activity = "win";
@@ -103,7 +102,9 @@ export class Game002FreeGameOperationTarget {
         this.#activity = "popup";
         return;
       default:
-        this.startTransaction(this.createTransactionProgram(payload));
+        this.startTransaction(
+          this.createTransactionProgram(operation, payload),
+        );
     }
   }
 
@@ -164,6 +165,7 @@ export class Game002FreeGameOperationTarget {
   }
 
   private createTransactionProgram(
+    operation: SlotOperationV2,
     payload: Exclude<
       Game002FreeGameOperationPayload,
       { kind: "spin" | "win" | "popup" }
@@ -191,28 +193,30 @@ export class Game002FreeGameOperationTarget {
         },
       });
     } else if (payload.kind === "af") {
+      const mutation = requireMutation(operation);
       commands.push(
         this.commit(() => {
-          for (const position of payload.af.positions)
+          for (const position of payload.positions)
             this.#runtime.setVisibleSymbolImageStringText(
               position.x,
               position.y,
               "free-spins",
-              String(payload.af.addedFreeSpins),
+              String(payload.addedFreeSpins),
             );
         }),
-        this.awaitStates(payload.af.positions, "feature"),
-        this.awaitStates(payload.af.positions, "change"),
-        this.prepareReplacements(payload.af.positions, (position) => ({
+        this.awaitStates(payload.positions, "feature"),
+        this.awaitStates(payload.positions, "change"),
+        this.prepareReplacements(payload.positions, (position) => ({
           x: position.x,
           y: position.y,
-          expectedCode: this.#codes.AF,
-          outputCode: this.#codes.CN,
+          expectedCode: mutation.input.scene[position.x]![position.y]!,
+          outputCode: mutation.output.scene[position.x]![position.y]!,
           outputPresentationValue:
-            payload.af.outputValues[position.x]![position.y]!,
+            mutation.output.values[position.x]![position.y]!,
         })),
       );
     } else {
+      const sourcePositions = payload.routes.map(({ source }) => source);
       commands.push(
         {
           kind: "await",
@@ -221,7 +225,7 @@ export class Game002FreeGameOperationTarget {
             this.#runtime.playVisibleSymbolStateBatch(
               [
                 {
-                  positions: payload.co.coPositions,
+                  positions: payload.mainPos,
                   state: "feature",
                   options: {
                     transitionMode: "immediate",
@@ -229,7 +233,7 @@ export class Game002FreeGameOperationTarget {
                   },
                 },
                 {
-                  positions: payload.co.sourcePositions,
+                  positions: sourcePositions,
                   state: "feature1",
                   options: {
                     transitionMode: "immediate",
@@ -240,7 +244,7 @@ export class Game002FreeGameOperationTarget {
               { signal },
             ),
         },
-        this.prepareCoTransfer(payload),
+        this.prepareCoTransfer(operation, payload),
       );
     }
     return Object.freeze({ commands: Object.freeze(commands) });
@@ -313,45 +317,45 @@ export class Game002FreeGameOperationTarget {
   }
 
   private prepareCoTransfer(
+    operation: SlotOperationV2,
     payload: Extract<Game002FreeGameOperationPayload, { kind: "co" }>,
   ): PresentationTransactionCommand {
+    const mutation = requireMutation(operation);
+    const sourcePositions = payload.routes.map(({ source }) => source);
     return Object.freeze({
       kind: "progress" as const,
       durationSeconds: 0.5,
       preflight: () => undefined,
       await: (signal: AbortSignal) =>
-        this.#runtime.playVisibleSymbolStates(
-          payload.co.sourcePositions,
-          "feature2",
-          {
-            transitionMode: "immediate",
-            completion: "once-complete",
-            signal,
-          },
-        ),
+        this.#runtime.playVisibleSymbolStates(sourcePositions, "feature2", {
+          transitionMode: "immediate",
+          completion: "once-complete",
+          signal,
+        }),
       prepare: () => {
         const replacements: PreparedVisibleOccurrenceReplacement[] = [];
         let transfer: PreparedGridCellVisibleOccurrenceTransferBatch | null =
           null;
         try {
-          for (const position of payload.co.coPositions)
+          for (const position of payload.mainPos)
             replacements.push(
               this.#runtime.prepareVisibleOccurrenceReplacement({
                 x: position.x,
                 y: position.y,
-                expectedCode: this.#codes.CO,
-                outputCode: this.#codes.CN,
+                expectedCode: mutation.input.scene[position.x]![position.y]!,
+                outputCode: mutation.output.scene[position.x]![position.y]!,
                 outputPresentationValue:
-                  payload.co.outputValues[position.x]![position.y]!,
+                  mutation.output.values[position.x]![position.y]!,
               }),
             );
           transfer = this.#runtime.prepareVisibleOccurrenceTransferBatch({
-            transfers: payload.co.transfers.map((item) => ({
-              source: item.source,
-              target: item.target,
-              expectedSourceCode: item.sourceCode,
-              expectedTargetCode: item.targetCode,
-              sourceReplacementCode: this.#codes.BN,
+            transfers: payload.routes.map(({ source, target }) => ({
+              source,
+              target,
+              expectedSourceCode: mutation.input.scene[source.x]![source.y]!,
+              expectedTargetCode: mutation.input.scene[target.x]![target.y]!,
+              sourceReplacementCode:
+                mutation.output.scene[source.x]![source.y]!,
               sourceReplacementPresentationValue: null,
             })),
           });
@@ -407,4 +411,12 @@ export class Game002FreeGameOperationTarget {
 
 function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
+}
+
+function requireMutation(
+  operation: SlotOperationV2,
+): SlotStateMutationOperation {
+  if (operation.effect !== "state-mutation")
+    throw new Error(`${operation.kind} must be a state-mutation operation.`);
+  return operation;
 }

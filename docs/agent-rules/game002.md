@@ -77,14 +77,14 @@
   FreeGame 必须展开为 trigger、transition、spin、AF、CO、win、popup 等显式 operation；不得
   重新封装为一个内部推进全部阶段的 opaque operation。plan generation 只负责按服务器已出现的
   component 排列 operation 并携带本步所需数据，不在首次 mutation 前重新证明整轮业务公式或 final
-  closure；每个 operation 开始前只校验本步安全执行所需的 scene shape、position、目标 symbol、value
+  closure；每个 operation 开始前只校验本步安全执行所需的 scene shape、position、value
   和 animation/resource capability。
 
 - game002 spin flow 使用 fail-stop、无 rollback 模型。所有权威 scene/value mutation 必须推迟到对应
   animation 完成边界并同步原子提交；prepare/playback/commit 任一失败立即停止当前 round、禁止继续
   后续 operation 或下一次 spin，并交由显式重新初始化/重新同步恢复。cleanup 只取消 pending playback、
   input 和临时资源，不恢复 operation input snapshot。未参与当前 operation 的额外 server field、component
-  或 matrix cell 不作为失败条件；当前 operation 必需的数据缺失、越界、类型非法或目标 symbol 不匹配仍
+  或 matrix cell 不作为失败条件；当前 operation 必需的数据缺失、越界或类型非法仍
   显式失败。只有显式声明为 best-effort 且不改变 scene/value 的装饰效果允许跳过。
 
 - `bg-triggerfg` 只接受没有其它 BaseGame 赔付的 type-5 WL result；WL win once
@@ -93,8 +93,9 @@
   提供本步可见落点，`fg-spin.pos` 只作为 feature result set。
 - 每步顺序固定为 `spin -> AF -> CO`。AF number 只取 `fg-rollaf.number`，以 raw
   digits 显示并计入 `fg-start.lastRespinNum`；AF Change 完成才提交 AF -> CN。
-- FG CO source 只允许 post-AF scene 中的 WL/CN，并复用 rendercore relocation
-  transaction；source 变 BN、target 接收 occurrence/value、CO 变 CN。
+- FG CO 将 `fg-triggerco` 坐标作为 `mainPos`，将 `fg-vortex.pos` 四元组作为 routes，
+  并复用 rendercore relocation transaction；source、target、CO 的最终 code/value 只取
+  对应 operation output，不在 plan 中重算 symbol 业务规则。
 - 只有剩余次数为 0 的最后一步允许 `fg-win`，且只赔付 type-6 CN group；collect
   不 remove，BigWin complete 后才反向 transition，最终 scene 跨模式保留。
 
@@ -143,14 +144,14 @@
   `bg-cm2cn.scene` 原子提交该 CM -> CN，且新 CN value 只取
   `bg-gencmcn.otherScene`。CM 全流程完成后才允许开始中奖；无 CM 时不得制造空阶段。
 - `bg-win` 有实际 result 时优先走原中奖流程，不启动 CO。没有 `bg-win` result
-  且 `bg-triggerco` 命中 CO 时，严格解析 `bg-co.pos` 的 `-1` 分段和 4..8 个
-  source/target 四元组；target 必须是该 CO 的八邻域，多 CO 必须全批 disjoint。
+  且 `bg-triggerco` 命中 CO 时，将命中的 CO 坐标作为 `mainPos`，并把
+  `bg-co.pos` 按 source/target 四元组解析为 routes；`-1` 只作为段分隔符，客户端
+  不再证明每段数量、八邻域归属或跨组件业务公式。
 - CO `feature` 与全部 source `feature1` 同时播放；全部真实 once 完成后 source
   播放 `feature2`，完整 occurrence（含 value/image-string）在 board mask 内移到
-  target。全批完成后原子提交 source->BN、target<-source、CO->selected symbol。
-  `bg-co.otherScene` 只校验 vortex 搬运后的中间 value；CO 转为 value symbol 的
-  新 value 必须从后续 `bg-cogencn.otherScene` 取得并校验最终完整矩阵；转为
-  非 value symbol 时该 CO 格的生成数值不进入 presentation value。
+  target。source、target 和 CO 的 output code 直接采用服务器 `bg-co.scene`；target
+  value 继承 source input，CO 转为 value symbol 时只读取
+  `bg-cogencn.otherScene` 对应 `mainPos`，非 value symbol 的 presentation value 为 null。
   `bg-win2` 进入普通中奖，`bg-bn` 只作为 release-only holes，不参与金额或 carousel。
 - WL/WM/CM multiplier 共用 paired Symbols package 的唯一 ImgNumber dependency，
   formatter 为 exact `x${value}`，Spine slot 为 exact `Mult`；不得使用 `Multi`

@@ -4,6 +4,7 @@ import {
   assertExactMatrixShape,
   assertExactPositionSet,
   optionalExactlyOneOtherScene,
+  parseTransferRoutes,
   requireExactlyOneOtherScene,
   requireExactlyOneResult,
   requireExactlyOneScene,
@@ -151,7 +152,20 @@ describe("slot operation exact data", () => {
     expect(() => requireSafeIntegerArray("bad", "values")).toThrow(
       /must be an array/,
     );
-    expect(() => requireSafeIntegerArray([1, -1], "values", { minimum: 0 }))
-      .toThrow(/values\[1\].*>= 0/);
+    expect(() =>
+      requireSafeIntegerArray([1, -1], "values", { minimum: 0 }),
+    ).toThrow(/values\[1\].*>= 0/);
+  });
+
+  it("parses separator-delimited transfer routes", () => {
+    expect(parseTransferRoutes([0, 0, 0, 1, -1], scene, "routes")).toEqual([
+      { source: { x: 0, y: 0 }, target: { x: 0, y: 1 } },
+    ]);
+    expect(() => parseTransferRoutes([0, 0, 0], scene, "routes")).toThrow(
+      /coordinate quadruples/,
+    );
+    expect(() => parseTransferRoutes([0, 0, 0, 2], scene, "routes")).toThrow(
+      /out of range/,
+    );
   });
 });

@@ -317,12 +317,6 @@ class Game002PixiAdapter implements SlotGameAdapter {
         cascadePlayer: symbolCascadePlayer,
         winAmountPlayer,
         backgroundPlayer,
-        codes: {
-          AF: requireGame002SymbolCode(runtime, "AF"),
-          CN: requireGame002SymbolCode(runtime, "CN"),
-          CO: requireGame002SymbolCode(runtime, "CO"),
-          BN: requireGame002SymbolCode(runtime, "BN"),
-        },
       });
       for (const registration of createGame002FreeGameOperationRegistrations(
         this.#freeGameOperationTarget,
@@ -713,7 +707,7 @@ function createGame002FreeGameOperationRegistrations(
     start: (operation) => {
       const payload = requirePayload(operation);
       target.preflight(payload);
-      target.start(payload);
+      target.start(operation, payload);
     },
     update: (_operation, deltaSeconds) => target.update(deltaSeconds),
     commit: () => undefined,

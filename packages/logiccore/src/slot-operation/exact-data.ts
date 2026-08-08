@@ -8,6 +8,7 @@ import type {
   SlotOperationPosition,
   SlotOperationSnapshot,
 } from "./types";
+import type { SlotChgRoute } from "./v2-types";
 
 export function requireExactlyOneScene(
   selection: ComponentSelection,
@@ -227,6 +228,49 @@ export function requireSafeIntegerArray(
       requireSafeInteger(item, `${label}[${index}]`, options),
     ),
   );
+}
+
+export function parseTransferRoutes(
+  raw: unknown,
+  matrix: readonly (readonly unknown[])[],
+  label: string,
+): readonly SlotChgRoute[] {
+  const encoded = requireSafeIntegerArray(raw, label);
+  const routes: SlotChgRoute[] = [];
+  let tuple: number[] = [];
+  for (const value of encoded) {
+    if (value === -1) {
+      if (tuple.length !== 0)
+        throw new LogicParseError(
+          `${label} must contain source/target coordinate quadruples.`,
+        );
+      continue;
+    }
+    tuple.push(value);
+    if (tuple.length !== 4) continue;
+    routes.push(
+      Object.freeze({
+        source: decodePositionInMatrix(
+          tuple[0],
+          tuple[1],
+          matrix,
+          `${label} source`,
+        ),
+        target: decodePositionInMatrix(
+          tuple[2],
+          tuple[3],
+          matrix,
+          `${label} target`,
+        ),
+      }),
+    );
+    tuple = [];
+  }
+  if (tuple.length !== 0)
+    throw new LogicParseError(
+      `${label} must contain source/target coordinate quadruples.`,
+    );
+  return Object.freeze(routes);
 }
 
 function uniquePositionKeys(

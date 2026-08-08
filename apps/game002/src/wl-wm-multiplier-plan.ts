@@ -6,74 +6,47 @@ import type {
   SlotRoundSettledCompileContext,
   SlotRoundSettledSceneCompileContext,
   SlotRoundSettledTransformChangeDraft,
-  SlotRoundSettledTransformDraft,
+  SlotRoundSettledTransformRelocationDraft,
   SlotRoundSettledValueDraft,
 } from "@slotclientengine/gameframeworks";
 import {
   assertExactMatrixShape,
+  findMatrixValuePositions,
   parseExactPositionPairs,
   requireSafeInteger,
   slotOperationPositionKey as positionKey,
 } from "@slotclientengine/gameframeworks";
 import { GAME002_CASCADE_COMPONENTS } from "./cascade-config.js";
-import {
-  compileGame002CoCollectionPlan,
-  type Game002CoCollectionPlan,
-} from "./co-collection-plan.js";
+import { compileGame002CoCollectionPlan } from "./co-collection-plan.js";
 
-export interface Game002WlWmMultiplierCompiler {
-  resolveSettledScene(
-    context: SlotRoundSettledSceneCompileContext,
-  ): SceneMatrix;
-  hydrateSettledValues(
-    context: SlotRoundSettledCompileContext,
-  ): readonly SlotRoundSettledValueDraft[];
-  compileSettledTransform(
-    context: SlotRoundSettledCompileContext,
-  ): Game002SettledTransformCompilation;
-  assertComplete(): void;
+export type Game002TransformKey =
+  | "wl-increment"
+  | "wild-multiplier"
+  | "wm-to-cn"
+  | "coin-multiplier"
+  | "cm-to-cn"
+  | "co-collect";
+
+interface PhaseBase {
+  readonly key: Game002TransformKey;
+  readonly changes: readonly SlotRoundSettledTransformChangeDraft[];
 }
 
-export interface Game002SettledTransformCompilation {
-  readonly draft:
-    | readonly SlotRoundSettledTransformChangeDraft[]
-    | SlotRoundSettledTransformDraft;
-  readonly payload: Game002TransformOperationPayload | null;
-}
-
-export interface Game002WlIncrementPresentation {
-  readonly position: SlotRoundPosition;
-  readonly inputValue: number;
-  readonly outputValue: number;
-}
-
-export interface Game002TransformOperationPayload {
-  readonly stepIndex: number;
-  readonly wlIncrements: readonly Game002WlIncrementPresentation[];
-  readonly wlUpdates: readonly Game002WlIncrementPresentation[];
-  readonly wmReplacements: readonly Game002WmReplacementPresentation[];
-  readonly cnUpdates: readonly Game002CnValueUpdatePresentation[];
-  readonly cm: Game002CmPresentation | null;
-  readonly coCollection?: Game002CoCollectionPlan | null;
-}
-
-export interface Game002WmReplacementPresentation {
-  readonly position: SlotRoundPosition;
-  readonly intermediateValue: number;
-  readonly outputValue: number;
-}
-
-export interface Game002CnValueUpdatePresentation {
-  readonly position: SlotRoundPosition;
-  readonly inputValue: number;
-  readonly outputValue: number;
-}
-
-export interface Game002CmPresentation {
-  readonly position: SlotRoundPosition;
-  readonly multiplier: number;
-  readonly outputValue: number;
-}
+export type Game002SettledTransformPhase =
+  | Readonly<PhaseBase & { type: "change" }>
+  | Readonly<
+      PhaseBase & {
+        type: "driven-change";
+        mainPos: readonly SlotRoundPosition[];
+      }
+    >
+  | Readonly<
+      PhaseBase & {
+        type: "transfer";
+        mainPos: readonly SlotRoundPosition[];
+        routes: readonly SlotRoundSettledTransformRelocationDraft[];
+      }
+    >;
 
 /**
  * Builds presentation operations from server-owned snapshots. The compiler only
@@ -86,34 +59,31 @@ export function createGame002WlWmMultiplierCompiler(options: {
   readonly cnSymbolCode: number;
   readonly cmSymbolCode: number;
   readonly coSymbolCode?: number;
-  readonly bnSymbolCode?: number;
   readonly logDiagnostic?: (message: string) => void;
-}): Game002WlWmMultiplierCompiler {
-  const wlCode = code(options.wlSymbolCode, "WL");
-  const wmCode = code(options.wmSymbolCode, "WM");
-  const cnCode = code(options.cnSymbolCode, "CN");
-  const cmCode = code(options.cmSymbolCode, "CM");
-  const coCode = optionalCode(options.coSymbolCode, "CO");
-  const bnCode = optionalCode(options.bnSymbolCode, "BN");
+}) {
+  const wlCode = options.wlSymbolCode;
+  const wmCode = options.wmSymbolCode;
+  const cnCode = options.cnSymbolCode;
+  const cmCode = options.cmSymbolCode;
+  const coCode = options.coSymbolCode;
   let pendingWinningWilds: readonly SlotRoundPosition[] = Object.freeze([]);
 
   return Object.freeze({
     resolveSettledScene(context: SlotRoundSettledSceneCompileContext) {
-      const wmScene = componentScene(
-        context.step,
-        GAME002_CASCADE_COMPONENTS.genwm,
-        context.inputScene,
-      );
-      const cmScene = componentScene(
-        context.step,
-        GAME002_CASCADE_COMPONENTS.gencm,
-        wmScene,
-      );
+      const wmScene =
+        scene(
+          context.step,
+          GAME002_CASCADE_COMPONENTS.genwm,
+          context.inputScene,
+        ) ?? context.inputScene;
+      const cmScene =
+        scene(context.step, GAME002_CASCADE_COMPONENTS.gencm, wmScene) ??
+        wmScene;
       let settled =
         wmScene !== context.inputScene && cmScene !== wmScene
           ? mergeGeneratedMultipliers(wmScene, cmScene, wmCode, cnCode, cmCode)
           : cmScene;
-      const generatedCo = optionalScene(
+      const generatedCo = scene(
         context.step,
         GAME002_CASCADE_COMPONENTS.genco,
         settled,
@@ -135,31 +105,12 @@ export function createGame002WlWmMultiplierCompiler(options: {
     },
 
     hydrateSettledValues(context: SlotRoundSettledCompileContext) {
+      const values = (name: string) =>
+        otherScene(context.step, name, context.input.scene);
       const valuesByCode = new Map<number, OtherSceneMatrix | undefined>([
-        [
-          wlCode,
-          optionalValues(
-            context.step,
-            GAME002_CASCADE_COMPONENTS.genwilds,
-            context.input.scene,
-          ),
-        ],
-        [
-          wmCode,
-          optionalValues(
-            context.step,
-            GAME002_CASCADE_COMPONENTS.setwm,
-            context.input.scene,
-          ),
-        ],
-        [
-          cmCode,
-          optionalValues(
-            context.step,
-            GAME002_CASCADE_COMPONENTS.setcm,
-            context.input.scene,
-          ),
-        ],
+        [wlCode, values(GAME002_CASCADE_COMPONENTS.genwilds)],
+        [wmCode, values(GAME002_CASCADE_COMPONENTS.setwm)],
+        [cmCode, values(GAME002_CASCADE_COMPONENTS.setcm)],
       ]);
       const drafts: SlotRoundSettledValueDraft[] = [];
       for (const occurrence of context.input.occurrences) {
@@ -178,156 +129,121 @@ export function createGame002WlWmMultiplierCompiler(options: {
     },
 
     compileSettledTransform(context: SlotRoundSettledCompileContext) {
-      const changes = new Map<string, SlotRoundSettledTransformChangeDraft>();
+      const phases: Game002SettledTransformPhase[] = [];
       const values = context.input.values.map((column) => [...column]);
-      const wlIncrements = readWildIncrements(
+      const wlIncrements = readWildIncrementChanges(
         context,
         wlCode,
         pendingWinningWilds,
       );
       pendingWinningWilds = Object.freeze([]);
-      for (const item of wlIncrements) {
-        setChange(changes, item.position, wlCode, item.outputValue);
-        values[item.position.x]![item.position.y] = item.outputValue;
-      }
+      applyChanges(values, wlIncrements);
+      if (wlIncrements.length > 0)
+        phases.push(changePhase("wl-increment", wlIncrements));
 
       const wmOccurrences = context.input.occurrences.filter(
         (item) => item.code === wmCode,
       );
-      const wmReplacements: Array<{
-        readonly position: SlotRoundPosition;
-        readonly intermediateValue: number;
-        outputValue: number;
-      }> = [];
-      const wlUpdates: Game002WlIncrementPresentation[] = [];
       let intermediateScene = context.input.scene;
       if (wmOccurrences.length > 0) {
-        const updatedWilds = optionalValues(
+        const updatedWilds = otherScene(
           context.step,
           GAME002_CASCADE_COMPONENTS.updwl,
           context.input.scene,
         );
-        if (updatedWilds)
-          for (const occurrence of context.input.occurrences) {
-            if (occurrence.code !== wlCode) continue;
-            const { x, y } = occurrence.position;
-            const outputValue = positive(
-              updatedWilds[x]![y],
-              `step[${context.stepIndex}] bg-updwl[${x}][${y}]`,
-            );
-            wlUpdates.push(
-              Object.freeze({
-                position: occurrence.position,
-                inputValue: positive(
-                  values[x]![y],
-                  `step[${context.stepIndex}] WL value`,
-                ),
-                outputValue,
-              }),
-            );
-            setChange(changes, occurrence.position, wlCode, outputValue);
-            values[x]![y] = outputValue;
-          }
-        intermediateScene = requiredScene(
+        const wlUpdates = updatedWilds
+          ? changesAt(
+              context.input.occurrences
+                .filter(({ code }) => code === wlCode)
+                .map(({ position }) => position),
+              context.input.scene,
+              updatedWilds,
+              `step[${context.stepIndex}] bg-updwl`,
+            )
+          : [];
+        applyChanges(values, wlUpdates);
+        phases.push(
+          drivenPhase(
+            "wild-multiplier",
+            wmOccurrences.map(({ position }) => position),
+            wlUpdates,
+          ),
+        );
+        intermediateScene = scene(
           context.step,
           GAME002_CASCADE_COMPONENTS.wm2cn,
           context.input.scene,
-        );
-        const generated = requiredValues(
+          true,
+        )!;
+        const generated = otherScene(
           context.step,
           GAME002_CASCADE_COMPONENTS.genwmcn,
           context.input.scene,
-        );
-        for (const occurrence of wmOccurrences) {
-          const { x, y } = occurrence.position;
-          const intermediateValue = positive(
-            generated[x]![y],
-            `step[${context.stepIndex}] bg-genwmcn[${x}][${y}]`,
-          );
-          if (intermediateScene[x]![y] !== cnCode)
-            throw new Error(`step[${context.stepIndex}] WM target must be CN.`);
-          wmReplacements.push({
-            position: occurrence.position,
-            intermediateValue,
-            outputValue: intermediateValue,
-          });
-          setChange(changes, occurrence.position, cnCode, intermediateValue);
-          values[x]![y] = intermediateValue;
-        }
-        intermediateScene = componentScene(
-          context.step,
-          GAME002_CASCADE_COMPONENTS.gencm,
+          true,
+        )!;
+        const wmChanges = changesAt(
+          wmOccurrences.map(({ position }) => position),
           intermediateScene,
+          generated,
+          `step[${context.stepIndex}] bg-genwmcn`,
         );
+        applyChanges(values, wmChanges);
+        phases.push(changePhase("wm-to-cn", wmChanges));
+        intermediateScene =
+          scene(
+            context.step,
+            GAME002_CASCADE_COMPONENTS.gencm,
+            intermediateScene,
+          ) ?? intermediateScene;
       }
 
       const cmOccurrence = context.input.occurrences.find(
         (item) => item.code === cmCode,
       );
-      const cnUpdates: Game002CnValueUpdatePresentation[] = [];
-      let cm: Game002CmPresentation | null = null;
       if (cmOccurrence) {
-        const multiplier = positive(
-          cmOccurrence.value,
-          `step[${context.stepIndex}] CM multiplier`,
-        );
-        const updatedCoins = optionalValues(
+        const updatedCoins = otherScene(
           context.step,
           GAME002_CASCADE_COMPONENTS.updcn,
           intermediateScene,
         );
-        if (updatedCoins)
-          for (let x = 0; x < intermediateScene.length; x += 1)
-            for (let y = 0; y < intermediateScene[x]!.length; y += 1) {
-              if (intermediateScene[x]![y] !== cnCode) continue;
-              const outputValue = positive(
-                updatedCoins[x]![y],
-                `step[${context.stepIndex}] bg-updcn[${x}][${y}]`,
-              );
-              const inputValue = positive(
-                values[x]![y],
-                `step[${context.stepIndex}] CN value`,
-              );
-              const position = Object.freeze({ x, y });
-              cnUpdates.push(
-                Object.freeze({ position, inputValue, outputValue }),
-              );
-              setChange(changes, position, cnCode, outputValue);
-              values[x]![y] = outputValue;
-              const replacement = wmReplacements.find(
-                (item) => positionKey(item.position) === `${x},${y}`,
-              );
-              if (replacement) replacement.outputValue = outputValue;
-            }
-        const cmOutputScene = requiredScene(
+        const cnUpdates = updatedCoins
+          ? changesAt(
+              findMatrixValuePositions(intermediateScene, cnCode),
+              intermediateScene,
+              updatedCoins,
+              `step[${context.stepIndex}] bg-updcn`,
+            )
+          : [];
+        applyChanges(values, cnUpdates);
+        if (cnUpdates.length > 0)
+          phases.push(
+            drivenPhase("coin-multiplier", [cmOccurrence.position], cnUpdates),
+          );
+        const cmOutputScene = scene(
           context.step,
           GAME002_CASCADE_COMPONENTS.cm2cn,
           intermediateScene,
-        );
-        const generated = requiredValues(
+          true,
+        )!;
+        const generated = otherScene(
           context.step,
           GAME002_CASCADE_COMPONENTS.gencmcn,
           intermediateScene,
+          true,
+        )!;
+        const cmChanges = changesAt(
+          [cmOccurrence.position],
+          cmOutputScene,
+          generated,
+          `step[${context.stepIndex}] bg-gencmcn`,
         );
-        const { x, y } = cmOccurrence.position;
-        const outputValue = positive(
-          generated[x]![y],
-          `step[${context.stepIndex}] bg-gencmcn[${x}][${y}]`,
-        );
-        if (cmOutputScene[x]![y] !== cnCode)
-          throw new Error(`step[${context.stepIndex}] CM target must be CN.`);
-        cm = Object.freeze({
-          position: cmOccurrence.position,
-          multiplier,
-          outputValue,
-        });
-        setChange(changes, cmOccurrence.position, cnCode, outputValue);
-        values[x]![y] = outputValue;
+        phases.push(changePhase("cm-to-cn", cmChanges));
+        applyChanges(values, cmChanges);
         intermediateScene = cmOutputScene;
       }
 
       const coCollection =
-        coCode === undefined || bnCode === undefined
+        coCode === undefined
           ? null
           : compileGame002CoCollectionPlan({
               stepIndex: context.stepIndex,
@@ -335,59 +251,90 @@ export function createGame002WlWmMultiplierCompiler(options: {
               inputScene: intermediateScene,
               inputValues: values,
               coSymbolCode: coCode,
-              bnSymbolCode: bnCode,
               valueSymbolCodes: new Set([wlCode, cnCode]),
             });
-      for (const change of coCollection?.transform.changes ?? [])
-        changes.set(positionKey(change.position), change);
+      if (coCollection) phases.push(transferPhase("co-collect", coCollection));
 
       pendingWinningWilds = winningWildPositions(context, wlCode);
-      const drafts = [...changes.values()].sort(
-        (left, right) =>
-          left.position.x - right.position.x ||
-          left.position.y - right.position.y,
-      );
-      if (
-        drafts.length === 0 &&
-        wmOccurrences.length === 0 &&
-        !cmOccurrence &&
-        !coCollection
-      )
-        return Object.freeze({ draft: Object.freeze([]), payload: null });
-      const payload = Object.freeze({
-        stepIndex: context.stepIndex,
-        wlIncrements,
-        wlUpdates: Object.freeze(wlUpdates),
-        wmReplacements: Object.freeze(
-          wmReplacements.map((item) => Object.freeze({ ...item })),
-        ),
-        cnUpdates: Object.freeze(cnUpdates),
-        cm,
-        ...(coCollection ? { coCollection } : {}),
-      });
-      return Object.freeze({
-        draft: coCollection
-          ? Object.freeze({
-              changes: Object.freeze(drafts),
-              relocations: coCollection.transform.relocations,
-            })
-          : Object.freeze(drafts),
-        payload,
-      });
-    },
-
-    assertComplete() {
-      // Later-step server evidence is intentionally validated when that step runs.
+      return Object.freeze({ phases: Object.freeze(phases) });
     },
   });
 }
 
-function readWildIncrements(
+function change(
+  position: SlotRoundPosition,
+  outputCode: number,
+  outputValue: number,
+): SlotRoundSettledTransformChangeDraft {
+  return Object.freeze({ position, outputCode, outputValue });
+}
+
+function changesAt(
+  positions: readonly SlotRoundPosition[],
+  scene: SceneMatrix,
+  values: OtherSceneMatrix,
+  label: string,
+): readonly SlotRoundSettledTransformChangeDraft[] {
+  return Object.freeze(
+    positions.map(({ x, y }) =>
+      change(
+        Object.freeze({ x, y }),
+        scene[x]![y]!,
+        positive(values[x]![y], `${label}[${x}][${y}]`),
+      ),
+    ),
+  );
+}
+
+function applyChanges(
+  values: (number | null)[][],
+  changes: readonly SlotRoundSettledTransformChangeDraft[],
+): void {
+  for (const { position, outputValue } of changes)
+    values[position.x]![position.y] = outputValue;
+}
+
+function changePhase(
+  key: Game002TransformKey,
+  changes: readonly SlotRoundSettledTransformChangeDraft[],
+): Game002SettledTransformPhase {
+  return Object.freeze({
+    key,
+    type: "change",
+    changes: Object.freeze(changes),
+  });
+}
+
+function drivenPhase(
+  key: Game002TransformKey,
+  mainPos: readonly SlotRoundPosition[],
+  changes: readonly SlotRoundSettledTransformChangeDraft[],
+): Game002SettledTransformPhase {
+  return Object.freeze({
+    key,
+    type: "driven-change",
+    mainPos: Object.freeze(mainPos),
+    changes: Object.freeze(changes),
+  });
+}
+
+function transferPhase(
+  key: Game002TransformKey,
+  plan: Readonly<{
+    mainPos: readonly SlotRoundPosition[];
+    routes: readonly SlotRoundSettledTransformRelocationDraft[];
+    changes: readonly SlotRoundSettledTransformChangeDraft[];
+  }>,
+): Game002SettledTransformPhase {
+  return Object.freeze({ key, type: "transfer", ...plan });
+}
+
+function readWildIncrementChanges(
   context: SlotRoundSettledCompileContext,
   wlCode: number,
   pending: readonly SlotRoundPosition[],
-): readonly Game002WlIncrementPresentation[] {
-  const values = optionalValues(
+): readonly SlotRoundSettledTransformChangeDraft[] {
+  const values = otherScene(
     context.step,
     GAME002_CASCADE_COMPONENTS.incwl,
     context.input.scene,
@@ -401,23 +348,13 @@ function readWildIncrements(
           .map((item) => item.position),
   );
   return Object.freeze(
-    positions.map((position) => {
-      const occurrence = context.input.occurrences.find(
-        (item) => positionKey(item.position) === positionKey(position),
-      );
-      if (occurrence?.code !== wlCode)
-        throw new Error(
-          `step[${context.stepIndex}] WL increment target is not WL.`,
-        );
-      return Object.freeze({
+    positions.map((position) =>
+      change(
         position,
-        inputValue: positive(occurrence.value, "WL input multiplier"),
-        outputValue: positive(
-          values[position.x]![position.y],
-          "WL output multiplier",
-        ),
-      });
-    }),
+        wlCode,
+        positive(values[position.x]![position.y], "WL output multiplier"),
+      ),
+    ),
   );
 }
 
@@ -473,31 +410,13 @@ function mergeGeneratedMultipliers(
   );
 }
 
-function componentScene(
-  step: GameLogicStep,
-  name: string,
-  fallback: SceneMatrix,
-): SceneMatrix {
-  return step.hasComponent(name)
-    ? requiredScene(step, name, fallback)
-    : fallback;
-}
-
-function optionalScene(
+function scene(
   step: GameLogicStep,
   name: string,
   reference: SceneMatrix,
+  required = false,
 ): SceneMatrix | undefined {
-  return step.hasComponent(name)
-    ? requiredScene(step, name, reference)
-    : undefined;
-}
-
-function requiredScene(
-  step: GameLogicStep,
-  name: string,
-  reference: SceneMatrix,
-): SceneMatrix {
+  if (!required && !step.hasComponent(name)) return undefined;
   const scenes = step.getComponentScenes(name);
   if (scenes.length === 0)
     throw new Error(`step[${step.getIndex()}] ${name} scene is missing.`);
@@ -505,20 +424,13 @@ function requiredScene(
   return scenes[0]!;
 }
 
-function optionalValues(
+function otherScene(
   step: GameLogicStep,
   name: string,
   reference: SceneMatrix,
+  required = false,
 ): OtherSceneMatrix | undefined {
-  if (!step.hasComponent(name)) return undefined;
-  return requiredValues(step, name, reference);
-}
-
-function requiredValues(
-  step: GameLogicStep,
-  name: string,
-  reference: SceneMatrix,
-): OtherSceneMatrix {
+  if (!required && !step.hasComponent(name)) return undefined;
   const values = step.getComponentOtherScenes(name);
   if (values.length === 0)
     throw new Error(`step[${step.getIndex()}] ${name} otherScene is missing.`);
@@ -526,28 +438,6 @@ function requiredValues(
   return values[0]!;
 }
 
-function setChange(
-  changes: Map<string, SlotRoundSettledTransformChangeDraft>,
-  position: SlotRoundPosition,
-  outputCode: number,
-  outputValue: number | null,
-): void {
-  changes.set(
-    positionKey(position),
-    Object.freeze({ position, outputCode, outputValue }),
-  );
-}
-
 function positive(value: unknown, label: string): number {
   return requireSafeInteger(value, label, { minimum: 1 });
-}
-
-function code(value: unknown, symbol: string): number {
-  return requireSafeInteger(value, `game002 ${symbol} symbol code`, {
-    minimum: 0,
-  });
-}
-
-function optionalCode(value: unknown, symbol: string): number | undefined {
-  return value === undefined ? undefined : code(value, symbol);
 }

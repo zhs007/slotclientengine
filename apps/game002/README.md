@@ -125,11 +125,12 @@ WM `Change` 完成后才按 `bg-wm2cn` 原位置原子替换 CN，并用
 CM 流程完成后才进入现有中奖/cascade；没有 CM 时不制造空阶段。
 
 若当前 `bg-win` 有实际 result，它始终优先走原中奖/remove。否则
-`bg-triggerco` 命中 CO 后，客户端严格编译 `bg-co.pos` 的分段 transfer：
+`bg-triggerco` 命中 CO 后，客户端把命中坐标作为 `mainPos`，把 `bg-co.pos`
+四元组直接解析为 transfer routes：
 CO `Feature` 与 source `Feature1` 并行，完成后 source 播放 `Feature2` 并携带
-value presentation 移到 CO 八邻域 target；整批提交后 source 成为 BN、CO 变为
-selected symbol。随后 `bg-win2` 走既有金额/中奖流程，`bg-bn` 只在 remove 完成
-边界 release，不生成零金额 carousel group。
+value presentation 移到 target。source、target 和 CO 的最终 symbol 以服务器
+`bg-co.scene` 为准，客户端不再重算八邻域归属或 selected symbol。随后 `bg-win2`
+走既有金额/中奖流程，`bg-bn` 只在 remove 完成边界 release，不生成零金额 carousel group。
 
 各 multiplier component 只读取当前操作所需的目标 symbol cell，非目标 cell
 保留给服务器其它用途且不参与该 component 的语义校验。客户端检查必需 component、
@@ -162,9 +163,10 @@ trigger 提供有效坐标即可；先播放 WL
 
 每次 `fg-spin` 只释放并滚动当前 scene 中非 WL、非 CN 的格子，WL/CN occurrence
 与 value 保持不动。落定后按 `AF -> CO` 处理：AF 从 `fg-rollaf.number` 显示
-不带 `x` 的免费次数，依次播放 `Feature/Change` 后变 CN；CO 只从 post-AF scene
-的 WL/CN 搬运完整 occurrence/value，source 变 BN、CO 变 CN。`fg-start` 的计数直接用于
-界面显示，不在客户端重算整轮次数公式。
+不带 `x` 的免费次数并依次播放 `Feature/Change`；CO 使用 `mainPos + routes` 搬运完整
+occurrence/value。AF、CO 的 payload 不再复制 scene/value，渲染直接读取 operation
+input/output；最终 symbol/value 以服务器 output 为准。`fg-start` 的计数直接用于界面显示，
+不在客户端重算整轮次数公式。
 
 `fg-win` 在所在 spin 作为中奖表现播放。它复用 CN collect
 但不 remove，随后等待 BigWin popup 真正完成，再走 `FreeGame -> BaseGame`

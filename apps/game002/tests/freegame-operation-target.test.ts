@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type {
+  SlotOperationSnapshot,
+  SlotOperationV2,
+} from "@slotclientengine/gameframeworks";
+import type {
   PreparedGridCellVisibleOccurrenceTransferBatch,
   PreparedVisibleOccurrenceReplacement,
   SymbolCascadePlayer,
@@ -23,7 +27,7 @@ describe("Game002FreeGameOperationTarget", () => {
     const payload = { kind: "trigger", positions: [POSITION] } as const;
 
     fixture.target.preflight(payload);
-    fixture.target.start(payload);
+    start(fixture.target, payload);
     expect(fixture.target.update(0.1)).toEqual({ completed: false });
 
     fixture.runtime.resolvePlayback();
@@ -35,7 +39,7 @@ describe("Game002FreeGameOperationTarget", () => {
       "immediate",
     );
 
-    fixture.target.start(payload);
+    start(fixture.target, payload);
     const signal = fixture.runtime.playbacks.at(-1)!.signal;
     fixture.target.cleanup();
     expect(signal.aborted).toBe(true);
@@ -46,7 +50,7 @@ describe("Game002FreeGameOperationTarget", () => {
     const fixture = createFixture();
     const payload = { kind: "trigger", positions: [POSITION] } as const;
 
-    fixture.target.start(payload);
+    start(fixture.target, payload);
     fixture.runtime.rejectPlayback(new Error("playback failed"));
     await flushPlayback();
     expect(() => fixture.target.update(0.1)).toThrow("playback failed");
@@ -55,7 +59,7 @@ describe("Game002FreeGameOperationTarget", () => {
     fixture.runtime.playVisibleSymbolStates.mockImplementationOnce(() => {
       throw new Error("playback did not start");
     });
-    fixture.target.start(payload);
+    start(fixture.target, payload);
     await flushPlayback();
     expect(() => fixture.target.update(0.1)).toThrow("playback did not start");
     fixture.target.cleanup();
@@ -67,16 +71,12 @@ describe("Game002FreeGameOperationTarget", () => {
     fixture.runtime.visibleScene = scene;
     const af: Game002FreeGameOperationPayload = {
       kind: "af",
-      af: {
-        positions: [POSITION],
-        addedFreeSpins: 3,
-        outputScene: scene,
-        outputValues: createValues(3),
-      },
+      positions: [POSITION],
+      addedFreeSpins: 3,
     };
 
     fixture.target.preflight(af);
-    fixture.target.start(af);
+    start(fixture.target, af, scene, scene, createValues(3));
     expect(fixture.target.update(0.1)).toEqual({ completed: false });
     fixture.runtime.resolvePlayback();
     await flushPlayback();
@@ -90,24 +90,11 @@ describe("Game002FreeGameOperationTarget", () => {
 
     const co: Game002FreeGameOperationPayload = {
       kind: "co",
-      co: {
-        coPositions: [POSITION],
-        sourcePositions: [{ x: 1, y: 0 }],
-        transfers: [
-          {
-            source: { x: 1, y: 0 },
-            target: POSITION,
-            sourceCode: CODES.CN,
-            sourceValue: 2,
-            targetCode: CODES.CO,
-          },
-        ],
-        outputScene: scene,
-        outputValues: createValues(2),
-      },
+      mainPos: [POSITION],
+      routes: [{ source: { x: 1, y: 0 }, target: POSITION }],
     };
     fixture.target.preflight(co);
-    fixture.target.start(co);
+    start(fixture.target, co, scene, scene, createValues(2));
     expect(fixture.target.update(0.1)).toEqual({ completed: false });
     fixture.runtime.resolveAllPlaybacks();
     await flushPlayback();
@@ -128,37 +115,38 @@ describe("Game002FreeGameOperationTarget", () => {
     fixture.runtime.visibleScene = scene;
 
     fixture.target.preflight({ kind: "transition", mode: "FreeGame" });
-    fixture.target.start({ kind: "transition", mode: "FreeGame" });
+    start(fixture.target, { kind: "transition", mode: "FreeGame" });
     expect(fixture.target.update(0.1)).toEqual({ completed: false });
     await flushPlayback();
     expect(fixture.target.update(0.1)).toEqual({ completed: true });
     expect(fixture.background.requestMode).toHaveBeenCalledWith("FreeGame");
 
-    fixture.target.start({
-      kind: "spin",
-      spin: {
-        inputScene: scene,
-        inputValues: createValues(null),
-        spinScene: scene,
-        spinValues: createValues(null),
+    start(
+      fixture.target,
+      {
+        kind: "spin",
         respinNumber: 1,
         remainingFreeSpins: 2,
         spinPositions: [POSITION],
         featurePositions: [],
-        outputScene: scene,
-        outputValues: createValues(null),
       },
-    });
+      scene,
+      scene,
+    );
     expect(fixture.target.update(0.1)).toEqual({ completed: false });
     fixture.runtime.spinning = false;
     expect(fixture.target.update(0.1)).toEqual({ completed: true });
 
-    fixture.target.start({ kind: "win", groups: [] });
+    start(fixture.target, { kind: "win", groups: [] });
     expect(fixture.target.update(0.1)).toEqual({ completed: false });
     fixture.cascade.completed = true;
     expect(fixture.target.update(0.1)).toEqual({ completed: true });
 
-    fixture.target.start({ kind: "popup", betAmountRaw: 1, winAmountRaw: 2 });
+    start(fixture.target, {
+      kind: "popup",
+      betAmountRaw: 1,
+      winAmountRaw: 2,
+    });
     expect(fixture.target.update(0.1)).toEqual({ completed: false });
     fixture.winAmount.complete = true;
     expect(fixture.target.update(0.1)).toEqual({ completed: true });
@@ -178,12 +166,8 @@ describe("Game002FreeGameOperationTarget", () => {
     expect(() =>
       fixture.target.preflight({
         kind: "af",
-        af: {
-          positions: [POSITION],
-          addedFreeSpins: 1,
-          outputScene: createScene(CODES.CN),
-          outputValues: createValues(1),
-        },
+        positions: [POSITION],
+        addedFreeSpins: 1,
       }),
     ).toThrow(/symbol AF has no "feature" state/);
 
@@ -211,13 +195,8 @@ describe("Game002FreeGameOperationTarget", () => {
       expect(() =>
         capabilityFixture.target.preflight({
           kind: "co",
-          co: {
-            coPositions: [POSITION],
-            sourcePositions: [{ x: 1, y: 0 }],
-            transfers: [],
-            outputScene: createScene(CODES.CN),
-            outputValues: createValues(1),
-          },
+          mainPos: [POSITION],
+          routes: [],
         }),
       ).toThrow(new RegExp(`symbol ${symbol} has no "${state}" state`));
     }
@@ -227,8 +206,8 @@ describe("Game002FreeGameOperationTarget", () => {
     const fixture = createFixture();
     const payload = { kind: "trigger", positions: [POSITION] } as const;
     expect(() => fixture.target.update(0.1)).toThrow(/payload is missing/);
-    fixture.target.start(payload);
-    expect(() => fixture.target.start(payload)).toThrow(/already active/);
+    start(fixture.target, payload);
+    expect(() => start(fixture.target, payload)).toThrow(/already active/);
     fixture.target.cleanup();
   });
 
@@ -243,14 +222,10 @@ describe("Game002FreeGameOperationTarget", () => {
       .mockImplementationOnce(() => {
         throw new Error("AF prepare failed");
       });
-    afFixture.target.start({
+    start(afFixture.target, {
       kind: "af",
-      af: {
-        positions: [POSITION, { x: 1, y: 0 }],
-        addedFreeSpins: 1,
-        outputScene: createScene(CODES.CN),
-        outputValues: createValues(1),
-      },
+      positions: [POSITION, { x: 1, y: 0 }],
+      addedFreeSpins: 1,
     });
     afFixture.runtime.resolvePlayback();
     await flushPlayback();
@@ -267,15 +242,10 @@ describe("Game002FreeGameOperationTarget", () => {
         throw new Error("CO transfer prepare failed");
       },
     );
-    coFixture.target.start({
+    start(coFixture.target, {
       kind: "co",
-      co: {
-        coPositions: [POSITION],
-        sourcePositions: [{ x: 1, y: 0 }],
-        transfers: [],
-        outputScene: createScene(CODES.CN),
-        outputValues: createValues(1),
-      },
+      mainPos: [POSITION],
+      routes: [],
     });
     coFixture.runtime.resolveAllPlaybacks();
     await flushPlayback();
@@ -293,7 +263,7 @@ describe("Game002FreeGameOperationTarget", () => {
     vi.mocked(fixture.background.prepareModeTransition!).mockRejectedValueOnce(
       "transition failed",
     );
-    fixture.target.start({ kind: "transition", mode: "FreeGame" });
+    start(fixture.target, { kind: "transition", mode: "FreeGame" });
     await flushPlayback();
     expect(() => fixture.target.update(0.1)).toThrow("transition failed");
     fixture.target.cleanup();
@@ -301,7 +271,10 @@ describe("Game002FreeGameOperationTarget", () => {
     for (const payload of [
       {
         kind: "spin",
-        spin: {} as never,
+        respinNumber: 0,
+        remainingFreeSpins: 0,
+        spinPositions: [],
+        featurePositions: [],
       },
       { kind: "win", groups: [] },
       { kind: "popup", betAmountRaw: 1, winAmountRaw: 1 },
@@ -343,9 +316,38 @@ function createFixture(options: { transitionSupport?: boolean } = {}) {
     cascadePlayer: cascade as unknown as SymbolCascadePlayer,
     winAmountPlayer: winAmount as unknown as WinAmountAnimationPlayer,
     backgroundPlayer: background as Game002BackgroundPlayer,
-    codes: CODES,
   });
   return { target, runtime, cascade, winAmount, background };
+}
+
+function start(
+  target: Game002FreeGameOperationTarget,
+  payload: Game002FreeGameOperationPayload,
+  inputScene = createScene(CODES.CN),
+  outputScene = inputScene,
+  outputValues = createValues(null),
+): void {
+  const mutation =
+    payload.kind === "spin" || payload.kind === "af" || payload.kind === "co";
+  const operation = {
+    kind: `game002:freegame-${payload.kind}`,
+    effect: mutation ? "state-mutation" : "presentation",
+    ...(mutation
+      ? {
+          input: snapshot(inputScene, createValues(null)),
+          output: snapshot(outputScene, outputValues),
+          mutations: [],
+        }
+      : {}),
+  } as unknown as SlotOperationV2;
+  target.start(operation, payload);
+}
+
+function snapshot(
+  scene: readonly (readonly number[])[],
+  values: readonly (readonly (number | null)[])[],
+): SlotOperationSnapshot {
+  return Object.freeze({ scene, values, occurrences: Object.freeze([]) });
 }
 
 class FakeRuntime {

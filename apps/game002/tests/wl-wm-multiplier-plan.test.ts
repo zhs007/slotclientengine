@@ -108,11 +108,12 @@ describe("game002 WL/WM/CM operation compiler", () => {
         otherScenes: { "bg-incwl": matrix([[3]]) },
       }),
     );
-    expect(result.draft).toEqual([
-      { position: { x: 0, y: 0 }, outputCode: WL, outputValue: 3 },
-    ]);
-    expect(result.payload?.wlIncrements).toEqual([
-      { position: { x: 0, y: 0 }, inputValue: 2, outputValue: 3 },
+    expect(result.phases).toEqual([
+      {
+        key: "wl-increment",
+        type: "change",
+        changes: [{ position: { x: 0, y: 0 }, outputCode: WL, outputValue: 3 }],
+      },
     ]);
   });
 
@@ -148,14 +149,24 @@ describe("game002 WL/WM/CM operation compiler", () => {
         },
       }),
     );
-    expect(result.draft).toEqual([
-      { position: { x: 0, y: 0 }, outputCode: WL, outputValue: 19 },
-      { position: { x: 0, y: 1 }, outputCode: CN, outputValue: 11 },
-      { position: { x: 1, y: 0 }, outputCode: WL, outputValue: 23 },
+    expect(result.phases).toEqual([
+      {
+        key: "wild-multiplier",
+        type: "driven-change",
+        mainPos: [{ x: 0, y: 1 }],
+        changes: [
+          { position: { x: 0, y: 0 }, outputCode: WL, outputValue: 19 },
+          { position: { x: 1, y: 0 }, outputCode: WL, outputValue: 23 },
+        ],
+      },
+      {
+        key: "wm-to-cn",
+        type: "change",
+        changes: [
+          { position: { x: 0, y: 1 }, outputCode: CN, outputValue: 11 },
+        ],
+      },
     ]);
-    expect(
-      result.payload?.wlUpdates.map(({ outputValue }) => outputValue),
-    ).toEqual([19, 23]);
   });
 
   it("uses server CN and CM conversion values", () => {
@@ -170,15 +181,23 @@ describe("game002 WL/WM/CM operation compiler", () => {
         },
       }),
     );
-    expect(result.draft).toEqual([
-      { position: { x: 0, y: 0 }, outputCode: CN, outputValue: 17 },
-      { position: { x: 1, y: 0 }, outputCode: CN, outputValue: 13 },
+    expect(result.phases).toEqual([
+      {
+        key: "coin-multiplier",
+        type: "driven-change",
+        mainPos: [{ x: 1, y: 0 }],
+        changes: [
+          { position: { x: 0, y: 0 }, outputCode: CN, outputValue: 17 },
+        ],
+      },
+      {
+        key: "cm-to-cn",
+        type: "change",
+        changes: [
+          { position: { x: 1, y: 0 }, outputCode: CN, outputValue: 13 },
+        ],
+      },
     ]);
-    expect(result.payload?.cm).toEqual({
-      position: { x: 1, y: 0 },
-      multiplier: 2,
-      outputValue: 13,
-    });
   });
 
   it("requires only data consumed by the current WM operation", () => {
@@ -202,7 +221,14 @@ describe("game002 WL/WM/CM operation compiler", () => {
         results: { "bg-win": [{ pos: [0, 0] }] },
       }),
     );
-    expect(() => instance.assertComplete()).not.toThrow();
+    expect(() =>
+      instance.compileSettledTransform(
+        createContext({
+          stepIndex: 1,
+          snapshot: snapshot(matrix([[WL]]), [[2]]),
+        }),
+      ),
+    ).not.toThrow();
   });
 });
 

@@ -56,7 +56,7 @@ describe("game002 FreeGame plan", () => {
     expect(plan?.spins).toHaveLength(10);
     expect(plan?.spins.filter(({ af }) => af)).toHaveLength(2);
     expect(plan?.spins.filter(({ co }) => co)).toHaveLength(4);
-    expect(plan?.finalStepIndex).toBe(17);
+    expect(plan?.spins.at(-1)?.stepIndex).toBe(17);
     expect(Object.isFrozen(plan)).toBe(true);
   });
 
@@ -105,20 +105,7 @@ describe("game002 FreeGame plan", () => {
       mutate: (raw: SampleMessage) => {
         basic(raw, 9, "fg-spin").usedScenes = [];
       },
-      error: /exactly one scene/,
-    },
-    {
-      name: "partial AF operation",
-      mutate: (raw: SampleMessage) =>
-        removeActiveComponent(raw, 8, "fg-rollaf"),
-      error: /AF protocol is partial/,
-    },
-    {
-      name: "AF targets a non-AF cell",
-      mutate: (raw: SampleMessage) => {
-        result(raw, 8, 0).pos = [0, 0];
-      },
-      error: /must use symbol code 11/,
+      error: /exactly one entry/,
     },
     {
       name: "invalid AF coin value",
@@ -132,14 +119,14 @@ describe("game002 FreeGame plan", () => {
       name: "partial CO operation",
       mutate: (raw: SampleMessage) =>
         removeActiveComponent(raw, 11, "fg-cogencn"),
-      error: /CO protocol is partial/,
+      error: /exactly one entry/,
     },
     {
       name: "malformed CO coordinates",
       mutate: (raw: SampleMessage) => {
         components(raw, 11)["fg-vortex"]!.pos = [1, 0, 0];
       },
-      error: /partial tuple/,
+      error: /coordinate quadruples/,
     },
   ])("rejects a basic $name error", ({ mutate, error }) => {
     const raw = createSampleMessage();

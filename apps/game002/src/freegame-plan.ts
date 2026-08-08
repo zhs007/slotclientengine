@@ -2,28 +2,22 @@ import type {
   GameLogic,
   GameLogicStep,
   SceneMatrix,
+  SlotChgRoute,
   SlotRoundPosition,
   WinResult,
 } from "@slotclientengine/gameframeworks";
 import {
-  assertExactMatrixEqual as assertMatrixEqual,
-  assertExactMatrixShape as assertDimensions,
-  decodePositionInMatrix as position,
+  assertExactMatrixShape,
   parseExactPositionPairs,
+  parseTransferRoutes,
+  requireExactlyOne,
   requireSafeInteger,
-  slotOperationPositionKey as positionKey,
 } from "@slotclientengine/gameframeworks";
-
-const positionsFromFlat = (raw: unknown, scene: SceneMatrix, label: string) =>
-  parseExactPositionPairs(raw, scene, label, {
-    rangeMessage: "is out of bounds",
-  });
 
 export type Game002FreeGameValueMatrix = readonly (readonly (
   | number
   | null
 )[])[];
-type VortexTuple = readonly [number, number, number, number];
 
 export interface Game002FreeGameAfPlan {
   readonly positions: readonly SlotRoundPosition[];
@@ -32,26 +26,15 @@ export interface Game002FreeGameAfPlan {
   readonly outputValues: Game002FreeGameValueMatrix;
 }
 
-export interface Game002FreeGameCoTransfer {
-  readonly source: SlotRoundPosition;
-  readonly target: SlotRoundPosition;
-  readonly sourceCode: number;
-  readonly sourceValue: number | null;
-  readonly targetCode: number;
-}
-
 export interface Game002FreeGameCoPlan {
-  readonly coPositions: readonly SlotRoundPosition[];
-  readonly sourcePositions: readonly SlotRoundPosition[];
-  readonly transfers: readonly Game002FreeGameCoTransfer[];
+  readonly mainPos: readonly SlotRoundPosition[];
+  readonly routes: readonly SlotChgRoute[];
   readonly outputScene: SceneMatrix;
   readonly outputValues: Game002FreeGameValueMatrix;
 }
 
 export interface Game002FreeGameSpinPlan {
   readonly stepIndex: number;
-  readonly inputScene: SceneMatrix;
-  readonly inputValues: Game002FreeGameValueMatrix;
   readonly spinScene: SceneMatrix;
   readonly spinValues: Game002FreeGameValueMatrix;
   readonly respinNumber: number;
@@ -60,38 +43,22 @@ export interface Game002FreeGameSpinPlan {
   readonly featurePositions: readonly SlotRoundPosition[];
   readonly af: Game002FreeGameAfPlan | null;
   readonly co: Game002FreeGameCoPlan | null;
-  readonly outputScene: SceneMatrix;
-  readonly outputValues: Game002FreeGameValueMatrix;
   readonly winResults: readonly WinResult[];
 }
 
 export interface Game002FreeGamePlan {
   readonly triggerStepIndex: number;
   readonly triggerPositions: readonly SlotRoundPosition[];
-  readonly entryScene: SceneMatrix;
-  readonly entryValues: Game002FreeGameValueMatrix;
   readonly initialFreeSpins: number;
   readonly spins: readonly Game002FreeGameSpinPlan[];
-  readonly finalStepIndex: number;
-  readonly finalScene: SceneMatrix;
-  readonly finalValues: Game002FreeGameValueMatrix;
 }
 
-/**
- * Compiles every game002 FreeGame scene, counter and transaction before any
- * FreeGame presentation mutation. The renderer receives no component names.
- */
+/** Parses the server FreeGame steps into the smallest operation inputs. */
 export function compileGame002FreeGamePlan(options: {
   readonly logic: GameLogic;
   readonly entryScene: SceneMatrix;
   readonly entryValues: Game002FreeGameValueMatrix;
-  readonly symbolCodes: Readonly<{
-    WL: number;
-    CN: number;
-    CO: number;
-    AF: number;
-    BN: number;
-  }>;
+  readonly symbolCodes: Readonly<{ WL: number; CN: number }>;
 }): Game002FreeGamePlan | null {
   const steps = options.logic.getSteps();
   const triggerStepIndex = steps.findIndex((step) =>
@@ -99,18 +66,9 @@ export function compileGame002FreeGamePlan(options: {
   );
   if (triggerStepIndex < 0) return null;
   const trigger = steps[triggerStepIndex]!;
-  const triggerResults = trigger.getComponentResults("bg-triggerfg");
-  if (triggerResults.length === 0)
-    throw new Error(`step[${triggerStepIndex}] bg-triggerfg has no result.`);
-  const triggerPositions = positionsFromResults(
-    triggerResults,
+  const triggerPositions = resultPositions(
+    trigger.getComponentResults("bg-triggerfg"),
     options.entryScene,
-    `step[${triggerStepIndex}] bg-triggerfg`,
-  );
-  assertCodes(
-    options.entryScene,
-    triggerPositions,
-    options.symbolCodes.WL,
     `step[${triggerStepIndex}] bg-triggerfg`,
   );
   const initialFreeSpins = positiveInteger(
@@ -118,8 +76,8 @@ export function compileGame002FreeGamePlan(options: {
     `step[${triggerStepIndex}] fg-start.lastRespinNum`,
   );
 
-  let currentScene = validateScene(options.entryScene, "FreeGame entry scene");
-  let currentValues = validateValues(
+  let currentScene = options.entryScene;
+  normalizeValues(
     options.entryValues,
     currentScene,
     options.symbolCodes,
@@ -136,19 +94,9 @@ export function compileGame002FreeGamePlan(options: {
       throw new Error(
         `step[${stepIndex}] after bg-triggerfg must contain fg-start and fg-spin.`,
       );
-    const inputScene = exactlyOneIndexedScene(
-      step,
-      0,
-      currentScene,
-      `step[${stepIndex}] FreeGame source`,
-    );
-    const inputValues = currentValues;
-    const respinNumber = nonNegativeInteger(
-      componentNumber(step, "fg-start", "curRespinNum", stepIndex),
-      `step[${stepIndex}] fg-start.curRespinNum`,
-    );
-    const spinScene = exactlyOneComponentScene(step, "fg-spin", stepIndex);
-    validateScene(spinScene, `step[${stepIndex}] fg-spin scene`);
+
+    const inputScene = currentScene;
+    const spinScene = componentScene(step, "fg-spin", stepIndex);
     const spinValues = componentValues(
       step,
       "fg-spin",
@@ -156,263 +104,124 @@ export function compileGame002FreeGamePlan(options: {
       options.symbolCodes,
       stepIndex,
     );
-    const spinPositions = nonHeldPositions(
-      inputScene,
-      options.symbolCodes.WL,
-      options.symbolCodes.CN,
-    );
-    const featurePositions = componentPositions(
-      step,
-      "fg-spin",
-      spinScene,
-      stepIndex,
-    );
-
-    const af = compileAf({
-      step,
-      stepIndex,
-      inputScene: spinScene,
-      inputValues: spinValues,
-      codes: options.symbolCodes,
-    });
+    const af = compileAf(step, stepIndex, spinScene, options.symbolCodes);
     const postAfScene = af?.outputScene ?? spinScene;
-    const postAfValues = af?.outputValues ?? spinValues;
-    const co = compileCo({
-      step,
-      stepIndex,
-      inputScene: postAfScene,
-      inputValues: postAfValues,
-      codes: options.symbolCodes,
-    });
-    const outputScene = co?.outputScene ?? postAfScene;
-    const outputValues = co?.outputValues ?? postAfValues;
-    const remainingFreeSpins = nonNegativeInteger(
-      componentNumber(step, "fg-start", "lastRespinNum", stepIndex),
-      `step[${stepIndex}] fg-start.lastRespinNum`,
-    );
+    const co = compileCo(step, stepIndex, postAfScene, options.symbolCodes);
+    currentScene = co?.outputScene ?? postAfScene;
     const winResults = step.getComponentResults("fg-win");
-    if (winResults.length > 0) {
-      positionsFromResults(
-        winResults,
-        outputScene,
-        `step[${stepIndex}] fg-win`,
-      );
-    }
+    if (winResults.length > 0)
+      resultPositions(winResults, currentScene, `step[${stepIndex}] fg-win`);
+
     spins.push(
       Object.freeze({
         stepIndex,
-        inputScene,
-        inputValues,
         spinScene,
         spinValues,
-        respinNumber,
-        remainingFreeSpins,
-        spinPositions,
-        featurePositions,
+        respinNumber: nonNegativeInteger(
+          componentNumber(step, "fg-start", "curRespinNum", stepIndex),
+          `step[${stepIndex}] fg-start.curRespinNum`,
+        ),
+        remainingFreeSpins: nonNegativeInteger(
+          componentNumber(step, "fg-start", "lastRespinNum", stepIndex),
+          `step[${stepIndex}] fg-start.lastRespinNum`,
+        ),
+        spinPositions: nonHeldPositions(inputScene, options.symbolCodes),
+        featurePositions: componentPositions(
+          step,
+          "fg-spin",
+          spinScene,
+          stepIndex,
+        ),
         af,
         co,
-        outputScene,
-        outputValues,
         winResults: Object.freeze([...winResults]),
       }),
     );
-    currentScene = outputScene;
-    currentValues = outputValues;
   }
-  const last = spins.at(-1);
-  if (!last) throw new Error("FreeGame has no spin step.");
+  if (spins.length === 0) throw new Error("FreeGame has no spin step.");
   return Object.freeze({
     triggerStepIndex,
     triggerPositions,
-    entryScene: currentSnapshotScene(options.entryScene),
-    entryValues: currentSnapshotValues(options.entryValues),
     initialFreeSpins,
     spins: Object.freeze(spins),
-    finalStepIndex: last.stepIndex,
-    finalScene: last.outputScene,
-    finalValues: last.outputValues,
   });
 }
 
-function compileAf(options: {
-  readonly step: GameLogicStep;
-  readonly stepIndex: number;
-  readonly inputScene: SceneMatrix;
-  readonly inputValues: Game002FreeGameValueMatrix;
-  readonly codes: Readonly<{ AF: number; CN: number; WL: number }>;
-}): Game002FreeGameAfPlan | null {
-  const names = ["fg-triggeraf", "fg-rollaf", "fg-af2cn", "fg-genafcn"];
-  const present = names.filter((name) => options.step.hasComponent(name));
-  if (present.length === 0) return null;
-  if (present.length !== names.length)
-    throw new Error(
-      `step[${options.stepIndex}] AF protocol is partial: ${present.join(",")}.`,
-    );
-  const addedFreeSpins = positiveInteger(
-    componentNumber(options.step, "fg-rollaf", "number", options.stepIndex),
-    `step[${options.stepIndex}] fg-rollaf.number`,
+function compileAf(
+  step: GameLogicStep,
+  stepIndex: number,
+  inputScene: SceneMatrix,
+  codes: Readonly<{ WL: number; CN: number }>,
+): Game002FreeGameAfPlan | null {
+  if (!step.hasComponent("fg-triggeraf")) return null;
+  const positions = resultPositions(
+    step.getComponentResults("fg-triggeraf"),
+    inputScene,
+    `step[${stepIndex}] fg-triggeraf`,
   );
-  const positions = positionsFromResults(
-    options.step.getComponentResults("fg-triggeraf"),
-    options.inputScene,
-    `step[${options.stepIndex}] fg-triggeraf`,
-  );
-  if (positions.length === 0)
-    throw new Error(
-      `step[${options.stepIndex}] fg-triggeraf must select AF positions.`,
-    );
-  assertCodes(
-    options.inputScene,
-    positions,
-    options.codes.AF,
-    `step[${options.stepIndex}] fg-triggeraf`,
-  );
-  const declaredPositions = componentPositions(
-    options.step,
-    "fg-af2cn",
-    options.inputScene,
-    options.stepIndex,
-  );
-  const outputScene = exactlyOneComponentScene(
-    options.step,
-    "fg-af2cn",
-    options.stepIndex,
-  );
-  assertCodes(
-    outputScene,
-    declaredPositions,
-    options.codes.CN,
-    `step[${options.stepIndex}] fg-af2cn`,
-  );
-  const outputValues = componentValues(
-    options.step,
-    "fg-genafcn",
-    outputScene,
-    options.codes,
-    options.stepIndex,
-  );
+  const outputScene = componentScene(step, "fg-af2cn", stepIndex);
   return Object.freeze({
     positions,
-    addedFreeSpins,
+    addedFreeSpins: positiveInteger(
+      componentNumber(step, "fg-rollaf", "number", stepIndex),
+      `step[${stepIndex}] fg-rollaf.number`,
+    ),
     outputScene,
-    outputValues,
+    outputValues: componentValues(
+      step,
+      "fg-genafcn",
+      outputScene,
+      codes,
+      stepIndex,
+    ),
   });
 }
 
-function compileCo(options: {
-  readonly step: GameLogicStep;
-  readonly stepIndex: number;
-  readonly inputScene: SceneMatrix;
-  readonly inputValues: Game002FreeGameValueMatrix;
-  readonly codes: Readonly<{
-    WL: number;
-    CN: number;
-    CO: number;
-    BN: number;
-  }>;
-}): Game002FreeGameCoPlan | null {
-  const names = ["fg-triggerco", "fg-vortex", "fg-cogencn"];
-  const present = names.filter((name) => options.step.hasComponent(name));
-  if (present.length === 0) return null;
-  if (present.length !== names.length)
-    throw new Error(
-      `step[${options.stepIndex}] CO protocol is partial: ${present.join(",")}.`,
-    );
-  const coPositions = positionsFromResults(
-    options.step.getComponentResults("fg-triggerco"),
-    options.inputScene,
-    `step[${options.stepIndex}] fg-triggerco`,
+function compileCo(
+  step: GameLogicStep,
+  stepIndex: number,
+  inputScene: SceneMatrix,
+  codes: Readonly<{ WL: number; CN: number }>,
+): Game002FreeGameCoPlan | null {
+  if (!step.hasComponent("fg-triggerco")) return null;
+  const mainPos = resultPositions(
+    step.getComponentResults("fg-triggerco"),
+    inputScene,
+    `step[${stepIndex}] fg-triggerco`,
   );
-  assertCodes(
-    options.inputScene,
-    coPositions,
-    options.codes.CO,
-    `step[${options.stepIndex}] fg-triggerco`,
+  const component = step.getComponent("fg-vortex");
+  const raw = component?.raw;
+  const routes = parseTransferRoutes(
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Readonly<Record<string, unknown>>).pos
+      : undefined,
+    inputScene,
+    `step[${stepIndex}] fg-vortex.pos`,
   );
-  const component = options.step.getComponent("fg-vortex");
-  if (!component || !isRecord(component.raw))
-    throw new Error(`step[${options.stepIndex}] fg-vortex is missing.`);
-  const segments = splitVortex(component.raw.pos, options.stepIndex);
-  if (segments.length !== coPositions.length)
-    throw new Error(
-      `step[${options.stepIndex}] fg-vortex segment count must match triggered CO count.`,
-    );
-  const used = new Set<string>();
-  const transfers: Game002FreeGameCoTransfer[] = [];
-  const sourcePositions: SlotRoundPosition[] = [];
-  for (const [segmentIndex, segment] of segments.entries()) {
-    const segmentTransfers: Game002FreeGameCoTransfer[] = [];
-    for (const [sourceX, sourceY, targetX, targetY] of segment) {
-      const source = position(
-        sourceX,
-        sourceY,
-        options.inputScene,
-        `step[${options.stepIndex}] fg-vortex source`,
-        { rangeMessage: "is out of bounds" },
-      );
-      const target = position(
-        targetX,
-        targetY,
-        options.inputScene,
-        `step[${options.stepIndex}] fg-vortex target`,
-        { rangeMessage: "is out of bounds" },
-      );
-      for (const candidate of [source, target]) {
-        const key = positionKey(candidate);
-        if (used.has(key))
-          throw new Error(
-            `step[${options.stepIndex}] fg-vortex reuses position ${key}.`,
-          );
-        used.add(key);
-      }
-      const sourceCode = options.inputScene[source.x]![source.y]!;
-      if (sourceCode !== options.codes.WL && sourceCode !== options.codes.CN)
-        throw new Error(
-          `step[${options.stepIndex}] fg-vortex source ${positionKey(source)} must be WL or CN.`,
-        );
-      const transfer = Object.freeze({
-        source,
-        target,
-        sourceCode,
-        sourceValue: options.inputValues[source.x]![source.y]!,
-        targetCode: options.inputScene[target.x]![target.y]!,
-      });
-      segmentTransfers.push(transfer);
-      transfers.push(transfer);
-      sourcePositions.push(source);
-    }
-    const candidates = coPositions.filter(
-      (co) =>
-        !used.has(positionKey(co)) &&
-        segmentTransfers.every((transfer) =>
-          isEightNeighbor(co, transfer.target),
-        ),
-    );
-    if (candidates.length !== 1)
-      throw new Error(
-        `step[${options.stepIndex}] fg-vortex segment[${segmentIndex}] must map to exactly one CO.`,
-      );
-    used.add(positionKey(candidates[0]!));
-  }
-  const outputScene = exactlyOneComponentScene(
-    options.step,
-    "fg-vortex",
-    options.stepIndex,
-  );
-  const outputValues = componentValues(
-    options.step,
-    "fg-cogencn",
-    outputScene,
-    options.codes,
-    options.stepIndex,
-  );
+  const outputScene = componentScene(step, "fg-vortex", stepIndex);
   return Object.freeze({
-    coPositions,
-    sourcePositions: Object.freeze(sourcePositions),
-    transfers: Object.freeze(transfers),
+    mainPos,
+    routes,
     outputScene,
-    outputValues,
+    outputValues: componentValues(
+      step,
+      "fg-cogencn",
+      outputScene,
+      codes,
+      stepIndex,
+    ),
   });
+}
+
+function componentScene(
+  step: GameLogicStep,
+  name: string,
+  stepIndex: number,
+): SceneMatrix {
+  return requireExactlyOne(
+    step.getComponentScenes(name),
+    `step[${stepIndex}] ${name} scene`,
+  );
 }
 
 function componentValues(
@@ -422,26 +231,24 @@ function componentValues(
   codes: Readonly<{ WL: number; CN: number }>,
   stepIndex: number,
 ): Game002FreeGameValueMatrix {
-  const values = step.getComponentOtherScenes(name);
-  if (values.length !== 1)
-    throw new Error(
-      `step[${stepIndex}] ${name} must reference exactly one otherScene.`,
-    );
-  return validateValues(
-    values[0]!,
+  return normalizeValues(
+    requireExactlyOne(
+      step.getComponentOtherScenes(name),
+      `step[${stepIndex}] ${name} otherScene`,
+    ),
     scene,
     codes,
     `step[${stepIndex}] ${name} values`,
   );
 }
 
-function validateValues(
+function normalizeValues(
   values: readonly (readonly (number | null)[])[],
   scene: SceneMatrix,
   codes: Readonly<{ WL: number; CN: number }>,
   label: string,
 ): Game002FreeGameValueMatrix {
-  assertDimensions(values, scene, label);
+  assertExactMatrixShape(values, scene, label);
   return Object.freeze(
     values.map((column, x) =>
       Object.freeze(
@@ -449,7 +256,7 @@ function validateValues(
           const code = scene[x]![y]!;
           if (code !== codes.WL && code !== codes.CN) return null;
           if (raw === 0) return null;
-          if (typeof raw !== "number" || !Number.isSafeInteger(raw) || raw <= 0)
+          if (!Number.isSafeInteger(raw) || raw === null || raw <= 0)
             throw new Error(`${label}[${x}][${y}] must be positive for WL/CN.`);
           return raw;
         }),
@@ -458,139 +265,58 @@ function validateValues(
   );
 }
 
-function exactlyOneIndexedScene(
-  step: GameLogicStep,
-  index: number,
-  expected: SceneMatrix,
-  label: string,
-): SceneMatrix {
-  const scene = step.getScene(index);
-  assertMatrixEqual(scene, expected, label);
-  return scene;
-}
-
-function exactlyOneComponentScene(
-  step: GameLogicStep,
-  name: string,
-  stepIndex: number,
-): SceneMatrix {
-  const scenes = step.getComponentScenes(name);
-  if (scenes.length !== 1)
-    throw new Error(
-      `step[${stepIndex}] ${name} must reference exactly one scene.`,
-    );
-  return scenes[0]!;
-}
-
 function componentPositions(
   step: GameLogicStep,
   name: string,
   scene: SceneMatrix,
   stepIndex: number,
 ): readonly SlotRoundPosition[] {
-  const component = step.getComponent(name);
-  if (!component || !isRecord(component.raw))
+  const raw = step.getComponent(name)?.raw;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw))
     throw new Error(`step[${stepIndex}] ${name} is missing.`);
-  const raw =
-    isRecord(component.raw.basicComponentData) &&
-    Array.isArray(component.raw.basicComponentData.pos) &&
-    component.raw.basicComponentData.pos.length > 0
-      ? component.raw.basicComponentData.pos
-      : component.raw.pos;
-  return positionsFromFlat(raw, scene, `step[${stepIndex}] ${name}.pos`);
+  const basic = (raw as Readonly<Record<string, unknown>>).basicComponentData;
+  const basicPos =
+    basic && typeof basic === "object" && !Array.isArray(basic)
+      ? (basic as Readonly<Record<string, unknown>>).pos
+      : undefined;
+  return parsePositions(
+    Array.isArray(basicPos) && basicPos.length > 0
+      ? basicPos
+      : (raw as Readonly<Record<string, unknown>>).pos,
+    scene,
+    `step[${stepIndex}] ${name}.pos`,
+  );
 }
 
-function positionsFromResults(
+function resultPositions(
   results: readonly WinResult[],
   scene: SceneMatrix,
   label: string,
 ): readonly SlotRoundPosition[] {
   return Object.freeze(
     results.flatMap((result, index) =>
-      positionsFromFlat(result.pos, scene, `${label} result[${index}].pos`),
+      parsePositions(result.pos, scene, `${label} result[${index}].pos`),
     ),
   );
+}
+
+function parsePositions(raw: unknown, scene: SceneMatrix, label: string) {
+  return parseExactPositionPairs(raw, scene, label, {
+    rangeMessage: "is out of bounds",
+  });
 }
 
 function nonHeldPositions(
   scene: SceneMatrix,
-  wlCode: number,
-  cnCode: number,
+  codes: Readonly<{ WL: number; CN: number }>,
 ): readonly SlotRoundPosition[] {
-  const result: SlotRoundPosition[] = [];
-  for (let x = 0; x < scene.length; x += 1)
-    for (let y = 0; y < scene[x]!.length; y += 1) {
-      const code = scene[x]![y]!;
-      if (code !== wlCode && code !== cnCode)
-        result.push(Object.freeze({ x, y }));
-    }
-  return Object.freeze(result);
-}
-
-function splitVortex(
-  raw: unknown,
-  stepIndex: number,
-): readonly (readonly VortexTuple[])[] {
-  if (!Array.isArray(raw))
-    throw new Error(`step[${stepIndex}] fg-vortex.pos must be an array.`);
-  const segments: Array<Array<[number, number, number, number]>> = [[]];
-  let tuple: number[] = [];
-  for (const [index, value] of raw.entries()) {
-    if (value === -1) {
-      if (tuple.length > 0 || segments.at(-1)!.length === 0)
-        throw new Error(
-          `step[${stepIndex}] fg-vortex.pos separator at ${index} is invalid.`,
-        );
-      segments.push([]);
-      continue;
-    }
-    tuple.push(nonNegativeInteger(value, `fg-vortex.pos[${index}]`));
-    if (tuple.length === 4) {
-      segments.at(-1)!.push(tuple as [number, number, number, number]);
-      tuple = [];
-    }
-  }
-  if (tuple.length > 0)
-    throw new Error(`step[${stepIndex}] fg-vortex.pos has a partial tuple.`);
-  if (segments.at(-1)!.length === 0) segments.pop();
-  if (segments.length === 0)
-    throw new Error(`step[${stepIndex}] fg-vortex.pos has no segment.`);
   return Object.freeze(
-    segments.map((segment) =>
-      Object.freeze(
-        segment.map(
-          (entry) =>
-            Object.freeze(entry) as readonly [number, number, number, number],
-        ),
+    scene.flatMap((column, x) =>
+      column.flatMap((code, y) =>
+        code === codes.WL || code === codes.CN ? [] : [Object.freeze({ x, y })],
       ),
     ),
   );
-}
-
-function assertCodes(
-  scene: SceneMatrix,
-  positions: readonly SlotRoundPosition[],
-  expected: number,
-  label: string,
-): void {
-  for (const { x, y } of positions)
-    if (scene[x]![y] !== expected)
-      throw new Error(`${label} (${x},${y}) must use symbol code ${expected}.`);
-}
-
-function validateScene(scene: SceneMatrix, label: string): SceneMatrix {
-  if (!Array.isArray(scene) || scene.length === 0)
-    throw new Error(`${label} must contain columns.`);
-  const rows = scene[0]?.length ?? 0;
-  if (rows === 0) throw new Error(`${label} must contain rows.`);
-  for (const [x, column] of scene.entries()) {
-    if (column.length !== rows)
-      throw new Error(`${label} column[${x}] has inconsistent rows.`);
-    for (const [y, code] of column.entries())
-      if (!Number.isSafeInteger(code) || code < 0)
-        throw new Error(`${label}[${x}][${y}] has invalid symbol code.`);
-  }
-  return scene;
 }
 
 function componentNumber(
@@ -599,21 +325,28 @@ function componentNumber(
   field: string,
   stepIndex: number,
 ): unknown {
-  const component = step.getComponent(name);
-  if (component && isRecord(component.raw)) return component.raw[field];
+  const direct = step.getComponent(name)?.raw;
+  if (direct && typeof direct === "object" && !Array.isArray(direct))
+    return (direct as Readonly<Record<string, unknown>>)[field];
   const clientData = step.getRawClientData();
-  const gameParam =
-    isRecord(clientData) && isRecord(clientData.curGameModParam)
-      ? clientData.curGameModParam
-      : null;
-  const mapComponents =
-    gameParam && isRecord(gameParam.mapComponents)
-      ? gameParam.mapComponents
-      : null;
   const raw =
-    mapComponents && isRecord(mapComponents[name]) ? mapComponents[name] : null;
-  if (!raw) throw new Error(`step[${stepIndex}] ${name} is missing.`);
-  return raw[field];
+    clientData && typeof clientData === "object" && !Array.isArray(clientData)
+      ? (clientData as Readonly<Record<string, unknown>>).curGameModParam
+      : null;
+  const components =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Readonly<Record<string, unknown>>).mapComponents
+      : null;
+  if (
+    !components ||
+    typeof components !== "object" ||
+    Array.isArray(components)
+  )
+    throw new Error(`step[${stepIndex}] ${name} is missing.`);
+  const component = (components as Readonly<Record<string, unknown>>)[name];
+  if (!component || typeof component !== "object" || Array.isArray(component))
+    throw new Error(`step[${stepIndex}] ${name} is missing.`);
+  return (component as Readonly<Record<string, unknown>>)[field];
 }
 
 function positiveInteger(value: unknown, label: string): number {
@@ -622,27 +355,4 @@ function positiveInteger(value: unknown, label: string): number {
 
 function nonNegativeInteger(value: unknown, label: string): number {
   return requireSafeInteger(value, label, { minimum: 0 });
-}
-
-function isEightNeighbor(
-  center: SlotRoundPosition,
-  candidate: SlotRoundPosition,
-): boolean {
-  const dx = Math.abs(center.x - candidate.x);
-  const dy = Math.abs(center.y - candidate.y);
-  return dx <= 1 && dy <= 1 && dx + dy > 0;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function currentSnapshotScene(scene: SceneMatrix): SceneMatrix {
-  return Object.freeze(scene.map((column) => Object.freeze([...column])));
-}
-
-function currentSnapshotValues(
-  values: Game002FreeGameValueMatrix,
-): Game002FreeGameValueMatrix {
-  return Object.freeze(values.map((column) => Object.freeze([...column])));
 }

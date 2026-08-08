@@ -12,246 +12,99 @@ const SELECTED = 3;
 const OTHER = 4;
 
 describe("game002 CO collection compiler", () => {
-  it("compiles four disjoint source relocations and authoritative BN output", () => {
-    const input = matrix([
-      [SELECTED, OTHER, OTHER, OTHER, SELECTED],
-      [OTHER, OTHER, OTHER, OTHER, OTHER],
-      [OTHER, OTHER, CO, OTHER, OTHER],
-      [OTHER, OTHER, OTHER, OTHER, OTHER],
-      [SELECTED, OTHER, OTHER, OTHER, SELECTED],
-    ]);
-    const output = mutable(input);
-    const sources = [
-      [0, 0],
-      [0, 4],
-      [4, 0],
-      [4, 4],
-    ] as const;
-    const targets = [
-      [1, 2],
-      [2, 1],
-      [2, 3],
-      [3, 2],
-    ] as const;
-    sources.forEach(([x, y]) => (output[x]![y] = BN));
-    targets.forEach(([x, y]) => (output[x]![y] = SELECTED));
-    output[2]![2] = SELECTED;
-    const other = output.map((column) =>
-      column.map((code) => (code === BN ? -1 : 0)),
-    );
-    const pos: number[] = sources.flatMap(([sourceX, sourceY], index) => [
-      sourceX,
-      sourceY,
-      targets[index]![0],
-      targets[index]![1],
-    ]);
-    pos.push(-1);
-    const step = fakeStep({
-      "bg-triggerco": { results: [{ pos: [2, 2], symbol: CO }] },
-      "bg-co": { raw: { pos }, scenes: [output], otherScenes: [other] },
-      "bg-cogencn": { otherScenes: [other] },
-      "bg-win2": {
-        results: [
-          {
-            pos: [2, 2, ...targets.flatMap((position) => position)],
-            symbol: SELECTED,
-            mul: 5,
-            cashWin: 0,
-          },
-        ],
-      },
-      "bg-bn": {
-        results: [
-          {
-            pos: sources.flatMap((position) => position),
-            symbol: BN,
-            cashWin: 0,
-          },
-        ],
-      },
-    });
+  it("compiles trigger positions, routes and server-owned output changes", () => {
+    const fixture = validFixture();
+    const plan = compileFixture(fixture);
 
-    const plan = compileGame002CoCollectionPlan({
-      stepIndex: 0,
-      step,
-      inputScene: input,
-      inputValues: input.map((column) => column.map(() => null)),
-      coSymbolCode: CO,
-      bnSymbolCode: BN,
-      valueSymbolCodes: new Set(),
-    });
-
-    expect(plan?.segments).toHaveLength(1);
-    expect(plan?.segments[0]?.transfers).toHaveLength(4);
-    expect(plan?.transform.relocations).toEqual(
-      sources.map(([x, y], index) => ({
-        source: { x, y },
-        target: { x: targets[index]![0], y: targets[index]![1] },
-      })),
+    expect(plan?.mainPos).toEqual([{ x: 2, y: 2 }]);
+    expect(plan?.routes).toEqual([
+      { source: { x: 0, y: 0 }, target: { x: 1, y: 2 } },
+      { source: { x: 0, y: 4 }, target: { x: 2, y: 1 } },
+      { source: { x: 4, y: 0 }, target: { x: 2, y: 3 } },
+      { source: { x: 4, y: 4 }, target: { x: 3, y: 2 } },
+    ]);
+    expect(plan?.changes).toEqual(
+      expect.arrayContaining([
+        { position: { x: 0, y: 0 }, outputCode: BN, outputValue: null },
+        {
+          position: { x: 1, y: 2 },
+          outputCode: SELECTED,
+          outputValue: null,
+        },
+        {
+          position: { x: 2, y: 2 },
+          outputCode: SELECTED,
+          outputValue: null,
+        },
+      ]),
     );
-    expect(plan?.sourcePositions).toEqual(sources.map(([x, y]) => ({ x, y })));
     expect(Object.isFrozen(plan)).toBe(true);
   });
 
-  it("gives an actual bg-win result priority over CO collection", () => {
-    const input = matrix([[CO]]);
-    const step = fakeStep({
-      "bg-win": {
-        results: [{ pos: [0, 0], symbol: CO, cashWin: 1 }],
-      },
-    });
-    expect(
-      compileGame002CoCollectionPlan({
-        stepIndex: 0,
-        step,
-        inputScene: input,
-        inputValues: [[null]],
-        coSymbolCode: CO,
-        bnSymbolCode: BN,
-        valueSymbolCodes: new Set(),
-      }),
-    ).toBeNull();
+  it("returns null when a normal win owns the step or no CO is triggered", () => {
+    const fixture = validFixture();
+    fixture.components["bg-win"] = {
+      results: [{ pos: [2, 2], symbol: CO, cashWin: 1 }],
+    };
+    expect(compileFixture(fixture)).toBeNull();
+
+    const noTrigger = validFixture();
+    delete noTrigger.components["bg-triggerco"];
+    expect(compileFixture(noTrigger)).toBeNull();
   });
 
-  it("rejects incomplete, malformed, and ambiguous collection protocols", () => {
-    const noCollection = validFixture();
-    noCollection.components = {};
-    expect(compileFixture(noCollection)).toBeNull();
-
-    const missingTrigger = validFixture();
-    delete missingTrigger.components["bg-triggerco"];
-    expect(() => compileFixture(missingTrigger)).toThrow(
-      /requires bg-triggerco/,
-    );
-
-    const noTriggeredCo = validFixture();
-    noTriggeredCo.components["bg-triggerco"] = {
-      results: [{ pos: [1, 1], symbol: OTHER }],
-    };
-    delete noTriggeredCo.components["bg-co"];
-    delete noTriggeredCo.components["bg-cogencn"];
-    delete noTriggeredCo.components["bg-win2"];
-    delete noTriggeredCo.components["bg-bn"];
-    expect(compileFixture(noTriggeredCo)).toBeNull();
-
-    const unexpectedCollection = validFixture();
-    unexpectedCollection.components["bg-triggerco"] = {
-      results: [{ pos: [1, 1], symbol: OTHER }],
-    };
-    expect(() => compileFixture(unexpectedCollection)).toThrow(
-      /has no triggered CO/,
-    );
-
-    const missingComponent = validFixture();
-    delete missingComponent.components["bg-co"];
-    expect(() => compileFixture(missingComponent)).toThrow(
-      /requires component "bg-co"/,
-    );
-
-    const missingGeneratedCn = validFixture();
-    delete missingGeneratedCn.components["bg-cogencn"];
-    expect(() => compileFixture(missingGeneratedCn)).toThrow(
-      /requires component "bg-cogencn"/,
-    );
-
-    const invalidRaw = validFixture();
-    invalidRaw.components["bg-co"]!.raw = [];
-    expect(() => compileFixture(invalidRaw)).toThrow(/must be an object/);
-
-    const invalidPos = validFixture();
-    invalidPos.components["bg-co"]!.raw = { pos: "bad" };
-    expect(() => compileFixture(invalidPos)).toThrow(/must be an array/);
-
-    const emptySegment = validFixture();
-    emptySegment.components["bg-co"]!.raw = { pos: [-1] };
-    expect(() => compileFixture(emptySegment)).toThrow(/empty segment/);
-
-    const shortSegment = validFixture();
-    shortSegment.components["bg-co"]!.raw = { pos: [0, 0, 1, 2] };
-    expect(() => compileFixture(shortSegment)).toThrow(
-      /must contain 4\.\.8 transfers/,
-    );
-
-    const malformedSegment = validFixture();
-    malformedSegment.components["bg-co"]!.raw = {
-      pos: [...validCollectionPos().slice(0, -2), -1],
-    };
-    expect(() => compileFixture(malformedSegment)).toThrow(
-      /coordinate quadruples/,
-    );
+  it("only performs basic parsing checks for consumed protocol cells", () => {
+    const malformed = validFixture();
+    malformed.components["bg-co"]!.raw = { pos: [0, 0, 1] };
+    expect(() => compileFixture(malformed)).toThrow(/coordinate quadruples/);
 
     const outOfRange = validFixture();
-    const outOfRangePos = validCollectionPos();
-    outOfRangePos[0] = 9;
-    outOfRange.components["bg-co"]!.raw = { pos: outOfRangePos };
+    outOfRange.components["bg-co"]!.raw = {
+      pos: [99, 0, 1, 2, -1],
+    };
     expect(() => compileFixture(outOfRange)).toThrow(/is out of range/);
 
-    const reusedSource = validFixture();
-    const reusedPos = validCollectionPos();
-    reusedPos[4] = reusedPos[0]!;
-    reusedPos[5] = reusedPos[1]!;
-    reusedSource.components["bg-co"]!.raw = { pos: reusedPos };
-    expect(() => compileFixture(reusedSource)).toThrow(
-      /is reused across the collection batch/,
-    );
-
-    const ambiguousCo = validFixture();
-    const ambiguousPos = validCollectionPos();
-    ambiguousPos[2] = 4;
-    ambiguousPos[3] = 1;
-    ambiguousCo.components["bg-co"]!.raw = { pos: ambiguousPos };
-    expect(() => compileFixture(ambiguousCo)).toThrow(
-      /must map to exactly one CO/,
-    );
+    const missingScene = validFixture();
+    missingScene.components["bg-co"]!.scenes = [];
+    expect(() => compileFixture(missingScene)).toThrow(/exactly one/);
   });
 
-  it("ignores unused output, win2, and BN fields", () => {
-    const sceneMismatch = validFixture();
-    const changedScene = mutable(
-      sceneMismatch.components["bg-co"]!.scenes![0]!,
-    );
-    changedScene[1]![1] = SELECTED;
-    sceneMismatch.components["bg-co"]!.scenes = [matrix(changedScene)];
-    sceneMismatch.components["bg-win2"]!.results = [
-      { pos: [2, 2], symbol: OTHER, mul: 1 },
-    ];
-    sceneMismatch.components["bg-bn"]!.results = [
-      { pos: [0, 0], symbol: BN, cashWin: 0 },
-    ];
-    expect(() => compileFixture(sceneMismatch)).not.toThrow();
-  });
-
-  it("preserves a value symbol value across source relocation", () => {
+  it("uses output scene codes instead of reconstructing CO rules", () => {
     const fixture = validFixture();
+    const output = mutable(fixture.components["bg-co"]!.scenes![0]!);
+    output[0]![0] = OTHER;
+    output[1]![2] = OTHER;
+    fixture.components["bg-co"]!.scenes = [matrix(output)];
+
+    const plan = compileFixture(fixture);
+
+    expect(plan?.changes.slice(0, 2)).toEqual([
+      { position: { x: 0, y: 0 }, outputCode: OTHER, outputValue: null },
+      { position: { x: 1, y: 2 }, outputCode: OTHER, outputValue: null },
+    ]);
+  });
+
+  it("copies value-symbol values only for the affected cells", () => {
+    const fixture = validFixture();
+    fixture.valueSymbolCodes = new Set([SELECTED]);
     fixture.inputValues[0]![0] = 7;
     fixture.inputValues[0]![4] = 8;
     fixture.inputValues[4]![0] = 9;
     fixture.inputValues[4]![4] = 10;
-    const intermediateValues = mutable(
-      fixture.components["bg-co"]!.otherScenes![0]!,
-    );
-    intermediateValues[1]![2] = 7;
-    intermediateValues[2]![1] = 8;
-    intermediateValues[2]![3] = 9;
-    intermediateValues[3]![2] = 10;
-    fixture.components["bg-co"]!.otherScenes = [matrix(intermediateValues)];
-    const generatedValues = mutable(intermediateValues);
-    generatedValues[2]![2] = 11;
-    fixture.components["bg-cogencn"]!.otherScenes = [matrix(generatedValues)];
-    fixture.valueSymbolCodes = new Set([SELECTED]);
 
     const plan = compileFixture(fixture);
 
-    expect(plan?.segments[0]?.transfers[0]?.sourceValue).toBe(7);
     expect(
-      plan?.transform.changes.find(
-        ({ position }) => position.x === 1 && position.y === 2,
-      )?.outputValue,
+      plan?.changes.find(({ position }) => position.x === 1 && position.y === 2)
+        ?.outputValue,
     ).toBe(7);
+    expect(
+      plan?.changes.find(({ position }) => position.x === 2 && position.y === 2)
+        ?.outputValue,
+    ).toBe(1);
 
-    const invalidValue = validFixture();
-    invalidValue.valueSymbolCodes = new Set([SELECTED]);
-    expect(() => compileFixture(invalidValue)).toThrow(/must be positive/);
+    fixture.inputValues[0]![0] = null;
+    expect(() => compileFixture(fixture)).toThrow(/positive safe integer/);
   });
 });
 
@@ -293,12 +146,7 @@ function validFixture(): ValidFixture {
     [3, 2],
   ])
     output[x]![y] = SELECTED;
-  const intermediateValues: number[][] = output.map((column) =>
-    column.map((code) => (code === BN ? -1 : 0)),
-  );
-  const generatedValues: number[][] = intermediateValues.map((column) => [
-    ...column,
-  ]);
+  const generatedValues = output.map((column) => column.map(() => 0));
   generatedValues[2]![2] = 1;
   return {
     input,
@@ -308,30 +156,8 @@ function validFixture(): ValidFixture {
       "bg-co": {
         raw: { pos: validCollectionPos() },
         scenes: [matrix(output)],
-        otherScenes: [matrix(intermediateValues)],
       },
-      "bg-cogencn": {
-        otherScenes: [matrix(generatedValues)],
-      },
-      "bg-win2": {
-        results: [
-          {
-            pos: [2, 2, 1, 2, 2, 1, 2, 3, 3, 2],
-            symbol: SELECTED,
-            mul: 5,
-            cashWin: 0,
-          },
-        ],
-      },
-      "bg-bn": {
-        results: [
-          {
-            pos: [0, 0, 0, 4, 4, 0, 4, 4],
-            symbol: BN,
-            cashWin: 0,
-          },
-        ],
-      },
+      "bg-cogencn": { otherScenes: [matrix(generatedValues)] },
     },
     valueSymbolCodes: new Set(),
   };
@@ -348,23 +174,12 @@ function compileFixture(fixture: ValidFixture) {
     inputScene: fixture.input,
     inputValues: fixture.inputValues,
     coSymbolCode: CO,
-    bnSymbolCode: BN,
     valueSymbolCodes: fixture.valueSymbolCodes,
   });
 }
 
 function fakeStep(
-  components: Readonly<
-    Record<
-      string,
-      {
-        readonly raw?: unknown;
-        readonly scenes?: readonly SceneMatrix[];
-        readonly otherScenes?: readonly SceneMatrix[];
-        readonly results?: readonly WinResult[];
-      }
-    >
-  >,
+  components: Readonly<Record<string, MutableFakeComponent>>,
 ): GameLogicStep {
   return {
     getIndex: () => 0,

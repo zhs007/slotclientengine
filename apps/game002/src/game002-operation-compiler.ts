@@ -1,5 +1,4 @@
 import {
-  applySlotOperationChanges,
   applySlotOperationValueUpdates,
   createSlotOperationSnapshot,
   deriveSlotStateMutations,
@@ -17,6 +16,7 @@ import {
   type SlotOperationSource,
   type SlotChgOperation,
   type SlotChgPayload,
+  type SlotChgRoute,
   type SlotStateMutationDraftV2,
   type SlotStateMutation,
 } from "@slotclientengine/gameframeworks";
@@ -35,16 +35,16 @@ import { GAME002_REEL_COUNT, GAME002_VISIBLE_ROWS } from "./game-layout.js";
 import type { Game002ReelRuntime } from "./game002-reel-controller.js";
 import {
   compileGame002FreeGamePlan,
-  type Game002FreeGameAfPlan,
-  type Game002FreeGameCoPlan,
   type Game002FreeGameSpinPlan,
 } from "./freegame-plan.js";
 import type { SymbolCascadeGroup } from "@slotclientengine/rendercore";
 import { resolveGame002WinResultAmount } from "./win-symbol-carousel-config.js";
 import {
   createGame002WlWmMultiplierCompiler,
-  type Game002TransformOperationPayload,
+  type Game002SettledTransformPhase,
+  type Game002TransformKey,
 } from "./wl-wm-multiplier-plan.js";
+export type { Game002TransformKey } from "./wl-wm-multiplier-plan.js";
 
 export interface Game002SpinPayload {
   readonly scene: SlotOperationSnapshot;
@@ -66,13 +66,6 @@ export interface Game002FallPayload extends Game002FallOperationData {
 }
 
 export type Game002TransformPayload = SlotChgPayload;
-export type Game002TransformKey =
-  | "wl-increment"
-  | "wild-multiplier"
-  | "wm-to-cn"
-  | "coin-multiplier"
-  | "cm-to-cn"
-  | "co-collect";
 export type Game002TransformOperationKind = `game002:${Game002TransformKey}`;
 export type Game002TransformOperation =
   SlotChgOperation<Game002TransformOperationKind>;
@@ -108,13 +101,21 @@ export type Game002FreeGameOperationPayload =
   | Readonly<{ kind: "transition"; mode: "BaseGame" | "FreeGame" }>
   | Readonly<{
       kind: "spin";
-      spin: Omit<
-        Game002FreeGameSpinPlan,
-        "stepIndex" | "af" | "co" | "winResults"
-      >;
+      respinNumber: number;
+      remainingFreeSpins: number;
+      spinPositions: readonly { readonly x: number; readonly y: number }[];
+      featurePositions: readonly { readonly x: number; readonly y: number }[];
     }>
-  | Readonly<{ kind: "af"; af: Game002FreeGameAfPlan }>
-  | Readonly<{ kind: "co"; co: Game002FreeGameCoPlan }>
+  | Readonly<{
+      kind: "af";
+      positions: readonly { readonly x: number; readonly y: number }[];
+      addedFreeSpins: number;
+    }>
+  | Readonly<{
+      kind: "co";
+      mainPos: readonly { readonly x: number; readonly y: number }[];
+      routes: readonly SlotChgRoute[];
+    }>
   | Readonly<{ kind: "win"; groups: readonly SymbolCascadeGroup[] }>
   | Readonly<{
       kind: "popup";
@@ -211,17 +212,16 @@ export function compileGame002RoundOperationPlan(options: {
       symbolCodes: base.symbolCodes,
       occurrenceIdPrefix: `game002:freegame:${spinIndex}:spin`,
     });
-    const {
-      stepIndex: _stepIndex,
-      af: _af,
-      co: _co,
-      winResults: _wins,
-      ...spinPayload
-    } = spin;
     appendMutation(
       "game002:freegame-spin",
       spinOutput,
-      Object.freeze({ kind: "spin", spin: Object.freeze(spinPayload) }),
+      Object.freeze({
+        kind: "spin",
+        respinNumber: spin.respinNumber,
+        remainingFreeSpins: spin.remainingFreeSpins,
+        spinPositions: spin.spinPositions,
+        featurePositions: spin.featurePositions,
+      }),
     );
     if (spin.af) {
       const output = createSlotOperationSnapshot({
@@ -233,7 +233,11 @@ export function compileGame002RoundOperationPlan(options: {
       appendMutation(
         "game002:freegame-af",
         output,
-        Object.freeze({ kind: "af", af: spin.af }),
+        Object.freeze({
+          kind: "af",
+          positions: spin.af.positions,
+          addedFreeSpins: spin.af.addedFreeSpins,
+        }),
       );
     }
     if (spin.co) {
@@ -246,7 +250,11 @@ export function compileGame002RoundOperationPlan(options: {
       appendMutation(
         "game002:freegame-co",
         output,
-        Object.freeze({ kind: "co", co: spin.co }),
+        Object.freeze({
+          kind: "co",
+          mainPos: spin.co.mainPos,
+          routes: spin.co.routes,
+        }),
       );
     }
     if (spin.winResults.length > 0)
@@ -254,7 +262,7 @@ export function compileGame002RoundOperationPlan(options: {
         "game002:freegame-win",
         Object.freeze({
           kind: "win",
-          groups: createFreeGameWinGroups(spin),
+          groups: createFreeGameWinGroups(spin, current.scene),
         }),
       );
   }
@@ -310,7 +318,6 @@ function compileGame002BaseDrafts(
     CN: requireCode(symbolCodes, "CN"),
     CM: requireCode(symbolCodes, "CM"),
     CO: requireCode(symbolCodes, "CO"),
-    BN: requireCode(symbolCodes, "BN"),
   };
   const steps = options.logic.getSteps().slice(0, options.stepLimit);
   if (steps.length === 0) throw new Error("game002 round has no server steps.");
@@ -320,7 +327,6 @@ function compileGame002BaseDrafts(
     cnSymbolCode: codes.CN,
     cmSymbolCode: codes.CM,
     coSymbolCode: codes.CO,
-    bnSymbolCode: codes.BN,
     logDiagnostic: options.logDiagnostic,
   });
   const drafts: SlotOperationDraftV2[] = [];
@@ -425,19 +431,10 @@ function compileGame002BaseDrafts(
       step,
       input: current,
     });
-    const normalizedTransform = normalizeTransformDraft(
-      transformCompilation.draft,
-    );
-    if (
-      normalizedTransform.changes.length > 0 ||
-      normalizedTransform.relocations.length > 0
-    ) {
-      const transform = transformCompilation.payload;
-      if (!transform)
-        throw new Error(`${flowKey} has transform changes without a payload.`);
+    if (transformCompilation.phases.length > 0) {
       const atomic = genGame002AtomicTransformOperations({
         input: current,
-        transform,
+        phases: transformCompilation.phases,
         symbolCodes,
         source: serverSource(serverStepIndex, "game002-transform"),
         flowKey,
@@ -481,7 +478,6 @@ function compileGame002BaseDrafts(
       throw new Error(`${flowKey} has no win but more server steps follow.`);
     }
   }
-  multiplierCompiler.assertComplete();
   if (options.includeWinAmount !== false && winAmountRaw > 0)
     drafts.push(
       genWinOperation({
@@ -504,7 +500,7 @@ function compileGame002BaseDrafts(
 
 function genGame002AtomicTransformOperations(options: {
   readonly input: SlotOperationSnapshot;
-  readonly transform: Game002TransformOperationPayload;
+  readonly phases: readonly Game002SettledTransformPhase[];
   readonly symbolCodes: Readonly<Record<string, number>>;
   readonly source: SlotOperationSource;
   readonly flowKey: string;
@@ -512,118 +508,29 @@ function genGame002AtomicTransformOperations(options: {
   drafts: readonly SlotOperationDraftV2[];
   output: SlotOperationSnapshot;
 }> {
-  const codes = {
-    WL: requireCode(options.symbolCodes, "WL"),
-    CN: requireCode(options.symbolCodes, "CN"),
-  };
   const drafts: SlotOperationDraftV2[] = [];
   let current = options.input;
-  const common = (
-    kind: Game002TransformKey,
-    changes: readonly {
-      readonly position: { readonly x: number; readonly y: number };
-      readonly outputCode: number;
-      readonly outputValue: number | null;
-    }[],
-  ) => ({
-    kind: `game002:${kind}`,
-    source: options.source,
-    input: current,
-    changes,
-    symbolCodes: options.symbolCodes,
-    replacementIdPrefix: `${options.flowKey}:transform`,
-    businessKey: `${options.flowKey}:${kind}`,
-  });
-  const appendChange = (
-    kind: Game002TransformKey,
-    changes: readonly {
-      readonly position: { readonly x: number; readonly y: number };
-      readonly outputCode: number;
-      readonly outputValue: number | null;
-    }[],
-  ) => {
-    const draft = genChg({ ...common(kind, changes), type: "change" });
-    drafts.push(draft);
-    current = draft.output;
-  };
-  const appendDriven = (
-    kind: Game002TransformKey,
-    mainPos: readonly { readonly x: number; readonly y: number }[],
-    changes: readonly {
-      readonly position: { readonly x: number; readonly y: number };
-      readonly outputCode: number;
-      readonly outputValue: number | null;
-    }[],
-  ) => {
+  for (const phase of options.phases) {
+    const common = {
+      kind: `game002:${phase.key}`,
+      source: options.source,
+      input: current,
+      changes: phase.changes,
+      symbolCodes: options.symbolCodes,
+      replacementIdPrefix: `${options.flowKey}:transform`,
+      businessKey: `${options.flowKey}:${phase.key}`,
+    } as const;
     const draft = genChg({
-      ...common(kind, changes),
-      type: "driven-change",
-      mainPos,
-    });
-    drafts.push(draft);
-    current = draft.output;
-  };
-
-  if (options.transform.wlIncrements.length > 0)
-    appendChange(
-      "wl-increment",
-      options.transform.wlIncrements.map((item) => ({
-        position: item.position,
-        outputCode: codes.WL,
-        outputValue: item.outputValue,
-      })),
-    );
-
-  if (options.transform.wmReplacements.length > 0) {
-    const wmPositions = Object.freeze(
-      options.transform.wmReplacements.map(({ position }) => position),
-    );
-    appendDriven(
-      "wild-multiplier",
-      wmPositions,
-      options.transform.wlUpdates.map((item) => ({
-        position: item.position,
-        outputCode: codes.WL,
-        outputValue: item.outputValue,
-      })),
-    );
-    appendChange(
-      "wm-to-cn",
-      options.transform.wmReplacements.map((item) => ({
-        position: item.position,
-        outputCode: codes.CN,
-        outputValue: item.intermediateValue,
-      })),
-    );
-  }
-
-  if (options.transform.cnUpdates.length > 0)
-    appendDriven(
-      "coin-multiplier",
-      [options.transform.cm!.position],
-      options.transform.cnUpdates.map((item) => ({
-        position: item.position,
-        outputCode: codes.CN,
-        outputValue: item.outputValue,
-      })),
-    );
-
-  if (options.transform.cm)
-    appendChange("cm-to-cn", [
-      {
-        position: options.transform.cm.position,
-        outputCode: codes.CN,
-        outputValue: options.transform.cm.outputValue,
-      },
-    ]);
-
-  if (options.transform.coCollection) {
-    const collection = options.transform.coCollection;
-    const draft = genChg({
-      ...common("co-collect", collection.transform.changes),
-      type: "transfer",
-      mainPos: collection.segments.map(({ co }) => co),
-      routes: collection.transform.relocations ?? [],
+      ...common,
+      ...(phase.type === "change"
+        ? { type: phase.type }
+        : phase.type === "driven-change"
+          ? { type: phase.type, mainPos: phase.mainPos }
+          : {
+              type: phase.type,
+              mainPos: phase.mainPos,
+              routes: phase.routes,
+            }),
     });
     drafts.push(draft);
     current = draft.output;
@@ -702,16 +609,6 @@ function serverSource(
   });
 }
 
-function normalizeTransformDraft(
-  draft:
-    | readonly import("@slotclientengine/gameframeworks").SlotRoundSettledTransformChangeDraft[]
-    | import("@slotclientengine/gameframeworks").SlotRoundSettledTransformDraft,
-): import("@slotclientengine/gameframeworks").SlotRoundSettledTransformDraft {
-  return Array.isArray(draft)
-    ? Object.freeze({ changes: draft, relocations: Object.freeze([]) })
-    : (draft as import("@slotclientengine/gameframeworks").SlotRoundSettledTransformDraft);
-}
-
 function createGame002OperationPlan(
   drafts: readonly SlotOperationDraftV2[],
 ): SlotOperationPlanV2 {
@@ -762,10 +659,11 @@ function createGame002OperationPlan(
 
 function createFreeGameWinGroups(
   spin: Game002FreeGameSpinPlan,
+  scene: readonly (readonly number[])[],
 ): readonly SymbolCascadeGroup[] {
   return Object.freeze(
     spin.winResults.map((result, resultIndex) => {
-      const positions = parseResultPositions(result.pos, spin.outputScene);
+      const positions = parseResultPositions(result.pos, scene);
       return Object.freeze({
         componentName: "fg-win",
         stepIndex: resultIndex,

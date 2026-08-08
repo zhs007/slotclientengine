@@ -13,6 +13,7 @@ export {
   requireSafeIntegerArray,
   requireExactlyOne,
   parseExactPositionPairs,
+  parseTransferRoutes,
   slotOperationPositionKey,
   validatePositionInMatrix,
   compileConfiguredSlotRoundOperationPlanV2,
