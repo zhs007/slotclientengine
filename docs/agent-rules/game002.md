@@ -115,10 +115,12 @@
   transform 再由 runtime 拆 phase。缺席阶段不得生成 operation；WM 已触发但没有
   WL 数值变化时仍生成 output 与前态相同、`pos` 为空的 keyed change operation。
 
-- initial spin 和 refill 的动画前落定 scene 先按
-  `bg-gencm > bg-genwm > bg-spin/bg-refill` 合成 multiplier 输入，再把
-  `bg-genco` 中新增 CO overlay 到落定盘面；CO 不得在 transform 末尾凭空出现。
-  `bg-genco` 仍是 WM/CM 后、CO collection 前的权威完整盘面。
+- initial spin 和 refill 的动画前落定 scene 只从当前 step 已触发的
+  `bg-spin`/`bg-refill`、`bg-genwm`、`bg-gencm`、`bg-genco` 中，按 server
+  `historyComponents` 选择最后触发组件的唯一完整 scene。`bg-spin` 与
+  `bg-refill` 在同一 step 必须互斥并作为各自流程的 base scene。app 不再合并
+  WM/CM scene 或 overlay CO；后续 value hydration、transform、win/remove 均基于该
+  server 完整 scene。
 - `bg-genwilds`、`bg-setwm` 和 `bg-setcm` 的 component-scoped `otherScene`
   分别给新 WL/WM/CM 提供 positive safe integer multiplier；每个 settled step
   最多一个 CM，值随 occurrence dropdown/refill 搬运。

@@ -3,6 +3,9 @@ import {
   getComponentOtherScenesForStep,
   getComponentResultsForStep,
   getComponentScenesForStep,
+  getLastComponentOtherScenesForStep,
+  getLastComponentResultsForStep,
+  getLastComponentScenesForStep,
   hasTriggeredComponent,
 } from "./component";
 import { parseGameModuleInfoMessage, parseGmiWithMeta } from "./parser";
@@ -129,6 +132,27 @@ export class GameLogicModel implements GameLogic {
   getComponentResults(stepIndex: number, name: string): readonly WinResult[] {
     return this.getStep(stepIndex).getComponentResults(name);
   }
+
+  getLastComponentScenes(
+    stepIndex: number,
+    names: readonly string[],
+  ): readonly SceneMatrix[] {
+    return this.getStep(stepIndex).getLastComponentScenes(names);
+  }
+
+  getLastComponentOtherScenes(
+    stepIndex: number,
+    names: readonly string[],
+  ): readonly OtherSceneMatrix[] {
+    return this.getStep(stepIndex).getLastComponentOtherScenes(names);
+  }
+
+  getLastComponentResults(
+    stepIndex: number,
+    names: readonly string[],
+  ): readonly WinResult[] {
+    return this.getStep(stepIndex).getLastComponentResults(names);
+  }
 }
 
 export class GameLogicStepModel implements GameLogicStep {
@@ -227,6 +251,20 @@ export class GameLogicStepModel implements GameLogicStep {
 
   getComponentResults(name: string): readonly WinResult[] {
     return getComponentResultsForStep(this.#data, name);
+  }
+
+  getLastComponentScenes(names: readonly string[]): readonly SceneMatrix[] {
+    return getLastComponentScenesForStep(this.#data, names);
+  }
+
+  getLastComponentOtherScenes(
+    names: readonly string[],
+  ): readonly OtherSceneMatrix[] {
+    return getLastComponentOtherScenesForStep(this.#data, names);
+  }
+
+  getLastComponentResults(names: readonly string[]): readonly WinResult[] {
+    return getLastComponentResultsForStep(this.#data, names);
   }
 }
 

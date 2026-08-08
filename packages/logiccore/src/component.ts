@@ -146,6 +146,60 @@ export function getComponentResultsForStep(
   );
 }
 
+export function getLastComponentScenesForStep(
+  step: ParsedGameLogicStepData,
+  names: readonly string[],
+): readonly SceneMatrix[] {
+  const name = getLastTriggeredComponentName(step, names);
+  return name === undefined
+    ? freezeArray([])
+    : getComponentScenesForStep(step, name);
+}
+
+export function getLastComponentOtherScenesForStep(
+  step: ParsedGameLogicStepData,
+  names: readonly string[],
+): readonly OtherSceneMatrix[] {
+  const name = getLastTriggeredComponentName(step, names);
+  return name === undefined
+    ? freezeArray([])
+    : getComponentOtherScenesForStep(step, name);
+}
+
+export function getLastComponentResultsForStep(
+  step: ParsedGameLogicStepData,
+  names: readonly string[],
+): readonly WinResult[] {
+  const name = getLastTriggeredComponentName(step, names);
+  return name === undefined
+    ? freezeArray([])
+    : getComponentResultsForStep(step, name);
+}
+
+function getLastTriggeredComponentName(
+  step: ParsedGameLogicStepData,
+  names: readonly string[],
+): string | undefined {
+  if (!Array.isArray(names) || names.length === 0) {
+    throw new LogicParseError("component candidates must not be empty.");
+  }
+  const candidates = new Set<string>();
+  for (const name of names) {
+    if (typeof name !== "string" || name.trim().length === 0) {
+      throw new LogicParseError("component candidate must not be blank.");
+    }
+    if (candidates.has(name)) {
+      throw new LogicParseError(`duplicate component candidate "${name}".`);
+    }
+    candidates.add(name);
+  }
+  for (let index = step.historyComponents.length - 1; index >= 0; index -= 1) {
+    const name = step.historyComponents[index];
+    if (name !== undefined && candidates.has(name)) return name;
+  }
+  return undefined;
+}
+
 function assertIndexesInRange(
   indexes: readonly number[],
   length: number,

@@ -69,6 +69,61 @@ describe("component mapping", () => {
     expect(step.getComponentResults("not-exists")).toEqual([]);
   });
 
+  it("maps data from the last candidate in historyComponents", () => {
+    const logic = createGameLogic(createLastComponentMessage());
+    const step = logic.getStep(0);
+    const candidates = ["b", "c"];
+
+    expect(step.getLastComponentScenes(candidates)).toEqual([[[3]]]);
+    expect(step.getLastComponentOtherScenes(candidates)).toEqual([[[30]]]);
+    expect(step.getLastComponentResults(candidates)[0].marker).toBe("b");
+    expect(logic.getLastComponentScenes(0, candidates)).toEqual([[[3]]]);
+    expect(logic.getLastComponentOtherScenes(0, candidates)).toEqual([[[30]]]);
+    expect(logic.getLastComponentResults(0, candidates)[0].marker).toBe("b");
+  });
+
+  it("returns frozen empty mappings when no candidate was triggered", () => {
+    const step = createGameLogic(createLastComponentMessage()).getStep(0);
+
+    const scenes = step.getLastComponentScenes(["missing"]);
+    const otherScenes = step.getLastComponentOtherScenes(["missing"]);
+    const results = step.getLastComponentResults(["missing"]);
+    expect(scenes).toEqual([]);
+    expect(otherScenes).toEqual([]);
+    expect(results).toEqual([]);
+    expect(Object.isFrozen(scenes)).toBe(true);
+    expect(Object.isFrozen(otherScenes)).toBe(true);
+    expect(Object.isFrozen(results)).toBe(true);
+  });
+
+  it("validates last-component candidates and never skips invalid latest data", () => {
+    const step = createGameLogic(createLastComponentMessage()).getStep(0);
+    expect(() => step.getLastComponentScenes([])).toThrow(/must not be empty/);
+    expect(() => step.getLastComponentScenes([""])).toThrow(
+      /must not be blank/,
+    );
+    expect(() => step.getLastComponentScenes(["a", "a"])).toThrow(/duplicate/);
+
+    const invalidIndex = createLastComponentMessage();
+    invalidIndex.gmi.replyPlay.results[0].clientData.curGameModParam.mapComponents[
+      "b"
+    ].basicComponentData.usedScenes = [99];
+    expect(() =>
+      createGameLogic(invalidIndex)
+        .getStep(0)
+        .getLastComponentScenes(["b", "c"]),
+    ).toThrow(LogicParseError);
+
+    const missingLatest = createLastComponentMessage();
+    delete missingLatest.gmi.replyPlay.results[0].clientData.curGameModParam
+      .mapComponents["b"];
+    expect(() =>
+      createGameLogic(missingLatest)
+        .getStep(0)
+        .getLastComponentResults(["b", "c"]),
+    ).toThrow(LogicParseError);
+  });
+
   it("throws when a triggered component is missing in mapComponents", () => {
     const message = cloneFixture(basicMessage);
     delete (
@@ -136,3 +191,37 @@ describe("component mapping", () => {
     ).toThrow(LogicParseError);
   });
 });
+
+function createLastComponentMessage(): any {
+  const message = cloneFixture(basicMessage) as any;
+  const clientData = message.gmi.replyPlay.results[0].clientData;
+  const params = clientData.curGameModParam;
+  clientData.scenes = [matrix(1), matrix(2), matrix(3)];
+  clientData.otherScenes = [matrix(10), matrix(20), matrix(30)];
+  clientData.results = [
+    { pos: [0, 0], marker: "a" },
+    { pos: [0, 0], marker: "c" },
+    { pos: [0, 0], marker: "b" },
+  ];
+  params.historyComponents = ["a", "c", "b"];
+  params.mapComponents = {
+    a: componentData(0),
+    c: componentData(1),
+    b: componentData(2),
+  };
+  return message;
+}
+
+function matrix(value: number) {
+  return { values: [{ values: [value] }] };
+}
+
+function componentData(index: number) {
+  return {
+    basicComponentData: {
+      usedScenes: [index],
+      usedOtherScenes: [index],
+      usedResults: [index],
+    },
+  };
+}

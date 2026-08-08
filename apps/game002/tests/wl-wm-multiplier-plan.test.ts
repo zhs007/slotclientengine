@@ -14,47 +14,6 @@ const CN = 8;
 const CM = 9;
 
 describe("game002 WL/WM/CM operation compiler", () => {
-  it("settles generated WM and CM in server order", () => {
-    const input = matrix([
-      [A, A],
-      [A, A],
-    ]);
-    const context = createContext({
-      stepIndex: 1,
-      snapshot: snapshot(
-        matrix([
-          [WM, A],
-          [CM, A],
-        ]),
-        [
-          [null, null],
-          [null, null],
-        ],
-      ),
-      scenes: {
-        "bg-genwm": matrix([
-          [WM, A],
-          [A, A],
-        ]),
-        "bg-gencm": matrix([
-          [CN, A],
-          [CM, A],
-        ]),
-      },
-    });
-    expect(
-      compiler().resolveSettledScene({
-        stepIndex: 1,
-        step: context.step,
-        kind: "refill",
-        inputScene: input,
-      }),
-    ).toEqual([
-      [WM, A],
-      [CM, A],
-    ]);
-  });
-
   it("hydrates only visible value symbols from their components", () => {
     const context = createContext({
       stepIndex: 0,

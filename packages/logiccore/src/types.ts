@@ -156,6 +156,18 @@ export interface GameLogic {
     name: string,
   ): readonly OtherSceneMatrix[];
   getComponentResults(stepIndex: number, name: string): readonly WinResult[];
+  getLastComponentScenes(
+    stepIndex: number,
+    names: readonly string[],
+  ): readonly SceneMatrix[];
+  getLastComponentOtherScenes(
+    stepIndex: number,
+    names: readonly string[],
+  ): readonly OtherSceneMatrix[];
+  getLastComponentResults(
+    stepIndex: number,
+    names: readonly string[],
+  ): readonly WinResult[];
 }
 
 export interface GameLogicStep {
@@ -180,6 +192,11 @@ export interface GameLogicStep {
   getComponentScenes(name: string): readonly SceneMatrix[];
   getComponentOtherScenes(name: string): readonly OtherSceneMatrix[];
   getComponentResults(name: string): readonly WinResult[];
+  getLastComponentScenes(names: readonly string[]): readonly SceneMatrix[];
+  getLastComponentOtherScenes(
+    names: readonly string[],
+  ): readonly OtherSceneMatrix[];
+  getLastComponentResults(names: readonly string[]): readonly WinResult[];
 }
 
 export interface ParsedGameLogicData {

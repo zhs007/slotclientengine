@@ -96,6 +96,14 @@ export function createMockGameLogic(totalwin = 0): GameLogic {
       name === "lineWin" && totalwin > 0
         ? [{ pos: [0, 0], coinWin: totalwin, cashWin: totalwin }]
         : [],
+    getLastComponentScenes: (names: readonly string[]) =>
+      names.includes("lineWin") ? [[[1, 2, 3]]] : [],
+    getLastComponentOtherScenes: (names: readonly string[]) =>
+      names.includes("lineWin") ? [[[0, totalwin, 0]]] : [],
+    getLastComponentResults: (names: readonly string[]) =>
+      names.includes("lineWin") && totalwin > 0
+        ? [{ pos: [0, 0], coinWin: totalwin, cashWin: totalwin }]
+        : [],
   };
   return {
     getGameModuleName: () => "mock",
@@ -120,6 +128,12 @@ export function createMockGameLogic(totalwin = 0): GameLogic {
     getComponentOtherScenes: (_stepIndex, name) =>
       step.getComponentOtherScenes(name),
     getComponentResults: (_stepIndex, name) => step.getComponentResults(name),
+    getLastComponentScenes: (_stepIndex, names) =>
+      step.getLastComponentScenes(names),
+    getLastComponentOtherScenes: (_stepIndex, names) =>
+      step.getLastComponentOtherScenes(names),
+    getLastComponentResults: (_stepIndex, names) =>
+      step.getLastComponentResults(names),
   };
 }
 

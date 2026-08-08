@@ -29,6 +29,14 @@ export const GAME002_CASCADE_COMPONENTS = Object.freeze({
   gencmcn: "bg-gencmcn",
 });
 
+export const GAME002_SETTLED_SCENE_COMPONENTS = Object.freeze([
+  GAME002_CASCADE_COMPONENTS.spin,
+  GAME002_CASCADE_COMPONENTS.refill,
+  GAME002_CASCADE_COMPONENTS.genwm,
+  GAME002_CASCADE_COMPONENTS.gencm,
+  GAME002_CASCADE_COMPONENTS.genco,
+]);
+
 export const GAME002_CASCADE_MOTION = Object.freeze({
   columnStartStaggerSeconds: 0.045,
   startStaggerSeconds: 0.018,

@@ -4,7 +4,6 @@ import type {
   SceneMatrix,
   SlotOperationSnapshot,
   SlotRoundPosition,
-  SlotRoundSettledSceneCompileContext,
   SlotRoundSettledTransformChangeDraft,
   SlotRoundSettledTransformRelocationDraft,
   SlotRoundSettledValueDraft,
@@ -65,7 +64,6 @@ export function createGame002WlWmMultiplierCompiler(options: {
   readonly cnSymbolCode: number;
   readonly cmSymbolCode: number;
   readonly coSymbolCode?: number;
-  readonly logDiagnostic?: (message: string) => void;
 }) {
   const wlCode = options.wlSymbolCode;
   const wmCode = options.wmSymbolCode;
@@ -75,41 +73,6 @@ export function createGame002WlWmMultiplierCompiler(options: {
   let pendingWinningWilds: readonly SlotRoundPosition[] = Object.freeze([]);
 
   return Object.freeze({
-    resolveSettledScene(context: SlotRoundSettledSceneCompileContext) {
-      const wmScene =
-        scene(
-          context.step,
-          GAME002_CASCADE_COMPONENTS.genwm,
-          context.inputScene,
-        ) ?? context.inputScene;
-      const cmScene =
-        scene(context.step, GAME002_CASCADE_COMPONENTS.gencm, wmScene) ??
-        wmScene;
-      let settled =
-        wmScene !== context.inputScene && cmScene !== wmScene
-          ? mergeGeneratedMultipliers(wmScene, cmScene, wmCode, cnCode, cmCode)
-          : cmScene;
-      const generatedCo = scene(
-        context.step,
-        GAME002_CASCADE_COMPONENTS.genco,
-        settled,
-      );
-      if (generatedCo && coCode !== undefined)
-        settled = Object.freeze(
-          settled.map((column, x) =>
-            Object.freeze(
-              column.map((value, y) =>
-                generatedCo[x]![y] === coCode ? coCode : value,
-              ),
-            ),
-          ),
-        );
-      options.logDiagnostic?.(
-        `game002 step[${context.stepIndex}] ${context.kind} operations prepared`,
-      );
-      return settled;
-    },
-
     hydrateSettledValues(context: Game002SettledCompileContext) {
       const values = (name: string) =>
         otherScene(context.step, name, context.input.scene);
@@ -384,26 +347,6 @@ function uniquePositions(
       seen.add(key);
       return true;
     }),
-  );
-}
-
-function mergeGeneratedMultipliers(
-  wmScene: SceneMatrix,
-  cmScene: SceneMatrix,
-  wmCode: number,
-  cnCode: number,
-  cmCode: number,
-): SceneMatrix {
-  assertExactMatrixShape(cmScene, wmScene, "game002 generated CM scene");
-  return Object.freeze(
-    wmScene.map((column, x) =>
-      Object.freeze(
-        column.map((value, y) => {
-          if (value === wmCode && cmScene[x]![y] === cnCode) return wmCode;
-          return cmScene[x]![y] === cmCode ? cmCode : value;
-        }),
-      ),
-    ),
   );
 }
 

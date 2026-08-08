@@ -23,7 +23,10 @@ import {
   type GridCellCascadeValueMatrix,
   type SymbolPresentationValueMatrix,
 } from "@slotclientengine/rendercore/reel";
-import { GAME002_CASCADE_COMPONENTS } from "./cascade-config.js";
+import {
+  GAME002_CASCADE_COMPONENTS,
+  GAME002_SETTLED_SCENE_COMPONENTS,
+} from "./cascade-config.js";
 import { GAME002_VISIBLE_ROWS, GAME002_REEL_COUNT } from "./game-layout.js";
 import { resolveGame002WinResultAmount } from "./win-symbol-carousel-config.js";
 
@@ -60,9 +63,10 @@ export function readGame002SpinOperationData(options: {
   const step = options.logic.getSteps()[0];
   if (!step) throw new Error("game002 spin requires server step[0].");
   requireTriggered(step, GAME002_CASCADE_COMPONENTS.spin);
+  rejectTriggered(step, GAME002_CASCADE_COMPONENTS.refill);
   const serverScene = exactlyOneFullScene(
-    step.getComponentScenes(GAME002_CASCADE_COMPONENTS.spin),
-    "step[0] bg-spin",
+    step.getLastComponentScenes(GAME002_SETTLED_SCENE_COMPONENTS),
+    "step[0] settled scene",
   );
   const scene = serverScene;
   const valueResult = readFinalValues({
@@ -96,6 +100,7 @@ export function readGame002FallOperationData(options: {
   requireTriggered(options.step, GAME002_CASCADE_COMPONENTS.respin);
   requireTriggered(options.step, GAME002_CASCADE_COMPONENTS.dropdown);
   requireTriggered(options.step, GAME002_CASCADE_COMPONENTS.refill);
+  rejectTriggered(options.step, GAME002_CASCADE_COMPONENTS.spin);
   requireBasicComponent(options.step, GAME002_CASCADE_COMPONENTS.dropdown);
   const dropdownScene = exactlyOneHoleScene(
     options.step.getComponentScenes(GAME002_CASCADE_COMPONENTS.dropdown),
@@ -130,14 +135,10 @@ export function readGame002FallOperationData(options: {
     `step[${stepIndex}] bg-refill.pos`,
   );
   const serverRefillScene = exactlyOneFullScene(
-    options.step.getComponentScenes(GAME002_CASCADE_COMPONENTS.refill),
-    `step[${stepIndex}] bg-refill`,
+    options.step.getLastComponentScenes(GAME002_SETTLED_SCENE_COMPONENTS),
+    `step[${stepIndex}] settled scene`,
   );
-  const refillScene = resolveGeneratedMultiplierScene(
-    options.step,
-    serverRefillScene,
-    `step[${stepIndex}]`,
-  );
+  const refillScene = serverRefillScene;
   const refillValueResult = readFinalValues({
     step: options.step,
     scene: refillScene,
@@ -390,26 +391,6 @@ function parseFullValues(
   );
 }
 
-function resolveGeneratedMultiplierScene(
-  step: GameLogicStep,
-  inputScene: SceneMatrix,
-  label: string,
-): SceneMatrix {
-  const generatedWm = step.hasComponent(GAME002_CASCADE_COMPONENTS.genwm)
-    ? exactlyOneFullScene(
-        step.getComponentScenes(GAME002_CASCADE_COMPONENTS.genwm),
-        `${label} bg-genwm`,
-      )
-    : inputScene;
-  const generatedCm = step.hasComponent(GAME002_CASCADE_COMPONENTS.gencm)
-    ? exactlyOneFullScene(
-        step.getComponentScenes(GAME002_CASCADE_COMPONENTS.gencm),
-        `${label} bg-gencm`,
-      )
-    : generatedWm;
-  return generatedCm;
-}
-
 function exactlyOneFullScene(
   scenes: readonly SceneMatrix[],
   label: string,
@@ -510,6 +491,12 @@ function assertPositionsAreExactlyHoles(
 function requireTriggered(step: GameLogicStep, name: string): void {
   if (!step.hasComponent(name))
     throw new Error(`step[${step.getIndex()}] must trigger ${name}.`);
+}
+
+function rejectTriggered(step: GameLogicStep, name: string): void {
+  if (step.hasComponent(name)) {
+    throw new Error(`step[${step.getIndex()}] must not trigger ${name}.`);
+  }
 }
 
 function requireBasicComponent(step: GameLogicStep, name: string) {

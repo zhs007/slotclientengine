@@ -316,7 +316,6 @@ function compileGame002BaseDrafts(
     cnSymbolCode: codes.CN,
     cmSymbolCode: codes.CM,
     coSymbolCode: codes.CO,
-    logDiagnostic: options.logDiagnostic,
   });
   const drafts: SlotOperationDraftV2[] = [];
   const spinData = readGame002SpinOperationData({
@@ -324,14 +323,8 @@ function compileGame002BaseDrafts(
     cnSymbolCode: codes.CN,
     auxiliaryValueSymbolCodes: [codes.WL, codes.WM, codes.CM],
   });
-  const initialScene = multiplierCompiler.resolveSettledScene({
-    stepIndex: 0,
-    step: steps[0]!,
-    kind: "spin",
-    inputScene: spinData.scene,
-  });
   const rawInitialSnapshot = createSlotOperationSnapshot({
-    scene: initialScene,
+    scene: spinData.scene,
     values: spinData.values,
     symbolCodes,
   });
@@ -383,12 +376,7 @@ function compileGame002BaseDrafts(
         kind: "game002:refill",
         source: serverSource(serverStepIndex, "bg-refill"),
         input: current,
-        outputScene: multiplierCompiler.resolveSettledScene({
-          stepIndex: serverStepIndex,
-          step,
-          kind: "refill",
-          inputScene: fall.refillScene,
-        }),
+        outputScene: fall.refillScene,
         outputValues: fall.refillValues,
         positions: fall.refillPositions,
         symbolCodes,

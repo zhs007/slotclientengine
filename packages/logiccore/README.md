@@ -58,6 +58,19 @@ if (firstStep.hasComponent("bg-gencoins")) {
   const otherScenes = firstStep.getComponentOtherScenes("bg-gencoins");
 }
 
+const settledScenes = firstStep.getLastComponentScenes([
+  "base-scene",
+  "generated-scene",
+]);
+const latestOtherScenes = firstStep.getLastComponentOtherScenes([
+  "base-values",
+  "generated-values",
+]);
+const latestResults = logic.getLastComponentResults(0, [
+  "primary-result",
+  "secondary-result",
+]);
+
 const logicFromGmi = createGameLogicFromGmi(gameModuleInfoMessage.gmi, {
   bet: gameModuleInfoMessage.bet,
   lines: gameModuleInfoMessage.lines,
@@ -212,6 +225,13 @@ logic.getStep(0).getResult(999); // RangeError
 ```
 
 `hasComponent(name)` 只根据 `historyComponents` 判断。若某个 name 已触发但 `mapComponents` 缺少同名数据，读取 `getComponent(name)`、`getComponentScenes(name)`、`getComponentOtherScenes(name)` 或 `getComponentResults(name)` 时会抛 `LogicParseError`。
+
+`getLastComponentScenes(names)`、`getLastComponentOtherScenes(names)` 和
+`getLastComponentResults(names)` 会在当前 step 的 `historyComponents` 中从后向前查找
+最后触发的候选组件，再返回该组件的完整 mapping。候选数组只定义允许集合，
+其排列不是优先级。无候选组件触发时返回冻结空数组；候选数组为空、包含空白或
+重复名时抛 `LogicParseError`。如最后触发组件的 map/basic data/index 非法，查询会显式失败，
+不会改选较早组件。`GameLogic` 提供带 `stepIndex` 的对称方法。
 
 ## protobuf Any 组件
 
