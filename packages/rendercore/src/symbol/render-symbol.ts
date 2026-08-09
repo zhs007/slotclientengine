@@ -367,10 +367,12 @@ export class RenderSymbol extends VisualEntity<void> {
     return this.#imageStringController.getText(name);
   }
 
-  requestLandingAppear(): boolean {
+  requestLandingAppear(
+    transitionMode: SymbolStateTransitionMode = "boundary",
+  ): boolean {
     this.assertNotDestroyed();
     if (!this.#landingAppearEnabled) return false;
-    this.requestState("appear");
+    this.requestState("appear", transitionMode);
     return true;
   }
 

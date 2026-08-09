@@ -266,10 +266,12 @@ class DirectRoundAdapter implements SlotGameAdapter {
             currentScene,
             !settledPreSpin && this.#preSpinActive,
           );
+          this.#performanceTrace?.markActiveSpin("reel-presentation-complete");
           if (this.#preSpinActive === false) settledPreSpin = true;
         }
       }
       await this.playFeatureStates(step, runtime.getMainReelSceneSnapshot());
+      this.#performanceTrace?.markActiveSpin("feature-states-complete");
       const finalScene = readFinalScene(step);
       if (finalScene) {
         const currentScene = runtime.getMainReelSceneSnapshot();
@@ -291,7 +293,9 @@ class DirectRoundAdapter implements SlotGameAdapter {
           });
       }
       await this.playWins(step);
+      this.#performanceTrace?.markActiveSpin("wins-complete");
       await this.removeWonSymbols(step);
+      this.#performanceTrace?.markActiveSpin("remove-complete");
       if (
         step.hasComponent("bg-triggerfg") &&
         runtime.getGameModeSnapshot().stableMode !== "FreeGame"
@@ -338,7 +342,12 @@ class DirectRoundAdapter implements SlotGameAdapter {
     const runtime = this.#runtime;
     if (!runtime || this.#destroyed) return;
     try {
-      runtime.update(Math.min(this.#app.ticker.deltaMS / 1000, 1 / 30));
+      let remainingSeconds = Math.min(this.#app.ticker.deltaMS / 1000, 0.25);
+      while (remainingSeconds > 0) {
+        const sliceSeconds = Math.min(remainingSeconds, 1 / 30);
+        runtime.update(sliceSeconds);
+        remainingSeconds -= sliceSeconds;
+      }
       const started = runtime.drainMainReelStartedPositions();
       if (started.length > 0 && !this.#spinStartPaintPending) {
         this.#spinStartPaintPending = true;

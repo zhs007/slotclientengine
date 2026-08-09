@@ -13,6 +13,10 @@ type ExtraStartupPhase =
 type ExtraSpinPhase =
   | "plan-start"
   | "spin-call-complete"
+  | "reel-presentation-complete"
+  | "feature-states-complete"
+  | "wins-complete"
+  | "remove-complete"
   | "first-cell-start"
   | "first-cell-paint";
 

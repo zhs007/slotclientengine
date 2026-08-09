@@ -21,6 +21,8 @@
 - v2 每次 framework spin 请求只预转一次，并只由响应的第一个 landing 落停；同一响应后续 FG
   连续段与 refill 直接播放已有目标，不等待消息或再次预转。BaseGame 首段全盘预转；FreeGame
   首段按请求前 authoritative scene/value 保留 WL/CN。滚动中的本地窗口不得反向成为业务输入。
+- v2 首段预转按 initial grid-cell order 与 manifest `startStepMs` 分批启动；第一次 initial snapshot 和
+  后续 settled snapshot 必须保持同一 manifest direction，不允许首次 spin 使用反向或二次起转路径。
 - v2 的 `defaultScene` CN presentation value 必须从 active Symbols package 的 exact
   `bgcoinweight` 独立加权抽取；稳定 occurrence 缓存和无偏抽样属于 rendercore，v2 只选择
   CN code 与权重表。active package 必须由 rendercore 的 initial Symbol package resource 接口

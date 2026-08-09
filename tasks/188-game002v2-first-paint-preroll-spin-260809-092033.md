@@ -63,3 +63,10 @@ cold/warm cache 基线，因此未生成优化后 5 次原始样本或 median，
 
 剩余风险是首屏 333.1ms 若主要来自 Pixi/Spine 同步构造而非资源等待，并发 prepare 的实际收益可能有限；
 应以真实 median 与 profiler 决定是否继续优化，不能由当前自动测试推断。
+
+## 现场复测修正
+
+后续现场 trace 证明单 WL、无中奖 round 仍在视觉停轴后等待约 3 秒。补充修正为：continuous pre-roll
+复用 manifest `startStepMs` 按格波纹启动；早响应保留 pending cadence；grid-cell landing appear immediate
+进入而不等待 normal/active-Spine loop boundary；ticker 以 `1/30s` 上限分片消费最多 `250ms` 的完整墙钟
+delta。新增 trace phase 拆分 reel presentation、feature states、wins 和 remove，供下一轮现场复测定位。

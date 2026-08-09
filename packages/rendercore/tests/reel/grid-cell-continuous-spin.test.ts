@@ -84,6 +84,34 @@ describe("grid-cell continuous spin", () => {
     );
   });
 
+  it("starts targetless cells in stable order and preserves pending cadence after an early response", () => {
+    const reel = createSet();
+    reel.resetToScene(INITIAL, [0, 1]);
+    reel.startContinuous({
+      direction: "forward",
+      speedSymbolsPerSecond: 20,
+      startStepMs: 10,
+    });
+
+    expect(reel.update(0.001).startedCells).toEqual([
+      { x: 0, y: 0, orderIndex: 0 },
+    ]);
+    reel.settleContinuous(createPlan());
+    expect(reel.update(0.009).startedCells).toEqual([
+      { x: 0, y: 1, orderIndex: 1 },
+    ]);
+    expect(reel.update(0.01).startedCells).toEqual([
+      { x: 0, y: 2, orderIndex: 2 },
+    ]);
+
+    for (let index = 0; index < 30 && reel.getSnapshot().spinning; index += 1)
+      reel.update(0.05);
+    expect(reel.getSnapshot()).toMatchObject({
+      spinning: false,
+      visibleScene: TARGET,
+    });
+  });
+
   it("requires settle positions to equal the response-free start positions", () => {
     const reel = createSet();
     reel.resetToScene(INITIAL, [0, 1]);
@@ -134,6 +162,33 @@ describe("grid-cell continuous spin", () => {
     reel.update(0.01);
 
     expect(reel.getSnapshot().currentY - settleStartY).toBeCloseTo(0.2, 6);
+  });
+
+  it("uses the same forward direction for the initial and following continuous spin", () => {
+    const reels = createBasicReels();
+    const reel = new RenderReel({
+      reels,
+      x: 0,
+      layout: createBasicLayout(),
+      registry: createBasicRegistry(),
+    });
+    reel.resetToVisibleSymbols([1, 0, 2], 3);
+    const initialY = reel.getSnapshot().currentY;
+    reel.startContinuous({
+      direction: "forward",
+      speedSymbolsPerSecond: 20,
+    });
+    reel.update(0.01);
+    expect(reel.getSnapshot().currentY - initialY).toBeCloseTo(0.2, 6);
+    reel.cancelContinuous();
+
+    const followingY = reel.getSnapshot().currentY;
+    reel.startContinuous({
+      direction: "forward",
+      speedSymbolsPerSecond: 20,
+    });
+    reel.update(0.01);
+    expect(reel.getSnapshot().currentY - followingY).toBeCloseTo(0.2, 6);
   });
 });
 

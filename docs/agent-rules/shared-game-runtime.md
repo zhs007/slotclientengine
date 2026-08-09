@@ -54,6 +54,9 @@
   落停由 rendercore 拥有。预转阶段只能使用本地公开轮带；服务器目标只能在 settle 边界注入。
   每个请求只有一个 continuous transaction，由响应内第一个 landing 消费；同一响应后续 FG/refill
   使用普通 target-aware presentation，不重新等待或预转。失败 cleanup 必须只取消一次并 fail-stop。
+- grid-cell targetless pre-roll 必须复用 manifest timing 的 stable start group cadence；响应早于全部格启动时，
+  pending cell 保留剩余 cadence 后进入 target-aware spin。落点 appear immediate 进入，不等待刚 reset 的
+  stable loop boundary；低 FPS ticker 必须分片消费完整受控 elapsed delta，不得通过截断单帧时间拉长业务等待。
 - 不读取、缓存、输出或推断服务器真实轮带，也不消费服务器 randomNumbers 作为本地视觉随机源。
 - 测试服 `lstrand` 只能由 gameframeworks 的显式 opt-in、instance-scoped
   console contract 覆盖下一次实际发出的 spin；消费后立即清除，不持久化、不自动

@@ -48,6 +48,29 @@ const createSizedTexture = (width: number, height: number) => {
 };
 
 describe("RenderSymbol", () => {
+  it("can enter landing appear immediately from an active stable loop", () => {
+    const renderSymbol = new RenderSymbol({
+      definition: createDefinition(),
+      texture: Texture.WHITE,
+      animationResolver: (context) =>
+        new ManualSymbolAni({
+          stateId: context.resolvedState,
+          playback: context.state.playback,
+          durationSeconds: 1,
+        }),
+      landingAppearEnabled: true,
+    });
+    renderSymbol.requestState("dropdown", "immediate");
+
+    expect(renderSymbol.requestLandingAppear("immediate")).toBe(true);
+
+    expect(renderSymbol.getStateSnapshot()).toMatchObject({
+      requestedState: "appear",
+      resolvedState: "appear",
+      pendingState: null,
+    });
+  });
+
   it("awaits entered and real once completion while update remains the time source", async () => {
     const renderSymbol = new RenderSymbol({
       definition: createDefinition(),

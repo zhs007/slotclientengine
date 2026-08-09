@@ -172,6 +172,8 @@ export interface GridCellReelSpinTiming {
 export interface GridCellContinuousSpinOptions {
   readonly direction: ReelSpinDirection;
   readonly speedSymbolsPerSecond: number;
+  /** Delay between stable position start groups. */
+  readonly startStepMs?: number;
   readonly positions?: readonly GridCellSpinPosition[];
   readonly dimming?: GridCellDimmingPattern;
   readonly dimmingActivatedAtStart?: boolean;

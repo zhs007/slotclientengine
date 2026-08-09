@@ -27,6 +27,9 @@ prepare 成功后仍按 manifest 顺序确定性 commit；失败会先等待所�
 响应中的第一个 landing 从当前运动状态连续落停。BaseGame 首段预转全盘；FreeGame 首段保留输入
 盘面的 WL/CN，只滚动其它格。该响应内后续 FG 连续段和 refill 已有目标，不再等待消息、也不再次
 预转。请求、解析或表现失败会取消尚未消费的预转并走既有 fail-stop。
+预转沿 grid-cell order 使用 manifest `startStepMs` 波纹启动；低 FPS 时 ticker 会按不超过 `1/30s`
+的 slice 消费完整 elapsed time，不因直接截断 delta 拉长停轴。landing appear 在落点立即进入。
+spin trace 另外拆出 reel presentation、feature state、wins 与 remove 完成边界，区分视觉停轴和后处理。
 
 `fg-spin` 以输入盘面为准保留 WL/CN occurrence，只对其它格执行 rendercore selective
 spin，并由 shared runtime 校验 held code/value 未被 target 改写。Nearwin 的 `nearwin1`

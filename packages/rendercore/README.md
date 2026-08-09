@@ -518,6 +518,9 @@ gridReels.spin(plan);
 并从当前速度和位置连续减速落停，不重新起转。start 与 settle 的 selected positions 必须完全一致；
 未选 held cells 始终保持原 occurrence。`cancelContinuous()` 仅停止并提交当前本地窗口，用于请求、
 解析或表现失败的 fail-stop cleanup，不能伪造服务器落点。同一 transaction 只能 settle 一次。
+`startStepMs` 按 positions 的稳定 `startGroupIndex` 分批启动；响应早于全部格起转时，未启动格保留
+剩余 cadence 后直接进入 target-aware spin。grid-cell landing appear 在落点边界 immediate 进入，
+不会先等待 normal loop boundary；完成仍等待该次真实 once appear。
 
 Scene Layout package runtime 通过 `startMainReelContinuousSpin()`、
 `settleMainReelContinuousSpin()` 和 `cancelMainReelContinuousSpin()` 暴露相同 ownership。一个网络

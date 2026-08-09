@@ -757,6 +757,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     reel.startContinuous({
       direction: profile.direction,
       speedSymbolsPerSecond: profile.timing.speedSymbolsPerSecond,
+      startStepMs: profile.timing.startStepMs,
       ...(input.positions ? { positions: input.positions } : {}),
       ...(input.dimming ? { dimming: input.dimming } : {}),
       ...(input.dimmingActivatedAtStart === undefined
