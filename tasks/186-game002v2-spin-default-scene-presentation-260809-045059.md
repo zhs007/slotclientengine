@@ -20,7 +20,8 @@ occurrence 加权 presentation value resolver。game002v2 通过这些接口补�
 - game002v2 从 active Symbols package exact 解析 CN/WL/WM/CM/CO。普通 initial spin 仅其它
   symbol 使用 `0.5` 暗度；第 2 枚 WL 落地后只有 WL 保持全亮。
 - game002v2 的 Nearwin controller 只跟踪真实 landing/activation edge：gate 打开时对已落地 WL
-  请求 `Reel_NearWin`，后续 WL 落地后补请求，spin 完成/失败/destroy 时恢复 normal。
+  直接请求 `Reel_NearWin`，后续 WL 落地后补请求，spin 完成/失败/destroy 时恢复 normal。
+  WL 触发期待已经是业务事实，不在渲染 edge 反向查询 capability；资源/state 缺失由实际请求原位报错。
 - 任务 185 的最后完整 scene 继续作为 landing scene。rendercore 既有 target-window 注入让不在
   本地公开轮带中的 WM/CM/CO 只进入对应临时 stop window；回归测试确认公开轮带不变。
 - `createWeightedGridCellPresentationValueResolver()` 严格校验 caller table/uint32 source，使用
@@ -92,4 +93,4 @@ docs/agent-rules/game002.md
 4. 首次 `defaultScene` 含 CN：每个 CN 显示 `bgcoinweight` 范围内的值；同一 occurrence 在本次
    reel 重建前保持稳定。
 
-若浏览器发现素材缺失、state capability 缺失或权重表不可用，当前实现会显式报错，不做表现降级。
+若浏览器发现素材/state 缺失或权重表不可用，当前实现会在实际使用处显式报错，不做表现降级。

@@ -66,7 +66,6 @@ describe("game002v2 nearwin", () => {
     )!;
     const request = vi.fn();
     const controller = new Game002v2NearwinController(state, {
-      hasMainReelSymbolStateCapability: () => true,
       requestMainReelSymbolStates: request,
     });
     controller.update([{ x: 0, y: 0 }], []);

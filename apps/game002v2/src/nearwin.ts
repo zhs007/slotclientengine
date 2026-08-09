@@ -15,10 +15,6 @@ export interface NearwinPosition {
 }
 
 export interface NearwinPresentationTarget {
-  hasMainReelSymbolStateCapability(
-    position: NearwinPosition,
-    state: string,
-  ): boolean;
   requestMainReelSymbolStates(
     positions: readonly NearwinPosition[],
     state: string,
@@ -95,13 +91,6 @@ export class Game002v2NearwinController {
       (position) => !this.#requested.has(positionKey(position)),
     );
     if (pending.length === 0) return;
-    for (const position of pending)
-      if (
-        !this.#target.hasMainReelSymbolStateCapability(position, "Reel_NearWin")
-      )
-        throw new Error(
-          `game002v2 WL at (${position.x},${position.y}) cannot play Reel_NearWin.`,
-        );
     this.#target.requestMainReelSymbolStates(
       pending,
       "Reel_NearWin",
