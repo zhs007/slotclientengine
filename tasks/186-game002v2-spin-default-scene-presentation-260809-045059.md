@@ -32,6 +32,9 @@ occurrence 加权 presentation value resolver。game002v2 通过这些接口补�
   `bgcoinweight`；缺 package、CN、表或非法权重/random 都直接失败。
 - game002v2 主 adapter 只保留 hook 接入和 controller 生命周期；暗度分类、权重解析、Nearwin
   跟踪分别收敛在小型 helper 中。
+- 后续浏览器验收发现固定 WL 的 `bg-incwl` value 会被 cascade builder 当成 occurrence 替换。
+  rendercore 已移除 carried presentation value 的反向业务校验：只校验动画能否执行，保留 WL
+  renderer identity，并在 fall 完成边界采用 plan 的 target value。
 
 ## 实际文件
 

@@ -64,13 +64,7 @@ export function createGridCellCascadeDropPlan(options: {
     options.refillPositions,
     settledScene,
   );
-  validateRefillTarget(
-    settledScene,
-    settledValues,
-    targetScene,
-    targetValues,
-    refillPositions,
-  );
+  validatePlayableRefillTarget(settledScene, targetScene, refillPositions);
   const movements: GridCellCascadeDropMovement[] = [];
 
   for (let x = 0; x < columns; x += 1) {
@@ -91,11 +85,7 @@ export function createGridCellCascadeDropPlan(options: {
     const fixedKeys = new Set(fixed.map((occurrence) => occurrence.y));
     for (const occurrence of fixed) {
       const settledCode = settledScene[x][occurrence.y];
-      const settledValue = settledValues[x][occurrence.y];
-      if (
-        settledCode !== occurrence.code ||
-        settledValue !== occurrence.value
-      ) {
+      if (settledCode !== occurrence.code) {
         throw new ReelError(
           `cascade fixed occurrence changed at (${x},${occurrence.y}).`,
         );
@@ -119,9 +109,9 @@ export function createGridCellCascadeDropPlan(options: {
     for (let index = 0; index < droppableSource.length; index += 1) {
       const from = droppableSource[index];
       const to = droppableTarget[index];
-      if (from.code !== to.code || from.value !== to.value) {
+      if (from.code !== to.code) {
         throw new ReelError(
-          `cascade column ${x} occurrence ${index} code/value changed.`,
+          `cascade column ${x} occurrence ${index} code changed.`,
         );
       }
       if (to.y < from.y) {
@@ -354,11 +344,9 @@ function parseRefillPositions(
   return Object.freeze(parsed);
 }
 
-function validateRefillTarget(
+function validatePlayableRefillTarget(
   settledScene: GridCellCascadeScene,
-  settledValues: GridCellCascadeValueMatrix,
   targetScene: GridCellCascadeScene,
-  targetValues: GridCellCascadeValueMatrix,
   refillPositions: readonly { readonly x: number; readonly y: number }[],
 ): void {
   const refillKeys = new Set(refillPositions.map(({ x, y }) => `${x},${y}`));
@@ -368,10 +356,7 @@ function validateRefillTarget(
         throw new ReelError("targetScene must not contain holes.");
       }
       if (!refillKeys.has(`${x},${y}`)) {
-        if (
-          targetScene[x][y] !== settledScene[x][y] ||
-          targetValues[x][y] !== settledValues[x][y]
-        ) {
+        if (targetScene[x][y] !== settledScene[x][y]) {
           throw new ReelError(
             `refill changed carried occurrence at (${x},${y}).`,
           );

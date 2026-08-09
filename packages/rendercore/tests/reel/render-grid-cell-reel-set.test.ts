@@ -544,8 +544,8 @@ describe("RenderGridCellReelSet", () => {
         [2, 1, 1],
       ],
       targetValues: [
-        [null, null, null],
-        [null, null, null],
+        [null, 50, null],
+        [null, 75, 100],
       ],
       refillPositions: [
         { x: 0, y: 0 },
@@ -580,6 +580,7 @@ describe("RenderGridCellReelSet", () => {
       [1, 1, 2],
       [2, 1, 1],
     ]);
+    expect(reelSet.getCascadeValues()).toEqual(drop.targetValues);
   });
 
   it("lets a falling symbol pass behind a fixed higher-priority symbol", () => {
@@ -651,6 +652,7 @@ describe("RenderGridCellReelSet", () => {
     );
     expect(reelSet.mask == null).toBe(true);
     expect(reelSet.getVisibleScene()).toEqual(plan.targetScene);
+    expect(reelSet.getCascadeValues()).toEqual(plan.targetValues);
   });
 
   it("rejects cascade release/drop/refill state drift without fallback", () => {

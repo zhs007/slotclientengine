@@ -6,6 +6,7 @@ import { normalizeGridCellReelOffsetMatrix } from "./grid-cell-reel-offsets.js";
 import { resolveGridCellDimmingAlpha } from "./grid-cell-spin-plan.js";
 import { createReelLayout } from "./layout.js";
 import { RenderReel } from "./render-reel.js";
+import { CASCADE_EMPTY_CELL } from "./types.js";
 import type {
   GridCellCoordinate,
   GridCellCascadeDropMovement,
@@ -1678,6 +1679,17 @@ export class RenderGridCellReelSet extends Container {
       target.occupied = true;
       target.phase = "completed";
       this.syncCellRenderOrder(target);
+    }
+    for (let x = 0; x < active.plan.columns; x += 1) {
+      for (let y = 0; y < active.plan.rows; y += 1) {
+        const value = active.plan.targetValues[x][y];
+        if (value === CASCADE_EMPTY_CELL) {
+          throw new ReelError(
+            `Dropdown target presentation value at (${x},${y}) is empty.`,
+          );
+        }
+        this.getCell(x, y).reel.setVisibleSymbolPresentationValue(0, value);
+      }
     }
     this.#activeDrop = null;
     this.setCascadeMovementMaskActive(false);

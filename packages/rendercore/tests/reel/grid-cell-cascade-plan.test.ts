@@ -200,13 +200,6 @@ describe("grid cell cascade plan", () => {
       targetValues: [[null, null, -1]],
     },
     {
-      label: "value drift",
-      sourceScene: [[8, -1]],
-      sourceValues: [[25, -1]],
-      targetScene: [[-1, 8]],
-      targetValues: [[-1, 50]],
-    },
-    {
       label: "upward move",
       sourceScene: [[-1, 1]],
       sourceValues: [[-1, null]],
@@ -231,6 +224,27 @@ describe("grid cell cascade plan", () => {
       ).toThrow();
     },
   );
+
+  it("trusts target presentation value changes for carried occurrences", () => {
+    const plan = createGridCellCascadeDropPlan({
+      sourceScene: [[8, -1]],
+      sourceValues: [[25, -1]],
+      settledScene: [[-1, 8]],
+      settledValues: [[-1, 25]],
+      targetScene: [[7, 8]],
+      targetValues: [[null, 50]],
+      refillPositions: [{ x: 0, y: 0 }],
+      cellHeight: 100,
+      motion,
+    });
+
+    expect(plan.targetValues).toEqual([[null, 50]]);
+    expect(plan.movements[0]).toMatchObject({
+      kind: "existing",
+      code: 8,
+      presentationValue: 25,
+    });
+  });
 
   it("strictly validates fixed occurrences and the refill closure", () => {
     const base = {
