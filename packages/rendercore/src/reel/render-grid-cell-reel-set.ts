@@ -711,35 +711,30 @@ export class RenderGridCellReelSet extends Container {
         "Visible symbol state playback batch must not be empty.",
       );
     }
-    const positionKeys = new Set<string>();
     const prepared = requests.flatMap((request) =>
-      normalizePositions(request.positions, this.#columns, this.#rows).map(
-        (position) => {
-          const key = `${position.x},${position.y}`;
-          if (positionKeys.has(key)) {
-            throw new ReelError(
-              `Visible symbol state playback batch contains duplicate position (${key}).`,
-            );
-          }
-          positionKeys.add(key);
-          const cell = this.getCell(position.x, position.y);
-          if (!cell.occupied) {
-            throw new ReelError(
-              `Cannot play state for empty grid cell (${position.x},${position.y}).`,
-            );
-          }
-          const playbackOptions: SymbolStatePlaybackOptions = {
-            ...request.options,
-            ...(options?.signal ? { signal: options.signal } : {}),
-          };
-          cell.reel.validateVisibleSymbolStatePlayback(
-            0,
-            request.state,
-            playbackOptions,
+      normalizePositions(
+        request.positions,
+        this.#columns,
+        this.#rows,
+        "coalesce",
+      ).map((position) => {
+        const cell = this.getCell(position.x, position.y);
+        if (!cell.occupied) {
+          throw new ReelError(
+            `Cannot play state for empty grid cell (${position.x},${position.y}).`,
           );
-          return { cell, request };
-        },
-      ),
+        }
+        const playbackOptions: SymbolStatePlaybackOptions = {
+          ...request.options,
+          ...(options?.signal ? { signal: options.signal } : {}),
+        };
+        cell.reel.validateVisibleSymbolStatePlayback(
+          0,
+          request.state,
+          playbackOptions,
+        );
+        return { cell, request };
+      }),
     );
     return startSymbolStatePlaybackBatch(
       prepared.map(
@@ -1906,32 +1901,38 @@ function normalizePositions(
   positions: readonly { readonly x: number; readonly y: number }[],
   columns: number,
   rows: number,
+  duplicateMode: "reject" | "coalesce" = "reject",
 ): readonly { readonly x: number; readonly y: number }[] {
   if (!Array.isArray(positions) || positions.length === 0) {
     throw new ReelError("grid positions must not be empty.");
   }
   const seen = new Set<string>();
+  const normalized = positions.map((position, index) => {
+    if (
+      !Number.isInteger(position.x) ||
+      position.x < 0 ||
+      position.x >= columns ||
+      !Number.isInteger(position.y) ||
+      position.y < 0 ||
+      position.y >= rows
+    ) {
+      throw new ReelError(`grid positions[${index}] is out of range.`);
+    }
+    const key = createCellKey(position.x, position.y);
+    if (seen.has(key)) {
+      if (duplicateMode === "coalesce") return null;
+      throw new ReelError(
+        `duplicate grid position (${position.x},${position.y}).`,
+      );
+    }
+    seen.add(key);
+    return Object.freeze({ x: position.x, y: position.y });
+  });
   return Object.freeze(
-    positions.map((position, index) => {
-      if (
-        !Number.isInteger(position.x) ||
-        position.x < 0 ||
-        position.x >= columns ||
-        !Number.isInteger(position.y) ||
-        position.y < 0 ||
-        position.y >= rows
-      ) {
-        throw new ReelError(`grid positions[${index}] is out of range.`);
-      }
-      const key = createCellKey(position.x, position.y);
-      if (seen.has(key)) {
-        throw new ReelError(
-          `duplicate grid position (${position.x},${position.y}).`,
-        );
-      }
-      seen.add(key);
-      return Object.freeze({ x: position.x, y: position.y });
-    }),
+    normalized.filter(
+      (position): position is { readonly x: number; readonly y: number } =>
+        position !== null,
+    ),
   );
 }
 

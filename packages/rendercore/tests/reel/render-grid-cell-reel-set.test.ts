@@ -43,6 +43,7 @@ describe("RenderGridCellReelSet", () => {
     const positions = Object.freeze([
       Object.freeze({ x: 1, y: 1 }),
       Object.freeze({ x: 0, y: 2 }),
+      Object.freeze({ x: 1, y: 1 }),
     ]);
     let completed = false;
     const playback = target
@@ -59,27 +60,6 @@ describe("RenderGridCellReelSet", () => {
     reelSet.update(0.02);
     await playback;
     expect(completed).toBe(true);
-
-    expect(() =>
-      target.playVisibleSymbolStates([positions[0], positions[0]], "win", {
-        transitionMode: "immediate",
-        completion: "once-complete",
-      }),
-    ).toThrow(/duplicate grid position/);
-    expect(() =>
-      target.playVisibleSymbolStateBatch([
-        {
-          positions: [positions[0]],
-          state: "appear",
-          options: { completion: "once-complete" },
-        },
-        {
-          positions: [positions[0]],
-          state: "win",
-          options: { completion: "once-complete" },
-        },
-      ]),
-    ).toThrow(/duplicate position/);
 
     const releasedPlayback = target.playVisibleSymbolStates(
       [positions[0]],

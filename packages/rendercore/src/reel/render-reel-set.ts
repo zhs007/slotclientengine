@@ -486,7 +486,6 @@ export class RenderReelSet extends Container {
         "Visible symbol state playback batch must not be empty.",
       );
     }
-    const positionKeys = new Set<string>();
     const prepared = requests.flatMap((request) => {
       if (request.positions.length === 0) {
         throw new ReelError(
@@ -497,14 +496,8 @@ export class RenderReelSet extends Container {
         request.positions,
         this.reels.length,
         this.reels[0]?.layout.visibleRows ?? 0,
+        "coalesce",
       ).map((position) => {
-        const key = `${position.x},${position.y}`;
-        if (positionKeys.has(key)) {
-          throw new ReelError(
-            `Visible symbol state playback batch contains duplicate position (${key}).`,
-          );
-        }
-        positionKeys.add(key);
         const reel = this.getReelAt(position.x);
         const playbackOptions: SymbolStatePlaybackOptions = {
           ...request.options,
@@ -729,25 +722,32 @@ function normalizeCascadePositions(
   positions: readonly { readonly x: number; readonly y: number }[],
   columns: number,
   rows: number,
+  duplicateMode: "reject" | "coalesce" = "reject",
 ): readonly { readonly x: number; readonly y: number }[] {
   const seen = new Set<string>();
+  const normalized = positions.map((position, index) => {
+    if (
+      !Number.isSafeInteger(position.x) ||
+      !Number.isSafeInteger(position.y) ||
+      position.x < 0 ||
+      position.x >= columns ||
+      position.y < 0 ||
+      position.y >= rows
+    )
+      throw new ReelError(`positions[${index}] is out of range.`);
+    const key = `${position.x},${position.y}`;
+    if (seen.has(key)) {
+      if (duplicateMode === "coalesce") return null;
+      throw new ReelError(`positions contains duplicate ${key}.`);
+    }
+    seen.add(key);
+    return Object.freeze({ x: position.x, y: position.y });
+  });
   return Object.freeze(
-    positions.map((position, index) => {
-      if (
-        !Number.isSafeInteger(position.x) ||
-        !Number.isSafeInteger(position.y) ||
-        position.x < 0 ||
-        position.x >= columns ||
-        position.y < 0 ||
-        position.y >= rows
-      )
-        throw new ReelError(`positions[${index}] is out of range.`);
-      const key = `${position.x},${position.y}`;
-      if (seen.has(key))
-        throw new ReelError(`positions contains duplicate ${key}.`);
-      seen.add(key);
-      return Object.freeze({ x: position.x, y: position.y });
-    }),
+    normalized.filter(
+      (position): position is { readonly x: number; readonly y: number } =>
+        position !== null,
+    ),
   );
 }
 

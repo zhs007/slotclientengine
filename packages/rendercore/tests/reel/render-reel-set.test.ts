@@ -39,7 +39,10 @@ describe("RenderReelSet", () => {
     const target: AwaitableVisibleSymbolPresentationTarget = reelSet;
     const requests = [
       {
-        positions: [{ x: 0, y: 0 }],
+        positions: [
+          { x: 0, y: 0 },
+          { x: 0, y: 0 },
+        ],
         state: "appear",
         options: {
           transitionMode: "immediate",
@@ -79,16 +82,6 @@ describe("RenderReelSet", () => {
         },
       ]),
     ).toThrow(/positions must not be empty/);
-    expect(() =>
-      target.playVisibleSymbolStateBatch([
-        requests[0],
-        {
-          ...requests[1],
-          positions: requests[0].positions,
-        },
-      ]),
-    ).toThrow(/duplicate position/);
-
     expect(() =>
       target.playVisibleSymbolStateBatch([
         requests[0],
