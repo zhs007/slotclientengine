@@ -2,6 +2,21 @@
 
 本文件保存 game002 专属业务和 presentation 合同。通用 reel、symbol、Spine、scene-layout 和 coordinator 规则同时遵守 `shared-game-runtime.md`。
 
+## game002v2 精简实现
+
+- `apps/game002v2` 是从 Scene Layout package runtime 直接编排的精简实现；它读取
+  server step 后直接调用 spin、Symbols state、mode transition 和 Popup API，不生成
+  facts/draft/plan/payload，不使用 mutation contract、operation registry 或 rollback。
+- v2 只把 `assets/crave/assets.map.json` 当 logical key 到 physical path 的路由表；运行时
+  不读取或比对 sha256、byteLength、content-addressed filename，也不因 404 orphan 阻断。
+  实际被 Scene Layout/Symbols/Popup 引用的资源缺失时由对应 runtime 自然失败。
+- 背景、Symbols 内部动画绑定、FreeGame 有向转场和 Popup 流程全部由 Gamelayout package
+  拥有。v2 只保留业务 component 到 semantic Symbols state 的调用顺序；不得直接操作
+  Spine/VNI player 或 display tree。
+- Nearwin 是唯一 app-owned landing rule，但表现仍请求 Symbols 的 `Reel_NearWin` state；
+  app 不直接选择或播放底层 animation。
+- v2 采用 fail-stop：异步调用失败立即结束本轮并上报，不回滚已经完成的画面变化。
+
 ## 固定入口和资源
 
 - game002 只有一个 Scene Layout package，不提供 skin 选择；URL 传入 `skin` 即

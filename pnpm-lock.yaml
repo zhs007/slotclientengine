@@ -180,6 +180,52 @@ importers:
         specifier: ^20.0.10
         version: 20.10.2
 
+  apps/game002v2:
+    dependencies:
+      '@slotclientengine/game-ui-leo':
+        specifier: workspace:*
+        version: link:../../packages/game-ui-leo
+      '@slotclientengine/gameframeworks':
+        specifier: workspace:*
+        version: link:../../packages/gameframeworks
+      '@slotclientengine/gameloading':
+        specifier: workspace:*
+        version: link:../../packages/gameloading
+      '@slotclientengine/gameloading-ui-leo':
+        specifier: workspace:*
+        version: link:../../packages/gameloading-ui-leo
+      '@slotclientengine/platformbootstrap':
+        specifier: workspace:*
+        version: link:../../packages/platformbootstrap
+      '@slotclientengine/platformbootstrap-leo':
+        specifier: workspace:*
+        version: link:../../packages/platformbootstrap-leo
+      '@slotclientengine/rendercore':
+        specifier: workspace:*
+        version: link:../../packages/rendercore
+      pixi.js:
+        specifier: ^8.1.6
+        version: 8.17.1
+    devDependencies:
+      '@eslint/js':
+        specifier: ^9.34.0
+        version: 9.39.4
+      '@typescript-eslint/eslint-plugin':
+        specifier: ^8.0.0
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
+      '@typescript-eslint/parser':
+        specifier: ^8.0.0
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
+      eslint-config-prettier:
+        specifier: ^9.1.0
+        version: 9.1.2(eslint@10.1.0)
+      globals:
+        specifier: ^15.15.0
+        version: 15.15.0
+      happy-dom:
+        specifier: ^20.0.10
+        version: 20.10.2
+
   apps/game003:
     dependencies:
       '@slotclientengine/gameframeworks':
