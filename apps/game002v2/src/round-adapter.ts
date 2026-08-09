@@ -17,6 +17,7 @@ import {
 import { Application } from "pixi.js";
 import { createGame002v2DefaultSceneValueResolver } from "./default-scene-values.js";
 import { Game002v2NearwinController } from "./nearwin.js";
+import { uniqueGame002v2Positions } from "./round-positions.js";
 import {
   createGame002v2PresentationValues,
   sameGame002v2PresentationValues,
@@ -350,8 +351,10 @@ class DirectRoundAdapter implements SlotGameAdapter {
   }
 
   private async playWins(step: GameLogicStep): Promise<void> {
-    const positions = WIN_COMPONENTS.flatMap((name) =>
-      step.getComponentResults(name).flatMap((result) => pairs(result.pos)),
+    const positions = uniqueGame002v2Positions(
+      WIN_COMPONENTS.flatMap((name) =>
+        step.getComponentResults(name).flatMap((result) => pairs(result.pos)),
+      ),
     );
     const scene = this.requireRuntime().getMainReelSceneSnapshot();
     const coinCode = this.requireSpinCodes().coin;

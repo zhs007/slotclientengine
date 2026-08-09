@@ -42,6 +42,8 @@ occurrence 加权 presentation value resolver。game002v2 通过这些接口补�
   occurrence，再由当前 step otherScene 覆盖，避免合法 CN/WL/WM/CM value 被清成 `null`。同 scene
   但 value 变化也会提交 final snapshot。feature 播放从 runtime 当前 scene 取位置，transform-only
   step 即使没有 landing component，也会先播放源 symbol state 再提交 final scene。
+- 同一 symbol（尤其 WL）可参与多个 win result；game002v2 在构建 win presentation request 时按
+  坐标稳定去重，同一格只请求一次 win state，rendercore 继续拒绝无法执行的 duplicate batch。
 
 ## 实际文件
 
@@ -86,7 +88,7 @@ docs/agent-rules/game002.md
 - `pnpm --filter @slotclientengine/rendercore typecheck`：通过。
 - `pnpm --filter @slotclientengine/rendercore exec vitest run tests/reel/grid-cell-cascade-plan.test.ts tests/reel/render-grid-cell-reel-set.test.ts`：通过，2 files / 27 tests，覆盖 carried target value 与固定 WL identity。
 - `pnpm --filter @slotclientengine/rendercore exec vitest run tests/scene-layout/package-resource.test.ts tests/scene-layout/configured-round-adapter.test.ts`：通过，2 files / 26 tests，覆盖 initial active Symbols resource 接口及既有 consumer。
-- `pnpm --filter game002v2 test`：通过，6 files / 10 tests。
+- `pnpm --filter game002v2 test`：通过，7 files / 11 tests。
 - `pnpm --filter game002v2 typecheck`：通过，含直接依赖构建。
 - `pnpm --filter game002 typecheck`：通过，证明 rendercore public API 变更未破坏直接 consumer。
 - 修改文件 Prettier write/check：通过。
