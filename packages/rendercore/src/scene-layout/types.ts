@@ -487,10 +487,25 @@ export interface SceneLayoutInitialReelScene {
   readonly presentationValues?: readonly (readonly (number | null)[])[];
 }
 
+export interface SceneLayoutGridCellSpinPlanStage {
+  readonly targetScene: readonly (readonly number[])[];
+  readonly order: readonly import("../reel/index.js").GridCellCoordinate[];
+  createPlan(options?: {
+    readonly dimming?: import("../reel/index.js").GridCellDimmingPattern;
+    readonly dimmingActivatedAtStart?: boolean;
+    readonly activation?: import("../reel/index.js").GridCellReelActivationPlanOptions;
+    readonly effects?: import("../reel/index.js").GridCellReelEffectPlanOptions;
+  }): import("../reel/index.js").GridCellReelSpinPlan;
+}
+
 export interface SceneLayoutMainReelSpinInput extends SceneLayoutInitialReelScene {
   readonly random: () => number;
   /** X-first state matrix applied inside each exact reel landing transaction. */
   readonly landingStates?: readonly (readonly string[])[];
+  /** Optional game-owned extension invoked after common grid-cell input validation. */
+  readonly buildGridCellSpinPlan?: (
+    stage: SceneLayoutGridCellSpinPlanStage,
+  ) => import("../reel/index.js").GridCellReelSpinPlan;
 }
 
 export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
@@ -542,6 +557,10 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
     readonly transfers: readonly import("../reel/index.js").GridCellVisibleOccurrenceTransfer[];
   }): import("../reel/index.js").PreparedGridCellVisibleOccurrenceTransferBatch;
   drainMainReelLandingPositions(): readonly {
+    readonly x: number;
+    readonly y: number;
+  }[];
+  drainMainReelActivationPositions(): readonly {
     readonly x: number;
     readonly y: number;
   }[];

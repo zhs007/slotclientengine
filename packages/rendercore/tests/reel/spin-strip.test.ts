@@ -87,7 +87,11 @@ describe("createTemporaryReelStrip", () => {
       stopDelayMs: 0,
     }).axes[0];
     const currentVisibleSymbols = [3, 2, 1];
-    const targetVisibleSymbols = [2, 2, 2];
+    const publicReelBefore = Array.from(
+      { length: reels.getLength(0) },
+      (_, y) => reels.get(0, y),
+    );
+    const targetVisibleSymbols = [99, 98, 97];
 
     const strip = createTemporaryReelStrip({
       reels,
@@ -105,6 +109,9 @@ describe("createTemporaryReelStrip", () => {
     expect(strip.get(axisPlan.travelSymbols)).toBe(targetVisibleSymbols[0]);
     expect(strip.get(axisPlan.travelSymbols + 1)).toBe(targetVisibleSymbols[1]);
     expect(strip.get(axisPlan.travelSymbols + 2)).toBe(targetVisibleSymbols[2]);
+    expect(
+      Array.from({ length: reels.getLength(0) }, (_, y) => reels.get(0, y)),
+    ).toEqual(publicReelBefore);
   });
 
   it("carries stable random presentation values through the temporary strip and preserves explicit endpoints", () => {

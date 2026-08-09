@@ -221,6 +221,12 @@ export interface GridCellReelEffectPlanOptions {
   readonly activatedStopStepMs?: number;
 }
 
+export interface GridCellReelActivationPlanOptions {
+  readonly activationGate: Readonly<{ x: number; y: number }>;
+  readonly firstFollowingStopDelayMs: number;
+  readonly activatedStopStepMs: number;
+}
+
 export interface GridCellReelSpinPlan {
   readonly direction: ReelSpinDirection;
   readonly columns: number;

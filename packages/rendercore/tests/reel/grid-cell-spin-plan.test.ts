@@ -349,6 +349,54 @@ describe("createGridCellReelSpinPlan", () => {
     ).toThrow(/lead exceeds/);
   });
 
+  it("supports an activation landing schedule without effects", () => {
+    const reels = createBasicReels();
+    const order = createGridCellOrder({
+      columns: 2,
+      rows: 3,
+      mode: "top-down-left-right",
+    });
+    const plan = createGridCellReelSpinPlan({
+      reels,
+      finalYs: [2, 1],
+      targetScene: TARGET_SCENE,
+      columns: 2,
+      rows: 3,
+      order,
+      timing: TIMING,
+      dimming: DIMMING,
+      activation: {
+        activationGate: { x: 0, y: 1 },
+        firstFollowingStopDelayMs: 240,
+        activatedStopStepMs: 100,
+      },
+    });
+
+    expect(plan.activationGate).toEqual({ x: 0, y: 1 });
+    expect(plan.cells.map((cell) => cell.stopAtMs)).toEqual([
+      150, 170, 410, 510, 610, 710,
+    ]);
+    expect(plan.cells.every((cell) => cell.effect === null)).toBe(true);
+
+    expect(() =>
+      createGridCellReelSpinPlan({
+        reels,
+        finalYs: [2, 1],
+        targetScene: TARGET_SCENE,
+        columns: 2,
+        rows: 3,
+        order,
+        timing: TIMING,
+        dimming: DIMMING,
+        activation: {
+          activationGate: { x: 9, y: 9 },
+          firstFollowingStopDelayMs: 240,
+          activatedStopStepMs: 100,
+        },
+      }),
+    ).toThrow(/selected grid order/);
+  });
+
   it("rejects malformed scenes, final y values, order, timing and dimming", () => {
     const reels = createBasicReels();
     const order = createGridCellOrder({

@@ -57,6 +57,11 @@ Pixi Application、package resource 与所有 player 的 destroy。
 
 完整 package runtime 可以 deferred prepare main reel：首次合法 scene commit 前 reel 不可见，scene/value/spin API 会严格失败。业务自定义 grid-cell controller 可通过 ownership-transfer factory 注入，package 仍拥有唯一 reel、manifest placement/order 和最终 destroy；cascade 等借用 overlay 通过 typed attach disposer 接入，保持在 transition/popup 下方。
 
+`getInitialSceneLayoutSymbolPackageResource(resource)` 按 layout 的 legacy binding 或
+`gameModes.initialMode` 返回初始稳定模式实际选择的 Symbols package resource。游戏需要读取同一
+解包 package 内的 typed `gameConfig` 时使用该接口，不自行遍历 manifest/binding，也不读取额外
+assets 或 raw 文件；binding/resource 缺失时显式失败。
+
 slot operation handler 只实现一个异步 `start(operation, context)`。业务 app 可直接用 `await` 组合动画、逐格 mutation、`context.delay()` 和 `context.waitForFrame()`；coordinator 只负责精确分派、顺序推进、abort 与 fail-stop，不在 render 重做 plan preflight，也不提供通用 transaction phase runner。
 
 普通 Scene Layout node 可省略 `gameMode` 表示跨全部状态存在，或声明一个 exact mode id；旧 v1 node 因缺少该字段自然保持全局可见。package runtime 在初始化和 production transition switch commit 时一起更新 mode background 与 scoped 普通 node，可见性再与当前 variant placement 组合。编辑器预览可调用独立的 `selectAuthoringGameMode()` 直接选择稳定状态；该 API 不查找或播放 transition，且不会为相同 Symbols binding 重建 reel 或重新抽样。
@@ -509,6 +514,18 @@ gridReels.spin(plan);
 ```
 
 `createGridCellOrder({ mode: "top-down-left-right" })` 生成 `(0,0),(0,1)...(0,rows-1),(1,0)...` 的稳定顺序。`createGridCellReelSpinPlan()` 对每个 cell 计算 `startAtMs`、`stopAtMs`、`durationMs`、`axisPlan`、`targetVisibleSymbols` 和目标暗度；默认每个 cell 的最终 y 使用 `reels.normalizeY(x, finalYs[x] + y)`。selective `positions` 可以全部提供非负、从 0 开始且非递减的 `startGroupIndex`；相同 group 的 cell 共享 `startGroupIndex * startStepMs` 起播边界，而 stop timeline 仍按 positions 稳定顺序计算，因此能做同时启动的波纹而不改变既有逐格停轴 cadence。省略 group 时继续使用原来的逐格 sequence index。dimming resolver 同时接收通用 `activated` 布尔上下文；plan 可用 `dimmingActivatedAtStart` 设置起始状态，存在 activation gate 时 runtime 会在 gate 真实 landing edge 切为 `true`。滚动 strip 和 landing fade 都用当前 code 与当前状态重新解析暗度，不缓存业务 symbol 结论。运行时每帧仍对临时 spin strip 中当前真实 slot code 调用同一 resolver，而不是只看 endpoint 或 cell 序号；resolver 必须返回 `[0,1]`，游戏语义由调用方负责，rendercore 不认识具体 symbol 名。如果传入 `cellReelOffsets`，则使用 `reels.normalizeY(x, finalYs[x] + y + cellReelOffsets[x][y])`，让同一列内不同格子也能使用更分散的本地轮带窗口滚动。`createGridCellReelOffsetMatrix()` 适合固定线性 offset；`createShuffledGridCellReelOffsetMatrix()` 则对每一列做 partial Fisher-Yates，从该列完整本地公开轮带相位中为各格无重复抽取相位。调用方每次创建 spin plan 时重新调用即可获得新的视觉相位；注入的 random 必须返回 `[0,1)`，不能使用服务器随机数。两种 helper 都不打乱 symbol 顺序。`targetVisibleSymbols` 仍会注入临时 spin strip 的落点窗口，因此完成后的 `getVisibleScene()` 能还原目标 scene。调用方可以用本地公开轮带提供滚动内容，再把服务器本轮目标窗口叠加到临时 strip，不需要也不应该暴露服务器真实轮带。
+
+activation 时间线可通过 plan 的 `activation` 独立使用，不要求绑定 effect resource；gate
+仍只在目标 cell 的真实 landing edge 打开。Scene Layout package runtime 的 grid-cell spin 输入可选
+`buildGridCellSpinPlan(stage)`，stage 提供已验证的目标 scene/order 和受控 `createPlan()`，让游戏注入
+dimming、activation 或 effect，而无需复制 phase、临时 target window 和 reel 生命周期。默认不配置
+function 时行为不变；`drainMainReelActivationPositions()` 与 landing drain 对称返回 instance-scoped
+edge，reset/new spin/mode switch/destroy 都会清理未消费事件。standard reel 传入该 function 会显式失败。
+
+`createWeightedGridCellPresentationValueResolver()` 是中性的 grid-cell presentation helper：调用方按
+occurrence context 选择 number-weight table，rendercore 对 `(x,y,symbolY,code)` 缓存稳定值，并以
+uint32 rejection sampling 避免 modulo bias。空表、重复/非正 value 或 weight、总权重越界和非法随机值
+全部失败；helper 不选择业务表、不读取 server random，也不把抽样值写入 scene/轮带。
 
 grid-cell API 会 fail-fast 校验 scene 尺寸、final y 长度、order 重复/越界/缺失、offset 矩阵尺寸和整数值、timing、alpha 范围和 reel 列数。资源状态缺失仍由 `ReelSymbolRegistry` / `RenderSymbol` 按 `texturePolicy.requiredStateTextures` 显式失败，不会静默回退到普通图。
 

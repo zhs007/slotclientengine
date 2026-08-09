@@ -34,6 +34,7 @@ import {
   type SymbolCascadeTarget,
 } from "../symbol-cascade/index.js";
 import { SceneLayoutError } from "./errors.js";
+import { getInitialSceneLayoutSymbolPackageResource } from "./package-resource.js";
 import { createSceneLayoutPackageRuntime } from "./package-runtime.js";
 import type {
   SceneLayoutPackageResource,
@@ -177,7 +178,9 @@ class DefaultConfiguredSceneLayoutRoundAdapter implements ConfiguredSceneLayoutR
       this.#runtime = runtime;
       const target = new ConfiguredRoundTarget({
         runtime,
-        symbolResource: requireInitialSymbolResource(this.#resource),
+        symbolResource: getInitialSceneLayoutSymbolPackageResource(
+          this.#resource,
+        ),
         roundFlow: this.#roundFlow,
         presentation: this.#presentation,
         createLocalPhases: () => this.createLocalPhases(),
@@ -210,7 +213,9 @@ class DefaultConfiguredSceneLayoutRoundAdapter implements ConfiguredSceneLayoutR
       const geometry = this.#resource.manifest.reels.main;
       if (!geometry)
         throw new SceneLayoutError("Scene layout has no reels.main.");
-      const symbolResource = requireInitialSymbolResource(this.#resource);
+      const symbolResource = getInitialSceneLayoutSymbolPackageResource(
+        this.#resource,
+      );
       const symbolCodes = Object.fromEntries(
         symbolResource.displaySymbols.map((symbol) => {
           const code = symbolResource.gameConfig.getSymbolCode(symbol);
@@ -619,21 +624,6 @@ class ConfiguredRoundTarget {
       throw new SceneLayoutError("Configured collect step is not active.");
     return this.#playerStep;
   }
-}
-
-function requireInitialSymbolResource(resource: SceneLayoutPackageResource) {
-  if (resource.symbolPackage) return resource.symbolPackage;
-  const manifest = resource.manifest;
-  const initialMode = manifest.gameModes?.modes.find(
-    (mode) => mode.id === manifest.gameModes?.initialMode,
-  );
-  const bindingId = initialMode?.symbolPackage;
-  const resolved = bindingId ? resource.symbolPackages[bindingId] : undefined;
-  if (!resolved)
-    throw new SceneLayoutError(
-      "Configured scene-layout initial mode has no active symbol package resource.",
-    );
-  return resolved;
 }
 
 function requirePlanOccurrence(

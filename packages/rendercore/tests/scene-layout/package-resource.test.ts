@@ -3,8 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import {
   collectSceneLayoutPackagePaths,
   createSceneLayoutPackageResource,
+  getInitialSceneLayoutSymbolPackageResource,
   loadSceneLayoutPackageFromUrl,
+  type SceneLayoutPackageResource,
 } from "../../src/scene-layout/index.js";
+import type { SymbolPackageResource } from "../../src/symbol/index.js";
 import { game002LayoutFixture } from "./fixtures.js";
 import { createMappedPackageFiles } from "../editor-assets-map-fixture.js";
 
@@ -106,6 +109,44 @@ function packageFiles(): Map<string, Uint8Array> {
 }
 
 describe("scene layout package resources", () => {
+  it("exposes the Symbols resource selected by the initial layout mode", () => {
+    const legacy = {} as SymbolPackageResource;
+    expect(
+      getInitialSceneLayoutSymbolPackageResource({
+        manifest: { symbolPackage: {} },
+        symbolPackage: legacy,
+        symbolPackages: {},
+      } as unknown as SceneLayoutPackageResource),
+    ).toBe(legacy);
+
+    const base = {} as SymbolPackageResource;
+    expect(
+      getInitialSceneLayoutSymbolPackageResource({
+        manifest: {
+          gameModes: {
+            initialMode: "base",
+            modes: [{ id: "base", symbolPackage: "base-symbols" }],
+          },
+        },
+        symbolPackage: null,
+        symbolPackages: { "base-symbols": base },
+      } as unknown as SceneLayoutPackageResource),
+    ).toBe(base);
+
+    expect(() =>
+      getInitialSceneLayoutSymbolPackageResource({
+        manifest: {
+          gameModes: {
+            initialMode: "base",
+            modes: [{ id: "base", symbolPackage: "missing" }],
+          },
+        },
+        symbolPackage: null,
+        symbolPackages: {},
+      } as unknown as SceneLayoutPackageResource),
+    ).toThrow(/no active symbol package resource/);
+  });
+
   it("owns the exact direct and mapped VNI closure", async () => {
     const manifest = {
       ...game002LayoutFixture,

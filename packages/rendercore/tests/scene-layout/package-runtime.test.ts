@@ -597,11 +597,28 @@ describe("scene layout package runtime", () => {
             ["normal", "normal"],
             ["normal", "normal"],
           ],
+          ...(renderMode === "grid-cell"
+            ? {
+                buildGridCellSpinPlan: (stage) =>
+                  stage.createPlan({
+                    activation: {
+                      activationGate: { x: 0, y: 0 },
+                      firstFollowingStopDelayMs: 100,
+                      activatedStopStepMs: 100,
+                    },
+                  }),
+              }
+            : {}),
         });
         runtime.update(0.1);
         const landings = runtime.drainMainReelLandingPositions();
+        const activations = runtime.drainMainReelActivationPositions();
 
         expect(landings).toHaveLength(renderMode === "standard" ? 2 : 1);
+        expect(activations).toEqual(
+          renderMode === "grid-cell" ? [{ x: 0, y: 0 }] : [],
+        );
+        expect(runtime.drainMainReelActivationPositions()).toEqual([]);
         expect(runtime.isMainReelSpinning()).toBe(true);
         expect(runtime.getMainReelSymbolStateSnapshots(landings)).toMatchObject(
           landings.map(() => ({ requestedState: "normal" })),

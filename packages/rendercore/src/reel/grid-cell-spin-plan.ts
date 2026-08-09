@@ -4,6 +4,7 @@ import type {
   GridCellCoordinate,
   GridCellDimmingPattern,
   GridCellReelPlanCell,
+  GridCellReelActivationPlanOptions,
   GridCellReelOffsetMatrix,
   GridCellReelSpinPlan,
   GridCellReelSpinTiming,
@@ -28,6 +29,7 @@ export function createGridCellReelSpinPlan(options: {
   readonly dimming: GridCellDimmingPattern;
   readonly dimmingActivatedAtStart?: boolean;
   readonly positions?: readonly GridCellSpinPosition[];
+  readonly activation?: GridCellReelActivationPlanOptions;
   readonly effects?: GridCellReelEffectPlanOptions;
 }): GridCellReelSpinPlan {
   const columns = assertPositiveInteger(options.columns, "columns");
@@ -48,6 +50,14 @@ export function createGridCellReelSpinPlan(options: {
   );
   const timing = parseTiming(options.timing);
   const effects = parseEffects(options.effects, selectedOrder);
+  if (options.activation && effects?.activationGate) {
+    throw new ReelError(
+      "grid cell spin must not define activation and an effect activationGate together.",
+    );
+  }
+  const activation =
+    parseActivation(options.activation, selectedOrder) ??
+    (effects?.activationGate ? effects : undefined);
   const dimming = parseDimming(options.dimming);
   const dimmingActivatedAtStart = parseOptionalBoolean(
     options.dimmingActivatedAtStart,
@@ -61,13 +71,13 @@ export function createGridCellReelSpinPlan(options: {
   const cells = selectedOrder.map(
     (cell, sequenceIndex): GridCellReelPlanCell => {
       const startAtMs = cell.startGroupIndex * timing.startStepMs;
-      const gateIndex = effects?.gateIndex ?? -1;
+      const gateIndex = activation?.gateIndex ?? -1;
       const stopAtMs =
-        effects?.activated && sequenceIndex > gateIndex
+        activation && sequenceIndex > gateIndex
           ? firstStopAtMs +
             gateIndex * timing.stopStepMs +
-            effects.firstFollowingStopDelayMs +
-            (sequenceIndex - gateIndex - 1) * effects.activatedStopStepMs
+            activation.firstFollowingStopDelayMs +
+            (sequenceIndex - gateIndex - 1) * activation.activatedStopStepMs
           : firstStopAtMs + sequenceIndex * timing.stopStepMs;
       const durationMs = stopAtMs - startAtMs;
       if (durationMs <= 0) {
@@ -155,8 +165,46 @@ export function createGridCellReelSpinPlan(options: {
     cells: Object.freeze(cells),
     lastStopAtMs: cells.at(-1)!.stopAtMs,
     selective: options.positions !== undefined,
-    activationGate: effects?.activationGate ?? null,
+    activationGate: activation?.activationGate ?? null,
     dimmingActivatedAtStart,
+  });
+}
+
+function parseActivation(
+  value: GridCellReelActivationPlanOptions | undefined,
+  selectedOrder: readonly GridCellCoordinate[],
+):
+  | Readonly<{
+      activationGate: Readonly<{ x: number; y: number }>;
+      gateIndex: number;
+      firstFollowingStopDelayMs: number;
+      activatedStopStepMs: number;
+    }>
+  | undefined {
+  if (value === undefined) return undefined;
+  const gate = value.activationGate;
+  if (!gate || !Number.isInteger(gate.x) || !Number.isInteger(gate.y)) {
+    throw new ReelError("activationGate must contain integer x and y.");
+  }
+  const gateIndex = selectedOrder.findIndex(
+    (cell) => cell.x === gate.x && cell.y === gate.y,
+  );
+  if (gateIndex < 0) {
+    throw new ReelError(
+      "activationGate must be present in the selected grid order.",
+    );
+  }
+  return Object.freeze({
+    activationGate: Object.freeze({ x: gate.x, y: gate.y }),
+    gateIndex,
+    firstFollowingStopDelayMs: assertNonNegativeNumber(
+      value.firstFollowingStopDelayMs,
+      "firstFollowingStopDelayMs",
+    ),
+    activatedStopStepMs: assertNonNegativeNumber(
+      value.activatedStopStepMs,
+      "activatedStopStepMs",
+    ),
   });
 }
 

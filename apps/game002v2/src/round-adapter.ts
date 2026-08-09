@@ -9,12 +9,19 @@ import {
 import {
   createGridCellCascadeDropPlan,
   createSceneLayoutPackageRuntime,
+  getInitialSceneLayoutSymbolPackageResource,
   deriveGridCellCascadeSettledValues,
   type SceneLayoutPackageResource,
   type SceneLayoutPackageRuntime,
 } from "@slotclientengine/rendercore";
 import { Application } from "pixi.js";
-import { createNearwinLandingState } from "./nearwin.js";
+import { createGame002v2DefaultSceneValueResolver } from "./default-scene-values.js";
+import { Game002v2NearwinController } from "./nearwin.js";
+import {
+  buildGame002v2InitialSpinPlan,
+  resolveGame002v2SpinSymbolCodes,
+  type Game002v2SpinSymbolCodes,
+} from "./spin-presentation.js";
 
 const LANDING_COMPONENTS = Object.freeze([
   "bg-spin",
@@ -62,6 +69,8 @@ class DirectRoundAdapter implements SlotGameAdapter {
   #unsubscribeViewport: (() => void) | null = null;
   #unbindPopup: (() => void) | null = null;
   #spinWaiter: { resolve(): void; reject(error: Error): void } | null = null;
+  #spinCodes: Game002v2SpinSymbolCodes | null = null;
+  #nearwin: Game002v2NearwinController | null = null;
   #destroyed = false;
   #resourceOwned = true;
 
@@ -93,6 +102,8 @@ class DirectRoundAdapter implements SlotGameAdapter {
   async applyInitialState(state: SlotGameInitialState): Promise<void> {
     if (!state.defaultScene)
       throw new Error("game002v2 requires userInfo.defaultScene.");
+    const symbols = getInitialSceneLayoutSymbolPackageResource(this.#resource);
+    this.#spinCodes = resolveGame002v2SpinSymbolCodes(symbols);
     const runtime = createSceneLayoutPackageRuntime({
       resource: this.#resource,
       reelPresentation: {
@@ -108,6 +119,10 @@ class DirectRoundAdapter implements SlotGameAdapter {
           speedSymbolsPerSecond: 54,
         },
         bounceStrength: 0,
+      },
+      gridCellPresentation: {
+        presentationValueResolver:
+          createGame002v2DefaultSceneValueResolver(symbols),
       },
     });
     this.#resourceOwned = false;
@@ -140,12 +155,10 @@ class DirectRoundAdapter implements SlotGameAdapter {
     for (const step of steps) {
       const landingScene = readLandingScene(step);
       if (landingScene) {
-        const symbols = initialSymbolPackage(this.#resource);
-        const wildCode = symbols.gameConfig.getSymbolCode("WL");
-        const nearwin =
-          step.hasComponent("bg-spin") && wildCode !== undefined
-            ? createNearwinLandingState(landingScene, wildCode)
-            : null;
+        const symbols = getInitialSceneLayoutSymbolPackageResource(
+          this.#resource,
+        );
+        const wildCode = this.requireSpinCodes().wild;
         const landingValues = readPresentationValues(
           step,
           landingScene,
@@ -153,9 +166,12 @@ class DirectRoundAdapter implements SlotGameAdapter {
         );
         if (step.hasComponent("bg-dropdown"))
           await this.cascadeTo(step, landingScene, landingValues, wildCode);
-        else await this.spinTo(landingScene, landingValues, nearwin?.matrix);
-        if (nearwin)
-          await this.playAvailableState(nearwin.positions, "Reel_NearWin");
+        else
+          await this.spinTo(
+            landingScene,
+            landingValues,
+            step.hasComponent("bg-spin") ? this.requireSpinCodes() : null,
+          );
       }
       await this.playFeatureStates(step, landingScene);
       const finalScene = readFinalScene(step);
@@ -165,7 +181,7 @@ class DirectRoundAdapter implements SlotGameAdapter {
           presentationValues: readPresentationValues(
             step,
             finalScene,
-            initialSymbolPackage(this.#resource),
+            getInitialSceneLayoutSymbolPackageResource(this.#resource),
           ),
           localPhaseYs: this.localPhases(),
         });
@@ -194,6 +210,7 @@ class DirectRoundAdapter implements SlotGameAdapter {
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
+    this.finishNearwin();
     this.#spinWaiter?.reject(new Error("game002v2 adapter was destroyed."));
     this.#spinWaiter = null;
     this.#unbindPopup?.();
@@ -209,12 +226,18 @@ class DirectRoundAdapter implements SlotGameAdapter {
     if (!runtime || this.#destroyed) return;
     try {
       runtime.update(Math.min(this.#app.ticker.deltaMS / 1000, 1 / 30));
+      this.updateNearwin(
+        runtime.drainMainReelLandingPositions(),
+        runtime.drainMainReelActivationPositions(),
+      );
       if (this.#spinWaiter && !runtime.isMainReelSpinning()) {
         const waiter = this.#spinWaiter;
         this.#spinWaiter = null;
+        this.finishNearwin();
         waiter.resolve();
       }
     } catch (error) {
+      this.finishNearwin();
       const waiter = this.#spinWaiter;
       this.#spinWaiter = null;
       waiter?.reject(asError(error));
@@ -225,18 +248,40 @@ class DirectRoundAdapter implements SlotGameAdapter {
   private spinTo(
     scene: SceneMatrix,
     presentationValues: readonly (readonly (number | null)[])[],
-    landingStates?: readonly (readonly string[])[],
+    spinCodes: Game002v2SpinSymbolCodes | null,
   ): Promise<void> {
     if (this.#spinWaiter)
       throw new Error("game002v2 reel is already spinning.");
     const runtime = this.requireRuntime();
-    runtime.spinMainReelToScene({
-      scene,
-      localPhaseYs: this.localPhases(),
-      random: secureRandom,
-      presentationValues,
-      ...(landingStates ? { landingStates } : {}),
-    });
+    this.#nearwin = null;
+    try {
+      runtime.spinMainReelToScene({
+        scene,
+        localPhaseYs: this.localPhases(),
+        random: secureRandom,
+        presentationValues,
+        ...(spinCodes
+          ? {
+              buildGridCellSpinPlan: (stage) => {
+                const presentation = buildGame002v2InitialSpinPlan(
+                  stage,
+                  spinCodes,
+                );
+                this.#nearwin = presentation.nearwin
+                  ? new Game002v2NearwinController(
+                      presentation.nearwin,
+                      runtime,
+                    )
+                  : null;
+                return presentation.plan;
+              },
+            }
+          : {}),
+      });
+    } catch (error) {
+      this.#nearwin = null;
+      throw error;
+    }
     return new Promise<void>((resolve, reject) => {
       this.#spinWaiter = { resolve, reject };
     });
@@ -311,7 +356,9 @@ class DirectRoundAdapter implements SlotGameAdapter {
     scene: SceneMatrix | null,
   ): Promise<void> {
     if (!scene) return;
-    const symbolPackage = initialSymbolPackage(this.#resource);
+    const symbolPackage = getInitialSceneLayoutSymbolPackageResource(
+      this.#resource,
+    );
     const plays: Array<readonly [string, string]> = [];
     if (step.hasComponent("bg-genwm") || step.hasComponent("bg-wm2cn"))
       plays.push(["WM", "multStart"], ["WM", "change"]);
@@ -365,6 +412,31 @@ class DirectRoundAdapter implements SlotGameAdapter {
   private requireRuntime(): SceneLayoutPackageRuntime {
     if (!this.#runtime) throw new Error("game002v2 runtime is not ready.");
     return this.#runtime;
+  }
+
+  private requireSpinCodes(): Game002v2SpinSymbolCodes {
+    if (!this.#spinCodes)
+      throw new Error("game002v2 spin presentation is not ready.");
+    return this.#spinCodes;
+  }
+
+  private updateNearwin(
+    landed: readonly Position[],
+    activated: readonly Position[],
+  ): void {
+    const nearwin = this.#nearwin;
+    if (!nearwin) {
+      if (activated.length > 0)
+        throw new Error("game002v2 received an unexpected activation edge.");
+      return;
+    }
+    nearwin.update(landed, activated);
+  }
+
+  private finishNearwin(): void {
+    const nearwin = this.#nearwin;
+    this.#nearwin = null;
+    nearwin?.finish();
   }
 }
 
@@ -422,7 +494,7 @@ function sameScene(left: SceneMatrix, right: SceneMatrix): boolean {
 function readPresentationValues(
   step: GameLogicStep,
   scene: SceneMatrix,
-  symbols: ReturnType<typeof initialSymbolPackage>,
+  symbols: ReturnType<typeof getInitialSceneLayoutSymbolPackageResource>,
 ): readonly (readonly (number | null)[])[] {
   const values: Array<Array<number | null>> = scene.map((column) =>
     column.map(() => null),
@@ -440,15 +512,6 @@ function readPresentationValues(
           }
   }
   return Object.freeze(values.map((column) => Object.freeze(column)));
-}
-
-function initialSymbolPackage(resource: SceneLayoutPackageResource) {
-  const modes = resource.manifest.gameModes;
-  const initial = modes?.modes.find((mode) => mode.id === modes.initialMode);
-  const id = initial?.symbolPackage;
-  const symbols = id ? resource.symbolPackages[id] : resource.symbolPackage;
-  if (!symbols) throw new Error("Crave initial symbol package is unavailable.");
-  return symbols;
 }
 
 function secureRandom(): number {

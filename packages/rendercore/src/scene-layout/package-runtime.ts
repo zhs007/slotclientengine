@@ -50,6 +50,7 @@ import type {
   SceneLayoutGameModeRequestOptions,
   SceneLayoutGameModeSnapshot,
   SceneLayoutInitialReelScene,
+  SceneLayoutGridCellSpinPlanStage,
   SceneLayoutMainReelSpinInput,
   SceneLayoutNodeStateSnapshot,
   SceneLayoutPackageResource,
@@ -218,6 +219,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     readonly y: number;
   }[] = [];
   #mainReelLandingKeys = new Set<string>();
+  #pendingMainReelActivationPositions: {
+    readonly x: number;
+    readonly y: number;
+  }[] = [];
+  #mainReelActivationKeys = new Set<string>();
   #disposePopupInputBinding: (() => void) | null = null;
   readonly #onPopupPointerDown = () => {
     const result = this.requestPrimaryPopupInteraction();
@@ -537,6 +543,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         const result = this.#reel.update(deltaSeconds);
         for (const position of result.landedCells)
           this.recordMainReelLanding(position.x, position.y);
+        for (const position of result.activationCells)
+          this.recordMainReelActivation(position.x, position.y);
       } else if (geometry) {
         const result = this.#reel.update(deltaSeconds);
         for (const x of result.stoppedAxes)
@@ -715,6 +723,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       );
     if (typeof input.random !== "function")
       throw new SceneLayoutError("spin random must be a function.");
+    if (
+      input.buildGridCellSpinPlan !== undefined &&
+      typeof input.buildGridCellSpinPlan !== "function"
+    )
+      throw new SceneLayoutError("buildGridCellSpinPlan must be a function.");
     const geometry = this.#manifest.reels.main!;
     const scene = validateScene(
       input.scene,
@@ -744,27 +757,47 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         rows: geometry.rows,
         mode: profile.order,
       });
-      const plan = createGridCellReelSpinPlan({
+      const cellReelOffsets = createShuffledGridCellReelOffsetMatrix({
         reels,
-        finalYs: phases,
-        targetScene: scene,
         columns: geometry.columns,
         rows: geometry.rows,
-        order,
-        cellReelOffsets: createShuffledGridCellReelOffsetMatrix({
+        random: input.random,
+      });
+      const createPlan: SceneLayoutGridCellSpinPlanStage["createPlan"] = (
+        options = {},
+      ) =>
+        createGridCellReelSpinPlan({
           reels,
+          finalYs: phases,
+          targetScene: scene,
           columns: geometry.columns,
           rows: geometry.rows,
-          random: input.random,
-        }),
-        direction: profile.direction,
-        timing: profile.timing,
-        dimming: {
-          resolveDimmingAlpha: () => 0,
-          fadeInMs: 0,
-          fadeOutMs: 0,
-        },
-      });
+          order,
+          cellReelOffsets,
+          direction: profile.direction,
+          timing: profile.timing,
+          dimming: options.dimming ?? {
+            resolveDimmingAlpha: () => 0,
+            fadeInMs: 0,
+            fadeOutMs: 0,
+          },
+          ...(options.dimmingActivatedAtStart === undefined
+            ? {}
+            : {
+                dimmingActivatedAtStart: options.dimmingActivatedAtStart,
+              }),
+          ...(options.activation ? { activation: options.activation } : {}),
+          ...(options.effects ? { effects: options.effects } : {}),
+        });
+      const plan = input.buildGridCellSpinPlan
+        ? input.buildGridCellSpinPlan(
+            Object.freeze({
+              targetScene: scene,
+              order,
+              createPlan,
+            }),
+          )
+        : createPlan();
       reel.spin(plan, {
         ...(values ? { targetPresentationValues: values } : {}),
         ...(landingStates ? { targetLandingStates: landingStates } : {}),
@@ -774,6 +807,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     if (reel instanceof RenderGridCellReelSet)
       throw new SceneLayoutError(
         "Standard reel profile resolved a grid-cell runtime.",
+      );
+    if (input.buildGridCellSpinPlan)
+      throw new SceneLayoutError(
+        "buildGridCellSpinPlan requires a grid-cell reel profile.",
       );
     const plan = createReelSpinPlan({
       reels,
@@ -892,6 +929,14 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       this.#pendingMainReelLandingPositions.splice(0),
     );
     return positions;
+  }
+
+  drainMainReelActivationPositions(): readonly {
+    readonly x: number;
+    readonly y: number;
+  }[] {
+    this.assertReady();
+    return Object.freeze(this.#pendingMainReelActivationPositions.splice(0));
   }
 
   getMainReelSymbolStateSnapshots(
@@ -2328,9 +2373,18 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#pendingMainReelLandingPositions.push(Object.freeze({ x, y }));
   }
 
+  private recordMainReelActivation(x: number, y: number): void {
+    const key = `${x}:${y}`;
+    if (this.#mainReelActivationKeys.has(key)) return;
+    this.#mainReelActivationKeys.add(key);
+    this.#pendingMainReelActivationPositions.push(Object.freeze({ x, y }));
+  }
+
   private clearMainReelLandingPositions(): void {
     this.#pendingMainReelLandingPositions.length = 0;
     this.#mainReelLandingKeys.clear();
+    this.#pendingMainReelActivationPositions.length = 0;
+    this.#mainReelActivationKeys.clear();
   }
 
   private requireGameModes() {

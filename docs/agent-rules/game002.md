@@ -15,6 +15,14 @@
   Spine/VNI player 或 display tree。
 - Nearwin 是唯一 app-owned landing rule，但表现仍请求 Symbols 的 `Reel_NearWin` state；
   app 不直接选择或播放底层 animation。
+- v2 的 initial grid-cell spin 通过 rendercore 的 typed spin-plan stage function 注入业务暗度和
+  第 2 枚 WL activation；未注入 function 的游戏保持 rendercore 默认行为。package runtime
+  暴露真实 landing/activation edge，v2 不复制 reel update loop。
+- v2 的 `defaultScene` CN presentation value 必须从 active Symbols package 的 exact
+  `bgcoinweight` 独立加权抽取；稳定 occurrence 缓存和无偏抽样属于 rendercore，v2 只选择
+  CN code 与权重表。active package 必须由 rendercore 的 initial Symbol package resource 接口
+  从同一 Crave layout package 解析，app 不自行遍历 binding 或读取额外资源。缺 CN、缺表或
+  非法权重/random 必须失败，不回退 manifest default value。
 - v2 采用 fail-stop：异步调用失败立即结束本轮并上报，不回滚已经完成的画面变化。
 
 ## 固定入口和资源
@@ -56,7 +64,9 @@
 ## Initial spin、dimming 与 anticipation
 
 - 普通 initial grid-cell spin 不播放 Nearwin effect。
-- 非期待 initial spin 中 WL/CN 全亮。第 2 个按真实 landing order 落地的 paytable-exact WL 在同一边界打开 anticipation gate；从该边界起只有 WL 全亮，其它实际滚动 occurrence（包括 CN）压暗。
+- 非期待 initial spin 中 WL/CN/WM/CM/CO 全亮，其它实际滚动 occurrence 压暗。第 2 个按真实 landing order 落地的 paytable-exact WL 在同一边界打开 anticipation gate；从该边界起只有 WL 全亮，其它实际滚动 occurrence（包括 CN/WM/CM/CO）压暗。
+- v2 以任务 185 选出的最后完整 landing scene 建 plan；不在本地公开轮带中的 WM/CM/CO
+  只经 rendercore 的目标 cell 临时 landing window 注入，完成后不得写入或反推公开轮带。
 - 激活 gate 的第 2 个 WL 自身不补播 effect，后续格各播放 `Nearwin1.Loop` 真实一次。
 - 第一枚后续格在 activation 后 `800ms` 落地；Nearwin1 在落地前一个真实单循环时长起播。之后 effect start 与 landing 都保持 `100ms` cadence。
 - anticipation 状态跨本轮 win/remove/cascade/refill/global win-amount 保留，只在下一次合法 initial spin apply state、fatal cleanup 或 destroy 时清除。

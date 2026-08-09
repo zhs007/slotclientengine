@@ -49,6 +49,30 @@ import type {
 
 const ROOT_MANIFEST = "layout.manifest.json";
 
+/** Returns the Symbols package selected by the layout's initial stable mode. */
+export function getInitialSceneLayoutSymbolPackageResource(
+  resource: SceneLayoutPackageResource,
+): SymbolPackageResource {
+  if (resource.manifest.symbolPackage) {
+    if (!resource.symbolPackage)
+      throw new SceneLayoutError(
+        "Scene layout legacy symbol package resource is unavailable.",
+      );
+    return resource.symbolPackage;
+  }
+  const modes = resource.manifest.gameModes;
+  const initialMode = modes?.modes.find(
+    (mode) => mode.id === modes.initialMode,
+  );
+  const id = initialMode?.symbolPackage;
+  const symbols = id ? resource.symbolPackages[id] : undefined;
+  if (!id || !symbols)
+    throw new SceneLayoutError(
+      "Scene layout initial mode has no active symbol package resource.",
+    );
+  return symbols;
+}
+
 export function collectSceneLayoutPackagePaths(options: {
   readonly manifest: SceneLayoutManifestV1;
   readonly files: ReadonlyMap<string, Uint8Array>;
