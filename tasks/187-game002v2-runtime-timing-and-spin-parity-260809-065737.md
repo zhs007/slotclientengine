@@ -47,8 +47,16 @@
 每个完成/失败 trace 输出：
 
 ```text
-[game002v2 timing] {
+[game002v2 timing] spin#<id> <status> total=<ms> |
+  click-to-first-cell-start=<ms> | click-to-first-cell-paint=<ms> |
+  pre-start-largest=<from> -> <to> (<ms>) | largest=<from> -> <to> (<ms>)
+  duration  elapsed  phase
+  ...每个 phase 一行...
+
+结构化对象：{
   traceKind, traceId, status, totalMs,
+  clickToFirstCellStartMs, clickToFirstCellPaintMs,
+  largestBeforeFirstCellStart, largestPhase,
   phases: [{ phase, atMs, durationMs, elapsedMs }]
 }
 ```
@@ -61,6 +69,22 @@ first-cell-paint、collect/complete。`request-send → response-received` 可�
 确定性本地优化包括：Nearwin 资源在 loading prepare 阶段复用、initial first-paint gate、删除
 remove 后的 normal 中间态、selective held 不重建、期待 refill 不让 survivor 重播 spin/appear。
 本报告不填写虚构的浏览器 median 或改善比例。
+
+## 用户浏览器样本回传
+
+用户于 2026-08-09 回传的一次 spin trace（单样本，不作为 median）：
+
+- total：`13622.7ms`；click → first-cell-start：`3291ms`。
+- request-send → response-received：`3280.6ms`，占 click → first-cell-start 的约 `99.7%`。
+- response-received → first-cell-start：约 `11ms`；logic parse 为 `1.9ms`，plan call 为
+  `1.5ms`，未发现本地开始阶段的同步性能瓶颈。
+- adapter-play-start → adapter-play-complete：`7714.2ms`；其后 collect：`2624.2ms`。二者
+  属于已开始 spin 后的表现/结算，不解释点击后的静止等待。
+
+结论：当前点击等待由 server RTT 主导。要消除该体感，需要新增 targetless speculative
+spin 公共合同，在 request-send 后预转并于 response 后落停；该能力涉及 gameframeworks 与
+rendercore 的生命周期、失败回滚和 selective held 语义，按本任务计划的范围约束不在 187
+中暗中实现，应独立设计与验收。
 
 ## 自动验收
 

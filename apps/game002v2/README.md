@@ -12,7 +12,10 @@ game002 的精简重写。运行时直接消费 `assets/crave` 解包目录，�
 包含单调时钟 `atMs`、相对上一阶段的 `durationMs` 和相对起点的 `elapsedMs`；记录
 只含阶段名、实例内 trace id、状态和毫秒值，不包含 token、server payload、随机数、
 scene 或轮带。startup 在初始 scene commit 后等待一个 animation frame 才允许 loading
-退场；spin trace 另外记录 plan call、首个真实 cell started edge 和其后的 paint。
+退场；spin trace 另外记录 plan call、首个真实 cell started edge 和其后的 paint。控制台
+首行直接汇总 total、click-to-first-cell-start/paint 和最大阶段，后续文本逐行展开全部
+phase；`pre-start-largest` 单独标出点击到首格开始前的最大阶段。同一条日志的结构化
+对象仍保留完整数据，便于采样统计。
 
 `fg-spin` 以输入盘面为准保留 WL/CN occurrence，只对其它格执行 rendercore selective
 spin，并由 shared runtime 校验 held code/value 未被 target 改写。Nearwin 的 `nearwin1`

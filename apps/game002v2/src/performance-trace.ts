@@ -17,6 +17,13 @@ interface TraceRecord {
   logged: boolean;
 }
 
+interface TracePhaseOutput {
+  readonly phase: string;
+  readonly atMs: number;
+  readonly durationMs: number;
+  readonly elapsedMs: number;
+}
+
 export interface Game002v2PerformanceTrace {
   readonly observer: SlotGamePerformanceObserver;
   markStartup(phase: ExtraStartupPhase): void;
@@ -99,16 +106,98 @@ function emit(
       elapsedMs: roundMs(atMs - startedAtMs),
     });
   });
-  log(
-    "[game002v2 timing]",
-    Object.freeze({
-      traceKind: record.traceKind,
-      traceId: record.traceId,
-      status,
-      totalMs: roundMs((ordered.at(-1)?.[1] ?? startedAtMs) - startedAtMs),
-      phases: Object.freeze(phases),
-    }),
+  const totalMs = roundMs((ordered.at(-1)?.[1] ?? startedAtMs) - startedAtMs);
+  const clickToFirstCellStartMs = durationBetween(
+    ordered,
+    "command-received",
+    "first-cell-start",
   );
+  const clickToFirstCellPaintMs = durationBetween(
+    ordered,
+    "command-received",
+    "first-cell-paint",
+  );
+  const firstCellStartIndex = phases.findIndex(
+    ({ phase }) => phase === "first-cell-start",
+  );
+  const largestBeforeFirstCellStart =
+    firstCellStartIndex < 0
+      ? null
+      : findLargestPhase(phases.slice(0, firstCellStartIndex + 1));
+  const largestPhase = findLargestPhase(phases);
+  const output = Object.freeze({
+    traceKind: record.traceKind,
+    traceId: record.traceId,
+    status,
+    totalMs,
+    clickToFirstCellStartMs,
+    clickToFirstCellPaintMs,
+    largestBeforeFirstCellStart,
+    largestPhase,
+    phases: Object.freeze(phases),
+  });
+  log(formatTraceOutput(output), output);
+}
+
+function durationBetween(
+  ordered: readonly (readonly [string, number])[],
+  fromPhase: string,
+  toPhase: string,
+): number | null {
+  const from = ordered.find(([phase]) => phase === fromPhase)?.[1];
+  const to = ordered.find(([phase]) => phase === toPhase)?.[1];
+  return from === undefined || to === undefined ? null : roundMs(to - from);
+}
+
+function findLargestPhase(phases: readonly TracePhaseOutput[]) {
+  if (phases.length < 2) return null;
+  let largestIndex = 1;
+  for (let index = 2; index < phases.length; index += 1) {
+    if (phases[index]!.durationMs > phases[largestIndex]!.durationMs)
+      largestIndex = index;
+  }
+  return Object.freeze({
+    fromPhase: phases[largestIndex - 1]!.phase,
+    toPhase: phases[largestIndex]!.phase,
+    durationMs: phases[largestIndex]!.durationMs,
+  });
+}
+
+function formatTraceOutput(output: {
+  readonly traceKind: "startup" | "spin";
+  readonly traceId: number;
+  readonly status: "complete" | "failed" | "destroyed";
+  readonly totalMs: number;
+  readonly clickToFirstCellStartMs: number | null;
+  readonly clickToFirstCellPaintMs: number | null;
+  readonly largestBeforeFirstCellStart: ReturnType<typeof findLargestPhase>;
+  readonly largestPhase: ReturnType<typeof findLargestPhase>;
+  readonly phases: readonly TracePhaseOutput[];
+}): string {
+  const metrics = [
+    `total=${output.totalMs}ms`,
+    output.clickToFirstCellStartMs === null
+      ? null
+      : `click-to-first-cell-start=${output.clickToFirstCellStartMs}ms`,
+    output.clickToFirstCellPaintMs === null
+      ? null
+      : `click-to-first-cell-paint=${output.clickToFirstCellPaintMs}ms`,
+    output.largestBeforeFirstCellStart === null
+      ? null
+      : `pre-start-largest=${output.largestBeforeFirstCellStart.fromPhase} -> ${output.largestBeforeFirstCellStart.toPhase} (${output.largestBeforeFirstCellStart.durationMs}ms)`,
+    output.largestPhase === null
+      ? null
+      : `largest=${output.largestPhase.fromPhase} -> ${output.largestPhase.toPhase} (${output.largestPhase.durationMs}ms)`,
+  ].filter((value): value is string => value !== null);
+  const phaseLines = output.phases.map(
+    ({ phase, durationMs, elapsedMs }) =>
+      `  +${durationMs}ms\t=${elapsedMs}ms\t${phase}`,
+  );
+  return [
+    `[game002v2 timing] ${output.traceKind}#${output.traceId} ${output.status} ${metrics.join(" | ")}`,
+    "  duration\telapsed\tphase",
+    ...phaseLines,
+  ].join("\n");
 }
 
 function roundMs(value: number): number {
