@@ -14,6 +14,88 @@ import {
 } from "./test-helpers.js";
 
 describe("framework flow", () => {
+  it("reports monotonic startup and UI spin boundaries without exposing payloads", async () => {
+    const events: Array<{
+      traceKind: string;
+      traceId: number;
+      phase: string;
+      atMs: number;
+    }> = [];
+    let clock = 100;
+    const client = new MockClient();
+    const root = document.createElement("div");
+    const framework = createSlotGameFramework({
+      root,
+      gameAdapter: new MockAdapter(),
+      live: { serverUrl: "ws://localhost", token: "secret" },
+      betOptions: BET_OPTIONS,
+      clientFactory: () => client,
+      performanceObserver: {
+        now: () => ++clock,
+        onEvent: (event) => events.push(event),
+      },
+    });
+
+    await framework.connect();
+    const button = root.querySelector<HTMLButtonElement>(
+      ".slot-ui-spin-button",
+    );
+    if (!button) throw new Error("spin button is missing");
+    button.click();
+    await waitForState(() => framework.getState().spinState, "idle");
+
+    expect(events.map(({ phase }) => phase)).toEqual(
+      expect.arrayContaining([
+        "framework-created",
+        "adapter-mount-start",
+        "adapter-mount-complete",
+        "connect-start",
+        "session-connect-start",
+        "session-connect-complete",
+        "initial-state-start",
+        "initial-state-complete",
+        "connect-complete",
+        "command-received",
+        "request-send",
+        "response-received",
+        "logic-parse-start",
+        "logic-parse-complete",
+        "adapter-play-start",
+        "adapter-play-complete",
+        "spin-complete",
+      ]),
+    );
+    const spinIds = new Set(
+      events
+        .filter(({ traceKind }) => traceKind === "spin")
+        .map(({ traceId }) => traceId),
+    );
+    expect(spinIds).toEqual(new Set([1]));
+    expect(
+      events.every(
+        (event, index) => index === 0 || event.atMs > events[index - 1]!.atMs,
+      ),
+    ).toBe(true);
+    expect(JSON.stringify(events)).not.toContain("secret");
+  });
+
+  it("ignores performance observer failures", async () => {
+    const framework = createSlotGameFramework({
+      root: document.createElement("div"),
+      gameAdapter: new MockAdapter(),
+      live: { serverUrl: "ws://localhost" },
+      betOptions: BET_OPTIONS,
+      clientFactory: () => new MockClient(),
+      performanceObserver: {
+        onEvent: () => {
+          throw new Error("observer failed");
+        },
+      },
+    });
+    await framework.connect();
+    await expect(framework.spin()).resolves.toBeDefined();
+  });
+
   it("publishes explicit preferences in the first framework and UI snapshot", () => {
     const states: Array<{
       muted: boolean;

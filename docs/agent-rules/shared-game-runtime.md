@@ -91,6 +91,13 @@
 - component 名、amount resolver、formatter、样式和业务阻塞边界由 app 传入；shared code 不维护游戏专属金额或 symbol 规则。
 - win-amount 进入 `awaiting-dismiss` 后不得继续阻塞 `playSpin()`；下一次 spin 负责清理遗留展示。
 - reel runtime 在金额或 popup 播放期间仍需逐帧 update，不能冻结 active Spine/VNI loop。
+- grid-cell full/selective spin 活跃期间，rendercore 必须在每个 timeline slice 恰好推进一次
+  所有 occupied cell 的 symbol player，包括 waiting、已落地/完成和未选 held cell；hole
+  不推进，app 不补 ticker 或逐格 update。
+- terminal remove/release 属于 rendercore：必须整批 preflight candidate 与中性 retained
+  predicate，每个 removable occurrence 在自身 once completion 边界直接 release，不插入
+  normal；retained occurrence 的 identity/value/player timeline 不得被触碰。具体 retained
+  symbol 规则只由 app 注入，共享层不得硬编码 code/name。
 
 ## Scene layout 与生成配置
 

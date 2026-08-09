@@ -282,6 +282,14 @@ UI spinning -> netcore spin -> GameLogic -> UI presenting -> adapter.playSpin(lo
 
 因此 `framework.spin()` resolve 时，必要 collect 已完成并且状态已回到可安全下一次 spin 的 `idle`。
 
+## 可选性能边界
+
+`SlotGameFrameworkOptions.performanceObserver` 是实例级、默认关闭的诊断合同。它以调用方
+可注入的单调 clock 上报 framework mount/connect、UI spin command、request build/send、
+response、logic parse、adapter presentation、collect 和终止边界；startup 使用 trace id 0，
+spin 使用实例内递增 id。事件不携带 request/response、token、logic、scene 或随机数。
+observer 的 clock/callback 抛错或返回非有限值时被忽略，不得改变游戏状态或替换原错误。
+
 ## 配置驱动 round facade
 
 本包重导出 logiccore 的 strict round-flow parser、immutable execution-plan compiler 与相关类型，供游戏和 scene-layout template 通过默认 facade 接入。framework 不复制 server round 解释或 renderer movement；配置模板把规范化 `GameLogic` 先交给 compiler，再把冻结 plan 交给 rendercore coordinator。游戏专属 amount/value resolver 与 typed extension 仍由 app 注入。

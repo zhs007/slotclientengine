@@ -8,6 +8,7 @@ import {
 } from "@slotclientengine/gameframeworks";
 import {
   createGridCellCascadeDropPlan,
+  createGridCellCascadeDropdownPlan,
   createSceneLayoutPackageRuntime,
   getInitialSceneLayoutSymbolPackageResource,
   deriveGridCellCascadeSettledValues,
@@ -23,10 +24,18 @@ import {
   type Game002v2PresentationValues,
 } from "./round-values.js";
 import {
+  buildGame002v2AnticipationRefillPlan,
+  buildGame002v2AnticipationSweep,
   buildGame002v2InitialSpinPlan,
+  buildGame002v2FreeGameSpinPlan,
   resolveGame002v2SpinSymbolCodes,
   type Game002v2SpinSymbolCodes,
 } from "./spin-presentation.js";
+import type { Game002v2PerformanceTrace } from "./performance-trace.js";
+import {
+  createGame002v2EffectController,
+  type Game002v2ReelPresentation,
+} from "./reel-presentation.js";
 
 const LANDING_COMPONENTS = Object.freeze([
   "bg-spin",
@@ -62,12 +71,16 @@ const VALUE_COMPONENTS = Object.freeze({
 
 export function createGame002v2RoundAdapter(
   resource: SceneLayoutPackageResource,
+  reelPresentation: Game002v2ReelPresentation,
+  performanceTrace?: Game002v2PerformanceTrace,
 ): SlotGameAdapter {
-  return new DirectRoundAdapter(resource);
+  return new DirectRoundAdapter(resource, reelPresentation, performanceTrace);
 }
 
 class DirectRoundAdapter implements SlotGameAdapter {
   readonly #resource: SceneLayoutPackageResource;
+  readonly #performanceTrace: Game002v2PerformanceTrace | undefined;
+  readonly #reelPresentation: Game002v2ReelPresentation;
   readonly #app = new Application();
   #runtime: SceneLayoutPackageRuntime | null = null;
   #context: SlotGameMountContext | null = null;
@@ -78,9 +91,17 @@ class DirectRoundAdapter implements SlotGameAdapter {
   #nearwin: Game002v2NearwinController | null = null;
   #destroyed = false;
   #resourceOwned = true;
+  #spinStartPaintPending = false;
+  #anticipationActive = false;
 
-  constructor(resource: SceneLayoutPackageResource) {
+  constructor(
+    resource: SceneLayoutPackageResource,
+    reelPresentation: Game002v2ReelPresentation,
+    performanceTrace?: Game002v2PerformanceTrace,
+  ) {
     this.#resource = resource;
+    this.#reelPresentation = reelPresentation;
+    this.#performanceTrace = performanceTrace;
   }
 
   async mount(context: SlotGameMountContext): Promise<void> {
@@ -116,29 +137,33 @@ class DirectRoundAdapter implements SlotGameAdapter {
         version: 1,
         direction: "forward",
         order: "top-down-left-right",
-        timing: {
-          startStepMs: 16,
-          stopStepMs: 16,
-          settleAfterLastStartMs: 180,
-          minimumSpinCycles: 6,
-          speedSymbolsPerSecond: 54,
-        },
-        bounceStrength: 0,
+        timing: this.#reelPresentation.manifest.spin.timing,
+        bounceStrength: this.#reelPresentation.manifest.spin.bounceStrength,
       },
       gridCellPresentation: {
+        createEffectController: () =>
+          createGame002v2EffectController(
+            this.#resource,
+            this.#reelPresentation,
+          ),
         presentationValueResolver:
           createGame002v2DefaultSceneValueResolver(symbols),
       },
     });
     this.#resourceOwned = false;
-    await runtime.init({
-      reels: {
-        main: {
-          scene: state.defaultScene,
-          localPhaseYs: this.localPhases(),
+    try {
+      await runtime.init({
+        reels: {
+          main: {
+            scene: state.defaultScene,
+            localPhaseYs: this.localPhases(),
+          },
         },
-      },
-    });
+      });
+    } catch (error) {
+      runtime.destroy();
+      throw error;
+    }
     const context = this.#context;
     if (!context) throw new Error("game002v2 adapter is not mounted.");
     this.#runtime = runtime;
@@ -149,6 +174,8 @@ class DirectRoundAdapter implements SlotGameAdapter {
       keyboardTarget: window,
       onError: (error) => console.error(error),
     });
+    await nextAnimationFrame();
+    this.#performanceTrace?.markStartup("first-scene-paint");
   }
 
   async playSpin(logic: GameLogic): Promise<void> {
@@ -156,6 +183,7 @@ class DirectRoundAdapter implements SlotGameAdapter {
     runtime.dismissActiveAwardCelebrationImmediately();
     const steps = logic.getSteps();
     if (steps.length === 0) throw new Error("game002v2 round has no steps.");
+    this.#anticipationActive = false;
 
     for (const step of steps) {
       const landingScene = readLandingScene(step);
@@ -166,12 +194,29 @@ class DirectRoundAdapter implements SlotGameAdapter {
         const wildCode = this.requireSpinCodes().wild;
         if (step.hasComponent("bg-dropdown"))
           await this.cascadeTo(step, landingScene, symbols, wildCode);
-        else
+        else {
+          const runtime = this.requireRuntime();
+          const isFreeGameSpin = step.hasComponent("fg-spin");
+          const currentScene = runtime.getMainReelSceneSnapshot();
+          const currentValues = runtime.getMainReelCascadeValues();
           await this.spinTo(
             landingScene,
-            readPresentationValues(step, landingScene, symbols),
-            step.hasComponent("bg-spin") ? this.requireSpinCodes() : null,
+            readPresentationValues(
+              step,
+              landingScene,
+              symbols,
+              isFreeGameSpin
+                ? { scene: currentScene, values: currentValues }
+                : undefined,
+            ),
+            step.hasComponent("bg-spin")
+              ? "base"
+              : isFreeGameSpin
+                ? "freegame"
+                : "plain",
+            currentScene,
           );
+        }
       }
       await this.playFeatureStates(step, runtime.getMainReelSceneSnapshot());
       const finalScene = readFinalScene(step);
@@ -235,6 +280,16 @@ class DirectRoundAdapter implements SlotGameAdapter {
     if (!runtime || this.#destroyed) return;
     try {
       runtime.update(Math.min(this.#app.ticker.deltaMS / 1000, 1 / 30));
+      const started = runtime.drainMainReelStartedPositions();
+      if (started.length > 0 && !this.#spinStartPaintPending) {
+        this.#spinStartPaintPending = true;
+        this.#performanceTrace?.markActiveSpin("first-cell-start");
+        requestAnimationFrame(() => {
+          this.#spinStartPaintPending = false;
+          if (!this.#destroyed)
+            this.#performanceTrace?.markActiveSpin("first-cell-paint");
+        });
+      }
       this.updateNearwin(
         runtime.drainMainReelLandingPositions(),
         runtime.drainMainReelActivationPositions(),
@@ -257,24 +312,33 @@ class DirectRoundAdapter implements SlotGameAdapter {
   private spinTo(
     scene: SceneMatrix,
     presentationValues: readonly (readonly (number | null)[])[],
-    spinCodes: Game002v2SpinSymbolCodes | null,
+    kind: "base" | "freegame" | "plain",
+    inputScene: SceneMatrix,
   ): Promise<void> {
     if (this.#spinWaiter)
       throw new Error("game002v2 reel is already spinning.");
     const runtime = this.requireRuntime();
     this.#nearwin = null;
     try {
+      this.#performanceTrace?.markActiveSpin("plan-start");
       runtime.spinMainReelToScene({
         scene,
         localPhaseYs: this.localPhases(),
         random: secureRandom,
         presentationValues,
-        ...(spinCodes
+        ...(kind !== "plain"
           ? {
               buildGridCellSpinPlan: (stage) => {
+                if (kind === "freegame")
+                  return buildGame002v2FreeGameSpinPlan(
+                    stage,
+                    inputScene,
+                    this.requireSpinCodes(),
+                  );
                 const presentation = buildGame002v2InitialSpinPlan(
                   stage,
-                  spinCodes,
+                  this.requireSpinCodes(),
+                  this.#reelPresentation,
                 );
                 this.#nearwin = presentation.nearwin
                   ? new Game002v2NearwinController(
@@ -287,6 +351,7 @@ class DirectRoundAdapter implements SlotGameAdapter {
             }
           : {}),
       });
+      this.#performanceTrace?.markActiveSpin("spin-call-complete");
     } catch (error) {
       this.#nearwin = null;
       throw error;
@@ -296,7 +361,7 @@ class DirectRoundAdapter implements SlotGameAdapter {
     });
   }
 
-  private cascadeTo(
+  private async cascadeTo(
     step: GameLogicStep,
     targetScene: SceneMatrix,
     symbols: ReturnType<typeof getInitialSceneLayoutSymbolPackageResource>,
@@ -321,32 +386,62 @@ class DirectRoundAdapter implements SlotGameAdapter {
       values: settledValues,
     });
     const geometry = this.#resource.manifest.reels.main!;
+    const refillPositions = holes(dropdown);
+    const planOptions = {
+      sourceScene,
+      sourceValues,
+      settledScene: dropdown,
+      settledValues,
+      targetScene,
+      targetValues,
+      refillPositions,
+      canDropOccurrence,
+      cellHeight: geometry.cellSize.height,
+      rowGap: geometry.gap.y,
+      motion: {
+        columnStartStaggerSeconds: 0.045,
+        startStaggerSeconds: 0.018,
+        baseFallSeconds: 0.11,
+        perRowFallSeconds: 0.04,
+        maxFallSeconds: 0.36,
+        overshootCellRatio: 0.16,
+        settleSeconds: 0.09,
+      },
+    } as const;
+    if (!this.#anticipationActive) {
+      runtime.startMainReelCascadeDrop(
+        createGridCellCascadeDropPlan(planOptions),
+      );
+      await this.waitForReelActivity();
+      if (
+        countCode(dropdown, this.requireSpinCodes().wild) < 2 &&
+        countCode(targetScene, this.requireSpinCodes().wild) >= 2
+      )
+        this.#anticipationActive = true;
+      return;
+    }
+
     runtime.startMainReelCascadeDrop(
-      createGridCellCascadeDropPlan({
-        sourceScene,
-        sourceValues,
-        settledScene: dropdown,
-        settledValues,
-        targetScene,
-        targetValues,
-        refillPositions: holes(dropdown),
-        canDropOccurrence,
-        cellHeight: geometry.cellSize.height,
-        rowGap: geometry.gap.y,
-        motion: {
-          columnStartStaggerSeconds: 0.045,
-          startStaggerSeconds: 0.018,
-          baseFallSeconds: 0.11,
-          perRowFallSeconds: 0.04,
-          maxFallSeconds: 0.36,
-          overshootCellRatio: 0.16,
-          settleSeconds: 0.09,
-        },
-      }),
+      createGridCellCascadeDropdownPlan(planOptions),
     );
-    return new Promise<void>((resolve, reject) => {
-      this.#spinWaiter = { resolve, reject };
+    await this.waitForReelActivity();
+    runtime.startMainReelEffectSweep(
+      buildGame002v2AnticipationSweep(refillPositions, this.#reelPresentation),
+    );
+    await this.waitForReelActivity();
+    runtime.spinMainReelToScene({
+      scene: targetScene,
+      localPhaseYs: this.localPhases(),
+      random: secureRandom,
+      presentationValues: targetValues,
+      buildGridCellSpinPlan: (stage) =>
+        buildGame002v2AnticipationRefillPlan(
+          stage,
+          refillPositions,
+          this.#reelPresentation,
+        ),
     });
+    await this.waitForReelActivity();
   }
 
   private async playWins(step: GameLogicStep): Promise<void> {
@@ -368,9 +463,29 @@ class DirectRoundAdapter implements SlotGameAdapter {
   private async removeWonSymbols(step: GameLogicStep): Promise<void> {
     const removeScene = step.getComponentScenes("bg-remove").at(-1);
     if (!removeScene) return;
-    const positions = holes(removeScene);
-    await this.playState(positions, "remove");
-    this.requireRuntime().releaseMainReelSymbols(positions);
+    const winningPositions = WIN_COMPONENTS.flatMap((name) =>
+      step.getComponentResults(name).flatMap((result) => pairs(result.pos)),
+    );
+    const targetHoles = holes(removeScene);
+    const positions = [...winningPositions, ...targetHoles];
+    if (positions.length === 0)
+      throw new Error("bg-remove requires winning occurrence positions.");
+    const runtime = this.requireRuntime();
+    const result = await runtime.removeMainReelSymbols({
+      positions,
+      state: "remove",
+      playback: {
+        transitionMode: "immediate",
+        completion: "once-complete",
+      },
+      canRemoveOccurrence: ({ code }) => code !== this.requireSpinCodes().wild,
+    });
+    assertSamePositions(result.removed, targetHoles, "removed");
+    for (const retained of result.retained)
+      if (removeScene[retained.x]?.[retained.y] !== retained.code)
+        throw new Error(
+          `game002v2 retained remove occurrence changed at (${retained.x},${retained.y}).`,
+        );
   }
 
   private async playFeatureStates(
@@ -448,12 +563,20 @@ class DirectRoundAdapter implements SlotGameAdapter {
       return;
     }
     nearwin.update(landed, activated);
+    if (activated.length > 0) this.#anticipationActive = true;
   }
 
   private finishNearwin(): void {
     const nearwin = this.#nearwin;
     this.#nearwin = null;
     nearwin?.finish();
+  }
+
+  private waitForReelActivity(): Promise<void> {
+    if (this.#spinWaiter) throw new Error("game002v2 reel is already active.");
+    return new Promise<void>((resolve, reject) => {
+      this.#spinWaiter = { resolve, reject };
+    });
   }
 }
 
@@ -487,6 +610,14 @@ function findCode(scene: SceneMatrix, code: number): readonly Position[] {
 
 function holes(scene: SceneMatrix): readonly Position[] {
   return findCode(scene, -1);
+}
+
+function countCode(scene: SceneMatrix, expected: number): number {
+  return scene.reduce(
+    (total, column) =>
+      total + column.filter((code) => code === expected).length,
+    0,
+  );
 }
 
 function sameScene(left: SceneMatrix, right: SceneMatrix): boolean {
@@ -535,4 +666,19 @@ function secureRandom(): number {
 
 function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
+}
+
+function nextAnimationFrame(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+function assertSamePositions(
+  left: readonly Position[],
+  right: readonly Position[],
+  label: string,
+): void {
+  const keys = (positions: readonly Position[]) =>
+    [...new Set(positions.map(({ x, y }) => `${x}:${y}`))].sort();
+  if (JSON.stringify(keys(left)) !== JSON.stringify(keys(right)))
+    throw new Error(`game002v2 ${label} positions do not match target scene.`);
 }

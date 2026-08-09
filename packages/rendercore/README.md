@@ -626,6 +626,18 @@ manifest 扩展 state 只能声明不覆盖 base preset 的 `once/once` 或 `sta
 
 grid-cell 级联以 `-1` 作为中间态空洞。`createGridCellCascadeDropPlan()` 根据 remove 后 source、服务器 settled/dropdown 和 refill 后完整 target，按列稳定匹配 symbol occurrence，并把既有 occurrence 与从棋盘上方创建的 refill occurrence 编入同一批 unified fall movement。rendercore 只拒绝无法执行该动画的结构，例如非法 hole/坐标、上移、code identity/顺序漂移或 fixed occurrence 被替换；不反向校验 plan 已决定的 presentation value。固定和移动 occurrence 保留 renderer identity，完成边界直接应用 plan 的 target values。`createGridCellCascadeDropdownPlan()` 复用同一 movement pairing，但只保留 existing movement，完成后允许精确 holes；调用方随后可用 effect sweep 与既有 selective `spin(positions)` 填洞，未选 occurrence 不重建、不 appear。`deriveGridCellCascadeSettledValues()` 使用相同 occurrence 顺序与 fixed predicate，从 source scene/value 和 settled scene 确定性推导 settled values。调用方可注入 `canDropOccurrence` 固定特殊 occurrence；其它 symbol 可从固定 symbol 后面穿过，渲染前后关系统一服从 manifest `renderPriority`。fall 期间只在整个 `RenderGridCellReelSet` 上启用一个完整 grid rect mask，活动 symbol 自身不绑定 mask。
 
+grid-cell full/selective spin 的每个 timeline slice 都会恰好推进一次所有 occupied cell：
+包括 waiting、已落地/完成和 selective held cell；hole 不推进。Scene Layout 的 plan stage
+可传 `positions` 与显式 `timing`，package runtime 在释放 selected occurrence 前校验全部 held
+code/value continuity，并通过 `drainMainReelStartedPositions()` 暴露真实 start edge。
+
+`removeVisibleSymbols()` 是通用 terminal remove transaction：整批 candidate/predicate/state
+playback 先完成 preflight，retained occurrence 不请求任何状态；removable occurrence 各自在
+once completion 边界直接 release，不经过 normal。API 返回冻结的 removed/retained occurrence
+快照；播放、identity、abort 或 destroy 失败采用 fail-stop，不回滚已经完成的 release。
+`createGridCellEffectResourceFromLoadedSpine()` 把 Scene Layout 已 exact 加载的 official Spine
+resource 转成 grid effect，仍执行版本、atlas page、texture closure、animation 和 duration 校验。
+
 `scripts/generate-symbol-value-vite-resources.mjs` 为 consumer 生成 tier Spine、`reelStates` PNG，以及 image 模式完整值图片或 image-string 模式 nested manifest/glyph 的 Vite 可静态分析精确 imports、module maps 和 loading URL；共享 dependency 去重，decoded glyph 尺寸也在生成时核对。`--check` 检查漂移。状态贴图 generator 会严格保留并验证三种互斥分支，确保重生成不丢 tier binding、不写回 value-managed symbol 的顶层 normal/state。
 
 ## Slot operation coordinator

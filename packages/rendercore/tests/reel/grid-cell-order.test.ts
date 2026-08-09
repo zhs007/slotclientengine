@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createGridCellOrder } from "../../src/reel/index.js";
+import {
+  createGridCellOrder,
+  orderGridCellPositions,
+} from "../../src/reel/index.js";
 
 describe("createGridCellOrder", () => {
   it("creates top-down-left-right order for a 6 x 9 grid", () => {
@@ -47,5 +50,42 @@ describe("createGridCellOrder", () => {
         mode: "diagonal" as "top-down-left-right",
       }),
     ).toThrow(/mode/);
+  });
+});
+
+describe("grid cell position ordering", () => {
+  it("creates stable sweep and diagonal-wave schedules", () => {
+    const positions = [
+      { x: 1, y: 1 },
+      { x: 0, y: 2 },
+      { x: 0, y: 1 },
+      { x: 1, y: 2 },
+    ];
+    expect(
+      orderGridCellPositions({
+        positions,
+        columns: 2,
+        rows: 3,
+        mode: "left-right-bottom-up",
+      }),
+    ).toEqual([
+      { x: 0, y: 2 },
+      { x: 1, y: 2 },
+      { x: 0, y: 1 },
+      { x: 1, y: 1 },
+    ]);
+    expect(
+      orderGridCellPositions({
+        positions,
+        columns: 2,
+        rows: 3,
+        mode: "bottom-left-up-right-wave",
+      }),
+    ).toEqual([
+      { x: 0, y: 2, startGroupIndex: 0 },
+      { x: 0, y: 1, startGroupIndex: 1 },
+      { x: 1, y: 2, startGroupIndex: 1 },
+      { x: 1, y: 1, startGroupIndex: 2 },
+    ]);
   });
 });

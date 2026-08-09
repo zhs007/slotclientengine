@@ -491,6 +491,8 @@ export interface SceneLayoutGridCellSpinPlanStage {
   readonly targetScene: readonly (readonly number[])[];
   readonly order: readonly import("../reel/index.js").GridCellCoordinate[];
   createPlan(options?: {
+    readonly positions?: readonly import("../reel/index.js").GridCellSpinPosition[];
+    readonly timing?: import("../reel/index.js").GridCellReelSpinTiming;
     readonly dimming?: import("../reel/index.js").GridCellDimmingPattern;
     readonly dimmingActivatedAtStart?: boolean;
     readonly activation?: import("../reel/index.js").GridCellReelActivationPlanOptions;
@@ -560,6 +562,10 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
     readonly x: number;
     readonly y: number;
   }[];
+  drainMainReelStartedPositions(): readonly {
+    readonly x: number;
+    readonly y: number;
+  }[];
   drainMainReelActivationPositions(): readonly {
     readonly x: number;
     readonly y: number;
@@ -580,6 +586,9 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   releaseMainReelSymbols(
     positions: readonly { readonly x: number; readonly y: number }[],
   ): void;
+  removeMainReelSymbols(
+    options: import("../reel/index.js").GridCellTerminalRemoveOptions,
+  ): Promise<import("../reel/index.js").GridCellTerminalRemoveResult>;
   setMainReelSymbolDimming(
     highlightedPositions: readonly {
       readonly x: number;

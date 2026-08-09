@@ -31,6 +31,40 @@ export type GridCellEffectResourceMap = Readonly<
   Record<string, GridCellEffectResource>
 >;
 
+export function createGridCellEffectResourceFromLoadedSpine(options: {
+  readonly id: string;
+  readonly resource: OfficialSpinePlayerResource;
+  readonly animationName: string;
+  readonly loopCount: number;
+  readonly finishBeforeStopMs: number;
+  readonly transform: Readonly<{ x: number; y: number; scale: number }>;
+}): GridCellEffectResource {
+  if (typeof options.id !== "string" || options.id.length === 0)
+    throw new ReelError("grid cell effect id must be non-empty.");
+  if (!Number.isSafeInteger(options.loopCount) || options.loopCount <= 0)
+    throw new ReelError("grid cell effect loopCount must be positive.");
+  if (
+    !Number.isFinite(options.finishBeforeStopMs) ||
+    options.finishBeforeStopMs < 0
+  )
+    throw new ReelError(
+      "grid cell effect finishBeforeStopMs must be non-negative.",
+    );
+  const { x, y, scale } = options.transform;
+  if (![x, y, scale].every(Number.isFinite) || scale <= 0)
+    throw new ReelError(
+      "grid cell effect transform must be finite with positive scale.",
+    );
+  return resolveLoadedEffect({
+    id: options.id,
+    playerResource: options.resource,
+    animationName: options.animationName,
+    loopCount: options.loopCount,
+    finishBeforeStopMs: options.finishBeforeStopMs,
+    transform: Object.freeze({ x, y, scale }),
+  });
+}
+
 export function createGridCellEffectResourcesFromManifest(options: {
   readonly manifest: ParsedReelManifest;
   readonly skeletonModules: Readonly<Record<string, unknown>>;
@@ -116,14 +150,33 @@ function resolveEffect(
     atlasText,
     textureUrls: Object.freeze({ [page]: textureUrl }),
   });
-  const validation = validateOfficialSpineResource({
-    resource: playerResource,
-    requiredAnimations: [spec.animation],
+  return resolveLoadedEffect({
+    id,
+    playerResource,
+    animationName: spec.animation,
+    loopCount: spec.loopCount,
+    finishBeforeStopMs: spec.finishBeforeStopMs,
+    transform: spec.transform,
   });
-  const parsedDurationSeconds = validation.animationDurations[spec.animation];
+}
+
+function resolveLoadedEffect(options: {
+  readonly id: string;
+  readonly playerResource: OfficialSpinePlayerResource;
+  readonly animationName: string;
+  readonly loopCount: number;
+  readonly finishBeforeStopMs: number;
+  readonly transform: Readonly<{ x: number; y: number; scale: number }>;
+}): GridCellEffectResource {
+  const validation = validateOfficialSpineResource({
+    resource: options.playerResource,
+    requiredAnimations: [options.animationName],
+  });
+  const parsedDurationSeconds =
+    validation.animationDurations[options.animationName];
   if (!Number.isFinite(parsedDurationSeconds) || parsedDurationSeconds! <= 0) {
     throw new ReelError(
-      `grid cell effect "${id}" animation "${spec.animation}" must have positive official duration.`,
+      `grid cell effect "${options.id}" animation "${options.animationName}" must have positive official duration.`,
     );
   }
   const officialDurationSeconds = parsedDurationSeconds!;
@@ -132,15 +185,15 @@ function resolveEffect(
     Math.max(0, officialDurationSeconds - durationSeconds) +
     SPINE_FLOAT_COMPLETION_MARGIN_SECONDS;
   return Object.freeze({
-    id,
-    playerResource,
-    animationName: spec.animation,
+    id: options.id,
+    playerResource: options.playerResource,
+    animationName: options.animationName,
     officialDurationSeconds,
     durationSeconds,
     completionBoundaryAdjustmentSeconds,
-    loopCount: spec.loopCount,
-    finishBeforeStopMs: spec.finishBeforeStopMs,
-    transform: spec.transform,
+    loopCount: options.loopCount,
+    finishBeforeStopMs: options.finishBeforeStopMs,
+    transform: options.transform,
   });
 }
 

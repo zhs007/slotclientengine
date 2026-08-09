@@ -36,6 +36,79 @@ const DIMMING = Object.freeze({
 }) satisfies GridCellDimmingPattern;
 
 describe("RenderGridCellReelSet", () => {
+  it("terminal-removes each completed occurrence without touching retained candidates", async () => {
+    const reelSet = createGridReelSet();
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS, undefined, [
+      [7, null, null],
+      [null, null, null],
+    ]);
+    const removal = reelSet.removeVisibleSymbols({
+      positions: [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+      ],
+      state: "win",
+      playback: { transitionMode: "immediate", completion: "once-complete" },
+      canRemoveOccurrence: ({ code }) => code !== 1,
+    });
+
+    reelSet.update(0.59);
+    const result = await removal;
+
+    expect(result).toEqual({
+      removed: [{ x: 1, y: 0, code: 2, presentationValue: null }],
+      retained: [{ x: 0, y: 0, code: 1, presentationValue: 7 }],
+    });
+    expect(reelSet.getVisibleScene()).toEqual([
+      [1, 0, 2],
+      [-1, 1, 0],
+    ]);
+    expect(reelSet.getVisibleSymbolStateSnapshot(0, 0)).toMatchObject({
+      code: 1,
+      requestedState: "normal",
+    });
+  });
+
+  it("keeps waiting and selective-held occurrence animations advancing during spin", async () => {
+    const reelSet = createGridReelSet();
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
+    const heldPlayback = reelSet.playVisibleSymbolStates(
+      [{ x: 1, y: 1 }],
+      "win",
+      { transitionMode: "immediate", completion: "once-complete" },
+    );
+    const target = [
+      [2, 0, 2],
+      [2, 1, 0],
+    ];
+    const plan = createGridCellReelSpinPlan({
+      reels: createBasicReels(),
+      finalYs: FINAL_YS,
+      targetScene: target,
+      columns: 2,
+      rows: 3,
+      order: createGridCellOrder({
+        columns: 2,
+        rows: 3,
+        mode: "top-down-left-right",
+      }),
+      positions: [{ x: 0, y: 0 }],
+      timing: { ...TIMING, settleAfterLastStartMs: 800 },
+      dimming: DIMMING,
+    });
+
+    reelSet.spinSelective(plan);
+    reelSet.update(0.59);
+    await heldPlayback;
+
+    expect(reelSet.getSnapshot().spinning).toBe(true);
+    expect(reelSet.getVisibleSymbolStateSnapshot(1, 1)).toMatchObject({
+      code: 1,
+      onceCompletionCount: 1,
+      requestedState: "normal",
+    });
+  });
+
   it("awaits a preflighted visible-symbol batch and rejects release-bound playback", async () => {
     const reelSet = createGridReelSet();
     reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);

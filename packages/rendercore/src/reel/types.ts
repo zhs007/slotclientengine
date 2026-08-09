@@ -395,6 +395,28 @@ export interface VisibleSymbolStatePlaybackBatchOptions {
   readonly signal?: AbortSignal;
 }
 
+export interface GridCellTerminalRemoveCandidate {
+  readonly x: number;
+  readonly y: number;
+  readonly code: number;
+  readonly presentationValue: number | null;
+}
+
+export interface GridCellTerminalRemoveOptions {
+  readonly positions: readonly { readonly x: number; readonly y: number }[];
+  readonly state: SymbolStateId;
+  readonly playback: Omit<SymbolStatePlaybackOptions, "signal">;
+  readonly canRemoveOccurrence?: (
+    candidate: GridCellTerminalRemoveCandidate,
+  ) => boolean;
+  readonly signal?: AbortSignal;
+}
+
+export interface GridCellTerminalRemoveResult {
+  readonly removed: readonly GridCellTerminalRemoveCandidate[];
+  readonly retained: readonly GridCellTerminalRemoveCandidate[];
+}
+
 export interface RenderReelSetOptions {
   readonly reels: LogicReels;
   readonly layout: ReelLayout;

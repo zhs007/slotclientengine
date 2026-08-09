@@ -18,6 +18,9 @@ import type {
   GridCellReelPlanCell,
   GridCellReelSpinPlan,
   GridCellEffectSweepPlan,
+  GridCellTerminalRemoveCandidate,
+  GridCellTerminalRemoveOptions,
+  GridCellTerminalRemoveResult,
   RenderGridCellReelCellSnapshot,
   RenderGridCellReelSetOptions,
   RenderGridCellReelSetSpinOptions,
@@ -331,6 +334,46 @@ export class RenderGridCellReelSet extends Container {
     }
   }
 
+  spinSelective(
+    plan: GridCellReelSpinPlan,
+    options: RenderGridCellReelSetSpinOptions = {},
+  ): void {
+    if (!plan.selective) {
+      throw new ReelError("spinSelective requires a selective grid spin plan.");
+    }
+    for (const planCell of plan.cells) {
+      const cell = this.getCell(planCell.x, planCell.y);
+      const slot = cell.reel
+        .getSlotSnapshots()
+        .find((candidate) => candidate.windowY === 0);
+      if (!cell.occupied || !slot?.symbol) {
+        throw new ReelError(
+          `Selective grid spin position (${planCell.x},${planCell.y}) has no releasable occurrence.`,
+        );
+      }
+    }
+    const detached = plan.cells.map((planCell) => {
+      const cell = this.getCell(planCell.x, planCell.y);
+      return Object.freeze({
+        cell,
+        occurrence: cell.reel.takeVisibleOccurrence(),
+      });
+    });
+    for (const { cell } of detached) cell.occupied = false;
+    try {
+      this.spin(plan, options);
+    } catch (error) {
+      for (const { cell, occurrence } of detached) {
+        cell.reel.placeVisibleOccurrence(occurrence);
+        cell.occupied = true;
+      }
+      throw error;
+    }
+    for (const { cell, occurrence } of detached) {
+      cell.reel.releaseDetachedOccurrence(occurrence);
+    }
+  }
+
   update(deltaSeconds: number): RenderGridCellReelSetUpdateResult {
     assertValidDeltaSeconds(deltaSeconds);
     if (this.#activeDrop) {
@@ -516,10 +559,100 @@ export class RenderGridCellReelSet extends Container {
           `Cannot release empty grid cell (${position.x},${position.y}).`,
         );
       }
-      cell.reel.releaseVisibleOccurrence();
-      cell.occupied = false;
-      cell.phase = "completed";
+      this.releaseCell(cell);
     }
+  }
+
+  removeVisibleSymbols(
+    options: GridCellTerminalRemoveOptions,
+  ): Promise<GridCellTerminalRemoveResult> {
+    this.assertStopped("remove visible symbols");
+    const positions = normalizePositions(
+      options.positions,
+      this.#columns,
+      this.#rows,
+      "coalesce",
+    );
+    const prepared = positions.map((position) => {
+      const cell = this.getCell(position.x, position.y);
+      if (!cell.occupied) {
+        throw new ReelError(
+          `Cannot remove empty grid cell (${position.x},${position.y}).`,
+        );
+      }
+      const slot = cell.reel
+        .getSlotSnapshots()
+        .find((candidate) => candidate.windowY === 0);
+      if (!slot?.symbol) {
+        throw new ReelError(
+          `Cannot remove missing occurrence at grid cell (${position.x},${position.y}).`,
+        );
+      }
+      const candidate: GridCellTerminalRemoveCandidate = Object.freeze({
+        x: position.x,
+        y: position.y,
+        code: slot.code,
+        presentationValue: slot.presentationValue,
+      });
+      const removable = options.canRemoveOccurrence?.(candidate) ?? true;
+      if (typeof removable !== "boolean") {
+        throw new ReelError("canRemoveOccurrence must return a boolean.");
+      }
+      if (removable) {
+        cell.reel.validateVisibleSymbolStatePlayback(
+          0,
+          options.state,
+          options.playback,
+        );
+      }
+      return Object.freeze({ cell, symbol: slot.symbol, candidate, removable });
+    });
+    const removed = Object.freeze(
+      prepared
+        .filter(({ removable }) => removable)
+        .map(({ candidate }) => candidate),
+    );
+    const retained = Object.freeze(
+      prepared
+        .filter(({ removable }) => !removable)
+        .map(({ candidate }) => candidate),
+    );
+    const result: GridCellTerminalRemoveResult = Object.freeze({
+      removed,
+      retained,
+    });
+    if (removed.length === 0) return Promise.resolve(result);
+
+    return startSymbolStatePlaybackBatch(
+      prepared
+        .filter(({ removable }) => removable)
+        .map(
+          ({ cell, symbol, candidate }) =>
+            (signal) =>
+              cell.reel
+                .playVisibleSymbolState(0, options.state, {
+                  ...options.playback,
+                  signal,
+                })
+                .then(() => {
+                  const current = cell.reel
+                    .getSlotSnapshots()
+                    .find((slot) => slot.windowY === 0);
+                  if (
+                    !cell.occupied ||
+                    current?.symbol !== symbol ||
+                    current.code !== candidate.code ||
+                    current.presentationValue !== candidate.presentationValue
+                  ) {
+                    throw new ReelError(
+                      `Terminal remove occurrence changed at grid cell (${candidate.x},${candidate.y}).`,
+                    );
+                  }
+                  this.releaseCell(cell);
+                }),
+        ),
+      options.signal,
+    ).then(() => result);
   }
 
   setVisibleSymbolDimming(
@@ -1232,6 +1365,12 @@ export class RenderGridCellReelSet extends Container {
     return { started, landed, activated };
   }
 
+  private releaseCell(cell: RuntimeCell): void {
+    cell.reel.releaseVisibleOccurrence();
+    cell.occupied = false;
+    cell.phase = "completed";
+  }
+
   private startEffectsAtBoundary(
     plan: GridCellReelSpinPlan,
     elapsedMs: number,
@@ -1397,8 +1536,22 @@ export class RenderGridCellReelSet extends Container {
   ): void {
     const planCell = cell.planCell;
     const plan = this.#spinPlan;
+    const sliceDeltaMs = Math.max(0, elapsedMs - previousElapsedMs);
     if (!planCell || !plan) {
+      if (cell.occupied && sliceDeltaMs > 0) {
+        cell.reel.update(sliceDeltaMs / 1000);
+        this.syncCellRenderOrder(cell);
+      }
       return;
+    }
+
+    if (cell.phase === "waiting") {
+      const waitingEndMs = Math.min(elapsedMs, planCell.startAtMs);
+      const waitingDeltaMs = Math.max(0, waitingEndMs - previousElapsedMs);
+      if (cell.occupied && waitingDeltaMs > 0) {
+        cell.reel.update(waitingDeltaMs / 1000);
+        this.syncCellRenderOrder(cell);
+      }
     }
 
     if (cell.phase === "waiting" && elapsedMs >= planCell.startAtMs) {
@@ -1456,7 +1609,13 @@ export class RenderGridCellReelSet extends Container {
     }
 
     if (cell.phase === "landed") {
-      this.updateLanded(cell, plan, elapsedMs - previousElapsedMs);
+      this.updateLanded(cell, plan, sliceDeltaMs);
+      return;
+    }
+
+    if (cell.phase === "completed" && cell.occupied && sliceDeltaMs > 0) {
+      cell.reel.update(sliceDeltaMs / 1000);
+      this.syncCellRenderOrder(cell);
     }
   }
 

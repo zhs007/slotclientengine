@@ -219,6 +219,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     readonly y: number;
   }[] = [];
   #mainReelLandingKeys = new Set<string>();
+  #pendingMainReelStartedPositions: {
+    readonly x: number;
+    readonly y: number;
+  }[] = [];
+  #mainReelStartedKeys = new Set<string>();
   #pendingMainReelActivationPositions: {
     readonly x: number;
     readonly y: number;
@@ -541,6 +546,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       const geometry = this.#manifest.reels.main;
       if (this.#reel instanceof RenderGridCellReelSet) {
         const result = this.#reel.update(deltaSeconds);
+        for (const position of result.startedCells)
+          this.recordMainReelStarted(position.x, position.y);
         for (const position of result.landedCells)
           this.recordMainReelLanding(position.x, position.y);
         for (const position of result.activationCells)
@@ -775,7 +782,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           order,
           cellReelOffsets,
           direction: profile.direction,
-          timing: profile.timing,
+          timing: options.timing ?? profile.timing,
+          ...(options.positions ? { positions: options.positions } : {}),
           dimming: options.dimming ?? {
             resolveDimmingAlpha: () => 0,
             fadeInMs: 0,
@@ -798,10 +806,22 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
             }),
           )
         : createPlan();
-      reel.spin(plan, {
+      const spinOptions = {
         ...(values ? { targetPresentationValues: values } : {}),
         ...(landingStates ? { targetLandingStates: landingStates } : {}),
-      });
+      };
+      if (plan.selective) {
+        assertSelectiveTargetContinuity(
+          reel.getVisibleScene(),
+          reel.getCascadeValues(),
+          scene,
+          values,
+          plan,
+        );
+        reel.spinSelective(plan, spinOptions);
+      } else {
+        reel.spin(plan, spinOptions);
+      }
       return;
     }
     if (reel instanceof RenderGridCellReelSet)
@@ -931,6 +951,14 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     return positions;
   }
 
+  drainMainReelStartedPositions(): readonly {
+    readonly x: number;
+    readonly y: number;
+  }[] {
+    this.assertReady();
+    return Object.freeze(this.#pendingMainReelStartedPositions.splice(0));
+  }
+
   drainMainReelActivationPositions(): readonly {
     readonly x: number;
     readonly y: number;
@@ -984,6 +1012,18 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.requireReel("main").releaseVisibleSymbols(positions);
   }
 
+  removeMainReelSymbols(
+    options: import("../reel/index.js").GridCellTerminalRemoveOptions,
+  ): Promise<import("../reel/index.js").GridCellTerminalRemoveResult> {
+    this.assertReady();
+    const reel = this.requireReel("main");
+    if (!(reel instanceof RenderGridCellReelSet))
+      throw new SceneLayoutError(
+        "Terminal remove requires a grid-cell main reel.",
+      );
+    return reel.removeVisibleSymbols(options);
+  }
+
   setMainReelSymbolDimming(
     highlightedPositions: readonly {
       readonly x: number;
@@ -1021,7 +1061,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         "Custom grid-cell spin requires a grid-cell main reel.",
       );
     this.clearMainReelLandingPositions();
-    reel.spin(plan, options);
+    if (plan.selective) reel.spinSelective(plan, options);
+    else reel.spin(plan, options);
   }
 
   startMainReelEffectSweep(
@@ -2373,6 +2414,13 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#pendingMainReelLandingPositions.push(Object.freeze({ x, y }));
   }
 
+  private recordMainReelStarted(x: number, y: number): void {
+    const key = `${x}:${y}`;
+    if (this.#mainReelStartedKeys.has(key)) return;
+    this.#mainReelStartedKeys.add(key);
+    this.#pendingMainReelStartedPositions.push(Object.freeze({ x, y }));
+  }
+
   private recordMainReelActivation(x: number, y: number): void {
     const key = `${x}:${y}`;
     if (this.#mainReelActivationKeys.has(key)) return;
@@ -2381,6 +2429,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   }
 
   private clearMainReelLandingPositions(): void {
+    this.#pendingMainReelStartedPositions.length = 0;
+    this.#mainReelStartedKeys.clear();
     this.#pendingMainReelLandingPositions.length = 0;
     this.#mainReelLandingKeys.clear();
     this.#pendingMainReelActivationPositions.length = 0;
@@ -2456,6 +2506,34 @@ function validateScene(
       );
     }),
   );
+}
+
+function assertSelectiveTargetContinuity(
+  currentScene: readonly (readonly number[])[],
+  currentValues: import("../reel/index.js").GridCellCascadeValueMatrix,
+  targetScene: readonly (readonly number[])[],
+  targetValues: SymbolPresentationValueMatrix | undefined,
+  plan: import("../reel/index.js").GridCellReelSpinPlan,
+): void {
+  const selected = new Set(plan.cells.map(({ x, y }) => `${x}:${y}`));
+  for (let x = 0; x < currentScene.length; x++) {
+    for (let y = 0; y < currentScene[x]!.length; y++) {
+      if (selected.has(`${x}:${y}`)) continue;
+      if (currentScene[x]![y] !== targetScene[x]![y]) {
+        throw new SceneLayoutError(
+          `Selective grid spin held cell (${x},${y}) changed code from ${currentScene[x]![y]} to ${targetScene[x]![y]}.`,
+        );
+      }
+      if (
+        targetValues !== undefined &&
+        currentValues[x]![y] !== targetValues[x]![y]
+      ) {
+        throw new SceneLayoutError(
+          `Selective grid spin held cell (${x},${y}) changed presentation value.`,
+        );
+      }
+    }
+  }
 }
 
 function validatePhases(

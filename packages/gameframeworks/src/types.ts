@@ -253,6 +253,48 @@ export type SlotGameLogicFactory = (
   meta: GameLogicMeta,
 ) => GameLogic;
 
+export type SlotGamePerformanceTraceKind = "startup" | "spin";
+
+export type SlotGamePerformancePhase =
+  | "framework-created"
+  | "adapter-mount-start"
+  | "adapter-mount-complete"
+  | "connect-start"
+  | "session-connect-start"
+  | "session-connect-complete"
+  | "initial-state-start"
+  | "initial-state-complete"
+  | "connect-complete"
+  | "command-received"
+  | "spin-start"
+  | "request-build-start"
+  | "request-build-complete"
+  | "request-send"
+  | "response-received"
+  | "logic-parse-start"
+  | "logic-parse-complete"
+  | "adapter-play-start"
+  | "adapter-play-complete"
+  | "collect-start"
+  | "collect-complete"
+  | "spin-complete"
+  | "failed"
+  | "destroyed";
+
+export interface SlotGamePerformanceEvent {
+  readonly traceKind: SlotGamePerformanceTraceKind;
+  /** Startup always uses 0; spin ids are monotonically increasing per framework. */
+  readonly traceId: number;
+  readonly phase: SlotGamePerformancePhase;
+  readonly atMs: number;
+}
+
+export interface SlotGamePerformanceObserver {
+  /** Defaults to performance.now(), with Date.now() as the non-browser fallback. */
+  readonly now?: () => number;
+  onEvent(event: SlotGamePerformanceEvent): void;
+}
+
 export interface SlotGameFrameworkOptions {
   readonly root: HTMLElement;
   readonly gameAdapter: SlotGameAdapter;
@@ -281,6 +323,7 @@ export interface SlotGameFrameworkOptions {
   readonly uiFactory?: SlotGameUiFactory;
   readonly onStateChange?: (state: SlotGameStateSnapshot) => void;
   readonly onError?: (error: Error) => void;
+  readonly performanceObserver?: SlotGamePerformanceObserver;
 }
 
 export interface SlotGameAdapter {

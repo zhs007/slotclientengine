@@ -22,6 +22,8 @@ import type {
   SlotGameFrameworkOptions,
   SlotGameLiveSessionLike,
   SlotGameMountContext,
+  SlotGamePerformancePhase,
+  SlotGamePerformanceTraceKind,
   SlotGameSpinRequest,
   SlotGameStateSnapshot,
   SlotGameUi,
@@ -47,6 +49,8 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
   #lifecycleGeneration = 0;
   #fatalUiError: Error | null = null;
   #roundId = 0;
+  #spinTraceId = 0;
+  #activeSpinTraceId: number | null = null;
 
   constructor(options: SlotGameFrameworkOptions) {
     validateFrameworkOptions(options);
@@ -56,6 +60,7 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
         : createSlotGameRngConsoleController(options.rngConsole);
     try {
       this.#options = options;
+      this.#emitPerformance("startup", 0, "framework-created");
       this.#state = new SlotGameStateStore({
         designSize: options.designSize,
         betOptions: options.betOptions,
@@ -108,13 +113,16 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
   async connect(): Promise<void> {
     this.#assertAlive();
     const generation = this.#lifecycleGeneration;
+    this.#emitPerformance("startup", 0, "connect-start");
     try {
       this.#state.setError(null);
       this.#state.setSpinState("connecting");
       this.#applyState();
       await this.#mountPromise;
       this.#assertOperationActive(generation);
+      this.#emitPerformance("startup", 0, "session-connect-start");
       const userInfo = await this.#session.connect();
+      this.#emitPerformance("startup", 0, "session-connect-complete");
       this.#assertOperationActive(generation);
       const balance = requireFiniteBalance(
         userInfo,
@@ -122,14 +130,18 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
       );
       this.#state.setConnected(true);
       this.#state.setBalance(balance);
+      this.#emitPerformance("startup", 0, "initial-state-start");
       await this.#options.gameAdapter.applyInitialState?.(
         createInitialState(userInfo, balance),
       );
+      this.#emitPerformance("startup", 0, "initial-state-complete");
       this.#assertOperationActive(generation);
       this.#state.setSpinState("idle");
       this.#state.setError(null);
       this.#applyState();
+      this.#emitPerformance("startup", 0, "connect-complete");
     } catch (error) {
+      this.#emitPerformance("startup", 0, "failed");
       throw this.#handleOperationFailure(
         error,
         generation,
@@ -139,6 +151,10 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
   }
 
   async spin(): Promise<GameLogic> {
+    return this.#spin(++this.#spinTraceId);
+  }
+
+  async #spin(traceId: number): Promise<GameLogic> {
     this.#assertAlive();
     const current = this.#state.getState();
     if (!current.connected) {
@@ -151,6 +167,8 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
     }
 
     const generation = this.#lifecycleGeneration;
+    this.#activeSpinTraceId = traceId;
+    this.#emitPerformance("spin", traceId, "spin-start");
     try {
       const betOption = current.betOption;
       const balanceBefore = current.balance;
@@ -160,6 +178,7 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
       await this.#mountPromise;
       this.#assertOperationActive(generation);
 
+      this.#emitPerformance("spin", traceId, "request-build-start");
       const baseParams = buildSpinParams(
         this.#state.getState(),
         betOption,
@@ -173,16 +192,21 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
               ...baseParams,
               lstrand: nextRandomNumbers,
             }) as SpinParams);
+      this.#emitPerformance("spin", traceId, "request-build-complete");
+      this.#emitPerformance("spin", traceId, "request-send");
       const rawResult = await this.#session.spin(params);
+      this.#emitPerformance("spin", traceId, "response-received");
       this.#assertOperationActive(generation);
       const balanceAfterSpin = readFiniteBalanceOrNull(
         this.#session.getUserInfo(),
       );
+      this.#emitPerformance("spin", traceId, "logic-parse-start");
       const logicResult = createSlotGameLogicResult(rawResult, {
         bet: betOption,
         userInfo: this.#session.getUserInfo(),
         logicFactory: this.#options.logicFactory,
       });
+      this.#emitPerformance("spin", traceId, "logic-parse-complete");
       this.#rngConsole?.logRandomNumbers(logicResult.logic.getRandomNumbers());
       const round = createSlotGameRoundContext({
         id: ++this.#roundId,
@@ -196,14 +220,18 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
       this.#state.setSpinState("presenting");
       this.#applyState();
       this.#assertOperationActive(generation);
+      this.#emitPerformance("spin", traceId, "adapter-play-start");
       await this.#options.gameAdapter.playSpin(logicResult.logic);
+      this.#emitPerformance("spin", traceId, "adapter-play-complete");
       this.#assertOperationActive(generation);
 
       if (round.shouldCollect) {
         this.#state.setSpinState("collecting");
         this.#applyState();
         this.#assertOperationActive(generation);
+        this.#emitPerformance("spin", traceId, "collect-start");
         const userInfo = await this.#session.collect();
+        this.#emitPerformance("spin", traceId, "collect-complete");
         this.#assertOperationActive(generation);
         this.#state.setBalance(requireFiniteBalance(userInfo));
       } else if (balanceAfterSpin !== null) {
@@ -213,8 +241,12 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
       this.#state.setSpinState("idle");
       this.#state.setError(null);
       this.#applyState();
+      this.#emitPerformance("spin", traceId, "spin-complete");
+      this.#activeSpinTraceId = null;
       return logicResult.logic;
     } catch (error) {
+      this.#emitPerformance("spin", traceId, "failed");
+      this.#activeSpinTraceId = null;
       throw this.#handleOperationFailure(
         error,
         generation,
@@ -262,6 +294,7 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
   }
 
   async #mountGameAdapter(): Promise<void> {
+    this.#emitPerformance("startup", 0, "adapter-mount-start");
     const context: SlotGameMountContext = Object.freeze({
       frame: this.#ui.elements.frame,
       gameLayer: this.#ui.elements.gameLayer,
@@ -302,6 +335,7 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
       },
     });
     await this.#options.gameAdapter.mount(context);
+    this.#emitPerformance("startup", 0, "adapter-mount-complete");
   }
 
   #applyState(): void {
@@ -382,6 +416,11 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
       return null;
     }
     this.#destroyed = true;
+    if (this.#activeSpinTraceId !== null) {
+      this.#emitPerformance("spin", this.#activeSpinTraceId, "destroyed");
+      this.#activeSpinTraceId = null;
+    }
+    this.#emitPerformance("startup", 0, "destroyed");
     this.#lifecycleGeneration += 1;
     let firstError: Error | null = null;
     for (const cleanup of [
@@ -405,7 +444,9 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
         if (this.#destroyed) {
           return;
         }
-        void this.spin().catch(() => undefined);
+        const traceId = ++this.#spinTraceId;
+        this.#emitPerformance("spin", traceId, "command-received");
+        void this.#spin(traceId).catch(() => undefined);
       },
       increaseBet: (): void => {
         if (this.#destroyed) {
@@ -448,6 +489,23 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
   #assertAlive(): void {
     if (this.#destroyed) {
       throw new SlotGameRuntimeError("Slot game framework has been destroyed.");
+    }
+  }
+
+  #emitPerformance(
+    traceKind: SlotGamePerformanceTraceKind,
+    traceId: number,
+    phase: SlotGamePerformancePhase,
+  ): void {
+    const observer = this.#options.performanceObserver;
+    if (!observer) return;
+    try {
+      const now = observer.now ?? defaultPerformanceNow;
+      const atMs = now();
+      if (!Number.isFinite(atMs)) return;
+      observer.onEvent(Object.freeze({ traceKind, traceId, phase, atMs }));
+    } catch {
+      // Diagnostic observers must never change game behavior.
     }
   }
 }
@@ -516,6 +574,22 @@ function validateFrameworkOptions(options: SlotGameFrameworkOptions): void {
   ) {
     throw new SlotGameConfigError("uiFactory must provide create().");
   }
+  if (
+    options.performanceObserver !== undefined &&
+    (typeof options.performanceObserver !== "object" ||
+      options.performanceObserver === null ||
+      typeof options.performanceObserver.onEvent !== "function" ||
+      (options.performanceObserver.now !== undefined &&
+        typeof options.performanceObserver.now !== "function"))
+  ) {
+    throw new SlotGameConfigError(
+      "performanceObserver must provide onEvent() and an optional now().",
+    );
+  }
+}
+
+function defaultPerformanceNow(): number {
+  return globalThis.performance?.now?.() ?? Date.now();
 }
 
 function createDestroyedError(): SlotGameRuntimeError {

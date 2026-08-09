@@ -13,6 +13,8 @@ import { createCraveLoadingResources, createCraveResource } from "./crave.js";
 import type { Game002v2LaunchConfig } from "./launch.js";
 import { prepareReadiness, type Game002v2Readiness } from "./readiness.js";
 import { createGame002v2RoundAdapter } from "./round-adapter.js";
+import { createGame002v2PerformanceTrace } from "./performance-trace.js";
+import { prepareGame002v2ReelPresentation } from "./reel-presentation.js";
 import "./styles.css";
 
 const root = document.getElementById("app");
@@ -29,10 +31,14 @@ interface PreparedGame {
   readonly platform: SlotPlatformBootstrapHandle;
   readonly session: Game002v2Readiness["session"];
   readonly resource: Awaited<ReturnType<typeof createCraveResource>>;
+  readonly reelPresentation: Awaited<
+    ReturnType<typeof prepareGame002v2ReelPresentation>
+  >;
 }
 
 let framework: SlotGameFramework | null = null;
 let platform: SlotPlatformBootstrapHandle | null = null;
+const performanceTrace = createGame002v2PerformanceTrace();
 
 const loading = createGameLoading<PreparedGame, Game002v2Readiness>({
   root: loadingHost,
@@ -46,20 +52,32 @@ const loading = createGameLoading<PreparedGame, Game002v2Readiness>({
   onBeforeComplete: async ({ loadedResources, readinessResult, signal }) => {
     if (signal.aborted) throw new DOMException("Aborted", "AbortError");
     const resource = await createCraveResource(loadedResources);
-    return Object.freeze({
-      config: readinessResult.config,
-      platform: readinessResult.platform,
-      session: readinessResult.session,
-      resource,
-    });
+    try {
+      const reelPresentation = await prepareGame002v2ReelPresentation(resource);
+      return Object.freeze({
+        config: readinessResult.config,
+        platform: readinessResult.platform,
+        session: readinessResult.session,
+        resource,
+        reelPresentation,
+      });
+    } catch (error) {
+      await resource.destroy();
+      throw error;
+    }
   },
   onEnterGame: async ({ prepareResult }) => {
+    performanceTrace.markStartup("entering-game");
     const snapshot = prepareResult.platform.snapshot;
     platform = prepareResult.platform;
     gameHost.hidden = false;
     framework = createSlotGameFramework({
       root: gameHost,
-      gameAdapter: createGame002v2RoundAdapter(prepareResult.resource),
+      gameAdapter: createGame002v2RoundAdapter(
+        prepareResult.resource,
+        prepareResult.reelPresentation,
+        performanceTrace,
+      ),
       live: prepareResult.config.live,
       liveSession: prepareResult.session,
       betOptions: prepareResult.config.betOptions,
@@ -82,6 +100,7 @@ const loading = createGameLoading<PreparedGame, Game002v2Readiness>({
       buildSpinRequest: () => prepareResult.config.spinRequest,
       rngConsole: { target: window, log: console.info },
       onError: console.error,
+      performanceObserver: performanceTrace.observer,
     });
     await framework.connect();
   },

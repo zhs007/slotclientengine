@@ -2,6 +2,7 @@ import { Container } from "pixi.js";
 import { describe, expect, it } from "vitest";
 import {
   createGridCellEffectController,
+  createGridCellEffectResourceFromLoadedSpine,
   createGridCellEffectResourcesFromManifest,
   deriveGridCellEffectPoolCapacities,
   parseReelManifest,
@@ -70,6 +71,41 @@ const TEST_EFFECT_ATLAS =
   "effect.png\nsize: 1,1\nformat: RGBA8888\nfilter: Linear,Linear\n";
 
 describe("grid cell effect resources and controller", () => {
+  it("adapts an already loaded package Spine resource without path maps", () => {
+    const resource = createGridCellEffectResourceFromLoadedSpine({
+      id: "loaded",
+      resource: {
+        skeleton: TEST_EFFECT_SKELETON,
+        atlasText: TEST_EFFECT_ATLAS,
+        textureUrls: { "effect.png": "/effect.png" },
+      },
+      animationName: "Loop",
+      loopCount: 1,
+      finishBeforeStopMs: 0,
+      transform: { x: 0, y: 0, scale: 1 },
+    });
+
+    expect(resource).toMatchObject({
+      id: "loaded",
+      animationName: "Loop",
+      durationSeconds: 0.5,
+    });
+    expect(() =>
+      createGridCellEffectResourceFromLoadedSpine({
+        id: "loaded",
+        resource: {
+          skeleton: TEST_EFFECT_SKELETON,
+          atlasText: TEST_EFFECT_ATLAS,
+          textureUrls: {},
+        },
+        animationName: "Loop",
+        loopCount: 1,
+        finishBeforeStopMs: 0,
+        transform: { x: 0, y: 0, scale: 1 },
+      }),
+    ).toThrow(/texture/i);
+  });
+
   it("builds generic effect resources and derives bounded pool capacities", () => {
     const manifest = parseReelManifest(TEST_REEL_MANIFEST);
     const resources = createGridCellEffectResourcesFromManifest({

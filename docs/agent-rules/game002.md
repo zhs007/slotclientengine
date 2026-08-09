@@ -204,6 +204,17 @@
 - official Spine loop 必须报告真实 loop boundary，不能卡住 pending Collect。
 - WL 作为 app 显式批准的 sequential companion，与 CN `Win_Start` 同时播放自身 win；等待完成后回 normal，但不贡献 item value、不进入 loop/Collect/End、不 remove/drop。
 
+## game002v2 selective 与期待模式
+
+- game002v2 的 `fg-spin` 以每次输入 scene 为准保留 WL/CN occurrence，只选择其它格
+  spin；held code/value 必须与 server 完整 target 原位一致，不允许静默退回 full spin。
+- game002v2 的期待模式业务状态和 component 解释留在 app；真实 effect、dropdown-only、
+  effect sweep、selective refill、started edge、player update 与 terminal remove transaction
+  只调用 rendercore typed API，不在 app 复制 player/state machine。
+- Nearwin1/2 只从 Crave Scene Layout runtime resource exact key 加载，并消费
+  `apps/game002/config/reel-presentation.manifest.json` 的唯一 timing/effect 配置；未使用的
+  Nearwin3 不加载。WL 是当前 remove retained 业务 predicate，rendercore 不认识 WL。
+
 ## Win carousel
 
 - game002 正中奖 component 顺序是 app-owned `bg-win,bg-win2`；`bg-bn` 仅是
