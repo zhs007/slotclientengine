@@ -483,10 +483,14 @@ describe("scene layout runtime", () => {
       unloadTexture,
     });
     await expect(runtime.init()).rejects.toThrow(/size mismatch/);
-    expect(unloadTexture).toHaveBeenCalledOnce();
-    expect(unloadTexture).toHaveBeenCalledWith("memory:bg1");
+    const preparedUrls = [
+      ...new Set(game003LayoutFixture.nodes.map((node) => `memory:${node.id}`)),
+    ];
+    expect(unloadTexture).toHaveBeenCalledTimes(preparedUrls.length);
+    for (const url of preparedUrls)
+      expect(unloadTexture).toHaveBeenCalledWith(url);
     runtime.destroy();
-    expect(unloadTexture).toHaveBeenCalledOnce();
+    expect(unloadTexture).toHaveBeenCalledTimes(preparedUrls.length);
   });
 
   it("forces the Pixi texture parser for extensionless Blob URLs and rejects null textures", async () => {

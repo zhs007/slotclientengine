@@ -169,6 +169,14 @@ export interface GridCellReelSpinTiming {
   readonly speedSymbolsPerSecond: number;
 }
 
+export interface GridCellContinuousSpinOptions {
+  readonly direction: ReelSpinDirection;
+  readonly speedSymbolsPerSecond: number;
+  readonly positions?: readonly GridCellSpinPosition[];
+  readonly dimming?: GridCellDimmingPattern;
+  readonly dimmingActivatedAtStart?: boolean;
+}
+
 export interface GridCellDimmingPattern {
   readonly resolveDimmingAlpha: (code: number, activated: boolean) => number;
   readonly fadeInMs: number;
@@ -279,6 +287,11 @@ export interface RenderReelSpinOptions {
   readonly targetVisiblePresentationValues?: readonly (number | null)[];
   /** Requested immediately after the target occurrence is committed at land. */
   readonly targetVisibleStates?: readonly SymbolStateId[];
+}
+
+export interface RenderReelContinuousSpinOptions {
+  readonly direction: ReelSpinDirection;
+  readonly speedSymbolsPerSecond: number;
 }
 
 export interface ReelSymbolPresentationValueContext {

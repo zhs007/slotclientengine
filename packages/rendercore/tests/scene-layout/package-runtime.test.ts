@@ -647,6 +647,76 @@ describe("scene layout package runtime", () => {
     });
   }
 
+  it("exposes one targetless grid transaction and settles only its first response target", async () => {
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    try {
+      const resource = await createSceneLayoutPackageResource({
+        manifest: layoutManifest("grid-cell"),
+        files: files(),
+      });
+      const runtime = createSceneLayoutPackageRuntime({
+        resource,
+        reelPresentation: {
+          kind: "grid-cell",
+          version: 1,
+          direction: "forward",
+          order: "top-down-left-right",
+          timing: {
+            startStepMs: 0,
+            stopStepMs: 20,
+            settleAfterLastStartMs: 80,
+            minimumSpinCycles: 1,
+            speedSymbolsPerSecond: 20,
+          },
+          bounceStrength: 0,
+        },
+      });
+      await runtime.init({
+        reels: {
+          main: {
+            scene: [
+              [1, 1],
+              [0, 0],
+            ],
+            localPhaseYs: [0, 0],
+          },
+        },
+      });
+      runtime.startMainReelContinuousSpin();
+      runtime.update(0.05);
+      expect(runtime.drainMainReelStartedPositions()).toHaveLength(4);
+      const target = {
+        scene: [
+          [0, 1],
+          [1, 0],
+        ],
+        localPhaseYs: [0, 0],
+        random: () => 0,
+      };
+      expect(() => runtime.spinMainReelToScene(target)).toThrow(
+        /must be settled through/,
+      );
+      runtime.settleMainReelContinuousSpin(target);
+      for (
+        let index = 0;
+        index < 20 && runtime.isMainReelSpinning();
+        index += 1
+      )
+        runtime.update(0.05);
+      expect(runtime.getMainReelSceneSnapshot()).toEqual(target.scene);
+      expect(() => runtime.settleMainReelContinuousSpin(target)).toThrow(
+        /without an active continuous spin/,
+      );
+      runtime.destroy();
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
+  });
+
   it("requires explicit runtime scene input and rejects incompatible bindings", async () => {
     const load = vi
       .spyOn(Assets, "load")

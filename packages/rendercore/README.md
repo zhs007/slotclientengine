@@ -513,6 +513,17 @@ const plan = createGridCellReelSpinPlan({
 gridReels.spin(plan);
 ```
 
+网络等待期间可调用 `startContinuous()` 启动 targetless 连续滚动。该阶段只读取本地公开轮带，
+不接收、缓存或猜测服务器目标；响应到达后用 `settleContinuous(plan)` 把目标窗口注入临时 strip，
+并从当前速度和位置连续减速落停，不重新起转。start 与 settle 的 selected positions 必须完全一致；
+未选 held cells 始终保持原 occurrence。`cancelContinuous()` 仅停止并提交当前本地窗口，用于请求、
+解析或表现失败的 fail-stop cleanup，不能伪造服务器落点。同一 transaction 只能 settle 一次。
+
+Scene Layout package runtime 通过 `startMainReelContinuousSpin()`、
+`settleMainReelContinuousSpin()` 和 `cancelMainReelContinuousSpin()` 暴露相同 ownership。一个网络
+请求只创建一个 continuous transaction；响应中的第一个 landing 消费它，之后同一响应内的
+free-game 连续段和 refill 继续调用普通 target-aware spin API，不等待下一条消息。
+
 `createGridCellOrder({ mode: "top-down-left-right" })` 生成 `(0,0),(0,1)...(0,rows-1),(1,0)...` 的稳定顺序。`createGridCellReelSpinPlan()` 对每个 cell 计算 `startAtMs`、`stopAtMs`、`durationMs`、`axisPlan`、`targetVisibleSymbols` 和目标暗度；默认每个 cell 的最终 y 使用 `reels.normalizeY(x, finalYs[x] + y)`。selective `positions` 可以全部提供非负、从 0 开始且非递减的 `startGroupIndex`；相同 group 的 cell 共享 `startGroupIndex * startStepMs` 起播边界，而 stop timeline 仍按 positions 稳定顺序计算，因此能做同时启动的波纹而不改变既有逐格停轴 cadence。省略 group 时继续使用原来的逐格 sequence index。dimming resolver 同时接收通用 `activated` 布尔上下文；plan 可用 `dimmingActivatedAtStart` 设置起始状态，存在 activation gate 时 runtime 会在 gate 真实 landing edge 切为 `true`。滚动 strip 和 landing fade 都用当前 code 与当前状态重新解析暗度，不缓存业务 symbol 结论。运行时每帧仍对临时 spin strip 中当前真实 slot code 调用同一 resolver，而不是只看 endpoint 或 cell 序号；resolver 必须返回 `[0,1]`，游戏语义由调用方负责，rendercore 不认识具体 symbol 名。如果传入 `cellReelOffsets`，则使用 `reels.normalizeY(x, finalYs[x] + y + cellReelOffsets[x][y])`，让同一列内不同格子也能使用更分散的本地轮带窗口滚动。`createGridCellReelOffsetMatrix()` 适合固定线性 offset；`createShuffledGridCellReelOffsetMatrix()` 则对每一列做 partial Fisher-Yates，从该列完整本地公开轮带相位中为各格无重复抽取相位。调用方每次创建 spin plan 时重新调用即可获得新的视觉相位；注入的 random 必须返回 `[0,1)`，不能使用服务器随机数。两种 helper 都不打乱 symbol 顺序。`targetVisibleSymbols` 仍会注入临时 spin strip 的落点窗口，因此完成后的 `getVisibleScene()` 能还原目标 scene。调用方可以用本地公开轮带提供滚动内容，再把服务器本轮目标窗口叠加到临时 strip，不需要也不应该暴露服务器真实轮带。
 
 activation 时间线可通过 plan 的 `activation` 独立使用，不要求绑定 effect resource；gate

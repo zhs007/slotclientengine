@@ -134,6 +134,9 @@ await framework.connect();
 - `framework.spin()` 返回 `Promise<GameLogic>`。
 - `adapter.playSpin(logic)` 收到的就是当前 spin 的 `GameLogic`。
 - `adapter.playSpin(logic)` 的 Promise resolve 表示游戏动画或展示完成；框架随后按协议自动 collect。
+- adapter 可成对实现同步 `startSpinPresentation()` 与 `cancelSpinPresentation(error)`：框架先真正调用
+  `session.spin()` 发出请求，再启动无目标预转；响应、解析或播放失败时只取消一次。每个 framework
+  spin 请求只启动一次，响应中后续的 free-game/refill 展示不重新进入该等待边界。
 - 游戏不要解析 `gmi.replyPlay` 或调用 `client.collect()`。
 - `balance`、`bet`、`win`、spin 状态和 collect 状态由框架自动驱动 HUD。
 - 游戏如需动态 canvas backing size，应通过 `context.getViewport()` 读取初始 viewport，并通过 `context.onViewportChange(listener)` 订阅后续 resize；不要从游戏 app 直接依赖 `@slotclientengine/uiframeworks`。
@@ -270,7 +273,8 @@ helper 只接收 `GameLogic`，不会暴露 raw 协议 wrapper。
 spin 顺序为：
 
 ```text
-UI spinning -> netcore spin -> GameLogic -> UI presenting -> adapter.playSpin(logic)
+UI spinning -> netcore spin request -> optional adapter pre-spin -> GameLogic
+  -> UI presenting -> adapter.playSpin(logic)
   -> adapter resolve -> optional collect -> UI idle
 ```
 
@@ -289,6 +293,7 @@ UI spinning -> netcore spin -> GameLogic -> UI presenting -> adapter.playSpin(lo
 response、logic parse、adapter presentation、collect 和终止边界；startup 使用 trace id 0，
 spin 使用实例内递增 id。事件不携带 request/response、token、logic、scene 或随机数。
 observer 的 clock/callback 抛错或返回非有限值时被忽略，不得改变游戏状态或替换原错误。
+预转 adapter 启动、完成和取消分别以 `adapter-pre-spin-start/complete/cancel` 上报。
 
 ## 配置驱动 round facade
 

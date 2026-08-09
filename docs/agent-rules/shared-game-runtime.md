@@ -50,6 +50,10 @@
 ## Reel 与 server 数据边界
 
 - 客户端 spin 始终使用本地公开轮带。服务器 scene 只覆盖本轮临时 strip 的可见落点窗口；scene 无法反查本地 stop 时不得失败。
+- 请求发出后的无目标预转由 gameframeworks 的 paired adapter hook 启动和取消，连续滚动与响应后
+  落停由 rendercore 拥有。预转阶段只能使用本地公开轮带；服务器目标只能在 settle 边界注入。
+  每个请求只有一个 continuous transaction，由响应内第一个 landing 消费；同一响应后续 FG/refill
+  使用普通 target-aware presentation，不重新等待或预转。失败 cleanup 必须只取消一次并 fail-stop。
 - 不读取、缓存、输出或推断服务器真实轮带，也不消费服务器 randomNumbers 作为本地视觉随机源。
 - 测试服 `lstrand` 只能由 gameframeworks 的显式 opt-in、instance-scoped
   console contract 覆盖下一次实际发出的 spin；消费后立即清除，不持久化、不自动
@@ -102,6 +106,8 @@
 ## Scene layout 与生成配置
 
 - rendercore 拥有 strict scene-layout manifest parsing、exact asset closure、named-node attachment、focus/reel geometry、variant application、mode-aware visibility 和 production runtime。
+- scene-layout init 可并发 prepare 相互独立的 node、reel/Symbol/effect 和 popup 资源，但必须等待所有
+  已启动 prepare 收敛后处理失败/cleanup，并只在全部成功后按 manifest/order 确定性 commit 到 display tree。
 - scene-layout 普通 node 的 optional exact mode scope 缺失时表示全局；runtime 的 init、真实 transition switch 和 editor authoring stable selection 必须复用同一 visibility commit。authoring selection 不得伪装成 production transition，且相同 Symbols binding 不重建 reel/player/sample。
 - `SceneLayoutPackageResource.loadRuntimeResource(key, kind)` 是包内程序资源的 typed async prepare 边界；同 key 并发请求复用同一 Promise，kind/未知 key 精确失败，`getLoadedRuntimeResource` 只返回已成功 prepare 的资源。
 - package runtime 稳定图层 id 仅为 `layout | reel | transition | popup`；`getLayer()` 和 `getNode()` 返回 borrowed container，调用方不得 destroy 或改写内部层级。presentation-only runtime 请求 `reel` 显式失败。

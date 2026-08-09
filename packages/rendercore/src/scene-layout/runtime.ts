@@ -94,6 +94,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   readonly #artMask = new Graphics();
   readonly #loadedTextureUrls = new Set<string>();
   readonly #texturesByUrl = new Map<string, Texture>();
+  readonly #texturePromisesByUrl = new Map<string, Promise<Texture>>();
   readonly #activeNodes = new Map<string, boolean>();
   #manifest: SceneLayoutResource["manifest"];
   #snapshot: SceneLayoutSnapshot | null = null;
@@ -186,7 +187,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     }
     this.#initializing = true;
     try {
-      for (const node of this.#nodes) await this.initNode(node);
+      await settleAllInOrder(this.#nodes.map((node) => this.initNode(node)));
       this.assertAlive();
       this.#initialized = true;
     } catch (error) {
@@ -397,18 +398,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
           `Scene layout image URL is missing: ${node.spec.resource.path}.`,
         );
       }
-      let texture = this.#texturesByUrl.get(url);
-      if (!texture) {
-        texture = await this.#loadTexture(url);
-        this.#loadedTextureUrls.add(url);
-        this.assertAlive();
-        if (!texture?.source) {
-          throw new SceneLayoutError(
-            `Scene layout image "${node.spec.resource.path}" failed to load a valid Pixi texture.`,
-          );
-        }
-        this.#texturesByUrl.set(url, texture);
-      }
+      const texture = await this.loadTextureOnce(url);
       if (!texture?.source) {
         throw new SceneLayoutError(
           `Scene layout image "${node.spec.resource.path}" failed to load a valid Pixi texture.`,
@@ -524,6 +514,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     const textureUrls = [...this.#loadedTextureUrls];
     this.#loadedTextureUrls.clear();
     this.#texturesByUrl.clear();
+    this.#texturePromisesByUrl.clear();
     for (const url of textureUrls) {
       try {
         void this.#unloadTexture(url).catch(() => undefined);
@@ -531,6 +522,30 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
         // Resource release is best-effort and must remain idempotent.
       }
     }
+  }
+
+  private loadTextureOnce(url: string): Promise<Texture> {
+    const loaded = this.#texturesByUrl.get(url);
+    if (loaded) return Promise.resolve(loaded);
+    const pending = this.#texturePromisesByUrl.get(url);
+    if (pending) return pending;
+    const created = this.#loadTexture(url)
+      .then((texture) => {
+        this.#loadedTextureUrls.add(url);
+        if (!texture?.source) {
+          throw new SceneLayoutError(
+            "Scene layout image failed to load a valid Pixi texture.",
+          );
+        }
+        this.#texturesByUrl.set(url, texture);
+        this.assertAlive();
+        return texture;
+      })
+      .finally(() => {
+        this.#texturePromisesByUrl.delete(url);
+      });
+    this.#texturePromisesByUrl.set(url, created);
+    return created;
   }
 
   private requireNode(id: string): RuntimeNode {
@@ -725,6 +740,14 @@ async function loadSceneLayoutTexture(url: string): Promise<Texture> {
 
 async function unloadSceneLayoutTexture(url: string): Promise<void> {
   await Assets.unload(url);
+}
+
+async function settleAllInOrder(promises: readonly Promise<void>[]) {
+  const results = await Promise.allSettled(promises);
+  const failure = results.find(
+    (result): result is PromiseRejectedResult => result.status === "rejected",
+  );
+  if (failure) throw failure.reason;
 }
 
 function assertAttachable(object: Container): void {

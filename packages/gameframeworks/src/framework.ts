@@ -167,6 +167,7 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
     }
 
     const generation = this.#lifecycleGeneration;
+    let preSpinStarted = false;
     this.#activeSpinTraceId = traceId;
     this.#emitPerformance("spin", traceId, "spin-start");
     try {
@@ -194,7 +195,18 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
             }) as SpinParams);
       this.#emitPerformance("spin", traceId, "request-build-complete");
       this.#emitPerformance("spin", traceId, "request-send");
-      const rawResult = await this.#session.spin(params);
+      const responsePromise = this.#session.spin(params);
+      // A synchronous presentation hook can fail after the request has already
+      // been dispatched. Observe the request in that case so a later rejection
+      // never becomes unhandled while the authoritative hook error is reported.
+      void responsePromise.catch(() => undefined);
+      if (this.#options.gameAdapter.startSpinPresentation) {
+        this.#emitPerformance("spin", traceId, "adapter-pre-spin-start");
+        this.#options.gameAdapter.startSpinPresentation();
+        preSpinStarted = true;
+        this.#emitPerformance("spin", traceId, "adapter-pre-spin-complete");
+      }
+      const rawResult = await responsePromise;
       this.#emitPerformance("spin", traceId, "response-received");
       this.#assertOperationActive(generation);
       const balanceAfterSpin = readFiniteBalanceOrNull(
@@ -223,6 +235,7 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
       this.#emitPerformance("spin", traceId, "adapter-play-start");
       await this.#options.gameAdapter.playSpin(logicResult.logic);
       this.#emitPerformance("spin", traceId, "adapter-play-complete");
+      preSpinStarted = false;
       this.#assertOperationActive(generation);
 
       if (round.shouldCollect) {
@@ -245,6 +258,21 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
       this.#activeSpinTraceId = null;
       return logicResult.logic;
     } catch (error) {
+      if (preSpinStarted) {
+        this.#emitPerformance("spin", traceId, "adapter-pre-spin-cancel");
+        try {
+          this.#options.gameAdapter.cancelSpinPresentation?.(
+            toSlotGameError(error, "Slot game spin failed."),
+          );
+        } catch (cancelError) {
+          this.#reportError(
+            toSlotGameError(
+              cancelError,
+              "Slot game pre-spin cancellation failed.",
+            ),
+          );
+        }
+      }
       this.#emitPerformance("spin", traceId, "failed");
       this.#activeSpinTraceId = null;
       throw this.#handleOperationFailure(
@@ -556,6 +584,25 @@ function validateFrameworkOptions(options: SlotGameFrameworkOptions): void {
   ) {
     throw new SlotGameConfigError(
       "gameAdapter must provide mount() and playSpin().",
+    );
+  }
+  const hasPreSpinStart =
+    options.gameAdapter.startSpinPresentation !== undefined;
+  const hasPreSpinCancel =
+    options.gameAdapter.cancelSpinPresentation !== undefined;
+  if (hasPreSpinStart !== hasPreSpinCancel) {
+    throw new SlotGameConfigError(
+      "gameAdapter startSpinPresentation() and cancelSpinPresentation() must be provided together.",
+    );
+  }
+  if (
+    (hasPreSpinStart &&
+      typeof options.gameAdapter.startSpinPresentation !== "function") ||
+    (hasPreSpinCancel &&
+      typeof options.gameAdapter.cancelSpinPresentation !== "function")
+  ) {
+    throw new SlotGameConfigError(
+      "gameAdapter pre-spin presentation hooks must be functions.",
     );
   }
   if (!options.live || typeof options.live.serverUrl !== "string") {

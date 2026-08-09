@@ -18,6 +18,9 @@
 - v2 的 initial grid-cell spin 通过 rendercore 的 typed spin-plan stage function 注入业务暗度和
   第 2 枚 WL activation；未注入 function 的游戏保持 rendercore 默认行为。package runtime
   暴露真实 landing/activation edge，v2 不复制 reel update loop。
+- v2 每次 framework spin 请求只预转一次，并只由响应的第一个 landing 落停；同一响应后续 FG
+  连续段与 refill 直接播放已有目标，不等待消息或再次预转。BaseGame 首段全盘预转；FreeGame
+  首段按请求前 authoritative scene/value 保留 WL/CN。滚动中的本地窗口不得反向成为业务输入。
 - v2 的 `defaultScene` CN presentation value 必须从 active Symbols package 的 exact
   `bgcoinweight` 独立加权抽取；稳定 occurrence 缓存和无偏抽样属于 rendercore，v2 只选择
   CN code 与权重表。active package 必须由 rendercore 的 initial Symbol package resource 接口

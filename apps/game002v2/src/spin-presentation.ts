@@ -46,14 +46,7 @@ export function buildGame002v2InitialSpinPlan(
   return Object.freeze({
     nearwin,
     plan: stage.createPlan({
-      dimming: {
-        resolveDimmingAlpha: (code, activated) =>
-          (activated ? code === codes.wild : codes.normalBright.has(code))
-            ? 0
-            : (presentation?.manifest.spin.dimmingAlpha ?? DIMMING_ALPHA),
-        fadeInMs: 80,
-        fadeOutMs: 160,
-      },
+      dimming: createGame002v2SpinDimming(codes, presentation),
       ...(nearwin
         ? presentation
           ? {
@@ -79,6 +72,41 @@ export function buildGame002v2InitialSpinPlan(
             }
         : {}),
     }),
+  });
+}
+
+export function createGame002v2ContinuousSpinInput(
+  scene: readonly (readonly number[])[],
+  codes: Game002v2SpinSymbolCodes,
+  presentation: Game002v2ReelPresentation,
+  freeGame: boolean,
+) {
+  const positions = freeGame
+    ? scene.flatMap((column, x) =>
+        column.flatMap((code, y) =>
+          code === codes.wild || code === codes.coin ? [] : [{ x, y }],
+        ),
+      )
+    : undefined;
+  if (positions?.length === 0)
+    throw new Error("game002v2 FG pre-spin has no non-held positions.");
+  return Object.freeze({
+    ...(positions ? { positions: Object.freeze(positions) } : {}),
+    dimming: createGame002v2SpinDimming(codes, presentation),
+  });
+}
+
+function createGame002v2SpinDimming(
+  codes: Game002v2SpinSymbolCodes,
+  presentation?: Game002v2ReelPresentation,
+) {
+  return Object.freeze({
+    resolveDimmingAlpha: (code: number, activated: boolean) =>
+      (activated ? code === codes.wild : codes.normalBright.has(code))
+        ? 0
+        : (presentation?.manifest.spin.dimmingAlpha ?? DIMMING_ALPHA),
+    fadeInMs: 80,
+    fadeOutMs: 160,
   });
 }
 

@@ -3,7 +3,13 @@ import type {
   SlotGamePerformanceObserver,
 } from "@slotclientengine/gameframeworks";
 
-type ExtraStartupPhase = "entering-game" | "first-scene-paint";
+type ExtraStartupPhase =
+  | "entering-game"
+  | "runtime-init-start"
+  | "runtime-init-complete"
+  | "initial-scene-committed"
+  | "runtime-attached"
+  | "first-scene-paint";
 type ExtraSpinPhase =
   | "plan-start"
   | "spin-call-complete"
@@ -47,7 +53,7 @@ export function createGame002v2PerformanceTrace(
           : (spins.get(event.traceId) ??
             createAndStoreSpin(spins, event.traceId));
       record.phases.set(event.phase, event.atMs);
-      if (event.traceKind === "spin" && event.phase === "adapter-play-start")
+      if (event.traceKind === "spin" && event.phase === "spin-start")
         activeSpinId = event.traceId;
       if (event.phase === "failed") emit(record, "failed", log);
       if (event.phase === "destroyed") emit(record, "destroyed", log);

@@ -510,6 +510,12 @@ export interface SceneLayoutMainReelSpinInput extends SceneLayoutInitialReelScen
   ) => import("../reel/index.js").GridCellReelSpinPlan;
 }
 
+export interface SceneLayoutMainReelContinuousSpinInput {
+  readonly positions?: readonly import("../reel/index.js").GridCellSpinPosition[];
+  readonly dimming?: import("../reel/index.js").GridCellDimmingPattern;
+  readonly dimmingActivatedAtStart?: boolean;
+}
+
 export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   init(options?: {
     readonly reels?: Readonly<
@@ -526,6 +532,14 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
    * while retaining the package-owned public local reel strips.
    */
   spinMainReelToScene(input: SceneLayoutMainReelSpinInput): void;
+  /** Starts targetless rolling from the active public local reel strips. */
+  startMainReelContinuousSpin(
+    input?: SceneLayoutMainReelContinuousSpinInput,
+  ): void;
+  /** Injects the exact response target into the active continuous spin. */
+  settleMainReelContinuousSpin(input: SceneLayoutMainReelSpinInput): void;
+  /** Cancels targetless rolling without fabricating a landing target. */
+  cancelMainReelContinuousSpin(): void;
   isMainReelSpinning(): boolean;
   requestMainReelSymbolStates(
     positions: readonly { readonly x: number; readonly y: number }[],

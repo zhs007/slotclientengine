@@ -207,6 +207,68 @@ describe("framework flow", () => {
     await first;
   });
 
+  it("starts opt-in presentation only after dispatch and cancels it once on response failure", async () => {
+    const client = new MockClient();
+    let resolveSpin: (value: unknown) => void = () => undefined;
+    client.spinPromise = new Promise((resolve) => {
+      resolveSpin = resolve;
+    });
+    const adapter = new PreSpinAdapter();
+    const framework = createSlotGameFramework({
+      root: document.createElement("div"),
+      gameAdapter: adapter,
+      live: { serverUrl: "ws://localhost" },
+      betOptions: BET_OPTIONS,
+      clientFactory: () => client,
+    });
+    await framework.connect();
+
+    const spin = framework.spin();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(client.calls.some((call) => call.startsWith("spin:"))).toBe(true);
+    expect(adapter.calls.at(-1)).toBe("pre-spin");
+    expect(adapter.calls).not.toContain("play");
+    resolveSpin(createSpinResult());
+    await spin;
+    expect(adapter.calls).toEqual(["mount", "initial", "pre-spin", "play"]);
+
+    const failedClient = new MockClient();
+    failedClient.spinPromise = Promise.reject(new Error("network failed"));
+    const failedAdapter = new PreSpinAdapter();
+    const failed = createSlotGameFramework({
+      root: document.createElement("div"),
+      gameAdapter: failedAdapter,
+      live: { serverUrl: "ws://localhost" },
+      betOptions: BET_OPTIONS,
+      clientFactory: () => failedClient,
+    });
+    await failed.connect();
+    await expect(failed.spin()).rejects.toThrow(/network failed/);
+    expect(failedAdapter.calls).toEqual([
+      "mount",
+      "initial",
+      "pre-spin",
+      "cancel:network failed",
+    ]);
+  });
+
+  it("requires pre-spin start and cancel hooks as a pair", () => {
+    const adapter = new MockAdapter() as MockAdapter & {
+      startSpinPresentation?: () => void;
+    };
+    adapter.startSpinPresentation = () => undefined;
+    expect(() =>
+      createSlotGameFramework({
+        root: document.createElement("div"),
+        gameAdapter: adapter,
+        live: { serverUrl: "ws://localhost" },
+        betOptions: BET_OPTIONS,
+        clientFactory: () => new MockClient(),
+      }),
+    ).toThrow(/must be provided together/);
+  });
+
   it("uses an externally prepared live session and rejects ambiguous factories", async () => {
     const root = document.createElement("div");
     const liveSession = new MockLiveSession();
@@ -542,6 +604,16 @@ describe("framework flow", () => {
     );
   });
 });
+
+class PreSpinAdapter extends MockAdapter {
+  startSpinPresentation(): void {
+    this.calls.push("pre-spin");
+  }
+
+  cancelSpinPresentation(error: Error): void {
+    this.calls.push(`cancel:${error.message}`);
+  }
+}
 
 async function waitForState(
   getState: () => string,

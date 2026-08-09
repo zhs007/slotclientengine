@@ -9,6 +9,8 @@ import { RenderReel } from "./render-reel.js";
 import { CASCADE_EMPTY_CELL } from "./types.js";
 import type {
   GridCellCoordinate,
+  GridCellContinuousSpinOptions,
+  GridCellDimmingPattern,
   GridCellCascadeDropMovement,
   GridCellCascadeDropPlan,
   GridCellCascadeScene,
@@ -17,6 +19,7 @@ import type {
   GridCellReelPhase,
   GridCellReelPlanCell,
   GridCellReelSpinPlan,
+  GridCellSpinPosition,
   GridCellEffectSweepPlan,
   GridCellTerminalRemoveCandidate,
   GridCellTerminalRemoveOptions,
@@ -82,10 +85,23 @@ interface ActiveEffectSweep {
   elapsedMs: number;
 }
 
+interface ActiveContinuousSpin {
+  readonly keys: ReadonlySet<string>;
+  readonly speedSymbolsPerSecond: number;
+  readonly dimming: GridCellDimmingPattern;
+  readonly dimmingActivatedAtStart: boolean;
+}
+
 interface DimmingRow {
   readonly windowY: number;
   readonly graphic: Graphics;
 }
+
+const ZERO_DIMMING: GridCellDimmingPattern = Object.freeze({
+  resolveDimmingAlpha: () => 0,
+  fadeInMs: 0,
+  fadeOutMs: 0,
+});
 
 export class RenderGridCellReelSet extends Container {
   readonly #reels: LogicReels;
@@ -103,6 +119,7 @@ export class RenderGridCellReelSet extends Container {
   readonly #transferLayer: Container;
   readonly #effectController: GridCellEffectController | null;
   #spinPlan: GridCellReelSpinPlan | null = null;
+  #continuousSpin: ActiveContinuousSpin | null = null;
   #activeDrop: ActiveDrop | null = null;
   #activeEffectSweep: ActiveEffectSweep | null = null;
   #startedEffects = new Set<string>();
@@ -202,6 +219,7 @@ export class RenderGridCellReelSet extends Container {
       this.#rows,
     );
     this.#spinPlan = null;
+    this.#continuousSpin = null;
     this.clearDropOccurrences();
     this.#activeEffectSweep = null;
     this.#effectController?.cancelAll();
@@ -246,7 +264,7 @@ export class RenderGridCellReelSet extends Container {
     plan: GridCellReelSpinPlan,
     options: RenderGridCellReelSetSpinOptions = {},
   ): void {
-    if (this.#spinPlan) {
+    if (this.#spinPlan || this.#continuousSpin) {
       throw new ReelError(
         "Cannot start a new grid cell reel spin while another spin is active.",
       );
@@ -334,6 +352,225 @@ export class RenderGridCellReelSet extends Container {
     }
   }
 
+  startContinuous(options: GridCellContinuousSpinOptions): void {
+    if (this.#spinPlan || this.#continuousSpin) {
+      throw new ReelError(
+        "Cannot start a continuous grid spin while another spin is active.",
+      );
+    }
+    if (this.#activeDrop || this.#activeEffectSweep) {
+      throw new ReelError(
+        "Cannot start a continuous grid spin while another reel activity is active.",
+      );
+    }
+    if (options.direction !== "forward" && options.direction !== "backward") {
+      throw new ReelError(
+        'continuous grid spin direction must be "forward" or "backward".',
+      );
+    }
+    if (
+      !Number.isFinite(options.speedSymbolsPerSecond) ||
+      options.speedSymbolsPerSecond <= 0
+    ) {
+      throw new ReelError(
+        "continuous grid spin speedSymbolsPerSecond must be positive.",
+      );
+    }
+    const positions = options.positions
+      ? normalizeContinuousPositions(
+          options.positions,
+          this.#columns,
+          this.#rows,
+          this.#cellsByKey,
+        )
+      : this.#order;
+    const keys = new Set(positions.map(({ x, y }) => createCellKey(x, y)));
+    const dimming = options.dimming ?? ZERO_DIMMING;
+    if (typeof dimming.resolveDimmingAlpha !== "function") {
+      throw new ReelError(
+        "continuous grid spin dimming resolver must be a function.",
+      );
+    }
+    assertNonNegativeNumber(dimming.fadeInMs, "continuous dimming fadeInMs");
+    assertNonNegativeNumber(dimming.fadeOutMs, "continuous dimming fadeOutMs");
+    for (const position of positions) {
+      const cell = this.getCell(position.x, position.y);
+      if (!cell.occupied) {
+        throw new ReelError(
+          `Continuous grid spin position (${position.x},${position.y}) is empty.`,
+        );
+      }
+    }
+    for (const cell of this.#cells) {
+      const selected = keys.has(
+        createCellKey(cell.coordinate.x, cell.coordinate.y),
+      );
+      cell.planCell = null;
+      cell.phase = selected ? "spinning" : "completed";
+      cell.hasStartedThisSpin = false;
+      cell.hasLandedThisSpin = false;
+      cell.fadeOutElapsedMs = 0;
+      cell.fadeOutStartAlpha = 0;
+      cell.targetPresentationValue = null;
+      cell.targetLandingState = null;
+      if (selected) {
+        cell.reel.startContinuous({
+          direction: options.direction,
+          speedSymbolsPerSecond: options.speedSymbolsPerSecond,
+        });
+        this.setCellClipMask(cell, true);
+        cell.dimOverlay.alpha = dimming.fadeInMs === 0 ? 1 : 0;
+        cell.dimOverlay.renderable = dimming.fadeInMs === 0;
+      } else {
+        resetReelSlotSymbolDimming(cell);
+        this.setCellClipMask(cell, false);
+      }
+      this.syncCellRenderOrder(cell);
+    }
+    this.#continuousSpin = {
+      keys,
+      speedSymbolsPerSecond: options.speedSymbolsPerSecond,
+      dimming,
+      dimmingActivatedAtStart: options.dimmingActivatedAtStart === true,
+    };
+    this.#elapsedMs = 0;
+  }
+
+  settleContinuous(
+    plan: GridCellReelSpinPlan,
+    options: RenderGridCellReelSetSpinOptions = {},
+  ): void {
+    const continuous = this.#continuousSpin;
+    if (!continuous) {
+      throw new ReelError(
+        "Cannot settle a grid spin without an active continuous spin.",
+      );
+    }
+    this.assertPlanMatchesRuntime(plan);
+    const planKeys = new Set(plan.cells.map(({ x, y }) => createCellKey(x, y)));
+    if (
+      planKeys.size !== continuous.keys.size ||
+      [...planKeys].some((key) => !continuous.keys.has(key))
+    ) {
+      throw new ReelError(
+        "Continuous grid spin settle positions must match the started positions.",
+      );
+    }
+    if (plan.cells.some((cell) => cell.effect) && !this.#effectController) {
+      throw new ReelError("Grid cell spin plan requires an effect controller.");
+    }
+    if (
+      plan.cells.some((cell) => cell.effect) &&
+      this.#effectController?.getSnapshot().prepared !== true
+    ) {
+      throw new ReelError("Grid cell spin effect controller is not prepared.");
+    }
+    const targetPresentationValues = parsePresentationValueMatrix(
+      options.targetPresentationValues,
+      this.#columns,
+      this.#rows,
+    );
+    const targetLandingStates = parseStateMatrix(
+      options.targetLandingStates,
+      this.#columns,
+      this.#rows,
+    );
+    const normalizedCells = plan.cells.map((planCell) => {
+      const cell = this.getCell(planCell.x, planCell.y);
+      const durationMs = Math.max(1, planCell.stopAtMs);
+      const currentY = cell.reel.getSnapshot().currentY;
+      const fractionalY = currentY - Math.floor(currentY);
+      const minimumTravel = Math.ceil(
+        (durationMs / 1000) * continuous.speedSymbolsPerSecond +
+          (plan.direction === "forward" ? fractionalY : 1 - fractionalY),
+      );
+      const travelSymbols = Math.max(
+        planCell.axisPlan.travelSymbols,
+        minimumTravel,
+      );
+      const axisPlan = Object.freeze({
+        ...planCell.axisPlan,
+        startY: Math.floor(currentY),
+        travelSymbols,
+        startDelayMs: 0,
+        durationMs,
+        stopAtMs: durationMs,
+      });
+      return Object.freeze({
+        ...planCell,
+        startAtMs: 0,
+        stopAtMs: durationMs,
+        durationMs,
+        axisPlan,
+      });
+    });
+    const normalizedPlan = Object.freeze({
+      ...plan,
+      cells: Object.freeze(normalizedCells),
+      lastStopAtMs: Math.max(...normalizedCells.map((cell) => cell.stopAtMs)),
+    });
+    const cellsByKey = new Map(
+      normalizedCells.map((cell) => [createCellKey(cell.x, cell.y), cell]),
+    );
+    for (const cell of this.#cells) {
+      const planCell = cellsByKey.get(
+        createCellKey(cell.coordinate.x, cell.coordinate.y),
+      );
+      cell.planCell = planCell ?? null;
+      cell.phase = planCell ? "spinning" : "completed";
+      cell.hasLandedThisSpin = false;
+      cell.targetPresentationValue = planCell
+        ? (targetPresentationValues?.[cell.coordinate.x][cell.coordinate.y] ??
+          null)
+        : null;
+      cell.targetLandingState = planCell
+        ? (targetLandingStates?.[cell.coordinate.x]?.[cell.coordinate.y] ??
+          null)
+        : null;
+      if (planCell) {
+        cell.reel.settleContinuous(planCell.axisPlan, {
+          targetVisibleSymbols: planCell.targetVisibleSymbols,
+          targetVisiblePresentationValues: [cell.targetPresentationValue],
+          ...(cell.targetLandingState
+            ? { targetVisibleStates: [cell.targetLandingState] }
+            : {}),
+        });
+      }
+    }
+    this.#continuousSpin = null;
+    this.#spinPlan = normalizedPlan;
+    this.#elapsedMs = 0;
+    this.#effectController?.cancelAll();
+    this.#startedEffects.clear();
+    this.#completedEffects.clear();
+    this.#activationGateOpen = plan.activationGate === null;
+    this.#dimmingActivated = plan.dimmingActivatedAtStart;
+  }
+
+  cancelContinuous(): void {
+    const continuous = this.#continuousSpin;
+    if (!continuous) return;
+    for (const cell of this.#cells) {
+      const key = createCellKey(cell.coordinate.x, cell.coordinate.y);
+      if (continuous.keys.has(key)) cell.reel.cancelContinuous();
+      cell.planCell = null;
+      cell.phase = "completed";
+      cell.hasStartedThisSpin = false;
+      cell.hasLandedThisSpin = false;
+      cell.dimOverlay.alpha = 0;
+      cell.dimOverlay.renderable = false;
+      resetReelSlotSymbolDimming(cell);
+      this.setCellClipMask(cell, false);
+      this.syncCellRenderOrder(cell);
+    }
+    this.#continuousSpin = null;
+    this.#elapsedMs = 0;
+  }
+
+  isContinuousSpinning(): boolean {
+    return this.#continuousSpin !== null;
+  }
+
   spinSelective(
     plan: GridCellReelSpinPlan,
     options: RenderGridCellReelSetSpinOptions = {},
@@ -394,6 +631,46 @@ export class RenderGridCellReelSet extends Container {
         completed,
         activity: completed ? null : "effect-sweep",
         startedCells: Object.freeze([]),
+        landedCells: Object.freeze([]),
+        activationCells: Object.freeze([]),
+      });
+    }
+    if (this.#continuousSpin) {
+      const active = this.#continuousSpin;
+      const started: GridCellCoordinate[] = [];
+      const deltaMs = deltaSeconds * 1000;
+      this.#elapsedMs += deltaMs;
+      for (const cell of this.#cells) {
+        const selected = active.keys.has(
+          createCellKey(cell.coordinate.x, cell.coordinate.y),
+        );
+        if (selected) {
+          if (!cell.hasStartedThisSpin) {
+            cell.hasStartedThisSpin = true;
+            started.push(cell.coordinate);
+          }
+          cell.reel.update(deltaSeconds);
+          if (active.dimming.fadeInMs === 0) cell.dimOverlay.alpha = 1;
+          else
+            cell.dimOverlay.alpha = Math.min(
+              1,
+              cell.dimOverlay.alpha + deltaMs / active.dimming.fadeInMs,
+            );
+          this.syncDimmingStrip(
+            cell,
+            active.dimming,
+            active.dimmingActivatedAtStart,
+          );
+        } else if (cell.occupied) {
+          cell.reel.update(deltaSeconds);
+        }
+        this.syncCellRenderOrder(cell);
+      }
+      return Object.freeze({
+        spinning: true,
+        completed: false,
+        activity: "spin",
+        startedCells: freezeCoordinates(started),
         landedCells: Object.freeze([]),
         activationCells: Object.freeze([]),
       });
@@ -1203,10 +1480,12 @@ export class RenderGridCellReelSet extends Container {
     return Object.freeze({
       spinning:
         this.#spinPlan !== null ||
+        this.#continuousSpin !== null ||
         this.#activeDrop !== null ||
         this.#activeEffectSweep !== null,
       completed:
         this.#spinPlan === null &&
+        this.#continuousSpin === null &&
         this.#activeDrop === null &&
         this.#activeEffectSweep === null &&
         this.#cells.every(
@@ -1220,6 +1499,7 @@ export class RenderGridCellReelSet extends Container {
 
   override destroy(options?: Parameters<Container["destroy"]>[0]): void {
     this.#activeTransferRollback?.();
+    this.cancelContinuous();
     this.#effectController?.destroy();
     super.destroy(options);
   }
@@ -1598,7 +1878,7 @@ export class RenderGridCellReelSet extends Container {
         // RenderReel.update() may recycle or replace visible slot symbols. Apply
         // dimming after that work so the current rolling symbols keep the
         // configured tint instead of inheriting a freshly reset white tint.
-        this.syncDimmingStrip(cell, plan);
+        this.syncDimmingStrip(cell, plan.dimming);
       }
       if (cell.phase === "landed" && elapsedMs > planCell.stopAtMs) {
         const postLandDeltaMs =
@@ -1879,7 +2159,8 @@ export class RenderGridCellReelSet extends Container {
 
   private syncDimmingStrip(
     cell: RuntimeCell,
-    plan: GridCellReelSpinPlan,
+    dimming: GridCellDimmingPattern,
+    activated = this.#dimmingActivated,
   ): void {
     const reelY = cell.reel.getSnapshot().currentY;
     cell.dimOverlay.renderable = cell.dimOverlay.alpha > 0;
@@ -1892,11 +2173,7 @@ export class RenderGridCellReelSet extends Container {
       const slot = slotsByWindowY.get(row.windowY);
       const dimmingAlpha =
         slot && slot.kind !== "empty"
-          ? resolveGridCellDimmingAlpha(
-              plan.dimming,
-              slot.code,
-              this.#dimmingActivated,
-            )
+          ? resolveGridCellDimmingAlpha(dimming, slot.code, activated)
           : 0;
       row.graphic.alpha = dimmingAlpha;
       if (slot?.symbol) {
@@ -2250,6 +2527,48 @@ function parseOrder(
         y: cell.y,
         orderIndex: cell.orderIndex,
       });
+    }),
+  );
+}
+
+function normalizeContinuousPositions(
+  value: readonly GridCellSpinPosition[],
+  columns: number,
+  rows: number,
+  cellsByKey: ReadonlyMap<string, RuntimeCell>,
+): readonly GridCellCoordinate[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new ReelError("continuous grid spin positions must not be empty.");
+  }
+  const seen = new Set<string>();
+  return Object.freeze(
+    value.map((position, index) => {
+      if (
+        !Number.isInteger(position.x) ||
+        position.x < 0 ||
+        position.x >= columns ||
+        !Number.isInteger(position.y) ||
+        position.y < 0 ||
+        position.y >= rows
+      ) {
+        throw new ReelError(
+          `continuous grid spin positions[${index}] is out of range.`,
+        );
+      }
+      const key = createCellKey(position.x, position.y);
+      if (seen.has(key)) {
+        throw new ReelError(
+          `duplicate continuous grid spin position (${position.x},${position.y}).`,
+        );
+      }
+      seen.add(key);
+      const cell = cellsByKey.get(key);
+      if (!cell) {
+        throw new ReelError(
+          `continuous grid spin position (${position.x},${position.y}) is missing.`,
+        );
+      }
+      return cell.coordinate;
     }),
   );
 }

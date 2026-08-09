@@ -51,6 +51,7 @@ import type {
   SceneLayoutGameModeSnapshot,
   SceneLayoutInitialReelScene,
   SceneLayoutGridCellSpinPlanStage,
+  SceneLayoutMainReelContinuousSpinInput,
   SceneLayoutMainReelSpinInput,
   SceneLayoutNodeStateSnapshot,
   SceneLayoutPackageResource,
@@ -321,15 +322,23 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       );
     this.#initializing = true;
     try {
-      await this.#layout.init();
       const initialModeId = this.#manifest.gameModes?.initialMode ?? null;
       const initialMode = initialModeId
         ? this.requireMode(initialModeId)
         : null;
-      this.commitModeVisibility(initialMode);
       const activeBinding = this.resolveModeSymbolBinding(initialMode);
-      if (activeBinding && !this.#presentationOnly) {
-        const initial = options.reels?.main;
+      if (activeBinding && this.#presentationOnly && options.reels?.main)
+        throw new SceneLayoutError(
+          "Presentation-only scene layout runtime must not receive reels.main input.",
+        );
+      if (!activeBinding && options.reels?.main)
+        throw new SceneLayoutError(
+          "Scene layout package has no symbol binding and must not receive reels.main input.",
+        );
+
+      const layoutPromise = this.#layout.init();
+      const reelPromise = Promise.resolve().then(async () => {
+        if (!activeBinding || this.#presentationOnly) return;
         const symbolPackage = activeBinding.resource;
         if (this.#createGridCellReel) {
           if (activeBinding.binding.renderMode !== "grid-cell")
@@ -338,60 +347,76 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
             );
           this.#reel = this.#createGridCellReel();
           this.#catalog = null;
-        } else {
-          this.#catalog = await symbolPackage.createCatalog();
-          this.assertAlive();
-          this.#reel = this.createReelPresentation(
-            symbolPackage,
-            this.#catalog,
-            activeBinding.binding,
+          return;
+        }
+        this.#catalog = await symbolPackage.createCatalog();
+        this.assertAlive();
+        this.#reel = this.createReelPresentation(
+          symbolPackage,
+          this.#catalog,
+          activeBinding.binding,
+        );
+        await this.prepareReelPresentation(this.#reel);
+        this.assertAlive();
+      });
+      const popupEntries = Object.entries(this.#resource.popupPackages).map(
+        ([id, resource]) => {
+          const popup =
+            resource.manifest.type === "spine"
+              ? this.#createSpinePopupPlayer({ resource })
+              : createAwardCelebrationPlayer({
+                  resource,
+                  formatAmount: this.#formatPopupAmount,
+                });
+          if (resource.manifest.type === "spine")
+            this.#spinePopups.set(id, popup as SpinePopupPlayer);
+          else this.#popups.set(id, popup as AwardCelebrationPlayer);
+          return Object.freeze({
+            id,
+            resource,
+            popup,
+            initPromise: Promise.resolve().then(async () => {
+              await popup.init();
+              this.assertAlive();
+            }),
+          });
+        },
+      );
+
+      await settleAllInOrder([
+        layoutPromise,
+        reelPromise,
+        ...popupEntries.map((entry) => entry.initPromise),
+      ]);
+      this.assertAlive();
+      this.commitModeVisibility(initialMode);
+      if (activeBinding && !this.#presentationOnly) {
+        const initial = options.reels?.main;
+        const symbolPackage = activeBinding.resource;
+        const reel = this.#reel;
+        if (!reel)
+          throw new SceneLayoutError(
+            "Scene layout active reel preparation completed without a reel.",
           );
-        }
-        if (!this.#createGridCellReel) {
-          await this.prepareReelPresentation(this.#reel);
-          this.assertAlive();
-        }
-        this.attachReel(this.#reel);
+        this.attachReel(reel);
         if (initial) {
           this.applyReelScene(
-            this.#reel,
+            reel,
             symbolPackage,
             activeBinding.binding,
             initial,
           );
           this.#mainReelSceneCommitted = true;
         } else {
-          this.#reel.visible = false;
+          reel.visible = false;
         }
         this.#activeSymbolPackageId = activeBinding.id;
         this.#stableSymbolPackageId = activeBinding.id;
       } else if (activeBinding) {
-        if (options.reels?.main)
-          throw new SceneLayoutError(
-            "Presentation-only scene layout runtime must not receive reels.main input.",
-          );
         this.#activeSymbolPackageId = activeBinding.id;
         this.#stableSymbolPackageId = activeBinding.id;
-      } else if (options.reels?.main) {
-        throw new SceneLayoutError(
-          "Scene layout package has no symbol binding and must not receive reels.main input.",
-        );
       }
-      for (const [id, resource] of Object.entries(
-        this.#resource.popupPackages,
-      )) {
-        const popup =
-          resource.manifest.type === "spine"
-            ? this.#createSpinePopupPlayer({ resource })
-            : createAwardCelebrationPlayer({
-                resource,
-                formatAmount: this.#formatPopupAmount,
-              });
-        await popup.init();
-        this.assertAlive();
-        if (resource.manifest.type === "spine")
-          this.#spinePopups.set(id, popup as SpinePopupPlayer);
-        else this.#popups.set(id, popup as AwardCelebrationPlayer);
+      for (const { id, popup } of popupEntries) {
         const binding = this.#manifest.popups?.[id];
         if (!binding)
           throw new SceneLayoutError(
@@ -709,6 +734,57 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   }
 
   spinMainReelToScene(input: SceneLayoutMainReelSpinInput): void {
+    this.spinMainReelToSceneInternal(input, false);
+  }
+
+  startMainReelContinuousSpin(
+    input: SceneLayoutMainReelContinuousSpinInput = {},
+  ): void {
+    this.assertReady();
+    const reel = this.requireReel("main");
+    const profile = this.#reelPresentation;
+    if (!profile || profile.kind !== "grid-cell") {
+      throw new SceneLayoutError(
+        "Continuous main reel spin requires a grid-cell reel presentation profile.",
+      );
+    }
+    if (!(reel instanceof RenderGridCellReelSet)) {
+      throw new SceneLayoutError(
+        "Continuous main reel spin resolved a non-grid-cell runtime.",
+      );
+    }
+    this.clearMainReelLandingPositions();
+    reel.startContinuous({
+      direction: profile.direction,
+      speedSymbolsPerSecond: profile.timing.speedSymbolsPerSecond,
+      ...(input.positions ? { positions: input.positions } : {}),
+      ...(input.dimming ? { dimming: input.dimming } : {}),
+      ...(input.dimmingActivatedAtStart === undefined
+        ? {}
+        : { dimmingActivatedAtStart: input.dimmingActivatedAtStart }),
+    });
+  }
+
+  settleMainReelContinuousSpin(input: SceneLayoutMainReelSpinInput): void {
+    this.spinMainReelToSceneInternal(input, true);
+  }
+
+  cancelMainReelContinuousSpin(): void {
+    this.assertReady();
+    const reel = this.requireReel("main");
+    if (!(reel instanceof RenderGridCellReelSet)) {
+      throw new SceneLayoutError(
+        "Continuous main reel cancellation requires a grid-cell runtime.",
+      );
+    }
+    reel.cancelContinuous();
+    this.clearMainReelLandingPositions();
+  }
+
+  private spinMainReelToSceneInternal(
+    input: SceneLayoutMainReelSpinInput,
+    settleContinuous: boolean,
+  ): void {
     this.assertReady();
     const reel = this.requireReel("main");
     this.clearMainReelLandingPositions();
@@ -810,6 +886,29 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         ...(values ? { targetPresentationValues: values } : {}),
         ...(landingStates ? { targetLandingStates: landingStates } : {}),
       };
+      if (settleContinuous) {
+        if (!reel.isContinuousSpinning()) {
+          throw new SceneLayoutError(
+            "Cannot settle main reel without an active continuous spin.",
+          );
+        }
+        if (plan.selective) {
+          assertSelectiveTargetContinuity(
+            reel.getVisibleScene(),
+            reel.getCascadeValues(),
+            scene,
+            values,
+            plan,
+          );
+        }
+        reel.settleContinuous(plan, spinOptions);
+        return;
+      }
+      if (reel.isContinuousSpinning()) {
+        throw new SceneLayoutError(
+          "An active continuous spin must be settled through settleMainReelContinuousSpin().",
+        );
+      }
       if (plan.selective) {
         assertSelectiveTargetContinuity(
           reel.getVisibleScene(),
@@ -827,6 +926,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     if (reel instanceof RenderGridCellReelSet)
       throw new SceneLayoutError(
         "Standard reel profile resolved a grid-cell runtime.",
+      );
+    if (settleContinuous)
+      throw new SceneLayoutError(
+        "Continuous main reel settle requires a grid-cell reel profile.",
       );
     if (input.buildGridCellSpinPlan)
       throw new SceneLayoutError(
@@ -2619,6 +2722,14 @@ function requestOptionsSignature(
     recreateReel: options.recreateReel === true,
     reels: options.reels ?? null,
   });
+}
+
+async function settleAllInOrder(promises: readonly Promise<void>[]) {
+  const results = await Promise.allSettled(promises);
+  const failure = results.find(
+    (result): result is PromiseRejectedResult => result.status === "rejected",
+  );
+  if (failure) throw failure.reason;
 }
 
 function asSceneLayoutError(error: unknown): SceneLayoutError {

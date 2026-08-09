@@ -28,6 +28,7 @@ import {
   buildGame002v2AnticipationSweep,
   buildGame002v2InitialSpinPlan,
   buildGame002v2FreeGameSpinPlan,
+  createGame002v2ContinuousSpinInput,
   resolveGame002v2SpinSymbolCodes,
   type Game002v2SpinSymbolCodes,
 } from "./spin-presentation.js";
@@ -93,6 +94,10 @@ class DirectRoundAdapter implements SlotGameAdapter {
   #resourceOwned = true;
   #spinStartPaintPending = false;
   #anticipationActive = false;
+  #preSpinActive = false;
+  #preSpinInputScene: SceneMatrix | null = null;
+  #preSpinInputValues: readonly (readonly (number | null | -1)[])[] | null =
+    null;
 
   constructor(
     resource: SceneLayoutPackageResource,
@@ -130,6 +135,7 @@ class DirectRoundAdapter implements SlotGameAdapter {
       throw new Error("game002v2 requires userInfo.defaultScene.");
     const symbols = getInitialSceneLayoutSymbolPackageResource(this.#resource);
     this.#spinCodes = resolveGame002v2SpinSymbolCodes(symbols);
+    this.#performanceTrace?.markStartup("runtime-init-start");
     const runtime = createSceneLayoutPackageRuntime({
       resource: this.#resource,
       reelPresentation: {
@@ -160,6 +166,7 @@ class DirectRoundAdapter implements SlotGameAdapter {
           },
         },
       });
+      this.#performanceTrace?.markStartup("runtime-init-complete");
     } catch (error) {
       runtime.destroy();
       throw error;
@@ -167,8 +174,10 @@ class DirectRoundAdapter implements SlotGameAdapter {
     const context = this.#context;
     if (!context) throw new Error("game002v2 adapter is not mounted.");
     this.#runtime = runtime;
+    this.#performanceTrace?.markStartup("initial-scene-committed");
     this.#app.stage.addChild(runtime.container);
     runtime.applyViewport(context.getViewport().frameDesignSize);
+    this.#performanceTrace?.markStartup("runtime-attached");
     this.#unbindPopup = runtime.bindPopupInput({
       canvas: this.#app.canvas,
       keyboardTarget: window,
@@ -178,12 +187,46 @@ class DirectRoundAdapter implements SlotGameAdapter {
     this.#performanceTrace?.markStartup("first-scene-paint");
   }
 
+  startSpinPresentation(): void {
+    if (this.#preSpinActive)
+      throw new Error("game002v2 pre-spin presentation is already active.");
+    if (this.#spinWaiter)
+      throw new Error("game002v2 reel activity is already in progress.");
+    const runtime = this.requireRuntime();
+    runtime.dismissActiveAwardCelebrationImmediately();
+    this.#anticipationActive = false;
+    const freeGame = runtime.getGameModeSnapshot().stableMode === "FreeGame";
+    const inputScene = runtime.getMainReelSceneSnapshot();
+    const inputValues = runtime.getMainReelCascadeValues();
+    runtime.startMainReelContinuousSpin(
+      createGame002v2ContinuousSpinInput(
+        inputScene,
+        this.requireSpinCodes(),
+        this.#reelPresentation,
+        freeGame,
+      ),
+    );
+    this.#preSpinInputScene = inputScene;
+    this.#preSpinInputValues = inputValues;
+    this.#preSpinActive = true;
+  }
+
+  cancelSpinPresentation(_error: Error): void {
+    if (!this.#preSpinActive) return;
+    this.#preSpinActive = false;
+    this.#preSpinInputScene = null;
+    this.#preSpinInputValues = null;
+    this.finishNearwin();
+    this.requireRuntime().cancelMainReelContinuousSpin();
+  }
+
   async playSpin(logic: GameLogic): Promise<void> {
     const runtime = this.requireRuntime();
     runtime.dismissActiveAwardCelebrationImmediately();
     const steps = logic.getSteps();
     if (steps.length === 0) throw new Error("game002v2 round has no steps.");
     this.#anticipationActive = false;
+    let settledPreSpin = false;
 
     for (const step of steps) {
       const landingScene = readLandingScene(step);
@@ -197,8 +240,14 @@ class DirectRoundAdapter implements SlotGameAdapter {
         else {
           const runtime = this.requireRuntime();
           const isFreeGameSpin = step.hasComponent("fg-spin");
-          const currentScene = runtime.getMainReelSceneSnapshot();
-          const currentValues = runtime.getMainReelCascadeValues();
+          const currentScene =
+            !settledPreSpin && this.#preSpinInputScene
+              ? this.#preSpinInputScene
+              : runtime.getMainReelSceneSnapshot();
+          const currentValues =
+            !settledPreSpin && this.#preSpinInputValues
+              ? this.#preSpinInputValues
+              : runtime.getMainReelCascadeValues();
           await this.spinTo(
             landingScene,
             readPresentationValues(
@@ -215,7 +264,9 @@ class DirectRoundAdapter implements SlotGameAdapter {
                 ? "freegame"
                 : "plain",
             currentScene,
+            !settledPreSpin && this.#preSpinActive,
           );
+          if (this.#preSpinActive === false) settledPreSpin = true;
         }
       }
       await this.playFeatureStates(step, runtime.getMainReelSceneSnapshot());
@@ -250,6 +301,11 @@ class DirectRoundAdapter implements SlotGameAdapter {
       }
     }
 
+    if (this.#preSpinActive)
+      throw new Error(
+        "game002v2 round did not provide a pre-spin landing scene.",
+      );
+
     if (runtime.getGameModeSnapshot().stableMode === "FreeGame") {
       await runtime.prepareGameModeTransition("BaseGame");
       await runtime.requestGameMode("BaseGame");
@@ -264,6 +320,9 @@ class DirectRoundAdapter implements SlotGameAdapter {
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
+    this.#preSpinActive = false;
+    this.#preSpinInputScene = null;
+    this.#preSpinInputValues = null;
     this.finishNearwin();
     this.#spinWaiter?.reject(new Error("game002v2 adapter was destroyed."));
     this.#spinWaiter = null;
@@ -314,6 +373,7 @@ class DirectRoundAdapter implements SlotGameAdapter {
     presentationValues: readonly (readonly (number | null)[])[],
     kind: "base" | "freegame" | "plain",
     inputScene: SceneMatrix,
+    settlePreSpin = false,
   ): Promise<void> {
     if (this.#spinWaiter)
       throw new Error("game002v2 reel is already spinning.");
@@ -321,7 +381,7 @@ class DirectRoundAdapter implements SlotGameAdapter {
     this.#nearwin = null;
     try {
       this.#performanceTrace?.markActiveSpin("plan-start");
-      runtime.spinMainReelToScene({
+      const input = {
         scene,
         localPhaseYs: this.localPhases(),
         random: secureRandom,
@@ -350,7 +410,13 @@ class DirectRoundAdapter implements SlotGameAdapter {
               },
             }
           : {}),
-      });
+      } as const;
+      if (settlePreSpin) {
+        runtime.settleMainReelContinuousSpin(input);
+        this.#preSpinActive = false;
+        this.#preSpinInputScene = null;
+        this.#preSpinInputValues = null;
+      } else runtime.spinMainReelToScene(input);
       this.#performanceTrace?.markActiveSpin("spin-call-complete");
     } catch (error) {
       this.#nearwin = null;

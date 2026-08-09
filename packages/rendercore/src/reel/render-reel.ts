@@ -8,10 +8,12 @@ import {
 } from "./spin-strip.js";
 import type {
   ReelAxisSpinPlan,
+  ReelSpinDirection,
   ReelLayout,
   ReelSymbolKind,
   ReelSymbolRegistry,
   RenderReelOptions,
+  RenderReelContinuousSpinOptions,
   RenderReelPhase,
   RenderReelSpinOptions,
   RenderReelSlotSnapshot,
@@ -39,6 +41,13 @@ interface ReelSlot {
   symbol: RenderSymbol | null;
 }
 
+interface ActiveContinuousSpin {
+  readonly direction: ReelSpinDirection;
+  readonly speedSymbolsPerSecond: number;
+  readonly initialCodes: ReadonlyMap<number, number>;
+  readonly initialPresentationValues: ReadonlyMap<number, number | null>;
+}
+
 export class RenderReel extends Container {
   readonly xIndex: number;
   readonly layout: ReelLayout;
@@ -55,8 +64,12 @@ export class RenderReel extends Container {
   readonly #clipMask: Graphics;
   #phase: RenderReelPhase = "idle";
   #plan: ReelAxisSpinPlan | null = null;
+  #continuousSpin: ActiveContinuousSpin | null = null;
   #spinStrip: TemporaryReelStrip | null = null;
   #spinLocalY = 0;
+  #spinStartLocalY = 0;
+  #continuousSettleInitialSlope = 1;
+  #settlingFromContinuous = false;
   #elapsedMs = 0;
   #currentY = 0;
   #staticVisibleSymbols: readonly number[] | null = null;
@@ -126,6 +139,7 @@ export class RenderReel extends Container {
     );
 
     this.#plan = plan;
+    this.#continuousSpin = null;
     this.#spinStrip = createTemporaryReelStrip({
       reels: this.#reels,
       x: this.xIndex,
@@ -144,6 +158,9 @@ export class RenderReel extends Container {
       targetVisiblePresentationValues ?? null;
     this.#targetVisibleStates = targetVisibleStates ?? null;
     this.#spinLocalY = 0;
+    this.#spinStartLocalY = 0;
+    this.#continuousSettleInitialSlope = 1;
+    this.#settlingFromContinuous = false;
     this.#elapsedMs = 0;
     this.#phase = "starting";
     this.#landed = false;
@@ -151,12 +168,151 @@ export class RenderReel extends Container {
     this.renderAtY(this.#spinLocalY, "spinBlur");
   }
 
+  startContinuous(options: RenderReelContinuousSpinOptions): void {
+    if (this.#phase !== "idle" && this.#phase !== "stopped") {
+      throw new ReelError(
+        `Cannot start continuous reel ${this.xIndex} while phase is "${this.#phase}".`,
+      );
+    }
+    const speedSymbolsPerSecond = normalizePositiveFiniteNumber(
+      options.speedSymbolsPerSecond,
+      "speedSymbolsPerSecond",
+    );
+    if (options.direction !== "forward" && options.direction !== "backward") {
+      throw new ReelError(
+        'continuous spin direction must be "forward" or "backward".',
+      );
+    }
+    const currentY = this.#spinStrip ? this.#spinLocalY : this.#currentY;
+    const currentScene = this.getVisibleScene();
+    const currentValues = this.getVisiblePresentationValues();
+    const baseY = Math.floor(currentY);
+    this.#continuousSpin = {
+      direction: options.direction,
+      speedSymbolsPerSecond,
+      initialCodes: new Map(
+        currentScene.map((code, y) => [baseY + y, code] as const),
+      ),
+      initialPresentationValues: new Map(
+        currentValues.map((value, y) => [baseY + y, value] as const),
+      ),
+    };
+    this.#plan = null;
+    this.#spinStrip = null;
+    this.#spinLocalY = 0;
+    this.#spinStartLocalY = 0;
+    this.#continuousSettleInitialSlope = 1;
+    this.#elapsedMs = 0;
+    this.#currentY = currentY;
+    this.#staticVisibleSymbols = null;
+    this.#staticVisiblePresentationValues = null;
+    this.#targetVisibleSymbols = null;
+    this.#targetVisiblePresentationValues = null;
+    this.#targetVisibleStates = null;
+    this.#phase = "spinning";
+    this.#landed = false;
+    this.#settlingFromContinuous = false;
+    this.syncClippingForPhase();
+    this.renderAtY(this.#currentY, "spinBlur");
+  }
+
+  settleContinuous(
+    plan: ReelAxisSpinPlan,
+    options: RenderReelSpinOptions = {},
+  ): void {
+    const continuous = this.#continuousSpin;
+    if (!continuous || this.#phase !== "spinning") {
+      throw new ReelError(
+        `Cannot settle reel ${this.xIndex} without an active continuous spin.`,
+      );
+    }
+    if (plan.x !== this.xIndex || plan.direction !== continuous.direction) {
+      throw new ReelError(
+        `Continuous reel ${this.xIndex} settle plan does not match its active direction.`,
+      );
+    }
+    const targetVisibleSymbols = parseVisibleSymbols(
+      options.targetVisibleSymbols,
+      this.layout.visibleRows,
+      "targetVisibleSymbols",
+    );
+    const targetVisiblePresentationValues = parsePresentationValues(
+      options.targetVisiblePresentationValues,
+      this.layout.visibleRows,
+      "targetVisiblePresentationValues",
+    );
+    const targetVisibleStates = parseVisibleStates(
+      options.targetVisibleStates,
+      this.layout.visibleRows,
+      "targetVisibleStates",
+    );
+    const currentScene = this.getVisibleScene();
+    const currentValues = this.getVisiblePresentationValues();
+    const startY = Math.floor(this.#currentY);
+    const startLocalY = this.#currentY - startY;
+    const settlePlan = Object.freeze({ ...plan, startY });
+    this.#plan = settlePlan;
+    this.#spinStrip = createTemporaryReelStrip({
+      reels: this.#reels,
+      x: this.xIndex,
+      layout: this.layout,
+      plan: settlePlan,
+      currentVisibleSymbols: currentScene,
+      currentVisiblePresentationValues: currentValues,
+      targetVisibleSymbols,
+      targetVisiblePresentationValues,
+      presentationValueResolver: this.#presentationValueResolver,
+    });
+    this.#continuousSpin = null;
+    this.#targetVisibleSymbols = targetVisibleSymbols ?? null;
+    this.#targetVisiblePresentationValues =
+      targetVisiblePresentationValues ?? null;
+    this.#targetVisibleStates = targetVisibleStates ?? null;
+    this.#spinStartLocalY = startLocalY;
+    this.#spinLocalY = startLocalY;
+    const settleDistance = Math.abs(
+      (plan.direction === "forward"
+        ? settlePlan.travelSymbols
+        : -settlePlan.travelSymbols) - startLocalY,
+    );
+    this.#continuousSettleInitialSlope = Math.min(
+      1,
+      (continuous.speedSymbolsPerSecond * settlePlan.durationMs) /
+        1000 /
+        settleDistance,
+    );
+    this.#elapsedMs = 0;
+    this.#phase = "spinning";
+    this.#landed = false;
+    this.#settlingFromContinuous = true;
+    this.renderAtY(this.#spinLocalY, "spinBlur");
+  }
+
+  cancelContinuous(): void {
+    if (!this.#continuousSpin) return;
+    const scene = this.getVisibleScene();
+    const values = this.getVisiblePresentationValues();
+    this.resetToVisibleSymbols(scene, Math.floor(this.#currentY), values);
+  }
+
+  isContinuousSpinning(): boolean {
+    return this.#continuousSpin !== null;
+  }
+
   update(deltaSeconds: number): RenderReelUpdateResult {
     assertValidDeltaSeconds(deltaSeconds);
     const wasLanded = this.#landed;
     let landedThisUpdate = false;
 
-    if (this.#plan && !this.#landed) {
+    if (this.#continuousSpin) {
+      const continuous = this.#continuousSpin;
+      this.#elapsedMs += deltaSeconds * 1000;
+      const travel = continuous.speedSymbolsPerSecond * deltaSeconds;
+      this.#currentY += continuous.direction === "forward" ? travel : -travel;
+      this.#phase = "spinning";
+      this.syncClippingForPhase();
+      this.renderAtY(this.#currentY, "spinBlur");
+    } else if (this.#plan && !this.#landed) {
       this.#elapsedMs = Math.min(
         this.#elapsedMs + deltaSeconds * 1000,
         this.#plan.durationMs,
@@ -198,8 +354,12 @@ export class RenderReel extends Container {
 
   resetToY(y: number): void {
     this.#plan = null;
+    this.#continuousSpin = null;
     this.#spinStrip = null;
     this.#spinLocalY = 0;
+    this.#spinStartLocalY = 0;
+    this.#continuousSettleInitialSlope = 1;
+    this.#settlingFromContinuous = false;
     this.#elapsedMs = 0;
     this.#currentY = y;
     this.#staticVisibleSymbols = null;
@@ -231,8 +391,12 @@ export class RenderReel extends Container {
       "presentationValues",
     );
     this.#plan = null;
+    this.#continuousSpin = null;
     this.#spinStrip = null;
     this.#spinLocalY = 0;
+    this.#spinStartLocalY = 0;
+    this.#continuousSettleInitialSlope = 1;
+    this.#settlingFromContinuous = false;
     this.#elapsedMs = 0;
     this.#currentY = y;
     this.#staticVisibleSymbols = parsedVisibleSymbols;
@@ -649,6 +813,7 @@ export class RenderReel extends Container {
 
   private createWindowSnapshot(y: number): ReelWindowSnapshot {
     const spinStrip = this.#spinStrip;
+    const continuousSpin = this.#continuousSpin;
     const staticVisibleSymbols = spinStrip ? null : this.#staticVisibleSymbols;
     const staticBaseY = Math.floor(y);
 
@@ -659,15 +824,19 @@ export class RenderReel extends Container {
       layout: this.layout,
       codeAt: spinStrip
         ? (symbolY) => spinStrip.get(symbolY)
-        : staticVisibleSymbols
-          ? (symbolY) => {
-              const visibleY = symbolY - staticBaseY;
-              if (visibleY >= 0 && visibleY < this.layout.visibleRows) {
-                return staticVisibleSymbols[visibleY];
+        : continuousSpin
+          ? (symbolY) =>
+              continuousSpin.initialCodes.get(symbolY) ??
+              this.#reels.get(this.xIndex, symbolY)
+          : staticVisibleSymbols
+            ? (symbolY) => {
+                const visibleY = symbolY - staticBaseY;
+                if (visibleY >= 0 && visibleY < this.layout.visibleRows) {
+                  return staticVisibleSymbols[visibleY];
+                }
+                return this.#reels.get(this.xIndex, symbolY);
               }
-              return this.#reels.get(this.xIndex, symbolY);
-            }
-          : undefined,
+            : undefined,
     });
   }
 
@@ -746,6 +915,9 @@ export class RenderReel extends Container {
     this.#targetVisibleStates = null;
     this.#spinStrip = null;
     this.#spinLocalY = 0;
+    this.#spinStartLocalY = 0;
+    this.#continuousSettleInitialSlope = 1;
+    this.#settlingFromContinuous = false;
     this.#phase = "stopped";
     this.#landed = true;
     this.y = 0;
@@ -762,10 +934,14 @@ export class RenderReel extends Container {
       return this.#spinLocalY;
     }
 
-    const eased = easeSpinTravel(progress);
-    return plan.direction === "forward"
-      ? plan.travelSymbols * eased
-      : -plan.travelSymbols * eased;
+    const eased = this.#settlingFromContinuous
+      ? easeContinuousSettle(progress, this.#continuousSettleInitialSlope)
+      : easeSpinTravel(progress);
+    const targetLocalY =
+      plan.direction === "forward" ? plan.travelSymbols : -plan.travelSymbols;
+    return (
+      this.#spinStartLocalY + (targetLocalY - this.#spinStartLocalY) * eased
+    );
   }
 
   private syncClippingForPhase(): void {
@@ -821,6 +997,12 @@ export class RenderReel extends Container {
     renderedY: number,
   ): number | null {
     if (this.#spinStrip) return this.#spinStrip.getPresentationValue(symbolY);
+    if (this.#continuousSpin) {
+      return (
+        this.#continuousSpin.initialPresentationValues.get(symbolY) ??
+        this.resolvePresentationValue(symbolY, code)
+      );
+    }
     if (this.#staticVisibleSymbols && this.#staticVisiblePresentationValues) {
       const visibleY = symbolY - Math.floor(renderedY);
       if (visibleY >= 0 && visibleY < this.layout.visibleRows) {
@@ -922,6 +1104,23 @@ function easeSpinTravel(progress: number): number {
   return 0.78 + 0.22 * easeOutCubic(settledProgress);
 }
 
+function easeContinuousSettle(progress: number, initialSlope: number): number {
+  const linearEnd = 0.8;
+  if (progress <= linearEnd) return progress * initialSlope;
+  const linearValue = linearEnd * initialSlope;
+  const remainingValue = 1 - linearValue;
+  const local = (progress - linearEnd) / (1 - linearEnd);
+  const localInitialSlope = (initialSlope * (1 - linearEnd)) / remainingValue;
+  // Cubic Hermite reaches the exact endpoint with zero final velocity. The
+  // leading linear segment uses the incoming continuous velocity exactly, so
+  // the response boundary neither jumps nor changes speed.
+  const settled =
+    (-2 + localInitialSlope) * local ** 3 +
+    (3 - 2 * localInitialSlope) * local ** 2 +
+    localInitialSlope * local;
+  return linearValue + remainingValue * settled;
+}
+
 function easeInCubic(progress: number): number {
   return progress * progress * progress;
 }
@@ -982,6 +1181,13 @@ function normalizeNonNegativeFiniteNumber(
 ): number {
   if (!Number.isFinite(value) || value < 0) {
     throw new ReelError(`${label} must be a non-negative finite number.`);
+  }
+  return value;
+}
+
+function normalizePositiveFiniteNumber(value: number, label: string): number {
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new ReelError(`${label} must be a positive finite number.`);
   }
   return value;
 }

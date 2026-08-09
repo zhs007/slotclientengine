@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildGame002v2FreeGameSpinPlan,
   buildGame002v2InitialSpinPlan,
+  createGame002v2ContinuousSpinInput,
 } from "../src/spin-presentation.js";
 
 describe("game002v2 spin presentation", () => {
@@ -80,5 +81,42 @@ describe("game002v2 spin presentation", () => {
     expect(dim(7, true)).toBe(0);
     expect(dim(3, true)).toBe(0.5);
     expect(dim(8, true)).toBe(0.5);
+  });
+
+  it("pre-rolls the full base board but holds WL/CN for a first FreeGame spin", () => {
+    const presentation = {
+      manifest: { spin: { dimmingAlpha: 0.5 } },
+    } as Parameters<typeof createGame002v2ContinuousSpinInput>[2];
+    const codes = {
+      wild: 7,
+      coin: 3,
+      normalBright: new Set([3, 7, 8]),
+    };
+    const scene = [
+      [7, 1, 3],
+      [2, 7, 6],
+    ];
+
+    const base = createGame002v2ContinuousSpinInput(
+      scene,
+      codes,
+      presentation,
+      false,
+    );
+    const freeGame = createGame002v2ContinuousSpinInput(
+      scene,
+      codes,
+      presentation,
+      true,
+    );
+
+    expect(base).not.toHaveProperty("positions");
+    expect(freeGame.positions).toEqual([
+      { x: 0, y: 1 },
+      { x: 1, y: 0 },
+      { x: 1, y: 2 },
+    ]);
+    expect(freeGame.dimming.resolveDimmingAlpha(7, false)).toBe(0);
+    expect(freeGame.dimming.resolveDimmingAlpha(1, false)).toBe(0.5);
   });
 });

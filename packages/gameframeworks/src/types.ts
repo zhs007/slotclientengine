@@ -270,6 +270,9 @@ export type SlotGamePerformancePhase =
   | "request-build-start"
   | "request-build-complete"
   | "request-send"
+  | "adapter-pre-spin-start"
+  | "adapter-pre-spin-complete"
+  | "adapter-pre-spin-cancel"
   | "response-received"
   | "logic-parse-start"
   | "logic-parse-complete"
@@ -329,6 +332,14 @@ export interface SlotGameFrameworkOptions {
 export interface SlotGameAdapter {
   mount(context: SlotGameMountContext): void | Promise<void>;
   applyInitialState?(state: SlotGameInitialState): void | Promise<void>;
+  /**
+   * Starts an optional targetless presentation after the live spin request has
+   * been dispatched and before its response is awaited. This hook must be
+   * synchronous so request and presentation ownership cannot race.
+   */
+  startSpinPresentation?(): void;
+  /** Cancels a started targetless presentation after the round fails. */
+  cancelSpinPresentation?(error: Error): void;
   playSpin(logic: GameLogic): void | Promise<void>;
   setFrameworkState?(state: SlotGameStateSnapshot): void;
   destroy?(): void;
