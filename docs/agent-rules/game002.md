@@ -24,6 +24,12 @@
   从同一 Crave layout package 解析，app 不自行遍历 binding 或读取额外资源。缺 CN、缺表或
   非法权重/random 必须失败，不回退 manifest default value。
 - v2 采用 fail-stop：异步调用失败立即结束本轮并上报，不回滚已经完成的画面变化。
+- v2 在业务事实确定后直接请求对应 Symbols state，不在执行 edge 反向查询 capability 或静默跳过；
+  state/resource 无法播放时由实际 render request 原位失败。landing/final scene 只来自明确候选
+  component，不回退 step 的泛化 scenes。
+- cascade plan 的 target presentation values 对同 code carried occurrence 继承当前值，再由本 step
+  明确 otherScene 覆盖；refill 新 occurrence 不继承 hole。rendercore 保留 occurrence identity，并在
+  fall 完成边界采用 plan target value，不重新验证业务 value closure。
 
 ## 固定入口和资源
 

@@ -35,6 +35,13 @@ occurrence 加权 presentation value resolver。game002v2 通过这些接口补�
 - 后续浏览器验收发现固定 WL 的 `bg-incwl` value 会被 cascade builder 当成 occurrence 替换。
   rendercore 已移除 carried presentation value 的反向业务校验：只校验动画能否执行，保留 WL
   renderer identity，并在 fall 完成边界采用 plan 的 target value。
+- 沿 game002v2 完整 round 调用链复核后，删除了 `playAvailableState()` 的 capability 预查询与
+  静默跳过：win/remove/feature 现在按已知业务 state 直接请求，实际无法播放时原位失败。CN win
+  使用 `winStart`，其它中奖 symbol 使用 `win`。
+- landing/final scene 不再回退泛化 `step.getScenes()`；cascade target values 继承同 code carried
+  occurrence，再由当前 step otherScene 覆盖，避免合法 CN/WL/WM/CM value 被清成 `null`。同 scene
+  但 value 变化也会提交 final snapshot。feature 播放从 runtime 当前 scene 取位置，transform-only
+  step 即使没有 landing component，也会先播放源 symbol state 再提交 final scene。
 
 ## 实际文件
 
@@ -77,8 +84,9 @@ docs/agent-rules/game002.md
 
 - `pnpm --filter @slotclientengine/rendercore exec vitest run tests/reel/grid-cell-spin-plan.test.ts tests/reel/render-grid-cell-reel-set.test.ts tests/reel/spin-strip.test.ts tests/reel/weighted-presentation-value.test.ts tests/scene-layout/package-runtime.test.ts`：通过，5 files / 46 tests。
 - `pnpm --filter @slotclientengine/rendercore typecheck`：通过。
+- `pnpm --filter @slotclientengine/rendercore exec vitest run tests/reel/grid-cell-cascade-plan.test.ts tests/reel/render-grid-cell-reel-set.test.ts`：通过，2 files / 27 tests，覆盖 carried target value 与固定 WL identity。
 - `pnpm --filter @slotclientengine/rendercore exec vitest run tests/scene-layout/package-resource.test.ts tests/scene-layout/configured-round-adapter.test.ts`：通过，2 files / 26 tests，覆盖 initial active Symbols resource 接口及既有 consumer。
-- `pnpm --filter game002v2 test`：通过，5 files / 9 tests。
+- `pnpm --filter game002v2 test`：通过，6 files / 10 tests。
 - `pnpm --filter game002v2 typecheck`：通过，含直接依赖构建。
 - `pnpm --filter game002 typecheck`：通过，证明 rendercore public API 变更未破坏直接 consumer。
 - 修改文件 Prettier write/check：通过。

@@ -25,6 +25,7 @@ describe("game002v2 spin presentation", () => {
     } as unknown as SceneLayoutGridCellSpinPlanStage;
     const result = buildGame002v2InitialSpinPlan(stage, {
       wild: 7,
+      coin: 3,
       normalBright: new Set([3, 7, 8, 9, 10]),
     });
     const options = createPlan.mock.calls[0]![0]!;

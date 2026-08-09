@@ -9,6 +9,7 @@ const NORMAL_BRIGHT_SYMBOLS = Object.freeze(["CN", "WL", "WM", "CM", "CO"]);
 
 export interface Game002v2SpinSymbolCodes {
   readonly wild: number;
+  readonly coin: number;
   readonly normalBright: ReadonlySet<number>;
 }
 
@@ -25,6 +26,7 @@ export function resolveGame002v2SpinSymbolCodes(
   );
   return Object.freeze({
     wild: codes.get("WL")!,
+    coin: codes.get("CN")!,
     normalBright: new Set(codes.values()),
   });
 }

@@ -18,6 +18,11 @@ import { Application } from "pixi.js";
 import { createGame002v2DefaultSceneValueResolver } from "./default-scene-values.js";
 import { Game002v2NearwinController } from "./nearwin.js";
 import {
+  createGame002v2PresentationValues,
+  sameGame002v2PresentationValues,
+  type Game002v2PresentationValues,
+} from "./round-values.js";
+import {
   buildGame002v2InitialSpinPlan,
   resolveGame002v2SpinSymbolCodes,
   type Game002v2SpinSymbolCodes,
@@ -159,32 +164,36 @@ class DirectRoundAdapter implements SlotGameAdapter {
           this.#resource,
         );
         const wildCode = this.requireSpinCodes().wild;
-        const landingValues = readPresentationValues(
-          step,
-          landingScene,
-          symbols,
-        );
         if (step.hasComponent("bg-dropdown"))
-          await this.cascadeTo(step, landingScene, landingValues, wildCode);
+          await this.cascadeTo(step, landingScene, symbols, wildCode);
         else
           await this.spinTo(
             landingScene,
-            landingValues,
+            readPresentationValues(step, landingScene, symbols),
             step.hasComponent("bg-spin") ? this.requireSpinCodes() : null,
           );
       }
-      await this.playFeatureStates(step, landingScene);
+      await this.playFeatureStates(step, runtime.getMainReelSceneSnapshot());
       const finalScene = readFinalScene(step);
-      if (finalScene && landingScene && !sameScene(landingScene, finalScene))
-        runtime.applyMainReelSnapshot({
-          scene: finalScene,
-          presentationValues: readPresentationValues(
-            step,
-            finalScene,
-            getInitialSceneLayoutSymbolPackageResource(this.#resource),
-          ),
-          localPhaseYs: this.localPhases(),
-        });
+      if (finalScene) {
+        const currentScene = runtime.getMainReelSceneSnapshot();
+        const currentValues = runtime.getMainReelCascadeValues();
+        const finalValues = readPresentationValues(
+          step,
+          finalScene,
+          getInitialSceneLayoutSymbolPackageResource(this.#resource),
+          { scene: currentScene, values: currentValues },
+        );
+        if (
+          !sameScene(currentScene, finalScene) ||
+          !sameGame002v2PresentationValues(currentValues, finalValues)
+        )
+          runtime.applyMainReelSnapshot({
+            scene: finalScene,
+            presentationValues: finalValues,
+            localPhaseYs: this.localPhases(),
+          });
+      }
       await this.playWins(step);
       await this.removeWonSymbols(step);
       if (
@@ -290,7 +299,7 @@ class DirectRoundAdapter implements SlotGameAdapter {
   private cascadeTo(
     step: GameLogicStep,
     targetScene: SceneMatrix,
-    targetValues: readonly (readonly (number | null)[])[],
+    symbols: ReturnType<typeof getInitialSceneLayoutSymbolPackageResource>,
     wildCode: number | undefined,
   ): Promise<void> {
     if (this.#spinWaiter) throw new Error("game002v2 reel is already active.");
@@ -306,6 +315,10 @@ class DirectRoundAdapter implements SlotGameAdapter {
       sourceValues,
       settledScene: dropdown,
       canDropOccurrence,
+    });
+    const targetValues = readPresentationValues(step, targetScene, symbols, {
+      scene: dropdown,
+      values: settledValues,
     });
     const geometry = this.#resource.manifest.reels.main!;
     runtime.startMainReelCascadeDrop(
@@ -340,14 +353,23 @@ class DirectRoundAdapter implements SlotGameAdapter {
     const positions = WIN_COMPONENTS.flatMap((name) =>
       step.getComponentResults(name).flatMap((result) => pairs(result.pos)),
     );
-    await this.playAvailableState(positions, "win", "winStart");
+    const scene = this.requireRuntime().getMainReelSceneSnapshot();
+    const coinCode = this.requireSpinCodes().coin;
+    await this.playState(
+      positions.filter(({ x, y }) => scene[x]?.[y] !== coinCode),
+      "win",
+    );
+    await this.playState(
+      positions.filter(({ x, y }) => scene[x]?.[y] === coinCode),
+      "winStart",
+    );
   }
 
   private async removeWonSymbols(step: GameLogicStep): Promise<void> {
     const removeScene = step.getComponentScenes("bg-remove").at(-1);
     if (!removeScene) return;
     const positions = holes(removeScene);
-    await this.playAvailableState(positions, "remove");
+    await this.playState(positions, "remove");
     this.requireRuntime().releaseMainReelSymbols(positions);
   }
 
@@ -370,34 +392,29 @@ class DirectRoundAdapter implements SlotGameAdapter {
       plays.push(["AF", "feature"], ["AF", "change"]);
     for (const [symbol, state] of plays) {
       const code = symbolPackage.gameConfig.getSymbolCode(symbol);
-      if (code === undefined) continue;
-      await this.playAvailableState(findCode(scene, code), state);
+      if (code === undefined)
+        throw new Error(`game002v2 requires symbol "${symbol}".`);
+      await this.playState(findCode(scene, code), state);
     }
   }
 
-  private async playAvailableState(
+  private async playState(
     positions: readonly Position[],
-    ...states: readonly string[]
+    state: string,
   ): Promise<void> {
+    if (positions.length === 0) return;
     const runtime = this.requireRuntime();
-    const remaining = [...positions];
-    for (const state of states) {
-      const playable = remaining.filter((position) =>
-        runtime.hasMainReelSymbolStateCapability(position, state),
-      );
-      if (playable.length === 0) continue;
-      await runtime.playMainReelSymbolStateBatch([
-        {
-          positions: playable,
-          state,
-          options: {
-            transitionMode: "immediate",
-            completion: "once-complete",
-          },
+    await runtime.playMainReelSymbolStateBatch([
+      {
+        positions,
+        state,
+        options: {
+          transitionMode: "immediate",
+          completion: "once-complete",
         },
-      ]);
-      runtime.requestMainReelSymbolStates(playable, "normal", "immediate");
-    }
+      },
+    ]);
+    runtime.requestMainReelSymbolStates(positions, "normal", "immediate");
   }
 
   private localPhases(): readonly number[] {
@@ -446,19 +463,11 @@ interface Position {
 }
 
 function readLandingScene(step: GameLogicStep): SceneMatrix | null {
-  return (
-    step.getLastComponentScenes(LANDING_COMPONENTS).at(-1) ??
-    step.getScenes().at(-1) ??
-    null
-  );
+  return step.getLastComponentScenes(LANDING_COMPONENTS).at(-1) ?? null;
 }
 
 function readFinalScene(step: GameLogicStep): SceneMatrix | null {
-  return (
-    step.getLastComponentScenes(FINAL_COMPONENTS).at(-1) ??
-    step.getScenes().at(-1) ??
-    null
-  );
+  return step.getLastComponentScenes(FINAL_COMPONENTS).at(-1) ?? null;
 }
 
 function pairs(values: readonly number[]): readonly Position[] {
@@ -495,23 +504,27 @@ function readPresentationValues(
   step: GameLogicStep,
   scene: SceneMatrix,
   symbols: ReturnType<typeof getInitialSceneLayoutSymbolPackageResource>,
-): readonly (readonly (number | null)[])[] {
-  const values: Array<Array<number | null>> = scene.map((column) =>
-    column.map(() => null),
-  );
+  fallback?: Readonly<{
+    readonly scene: readonly (readonly number[])[];
+    readonly values: readonly (readonly (number | null | -1)[])[];
+  }>,
+): Game002v2PresentationValues {
+  const overlays: Array<{
+    readonly code: number;
+    readonly values: readonly (readonly number[])[];
+  }> = [];
   for (const [symbol, componentNames] of Object.entries(VALUE_COMPONENTS)) {
     const code = symbols.gameConfig.getSymbolCode(symbol);
     if (code === undefined) continue;
     for (const name of componentNames)
       for (const matrix of step.getComponentOtherScenes(name))
-        for (let x = 0; x < scene.length; x++)
-          for (let y = 0; y < scene[x]!.length; y++) {
-            const value = matrix[x]?.[y];
-            if (scene[x]![y] === code && typeof value === "number" && value > 0)
-              values[x]![y] = value;
-          }
+        overlays.push({ code, values: matrix });
   }
-  return Object.freeze(values.map((column) => Object.freeze(column)));
+  return createGame002v2PresentationValues({
+    scene,
+    overlays,
+    ...(fallback ? { fallback } : {}),
+  });
 }
 
 function secureRandom(): number {

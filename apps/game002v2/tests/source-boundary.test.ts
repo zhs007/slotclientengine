@@ -10,5 +10,7 @@ describe("game002v2 source boundary", () => {
       .join("\n");
     expect(source).not.toMatch(/SlotOperation|mutation|sha256|byteLength/u);
     expect(source).not.toMatch(/compile[A-Z].*Plan|rollback/u);
+    expect(source).not.toMatch(/hasMainReelSymbolStateCapability/u);
+    expect(source).not.toMatch(/getScenes\(\)\.at/u);
   });
 });
