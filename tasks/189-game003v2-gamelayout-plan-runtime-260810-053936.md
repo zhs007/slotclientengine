@@ -67,3 +67,6 @@
 
 浏览器视觉/交互验收由用户执行，当前未标记完成。建议重点观察：request 发出即开始转、response 后只落停一次、
 CO 数字、首轮和 lingering win、award popup、横竖屏切换，以及 console 是否存在实际缺资源错误。
+
+浏览器验收发现并修复 coordinator `next-spin` cleanup 提前清除 request-time continuous spin ownership 的问题；
+该 cleanup 现在保留 pre-spin 状态，由首个 landing operation 调用 `settleMainReelContinuousSpin()` 完成同一轮落停。
