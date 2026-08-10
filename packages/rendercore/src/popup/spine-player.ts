@@ -16,6 +16,7 @@ import {
   createSpinePopupOverlayRuntime,
   type SpinePopupOverlayRuntime,
 } from "./spine-overlay-runtime.js";
+import { createPopupPresentation } from "./presentation.js";
 
 export function createSpinePopupPlayer(options: {
   readonly resource: PopupPackageResource;
@@ -44,7 +45,7 @@ export function createSpinePopupPlayer(options: {
 }
 
 class DefaultSpinePopupPlayer implements SpinePopupPlayer {
-  readonly container = new Container();
+  readonly container: Container;
   readonly #manifest: Extract<
     PopupPackageResource["manifest"],
     { readonly type: "spine" }
@@ -53,6 +54,8 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
   readonly #overlays: readonly SpinePopupOverlayRuntime[];
   readonly #prompt: ReturnType<typeof createPopupPromptText> | null;
   readonly #nodes: ReturnType<typeof createPopupStringNodeRegistry>;
+  readonly #presentation: ReturnType<typeof createPopupPresentation>;
+  readonly #popupRoot = new Container();
   #phase: SpinePopupSnapshot["phase"] = "idle";
   #dismissRequested = false;
   #initialized = false;
@@ -74,18 +77,23 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
     const manifest = resource.manifest;
     this.#manifest = manifest;
     this.#player = player;
-    this.container.position.set(
+    this.#presentation = createPopupPresentation(manifest);
+    this.container = this.#presentation.container;
+    this.#popupRoot.position.set(
       manifest.spine.transform.x,
       manifest.spine.transform.y,
     );
-    this.container.scale.set(manifest.spine.transform.scale);
+    this.#popupRoot.scale.set(manifest.spine.transform.scale);
     this.container.visible = false;
-    this.container.sortableChildren = true;
+    this.#popupRoot.sortableChildren = true;
+    this.#presentation.contentRoot.addChild(this.#popupRoot);
     player.view.zIndex = -1;
-    this.container.addChild(player.view);
+    this.#popupRoot.addChild(player.view);
     this.#overlays = (manifest.spine.overlays ?? []).map((layer) => {
-      const prepared = resource.resources[layer.resource];
-      if (!prepared)
+      const prepared = layer.resource
+        ? resource.resources[layer.resource]
+        : undefined;
+      if (!prepared && layer.kind !== "text")
         throw new Error(
           `Spine popup overlay resource missing: ${layer.resource}`,
         );
@@ -94,7 +102,7 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
         layer,
         resource: prepared,
       });
-      this.container.addChild(runtime.container);
+      this.#popupRoot.addChild(runtime.container);
       return runtime;
     });
     const prompt = manifest.spine.prompt;
@@ -108,7 +116,7 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
         measureText: measurePromptText,
       });
       this.#prompt.text.zIndex = prompt.order;
-      this.container.addChild(this.#prompt.text);
+      this.#popupRoot.addChild(this.#prompt.text);
     } else this.#prompt = null;
     this.#nodes = createPopupStringNodeRegistry(
       collectSpineStringNodeDefinitions(manifest),
@@ -138,6 +146,12 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
   getImageStringNode(selector: PopupStringNodeSelector): PopupStringNodeHandle {
     this.assertUsable();
     return this.#nodes.getImageStringNode(selector);
+  }
+  applyViewport(
+    viewportSize: Parameters<NonNullable<SpinePopupPlayer["applyViewport"]>>[0],
+    placement?: Parameters<NonNullable<SpinePopupPlayer["applyViewport"]>>[1],
+  ) {
+    return this.#presentation.applyViewport(viewportSize, placement);
   }
 
   async init(): Promise<void> {
@@ -171,6 +185,7 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
     this.#dismissRequested = false;
     this.#phase = "start";
     this.container.visible = true;
+    this.#presentation.setActive(true);
     if (this.#prompt) {
       this.#prompt.text.visible = true;
     }
@@ -242,7 +257,8 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
     for (const overlay of this.#overlays) overlay.destroy();
     this.#prompt?.text.destroy();
     this.#nodes.destroy();
-    this.container.destroy({ children: false });
+    this.#popupRoot.destroy({ children: false });
+    this.#presentation.destroy();
   }
 
   private complete(): void {
@@ -250,6 +266,7 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
     if (this.#prompt) this.#prompt.text.visible = false;
     this.#phase = "complete";
     this.container.visible = false;
+    this.#presentation.setActive(false);
   }
 
   private assertReady(): void {

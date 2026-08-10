@@ -483,11 +483,14 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         throw new SceneLayoutError(
           `Scene layout popup "${id}" has no ${snapshot.variantId} placement.`,
         );
-      popup.container.position.set(
-        viewportSize.width / 2 + placement.x,
-        viewportSize.height / 2 + placement.y,
-      );
-      popup.container.scale.set(placement.scale);
+      if (popup.applyViewport) popup.applyViewport(viewportSize, placement);
+      else {
+        popup.container.position.set(
+          viewportSize.width / 2 + placement.x,
+          viewportSize.height / 2 + placement.y,
+        );
+        popup.container.scale.set(placement.scale);
+      }
     }
     for (const [id, popup] of this.#spinePopups) {
       const binding = this.#manifest.popups?.[id];
@@ -496,11 +499,14 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         throw new SceneLayoutError(
           `Scene layout popup "${id}" has no ${snapshot.variantId} placement.`,
         );
-      popup.container.position.set(
-        viewportSize.width / 2 + placement.x,
-        viewportSize.height / 2 + placement.y,
-      );
-      popup.container.scale.set(placement.scale);
+      if (popup.applyViewport) popup.applyViewport(viewportSize, placement);
+      else {
+        popup.container.position.set(
+          viewportSize.width / 2 + placement.x,
+          viewportSize.height / 2 + placement.y,
+        );
+        popup.container.scale.set(placement.scale);
+      }
     }
     this.#transitionRoot.position.set(
       snapshot.worldOffset.x,

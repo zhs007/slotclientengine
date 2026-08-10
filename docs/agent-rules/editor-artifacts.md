@@ -41,11 +41,14 @@
 ## Popup Editor
 
 - `apps/popupeditor` 输出 strict `award-celebration` 或普通 `spine` popup package；两种类型使用互斥 schema，不保留无关字段。
+- Popup Editor 启动时没有隐式项目；项目只能通过“创建项目”dialog（名称与固定类型）或单独导入 Popup ZIP 建立。项目 ZIP 与资源导入是两个入口，资源入口中 VNI/ImgNumber 只接受各自 Editor 导出的 ZIP，Spine 必须以完整 JSON/atlas/texture 组导入。同名不同 bytes 必须由用户逐项选择覆盖或自动 suffix 保留两份，不能默认提交。
+- Popup v2 保存中心基准的 `focus.left/right/top/bottom`、默认启用的 50% 黑色全 viewport backdrop，以及每层 `alpha`；focus 使用与 Game Layout `maximized-focus` 相同的适配算法。v1 导入、预览和原版本导出保持兼容，升级 v2 必须显式执行。
+- Popup Editor 独立预览页拥有唯一的 Pixi Application/canvas，并把 rendercore Popup player 的 Container 挂入其中；rendercore Popup 与游戏/Scene Layout consumer 不得创建 canvas、Renderer、ticker 或 RAF。预览在合法配置变化后自动 rebuild，不提供 Build、advance、dismiss 或 immediate-dismiss UI；普通交互只来自完整 preview canvas 或 keyboard input。
 - 普通 Spine popup 的可选 prompt 缺省使用 rendercore 系统字体且不进入资源闭包；显式字体只接受 package-owned WOFF2/WOFF/TTF/OTF。prompt 使用单行默认 string 与显式 area/order；游戏可传入已翻译 string，runtime 不翻译。award 各档与 Spine overlay 都可声明多个命名系统文字和 manual ImgNumber；系统文字样式、默认 string、transform/order/segment 及 ImgNumber 默认 string 只在 Popup Editor 编辑，每个 award 档仍必须恰好有一个 `win-amount`。其它 image/Spine/VNI overlay 的 transform、order 与 playback 同样只在 Popup Editor 编辑。
 - VNI export bundle 只把 `purpose=runtime` 作为运行候选：唯一 runtime 自动选择，多个 runtime 才枚举；禁止手输 profile id，`purpose=editing` 不进入候选。
 - popup package 使用完整 SHA-256 content-addressed owned payload，并保持 exact closure。
 - Popup 字体与其它 payload 一样按完整 SHA-256 物理去重；logical filename key 与 owner 引用不得从 hash path 反推或合并。
-- `packages/rendercore/popup` 拥有 popup manifest/parser、image/VNI/official Spine/image-string/系统文字 layer、字体效果与 grapheme 弧排、按 name/kind-index 的 string node registry、BigInt threshold sequence、金额格式、canvas/keyboard input binding、点击/dismiss/end drain、普通 Spine start/loop/end 边界状态机和 runtime snapshot；editor/game app 只绑定宿主并呈现错误，不复制分派。
+- `packages/rendercore/popup` 拥有 popup manifest/parser、focus presentation Container、全 viewport backdrop、image/VNI/official Spine/image-string/系统文字 layer、字体效果与 grapheme 弧排、按 name/kind-index 的 string node registry、BigInt threshold sequence、金额格式、canvas/keyboard input binding、点击/dismiss/end drain、普通 Spine start/loop/end 边界状态机和 runtime snapshot；editor/game app 只创建宿主 canvas、挂载节点并呈现错误，不复制分派。
 
 ## Symbols Editor
 

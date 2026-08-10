@@ -192,7 +192,7 @@ describe("popup editor filename-key project", () => {
     );
   });
 
-  it("overwrites same-name bytes by default and garbage-collects an unbound resource", async () => {
+  it("overwrites same-name bytes after an explicit decision and garbage-collects an unbound resource", async () => {
     const project = createPopupEditorProject();
     const first = await discoverPopupResources([
       new File([png(2, 3).buffer], "BG.PNG"),
@@ -205,7 +205,9 @@ describe("popup editor filename-key project", () => {
     const replacement = await discoverPopupResources([
       new File([png(4, 5).buffer], "BG.PNG"),
     ]);
-    const transaction = await commitImportReview(project, replacement);
+    const transaction = await commitImportReview(project, replacement, [
+      { itemIndex: 0, resolution: "overwrite" },
+    ]);
     expect(transaction.assets.items[0]).toMatchObject({
       targetKey: "BG.PNG",
       action: "overwrite",
@@ -218,6 +220,30 @@ describe("popup editor filename-key project", () => {
     removePopupResource(project, "BG.PNG");
     expect(project.resources.size).toBe(0);
     expect(project.assets.size).toBe(0);
+  });
+
+  it("keeps both same-name resources only after an explicit decision", async () => {
+    const project = createPopupEditorProject();
+    await commitImportReview(
+      project,
+      await discoverPopupResources([new File([png(2, 3).buffer], "BG.PNG")]),
+    );
+    const replacement = await discoverPopupResources([
+      new File([png(4, 5).buffer], "BG.PNG"),
+    ]);
+    await expect(commitImportReview(project, replacement)).rejects.toThrow(
+      /冲突尚未解决/,
+    );
+    const transaction = await commitImportReview(project, replacement, [
+      { itemIndex: 0, resolution: "keep-both" },
+    ]);
+    const renamed = transaction.assets.items[0]!.targetKey;
+    expect(renamed).not.toBe("BG.PNG");
+    expect(project.resources.get(renamed)).toMatchObject({
+      rootKey: renamed,
+      spec: { kind: "image", path: renamed, size: { width: 4, height: 5 } },
+    });
+    expect(project.resources.has("BG.PNG")).toBe(true);
   });
 
   it("imports multiple Spine skeleton roots that share one atlas and texture", async () => {

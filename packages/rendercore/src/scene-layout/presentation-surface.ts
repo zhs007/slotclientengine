@@ -165,11 +165,14 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
           `Scene layout popup "${id}" has no ${variantId} placement.`,
         );
       }
-      popup.container.position.set(
-        viewportSize.width / 2 + placement.x,
-        viewportSize.height / 2 + placement.y,
-      );
-      popup.container.scale.set(placement.scale);
+      if (popup.applyViewport) popup.applyViewport(viewportSize, placement);
+      else {
+        popup.container.position.set(
+          viewportSize.width / 2 + placement.x,
+          viewportSize.height / 2 + placement.y,
+        );
+        popup.container.scale.set(placement.scale);
+      }
     }
   }
 

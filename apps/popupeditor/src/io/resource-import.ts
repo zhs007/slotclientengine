@@ -12,11 +12,13 @@ import {
   createEditorAssetEntry,
   createEmptyEditorAssetWorkspace,
   normalizeEditorPackageZipEntries,
+  resolveEditorAssetImportReview,
   reviewEditorAssetImport,
   type EditorAssetEntry,
   type EditorAssetRewriteAdapter,
   type EditorAssetWorkspace,
   type EditorImportReview,
+  type EditorImportResolution,
 } from "@slotclientengine/editorresource";
 import {
   collectImageStringAssetPaths,
@@ -138,6 +140,26 @@ export async function discoverPopupResources(
         throw new Error(`${path} 不是合法 JSON：${formatError(error)}。`);
       }
     }
+
+  const looseImageStringManifest = [...jsonValues.keys()].find((path) =>
+    path.toLowerCase().endsWith("image-string.manifest.json"),
+  );
+  if (looseImageStringManifest)
+    throw new Error(
+      `${looseImageStringManifest} 是散装 ImgNumber；请导入 ImgNumber Editor 导出的 ZIP。`,
+    );
+  const looseVniProject = [...jsonValues].find(([, value]) => {
+    try {
+      assertVNIProject(value);
+      return true;
+    } catch {
+      return false;
+    }
+  })?.[0];
+  if (looseVniProject)
+    throw new Error(
+      `${looseVniProject} 是散装 VNI；请导入 Ani Editor 导出的 VNI ZIP。`,
+    );
 
   for (const path of jsonValues.keys())
     if (path.toLowerCase().endsWith("image-string.manifest.json"))
@@ -358,30 +380,46 @@ export async function reviewPopupImportTransaction(
 export async function commitImportReview(
   project: PopupEditorProject,
   candidates: readonly PopupImportReviewCandidate[],
+  resolutions: readonly EditorImportResolution[] = [],
 ): Promise<PopupImportTransactionReview> {
   const transaction = await reviewPopupImportTransaction(project, candidates);
-  if (!transaction.assets.canCommit)
-    throw new Error(transaction.assets.blockingErrors.join("\n"));
   const workspace = await popupProjectWorkspace(project);
+  const resolvedAssets = resolveEditorAssetImportReview({
+    workspace,
+    review: transaction.assets,
+    resolutions,
+  });
+  if (!resolvedAssets.canCommit)
+    throw new Error(resolvedAssets.blockingErrors.join("\n"));
+  const keyMap = new Map<string, string>();
+  for (const item of resolvedAssets.items)
+    for (const sourceKey of item.sourceKeys)
+      keyMap.set(sourceKey, item.targetKey);
   const candidateProject = clonePopupEditorProject(project);
   for (const candidate of candidates) {
+    let spec = structuredClone(candidate.spec);
+    for (const [from, to] of keyMap)
+      if (from !== to) spec = renamePopupSpec(spec, from, to);
+    const rootKey = keyMap.get(candidate.rootKey) ?? candidate.rootKey;
     const resource: PopupEditorResource = {
-      rootKey: candidate.rootKey,
+      rootKey,
       kind: candidate.kind,
-      spec: structuredClone(candidate.spec),
-      keys: Object.freeze([...candidate.exactKeys]),
+      spec,
+      keys: Object.freeze(
+        candidate.exactKeys.map((key) => keyMap.get(key) ?? key),
+      ),
     };
-    candidateProject.resources.set(candidate.rootKey, resource);
+    candidateProject.resources.set(rootKey, resource);
   }
   const committed = await commitEditorAssetImport({
     workspace,
     project: candidateProject,
-    review: transaction.assets,
+    review: resolvedAssets,
     adapter: popupProjectAdapter,
   });
   candidateProject.assets = new Map(committed.workspace.entries);
   Object.assign(project, candidateProject);
-  return transaction;
+  return Object.freeze({ assets: resolvedAssets, candidates });
 }
 
 async function discoverImage(
@@ -704,11 +742,17 @@ const popupProjectAdapter: EditorAssetRewriteAdapter<PopupEditorProject> = {
           })),
         ),
         ...[...project.tiers].flatMap(([tierId, tier]) =>
-          tier.layers.map((layer, index) => ({
-            key: layer.resource,
-            location: `tiers.${tierId}.layers[${index}].resource`,
-            kind: "layer",
-          })),
+          tier.layers.flatMap((layer, index) =>
+            layer.resource
+              ? [
+                  {
+                    key: layer.resource,
+                    location: `tiers.${tierId}.layers[${index}].resource`,
+                    kind: "layer",
+                  },
+                ]
+              : [],
+          ),
         ),
         ...(project.spine.prompt.font
           ? [
@@ -719,11 +763,17 @@ const popupProjectAdapter: EditorAssetRewriteAdapter<PopupEditorProject> = {
               },
             ]
           : []),
-        ...project.spine.overlays.map((overlay, index) => ({
-          key: overlay.resource,
-          location: `spine.overlays[${index}].resource`,
-          kind: "overlay",
-        })),
+        ...project.spine.overlays.flatMap((overlay, index) =>
+          overlay.resource
+            ? [
+                {
+                  key: overlay.resource,
+                  location: `spine.overlays[${index}].resource`,
+                  kind: "overlay",
+                },
+              ]
+            : [],
+        ),
       ],
     };
   },

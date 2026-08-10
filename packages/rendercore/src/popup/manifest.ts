@@ -2,18 +2,23 @@ import { assertCanonicalPackagePath } from "@slotclientengine/browserartifactio"
 import { assertEditorAssetKey } from "@slotclientengine/editorresource";
 import type {
   AwardCelebrationPopupManifestV1,
+  AwardCelebrationPopupManifestV2,
   AwardCelebrationSpec,
   AwardCelebrationTier,
   AwardTierPresentation,
   PopupAmountFormat,
+  PopupManifest,
   PopupLayer,
   PopupManifestV1,
+  PopupManifestV2,
   PopupOverlayLayer,
   PopupPromptSpec,
   PopupResourceSpec,
   PopupSegment,
+  PopupSize,
   PopupTextStyle,
   SpinePopupManifestV1,
+  SpinePopupManifestV2,
 } from "./types.js";
 
 const IDS = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
@@ -24,11 +29,18 @@ const SEGMENTS: readonly PopupSegment[] = ["start", "loop", "end"];
 interface ParsePopupManifest {
   (value: AwardCelebrationPopupManifestV1): AwardCelebrationPopupManifestV1;
   (value: SpinePopupManifestV1): SpinePopupManifestV1;
-  (value: unknown): PopupManifestV1;
+  (value: AwardCelebrationPopupManifestV2): AwardCelebrationPopupManifestV2;
+  (value: SpinePopupManifestV2): SpinePopupManifestV2;
+  (value: PopupManifestV1): PopupManifestV1;
+  (value: PopupManifestV2): PopupManifestV2;
+  (value: unknown): PopupManifest;
 }
 
-export const parsePopupManifest = ((value: unknown): PopupManifestV1 => {
+export const parsePopupManifest = ((value: unknown): PopupManifest => {
   const record = object(value, "popup manifest");
+  if (record.version !== 1 && record.version !== 2)
+    fail("popup manifest.version must be 1 or 2.");
+  const version = record.version;
   const commonKeys = [
     "version",
     "kind",
@@ -36,6 +48,7 @@ export const parsePopupManifest = ((value: unknown): PopupManifestV1 => {
     "type",
     "designViewport",
     "resources",
+    ...(version === 2 ? ["name", "adaptation", "backdrop"] : []),
   ];
   keys(
     record,
@@ -44,7 +57,6 @@ export const parsePopupManifest = ((value: unknown): PopupManifestV1 => {
       : [...commonKeys, "amountFormat", "awardCelebration"],
     "popup manifest",
   );
-  if (record.version !== 1) fail("popup manifest.version must be 1.");
   if (record.kind !== "popup") fail('popup manifest.kind must be "popup".');
   if (record.type !== "award-celebration" && record.type !== "spine")
     fail('popup manifest.type must be "award-celebration" or "spine".');
@@ -63,9 +75,19 @@ export const parsePopupManifest = ((value: unknown): PopupManifestV1 => {
     resources[resourceId] = parsed;
   }
   const base = {
-    version: 1 as const,
+    version,
     kind: "popup" as const,
     id,
+    ...(version === 2
+      ? {
+          name: nonEmptySingleLine(record.name, "name"),
+          adaptation: parseAdaptation(record.adaptation, {
+            width: positive(viewport.width, "designViewport.width"),
+            height: positive(viewport.height, "designViewport.height"),
+          }),
+          backdrop: parseBackdrop(record.backdrop),
+        }
+      : {}),
     designViewport: {
       width: positive(viewport.width, "designViewport.width"),
       height: positive(viewport.height, "designViewport.height"),
@@ -73,24 +95,27 @@ export const parsePopupManifest = ((value: unknown): PopupManifestV1 => {
     resources,
   };
   if (record.type === "spine") {
-    const spine = parseSpinePopup(record.spine, resources);
+    const spine = parseSpinePopup(record.spine, resources, version);
     const used = new Set<string>([spine.resource]);
     if (spine.prompt?.font) used.add(spine.prompt.font);
-    for (const overlay of spine.overlays ?? []) used.add(overlay.resource);
+    for (const overlay of spine.overlays ?? [])
+      if (overlay.resource) used.add(overlay.resource);
     const unused = Object.keys(resources).filter(
       (resourceId) => !used.has(resourceId),
     );
     if (unused.length)
       fail(`popup production resources 包含未引用项：${unused.join(", ")}`);
-    return freeze({ ...base, type: "spine" as const, spine });
+    return freeze({ ...base, type: "spine" as const, spine }) as PopupManifest;
   }
   const awardCelebration = parseAwardCelebration(
     record.awardCelebration,
     resources,
+    version,
   );
   const used = new Set<string>();
   for (const tier of allTiers(awardCelebration))
-    for (const layer of tier.layers) used.add(layer.resource);
+    for (const layer of tier.layers)
+      if (layer.resource) used.add(layer.resource);
   const unused = Object.keys(resources).filter(
     (resourceId) => !used.has(resourceId),
   );
@@ -101,12 +126,13 @@ export const parsePopupManifest = ((value: unknown): PopupManifestV1 => {
     type: "award-celebration" as const,
     amountFormat: parseAmountFormat(record.amountFormat),
     awardCelebration,
-  });
+  }) as PopupManifest;
 }) as ParsePopupManifest;
 
 function parseSpinePopup(
   value: unknown,
   resources: Readonly<Record<string, PopupResourceSpec>>,
+  version: 1 | 2,
 ) {
   const record = object(value, "spine");
   keys(
@@ -143,7 +169,7 @@ function parseSpinePopup(
     ? parsePrompt(record.prompt, resources)
     : undefined;
   const overlays = Object.hasOwn(record, "overlays")
-    ? parseOverlays(record.overlays, resources)
+    ? parseOverlays(record.overlays, resources, version)
     : undefined;
   unique(
     [
@@ -219,6 +245,7 @@ function parsePrompt(
 function parseOverlays(
   value: unknown,
   resources: Readonly<Record<string, PopupResourceSpec>>,
+  version: 1 | 2,
 ): readonly PopupOverlayLayer[] {
   if (!Array.isArray(value)) fail("spine.overlays must be an array.");
   const overlays = value.map((raw, index) => {
@@ -234,6 +261,7 @@ function parseOverlays(
       },
       label,
       resources,
+      version,
     );
     if (parsed.kind === "image-string" && parsed.binding !== "manual")
       fail(`${label}.binding must be manual.`);
@@ -258,7 +286,7 @@ function parseOverlays(
 }
 
 export function collectPopupDirectPaths(
-  manifest: PopupManifestV1,
+  manifest: PopupManifest,
 ): readonly string[] {
   const parsed = parsePopupManifest(manifest);
   const result = new Set<string>();
@@ -274,6 +302,41 @@ export function collectPopupDirectPaths(
     }
   }
   return Object.freeze([...result].sort());
+}
+
+function parseAdaptation(value: unknown, designViewport: PopupSize) {
+  const record = object(value, "adaptation");
+  keys(record, ["mode", "focus"], "adaptation");
+  if (record.mode !== "maximized-focus")
+    fail('adaptation.mode must be "maximized-focus".');
+  const focus = object(record.focus, "adaptation.focus");
+  keys(focus, ["left", "right", "top", "bottom"], "adaptation.focus");
+  const result = {
+    left: positive(focus.left, "adaptation.focus.left"),
+    right: positive(focus.right, "adaptation.focus.right"),
+    top: positive(focus.top, "adaptation.focus.top"),
+    bottom: positive(focus.bottom, "adaptation.focus.bottom"),
+  };
+  if (
+    result.left > designViewport.width / 2 ||
+    result.right > designViewport.width / 2 ||
+    result.top > designViewport.height / 2 ||
+    result.bottom > designViewport.height / 2
+  )
+    fail("adaptation.focus must fit inside designViewport around its center.");
+  return freeze({ mode: "maximized-focus" as const, focus: result });
+}
+
+function parseBackdrop(value: unknown) {
+  const record = object(value, "backdrop");
+  keys(record, ["enabled", "color", "alpha"], "backdrop");
+  if (typeof record.enabled !== "boolean")
+    fail("backdrop.enabled must be boolean.");
+  return freeze({
+    enabled: record.enabled,
+    color: hexColor(record.color, "backdrop.color"),
+    alpha: unit(record.alpha, "backdrop.alpha"),
+  });
 }
 
 function parseAmountFormat(value: unknown): PopupAmountFormat {
@@ -386,6 +449,7 @@ function parseResource(value: unknown, label: string): PopupResourceSpec {
 function parseAwardCelebration(
   value: unknown,
   resources: Readonly<Record<string, PopupResourceSpec>>,
+  version: 1 | 2,
 ): AwardCelebrationSpec {
   const record = object(value, "awardCelebration");
   keys(record, ["base", "standard", "celebrationTiers"], "awardCelebration");
@@ -417,7 +481,7 @@ function parseAwardCelebration(
         "celebration tier thresholds must satisfy 1 < bigwin < superwin < megawin.",
       );
     previous = thresholdMultiplier;
-    const presentation = parseTier(tierRecord, label, resources);
+    const presentation = parseTier(tierRecord, label, resources, version);
     return freeze({
       id: ids[index],
       thresholdMultiplier,
@@ -425,11 +489,12 @@ function parseAwardCelebration(
     }) as AwardCelebrationTier;
   });
   const result = freeze({
-    base: parseTier(record.base, "awardCelebration.base", resources),
+    base: parseTier(record.base, "awardCelebration.base", resources, version),
     standard: parseTier(
       record.standard,
       "awardCelebration.standard",
       resources,
+      version,
     ),
     celebrationTiers,
   });
@@ -442,6 +507,7 @@ function parseTier(
   value: unknown,
   label: string,
   resources: Readonly<Record<string, PopupResourceSpec>>,
+  version: 1 | 2,
 ): AwardTierPresentation {
   const record = object(value, label);
   const allowed = [
@@ -455,7 +521,7 @@ function parseTier(
   if (!Array.isArray(record.layers) || !record.layers.length)
     fail(`${label}.layers must be non-empty.`);
   const layers = record.layers.map((layer, index) =>
-    parseLayer(layer, `${label}.layers[${index}]`, resources),
+    parseLayer(layer, `${label}.layers[${index}]`, resources, version),
   );
   unique(
     layers.map(({ id }) => id),
@@ -498,14 +564,27 @@ function parseLayer(
   value: unknown,
   label: string,
   resources: Readonly<Record<string, PopupResourceSpec>>,
+  version: 1 | 2,
 ): PopupLayer {
   const record = object(value, label);
   const kind = record.kind;
-  const common = ["id", "kind", "order", "resource", "transform"];
-  const resourceId = resourceKey(record.resource, `${label}.resource`);
-  const resource = resources[resourceId];
+  const hasResource = Object.hasOwn(record, "resource");
+  const common = [
+    "id",
+    "kind",
+    "order",
+    ...(hasResource ? ["resource"] : []),
+    "transform",
+    ...(version === 2 ? ["alpha"] : []),
+  ];
+  if (!hasResource && (version === 1 || kind !== "text"))
+    fail(`${label}.resource is required.`);
+  const resourceId = hasResource
+    ? resourceKey(record.resource, `${label}.resource`)
+    : undefined;
+  const resource = resourceId ? resources[resourceId] : undefined;
   const expectedResourceKind = kind === "text" ? "font" : kind;
-  if (!resource || resource.kind !== expectedResourceKind)
+  if (resourceId && (!resource || resource.kind !== expectedResourceKind))
     fail(`${label}.resource 必须引用相同 kind 的 resource。`);
   const transform = object(record.transform, `${label}.transform`);
   keys(
@@ -521,7 +600,8 @@ function parseLayer(
   const base = {
     id: identifier(record.id, `${label}.id`),
     order: nonNegativeSafe(record.order, `${label}.order`),
-    resource: resourceId,
+    ...(resourceId ? { resource: resourceId } : {}),
+    ...(version === 2 ? { alpha: unit(record.alpha, `${label}.alpha`) } : {}),
     transform: {
       x: finite(transform.x, `${label}.transform.x`),
       y: finite(transform.y, `${label}.transform.y`),
@@ -580,6 +660,7 @@ function parseLayer(
       return freeze({
         ...base,
         kind,
+        resource: resourceId!,
         name,
         binding,
         ...(defaultText !== undefined ? { defaultText } : {}),
@@ -602,6 +683,7 @@ function parseLayer(
     return freeze({
       ...base,
       kind,
+      resource: resourceId!,
       anchor: parsedAnchor,
       visibleSegments,
     });
@@ -638,6 +720,7 @@ function parseLayer(
       return freeze({
         ...base,
         kind: "vni" as const,
+        resource: resourceId!,
         playback: { mode: "once" as const },
       });
     }
@@ -660,6 +743,7 @@ function parseLayer(
     return freeze({
       ...base,
       kind: "vni" as const,
+      resource: resourceId!,
       playback: {
         mode: "segmented" as const,
         loopStartTime: start,
@@ -687,6 +771,7 @@ function parseLayer(
     return freeze({
       ...base,
       kind: "spine" as const,
+      resource: resourceId!,
       playback: {
         mode: "segmented-animations" as const,
         startAnimation: animations[0]!,

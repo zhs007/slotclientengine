@@ -47,6 +47,36 @@ describe("spine popup overlay runtime", () => {
         resource: { kind: "font", family: "font" },
       }),
     ).toThrow(/mismatch/);
+    expect(() =>
+      createSpinePopupOverlayRuntime({
+        popupId: "free-game",
+        layer: systemTextOverlay(),
+        resource: { kind: "image", texture: Texture.EMPTY },
+      }),
+    ).toThrow(/mismatch/);
+  });
+
+  it("renders v2 system-font text without a prepared resource", async () => {
+    const runtime = createSpinePopupOverlayRuntime({
+      popupId: "free-game",
+      layer: systemTextOverlay(),
+    });
+    expect(runtime.container.alpha).toBe(0.6);
+    expect(runtime.stringNode).toMatchObject({
+      kind: "text",
+      name: "heading",
+      defaultText: "READY",
+    });
+    await runtime.init();
+    runtime.start();
+    expect(runtime.container.visible).toBe(true);
+    runtime.stringNode!.setText("GO");
+    runtime.applySegment("loop");
+    expect(runtime.container.visible).toBe(true);
+    runtime.applySegment("end");
+    expect(runtime.container.visible).toBe(false);
+    runtime.update(0.1);
+    runtime.destroy();
   });
 
   it("runs authored Spine start, loop, and end animations", async () => {
@@ -172,3 +202,23 @@ describe("spine popup overlay runtime", () => {
     expect(player.destroy).toHaveBeenCalledOnce();
   });
 });
+
+function systemTextOverlay() {
+  return {
+    id: "heading",
+    kind: "text" as const,
+    name: "heading",
+    defaultText: "READY",
+    order: 4,
+    alpha: 0.6,
+    transform: { x: 0, y: -100, scale: 1, rotation: 0 },
+    anchor: { x: 0.5, y: 0.5 },
+    style: {
+      fontSize: 48,
+      letterSpacing: 0,
+      fill: { kind: "solid" as const, color: "#ffffff" },
+      arcDegrees: 0,
+    },
+    visibleSegments: ["start", "loop"] as const,
+  };
+}

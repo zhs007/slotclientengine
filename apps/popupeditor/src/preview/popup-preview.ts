@@ -10,8 +10,9 @@ import {
   type AwardCelebrationPlayer,
   type SpinePopupPlayer,
   type PopupPackageResource,
+  type PopupPresentationSnapshot,
 } from "@slotclientengine/rendercore/popup";
-import { Application, Graphics } from "pixi.js";
+import { Application, Container, Graphics } from "pixi.js";
 import type { PopupEditorProject } from "../model/project.js";
 import { exportPopupZip, importPopupZip } from "../io/popup-zip.js";
 import { POPUP_ZIP_LIMITS } from "../io/resource-import.js";
@@ -60,6 +61,7 @@ function validatePopupPreviewAmountFormat(
 
 export class PopupPreview {
   readonly #app = new Application();
+  readonly #previewRoot = new Container();
   readonly #guides = new Graphics();
   readonly #host: HTMLElement;
   readonly #status: HTMLElement;
@@ -74,6 +76,8 @@ export class PopupPreview {
   #amountFormat = DEFAULT_POPUP_PREVIEW_AMOUNT_FORMAT;
   #promptText: string | undefined;
   #disposePopupInputBinding: (() => void) | null = null;
+  #presentationSnapshot: PopupPresentationSnapshot | null = null;
+  #rebuildGeneration = 0;
   constructor(host: HTMLElement, status: HTMLElement) {
     this.#host = host;
     this.#status = status;
@@ -100,7 +104,7 @@ export class PopupPreview {
           error instanceof Error ? error.message : String(error);
       },
     });
-    this.#app.stage.addChild(this.#guides);
+    this.#app.stage.addChild(this.#previewRoot, this.#guides);
     this.#app.ticker.add((ticker) => {
       if (this.#player?.isPlaying()) {
         const snapshot = this.#player.update(ticker.deltaMS / 1000);
@@ -115,6 +119,7 @@ export class PopupPreview {
   }
   async rebuild(project: PopupEditorProject) {
     this.assertReady();
+    const generation = ++this.#rebuildGeneration;
     const exported = await exportPopupZip(project, { prepare: false });
     const files = extractBoundedZip(exported.bytes, {
       limits: POPUP_ZIP_LIMITS,
@@ -130,11 +135,16 @@ export class PopupPreview {
               formatPopupPreviewAmount(amountRaw, this.#amountFormat),
           });
     await player.init();
+    if (generation !== this.#rebuildGeneration) {
+      player.destroy();
+      await resource.destroy();
+      return;
+    }
     this.clear();
     this.#resource = resource;
     this.#player = player;
     this.#type = resource.manifest.type;
-    this.#app.stage.addChildAt(player.container, 0);
+    this.#previewRoot.addChild(player.container);
     this.layout();
     this.#status.textContent = "production runtime ready";
   }
@@ -174,15 +184,13 @@ export class PopupPreview {
       (this.#player as SpinePopupPlayer).start(this.#promptText);
     else (this.#player as AwardCelebrationPlayer).start(this.#input);
   }
-  advance() {
-    if (this.#player && this.#type === "award-celebration")
-      (this.#player as AwardCelebrationPlayer).requestAdvance();
+  reset() {
+    this.#rebuildGeneration += 1;
+    this.clear();
+    this.layout();
   }
-  dismiss() {
-    this.#player?.requestDismiss();
-  }
-  dismissImmediately() {
-    this.#player?.dismissImmediately();
+  cancelPendingRebuild() {
+    this.#rebuildGeneration += 1;
   }
   setViewport(
     width: number,
@@ -210,16 +218,26 @@ export class PopupPreview {
       screen.height / this.#size.height,
     );
     const scale = this.#zoom === "fit" ? fit : this.#zoom;
+    const width = this.#size.width * scale;
+    const height = this.#size.height * scale;
+    const x = (screen.width - width) / 2;
+    const y = (screen.height - height) / 2;
+    this.#previewRoot.position.set(x, y);
+    this.#previewRoot.scale.set(scale);
     if (this.#player) {
-      this.#player.container.position.set(screen.width / 2, screen.height / 2);
-      this.#player.container.scale.set(scale);
+      this.#presentationSnapshot = this.#player.applyViewport
+        ? this.#player.applyViewport(this.#size)
+        : null;
+      if (!this.#player.applyViewport)
+        this.#player.container.position.set(
+          this.#size.width / 2,
+          this.#size.height / 2,
+        );
+    } else {
+      this.#presentationSnapshot = null;
     }
     this.#guides.clear();
     if (this.#showGuides) {
-      const width = this.#size.width * scale;
-      const height = this.#size.height * scale;
-      const x = (screen.width - width) / 2;
-      const y = (screen.height - height) / 2;
       this.#guides
         .rect(x, y, width, height)
         .stroke({ color: 0x5d7cff, width: 1 });
@@ -229,6 +247,16 @@ export class PopupPreview {
         .moveTo(screen.width / 2, screen.height / 2 - 20)
         .lineTo(screen.width / 2, screen.height / 2 + 20)
         .stroke({ color: 0xffcc66, width: 1 });
+      const focus = this.#presentationSnapshot?.focusRectInViewport;
+      if (focus)
+        this.#guides
+          .rect(
+            x + focus.x * scale,
+            y + focus.y * scale,
+            focus.width * scale,
+            focus.height * scale,
+          )
+          .stroke({ color: 0x3ddc97, width: 2 });
     }
   }
   private requestPrimaryPopupInteraction() {
@@ -239,6 +267,7 @@ export class PopupPreview {
     return handledPopupInteraction();
   }
   private clear() {
+    this.#presentationSnapshot = null;
     this.#player?.destroy();
     this.#player = null;
     void this.#resource?.destroy();

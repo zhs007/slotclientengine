@@ -168,7 +168,13 @@ export {
 } from "./scene-layout-template/index.js";
 export { createSpinePopupPlayer } from "@slotclientengine/rendercore/popup";
 export type {
+  PopupManifest,
+  PopupManifestV1,
+  PopupManifestV2,
+  PopupHostPlacement,
+  PopupPresentationSnapshot,
   SpinePopupManifestV1,
+  SpinePopupManifestV2,
   SpinePopupPhase,
   SpinePopupPlayer,
   SpinePopupSnapshot,

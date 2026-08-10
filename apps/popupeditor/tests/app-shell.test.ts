@@ -21,9 +21,8 @@ const preview = {
   setNodeText: vi.fn(),
   resetNodeText: vi.fn(),
   play: vi.fn(),
-  advance: vi.fn(),
-  dismiss: vi.fn(),
-  dismissImmediately: vi.fn(),
+  reset: vi.fn(),
+  cancelPendingRebuild: vi.fn(),
   setViewport: vi.fn(),
 };
 const asset = {
@@ -70,6 +69,7 @@ vi.mock("../src/io/resource-import.js", async (original) => {
           targetKey: "image-string.manifest.json",
           action: "add",
           references: [],
+          sourceKeys: ["image-string.manifest.json"],
         },
       ],
     },
@@ -108,6 +108,16 @@ vi.mock("../src/io/popup-zip.js", () => ({
 }));
 
 describe("PopupEditorApp", () => {
+  function createProject(
+    root: HTMLElement,
+    type: "award-celebration" | "spine" = "award-celebration",
+  ) {
+    root.querySelector<HTMLButtonElement>("#create-project")!.click();
+    root.querySelector<HTMLInputElement>("#create-project-name")!.value =
+      "Test Popup";
+    root.querySelector<HTMLSelectElement>("#create-project-type")!.value = type;
+    root.querySelector<HTMLButtonElement>("#create-project-confirm")!.click();
+  }
   beforeEach(() => {
     document.body.innerHTML = '<div id="app"></div>';
     vi.clearAllMocks();
@@ -129,6 +139,7 @@ describe("PopupEditorApp", () => {
     const root = document.querySelector<HTMLElement>("#app")!;
     const app = new PopupEditorApp(root);
     await app.init();
+    createProject(root);
 
     const resourceTab = root.querySelector<HTMLButtonElement>(
       '[data-tab="resources"]',
@@ -138,9 +149,7 @@ describe("PopupEditorApp", () => {
     )!;
     expect(resourceTab.getAttribute("aria-selected")).toBe("true");
     expect(projectTab.getAttribute("aria-selected")).toBe("false");
-    expect(
-      root.querySelector("#preview-build")?.hasAttribute("aria-selected"),
-    ).toBe(false);
+    expect(root.querySelector("#preview-build")).toBeNull();
 
     projectTab.click();
     expect(projectTab.getAttribute("aria-selected")).toBe("true");
@@ -180,11 +189,69 @@ describe("PopupEditorApp", () => {
     app.destroy();
   });
 
+  it("creates a fixed-type v2 project and edits presentation configuration", async () => {
+    const { PopupEditorApp } = await import("../src/ui/app-shell.js");
+    const root = document.querySelector<HTMLElement>("#app")!;
+    const app = new PopupEditorApp(root);
+    await app.init();
+    expect(root.querySelector("#import-project")).not.toBeNull();
+    expect(root.querySelector("nav")!.hasAttribute("hidden")).toBe(true);
+    createProject(root, "spine");
+    expect(root.querySelector("nav")!.hasAttribute("hidden")).toBe(false);
+
+    root.querySelector<HTMLButtonElement>('[data-tab="project"]')!.click();
+    expect(root.textContent).toContain("格式 v2 · Spine 弹窗");
+    const change = (field: string, value: string) => {
+      const input = root.querySelector<HTMLInputElement>(
+        `[data-project-field="${field}"]`,
+      )!;
+      input.value = value;
+      input.dispatchEvent(new Event("change"));
+    };
+    change("project-name", "Renamed Popup");
+    change("focus-left", "240");
+    change("backdrop-alpha", "0.35");
+    const backdrop = root.querySelector<HTMLInputElement>(
+      '[data-project-field="backdrop-enabled"]',
+    )!;
+    backdrop.checked = false;
+    backdrop.dispatchEvent(new Event("change"));
+    expect(
+      root.querySelector<HTMLInputElement>('[data-project-field="focus-left"]')!
+        .value,
+    ).toBe("240");
+    expect(
+      root.querySelector<HTMLInputElement>(
+        '[data-project-field="backdrop-alpha"]',
+      )!.value,
+    ).toBe("0.35");
+
+    root.querySelector<HTMLButtonElement>('[data-tab="tiers"]')!.click();
+    root.querySelector<HTMLButtonElement>("#add-spine-system-text")!.click();
+    const alpha = root.querySelector<HTMLInputElement>(
+      '[data-overlay-field="alpha"]',
+    )!;
+    alpha.value = "0.6";
+    alpha.dispatchEvent(new Event("change"));
+    expect(
+      root.querySelector<HTMLInputElement>(
+        '[data-overlay-field="defaultText"]',
+      ),
+    ).not.toBeNull();
+
+    root.querySelector<HTMLButtonElement>('[data-tab="project"]')!.click();
+    root.querySelector<HTMLButtonElement>("#close-project")!.click();
+    expect(root.querySelector("#create-project")).not.toBeNull();
+    expect(preview.reset).toHaveBeenCalled();
+    app.destroy();
+  });
+
   it("uses one flat import entry, reviews atomically, and drives tiers and preview", async () => {
     const { PopupEditorApp } = await import("../src/ui/app-shell.js");
     const root = document.querySelector<HTMLElement>("#app")!;
     const app = new PopupEditorApp(root);
     await app.init();
+    createProject(root);
     const fractionDigits = root.querySelector<HTMLInputElement>(
       "#preview-fraction-digits",
     )!;
@@ -272,8 +339,7 @@ describe("PopupEditorApp", () => {
     ).toBe("2");
     expect(fractionDigits.value).toBe("3");
     expect(useGrouping.checked).toBe(true);
-    root.querySelector<HTMLButtonElement>("#preview-build")!.click();
-    await vi.waitFor(() => expect(preview.rebuild).toHaveBeenCalled());
+    expect(root.querySelector("#preview-build")).toBeNull();
     root.querySelector<HTMLButtonElement>("#preview-play")!.click();
     root.querySelector<HTMLInputElement>("#preview-node-selector")!.value = "0";
     root.querySelector<HTMLInputElement>("#preview-node-text")!.value = "777";
@@ -283,11 +349,10 @@ describe("PopupEditorApp", () => {
     root.querySelector<HTMLButtonElement>("#preview-node-reset")!.click();
     expect(preview.setNodeText).toHaveBeenCalledWith("image-string", 0, "777");
     expect(preview.resetNodeText).toHaveBeenCalledWith("image-string", 0);
-    root.querySelector<HTMLButtonElement>("#preview-advance")!.click();
-    root.querySelector<HTMLButtonElement>("#preview-dismiss")!.click();
-    root.querySelector<HTMLButtonElement>("#preview-clear")!.click();
+    expect(root.querySelector("#preview-advance")).toBeNull();
+    expect(root.querySelector("#preview-dismiss")).toBeNull();
+    expect(root.querySelector("#preview-clear")).toBeNull();
     expect(preview.play).toHaveBeenCalled();
-    expect(preview.advance).toHaveBeenCalled();
     root.querySelector<HTMLButtonElement>("#export-project")!.click();
     await vi.waitFor(() =>
       expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled(),
@@ -308,6 +373,7 @@ describe("PopupEditorApp", () => {
     const root = document.querySelector<HTMLElement>("#app")!;
     const app = new PopupEditorApp(root);
     await app.init();
+    createProject(root);
     const importer = root.querySelector<HTMLInputElement>("#import-assets")!;
     const zip = createDeterministicZip(
       new Map([["manifest.json", new TextEncoder().encode("{}")]]),
@@ -387,6 +453,96 @@ describe("PopupEditorApp", () => {
     app.destroy();
   });
 
+  it("imports and edits a fixed Spine project with generic overlays", async () => {
+    const { importPopupZip } = await import("../src/io/popup-zip.js");
+    vi.mocked(importPopupZip).mockResolvedValueOnce(validSpineProject());
+    const { PopupEditorApp } = await import("../src/ui/app-shell.js");
+    const root = document.querySelector<HTMLElement>("#app")!;
+    const app = new PopupEditorApp(root);
+    await app.init();
+    const importer = root.querySelector<HTMLInputElement>("#import-project")!;
+    Object.defineProperty(importer, "files", {
+      value: [new File([new Uint8Array([1])], "spine-popup.zip")],
+      configurable: true,
+    });
+    importer.dispatchEvent(new Event("change"));
+    await vi.waitFor(() => expect(importPopupZip).toHaveBeenCalled());
+    root.querySelector<HTMLButtonElement>('[data-tab="tiers"]')!.click();
+    expect(root.textContent).toContain("普通 Spine 弹窗");
+    expect(root.querySelector("#project-type")).toBeNull();
+
+    const promptEnabled = root.querySelector<HTMLInputElement>(
+      "#spine-prompt-enabled",
+    )!;
+    promptEnabled.checked = true;
+    promptEnabled.dispatchEvent(new Event("change"));
+    const font = root.querySelector<HTMLSelectElement>("#spine-prompt-font")!;
+    font.value = "Prompt.woff2";
+    font.dispatchEvent(new Event("change"));
+    for (const [field, value] of [
+      ["defaultText", "Continue"],
+      ["fill", "#ffff00"],
+      ["order", "7"],
+      ["x", "100"],
+    ]) {
+      const input = root.querySelector<HTMLInputElement>(
+        `[data-spine-prompt-field="${field}"]`,
+      )!;
+      input.value = value;
+      input.dispatchEvent(new Event("change"));
+    }
+
+    for (const resource of [
+      "BG.PNG",
+      "effect.json",
+      "Spine.json",
+      "image-string.manifest.json",
+      "Prompt.woff2",
+    ]) {
+      const select = root.querySelector<HTMLSelectElement>(
+        "#spine-overlay-resource",
+      )!;
+      select.value = resource;
+      root.querySelector<HTMLButtonElement>("#add-spine-overlay")!.click();
+    }
+    root.querySelector<HTMLButtonElement>("#add-spine-system-text")!.click();
+    expect(root.querySelectorAll("[data-delete-overlay]")).toHaveLength(6);
+
+    const imageId = root.querySelector<HTMLInputElement>(
+      '[data-overlay-field="anchor-x"]',
+    )!.dataset.overlayId!;
+    for (const [field, value] of [
+      ["x", "11"],
+      ["order", "12"],
+      ["alpha", "0.7"],
+      ["anchor-x", "0.25"],
+    ]) {
+      const input = root.querySelector<HTMLInputElement>(
+        `[data-overlay-id="${imageId}"][data-overlay-field="${field}"]`,
+      )!;
+      input.value = value;
+      input.dispatchEvent(new Event("change"));
+    }
+    const segment = root.querySelector<HTMLInputElement>(
+      `[data-overlay-id="${imageId}"][data-overlay-field="segment-end"]`,
+    )!;
+    segment.checked = false;
+    segment.dispatchEvent(new Event("change"));
+    const vniMode = root.querySelector<HTMLSelectElement>(
+      "[data-overlay-vni-mode]",
+    )!;
+    vniMode.value = "once";
+    vniMode.dispatchEvent(new Event("change"));
+    expect(root.textContent).toContain("VNI once");
+    const fill = root.querySelector<HTMLSelectElement>(
+      "[data-overlay-fill-kind]",
+    )!;
+    fill.value = "linear-gradient";
+    fill.dispatchEvent(new Event("change"));
+    root.querySelector<HTMLButtonElement>("[data-delete-overlay]")!.click();
+    app.destroy();
+  });
+
   it("reports an unbound VNI as imported draft state instead of an import failure", async () => {
     const { PopupEditorApp } = await import("../src/ui/app-shell.js");
     const resourceImport = await import("../src/io/resource-import.js");
@@ -395,6 +551,7 @@ describe("PopupEditorApp", () => {
     const root = document.querySelector<HTMLElement>("#app")!;
     const app = new PopupEditorApp(root);
     await app.init();
+    createProject(root);
     const importer = root.querySelector<HTMLInputElement>("#import-assets")!;
     const zip = createDeterministicZip(
       new Map([["manifest.json", new TextEncoder().encode("{}")]]),
@@ -488,13 +645,18 @@ describe("PopupEditorApp", () => {
         "popup.manifest.json",
       ),
     ).toBe(true);
-    const importer = root.querySelector<HTMLInputElement>("#import-assets")!;
+    const importer = root.querySelector<HTMLInputElement>("#import-project")!;
     Object.defineProperty(importer, "files", {
       value: [new File([zip.slice().buffer], "project.zip")],
       configurable: true,
     });
     importer.dispatchEvent(new Event("change"));
-    await vi.waitFor(() => expect(window.confirm).toHaveBeenCalled());
+    const { importPopupZip } = await import("../src/io/popup-zip.js");
+    await vi.waitFor(() => expect(importPopupZip).toHaveBeenCalled());
+    root.querySelector<HTMLButtonElement>('[data-tab="project"]')!.click();
+    expect(root.querySelector<HTMLInputElement>("#project-id")?.value).toBe(
+      "game-win",
+    );
     expect(fractionDigits.value).toBe("2");
     expect(useGrouping.checked).toBe(true);
     expect(preview.setAmountFormat).toHaveBeenLastCalledWith({
@@ -556,112 +718,7 @@ describe("PopupEditorApp", () => {
     expect(root.textContent).toContain("game-win");
     expect(root.textContent).toContain('"mode": "once"');
 
-    const projectType = root.querySelector<HTMLSelectElement>("#project-type")!;
-    projectType.value = "spine";
-    projectType.dispatchEvent(new Event("change"));
-    root.querySelector<HTMLButtonElement>('[data-tab="tiers"]')!.click();
-    const spineResource =
-      root.querySelector<HTMLSelectElement>("#spine-resource")!;
-    spineResource.value = "Spine.json";
-    spineResource.dispatchEvent(new Event("change"));
-
-    const promptEnabled = root.querySelector<HTMLInputElement>(
-      "#spine-prompt-enabled",
-    )!;
-    promptEnabled.checked = true;
-    promptEnabled.dispatchEvent(new Event("change"));
-    const font = root.querySelector<HTMLSelectElement>("#spine-prompt-font")!;
-    expect(font.options[0]!.textContent).toContain("系统字体");
-    font.value = "Prompt.woff2";
-    font.dispatchEvent(new Event("change"));
-    for (const [field, value] of [
-      ["defaultText", "Continue"],
-      ["fill", "#ffff00"],
-      ["order", "7"],
-      ["x", "100"],
-    ]) {
-      const input = root.querySelector<HTMLInputElement>(
-        `[data-spine-prompt-field="${field}"]`,
-      )!;
-      input.value = value;
-      input.dispatchEvent(new Event("change"));
-    }
-
-    for (const resource of [
-      "BG.PNG",
-      "effect.json",
-      "Spine.json",
-      "image-string.manifest.json",
-      "Prompt.woff2",
-    ]) {
-      const overlayResource = root.querySelector<HTMLSelectElement>(
-        "#spine-overlay-resource",
-      )!;
-      overlayResource.value = resource;
-      root.querySelector<HTMLButtonElement>("#add-spine-overlay")!.click();
-    }
-    const imageId = root.querySelector<HTMLInputElement>(
-      '[data-overlay-field="anchor-x"]',
-    )!.dataset.overlayId!;
-    for (const [field, value, checked] of [
-      ["x", "11", false],
-      ["order", "12", false],
-      ["anchor-x", "0.25", false],
-      ["segment-end", "", false],
-    ] as const) {
-      const input = root.querySelector<HTMLInputElement>(
-        `[data-overlay-id="${imageId}"][data-overlay-field="${field}"]`,
-      )!;
-      input.value = value;
-      if (field === "segment-end") input.checked = checked;
-      input.dispatchEvent(new Event("change"));
-    }
-    const loopStart = root.querySelector<HTMLInputElement>(
-      '[data-overlay-field="loopStartTime"]',
-    )!;
-    loopStart.value = "0.5";
-    loopStart.dispatchEvent(new Event("change"));
-    const keepParticles = root.querySelector<HTMLInputElement>(
-      '[data-overlay-field="keepParticlesAlive"]',
-    )!;
-    keepParticles.checked = false;
-    keepParticles.dispatchEvent(new Event("change"));
-    const vniMode = root.querySelector<HTMLSelectElement>(
-      "[data-overlay-vni-mode]",
-    )!;
-    vniMode.value = "once";
-    vniMode.dispatchEvent(new Event("change"));
-    expect(root.textContent).toContain("VNI once");
-    const spineStart = root.querySelector<HTMLInputElement>(
-      '[data-overlay-field="startAnimation"]',
-    )!;
-    spineStart.value = "Start";
-    spineStart.dispatchEvent(new Event("change"));
-    const overlayText = root.querySelector<HTMLInputElement>(
-      '[data-overlay-field="fontSize"]',
-    )!;
-    const overlayTextId = overlayText.dataset.overlayId!;
-    overlayText.value = "96";
-    overlayText.dispatchEvent(new Event("change"));
-    const overlayFill = root.querySelector<HTMLSelectElement>(
-      `[data-overlay-fill-kind="${overlayTextId}"]`,
-    )!;
-    overlayFill.value = "linear-gradient";
-    overlayFill.dispatchEvent(new Event("change"));
-    const overlayDefault = root.querySelector<HTMLInputElement>(
-      `[data-overlay-id="${overlayTextId}"][data-overlay-field="defaultText"]`,
-    )!;
-    overlayDefault.value = "BONUS!";
-    overlayDefault.dispatchEvent(new Event("change"));
-    root.querySelector<HTMLButtonElement>("[data-delete-overlay]")!.click();
-
-    const promptPreview =
-      root.querySelector<HTMLInputElement>("#preview-prompt")!;
-    promptPreview.value = "Translated continue";
-    promptPreview.dispatchEvent(new Event("change"));
-    expect(preview.setPromptText).toHaveBeenLastCalledWith(
-      "Translated continue",
-    );
+    expect(root.querySelector("#project-type")).toBeNull();
     app.destroy();
   });
 });
@@ -734,5 +791,17 @@ function validProject() {
   addLayer(project, "base", "Spine.json");
   addLayer(project, "base", "Prompt.woff2");
   addLayer(project, "base", candidate.rootKey);
+  return project;
+}
+
+function validSpineProject() {
+  const project = validProject();
+  project.type = "spine";
+  project.spine.resource = "Spine.json";
+  project.spine.playback = {
+    startAnimation: "Start",
+    loopAnimation: "Loop",
+    endAnimation: "End",
+  };
   return project;
 }

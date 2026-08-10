@@ -421,6 +421,31 @@ describe("typed asset reference rewriting", () => {
     if (systemFontPopup.type !== "spine")
       throw new Error("Expected Spine popup.");
     expect(systemFontPopup.spine.prompt).not.toHaveProperty("font");
+    const popupV2 = rewritePopupManifest(
+      {
+        ...popup,
+        version: 2,
+        name: "Spine Popup V2",
+        adaptation: {
+          mode: "maximized-focus",
+          focus: { left: 50, right: 50, top: 50, bottom: 50 },
+        },
+        backdrop: { enabled: true, color: "#000000", alpha: 0.5 },
+        spine: {
+          ...popup.spine,
+          overlays: popup.spine.overlays?.map((overlay) => ({
+            ...overlay,
+            alpha: 1,
+          })),
+        },
+      },
+      mapping,
+    );
+    expect(popupV2).toMatchObject({
+      version: 2,
+      name: "Spine Popup V2",
+      backdrop: { alpha: 0.5 },
+    });
   });
 
   it("rewrites VNI asset.path while preserving authored identity", () => {

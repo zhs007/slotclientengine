@@ -34,7 +34,7 @@ import {
   type PopupFontLoader,
 } from "./font-resource.js";
 import type {
-  PopupManifestV1,
+  PopupManifest,
   PopupLayer,
   PopupPackageResource,
   PopupPreparedResource,
@@ -44,7 +44,7 @@ import type {
 const ROOT = "popup.manifest.json";
 
 export function collectPopupPackagePaths(options: {
-  readonly manifest: PopupManifestV1;
+  readonly manifest: PopupManifest;
   readonly files: ReadonlyMap<string, Uint8Array>;
 }): readonly string[] {
   const manifest = parsePopupManifest(options.manifest);
@@ -315,7 +315,7 @@ export async function resolvePopupPackageFiles(options: {
 export function rewritePopupManifestFilenameKeys(options: {
   readonly manifest: unknown;
   readonly rewrite: (filenameKey: string) => string;
-}): PopupManifestV1 {
+}): PopupManifest {
   const manifest = parsePopupManifest(options.manifest);
   const mapping = new Map(
     [...new Set(collectPopupDirectPaths(manifest))].map(
@@ -330,7 +330,7 @@ export function flattenPopupPackageFiles(options: {
   readonly manifest: unknown;
   readonly files: ReadonlyMap<string, Uint8Array>;
 }): {
-  readonly manifest: PopupManifestV1;
+  readonly manifest: PopupManifest;
   readonly files: ReadonlyMap<string, Uint8Array>;
 } {
   const manifest = parsePopupManifest(options.manifest);
@@ -411,7 +411,7 @@ export function namespaceMappedPopupPackageFiles(options: {
   readonly files: ReadonlyMap<string, Uint8Array>;
   readonly keyPrefix: string;
 }): {
-  readonly manifest: PopupManifestV1;
+  readonly manifest: PopupManifest;
   readonly files: ReadonlyMap<string, Uint8Array>;
   readonly rootKey: string;
 } {
@@ -605,7 +605,7 @@ export async function loadPopupPackageFromUrl(options: {
 }
 
 function validateAnimationBindings(
-  manifest: PopupManifestV1,
+  manifest: PopupManifest,
   resources: Readonly<Record<string, PopupPreparedResource>>,
 ) {
   if (manifest.type === "spine") {
@@ -621,7 +621,9 @@ function validateAnimationBindings(
       ],
     });
     for (const overlay of manifest.spine.overlays ?? []) {
-      const overlayResource = resources[overlay.resource];
+      const overlayResource = overlay.resource
+        ? resources[overlay.resource]
+        : undefined;
       if (overlay.kind === "image-string") {
         if (overlayResource?.kind !== "image-string")
           throw new Error("Spine popup ImgNumber overlay resource mismatch.");
@@ -630,7 +632,7 @@ function validateAnimationBindings(
           overlayResource.resource.manifest,
         );
       } else if (overlay.kind === "text") {
-        if (overlayResource?.kind !== "font")
+        if (overlayResource && overlayResource.kind !== "font")
           throw new Error("Spine popup text overlay resource mismatch.");
       } else if (overlay.kind === "spine") {
         if (overlayResource?.kind !== "spine")
@@ -673,7 +675,9 @@ function validateAnimationBindings(
       const target = tier.layers.find(
         ({ id }) => id === amountParent.vniLayerId,
       )!;
-      const targetResource = resources[target.resource];
+      const targetResource = target.resource
+        ? resources[target.resource]
+        : undefined;
       if (targetResource?.kind !== "vni")
         throw new Error("popup ImgNumber VNI parent resource mismatch.");
       const textLayer = targetResource.project.layers.find(
@@ -685,19 +689,19 @@ function validateAnimationBindings(
         );
     }
     for (const layer of tier.layers) {
-      const resource = resources[layer.resource]!;
+      const resource = layer.resource ? resources[layer.resource] : undefined;
       if (layer.kind === "image-string" && layer.binding === "manual") {
-        if (resource.kind !== "image-string")
+        if (resource?.kind !== "image-string")
           throw new Error("popup manual ImgNumber resource mismatch.");
         validateImageStringText(
           layer.defaultText ?? "",
           resource.resource.manifest,
         );
       }
-      if (layer.kind === "text" && resource.kind !== "font")
+      if (layer.kind === "text" && resource && resource.kind !== "font")
         throw new Error("popup text resource mismatch.");
       if (layer.kind === "vni") {
-        if (resource.kind !== "vni")
+        if (resource?.kind !== "vni")
           throw new Error("popup VNI resource mismatch.");
         if (
           layer.playback.mode === "segmented" &&
@@ -708,7 +712,7 @@ function validateAnimationBindings(
           );
       }
       if (layer.kind === "spine") {
-        if (resource.kind !== "spine")
+        if (resource?.kind !== "spine")
           throw new Error("popup Spine resource mismatch.");
         validateOfficialSpineResource({
           resource: resource.resource,
@@ -724,7 +728,7 @@ function validateAnimationBindings(
 }
 
 function awardAmountResourceIds(
-  manifest: Extract<PopupManifestV1, { readonly type: "award-celebration" }>,
+  manifest: Extract<PopupManifest, { readonly type: "award-celebration" }>,
 ): ReadonlySet<string> {
   const result = new Set<string>();
   for (const tier of [
@@ -734,7 +738,7 @@ function awardAmountResourceIds(
   ])
     for (const layer of tier.layers)
       if (layer.kind === "image-string" && layer.binding === "win-amount")
-        result.add(layer.resource);
+        result.add(layer.resource!);
   return result;
 }
 
@@ -762,9 +766,9 @@ function rewritePopupResourceSpec(
 }
 
 function rewritePopupManifestWithMapping(
-  manifest: PopupManifestV1,
+  manifest: PopupManifest,
   mapping: ReadonlyMap<string, string>,
-): PopupManifestV1 {
+): PopupManifest {
   const resources: Record<string, PopupResourceSpec> = {};
   const resourceKeys = new Map<string, string>();
   for (const [id, spec] of Object.entries(manifest.resources)) {
@@ -782,7 +786,9 @@ function rewritePopupManifestWithMapping(
       ...tier,
       layers: tier.layers.map((layer) => ({
         ...layer,
-        resource: requiredPopupResourceKey(resourceKeys, layer.resource),
+        ...(layer.resource
+          ? { resource: requiredPopupResourceKey(resourceKeys, layer.resource) }
+          : {}),
       })),
     }) as T;
   return parsePopupManifest(
@@ -813,7 +819,7 @@ function popupResourceRoot(spec: PopupResourceSpec): string {
 }
 
 function rewriteSpineReferences(
-  spine: Extract<PopupManifestV1, { readonly type: "spine" }>["spine"],
+  spine: Extract<PopupManifest, { readonly type: "spine" }>["spine"],
   mapping: ReadonlyMap<string, string>,
 ) {
   return {
@@ -835,7 +841,11 @@ function rewriteSpineReferences(
       ? {
           overlays: spine.overlays.map((overlay) => ({
             ...overlay,
-            resource: requiredPopupResourceKey(mapping, overlay.resource),
+            ...(overlay.resource
+              ? {
+                  resource: requiredPopupResourceKey(mapping, overlay.resource),
+                }
+              : {}),
           })),
         }
       : {}),
