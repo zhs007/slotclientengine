@@ -16,6 +16,7 @@ import {
   createPopupEditorProject,
   detectPopupAmountFormatPreset,
   getPopupVniTextLayerTargets,
+  migratePopupPromptToTextLayer,
   popupEditorProjectDiagnostics,
   projectToManifest,
   removePopupResource,
@@ -53,14 +54,51 @@ describe("popup editor filename-key project", () => {
       endAnimation: "end",
     };
     project.spine.prompt.enabled = true;
+    expect(() => projectToManifest(project)).toThrow(/不能导出 legacy prompt/);
+    expect(migratePopupPromptToTextLayer(project)).toBe(true);
     const manifest = projectToManifest(project);
     expect(manifest.type).toBe("spine");
     if (manifest.type !== "spine") throw new Error("Expected spine popup.");
     expect(manifest.spine.resource).toBe("effect");
-    expect(manifest.spine.prompt).not.toHaveProperty("font");
+    expect(manifest.spine.prompt).toBeUndefined();
+    expect(manifest.spine.overlays).toContainEqual(
+      expect.objectContaining({
+        id: "prompt",
+        kind: "text",
+        name: "prompt",
+        visibleSegments: ["start", "loop"],
+      }),
+    );
     expect(Object.keys(manifest.resources)).toEqual(["effect"]);
     expect("awardCelebration" in manifest).toBe(false);
     expect("amountFormat" in manifest).toBe(false);
+  });
+
+  it("rejects legacy prompt migration collisions without mutating the draft", () => {
+    const project = createPopupEditorProject({ type: "spine" });
+    project.spine.prompt.enabled = true;
+    project.spine.overlays.push({
+      id: "existing",
+      kind: "text",
+      name: "prompt",
+      defaultText: "EXISTING",
+      order: 1,
+      alpha: 1,
+      transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+      anchor: { x: 0.5, y: 0.5 },
+      style: {
+        fontSize: 72,
+        letterSpacing: 0,
+        fill: { kind: "solid", color: "#ffffff" },
+        arcDegrees: 0,
+      },
+      visibleSegments: ["start", "loop", "end"],
+    });
+    const before = structuredClone(project.spine);
+    expect(() => migratePopupPromptToTextLayer(project)).toThrow(
+      /id\/name=prompt/,
+    );
+    expect(project.spine).toEqual(before);
   });
 
   it("round-trips a system-font prompt without adding a font to the Popup ZIP", async () => {
@@ -77,6 +115,7 @@ describe("popup editor filename-key project", () => {
       new File([png(1, 1).buffer], "Spine.png"),
     ]);
     const project = createPopupEditorProject();
+    project.formatVersion = 1;
     project.type = "spine";
     project.id = "free-game";
     await commitImportReview(project, review);
@@ -106,6 +145,29 @@ describe("popup editor filename-key project", () => {
     const imported = await importPopupZip(exported.bytes, { prepare: false });
     expect(imported.spine.prompt.font).toBeNull();
     expect(projectToManifest(imported)).toEqual(projectToManifest(project));
+
+    manifest.version = 2;
+    manifest.name = "Task 190 Legacy Prompt";
+    manifest.adaptation = {
+      mode: "maximized-focus",
+      focus: { left: 540, right: 540, top: 960, bottom: 960 },
+    };
+    manifest.backdrop = { enabled: true, color: "#000000", alpha: 0.5 };
+    entries.set(
+      "popup.manifest.json",
+      new TextEncoder().encode(JSON.stringify(manifest)),
+    );
+    const importedLegacyV2 = await importPopupZip(
+      createDeterministicZip(entries),
+      { prepare: false },
+    );
+    expect(importedLegacyV2.spine.prompt.enabled).toBe(false);
+    expect(importedLegacyV2.spine.overlays).toContainEqual(
+      expect.objectContaining({ id: "prompt", kind: "text", name: "prompt" }),
+    );
+    const canonicalV2 = projectToManifest(importedLegacyV2);
+    if (canonicalV2.type !== "spine") throw new Error("Expected spine popup.");
+    expect(canonicalV2.spine.prompt).toBeUndefined();
   });
 
   it("keeps the five-tier amount contract", () => {

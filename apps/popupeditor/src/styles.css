@@ -176,6 +176,11 @@ aside {
   margin-top: 10px;
   min-height: 0;
 }
+.popup-preview-gradient {
+  background:
+    radial-gradient(circle at 72% 24%, rgb(255 193 94 / 55%), transparent 32%),
+    linear-gradient(135deg, #173e72 0%, #814478 48%, #17243f 100%);
+}
 #preview-canvas canvas {
   display: block;
   width: auto;
@@ -351,6 +356,17 @@ input.invalid,
 input[aria-invalid="true"] {
   border-color: #ff5d75;
   box-shadow: 0 0 0 1px #ff5d75;
+}
+.color-control {
+  display: inline-grid;
+  grid-template-columns: 42px minmax(120px, 1fr);
+  gap: 6px;
+  align-items: center;
+}
+.color-control input[type="color"] {
+  width: 42px;
+  height: 30px;
+  padding: 2px;
 }
 .field-stack {
   display: grid;

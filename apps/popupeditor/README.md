@@ -10,9 +10,11 @@ VNI bundle 只导入 `purpose=runtime` 的运行发布包：唯一 runtime 自�
 
 新导出的 `<id>-popup.zip` 由根 `popup.manifest.json`、`assets.map.json` 和完整 SHA-256 payload 构成。普通 Spine 类型接收一组 JSON、atlas 与若干 PNG，并显式配置 start、loop、end 动画；点击在 loop 边界生效。production preview 复用 `rendercore/popup` 的完整 canvas/keyboard binding：award 执行一次 advance，普通 Spine 锁存 dismiss，idle 输入透传。runtime parser、输入绑定与两类播放生命周期均由 `rendercore/popup` 拥有。
 
-普通 Spine 类型还可配置一个单行点击提示：字体默认使用 rendercore 的 `system-ui, sans-serif`，不会写入资源表或 ZIP；显式选择 package 字体时才携带 WOFF2/WOFF/TTF/OTF。默认文案、颜色、order 与渲染区域均可编辑，预览文案可临时覆盖，留空时显示默认文案；游戏 runtime 可传入已翻译 string。字号以区域高度起步并按区域等比缩小，不换行。可追加任意数量 image、系统文字、ImgNumber、Spine 或 VNI overlay，编辑其位置、缩放、旋转、order 及各类型 playback/可见 segment。
+普通 Spine 类型不再提供独立 prompt authoring；提示语与其它文案一样使用命名的字体文字 overlay。旧 v1 prompt 仍可原版本导入和导出，显式升级 v2 时结构化迁移为 `name=prompt` 的文字层；任务 190 产生的 v2 prompt 在导入边界执行相同迁移，名称、order 或资源冲突会明确失败。可追加任意数量 image、字体文字、ImgNumber、Spine 或 VNI overlay，编辑其位置、缩放、旋转、order 及各类型 playback/可见 segment。
 
-所有获奖档位与普通 Spine overlay 都可添加多个命名系统文字和 manual ImgNumber。系统文字支持单行默认文案、字号、字距、纯色/线性渐变、描边、投影、正负弧度、anchor、旋转与 segment；导入字体后直接作为 text layer 添加。每个获奖档仍必须恰好有一个 `win-amount` ImgNumber，再次添加 ImgNumber 会创建可独立命名和设值的 manual 节点。预览侧栏可按节点 exact name 或各 kind 的零基 index 临时 set/reset string，这些覆盖不写入 ZIP。
+所有获奖档位与普通 Spine overlay 都可添加多个命名字体文字和 manual ImgNumber。字体文字可明确选择已导入的 WOFF2/WOFF/TTF/OTF；未选择资源时才使用 `system-ui, sans-serif`。文字支持单行默认文案、字号、字距、色板或 canonical color string、纯色/线性渐变、描边、投影、正负 Curved Text、anchor、旋转与 segment。每个获奖档仍必须恰好有一个 `win-amount` ImgNumber，再次添加 ImgNumber 会创建可独立命名和设值的 manual 节点。游戏通过 exact layer name 获取 rendercore handle 并原子 `setText()/resetText()`；Editor 预览不提供临时节点覆盖入口。
+
+production preview 使用与 runtime 相同的 centered-contain focus transform：重点区域始终完整可见，横屏与方屏的多余空间对称分配，宿主 placement 再叠加到该矩阵。预览 canvas 后方的渐变只用于观察留边、缩放和全屏 backdrop，不进入 project、manifest 或 ZIP。文字标量输入就地提交并异步重建 player，不替换当前 inspector DOM。
 
 项目页的 `project id` 在输入时即时执行与 production manifest 相同的 lowercase kebab-case 校验，非法值显示红框与就地错误，preview/export 仍严格拒绝。按钮统一提供 hover、按下、键盘 focus 和 disabled 反馈；顶部 tab 与档位 tab 另外保留明确选中态。
 

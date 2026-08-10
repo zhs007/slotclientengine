@@ -79,7 +79,7 @@
 
 - 每个 active variant 只配置 popup root 相对 viewport center 的 `x/y/scale`。
 - popup package 最终 vendor 到 layout ZIP；内部 layer、tier、坐标和资源保持 popup owner 自包含。
-- popup 的系统文字样式、命名文字/ImgNumber 默认 string、award 内部档位和普通 Spine prompt/overlay 在 Scene Layout 中只读；Editor 只允许按公开 node handle 临时覆盖预览 string。相同字体 bytes 由根 assets map 按 SHA-256 物理去重。
+- popup 的字体文字样式、命名文字/ImgNumber 默认 string、award 内部档位和普通 Spine legacy prompt/overlay 在 Scene Layout 中只读；Editor 只允许按公开 node handle 临时覆盖预览 string。相同字体 bytes 由根 assets map 按 SHA-256 物理去重。
 - 普通 Spine popup 的 placement 与注册由 Scene Layout 拥有；start/loop/end 动画名与点击锁存生命周期由 popup package 和 rendercore 拥有。
 - Popup root order 由 Scene Layout binding 拥有，可由 editor 修改；rendercore 在当前 scene 的顶层 Popup root 中按 order 排序，不为转场 Popup 创建独立 scene。
 - production app 直接消费 editor 导出的 mapped folder 时，构建期必须从根 manifest

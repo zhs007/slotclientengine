@@ -20,20 +20,20 @@ v2 在 v1 的类型专属内容之外增加以下公共字段：
 }
 ```
 
-`focus` 以 `designViewport` 中心为基准向四边扩展，必须形成画布内的正面积区域。runtime 使用与 Game Layout 相同的 maximized-focus 算法计算 content transform，但 Popup 自己拥有该适配结果；layout 的 popup root `x/y/scale` 只作为宿主 placement 叠加。`backdrop` 是独立于 authored content transform 的 viewport 全屏层，默认由 Editor 建立为 50% 黑色，也可显式关闭。
+`focus` 以 `designViewport` 中心为基准向四边扩展，必须形成画布内的正面积区域。runtime 使用与 Game Layout 相同的 maximized-focus 算法求出 art-space visible rect，再以 `min(viewportWidth/visibleWidth, viewportHeight/visibleHeight)` 等比 contain，并把剩余横向或纵向空间平均分配；Popup 自己拥有该适配结果。layout 的 popup root `x/y/scale` 只作为宿主 placement 叠加。`backdrop` 是独立于 authored content transform 的 viewport 全屏层，默认由 Editor 建立为 50% 黑色，也可显式关闭。
 
-v2 的每个 award layer 与 Spine overlay 都必须声明 `alpha`（`0..1`）。v2 系统文字可以省略 `resource` 并使用 `system-ui, sans-serif`；上传字体时仍以 font resource 显式引用。第一版文字效果支持纯色/线性渐变、描边、投影和 grapheme 弧排。
+v2 的每个 award layer 与 Spine overlay 都必须声明 `alpha`（`0..1`）。v2 字体文字必须有 lowercase kebab-case exact `name`；它可以省略 `resource` 并使用 `system-ui, sans-serif`，选择上传字体时则必须精确引用 font resource，引用失效不得回退。文字效果支持 canonical `#rrggbb | #rrggbbaa` 颜色、纯色/线性渐变、描边、投影和 `-180..180` 度 grapheme 弧排。
 
-Popup Editor 的 v2 模板完成条件是：获奖庆祝五档共享一个 `win-amount` ImgNumber，且 `bigwin/superwin/megawin` 各至少绑定一个 VNI；Spine 弹窗必须绑定一个 official Spine resource，并明确选择互不相同的 start/loop/end 三段动画。两种模板都可继续添加图片、Spine、VNI、系统文字或上传字体文字、ImgNumber 图层。
+Popup Editor 的 v2 模板完成条件是：获奖庆祝五档共享一个 `win-amount` ImgNumber，且 `bigwin/superwin/megawin` 各至少绑定一个 VNI；Spine 弹窗必须绑定一个 official Spine resource，并明确选择互不相同的 start/loop/end 三段动画。两种模板都可继续添加图片、Spine、VNI、字体文字或 ImgNumber 图层。独立 `spine.prompt` 只属于 legacy 兼容；新 v2 authoring 不生成它，旧 prompt 在显式升级/导入时迁移为命名 text overlay。
 
 ## 坐标、档位与输入
 
-- popup 中心为 `(0, 0)`，向右/向下为正；`designViewport` 只恢复编辑边框，不触发 fit/contain/cover。
+- popup 中心为 `(0, 0)`，向右/向下为正；`designViewport` 与 focus 共同建立上述 centered-contain production transform。
 - layout 为每个 active variant 保存相对 viewport center 的 `x/y/scale`。
 - 游戏只提交 safe integer `betAmountRaw` 和 `winAmountRaw`；preview 的 bet、win、zoom、guides 不进入 manifest。
 - 档位固定为 `base -> standard -> bigwin -> superwin -> megawin`。`base` 截止 `1×bet`，`standard` 截止 bigwin threshold，后三档 threshold multiplier 显式且严格递增。边界相等时进入对应档，runtime 用 BigInt 比较。
 - 每档必须有非空 `layers`，且必须恰好包含一个 `image-string + win-amount` 图层。金额不参与 `start/loop/end` 可见性：整场只维持一个 renderer/runtime，跨档只更新文本、transform，必要时在同一实例上切换 image-string resource。
-- 每档还可声明任意数量的命名 `text` 和 `binding="manual"` ImgNumber。名称在同档唯一；跨档同名节点视为一个逻辑节点且必须保持 kind 一致。`text` 引用 package font，并严格保存单行默认文案、字号、字距、纯色或线性渐变、可选描边/投影、`-180..180` 度弧排、anchor、rotation 与可见 segment。manual ImgNumber 保存默认 string、anchor、rotation 与可见 segment。
+- 每档还可声明任意数量的命名 `text` 和 `binding="manual"` ImgNumber。名称在同档唯一；跨档同名节点视为一个逻辑节点且必须保持 kind 一致。`text` 可省略字体资源或精确引用 package font，并严格保存单行默认文案、字号、字距、纯色或线性渐变、可选描边/投影、`-180..180` 度弧排、anchor、rotation 与可见 segment。游戏应按 exact name 获取 node handle 并调用 `setText()/resetText()`；不得按 label、order 或资源名猜测。manual ImgNumber 保存默认 string、anchor、rotation 与可见 segment。
 - 每档严格按唯一的 `order` 升序叠放，数值越小越靠下。跨档时单一金额 renderer 会移动到新档容器内对应的 child index，不会固定在全部 VNI 之上。
 - ImgNumber layer 的 `parent` 是 `{ "kind": "popup-root" }` 或
   `{ "kind": "vni-text-layer", "vniLayerId": "...", "textLayerId": "..." }`。后者只能引用

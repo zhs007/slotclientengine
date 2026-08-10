@@ -74,7 +74,6 @@ export class PopupPreview {
   #showGuides = true;
   #input = { betAmountRaw: 100, winAmountRaw: 5000 };
   #amountFormat = DEFAULT_POPUP_PREVIEW_AMOUNT_FORMAT;
-  #promptText: string | undefined;
   #disposePopupInputBinding: (() => void) | null = null;
   #presentationSnapshot: PopupPresentationSnapshot | null = null;
   #rebuildGeneration = 0;
@@ -86,9 +85,10 @@ export class PopupPreview {
     await this.#app.init({
       width: 540,
       height: 720,
-      background: "#050814",
+      backgroundAlpha: 0,
       antialias: true,
     });
+    this.#host.classList.add("popup-preview-gradient");
     this.#host.replaceChildren(this.#app.canvas);
     const keyboardTarget = this.#app.canvas.ownerDocument.defaultView;
     if (!keyboardTarget)
@@ -126,15 +126,22 @@ export class PopupPreview {
     });
     await importPopupZip(exported.bytes);
     const resource = await createPopupPackageResource({ files });
-    const player =
-      resource.manifest.type === "spine"
-        ? createSpinePopupPlayer({ resource })
-        : createAwardCelebrationPlayer({
-            resource,
-            formatAmount: (amountRaw) =>
-              formatPopupPreviewAmount(amountRaw, this.#amountFormat),
-          });
-    await player.init();
+    let player: AwardCelebrationPlayer | SpinePopupPlayer | null = null;
+    try {
+      player =
+        resource.manifest.type === "spine"
+          ? createSpinePopupPlayer({ resource })
+          : createAwardCelebrationPlayer({
+              resource,
+              formatAmount: (amountRaw) =>
+                formatPopupPreviewAmount(amountRaw, this.#amountFormat),
+            });
+      await player.init();
+    } catch (error) {
+      player?.destroy();
+      await resource.destroy();
+      throw error;
+    }
     if (generation !== this.#rebuildGeneration) {
       player.destroy();
       await resource.destroy();
@@ -154,34 +161,10 @@ export class PopupPreview {
   setAmountFormat(format: PopupPreviewAmountFormat) {
     this.#amountFormat = validatePopupPreviewAmountFormat(format);
   }
-  setPromptText(text: string | undefined) {
-    this.#promptText = text;
-  }
-  setNodeText(
-    kind: "text" | "image-string",
-    selector: string | number,
-    text: string,
-  ) {
-    if (!this.#player) throw new Error("请先生成有效 production preview。");
-    const handle =
-      kind === "text"
-        ? this.#player.getTextNode(selector)
-        : this.#player.getImageStringNode(selector);
-    handle.setText(text);
-  }
-  resetNodeText(kind: "text" | "image-string", selector: string | number) {
-    if (!this.#player) throw new Error("请先生成有效 production preview。");
-    const handle =
-      kind === "text"
-        ? this.#player.getTextNode(selector)
-        : this.#player.getImageStringNode(selector);
-    handle.resetText();
-  }
   play() {
     if (!this.#player) throw new Error("请先生成有效 production preview。");
     this.#player.dismissImmediately();
-    if (this.#type === "spine")
-      (this.#player as SpinePopupPlayer).start(this.#promptText);
+    if (this.#type === "spine") (this.#player as SpinePopupPlayer).start();
     else (this.#player as AwardCelebrationPlayer).start(this.#input);
   }
   reset() {
@@ -206,6 +189,7 @@ export class PopupPreview {
   destroy() {
     this.#disposePopupInputBinding?.();
     this.#disposePopupInputBinding = null;
+    this.#host.classList.remove("popup-preview-gradient");
     this.clear();
     this.#guides.destroy();
     this.#app.destroy(true);

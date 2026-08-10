@@ -4,6 +4,51 @@ import { createPopupPresentation } from "../../src/popup/presentation.js";
 import type { PopupManifest, PopupManifestV1 } from "../../src/popup/types.js";
 
 describe("popup presentation host contract", () => {
+  it("contains and centers a portrait design in landscape and square viewports", () => {
+    const presentation = createPopupPresentation({
+      version: 2,
+      kind: "popup",
+      type: "spine",
+      id: "portrait-popup",
+      name: "Portrait Popup",
+      designViewport: { width: 1080, height: 1920 },
+      adaptation: {
+        mode: "maximized-focus",
+        focus: { left: 540, right: 540, top: 960, bottom: 960 },
+      },
+      backdrop: { enabled: true, color: "#000000", alpha: 0.5 },
+      resources: {},
+      spine: {} as never,
+    });
+
+    expect(presentation.applyViewport({ width: 1920, height: 1080 })).toEqual({
+      viewportSize: { width: 1920, height: 1080 },
+      contentScale: 0.5625,
+      contentPosition: { x: 960, y: 540 },
+      focusRectInViewport: {
+        x: 656.25,
+        y: 0,
+        width: 607.5,
+        height: 1080,
+      },
+    });
+    expect(presentation.contentRoot.position).toMatchObject({
+      x: 960,
+      y: 540,
+    });
+
+    const square = presentation.applyViewport({ width: 2000, height: 2000 });
+    expect(square.contentScale).toBeCloseTo(25 / 24);
+    expect(square.contentPosition).toEqual({ x: 1000, y: 1000 });
+    expect(square.focusRectInViewport).toEqual({
+      x: 437.5,
+      y: 0,
+      width: 1125,
+      height: 2000,
+    });
+    presentation.destroy();
+  });
+
   it("adapts v2 content inside a caller-owned viewport and owns no canvas", () => {
     const manifest = {
       version: 2,

@@ -32,6 +32,7 @@ import { assertVNIProject } from "@slotclientengine/vnicore/core";
 import {
   clonePopupEditorProject,
   createPopupEditorProject,
+  migratePopupPromptToTextLayer,
   projectToManifest,
 } from "../model/project.js";
 import type { PopupEditorProject } from "../model/project.js";
@@ -160,6 +161,7 @@ export async function importPopupZip(
           },
       overlays: structuredClone([...(manifest.spine.overlays ?? [])]),
     };
+    if (project.formatVersion === 2) migratePopupPromptToTextLayer(project);
     const closure = popupManifestAssetClosure(manifest, project.assets);
     if (closure.length !== project.assets.size)
       throw new Error("popup assets map 包含未引用 entry。");

@@ -239,6 +239,10 @@ export function projectToManifest(project: PopupEditorProject): PopupManifest {
       ? { ...layer, alpha: 1 }
       : layer) as T;
   if (project.type === "spine") {
+    if (project.formatVersion === 2 && project.spine.prompt.enabled)
+      throw new Error(
+        "v2 项目不能导出 legacy prompt；请先迁移为命名的字体文字 overlay。",
+      );
     const resourceKey = project.spine.resource;
     if (!resourceKey)
       throw new Error("普通 Spine Popup 尚未绑定 Spine resource。");
@@ -251,7 +255,9 @@ export function projectToManifest(project: PopupEditorProject): PopupManifest {
       resources: Object.fromEntries(
         [
           resourceKey,
-          ...(project.spine.prompt.enabled && project.spine.prompt.font
+          ...(project.formatVersion === 1 &&
+          project.spine.prompt.enabled &&
+          project.spine.prompt.font
             ? [project.spine.prompt.font]
             : []),
           ...project.spine.overlays.flatMap(({ resource }) =>
@@ -271,7 +277,7 @@ export function projectToManifest(project: PopupEditorProject): PopupManifest {
           mode: "segmented-animations",
           ...project.spine.playback,
         },
-        ...(project.spine.prompt.enabled
+        ...(project.formatVersion === 1 && project.spine.prompt.enabled
           ? {
               prompt: {
                 ...(project.spine.prompt.font
@@ -326,6 +332,51 @@ export function projectToManifest(project: PopupEditorProject): PopupManifest {
       ),
     },
   });
+}
+
+export function migratePopupPromptToTextLayer(
+  project: PopupEditorProject,
+): boolean {
+  if (!project.spine.prompt.enabled) return false;
+  if (
+    project.spine.overlays.some(
+      (layer) =>
+        layer.id === "prompt" ||
+        ((layer.kind === "text" || layer.kind === "image-string") &&
+          layer.name === "prompt") ||
+        layer.order === project.spine.prompt.order,
+    )
+  )
+    throw new Error(
+      "legacy prompt 无法迁移：overlay id/name=prompt 或 order 已被占用。",
+    );
+  const prompt = project.spine.prompt;
+  project.spine.overlays.push({
+    id: "prompt",
+    kind: "text",
+    name: "prompt",
+    defaultText: prompt.defaultText,
+    order: prompt.order,
+    ...(prompt.font ? { resource: prompt.font } : {}),
+    transform: {
+      x: prompt.area.x,
+      y: prompt.area.y,
+      scale: 1,
+      rotation: 0,
+    },
+    alpha: 1,
+    anchor: { x: 0.5, y: 0.5 },
+    style: {
+      fontSize: prompt.area.height,
+      letterSpacing: 0,
+      fill: { kind: "solid", color: prompt.fill },
+      arcDegrees: 0,
+    },
+    visibleSegments: ["start", "loop"],
+  });
+  project.spine.prompt.enabled = false;
+  project.spine.prompt.font = null;
+  return true;
 }
 
 export function popupEditorProjectDiagnostics(

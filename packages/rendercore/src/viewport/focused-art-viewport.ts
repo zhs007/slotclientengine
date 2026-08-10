@@ -215,8 +215,8 @@ export function calculateMaximizedFocusedArtViewport(
     pageSize.height / focusRect.height,
   );
   const viewportSize = freezeSize({
-    width: Math.min(artSize.width, pageSize.width / focusScale),
-    height: Math.min(artSize.height, pageSize.height / focusScale),
+    width: capProjectedLength(pageSize.width / focusScale, artSize.width),
+    height: capProjectedLength(pageSize.height / focusScale, artSize.height),
   });
 
   return calculateFocusedArtViewport({
@@ -224,6 +224,13 @@ export function calculateMaximizedFocusedArtViewport(
     viewportSize,
     focusRect,
   });
+}
+
+function capProjectedLength(projected: number, upperBound: number): number {
+  const tolerance = Math.max(1, upperBound) * Number.EPSILON * 16;
+  return Math.abs(projected - upperBound) <= tolerance
+    ? upperBound
+    : Math.min(upperBound, projected);
 }
 
 export function createMaximizedFocusedArtViewportPolicy(options: {

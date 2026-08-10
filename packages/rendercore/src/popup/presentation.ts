@@ -86,14 +86,28 @@ export function createPopupPresentation(
         pageSize: viewport,
         focusRect,
       });
-      const baseScale = viewport.width / focused.viewportSize.width;
+      const baseScale = Math.min(
+        viewport.width / focused.visibleRect.width,
+        viewport.height / focused.visibleRect.height,
+      );
+      const visibleOrigin = Object.freeze({
+        x: (viewport.width - focused.visibleRect.width * baseScale) / 2,
+        y: (viewport.height - focused.visibleRect.height * baseScale) / 2,
+      });
       const contentScale = baseScale * placement.scale;
       const contentPosition = Object.freeze({
-        x:
-          (artSize.width / 2 - focused.visibleRect.x) * baseScale + placement.x,
-        y:
-          (artSize.height / 2 - focused.visibleRect.y) * baseScale +
-          placement.y,
+        x: snapViewportValue(
+          visibleOrigin.x +
+            (artSize.width / 2 - focused.visibleRect.x) * baseScale +
+            placement.x,
+          viewport.width,
+        ),
+        y: snapViewportValue(
+          visibleOrigin.y +
+            (artSize.height / 2 - focused.visibleRect.y) * baseScale +
+            placement.y,
+          viewport.height,
+        ),
       });
       contentRoot.position.set(contentPosition.x, contentPosition.y);
       contentRoot.scale.set(contentScale);
@@ -103,10 +117,22 @@ export function createPopupPresentation(
         contentScale,
         contentPosition,
         focusRectInViewport: Object.freeze({
-          x: focused.focusRectInViewport.x * baseScale,
-          y: focused.focusRectInViewport.y * baseScale,
-          width: focused.focusRectInViewport.width * baseScale,
-          height: focused.focusRectInViewport.height * baseScale,
+          x: snapViewportValue(
+            visibleOrigin.x + focused.focusRectInViewport.x * baseScale,
+            viewport.width,
+          ),
+          y: snapViewportValue(
+            visibleOrigin.y + focused.focusRectInViewport.y * baseScale,
+            viewport.height,
+          ),
+          width: snapViewportValue(
+            focused.focusRectInViewport.width * baseScale,
+            viewport.width,
+          ),
+          height: snapViewportValue(
+            focused.focusRectInViewport.height * baseScale,
+            viewport.height,
+          ),
         }),
       });
     },
@@ -127,6 +153,13 @@ export function createPopupPresentation(
   function assertUsable() {
     if (destroyed) throw new Error("popup presentation was destroyed.");
   }
+}
+
+function snapViewportValue(value: number, viewportLength: number): number {
+  const tolerance = Math.max(1, viewportLength) * Number.EPSILON * 16;
+  for (const boundary of [0, viewportLength / 2, viewportLength])
+    if (Math.abs(value - boundary) <= tolerance) return boundary;
+  return value;
 }
 
 function redrawBackdrop(

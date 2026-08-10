@@ -55,8 +55,6 @@ const player = {
     contentPosition: { x: 540, y: 960 },
   })),
   destroy: vi.fn(),
-  getTextNode: vi.fn(() => ({ setText: vi.fn(), resetText: vi.fn() })),
-  getImageStringNode: vi.fn(() => ({ setText: vi.fn(), resetText: vi.fn() })),
 };
 const resource = {
   manifest: { type: "award-celebration" },
@@ -127,6 +125,9 @@ describe("PopupPreview", () => {
       document.querySelector("#status")!,
     );
     await preview.init();
+    expect(document.querySelector("#host")!.classList).toContain(
+      "popup-preview-gradient",
+    );
     await preview.rebuild({} as never);
     const formatAmount = vi.mocked(createAwardCelebrationPlayer).mock
       .calls[0]![0].formatAmount!;
@@ -134,12 +135,6 @@ describe("PopupPreview", () => {
     preview.setAmountFormat({ fractionDigits: 2, useGrouping: true });
     expect(formatAmount(1234567)).toBe("1,234,567.00");
     preview.setInput(100, 5000);
-    preview.setNodeText("text", "heading", "HELLO");
-    preview.setNodeText("image-string", 0, "123");
-    preview.resetNodeText("text", "heading");
-    preview.resetNodeText("image-string", 0);
-    expect(player.getTextNode).toHaveBeenCalledWith("heading");
-    expect(player.getImageStringNode).toHaveBeenCalledWith(0);
     preview.play();
     canvas.dispatchEvent(new Event("pointerdown"));
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "A" }));
@@ -162,6 +157,9 @@ describe("PopupPreview", () => {
     expect(player.requestAdvance).toHaveBeenCalledTimes(2);
     expect(player.destroy).toHaveBeenCalled();
     expect(resource.destroy).toHaveBeenCalled();
+    expect(document.querySelector("#host")!.classList).not.toContain(
+      "popup-preview-gradient",
+    );
   });
 
   it("discards a prepared preview when a newer edit invalidates the rebuild", async () => {
@@ -185,6 +183,23 @@ describe("PopupPreview", () => {
     preview.destroy();
   });
 
+  it("releases a failed preview prepare without replacing the current canvas", async () => {
+    player.init.mockRejectedValueOnce(new Error("font prepare failed"));
+    const { PopupPreview } = await import("../src/preview/popup-preview.js");
+    const preview = new PopupPreview(
+      document.querySelector("#host")!,
+      document.querySelector("#status")!,
+    );
+    await preview.init();
+    await expect(preview.rebuild({} as never)).rejects.toThrow(
+      "font prepare failed",
+    );
+    expect(player.destroy).toHaveBeenCalled();
+    expect(resource.destroy).toHaveBeenCalled();
+    expect(document.querySelector("#host")!.contains(canvas)).toBe(true);
+    preview.destroy();
+  });
+
   it("dismisses a playing Spine Popup from canvas or keyboard input", async () => {
     resource.manifest.type = "spine";
     const { PopupPreview } = await import("../src/preview/popup-preview.js");
@@ -195,6 +210,7 @@ describe("PopupPreview", () => {
     await preview.init();
     await preview.rebuild({} as never);
     preview.play();
+    expect(player.start).toHaveBeenCalledWith();
 
     canvas.dispatchEvent(new Event("pointerdown"));
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));

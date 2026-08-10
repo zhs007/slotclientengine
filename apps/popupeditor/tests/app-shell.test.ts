@@ -17,9 +17,6 @@ const preview = {
         throw new Error("preview 小数位数必须是 0..6 safe integer。");
     },
   ),
-  setPromptText: vi.fn(),
-  setNodeText: vi.fn(),
-  resetNodeText: vi.fn(),
   play: vi.fn(),
   reset: vi.fn(),
   cancelPendingRebuild: vi.fn(),
@@ -227,7 +224,7 @@ describe("PopupEditorApp", () => {
     ).toBe("0.35");
 
     root.querySelector<HTMLButtonElement>('[data-tab="tiers"]')!.click();
-    root.querySelector<HTMLButtonElement>("#add-spine-system-text")!.click();
+    root.querySelector<HTMLButtonElement>("#add-spine-font-text")!.click();
     const alpha = root.querySelector<HTMLInputElement>(
       '[data-overlay-field="alpha"]',
     )!;
@@ -341,14 +338,10 @@ describe("PopupEditorApp", () => {
     expect(useGrouping.checked).toBe(true);
     expect(root.querySelector("#preview-build")).toBeNull();
     root.querySelector<HTMLButtonElement>("#preview-play")!.click();
-    root.querySelector<HTMLInputElement>("#preview-node-selector")!.value = "0";
-    root.querySelector<HTMLInputElement>("#preview-node-text")!.value = "777";
-    root.querySelector<HTMLSelectElement>("#preview-node-kind")!.value =
-      "image-string";
-    root.querySelector<HTMLButtonElement>("#preview-node-apply")!.click();
-    root.querySelector<HTMLButtonElement>("#preview-node-reset")!.click();
-    expect(preview.setNodeText).toHaveBeenCalledWith("image-string", 0, "777");
-    expect(preview.resetNodeText).toHaveBeenCalledWith("image-string", 0);
+    expect(root.querySelector("#preview-prompt")).toBeNull();
+    expect(root.querySelector("#preview-node-kind")).toBeNull();
+    expect(root.querySelector("#preview-node-apply")).toBeNull();
+    expect(root.querySelector("#preview-node-reset")).toBeNull();
     expect(root.querySelector("#preview-advance")).toBeNull();
     expect(root.querySelector("#preview-dismiss")).toBeNull();
     expect(root.querySelector("#preview-clear")).toBeNull();
@@ -471,33 +464,14 @@ describe("PopupEditorApp", () => {
     expect(root.textContent).toContain("普通 Spine 弹窗");
     expect(root.querySelector("#project-type")).toBeNull();
 
-    const promptEnabled = root.querySelector<HTMLInputElement>(
-      "#spine-prompt-enabled",
-    )!;
-    promptEnabled.checked = true;
-    promptEnabled.dispatchEvent(new Event("change"));
-    const font = root.querySelector<HTMLSelectElement>("#spine-prompt-font")!;
-    font.value = "Prompt.woff2";
-    font.dispatchEvent(new Event("change"));
-    for (const [field, value] of [
-      ["defaultText", "Continue"],
-      ["fill", "#ffff00"],
-      ["order", "7"],
-      ["x", "100"],
-    ]) {
-      const input = root.querySelector<HTMLInputElement>(
-        `[data-spine-prompt-field="${field}"]`,
-      )!;
-      input.value = value;
-      input.dispatchEvent(new Event("change"));
-    }
+    expect(root.querySelector("#spine-prompt-enabled")).toBeNull();
+    expect(root.querySelector("#spine-prompt-font")).toBeNull();
 
     for (const resource of [
       "BG.PNG",
       "effect.json",
       "Spine.json",
       "image-string.manifest.json",
-      "Prompt.woff2",
     ]) {
       const select = root.querySelector<HTMLSelectElement>(
         "#spine-overlay-resource",
@@ -505,8 +479,43 @@ describe("PopupEditorApp", () => {
       select.value = resource;
       root.querySelector<HTMLButtonElement>("#add-spine-overlay")!.click();
     }
-    root.querySelector<HTMLButtonElement>("#add-spine-system-text")!.click();
-    expect(root.querySelectorAll("[data-delete-overlay]")).toHaveLength(6);
+    root.querySelector<HTMLButtonElement>("#add-spine-font-text")!.click();
+    const font = root.querySelector<HTMLSelectElement>("[data-overlay-font]")!;
+    font.value = "Prompt.woff2";
+    font.dispatchEvent(new Event("change"));
+    expect(root.querySelectorAll("[data-delete-overlay]")).toHaveLength(5);
+
+    const fontSize = root.querySelector<HTMLInputElement>(
+      '[data-overlay-field="fontSize"]',
+    )!;
+    fontSize.focus();
+    fontSize.value = "96";
+    fontSize.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(
+      root.querySelector<HTMLInputElement>('[data-overlay-field="fontSize"]'),
+    ).toBe(fontSize);
+    expect(document.activeElement).toBe(fontSize);
+
+    const curved = root.querySelector<HTMLInputElement>(
+      '[data-overlay-field="curvedEnabled"]',
+    )!;
+    curved.checked = true;
+    curved.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(
+      root.querySelector<HTMLInputElement>('[data-overlay-field="arcDegrees"]')!
+        .value,
+    ).toBe("30");
+
+    const fillColor = root.querySelector<HTMLInputElement>(
+      '[data-overlay-field="fillColor"]',
+    )!;
+    const fillPicker = root.querySelector<HTMLInputElement>(
+      '[data-color-picker-owner="overlay"][data-color-picker-field="fillColor"]',
+    )!;
+    fillPicker.value = "#123456";
+    fillPicker.dispatchEvent(new Event("input"));
+    expect(fillColor.value).toBe("#123456");
+    expect(font.value).toBe("Prompt.woff2");
 
     const imageId = root.querySelector<HTMLInputElement>(
       '[data-overlay-field="anchor-x"]',
