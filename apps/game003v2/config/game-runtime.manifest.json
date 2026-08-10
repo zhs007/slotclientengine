@@ -6,7 +6,7 @@
     "gamecode": "EfedJuHEaydXNghnmO9KI"
   },
   "reel": {
-    "direction": "forward",
+    "direction": "backward",
     "minimumSpinCycles": 8,
     "baseDurationMs": 1300,
     "speedSymbolsPerSecond": 44,
