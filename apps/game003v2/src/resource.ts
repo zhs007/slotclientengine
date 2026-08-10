@@ -1,4 +1,4 @@
-import { createSceneLayoutPackageResource } from "@slotclientengine/rendercore";
+import { loadSceneLayoutPackageFromUrl } from "@slotclientengine/rendercore";
 import type {
   SceneLayoutPackageResource,
   SymbolPackageResource,
@@ -13,9 +13,17 @@ export interface Game003v2Resource {
 }
 
 export async function prepareGame003v2Resource(
-  files: ReadonlyMap<string, Uint8Array>,
+  manifestUrl: string | URL,
+  manifestBytes: Uint8Array,
+  signal: AbortSignal,
 ): Promise<Game003v2Resource> {
-  const resource = await createSceneLayoutPackageResource({ files });
+  const fetchImpl = ((input: RequestInfo | URL, init?: RequestInit) =>
+    globalThis.fetch(input, { ...init, signal })) as typeof fetch;
+  const resource = await loadSceneLayoutPackageFromUrl({
+    manifestUrl,
+    manifestBytes,
+    fetchImpl,
+  });
   try {
     const modes = resource.manifest.gameModes;
     const mode = modes?.modes.find(

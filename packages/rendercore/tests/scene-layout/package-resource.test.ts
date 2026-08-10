@@ -448,6 +448,7 @@ describe("scene layout package resources", () => {
     const requested: string[] = [];
     const resource = await loadSceneLayoutPackageFromUrl({
       manifestUrl: "https://cdn.example/layout/layout.manifest.json",
+      manifestBytes: encode(manifest),
       fetchImpl: async (input) => {
         const url = new URL(String(input));
         const path = url.pathname.split("/layout/")[1]!;
@@ -460,7 +461,6 @@ describe("scene layout package resources", () => {
       decodeImage: async () => ({ width: 1, height: 1 }),
     });
     expect(requested).toEqual([
-      "layout.manifest.json",
       "assets/bg.png",
       "effects/runtime.json",
       "effects/assets/spark.png",

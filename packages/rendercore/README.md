@@ -53,7 +53,7 @@ reel settle 硬屏障。v1 local-flow project 不做猜测迁移。
 该 facade 不解析 server round 或 component，也不创建 DOM 配置 UI；runtime owner 负责
 Pixi Application、package resource 与所有 player 的 destroy。
 
-低层 `createSceneLayoutResource()` / `createSceneLayoutRuntime()` 保持用于 layout-only 和自定义 attachment；自包含 production 包使用 `createSceneLayoutPackageResource()` / `loadSceneLayoutPackageFromUrl()` 与 `createSceneLayoutPackageRuntime()`。未声明 `symbolPackage` 的旧 v1 manifest 行为不变，但组合 reel 初始化与 reset API 会显式不可用。
+低层 `createSceneLayoutResource()` / `createSceneLayoutRuntime()` 保持用于 layout-only 和自定义 attachment；自包含 production 包使用 `createSceneLayoutPackageResource()` / `loadSceneLayoutPackageFromUrl()` 与 `createSceneLayoutPackageRuntime()`。URL loader 可接收 loading 阶段已取得的 `manifestBytes`，随后仍只按 manifest 与 assets map 的实际引用获取 package 文件。未声明 `symbolPackage` 的旧 v1 manifest 行为不变，但组合 reel 初始化与 reset API 会显式不可用。
 
 完整 package runtime 可以 deferred prepare main reel：首次合法 scene commit 前 reel 不可见，scene/value/spin API 会严格失败。业务自定义 grid-cell controller 可通过 ownership-transfer factory 注入，package 仍拥有唯一 reel、manifest placement/order 和最终 destroy；cascade 等借用 overlay 通过 typed attach disposer 接入，保持在 transition/popup 下方。
 

@@ -12,6 +12,8 @@
   rendercore mutation。中奖组以 plain plan data 交给 carousel，不在执行期保留 GameLogic。
 - 全仓长期规则已记录：production 解包资源 files/bytes 为权威；runtime/build 不比较 hash、byteLength、
   content-addressed filename，不扫描 orphan，不做全包齐全性 gate；实际引用缺失在消费点报错。
+- game003v2 不再生成逐文件资源绑定。Vite 原样提供 `assets/minecart2`，rendercore 按 manifest URL 和
+  assets map 在消费点加载；美术替换目录后只需重启开发服务或重新构建，不产生 TypeScript diff。
 
 ## layout10 接收与 CLI 修复
 
@@ -50,8 +52,7 @@
 - `rendercore`: 92 test files / 728 tests，branch coverage 80.04%，typecheck、lint、format check。
 - `gameframeworks`: 13 test files / 91 tests，typecheck、lint。
 - 旧 `game003`: 16 test files / 60 tests，coverage 通过；188 项 resource generator `--check` 通过。
-- `game003v2`: 3 test files / 7 tests、typecheck、lint、format check、188 项 resource generator `--check`、
-  production build 均通过。
+- `game003v2`: 定向 tests、typecheck、lint、format check和production build均通过；不再执行resource generator。
 - 最终优化 ZIP CRC、`git diff --check` 通过。
 
 整仓现存的非本任务失败：

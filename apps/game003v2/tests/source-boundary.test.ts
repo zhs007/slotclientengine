@@ -22,4 +22,14 @@ describe("game003v2 source boundary", () => {
     expect(source).not.toMatch(/sha256|byteLength|orphan|content-addressed/u);
     expect(source).not.toMatch(/createReelSpinPlan/u);
   });
+
+  it("serves the art-owned package directly without generated bindings", () => {
+    const appRoot = resolve(import.meta.dirname, "..");
+    const packageJson = readFileSync(resolve(appRoot, "package.json"), "utf8");
+    const viteConfig = readFileSync(resolve(appRoot, "vite.config.ts"), "utf8");
+    expect(packageJson).not.toMatch(/generate:resources|check:resources/u);
+    expect(viteConfig).toContain(
+      'publicDir: resolve(__dirname, "../../assets/minecart2")',
+    );
+  });
 });

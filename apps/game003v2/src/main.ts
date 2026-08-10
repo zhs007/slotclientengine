@@ -11,7 +11,7 @@ import { GAME003V2_CONFIG } from "./config.js";
 import { parseGame003v2Launch } from "./launch.js";
 import {
   createGame003v2LoadingResources,
-  readMinecart2Files,
+  readMinecart2Manifest,
 } from "./loading-resources.js";
 import { formatGame003v2Amount } from "./money.js";
 import { prepareGame003v2Resource } from "./resource.js";
@@ -32,7 +32,7 @@ const loading = createGameLoading({
   root: loadingHost,
   ui: createSimpleGameLoadingUi(),
   maxConcurrentResources: 4,
-  resources: createGame003v2LoadingResources(),
+  resources: createGame003v2LoadingResources(document.baseURI),
   readiness: {
     start: async () => {
       const config = parseGame003v2Launch(window.location.search);
@@ -44,7 +44,9 @@ const loading = createGameLoading({
   onBeforeComplete: async ({ loadedResources, readinessResult, signal }) => {
     if (signal.aborted) throw new DOMException("Aborted", "AbortError");
     const resource = await prepareGame003v2Resource(
-      readMinecart2Files(loadedResources),
+      new URL("layout.manifest.json", document.baseURI),
+      readMinecart2Manifest(loadedResources),
+      signal,
     );
     return Object.freeze({ ...readinessResult, resource });
   },

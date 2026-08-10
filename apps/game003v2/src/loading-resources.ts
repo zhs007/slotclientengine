@@ -1,29 +1,24 @@
 import type { GameLoadingResource } from "@slotclientengine/gameloading";
-import { craveSceneLayoutPhysicalResourceUrls as minecart2Urls } from "./generated/minecart2-layout-resources.generated.js";
 
-export const MINECART2_RESOURCE_PREFIX = "game003v2-minecart2:";
+export const MINECART2_MANIFEST_RESOURCE_ID = "game003v2-minecart2-manifest";
 
-export function createGame003v2LoadingResources(): readonly GameLoadingResource[] {
-  return Object.freeze(
-    Object.entries(minecart2Urls).map(([path, url]) =>
-      Object.freeze({
-        id: `${MINECART2_RESOURCE_PREFIX}${path}`,
-        url,
-        kind: "binary" as const,
-      }),
-    ),
-  );
+export function createGame003v2LoadingResources(
+  documentBaseUrl: string | URL,
+): readonly GameLoadingResource[] {
+  return Object.freeze([
+    Object.freeze({
+      id: MINECART2_MANIFEST_RESOURCE_ID,
+      url: new URL("layout.manifest.json", documentBaseUrl).href,
+      kind: "binary" as const,
+    }),
+  ]);
 }
 
-export function readMinecart2Files(
+export function readMinecart2Manifest(
   loaded: ReadonlyMap<string, unknown>,
-): ReadonlyMap<string, Uint8Array> {
-  const files = new Map<string, Uint8Array>();
-  for (const path of Object.keys(minecart2Urls)) {
-    const value = loaded.get(`${MINECART2_RESOURCE_PREFIX}${path}`);
-    if (!(value instanceof ArrayBuffer))
-      throw new Error(`Minecart2 resource "${path}" was not loaded.`);
-    files.set(path, new Uint8Array(value.slice(0)));
-  }
-  return files;
+): Uint8Array {
+  const value = loaded.get(MINECART2_MANIFEST_RESOURCE_ID);
+  if (!(value instanceof ArrayBuffer))
+    throw new Error("Minecart2 layout manifest was not loaded.");
+  return new Uint8Array(value.slice(0));
 }

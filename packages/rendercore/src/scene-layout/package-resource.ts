@@ -849,6 +849,7 @@ function parseRuntimeVniProject(
 
 export async function loadSceneLayoutPackageFromUrl(options: {
   readonly manifestUrl: string | URL;
+  readonly manifestBytes?: Uint8Array;
   readonly fetchImpl?: typeof fetch;
   readonly decodeImage?: DecodeImageStringImage;
   readonly loadSymbolTextures?: boolean;
@@ -864,7 +865,9 @@ export async function loadSceneLayoutPackageFromUrl(options: {
       "Scene layout package manifest URL must use http or https.",
     );
   const files = new Map<string, Uint8Array>();
-  const manifestBytes = await fetchBytes(fetchImpl, manifestUrl);
+  const manifestBytes =
+    options.manifestBytes?.slice() ??
+    (await fetchBytes(fetchImpl, manifestUrl));
   files.set(ROOT_MANIFEST, manifestBytes);
   const manifest = parseSceneLayoutManifest(
     parseJsonBytes(manifestBytes, ROOT_MANIFEST),

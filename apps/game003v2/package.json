@@ -5,12 +5,10 @@
   "type": "module",
   "scripts": {
     "prepare:deps": "pnpm --filter @slotclientengine/gameloading build && pnpm --filter @slotclientengine/gameloading-ui-simple build && pnpm --filter @slotclientengine/gameframeworks build && pnpm --filter @slotclientengine/rendercore build",
-    "generate:resources": "node ../../packages/rendercore/scripts/generate-scene-layout-vite-resources.mjs --manifest assets/minecart2/layout.manifest.json --out apps/game003v2/src/generated/minecart2-layout-resources.generated.ts",
-    "check:resources": "node ../../packages/rendercore/scripts/generate-scene-layout-vite-resources.mjs --manifest assets/minecart2/layout.manifest.json --out apps/game003v2/src/generated/minecart2-layout-resources.generated.ts --check",
-    "build": "pnpm run generate:resources && pnpm run prepare:deps && vite build",
-    "dev": "pnpm run generate:resources && pnpm run prepare:deps && node ../../scripts/run-vite-dev.mjs",
-    "test": "pnpm run generate:resources && vitest run",
-    "typecheck": "pnpm run generate:resources && pnpm run prepare:deps && tsc -p tsconfig.json --noEmit",
+    "build": "pnpm run prepare:deps && vite build",
+    "dev": "pnpm run prepare:deps && node ../../scripts/run-vite-dev.mjs",
+    "test": "vitest run",
+    "typecheck": "pnpm run prepare:deps && tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

@@ -3,6 +3,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   base: "./",
+  publicDir: resolve(__dirname, "../../assets/minecart2"),
   assetsInclude: ["**/*.atlas"],
   build: { assetsInlineLimit: 0 },
   resolve: {

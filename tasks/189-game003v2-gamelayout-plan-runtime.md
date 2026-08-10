@@ -171,7 +171,6 @@ apps/game003v2/{package.json,index.html,README.md,vite.config.ts,tsconfig*.json,
 apps/game003v2/config/game-runtime.manifest.json
 apps/game003v2/scripts/verify-static-dist.mjs
 apps/game003v2/src/{main,launch,loading-resources,resource,round-compiler,round-adapter,business-policy,money}.ts
-apps/game003v2/src/generated/minecart2-layout-resources.generated.ts
 apps/game003v2/tests/{launch,resource,round-compiler,round-adapter,source-boundary}.test.ts
 tasks/189-game003v2-gamelayout-plan-runtime-<utctime>.md
 ```
@@ -221,7 +220,8 @@ package.json
      不比较assets hash/byteSize/content-addressed filename，不扫描orphan或预读全部资源。
    - 完整替换`assets/minecart2`并同步asset-groups；不保留旧payload。随后由实际loading/render路径自然发现
      缺失资源，原位错误汇总到执行报告并通知用户。
-   - 为 game003与game003v2分别运行正式 generator/`--check`，禁止手改 generated import。
+   - game003v2由Vite原样提供`assets/minecart2` public目录并使用rendercore URL loader，不生成逐文件
+     TypeScript绑定；旧game003继续运行其正式generator/`--check`。
 3. **固定 logic plan 合同**
    - 用 tests先刻画 bg spin、zero/one/multi bg-wins、可省略/单份 CO otherScene、amount优先级、invalid data、
      source evidence、operation顺序、final snapshot和 deep freeze。
@@ -270,7 +270,7 @@ package.json
 
 ```bash
 pnpm --filter gamelayoutpkgcli build && pnpm --filter gamelayoutpkgcli start -- --input /Users/zerro/Downloads/minecart2/layout10.zip --output /private/tmp/task189-minecart2.optimized.zip --assets-json /private/tmp/task189-minecart2.assets-groups.json --quality 80
-pnpm --filter game003v2 generate:resources && pnpm --filter game003v2 check:resources && pnpm --filter game003 check:resources
+pnpm --filter game003 check:resources
 pnpm --filter @slotclientengine/logiccore --filter @slotclientengine/rendercore --filter @slotclientengine/gameframeworks --filter game003v2 --filter game003 test
 pnpm typecheck && pnpm lint
 pnpm test && pnpm build && pnpm format:check
