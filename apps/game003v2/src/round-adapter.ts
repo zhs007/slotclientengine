@@ -122,7 +122,8 @@ class Game003v2RoundAdapter implements SlotGameAdapter {
         cleanup: (reason) => {
           carousel.clear();
           runtime.dismissActiveAwardCelebrationImmediately();
-          if (reason !== "next-spin" && runtime.isMainReelSpinning())
+          if (reason === "next-spin") return;
+          if (runtime.isMainReelSpinning())
             runtime.cancelMainReelContinuousSpin();
           this.#preSpinActive = false;
         },

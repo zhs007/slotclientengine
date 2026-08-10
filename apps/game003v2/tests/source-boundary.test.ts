@@ -32,4 +32,14 @@ describe("game003v2 source boundary", () => {
       'publicDir: resolve(__dirname, "../../assets/minecart2")',
     );
   });
+
+  it("preserves request-time continuous spin state through next-spin cleanup", () => {
+    const source = readFileSync(
+      resolve(import.meta.dirname, "../src/round-adapter.ts"),
+      "utf8",
+    );
+    expect(source).toMatch(
+      /cleanup: \(reason\)[\s\S]*if \(reason === "next-spin"\) return;[\s\S]*this\.#preSpinActive = false;/u,
+    );
+  });
 });
