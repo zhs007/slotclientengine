@@ -70,3 +70,4 @@ CO 数字、首轮和 lingering win、award popup、横竖屏切换，以及 con
 
 浏览器验收发现并修复 coordinator `next-spin` cleanup 提前清除 request-time continuous spin ownership 的问题；
 该 cleanup 现在保留 pre-spin 状态，由首个 landing operation 调用 `settleMainReelContinuousSpin()` 完成同一轮落停。
+同时将 game003v2 reel direction 从 phase-forward（屏幕向上）调整为 `backward`，使 symbol 按产品预期向下旋转。
