@@ -296,6 +296,9 @@ export interface RenderReelContinuousSpinOptions {
   readonly speedSymbolsPerSecond: number;
 }
 
+export type RenderReelSetContinuousSpinOptions =
+  RenderReelContinuousSpinOptions;
+
 export interface ReelSymbolPresentationValueContext {
   readonly x: number;
   readonly symbolY: number;

@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMappedPackageFiles } from "../editor-assets-map-fixture.js";
 import {
+  getMinecart2AwardVniProjectPath,
   getMinecart2SymbolResourcePath,
   readMinecart2LogicalBytes,
   readMinecart2LogicalJson,
   readMinecart2SymbolBytes,
+  readMinecart2SymbolFixtureBytes,
 } from "../../../../test-utils/minecart2-fixtures.js";
 
 const destroyImageString = vi.hoisted(() => vi.fn(async () => {}));
@@ -93,8 +95,8 @@ describe("popup package resource", () => {
         transform: { x: 0, y: 0, scale: 1 },
         playback: {
           mode: "segmented-animations",
-          startAnimation: "start",
-          loopAnimation: "Loop",
+          startAnimation: "Feature",
+          loopAnimation: "Idle",
           endAnimation: "Win",
         },
         prompt: {
@@ -522,7 +524,7 @@ describe("popup package resource", () => {
 function fixture() {
   const hex = (value: number) => value.toString(16).padStart(64, "0");
   const project = structuredClone(
-    readMinecart2LogicalJson("big_win0721.json"),
+    readMinecart2LogicalJson(getMinecart2AwardVniProjectPath("bigwin")),
   ) as { assets: Array<{ path: string }> };
   const files = new Map<string, Uint8Array>();
   project.assets.forEach((asset: { path: string }, index: number) => {
@@ -535,9 +537,9 @@ function fixture() {
   const skeletonPath = `assets/${hex(2)}.json`;
   const atlasPath = `assets/${hex(3)}.atlas`;
   const texturePath = `assets/${hex(4)}.png`;
-  const texturePage = getMinecart2SymbolResourcePath("WL", "texture");
+  const texturePage = "Symbol.png";
   files.set(skeletonPath, readMinecart2SymbolBytes("WL", "skeleton"));
-  files.set(atlasPath, readMinecart2SymbolBytes("WL", "atlas"));
+  files.set(atlasPath, readMinecart2SymbolFixtureBytes("Symbol.atlas"));
   files.set(texturePath, readMinecart2SymbolBytes("WL", "texture"));
   const imagePath = `assets/${hex(5)}.png`;
   files.set(imagePath, new Uint8Array([1]));
@@ -679,8 +681,8 @@ function fixture() {
             transform: { x: 0, y: 0, scale: 1 },
             playback: {
               mode: "segmented-animations",
-              startAnimation: "start",
-              loopAnimation: "Loop",
+              startAnimation: "Feature",
+              loopAnimation: "Idle",
               endAnimation: "Win",
             },
           },
@@ -747,14 +749,13 @@ function mappedSourceFixture(): ReturnType<typeof fixture> {
 }
 
 function multiPageSpinePopupFixture() {
-  const sourcePage = getMinecart2SymbolResourcePath("WL", "texture");
   const logicalPages = ["BG.png", "BG_2.png"];
   const skeleton = "FG.json";
   const atlas = "BG.atlas";
   const textures = Object.fromEntries(logicalPages.map((page) => [page, page]));
   const atlasText = new TextDecoder()
     .decode(readMinecart2SymbolBytes("WL", "atlas"))
-    .replace(sourcePage, logicalPages[0]!);
+    .replace(/^[^\r\n]+/u, logicalPages[0]!);
   const manifest = {
     version: 1,
     kind: "popup",
@@ -774,8 +775,8 @@ function multiPageSpinePopupFixture() {
       transform: { x: 0, y: 0, scale: 1 },
       playback: {
         mode: "segmented-animations",
-        startAnimation: "start",
-        loopAnimation: "Loop",
+        startAnimation: "Feature",
+        loopAnimation: "Idle",
         endAnimation: "Win",
       },
     },

@@ -1,0 +1,177 @@
+{
+  "fixedAdvanceGroups": [],
+  "glyphs": {
+    "0": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-17-award-celebration-0.webp",
+      "size": {
+        "height": 43,
+        "width": 31
+      }
+    },
+    "1": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-17-award-celebration-1.webp",
+      "size": {
+        "height": 43,
+        "width": 31
+      }
+    },
+    "2": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-17-award-celebration-2-2.webp",
+      "size": {
+        "height": 43,
+        "width": 31
+      }
+    },
+    "3": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-17-award-celebration-3-2.webp",
+      "size": {
+        "height": 43,
+        "width": 31
+      }
+    },
+    "4": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-17-award-celebration-4-2.webp",
+      "size": {
+        "height": 43,
+        "width": 31
+      }
+    },
+    "5": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-17-award-celebration-5.webp",
+      "size": {
+        "height": 43,
+        "width": 31
+      }
+    },
+    "6": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-17-award-celebration-6.webp",
+      "size": {
+        "height": 43,
+        "width": 31
+      }
+    },
+    "7": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-17-award-celebration-7.webp",
+      "size": {
+        "height": 43,
+        "width": 31
+      }
+    },
+    "8": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-17-award-celebration-8.webp",
+      "size": {
+        "height": 43,
+        "width": 31
+      }
+    },
+    "9": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-17-award-celebration-9.webp",
+      "size": {
+        "height": 43,
+        "width": 31
+      }
+    },
+    "-": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-17-award-celebration.webp",
+      "size": {
+        "height": 43,
+        "width": 31
+      }
+    },
+    ",": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-17-award-celebration-2.webp",
+      "size": {
+        "height": 43,
+        "width": 13
+      }
+    },
+    ".": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-17-award-celebration-3.webp",
+      "size": {
+        "height": 43,
+        "width": 13
+      }
+    },
+    "+": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-17-award-celebration-4.webp",
+      "size": {
+        "height": 43,
+        "width": 31
+      }
+    },
+    "X": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-17-award-celebration-x.webp",
+      "size": {
+        "height": 43,
+        "width": 31
+      }
+    }
+  },
+  "id": "new-image-string",
+  "kind": "image-string",
+  "metrics": {
+    "letterSpacing": 0,
+    "lineHeight": 64
+  },
+  "version": 1
+}

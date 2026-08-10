@@ -20,6 +20,8 @@ export {
   createGameConfig,
   createBuiltinSlotOperationDefinitionsV2,
   finalizeSlotOperationPlanV2,
+  createSlotOperationServerView,
+  selectServerComponentSource,
   genDropdownOperation,
   genChg,
   genRefillOperation,

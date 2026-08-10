@@ -1,0 +1,177 @@
+{
+  "fixedAdvanceGroups": [],
+  "glyphs": {
+    "0": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-9-minecart2-new-image-string-2-coin_0000_0.webp",
+      "size": {
+        "height": 43,
+        "width": 31
+      }
+    },
+    "1": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-9-minecart2-new-image-string-2-coin_0001_1.webp",
+      "size": {
+        "height": 43,
+        "width": 31
+      }
+    },
+    "2": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-9-minecart2-new-image-string-2-coin_0002_2.webp",
+      "size": {
+        "height": 43,
+        "width": 31
+      }
+    },
+    "3": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-9-minecart2-new-image-string-2-coin_0003_3.webp",
+      "size": {
+        "height": 43,
+        "width": 31
+      }
+    },
+    "4": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-9-minecart2-new-image-string-2-coin_0004_4.webp",
+      "size": {
+        "height": 43,
+        "width": 31
+      }
+    },
+    "5": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-9-minecart2-new-image-string-2-coin_0005_5.webp",
+      "size": {
+        "height": 43,
+        "width": 31
+      }
+    },
+    "6": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-9-minecart2-new-image-string-2-coin_0006_6.webp",
+      "size": {
+        "height": 43,
+        "width": 31
+      }
+    },
+    "7": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-9-minecart2-new-image-string-2-coin_0007_7.webp",
+      "size": {
+        "height": 43,
+        "width": 31
+      }
+    },
+    "8": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-9-minecart2-new-image-string-2-coin_0008_8.webp",
+      "size": {
+        "height": 43,
+        "width": 31
+      }
+    },
+    "9": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-9-minecart2-new-image-string-2-coin_0009_9.webp",
+      "size": {
+        "height": 43,
+        "width": 31
+      }
+    },
+    "-": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-9-minecart2-new-image-string-2-coin_0011.webp",
+      "size": {
+        "height": 43,
+        "width": 31
+      }
+    },
+    ",": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-9-minecart2-new-image-string-2-coin_0013.webp",
+      "size": {
+        "height": 43,
+        "width": 13
+      }
+    },
+    ".": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-9-minecart2-new-image-string-2-coin_0014.webp",
+      "size": {
+        "height": 43,
+        "width": 13
+      }
+    },
+    "+": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-9-minecart2-new-image-string-2-coin_0012.webp",
+      "size": {
+        "height": 43,
+        "width": 31
+      }
+    },
+    "x": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "pkg-9-minecart2-new-image-string-2-coin_0010_x.webp",
+      "size": {
+        "height": 43,
+        "width": 31
+      }
+    }
+  },
+  "id": "new-image-string-2",
+  "kind": "image-string",
+  "metrics": {
+    "letterSpacing": 0,
+    "lineHeight": 64
+  },
+  "version": 1
+}

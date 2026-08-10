@@ -95,6 +95,10 @@ export interface SymbolWinCarousel {
   readonly container: Container;
   readonly firstCycleComplete: boolean;
   prepare(input: SymbolWinCarouselStartInput): PreparedSymbolWinCarousel;
+  /** Adopts compiler-produced plain win groups without retaining GameLogic. */
+  prepareGroups(
+    groups: readonly SymbolWinCarouselGroup[],
+  ): PreparedSymbolWinCarousel;
   start(prepared: PreparedSymbolWinCarousel): SymbolWinCarouselStartResult;
   clear(): void;
   update(deltaSeconds: number): SymbolWinCarouselUpdateResult;

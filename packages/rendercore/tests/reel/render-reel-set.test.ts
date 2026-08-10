@@ -23,6 +23,197 @@ import {
 } from "./helpers.js";
 
 describe("RenderReelSet", () => {
+  it("starts, settles, and cancels continuous spins across standard reels", () => {
+    const reels = createBasicReels();
+    const reelSet = new RenderReelSet({
+      reels,
+      layout: createBasicLayout(),
+      registry: createBasicRegistry(),
+    });
+    const initialScene = [
+      [1, 2, 1],
+      [2, 1, 2],
+    ] as const;
+    const targetScene = [
+      [2, 1, 2],
+      [1, 2, 1],
+    ] as const;
+    reelSet.resetToVisibleScene(initialScene, [0, 0]);
+
+    reelSet.startContinuous({
+      direction: "forward",
+      speedSymbolsPerSecond: 20,
+    });
+    expect(reelSet.isContinuousSpinning()).toBe(true);
+    expect(() =>
+      reelSet.startContinuous({
+        direction: "forward",
+        speedSymbolsPerSecond: 20,
+      }),
+    ).toThrow(/another spin is active/);
+    reelSet.update(0.05);
+    expect(reelSet.getSnapshot().spinning).toBe(true);
+
+    reelSet.settleContinuous(
+      createReelSpinPlan({
+        reels,
+        finalYs: [1, 1],
+        visibleRows: 3,
+        minimumSpinCycles: 1,
+        baseDurationMs: 100,
+        speedSymbolsPerSecond: 100,
+        startDelayMs: 0,
+        stopDelayMs: 0,
+        direction: "forward",
+      }),
+      {
+        targetVisibleScene: targetScene,
+        targetVisiblePresentationValues: [
+          [null, null, null],
+          [null, null, null],
+        ],
+        targetVisibleStates: [
+          ["normal", "normal", "normal"],
+          ["normal", "normal", "normal"],
+        ],
+      },
+    );
+    expect(reelSet.isContinuousSpinning()).toBe(false);
+    for (
+      let index = 0;
+      index < 20 && reelSet.getSnapshot().spinning;
+      index += 1
+    )
+      reelSet.update(0.05);
+    expect(reelSet.getVisibleScene()).toEqual(targetScene);
+    expect(() =>
+      reelSet.settleContinuous(
+        createReelSpinPlan({
+          reels,
+          finalYs: [1, 1],
+          visibleRows: 3,
+          minimumSpinCycles: 1,
+          baseDurationMs: 100,
+          speedSymbolsPerSecond: 100,
+          startDelayMs: 0,
+          stopDelayMs: 0,
+        }),
+      ),
+    ).toThrow(/without an active continuous spin/);
+
+    reelSet.startContinuous({
+      direction: "forward",
+      speedSymbolsPerSecond: 20,
+    });
+    reelSet.cancelContinuous();
+    expect(reelSet.getSnapshot().spinning).toBe(false);
+    expect(
+      reelSet.reels.every((reel) => reel.getSnapshot().phase === "stopped"),
+    ).toBe(true);
+
+    reelSet.startContinuous({
+      direction: "forward",
+      speedSymbolsPerSecond: 20,
+    });
+    reelSet.settleContinuous(
+      createReelSpinPlan({
+        reels,
+        finalYs: [1, 1],
+        visibleRows: 3,
+        minimumSpinCycles: 1,
+        baseDurationMs: 100,
+        speedSymbolsPerSecond: 100,
+        startDelayMs: 0,
+        stopDelayMs: 0,
+      }),
+    );
+    reelSet.cancelContinuous();
+    expect(reelSet.getSnapshot().spinning).toBe(false);
+  });
+
+  it("preflights standard continuous spins and rolls back partial starts", () => {
+    const reels = createBasicReels();
+    const reelSet = new RenderReelSet({
+      reels,
+      layout: createBasicLayout(),
+      registry: createBasicRegistry(),
+    });
+    const plan = createReelSpinPlan({
+      reels,
+      finalYs: [1, 1],
+      visibleRows: 3,
+      minimumSpinCycles: 1,
+      baseDurationMs: 100,
+      speedSymbolsPerSecond: 100,
+      startDelayMs: 0,
+      stopDelayMs: 0,
+    });
+
+    expect(() => reelSet.settleContinuous(plan)).toThrow(
+      /without an active continuous spin/,
+    );
+    reelSet.cancelContinuous();
+
+    reelSet.spin(plan);
+    expect(() =>
+      reelSet.startContinuous({
+        direction: "forward",
+        speedSymbolsPerSecond: 20,
+      }),
+    ).toThrow(/another spin is active/);
+    for (
+      let index = 0;
+      index < 20 && reelSet.getSnapshot().spinning;
+      index += 1
+    )
+      reelSet.update(0.05);
+
+    const startFailure = vi
+      .spyOn(reelSet.reels[1]!, "startContinuous")
+      .mockImplementationOnce(() => {
+        throw new Error("start failed");
+      });
+    expect(() =>
+      reelSet.startContinuous({
+        direction: "forward",
+        speedSymbolsPerSecond: 20,
+      }),
+    ).toThrow(/start failed/);
+    expect(reelSet.reels[0]!.getSnapshot().phase).toBe("stopped");
+    startFailure.mockRestore();
+
+    reelSet.startContinuous({
+      direction: "forward",
+      speedSymbolsPerSecond: 20,
+    });
+    expect(() =>
+      reelSet.settleContinuous({ ...plan, axes: plan.axes.slice(0, 1) }),
+    ).toThrow(/axes length/);
+    reelSet.cancelContinuous();
+
+    reelSet.startContinuous({
+      direction: "forward",
+      speedSymbolsPerSecond: 20,
+    });
+    expect(() =>
+      reelSet.settleContinuous({
+        ...plan,
+        axes: [plan.axes[0]!, { ...plan.axes[1]!, x: 0 }],
+      }),
+    ).toThrow(/missing axis 1/);
+    reelSet.cancelContinuous();
+
+    reelSet.startContinuous({
+      direction: "forward",
+      speedSymbolsPerSecond: 20,
+    });
+    reelSet.reels[1]!.cancelContinuous();
+    expect(() => reelSet.settleContinuous(plan)).toThrow(
+      /settle reel 1 without an active continuous spin/,
+    );
+    reelSet.cancelContinuous();
+  });
+
   it("preflights and awaits a multi-state batch on standard reels", async () => {
     const reelSet = new RenderReelSet({
       reels: createBasicReels(),
@@ -774,6 +965,12 @@ describe("RenderReelSet", () => {
       ],
       totalSeconds: 0.17,
     });
+    expect(() =>
+      reelSet.startContinuous({
+        direction: "forward",
+        speedSymbolsPerSecond: 20,
+      }),
+    ).toThrow(/cascade dropdown is active/);
     expect(reelSet.getSnapshot().spinning).toBe(true);
     reelSet.update(0.1);
     reelSet.update(0.1);

@@ -108,7 +108,7 @@ describe("typed asset reference rewriting", () => {
       kind: "spine",
       skeleton: "symbol.json",
       atlas: "symbol.atlas",
-      textures: { "symbol.png": "symbol.webp" },
+      textures: { "symbol.webp": "symbol.webp" },
     });
 
     const withNone = rewriteLayoutManifest(

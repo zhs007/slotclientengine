@@ -1,0 +1,224 @@
+{
+  "amountFormat": {
+    "decimalSeparator": ".",
+    "fractionDigits": 0,
+    "groupSeparator": ",",
+    "prefix": "",
+    "rawScale": 1,
+    "rounding": "floor",
+    "suffix": "",
+    "useGrouping": false
+  },
+  "awardCelebration": {
+    "base": {
+      "countDurationSeconds": 1,
+      "layers": [
+        {
+          "anchor": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "binding": "win-amount",
+          "id": "layer-base-0",
+          "kind": "image-string",
+          "name": "win-amount",
+          "order": 0,
+          "parent": {
+            "kind": "popup-root"
+          },
+          "resource": "pkg-17-award-celebration-image-string.manifest.json",
+          "transform": {
+            "scale": 2,
+            "x": 0,
+            "y": 400
+          }
+        }
+      ]
+    },
+    "celebrationTiers": [
+      {
+        "countDurationSeconds": 2,
+        "id": "bigwin",
+        "layers": [
+          {
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "binding": "win-amount",
+            "id": "layer-bigwin-0",
+            "kind": "image-string",
+            "name": "win-amount",
+            "order": 0,
+            "parent": {
+              "kind": "popup-root"
+            },
+            "resource": "pkg-17-award-celebration-image-string.manifest.json",
+            "transform": {
+              "scale": 2.8,
+              "x": 0,
+              "y": 400
+            }
+          },
+          {
+            "id": "layer-bigwin-1",
+            "kind": "vni",
+            "order": 1,
+            "playback": {
+              "keepParticlesAlive": true,
+              "loopEndTime": 2.9,
+              "loopStartTime": 1.2,
+              "mode": "segmented"
+            },
+            "resource": "pkg-17-award-celebration-big_win0721.json",
+            "transform": {
+              "scale": 1,
+              "x": 0,
+              "y": 50
+            }
+          }
+        ],
+        "thresholdMultiplier": 15
+      },
+      {
+        "countDurationSeconds": 2.5,
+        "id": "superwin",
+        "layers": [
+          {
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "binding": "win-amount",
+            "id": "layer-superwin-0",
+            "kind": "image-string",
+            "name": "win-amount",
+            "order": 0,
+            "parent": {
+              "kind": "popup-root"
+            },
+            "resource": "pkg-17-award-celebration-image-string.manifest.json",
+            "transform": {
+              "scale": 2.8,
+              "x": 0,
+              "y": 400
+            }
+          },
+          {
+            "id": "layer-superwin-1",
+            "kind": "vni",
+            "order": 1,
+            "playback": {
+              "keepParticlesAlive": true,
+              "loopEndTime": 2.9,
+              "loopStartTime": 1.2,
+              "mode": "segmented"
+            },
+            "resource": "pkg-17-award-celebration-super_win0721.json",
+            "transform": {
+              "scale": 1,
+              "x": 0,
+              "y": 50
+            }
+          }
+        ],
+        "thresholdMultiplier": 25
+      },
+      {
+        "countDurationSeconds": 3.5,
+        "id": "megawin",
+        "layers": [
+          {
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "binding": "win-amount",
+            "id": "layer-megawin-0",
+            "kind": "image-string",
+            "name": "win-amount",
+            "order": 0,
+            "parent": {
+              "kind": "popup-root"
+            },
+            "resource": "pkg-17-award-celebration-image-string.manifest.json",
+            "transform": {
+              "scale": 2.8,
+              "x": 0,
+              "y": 400
+            }
+          },
+          {
+            "id": "layer-megawin-1",
+            "kind": "vni",
+            "order": 1,
+            "playback": {
+              "keepParticlesAlive": true,
+              "loopEndTime": 2.9,
+              "loopStartTime": 1.2,
+              "mode": "segmented"
+            },
+            "resource": "pkg-17-award-celebration-mega_win0721.json",
+            "transform": {
+              "scale": 1.1,
+              "x": 0,
+              "y": 50
+            }
+          }
+        ],
+        "thresholdMultiplier": 50
+      }
+    ],
+    "standard": {
+      "countDurationSeconds": 1.5,
+      "layers": [
+        {
+          "anchor": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "binding": "win-amount",
+          "id": "layer-standard-0",
+          "kind": "image-string",
+          "name": "win-amount",
+          "order": 0,
+          "parent": {
+            "kind": "popup-root"
+          },
+          "resource": "pkg-17-award-celebration-image-string.manifest.json",
+          "transform": {
+            "scale": 2,
+            "x": 0,
+            "y": 400
+          }
+        }
+      ]
+    }
+  },
+  "designViewport": {
+    "height": 1920,
+    "width": 1080
+  },
+  "id": "award-celebration",
+  "kind": "popup",
+  "resources": {
+    "pkg-17-award-celebration-big_win0721.json": {
+      "kind": "vni",
+      "project": "pkg-17-award-celebration-big_win0721.json"
+    },
+    "pkg-17-award-celebration-image-string.manifest.json": {
+      "kind": "image-string",
+      "manifest": "pkg-17-award-celebration-image-string.manifest.json"
+    },
+    "pkg-17-award-celebration-mega_win0721.json": {
+      "kind": "vni",
+      "project": "pkg-17-award-celebration-mega_win0721.json"
+    },
+    "pkg-17-award-celebration-super_win0721.json": {
+      "kind": "vni",
+      "project": "pkg-17-award-celebration-super_win0721.json"
+    }
+  },
+  "type": "award-celebration",
+  "version": 1
+}

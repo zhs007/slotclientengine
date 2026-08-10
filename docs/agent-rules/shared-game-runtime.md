@@ -52,6 +52,8 @@
 - 客户端 spin 始终使用本地公开轮带。服务器 scene 只覆盖本轮临时 strip 的可见落点窗口；scene 无法反查本地 stop 时不得失败。
 - 请求发出后的无目标预转由 gameframeworks 的 paired adapter hook 启动和取消，连续滚动与响应后
   落停由 rendercore 拥有。预转阶段只能使用本地公开轮带；服务器目标只能在 settle 边界注入。
+  standard 与 grid-cell reel presentation 必须复用同一 Scene Layout start/settle/cancel ownership；
+  standard 不接受 positions/dimming 等 grid-cell-only 参数，也不得复制 app-owned continuous 状态机。
   每个请求只有一个 continuous transaction，由响应内第一个 landing 消费；同一响应后续 FG/refill
   使用普通 target-aware presentation，不重新等待或预转。失败 cleanup 必须只取消一次并 fail-stop。
 - grid-cell targetless pre-roll 必须复用 manifest timing 的 stable start group cadence；响应早于全部格启动时，

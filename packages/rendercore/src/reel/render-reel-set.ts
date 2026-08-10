@@ -8,6 +8,7 @@ import { startSymbolStatePlaybackBatch } from "./symbol-state-playback.js";
 import type {
   ReelSpinPlan,
   RenderReelSetOptions,
+  RenderReelSetContinuousSpinOptions,
   VisibleSymbolStatePlaybackBatchOptions,
   VisibleSymbolStatePlaybackRequest,
   RenderReelSetSpinOptions,
@@ -37,6 +38,8 @@ export class RenderReelSet extends Container {
   #spinOptions: RenderReelSetSpinOptions | null = null;
   #elapsedMs = 0;
   #startedAxes = new Set<number>();
+  #continuousSpinActive = false;
+  #settlingContinuous = false;
   #activeDrop: {
     readonly plan: GridCellCascadeDropPlan;
     readonly movements: readonly {
@@ -91,13 +94,14 @@ export class RenderReelSet extends Container {
   }
 
   override destroy(options?: Parameters<Container["destroy"]>[0]): void {
+    this.cancelContinuous();
     this.cancelActiveDrop();
     this.#symbolPool?.destroy();
     super.destroy(options);
   }
 
   spin(plan: ReelSpinPlan, options: RenderReelSetSpinOptions = {}): void {
-    if (this.#spinPlan) {
+    if (this.#spinPlan || this.#continuousSpinActive) {
       throw new ReelError(
         "Cannot start a new reel spin while another spin is active.",
       );
@@ -124,6 +128,106 @@ export class RenderReelSet extends Container {
     this.#spinOptions = options;
     this.#elapsedMs = 0;
     this.#startedAxes = new Set();
+    this.#settlingContinuous = false;
+  }
+
+  startContinuous(options: RenderReelSetContinuousSpinOptions): void {
+    if (this.#spinPlan || this.#continuousSpinActive)
+      throw new ReelError(
+        "Cannot start a continuous reel spin while another spin is active.",
+      );
+    if (this.#activeDrop)
+      throw new ReelError(
+        "Cannot start a continuous reel spin while cascade dropdown is active.",
+      );
+    const started: RenderReel[] = [];
+    try {
+      for (const reel of this.reels) {
+        reel.startContinuous(options);
+        started.push(reel);
+      }
+    } catch (error) {
+      for (const reel of started) reel.cancelContinuous();
+      throw error;
+    }
+    this.#spinPlan = null;
+    this.#spinOptions = null;
+    this.#elapsedMs = 0;
+    this.#startedAxes = new Set(this.reels.map((reel) => reel.xIndex));
+    this.#continuousSpinActive = true;
+    this.#settlingContinuous = false;
+  }
+
+  settleContinuous(
+    plan: ReelSpinPlan,
+    options: RenderReelSetSpinOptions = {},
+  ): void {
+    if (!this.#continuousSpinActive)
+      throw new ReelError(
+        "Cannot settle standard reels without an active continuous spin.",
+      );
+    if (plan.axes.length !== this.reels.length)
+      throw new ReelError(
+        `spin plan axes length ${plan.axes.length} does not match reel count.`,
+      );
+    this.assertTargetVisibleScene(options.targetVisibleScene);
+    this.assertTargetVisibleMatrix(
+      options.targetVisiblePresentationValues,
+      "targetVisiblePresentationValues",
+    );
+    this.assertTargetVisibleMatrix(
+      options.targetVisibleStates,
+      "targetVisibleStates",
+    );
+    const axesByX = new Map(plan.axes.map((axis) => [axis.x, axis] as const));
+    for (const reel of this.reels) {
+      const axis = axesByX.get(reel.xIndex);
+      if (!axis)
+        throw new ReelError(`spin plan is missing axis ${reel.xIndex}.`);
+      if (!reel.isContinuousSpinning())
+        throw new ReelError(
+          `Cannot settle reel ${reel.xIndex} without an active continuous spin.`,
+        );
+    }
+    for (const axis of plan.axes) {
+      this.reels[axis.x]!.settleContinuous(axis, {
+        targetVisibleSymbols: options.targetVisibleScene?.[axis.x],
+        targetVisiblePresentationValues:
+          options.targetVisiblePresentationValues?.[axis.x],
+        targetVisibleStates: options.targetVisibleStates?.[axis.x],
+      });
+    }
+    this.#spinPlan = plan;
+    this.#spinOptions = options;
+    this.#elapsedMs = 0;
+    this.#startedAxes = new Set(plan.axes.map((axis) => axis.x));
+    this.#continuousSpinActive = false;
+    this.#settlingContinuous = true;
+  }
+
+  cancelContinuous(): void {
+    if (!this.#continuousSpinActive && !this.#settlingContinuous) return;
+    for (const reel of this.reels) {
+      if (this.#continuousSpinActive) reel.cancelContinuous();
+      else {
+        const snapshot = reel.getSnapshot();
+        reel.resetToVisibleSymbols(
+          reel.getVisibleScene(),
+          Math.floor(snapshot.currentY),
+          reel.getVisiblePresentationValues(),
+        );
+      }
+    }
+    this.#spinPlan = null;
+    this.#spinOptions = null;
+    this.#continuousSpinActive = false;
+    this.#settlingContinuous = false;
+    this.#elapsedMs = 0;
+    this.#startedAxes = new Set();
+  }
+
+  isContinuousSpinning(): boolean {
+    return this.#continuousSpinActive;
   }
 
   update(deltaSeconds: number): RenderReelSetUpdateResult {
@@ -142,7 +246,11 @@ export class RenderReelSet extends Container {
     for (const reel of this.reels) {
       const axisPlan = this.#spinPlan?.axes[reel.xIndex];
       let reelDeltaSeconds = deltaSeconds;
-      if (axisPlan && this.#startedAxes.has(reel.xIndex)) {
+      if (
+        axisPlan &&
+        this.#startedAxes.has(reel.xIndex) &&
+        !this.#settlingContinuous
+      ) {
         const activeStart = Math.max(previousElapsedMs, axisPlan.startDelayMs);
         const activeEnd = Math.min(this.#elapsedMs, axisPlan.stopAtMs);
         reelDeltaSeconds = Math.max(0, activeEnd - activeStart) / 1000;
@@ -164,11 +272,15 @@ export class RenderReelSet extends Container {
     if (completed) {
       this.#spinPlan = null;
       this.#spinOptions = null;
+      this.#settlingContinuous = false;
     }
 
     return Object.freeze({
       completed,
-      spinning: this.#spinPlan !== null || this.#activeDrop !== null,
+      spinning:
+        this.#spinPlan !== null ||
+        this.#continuousSpinActive ||
+        this.#activeDrop !== null,
       startedAxes: Object.freeze(
         [...this.#startedAxes].sort((left, right) => left - right),
       ),
@@ -185,6 +297,8 @@ export class RenderReelSet extends Container {
     this.cancelActiveDrop();
     this.#spinPlan = null;
     this.#spinOptions = null;
+    this.#continuousSpinActive = false;
+    this.#settlingContinuous = false;
     this.#elapsedMs = 0;
     this.#startedAxes = new Set();
     for (const [x, y] of finalYs.entries()) {
@@ -205,6 +319,8 @@ export class RenderReelSet extends Container {
     this.cancelActiveDrop();
     this.#spinPlan = null;
     this.#spinOptions = null;
+    this.#continuousSpinActive = false;
+    this.#settlingContinuous = false;
     this.#elapsedMs = 0;
     this.#startedAxes = new Set();
     for (const [x, column] of visibleScene.entries()) {
@@ -416,7 +532,7 @@ export class RenderReelSet extends Container {
     state: SymbolStateId,
     transitionMode: SymbolStateTransitionMode = "boundary",
   ): void {
-    if (this.#spinPlan) {
+    if (this.#spinPlan || this.#continuousSpinActive) {
       throw new ReelError(
         "Cannot request visible symbol state while reel set is spinning.",
       );
@@ -545,7 +661,7 @@ export class RenderReelSet extends Container {
     x: number,
     y: number,
   ): RenderVisibleSymbolGeometrySnapshot {
-    if (this.#spinPlan) {
+    if (this.#spinPlan || this.#continuousSpinActive) {
       throw new ReelError(
         "Cannot read visible symbol geometry while reel set is spinning.",
       );
@@ -565,7 +681,10 @@ export class RenderReelSet extends Container {
 
   getSnapshot(): RenderReelSetSnapshot {
     return Object.freeze({
-      spinning: this.#spinPlan !== null || this.#activeDrop !== null,
+      spinning:
+        this.#spinPlan !== null ||
+        this.#continuousSpinActive ||
+        this.#activeDrop !== null,
       elapsedMs: this.#elapsedMs,
       visibleScene: this.getVisibleScene(),
       reels: Object.freeze(this.reels.map((reel) => reel.getSnapshot())),
@@ -584,7 +703,7 @@ export class RenderReelSet extends Container {
   }
 
   private assertStopped(action: string): void {
-    if (this.#spinPlan || this.#activeDrop)
+    if (this.#spinPlan || this.#continuousSpinActive || this.#activeDrop)
       throw new ReelError(`Cannot ${action} while standard reels are active.`);
   }
 

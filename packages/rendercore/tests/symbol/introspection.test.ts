@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  getMinecart2SymbolManifestPath,
   getMinecart2SymbolResourcePath,
   readMinecart2LogicalJson,
   readMinecart2LogicalText,
@@ -14,11 +15,11 @@ import {
 describe("symbol editor resource introspection", () => {
   it("strictly reports VNI duration, stage and indirect assets", () => {
     const projectPath = (
-      readMinecart2LogicalJson("symbol-state-textures.manifest.json") as any
+      readMinecart2LogicalJson(getMinecart2SymbolManifestPath()) as any
     ).symbols.L1.animations.win.project as string;
     const project = readMinecart2LogicalJson(projectPath);
     expect(inspectSymbolVniProject(project)).toMatchObject({
-      schemaVersion: "VNI_0.022",
+      schemaVersion: "VNI_0.087",
       durationSeconds: 1,
       stage: { width: 300, height: 300 },
       assetPaths: expect.arrayContaining([expect.stringMatching(/\.webp$/)]),
@@ -45,7 +46,7 @@ describe("symbol editor resource introspection", () => {
         atlasText,
         texturePath: `nested/${texture}`,
       }).skeleton.animationNames,
-    ).toContain("start");
+    ).toContain("Win");
     expect(
       inspectSymbolSpineBundle({
         skeleton,

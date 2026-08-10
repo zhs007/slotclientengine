@@ -1,0 +1,35 @@
+import { resolve } from "node:path";
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  base: "./",
+  assetsInclude: ["**/*.atlas"],
+  build: { assetsInlineLimit: 0 },
+  resolve: {
+    alias: [
+      {
+        find: "@slotclientengine/logiccore",
+        replacement: resolve(
+          __dirname,
+          "../../packages/logiccore/src/index.ts",
+        ),
+      },
+      {
+        find: "@slotclientengine/rendercore",
+        replacement: resolve(
+          __dirname,
+          "../../packages/rendercore/src/index.ts",
+        ),
+      },
+    ],
+  },
+  server: {
+    host: "0.0.0.0",
+    port: 5210,
+    fs: { allow: [resolve(__dirname, "../..")] },
+  },
+  test: {
+    environment: "happy-dom",
+    coverage: { provider: "v8", reporter: ["text", "json", "html"] },
+  },
+});

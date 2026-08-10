@@ -526,6 +526,8 @@ Scene Layout package runtime 通过 `startMainReelContinuousSpin()`、
 `settleMainReelContinuousSpin()` 和 `cancelMainReelContinuousSpin()` 暴露相同 ownership。一个网络
 请求只创建一个 continuous transaction；响应中的第一个 landing 消费它，之后同一响应内的
 free-game 连续段和 refill 继续调用普通 target-aware spin API，不等待下一条消息。
+该合同同时支持 standard `RenderReelSet` 和 grid-cell；standard 复用每轴 `RenderReel`
+continuous primitive，并显式拒绝 positions/dimming 等 grid-cell-only 输入。
 
 `createGridCellOrder({ mode: "top-down-left-right" })` 生成 `(0,0),(0,1)...(0,rows-1),(1,0)...` 的稳定顺序。`createGridCellReelSpinPlan()` 对每个 cell 计算 `startAtMs`、`stopAtMs`、`durationMs`、`axisPlan`、`targetVisibleSymbols` 和目标暗度；默认每个 cell 的最终 y 使用 `reels.normalizeY(x, finalYs[x] + y)`。selective `positions` 可以全部提供非负、从 0 开始且非递减的 `startGroupIndex`；相同 group 的 cell 共享 `startGroupIndex * startStepMs` 起播边界，而 stop timeline 仍按 positions 稳定顺序计算，因此能做同时启动的波纹而不改变既有逐格停轴 cadence。省略 group 时继续使用原来的逐格 sequence index。dimming resolver 同时接收通用 `activated` 布尔上下文；plan 可用 `dimmingActivatedAtStart` 设置起始状态，存在 activation gate 时 runtime 会在 gate 真实 landing edge 切为 `true`。滚动 strip 和 landing fade 都用当前 code 与当前状态重新解析暗度，不缓存业务 symbol 结论。运行时每帧仍对临时 spin strip 中当前真实 slot code 调用同一 resolver，而不是只看 endpoint 或 cell 序号；resolver 必须返回 `[0,1]`，游戏语义由调用方负责，rendercore 不认识具体 symbol 名。如果传入 `cellReelOffsets`，则使用 `reels.normalizeY(x, finalYs[x] + y + cellReelOffsets[x][y])`，让同一列内不同格子也能使用更分散的本地轮带窗口滚动。`createGridCellReelOffsetMatrix()` 适合固定线性 offset；`createShuffledGridCellReelOffsetMatrix()` 则对每一列做 partial Fisher-Yates，从该列完整本地公开轮带相位中为各格无重复抽取相位。调用方每次创建 spin plan 时重新调用即可获得新的视觉相位；注入的 random 必须返回 `[0,1)`，不能使用服务器随机数。两种 helper 都不打乱 symbol 顺序。`targetVisibleSymbols` 仍会注入临时 spin strip 的落点窗口，因此完成后的 `getVisibleScene()` 能还原目标 scene。调用方可以用本地公开轮带提供滚动内容，再把服务器本轮目标窗口叠加到临时 strip，不需要也不应该暴露服务器真实轮带。
 
@@ -580,7 +582,8 @@ const prepared = carousel.prepare({
 carousel.start(prepared);
 ```
 
-`prepare()` 只解析、校验并冻结 groups，不触碰 target；`start()` 读取 target 本地 geometry，从中奖格中心平均点附近选择一个真实格（等距按 x/y），开始状态与金额展示。`update()` 只根据 symbol 自然回到 normal 判断组完成，不使用固定动画 timer；`clear()` 清理当前组和金额；`destroy()` 释放 Pixi 容器。金额来源、formatter、style 和可选 component validator 都由调用方提供，carousel 不读取 totalwin 或游戏专属字段。manifest 仍是 symbol animation 的唯一来源。未来 ReelSet 只要实现 `VisibleSymbolPresentationTarget` 即可接入；不同中奖效果应新增并列函数，不向本 carousel 堆游戏分支。
+`prepare()` 只解析、校验并冻结 groups，不触碰 target；plan compiler 已经产出 plain groups 时使用
+`prepareGroups()`，避免 renderer 保留 `GameLogic`。`start()` 读取 target 本地 geometry，从中奖格中心平均点附近选择一个真实格（等距按 x/y），开始状态与金额展示。`update()` 只根据 symbol 自然回到 normal 判断组完成，不使用固定动画 timer；`clear()` 清理当前组和金额；`destroy()` 释放 Pixi 容器。金额来源、formatter、style 和可选 component validator 都由调用方提供，carousel 不读取 totalwin 或游戏专属字段。manifest 仍是 symbol animation 的唯一来源。未来 ReelSet 只要实现 `VisibleSymbolPresentationTarget` 即可接入；不同中奖效果应新增并列函数，不向本 carousel 堆游戏分支。
 
 symbol cascade 的 `WinSummaryCollectOptions.sequentialCollectStartIntervalSeconds` 可选开启逐格 collect 起播 cadence。未配置时保持严格串行的 `collect -> remove -> 下一格`；配置正有限秒数后，每一格会在自己的 cadence 边界立即从当前 loop 切入 collect，避免多个同步 loop 等到同一 boundary 后成组起播。各格仍独立等待自身 collect 完成再 remove/release，但下一格只按起播间隔启动，不等待上一格 remove 完成。rendercore 同时推进全部 active item，并在全部 item release、summary 计数完成后才结束该组；游戏 symbol、动画名和具体间隔仍由调用方配置。
 

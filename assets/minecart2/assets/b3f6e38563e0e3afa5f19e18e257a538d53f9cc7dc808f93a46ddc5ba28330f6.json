@@ -1,0 +1,148 @@
+{
+  "assets": [
+    {
+      "fileHeight": 130,
+      "fileScale": 1,
+      "fileWidth": 172,
+      "height": 130,
+      "id": "asset_image_ms7b3znr_i",
+      "originalName": "10_1.png",
+      "path": "pkg-9-minecart2-10_1_asset_image_ms7b3znr_i.webp",
+      "type": "image",
+      "width": 172
+    }
+  ],
+  "editor": {
+    "name": "VNI",
+    "version": "VNI_0.087"
+  },
+  "engineTarget": {
+    "name": "cocos_creator",
+    "version": "3.8.6"
+  },
+  "exportProfile": {
+    "assetScale": 1,
+    "id": "runtime_100",
+    "purpose": "runtime"
+  },
+  "layerGroups": [
+    {
+      "collapsed": false,
+      "id": "group_default",
+      "name": "默认组",
+      "order": 0,
+      "visible": true
+    }
+  ],
+  "layers": [
+    {
+      "animations": [
+        {
+          "duration": 1,
+          "enabled": true,
+          "id": "anim_module_ms7b44vh_k",
+          "name": "Glow 发光高亮",
+          "params": {
+            "blendMode": 0,
+            "easing": "linear",
+            "intensity": 0.75,
+            "keepOriginal": true,
+            "maxAlpha": 0.75,
+            "minAlpha": 0.15,
+            "pulses": 2,
+            "spread": 0
+          },
+          "seed": 59050,
+          "startTime": 0,
+          "type": "glow"
+        },
+        {
+          "duration": 1,
+          "enabled": true,
+          "id": "anim_module_ms7b44vh_l",
+          "name": "Pop 弹一下",
+          "params": {
+            "easing": "easeInOutQuad",
+            "peakAt": 0.38,
+            "peakScale": 1.25,
+            "settleScale": 1
+          },
+          "seed": 86665,
+          "startTime": 0,
+          "type": "pop"
+        },
+        {
+          "duration": 1,
+          "enabled": true,
+          "id": "anim_module_ms7b44vh_m",
+          "name": "Swing 摇摆",
+          "params": {
+            "angle": 5,
+            "cycles": 2,
+            "easing": "backOut"
+          },
+          "seed": 55693,
+          "startTime": 0,
+          "type": "swing"
+        }
+      ],
+      "assetId": "asset_image_ms7b3znr_i",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "normal",
+      "groupId": "group_default",
+      "id": "layer_image_ms7b3znr_j",
+      "keyframes": [],
+      "locked": false,
+      "name": "10_1.png",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "x": 0,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    }
+  ],
+  "maskCompositeMode": "precompose_light_alpha",
+  "name": "L5",
+  "particles": [],
+  "schemaVersion": "VNI_0.087",
+  "stage": {
+    "backgroundColor": "#0a0a0a",
+    "coordinate": "center",
+    "duration": 1,
+    "height": 300,
+    "width": 300
+  }
+}

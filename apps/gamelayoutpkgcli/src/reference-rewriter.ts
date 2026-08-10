@@ -2,6 +2,7 @@ import {
   parseImageStringManifest,
   type ImageStringManifestV1,
 } from "@slotclientengine/rendercore/image-string";
+import { editorAssetKeyCollisionToken } from "@slotclientengine/editorresource";
 import {
   parsePopupManifest,
   type PopupManifestV1,
@@ -124,7 +125,7 @@ export function rewriteLayoutManifest(
         ...node.resource,
         skeleton: rewriteRef(node.resource.skeleton, mapping),
         atlas: rewriteRef(node.resource.atlas, mapping),
-        textures: rewriteRecordValues(node.resource.textures, mapping),
+        textures: rewriteSpineTextures(node.resource.textures, mapping),
       },
     };
   });
@@ -150,7 +151,7 @@ export function rewriteLayoutManifest(
           ...resource,
           skeleton: rewriteRef(resource.skeleton, mapping),
           atlas: rewriteRef(resource.atlas, mapping),
-          textures: rewriteRecordValues(resource.textures, mapping),
+          textures: rewriteSpineTextures(resource.textures, mapping),
         },
       },
     };
@@ -182,7 +183,7 @@ export function rewriteLayoutManifest(
               ...resource,
               skeleton: rewriteRef(resource.skeleton, mapping),
               atlas: rewriteRef(resource.atlas, mapping),
-              textures: rewriteRecordValues(resource.textures, mapping),
+              textures: rewriteSpineTextures(resource.textures, mapping),
             },
           ];
         }),
@@ -505,7 +506,7 @@ function rewritePopupResource(
     ...resource,
     skeleton: rewriteRef(resource.skeleton, mapping),
     atlas: rewriteRef(resource.atlas, mapping),
-    textures: rewriteRecordValues(resource.textures, mapping),
+    textures: rewriteSpineTextures(resource.textures, mapping),
   };
 }
 
@@ -527,6 +528,27 @@ function rewriteRecordValues(
       rewriteRef(value, mapping),
     ]),
   );
+}
+
+function rewriteSpineTextures(
+  values: Readonly<Record<string, string>>,
+  mapping: ReadonlyMap<string, string>,
+): Record<string, string> {
+  const targetsByToken = new Map(
+    [...mapping].map(([source, target]) => [
+      editorAssetKeyCollisionToken(source),
+      target,
+    ]),
+  );
+  const rewritten: Record<string, string> = {};
+  for (const [page, value] of Object.entries(values)) {
+    const targetPage =
+      targetsByToken.get(editorAssetKeyCollisionToken(page)) ?? page;
+    if (targetPage in rewritten)
+      throw new Error(`Spine texture 页名重写后冲突：${targetPage}`);
+    rewritten[targetPage] = rewriteRef(value, mapping);
+  }
+  return rewritten;
 }
 
 function rewriteRef(

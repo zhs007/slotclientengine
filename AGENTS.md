@@ -39,6 +39,7 @@
 - `packages/rendercore` 拥有通用 Pixi/Spine/VNI 渲染、reel、symbol、popup、scene-layout 和 presentation 算法；游戏 app 只提供业务配置、resolver、formatter、layout 与显式 typed extension，不复制共享状态机或直接操作内部 display tree。
 - 共享包不得硬编码 `game002`、`game003`、业务 component 名或 symbol code。游戏专属行为留在相应 app，通过 strict typed contract 注入。
 - manifest、YAML 或 versioned config 是资源、能力、时序和变体绑定的唯一来源；不得在 app、生成物、测试或 shared runtime 维护第二份业务表。
+- 仓库内已解包的 production 美术目录以当前 files/bytes 为权威；所有游戏 runtime 与 build generator 只把 assets map 当 logical key 到安全 physical path 的路由，不比较 `sha256`、`byteLength`、content-addressed filename，不扫描 orphan，也不以全包资源齐全性作为启动或构建 gate。实际被 manifest 或 typed binding 引用的资源缺失、schema/parser/decoder 不兼容时在消费点显式失败。editor import/export、optimizer 和 production ZIP 自身的交付完整性边界不因此改为 runtime gate。
 - live slot 客户端只使用本地公开轮带渲染；服务器 scene 只覆盖本轮临时可见落点。不得读取、缓存、推断或泄露服务器真实轮带。
 - 未知 kind、extension、state、animation、component、资源、路径、value 或版本必须显式失败。不得增加 placeholder、猜测路径、首项默认值、静默 alias 或效果降级来掩盖错误。
 - 资源 ownership、prepare/commit/rollback/destroy 边界必须明确；异步失败不得留下半提交画面、泄漏或修改宿主对象。

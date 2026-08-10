@@ -1,0 +1,525 @@
+{
+  "settings": {
+    "additionalStateDefinitions": [
+      {
+        "id": "feature1",
+        "phase": "once",
+        "playback": "once"
+      }
+    ],
+    "disabled": {
+      "brightness": 0.72,
+      "kind": "grayscale"
+    },
+    "spinBlur": {
+      "kernelHeight": 21,
+      "kind": "verticalBoxBlur"
+    }
+  },
+  "states": [
+    "spinBlur",
+    "disabled"
+  ],
+  "symbols": {
+    "BO": {
+      "animations": {
+        "appear": {
+          "atlas": "./pkg-9-minecart2-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Collect_Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-9-minecart2-bn.json",
+          "texture": "./pkg-9-minecart2-symbol.webp"
+        },
+        "normal": {
+          "atlas": "./pkg-9-minecart2-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-9-minecart2-bn.json",
+          "texture": "./pkg-9-minecart2-symbol.webp"
+        }
+      },
+      "disabled": "./pkg-9-minecart2-bo.disabled.webp",
+      "normal": "./pkg-9-minecart2-bo.webp",
+      "scale": 1,
+      "spinBlur": "./pkg-9-minecart2-bo.spinblur.webp"
+    },
+    "CL": {
+      "animations": {
+        "appear": {
+          "atlas": "./pkg-9-minecart2-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-9-minecart2-cl.json",
+          "texture": "./pkg-9-minecart2-symbol.webp"
+        },
+        "normal": {
+          "atlas": "./pkg-9-minecart2-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-9-minecart2-cl.json",
+          "texture": "./pkg-9-minecart2-symbol.webp"
+        },
+        "win": {
+          "atlas": "./pkg-9-minecart2-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Win",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-9-minecart2-cl.json",
+          "texture": "./pkg-9-minecart2-symbol.webp"
+        }
+      },
+      "disabled": "./pkg-9-minecart2-cl.disabled.webp",
+      "normal": "./pkg-9-minecart2-cl.webp",
+      "renderPriority": 1,
+      "scale": 1,
+      "spinBlur": "./pkg-9-minecart2-cl.spinblur.webp"
+    },
+    "CO": {
+      "animations": {
+        "appear": {
+          "durationSeconds": 0.42,
+          "kind": "builtin"
+        },
+        "win": {
+          "durationSeconds": 0.58,
+          "kind": "builtin"
+        }
+      },
+      "disabled": "./pkg-9-minecart2-co.disabled.webp",
+      "imageStringNodes": [
+        {
+          "anchor": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "followSlotColor": true,
+          "initialText": "0.5",
+          "name": "image-value",
+          "resource": "./pkg-9-minecart2-new-image-string-2.image-string.manifest.json",
+          "targets": [
+            {
+              "state": "normal"
+            },
+            {
+              "state": "spinBlur"
+            },
+            {
+              "state": "disabled"
+            },
+            {
+              "state": "appear"
+            },
+            {
+              "state": "win"
+            }
+          ],
+          "transform": {
+            "scale": 1,
+            "x": 0,
+            "y": 1
+          }
+        }
+      ],
+      "normal": "./pkg-9-minecart2-co.webp",
+      "scale": 1,
+      "spinBlur": "./pkg-9-minecart2-co.spinblur.webp"
+    },
+    "H1": {
+      "animations": {
+        "appear": {
+          "atlas": "./pkg-9-minecart2-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-9-minecart2-h1.json",
+          "texture": "./pkg-9-minecart2-symbol.webp"
+        },
+        "feature1": {
+          "atlas": "./pkg-9-minecart2-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-9-minecart2-h1.json",
+          "texture": "./pkg-9-minecart2-symbol.webp"
+        },
+        "normal": {
+          "atlas": "./pkg-9-minecart2-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-9-minecart2-h1.json",
+          "texture": "./pkg-9-minecart2-symbol.webp"
+        },
+        "win": {
+          "atlas": "./pkg-9-minecart2-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Win",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-9-minecart2-h1.json",
+          "texture": "./pkg-9-minecart2-symbol.webp"
+        }
+      },
+      "disabled": "./pkg-9-minecart2-h1.disabled.webp",
+      "normal": "./pkg-9-minecart2-h1.webp",
+      "scale": 1,
+      "spinBlur": "./pkg-9-minecart2-h1.spinblur.webp"
+    },
+    "H2": {
+      "animations": {
+        "normal": {
+          "atlas": "./pkg-9-minecart2-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-9-minecart2-h2.json",
+          "texture": "./pkg-9-minecart2-symbol.webp"
+        },
+        "win": {
+          "atlas": "./pkg-9-minecart2-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Win",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-9-minecart2-h2.json",
+          "texture": "./pkg-9-minecart2-symbol.webp"
+        }
+      },
+      "disabled": "./pkg-9-minecart2-h2.disabled.webp",
+      "normal": "./pkg-9-minecart2-h2.webp",
+      "scale": 1,
+      "spinBlur": "./pkg-9-minecart2-h2.spinblur.webp"
+    },
+    "H3": {
+      "animations": {
+        "normal": {
+          "atlas": "./pkg-9-minecart2-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-9-minecart2-h3.json",
+          "texture": "./pkg-9-minecart2-symbol.webp"
+        },
+        "win": {
+          "atlas": "./pkg-9-minecart2-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Win",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-9-minecart2-h3.json",
+          "texture": "./pkg-9-minecart2-symbol.webp"
+        }
+      },
+      "disabled": "./pkg-9-minecart2-h3.disabled.webp",
+      "normal": "./pkg-9-minecart2-h3.webp",
+      "scale": 1,
+      "spinBlur": "./pkg-9-minecart2-h3.spinblur.webp"
+    },
+    "H4": {
+      "animations": {
+        "normal": {
+          "atlas": "./pkg-9-minecart2-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-9-minecart2-h4.json",
+          "texture": "./pkg-9-minecart2-symbol.webp"
+        },
+        "win": {
+          "atlas": "./pkg-9-minecart2-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Win",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-9-minecart2-h4.json",
+          "texture": "./pkg-9-minecart2-symbol.webp"
+        }
+      },
+      "disabled": "./pkg-9-minecart2-h4.disabled.webp",
+      "normal": "./pkg-9-minecart2-h4.webp",
+      "scale": 1,
+      "spinBlur": "./pkg-9-minecart2-h4.spinblur.webp"
+    },
+    "H5": {
+      "animations": {
+        "normal": {
+          "atlas": "./pkg-9-minecart2-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-9-minecart2-h5.json",
+          "texture": "./pkg-9-minecart2-symbol.webp"
+        },
+        "win": {
+          "atlas": "./pkg-9-minecart2-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Win",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-9-minecart2-h5.json",
+          "texture": "./pkg-9-minecart2-symbol.webp"
+        }
+      },
+      "disabled": "./pkg-9-minecart2-h5.disabled.webp",
+      "normal": "./pkg-9-minecart2-h5.webp",
+      "scale": 1,
+      "spinBlur": "./pkg-9-minecart2-h5.spinblur.webp"
+    },
+    "L1": {
+      "animations": {
+        "appear": {
+          "durationSeconds": 0.016666666666666666,
+          "kind": "static"
+        },
+        "win": {
+          "kind": "vni",
+          "playback": {
+            "endTime": 1,
+            "loop": false,
+            "mode": "range",
+            "startTime": 0
+          },
+          "project": "./pkg-9-minecart2-l1.json"
+        }
+      },
+      "disabled": "./pkg-9-minecart2-l1.disabled.webp",
+      "normal": "./pkg-9-minecart2-a.webp",
+      "scale": 1,
+      "spinBlur": "./pkg-9-minecart2-a.spinblur.webp"
+    },
+    "L2": {
+      "animations": {
+        "appear": {
+          "durationSeconds": 0.016666666666666666,
+          "kind": "static"
+        },
+        "win": {
+          "kind": "vni",
+          "playback": {
+            "endTime": 1,
+            "loop": false,
+            "mode": "range",
+            "startTime": 0
+          },
+          "project": "./pkg-9-minecart2-l2.json"
+        }
+      },
+      "disabled": "./pkg-9-minecart2-l2.disabled.webp",
+      "normal": "./pkg-9-minecart2-k.webp",
+      "scale": 1,
+      "spinBlur": "./pkg-9-minecart2-k.spinblur.webp"
+    },
+    "L3": {
+      "animations": {
+        "appear": {
+          "durationSeconds": 0.016666666666666666,
+          "kind": "static"
+        },
+        "win": {
+          "kind": "vni",
+          "playback": {
+            "endTime": 1,
+            "loop": false,
+            "mode": "range",
+            "startTime": 0
+          },
+          "project": "./pkg-9-minecart2-l3.json"
+        }
+      },
+      "disabled": "./pkg-9-minecart2-l3.disabled.webp",
+      "normal": "./pkg-9-minecart2-l3.webp",
+      "scale": 1,
+      "spinBlur": "./pkg-9-minecart2-l3.spinblur.webp"
+    },
+    "L4": {
+      "animations": {
+        "appear": {
+          "durationSeconds": 0.016666666666666666,
+          "kind": "static"
+        },
+        "win": {
+          "kind": "vni",
+          "playback": {
+            "endTime": 1,
+            "loop": false,
+            "mode": "range",
+            "startTime": 0
+          },
+          "project": "./pkg-9-minecart2-l4.json"
+        }
+      },
+      "disabled": "./pkg-9-minecart2-l4.disabled.webp",
+      "normal": "./pkg-9-minecart2-l4.webp",
+      "scale": 1,
+      "spinBlur": "./pkg-9-minecart2-l4.spinblur.webp"
+    },
+    "L5": {
+      "animations": {
+        "appear": {
+          "durationSeconds": 0.016666666666666666,
+          "kind": "static"
+        },
+        "win": {
+          "kind": "vni",
+          "playback": {
+            "endTime": 1,
+            "loop": false,
+            "mode": "range",
+            "startTime": 0
+          },
+          "project": "./pkg-9-minecart2-l5.json"
+        }
+      },
+      "disabled": "./pkg-9-minecart2-l5.disabled.webp",
+      "normal": "./pkg-9-minecart2-l5.webp",
+      "scale": 1,
+      "spinBlur": "./pkg-9-minecart2-l5.spinblur.webp"
+    },
+    "SC": {
+      "animations": {
+        "appear": {
+          "atlas": "./pkg-9-minecart2-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-9-minecart2-sc.json",
+          "texture": "./pkg-9-minecart2-symbol.webp"
+        },
+        "normal": {
+          "atlas": "./pkg-9-minecart2-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-9-minecart2-sc.json",
+          "texture": "./pkg-9-minecart2-symbol.webp"
+        },
+        "win": {
+          "atlas": "./pkg-9-minecart2-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Win",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-9-minecart2-sc.json",
+          "texture": "./pkg-9-minecart2-symbol.webp"
+        }
+      },
+      "disabled": "./pkg-9-minecart2-sc.disabled.webp",
+      "normal": "./pkg-9-minecart2-sc.webp",
+      "renderPriority": 1,
+      "scale": 1,
+      "spinBlur": "./pkg-9-minecart2-sc.spinblur.webp"
+    },
+    "WL": {
+      "animations": {
+        "appear": {
+          "atlas": "./pkg-9-minecart2-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Start",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-9-minecart2-wl.json",
+          "texture": "./pkg-9-minecart2-symbol.webp"
+        },
+        "feature1": {
+          "atlas": "./pkg-9-minecart2-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Feature",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-9-minecart2-wl.json",
+          "texture": "./pkg-9-minecart2-symbol.webp"
+        },
+        "normal": {
+          "atlas": "./pkg-9-minecart2-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-9-minecart2-wl.json",
+          "texture": "./pkg-9-minecart2-symbol.webp"
+        },
+        "win": {
+          "atlas": "./pkg-9-minecart2-symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Win",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./pkg-9-minecart2-wl.json",
+          "texture": "./pkg-9-minecart2-symbol.webp"
+        }
+      },
+      "disabled": "./pkg-9-minecart2-wl.disabled.webp",
+      "normal": "./pkg-9-minecart2-wl.webp",
+      "renderPriority": 1,
+      "scale": 1,
+      "spinBlur": "./pkg-9-minecart2-wl.spinblur.webp"
+    }
+  },
+  "version": 1
+}

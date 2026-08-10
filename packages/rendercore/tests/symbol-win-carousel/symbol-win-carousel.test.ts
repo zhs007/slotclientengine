@@ -19,6 +19,83 @@ const SCENE = Object.freeze([
 ]);
 
 describe("createSymbolWinCarousel", () => {
+  it("adopts compiler-produced plain groups without retaining GameLogic", () => {
+    const carousel = createCarousel();
+    const winResult = result([0, 0, 1, 1], 100);
+    const prepared = carousel.prepareGroups([
+      {
+        componentName: "line-win",
+        stepIndex: 0,
+        resultIndex: 0,
+        result: winResult,
+        positions: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+        amount: 100,
+      },
+    ]);
+
+    expect(prepared.groupCount).toBe(1);
+    expect(carousel.start(prepared)).toEqual({ started: true });
+    expect(() => carousel.start(prepared)).toThrow(/cannot start from playing/);
+    expect(() =>
+      carousel.prepareGroups([
+        {
+          ...prepared.groups[0]!,
+          positions: [
+            { x: 0, y: 0 },
+            { x: 0, y: 0 },
+          ],
+        },
+      ]),
+    ).toThrow(/duplicate position/);
+
+    const multi = createCarousel();
+    const multiPrepared = multi.prepareGroups([
+      prepared.groups[0]!,
+      { ...prepared.groups[0]!, resultIndex: 1, amount: 200 },
+    ]);
+    multi.start(multiPrepared);
+    multi.update(0.1);
+    expect(multi.getSnapshot().resultIndex).toBe(1);
+  });
+
+  it("rejects malformed compiler-produced groups", () => {
+    const carousel = createCarousel();
+    expect(carousel.update(0)).toEqual({ firstCycleComplete: false });
+    carousel.clear();
+    const valid = {
+      componentName: "line-win",
+      stepIndex: 0,
+      resultIndex: 0,
+      result: result([0, 0], 100),
+      positions: [{ x: 0, y: 0 }],
+      amount: 100,
+    };
+    const invalidGroups: readonly unknown[] = [
+      null,
+      [{ ...valid, stepIndex: 0.5 }],
+      [{ ...valid, stepIndex: -1 }],
+      [{ ...valid, resultIndex: 0.5 }],
+      [{ ...valid, resultIndex: -1 }],
+      [{ ...valid, componentName: null }],
+      [{ ...valid, componentName: " " }],
+      [{ ...valid, amount: Number.NaN }],
+      [{ ...valid, amount: 0 }],
+      [{ ...valid, positions: null }],
+      [{ ...valid, positions: [] }],
+      [{ ...valid, positions: [{ x: 0.5, y: 0 }] }],
+      [{ ...valid, positions: [{ x: -1, y: 0 }] }],
+      [{ ...valid, positions: [{ x: 0, y: -1 }] }],
+      [{ ...valid, positions: [{ x: 0, y: 0.5 }] }],
+    ];
+
+    for (const groups of invalidGroups) {
+      expect(() => carousel.prepareGroups(groups as never)).toThrow();
+    }
+  });
+
   it("prepares components and results in caller and usedResults order", () => {
     const carousel = createCarousel();
     const logic = createLogic({
@@ -147,10 +224,82 @@ describe("createSymbolWinCarousel", () => {
       amountVisible: false,
       firstCycleComplete: false,
     });
+
+    const vertical = createCarousel();
+    const verticalPrepared = vertical.prepare({
+      logic: createLogic({
+        results: [result([0, 0, 0, 2], 100)],
+        components: { "line-win": component([0]) },
+      }),
+      stepIndex: 0,
+      scene: SCENE,
+      componentNames: ["line-win"],
+    });
+    vertical.start(verticalPrepared);
+    expect(vertical.getSnapshot().amountPosition?.y).toBe(86.4);
   });
 
   it("fails fast for invalid configuration, data, callback output, and ownership", () => {
     const carousel = createCarousel();
+    const validAmountText = {
+      yOffsetRatioFromCellCenter: 0.22,
+      fontSize: 38,
+      fill: "#fff",
+      stroke: "#000",
+      strokeWidth: 5,
+    };
+    for (const invalid of [
+      { cyclePauseSeconds: Number.NaN, amountText: validAmountText },
+      { cyclePauseSeconds: 0, amountText: validAmountText },
+      {
+        cyclePauseSeconds: 1,
+        amountText: { ...validAmountText, strokeWidth: Number.NaN },
+      },
+      {
+        cyclePauseSeconds: 1,
+        amountText: { ...validAmountText, strokeWidth: -1 },
+      },
+      {
+        cyclePauseSeconds: 1,
+        amountText: { ...validAmountText, fontSize: Number.NaN },
+      },
+      {
+        cyclePauseSeconds: 1,
+        amountText: { ...validAmountText, fontSize: 0 },
+      },
+      {
+        cyclePauseSeconds: 1,
+        amountText: {
+          ...validAmountText,
+          yOffsetRatioFromCellCenter: Number.POSITIVE_INFINITY,
+        },
+      },
+      {
+        cyclePauseSeconds: 1,
+        amountText: { ...validAmountText, fill: null },
+      },
+      {
+        cyclePauseSeconds: 1,
+        amountText: { ...validAmountText, fill: " " },
+      },
+      {
+        cyclePauseSeconds: 1,
+        amountText: { ...validAmountText, stroke: null },
+      },
+      {
+        cyclePauseSeconds: 1,
+        amountText: { ...validAmountText, stroke: " " },
+      },
+    ]) {
+      expect(() =>
+        createSymbolWinCarousel({
+          target: new FakeTarget(),
+          resolveAmount: () => 1,
+          formatAmount: String,
+          ...invalid,
+        } as never),
+      ).toThrow();
+    }
     const logic = createLogic({
       results: [result([0, 0], 100)],
       components: { "line-win": component([0]) },

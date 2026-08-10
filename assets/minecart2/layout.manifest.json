@@ -50,7 +50,7 @@
         },
         "id": "BaseGame",
         "nodeStates": {},
-        "symbolPackage": "game003-s1"
+        "symbolPackage": "minecart2"
       },
       {
         "backgroundNodes": {
@@ -59,16 +59,17 @@
         },
         "id": "FreeGame",
         "nodeStates": {},
-        "symbolPackage": "game003-s1"
+        "symbolPackage": "minecart2"
       },
       {
+        "awardCelebrationPopup": "award-celebration",
         "backgroundNodes": {
           "landscape": "bonusgame-landscape-background",
           "portrait": "bonusgame-portrait-background"
         },
         "id": "BonusGame",
         "nodeStates": {},
-        "symbolPackage": "game003-s1"
+        "symbolPackage": "minecart2"
       }
     ],
     "transitions": [
@@ -108,6 +109,11 @@
       "order": 0,
       "placements": {
         "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 0,
           "y": 0
@@ -115,7 +121,7 @@
       },
       "resource": {
         "kind": "image",
-        "path": "A4.webp",
+        "path": "a3.webp",
         "size": {
           "height": 1125,
           "width": 2000
@@ -127,6 +133,11 @@
       "order": 1,
       "placements": {
         "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 0,
           "y": 20
@@ -134,7 +145,7 @@
       },
       "resource": {
         "kind": "image",
-        "path": "SD2.webp",
+        "path": "pt2.webp",
         "size": {
           "height": 2000,
           "width": 1174
@@ -146,6 +157,11 @@
       "order": 2,
       "placements": {
         "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 0,
           "y": 0
@@ -153,7 +169,7 @@
       },
       "resource": {
         "kind": "image",
-        "path": "free2.webp",
+        "path": "free8.webp",
         "size": {
           "height": 1125,
           "width": 2000
@@ -165,6 +181,11 @@
       "order": 3,
       "placements": {
         "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 0,
           "y": 0
@@ -172,7 +193,7 @@
       },
       "resource": {
         "kind": "image",
-        "path": "free3.webp",
+        "path": "free6.webp",
         "size": {
           "height": 2000,
           "width": 1174
@@ -184,6 +205,11 @@
       "order": 4,
       "placements": {
         "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 0,
           "y": 0
@@ -191,7 +217,7 @@
       },
       "resource": {
         "kind": "image",
-        "path": "free1.webp",
+        "path": "free7.webp",
         "size": {
           "height": 1125,
           "width": 2000
@@ -203,6 +229,11 @@
       "order": 5,
       "placements": {
         "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 0,
           "y": 0
@@ -218,10 +249,16 @@
       }
     },
     {
+      "gameMode": "BaseGame",
       "id": "gd1",
       "order": 6,
       "placements": {
         "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 0,
           "y": 984
@@ -229,7 +266,7 @@
       },
       "resource": {
         "kind": "image",
-        "path": "GD1.webp",
+        "path": "gd1.webp",
         "size": {
           "height": 149,
           "width": 2000
@@ -237,10 +274,16 @@
       }
     },
     {
+      "gameMode": "BaseGame",
       "id": "gd2",
       "order": 7,
       "placements": {
         "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 0,
           "y": 1494
@@ -248,7 +291,7 @@
       },
       "resource": {
         "kind": "image",
-        "path": "GD2.webp",
+        "path": "gd2.webp",
         "size": {
           "height": 135,
           "width": 1180
@@ -256,15 +299,95 @@
       }
     },
     {
-      "id": "b6",
+      "gameMode": "FreeGame",
+      "id": "freegame1",
       "order": 8,
       "placements": {
         "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
+          "scale": 1,
+          "x": 0,
+          "y": 984
+        },
+        "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
+          "scale": 1,
+          "x": -440,
+          "y": 1494
+        }
+      },
+      "resource": {
+        "kind": "image",
+        "path": "freegame1.webp",
+        "size": {
+          "height": 149,
+          "width": 2000
+        }
+      }
+    },
+    {
+      "gameMode": "BonusGame",
+      "id": "bonusgame1",
+      "order": 9,
+      "placements": {
+        "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
+          "scale": 1,
+          "x": 0,
+          "y": 984
+        },
+        "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
+          "scale": 1,
+          "x": -440,
+          "y": 1494
+        }
+      },
+      "resource": {
+        "kind": "image",
+        "path": "bonusgame1.webp",
+        "size": {
+          "height": 149,
+          "width": 2000
+        }
+      }
+    },
+    {
+      "id": "b6",
+      "order": 10,
+      "placements": {
+        "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 302,
           "y": 918
         },
         "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": -138,
           "y": 1446
@@ -272,7 +395,7 @@
       },
       "resource": {
         "kind": "image",
-        "path": "B6.webp",
+        "path": "b6.webp",
         "size": {
           "height": 57,
           "width": 1411
@@ -281,9 +404,14 @@
     },
     {
       "id": "d2",
-      "order": 9,
+      "order": 11,
       "placements": {
         "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 168,
           "y": 498
@@ -291,7 +419,7 @@
       },
       "resource": {
         "kind": "image",
-        "path": "D2.webp",
+        "path": "d2.webp",
         "size": {
           "height": 130,
           "width": 885
@@ -299,10 +427,41 @@
       }
     },
     {
-      "id": "d1",
-      "order": 10,
+      "id": "conveyor-2",
+      "order": 12,
       "placements": {
         "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
+          "scale": 1,
+          "x": 610,
+          "y": 1084
+        }
+      },
+      "resource": {
+        "atlas": "reel_conveyor.atlas",
+        "defaultAnimation": "Conveyor2_Idle",
+        "kind": "spine",
+        "loop": true,
+        "skeleton": "conveyor_2.json",
+        "textures": {
+          "reel_conveyor.webp": "reel_conveyor.webp"
+        }
+      }
+    },
+    {
+      "id": "d1",
+      "order": 13,
+      "placements": {
+        "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 102,
           "y": 442
@@ -310,7 +469,7 @@
       },
       "resource": {
         "kind": "image",
-        "path": "D1.webp",
+        "path": "d1.webp",
         "size": {
           "height": 243,
           "width": 1017
@@ -318,29 +477,67 @@
       }
     },
     {
-      "id": "7dc083f689092ab3ef36d53f34f96bbe6a6380beb25730b00825710a47eee440",
-      "order": 11,
+      "id": "conveyor-1",
+      "order": 14,
       "placements": {
         "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
-          "x": 405,
-          "y": 227
+          "x": 1122,
+          "y": 544
         }
       },
       "resource": {
-        "kind": "image",
-        "path": "7dc083f689092ab3ef36d53f34f96bbe6a6380beb25730b00825710a47eee440.webp",
-        "size": {
-          "height": 674,
-          "width": 173
+        "atlas": "reel_conveyor.atlas",
+        "defaultAnimation": "Conveyor1_Idle",
+        "kind": "spine",
+        "loop": true,
+        "skeleton": "conveyor_1.json",
+        "textures": {
+          "reel_conveyor.webp": "reel_conveyor.webp"
+        }
+      }
+    },
+    {
+      "id": "conveyor-3",
+      "order": 15,
+      "placements": {
+        "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
+          "scale": 1,
+          "x": 492,
+          "y": 846
+        }
+      },
+      "resource": {
+        "atlas": "reel_conveyor.atlas",
+        "defaultAnimation": "Loop",
+        "kind": "spine",
+        "loop": true,
+        "skeleton": "conveyor_3.json",
+        "textures": {
+          "reel_conveyor.webp": "reel_conveyor.webp"
         }
       }
     },
     {
       "id": "bee187d3863feb8de735ddc11e4381d3e8384c3e9d3493eef2b151f3c04727bd",
-      "order": 12,
+      "order": 16,
       "placements": {
         "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 350,
           "y": 160
@@ -357,14 +554,24 @@
     },
     {
       "id": "fd66f6f1eb79b96d2e8ac58a20788b5ce6809babb23d84647ca82c5a697e2080",
-      "order": 13,
+      "order": 17,
       "placements": {
         "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 594,
           "y": 142
         },
         "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 84,
           "y": 670
@@ -381,14 +588,24 @@
     },
     {
       "id": "2a3b14312b68630df119aa32fc410861fcde3c5e04a0cfd3096bccbb9c2e55ad",
-      "order": 14,
+      "order": 18,
       "placements": {
         "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 678,
           "y": 196
         },
         "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 166,
           "y": 724
@@ -405,14 +622,24 @@
     },
     {
       "id": "8344f2009c6ae78c6dd75562edb248be94521ca9edfe6df9a20de89ab7b43e42",
-      "order": 15,
+      "order": 19,
       "placements": {
         "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 686,
           "y": 202
         },
         "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 174,
           "y": 730
@@ -429,14 +656,24 @@
     },
     {
       "id": "9ba676a65e7ee29f27e3af0f2075efaad54546971ece268708163128eb2f027f",
-      "order": 16,
+      "order": 20,
       "placements": {
         "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 680,
           "y": 132
         },
         "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 172,
           "y": 662
@@ -453,14 +690,24 @@
     },
     {
       "id": "467790a895d324579b5f218b6e71e7665e81bf6e7c9a57c1897945fffe03408f",
-      "order": 17,
+      "order": 21,
       "placements": {
         "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 902,
           "y": 132
         },
         "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 392,
           "y": 662
@@ -477,14 +724,24 @@
     },
     {
       "id": "d1bf7175c00e6fdbd661c39c1c2458616dc57c51d3ba1fd8df7b3e1f549e9cc2",
-      "order": 18,
+      "order": 22,
       "placements": {
         "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 1124,
           "y": 132
         },
         "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 612,
           "y": 662
@@ -501,14 +758,24 @@
     },
     {
       "id": "ae8c1696406cab5daeeda40c44d51fb2dbcbb441c4acc3b28a61e8fd26461e34",
-      "order": 19,
+      "order": 23,
       "placements": {
         "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 1348,
           "y": 132
         },
         "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 834,
           "y": 662
@@ -525,14 +792,24 @@
     },
     {
       "id": "9a3f4d78ffe6a5c8bc4b2b973069adca13725aa2a8d3e831c1d6f59ccacd72cb",
-      "order": 20,
+      "order": 24,
       "placements": {
         "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 734,
           "y": 99
         },
         "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 228,
           "y": 630
@@ -549,14 +826,24 @@
     },
     {
       "id": "932e18103485cfa6112cbb70f00a5030b7c9fd234d2fab6a7ab7f3ab406adfcb",
-      "order": 21,
+      "order": 25,
       "placements": {
         "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 936,
           "y": 99
         },
         "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 428,
           "y": 630
@@ -573,14 +860,24 @@
     },
     {
       "id": "82d3d16d974db64d572a42faff4f66114448c22980c591ac4b1c03b5edfd996b",
-      "order": 22,
+      "order": 26,
       "placements": {
         "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 1158,
           "y": 99
         },
         "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 646,
           "y": 630
@@ -597,14 +894,24 @@
     },
     {
       "id": "dbd7baf96994aa0cf361e2e39532c89ddac3b281e6d30ae16b380b05afa10976",
-      "order": 23,
+      "order": 27,
       "placements": {
         "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 1400,
           "y": 99
         },
         "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 886,
           "y": 630
@@ -621,14 +928,24 @@
     },
     {
       "id": "4b8117c67acf1a9a93062a8bb6ce29647ea62d146c02a95386aeb17db8b5e34a",
-      "order": 24,
+      "order": 28,
       "placements": {
         "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 405,
           "y": 494
         },
         "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 346,
           "y": 492
@@ -645,14 +962,24 @@
     },
     {
       "id": "311f64e66d1f888d26b54dc81efcb6af4f65bd8fb326071025c3c75fc0dce7a6",
-      "order": 25,
+      "order": 29,
       "placements": {
         "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 405,
           "y": 362
         },
         "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 524,
           "y": 492
@@ -669,14 +996,24 @@
     },
     {
       "id": "e9f9b7f669a8632281b431abe81824f2cd00e7879a6d90662b12646f8881d865",
-      "order": 26,
+      "order": 30,
       "placements": {
         "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 405,
-          "y": 224
+          "y": 230
         },
         "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 166,
           "y": 492
@@ -693,14 +1030,24 @@
     },
     {
       "id": "image-string-manifest",
-      "order": 27,
+      "order": 31,
       "placements": {
         "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 788,
           "y": 164
         },
         "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 284,
           "y": 694
@@ -718,14 +1065,24 @@
     },
     {
       "id": "image-string-manifest-2",
-      "order": 28,
+      "order": 32,
       "placements": {
         "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 1015,
           "y": 164
         },
         "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 500,
           "y": 694
@@ -743,14 +1100,24 @@
     },
     {
       "id": "image-string-manifest-3",
-      "order": 29,
+      "order": 33,
       "placements": {
         "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 1235,
           "y": 164
         },
         "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 724,
           "y": 694
@@ -768,14 +1135,24 @@
     },
     {
       "id": "image-string-manifest-4",
-      "order": 30,
+      "order": 34,
       "placements": {
         "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 1462,
           "y": 164
         },
         "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 946,
           "y": 694
@@ -792,34 +1169,15 @@
       }
     },
     {
-      "id": "50550d6f354468ad3a8617ff0d6fea6fe88858bf79fdd1eab1e7755067abf14a",
-      "order": 31,
-      "placements": {
-        "landscape": {
-          "scale": 1,
-          "x": 320,
-          "y": 860
-        },
-        "portrait": {
-          "scale": 1,
-          "x": -138,
-          "y": 1380
-        }
-      },
-      "resource": {
-        "kind": "image",
-        "path": "50550d6f354468ad3a8617ff0d6fea6fe88858bf79fdd1eab1e7755067abf14a.webp",
-        "size": {
-          "height": 200,
-          "width": 310
-        }
-      }
-    },
-    {
       "id": "sd1",
-      "order": 32,
+      "order": 35,
       "placements": {
         "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": 0,
           "y": 990
@@ -827,7 +1185,7 @@
       },
       "resource": {
         "kind": "image",
-        "path": "SD1.webp",
+        "path": "sd1.webp",
         "size": {
           "height": 167,
           "width": 2000
@@ -835,10 +1193,88 @@
       }
     },
     {
+      "id": "car-back",
+      "order": 36,
+      "placements": {
+        "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
+          "scale": 1,
+          "x": 488,
+          "y": 1054
+        },
+        "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
+          "scale": 1,
+          "x": 86,
+          "y": 1560
+        }
+      },
+      "resource": {
+        "atlas": "car.atlas",
+        "defaultAnimation": "Feature1",
+        "kind": "spine",
+        "loop": true,
+        "skeleton": "car_back.json",
+        "textures": {
+          "car.webp": "car.webp"
+        }
+      }
+    },
+    {
+      "id": "car-front",
+      "order": 37,
+      "placements": {
+        "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
+          "scale": 1,
+          "x": 488,
+          "y": 1054
+        },
+        "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
+          "scale": 1,
+          "x": 86,
+          "y": 1560
+        }
+      },
+      "resource": {
+        "atlas": "car.atlas",
+        "defaultAnimation": "Feature1",
+        "kind": "spine",
+        "loop": true,
+        "skeleton": "car_front.json",
+        "textures": {
+          "car.webp": "car.webp"
+        }
+      }
+    },
+    {
+      "gameMode": "BaseGame",
       "id": "st2",
-      "order": 33,
+      "order": 38,
       "placements": {
         "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
           "scale": 1,
           "x": -4,
           "y": 1528
@@ -846,27 +1282,134 @@
       },
       "resource": {
         "kind": "image",
-        "path": "ST2.webp",
+        "path": "st2.webp",
         "size": {
           "height": 295,
           "width": 1181
+        }
+      }
+    },
+    {
+      "gameMode": "FreeGame",
+      "id": "freegame2",
+      "order": 39,
+      "placements": {
+        "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
+          "scale": 1,
+          "x": 0,
+          "y": 880
+        },
+        "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
+          "scale": 1,
+          "x": -414,
+          "y": 1320
+        }
+      },
+      "resource": {
+        "kind": "image",
+        "path": "freegame2.webp",
+        "size": {
+          "height": 657,
+          "width": 2000
+        }
+      }
+    },
+    {
+      "gameMode": "BonusGame",
+      "id": "bonusgame2",
+      "order": 40,
+      "placements": {
+        "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
+          "scale": 1,
+          "x": 0,
+          "y": 834
+        },
+        "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
+          "scale": 1,
+          "x": -414,
+          "y": 1270
+        }
+      },
+      "resource": {
+        "kind": "image",
+        "path": "bonusgame2.webp",
+        "size": {
+          "height": 728,
+          "width": 2000
+        }
+      }
+    },
+    {
+      "id": "reel-collect",
+      "order": 41,
+      "placements": {
+        "landscape": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
+          "scale": 1,
+          "x": 1124,
+          "y": 224
+        },
+        "portrait": {
+          "center": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "rotation": 0,
+          "scale": 1,
+          "x": 612,
+          "y": 754
+        }
+      },
+      "resource": {
+        "atlas": "reel_collect.atlas",
+        "defaultAnimation": "2_Collect",
+        "kind": "spine",
+        "loop": true,
+        "skeleton": "reel_collect.json",
+        "textures": {
+          "reel_collect.webp": "reel_collect.webp"
         }
       }
     }
   ],
   "popups": {
     "award-celebration": {
-      "manifest": "popup.manifest.json",
+      "manifest": "pkg-17-award-celebration-popup.manifest.json",
+      "order": 2000,
       "placements": {
         "landscape": {
           "scale": 1,
           "x": 0,
-          "y": -140
+          "y": -80
         },
         "portrait": {
           "scale": 1,
           "x": 0,
-          "y": -140
+          "y": -100
         }
       },
       "type": "award-celebration"
@@ -898,8 +1441,8 @@
     }
   },
   "symbolPackages": {
-    "game003-s1": {
-      "manifest": "symbols.package.json",
+    "minecart2": {
+      "manifest": "pkg-9-minecart2-symbols.package.json",
       "reel": "main",
       "reelSet": "bg-reel01",
       "renderMode": "standard"

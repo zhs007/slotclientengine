@@ -743,26 +743,49 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.assertReady();
     const reel = this.requireReel("main");
     const profile = this.#reelPresentation;
-    if (!profile || profile.kind !== "grid-cell") {
+    if (!profile) {
       throw new SceneLayoutError(
-        "Continuous main reel spin requires a grid-cell reel presentation profile.",
+        "Continuous main reel spin requires a reel presentation profile.",
       );
     }
-    if (!(reel instanceof RenderGridCellReelSet)) {
+    if (profile.kind === "grid-cell") {
+      /* v8 ignore next -- reel kind is created from this validated profile */
+      if (!(reel instanceof RenderGridCellReelSet)) {
+        throw new SceneLayoutError(
+          "Continuous grid-cell spin resolved a non-grid-cell runtime.",
+        );
+      }
+      this.clearMainReelLandingPositions();
+      reel.startContinuous({
+        direction: profile.direction,
+        speedSymbolsPerSecond: profile.timing.speedSymbolsPerSecond,
+        startStepMs: profile.timing.startStepMs,
+        ...(input.positions ? { positions: input.positions } : {}),
+        ...(input.dimming ? { dimming: input.dimming } : {}),
+        ...(input.dimmingActivatedAtStart === undefined
+          ? {}
+          : { dimmingActivatedAtStart: input.dimmingActivatedAtStart }),
+      });
+      return;
+    }
+    /* v8 ignore next -- reel kind is created from this validated profile */
+    if (reel instanceof RenderGridCellReelSet) {
       throw new SceneLayoutError(
-        "Continuous main reel spin resolved a non-grid-cell runtime.",
+        "Continuous standard spin resolved a grid-cell runtime.",
       );
     }
+    if (
+      input.positions !== undefined ||
+      input.dimming !== undefined ||
+      input.dimmingActivatedAtStart !== undefined
+    )
+      throw new SceneLayoutError(
+        "Standard continuous spin does not accept grid-cell presentation options.",
+      );
     this.clearMainReelLandingPositions();
     reel.startContinuous({
       direction: profile.direction,
-      speedSymbolsPerSecond: profile.timing.speedSymbolsPerSecond,
-      startStepMs: profile.timing.startStepMs,
-      ...(input.positions ? { positions: input.positions } : {}),
-      ...(input.dimming ? { dimming: input.dimming } : {}),
-      ...(input.dimmingActivatedAtStart === undefined
-        ? {}
-        : { dimmingActivatedAtStart: input.dimmingActivatedAtStart }),
+      speedSymbolsPerSecond: profile.speedSymbolsPerSecond,
     });
   }
 
@@ -773,11 +796,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   cancelMainReelContinuousSpin(): void {
     this.assertReady();
     const reel = this.requireReel("main");
-    if (!(reel instanceof RenderGridCellReelSet)) {
-      throw new SceneLayoutError(
-        "Continuous main reel cancellation requires a grid-cell runtime.",
-      );
-    }
     reel.cancelContinuous();
     this.clearMainReelLandingPositions();
   }
@@ -928,10 +946,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       throw new SceneLayoutError(
         "Standard reel profile resolved a grid-cell runtime.",
       );
-    if (settleContinuous)
-      throw new SceneLayoutError(
-        "Continuous main reel settle requires a grid-cell reel profile.",
-      );
     if (input.buildGridCellSpinPlan)
       throw new SceneLayoutError(
         "buildGridCellSpinPlan requires a grid-cell reel profile.",
@@ -947,11 +961,24 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       startDelayMs: profile.startDelayMs,
       stopDelayMs: profile.stopDelayMs,
     });
-    reel.spin(plan, {
+    const spinOptions = {
       targetVisibleScene: scene,
       ...(values ? { targetVisiblePresentationValues: values } : {}),
       ...(landingStates ? { targetVisibleStates: landingStates } : {}),
-    });
+    };
+    if (settleContinuous) {
+      if (!reel.isContinuousSpinning())
+        throw new SceneLayoutError(
+          "Cannot settle main reel without an active continuous spin.",
+        );
+      reel.settleContinuous(plan, spinOptions);
+    } else {
+      if (reel.isContinuousSpinning())
+        throw new SceneLayoutError(
+          "An active continuous spin must be settled through settleMainReelContinuousSpin().",
+        );
+      reel.spin(plan, spinOptions);
+    }
   }
 
   isMainReelSpinning(): boolean {

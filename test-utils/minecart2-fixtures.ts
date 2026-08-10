@@ -37,6 +37,40 @@ interface SymbolStateManifest {
   >;
 }
 
+interface LayoutManifest {
+  readonly gameModes?: {
+    readonly initialMode: string;
+    readonly modes: readonly {
+      readonly id: string;
+      readonly symbolPackage?: string;
+      readonly awardCelebrationPopup?: string;
+    }[];
+  };
+  readonly symbolPackages?: Readonly<
+    Record<string, { readonly manifest: string }>
+  >;
+  readonly popups?: Readonly<Record<string, { readonly manifest: string }>>;
+}
+
+interface SymbolPackageManifest {
+  readonly entrypoints: { readonly symbolManifest: string };
+}
+
+interface PopupManifest {
+  readonly awardCelebration?: {
+    readonly celebrationTiers: readonly {
+      readonly id: string;
+      readonly layers: readonly {
+        readonly kind: string;
+        readonly resource: string;
+      }[];
+    }[];
+  };
+  readonly resources: Readonly<
+    Record<string, { readonly kind: string; readonly project?: string }>
+  >;
+}
+
 export const MINECART2_ROOT = resolve(process.cwd(), "../../assets/minecart2");
 
 const MINECART2_ASSETS_MAP = JSON.parse(
@@ -77,6 +111,42 @@ export function readMinecart2LogicalText(logicalPath: string): string {
 
 export function readMinecart2LogicalJson(logicalPath: string): unknown {
   return JSON.parse(readMinecart2LogicalText(logicalPath)) as unknown;
+}
+
+export function getMinecart2AwardVniProjectPath(tierId: string): string {
+  const layout = readMinecart2LayoutManifest();
+  const initialMode = requireInitialMode(layout);
+  const popupId = initialMode.awardCelebrationPopup;
+  if (!popupId)
+    throw new Error("Minecart2 initial mode has no award celebration popup.");
+  const popupBinding = layout.popups?.[popupId];
+  if (!popupBinding)
+    throw new Error(`Minecart2 popup binding "${popupId}" is unavailable.`);
+  const popup = readMinecart2LogicalJson(
+    popupBinding.manifest,
+  ) as PopupManifest;
+  const tier = popup.awardCelebration?.celebrationTiers.find(
+    (candidate) => candidate.id === tierId,
+  );
+  const layer = tier?.layers.find((candidate) => candidate.kind === "vni");
+  const resource = layer && popup.resources[layer.resource];
+  if (!resource?.project)
+    throw new Error(`Minecart2 award tier "${tierId}" has no VNI project.`);
+  return resource.project;
+}
+
+export function getMinecart2SymbolManifestPath(): string {
+  const layout = readMinecart2LayoutManifest();
+  const packageId = requireInitialMode(layout).symbolPackage;
+  if (!packageId)
+    throw new Error("Minecart2 initial mode has no symbol package.");
+  const binding = layout.symbolPackages?.[packageId];
+  if (!binding)
+    throw new Error(`Minecart2 symbol binding "${packageId}" is unavailable.`);
+  const symbolPackage = readMinecart2LogicalJson(
+    binding.manifest,
+  ) as SymbolPackageManifest;
+  return symbolPackage.entrypoints.symbolManifest;
 }
 
 export function getMinecart2SymbolResourcePath(
@@ -141,11 +211,10 @@ export function readMinecart2SymbolFixtureBytes(
     return readMinecart2SymbolBytes("WL", "texture");
   }
   if (name === "Symbol.atlas") {
-    const texturePath = getMinecart2SymbolResourcePath("WL", "texture");
     return new TextEncoder().encode(
       readMinecart2LogicalText(
         getMinecart2SymbolResourcePath("WL", "atlas"),
-      ).replace(texturePath, "Symbol.png"),
+      ).replace(/^[^\r\n]+/u, "Symbol.png"),
     );
   }
   throw new Error(`Unknown Minecart2 symbol fixture "${name}".`);
@@ -153,6 +222,19 @@ export function readMinecart2SymbolFixtureBytes(
 
 function readSymbolStateManifest(): SymbolStateManifest {
   return readMinecart2LogicalJson(
-    "symbol-state-textures.manifest.json",
+    getMinecart2SymbolManifestPath(),
   ) as SymbolStateManifest;
+}
+
+function readMinecart2LayoutManifest(): LayoutManifest {
+  return JSON.parse(
+    readFileSync(resolve(MINECART2_ROOT, "layout.manifest.json"), "utf8"),
+  ) as LayoutManifest;
+}
+
+function requireInitialMode(layout: LayoutManifest) {
+  const modes = layout.gameModes;
+  const initial = modes?.modes.find((mode) => mode.id === modes.initialMode);
+  if (!initial) throw new Error("Minecart2 initial game mode is unavailable.");
+  return initial;
 }

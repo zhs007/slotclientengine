@@ -131,13 +131,13 @@ describe("image optimizer", () => {
     ).rejects.toThrow(/合法 WebP/);
   });
 
-  it("keeps Spine atlas page logical names while converting their bytes", async () => {
+  it("converts Spine atlas pages and rewrites case-mismatched page names", async () => {
     const result = await optimizeLayoutImages({
       source: source({
         "symbol.atlas": {
           mediaType: "text/plain",
           bytes: new TextEncoder().encode(
-            "symbol.png\nsize:1,1\nfilter:Linear,Linear\nregion\nbounds:0,0,1,1\n",
+            "Symbol.png\nsize:1,1\nfilter:Linear,Linear\nregion\nbounds:0,0,1,1\n",
           ),
         },
         "symbol.png": {
@@ -150,11 +150,31 @@ describe("image optimizer", () => {
       runner: runner(),
     });
 
-    expect(result.keyMapping.get("symbol.png")).toBe("symbol.png");
-    expect(result.assets.get("symbol.png")).toMatchObject({
+    expect(result.keyMapping.get("symbol.png")).toBe("symbol.webp");
+    expect(result.assets.get("symbol.webp")).toMatchObject({
       converted: true,
       mediaType: "image/webp",
     });
-    expect(result.assets.has("symbol.webp")).toBe(false);
+    expect(
+      new TextDecoder().decode(result.assets.get("symbol.atlas")?.bytes),
+    ).toMatch(/^symbol\.webp\n/u);
+  });
+
+  it("rejects an atlas page that is absent from the package", async () => {
+    await expect(
+      optimizeLayoutImages({
+        source: source({
+          "symbol.atlas": {
+            mediaType: "text/plain",
+            bytes: new TextEncoder().encode(
+              "missing.png\nsize:1,1\nfilter:Linear,Linear\nregion\nbounds:0,0,1,1\n",
+            ),
+          },
+        }),
+        quality: 80,
+        cwebpExecutable: "cwebp",
+        runner: runner(),
+      }),
+    ).rejects.toThrow(/atlas 页资源不存在/u);
   });
 });

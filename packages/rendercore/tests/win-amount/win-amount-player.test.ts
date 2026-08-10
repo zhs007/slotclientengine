@@ -4,7 +4,10 @@ import {
   rewriteVNIProjectAssetPaths,
   type VNIProjectConfig,
 } from "@slotclientengine/vnicore/core";
-import { readMinecart2LogicalJson } from "../../../../test-utils/minecart2-fixtures.js";
+import {
+  getMinecart2AwardVniProjectPath,
+  readMinecart2LogicalJson,
+} from "../../../../test-utils/minecart2-fixtures.js";
 import {
   createWinAmountAnimationPlayer,
   createWinAmountAnimationTiersFromModules,
@@ -12,9 +15,15 @@ import {
 } from "../../src/win-amount/index.js";
 import type { VNIPlayerOptions } from "@slotclientengine/vnicore/pixi";
 
-const bigwinProject = readLegacyWinAmountProject("big_win0721.json");
-const superwinProject = readLegacyWinAmountProject("super_win0721.json");
-const megawinProject = readLegacyWinAmountProject("mega_win0721.json");
+const bigwinProject = readLegacyWinAmountProject(
+  getMinecart2AwardVniProjectPath("bigwin"),
+);
+const superwinProject = readLegacyWinAmountProject(
+  getMinecart2AwardVniProjectPath("superwin"),
+);
+const megawinProject = readLegacyWinAmountProject(
+  getMinecart2AwardVniProjectPath("megawin"),
+);
 
 describe("win amount animation player", () => {
   beforeEach(() => {

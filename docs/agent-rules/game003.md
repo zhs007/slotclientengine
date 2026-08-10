@@ -4,9 +4,9 @@
 
 ## 固定入口与资源 ownership
 
-- 使用 `apps/game003`，严格只支持显式 `skin=2`。
+- `apps/game003` 与精简的 `apps/game003v2` 都严格只支持显式 `skin=2`；v2 回合必须先 finalize immutable `SlotOperationPlanV2`，再由 rendercore coordinator 执行。
 - 唯一正式美术、layout、公开轮带、symbol 与 popup 输入是 `assets/minecart2` 的 mapped Scene Layout package；不得新增旧皮肤目录、平铺资源副本或 fallback。
-- package 内部的 `game003-s1` 是稳定 symbol package id，不是仓库路径，也不表示可选皮肤。
+- symbol package id、reelSet 与 popup id 只从当前 package 的 initial mode typed binding 读取；不得锁定历史 `game003-s1` 或猜测 namespace。
 - `assets/minecart2` 的当前美术 files/bytes 是 game003 权威交付；首次可由优化
   ZIP 完整接收，之后允许美术直接替换/增加文件。game runtime/build 天然不比对
   map `sha256`/`byteLength`、不因未引用 entry/file 阻断，不依赖 app 传 policy 才
@@ -21,6 +21,7 @@
 - variant、focus rect、art size、node placement、reel geometry、game modes、symbol package 和 award popup 只来自 package manifest。
 - app 只使用 package initial mode 的 standard `bg-reel01` 5×5 presentation；未知或缺失 binding 显式失败。
 - spin 使用 package symbol package 内的本地公开轮带。服务器 scene 只覆盖本轮临时可见落点，不缓存、推断或暴露服务器真实轮带。
+- v2 在 framework 发出请求后同步启动 standard targetless continuous spin，响应的第一项 landing operation settle 同一 transaction；失败和 destroy 取消，不能收到消息后再起转。
 - symbol scale、render priority、normal/state texture 和 VNI/Spine animation binding 只来自 package symbol manifest；app/viewer/test 不维护第二份业务表。
 - Spine animation 名大小写精确；缺资源、manifest 闭包不完整、atlas/texture 映射错误或版本不兼容都显式失败。
 
@@ -43,6 +44,7 @@
 
 - `bg-gencoins`/CO overlay 把零份 otherScene 视为本 step 无 update；提供时最多一份。
 - CO cell 显示 raw positive integer，非 CO cell 必须为 0；symbol code 从 package gameconfig 查询，不硬编码数值。
+- v2 优先把 CO 数值写入 landing snapshot 的 presentation values，由 package symbol image-string node 渲染；app 不再创建 Pixi 文字 overlay。
 - shared package 不硬编码 bg-gencoins 或 CO。
 
 ## Win amount

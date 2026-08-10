@@ -685,9 +685,113 @@ describe("scene layout package runtime", () => {
           },
         },
       });
+      runtime.startMainReelContinuousSpin({
+        positions: [{ x: 0, y: 0 }],
+        dimming: {
+          resolveDimmingAlpha: () => 0,
+          fadeInMs: 0,
+          fadeOutMs: 0,
+        },
+        dimmingActivatedAtStart: false,
+      });
+      runtime.settleMainReelContinuousSpin({
+        scene: [
+          [0, 1],
+          [0, 0],
+        ],
+        localPhaseYs: [0, 0],
+        random: () => 0,
+        buildGridCellSpinPlan: (stage) =>
+          stage.createPlan({ positions: [{ x: 0, y: 0 }] }),
+      });
+      for (
+        let index = 0;
+        index < 20 && runtime.isMainReelSpinning();
+        index += 1
+      )
+        runtime.update(0.05);
       runtime.startMainReelContinuousSpin();
       runtime.update(0.05);
       expect(runtime.drainMainReelStartedPositions()).toHaveLength(4);
+      const target = {
+        scene: [
+          [0, 1],
+          [1, 0],
+        ],
+        localPhaseYs: [0, 0],
+        random: () => 0,
+      };
+      expect(() => runtime.spinMainReelToScene(target)).toThrow(
+        /must be settled through/,
+      );
+      runtime.settleMainReelContinuousSpin(target);
+      for (
+        let index = 0;
+        index < 20 && runtime.isMainReelSpinning();
+        index += 1
+      )
+        runtime.update(0.05);
+      expect(runtime.getMainReelSceneSnapshot()).toEqual(target.scene);
+      expect(() => runtime.settleMainReelContinuousSpin(target)).toThrow(
+        /without an active continuous spin/,
+      );
+      runtime.destroy();
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
+  });
+
+  it("starts and settles one targetless standard reel transaction", async () => {
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    try {
+      const resource = await createSceneLayoutPackageResource({
+        manifest: layoutManifest("standard"),
+        files: files(),
+      });
+      const runtime = createSceneLayoutPackageRuntime({
+        resource,
+        reelPresentation: {
+          kind: "standard",
+          version: 1,
+          direction: "forward",
+          speedSymbolsPerSecond: 100,
+          minimumSpinCycles: 1,
+          baseDurationMs: 100,
+          startDelayMs: 0,
+          stopDelayMs: 0,
+          bounceStrength: 0,
+        },
+      });
+      await runtime.init({
+        reels: {
+          main: {
+            scene: [
+              [1, 1],
+              [0, 0],
+            ],
+            localPhaseYs: [0, 0],
+          },
+        },
+      });
+      for (const input of [
+        { positions: [{ x: 0, y: 0 }] },
+        { dimming: {} },
+        { dimmingActivatedAtStart: true },
+      ]) {
+        expect(() =>
+          runtime.startMainReelContinuousSpin(input as never),
+        ).toThrow(/does not accept grid-cell presentation options/);
+      }
+      runtime.startMainReelContinuousSpin();
+      runtime.cancelMainReelContinuousSpin();
+      expect(runtime.isMainReelSpinning()).toBe(false);
+      runtime.startMainReelContinuousSpin();
+      runtime.update(0.05);
+      expect(runtime.isMainReelSpinning()).toBe(true);
       const target = {
         scene: [
           [0, 1],
@@ -740,6 +844,9 @@ describe("scene layout package runtime", () => {
         ],
         localPhaseYs: [0, 0],
       });
+      expect(() => runtime.startMainReelContinuousSpin()).toThrow(
+        /requires a reel presentation profile/,
+      );
       expect(runtime.hasCommittedMainReelScene()).toBe(true);
       expect(runtime.getMainReelSceneSnapshot()).toEqual([
         [0, 1],

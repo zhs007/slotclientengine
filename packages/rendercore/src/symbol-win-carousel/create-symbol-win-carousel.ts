@@ -61,9 +61,18 @@ class SymbolWinCarouselModel implements SymbolWinCarousel {
     this.assertNotDestroyed();
     const groups = prepareSymbolWinGroups(this.#options, input);
 
+    return this.prepareGroups(groups);
+  }
+
+  prepareGroups(
+    groups: readonly SymbolWinCarouselGroup[],
+  ): PreparedSymbolWinCarousel {
+    this.assertNotDestroyed();
+    validatePreparedGroups(groups);
+
     const prepared = Object.freeze({
       groupCount: groups.length,
-      groups: Object.freeze(groups),
+      groups: Object.freeze([...groups]),
     });
     this.#prepared.add(prepared);
     return prepared;
@@ -256,6 +265,53 @@ class SymbolWinCarouselModel implements SymbolWinCarousel {
   private assertNotDestroyed(): void {
     if (this.#phase === "destroyed") {
       throw new Error("symbol win carousel was destroyed.");
+    }
+  }
+}
+
+function validatePreparedGroups(
+  groups: readonly SymbolWinCarouselGroup[],
+): void {
+  if (!Array.isArray(groups))
+    throw new Error("symbol win carousel groups must be an array.");
+  for (const [groupIndex, group] of groups.entries()) {
+    if (!Number.isSafeInteger(group.stepIndex) || group.stepIndex < 0)
+      throw new Error(
+        `symbol win carousel groups[${groupIndex}].stepIndex is invalid.`,
+      );
+    if (!Number.isSafeInteger(group.resultIndex) || group.resultIndex < 0)
+      throw new Error(
+        `symbol win carousel groups[${groupIndex}].resultIndex is invalid.`,
+      );
+    if (typeof group.componentName !== "string" || !group.componentName.trim())
+      throw new Error(
+        `symbol win carousel groups[${groupIndex}].componentName is invalid.`,
+      );
+    if (!Number.isFinite(group.amount) || group.amount <= 0)
+      throw new Error(
+        `symbol win carousel groups[${groupIndex}].amount must be finite and positive.`,
+      );
+    if (!Array.isArray(group.positions) || group.positions.length === 0)
+      throw new Error(
+        `symbol win carousel groups[${groupIndex}].positions must not be empty.`,
+      );
+    const seen = new Set<string>();
+    for (const [positionIndex, position] of group.positions.entries()) {
+      if (
+        !Number.isSafeInteger(position.x) ||
+        position.x < 0 ||
+        !Number.isSafeInteger(position.y) ||
+        position.y < 0
+      )
+        throw new Error(
+          `symbol win carousel groups[${groupIndex}].positions[${positionIndex}] is invalid.`,
+        );
+      const key = `${position.x},${position.y}`;
+      if (seen.has(key))
+        throw new Error(
+          `symbol win carousel groups[${groupIndex}] contains duplicate position ${key}.`,
+        );
+      seen.add(key);
     }
   }
 }

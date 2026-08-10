@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "brandLabel": "minecart2",
+  "live": {
+    "serverUrl": "wss://gameserv.rgstest.slammerstudios.com/",
+    "gamecode": "EfedJuHEaydXNghnmO9KI"
+  },
+  "reel": {
+    "direction": "forward",
+    "minimumSpinCycles": 8,
+    "baseDurationMs": 1300,
+    "speedSymbolsPerSecond": 44,
+    "startDelayMs": 80,
+    "stopDelayMs": 120
+  },
+  "winCarousel": {
+    "cyclePauseSeconds": 1,
+    "amountText": {
+      "yOffsetRatioFromCellCenter": 0.22,
+      "fontSize": 38,
+      "fill": "#fff7d6",
+      "stroke": "#5a2500",
+      "strokeWidth": 5
+    }
+  }
+}
