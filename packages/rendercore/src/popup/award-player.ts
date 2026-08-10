@@ -16,7 +16,6 @@ import {
 import type {
   AwardCelebrationPlayer,
   AwardCelebrationSnapshot,
-  AwardCelebrationPopupManifestV1,
   AwardTierId,
   PopupLayer,
   PopupAmountFormatter,
@@ -26,7 +25,9 @@ import type {
   PopupSegment,
   PopupStringNodeHandle,
   PopupStringNodeSelector,
+  PopupManifest,
 } from "./types.js";
+import { createPopupPresentation } from "./presentation.js";
 
 export interface PopupLayerRuntime {
   readonly container: Container;
@@ -58,7 +59,7 @@ export interface PopupLayerRuntime {
 }
 export type PopupLayerRuntimeFactory = (options: {
   readonly layer: PopupLayer;
-  readonly resource: PopupPreparedResource;
+  readonly resource?: PopupPreparedResource;
   readonly popupId: string;
   readonly tierId: AwardTierId;
 }) => PopupLayerRuntime;
@@ -90,10 +91,14 @@ export function createAwardCelebrationPlayer(options: {
 }
 
 class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
-  readonly container = new Container();
+  readonly container: Container;
   readonly #resource: PopupPackageResource & {
-    readonly manifest: AwardCelebrationPopupManifestV1;
+    readonly manifest: Extract<
+      PopupManifest,
+      { readonly type: "award-celebration" }
+    >;
   };
+  readonly #presentation: ReturnType<typeof createPopupPresentation>;
   readonly #factory: PopupLayerRuntimeFactory;
   readonly #formatAmount: PopupAmountFormatter;
   readonly #nodes: ReturnType<typeof createPopupStringNodeRegistry>;
@@ -120,8 +125,13 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
         "Award celebration player requires an award-celebration popup package.",
       );
     this.#resource = options.resource as PopupPackageResource & {
-      readonly manifest: AwardCelebrationPopupManifestV1;
+      readonly manifest: Extract<
+        PopupManifest,
+        { readonly type: "award-celebration" }
+      >;
     };
+    this.#presentation = createPopupPresentation(this.#resource.manifest);
+    this.container = this.#presentation.container;
     this.#factory = options.layerFactory ?? defaultLayerFactory;
     this.#formatAmount =
       options.formatAmount ??
@@ -145,6 +155,16 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
     this.assertUsable();
     return this.#nodes.getImageStringNode(selector);
   }
+  applyViewport(
+    viewportSize: Parameters<
+      NonNullable<AwardCelebrationPlayer["applyViewport"]>
+    >[0],
+    placement?: Parameters<
+      NonNullable<AwardCelebrationPlayer["applyViewport"]>
+    >[1],
+  ) {
+    return this.#presentation.applyViewport(viewportSize, placement);
+  }
   init(): Promise<void> {
     this.assertUsable();
     if (this.#initialized) return Promise.resolve();
@@ -160,12 +180,14 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
     if (this.isPlaying())
       throw new Error("award celebration is already playing.");
     this.clearPlayback();
+    this.#presentation.setActive(true);
     this.#final = input.winAmountRaw;
     this.#displayed = 0;
     this.#nodes.setAutomaticText("win-amount", this.formatAmount(0));
     this.#stages = createAwardCountStages(this.#resource.manifest, input);
     if (!this.#stages.length) {
       this.#phase = "complete";
+      this.#presentation.setActive(false);
       return;
     }
     this.startNextStage();
@@ -266,7 +288,7 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
     this.#amount = null;
     this.#tiers.clear();
     this.#nodes.destroy();
-    this.container.destroy({ children: false });
+    this.#presentation.destroy();
   }
   private async prepare() {
     const manifest = this.#resource.manifest;
@@ -294,6 +316,8 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
           ): layer is Extract<PopupLayer, { readonly kind: "image-string" }> =>
             layer.kind === "image-string" && layer.binding === "win-amount",
         )!;
+        if (!amountLayer.resource)
+          throw new Error("popup amount layer resource is required.");
         const amountResource = this.#resource.resources[amountLayer.resource]!;
         if (amountResource.kind !== "image-string")
           throw new Error("popup amount layer/resource kind mismatch.");
@@ -332,13 +356,15 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
           endRequested: false,
         };
         created.push(tier);
-        this.container.addChild(container);
+        this.#presentation.contentRoot.addChild(container);
         for (const layer of orderedLayers) {
           if (layer.kind === "image-string" && layer.binding === "win-amount")
             continue;
           const runtime = this.#factory({
             layer,
-            resource: this.#resource.resources[layer.resource]!,
+            resource: layer.resource
+              ? this.#resource.resources[layer.resource]
+              : undefined,
             popupId: manifest.id,
             tierId: id,
           });
@@ -498,6 +524,7 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
     this.#active = null;
     this.#ending = [];
     this.#phase = "complete";
+    this.#presentation.setActive(false);
   }
   private clearPlayback() {
     for (const tier of this.#tiers.values()) tier.container.visible = false;
@@ -528,7 +555,7 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
 }
 
 function collectAwardStringNodeDefinitions(
-  manifest: AwardCelebrationPopupManifestV1,
+  manifest: Extract<PopupManifest, { readonly type: "award-celebration" }>,
 ) {
   const tiers = [
     manifest.awardCelebration.base,
@@ -582,28 +609,29 @@ function detach(container: Container | undefined): void {
 
 function defaultLayerFactory(options: {
   readonly layer: PopupLayer;
-  readonly resource: PopupPreparedResource;
+  readonly resource?: PopupPreparedResource;
   readonly popupId: string;
   readonly tierId: AwardTierId;
 }): PopupLayerRuntime {
   const { layer, resource } = options;
-  if (
-    layer.kind === "text"
-      ? resource.kind !== "font"
-      : layer.kind !== resource.kind
-  )
+  if (layer.kind === "text") {
+    if (resource && resource.kind !== "font")
+      throw new Error(`popup layer/resource kind mismatch: ${layer.id}`);
+  } else if (!resource || layer.kind !== resource.kind) {
     throw new Error(`popup layer/resource kind mismatch: ${layer.id}`);
+  }
   const container = new Container();
   container.position.set(layer.transform.x, layer.transform.y);
   container.scale.set(layer.transform.scale);
   container.rotation = ((layer.transform.rotation ?? 0) * Math.PI) / 180;
-  if (layer.kind === "image" && resource.kind === "image") {
+  container.alpha = layer.alpha ?? 1;
+  if (layer.kind === "image" && resource?.kind === "image") {
     const sprite = new Sprite(resource.texture);
     sprite.anchor.set(layer.anchor.x, layer.anchor.y);
     container.addChild(sprite);
     return staticRuntime(container, layer.visibleSegments);
   }
-  if (layer.kind === "image-string" && resource.kind === "image-string") {
+  if (layer.kind === "image-string" && resource?.kind === "image-string") {
     const initialText =
       layer.binding === "manual" ? (layer.defaultText ?? "") : "0";
     const renderer = createRenderImageString({
@@ -659,6 +687,7 @@ function defaultLayerFactory(options: {
         container.scale.set(nextLayer.transform.scale);
         container.rotation =
           ((nextLayer.transform.rotation ?? 0) * Math.PI) / 180;
+        container.alpha = nextLayer.alpha ?? 1;
       },
       destroy() {
         renderer.destroy();
@@ -666,9 +695,9 @@ function defaultLayerFactory(options: {
       },
     };
   }
-  if (layer.kind === "text" && resource.kind === "font") {
+  if (layer.kind === "text" && (!resource || resource.kind === "font")) {
     const renderer = createPopupStyledText({
-      family: resource.family,
+      family: resource?.family ?? "system-ui",
       text: layer.defaultText,
       style: layer.style,
       anchor: layer.anchor,
@@ -707,7 +736,7 @@ function defaultLayerFactory(options: {
       },
     };
   }
-  if (layer.kind === "spine" && resource.kind === "spine") {
+  if (layer.kind === "spine" && resource?.kind === "spine") {
     const player = createOfficialSpinePlayer({ resource: resource.resource });
     container.addChild(player.view);
     let state: PopupSegment = "start";
@@ -760,7 +789,7 @@ function defaultLayerFactory(options: {
       },
     };
   }
-  if (layer.kind === "vni" && resource.kind === "vni") {
+  if (layer.kind === "vni" && resource?.kind === "vni") {
     const player = new VNIPlayer({
       parent: container,
       projectId: `${options.popupId}-${options.tierId}-${layer.id}`,

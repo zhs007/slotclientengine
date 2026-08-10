@@ -3,7 +3,7 @@ import {
   type AwardTierId,
   type PopupAmountFormat,
   type PopupLayer,
-  type PopupManifestV1,
+  type PopupManifest,
   type PopupOverlayLayer,
   type PopupResourceSpec,
 } from "@slotclientengine/rendercore/popup";
@@ -36,9 +36,15 @@ export interface PopupVniTextLayerTarget {
   readonly textLayerName: string;
 }
 export interface PopupEditorProject {
+  formatVersion: 1 | 2;
+  name: string;
   type: "award-celebration" | "spine";
   id: string;
   designViewport: { width: number; height: number };
+  adaptation: {
+    focus: { left: number; right: number; top: number; bottom: number };
+  };
+  backdrop: { enabled: boolean; color: string; alpha: number };
   amountFormat: PopupAmountFormat;
   resources: Map<string, PopupEditorResource>;
   assets: Map<string, EditorAssetEntry>;
@@ -110,15 +116,28 @@ export function detectPopupAmountFormatPreset(
   return "custom";
 }
 
-export function createPopupEditorProject(): PopupEditorProject {
+export function createPopupEditorProject(
+  options: {
+    readonly name?: string;
+    readonly id?: string;
+    readonly type?: "award-celebration" | "spine";
+    readonly formatVersion?: 1 | 2;
+  } = {},
+): PopupEditorProject {
   const empty = (): PopupEditorTier => ({
     countDurationSeconds: 1.5,
     layers: [],
   });
   return {
-    type: "award-celebration",
-    id: "award-celebration",
+    formatVersion: options.formatVersion ?? 2,
+    name: options.name ?? "Untitled Popup",
+    type: options.type ?? "award-celebration",
+    id: options.id ?? "untitled-popup",
     designViewport: { width: 1080, height: 1920 },
+    adaptation: {
+      focus: { left: 540, right: 540, top: 960, bottom: 960 },
+    },
+    backdrop: { enabled: true, color: "#000000", alpha: 0.5 },
     amountFormat: createPopupAmountFormat("integer"),
     resources: new Map(),
     assets: new Map(),
@@ -165,6 +184,8 @@ export function clonePopupEditorProject(
   return {
     ...project,
     designViewport: { ...project.designViewport },
+    adaptation: structuredClone(project.adaptation),
+    backdrop: { ...project.backdrop },
     amountFormat: { ...project.amountFormat },
     spine: structuredClone(project.spine),
     resources: new Map(
@@ -192,9 +213,31 @@ export function clonePopupEditorProject(
   };
 }
 
-export function projectToManifest(
-  project: PopupEditorProject,
-): PopupManifestV1 {
+export function projectToManifest(project: PopupEditorProject): PopupManifest {
+  const common = {
+    version: project.formatVersion,
+    kind: "popup" as const,
+    id: project.id,
+    ...(project.formatVersion === 2
+      ? {
+          name: project.name,
+          adaptation: {
+            mode: "maximized-focus" as const,
+            focus: { ...project.adaptation.focus },
+          },
+          backdrop: { ...project.backdrop },
+        }
+      : {}),
+    designViewport: project.designViewport,
+  };
+  const canonicalLayer = <T extends PopupLayer>(layer: T): T =>
+    (project.formatVersion === 2 && layer.alpha === undefined
+      ? { ...layer, alpha: 1 }
+      : layer) as T;
+  const canonicalOverlay = <T extends PopupOverlayLayer>(layer: T): T =>
+    (project.formatVersion === 2 && layer.alpha === undefined
+      ? { ...layer, alpha: 1 }
+      : layer) as T;
   if (project.type === "spine") {
     const resourceKey = project.spine.resource;
     if (!resourceKey)
@@ -203,18 +246,17 @@ export function projectToManifest(
     if (!resource || resource.kind !== "spine")
       throw new Error(`普通 Spine Popup resource 无效：${resourceKey}`);
     return parsePopupManifest({
-      version: 1,
-      kind: "popup",
-      id: project.id,
+      ...common,
       type: "spine",
-      designViewport: project.designViewport,
       resources: Object.fromEntries(
         [
           resourceKey,
           ...(project.spine.prompt.enabled && project.spine.prompt.font
             ? [project.spine.prompt.font]
             : []),
-          ...project.spine.overlays.map(({ resource }) => resource),
+          ...project.spine.overlays.flatMap(({ resource }) =>
+            resource ? [resource] : [],
+          ),
         ].map((id) => {
           const selected = project.resources.get(id);
           if (!selected)
@@ -243,14 +285,15 @@ export function projectToManifest(
             }
           : {}),
         ...(project.spine.overlays.length
-          ? { overlays: project.spine.overlays }
+          ? { overlays: project.spine.overlays.map(canonicalOverlay) }
           : {}),
       },
     });
   }
   const used = new Set<string>();
   for (const tier of project.tiers.values())
-    for (const layer of tier.layers) used.add(layer.resource);
+    for (const layer of tier.layers)
+      if (layer.resource) used.add(layer.resource);
   const resources = Object.fromEntries(
     [...used].sort().map((id) => {
       const resource = project.resources.get(id);
@@ -263,15 +306,12 @@ export function projectToManifest(
     if (!value) throw new Error(`缺失 tier：${id}`);
     return {
       countDurationSeconds: value.countDurationSeconds,
-      layers: value.layers,
+      layers: value.layers.map(canonicalLayer),
     };
   };
   return parsePopupManifest({
-    version: 1,
-    kind: "popup",
-    id: project.id,
+    ...common,
     type: "award-celebration",
-    designViewport: project.designViewport,
     amountFormat: project.amountFormat,
     resources,
     awardCelebration: {
@@ -308,6 +348,31 @@ export function popupEditorProjectDiagnostics(
     return Object.freeze([
       `项目尚未完成：${incompleteTiers.join("、")} 档位尚未添加图层。资源导入已独立保存；请在“档位”页显式绑定资源。`,
     ]);
+  if (project.formatVersion === 2) {
+    const amountResources = new Set(
+      [...project.tiers.values()]
+        .flatMap(({ layers }) => layers)
+        .filter(
+          (layer): layer is Extract<PopupLayer, { kind: "image-string" }> =>
+            layer.kind === "image-string" && layer.binding === "win-amount",
+        )
+        .map(({ resource }) => resource),
+    );
+    if (amountResources.size !== 1)
+      return Object.freeze([
+        "获奖庆祝模板必须让五档共享同一个 win-amount ImgNumber 资源。",
+      ]);
+    const missingVni = (["bigwin", "superwin", "megawin"] as const).filter(
+      (tierId) =>
+        !project.tiers
+          .get(tierId)
+          ?.layers.some((layer) => layer.kind === "vni"),
+    );
+    if (missingVni.length)
+      return Object.freeze([
+        `获奖庆祝模板缺少必需 VNI：${missingVni.join("、")}。`,
+      ]);
+  }
   try {
     projectToManifest(project);
     for (const [tierId, tier] of project.tiers) {
@@ -345,6 +410,8 @@ export function getPopupVniTextLayerTargets(
   const targets: PopupVniTextLayerTarget[] = [];
   for (const layer of tier.layers) {
     if (layer.kind !== "vni") continue;
+    if (!layer.resource)
+      throw new Error(`VNI layer 缺少 resource：${layer.id}`);
     const resource = project.resources.get(layer.resource);
     if (resource?.spec.kind !== "vni")
       throw new Error(`VNI layer resource 无效：${layer.id}`);
@@ -386,6 +453,7 @@ export function addLayer(
     order,
     resource: resourceKey,
     transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+    ...(project.formatVersion === 2 ? { alpha: 1 } : {}),
   };
   let layer: PopupLayer;
   if (resource.kind === "image-string" && !existingAmount)

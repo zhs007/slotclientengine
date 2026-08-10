@@ -1,6 +1,30 @@
-# Popup package v1
+# Popup package v1 / v2
 
 `popup.manifest.json` 是获奖庆祝与普通 Spine 弹窗的唯一 production 合同。独立 `<id>-popup.zip` 最终由 Game Layout Editor 原样 vendor 到 Scene Layout package。
+
+v1 合同继续原样解析、渲染和导出。新建项目默认使用 v2；旧项目只有在 Popup Editor 中显式升级后才改变版本。
+
+## v2 presentation 扩展
+
+v2 在 v1 的类型专属内容之外增加以下公共字段：
+
+```json
+{
+  "version": 2,
+  "name": "Big Win",
+  "adaptation": {
+    "mode": "maximized-focus",
+    "focus": { "left": 320, "right": 320, "top": 480, "bottom": 480 }
+  },
+  "backdrop": { "enabled": true, "color": "#000000", "alpha": 0.5 }
+}
+```
+
+`focus` 以 `designViewport` 中心为基准向四边扩展，必须形成画布内的正面积区域。runtime 使用与 Game Layout 相同的 maximized-focus 算法计算 content transform，但 Popup 自己拥有该适配结果；layout 的 popup root `x/y/scale` 只作为宿主 placement 叠加。`backdrop` 是独立于 authored content transform 的 viewport 全屏层，默认由 Editor 建立为 50% 黑色，也可显式关闭。
+
+v2 的每个 award layer 与 Spine overlay 都必须声明 `alpha`（`0..1`）。v2 系统文字可以省略 `resource` 并使用 `system-ui, sans-serif`；上传字体时仍以 font resource 显式引用。第一版文字效果支持纯色/线性渐变、描边、投影和 grapheme 弧排。
+
+Popup Editor 的 v2 模板完成条件是：获奖庆祝五档共享一个 `win-amount` ImgNumber，且 `bigwin/superwin/megawin` 各至少绑定一个 VNI；Spine 弹窗必须绑定一个 official Spine resource，并明确选择互不相同的 start/loop/end 三段动画。两种模板都可继续添加图片、Spine、VNI、系统文字或上传字体文字、ImgNumber 图层。
 
 ## 坐标、档位与输入
 

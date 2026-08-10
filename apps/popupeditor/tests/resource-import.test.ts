@@ -1,12 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { createDeterministicZip } from "@slotclientengine/browserartifactio";
 import {
-  commitImportReview,
   discoverPopupResources,
   inspectVniBundleProfiles,
 } from "../src/io/resource-import.js";
 import {
-  applyImportedResourceBindings,
   createPopupEditorProject,
   PopupEditorStore,
 } from "../src/model/project.js";
@@ -36,7 +34,7 @@ describe("popup flat resource discovery", () => {
     ).rejects.toThrow(/signature/);
   });
 
-  it("rewrites a VNI closure to filename keys and preserves unrelated images", async () => {
+  it("rejects loose VNI projects and requires an exported ZIP", async () => {
     const projectBytes = readMinecart2LogicalBytes("big_win0721.json");
     const project = JSON.parse(new TextDecoder().decode(projectBytes)) as {
       assets: readonly { path: string }[];
@@ -47,35 +45,12 @@ describe("popup flat resource discovery", () => {
         sourceFile(path, readMinecart2LogicalBytes(path)),
       ),
     ];
-    const review = await discoverPopupResources(files);
-    expect(review[0]).toMatchObject({
-      kind: "vni",
-      rootKey: "bigwin.json",
-      dependencyCount: project.assets.length,
-    });
-    const spec = review[0]!.spec;
-    if (spec.kind !== "vni") throw new Error("expected VNI");
-    const rewritten = new TextDecoder().decode(
-      review[0]!.assets.find(({ key }) => key === spec.project)!.bytes,
+    await expect(discoverPopupResources(files)).rejects.toThrow(
+      /散装 VNI.*VNI ZIP/,
     );
-    expect(rewritten).not.toContain("../");
-    expect(
-      JSON.parse(rewritten).assets.every(
-        ({ path }: { path: string }) => !path.includes("/"),
-      ),
-    ).toBe(true);
-
-    const mixed = await discoverPopupResources([
-      ...files,
-      sourceFile("extra.png", png(1, 1)),
-    ]);
-    expect(mixed.map(({ kind, rootKey }) => [kind, rootKey])).toEqual([
-      ["vni", "bigwin.json"],
-      ["image", "extra.png"],
-    ]);
   });
 
-  it("uses manifest order for the three win-amount profiles and requires explicit source hygiene", async () => {
+  it("rejects legacy loose win-amount VNI batches", async () => {
     const projectNames = [
       "big_win0721.json",
       "super_win0721.json",
@@ -125,31 +100,13 @@ describe("popup flat resource discovery", () => {
     }
     for (const [path, originalPath] of [...assetPaths].sort())
       files.push(sourceFile(path, readMinecart2LogicalBytes(originalPath)));
-    const review = await discoverPopupResources(files);
-    expect(review.map(({ rootKey }) => rootKey)).toEqual(projectNames);
-    expect(
-      review.map(
-        ({ suggestedTierBindings }) => suggestedTierBindings?.[0]?.tierId,
-      ),
-    ).toEqual(["bigwin", "superwin", "megawin"]);
-    const project = createPopupEditorProject();
-    await commitImportReview(project, review);
-    for (const candidate of review)
-      applyImportedResourceBindings(
-        project,
-        candidate.rootKey,
-        candidate.suggestedTierBindings,
-      );
-    expect(project.tiers.get("superwin")!.layers[0]).toMatchObject({
-      resource: "super_win0721.json",
-      playback: { loopStartTime: 1, loopEndTime: 2.5 },
-    });
+    await expect(discoverPopupResources(files)).rejects.toThrow(/散装 VNI/);
     await expect(
       discoverPopupResources([
         ...files,
         sourceFile(".DS_Store", new Uint8Array([1, 2, 3])),
       ]),
-    ).rejects.toThrow(/无法识别、未引用或不完整/);
+    ).rejects.toThrow(/散装 VNI/);
   });
 
   it("defaults to the only runtime and requires selection only for multiple runtimes", async () => {

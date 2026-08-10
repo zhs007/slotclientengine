@@ -4,7 +4,7 @@ import {
 } from "@slotclientengine/rendercore/image-string";
 import {
   parsePopupManifest,
-  type PopupManifestV1,
+  type PopupManifest,
   type PopupResourceSpec,
 } from "@slotclientengine/rendercore/popup";
 import {
@@ -303,7 +303,7 @@ export function rewriteSymbolManifest(
 export function rewritePopupManifest(
   value: unknown,
   mapping: ReadonlyMap<string, string>,
-): PopupManifestV1 {
+): PopupManifest {
   const manifest = parsePopupManifest(value);
   const resources: Record<string, PopupResourceSpec> = {};
   const resourceIds = new Map<string, string>();
@@ -354,7 +354,12 @@ export function rewritePopupManifest(
           ? {
               overlays: manifest.spine.overlays.map((layer) => ({
                 ...layer,
-                resource: resourceIds.get(layer.resource) ?? layer.resource,
+                ...(layer.resource
+                  ? {
+                      resource:
+                        resourceIds.get(layer.resource) ?? layer.resource,
+                    }
+                  : {}),
               })),
             }
           : {}),

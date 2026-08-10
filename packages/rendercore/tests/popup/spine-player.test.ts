@@ -92,7 +92,10 @@ describe("spine popup player", () => {
     expect(createPromptText).toHaveBeenCalledWith({
       spec: promptResource.manifest.spine.prompt,
     });
-    expect(player.container.children).toHaveLength(2);
+    expect(
+      ((player.container.children[0] as Container).children[0] as Container)
+        .children,
+    ).toHaveLength(2);
     await player.init();
     player.start("Translated continue");
     expect(promptSetText).toHaveBeenCalledWith("Translated continue");

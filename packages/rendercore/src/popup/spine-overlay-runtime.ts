@@ -34,24 +34,25 @@ export interface SpinePopupOverlayRuntime {
 export function createSpinePopupOverlayRuntime(options: {
   readonly popupId: string;
   readonly layer: PopupOverlayLayer;
-  readonly resource: PopupPreparedResource;
+  readonly resource?: PopupPreparedResource;
   readonly spinePlayerFactory?: () => RendercoreSpinePlayer;
   readonly vniPlayerFactory?: (parent: Container) => VNIPlayer;
 }): SpinePopupOverlayRuntime {
   const { layer, resource } = options;
-  if (
-    layer.kind === "text"
-      ? resource.kind !== "font"
-      : layer.kind !== resource.kind
-  )
+  if (layer.kind === "text") {
+    if (resource && resource.kind !== "font")
+      throw new Error(`popup overlay/resource kind mismatch: ${layer.id}`);
+  } else if (!resource || layer.kind !== resource.kind) {
     throw new Error(`popup overlay/resource kind mismatch: ${layer.id}`);
+  }
   const container = new Container();
   container.position.set(layer.transform.x, layer.transform.y);
   container.scale.set(layer.transform.scale);
   container.rotation = (layer.transform.rotation * Math.PI) / 180;
+  container.alpha = layer.alpha ?? 1;
   container.zIndex = layer.order;
   container.visible = false;
-  if (layer.kind === "image" && resource.kind === "image") {
+  if (layer.kind === "image" && resource?.kind === "image") {
     const sprite = new Sprite(resource.texture);
     sprite.anchor.set(layer.anchor.x, layer.anchor.y);
     container.addChild(sprite);
@@ -70,7 +71,7 @@ export function createSpinePopupOverlayRuntime(options: {
       },
     };
   }
-  if (layer.kind === "image-string" && resource.kind === "image-string") {
+  if (layer.kind === "image-string" && resource?.kind === "image-string") {
     const renderer = createRenderImageString({
       resource: resource.resource,
       text: layer.defaultText,
@@ -101,9 +102,9 @@ export function createSpinePopupOverlayRuntime(options: {
       },
     };
   }
-  if (layer.kind === "text" && resource.kind === "font") {
+  if (layer.kind === "text" && (!resource || resource.kind === "font")) {
     const renderer = createPopupStyledText({
-      family: resource.family,
+      family: resource?.family ?? "system-ui",
       text: layer.defaultText,
       style: layer.style,
       anchor: layer.anchor,
@@ -133,7 +134,7 @@ export function createSpinePopupOverlayRuntime(options: {
       },
     };
   }
-  if (layer.kind === "spine" && resource.kind === "spine") {
+  if (layer.kind === "spine" && resource?.kind === "spine") {
     const player = options.spinePlayerFactory
       ? options.spinePlayerFactory()
       : createOfficialSpinePlayer({ resource: resource.resource });
@@ -176,7 +177,7 @@ export function createSpinePopupOverlayRuntime(options: {
       },
     };
   }
-  if (layer.kind === "vni" && resource.kind === "vni") {
+  if (layer.kind === "vni" && resource?.kind === "vni") {
     const player = options.vniPlayerFactory
       ? options.vniPlayerFactory(container)
       : new VNIPlayer({

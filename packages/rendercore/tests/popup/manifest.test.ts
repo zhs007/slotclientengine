@@ -61,6 +61,394 @@ describe("popup manifest", () => {
     ).toThrow(/must be unique/);
   });
 
+  it("parses v2 focus, backdrop, alpha, and system-font text", () => {
+    const hash = (value: string) => `assets/${value.repeat(64)}`;
+    const manifest = parsePopupManifest({
+      version: 2,
+      kind: "popup",
+      id: "free-game-v2",
+      name: "Free Game V2",
+      type: "spine",
+      designViewport: { width: 1080, height: 1920 },
+      adaptation: {
+        mode: "maximized-focus",
+        focus: { left: 320, right: 320, top: 480, bottom: 480 },
+      },
+      backdrop: { enabled: true, color: "#000000", alpha: 0.5 },
+      resources: {
+        effect: {
+          kind: "spine",
+          skeleton: `${hash("a")}.json`,
+          atlas: `${hash("b")}.atlas`,
+          textures: { "effect.png": `${hash("c")}.png` },
+        },
+      },
+      spine: {
+        resource: "effect",
+        transform: { x: 0, y: 0, scale: 1 },
+        playback: {
+          mode: "segmented-animations",
+          startAnimation: "start",
+          loopAnimation: "loop",
+          endAnimation: "end",
+        },
+        overlays: [
+          {
+            id: "heading",
+            kind: "text",
+            name: "heading",
+            defaultText: "FREE GAME",
+            order: 1,
+            alpha: 0.75,
+            transform: { x: 0, y: -200, scale: 1, rotation: 0 },
+            anchor: { x: 0.5, y: 0.5 },
+            style: {
+              fontSize: 72,
+              letterSpacing: 0,
+              fill: { kind: "solid", color: "#ffffff" },
+              arcDegrees: 0,
+            },
+            visibleSegments: ["start", "loop", "end"],
+          },
+        ],
+      },
+    });
+    expect(manifest.version).toBe(2);
+    if (manifest.version !== 2 || manifest.type !== "spine")
+      throw new Error("Expected v2 spine popup.");
+    expect(manifest.adaptation.focus.left).toBe(320);
+    expect(manifest.spine.overlays?.[0]).toMatchObject({ alpha: 0.75 });
+    expect(manifest.spine.overlays?.[0]).not.toHaveProperty("resource");
+  });
+
+  it.each([
+    ["name", (value: any) => delete value.name],
+    ["adaptation", (value: any) => delete value.adaptation],
+    ["backdrop", (value: any) => delete value.backdrop],
+    ["adaptation mode", (value: any) => (value.adaptation.mode = "contain")],
+    ["empty focus", (value: any) => (value.adaptation.focus.left = 0)],
+    ["outside focus", (value: any) => (value.adaptation.focus.right = 600)],
+    ["backdrop enabled", (value: any) => (value.backdrop.enabled = "yes")],
+    ["backdrop color", (value: any) => (value.backdrop.color = "black")],
+    ["backdrop alpha", (value: any) => (value.backdrop.alpha = 2)],
+  ])("rejects invalid v2 %s", (_label, mutate) => {
+    const value = v2SpineManifestFixture();
+    mutate(value);
+    expect(() => parsePopupManifest(value)).toThrow();
+  });
+
+  it("requires v2 layer alpha within the unit interval", () => {
+    const value = v2SpineManifestFixture();
+    value.resources.shade = {
+      kind: "image",
+      path: `assets/${"d".repeat(64)}.png`,
+      size: { width: 100, height: 100 },
+    };
+    value.spine.overlays = [
+      {
+        id: "shade",
+        kind: "image",
+        order: 1,
+        resource: "shade",
+        transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+        anchor: { x: 0.5, y: 0.5 },
+        visibleSegments: ["start", "loop", "end"],
+      },
+    ];
+    expect(() => parsePopupManifest(value)).toThrow(/alpha/);
+    value.spine.overlays[0]!.alpha = 1.1;
+    expect(() => parsePopupManifest(value)).toThrow(/alpha/);
+    value.spine.overlays[0]!.alpha = 0;
+    expect(parsePopupManifest(value).version).toBe(2);
+  });
+
+  it.each([
+    ["unsupported version", (v: any) => (v.version = 3)],
+    [
+      "resource root mismatch",
+      (v: any) => (v.resources["bad.png"] = v.resources.effect),
+    ],
+    [
+      "non-spine root",
+      (v: any) =>
+        (v.resources.effect = {
+          kind: "image",
+          path: `assets/${"a".repeat(64)}.png`,
+          size: { width: 1, height: 1 },
+        }),
+    ],
+    ["spine playback mode", (v: any) => (v.spine.playback.mode = "once")],
+    ["empty animation", (v: any) => (v.spine.playback.startAnimation = "")],
+    [
+      "duplicate animation",
+      (v: any) => (v.spine.playback.endAnimation = "loop"),
+    ],
+    ["empty textures", (v: any) => (v.resources.effect.textures = {})],
+    [
+      "invalid atlas page",
+      (v: any) =>
+        (v.resources.effect.textures = {
+          "a/b.png": `assets/${"c".repeat(64)}.png`,
+        }),
+    ],
+    ["non-string owned path", (v: any) => (v.resources.effect.skeleton = 1)],
+    ["overlays object", (v: any) => (v.spine.overlays = {})],
+    ["font overlay kind", (v: any) => (v.spine.overlays = [{ kind: "font" }])],
+    [
+      "empty segments",
+      (v: any) => addV2TextOverlay(v, { visibleSegments: [] }),
+    ],
+    [
+      "invalid segment",
+      (v: any) => addV2TextOverlay(v, { visibleSegments: ["middle"] }),
+    ],
+    [
+      "invalid fill kind",
+      (v: any) =>
+        addV2TextOverlay(v, {
+          style: { ...v2TextStyle(), fill: { kind: "rainbow" } },
+        }),
+    ],
+    [
+      "short gradient",
+      (v: any) =>
+        addV2TextOverlay(v, {
+          style: {
+            ...v2TextStyle(),
+            fill: {
+              kind: "linear-gradient",
+              angleDegrees: 0,
+              stops: [{ offset: 0, color: "#ffffff" }],
+            },
+          },
+        }),
+    ],
+    [
+      "gradient endpoints",
+      (v: any) =>
+        addV2TextOverlay(v, {
+          style: {
+            ...v2TextStyle(),
+            fill: {
+              kind: "linear-gradient",
+              angleDegrees: 0,
+              stops: [
+                { offset: 0.1, color: "#ffffff" },
+                { offset: 1, color: "#000000" },
+              ],
+            },
+          },
+        }),
+    ],
+    [
+      "gradient ordering",
+      (v: any) =>
+        addV2TextOverlay(v, {
+          style: {
+            ...v2TextStyle(),
+            fill: {
+              kind: "linear-gradient",
+              angleDegrees: 0,
+              stops: [
+                { offset: 0, color: "#ffffff" },
+                { offset: 0.5, color: "#888888" },
+                { offset: 0.5, color: "#000000" },
+                { offset: 1, color: "#000000" },
+              ],
+            },
+          },
+        }),
+    ],
+    [
+      "arc range",
+      (v: any) =>
+        addV2TextOverlay(v, { style: { ...v2TextStyle(), arcDegrees: 181 } }),
+    ],
+    ["multiline project name", (v: any) => (v.name = "Bad\nName")],
+    [
+      "reserved prompt name",
+      (v: any) => {
+        v.spine.prompt = {
+          defaultText: "Continue",
+          fill: "#ffffff",
+          order: 2,
+          area: { x: 0, y: 0, width: 100, height: 20 },
+        };
+        addV2TextOverlay(v, { name: "prompt", order: 1 });
+      },
+    ],
+    [
+      "unused resource",
+      (v: any) =>
+        (v.resources.unused = {
+          kind: "image",
+          path: `assets/${"d".repeat(64)}.png`,
+          size: { width: 1, height: 1 },
+        }),
+    ],
+    [
+      "unsupported font",
+      (v: any) =>
+        (v.resources.font = {
+          kind: "font",
+          path: `assets/${"d".repeat(64)}.png`,
+        }),
+    ],
+    [
+      "missing image resource",
+      (v: any) =>
+        (v.spine.overlays = [
+          {
+            id: "image",
+            kind: "image",
+            order: 1,
+            alpha: 1,
+            transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+            anchor: { x: 0.5, y: 0.5 },
+            visibleSegments: ["start"],
+          },
+        ]),
+    ],
+    ["invalid layer id", (v: any) => addV2TextOverlay(v, { id: "Bad_Id" })],
+    [
+      "non-NFC default text",
+      (v: any) => addV2TextOverlay(v, { defaultText: "e\u0301" }),
+    ],
+    [
+      "multiline default text",
+      (v: any) => addV2TextOverlay(v, { defaultText: "a\nb" }),
+    ],
+    ["non-object adaptation", (v: any) => (v.adaptation = [])],
+  ])("rejects additional strict %s contracts", (_label, mutate) => {
+    const value = v2SpineManifestFixture();
+    mutate(value);
+    expect(() => parsePopupManifest(value)).toThrow();
+  });
+
+  it("rejects v1 system text without an explicit font resource", () => {
+    const value = v2SpineManifestFixture();
+    value.version = 1;
+    delete value.name;
+    delete value.adaptation;
+    delete value.backdrop;
+    addV2TextOverlay(value);
+    delete value.spine.overlays[0].alpha;
+    expect(() => parsePopupManifest(value)).toThrow(/resource is required/);
+  });
+
+  it("rejects tier unknown keys, empty layers, and duplicate string names", () => {
+    const unknown = structuredClone(popupFixture()) as any;
+    unknown.awardCelebration.base.extra = true;
+    expect(() => parsePopupManifest(unknown)).toThrow(/unknown key/);
+    const empty = structuredClone(popupFixture()) as any;
+    empty.awardCelebration.base.layers = [];
+    expect(() => parsePopupManifest(empty)).toThrow(/non-empty/);
+    const duplicate = structuredClone(popupFixture()) as any;
+    duplicate.awardCelebration.base.layers.push({
+      ...duplicate.awardCelebration.base.layers[0],
+      id: "manual-amount",
+      order: 11,
+      name: "win-amount",
+      binding: "manual",
+      defaultText: "0",
+      visibleSegments: ["start"],
+    });
+    expect(() => parsePopupManifest(duplicate)).toThrow(/names must be unique/);
+  });
+
+  it("parses v2 ImgNumber and VNI overlays and rejects award name kind conflicts", () => {
+    const value = v2SpineManifestFixture();
+    value.resources.amount = {
+      kind: "image-string",
+      manifest: "image-string.manifest.json",
+    };
+    value.resources["effect-vni"] = {
+      kind: "vni",
+      project: `assets/${"d".repeat(64)}.json`,
+    };
+    value.spine.overlays = [
+      {
+        id: "manual-amount",
+        kind: "image-string",
+        name: "manual-amount",
+        binding: "manual",
+        defaultText: "100",
+        order: 1,
+        alpha: 1,
+        resource: "amount",
+        transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+        anchor: { x: 0.5, y: 0.5 },
+        parent: { kind: "popup-root" },
+        visibleSegments: ["start"],
+      },
+      {
+        id: "vni",
+        kind: "vni",
+        order: 2,
+        alpha: 1,
+        resource: "effect-vni",
+        transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+        playback: { mode: "once" },
+      },
+    ];
+    expect(parsePopupManifest(value).type).toBe("spine");
+
+    value.spine.overlays[0].binding = "win-amount";
+    value.spine.overlays[0].name = "win-amount";
+    delete value.spine.overlays[0].defaultText;
+    delete value.spine.overlays[0].visibleSegments;
+    expect(() => parsePopupManifest(value)).toThrow(/binding must be manual/);
+
+    const conflict = structuredClone(popupFixture()) as any;
+    conflict.resources.font = {
+      kind: "font",
+      path: `assets/${"f".repeat(64)}.woff2`,
+    };
+    conflict.awardCelebration.base.layers.push({
+      id: "amount-text",
+      kind: "text",
+      name: "win-amount",
+      defaultText: "WIN",
+      order: 11,
+      resource: "font",
+      transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+      anchor: { x: 0.5, y: 0.5 },
+      style: v2TextStyle(),
+      visibleSegments: ["start"],
+    });
+    expect(() => parsePopupManifest(conflict)).toThrow(/same kind/);
+  });
+
+  it("rejects layer animation modes, win-amount names, and owned extensions", () => {
+    const layerAnimation = v2SpineManifestFixture();
+    layerAnimation.spine.overlays = [
+      {
+        id: "nested-spine",
+        kind: "spine",
+        order: 1,
+        alpha: 1,
+        resource: "effect",
+        transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+        playback: {
+          mode: "once",
+          startAnimation: "start",
+          loopAnimation: "loop",
+          endAnimation: "end",
+        },
+      },
+    ];
+    expect(() => parsePopupManifest(layerAnimation)).toThrow(/mode invalid/);
+    const name = structuredClone(popupFixture()) as any;
+    name.awardCelebration.base.layers[0].name = "wrong";
+    expect(() => parsePopupManifest(name)).toThrow(/name must be win-amount/);
+    const extension = v2SpineManifestFixture();
+    extension.resources.bad = {
+      kind: "vni",
+      project: `assets/${"d".repeat(64)}.png`,
+    };
+    expect(() => parsePopupManifest(extension)).toThrow(/content-addressed/);
+  });
+
   it("parses a single-line prompt and ordered image overlay", () => {
     const hash = (value: string) => `assets/${value.repeat(64)}`;
     const manifest = parsePopupManifest({
@@ -520,3 +908,64 @@ describe("popup manifest", () => {
     expect(() => parsePopupManifest(value)).toThrow();
   });
 });
+
+function v2SpineManifestFixture(): any {
+  return {
+    version: 2,
+    kind: "popup",
+    id: "strict-v2",
+    name: "Strict V2",
+    type: "spine",
+    designViewport: { width: 1000, height: 1000 },
+    adaptation: {
+      mode: "maximized-focus",
+      focus: { left: 100, right: 100, top: 100, bottom: 100 },
+    },
+    backdrop: { enabled: true, color: "#000000", alpha: 0.5 },
+    resources: {
+      effect: {
+        kind: "spine",
+        skeleton: `assets/${"a".repeat(64)}.json`,
+        atlas: `assets/${"b".repeat(64)}.atlas`,
+        textures: { "effect.png": `assets/${"c".repeat(64)}.png` },
+      },
+    },
+    spine: {
+      resource: "effect",
+      transform: { x: 0, y: 0, scale: 1 },
+      playback: {
+        mode: "segmented-animations",
+        startAnimation: "start",
+        loopAnimation: "loop",
+        endAnimation: "end",
+      },
+    },
+  };
+}
+
+function v2TextStyle(): any {
+  return {
+    fontSize: 48,
+    letterSpacing: 0,
+    fill: { kind: "solid", color: "#ffffff" },
+    arcDegrees: 0,
+  };
+}
+
+function addV2TextOverlay(value: any, overrides: any = {}): void {
+  value.spine.overlays = [
+    {
+      id: "heading",
+      kind: "text",
+      name: "heading",
+      defaultText: "HEADING",
+      order: 1,
+      alpha: 1,
+      transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+      anchor: { x: 0.5, y: 0.5 },
+      style: v2TextStyle(),
+      visibleSegments: ["start", "loop", "end"],
+      ...overrides,
+    },
+  ];
+}

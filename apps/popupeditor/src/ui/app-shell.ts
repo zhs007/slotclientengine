@@ -1,5 +1,9 @@
 import { extractBoundedZip } from "@slotclientengine/browserartifactio";
-import { normalizeEditorPackageZipEntries } from "@slotclientengine/editorresource";
+import {
+  normalizeEditorPackageZipEntries,
+  type EditorImportConflictResolution,
+  type EditorImportResolution,
+} from "@slotclientengine/editorresource";
 import {
   formatPopupAmount,
   validatePopupId,
@@ -14,6 +18,7 @@ import {
   applyImportedResourceBindings,
   clonePopupEditorProject,
   createPopupAmountFormat,
+  createPopupEditorProject,
   detectPopupAmountFormatPreset,
   getPopupVniTextLayerTargets,
   removePopupResource,
@@ -57,6 +62,9 @@ export class PopupEditorApp {
     DEFAULT_POPUP_PREVIEW_AMOUNT_FORMAT;
   #errors: readonly string[] = [];
   #notice = "";
+  #hasProject = false;
+  #previewGeneration = 0;
+  #previewTimer: ReturnType<typeof setTimeout> | null = null;
   constructor(root: HTMLElement) {
     this.#root = root;
   }
@@ -72,13 +80,22 @@ export class PopupEditorApp {
     this.#store.subscribe((project, errors) => {
       this.#errors = errors;
       this.renderWorkspace(project);
+      this.schedulePreview(project, errors);
     });
     this.renderWorkspace(this.#store.project);
   }
   destroy() {
+    if (this.#previewTimer) clearTimeout(this.#previewTimer);
+    this.#previewGeneration += 1;
     this.#preview?.destroy();
   }
   private renderWorkspace(project: PopupEditorProject) {
+    this.#root
+      .querySelector("nav")
+      ?.toggleAttribute("hidden", !this.#hasProject);
+    this.#root
+      .querySelector("aside")
+      ?.toggleAttribute("hidden", !this.#hasProject);
     this.#root
       .querySelectorAll<HTMLButtonElement>("[data-tab]")
       .forEach((button) => {
@@ -88,6 +105,12 @@ export class PopupEditorApp {
         button.tabIndex = active ? 0 : -1;
       });
     const host = this.required("workspace");
+    if (!this.#hasProject) {
+      host.innerHTML = `<section class="project-landing"><h2>开始 Popup 项目</h2><p>创建一个空项目，或导入 Popup Editor 导出的 ZIP。</p><button id="create-project">创建项目</button><label class="file-action">导入项目<input id="import-project" type="file" accept=".zip,application/zip"/></label></section>`;
+      this.required("diagnostics").textContent = this.#notice;
+      this.bindWorkspace(project);
+      return;
+    }
     host.innerHTML =
       this.#tab === "resources"
         ? resourcesMarkup(project)
@@ -110,12 +133,28 @@ export class PopupEditorApp {
           this.renderWorkspace(this.#store.project);
         }),
       );
-    this.required("preview-build").addEventListener(
-      "click",
-      () =>
-        void this.action(async () =>
-          this.#preview!.rebuild(this.#store.project),
-        ),
+    const createDialog = this.required<HTMLDialogElement>(
+      "create-project-dialog",
+    );
+    this.required("create-project-confirm").addEventListener("click", () => {
+      const name = this.required<HTMLInputElement>(
+        "create-project-name",
+      ).value.trim();
+      const type = this.required<HTMLSelectElement>("create-project-type")
+        .value as "award-celebration" | "spine";
+      if (!name) {
+        this.#notice = "项目名不能为空。";
+        return;
+      }
+      const token = crypto.randomUUID().replaceAll("-", "");
+      this.#hasProject = true;
+      createDialog.close();
+      this.#store.replace(
+        createPopupEditorProject({ name, type, id: `popup-${token}` }),
+      );
+    });
+    this.required("create-project-cancel").addEventListener("click", () =>
+      createDialog.close(),
     );
     const bet = this.required<HTMLInputElement>("preview-bet");
     const win = this.required<HTMLInputElement>("preview-win");
@@ -185,15 +224,6 @@ export class PopupEditorApp {
         ),
       ),
     );
-    this.required("preview-advance").addEventListener("click", () =>
-      this.#preview?.advance(),
-    );
-    this.required("preview-dismiss").addEventListener("click", () =>
-      this.#preview?.dismiss(),
-    );
-    this.required("preview-clear").addEventListener("click", () =>
-      this.#preview?.dismissImmediately(),
-    );
     const viewport = this.required<HTMLSelectElement>("preview-resolution");
     const customWidth = this.required<HTMLInputElement>("preview-width");
     const customHeight = this.required<HTMLInputElement>("preview-height");
@@ -219,6 +249,18 @@ export class PopupEditorApp {
     layout();
   }
   private bindWorkspace(project: PopupEditorProject) {
+    this.#root
+      .querySelector("#create-project")
+      ?.addEventListener("click", () => {
+        this.required<HTMLInputElement>("create-project-name").value = "";
+        this.required<HTMLDialogElement>("create-project-dialog").showModal();
+      });
+    const projectFile =
+      this.#root.querySelector<HTMLInputElement>("#import-project");
+    projectFile?.addEventListener("change", () => {
+      const file = projectFile.files?.[0];
+      if (file) void this.importProject(file);
+    });
     const files = this.#root.querySelector<HTMLInputElement>("#import-assets");
     files?.addEventListener(
       "change",
@@ -227,6 +269,26 @@ export class PopupEditorApp {
     this.#root
       .querySelector<HTMLButtonElement>("#export-project")
       ?.addEventListener("click", () => void this.exportProject());
+    this.#root
+      .querySelector<HTMLButtonElement>("#close-project")
+      ?.addEventListener("click", () => {
+        this.#hasProject = false;
+        this.#previewGeneration += 1;
+        this.#preview?.reset();
+        this.renderWorkspace(this.#store.project);
+      });
+    this.#root
+      .querySelector<HTMLButtonElement>("#upgrade-project")
+      ?.addEventListener("click", () =>
+        this.#store.transact((draft) => {
+          draft.formatVersion = 2;
+          draft.name ||= draft.id;
+          for (const tier of draft.tiers.values())
+            for (const layer of tier.layers) (layer as any).alpha ??= 1;
+          for (const overlay of draft.spine.overlays)
+            (overlay as any).alpha ??= 1;
+        }),
+      );
     this.#root
       .querySelectorAll<HTMLButtonElement>("[data-tier]")
       .forEach((button) =>
@@ -358,6 +420,16 @@ export class PopupEditorApp {
         ),
       );
     this.#root
+      .querySelector<HTMLButtonElement>("#add-spine-system-text")
+      ?.addEventListener("click", () =>
+        this.#store.transact((draft) => {
+          const order = nextOrder(draft.spine.overlays);
+          draft.spine.overlays.push(
+            createSystemTextLayer(`overlay-${order}`, order),
+          );
+        }),
+      );
+    this.#root
       .querySelectorAll<HTMLButtonElement>("[data-delete-overlay]")
       .forEach((button) =>
         button.addEventListener("click", () =>
@@ -380,8 +452,8 @@ export class PopupEditorApp {
             const field = input.dataset.overlayField!;
             if (["x", "y", "scale", "rotation"].includes(field))
               (overlay.transform as any)[field] = Number(input.value);
-            else if (field === "order")
-              (overlay as any).order = Number(input.value);
+            else if (field === "order" || field === "alpha")
+              (overlay as any)[field] = Number(input.value);
             else if (["name", "defaultText"].includes(field))
               (overlay as any)[field] = input.value;
             else if (["anchor-x", "anchor-y"].includes(field))
@@ -463,6 +535,15 @@ export class PopupEditorApp {
         }),
       );
     this.#root
+      .querySelector<HTMLButtonElement>("#add-system-text-layer")
+      ?.addEventListener("click", () =>
+        this.#store.transact((draft) => {
+          const layers = draft.tiers.get(this.#tier)!.layers;
+          const order = nextOrder(layers);
+          layers.push(createSystemTextLayer(`text-${order}`, order));
+        }),
+      );
+    this.#root
       .querySelectorAll<HTMLButtonElement>("[data-delete-resource]")
       .forEach((button) =>
         button.addEventListener("click", () =>
@@ -531,8 +612,8 @@ export class PopupEditorApp {
             const field = input.dataset.layerField!;
             if (["x", "y", "scale", "rotation"].includes(field))
               (layer.transform as any)[field] = Number(input.value);
-            else if (field === "order")
-              (layer as any).order = Number(input.value);
+            else if (field === "order" || field === "alpha")
+              (layer as any)[field] = Number(input.value);
             else if (["name", "defaultText"].includes(field))
               (layer as any)[field] = input.value;
             else if (field === "anchor-x" || field === "anchor-y")
@@ -614,13 +695,6 @@ export class PopupEditorApp {
         }),
       );
     }
-    const projectType =
-      this.#root.querySelector<HTMLSelectElement>("#project-type");
-    projectType?.addEventListener("change", () =>
-      this.#store.transact((draft) => {
-        draft.type = projectType.value as "award-celebration" | "spine";
-      }),
-    );
     const spineResource =
       this.#root.querySelector<HTMLSelectElement>("#spine-resource");
     spineResource?.addEventListener("change", () =>
@@ -668,6 +742,16 @@ export class PopupEditorApp {
               draft.designViewport[
                 field === "viewport-width" ? "width" : "height"
               ] = Number(input.value);
+            else if (field === "project-name") draft.name = input.value;
+            else if (field.startsWith("focus-"))
+              (draft.adaptation.focus as any)[field.slice("focus-".length)] =
+                Number(input.value);
+            else if (field === "backdrop-enabled")
+              draft.backdrop.enabled = input.checked;
+            else if (field === "backdrop-color")
+              draft.backdrop.color = input.value;
+            else if (field === "backdrop-alpha")
+              draft.backdrop.alpha = Number(input.value);
             else {
               const key = field as keyof typeof draft.amountFormat;
               (draft.amountFormat as any)[key] =
@@ -681,6 +765,36 @@ export class PopupEditorApp {
         ),
       );
   }
+  private schedulePreview(
+    project: PopupEditorProject,
+    errors: readonly string[],
+  ) {
+    if (this.#previewTimer) clearTimeout(this.#previewTimer);
+    this.#preview?.cancelPendingRebuild();
+    const generation = ++this.#previewGeneration;
+    if (!this.#hasProject || errors.length) return;
+    const snapshot = clonePopupEditorProject(project);
+    this.#previewTimer = setTimeout(() => {
+      this.#previewTimer = null;
+      void this.#preview!.rebuild(snapshot).catch((error) => {
+        if (generation !== this.#previewGeneration) return;
+        this.#notice = `自动预览失败：${error instanceof Error ? error.message : String(error)}`;
+        this.renderWorkspace(this.#store.project);
+      });
+    }, 120);
+  }
+  private async importProject(file: File) {
+    await this.action(async () => {
+      if (!file.name.toLowerCase().endsWith(".zip"))
+        throw new Error("Popup 项目必须是 ZIP。");
+      const imported = await importPopupZip(
+        new Uint8Array(await file.arrayBuffer()),
+      );
+      this.#hasProject = true;
+      this.#store.replace(imported);
+      this.#notice = `已导入项目：${imported.name}`;
+    });
+  }
   private async reviewFiles(files: readonly File[]) {
     await this.action(async () => {
       if (files.length === 1 && files[0]!.name.toLowerCase().endsWith(".zip")) {
@@ -690,14 +804,7 @@ export class PopupEditorApp {
           ["popup.manifest.json", "image-string.manifest.json"],
         );
         if (entries.has("popup.manifest.json")) {
-          const imported = await importPopupZip(bytes);
-          if (
-            globalThis.window?.confirm?.(
-              `导入资源审查\n${files[0]!.name} · popup project · ${files[0]!.size} bytes\n\n确认原子替换当前项目？`,
-            ) !== false
-          )
-            this.#store.replace(imported);
-          return;
+          throw new Error("这是 Popup 项目 ZIP，请使用“导入项目”。");
         }
       }
       const profileSelections = new Map<string, string>();
@@ -774,18 +881,40 @@ export class PopupEditorApp {
             `<article><strong>${candidate.rootKey}</strong><span>${candidate.kind}</span><span>${candidate.primarySource}</span><span>${candidate.summary}</span>${candidate.profiles ? `<span>VNI profile：${candidate.selectedProfileId} / ${candidate.profiles.map(({ id, label }) => `${id} (${label})`).join(", ")}</span>` : ""}<span>${candidateBindingSummary(candidate)}</span><span>${candidate.dependencyCount} dependencies / ${candidate.assets.length} filename keys / ${candidate.assets.reduce((sum, asset) => sum + asset.byteLength, 0)} bytes</span></article>`,
         )
         .join("") +
-      `<pre>${transaction.assets.items.map((item) => `${item.targetKey} · ${item.action}${item.references.length ? ` · 影响 ${item.references.map(({ location }) => location).join(", ")}` : ""}`).join("\n")}</pre>`;
+      `<div class="import-conflicts">${transaction.assets.items
+        .map(
+          (item, index) =>
+            `<p><strong>${item.targetKey}</strong> · ${item.action}${item.references.length ? ` · 影响 ${item.references.map(({ location }) => location).join(", ")}` : ""}${item.action === "overwrite" || item.action === "rename-required" ? `<label>处理方式<select data-import-resolution="${index}">${item.action === "overwrite" ? '<option value="overwrite">覆盖同名资源</option>' : ""}<option value="keep-both">保留两份（自动重命名）</option></select></label>` : ""}</p>`,
+        )
+        .join("")}</div>`;
     this.required("review-confirm").onclick = () =>
       void this.action(async () => {
         const draft = clonePopupEditorProject(this.#store.project);
-        await commitImportReview(draft, candidates);
+        const resolutions: EditorImportResolution[] = [
+          ...dialog.querySelectorAll<HTMLSelectElement>(
+            "[data-import-resolution]",
+          ),
+        ].map((select) => ({
+          itemIndex: Number(select.dataset.importResolution),
+          resolution: select.value as EditorImportConflictResolution,
+        }));
+        const committed = await commitImportReview(
+          draft,
+          candidates,
+          resolutions,
+        );
         if (draft.type === "award-celebration")
-          for (const candidate of candidates)
+          for (const candidate of candidates) {
+            const rootKey =
+              committed.assets.items.find((item) =>
+                item.sourceKeys.includes(candidate.rootKey),
+              )?.targetKey ?? candidate.rootKey;
             applyImportedResourceBindings(
               draft,
-              candidate.rootKey,
+              rootKey,
               candidate.suggestedTierBindings,
             );
+          }
         this.#store.replace(draft);
         this.#notice = resourceImportNotice(draft, candidates);
         dialog.close();
@@ -831,10 +960,10 @@ export class PopupEditorApp {
 }
 
 function shell() {
-  return `<header><h1>Popup Editor</h1><nav class="primary-tabs" role="tablist" aria-label="编辑区域"><button role="tab" data-tab="resources">资源</button><button role="tab" data-tab="tiers">动画 / 档位</button><button role="tab" data-tab="project">项目</button></nav></header><main><section class="left"><div id="workspace" role="tabpanel"></div><pre id="diagnostics"></pre></section><aside><div class="preview-controls"><select id="preview-resolution"><option value="1920x1080">1920×1080</option><option value="1080x1920" selected>1080×1920</option><option value="2000x2000">2000×2000</option><option value="custom">custom</option></select><label>width<input id="preview-width" type="number" min="1" value="1080"/></label><label>height<input id="preview-height" type="number" min="1" value="1920"/></label><select id="preview-zoom"><option value="fit">fit</option>${[0.25, 0.5, 0.75, 1, 1.5, 2].map((v) => `<option value="${v}">${v * 100}%</option>`)}</select><label><input id="preview-guides" type="checkbox" checked/>guides</label><label>bet raw<input id="preview-bet" type="number" value="100"/></label><label>win raw<input id="preview-win" type="number" value="5000"/></label><label>Prompt preview（留空用默认）<input id="preview-prompt" value=""/></label><label>小数位数（仅预览）<input id="preview-fraction-digits" type="number" min="0" max="6" step="1" value="0"/></label><label><input id="preview-use-grouping" type="checkbox"/>千位分隔（仅预览）</label><button id="preview-build">Build preview</button><button id="preview-play">Play / Replay</button><label>节点类型<select id="preview-node-kind"><option value="text">系统文字</option><option value="image-string">ImgNumber</option></select></label><label>节点 name 或 index<input id="preview-node-selector" value="congratulations"/></label><label>节点预览 string<input id="preview-node-text" value="CONGRATULATIONS!"/></label><button id="preview-node-apply">Set string</button><button id="preview-node-reset">Reset string</button><button id="preview-advance">Advance</button><button id="preview-dismiss">Click / Dismiss</button><button id="preview-clear">Dismiss immediately</button></div><div id="preview-canvas"></div><output id="preview-status"></output></aside></main><dialog id="vni-runtime-choice"><h2>选择 VNI runtime</h2><p id="vni-runtime-description"></p><label class="vni-runtime-options">运行版本<select id="vni-runtime-select"></select></label><button id="vni-runtime-confirm">确认 runtime</button><button id="vni-runtime-cancel">取消导入</button></dialog><dialog id="import-review"><h2>Import review</h2><div id="review-body"></div><button id="review-confirm">确认导入</button><button id="review-cancel">取消</button></dialog>`;
+  return `<header><h1>Popup Editor</h1><nav class="primary-tabs" role="tablist" aria-label="编辑区域"><button role="tab" data-tab="resources">资源</button><button role="tab" data-tab="tiers">动画 / 档位</button><button role="tab" data-tab="project">项目</button></nav></header><main><section class="left"><div id="workspace" role="tabpanel"></div><pre id="diagnostics"></pre></section><aside><div class="preview-controls"><select id="preview-resolution"><option value="1920x1080">1920×1080</option><option value="1080x1920" selected>1080×1920</option><option value="2000x2000">2000×2000</option><option value="custom">custom</option></select><label>width<input id="preview-width" type="number" min="1" value="1080"/></label><label>height<input id="preview-height" type="number" min="1" value="1920"/></label><select id="preview-zoom"><option value="fit">fit</option>${[0.25, 0.5, 0.75, 1, 1.5, 2].map((v) => `<option value="${v}">${v * 100}%</option>`)}</select><label><input id="preview-guides" type="checkbox" checked/>guides</label><label>bet raw<input id="preview-bet" type="number" value="100"/></label><label>win raw<input id="preview-win" type="number" value="5000"/></label><label>Prompt preview（留空用默认）<input id="preview-prompt" value=""/></label><label>小数位数（仅预览）<input id="preview-fraction-digits" type="number" min="0" max="6" step="1" value="0"/></label><label><input id="preview-use-grouping" type="checkbox"/>千位分隔（仅预览）</label><button id="preview-play">Play / Replay</button><label>节点类型<select id="preview-node-kind"><option value="text">系统文字</option><option value="image-string">ImgNumber</option></select></label><label>节点 name 或 index<input id="preview-node-selector" value="congratulations"/></label><label>节点预览 string<input id="preview-node-text" value="CONGRATULATIONS!"/></label><button id="preview-node-apply">Set string</button><button id="preview-node-reset">Reset string</button></div><div id="preview-canvas"></div><output id="preview-status"></output></aside></main><dialog id="create-project-dialog"><h2>创建 Popup 项目</h2><label>项目名<input id="create-project-name"/></label><label>类型<select id="create-project-type"><option value="award-celebration">获奖庆祝</option><option value="spine">Spine 弹窗</option></select></label><button id="create-project-confirm">创建</button><button id="create-project-cancel">取消</button></dialog><dialog id="vni-runtime-choice"><h2>选择 VNI runtime</h2><p id="vni-runtime-description"></p><label class="vni-runtime-options">运行版本<select id="vni-runtime-select"></select></label><button id="vni-runtime-confirm">确认 runtime</button><button id="vni-runtime-cancel">取消导入</button></dialog><dialog id="import-review"><h2>Import review</h2><div id="review-body"></div><button id="review-confirm">确认导入</button><button id="review-cancel">取消</button></dialog>`;
 }
 function resourcesMarkup(project: PopupEditorProject) {
-  return `<section class="resource-import-panel"><h2>扁平资源库</h2><p>图片、字体、Spine、VNI、ImgNumber ZIP 与 Popup ZIP 统一从这里导入；filename key 保留原始拼写，同名不同 bytes 默认覆盖。普通资源导入只入库，不会根据文件名猜测用途；请在导入后到“动画 / 档位”页显式绑定。</p><div class="resource-actions"><label class="file-action">导入资源<input id="import-assets" type="file" accept="image/png,image/webp,image/jpeg,.json,.atlas,.zip,.woff2,.woff,.ttf,.otf" multiple/></label></div></section><div class="resource-list">${[...project.resources.values()].map((resource) => `<article class="card"><strong>${resource.rootKey}</strong><span>${resource.kind}</span><details><summary>${resource.keys.length} filename keys</summary><code>${resource.keys.join("\n")}</code></details><span>${resourceReferenceCount(project, resource.rootKey)} 个图层绑定</span><button data-delete-resource="${resource.rootKey}">删除</button></article>`).join("") || '<p class="empty-state">尚无资源</p>'}</div>`;
+  return `<section class="resource-import-panel"><h2>资源库</h2><p>这里只导入资源：VNI 与 ImgNumber 使用 ZIP；图片、字体使用文件；Spine 每次选择完整 JSON、atlas、PNG 组。Popup 项目 ZIP 请使用项目入口。同名不同 bytes 必须在 review 中选择覆盖或保留两份。</p><div class="resource-actions"><label class="file-action">上传资源<input id="import-assets" type="file" accept="image/png,image/webp,image/jpeg,.json,.atlas,.zip,.woff2,.woff,.ttf,.otf" multiple/></label></div></section><div class="resource-list">${[...project.resources.values()].map((resource) => `<article class="card"><strong>${resource.rootKey}</strong><span>${resource.kind}</span><details><summary>${resource.keys.length} filename keys</summary><code>${resource.keys.join("\n")}</code></details><span>${resourceReferenceCount(project, resource.rootKey)} 个图层绑定</span><button data-delete-resource="${resource.rootKey}">删除</button></article>`).join("") || '<p class="empty-state">尚无资源</p>'}</div>`;
 }
 
 function spineMarkup(project: PopupEditorProject) {
@@ -856,7 +985,7 @@ function spineMarkup(project: PopupEditorProject) {
     return `<label>${label}<select data-spine-popup-field="${field}"><option value="">请选择动画</option>${animations.map((name) => `<option value="${name}" ${name === selected ? "selected" : ""}>${name}</option>`).join("")}</select></label>`;
   };
   const prompt = project.spine.prompt;
-  return `<section class="tier-editor"><h2>普通 Spine 弹窗</h2><p>播放 start 后进入 loop；用户点击会锁存关闭请求，并在当前 loop 播放到边界后进入 end。</p><label>Spine 资源<select id="spine-resource"><option value="">请选择资源</option>${resources.map((resource) => `<option value="${resource.rootKey}" ${resource.rootKey === project.spine.resource ? "selected" : ""}>${resource.rootKey}</option>`).join("")}</select></label><div class="threshold-grid">${(["x", "y", "scale"] as const).map((field) => `<label>${field}<input data-spine-popup-field="${field}" type="number" step="0.1" value="${project.spine.transform[field]}"/></label>`).join("")}</div>${animationSelect("startAnimation", "开始动画")}${animationSelect("loopAnimation", "循环动画")}${animationSelect("endAnimation", "结束动画")}<p class="segment-summary">${project.spine.resource ? (animations.length ? `已从 skeleton JSON 读取 ${animations.length} 个动画。` : "所选 skeleton JSON 没有可用动画。") : "导入并选择一组 Spine JSON、atlas 与 PNG 后配置动画。"}</p><h3>单行点击提示</h3><label><input id="spine-prompt-enabled" type="checkbox" ${prompt.enabled ? "checked" : ""}/>启用提示</label><label>字体<select id="spine-prompt-font"><option value="">系统字体（默认，不打包）</option>${fonts.map((font) => `<option value="${font.rootKey}" ${font.rootKey === prompt.font ? "selected" : ""}>${font.rootKey}</option>`).join("")}</select></label><label>默认文案<input data-spine-prompt-field="defaultText" value="${prompt.defaultText}"/></label><label>颜色<input data-spine-prompt-field="fill" value="${prompt.fill}"/></label><div class="threshold-grid">${(["order", "x", "y", "width", "height"] as const).map((field) => `<label>${field}<input data-spine-prompt-field="${field}" type="number" step="0.1" value="${field === "order" ? prompt.order : prompt.area[field]}"/></label>`).join("")}</div><p>文字始终单行，根据区域自动缩放；进入 end 时隐藏。</p><h3>Overlay 图层</h3><div class="layer-add"><select id="spine-overlay-resource">${overlayResources.map((resource) => `<option value="${resource.rootKey}">${resource.rootKey} (${resource.kind})</option>`).join("")}</select><button id="add-spine-overlay" ${overlayResources.length ? "" : "disabled"}>添加 overlay</button></div>${project.spine.overlays.map(overlayMarkup).join("")}</section>`;
+  return `<section class="tier-editor"><h2>普通 Spine 弹窗</h2><p>播放 start 后进入 loop；用户点击会锁存关闭请求，并在当前 loop 播放到边界后进入 end。</p><label>Spine 资源<select id="spine-resource"><option value="">请选择资源</option>${resources.map((resource) => `<option value="${resource.rootKey}" ${resource.rootKey === project.spine.resource ? "selected" : ""}>${resource.rootKey}</option>`).join("")}</select></label><div class="threshold-grid">${(["x", "y", "scale"] as const).map((field) => `<label>${field}<input data-spine-popup-field="${field}" type="number" step="0.1" value="${project.spine.transform[field]}"/></label>`).join("")}</div>${animationSelect("startAnimation", "开始动画")}${animationSelect("loopAnimation", "循环动画")}${animationSelect("endAnimation", "结束动画")}<p class="segment-summary">${project.spine.resource ? (animations.length ? `已从 skeleton JSON 读取 ${animations.length} 个动画。` : "所选 skeleton JSON 没有可用动画。") : "导入并选择一组 Spine JSON、atlas 与 PNG 后配置动画。"}</p><h3>单行点击提示</h3><label><input id="spine-prompt-enabled" type="checkbox" ${prompt.enabled ? "checked" : ""}/>启用提示</label><label>字体<select id="spine-prompt-font"><option value="">系统字体（默认，不打包）</option>${fonts.map((font) => `<option value="${font.rootKey}" ${font.rootKey === prompt.font ? "selected" : ""}>${font.rootKey}</option>`).join("")}</select></label><label>默认文案<input data-spine-prompt-field="defaultText" value="${prompt.defaultText}"/></label><label>颜色<input data-spine-prompt-field="fill" value="${prompt.fill}"/></label><div class="threshold-grid">${(["order", "x", "y", "width", "height"] as const).map((field) => `<label>${field}<input data-spine-prompt-field="${field}" type="number" step="0.1" value="${field === "order" ? prompt.order : prompt.area[field]}"/></label>`).join("")}</div><p>文字始终单行，根据区域自动缩放；进入 end 时隐藏。</p><h3>Overlay 图层</h3><div class="layer-add"><select id="spine-overlay-resource">${overlayResources.map((resource) => `<option value="${resource.rootKey}">${resource.rootKey} (${resource.kind})</option>`).join("")}</select><button id="add-spine-overlay" ${overlayResources.length ? "" : "disabled"}>添加 overlay</button>${project.formatVersion === 2 ? '<button id="add-spine-system-text">添加系统文字</button>' : ""}</div>${project.spine.overlays.map(overlayMarkup).join("")}</section>`;
 }
 
 function overlayMarkup(layer: PopupOverlayLayer) {
@@ -878,7 +1007,7 @@ function overlayMarkup(layer: PopupOverlayLayer) {
                   ? `${input("loopStartTime", layer.playback.loopStartTime)}${input("loopEndTime", layer.playback.loopEndTime)}<label>keepParticlesAlive<input data-overlay-id="${layer.id}" data-overlay-field="keepParticlesAlive" type="checkbox" ${layer.playback.keepParticlesAlive ? "checked" : ""}/></label>`
                   : `<p>VNI once</p>`
               }`;
-  return `<article class="card"><strong>${layer.id}</strong><span>${layer.kind} / ${layer.resource}</span>${input("order", layer.order)}${(["x", "y", "scale", "rotation"] as const).map((field) => input(field, layer.transform[field])).join("")}${playback}<button data-delete-overlay="${layer.id}">删除 overlay</button></article>`;
+  return `<article class="card"><strong>${layer.id}</strong><span>${layer.kind} / ${layer.resource ?? "system"}</span>${input("order", layer.order)}${input("alpha", layer.alpha ?? 1)}${(["x", "y", "scale", "rotation"] as const).map((field) => input(field, layer.transform[field])).join("")}${playback}<button data-delete-overlay="${layer.id}">删除 overlay</button></article>`;
 }
 
 function segmentControls(
@@ -895,6 +1024,38 @@ function segmentControls(
         `<label>${segment}<input ${idAttribute}="${id}" ${fieldAttribute}="segment-${segment}" type="checkbox" ${segments.includes(segment) ? "checked" : ""}/></label>`,
     )
     .join("");
+}
+
+function nextOrder(layers: readonly { readonly order: number }[]): number {
+  return layers.length ? Math.max(...layers.map(({ order }) => order)) + 1 : 0;
+}
+
+function createSystemTextLayer(id: string, order: number) {
+  return {
+    id,
+    kind: "text" as const,
+    name: id,
+    defaultText: "TEXT",
+    order,
+    alpha: 1,
+    transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+    anchor: { x: 0.5, y: 0.5 },
+    style: {
+      fontSize: 72,
+      letterSpacing: 0,
+      fill: { kind: "solid" as const, color: "#ffffff" },
+      stroke: { color: "#000000", width: 4 },
+      shadow: {
+        color: "#000000",
+        alpha: 0.5,
+        blur: 4,
+        distance: 6,
+        angleDegrees: 90,
+      },
+      arcDegrees: 0,
+    },
+    visibleSegments: ["start", "loop", "end"] as const,
+  };
 }
 
 function updateTextStyleField(
@@ -1046,7 +1207,7 @@ function tiersMarkup(
   betRaw: number,
 ) {
   const tier = project.tiers.get(active)!;
-  return `<nav class="tier-tabs" role="tablist" aria-label="获奖档位">${TIERS.map((id) => `<button role="tab" aria-selected="${id === active}" tabindex="${id === active ? 0 : -1}" data-tier="${id}" class="${id === active ? "active" : ""}"><span>${id}</span><small>${project.tiers.get(id)!.layers.length} 层</small></button>`).join("")}</nav><section class="tier-contract"><h2>累计档位合同</h2><p>base：0 &lt; win ≤ 1×bet；standard：1×bet &lt; win &lt; bigwin。达到某个阈值时进入该档，已达到的前序档位会依次累计播放。</p><div class="threshold-grid">${(["bigwin", "superwin", "megawin"] as const).map((id) => `<label><span>${id}</span><input data-threshold-tier="${id}" type="number" min="2" step="1" value="${project.tiers.get(id)!.thresholdMultiplier}"/><small>× bet</small></label>`).join("")}</div><p class="contract-example">当前倍数边界：1× / ${project.tiers.get("bigwin")!.thresholdMultiplier}× / ${project.tiers.get("superwin")!.thresholdMultiplier}× / ${project.tiers.get("megawin")!.thresholdMultiplier}×；等于阈值时进入对应档。</p><p id="tier-boundaries" class="raw-boundaries">${tierBoundarySummary(project, betRaw)}</p></section><section class="tier-editor"><h2>${active}</h2><p class="layer-order-help">order 数值越小越靠下，只控制当前档位内的图层顺序。</p><label>金额计数时长<input id="tier-duration" type="number" step="0.1" min="0" value="${tier.countDurationSeconds}"/><small>秒</small></label><div class="layer-add"><select id="layer-resource">${[...project.resources.values()].map((resource) => `<option value="${resource.rootKey}">${resource.rootKey} (${resource.kind})</option>`)}</select><button data-add-layer ${project.resources.size ? "" : "disabled"}>新增 / 切换图层</button></div>${tier.layers.map((layer) => layerMarkup(layer, project, active)).join("")}</section>`;
+  return `<nav class="tier-tabs" role="tablist" aria-label="获奖档位">${TIERS.map((id) => `<button role="tab" aria-selected="${id === active}" tabindex="${id === active ? 0 : -1}" data-tier="${id}" class="${id === active ? "active" : ""}"><span>${id}</span><small>${project.tiers.get(id)!.layers.length} 层</small></button>`).join("")}</nav><section class="tier-contract"><h2>累计档位合同</h2><p>base：0 &lt; win ≤ 1×bet；standard：1×bet &lt; win &lt; bigwin。达到某个阈值时进入该档，已达到的前序档位会依次累计播放。</p><div class="threshold-grid">${(["bigwin", "superwin", "megawin"] as const).map((id) => `<label><span>${id}</span><input data-threshold-tier="${id}" type="number" min="2" step="1" value="${project.tiers.get(id)!.thresholdMultiplier}"/><small>× bet</small></label>`).join("")}</div><p class="contract-example">当前倍数边界：1× / ${project.tiers.get("bigwin")!.thresholdMultiplier}× / ${project.tiers.get("superwin")!.thresholdMultiplier}× / ${project.tiers.get("megawin")!.thresholdMultiplier}×；等于阈值时进入对应档。</p><p id="tier-boundaries" class="raw-boundaries">${tierBoundarySummary(project, betRaw)}</p></section><section class="tier-editor"><h2>${active}</h2><p class="layer-order-help">order 数值越小越靠下，只控制当前档位内的图层顺序。</p><label>金额计数时长<input id="tier-duration" type="number" step="0.1" min="0" value="${tier.countDurationSeconds}"/><small>秒</small></label><div class="layer-add"><select id="layer-resource">${[...project.resources.values()].map((resource) => `<option value="${resource.rootKey}">${resource.rootKey} (${resource.kind})</option>`)}</select><button data-add-layer ${project.resources.size ? "" : "disabled"}>新增 / 切换图层</button>${project.formatVersion === 2 ? '<button id="add-system-text-layer">添加系统文字</button>' : ""}</div>${tier.layers.map((layer) => layerMarkup(layer, project, active)).join("")}</section>`;
 }
 
 function tierBoundarySummary(project: PopupEditorProject, betRaw: number) {
@@ -1085,7 +1246,7 @@ function layerMarkup(
           : layer.kind === "text"
             ? `${input("name", layer.name, "text")}${input("defaultText", layer.defaultText, "text")}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${textStyleMarkup("layer", layer.id, layer.style)}${segmentControls("layer", layer.id, layer.visibleSegments)}`
             : `${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${(["start", "loop", "end"] as const).map((segment) => `<label>${segment}<input data-layer-id="${layer.id}" data-layer-field="segment-${segment}" type="checkbox" ${layer.visibleSegments.includes(segment) ? "checked" : ""}/></label>`).join("")}`;
-  return `<article class="card"><strong>${layer.id}</strong><span>${layer.kind} / ${layer.resource}</span>${input("order", layer.order)}${(["x", "y", "scale"] as const).map((field) => input(field, layer.transform[field])).join("")}${layer.kind === "text" || layer.kind === "image-string" ? input("rotation", layer.transform.rotation ?? 0) : ""}${playback}<button data-delete-layer="${layer.id}">删除图层</button></article>`;
+  return `<article class="card"><strong>${layer.id}</strong><span>${layer.kind} / ${layer.resource ?? "system"}</span>${input("order", layer.order)}${input("alpha", layer.alpha ?? 1)}${(["x", "y", "scale"] as const).map((field) => input(field, layer.transform[field])).join("")}${layer.kind === "text" || layer.kind === "image-string" ? input("rotation", layer.transform.rotation ?? 0) : ""}${playback}<button data-delete-layer="${layer.id}">删除图层</button></article>`;
 }
 
 function vniPlaybackMarkup(
@@ -1165,6 +1326,7 @@ function vniTimingSummary(
   project: PopupEditorProject,
   layer: Extract<PopupLayer, { kind: "vni" }>,
 ) {
+  if (!layer.resource) return "";
   const resource = project.resources.get(layer.resource);
   if (!resource || resource.spec.kind !== "vni") return "";
   const bytes = project.assets.get(resource.spec.project)?.bytes;
@@ -1196,7 +1358,11 @@ function projectMarkup(project: PopupEditorProject, errors: readonly string[]) {
     `<label>${field}<input data-project-field="${field}" type="${type}" value="${project.amountFormat[field]}" ${type === "checkbox" && project.amountFormat[field] ? "checked" : ""}/></label>`;
   const preset = detectPopupAmountFormatPreset(project.amountFormat);
   const idError = popupIdValidationError(project.id);
-  const common = `<div class="project-actions"><button id="export-project">导出 Popup ZIP</button></div><h2>项目</h2><label>弹窗类型<select id="project-type"><option value="award-celebration" ${project.type === "award-celebration" ? "selected" : ""}>获奖庆祝</option><option value="spine" ${project.type === "spine" ? "selected" : ""}>普通 Spine</option></select></label><label class="field-stack">project id<input id="project-id" value="${project.id}" aria-invalid="${String(Boolean(idError))}" aria-describedby="project-id-error" class="${idError ? "invalid" : ""}"/><small id="project-id-error" class="field-error" ${idError ? "" : "hidden"}>${idError}</small></label><label>viewport width<input data-project-field="viewport-width" type="number" value="${project.designViewport.width}"/></label><label>viewport height<input data-project-field="viewport-height" type="number" value="${project.designViewport.height}"/></label>`;
+  const versionActions =
+    project.formatVersion === 1
+      ? '<button id="upgrade-project">升级为 v2</button>'
+      : "";
+  const common = `<div class="project-actions"><button id="export-project">导出 Popup ZIP</button>${versionActions}<button id="close-project">关闭项目</button></div><h2>项目</h2><p>格式 v${project.formatVersion} · ${project.type === "award-celebration" ? "获奖庆祝" : "Spine 弹窗"}</p><label>项目名<input data-project-field="project-name" value="${project.name}"/></label><label class="field-stack">project id<input id="project-id" value="${project.id}" aria-invalid="${String(Boolean(idError))}" aria-describedby="project-id-error" class="${idError ? "invalid" : ""}"/><small id="project-id-error" class="field-error" ${idError ? "" : "hidden"}>${idError}</small></label><label>viewport width<input data-project-field="viewport-width" type="number" value="${project.designViewport.width}"/></label><label>viewport height<input data-project-field="viewport-height" type="number" value="${project.designViewport.height}"/></label>${project.formatVersion === 2 ? `<h3>重点区域</h3><p>以设计画布中心为原点，分别向四边扩展；预览中的绿色框显示适配结果。</p><div class="threshold-grid">${(["left", "right", "top", "bottom"] as const).map((side) => `<label>${side}<input data-project-field="focus-${side}" type="number" min="0.001" step="1" value="${project.adaptation.focus[side]}"/></label>`).join("")}</div><h3>全屏压暗底</h3><label><input data-project-field="backdrop-enabled" type="checkbox" ${project.backdrop.enabled ? "checked" : ""}/>启用</label><label>颜色<input data-project-field="backdrop-color" type="color" value="${project.backdrop.color}"/></label><label>透明度<input data-project-field="backdrop-alpha" type="number" min="0" max="1" step="0.05" value="${project.backdrop.alpha}"/></label>` : "<p>v1 项目保持旧适配和输出；升级后才启用重点区域、通用全屏底与图层透明度合同。</p>"}`;
   const amount =
     project.type === "award-celebration"
       ? `<h3>金额合同</h3><label>preset<select id="amount-format-preset"><option value="integer" ${preset === "integer" ? "selected" : ""}>纯数字整数（raw 100 → 100）</option><option value="decimal" ${preset === "decimal" ? "selected" : ""}>纯数字两位小数（raw 100 → 1.00）</option><option value="custom" ${preset === "custom" ? "selected" : ""}>自定义</option></select></label><p class="preset-help">整数预设使用 rawScale=1，只要求 glyph 0–9；两位小数预设使用 rawScale=100，要求 glyph 0–9 和 .。两者均不输出货币符号或千分位。</p>${amountInput("rawScale", "number")}${amountInput("fractionDigits", "number")}${amountInput("useGrouping", "checkbox")}${amountInput("groupSeparator")}${amountInput("decimalSeparator")}${amountInput("prefix")}${amountInput("suffix")}<p>rounding: floor（strict contract）</p>`

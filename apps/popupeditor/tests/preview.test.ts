@@ -49,6 +49,11 @@ const player = {
   start: vi.fn(),
   requestAdvance: vi.fn(),
   requestDismiss: vi.fn(),
+  applyViewport: vi.fn(() => ({
+    viewportSize: { width: 1080, height: 1920 },
+    contentScale: 1,
+    contentPosition: { x: 540, y: 960 },
+  })),
   destroy: vi.fn(),
   getTextNode: vi.fn(() => ({ setText: vi.fn(), resetText: vi.fn() })),
   getImageStringNode: vi.fn(() => ({ setText: vi.fn(), resetText: vi.fn() })),
@@ -139,10 +144,11 @@ describe("PopupPreview", () => {
     canvas.dispatchEvent(new Event("pointerdown"));
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "A" }));
     expect(player.requestAdvance).toHaveBeenCalledTimes(2);
-    preview.advance();
-    preview.dismiss();
-    preview.dismissImmediately();
     preview.setViewport(1920, 1080, 0.5, false);
+    expect(player.applyViewport).toHaveBeenLastCalledWith({
+      width: 1920,
+      height: 1080,
+    });
     expect(player.start).toHaveBeenCalledWith({
       betAmountRaw: 100,
       winAmountRaw: 5000,
@@ -153,9 +159,30 @@ describe("PopupPreview", () => {
     preview.destroy();
     canvas.dispatchEvent(new Event("pointerdown"));
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "B" }));
-    expect(player.requestAdvance).toHaveBeenCalledTimes(3);
+    expect(player.requestAdvance).toHaveBeenCalledTimes(2);
     expect(player.destroy).toHaveBeenCalled();
     expect(resource.destroy).toHaveBeenCalled();
+  });
+
+  it("discards a prepared preview when a newer edit invalidates the rebuild", async () => {
+    let release!: () => void;
+    player.init.mockImplementationOnce(
+      () => new Promise<void>((resolve) => (release = resolve)),
+    );
+    const { PopupPreview } = await import("../src/preview/popup-preview.js");
+    const preview = new PopupPreview(
+      document.querySelector("#host")!,
+      document.querySelector("#status")!,
+    );
+    await preview.init();
+    const rebuilding = preview.rebuild({} as never);
+    await vi.waitFor(() => expect(player.init).toHaveBeenCalled());
+    preview.cancelPendingRebuild();
+    release();
+    await rebuilding;
+    expect(player.destroy).toHaveBeenCalled();
+    expect(resource.destroy).toHaveBeenCalled();
+    preview.destroy();
   });
 
   it("dismisses a playing Spine Popup from canvas or keyboard input", async () => {

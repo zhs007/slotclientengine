@@ -18,7 +18,7 @@ import {
   collectMappedPopupAssetKeys,
   collectPopupPackagePaths,
   parsePopupManifest,
-  type PopupManifestV1,
+  type PopupManifest,
 } from "@slotclientengine/rendercore/popup";
 import { assertVNIProject } from "@slotclientengine/vnicore";
 import {
@@ -122,7 +122,7 @@ export interface EditorModeSymbolBinding {
 
 export interface EditorPopupDependency {
   readonly id: string;
-  readonly type: PopupManifestV1["type"];
+  readonly type: PopupManifest["type"];
   readonly rootKey: string;
   readonly keys: readonly string[];
   order: number;

@@ -101,7 +101,8 @@ describe("award celebration player", () => {
     });
     player.requestAdvance();
     expect(player.getSnapshot().activeTierId).toBe("bigwin");
-    expect((player.container.children[2] as Container).children).toEqual([
+    const contentRoot = player.container.children[0] as Container;
+    expect((contentRoot.children[2] as Container).children).toEqual([
       layerContainers.get("bigwin:vni"),
       amountContainer,
     ]);
@@ -111,7 +112,7 @@ describe("award celebration player", () => {
     player.update(1);
     player.requestAdvance();
     expect(player.getSnapshot().activeTierId).toBe("megawin");
-    expect((player.container.children[4] as Container).children).toEqual([
+    expect((contentRoot.children[4] as Container).children).toEqual([
       amountContainer,
       layerContainers.get("megawin:vni"),
     ]);
@@ -369,7 +370,8 @@ describe("award celebration player", () => {
     await player.init();
     player.start({ betAmountRaw: 100, winAmountRaw: 1500 });
     player.requestAdvance();
-    const bigwinContainer = player.container.children[2] as Container;
+    const bigwinContainer = (player.container.children[0] as Container)
+      .children[2] as Container;
     player.update(0.2);
     expect(player.getSnapshot()).toMatchObject({
       phase: "counting",

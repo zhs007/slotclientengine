@@ -59,8 +59,8 @@ export interface PopupAnchor {
 export interface PopupLayerBase {
   readonly id: string;
   readonly order: number;
-  readonly resource: string;
   readonly transform: PopupTransform;
+  readonly alpha?: number;
 }
 export interface PopupGradientStop {
   readonly offset: number;
@@ -117,11 +117,13 @@ export type PopupVniPlayback =
 export type PopupLayer =
   | (PopupLayerBase & {
       readonly kind: "image";
+      readonly resource: string;
       readonly anchor: PopupAnchor;
       readonly visibleSegments: readonly PopupSegment[];
     })
   | (PopupLayerBase & {
       readonly kind: "image-string";
+      readonly resource: string;
       readonly name?: string;
       readonly binding: "win-amount" | "manual";
       readonly defaultText?: string;
@@ -131,6 +133,7 @@ export type PopupLayer =
     })
   | (PopupLayerBase & {
       readonly kind: "text";
+      readonly resource?: string;
       readonly name: string;
       readonly defaultText: string;
       readonly anchor: PopupAnchor;
@@ -139,10 +142,12 @@ export type PopupLayer =
     })
   | (PopupLayerBase & {
       readonly kind: "vni";
+      readonly resource: string;
       readonly playback: PopupVniPlayback;
     })
   | (PopupLayerBase & {
       readonly kind: "spine";
+      readonly resource: string;
       readonly playback: {
         readonly mode: "segmented-animations";
         readonly startAnimation: string;
@@ -158,6 +163,7 @@ export type PopupOverlayLayer =
       readonly order: number;
       readonly resource: string;
       readonly transform: PopupOverlayTransform;
+      readonly alpha?: number;
       readonly anchor: PopupAnchor;
       readonly visibleSegments: readonly PopupSegment[];
     }
@@ -170,6 +176,7 @@ export type PopupOverlayLayer =
       readonly order: number;
       readonly resource: string;
       readonly transform: PopupOverlayTransform;
+      readonly alpha?: number;
       readonly anchor: PopupAnchor;
       readonly visibleSegments: readonly PopupSegment[];
     }
@@ -179,8 +186,9 @@ export type PopupOverlayLayer =
       readonly name: string;
       readonly defaultText: string;
       readonly order: number;
-      readonly resource: string;
+      readonly resource?: string;
       readonly transform: PopupOverlayTransform;
+      readonly alpha?: number;
       readonly anchor: PopupAnchor;
       readonly style: PopupTextStyle;
       readonly visibleSegments: readonly PopupSegment[];
@@ -191,6 +199,7 @@ export type PopupOverlayLayer =
       readonly order: number;
       readonly resource: string;
       readonly transform: PopupOverlayTransform;
+      readonly alpha?: number;
       readonly playback: PopupVniPlayback;
     }
   | {
@@ -199,6 +208,7 @@ export type PopupOverlayLayer =
       readonly order: number;
       readonly resource: string;
       readonly transform: PopupOverlayTransform;
+      readonly alpha?: number;
       readonly playback: {
         readonly mode: "segmented-animations";
         readonly startAnimation: string;
@@ -268,6 +278,70 @@ export type PopupManifestV1 =
   | AwardCelebrationPopupManifestV1
   | SpinePopupManifestV1;
 
+export interface PopupFocusExtent {
+  readonly left: number;
+  readonly right: number;
+  readonly top: number;
+  readonly bottom: number;
+}
+
+export interface PopupAdaptationV2 {
+  readonly mode: "maximized-focus";
+  readonly focus: PopupFocusExtent;
+}
+
+export interface PopupBackdropV2 {
+  readonly enabled: boolean;
+  readonly color: string;
+  readonly alpha: number;
+}
+
+export interface PopupManifestBaseV2 {
+  readonly version: 2;
+  readonly kind: "popup";
+  readonly id: string;
+  readonly name: string;
+  readonly designViewport: PopupSize;
+  readonly adaptation: PopupAdaptationV2;
+  readonly backdrop: PopupBackdropV2;
+  readonly resources: Readonly<Record<string, PopupResourceSpec>>;
+}
+
+export interface AwardCelebrationPopupManifestV2 extends PopupManifestBaseV2 {
+  readonly type: "award-celebration";
+  readonly amountFormat: PopupAmountFormat;
+  readonly awardCelebration: AwardCelebrationSpec;
+}
+
+export interface SpinePopupManifestV2 extends PopupManifestBaseV2 {
+  readonly type: "spine";
+  readonly spine: SpinePopupManifestV1["spine"];
+}
+
+export type PopupManifestV2 =
+  | AwardCelebrationPopupManifestV2
+  | SpinePopupManifestV2;
+
+export type PopupManifest = PopupManifestV1 | PopupManifestV2;
+
+export interface PopupHostPlacement {
+  readonly x: number;
+  readonly y: number;
+  readonly scale: number;
+}
+
+export interface PopupPresentationSnapshot {
+  readonly viewportSize: PopupSize;
+  readonly contentScale: number;
+  readonly contentPosition: { readonly x: number; readonly y: number };
+  readonly focusRectInViewport?: {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+  };
+}
+
 export interface AwardCelebrationInput {
   readonly betAmountRaw: number;
   readonly winAmountRaw: number;
@@ -318,7 +392,7 @@ export type PopupPreparedResource =
   | PopupPreparedSpine;
 
 export interface PopupPackageResource<
-  TManifest extends PopupManifestV1 = PopupManifestV1,
+  TManifest extends PopupManifest = PopupManifest,
 > {
   readonly manifest: TManifest;
   readonly resources: Readonly<Record<string, PopupPreparedResource>>;
@@ -329,6 +403,10 @@ export interface AwardCelebrationPlayer {
   readonly container: Container;
   readonly textNodes: readonly PopupStringNodeHandle[];
   readonly imageStringNodes: readonly PopupStringNodeHandle[];
+  applyViewport?(
+    viewportSize: PopupSize,
+    placement?: PopupHostPlacement,
+  ): PopupPresentationSnapshot;
   init(): Promise<void>;
   start(input: AwardCelebrationInput): void;
   update(deltaSeconds: number): AwardCelebrationSnapshot;
@@ -353,6 +431,10 @@ export interface SpinePopupPlayer {
   readonly container: Container;
   readonly textNodes: readonly PopupStringNodeHandle[];
   readonly imageStringNodes: readonly PopupStringNodeHandle[];
+  applyViewport?(
+    viewportSize: PopupSize,
+    placement?: PopupHostPlacement,
+  ): PopupPresentationSnapshot;
   init(): Promise<void>;
   start(text?: string): void;
   update(deltaSeconds: number): SpinePopupSnapshot;

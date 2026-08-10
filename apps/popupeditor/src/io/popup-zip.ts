@@ -25,7 +25,7 @@ import {
   resolvePopupPackageFiles,
 } from "@slotclientengine/rendercore/popup";
 import type {
-  PopupManifestV1,
+  PopupManifest,
   PopupResourceSpec,
 } from "@slotclientengine/rendercore/popup";
 import { assertVNIProject } from "@slotclientengine/vnicore/core";
@@ -92,9 +92,26 @@ export async function importPopupZip(
   }
   const map = decodeEditorAssetsMap(files.get(EDITOR_ASSETS_MAP_PATH)!);
   const project = createPopupEditorProject();
+  project.formatVersion = manifest.version;
+  project.name = manifest.version === 2 ? manifest.name : manifest.id;
   project.type = manifest.type;
   project.id = manifest.id;
   project.designViewport = { ...manifest.designViewport };
+  project.adaptation =
+    manifest.version === 2
+      ? { focus: { ...manifest.adaptation.focus } }
+      : {
+          focus: {
+            left: manifest.designViewport.width / 2,
+            right: manifest.designViewport.width / 2,
+            top: manifest.designViewport.height / 2,
+            bottom: manifest.designViewport.height / 2,
+          },
+        };
+  project.backdrop =
+    manifest.version === 2
+      ? { ...manifest.backdrop }
+      : { enabled: false, color: "#000000", alpha: 0.5 };
   project.resources.clear();
   project.assets.clear();
   for (const key of Object.keys(map.files)) {
@@ -171,7 +188,7 @@ export async function importPopupZip(
 }
 
 function popupManifestAssetClosure(
-  manifest: PopupManifestV1,
+  manifest: PopupManifest,
   assets: ReadonlyMap<string, { readonly bytes: Uint8Array }>,
 ) {
   const keys = new Set<string>();
