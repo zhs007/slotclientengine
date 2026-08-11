@@ -138,6 +138,14 @@ export function buildGame002v2FreeGameSpinPlan(
   });
   if (positions.length === 0)
     throw new Error("game002v2 FG spin has no non-held positions.");
+  const selected = new Set(positions.map(({ x, y }) => `${x}:${y}`));
+  for (const { x, y } of stage.order) {
+    if (selected.has(`${x}:${y}`)) continue;
+    if (inputScene[x]![y] !== stage.targetScene[x]![y])
+      throw new Error(
+        `game002v2 FG held cell (${x},${y}) changed in the compiled target scene.`,
+      );
+  }
   return stage.createPlan({ positions });
 }
 

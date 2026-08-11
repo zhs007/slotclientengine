@@ -712,7 +712,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
               reel.prepareVisibleOccurrenceReplacement({
                 x,
                 y,
-                expectedCode: current[x]![y]!,
                 outputCode: scene[x]![y]!,
                 outputPresentationValue: values?.[x]?.[y] ?? null,
               }),
@@ -917,15 +916,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
             "Cannot settle main reel without an active continuous spin.",
           );
         }
-        if (plan.selective) {
-          assertSelectiveTargetContinuity(
-            reel.getVisibleScene(),
-            reel.getCascadeValues(),
-            scene,
-            values,
-            plan,
-          );
-        }
         reel.settleContinuous(plan, spinOptions);
         return;
       }
@@ -935,13 +925,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         );
       }
       if (plan.selective) {
-        assertSelectiveTargetContinuity(
-          reel.getVisibleScene(),
-          reel.getCascadeValues(),
-          scene,
-          values,
-          plan,
-        );
         reel.spinSelective(plan, spinOptions);
       } else {
         reel.spin(plan, spinOptions);
@@ -1055,7 +1038,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   prepareMainReelVisibleOccurrenceReplacement(options: {
     readonly x: number;
     readonly y: number;
-    readonly expectedCode: number;
     readonly outputCode: number;
     readonly outputPresentationValue: number | null;
   }) {
@@ -1151,7 +1133,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
 
   removeMainReelSymbols(
     options: import("../reel/index.js").GridCellTerminalRemoveOptions,
-  ): Promise<import("../reel/index.js").GridCellTerminalRemoveResult> {
+  ): Promise<void> {
     this.assertReady();
     const reel = this.requireReel("main");
     if (!(reel instanceof RenderGridCellReelSet))
@@ -2643,34 +2625,6 @@ function validateScene(
       );
     }),
   );
-}
-
-function assertSelectiveTargetContinuity(
-  currentScene: readonly (readonly number[])[],
-  currentValues: import("../reel/index.js").GridCellCascadeValueMatrix,
-  targetScene: readonly (readonly number[])[],
-  targetValues: SymbolPresentationValueMatrix | undefined,
-  plan: import("../reel/index.js").GridCellReelSpinPlan,
-): void {
-  const selected = new Set(plan.cells.map(({ x, y }) => `${x}:${y}`));
-  for (let x = 0; x < currentScene.length; x++) {
-    for (let y = 0; y < currentScene[x]!.length; y++) {
-      if (selected.has(`${x}:${y}`)) continue;
-      if (currentScene[x]![y] !== targetScene[x]![y]) {
-        throw new SceneLayoutError(
-          `Selective grid spin held cell (${x},${y}) changed code from ${currentScene[x]![y]} to ${targetScene[x]![y]}.`,
-        );
-      }
-      if (
-        targetValues !== undefined &&
-        currentValues[x]![y] !== targetValues[x]![y]
-      ) {
-        throw new SceneLayoutError(
-          `Selective grid spin held cell (${x},${y}) changed presentation value.`,
-        );
-      }
-    }
-  }
 }
 
 function validatePhases(

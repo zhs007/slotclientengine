@@ -20,7 +20,6 @@ import {
   type GridCellCascadeDropPlan,
   type GridCellCascadeScene,
   type GridCellCascadeValueMatrix,
-  type GridCellCascadeMotionOptions,
   type GridCellEffectResourceMap,
   type GridCellEffectSweepPlan,
   type ParsedReelManifest,
@@ -237,7 +236,6 @@ export interface Game002ReelRuntime {
   replaceVisibleOccurrence(options: {
     readonly x: number;
     readonly y: number;
-    readonly expectedCode: number;
     readonly outputCode: number;
     readonly outputPresentationValue: number | null;
   }): void;
@@ -264,33 +262,23 @@ export interface Game002ReelRuntime {
   ): void;
   clearVisibleSymbolDimming(): void;
   getCascadeValues(): GridCellCascadeValueMatrix;
-  createCascadeDropPlan(options: {
-    readonly sourceScene: GridCellCascadeScene;
-    readonly sourceValues: GridCellCascadeValueMatrix;
-    readonly settledScene: GridCellCascadeScene;
-    readonly settledValues: GridCellCascadeValueMatrix;
-    readonly targetScene: GridCellCascadeScene;
-    readonly targetValues: GridCellCascadeValueMatrix;
-    readonly refillPositions: readonly WinResultPosition[];
-    readonly canDropOccurrence: NonNullable<
-      Parameters<typeof createGridCellCascadeDropPlan>[0]["canDropOccurrence"]
-    >;
-    readonly motion: GridCellCascadeMotionOptions;
-  }): GridCellCascadeDropPlan;
-  createCascadeDropdownPlan(options: {
-    readonly sourceScene: GridCellCascadeScene;
-    readonly sourceValues: GridCellCascadeValueMatrix;
-    readonly settledScene: GridCellCascadeScene;
-    readonly settledValues: GridCellCascadeValueMatrix;
-    readonly targetScene: GridCellCascadeScene;
-    readonly targetValues: GridCellCascadeValueMatrix;
-    readonly refillPositions: readonly WinResultPosition[];
-    readonly canDropOccurrence: NonNullable<
-      Parameters<typeof createGridCellCascadeDropPlan>[0]["canDropOccurrence"]
-    >;
-    readonly motion: GridCellCascadeMotionOptions;
-  }): GridCellCascadeDropPlan;
-  startCascadeDrop(plan: GridCellCascadeDropPlan): void;
+  createCascadeDropPlan(
+    options: Omit<
+      Parameters<typeof createGridCellCascadeDropPlan>[0],
+      "cellHeight" | "rowGap"
+    >,
+  ): GridCellCascadeDropPlan;
+  createCascadeDropdownPlan(
+    options: Omit<
+      Parameters<typeof createGridCellCascadeDropdownPlan>[0],
+      "cellHeight" | "rowGap"
+    >,
+  ): GridCellCascadeDropPlan;
+  startCascadeDrop(
+    plan: GridCellCascadeDropPlan,
+    outputScene: SceneMatrix,
+    preRefillScene?: SceneMatrix,
+  ): void;
   startRefillEffectSweep(positions: readonly WinResultPosition[]): void;
   startSelectiveRefillSpin(options: {
     readonly dropdownScene: GridCellCascadeScene;
@@ -388,8 +376,10 @@ export function createGame002ReelRuntime(
   let anticipationActive = false;
   let landedTriggerCount = 0;
   let activationCoordinate: Readonly<{ x: number; y: number }> | null = null;
-  let pendingUnifiedRefillAnticipationPlan: GridCellCascadeDropPlan | null =
-    null;
+  let pendingUnifiedRefillAnticipationPlan: Readonly<{
+    plan: GridCellCascadeDropPlan;
+    preRefillScene: SceneMatrix;
+  }> | null = null;
 
   const createSpinPhaseOffsets = () =>
     createShuffledGridCellReelOffsetMatrix({
@@ -469,6 +459,7 @@ export function createGame002ReelRuntime(
 
   const activateAnticipationFromCompletedUnifiedRefill = (
     plan: GridCellCascadeDropPlan,
+    preRefillScene: SceneMatrix,
   ): void => {
     if (anticipationActive) return;
     const refillMovements = plan.movements
@@ -488,7 +479,7 @@ export function createGame002ReelRuntime(
     if (refillMovements.length === 0) return;
 
     let matched = 0;
-    for (const [x, column] of plan.settledScene.entries()) {
+    for (const [x, column] of preRefillScene.entries()) {
       for (const [y, code] of column.entries()) {
         if (code === CASCADE_EMPTY_CELL) continue;
         if (
@@ -513,7 +504,7 @@ export function createGame002ReelRuntime(
     for (const movement of refillMovements) {
       if (
         !resolveExactWild(
-          movement.code,
+          movement.outputCode,
           `game002 completed unified refill cell (${movement.x},${movement.targetY})`,
         )
       ) {
@@ -814,29 +805,14 @@ export function createGame002ReelRuntime(
       if (result.completed && targetScene) {
         const completedUnifiedRefillAnticipationPlan =
           pendingUnifiedRefillAnticipationPlan;
-        const visibleScene = reelSet.getVisibleScene();
-        if (
-          activeTargetKind === "initial-spin" ||
-          activeTargetKind === "selective-spin" ||
-          activeTargetKind === "refill-spin"
-        ) {
-          const fullScene = validateGame002Scene(
-            visibleScene,
-            "completed game002 reels",
-          );
-          assertScenesEqual(fullScene, targetScene, "completed game002 reels");
-        } else if (!sceneEquals(visibleScene, targetScene)) {
-          throw new Error(
-            "completed game002 cascade scene does not match target.",
-          );
-        }
         currentScene = targetScene;
         targetScene = null;
         activeTargetKind = null;
         pendingUnifiedRefillAnticipationPlan = null;
         if (completedUnifiedRefillAnticipationPlan) {
           activateAnticipationFromCompletedUnifiedRefill(
-            completedUnifiedRefillAnticipationPlan,
+            completedUnifiedRefillAnticipationPlan.plan,
+            completedUnifiedRefillAnticipationPlan.preRefillScene,
           );
         }
         reelSet.visible = true;
@@ -893,7 +869,6 @@ export function createGame002ReelRuntime(
     replaceVisibleOccurrence(replacementOptions: {
       readonly x: number;
       readonly y: number;
-      readonly expectedCode: number;
       readonly outputCode: number;
       readonly outputPresentationValue: number | null;
     }) {
@@ -978,57 +953,48 @@ export function createGame002ReelRuntime(
     getCascadeValues(): GridCellCascadeValueMatrix {
       return reelSet.getCascadeValues();
     },
-    createCascadeDropPlan(dropOptions: {
-      readonly sourceScene: GridCellCascadeScene;
-      readonly sourceValues: GridCellCascadeValueMatrix;
-      readonly settledScene: GridCellCascadeScene;
-      readonly settledValues: GridCellCascadeValueMatrix;
-      readonly targetScene: GridCellCascadeScene;
-      readonly targetValues: GridCellCascadeValueMatrix;
-      readonly refillPositions: readonly WinResultPosition[];
-      readonly canDropOccurrence: NonNullable<
-        Parameters<typeof createGridCellCascadeDropPlan>[0]["canDropOccurrence"]
-      >;
-      readonly motion: GridCellCascadeMotionOptions;
-    }): GridCellCascadeDropPlan {
+    createCascadeDropPlan(
+      dropOptions: Omit<
+        Parameters<typeof createGridCellCascadeDropPlan>[0],
+        "cellHeight" | "rowGap"
+      >,
+    ): GridCellCascadeDropPlan {
       return createGridCellCascadeDropPlan({
         ...dropOptions,
         cellHeight: layout.cellHeight,
         rowGap: layout.rowGap,
       });
     },
-    createCascadeDropdownPlan(dropOptions: {
-      readonly sourceScene: GridCellCascadeScene;
-      readonly sourceValues: GridCellCascadeValueMatrix;
-      readonly settledScene: GridCellCascadeScene;
-      readonly settledValues: GridCellCascadeValueMatrix;
-      readonly targetScene: GridCellCascadeScene;
-      readonly targetValues: GridCellCascadeValueMatrix;
-      readonly refillPositions: readonly WinResultPosition[];
-      readonly canDropOccurrence: NonNullable<
-        Parameters<typeof createGridCellCascadeDropPlan>[0]["canDropOccurrence"]
-      >;
-      readonly motion: GridCellCascadeMotionOptions;
-    }): GridCellCascadeDropPlan {
+    createCascadeDropdownPlan(
+      dropOptions: Omit<
+        Parameters<typeof createGridCellCascadeDropdownPlan>[0],
+        "cellHeight" | "rowGap"
+      >,
+    ): GridCellCascadeDropPlan {
       return createGridCellCascadeDropdownPlan({
         ...dropOptions,
         cellHeight: layout.cellHeight,
         rowGap: layout.rowGap,
       });
     },
-    startCascadeDrop(plan: GridCellCascadeDropPlan): void {
+    startCascadeDrop(
+      plan: GridCellCascadeDropPlan,
+      outputScene: SceneMatrix,
+      preRefillScene?: SceneMatrix,
+    ): void {
       if (targetScene)
         throw new Error("game002 runtime already has a target scene.");
-      targetScene = plan.targetScene;
+      targetScene = outputScene;
       activeTargetKind = "dropdown";
       pendingUnifiedRefillAnticipationPlan =
         !anticipationActive &&
-        plan.movements.some((movement) => movement.kind === "refill")
-          ? plan
+        plan.movements.some((movement) => movement.kind === "refill") &&
+        preRefillScene
+          ? Object.freeze({ plan, preRefillScene })
           : null;
       reelSet.startCascadeDrop(plan);
       if (plan.totalSeconds === 0) {
-        currentScene = plan.targetScene;
+        currentScene = outputScene;
         targetScene = null;
         activeTargetKind = null;
         const completedUnifiedRefillAnticipationPlan =
@@ -1036,7 +1002,8 @@ export function createGame002ReelRuntime(
         pendingUnifiedRefillAnticipationPlan = null;
         if (completedUnifiedRefillAnticipationPlan) {
           activateAnticipationFromCompletedUnifiedRefill(
-            completedUnifiedRefillAnticipationPlan,
+            completedUnifiedRefillAnticipationPlan.plan,
+            completedUnifiedRefillAnticipationPlan.preRefillScene,
           );
         }
       }

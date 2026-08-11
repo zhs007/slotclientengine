@@ -99,9 +99,10 @@ function createSpinHandler(
 ): SlotOperationHandler {
   return frameDrivenHandler({
     start: (operation) => {
-      if (operation.effect !== "scene-landing")
-        throw new Error("slot:spin must be a scene-landing operation.");
-      target.startInitialSpin(operation.output);
+      target.startInitialSpin(
+        (operation as Extract<SlotOperationV2, { effect: "scene-landing" }>)
+          .output,
+      );
     },
     update: (deltaSeconds) => {
       target.update(deltaSeconds);
@@ -115,7 +116,7 @@ function createWinHandler(
 ): SlotOperationHandler {
   return frameDrivenHandler({
     start: (operation) =>
-      target.startWin(requireStep<SlotRoundWinStepPlan>(operation)),
+      target.startWin(operationStep<SlotRoundWinStepPlan>(operation)),
     update: (deltaSeconds) => {
       target.update(deltaSeconds);
       return target.updateWin(deltaSeconds).completed;
@@ -128,7 +129,7 @@ function createDropdownHandler(
 ): SlotOperationHandler {
   return frameDrivenHandler({
     start: (operation) =>
-      target.startDropdown(requireStep<SlotRoundDropdownStepPlan>(operation)),
+      target.startDropdown(operationStep<SlotRoundDropdownStepPlan>(operation)),
     update: (deltaSeconds) => {
       target.update(deltaSeconds);
       return target.isDropdownComplete();
@@ -141,7 +142,7 @@ function createRefillHandler(
 ): SlotOperationHandler {
   return frameDrivenHandler({
     start: (operation) =>
-      target.startRefill(requireStep<SlotRoundRefillStepPlan>(operation)),
+      target.startRefill(operationStep<SlotRoundRefillStepPlan>(operation)),
     update: (deltaSeconds) => {
       target.update(deltaSeconds);
       return target.isRefillComplete();
@@ -159,7 +160,7 @@ function createTransformHandler(
           "Slot round profile target has no settled-transform handler.",
         );
       target.startSettledTransform!(
-        requireStep<SlotRoundSettledTransformStepPlan>(operation),
+        operationStep<SlotRoundSettledTransformStepPlan>(operation),
       );
     },
     update: (deltaSeconds) => {
@@ -196,8 +197,6 @@ function frameDrivenHandler(options: {
   };
 }
 
-function requireStep<Step>(operation: SlotOperationV2): Step {
-  const step = (operation.payload as { readonly step?: Step }).step;
-  if (!step) throw new Error(`${operation.kind} payload.step is missing.`);
-  return step;
+function operationStep<Step>(operation: SlotOperationV2): Step {
+  return (operation.payload as { readonly step: Step }).step;
 }

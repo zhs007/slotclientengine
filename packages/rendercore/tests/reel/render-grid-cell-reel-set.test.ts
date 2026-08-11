@@ -5,12 +5,13 @@ import {
   createGridCellOrder,
   createGridCellReelOffsetMatrix,
   createGridCellReelSpinPlan,
-  createGridCellCascadeDropPlan,
+  createGridCellCascadeDropPlan as createRendererCascadeDropPlan,
   type GridCellDimmingPattern,
   type GridCellReelSpinTiming,
   type AwaitableVisibleSymbolPresentationTarget,
   type VisibleSymbolPresentationTarget,
 } from "../../src/reel/index.js";
+import { compileSlotCascadeFacts } from "@slotclientengine/logiccore";
 import { createBasicRegistry, createBasicReels } from "./helpers.js";
 
 const INITIAL_SCENE = Object.freeze([
@@ -36,29 +37,20 @@ const DIMMING = Object.freeze({
 }) satisfies GridCellDimmingPattern;
 
 describe("RenderGridCellReelSet", () => {
-  it("terminal-removes each completed occurrence without touching retained candidates", async () => {
+  it("terminal-removes the producer-selected occurrences", async () => {
     const reelSet = createGridReelSet();
     reelSet.resetToScene(INITIAL_SCENE, FINAL_YS, undefined, [
       [7, null, null],
       [null, null, null],
     ]);
     const removal = reelSet.removeVisibleSymbols({
-      positions: [
-        { x: 0, y: 0 },
-        { x: 1, y: 0 },
-      ],
+      positions: [{ x: 1, y: 0 }],
       state: "win",
       playback: { transitionMode: "immediate", completion: "once-complete" },
-      canRemoveOccurrence: ({ code }) => code !== 1,
     });
 
     reelSet.update(0.59);
-    const result = await removal;
-
-    expect(result).toEqual({
-      removed: [{ x: 1, y: 0, code: 2, presentationValue: null }],
-      retained: [{ x: 0, y: 0, code: 1, presentationValue: 7 }],
-    });
+    await removal;
     expect(reelSet.getVisibleScene()).toEqual([
       [1, 0, 2],
       [-1, 1, 0],
@@ -633,7 +625,10 @@ describe("RenderGridCellReelSet", () => {
       [1, 1, 2],
       [2, 1, 1],
     ]);
-    expect(reelSet.getCascadeValues()).toEqual(drop.targetValues);
+    expect(reelSet.getCascadeValues()).toEqual([
+      [null, 50, null],
+      [null, 75, 100],
+    ]);
   });
 
   it("lets a falling symbol pass behind a fixed higher-priority symbol", () => {
@@ -704,11 +699,17 @@ describe("RenderGridCellReelSet", () => {
       true,
     );
     expect(reelSet.mask == null).toBe(true);
-    expect(reelSet.getVisibleScene()).toEqual(plan.targetScene);
-    expect(reelSet.getCascadeValues()).toEqual(plan.targetValues);
+    expect(reelSet.getVisibleScene()).toEqual([
+      [2, 1, 2],
+      [2, 1, 1],
+    ]);
+    expect(reelSet.getCascadeValues()).toEqual([
+      [null, null, null],
+      [null, null, null],
+    ]);
   });
 
-  it("rejects cascade release/drop/refill state drift without fallback", () => {
+  it("rejects invalid runtime coordinates and trusts cascade value commits", () => {
     const reelSet = createGridReelSet();
     reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
     expect(() =>
@@ -782,9 +783,9 @@ describe("RenderGridCellReelSet", () => {
         overshootCellRatio: 0,
       },
     });
-    expect(() => reelSet.startCascadeDrop(valueDriftPlan)).toThrow(
-      /dropdown source values\[0\]\[1\] differs: actual\(runtime\)=null; expected\(plan\)=7/,
-    );
+    expect(() => reelSet.startCascadeDrop(valueDriftPlan)).not.toThrow();
+    expect(reelSet.getSnapshot().spinning).toBe(true);
+    reelSet.destroy();
   });
 
   it("prepares visible occurrence replacement without mutation and commits atomically", () => {
@@ -794,7 +795,6 @@ describe("RenderGridCellReelSet", () => {
     const rolledBack = reelSet.prepareVisibleOccurrenceReplacement({
       x: 0,
       y: 0,
-      expectedCode: 1,
       outputCode: 2,
       outputPresentationValue: null,
     });
@@ -806,22 +806,19 @@ describe("RenderGridCellReelSet", () => {
     const prepared = reelSet.prepareVisibleOccurrenceReplacement({
       x: 0,
       y: 0,
-      expectedCode: 1,
       outputCode: 2,
       outputPresentationValue: null,
     });
     prepared.commit();
     prepared.commit();
     expect(reelSet.getVisibleScene()[0][0]).toBe(2);
-    expect(() =>
-      reelSet.prepareVisibleOccurrenceReplacement({
-        x: 0,
-        y: 0,
-        expectedCode: 1,
-        outputCode: 2,
-        outputPresentationValue: null,
-      }),
-    ).toThrow(/expected code 1, received 2/);
+    const trusted = reelSet.prepareVisibleOccurrenceReplacement({
+      x: 0,
+      y: 0,
+      outputCode: 2,
+      outputPresentationValue: null,
+    });
+    trusted.rollback();
   });
 
   it("moves a complete visible occurrence and commits source replacement as one batch", () => {
@@ -836,8 +833,6 @@ describe("RenderGridCellReelSet", () => {
         {
           source: { x: 0, y: 0 },
           target: { x: 1, y: 0 },
-          expectedSourceCode: 1,
-          expectedTargetCode: 2,
           sourceReplacementCode: 2,
           sourceReplacementPresentationValue: null,
         },
@@ -856,6 +851,60 @@ describe("RenderGridCellReelSet", () => {
     expect(reelSet.getCascadeValues()[1][0]).toBe(7);
   });
 });
+
+function createGridCellCascadeDropPlan(options: {
+  readonly sourceScene: readonly (readonly number[])[];
+  readonly sourceValues: readonly (readonly (number | null | -1)[])[];
+  readonly settledScene: readonly (readonly number[])[];
+  readonly settledValues: readonly (readonly (number | null | -1)[])[];
+  readonly targetScene: readonly (readonly number[])[];
+  readonly targetValues: readonly (readonly (number | null | -1)[])[];
+  readonly refillPositions: readonly {
+    readonly x: number;
+    readonly y: number;
+  }[];
+  readonly canDropOccurrence?: (context: {
+    readonly x: number;
+    readonly sourceY: number;
+    readonly code: number;
+    readonly presentationValue: number | null;
+  }) => boolean;
+  readonly cellHeight: number;
+  readonly rowGap?: number;
+  readonly motion: Parameters<
+    typeof createRendererCascadeDropPlan
+  >[0]["motion"];
+}) {
+  const facts = compileSlotCascadeFacts({
+    sourceScene: options.sourceScene,
+    sourceValues: options.sourceValues,
+    dropdownScene: options.settledScene,
+    dropdownValues: options.settledValues,
+    targetScene: options.targetScene,
+    targetValues: options.targetValues,
+    refillPositions: options.refillPositions,
+    ...(options.canDropOccurrence
+      ? {
+          canDropOccurrence: ({ x, y, code, value }) =>
+            options.canDropOccurrence!({
+              x,
+              sourceY: y,
+              code,
+              presentationValue: value,
+            }),
+        }
+      : {}),
+  });
+  return createRendererCascadeDropPlan({
+    columns: facts.columns,
+    rows: facts.rows,
+    movements: [...facts.dropdownMovements, ...facts.refillMovements],
+    valueCommits: facts.targetValueCommits,
+    cellHeight: options.cellHeight,
+    ...(options.rowGap === undefined ? {} : { rowGap: options.rowGap }),
+    motion: options.motion,
+  });
+}
 
 function getCellClipMask(
   reelSet: RenderGridCellReelSet,
@@ -887,7 +936,15 @@ function createGridReelSet(
 ): RenderGridCellReelSet {
   return new RenderGridCellReelSet({
     reels: createBasicReels(),
-    registry: createBasicRegistry(registryOptions),
+    registry: createBasicRegistry({
+      ...registryOptions,
+      symbolAnimationCapabilities:
+        registryOptions.symbolAnimationCapabilities ?? {
+          A: ["dropdown"],
+          B: ["dropdown"],
+          C: ["dropdown"],
+        },
+    }),
     columns: 2,
     rows: 3,
     cellWidth: 15,

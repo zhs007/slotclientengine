@@ -565,7 +565,6 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   prepareMainReelVisibleOccurrenceReplacement(options: {
     readonly x: number;
     readonly y: number;
-    readonly expectedCode: number;
     readonly outputCode: number;
     readonly outputPresentationValue: number | null;
   }): import("../reel/index.js").PreparedVisibleOccurrenceReplacement;
@@ -602,7 +601,7 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   ): void;
   removeMainReelSymbols(
     options: import("../reel/index.js").GridCellTerminalRemoveOptions,
-  ): Promise<import("../reel/index.js").GridCellTerminalRemoveResult>;
+  ): Promise<void>;
   setMainReelSymbolDimming(
     highlightedPositions: readonly {
       readonly x: number;

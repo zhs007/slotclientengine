@@ -71,7 +71,6 @@ export class Game002FreeGameOperationTarget {
       }
       case "af": {
         const mutation = requireMutation(operation);
-        const input = requireInput(operation, context);
         for (const position of payload.positions)
           this.#runtime.setVisibleSymbolImageStringText(
             position.x,
@@ -85,7 +84,6 @@ export class Game002FreeGameOperationTarget {
           this.#runtime.replaceVisibleOccurrence({
             x: position.x,
             y: position.y,
-            expectedCode: input.scene[position.x]![position.y]!,
             outputCode: mutation.output.scene[position.x]![position.y]!,
             outputPresentationValue:
               mutation.output.values[position.x]![position.y]!,
@@ -94,7 +92,6 @@ export class Game002FreeGameOperationTarget {
       }
       case "co": {
         const mutation = requireMutation(operation);
-        const input = requireInput(operation, context);
         const sourcePositions = payload.routes.map(({ source }) => source);
         await this.#runtime.playVisibleSymbolStateBatch(
           [
@@ -121,8 +118,6 @@ export class Game002FreeGameOperationTarget {
           transfers: payload.routes.map(({ source, target }) => ({
             source,
             target,
-            expectedSourceCode: input.scene[source.x]![source.y]!,
-            expectedTargetCode: input.scene[target.x]![target.y]!,
             sourceReplacementCode: mutation.output.scene[source.x]![source.y]!,
             sourceReplacementPresentationValue: null,
           })),
@@ -134,7 +129,6 @@ export class Game002FreeGameOperationTarget {
           this.#runtime.replaceVisibleOccurrence({
             x: position.x,
             y: position.y,
-            expectedCode: input.scene[position.x]![position.y]!,
             outputCode: mutation.output.scene[position.x]![position.y]!,
             outputPresentationValue:
               mutation.output.values[position.x]![position.y]!,

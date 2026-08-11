@@ -71,8 +71,6 @@ export async function createSceneOtherSceneFlowRuntime(options: {
       : {}),
     project: options.project,
   });
-  if (options.operationPlan)
-    assertOperationPlanMatchesFlow(options.operationPlan, readiness.project);
   const resource = await loadSceneLayoutPackageFromZipBytes({
     zipBytes: options.layoutZipBytes,
     loadSymbolTextures: true,
@@ -120,54 +118,6 @@ export async function createSceneOtherSceneFlowRuntime(options: {
     if (!runtime) await resource.destroy();
     application.destroy(true, { children: true, texture: false });
     throw error;
-  }
-}
-
-function assertOperationPlanMatchesFlow(
-  plan: SlotOperationPlanV2,
-  project: SceneOtherSceneFlowProjectV2,
-): void {
-  const initial = project.snapshots[0];
-  const firstLanding = plan.operations.find(
-    (operation) => operation.effect === "scene-landing",
-  );
-  if (!firstLanding)
-    throw new SceneLayoutError("Operation plan has no scene landing.");
-  if (
-    JSON.stringify(firstLanding.output.scene) !==
-      JSON.stringify(initial.scene) ||
-    JSON.stringify(firstLanding.output.values) !==
-      JSON.stringify(initial.otherScene)
-  )
-    throw new SceneLayoutError(
-      "Operation plan initial snapshot does not match the local flow.",
-    );
-  for (const snapshot of project.snapshots.slice(1)) {
-    const operation = [...plan.operations]
-      .reverse()
-      .find(
-        (item) =>
-          item.effect !== "presentation" &&
-          item.source.kind === "snapshot-authored" &&
-          item.source.outputSnapshotId === snapshot.id,
-      );
-    if (!operation)
-      throw new SceneLayoutError(
-        `Operation plan has no finalized edge for snapshot "${snapshot.id}".`,
-      );
-    if (operation.effect === "presentation")
-      throw new SceneLayoutError(
-        `Operation plan edge for snapshot "${snapshot.id}" does not establish state.`,
-      );
-    if (
-      JSON.stringify(operation.output.scene) !==
-        JSON.stringify(snapshot.scene) ||
-      JSON.stringify(operation.output.values) !==
-        JSON.stringify(snapshot.otherScene)
-    )
-      throw new SceneLayoutError(
-        `Operation plan output for snapshot "${snapshot.id}" does not match the local flow.`,
-      );
   }
 }
 

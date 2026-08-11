@@ -189,7 +189,6 @@ describe("game002 task 95 adapter", () => {
       y: 5,
     });
     expect(runtime.released.flat()).toHaveLength(12);
-    expect(runtime.dropSource).toEqual(GAME002_CASCADE_REMOVED_SCENE);
     expect(runtime.dropSettled).toEqual(GAME002_CASCADE_DROPDOWN_SCENE);
     expect(runtime.dropTarget).toEqual(GAME002_CASCADE_REFILL_SCENE);
     expect(runtime.refillPositions.flatMap(({ x, y }) => [x, y])).toEqual(
@@ -724,31 +723,18 @@ class FakeRuntime {
       clearVisibleSymbolDimming: () => undefined,
       getCascadeValues: () => [],
       createCascadeDropPlan: (options: any) => {
-        this.dropSource = options.sourceScene;
-        this.dropSettled = options.settledScene;
-        this.dropTarget = options.targetScene;
-        this.refillPositions = options.refillPositions;
+        this.refillPositions = options.movements
+          .filter((movement: any) => movement.kind === "refill")
+          .map((movement: any) => movement.target);
         return {
           ...options,
-          columns: 6,
-          rows: 9,
-          movements: [],
           totalSeconds: this.dropdownTotalSeconds,
         };
       },
       createCascadeDropdownPlan: (options: any) => {
-        this.dropSource = options.sourceScene;
-        this.dropSettled = options.settledScene;
-        this.dropTarget = options.targetScene;
-        this.refillPositions = options.refillPositions;
         return {
           ...options,
           kind: "dropdown",
-          targetScene: options.settledScene,
-          targetValues: options.settledValues,
-          columns: 6,
-          rows: 9,
-          movements: [],
           totalSeconds: 0.2,
         };
       },
@@ -762,9 +748,15 @@ class FakeRuntime {
         this.events.push("refill.start");
         return {};
       },
-      startCascadeDrop: (plan: any) => {
-        this.currentScene = plan.targetScene as SceneMatrix;
-        const operation = plan.kind === "dropdown" ? "dropdown" : "fall";
+      startCascadeDrop: (
+        plan: any,
+        outputScene: SceneMatrix,
+        preRefillScene?: SceneMatrix,
+      ) => {
+        this.currentScene = outputScene;
+        this.dropTarget = outputScene;
+        this.dropSettled = preRefillScene ?? outputScene;
+        const operation = preRefillScene ? "fall" : "dropdown";
         this.events.push(`${operation}.start`);
         if (plan.totalSeconds === 0) {
           this.operation = "idle";

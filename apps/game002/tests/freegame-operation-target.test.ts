@@ -101,7 +101,6 @@ describe("Game002FreeGameOperationTarget", () => {
       {
         x: 0,
         y: 0,
-        expectedCode: CODES.AF,
         outputCode: CODES.CN,
         outputPresentationValue: 3,
       },
@@ -151,8 +150,6 @@ describe("Game002FreeGameOperationTarget", () => {
           {
             source,
             target,
-            expectedSourceCode: CODES.CN,
-            expectedTargetCode: CODES.BN,
             sourceReplacementCode: CODES.BN,
             sourceReplacementPresentationValue: null,
           },
@@ -162,7 +159,6 @@ describe("Game002FreeGameOperationTarget", () => {
     expect(fixture.runtime.replaceVisibleOccurrence).toHaveBeenCalledWith({
       x: 0,
       y: 0,
-      expectedCode: CODES.CO,
       outputCode: CODES.CN,
       outputPresentationValue: 2,
     });

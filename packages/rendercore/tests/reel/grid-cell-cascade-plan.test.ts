@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   createGridCellCascadeDropPlan,
   createGridCellCascadeDropdownPlan,
-  deriveGridCellCascadeSettledValues,
 } from "../../src/reel/index.js";
 
 const motion = Object.freeze({
@@ -16,272 +15,95 @@ const motion = Object.freeze({
 });
 
 describe("grid cell cascade plan", () => {
-  it("derives carried values when an unchanged auxiliary otherScene is omitted", () => {
-    expect(
-      deriveGridCellCascadeSettledValues({
-        sourceScene: [
-          [8, -1, 0, -1],
-          [2, -1, -1, 3],
-        ],
-        sourceValues: [
-          [25, -1, null, -1],
-          [null, -1, -1, null],
-        ],
-        settledScene: [
-          [-1, -1, 0, 8],
-          [-1, -1, 2, 3],
-        ],
-        canDropOccurrence: ({ code }) => code !== 0,
-      }),
-    ).toEqual([
-      [-1, -1, null, 25],
-      [-1, -1, null, null],
-    ]);
-  });
-
-  it("rejects invalid inferred occurrence movement", () => {
-    expect(() =>
-      deriveGridCellCascadeSettledValues({
-        sourceScene: [[8, -1]],
-        sourceValues: [[25, -1]],
-        settledScene: [[7, -1]],
-      }),
-    ).toThrow(/code changed/);
-    expect(() =>
-      deriveGridCellCascadeSettledValues({
-        sourceScene: [[0, -1]],
-        sourceValues: [[null, -1]],
-        settledScene: [[-1, 0]],
-        canDropOccurrence: () => false,
-      }),
-    ).toThrow(/fixed occurrence changed/);
-  });
-
-  it("combines existing and refill falls, keeps fixed symbols in place and staggers columns", () => {
+  it("adds renderer timing to trusted movement and value facts", () => {
     const plan = createGridCellCascadeDropPlan({
-      sourceScene: [
-        [1, -1, 0, -1],
-        [2, -1, -1, 3],
+      columns: 2,
+      rows: 4,
+      movements: [
+        {
+          kind: "existing",
+          source: { x: 0, y: 0 },
+          target: { x: 0, y: 3 },
+        },
+        {
+          kind: "refill",
+          source: { x: 0, y: -1 },
+          target: { x: 0, y: 1 },
+          outputCode: 5,
+          outputValue: 25,
+        },
+        {
+          kind: "existing",
+          source: { x: 1, y: 0 },
+          target: { x: 1, y: 2 },
+        },
       ],
-      sourceValues: [
-        [25, -1, null, -1],
-        [null, -1, -1, null],
+      valueCommits: [
+        { position: { x: 0, y: 1 }, value: 25 },
+        { position: { x: 0, y: 3 }, value: 50 },
       ],
-      settledScene: [
-        [-1, -1, 0, 1],
-        [-1, -1, 2, 3],
-      ],
-      settledValues: [
-        [-1, -1, null, 25],
-        [-1, -1, null, null],
-      ],
-      targetScene: [
-        [4, 5, 0, 1],
-        [6, 7, 2, 3],
-      ],
-      targetValues: [
-        [null, null, null, 25],
-        [null, null, null, null],
-      ],
-      refillPositions: [
-        { x: 0, y: 0 },
-        { x: 0, y: 1 },
-        { x: 1, y: 0 },
-        { x: 1, y: 1 },
-      ],
-      canDropOccurrence: ({ code }) => code !== 0,
       cellHeight: 100,
       motion,
     });
 
-    expect(
-      plan.movements.map(
-        ({ kind, x, sourceY, targetY, code, presentationValue }) => ({
-          kind,
-          x,
-          sourceY,
-          targetY,
-          code,
-          presentationValue,
-        }),
-      ),
-    ).toEqual([
+    expect(plan.movements).toMatchObject([
       {
         kind: "existing",
         x: 0,
         sourceY: 0,
         targetY: 3,
-        code: 1,
-        presentationValue: 25,
+        startSeconds: 0,
+        fallSeconds: 0.25,
+        overshootPixels: 10,
       },
       {
         kind: "refill",
         x: 0,
         sourceY: -1,
         targetY: 1,
-        code: 5,
-        presentationValue: null,
-      },
-      {
-        kind: "refill",
-        x: 0,
-        sourceY: -2,
-        targetY: 0,
-        code: 4,
-        presentationValue: null,
+        startSeconds: 0.02,
+        outputCode: 5,
+        outputPresentationValue: 25,
       },
       {
         kind: "existing",
         x: 1,
         sourceY: 0,
         targetY: 2,
-        code: 2,
-        presentationValue: null,
-      },
-      {
-        kind: "refill",
-        x: 1,
-        sourceY: -1,
-        targetY: 1,
-        code: 7,
-        presentationValue: null,
-      },
-      {
-        kind: "refill",
-        x: 1,
-        sourceY: -2,
-        targetY: 0,
-        code: 6,
-        presentationValue: null,
+        startSeconds: 0.1,
       },
     ]);
-    expect(plan.movements[0].startSeconds).toBe(0);
-    expect(plan.movements[0].fallSeconds).toBeCloseTo(0.25);
-    expect(plan.movements[0].settleSeconds).toBe(0.04);
-    expect(plan.movements[0].overshootPixels).toBe(10);
-    expect(plan.movements[1].startSeconds).toBe(0.02);
-    expect(plan.movements[3].startSeconds).toBe(0.1);
-    expect(plan.totalSeconds).toBeCloseTo(0.38);
+    expect(plan.valueCommits).toEqual([
+      { x: 0, y: 1, presentationValue: 25 },
+      { x: 0, y: 3, presentationValue: 50 },
+    ]);
+    expect(plan.totalSeconds).toBeCloseTo(0.34);
     expect(Object.isFrozen(plan)).toBe(true);
-
-    const dropdown = createGridCellCascadeDropdownPlan({
-      sourceScene: plan.sourceScene,
-      sourceValues: plan.sourceValues,
-      settledScene: plan.settledScene,
-      settledValues: plan.settledValues,
-      targetScene: plan.targetScene,
-      targetValues: plan.targetValues,
-      refillPositions: plan.refillPositions,
-      canDropOccurrence: ({ code }) => code !== 0,
-      cellHeight: 100,
-      motion,
-    });
-    expect(
-      dropdown.movements.every((movement) => movement.kind === "existing"),
-    ).toBe(true);
-    expect(dropdown.targetScene).toEqual(plan.settledScene);
-    expect(dropdown.targetValues).toEqual(plan.settledValues);
-    expect(dropdown.totalSeconds).toBeLessThanOrEqual(plan.totalSeconds);
   });
 
-  it.each([
-    {
-      label: "occurrence count drift",
-      sourceScene: [[-1, 1, 2]],
-      sourceValues: [[-1, null, null]],
-      targetScene: [[-1, 1]],
-      targetValues: [[-1, null]],
-    },
-    {
-      label: "code order drift",
-      sourceScene: [[1, 2, -1]],
-      sourceValues: [[null, null, -1]],
-      targetScene: [[2, 1, -1]],
-      targetValues: [[null, null, -1]],
-    },
-    {
-      label: "upward move",
-      sourceScene: [[-1, 1]],
-      sourceValues: [[-1, null]],
-      targetScene: [[1, -1]],
-      targetValues: [[null, -1]],
-    },
-  ])(
-    "rejects $label",
-    ({ sourceScene, sourceValues, targetScene, targetValues }) => {
-      expect(() =>
-        createGridCellCascadeDropPlan({
-          sourceScene,
-          sourceValues,
-          settledScene: targetScene,
-          settledValues: targetValues,
-          targetScene,
-          targetValues,
-          refillPositions: [],
-          cellHeight: 100,
-          motion,
-        }),
-      ).toThrow();
-    },
-  );
-
-  it("trusts target presentation value changes for carried occurrences", () => {
-    const plan = createGridCellCascadeDropPlan({
-      sourceScene: [[8, -1]],
-      sourceValues: [[25, -1]],
-      settledScene: [[-1, 8]],
-      settledValues: [[-1, 25]],
-      targetScene: [[7, 8]],
-      targetValues: [[null, 50]],
-      refillPositions: [{ x: 0, y: 0 }],
+  it("keeps logical facts opaque and validates renderer-owned motion", () => {
+    const options = {
+      columns: 1,
+      rows: 2,
+      movements: [
+        {
+          kind: "existing" as const,
+          source: { x: 0, y: 0 },
+          target: { x: 0, y: 1 },
+        },
+      ],
+      valueCommits: [{ position: { x: 0, y: 1 }, value: null }],
       cellHeight: 100,
       motion,
-    });
-
-    expect(plan.targetValues).toEqual([[null, 50]]);
-    expect(plan.movements[0]).toMatchObject({
-      kind: "existing",
-      code: 8,
-      presentationValue: 25,
-    });
-  });
-
-  it("strictly validates fixed occurrences and the refill closure", () => {
-    const base = {
-      sourceScene: [[1, -1]],
-      sourceValues: [[null, -1]],
-      settledScene: [[-1, 1]],
-      settledValues: [[-1, null]],
-      targetScene: [[2, 1]],
-      targetValues: [[null, null]],
-      refillPositions: [{ x: 0, y: 0 }],
-      cellHeight: 100,
-      motion,
-    } as const;
-    expect(createGridCellCascadeDropPlan(base).movements).toHaveLength(2);
+    };
+    expect(createGridCellCascadeDropdownPlan(options).movements).toHaveLength(
+      1,
+    );
     expect(() =>
       createGridCellCascadeDropPlan({
-        ...base,
-        canDropOccurrence: () => false,
+        ...options,
+        motion: { ...motion, settleSeconds: 0 },
       }),
-    ).toThrow(/fixed occurrence changed/);
-    expect(() =>
-      createGridCellCascadeDropPlan({ ...base, refillPositions: [] }),
-    ).toThrow(/match settledScene holes exactly/);
-    expect(() =>
-      createGridCellCascadeDropPlan({
-        ...base,
-        targetScene: [[2, 3]],
-      }),
-    ).toThrow(/changed carried occurrence/);
-    expect(() =>
-      createGridCellCascadeDropPlan({
-        ...base,
-        refillPositions: [
-          { x: 0, y: 0 },
-          { x: 0, y: 0 },
-        ],
-      }),
-    ).toThrow(/duplicate/);
+    ).toThrow(/settleSeconds/);
   });
 });

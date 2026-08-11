@@ -344,16 +344,17 @@ export class RenderReelSet extends Container {
   prepareVisibleOccurrenceReplacement(options: {
     readonly x: number;
     readonly y: number;
-    readonly expectedCode: number;
     readonly outputCode: number;
     readonly outputPresentationValue: number | null;
   }): PreparedVisibleOccurrenceReplacement {
     this.assertStopped("prepare visible occurrence replacement");
     const reel = this.getReelAt(options.x);
-    const input = reel.getVisibleSymbolStateSnapshot(options.y);
-    if (input.code !== options.expectedCode)
+    const inputSymbol = reel
+      .getSlotSnapshots()
+      .find((candidate) => candidate.windowY === options.y)?.symbol;
+    if (!inputSymbol)
       throw new ReelError(
-        `Cannot replace standard reel cell (${options.x},${options.y}): expected code ${options.expectedCode}, received ${input.code}.`,
+        `Cannot replace missing occurrence at standard reel cell (${options.x},${options.y}).`,
       );
     const output = reel.createDetachedOccurrence(
       options.outputCode,
@@ -368,7 +369,6 @@ export class RenderReelSet extends Container {
     return Object.freeze({
       x: options.x,
       y: options.y,
-      inputCode: options.expectedCode,
       outputCode: options.outputCode,
       commit: (): void => {
         if (state === "committed") return;
@@ -377,10 +377,12 @@ export class RenderReelSet extends Container {
             `Cannot commit rolled-back replacement at standard reel cell (${options.x},${options.y}).`,
           );
         this.assertStopped("commit visible occurrence replacement");
-        const current = reel.getVisibleSymbolStateSnapshot(options.y);
-        if (current.code !== options.expectedCode)
+        const currentSymbol = reel
+          .getSlotSnapshots()
+          .find((candidate) => candidate.windowY === options.y)?.symbol;
+        if (currentSymbol !== inputSymbol)
           throw new ReelError(
-            `Cannot commit replacement at standard reel cell (${options.x},${options.y}): expected code ${options.expectedCode}, received ${current.code}.`,
+            `Cannot commit replacement at standard reel cell (${options.x},${options.y}): occurrence ownership changed.`,
           );
         const previous = reel.takeVisibleOccurrence(options.y);
         try {
@@ -485,34 +487,80 @@ export class RenderReelSet extends Container {
       throw new ReelError(
         `Cascade dropdown dimensions ${plan.columns}x${plan.rows} do not match standard reel runtime.`,
       );
-    assertCascadeMatrix(this.getVisibleScene(), plan.sourceScene, "scene");
-    assertCascadeMatrix(this.getCascadeValues(), plan.sourceValues, "values");
-    const active = plan.movements.map((movement) => {
-      const reel = this.getReelAt(movement.x);
-      const occurrence =
-        movement.kind === "existing"
-          ? reel.takeVisibleOccurrence(movement.sourceY)
-          : reel.createDetachedOccurrence(
-              movement.code,
-              movement.presentationValue,
+    const prepared: Array<{
+      readonly movement: GridCellCascadeDropPlan["movements"][number];
+      readonly reel: RenderReel;
+      readonly occurrence: RenderReelVisibleOccurrence | null;
+    }> = [];
+    try {
+      for (const movement of plan.movements) {
+        const reel = this.getReelAt(movement.x);
+        if (movement.kind === "existing") {
+          const symbol = reel
+            .getSlotSnapshots()
+            .find(
+              (candidate) => candidate.windowY === movement.sourceY,
+            )?.symbol;
+          if (!symbol)
+            throw new ReelError(
+              `Cascade source occurrence is missing at (${movement.x},${movement.sourceY}).`,
             );
-      if (
-        occurrence.code !== movement.code ||
-        occurrence.presentationValue !== movement.presentationValue
-      )
-        throw new ReelError(
-          `Cascade occurrence changed at (${movement.x},${movement.sourceY}).`,
+          if (!symbol.hasAnimationCapability("dropdown"))
+            throw new ReelError(
+              `Dropdown animation is unavailable at (${movement.x},${movement.sourceY}).`,
+            );
+          symbol.requestState("dropdown");
+          prepared.push({ movement, reel, occurrence: null });
+          continue;
+        }
+        const occurrence = reel.createDetachedOccurrence(
+          movement.outputCode,
+          movement.outputPresentationValue,
         );
-      if (occurrence.symbol.hasAnimationCapability("dropdown"))
-        occurrence.symbol.requestState("dropdown");
-      else occurrence.symbol.requestState("normal");
-      occurrence.symbol.position.set(
-        reel.layout.getReelX(movement.x) + reel.layout.cellWidth / 2,
-        reel.layout.getCellY(movement.sourceY) + reel.layout.cellHeight / 2,
-      );
-      this.#slotLayer.addChild(occurrence.symbol);
-      return Object.freeze({ movement, occurrence });
-    });
+        if (!occurrence.symbol.hasAnimationCapability("dropdown")) {
+          reel.releaseDetachedOccurrence(occurrence);
+          throw new ReelError(
+            `Dropdown animation is unavailable for refill at (${movement.x},${movement.targetY}).`,
+          );
+        }
+        try {
+          occurrence.symbol.requestState("dropdown");
+        } catch (error) {
+          reel.releaseDetachedOccurrence(occurrence);
+          throw error;
+        }
+        prepared.push({ movement, reel, occurrence });
+      }
+    } catch (error) {
+      for (const item of prepared) {
+        if (item.occurrence) {
+          item.occurrence.symbol.requestState("normal");
+          item.reel.releaseDetachedOccurrence(item.occurrence);
+        } else {
+          item.reel
+            .getSlotSnapshots()
+            .find((candidate) => candidate.windowY === item.movement.sourceY)
+            ?.symbol?.requestState("normal");
+        }
+      }
+      throw error;
+    }
+    const active = prepared.map(
+      ({ movement, reel, occurrence: preparedOccurrence }) => {
+        const occurrence =
+          movement.kind === "existing"
+            ? reel.takeVisibleOccurrence(movement.sourceY)
+            : preparedOccurrence;
+        if (!occurrence)
+          throw new ReelError("Prepared refill occurrence is missing.");
+        occurrence.symbol.position.set(
+          reel.layout.getReelX(movement.x) + reel.layout.cellWidth / 2,
+          reel.layout.getCellY(movement.sourceY) + reel.layout.cellHeight / 2,
+        );
+        this.#slotLayer.addChild(occurrence.symbol);
+        return Object.freeze({ movement, occurrence });
+      },
+    );
     this.#activeDrop = {
       plan,
       movements: Object.freeze(active),
@@ -744,20 +792,15 @@ export class RenderReelSet extends Container {
         movement.targetY,
       );
     }
+    for (const commit of active.plan.valueCommits)
+      this.getReelAt(commit.x).setVisibleSymbolPresentationValue(
+        commit.y,
+        commit.presentationValue,
+      );
     this.#activeDrop = null;
     this.#slotLayer.mask = null;
     this.#cascadeMask.visible = false;
     this.#cascadeMask.renderable = false;
-    assertCascadeMatrix(
-      this.getVisibleScene(),
-      active.plan.targetScene,
-      "target scene",
-    );
-    assertCascadeMatrix(
-      this.getCascadeValues(),
-      active.plan.targetValues,
-      "target values",
-    );
   }
 
   private cancelActiveDrop(): void {
@@ -868,22 +911,6 @@ function normalizeCascadePositions(
         position !== null,
     ),
   );
-}
-
-function assertCascadeMatrix(
-  actual: readonly (readonly unknown[])[],
-  expected: readonly (readonly unknown[])[],
-  label: string,
-): void {
-  if (
-    actual.length !== expected.length ||
-    actual.some(
-      (column, x) =>
-        column.length !== expected[x]?.length ||
-        column.some((value, y) => value !== expected[x]?.[y]),
-    )
-  )
-    throw new ReelError(`Cascade ${label} does not match compiled plan.`);
 }
 
 function createBrightnessTint(brightness: number): number {

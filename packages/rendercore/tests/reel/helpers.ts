@@ -14,6 +14,7 @@ import {
 import {
   createAppearSymbolAni,
   createDefaultSymbolAnimationResolver,
+  createLoopSymbolAni,
   createWinSymbolAni,
   type SymbolAnimationResolver,
   type SymbolAssetMap,
@@ -133,6 +134,12 @@ export function createBasicRegistry(
 export function createTestSymbolAnimationResolver(): SymbolAnimationResolver {
   const normalResolver = createDefaultSymbolAnimationResolver();
   return (context) => {
+    if (context.resolvedState === "dropdown") {
+      return createLoopSymbolAni({
+        stateId: "dropdown",
+        durationSeconds: 1,
+      });
+    }
     if (context.resolvedState === "appear") {
       return createAppearSymbolAni(context, { durationSeconds: 0.42 });
     }

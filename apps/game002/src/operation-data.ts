@@ -11,14 +11,16 @@ import {
   parseExactPositionPairs,
   requireSafeInteger,
   slotOperationPositionKey as positionKey,
+  compileSlotCascadeFacts,
+  deriveSlotCascadeDropdownValues,
 } from "@slotclientengine/gameframeworks";
+import type { SlotCascadeFacts } from "@slotclientengine/gameframeworks";
 import {
   createLastUseRemoveGroups,
   prepareSymbolWinGroups,
   type SymbolCascadeGroup,
 } from "@slotclientengine/rendercore";
 import {
-  deriveGridCellCascadeSettledValues,
   type GridCellCascadeScene,
   type GridCellCascadeValueMatrix,
   type SymbolPresentationValueMatrix,
@@ -53,6 +55,7 @@ export interface Game002FallOperationData {
   readonly refillPositions: readonly WinResultPosition[];
   readonly refillScene: SceneMatrix;
   readonly refillValues: SymbolPresentationValueMatrix;
+  readonly cascadeFacts: SlotCascadeFacts;
 }
 
 export function readGame002SpinOperationData(options: {
@@ -106,17 +109,17 @@ export function readGame002FallOperationData(options: {
     options.step.getComponentScenes(GAME002_CASCADE_COMPONENTS.dropdown),
     `step[${stepIndex}] bg-dropdown`,
   );
-  const derivedDropdownValues = deriveGridCellCascadeSettledValues({
+  const derivedDropdownValues = deriveSlotCascadeDropdownValues({
     sourceScene: options.sourceScene,
     sourceValues: options.sourceValues,
-    settledScene: dropdownScene,
-    canDropOccurrence: ({ x, sourceY, code, presentationValue }) =>
+    dropdownScene,
+    canDropOccurrence: ({ x, y, code, value }) =>
       options.canDropSymbol({
         stepIndex,
         x,
-        y: sourceY,
+        y,
         code,
-        presentationValue,
+        presentationValue: value,
       }),
   });
   const dropdownValues = derivedDropdownValues;
@@ -149,6 +152,23 @@ export function readGame002FallOperationData(options: {
     ),
     fallbackValues: createCarriedRefillValues(dropdownValues, refillPositions),
   });
+  const cascadeFacts = compileSlotCascadeFacts({
+    sourceScene: options.sourceScene,
+    sourceValues: options.sourceValues,
+    dropdownScene,
+    dropdownValues,
+    targetScene: refillScene,
+    targetValues: refillValueResult.values,
+    refillPositions,
+    canDropOccurrence: ({ x, y, code, value }) =>
+      options.canDropSymbol({
+        stepIndex,
+        x,
+        y,
+        code,
+        presentationValue: value,
+      }),
+  });
   return Object.freeze({
     sourceScene: options.sourceScene,
     sourceValues: options.sourceValues,
@@ -157,6 +177,7 @@ export function readGame002FallOperationData(options: {
     refillPositions,
     refillScene,
     refillValues: refillValueResult.values,
+    cascadeFacts,
   });
 }
 

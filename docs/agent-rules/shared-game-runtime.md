@@ -28,13 +28,17 @@
   preflight/prepare/update/commit/rollback/destroy 生命周期，也不使用进程级 registry、kind alias
   或首项 fallback。coordinator 在每个非 presentation operation 成功后保存其 output，并把它作为
   下一 handler 的 `context.input`；plan 不重复携带 input。
-- render handler 自己决定动画边界、逐格或批量提交，并在实际变化前检查涉及坐标的
-  `context.input`/`operation.output` continuity；不重新验证完整 plan。Promise 成功后推进下一 operation；失败后立即
+- render handler 自己决定动画边界、逐格或批量提交，直接执行 finalizer/producer 已证明的
+  operation output、movement 和 value commit，不再对 `context.input`/`operation.output` 做 scene/code/value
+  continuity 复核。Promise 成功后推进下一 operation；失败后立即
   fail-stop 并取消 pending playback，不倒放已经完成的动画或 mutation。
 - settled 后、中奖前的业务转换必须由 logiccore 的中性 immutable output operation
-  和 app-owned 异步调用链显式表达；每次提交只校验受影响坐标的 code/value
-  continuity，共享层不认识业务 symbol、component 或动画名。没有 transform 的 consumer
+  和 app-owned 异步调用链显式表达；renderer 只消费显式 output code/value，
+  不读取显示前态反向验证业务连续性，共享层不认识业务 symbol、component 或动画名。没有 transform 的 consumer
   trace 保持不变。
+- remove/dropdown/refill 的 held、hole closure、occurrence relation、carried value 和 target value
+  必须在 logiccore compiler 或 direct consumer 调用前确定。rendercore cascade plan 只保存 render-ready
+  movement、value commit、尺寸和时序，不保存用于复核的 source/settled/target matrix，也不接收业务 predicate。
 - symbol package 到 reel registry 的 catalog/value-controller 适配属于 rendercore；
   game app 不从 package bytes 重建 asset 表。完整 package runtime 必须拥有唯一 root/reel、manifest
   placement/order 与 overlay attachment；确实只消费 layout/background/popup 且不需要 package main reel 的
@@ -104,10 +108,10 @@
 - grid-cell full/selective spin 活跃期间，rendercore 必须在每个 timeline slice 恰好推进一次
   所有 occupied cell 的 symbol player，包括 waiting、已落地/完成和未选 held cell；hole
   不推进，app 不补 ticker 或逐格 update。
-- terminal remove/release 属于 rendercore：必须整批 preflight candidate 与中性 retained
-  predicate，每个 removable occurrence 在自身 once completion 边界直接 release，不插入
-  normal；retained occurrence 的 identity/value/player timeline 不得被触碰。具体 retained
-  symbol 规则只由 app 注入，共享层不得硬编码 code/name。
+- terminal remove/release 属于 rendercore：上游必须传入最终 remove positions，rendercore
+  整批 preflight exact state/animation 后让每个 occurrence 在自身 once completion 边界直接
+  release，不插入 normal。retained symbol 规则由 logiccore compiler 或 app 在调用前解析，
+  rendercore 不接收 retained predicate，也不返回业务 removed/retained 分类。
 
 ## Scene layout 与生成配置
 

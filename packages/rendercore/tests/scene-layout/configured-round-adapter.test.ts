@@ -419,11 +419,43 @@ function createHarness() {
     releaseMainReelSymbols: vi.fn(releasePositions),
     startMainReelCascadeDrop: vi.fn(
       (plan: {
-        targetScene: SceneMatrix;
-        targetValues: readonly (readonly (number | null | -1)[])[];
+        movements: readonly (
+          | {
+              readonly kind: "existing";
+              readonly x: number;
+              readonly sourceY: number;
+              readonly targetY: number;
+            }
+          | {
+              readonly kind: "refill";
+              readonly x: number;
+              readonly sourceY: number;
+              readonly targetY: number;
+              readonly outputCode: number;
+              readonly outputPresentationValue: number | null;
+            }
+        )[];
+        valueCommits: readonly {
+          readonly x: number;
+          readonly y: number;
+          readonly presentationValue: number | null;
+        }[];
       }) => {
-        currentScene = plan.targetScene;
-        currentValues = plan.targetValues;
+        const nextScene = currentScene.map((column) => [...column]);
+        for (const movement of plan.movements) {
+          const code =
+            movement.kind === "existing"
+              ? currentScene[movement.x]![movement.sourceY]!
+              : movement.outputCode;
+          if (movement.kind === "existing")
+            nextScene[movement.x]![movement.sourceY] = -1;
+          nextScene[movement.x]![movement.targetY] = code;
+        }
+        const nextValues = currentValues.map((column) => [...column]);
+        for (const commit of plan.valueCommits)
+          nextValues[commit.x]![commit.y] = commit.presentationValue;
+        currentScene = nextScene;
+        currentValues = nextValues;
         spinning = false;
       },
     ),

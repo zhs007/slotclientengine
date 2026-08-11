@@ -18,6 +18,7 @@ export * from "./effect-generators";
 export * from "./exact-data";
 export * from "./server-view";
 export * from "./operation-generators";
+export * from "./cascade-facts";
 export {
   finalizeSlotOperationPlanV2,
   type FinalizeSlotOperationPlanV2Options,

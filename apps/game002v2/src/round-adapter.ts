@@ -5,13 +5,15 @@ import {
   type SlotGameAdapter,
   type SlotGameInitialState,
   type SlotGameMountContext,
+  compileSlotCascadeFacts,
+  deriveSlotCascadeDropdownValues,
 } from "@slotclientengine/gameframeworks";
 import {
   createGridCellCascadeDropPlan,
   createGridCellCascadeDropdownPlan,
   createSceneLayoutPackageRuntime,
   getInitialSceneLayoutSymbolPackageResource,
-  deriveGridCellCascadeSettledValues,
+  type SceneLayoutGridCellSpinPlanStage,
   type SceneLayoutPackageResource,
   type SceneLayoutPackageRuntime,
 } from "@slotclientengine/rendercore";
@@ -397,7 +399,9 @@ class DirectRoundAdapter implements SlotGameAdapter {
         presentationValues,
         ...(kind !== "plain"
           ? {
-              buildGridCellSpinPlan: (stage) => {
+              buildGridCellSpinPlan: (
+                stage: SceneLayoutGridCellSpinPlanStage,
+              ) => {
                 if (kind === "freegame")
                   return buildGame002v2FreeGameSpinPlan(
                     stage,
@@ -450,11 +454,11 @@ class DirectRoundAdapter implements SlotGameAdapter {
     const sourceValues = runtime.getMainReelCascadeValues();
     const canDropOccurrence = ({ code }: { readonly code: number }) =>
       code !== wildCode;
-    const settledValues = deriveGridCellCascadeSettledValues({
+    const settledValues = deriveSlotCascadeDropdownValues({
       sourceScene,
       sourceValues,
-      settledScene: dropdown,
-      canDropOccurrence,
+      dropdownScene: dropdown,
+      canDropOccurrence: ({ code }) => canDropOccurrence({ code }),
     });
     const targetValues = readPresentationValues(step, targetScene, symbols, {
       scene: dropdown,
@@ -462,15 +466,19 @@ class DirectRoundAdapter implements SlotGameAdapter {
     });
     const geometry = this.#resource.manifest.reels.main!;
     const refillPositions = holes(dropdown);
-    const planOptions = {
+    const facts = compileSlotCascadeFacts({
       sourceScene,
       sourceValues,
-      settledScene: dropdown,
-      settledValues,
+      dropdownScene: dropdown,
+      dropdownValues: settledValues,
       targetScene,
       targetValues,
       refillPositions,
-      canDropOccurrence,
+      canDropOccurrence: ({ code }) => canDropOccurrence({ code }),
+    });
+    const motionOptions = {
+      columns: facts.columns,
+      rows: facts.rows,
       cellHeight: geometry.cellSize.height,
       rowGap: geometry.gap.y,
       motion: {
@@ -485,7 +493,11 @@ class DirectRoundAdapter implements SlotGameAdapter {
     } as const;
     if (!this.#anticipationActive) {
       runtime.startMainReelCascadeDrop(
-        createGridCellCascadeDropPlan(planOptions),
+        createGridCellCascadeDropPlan({
+          ...motionOptions,
+          movements: [...facts.dropdownMovements, ...facts.refillMovements],
+          valueCommits: facts.targetValueCommits,
+        }),
       );
       await this.waitForReelActivity();
       if (
@@ -497,7 +509,11 @@ class DirectRoundAdapter implements SlotGameAdapter {
     }
 
     runtime.startMainReelCascadeDrop(
-      createGridCellCascadeDropdownPlan(planOptions),
+      createGridCellCascadeDropdownPlan({
+        ...motionOptions,
+        movements: facts.dropdownMovements,
+        valueCommits: facts.dropdownValueCommits,
+      }),
     );
     await this.waitForReelActivity();
     runtime.startMainReelEffectSweep(
@@ -538,29 +554,17 @@ class DirectRoundAdapter implements SlotGameAdapter {
   private async removeWonSymbols(step: GameLogicStep): Promise<void> {
     const removeScene = step.getComponentScenes("bg-remove").at(-1);
     if (!removeScene) return;
-    const winningPositions = WIN_COMPONENTS.flatMap((name) =>
-      step.getComponentResults(name).flatMap((result) => pairs(result.pos)),
-    );
     const targetHoles = holes(removeScene);
-    const positions = [...winningPositions, ...targetHoles];
-    if (positions.length === 0)
-      throw new Error("bg-remove requires winning occurrence positions.");
+    if (targetHoles.length === 0) return;
     const runtime = this.requireRuntime();
-    const result = await runtime.removeMainReelSymbols({
-      positions,
+    await runtime.removeMainReelSymbols({
+      positions: targetHoles,
       state: "remove",
       playback: {
         transitionMode: "immediate",
         completion: "once-complete",
       },
-      canRemoveOccurrence: ({ code }) => code !== this.requireSpinCodes().wild,
     });
-    assertSamePositions(result.removed, targetHoles, "removed");
-    for (const retained of result.retained)
-      if (removeScene[retained.x]?.[retained.y] !== retained.code)
-        throw new Error(
-          `game002v2 retained remove occurrence changed at (${retained.x},${retained.y}).`,
-        );
   }
 
   private async playFeatureStates(
@@ -745,15 +749,4 @@ function asError(error: unknown): Error {
 
 function nextAnimationFrame(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));
-}
-
-function assertSamePositions(
-  left: readonly Position[],
-  right: readonly Position[],
-  label: string,
-): void {
-  const keys = (positions: readonly Position[]) =>
-    [...new Set(positions.map(({ x, y }) => `${x}:${y}`))].sort();
-  if (JSON.stringify(keys(left)) !== JSON.stringify(keys(right)))
-    throw new Error(`game002v2 ${label} positions do not match target scene.`);
 }

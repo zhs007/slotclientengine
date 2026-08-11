@@ -340,7 +340,6 @@ export interface RenderVisibleSymbolStateSnapshot {
 export interface PreparedVisibleOccurrenceReplacement {
   readonly x: number;
   readonly y: number;
-  readonly inputCode: number;
   readonly outputCode: number;
   commit(): void;
   rollback(): void;
@@ -350,8 +349,6 @@ export interface PreparedVisibleOccurrenceReplacement {
 export interface GridCellVisibleOccurrenceTransfer {
   readonly source: { readonly x: number; readonly y: number };
   readonly target: { readonly x: number; readonly y: number };
-  readonly expectedSourceCode: number;
-  readonly expectedTargetCode: number;
   readonly sourceReplacementCode: number;
   readonly sourceReplacementPresentationValue: number | null;
 }
@@ -413,26 +410,11 @@ export interface VisibleSymbolStatePlaybackBatchOptions {
   readonly signal?: AbortSignal;
 }
 
-export interface GridCellTerminalRemoveCandidate {
-  readonly x: number;
-  readonly y: number;
-  readonly code: number;
-  readonly presentationValue: number | null;
-}
-
 export interface GridCellTerminalRemoveOptions {
   readonly positions: readonly { readonly x: number; readonly y: number }[];
   readonly state: SymbolStateId;
   readonly playback: Omit<SymbolStatePlaybackOptions, "signal">;
-  readonly canRemoveOccurrence?: (
-    candidate: GridCellTerminalRemoveCandidate,
-  ) => boolean;
   readonly signal?: AbortSignal;
-}
-
-export interface GridCellTerminalRemoveResult {
-  readonly removed: readonly GridCellTerminalRemoveCandidate[];
-  readonly retained: readonly GridCellTerminalRemoveCandidate[];
 }
 
 export interface RenderReelSetOptions {
@@ -551,41 +533,38 @@ export interface GridCellCascadeMotionOptions {
   readonly settleSeconds: number;
 }
 
-export interface GridCellCascadeDropMovement {
-  readonly kind: "existing" | "refill";
+interface GridCellCascadeDropMovementBase {
   readonly x: number;
   readonly sourceY: number;
   readonly targetY: number;
-  readonly code: number;
-  readonly presentationValue: number | null;
   readonly startSeconds: number;
   readonly fallSeconds: number;
   readonly settleSeconds: number;
   readonly overshootPixels: number;
 }
 
+export type GridCellCascadeDropMovement =
+  | (GridCellCascadeDropMovementBase & {
+      readonly kind: "existing";
+    })
+  | (GridCellCascadeDropMovementBase & {
+      readonly kind: "refill";
+      readonly outputCode: number;
+      readonly outputPresentationValue: number | null;
+    });
+
+export interface GridCellCascadeValueCommit {
+  readonly x: number;
+  readonly y: number;
+  readonly presentationValue: number | null;
+}
+
 export interface GridCellCascadeDropPlan {
   readonly columns: number;
   readonly rows: number;
-  readonly sourceScene: GridCellCascadeScene;
-  readonly sourceValues: GridCellCascadeValueMatrix;
-  readonly settledScene: GridCellCascadeScene;
-  readonly settledValues: GridCellCascadeValueMatrix;
-  readonly targetScene: GridCellCascadeScene;
-  readonly targetValues: GridCellCascadeValueMatrix;
-  readonly refillPositions: readonly {
-    readonly x: number;
-    readonly y: number;
-  }[];
   readonly movements: readonly GridCellCascadeDropMovement[];
+  readonly valueCommits: readonly GridCellCascadeValueCommit[];
   readonly totalSeconds: number;
-}
-
-export interface GridCellCascadeDropOccurrenceContext {
-  readonly x: number;
-  readonly sourceY: number;
-  readonly code: number;
-  readonly presentationValue: number | null;
 }
 
 export interface RenderGridCellReelSetSpinOptions {
