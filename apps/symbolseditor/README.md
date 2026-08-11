@@ -1,10 +1,12 @@
 # Symbols Editor
 
-纯前端、resource-library-first 的 strict symbols package v1 编辑器。
+纯前端、resource-library-first 的 strict Symbols package 编辑器。外层 `symbols.package.json` 保持 v1，内层 symbol-state-textures manifest 导出为 v2。
 
 资源工作区只有一个支持多文件和 ZIP 的“导入资源”入口。image、Spine、VNI、standalone ImgNumber ZIP 与已有 Symbols ZIP 都进入同一扁平 filename-key namespace；Picker 只提交明确的 filename key/typed descriptor，不从 symbol code 或文件名猜绑定。
 
 symbol code、state、lifecycle、scale、renderPriority、value/cascade 配置仍是业务身份。image state 引用图片 key；Spine 引用 skeleton/atlas/page keys；VNI 引用 project key；image-string dependency 只记录 root key、manifest 与 closure keys，真实 bytes 只存在全局 asset library。
+
+项目状态定义为每个 once state 显式编辑 `afterComplete`：`return-to-default` 完成后回 normal/default，`terminal` 保持终态；stable state 不显示该字段。打开旧 v1 ZIP 时统一由 rendercore upgrader 填充 exact remove=`terminal`、其它 once=`return-to-default`，新导出只写完整 `settings.stateDefinitions` v2。预览与 Replay 直接消费该配置，不按 remove 名称分支。
 
 任意非 value-managed state 都直接提供“增加动画层”，不要求先把旧 visual 重新选择为多图层类型。首次增加时，现有图片会原样保留为 normal/stateTexture base，现有 Spine/VNI 会原样迁移为第一层，再追加一份待绑定的新层；已导入的旧 ZIP 因此不需要重新录入既有资源。附加层按稳定列表顺序逐项选择 `underlay | overlay` 以及 Spine/VNI 资源与播放参数。层 id 必须唯一且为 lowercase kebab-case；至少保留一层。导入、预览、导出与资源覆盖都按 exact layer binding 处理，不按文件名猜层，也不把多层静默降级成单层。
 

@@ -291,7 +291,7 @@ export interface ParsedSymbolManifestSymbol {
 }
 
 export interface ParsedSymbolStateTextureManifest {
-  readonly version: 1;
+  readonly version: 2;
   readonly states: readonly SymbolStateId[];
   readonly statePreset: SymbolStatePreset;
   readonly symbols: Readonly<Record<string, ParsedSymbolManifestSymbol>>;
@@ -402,11 +402,12 @@ export function parseSymbolStateTextureManifest(
     "symbol state texture manifest",
     TOP_LEVEL_MANIFEST_KEYS,
   );
-  if (record.version !== 1) {
+  if (record.version !== 1 && record.version !== 2) {
     throw new SymbolAssetError(
-      "Symbol state texture manifest version must be 1.",
+      "Symbol state texture manifest version must be 1 or 2.",
     );
   }
+  const sourceVersion = record.version;
   if (!Array.isArray(record.states)) {
     throw new SymbolAssetError(
       "Symbol state texture manifest states must be an array.",
@@ -417,7 +418,11 @@ export function parseSymbolStateTextureManifest(
     record.states.map((state) => assertString(state, "manifest state")),
   );
   assertUniqueStrings(states, "symbol state texture manifest states");
-  const statePreset = parseManifestStatePreset(record.settings, states);
+  const statePreset = parseManifestStatePreset(
+    record.settings,
+    states,
+    sourceVersion,
+  );
   const stateSet = new Set(states);
   for (const state of options.requiredStates ?? []) {
     if (!stateSet.has(state)) {
@@ -582,11 +587,41 @@ export function parseSymbolStateTextureManifest(
   }
 
   return Object.freeze({
-    version: 1,
+    version: 2,
     states,
     statePreset,
     symbols: Object.freeze(symbols),
   });
+}
+
+export function upgradeSymbolStateTextureManifest(
+  manifest: unknown,
+): Readonly<Record<string, unknown>> {
+  const parsed = parseSymbolStateTextureManifest(manifest);
+  const record = structuredClone(
+    assertRecord(manifest, "symbol state texture manifest"),
+  );
+  const settings =
+    record.settings === undefined
+      ? {}
+      : structuredClone(
+          assertRecord(
+            record.settings,
+            "symbol state texture manifest settings",
+          ),
+        );
+  delete settings.additionalStateDefinitions;
+  settings.stateDefinitions = parsed.statePreset.states.map((definition) => ({
+    id: definition.id,
+    phase: definition.phase,
+    playback: definition.playback,
+    ...(definition.afterComplete
+      ? { afterComplete: definition.afterComplete }
+      : {}),
+  }));
+  record.version = 2;
+  record.settings = settings;
+  return deepFreezeManifest(record);
 }
 
 function parseImageStringNodes(
@@ -1036,17 +1071,29 @@ function finitePositiveNumber(value: unknown, label: string): number {
 function parseManifestStatePreset(
   settings: unknown,
   textureStates: readonly SymbolStateId[],
+  version: 1 | 2,
 ): SymbolStatePreset {
-  const base = createDefaultSymbolStatePreset();
-  if (settings === undefined) return base;
+  const base =
+    version === 1
+      ? createLegacyV1UpgradedStatePreset()
+      : createDefaultSymbolStatePreset();
+  if (version === 1 && settings === undefined) return base;
+  if (version === 2 && settings === undefined) {
+    throw new SymbolAssetError(
+      "Symbol state texture manifest v2 settings must declare stateDefinitions.",
+    );
+  }
   const record = assertRecord(
     settings,
     "symbol state texture manifest settings",
   );
   assertOnlyKnownKeys(record, "symbol state texture manifest settings", [
     ...textureStates,
-    "additionalStateDefinitions",
+    version === 1 ? "additionalStateDefinitions" : "stateDefinitions",
   ]);
+  if (version === 2) {
+    return parseManifestStatePresetV2(record, base);
+  }
   if (record.additionalStateDefinitions === undefined) return base;
   if (!Array.isArray(record.additionalStateDefinitions)) {
     throw new SymbolAssetError(
@@ -1077,13 +1124,140 @@ function parseManifestStatePreset(
       );
     }
     existingIds.add(id);
-    return Object.freeze({ id, phase, playback }) as SymbolStateDefinition;
+    return Object.freeze({
+      id,
+      phase,
+      playback,
+      ...(playback === "once"
+        ? { afterComplete: "return-to-default" as const }
+        : {}),
+    }) as SymbolStateDefinition;
   });
   return Object.freeze({
     defaultState: base.defaultState,
     states: Object.freeze([...base.states, ...additions]),
     equivalences: base.equivalences,
   });
+}
+
+function createLegacyV1UpgradedStatePreset(): SymbolStatePreset {
+  const base = createDefaultSymbolStatePreset();
+  return Object.freeze({
+    defaultState: base.defaultState,
+    states: Object.freeze(
+      base.states.map((definition) =>
+        definition.playback === "once"
+          ? Object.freeze({
+              ...definition,
+              afterComplete:
+                definition.id === "remove"
+                  ? ("terminal" as const)
+                  : ("return-to-default" as const),
+            })
+          : definition,
+      ),
+    ),
+    equivalences: base.equivalences,
+  });
+}
+
+function parseManifestStatePresetV2(
+  settings: Readonly<Record<string, unknown>>,
+  base: SymbolStatePreset,
+): SymbolStatePreset {
+  if (!Array.isArray(settings.stateDefinitions)) {
+    throw new SymbolAssetError(
+      "Symbol state texture manifest v2 settings.stateDefinitions must be an array.",
+    );
+  }
+  const baseById = new Map(base.states.map((state) => [state.id, state]));
+  const seen = new Set<string>();
+  const definitions = settings.stateDefinitions.map((value, index) => {
+    const label = `symbol state definition[${index}]`;
+    const record = assertRecord(value, label);
+    assertOnlyKnownKeys(record, label, [
+      "id",
+      "phase",
+      "playback",
+      "afterComplete",
+    ]);
+    const id = assertString(record.id, `${label}.id`);
+    if (seen.has(id)) {
+      throw new SymbolAssetError(
+        `Symbol state texture manifest v2 contains duplicate state definition "${id}".`,
+      );
+    }
+    seen.add(id);
+    const phase = record.phase;
+    const playback = record.playback;
+    if (
+      !(
+        (phase === "once" && playback === "once") ||
+        (phase === "stable" && (playback === "static" || playback === "loop"))
+      )
+    ) {
+      throw new SymbolAssetError(
+        `Symbol state definition "${id}" must be once/once, stable/static or stable/loop.`,
+      );
+    }
+    const afterComplete = record.afterComplete;
+    if (
+      playback === "once" &&
+      afterComplete !== "return-to-default" &&
+      afterComplete !== "terminal"
+    ) {
+      throw new SymbolAssetError(
+        `Symbol state definition "${id}" once playback requires afterComplete "return-to-default" or "terminal".`,
+      );
+    }
+    if (playback !== "once" && afterComplete !== undefined) {
+      throw new SymbolAssetError(
+        `Symbol state definition "${id}" ${String(playback)} playback must not declare afterComplete.`,
+      );
+    }
+    const builtin = baseById.get(id);
+    if (builtin && (builtin.phase !== phase || builtin.playback !== playback)) {
+      throw new SymbolAssetError(
+        `Builtin symbol state "${id}" must keep ${builtin.phase}/${builtin.playback}.`,
+      );
+    }
+    if (!builtin && phase === "stable" && playback !== "loop") {
+      throw new SymbolAssetError(
+        `Custom symbol state "${id}" must be once/once or stable/loop.`,
+      );
+    }
+    return Object.freeze({
+      id,
+      phase,
+      playback,
+      ...(afterComplete !== undefined ? { afterComplete } : {}),
+      ...(builtin?.frameDurationSeconds !== undefined
+        ? { frameDurationSeconds: builtin.frameDurationSeconds }
+        : {}),
+    }) as SymbolStateDefinition;
+  });
+  for (const builtin of base.states) {
+    if (!seen.has(builtin.id)) {
+      throw new SymbolAssetError(
+        `Symbol state texture manifest v2 is missing builtin state definition "${builtin.id}".`,
+      );
+    }
+  }
+  return Object.freeze({
+    defaultState: base.defaultState,
+    states: Object.freeze(definitions),
+    equivalences: base.equivalences,
+  });
+}
+
+function deepFreezeManifest<T>(value: T): T {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value as Record<string, unknown>)) {
+      deepFreezeManifest(child);
+    }
+  }
+  return value;
 }
 
 function parseCascadeWinPresentation(

@@ -415,6 +415,7 @@ export interface GridCellTerminalRemoveOptions {
   readonly state: SymbolStateId;
   readonly playback: Omit<SymbolStatePlaybackOptions, "signal">;
   readonly signal?: AbortSignal;
+  readonly onComplete?: () => void;
 }
 
 export interface RenderReelSetOptions {

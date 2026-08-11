@@ -17,6 +17,7 @@ import {
   type EditorAssetRewriteAdapter,
 } from "@slotclientengine/editorresource";
 import { rewriteVNIProjectAssetPaths } from "@slotclientengine/vnicore/core";
+import { upgradeSymbolStateTextureManifest } from "./manifest.js";
 import {
   collectSymbolManifestResourcePaths,
   createSymbolPackageResource,
@@ -97,9 +98,8 @@ export async function materializeSymbolPackageContents(options: {
     putFile(output, target, canonical);
     mapping.set(path, target);
   }
-  const rawSymbolManifest = rewriteSymbolManifestPaths(
-    options.rawSymbolManifest,
-    mapping,
+  const rawSymbolManifest = upgradeSymbolStateTextureManifest(
+    rewriteSymbolManifestPaths(options.rawSymbolManifest, mapping),
   );
   const resources = collectSymbolManifestResourcePaths({
     symbolManifest: rawSymbolManifest,
@@ -165,9 +165,8 @@ export async function materializeMappedSymbolPackageContents(options: {
   readonly keyPrefix?: string;
 }): Promise<MaterializedSymbolPackageContents> {
   const flattened = flattenSymbolAssets(options.assets, options.keyPrefix);
-  const rawSymbolManifest = rewriteSymbolManifestPaths(
-    options.rawSymbolManifest,
-    flattened.mapping,
+  const rawSymbolManifest = upgradeSymbolStateTextureManifest(
+    rewriteSymbolManifestPaths(options.rawSymbolManifest, flattened.mapping),
   );
   const gameConfigKey = prefixedKey(
     options.packageManifest.entrypoints.gameConfig,

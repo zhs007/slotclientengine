@@ -43,6 +43,13 @@ interface OverlappingCollectItemRuntime {
   incrementStarted: boolean;
   removeRequested: boolean;
   released: boolean;
+  removal: TerminalRemovalRuntime | null;
+}
+
+interface TerminalRemovalRuntime {
+  readonly controller: AbortController;
+  completed: boolean;
+  error: unknown;
 }
 
 interface CompanionExecutionPlan {
@@ -90,6 +97,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
   #emphasisElapsedSeconds = 0;
   #overlappingCollectItems: OverlappingCollectItemRuntime[] = [];
   #collectStartElapsedSeconds = 0;
+  #removal: TerminalRemovalRuntime | null = null;
   readonly #prestartedSequentialLoops = new Set<number>();
 
   constructor(options: CreateSymbolCascadePlayerOptions) {
@@ -128,6 +136,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
         "symbol cascade prepared input is not owned by this player.",
       );
     }
+    this.cancelRemoval();
     this.#plans = plans;
     this.#index = -1;
     this.#itemIndex = -1;
@@ -178,6 +187,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
     this.#options.target.clearVisibleSymbolDimming();
     this.clearAmountTexts();
     this.#summary?.clear();
+    this.cancelRemoval();
     this.#plans = [];
     this.#phase = "idle";
     this.#index = -1;
@@ -227,6 +237,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
       this.#summary.destroy();
     }
     this.container.destroy({ children: true });
+    this.cancelRemoval();
     this.#plans = [];
     this.#overlappingCollectItems = [];
     this.#phase = "destroyed";
@@ -262,7 +273,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
         return Object.freeze({ completed: false });
       }
       if (plan.group.removePositions.length > 0) {
-        this.#options.target.requestVisibleSymbolStates(
+        this.#removal = this.startTerminalRemoval(
           plan.group.removePositions,
           plan.removeState,
         );
@@ -277,10 +288,10 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
         `symbol cascade group cannot update from ${this.#phase}.`,
       );
     }
-    if (!statesReturnedToNormal(this.#options, plan.group.removePositions)) {
+    if (!this.requireRemovalComplete()) {
       return Object.freeze({ completed: false });
     }
-    this.#options.target.releaseVisibleSymbols(plan.group.removePositions);
+    this.#removal = null;
     this.hideAmount(this.#index);
     return this.startPlanAt(this.#index + 1);
   }
@@ -348,7 +359,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
         this.hideAmount(this.#index);
         return this.startPlanAt(this.#index + 1);
       }
-      this.#options.target.requestVisibleSymbolStates(
+      this.#removal = this.startTerminalRemoval(
         [item.context.position],
         plan.removeState,
       );
@@ -360,10 +371,10 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
         `symbol cascade sequential collect cannot update from ${this.#phase}.`,
       );
     }
-    if (!statesReturnedToNormal(this.#options, [item.context.position])) {
+    if (!this.requireRemovalComplete()) {
       return Object.freeze({ completed: false });
     }
-    this.#options.target.releaseVisibleSymbols([item.context.position]);
+    this.#removal = null;
     if (this.#itemIndex + 1 < plan.items.length) {
       return this.startCollectItem(plan, this.#itemIndex + 1);
     }
@@ -426,6 +437,12 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
   }
 
   private advanceOverlappingCollectItems(plan: SequentialExecutionPlan): void {
+    for (const runtime of this.#overlappingCollectItems) {
+      if (runtime.removal?.error !== undefined) throw runtime.removal.error;
+      if (runtime.removal?.completed && runtime.incrementStarted) {
+        runtime.released = true;
+      }
+    }
     const active = this.#overlappingCollectItems.filter(
       (runtime) => !runtime.released,
     );
@@ -461,7 +478,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
           if (runtime.incrementStarted) runtime.released = true;
           continue;
         }
-        this.#options.target.requestVisibleSymbolStates(
+        runtime.removal = this.startTerminalRemoval(
           [item.context.position],
           plan.removeState,
         );
@@ -471,10 +488,8 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
       if (
         runtime.removeRequested &&
         runtime.incrementStarted &&
-        snapshot.requestedState === "normal" &&
-        snapshot.resolvedState === "normal"
+        runtime.removal?.completed
       ) {
-        this.#options.target.releaseVisibleSymbols([item.context.position]);
         runtime.released = true;
       }
     }
@@ -498,6 +513,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
       incrementStarted: false,
       removeRequested: false,
       released: false,
+      removal: null,
     });
     this.#options.target.requestVisibleSymbolStates(
       [item.context.position],
@@ -507,6 +523,48 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
     this.#phase =
       index + 1 < plan.items.length ? "collect-item" : "collect-remove";
     return Object.freeze({ completed: false });
+  }
+
+  private startTerminalRemoval(
+    positions: readonly Position[],
+    state: string,
+  ): TerminalRemovalRuntime {
+    const controller = new AbortController();
+    const runtime: TerminalRemovalRuntime = {
+      controller,
+      completed: false,
+      error: undefined,
+    };
+    void this.#options.target
+      .removeVisibleSymbols({
+        positions,
+        state,
+        playback: { completion: "once-complete" },
+        signal: controller.signal,
+        onComplete: () => {
+          runtime.completed = true;
+        },
+      })
+      .catch((error: unknown) => {
+        runtime.error = error;
+      });
+    return runtime;
+  }
+
+  private requireRemovalComplete(): boolean {
+    const removal = this.#removal;
+    if (!removal) throw new Error("symbol cascade removal is missing.");
+    if (removal.error !== undefined) throw removal.error;
+    return removal.completed;
+  }
+
+  private cancelRemoval(): void {
+    this.#removal?.controller.abort();
+    this.#removal = null;
+    for (const runtime of this.#overlappingCollectItems) {
+      runtime.removal?.controller.abort();
+      runtime.removal = null;
+    }
   }
 
   private getSequentialCollectStartIntervalSeconds(): number | null {

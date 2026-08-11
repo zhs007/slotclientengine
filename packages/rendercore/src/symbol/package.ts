@@ -33,6 +33,7 @@ import {
   createSymbolStatePresetFromManifest,
   createSymbolValuePresentationImagePath,
   parseSymbolStateTextureManifest,
+  upgradeSymbolStateTextureManifest,
   resolveSymbolValuePresentationImageStringBinding,
   type ParsedSymbolStateTextureManifest,
   type SymbolManifestNormal,
@@ -465,11 +466,13 @@ export async function createSymbolPackageResourceFromResolvedFiles(options: {
     packageManifest.entrypoints.gameConfig,
     "game config",
   );
-  const rawSymbolManifest = parseJsonFile(
+  const sourceSymbolManifest = parseJsonFile(
     files,
     packageManifest.entrypoints.symbolManifest,
     "symbol manifest",
   );
+  const rawSymbolManifest =
+    upgradeSymbolStateTextureManifest(sourceSymbolManifest);
   const { gameConfig, displaySymbols } = validateSymbolPackageGameConfig({
     rawGameConfig,
     symbolManifest: rawSymbolManifest,

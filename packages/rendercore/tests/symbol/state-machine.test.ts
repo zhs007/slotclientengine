@@ -221,7 +221,12 @@ describe("SymbolStateMachine transitions", () => {
       createDefinition({
         states: [
           { id: "normal", phase: "stable", playback: "loop" },
-          { id: "collect", phase: "once", playback: "once" },
+          {
+            id: "collect",
+            phase: "once",
+            playback: "once",
+            afterComplete: "return-to-default",
+          },
         ],
         equivalences: [],
       }),
@@ -256,6 +261,20 @@ describe("SymbolStateMachine transitions", () => {
       resolvedState: "normal",
       defaultState: "spinBlur",
       pendingState: null,
+    });
+  });
+
+  it("keeps terminal once states resolved after completion", () => {
+    const machine = new SymbolStateMachine(createDefinition());
+
+    machine.requestState("remove", "immediate");
+    machine.notifyOnceComplete();
+
+    expect(machine.getSnapshot()).toMatchObject({
+      requestedState: "remove",
+      resolvedState: "remove",
+      pendingState: null,
+      isOnce: true,
     });
   });
 

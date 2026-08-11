@@ -910,19 +910,27 @@ export class RenderGridCellReelSet extends Container {
         options.state,
         options.playback,
       );
+      if (!cell.reel.hasVisibleTerminalSymbolState(0, options.state)) {
+        throw new ReelError(
+          `Terminal remove state "${options.state}" at grid cell (${position.x},${position.y}) must declare afterComplete "terminal".`,
+        );
+      }
       return Object.freeze({ cell, symbol: slot.symbol });
     });
+    let remaining = prepared.length;
 
     return startSymbolStatePlaybackBatch(
       prepared.map(
         ({ cell, symbol }) =>
           (signal) =>
-            cell.reel
-              .playVisibleSymbolState(0, options.state, {
+            cell.reel.playVisibleTerminalSymbolState(
+              0,
+              options.state,
+              {
                 ...options.playback,
                 signal,
-              })
-              .then(() => {
+              },
+              () => {
                 const current = cell.reel
                   .getSlotSnapshots()
                   .find((slot) => slot.windowY === 0);
@@ -932,7 +940,10 @@ export class RenderGridCellReelSet extends Container {
                   );
                 }
                 this.releaseCell(cell);
-              }),
+                remaining -= 1;
+                if (remaining === 0) options.onComplete?.();
+              },
+            ),
       ),
       options.signal,
     );

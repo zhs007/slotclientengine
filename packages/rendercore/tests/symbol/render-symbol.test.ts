@@ -25,7 +25,7 @@ const createTestDefaultSymbolAnimationResolver = () =>
     if (context.resolvedState === "appear") {
       return createAppearSymbolAni(context, { durationSeconds: 0.42 });
     }
-    if (context.resolvedState === "win") {
+    if (context.resolvedState === "win" || context.resolvedState === "remove") {
       return createWinSymbolAni(context, { durationSeconds: 0.58 });
     }
     return createDefaultSymbolAnimationResolver()(context);
@@ -329,6 +329,37 @@ describe("RenderSymbol", () => {
       resolvedState: "normal",
     });
     expect(renderSymbol.update(1).onceCompleted).toBe(false);
+  });
+
+  it("holds terminal completion and can replay the same terminal state", async () => {
+    const renderSymbol = new RenderSymbol({
+      definition: createDefinition(),
+      texture: Texture.WHITE,
+      animationResolver: createTestDefaultSymbolAnimationResolver(),
+    });
+    let completionCount = 0;
+    const play = () =>
+      renderSymbol.playTerminalState(
+        "remove",
+        { transitionMode: "immediate", completion: "once-complete" },
+        () => {
+          completionCount += 1;
+        },
+      );
+
+    const first = play();
+    renderSymbol.update(0.59);
+    await first;
+    expect(renderSymbol.getStateSnapshot()).toMatchObject({
+      requestedState: "remove",
+      resolvedState: "remove",
+    });
+
+    const replay = play();
+    expect(renderSymbol.update(0.57).onceCompleted).toBe(false);
+    expect(renderSymbol.update(0.02).onceCompleted).toBe(true);
+    await replay;
+    expect(completionCount).toBe(2);
   });
 
   it("resolves spinBlur and disabled to normal while retaining requested state", () => {

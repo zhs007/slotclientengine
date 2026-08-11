@@ -11,6 +11,13 @@ export interface SymbolCascadeTarget extends VisibleSymbolPresentationTarget {
   releaseVisibleSymbols(
     positions: readonly { readonly x: number; readonly y: number }[],
   ): void;
+  removeVisibleSymbols(options: {
+    readonly positions: readonly { readonly x: number; readonly y: number }[];
+    readonly state: string;
+    readonly playback: { readonly completion: "once-complete" };
+    readonly signal?: AbortSignal;
+    readonly onComplete?: () => void;
+  }): Promise<void>;
   setVisibleSymbolDimming(
     highlightedPositions: readonly { readonly x: number; readonly y: number }[],
     dimmingAlpha: number,

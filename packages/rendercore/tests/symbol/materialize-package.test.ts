@@ -232,6 +232,8 @@ describe("symbol package materialization", () => {
     });
 
     expect(mapped.rawSymbolManifest).toMatchObject({
+      version: 2,
+      settings: { stateDefinitions: expect.any(Array) },
       symbols: {
         A: {
           imageStringNodes: [

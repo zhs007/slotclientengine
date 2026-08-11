@@ -9,6 +9,7 @@ import {
   createSymbolVniAnimationResourcesFromManifest,
   getSymbolDisplaySymbolsFromManifest,
   parseSymbolStateTextureManifest,
+  upgradeSymbolStateTextureManifest,
 } from "../../src/symbol/index.js";
 
 const requiredStates = ["spinBlur", "disabled"] as const;
@@ -165,6 +166,59 @@ function createProject() {
 }
 
 describe("symbol state texture manifest helpers", () => {
+  it("strictly upgrades v1 lifecycle defaults into a frozen canonical v2 manifest", () => {
+    const legacy = createManifest() as any;
+    legacy.settings.additionalStateDefinitions = [
+      { id: "burst", phase: "once", playback: "once" },
+    ];
+
+    const upgraded = upgradeSymbolStateTextureManifest(legacy) as any;
+    const definitions = upgraded.settings.stateDefinitions;
+
+    expect(upgraded.version).toBe(2);
+    expect(upgraded.settings.additionalStateDefinitions).toBeUndefined();
+    expect(definitions.find((item: any) => item.id === "remove")).toMatchObject(
+      { afterComplete: "terminal" },
+    );
+    expect(definitions.find((item: any) => item.id === "win")).toMatchObject({
+      afterComplete: "return-to-default",
+    });
+    expect(definitions.find((item: any) => item.id === "burst")).toMatchObject({
+      afterComplete: "return-to-default",
+    });
+    expect(parseSymbolStateTextureManifest(upgraded).version).toBe(2);
+    expect(upgradeSymbolStateTextureManifest(upgraded)).toEqual(upgraded);
+    expect(Object.isFrozen(upgraded.settings.stateDefinitions)).toBe(true);
+  });
+
+  it("uses explicit v2 completion behavior and rejects incomplete or mixed definitions", () => {
+    const canonical = upgradeSymbolStateTextureManifest(
+      createManifest(),
+    ) as any;
+    const explicit = structuredClone(canonical);
+    explicit.settings.stateDefinitions.find(
+      (item: any) => item.id === "remove",
+    ).afterComplete = "return-to-default";
+
+    expect(
+      parseSymbolStateTextureManifest(explicit).statePreset.states.find(
+        (item) => item.id === "remove",
+      )?.afterComplete,
+    ).toBe("return-to-default");
+
+    const missing = structuredClone(canonical);
+    delete missing.settings.stateDefinitions.find(
+      (item: any) => item.id === "win",
+    ).afterComplete;
+    expect(() => parseSymbolStateTextureManifest(missing)).toThrow(
+      /requires afterComplete/,
+    );
+
+    const mixed = structuredClone(canonical);
+    mixed.settings.additionalStateDefinitions = [];
+    expect(() => parseSymbolStateTextureManifest(mixed)).toThrow(/unknown/);
+  });
+
   it("strictly parses additive composite animation layers", () => {
     const manifest = createManifest() as any;
     manifest.symbols.SC.animations.win = {

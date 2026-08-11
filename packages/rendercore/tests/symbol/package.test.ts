@@ -181,6 +181,10 @@ describe("symbol package game config and resources", () => {
     });
     expect(resource.displaySymbols).toEqual(["A", "B"]);
     expect(resource.packageManifest.cellSize.width).toBe(120.5);
+    expect(resource.rawSymbolManifest).toMatchObject({
+      version: 2,
+      settings: { stateDefinitions: expect.any(Array) },
+    });
     await expect(resource.createCatalog()).rejects.toThrow(
       /without loaded textures/,
     );

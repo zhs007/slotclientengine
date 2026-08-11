@@ -24,6 +24,7 @@ import {
   type GridCellEffectSweepPlan,
   type ParsedReelManifest,
   type GridCellVisibleOccurrenceTransfer,
+  type GridCellTerminalRemoveOptions,
   type ReelLayout,
   type ReelSymbolRegistry,
   type ReelSymbolAnimationCapabilityMap,
@@ -256,6 +257,7 @@ export interface Game002ReelRuntime {
     state: SymbolStateId,
   ): boolean;
   releaseVisibleSymbols(positions: readonly WinResultPosition[]): void;
+  removeVisibleSymbols(options: GridCellTerminalRemoveOptions): Promise<void>;
   setVisibleSymbolDimming(
     highlightedPositions: readonly WinResultPosition[],
     dimmingAlpha: number,
@@ -939,6 +941,12 @@ export function createGame002ReelRuntime(
     },
     releaseVisibleSymbols(positions: readonly WinResultPosition[]): void {
       reelSet.releaseVisibleSymbols(positions);
+      currentScene = reelSet.getVisibleScene();
+    },
+    async removeVisibleSymbols(
+      options: GridCellTerminalRemoveOptions,
+    ): Promise<void> {
+      await reelSet.removeVisibleSymbols(options);
       currentScene = reelSet.getVisibleScene();
     },
     setVisibleSymbolDimming(

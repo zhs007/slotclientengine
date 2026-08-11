@@ -115,12 +115,15 @@ export class SymbolStateMachine {
   }
 
   notifyOnceComplete(): void {
-    if (this.getCurrentStateDefinition().playback !== "once") {
+    const current = this.getCurrentStateDefinition();
+    if (current.playback !== "once") {
       return;
     }
 
     this.#pendingState = null;
-    this.switchTo(this.#defaultState);
+    if (current.afterComplete === "return-to-default") {
+      this.switchTo(this.#defaultState);
+    }
   }
 
   canSwitchImmediately(): boolean {
@@ -189,16 +192,19 @@ export function createDefaultSymbolStatePreset(): SymbolStatePreset {
         id: "appear",
         phase: "once",
         playback: "once",
+        afterComplete: "return-to-default",
       }),
       Object.freeze({
         id: "win",
         phase: "once",
         playback: "once",
+        afterComplete: "return-to-default",
       }),
       Object.freeze({
         id: "remove",
         phase: "once",
         playback: "once",
+        afterComplete: "terminal",
       }),
       Object.freeze({
         id: "dropdown",
@@ -286,11 +292,31 @@ function validateStateDefinitions(
     }
 
     validatePhaseAndPlayback(state.id, state.phase, state.playback);
+    validateAfterComplete(state);
     validateFrameDuration(state);
     statesById.set(state.id, Object.freeze({ ...state }));
   }
 
   return statesById;
+}
+
+function validateAfterComplete(state: SymbolStateDefinition): void {
+  if (state.playback === "once") {
+    if (
+      state.afterComplete !== "return-to-default" &&
+      state.afterComplete !== "terminal"
+    ) {
+      throw new SymbolStateError(
+        `Symbol state "${state.id}" once playback requires afterComplete "return-to-default" or "terminal".`,
+      );
+    }
+    return;
+  }
+  if (state.afterComplete !== undefined) {
+    throw new SymbolStateError(
+      `Symbol state "${state.id}" ${state.playback} playback must not declare afterComplete.`,
+    );
+  }
 }
 
 function validateDefaultState(

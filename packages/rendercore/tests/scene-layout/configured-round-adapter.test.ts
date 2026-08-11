@@ -389,6 +389,21 @@ function createHarness() {
     ),
     hasVisibleSymbolStateCapability: vi.fn(() => true),
     releaseVisibleSymbols: vi.fn(releasePositions),
+    removeVisibleSymbols: vi.fn(
+      (options: {
+        readonly positions: readonly {
+          readonly x: number;
+          readonly y: number;
+        }[];
+        readonly state: string;
+        readonly onComplete?: () => void;
+      }) => {
+        requestVisibleSymbolStates(options.positions, options.state);
+        releasePositions(options.positions);
+        options.onComplete?.();
+        return Promise.resolve();
+      },
+    ),
     setVisibleSymbolDimming: vi.fn(),
     clearVisibleSymbolDimming: vi.fn(),
     update: updatePresentation,
@@ -417,6 +432,19 @@ function createHarness() {
     setMainReelSymbolDimming: vi.fn(),
     clearMainReelSymbolDimming: vi.fn(),
     releaseMainReelSymbols: vi.fn(releasePositions),
+    removeMainReelSymbols: vi.fn(
+      (options: {
+        readonly positions: readonly {
+          readonly x: number;
+          readonly y: number;
+        }[];
+        readonly onComplete?: () => void;
+      }) => {
+        releasePositions(options.positions);
+        options.onComplete?.();
+        return Promise.resolve();
+      },
+    ),
     startMainReelCascadeDrop: vi.fn(
       (plan: {
         movements: readonly (
@@ -542,10 +570,8 @@ describe("configured scene-layout round adapter", () => {
     await runTicks(harness);
     harness.setOnce(false);
     await runTicks(harness, 50);
-    expect(harness.runtime.requestMainReelSymbolStates).toHaveBeenCalledTimes(
-      2,
-    );
-    expect(harness.runtime.releaseMainReelSymbols).toHaveBeenCalledOnce();
+    expect(harness.runtime.requestMainReelSymbolStates).toHaveBeenCalledOnce();
+    expect(harness.runtime.removeMainReelSymbols).toHaveBeenCalledOnce();
     expect(harness.runtime.startMainReelCascadeDrop).toHaveBeenCalledTimes(2);
     await round;
 
@@ -554,9 +580,9 @@ describe("configured scene-layout round adapter", () => {
       [{ x: 0, y: 0 }],
       "win",
     );
-    expect(harness.runtime.releaseMainReelSymbols).toHaveBeenCalledWith([
-      { x: 0, y: 0 },
-    ]);
+    expect(harness.runtime.removeMainReelSymbols).toHaveBeenCalledWith(
+      expect.objectContaining({ positions: [{ x: 0, y: 0 }] }),
+    );
     expect(harness.runtime.startMainReelCascadeDrop).toHaveBeenCalledTimes(2);
     expect(harness.runtime.getMainReelSceneSnapshot()).toEqual(refillScene);
     expect(harness.app.renderer.resize).toHaveBeenCalledWith(640, 360);
@@ -642,8 +668,8 @@ describe("configured scene-layout round adapter", () => {
     expect(requested.map(([, state]) => state)).toEqual(
       expect.arrayContaining(["winStart", "win", "collect", "remove"]),
     );
-    expect(harness.reelPresentation.releaseVisibleSymbols).toHaveBeenCalledWith(
-      [{ x: 0, y: 0 }],
+    expect(harness.reelPresentation.removeVisibleSymbols).toHaveBeenCalledWith(
+      expect.objectContaining({ positions: [{ x: 0, y: 0 }] }),
     );
     expect(harness.runtime.startMainReelCascadeDrop).toHaveBeenCalledTimes(2);
     expect(harness.runtime.getMainReelSceneSnapshot()).toEqual(refillScene);

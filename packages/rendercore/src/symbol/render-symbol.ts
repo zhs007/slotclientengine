@@ -31,6 +31,7 @@ interface ActiveSymbolStatePlayback {
   readonly reject: (error: Error) => void;
   readonly signal?: AbortSignal;
   readonly abortListener?: () => void;
+  readonly terminalComplete?: () => void;
   entered: boolean;
 }
 
@@ -183,7 +184,15 @@ export class RenderSymbol extends VisualEntity<void> {
     );
     const before = this.createAniKey(this.#stateMachine.getSnapshot());
     this.#stateMachine.requestState(state, transitionMode);
-    this.syncAniIfNeeded(before);
+    const stateChanged = this.syncAniIfNeeded(before);
+    const current = this.#stateMachine.getSnapshot();
+    if (
+      !stateChanged &&
+      current.resolvedState === this.#stateMachine.resolveState(state) &&
+      this.#stateMachine.getCurrentStateDefinition().playback === "once"
+    ) {
+      this.#currentAni.reset();
+    }
   }
 
   validateStatePlayback(
@@ -252,7 +261,15 @@ export class RenderSymbol extends VisualEntity<void> {
       state,
       options.transitionMode ?? "boundary",
     );
-    this.syncAniIfNeeded(before);
+    const stateChanged = this.syncAniIfNeeded(before);
+    const current = this.#stateMachine.getSnapshot();
+    if (
+      !stateChanged &&
+      current.resolvedState === this.#stateMachine.resolveState(state) &&
+      this.#stateMachine.getCurrentStateDefinition().playback === "once"
+    ) {
+      this.#currentAni.reset();
+    }
 
     let resolve!: () => void;
     let reject!: (error: Error) => void;
@@ -286,6 +303,49 @@ export class RenderSymbol extends VisualEntity<void> {
     options.signal?.addEventListener("abort", abortListener!, { once: true });
     this.markActivePlaybackEntered(this.#stateMachine.getSnapshot());
     return promise;
+  }
+
+  playTerminalState(
+    state: SymbolStateId,
+    options: SymbolStatePlaybackOptions,
+    terminalComplete: () => void,
+  ): Promise<void> {
+    if (typeof terminalComplete !== "function") {
+      throw new SymbolAnimationError(
+        `Render symbol "${this.symbol}" terminal completion must be a function.`,
+      );
+    }
+    const definition = this.#stateMachine.getStateDefinition(
+      this.#stateMachine.resolveState(state),
+    );
+    if (
+      options.completion !== "once-complete" ||
+      definition.afterComplete !== "terminal"
+    ) {
+      throw new SymbolAnimationError(
+        `Symbol state "${state}" terminal playback requires once-complete and afterComplete "terminal".`,
+      );
+    }
+    const promise = this.playState(state, options);
+    if (!this.#activePlayback) {
+      throw new SymbolAnimationError(
+        `Render symbol "${this.symbol}" terminal playback did not start.`,
+      );
+    }
+    this.#activePlayback = {
+      ...this.#activePlayback,
+      terminalComplete,
+    };
+    return promise;
+  }
+
+  hasTerminalState(state: SymbolStateId): boolean {
+    this.assertNotDestroyed();
+    const resolved = this.#stateMachine.resolveState(state);
+    return (
+      this.#stateMachine.getStateDefinition(resolved).afterComplete ===
+      "terminal"
+    );
   }
 
   returnToDefaultState(): void {
@@ -393,6 +453,17 @@ export class RenderSymbol extends VisualEntity<void> {
       }
       if (aniResult.onceCompleted) {
         this.#onceCompletionCount += 1;
+        const terminal = this.completeActiveTerminalPlayback(beforeSnapshot);
+        if (terminal) {
+          const snapshot = this.#stateMachine.getSnapshot();
+          return Object.freeze({
+            requestedState: snapshot.requestedState,
+            resolvedState: snapshot.resolvedState,
+            loopCompleted: aniResult.loopCompleted,
+            onceCompleted: true,
+            stateChanged: false,
+          });
+        }
         this.#stateMachine.notifyOnceComplete();
       }
 
@@ -620,6 +691,34 @@ export class RenderSymbol extends VisualEntity<void> {
     ) {
       this.resolveActivePlayback();
     }
+  }
+
+  private completeActiveTerminalPlayback(
+    snapshot: SymbolStateSnapshot,
+  ): boolean {
+    const active = this.#activePlayback;
+    if (
+      !active?.terminalComplete ||
+      active.completion !== "once-complete" ||
+      !active.entered ||
+      !this.isActivePlaybackTarget(active, snapshot)
+    ) {
+      return false;
+    }
+    const detached = this.detachActivePlayback();
+    if (!detached) return false;
+    try {
+      detached.terminalComplete?.();
+      detached.resolve();
+    } catch (error) {
+      detached.reject(
+        toPlaybackError(
+          error,
+          `Render symbol "${this.symbol}" terminal completion failed.`,
+        ),
+      );
+    }
+    return true;
   }
 
   private markActivePlaybackEntered(snapshot: SymbolStateSnapshot): boolean {

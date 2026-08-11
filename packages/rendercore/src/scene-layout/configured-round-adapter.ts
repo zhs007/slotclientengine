@@ -348,6 +348,11 @@ class ConfiguredRoundTarget {
     readonly step: SlotRoundWinStepPlan;
     phase: "emphasis" | "remove";
     elapsedSeconds: number;
+    removal?: {
+      readonly controller: AbortController;
+      completed: boolean;
+      error: unknown;
+    };
   } | null = null;
   #dropdown: SlotRoundDropdownStepPlan | null = null;
   #refill: SlotRoundRefillStepPlan | null = null;
@@ -390,6 +395,7 @@ class ConfiguredRoundTarget {
       | "fatal"
       | "destroy",
   ): void {
+    this.#win?.removal?.controller.abort();
     if (reason === "destroy") this.#cascadePlayer?.destroy();
     else this.#cascadePlayer?.clear();
     this.#playerStep = null;
@@ -470,19 +476,33 @@ class ConfiguredRoundTarget {
         this.#win = null;
         return { completed: true };
       }
-      this.#runtime.requestMainReelSymbolStates(
-        releasePositions,
-        this.#presentation.flow.symbolStates.remove,
-      );
+      const controller = new AbortController();
+      const removal = {
+        controller,
+        completed: false,
+        error: undefined as unknown,
+      };
+      active.removal = removal;
+      void this.#runtime
+        .removeMainReelSymbols({
+          positions: releasePositions,
+          state: this.#presentation.flow.symbolStates.remove,
+          playback: { completion: "once-complete" },
+          signal: controller.signal,
+          onComplete: () => {
+            removal.completed = true;
+          },
+        })
+        .catch((error: unknown) => {
+          removal.error = error;
+        });
       active.phase = "remove";
       return { completed: false };
     }
-    const releasePositions = active.step.groups.flatMap(
-      (group) => group.removePositions,
-    );
-    if (hasPendingOnce(this.#runtime, releasePositions))
-      return { completed: false };
-    this.#runtime.releaseMainReelSymbols(releasePositions);
+    if (!active.removal)
+      throw new SceneLayoutError("Configured terminal removal is missing.");
+    if (active.removal.error !== undefined) throw active.removal.error;
+    if (!active.removal.completed) return { completed: false };
     this.#win = null;
     return { completed: true };
   }

@@ -51,10 +51,25 @@ try {
   const resource = `./${installed.rootKey}`;
 
   for (const definition of [
-    { id: "multStart", phase: "once", playback: "once" },
+    {
+      id: "multStart",
+      phase: "once",
+      playback: "once",
+      afterComplete: "return-to-default",
+    },
     { id: "multIdle", phase: "stable", playback: "loop" },
-    { id: "multEnd", phase: "once", playback: "once" },
-    { id: "change", phase: "once", playback: "once" },
+    {
+      id: "multEnd",
+      phase: "once",
+      playback: "once",
+      afterComplete: "return-to-default",
+    },
+    {
+      id: "change",
+      phase: "once",
+      playback: "once",
+      afterComplete: "return-to-default",
+    },
   ] as const) {
     addCustomStateDefinition(importedSymbols.project, definition);
     addSymbolState(importedSymbols.project, "WM", definition.id);

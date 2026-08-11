@@ -26,6 +26,7 @@ import {
   moveSymbolState,
   removeCustomStateDefinition,
   removeSymbolState,
+  setStateAfterComplete,
   setAllSymbolsIncluded,
   setCascadeWinPresentation,
   setStateVisual,
@@ -737,12 +738,15 @@ export class SymbolsEditorApp {
         const lifecycle = panel.querySelector<HTMLSelectElement>(
           "[data-custom-lifecycle]",
         )!.value;
+        const afterComplete = panel.querySelector<HTMLSelectElement>(
+          "[data-custom-after-complete]",
+        )!.value as "return-to-default" | "terminal";
         try {
           this.#store.transact((draft) =>
             addCustomStateDefinition(
               draft,
               lifecycle === "once"
-                ? { id, phase: "once", playback: "once" }
+                ? { id, phase: "once", playback: "once", afterComplete }
                 : { id, phase: "stable", playback: "loop" },
             ),
           );
@@ -750,6 +754,23 @@ export class SymbolsEditorApp {
         } catch (error) {
           this.#store.setExternalError(error);
         }
+      });
+    panel
+      .querySelectorAll<HTMLSelectElement>("[data-state-after-complete]")
+      .forEach((select) => {
+        select.addEventListener("change", () => {
+          try {
+            this.#store.transact((draft) =>
+              setStateAfterComplete(
+                draft,
+                select.dataset.stateAfterComplete!,
+                select.value as "return-to-default" | "terminal",
+              ),
+            );
+          } catch (error) {
+            this.#store.setExternalError(error);
+          }
+        });
       });
     panel
       .querySelectorAll<HTMLElement>("[data-remove-custom]")
@@ -3561,7 +3582,7 @@ function cascadeInspectorMarkup(
 
 function projectWorkspaceMarkup(project: SymbolEditorProject): string {
   return `<section class="project-config"><div class="section-heading"><div><h1>项目配置</h1><p>全局内容独立于单个 symbol Inspector。</p></div></div><div class="form-grid"><label>Package / project id <input data-project-id data-focus-key="project-id" value="${escapeAttr(project.id)}"></label><label>Cell width <input data-cell-width type="number" min="1" value="${project.cellSize.width}"></label><label>Cell height <input data-cell-height type="number" min="1" value="${project.cellSize.height}"></label></div>
-    <h2>项目状态定义</h2><div class="definition-list">${project.stateDefinitions.map((item) => `<div class="definition-row"><code>${escapeHtml(item.id)}</code><small>${item.phase} / ${item.playback}</small><span>${item.source === "custom" ? "Custom" : "Built-in"}</span>${item.source === "custom" ? `<button data-remove-custom="${escapeAttr(item.id)}">删除</button>` : ""}</div>`).join("")}</div><div class="form-row add-definition"><input data-custom-id placeholder="custom state id"><select data-custom-lifecycle><option value="once">once / once</option><option value="loop">stable / loop</option></select><button class="primary" data-add-custom>增加 custom state</button></div>
+    <h2>项目状态定义</h2><div class="definition-list">${project.stateDefinitions.map((item) => `<div class="definition-row"><code>${escapeHtml(item.id)}</code><small>${item.phase} / ${item.playback}</small><span>${item.source === "custom" ? "Custom" : "Built-in"}</span>${item.afterComplete ? `<label>完成后 <select data-state-after-complete="${escapeAttr(item.id)}">${option("return-to-default", "回到 normal", item.afterComplete === "return-to-default")}${option("terminal", "停在终止帧", item.afterComplete === "terminal")}</select></label>` : ""}${item.source === "custom" ? `<button data-remove-custom="${escapeAttr(item.id)}">删除</button>` : ""}</div>`).join("")}</div><div class="form-row add-definition"><input data-custom-id placeholder="custom state id"><select data-custom-lifecycle><option value="once">once / once</option><option value="loop">stable / loop</option></select><select data-custom-after-complete><option value="return-to-default">完成后回到 normal</option><option value="terminal">完成后停在终止帧</option></select><button class="primary" data-add-custom>增加 custom state</button></div>
     <details class="advanced-summary"><summary>Legacy 导入兼容数据</summary><p>这些字段只为无损 round-trip 保留，不是现代 state texture 生成配置。</p><pre>${escapeHtml(JSON.stringify({ textureStateOrder: project.legacyTextureStateOrder, settings: project.legacyStateSettings }, null, 2))}</pre></details>
     <details class="advanced-summary"><summary>高级导出摘要</summary><dl class="summary-grid"><div><dt>Game config</dt><dd>${escapeHtml(project.gameConfigFileName)}</dd></div><div><dt>Symbols</dt><dd>${project.symbols.size}</dd></div><div><dt>Included</dt><dd>${getIncludedSymbols(project).length}</dd></div><div><dt>Library resources</dt><dd>${project.assetLibrary.records.size}</dd></div></dl><p>UI Tab、筛选、选择和展开状态不进入 ZIP。</p></details>
   </section>`;

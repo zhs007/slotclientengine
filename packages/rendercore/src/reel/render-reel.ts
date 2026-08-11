@@ -595,6 +595,28 @@ export class RenderReel extends Container {
     );
   }
 
+  playVisibleTerminalSymbolState(
+    windowY: number,
+    state: SymbolStateId,
+    options: SymbolStatePlaybackOptions,
+    terminalComplete: () => void,
+  ): Promise<void> {
+    return this.getVisiblePlayableSymbol(windowY, state).playTerminalState(
+      state,
+      options,
+      terminalComplete,
+    );
+  }
+
+  hasVisibleTerminalSymbolState(
+    windowY: number,
+    state: SymbolStateId,
+  ): boolean {
+    return this.getVisiblePlayableSymbol(windowY, state).hasTerminalState(
+      state,
+    );
+  }
+
   setVisibleSymbolPresentationValue(
     windowY: number,
     value: number | null,

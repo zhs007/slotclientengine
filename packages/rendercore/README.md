@@ -73,7 +73,7 @@ slot operation handler 只实现一个异步 `start(operation, context)`。业�
 
 ## Symbol API
 
-`@slotclientengine/rendercore/symbol` 同时提供 strict symbol-package v1 parser、game config/display set 交叉校验、direct/indirect exact resource closure，以及 browser bytes → texture/VNI/official Spine/value resource 的通用组装。editor app 只处理 File/Blob/UI，不复制 manifest 或 player。完整 ZIP 合同见 [`docs/symbol-package.md`](../../docs/symbol-package.md)。
+`@slotclientengine/rendercore/symbol` 同时提供 strict symbol-package v1 container parser、symbol-state-textures manifest v1/v2 parser 与 v1→v2 upgrader、game config/display set 交叉校验、direct/indirect exact resource closure，以及 browser bytes → texture/VNI/official Spine/value resource 的通用组装。package 加载后只暴露 canonical v2 symbol manifest；editor app 只处理 File/Blob/UI，不复制 migration 或 player。完整 ZIP 合同见 [`docs/symbol-package.md`](../../docs/symbol-package.md)。
 
 主要入口：
 
@@ -98,12 +98,12 @@ import {
 - `stable` 状态可以长期停留，播放方式只能是 `loop` 或 `static`。
 - `once` 状态只播放一次，播放方式必须是 `once`。
 - 默认状态只能是 `stable`。
-- 单次状态完成后回到当前默认状态。
+- `once` 必须声明 `afterComplete: "return-to-default" | "terminal"`；前者完成后回当前默认状态，后者保持终态。
 - 当前状态是 `loop` 时，请求切换会等待下一次 loop 完成边界。
 - 当前状态是 `static` 时，请求切换会立即生效。
 - 显式 `frameDurationSeconds` 不得小于 `1 / 60` 秒。
 
-默认 preset 包含 `normal`、`spinBlur`、`disabled`、`appear`、`win`、`remove`、`dropdown`。其中 `spinBlur -> normal`、`disabled -> normal` 是状态等价配置；等价目标必须存在、phase 必须一致、链路不能有环。skin 可通过 manifest `settings.additionalStateDefinitions` 追加不覆盖默认 id 的 generic `once/once` 或 `stable/loop` state，catalog、resolver、capability map、reel runtime 与 viewer 必须消费同一份派生 preset。
+默认 preset 包含 `normal`、`spinBlur`、`disabled`、`appear`、`win`、`remove`、`dropdown`。其中 `spinBlur -> normal`、`disabled -> normal` 是状态等价配置；等价目标必须存在、phase 必须一致、链路不能有环。symbol manifest v2 在 `settings.stateDefinitions` 保存完整 builtin/custom 定义，once 必须显式保存完成行为，stable 禁止该字段。合法 v1 加载时只在 upgrader 中把 exact `remove` 迁移为 `terminal`，其它 once 迁移为 `return-to-default`；v2 runtime 不按 state id 推断。
 
 ## 状态贴图
 
@@ -642,7 +642,7 @@ reel 可为每个本地 symbol occurrence 携带可选 presentation value。`Tem
 
 `createSymbolCascadePlayer()` 按冻结的中奖组执行 `aggregate emphasis -> ordered group/collect choreography`。emphasis 期间同时显示各组金额，并通过 target API 同步压暗全部中奖坐标之外的格子遮罩与 RenderSymbol 本体，因此跨格美术也会完整变暗；fade-in、hold、fade-out 和目标 alpha 均由调用方配置。调用方可选 `startPresentationsWithEmphasis`，让全部 group win 与 sequential start/companion win 在压暗开始的同一边界并行起播；sequential start 完成后可在 emphasis 期间进入 loop，强调结束后仍按稳定顺序 remove/collect，且不会重播 opening state。未启用该选项时保持既有的 emphasis 结束后逐组 `win -> remove` 行为。
 
-配置单一 `winSummaryCollect` 后，player 从 manifest 的 `additionalStateDefinitions` 和每个 symbol 的 `cascadeWinPresentation` 派生 state preset、稳定 `order`、group 或 sequential-collect mode 及状态 id。group mode 在 win 请求同一边界把 positive safe integer group amount 累加到 Pixi summary，并等待动画和 `0 -> target` tween 都完成后 remove；sequential mode 执行“全部 primary start once，并行播放调用方批准的 group-mode companion win -> 等全部完成 -> 全部 primary loop -> 按调用方稳定 item 顺序逐枚 collect once + item amount -> remove once -> release”。companion 不进入 item/loop/collect/remove，也不贡献金额；哪些实际 symbol 可作为 companion 完全由调用方 predicate 决定，rendercore 不认识 wild。计数只在 snapshot 的 `resolvedState` 真正进入 collect state后开始，loop pending 不会提前计数。summary 为 0 时隐藏，跨多次 `start()` 保留累计，只有 `clear()`/`destroy()` 重置。rendercore 不解析游戏组件、coin/cash 字段、symbol code 或专属动画名。
+配置单一 `winSummaryCollect` 后，player 从 manifest 的 canonical `stateDefinitions` 和每个 symbol 的 `cascadeWinPresentation` 派生 state preset、稳定 `order`、group 或 sequential-collect mode 及状态 id。group mode 在 win 请求同一边界把 positive safe integer group amount 累加到 Pixi summary，并等待动画和 `0 -> target` tween 都完成后 remove；sequential mode 执行“全部 primary start once，并行播放调用方批准的 group-mode companion win -> 等全部完成 -> 全部 primary loop -> 按调用方稳定 item 顺序逐枚 collect once + item amount -> remove once -> release”。companion 不进入 item/loop/collect/remove，也不贡献金额；哪些实际 symbol 可作为 companion 完全由调用方 predicate 决定，rendercore 不认识 wild。计数只在 snapshot 的 `resolvedState` 真正进入 collect state后开始，loop pending 不会提前计数。summary 为 0 时隐藏，跨多次 `start()` 保留累计，只有 `clear()`/`destroy()` 重置。rendercore 不解析游戏组件、coin/cash 字段、symbol code 或专属动画名。
 
 manifest 扩展 state 只能声明不覆盖 base preset 的 `once/once` 或 `stable/loop` 定义；presentation 引用必须与 animation capability/playback 一致。generator 根据派生 state 集合保留 animation，不为 phase animation 生成 PNG，也不维护游戏实例 state 白名单。`createLastUseRemoveGroups()` 仍支持调用方注入通用 position predicate；启用 summary/collect 时 player 会在 manifest order 稳定排序后重新计算最后使用者，remove 完成的同一 update 边界释放 occurrence。
 
@@ -653,10 +653,11 @@ grid-cell full/selective spin 的每个 timeline slice 都会恰好推进一次�
 可传 `positions` 与显式 `timing`，package runtime 在释放 selected occurrence 前校验全部 held
 code/value continuity，并通过 `drainMainReelStartedPositions()` 暴露真实 start edge。
 
-`removeVisibleSymbols()` 是通用 terminal remove transaction：整批 candidate/predicate/state
-playback 先完成 preflight，retained occurrence 不请求任何状态；removable occurrence 各自在
-once completion 边界直接 release，不经过 normal。API 返回冻结的 removed/retained occurrence
-快照；播放、identity、abort 或 destroy 失败采用 fail-stop，不回滚已经完成的 release。
+`removeVisibleSymbols()` 是通用 terminal remove transaction：整批 positions/state/playback
+先完成 preflight，并要求 state 的 `afterComplete` 为 `terminal`；每个 exact occurrence 在自身
+once completion 的同步 `update()` 边界直接 release，不经过 normal，也不把 commit 推迟到 Promise
+continuation。返回的 Promise 只汇总完成/失败；播放、identity、abort 或 destroy 失败采用 fail-stop，
+不回滚已经完成的 release。
 `createGridCellEffectResourceFromLoadedSpine()` 把 Scene Layout 已 exact 加载的 official Spine
 resource 转成 grid effect，仍执行版本、atlas page、texture closure、animation 和 duration 校验。
 

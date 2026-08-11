@@ -45,11 +45,18 @@ describe("RenderGridCellReelSet", () => {
     ]);
     const removal = reelSet.removeVisibleSymbols({
       positions: [{ x: 1, y: 0 }],
-      state: "win",
+      state: "remove",
       playback: { transitionMode: "immediate", completion: "once-complete" },
+      onComplete: () => {
+        expect(reelSet.getVisibleScene()[1][0]).toBe(-1);
+      },
     });
 
     reelSet.update(0.59);
+    expect(reelSet.getVisibleScene()).toEqual([
+      [1, 0, 2],
+      [-1, 1, 0],
+    ]);
     await removal;
     expect(reelSet.getVisibleScene()).toEqual([
       [1, 0, 2],

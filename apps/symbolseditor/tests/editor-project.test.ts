@@ -62,6 +62,49 @@ const vniProjectBytes = () =>
   );
 
 describe("symbol editor typed project", () => {
+  it("loads legacy v1 completion behavior and exports canonical v2 definitions", () => {
+    const project = createFromImportedPackage({
+      packageManifest: {
+        version: 1,
+        kind: "symbol-package",
+        id: "legacy",
+        cellSize: { width: 160, height: 160 },
+        entrypoints: {
+          gameConfig: "game.json",
+          symbolManifest: "symbol-state-textures.manifest.json",
+        },
+        resources: [],
+      },
+      rawGameConfig: gameConfig,
+      rawSymbolManifest: {
+        version: 1,
+        states: [],
+        symbols: {
+          A: {
+            normal: { kind: "transparent", width: 160, height: 160 },
+            scale: 1,
+          },
+          B: {
+            normal: { kind: "transparent", width: 160, height: 160 },
+            scale: 1,
+          },
+        },
+      },
+      assets: new Map(),
+    });
+
+    expect(
+      project.stateDefinitions.find((definition) => definition.id === "remove"),
+    ).toMatchObject({ afterComplete: "terminal" });
+    expect(
+      project.stateDefinitions.find((definition) => definition.id === "win"),
+    ).toMatchObject({ afterComplete: "return-to-default" });
+    expect(compileSymbolEditorManifest(project)).toMatchObject({
+      version: 2,
+      settings: { stateDefinitions: expect.any(Array) },
+    });
+  });
+
   it("compiles direct ImgNumber targets and sparse special image mappings", () => {
     const project = createFromGameConfig({
       rawGameConfig: gameConfig,
@@ -109,8 +152,8 @@ describe("symbol editor typed project", () => {
     }
     const snapshot = exportSnapshot(project);
     expect(snapshot.packageManifest.resources).toEqual([]);
-    expect(snapshot.symbolManifest).toEqual({
-      version: 1,
+    expect(snapshot.symbolManifest).toMatchObject({
+      version: 2,
       states: [],
       symbols: {
         A: {
@@ -123,6 +166,11 @@ describe("symbol editor typed project", () => {
         },
       },
     });
+    expect(
+      (snapshot.symbolManifest as any).settings.stateDefinitions.find(
+        (definition: any) => definition.id === "remove",
+      ),
+    ).toMatchObject({ afterComplete: "terminal" });
   });
 
   it("compiles VNI playback from normal, once and loop state lifecycles", () => {
@@ -384,6 +432,7 @@ describe("symbol editor typed project", () => {
       id: "collect",
       phase: "once",
       playback: "once",
+      afterComplete: "return-to-default",
     });
     addSymbolState(project, "A", "win");
     addSymbolState(project, "A", "remove");

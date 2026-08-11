@@ -56,16 +56,51 @@ try {
   const resource = `./${installed.rootKey}`;
 
   for (const definition of [
-    { id: "multStart", phase: "once", playback: "once" },
+    {
+      id: "multStart",
+      phase: "once",
+      playback: "once",
+      afterComplete: "return-to-default",
+    },
     { id: "multIdle", phase: "stable", playback: "loop" },
-    { id: "multEnd", phase: "once", playback: "once" },
-    { id: "change", phase: "once", playback: "once" },
-    { id: "feature1", phase: "once", playback: "once" },
-    { id: "featureChange", phase: "once", playback: "once" },
+    {
+      id: "multEnd",
+      phase: "once",
+      playback: "once",
+      afterComplete: "return-to-default",
+    },
+    {
+      id: "change",
+      phase: "once",
+      playback: "once",
+      afterComplete: "return-to-default",
+    },
+    {
+      id: "feature1",
+      phase: "once",
+      playback: "once",
+      afterComplete: "return-to-default",
+    },
+    {
+      id: "featureChange",
+      phase: "once",
+      playback: "once",
+      afterComplete: "return-to-default",
+    },
     ...(isTask135
       ? ([
-          { id: "feature", phase: "once", playback: "once" },
-          { id: "feature2", phase: "once", playback: "once" },
+          {
+            id: "feature",
+            phase: "once",
+            playback: "once",
+            afterComplete: "return-to-default",
+          },
+          {
+            id: "feature2",
+            phase: "once",
+            playback: "once",
+            afterComplete: "return-to-default",
+          },
         ] as const)
       : []),
   ] as const) {

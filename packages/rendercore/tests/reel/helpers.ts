@@ -143,7 +143,7 @@ export function createTestSymbolAnimationResolver(): SymbolAnimationResolver {
     if (context.resolvedState === "appear") {
       return createAppearSymbolAni(context, { durationSeconds: 0.42 });
     }
-    if (context.resolvedState === "win") {
+    if (context.resolvedState === "win" || context.resolvedState === "remove") {
       return createWinSymbolAni(context, { durationSeconds: 0.58 });
     }
     return normalResolver(context);

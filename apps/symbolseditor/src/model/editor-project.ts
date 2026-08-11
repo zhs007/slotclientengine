@@ -21,6 +21,7 @@ import {
   type SymbolManifestLayeredNormal,
   type SymbolManifestNormal,
   type SymbolManifestSpineAnimationTransform,
+  type SymbolStateAfterComplete,
   type SymbolPackageGameConfigSymbol,
   type SymbolPackageManifestV1,
   type SymbolImageStringNodeSpec,
@@ -68,6 +69,7 @@ export interface EditorStateDefinition {
   readonly source: "builtin" | "custom";
   readonly phase: "stable" | "once";
   readonly playback: "static" | "loop" | "once";
+  readonly afterComplete?: SymbolStateAfterComplete;
 }
 
 export interface EditorImageLayer {
@@ -241,6 +243,9 @@ export function createFromImportedPackage(options: {
       source: builtinIds.has(definition.id) ? "builtin" : "custom",
       phase: definition.phase,
       playback: definition.playback,
+      ...(definition.afterComplete
+        ? { afterComplete: definition.afterComplete }
+        : {}),
     }));
   const symbols = new Map<string, EditorSymbolDraft>();
   for (const configSymbol of configSymbols) {
@@ -343,6 +348,7 @@ export function createFromImportedPackage(options: {
       ? cloneValue(rawManifest.settings as Record<string, unknown>)
       : {};
   delete rawSettings.additionalStateDefinitions;
+  delete rawSettings.stateDefinitions;
   const library: EditorAssetLibrary = { records: new Map(), batches: [] };
   const importedBatch: EditorUploadBatch = {
     id: "imported",
@@ -683,6 +689,7 @@ export function addCustomStateDefinition(
     id: string;
     phase: "once" | "stable";
     playback: "once" | "loop";
+    afterComplete?: SymbolStateAfterComplete;
   }>,
 ): void {
   if (!/^[A-Za-z][A-Za-z0-9_-]*$/u.test(definition.id)) {
@@ -701,7 +708,35 @@ export function addCustomStateDefinition(
   ) {
     throw new Error("custom state 只支持 once/once 或 stable/loop。");
   }
+  if (
+    definition.phase === "once" &&
+    definition.afterComplete !== "return-to-default" &&
+    definition.afterComplete !== "terminal"
+  ) {
+    throw new Error("once custom state 必须配置 afterComplete。");
+  }
+  if (definition.phase === "stable" && definition.afterComplete !== undefined) {
+    throw new Error("stable custom state 不允许配置 afterComplete。");
+  }
   project.stateDefinitions.push({ ...definition, source: "custom" });
+}
+
+export function setStateAfterComplete(
+  project: SymbolEditorProject,
+  state: string,
+  afterComplete: SymbolStateAfterComplete,
+): void {
+  if (afterComplete !== "return-to-default" && afterComplete !== "terminal") {
+    throw new Error("afterComplete 必须是 return-to-default 或 terminal。");
+  }
+  const definition = project.stateDefinitions.find((item) => item.id === state);
+  if (!definition) throw new Error(`state ${state} 不存在。`);
+  if (definition.phase !== "once" || definition.playback !== "once") {
+    throw new Error(`state ${state} 不是 once state。`);
+  }
+  project.stateDefinitions = project.stateDefinitions.map((item) =>
+    item.id === state ? { ...item, afterComplete } : item,
+  );
 }
 
 export function removeCustomStateDefinition(
@@ -1306,18 +1341,21 @@ export function compileSymbolEditorManifest(
       }
     }
   }
-  const customDefinitions = project.stateDefinitions
-    .filter((definition) => definition.source === "custom")
-    .map(({ id, phase, playback }) => ({ id, phase, playback }));
+  const stateDefinitions = project.stateDefinitions.map(
+    ({ id, phase, playback, afterComplete }) => ({
+      id,
+      phase,
+      playback,
+      ...(afterComplete ? { afterComplete } : {}),
+    }),
+  );
   const settings: Record<string, unknown> = {};
   for (const state of textureStates) {
     if (project.legacyStateSettings[state] !== undefined) {
       settings[state] = cloneValue(project.legacyStateSettings[state]);
     }
   }
-  if (customDefinitions.length > 0) {
-    settings.additionalStateDefinitions = customDefinitions;
-  }
+  settings.stateDefinitions = stateDefinitions;
   const manifestSymbols: Record<string, unknown> = {};
   for (const symbol of included) {
     const entry: Record<string, unknown> = { scale: symbol.scale };
@@ -1407,7 +1445,7 @@ export function compileSymbolEditorManifest(
     manifestSymbols[symbol.symbol] = entry;
   }
   return {
-    version: 1,
+    version: 2,
     states: textureStates,
     ...(Object.keys(settings).length > 0 ? { settings } : {}),
     symbols: manifestSymbols,
@@ -1570,6 +1608,9 @@ function createEditorStateDefinitions(
       source: "builtin" as const,
       phase: definition.phase,
       playback: definition.playback,
+      ...(definition.afterComplete
+        ? { afterComplete: definition.afterComplete }
+        : {}),
     })),
     ...custom,
   ];

@@ -12,5 +12,8 @@ describe("game002v2 source boundary", () => {
     expect(source).not.toMatch(/compile[A-Z].*Plan|rollback/u);
     expect(source).not.toMatch(/hasMainReelSymbolStateCapability/u);
     expect(source).not.toMatch(/getScenes\(\)\.at/u);
+    expect(source).toMatch(/removeMainReelSymbols/u);
+    expect(source).not.toMatch(/releaseMainReelSymbols/u);
+    expect(source).not.toMatch(/(?:state|id)\s*[!=]==?\s*["']remove["']/u);
   });
 });

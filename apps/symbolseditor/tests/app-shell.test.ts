@@ -605,10 +605,18 @@ describe("symbols editor app shell", () => {
     expect(root.querySelector("[data-symbol-query]")).toBeNull();
     const id = root.querySelector<HTMLInputElement>("[data-custom-id]")!;
     id.value = "celebrate";
+    root.querySelector<HTMLSelectElement>(
+      "[data-custom-after-complete]",
+    )!.value = "terminal";
     click(root, "[data-add-custom]");
     expect(root.querySelector("[data-feedback]")?.textContent).toContain(
       "已添加项目状态 celebrate",
     );
+    expect(
+      root.querySelector<HTMLSelectElement>(
+        '[data-state-after-complete="celebrate"]',
+      )?.value,
+    ).toBe("terminal");
 
     click(root, '[data-workspace-tab][data-tab-value="symbols"]');
     click(root, '[data-inspector-tab][data-tab-value="states"]');

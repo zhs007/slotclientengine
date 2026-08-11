@@ -280,6 +280,10 @@ class FakeTarget {
     state: string;
   } | null = null;
   private complete = false;
+  private terminalRemoval: {
+    readonly positions: readonly { readonly x: number; readonly y: number }[];
+    readonly onComplete?: () => void;
+  } | null = null;
 
   requestVisibleSymbolStates(
     positions: readonly { readonly x: number; readonly y: number }[],
@@ -333,6 +337,15 @@ class FakeTarget {
   ): void {
     this.releases.push(positions.map(({ x, y }) => `${x},${y}`).join("|"));
   }
+  removeVisibleSymbols(options: {
+    readonly positions: readonly { readonly x: number; readonly y: number }[];
+    readonly state: string;
+    readonly onComplete?: () => void;
+  }): Promise<void> {
+    this.requestVisibleSymbolStates(options.positions, options.state);
+    this.terminalRemoval = options;
+    return Promise.resolve();
+  }
   setVisibleSymbolDimming(
     positions: readonly { readonly x: number; readonly y: number }[],
     dimmingAlpha: number,
@@ -354,5 +367,10 @@ class FakeTarget {
   }
   completeRequestedState(): void {
     this.complete = true;
+    if (this.terminalRemoval) {
+      this.releaseVisibleSymbols(this.terminalRemoval.positions);
+      this.terminalRemoval.onComplete?.();
+      this.terminalRemoval = null;
+    }
   }
 }

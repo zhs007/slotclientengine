@@ -475,6 +475,10 @@ class StatefulTarget {
   readonly immediateRequests: string[] = [];
   readonly releases: string[] = [];
   readonly states = new Map<string, { requested: string; resolved: string }>();
+  readonly terminalRemovals: {
+    readonly positions: readonly Position[];
+    readonly onComplete?: () => void;
+  }[] = [];
   missingCapability: string | null = null;
 
   requestVisibleSymbolStates(
@@ -532,6 +536,15 @@ class StatefulTarget {
   releaseVisibleSymbols(positions: readonly Position[]) {
     this.releases.push(positions.map(key).join("|"));
   }
+  removeVisibleSymbols(options: {
+    readonly positions: readonly Position[];
+    readonly state: string;
+    readonly onComplete?: () => void;
+  }) {
+    this.requestVisibleSymbolStates(options.positions, options.state);
+    this.terminalRemovals.push(options);
+    return Promise.resolve();
+  }
   setVisibleSymbolDimming() {}
   clearVisibleSymbolDimming() {}
   update() {
@@ -543,6 +556,10 @@ class StatefulTarget {
       if (!["normal", "hover"].includes(state.resolved)) {
         this.states.set(position, { requested: "normal", resolved: "normal" });
       }
+    }
+    for (const removal of this.terminalRemovals.splice(0)) {
+      this.releaseVisibleSymbols(removal.positions);
+      removal.onComplete?.();
     }
   }
 

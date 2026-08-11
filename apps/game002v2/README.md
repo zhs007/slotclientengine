@@ -36,6 +36,7 @@ spin，并由 shared runtime 校验 held code/value 未被 target 改写。Nearw
 与 refill sweep 的 `nearwin2` 只经 Crave runtime resource exact key 加载；期待状态下的
 cascade 顺序为 existing-only dropdown、Nearwin2 sweep、holes selective refill spin。
 
-中奖 remove 使用 rendercore terminal remove transaction。game002v2 只注入 WL retained
-predicate，并核对返回的 removed/retained 坐标与 server `bg-remove` scene；不会在 remove
-完成和 release 之间请求一次 normal。
+中奖 remove 使用 rendercore terminal remove transaction。game002v2 只提交上游已决定的最终
+remove positions；active Symbols canonical v2 配置决定该 once state 是否为 terminal。occurrence
+在完成 edge 同步 release，app 不解析 symbol manifest、不按 remove 名称分支，也不在完成与 release
+之间请求 normal。

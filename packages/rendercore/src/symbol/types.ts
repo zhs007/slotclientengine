@@ -14,6 +14,7 @@ export type SymbolStatePlaybackCompletion =
   | "next-loop-complete";
 export type SymbolStatePhase = "stable" | "once";
 export type SymbolPlaybackKind = "loop" | "static" | "once";
+export type SymbolStateAfterComplete = "return-to-default" | "terminal";
 
 export interface SymbolStatePlaybackOptions {
   readonly completion: SymbolStatePlaybackCompletion;
@@ -25,6 +26,7 @@ export interface SymbolStateDefinition {
   readonly id: SymbolStateId;
   readonly phase: SymbolStatePhase;
   readonly playback: SymbolPlaybackKind;
+  readonly afterComplete?: SymbolStateAfterComplete;
   readonly frameDurationSeconds?: number;
 }
 
