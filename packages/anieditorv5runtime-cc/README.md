@@ -449,7 +449,7 @@ const player = createV5GCocosPlayer({
 atlas.getSpriteFrame("respin_asset_image_mqkv73wu_e")
 ```
 
-runtime 不会 fallback 到 `asset.id`、`asset.originalName` 或其它猜测规则。`atlas.getSpriteFrame(...)` 返回 `null` 会直接抛错，错误包含 asset id、asset path 和实际 atlas key；不会创建 placeholder、跳过图层或吞掉 atlas 错误。atlas frame 可能被合图工具 trim/crop，普通 image/sequence 播放不用 atlas `SpriteFrame` 的可读尺寸校验 JSON 尺寸；Cocos 节点内容尺寸始终使用 JSON `asset.width/height`，实际播放以 JSON 逻辑尺寸为准。`wave_distort` 和 `card_carousel_3d` 必须切片，因此 SpriteFrame 必须公开 `texture/rect/originalSize` 且不能是 rotated atlas frame；不满足时会显式失败，不会退回整图或错误 UV。
+runtime 不会 fallback 到 `asset.id`、`asset.originalName` 或其它猜测规则。`atlas.getSpriteFrame(...)` 返回 `null` 会直接抛错，错误包含 asset id、asset path 和实际 atlas key；不会创建 placeholder、跳过图层或吞掉 atlas 错误。atlas frame 可能被合图工具 trim/crop 或 rotate，普通 image/sequence 播放不用 atlas `SpriteFrame` 的可读尺寸校验 JSON 尺寸；Cocos 节点内容尺寸始终使用 JSON `asset.width/height`，实际播放以 JSON 逻辑尺寸为准。`wave_distort` 和 `card_carousel_3d` 必须切片，因此 SpriteFrame 必须公开 `texture/rect/originalSize`；runtime 会按 `rotated` 映射逻辑切片坐标，不满足必要 metadata 时会显式失败，不会退回整图或错误 UV。
 
 旧 resolver 入口如果能从 `SpriteFrame` 读取原始尺寸，runtime 会校验它与 JSON `asset.fileWidth/fileHeight` 一致。没有压缩字段的旧导出按 `asset.width/height` 校验。`fileScale` 只用于 metadata 校验和诊断，不会额外参与节点缩放。
 

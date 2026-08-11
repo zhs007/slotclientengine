@@ -580,11 +580,6 @@ function createCocosSpriteFrameRegion(
   ) {
     throw new Error("Cocos SpriteFrame region must be finite and positive.");
   }
-  if (source.rotated) {
-    throw new Error(
-      "Cocos SpriteFrame region slicing does not support rotated atlas frames.",
-    );
-  }
   const sourceSize = source.originalSize;
   const sourceRect = source.rect;
   const sourceTexture = source.texture;
@@ -601,18 +596,30 @@ function createCocosSpriteFrameRegion(
       "Cocos SpriteFrame region exceeds the source frame bounds.",
     );
   }
+  const rotated = source.rotated === true;
+  // Cocos maps logical +x to atlas +y and logical +y to atlas -x for rotated frames.
+  const rect = rotated
+    ? new Rect(
+        sourceRect.x +
+          ((sourceSize.height - region.y - region.height) / sourceSize.height) *
+            sourceRect.height,
+        sourceRect.y + (region.x / sourceSize.width) * sourceRect.width,
+        (region.width / sourceSize.width) * sourceRect.width,
+        (region.height / sourceSize.height) * sourceRect.height,
+      )
+    : new Rect(
+        sourceRect.x + (region.x / sourceSize.width) * sourceRect.width,
+        sourceRect.y + (region.y / sourceSize.height) * sourceRect.height,
+        (region.width / sourceSize.width) * sourceRect.width,
+        (region.height / sourceSize.height) * sourceRect.height,
+      );
   const frame = new SpriteFrame();
   frame.reset({
     texture: sourceTexture,
-    rect: new Rect(
-      sourceRect.x + (region.x / sourceSize.width) * sourceRect.width,
-      sourceRect.y + (region.y / sourceSize.height) * sourceRect.height,
-      (region.width / sourceSize.width) * sourceRect.width,
-      (region.height / sourceSize.height) * sourceRect.height,
-    ),
+    rect,
     originalSize: new Size(region.width, region.height),
     offset: new Vec2(0, 0),
-    isRotate: false,
+    isRotate: rotated,
   });
   return frame;
 }
