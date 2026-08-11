@@ -1,4 +1,4 @@
-import reelPresentationManifest from "../../game002/config/reel-presentation.manifest.json" with { type: "json" };
+import reelPresentationManifest from "../config/reel-presentation.manifest.json" with { type: "json" };
 import {
   createGridCellEffectController,
   createGridCellEffectResourceFromLoadedSpine,

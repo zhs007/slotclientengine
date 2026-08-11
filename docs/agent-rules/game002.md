@@ -50,7 +50,7 @@
   天然不比对 map `sha256`/`byteLength`、不因未引用 entry/file 阻断，不依赖 app
   传 policy 才关闭 integrity gate。实际引用的 logical key 仍必须路由到安全存在的
   path，并通过对应资源 parser/decoder；不猜测未声明资源。
-- `apps/game002/config/reel-presentation.manifest.json` 只保存 game002 转轮时序和 Nearwin 程序资源键；Nearwin1/2 是 app 唯一显式 prepare 的美术资源，只来自 `assets/crave` 并通过 typed runtime-resource API 加载。其它 layout/presentation/transition/popup 由 Scene Layout package 直接驱动；未请求的 Nearwin3 不 prepare。
+- `apps/game002v2/config/reel-presentation.manifest.json` 只保存 game002v2 转轮时序和 Nearwin 程序资源键；Nearwin1/2 是 app 唯一显式 prepare 的美术资源，只来自 `assets/crave` 并通过 typed runtime-resource API 加载。其它 layout/presentation/transition/popup 由 Scene Layout package 直接驱动；未请求的 Nearwin3 不 prepare。
 - live server 固定为 `wss://gameserv.rgstest.slammerstudios.com/`；URL 不接受 `serverUrl`，旧参数也显式失败。
 - URL 必须显式提供 `lines=30`，其它值在 loading 99% 配置解析阶段失败。
 - 首屏遵守 `docs/agent-rules/loading-ui.md`；99% 准备 live session，100% 后创建 framework/Pixi，并复用 session。
@@ -217,7 +217,7 @@
   effect sweep、selective refill、started edge、player update 与 terminal remove transaction
   只调用 rendercore typed API，不在 app 复制 player/state machine。
 - Nearwin1/2 只从 Crave Scene Layout runtime resource exact key 加载，并消费
-  `apps/game002/config/reel-presentation.manifest.json` 的唯一 timing/effect 配置；未使用的
+  `apps/game002v2/config/reel-presentation.manifest.json` 的唯一 timing/effect 配置；未使用的
   Nearwin3 不加载。WL 是当前 remove retained 业务 predicate，rendercore 不认识 WL。
 
 ## Win carousel
