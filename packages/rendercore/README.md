@@ -583,6 +583,8 @@ for (const transfer of transfers) {
 
 游戏仍拥有 route、循环顺序、间隔、control points、业务 state/effect 名与后续 Promise 链；rendercore 不解释 CO 或其它 operation component。
 
+完整接口、生命周期、曲线路径、附加效果和 `for + await` 示例见 [`docs/visible-occurrence-transfer.md`](./docs/visible-occurrence-transfer.md)。
+
 ## 通用 symbol win carousel
 
 `createSymbolWinCarousel(...)` 是一个职责收敛的通用效果：按调用方传入的一个或多个组件名解析各自 `usedResults`，同组 `pos` 同时请求 manifest `win`，显示该组 resolver 金额，依次完成首轮后暂停并 lingering。未触发组件跳过，全部未触发时保持 idle；同一 result 被多个组件引用时分别播放并在 snapshot 中保留 `componentName/resultIndex`。
