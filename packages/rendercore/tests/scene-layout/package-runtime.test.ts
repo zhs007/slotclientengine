@@ -446,6 +446,16 @@ describe("scene layout package runtime", () => {
             main: { scene: initialScene, localPhaseYs: [5, -3] },
           },
         });
+        let delayCompleted = false;
+        const delay = runtime.waitForPresentationDelay(50).then(() => {
+          delayCompleted = true;
+        });
+        runtime.update(0.049);
+        await Promise.resolve();
+        expect(delayCompleted).toBe(false);
+        runtime.update(0.001);
+        await delay;
+        expect(delayCompleted).toBe(true);
         const reel = runtime.getReelPresentation("main");
         expect(
           renderMode === "standard"
@@ -721,7 +731,9 @@ describe("scene layout package runtime", () => {
       expect(() => runtime.settleMainReelContinuousSpin(target)).toThrow(
         /without an active continuous spin/,
       );
+      const destroyedDelay = runtime.waitForPresentationDelay(100);
       runtime.destroy();
+      await expect(destroyedDelay).rejects.toThrow(/destroyed/);
     } finally {
       load.mockRestore();
       unload.mockRestore();

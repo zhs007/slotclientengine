@@ -5,6 +5,7 @@ import { startSymbolStatePlaybackBatch } from "./symbol-state-playback.js";
 import { normalizeGridCellReelOffsetMatrix } from "./grid-cell-reel-offsets.js";
 import { resolveGridCellDimmingAlpha } from "./grid-cell-spin-plan.js";
 import { createReelLayout } from "./layout.js";
+import { prepareVisibleOccurrenceMotion } from "./visible-occurrence-transfer.js";
 import { RenderReel } from "./render-reel.js";
 import type {
   GridCellCoordinate,
@@ -36,6 +37,14 @@ import type {
   VisibleSymbolStatePlaybackRequest,
   RenderReelVisibleOccurrence,
   ReelSpinDirection,
+  VisibleOccurrenceEffectAttachmentOptions,
+  VisibleOccurrenceEffectHandle,
+  VisibleOccurrenceEffectPlayer,
+  VisibleOccurrenceEffectPlayerFactory,
+  VisibleOccurrenceHandle,
+  VisibleOccurrenceMotion,
+  VisibleOccurrenceTransferInput,
+  VisibleOccurrenceTransferScope,
 } from "./types.js";
 import type { GridCellEffectController } from "./grid-cell-effect-player.js";
 import type { LogicReels, SceneMatrix } from "@slotclientengine/logiccore";
@@ -96,6 +105,40 @@ interface DimmingRow {
   readonly graphic: Graphics;
 }
 
+interface PresentationDelayWaiter {
+  remainingMs: number;
+  readonly resolve: () => void;
+  readonly reject: (error: Error) => void;
+  readonly signal?: AbortSignal;
+  readonly abortListener?: () => void;
+}
+
+interface OccurrenceEffectAttachment {
+  readonly occurrence: RenderReelVisibleOccurrence;
+  readonly generation: number;
+  readonly parent: Container;
+  readonly player: VisibleOccurrenceEffectPlayer;
+  detached: boolean;
+}
+
+interface ActiveScopedTransfer {
+  readonly input: VisibleOccurrenceTransferInput;
+  readonly batch: PreparedGridCellVisibleOccurrenceTransferBatch;
+  readonly movingOccurrence: RenderReelVisibleOccurrence;
+  readonly targetOccurrence: RenderReelVisibleOccurrence;
+  readonly sourceGeometry: RenderVisibleSymbolGeometrySnapshot;
+  readonly targetGeometry: RenderVisibleSymbolGeometrySnapshot;
+  readonly controller: AbortController;
+  inputAbortListener: (() => void) | null;
+  motion: ReturnType<typeof prepareVisibleOccurrenceMotion> | null;
+  elapsedMs: number;
+  started: boolean;
+  arrived: boolean;
+  committed: boolean;
+  moveResolve: (() => void) | null;
+  moveReject: ((error: Error) => void) | null;
+}
+
 const ZERO_DIMMING: GridCellDimmingPattern = Object.freeze({
   resolveDimmingAlpha: () => 0,
   fadeInMs: 0,
@@ -115,8 +158,16 @@ export class RenderGridCellReelSet extends Container {
   readonly #cells: readonly RuntimeCell[];
   readonly #cellsByKey: ReadonlyMap<string, RuntimeCell>;
   readonly #cascadeMovementMask: Graphics;
+  readonly #transferAboveSymbolsLayer: Container;
   readonly #transferLayer: Container;
   readonly #effectController: GridCellEffectController | null;
+  #occurrenceEffectPlayerFactory: VisibleOccurrenceEffectPlayerFactory | null;
+  readonly #presentationDelayWaiters = new Set<PresentationDelayWaiter>();
+  readonly #occurrenceEffects = new Set<OccurrenceEffectAttachment>();
+  readonly #occurrenceGenerations = new WeakMap<
+    RenderReelVisibleOccurrence["symbol"],
+    number
+  >();
   #spinPlan: GridCellReelSpinPlan | null = null;
   #continuousSpin: ActiveContinuousSpin | null = null;
   #activeDrop: ActiveDrop | null = null;
@@ -127,6 +178,7 @@ export class RenderGridCellReelSet extends Container {
   #dimmingActivated = false;
   #elapsedMs = 0;
   #activeTransferRollback: (() => void) | null = null;
+  #activeScopedTransfer: ActiveScopedTransfer | null = null;
 
   constructor(options: RenderGridCellReelSetOptions) {
     super();
@@ -176,11 +228,17 @@ export class RenderGridCellReelSet extends Container {
     this.#cascadeMovementMask.includeInBuild = false;
     this.#cascadeMovementMask.measurable = false;
     this.addChild(this.#cascadeMovementMask);
+    this.#transferAboveSymbolsLayer = new Container();
+    this.#transferAboveSymbolsLayer.sortableChildren = true;
+    this.#transferAboveSymbolsLayer.zIndex = this.#cells.length * 5_000;
+    this.addChild(this.#transferAboveSymbolsLayer);
     this.#transferLayer = new Container();
     this.#transferLayer.sortableChildren = true;
     this.#transferLayer.zIndex = this.#cells.length * 20_000;
     this.addChild(this.#transferLayer);
     this.#effectController = options.effectController ?? null;
+    this.#occurrenceEffectPlayerFactory =
+      options.occurrenceEffectPlayerFactory ?? null;
     if (this.#effectController) {
       this.#effectController.container.zIndex = this.#cells.length * 10_000;
       this.addChild(this.#effectController.container);
@@ -189,6 +247,16 @@ export class RenderGridCellReelSet extends Container {
 
   prepareEffects(): Promise<void> | void {
     return this.#effectController?.prepare();
+  }
+
+  setOccurrenceEffectPlayerFactory(
+    factory: VisibleOccurrenceEffectPlayerFactory,
+  ): void {
+    if (this.#occurrenceEffectPlayerFactory)
+      throw new ReelError(
+        "Visible occurrence effect player factory is already configured.",
+      );
+    this.#occurrenceEffectPlayerFactory = factory;
   }
 
   cancelPresentationEffects(): void {
@@ -204,6 +272,9 @@ export class RenderGridCellReelSet extends Container {
     cellReelOffsets?: GridCellReelOffsetMatrix,
     presentationValues?: SymbolPresentationValueMatrix,
   ): void {
+    this.cancelActiveScopedTransfer(
+      new ReelError("Visible occurrence transfer was interrupted by reset."),
+    );
     this.#activeTransferRollback?.();
     const parsedScene = parseScene(scene, this.#columns, this.#rows);
     const parsedFinalYs = parseFinalYs(finalYs, this.#columns);
@@ -640,6 +711,9 @@ export class RenderGridCellReelSet extends Container {
 
   update(deltaSeconds: number): RenderGridCellReelSetUpdateResult {
     assertValidDeltaSeconds(deltaSeconds);
+    this.updatePresentationWaiters(deltaSeconds);
+    this.updateScopedTransfer(deltaSeconds);
+    this.updateOccurrenceEffects(deltaSeconds);
     if (this.#activeDrop) {
       const completed = this.updateDrop(deltaSeconds);
       return Object.freeze({
@@ -1298,6 +1372,7 @@ export class RenderGridCellReelSet extends Container {
           cell.reel.placeVisibleOccurrence(previous);
           throw error;
         }
+        this.bumpOccurrenceGeneration(previous);
         cell.reel.releaseDetachedOccurrence(previous);
         state = "committed";
       },
@@ -1336,13 +1411,27 @@ export class RenderGridCellReelSet extends Container {
         throw new ReelError(
           `Transfer[${index}] source and target must both be occupied.`,
         );
+      if (
+        !Number.isSafeInteger(transfer.sourceReplacementCode) ||
+        transfer.sourceReplacementCode < -1
+      )
+        throw new ReelError(
+          `Transfer[${index}] sourceReplacementCode must be -1 or a non-negative safe integer.`,
+        );
+      if (
+        transfer.sourceReplacementCode === -1 &&
+        transfer.sourceReplacementPresentationValue !== null
+      )
+        throw new ReelError(
+          `Transfer[${index}] sourceReplacementPresentationValue must be null for a hole.`,
+        );
       return { transfer, source, target };
     });
     const prepared: Array<{
       readonly transfer: GridCellVisibleOccurrenceTransfer;
       readonly source: RuntimeCell;
       readonly target: RuntimeCell;
-      readonly sourceReplacement: RenderReelVisibleOccurrence;
+      readonly sourceReplacement: RenderReelVisibleOccurrence | null;
       moving: RenderReelVisibleOccurrence | null;
     }> = [];
     try {
@@ -1355,15 +1444,19 @@ export class RenderGridCellReelSet extends Container {
           }),
           source: item.source,
           target: item.target,
-          sourceReplacement: item.source.reel.createDetachedOccurrence(
-            item.transfer.sourceReplacementCode,
-            item.transfer.sourceReplacementPresentationValue,
-          ),
+          sourceReplacement:
+            item.transfer.sourceReplacementCode === -1
+              ? null
+              : item.source.reel.createDetachedOccurrence(
+                  item.transfer.sourceReplacementCode,
+                  item.transfer.sourceReplacementPresentationValue,
+                ),
           moving: null,
         });
     } catch (error) {
       for (const item of prepared)
-        item.source.reel.releaseDetachedOccurrence(item.sourceReplacement);
+        if (item.sourceReplacement)
+          item.source.reel.releaseDetachedOccurrence(item.sourceReplacement);
       throw error;
     }
     let state: "prepared" | "started" | "committed" | "rolled-back" =
@@ -1375,7 +1468,8 @@ export class RenderGridCellReelSet extends Container {
           item.source.reel.restoreDetachedVisibleOccurrence(item.moving);
           item.moving = null;
         }
-        item.source.reel.releaseDetachedOccurrence(item.sourceReplacement);
+        if (item.sourceReplacement)
+          item.source.reel.releaseDetachedOccurrence(item.sourceReplacement);
       }
       this.#transferLayer.removeChildren();
       this.#cascadeMovementMask.visible = false;
@@ -1437,7 +1531,12 @@ export class RenderGridCellReelSet extends Container {
           const moving = item.source.reel.takeVisibleOccurrence();
           const overwritten = item.target.reel.takeVisibleOccurrence();
           item.target.reel.placeVisibleOccurrence(moving);
-          item.source.reel.placeVisibleOccurrence(item.sourceReplacement);
+          if (item.sourceReplacement) {
+            item.source.reel.placeVisibleOccurrence(item.sourceReplacement);
+          } else {
+            item.source.occupied = false;
+          }
+          this.bumpOccurrenceGeneration(overwritten);
           item.target.reel.releaseDetachedOccurrence(overwritten);
           item.moving = null;
         }
@@ -1452,6 +1551,377 @@ export class RenderGridCellReelSet extends Container {
       destroy: rollback,
     }) satisfies PreparedGridCellVisibleOccurrenceTransferBatch;
     return batch;
+  }
+
+  waitForPresentationDelay(
+    durationMs: number,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    if (!Number.isFinite(durationMs) || durationMs < 0)
+      return Promise.reject(
+        new ReelError(
+          "Presentation delay durationMs must be finite and non-negative.",
+        ),
+      );
+    if (signal?.aborted)
+      return Promise.reject(new ReelError("Presentation delay was aborted."));
+    if (durationMs === 0) return Promise.resolve();
+    return new Promise<void>((resolve, reject) => {
+      const waiter: PresentationDelayWaiter = {
+        remainingMs: durationMs,
+        resolve,
+        reject,
+        signal,
+      };
+      if (signal) {
+        const abortListener = (): void => {
+          if (!this.#presentationDelayWaiters.delete(waiter)) return;
+          reject(new ReelError("Presentation delay was aborted."));
+        };
+        (waiter as { abortListener?: () => void }).abortListener =
+          abortListener;
+        signal.addEventListener("abort", abortListener, { once: true });
+      }
+      this.#presentationDelayWaiters.add(waiter);
+    });
+  }
+
+  getVisibleOccurrenceHandle(x: number, y: number): VisibleOccurrenceHandle {
+    if (
+      this.#activeScopedTransfer?.started &&
+      this.#activeScopedTransfer.input.source.x === x &&
+      this.#activeScopedTransfer.input.source.y === y
+    )
+      throw new ReelError(
+        `Visible occurrence at grid cell (${x},${y}) is leased by an active transfer.`,
+      );
+    const cell = this.getCell(x, y);
+    if (!cell.occupied)
+      throw new ReelError(
+        `Cannot get occurrence for empty grid cell (${x},${y}).`,
+      );
+    return this.createOccurrenceHandle(this.getCellOccurrence(cell));
+  }
+
+  async runVisibleOccurrenceTransfer(
+    input: VisibleOccurrenceTransferInput,
+    choreography: (scope: VisibleOccurrenceTransferScope) => Promise<void>,
+  ): Promise<void> {
+    if (this.#activeScopedTransfer)
+      throw new ReelError("A scoped visible occurrence transfer is active.");
+    if (input.signal?.aborted)
+      throw new ReelError("Visible occurrence transfer was aborted.");
+    const sourceCell = this.getCell(input.source.x, input.source.y);
+    const targetCell = this.getCell(input.target.x, input.target.y);
+    const movingOccurrence = this.getCellOccurrence(sourceCell);
+    const targetOccurrence = this.getCellOccurrence(targetCell);
+    const sourceGeometry = this.getVisibleSymbolGeometrySnapshot(
+      input.source.x,
+      input.source.y,
+    );
+    const targetGeometry = this.getVisibleSymbolGeometrySnapshot(
+      input.target.x,
+      input.target.y,
+    );
+    const batch = this.prepareVisibleOccurrenceTransferBatch({
+      transfers: [input],
+    });
+    const active: ActiveScopedTransfer = {
+      input: Object.freeze({
+        ...input,
+        source: Object.freeze({ ...input.source }),
+        target: Object.freeze({ ...input.target }),
+      }),
+      batch,
+      movingOccurrence,
+      targetOccurrence,
+      sourceGeometry,
+      targetGeometry,
+      controller: new AbortController(),
+      inputAbortListener: null,
+      motion: null,
+      elapsedMs: 0,
+      started: false,
+      arrived: false,
+      committed: false,
+      moveResolve: null,
+      moveReject: null,
+    };
+    this.#activeScopedTransfer = active;
+    if (input.signal) {
+      active.inputAbortListener = (): void =>
+        this.cancelActiveScopedTransfer(
+          new ReelError("Visible occurrence transfer was aborted."),
+        );
+      input.signal.addEventListener("abort", active.inputAbortListener, {
+        once: true,
+      });
+    }
+    const scope = Object.freeze({
+      moving: this.createOccurrenceHandle(movingOccurrence),
+      target: this.createOccurrenceHandle(targetOccurrence),
+      delay: (durationMs: number, signal?: AbortSignal) =>
+        this.waitForScopedTransferDelay(active, durationMs, signal),
+      move: (motion: VisibleOccurrenceMotion) =>
+        this.startScopedTransferMotion(active, motion),
+      commit: async (): Promise<void> => {
+        if (this.#activeScopedTransfer !== active)
+          throw new ReelError("Visible occurrence transfer scope is stale.");
+        if (!active.arrived)
+          throw new ReelError(
+            "Visible occurrence transfer must finish move() before commit().",
+          );
+        if (active.committed)
+          throw new ReelError(
+            "Visible occurrence transfer can only commit once.",
+          );
+        active.batch.commit();
+        this.#transferAboveSymbolsLayer.mask = null;
+        this.bumpOccurrenceGeneration(active.targetOccurrence);
+        active.committed = true;
+        if (active.inputAbortListener)
+          input.signal?.removeEventListener("abort", active.inputAbortListener);
+        this.#activeScopedTransfer = null;
+        this.cleanupStaleOccurrenceEffects();
+      },
+    }) satisfies VisibleOccurrenceTransferScope;
+    try {
+      await choreography(scope);
+      if (!active.committed)
+        throw new ReelError(
+          "Visible occurrence transfer choreography returned without commit().",
+        );
+    } catch (error) {
+      if (!active.committed) active.batch.rollback();
+      this.#transferAboveSymbolsLayer.mask = null;
+      active.controller.abort();
+      if (active.inputAbortListener)
+        input.signal?.removeEventListener("abort", active.inputAbortListener);
+      active.moveReject?.(
+        error instanceof Error ? error : new ReelError(String(error)),
+      );
+      if (this.#activeScopedTransfer === active)
+        this.#activeScopedTransfer = null;
+      throw error;
+    }
+  }
+
+  private startScopedTransferMotion(
+    active: ActiveScopedTransfer,
+    motion: VisibleOccurrenceMotion,
+  ): Promise<void> {
+    if (this.#activeScopedTransfer !== active)
+      return Promise.reject(
+        new ReelError("Visible occurrence transfer scope is stale."),
+      );
+    if (active.started)
+      return Promise.reject(
+        new ReelError("Visible occurrence transfer move() can only run once."),
+      );
+    active.motion = prepareVisibleOccurrenceMotion(
+      motion,
+      { x: active.sourceGeometry.centerX, y: active.sourceGeometry.centerY },
+      { x: active.targetGeometry.centerX, y: active.targetGeometry.centerY },
+    );
+    active.batch.start();
+    active.started = true;
+    const destinationLayer =
+      motion.stacking.layer === "above-effects"
+        ? this.#transferLayer
+        : this.#transferAboveSymbolsLayer;
+    destinationLayer.mask = this.#cascadeMovementMask;
+    destinationLayer.addChild(active.movingOccurrence.symbol);
+    active.movingOccurrence.symbol.zIndex = motion.stacking.order;
+    return new Promise<void>((resolve, reject) => {
+      active.moveResolve = resolve;
+      active.moveReject = reject;
+    });
+  }
+
+  private waitForScopedTransferDelay(
+    active: ActiveScopedTransfer,
+    durationMs: number,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    if (this.#activeScopedTransfer !== active)
+      return Promise.reject(
+        new ReelError("Visible occurrence transfer scope is stale."),
+      );
+    if (!signal)
+      return this.waitForPresentationDelay(
+        durationMs,
+        active.controller.signal,
+      );
+    const linked = new AbortController();
+    const abort = (): void => linked.abort();
+    active.controller.signal.addEventListener("abort", abort, { once: true });
+    signal.addEventListener("abort", abort, { once: true });
+    if (active.controller.signal.aborted || signal.aborted) linked.abort();
+    return this.waitForPresentationDelay(durationMs, linked.signal).finally(
+      () => {
+        active.controller.signal.removeEventListener("abort", abort);
+        signal.removeEventListener("abort", abort);
+      },
+    );
+  }
+
+  private createOccurrenceHandle(
+    occurrence: RenderReelVisibleOccurrence,
+  ): VisibleOccurrenceHandle {
+    const generation = this.getOccurrenceGeneration(occurrence);
+    const assertUsable = (): void => {
+      if (
+        this.getOccurrenceGeneration(occurrence) !== generation ||
+        !this.isOccurrenceOwned(occurrence)
+      )
+        throw new ReelError("Visible occurrence handle is stale.");
+    };
+    return Object.freeze({
+      getSnapshot: () => {
+        assertUsable();
+        const state = occurrence.symbol.getStateSnapshot();
+        const completion = occurrence.symbol.getAnimationCompletionSnapshot();
+        const position = this.findOccurrencePosition(occurrence);
+        return Object.freeze({
+          x: position.x,
+          y: position.y,
+          code: occurrence.code,
+          kind: occurrence.kind,
+          requestedState: state.requestedState,
+          resolvedState: state.resolvedState,
+          isOnce: state.isOnce,
+          ...completion,
+        });
+      },
+      getGeometrySnapshot: () => {
+        assertUsable();
+        const position = this.findOccurrencePosition(occurrence);
+        if (position.moving) {
+          return Object.freeze({
+            x: position.x,
+            y: position.y,
+            code: occurrence.code,
+            kind: occurrence.kind,
+            centerX: occurrence.symbol.x,
+            centerY: occurrence.symbol.y,
+            cellWidth: this.#cellWidth,
+            cellHeight: this.#cellHeight,
+          });
+        }
+        return this.getVisibleSymbolGeometrySnapshot(position.x, position.y);
+      },
+      setPresentationValue: (value: number | null) => {
+        assertUsable();
+        const position = this.findOccurrencePosition(occurrence);
+        this.getCell(
+          position.x,
+          position.y,
+        ).reel.setVisibleSymbolPresentationValue(0, value);
+      },
+      playState: (
+        state: SymbolStateId,
+        options: SymbolStatePlaybackOptions,
+      ) => {
+        assertUsable();
+        return occurrence.symbol.playState(state, options);
+      },
+      attachEffect: (options: VisibleOccurrenceEffectAttachmentOptions) => {
+        assertUsable();
+        return this.attachOccurrenceEffect(occurrence, options);
+      },
+    });
+  }
+
+  private async attachOccurrenceEffect(
+    occurrence: RenderReelVisibleOccurrence,
+    options: VisibleOccurrenceEffectAttachmentOptions,
+  ): Promise<VisibleOccurrenceEffectHandle> {
+    const generation = this.getOccurrenceGeneration(occurrence);
+    const factory = this.#occurrenceEffectPlayerFactory;
+    if (!factory)
+      throw new ReelError(
+        "Visible occurrence effect attachment is not configured for this reel.",
+      );
+    if (!options.key)
+      throw new ReelError(
+        "Visible occurrence effect resource key is required.",
+      );
+    if (options.kind !== "spine" && options.kind !== "vni")
+      throw new ReelError(
+        `Unknown visible occurrence effect kind "${String(options.kind)}".`,
+      );
+    const stacking = options.stacking ?? {
+      layer: "above-symbols" as const,
+      order: 0,
+    };
+    if (
+      (stacking.layer !== "above-symbols" &&
+        stacking.layer !== "above-effects") ||
+      !Number.isSafeInteger(stacking.order) ||
+      stacking.order < 0
+    )
+      throw new ReelError(
+        "Visible occurrence effect stacking must use a known layer and non-negative safe integer order.",
+      );
+    const parent = new Container();
+    const transform = options.transform;
+    for (const [name, value] of Object.entries(transform ?? {}))
+      if (!Number.isFinite(value))
+        throw new ReelError(
+          `Visible occurrence effect transform ${name} must be finite.`,
+        );
+    parent.position.set(transform?.x ?? 0, transform?.y ?? 0);
+    parent.scale.set(transform?.scaleX ?? 1, transform?.scaleY ?? 1);
+    parent.rotation = transform?.rotation ?? 0;
+    parent.zIndex =
+      (stacking.layer === "above-effects" ? 1_000_000_000 : 0) + stacking.order;
+    occurrence.symbol.overlayLayer.sortableChildren = true;
+    occurrence.symbol.overlayLayer.addChild(parent);
+    let player: VisibleOccurrenceEffectPlayer;
+    try {
+      player = await factory({ parent, attachment: options });
+    } catch (error) {
+      parent.destroy({ children: true });
+      throw error;
+    }
+    if (
+      this.getOccurrenceGeneration(occurrence) !== generation ||
+      !this.isOccurrenceOwned(occurrence)
+    ) {
+      player.destroy();
+      parent.destroy({ children: true });
+      throw new ReelError(
+        "Visible occurrence became stale while attaching its effect.",
+      );
+    }
+    const attachment: OccurrenceEffectAttachment = {
+      occurrence,
+      generation,
+      parent,
+      player,
+      detached: false,
+    };
+    this.#occurrenceEffects.add(attachment);
+    const detach = (): void => {
+      if (attachment.detached) return;
+      attachment.detached = true;
+      this.#occurrenceEffects.delete(attachment);
+      player.destroy();
+      parent.destroy({ children: true });
+    };
+    return Object.freeze({
+      play: async (
+        playback: import("./types.js").VisibleOccurrenceEffectPlaybackOptions,
+      ) => {
+        if (attachment.detached)
+          throw new ReelError("Visible occurrence effect handle is detached.");
+        await player.play(playback);
+      },
+      stop: () => {
+        if (!attachment.detached) player.stop();
+      },
+      detach,
+    });
   }
 
   getVisibleSymbolStateSnapshot(
@@ -1529,10 +1999,176 @@ export class RenderGridCellReelSet extends Container {
   }
 
   override destroy(options?: Parameters<Container["destroy"]>[0]): void {
+    this.cancelActiveScopedTransfer(
+      new ReelError("Visible occurrence transfer runtime was destroyed."),
+    );
     this.#activeTransferRollback?.();
+    for (const waiter of this.#presentationDelayWaiters) {
+      waiter.signal?.removeEventListener("abort", waiter.abortListener!);
+      waiter.reject(new ReelError("Presentation delay runtime was destroyed."));
+    }
+    this.#presentationDelayWaiters.clear();
+    for (const attachment of [...this.#occurrenceEffects]) {
+      attachment.detached = true;
+      attachment.player.destroy();
+      attachment.parent.destroy({ children: true });
+    }
+    this.#occurrenceEffects.clear();
     this.cancelContinuous();
     this.#effectController?.destroy();
     super.destroy(options);
+  }
+
+  private updatePresentationWaiters(deltaSeconds: number): void {
+    const deltaMs = deltaSeconds * 1000;
+    for (const waiter of [...this.#presentationDelayWaiters]) {
+      waiter.remainingMs -= deltaMs;
+      if (waiter.remainingMs > 0) continue;
+      this.#presentationDelayWaiters.delete(waiter);
+      waiter.signal?.removeEventListener("abort", waiter.abortListener!);
+      waiter.resolve();
+    }
+  }
+
+  private updateScopedTransfer(deltaSeconds: number): void {
+    const active = this.#activeScopedTransfer;
+    if (!active?.started || active.arrived || !active.motion) return;
+    if (active.input.signal?.aborted) {
+      this.cancelActiveScopedTransfer(
+        new ReelError("Visible occurrence transfer was aborted."),
+      );
+      return;
+    }
+    active.elapsedMs = Math.min(
+      active.motion.durationMs,
+      active.elapsedMs + deltaSeconds * 1000,
+    );
+    const point = active.motion.sample(
+      active.elapsedMs / active.motion.durationMs,
+    );
+    active.movingOccurrence.symbol.position.set(point.x, point.y);
+    if (active.elapsedMs < active.motion.durationMs) return;
+    active.arrived = true;
+    const resolve = active.moveResolve;
+    active.moveResolve = null;
+    active.moveReject = null;
+    resolve?.();
+  }
+
+  private cancelActiveScopedTransfer(error: Error): void {
+    const active = this.#activeScopedTransfer;
+    if (!active || active.committed) return;
+    active.batch.rollback();
+    this.#transferAboveSymbolsLayer.mask = null;
+    active.controller.abort();
+    if (active.inputAbortListener)
+      active.input.signal?.removeEventListener(
+        "abort",
+        active.inputAbortListener,
+      );
+    active.moveReject?.(error);
+    active.moveResolve = null;
+    active.moveReject = null;
+    this.#activeScopedTransfer = null;
+  }
+
+  private updateOccurrenceEffects(deltaSeconds: number): void {
+    this.cleanupStaleOccurrenceEffects();
+    for (const attachment of this.#occurrenceEffects)
+      attachment.player.update(deltaSeconds);
+  }
+
+  private cleanupStaleOccurrenceEffects(): void {
+    for (const attachment of [...this.#occurrenceEffects]) {
+      if (
+        this.getOccurrenceGeneration(attachment.occurrence) ===
+          attachment.generation &&
+        this.isOccurrenceOwned(attachment.occurrence)
+      )
+        continue;
+      attachment.detached = true;
+      this.#occurrenceEffects.delete(attachment);
+      attachment.player.destroy();
+      attachment.parent.destroy({ children: true });
+    }
+  }
+
+  private getCellOccurrence(cell: RuntimeCell): RenderReelVisibleOccurrence {
+    const slot = cell.reel
+      .getSlotSnapshots()
+      .find((candidate) => candidate.windowY === 0);
+    if (
+      !cell.occupied ||
+      !slot?.symbol ||
+      slot.code < 0 ||
+      slot.kind === "empty"
+    )
+      throw new ReelError(
+        `Cannot resolve visible occurrence at grid cell (${cell.coordinate.x},${cell.coordinate.y}).`,
+      );
+    return Object.freeze({
+      code: slot.code,
+      kind: "textured" as const,
+      symbol: slot.symbol,
+      presentationValue: slot.presentationValue,
+    });
+  }
+
+  private isOccurrenceOwned(occurrence: RenderReelVisibleOccurrence): boolean {
+    if (
+      this.#activeScopedTransfer?.movingOccurrence.symbol === occurrence.symbol
+    )
+      return true;
+    return this.#cells.some((cell) =>
+      cell.reel
+        .getSlotSnapshots()
+        .some(
+          (slot) => slot.windowY === 0 && slot.symbol === occurrence.symbol,
+        ),
+    );
+  }
+
+  private getOccurrenceGeneration(
+    occurrence: RenderReelVisibleOccurrence,
+  ): number {
+    return this.#occurrenceGenerations.get(occurrence.symbol) ?? 0;
+  }
+
+  private bumpOccurrenceGeneration(
+    occurrence: RenderReelVisibleOccurrence,
+  ): void {
+    this.#occurrenceGenerations.set(
+      occurrence.symbol,
+      this.getOccurrenceGeneration(occurrence) + 1,
+    );
+  }
+
+  private findOccurrencePosition(occurrence: RenderReelVisibleOccurrence): {
+    readonly x: number;
+    readonly y: number;
+    readonly moving: boolean;
+  } {
+    const active = this.#activeScopedTransfer;
+    if (active?.started && active.movingOccurrence.symbol === occurrence.symbol)
+      return {
+        x: active.input.source.x,
+        y: active.input.source.y,
+        moving: true,
+      };
+    for (const cell of this.#cells) {
+      const found = cell.reel
+        .getSlotSnapshots()
+        .some(
+          (slot) => slot.windowY === 0 && slot.symbol === occurrence.symbol,
+        );
+      if (found)
+        return {
+          x: cell.coordinate.x,
+          y: cell.coordinate.y,
+          moving: false,
+        };
+    }
+    throw new ReelError("Visible occurrence handle is stale.");
   }
 
   private getCellGeometry(coordinate: {
@@ -1677,6 +2313,8 @@ export class RenderGridCellReelSet extends Container {
   }
 
   private releaseCell(cell: RuntimeCell): void {
+    const occurrence = this.getCellOccurrence(cell);
+    this.bumpOccurrenceGeneration(occurrence);
     cell.reel.releaseVisibleOccurrence();
     cell.occupied = false;
     cell.phase = "completed";

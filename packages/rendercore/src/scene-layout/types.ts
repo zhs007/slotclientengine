@@ -571,6 +571,20 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   prepareMainReelVisibleOccurrenceTransferBatch(options: {
     readonly transfers: readonly import("../reel/index.js").GridCellVisibleOccurrenceTransfer[];
   }): import("../reel/index.js").PreparedGridCellVisibleOccurrenceTransferBatch;
+  waitForPresentationDelay(
+    durationMs: number,
+    signal?: AbortSignal,
+  ): Promise<void>;
+  getMainReelVisibleOccurrence(
+    x: number,
+    y: number,
+  ): import("../reel/index.js").VisibleOccurrenceHandle;
+  runMainReelVisibleOccurrenceTransfer(
+    input: import("../reel/index.js").VisibleOccurrenceTransferInput,
+    choreography: (
+      scope: import("../reel/index.js").VisibleOccurrenceTransferScope,
+    ) => Promise<void>,
+  ): Promise<void>;
   drainMainReelLandingPositions(): readonly {
     readonly x: number;
     readonly y: number;

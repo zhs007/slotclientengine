@@ -353,6 +353,111 @@ export interface GridCellVisibleOccurrenceTransfer {
   readonly sourceReplacementPresentationValue: number | null;
 }
 
+export interface VisibleOccurrencePoint {
+  readonly x: number;
+  readonly y: number;
+}
+
+export type VisibleOccurrenceMotionPath =
+  | { readonly kind: "line" }
+  | {
+      readonly kind: "cubic-bezier-path";
+      readonly segments: readonly {
+        readonly control1: VisibleOccurrencePoint;
+        readonly control2: VisibleOccurrencePoint;
+        readonly end: VisibleOccurrencePoint;
+      }[];
+    };
+
+export type VisibleOccurrenceTimeEasing =
+  | { readonly kind: "linear" }
+  | {
+      readonly kind: "cubic-bezier";
+      readonly x1: number;
+      readonly y1: number;
+      readonly x2: number;
+      readonly y2: number;
+    };
+
+export interface VisibleOccurrenceStacking {
+  readonly layer: "above-symbols" | "above-effects";
+  readonly order: number;
+}
+
+export interface VisibleOccurrenceMotion {
+  readonly durationMs: number;
+  readonly path: VisibleOccurrenceMotionPath;
+  readonly easing: VisibleOccurrenceTimeEasing;
+  readonly stacking: VisibleOccurrenceStacking;
+}
+
+export interface VisibleOccurrenceEffectAttachmentOptions {
+  readonly key: string;
+  readonly kind: "spine" | "vni";
+  readonly transform?: {
+    readonly x?: number;
+    readonly y?: number;
+    readonly scaleX?: number;
+    readonly scaleY?: number;
+    readonly rotation?: number;
+  };
+  readonly stacking?: VisibleOccurrenceStacking;
+}
+
+export type VisibleOccurrenceEffectPlaybackOptions =
+  | {
+      readonly kind: "spine";
+      readonly animationName: string;
+      readonly loop?: boolean;
+    }
+  | {
+      readonly kind: "vni";
+      readonly loop?: boolean;
+    };
+
+export interface VisibleOccurrenceEffectHandle {
+  play(options: VisibleOccurrenceEffectPlaybackOptions): Promise<void>;
+  stop(): void;
+  detach(): void;
+}
+
+export interface VisibleOccurrenceEffectPlayer {
+  play(options: VisibleOccurrenceEffectPlaybackOptions): Promise<void>;
+  update(deltaSeconds: number): void;
+  stop(): void;
+  destroy(): void;
+}
+
+export type VisibleOccurrenceEffectPlayerFactory = (options: {
+  readonly parent: Container;
+  readonly attachment: VisibleOccurrenceEffectAttachmentOptions;
+}) => Promise<VisibleOccurrenceEffectPlayer>;
+
+export interface VisibleOccurrenceHandle {
+  getSnapshot(): RenderVisibleSymbolStateSnapshot;
+  getGeometrySnapshot(): RenderVisibleSymbolGeometrySnapshot;
+  setPresentationValue(value: number | null): void;
+  playState(
+    state: SymbolStateId,
+    options: SymbolStatePlaybackOptions,
+  ): Promise<void>;
+  attachEffect(
+    options: VisibleOccurrenceEffectAttachmentOptions,
+  ): Promise<VisibleOccurrenceEffectHandle>;
+}
+
+export interface VisibleOccurrenceTransferInput extends GridCellVisibleOccurrenceTransfer {
+  readonly signal?: AbortSignal;
+}
+
+export interface VisibleOccurrenceTransferScope {
+  readonly moving: VisibleOccurrenceHandle;
+  readonly target: VisibleOccurrenceHandle;
+  delay(durationMs: number, signal?: AbortSignal): Promise<void>;
+  move(motion: VisibleOccurrenceMotion): Promise<void>;
+  commit(): Promise<void>;
+}
+
 export interface PreparedGridCellVisibleOccurrenceTransferBatch {
   readonly transfers: readonly GridCellVisibleOccurrenceTransfer[];
   start(): void;
@@ -499,6 +604,7 @@ export interface RenderGridCellReelSetOptions {
   readonly presentationValueResolver?: GridCellSymbolPresentationValueResolver;
   readonly bounceStrength?: number;
   readonly effectController?: GridCellEffectController;
+  readonly occurrenceEffectPlayerFactory?: VisibleOccurrenceEffectPlayerFactory;
 }
 
 export interface GridCellSymbolPresentationValueContext {

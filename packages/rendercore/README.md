@@ -558,6 +558,31 @@ grid-cell 可选 effect API 把逐格 presentation 与 symbol state 分离。`cr
 
 停轴后，`RenderReelSet`（逐轴 spin）和 `RenderGridCellReelSet`（逐格 spin）都结构化实现 `VisibleSymbolPresentationTarget`：批量请求可见 symbol state、读取状态/几何快照并推进 animation。这个共同能力不合并两种 spin plan；grid-cell 的几何会把内部单行 reel 坐标转换为完整 grid 本地坐标，且 idle `update()` 会继续推进 `win once -> normal`。
 
+grid-cell main reel 还提供 occurrence identity 能力：`getMainReelVisibleOccurrence(x, y)` 返回受控 handle，可读取状态/几何、播放 state、设置 presentation value，并用 exact Scene Layout `spine | vni` runtime resource 附着 occurrence effect；它不暴露 Pixi Container、RenderSymbol 或 raw zIndex。occurrence effect 随同一 symbol identity 移动，和固定在坐标上的既有 cell effect 是两套独立 ownership；显式 `detach()`、occurrence release/回池或 runtime destroy 会清理 attachment。
+
+`runMainReelVisibleOccurrenceTransfer(input, choreography)` 是单次显式提交事务。`tx.delay()` 和 `tx.move()` 都只由宿主唯一的 `runtime.update(deltaSeconds)` 推进，不使用 GSAP、RAF 或 wall-clock timer。空间 path 支持 `line` 和多段 `cubic-bezier-path`（按总弧长采样），时间 easing 独立支持 `linear` 和 CSS-style cubic Bezier；`above-symbols | above-effects` 加非负整数 order 表达语义叠放。移动完成不会自动改数据，必须 `await tx.commit()`；callback 无 commit、reject、abort、reset 或 destroy 都会 rollback。source replacement 可为非负 symbol code，或 exact `-1/null` hole：
+
+```ts
+for (const transfer of transfers) {
+  await runtime.waitForPresentationDelay(transfer.gapMs);
+  await runtime.runMainReelVisibleOccurrenceTransfer(transfer, async (tx) => {
+    const trail = await tx.moving.attachEffect({ key: "trail", kind: "vni" });
+    await Promise.all([
+      tx.move({
+        durationMs: 320,
+        path: { kind: "line" },
+        easing: { kind: "cubic-bezier", x1: 0.2, y1: 0, x2: 0.2, y2: 1 },
+        stacking: { layer: "above-effects", order: 0 },
+      }),
+      trail.play({ kind: "vni" }),
+    ]);
+    await tx.commit();
+  });
+}
+```
+
+游戏仍拥有 route、循环顺序、间隔、control points、业务 state/effect 名与后续 Promise 链；rendercore 不解释 CO 或其它 operation component。
+
 ## 通用 symbol win carousel
 
 `createSymbolWinCarousel(...)` 是一个职责收敛的通用效果：按调用方传入的一个或多个组件名解析各自 `usedResults`，同组 `pos` 同时请求 manifest `win`，显示该组 resolver 金额，依次完成首轮后暂停并 lingering。未触发组件跳过，全部未触发时保持 idle；同一 result 被多个组件引用时分别播放并在 snapshot 中保留 `componentName/resultIndex`。

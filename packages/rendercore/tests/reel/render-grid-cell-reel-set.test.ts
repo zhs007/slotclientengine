@@ -10,6 +10,8 @@ import {
   type GridCellReelSpinTiming,
   type AwaitableVisibleSymbolPresentationTarget,
   type VisibleSymbolPresentationTarget,
+  type VisibleOccurrenceEffectPlayer,
+  type VisibleOccurrenceEffectPlayerFactory,
 } from "../../src/reel/index.js";
 import { compileSlotCascadeFacts } from "@slotclientengine/logiccore";
 import { createBasicRegistry, createBasicReels } from "./helpers.js";
@@ -884,6 +886,161 @@ describe("RenderGridCellReelSet", () => {
     ]);
     expect(reelSet.getCascadeValues()[1][0]).toBe(7);
   });
+
+  it("commits an exact -1/null source hole and rejects invalid hole values before mutation", () => {
+    const reelSet = createGridReelSet();
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
+    const before = reelSet.getVisibleScene();
+    expect(() =>
+      reelSet.prepareVisibleOccurrenceTransferBatch({
+        transfers: [
+          {
+            source: { x: 0, y: 0 },
+            target: { x: 1, y: 0 },
+            sourceReplacementCode: -1,
+            sourceReplacementPresentationValue: 7,
+          },
+        ],
+      }),
+    ).toThrow(/must be null/);
+    expect(reelSet.getVisibleScene()).toEqual(before);
+
+    const prepared = reelSet.prepareVisibleOccurrenceTransferBatch({
+      transfers: [
+        {
+          source: { x: 0, y: 0 },
+          target: { x: 1, y: 0 },
+          sourceReplacementCode: -1,
+          sourceReplacementPresentationValue: null,
+        },
+      ],
+    });
+    prepared.start();
+    prepared.setProgress(1);
+    prepared.commit();
+    expect(reelSet.getVisibleScene()).toEqual([
+      [-1, 0, 2],
+      [1, 1, 0],
+    ]);
+  });
+
+  it("awaits scoped motion, keeps target identity until commit, and drives delays from update", async () => {
+    const reelSet = createGridReelSet();
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
+    const originalTarget = reelSet.getVisibleOccurrenceHandle(1, 0);
+    let arrived = false;
+    const transfer = reelSet.runVisibleOccurrenceTransfer(
+      {
+        source: { x: 0, y: 0 },
+        target: { x: 1, y: 0 },
+        sourceReplacementCode: 2,
+        sourceReplacementPresentationValue: null,
+      },
+      async (tx) => {
+        expect(tx.target.getSnapshot().code).toBe(
+          originalTarget.getSnapshot().code,
+        );
+        await tx.delay(50);
+        await tx.move({
+          durationMs: 100,
+          path: { kind: "line" },
+          easing: { kind: "linear" },
+          stacking: { layer: "above-effects", order: 4 },
+        });
+        arrived = true;
+        await tx.commit();
+      },
+    );
+    reelSet.update(0.049);
+    await Promise.resolve();
+    expect(arrived).toBe(false);
+    reelSet.update(0.001);
+    await Promise.resolve();
+    expect(() => reelSet.getVisibleOccurrenceHandle(0, 0)).toThrow(/leased/);
+    reelSet.update(0.1);
+    await transfer;
+    expect(arrived).toBe(true);
+    expect(reelSet.getVisibleScene()).toEqual([
+      [2, 0, 2],
+      [1, 1, 0],
+    ]);
+    expect(() => originalTarget.getSnapshot()).toThrow(/stale/);
+  });
+
+  it("keeps occurrence effects identity-bound and cleans the overwritten target effect", async () => {
+    const players: Array<
+      VisibleOccurrenceEffectPlayer & { destroyed: boolean }
+    > = [];
+    const factory: VisibleOccurrenceEffectPlayerFactory = async ({
+      parent,
+    }) => {
+      expect(parent.parent).not.toBeNull();
+      const player = {
+        destroyed: false,
+        play: async () => {},
+        update: () => {},
+        stop: () => {},
+        destroy() {
+          this.destroyed = true;
+        },
+      } satisfies VisibleOccurrenceEffectPlayer & { destroyed: boolean };
+      players.push(player);
+      return player;
+    };
+    const reelSet = createGridReelSet({}, factory);
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
+    const moving = reelSet.getVisibleOccurrenceHandle(0, 0);
+    const target = reelSet.getVisibleOccurrenceHandle(1, 0);
+    await moving.attachEffect({ key: "moving", kind: "vni" });
+    await target.attachEffect({ key: "target", kind: "spine" });
+
+    const transfer = reelSet.runVisibleOccurrenceTransfer(
+      {
+        source: { x: 0, y: 0 },
+        target: { x: 1, y: 0 },
+        sourceReplacementCode: 2,
+        sourceReplacementPresentationValue: null,
+      },
+      async (tx) => {
+        await tx.move({
+          durationMs: 10,
+          path: { kind: "line" },
+          easing: { kind: "linear" },
+          stacking: { layer: "above-symbols", order: 0 },
+        });
+        await tx.commit();
+      },
+    );
+    reelSet.update(0.01);
+    await transfer;
+    expect(players.map((player) => player.destroyed)).toEqual([false, true]);
+    expect(moving.getSnapshot()).toMatchObject({ x: 1, y: 0, code: 1 });
+  });
+
+  it("rolls back and rejects scoped motion when reset interrupts it", async () => {
+    const reelSet = createGridReelSet();
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
+    const transfer = reelSet.runVisibleOccurrenceTransfer(
+      {
+        source: { x: 0, y: 0 },
+        target: { x: 1, y: 0 },
+        sourceReplacementCode: 2,
+        sourceReplacementPresentationValue: null,
+      },
+      async (tx) => {
+        await tx.move({
+          durationMs: 100,
+          path: { kind: "line" },
+          easing: { kind: "linear" },
+          stacking: { layer: "above-effects", order: 0 },
+        });
+        await tx.commit();
+      },
+    );
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
+    await expect(transfer).rejects.toThrow(/reset/);
+    expect(reelSet.getVisibleScene()).toEqual(INITIAL_SCENE);
+  });
 });
 
 function createGridCellCascadeDropPlan(options: {
@@ -967,6 +1124,7 @@ function getCellRoot(
 
 function createGridReelSet(
   registryOptions: Parameters<typeof createBasicRegistry>[0] = {},
+  occurrenceEffectPlayerFactory?: VisibleOccurrenceEffectPlayerFactory,
 ): RenderGridCellReelSet {
   return new RenderGridCellReelSet({
     reels: createBasicReels(),
@@ -988,6 +1146,7 @@ function createGridReelSet(
       rows: 3,
       mode: "top-down-left-right",
     }),
+    occurrenceEffectPlayerFactory,
   });
 }
 
