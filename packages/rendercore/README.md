@@ -50,6 +50,9 @@ stopping；stopping 首状态和 target value 在各 occurrence 的 exact landin
 中一起生效，上层 landing drain 只追踪后续 once completion。后续 snapshot 原位提交。所有可完成序列以 exact `normal`
 结尾，scene 显式选择全格或左上第一格 completion barrier；Spin 始终保留
 reel settle 硬屏障。v1 local-flow project 不做猜测迁移。
+scene/operation flow 完成只结束编排调度，不结束 preview renderer 生命周期；同一宿主 ticker
+继续推进最终 `normal` Symbol loop 和 Gamelayout 中其它 Spine/VNI/node 动画，直到 Replay 或 destroy。
+完成边界不重播、重置或重建这些 player。
 该 facade 不解析 server round 或 component，也不创建 DOM 配置 UI；runtime owner 负责
 Pixi Application、package resource 与所有 player 的 destroy。
 

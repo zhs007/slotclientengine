@@ -16,6 +16,9 @@ launch v4 只通过一次性 MessageChannel 发送 ZIP、flow 和 finalized V2 p
 继续新建本地 generation，不复用未完成的 cell controller。核对通过后，spin、同一
 edge 的 ordered drafts 与 settled commit 均由 rendercore 实例级 operation coordinator
 执行；settled scene/value 只取当前 `operation.output`。
+flow 完成后独立窗口继续运行同一个 renderer ticker：最终 Symbol 保持 `normal` loop，
+Gamelayout 中其它 Spine/VNI/node 动画按原 manifest 和当前 playhead 继续播放，不统一暂停、
+重播或重建；只有 Replay 重走流程，窗口关闭才 destroy runtime。
 
 完全本地的 scene / otherScene 流程预览器。导入 Game Layout Editor production ZIP 后，可编辑场景链、逐格 Symbol 与值、状态编排，并在独立窗口播放。scene 编辑器以 `columns = width`、`rows = height` 显示矩阵，底层数据仍是 x-first `scene[x][y]`。
 

@@ -201,6 +201,7 @@ describe("local scene flow runtime", () => {
     });
     expect(root.replaceChildren).toHaveBeenCalledOnce();
     mocks.tickerCallback!({ deltaMS: 16 });
+    expect(mocks.runtimeUpdate).toHaveBeenCalledOnce();
     runtime.applyViewport({ width: 800, height: 600 });
     expect(mocks.resolveFrame).toHaveBeenCalledWith({
       manifest: {},
@@ -223,6 +224,7 @@ describe("local scene flow runtime", () => {
     runtime.play();
     runtime.play();
     await runOperationTick();
+    expect(mocks.runtimeUpdate).toHaveBeenCalledTimes(2);
     expect(mocks.spin).toHaveBeenCalledOnce();
 
     mocks.landings.push({ x: 0, y: 0 }, { x: 0, y: 0 });
@@ -244,14 +246,27 @@ describe("local scene flow runtime", () => {
       phase: "completed",
       snapshotIndex: 2,
     });
+    const updatesAtCompletion = mocks.runtimeUpdate.mock.calls.length;
+    mocks.tickerCallback!({ deltaMS: 16 });
+    mocks.tickerCallback!({ deltaMS: 16 });
+    expect(mocks.runtimeUpdate).toHaveBeenCalledTimes(updatesAtCompletion + 2);
 
     runtime.play();
     expect(mocks.reset).toHaveBeenCalledOnce();
     runtime.replay();
     expect(mocks.reset).toHaveBeenCalledTimes(2);
-    runtime.destroy();
-    runtime.destroy();
+    const updatesBeforeReplayTick = mocks.runtimeUpdate.mock.calls.length;
     mocks.tickerCallback!({ deltaMS: 16 });
+    expect(mocks.runtimeUpdate).toHaveBeenCalledTimes(
+      updatesBeforeReplayTick + 1,
+    );
+    runtime.destroy();
+    runtime.destroy();
+    const updatesBeforeDestroyedTick = mocks.runtimeUpdate.mock.calls.length;
+    mocks.tickerCallback!({ deltaMS: 16 });
+    expect(mocks.runtimeUpdate).toHaveBeenCalledTimes(
+      updatesBeforeDestroyedTick,
+    );
     expect(mocks.runtimeDestroy).toHaveBeenCalledOnce();
     expect(() => runtime.play()).toThrow(/destroyed/);
   });
