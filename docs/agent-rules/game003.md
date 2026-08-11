@@ -4,7 +4,7 @@
 
 ## 固定入口与资源 ownership
 
-- `apps/game003` 与精简的 `apps/game003v2` 都严格只支持显式 `skin=2`；v2 回合必须先 finalize immutable `SlotOperationPlanV2`，再由 rendercore coordinator 执行。
+- `apps/game003v2` 严格只支持显式 `skin=2`；回合必须先 finalize immutable `SlotOperationPlanV2`，再由 rendercore coordinator 执行。
 - 唯一正式美术、layout、公开轮带、symbol 与 popup 输入是 `assets/minecart2` 的 mapped Scene Layout package；不得新增旧皮肤目录、平铺资源副本或 fallback。
 - symbol package id、reelSet 与 popup id 只从当前 package 的 initial mode typed binding 读取；不得锁定历史 `game003-s1` 或猜测 namespace。
 - `assets/minecart2` 的当前美术 files/bytes 是 game003 权威交付；首次可由优化

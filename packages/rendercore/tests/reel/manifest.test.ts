@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import rawManifest from "../../../../apps/game002/config/reel-presentation.manifest.json";
+import rawManifest from "./fixtures/reel-presentation.manifest.json";
 import { parseReelManifest } from "../../src/reel/index.js";
 
 describe("parseReelManifest", () => {

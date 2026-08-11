@@ -7,7 +7,7 @@ import {
   GAME003_SAMPLE_COIN_SPIN_RESULT,
   GAME003_SAMPLE_SPIN_RESULT,
   GAME003_SAMPLE_WIN_SPIN_RESULT,
-} from "../../game003/tests/fixtures/game003-gmi.js";
+} from "./fixtures/game003-gmi.js";
 import { compileGame003v2Round } from "../src/round-compiler.js";
 
 const displaySymbols = Object.freeze([

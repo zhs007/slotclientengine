@@ -11,4 +11,4 @@
 - 游戏 live 初始化在 loading `99%` 回调中校验配置并准备 session。
 - `100%` 后才创建 framework/Pixi 画面，并复用同一个 prepared session，禁止 loading 前挂载或双 WebSocket。
 - Loading UI 的视觉 gate 不决定 live session 是否完成；enter 成功后由 controller 统一 exit/destroy。
-- game002 注入 Leo UI，game003 注入 simple UI。
+- game002v2 注入 Leo UI，game003v2 注入 simple UI。
