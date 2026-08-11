@@ -11,7 +11,7 @@ resource，不要求内层第二份 map。无 map 的合法 legacy direct path �
 
 ## Popup API
 
-`@slotclientengine/rendercore/popup` 提供 strict `award-celebration | spine` popup parser、Popup id validator、typed filename-key namespace rewrite、传递资源闭包、files/CDN loader、snapshot 与共享 input binding。v2 presentation 把 maximized-focus 得到的 visible rect 等比 contain 到 viewport 并居中，backdrop 独立覆盖整个 viewport。普通 Spine popup 使用独立 start→loop→end 状态机：点击请求可提前锁存，只在 loop 完整播放到边界后进入 end；legacy prompt 仍接受游戏传入的已翻译单行 string。canonical v2 使用命名字体文字 overlay，可组合 image、命名 ImgNumber、VNI 与 official Spine overlay。获奖庆祝支持同样的文字/ImgNumber 节点、五档 BigInt threshold sequence 与金额格式，并要求每档恰好一个 win-amount。Scene Layout 的无效果、Spine 与 video transition 都可独立用 `preludePopup` 复用该 player；host 绑定真实 canvas 与 keyboard target 后，active Popup 在 canvas 任意位置 `pointerdown` 或任意非 repeat `keydown` 上执行唯一主操作，idle 完全透传。prelude 请求进入 end、award celebration 执行 advance；带 Popup 的 video 完成后第二次 trusted pointer/key 同步启动等待中的视频。绑定期间关闭 Pixi pointer fallback，避免一次输入双 advance。Popup binding 的 root `order` 与 node/main reel 全局唯一且必须更高，runtime 在当前 scene 的顶层 Popup root 内按该值排序。
+`@slotclientengine/rendercore/popup` 提供 strict `award-celebration | spine` popup parser、Popup id validator、typed filename-key namespace rewrite、传递资源闭包、files/CDN loader、snapshot 与共享 input binding。v1/v2 保持历史 runtime；v3 删除有限 `designViewport`，只用 focus 在无界 authored plane 上反推 page-aspect visible rect，backdrop 独立覆盖整个 viewport。普通 Spine popup 使用独立 start→loop→end 状态机：点击请求可提前锁存，只在 loop 完整播放到边界后进入 end；legacy prompt 仍接受游戏传入的已翻译单行 string，canonical v3 只使用命名字体文字 overlay。获奖庆祝支持同样的文字/ImgNumber 节点、五档 BigInt threshold sequence 与金额格式，并要求每档恰好一个 win-amount。Scene Layout 的无效果、Spine 与 video transition 都可独立用 `preludePopup` 复用该 player；host 绑定真实 canvas 与 keyboard target 后，active Popup 在 eligible canvas `pointerdown` 或非 repeat `keydown` 上执行唯一主操作，idle 完全透传。宿主可用显式 keyboard eligibility policy 排除表单控件，不能用重复状态机补分派。Popup binding 的 root `order` 与 node/main reel 全局唯一且必须更高，runtime 在当前 scene 的顶层 Popup root 内按该值排序。
 
 字体文字 renderer 支持可选 package font（省略时才使用系统字体）、字号、字距、canonical color、纯色/线性渐变、描边、投影、Unicode grapheme 弧排、anchor 与原子 `setText()`。两类 player 都公开稳定的 `textNodes` / `imageStringNodes`，并可按 exact name 或各 kind 零基 index 取得 handle；业务绑定优先使用 exact name。覆盖 string 跨档位和重复播放保持，`resetText()` 恢复 manifest/自动金额值，destroy 后 handle 失效。
 
@@ -360,6 +360,8 @@ import {
 该 helper 只做通用几何计算，不读取资源、不创建 Pixi 对象，也不包含任何 game002 路径、symbol 名或棋盘常量。`viewportSize` 大于 `artSize`、`focusRect` 超出 art、focus 加 margin 无法放入 viewport、`NaN`/`Infinity`/非正数都会显式抛错，避免运行时静默裁掉关键区域。
 
 `calculateMaximizedFocusedArtViewport()` 用于只有一套背景和一个重点区域的页面适配。算法先按 contain 语义计算 focus 在页面内完整显示时的最大 scale，再用页面宽高除以该 scale，反推出当前应展示的 art-space viewport；因此 focus 保持完整且最大化，focus 以外只要仍在背景范围内就继续显示，不会因为横竖屏分类主动裁掉。只有反推 viewport 超过完整 `artSize` 时才按对应轴封顶，此时页面极端宽高比造成的黑边才是不可避免的。随后仍复用 `calculateFocusedArtViewport()` 完成居中和 art 裁切。`createMaximizedFocusedArtViewportPolicy()` 把这一计算封装成 frame policy resolver，framework/UI 层只消费 resolver 结果，不复制几何算法。
+
+`calculateUnboundedMaximizedFocusedViewport()` 用于没有有限 art bounds 的 authored plane。它同样先 contain focus，再按 page aspect 反推 visible rect，并以 focus 几何中心向外扩展；不会把 `Infinity` 或超大 magic size 当 artSize，也不会执行边界钳制。Popup v3 presentation 使用该 helper，v2 继续使用有限 art helper。
 
 `mapReferenceRectToArt()` 用于把旧设计稿或旧 portrait crop 里的矩形映射到新的完整 art 坐标。典型用法是把旧 `1125 x 2000` 坐标中的棋盘矩形映射到 `2000 x 2000` art 中，再把映射后的矩形作为 focus rect。
 

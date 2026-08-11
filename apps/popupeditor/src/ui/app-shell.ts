@@ -21,7 +21,6 @@ import {
   createPopupEditorProject,
   detectPopupAmountFormatPreset,
   getPopupVniTextLayerTargets,
-  migratePopupPromptToTextLayer,
   removePopupResource,
   PopupEditorStore,
   projectToManifest,
@@ -111,7 +110,7 @@ export class PopupEditorApp {
       });
     const host = this.required("workspace");
     if (!this.#hasProject) {
-      host.innerHTML = `<section class="project-landing"><h2>开始 Popup 项目</h2><p>创建一个空项目，或导入 Popup Editor 导出的 ZIP。</p><button id="create-project">创建项目</button><label class="file-action">导入项目<input id="import-project" type="file" accept=".zip,application/zip"/></label></section>`;
+      host.innerHTML = `<section class="project-landing"><h2>开始 Popup 项目</h2><p>创建一个空项目，或导入 Popup Editor 导出的 ZIP。</p><div class="project-landing-actions"><button id="create-project" class="project-entry-action">创建项目</button><label class="file-action project-entry-action">导入项目<input id="import-project" type="file" accept=".zip,application/zip"/></label></div></section>`;
       this.required("diagnostics").textContent = this.#notice;
       this.bindWorkspace(project);
       return;
@@ -274,19 +273,6 @@ export class PopupEditorApp {
         this.#preview?.reset();
         this.renderWorkspace(this.#store.project);
       });
-    this.#root
-      .querySelector<HTMLButtonElement>("#upgrade-project")
-      ?.addEventListener("click", () =>
-        this.#store.transact((draft) => {
-          draft.formatVersion = 2;
-          draft.name ||= draft.id;
-          migratePopupPromptToTextLayer(draft);
-          for (const tier of draft.tiers.values())
-            for (const layer of tier.layers) (layer as any).alpha ??= 1;
-          for (const overlay of draft.spine.overlays)
-            (overlay as any).alpha ??= 1;
-        }),
-      );
     this.#root
       .querySelectorAll<HTMLButtonElement>("[data-tier]")
       .forEach((button) =>
@@ -742,11 +728,7 @@ export class PopupEditorApp {
         input.addEventListener("change", () =>
           this.transactField((draft) => {
             const field = input.dataset.projectField!;
-            if (field === "viewport-width" || field === "viewport-height")
-              draft.designViewport[
-                field === "viewport-width" ? "width" : "height"
-              ] = Number(input.value);
-            else if (field === "project-name") draft.name = input.value;
+            if (field === "project-name") draft.name = input.value;
             else if (field.startsWith("focus-"))
               (draft.adaptation.focus as any)[field.slice("focus-".length)] =
                 Number(input.value);
@@ -985,10 +967,7 @@ function spineMarkup(project: PopupEditorProject) {
     const selected = project.spine.playback[field];
     return `<label>${label}<select data-spine-popup-field="${field}"><option value="">请选择动画</option>${animations.map((name) => `<option value="${name}" ${name === selected ? "selected" : ""}>${name}</option>`).join("")}</select></label>`;
   };
-  const legacyPrompt = project.spine.prompt.enabled
-    ? '<p class="amount-layer-note">此项目含 legacy prompt；运行与原版本导出保持兼容。升级到 v2 时会转换为名为 prompt 的字体文字图层。</p>'
-    : "";
-  return `<section class="tier-editor"><h2>普通 Spine 弹窗</h2><p>播放 start 后进入 loop；用户点击会锁存关闭请求，并在当前 loop 播放到边界后进入 end。</p><label>Spine 资源<select id="spine-resource"><option value="">请选择资源</option>${resources.map((resource) => `<option value="${resource.rootKey}" ${resource.rootKey === project.spine.resource ? "selected" : ""}>${resource.rootKey}</option>`).join("")}</select></label><div class="threshold-grid">${(["x", "y", "scale"] as const).map((field) => `<label>${field}<input data-spine-popup-field="${field}" type="number" step="0.1" value="${project.spine.transform[field]}"/></label>`).join("")}</div>${animationSelect("startAnimation", "开始动画")}${animationSelect("loopAnimation", "循环动画")}${animationSelect("endAnimation", "结束动画")}<p class="segment-summary">${project.spine.resource ? (animations.length ? `已从 skeleton JSON 读取 ${animations.length} 个动画。` : "所选 skeleton JSON 没有可用动画。") : "导入并选择一组 Spine JSON、atlas 与 PNG 后配置动画。"}</p>${legacyPrompt}<h3>Overlay 图层</h3><div class="layer-add"><select id="spine-overlay-resource">${overlayResources.map((resource) => `<option value="${resource.rootKey}">${resource.rootKey} (${resource.kind})</option>`).join("")}</select><button id="add-spine-overlay" ${overlayResources.length ? "" : "disabled"}>添加 overlay</button>${project.formatVersion === 2 ? '<button id="add-spine-font-text">添加字体文字</button>' : ""}</div>${project.spine.overlays.map((layer) => overlayMarkup(layer, project)).join("")}</section>`;
+  return `<section class="tier-editor"><h2>普通 Spine 弹窗</h2><p>播放 start 后进入 loop；用户点击会锁存关闭请求，并在当前 loop 播放到边界后进入 end。</p><label>Spine 资源<select id="spine-resource"><option value="">请选择资源</option>${resources.map((resource) => `<option value="${resource.rootKey}" ${resource.rootKey === project.spine.resource ? "selected" : ""}>${resource.rootKey}</option>`).join("")}</select></label><div class="threshold-grid">${(["x", "y", "scale"] as const).map((field) => `<label>${field}<input data-spine-popup-field="${field}" type="number" step="0.1" value="${project.spine.transform[field]}"/></label>`).join("")}</div>${animationSelect("startAnimation", "开始动画")}${animationSelect("loopAnimation", "循环动画")}${animationSelect("endAnimation", "结束动画")}<p class="segment-summary">${project.spine.resource ? (animations.length ? `已从 skeleton JSON 读取 ${animations.length} 个动画。` : "所选 skeleton JSON 没有可用动画。") : "导入并选择一组 Spine JSON、atlas 与 PNG 后配置动画。"}</p><h3>Overlay 图层</h3><div class="layer-add"><select id="spine-overlay-resource">${overlayResources.map((resource) => `<option value="${resource.rootKey}">${resource.rootKey} (${resource.kind})</option>`).join("")}</select><button id="add-spine-overlay" ${overlayResources.length ? "" : "disabled"}>添加 overlay</button><button id="add-spine-font-text">添加字体文字</button></div>${project.spine.overlays.map((layer) => overlayMarkup(layer, project)).join("")}</section>`;
 }
 
 function overlayMarkup(layer: PopupOverlayLayer, project: PopupEditorProject) {
@@ -1267,7 +1246,7 @@ function tiersMarkup(
   const layerResources = [...project.resources.values()].filter(
     ({ kind }) => kind !== "font",
   );
-  return `<nav class="tier-tabs" role="tablist" aria-label="获奖档位">${TIERS.map((id) => `<button role="tab" aria-selected="${id === active}" tabindex="${id === active ? 0 : -1}" data-tier="${id}" class="${id === active ? "active" : ""}"><span>${id}</span><small>${project.tiers.get(id)!.layers.length} 层</small></button>`).join("")}</nav><section class="tier-contract"><h2>累计档位合同</h2><p>base：0 &lt; win ≤ 1×bet；standard：1×bet &lt; win &lt; bigwin。达到某个阈值时进入该档，已达到的前序档位会依次累计播放。</p><div class="threshold-grid">${(["bigwin", "superwin", "megawin"] as const).map((id) => `<label><span>${id}</span><input data-threshold-tier="${id}" type="number" min="2" step="1" value="${project.tiers.get(id)!.thresholdMultiplier}"/><small>× bet</small></label>`).join("")}</div><p class="contract-example">当前倍数边界：1× / ${project.tiers.get("bigwin")!.thresholdMultiplier}× / ${project.tiers.get("superwin")!.thresholdMultiplier}× / ${project.tiers.get("megawin")!.thresholdMultiplier}×；等于阈值时进入对应档。</p><p id="tier-boundaries" class="raw-boundaries">${tierBoundarySummary(project, betRaw)}</p></section><section class="tier-editor"><h2>${active}</h2><p class="layer-order-help">order 数值越小越靠下，只控制当前档位内的图层顺序。</p><label>金额计数时长<input id="tier-duration" type="number" step="0.1" min="0" value="${tier.countDurationSeconds}"/><small>秒</small></label><div class="layer-add"><select id="layer-resource">${layerResources.map((resource) => `<option value="${resource.rootKey}">${resource.rootKey} (${resource.kind})</option>`)}</select><button data-add-layer ${layerResources.length ? "" : "disabled"}>新增 / 切换图层</button>${project.formatVersion === 2 ? '<button id="add-font-text-layer">添加字体文字</button>' : ""}</div>${tier.layers.map((layer) => layerMarkup(layer, project, active)).join("")}</section>`;
+  return `<nav class="tier-tabs" role="tablist" aria-label="获奖档位">${TIERS.map((id) => `<button role="tab" aria-selected="${id === active}" tabindex="${id === active ? 0 : -1}" data-tier="${id}" class="${id === active ? "active" : ""}"><span>${id}</span><small>${project.tiers.get(id)!.layers.length} 层</small></button>`).join("")}</nav><section class="tier-contract"><h2>累计档位合同</h2><p>base：0 &lt; win ≤ 1×bet；standard：1×bet &lt; win &lt; bigwin。达到某个阈值时进入该档，已达到的前序档位会依次累计播放。</p><div class="threshold-grid">${(["bigwin", "superwin", "megawin"] as const).map((id) => `<label><span>${id}</span><input data-threshold-tier="${id}" type="number" min="2" step="1" value="${project.tiers.get(id)!.thresholdMultiplier}"/><small>× bet</small></label>`).join("")}</div><p class="contract-example">当前倍数边界：1× / ${project.tiers.get("bigwin")!.thresholdMultiplier}× / ${project.tiers.get("superwin")!.thresholdMultiplier}× / ${project.tiers.get("megawin")!.thresholdMultiplier}×；等于阈值时进入对应档。</p><p id="tier-boundaries" class="raw-boundaries">${tierBoundarySummary(project, betRaw)}</p></section><section class="tier-editor"><h2>${active}</h2><p class="layer-order-help">order 数值越小越靠下，只控制当前档位内的图层顺序。</p><label>金额计数时长<input id="tier-duration" type="number" step="0.1" min="0" value="${tier.countDurationSeconds}"/><small>秒</small></label><div class="layer-add"><select id="layer-resource">${layerResources.map((resource) => `<option value="${resource.rootKey}">${resource.rootKey} (${resource.kind})</option>`)}</select><button data-add-layer ${layerResources.length ? "" : "disabled"}>新增 / 切换图层</button><button id="add-font-text-layer">添加字体文字</button></div>${tier.layers.map((layer) => layerMarkup(layer, project, active)).join("")}</section>`;
 }
 
 function tierBoundarySummary(project: PopupEditorProject, betRaw: number) {
@@ -1418,11 +1397,7 @@ function projectMarkup(project: PopupEditorProject, errors: readonly string[]) {
     `<label>${field}<input data-project-field="${field}" type="${type}" value="${project.amountFormat[field]}" ${type === "checkbox" && project.amountFormat[field] ? "checked" : ""}/></label>`;
   const preset = detectPopupAmountFormatPreset(project.amountFormat);
   const idError = popupIdValidationError(project.id);
-  const versionActions =
-    project.formatVersion === 1
-      ? '<button id="upgrade-project">升级为 v2</button>'
-      : "";
-  const common = `<div class="project-actions"><button id="export-project">导出 Popup ZIP</button>${versionActions}<button id="close-project">关闭项目</button></div><h2>项目</h2><p>格式 v${project.formatVersion} · ${project.type === "award-celebration" ? "获奖庆祝" : "Spine 弹窗"}</p><label>项目名<input data-project-field="project-name" value="${project.name}"/></label><label class="field-stack">project id<input id="project-id" value="${project.id}" aria-invalid="${String(Boolean(idError))}" aria-describedby="project-id-error" class="${idError ? "invalid" : ""}"/><small id="project-id-error" class="field-error" ${idError ? "" : "hidden"}>${idError}</small></label><label>viewport width<input data-project-field="viewport-width" type="number" value="${project.designViewport.width}"/></label><label>viewport height<input data-project-field="viewport-height" type="number" value="${project.designViewport.height}"/></label>${project.formatVersion === 2 ? `<h3>重点区域</h3><p>以设计画布中心为原点，分别向四边扩展；预览中的绿色框显示适配结果。</p><div class="threshold-grid">${(["left", "right", "top", "bottom"] as const).map((side) => `<label>${side}<input data-project-field="focus-${side}" type="number" min="0.001" step="1" value="${project.adaptation.focus[side]}"/></label>`).join("")}</div><h3>全屏压暗底</h3><label><input data-project-field="backdrop-enabled" type="checkbox" ${project.backdrop.enabled ? "checked" : ""}/>启用</label><label>颜色<input data-project-field="backdrop-color" type="color" value="${project.backdrop.color}"/></label><label>透明度<input data-project-field="backdrop-alpha" type="number" min="0" max="1" step="0.05" value="${project.backdrop.alpha}"/></label>` : "<p>v1 项目保持旧适配和输出；升级后才启用重点区域、通用全屏底与图层透明度合同。</p>"}`;
+  const common = `<div class="project-actions"><button id="export-project">导出 Popup ZIP</button><button id="close-project">关闭项目</button></div><h2>项目</h2><p>格式 v${project.formatVersion} · ${project.type === "award-celebration" ? "获奖庆祝" : "Spine 弹窗"}</p><label>项目名<input data-project-field="project-name" value="${project.name}"/></label><label class="field-stack">project id<input id="project-id" value="${project.id}" aria-invalid="${String(Boolean(idError))}" aria-describedby="project-id-error" class="${idError ? "invalid" : ""}"/><small id="project-id-error" class="field-error" ${idError ? "" : "hidden"}>${idError}</small></label><h3>重点区域</h3><p>以 Popup 原点为基准向四边扩展；坐标平面无边界，预览中的绿色框显示必须完整可见的区域。</p><div class="threshold-grid">${(["left", "right", "top", "bottom"] as const).map((side) => `<label>${side}<input data-project-field="focus-${side}" type="number" min="0.001" step="1" value="${project.adaptation.focus[side]}"/></label>`).join("")}</div><h3>全屏压暗底</h3><label><input data-project-field="backdrop-enabled" type="checkbox" ${project.backdrop.enabled ? "checked" : ""}/>启用</label><label>颜色<input data-project-field="backdrop-color" type="color" value="${project.backdrop.color}"/></label><label>透明度<input data-project-field="backdrop-alpha" type="number" min="0" max="1" step="0.05" value="${project.backdrop.alpha}"/></label>`;
   const commonWithColorEditor = common.replace(
     `<label>颜色<input data-project-field="backdrop-color" type="color" value="${project.backdrop.color}"/></label>`,
     `<label>颜色<span class="color-control"><input type="color" data-project-color-picker="backdrop-color" value="${project.backdrop.color.slice(0, 7)}"/><input data-project-field="backdrop-color" type="text" value="${project.backdrop.color}"/></span></label>`,

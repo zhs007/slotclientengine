@@ -101,7 +101,7 @@ describe("popup editor filename-key project", () => {
     expect(project.spine).toEqual(before);
   });
 
-  it("round-trips a system-font prompt without adding a font to the Popup ZIP", async () => {
+  it("automatically migrates v1 and v2 system-font prompts to canonical v3", async () => {
     const skeleton = JSON.stringify({
       skeleton: { spine: "4.3.23" },
       bones: [{ name: "root" }],
@@ -115,7 +115,6 @@ describe("popup editor filename-key project", () => {
       new File([png(1, 1).buffer], "Spine.png"),
     ]);
     const project = createPopupEditorProject();
-    project.formatVersion = 1;
     project.type = "spine";
     project.id = "free-game";
     await commitImportReview(project, review);
@@ -125,14 +124,27 @@ describe("popup editor filename-key project", () => {
       loopAnimation: "Loop",
       endAnimation: "End",
     };
-    project.spine.prompt.enabled = true;
-
     const exported = await exportPopupZip(project, { prepare: false });
     const entries = extractBoundedZip(exported.bytes, {
       limits: POPUP_ZIP_LIMITS,
     });
     const manifest = JSON.parse(
       new TextDecoder().decode(entries.get("popup.manifest.json")),
+    );
+    manifest.version = 1;
+    manifest.designViewport = { width: 1080, height: 1920 };
+    delete manifest.name;
+    delete manifest.adaptation;
+    delete manifest.backdrop;
+    manifest.spine.prompt = {
+      defaultText: "Press any key to continue",
+      fill: "#ffffff",
+      order: 100,
+      area: { x: 0, y: 500, width: 800, height: 80 },
+    };
+    entries.set(
+      "popup.manifest.json",
+      new TextEncoder().encode(JSON.stringify(manifest)),
     );
     expect(manifest.spine.prompt).not.toHaveProperty("font");
     expect(Object.values(manifest.resources)).not.toContainEqual(
@@ -142,9 +154,17 @@ describe("popup editor filename-key project", () => {
       [...entries.keys()].some((path) => /\.(?:woff2?|ttf|otf)$/u.test(path)),
     ).toBe(false);
 
-    const imported = await importPopupZip(exported.bytes, { prepare: false });
+    const imported = await importPopupZip(createDeterministicZip(entries), {
+      prepare: false,
+    });
+    expect(imported.formatVersion).toBe(3);
     expect(imported.spine.prompt.font).toBeNull();
-    expect(projectToManifest(imported)).toEqual(projectToManifest(project));
+    expect(imported.spine.prompt.enabled).toBe(false);
+    expect(imported.spine.overlays).toContainEqual(
+      expect.objectContaining({ id: "prompt", kind: "text", name: "prompt" }),
+    );
+    expect(projectToManifest(imported)).toMatchObject({ version: 3 });
+    expect(projectToManifest(imported)).not.toHaveProperty("designViewport");
 
     manifest.version = 2;
     manifest.name = "Task 190 Legacy Prompt";
@@ -165,9 +185,11 @@ describe("popup editor filename-key project", () => {
     expect(importedLegacyV2.spine.overlays).toContainEqual(
       expect.objectContaining({ id: "prompt", kind: "text", name: "prompt" }),
     );
-    const canonicalV2 = projectToManifest(importedLegacyV2);
-    if (canonicalV2.type !== "spine") throw new Error("Expected spine popup.");
-    expect(canonicalV2.spine.prompt).toBeUndefined();
+    const canonicalV3 = projectToManifest(importedLegacyV2);
+    expect(canonicalV3.version).toBe(3);
+    expect(canonicalV3).not.toHaveProperty("designViewport");
+    if (canonicalV3.type !== "spine") throw new Error("Expected spine popup.");
+    expect(canonicalV3.spine).not.toHaveProperty("prompt");
   });
 
   it("keeps the five-tier amount contract", () => {

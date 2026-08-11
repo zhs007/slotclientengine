@@ -88,6 +88,57 @@ describe("gamelayout popup dependency", () => {
     unload.mockRestore();
   });
 
+  it("imports and preserves a focus-only v3 Popup package", async () => {
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    const popup = popupFiles();
+    const manifest = JSON.parse(
+      new TextDecoder().decode(popup.get("popup.manifest.json")),
+    );
+    manifest.version = 3;
+    manifest.name = "Fixture Popup V3";
+    manifest.adaptation = {
+      mode: "maximized-focus",
+      focus: { left: 1000, right: 2000, top: 3000, bottom: 4000 },
+    };
+    manifest.backdrop = { enabled: true, color: "#000000", alpha: 0.5 };
+    delete manifest.designViewport;
+    for (const tier of [
+      manifest.awardCelebration.base,
+      manifest.awardCelebration.standard,
+      ...manifest.awardCelebration.celebrationTiers,
+    ])
+      for (const layer of tier.layers) layer.alpha = 1;
+    popup.set(
+      "popup.manifest.json",
+      new TextEncoder().encode(JSON.stringify(manifest)),
+    );
+
+    const imported = await importPopupPackageZip(
+      createDeterministicZip(await mappedPopupFiles(popup)),
+      { decodeImage: async () => ({ width: 1, height: 1 }) },
+    );
+    expect(imported.manifest.version).toBe(3);
+    expect(imported.manifest).not.toHaveProperty("designViewport");
+    if (imported.manifest.version !== 3)
+      throw new Error("Expected v3 Popup package.");
+    expect(imported.manifest.adaptation.focus).toEqual({
+      left: 1000,
+      right: 2000,
+      top: 3000,
+      bottom: 4000,
+    });
+    const rewritten = JSON.parse(
+      new TextDecoder().decode(imported.files.get(imported.rootKey)),
+    );
+    expect(rewritten.version).toBe(3);
+    expect(rewritten).not.toHaveProperty("designViewport");
+    load.mockRestore();
+    unload.mockRestore();
+  });
+
   it("rejects missing sentinel, orphan entries and unknown manifest fields", async () => {
     await expect(
       importPopupPackageZip(

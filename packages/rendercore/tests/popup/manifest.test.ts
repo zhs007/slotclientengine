@@ -121,6 +121,34 @@ describe("popup manifest", () => {
     expect(manifest.spine.overlays?.[0]).not.toHaveProperty("resource");
   });
 
+  it("parses v3 focus without a finite design viewport", () => {
+    const value = v2SpineManifestFixture();
+    value.version = 3;
+    delete value.designViewport;
+    value.adaptation.focus = {
+      left: 3200,
+      right: 6400,
+      top: 4800,
+      bottom: 9600,
+    };
+    const manifest = parsePopupManifest(value);
+    expect(manifest.version).toBe(3);
+    expect(manifest).not.toHaveProperty("designViewport");
+    if (manifest.version !== 3) throw new Error("Expected v3 popup.");
+    expect(manifest.adaptation.focus.right).toBe(6400);
+
+    value.designViewport = { width: 1080, height: 1920 };
+    expect(() => parsePopupManifest(value)).toThrow(/designViewport/);
+    delete value.designViewport;
+    value.spine.prompt = {
+      defaultText: "legacy",
+      fill: "#ffffff",
+      order: 10,
+      area: { x: 0, y: 0, width: 100, height: 20 },
+    };
+    expect(() => parsePopupManifest(value)).toThrow(/not supported.*v3/);
+  });
+
   it.each([
     ["name", (value: any) => delete value.name],
     ["adaptation", (value: any) => delete value.adaptation],
@@ -163,7 +191,7 @@ describe("popup manifest", () => {
   });
 
   it.each([
-    ["unsupported version", (v: any) => (v.version = 3)],
+    ["unsupported version", (v: any) => (v.version = 4)],
     [
       "resource root mismatch",
       (v: any) => (v.resources["bad.png"] = v.resources.effect),

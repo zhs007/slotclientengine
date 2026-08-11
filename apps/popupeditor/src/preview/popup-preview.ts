@@ -98,6 +98,7 @@ export class PopupPreview {
     this.#disposePopupInputBinding = bindPopupInteractionInput({
       canvas: this.#app.canvas,
       keyboardTarget,
+      shouldHandleKeyboardEvent: shouldHandlePopupPreviewKeyboardEvent,
       dispatch: () => this.requestPrimaryPopupInteraction(),
       onError: (error) => {
         this.#status.textContent =
@@ -260,4 +261,17 @@ export class PopupPreview {
   private assertReady() {
     if (!this.#ready) throw new Error("preview 尚未 init。");
   }
+}
+
+export function shouldHandlePopupPreviewKeyboardEvent(event: Event): boolean {
+  for (const target of event.composedPath()) {
+    if (!(target instanceof Element)) continue;
+    if (
+      target.matches(
+        "input, textarea, select, button, [contenteditable]:not([contenteditable='false'])",
+      )
+    )
+      return false;
+  }
+  return true;
 }

@@ -139,6 +139,16 @@ describe("PopupPreview", () => {
     canvas.dispatchEvent(new Event("pointerdown"));
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "A" }));
     expect(player.requestAdvance).toHaveBeenCalledTimes(2);
+    const input = document.createElement("input");
+    document.body.append(input);
+    const editingKey = new KeyboardEvent("keydown", {
+      key: "B",
+      bubbles: true,
+      cancelable: true,
+    });
+    input.dispatchEvent(editingKey);
+    expect(player.requestAdvance).toHaveBeenCalledTimes(2);
+    expect(editingKey.defaultPrevented).toBe(false);
     preview.setViewport(1920, 1080, 0.5, false);
     expect(player.applyViewport).toHaveBeenLastCalledWith({
       width: 1920,

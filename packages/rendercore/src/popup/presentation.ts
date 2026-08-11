@@ -1,5 +1,8 @@
 import { Container, Graphics } from "pixi.js";
-import { calculateMaximizedFocusedArtViewport } from "../viewport/index.js";
+import {
+  calculateMaximizedFocusedArtViewport,
+  calculateUnboundedMaximizedFocusedViewport,
+} from "../viewport/index.js";
 import type {
   PopupHostPlacement,
   PopupManifest,
@@ -29,8 +32,8 @@ export function createPopupPresentation(
 ): PopupPresentation {
   const container = new Container();
   const contentRoot = new Container();
-  const v2 = manifest.version === 2 ? manifest : null;
-  const backdrop = v2 ? new Graphics() : null;
+  const modern = manifest.version === 1 ? null : manifest;
+  const backdrop = modern ? new Graphics() : null;
   let destroyed = false;
   let active = false;
   container.label = `popup ${manifest.id}`;
@@ -53,7 +56,7 @@ export function createPopupPresentation(
       assertUsable();
       const viewport = size(viewportSize, "viewportSize");
       const placement = hostPlacement(rawPlacement);
-      if (!v2) {
+      if (!modern) {
         container.position.set(
           viewport.width / 2 + placement.x,
           viewport.height / 2 + placement.y,
@@ -73,19 +76,24 @@ export function createPopupPresentation(
 
       container.position.set(0, 0);
       container.scale.set(1);
-      const artSize = v2.designViewport;
-      const focus = v2.adaptation.focus;
+      const focus = modern.adaptation.focus;
+      const artSize = modern.version === 2 ? modern.designViewport : null;
       const focusRect = Object.freeze({
-        x: artSize.width / 2 - focus.left,
-        y: artSize.height / 2 - focus.top,
+        x: (artSize ? artSize.width / 2 : 0) - focus.left,
+        y: (artSize ? artSize.height / 2 : 0) - focus.top,
         width: focus.left + focus.right,
         height: focus.top + focus.bottom,
       });
-      const focused = calculateMaximizedFocusedArtViewport({
-        artSize,
-        pageSize: viewport,
-        focusRect,
-      });
+      const focused = artSize
+        ? calculateMaximizedFocusedArtViewport({
+            artSize,
+            pageSize: viewport,
+            focusRect,
+          })
+        : calculateUnboundedMaximizedFocusedViewport({
+            pageSize: viewport,
+            focusRect,
+          });
       const baseScale = Math.min(
         viewport.width / focused.visibleRect.width,
         viewport.height / focused.visibleRect.height,
@@ -98,20 +106,22 @@ export function createPopupPresentation(
       const contentPosition = Object.freeze({
         x: snapViewportValue(
           visibleOrigin.x +
-            (artSize.width / 2 - focused.visibleRect.x) * baseScale +
+            ((artSize ? artSize.width / 2 : 0) - focused.visibleRect.x) *
+              baseScale +
             placement.x,
           viewport.width,
         ),
         y: snapViewportValue(
           visibleOrigin.y +
-            (artSize.height / 2 - focused.visibleRect.y) * baseScale +
+            ((artSize ? artSize.height / 2 : 0) - focused.visibleRect.y) *
+              baseScale +
             placement.y,
           viewport.height,
         ),
       });
       contentRoot.position.set(contentPosition.x, contentPosition.y);
       contentRoot.scale.set(contentScale);
-      redrawBackdrop(backdrop!, v2.backdrop, viewport, active);
+      redrawBackdrop(backdrop!, modern.backdrop, viewport, active);
       return Object.freeze({
         viewportSize: viewport,
         contentScale,
@@ -139,7 +149,7 @@ export function createPopupPresentation(
     setActive(next: boolean) {
       assertUsable();
       active = next;
-      if (backdrop) backdrop.visible = next && v2!.backdrop.enabled;
+      if (backdrop) backdrop.visible = next && modern!.backdrop.enabled;
     },
     destroy() {
       if (destroyed) return;

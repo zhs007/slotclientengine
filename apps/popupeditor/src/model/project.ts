@@ -36,11 +36,10 @@ export interface PopupVniTextLayerTarget {
   readonly textLayerName: string;
 }
 export interface PopupEditorProject {
-  formatVersion: 1 | 2;
+  formatVersion: 3;
   name: string;
   type: "award-celebration" | "spine";
   id: string;
-  designViewport: { width: number; height: number };
   adaptation: {
     focus: { left: number; right: number; top: number; bottom: number };
   };
@@ -121,7 +120,6 @@ export function createPopupEditorProject(
     readonly name?: string;
     readonly id?: string;
     readonly type?: "award-celebration" | "spine";
-    readonly formatVersion?: 1 | 2;
   } = {},
 ): PopupEditorProject {
   const empty = (): PopupEditorTier => ({
@@ -129,11 +127,10 @@ export function createPopupEditorProject(
     layers: [],
   });
   return {
-    formatVersion: options.formatVersion ?? 2,
+    formatVersion: 3,
     name: options.name ?? "Untitled Popup",
     type: options.type ?? "award-celebration",
     id: options.id ?? "untitled-popup",
-    designViewport: { width: 1080, height: 1920 },
     adaptation: {
       focus: { left: 540, right: 540, top: 960, bottom: 960 },
     },
@@ -183,7 +180,6 @@ export function clonePopupEditorProject(
 ): PopupEditorProject {
   return {
     ...project,
-    designViewport: { ...project.designViewport },
     adaptation: structuredClone(project.adaptation),
     backdrop: { ...project.backdrop },
     amountFormat: { ...project.amountFormat },
@@ -215,33 +211,24 @@ export function clonePopupEditorProject(
 
 export function projectToManifest(project: PopupEditorProject): PopupManifest {
   const common = {
-    version: project.formatVersion,
+    version: 3 as const,
     kind: "popup" as const,
     id: project.id,
-    ...(project.formatVersion === 2
-      ? {
-          name: project.name,
-          adaptation: {
-            mode: "maximized-focus" as const,
-            focus: { ...project.adaptation.focus },
-          },
-          backdrop: { ...project.backdrop },
-        }
-      : {}),
-    designViewport: project.designViewport,
+    name: project.name,
+    adaptation: {
+      mode: "maximized-focus" as const,
+      focus: { ...project.adaptation.focus },
+    },
+    backdrop: { ...project.backdrop },
   };
   const canonicalLayer = <T extends PopupLayer>(layer: T): T =>
-    (project.formatVersion === 2 && layer.alpha === undefined
-      ? { ...layer, alpha: 1 }
-      : layer) as T;
+    (layer.alpha === undefined ? { ...layer, alpha: 1 } : layer) as T;
   const canonicalOverlay = <T extends PopupOverlayLayer>(layer: T): T =>
-    (project.formatVersion === 2 && layer.alpha === undefined
-      ? { ...layer, alpha: 1 }
-      : layer) as T;
+    (layer.alpha === undefined ? { ...layer, alpha: 1 } : layer) as T;
   if (project.type === "spine") {
-    if (project.formatVersion === 2 && project.spine.prompt.enabled)
+    if (project.spine.prompt.enabled)
       throw new Error(
-        "v2 项目不能导出 legacy prompt；请先迁移为命名的字体文字 overlay。",
+        "v3 项目不能导出 legacy prompt；请先迁移为命名的字体文字 overlay。",
       );
     const resourceKey = project.spine.resource;
     if (!resourceKey)
@@ -255,11 +242,6 @@ export function projectToManifest(project: PopupEditorProject): PopupManifest {
       resources: Object.fromEntries(
         [
           resourceKey,
-          ...(project.formatVersion === 1 &&
-          project.spine.prompt.enabled &&
-          project.spine.prompt.font
-            ? [project.spine.prompt.font]
-            : []),
           ...project.spine.overlays.flatMap(({ resource }) =>
             resource ? [resource] : [],
           ),
@@ -277,19 +259,6 @@ export function projectToManifest(project: PopupEditorProject): PopupManifest {
           mode: "segmented-animations",
           ...project.spine.playback,
         },
-        ...(project.formatVersion === 1 && project.spine.prompt.enabled
-          ? {
-              prompt: {
-                ...(project.spine.prompt.font
-                  ? { font: project.spine.prompt.font }
-                  : {}),
-                defaultText: project.spine.prompt.defaultText,
-                fill: project.spine.prompt.fill,
-                order: project.spine.prompt.order,
-                area: project.spine.prompt.area,
-              },
-            }
-          : {}),
         ...(project.spine.overlays.length
           ? { overlays: project.spine.overlays.map(canonicalOverlay) }
           : {}),
@@ -399,31 +368,27 @@ export function popupEditorProjectDiagnostics(
     return Object.freeze([
       `项目尚未完成：${incompleteTiers.join("、")} 档位尚未添加图层。资源导入已独立保存；请在“档位”页显式绑定资源。`,
     ]);
-  if (project.formatVersion === 2) {
-    const amountResources = new Set(
-      [...project.tiers.values()]
-        .flatMap(({ layers }) => layers)
-        .filter(
-          (layer): layer is Extract<PopupLayer, { kind: "image-string" }> =>
-            layer.kind === "image-string" && layer.binding === "win-amount",
-        )
-        .map(({ resource }) => resource),
-    );
-    if (amountResources.size !== 1)
-      return Object.freeze([
-        "获奖庆祝模板必须让五档共享同一个 win-amount ImgNumber 资源。",
-      ]);
-    const missingVni = (["bigwin", "superwin", "megawin"] as const).filter(
-      (tierId) =>
-        !project.tiers
-          .get(tierId)
-          ?.layers.some((layer) => layer.kind === "vni"),
-    );
-    if (missingVni.length)
-      return Object.freeze([
-        `获奖庆祝模板缺少必需 VNI：${missingVni.join("、")}。`,
-      ]);
-  }
+  const amountResources = new Set(
+    [...project.tiers.values()]
+      .flatMap(({ layers }) => layers)
+      .filter(
+        (layer): layer is Extract<PopupLayer, { kind: "image-string" }> =>
+          layer.kind === "image-string" && layer.binding === "win-amount",
+      )
+      .map(({ resource }) => resource),
+  );
+  if (amountResources.size !== 1)
+    return Object.freeze([
+      "获奖庆祝模板必须让五档共享同一个 win-amount ImgNumber 资源。",
+    ]);
+  const missingVni = (["bigwin", "superwin", "megawin"] as const).filter(
+    (tierId) =>
+      !project.tiers.get(tierId)?.layers.some((layer) => layer.kind === "vni"),
+  );
+  if (missingVni.length)
+    return Object.freeze([
+      `获奖庆祝模板缺少必需 VNI：${missingVni.join("、")}。`,
+    ]);
   try {
     projectToManifest(project);
     for (const [tierId, tier] of project.tiers) {
@@ -504,7 +469,7 @@ export function addLayer(
     order,
     resource: resourceKey,
     transform: { x: 0, y: 0, scale: 1, rotation: 0 },
-    ...(project.formatVersion === 2 ? { alpha: 1 } : {}),
+    alpha: 1,
   };
   let layer: PopupLayer;
   if (resource.kind === "image-string" && !existingAmount)

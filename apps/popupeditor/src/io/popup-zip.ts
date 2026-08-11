@@ -93,13 +93,11 @@ export async function importPopupZip(
   }
   const map = decodeEditorAssetsMap(files.get(EDITOR_ASSETS_MAP_PATH)!);
   const project = createPopupEditorProject();
-  project.formatVersion = manifest.version;
-  project.name = manifest.version === 2 ? manifest.name : manifest.id;
+  project.name = manifest.version === 1 ? manifest.id : manifest.name;
   project.type = manifest.type;
   project.id = manifest.id;
-  project.designViewport = { ...manifest.designViewport };
   project.adaptation =
-    manifest.version === 2
+    manifest.version !== 1
       ? { focus: { ...manifest.adaptation.focus } }
       : {
           focus: {
@@ -110,7 +108,7 @@ export async function importPopupZip(
           },
         };
   project.backdrop =
-    manifest.version === 2
+    manifest.version !== 1
       ? { ...manifest.backdrop }
       : { enabled: false, color: "#000000", alpha: 0.5 };
   project.resources.clear();
@@ -134,6 +132,8 @@ export async function importPopupZip(
       keys: resourceClosure(spec, project.assets),
     });
   if (manifest.type === "spine") {
+    const prompt =
+      "prompt" in manifest.spine ? manifest.spine.prompt : undefined;
     project.spine = {
       resource: manifest.spine.resource,
       transform: { ...manifest.spine.transform },
@@ -142,14 +142,14 @@ export async function importPopupZip(
         loopAnimation: manifest.spine.playback.loopAnimation,
         endAnimation: manifest.spine.playback.endAnimation,
       },
-      prompt: manifest.spine.prompt
+      prompt: prompt
         ? {
             enabled: true,
-            font: manifest.spine.prompt.font ?? null,
-            defaultText: manifest.spine.prompt.defaultText,
-            fill: manifest.spine.prompt.fill,
-            order: manifest.spine.prompt.order,
-            area: { ...manifest.spine.prompt.area },
+            font: prompt.font ?? null,
+            defaultText: prompt.defaultText,
+            fill: prompt.fill,
+            order: prompt.order,
+            area: { ...prompt.area },
           }
         : {
             enabled: false,
@@ -161,7 +161,7 @@ export async function importPopupZip(
           },
       overlays: structuredClone([...(manifest.spine.overlays ?? [])]),
     };
-    if (project.formatVersion === 2) migratePopupPromptToTextLayer(project);
+    normalizeImportedProject(project);
     const closure = popupManifestAssetClosure(manifest, project.assets);
     if (closure.length !== project.assets.size)
       throw new Error("popup assets map 包含未引用 entry。");
@@ -183,10 +183,19 @@ export async function importPopupZip(
       layers: structuredClone([...tier.layers]),
       thresholdMultiplier: tier.thresholdMultiplier,
     });
+  normalizeImportedProject(project);
   const closure = popupManifestAssetClosure(manifest, project.assets);
   if (closure.length !== project.assets.size)
     throw new Error("popup assets map 包含未引用 entry。");
   return clonePopupEditorProject(project);
+}
+
+function normalizeImportedProject(project: PopupEditorProject): void {
+  migratePopupPromptToTextLayer(project);
+  for (const tier of project.tiers.values())
+    for (const layer of tier.layers) (layer as { alpha?: number }).alpha ??= 1;
+  for (const overlay of project.spine.overlays)
+    (overlay as { alpha?: number }).alpha ??= 1;
 }
 
 function popupManifestAssetClosure(

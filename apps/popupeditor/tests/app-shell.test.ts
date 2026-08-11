@@ -186,18 +186,31 @@ describe("PopupEditorApp", () => {
     app.destroy();
   });
 
-  it("creates a fixed-type v2 project and edits presentation configuration", async () => {
+  it("creates a fixed-type v3 project and edits focus-only presentation configuration", async () => {
     const { PopupEditorApp } = await import("../src/ui/app-shell.js");
     const root = document.querySelector<HTMLElement>("#app")!;
     const app = new PopupEditorApp(root);
     await app.init();
     expect(root.querySelector("#import-project")).not.toBeNull();
+    expect(root.querySelector("#create-project")!.classList).toContain(
+      "project-entry-action",
+    );
+    expect(root.querySelector(".file-action")!.classList).toContain(
+      "project-entry-action",
+    );
     expect(root.querySelector("nav")!.hasAttribute("hidden")).toBe(true);
     createProject(root, "spine");
     expect(root.querySelector("nav")!.hasAttribute("hidden")).toBe(false);
 
     root.querySelector<HTMLButtonElement>('[data-tab="project"]')!.click();
-    expect(root.textContent).toContain("格式 v2 · Spine 弹窗");
+    expect(root.textContent).toContain("格式 v3 · Spine 弹窗");
+    expect(
+      root.querySelector('[data-project-field="viewport-width"]'),
+    ).toBeNull();
+    expect(
+      root.querySelector('[data-project-field="viewport-height"]'),
+    ).toBeNull();
+    expect(root.querySelector("#upgrade-project")).toBeNull();
     const change = (field: string, value: string) => {
       const input = root.querySelector<HTMLInputElement>(
         `[data-project-field="${field}"]`,

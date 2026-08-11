@@ -322,7 +322,45 @@ export type PopupManifestV2 =
   | AwardCelebrationPopupManifestV2
   | SpinePopupManifestV2;
 
-export type PopupManifest = PopupManifestV1 | PopupManifestV2;
+export interface PopupAdaptationV3 {
+  readonly mode: "maximized-focus";
+  readonly focus: PopupFocusExtent;
+}
+
+export interface PopupBackdropV3 {
+  readonly enabled: boolean;
+  readonly color: string;
+  readonly alpha: number;
+}
+
+export interface PopupManifestBaseV3 {
+  readonly version: 3;
+  readonly kind: "popup";
+  readonly id: string;
+  readonly name: string;
+  readonly adaptation: PopupAdaptationV3;
+  readonly backdrop: PopupBackdropV3;
+  readonly resources: Readonly<Record<string, PopupResourceSpec>>;
+}
+
+export interface AwardCelebrationPopupManifestV3 extends PopupManifestBaseV3 {
+  readonly type: "award-celebration";
+  readonly amountFormat: PopupAmountFormat;
+  readonly awardCelebration: AwardCelebrationSpec;
+}
+
+export interface SpinePopupManifestV3 extends PopupManifestBaseV3 {
+  readonly type: "spine";
+  readonly spine: Omit<SpinePopupManifestV1["spine"], "prompt"> & {
+    readonly prompt?: never;
+  };
+}
+
+export type PopupManifestV3 =
+  | AwardCelebrationPopupManifestV3
+  | SpinePopupManifestV3;
+
+export type PopupManifest = PopupManifestV1 | PopupManifestV2 | PopupManifestV3;
 
 export interface PopupHostPlacement {
   readonly x: number;

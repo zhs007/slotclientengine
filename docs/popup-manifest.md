@@ -1,8 +1,8 @@
-# Popup package v1 / v2
+# Popup package v1 / v2 / v3
 
 `popup.manifest.json` 是获奖庆祝与普通 Spine 弹窗的唯一 production 合同。独立 `<id>-popup.zip` 最终由 Game Layout Editor 原样 vendor 到 Scene Layout package。
 
-v1 合同继续原样解析、渲染和导出。新建项目默认使用 v2；旧项目只有在 Popup Editor 中显式升级后才改变版本。
+rendercore 继续原样解析与渲染 v1/v2。Popup Editor 新建项目固定使用 v3；导入合法 v1/v2 ZIP 时先按 source version 完成 strict schema、map/hash/closure 与 resource prepare，再原子迁移为 v3。迁移失败不打开半迁移项目，后续 preview/export 只生成 v3。
 
 ## v2 presentation 扩展
 
@@ -26,9 +26,32 @@ v2 的每个 award layer 与 Spine overlay 都必须声明 `alpha`（`0..1`）�
 
 Popup Editor 的 v2 模板完成条件是：获奖庆祝五档共享一个 `win-amount` ImgNumber，且 `bigwin/superwin/megawin` 各至少绑定一个 VNI；Spine 弹窗必须绑定一个 official Spine resource，并明确选择互不相同的 start/loop/end 三段动画。两种模板都可继续添加图片、Spine、VNI、字体文字或 ImgNumber 图层。独立 `spine.prompt` 只属于 legacy 兼容；新 v2 authoring 不生成它，旧 prompt 在显式升级/导入时迁移为命名 text overlay。
 
+## v3 无界重点区域
+
+v3 保留 v2 的 `name/adaptation/backdrop`、layer `alpha`、命名文字及类型专属内容，但删除 `designViewport`：
+
+```json
+{
+  "version": 3,
+  "kind": "popup",
+  "id": "big-win",
+  "name": "Big Win",
+  "type": "award-celebration",
+  "adaptation": {
+    "mode": "maximized-focus",
+    "focus": { "left": 540, "right": 540, "top": 960, "bottom": 960 }
+  },
+  "backdrop": { "enabled": true, "color": "#000000", "alpha": 0.5 }
+}
+```
+
+骨架省略了 required resources 与 award 内容，只说明公共字段。focus 四边都是相对 Popup 原点 `(0,0)` 的正有限 extent；authored plane 没有有限边界，也不写 `Infinity` 或超大占位 viewport。runtime 先 contain 完整 focus，再按宿主 page aspect 反推 visible rect，并以 focus 几何中心向外扩展；focus 外 layer 可以进入额外可见范围，不执行 art-bound clamp。host placement 最后叠加，backdrop 仍独立覆盖整个宿主 viewport。v3 出现 `designViewport` 或 `spine.prompt` 都是 unknown/unsupported contract error。
+
+v1 自动迁移使用旧 `designViewport` 的半宽/半高生成对称 focus；v2 原样保留 focus。两版 layer 坐标仍以 Popup 中心为原点，因此迁移不移动 transform。旧 prompt 结构化转换为 `name=prompt` 的 text overlay，name/order 冲突时整次导入失败；v1 缺失的 layer alpha 规范化为 `1`。
+
 ## 坐标、档位与输入
 
-- popup 中心为 `(0, 0)`，向右/向下为正；`designViewport` 与 focus 共同建立上述 centered-contain production transform。
+- popup 中心为 `(0, 0)`，向右/向下为正；v1/v2 使用 `designViewport`，v3 只由 focus 建立无界 maximized-focus production transform。
 - layout 为每个 active variant 保存相对 viewport center 的 `x/y/scale`。
 - 游戏只提交 safe integer `betAmountRaw` 和 `winAmountRaw`；preview 的 bet、win、zoom、guides 不进入 manifest。
 - 档位固定为 `base -> standard -> bigwin -> superwin -> megawin`。`base` 截止 `1×bet`，`standard` 截止 bigwin threshold，后三档 threshold multiplier 显式且严格递增。边界相等时进入对应档，runtime 用 BigInt 比较。

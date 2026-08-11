@@ -63,6 +63,25 @@ describe("Popup interaction input binding", () => {
     expect(downstream).toHaveBeenCalledTimes(2);
   });
 
+  it("passes keyboard input rejected by the host eligibility policy", () => {
+    const canvas = new EventTarget();
+    const keyboard = new EventTarget();
+    const dispatch = vi.fn(() => handledPopupInteraction());
+    const eligibility = vi.fn(() => false);
+    bindPopupInteractionInput({
+      canvas,
+      keyboardTarget: keyboard,
+      shouldHandleKeyboardEvent: eligibility,
+      dispatch,
+      onError: vi.fn(),
+    });
+    const key = new Event("keydown", { cancelable: true });
+    keyboard.dispatchEvent(key);
+    expect(eligibility).toHaveBeenCalledOnce();
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(key.defaultPrevented).toBe(false);
+  });
+
   it("reports synchronous and asynchronous interaction failures", async () => {
     const canvas = new EventTarget();
     const keyboard = new EventTarget();

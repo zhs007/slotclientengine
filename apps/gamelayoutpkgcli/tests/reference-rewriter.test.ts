@@ -448,6 +448,54 @@ describe("typed asset reference rewriting", () => {
     });
   });
 
+  it("preserves focus-only v3 fields while rewriting Popup resources", () => {
+    const popup = rewritePopupManifest(
+      {
+        version: 3,
+        kind: "popup",
+        id: "free-game-v3",
+        name: "Free Game V3",
+        type: "spine",
+        adaptation: {
+          mode: "maximized-focus",
+          focus: { left: 1000, right: 2000, top: 3000, bottom: 4000 },
+        },
+        backdrop: { enabled: true, color: "#000000", alpha: 0.5 },
+        resources: {
+          "effect.json": {
+            kind: "spine",
+            skeleton: "effect.json",
+            atlas: "effect.atlas",
+            textures: { "effect.png": "effect.png" },
+          },
+        },
+        spine: {
+          resource: "effect.json",
+          transform: { x: 0, y: 0, scale: 1 },
+          playback: {
+            mode: "segmented-animations",
+            startAnimation: "Start",
+            loopAnimation: "Loop",
+            endAnimation: "End",
+          },
+        },
+      },
+      new Map([
+        ["effect.json", "effect.hash.json"],
+        ["effect.atlas", "effect.hash.atlas"],
+        ["effect.png", "effect.hash.png"],
+      ]),
+    );
+    expect(popup).toMatchObject({
+      version: 3,
+      adaptation: {
+        focus: { left: 1000, right: 2000, top: 3000, bottom: 4000 },
+      },
+      spine: { resource: "effect.hash.json" },
+    });
+    expect(popup).not.toHaveProperty("designViewport");
+  });
+
   it("rewrites VNI asset.path while preserving authored identity", () => {
     const project = rewriteVniProject(vniProject(), mapping);
     expect(project.assets[0]).toMatchObject({

@@ -3,6 +3,7 @@ import { assertEditorAssetKey } from "@slotclientengine/editorresource";
 import type {
   AwardCelebrationPopupManifestV1,
   AwardCelebrationPopupManifestV2,
+  AwardCelebrationPopupManifestV3,
   AwardCelebrationSpec,
   AwardCelebrationTier,
   AwardTierPresentation,
@@ -11,6 +12,7 @@ import type {
   PopupLayer,
   PopupManifestV1,
   PopupManifestV2,
+  PopupManifestV3,
   PopupOverlayLayer,
   PopupPromptSpec,
   PopupResourceSpec,
@@ -19,6 +21,7 @@ import type {
   PopupTextStyle,
   SpinePopupManifestV1,
   SpinePopupManifestV2,
+  SpinePopupManifestV3,
 } from "./types.js";
 
 const IDS = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
@@ -31,24 +34,28 @@ interface ParsePopupManifest {
   (value: SpinePopupManifestV1): SpinePopupManifestV1;
   (value: AwardCelebrationPopupManifestV2): AwardCelebrationPopupManifestV2;
   (value: SpinePopupManifestV2): SpinePopupManifestV2;
+  (value: AwardCelebrationPopupManifestV3): AwardCelebrationPopupManifestV3;
+  (value: SpinePopupManifestV3): SpinePopupManifestV3;
   (value: PopupManifestV1): PopupManifestV1;
   (value: PopupManifestV2): PopupManifestV2;
+  (value: PopupManifestV3): PopupManifestV3;
   (value: unknown): PopupManifest;
 }
 
 export const parsePopupManifest = ((value: unknown): PopupManifest => {
   const record = object(value, "popup manifest");
-  if (record.version !== 1 && record.version !== 2)
-    fail("popup manifest.version must be 1 or 2.");
+  if (record.version !== 1 && record.version !== 2 && record.version !== 3)
+    fail("popup manifest.version must be 1, 2, or 3.");
   const version = record.version;
+  const modern = version !== 1;
   const commonKeys = [
     "version",
     "kind",
     "id",
     "type",
-    "designViewport",
+    ...(version !== 3 ? ["designViewport"] : []),
     "resources",
-    ...(version === 2 ? ["name", "adaptation", "backdrop"] : []),
+    ...(modern ? ["name", "adaptation", "backdrop"] : []),
   ];
   keys(
     record,
@@ -61,8 +68,9 @@ export const parsePopupManifest = ((value: unknown): PopupManifest => {
   if (record.type !== "award-celebration" && record.type !== "spine")
     fail('popup manifest.type must be "award-celebration" or "spine".');
   const id = validatePopupId(record.id);
-  const viewport = object(record.designViewport, "designViewport");
-  keys(viewport, ["width", "height"], "designViewport");
+  const viewport =
+    version !== 3 ? object(record.designViewport, "designViewport") : undefined;
+  if (viewport) keys(viewport, ["width", "height"], "designViewport");
   const resourcesRecord = object(record.resources, "resources");
   const resources: Record<string, PopupResourceSpec> = {};
   for (const [resourceId, spec] of Object.entries(resourcesRecord)) {
@@ -78,20 +86,29 @@ export const parsePopupManifest = ((value: unknown): PopupManifest => {
     version,
     kind: "popup" as const,
     id,
-    ...(version === 2
+    ...(modern
       ? {
           name: nonEmptySingleLine(record.name, "name"),
-          adaptation: parseAdaptation(record.adaptation, {
-            width: positive(viewport.width, "designViewport.width"),
-            height: positive(viewport.height, "designViewport.height"),
-          }),
+          adaptation: parseAdaptation(
+            record.adaptation,
+            viewport
+              ? {
+                  width: positive(viewport.width, "designViewport.width"),
+                  height: positive(viewport.height, "designViewport.height"),
+                }
+              : undefined,
+          ),
           backdrop: parseBackdrop(record.backdrop),
         }
       : {}),
-    designViewport: {
-      width: positive(viewport.width, "designViewport.width"),
-      height: positive(viewport.height, "designViewport.height"),
-    },
+    ...(viewport
+      ? {
+          designViewport: {
+            width: positive(viewport.width, "designViewport.width"),
+            height: positive(viewport.height, "designViewport.height"),
+          },
+        }
+      : {}),
     resources,
   };
   if (record.type === "spine") {
@@ -132,7 +149,7 @@ export const parsePopupManifest = ((value: unknown): PopupManifest => {
 function parseSpinePopup(
   value: unknown,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2,
+  version: 1 | 2 | 3,
 ) {
   const record = object(value, "spine");
   keys(
@@ -165,6 +182,8 @@ function parseSpinePopup(
     nonEmpty(playback.endAnimation, "spine.playback.endAnimation"),
   ];
   unique(animations, "spine playback animations");
+  if (version === 3 && Object.hasOwn(record, "prompt"))
+    fail("spine.prompt is not supported in popup manifest v3.");
   const prompt = Object.hasOwn(record, "prompt")
     ? parsePrompt(record.prompt, resources)
     : undefined;
@@ -245,7 +264,7 @@ function parsePrompt(
 function parseOverlays(
   value: unknown,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2,
+  version: 1 | 2 | 3,
 ): readonly PopupOverlayLayer[] {
   if (!Array.isArray(value)) fail("spine.overlays must be an array.");
   const overlays = value.map((raw, index) => {
@@ -304,7 +323,7 @@ export function collectPopupDirectPaths(
   return Object.freeze([...result].sort());
 }
 
-function parseAdaptation(value: unknown, designViewport: PopupSize) {
+function parseAdaptation(value: unknown, designViewport?: PopupSize) {
   const record = object(value, "adaptation");
   keys(record, ["mode", "focus"], "adaptation");
   if (record.mode !== "maximized-focus")
@@ -318,10 +337,11 @@ function parseAdaptation(value: unknown, designViewport: PopupSize) {
     bottom: positive(focus.bottom, "adaptation.focus.bottom"),
   };
   if (
-    result.left > designViewport.width / 2 ||
-    result.right > designViewport.width / 2 ||
-    result.top > designViewport.height / 2 ||
-    result.bottom > designViewport.height / 2
+    designViewport &&
+    (result.left > designViewport.width / 2 ||
+      result.right > designViewport.width / 2 ||
+      result.top > designViewport.height / 2 ||
+      result.bottom > designViewport.height / 2)
   )
     fail("adaptation.focus must fit inside designViewport around its center.");
   return freeze({ mode: "maximized-focus" as const, focus: result });
@@ -449,7 +469,7 @@ function parseResource(value: unknown, label: string): PopupResourceSpec {
 function parseAwardCelebration(
   value: unknown,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2,
+  version: 1 | 2 | 3,
 ): AwardCelebrationSpec {
   const record = object(value, "awardCelebration");
   keys(record, ["base", "standard", "celebrationTiers"], "awardCelebration");
@@ -507,7 +527,7 @@ function parseTier(
   value: unknown,
   label: string,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2,
+  version: 1 | 2 | 3,
 ): AwardTierPresentation {
   const record = object(value, label);
   const allowed = [
@@ -564,7 +584,7 @@ function parseLayer(
   value: unknown,
   label: string,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2,
+  version: 1 | 2 | 3,
 ): PopupLayer {
   const record = object(value, label);
   const kind = record.kind;
@@ -575,7 +595,7 @@ function parseLayer(
     "order",
     ...(hasResource ? ["resource"] : []),
     "transform",
-    ...(version === 2 ? ["alpha"] : []),
+    ...(version !== 1 ? ["alpha"] : []),
   ];
   if (!hasResource && (version === 1 || kind !== "text"))
     fail(`${label}.resource is required.`);
@@ -601,7 +621,7 @@ function parseLayer(
     id: identifier(record.id, `${label}.id`),
     order: nonNegativeSafe(record.order, `${label}.order`),
     ...(resourceId ? { resource: resourceId } : {}),
-    ...(version === 2 ? { alpha: unit(record.alpha, `${label}.alpha`) } : {}),
+    ...(version !== 1 ? { alpha: unit(record.alpha, `${label}.alpha`) } : {}),
     transform: {
       x: finite(transform.x, `${label}.transform.x`),
       y: finite(transform.y, `${label}.transform.y`),

@@ -4,6 +4,35 @@ import { createPopupPresentation } from "../../src/popup/presentation.js";
 import type { PopupManifest, PopupManifestV1 } from "../../src/popup/types.js";
 
 describe("popup presentation host contract", () => {
+  it("adapts v3 content from focus alone on an unbounded authored plane", () => {
+    const presentation = createPopupPresentation({
+      version: 3,
+      kind: "popup",
+      type: "spine",
+      id: "unbounded-popup",
+      name: "Unbounded Popup",
+      adaptation: {
+        mode: "maximized-focus",
+        focus: { left: 100, right: 300, top: 200, bottom: 200 },
+      },
+      backdrop: { enabled: true, color: "#000000", alpha: 0.5 },
+      resources: {},
+      spine: {} as never,
+    });
+    expect(
+      presentation.applyViewport(
+        { width: 1600, height: 900 },
+        { x: 10, y: 20, scale: 0.5 },
+      ),
+    ).toEqual({
+      viewportSize: { width: 1600, height: 900 },
+      contentScale: 1.125,
+      contentPosition: { x: 585, y: 470 },
+      focusRectInViewport: { x: 350, y: 0, width: 900, height: 900 },
+    });
+    presentation.destroy();
+  });
+
   it("contains and centers a portrait design in landscape and square viewports", () => {
     const presentation = createPopupPresentation({
       version: 2,

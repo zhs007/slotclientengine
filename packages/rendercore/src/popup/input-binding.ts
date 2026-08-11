@@ -8,6 +8,7 @@ export type PopupInteractionDispatchResult =
 export interface PopupInteractionInputBindingOptions {
   readonly canvas: EventTarget;
   readonly keyboardTarget: EventTarget;
+  readonly shouldHandleKeyboardEvent?: (event: Event) => boolean;
   readonly dispatch: () => PopupInteractionDispatchResult;
   readonly onError: (error: unknown) => void;
 }
@@ -43,6 +44,12 @@ export function bindPopupInteractionInput(
   };
   const handle = (event: Event) => {
     if (event.type === "keydown" && "repeat" in event && event.repeat === true)
+      return;
+    if (
+      event.type === "keydown" &&
+      options.shouldHandleKeyboardEvent &&
+      !options.shouldHandleKeyboardEvent(event)
+    )
       return;
     let result: PopupInteractionDispatchResult;
     try {

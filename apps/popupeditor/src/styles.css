@@ -148,6 +148,19 @@ aside {
 .project-actions {
   align-items: center;
 }
+.project-landing-actions {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+.project-entry-action {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.2;
+}
 .project-actions {
   padding-bottom: 14px;
   border-bottom: 1px solid #27314c;
@@ -177,9 +190,23 @@ aside {
   min-height: 0;
 }
 .popup-preview-gradient {
-  background:
-    radial-gradient(circle at 72% 24%, rgb(255 193 94 / 55%), transparent 32%),
-    linear-gradient(135deg, #173e72 0%, #814478 48%, #17243f 100%);
+  animation: popup-preview-color-cycle 12s linear infinite;
+  background: #ff0000;
+}
+@keyframes popup-preview-color-cycle {
+  0%,
+  100% {
+    background-color: #ff0000;
+  }
+  25% {
+    background-color: #0000ff;
+  }
+  50% {
+    background-color: #ffff00;
+  }
+  75% {
+    background-color: #00a000;
+  }
 }
 #preview-canvas canvas {
   display: block;
