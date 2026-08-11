@@ -27,6 +27,7 @@ import {
 } from "../image-string/index.js";
 import { validateOfficialSpineResource } from "../spine/runtime-player.js";
 import { collectPopupDirectPaths, parsePopupManifest } from "./manifest.js";
+import { resolvePopupLayerAttachment } from "./layer-attachment.js";
 import { requiredPopupAmountCharacters } from "./amount-format.js";
 import {
   acquirePopupFont,
@@ -36,6 +37,7 @@ import {
 import type {
   PopupManifest,
   PopupLayer,
+  PopupOverlayLayer,
   PopupPackageResource,
   PopupPreparedResource,
   PopupResourceSpec,
@@ -619,6 +621,10 @@ function validateAnimationBindings(
         manifest.spine.playback.loopAnimation,
         manifest.spine.playback.endAnimation,
       ],
+      requiredSlots: requiredPopupSpineSlots(
+        manifest.spine.overlays ?? [],
+        "main-spine",
+      ),
     });
     for (const overlay of manifest.spine.overlays ?? []) {
       const overlayResource = overlay.resource
@@ -644,6 +650,10 @@ function validateAnimationBindings(
             overlay.playback.loopAnimation,
             overlay.playback.endAnimation,
           ],
+          requiredSlots: requiredPopupSpineSlots(
+            manifest.spine.overlays ?? [],
+            overlay.id,
+          ),
         });
       } else if (overlay.kind === "vni") {
         if (overlayResource?.kind !== "vni")
@@ -670,7 +680,7 @@ function validateAnimationBindings(
       ): layer is Extract<PopupLayer, { readonly kind: "image-string" }> =>
         layer.kind === "image-string" && layer.binding === "win-amount",
     )!;
-    const amountParent = amount.parent;
+    const amountParent = resolvePopupLayerAttachment(amount);
     if (amountParent.kind === "vni-text-layer") {
       const target = tier.layers.find(
         ({ id }) => id === amountParent.vniLayerId,
@@ -721,10 +731,28 @@ function validateAnimationBindings(
             layer.playback.loopAnimation,
             layer.playback.endAnimation,
           ],
+          requiredSlots: requiredPopupSpineSlots(tier.layers, layer.id),
         });
       }
     }
   }
+}
+
+function requiredPopupSpineSlots(
+  layers: readonly (PopupLayer | PopupOverlayLayer)[],
+  target: string,
+): readonly string[] {
+  const slots = new Set<string>();
+  for (const layer of layers) {
+    const attachment = resolvePopupLayerAttachment(layer);
+    if (attachment.kind !== "spine-slot") continue;
+    const targetId =
+      attachment.target.kind === "main-spine"
+        ? "main-spine"
+        : attachment.target.layerId;
+    if (targetId === target) slots.add(attachment.slot);
+  }
+  return Object.freeze([...slots]);
 }
 
 function awardAmountResourceIds(

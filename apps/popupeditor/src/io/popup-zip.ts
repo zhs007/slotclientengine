@@ -22,6 +22,7 @@ import {
   collectPopupPackagePaths,
   createPopupPackageResource,
   parsePopupManifest,
+  resolvePopupLayerAttachment,
   resolvePopupPackageFiles,
 } from "@slotclientengine/rendercore/popup";
 import type {
@@ -193,9 +194,17 @@ export async function importPopupZip(
 function normalizeImportedProject(project: PopupEditorProject): void {
   migratePopupPromptToTextLayer(project);
   for (const tier of project.tiers.values())
-    for (const layer of tier.layers) (layer as { alpha?: number }).alpha ??= 1;
-  for (const overlay of project.spine.overlays)
+    for (const layer of tier.layers) {
+      (layer as { alpha?: number }).alpha ??= 1;
+      (layer as { attachment?: unknown }).attachment =
+        resolvePopupLayerAttachment(layer);
+      delete (layer as { parent?: unknown }).parent;
+    }
+  for (const overlay of project.spine.overlays) {
     (overlay as { alpha?: number }).alpha ??= 1;
+    (overlay as { attachment?: unknown }).attachment =
+      resolvePopupLayerAttachment(overlay);
+  }
 }
 
 function popupManifestAssetClosure(

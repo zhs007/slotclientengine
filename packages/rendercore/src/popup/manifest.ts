@@ -4,6 +4,7 @@ import type {
   AwardCelebrationPopupManifestV1,
   AwardCelebrationPopupManifestV2,
   AwardCelebrationPopupManifestV3,
+  AwardCelebrationPopupManifestV4,
   AwardCelebrationSpec,
   AwardCelebrationTier,
   AwardTierPresentation,
@@ -13,7 +14,9 @@ import type {
   PopupManifestV1,
   PopupManifestV2,
   PopupManifestV3,
+  PopupManifestV4,
   PopupOverlayLayer,
+  PopupLayerAttachment,
   PopupPromptSpec,
   PopupResourceSpec,
   PopupSegment,
@@ -22,7 +25,9 @@ import type {
   SpinePopupManifestV1,
   SpinePopupManifestV2,
   SpinePopupManifestV3,
+  SpinePopupManifestV4,
 } from "./types.js";
+import { validatePopupLayerAttachmentGraph } from "./layer-attachment.js";
 
 const IDS = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const OWNED_PATH =
@@ -36,16 +41,24 @@ interface ParsePopupManifest {
   (value: SpinePopupManifestV2): SpinePopupManifestV2;
   (value: AwardCelebrationPopupManifestV3): AwardCelebrationPopupManifestV3;
   (value: SpinePopupManifestV3): SpinePopupManifestV3;
+  (value: AwardCelebrationPopupManifestV4): AwardCelebrationPopupManifestV4;
+  (value: SpinePopupManifestV4): SpinePopupManifestV4;
   (value: PopupManifestV1): PopupManifestV1;
   (value: PopupManifestV2): PopupManifestV2;
   (value: PopupManifestV3): PopupManifestV3;
+  (value: PopupManifestV4): PopupManifestV4;
   (value: unknown): PopupManifest;
 }
 
 export const parsePopupManifest = ((value: unknown): PopupManifest => {
   const record = object(value, "popup manifest");
-  if (record.version !== 1 && record.version !== 2 && record.version !== 3)
-    fail("popup manifest.version must be 1, 2, or 3.");
+  if (
+    record.version !== 1 &&
+    record.version !== 2 &&
+    record.version !== 3 &&
+    record.version !== 4
+  )
+    fail("popup manifest.version must be 1, 2, 3, or 4.");
   const version = record.version;
   const modern = version !== 1;
   const commonKeys = [
@@ -53,7 +66,7 @@ export const parsePopupManifest = ((value: unknown): PopupManifest => {
     "kind",
     "id",
     "type",
-    ...(version !== 3 ? ["designViewport"] : []),
+    ...(version === 1 || version === 2 ? ["designViewport"] : []),
     "resources",
     ...(modern ? ["name", "adaptation", "backdrop"] : []),
   ];
@@ -69,7 +82,9 @@ export const parsePopupManifest = ((value: unknown): PopupManifest => {
     fail('popup manifest.type must be "award-celebration" or "spine".');
   const id = validatePopupId(record.id);
   const viewport =
-    version !== 3 ? object(record.designViewport, "designViewport") : undefined;
+    version === 1 || version === 2
+      ? object(record.designViewport, "designViewport")
+      : undefined;
   if (viewport) keys(viewport, ["width", "height"], "designViewport");
   const resourcesRecord = object(record.resources, "resources");
   const resources: Record<string, PopupResourceSpec> = {};
@@ -149,7 +164,7 @@ export const parsePopupManifest = ((value: unknown): PopupManifest => {
 function parseSpinePopup(
   value: unknown,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2 | 3,
+  version: 1 | 2 | 3 | 4,
 ) {
   const record = object(value, "spine");
   keys(
@@ -182,21 +197,28 @@ function parseSpinePopup(
     nonEmpty(playback.endAnimation, "spine.playback.endAnimation"),
   ];
   unique(animations, "spine playback animations");
-  if (version === 3 && Object.hasOwn(record, "prompt"))
-    fail("spine.prompt is not supported in popup manifest v3.");
+  if (version >= 3 && Object.hasOwn(record, "prompt"))
+    fail(`spine.prompt is not supported in popup manifest v${version}.`);
   const prompt = Object.hasOwn(record, "prompt")
     ? parsePrompt(record.prompt, resources)
     : undefined;
   const overlays = Object.hasOwn(record, "overlays")
     ? parseOverlays(record.overlays, resources, version)
     : undefined;
-  unique(
-    [
-      ...(prompt ? [String(prompt.order)] : []),
-      ...(overlays ?? []).map(({ order }) => String(order)),
-    ],
-    "spine prompt/overlay order",
-  );
+  if (version !== 4)
+    unique(
+      [
+        ...(prompt ? [String(prompt.order)] : []),
+        ...(overlays ?? []).map(({ order }) => String(order)),
+      ],
+      "spine prompt/overlay order",
+    );
+  else
+    validatePopupLayerAttachmentGraph({
+      layers: overlays ?? [],
+      label: "spine.overlays",
+      allowMainSpine: true,
+    });
   if (
     prompt &&
     (overlays ?? []).some(
@@ -264,7 +286,7 @@ function parsePrompt(
 function parseOverlays(
   value: unknown,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2 | 3,
+  version: 1 | 2 | 3 | 4,
 ): readonly PopupOverlayLayer[] {
   if (!Array.isArray(value)) fail("spine.overlays must be an array.");
   const overlays = value.map((raw, index) => {
@@ -469,7 +491,7 @@ function parseResource(value: unknown, label: string): PopupResourceSpec {
 function parseAwardCelebration(
   value: unknown,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2 | 3,
+  version: 1 | 2 | 3 | 4,
 ): AwardCelebrationSpec {
   const record = object(value, "awardCelebration");
   keys(record, ["base", "standard", "celebrationTiers"], "awardCelebration");
@@ -527,7 +549,7 @@ function parseTier(
   value: unknown,
   label: string,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2 | 3,
+  version: 1 | 2 | 3 | 4,
 ): AwardTierPresentation {
   const record = object(value, label);
   const allowed = [
@@ -547,10 +569,17 @@ function parseTier(
     layers.map(({ id }) => id),
     `${label}.layers.id`,
   );
-  unique(
-    layers.map(({ order }) => String(order)),
-    `${label}.layers.order`,
-  );
+  if (version !== 4)
+    unique(
+      layers.map(({ order }) => String(order)),
+      `${label}.layers.order`,
+    );
+  else
+    validatePopupLayerAttachmentGraph({
+      layers,
+      label: `${label}.layers`,
+      allowMainSpine: false,
+    });
   if (
     layers.filter(
       (layer) =>
@@ -563,8 +592,11 @@ function parseTier(
     (layer): layer is Extract<PopupLayer, { readonly kind: "image-string" }> =>
       layer.kind === "image-string" && layer.binding === "win-amount",
   )!;
-  const amountParent = amount.parent;
-  if (amountParent.kind === "vni-text-layer") {
+  const amountParent =
+    version === 4
+      ? amount.attachment
+      : (amount.parent ?? { kind: "popup-root" });
+  if (amountParent?.kind === "vni-text-layer") {
     const target = layers.find(({ id }) => id === amountParent.vniLayerId);
     if (!target || target.kind !== "vni")
       fail(
@@ -584,7 +616,7 @@ function parseLayer(
   value: unknown,
   label: string,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2 | 3,
+  version: 1 | 2 | 3 | 4,
 ): PopupLayer {
   const record = object(value, label);
   const kind = record.kind;
@@ -596,6 +628,7 @@ function parseLayer(
     ...(hasResource ? ["resource"] : []),
     "transform",
     ...(version !== 1 ? ["alpha"] : []),
+    ...(version === 4 ? ["attachment"] : []),
   ];
   if (!hasResource && (version === 1 || kind !== "text"))
     fail(`${label}.resource is required.`);
@@ -622,6 +655,14 @@ function parseLayer(
     order: nonNegativeSafe(record.order, `${label}.order`),
     ...(resourceId ? { resource: resourceId } : {}),
     ...(version !== 1 ? { alpha: unit(record.alpha, `${label}.alpha`) } : {}),
+    ...(version === 4
+      ? {
+          attachment: parseLayerAttachment(
+            record.attachment,
+            `${label}.attachment`,
+          ),
+        }
+      : {}),
     transform: {
       x: finite(transform.x, `${label}.transform.x`),
       y: finite(transform.y, `${label}.transform.y`),
@@ -645,7 +686,9 @@ function parseLayer(
           "binding",
           ...(Object.hasOwn(record, "defaultText") ? ["defaultText"] : []),
           "anchor",
-          ...(Object.hasOwn(record, "parent") ? ["parent"] : []),
+          ...(version !== 4 && Object.hasOwn(record, "parent")
+            ? ["parent"]
+            : []),
           ...(record.binding === "manual" &&
           Object.hasOwn(record, "visibleSegments")
             ? ["visibleSegments"]
@@ -685,7 +728,9 @@ function parseLayer(
         binding,
         ...(defaultText !== undefined ? { defaultText } : {}),
         anchor: parsedAnchor,
-        parent: parseImageStringParent(record.parent, `${label}.parent`),
+        ...(version !== 4
+          ? { parent: parseImageStringParent(record.parent, `${label}.parent`) }
+          : {}),
         ...(Object.hasOwn(record, "visibleSegments")
           ? {
               visibleSegments: parseSegments(
@@ -819,6 +864,50 @@ function parseImageStringParent(value: unknown, label: string) {
     });
   }
   fail(`${label}.kind must be popup-root or vni-text-layer.`);
+}
+
+function parseLayerAttachment(
+  value: unknown,
+  label: string,
+): PopupLayerAttachment {
+  const record = object(value, label);
+  if (record.kind === "popup-root") {
+    keys(record, ["kind"], label);
+    return freeze({ kind: "popup-root" as const });
+  }
+  if (record.kind === "vni-text-layer") {
+    keys(record, ["kind", "vniLayerId", "textLayerId"], label);
+    return freeze({
+      kind: "vni-text-layer" as const,
+      vniLayerId: identifier(record.vniLayerId, `${label}.vniLayerId`),
+      textLayerId: nonEmpty(record.textLayerId, `${label}.textLayerId`),
+    });
+  }
+  if (record.kind === "spine-slot") {
+    keys(record, ["kind", "target", "slot"], label);
+    const target = object(record.target, `${label}.target`);
+    if (target.kind === "main-spine") {
+      keys(target, ["kind"], `${label}.target`);
+      return freeze({
+        kind: "spine-slot" as const,
+        target: freeze({ kind: "main-spine" as const }),
+        slot: nonEmpty(record.slot, `${label}.slot`),
+      });
+    }
+    if (target.kind === "layer") {
+      keys(target, ["kind", "layerId"], `${label}.target`);
+      return freeze({
+        kind: "spine-slot" as const,
+        target: freeze({
+          kind: "layer" as const,
+          layerId: identifier(target.layerId, `${label}.target.layerId`),
+        }),
+        slot: nonEmpty(record.slot, `${label}.slot`),
+      });
+    }
+    fail(`${label}.target.kind must be layer or main-spine.`);
+  }
+  fail(`${label}.kind must be popup-root, vni-text-layer, or spine-slot.`);
 }
 
 function parseSegments(value: unknown, label: string): readonly PopupSegment[] {

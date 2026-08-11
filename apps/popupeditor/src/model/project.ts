@@ -1,5 +1,7 @@
 import {
   parsePopupManifest,
+  resolvePopupLayerAttachment,
+  validatePopupLayerAttachmentGraph,
   type AwardTierId,
   type PopupAmountFormat,
   type PopupLayer,
@@ -7,6 +9,7 @@ import {
   type PopupOverlayLayer,
   type PopupResourceSpec,
 } from "@slotclientengine/rendercore/popup";
+import { validateOfficialSpineResource } from "@slotclientengine/rendercore";
 import type { EditorAssetEntry } from "@slotclientengine/editorresource";
 import { assertVNIProject } from "@slotclientengine/vnicore/core";
 
@@ -35,8 +38,13 @@ export interface PopupVniTextLayerTarget {
   readonly textLayerId: string;
   readonly textLayerName: string;
 }
+export interface PopupSpineAttachmentTarget {
+  readonly key: "main-spine" | string;
+  readonly label: string;
+  readonly slotNames: readonly string[];
+}
 export interface PopupEditorProject {
-  formatVersion: 3;
+  formatVersion: 4;
   name: string;
   type: "award-celebration" | "spine";
   id: string;
@@ -127,7 +135,7 @@ export function createPopupEditorProject(
     layers: [],
   });
   return {
-    formatVersion: 3,
+    formatVersion: 4,
     name: options.name ?? "Untitled Popup",
     type: options.type ?? "award-celebration",
     id: options.id ?? "untitled-popup",
@@ -211,7 +219,7 @@ export function clonePopupEditorProject(
 
 export function projectToManifest(project: PopupEditorProject): PopupManifest {
   const common = {
-    version: 3 as const,
+    version: 4 as const,
     kind: "popup" as const,
     id: project.id,
     name: project.name,
@@ -221,14 +229,23 @@ export function projectToManifest(project: PopupEditorProject): PopupManifest {
     },
     backdrop: { ...project.backdrop },
   };
-  const canonicalLayer = <T extends PopupLayer>(layer: T): T =>
-    (layer.alpha === undefined ? { ...layer, alpha: 1 } : layer) as T;
-  const canonicalOverlay = <T extends PopupOverlayLayer>(layer: T): T =>
-    (layer.alpha === undefined ? { ...layer, alpha: 1 } : layer) as T;
+  const canonicalLayer = <T extends PopupLayer>(layer: T) => {
+    const { parent: _parent, ...rest } = layer as T & { parent?: unknown };
+    return {
+      ...rest,
+      alpha: layer.alpha ?? 1,
+      attachment: resolvePopupLayerAttachment(layer),
+    };
+  };
+  const canonicalOverlay = <T extends PopupOverlayLayer>(layer: T) => ({
+    ...layer,
+    alpha: layer.alpha ?? 1,
+    attachment: resolvePopupLayerAttachment(layer),
+  });
   if (project.type === "spine") {
     if (project.spine.prompt.enabled)
       throw new Error(
-        "v3 项目不能导出 legacy prompt；请先迁移为命名的字体文字 overlay。",
+        "v4 项目不能导出 legacy prompt；请先迁移为命名的字体文字 overlay。",
       );
     const resourceKey = project.spine.resource;
     if (!resourceKey)
@@ -334,6 +351,7 @@ export function migratePopupPromptToTextLayer(
       rotation: 0,
     },
     alpha: 1,
+    attachment: { kind: "popup-root" },
     anchor: { x: 0.5, y: 0.5 },
     style: {
       fontSize: prompt.area.height,
@@ -351,6 +369,13 @@ export function migratePopupPromptToTextLayer(
 export function popupEditorProjectDiagnostics(
   project: PopupEditorProject,
 ): readonly string[] {
+  try {
+    validatePopupEditorAttachments(project);
+  } catch (error) {
+    return Object.freeze([
+      error instanceof Error ? error.message : String(error),
+    ]);
+  }
   if (project.type === "spine") {
     try {
       projectToManifest(project);
@@ -397,8 +422,8 @@ export function popupEditorProjectDiagnostics(
           layer.kind === "image-string" && layer.binding === "win-amount",
       );
       if (!amount) continue;
-      const amountParent = amount.parent;
-      if (amountParent.kind === "popup-root") continue;
+      const amountParent = resolvePopupLayerAttachment(amount);
+      if (amountParent.kind !== "vni-text-layer") continue;
       const matches = getPopupVniTextLayerTargets(project, tierId).some(
         (target) =>
           target.vniLayerId === amountParent.vniLayerId &&
@@ -470,6 +495,7 @@ export function addLayer(
     resource: resourceKey,
     transform: { x: 0, y: 0, scale: 1, rotation: 0 },
     alpha: 1,
+    attachment: { kind: "popup-root" as const },
   };
   let layer: PopupLayer;
   if (resource.kind === "image-string" && !existingAmount)
@@ -545,6 +571,135 @@ export function addLayer(
       },
     };
   tier.layers = [...tier.layers, layer];
+}
+
+export function getPopupSpineAttachmentTargets(
+  project: PopupEditorProject,
+  options:
+    | { readonly kind: "award"; readonly tierId: AwardTierId }
+    | { readonly kind: "spine-popup" },
+): readonly PopupSpineAttachmentTarget[] {
+  const targets: PopupSpineAttachmentTarget[] = [];
+  if (options.kind === "spine-popup" && project.spine.resource)
+    targets.push(
+      Object.freeze({
+        key: "main-spine",
+        label: "主 Spine",
+        slotNames: popupSpineSlotNames(project, project.spine.resource),
+      }),
+    );
+  const layers =
+    options.kind === "award"
+      ? (project.tiers.get(options.tierId)?.layers ?? [])
+      : project.spine.overlays;
+  for (const layer of layers) {
+    if (layer.kind !== "spine" || !layer.resource) continue;
+    targets.push(
+      Object.freeze({
+        key: layer.id,
+        label: `Spine 图层：${layer.id}`,
+        slotNames: popupSpineSlotNames(project, layer.resource),
+      }),
+    );
+  }
+  return Object.freeze(targets);
+}
+
+export function assertPopupLayerCanDelete(
+  layers: readonly (PopupLayer | PopupOverlayLayer)[],
+  layerId: string,
+): void {
+  const dependents = layers
+    .filter((layer) => {
+      const attachment = resolvePopupLayerAttachment(layer);
+      return (
+        attachment.kind === "spine-slot" &&
+        attachment.target.kind === "layer" &&
+        attachment.target.layerId === layerId
+      );
+    })
+    .map(({ id }) => id);
+  if (dependents.length)
+    throw new Error(
+      `Spine 图层 ${layerId} 仍被以下图层挂接，禁止删除：${dependents.join("、")}。`,
+    );
+}
+
+export function validatePopupEditorAttachments(
+  project: PopupEditorProject,
+): void {
+  const validateScope = (
+    layers: readonly (PopupLayer | PopupOverlayLayer)[],
+    label: string,
+    allowMainSpine: boolean,
+    getTargets: () => readonly PopupSpineAttachmentTarget[],
+  ) => {
+    validatePopupLayerAttachmentGraph({ layers, label, allowMainSpine });
+    const targets = getTargets();
+    const byKey = new Map(targets.map((target) => [target.key, target]));
+    for (const layer of layers) {
+      const attachment = layer.attachment;
+      if (attachment?.kind !== "spine-slot") continue;
+      const targetKey =
+        attachment.target.kind === "main-spine"
+          ? "main-spine"
+          : attachment.target.layerId;
+      const target = byKey.get(targetKey);
+      if (!target?.slotNames.includes(attachment.slot))
+        throw new Error(
+          `${label} 图层 ${layer.id} 引用的 Spine slot 不存在：${targetKey}/${attachment.slot}。`,
+        );
+    }
+  };
+  if (project.type === "spine") {
+    validateScope(project.spine.overlays, "spine.overlays", true, () =>
+      getPopupSpineAttachmentTargets(project, { kind: "spine-popup" }),
+    );
+    return;
+  }
+  for (const [tierId, tier] of project.tiers)
+    validateScope(tier.layers, `awardCelebration.${tierId}.layers`, false, () =>
+      getPopupSpineAttachmentTargets(project, { kind: "award", tierId }),
+    );
+}
+
+function popupSpineSlotNames(
+  project: PopupEditorProject,
+  resourceKey: string,
+): readonly string[] {
+  const resource = project.resources.get(resourceKey);
+  if (!resource || resource.spec.kind !== "spine")
+    throw new Error(`Spine attachment target resource 无效：${resourceKey}`);
+  const skeletonBytes = project.assets.get(resource.spec.skeleton)?.bytes;
+  const atlasBytes = project.assets.get(resource.spec.atlas)?.bytes;
+  if (!skeletonBytes || !atlasBytes)
+    throw new Error(`Spine attachment target bytes 缺失：${resourceKey}`);
+  let skeleton: unknown;
+  try {
+    skeleton = JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(skeletonBytes),
+    );
+  } catch (error) {
+    throw new Error(
+      `Spine attachment target skeleton JSON 无效：${resourceKey}：${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  const atlasText = new TextDecoder("utf-8", { fatal: true }).decode(
+    atlasBytes,
+  );
+  return validateOfficialSpineResource({
+    resource: {
+      skeleton,
+      atlasText,
+      textureUrls: Object.fromEntries(
+        Object.keys(resource.spec.textures).map((page) => [
+          page,
+          `memory:${page}`,
+        ]),
+      ),
+    },
+    requiredAnimations: [],
+  }).slotNames;
 }
 
 export function setPopupVniPlaybackMode(

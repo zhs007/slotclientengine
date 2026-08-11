@@ -61,6 +61,7 @@ export interface PopupLayerBase {
   readonly order: number;
   readonly transform: PopupTransform;
   readonly alpha?: number;
+  readonly attachment?: PopupLayerAttachment;
 }
 export interface PopupGradientStop {
   readonly offset: number;
@@ -104,6 +105,21 @@ export type PopupImageStringParent =
       readonly vniLayerId: string;
       readonly textLayerId: string;
     };
+export type PopupSpineSlotTarget =
+  | { readonly kind: "layer"; readonly layerId: string }
+  | { readonly kind: "main-spine" };
+export type PopupLayerAttachment =
+  | { readonly kind: "popup-root" }
+  | {
+      readonly kind: "vni-text-layer";
+      readonly vniLayerId: string;
+      readonly textLayerId: string;
+    }
+  | {
+      readonly kind: "spine-slot";
+      readonly target: PopupSpineSlotTarget;
+      readonly slot: string;
+    };
 export type PopupVniPlayback =
   | {
       readonly mode: "segmented";
@@ -128,7 +144,7 @@ export type PopupLayer =
       readonly binding: "win-amount" | "manual";
       readonly defaultText?: string;
       readonly anchor: PopupAnchor;
-      readonly parent: PopupImageStringParent;
+      readonly parent?: PopupImageStringParent;
       readonly visibleSegments?: readonly PopupSegment[];
     })
   | (PopupLayerBase & {
@@ -164,6 +180,7 @@ export type PopupOverlayLayer =
       readonly resource: string;
       readonly transform: PopupOverlayTransform;
       readonly alpha?: number;
+      readonly attachment?: PopupLayerAttachment;
       readonly anchor: PopupAnchor;
       readonly visibleSegments: readonly PopupSegment[];
     }
@@ -177,6 +194,7 @@ export type PopupOverlayLayer =
       readonly resource: string;
       readonly transform: PopupOverlayTransform;
       readonly alpha?: number;
+      readonly attachment?: PopupLayerAttachment;
       readonly anchor: PopupAnchor;
       readonly visibleSegments: readonly PopupSegment[];
     }
@@ -189,6 +207,7 @@ export type PopupOverlayLayer =
       readonly resource?: string;
       readonly transform: PopupOverlayTransform;
       readonly alpha?: number;
+      readonly attachment?: PopupLayerAttachment;
       readonly anchor: PopupAnchor;
       readonly style: PopupTextStyle;
       readonly visibleSegments: readonly PopupSegment[];
@@ -200,6 +219,7 @@ export type PopupOverlayLayer =
       readonly resource: string;
       readonly transform: PopupOverlayTransform;
       readonly alpha?: number;
+      readonly attachment?: PopupLayerAttachment;
       readonly playback: PopupVniPlayback;
     }
   | {
@@ -209,6 +229,7 @@ export type PopupOverlayLayer =
       readonly resource: string;
       readonly transform: PopupOverlayTransform;
       readonly alpha?: number;
+      readonly attachment?: PopupLayerAttachment;
       readonly playback: {
         readonly mode: "segmented-animations";
         readonly startAnimation: string;
@@ -360,7 +381,55 @@ export type PopupManifestV3 =
   | AwardCelebrationPopupManifestV3
   | SpinePopupManifestV3;
 
-export type PopupManifest = PopupManifestV1 | PopupManifestV2 | PopupManifestV3;
+export type PopupLayerV4 = PopupLayer & {
+  readonly attachment: PopupLayerAttachment;
+};
+export type PopupOverlayLayerV4 = PopupOverlayLayer & {
+  readonly attachment: PopupLayerAttachment;
+};
+export interface AwardTierPresentationV4 {
+  readonly countDurationSeconds: number;
+  readonly layers: readonly PopupLayerV4[];
+}
+export interface AwardCelebrationTierV4 extends AwardTierPresentationV4 {
+  readonly id: "bigwin" | "superwin" | "megawin";
+  readonly thresholdMultiplier: number;
+}
+export interface AwardCelebrationSpecV4 {
+  readonly base: AwardTierPresentationV4;
+  readonly standard: AwardTierPresentationV4;
+  readonly celebrationTiers: readonly AwardCelebrationTierV4[];
+}
+export interface PopupManifestBaseV4 {
+  readonly version: 4;
+  readonly kind: "popup";
+  readonly id: string;
+  readonly name: string;
+  readonly adaptation: PopupAdaptationV3;
+  readonly backdrop: PopupBackdropV3;
+  readonly resources: Readonly<Record<string, PopupResourceSpec>>;
+}
+export interface AwardCelebrationPopupManifestV4 extends PopupManifestBaseV4 {
+  readonly type: "award-celebration";
+  readonly amountFormat: PopupAmountFormat;
+  readonly awardCelebration: AwardCelebrationSpecV4;
+}
+export interface SpinePopupManifestV4 extends PopupManifestBaseV4 {
+  readonly type: "spine";
+  readonly spine: Omit<SpinePopupManifestV1["spine"], "prompt" | "overlays"> & {
+    readonly prompt?: never;
+    readonly overlays?: readonly PopupOverlayLayerV4[];
+  };
+}
+export type PopupManifestV4 =
+  | AwardCelebrationPopupManifestV4
+  | SpinePopupManifestV4;
+
+export type PopupManifest =
+  | PopupManifestV1
+  | PopupManifestV2
+  | PopupManifestV3
+  | PopupManifestV4;
 
 export interface PopupHostPlacement {
   readonly x: number;

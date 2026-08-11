@@ -2,6 +2,7 @@ import { Container, type Text } from "pixi.js";
 import {
   createOfficialSpinePlayer,
   type RendercoreSpinePlayer,
+  type RendercoreSpineSlotPlayer,
 } from "../spine/runtime-player.js";
 import type {
   PopupPackageResource,
@@ -17,6 +18,10 @@ import {
   type SpinePopupOverlayRuntime,
 } from "./spine-overlay-runtime.js";
 import { createPopupPresentation } from "./presentation.js";
+import {
+  attachPopupLayerRuntimes,
+  type PopupLayerAttachmentHandle,
+} from "./layer-attachment.js";
 
 export function createSpinePopupPlayer(options: {
   readonly resource: PopupPackageResource;
@@ -56,6 +61,7 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
   readonly #nodes: ReturnType<typeof createPopupStringNodeRegistry>;
   readonly #presentation: ReturnType<typeof createPopupPresentation>;
   readonly #popupRoot = new Container();
+  #attachmentHandle: PopupLayerAttachmentHandle | null = null;
   #phase: SpinePopupSnapshot["phase"] = "idle";
   #dismissRequested = false;
   #initialized = false;
@@ -102,7 +108,7 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
         layer,
         resource: prepared,
       });
-      this.#popupRoot.addChild(runtime.container);
+      if (manifest.version !== 4) this.#popupRoot.addChild(runtime.container);
       return runtime;
     });
     const prompt = manifest.spine.prompt;
@@ -163,6 +169,21 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
       for (const overlay of this.#overlays) {
         await overlay.init();
         this.assertUsable();
+      }
+      if (this.#manifest.version === 4) {
+        const layers = this.#manifest.spine.overlays ?? [];
+        this.#attachmentHandle = attachPopupLayerRuntimes({
+          layers,
+          runtimes: new Map(
+            layers.map(
+              (layer, index) => [layer.id, this.#overlays[index]!] as const,
+            ),
+          ),
+          root: this.#popupRoot,
+          ...(isSpineSlotPlayer(this.#player)
+            ? { mainSpine: this.#player }
+            : {}),
+        });
       }
       this.#initialized = true;
     } catch (error) {
@@ -253,6 +274,8 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
+    this.#attachmentHandle?.destroy();
+    this.#attachmentHandle = null;
     this.#player.destroy();
     for (const overlay of this.#overlays) overlay.destroy();
     this.#prompt?.text.destroy();
@@ -278,6 +301,16 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
   private assertUsable(): void {
     if (this.#destroyed) throw new Error("Spine popup player was destroyed.");
   }
+}
+
+function isSpineSlotPlayer(
+  player: RendercoreSpinePlayer,
+): player is RendercoreSpineSlotPlayer {
+  const candidate = player as Partial<RendercoreSpineSlotPlayer>;
+  return (
+    typeof candidate.attachSlotObject === "function" &&
+    typeof candidate.removeSlotObject === "function"
+  );
 }
 
 function collectSpineStringNodeDefinitions(

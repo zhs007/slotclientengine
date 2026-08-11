@@ -3,6 +3,7 @@ import { VNIPlayer } from "@slotclientengine/vnicore/pixi";
 import {
   createOfficialSpinePlayer,
   type RendercoreSpinePlayer,
+  type RendercoreSpineSlotPlayer,
 } from "../spine/runtime-player.js";
 import {
   requestPopupVniPlaybackEnd,
@@ -18,6 +19,7 @@ import type {
 
 export interface SpinePopupOverlayRuntime {
   readonly container: Container;
+  readonly spinePlayer?: RendercoreSpineSlotPlayer;
   readonly stringNode?: {
     readonly kind: "text" | "image-string";
     readonly name: string;
@@ -142,6 +144,7 @@ export function createSpinePopupOverlayRuntime(options: {
     let segment: PopupSegment = "start";
     return {
       container,
+      ...(isSpineSlotPlayer(player) ? { spinePlayer: player } : {}),
       async init() {
         await player.init();
       },
@@ -221,4 +224,14 @@ export function createSpinePopupOverlayRuntime(options: {
     };
   }
   throw new Error(`unsupported popup overlay ${layer.id}.`);
+}
+
+function isSpineSlotPlayer(
+  player: RendercoreSpinePlayer,
+): player is RendercoreSpineSlotPlayer {
+  const candidate = player as Partial<RendercoreSpineSlotPlayer>;
+  return (
+    typeof candidate.attachSlotObject === "function" &&
+    typeof candidate.removeSlotObject === "function"
+  );
 }

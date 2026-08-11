@@ -135,6 +135,33 @@ describe("gamelayout popup dependency", () => {
     );
     expect(rewritten.version).toBe(3);
     expect(rewritten).not.toHaveProperty("designViewport");
+
+    manifest.version = 4;
+    manifest.name = "Fixture Popup V4";
+    for (const tier of [
+      manifest.awardCelebration.base,
+      manifest.awardCelebration.standard,
+      ...manifest.awardCelebration.celebrationTiers,
+    ])
+      for (const layer of tier.layers)
+        layer.attachment = { kind: "popup-root" };
+    popup.set(
+      "popup.manifest.json",
+      new TextEncoder().encode(JSON.stringify(manifest)),
+    );
+    const importedV4 = await importPopupPackageZip(
+      createDeterministicZip(await mappedPopupFiles(popup)),
+      { decodeImage: async () => ({ width: 1, height: 1 }) },
+    );
+    expect(importedV4.manifest.version).toBe(4);
+    if (
+      importedV4.manifest.version !== 4 ||
+      importedV4.manifest.type !== "award-celebration"
+    )
+      throw new Error("Expected v4 Popup package.");
+    expect(
+      importedV4.manifest.awardCelebration.base.layers[0]?.attachment,
+    ).toEqual({ kind: "popup-root" });
     load.mockRestore();
     unload.mockRestore();
   });

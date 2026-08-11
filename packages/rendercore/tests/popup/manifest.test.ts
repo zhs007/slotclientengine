@@ -149,6 +149,100 @@ describe("popup manifest", () => {
     expect(() => parsePopupManifest(value)).toThrow(/not supported.*v3/);
   });
 
+  it("parses v4 Spine slot attachments and rejects invalid graphs", () => {
+    const value = v2SpineManifestFixture();
+    value.version = 4;
+    delete value.designViewport;
+    value.resources.shade = {
+      kind: "image",
+      path: `assets/${"d".repeat(64)}.png`,
+      size: { width: 100, height: 50 },
+    };
+    value.spine.overlays = [
+      {
+        id: "nested",
+        kind: "spine",
+        order: 1,
+        alpha: 1,
+        resource: "effect",
+        attachment: {
+          kind: "spine-slot",
+          target: { kind: "main-spine" },
+          slot: "Fx",
+        },
+        transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+        playback: {
+          mode: "segmented-animations",
+          startAnimation: "start",
+          loopAnimation: "loop",
+          endAnimation: "end",
+        },
+      },
+      {
+        id: "shade",
+        kind: "image",
+        order: 1,
+        alpha: 1,
+        resource: "shade",
+        attachment: {
+          kind: "spine-slot",
+          target: { kind: "layer", layerId: "nested" },
+          slot: "Value",
+        },
+        transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+        anchor: { x: 0.5, y: 0.5 },
+        visibleSegments: ["start", "loop", "end"],
+      },
+    ];
+    const manifest = parsePopupManifest(value);
+    expect(manifest.version).toBe(4);
+    if (manifest.version !== 4 || manifest.type !== "spine")
+      throw new Error("Expected v4 Spine popup.");
+    expect(manifest.spine.overlays?.[1]?.attachment).toEqual({
+      kind: "spine-slot",
+      target: { kind: "layer", layerId: "nested" },
+      slot: "Value",
+    });
+
+    const missing = structuredClone(value);
+    delete missing.spine.overlays[1].attachment;
+    expect(() => parsePopupManifest(missing)).toThrow(/attachment/);
+
+    const self = structuredClone(value);
+    self.spine.overlays[0].attachment = {
+      kind: "spine-slot",
+      target: { kind: "layer", layerId: "nested" },
+      slot: "Fx",
+    };
+    expect(() => parsePopupManifest(self)).toThrow(/nested -> nested/);
+
+    const cycle = structuredClone(value);
+    cycle.spine.overlays[0].attachment = {
+      kind: "spine-slot",
+      target: { kind: "layer", layerId: "second" },
+      slot: "Fx",
+    };
+    cycle.spine.overlays.push({
+      ...cycle.spine.overlays[0],
+      id: "second",
+      attachment: {
+        kind: "spine-slot",
+        target: { kind: "layer", layerId: "nested" },
+        slot: "Fx",
+      },
+    });
+    expect(() => parsePopupManifest(cycle)).toThrow(
+      /nested -> second -> nested/,
+    );
+
+    const duplicate = structuredClone(value);
+    duplicate.spine.overlays.push({
+      ...duplicate.spine.overlays[1],
+      id: "shade-two",
+    });
+    expect(() => parsePopupManifest(duplicate)).toThrow(/order 1/);
+  });
+
   it.each([
     ["name", (value: any) => delete value.name],
     ["adaptation", (value: any) => delete value.adaptation],
@@ -191,7 +285,7 @@ describe("popup manifest", () => {
   });
 
   it.each([
-    ["unsupported version", (v: any) => (v.version = 4)],
+    ["unsupported version", (v: any) => (v.version = 5)],
     [
       "resource root mismatch",
       (v: any) => (v.resources["bad.png"] = v.resources.effect),
