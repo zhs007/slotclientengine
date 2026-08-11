@@ -496,6 +496,82 @@ describe("typed asset reference rewriting", () => {
     expect(popup).not.toHaveProperty("designViewport");
   });
 
+  it("preserves v4 Spine attachment identities while rewriting resources", () => {
+    const popup = rewritePopupManifest(
+      {
+        version: 4,
+        kind: "popup",
+        id: "free-game-v4",
+        name: "Free Game V4",
+        type: "spine",
+        adaptation: {
+          mode: "maximized-focus",
+          focus: { left: 50, right: 50, top: 50, bottom: 50 },
+        },
+        backdrop: { enabled: true, color: "#000000", alpha: 0.5 },
+        resources: {
+          "effect.json": {
+            kind: "spine",
+            skeleton: "effect.json",
+            atlas: "effect.atlas",
+            textures: { "effect.png": "effect.png" },
+          },
+        },
+        spine: {
+          resource: "effect.json",
+          transform: { x: 0, y: 0, scale: 1 },
+          playback: {
+            mode: "segmented-animations",
+            startAnimation: "Start",
+            loopAnimation: "Loop",
+            endAnimation: "End",
+          },
+          overlays: [
+            {
+              id: "nested",
+              kind: "spine",
+              resource: "effect.json",
+              order: 1,
+              alpha: 1,
+              attachment: {
+                kind: "spine-slot",
+                target: { kind: "main-spine" },
+                slot: "Fx",
+              },
+              transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+              playback: {
+                mode: "segmented-animations",
+                startAnimation: "Start",
+                loopAnimation: "Loop",
+                endAnimation: "End",
+              },
+            },
+          ],
+        },
+      },
+      new Map([
+        ["effect.json", "effect.hash.json"],
+        ["effect.atlas", "effect.hash.atlas"],
+        ["effect.png", "effect.webp"],
+      ]),
+    );
+    expect(popup).toMatchObject({
+      version: 4,
+      spine: {
+        resource: "effect.hash.json",
+        overlays: [
+          {
+            resource: "effect.hash.json",
+            attachment: {
+              target: { kind: "main-spine" },
+              slot: "Fx",
+            },
+          },
+        ],
+      },
+    });
+  });
+
   it("rewrites VNI asset.path while preserving authored identity", () => {
     const project = rewriteVniProject(vniProject(), mapping);
     expect(project.assets[0]).toMatchObject({

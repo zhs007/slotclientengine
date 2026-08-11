@@ -3,25 +3,30 @@ import {
   extractBoundedZip,
 } from "@slotclientengine/browserartifactio";
 import { describe, expect, it } from "vitest";
+import type { PopupOverlayLayer } from "@slotclientengine/rendercore/popup";
 import { exportPopupZip, importPopupZip } from "../src/io/popup-zip.js";
 import {
   commitImportReview,
   discoverPopupResources,
   POPUP_ZIP_LIMITS,
+  reviewPopupImportTransaction,
 } from "../src/io/resource-import.js";
 import {
   addLayer,
   applyImportedResourceBindings,
+  assertPopupLayerCanDelete,
   createPopupAmountFormat,
   createPopupEditorProject,
   detectPopupAmountFormatPreset,
   getPopupVniTextLayerTargets,
+  getPopupSpineAttachmentTargets,
   migratePopupPromptToTextLayer,
   popupEditorProjectDiagnostics,
   projectToManifest,
   removePopupResource,
   resourceReferenceCount,
   setPopupVniPlaybackMode,
+  validatePopupEditorAttachments,
 } from "../src/model/project.js";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -101,11 +106,11 @@ describe("popup editor filename-key project", () => {
     expect(project.spine).toEqual(before);
   });
 
-  it("automatically migrates v1 and v2 system-font prompts to canonical v3", async () => {
+  it("automatically migrates v1 and v2 system-font prompts to canonical v4", async () => {
     const skeleton = JSON.stringify({
       skeleton: { spine: "4.3.23" },
       bones: [{ name: "root" }],
-      slots: [],
+      slots: [{ name: "Value", bone: "root" }],
       skins: [{ name: "default", attachments: {} }],
       animations: { Start: {}, Loop: {}, End: {} },
     });
@@ -124,6 +129,9 @@ describe("popup editor filename-key project", () => {
       loopAnimation: "Loop",
       endAnimation: "End",
     };
+    expect(
+      getPopupSpineAttachmentTargets(project, { kind: "spine-popup" }),
+    ).toMatchObject([{ key: "main-spine", slotNames: ["Value"] }]);
     const exported = await exportPopupZip(project, { prepare: false });
     const entries = extractBoundedZip(exported.bytes, {
       limits: POPUP_ZIP_LIMITS,
@@ -157,13 +165,13 @@ describe("popup editor filename-key project", () => {
     const imported = await importPopupZip(createDeterministicZip(entries), {
       prepare: false,
     });
-    expect(imported.formatVersion).toBe(3);
+    expect(imported.formatVersion).toBe(4);
     expect(imported.spine.prompt.font).toBeNull();
     expect(imported.spine.prompt.enabled).toBe(false);
     expect(imported.spine.overlays).toContainEqual(
       expect.objectContaining({ id: "prompt", kind: "text", name: "prompt" }),
     );
-    expect(projectToManifest(imported)).toMatchObject({ version: 3 });
+    expect(projectToManifest(imported)).toMatchObject({ version: 4 });
     expect(projectToManifest(imported)).not.toHaveProperty("designViewport");
 
     manifest.version = 2;
@@ -185,11 +193,52 @@ describe("popup editor filename-key project", () => {
     expect(importedLegacyV2.spine.overlays).toContainEqual(
       expect.objectContaining({ id: "prompt", kind: "text", name: "prompt" }),
     );
-    const canonicalV3 = projectToManifest(importedLegacyV2);
-    expect(canonicalV3.version).toBe(3);
-    expect(canonicalV3).not.toHaveProperty("designViewport");
-    if (canonicalV3.type !== "spine") throw new Error("Expected spine popup.");
-    expect(canonicalV3.spine).not.toHaveProperty("prompt");
+    const canonicalV4 = projectToManifest(importedLegacyV2);
+    expect(canonicalV4.version).toBe(4);
+    expect(canonicalV4).not.toHaveProperty("designViewport");
+    if (canonicalV4.type !== "spine") throw new Error("Expected spine popup.");
+    expect(canonicalV4.spine).not.toHaveProperty("prompt");
+    expect(canonicalV4.spine.overlays?.[0]).toMatchObject({
+      attachment: { kind: "popup-root" },
+    });
+  });
+
+  it("rejects cyclic Spine layer attachments and protects referenced targets", () => {
+    const project = createPopupEditorProject({ type: "spine" });
+    const spine = (id: string, order: number): PopupOverlayLayer => ({
+      id,
+      kind: "spine",
+      resource: "effect",
+      order,
+      alpha: 1,
+      attachment: { kind: "popup-root" },
+      transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+      playback: {
+        mode: "segmented-animations",
+        startAnimation: "Start",
+        loopAnimation: "Loop",
+        endAnimation: "End",
+      },
+    });
+    const a = spine("a", 1);
+    const b = spine("b", 2);
+    (b as { attachment: PopupOverlayLayer["attachment"] }).attachment = {
+      kind: "spine-slot",
+      target: { kind: "layer", layerId: "a" },
+      slot: "Value",
+    };
+    project.spine.overlays = [a, b];
+    expect(() =>
+      assertPopupLayerCanDelete(project.spine.overlays, "a"),
+    ).toThrow(/b/);
+    (a as { attachment: PopupOverlayLayer["attachment"] }).attachment = {
+      kind: "spine-slot",
+      target: { kind: "layer", layerId: "b" },
+      slot: "Value",
+    };
+    expect(() => validatePopupEditorAttachments(project)).toThrow(
+      /a -> b -> a/,
+    );
   });
 
   it("keeps the five-tier amount contract", () => {
@@ -371,6 +420,66 @@ describe("popup editor filename-key project", () => {
       kind: "spine",
       atlas: "Pop_ups.atlas",
       textures: { "Pop_ups.png": "Pop_ups.png" },
+    });
+  });
+
+  it("rolls back a Spine overwrite that removes an attached exact slot", async () => {
+    const skeleton = (slots: readonly string[]) =>
+      JSON.stringify({
+        skeleton: { spine: "4.3.23" },
+        bones: [{ name: "root" }],
+        slots: slots.map((name) => ({ name, bone: "root" })),
+        skins: [{ name: "default", attachments: {} }],
+        animations: { Start: {}, Loop: {}, End: {} },
+      });
+    const files = (slots: readonly string[]) => [
+      new File([skeleton(slots)], "Popup.json"),
+      new File(["Popup.png\nsize:1,1\nfilter:Linear,Linear\n"], "Popup.atlas"),
+      new File([png(1, 1).buffer], "Popup.png"),
+    ];
+    const project = createPopupEditorProject({ type: "spine" });
+    await commitImportReview(
+      project,
+      await discoverPopupResources(files(["Value"])),
+    );
+    project.spine.resource = "Popup.json";
+    project.spine.overlays.push({
+      id: "amount-background",
+      kind: "text",
+      name: "amount-background",
+      defaultText: "BG",
+      order: 1,
+      alpha: 1,
+      attachment: {
+        kind: "spine-slot",
+        target: { kind: "main-spine" },
+        slot: "Value",
+      },
+      transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+      anchor: { x: 0.5, y: 0.5 },
+      style: {
+        fontSize: 32,
+        letterSpacing: 0,
+        fill: { kind: "solid", color: "#ffffff" },
+        arcDegrees: 0,
+      },
+      visibleSegments: ["start", "loop", "end"],
+    });
+    const before = project.assets.get("Popup.json")!.bytes.slice();
+    const replacement = await discoverPopupResources(files([]));
+    const review = await reviewPopupImportTransaction(project, replacement);
+    const skeletonIndex = review.assets.items.findIndex(
+      ({ incoming }) => incoming.key === "Popup.json",
+    );
+    await expect(
+      commitImportReview(project, replacement, [
+        { itemIndex: skeletonIndex, resolution: "overwrite" },
+      ]),
+    ).rejects.toThrow(/main-spine\/Value/);
+    expect(project.assets.get("Popup.json")!.bytes).toEqual(before);
+    expect(project.spine.overlays[0]!.attachment).toMatchObject({
+      kind: "spine-slot",
+      slot: "Value",
     });
   });
 

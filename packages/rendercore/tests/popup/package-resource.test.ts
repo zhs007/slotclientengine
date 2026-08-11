@@ -172,6 +172,109 @@ describe("popup package resource", () => {
     await systemResource.destroy();
   });
 
+  it("validates every exact Spine slot required by v4 attachments", async () => {
+    const { createPopupPackageResource } =
+      await import("../../src/popup/package-resource.js");
+    const skeletonPath = `assets/${"a".repeat(64)}.json`;
+    const atlasPath = `assets/${"b".repeat(64)}.atlas`;
+    const texturePath = `assets/${"c".repeat(64)}.png`;
+    const imagePath = `assets/${"d".repeat(64)}.png`;
+    const spineSpec = {
+      kind: "spine" as const,
+      skeleton: skeletonPath,
+      atlas: atlasPath,
+      textures: { "Popup.png": texturePath },
+    };
+    const imageSpec = {
+      kind: "image" as const,
+      path: imagePath,
+      size: { width: 1, height: 1 },
+    };
+    const manifest = {
+      version: 4,
+      kind: "popup",
+      id: "slot-attachment",
+      type: "spine",
+      name: "Slot attachment",
+      adaptation: {
+        mode: "maximized-focus",
+        focus: { left: 1, right: 100, top: 1, bottom: 100 },
+      },
+      backdrop: { enabled: true, color: "#000000", alpha: 0.5 },
+      resources: { spine: spineSpec, image: imageSpec },
+      spine: {
+        resource: "spine",
+        transform: { x: 0, y: 0, scale: 1 },
+        playback: {
+          mode: "segmented-animations",
+          startAnimation: "Start",
+          loopAnimation: "Loop",
+          endAnimation: "End",
+        },
+        overlays: [
+          {
+            id: "background",
+            kind: "image",
+            resource: "image",
+            order: 0,
+            alpha: 1,
+            attachment: {
+              kind: "spine-slot",
+              target: { kind: "main-spine" },
+              slot: "Value",
+            },
+            transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+            anchor: { x: 0.5, y: 0.5 },
+            visibleSegments: ["start", "loop", "end"],
+          },
+        ],
+      },
+    } as const;
+    const files = new Map<string, Uint8Array>([
+      [
+        "popup.manifest.json",
+        new TextEncoder().encode(JSON.stringify(manifest)),
+      ],
+      ...([
+        [
+          skeletonPath,
+          new TextEncoder().encode(
+            JSON.stringify({
+              skeleton: { spine: "4.3.23" },
+              bones: [{ name: "root" }],
+              slots: [{ name: "Value", bone: "root" }],
+              skins: [{ name: "default", attachments: {} }],
+              animations: { Start: {}, Loop: {}, End: {} },
+            }),
+          ),
+        ],
+        [
+          atlasPath,
+          new TextEncoder().encode(
+            "Popup.png\nsize: 1,1\nfilter: Linear,Linear\n",
+          ),
+        ],
+        [texturePath, new Uint8Array([1])],
+        [imagePath, new Uint8Array([2])],
+      ] as const),
+    ]);
+    const loadTexture = vi.fn(
+      async () => ({ width: 1, height: 1, destroy() {} }) as never,
+    );
+    const resource = await createPopupPackageResource({
+      manifest,
+      files,
+      loadTexture,
+    });
+    await resource.destroy();
+
+    const missing = structuredClone(manifest) as any;
+    missing.spine.overlays[0].attachment.slot = "Missing";
+    await expect(
+      createPopupPackageResource({ manifest: missing, files, loadTexture }),
+    ).rejects.toThrow(/Missing/);
+  });
+
   it("namespaces physical Spine keys without changing logical atlas pages", async () => {
     const {
       createPopupPackageResourceFromResolvedFiles,

@@ -1,7 +1,10 @@
 import { Container, Sprite } from "pixi.js";
 import { VNIPlayer } from "@slotclientengine/vnicore/pixi";
 import { createRenderImageString } from "../image-string/index.js";
-import { createOfficialSpinePlayer } from "../spine/runtime-player.js";
+import {
+  createOfficialSpinePlayer,
+  type RendercoreSpineSlotPlayer,
+} from "../spine/runtime-player.js";
 import {
   createAwardCountStages,
   type AwardCountStage,
@@ -28,10 +31,15 @@ import type {
   PopupManifest,
 } from "./types.js";
 import { createPopupPresentation } from "./presentation.js";
+import {
+  attachPopupLayerRuntimes,
+  type PopupLayerAttachmentHandle,
+} from "./layer-attachment.js";
 
 export interface PopupLayerRuntime {
   readonly container: Container;
   readonly animated: boolean;
+  readonly spinePlayer?: RendercoreSpineSlotPlayer;
   readonly stringNode?: {
     readonly kind: "text" | "image-string";
     readonly name: string;
@@ -73,7 +81,9 @@ interface TierRuntime {
   readonly amountResource: PopupPreparedImageString;
   readonly amountChildIndex: number;
   amountParent: Container;
+  amountMount?: Container;
   disposeAmountParent?: () => void;
+  attachmentHandle?: PopupLayerAttachmentHandle;
   segment: PopupSegment;
   endRequested: boolean;
 }
@@ -357,6 +367,7 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
         };
         created.push(tier);
         this.#presentation.contentRoot.addChild(container);
+        const runtimesById = new Map<string, PopupLayerRuntime>();
         for (const layer of orderedLayers) {
           if (layer.kind === "image-string" && layer.binding === "win-amount")
             continue;
@@ -370,14 +381,28 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
           });
           layers.push(runtime);
           layersById.set(layer.id, runtime);
+          runtimesById.set(layer.id, runtime);
           if (runtime.stringNode)
             (
               tier.stringNodes as Map<string, PopupLayerRuntime["stringNode"]>
             ).set(runtime.stringNode.name, runtime.stringNode);
-          container.addChild(runtime.container);
+          if (manifest.version !== 4) container.addChild(runtime.container);
         }
         await Promise.all(layers.map((layer) => layer.init()));
-        if (amountLayer.parent.kind === "vni-text-layer") {
+        if (manifest.version === 4) {
+          const amountMount = new Container();
+          amountMount.label = `popup amount mount ${id}`;
+          runtimesById.set(amountLayer.id, {
+            container: amountMount,
+          } as PopupLayerRuntime);
+          tier.amountMount = amountMount;
+          tier.amountParent = amountMount;
+          tier.attachmentHandle = attachPopupLayerRuntimes({
+            layers: orderedLayers,
+            runtimes: runtimesById,
+            root: container,
+          });
+        } else if (amountLayer.parent?.kind === "vni-text-layer") {
           const target = layersById.get(amountLayer.parent.vniLayerId);
           if (!target?.mountNodeToTextLayer)
             throw new Error(
@@ -535,6 +560,9 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
     this.#stageIndex = -1;
   }
   private destroyTier(tier: TierRuntime) {
+    if (tier.amountMount && this.#amount?.container.parent === tier.amountMount)
+      tier.amountMount.removeChild(this.#amount.container);
+    tier.attachmentHandle?.destroy();
     tier.disposeAmountParent?.();
     if (tier.amountParent !== tier.container)
       tier.amountParent.destroy({ children: false });
@@ -743,6 +771,7 @@ function defaultLayerFactory(options: {
     let complete = false;
     return {
       container,
+      spinePlayer: player,
       animated: true,
       async init() {
         await player.init();

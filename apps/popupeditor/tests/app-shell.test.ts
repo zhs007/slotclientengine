@@ -186,7 +186,7 @@ describe("PopupEditorApp", () => {
     app.destroy();
   });
 
-  it("creates a fixed-type v3 project and edits focus-only presentation configuration", async () => {
+  it("creates a fixed-type v4 project and edits focus-only presentation configuration", async () => {
     const { PopupEditorApp } = await import("../src/ui/app-shell.js");
     const root = document.querySelector<HTMLElement>("#app")!;
     const app = new PopupEditorApp(root);
@@ -203,7 +203,7 @@ describe("PopupEditorApp", () => {
     expect(root.querySelector("nav")!.hasAttribute("hidden")).toBe(false);
 
     root.querySelector<HTMLButtonElement>('[data-tab="project"]')!.click();
-    expect(root.textContent).toContain("格式 v3 · Spine 弹窗");
+    expect(root.textContent).toContain("格式 v4 · Spine 弹窗");
     expect(
       root.querySelector('[data-project-field="viewport-width"]'),
     ).toBeNull();
@@ -533,6 +533,27 @@ describe("PopupEditorApp", () => {
     const imageId = root.querySelector<HTMLInputElement>(
       '[data-overlay-field="anchor-x"]',
     )!.dataset.overlayId!;
+    const attachmentTarget = root.querySelector<HTMLSelectElement>(
+      `[data-attachment-owner="overlay"][data-attachment-target-id="${imageId}"]`,
+    )!;
+    expect(attachmentTarget.textContent).toContain("主 Spine");
+    attachmentTarget.value = "spine:main-spine";
+    attachmentTarget.dispatchEvent(new Event("change"));
+    const attachmentSlot = root.querySelector<HTMLSelectElement>(
+      `[data-attachment-owner="overlay"][data-attachment-slot-id="${imageId}"]`,
+    )!;
+    expect([...attachmentSlot.options].map(({ value }) => value)).toEqual([
+      "",
+      "Value",
+      "Background",
+    ]);
+    attachmentSlot.value = "Value";
+    attachmentSlot.dispatchEvent(new Event("change"));
+    expect(
+      root.querySelector<HTMLSelectElement>(
+        `[data-attachment-owner="overlay"][data-attachment-slot-id="${imageId}"]`,
+      )!.value,
+    ).toBe("Value");
     for (const [field, value] of [
       ["x", "11"],
       ["order", "12"],
@@ -789,6 +810,41 @@ function validProject() {
       textures: { "Spine.png": "Spine.png" },
     },
     keys: ["Spine.json", "Spine.atlas", "Spine.png"],
+  });
+  const spineSkeleton = new TextEncoder().encode(
+    JSON.stringify({
+      skeleton: { spine: "4.3.23" },
+      bones: [{ name: "root" }],
+      slots: [
+        { name: "Value", bone: "root" },
+        { name: "Background", bone: "root" },
+      ],
+      skins: [{ name: "default", attachments: {} }],
+      animations: { Start: {}, Loop: {}, End: {} },
+    }),
+  );
+  project.assets.set("Spine.json", {
+    ...asset,
+    key: "Spine.json",
+    byteLength: spineSkeleton.byteLength,
+    bytes: spineSkeleton,
+  });
+  const spineAtlas = new TextEncoder().encode(
+    "Spine.png\nsize:1,1\nfilter:Linear,Linear\n",
+  );
+  project.assets.set("Spine.atlas", {
+    ...asset,
+    key: "Spine.atlas",
+    mediaType: "text/plain",
+    byteLength: spineAtlas.byteLength,
+    bytes: spineAtlas,
+  });
+  project.assets.set("Spine.png", {
+    ...asset,
+    key: "Spine.png",
+    mediaType: "image/png",
+    byteLength: 1,
+    bytes: new Uint8Array([1]),
   });
   project.resources.set("Prompt.woff2", {
     rootKey: "Prompt.woff2",

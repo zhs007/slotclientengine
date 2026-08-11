@@ -8,7 +8,7 @@ VNI bundle 只导入 `purpose=runtime` 的运行发布包：唯一 runtime 自�
 
 同名不同 bytes 默认覆盖，review 显示 hash、bytes、动作和受影响 layer；全项目校验或 preview prepare 失败会完整回滚。不存在文件夹入口、任意 logical resource id 或独立 dependency bytes 区。
 
-新建项目与新导出的 `<id>-popup.zip` 固定使用 Popup v3，由根 `popup.manifest.json`、`assets.map.json` 和完整 SHA-256 payload 构成。v3 不保存有限 `designViewport`，只用 Popup 原点周围的 `focus.left/right/top/bottom` 适配无界 authored space。导入合法 v1/v2 ZIP 时先完成原版本 strict 校验和资源 prepare，再原子迁移到 v3；后续 preview/export 不再写旧版本。普通 Spine 类型接收一组 JSON、atlas 与若干 PNG，并显式配置 start、loop、end 动画；点击在 loop 边界生效。
+新建项目与新导出的 `<id>-popup.zip` 固定使用 Popup v4，由根 `popup.manifest.json`、`assets.map.json` 和完整 SHA-256 payload 构成。v4 沿用 v3 的无界 focus 适配，并为每层显式保存 attachment。导入合法 v1/v2/v3 ZIP 时先完成原版本 strict 校验和资源 prepare，再原子迁移到 v4；后续 preview/export 不再写旧版本。普通 Spine 类型接收一组 JSON、atlas 与若干 PNG，并显式配置 start、loop、end 动画；点击在 loop 边界生效。
 
 普通 Spine 类型不再提供独立 prompt authoring；提示语与其它文案一样使用命名的字体文字 overlay。旧 v1/v2 prompt 在导入边界自动结构化迁移为 `name=prompt` 的文字层，名称、order 或资源冲突会使整次导入失败。可追加任意数量 image、字体文字、ImgNumber、Spine 或 VNI overlay，编辑其位置、缩放、旋转、order 及各类型 playback/可见 segment。
 
@@ -23,7 +23,9 @@ VNI 图层可显式选择“分段循环”或“完整单次”。分段模式�
 最后一帧，到跨档或关闭 Popup 才隐藏。两种模式使用互斥字段，未知或残留字段会阻止
 preview/export。
 
-ImgNumber 图层可显式选择 Popup 根节点或同档 VNI 的文字占位层。选择文字层后，`x/y/scale/anchor` 相对该层编辑并跟随其动画；候选从严格校验的 VNI project 枚举，目标缺失或替换后失效会阻止 preview/export，不会自动换到其它文字层或根节点。
+每个 image、字体文字、ImgNumber、VNI 或 Spine 图层都可先选择当前作用域内的 Spine 目标，再选择该 skeleton 的 exact slot；普通 Spine Popup 还可选择主 Spine。award 目标限定在同档位，普通 overlay 目标限定在同一 Popup。目标 slot 内可同时挂图片背景、文字和 ImgNumber，`order` 只比较同一父节点下的兄弟；局部 transform 会跟随 slot bone、颜色和 draw order。循环引用、失效 target/slot、同父 order 冲突以及覆盖资源后 slot 消失都会阻止提交，删除仍被引用的 Spine layer 也会被拒绝。
+
+ImgNumber 图层还可显式选择同档 VNI 的文字占位层。选择文字层后，`x/y/scale/anchor` 相对该层编辑并跟随其动画；候选从严格校验的 VNI project 枚举，目标缺失或替换后失效会阻止 preview/export，不会自动换到其它文字层或根节点。
 
 预览区可单独设置 ImgNumber 的固定小数位数（默认 `0`，范围 `0..6`）和千位分隔
 （默认关闭）。预览 raw 金额按整数单位显示：例如 raw `1234567` 配置两位小数与分组后

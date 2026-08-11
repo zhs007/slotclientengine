@@ -41,6 +41,7 @@ import {
 } from "@slotclientengine/vnicore/core";
 import {
   clonePopupEditorProject,
+  validatePopupEditorAttachments,
   type PopupEditorProject,
   type PopupEditorResource,
   type PopupEditorTierBindingSuggestion,
@@ -804,6 +805,11 @@ const popupProjectAdapter: EditorAssetRewriteAdapter<PopupEditorProject> = {
         layer.resource === from ? { ...layer, resource: to } : layer,
       );
     return project;
+  },
+  validateProject(project, workspace) {
+    const candidate = clonePopupEditorProject(project);
+    candidate.assets = new Map(workspace.entries);
+    validatePopupEditorAttachments(candidate);
   },
 };
 

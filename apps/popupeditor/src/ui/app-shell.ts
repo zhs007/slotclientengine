@@ -6,6 +6,7 @@ import {
 } from "@slotclientengine/editorresource";
 import {
   formatPopupAmount,
+  resolvePopupLayerAttachment,
   validatePopupId,
 } from "@slotclientengine/rendercore/popup";
 import type {
@@ -16,11 +17,13 @@ import type {
 import {
   addLayer,
   applyImportedResourceBindings,
+  assertPopupLayerCanDelete,
   clonePopupEditorProject,
   createPopupAmountFormat,
   createPopupEditorProject,
   detectPopupAmountFormatPreset,
   getPopupVniTextLayerTargets,
+  getPopupSpineAttachmentTargets,
   removePopupResource,
   PopupEditorStore,
   projectToManifest,
@@ -305,6 +308,7 @@ export class PopupEditorApp {
               order,
               resource: resource.rootKey,
               transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+              attachment: { kind: "popup-root" as const },
             };
             const overlay: PopupOverlayLayer =
               resource.kind === "image"
@@ -378,6 +382,10 @@ export class PopupEditorApp {
       .forEach((button) =>
         button.addEventListener("click", () =>
           this.#store.transact((draft) => {
+            assertPopupLayerCanDelete(
+              draft.spine.overlays,
+              button.dataset.deleteOverlay!,
+            );
             draft.spine.overlays = draft.spine.overlays.filter(
               ({ id }) => id !== button.dataset.deleteOverlay,
             );
@@ -521,6 +529,7 @@ export class PopupEditorApp {
         button.addEventListener("click", () =>
           this.#store.transact((draft) => {
             const tier = draft.tiers.get(this.#tier)!;
+            assertPopupLayerCanDelete(tier.layers, button.dataset.deleteLayer!);
             tier.layers = tier.layers.filter(
               (layer) => layer.id !== button.dataset.deleteLayer,
             );
@@ -621,28 +630,66 @@ export class PopupEditorApp {
         ),
       );
     this.#root
-      .querySelectorAll<HTMLSelectElement>("[data-image-string-parent]")
+      .querySelectorAll<HTMLSelectElement>("[data-attachment-target-id]")
       .forEach((select) =>
         select.addEventListener("change", () =>
           this.#store.transact((draft) => {
-            const layer = draft.tiers
-              .get(this.#tier)!
-              .layers.find((item) => item.id === select.dataset.layerId);
-            if (!layer || layer.kind !== "image-string")
-              throw new Error("ImgNumber layer 不存在。");
+            const layer = findAttachmentLayer(
+              draft,
+              this.#tier,
+              select.dataset.attachmentOwner!,
+              select.dataset.attachmentTargetId!,
+            );
             if (select.value === "popup-root") {
-              (layer as any).parent = { kind: "popup-root" };
+              (layer as any).attachment = { kind: "popup-root" };
               return;
             }
-            const [vniLayerId, textLayerId] = select.value
-              .split(":", 2)
-              .map(decodeURIComponent);
-            if (!vniLayerId || !textLayerId)
-              throw new Error("VNI 文字层选择无效。");
-            (layer as any).parent = {
-              kind: "vni-text-layer",
-              vniLayerId,
-              textLayerId,
+            if (select.value.startsWith("vni:")) {
+              const [vniLayerId, textLayerId] = select.value
+                .slice("vni:".length)
+                .split(":", 2)
+                .map(decodeURIComponent);
+              if (!vniLayerId || !textLayerId || layer.kind !== "image-string")
+                throw new Error("VNI 文字层挂接选择无效。");
+              (layer as any).attachment = {
+                kind: "vni-text-layer",
+                vniLayerId,
+                textLayerId,
+              };
+              return;
+            }
+            if (!select.value.startsWith("spine:"))
+              throw new Error("Spine 挂接目标无效。");
+            const targetKey = decodeURIComponent(
+              select.value.slice("spine:".length),
+            );
+            (layer as any).attachment = {
+              kind: "spine-slot",
+              target:
+                targetKey === "main-spine"
+                  ? { kind: "main-spine" }
+                  : { kind: "layer", layerId: targetKey },
+              slot: "",
+            };
+          }),
+        ),
+      );
+    this.#root
+      .querySelectorAll<HTMLSelectElement>("[data-attachment-slot-id]")
+      .forEach((select) =>
+        select.addEventListener("change", () =>
+          this.#store.transact((draft) => {
+            const layer = findAttachmentLayer(
+              draft,
+              this.#tier,
+              select.dataset.attachmentOwner!,
+              select.dataset.attachmentSlotId!,
+            );
+            if (layer.attachment?.kind !== "spine-slot")
+              throw new Error("图层当前未挂接到 Spine slot。");
+            (layer as any).attachment = {
+              ...layer.attachment,
+              slot: select.value,
             };
           }),
         ),
@@ -989,7 +1036,7 @@ function overlayMarkup(layer: PopupOverlayLayer, project: PopupEditorProject) {
                   ? `${input("loopStartTime", layer.playback.loopStartTime)}${input("loopEndTime", layer.playback.loopEndTime)}<label>keepParticlesAlive<input data-overlay-id="${layer.id}" data-overlay-field="keepParticlesAlive" type="checkbox" ${layer.playback.keepParticlesAlive ? "checked" : ""}/></label>`
                   : `<p>VNI once</p>`
               }`;
-  return `<article class="card"><strong>${layer.id}</strong><span>${layer.kind} / ${layer.resource ?? "system"}</span>${input("order", layer.order)}${input("alpha", layer.alpha ?? 1)}${(["x", "y", "scale", "rotation"] as const).map((field) => input(field, layer.transform[field])).join("")}${playback}<button data-delete-overlay="${layer.id}">删除 overlay</button></article>`;
+  return `<article class="card"><strong>${layer.id}</strong><span>${layer.kind} / ${layer.resource ?? "system"}</span>${attachmentMarkup(layer, project, { kind: "spine-popup" }, "overlay")}${input("order", layer.order)}${input("alpha", layer.alpha ?? 1)}${(["x", "y", "scale", "rotation"] as const).map((field) => input(field, layer.transform[field])).join("")}${playback}<button data-delete-overlay="${layer.id}">删除 overlay</button></article>`;
 }
 
 function segmentControls(
@@ -1049,6 +1096,7 @@ function createFontTextLayer(id: string, order: number) {
     defaultText: "TEXT",
     order,
     alpha: 1,
+    attachment: { kind: "popup-root" as const },
     transform: { x: 0, y: 0, scale: 1, rotation: 0 },
     anchor: { x: 0.5, y: 0.5 },
     style: {
@@ -1281,11 +1329,11 @@ function layerMarkup(
             .map((field) => input(field, layer.playback[field], "text"))
             .join("")
         : layer.kind === "image-string"
-          ? `${input("name", layer.name ?? "win-amount", "text")}${layer.binding === "manual" ? input("defaultText", layer.defaultText ?? "", "text") : ""}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${imageStringParentMarkup(layer, project, tierId)}${layer.binding === "manual" ? segmentControls("layer", layer.id, layer.visibleSegments ?? ["start", "loop", "end"]) : '<p class="amount-layer-note">win-amount 全程显示；五档共享一个 runtime，跨档只切换 resource、transform 和文本。</p>'}`
+          ? `${input("name", layer.name ?? "win-amount", "text")}${layer.binding === "manual" ? input("defaultText", layer.defaultText ?? "", "text") : ""}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${layer.binding === "manual" ? segmentControls("layer", layer.id, layer.visibleSegments ?? ["start", "loop", "end"]) : '<p class="amount-layer-note">win-amount 全程显示；五档共享一个 runtime，跨档只切换 resource、transform 和文本。</p>'}`
           : layer.kind === "text"
             ? `${input("name", layer.name, "text")}${fontSelectMarkup("layer", layer.id, layer.resource, project)}${input("defaultText", layer.defaultText, "text")}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${textStyleMarkup("layer", layer.id, layer.style)}${segmentControls("layer", layer.id, layer.visibleSegments)}`
             : `${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${(["start", "loop", "end"] as const).map((segment) => `<label>${segment}<input data-layer-id="${layer.id}" data-layer-field="segment-${segment}" type="checkbox" ${layer.visibleSegments.includes(segment) ? "checked" : ""}/></label>`).join("")}`;
-  return `<article class="card"><strong>${layer.id}</strong><span>${layer.kind} / ${layer.resource ?? "system"}</span>${input("order", layer.order)}${input("alpha", layer.alpha ?? 1)}${(["x", "y", "scale"] as const).map((field) => input(field, layer.transform[field])).join("")}${layer.kind === "text" || layer.kind === "image-string" ? input("rotation", layer.transform.rotation ?? 0) : ""}${playback}<button data-delete-layer="${layer.id}">删除图层</button></article>`;
+  return `<article class="card"><strong>${layer.id}</strong><span>${layer.kind} / ${layer.resource ?? "system"}</span>${attachmentMarkup(layer, project, { kind: "award", tierId }, "layer")}${input("order", layer.order)}${input("alpha", layer.alpha ?? 1)}${(["x", "y", "scale"] as const).map((field) => input(field, layer.transform[field])).join("")}${layer.kind === "text" || layer.kind === "image-string" ? input("rotation", layer.transform.rotation ?? 0) : ""}${playback}<button data-delete-layer="${layer.id}">删除图层</button></article>`;
 }
 
 function vniPlaybackMarkup(
@@ -1300,29 +1348,75 @@ function vniPlaybackMarkup(
   return `${mode}${vniTimingSummary(project, layer)}${input("loopStartTime", layer.playback.loopStartTime)}${input("loopEndTime", layer.playback.loopEndTime)}<label>keepParticlesAlive<input data-layer-id="${layer.id}" data-layer-field="keepParticlesAlive" type="checkbox" ${layer.playback.keepParticlesAlive ? "checked" : ""}/></label><p class="amount-layer-note">切换到完整单次会从导出配置移除当前分段字段。</p>`;
 }
 
-function imageStringParentMarkup(
-  layer: Extract<PopupLayer, { kind: "image-string" }>,
+function attachmentMarkup(
+  layer: PopupLayer | PopupOverlayLayer,
   project: PopupEditorProject,
-  tierId: AwardTierId,
+  scope:
+    | { readonly kind: "award"; readonly tierId: AwardTierId }
+    | { readonly kind: "spine-popup" },
+  owner: "layer" | "overlay",
 ) {
-  let targets: ReturnType<typeof getPopupVniTextLayerTargets> = [];
+  let spineTargets: ReturnType<typeof getPopupSpineAttachmentTargets> = [];
   try {
-    targets = getPopupVniTextLayerTargets(project, tierId);
+    spineTargets = getPopupSpineAttachmentTargets(project, scope);
   } catch {
-    // Diagnostics reports the concrete VNI parse failure.
+    // Project diagnostics reports the exact Spine resource failure.
   }
+  const attachment = resolvePopupLayerAttachment(layer);
   const selected =
-    layer.parent.kind === "popup-root"
+    attachment.kind === "popup-root"
       ? "popup-root"
-      : `${encodeURIComponent(layer.parent.vniLayerId)}:${encodeURIComponent(layer.parent.textLayerId)}`;
+      : attachment.kind === "vni-text-layer"
+        ? `vni:${encodeURIComponent(attachment.vniLayerId)}:${encodeURIComponent(attachment.textLayerId)}`
+        : `spine:${encodeURIComponent(attachment.target.kind === "main-spine" ? "main-spine" : attachment.target.layerId)}`;
   const options = [
     `<option value="popup-root">Popup 根节点</option>`,
-    ...targets.map(({ vniLayerId, textLayerId, textLayerName }) => {
-      const value = `${encodeURIComponent(vniLayerId)}:${encodeURIComponent(textLayerId)}`;
-      return `<option value="${value}" ${value === selected ? "selected" : ""}>${vniLayerId} / ${textLayerName} (${textLayerId})</option>`;
+    ...(scope.kind === "award" && layer.kind === "image-string"
+      ? (() => {
+          try {
+            return getPopupVniTextLayerTargets(project, scope.tierId).map(
+              ({ vniLayerId, textLayerId, textLayerName }) => {
+                const value = `vni:${encodeURIComponent(vniLayerId)}:${encodeURIComponent(textLayerId)}`;
+                return `<option value="${value}" ${value === selected ? "selected" : ""}>VNI 文字层：${vniLayerId} / ${textLayerName} (${textLayerId})</option>`;
+              },
+            );
+          } catch {
+            return [];
+          }
+        })()
+      : []),
+    ...spineTargets.map((target) => {
+      const value = `spine:${encodeURIComponent(target.key)}`;
+      return `<option value="${value}" ${value === selected ? "selected" : ""}>${target.label}</option>`;
     }),
   ];
-  return `<label>父节点<select data-image-string-parent data-layer-id="${layer.id}">${options.join("")}</select></label><p class="amount-layer-note">选择 VNI 文字层后，x/y/scale 相对该文字层；渲染顺序由 VNI 文字层决定。</p>`;
+  const targetKey =
+    attachment.kind === "spine-slot"
+      ? attachment.target.kind === "main-spine"
+        ? "main-spine"
+        : attachment.target.layerId
+      : null;
+  const slotTarget = spineTargets.find(({ key }) => key === targetKey);
+  const slot = attachment.kind === "spine-slot" ? attachment.slot : "";
+  const slotMarkup =
+    attachment.kind === "spine-slot"
+      ? `<label>Spine slot<select data-attachment-owner="${owner}" data-attachment-slot-id="${layer.id}"><option value="">请选择 exact slot</option>${(slotTarget?.slotNames ?? []).map((name) => `<option value="${name}" ${name === slot ? "selected" : ""}>${name}</option>`).join("")}</select></label>`
+      : "";
+  return `<fieldset class="attachment-editor"><legend>挂接</legend><label>父节点<select data-attachment-owner="${owner}" data-attachment-target-id="${layer.id}">${options.join("")}</select></label>${slotMarkup}<p class="amount-layer-note">挂接后 transform 为父节点局部坐标；order 只控制同一父节点下的兄弟顺序。</p></fieldset>`;
+}
+
+function findAttachmentLayer(
+  project: PopupEditorProject,
+  tierId: AwardTierId,
+  owner: string,
+  layerId: string,
+): PopupLayer | PopupOverlayLayer {
+  const layer =
+    owner === "overlay"
+      ? project.spine.overlays.find(({ id }) => id === layerId)
+      : project.tiers.get(tierId)?.layers.find(({ id }) => id === layerId);
+  if (!layer) throw new Error(`挂接图层不存在：${layerId}`);
+  return layer;
 }
 
 function candidateBindingSummary(candidate: PopupImportReviewCandidate) {

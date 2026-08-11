@@ -100,8 +100,9 @@
 ## Presentation
 
 - rendercore 拥有通用 symbol win carousel、金额递增、big/super/mega tier、segmented VNI 播放、popup threshold sequence、完整 canvas/keyboard 输入绑定、advance/dismiss/end drain，以及普通 Spine popup 的 start→loop→end 边界状态机和 runtime snapshot。Scene Layout transition prelude 只能编排该 public player；app/editor 只提供宿主 input target，不复制点击分派、latch 或 loop/end 边界。
-- Popup player 是主 Pixi display tree 中的普通 Container 节点；rendercore 不为 Popup 创建独立 Application、canvas、Renderer、ticker 或 RAF。只有 Popup Editor 的独立预览页面可创建自己的预览 canvas，再挂载同一个 player Container。Popup v2 保留有限 design viewport 适配；v3 不保存 design viewport，由 shared 无界 maximized-focus 以 focus 几何中心按 page aspect 扩展 visible rect。全屏 backdrop 始终覆盖宿主 viewport，不随 authored content focus transform 缩放。
-- popup 字体文字的单行/NFC 校验、字号/颜色/渐变/描边/投影/grapheme 弧排、显式 package 字体 FontFace hash 复用/释放及 image/ImgNumber/Spine/VNI overlay 生命周期属于 rendercore；省略 font resource 才使用 `system-ui/sans-serif`，系统字体不建模为 package 资源。游戏优先通过 player 的 exact name handle 原子 set/reset string；legacy prompt 仍可由 `start(text?)` 传入已翻译 string，省略时使用 manifest 默认值，但新 v3 authoring 不生成 prompt。
+- Popup player 是主 Pixi display tree 中的普通 Container 节点；rendercore 不为 Popup 创建独立 Application、canvas、Renderer、ticker 或 RAF。只有 Popup Editor 的独立预览页面可创建自己的预览 canvas，再挂载同一个 player Container。Popup v2 保留有限 design viewport 适配；v3/v4 不保存 design viewport，由 shared 无界 maximized-focus 以 focus 几何中心按 page aspect 扩展 visible rect。全屏 backdrop 始终覆盖宿主 viewport，不随 authored content focus transform 缩放。
+- Popup v4 Spine-slot attachment graph、exact slot prepare、DAG/per-parent order 与一 slot 一稳定 owner group 属于 rendercore；同 slot 多 child 按 layer order 排序并保留局部 transform，跨 slot 顺序继续由 skeleton draw order 决定。app/editor 不直接改 official Spine display tree，不自动断环、回根、改 order 或猜 slot。
+- popup 字体文字的单行/NFC 校验、字号/颜色/渐变/描边/投影/grapheme 弧排、显式 package 字体 FontFace hash 复用/释放及 image/ImgNumber/Spine/VNI overlay 生命周期属于 rendercore；省略 font resource 才使用 `system-ui/sans-serif`，系统字体不建模为 package 资源。游戏优先通过 player 的 exact name handle 原子 set/reset string；legacy prompt 仍可由 `start(text?)` 传入已翻译 string，省略时使用 manifest 默认值，但新 v4 authoring 不生成 prompt。
 - component 名、amount resolver、formatter、样式和业务阻塞边界由 app 传入；shared code 不维护游戏专属金额或 symbol 规则。
 - win-amount 进入 `awaiting-dismiss` 后不得继续阻塞 `playSpin()`；下一次 spin 负责清理遗留展示。
 - reel runtime 在金额或 popup 播放期间仍需逐帧 update，不能冻结 active Spine/VNI loop。
