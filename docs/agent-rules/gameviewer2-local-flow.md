@@ -30,3 +30,6 @@
   finalized operation plan。新窗口先核对 plan initial/edge checkpoint，再重新 readiness，
   并独立拥有及销毁 Pixi application、layout resource、reel 与 Symbol players。
 - Replay 必须回到第一 snapshot 并重走完整流程；不得复用半完成 controller、landing queue 或 spin 状态。
+- flow/operation 完成只结束编排调度，不结束预览 renderer 时钟。宿主 ticker 必须继续恰好一次推进
+  package runtime，使最终 Symbol 按现有状态机保持 `normal` loop，并让 Gamelayout 其它动画遵守各自
+  manifest、可见性与 playhead；不得通过暂停、重播、reset 或重建其它 player 伪装完成态。
