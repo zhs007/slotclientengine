@@ -6,14 +6,12 @@ import { normalizeGridCellReelOffsetMatrix } from "./grid-cell-reel-offsets.js";
 import { resolveGridCellDimmingAlpha } from "./grid-cell-spin-plan.js";
 import { createReelLayout } from "./layout.js";
 import { RenderReel } from "./render-reel.js";
-import { CASCADE_EMPTY_CELL } from "./types.js";
 import type {
   GridCellCoordinate,
   GridCellContinuousSpinOptions,
   GridCellDimmingPattern,
   GridCellCascadeDropMovement,
   GridCellCascadeDropPlan,
-  GridCellCascadeScene,
   GridCellCascadeValueMatrix,
   GridCellReelOffsetMatrix,
   GridCellReelPhase,
@@ -21,9 +19,7 @@ import type {
   GridCellReelSpinPlan,
   GridCellSpinPosition,
   GridCellEffectSweepPlan,
-  GridCellTerminalRemoveCandidate,
   GridCellTerminalRemoveOptions,
-  GridCellTerminalRemoveResult,
   RenderGridCellReelCellSnapshot,
   RenderGridCellReelSetOptions,
   RenderGridCellReelSetSpinOptions,
@@ -879,9 +875,7 @@ export class RenderGridCellReelSet extends Container {
     }
   }
 
-  removeVisibleSymbols(
-    options: GridCellTerminalRemoveOptions,
-  ): Promise<GridCellTerminalRemoveResult> {
+  removeVisibleSymbols(options: GridCellTerminalRemoveOptions): Promise<void> {
     this.assertStopped("remove visible symbols");
     const positions = normalizePositions(
       options.positions,
@@ -904,71 +898,37 @@ export class RenderGridCellReelSet extends Container {
           `Cannot remove missing occurrence at grid cell (${position.x},${position.y}).`,
         );
       }
-      const candidate: GridCellTerminalRemoveCandidate = Object.freeze({
-        x: position.x,
-        y: position.y,
-        code: slot.code,
-        presentationValue: slot.presentationValue,
-      });
-      const removable = options.canRemoveOccurrence?.(candidate) ?? true;
-      if (typeof removable !== "boolean") {
-        throw new ReelError("canRemoveOccurrence must return a boolean.");
-      }
-      if (removable) {
-        cell.reel.validateVisibleSymbolStatePlayback(
-          0,
-          options.state,
-          options.playback,
-        );
-      }
-      return Object.freeze({ cell, symbol: slot.symbol, candidate, removable });
+      cell.reel.validateVisibleSymbolStatePlayback(
+        0,
+        options.state,
+        options.playback,
+      );
+      return Object.freeze({ cell, symbol: slot.symbol });
     });
-    const removed = Object.freeze(
-      prepared
-        .filter(({ removable }) => removable)
-        .map(({ candidate }) => candidate),
-    );
-    const retained = Object.freeze(
-      prepared
-        .filter(({ removable }) => !removable)
-        .map(({ candidate }) => candidate),
-    );
-    const result: GridCellTerminalRemoveResult = Object.freeze({
-      removed,
-      retained,
-    });
-    if (removed.length === 0) return Promise.resolve(result);
 
     return startSymbolStatePlaybackBatch(
-      prepared
-        .filter(({ removable }) => removable)
-        .map(
-          ({ cell, symbol, candidate }) =>
-            (signal) =>
-              cell.reel
-                .playVisibleSymbolState(0, options.state, {
-                  ...options.playback,
-                  signal,
-                })
-                .then(() => {
-                  const current = cell.reel
-                    .getSlotSnapshots()
-                    .find((slot) => slot.windowY === 0);
-                  if (
-                    !cell.occupied ||
-                    current?.symbol !== symbol ||
-                    current.code !== candidate.code ||
-                    current.presentationValue !== candidate.presentationValue
-                  ) {
-                    throw new ReelError(
-                      `Terminal remove occurrence changed at grid cell (${candidate.x},${candidate.y}).`,
-                    );
-                  }
-                  this.releaseCell(cell);
-                }),
-        ),
+      prepared.map(
+        ({ cell, symbol }) =>
+          (signal) =>
+            cell.reel
+              .playVisibleSymbolState(0, options.state, {
+                ...options.playback,
+                signal,
+              })
+              .then(() => {
+                const current = cell.reel
+                  .getSlotSnapshots()
+                  .find((slot) => slot.windowY === 0);
+                if (!cell.occupied || current?.symbol !== symbol) {
+                  throw new ReelError(
+                    `Terminal remove occurrence ownership changed at grid cell (${cell.coordinate.x},${cell.coordinate.y}).`,
+                  );
+                }
+                this.releaseCell(cell);
+              }),
+      ),
       options.signal,
-    ).then(() => result);
+    );
   }
 
   setVisibleSymbolDimming(
@@ -1047,48 +1007,82 @@ export class RenderGridCellReelSet extends Container {
         `Cascade dropdown dimensions ${plan.columns}x${plan.rows} do not match runtime ${this.#columns}x${this.#rows}.`,
       );
     }
-    assertCascadeMatrixEqual(
-      this.getVisibleScene(),
-      plan.sourceScene,
-      "dropdown source scene",
-    );
-    assertCascadeMatrixEqual(
-      this.getCascadeValues(),
-      plan.sourceValues,
-      "dropdown source values",
-    );
-    const active: ActiveDropMovement[] = [];
-    for (const movement of plan.movements) {
-      const cell =
-        movement.kind === "existing"
-          ? this.getCell(movement.x, movement.sourceY)
-          : this.getCell(movement.x, movement.targetY);
-      if (movement.kind === "existing" && !cell.occupied) {
-        throw new ReelError(
-          `Dropdown source (${movement.x},${movement.sourceY}) is empty.`,
+    const prepared: Array<{
+      readonly movement: GridCellCascadeDropMovement;
+      readonly cell: RuntimeCell;
+      readonly occurrence: RenderReelVisibleOccurrence | null;
+    }> = [];
+    try {
+      for (const movement of plan.movements) {
+        const cell =
+          movement.kind === "existing"
+            ? this.getCell(movement.x, movement.sourceY)
+            : this.getCell(movement.x, movement.targetY);
+        if (movement.kind === "existing") {
+          if (!cell.occupied) {
+            throw new ReelError(
+              `Dropdown source (${movement.x},${movement.sourceY}) is empty.`,
+            );
+          }
+          const symbol = cell.reel
+            .getSlotSnapshots()
+            .find((candidate) => candidate.windowY === 0)?.symbol;
+          if (!symbol) {
+            throw new ReelError(
+              `Dropdown source occurrence is missing at (${movement.x},${movement.sourceY}).`,
+            );
+          }
+          if (!symbol.hasAnimationCapability("dropdown")) {
+            throw new ReelError(
+              `Dropdown animation is unavailable at (${movement.x},${movement.sourceY}).`,
+            );
+          }
+          symbol.requestState("dropdown");
+          prepared.push({ movement, cell, occurrence: null });
+          continue;
+        }
+        const occurrence = cell.reel.createDetachedOccurrence(
+          movement.outputCode,
+          movement.outputPresentationValue,
         );
+        if (!occurrence.symbol.hasAnimationCapability("dropdown")) {
+          cell.reel.releaseDetachedOccurrence(occurrence);
+          throw new ReelError(
+            `Dropdown animation is unavailable for refill at (${movement.x},${movement.targetY}).`,
+          );
+        }
+        try {
+          occurrence.symbol.requestState("dropdown");
+        } catch (error) {
+          cell.reel.releaseDetachedOccurrence(occurrence);
+          throw error;
+        }
+        prepared.push({ movement, cell, occurrence });
       }
+    } catch (error) {
+      for (const item of prepared) {
+        if (item.occurrence) {
+          item.occurrence.symbol.requestState("normal");
+          item.cell.reel.releaseDetachedOccurrence(item.occurrence);
+        } else {
+          item.cell.reel
+            .getSlotSnapshots()
+            .find((candidate) => candidate.windowY === 0)
+            ?.symbol?.requestState("normal");
+        }
+      }
+      throw error;
+    }
+    const active: ActiveDropMovement[] = [];
+    for (const item of prepared) {
+      const { movement, cell } = item;
       const occurrence =
         movement.kind === "existing"
           ? cell.reel.takeVisibleOccurrence()
-          : cell.reel.createDetachedOccurrence(
-              movement.code,
-              movement.presentationValue,
-            );
-      if (
-        occurrence.code !== movement.code ||
-        occurrence.presentationValue !== movement.presentationValue
-      ) {
-        throw new ReelError(
-          `Dropdown source occurrence changed at (${movement.x},${movement.sourceY}).`,
-        );
-      }
+          : item.occurrence;
+      if (!occurrence)
+        throw new ReelError("Prepared refill occurrence is missing.");
       if (movement.kind === "existing") cell.occupied = false;
-      if (occurrence.symbol.hasAnimationCapability("dropdown")) {
-        occurrence.symbol.requestState("dropdown");
-      } else {
-        occurrence.symbol.requestState("normal");
-      }
       occurrence.symbol.position.set(
         movement.x * (this.#cellWidth + this.#columnGap) + this.#cellWidth / 2,
         movement.sourceY * (this.#cellHeight + this.#rowGap) +
@@ -1243,7 +1237,6 @@ export class RenderGridCellReelSet extends Container {
   prepareVisibleOccurrenceReplacement(options: {
     readonly x: number;
     readonly y: number;
-    readonly expectedCode: number;
     readonly outputCode: number;
     readonly outputPresentationValue: number | null;
   }): PreparedVisibleOccurrenceReplacement {
@@ -1254,12 +1247,13 @@ export class RenderGridCellReelSet extends Container {
         `Cannot replace empty grid cell (${options.x},${options.y}).`,
       );
     }
-    const input = cell.reel.getVisibleSymbolStateSnapshot(0);
-    if (input.code !== options.expectedCode) {
+    const inputSymbol = cell.reel
+      .getSlotSnapshots()
+      .find((candidate) => candidate.windowY === 0)?.symbol;
+    if (!inputSymbol)
       throw new ReelError(
-        `Cannot replace grid cell (${options.x},${options.y}): expected code ${options.expectedCode}, received ${input.code}.`,
+        `Cannot replace missing occurrence at grid cell (${options.x},${options.y}).`,
       );
-    }
     const output = cell.reel.createDetachedOccurrence(
       options.outputCode,
       options.outputPresentationValue,
@@ -1273,7 +1267,6 @@ export class RenderGridCellReelSet extends Container {
     return Object.freeze({
       x: options.x,
       y: options.y,
-      inputCode: options.expectedCode,
       outputCode: options.outputCode,
       commit: (): void => {
         if (state === "committed") return;
@@ -1283,10 +1276,12 @@ export class RenderGridCellReelSet extends Container {
           );
         }
         this.assertStopped("commit visible occurrence replacement");
-        const current = cell.reel.getVisibleSymbolStateSnapshot(0);
-        if (current.code !== options.expectedCode) {
+        const currentSymbol = cell.reel
+          .getSlotSnapshots()
+          .find((candidate) => candidate.windowY === 0)?.symbol;
+        if (!cell.occupied || currentSymbol !== inputSymbol) {
           throw new ReelError(
-            `Cannot commit replacement at grid cell (${options.x},${options.y}): expected code ${options.expectedCode}, received ${current.code}.`,
+            `Cannot commit replacement at grid cell (${options.x},${options.y}): occurrence ownership changed.`,
           );
         }
         const previous = cell.reel.takeVisibleOccurrence();
@@ -1333,16 +1328,6 @@ export class RenderGridCellReelSet extends Container {
       if (!source.occupied || !target.occupied)
         throw new ReelError(
           `Transfer[${index}] source and target must both be occupied.`,
-        );
-      const sourceSnapshot = source.reel.getVisibleSymbolStateSnapshot(0);
-      const targetSnapshot = target.reel.getVisibleSymbolStateSnapshot(0);
-      if (sourceSnapshot.code !== transfer.expectedSourceCode)
-        throw new ReelError(
-          `Transfer[${index}] expected source code ${transfer.expectedSourceCode}, received ${sourceSnapshot.code}.`,
-        );
-      if (targetSnapshot.code !== transfer.expectedTargetCode)
-        throw new ReelError(
-          `Transfer[${index}] expected target code ${transfer.expectedTargetCode}, received ${targetSnapshot.code}.`,
         );
       return { transfer, source, target };
     });
@@ -2153,29 +2138,17 @@ export class RenderGridCellReelSet extends Container {
       target.phase = "completed";
       this.syncCellRenderOrder(target);
     }
-    for (let x = 0; x < active.plan.columns; x += 1) {
-      for (let y = 0; y < active.plan.rows; y += 1) {
-        const value = active.plan.targetValues[x][y];
-        if (value === CASCADE_EMPTY_CELL) {
-          throw new ReelError(
-            `Dropdown target presentation value at (${x},${y}) is empty.`,
-          );
-        }
-        this.getCell(x, y).reel.setVisibleSymbolPresentationValue(0, value);
+    for (const commit of active.plan.valueCommits) {
+      const cell = this.getCell(commit.x, commit.y);
+      if (!cell.occupied) {
+        throw new ReelError(
+          `Cannot commit dropdown presentation value to empty grid cell (${commit.x},${commit.y}).`,
+        );
       }
+      cell.reel.setVisibleSymbolPresentationValue(0, commit.presentationValue);
     }
     this.#activeDrop = null;
     this.setCascadeMovementMaskActive(false);
-    assertCascadeMatrixEqual(
-      this.getVisibleScene(),
-      active.plan.targetScene,
-      "dropdown target scene",
-    );
-    assertCascadeMatrixEqual(
-      this.getCascadeValues(),
-      active.plan.targetValues,
-      "dropdown target values",
-    );
   }
 
   private clearDropOccurrences(): void {
@@ -2409,34 +2382,6 @@ function normalizePositions(
         position !== null,
     ),
   );
-}
-
-function assertCascadeMatrixEqual(
-  actual: readonly (readonly (number | null)[])[],
-  expected: readonly (readonly (number | null)[])[],
-  label: string,
-): void {
-  if (actual.length !== expected.length) {
-    throw new ReelError(
-      `${label} column count differs: actual=${actual.length}; expected=${expected.length}.`,
-    );
-  }
-  for (const [x, column] of actual.entries()) {
-    const expectedColumn = expected[x];
-    if (!expectedColumn || column.length !== expectedColumn.length) {
-      throw new ReelError(
-        `${label}[${x}] row count differs: actual=${column.length}; expected=${expectedColumn?.length ?? "missing"}.`,
-      );
-    }
-    for (const [y, value] of column.entries()) {
-      const expectedValue = expectedColumn[y];
-      if (value !== expectedValue) {
-        throw new ReelError(
-          `${label}[${x}][${y}] differs: actual(runtime)=${String(value)}; expected(plan)=${String(expectedValue)}.`,
-        );
-      }
-    }
-  }
 }
 
 function easeOutCubic(progress: number): number {

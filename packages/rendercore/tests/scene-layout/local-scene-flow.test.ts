@@ -432,36 +432,17 @@ describe("local scene flow runtime", () => {
     runtime.destroy();
   });
 
-  it("requires every finalized operation checkpoint to match the local flow", async () => {
+  it("trusts the finalized operation plan at the render boundary", async () => {
     const root = { replaceChildren: vi.fn() } as unknown as HTMLElement;
-    await expect(
-      createSceneOtherSceneFlowRuntime({
-        root,
-        layoutZipBytes: new Uint8Array([1]),
-        project,
-        operationPlan: operationPlanFor(project, {
-          initialMismatch: true,
-        }) as never,
-      }),
-    ).rejects.toThrow(/initial snapshot/);
-    await expect(
-      createSceneOtherSceneFlowRuntime({
-        root,
-        layoutZipBytes: new Uint8Array([1]),
-        project,
-        operationPlan: operationPlanFor(project, { omitFinal: true }) as never,
-      }),
-    ).rejects.toThrow(/no finalized edge/);
-    await expect(
-      createSceneOtherSceneFlowRuntime({
-        root,
-        layoutZipBytes: new Uint8Array([1]),
-        project,
-        operationPlan: operationPlanFor(project, {
-          outputMismatch: true,
-        }) as never,
-      }),
-    ).rejects.toThrow(/does not match the local flow/);
+    const runtime = await createSceneOtherSceneFlowRuntime({
+      root,
+      layoutZipBytes: new Uint8Array([1]),
+      project,
+      operationPlan: operationPlanFor(project, {
+        initialMismatch: true,
+      }) as never,
+    });
+    runtime.destroy();
   });
 
   it("accepts a matching finalized operation checkpoint chain", async () => {

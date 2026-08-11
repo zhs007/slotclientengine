@@ -17,7 +17,7 @@ describe("configured profile operation handlers", () => {
     expect(registry.has("slot:spin", 2)).toBe(true);
   });
 
-  it("rejects missing step payloads and target methods when the operation starts", async () => {
+  it("keeps missing presentation capability failures explicit", async () => {
     const registry = createSlotOperationHandlerRegistry();
     registerSlotRoundProfileOperationHandlers({
       registry,
@@ -29,9 +29,6 @@ describe("configured profile operation handlers", () => {
         .get("slot:state-mutation", 2)!
         .handler.start(operation, context()),
     ).rejects.toThrow(/no settled-transform handler/);
-    await expect(
-      registry.get("slot:win-remove", 2)!.handler.start(operation, context()),
-    ).rejects.toThrow(/payload.step/);
   });
 
   it("runs transform and completion as async frame chains", async () => {
@@ -92,28 +89,30 @@ describe("configured profile operation handlers", () => {
       );
   });
 
-  it("rejects missing dropdown and refill step payloads", async () => {
+  it("forwards producer-compiled dropdown and refill steps", async () => {
     const registry = createSlotOperationHandlerRegistry();
+    const startDropdown = vi.fn();
+    const startRefill = vi.fn();
     registerSlotRoundProfileOperationHandlers({
       registry,
-      target: target() as never,
+      target: { ...target(), startDropdown, startRefill } as never,
     });
-    await expect(
-      registry
-        .get("slot:dropdown", 2)!
-        .handler.start(
-          { kind: "slot:dropdown", payload: {} } as never,
-          context(),
-        ),
-    ).rejects.toThrow(/slot:dropdown payload.step/);
-    await expect(
-      registry
-        .get("slot:refill", 2)!
-        .handler.start(
-          { kind: "slot:refill", payload: {} } as never,
-          context(),
-        ),
-    ).rejects.toThrow(/slot:refill payload.step/);
+    const dropdown = { stepIndex: 1 };
+    const refill = { stepIndex: 2 };
+    await registry
+      .get("slot:dropdown", 2)!
+      .handler.start(
+        { kind: "slot:dropdown", payload: { step: dropdown } } as never,
+        context(),
+      );
+    await registry
+      .get("slot:refill", 2)!
+      .handler.start(
+        { kind: "slot:refill", payload: { step: refill } } as never,
+        context(),
+      );
+    expect(startDropdown).toHaveBeenCalledWith(dropdown);
+    expect(startRefill).toHaveBeenCalledWith(refill);
   });
 });
 

@@ -590,20 +590,6 @@ describe("scene layout package runtime", () => {
             landingStates: [["normal"], ["normal", "normal"]],
           }),
         ).toThrow(/2 rows/);
-        if (renderMode === "grid-cell") {
-          expect(() =>
-            runtime.spinMainReelToScene({
-              ...target,
-              buildGridCellSpinPlan: (stage) =>
-                stage.createPlan({ positions: [{ x: 0, y: 0 }] }),
-            }),
-          ).toThrow(/held cell/);
-          expect(runtime.getMainReelSceneSnapshot()).toEqual([
-            [1, 1],
-            [0, 0],
-          ]);
-        }
-
         runtime.spinMainReelToScene({
           ...target,
           landingStates: [

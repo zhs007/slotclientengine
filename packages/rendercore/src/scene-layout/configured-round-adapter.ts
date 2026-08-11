@@ -756,18 +756,25 @@ function createRendererMovementPlan(
         timing.maxFallSeconds,
         timing.baseFallSeconds + rows * timing.perRowFallSeconds,
       );
-      return Object.freeze({
-        kind: movement.kind,
+      const common = {
         x: movement.target.x,
         sourceY: movement.source.y,
         targetY: movement.target.y,
-        code: movement.code,
-        presentationValue: movement.value,
         startSeconds: 0,
         fallSeconds,
         settleSeconds: timing.settleSeconds,
         overshootPixels: 0,
-      });
+      };
+      return Object.freeze(
+        movement.kind === "refill"
+          ? {
+              kind: movement.kind,
+              ...common,
+              outputCode: movement.code,
+              outputPresentationValue: movement.value,
+            }
+          : { kind: movement.kind, ...common },
+      );
     },
   );
   const totalSeconds = movements.reduce(
@@ -781,17 +788,22 @@ function createRendererMovementPlan(
   return Object.freeze({
     columns: step.input.scene.length,
     rows: step.input.scene[0]?.length ?? 0,
-    sourceScene: step.input.scene,
-    sourceValues: step.input.values,
-    settledScene: step.output.scene,
-    settledValues: step.output.values,
-    targetScene: step.output.scene,
-    targetValues: step.output.values,
-    refillPositions:
-      step.kind === "refill"
-        ? Object.freeze(step.movements.map((movement) => movement.target))
-        : Object.freeze([]),
     movements: Object.freeze(movements),
+    valueCommits: Object.freeze(
+      step.output.scene.flatMap((column, x) =>
+        column.flatMap((code, y) =>
+          code === -1
+            ? []
+            : [
+                Object.freeze({
+                  x,
+                  y,
+                  presentationValue: step.output.values[x]![y] as number | null,
+                }),
+              ],
+        ),
+      ),
+    ),
     totalSeconds,
   });
 }

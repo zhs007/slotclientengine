@@ -249,24 +249,6 @@ describe("Game002RoundTarget atomic multiplier programs", () => {
     expect(target.isCompletionComplete()).toBe(false);
     target.cleanup();
 
-    const fall = {
-      flowKey: "edge-fall",
-      sourceScene: createScene(1),
-      sourceValues: createScene<number | null>(null),
-      dropdownScene: createScene(2),
-      dropdownValues: createScene<number | null>(null),
-      refillScene: createScene(3),
-      refillValues: createScene<number | null>(null),
-      refillPositions: [],
-    } as never;
-    target.startDropdownData(fall);
-    expect(target.isDropdownComplete()).toBe(false);
-    target.cleanup();
-    runtime.anticipation = true;
-    target.startDropdownData(fall);
-    expect(() => target.isDropdownComplete()).toThrow(/does not match/);
-    target.cleanup();
-
     const presentation = {
       ...operation("game002:wl-increment", snapshot, {
         type: "change",
@@ -535,12 +517,9 @@ class TransformRuntime {
       replaceVisibleOccurrence: (options: {
         x: number;
         y: number;
-        expectedCode: number;
         outputCode: number;
         outputPresentationValue: number | null;
       }) => {
-        if (this.scene[options.x][options.y] !== options.expectedCode)
-          throw new Error("replacement input mismatch");
         this.scene[options.x][options.y] = options.outputCode;
         this.events.push(
           `replace:${options.x},${options.y}:${options.outputCode}`,
@@ -551,8 +530,6 @@ class TransformRuntime {
         transfers: readonly {
           source: { x: number; y: number };
           target: { x: number; y: number };
-          expectedSourceCode: number;
-          expectedTargetCode: number;
           sourceReplacementCode: number;
         }[];
         barrier: Promise<void>;
@@ -564,15 +541,8 @@ class TransformRuntime {
         await options.barrier;
         await options.waitForFrame(() => true);
         for (const transfer of options.transfers) {
-          if (
-            this.scene[transfer.source.x]![transfer.source.y] !==
-              transfer.expectedSourceCode ||
-            this.scene[transfer.target.x]![transfer.target.y] !==
-              transfer.expectedTargetCode
-          )
-            throw new Error("transfer input mismatch");
-          this.scene[transfer.target.x]![transfer.target.y] =
-            transfer.expectedSourceCode;
+          const sourceCode = this.scene[transfer.source.x]![transfer.source.y]!;
+          this.scene[transfer.target.x]![transfer.target.y] = sourceCode;
           this.scene[transfer.source.x]![transfer.source.y] =
             transfer.sourceReplacementCode;
         }

@@ -898,7 +898,13 @@ describe("RenderReelSet", () => {
     const reelSet = new RenderReelSet({
       reels: createBasicReels(),
       layout: createBasicLayout(),
-      registry: createBasicRegistry(),
+      registry: createBasicRegistry({
+        symbolAnimationCapabilities: {
+          A: ["dropdown"],
+          B: ["dropdown"],
+          C: ["dropdown"],
+        },
+      }),
     });
     reelSet.resetToVisibleScene(
       [
@@ -912,39 +918,12 @@ describe("RenderReelSet", () => {
     reelSet.startCascadeDrop({
       columns: 2,
       rows: 3,
-      sourceScene: [
-        [1, -1, 2],
-        [2, 2, 1],
-      ],
-      sourceValues: [
-        [null, -1, null],
-        [null, null, null],
-      ],
-      settledScene: [
-        [-1, 1, 2],
-        [2, 2, 1],
-      ],
-      settledValues: [
-        [-1, null, null],
-        [null, null, null],
-      ],
-      targetScene: [
-        [2, 1, 2],
-        [2, 2, 1],
-      ],
-      targetValues: [
-        [null, null, null],
-        [null, null, null],
-      ],
-      refillPositions: [{ x: 0, y: 0 }],
       movements: [
         {
           kind: "existing",
           x: 0,
           sourceY: 0,
           targetY: 1,
-          code: 1,
-          presentationValue: null,
           startSeconds: 0,
           fallSeconds: 0.1,
           settleSeconds: 0.05,
@@ -955,14 +934,15 @@ describe("RenderReelSet", () => {
           x: 0,
           sourceY: -1,
           targetY: 0,
-          code: 2,
-          presentationValue: null,
+          outputCode: 2,
+          outputPresentationValue: null,
           startSeconds: 0.02,
           fallSeconds: 0.1,
           settleSeconds: 0.05,
           overshootPixels: 0,
         },
       ],
+      valueCommits: [],
       totalSeconds: 0.17,
     });
     expect(() =>

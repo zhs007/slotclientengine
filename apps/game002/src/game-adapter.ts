@@ -37,7 +37,7 @@ import {
   createGame002ReelRuntime,
   type Game002ReelRuntime,
 } from "./game002-reel-controller.js";
-import { sceneEquals, validateGame002Scene } from "./scene.js";
+import { validateGame002Scene } from "./scene.js";
 import type { Game002PackageConfig } from "./package-config.js";
 import {
   createGame002SceneRuntime,
@@ -49,7 +49,6 @@ import { createGame002WinSummaryCollectOptions } from "./cascade-win-summary-con
 import {
   GAME002_CASCADE_MOTION,
   GAME002_CASCADE_PRESENTATION,
-  canGame002CascadeDropSymbol,
 } from "./cascade-config.js";
 import {
   compileGame002RoundOperationPlan,
@@ -812,33 +811,28 @@ export class Game002RoundTarget {
 
   startDropdownData(fall: Game002FallPayload): void {
     this.#activeFall = fall;
-    const planOptions = this.createDropPlanOptionsFromFall(fall);
     const anticipation = this.#runtime.isAnticipationActive();
+    const planOptions = this.createDropPlanOptionsFromFall(fall, !anticipation);
     const plan = anticipation
       ? this.#runtime.createCascadeDropdownPlan(planOptions)
       : this.#runtime.createCascadeDropPlan(planOptions);
     this.#activity = anticipation ? "dropdown-only" : "dropdown-unified";
     if (!anticipation) this.#unifiedSteps.add(fallStepKey(fall));
     this.#runtimeCompleted = plan.totalSeconds === 0;
-    this.#runtime.startCascadeDrop(plan);
+    this.#runtime.startCascadeDrop(
+      plan,
+      anticipation ? fall.dropdownScene : fall.refillScene,
+      anticipation ? undefined : fall.dropdownScene,
+    );
   }
 
   isDropdownComplete(): boolean {
-    const stage = this.activeFallView();
+    if (
+      this.#activity !== "dropdown-only" &&
+      this.#activity !== "dropdown-unified"
+    )
+      throw new Error("game002 dropdown stage is not active.");
     if (!this.#runtimeCompleted) return false;
-    if (this.#activity === "dropdown-unified")
-      assertGame002ReelVisualMatchesTarget(
-        this.#runtime.getVisualSnapshot(),
-        stage.refillScene,
-        `completed game002 ${stage.label} unified fall`,
-      );
-    else {
-      const current = this.#runtime.getCurrentScene();
-      if (!current || !sceneEquals(current, stage.dropdownScene))
-        throw new Error(
-          `completed game002 ${stage.label} dropdown scene does not match.`,
-        );
-    }
     this.#activity = "idle";
     return true;
   }
@@ -860,7 +854,6 @@ export class Game002RoundTarget {
   }
 
   isRefillComplete(): boolean {
-    const stage = this.activeFallView();
     if (this.#activity === "refill-complete") {
       this.applyRequiredRefillMultiplierTexts();
       this.#activity = "idle";
@@ -868,11 +861,6 @@ export class Game002RoundTarget {
     }
     if (this.#activity !== "refill-spin" || !this.#runtimeCompleted)
       return false;
-    assertGame002ReelVisualMatchesTarget(
-      this.#runtime.getVisualSnapshot(),
-      stage.refillScene,
-      `completed game002 ${stage.label} selective refill`,
-    );
     this.applyRequiredRefillMultiplierTexts();
     this.#activity = "idle";
     return true;
@@ -912,7 +900,7 @@ export class Game002RoundTarget {
           await this.playStates(payload.pos, "multEnd", context.signal);
           await this.playStates(payload.pos, "change", context.signal);
           for (const position of payload.pos)
-            this.replaceFromOperation(input, operation, position);
+            this.replaceFromOperation(operation, position);
           return;
         }
         case "game002:coin-multiplier": {
@@ -938,7 +926,7 @@ export class Game002RoundTarget {
           const payload = requireGame002ChgPayload(operation, "change");
           for (const position of payload.pos) {
             await this.playStates([position], "change", context.signal);
-            this.replaceFromOperation(input, operation, position);
+            this.replaceFromOperation(operation, position);
           }
           return;
         }
@@ -997,16 +985,13 @@ export class Game002RoundTarget {
   }
 
   private replaceFromOperation(
-    inputSnapshot: SlotOperationSnapshot,
     operation: Game002MutationOperation,
     position: { readonly x: number; readonly y: number },
   ): void {
-    const input = operationInputCell(inputSnapshot, position);
     const output = operationOutputCell(operation, position);
     this.#runtime.replaceVisibleOccurrence({
       x: position.x,
       y: position.y,
-      expectedCode: input.code,
       outputCode: output.code,
       outputPresentationValue: output.value,
     });
@@ -1042,14 +1027,10 @@ export class Game002RoundTarget {
     );
     await this.#runtime.transferVisibleOccurrences({
       transfers: payload.routes.map(({ source, target }) => {
-        const inputSource = operationInputCell(inputSnapshot, source);
-        const inputTarget = operationInputCell(inputSnapshot, target);
         const outputSource = operationOutputCell(operation, source);
         return Object.freeze({
           source,
           target,
-          expectedSourceCode: inputSource.code,
-          expectedTargetCode: inputTarget.code,
           sourceReplacementCode: outputSource.code,
           sourceReplacementPresentationValue: outputSource.value,
         });
@@ -1059,7 +1040,7 @@ export class Game002RoundTarget {
       waitForFrame: context.waitForFrame,
     });
     for (const position of payload.mainPos)
-      this.replaceFromOperation(inputSnapshot, operation, position);
+      this.replaceFromOperation(operation, position);
   }
 
   update(deltaSeconds: number): void {
@@ -1167,19 +1148,18 @@ export class Game002RoundTarget {
 
   private createDropPlanOptionsFromFall(
     fall: Game002FallPayload,
+    includeRefill: boolean,
   ): Parameters<Game002ReelRuntime["createCascadeDropPlan"]>[0] {
+    const facts = fall.cascadeFacts;
     return {
-      sourceScene: fall.sourceScene,
-      sourceValues: fall.sourceValues,
-      settledScene: fall.dropdownScene,
-      settledValues: fall.dropdownValues,
-      targetScene: fall.refillScene,
-      targetValues: fall.refillValues,
-      refillPositions: fall.refillPositions,
-      canDropOccurrence: ({ code }) =>
-        canGame002CascadeDropSymbol(
-          resolveGame002CascadeSymbol(this.#runtime, code),
-        ),
+      columns: facts.columns,
+      rows: facts.rows,
+      movements: includeRefill
+        ? [...facts.dropdownMovements, ...facts.refillMovements]
+        : facts.dropdownMovements,
+      valueCommits: includeRefill
+        ? facts.targetValueCommits
+        : facts.dropdownValueCommits,
       motion: GAME002_CASCADE_MOTION,
     };
   }
@@ -1276,16 +1256,6 @@ function requireGame002ChgPayload<Type extends SlotChgPayload["type"]>(
   return payload as Extract<SlotChgPayload, { readonly type: Type }>;
 }
 
-function operationInputCell(
-  input: SlotOperationSnapshot,
-  position: { readonly x: number; readonly y: number },
-) {
-  return Object.freeze({
-    code: input.scene[position.x]![position.y]!,
-    value: input.values[position.x]![position.y]!,
-  });
-}
-
 function requireOperationInput(
   operation: SlotOperationV2,
   context: SlotOperationExecutionContext,
@@ -1320,17 +1290,6 @@ function isWinAmountBlockingSpin(phase: WinAmountAnimationPhase): boolean {
     phase === "major-counting" ||
     phase === "tier-counting"
   );
-}
-
-function resolveGame002CascadeSymbol(
-  runtime: Game002ReelRuntime,
-  code: number,
-): string {
-  const symbol = runtime.gameConfig.getPaytableEntry(code)?.symbol;
-  if (!symbol) {
-    throw new Error(`game002 cascade symbol code ${code} is not in paytable.`);
-  }
-  return symbol;
 }
 
 function asError(error: unknown): Error {

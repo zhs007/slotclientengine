@@ -46,6 +46,7 @@ import rawGameConfig from "../../../assets/gamecfg002/gameconfig.json";
 import {
   createGameConfig,
   createSlotGameLogicResult,
+  compileSlotCascadeFacts,
 } from "@slotclientengine/gameframeworks";
 import {
   createDefaultSymbolAnimationResolver,
@@ -489,15 +490,21 @@ describe("game002 Crave reel runtime", () => {
     const refillValues = removedValues.map((column) =>
       column.map((value) => (value === -1 ? null : value)),
     );
-    const dropdown = runtime.createCascadeDropdownPlan({
+    const cascadeFacts = compileSlotCascadeFacts({
       sourceScene: removedScene,
       sourceValues: removedValues,
-      settledScene: removedScene,
-      settledValues: removedValues,
+      dropdownScene: removedScene,
+      dropdownValues: removedValues,
       targetScene: refillScene,
       targetValues: refillValues,
       refillPositions: holes,
       canDropOccurrence: () => true,
+    });
+    const dropdown = runtime.createCascadeDropdownPlan({
+      columns: cascadeFacts.columns,
+      rows: cascadeFacts.rows,
+      movements: cascadeFacts.dropdownMovements,
+      valueCommits: cascadeFacts.dropdownValueCommits,
       motion: {
         columnStartStaggerSeconds: 0.03,
         startStaggerSeconds: 0.01,
@@ -509,7 +516,7 @@ describe("game002 Crave reel runtime", () => {
       },
     });
     expect(dropdown.movements).toEqual([]);
-    runtime.startCascadeDrop(dropdown);
+    runtime.startCascadeDrop(dropdown, removedScene);
     expect(runtime.getCurrentScene()).toEqual(removedScene);
 
     runtime.startRefillEffectSweep(holes);
@@ -603,15 +610,24 @@ describe("game002 Crave reel runtime", () => {
     const refillValues = removedValues.map((column) =>
       column.map((value) => (value === -1 ? null : value)),
     );
-    const unified = runtime.createCascadeDropPlan({
+    const cascadeFacts = compileSlotCascadeFacts({
       sourceScene: removedScene,
       sourceValues: removedValues,
-      settledScene: removedScene,
-      settledValues: removedValues,
+      dropdownScene: removedScene,
+      dropdownValues: removedValues,
       targetScene: refillScene,
       targetValues: refillValues,
       refillPositions,
       canDropOccurrence: () => true,
+    });
+    const unified = runtime.createCascadeDropPlan({
+      columns: cascadeFacts.columns,
+      rows: cascadeFacts.rows,
+      movements: [
+        ...cascadeFacts.dropdownMovements,
+        ...cascadeFacts.refillMovements,
+      ],
+      valueCommits: cascadeFacts.targetValueCommits,
       motion: {
         columnStartStaggerSeconds: 0.03,
         startStaggerSeconds: 0.01,
@@ -627,10 +643,10 @@ describe("game002 Crave reel runtime", () => {
         kind: "refill",
         x: 1,
         targetY: 0,
-        code: 0,
+        outputCode: 0,
       }),
     ]);
-    runtime.startCascadeDrop(unified);
+    runtime.startCascadeDrop(unified, refillScene, removedScene);
     expect(runtime.isAnticipationActive()).toBe(false);
     result = runtime.update(0.05);
     for (let index = 0; index < 20 && !result.completed; index += 1) {

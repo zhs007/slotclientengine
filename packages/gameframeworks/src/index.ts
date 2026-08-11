@@ -29,6 +29,8 @@ export {
   genSpinOperation,
   genWinOperation,
   createSlotOperationSnapshot,
+  compileSlotCascadeFacts,
+  deriveSlotCascadeDropdownValues,
 } from "@slotclientengine/logiccore";
 export {
   createSceneLayoutPackageResource,
@@ -79,6 +81,12 @@ export type {
   SlotRoundValueMatrix,
   SlotRoundWinGroupPlan,
   SlotRoundWinStepPlan,
+  SlotCascadeFacts,
+  SlotCascadeCanDropOccurrence,
+  SlotCascadeMovementFact,
+  SlotCascadeOccurrenceContext,
+  SlotCascadeValueCommit,
+  SlotCascadeValueMatrix,
 } from "@slotclientengine/logiccore";
 export { createSlotGameFramework, buildSpinParams } from "./framework.js";
 export {
