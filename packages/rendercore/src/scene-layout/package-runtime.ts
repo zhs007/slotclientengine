@@ -62,6 +62,7 @@ import type {
   SceneLayoutSymbolPackageBinding,
 } from "./types.js";
 import type { SlotReelPresentationProfileV1 } from "./template-presentation.js";
+import { createSceneLayoutOccurrenceEffectPlayerFactory } from "./occurrence-effect-player.js";
 
 type ReelPresentation = RenderReelSet | RenderGridCellReelSet;
 
@@ -97,6 +98,14 @@ interface ActiveModeTransitionBase extends PreparedModeTransitionBase {
   switched: boolean;
   readonly resolve: () => void;
   readonly reject: (error: SceneLayoutError) => void;
+}
+
+interface PackagePresentationDelayWaiter {
+  remainingMs: number;
+  readonly resolve: () => void;
+  readonly reject: (error: Error) => void;
+  readonly signal?: AbortSignal;
+  readonly abortListener?: () => void;
 }
 
 type ActiveModeTransition =
@@ -205,6 +214,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   #initialized = false;
   #initializing = false;
   #destroyed = false;
+  readonly #presentationDelayWaiters =
+    new Set<PackagePresentationDelayWaiter>();
   #stableMode: string | null = null;
   #displayedMode: string | null = null;
   #targetMode: string | null = null;
@@ -572,6 +583,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
 
   update(deltaSeconds: number): void {
     this.assertReady();
+    this.updatePresentationDelayWaiters(deltaSeconds);
     this.#layout.update(deltaSeconds);
     if (this.#reel && !this.#hostUpdatesMainReel) {
       const geometry = this.#manifest.reels.main;
@@ -1057,6 +1069,69 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         "Visible occurrence transfer requires a grid-cell main reel.",
       );
     return reel.prepareVisibleOccurrenceTransferBatch(options);
+  }
+
+  waitForPresentationDelay(
+    durationMs: number,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    this.assertReady();
+    if (!Number.isFinite(durationMs) || durationMs < 0)
+      return Promise.reject(
+        new SceneLayoutError(
+          "Presentation delay durationMs must be finite and non-negative.",
+        ),
+      );
+    if (signal?.aborted)
+      return Promise.reject(
+        new SceneLayoutError("Presentation delay was aborted."),
+      );
+    if (durationMs === 0) return Promise.resolve();
+    return new Promise<void>((resolve, reject) => {
+      const waiter: PackagePresentationDelayWaiter = {
+        remainingMs: durationMs,
+        resolve,
+        reject,
+        signal,
+      };
+      if (signal) {
+        const abortListener = (): void => {
+          if (!this.#presentationDelayWaiters.delete(waiter)) return;
+          reject(new SceneLayoutError("Presentation delay was aborted."));
+        };
+        (waiter as { abortListener?: () => void }).abortListener =
+          abortListener;
+        signal.addEventListener("abort", abortListener, { once: true });
+      }
+      this.#presentationDelayWaiters.add(waiter);
+    });
+  }
+
+  getMainReelVisibleOccurrence(x: number, y: number) {
+    this.assertReady();
+    const reel = this.requireReel("main");
+    if (!(reel instanceof RenderGridCellReelSet))
+      throw new SceneLayoutError(
+        "Visible occurrence handles require a grid-cell main reel.",
+      );
+    return reel.getVisibleOccurrenceHandle(x, y);
+  }
+
+  runMainReelVisibleOccurrenceTransfer(
+    input: import("../reel/index.js").VisibleOccurrenceTransferInput,
+    choreography: (
+      scope: import("../reel/index.js").VisibleOccurrenceTransferScope,
+    ) => Promise<void>,
+  ): Promise<void> {
+    this.assertReady();
+    const reel = this.requireReel("main");
+    if (!(reel instanceof RenderGridCellReelSet))
+      return Promise.reject(
+        new SceneLayoutError(
+          "Visible occurrence transfer requires a grid-cell main reel.",
+        ),
+      );
+    return reel.runVisibleOccurrenceTransfer(input, choreography);
   }
 
   drainMainReelLandingPositions(): readonly {
@@ -1738,6 +1813,13 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
+    for (const waiter of this.#presentationDelayWaiters) {
+      waiter.signal?.removeEventListener("abort", waiter.abortListener!);
+      waiter.reject(
+        new SceneLayoutError("Presentation delay runtime was destroyed."),
+      );
+    }
+    this.#presentationDelayWaiters.clear();
     this.#disposePopupInputBinding?.();
     this.#disposePopupInputBinding = null;
     this.releasePreparedTransition(this.#preparedTransition);
@@ -1792,6 +1874,17 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#targetSymbolPackageId = null;
     this.#activeBackgroundNodes = Object.freeze([]);
     this.#viewportSize = null;
+  }
+
+  private updatePresentationDelayWaiters(deltaSeconds: number): void {
+    const deltaMs = deltaSeconds * 1000;
+    for (const waiter of [...this.#presentationDelayWaiters]) {
+      waiter.remainingMs -= deltaMs;
+      if (waiter.remainingMs > 0) continue;
+      this.#presentationDelayWaiters.delete(waiter);
+      waiter.signal?.removeEventListener("abort", waiter.abortListener!);
+      waiter.resolve();
+    }
   }
 
   private assertCanPrepareTransition(): void {
@@ -2399,11 +2492,19 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
               this.#gridCellPresentation.presentationValueResolver,
           }
         : {}),
+      occurrenceEffectPlayerFactory:
+        createSceneLayoutOccurrenceEffectPlayerFactory(this.#resource),
     });
   }
 
   private async prepareReelPresentation(reel: ReelPresentation): Promise<void> {
-    if (reel instanceof RenderGridCellReelSet) await reel.prepareEffects();
+    if (reel instanceof RenderGridCellReelSet) {
+      if (this.#createGridCellReel)
+        reel.setOccurrenceEffectPlayerFactory(
+          createSceneLayoutOccurrenceEffectPlayerFactory(this.#resource),
+        );
+      await reel.prepareEffects();
+    }
   }
 
   private applyReelScene(
