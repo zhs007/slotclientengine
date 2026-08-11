@@ -598,32 +598,39 @@ export class RenderGridCellReelSet extends Container {
     if (!plan.selective) {
       throw new ReelError("spinSelective requires a selective grid spin plan.");
     }
-    for (const planCell of plan.cells) {
+    this.assertPlanMatchesRuntime(plan);
+    const selected = plan.cells.map((planCell) => {
       const cell = this.getCell(planCell.x, planCell.y);
-      const slot = cell.reel
-        .getSlotSnapshots()
-        .find((candidate) => candidate.windowY === 0);
-      if (!cell.occupied || !slot?.symbol) {
-        throw new ReelError(
-          `Selective grid spin position (${planCell.x},${planCell.y}) has no releasable occurrence.`,
-        );
-      }
-    }
-    const detached = plan.cells.map((planCell) => {
-      const cell = this.getCell(planCell.x, planCell.y);
-      return Object.freeze({
-        cell,
-        occurrence: cell.reel.takeVisibleOccurrence(),
-      });
+      return { cell, wasOccupied: cell.occupied };
     });
-    for (const { cell } of detached) cell.occupied = false;
+    const detached: Array<{
+      readonly cell: RuntimeCell;
+      readonly occurrence: RenderReelVisibleOccurrence;
+    }> = [];
     try {
+      for (const item of selected) {
+        const slot = item.cell.reel
+          .getSlotSnapshots()
+          .find((candidate) => candidate.windowY === 0);
+        if (
+          item.wasOccupied &&
+          slot?.symbol &&
+          slot.kind !== "empty" &&
+          slot.code >= 0
+        ) {
+          detached.push({
+            cell: item.cell,
+            occurrence: item.cell.reel.takeVisibleOccurrence(),
+          });
+        }
+        item.cell.occupied = false;
+      }
       this.spin(plan, options);
     } catch (error) {
       for (const { cell, occurrence } of detached) {
         cell.reel.placeVisibleOccurrence(occurrence);
-        cell.occupied = true;
       }
+      for (const item of selected) item.cell.occupied = item.wasOccupied;
       throw error;
     }
     for (const { cell, occurrence } of detached) {

@@ -101,6 +101,40 @@ describe("RenderGridCellReelSet", () => {
     });
   });
 
+  it("selectively spins into released and visually empty cascade holes", () => {
+    const reelSet = createGridReelSet();
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
+    reelSet.releaseVisibleSymbols([{ x: 0, y: 0 }]);
+    const target = [
+      [2, 0, 2],
+      [2, 1, 3],
+    ];
+    const plan = createGridCellReelSpinPlan({
+      reels: createBasicReels(),
+      finalYs: FINAL_YS,
+      targetScene: target,
+      columns: 2,
+      rows: 3,
+      order: createGridCellOrder({
+        columns: 2,
+        rows: 3,
+        mode: "top-down-left-right",
+      }),
+      positions: [
+        { x: 0, y: 0 },
+        { x: 1, y: 2 },
+      ],
+      timing: TIMING,
+      dimming: DIMMING,
+    });
+
+    reelSet.spinSelective(plan);
+    reelSet.update(1);
+
+    expect(reelSet.getSnapshot().spinning).toBe(false);
+    expect(reelSet.getVisibleScene()).toEqual(target);
+  });
+
   it("awaits a preflighted visible-symbol batch and rejects release-bound playback", async () => {
     const reelSet = createGridReelSet();
     reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
