@@ -107,6 +107,27 @@ extract、严格 path collision、assets map hash/size/media/orphan 与 nested e
 “manifest-owned layout/background/popup + app-owned reel/round target”的组合，继续
 由 rendercore 管理 mode background、popup placement 和资源生命周期。
 
+`createSymbolPackageReelRegistry()`、`createSymbolPackageReelRegistryFromCatalog()` 与
+`createSceneLayoutPackageRuntime()` 可接收同步的 `valueTextBindings` /
+`symbolValueTextBindings`。配置按 symbol 名和 exact ImgNumber node 名把同一个 presentation value
+格式化成文字；一个 symbol 可绑定多个 node。全部 formatter 结果、node 和 glyph 会先完成预检，再与
+value tier 一起提交；`null` 清空绑定 node，未绑定 node 仍由 `setText(name, text)` 独立控制。
+
+```ts
+createSceneLayoutPackageRuntime({
+  resource,
+  symbolValueTextBindings: {
+    Wild: {
+      multiplier: (value) => `x${value}`,
+      badge: (value) => String(value),
+    },
+  },
+});
+```
+
+formatter 必须同步返回非空 string。unknown symbol/node、非函数、formatter 异常或缺 glyph 都在画面
+部分更新前显式失败；RenderCore 不默认选择 node，也不默认添加 `x` 或调用 `String(value)`。
+
 模板 reel presentation 是 strict `standard | grid-cell` union；round flow 通过
 `SlotReelPresentationCapabilities` 与 remove/dropdown/refill requirement 匹配，不通过
 reel kind 推断 cascade。`createConfiguredSceneLayoutRoundAdapter()` 只串接现有
