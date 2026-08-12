@@ -1,6 +1,10 @@
 import { Container } from "pixi.js";
 import { describe, expect, it } from "vitest";
-import { RenderReelSet, createRenderNode } from "../../src/index.js";
+import {
+  RenderReelSet,
+  createAreaSpinFunction,
+  createRenderNode,
+} from "../../src/index.js";
 import {
   createBasicLayout,
   createBasicRegistry,
@@ -201,6 +205,161 @@ describe("RenderReelSet ReelSpin", () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(() => spin.update(0)).toThrow("repeat failed");
+  });
+
+  it("owns scoped nodes, resolves group anchors, and moves with the reel clock", async () => {
+    const spin = createSpin();
+    spin.resetToVisibleScene([
+      [1, 2, 1],
+      [2, 1, 2],
+    ]);
+    const area = spin.getArea();
+    const group = area.getSymbols([
+      { x: 0, y: 0 },
+      { x: 1, y: 2 },
+    ]);
+    const view = new Container();
+    let destroys = 0;
+    const node = createRenderNode({
+      view,
+      destroy: () => {
+        destroys += 1;
+        view.destroy();
+      },
+    });
+    const presentation = area.present(async (context) => {
+      await context.withNode(
+        area.getLayer("win"),
+        node,
+        {
+          anchor: group.getAnchor({ align: "center" }),
+          ownership: "destroy",
+        },
+        async () => {
+          expect(view.position.x).toBeCloseTo(16);
+          expect(view.position.y).toBeCloseTo(18);
+          const motion = context.move(node, {
+            to: area.getAnchor({ x: 30, y: 40 }),
+            durationSeconds: 0.1,
+          });
+          spin.update(0.1);
+          await motion;
+          expect(view.position.x).toBeCloseTo(30);
+          expect(view.position.y).toBeCloseTo(40);
+        },
+      );
+    });
+
+    await presentation;
+    expect(view.parent).toBeNull();
+    expect(destroys).toBe(1);
+  });
+
+  it("preflights a SymbolGroup before mutating any member", async () => {
+    const spin = createSpin();
+    spin.resetToVisibleScene([
+      [1, 2, 1],
+      [2, 1, 2],
+    ]);
+    const area = spin.getArea();
+    expect(() =>
+      area.getSymbols([
+        { x: 0, y: 0 },
+        { x: 0, y: 0 },
+      ]),
+    ).toThrow(/Duplicate/);
+    const group = area.getSymbols([
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+    ]);
+    expect(() => group.setState("missing")).toThrow();
+    expect(spin.getVisibleSymbolStateSnapshot(0, 0).requestedState).toBe(
+      "normal",
+    );
+    expect(spin.getVisibleSymbolStateSnapshot(1, 0).requestedState).toBe(
+      "normal",
+    );
+    expect(() =>
+      group.playState("win", {
+        completion: "next-loop-complete",
+      }),
+    ).toThrow(/expected "loop"/);
+    expect(spin.getVisibleSymbolStateSnapshot(0, 0).requestedState).toBe(
+      "normal",
+    );
+    expect(spin.getVisibleSymbolStateSnapshot(1, 0).requestedState).toBe(
+      "normal",
+    );
+  });
+
+  it("cleans scoped nodes when spin interrupts presentation", async () => {
+    const spin = createSpin();
+    spin.resetToVisibleScene([
+      [1, 2, 1],
+      [2, 1, 2],
+    ]);
+    const area = spin.getArea();
+    const view = new Container();
+    let destroys = 0;
+    const node = createRenderNode({
+      view,
+      destroy: () => {
+        destroys += 1;
+        view.destroy();
+      },
+    });
+    const presentation = area.present(async (context) => {
+      await context.withNode(
+        area.getLayer("win"),
+        node,
+        { ownership: "destroy" },
+        () => context.delay(1),
+      );
+    });
+
+    area.spin.start();
+    await presentation;
+    expect(view.parent).toBeNull();
+    expect(destroys).toBe(1);
+    area.spin.cancel();
+  });
+
+  it("creates a reusable staggered landing function", async () => {
+    const delays: number[] = [];
+    const calls: string[] = [];
+    const fn = createAreaSpinFunction({
+      landOrder: "right-to-left",
+      landStaggerSeconds: 0.12,
+    });
+    await fn.land(
+      {
+        reels: {
+          start: () => undefined,
+          cancel: () => undefined,
+          roll: async (x) => {
+            calls.push(`roll:${x}`);
+          },
+          settle: async (x) => {
+            calls.push(`settle:${x}`);
+          },
+          getReel: () => ({ add: () => undefined, remove: () => undefined }),
+          getSymbol: () => {
+            throw new Error("unused");
+          },
+          getSymbols: () => {
+            throw new Error("unused");
+          },
+        },
+        columns: 3,
+        wasStarted: true,
+        delay: async (seconds) => {
+          delays.push(seconds);
+        },
+      },
+      { scene: [[1], [2], [3]] },
+    );
+    expect(calls).toEqual(["settle:2", "settle:1", "settle:0"]);
+    expect(delays).toEqual([0.12, 0.12]);
   });
 });
 

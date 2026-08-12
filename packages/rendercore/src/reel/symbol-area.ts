@@ -1,4 +1,4 @@
-import type { SymbolRender } from "../symbol/index.js";
+import type { SymbolGroup, SymbolRender } from "../symbol/index.js";
 
 export interface SymbolPosition {
   readonly x: number;
@@ -7,4 +7,5 @@ export interface SymbolPosition {
 
 export interface SymbolArea {
   getSymbol(position: SymbolPosition): SymbolRender;
+  getSymbols(positions: readonly SymbolPosition[]): SymbolGroup;
 }

@@ -32,6 +32,12 @@ describe("game003v2 source boundary", () => {
       /resolveFirstCycle|rejectFirstCycle|while \(true\)/u,
     );
     expect(source).toMatch(/present\([\s\S]*\{ repeat: true \}/u);
+    expect(source).toMatch(/getSymbols\(group\.positions\)/u);
+    expect(source).toMatch(/context\.withNode/u);
+    expect(source).toMatch(/createAreaSpinFunction/u);
+    expect(source).not.toMatch(
+      /selectMiddleSymbol|defaultAreaSpinFunction|AreaSpinFunctionContext|area\.getLayer\("win"\)\.remove/u,
+    );
   });
 
   it("serves the art-owned package directly without generated bindings", () => {

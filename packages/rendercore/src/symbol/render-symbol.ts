@@ -211,6 +211,18 @@ export class RenderSymbol extends VisualEntity<void> {
     }
   }
 
+  validateStateRequest(
+    state: SymbolStateId,
+    transitionMode: SymbolStateTransitionMode = "boundary",
+  ): void {
+    this.assertNotDestroyed();
+    if (transitionMode !== "boundary" && transitionMode !== "immediate")
+      throw new SymbolAnimationError(
+        `Unknown symbol state transition mode "${String(transitionMode)}".`,
+      );
+    this.#stateMachine.resolveState(state);
+  }
+
   validateStatePlayback(
     state: SymbolStateId,
     options: SymbolStatePlaybackOptions,

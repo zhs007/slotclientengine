@@ -43,6 +43,19 @@ standard reel 提供 `getReelSpin("main")`；未知
 area、未 ready 或首次 scene 尚未 commit 都严格失败。详细合同见
 [`docs/rendercore-operation-first-layer-api.md`](../../docs/rendercore-operation-first-layer-api.md)。
 
+## Operation 渲染第二层 API
+
+第二层保持游戏侧普通 `for/await/Promise.all`，只接管跨 await 容易出错的机械工作。`area.getSymbols(positions)`
+返回捕获 exact occurrences 的 `SymbolGroup`，批量 `setState/playState` 会先完整预检；`getAnchor({align:"center"})`
+返回 opaque `RenderAnchor`，不暴露 Pixi matrix、bounds 或 display tree。单个 Symbol、area-local point和Scene Layout
+exact named node同样可提供anchor，由RenderCore在实际mount/move时完成坐标转换。
+
+`area.present()` context提供`mount/unmount/withNode/move/transfer`。临时节点声明`detach|destroy` ownership；callback
+完成、失败、repeat轮次结束、spin interruption和destroy都会统一cleanup。motion复用现有visible-occurrence transfer的
+line/cubic path与easing sampler，并由同一manual runtime clock推进；generic transfer只移动临时RenderNode/owned clone，
+不提交盘面mutation。`createAreaSpinFunction()`用于装配column order和landing stagger，仍只调用第一层ReelSpin原子方法，
+不生成public plan。
+
 ## Popup API
 
 `@slotclientengine/rendercore/popup` 提供 strict `award-celebration | spine` popup parser、Popup id validator、typed filename-key namespace rewrite、传递资源闭包、files/CDN loader、snapshot 与共享 input binding。v1/v2/v3 保持历史 runtime；v3 删除有限 `designViewport`，只用 focus 在无界 authored plane 上反推 page-aspect visible rect，backdrop 独立覆盖整个 viewport。v4 为所有 layer 增加 strict attachment graph：Popup root、ImgNumber 专用 VNI text layer，或同作用域 official Spine exact slot；DAG、target kind、slot 与 per-parent order 都在画面 mutation 前验证。同一 slot 使用单一 owner group 按 child order 承载多个 layer，局部 transform 继承 slot bone/color/draw-order。普通 Spine popup 使用独立 start→loop→end 状态机：点击请求可提前锁存，只在 loop 完整播放到边界后进入 end；legacy prompt 仍接受游戏传入的已翻译单行 string，canonical v4 只使用命名字体文字 overlay。获奖庆祝支持同样的文字/ImgNumber 节点、五档 BigInt threshold sequence 与金额格式，并要求每档恰好一个 win-amount。Scene Layout 的无效果、Spine 与 video transition 都可独立用 `preludePopup` 复用该 player；host 绑定真实 canvas 与 keyboard target 后，active Popup 在 eligible canvas `pointerdown` 或非 repeat `keydown` 上执行唯一主操作，idle 完全透传。宿主可用显式 keyboard eligibility policy 排除表单控件，不能用重复状态机补分派。Popup binding 的 root `order` 与 node/main reel 全局唯一且必须更高，runtime 在当前 scene 的顶层 Popup root 内按该值排序。

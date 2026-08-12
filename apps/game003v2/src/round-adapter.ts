@@ -11,12 +11,10 @@ import {
   createSlotOperationCoordinator,
   createSlotOperationHandlerRegistry,
   createTextRenderNode,
-  defaultAreaSpinFunction,
-  type AreaSpinFunction,
-  type AreaSpinFunctionContext,
-  type AreaSpinTarget,
+  createAreaSpinFunction,
   type ReelArea,
   type SceneLayoutPackageRuntime,
+  type SymbolAreaPresentationContext,
   type SlotOperationExecutionContext,
 } from "@slotclientengine/rendercore";
 import { GAME003V2_CONFIG } from "./config.js";
@@ -84,7 +82,10 @@ class Game003v2RoundAdapter implements SlotGameAdapter {
         startDelayMs: 0,
         bounceStrength: 0,
       },
-      areaSpinFunction: createGame003AreaSpinFunction(),
+      areaSpinFunction: createAreaSpinFunction({
+        landOrder: "left-to-right",
+        landStaggerSeconds: GAME003V2_CONFIG.reel.stopDelayMs / 1000,
+      }),
       formatPopupAmount: formatGame003v2Amount,
     });
     try {
@@ -257,7 +258,7 @@ function startWinLoop(
   return area.present(
     async (context) => {
       for (const group of groups) {
-        await playWinGroup(area, group, resource);
+        await playWinGroup(context, area, group, resource);
       }
       await context.delay(GAME003V2_CONFIG.winCarousel.cyclePauseSeconds);
     },
@@ -266,37 +267,35 @@ function startWinLoop(
 }
 
 async function playWinGroup(
+  context: SymbolAreaPresentationContext,
   area: ReelArea,
   group: Game003v2WinGroup,
   resource: Game003v2Resource,
 ): Promise<void> {
-  const symbols = group.positions.map((position) => area.getSymbol(position));
-  const text = createWinAmountText(
-    selectMiddleSymbol(symbols).getPosition(),
-    group.amount,
-    resource,
+  const symbols = area.getSymbols(group.positions);
+  const text = createWinAmountText(group.amount, resource);
+  await context.withNode(
+    area.getLayer("win"),
+    text,
+    {
+      anchor: symbols.getAnchor({ align: "center" }),
+      offset: {
+        x: 0,
+        y:
+          resource.package.manifest.reels.main!.cellSize.height *
+          GAME003V2_CONFIG.winCarousel.amountText.yOffsetRatioFromCellCenter,
+      },
+      ownership: "destroy",
+    },
+    () =>
+      symbols.playState("win", {
+        completion: "once-complete",
+        transitionMode: "immediate",
+      }),
   );
-  area.getLayer("win").add(text);
-  try {
-    await Promise.all(
-      symbols.map((symbol) =>
-        symbol.playState("win", {
-          completion: "once-complete",
-          transitionMode: "immediate",
-        }),
-      ),
-    );
-  } finally {
-    area.getLayer("win").remove(text);
-    text.destroy();
-  }
 }
 
-function createWinAmountText(
-  point: { readonly x: number; readonly y: number },
-  amount: number,
-  resource: Game003v2Resource,
-) {
+function createWinAmountText(amount: number, resource: Game003v2Resource) {
   const text = createTextRenderNode({
     text: formatGame003v2Amount(amount),
     style: {
@@ -311,59 +310,7 @@ function createWinAmountText(
       align: "center",
     },
   });
-  text.setPosition({
-    x: point.x,
-    y:
-      point.y +
-      resource.package.manifest.reels.main!.cellSize.height *
-        GAME003V2_CONFIG.winCarousel.amountText.yOffsetRatioFromCellCenter,
-  });
   return text;
-}
-
-function selectMiddleSymbol(
-  symbols: readonly ReturnType<ReelArea["getSymbol"]>[],
-) {
-  const points = symbols.map((symbol) => ({
-    symbol,
-    point: symbol.getPosition(),
-  }));
-  const average = points.reduce(
-    (sum, item) => ({
-      x: sum.x + item.point.x / points.length,
-      y: sum.y + item.point.y / points.length,
-    }),
-    { x: 0, y: 0 },
-  );
-  return [...points].sort((left, right) => {
-    const leftDistance =
-      (left.point.x - average.x) ** 2 + (left.point.y - average.y) ** 2;
-    const rightDistance =
-      (right.point.x - average.x) ** 2 + (right.point.y - average.y) ** 2;
-    return leftDistance - rightDistance;
-  })[0]!.symbol;
-}
-
-function createGame003AreaSpinFunction(): AreaSpinFunction {
-  return Object.freeze({
-    start: defaultAreaSpinFunction.start,
-    cancel: defaultAreaSpinFunction.cancel,
-    land: async (context: AreaSpinFunctionContext, target: AreaSpinTarget) => {
-      await Promise.all(
-        target.scene.map(async (symbols, x) => {
-          if (x > 0)
-            await context.delay((x * GAME003V2_CONFIG.reel.stopDelayMs) / 1000);
-          const reelTarget = {
-            symbols,
-            ...(target.values ? { values: target.values[x] } : {}),
-          };
-          return context.wasStarted
-            ? context.reels.settle(x, reelTarget)
-            : context.reels.roll(x, reelTarget);
-        }),
-      );
-    },
-  });
 }
 
 function playAward(

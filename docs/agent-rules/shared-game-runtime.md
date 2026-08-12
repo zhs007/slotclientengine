@@ -63,6 +63,11 @@
   默认或typed game spin function。`present(..., { repeat: true })` 在首轮 callback 完成后 resolve并由 area 继续后台
   重复，operation handler 不得为 lingering loop 自建 deferred Promise 或 `while(true)`。symbols 主层、raw Container
   和完整geometry不向游戏开放。
+- RenderCore第二层只组合第一层对象：PresentationScope拥有临时node的mount/withNode、明确detach/destroy ownership、repeat
+  child scope和interruption cleanup；opaque RenderAnchor负责Symbol/Group/area point/named Scene node坐标转换；SymbolGroup
+  批量state/play必须先完整preflight。generic motion只移动临时RenderNode或owned clone，复用grid-cell transfer的pure
+  path/easing/manual-clock primitive，不取得盘面commit；游戏仍用普通for/await，不新增presentation/motion plan或业务DSL。
+- area spin通用factory只装配column order与stagger并调用逐列ReelSpin；不得接受业务predicate、matrix command或state名。
 - 游戏 app 只保留业务 component/value/result resolver、formatter、layout、anticipation 和 typed extension；不得复制 Pixi、Spine、reel、cascade 或 popup 状态机。
 - shared package 测试必须使用包内自包含的最小数据验证 parser、binding、player 和 lifecycle
   合同，不得读取任一游戏的 `assets/` 美术交付。只校验当前 Gamelayout 文件、bytes、

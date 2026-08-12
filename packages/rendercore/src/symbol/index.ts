@@ -27,6 +27,7 @@ export type {
   SymbolNodeOptions,
   SymbolRender,
 } from "./symbol-render.js";
+export * from "./symbol-group.js";
 export * from "./package.js";
 export * from "./materialize-package.js";
 export * from "./state-texture-generation.js";

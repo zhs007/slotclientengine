@@ -1437,6 +1437,10 @@ describe("scene layout package runtime", () => {
       expect(
         runtime.getReelArea("main").getSymbol({ x: 0, y: 0 }),
       ).toBeDefined();
+      expect(runtime.getNodeAnchor("bg")).toEqual({
+        kind: "render-anchor",
+      });
+      expect(() => runtime.getNodeAnchor("missing")).toThrow();
       expect(() => runtime.getSymbolArea("other")).toThrow(/unavailable/);
       expect(() => runtime.getReelSpin("other")).toThrow(/unavailable/);
       runtime.destroy();

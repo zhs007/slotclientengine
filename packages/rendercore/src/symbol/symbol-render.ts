@@ -1,4 +1,5 @@
 import type { Container } from "pixi.js";
+import type { RenderAnchor } from "../presentation/render-anchor.js";
 import { SymbolAnimationError } from "./errors.js";
 import {
   createRenderNode,
@@ -28,6 +29,7 @@ export interface SymbolRender extends RenderNode {
   readonly code: number;
   readonly symbol: string;
   getPosition(): RenderPoint;
+  getAnchor(): RenderAnchor;
   setState(
     state: SymbolStateId,
     transitionMode?: SymbolStateTransitionMode,
@@ -49,6 +51,7 @@ export interface SymbolRenderSource {
   assertUsable(): void;
   clone(): SymbolRenderSource;
   getPosition?: () => RenderPoint;
+  getAnchor?: () => RenderAnchor;
   getPresentationSignal?(): AbortSignal | undefined;
   release?(): void;
 }
@@ -56,6 +59,20 @@ export interface SymbolRenderSource {
 const DEFAULT_PLAY_OPTIONS: SymbolStatePlaybackOptions = Object.freeze({
   completion: "entered",
 });
+
+interface SymbolRenderAdapter {
+  assertUsable(): void;
+  validateStateRequest(
+    state: SymbolStateId,
+    transitionMode?: SymbolStateTransitionMode,
+  ): void;
+  validateStatePlayback(
+    state: SymbolStateId,
+    options: SymbolStatePlaybackOptions,
+  ): void;
+}
+
+const symbolRenderAdapters = new WeakMap<SymbolRender, SymbolRenderAdapter>();
 
 export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
   const mounted = new Set<RenderNode>();
@@ -111,6 +128,14 @@ export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
           "SymbolRender has no SymbolArea position.",
         );
       return source.getPosition();
+    },
+    getAnchor: () => {
+      assertUsable();
+      if (!source.getAnchor)
+        throw new SymbolAnimationError(
+          "SymbolRender has no SymbolArea anchor.",
+        );
+      return source.getAnchor();
     },
     setPosition: (position: RenderPoint) => {
       assertUsable();
@@ -216,5 +241,27 @@ export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
     },
   }) satisfies SymbolRender;
   registerRenderNodeAlias(render, getRenderNodeAdapter(baseNode));
+  symbolRenderAdapters.set(render, {
+    assertUsable,
+    validateStateRequest: (state, transitionMode) => {
+      assertUsable();
+      source.symbol.validateStateRequest(state, transitionMode);
+    },
+    validateStatePlayback: (state, options) => {
+      assertUsable();
+      source.symbol.validateStatePlayback(state, options);
+    },
+  });
   return render;
+}
+
+export function getSymbolRenderAdapter(
+  render: SymbolRender,
+): SymbolRenderAdapter {
+  const adapter = symbolRenderAdapters.get(render);
+  if (!adapter)
+    throw new SymbolAnimationError(
+      "SymbolRender was not created by the active RenderCore runtime.",
+    );
+  return adapter;
 }

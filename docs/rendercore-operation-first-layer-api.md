@@ -468,12 +468,21 @@ refill 同样按实际视觉原语执行：
 - 新 symbol 与 surviving symbol 一起下落：以后由独立 fall/drop 原语表达；
 - 第二层将来可以提供 refill 语义封装，但第一层不增加统一 `RefillPlan`。
 
-## 第二层方向
+## 第二层安全组合
 
-第二层可以用第一层原子操作封装常见组合，例如 full cell spin、selective spin、held respin、wave、refill 和
-anticipation。它应是可选便利层：模板无法覆盖的游戏仍可直接调用第一层，不需要修改 RenderCore 内部状态机。
+第二层不替代第一层，也不引入plan或业务DSL。游戏继续使用普通`for`、`await`和`Promise.all()`，RenderCore只接管
+跨对象/跨await的ownership、批量preflight、坐标转换、motion clock和interruption cleanup：
 
-本文不冻结第二层函数名、配置形状或第三层 operation handler 模板。
+- `area.getSymbols(positions)`返回exact-occurrence `SymbolGroup`，批量`setState/playState`先完整预检；
+- Symbol、SymbolGroup center、area point和Scene Layout named node提供opaque `RenderAnchor`，游戏不读取Pixi matrix/bounds；
+- presentation context提供`mount/unmount/withNode/move/transfer`，临时node显式声明`detach|destroy` ownership；
+- callback success/error、repeat轮次、spin interruption和destroy统一cleanup；
+- generic transfer只移动RenderNode或owned Symbol clone，不改变盘面；盘面occurrence relocation继续使用带lease/commit的专用原语；
+- motion复用line/cubic path、easing和manual runtime clock，不引入RAF/timer/tween engine；
+- `createAreaSpinFunction()`只装配column order与landing stagger，内部仍调用第一层`ReelSpin`。
+
+第二层仍不知道CM、WM、CO、Win或任何component。`collectCoins/playWins/expandWild`等第三层业务模板等第二层实际consumer
+稳定后另行讨论。
 
 ## 非目标
 

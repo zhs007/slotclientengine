@@ -1,5 +1,6 @@
 import type { LogicReels } from "@slotclientengine/logiccore";
 import { Container, Graphics, Rectangle } from "pixi.js";
+import { createContainerRenderAnchor } from "../presentation/render-anchor.js";
 import {
   bindPopupInteractionInput,
   createAwardCelebrationPlayer,
@@ -1796,6 +1797,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   getNode(id: string): Container {
     this.assertReady();
     return this.#layout.getNode(id);
+  }
+
+  getNodeAnchor(id: string) {
+    this.assertReady();
+    return createContainerRenderAnchor(this.#layout.getNode(id));
   }
 
   attachChild(options: AttachChildOptions): () => void {

@@ -546,6 +546,8 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   getReelSpin(reelId: string): import("../reel/index.js").ReelSpin;
   /** Returns the first-layer standard reel area with presentation-owned spin. */
   getReelArea(reelId: string): import("../reel/index.js").ReelArea;
+  /** Returns an opaque anchor for an exact named Scene Layout node. */
+  getNodeAnchor(id: string): import("../presentation/index.js").RenderAnchor;
   isMainReelSpinning(): boolean;
   requestMainReelSymbolStates(
     positions: readonly { readonly x: number; readonly y: number }[],
