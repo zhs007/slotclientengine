@@ -25,6 +25,9 @@
 - v2 使用 `getReelSpin("main")` 的逐列第一层接口：五列在请求 hook 同帧 `start()`，响应按 app config
   的 stop cadence 以 frame delay 错峰 `settle()` 并 `Promise.all()`；没有预转时逐列 `roll()`。app
   不计算 local landing phase、不轮询完成、不截断 ticker delta。
+- v2 只取得 `getReelArea("main")`：win groups 用 area presentation 内的 `getSymbol().playState("win")`
+  await 循环，金额 TextRenderNode 挂到 area win layer并用最中间 symbol center 定位。首轮后循环可 lingering；
+  下一 spin 由 area.spin 内部中断，不调用 legacy carousel/state/geometry snapshot或raw reel container。
 - symbol scale、render priority、normal/state texture 和 VNI/Spine animation binding 只来自 package symbol manifest；app/viewer/test 不维护第二份业务表。
 - Spine animation 名大小写精确；缺资源、manifest 闭包不完整、atlas/texture 映射错误或版本不兼容都显式失败。
 

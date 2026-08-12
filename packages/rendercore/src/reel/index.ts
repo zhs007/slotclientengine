@@ -19,4 +19,5 @@ export * from "./render-reel-set.js";
 export * from "./render-grid-cell-reel-set.js";
 export * from "./render-cell-spin.js";
 export * from "./reel-spin.js";
+export * from "./reel-area.js";
 export * from "./visible-occurrence-transfer.js";

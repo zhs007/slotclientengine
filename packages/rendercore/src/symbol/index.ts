@@ -15,10 +15,12 @@ export * from "./catalog.js";
 export * from "./standalone-catalog.js";
 export * from "./render-symbol.js";
 export { createRenderNode } from "./render-node.js";
+export * from "./text-render-node.js";
 export type {
   RenderNode,
   RenderNodeAdapter,
   RenderNodePlayOptions,
+  RenderPoint,
 } from "./render-node.js";
 export type {
   SymbolCloneOptions,

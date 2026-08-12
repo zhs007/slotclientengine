@@ -135,6 +135,7 @@ export function createSceneLayoutPackageRuntime(options: {
    */
   readonly presentationOnly?: boolean;
   readonly reelPresentation?: SlotReelPresentationProfileV1;
+  readonly areaSpinFunction?: import("../reel/index.js").AreaSpinFunction;
   readonly gridCellPresentation?: {
     readonly createEffectController?: () => import("../reel/index.js").GridCellEffectController;
     readonly presentationValueResolver?: import("../reel/index.js").GridCellSymbolPresentationValueResolver;
@@ -159,6 +160,7 @@ export function createSceneLayoutPackageRuntime(options: {
     options.resource,
     options.presentationOnly === true,
     options.reelPresentation,
+    options.areaSpinFunction,
     options.gridCellPresentation,
     options.createGridCellReel,
     options.hostUpdatesMainReel === true,
@@ -176,6 +178,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   #manifest: SceneLayoutPackageResource["manifest"];
   readonly #layout;
   readonly #reelPresentation: SlotReelPresentationProfileV1 | null;
+  readonly #areaSpinFunction:
+    | import("../reel/index.js").AreaSpinFunction
+    | undefined;
   readonly #gridCellPresentation:
     | {
         readonly createEffectController?: () => import("../reel/index.js").GridCellEffectController;
@@ -252,6 +257,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     resource: SceneLayoutPackageResource,
     presentationOnly: boolean,
     reelPresentation: SlotReelPresentationProfileV1 | undefined,
+    areaSpinFunction: import("../reel/index.js").AreaSpinFunction | undefined,
     gridCellPresentation:
       | {
           readonly createEffectController?: () => import("../reel/index.js").GridCellEffectController;
@@ -283,6 +289,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#resource = resource;
     this.#presentationOnly = presentationOnly;
     this.#manifest = resource.manifest;
+    this.#areaSpinFunction = areaSpinFunction;
     this.#reelPresentation = reelPresentation ?? null;
     this.#gridCellPresentation = gridCellPresentation;
     this.#createGridCellReel = createGridCellReel;
@@ -838,6 +845,14 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         'Scene layout reel spin "main" requires a standard reel runtime.',
       );
     return reel;
+  }
+
+  getReelArea(reelId: string) {
+    const reel = this.getReelSpin(reelId);
+    /* v8 ignore next -- getReelSpin already rejects grid-cell */
+    if (!(reel instanceof RenderReelSet))
+      throw new SceneLayoutError("Standard reel area is unavailable.");
+    return reel.getArea();
   }
 
   private spinMainReelToSceneInternal(
@@ -2483,6 +2498,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         }),
         ...(this.#reelPresentation?.kind === "standard"
           ? { bounceStrength: this.#reelPresentation.bounceStrength }
+          : {}),
+        ...(this.#areaSpinFunction
+          ? { areaSpinFunction: this.#areaSpinFunction }
           : {}),
         ...(this.#reelPresentation?.kind === "standard"
           ? {

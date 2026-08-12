@@ -99,6 +99,57 @@ describe("RenderReelSet ReelSpin", () => {
     spin.destroy({ children: true });
     await expect(rolling).rejects.toThrow(/destroyed/);
   });
+
+  it("owns area layers, symbol positions, and interrupts presentation before spin", async () => {
+    const spin = createSpin();
+    spin.resetToVisibleScene([
+      [1, 2, 1],
+      [2, 1, 2],
+    ]);
+    const area = spin.getArea();
+    expect(area.getSymbol({ x: 1, y: 2 }).getPosition()).toEqual({
+      x: 24.5,
+      y: 30,
+    });
+    const view = new Container();
+    const node = createRenderNode({ view, destroy: () => view.destroy() });
+    area.getLayer("win").add(node);
+    let continued = false;
+    const presentation = area.present(async (context) => {
+      await context.delay(1);
+      continued = true;
+    });
+
+    area.spin.start();
+    await presentation;
+    expect(continued).toBe(false);
+    expect(view.parent).toBeNull();
+    area.getLayer("win").remove(node);
+    node.destroy();
+    area.spin.cancel();
+  });
+
+  it("interrupts awaitable symbol playback when area spin takes priority", async () => {
+    const spin = createSpin();
+    spin.resetToVisibleScene([
+      [1, 2, 1],
+      [2, 1, 2],
+    ]);
+    const area = spin.getArea();
+    let continued = false;
+    const presentation = area.present(async () => {
+      await area.getSymbol({ x: 0, y: 0 }).playState("win", {
+        completion: "once-complete",
+        transitionMode: "immediate",
+      });
+      continued = true;
+    });
+
+    area.spin.start();
+    await presentation;
+    expect(continued).toBe(false);
+    area.spin.cancel();
+  });
 });
 
 function createSpin(): RenderReelSet {

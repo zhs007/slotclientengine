@@ -1434,6 +1434,9 @@ describe("scene layout package runtime", () => {
       expect(runtime.getReelSpin("main")).toBe(
         runtime.getReelPresentation("main"),
       );
+      expect(
+        runtime.getReelArea("main").getSymbol({ x: 0, y: 0 }),
+      ).toBeDefined();
       expect(() => runtime.getSymbolArea("other")).toThrow(/unavailable/);
       expect(() => runtime.getReelSpin("other")).toThrow(/unavailable/);
       runtime.destroy();

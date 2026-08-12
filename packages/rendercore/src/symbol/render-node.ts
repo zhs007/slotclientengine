@@ -6,9 +6,16 @@ export interface RenderNodePlayOptions {
 }
 
 export interface RenderNode {
+  setPosition(position: RenderPoint): void;
+  setVisible(visible: boolean): void;
   play(name?: string, options?: RenderNodePlayOptions): Promise<void>;
   stop(): void;
   destroy(): void;
+}
+
+export interface RenderPoint {
+  readonly x: number;
+  readonly y: number;
 }
 
 export interface RenderNodeAdapter {
@@ -26,6 +33,22 @@ export function createRenderNode(adapter: RenderNodeAdapter): RenderNode {
     if (destroyed) throw new SymbolAnimationError("RenderNode was destroyed.");
   };
   const node = Object.freeze({
+    setPosition: (position: RenderPoint) => {
+      assertAlive();
+      if (!Number.isFinite(position.x) || !Number.isFinite(position.y))
+        throw new SymbolAnimationError(
+          "RenderNode position must contain finite coordinates.",
+        );
+      adapter.view.position.set(position.x, position.y);
+    },
+    setVisible: (visible: boolean) => {
+      assertAlive();
+      if (typeof visible !== "boolean")
+        throw new SymbolAnimationError(
+          "RenderNode visibility must be boolean.",
+        );
+      adapter.view.visible = visible;
+    },
     play: (name?: string, options?: RenderNodePlayOptions) => {
       assertAlive();
       if (options?.signal?.aborted)

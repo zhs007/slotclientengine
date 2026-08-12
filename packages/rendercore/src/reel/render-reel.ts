@@ -829,7 +829,10 @@ export class RenderReel extends Container {
         slotData.code,
         this.getPresentationValue(slotData.symbolY, slotData.code, y),
       );
-      slot.symbol?.requestState(state);
+      slot.symbol?.requestState(
+        state,
+        state === "spinBlur" ? "immediate" : "boundary",
+      );
     }
   }
 

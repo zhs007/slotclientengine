@@ -57,6 +57,10 @@
   full/held/stagger/barrier 由 operation handler 以 frame delay 和 Promise 编排。落停 Promise resolve 时
   整列 `getSymbol()` 必须可用。standard legacy batch façade只能复用同一 RenderReel 单轴运动 owner，
   不得复制另一套 motion/pool/player 状态机。
+- standard ReelArea 拥有 `bottom < symbols < top < win` 图层、area-local symbol center、game-owned await
+  presentation 与最高优先级 area.spin。游戏决定 idle/win 等循环内容，但不接触 interruption signal；spin
+  必须在内部中断当前 presentation、清理 transient win layer并以 immediate spinBlur 接管 occurrence，再调用
+  默认或typed game spin function。symbols 主层、raw Container和完整geometry不向游戏开放。
 - 游戏 app 只保留业务 component/value/result resolver、formatter、layout、anticipation 和 typed extension；不得复制 Pixi、Spine、reel、cascade 或 popup 状态机。
 - shared package 测试必须使用包内自包含的最小数据验证 parser、binding、player 和 lifecycle
   合同，不得读取任一游戏的 `assets/` 美术交付。只校验当前 Gamelayout 文件、bytes、

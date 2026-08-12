@@ -14,6 +14,15 @@ import type {
   ReelRollTarget,
   ReelSpin,
 } from "./reel-spin.js";
+import {
+  defaultAreaSpinFunction,
+  type AreaSpinFunction,
+  type AreaSpinLandOptions,
+  type AreaSpinTarget,
+  type ReelArea,
+  type SymbolAreaLayer,
+  type SymbolAreaLayerId,
+} from "./reel-area.js";
 import type {
   ReelSpinPlan,
   RenderReelSetOptions,
@@ -56,6 +65,14 @@ interface ActiveAtomicReel {
 
 const MAX_UPDATE_SLICE_SECONDS = 1 / 60;
 
+interface PresentationDelayWaiter {
+  remainingSeconds: number;
+  readonly signal: AbortSignal;
+  readonly resolve: () => void;
+  readonly reject: (error: Error) => void;
+  readonly abortListener: () => void;
+}
+
 export class RenderReelSet extends Container implements ReelSpin {
   readonly reels: readonly RenderReel[];
   readonly #symbolPool: RenderSymbolPool | null;
@@ -70,6 +87,14 @@ export class RenderReelSet extends Container implements ReelSpin {
   readonly #reelSpinDefaults: Required<
     NonNullable<RenderReelSetOptions["reelSpin"]>
   >;
+  readonly #areaLayers: ReadonlyMap<SymbolAreaLayerId, Container>;
+  readonly #areaMounted = new Map<SymbolAreaLayerId, Set<RenderNode>>();
+  readonly #areaSpinFunction: AreaSpinFunction;
+  readonly #presentationDelayWaiters = new Set<PresentationDelayWaiter>();
+  #presentationAbort: AbortController | null = null;
+  #areaSpinStarted = false;
+  readonly #areaSpinController: ReelArea["spin"];
+  readonly #areaFacade: ReelArea;
   #spinPlan: ReelSpinPlan | null = null;
   #spinOptions: RenderReelSetSpinOptions | null = null;
   #elapsedMs = 0;
@@ -88,6 +113,7 @@ export class RenderReelSet extends Container implements ReelSpin {
 
   constructor(options: RenderReelSetOptions) {
     super();
+    this.sortableChildren = true;
     assertLayoutMatchesReels(options.layout, options.reels.getReelCount());
     this.#symbolPool = createRenderSymbolPool(options.symbolPool);
     const reelSpinDirection = options.reelSpin?.direction ?? "forward";
@@ -110,6 +136,24 @@ export class RenderReelSet extends Container implements ReelSpin {
         "reelSpin.minimumSpinCycles",
       ),
     };
+    this.#areaSpinFunction =
+      options.areaSpinFunction ?? defaultAreaSpinFunction;
+    const bottomLayer = new Container();
+    const topLayer = new Container();
+    const winLayer = new Container();
+    bottomLayer.sortableChildren = true;
+    topLayer.sortableChildren = true;
+    winLayer.sortableChildren = true;
+    bottomLayer.zIndex = -1_000_000;
+    topLayer.zIndex = 1_000_000;
+    winLayer.zIndex = 2_000_000;
+    this.#areaLayers = new Map([
+      ["bottom", bottomLayer],
+      ["top", topLayer],
+      ["win", winLayer],
+    ]);
+    for (const id of this.#areaLayers.keys())
+      this.#areaMounted.set(id, new Set());
     this.#slotLayer = new Container();
     this.#slotLayer.sortableChildren = true;
     this.#cascadeMask = new Graphics()
@@ -146,6 +190,7 @@ export class RenderReelSet extends Container implements ReelSpin {
         return reel;
       }),
     );
+    this.addChild(bottomLayer);
     this.addChild(this.#slotLayer);
     this.#reelAttachments = Object.freeze(
       this.reels.map((reel) => {
@@ -156,13 +201,29 @@ export class RenderReelSet extends Container implements ReelSpin {
         return { layer, mounted: new Set<RenderNode>() };
       }),
     );
+    this.addChild(topLayer);
+    this.addChild(winLayer);
     this.addChild(this.#cascadeMask);
+    this.#areaSpinController = Object.freeze({
+      start: () => this.startAreaSpin(),
+      land: (target: AreaSpinTarget, options?: AreaSpinLandOptions) =>
+        this.landAreaSpin(target, options),
+      cancel: () => this.cancelAreaSpin(),
+    });
+    this.#areaFacade = Object.freeze({
+      spin: this.#areaSpinController,
+      getSymbol: (position: SymbolPosition) => this.getSymbol(position),
+      getLayer: (id: SymbolAreaLayerId) => this.getLayer(id),
+      present: (presentation: Parameters<ReelArea["present"]>[0]) =>
+        this.present(presentation),
+    });
   }
 
   override destroy(options?: Parameters<Container["destroy"]>[0]): void {
     if (this.#destroyed) return;
     this.bumpVisibleOccurrenceGenerations();
     this.#destroyed = true;
+    this.interruptPresentation();
     for (const active of [...this.#atomicActive.values()])
       this.failAtomic(active, new ReelError("ReelSpin was destroyed."));
     for (const attachment of this.#reelAttachments) {
@@ -171,6 +232,14 @@ export class RenderReelSet extends Container implements ReelSpin {
           getRenderNodeAdapter(node).view,
         );
       attachment.mounted.clear();
+    }
+    for (const [id, nodes] of this.#areaMounted) {
+      for (const node of nodes)
+        getRenderNodeAdapter(node).view.parent?.removeChild(
+          getRenderNodeAdapter(node).view,
+        );
+      nodes.clear();
+      this.#areaLayers.get(id)?.removeChildren();
     }
     this.cancelContinuous();
     this.cancelActiveDrop();
@@ -343,6 +412,7 @@ export class RenderReelSet extends Container implements ReelSpin {
   }
 
   private updateSlice(deltaSeconds: number): RenderReelSetUpdateResult {
+    this.updatePresentationDelays(deltaSeconds);
     const previousElapsedMs = this.#elapsedMs;
     if (this.#spinPlan) {
       this.#elapsedMs = Math.min(
@@ -519,6 +589,15 @@ export class RenderReelSet extends Container implements ReelSpin {
             captured.getPresentationValue(),
           ),
         ),
+      getPosition: () =>
+        Object.freeze({
+          x: reel.x + reel.layout.cellWidth / 2,
+          y:
+            reel.y +
+            reel.layout.getCellY(position.y) +
+            reel.layout.cellHeight / 2,
+        }),
+      getPresentationSignal: () => this.#presentationAbort?.signal,
     });
   }
 
@@ -943,6 +1022,182 @@ export class RenderReelSet extends Container implements ReelSpin {
 
   getSymbolPoolStats(): RenderSymbolPoolStats | null {
     return this.#symbolPool?.getStats() ?? null;
+  }
+
+  getLayer(id: SymbolAreaLayerId): SymbolAreaLayer {
+    this.assertAlive();
+    const layer = this.#areaLayers.get(id);
+    const mounted = this.#areaMounted.get(id);
+    if (!layer || !mounted)
+      throw new ReelError(`Unknown symbol area layer "${String(id)}".`);
+    return Object.freeze({
+      add: (node: RenderNode, order = 0) => {
+        this.assertAlive();
+        if (!Number.isSafeInteger(order))
+          throw new ReelError("Area node order must be an integer.");
+        if (mounted.has(node))
+          throw new ReelError(`RenderNode is already attached to ${id} layer.`);
+        const adapter = getRenderNodeAdapter(node);
+        if (adapter.view.parent)
+          throw new ReelError(
+            "RenderNode is already attached to another parent.",
+          );
+        adapter.view.zIndex = order;
+        layer.addChild(adapter.view);
+        mounted.add(node);
+      },
+      remove: (node: RenderNode) => {
+        this.assertAlive();
+        if (!mounted.delete(node)) return;
+        getRenderNodeAdapter(node).view.parent?.removeChild(
+          getRenderNodeAdapter(node).view,
+        );
+      },
+    });
+  }
+
+  getArea(): ReelArea {
+    this.assertAlive();
+    return this.#areaFacade;
+  }
+
+  async present(
+    presentation: Parameters<ReelArea["present"]>[0],
+  ): Promise<void> {
+    this.assertAlive();
+    if (this.#presentationAbort)
+      throw new ReelError("Symbol area already has an active presentation.");
+    const controller = new AbortController();
+    this.#presentationAbort = controller;
+    try {
+      await presentation({
+        delay: (seconds) =>
+          this.waitForPresentationDelay(seconds, controller.signal),
+      });
+    } catch (error) {
+      if (!controller.signal.aborted) throw error;
+    } finally {
+      if (this.#presentationAbort === controller)
+        this.#presentationAbort = null;
+    }
+  }
+
+  private startAreaSpin(): void {
+    this.assertAlive();
+    if (this.#areaSpinStarted)
+      throw new ReelError("Symbol area spin is already started.");
+    this.interruptPresentation();
+    this.clearAreaLayer("win");
+    const context = this.createAreaSpinContext(false);
+    this.#areaSpinFunction.start(context);
+    this.#areaSpinStarted = true;
+  }
+
+  private async landAreaSpin(
+    target: AreaSpinTarget,
+    options: AreaSpinLandOptions = {},
+  ): Promise<void> {
+    this.assertAlive();
+    this.interruptPresentation();
+    this.clearAreaLayer("win");
+    const wasStarted = this.#areaSpinStarted;
+    this.#areaSpinStarted = false;
+    try {
+      await this.#areaSpinFunction.land(
+        this.createAreaSpinContext(wasStarted, options.delay),
+        target,
+      );
+    } catch (error) {
+      this.cancelAllAtomic();
+      throw error;
+    }
+  }
+
+  private cancelAreaSpin(): void {
+    this.assertAlive();
+    this.#areaSpinFunction.cancel(
+      this.createAreaSpinContext(this.#areaSpinStarted),
+    );
+    this.#areaSpinStarted = false;
+  }
+
+  private createAreaSpinContext(
+    wasStarted: boolean,
+    delay: ((seconds: number) => Promise<void>) | undefined = undefined,
+  ): import("./reel-area.js").AreaSpinFunctionContext {
+    return Object.freeze({
+      reels: this,
+      columns: this.reels.length,
+      wasStarted,
+      delay:
+        delay ??
+        ((seconds) =>
+          Promise.resolve().then(() => {
+            if (seconds !== 0)
+              throw new ReelError(
+                "Area spin delay requires a host frame delay.",
+              );
+          })),
+    });
+  }
+
+  private interruptPresentation(): void {
+    const controller = this.#presentationAbort;
+    if (!controller) return;
+    this.#presentationAbort = null;
+    controller.abort(
+      new ReelError("Symbol area presentation was interrupted."),
+    );
+  }
+
+  private waitForPresentationDelay(
+    seconds: number,
+    signal: AbortSignal,
+  ): Promise<void> {
+    if (!Number.isFinite(seconds) || seconds < 0)
+      return Promise.reject(
+        new ReelError("Symbol area delay must be finite and non-negative."),
+      );
+    if (seconds === 0) return Promise.resolve();
+    if (signal.aborted)
+      return Promise.reject(
+        new ReelError("Symbol area presentation was interrupted."),
+      );
+    return new Promise<void>((resolve, reject) => {
+      let waiter!: PresentationDelayWaiter;
+      const abortListener = () => {
+        this.#presentationDelayWaiters.delete(waiter);
+        reject(new ReelError("Symbol area presentation was interrupted."));
+      };
+      waiter = {
+        remainingSeconds: seconds,
+        signal,
+        resolve,
+        reject,
+        abortListener,
+      };
+      signal.addEventListener("abort", abortListener, { once: true });
+      this.#presentationDelayWaiters.add(waiter);
+    });
+  }
+
+  private updatePresentationDelays(deltaSeconds: number): void {
+    for (const waiter of [...this.#presentationDelayWaiters]) {
+      waiter.remainingSeconds -= deltaSeconds;
+      if (waiter.remainingSeconds > 0) continue;
+      this.#presentationDelayWaiters.delete(waiter);
+      waiter.signal.removeEventListener("abort", waiter.abortListener);
+      waiter.resolve();
+    }
+  }
+
+  private clearAreaLayer(id: SymbolAreaLayerId): void {
+    const mounted = this.#areaMounted.get(id)!;
+    for (const node of mounted)
+      getRenderNodeAdapter(node).view.parent?.removeChild(
+        getRenderNodeAdapter(node).view,
+      );
+    mounted.clear();
   }
 
   roll(

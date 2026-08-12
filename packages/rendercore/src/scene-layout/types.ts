@@ -544,6 +544,8 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   getSymbolArea(reelId: string): import("../reel/index.js").SymbolArea;
   /** Returns the instance-scoped standard ReelSpin; currently only "main" exists. */
   getReelSpin(reelId: string): import("../reel/index.js").ReelSpin;
+  /** Returns the first-layer standard reel area with presentation-owned spin. */
+  getReelArea(reelId: string): import("../reel/index.js").ReelArea;
   isMainReelSpinning(): boolean;
   requestMainReelSymbolStates(
     positions: readonly { readonly x: number; readonly y: number }[],

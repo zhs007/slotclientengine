@@ -24,7 +24,10 @@ describe("game003v2 source boundary", () => {
     expect(source).not.toMatch(
       /isMainReelSpinning|resolvePhases|localPhasePolicy|MAX_DELTA_SECONDS/u,
     );
-    expect(source).toMatch(/getReelSpin\("main"\)/u);
+    expect(source).toMatch(/getReelArea\("main"\)/u);
+    expect(source).not.toMatch(
+      /createSymbolWinCarousel|getMainReelSymbolStateSnapshots|getMainReelSymbolGeometrySnapshots|getReelPresentation/u,
+    );
   });
 
   it("serves the art-owned package directly without generated bindings", () => {

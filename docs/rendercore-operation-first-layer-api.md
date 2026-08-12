@@ -50,6 +50,23 @@ const featureSymbol = featureArea.getSymbol({ x: 0, y: 0 });
 `getSymbol()` 是严格取得接口。坐标越界、合法 hole 或尚未落地的滚动格没有可用 symbol 时显式失败。
 只有出现真实的可选探测需求时才考虑独立 `findSymbol()`，第一层不预先增加两套查询。
 
+Standard reel 的完整第一层区域使用 `ReelArea`。它在 `SymbolArea` 之上管理安全 attachment layers、
+game-owned await presentation 与最高优先级 spin：
+
+```ts
+interface ReelArea extends SymbolArea {
+  readonly spin: AreaSpinController;
+  getLayer(id: "bottom" | "top" | "win"): SymbolAreaLayer;
+  present(
+    presentation: (context: SymbolAreaPresentationContext) => Promise<void>,
+  ): Promise<void>;
+}
+```
+
+内部 display 顺序固定为 `bottom < symbols < top < win`。symbols 主层不向游戏开放；`bottom/top/win`
+只提供 `RenderNode add/remove`。`win` 是最高 area presentation layer，金额文字等独立节点放在这里，
+不绑定 symbol 或 reel 生命周期。
+
 ## SymbolRender
 
 `getSymbol()` 返回游戏可直接操作的 `SymbolRender`。游戏代码不接触 `SymbolHandle` 名称，也不需要理解
@@ -59,6 +76,7 @@ const featureSymbol = featureArea.getSymbol({ x: 0, y: 0 });
 
 ```ts
 interface SymbolRender {
+  getPosition(): RenderPoint;
   setState(state: string): void;
   playState(state: string, options?: SymbolPlayOptions): Promise<void>;
   setValue(value: number | null): void;
@@ -87,6 +105,10 @@ symbol.remove(glow);
 
 const copy = symbol.clone();
 ```
+
+`getPosition()` 返回当前 occurrence 中心在所属 SymbolArea 本地坐标系中的位置。它只提供定位点，不恢复
+`SymbolGeometry`、bounds、mask、world transform 或 mutable display object；stale、未落停或 detached clone 没有
+area position 时显式失败。
 
 第一层不提供 `SymbolSnapshot` 或完整 `SymbolGeometry`。跨 symbol、scene node 或其它目标的坐标换算由
 RenderCore 内部 anchor/motion 能力处理，游戏不计算 reel-space、scene-space 和 world-space 变换。
@@ -346,6 +368,58 @@ await Promise.all(landings);
 
 game003v2 迁移后，legacy standard Scene Layout 方法仍暂时可用，但它们只是同一 ReelSpin owner 的兼容入口。新游戏和新
 operation handler 直接使用 `getReelSpin()`。
+
+## Area presentation 与最高优先级 spin
+
+普通 idle、win loop 或其它由游戏决定的场景表现使用直接的 await 编排：
+
+```ts
+await area.present(async (context) => {
+  while (true) {
+    for (const group of groups) {
+      const symbols = group.positions.map((pos) => area.getSymbol(pos));
+      await Promise.all(
+        symbols.map((symbol) =>
+          symbol.playState("win", {
+            completion: "once-complete",
+            transitionMode: "immediate",
+          }),
+        ),
+      );
+    }
+    await context.delay(1);
+  }
+});
+```
+
+游戏决定 presentation 内容和循环，不管理 AbortController、generation 或 interruption error。一个 area 同时只拥有一个
+game presentation。`area.spin.start()` 与 `area.spin.land()` 是最高优先级入口，内部先中断当前 presentation、阻止旧 await
+continuation、清理 transient win layer，再调用绑定的 spin function。由 spin 产生的 interruption 在 `area.present()`
+边界正常结束；真实资源、state 或 player 错误继续 reject。
+
+```ts
+interface AreaSpinController {
+  start(): void;
+  land(target: AreaSpinTarget, options?: AreaSpinLandOptions): Promise<void>;
+  cancel(): void;
+}
+```
+
+RenderCore 提供所有列同时 start/land 的默认 `AreaSpinFunction`。游戏可以在 runtime 装配时注入同形扩展，例如 game003v2
+只增加列间 landing delay；扩展仍只能调用逐列 ReelSpin 原子能力，不取得 plan、pool、display tree 或 interruption owner。
+请求方只调用 `area.spin`，不显式 interrupt。
+
+每列真正开始时，ReelSpin 以 immediate `spinBlur` 接管其 visible occurrence，正在等待的 symbol playback 被 supersede；
+尚未开始的列仍可继续原 presentation。landing 建立全新的 target occurrences，不继承旧 win 状态。
+
+通用文字通过 `createTextRenderNode()` 创建，使用 symbol 中心定位但挂入独立 win layer：
+
+```ts
+const anchor = area.getSymbol(middlePos).getPosition();
+const amount = createTextRenderNode({ text: formatAmount(win), style });
+amount.setPosition(anchor);
+area.getLayer("win").add(amount);
+```
 
 ## Legacy grid-cell 兼容边界
 

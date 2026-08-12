@@ -6,6 +6,7 @@ import {
   registerRenderNodeAlias,
   type RenderNode,
   type RenderNodePlayOptions,
+  type RenderPoint,
 } from "./render-node.js";
 import type { RenderSymbol } from "./render-symbol.js";
 import type {
@@ -26,6 +27,7 @@ export interface SymbolCloneOptions {
 export interface SymbolRender extends RenderNode {
   readonly code: number;
   readonly symbol: string;
+  getPosition(): RenderPoint;
   setState(
     state: SymbolStateId,
     transitionMode?: SymbolStateTransitionMode,
@@ -46,6 +48,8 @@ export interface SymbolRenderSource {
   readonly owned: boolean;
   assertUsable(): void;
   clone(): SymbolRenderSource;
+  getPosition?: () => RenderPoint;
+  getPresentationSignal?(): AbortSignal | undefined;
   release?(): void;
 }
 
@@ -100,6 +104,22 @@ export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
   render = Object.freeze({
     code: source.symbol.code,
     symbol: source.symbol.symbol,
+    getPosition: () => {
+      assertUsable();
+      if (!source.getPosition)
+        throw new SymbolAnimationError(
+          "SymbolRender has no SymbolArea position.",
+        );
+      return source.getPosition();
+    },
+    setPosition: (position: RenderPoint) => {
+      assertUsable();
+      baseNode.setPosition(position);
+    },
+    setVisible: (visible: boolean) => {
+      assertUsable();
+      baseNode.setVisible(visible);
+    },
     play: (name?: string, options?: RenderNodePlayOptions) => {
       assertUsable();
       return baseNode.play(name, options);
@@ -128,7 +148,15 @@ export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
       options: SymbolStatePlaybackOptions = DEFAULT_PLAY_OPTIONS,
     ) => {
       assertUsable();
-      return source.symbol.playState(state, options);
+      const presentationSignal = source.getPresentationSignal?.();
+      return source.symbol.playState(state, {
+        ...options,
+        ...(options.signal
+          ? { signal: options.signal }
+          : presentationSignal
+            ? { signal: presentationSignal }
+            : {}),
+      });
     },
     setValue: (value: number | null) => {
       assertUsable();

@@ -10,11 +10,14 @@ import {
   createSceneLayoutPackageRuntime,
   createSlotOperationCoordinator,
   createSlotOperationHandlerRegistry,
-  createSymbolWinCarousel,
+  createTextRenderNode,
+  defaultAreaSpinFunction,
+  type AreaSpinFunction,
+  type AreaSpinFunctionContext,
+  type AreaSpinTarget,
+  type ReelArea,
   type SceneLayoutPackageRuntime,
   type SlotOperationExecutionContext,
-  type SymbolWinCarousel,
-  type SymbolWinCarouselGroup,
 } from "@slotclientengine/rendercore";
 import { GAME003V2_CONFIG } from "./config.js";
 import { formatGame003v2Amount } from "./money.js";
@@ -35,7 +38,6 @@ class Game003v2RoundAdapter implements SlotGameAdapter {
   readonly #app = new Application();
   #context: SlotGameMountContext | null = null;
   #runtime: SceneLayoutPackageRuntime | null = null;
-  #carousel: SymbolWinCarousel | null = null;
   #coordinator: ReturnType<typeof createSlotOperationCoordinator> | null = null;
   #unsubscribeViewport: (() => void) | null = null;
   #unbindPopup: (() => void) | null = null;
@@ -82,6 +84,7 @@ class Game003v2RoundAdapter implements SlotGameAdapter {
         startDelayMs: 0,
         bounceStrength: 0,
       },
+      areaSpinFunction: createGame003AreaSpinFunction(),
       formatPopupAmount: formatGame003v2Amount,
     });
     try {
@@ -93,41 +96,19 @@ class Game003v2RoundAdapter implements SlotGameAdapter {
           },
         },
       });
-      const carousel = createSymbolWinCarousel({
-        target: {
-          requestVisibleSymbolStates: (positions, symbolState) =>
-            runtime.requestMainReelSymbolStates(
-              positions,
-              symbolState,
-              "immediate",
-            ),
-          getVisibleSymbolStateSnapshots: (positions) =>
-            runtime.getMainReelSymbolStateSnapshots(positions),
-          getVisibleSymbolGeometrySnapshots: (positions) =>
-            runtime.getMainReelSymbolGeometrySnapshots(positions),
-          update: () => undefined,
-        },
-        resolveAmount: () => {
-          throw new Error("game003v2 uses compiler-produced win amounts.");
-        },
-        formatAmount: formatGame003v2Amount,
-        ...GAME003V2_CONFIG.winCarousel,
-      });
-      runtime.getReelPresentation("main").addChild(carousel.container);
-      const registry = this.createRegistry(runtime, carousel);
+      const area = runtime.getReelArea("main");
+      const registry = this.createRegistry(runtime, area);
       const coordinator = createSlotOperationCoordinator({
         registry,
         updateRuntime: (deltaSeconds) => runtime.update(deltaSeconds),
         cleanup: (reason) => {
-          carousel.clear();
           runtime.dismissActiveAwardCelebrationImmediately();
           if (reason === "next-spin") return;
-          this.cancelActiveReels(runtime);
+          area.spin.cancel();
           this.#preSpinActive = false;
         },
       });
       this.#runtime = runtime;
-      this.#carousel = carousel;
       this.#coordinator = coordinator;
       this.#app.stage.addChild(runtime.container);
       const context = this.requireContext();
@@ -149,24 +130,14 @@ class Game003v2RoundAdapter implements SlotGameAdapter {
     const runtime = this.requireRuntime();
     if (this.requireCoordinator().getSnapshot().running)
       throw new Error("game003v2 operation plan is still running.");
-    const reelSpin = runtime.getReelSpin("main");
-    const started: number[] = [];
-    try {
-      for (let x = 0; x < this.#resource.columns; x += 1) {
-        reelSpin.start(x);
-        started.push(x);
-      }
-      this.#preSpinActive = true;
-    } catch (error) {
-      for (const x of started.reverse()) reelSpin.cancel(x);
-      throw error;
-    }
+    runtime.getReelArea("main").spin.start();
+    this.#preSpinActive = true;
   }
 
   cancelSpinPresentation(_error: Error): void {
     if (!this.#preSpinActive) return;
     const runtime = this.requireRuntime();
-    this.cancelActiveReels(runtime);
+    runtime.getReelArea("main").spin.cancel();
     this.#preSpinActive = false;
   }
 
@@ -188,20 +159,15 @@ class Game003v2RoundAdapter implements SlotGameAdapter {
     this.#unbindPopup = null;
     this.#app.ticker.remove(this.#tick);
     this.#coordinator?.destroy();
-    this.#carousel?.destroy();
     this.#runtime?.destroy();
     if (!this.#runtime) void this.#resource.package.destroy();
     this.#app.destroy();
     this.#runtime = null;
-    this.#carousel = null;
     this.#coordinator = null;
     this.#context = null;
   }
 
-  private createRegistry(
-    runtime: SceneLayoutPackageRuntime,
-    carousel: SymbolWinCarousel,
-  ) {
+  private createRegistry(runtime: SceneLayoutPackageRuntime, area: ReelArea) {
     const registry = createSlotOperationHandlerRegistry();
     registry.register({
       kind: "slot:spin",
@@ -214,7 +180,7 @@ class Game003v2RoundAdapter implements SlotGameAdapter {
       kind: "game003:wins",
       version: 2,
       handler: {
-        start: (operation, context) => playWins(carousel, operation, context),
+        start: (operation) => playWins(area, operation, this.#resource),
       },
     });
     registry.register({
@@ -238,24 +204,12 @@ class Game003v2RoundAdapter implements SlotGameAdapter {
       );
     const scene = validateScene(operation.output.scene);
     const values = presentationValues(operation.output.values);
-    const reelSpin = runtime.getReelSpin("main");
-    const settle = this.#preSpinActive;
+    const area = runtime.getReelArea("main");
     this.#preSpinActive = false;
-    const jobs = scene.map(async (symbols, x) => {
-      if (x > 0)
-        await context.delay((x * GAME003V2_CONFIG.reel.stopDelayMs) / 1000);
-      const target = { symbols, values: values[x]! };
-      return settle
-        ? reelSpin.settle(x, target, { signal: context.signal })
-        : reelSpin.roll(x, target, { signal: context.signal });
-    });
-    try {
-      await Promise.all(jobs);
-    } catch (error) {
-      for (let x = 0; x < scene.length; x += 1) reelSpin.cancel(x);
-      await Promise.allSettled(jobs);
-      throw error;
-    }
+    await area.spin.land(
+      { scene, values },
+      { delay: (seconds) => context.delay(seconds) },
+    );
   }
 
   readonly #tick = (ticker: { deltaMS: number }) => {
@@ -264,21 +218,12 @@ class Game003v2RoundAdapter implements SlotGameAdapter {
     if (!runtime || !coordinator) return;
     const deltaSeconds = Math.max(0, ticker.deltaMS / 1000);
     if (coordinator.getSnapshot().running) coordinator.update(deltaSeconds);
-    else {
-      runtime.update(deltaSeconds);
-      if (this.#carousel?.getSnapshot().phase !== "idle")
-        this.#carousel?.update(deltaSeconds);
-    }
+    else runtime.update(deltaSeconds);
   };
 
   private requireRuntime(): SceneLayoutPackageRuntime {
     if (!this.#runtime) throw new Error("game003v2 adapter is not ready.");
     return this.#runtime;
-  }
-
-  private cancelActiveReels(runtime: SceneLayoutPackageRuntime): void {
-    const reelSpin = runtime.getReelSpin("main");
-    for (let x = 0; x < this.#resource.columns; x += 1) reelSpin.cancel(x);
   }
 
   private requireCoordinator() {
@@ -293,21 +238,129 @@ class Game003v2RoundAdapter implements SlotGameAdapter {
 }
 
 function playWins(
-  carousel: SymbolWinCarousel,
+  area: ReelArea,
   operation: SlotOperationV2,
-  context: SlotOperationExecutionContext,
+  resource: Game003v2Resource,
 ): Promise<void> {
   const groups = payload(operation).groups;
   if (!Array.isArray(groups))
     throw new Error("game003v2 wins groups are missing.");
-  const prepared = carousel.prepareGroups(
-    groups as readonly Game003v2WinGroup[],
+  return startWinLoop(area, groups as readonly Game003v2WinGroup[], resource);
+}
+
+function startWinLoop(
+  area: ReelArea,
+  groups: readonly Game003v2WinGroup[],
+  resource: Game003v2Resource,
+): Promise<void> {
+  if (groups.length === 0) return Promise.resolve();
+  let resolveFirstCycle!: () => void;
+  let rejectFirstCycle!: (error: Error) => void;
+  const firstCycle = new Promise<void>((resolve, reject) => {
+    resolveFirstCycle = resolve;
+    rejectFirstCycle = reject;
+  });
+  void area
+    .present(async (context) => {
+      let firstCycleComplete = false;
+      while (true) {
+        for (const group of groups) {
+          const symbols = group.positions.map((position) =>
+            area.getSymbol(position),
+          );
+          const anchor = selectMiddleSymbol(symbols);
+          const text = createTextRenderNode({
+            text: formatGame003v2Amount(group.amount),
+            style: {
+              fontFamily: "Arial",
+              fontSize: GAME003V2_CONFIG.winCarousel.amountText.fontSize,
+              fontWeight: "900",
+              fill: GAME003V2_CONFIG.winCarousel.amountText.fill,
+              stroke: {
+                color: GAME003V2_CONFIG.winCarousel.amountText.stroke,
+                width: GAME003V2_CONFIG.winCarousel.amountText.strokeWidth,
+              },
+              align: "center",
+            },
+          });
+          const point = anchor.getPosition();
+          text.setPosition({
+            x: point.x,
+            y:
+              point.y +
+              resource.package.manifest.reels.main!.cellSize.height *
+                GAME003V2_CONFIG.winCarousel.amountText
+                  .yOffsetRatioFromCellCenter,
+          });
+          area.getLayer("win").add(text);
+          try {
+            await Promise.all(
+              symbols.map((symbol) =>
+                symbol.playState("win", {
+                  completion: "once-complete",
+                  transitionMode: "immediate",
+                }),
+              ),
+            );
+          } finally {
+            area.getLayer("win").remove(text);
+            text.destroy();
+          }
+        }
+        if (!firstCycleComplete) {
+          firstCycleComplete = true;
+          resolveFirstCycle();
+        }
+        await context.delay(GAME003V2_CONFIG.winCarousel.cyclePauseSeconds);
+      }
+    })
+    .then(resolveFirstCycle, rejectFirstCycle);
+  return firstCycle;
+}
+
+function selectMiddleSymbol(
+  symbols: readonly ReturnType<ReelArea["getSymbol"]>[],
+) {
+  const points = symbols.map((symbol) => ({
+    symbol,
+    point: symbol.getPosition(),
+  }));
+  const average = points.reduce(
+    (sum, item) => ({
+      x: sum.x + item.point.x / points.length,
+      y: sum.y + item.point.y / points.length,
+    }),
+    { x: 0, y: 0 },
   );
-  const started = carousel.start(prepared);
-  if (!started.started) return Promise.resolve();
-  return context.waitForFrame(
-    (deltaSeconds) => carousel.update(deltaSeconds).firstCycleComplete,
-  );
+  return [...points].sort((left, right) => {
+    const leftDistance =
+      (left.point.x - average.x) ** 2 + (left.point.y - average.y) ** 2;
+    const rightDistance =
+      (right.point.x - average.x) ** 2 + (right.point.y - average.y) ** 2;
+    return leftDistance - rightDistance;
+  })[0]!.symbol;
+}
+
+function createGame003AreaSpinFunction(): AreaSpinFunction {
+  return Object.freeze({
+    start: defaultAreaSpinFunction.start,
+    cancel: defaultAreaSpinFunction.cancel,
+    land: async (context: AreaSpinFunctionContext, target: AreaSpinTarget) => {
+      await Promise.all(
+        target.scene.map(async (symbols, x) => {
+          if (x > 0)
+            await context.delay((x * GAME003V2_CONFIG.reel.stopDelayMs) / 1000);
+          const reelTarget = {
+            symbols,
+            ...(target.values ? { values: target.values[x] } : {}),
+          };
+          return context.wasStarted
+            ? context.reels.settle(x, reelTarget)
+            : context.reels.roll(x, reelTarget);
+        }),
+      );
+    },
+  });
 }
 
 function playAward(
