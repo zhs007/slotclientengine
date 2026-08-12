@@ -6,10 +6,11 @@ delay 错峰调用 `settle()`，没有预转时调用 `roll()`，最终以 `Prom
 local final phase、不轮询 reel completion，也不截断 ticker delta；落停 scene/value 与 symbol runtime
 ownership 仍由 RenderCore 负责。
 
-中奖循环由 game003v2 直接以 `area.present()`、`getSymbol()` 和 awaitable `playState("win")` 编排；金额使用
-通用 TextRenderNode，根据中奖组最中间 symbol 的 area-local 中心定位并挂到 `win` layer。首轮完成后 operation
-可以结束而循环继续；下一次 `area.spin.start()` 在 area 内部中断循环并清理文字，不使用旧 carousel、state snapshot、
-geometry snapshot 或 raw reel presentation container。
+中奖循环由 game003v2 以 `area.present(..., { repeat: true })`、`getSymbol()` 和 awaitable
+`playState("win")` 编排单轮；金额使用通用 TextRenderNode，根据中奖组最中间 symbol 的 area-local 中心定位并挂到
+`win` layer。首轮完成后 operation 可以结束，后台重复和下一次 `area.spin.start()` 的中断由 area 内部管理；app
+不自建 deferred Promise 或 `while(true)`，也不使用旧 carousel、state snapshot、geometry snapshot或raw reel
+presentation container。
 
 `game003v2` 是 Minecart 的精简 live consumer。美术、layout、公开轮带、Symbols 与 Popup
 唯一来自 `assets/minecart2`；该目录由 `layout10.zip` 经 `gamelayoutpkgcli optimize --quality 80`

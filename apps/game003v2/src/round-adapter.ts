@@ -254,68 +254,71 @@ function startWinLoop(
   resource: Game003v2Resource,
 ): Promise<void> {
   if (groups.length === 0) return Promise.resolve();
-  let resolveFirstCycle!: () => void;
-  let rejectFirstCycle!: (error: Error) => void;
-  const firstCycle = new Promise<void>((resolve, reject) => {
-    resolveFirstCycle = resolve;
-    rejectFirstCycle = reject;
-  });
-  void area
-    .present(async (context) => {
-      let firstCycleComplete = false;
-      while (true) {
-        for (const group of groups) {
-          const symbols = group.positions.map((position) =>
-            area.getSymbol(position),
-          );
-          const anchor = selectMiddleSymbol(symbols);
-          const text = createTextRenderNode({
-            text: formatGame003v2Amount(group.amount),
-            style: {
-              fontFamily: "Arial",
-              fontSize: GAME003V2_CONFIG.winCarousel.amountText.fontSize,
-              fontWeight: "900",
-              fill: GAME003V2_CONFIG.winCarousel.amountText.fill,
-              stroke: {
-                color: GAME003V2_CONFIG.winCarousel.amountText.stroke,
-                width: GAME003V2_CONFIG.winCarousel.amountText.strokeWidth,
-              },
-              align: "center",
-            },
-          });
-          const point = anchor.getPosition();
-          text.setPosition({
-            x: point.x,
-            y:
-              point.y +
-              resource.package.manifest.reels.main!.cellSize.height *
-                GAME003V2_CONFIG.winCarousel.amountText
-                  .yOffsetRatioFromCellCenter,
-          });
-          area.getLayer("win").add(text);
-          try {
-            await Promise.all(
-              symbols.map((symbol) =>
-                symbol.playState("win", {
-                  completion: "once-complete",
-                  transitionMode: "immediate",
-                }),
-              ),
-            );
-          } finally {
-            area.getLayer("win").remove(text);
-            text.destroy();
-          }
-        }
-        if (!firstCycleComplete) {
-          firstCycleComplete = true;
-          resolveFirstCycle();
-        }
-        await context.delay(GAME003V2_CONFIG.winCarousel.cyclePauseSeconds);
+  return area.present(
+    async (context) => {
+      for (const group of groups) {
+        await playWinGroup(area, group, resource);
       }
-    })
-    .then(resolveFirstCycle, rejectFirstCycle);
-  return firstCycle;
+      await context.delay(GAME003V2_CONFIG.winCarousel.cyclePauseSeconds);
+    },
+    { repeat: true },
+  );
+}
+
+async function playWinGroup(
+  area: ReelArea,
+  group: Game003v2WinGroup,
+  resource: Game003v2Resource,
+): Promise<void> {
+  const symbols = group.positions.map((position) => area.getSymbol(position));
+  const text = createWinAmountText(
+    selectMiddleSymbol(symbols).getPosition(),
+    group.amount,
+    resource,
+  );
+  area.getLayer("win").add(text);
+  try {
+    await Promise.all(
+      symbols.map((symbol) =>
+        symbol.playState("win", {
+          completion: "once-complete",
+          transitionMode: "immediate",
+        }),
+      ),
+    );
+  } finally {
+    area.getLayer("win").remove(text);
+    text.destroy();
+  }
+}
+
+function createWinAmountText(
+  point: { readonly x: number; readonly y: number },
+  amount: number,
+  resource: Game003v2Resource,
+) {
+  const text = createTextRenderNode({
+    text: formatGame003v2Amount(amount),
+    style: {
+      fontFamily: "Arial",
+      fontSize: GAME003V2_CONFIG.winCarousel.amountText.fontSize,
+      fontWeight: "900",
+      fill: GAME003V2_CONFIG.winCarousel.amountText.fill,
+      stroke: {
+        color: GAME003V2_CONFIG.winCarousel.amountText.stroke,
+        width: GAME003V2_CONFIG.winCarousel.amountText.strokeWidth,
+      },
+      align: "center",
+    },
+  });
+  text.setPosition({
+    x: point.x,
+    y:
+      point.y +
+      resource.package.manifest.reels.main!.cellSize.height *
+        GAME003V2_CONFIG.winCarousel.amountText.yOffsetRatioFromCellCenter,
+  });
+  return text;
 }
 
 function selectMiddleSymbol(

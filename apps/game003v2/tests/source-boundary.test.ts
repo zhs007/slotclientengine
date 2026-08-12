@@ -28,6 +28,10 @@ describe("game003v2 source boundary", () => {
     expect(source).not.toMatch(
       /createSymbolWinCarousel|getMainReelSymbolStateSnapshots|getMainReelSymbolGeometrySnapshots|getReelPresentation/u,
     );
+    expect(source).not.toMatch(
+      /resolveFirstCycle|rejectFirstCycle|while \(true\)/u,
+    );
+    expect(source).toMatch(/present\([\s\S]*\{ repeat: true \}/u);
   });
 
   it("serves the art-owned package directly without generated bindings", () => {

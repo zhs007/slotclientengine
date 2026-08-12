@@ -59,6 +59,7 @@ interface ReelArea extends SymbolArea {
   getLayer(id: "bottom" | "top" | "win"): SymbolAreaLayer;
   present(
     presentation: (context: SymbolAreaPresentationContext) => Promise<void>,
+    options?: { repeat?: boolean },
   ): Promise<void>;
 }
 ```
@@ -374,8 +375,8 @@ operation handler 直接使用 `getReelSpin()`。
 普通 idle、win loop 或其它由游戏决定的场景表现使用直接的 await 编排：
 
 ```ts
-await area.present(async (context) => {
-  while (true) {
+await area.present(
+  async (context) => {
     for (const group of groups) {
       const symbols = group.positions.map((pos) => area.getSymbol(pos));
       await Promise.all(
@@ -388,14 +389,17 @@ await area.present(async (context) => {
       );
     }
     await context.delay(1);
-  }
-});
+  },
+  { repeat: true },
+);
 ```
 
-游戏决定 presentation 内容和循环，不管理 AbortController、generation 或 interruption error。一个 area 同时只拥有一个
+游戏决定单轮 presentation 内容，不管理 AbortController、generation、后台循环或 interruption error。默认 `present()`
+等待整段 callback 完成；`repeat: true` 时 Promise 在首轮完成后 resolve，RenderCore 继续重复 callback，直到 spin 打断。
+这使 operation 可以只等待首轮，而 lingering win/idle loop 不需要游戏手工创建 deferred Promise。一个 area 同时只拥有一个
 game presentation。`area.spin.start()` 与 `area.spin.land()` 是最高优先级入口，内部先中断当前 presentation、阻止旧 await
-continuation、清理 transient win layer，再调用绑定的 spin function。由 spin 产生的 interruption 在 `area.present()`
-边界正常结束；真实资源、state 或 player 错误继续 reject。
+continuation、清理 transient win layer，再调用绑定的 spin function。首轮完成前由 spin 产生的 interruption在
+`area.present()` 边界正常结束；真实资源、state 或 player 错误继续 reject。
 
 ```ts
 interface AreaSpinController {

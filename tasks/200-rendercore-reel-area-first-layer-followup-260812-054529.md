@@ -20,6 +20,8 @@ SymbolWinCarousel、state/geometry snapshot 和 raw reel container 依赖，改�
 - ReelSpin 开始时以 immediate `spinBlur` 接管当前 occurrence，打断活动 symbol playback。
 - game003v2 中奖逻辑直接循环 groups，取得具体 SymbolRender，await `playState("win")`；金额 TextRenderNode
   使用最中间 symbol center定位并挂入 win layer。首轮完成后 operation resolve，循环继续到下一 spin。
+- 后续将该边界收敛为 `present(..., { repeat: true })`：game003v2 只编排一轮 groups；首轮完成后 Promise
+  resolve，后台重复和 spin interruption 由 ReelArea 持有，不再由 app 自建 deferred Promise 或 `while(true)`。
 - 旧 `RenderReelSet.spin(plan)` 与其它 legacy façade暂时保留给未迁移 consumer；game003v2 不再使用。
 
 ## 自动化验收
@@ -28,7 +30,7 @@ SymbolWinCarousel、state/geometry snapshot 和 raw reel container 依赖，改�
 
 ```text
 pnpm --filter @slotclientengine/rendercore exec vitest run tests/reel/render-reel-spin.test.ts tests/symbol/symbol-render.test.ts tests/reel/render-reel-set.test.ts tests/scene-layout/package-runtime.test.ts
-结果：4 files / 40 tests passed
+结果：4 files / 42 tests passed（含 repeat 首轮边界、后台继续、spin interruption 与后台错误上抛）
 
 pnpm --filter game003v2 test
 结果：3 files / 9 tests passed

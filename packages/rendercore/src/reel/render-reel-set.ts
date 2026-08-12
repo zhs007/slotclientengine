@@ -92,6 +92,7 @@ export class RenderReelSet extends Container implements ReelSpin {
   readonly #areaSpinFunction: AreaSpinFunction;
   readonly #presentationDelayWaiters = new Set<PresentationDelayWaiter>();
   #presentationAbort: AbortController | null = null;
+  #presentationFailure: Error | null = null;
   #areaSpinStarted = false;
   readonly #areaSpinController: ReelArea["spin"];
   readonly #areaFacade: ReelArea;
@@ -214,8 +215,10 @@ export class RenderReelSet extends Container implements ReelSpin {
       spin: this.#areaSpinController,
       getSymbol: (position: SymbolPosition) => this.getSymbol(position),
       getLayer: (id: SymbolAreaLayerId) => this.getLayer(id),
-      present: (presentation: Parameters<ReelArea["present"]>[0]) =>
-        this.present(presentation),
+      present: (
+        presentation: Parameters<ReelArea["present"]>[0],
+        options?: Parameters<ReelArea["present"]>[1],
+      ) => this.present(presentation, options),
     });
   }
 
@@ -388,6 +391,11 @@ export class RenderReelSet extends Container implements ReelSpin {
 
   update(deltaSeconds: number): RenderReelSetUpdateResult {
     assertValidDeltaSeconds(deltaSeconds);
+    if (this.#presentationFailure) {
+      const failure = this.#presentationFailure;
+      this.#presentationFailure = null;
+      throw failure;
+    }
 
     let remaining = deltaSeconds;
     let first = true;
@@ -1063,23 +1071,67 @@ export class RenderReelSet extends Container implements ReelSpin {
 
   async present(
     presentation: Parameters<ReelArea["present"]>[0],
+    options: Parameters<ReelArea["present"]>[1] = {},
   ): Promise<void> {
     this.assertAlive();
     if (this.#presentationAbort)
       throw new ReelError("Symbol area already has an active presentation.");
+    if (options.repeat !== undefined && typeof options.repeat !== "boolean")
+      throw new ReelError("Symbol area presentation repeat must be boolean.");
     const controller = new AbortController();
     this.#presentationAbort = controller;
-    try {
-      await presentation({
-        delay: (seconds) =>
-          this.waitForPresentationDelay(seconds, controller.signal),
-      });
-    } catch (error) {
-      if (!controller.signal.aborted) throw error;
-    } finally {
-      if (this.#presentationAbort === controller)
-        this.#presentationAbort = null;
+    const context = Object.freeze({
+      delay: (seconds: number) =>
+        this.waitForPresentationDelay(seconds, controller.signal),
+    });
+    if (!options.repeat) {
+      try {
+        await presentation(context);
+      } catch (error) {
+        if (!controller.signal.aborted) throw error;
+      } finally {
+        if (this.#presentationAbort === controller)
+          this.#presentationAbort = null;
+      }
+      return;
     }
+
+    let firstCycleSettled = false;
+    let resolveFirstCycle!: () => void;
+    let rejectFirstCycle!: (error: unknown) => void;
+    const firstCycle = new Promise<void>((resolve, reject) => {
+      resolveFirstCycle = resolve;
+      rejectFirstCycle = reject;
+    });
+    void (async () => {
+      try {
+        while (!controller.signal.aborted) {
+          await presentation(context);
+          if (!firstCycleSettled) {
+            firstCycleSettled = true;
+            resolveFirstCycle();
+          }
+        }
+      } catch (error) {
+        if (!controller.signal.aborted && !firstCycleSettled) {
+          firstCycleSettled = true;
+          rejectFirstCycle(error);
+        } else if (!controller.signal.aborted) {
+          this.#presentationFailure =
+            error instanceof Error
+              ? error
+              : new ReelError("Symbol area presentation failed.");
+        }
+      } finally {
+        if (!firstCycleSettled) {
+          firstCycleSettled = true;
+          resolveFirstCycle();
+        }
+        if (this.#presentationAbort === controller)
+          this.#presentationAbort = null;
+      }
+    })();
+    await firstCycle;
   }
 
   private startAreaSpin(): void {

@@ -13,6 +13,10 @@ export interface SymbolAreaPresentationContext {
   delay(seconds: number): Promise<void>;
 }
 
+export interface SymbolAreaPresentationOptions {
+  readonly repeat?: boolean;
+}
+
 export interface AreaSpinTarget {
   readonly scene: readonly (readonly number[])[];
   readonly values?: readonly (readonly (number | null)[])[];
@@ -47,6 +51,7 @@ export interface ReelArea extends SymbolArea {
   getLayer(id: SymbolAreaLayerId): SymbolAreaLayer;
   present(
     presentation: (context: SymbolAreaPresentationContext) => Promise<void>,
+    options?: SymbolAreaPresentationOptions,
   ): Promise<void>;
 }
 

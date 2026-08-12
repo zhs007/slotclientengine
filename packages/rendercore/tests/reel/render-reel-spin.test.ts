@@ -150,6 +150,58 @@ describe("RenderReelSet ReelSpin", () => {
     expect(continued).toBe(false);
     area.spin.cancel();
   });
+
+  it("resolves a repeating presentation after its first cycle and keeps it active", async () => {
+    const spin = createSpin();
+    spin.resetToVisibleScene([
+      [1, 2, 1],
+      [2, 1, 2],
+    ]);
+    const area = spin.getArea();
+    let cycles = 0;
+    const firstCycle = area.present(
+      async (context) => {
+        cycles += 1;
+        await context.delay(0.1);
+      },
+      { repeat: true },
+    );
+
+    spin.update(0.1);
+    await firstCycle;
+    expect(cycles).toBe(2);
+    spin.update(0.1);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(cycles).toBe(3);
+
+    area.spin.start();
+    area.spin.cancel();
+  });
+
+  it("fails explicitly when a repeating presentation fails after its first cycle", async () => {
+    const spin = createSpin();
+    spin.resetToVisibleScene([
+      [1, 2, 1],
+      [2, 1, 2],
+    ]);
+    let cycles = 0;
+    const firstCycle = spin.getArea().present(
+      async (context) => {
+        cycles += 1;
+        await context.delay(0.1);
+        if (cycles === 2) throw new Error("repeat failed");
+      },
+      { repeat: true },
+    );
+
+    spin.update(0.1);
+    await firstCycle;
+    spin.update(0.1);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(() => spin.update(0)).toThrow("repeat failed");
+  });
 });
 
 function createSpin(): RenderReelSet {
