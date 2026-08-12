@@ -681,6 +681,9 @@ describe("scene layout package runtime", () => {
           },
         },
       });
+      expect(() => runtime.getReelSpin("main")).toThrow(
+        /requires a standard reel runtime/,
+      );
       runtime.startMainReelContinuousSpin({
         positions: [{ x: 0, y: 0 }],
         dimming: {
@@ -1428,7 +1431,11 @@ describe("scene layout package runtime", () => {
       expect(runtime.getSymbolArea("main")).toBe(
         runtime.getReelPresentation("main"),
       );
+      expect(runtime.getReelSpin("main")).toBe(
+        runtime.getReelPresentation("main"),
+      );
       expect(() => runtime.getSymbolArea("other")).toThrow(/unavailable/);
+      expect(() => runtime.getReelSpin("other")).toThrow(/unavailable/);
       runtime.destroy();
 
       const dead = createSceneLayoutPackageRuntime({

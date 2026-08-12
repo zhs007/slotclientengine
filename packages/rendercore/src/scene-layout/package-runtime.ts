@@ -826,6 +826,20 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     return this.requireReel("main");
   }
 
+  getReelSpin(reelId: string) {
+    this.assertReady();
+    if (reelId !== "main")
+      throw new SceneLayoutError(
+        `Scene layout reel spin "${reelId}" is unavailable.`,
+      );
+    const reel = this.requireReel("main");
+    if (reel instanceof RenderGridCellReelSet)
+      throw new SceneLayoutError(
+        'Scene layout reel spin "main" requires a standard reel runtime.',
+      );
+    return reel;
+  }
+
   private spinMainReelToSceneInternal(
     input: SceneLayoutMainReelSpinInput,
     settleContinuous: boolean,
@@ -2469,6 +2483,17 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         }),
         ...(this.#reelPresentation?.kind === "standard"
           ? { bounceStrength: this.#reelPresentation.bounceStrength }
+          : {}),
+        ...(this.#reelPresentation?.kind === "standard"
+          ? {
+              reelSpin: {
+                direction: this.#reelPresentation.direction,
+                durationMs: this.#reelPresentation.baseDurationMs,
+                speedSymbolsPerSecond:
+                  this.#reelPresentation.speedSymbolsPerSecond,
+                minimumSpinCycles: this.#reelPresentation.minimumSpinCycles,
+              },
+            }
           : {}),
       });
     }

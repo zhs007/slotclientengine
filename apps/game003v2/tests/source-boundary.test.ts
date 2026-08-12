@@ -21,6 +21,10 @@ describe("game003v2 source boundary", () => {
     expect(source).not.toMatch(/assets\/game003|apps\/game003|game003-s1/u);
     expect(source).not.toMatch(/sha256|byteLength|orphan|content-addressed/u);
     expect(source).not.toMatch(/createReelSpinPlan/u);
+    expect(source).not.toMatch(
+      /isMainReelSpinning|resolvePhases|localPhasePolicy|MAX_DELTA_SECONDS/u,
+    );
+    expect(source).toMatch(/getReelSpin\("main"\)/u);
   });
 
   it("serves the art-owned package directly without generated bindings", () => {

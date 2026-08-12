@@ -25,7 +25,15 @@ stagger 和 anticipation 由 operation handler 用普通 `async/await`、frame d
 组合，不增加 `CellSpinPlan`。现有 `GridCellReelSpinPlan` 仅作为 game002v2 legacy compatibility
 surface 保留，新游戏使用 `CellSpin`；logiccore 继续拥有权威 operation plan。
 
-Scene Layout package runtime 通过 `getSymbolArea("main")` 暴露当前 main reel 的共同入口；未知
+Standard `RenderReelSet` 同时实现无 public plan 的逐列 `ReelSpin`：`roll(x,target)` 直接滚动一列，
+`start(x)` 使用本地公开轮带 targetless 预转，`settle(x,target)` 注入服务器可见窗口，`cancel(x)`
+取消活动列。不同列可并发，同列冲突显式失败；`roll/settle` 只在整列原子落停、每个
+`getSymbol({x,y})` 已可用后 resolve。跨列 stagger/full/held 由 operation handler 使用 frame delay
+和 `Promise.all()` 组合，不增加 `ReelSpinPlan`。`getReel(x)` 是稳定 reel-space `RenderNode`
+attachment 入口。
+
+Scene Layout package runtime 通过 `getSymbolArea("main")` 暴露当前 main reel 的共同入口，并只为
+standard reel 提供 `getReelSpin("main")`；未知
 area、未 ready 或首次 scene 尚未 commit 都严格失败。详细合同见
 [`docs/rendercore-operation-first-layer-api.md`](../../docs/rendercore-operation-first-layer-api.md)。
 

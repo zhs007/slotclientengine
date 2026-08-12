@@ -5,9 +5,19 @@ import { assertLayoutMatchesReels } from "./layout.js";
 import { RenderReel } from "./render-reel.js";
 import { createRenderSymbolPool } from "./render-symbol-pool.js";
 import { startSymbolStatePlaybackBatch } from "./symbol-state-playback.js";
+import { getRenderNodeAdapter } from "../symbol/render-node.js";
+import type { RenderNode } from "../symbol/index.js";
+import type {
+  ReelRender,
+  ReelRollOptions,
+  ReelRollStartOptions,
+  ReelRollTarget,
+  ReelSpin,
+} from "./reel-spin.js";
 import type {
   ReelSpinPlan,
   RenderReelSetOptions,
+  RenderReelSpinOptions,
   RenderReelSetContinuousSpinOptions,
   VisibleSymbolStatePlaybackBatchOptions,
   VisibleSymbolStatePlaybackRequest,
@@ -33,14 +43,33 @@ import {
   createSymbolRender,
   type SymbolRender,
 } from "../symbol/symbol-render.js";
-import type { SymbolArea, SymbolPosition } from "./symbol-area.js";
+import type { SymbolPosition } from "./symbol-area.js";
 
-export class RenderReelSet extends Container implements SymbolArea {
+interface ActiveAtomicReel {
+  readonly x: number;
+  readonly mode: "roll" | "continuous" | "settle";
+  readonly signal?: AbortSignal;
+  readonly abortListener?: () => void;
+  readonly resolve?: () => void;
+  readonly reject?: (error: Error) => void;
+}
+
+const MAX_UPDATE_SLICE_SECONDS = 1 / 60;
+
+export class RenderReelSet extends Container implements ReelSpin {
   readonly reels: readonly RenderReel[];
   readonly #symbolPool: RenderSymbolPool | null;
   readonly #slotLayer: Container;
   readonly #cascadeMask: Graphics;
   readonly #occurrenceGenerations = new WeakMap<RenderSymbol, number>();
+  readonly #atomicActive = new Map<number, ActiveAtomicReel>();
+  readonly #reelAttachments: readonly {
+    readonly layer: Container;
+    readonly mounted: Set<RenderNode>;
+  }[];
+  readonly #reelSpinDefaults: Required<
+    NonNullable<RenderReelSetOptions["reelSpin"]>
+  >;
   #spinPlan: ReelSpinPlan | null = null;
   #spinOptions: RenderReelSetSpinOptions | null = null;
   #elapsedMs = 0;
@@ -61,6 +90,26 @@ export class RenderReelSet extends Container implements SymbolArea {
     super();
     assertLayoutMatchesReels(options.layout, options.reels.getReelCount());
     this.#symbolPool = createRenderSymbolPool(options.symbolPool);
+    const reelSpinDirection = options.reelSpin?.direction ?? "forward";
+    if (reelSpinDirection !== "forward" && reelSpinDirection !== "backward")
+      throw new ReelError(
+        'reelSpin.direction must be "forward" or "backward".',
+      );
+    this.#reelSpinDefaults = {
+      direction: reelSpinDirection,
+      durationMs: normalizePositiveFinite(
+        options.reelSpin?.durationMs ?? 900,
+        "reelSpin.durationMs",
+      ),
+      speedSymbolsPerSecond: normalizePositiveFinite(
+        options.reelSpin?.speedSymbolsPerSecond ?? 24,
+        "reelSpin.speedSymbolsPerSecond",
+      ),
+      minimumSpinCycles: normalizePositiveInteger(
+        options.reelSpin?.minimumSpinCycles ?? 3,
+        "reelSpin.minimumSpinCycles",
+      ),
+    };
     this.#slotLayer = new Container();
     this.#slotLayer.sortableChildren = true;
     this.#cascadeMask = new Graphics()
@@ -98,6 +147,15 @@ export class RenderReelSet extends Container implements SymbolArea {
       }),
     );
     this.addChild(this.#slotLayer);
+    this.#reelAttachments = Object.freeze(
+      this.reels.map((reel) => {
+        const layer = new Container();
+        layer.x = reel.x;
+        layer.sortableChildren = true;
+        this.addChild(layer);
+        return { layer, mounted: new Set<RenderNode>() };
+      }),
+    );
     this.addChild(this.#cascadeMask);
   }
 
@@ -105,6 +163,15 @@ export class RenderReelSet extends Container implements SymbolArea {
     if (this.#destroyed) return;
     this.bumpVisibleOccurrenceGenerations();
     this.#destroyed = true;
+    for (const active of [...this.#atomicActive.values()])
+      this.failAtomic(active, new ReelError("ReelSpin was destroyed."));
+    for (const attachment of this.#reelAttachments) {
+      for (const node of attachment.mounted)
+        getRenderNodeAdapter(node).view.parent?.removeChild(
+          getRenderNodeAdapter(node).view,
+        );
+      attachment.mounted.clear();
+    }
     this.cancelContinuous();
     this.cancelActiveDrop();
     this.#symbolPool?.destroy();
@@ -112,7 +179,11 @@ export class RenderReelSet extends Container implements SymbolArea {
   }
 
   spin(plan: ReelSpinPlan, options: RenderReelSetSpinOptions = {}): void {
-    if (this.#spinPlan || this.#continuousSpinActive) {
+    if (
+      this.#spinPlan ||
+      this.#continuousSpinActive ||
+      this.#atomicActive.size
+    ) {
       throw new ReelError(
         "Cannot start a new reel spin while another spin is active.",
       );
@@ -144,7 +215,7 @@ export class RenderReelSet extends Container implements SymbolArea {
   }
 
   startContinuous(options: RenderReelSetContinuousSpinOptions): void {
-    if (this.#spinPlan || this.#continuousSpinActive)
+    if (this.#spinPlan || this.#continuousSpinActive || this.#atomicActive.size)
       throw new ReelError(
         "Cannot start a continuous reel spin while another spin is active.",
       );
@@ -249,6 +320,29 @@ export class RenderReelSet extends Container implements SymbolArea {
   update(deltaSeconds: number): RenderReelSetUpdateResult {
     assertValidDeltaSeconds(deltaSeconds);
 
+    let remaining = deltaSeconds;
+    let first = true;
+    let completed = false;
+    const startedAxes = new Set<number>();
+    const stoppedAxes = new Set<number>();
+    while (first || remaining > 0) {
+      first = false;
+      const slice = Math.min(remaining, MAX_UPDATE_SLICE_SECONDS);
+      remaining = Math.max(0, remaining - slice);
+      const result = this.updateSlice(slice);
+      completed ||= result.completed;
+      for (const x of result.startedAxes) startedAxes.add(x);
+      for (const x of result.stoppedAxes) stoppedAxes.add(x);
+    }
+    return Object.freeze({
+      completed,
+      spinning: this.getSnapshot().spinning,
+      startedAxes: Object.freeze([...startedAxes].sort((a, b) => a - b)),
+      stoppedAxes: Object.freeze([...stoppedAxes].sort((a, b) => a - b)),
+    });
+  }
+
+  private updateSlice(deltaSeconds: number): RenderReelSetUpdateResult {
     const previousElapsedMs = this.#elapsedMs;
     if (this.#spinPlan) {
       this.#elapsedMs = Math.min(
@@ -272,6 +366,11 @@ export class RenderReelSet extends Container implements SymbolArea {
         reelDeltaSeconds = Math.max(0, activeEnd - activeStart) / 1000;
       }
       const result = reel.update(reelDeltaSeconds);
+      const atomic = this.#atomicActive.get(reel.xIndex);
+      if (atomic && atomic.mode !== "continuous" && result.landed) {
+        this.detachAtomic(atomic);
+        atomic.resolve?.();
+      }
       if (result.completed) {
         stoppedAxes.push(reel.xIndex);
       }
@@ -296,6 +395,7 @@ export class RenderReelSet extends Container implements SymbolArea {
       spinning:
         this.#spinPlan !== null ||
         this.#continuousSpinActive ||
+        this.#atomicActive.size > 0 ||
         this.#activeDrop !== null,
       startedAxes: Object.freeze(
         [...this.#startedAxes].sort((left, right) => left - right),
@@ -311,6 +411,7 @@ export class RenderReelSet extends Container implements SymbolArea {
       );
     }
     this.cancelActiveDrop();
+    this.cancelAllAtomic();
     this.bumpVisibleOccurrenceGenerations();
     this.#spinPlan = null;
     this.#spinOptions = null;
@@ -334,6 +435,7 @@ export class RenderReelSet extends Container implements SymbolArea {
       );
     }
     this.cancelActiveDrop();
+    this.cancelAllAtomic();
     this.bumpVisibleOccurrenceGenerations();
     this.#spinPlan = null;
     this.#spinOptions = null;
@@ -360,6 +462,7 @@ export class RenderReelSet extends Container implements SymbolArea {
       throw new ReelError(`visible symbol y ${position.y} is out of range.`);
     if (
       reel.getSnapshot().phase !== "stopped" ||
+      this.#atomicActive.has(position.x) ||
       (this.#spinPlan !== null && !this.#startedAxes.has(position.x))
     )
       throw new ReelError(
@@ -674,7 +777,11 @@ export class RenderReelSet extends Container implements SymbolArea {
     state: SymbolStateId,
     transitionMode: SymbolStateTransitionMode = "boundary",
   ): void {
-    if (this.#spinPlan || this.#continuousSpinActive) {
+    if (
+      this.#spinPlan ||
+      this.#continuousSpinActive ||
+      this.#atomicActive.size
+    ) {
       throw new ReelError(
         "Cannot request visible symbol state while reel set is spinning.",
       );
@@ -826,6 +933,7 @@ export class RenderReelSet extends Container implements SymbolArea {
       spinning:
         this.#spinPlan !== null ||
         this.#continuousSpinActive ||
+        this.#atomicActive.size > 0 ||
         this.#activeDrop !== null,
       elapsedMs: this.#elapsedMs,
       visibleScene: this.getVisibleScene(),
@@ -837,11 +945,246 @@ export class RenderReelSet extends Container implements SymbolArea {
     return this.#symbolPool?.getStats() ?? null;
   }
 
+  roll(
+    x: number,
+    target: ReelRollTarget,
+    options: ReelRollOptions = {},
+  ): Promise<void> {
+    const reel = this.prepareAtomicReel(x, options.signal);
+    const parsed = this.parseAtomicTarget(reel, target);
+    const promise = this.createAtomicCompletion(x, "roll", options.signal);
+    try {
+      this.bumpReelOccurrenceGenerations(reel);
+      reel.start(this.createAtomicAxisPlan(reel, options), parsed);
+    } catch (error) {
+      this.failAtomic(this.#atomicActive.get(x)!, toReelError(error));
+    }
+    return promise;
+  }
+
+  start(x: number, options: ReelRollStartOptions = {}): void {
+    const reel = this.prepareAtomicReel(x, options.signal);
+    const active = this.createAtomic(x, "continuous", options.signal);
+    try {
+      this.bumpReelOccurrenceGenerations(reel);
+      reel.startContinuous({
+        direction: this.#reelSpinDefaults.direction,
+        speedSymbolsPerSecond: normalizePositiveFinite(
+          options.speedSymbolsPerSecond ??
+            this.#reelSpinDefaults.speedSymbolsPerSecond,
+          "speedSymbolsPerSecond",
+        ),
+      });
+    } catch (error) {
+      this.detachAtomic(active);
+      throw error;
+    }
+  }
+
+  settle(
+    x: number,
+    target: ReelRollTarget,
+    options: ReelRollOptions = {},
+  ): Promise<void> {
+    const reel = this.getReelAt(x);
+    const current = this.#atomicActive.get(x);
+    if (!current || current.mode !== "continuous")
+      return Promise.reject(
+        new ReelError(`Cannot settle reel ${x} without targetless rolling.`),
+      );
+    if (options.signal?.aborted)
+      return Promise.reject(new ReelError("Reel settle was already aborted."));
+    const parsed = this.parseAtomicTarget(reel, target);
+    this.detachAtomic(current);
+    const promise = this.createAtomicCompletion(x, "settle", options.signal);
+    try {
+      reel.settleContinuous(this.createAtomicAxisPlan(reel, options), parsed);
+    } catch (error) {
+      if (reel.isContinuousSpinning()) reel.cancelContinuous();
+      this.failAtomic(this.#atomicActive.get(x)!, toReelError(error));
+    }
+    return promise;
+  }
+
+  cancel(x: number): void {
+    const reel = this.getReelAt(x);
+    const active = this.#atomicActive.get(x);
+    if (!active) return;
+    if (active.mode === "continuous") reel.cancelContinuous();
+    else
+      reel.resetToVisibleSymbols(
+        reel.getVisibleScene(),
+        Math.floor(reel.getSnapshot().currentY),
+        reel.getVisiblePresentationValues(),
+      );
+    this.failAtomic(active, new ReelError(`Reel spin ${x} was cancelled.`));
+  }
+
+  getReel(x: number): ReelRender {
+    this.getReelAt(x);
+    const attachment = this.#reelAttachments[x]!;
+    return Object.freeze({
+      add: (node: RenderNode, order = 0) => {
+        this.assertAlive();
+        if (!Number.isSafeInteger(order))
+          throw new ReelError("Reel node order must be an integer.");
+        if (attachment.mounted.has(node))
+          throw new ReelError("RenderNode is already attached to this reel.");
+        const adapter = getRenderNodeAdapter(node);
+        if (adapter.view.parent)
+          throw new ReelError(
+            "RenderNode is already attached to another parent.",
+          );
+        adapter.view.zIndex = order;
+        attachment.layer.addChild(adapter.view);
+        attachment.mounted.add(node);
+      },
+      remove: (node: RenderNode) => {
+        this.assertAlive();
+        if (!attachment.mounted.delete(node))
+          throw new ReelError("RenderNode is not attached to this reel.");
+        getRenderNodeAdapter(node).view.parent?.removeChild(
+          getRenderNodeAdapter(node).view,
+        );
+      },
+    });
+  }
+
   private getReelAt(x: number): RenderReel {
     if (!Number.isInteger(x) || x < 0 || x >= this.reels.length) {
       throw new ReelError(`visible symbol x ${x} is out of range.`);
     }
     return this.reels[x];
+  }
+
+  private assertAlive(): void {
+    if (this.#destroyed) throw new ReelError("ReelSpin was destroyed.");
+  }
+
+  private prepareAtomicReel(x: number, signal?: AbortSignal): RenderReel {
+    this.assertAlive();
+    const reel = this.getReelAt(x);
+    if (this.#spinPlan || this.#continuousSpinActive || this.#activeDrop)
+      throw new ReelError(
+        "Cannot start a reel while legacy reel motion is active.",
+      );
+    if (this.#atomicActive.has(x))
+      throw new ReelError(`Reel ${x} already has an active spin.`);
+    if (signal?.aborted) throw new ReelError("Reel spin was already aborted.");
+    return reel;
+  }
+
+  private parseAtomicTarget(
+    reel: RenderReel,
+    target: ReelRollTarget,
+  ): RenderReelSpinOptions {
+    if (!target || typeof target !== "object")
+      throw new ReelError("Reel target must be an object.");
+    const rows = reel.layout.visibleRows;
+    if (!Array.isArray(target.symbols) || target.symbols.length !== rows)
+      throw new ReelError(`Reel target symbols length must be ${rows}.`);
+    if (target.values && target.values.length !== rows)
+      throw new ReelError(`Reel target values length must be ${rows}.`);
+    if (target.states && target.states.length !== rows)
+      throw new ReelError(`Reel target states length must be ${rows}.`);
+    return {
+      targetVisibleSymbols: target.symbols,
+      ...(target.values
+        ? { targetVisiblePresentationValues: target.values }
+        : {}),
+      ...(target.states ? { targetVisibleStates: target.states } : {}),
+    };
+  }
+
+  private createAtomicAxisPlan(
+    reel: RenderReel,
+    options: ReelRollOptions,
+  ): import("./types.js").ReelAxisSpinPlan {
+    const durationMs = normalizePositiveFinite(
+      options.durationMs ?? this.#reelSpinDefaults.durationMs,
+      "durationMs",
+    );
+    const speed = normalizePositiveFinite(
+      options.speedSymbolsPerSecond ??
+        this.#reelSpinDefaults.speedSymbolsPerSecond,
+      "speedSymbolsPerSecond",
+    );
+    const cycles = normalizePositiveInteger(
+      options.minimumSpinCycles ?? this.#reelSpinDefaults.minimumSpinCycles,
+      "minimumSpinCycles",
+    );
+    const travelSymbols = Math.max(
+      cycles * reel.layout.visibleRows,
+      Math.ceil((durationMs / 1000) * speed),
+    );
+    const startY = Math.floor(reel.getSnapshot().currentY);
+    const finalY =
+      startY +
+      (this.#reelSpinDefaults.direction === "forward"
+        ? travelSymbols
+        : -travelSymbols);
+    return Object.freeze({
+      x: reel.xIndex,
+      startY,
+      finalY,
+      direction: this.#reelSpinDefaults.direction,
+      travelSymbols,
+      startDelayMs: 0,
+      durationMs,
+      stopAtMs: durationMs,
+    });
+  }
+
+  private createAtomicCompletion(
+    x: number,
+    mode: "roll" | "settle",
+    signal?: AbortSignal,
+  ): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      this.createAtomic(x, mode, signal, resolve, reject);
+    });
+  }
+
+  private createAtomic(
+    x: number,
+    mode: ActiveAtomicReel["mode"],
+    signal?: AbortSignal,
+    resolve?: () => void,
+    reject?: (error: Error) => void,
+  ): ActiveAtomicReel {
+    let active!: ActiveAtomicReel;
+    const abortListener = signal ? () => this.cancel(x) : undefined;
+    active = {
+      x,
+      mode,
+      ...(signal ? { signal } : {}),
+      ...(abortListener ? { abortListener } : {}),
+      ...(resolve ? { resolve } : {}),
+      ...(reject ? { reject } : {}),
+    };
+    this.#atomicActive.set(x, active);
+    signal?.addEventListener("abort", abortListener!, { once: true });
+    return active;
+  }
+
+  private detachAtomic(active: ActiveAtomicReel): void {
+    this.#atomicActive.delete(active.x);
+    if (active.signal && active.abortListener)
+      active.signal.removeEventListener("abort", active.abortListener);
+  }
+
+  private failAtomic(active: ActiveAtomicReel, error: Error): void {
+    this.detachAtomic(active);
+    active.reject?.(error);
+  }
+
+  private cancelAllAtomic(): void {
+    for (const x of [...this.#atomicActive.keys()]) this.cancel(x);
+  }
+
+  private bumpReelOccurrenceGenerations(reel: RenderReel): void {
+    for (const slot of reel.getSlotSnapshots())
+      if (slot.symbol) this.bumpOccurrenceGeneration(slot.symbol);
   }
 
   private isOccurrenceOwned(symbol: RenderSymbol): boolean {
@@ -883,7 +1226,12 @@ export class RenderReelSet extends Container implements SymbolArea {
   }
 
   private assertStopped(action: string): void {
-    if (this.#spinPlan || this.#continuousSpinActive || this.#activeDrop)
+    if (
+      this.#spinPlan ||
+      this.#continuousSpinActive ||
+      this.#atomicActive.size ||
+      this.#activeDrop
+    )
       throw new ReelError(`Cannot ${action} while standard reels are active.`);
   }
 
@@ -1054,4 +1402,20 @@ function createBrightnessTint(brightness: number): number {
 
 function calculateSlotCount(layout: RenderReelSetOptions["layout"]): number {
   return layout.visibleRows + layout.bufferRowsBefore + layout.bufferRowsAfter;
+}
+
+function normalizePositiveFinite(value: unknown, label: string): number {
+  if (!Number.isFinite(value) || (value as number) <= 0)
+    throw new ReelError(`${label} must be a positive finite number.`);
+  return value as number;
+}
+
+function normalizePositiveInteger(value: unknown, label: string): number {
+  if (!Number.isSafeInteger(value) || (value as number) <= 0)
+    throw new ReelError(`${label} must be a positive integer.`);
+  return value as number;
+}
+
+function toReelError(error: unknown): Error {
+  return error instanceof Error ? error : new ReelError(String(error));
 }

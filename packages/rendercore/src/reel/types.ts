@@ -529,6 +529,7 @@ export interface RenderReelSetOptions {
   readonly registry: ReelSymbolRegistry;
   readonly symbolPool?: RenderSymbolPoolOptions;
   readonly bounceStrength?: number;
+  readonly reelSpin?: import("./reel-spin.js").ReelSpinDefaults;
 }
 
 export interface RenderSymbolPoolOptions {

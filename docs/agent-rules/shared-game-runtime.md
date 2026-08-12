@@ -53,6 +53,10 @@
   refill、stagger 和 anticipation 由 operation handler 以 frame delay、Promise 与明确业务事实编排。
   不新增 CellSpinPlan/RefillPlan 或 renderer 业务 predicate。game002v2 的 GridCellReelSpinPlan 仅为
   legacy compatibility，新能力不得继续扩展该 surface。
+- 新普通转使用无 public plan 的 ReelSpin `roll/start/settle/cancel` 逐列原子接口；不同列并发、
+  full/held/stagger/barrier 由 operation handler 以 frame delay 和 Promise 编排。落停 Promise resolve 时
+  整列 `getSymbol()` 必须可用。standard legacy batch façade只能复用同一 RenderReel 单轴运动 owner，
+  不得复制另一套 motion/pool/player 状态机。
 - 游戏 app 只保留业务 component/value/result resolver、formatter、layout、anticipation 和 typed extension；不得复制 Pixi、Spine、reel、cascade 或 popup 状态机。
 - shared package 测试必须使用包内自包含的最小数据验证 parser、binding、player 和 lifecycle
   合同，不得读取任一游戏的 `assets/` 美术交付。只校验当前 Gamelayout 文件、bytes、
@@ -68,6 +72,9 @@
   standard 不接受 positions/dimming 等 grid-cell-only 参数，也不得复制 app-owned continuous 状态机。
   每个请求只有一个 continuous transaction，由响应内第一个 landing 消费；同一响应后续 FG/refill
   使用普通 target-aware presentation，不重新等待或预转。失败 cleanup 必须只取消一次并 fail-stop。
+- standard ReelSpin 的跨列 targetless start 可由同步 hook 同帧逐列调用；response landing cadence 留在
+  operation handler 的 frame delay。consumer 必须传递完整受控 elapsed delta，由 rendercore 内部切片，
+  不得通过 clamp 丢弃长帧时间或轮询完成状态。
 - grid-cell targetless pre-roll 必须复用 manifest timing 的 stable start group cadence；响应早于全部格启动时，
   pending cell 保留剩余 cadence 后进入 target-aware spin。落点 appear immediate 进入，不等待刚 reset 的
   stable loop boundary；低 FPS ticker 必须分片消费完整受控 elapsed delta，不得通过截断单帧时间拉长业务等待。

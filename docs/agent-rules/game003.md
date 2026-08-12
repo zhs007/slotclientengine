@@ -22,6 +22,9 @@
 - app 只使用 package initial mode 的 standard `bg-reel01` 5×5 presentation；未知或缺失 binding 显式失败。
 - spin 使用 package symbol package 内的本地公开轮带。服务器 scene 只覆盖本轮临时可见落点，不缓存、推断或暴露服务器真实轮带。
 - v2 在 framework 发出请求后同步启动 standard targetless continuous spin，响应的第一项 landing operation settle 同一 transaction；失败和 destroy 取消，不能收到消息后再起转。
+- v2 使用 `getReelSpin("main")` 的逐列第一层接口：五列在请求 hook 同帧 `start()`，响应按 app config
+  的 stop cadence 以 frame delay 错峰 `settle()` 并 `Promise.all()`；没有预转时逐列 `roll()`。app
+  不计算 local landing phase、不轮询完成、不截断 ticker delta。
 - symbol scale、render priority、normal/state texture 和 VNI/Spine animation binding 只来自 package symbol manifest；app/viewer/test 不维护第二份业务表。
 - Spine animation 名大小写精确；缺资源、manifest 闭包不完整、atlas/texture 映射错误或版本不兼容都显式失败。
 

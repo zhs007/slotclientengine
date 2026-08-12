@@ -29,7 +29,6 @@ function parse(value: unknown) {
         reel.speedSymbolsPerSecond,
         "speedSymbolsPerSecond",
       ),
-      startDelayMs: nonNegative(reel.startDelayMs, "startDelayMs"),
       stopDelayMs: nonNegative(reel.stopDelayMs, "stopDelayMs"),
     }),
     winCarousel: Object.freeze({

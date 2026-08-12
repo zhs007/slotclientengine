@@ -542,6 +542,8 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   cancelMainReelContinuousSpin(): void;
   /** Returns the instance-scoped symbol area; currently only "main" exists. */
   getSymbolArea(reelId: string): import("../reel/index.js").SymbolArea;
+  /** Returns the instance-scoped standard ReelSpin; currently only "main" exists. */
+  getReelSpin(reelId: string): import("../reel/index.js").ReelSpin;
   isMainReelSpinning(): boolean;
   requestMainReelSymbolStates(
     positions: readonly { readonly x: number; readonly y: number }[],

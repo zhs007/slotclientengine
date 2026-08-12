@@ -24,8 +24,6 @@ import {
   type Game003v2WinGroup,
 } from "./round-compiler.js";
 
-const MAX_DELTA_SECONDS = 1 / 30;
-
 export function createGame003v2RoundAdapter(
   resource: Game003v2Resource,
 ): SlotGameAdapter {
@@ -81,6 +79,7 @@ class Game003v2RoundAdapter implements SlotGameAdapter {
         kind: "standard",
         version: 1,
         ...GAME003V2_CONFIG.reel,
+        startDelayMs: 0,
         bounceStrength: 0,
       },
       formatPopupAmount: formatGame003v2Amount,
@@ -123,8 +122,7 @@ class Game003v2RoundAdapter implements SlotGameAdapter {
           carousel.clear();
           runtime.dismissActiveAwardCelebrationImmediately();
           if (reason === "next-spin") return;
-          if (runtime.isMainReelSpinning())
-            runtime.cancelMainReelContinuousSpin();
+          this.cancelActiveReels(runtime);
           this.#preSpinActive = false;
         },
       });
@@ -151,14 +149,24 @@ class Game003v2RoundAdapter implements SlotGameAdapter {
     const runtime = this.requireRuntime();
     if (this.requireCoordinator().getSnapshot().running)
       throw new Error("game003v2 operation plan is still running.");
-    runtime.startMainReelContinuousSpin();
-    this.#preSpinActive = true;
+    const reelSpin = runtime.getReelSpin("main");
+    const started: number[] = [];
+    try {
+      for (let x = 0; x < this.#resource.columns; x += 1) {
+        reelSpin.start(x);
+        started.push(x);
+      }
+      this.#preSpinActive = true;
+    } catch (error) {
+      for (const x of started.reverse()) reelSpin.cancel(x);
+      throw error;
+    }
   }
 
   cancelSpinPresentation(_error: Error): void {
     if (!this.#preSpinActive) return;
     const runtime = this.requireRuntime();
-    if (runtime.isMainReelSpinning()) runtime.cancelMainReelContinuousSpin();
+    this.cancelActiveReels(runtime);
     this.#preSpinActive = false;
   }
 
@@ -219,7 +227,7 @@ class Game003v2RoundAdapter implements SlotGameAdapter {
     return registry;
   }
 
-  private land(
+  private async land(
     runtime: SceneLayoutPackageRuntime,
     operation: SlotOperationV2,
     context: SlotOperationExecutionContext,
@@ -228,29 +236,33 @@ class Game003v2RoundAdapter implements SlotGameAdapter {
       throw new Error(
         "game003v2 landing handler received a non-landing operation.",
       );
-    const input = {
-      scene: validateScene(operation.output.scene),
-      presentationValues: presentationValues(operation.output.values),
-      localPhaseYs: resolvePhases(
-        this.#resource.symbols.gameConfig.getReels(this.#resource.reelSet),
-        operation.output.scene,
-      ),
-      random: secureRandom,
-    };
-    if (this.#preSpinActive) runtime.settleMainReelContinuousSpin(input);
-    else runtime.spinMainReelToScene(input);
+    const scene = validateScene(operation.output.scene);
+    const values = presentationValues(operation.output.values);
+    const reelSpin = runtime.getReelSpin("main");
+    const settle = this.#preSpinActive;
     this.#preSpinActive = false;
-    return context.waitForFrame(() => !runtime.isMainReelSpinning());
+    const jobs = scene.map(async (symbols, x) => {
+      if (x > 0)
+        await context.delay((x * GAME003V2_CONFIG.reel.stopDelayMs) / 1000);
+      const target = { symbols, values: values[x]! };
+      return settle
+        ? reelSpin.settle(x, target, { signal: context.signal })
+        : reelSpin.roll(x, target, { signal: context.signal });
+    });
+    try {
+      await Promise.all(jobs);
+    } catch (error) {
+      for (let x = 0; x < scene.length; x += 1) reelSpin.cancel(x);
+      await Promise.allSettled(jobs);
+      throw error;
+    }
   }
 
   readonly #tick = (ticker: { deltaMS: number }) => {
     const runtime = this.#runtime;
     const coordinator = this.#coordinator;
     if (!runtime || !coordinator) return;
-    const deltaSeconds = Math.min(
-      Math.max(0, ticker.deltaMS / 1000),
-      MAX_DELTA_SECONDS,
-    );
+    const deltaSeconds = Math.max(0, ticker.deltaMS / 1000);
     if (coordinator.getSnapshot().running) coordinator.update(deltaSeconds);
     else {
       runtime.update(deltaSeconds);
@@ -262,6 +274,11 @@ class Game003v2RoundAdapter implements SlotGameAdapter {
   private requireRuntime(): SceneLayoutPackageRuntime {
     if (!this.#runtime) throw new Error("game003v2 adapter is not ready.");
     return this.#runtime;
+  }
+
+  private cancelActiveReels(runtime: SceneLayoutPackageRuntime): void {
+    const reelSpin = runtime.getReelSpin("main");
+    for (let x = 0; x < this.#resource.columns; x += 1) reelSpin.cancel(x);
   }
 
   private requireCoordinator() {
@@ -354,19 +371,6 @@ function localPhases(columns: number): readonly number[] {
   return Object.freeze(
     Array.from({ length: columns }, () =>
       Math.floor(secureRandom() * 1_000_000),
-    ),
-  );
-}
-
-function resolvePhases(
-  reels: ReturnType<Game003v2Resource["symbols"]["gameConfig"]["getReels"]>,
-  scene: SceneMatrix,
-): readonly number[] {
-  return Object.freeze(
-    scene.map(
-      (column, x) =>
-        reels.findStopYCandidates(x, column)[0] ??
-        Math.floor(secureRandom() * reels.getLength(x)),
     ),
   );
 }

@@ -1,5 +1,11 @@
 # game003v2
 
+主转轮通过 Scene Layout runtime 的 `getReelSpin("main")` 使用 RenderCore 第一层逐列接口。请求发出后
+五列同步 targetless `start()`；响应 landing 按 runtime config 的 `stopDelayMs` 使用 operation frame
+delay 错峰调用 `settle()`，没有预转时调用 `roll()`，最终以 `Promise.all()` 等待全部列。app 不计算
+local final phase、不轮询 reel completion，也不截断 ticker delta；落停 scene/value 与 symbol runtime
+ownership 仍由 RenderCore 负责。
+
 `game003v2` 是 Minecart 的精简 live consumer。美术、layout、公开轮带、Symbols 与 Popup
 唯一来自 `assets/minecart2`；该目录由 `layout10.zip` 经 `gamelayoutpkgcli optimize --quality 80`
 后的 ZIP 完整解包得到。

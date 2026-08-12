@@ -76,7 +76,7 @@ export function compileGame003v2Round(options: {
     genSpinOperation({
       source,
       output: snapshot,
-      payload: Object.freeze({ localPhasePolicy: "public-reel-stop" }),
+      payload: Object.freeze({}),
       businessKey: "landing",
     }),
   ];

@@ -1,6 +1,6 @@
 # RenderCore operation 渲染第一层接口设计
 
-> 状态：任务 199 已实施；本文同时作为第一层 public contract。
+> 状态：任务 199 与任务 200 已实施；本文同时作为第一层 public contract。
 >
 > 本文只定义由 operation 最终驱动的 RenderCore 第一层 public API，以及当前
 > `grid-cell` 的兼容边界。第二层只记录必要方向，不设计第三层模板。
@@ -230,6 +230,122 @@ symbol pool、spinBlur、低 FPS timeline slicing、落停原子提交、同格�
 Nearwin 等 effect 可能在目标 symbol 落地前就在 cell 位置播放，不能通过尚不存在的目标 symbol 的
 `getSymbol(pos)` 附加。该能力后续应设计为同样简单的 cell-level node/effect 原语，或由第二层组合已有节点能力；
 不能为了它恢复整盘 plan、activation gate callback 或 drain edge API。
+
+## 新 ReelSpin 第一层
+
+`ReelSpin` 与 `CellSpin` 使用相同的第一层设计：它只执行一列的原子运动，不接收整盘 plan。它同时是
+`SymbolArea`，因此任意一列落停后，最终 symbol 仍统一通过 `getSymbol({ x, y })` 取得。
+
+```ts
+interface ReelSpin extends SymbolArea {
+  roll(
+    x: number,
+    target: ReelRollTarget,
+    options?: ReelRollOptions,
+  ): Promise<void>;
+
+  start(x: number, options?: ReelRollStartOptions): void;
+
+  settle(
+    x: number,
+    target: ReelRollTarget,
+    options?: ReelRollOptions,
+  ): Promise<void>;
+
+  cancel(x: number): void;
+  getReel(x: number): ReelRender;
+}
+
+interface ReelRollTarget {
+  readonly symbols: readonly number[];
+  readonly values?: readonly (number | null)[];
+  readonly states?: readonly string[];
+}
+
+interface ReelRender {
+  add(node: RenderNode, options?: ReelNodeOptions): void;
+  remove(node: RenderNode): void;
+}
+```
+
+语义固定为：
+
+- `roll(x, target)`：已有整列目标，立即滚动该列，并在该列所有目标 symbol 完整落停后 resolve；
+- `start(x)`：没有服务器目标时，只使用本地公开轮带启动该列持续滚动；
+- `settle(x, target)`：向已经持续滚动的该列注入明确目标，并在整列落停后 resolve；
+- `cancel(x)`：取消该列当前尚未落停的 rolling；targetless rolling 不根据当前画面伪造目标，targeted motion
+  回滚未提交目标并拒绝其 Promise；
+- `getReel(x)`：取得稳定 reel-space attachment 入口，用于整列 mask 内的 Nearwin、光效等节点；
+- Promise resolve 时，目标列每个可见位置都已原子提交，所有 `getSymbol({ x, y })` 都可立即使用。
+
+`target.symbols` 的长度必须与区域可见行数一致；`values/states` 存在时同样必须等长。非法列、长度、symbol、value、
+state、同列并发、没有 active rolling 的 `settle()` 都显式失败。不同列可以并发，同一列只有一个 active transaction。
+
+### 直接编排整列运动
+
+普通整盘 spin 由调用方并发启动各列：
+
+```ts
+await Promise.all(
+  scene.map((symbols, x) =>
+    reelSpin.roll(x, {
+      symbols,
+      values: values[x],
+    }),
+  ),
+);
+```
+
+targetless pre-spin 与服务器响应后的错峰落停同样直接表达：
+
+```ts
+for (let x = 0; x < columns; x += 1) {
+  reelSpin.start(x);
+}
+
+const landings: Promise<void>[] = [];
+
+for (let x = 0; x < columns; x += 1) {
+  if (x > 0) {
+    await context.delay(0.12);
+  }
+
+  landings.push(
+    reelSpin.settle(x, {
+      symbols: scene[x],
+      values: values[x],
+    }),
+  );
+}
+
+await Promise.all(landings);
+```
+
+第一层不提供 `ReelSpinPlan`、full/selective/held mode、整盘 matrix command、stagger 数组或 completion polling。
+调用方使用调用哪些列、frame-driven delay 和 `Promise.all()` 表达跨列顺序。部分格 hold、refill 或单格变化使用
+`CellSpin`，不能把一列拆成 ReelSpin 的隐式 selective mode。
+
+默认方向、速度、minimum cycles、bounce、mask 和常用 timing 在区域创建时绑定。每次调用的 options 只允许覆盖该列真正
+需要的视觉参数与 `AbortSignal`。RenderCore 内部拥有公开轮带、临时目标窗口、pool/player、低 FPS timeline slicing、
+原子提交、abort/destroy 和 Promise edge；这些内部 motion 数据不是 public plan。
+
+### 与 standard reel 和 game003v2 的关系
+
+`ReelSpin` 必须复用 standard `RenderReel` 的单轴运动核心。现有 standard batch spin/continuous 接口可以作为兼容 façade
+保留，但必须翻译到同一组 per-reel transaction，不能继续维护第二个整盘状态机。
+
+任务 200 以 game003v2 作为第一个正式 consumer：
+
+- Scene Layout package runtime 按区域实例提供 `getReelSpin("main")`，不增加 singleton；
+- request-time pre-spin 在同步 hook 中立即启动全部列，第一版不保留原 `startDelayMs` 的逐列启动错峰；
+- response-time landing 使用 operation context 的 frame delay 保留列间 stop cadence，再以 `Promise.all()` 等待；
+- 不再由 game003v2 计算或传入每轮 `localPhaseYs/finalY`，目标只包含服务器 scene/value；
+- 不再轮询 `isMainReelSpinning()`，`roll/settle` Promise 本身就是 landing barrier；
+- game ticker 把完整 delta 交给 runtime，由 ReelSpin 内部切片，不能以 `1/30` clamp 丢弃时间；
+- win carousel 暂时继续使用现有 occurrence geometry compatibility API，本任务不把 geometry 加回 `SymbolRender`。
+
+game003v2 迁移后，legacy standard Scene Layout 方法仍暂时可用，但它们只是同一 ReelSpin owner 的兼容入口。新游戏和新
+operation handler 直接使用 `getReelSpin()`。
 
 ## Legacy grid-cell 兼容边界
 
