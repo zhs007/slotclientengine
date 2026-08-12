@@ -35,6 +35,11 @@ interface ActiveSymbolStatePlayback {
   entered: boolean;
 }
 
+interface PreparedPresentationValue {
+  readonly value: number | null;
+  readonly textUpdates: readonly Readonly<{ name: string; text: string }>[];
+}
+
 export class RenderSymbol extends VisualEntity<void> {
   readonly code: number;
   readonly symbol: string;
@@ -57,6 +62,7 @@ export class RenderSymbol extends VisualEntity<void> {
   readonly #animationResolver: RenderSymbolOptions["animationResolver"];
   readonly #valueController: RenderSymbolValueController | null;
   readonly #imageStringController: RenderSymbolImageStringController | null;
+  readonly #valueTextBindings: ReadonlyMap<string, (value: number) => string>;
   readonly #landingAppearEnabled: boolean;
   readonly #animationCapabilities: ReadonlySet<SymbolStateId>;
   #currentAni: SymbolAni;
@@ -64,6 +70,8 @@ export class RenderSymbol extends VisualEntity<void> {
   #defaultScaleX = 1;
   #defaultScaleY = 1;
   #presentationValue: number | null = null;
+  #valueTextBindingsDirty = false;
+  #preparedPresentationValue: PreparedPresentationValue | null = null;
   #loopCompletionCount = 0;
   #onceCompletionCount = 0;
   #playbackSequence = 0;
@@ -119,6 +127,17 @@ export class RenderSymbol extends VisualEntity<void> {
     this.#valueController = options.valueControllerFactory?.(this) ?? null;
     this.#imageStringController =
       options.imageStringControllerFactory?.(this) ?? null;
+    try {
+      this.#valueTextBindings = normalizeValueTextBindings(
+        this.symbol,
+        options.valueTextBindings,
+        this.#imageStringController,
+      );
+    } catch (error) {
+      this.#imageStringController?.destroy();
+      this.#valueController?.destroy();
+      throw error;
+    }
 
     this.#lastAniKey = this.createAniKey(this.#stateMachine.getSnapshot());
     this.#currentAni = this.createCurrentAni();
@@ -404,7 +423,9 @@ export class RenderSymbol extends VisualEntity<void> {
 
   setPresentationValue(value: number | null): void {
     this.assertNotDestroyed();
-    this.validatePresentationValue(value);
+    if (value === this.#presentationValue && !this.#valueTextBindingsDirty)
+      return;
+    const prepared = this.preparePresentationValue(value);
     const previous = this.#presentationValue;
     if (this.#valueController) {
       try {
@@ -415,6 +436,9 @@ export class RenderSymbol extends VisualEntity<void> {
     } else {
       this.#presentationValue = value;
     }
+    this.commitPresentationValueTexts(prepared.textUpdates);
+    this.#valueTextBindingsDirty = false;
+    this.#preparedPresentationValue = null;
     if (this.#valueController && previous !== value) {
       const before = this.#lastAniKey;
       this.#lastAniKey = "";
@@ -424,11 +448,27 @@ export class RenderSymbol extends VisualEntity<void> {
 
   validatePresentationValue(value: number | null): void {
     this.assertNotDestroyed();
+    if (value === this.#presentationValue && !this.#valueTextBindingsDirty)
+      return;
+    this.preparePresentationValue(value);
+  }
+
+  private preparePresentationValue(
+    value: number | null,
+  ): PreparedPresentationValue {
+    if (this.#preparedPresentationValue?.value === value)
+      return this.#preparedPresentationValue;
     if (value !== null && (!Number.isSafeInteger(value) || value <= 0)) {
       throw new Error(
         "Render symbol presentation value must be a positive safe integer or null.",
       );
     }
+    this.#valueController?.validateValue?.(value);
+    const textUpdates = this.formatPresentationValueTexts(value);
+    this.validatePresentationValueTexts(textUpdates);
+    const prepared = Object.freeze({ value, textUpdates });
+    this.#preparedPresentationValue = prepared;
+    return prepared;
   }
 
   getPresentationValue(): number | null {
@@ -466,6 +506,10 @@ export class RenderSymbol extends VisualEntity<void> {
       );
     }
     this.#imageStringController.setText(name, text);
+    if (this.#valueTextBindings.has(name)) {
+      this.#valueTextBindingsDirty = true;
+      this.#preparedPresentationValue = null;
+    }
   }
 
   getImageStringText(name: string): string {
@@ -589,6 +633,8 @@ export class RenderSymbol extends VisualEntity<void> {
     this.#valueController?.resetForPoolRelease();
     this.#imageStringController?.resetForPoolRelease();
     this.#presentationValue = null;
+    this.#valueTextBindingsDirty = false;
+    this.#preparedPresentationValue = null;
     this.gameUnderlayLayer.removeChildren();
     this.gameOverlayLayer.removeChildren();
     this.#stateMachine.reset();
@@ -605,6 +651,57 @@ export class RenderSymbol extends VisualEntity<void> {
     this.mask = null;
     this.filters = null;
     this.zIndex = 0;
+  }
+
+  private formatPresentationValueTexts(
+    value: number | null,
+  ): readonly Readonly<{ name: string; text: string }>[] {
+    if (this.#valueTextBindings.size === 0) return Object.freeze([]);
+    return Object.freeze(
+      [...this.#valueTextBindings.entries()].map(([name, formatter]) => {
+        if (value === null) return Object.freeze({ name, text: "" });
+        let text: unknown;
+        try {
+          text = formatter(value);
+        } catch (error) {
+          throw new SymbolAnimationError(
+            `Render symbol "${this.symbol}" value text formatter for node "${name}" failed: ${formatThrownError(error)}.`,
+          );
+        }
+        if (typeof text !== "string" || text.length === 0) {
+          throw new SymbolAnimationError(
+            `Render symbol "${this.symbol}" value text formatter for node "${name}" must return a non-empty string.`,
+          );
+        }
+        return Object.freeze({ name, text });
+      }),
+    );
+  }
+
+  private validatePresentationValueTexts(
+    values: readonly Readonly<{ name: string; text: string }>[],
+  ): void {
+    if (values.length === 0) return;
+    const validate = this.#imageStringController?.validateTexts;
+    if (!validate) {
+      throw new SymbolAnimationError(
+        `Render symbol "${this.symbol}" image-string controller does not support atomic text validation.`,
+      );
+    }
+    validate.call(this.#imageStringController, values);
+  }
+
+  private commitPresentationValueTexts(
+    values: readonly Readonly<{ name: string; text: string }>[],
+  ): void {
+    if (values.length === 0) return;
+    const setTexts = this.#imageStringController?.setTexts;
+    if (!setTexts) {
+      throw new SymbolAnimationError(
+        `Render symbol "${this.symbol}" image-string controller does not support atomic text updates.`,
+      );
+    }
+    setTexts.call(this.#imageStringController, values);
   }
 
   override destroy(options?: Parameters<Container["destroy"]>[0]): void {
@@ -1054,4 +1151,55 @@ function normalizeRenderPriority(value: number, symbol: string): number {
     );
   }
   return value;
+}
+
+function normalizeValueTextBindings(
+  symbol: string,
+  value: import("./types.js").SymbolValueTextBindings | undefined,
+  controller: RenderSymbolImageStringController | null,
+): ReadonlyMap<string, (value: number) => string> {
+  if (value === undefined) return new Map();
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new SymbolAnimationError(
+      `Render symbol "${symbol}" value text bindings must be an object.`,
+    );
+  }
+  if (!controller) {
+    throw new SymbolAnimationError(
+      `Render symbol "${symbol}" has value text bindings but no image-string controller.`,
+    );
+  }
+  if (
+    typeof controller.validateTexts !== "function" ||
+    typeof controller.setTexts !== "function"
+  ) {
+    throw new SymbolAnimationError(
+      `Render symbol "${symbol}" value text bindings require an image-string controller with atomic text batch support.`,
+    );
+  }
+  const available = new Set(controller.getNodeNames());
+  const normalized = new Map<string, (value: number) => string>();
+  for (const [name, formatter] of Object.entries(value)) {
+    if (!available.has(name)) {
+      throw new SymbolAnimationError(
+        `Render symbol "${symbol}" has no image-string node named "${name}" for value text binding.`,
+      );
+    }
+    if (typeof formatter !== "function") {
+      throw new SymbolAnimationError(
+        `Render symbol "${symbol}" value text binding for node "${name}" must be a function.`,
+      );
+    }
+    normalized.set(name, formatter);
+  }
+  if (normalized.size === 0) {
+    throw new SymbolAnimationError(
+      `Render symbol "${symbol}" value text bindings must not be empty.`,
+    );
+  }
+  return normalized;
+}
+
+function formatThrownError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

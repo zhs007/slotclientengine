@@ -213,6 +213,7 @@ export class SymbolCatalogModel implements SymbolCatalog {
       imageStringControllerFactory:
         options.imageStringControllerFactory ??
         this.#symbolImageStringControllerFactories[symbol],
+      valueTextBindings: options.valueTextBindings,
     });
   }
 }

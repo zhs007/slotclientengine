@@ -108,6 +108,40 @@ describe("focused art viewport", () => {
     ).toEqual({ width: 900, height: 1200 });
   });
 
+  it("normalizes floating-point projection at compact focus boundaries", () => {
+    const focusRect = Object.freeze({
+      x: 580,
+      y: 277,
+      width: 840,
+      height: 1200,
+    });
+    const heightLimited = calculateMaximizedFocusedArtViewport({
+      artSize: ART_SIZE,
+      pageSize: { width: 59, height: 84 },
+      focusRect,
+    });
+    expect(heightLimited.viewportSize.height).toBe(1200);
+    expect(heightLimited.viewportSize.width).toBeCloseTo(842.857142857, 9);
+    expect(heightLimited.focusRectInViewport.height).toBe(1200);
+
+    const widthLimited = calculateMaximizedFocusedArtViewport({
+      artSize: ART_SIZE,
+      pageSize: { width: 1, height: 2 },
+      focusRect,
+    });
+    expect(widthLimited.viewportSize.width).toBe(840);
+    expect(widthLimited.viewportSize.height).toBeCloseTo(1680, 10);
+    expect(widthLimited.focusRectInViewport.width).toBe(840);
+
+    expect(() =>
+      calculateFocusedArtViewport({
+        artSize: ART_SIZE,
+        viewportSize: { width: 839.99, height: 1200 },
+        focusRect,
+      }),
+    ).toThrow(/width/);
+  });
+
   it("creates a reusable maximized-focus policy and rejects invalid input", () => {
     const policy = createMaximizedFocusedArtViewportPolicy({
       artSize: ART_SIZE,

@@ -14,6 +14,83 @@ import { getRenderNodeAdapter } from "../../src/symbol/render-node.js";
 import { resolveRenderAnchor } from "../../src/presentation/render-anchor.js";
 
 describe("render symbol value controller", () => {
+  it("atomically formats one value into multiple named ImgNumber nodes", () => {
+    const primaryResource = createNamedImageStringResource();
+    const primaryManifest = Object.freeze({
+      ...primaryResource.manifest,
+      glyphs: Object.freeze({
+        ...primaryResource.manifest.glyphs,
+        "5": Object.freeze({
+          path: "assets/5.png",
+          size: Object.freeze({ width: 1, height: 1 }),
+          offset: Object.freeze({ x: 0, y: 0 }),
+        }),
+      }),
+    });
+    const primary = Object.freeze({
+      ...primaryResource,
+      manifest: Object.freeze(primaryManifest),
+      textures: Object.freeze({
+        ...primaryResource.textures,
+        "assets/5.png": Texture.WHITE,
+      }),
+    });
+    const secondary = createNamedImageStringResource();
+    const calls: number[] = [];
+    const symbol = createSymbol(
+      () => new FakeSlotPlayer(),
+      createResource(),
+      (root) =>
+        new SymbolImageStringController({
+          root,
+          nodes: [
+            createNamedNode("primary", primary),
+            createNamedNode("secondary", secondary),
+          ],
+        }),
+      {
+        primary: (value) => String(value),
+        secondary: (value) => {
+          calls.push(value);
+          return String(value);
+        },
+      },
+    );
+    symbol.init();
+
+    symbol.validatePresentationValue(1);
+    expect(calls).toEqual([1]);
+    symbol.setPresentationValue(1);
+    expect(symbol.getPresentationValue()).toBe(1);
+    expect(symbol.getImageStringText("primary")).toBe("1");
+    expect(symbol.getImageStringText("secondary")).toBe("1");
+    expect(calls).toEqual([1]);
+    symbol.requestState("spinBlur", "immediate");
+    expect(symbol.getImageStringText("primary")).toBe("1");
+    expect(symbol.getImageStringText("secondary")).toBe("1");
+    symbol.returnToDefaultState();
+    expect(calls).toEqual([1]);
+    symbol.setPresentationValue(1);
+    expect(calls).toEqual([1]);
+
+    expect(() => symbol.setPresentationValue(5)).toThrow(/缺少 glyph/);
+    expect(symbol.getPresentationValue()).toBe(1);
+    expect(symbol.getImageStringText("primary")).toBe("1");
+    expect(symbol.getImageStringText("secondary")).toBe("1");
+
+    symbol.setImageStringText("primary", "5");
+    symbol.setPresentationValue(1);
+    expect(symbol.getImageStringText("primary")).toBe("1");
+    expect(calls).toEqual([1, 5, 1]);
+
+    symbol.setPresentationValue(null);
+    expect(symbol.getPresentationValue()).toBeNull();
+    expect(symbol.getImageStringText("primary")).toBe("");
+    expect(symbol.getImageStringText("secondary")).toBe("");
+    expect(calls).toEqual([1, 5, 1]);
+    symbol.destroy();
+  });
+
   it("selects tiers, binds text to the configured slot and cleans up on value changes", async () => {
     const players: FakeSlotPlayer[] = [];
     const symbol = createSymbol((tier) => {
@@ -461,6 +538,7 @@ function createSymbol(
   imageStringControllerFactory?: (
     root: RenderSymbol,
   ) => SymbolImageStringController,
+  valueTextBindings?: Readonly<Record<string, (value: number) => string>>,
 ): RenderSymbol {
   let symbol!: RenderSymbol;
   symbol = new RenderSymbol({
@@ -520,8 +598,27 @@ function createSymbol(
         playerFactory: ({ tier }) => createPlayer(tier),
       }),
     imageStringControllerFactory,
+    valueTextBindings,
   });
   return symbol;
+}
+
+function createNamedNode(
+  name: string,
+  resource: ReturnType<typeof createNamedImageStringResource>,
+) {
+  return Object.freeze({
+    spec: Object.freeze({
+      name,
+      resource: "./digits.image-string.manifest.json",
+      targets: Object.freeze([{ state: "spinBlur" }]),
+      initialText: "1",
+      anchor: Object.freeze({ x: 0.5, y: 0.5 }),
+      transform: Object.freeze({ x: 0, y: 0, scale: 1 }),
+      followSlotColor: true,
+    }),
+    resource,
+  });
 }
 
 function createNamedImageStringResource() {
