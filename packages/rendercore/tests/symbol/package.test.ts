@@ -1,12 +1,15 @@
 import {
   collectSymbolManifestResourcePaths,
   collectSymbolPackageEntryPaths,
+  createSymbolPackageReelRegistryFromCatalog,
   createSymbolPackageResource,
   createSymbolPackageValueControllerFactory,
   parseSymbolPackageManifest,
+  type SymbolPackageResource,
   validateSymbolPackageContents,
   validateSymbolPackageGameConfig,
 } from "../../src/symbol/package.js";
+import type { SymbolCatalogModel } from "../../src/symbol/catalog.js";
 import { Assets, Cache, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
 
@@ -149,6 +152,58 @@ describe("symbol package manifest", () => {
 });
 
 describe("symbol package game config and resources", () => {
+  it("validates and forwards value-to-text bindings before symbol creation", () => {
+    const resource = {
+      packageManifest,
+      displaySymbols: ["A", "B"],
+      gameConfig: {
+        getSymbolCode: (symbol: string) => ({ A: 0, B: 1 })[symbol],
+      },
+      valuePresentationResources: {},
+      imageStringResources: {
+        A: [{ spec: { name: "multiplier" } }],
+      },
+    } as unknown as SymbolPackageResource;
+    const createRenderSymbol = vi.fn(() => ({ symbol: "A" }));
+    const catalog = {
+      createRenderSymbol,
+    } as unknown as SymbolCatalogModel;
+    const formatMultiplier = (value: number) => `x${value}`;
+
+    expect(() =>
+      createSymbolPackageReelRegistryFromCatalog(resource, catalog, {
+        valueTextBindings: { UNKNOWN: { multiplier: formatMultiplier } },
+      }),
+    ).toThrow(/unknown display symbol "UNKNOWN"/);
+    expect(() =>
+      createSymbolPackageReelRegistryFromCatalog(resource, catalog, {
+        valueTextBindings: { A: { missing: formatMultiplier } },
+      }),
+    ).toThrow(/no image-string node named "missing"/);
+    expect(() =>
+      createSymbolPackageReelRegistryFromCatalog(resource, catalog, {
+        valueTextBindings: {
+          A: { multiplier: "x" as unknown as (value: number) => string },
+        },
+      }),
+    ).toThrow(/must be a function/);
+
+    const registry = createSymbolPackageReelRegistryFromCatalog(
+      resource,
+      catalog,
+      {
+        valueTextBindings: { A: { multiplier: formatMultiplier } },
+      },
+    );
+    registry.createRenderSymbolByCode(0);
+    expect(createRenderSymbol).toHaveBeenCalledWith(
+      "A",
+      expect.objectContaining({
+        valueTextBindings: { multiplier: formatMultiplier },
+      }),
+    );
+  });
+
   it("allows config-only auxiliary symbols and sorts display symbols by numeric code", () => {
     const result = validateSymbolPackageGameConfig({
       rawGameConfig: gameConfig,

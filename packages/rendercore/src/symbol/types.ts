@@ -134,6 +134,7 @@ export interface RenderSymbolUpdateResult {
 }
 
 export interface RenderSymbolValueController {
+  validateValue?(value: number | null): void;
   setValue(value: number | null): void;
   getValue(): number | null;
   cloneValue(): CloneableRenderObject;
@@ -149,6 +150,10 @@ export interface RenderSymbolValueController {
 
 export interface RenderSymbolImageStringController {
   getNodeNames(): readonly string[];
+  validateTexts?(
+    values: readonly Readonly<{ name: string; text: string }>[],
+  ): void;
+  setTexts?(values: readonly Readonly<{ name: string; text: string }>[]): void;
   setText(name: string, text: string): void;
   getText(name: string): string;
   cloneText(name: string): CloneableRenderObject;
@@ -157,6 +162,16 @@ export interface RenderSymbolImageStringController {
   resetForPoolRelease(): void;
   destroy(): void;
 }
+
+export type SymbolValueTextFormatter = (value: number) => string;
+
+export type SymbolValueTextBindings = Readonly<
+  Record<string, SymbolValueTextFormatter>
+>;
+
+export type SymbolValueTextBindingMap = Readonly<
+  Record<string, SymbolValueTextBindings>
+>;
 
 export interface RenderSymbolOptions {
   readonly definition: SymbolDefinition;
@@ -173,6 +188,7 @@ export interface RenderSymbolOptions {
   readonly imageStringControllerFactory?: (
     root: RenderSymbol,
   ) => RenderSymbolImageStringController;
+  readonly valueTextBindings?: SymbolValueTextBindings;
 }
 
 export interface SymbolLayerTextureSource<TTexture = Texture | string> {
@@ -272,6 +288,7 @@ export interface CreateCatalogRenderSymbolOptions {
   readonly imageStringControllerFactory?: (
     root: RenderSymbol,
   ) => RenderSymbolImageStringController;
+  readonly valueTextBindings?: SymbolValueTextBindings;
 }
 
 export interface SymbolNamedAnimationSpec {

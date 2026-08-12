@@ -80,13 +80,24 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
     this.#displayRoot.renderable = false;
   }
 
-  setValue(value: number | null): void {
+  validateValue(value: number | null): void {
     this.assertNotDestroyed();
     if (value !== null && (!Number.isSafeInteger(value) || value <= 0)) {
       throw new Error(
         "Render symbol presentation value must be a positive safe integer or null.",
       );
     }
+    if (value === null) return;
+    const tierIndex = this.resolveTierIndex(value);
+    assertSymbolValueDisplayResource({
+      value,
+      tierIndex,
+      resource: this.#resource,
+    });
+  }
+
+  setValue(value: number | null): void {
+    this.validateValue(value);
     if (value === this.#value) return;
     if (value === null) {
       this.#continuityGeneration += 1;
@@ -95,19 +106,9 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
       return;
     }
 
-    const tierIndex = this.#resource.tiers.findIndex(
-      (candidate) =>
-        candidate.maxExclusive === undefined || value < candidate.maxExclusive,
-    );
+    const tierIndex = this.resolveTierIndex(value);
     const tier = this.#resource.tiers[tierIndex];
-    if (!tier) {
-      throw new Error(`No valuePresentation tier covers ${value}.`);
-    }
-    assertSymbolValueDisplayResource({
-      value,
-      tierIndex,
-      resource: this.#resource,
-    });
+    if (!tier) throw new Error(`No valuePresentation tier covers ${value}.`);
     if (
       tierIndex === this.#tierIndex &&
       this.#display?.type === "image-string"
@@ -116,9 +117,6 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
       this.#value = value;
       return;
     }
-    this.#continuityGeneration += 1;
-    this.clearActive();
-    this.#value = null;
     let player: RendercoreSpineSlotPlayer | null = null;
     try {
       player = this.#playerFactory({ tier });
@@ -126,6 +124,9 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
       player?.destroy();
       throw error;
     }
+    this.#continuityGeneration += 1;
+    this.clearActive();
+    this.#value = null;
     const requestId = ++this.#requestId;
     this.#value = value;
     this.#player = player;
@@ -136,6 +137,16 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
     player.view.position.set(transform?.x ?? 0, transform?.y ?? 0);
     player.view.scale.set(transform?.scale ?? 1);
     void this.initializePlayer({ player, requestId, value, tierIndex });
+  }
+
+  private resolveTierIndex(value: number): number {
+    const tierIndex = this.#resource.tiers.findIndex(
+      (candidate) =>
+        candidate.maxExclusive === undefined || value < candidate.maxExclusive,
+    );
+    if (tierIndex < 0)
+      throw new Error(`No valuePresentation tier covers ${value}.`);
+    return tierIndex;
   }
 
   private async initializePlayer(options: {

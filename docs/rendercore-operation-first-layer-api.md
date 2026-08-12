@@ -131,6 +131,17 @@ const copy = symbol.clone();
 `SymbolGeometry`、bounds、mask、world transform 或 mutable display object；stale、未落停或 detached clone 没有
 area position 时显式失败。
 
+Symbols package registry 可为 occurrence 配置 `SymbolValueTextBindingMap`，Scene Layout package runtime
+通过 `symbolValueTextBindings` 下传。映射粒度为 `symbol -> exact image-string node -> (value) => string`，
+因此同类 symbol 可同时驱动多个命名 ImgNumber。reel resolver/current/target 已交给 occurrence 的
+presentation value 会统一驱动 value tier 与这些 node；同一文字跨 `spinBlur` profile、landing 和 settled
+state 保持，不在逐帧 render 时重新调用 formatter。
+
+提交前会完整求值并校验所有 formatter、node、glyph/special image 和 value tier。任一失败时保留上一次
+完整 presentation；`null` 不调用 formatter，并清空全部已绑定 node。未绑定 node 的 `setText()` 语义不变；
+若手工覆盖已绑定 node，下一次 `setValue()` 即使 number 相同也会重新应用 binding。formatter 只能同步返回
+非空 string，RenderCore 不猜 node、前缀或默认格式。
+
 第一层不提供 `SymbolSnapshot` 或完整 `SymbolGeometry`。跨 symbol、scene node 或其它目标的坐标换算由
 RenderCore 内部 anchor/motion 能力处理，游戏不计算 reel-space、scene-space 和 world-space 变换。
 
@@ -502,6 +513,8 @@ refill 同样按实际视觉原语执行：
 - value-tier数字使用`setValue/getValue`与`getPart({kind:"value"})`，命名image-string文字使用exact-name
   `setText/getText`与`getPart({kind:"text",name})`；part和whole symbol统一使用`clone/getAnchor`；
   manifest `initialText`只用于authoring preview，production业务值必须显式设置；
+- package/runtime可显式注册per-symbol/per-node value-to-text formatter；它复用同一`setValue()`事务同步
+  value tier与多个命名node，不改变resolver负责选择occurrence number的职责；
 - presentation context提供`mount/unmount/withNode/move/transfer`，临时node显式声明`detach|destroy` ownership；
 - callback success/error、repeat轮次、spin interruption和destroy统一cleanup；
 - generic transfer只移动RenderObject或owned Symbol clone，不改变盘面；盘面occurrence relocation继续使用带lease/commit的专用原语；

@@ -18,6 +18,7 @@ export interface RenderMappedImageString {
       Record<string, SymbolImageStringSpecialImageResource>
     >;
   }): void;
+  validateText(text: string): void;
   setText(text: string): void;
   getText(): string;
   destroy(): void;
@@ -70,10 +71,14 @@ export function createRenderMappedImageString(options: {
       specialValueImages = nextSpecialValueImages;
       commit(text);
     },
+    validateText(nextText: string): void {
+      assertUsable();
+      validateMappedText(nextText, resource, specialValueImages);
+    },
     setText(nextText: string): void {
       assertUsable();
       if (nextText === text) return;
-      validateImageStringText(nextText);
+      validateMappedText(nextText, resource, specialValueImages);
       const mapped = specialValueImages[nextText];
       if (!mapped) glyphs.setText(nextText);
       text = nextText;
@@ -116,6 +121,18 @@ export function createRenderMappedImageString(options: {
       throw new Error("Mapped image-string display was destroyed.");
     resource.assertUsable();
   }
+}
+
+function validateMappedText(
+  text: string,
+  resource: ImageStringResource,
+  specialValueImages: Readonly<
+    Record<string, SymbolImageStringSpecialImageResource>
+  >,
+): void {
+  validateImageStringText(text);
+  if (!specialValueImages[text])
+    validateImageStringText(text, resource.manifest);
 }
 
 function resolveInitialGlyphText(

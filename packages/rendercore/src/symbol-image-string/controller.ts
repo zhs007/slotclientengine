@@ -18,6 +18,8 @@ interface ActiveNode {
   readonly renderer: ReturnType<typeof createRenderMappedImageString>;
 }
 
+type ImageStringTextUpdate = Readonly<{ name: string; text: string }>;
+
 const controllers = new WeakMap<Container, SymbolImageStringController>();
 
 export class SymbolImageStringController implements RenderSymbolImageStringController {
@@ -70,9 +72,29 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
     return this.#names;
   }
 
+  validateTexts(values: readonly ImageStringTextUpdate[]): void {
+    this.assertUsable();
+    const seen = new Set<string>();
+    for (const value of values) {
+      if (seen.has(value.name)) {
+        throw new SymbolAnimationError(
+          `Render symbol "${this.#root.symbol}" image-string text batch contains duplicate node "${value.name}".`,
+        );
+      }
+      seen.add(value.name);
+      this.requireNode(value.name).renderer.validateText(value.text);
+    }
+  }
+
+  setTexts(values: readonly ImageStringTextUpdate[]): void {
+    this.validateTexts(values);
+    for (const value of values)
+      this.requireNode(value.name).renderer.setText(value.text);
+  }
+
   setText(name: string, text: string): void {
     this.assertUsable();
-    this.requireNode(name).renderer.setText(text);
+    this.setTexts([{ name, text }]);
   }
 
   getText(name: string): string {

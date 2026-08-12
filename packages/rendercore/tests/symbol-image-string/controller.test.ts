@@ -41,6 +41,50 @@ afterEach(() => {
 });
 
 describe("SymbolImageStringController", () => {
+  it("preflights every named node before committing a text batch", () => {
+    const symbol = createSymbol();
+    const resource = createResource(manifest, Texture.EMPTY);
+    const controller = new SymbolImageStringController({
+      root: symbol,
+      nodes: ["left", "right"].map((name) => ({
+        spec: {
+          name,
+          resource: "./digits.image-string.manifest.json",
+          targets: [{ state: "normal" }],
+          initialText: "0",
+          anchor: { x: 0.5, y: 0.5 },
+          transform: { x: 0, y: 0, scale: 1 },
+          followSlotColor: true,
+        },
+        resource,
+      })),
+    });
+
+    controller.setTexts([
+      { name: "left", text: "0" },
+      { name: "right", text: "1" },
+    ]);
+    expect(controller.getText("left")).toBe("0");
+    expect(controller.getText("right")).toBe("1");
+    expect(() =>
+      controller.setTexts([
+        { name: "left", text: "1" },
+        { name: "right", text: "2" },
+      ]),
+    ).toThrow(/缺少 glyph/);
+    expect(controller.getText("left")).toBe("0");
+    expect(controller.getText("right")).toBe("1");
+    expect(() =>
+      controller.setTexts([
+        { name: "left", text: "0" },
+        { name: "left", text: "1" },
+      ]),
+    ).toThrow(/duplicate/);
+
+    controller.destroy();
+    symbol.destroy();
+  });
+
   it("renders exact special values as one image and attaches non-Spine states directly", () => {
     const symbol = createSymbol();
     const controller = new SymbolImageStringController({

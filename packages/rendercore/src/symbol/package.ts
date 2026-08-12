@@ -43,6 +43,8 @@ import { createDefaultSymbolAnimationResolver } from "./animation-resolver.js";
 import { createSymbolCatalog, type SymbolCatalogModel } from "./catalog.js";
 import type {
   RenderSymbolValueController,
+  SymbolValueTextBindingMap,
+  SymbolValueTextBindings,
   SymbolAnimationResolver,
   SymbolAssetMap,
   SymbolNormalTextureSource,
@@ -715,15 +717,25 @@ export function createSymbolPackageValueControllerFactory(
 
 export async function createSymbolPackageReelRegistry(
   resource: SymbolPackageResource,
+  options: {
+    readonly valueTextBindings?: SymbolValueTextBindingMap;
+  } = {},
 ): Promise<ReelSymbolRegistry> {
   const catalog = await resource.createCatalog();
-  return createSymbolPackageReelRegistryFromCatalog(resource, catalog);
+  return createSymbolPackageReelRegistryFromCatalog(resource, catalog, options);
 }
 
 export function createSymbolPackageReelRegistryFromCatalog(
   resource: SymbolPackageResource,
   catalog: SymbolCatalogModel,
+  options: {
+    readonly valueTextBindings?: SymbolValueTextBindingMap;
+  } = {},
 ): ReelSymbolRegistry {
+  const valueTextBindings = normalizeSymbolValueTextBindings(
+    resource,
+    options.valueTextBindings,
+  );
   const entries = resource.displaySymbols.map((symbol) => {
     const code = resource.gameConfig.getSymbolCode(symbol);
     if (code === undefined) {
@@ -762,9 +774,64 @@ export function createSymbolPackageReelRegistryFromCatalog(
           resource,
           entry.symbol,
         ),
+        valueTextBindings: valueTextBindings[entry.symbol],
       });
     },
   });
+}
+
+function normalizeSymbolValueTextBindings(
+  resource: SymbolPackageResource,
+  value: SymbolValueTextBindingMap | undefined,
+): Readonly<Record<string, SymbolValueTextBindings>> {
+  if (value === undefined) return Object.freeze({});
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new SymbolAssetError("Symbol value text bindings must be an object.");
+  }
+  const displaySymbols = new Set(resource.displaySymbols);
+  const normalized: Record<string, SymbolValueTextBindings> = {};
+  for (const [symbol, bindings] of Object.entries(value)) {
+    if (!displaySymbols.has(symbol)) {
+      throw new SymbolAssetError(
+        `Symbol value text bindings reference unknown display symbol "${symbol}".`,
+      );
+    }
+    if (
+      typeof bindings !== "object" ||
+      bindings === null ||
+      Array.isArray(bindings)
+    ) {
+      throw new SymbolAssetError(
+        `Symbol "${symbol}" value text bindings must be an object.`,
+      );
+    }
+    const nodeNames = new Set(
+      (resource.imageStringResources[symbol] ?? []).map(
+        (node) => node.spec.name,
+      ),
+    );
+    const normalizedBindings: Record<string, (value: number) => string> = {};
+    for (const [name, formatter] of Object.entries(bindings)) {
+      if (!nodeNames.has(name)) {
+        throw new SymbolAssetError(
+          `Symbol "${symbol}" has no image-string node named "${name}" for value text binding.`,
+        );
+      }
+      if (typeof formatter !== "function") {
+        throw new SymbolAssetError(
+          `Symbol "${symbol}" value text binding for node "${name}" must be a function.`,
+        );
+      }
+      normalizedBindings[name] = formatter;
+    }
+    if (Object.keys(normalizedBindings).length === 0) {
+      throw new SymbolAssetError(
+        `Symbol "${symbol}" value text bindings must not be empty.`,
+      );
+    }
+    normalized[symbol] = Object.freeze(normalizedBindings);
+  }
+  return Object.freeze(normalized);
 }
 
 function createPackageModules(

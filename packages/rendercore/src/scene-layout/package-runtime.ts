@@ -143,6 +143,7 @@ export function createSceneLayoutPackageRuntime(options: {
   readonly presentationOnly?: boolean;
   readonly reelPresentation?: SlotReelPresentationProfileV1;
   readonly areaSpinFunction?: import("../reel/index.js").AreaSpinFunction;
+  readonly symbolValueTextBindings?: import("../symbol/index.js").SymbolValueTextBindingMap;
   readonly gridCellPresentation?: {
     readonly createEffectController?: () => import("../reel/index.js").GridCellEffectController;
     readonly presentationValueResolver?: import("../reel/index.js").GridCellSymbolPresentationValueResolver;
@@ -168,6 +169,7 @@ export function createSceneLayoutPackageRuntime(options: {
     options.presentationOnly === true,
     options.reelPresentation,
     options.areaSpinFunction,
+    options.symbolValueTextBindings,
     options.gridCellPresentation,
     options.createGridCellReel,
     options.hostUpdatesMainReel === true,
@@ -187,6 +189,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #reelPresentation: SlotReelPresentationProfileV1 | null;
   readonly #areaSpinFunction:
     | import("../reel/index.js").AreaSpinFunction
+    | undefined;
+  readonly #symbolValueTextBindings:
+    | import("../symbol/index.js").SymbolValueTextBindingMap
     | undefined;
   readonly #gridCellPresentation:
     | {
@@ -266,6 +271,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     presentationOnly: boolean,
     reelPresentation: SlotReelPresentationProfileV1 | undefined,
     areaSpinFunction: import("../reel/index.js").AreaSpinFunction | undefined,
+    symbolValueTextBindings:
+      | import("../symbol/index.js").SymbolValueTextBindingMap
+      | undefined,
     gridCellPresentation:
       | {
           readonly createEffectController?: () => import("../reel/index.js").GridCellEffectController;
@@ -298,6 +306,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#presentationOnly = presentationOnly;
     this.#manifest = resource.manifest;
     this.#areaSpinFunction = areaSpinFunction;
+    this.#symbolValueTextBindings = symbolValueTextBindings;
     this.#reelPresentation = reelPresentation ?? null;
     this.#gridCellPresentation = gridCellPresentation;
     this.#createGridCellReel = createGridCellReel;
@@ -2591,6 +2600,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     const registry = createSymbolPackageReelRegistryFromCatalog(
       resource,
       catalog,
+      { valueTextBindings: this.#symbolValueTextBindings },
     );
     if (binding.renderMode === "standard") {
       return new RenderReelSet({
