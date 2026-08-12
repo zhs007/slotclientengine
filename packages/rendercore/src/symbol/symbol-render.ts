@@ -40,6 +40,12 @@ export interface SymbolRender extends RenderNode {
   ): Promise<void>;
   setValue(value: number | null): void;
   getValue(): number | null;
+  cloneValue(): RenderNode;
+  getValueAnchor(): RenderAnchor;
+  setText(name: string, text: string): void;
+  getText(name: string): string;
+  cloneText(name: string): RenderNode;
+  getTextAnchor(name: string): RenderAnchor;
   add(node: RenderNode, options?: SymbolNodeOptions): void;
   remove(node: RenderNode): void;
   clone(options?: SymbolCloneOptions): SymbolRender;
@@ -191,6 +197,30 @@ export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
     getValue: () => {
       assertUsable();
       return source.symbol.getPresentationValue();
+    },
+    cloneValue: () => {
+      assertUsable();
+      return source.symbol.clonePresentationValue();
+    },
+    getValueAnchor: () => {
+      assertUsable();
+      return source.symbol.getPresentationValueAnchor();
+    },
+    setText: (name: string, text: string) => {
+      assertUsable();
+      source.symbol.setImageStringText(name, text);
+    },
+    getText: (name: string) => {
+      assertUsable();
+      return source.symbol.getImageStringText(name);
+    },
+    cloneText: (name: string) => {
+      assertUsable();
+      return source.symbol.cloneImageStringText(name);
+    },
+    getTextAnchor: (name: string) => {
+      assertUsable();
+      return source.symbol.getImageStringTextAnchor(name);
     },
     add: (node: RenderNode, options: SymbolNodeOptions = {}) => {
       assertUsable();

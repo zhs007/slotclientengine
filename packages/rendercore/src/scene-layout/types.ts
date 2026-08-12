@@ -716,6 +716,11 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
     readonly betAmountRaw: number;
     readonly winAmountRaw: number;
   }): void;
+  /** Plays the current mode award celebration and resolves after its complete lifecycle. */
+  playAwardCelebrationForCurrentMode(input: {
+    readonly betAmountRaw: number;
+    readonly winAmountRaw: number;
+  }): Promise<void>;
   /** Advances the active mode popup according to its production interaction contract. */
   requestAdvanceAwardCelebration(): void;
   /** Immediately clears the active mode popup and its pending end lifecycle. */

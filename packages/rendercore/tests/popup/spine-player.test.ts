@@ -21,7 +21,7 @@ vi.mock("../../src/popup/prompt-text.js", async (original) => {
 });
 
 describe("spine popup player", () => {
-  it("latches an early click and exits only on the next loop boundary", async () => {
+  it("ignores start clicks and exits loop immediately without waiting for its boundary", async () => {
     const leaf = new FakeSpinePlayer();
     const player = createSpinePopupPlayer({
       resource: spineResource(),
@@ -34,13 +34,14 @@ describe("spine popup player", () => {
     leaf.results.push({ completed: true, events: [] });
     expect(player.update(0.1)).toEqual({
       phase: "loop",
-      dismissRequested: true,
+      dismissRequested: false,
     });
     expect(leaf.plays.at(-1)).toEqual({ animationName: "loop", loop: true });
-    leaf.results.push({ completed: false, events: [] });
-    expect(player.update(0.1).phase).toBe("loop");
-    leaf.results.push({ completed: false, loopCompleted: true, events: [] });
-    expect(player.update(0.1).phase).toBe("end");
+    player.requestDismiss();
+    expect(player.getSnapshot()).toEqual({
+      phase: "end",
+      dismissRequested: true,
+    });
     expect(leaf.plays.at(-1)).toEqual({ animationName: "end", loop: false });
     leaf.results.push({ completed: true, events: [] });
     expect(player.update(0.1).phase).toBe("complete");
@@ -57,8 +58,12 @@ describe("spine popup player", () => {
     player.start();
     expect(() => player.start()).toThrow(/already playing/);
     player.requestDismiss();
+    expect(player.getSnapshot().dismissRequested).toBe(false);
+    leaf.results.push({ completed: true, events: [] });
+    player.update(0.1);
     player.requestDismiss();
-    expect(player.getSnapshot().dismissRequested).toBe(true);
+    player.requestDismiss();
+    expect(player.getSnapshot().phase).toBe("end");
     player.dismissImmediately();
     expect(player.getSnapshot().phase).toBe("complete");
     expect(leaf.resetCount).toBe(1);

@@ -961,6 +961,9 @@ export class LayoutPreview {
             resource.symbolManifest.symbols[symbol]?.valuePresentation;
           if (presentation)
             renderSymbol.setPresentationValue(presentation.defaultValues[0]);
+          for (const node of resource.symbolManifest.symbols[symbol]
+            ?.imageStringNodes ?? [])
+            renderSymbol.setImageStringText(node.name, node.initialText);
           const assignment = assignmentByCell.get(`${x},${y}`);
           if (assignment?.target.kind === "image-string-node") {
             renderSymbol.setImageStringText(

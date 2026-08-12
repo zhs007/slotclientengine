@@ -4,6 +4,8 @@ import type {
   LogicGameConfig,
 } from "@slotclientengine/logiccore";
 import type { RenderSymbol } from "./render-symbol.js";
+import type { RenderNode } from "./render-node.js";
+import type { RenderAnchor } from "../presentation/render-anchor.js";
 import type { SymbolManifestAnimationPlaybackSpec } from "./manifest.js";
 
 export type SymbolStateId = string;
@@ -135,6 +137,8 @@ export interface RenderSymbolUpdateResult {
 export interface RenderSymbolValueController {
   setValue(value: number | null): void;
   getValue(): number | null;
+  cloneValue(): RenderNode;
+  getValueAnchor(): RenderAnchor;
   syncState(state: SymbolStateId): void;
   createActiveSpineAnimation(
     context: SymbolAnimationContext,
@@ -148,6 +152,8 @@ export interface RenderSymbolImageStringController {
   getNodeNames(): readonly string[];
   setText(name: string, text: string): void;
   getText(name: string): string;
+  cloneText(name: string): RenderNode;
+  getTextAnchor(name: string): RenderAnchor;
   syncState(state: SymbolStateId): void;
   resetForPoolRelease(): void;
   destroy(): void;

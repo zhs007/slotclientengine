@@ -1276,7 +1276,7 @@ describe("scene layout package runtime", () => {
       expect(popup.container.position).toMatchObject({ x: 103, y: 46 });
       expect(popup.container.scale).toMatchObject({ x: 0.8, y: 0.8 });
       expect(popup.container.zIndex).toBe(2000);
-      runtime.startAwardCelebrationForCurrentMode({
+      const celebrationComplete = runtime.playAwardCelebrationForCurrentMode({
         betAmountRaw: 100,
         winAmountRaw: 6000,
       });
@@ -1301,6 +1301,7 @@ describe("scene layout package runtime", () => {
       expect(popupPresentation.eventMode).toBe("static");
       popupPresentation.emit("pointerdown", {} as never);
       runtime.dismissActiveAwardCelebrationImmediately();
+      await expect(celebrationComplete).resolves.toBeUndefined();
       expect(popupPresentation.eventMode).toBe("none");
       expect(runtime.getActiveAwardCelebrationSnapshot()).toBeNull();
       await completeModeRequest(runtime, "FreeGame");

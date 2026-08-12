@@ -112,6 +112,7 @@
 - official Spine Pixi runtime 当前只支持 `4.3.x`。atlas、skeleton、animation 名和版本大小写精确校验；不得恢复 3.8/4.2 adapter 或手写兼容层。
 - normal/win/appear 共享相同 Spine resource 时复用 player，只切换语义 animation；资源、value/tier 或 symbol 真实变化时才按合同重建。
 - image-string parser、Unicode code-point layout、glyph exact closure、natural/fixed advance、动态 `visualBounds` anchor 和 `setText()` 生命周期属于 rendercore。缺 glyph、slot、resource 或 binding 显式失败，不回退字体、占位图、glob 或路径猜测。
+- symbol命名image-string node的`initialText`只属于authoring preview，不是production业务value；正式游戏通过exact node name显式setText。valuePresentation与命名node是两套严格来源，clone/anchor不得按唯一node或symbol业务名猜测。数字飞行只移动owned display clone，不自动提交目标value。
 - value presentation 使用 strict `font | image | image-string` union；新 image-string 每 tier 声明 normal JSON resource及可选explicit non-Spine `spinBlur` profile，并共享 Normal slot/transform/color/special配置；旧per-tier完整binding继续兼容。profile必须与normal layout/special集合一致，package在mutation前prepare exact closure；每occurrence复用稳定外层container，同tier改值只`setText()`，state切换只切profile和slot/overlay attachment。
 - 新 image-string logical node 用一个 `spineSlot` 覆盖全部 top-level Spine state，非 Spine state 仍使用唯一 exact `{state}` target；旧逐 Spine state `{state,slot}` 保持兼容且不扩大覆盖。
 - requested state 因 equivalence 解析到 normal、但自身有显式 state texture 时，ImgNumber attachment 使用 requested presentation state；shared `spineSlot` 只允许 attach 到 prepared Spine state，late init 不得覆盖 exact non-Spine direct overlay。回到 Spine state 前先同步 attachment 资格，同一 renderer/container 保持连续。
@@ -129,7 +130,7 @@
 
 ## Presentation
 
-- rendercore 拥有通用 symbol win carousel、金额递增、big/super/mega tier、segmented VNI 播放、popup threshold sequence、完整 canvas/keyboard 输入绑定、advance/dismiss/end drain，以及普通 Spine popup 的 start→loop→end 边界状态机和 runtime snapshot。Scene Layout transition prelude 只能编排该 public player；app/editor 只提供宿主 input target，不复制点击分派、latch 或 loop/end 边界。
+- rendercore 拥有通用 symbol win carousel、金额递增、big/super/mega tier、segmented VNI 播放、popup threshold sequence、完整 canvas/keyboard 输入绑定、advance/dismiss/end drain，以及普通 Spine popup 的 start→loop→end 状态机和 runtime snapshot。start点击忽略且不锁存，loop点击立即进入end，end点击忽略。Scene Layout transition prelude 只能编排该 public player；app/editor 只提供宿主 input target，不复制点击分派或状态边界。
 - Popup player 是主 Pixi display tree 中的普通 Container 节点；rendercore 不为 Popup 创建独立 Application、canvas、Renderer、ticker 或 RAF。只有 Popup Editor 的独立预览页面可创建自己的预览 canvas，再挂载同一个 player Container。Popup v2 保留有限 design viewport 适配；v3/v4 不保存 design viewport，由 shared 无界 maximized-focus 以 focus 几何中心按 page aspect 扩展 visible rect。全屏 backdrop 始终覆盖宿主 viewport，不随 authored content focus transform 缩放。
 - Popup v4 Spine-slot attachment graph、exact slot prepare、DAG/per-parent order 与一 slot 一稳定 owner group 属于 rendercore；同 slot 多 child 按 layer order 排序并保留局部 transform，跨 slot 顺序继续由 skeleton draw order 决定。app/editor 不直接改 official Spine display tree，不自动断环、回根、改 order 或猜 slot。
 - popup 字体文字的单行/NFC 校验、字号/颜色/渐变/描边/投影/grapheme 弧排、显式 package 字体 FontFace hash 复用/释放及 image/ImgNumber/Spine/VNI overlay 生命周期属于 rendercore；省略 font resource 才使用 `system-ui/sans-serif`，系统字体不建模为 package 资源。游戏优先通过 player 的 exact name handle 原子 set/reset string；legacy prompt 仍可由 `start(text?)` 传入已翻译 string，省略时使用 manifest 默认值，但新 v4 authoring 不生成 prompt。

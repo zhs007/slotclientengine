@@ -435,6 +435,24 @@ export class RenderSymbol extends VisualEntity<void> {
     return this.#presentationValue;
   }
 
+  clonePresentationValue(): import("./render-node.js").RenderNode {
+    this.assertNotDestroyed();
+    if (!this.#valueController)
+      throw new Error(
+        `Render symbol "${this.symbol}" has no value presentation.`,
+      );
+    return this.#valueController.cloneValue();
+  }
+
+  getPresentationValueAnchor(): import("../presentation/render-anchor.js").RenderAnchor {
+    this.assertNotDestroyed();
+    if (!this.#valueController)
+      throw new Error(
+        `Render symbol "${this.symbol}" has no value presentation.`,
+      );
+    return this.#valueController.getValueAnchor();
+  }
+
   getImageStringNodeNames(): readonly string[] {
     this.assertNotDestroyed();
     return this.#imageStringController?.getNodeNames() ?? Object.freeze([]);
@@ -458,6 +476,26 @@ export class RenderSymbol extends VisualEntity<void> {
       );
     }
     return this.#imageStringController.getText(name);
+  }
+
+  cloneImageStringText(name: string): import("./render-node.js").RenderNode {
+    this.assertNotDestroyed();
+    if (!this.#imageStringController)
+      throw new Error(
+        `Render symbol "${this.symbol}" has no image-string nodes.`,
+      );
+    return this.#imageStringController.cloneText(name);
+  }
+
+  getImageStringTextAnchor(
+    name: string,
+  ): import("../presentation/render-anchor.js").RenderAnchor {
+    this.assertNotDestroyed();
+    if (!this.#imageStringController)
+      throw new Error(
+        `Render symbol "${this.symbol}" has no image-string nodes.`,
+      );
+    return this.#imageStringController.getTextAnchor(name);
   }
 
   requestLandingAppear(

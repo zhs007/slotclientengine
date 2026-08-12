@@ -109,6 +109,12 @@ interface PackagePresentationDelayWaiter {
   readonly abortListener?: () => void;
 }
 
+interface ActiveAwardCelebrationWaiter {
+  readonly popupId: string;
+  readonly resolve: () => void;
+  readonly reject: (error: SceneLayoutError) => void;
+}
+
 type ActiveModeTransition =
   | (ActiveModeTransitionBase & {
       readonly kind: "spine";
@@ -230,6 +236,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   #activePrelude: ActiveModePrelude | null = null;
   #preparedTransition: PreparedModeTransition | null = null;
   #activePopupId: string | null = null;
+  #activeAwardCelebrationWaiter: ActiveAwardCelebrationWaiter | null = null;
   #viewportSize: RenderViewportSize | null = null;
   #artSpaceApplied = false;
   #pendingMainReelLandingPositions: {
@@ -613,8 +620,18 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         this.#reel.update(deltaSeconds);
       }
     }
-    for (const popup of this.#popups.values())
-      if (popup.isPlaying()) popup.update(deltaSeconds);
+    for (const [id, popup] of this.#popups)
+      if (popup.isPlaying())
+        try {
+          popup.update(deltaSeconds);
+        } catch (error) {
+          if (this.#activeAwardCelebrationWaiter?.popupId === id) {
+            const waiter = this.#activeAwardCelebrationWaiter;
+            this.#activeAwardCelebrationWaiter = null;
+            waiter.reject(asSceneLayoutError(error));
+          }
+          throw error;
+        }
     for (const [id, popup] of this.#spinePopups)
       if (popup.isPlaying())
         try {
@@ -633,8 +650,14 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       this.#activePopupId &&
       !this.#popups.get(this.#activePopupId)?.isPlaying()
     ) {
+      const completedId = this.#activePopupId;
       this.#activePopupId = null;
       this.refreshPopupPointerInteraction();
+      if (this.#activeAwardCelebrationWaiter?.popupId === completedId) {
+        const waiter = this.#activeAwardCelebrationWaiter;
+        this.#activeAwardCelebrationWaiter = null;
+        waiter.resolve();
+      }
     }
   }
 
@@ -1805,6 +1828,18 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     }
   }
 
+  playAwardCelebrationForCurrentMode(input: {
+    readonly betAmountRaw: number;
+    readonly winAmountRaw: number;
+  }): Promise<void> {
+    this.startAwardCelebrationForCurrentMode(input);
+    const popupId = this.#activePopupId;
+    if (!popupId) return Promise.resolve();
+    return new Promise<void>((resolve, reject) => {
+      this.#activeAwardCelebrationWaiter = { popupId, resolve, reject };
+    });
+  }
+
   requestAdvanceAwardCelebration(): void {
     this.assertReady();
     const id = this.#activePopupId ?? this.playingPopupId();
@@ -1819,6 +1854,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.getAwardCelebrationPopup(id).dismissImmediately();
     this.#activePopupId = null;
     this.refreshPopupPointerInteraction();
+    if (this.#activeAwardCelebrationWaiter?.popupId === id) {
+      const waiter = this.#activeAwardCelebrationWaiter;
+      this.#activeAwardCelebrationWaiter = null;
+      waiter.resolve();
+    }
   }
 
   getActiveAwardCelebrationSnapshot() {
@@ -1903,6 +1943,15 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       );
     }
     this.#presentationDelayWaiters.clear();
+    if (this.#activeAwardCelebrationWaiter) {
+      const waiter = this.#activeAwardCelebrationWaiter;
+      this.#activeAwardCelebrationWaiter = null;
+      waiter.reject(
+        new SceneLayoutError(
+          "Scene layout package runtime was destroyed during an award celebration.",
+        ),
+      );
+    }
     this.#disposePopupInputBinding?.();
     this.#disposePopupInputBinding = null;
     this.releasePreparedTransition(this.#preparedTransition);

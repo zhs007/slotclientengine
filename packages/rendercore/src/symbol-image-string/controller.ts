@@ -1,5 +1,5 @@
 import type { RendercoreSpineSlotPlayer } from "../spine/runtime-player.js";
-import type { Container } from "pixi.js";
+import { Container } from "pixi.js";
 import { SymbolAnimationError } from "../symbol/errors.js";
 import type { RenderSymbol } from "../symbol/render-symbol.js";
 import type { RenderSymbolImageStringController } from "../symbol/types.js";
@@ -8,6 +8,11 @@ import type {
   SymbolImageStringResourceMap,
 } from "./types.js";
 import { createRenderMappedImageString } from "./mapped-display.js";
+import { createRenderNode, type RenderNode } from "../symbol/render-node.js";
+import {
+  createContainerRenderAnchor,
+  type RenderAnchor,
+} from "../presentation/render-anchor.js";
 
 interface ActiveNode {
   readonly definition: SymbolImageStringNodeResource;
@@ -38,7 +43,7 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
       options.nodes.map((definition) => {
         const renderer = createRenderMappedImageString({
           resource: definition.resource,
-          text: definition.spec.initialText,
+          text: "",
           anchor: definition.spec.anchor,
           specialValueImages: definition.specialValueImages,
         });
@@ -74,6 +79,44 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
   getText(name: string): string {
     this.assertUsable();
     return this.requireNode(name).renderer.getText();
+  }
+
+  cloneText(name: string): RenderNode {
+    this.assertUsable();
+    const node = this.requireNode(name);
+    const renderer = createRenderMappedImageString({
+      resource:
+        this.#state === "spinBlur" && node.definition.spinBlurProfile
+          ? node.definition.spinBlurProfile.resource
+          : node.definition.resource,
+      text: node.renderer.getText(),
+      anchor: node.definition.spec.anchor,
+      specialValueImages:
+        this.#state === "spinBlur" && node.definition.spinBlurProfile
+          ? node.definition.spinBlurProfile.specialValueImages
+          : node.definition.specialValueImages,
+    });
+    renderer.container.position.set(
+      node.definition.spec.transform.x,
+      node.definition.spec.transform.y,
+    );
+    renderer.container.scale.set(node.definition.spec.transform.scale);
+    const root = new Container();
+    root.addChild(renderer.container);
+    return createRenderNode({
+      view: root,
+      destroy: () => {
+        renderer.destroy();
+        root.destroy({ children: false });
+      },
+    });
+  }
+
+  getTextAnchor(name: string): RenderAnchor {
+    this.assertUsable();
+    return createContainerRenderAnchor(
+      this.requireNode(name).renderer.container,
+    );
   }
 
   syncState(state: string): void {
@@ -190,7 +233,7 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
         resource: node.definition.resource,
         specialValueImages: node.definition.specialValueImages,
       });
-      node.renderer.setText(node.definition.spec.initialText);
+      node.renderer.setText("");
     }
   }
 

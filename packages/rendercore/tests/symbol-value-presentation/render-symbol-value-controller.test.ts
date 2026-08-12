@@ -10,6 +10,8 @@ import {
   type SymbolValuePresentationResource,
 } from "../../src/symbol-value-presentation/index.js";
 import { SymbolImageStringController } from "../../src/symbol-image-string/index.js";
+import { getRenderNodeAdapter } from "../../src/symbol/render-node.js";
+import { resolveRenderAnchor } from "../../src/presentation/render-anchor.js";
 
 describe("render symbol value controller", () => {
   it("selects tiers, binds text to the configured slot and cleans up on value changes", async () => {
@@ -377,6 +379,20 @@ describe("render symbol value controller", () => {
     expect(highContent.pivot).toMatchObject({ x: 2, y: 1 });
     expect(players[0].destroyed).toBe(true);
 
+    const clone = symbol.clonePresentationValue();
+    const cloneView = getRenderNodeAdapter(clone).view;
+    expect(cloneView.children[0]?.children).toHaveLength(2);
+    const target = new Container();
+    symbol.addChild(target);
+    const anchor = resolveRenderAnchor(
+      symbol.getPresentationValueAnchor(),
+      target,
+    );
+    expect(Number.isFinite(anchor.x) && Number.isFinite(anchor.y)).toBe(true);
+    symbol.setPresentationValue(25);
+    expect(cloneView.children[0]?.children).toHaveLength(2);
+    clone.destroy();
+
     expect(() => symbol.setPresentationValue(13)).toThrow(/缺少 glyph/);
     expect(symbol.getPresentationValue()).toBe(25);
     symbol.destroy();
@@ -457,10 +473,30 @@ function createSymbol(
         { id: "normal", phase: "stable", playback: "static" },
         { id: "spinBlur", phase: "stable", playback: "static" },
         { id: "disabled", phase: "stable", playback: "static" },
-        { id: "appear", phase: "once", playback: "once" },
-        { id: "win", phase: "once", playback: "once" },
-        { id: "remove", phase: "once", playback: "once" },
-        { id: "collect", phase: "once", playback: "once" },
+        {
+          id: "appear",
+          phase: "once",
+          playback: "once",
+          afterComplete: "return-to-default",
+        },
+        {
+          id: "win",
+          phase: "once",
+          playback: "once",
+          afterComplete: "return-to-default",
+        },
+        {
+          id: "remove",
+          phase: "once",
+          playback: "once",
+          afterComplete: "return-to-default",
+        },
+        {
+          id: "collect",
+          phase: "once",
+          playback: "once",
+          afterComplete: "return-to-default",
+        },
         { id: "dropdown", phase: "stable", playback: "loop" },
       ],
       equivalences: [

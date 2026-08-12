@@ -22,6 +22,11 @@ import {
   notifySymbolImageStringSpineInactive,
 } from "../symbol-image-string/controller.js";
 import { Container } from "pixi.js";
+import { createRenderNode, type RenderNode } from "../symbol/render-node.js";
+import {
+  createContainerRenderAnchor,
+  type RenderAnchor,
+} from "../presentation/render-anchor.js";
 
 export function createRenderSymbolValueController(options: {
   readonly root: RenderSymbol;
@@ -174,6 +179,31 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
 
   getValue(): number | null {
     return this.#value;
+  }
+
+  cloneValue(): RenderNode {
+    this.assertNotDestroyed();
+    if (!this.#initialized || !this.#display)
+      throw new Error(
+        "Render symbol presentation value is not ready to clone.",
+      );
+    const display = this.#display.clone();
+    const root = new Container();
+    root.addChild(display.container);
+    return createRenderNode({
+      view: root,
+      destroy: () => {
+        display.destroy();
+        root.destroy({ children: false });
+      },
+    });
+  }
+
+  getValueAnchor(): RenderAnchor {
+    this.assertNotDestroyed();
+    if (!this.#initialized || !this.#display)
+      throw new Error("Render symbol presentation value has no ready anchor.");
+    return createContainerRenderAnchor(this.#display.container);
   }
 
   syncState(state: string): void {

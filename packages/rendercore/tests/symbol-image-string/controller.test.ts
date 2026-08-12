@@ -10,6 +10,8 @@ import {
 import { RenderSymbol } from "../../src/symbol/render-symbol.js";
 import { createDefaultSymbolStatePreset } from "../../src/symbol/state-machine.js";
 import type { RendercoreSpineSlotPlayer } from "../../src/spine/runtime-player.js";
+import { getRenderNodeAdapter } from "../../src/symbol/render-node.js";
+import { resolveRenderAnchor } from "../../src/presentation/render-anchor.js";
 
 const manifest = {
   version: 1 as const,
@@ -74,6 +76,7 @@ describe("SymbolImageStringController", () => {
       ],
     });
 
+    controller.setText("coin-value", "200");
     controller.syncState("normal");
     const display = symbol.imageStringOverlayLayer.children[0] as Container;
     expect(display.children).toHaveLength(1);
@@ -88,6 +91,19 @@ describe("SymbolImageStringController", () => {
     expect(display.children).toHaveLength(2);
     controller.setText("coin-value", "200");
     expect(display.children).toHaveLength(1);
+    const clone = controller.cloneText("coin-value");
+    const cloneView = getRenderNodeAdapter(clone).view;
+    expect(cloneView.children).toHaveLength(1);
+    controller.setText("coin-value", "10");
+    expect(cloneView.children[0]?.children).toHaveLength(1);
+    const target = new Container();
+    symbol.addChild(target);
+    const anchor = resolveRenderAnchor(
+      controller.getTextAnchor("coin-value"),
+      target,
+    );
+    expect(Number.isFinite(anchor.x) && Number.isFinite(anchor.y)).toBe(true);
+    clone.destroy();
     controller.syncState("win");
     expect(symbol.imageStringOverlayLayer.children).toHaveLength(0);
     controller.destroy();
@@ -129,7 +145,7 @@ describe("SymbolImageStringController", () => {
     const player = createPlayer();
 
     expect(controller.getNodeNames()).toEqual(["coin-value"]);
-    expect(controller.getText("coin-value")).toBe("01");
+    expect(controller.getText("coin-value")).toBe("");
     controller.setText("coin-value", "001");
     expect(controller.getText("coin-value")).toBe("001");
     controller.setText("coin-value", "");
@@ -169,11 +185,13 @@ describe("SymbolImageStringController", () => {
 
     vi.mocked(player.attachSlotObject).mockClear();
     notifySymbolImageStringSpineActive(symbol, "normal", player, currentOwner);
+    controller.setText("coin-value", "01");
+    controller.setText("coin-value", "01");
     controller.syncState("normal");
     expect(player.attachSlotObject).toHaveBeenCalledTimes(1);
 
     controller.resetForPoolRelease();
-    expect(controller.getText("coin-value")).toBe("01");
+    expect(controller.getText("coin-value")).toBe("");
     controller.destroy();
     controller.destroy();
     expect(() => controller.getNodeNames()).toThrow(/destroyed/);
@@ -274,6 +292,7 @@ describe("SymbolImageStringController", () => {
       ],
     });
 
+    controller.setText("coin-value", "01");
     controller.syncState("normal");
     const display = symbol.imageStringOverlayLayer.children[0] as Container;
     const sprites = [...display.children];

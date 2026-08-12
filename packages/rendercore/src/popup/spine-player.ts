@@ -231,18 +231,6 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
         animationName: this.#manifest.spine.playback.loopAnimation,
         loop: true,
       });
-    } else if (
-      this.#phase === "loop" &&
-      this.#dismissRequested &&
-      result.loopCompleted
-    ) {
-      this.#phase = "end";
-      if (this.#prompt) this.#prompt.text.visible = false;
-      for (const overlay of this.#overlays) overlay.applySegment("end");
-      this.#player.play({
-        animationName: this.#manifest.spine.playback.endAnimation,
-        loop: false,
-      });
     } else if (this.#phase === "end" && result.completed) {
       this.complete();
     }
@@ -251,7 +239,15 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
 
   requestDismiss(): void {
     this.assertReady();
-    if (this.isPlaying()) this.#dismissRequested = true;
+    if (this.#phase !== "loop") return;
+    this.#dismissRequested = true;
+    this.#phase = "end";
+    if (this.#prompt) this.#prompt.text.visible = false;
+    for (const overlay of this.#overlays) overlay.applySegment("end");
+    this.#player.play({
+      animationName: this.#manifest.spine.playback.endAnimation,
+      loop: false,
+    });
   }
 
   dismissImmediately(): void {

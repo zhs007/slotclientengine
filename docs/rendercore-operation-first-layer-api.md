@@ -488,6 +488,8 @@ refill 同样按实际视觉原语执行：
 
 - `area.getSymbols(positions)`返回exact-occurrence `SymbolGroup`，批量`setState/playState`先完整预检；
 - Symbol、SymbolGroup center、area point和Scene Layout named node提供opaque `RenderAnchor`，游戏不读取Pixi matrix/bounds；
+- value-tier数字使用`setValue/cloneValue/getValueAnchor`，命名image-string文字使用exact-name `setText/cloneText/getTextAnchor`；
+  manifest `initialText`只用于authoring preview，production业务值必须显式设置；
 - presentation context提供`mount/unmount/withNode/move/transfer`，临时node显式声明`detach|destroy` ownership；
 - callback success/error、repeat轮次、spin interruption和destroy统一cleanup；
 - generic transfer只移动RenderNode或owned Symbol clone，不改变盘面；盘面occurrence relocation继续使用带lease/commit的专用原语；
