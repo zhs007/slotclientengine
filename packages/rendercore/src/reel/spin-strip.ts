@@ -163,6 +163,7 @@ function resolvePresentationValue(
   symbolY: number,
   code: number,
 ): number | null {
+  if (code === -1) return null;
   return normalizePresentationValue(
     options.presentationValueResolver?.({ x: options.x, symbolY, code }) ??
       null,
@@ -210,9 +211,9 @@ function parseVisibleSymbols(
   }
   return Object.freeze(
     value.map((code, index) => {
-      if (!Number.isInteger(code) || code < 0) {
+      if (!Number.isSafeInteger(code) || code < -1) {
         throw new ReelError(
-          `${label}[${index}] must be a non-negative integer.`,
+          `${label}[${index}] must be -1 or a non-negative safe integer.`,
         );
       }
       return code;

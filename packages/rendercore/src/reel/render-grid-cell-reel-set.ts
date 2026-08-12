@@ -57,6 +57,7 @@ import type {
   SymbolStateTransitionMode,
 } from "../symbol/index.js";
 import {
+  createEmptySymbolRender,
   createSymbolRender,
   type SymbolRender,
 } from "../symbol/symbol-render.js";
@@ -396,6 +397,11 @@ export class RenderGridCellReelSet extends Container implements SymbolArea {
       this.#columns,
       this.#rows,
     );
+    validateGridEmptyTargets(
+      plan,
+      targetPresentationValues,
+      targetLandingStates,
+    );
 
     const planCellsByKey = new Map(
       plan.cells.map((planCell) => [
@@ -581,6 +587,11 @@ export class RenderGridCellReelSet extends Container implements SymbolArea {
       options.targetLandingStates,
       this.#columns,
       this.#rows,
+    );
+    validateGridEmptyTargets(
+      plan,
+      targetPresentationValues,
+      targetLandingStates,
     );
     const normalizedCells = plan.cells.map((planCell) => {
       const cell = this.getCell(planCell.x, planCell.y);
@@ -1331,8 +1342,9 @@ export class RenderGridCellReelSet extends Container implements SymbolArea {
     this.assertStopped("set visible symbol presentation value");
     const cell = this.getCell(x, y);
     if (!cell.occupied) {
+      if (value === null) return;
       throw new ReelError(
-        `Cannot set presentation value for empty grid cell (${x},${y}).`,
+        `Empty grid cell (${x},${y}) only accepts a null presentation value.`,
       );
     }
     cell.reel.setVisibleSymbolPresentationValue(0, value);
@@ -1373,26 +1385,30 @@ export class RenderGridCellReelSet extends Container implements SymbolArea {
   }): PreparedVisibleOccurrenceReplacement {
     this.assertStopped("prepare visible occurrence replacement");
     const cell = this.getCell(options.x, options.y);
-    if (!cell.occupied) {
+    if (options.outputCode === -1 && options.outputPresentationValue !== null)
       throw new ReelError(
-        `Cannot replace empty grid cell (${options.x},${options.y}).`,
+        "Empty symbol replacement must have a null presentation value.",
       );
-    }
-    const inputSymbol = cell.reel
+    const input = cell.reel
       .getSlotSnapshots()
-      .find((candidate) => candidate.windowY === 0)?.symbol;
-    if (!inputSymbol)
+      .find((candidate) => candidate.windowY === 0);
+    if (!input)
       throw new ReelError(
         `Cannot replace missing occurrence at grid cell (${options.x},${options.y}).`,
       );
-    const output = cell.reel.createDetachedOccurrence(
-      options.outputCode,
-      options.outputPresentationValue,
-    );
+    const inputSymbol = input.symbol;
+    const inputOccupied = cell.occupied;
+    const output =
+      options.outputCode === -1
+        ? null
+        : cell.reel.createDetachedOccurrence(
+            options.outputCode,
+            options.outputPresentationValue,
+          );
     let state: "prepared" | "committed" | "rolled-back" = "prepared";
     const rollback = (): void => {
       if (state !== "prepared") return;
-      cell.reel.releaseDetachedOccurrence(output);
+      if (output) cell.reel.releaseDetachedOccurrence(output);
       state = "rolled-back";
     };
     return Object.freeze({
@@ -1410,20 +1426,28 @@ export class RenderGridCellReelSet extends Container implements SymbolArea {
         const currentSymbol = cell.reel
           .getSlotSnapshots()
           .find((candidate) => candidate.windowY === 0)?.symbol;
-        if (!cell.occupied || currentSymbol !== inputSymbol) {
+        if (cell.occupied !== inputOccupied || currentSymbol !== inputSymbol) {
           throw new ReelError(
             `Cannot commit replacement at grid cell (${options.x},${options.y}): occurrence ownership changed.`,
           );
         }
-        const previous = cell.reel.takeVisibleOccurrence();
+        const previous = inputOccupied
+          ? cell.reel.takeVisibleOccurrence()
+          : null;
+        if (!previous) cell.reel.openVisibleEmptySlot();
         try {
-          cell.reel.placeVisibleOccurrence(output);
+          if (output) cell.reel.placeVisibleOccurrence(output);
+          else cell.reel.placeVisibleEmptySlot();
         } catch (error) {
-          cell.reel.placeVisibleOccurrence(previous);
+          if (previous) cell.reel.placeVisibleOccurrence(previous);
+          else cell.reel.placeVisibleEmptySlot();
           throw error;
         }
-        this.bumpOccurrenceGeneration(previous);
-        cell.reel.releaseDetachedOccurrence(previous);
+        cell.occupied = output !== null;
+        if (previous) {
+          this.bumpOccurrenceGeneration(previous);
+          cell.reel.releaseDetachedOccurrence(previous);
+        }
         state = "committed";
       },
       rollback,
@@ -1747,6 +1771,52 @@ export class RenderGridCellReelSet extends Container implements SymbolArea {
       throw new ReelError(
         `Cannot get symbol at (${position.x},${position.y}) before the cell has landed.`,
       );
+    if (!cell.occupied) {
+      const slot = cell.reel
+        .getSlotSnapshots()
+        .find((candidate) => candidate.windowY === 0);
+      if (!slot)
+        throw new ReelError(
+          `Cannot resolve grid cell (${position.x},${position.y}).`,
+        );
+      const capturedContainer = slot.container;
+      const capturedLayer = slot.emptySymbolLayer;
+      const getPosition = () => ({
+        x: cell.root.x + this.#cellWidth / 2,
+        y: cell.root.y + this.#cellHeight / 2,
+      });
+      return createEmptySymbolRender({
+        view: capturedLayer,
+        owned: false,
+        assertUsable: () => {
+          const current = cell.reel
+            .getSlotSnapshots()
+            .find((candidate) => candidate.windowY === 0);
+          if (
+            cell.occupied ||
+            current?.container !== capturedContainer ||
+            current.emptySymbolLayer !== capturedLayer ||
+            current.code !== -1
+          )
+            throw new ReelError("SymbolRender is stale.");
+        },
+        getPosition,
+        getAnchor: () =>
+          createContainerRenderAnchor(this, () => {
+            const current = cell.reel
+              .getSlotSnapshots()
+              .find((candidate) => candidate.windowY === 0);
+            if (
+              cell.occupied ||
+              current?.container !== capturedContainer ||
+              current.emptySymbolLayer !== capturedLayer ||
+              current.code !== -1
+            )
+              throw new ReelError("SymbolRender is stale.");
+            return getPosition();
+          }),
+      });
+    }
     const handle = this.getVisibleOccurrenceHandle(position.x, position.y);
     const occurrence = this.getCellOccurrence(cell);
     const createOwnedSource = (
@@ -2182,7 +2252,17 @@ export class RenderGridCellReelSet extends Container implements SymbolArea {
   ): RenderVisibleSymbolStateSnapshot {
     const cell = this.getCell(x, y);
     if (!cell.occupied) {
-      throw new ReelError(`Cannot snapshot empty grid cell (${x},${y}).`);
+      return Object.freeze({
+        x,
+        y,
+        code: -1,
+        kind: "empty" as const,
+        requestedState: null,
+        resolvedState: null,
+        isOnce: false,
+        loopCompletionCount: 0,
+        onceCompletionCount: 0,
+      });
     }
     const snapshot = cell.reel.getVisibleSymbolStateSnapshot(0);
     return Object.freeze({ ...snapshot, x, y });
@@ -2205,9 +2285,16 @@ export class RenderGridCellReelSet extends Container implements SymbolArea {
     this.assertStopped("read visible symbol geometry");
     const cell = this.getCell(x, y);
     if (!cell.occupied) {
-      throw new ReelError(
-        `Cannot read geometry for empty grid cell (${x},${y}).`,
-      );
+      return Object.freeze({
+        x,
+        y,
+        code: -1,
+        kind: "empty" as const,
+        centerX: cell.root.x + this.#cellWidth / 2,
+        centerY: cell.root.y + this.#cellHeight / 2,
+        cellWidth: this.#cellWidth,
+        cellHeight: this.#cellHeight,
+      });
     }
     const snapshot = cell.reel.getVisibleSymbolGeometrySnapshot(0);
     return Object.freeze({
@@ -2844,6 +2931,7 @@ export class RenderGridCellReelSet extends Container implements SymbolArea {
           planCell.axisPlan.finalY,
           [cell.targetPresentationValue],
         );
+        cell.occupied = planCell.targetVisibleSymbols[0] !== -1;
         resetReelSlotSymbolsAndRequestLandingState(cell);
         this.syncLandedDimming(cell, planCell, plan);
         this.setCellClipMask(cell, false);
@@ -3248,6 +3336,27 @@ function resetReelSlotSymbolsAndRequestLandingState(cell: RuntimeCell): void {
     if (cell.targetLandingState)
       slot.symbol.requestState(cell.targetLandingState, "immediate");
     else slot.symbol.requestLandingAppear("immediate");
+  }
+}
+
+function validateGridEmptyTargets(
+  plan: GridCellReelSpinPlan,
+  values: SymbolPresentationValueMatrix | undefined,
+  states: readonly (readonly SymbolStateId[])[] | undefined,
+): void {
+  for (const cell of plan.cells) {
+    if (cell.targetVisibleSymbols[0] !== -1) continue;
+    if (
+      values?.[cell.x]?.[cell.y] !== undefined &&
+      values[cell.x]![cell.y] !== null
+    )
+      throw new ReelError(
+        `Grid cell spin empty target (${cell.x},${cell.y}) must have a null presentation value.`,
+      );
+    if (states?.[cell.x]?.[cell.y] !== undefined)
+      throw new ReelError(
+        `Grid cell spin empty target (${cell.x},${cell.y}) cannot have a landing state.`,
+      );
   }
 }
 

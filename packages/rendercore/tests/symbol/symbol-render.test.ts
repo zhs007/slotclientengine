@@ -66,6 +66,73 @@ describe("SymbolRender", () => {
     expect(() => old.setState("normal")).toThrow(/stale/);
   });
 
+  it("returns a lightweight empty SymbolRender for -1", () => {
+    const area = new RenderReelSet({
+      reels: createBasicReels(),
+      layout: createBasicLayout(),
+      registry: createBasicRegistry(),
+    });
+    area.resetToVisibleScene([
+      [-1, 2, 1],
+      [2, 1, 2],
+    ]);
+    const empty = area.getSymbol({ x: 0, y: 0 });
+    const positionBefore = empty.getPosition();
+    expect(empty).toMatchObject({
+      code: -1,
+      symbol: "__empty__",
+      kind: "empty",
+    });
+    expect(empty.getValue()).toBeNull();
+    empty.setValue(null);
+    expect(() => empty.setValue(1)).toThrow(/must be null/);
+    expect(() => empty.setState("normal")).toThrow(/does not support/);
+    empty.setPosition({ x: 123, y: 456 });
+    empty.setVisible(false);
+    expect(empty.getPosition()).toEqual(positionBefore);
+    expect(area.getVisibleSymbolGeometrySnapshot(0, 0)).toMatchObject({
+      centerX: positionBefore.x,
+      centerY: positionBefore.y,
+    });
+
+    const view = new Container();
+    const node = createRenderNode({ view, destroy: () => view.destroy() });
+    empty.add(node);
+    expect(view.parent).not.toBeNull();
+    empty.remove(node);
+    expect(view.parent).toBeNull();
+
+    area.resetToVisibleScene([
+      [1, 2, 1],
+      [2, 1, 2],
+    ]);
+    expect(() => empty.getPosition()).toThrow(/stale/);
+  });
+
+  it("replaces between a real and empty SymbolRender", () => {
+    const area = new RenderReelSet({
+      reels: createBasicReels(),
+      layout: createBasicLayout(),
+      registry: createBasicRegistry(),
+    });
+    area.resetToVisibleScene([
+      [1, 2, 1],
+      [2, 1, 2],
+    ]);
+    const real = area.getSymbol({ x: 0, y: 0 });
+    const empty = area.replaceSymbol({ x: 0, y: 0 }, { code: -1 });
+    expect(empty).toMatchObject({ code: -1, kind: "empty" });
+    expect(() => real.getValue()).toThrow(/stale/);
+    expect(() =>
+      area.replaceSymbol({ x: 0, y: 0 }, { code: -1, value: 2 }),
+    ).toThrow(/must have a null/);
+    expect(
+      area.replaceSymbol({ x: 0, y: 0 }, { code: 2, value: 7 }),
+    ).toMatchObject({ code: 2, kind: "symbol" });
+    expect(() => empty.getPosition()).toThrow(/stale/);
+    expect(area.getSymbol({ x: 0, y: 0 }).getValue()).toBe(7);
+  });
+
   it("detaches but does not destroy borrowed attachments with the host", () => {
     const area = new RenderReelSet({
       reels: createBasicReels(),

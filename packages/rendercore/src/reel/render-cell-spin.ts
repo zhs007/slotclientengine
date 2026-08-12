@@ -5,6 +5,7 @@ import { type RenderNode, type SymbolStateId } from "../symbol/index.js";
 import { getRenderNodeAdapter } from "../symbol/render-node.js";
 import { createContainerRenderAnchor } from "../presentation/render-anchor.js";
 import {
+  createEmptySymbolRender,
   createSymbolRender,
   type SymbolRender,
 } from "../symbol/symbol-render.js";
@@ -268,9 +269,52 @@ export class RenderCellSpin extends Container implements CellSpin {
     const slot = cell.reel
       .getSlotSnapshots()
       .find((item) => item.windowY === 0);
-    if (!slot?.symbol || slot.kind !== "textured")
+    if (!slot)
+      throw new ReelError(`Cannot resolve cell (${position.x},${position.y}).`);
+    const getPosition = () => ({
+      x: cell.root.x + cell.reel.layout.cellWidth / 2,
+      y: cell.root.y + cell.reel.layout.cellHeight / 2,
+    });
+    if (slot.code === -1) {
+      const capturedContainer = slot.container;
+      const capturedLayer = slot.emptySymbolLayer;
+      return createEmptySymbolRender({
+        view: capturedLayer,
+        owned: false,
+        assertUsable: () => {
+          const current = cell.reel
+            .getSlotSnapshots()
+            .find((item) => item.windowY === 0);
+          if (
+            this.#destroyed ||
+            this.#active.has(keyOf(position)) ||
+            current?.container !== capturedContainer ||
+            current.emptySymbolLayer !== capturedLayer ||
+            current.code !== -1
+          )
+            throw new ReelError("SymbolRender is stale.");
+        },
+        getPosition,
+        getAnchor: () =>
+          createContainerRenderAnchor(this, () => {
+            const current = cell.reel
+              .getSlotSnapshots()
+              .find((item) => item.windowY === 0);
+            if (
+              this.#destroyed ||
+              this.#active.has(keyOf(position)) ||
+              current?.container !== capturedContainer ||
+              current.emptySymbolLayer !== capturedLayer ||
+              current.code !== -1
+            )
+              throw new ReelError("SymbolRender is stale.");
+            return getPosition();
+          }),
+      });
+    }
+    if (!slot.symbol || slot.kind === "empty")
       throw new ReelError(
-        `Cannot get symbol for empty cell (${position.x},${position.y}).`,
+        `Configured symbol code ${slot.code} at cell (${position.x},${position.y}) has no renderable occurrence.`,
       );
     const captured = slot.symbol;
     const generation = this.getOccurrenceGeneration(captured);
@@ -316,10 +360,7 @@ export class RenderCellSpin extends Container implements CellSpin {
             captured.getPresentationValue(),
           ),
         ),
-      getPosition: () => ({
-        x: cell.root.x + cell.reel.layout.cellWidth / 2,
-        y: cell.root.y + cell.reel.layout.cellHeight / 2,
-      }),
+      getPosition,
       getAnchor: () =>
         createContainerRenderAnchor(this, () => {
           if (
@@ -362,8 +403,9 @@ export class RenderCellSpin extends Container implements CellSpin {
     const keys = new Set<string>();
     const prepared: Array<{
       readonly cell: RuntimeCell;
-      readonly previousSymbol: RenderReelVisibleOccurrence["symbol"];
-      readonly output: RenderReelVisibleOccurrence;
+      readonly previousSymbol: RenderReelVisibleOccurrence["symbol"] | null;
+      readonly previousCode: number;
+      readonly output: RenderReelVisibleOccurrence | null;
     }> = [];
     try {
       for (const { position, target } of replacements) {
@@ -384,39 +426,57 @@ export class RenderCellSpin extends Container implements CellSpin {
         const previous = cell.reel
           .getSlotSnapshots()
           .find((slot) => slot.windowY === 0);
-        if (!previous?.symbol || previous.kind !== "textured")
+        if (!previous)
           throw new ReelError(
-            `Cannot replace empty cell (${position.x},${position.y}).`,
+            `Cannot resolve cell (${position.x},${position.y}).`,
+          );
+        if (target.code === -1 && (target.value ?? null) !== null)
+          throw new ReelError(
+            "Empty symbol replacement must have a null presentation value.",
           );
         prepared.push({
           cell,
           previousSymbol: previous.symbol,
-          output: cell.reel.createDetachedOccurrence(
-            target.code,
-            target.value ?? null,
-          ),
+          previousCode: previous.code,
+          output:
+            target.code === -1
+              ? null
+              : cell.reel.createDetachedOccurrence(
+                  target.code,
+                  target.value ?? null,
+                ),
         });
       }
     } catch (error) {
       for (const item of prepared)
-        item.cell.reel.releaseDetachedOccurrence(item.output);
+        if (item.output) item.cell.reel.releaseDetachedOccurrence(item.output);
       throw error;
     }
     for (const item of prepared) {
       const current = item.cell.reel
         .getSlotSnapshots()
-        .find((slot) => slot.windowY === 0)?.symbol;
-      if (current !== item.previousSymbol) {
+        .find((slot) => slot.windowY === 0);
+      if (
+        current?.symbol !== item.previousSymbol ||
+        current.code !== item.previousCode
+      ) {
         for (const candidate of prepared)
-          candidate.cell.reel.releaseDetachedOccurrence(candidate.output);
+          if (candidate.output)
+            candidate.cell.reel.releaseDetachedOccurrence(candidate.output);
         throw new ReelError("Cell symbol replacement ownership changed.");
       }
     }
     for (const item of prepared) {
-      const previous = item.cell.reel.takeVisibleOccurrence();
-      item.cell.reel.placeVisibleOccurrence(item.output);
-      this.bumpOccurrenceGeneration(previous.symbol);
-      item.cell.reel.releaseDetachedOccurrence(previous);
+      const previous = item.previousSymbol
+        ? item.cell.reel.takeVisibleOccurrence()
+        : null;
+      if (!previous) item.cell.reel.openVisibleEmptySlot();
+      if (item.output) item.cell.reel.placeVisibleOccurrence(item.output);
+      else item.cell.reel.placeVisibleEmptySlot();
+      if (previous) {
+        this.bumpOccurrenceGeneration(previous.symbol);
+        item.cell.reel.releaseDetachedOccurrence(previous);
+      }
     }
     return this.getSymbols(replacements.map(({ position }) => position));
   }

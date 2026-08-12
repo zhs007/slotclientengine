@@ -503,6 +503,35 @@ describe("scene layout package runtime", () => {
             ? (reel as RenderReelSet).getVisibleScene()
             : (reel as RenderGridCellReelSet).getVisibleScene(),
         ).toEqual(nextScene);
+        const sceneWithEmptySymbol = [
+          [-1, 1],
+          [1, 0],
+        ];
+        runtime.applyMainReelSnapshot({
+          scene: sceneWithEmptySymbol,
+          localPhaseYs: [0, 0],
+          presentationValues: [
+            [null, null],
+            [null, null],
+          ],
+        });
+        expect(runtime.getMainReelSceneSnapshot()).toEqual(
+          sceneWithEmptySymbol,
+        );
+        expect(() =>
+          runtime.applyMainReelSnapshot({
+            scene: sceneWithEmptySymbol,
+            localPhaseYs: [0, 0],
+            presentationValues: [
+              [2, null],
+              [null, null],
+            ],
+          }),
+        ).toThrow(/must be null for an empty grid cell/);
+        runtime.applyMainReelSnapshot({
+          scene: nextScene,
+          localPhaseYs: [0, 0],
+        });
         expect(() =>
           runtime.resetReelScene("main", {
             scene: [[0], [1]],

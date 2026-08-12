@@ -13,8 +13,8 @@ resource，不要求内层第二份 map。无 map 的合法 legacy direct path �
 
 任务 202 增量提供 `SymbolMutationArea`、Reel/Cell active spin session，以及一次 await 的 occurrence transfer/drop。
 `CellSpin` 是后续新游戏的主实现；Crave/game002v2 仍使用 grid-cell 时，grid-cell 同步提供相同基础 mutation/transfer/drop
-能力，但不继续发展独有的高级接口。两种 grid runtime 都约定 `-1` 是唯一 hole 标记；其它 symbol code 必须为非负整数，
-`-1` 不进入 registry、轮带或 RenderSymbol pool。
+能力，但不继续发展独有的高级接口。RenderCore 的所有 symbol area 与 spin 模型都约定 `-1` 是唯一空图标标记；其它 symbol code 必须为非负整数，
+`-1` 不进入 registry、轮带或 RenderSymbol pool。`getSymbol(pos)` 对空位返回内置轻量 `SymbolRender`（`code: -1`、`kind: "empty"`）：它不创建贴图或动画资源，但保留位置、anchor 和节点挂载能力；state、文字和非 null value 等依赖真实 symbol 资源的操作会显式失败。
 
 ```ts
 const changed = mutations.replaceSymbol(pos, { code, value });
@@ -28,14 +28,13 @@ await cellSpin.dropOccurrences({ movements, values });
 ```
 
 `replaceSymbols()`、`SymbolGroup.setValues()/setStates()` 均先完整 preflight。session 中的 `overlay` 是稳定 cell/reel
-attachment；land Promise resolve 后统一通过 `getSymbol()` 取得 exact occurrence。现有 game002v2 plan/drain/polling API
+attachment；land Promise resolve 后统一通过 `getSymbol()` 取得 exact symbol（包括 `-1` Empty SymbolRender）。现有 game002v2 plan/drain/polling API
 保持兼容；新能力不继续扩展 plan surface。
 
 `SymbolArea.getSymbol({x,y})` 是 standard reel、legacy grid-cell 与新 `CellSpin`
 共同的实例级入口；没有全局 rendercore singleton。它返回简单的 `SymbolRender`，可直接
 `setState()` / `playState()`、读写 presentation value、`add/remove` 通用 `RenderNode`，以及
-创建独立 player/display identity 的 `clone()`。facade 捕获 exact occurrence：尚未落地、hole、
-leased、replacement/release 后的 stale 引用都会显式失败，不按相同坐标重绑。reel 内 symbol 是
+创建独立 player/display identity 的 `clone()`。facade 捕获 exact symbol：尚未落地、leased、replacement/release 后的 stale 引用都会显式失败，不按相同坐标重绑；hole 返回 exact Empty SymbolRender，而不是失败。reel 内 symbol 是
 borrowed，不能 destroy；clone 是 owned `RenderNode`，由调用方 remove 后 destroy。
 
 `createRenderCellSpin()` 提供无 public plan 的逐格 `roll/start/settle/cancel`。不同格可以并发，

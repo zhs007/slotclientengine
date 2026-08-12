@@ -1,4 +1,4 @@
-import type { Container } from "pixi.js";
+import { Container } from "pixi.js";
 import type { RenderAnchor } from "../presentation/render-anchor.js";
 import { SymbolAnimationError } from "./errors.js";
 import {
@@ -28,6 +28,7 @@ export interface SymbolCloneOptions {
 export interface SymbolRender extends RenderNode {
   readonly code: number;
   readonly symbol: string;
+  readonly kind: "symbol" | "empty";
   getPosition(): RenderPoint;
   getAnchor(): RenderAnchor;
   setState(
@@ -60,6 +61,14 @@ export interface SymbolRenderSource {
   getAnchor?: () => RenderAnchor;
   getPresentationSignal?(): AbortSignal | undefined;
   release?(): void;
+}
+
+export interface EmptySymbolRenderSource {
+  readonly view: Container;
+  readonly owned: boolean;
+  assertUsable(): void;
+  getPosition?: () => RenderPoint;
+  getAnchor?: () => RenderAnchor;
 }
 
 const DEFAULT_PLAY_OPTIONS: SymbolStatePlaybackOptions = Object.freeze({
@@ -128,6 +137,7 @@ export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
   render = Object.freeze({
     code: source.symbol.code,
     symbol: source.symbol.symbol,
+    kind: "symbol" as const,
     getPosition: () => {
       assertUsable();
       if (!source.getPosition)
@@ -286,6 +296,156 @@ export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
       assertUsable();
       source.symbol.validateStatePlayback(state, options);
     },
+  });
+  return render;
+}
+
+export function createEmptySymbolRender(
+  source: EmptySymbolRenderSource,
+): SymbolRender {
+  const mounted = new Set<RenderNode>();
+  let destroyed = false;
+  const assertUsable = (): void => {
+    if (destroyed)
+      throw new SymbolAnimationError("Empty SymbolRender was destroyed.");
+    source.assertUsable();
+  };
+  const unsupported = (operation: string): never => {
+    assertUsable();
+    throw new SymbolAnimationError(
+      `Empty SymbolRender does not support ${operation}.`,
+    );
+  };
+  const rejectUnsupported = (operation: string): Promise<never> => {
+    try {
+      return Promise.resolve(unsupported(operation));
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  };
+  const detachMounted = (): void => {
+    for (const node of mounted)
+      getRenderNodeAdapter(node).view.parent?.removeChild(
+        getRenderNodeAdapter(node).view,
+      );
+    mounted.clear();
+  };
+  const baseNode = createRenderNode({
+    view: source.view,
+    destroy: () => {
+      if (!source.owned)
+        throw new SymbolAnimationError(
+          "Borrowed reel SymbolRender cannot be destroyed.",
+        );
+      detachMounted();
+      destroyed = true;
+      source.view.destroy({ children: false });
+    },
+  });
+  const render = Object.freeze({
+    code: -1,
+    symbol: "__empty__",
+    kind: "empty" as const,
+    getPosition: () => {
+      assertUsable();
+      if (!source.getPosition)
+        throw new SymbolAnimationError(
+          "SymbolRender has no SymbolArea position.",
+        );
+      return source.getPosition();
+    },
+    getAnchor: () => {
+      assertUsable();
+      if (!source.getAnchor)
+        throw new SymbolAnimationError(
+          "SymbolRender has no SymbolArea anchor.",
+        );
+      return source.getAnchor();
+    },
+    setPosition: (position: RenderPoint) => {
+      assertUsable();
+      baseNode.setPosition(position);
+    },
+    setVisible: (visible: boolean) => {
+      assertUsable();
+      baseNode.setVisible(visible);
+    },
+    play: () => rejectUnsupported("playback"),
+    stop: () => unsupported("playback"),
+    destroy: () => {
+      assertUsable();
+      if (!source.owned)
+        throw new SymbolAnimationError(
+          "Borrowed reel SymbolRender cannot be destroyed.",
+        );
+      baseNode.destroy();
+    },
+    setState: () => unsupported("symbol states"),
+    playState: () => rejectUnsupported("symbol states"),
+    setValue: (value: number | null) => {
+      assertUsable();
+      if (value !== null)
+        throw new SymbolAnimationError(
+          "Empty SymbolRender presentation value must be null.",
+        );
+    },
+    getValue: () => {
+      assertUsable();
+      return null;
+    },
+    cloneValue: () => unsupported("presentation values"),
+    getValueAnchor: () => unsupported("presentation values"),
+    setText: () => unsupported("image-string text"),
+    getText: () => unsupported("image-string text"),
+    cloneText: () => unsupported("image-string text"),
+    getTextAnchor: () => unsupported("image-string text"),
+    add: (node: RenderNode, options: SymbolNodeOptions = {}) => {
+      assertUsable();
+      if (mounted.has(node))
+        throw new SymbolAnimationError("RenderNode is already attached.");
+      const adapter = getRenderNodeAdapter(node);
+      if (adapter.view.parent)
+        throw new SymbolAnimationError(
+          "RenderNode is already attached to another parent.",
+        );
+      const order = options.order ?? 0;
+      if (!Number.isSafeInteger(order))
+        throw new SymbolAnimationError("Symbol node order must be an integer.");
+      source.view.sortableChildren = true;
+      adapter.view.zIndex =
+        options.layer === "underlay" ? -1_000_000 + order : order;
+      source.view.addChild(adapter.view);
+      mounted.add(node);
+    },
+    remove: (node: RenderNode) => {
+      assertUsable();
+      if (!mounted.delete(node))
+        throw new SymbolAnimationError(
+          "RenderNode is not attached to this SymbolRender.",
+        );
+      getRenderNodeAdapter(node).view.parent?.removeChild(
+        getRenderNodeAdapter(node).view,
+      );
+    },
+    clone: () =>
+      createEmptySymbolRender({
+        view: new Container(),
+        owned: true,
+        assertUsable: () => {},
+      }),
+  }) satisfies SymbolRender;
+  registerRenderNodeAlias(render, getRenderNodeAdapter(baseNode));
+  symbolRenderAdapters.set(render, {
+    assertUsable,
+    validateValue: (value) => {
+      assertUsable();
+      if (value !== null)
+        throw new SymbolAnimationError(
+          "Empty SymbolRender presentation value must be null.",
+        );
+    },
+    validateStateRequest: () => unsupported("symbol states"),
+    validateStatePlayback: () => unsupported("symbol states"),
   });
   return render;
 }

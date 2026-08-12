@@ -402,9 +402,9 @@ function parseTargetScene(
       }
       return Object.freeze(
         column.map((code, y) => {
-          if (!Number.isInteger(code) || code < 0) {
+          if (!Number.isSafeInteger(code) || code < -1) {
             throw new ReelError(
-              `targetScene[${x}][${y}] must be a non-negative integer.`,
+              `targetScene[${x}][${y}] must be -1 or a non-negative safe integer.`,
             );
           }
           return code;
@@ -518,9 +518,12 @@ export function resolveGridCellDimmingAlpha(
   code: number,
   activated = false,
 ): number {
-  if (!Number.isSafeInteger(code) || code < 0) {
-    throw new ReelError("grid cell dimming code must be non-negative.");
+  if (!Number.isSafeInteger(code) || code < -1) {
+    throw new ReelError(
+      "grid cell dimming code must be -1 or a non-negative safe integer.",
+    );
   }
+  if (code === -1) return 0;
   return assertAlpha(
     dimming.resolveDimmingAlpha(code, activated),
     `dimming alpha for symbol code ${code}`,

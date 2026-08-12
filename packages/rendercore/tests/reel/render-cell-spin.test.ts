@@ -19,7 +19,11 @@ describe("RenderCellSpin", () => {
       cellWidth: 15,
       cellHeight: 12,
     });
-    expect(() => spin.getSymbol({ x: 0, y: 0 })).toThrow(/empty/);
+    expect(spin.getSymbol({ x: 0, y: 0 })).toMatchObject({
+      code: -1,
+      symbol: "__empty__",
+      kind: "empty",
+    });
     expect(() =>
       createRenderCellSpin({
         reels: createBasicReels(),
@@ -55,6 +59,18 @@ describe("RenderCellSpin", () => {
     expect(session.getPendingCells()).toHaveLength(1);
     session.cancel();
     expect(controller.getActive()).toBeNull();
+  });
+
+  it("replaces between a real and empty cell symbol", () => {
+    const spin = createSpin();
+    expect(spin.replaceSymbol({ x: 0, y: 0 }, { code: -1 })).toMatchObject({
+      code: -1,
+      kind: "empty",
+    });
+    expect(
+      spin.replaceSymbol({ x: 0, y: 0 }, { code: 2, value: 5 }),
+    ).toMatchObject({ code: 2, kind: "symbol" });
+    expect(spin.getSymbol({ x: 0, y: 0 }).getValue()).toBe(5);
   });
 
   it("transfers and drops occurrences with direct await APIs", async () => {
@@ -99,7 +115,10 @@ describe("RenderCellSpin", () => {
     });
     holeSpin.update(0.1);
     await drop;
-    expect(() => holeSpin.getSymbol({ x: 0, y: 0 })).toThrow(/empty/);
+    expect(holeSpin.getSymbol({ x: 0, y: 0 })).toMatchObject({
+      code: -1,
+      kind: "empty",
+    });
     expect(holeSpin.getSymbol({ x: 0, y: 1 }).code).toBe(1);
     expect(holeSpin.getSymbol({ x: 0, y: 1 }).getValue()).toBe(7);
   });
@@ -150,6 +169,24 @@ describe("RenderCellSpin", () => {
     spin.update(0.05);
     await second;
     expect(spin.getSymbol({ x: 1, y: 0 }).getValue()).toBe(7);
+  });
+
+  it("lands CellSpin on the shared empty symbol", async () => {
+    const spin = createSpin();
+    const landing = spin.roll(
+      { x: 0, y: 0 },
+      { code: -1 },
+      { durationMs: 100, minimumSpinCycles: 1 },
+    );
+    spin.update(0.1);
+    await landing;
+    expect(spin.getSymbol({ x: 0, y: 0 })).toMatchObject({
+      code: -1,
+      kind: "empty",
+    });
+    await expect(
+      spin.roll({ x: 0, y: 0 }, { code: -1, value: 2 }, { durationMs: 100 }),
+    ).rejects.toThrow(/must have a null/);
   });
 
   it("starts targetless, settles explicitly, cancels, and supports cell nodes", async () => {

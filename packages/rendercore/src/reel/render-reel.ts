@@ -36,6 +36,8 @@ interface ReelSlot {
   readonly windowY: number;
   readonly renderOrder: number;
   readonly container: Container;
+  readonly contentLayer: Container;
+  readonly emptySymbolLayer: Container;
   code: number | null;
   kind: ReelSymbolKind | null;
   symbol: RenderSymbol | null;
@@ -136,6 +138,12 @@ export class RenderReel extends Container {
       options.targetVisibleStates,
       this.layout.visibleRows,
       "targetVisibleStates",
+    );
+    validateEmptyEndpoints(
+      targetVisibleSymbols,
+      targetVisiblePresentationValues,
+      targetVisibleStates,
+      "targetVisibleSymbols",
     );
 
     this.#plan = plan;
@@ -245,6 +253,12 @@ export class RenderReel extends Container {
       options.targetVisibleStates,
       this.layout.visibleRows,
       "targetVisibleStates",
+    );
+    validateEmptyEndpoints(
+      targetVisibleSymbols,
+      targetVisiblePresentationValues,
+      targetVisibleStates,
+      "targetVisibleSymbols",
     );
     const currentScene = this.getVisibleScene();
     const currentValues = this.getVisiblePresentationValues();
@@ -490,7 +504,7 @@ export class RenderReel extends Container {
         `Cannot restore a different occurrence at reel ${this.xIndex}, y ${windowY}.`,
       );
     occurrence.symbol.parent?.removeChild(occurrence.symbol);
-    slot.container.addChild(occurrence.symbol);
+    slot.contentLayer.addChild(occurrence.symbol);
     occurrence.symbol.position.set(0);
   }
 
@@ -537,7 +551,7 @@ export class RenderReel extends Container {
     slot.code = occurrence.code;
     slot.kind = occurrence.kind;
     slot.symbol = occurrence.symbol;
-    slot.container.addChild(occurrence.symbol);
+    slot.contentLayer.addChild(occurrence.symbol);
     occurrence.symbol.position.set(0);
     occurrence.symbol.visible = true;
     occurrence.symbol.renderable = true;
@@ -563,6 +577,18 @@ export class RenderReel extends Container {
     slot.code = null;
     slot.kind = null;
     this.setStaticVisibleSlot(windowY, -1, null);
+  }
+
+  placeVisibleEmptySlot(windowY = 0): void {
+    const slot = this.getVisibleSlot(windowY);
+    if (slot.symbol || slot.code !== null || slot.kind !== null)
+      throw new ReelError(
+        `Cannot place an empty symbol into occupied reel ${this.xIndex}, y ${windowY}.`,
+      );
+    slot.code = -1;
+    slot.kind = "empty";
+    this.setStaticVisibleSlot(windowY, -1, null);
+    this.syncSlotRenderOrder(slot);
   }
 
   releaseVisibleOccurrence(windowY = 0): void {
@@ -639,8 +665,9 @@ export class RenderReel extends Container {
   ): void {
     const slot = this.getVisibleSlot(windowY);
     if (slot.kind === "empty" || !slot.symbol || slot.code === null) {
+      if (value === null) return;
       throw new ReelError(
-        `Cannot set presentation value for empty visible symbol at reel ${this.xIndex}, y ${windowY}.`,
+        `Empty visible symbol at reel ${this.xIndex}, y ${windowY} only accepts a null presentation value.`,
       );
     }
     slot.symbol.setPresentationValue(value);
@@ -741,6 +768,7 @@ export class RenderReel extends Container {
       kind: slot.kind ?? "empty",
       symbol: slot.symbol,
       container: slot.container,
+      emptySymbolLayer: slot.emptySymbolLayer,
       requestedState: stateSnapshot?.requestedState ?? null,
       resolvedState: stateSnapshot?.resolvedState ?? null,
       isOnce: stateSnapshot?.isOnce ?? false,
@@ -804,6 +832,9 @@ export class RenderReel extends Container {
       windowY += 1
     ) {
       const container = new Container();
+      const contentLayer = new Container();
+      const emptySymbolLayer = new Container();
+      container.addChild(contentLayer, emptySymbolLayer);
       const renderOrder = this.#slotRenderOrderOffset + orderIndex;
       container.x = this.getSlotContainerX();
       container.y = this.getSlotContainerY(windowY, 0);
@@ -813,6 +844,8 @@ export class RenderReel extends Container {
         windowY,
         renderOrder,
         container,
+        contentLayer,
+        emptySymbolLayer,
         code: null,
         kind: null,
         symbol: null,
@@ -901,7 +934,11 @@ export class RenderReel extends Container {
     } else {
       slot.symbol?.destroy({ children: true });
     }
-    slot.container.removeChildren();
+    slot.contentLayer.removeChildren();
+    slot.emptySymbolLayer.removeChildren();
+    slot.emptySymbolLayer.position.set(0);
+    slot.emptySymbolLayer.visible = true;
+    slot.emptySymbolLayer.renderable = true;
     slot.code = code;
     if (code === -1) {
       slot.kind = "empty";
@@ -914,7 +951,7 @@ export class RenderReel extends Container {
     slot.symbol =
       entry.kind === "empty" ? null : this.acquireTexturedSymbol(code);
     if (slot.symbol) {
-      slot.container.addChild(slot.symbol);
+      slot.contentLayer.addChild(slot.symbol);
       slot.symbol.init();
       slot.symbol.setPresentationValue(presentationValue);
     }
@@ -1136,6 +1173,25 @@ function parseVisibleStates(
       return state;
     }),
   );
+}
+
+function validateEmptyEndpoints(
+  symbols: readonly number[] | undefined,
+  values: readonly (number | null)[] | undefined,
+  states: readonly SymbolStateId[] | undefined,
+  label: string,
+): void {
+  symbols?.forEach((code, index) => {
+    if (code !== -1) return;
+    if (values?.[index] !== undefined && values[index] !== null)
+      throw new ReelError(
+        `${label}[${index}] empty symbol must have a null presentation value.`,
+      );
+    if (states?.[index] !== undefined)
+      throw new ReelError(
+        `${label}[${index}] empty symbol cannot have a landing state.`,
+      );
+  });
 }
 
 function easeSpinTravel(progress: number): number {

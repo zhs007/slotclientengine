@@ -593,6 +593,7 @@ export interface RenderReelSlotSnapshot {
   readonly kind: ReelSymbolKind;
   readonly symbol: RenderSymbol | null;
   readonly container: Container;
+  readonly emptySymbolLayer: Container;
   readonly requestedState: SymbolStateId | null;
   readonly resolvedState: SymbolStateId | null;
   readonly isOnce: boolean;
@@ -638,7 +639,10 @@ export type SymbolPresentationValueMatrix = readonly (readonly (
   | null
 )[])[];
 
-export const CASCADE_EMPTY_CELL = -1;
+/** Shared empty-symbol code for every RenderCore symbol area and spin model. */
+export const EMPTY_SYMBOL_CODE = -1;
+/** @deprecated Use EMPTY_SYMBOL_CODE. */
+export const CASCADE_EMPTY_CELL = EMPTY_SYMBOL_CODE;
 export type GridCellCascadeScene = readonly (readonly number[])[];
 export type GridCellCascadeValue = number | null | typeof CASCADE_EMPTY_CELL;
 export type GridCellCascadeValueMatrix =

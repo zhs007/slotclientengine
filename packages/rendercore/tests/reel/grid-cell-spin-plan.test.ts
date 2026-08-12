@@ -85,6 +85,28 @@ describe("createGridCellReelSpinPlan", () => {
     });
   });
 
+  it("uses -1 as the shared empty-symbol target", () => {
+    const plan = createGridCellReelSpinPlan({
+      reels: createBasicReels(),
+      finalYs: [2, 1],
+      targetScene: [
+        [-1, 0, 2],
+        [2, 1, 0],
+      ],
+      columns: 2,
+      rows: 3,
+      order: createGridCellOrder({
+        columns: 2,
+        rows: 3,
+        mode: "top-down-left-right",
+      }),
+      timing: TIMING,
+      dimming: DIMMING,
+    });
+
+    expect(plan.cells[0]?.targetVisibleSymbols).toEqual([-1]);
+  });
+
   it("groups selective starts without changing the sequential stop timeline", () => {
     const reels = createBasicReels();
     const order = createGridCellOrder({

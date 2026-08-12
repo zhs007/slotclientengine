@@ -739,12 +739,24 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       geometry.columns,
       geometry.rows,
     );
+    validateEmptyCellValues(scene, values);
     const current = reel.getVisibleScene();
     const currentValues = reel
       .getCascadeValues()
       .map((column) =>
         Object.freeze(column.map((value) => (value === -1 ? null : value))),
       );
+    const occupancyChanged = current.some((column, x) =>
+      column.some((code, y) => (code === -1) !== (scene[x]![y] === -1)),
+    );
+    if (occupancyChanged) {
+      this.applyReelScene(reel, binding.resource, binding.binding, {
+        scene,
+        localPhaseYs: input.localPhaseYs,
+        ...(values ? { presentationValues: values } : {}),
+      });
+      return;
+    }
     const replacements: import("../reel/index.js").PreparedVisibleOccurrenceReplacement[] =
       [];
     try {
@@ -762,7 +774,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       for (const replacement of replacements) replacement.commit();
       for (let x = 0; x < geometry.columns; x++)
         for (let y = 0; y < geometry.rows; y++)
-          if (current[x]![y] === scene[x]![y])
+          if (current[x]![y] === scene[x]![y] && scene[x]![y] !== -1)
             reel.setVisibleSymbolPresentationValue(
               x,
               y,
@@ -934,11 +946,13 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       geometry.columns,
       geometry.rows,
     );
+    validateEmptyCellValues(scene, values);
     const landingStates = validateLandingStates(
       input.landingStates,
       geometry.columns,
       geometry.rows,
     );
+    validateEmptyCellStates(scene, landingStates);
     if (profile.kind === "grid-cell") {
       if (!(reel instanceof RenderGridCellReelSet))
         throw new SceneLayoutError(
@@ -2675,6 +2689,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       geometry.columns,
       geometry.rows,
     );
+    validateEmptyCellValues(scene, values);
     if (reel instanceof RenderGridCellReelSet) {
       reel.resetToScene(scene, phases, undefined, values);
       return;
@@ -2863,15 +2878,44 @@ function validateScene(
         );
       return Object.freeze(
         column.map((code, y) => {
-          if (!Number.isSafeInteger(code) || !displayCodes.has(code))
+          if (
+            !Number.isSafeInteger(code) ||
+            (code !== -1 && !displayCodes.has(code))
+          )
             throw new SceneLayoutError(
-              `Reel scene[${x}][${y}] code ${String(code)} is not displayable.`,
+              `Reel scene[${x}][${y}] code ${String(code)} is not displayable and is not the -1 empty symbol.`,
             );
           return code;
         }),
       );
     }),
   );
+}
+
+function validateEmptyCellValues(
+  scene: readonly (readonly number[])[],
+  values: SymbolPresentationValueMatrix | undefined,
+): void {
+  if (!values) return;
+  for (let x = 0; x < scene.length; x += 1)
+    for (let y = 0; y < scene[x]!.length; y += 1)
+      if (scene[x]![y] === -1 && values[x]![y] !== null)
+        throw new SceneLayoutError(
+          `presentationValues[${x}][${y}] must be null for an empty grid cell.`,
+        );
+}
+
+function validateEmptyCellStates(
+  scene: readonly (readonly number[])[],
+  states: readonly (readonly string[])[] | undefined,
+): void {
+  if (!states) return;
+  for (let x = 0; x < scene.length; x += 1)
+    for (let y = 0; y < scene[x]!.length; y += 1)
+      if (scene[x]![y] === -1)
+        throw new SceneLayoutError(
+          `landingStates[${x}][${y}] is unavailable for an empty symbol.`,
+        );
 }
 
 function validatePhases(

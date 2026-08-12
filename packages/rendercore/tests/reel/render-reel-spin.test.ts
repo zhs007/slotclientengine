@@ -98,6 +98,39 @@ describe("RenderReelSet ReelSpin", () => {
     ]);
   });
 
+  it("lands ReelSpin on the shared empty symbol", async () => {
+    const spin = createSpin();
+    spin.resetToVisibleScene([
+      [1, 2, 1],
+      [2, 1, 2],
+    ]);
+    const landing = spin.roll(
+      0,
+      { symbols: [-1, 1, 2], values: [null, null, null] },
+      { durationMs: 100, minimumSpinCycles: 1 },
+    );
+    spin.update(0.1);
+    await landing;
+    expect(spin.getSymbol({ x: 0, y: 0 })).toMatchObject({
+      code: -1,
+      kind: "empty",
+    });
+    await expect(
+      spin.roll(
+        0,
+        { symbols: [-1, 1, 2], values: [2, null, null] },
+        { durationMs: 100 },
+      ),
+    ).rejects.toThrow(/must have a null/);
+    await expect(
+      spin.roll(
+        0,
+        { symbols: [-1, 1, 2], states: ["normal", "normal", "normal"] },
+        { durationMs: 100 },
+      ),
+    ).rejects.toThrow(/cannot have a landing state/);
+  });
+
   it("starts targetless, settles explicitly, cancels, and mounts reel nodes", async () => {
     const spin = createSpin();
     spin.resetToVisibleScene([

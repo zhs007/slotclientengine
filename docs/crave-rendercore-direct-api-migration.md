@@ -18,7 +18,7 @@
 | `createGridCellCascadeDropPlan + startMainReelCascadeDrop + waitForReelActivity` | `await runtime.dropMainReelOccurrences({movements,valueCommits,signal})`  | 仅当 Crave 已有 render-ready movement 时替换 |
 | initial/refill grid-cell plan、Nearwin drain                                     | 暂不迁移                                                                  | task 202 保持 compatibility                  |
 
-`-1` 是 CellSpin 与 grid-cell direct grid API 的唯一 hole 标记；其它 code 必须非负。不要把 `-1` 转成 BN、空纹理或某个 registry code。
+`-1` 是 RenderCore 所有 symbol area 与 spin 模型的唯一空图标标记；其它 code 必须非负。不要把 `-1` 转成 BN、空纹理或某个 registry code。`applyMainReelSnapshot()` 同样接受 `-1`，且对应 presentation value 必须是 `null`。
 
 ## `feature-anis.ts`
 

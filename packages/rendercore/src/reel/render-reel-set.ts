@@ -65,6 +65,7 @@ import type {
   SymbolStateTransitionMode,
 } from "../symbol/index.js";
 import {
+  createEmptySymbolRender,
   createSymbolRender,
   type SymbolRender,
 } from "../symbol/symbol-render.js";
@@ -609,9 +610,57 @@ export class RenderReelSet extends Container implements ReelSpin {
     const occurrence = reel
       .getSlotSnapshots()
       .find((slot) => slot.windowY === position.y);
-    if (!occurrence?.symbol || occurrence.kind !== "textured")
+    if (!occurrence)
       throw new ReelError(
-        `Cannot get symbol for empty standard reel cell (${position.x},${position.y}).`,
+        `Cannot resolve standard reel cell (${position.x},${position.y}).`,
+      );
+    const getPosition = () =>
+      Object.freeze({
+        x: reel.x + reel.layout.cellWidth / 2,
+        y:
+          reel.y +
+          reel.layout.getCellY(position.y) +
+          reel.layout.cellHeight / 2,
+      });
+    if (occurrence.code === -1) {
+      const capturedContainer = occurrence.container;
+      const capturedLayer = occurrence.emptySymbolLayer;
+      return createEmptySymbolRender({
+        view: capturedLayer,
+        owned: false,
+        assertUsable: () => {
+          const current = reel
+            .getSlotSnapshots()
+            .find((slot) => slot.windowY === position.y);
+          if (
+            this.#destroyed ||
+            current?.container !== capturedContainer ||
+            current.emptySymbolLayer !== capturedLayer ||
+            current.code !== -1 ||
+            current.kind !== "empty"
+          )
+            throw new ReelError("SymbolRender is stale.");
+        },
+        getPosition,
+        getAnchor: () =>
+          createContainerRenderAnchor(this, () => {
+            const current = reel
+              .getSlotSnapshots()
+              .find((slot) => slot.windowY === position.y);
+            if (
+              this.#destroyed ||
+              current?.container !== capturedContainer ||
+              current.emptySymbolLayer !== capturedLayer ||
+              current.code !== -1
+            )
+              throw new ReelError("SymbolRender is stale.");
+            return getPosition();
+          }),
+      });
+    }
+    if (!occurrence.symbol || occurrence.kind === "empty")
+      throw new ReelError(
+        `Configured symbol code ${occurrence.code} at standard reel cell (${position.x},${position.y}) has no renderable occurrence.`,
       );
     const captured = occurrence.symbol;
     const generation = this.getOccurrenceGeneration(captured);
@@ -657,14 +706,7 @@ export class RenderReelSet extends Container implements ReelSpin {
             captured.getPresentationValue(),
           ),
         ),
-      getPosition: () =>
-        Object.freeze({
-          x: reel.x + reel.layout.cellWidth / 2,
-          y:
-            reel.y +
-            reel.layout.getCellY(position.y) +
-            reel.layout.cellHeight / 2,
-        }),
+      getPosition,
       getAnchor: () =>
         createContainerRenderAnchor(this, () => {
           if (
@@ -751,21 +793,29 @@ export class RenderReelSet extends Container implements ReelSpin {
   }): PreparedVisibleOccurrenceReplacement {
     this.assertStopped("prepare visible occurrence replacement");
     const reel = this.getReelAt(options.x);
-    const inputSymbol = reel
+    if (options.outputCode === -1 && options.outputPresentationValue !== null)
+      throw new ReelError(
+        "Empty symbol replacement must have a null presentation value.",
+      );
+    const input = reel
       .getSlotSnapshots()
-      .find((candidate) => candidate.windowY === options.y)?.symbol;
-    if (!inputSymbol)
+      .find((candidate) => candidate.windowY === options.y);
+    if (!input)
       throw new ReelError(
         `Cannot replace missing occurrence at standard reel cell (${options.x},${options.y}).`,
       );
-    const output = reel.createDetachedOccurrence(
-      options.outputCode,
-      options.outputPresentationValue,
-    );
+    const inputSymbol = input.symbol;
+    const output =
+      options.outputCode === -1
+        ? null
+        : reel.createDetachedOccurrence(
+            options.outputCode,
+            options.outputPresentationValue,
+          );
     let state: "prepared" | "committed" | "rolled-back" = "prepared";
     const rollback = (): void => {
       if (state !== "prepared") return;
-      reel.releaseDetachedOccurrence(output);
+      if (output) reel.releaseDetachedOccurrence(output);
       state = "rolled-back";
     };
     return Object.freeze({
@@ -782,19 +832,29 @@ export class RenderReelSet extends Container implements ReelSpin {
         const currentSymbol = reel
           .getSlotSnapshots()
           .find((candidate) => candidate.windowY === options.y)?.symbol;
-        if (currentSymbol !== inputSymbol)
+        const currentCode = reel
+          .getSlotSnapshots()
+          .find((candidate) => candidate.windowY === options.y)?.code;
+        if (currentSymbol !== inputSymbol || currentCode !== input.code)
           throw new ReelError(
             `Cannot commit replacement at standard reel cell (${options.x},${options.y}): occurrence ownership changed.`,
           );
-        const previous = reel.takeVisibleOccurrence(options.y);
+        const previous = inputSymbol
+          ? reel.takeVisibleOccurrence(options.y)
+          : null;
+        if (!previous) reel.openVisibleEmptySlot(options.y);
         try {
-          reel.placeVisibleOccurrence(output, options.y);
+          if (output) reel.placeVisibleOccurrence(output, options.y);
+          else reel.placeVisibleEmptySlot(options.y);
         } catch (error) {
-          reel.placeVisibleOccurrence(previous, options.y);
+          if (previous) reel.placeVisibleOccurrence(previous, options.y);
+          else reel.placeVisibleEmptySlot(options.y);
           throw error;
         }
-        this.bumpOccurrenceGeneration(previous.symbol);
-        reel.releaseDetachedOccurrence(previous);
+        if (previous) {
+          this.bumpOccurrenceGeneration(previous.symbol);
+          reel.releaseDetachedOccurrence(previous);
+        }
         state = "committed";
       },
       rollback,

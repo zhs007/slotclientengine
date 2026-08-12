@@ -45,6 +45,16 @@ describe("SymbolArea", () => {
       [0, 0],
     );
     expect(grid.getSymbol({ x: 1, y: 1 }).code).toBe(1);
-    expect(() => grid.getSymbol({ x: 0, y: 1 })).toThrow(/occurrence|empty/);
+    grid.resetToScene(
+      [
+        [1, -1, 2],
+        [2, 1, 0],
+      ],
+      [0, 0],
+    );
+    expect(grid.getSymbol({ x: 0, y: 1 })).toMatchObject({
+      code: -1,
+      kind: "empty",
+    });
   });
 });

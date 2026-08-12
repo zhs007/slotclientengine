@@ -49,7 +49,78 @@ describe("RenderGridCellReelSet", () => {
       FINAL_YS,
     );
     expect(reelSet.getVisibleScene()[0]).toEqual([1, -1, 2]);
-    expect(() => reelSet.getSymbol({ x: 0, y: 1 })).toThrow(/empty/);
+    expect(reelSet.getSymbol({ x: 0, y: 1 })).toMatchObject({
+      code: -1,
+      symbol: "__empty__",
+      kind: "empty",
+    });
+  });
+
+  it("lands cellspin on the shared -1 empty symbol", () => {
+    const reelSet = createGridReelSet();
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
+    const plan = createGridCellReelSpinPlan({
+      reels: createBasicReels(),
+      finalYs: FINAL_YS,
+      targetScene: [
+        [-1, 0, 2],
+        [2, 1, 0],
+      ],
+      columns: 2,
+      rows: 3,
+      order: createGridCellOrder({
+        columns: 2,
+        rows: 3,
+        mode: "top-down-left-right",
+      }),
+      timing: TIMING,
+      dimming: DIMMING,
+    });
+
+    reelSet.spin(plan);
+    reelSet.update(1);
+
+    expect(reelSet.getVisibleScene()[0]?.[0]).toBe(-1);
+    expect(reelSet.getSnapshot().cells[0]).toMatchObject({
+      visibleSymbol: -1,
+      occupied: false,
+      presentationValue: null,
+    });
+  });
+
+  it("exposes empty snapshots and replaces between empty and real symbols", () => {
+    const reelSet = createGridReelSet();
+    reelSet.resetToScene(
+      [
+        [-1, 0, 2],
+        [2, 1, 0],
+      ],
+      FINAL_YS,
+    );
+    expect(reelSet.getVisibleSymbolStateSnapshot(0, 0)).toMatchObject({
+      code: -1,
+      kind: "empty",
+      requestedState: null,
+      isOnce: false,
+    });
+    expect(reelSet.getVisibleSymbolGeometrySnapshot(0, 0)).toMatchObject({
+      code: -1,
+      kind: "empty",
+      centerX: 7.5,
+      centerY: 6,
+    });
+    reelSet.setVisibleSymbolPresentationValue(0, 0, null);
+    expect(() => reelSet.setVisibleSymbolPresentationValue(0, 0, 2)).toThrow(
+      /only accepts a null/,
+    );
+    expect(reelSet.replaceSymbol({ x: 0, y: 0 }, { code: 1 })).toMatchObject({
+      code: 1,
+      kind: "symbol",
+    });
+    expect(reelSet.replaceSymbol({ x: 0, y: 0 }, { code: -1 })).toMatchObject({
+      code: -1,
+      kind: "empty",
+    });
   });
 
   it("runs additive direct transfer and drop promises on the runtime clock", async () => {
@@ -874,7 +945,10 @@ describe("RenderGridCellReelSet", () => {
     expect(() => reelSet.releaseVisibleSymbols([{ x: 0, y: 0 }])).toThrow(
       /empty/,
     );
-    expect(() => reelSet.getVisibleSymbolStateSnapshot(0, 0)).toThrow(/empty/);
+    expect(reelSet.getVisibleSymbolStateSnapshot(0, 0)).toMatchObject({
+      code: -1,
+      kind: "empty",
+    });
     expect(reelSet.hasVisibleSymbolStateCapability(0, 0, "remove")).toBe(false);
     expect(() =>
       reelSet.startCascadeDrop({

@@ -114,6 +114,32 @@ describe("createTemporaryReelStrip", () => {
     ).toEqual(publicReelBefore);
   });
 
+  it("overlays -1 as an empty symbol with a null presentation value", () => {
+    const reels = createBasicReels();
+    const layout = createBasicLayout();
+    const axisPlan = createReelSpinPlan({
+      reels,
+      finalYs: [2, 1],
+      visibleRows: layout.visibleRows,
+      minimumSpinCycles: 2,
+      baseDurationMs: 300,
+      speedSymbolsPerSecond: 30,
+      startDelayMs: 0,
+      stopDelayMs: 0,
+    }).axes[0];
+    const strip = createTemporaryReelStrip({
+      reels,
+      x: 0,
+      layout,
+      plan: axisPlan,
+      targetVisibleSymbols: [-1, 2, 1],
+      presentationValueResolver: () => 5,
+    });
+
+    expect(strip.get(axisPlan.travelSymbols)).toBe(-1);
+    expect(strip.getPresentationValue(axisPlan.travelSymbols)).toBeNull();
+  });
+
   it("carries stable random presentation values through the temporary strip and preserves explicit endpoints", () => {
     const reels = createBasicReels();
     const layout = createBasicLayout();
