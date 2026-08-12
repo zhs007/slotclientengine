@@ -5,13 +5,17 @@ import {
   createDefaultSymbolAnimationResolver,
   RenderSymbol,
 } from "../../src/symbol/index.js";
+import { createSymbolRender } from "../../src/symbol/symbol-render.js";
 import {
   createRenderSymbolValueController,
   type SymbolValuePresentationResource,
 } from "../../src/symbol-value-presentation/index.js";
 import { SymbolImageStringController } from "../../src/symbol-image-string/index.js";
-import { getRenderNodeAdapter } from "../../src/symbol/render-node.js";
-import { resolveRenderAnchor } from "../../src/presentation/render-anchor.js";
+import {
+  createContainerRenderAnchor,
+  resolveRenderAnchor,
+} from "../../src/presentation/render-anchor.js";
+import { getRenderObjectAdapter } from "../../src/presentation/render-object.js";
 
 describe("render symbol value controller", () => {
   it("selects tiers, binds text to the configured slot and cleans up on value changes", async () => {
@@ -206,6 +210,22 @@ describe("render symbol value controller", () => {
     symbol.requestState("spinBlur");
     const display = symbol.imageStringOverlayLayer.children[0]!;
     expect(display.visible).toBe(true);
+    let usable = true;
+    const render = createFacade(symbol, () => usable);
+    render.setText("coin-value", "1");
+    const textPart = render.getPart({ kind: "text", name: "coin-value" });
+    const textClone = textPart.clone();
+    expect(getRenderObjectAdapter(textClone).view.children).toHaveLength(1);
+    expect(() => textPart.destroy()).toThrow(/Borrowed RenderObject/);
+    textClone.destroy();
+    expect(() =>
+      render.getPart({ kind: "text", name: "missing" }).getAnchor(),
+    ).toThrow(/no image-string node named "missing"/);
+    expect(() => render.getPart({ kind: "unknown" } as never)).toThrow(
+      /Unknown SymbolRender part kind/,
+    );
+    usable = false;
+    expect(() => textPart.clone()).toThrow(/Test SymbolRender is stale/);
 
     finish();
     await flushPromises();
@@ -347,6 +367,12 @@ describe("render symbol value controller", () => {
     symbol.init();
     symbol.setPresentationValue(1);
     await flushPromises();
+    const render = createFacade(symbol);
+    const valuePart = render.getPart({ kind: "value" });
+    const target = new Container();
+    symbol.addChild(target);
+    const valueAnchor = valuePart.getAnchor();
+    const lowAnchor = resolveRenderAnchor(valueAnchor, target);
     expect(players[0].attached[0]).toMatchObject({
       slot: "LowNum",
       followSlotColor: false,
@@ -365,6 +391,8 @@ describe("render symbol value controller", () => {
 
     symbol.setPresentationValue(25);
     await flushPromises();
+    const highAnchor = resolveRenderAnchor(valueAnchor, target);
+    expect(highAnchor).not.toEqual(lowAnchor);
     expect(players[1].attached[0]).toMatchObject({
       slot: "HighNum",
       followSlotColor: true,
@@ -380,18 +408,27 @@ describe("render symbol value controller", () => {
     expect(players[0].destroyed).toBe(true);
 
     const clone = symbol.clonePresentationValue();
-    const cloneView = getRenderNodeAdapter(clone).view;
+    const cloneView = getRenderObjectAdapter(clone).view;
     expect(cloneView.children[0]?.children).toHaveLength(2);
-    const target = new Container();
-    symbol.addChild(target);
     const anchor = resolveRenderAnchor(
-      symbol.getPresentationValueAnchor(),
+      createContainerRenderAnchor(symbol.getPresentationValueView()),
       target,
     );
     expect(Number.isFinite(anchor.x) && Number.isFinite(anchor.y)).toBe(true);
     symbol.setPresentationValue(25);
     expect(cloneView.children[0]?.children).toHaveLength(2);
     clone.destroy();
+
+    const partClone = valuePart.clone();
+    expect(
+      getRenderObjectAdapter(partClone).view.children[0]?.children,
+    ).toHaveLength(2);
+    const secondPartClone = partClone.clone();
+    expect(
+      getRenderObjectAdapter(secondPartClone).view.children[0]?.children,
+    ).toHaveLength(2);
+    secondPartClone.destroy();
+    partClone.destroy();
 
     expect(() => symbol.setPresentationValue(13)).toThrow(/缺少 glyph/);
     expect(symbol.getPresentationValue()).toBe(25);
@@ -452,6 +489,23 @@ describe("render symbol value controller", () => {
     symbol.destroy();
   });
 });
+
+function createFacade(
+  symbol: RenderSymbol,
+  isUsable: () => boolean = () => true,
+) {
+  return createSymbolRender({
+    symbol,
+    owned: false,
+    assertUsable: () => {
+      if (!isUsable()) throw new Error("Test SymbolRender is stale.");
+    },
+    clone: () => {
+      throw new Error("Test facade clone is not configured.");
+    },
+    getAnchor: () => createContainerRenderAnchor(symbol),
+  });
+}
 
 function createSymbol(
   createPlayer: (

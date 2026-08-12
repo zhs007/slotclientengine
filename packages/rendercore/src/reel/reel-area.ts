@@ -1,5 +1,7 @@
-import type { RenderNode } from "../symbol/index.js";
-import type { RenderPoint } from "../symbol/index.js";
+import type {
+  RenderObject,
+  RenderPoint,
+} from "../presentation/render-object.js";
 import type { RenderAnchor } from "../presentation/render-anchor.js";
 import type {
   PresentationMountTarget,
@@ -11,8 +13,8 @@ import type { SymbolArea } from "./symbol-area.js";
 export type SymbolAreaLayerId = "bottom" | "top" | "win";
 
 export interface SymbolAreaLayer extends PresentationMountTarget {
-  add(node: RenderNode, order?: number): void;
-  remove(node: RenderNode): void;
+  add(node: RenderObject, order?: number): void;
+  remove(node: RenderObject): void;
 }
 
 export interface SymbolAreaPresentationContext extends PresentationScopeContext {}

@@ -80,7 +80,7 @@ interface ReelArea extends SymbolArea {
 ```
 
 内部 display 顺序固定为 `bottom < symbols < top < win`。symbols 主层不向游戏开放；`bottom/top/win`
-只提供 `RenderNode add/remove`。`win` 是最高 area presentation layer，金额文字等独立节点放在这里，
+只提供 `RenderObject add/remove`。`win` 是最高 area presentation layer，金额文字等独立节点放在这里，
 不绑定 symbol 或 reel 生命周期。
 
 ## SymbolRender
@@ -97,9 +97,14 @@ interface SymbolRender {
   playState(state: string, options?: SymbolPlayOptions): Promise<void>;
   setValue(value: number | null): void;
   getValue(): number | null;
+  setText(name: string, text: string): void;
+  getText(name: string): string;
+  getPart(
+    ref: { kind: "value" } | { kind: "text"; name: string },
+  ): CloneableRenderObject;
 
-  add(node: RenderNode, options?: SymbolNodeOptions): void;
-  remove(node: RenderNode): void;
+  add(node: RenderObject, options?: SymbolNodeOptions): void;
+  remove(node: RenderObject): void;
 
   clone(options?: SymbolCloneOptions): SymbolRender;
 }
@@ -131,8 +136,12 @@ RenderCore 内部 anchor/motion 能力处理，游戏不计算 reel-space、scen
 
 ### 节点与 clone
 
-Spine、VNI、粒子、光效、图片和后续 typed custom node 应统一表现为 `RenderNode`，而不是为每种资源在
+Spine、VNI、粒子、光效、图片和后续 typed custom node 应统一表现为 `RenderObject`，而不是为每种资源在
 `SymbolRender` 上增加专用方法。节点的创建、播放和资源校验属于 RenderCore；`add/remove` 只负责附加关系。
+
+`RenderObject` 内部由 Pixi `Container` 承载，但 public interface 不继承或返回 Container。对象统一提供受控
+position/visibility/play/stop/anchor/destroy；`CloneableRenderObject` 额外提供 clone。whole symbol、value part和
+exact-name text part共享该合同，part通过严格discriminated selector取得，不使用字符串猜测或唯一节点fallback。
 
 游戏附加节点不能直接放入现有 animation-owned overlay。RenderCore 需要稳定的自定义 attachment layer，避免
 symbol state 切换、Spine/VNI player 重建或 value presentation 同步误删游戏节点。
@@ -203,7 +212,7 @@ interface CellRollTarget {
 }
 ```
 
-`getCell(pos)` 只提供稳定 cell-space 的 `RenderNode add/remove`，用于目标尚未落地前的
+`getCell(pos)` 只提供稳定 cell-space 的 `RenderObject add/remove`，用于目标尚未落地前的
 Nearwin 等效果；它不提供 activation plan、effect schedule 或业务状态机。
 
 命名可在实现时按仓库风格小幅调整，但必须保持以下语义：
@@ -301,8 +310,8 @@ interface ReelRollTarget {
 }
 
 interface ReelRender {
-  add(node: RenderNode, options?: ReelNodeOptions): void;
-  remove(node: RenderNode): void;
+  add(node: RenderObject, options?: ReelNodeOptions): void;
+  remove(node: RenderObject): void;
 }
 ```
 
@@ -431,11 +440,11 @@ RenderCore 提供所有列同时 start/land 的默认 `AreaSpinFunction`。游�
 每列真正开始时，ReelSpin 以 immediate `spinBlur` 接管其 visible occurrence，正在等待的 symbol playback 被 supersede；
 尚未开始的列仍可继续原 presentation。landing 建立全新的 target occurrences，不继承旧 win 状态。
 
-通用文字通过 `createTextRenderNode()` 创建，使用 symbol 中心定位但挂入独立 win layer：
+通用文字通过 `createTextRenderObject()` 创建，使用 symbol 中心定位但挂入独立 win layer：
 
 ```ts
 const anchor = area.getSymbol(middlePos).getPosition();
-const amount = createTextRenderNode({ text: formatAmount(win), style });
+const amount = createTextRenderObject({ text: formatAmount(win), style });
 amount.setPosition(anchor);
 area.getLayer("win").add(amount);
 ```
@@ -490,11 +499,12 @@ refill 同样按实际视觉原语执行：
 
 - `area.getSymbols(positions)`返回exact-occurrence `SymbolGroup`，批量`setState/playState`先完整预检；
 - Symbol、SymbolGroup center、area point和Scene Layout named node提供opaque `RenderAnchor`，游戏不读取Pixi matrix/bounds；
-- value-tier数字使用`setValue/cloneValue/getValueAnchor`，命名image-string文字使用exact-name `setText/cloneText/getTextAnchor`；
+- value-tier数字使用`setValue/getValue`与`getPart({kind:"value"})`，命名image-string文字使用exact-name
+  `setText/getText`与`getPart({kind:"text",name})`；part和whole symbol统一使用`clone/getAnchor`；
   manifest `initialText`只用于authoring preview，production业务值必须显式设置；
 - presentation context提供`mount/unmount/withNode/move/transfer`，临时node显式声明`detach|destroy` ownership；
 - callback success/error、repeat轮次、spin interruption和destroy统一cleanup；
-- generic transfer只移动RenderNode或owned Symbol clone，不改变盘面；盘面occurrence relocation继续使用带lease/commit的专用原语；
+- generic transfer只移动RenderObject或owned Symbol clone，不改变盘面；盘面occurrence relocation继续使用带lease/commit的专用原语；
 - motion复用line/cubic path、easing和manual runtime clock，不引入RAF/timer/tween engine；
 - `createAreaSpinFunction()`只装配column order与landing stagger，内部仍调用第一层`ReelSpin`。
 

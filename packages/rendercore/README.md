@@ -33,13 +33,35 @@ attachment；land Promise resolve 后统一通过 `getSymbol()` 取得 exact sym
 
 `SymbolArea.getSymbol({x,y})` 是 standard reel、legacy grid-cell 与新 `CellSpin`
 共同的实例级入口；没有全局 rendercore singleton。它返回简单的 `SymbolRender`，可直接
-`setState()` / `playState()`、读写 presentation value、`add/remove` 通用 `RenderNode`，以及
+`setState()` / `playState()`、读写 presentation value、`add/remove` 通用 `RenderObject`，以及
 创建独立 player/display identity 的 `clone()`。facade 捕获 exact symbol：尚未落地、leased、replacement/release 后的 stale 引用都会显式失败，不按相同坐标重绑；hole 返回 exact Empty SymbolRender，而不是失败。reel 内 symbol 是
-borrowed，不能 destroy；clone 是 owned `RenderNode`，由调用方 remove 后 destroy。
+borrowed，不能 destroy；clone 是 owned `RenderObject`，由调用方 remove 后 destroy。
+
+`RenderObject` 是 Container-backed 的 opaque capability，不是 Pixi `Container` 子类，也不公开
+`parent/children/worldTransform`。`SymbolRender`、普通文字对象以及 symbol 的 value/text part 使用同一
+`getAnchor()/clone()/transfer()` 组合；只有可复制对象暴露 `clone()`。例如：
+
+```ts
+const source = area.getSymbol(position);
+const part = source.getPart({ kind: "text", name: "multiplier" });
+const flying = part.clone();
+
+await area.present((context) =>
+  context.transfer(area.getLayer("win"), flying, {
+    ownership: "destroy",
+    from: part.getAnchor(),
+    to: runtime.getNodeAnchor("coin-meter"),
+    durationSeconds: 0.5,
+  }),
+);
+```
+
+value part 使用 `{kind:"value"}`；whole-symbol flight 直接把 `source` 当 origin。part selector 不猜唯一节点、
+不在 value/text 之间 fallback。`setValue/getValue` 与 exact-name `setText/getText` 继续保留各自严格语义。
 
 `createRenderCellSpin()` 提供无 public plan 的逐格 `roll/start/settle/cancel`。不同格可以并发，
 同一格冲突失败；`roll/settle` 只在目标 occurrence 原子落地、可立即 `getSymbol()` 后 resolve。
-`getCell(pos)` 允许在目标落地前附加稳定 cell-space `RenderNode`。full、selective、hold、refill、
+`getCell(pos)` 允许在目标落地前附加稳定 cell-space `RenderObject`。full、selective、hold、refill、
 stagger 和 anticipation 由 operation handler 用普通 `async/await`、frame delay 与 `Promise.all()`
 组合，不增加 `CellSpinPlan`。现有 `GridCellReelSpinPlan` 仅作为 game002v2 legacy compatibility
 surface 保留，新游戏使用 `CellSpin`；logiccore 继续拥有权威 operation plan。
@@ -48,14 +70,14 @@ Standard `RenderReelSet` 同时实现无 public plan 的逐列 `ReelSpin`：`rol
 `start(x)` 使用本地公开轮带 targetless 预转，`settle(x,target)` 注入服务器可见窗口，`cancel(x)`
 取消活动列。不同列可并发，同列冲突显式失败；`roll/settle` 只在整列原子落停、每个
 `getSymbol({x,y})` 已可用后 resolve。跨列 stagger/full/held 由 operation handler 使用 frame delay
-和 `Promise.all()` 组合，不增加 `ReelSpinPlan`。`getReel(x)` 是稳定 reel-space `RenderNode`
+和 `Promise.all()` 组合，不增加 `ReelSpinPlan`。`getReel(x)` 是稳定 reel-space `RenderObject`
 attachment 入口。
 
 `getReelArea("main")` 返回 standard reel 的第一层 `ReelArea` façade。area 公开
 `getSymbol()`、`bottom|top|win` 安全图层、`present(async context => ...)` 与最高优先级
 `area.spin.start/land/cancel`。游戏用普通 await 编排 idle/win loop；spin 内部中断当前 presentation并清理
 win layer，再调用默认或装配时注入的 `AreaSpinFunction`。游戏不持有 interruption signal。`SymbolRender.getPosition()`
-只返回 area-local occurrence 中心；通用 `createTextRenderNode()` 可据此定位后挂入 win layer。
+只返回 area-local occurrence 中心；通用 `createTextRenderObject()` 可据此定位后挂入 win layer。
 
 Scene Layout package runtime 通过 `getSymbolArea("main")` 暴露当前 main reel 的共同入口，并只为
 standard reel 提供 `getReelSpin("main")`；未知
@@ -71,14 +93,15 @@ exact named node同样可提供anchor，由RenderCore在实际mount/move时完�
 
 `area.present()` context提供`mount/unmount/withNode/move/transfer`。临时节点声明`detach|destroy` ownership；callback
 完成、失败、repeat轮次结束、spin interruption和destroy都会统一cleanup。motion复用现有visible-occurrence transfer的
-line/cubic path与easing sampler，并由同一manual runtime clock推进；generic transfer只移动临时RenderNode/owned clone，
+line/cubic path与easing sampler，并由同一manual runtime clock推进；generic transfer只移动临时RenderObject/owned clone，
 不提交盘面mutation。`createAreaSpinFunction()`用于装配column order和landing stagger，仍只调用第一层ReelSpin原子方法，
 不生成public plan。
 
-数字表现有两种严格来源。声明 `valuePresentation` 的 symbol 使用 `setValue/getValue/cloneValue/getValueAnchor`；
+数字表现有两种严格来源。声明 `valuePresentation` 的 symbol 使用 `setValue/getValue` 和
+`getPart({kind:"value"})`；
 `setValue()` 会按 `maxExclusive` 自动同步 value tier。WL/WM/CM 这类命名 `imageStringNodes` 使用
-`setText/getText/cloneText/getTextAnchor` 并传 exact node name。`initialText` 是 authoring preview 默认，不是 production
-业务值。两类 clone 都返回 owned `RenderNode`，可交给同一个 presentation `transfer()` 飞向 area/named-node anchor或另一个
+`setText/getText` 与 `getPart({kind:"text",name})` 并传 exact node name。`initialText` 是 authoring preview 默认，不是 production
+业务值。两类 part 的 clone 都返回 owned `RenderObject`，可交给同一个 presentation `transfer()` 飞向 area/named-node anchor或另一个
 symbol 的对应 anchor；飞行本身不会推断或提交目标 value。
 
 ## Popup API

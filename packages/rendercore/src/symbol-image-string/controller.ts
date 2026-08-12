@@ -8,11 +8,10 @@ import type {
   SymbolImageStringResourceMap,
 } from "./types.js";
 import { createRenderMappedImageString } from "./mapped-display.js";
-import { createRenderNode, type RenderNode } from "../symbol/render-node.js";
 import {
-  createContainerRenderAnchor,
-  type RenderAnchor,
-} from "../presentation/render-anchor.js";
+  createCloneableRenderObject,
+  type CloneableRenderObject,
+} from "../presentation/render-object.js";
 
 interface ActiveNode {
   readonly definition: SymbolImageStringNodeResource;
@@ -81,42 +80,43 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
     return this.requireNode(name).renderer.getText();
   }
 
-  cloneText(name: string): RenderNode {
+  cloneText(name: string): CloneableRenderObject {
     this.assertUsable();
     const node = this.requireNode(name);
-    const renderer = createRenderMappedImageString({
-      resource:
-        this.#state === "spinBlur" && node.definition.spinBlurProfile
-          ? node.definition.spinBlurProfile.resource
-          : node.definition.resource,
-      text: node.renderer.getText(),
-      anchor: node.definition.spec.anchor,
-      specialValueImages:
-        this.#state === "spinBlur" && node.definition.spinBlurProfile
-          ? node.definition.spinBlurProfile.specialValueImages
-          : node.definition.specialValueImages,
-    });
-    renderer.container.position.set(
-      node.definition.spec.transform.x,
-      node.definition.spec.transform.y,
-    );
-    renderer.container.scale.set(node.definition.spec.transform.scale);
-    const root = new Container();
-    root.addChild(renderer.container);
-    return createRenderNode({
-      view: root,
-      destroy: () => {
-        renderer.destroy();
-        root.destroy({ children: false });
-      },
-    });
+    const profile =
+      this.#state === "spinBlur" && node.definition.spinBlurProfile
+        ? node.definition.spinBlurProfile
+        : node.definition;
+    const text = node.renderer.getText();
+    const createClone = (): CloneableRenderObject => {
+      const renderer = createRenderMappedImageString({
+        resource: profile.resource,
+        text,
+        anchor: node.definition.spec.anchor,
+        specialValueImages: profile.specialValueImages,
+      });
+      renderer.container.position.set(
+        node.definition.spec.transform.x,
+        node.definition.spec.transform.y,
+      );
+      renderer.container.scale.set(node.definition.spec.transform.scale);
+      const root = new Container();
+      root.addChild(renderer.container);
+      return createCloneableRenderObject({
+        view: root,
+        clone: createClone,
+        destroy: () => {
+          renderer.destroy();
+          root.destroy({ children: false });
+        },
+      });
+    };
+    return createClone();
   }
 
-  getTextAnchor(name: string): RenderAnchor {
+  getTextView(name: string): Container {
     this.assertUsable();
-    return createContainerRenderAnchor(
-      this.requireNode(name).renderer.container,
-    );
+    return this.requireNode(name).renderer.container;
   }
 
   syncState(state: string): void {

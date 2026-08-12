@@ -26,7 +26,7 @@
   的 stop cadence 以 frame delay 错峰 `settle()` 并 `Promise.all()`；没有预转时逐列 `roll()`。app
   不计算 local landing phase、不轮询完成、不截断 ticker delta。
 - v2 只取得 `getReelArea("main")`：win groups 用 area presentation 内的 `getSymbol().playState("win")`
-  await 单轮编排并通过 `repeat: true` 交给 area 重复，金额 TextRenderNode 挂到 area win layer并用最中间 symbol center
+  await 单轮编排并通过 `repeat: true` 交给 area 重复，金额 TextRenderObject 挂到 area win layer并用 group center anchor
   定位。首轮后循环可 lingering，app 不自建 deferred Promise 或 `while(true)`；下一 spin 由 area.spin 内部中断，
   不调用 legacy carousel/state/geometry snapshot或raw reel container。
 - v2第二层实现使用`getSymbols()`批量preflight/play、group center RenderAnchor和`context.withNode()`管理金额节点；app不得

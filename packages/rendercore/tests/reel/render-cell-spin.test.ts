@@ -4,7 +4,7 @@ import {
   createCellSpinSessionController,
   createRenderCellSpin,
 } from "../../src/reel/index.js";
-import { createRenderNode } from "../../src/symbol/index.js";
+import { createRenderObject } from "../../src/presentation/index.js";
 import { createBasicRegistry, createBasicReels } from "./helpers.js";
 
 describe("RenderCellSpin", () => {
@@ -192,7 +192,7 @@ describe("RenderCellSpin", () => {
   it("starts targetless, settles explicitly, cancels, and supports cell nodes", async () => {
     const spin = createSpin();
     const view = new Container();
-    const node = createRenderNode({ view, destroy: () => view.destroy() });
+    const node = createRenderObject({ view, destroy: () => view.destroy() });
     const cell = spin.getCell({ x: 0, y: 1 });
     cell.add(node, 3);
     expect(view.parent).not.toBeNull();

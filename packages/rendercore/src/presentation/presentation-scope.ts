@@ -3,8 +3,7 @@ import type {
   VisibleOccurrenceMotionPath,
   VisibleOccurrenceTimeEasing,
 } from "../reel/types.js";
-import type { RenderNode } from "../symbol/render-node.js";
-import type { RenderPoint } from "../symbol/render-node.js";
+import type { RenderObject, RenderPoint } from "./render-object.js";
 import type { RenderAnchor } from "./render-anchor.js";
 
 export type PresentationNodeOwnership = "detach" | "destroy";
@@ -29,28 +28,28 @@ export interface PresentationTransferOptions
 }
 
 export interface PresentationMountTarget {
-  add(node: RenderNode, order?: number): void;
-  remove(node: RenderNode): void;
+  add(node: RenderObject, order?: number): void;
+  remove(node: RenderObject): void;
 }
 
 export interface PresentationScopeContext {
   delay(seconds: number): Promise<void>;
   mount(
     target: PresentationMountTarget,
-    node: RenderNode,
+    node: RenderObject,
     options: PresentationNodeMountOptions,
   ): void;
-  unmount(node: RenderNode): void;
+  unmount(node: RenderObject): void;
   withNode<T>(
     target: PresentationMountTarget,
-    node: RenderNode,
+    node: RenderObject,
     options: PresentationNodeMountOptions,
     playback: () => Promise<T>,
   ): Promise<T>;
-  move(node: RenderNode, options: PresentationMotionOptions): Promise<void>;
+  move(node: RenderObject, options: PresentationMotionOptions): Promise<void>;
   transfer(
     target: PresentationMountTarget,
-    node: RenderNode,
+    node: RenderObject,
     options: PresentationTransferOptions,
   ): Promise<void>;
 }

@@ -65,8 +65,11 @@
   和完整geometry不向游戏开放。
 - RenderCore第二层只组合第一层对象：PresentationScope拥有临时node的mount/withNode、明确detach/destroy ownership、repeat
   child scope和interruption cleanup；opaque RenderAnchor负责Symbol/Group/area point/named Scene node坐标转换；SymbolGroup
-  批量state/play必须先完整preflight。generic motion只移动临时RenderNode或owned clone，复用grid-cell transfer的pure
+  批量state/play必须先完整preflight。generic motion只移动临时RenderObject或owned clone，复用grid-cell transfer的pure
   path/easing/manual-clock primitive，不取得盘面commit；游戏仍用普通for/await，不新增presentation/motion plan或业务DSL。
+- RenderObject是Container-backed的opaque public capability，不继承或公开raw Pixi Container。whole Symbol、普通文字及
+  symbol value/text part统一使用clone/getAnchor/mount/transfer；part只通过strict `{kind:"value"}`或
+  `{kind:"text",name}`取得，不猜唯一node、不在value/text间fallback。盘面Symbol/part为borrowed，只有owned clone可transfer或destroy。
 - area spin通用factory只装配column order与stagger并调用逐列ReelSpin；不得接受业务predicate、matrix command或state名。
 - `CellSpin`是新grid玩法的正式owner，提供settled mutation、active session、direct transfer/drop；`-1`是CellSpin和grid-cell唯一hole
   标记，其它symbol code非负。Crave仍消费grid-cell期间，相同基础能力同步到grid-cell但不得扩展grid-cell独有高级接口；迁移完成后停止维护。

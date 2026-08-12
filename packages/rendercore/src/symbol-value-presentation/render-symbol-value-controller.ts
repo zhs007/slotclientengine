@@ -22,11 +22,10 @@ import {
   notifySymbolImageStringSpineInactive,
 } from "../symbol-image-string/controller.js";
 import { Container } from "pixi.js";
-import { createRenderNode, type RenderNode } from "../symbol/render-node.js";
 import {
-  createContainerRenderAnchor,
-  type RenderAnchor,
-} from "../presentation/render-anchor.js";
+  createCloneableRenderObject,
+  type CloneableRenderObject,
+} from "../presentation/render-object.js";
 
 export function createRenderSymbolValueController(options: {
   readonly root: RenderSymbol;
@@ -181,17 +180,23 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
     return this.#value;
   }
 
-  cloneValue(): RenderNode {
+  cloneValue(): CloneableRenderObject {
     this.assertNotDestroyed();
     if (!this.#initialized || !this.#display)
       throw new Error(
         "Render symbol presentation value is not ready to clone.",
       );
-    const display = this.#display.clone();
+    return this.createValueClone(this.#display.clone());
+  }
+
+  private createValueClone(
+    display: SymbolValueDisplayHandle,
+  ): CloneableRenderObject {
     const root = new Container();
     root.addChild(display.container);
-    return createRenderNode({
+    return createCloneableRenderObject({
       view: root,
+      clone: () => this.createValueClone(display.clone()),
       destroy: () => {
         display.destroy();
         root.destroy({ children: false });
@@ -199,11 +204,11 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
     });
   }
 
-  getValueAnchor(): RenderAnchor {
+  getValueView(): Container {
     this.assertNotDestroyed();
     if (!this.#initialized || !this.#display)
-      throw new Error("Render symbol presentation value has no ready anchor.");
-    return createContainerRenderAnchor(this.#display.container);
+      throw new Error("Render symbol presentation value has no ready display.");
+    return this.#display.container;
   }
 
   syncState(state: string): void {

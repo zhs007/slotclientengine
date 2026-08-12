@@ -10,8 +10,11 @@ import {
 import { RenderSymbol } from "../../src/symbol/render-symbol.js";
 import { createDefaultSymbolStatePreset } from "../../src/symbol/state-machine.js";
 import type { RendercoreSpineSlotPlayer } from "../../src/spine/runtime-player.js";
-import { getRenderNodeAdapter } from "../../src/symbol/render-node.js";
-import { resolveRenderAnchor } from "../../src/presentation/render-anchor.js";
+import {
+  createContainerRenderAnchor,
+  resolveRenderAnchor,
+} from "../../src/presentation/render-anchor.js";
+import { getRenderObjectAdapter } from "../../src/presentation/render-object.js";
 
 const manifest = {
   version: 1 as const,
@@ -92,14 +95,17 @@ describe("SymbolImageStringController", () => {
     controller.setText("coin-value", "200");
     expect(display.children).toHaveLength(1);
     const clone = controller.cloneText("coin-value");
-    const cloneView = getRenderNodeAdapter(clone).view;
+    const cloneView = getRenderObjectAdapter(clone).view;
     expect(cloneView.children).toHaveLength(1);
+    const secondClone = clone.clone();
+    expect(getRenderObjectAdapter(secondClone).view.children).toHaveLength(1);
+    secondClone.destroy();
     controller.setText("coin-value", "10");
     expect(cloneView.children[0]?.children).toHaveLength(1);
     const target = new Container();
     symbol.addChild(target);
     const anchor = resolveRenderAnchor(
-      controller.getTextAnchor("coin-value"),
+      createContainerRenderAnchor(controller.getTextView("coin-value")),
       target,
     );
     expect(Number.isFinite(anchor.x) && Number.isFinite(anchor.y)).toBe(true);

@@ -1,7 +1,7 @@
 import { Container } from "pixi.js";
 import { describe, expect, it } from "vitest";
 import { RenderReelSet } from "../../src/reel/index.js";
-import { createRenderNode } from "../../src/symbol/index.js";
+import { createRenderObject } from "../../src/presentation/index.js";
 import {
   createBasicLayout,
   createBasicRegistry,
@@ -24,7 +24,7 @@ describe("SymbolRender", () => {
     expect(area.getVisibleSymbolStateSnapshot(0, 0).requestedState).toBe("win");
 
     const view = new Container();
-    const node = createRenderNode({ view, destroy: () => view.destroy() });
+    const node = createRenderObject({ view, destroy: () => view.destroy() });
     symbol.add(node, { layer: "overlay", order: 2 });
     expect(view.parent).not.toBeNull();
     symbol.setState("normal", "immediate");
@@ -96,7 +96,7 @@ describe("SymbolRender", () => {
     });
 
     const view = new Container();
-    const node = createRenderNode({ view, destroy: () => view.destroy() });
+    const node = createRenderObject({ view, destroy: () => view.destroy() });
     empty.add(node);
     expect(view.parent).not.toBeNull();
     empty.remove(node);
@@ -144,7 +144,7 @@ describe("SymbolRender", () => {
       [2, 1, 2],
     ]);
     const view = new Container();
-    const node = createRenderNode({ view, destroy: () => view.destroy() });
+    const node = createRenderObject({ view, destroy: () => view.destroy() });
     area.getSymbol({ x: 0, y: 0 }).add(node);
 
     area.destroy({ children: true });

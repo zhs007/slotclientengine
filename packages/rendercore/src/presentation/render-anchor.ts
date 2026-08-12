@@ -1,5 +1,5 @@
 import type { Container } from "pixi.js";
-import type { RenderPoint } from "../symbol/render-node.js";
+import type { RenderPoint } from "./render-object.js";
 import { ReelError } from "../reel/errors.js";
 
 export interface RenderAnchor {
@@ -24,15 +24,16 @@ interface RenderAnchorAdapter {
 const adapters = new WeakMap<RenderAnchor, RenderAnchorAdapter>();
 
 export function createContainerRenderAnchor(
-  owner: Container,
+  owner: Container | (() => Container),
   getPoint: () => RenderPoint = () => ({ x: 0, y: 0 }),
 ): RenderAnchor {
   const anchor = Object.freeze({ kind: "render-anchor" as const });
   adapters.set(anchor, {
     resolve: (target) => {
+      const resolvedOwner = typeof owner === "function" ? owner() : owner;
       const point = getPoint();
       assertPoint(point);
-      const global = owner.toGlobal(point);
+      const global = resolvedOwner.toGlobal(point);
       const local = target.toLocal(global);
       return Object.freeze({ x: local.x, y: local.y });
     },

@@ -10,7 +10,7 @@ import {
   createSceneLayoutPackageRuntime,
   createSlotOperationCoordinator,
   createSlotOperationHandlerRegistry,
-  createTextRenderNode,
+  createTextRenderObject,
   createAreaSpinFunction,
   type ReelArea,
   type SceneLayoutPackageRuntime,
@@ -296,7 +296,7 @@ async function playWinGroup(
 }
 
 function createWinAmountText(amount: number, resource: Game003v2Resource) {
-  const text = createTextRenderNode({
+  const text = createTextRenderObject({
     text: formatGame003v2Amount(amount),
     style: {
       fontFamily: "Arial",

@@ -1,78 +1,15 @@
 # Crave task 203 人工迁移说明
 
+> RenderObject统一API已由任务205更新。value/text/symbol飞行请以
+> [`docs/crave-render-object-migration.md`](./crave-render-object-migration.md) 为准；本文其余Popup与转场顺序仍有效。
+
 本文基于 Crave `49c19087b825c4bbebce00f2286c9d60080e9ebb`，只提供人工修改步骤；RenderCore 任务不会写入 Crave 仓库。
 
-## 1. WL、WM、CM 的 multiplier
+## 1. Symbol value/text 与飞行
 
-WL/WM/CM 的数字来自 Symbols manifest 中 exact name 为 `multiplier` 的 `imageStringNode`，不是 CN 使用的 `valuePresentation`。因此不要再对这些 symbol 调用：
-
-```ts
-runtime.setMainReelSymbolPresentationValue(x, y, multiplier);
-```
-
-改为通过 main symbol area 的第一层接口设置命名文字：
-
-```ts
-const symbol = runtime.getSymbolArea("main").getSymbol(position);
-symbol.setText("multiplier", `x${multiplier}`);
-```
-
-读取、复制和飞行同一文字时使用：
-
-```ts
-symbol.getText("multiplier");
-const flying = symbol.cloneText("multiplier");
-const from = symbol.getTextAnchor("multiplier");
-```
-
-CN 等声明 `valuePresentation` 的 symbol 继续使用：
-
-```ts
-symbol.setValue(value);
-const flying = symbol.cloneValue();
-const from = symbol.getValueAnchor();
-```
-
-`setValue()` 会自动跨 `<10 / <100 / <1000 / 其余` tier。不要在 Crave 计算或设置 tier。
-
-Symbols manifest 的 `imageStringNodes[].initialText` 只供 Symbols Editor / Game Layout Editor 预览。production occurrence 初始文字为空；Crave 必须在对应业务 value 出现时显式调用 `setText()`。
-
-## 2. 数字飞向位置或另一个 symbol
-
-两种玩法只在目标 anchor 不同。下面使用 area presentation scope，让 RenderCore 负责坐标转换、manual clock、spin interruption与临时节点销毁：
-
-```ts
-const source = area.getSymbol(sourcePosition);
-const flying = source.cloneText("multiplier"); // CN 使用 cloneValue()
-
-await area.present(async (context) => {
-  await context.transfer(area.getLayer("win"), flying, {
-    ownership: "destroy",
-    from: source.getTextAnchor("multiplier"),
-    to: runtime.getNodeAnchor("coin-meter"),
-    durationSeconds: 0.5,
-  });
-});
-```
-
-飞到另一个 symbol 时：
-
-```ts
-const target = area.getSymbol(targetPosition);
-
-await area.present(async (context) => {
-  await context.transfer(area.getLayer("win"), flying, {
-    ownership: "destroy",
-    from: source.getTextAnchor("multiplier"),
-    to: target.getTextAnchor("multiplier"),
-    durationSeconds: 0.5,
-  });
-});
-
-target.setText("multiplier", `x${nextMultiplier}`);
-```
-
-飞行不会自动累加或修改目标 value；最后一行由游戏业务决定。
+WL/WM/CM multiplier、CN value、whole symbol clone、统一 `RenderObject` 调用、生命周期和旧API对照已经集中到
+[`crave-render-object-migration.md`](./crave-render-object-migration.md)。Crave必须使用该文档的canonical API，
+不要继续使用任务203时期的四个专用clone/anchor方法。
 
 ## 3. 获奖庆祝完成后再转场
 

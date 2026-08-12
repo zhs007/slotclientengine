@@ -435,7 +435,7 @@ export class RenderSymbol extends VisualEntity<void> {
     return this.#presentationValue;
   }
 
-  clonePresentationValue(): import("./render-node.js").RenderNode {
+  clonePresentationValue(): import("../presentation/render-object.js").CloneableRenderObject {
     this.assertNotDestroyed();
     if (!this.#valueController)
       throw new Error(
@@ -444,13 +444,13 @@ export class RenderSymbol extends VisualEntity<void> {
     return this.#valueController.cloneValue();
   }
 
-  getPresentationValueAnchor(): import("../presentation/render-anchor.js").RenderAnchor {
+  getPresentationValueView(): import("pixi.js").Container {
     this.assertNotDestroyed();
     if (!this.#valueController)
       throw new Error(
         `Render symbol "${this.symbol}" has no value presentation.`,
       );
-    return this.#valueController.getValueAnchor();
+    return this.#valueController.getValueView();
   }
 
   getImageStringNodeNames(): readonly string[] {
@@ -478,7 +478,9 @@ export class RenderSymbol extends VisualEntity<void> {
     return this.#imageStringController.getText(name);
   }
 
-  cloneImageStringText(name: string): import("./render-node.js").RenderNode {
+  cloneImageStringText(
+    name: string,
+  ): import("../presentation/render-object.js").CloneableRenderObject {
     this.assertNotDestroyed();
     if (!this.#imageStringController)
       throw new Error(
@@ -487,15 +489,13 @@ export class RenderSymbol extends VisualEntity<void> {
     return this.#imageStringController.cloneText(name);
   }
 
-  getImageStringTextAnchor(
-    name: string,
-  ): import("../presentation/render-anchor.js").RenderAnchor {
+  getImageStringTextView(name: string): import("pixi.js").Container {
     this.assertNotDestroyed();
     if (!this.#imageStringController)
       throw new Error(
         `Render symbol "${this.symbol}" has no image-string nodes.`,
       );
-    return this.#imageStringController.getTextAnchor(name);
+    return this.#imageStringController.getTextView(name);
   }
 
   requestLandingAppear(

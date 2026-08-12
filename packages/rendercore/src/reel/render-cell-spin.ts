@@ -1,8 +1,9 @@
 import { Container } from "pixi.js";
 import type { LogicReels } from "@slotclientengine/logiccore";
 import { assertValidDeltaSeconds } from "../symbol/ani.js";
-import { type RenderNode, type SymbolStateId } from "../symbol/index.js";
-import { getRenderNodeAdapter } from "../symbol/render-node.js";
+import type { RenderObject } from "../presentation/render-object.js";
+import type { SymbolStateId } from "../symbol/index.js";
+import { getRenderObjectAdapter } from "../presentation/render-object.js";
 import { createContainerRenderAnchor } from "../presentation/render-anchor.js";
 import {
   createEmptySymbolRender,
@@ -48,8 +49,8 @@ export interface CellRollStartOptions {
 }
 
 export interface CellRender {
-  add(node: RenderNode, order?: number): void;
-  remove(node: RenderNode): void;
+  add(node: RenderObject, order?: number): void;
+  remove(node: RenderObject): void;
 }
 
 export interface CellSpin extends SymbolArea {
@@ -133,7 +134,7 @@ interface RuntimeCell {
   readonly root: Container;
   readonly attachmentLayer: Container;
   readonly reel: RenderReel;
-  readonly mounted: Set<RenderNode>;
+  readonly mounted: Set<RenderObject>;
 }
 
 interface ActiveCell {
@@ -571,27 +572,27 @@ export class RenderCellSpin extends Container implements CellSpin {
   getCell(position: SymbolPosition): CellRender {
     const cell = this.getRuntimeCell(position);
     return Object.freeze({
-      add: (node: RenderNode, order = 0) => {
+      add: (node: RenderObject, order = 0) => {
         this.assertAlive();
         if (!Number.isSafeInteger(order))
           throw new ReelError("Cell node order must be an integer.");
         if (cell.mounted.has(node))
-          throw new ReelError("RenderNode is already attached to this cell.");
-        const adapter = getRenderNodeAdapter(node);
+          throw new ReelError("RenderObject is already attached to this cell.");
+        const adapter = getRenderObjectAdapter(node);
         if (adapter.view.parent)
           throw new ReelError(
-            "RenderNode is already attached to another parent.",
+            "RenderObject is already attached to another parent.",
           );
         adapter.view.zIndex = order;
         cell.attachmentLayer.addChild(adapter.view);
         cell.mounted.add(node);
       },
-      remove: (node: RenderNode) => {
+      remove: (node: RenderObject) => {
         this.assertAlive();
         if (!cell.mounted.delete(node))
-          throw new ReelError("RenderNode is not attached to this cell.");
-        getRenderNodeAdapter(node).view.parent?.removeChild(
-          getRenderNodeAdapter(node).view,
+          throw new ReelError("RenderObject is not attached to this cell.");
+        getRenderObjectAdapter(node).view.parent?.removeChild(
+          getRenderObjectAdapter(node).view,
         );
       },
     });
@@ -839,8 +840,8 @@ export class RenderCellSpin extends Container implements CellSpin {
     }
     for (const cell of this.#cells) {
       for (const node of cell.mounted)
-        getRenderNodeAdapter(node).view.parent?.removeChild(
-          getRenderNodeAdapter(node).view,
+        getRenderObjectAdapter(node).view.parent?.removeChild(
+          getRenderObjectAdapter(node).view,
         );
       cell.mounted.clear();
     }

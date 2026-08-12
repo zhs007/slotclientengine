@@ -2,13 +2,15 @@ import { Container } from "pixi.js";
 import type { RenderAnchor } from "../presentation/render-anchor.js";
 import { SymbolAnimationError } from "./errors.js";
 import {
-  createRenderNode,
-  getRenderNodeAdapter,
-  registerRenderNodeAlias,
-  type RenderNode,
-  type RenderNodePlayOptions,
+  createCloneableRenderObject,
+  createRenderObject,
+  getRenderObjectAdapter,
+  registerRenderObjectAlias,
+  type CloneableRenderObject,
+  type RenderObject,
+  type RenderObjectPlayOptions,
   type RenderPoint,
-} from "./render-node.js";
+} from "../presentation/render-object.js";
 import type { RenderSymbol } from "./render-symbol.js";
 import type {
   SymbolStateId,
@@ -25,7 +27,11 @@ export interface SymbolCloneOptions {
   readonly state?: "normal" | "current";
 }
 
-export interface SymbolRender extends RenderNode {
+export type SymbolRenderPartRef =
+  | { readonly kind: "value" }
+  | { readonly kind: "text"; readonly name: string };
+
+export interface SymbolRender extends CloneableRenderObject {
   readonly code: number;
   readonly symbol: string;
   readonly kind: "symbol" | "empty";
@@ -41,14 +47,11 @@ export interface SymbolRender extends RenderNode {
   ): Promise<void>;
   setValue(value: number | null): void;
   getValue(): number | null;
-  cloneValue(): RenderNode;
-  getValueAnchor(): RenderAnchor;
   setText(name: string, text: string): void;
   getText(name: string): string;
-  cloneText(name: string): RenderNode;
-  getTextAnchor(name: string): RenderAnchor;
-  add(node: RenderNode, options?: SymbolNodeOptions): void;
-  remove(node: RenderNode): void;
+  getPart(ref: SymbolRenderPartRef): CloneableRenderObject;
+  add(node: RenderObject, options?: SymbolNodeOptions): void;
+  remove(node: RenderObject): void;
   clone(options?: SymbolCloneOptions): SymbolRender;
 }
 
@@ -91,7 +94,7 @@ interface SymbolRenderAdapter {
 const symbolRenderAdapters = new WeakMap<SymbolRender, SymbolRenderAdapter>();
 
 export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
-  const mounted = new Set<RenderNode>();
+  const mounted = new Set<RenderObject>();
   let destroyed = false;
   const assertUsable = (): void => {
     if (destroyed)
@@ -100,16 +103,18 @@ export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
   };
   const detachMounted = (): void => {
     for (const node of mounted) {
-      getRenderNodeAdapter(node).view.parent?.removeChild(
-        getRenderNodeAdapter(node).view,
+      getRenderObjectAdapter(node).view.parent?.removeChild(
+        getRenderObjectAdapter(node).view,
       );
     }
     mounted.clear();
   };
 
   let render!: SymbolRender;
-  const baseNode = createRenderNode({
+  const baseNode = createRenderObject({
     view: source.symbol as Container,
+    owned: source.owned,
+    assertUsable,
     play: (name, options) => {
       if (!name)
         return Promise.reject(
@@ -162,7 +167,7 @@ export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
       assertUsable();
       baseNode.setVisible(visible);
     },
-    play: (name?: string, options?: RenderNodePlayOptions) => {
+    play: (name?: string, options?: RenderObjectPlayOptions) => {
       assertUsable();
       return baseNode.play(name, options);
     },
@@ -208,14 +213,6 @@ export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
       assertUsable();
       return source.symbol.getPresentationValue();
     },
-    cloneValue: () => {
-      assertUsable();
-      return source.symbol.clonePresentationValue();
-    },
-    getValueAnchor: () => {
-      assertUsable();
-      return source.symbol.getPresentationValueAnchor();
-    },
     setText: (name: string, text: string) => {
       assertUsable();
       source.symbol.setImageStringText(name, text);
@@ -224,22 +221,15 @@ export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
       assertUsable();
       return source.symbol.getImageStringText(name);
     },
-    cloneText: (name: string) => {
-      assertUsable();
-      return source.symbol.cloneImageStringText(name);
-    },
-    getTextAnchor: (name: string) => {
-      assertUsable();
-      return source.symbol.getImageStringTextAnchor(name);
-    },
-    add: (node: RenderNode, options: SymbolNodeOptions = {}) => {
+    getPart: (ref: SymbolRenderPartRef) => createSymbolRenderPart(source, ref),
+    add: (node: RenderObject, options: SymbolNodeOptions = {}) => {
       assertUsable();
       if (mounted.has(node))
-        throw new SymbolAnimationError("RenderNode is already attached.");
-      const adapter = getRenderNodeAdapter(node);
+        throw new SymbolAnimationError("RenderObject is already attached.");
+      const adapter = getRenderObjectAdapter(node);
       if (adapter.view.parent)
         throw new SymbolAnimationError(
-          "RenderNode is already attached to another parent.",
+          "RenderObject is already attached to another parent.",
         );
       const order = options.order ?? 0;
       if (!Number.isSafeInteger(order))
@@ -253,14 +243,14 @@ export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
       parent.addChild(adapter.view);
       mounted.add(node);
     },
-    remove: (node: RenderNode) => {
+    remove: (node: RenderObject) => {
       assertUsable();
       if (!mounted.delete(node))
         throw new SymbolAnimationError(
-          "RenderNode is not attached to this SymbolRender.",
+          "RenderObject is not attached to this SymbolRender.",
         );
-      getRenderNodeAdapter(node).view.parent?.removeChild(
-        getRenderNodeAdapter(node).view,
+      getRenderObjectAdapter(node).view.parent?.removeChild(
+        getRenderObjectAdapter(node).view,
       );
     },
     clone: (options: SymbolCloneOptions = {}) => {
@@ -281,7 +271,7 @@ export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
       return clone;
     },
   }) satisfies SymbolRender;
-  registerRenderNodeAlias(render, getRenderNodeAdapter(baseNode));
+  registerRenderObjectAlias(render, getRenderObjectAdapter(baseNode));
   symbolRenderAdapters.set(render, {
     assertUsable,
     validateValue: (value) => {
@@ -303,7 +293,7 @@ export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
 export function createEmptySymbolRender(
   source: EmptySymbolRenderSource,
 ): SymbolRender {
-  const mounted = new Set<RenderNode>();
+  const mounted = new Set<RenderObject>();
   let destroyed = false;
   const assertUsable = (): void => {
     if (destroyed)
@@ -325,13 +315,15 @@ export function createEmptySymbolRender(
   };
   const detachMounted = (): void => {
     for (const node of mounted)
-      getRenderNodeAdapter(node).view.parent?.removeChild(
-        getRenderNodeAdapter(node).view,
+      getRenderObjectAdapter(node).view.parent?.removeChild(
+        getRenderObjectAdapter(node).view,
       );
     mounted.clear();
   };
-  const baseNode = createRenderNode({
+  const baseNode = createRenderObject({
     view: source.view,
+    owned: source.owned,
+    assertUsable,
     destroy: () => {
       if (!source.owned)
         throw new SymbolAnimationError(
@@ -393,20 +385,17 @@ export function createEmptySymbolRender(
       assertUsable();
       return null;
     },
-    cloneValue: () => unsupported("presentation values"),
-    getValueAnchor: () => unsupported("presentation values"),
     setText: () => unsupported("image-string text"),
     getText: () => unsupported("image-string text"),
-    cloneText: () => unsupported("image-string text"),
-    getTextAnchor: () => unsupported("image-string text"),
-    add: (node: RenderNode, options: SymbolNodeOptions = {}) => {
+    getPart: () => unsupported("presentation parts"),
+    add: (node: RenderObject, options: SymbolNodeOptions = {}) => {
       assertUsable();
       if (mounted.has(node))
-        throw new SymbolAnimationError("RenderNode is already attached.");
-      const adapter = getRenderNodeAdapter(node);
+        throw new SymbolAnimationError("RenderObject is already attached.");
+      const adapter = getRenderObjectAdapter(node);
       if (adapter.view.parent)
         throw new SymbolAnimationError(
-          "RenderNode is already attached to another parent.",
+          "RenderObject is already attached to another parent.",
         );
       const order = options.order ?? 0;
       if (!Number.isSafeInteger(order))
@@ -417,14 +406,14 @@ export function createEmptySymbolRender(
       source.view.addChild(adapter.view);
       mounted.add(node);
     },
-    remove: (node: RenderNode) => {
+    remove: (node: RenderObject) => {
       assertUsable();
       if (!mounted.delete(node))
         throw new SymbolAnimationError(
-          "RenderNode is not attached to this SymbolRender.",
+          "RenderObject is not attached to this SymbolRender.",
         );
-      getRenderNodeAdapter(node).view.parent?.removeChild(
-        getRenderNodeAdapter(node).view,
+      getRenderObjectAdapter(node).view.parent?.removeChild(
+        getRenderObjectAdapter(node).view,
       );
     },
     clone: () =>
@@ -434,7 +423,7 @@ export function createEmptySymbolRender(
         assertUsable: () => {},
       }),
   }) satisfies SymbolRender;
-  registerRenderNodeAlias(render, getRenderNodeAdapter(baseNode));
+  registerRenderObjectAlias(render, getRenderObjectAdapter(baseNode));
   symbolRenderAdapters.set(render, {
     assertUsable,
     validateValue: (value) => {
@@ -448,6 +437,42 @@ export function createEmptySymbolRender(
     validateStatePlayback: () => unsupported("symbol states"),
   });
   return render;
+}
+
+function createSymbolRenderPart(
+  source: SymbolRenderSource,
+  ref: SymbolRenderPartRef,
+): CloneableRenderObject {
+  source.assertUsable();
+  if (ref.kind !== "value" && ref.kind !== "text") {
+    throw new SymbolAnimationError(
+      `Unknown SymbolRender part kind "${String((ref as { kind?: unknown }).kind)}".`,
+    );
+  }
+  if (ref.kind === "text" && (typeof ref.name !== "string" || ref.name === ""))
+    throw new SymbolAnimationError(
+      "SymbolRender text part requires a non-empty exact name.",
+    );
+  if (ref.kind === "value") source.symbol.getPresentationValueView();
+  else source.symbol.getImageStringTextView(ref.name);
+  const assertUsable = (): void => source.assertUsable();
+  return createCloneableRenderObject({
+    view: () => {
+      assertUsable();
+      return ref.kind === "value"
+        ? source.symbol.getPresentationValueView()
+        : source.symbol.getImageStringTextView(ref.name);
+    },
+    owned: false,
+    assertUsable,
+    clone: () => {
+      assertUsable();
+      return ref.kind === "value"
+        ? source.symbol.clonePresentationValue()
+        : source.symbol.cloneImageStringText(ref.name);
+    },
+    destroy: () => {},
+  });
 }
 
 export function getSymbolRenderAdapter(

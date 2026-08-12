@@ -1,4 +1,5 @@
-import type { RenderNode, SymbolStateId } from "../symbol/index.js";
+import type { RenderObject } from "../presentation/render-object.js";
+import type { SymbolStateId } from "../symbol/index.js";
 import type { SymbolArea } from "./symbol-area.js";
 import type { ReelSpinDirection } from "./types.js";
 
@@ -21,8 +22,8 @@ export interface ReelRollStartOptions {
 }
 
 export interface ReelRender {
-  add(node: RenderNode, order?: number): void;
-  remove(node: RenderNode): void;
+  add(node: RenderObject, order?: number): void;
+  remove(node: RenderObject): void;
 }
 
 export interface ReelSpin extends SymbolArea {

@@ -26,6 +26,47 @@ export async function createSymbolValueDisplay(options: {
     renderer.container.scale.set(binding.transform.scale);
     let currentText = text;
     let currentProfile: "normal" | "spinBlur" = "normal";
+    const createDetachedHandle = (
+      textValue: string,
+      profile: "normal" | "spinBlur",
+      position: { readonly x: number; readonly y: number },
+      scale: { readonly x: number; readonly y: number },
+    ): SymbolValueDisplayHandle => {
+      const profileBinding =
+        profile === "spinBlur" ? binding.spinBlurProfile! : binding;
+      const cloneRenderer = createRenderMappedImageString({
+        resource: profileBinding.resource,
+        text: textValue,
+        anchor: binding.anchor,
+        specialValueImages: profileBinding.specialValueImages,
+      });
+      cloneRenderer.container.position.set(position.x, position.y);
+      cloneRenderer.container.scale.set(scale.x, scale.y);
+      let cloneText = textValue;
+      return Object.freeze({
+        container: cloneRenderer.container,
+        type: "image-string" as const,
+        get text(): string {
+          return cloneText;
+        },
+        resourcePath: profileBinding.resourcePath,
+        setText(next: string): void {
+          cloneRenderer.setText(next);
+          cloneText = next;
+        },
+        clone(): SymbolValueDisplayHandle {
+          return createDetachedHandle(
+            cloneText,
+            profile,
+            cloneRenderer.container.position,
+            cloneRenderer.container.scale,
+          );
+        },
+        destroy(): void {
+          cloneRenderer.destroy();
+        },
+      });
+    };
     const createHandle = (): SymbolValueDisplayHandle =>
       Object.freeze({
         container: renderer.container,
@@ -54,46 +95,12 @@ export async function createSymbolValueDisplay(options: {
           currentText = next;
         },
         clone(): SymbolValueDisplayHandle {
-          const cloneRenderer = createRenderMappedImageString({
-            resource:
-              currentProfile === "spinBlur"
-                ? binding.spinBlurProfile!.resource
-                : binding.resource,
-            text: currentText,
-            anchor: binding.anchor,
-            specialValueImages:
-              currentProfile === "spinBlur"
-                ? binding.spinBlurProfile!.specialValueImages
-                : binding.specialValueImages,
-          });
-          cloneRenderer.container.position.copyFrom(
+          return createDetachedHandle(
+            currentText,
+            currentProfile,
             renderer.container.position,
+            renderer.container.scale,
           );
-          cloneRenderer.container.scale.copyFrom(renderer.container.scale);
-          let cloneText = currentText;
-          return Object.freeze({
-            container: cloneRenderer.container,
-            type: "image-string" as const,
-            get text(): string {
-              return cloneText;
-            },
-            resourcePath:
-              currentProfile === "spinBlur"
-                ? binding.spinBlurProfile!.resourcePath
-                : binding.resourcePath,
-            setText(next: string): void {
-              cloneRenderer.setText(next);
-              cloneText = next;
-            },
-            clone(): SymbolValueDisplayHandle {
-              throw new SymbolAssetError(
-                "A detached symbol value clone cannot be cloned again.",
-              );
-            },
-            destroy(): void {
-              cloneRenderer.destroy();
-            },
-          });
         },
         destroy(): void {
           renderer.destroy();

@@ -4,7 +4,7 @@ import {
   RenderReelSet,
   createAreaSpinFunction,
   createReelSpinSessionController,
-  createRenderNode,
+  createRenderObject,
 } from "../../src/index.js";
 import {
   createBasicLayout,
@@ -138,7 +138,7 @@ describe("RenderReelSet ReelSpin", () => {
       [2, 1, 2],
     ]);
     const view = new Container();
-    const node = createRenderNode({ view, destroy: () => view.destroy() });
+    const node = createRenderObject({ view, destroy: () => view.destroy() });
     const reel = spin.getReel(0);
     reel.add(node, 3);
     expect(view.parent).not.toBeNull();
@@ -201,7 +201,7 @@ describe("RenderReelSet ReelSpin", () => {
       y: 30,
     });
     const view = new Container();
-    const node = createRenderNode({ view, destroy: () => view.destroy() });
+    const node = createRenderObject({ view, destroy: () => view.destroy() });
     area.getLayer("win").add(node);
     let continued = false;
     const presentation = area.present(async (context) => {
@@ -305,7 +305,7 @@ describe("RenderReelSet ReelSpin", () => {
     ]);
     const view = new Container();
     let destroys = 0;
-    const node = createRenderNode({
+    const node = createRenderObject({
       view,
       destroy: () => {
         destroys += 1;
@@ -338,6 +338,33 @@ describe("RenderReelSet ReelSpin", () => {
     await presentation;
     expect(view.parent).toBeNull();
     expect(destroys).toBe(1);
+  });
+
+  it("rejects transferring a borrowed RenderObject before mounting it", async () => {
+    const spin = createSpin();
+    spin.resetToVisibleScene([
+      [1, 2, 1],
+      [2, 1, 2],
+    ]);
+    const area = spin.getArea();
+    const view = new Container();
+    const borrowed = createRenderObject({
+      view,
+      owned: false,
+      destroy: () => undefined,
+    });
+
+    await expect(
+      area.present((context) =>
+        context.transfer(area.getLayer("win"), borrowed, {
+          ownership: "detach",
+          from: area.getAnchor({ x: 0, y: 0 }),
+          to: area.getAnchor({ x: 1, y: 1 }),
+          durationSeconds: 0.1,
+        }),
+      ),
+    ).rejects.toThrow(/Only an owned RenderObject/);
+    expect(view.parent).toBeNull();
   });
 
   it("preflights a SymbolGroup before mutating any member", async () => {
@@ -386,7 +413,7 @@ describe("RenderReelSet ReelSpin", () => {
     const area = spin.getArea();
     const view = new Container();
     let destroys = 0;
-    const node = createRenderNode({
+    const node = createRenderObject({
       view,
       destroy: () => {
         destroys += 1;

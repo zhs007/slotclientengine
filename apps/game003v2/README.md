@@ -7,7 +7,7 @@ local final phase、不轮询 reel completion，也不截断 ticker delta；落�
 ownership 仍由 RenderCore 负责。
 
 中奖循环由 game003v2 以 `area.present(..., { repeat: true })`、`getSymbols()` 和 awaitable
-`SymbolGroup.playState("win")` 编排单轮；金额使用通用TextRenderNode，通过group center anchor和`context.withNode()`
+`SymbolGroup.playState("win")` 编排单轮；金额使用通用TextRenderObject，通过group center anchor和`context.withNode()`
 定位、挂载及自动销毁。首轮完成后operation可以结束，后台重复和下一次`area.spin.start()`的中断由area内部管理；app
 不自建deferred Promise、`while(true)`、中心坐标计算或transient node cleanup，也不使用旧carousel、state snapshot、
 geometry snapshot或raw reel presentation container。逐列landing使用通用`createAreaSpinFunction()`装配left-to-right cadence。
