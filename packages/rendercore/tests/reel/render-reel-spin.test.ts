@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   RenderReelSet,
   createAreaSpinFunction,
+  createReelSpinSessionController,
   createRenderNode,
 } from "../../src/index.js";
 import {
@@ -12,6 +13,57 @@ import {
 } from "./helpers.js";
 
 describe("RenderReelSet ReelSpin", () => {
+  it("replaces settled symbols and preflights mapped group values", () => {
+    const spin = createSpin();
+    spin.resetToVisibleScene([
+      [1, 2, 1],
+      [2, 1, 2],
+    ]);
+    const previous = spin.getSymbol({ x: 0, y: 0 });
+    const replaced = spin.replaceSymbol({ x: 0, y: 0 }, { code: 2, value: 7 });
+    expect(replaced.code).toBe(2);
+    expect(replaced.getValue()).toBe(7);
+    expect(() => previous.getValue()).toThrow(/stale/);
+
+    const group = spin.getSymbols([
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+    ]);
+    expect(() => group.setValues([9, 0])).toThrow(/positive safe integer/);
+    expect(group.symbols.map((symbol) => symbol.getValue())).toEqual([7, null]);
+    group.setValues([9, 11]);
+    expect(group.symbols.map((symbol) => symbol.getValue())).toEqual([9, 11]);
+  });
+
+  it("exposes an additive active reel session that lands to SymbolGroups", async () => {
+    const spin = createSpin();
+    spin.resetToVisibleScene([
+      [1, 2, 1],
+      [2, 1, 2],
+    ]);
+    const controller = createReelSpinSessionController({
+      reels: spin,
+      columns: 2,
+      rows: 3,
+    });
+    const session = controller.start();
+    expect(session.getPendingReels().map((reel) => reel.x)).toEqual([0, 1]);
+    const first = session
+      .getReel(0)
+      .land({ symbols: [2, 2, 1] }, { durationMs: 100, minimumSpinCycles: 1 });
+    spin.update(0.1);
+    expect((await first).symbols.map((symbol) => symbol.code)).toEqual([
+      2, 2, 1,
+    ]);
+    expect(session.getPendingReels().map((reel) => reel.x)).toEqual([1]);
+    const second = session
+      .getReel(1)
+      .land({ symbols: [1, 1, 2] }, { durationMs: 100, minimumSpinCycles: 1 });
+    spin.update(0.1);
+    await second;
+    expect(controller.getActive()).toBeNull();
+    expect(() => session.getReel(1)).toThrow(/not pending/);
+  });
   it("rolls columns concurrently and resolves after exact landing", async () => {
     const spin = createSpin();
     spin.resetToVisibleScene([

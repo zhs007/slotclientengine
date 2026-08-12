@@ -404,11 +404,7 @@ export class RenderSymbol extends VisualEntity<void> {
 
   setPresentationValue(value: number | null): void {
     this.assertNotDestroyed();
-    if (value !== null && (!Number.isSafeInteger(value) || value <= 0)) {
-      throw new Error(
-        "Render symbol presentation value must be a positive safe integer or null.",
-      );
-    }
+    this.validatePresentationValue(value);
     const previous = this.#presentationValue;
     if (this.#valueController) {
       try {
@@ -423,6 +419,15 @@ export class RenderSymbol extends VisualEntity<void> {
       const before = this.#lastAniKey;
       this.#lastAniKey = "";
       this.syncAniIfNeeded(before, false);
+    }
+  }
+
+  validatePresentationValue(value: number | null): void {
+    this.assertNotDestroyed();
+    if (value !== null && (!Number.isSafeInteger(value) || value <= 0)) {
+      throw new Error(
+        "Render symbol presentation value must be a positive safe integer or null.",
+      );
     }
   }
 

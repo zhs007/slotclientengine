@@ -20,6 +20,11 @@ export interface SymbolGroup {
     state: SymbolStateId,
     transitionMode?: SymbolStateTransitionMode,
   ): void;
+  setStates(
+    states: readonly SymbolStateId[],
+    transitionMode?: SymbolStateTransitionMode,
+  ): void;
+  setValues(values: readonly (number | null)[]): void;
   playState(
     state: SymbolStateId,
     options?: SymbolGroupPlaybackOptions,
@@ -52,6 +57,26 @@ export function createSymbolGroup(
         );
       for (const symbol of members) symbol.setState(state, transitionMode);
     },
+    setStates: (
+      states: readonly SymbolStateId[],
+      transitionMode?: SymbolStateTransitionMode,
+    ) => {
+      assertMappedLength(states, members.length, "states");
+      for (const [index, symbol] of members.entries())
+        getSymbolRenderAdapter(symbol).validateStateRequest(
+          states[index]!,
+          transitionMode,
+        );
+      for (const [index, symbol] of members.entries())
+        symbol.setState(states[index]!, transitionMode);
+    },
+    setValues: (values: readonly (number | null)[]) => {
+      assertMappedLength(values, members.length, "values");
+      for (const [index, symbol] of members.entries())
+        getSymbolRenderAdapter(symbol).validateValue(values[index]!);
+      for (const [index, symbol] of members.entries())
+        symbol.setValue(values[index]!);
+    },
     playState: (
       state: SymbolStateId,
       options: SymbolGroupPlaybackOptions = { completion: "entered" },
@@ -79,4 +104,15 @@ export function createSymbolGroup(
       );
     },
   });
+}
+
+function assertMappedLength(
+  values: readonly unknown[],
+  expected: number,
+  label: string,
+): void {
+  if (!Array.isArray(values) || values.length !== expected)
+    throw new SymbolAnimationError(
+      `SymbolGroup ${label} length ${values.length} does not match ${expected} symbols.`,
+    );
 }

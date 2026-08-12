@@ -68,6 +68,9 @@
   批量state/play必须先完整preflight。generic motion只移动临时RenderNode或owned clone，复用grid-cell transfer的pure
   path/easing/manual-clock primitive，不取得盘面commit；游戏仍用普通for/await，不新增presentation/motion plan或业务DSL。
 - area spin通用factory只装配column order与stagger并调用逐列ReelSpin；不得接受业务predicate、matrix command或state名。
+- `CellSpin`是新grid玩法的正式owner，提供settled mutation、active session、direct transfer/drop；`-1`是CellSpin和grid-cell唯一hole
+  标记，其它symbol code非负。Crave仍消费grid-cell期间，相同基础能力同步到grid-cell但不得扩展grid-cell独有高级接口；迁移完成后停止维护。
+  新direct/session API复用既有reel/pool/ticker owner，不接受gameplay plan或暴露prepared/manual-progress lifecycle；game002v2旧surface保持兼容。
 - 游戏 app 只保留业务 component/value/result resolver、formatter、layout、anticipation 和 typed extension；不得复制 Pixi、Spine、reel、cascade 或 popup 状态机。
 - shared package 测试必须使用包内自包含的最小数据验证 parser、binding、player 和 lifecycle
   合同，不得读取任一游戏的 `assets/` 美术交付。只校验当前 Gamelayout 文件、bytes、

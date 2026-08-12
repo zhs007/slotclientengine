@@ -542,10 +542,18 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   cancelMainReelContinuousSpin(): void;
   /** Returns the instance-scoped symbol area; currently only "main" exists. */
   getSymbolArea(reelId: string): import("../reel/index.js").SymbolArea;
+  /** Additive settled-symbol mutation capability; legacy symbol APIs remain compatible. */
+  getSymbolMutationArea(
+    reelId: string,
+  ): import("../reel/index.js").SymbolMutationArea;
   /** Returns the instance-scoped standard ReelSpin; currently only "main" exists. */
   getReelSpin(reelId: string): import("../reel/index.js").ReelSpin;
   /** Returns the first-layer standard reel area with presentation-owned spin. */
   getReelArea(reelId: string): import("../reel/index.js").ReelArea;
+  /** Additive active standard-reel session controller. */
+  getReelSpinSessionController(
+    reelId: string,
+  ): import("../reel/index.js").ReelSpinSessionController;
   /** Returns an opaque anchor for an exact named Scene Layout node. */
   getNodeAnchor(id: string): import("../presentation/index.js").RenderAnchor;
   isMainReelSpinning(): boolean;
@@ -579,6 +587,12 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   prepareMainReelVisibleOccurrenceTransferBatch(options: {
     readonly transfers: readonly import("../reel/index.js").GridCellVisibleOccurrenceTransfer[];
   }): import("../reel/index.js").PreparedGridCellVisibleOccurrenceTransferBatch;
+  transferMainReelSymbols(
+    input: import("../reel/index.js").DirectVisibleOccurrenceTransferBatchInput,
+  ): Promise<void>;
+  dropMainReelOccurrences(
+    input: import("../reel/index.js").DirectGridCellCascadeDropInput,
+  ): Promise<void>;
   waitForPresentationDelay(
     durationMs: number,
     signal?: AbortSignal,

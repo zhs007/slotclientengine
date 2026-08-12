@@ -11,6 +11,26 @@ resource，不要求内层第二份 map。无 map 的合法 legacy direct path �
 
 ## Operation 渲染第一层 API
 
+任务 202 增量提供 `SymbolMutationArea`、Reel/Cell active spin session，以及一次 await 的 occurrence transfer/drop。
+`CellSpin` 是后续新游戏的主实现；Crave/game002v2 仍使用 grid-cell 时，grid-cell 同步提供相同基础 mutation/transfer/drop
+能力，但不继续发展独有的高级接口。两种 grid runtime 都约定 `-1` 是唯一 hole 标记；其它 symbol code 必须为非负整数，
+`-1` 不进入 registry、轮带或 RenderSymbol pool。
+
+```ts
+const changed = mutations.replaceSymbol(pos, { code, value });
+changed.setState("normal", "immediate");
+
+const session = createCellSpinSessionController(cellSpin).start(positions);
+const landed = await session.getCell(pos).land(target);
+
+await cellSpin.transferSymbols({ transfers, durationMs: 300 });
+await cellSpin.dropOccurrences({ movements, values });
+```
+
+`replaceSymbols()`、`SymbolGroup.setValues()/setStates()` 均先完整 preflight。session 中的 `overlay` 是稳定 cell/reel
+attachment；land Promise resolve 后统一通过 `getSymbol()` 取得 exact occurrence。现有 game002v2 plan/drain/polling API
+保持兼容；新能力不继续扩展 plan surface。
+
 `SymbolArea.getSymbol({x,y})` 是 standard reel、legacy grid-cell 与新 `CellSpin`
 共同的实例级入口；没有全局 rendercore singleton。它返回简单的 `SymbolRender`，可直接
 `setState()` / `playState()`、读写 presentation value、`add/remove` 通用 `RenderNode`，以及

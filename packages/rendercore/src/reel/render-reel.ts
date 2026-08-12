@@ -404,7 +404,7 @@ export class RenderReel extends Container {
       parsedPresentationValues ??
       Object.freeze(
         parsedVisibleSymbols.map((code, windowY) =>
-          this.resolvePresentationValue(y + windowY, code),
+          code === -1 ? null : this.resolvePresentationValue(y + windowY, code),
         ),
       );
     this.#targetVisibleSymbols = null;
@@ -547,6 +547,22 @@ export class RenderReel extends Container {
       occurrence.presentationValue,
     );
     this.syncSlotRenderOrder(slot);
+  }
+
+  openVisibleEmptySlot(windowY = 0): void {
+    const slot = this.getVisibleSlot(windowY);
+    if (slot.symbol)
+      throw new ReelError(
+        `Cannot open occupied visible slot at reel ${this.xIndex}, y ${windowY}.`,
+      );
+    if (slot.code === null && slot.kind === null) return;
+    if (slot.kind !== "empty" || slot.code === null)
+      throw new ReelError(
+        `Cannot open occupied visible slot at reel ${this.xIndex}, y ${windowY}.`,
+      );
+    slot.code = null;
+    slot.kind = null;
+    this.setStaticVisibleSlot(windowY, -1, null);
   }
 
   releaseVisibleOccurrence(windowY = 0): void {
@@ -887,6 +903,12 @@ export class RenderReel extends Container {
     }
     slot.container.removeChildren();
     slot.code = code;
+    if (code === -1) {
+      slot.kind = "empty";
+      slot.symbol = null;
+      this.syncSlotRenderOrder(slot);
+      return;
+    }
     const entry = this.#registry.getEntryByCode(code);
     slot.kind = entry.kind;
     slot.symbol =
@@ -1089,9 +1111,9 @@ function parseVisibleSymbols(
   }
   return Object.freeze(
     value.map((code, index) => {
-      if (!Number.isInteger(code) || code < 0) {
+      if (!Number.isInteger(code) || code < -1) {
         throw new ReelError(
-          `${label}[${index}] must be a non-negative integer.`,
+          `${label}[${index}] must be -1 or a non-negative integer.`,
         );
       }
       return code;

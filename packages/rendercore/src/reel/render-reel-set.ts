@@ -35,6 +35,10 @@ import {
   type SymbolAreaLayer,
   type SymbolAreaLayerId,
 } from "./reel-area.js";
+import {
+  createReelSpinSessionController,
+  type ReelSpinSessionController,
+} from "./spin-session.js";
 import type {
   ReelSpinPlan,
   RenderReelSetOptions,
@@ -65,7 +69,11 @@ import {
   type SymbolRender,
 } from "../symbol/symbol-render.js";
 import { createSymbolGroup } from "../symbol/symbol-group.js";
-import type { SymbolPosition } from "./symbol-area.js";
+import type {
+  SymbolPosition,
+  SymbolReplacement,
+  SymbolReplacementTarget,
+} from "./symbol-area.js";
 
 interface ActiveAtomicReel {
   readonly x: number;
@@ -119,6 +127,7 @@ export class RenderReelSet extends Container implements ReelSpin {
   readonly #areaLayers: ReadonlyMap<SymbolAreaLayerId, Container>;
   readonly #areaMounted = new Map<SymbolAreaLayerId, Set<RenderNode>>();
   readonly #areaSpinFunction: AreaSpinFunction;
+  readonly #spinSessionController: ReelSpinSessionController;
   readonly #presentationDelayWaiters = new Set<PresentationDelayWaiter>();
   readonly #presentationMotions = new Set<PresentationMotion>();
   #presentationAbort: AbortController | null = null;
@@ -246,6 +255,12 @@ export class RenderReelSet extends Container implements ReelSpin {
       getSymbol: (position: SymbolPosition) => this.getSymbol(position),
       getSymbols: (positions: readonly SymbolPosition[]) =>
         this.getSymbols(positions),
+      replaceSymbol: (
+        position: SymbolPosition,
+        target: SymbolReplacementTarget,
+      ) => this.replaceSymbol(position, target),
+      replaceSymbols: (replacements: readonly SymbolReplacement[]) =>
+        this.replaceSymbols(replacements),
       getAnchor: (point: RenderPoint) =>
         createContainerRenderAnchor(this, () => point),
       getLayer: (id: SymbolAreaLayerId) => this.getLayer(id),
@@ -254,6 +269,16 @@ export class RenderReelSet extends Container implements ReelSpin {
         options?: Parameters<ReelArea["present"]>[1],
       ) => this.present(presentation, options),
     });
+    this.#spinSessionController = createReelSpinSessionController({
+      reels: this,
+      columns: options.layout.reelCount,
+      rows: options.layout.visibleRows,
+      beforeStart: () => this.interruptPresentation(),
+    });
+  }
+
+  getSpinSessionController(): ReelSpinSessionController {
+    return this.#spinSessionController;
   }
 
   override destroy(options?: Parameters<Container["destroy"]>[0]): void {
@@ -670,6 +695,43 @@ export class RenderReelSet extends Container implements ReelSpin {
       return this.getSymbol(position);
     });
     return createSymbolGroup(symbols);
+  }
+
+  replaceSymbol(
+    position: SymbolPosition,
+    target: SymbolReplacementTarget,
+  ): SymbolRender {
+    return this.replaceSymbols([{ position, target }]).symbols[0]!;
+  }
+
+  replaceSymbols(replacements: readonly SymbolReplacement[]) {
+    if (replacements.length === 0)
+      throw new ReelError("Symbol replacement batch must not be empty.");
+    const keys = new Set<string>();
+    const prepared: PreparedVisibleOccurrenceReplacement[] = [];
+    try {
+      for (const { position, target } of replacements) {
+        const key = `${position.x}:${position.y}`;
+        if (keys.has(key))
+          throw new ReelError(
+            `Duplicate symbol replacement position (${key}).`,
+          );
+        keys.add(key);
+        prepared.push(
+          this.prepareVisibleOccurrenceReplacement({
+            x: position.x,
+            y: position.y,
+            outputCode: target.code,
+            outputPresentationValue: target.value ?? null,
+          }),
+        );
+      }
+      for (const replacement of prepared) replacement.commit();
+    } catch (error) {
+      for (const replacement of prepared) replacement.destroy();
+      throw error;
+    }
+    return this.getSymbols(replacements.map(({ position }) => position));
   }
 
   setVisibleSymbolPresentationValue(

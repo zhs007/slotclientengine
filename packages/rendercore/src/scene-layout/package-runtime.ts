@@ -834,6 +834,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     return this.requireReel("main");
   }
 
+  getSymbolMutationArea(reelId: string) {
+    return this.getSymbolArea(reelId);
+  }
+
   getReelSpin(reelId: string) {
     this.assertReady();
     if (reelId !== "main")
@@ -854,6 +858,13 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     if (!(reel instanceof RenderReelSet))
       throw new SceneLayoutError("Standard reel area is unavailable.");
     return reel.getArea();
+  }
+
+  getReelSpinSessionController(reelId: string) {
+    const reel = this.getReelSpin(reelId);
+    if (!(reel instanceof RenderReelSet))
+      throw new SceneLayoutError("Standard reel spin session is unavailable.");
+    return reel.getSpinSessionController();
   }
 
   private spinMainReelToSceneInternal(
@@ -1108,6 +1119,34 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         "Visible occurrence transfer requires a grid-cell main reel.",
       );
     return reel.prepareVisibleOccurrenceTransferBatch(options);
+  }
+
+  transferMainReelSymbols(
+    input: import("../reel/index.js").DirectVisibleOccurrenceTransferBatchInput,
+  ): Promise<void> {
+    this.assertReady();
+    const reel = this.requireReel("main");
+    if (!(reel instanceof RenderGridCellReelSet))
+      return Promise.reject(
+        new SceneLayoutError(
+          "Direct symbol transfer requires a grid-cell main reel.",
+        ),
+      );
+    return reel.transferSymbols(input);
+  }
+
+  dropMainReelOccurrences(
+    input: import("../reel/index.js").DirectGridCellCascadeDropInput,
+  ): Promise<void> {
+    this.assertReady();
+    const reel = this.requireReel("main");
+    if (!(reel instanceof RenderGridCellReelSet))
+      return Promise.reject(
+        new SceneLayoutError(
+          "Direct occurrence drop requires a grid-cell main reel.",
+        ),
+      );
+    return reel.dropOccurrences(input);
   }
 
   waitForPresentationDelay(

@@ -46,6 +46,8 @@ import type {
   VisibleOccurrenceMotion,
   VisibleOccurrenceTransferInput,
   VisibleOccurrenceTransferScope,
+  DirectVisibleOccurrenceTransferBatchInput,
+  DirectGridCellCascadeDropInput,
 } from "./types.js";
 import type { GridCellEffectController } from "./grid-cell-effect-player.js";
 import type { LogicReels, SceneMatrix } from "@slotclientengine/logiccore";
@@ -59,7 +61,12 @@ import {
   type SymbolRender,
 } from "../symbol/symbol-render.js";
 import { createSymbolGroup } from "../symbol/symbol-group.js";
-import type { SymbolArea, SymbolPosition } from "./symbol-area.js";
+import type {
+  SymbolArea,
+  SymbolPosition,
+  SymbolReplacement,
+  SymbolReplacementTarget,
+} from "./symbol-area.js";
 
 interface RuntimeCell {
   readonly coordinate: GridCellCoordinate;
@@ -89,6 +96,20 @@ interface ActiveDrop {
   readonly plan: GridCellCascadeDropPlan;
   readonly movements: readonly ActiveDropMovement[];
   elapsedSeconds: number;
+  resolve?: () => void;
+  reject?: (error: Error) => void;
+  signal?: AbortSignal;
+  abortListener?: () => void;
+}
+
+interface ActiveDirectTransferBatch {
+  readonly batch: PreparedGridCellVisibleOccurrenceTransferBatch;
+  readonly durationMs: number;
+  readonly signal?: AbortSignal;
+  readonly abortListener?: () => void;
+  readonly resolve: () => void;
+  readonly reject: (error: Error) => void;
+  elapsedMs: number;
 }
 
 interface ActiveEffectSweep {
@@ -178,6 +199,7 @@ export class RenderGridCellReelSet extends Container implements SymbolArea {
   #spinPlan: GridCellReelSpinPlan | null = null;
   #continuousSpin: ActiveContinuousSpin | null = null;
   #activeDrop: ActiveDrop | null = null;
+  #activeDirectTransferBatch: ActiveDirectTransferBatch | null = null;
   #activeEffectSweep: ActiveEffectSweep | null = null;
   #startedEffects = new Set<string>();
   #completedEffects = new Set<string>();
@@ -327,7 +349,7 @@ export class RenderGridCellReelSet extends Container implements SymbolArea {
       cell.fadeOutStartAlpha = 0;
       cell.targetPresentationValue = null;
       cell.targetLandingState = null;
-      cell.occupied = true;
+      cell.occupied = parsedScene[x][y] !== -1;
       cell.dimOverlay.alpha = 0;
       cell.dimOverlay.y = 0;
       cell.dimOverlay.renderable = false;
@@ -719,10 +741,20 @@ export class RenderGridCellReelSet extends Container implements SymbolArea {
   update(deltaSeconds: number): RenderGridCellReelSetUpdateResult {
     assertValidDeltaSeconds(deltaSeconds);
     this.updatePresentationWaiters(deltaSeconds);
+    this.updateDirectTransfer(deltaSeconds);
     this.updateScopedTransfer(deltaSeconds);
     this.updateOccurrenceEffects(deltaSeconds);
     if (this.#activeDrop) {
-      const completed = this.updateDrop(deltaSeconds);
+      let completed: boolean;
+      try {
+        completed = this.updateDrop(deltaSeconds);
+      } catch (error) {
+        if (this.#activeDrop?.reject)
+          this.cancelDirectDrop(
+            error instanceof Error ? error : new ReelError(String(error)),
+          );
+        throw error;
+      }
       return Object.freeze({
         spinning: false,
         completed,
@@ -1571,6 +1603,94 @@ export class RenderGridCellReelSet extends Container implements SymbolArea {
     return batch;
   }
 
+  transferSymbols(
+    input: DirectVisibleOccurrenceTransferBatchInput,
+  ): Promise<void> {
+    if (this.#activeDirectTransferBatch)
+      return Promise.reject(
+        new ReelError("A direct visible occurrence transfer is active."),
+      );
+    if (!Number.isFinite(input.durationMs) || input.durationMs <= 0)
+      return Promise.reject(
+        new ReelError(
+          "Direct transfer durationMs must be finite and positive.",
+        ),
+      );
+    if (input.signal?.aborted)
+      return Promise.reject(new ReelError("Direct transfer was aborted."));
+    let batch: PreparedGridCellVisibleOccurrenceTransferBatch;
+    try {
+      batch = this.prepareVisibleOccurrenceTransferBatch({
+        transfers: input.transfers,
+      });
+      batch.start();
+      batch.setProgress(0);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    return new Promise<void>((resolve, reject) => {
+      const active: ActiveDirectTransferBatch = {
+        batch,
+        durationMs: input.durationMs,
+        ...(input.signal ? { signal: input.signal } : {}),
+        resolve,
+        reject,
+        elapsedMs: 0,
+      };
+      if (input.signal) {
+        const abortListener = (): void =>
+          this.cancelDirectTransfer(
+            new ReelError("Direct transfer was aborted."),
+          );
+        (active as { abortListener?: () => void }).abortListener =
+          abortListener;
+        input.signal.addEventListener("abort", abortListener, { once: true });
+      }
+      this.#activeDirectTransferBatch = active;
+    });
+  }
+
+  dropOccurrences(input: DirectGridCellCascadeDropInput): Promise<void> {
+    if (input.signal?.aborted)
+      return Promise.reject(new ReelError("Cascade drop was aborted."));
+    const totalSeconds = input.movements.reduce(
+      (maximum, movement) =>
+        Math.max(
+          maximum,
+          movement.startSeconds + movement.fallSeconds + movement.settleSeconds,
+        ),
+      0,
+    );
+    const plan: GridCellCascadeDropPlan = Object.freeze({
+      columns: this.#columns,
+      rows: this.#rows,
+      movements: Object.freeze([...input.movements]),
+      valueCommits: Object.freeze([...(input.valueCommits ?? [])]),
+      totalSeconds,
+    });
+    return new Promise<void>((resolve, reject) => {
+      try {
+        this.startCascadeDrop(plan);
+        const active = this.#activeDrop;
+        if (!active) {
+          resolve();
+          return;
+        }
+        active.resolve = resolve;
+        active.reject = reject;
+        active.signal = input.signal;
+        if (input.signal) {
+          const abortListener = (): void =>
+            this.cancelDirectDrop(new ReelError("Cascade drop was aborted."));
+          active.abortListener = abortListener;
+          input.signal.addEventListener("abort", abortListener, { once: true });
+        }
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
   waitForPresentationDelay(
     durationMs: number,
     signal?: AbortSignal,
@@ -1696,6 +1816,43 @@ export class RenderGridCellReelSet extends Container implements SymbolArea {
         return this.getSymbol(position);
       }),
     );
+  }
+
+  replaceSymbol(
+    position: SymbolPosition,
+    target: SymbolReplacementTarget,
+  ): SymbolRender {
+    return this.replaceSymbols([{ position, target }]).symbols[0]!;
+  }
+
+  replaceSymbols(replacements: readonly SymbolReplacement[]) {
+    if (replacements.length === 0)
+      throw new ReelError("Symbol replacement batch must not be empty.");
+    const keys = new Set<string>();
+    const prepared: PreparedVisibleOccurrenceReplacement[] = [];
+    try {
+      for (const { position, target } of replacements) {
+        const key = `${position.x}:${position.y}`;
+        if (keys.has(key))
+          throw new ReelError(
+            `Duplicate symbol replacement position (${key}).`,
+          );
+        keys.add(key);
+        prepared.push(
+          this.prepareVisibleOccurrenceReplacement({
+            x: position.x,
+            y: position.y,
+            outputCode: target.code,
+            outputPresentationValue: target.value ?? null,
+          }),
+        );
+      }
+      for (const replacement of prepared) replacement.commit();
+    } catch (error) {
+      for (const replacement of prepared) replacement.destroy();
+      throw error;
+    }
+    return this.getSymbols(replacements.map(({ position }) => position));
   }
 
   async runVisibleOccurrenceTransfer(
@@ -2098,6 +2255,10 @@ export class RenderGridCellReelSet extends Container implements SymbolArea {
       new ReelError("Visible occurrence transfer runtime was destroyed."),
     );
     this.#activeTransferRollback?.();
+    this.cancelDirectTransfer(
+      new ReelError("Direct transfer runtime was destroyed."),
+    );
+    this.cancelDirectDrop(new ReelError("Cascade drop runtime was destroyed."));
     for (const waiter of this.#presentationDelayWaiters) {
       waiter.signal?.removeEventListener("abort", waiter.abortListener!);
       waiter.reject(new ReelError("Presentation delay runtime was destroyed."));
@@ -2123,6 +2284,59 @@ export class RenderGridCellReelSet extends Container implements SymbolArea {
       waiter.signal?.removeEventListener("abort", waiter.abortListener!);
       waiter.resolve();
     }
+  }
+
+  private updateDirectTransfer(deltaSeconds: number): void {
+    const active = this.#activeDirectTransferBatch;
+    if (!active) return;
+    active.elapsedMs = Math.min(
+      active.elapsedMs + deltaSeconds * 1000,
+      active.durationMs,
+    );
+    active.batch.setProgress(active.elapsedMs / active.durationMs);
+    if (active.elapsedMs < active.durationMs) return;
+    try {
+      active.batch.commit();
+      active.signal?.removeEventListener("abort", active.abortListener!);
+      this.#activeDirectTransferBatch = null;
+      active.resolve();
+    } catch (error) {
+      this.cancelDirectTransfer(
+        error instanceof Error ? error : new ReelError(String(error)),
+      );
+    }
+  }
+
+  private cancelDirectTransfer(error: Error): void {
+    const active = this.#activeDirectTransferBatch;
+    if (!active) return;
+    this.#activeDirectTransferBatch = null;
+    active.signal?.removeEventListener("abort", active.abortListener!);
+    active.batch.destroy();
+    active.reject(error);
+  }
+
+  private cancelDirectDrop(error: Error): void {
+    const active = this.#activeDrop;
+    if (!active?.reject) return;
+    this.#activeDrop = null;
+    active.signal?.removeEventListener("abort", active.abortListener!);
+    for (const item of active.movements) {
+      this.removeChild(item.occurrence.symbol);
+      item.occurrence.symbol.requestState("normal");
+      if (item.movement.kind === "existing") {
+        const source = this.getCell(item.movement.x, item.movement.sourceY);
+        source.reel.placeVisibleOccurrence(item.occurrence);
+        source.occupied = true;
+        source.phase = "completed";
+        this.syncCellRenderOrder(source);
+      } else {
+        const target = this.getCell(item.movement.x, item.movement.targetY);
+        target.reel.releaseDetachedOccurrence(item.occurrence);
+      }
+    }
+    this.setCascadeMovementMaskActive(false);
+    active.reject(error);
   }
 
   private updateScopedTransfer(deltaSeconds: number): void {
@@ -2887,8 +3101,10 @@ export class RenderGridCellReelSet extends Container implements SymbolArea {
       }
       cell.reel.setVisibleSymbolPresentationValue(0, commit.presentationValue);
     }
+    active.signal?.removeEventListener("abort", active.abortListener!);
     this.#activeDrop = null;
     this.setCascadeMovementMaskActive(false);
+    active.resolve?.();
   }
 
   private clearDropOccurrences(): void {
@@ -3073,9 +3289,9 @@ function parseScene(
       }
       return Object.freeze(
         column.map((code, y) => {
-          if (!Number.isInteger(code) || code < 0) {
+          if (!Number.isInteger(code) || code < -1) {
             throw new ReelError(
-              `scene[${x}][${y}] must be a non-negative integer.`,
+              `scene[${x}][${y}] must be -1 or a non-negative integer.`,
             );
           }
           return code;

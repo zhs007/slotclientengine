@@ -1,6 +1,6 @@
 # RenderCore operation 渲染第一层接口设计
 
-> 状态：任务 199 与任务 200 已实施；本文同时作为第一层 public contract。
+> 状态：任务 199、200 与 202 已实施；本文同时作为第一层 public contract。
 >
 > 本文只定义由 operation 最终驱动的 RenderCore 第一层 public API，以及当前
 > `grid-cell` 的兼容边界。第二层只记录必要方向，不设计第三层模板。
@@ -33,6 +33,19 @@ interface SymbolPosition {
   readonly y: number;
 }
 ```
+
+需要 settled mutation 的 consumer 显式取得 `SymbolMutationArea`；这不会扩大所有旧 `SymbolArea` fake/consumer 的必选合同：
+
+```ts
+interface SymbolMutationArea extends SymbolArea {
+  replaceSymbol(pos, target): SymbolRender;
+  replaceSymbols(replacements): SymbolGroup;
+}
+```
+
+批量 replacement 和 `SymbolGroup.setValues()/setStates()` 先全量验证。replacement 返回新 exact occurrence，旧 façade stale。
+CellSpin 同时正式拥有 active cell session、`transferSymbols()` 和 `dropOccurrences()`；grid-cell 在 Crave 仍使用期间同步支持相同基础能力。
+两者统一使用 `-1` 表示 hole，其它负数非法。新接口不接收 RenderCore gameplay plan；game002v2 旧入口保持兼容。
 
 区域如何从 package runtime、游戏 runtime 或依赖注入中取得，后续结合 runtime 装配接口确定；
 `getSymbol()` 必须属于具体区域实例，不能成为全局 `rendercore.symbol(pos)`。

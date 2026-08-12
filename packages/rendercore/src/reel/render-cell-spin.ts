@@ -13,7 +13,12 @@ import { ReelError } from "./errors.js";
 import { createReelLayout } from "./layout.js";
 import { RenderReel } from "./render-reel.js";
 import { createRenderSymbolPool } from "./render-symbol-pool.js";
-import type { SymbolArea, SymbolPosition } from "./symbol-area.js";
+import type {
+  SymbolArea,
+  SymbolPosition,
+  SymbolReplacement,
+  SymbolReplacementTarget,
+} from "./symbol-area.js";
 import type {
   ReelAxisSpinPlan,
   ReelSpinDirection,
@@ -60,8 +65,48 @@ export interface CellSpin extends SymbolArea {
   ): Promise<void>;
   cancel(position: SymbolPosition): void;
   getCell(position: SymbolPosition): CellRender;
+  transferSymbols(input: CellSymbolTransferInput): Promise<void>;
+  dropOccurrences(input: CellOccurrenceDropInput): Promise<void>;
   update(deltaSeconds: number): void;
   destroy(): void;
+}
+
+export interface CellSymbolTransfer {
+  readonly source: SymbolPosition;
+  readonly target: SymbolPosition;
+  /** `null` leaves a hole at source. */
+  readonly sourceReplacement: CellRollTarget | null;
+}
+
+export interface CellSymbolTransferInput {
+  readonly transfers: readonly CellSymbolTransfer[];
+  readonly durationMs: number;
+  readonly signal?: AbortSignal;
+}
+
+export type CellOccurrenceDropMovement =
+  | {
+      readonly kind: "existing";
+      readonly source: SymbolPosition;
+      readonly target: SymbolPosition;
+      readonly startSeconds?: number;
+      readonly durationSeconds: number;
+    }
+  | {
+      readonly kind: "refill";
+      readonly target: SymbolPosition;
+      readonly symbol: CellRollTarget;
+      readonly startSeconds?: number;
+      readonly durationSeconds: number;
+    };
+
+export interface CellOccurrenceDropInput {
+  readonly movements: readonly CellOccurrenceDropMovement[];
+  readonly values?: readonly {
+    readonly position: SymbolPosition;
+    readonly value: number | null;
+  }[];
+  readonly signal?: AbortSignal;
 }
 
 export interface RenderCellSpinOptions {
@@ -99,6 +144,30 @@ interface ActiveCell {
   readonly reject?: (error: Error) => void;
 }
 
+interface CellMotionItem {
+  readonly occurrence: RenderReelVisibleOccurrence;
+  readonly source: RuntimeCell | null;
+  readonly target: RuntimeCell;
+  readonly startSeconds: number;
+  readonly durationSeconds: number;
+  readonly fromX: number;
+  readonly fromY: number;
+  readonly toX: number;
+  readonly toY: number;
+}
+
+interface ActiveCellMotion {
+  readonly items: readonly CellMotionItem[];
+  readonly totalSeconds: number;
+  readonly signal?: AbortSignal;
+  readonly abortListener?: () => void;
+  readonly commit: () => void;
+  readonly rollback: () => void;
+  readonly resolve: () => void;
+  readonly reject: (error: Error) => void;
+  elapsedSeconds: number;
+}
+
 export class RenderCellSpin extends Container implements CellSpin {
   readonly #options: Required<
     Pick<
@@ -115,6 +184,8 @@ export class RenderCellSpin extends Container implements CellSpin {
   readonly #pool: RenderSymbolPool | null;
   readonly #cells: readonly RuntimeCell[];
   readonly #active = new Map<string, ActiveCell>();
+  readonly #motionLayer = new Container();
+  #activeMotion: ActiveCellMotion | null = null;
   readonly #occurrenceGenerations = new WeakMap<
     RenderReelVisibleOccurrence["symbol"],
     number
@@ -140,6 +211,7 @@ export class RenderCellSpin extends Container implements CellSpin {
       rowGap: normalizeNonNegative(options.rowGap ?? 0, "rowGap"),
     };
     this.#pool = createRenderSymbolPool(options.symbolPool);
+    this.#motionLayer.sortableChildren = true;
     const cells: RuntimeCell[] = [];
     for (const [x, column] of options.initialScene.entries()) {
       for (const [y, code] of column.entries()) {
@@ -181,6 +253,7 @@ export class RenderCellSpin extends Container implements CellSpin {
       }
     }
     this.#cells = Object.freeze(cells);
+    this.addChild(this.#motionLayer);
   }
 
   getSymbol(position: SymbolPosition): SymbolRender {
@@ -274,6 +347,78 @@ export class RenderCellSpin extends Container implements CellSpin {
         return this.getSymbol(position);
       }),
     );
+  }
+
+  replaceSymbol(
+    position: SymbolPosition,
+    target: SymbolReplacementTarget,
+  ): SymbolRender {
+    return this.replaceSymbols([{ position, target }]).symbols[0]!;
+  }
+
+  replaceSymbols(replacements: readonly SymbolReplacement[]) {
+    if (replacements.length === 0)
+      throw new ReelError("Symbol replacement batch must not be empty.");
+    const keys = new Set<string>();
+    const prepared: Array<{
+      readonly cell: RuntimeCell;
+      readonly previousSymbol: RenderReelVisibleOccurrence["symbol"];
+      readonly output: RenderReelVisibleOccurrence;
+    }> = [];
+    try {
+      for (const { position, target } of replacements) {
+        const key = keyOf(position);
+        if (keys.has(key))
+          throw new ReelError(
+            `Duplicate symbol replacement position (${key}).`,
+          );
+        keys.add(key);
+        const cell = this.getRuntimeCell(position);
+        if (
+          this.#active.has(key) ||
+          cell.reel.getSnapshot().phase !== "stopped"
+        )
+          throw new ReelError(
+            `Cannot replace symbol at (${position.x},${position.y}) before the cell has landed.`,
+          );
+        const previous = cell.reel
+          .getSlotSnapshots()
+          .find((slot) => slot.windowY === 0);
+        if (!previous?.symbol || previous.kind !== "textured")
+          throw new ReelError(
+            `Cannot replace empty cell (${position.x},${position.y}).`,
+          );
+        prepared.push({
+          cell,
+          previousSymbol: previous.symbol,
+          output: cell.reel.createDetachedOccurrence(
+            target.code,
+            target.value ?? null,
+          ),
+        });
+      }
+    } catch (error) {
+      for (const item of prepared)
+        item.cell.reel.releaseDetachedOccurrence(item.output);
+      throw error;
+    }
+    for (const item of prepared) {
+      const current = item.cell.reel
+        .getSlotSnapshots()
+        .find((slot) => slot.windowY === 0)?.symbol;
+      if (current !== item.previousSymbol) {
+        for (const candidate of prepared)
+          candidate.cell.reel.releaseDetachedOccurrence(candidate.output);
+        throw new ReelError("Cell symbol replacement ownership changed.");
+      }
+    }
+    for (const item of prepared) {
+      const previous = item.cell.reel.takeVisibleOccurrence();
+      item.cell.reel.placeVisibleOccurrence(item.output);
+      this.bumpOccurrenceGeneration(previous.symbol);
+      item.cell.reel.releaseDetachedOccurrence(previous);
+    }
+    return this.getSymbols(replacements.map(({ position }) => position));
   }
 
   roll(
@@ -392,9 +537,223 @@ export class RenderCellSpin extends Container implements CellSpin {
     });
   }
 
+  transferSymbols(input: CellSymbolTransferInput): Promise<void> {
+    if (!Number.isFinite(input.durationMs) || input.durationMs <= 0)
+      return Promise.reject(
+        new ReelError("Cell transfer durationMs must be finite and positive."),
+      );
+    const used = new Set<string>();
+    const replacements: Array<{
+      readonly cell: RuntimeCell;
+      readonly occurrence: RenderReelVisibleOccurrence | null;
+    }> = [];
+    let items: CellMotionItem[] = [];
+    try {
+      this.assertCanStartMotion(input.signal);
+      if (input.transfers.length === 0)
+        throw new ReelError("Cell transfer must contain transfers.");
+      const validated = input.transfers.map((transfer, index) => {
+        const source = this.getRuntimeCell(transfer.source);
+        const target = this.getRuntimeCell(transfer.target);
+        const sourceKey = keyOf(transfer.source);
+        const targetKey = keyOf(transfer.target);
+        if (sourceKey === targetKey)
+          throw new ReelError(
+            `Cell transfer[${index}] source and target must differ.`,
+          );
+        if (used.has(sourceKey) || used.has(targetKey))
+          throw new ReelError(`Cell transfer[${index}] positions collide.`);
+        used.add(sourceKey);
+        used.add(targetKey);
+        this.getSymbol(transfer.source);
+        this.getSymbol(transfer.target);
+        const replacement = transfer.sourceReplacement
+          ? source.reel.createDetachedOccurrence(
+              transfer.sourceReplacement.code,
+              transfer.sourceReplacement.value ?? null,
+            )
+          : null;
+        replacements.push({ cell: source, occurrence: replacement });
+        return { transfer, source, target };
+      });
+      for (const { source, target } of validated) {
+        const occurrence = source.reel.takeVisibleOccurrence();
+        const from = cellCenter(source, this.#options);
+        const to = cellCenter(target, this.#options);
+        this.#motionLayer.addChild(occurrence.symbol);
+        occurrence.symbol.position.set(from.x, from.y);
+        items.push({
+          occurrence,
+          source,
+          target,
+          startSeconds: 0,
+          durationSeconds: input.durationMs / 1000,
+          fromX: from.x,
+          fromY: from.y,
+          toX: to.x,
+          toY: to.y,
+        });
+      }
+    } catch (error) {
+      for (const item of items) {
+        item.occurrence.symbol.parent?.removeChild(item.occurrence.symbol);
+        item.source!.reel.placeVisibleOccurrence(item.occurrence);
+      }
+      for (const replacement of replacements)
+        if (replacement.occurrence)
+          replacement.cell.reel.releaseDetachedOccurrence(
+            replacement.occurrence,
+          );
+      return Promise.reject(error);
+    }
+    return this.startMotion(
+      items,
+      input.signal,
+      () => {
+        for (const [index, item] of items.entries()) {
+          const overwritten = item.target.reel.takeVisibleOccurrence();
+          item.occurrence.symbol.parent?.removeChild(item.occurrence.symbol);
+          item.target.reel.placeVisibleOccurrence(item.occurrence);
+          const replacement = replacements[index]!.occurrence;
+          if (replacement)
+            item.source!.reel.placeVisibleOccurrence(replacement);
+          this.bumpOccurrenceGeneration(overwritten.symbol);
+          item.target.reel.releaseDetachedOccurrence(overwritten);
+        }
+      },
+      () => {
+        for (const item of items) {
+          item.occurrence.symbol.parent?.removeChild(item.occurrence.symbol);
+          item.source!.reel.placeVisibleOccurrence(item.occurrence);
+        }
+        for (const replacement of replacements)
+          if (replacement.occurrence)
+            replacement.cell.reel.releaseDetachedOccurrence(
+              replacement.occurrence,
+            );
+      },
+    );
+  }
+
+  dropOccurrences(input: CellOccurrenceDropInput): Promise<void> {
+    let items: CellMotionItem[] = [];
+    const targetKeys = new Set<string>();
+    const sourceKeys = new Set<string>();
+    try {
+      this.assertCanStartMotion(input.signal);
+      if (input.movements.length === 0)
+        throw new ReelError("Cell occurrence drop must contain movements.");
+      const validated = input.movements.map((movement, index) => {
+        const target = this.getRuntimeCell(movement.target);
+        const targetKey = keyOf(movement.target);
+        if (targetKeys.has(targetKey))
+          throw new ReelError(`Cell drop[${index}] has a duplicate target.`);
+        targetKeys.add(targetKey);
+        const durationSeconds = normalizePositive(
+          movement.durationSeconds,
+          `drop[${index}].durationSeconds`,
+        );
+        const startSeconds = normalizeNonNegative(
+          movement.startSeconds ?? 0,
+          `drop[${index}].startSeconds`,
+        );
+        const source =
+          movement.kind === "existing"
+            ? this.getRuntimeCell(movement.source)
+            : null;
+        if (source) {
+          const sourceKey = keyOf(source.position);
+          if (sourceKeys.has(sourceKey))
+            throw new ReelError(`Cell drop[${index}] has a duplicate source.`);
+          sourceKeys.add(sourceKey);
+          this.getSymbol(source.position);
+        }
+        return {
+          movement,
+          source,
+          target,
+          targetKey,
+          startSeconds,
+          durationSeconds,
+        };
+      });
+      for (const [index, entry] of validated.entries()) {
+        const targetSlot = entry.target.reel
+          .getSlotSnapshots()
+          .find((slot) => slot.windowY === 0);
+        if (targetSlot?.kind !== "empty" && !sourceKeys.has(entry.targetKey))
+          throw new ReelError(
+            `Cell drop[${index}] target must be -1 or another movement source.`,
+          );
+      }
+      for (const [index, commit] of (input.values ?? []).entries()) {
+        this.getRuntimeCell(commit.position);
+        if (
+          commit.value !== null &&
+          (!Number.isSafeInteger(commit.value) || commit.value <= 0)
+        )
+          throw new ReelError(
+            `Cell drop value[${index}] must be a positive safe integer or null.`,
+          );
+      }
+      for (const entry of validated) {
+        const { movement, source, target, startSeconds, durationSeconds } =
+          entry;
+        const occurrence =
+          movement.kind === "existing"
+            ? source!.reel.takeVisibleOccurrence()
+            : target.reel.createDetachedOccurrence(
+                movement.symbol.code,
+                movement.symbol.value ?? null,
+              );
+        const to = cellCenter(target, this.#options);
+        const from = source
+          ? cellCenter(source, this.#options)
+          : { x: to.x, y: to.y - this.#options.cellHeight };
+        this.#motionLayer.addChild(occurrence.symbol);
+        occurrence.symbol.position.set(from.x, from.y);
+        items.push({
+          occurrence,
+          source,
+          target,
+          startSeconds,
+          durationSeconds,
+          fromX: from.x,
+          fromY: from.y,
+          toX: to.x,
+          toY: to.y,
+        });
+      }
+    } catch (error) {
+      this.rollbackPreparedMotion(items);
+      return Promise.reject(error);
+    }
+    return this.startMotion(
+      items,
+      input.signal,
+      () => {
+        for (const item of items) {
+          item.occurrence.symbol.parent?.removeChild(item.occurrence.symbol);
+          const targetSlot = item.target.reel
+            .getSlotSnapshots()
+            .find((slot) => slot.windowY === 0);
+          if (targetSlot?.kind === "empty")
+            item.target.reel.openVisibleEmptySlot();
+          item.target.reel.placeVisibleOccurrence(item.occurrence);
+        }
+        for (const commit of input.values ?? [])
+          this.getRuntimeCell(
+            commit.position,
+          ).reel.setVisibleSymbolPresentationValue(0, commit.value);
+      },
+      () => this.rollbackPreparedMotion(items),
+    );
+  }
+
   update(deltaSeconds: number): void {
     this.assertAlive();
     assertValidDeltaSeconds(deltaSeconds);
+    this.updateMotion(deltaSeconds);
     for (const cell of this.#cells) {
       const active = this.#active.get(keyOf(cell.position));
       let result: RenderReelUpdateResult;
@@ -413,6 +772,7 @@ export class RenderCellSpin extends Container implements CellSpin {
 
   override destroy(): void {
     if (this.#destroyed) return;
+    this.cancelMotion(new ReelError("Cell occurrence motion was destroyed."));
     for (const active of [...this.#active.values()]) {
       this.detachActive(active);
       active.reject?.(new ReelError("CellSpin was destroyed."));
@@ -434,6 +794,10 @@ export class RenderCellSpin extends Container implements CellSpin {
     signal?: AbortSignal,
   ): RuntimeCell {
     this.assertAlive();
+    if (this.#activeMotion)
+      throw new ReelError(
+        "Cannot spin a cell while occurrence motion is active.",
+      );
     const cell = this.getRuntimeCell(position);
     if (this.#active.has(keyOf(position)))
       throw new ReelError(
@@ -451,6 +815,105 @@ export class RenderCellSpin extends Container implements CellSpin {
     return new Promise<void>((resolve, reject) => {
       this.createActive(cell, mode, signal, resolve, reject);
     });
+  }
+
+  private assertCanStartMotion(signal?: AbortSignal): void {
+    this.assertAlive();
+    if (this.#activeMotion)
+      throw new ReelError("A cell occurrence motion is already active.");
+    if (this.#active.size > 0)
+      throw new ReelError("Cannot move occurrences while cells are spinning.");
+    if (signal?.aborted)
+      throw new ReelError("Cell occurrence motion was already aborted.");
+  }
+
+  private startMotion(
+    items: readonly CellMotionItem[],
+    signal: AbortSignal | undefined,
+    commit: () => void,
+    rollback: () => void,
+  ): Promise<void> {
+    const totalSeconds = items.reduce(
+      (maximum, item) =>
+        Math.max(maximum, item.startSeconds + item.durationSeconds),
+      0,
+    );
+    return new Promise<void>((resolve, reject) => {
+      const active: ActiveCellMotion = {
+        items: Object.freeze([...items]),
+        totalSeconds,
+        ...(signal ? { signal } : {}),
+        commit,
+        rollback,
+        resolve,
+        reject,
+        elapsedSeconds: 0,
+      };
+      if (signal) {
+        const abortListener = (): void =>
+          this.cancelMotion(
+            new ReelError("Cell occurrence motion was aborted."),
+          );
+        (active as { abortListener?: () => void }).abortListener =
+          abortListener;
+        signal.addEventListener("abort", abortListener, { once: true });
+      }
+      this.#activeMotion = active;
+    });
+  }
+
+  private updateMotion(deltaSeconds: number): void {
+    const active = this.#activeMotion;
+    if (!active) return;
+    active.elapsedSeconds = Math.min(
+      active.elapsedSeconds + deltaSeconds,
+      active.totalSeconds,
+    );
+    for (const item of active.items) {
+      item.occurrence.symbol.update(deltaSeconds);
+      const progress = Math.max(
+        0,
+        Math.min(
+          1,
+          (active.elapsedSeconds - item.startSeconds) / item.durationSeconds,
+        ),
+      );
+      const eased = 1 - Math.pow(1 - progress, 3);
+      item.occurrence.symbol.position.set(
+        item.fromX + (item.toX - item.fromX) * eased,
+        item.fromY + (item.toY - item.fromY) * eased,
+      );
+    }
+    if (active.elapsedSeconds < active.totalSeconds) return;
+    try {
+      active.commit();
+      active.signal?.removeEventListener("abort", active.abortListener!);
+      this.#activeMotion = null;
+      active.resolve();
+    } catch (error) {
+      this.cancelMotion(toError(error));
+    }
+  }
+
+  private cancelMotion(error: Error): void {
+    const active = this.#activeMotion;
+    if (!active) return;
+    this.#activeMotion = null;
+    active.signal?.removeEventListener("abort", active.abortListener!);
+    try {
+      active.rollback();
+    } catch {
+      // Preserve the original motion failure after best-effort ownership restore.
+    }
+    active.reject(error);
+  }
+
+  private rollbackPreparedMotion(items: readonly CellMotionItem[]): void {
+    for (const item of items) {
+      item.occurrence.symbol.parent?.removeChild(item.occurrence.symbol);
+      if (item.source) item.source.reel.placeVisibleOccurrence(item.occurrence);
+      else item.target.reel.releaseDetachedOccurrence(item.occurrence);
+    }
   }
 
   private createActive(
@@ -551,6 +1014,12 @@ export class RenderCellSpin extends Container implements CellSpin {
       .getSlotSnapshots()
       .find((slot) => slot.windowY === 0)?.symbol;
     if (!symbol) return;
+    this.bumpOccurrenceGeneration(symbol);
+  }
+
+  private bumpOccurrenceGeneration(
+    symbol: RenderReelVisibleOccurrence["symbol"],
+  ): void {
     this.#occurrenceGenerations.set(
       symbol,
       this.getOccurrenceGeneration(symbol) + 1,
@@ -566,6 +1035,16 @@ export function createRenderCellSpin(
 
 function keyOf(position: SymbolPosition): string {
   return `${position.x},${position.y}`;
+}
+
+function cellCenter(
+  cell: RuntimeCell,
+  options: Pick<RenderCellSpinOptions, "cellWidth" | "cellHeight">,
+): { readonly x: number; readonly y: number } {
+  return {
+    x: cell.root.x + options.cellWidth / 2,
+    y: cell.root.y + options.cellHeight / 2,
+  };
 }
 
 function positionX(cell: RuntimeCell): number {
@@ -593,6 +1072,19 @@ function validateInitialScene(options: RenderCellSpinOptions): void {
     throw new ReelError(
       "CellSpin initialPresentationValues must match initialScene.",
     );
+  for (const [x, column] of options.initialScene.entries()) {
+    for (const [y, code] of column.entries()) {
+      if (!Number.isSafeInteger(code) || code < -1)
+        throw new ReelError(
+          `CellSpin initialScene[${x}][${y}] must be -1 or a non-negative safe integer.`,
+        );
+      const value = options.initialPresentationValues?.[x]?.[y] ?? null;
+      if (code === -1 && value !== null)
+        throw new ReelError(
+          `CellSpin hole (${x},${y}) must have null presentation value.`,
+        );
+    }
+  }
 }
 
 function normalizePositive(value: number, name: string): number {

@@ -467,6 +467,18 @@ export interface PreparedGridCellVisibleOccurrenceTransferBatch {
   destroy(): void;
 }
 
+export interface DirectVisibleOccurrenceTransferBatchInput {
+  readonly transfers: readonly GridCellVisibleOccurrenceTransfer[];
+  readonly durationMs: number;
+  readonly signal?: AbortSignal;
+}
+
+export interface DirectGridCellCascadeDropInput {
+  readonly movements: readonly GridCellCascadeDropMovement[];
+  readonly valueCommits?: readonly GridCellCascadeValueCommit[];
+  readonly signal?: AbortSignal;
+}
+
 export interface RenderVisibleSymbolGeometrySnapshot {
   readonly x: number;
   readonly y: number;

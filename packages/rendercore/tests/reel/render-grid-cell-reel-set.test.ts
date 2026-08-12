@@ -39,6 +39,112 @@ const DIMMING = Object.freeze({
 }) satisfies GridCellDimmingPattern;
 
 describe("RenderGridCellReelSet", () => {
+  it("treats -1 as the shared direct-grid hole marker", () => {
+    const reelSet = createGridReelSet();
+    reelSet.resetToScene(
+      [
+        [1, -1, 2],
+        [2, 1, 0],
+      ],
+      FINAL_YS,
+    );
+    expect(reelSet.getVisibleScene()[0]).toEqual([1, -1, 2]);
+    expect(() => reelSet.getSymbol({ x: 0, y: 1 })).toThrow(/empty/);
+  });
+
+  it("runs additive direct transfer and drop promises on the runtime clock", async () => {
+    const reelSet = createGridReelSet();
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS, undefined, [
+      [7, null, null],
+      [null, null, null],
+    ]);
+    const transfer = reelSet.transferSymbols({
+      transfers: [
+        {
+          source: { x: 0, y: 0 },
+          target: { x: 1, y: 0 },
+          sourceReplacementCode: 2,
+          sourceReplacementPresentationValue: null,
+        },
+      ],
+      durationMs: 100,
+    });
+    reelSet.update(0.05);
+    expect(reelSet.getVisibleScene()).toEqual(INITIAL_SCENE);
+    reelSet.update(0.05);
+    await transfer;
+    expect(reelSet.getVisibleScene()).toEqual([
+      [2, 0, 2],
+      [1, 1, 0],
+    ]);
+    expect(reelSet.getSymbol({ x: 1, y: 0 }).getValue()).toBe(7);
+
+    reelSet.releaseVisibleSymbols([{ x: 0, y: 2 }]);
+    const drop = reelSet.dropOccurrences({
+      movements: [
+        {
+          kind: "existing",
+          x: 0,
+          sourceY: 0,
+          targetY: 2,
+          startSeconds: 0,
+          fallSeconds: 0.1,
+          settleSeconds: 0.1,
+          overshootPixels: 1,
+        },
+      ],
+      valueCommits: [{ x: 0, y: 2, presentationValue: null }],
+    });
+    reelSet.update(0.2);
+    await drop;
+    expect(reelSet.getVisibleScene()[0]).toEqual([-1, 0, 2]);
+  });
+
+  it("rolls back direct transfer and existing drop when aborted", async () => {
+    const reelSet = createGridReelSet();
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
+    const transferAbort = new AbortController();
+    const transfer = reelSet.transferSymbols({
+      transfers: [
+        {
+          source: { x: 0, y: 0 },
+          target: { x: 1, y: 0 },
+          sourceReplacementCode: 2,
+          sourceReplacementPresentationValue: null,
+        },
+      ],
+      durationMs: 100,
+      signal: transferAbort.signal,
+    });
+    reelSet.update(0.05);
+    transferAbort.abort();
+    await expect(transfer).rejects.toThrow(/aborted/);
+    expect(reelSet.getVisibleScene()).toEqual(INITIAL_SCENE);
+
+    reelSet.releaseVisibleSymbols([{ x: 0, y: 2 }]);
+    const beforeDrop = reelSet.getVisibleScene();
+    const dropAbort = new AbortController();
+    const drop = reelSet.dropOccurrences({
+      movements: [
+        {
+          kind: "existing",
+          x: 0,
+          sourceY: 0,
+          targetY: 2,
+          startSeconds: 0,
+          fallSeconds: 0.2,
+          settleSeconds: 0.1,
+          overshootPixels: 1,
+        },
+      ],
+      signal: dropAbort.signal,
+    });
+    reelSet.update(0.05);
+    dropAbort.abort();
+    await expect(drop).rejects.toThrow(/aborted/);
+    expect(reelSet.getVisibleScene()).toEqual(beforeDrop);
+  });
+
   it("terminal-removes the producer-selected occurrences", async () => {
     const reelSet = createGridReelSet();
     reelSet.resetToScene(INITIAL_SCENE, FINAL_YS, undefined, [

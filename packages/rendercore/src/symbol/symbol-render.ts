@@ -62,6 +62,7 @@ const DEFAULT_PLAY_OPTIONS: SymbolStatePlaybackOptions = Object.freeze({
 
 interface SymbolRenderAdapter {
   assertUsable(): void;
+  validateValue(value: number | null): void;
   validateStateRequest(
     state: SymbolStateId,
     transitionMode?: SymbolStateTransitionMode,
@@ -243,6 +244,10 @@ export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
   registerRenderNodeAlias(render, getRenderNodeAdapter(baseNode));
   symbolRenderAdapters.set(render, {
     assertUsable,
+    validateValue: (value) => {
+      assertUsable();
+      source.symbol.validatePresentationValue(value);
+    },
     validateStateRequest: (state, transitionMode) => {
       assertUsable();
       source.symbol.validateStateRequest(state, transitionMode);
