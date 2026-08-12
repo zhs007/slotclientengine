@@ -44,11 +44,13 @@ export class RenderSymbol extends VisualEntity<void> {
   readonly requiredStateTextures: readonly SymbolStateId[];
   readonly sprite: Sprite;
   readonly underlayLayer: Container;
+  readonly gameUnderlayLayer: Container;
   readonly baseLayer: Container;
   readonly layers: readonly SymbolVisualLayer[];
   readonly stateSprite: Sprite;
   readonly overlayLayer: Container;
   readonly imageStringOverlayLayer: Container;
+  readonly gameOverlayLayer: Container;
   readonly normalSource: SymbolNormalTextureSource<Texture>;
   readonly renderPriority: number;
   readonly #stateMachine: SymbolStateMachine;
@@ -89,12 +91,14 @@ export class RenderSymbol extends VisualEntity<void> {
       this.symbol,
     );
     this.underlayLayer = new Container();
+    this.gameUnderlayLayer = new Container();
     this.baseLayer = new Container();
     this.layers = Object.freeze(createVisualLayers(this.normalSource));
     this.sprite = this.layers[0].sprite;
     this.stateSprite = new Sprite(this.texture);
     this.overlayLayer = new Container();
     this.imageStringOverlayLayer = new Container();
+    this.gameOverlayLayer = new Container();
     this.#stateMachine = new SymbolStateMachine(options.definition);
     this.#animationResolver = options.animationResolver;
     this.#landingAppearEnabled = options.landingAppearEnabled ?? false;
@@ -105,10 +109,12 @@ export class RenderSymbol extends VisualEntity<void> {
     this.baseLayer.addChild(...this.layers.map((layer) => layer.sprite));
     this.addChild(
       this.underlayLayer,
+      this.gameUnderlayLayer,
       this.baseLayer,
       this.stateSprite,
       this.overlayLayer,
       this.imageStringOverlayLayer,
+      this.gameOverlayLayer,
     );
     this.#valueController = options.valueControllerFactory?.(this) ?? null;
     this.#imageStringController =
@@ -153,6 +159,16 @@ export class RenderSymbol extends VisualEntity<void> {
 
   getUnderlayLayer(): Container {
     return this.underlayLayer;
+  }
+
+  getGameUnderlayLayer(): Container {
+    this.assertNotDestroyed();
+    return this.gameUnderlayLayer;
+  }
+
+  getGameOverlayLayer(): Container {
+    this.assertNotDestroyed();
+    return this.gameOverlayLayer;
   }
 
   getLayerSprites(): readonly SymbolVisualLayer[] {
@@ -518,6 +534,8 @@ export class RenderSymbol extends VisualEntity<void> {
     this.#valueController?.resetForPoolRelease();
     this.#imageStringController?.resetForPoolRelease();
     this.#presentationValue = null;
+    this.gameUnderlayLayer.removeChildren();
+    this.gameOverlayLayer.removeChildren();
     this.#stateMachine.reset();
     this.#lastAniKey = "";
     this.#currentAni = createReleasedSymbolAni();
@@ -547,6 +565,10 @@ export class RenderSymbol extends VisualEntity<void> {
     this.#currentAni.destroy?.();
     this.#valueController?.destroy();
     this.#imageStringController?.destroy();
+    // Game attachments are borrowed. Detach them before Container.destroy()
+    // processes RenderSymbol-owned children.
+    this.gameUnderlayLayer.removeChildren();
+    this.gameOverlayLayer.removeChildren();
     destroyVniSymbolAnimationCache(this);
     super.destroy(options);
   }

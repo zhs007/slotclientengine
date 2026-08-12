@@ -914,6 +914,7 @@ describe("RenderReelSet", () => {
       [0, 0],
     );
     const carried = getVisibleSlotSymbol(reelSet, 0, 0);
+    const carriedRender = reelSet.getSymbol({ x: 0, y: 0 });
     reelSet.releaseVisibleSymbols([{ x: 0, y: 1 }]);
     reelSet.startCascadeDrop({
       columns: 2,
@@ -959,6 +960,7 @@ describe("RenderReelSet", () => {
       [2, 2, 1],
     ]);
     expect(getVisibleSlotSymbol(reelSet, 0, 1)).toBe(carried);
+    carriedRender.setState("normal");
     expect(reelSet.getSnapshot().spinning).toBe(false);
   });
 

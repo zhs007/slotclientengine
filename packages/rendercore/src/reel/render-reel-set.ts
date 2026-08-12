@@ -24,16 +24,23 @@ import type {
   PreparedVisibleOccurrenceReplacement,
 } from "./types.js";
 import type {
+  RenderSymbol,
   SymbolStateId,
   SymbolStatePlaybackOptions,
   SymbolStateTransitionMode,
 } from "../symbol/index.js";
+import {
+  createSymbolRender,
+  type SymbolRender,
+} from "../symbol/symbol-render.js";
+import type { SymbolArea, SymbolPosition } from "./symbol-area.js";
 
-export class RenderReelSet extends Container {
+export class RenderReelSet extends Container implements SymbolArea {
   readonly reels: readonly RenderReel[];
   readonly #symbolPool: RenderSymbolPool | null;
   readonly #slotLayer: Container;
   readonly #cascadeMask: Graphics;
+  readonly #occurrenceGenerations = new WeakMap<RenderSymbol, number>();
   #spinPlan: ReelSpinPlan | null = null;
   #spinOptions: RenderReelSetSpinOptions | null = null;
   #elapsedMs = 0;
@@ -48,6 +55,7 @@ export class RenderReelSet extends Container {
     }[];
     elapsedSeconds: number;
   } | null = null;
+  #destroyed = false;
 
   constructor(options: RenderReelSetOptions) {
     super();
@@ -94,6 +102,9 @@ export class RenderReelSet extends Container {
   }
 
   override destroy(options?: Parameters<Container["destroy"]>[0]): void {
+    if (this.#destroyed) return;
+    this.bumpVisibleOccurrenceGenerations();
+    this.#destroyed = true;
     this.cancelContinuous();
     this.cancelActiveDrop();
     this.#symbolPool?.destroy();
@@ -124,6 +135,7 @@ export class RenderReelSet extends Container {
       "targetVisibleStates",
     );
 
+    this.bumpVisibleOccurrenceGenerations();
     this.#spinPlan = plan;
     this.#spinOptions = options;
     this.#elapsedMs = 0;
@@ -140,6 +152,7 @@ export class RenderReelSet extends Container {
       throw new ReelError(
         "Cannot start a continuous reel spin while cascade dropdown is active.",
       );
+    const previousSymbols = this.getVisibleOccurrenceSymbols();
     const started: RenderReel[] = [];
     try {
       for (const reel of this.reels) {
@@ -148,6 +161,8 @@ export class RenderReelSet extends Container {
       }
     } catch (error) {
       for (const reel of started) reel.cancelContinuous();
+      for (const symbol of previousSymbols)
+        this.bumpOccurrenceGeneration(symbol);
       throw error;
     }
     this.#spinPlan = null;
@@ -156,6 +171,7 @@ export class RenderReelSet extends Container {
     this.#startedAxes = new Set(this.reels.map((reel) => reel.xIndex));
     this.#continuousSpinActive = true;
     this.#settlingContinuous = false;
+    for (const symbol of previousSymbols) this.bumpOccurrenceGeneration(symbol);
   }
 
   settleContinuous(
@@ -295,6 +311,7 @@ export class RenderReelSet extends Container {
       );
     }
     this.cancelActiveDrop();
+    this.bumpVisibleOccurrenceGenerations();
     this.#spinPlan = null;
     this.#spinOptions = null;
     this.#continuousSpinActive = false;
@@ -317,6 +334,7 @@ export class RenderReelSet extends Container {
       );
     }
     this.cancelActiveDrop();
+    this.bumpVisibleOccurrenceGenerations();
     this.#spinPlan = null;
     this.#spinOptions = null;
     this.#continuousSpinActive = false;
@@ -330,6 +348,75 @@ export class RenderReelSet extends Container {
 
   getVisibleScene(): readonly (readonly number[])[] {
     return Object.freeze(this.reels.map((reel) => reel.getVisibleScene()));
+  }
+
+  getSymbol(position: SymbolPosition): SymbolRender {
+    const reel = this.getReelAt(position.x);
+    if (
+      !Number.isInteger(position.y) ||
+      position.y < 0 ||
+      position.y >= reel.layout.visibleRows
+    )
+      throw new ReelError(`visible symbol y ${position.y} is out of range.`);
+    if (
+      reel.getSnapshot().phase !== "stopped" ||
+      (this.#spinPlan !== null && !this.#startedAxes.has(position.x))
+    )
+      throw new ReelError(
+        `Cannot get symbol at (${position.x},${position.y}) before its reel has landed.`,
+      );
+    const occurrence = reel
+      .getSlotSnapshots()
+      .find((slot) => slot.windowY === position.y);
+    if (!occurrence?.symbol || occurrence.kind !== "textured")
+      throw new ReelError(
+        `Cannot get symbol for empty standard reel cell (${position.x},${position.y}).`,
+      );
+    const captured = occurrence.symbol;
+    const generation = this.getOccurrenceGeneration(captured);
+    const createOwnedSource = (
+      symbolOccurrence: RenderReelVisibleOccurrence,
+    ) => {
+      let released = false;
+      return {
+        symbol: symbolOccurrence.symbol,
+        owned: true,
+        assertUsable: () => {
+          if (released) throw new ReelError("Owned SymbolRender is stale.");
+        },
+        clone: () =>
+          createOwnedSource(
+            reel.createDetachedOccurrence(
+              symbolOccurrence.code,
+              symbolOccurrence.symbol.getPresentationValue(),
+            ),
+          ),
+        release: () => {
+          if (released) return;
+          released = true;
+          reel.releaseDetachedOccurrence(symbolOccurrence);
+        },
+      };
+    };
+    return createSymbolRender({
+      symbol: captured,
+      owned: false,
+      assertUsable: () => {
+        if (
+          this.#destroyed ||
+          this.getOccurrenceGeneration(captured) !== generation ||
+          !this.isOccurrenceOwned(captured)
+        )
+          throw new ReelError("SymbolRender is stale.");
+      },
+      clone: () =>
+        createOwnedSource(
+          reel.createDetachedOccurrence(
+            captured.code,
+            captured.getPresentationValue(),
+          ),
+        ),
+    });
   }
 
   setVisibleSymbolPresentationValue(
@@ -391,6 +478,7 @@ export class RenderReelSet extends Container {
           reel.placeVisibleOccurrence(previous, options.y);
           throw error;
         }
+        this.bumpOccurrenceGeneration(previous.symbol);
         reel.releaseDetachedOccurrence(previous);
         state = "committed";
       },
@@ -418,8 +506,14 @@ export class RenderReelSet extends Container {
       positions,
       this.reels.length,
       this.reels[0]?.layout.visibleRows ?? 0,
-    ))
-      this.getReelAt(position.x).releaseVisibleOccurrence(position.y);
+    )) {
+      const reel = this.getReelAt(position.x);
+      const symbol = reel
+        .getSlotSnapshots()
+        .find((slot) => slot.windowY === position.y)?.symbol;
+      if (symbol) this.bumpOccurrenceGeneration(symbol);
+      reel.releaseVisibleOccurrence(position.y);
+    }
   }
 
   setVisibleSymbolDimming(
@@ -750,6 +844,44 @@ export class RenderReelSet extends Container {
     return this.reels[x];
   }
 
+  private isOccurrenceOwned(symbol: RenderSymbol): boolean {
+    if (
+      this.reels.some((candidate) =>
+        candidate.getSlotSnapshots().some((slot) => slot.symbol === symbol),
+      )
+    )
+      return true;
+    return (
+      this.#activeDrop?.movements.some(
+        ({ occurrence }) => occurrence.symbol === symbol,
+      ) ?? false
+    );
+  }
+
+  private getOccurrenceGeneration(symbol: RenderSymbol): number {
+    return this.#occurrenceGenerations.get(symbol) ?? 0;
+  }
+
+  private bumpOccurrenceGeneration(symbol: RenderSymbol): void {
+    this.#occurrenceGenerations.set(
+      symbol,
+      this.getOccurrenceGeneration(symbol) + 1,
+    );
+  }
+
+  private bumpVisibleOccurrenceGenerations(): void {
+    for (const symbol of this.getVisibleOccurrenceSymbols())
+      this.bumpOccurrenceGeneration(symbol);
+  }
+
+  private getVisibleOccurrenceSymbols(): ReadonlySet<RenderSymbol> {
+    const symbols = new Set<RenderSymbol>();
+    for (const reel of this.reels)
+      for (const slot of reel.getSlotSnapshots())
+        if (slot.symbol) symbols.add(slot.symbol);
+    return symbols;
+  }
+
   private assertStopped(action: string): void {
     if (this.#spinPlan || this.#continuousSpinActive || this.#activeDrop)
       throw new ReelError(`Cannot ${action} while standard reels are active.`);
@@ -806,8 +938,10 @@ export class RenderReelSet extends Container {
   private cancelActiveDrop(): void {
     const active = this.#activeDrop;
     if (!active) return;
-    for (const { occurrence } of active.movements)
+    for (const { occurrence } of active.movements) {
+      this.bumpOccurrenceGeneration(occurrence.symbol);
       this.getReelAt(0).releaseDetachedOccurrence(occurrence);
+    }
     this.#activeDrop = null;
     this.#slotLayer.mask = null;
     this.#cascadeMask.visible = false;

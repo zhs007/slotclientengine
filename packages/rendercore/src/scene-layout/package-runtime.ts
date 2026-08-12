@@ -817,6 +817,15 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.clearMainReelLandingPositions();
   }
 
+  getSymbolArea(reelId: string) {
+    this.assertReady();
+    if (reelId !== "main")
+      throw new SceneLayoutError(
+        `Scene layout symbol area "${reelId}" is unavailable.`,
+      );
+    return this.requireReel("main");
+  }
+
   private spinMainReelToSceneInternal(
     input: SceneLayoutMainReelSpinInput,
     settleContinuous: boolean,

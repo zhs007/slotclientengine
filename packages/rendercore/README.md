@@ -9,6 +9,26 @@ resource，不要求内层第二份 map。无 map 的合法 legacy direct path �
 
 `rendercore` 是 slot 前端渲染核心库。它基于 `pixi.js` v8、复用 `@slotclientengine/pixiani` 的基础显示对象生命周期，并复用 `@slotclientengine/logiccore` 的 game config/paytable 契约。`apps/symbolsviewer` 和 `apps/reelsviewer` 是调试 app，业务展示逻辑不放进核心库。
 
+## Operation 渲染第一层 API
+
+`SymbolArea.getSymbol({x,y})` 是 standard reel、legacy grid-cell 与新 `CellSpin`
+共同的实例级入口；没有全局 rendercore singleton。它返回简单的 `SymbolRender`，可直接
+`setState()` / `playState()`、读写 presentation value、`add/remove` 通用 `RenderNode`，以及
+创建独立 player/display identity 的 `clone()`。facade 捕获 exact occurrence：尚未落地、hole、
+leased、replacement/release 后的 stale 引用都会显式失败，不按相同坐标重绑。reel 内 symbol 是
+borrowed，不能 destroy；clone 是 owned `RenderNode`，由调用方 remove 后 destroy。
+
+`createRenderCellSpin()` 提供无 public plan 的逐格 `roll/start/settle/cancel`。不同格可以并发，
+同一格冲突失败；`roll/settle` 只在目标 occurrence 原子落地、可立即 `getSymbol()` 后 resolve。
+`getCell(pos)` 允许在目标落地前附加稳定 cell-space `RenderNode`。full、selective、hold、refill、
+stagger 和 anticipation 由 operation handler 用普通 `async/await`、frame delay 与 `Promise.all()`
+组合，不增加 `CellSpinPlan`。现有 `GridCellReelSpinPlan` 仅作为 game002v2 legacy compatibility
+surface 保留，新游戏使用 `CellSpin`；logiccore 继续拥有权威 operation plan。
+
+Scene Layout package runtime 通过 `getSymbolArea("main")` 暴露当前 main reel 的共同入口；未知
+area、未 ready 或首次 scene 尚未 commit 都严格失败。详细合同见
+[`docs/rendercore-operation-first-layer-api.md`](../../docs/rendercore-operation-first-layer-api.md)。
+
 ## Popup API
 
 `@slotclientengine/rendercore/popup` 提供 strict `award-celebration | spine` popup parser、Popup id validator、typed filename-key namespace rewrite、传递资源闭包、files/CDN loader、snapshot 与共享 input binding。v1/v2/v3 保持历史 runtime；v3 删除有限 `designViewport`，只用 focus 在无界 authored plane 上反推 page-aspect visible rect，backdrop 独立覆盖整个 viewport。v4 为所有 layer 增加 strict attachment graph：Popup root、ImgNumber 专用 VNI text layer，或同作用域 official Spine exact slot；DAG、target kind、slot 与 per-parent order 都在画面 mutation 前验证。同一 slot 使用单一 owner group 按 child order 承载多个 layer，局部 transform 继承 slot bone/color/draw-order。普通 Spine popup 使用独立 start→loop→end 状态机：点击请求可提前锁存，只在 loop 完整播放到边界后进入 end；legacy prompt 仍接受游戏传入的已翻译单行 string，canonical v4 只使用命名字体文字 overlay。获奖庆祝支持同样的文字/ImgNumber 节点、五档 BigInt threshold sequence 与金额格式，并要求每档恰好一个 win-amount。Scene Layout 的无效果、Spine 与 video transition 都可独立用 `preludePopup` 复用该 player；host 绑定真实 canvas 与 keyboard target 后，active Popup 在 eligible canvas `pointerdown` 或非 repeat `keydown` 上执行唯一主操作，idle 完全透传。宿主可用显式 keyboard eligibility policy 排除表单控件，不能用重复状态机补分派。Popup binding 的 root `order` 与 node/main reel 全局唯一且必须更高，runtime 在当前 scene 的顶层 Popup root 内按该值排序。

@@ -540,6 +540,8 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   settleMainReelContinuousSpin(input: SceneLayoutMainReelSpinInput): void;
   /** Cancels targetless rolling without fabricating a landing target. */
   cancelMainReelContinuousSpin(): void;
+  /** Returns the instance-scoped symbol area; currently only "main" exists. */
+  getSymbolArea(reelId: string): import("../reel/index.js").SymbolArea;
   isMainReelSpinning(): boolean;
   requestMainReelSymbolStates(
     positions: readonly { readonly x: number; readonly y: number }[],

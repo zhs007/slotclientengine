@@ -1425,6 +1425,10 @@ describe("scene layout package runtime", () => {
       expect(() => runtime.getReelPresentation("other" as "main")).toThrow(
         /unavailable/,
       );
+      expect(runtime.getSymbolArea("main")).toBe(
+        runtime.getReelPresentation("main"),
+      );
+      expect(() => runtime.getSymbolArea("other")).toThrow(/unavailable/);
       runtime.destroy();
 
       const dead = createSceneLayoutPackageRuntime({

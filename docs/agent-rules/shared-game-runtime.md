@@ -45,6 +45,14 @@
   consumer 才使用 rendercore presentation surface，不复制 scene-layout visibility、placement
   或 popup lifecycle。需要 mode transition 时，surface 必须委托 package runtime 的
   prepare/request/event/switch/settle 状态机并公开独立 transition container。
+- operation handler 和游戏取得 symbol 时只使用具体区域实例的 `SymbolArea.getSymbol(pos)`；
+  standard reel、legacy grid-cell 和新 CellSpin 必须返回同一 `SymbolRender` 合同。facade 捕获 exact
+  occurrence，hole、未落地、leased、replacement/release 后 stale 必须失败，不得按坐标重绑或暴露
+  pooled RenderSymbol/display tree。borrowed reel symbol 禁止 destroy，owned clone 由创建者 destroy。
+- 新逐格转使用无 public plan 的 CellSpin `roll/start/settle/cancel` 原子接口；full、selective、hold、
+  refill、stagger 和 anticipation 由 operation handler 以 frame delay、Promise 与明确业务事实编排。
+  不新增 CellSpinPlan/RefillPlan 或 renderer 业务 predicate。game002v2 的 GridCellReelSpinPlan 仅为
+  legacy compatibility，新能力不得继续扩展该 surface。
 - 游戏 app 只保留业务 component/value/result resolver、formatter、layout、anticipation 和 typed extension；不得复制 Pixi、Spine、reel、cascade 或 popup 状态机。
 - shared package 测试必须使用包内自包含的最小数据验证 parser、binding、player 和 lifecycle
   合同，不得读取任一游戏的 `assets/` 美术交付。只校验当前 Gamelayout 文件、bytes、

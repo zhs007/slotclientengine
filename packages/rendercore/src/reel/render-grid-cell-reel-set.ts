@@ -53,6 +53,11 @@ import type {
   SymbolStatePlaybackOptions,
   SymbolStateTransitionMode,
 } from "../symbol/index.js";
+import {
+  createSymbolRender,
+  type SymbolRender,
+} from "../symbol/symbol-render.js";
+import type { SymbolArea, SymbolPosition } from "./symbol-area.js";
 
 interface RuntimeCell {
   readonly coordinate: GridCellCoordinate;
@@ -145,7 +150,7 @@ const ZERO_DIMMING: GridCellDimmingPattern = Object.freeze({
   fadeOutMs: 0,
 });
 
-export class RenderGridCellReelSet extends Container {
+export class RenderGridCellReelSet extends Container implements SymbolArea {
   readonly #reels: LogicReels;
   readonly #columns: number;
   readonly #rows: number;
@@ -1612,6 +1617,54 @@ export class RenderGridCellReelSet extends Container {
         `Cannot get occurrence for empty grid cell (${x},${y}).`,
       );
     return this.createOccurrenceHandle(this.getCellOccurrence(cell));
+  }
+
+  getSymbol(position: SymbolPosition): SymbolRender {
+    const cell = this.getCell(position.x, position.y);
+    if (cell.phase === "waiting" || cell.phase === "spinning")
+      throw new ReelError(
+        `Cannot get symbol at (${position.x},${position.y}) before the cell has landed.`,
+      );
+    const handle = this.getVisibleOccurrenceHandle(position.x, position.y);
+    const occurrence = this.getCellOccurrence(cell);
+    const createOwnedSource = (
+      ownedOccurrence: RenderReelVisibleOccurrence,
+    ) => {
+      let released = false;
+      return {
+        symbol: ownedOccurrence.symbol,
+        owned: true,
+        assertUsable: () => {
+          if (released) throw new ReelError("Owned SymbolRender is stale.");
+        },
+        clone: () =>
+          createOwnedSource(
+            cell.reel.createDetachedOccurrence(
+              ownedOccurrence.code,
+              ownedOccurrence.symbol.getPresentationValue(),
+            ),
+          ),
+        release: () => {
+          if (released) return;
+          released = true;
+          cell.reel.releaseDetachedOccurrence(ownedOccurrence);
+        },
+      };
+    };
+    return createSymbolRender({
+      symbol: occurrence.symbol,
+      owned: false,
+      assertUsable: () => {
+        handle.getSnapshot();
+      },
+      clone: () =>
+        createOwnedSource(
+          cell.reel.createDetachedOccurrence(
+            occurrence.code,
+            occurrence.symbol.getPresentationValue(),
+          ),
+        ),
+    });
   }
 
   async runVisibleOccurrenceTransfer(

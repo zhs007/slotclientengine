@@ -14,6 +14,17 @@ export * from "./sequence.js";
 export * from "./catalog.js";
 export * from "./standalone-catalog.js";
 export * from "./render-symbol.js";
+export { createRenderNode } from "./render-node.js";
+export type {
+  RenderNode,
+  RenderNodeAdapter,
+  RenderNodePlayOptions,
+} from "./render-node.js";
+export type {
+  SymbolCloneOptions,
+  SymbolNodeOptions,
+  SymbolRender,
+} from "./symbol-render.js";
 export * from "./package.js";
 export * from "./materialize-package.js";
 export * from "./state-texture-generation.js";

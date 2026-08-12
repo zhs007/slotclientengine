@@ -1,6 +1,6 @@
 # RenderCore operation 渲染第一层接口设计
 
-> 状态：第一层讨论结论，尚未实施。
+> 状态：任务 199 已实施；本文同时作为第一层 public contract。
 >
 > 本文只定义由 operation 最终驱动的 RenderCore 第一层 public API，以及当前
 > `grid-cell` 的兼容边界。第二层只记录必要方向，不设计第三层模板。
@@ -61,6 +61,8 @@ const featureSymbol = featureArea.getSymbol({ x: 0, y: 0 });
 interface SymbolRender {
   setState(state: string): void;
   playState(state: string, options?: SymbolPlayOptions): Promise<void>;
+  setValue(value: number | null): void;
+  getValue(): number | null;
 
   add(node: RenderNode, options?: SymbolNodeOptions): void;
   remove(node: RenderNode): void;
@@ -119,10 +121,10 @@ operation scope 与 pool 冻结，但不向普通游戏暴露一组复杂 owners
 
 Public surface 支持三种 spin 形态，但后续只主力维护两种新接口：
 
-| 类型 | 定位 | 后续策略 |
-| --- | --- | --- |
-| `ReelSpin` | 新普通整列转接口 | 主力维护 |
-| `CellSpin` | 新单格转接口 | 主力维护 |
+| 类型               | 定位                   | 后续策略                     |
+| ------------------ | ---------------------- | ---------------------------- |
+| `ReelSpin`         | 新普通整列转接口       | 主力维护                     |
+| `CellSpin`         | 新单格转接口           | 主力维护                     |
 | legacy `grid-cell` | game002v2 当前兼容接口 | 行为冻结，只保兼容与必要修复 |
 
 三者最终都必须提供 `SymbolArea.getSymbol()`。legacy `grid-cell` 不因新增共同接口而改变现有 spin、
@@ -144,10 +146,7 @@ interface CellSpin extends SymbolArea {
     options?: CellRollOptions,
   ): Promise<void>;
 
-  start(
-    pos: SymbolPosition,
-    options?: CellRollStartOptions,
-  ): void;
+  start(pos: SymbolPosition, options?: CellRollStartOptions): void;
 
   settle(
     pos: SymbolPosition,
@@ -156,13 +155,18 @@ interface CellSpin extends SymbolArea {
   ): Promise<void>;
 
   cancel(pos: SymbolPosition): void;
+  getCell(pos: SymbolPosition): CellRender;
 }
 
 interface CellRollTarget {
   readonly code: number;
   readonly value?: number | null;
+  readonly state?: string;
 }
 ```
+
+`getCell(pos)` 只提供稳定 cell-space 的 `RenderNode add/remove`，用于目标尚未落地前的
+Nearwin 等效果；它不提供 activation plan、effect schedule 或业务状态机。
 
 命名可在实现时按仓库风格小幅调整，但必须保持以下语义：
 
