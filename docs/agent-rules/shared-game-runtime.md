@@ -57,8 +57,9 @@
   full/held/stagger/barrier 由 operation handler 以 frame delay 和 Promise 编排。落停 Promise resolve 时
   整列 `getSymbol()` 必须可用。standard legacy batch façade只能复用同一 RenderReel 单轴运动 owner，
   不得复制另一套 motion/pool/player 状态机。
-- standard ReelArea 拥有 `bottom < symbols < top < win` 图层、area-local symbol center、game-owned await
-  presentation 与最高优先级 area.spin。游戏决定 idle/win 等循环内容，但不接触 interruption signal；spin
+- standard ReelArea 与 Crave legacy grid-cell 的共同 PresentableSymbolArea 拥有
+  `bottom < symbols < top < win` 图层及 game-owned await presentation；standard ReelArea 额外拥有 area-local
+  point anchor 与最高优先级 area.spin。游戏决定 idle/win 等循环内容，但不接触 interruption signal；spin
   必须在内部中断当前 presentation、清理 transient win layer并以 immediate spinBlur 接管 occurrence，再调用
   默认或typed game spin function。`present(..., { repeat: true })` 在首轮 callback 完成后 resolve并由 area 继续后台
   重复，operation handler 不得为 lingering loop 自建 deferred Promise 或 `while(true)`。symbols 主层、raw Container

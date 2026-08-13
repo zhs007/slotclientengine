@@ -73,14 +73,14 @@ Standard `RenderReelSet` 同时实现无 public plan 的逐列 `ReelSpin`：`rol
 和 `Promise.all()` 组合，不增加 `ReelSpinPlan`。`getReel(x)` 是稳定 reel-space `RenderObject`
 attachment 入口。
 
-`getReelArea("main")` 返回 standard reel 的第一层 `ReelArea` façade。area 公开
-`getSymbol()`、`bottom|top|win` 安全图层、`present(async context => ...)` 与最高优先级
+`getSymbolArea("main")` 返回 standard reel 与 Crave legacy grid-cell 共同的 `PresentableSymbolArea`，公开
+`getSymbol()`、`bottom|top|win` 安全图层和 `present(async context => ...)`。`getReelArea("main")` 只返回
+standard reel 的第一层 `ReelArea` façade，并额外公开最高优先级
 `area.spin.start/land/cancel`。游戏用普通 await 编排 idle/win loop；spin 内部中断当前 presentation并清理
 win layer，再调用默认或装配时注入的 `AreaSpinFunction`。游戏不持有 interruption signal。`SymbolRender.getPosition()`
 只返回 area-local occurrence 中心；通用 `createTextRenderObject()` 可据此定位后挂入 win layer。
 
-Scene Layout package runtime 通过 `getSymbolArea("main")` 暴露当前 main reel 的共同入口，并只为
-standard reel 提供 `getReelSpin("main")`；未知
+Scene Layout package runtime 只为 standard reel 提供 `getReelSpin("main")`；未知
 area、未 ready 或首次 scene 尚未 commit 都严格失败。详细合同见
 [`docs/rendercore-operation-first-layer-api.md`](../../docs/rendercore-operation-first-layer-api.md)。
 

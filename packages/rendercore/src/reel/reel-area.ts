@@ -59,14 +59,17 @@ export interface AreaSpinFunctionOptions {
   readonly landStaggerSeconds?: number;
 }
 
-export interface ReelArea extends SymbolArea {
-  readonly spin: AreaSpinController;
-  getAnchor(point: RenderPoint): RenderAnchor;
+export interface PresentableSymbolArea extends SymbolArea {
   getLayer(id: SymbolAreaLayerId): SymbolAreaLayer;
   present(
     presentation: (context: SymbolAreaPresentationContext) => Promise<void>,
     options?: SymbolAreaPresentationOptions,
   ): Promise<void>;
+}
+
+export interface ReelArea extends PresentableSymbolArea {
+  readonly spin: AreaSpinController;
+  getAnchor(point: RenderPoint): RenderAnchor;
 }
 
 export const defaultAreaSpinFunction: AreaSpinFunction = Object.freeze({
