@@ -325,6 +325,41 @@ describe("game mode and popup dependency commands", () => {
     expect(project.assets.get(second.rootKey)).toEqual(new Uint8Array([2]));
   });
 
+  it("allows an exclusive Symbols replacement to change filename-key casing", () => {
+    const project = createNewEditorProject("maximized-focus");
+    const previous = symbolPackage("game002-s3", 1);
+    previous.files.set(
+      "pkg-10-game002-s3-af_spinblur.png",
+      new Uint8Array([1]),
+    );
+    importSymbolDependency(project, previous);
+
+    const replacement = symbolPackage("game002-s3", 2);
+    replacement.files.set(
+      "pkg-10-game002-s3-AF_spinBlur.png",
+      new Uint8Array([2]),
+    );
+    replaceSymbolDependency(project, "game002-s3", replacement);
+
+    expect(project.assets.has("pkg-10-game002-s3-af_spinblur.png")).toBe(false);
+    expect(project.assets.get("pkg-10-game002-s3-AF_spinBlur.png")).toEqual(
+      new Uint8Array([2]),
+    );
+  });
+
+  it("still rejects a filename-key case alias owned by another dependency", () => {
+    const project = createNewEditorProject("maximized-focus");
+    const first = symbolPackage("first-symbols", 1);
+    first.files.set("shared-image.png", new Uint8Array([1]));
+    importSymbolDependency(project, first);
+
+    const second = symbolPackage("second-symbols", 2);
+    second.files.set("SHARED-IMAGE.png", new Uint8Array([2]));
+
+    expect(() => importSymbolDependency(project, second)).toThrow(/大小写冲突/);
+    expect(project.symbolDependencies.has("second-symbols")).toBe(false);
+  });
+
   it("never aliases a new mode to the currently edited background nodes", () => {
     const project = createNewEditorProject("orientation-focus");
     project.gameModes.modes[0]!.backgroundNodes = {

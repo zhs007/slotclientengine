@@ -702,10 +702,9 @@ function mergeDependencyAssets(
   replaceableKeys: ReadonlySet<string> = new Set(),
 ): void {
   const aliases = new Map(
-    [...project.assets.keys()].map((key) => [
-      key.normalize("NFC").toLocaleLowerCase("en-US"),
-      key,
-    ]),
+    [...project.assets.keys()]
+      .filter((key) => !replaceableKeys.has(key))
+      .map((key) => [key.normalize("NFC").toLocaleLowerCase("en-US"), key]),
   );
   for (const [key, bytes] of files) {
     const existingKey = aliases.get(
