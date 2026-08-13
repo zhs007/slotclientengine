@@ -530,6 +530,17 @@ describe("PopupEditorApp", () => {
     expect(fillColor.value).toBe("#123456");
     expect(font.value).toBe("Prompt.woff2");
 
+    for (const field of ["strokeEnabled", "shadowEnabled"]) {
+      const checkbox = root.querySelector<HTMLInputElement>(
+        `[data-overlay-field="${field}"]`,
+      )!;
+      checkbox.checked = false;
+      checkbox.dispatchEvent(new Event("change"));
+    }
+    expect(root.querySelector("#diagnostics")!.textContent).not.toContain(
+      "must be an object",
+    );
+
     const imageId = root.querySelector<HTMLInputElement>(
       '[data-overlay-field="anchor-x"]',
     )!.dataset.overlayId!;
@@ -746,6 +757,14 @@ describe("PopupEditorApp", () => {
       input.value = value;
       input.dispatchEvent(new Event("change"));
     }
+    for (const field of ["strokeEnabled", "shadowEnabled"]) {
+      const checkbox = textInput(field);
+      checkbox.checked = false;
+      checkbox.dispatchEvent(new Event("change"));
+    }
+    expect(root.querySelector("#diagnostics")!.textContent).not.toContain(
+      "must be an object",
+    );
     const mode = root.querySelector<HTMLSelectElement>(
       "[data-vni-playback-mode]",
     )!;

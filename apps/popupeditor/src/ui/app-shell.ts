@@ -1151,21 +1151,20 @@ function updateTextStyleField(
     return true;
   }
   if (field === "strokeEnabled") {
-    mutable.style.stroke = input.checked
-      ? (mutable.style.stroke ?? { color: "#000000", width: 4 })
-      : undefined;
+    if (input.checked) mutable.style.stroke ??= { color: "#000000", width: 4 };
+    else delete mutable.style.stroke;
     return true;
   }
   if (field === "shadowEnabled") {
-    mutable.style.shadow = input.checked
-      ? (mutable.style.shadow ?? {
-          color: "#000000",
-          alpha: 0.6,
-          blur: 4,
-          distance: 6,
-          angleDegrees: 90,
-        })
-      : undefined;
+    if (input.checked)
+      mutable.style.shadow ??= {
+        color: "#000000",
+        alpha: 0.6,
+        blur: 4,
+        distance: 6,
+        angleDegrees: 90,
+      };
+    else delete mutable.style.shadow;
     return true;
   }
   const strokeFields: Record<string, string> = {
