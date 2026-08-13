@@ -13,6 +13,10 @@ import { describe, expect, it } from "vitest";
 import { Assets, Texture } from "pixi.js";
 import { vi } from "vitest";
 import {
+  parsePopupManifest,
+  upgradePopupManifestToV5,
+} from "@slotclientengine/rendercore/popup";
+import {
   findPopupSpineAssetConflicts,
   importPopupPackageZip,
 } from "../src/io/imported-popup-package.js";
@@ -29,6 +33,42 @@ import {
 } from "../../../test-utils/minecart2-fixtures.js";
 
 describe("gamelayout popup dependency", () => {
+  it("imports Popup v5 without changing state visibility", async () => {
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    const popup = popupFiles();
+    const legacy = parsePopupManifest(
+      JSON.parse(new TextDecoder().decode(popup.get("popup.manifest.json"))),
+    );
+    popup.set(
+      "popup.manifest.json",
+      new TextEncoder().encode(
+        JSON.stringify(upgradePopupManifestToV5(legacy)),
+      ),
+    );
+    const imported = await importPopupPackageZip(
+      createDeterministicZip(await mappedPopupFiles(popup)),
+      { decodeImage: async () => ({ width: 1, height: 1 }) },
+    );
+    expect(imported.manifest.version).toBe(5);
+    expect(imported.manifest.backdrop.visibleStates).toEqual([
+      "base",
+      "standard",
+      "bigwin",
+      "superwin",
+      "megawin",
+    ]);
+    if (imported.manifest.type !== "award-celebration")
+      throw new Error("Expected v5 award popup.");
+    expect(
+      imported.manifest.awardCelebration.base.layers[0]?.visibleStates,
+    ).toEqual(imported.manifest.backdrop.visibleStates);
+    load.mockRestore();
+    unload.mockRestore();
+  });
+
   it("strictly imports a self-contained popup and round-trips binding placement", async () => {
     const popup = popupFiles();
     const load = vi

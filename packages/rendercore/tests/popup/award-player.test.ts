@@ -2,6 +2,7 @@ import { Container, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
 import {
   createAwardCelebrationPlayer,
+  upgradePopupManifestToV5,
   type AwardCelebrationPopupManifestV1,
   type PopupLayerRuntime,
   type PopupPackageResource,
@@ -9,6 +10,37 @@ import {
 import { popupFixture } from "./fixtures.js";
 
 describe("award celebration player", () => {
+  it("gates every v5 award layer by the active five-tier state", async () => {
+    const legacy = staticResource();
+    const manifest = structuredClone(upgradePopupManifestToV5(legacy.manifest));
+    if (manifest.type !== "award-celebration")
+      throw new Error("Expected award popup.");
+    const image = manifest.awardCelebration.base.layers.find(
+      (layer) => layer.kind === "image",
+    )!;
+    (image as { visibleStates: string[] }).visibleStates = ["megawin"];
+    let imageContainer: Container | undefined;
+    const player = createAwardCelebrationPlayer({
+      resource: { ...legacy, manifest },
+      layerFactory: ({ layer }) => {
+        const runtime = fakeLayer(layer.kind === "vni");
+        if (layer.id === image.id) imageContainer = runtime.container;
+        return runtime;
+      },
+    });
+    await player.init();
+    player.start({ betAmountRaw: 100, winAmountRaw: 5000 });
+    expect(imageContainer?.visible).toBe(false);
+    player.requestAdvance();
+    player.update(1);
+    player.requestAdvance();
+    player.update(1);
+    player.requestAdvance();
+    expect(player.getSnapshot().activeTierId).toBe("megawin");
+    expect(imageContainer?.visible).toBe(true);
+    player.destroy();
+  });
+
   it("rejects non-award packages and shares concurrent initialization", async () => {
     expect(() =>
       createAwardCelebrationPlayer({

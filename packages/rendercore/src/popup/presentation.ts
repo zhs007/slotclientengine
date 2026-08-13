@@ -8,6 +8,7 @@ import type {
   PopupManifest,
   PopupPresentationSnapshot,
   PopupSize,
+  PopupVisibilityState,
 } from "./types.js";
 
 const NEUTRAL_PLACEMENT: PopupHostPlacement = Object.freeze({
@@ -24,6 +25,7 @@ export interface PopupPresentation {
     placement?: PopupHostPlacement,
   ): PopupPresentationSnapshot;
   setActive(active: boolean): void;
+  setState(state: PopupVisibilityState | null): void;
   destroy(): void;
 }
 
@@ -36,6 +38,7 @@ export function createPopupPresentation(
   const backdrop = modern ? new Graphics() : null;
   let destroyed = false;
   let active = false;
+  let state: PopupVisibilityState | null = null;
   container.label = `popup ${manifest.id}`;
   contentRoot.label = `popup ${manifest.id} content`;
   if (backdrop) {
@@ -121,7 +124,7 @@ export function createPopupPresentation(
       });
       contentRoot.position.set(contentPosition.x, contentPosition.y);
       contentRoot.scale.set(contentScale);
-      redrawBackdrop(backdrop!, modern.backdrop, viewport, active);
+      redrawBackdrop(backdrop!, modern.backdrop, viewport, active, state);
       return Object.freeze({
         viewportSize: viewport,
         contentScale,
@@ -149,7 +152,12 @@ export function createPopupPresentation(
     setActive(next: boolean) {
       assertUsable();
       active = next;
-      if (backdrop) backdrop.visible = next && modern!.backdrop.enabled;
+      if (backdrop) backdrop.visible = backdropVisible(modern!, next, state);
+    },
+    setState(next: PopupVisibilityState | null) {
+      assertUsable();
+      state = next;
+      if (backdrop) backdrop.visible = backdropVisible(modern!, active, state);
     },
     destroy() {
       if (destroyed) return;
@@ -181,13 +189,35 @@ function redrawBackdrop(
   },
   viewport: PopupSize,
   active: boolean,
+  state: PopupVisibilityState | null,
 ) {
   backdrop.clear();
   if (spec.enabled)
     backdrop
       .rect(0, 0, viewport.width, viewport.height)
       .fill({ color: spec.color, alpha: spec.alpha });
-  backdrop.visible = active && spec.enabled;
+  backdrop.visible =
+    active &&
+    spec.enabled &&
+    (!("visibleStates" in spec) ||
+      (state !== null &&
+        (spec.visibleStates as readonly PopupVisibilityState[]).includes(
+          state,
+        )));
+}
+
+function backdropVisible(
+  manifest: Exclude<PopupManifest, { readonly version: 1 }>,
+  active: boolean,
+  state: PopupVisibilityState | null,
+): boolean {
+  return (
+    active &&
+    manifest.backdrop.enabled &&
+    (manifest.version !== 5 ||
+      (state !== null &&
+        manifest.backdrop.visibleStates.includes(state as never)))
+  );
 }
 
 function size(value: PopupSize, label: string): PopupSize {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { upgradePopupManifestToV5 } from "@slotclientengine/rendercore/popup";
 import {
   rewriteImageStringManifest,
   rewriteLayoutManifest,
@@ -326,6 +327,20 @@ describe("typed asset reference rewriting", () => {
       name: "bonus-count",
       resource: "bonus.hash.json",
     });
+    const v5 = rewritePopupManifest(upgradePopupManifestToV5(popup), new Map());
+    expect(v5.version).toBe(5);
+    expect(v5.backdrop.visibleStates).toEqual([
+      "base",
+      "standard",
+      "bigwin",
+      "superwin",
+      "megawin",
+    ]);
+    if (v5.type !== "award-celebration")
+      throw new Error("Expected v5 award popup.");
+    expect(v5.awardCelebration.base.layers[0]?.visibleStates).toEqual(
+      v5.backdrop.visibleStates,
+    );
   });
 
   it("rewrites Spine prompt and string overlay resources without changing node identity", () => {

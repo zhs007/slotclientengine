@@ -11,3 +11,4 @@ export * from "./prompt-text.js";
 export * from "./input-binding.js";
 export * from "./presentation.js";
 export * from "./layer-attachment.js";
+export * from "./state-visibility.js";

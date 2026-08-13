@@ -15,6 +15,7 @@ import type {
   PopupOverlayLayer,
   PopupPreparedResource,
   PopupSegment,
+  SpinePopupOverlayLayerV5,
 } from "./types.js";
 
 export interface SpinePopupOverlayRuntime {
@@ -35,7 +36,7 @@ export interface SpinePopupOverlayRuntime {
 
 export function createSpinePopupOverlayRuntime(options: {
   readonly popupId: string;
-  readonly layer: PopupOverlayLayer;
+  readonly layer: PopupOverlayLayer | SpinePopupOverlayLayerV5;
   readonly resource?: PopupPreparedResource;
   readonly spinePlayerFactory?: () => RendercoreSpinePlayer;
   readonly vniPlayerFactory?: (parent: Container) => VNIPlayer;
@@ -62,11 +63,11 @@ export function createSpinePopupOverlayRuntime(options: {
       container,
       async init() {},
       start() {
-        container.visible = layer.visibleSegments.includes("start");
+        container.visible = visibleInSegment(layer, "start");
       },
       update() {},
       applySegment(segment) {
-        container.visible = layer.visibleSegments.includes(segment);
+        container.visible = visibleInSegment(layer, segment);
       },
       destroy() {
         container.destroy({ children: true });
@@ -92,11 +93,11 @@ export function createSpinePopupOverlayRuntime(options: {
       },
       async init() {},
       start() {
-        container.visible = layer.visibleSegments.includes("start");
+        container.visible = visibleInSegment(layer, "start");
       },
       update() {},
       applySegment(segment) {
-        container.visible = layer.visibleSegments.includes(segment);
+        container.visible = visibleInSegment(layer, segment);
       },
       destroy() {
         renderer.destroy();
@@ -124,11 +125,11 @@ export function createSpinePopupOverlayRuntime(options: {
       },
       async init() {},
       start() {
-        container.visible = layer.visibleSegments.includes("start");
+        container.visible = visibleInSegment(layer, "start");
       },
       update() {},
       applySegment(segment) {
-        container.visible = layer.visibleSegments.includes(segment);
+        container.visible = visibleInSegment(layer, segment);
       },
       destroy() {
         renderer.destroy();
@@ -150,7 +151,7 @@ export function createSpinePopupOverlayRuntime(options: {
       },
       start() {
         segment = "start";
-        container.visible = true;
+        container.visible = visibleInSegment(layer, "start");
         player.play({
           animationName: layer.playback.startAnimation,
           loop: false,
@@ -167,6 +168,7 @@ export function createSpinePopupOverlayRuntime(options: {
         }
       },
       applySegment(next) {
+        container.visible = visibleInSegment(layer, next);
         if (next !== "end" || segment === "end") return;
         segment = "end";
         player.play({
@@ -207,13 +209,14 @@ export function createSpinePopupOverlayRuntime(options: {
           );
       },
       start() {
-        container.visible = true;
+        container.visible = visibleInSegment(layer, "start");
         startPopupVniPlayback(player, layer.playback);
       },
       update(deltaSeconds) {
         player.update(deltaSeconds);
       },
       applySegment(segment) {
+        container.visible = visibleInSegment(layer, segment);
         if (segment === "end")
           requestPopupVniPlaybackEnd(player, layer.playback);
       },
@@ -224,6 +227,16 @@ export function createSpinePopupOverlayRuntime(options: {
     };
   }
   throw new Error(`unsupported popup overlay ${layer.id}.`);
+}
+
+function visibleInSegment(
+  layer: PopupOverlayLayer | SpinePopupOverlayLayerV5,
+  segment: PopupSegment,
+): boolean {
+  if (layer.visibleStates) return layer.visibleStates.includes(segment);
+  if ("visibleSegments" in layer && layer.visibleSegments)
+    return layer.visibleSegments.includes(segment);
+  return true;
 }
 
 function isSpineSlotPlayer(

@@ -108,7 +108,7 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
         layer,
         resource: prepared,
       });
-      if (manifest.version !== 4) this.#popupRoot.addChild(runtime.container);
+      if (manifest.version < 4) this.#popupRoot.addChild(runtime.container);
       return runtime;
     });
     const prompt = manifest.spine.prompt;
@@ -170,7 +170,7 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
         await overlay.init();
         this.assertUsable();
       }
-      if (this.#manifest.version === 4) {
+      if (this.#manifest.version >= 4) {
         const layers = this.#manifest.spine.overlays ?? [];
         this.#attachmentHandle = attachPopupLayerRuntimes({
           layers,
@@ -205,6 +205,7 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
     }
     this.#dismissRequested = false;
     this.#phase = "start";
+    this.#presentation.setState("start");
     this.container.visible = true;
     this.#presentation.setActive(true);
     if (this.#prompt) {
@@ -226,6 +227,7 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
     for (const overlay of this.#overlays) overlay.update(deltaSeconds);
     if (this.#phase === "start" && result.completed) {
       this.#phase = "loop";
+      this.#presentation.setState("loop");
       for (const overlay of this.#overlays) overlay.applySegment("loop");
       this.#player.play({
         animationName: this.#manifest.spine.playback.loopAnimation,
@@ -242,6 +244,7 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
     if (this.#phase !== "loop") return;
     this.#dismissRequested = true;
     this.#phase = "end";
+    this.#presentation.setState("end");
     if (this.#prompt) this.#prompt.text.visible = false;
     for (const overlay of this.#overlays) overlay.applySegment("end");
     this.#player.play({
@@ -284,6 +287,7 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
     this.#player.reset();
     if (this.#prompt) this.#prompt.text.visible = false;
     this.#phase = "complete";
+    this.#presentation.setState(null);
     this.container.visible = false;
     this.#presentation.setActive(false);
   }
