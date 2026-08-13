@@ -541,7 +541,9 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   /** Cancels targetless rolling without fabricating a landing target. */
   cancelMainReelContinuousSpin(): void;
   /** Returns the instance-scoped symbol area; currently only "main" exists. */
-  getSymbolArea(reelId: string): import("../reel/index.js").SymbolArea;
+  getSymbolArea(
+    reelId: string,
+  ): import("../reel/index.js").PresentableSymbolArea;
   /** Additive settled-symbol mutation capability; legacy symbol APIs remain compatible. */
   getSymbolMutationArea(
     reelId: string,

@@ -13,6 +13,8 @@
 - public `RenderNode/TextRenderNode/createTextRenderNode`一次性迁移为
   `RenderObject/TextRenderObject/createTextRenderObject`；game003v2只做对应factory机械迁移，业务时序不变。
 - 新增Crave canonical人工迁移文档`docs/crave-render-object-migration.md`；旧task 203文档保留Popup/转场说明并链接新文档。
+- Crave接入复核后补齐legacy grid-cell的共同`PresentableSymbolArea.getLayer/present`；调用方直接使用
+  `runtime.getSymbolArea("main")`，不得强转standard-only `RenderReelSet`。
 
 ## 实际文件
 
@@ -47,6 +49,16 @@ pnpm --filter game003v2 test
 pnpm --filter game003v2 typecheck
 git diff --check
 ```
+
+Crave grid-cell surface补充后另通过：
+
+```text
+tsc -p packages/rendercore/tsconfig.json --noEmit
+vitest run tests/reel/render-grid-cell-reel-set.test.ts
+```
+
+- grid-cell定向文件33个测试通过，覆盖owned RenderObject从一个symbol anchor经win layer飞到另一个anchor并自动destroy，
+  以及continuous spin打断后的scope清理。
 
 - RenderCore计划内组合：5个测试文件、43个测试通过；额外CellSpin定向文件10个测试通过。
 - game003v2：3个测试文件、9个测试通过。

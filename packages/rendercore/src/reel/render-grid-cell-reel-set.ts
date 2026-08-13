@@ -6,7 +6,20 @@ import { normalizeGridCellReelOffsetMatrix } from "./grid-cell-reel-offsets.js";
 import { resolveGridCellDimmingAlpha } from "./grid-cell-spin-plan.js";
 import { createReelLayout } from "./layout.js";
 import { prepareVisibleOccurrenceMotion } from "./visible-occurrence-transfer.js";
-import { createContainerRenderAnchor } from "../presentation/render-anchor.js";
+import {
+  createContainerRenderAnchor,
+  resolveRenderAnchor,
+} from "../presentation/render-anchor.js";
+import {
+  getRenderObjectAdapter,
+  type RenderObject,
+} from "../presentation/render-object.js";
+import {
+  getPresentationMountTargetAdapter,
+  registerPresentationMountTarget,
+  type PresentationNodeMountOptions,
+  type PresentationScopeContext,
+} from "../presentation/presentation-scope.js";
 import { RenderReel } from "./render-reel.js";
 import type {
   GridCellCoordinate,
@@ -68,6 +81,11 @@ import type {
   SymbolReplacement,
   SymbolReplacementTarget,
 } from "./symbol-area.js";
+import type {
+  PresentableSymbolArea,
+  SymbolAreaLayer,
+  SymbolAreaLayerId,
+} from "./reel-area.js";
 
 interface RuntimeCell {
   readonly coordinate: GridCellCoordinate;
@@ -142,6 +160,30 @@ interface PresentationDelayWaiter {
   readonly abortListener?: () => void;
 }
 
+interface AreaPresentationDelayWaiter {
+  remainingSeconds: number;
+  readonly signal: AbortSignal;
+  readonly resolve: () => void;
+  readonly reject: (error: Error) => void;
+  readonly abortListener: () => void;
+}
+
+interface AreaPresentationMountedNode {
+  readonly target: SymbolAreaLayer;
+  readonly node: RenderObject;
+  readonly ownership: PresentationNodeMountOptions["ownership"];
+}
+
+interface AreaPresentationMotion {
+  readonly node: RenderObject;
+  readonly prepared: ReturnType<typeof prepareVisibleOccurrenceMotion>;
+  readonly signal: AbortSignal;
+  readonly abortListener: () => void;
+  elapsedSeconds: number;
+  resolve(): void;
+  reject(error: Error): void;
+}
+
 interface OccurrenceEffectAttachment {
   readonly occurrence: RenderReelVisibleOccurrence;
   readonly generation: number;
@@ -174,7 +216,10 @@ const ZERO_DIMMING: GridCellDimmingPattern = Object.freeze({
   fadeOutMs: 0,
 });
 
-export class RenderGridCellReelSet extends Container implements SymbolArea {
+export class RenderGridCellReelSet
+  extends Container
+  implements SymbolArea, PresentableSymbolArea
+{
   readonly #reels: LogicReels;
   readonly #columns: number;
   readonly #rows: number;
@@ -189,9 +234,14 @@ export class RenderGridCellReelSet extends Container implements SymbolArea {
   readonly #cascadeMovementMask: Graphics;
   readonly #transferAboveSymbolsLayer: Container;
   readonly #transferLayer: Container;
+  readonly #areaLayers: ReadonlyMap<SymbolAreaLayerId, Container>;
+  readonly #areaMounted = new Map<SymbolAreaLayerId, Set<RenderObject>>();
   readonly #effectController: GridCellEffectController | null;
   #occurrenceEffectPlayerFactory: VisibleOccurrenceEffectPlayerFactory | null;
   readonly #presentationDelayWaiters = new Set<PresentationDelayWaiter>();
+  readonly #areaPresentationDelayWaiters =
+    new Set<AreaPresentationDelayWaiter>();
+  readonly #areaPresentationMotions = new Set<AreaPresentationMotion>();
   readonly #occurrenceEffects = new Set<OccurrenceEffectAttachment>();
   readonly #occurrenceGenerations = new WeakMap<
     RenderReelVisibleOccurrence["symbol"],
@@ -209,6 +259,8 @@ export class RenderGridCellReelSet extends Container implements SymbolArea {
   #elapsedMs = 0;
   #activeTransferRollback: (() => void) | null = null;
   #activeScopedTransfer: ActiveScopedTransfer | null = null;
+  #areaPresentationAbort: AbortController | null = null;
+  #areaPresentationFailure: Error | null = null;
 
   constructor(options: RenderGridCellReelSetOptions) {
     super();
@@ -258,6 +310,23 @@ export class RenderGridCellReelSet extends Container implements SymbolArea {
     this.#cascadeMovementMask.includeInBuild = false;
     this.#cascadeMovementMask.measurable = false;
     this.addChild(this.#cascadeMovementMask);
+    const bottomLayer = new Container();
+    const topLayer = new Container();
+    const winLayer = new Container();
+    bottomLayer.sortableChildren = true;
+    topLayer.sortableChildren = true;
+    winLayer.sortableChildren = true;
+    bottomLayer.zIndex = -1_000_000;
+    topLayer.zIndex = this.#cells.length * 15_000;
+    winLayer.zIndex = this.#cells.length * 25_000;
+    this.#areaLayers = new Map([
+      ["bottom", bottomLayer],
+      ["top", topLayer],
+      ["win", winLayer],
+    ]);
+    for (const id of this.#areaLayers.keys())
+      this.#areaMounted.set(id, new Set());
+    this.addChild(bottomLayer);
     this.#transferAboveSymbolsLayer = new Container();
     this.#transferAboveSymbolsLayer.sortableChildren = true;
     this.#transferAboveSymbolsLayer.zIndex = this.#cells.length * 5_000;
@@ -266,6 +335,8 @@ export class RenderGridCellReelSet extends Container implements SymbolArea {
     this.#transferLayer.sortableChildren = true;
     this.#transferLayer.zIndex = this.#cells.length * 20_000;
     this.addChild(this.#transferLayer);
+    this.addChild(topLayer);
+    this.addChild(winLayer);
     this.#effectController = options.effectController ?? null;
     this.#occurrenceEffectPlayerFactory =
       options.occurrenceEffectPlayerFactory ?? null;
@@ -302,6 +373,7 @@ export class RenderGridCellReelSet extends Container implements SymbolArea {
     cellReelOffsets?: GridCellReelOffsetMatrix,
     presentationValues?: SymbolPresentationValueMatrix,
   ): void {
+    this.interruptAreaPresentation();
     this.cancelActiveScopedTransfer(
       new ReelError("Visible occurrence transfer was interrupted by reset."),
     );
@@ -422,6 +494,7 @@ export class RenderGridCellReelSet extends Container implements SymbolArea {
       }
     }
 
+    this.interruptAreaPresentation();
     this.#spinPlan = plan;
     this.#elapsedMs = 0;
     this.#effectController?.cancelAll();
@@ -516,6 +589,7 @@ export class RenderGridCellReelSet extends Container implements SymbolArea {
         );
       }
     }
+    this.interruptAreaPresentation();
     for (const cell of this.#cells) {
       const selected = keys.has(
         createCellKey(cell.coordinate.x, cell.coordinate.y),
@@ -751,6 +825,13 @@ export class RenderGridCellReelSet extends Container implements SymbolArea {
 
   update(deltaSeconds: number): RenderGridCellReelSetUpdateResult {
     assertValidDeltaSeconds(deltaSeconds);
+    if (this.#areaPresentationFailure) {
+      const failure = this.#areaPresentationFailure;
+      this.#areaPresentationFailure = null;
+      throw failure;
+    }
+    this.updateAreaPresentationDelays(deltaSeconds);
+    this.updateAreaPresentationMotions(deltaSeconds);
     this.updatePresentationWaiters(deltaSeconds);
     this.updateDirectTransfer(deltaSeconds);
     this.updateScopedTransfer(deltaSeconds);
@@ -2337,7 +2418,345 @@ export class RenderGridCellReelSet extends Container implements SymbolArea {
     });
   }
 
+  getLayer(id: SymbolAreaLayerId): SymbolAreaLayer {
+    const layer = this.#areaLayers.get(id);
+    const mounted = this.#areaMounted.get(id);
+    if (!layer || !mounted)
+      throw new ReelError(`Unknown symbol area layer "${String(id)}".`);
+    const target = Object.freeze({
+      add: (node: RenderObject, order = 0) => {
+        if (!Number.isSafeInteger(order))
+          throw new ReelError("Area node order must be an integer.");
+        if (mounted.has(node))
+          throw new ReelError(
+            `RenderObject is already attached to ${id} layer.`,
+          );
+        const adapter = getRenderObjectAdapter(node);
+        if (adapter.view.parent)
+          throw new ReelError(
+            "RenderObject is already attached to another parent.",
+          );
+        adapter.view.zIndex = order;
+        layer.addChild(adapter.view);
+        mounted.add(node);
+      },
+      remove: (node: RenderObject) => {
+        if (!mounted.delete(node)) return;
+        getRenderObjectAdapter(node).view.parent?.removeChild(
+          getRenderObjectAdapter(node).view,
+        );
+      },
+    });
+    registerPresentationMountTarget(target, { view: layer });
+    return target;
+  }
+
+  async present(
+    presentation: (
+      context: import("./reel-area.js").SymbolAreaPresentationContext,
+    ) => Promise<void>,
+    options: import("./reel-area.js").SymbolAreaPresentationOptions = {},
+  ): Promise<void> {
+    if (this.destroyed)
+      throw new ReelError("Symbol area presentation runtime was destroyed.");
+    if (this.#areaPresentationAbort)
+      throw new ReelError("Symbol area already has an active presentation.");
+    if (options.repeat !== undefined && typeof options.repeat !== "boolean")
+      throw new ReelError("Symbol area presentation repeat must be boolean.");
+    const controller = new AbortController();
+    this.#areaPresentationAbort = controller;
+    if (!options.repeat) {
+      const scope = this.createAreaPresentationScope(controller.signal);
+      try {
+        await presentation(scope.context);
+      } catch (error) {
+        if (!controller.signal.aborted) throw error;
+      } finally {
+        scope.cleanup();
+        if (this.#areaPresentationAbort === controller)
+          this.#areaPresentationAbort = null;
+      }
+      return;
+    }
+
+    let firstCycleSettled = false;
+    let resolveFirstCycle!: () => void;
+    let rejectFirstCycle!: (error: unknown) => void;
+    const firstCycle = new Promise<void>((resolve, reject) => {
+      resolveFirstCycle = resolve;
+      rejectFirstCycle = reject;
+    });
+    void (async () => {
+      try {
+        while (!controller.signal.aborted) {
+          const scope = this.createAreaPresentationScope(controller.signal);
+          try {
+            await presentation(scope.context);
+          } finally {
+            scope.cleanup();
+          }
+          if (!firstCycleSettled) {
+            firstCycleSettled = true;
+            resolveFirstCycle();
+          }
+        }
+      } catch (error) {
+        if (!controller.signal.aborted && !firstCycleSettled) {
+          firstCycleSettled = true;
+          rejectFirstCycle(error);
+        } else if (!controller.signal.aborted) {
+          this.#areaPresentationFailure =
+            error instanceof Error
+              ? error
+              : new ReelError("Symbol area presentation failed.");
+        }
+      } finally {
+        if (!firstCycleSettled) {
+          firstCycleSettled = true;
+          resolveFirstCycle();
+        }
+        if (this.#areaPresentationAbort === controller)
+          this.#areaPresentationAbort = null;
+      }
+    })();
+    await firstCycle;
+  }
+
+  private createAreaPresentationScope(signal: AbortSignal): {
+    readonly context: PresentationScopeContext;
+    cleanup(): void;
+  } {
+    const mounted = new Map<RenderObject, AreaPresentationMountedNode>();
+    const cleanupNode = (entry: AreaPresentationMountedNode): void => {
+      mounted.delete(entry.node);
+      this.cancelAreaPresentationMotionsForNode(entry.node);
+      try {
+        entry.target.remove(entry.node);
+      } catch (error) {
+        if (!this.destroyed) throw error;
+        getRenderObjectAdapter(entry.node).view.parent?.removeChild(
+          getRenderObjectAdapter(entry.node).view,
+        );
+      }
+      if (entry.ownership === "destroy") entry.node.destroy();
+    };
+    const mount = (
+      target: SymbolAreaLayer,
+      node: RenderObject,
+      options: PresentationNodeMountOptions,
+    ): void => {
+      if (mounted.has(node))
+        throw new ReelError("RenderObject is already mounted in this scope.");
+      if (options.ownership !== "detach" && options.ownership !== "destroy")
+        throw new ReelError(
+          `Unknown presentation node ownership "${String(options.ownership)}".`,
+        );
+      const objectAdapter = getRenderObjectAdapter(node);
+      if (options.ownership === "destroy" && !objectAdapter.owned)
+        throw new ReelError(
+          "Borrowed RenderObject cannot use destroy ownership.",
+        );
+      const adapter = getPresentationMountTargetAdapter(target);
+      if (options.anchor) {
+        const point = resolveRenderAnchor(options.anchor, adapter.view);
+        const offset = options.offset ?? { x: 0, y: 0 };
+        if (!Number.isFinite(offset.x) || !Number.isFinite(offset.y))
+          throw new ReelError(
+            "Presentation node offset must contain finite coordinates.",
+          );
+        node.setPosition({ x: point.x + offset.x, y: point.y + offset.y });
+      }
+      target.add(node, options.order);
+      mounted.set(node, { target, node, ownership: options.ownership });
+    };
+    const unmount = (node: RenderObject): void => {
+      const entry = mounted.get(node);
+      if (!entry)
+        throw new ReelError("RenderObject is not mounted in this scope.");
+      cleanupNode(entry);
+    };
+    const move = (
+      node: RenderObject,
+      options: Parameters<PresentationScopeContext["move"]>[1],
+    ): Promise<void> => {
+      const entry = mounted.get(node);
+      if (!entry)
+        return Promise.reject(
+          new ReelError("Presentation motion node is not mounted."),
+        );
+      const targetView = getPresentationMountTargetAdapter(entry.target).view;
+      const from = getRenderObjectAdapter(node).view.position;
+      const to = resolveRenderAnchor(options.to, targetView);
+      const prepared = prepareVisibleOccurrenceMotion(
+        {
+          durationMs: options.durationSeconds * 1000,
+          path: options.path ?? { kind: "line" },
+          easing: options.easing ?? { kind: "linear" },
+          stacking: { layer: "above-effects", order: 0 },
+        },
+        { x: from.x, y: from.y },
+        to,
+      );
+      return new Promise<void>((resolve, reject) => {
+        let motion!: AreaPresentationMotion;
+        const abortListener = () => {
+          if (!this.#areaPresentationMotions.delete(motion)) return;
+          reject(new ReelError("Symbol area presentation was interrupted."));
+        };
+        motion = {
+          node,
+          prepared,
+          signal,
+          abortListener,
+          elapsedSeconds: 0,
+          resolve,
+          reject,
+        };
+        signal.addEventListener("abort", abortListener, { once: true });
+        this.#areaPresentationMotions.add(motion);
+      });
+    };
+    const context: PresentationScopeContext = Object.freeze({
+      delay: (seconds: number) =>
+        this.waitForAreaPresentationDelay(seconds, signal),
+      mount,
+      unmount,
+      withNode: async <T>(
+        target: Parameters<PresentationScopeContext["withNode"]>[0],
+        node: RenderObject,
+        options: PresentationNodeMountOptions,
+        playback: () => Promise<T>,
+      ) => {
+        mount(target as SymbolAreaLayer, node, options);
+        try {
+          return await playback();
+        } finally {
+          const entry = mounted.get(node);
+          if (entry) cleanupNode(entry);
+        }
+      },
+      move,
+      transfer: async (
+        target: Parameters<PresentationScopeContext["transfer"]>[0],
+        node: RenderObject,
+        options: Parameters<PresentationScopeContext["transfer"]>[2],
+      ) => {
+        if (!getRenderObjectAdapter(node).owned)
+          throw new ReelError("Only an owned RenderObject can be transferred.");
+        const adapter = getPresentationMountTargetAdapter(target);
+        node.setPosition(resolveRenderAnchor(options.from, adapter.view));
+        mount(target as SymbolAreaLayer, node, options);
+        try {
+          await move(node, options);
+        } finally {
+          const entry = mounted.get(node);
+          if (entry) cleanupNode(entry);
+        }
+      },
+    });
+    return {
+      context,
+      cleanup: () => {
+        for (const entry of [...mounted.values()]) cleanupNode(entry);
+      },
+    };
+  }
+
+  private interruptAreaPresentation(): void {
+    const controller = this.#areaPresentationAbort;
+    if (!controller) return;
+    this.#areaPresentationAbort = null;
+    controller.abort(
+      new ReelError("Symbol area presentation was interrupted."),
+    );
+  }
+
+  private waitForAreaPresentationDelay(
+    seconds: number,
+    signal: AbortSignal,
+  ): Promise<void> {
+    if (!Number.isFinite(seconds) || seconds < 0)
+      return Promise.reject(
+        new ReelError("Symbol area delay must be finite and non-negative."),
+      );
+    if (seconds === 0) return Promise.resolve();
+    if (signal.aborted)
+      return Promise.reject(
+        new ReelError("Symbol area presentation was interrupted."),
+      );
+    return new Promise<void>((resolve, reject) => {
+      let waiter!: AreaPresentationDelayWaiter;
+      const abortListener = () => {
+        this.#areaPresentationDelayWaiters.delete(waiter);
+        reject(new ReelError("Symbol area presentation was interrupted."));
+      };
+      waiter = {
+        remainingSeconds: seconds,
+        signal,
+        resolve,
+        reject,
+        abortListener,
+      };
+      signal.addEventListener("abort", abortListener, { once: true });
+      this.#areaPresentationDelayWaiters.add(waiter);
+    });
+  }
+
+  private updateAreaPresentationDelays(deltaSeconds: number): void {
+    for (const waiter of [...this.#areaPresentationDelayWaiters]) {
+      waiter.remainingSeconds -= deltaSeconds;
+      if (waiter.remainingSeconds > 0) continue;
+      this.#areaPresentationDelayWaiters.delete(waiter);
+      waiter.signal.removeEventListener("abort", waiter.abortListener);
+      waiter.resolve();
+    }
+  }
+
+  private updateAreaPresentationMotions(deltaSeconds: number): void {
+    for (const motion of [...this.#areaPresentationMotions]) {
+      if (motion.signal.aborted) {
+        this.#areaPresentationMotions.delete(motion);
+        motion.signal.removeEventListener("abort", motion.abortListener);
+        motion.reject(
+          new ReelError("Symbol area presentation was interrupted."),
+        );
+        continue;
+      }
+      motion.elapsedSeconds = Math.min(
+        motion.elapsedSeconds + deltaSeconds,
+        motion.prepared.durationMs / 1000,
+      );
+      motion.node.setPosition(
+        motion.prepared.sample(
+          motion.elapsedSeconds / (motion.prepared.durationMs / 1000),
+        ),
+      );
+      if (motion.elapsedSeconds < motion.prepared.durationMs / 1000) continue;
+      this.#areaPresentationMotions.delete(motion);
+      motion.signal.removeEventListener("abort", motion.abortListener);
+      motion.resolve();
+    }
+  }
+
+  private cancelAreaPresentationMotionsForNode(node: RenderObject): void {
+    for (const motion of [...this.#areaPresentationMotions]) {
+      if (motion.node !== node) continue;
+      this.#areaPresentationMotions.delete(motion);
+      motion.signal.removeEventListener("abort", motion.abortListener);
+      motion.reject(new ReelError("Presentation motion node was unmounted."));
+    }
+  }
+
   override destroy(options?: Parameters<Container["destroy"]>[0]): void {
+    this.interruptAreaPresentation();
+    for (const [id, nodes] of this.#areaMounted) {
+      for (const node of nodes)
+        getRenderObjectAdapter(node).view.parent?.removeChild(
+          getRenderObjectAdapter(node).view,
+        );
+      nodes.clear();
+      this.#areaLayers.get(id)?.removeChildren();
+    }
     this.cancelActiveScopedTransfer(
       new ReelError("Visible occurrence transfer runtime was destroyed."),
     );

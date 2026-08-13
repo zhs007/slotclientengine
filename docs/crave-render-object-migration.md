@@ -58,7 +58,15 @@ const valuePart = symbol.getPart({ kind: "value" });
 
 ## 4. 统一飞行写法
 
-文字和value只在part selector不同；clone、anchor、transfer完全相同：
+Crave 当前是 grid-cell reel。这里必须取得共同的 `PresentableSymbolArea`，不要强转为 standard reel 的
+`RenderReelSet`，也不要调用只支持 standard reel 的 `runtime.getReelArea("main")`：
+
+```ts
+const area = runtime.getSymbolArea("main");
+```
+
+`getSymbolArea("main")` 对 standard reel 和 grid-cell reel 都公开 `getSymbol/getLayer/present`。文字和 value 只在
+part selector 不同；clone、anchor、transfer 完全相同：
 
 ```ts
 const source = area.getSymbol(sourcePosition);

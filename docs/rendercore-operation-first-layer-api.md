@@ -65,17 +65,21 @@ const featureSymbol = featureArea.getSymbol({ x: 0, y: 0 });
 `getSymbol()` 是严格取得接口。坐标越界、合法 hole 或尚未落地的滚动格没有可用 symbol 时显式失败。
 只有出现真实的可选探测需求时才考虑独立 `findSymbol()`，第一层不预先增加两套查询。
 
-Standard reel 的完整第一层区域使用 `ReelArea`。它在 `SymbolArea` 之上管理安全 attachment layers、
-game-owned await presentation 与最高优先级 spin：
+Standard reel 与 Crave legacy grid-cell 共同用 `PresentableSymbolArea` 管理安全 attachment layers 和
+game-owned await presentation；standard reel 的完整第一层 `ReelArea` 再增加最高优先级 spin 与 area point anchor：
 
 ```ts
-interface ReelArea extends SymbolArea {
-  readonly spin: AreaSpinController;
+interface PresentableSymbolArea extends SymbolArea {
   getLayer(id: "bottom" | "top" | "win"): SymbolAreaLayer;
   present(
     presentation: (context: SymbolAreaPresentationContext) => Promise<void>,
     options?: { repeat?: boolean },
   ): Promise<void>;
+}
+
+interface ReelArea extends PresentableSymbolArea {
+  readonly spin: AreaSpinController;
+  getAnchor(point: RenderPoint): RenderAnchor;
 }
 ```
 

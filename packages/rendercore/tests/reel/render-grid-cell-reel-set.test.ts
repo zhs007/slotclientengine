@@ -13,6 +13,7 @@ import {
   type VisibleOccurrenceEffectPlayer,
   type VisibleOccurrenceEffectPlayerFactory,
 } from "../../src/reel/index.js";
+import { createRenderObject } from "../../src/presentation/index.js";
 import { compileSlotCascadeFacts } from "@slotclientengine/logiccore";
 import { createBasicRegistry, createBasicReels } from "./helpers.js";
 
@@ -39,6 +40,62 @@ const DIMMING = Object.freeze({
 }) satisfies GridCellDimmingPattern;
 
 describe("RenderGridCellReelSet", () => {
+  it("presents owned render objects through the shared symbol-area surface", async () => {
+    const reelSet = createGridReelSet();
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
+    const source = reelSet.getSymbol({ x: 0, y: 0 });
+    const target = reelSet.getSymbol({ x: 1, y: 0 });
+    const view = new Container();
+    const flying = createRenderObject({
+      view,
+      destroy: () => view.destroy(),
+    });
+
+    const presentation = reelSet.present((context) =>
+      context.transfer(reelSet.getLayer("win"), flying, {
+        ownership: "destroy",
+        from: source.getAnchor(),
+        to: target.getAnchor(),
+        durationSeconds: 0.1,
+      }),
+    );
+
+    expect(view.parent).not.toBeNull();
+    reelSet.update(0.1);
+    await presentation;
+    expect(view.destroyed).toBe(true);
+  });
+
+  it("interrupts and cleans a scoped presentation before continuous spin", async () => {
+    const reelSet = createGridReelSet();
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
+    const view = new Container();
+    const node = createRenderObject({
+      view,
+      destroy: () => view.destroy(),
+    });
+    let continued = false;
+    const presentation = reelSet.present(async (context) => {
+      await context.withNode(
+        reelSet.getLayer("win"),
+        node,
+        { ownership: "destroy" },
+        () => context.delay(1),
+      );
+      continued = true;
+    });
+
+    reelSet.startContinuous({
+      direction: "forward",
+      speedSymbolsPerSecond: 10,
+    });
+    await presentation;
+
+    expect(continued).toBe(false);
+    expect(view.destroyed).toBe(true);
+    reelSet.cancelContinuous();
+  });
+
   it("treats -1 as the shared direct-grid hole marker", () => {
     const reelSet = createGridReelSet();
     reelSet.resetToScene(
