@@ -31,6 +31,7 @@ import type {
   PopupManifest,
 } from "./types.js";
 import { createPopupPresentation } from "./presentation.js";
+import { popupLayerVisibleInState } from "./state-visibility.js";
 import {
   attachPopupLayerRuntimes,
   type PopupLayerAttachmentHandle,
@@ -76,6 +77,7 @@ interface TierRuntime {
   readonly id: AwardTierId;
   readonly container: Container;
   readonly layers: readonly PopupLayerRuntime[];
+  readonly layerSpecs: readonly PopupLayer[];
   readonly stringNodes: ReadonlyMap<string, PopupLayerRuntime["stringNode"]>;
   readonly amountLayer: Extract<PopupLayer, { readonly kind: "image-string" }>;
   readonly amountResource: PopupPreparedImageString;
@@ -123,6 +125,7 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
   #displayed = 0;
   #final = 0;
   #active: TierRuntime | null = null;
+  readonly #showing = new Set<TierRuntime>();
   #ending: TierRuntime[] = [];
   #amount: PopupLayerRuntime | null = null;
   constructor(options: {
@@ -206,11 +209,11 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
     this.assertReady();
     if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0)
       throw new Error("deltaSeconds must be finite and non-negative.");
-    for (const tier of [this.#active, ...this.#ending])
-      if (tier) this.updateTier(tier, deltaSeconds);
+    for (const tier of new Set([...this.#showing, ...this.#ending]))
+      this.updateTier(tier, deltaSeconds);
     this.drainEnding();
     if (this.#phase === "dismissing") {
-      if (!this.#active || tierEnded(this.#active)) this.complete();
+      if (!this.#showing.size && !this.#ending.length) this.complete();
       return this.getSnapshot();
     }
     if (this.#phase !== "counting" || !this.#active) return this.getSnapshot();
@@ -263,8 +266,12 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
       return;
     }
     this.#phase = "dismissing";
-    if (this.#active) requestTierEnd(this.#active, this.amountText());
-    else this.complete();
+    for (const tier of this.#showing) {
+      requestTierEnd(tier, this.amountText());
+      if (!this.#ending.includes(tier)) this.#ending.push(tier);
+    }
+    this.#showing.clear();
+    if (!this.#ending.length) this.complete();
   }
   dismissImmediately(): void {
     this.assertReady();
@@ -352,11 +359,13 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
           );
         }
         const layers: PopupLayerRuntime[] = [];
+        const layerSpecs: PopupLayer[] = [];
         const layersById = new Map<string, PopupLayerRuntime>();
         const tier: TierRuntime = {
           id,
           container,
           layers,
+          layerSpecs,
           stringNodes: new Map(),
           amountLayer,
           amountResource,
@@ -380,16 +389,17 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
             tierId: id,
           });
           layers.push(runtime);
+          layerSpecs.push(layer);
           layersById.set(layer.id, runtime);
           runtimesById.set(layer.id, runtime);
           if (runtime.stringNode)
             (
               tier.stringNodes as Map<string, PopupLayerRuntime["stringNode"]>
             ).set(runtime.stringNode.name, runtime.stringNode);
-          if (manifest.version !== 4) container.addChild(runtime.container);
+          if (manifest.version < 4) container.addChild(runtime.container);
         }
         await Promise.all(layers.map((layer) => layer.init()));
-        if (manifest.version === 4) {
+        if (manifest.version >= 4) {
           const amountMount = new Container();
           amountMount.label = `popup amount mount ${id}`;
           runtimesById.set(amountLayer.id, {
@@ -447,11 +457,10 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
     this.#elapsed = 0;
     this.#displayed = stage.fromAmountRaw;
     const tier = this.#tiers.get(stage.tierId)!;
+    this.switchVisibleTiers(stage.tierId);
+    if (!this.#showing.has(tier)) this.startTier(tier);
+    else this.applyTierStateGate(tier, stage.tierId);
     this.activateTierStringNodes(tier);
-    tier.segment = "start";
-    tier.endRequested = false;
-    tier.container.visible = true;
-    for (const layer of tier.layers) layer.enter(this.amountText());
     detach(this.#amount!.container);
     if (tier.amountParent === tier.container)
       tier.container.addChildAt(this.#amount!.container, tier.amountChildIndex);
@@ -462,7 +471,13 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
       amountText: this.amountText(),
     });
     this.#amount!.enter(this.amountText());
+    this.#amount!.container.visible = amountVisibleInState(
+      this.#resource.manifest,
+      tier.amountLayer,
+      stage.tierId,
+    );
     this.#active = tier;
+    this.#presentation.setState(stage.tierId);
     this.#phase = "counting";
   }
   private finishStage() {
@@ -474,11 +489,7 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
     }
   }
   private transitionToNext() {
-    if (this.#active) {
-      requestTierEnd(this.#active, this.amountText());
-      this.#ending.push(this.#active);
-      this.#active = null;
-    }
+    this.#active = null;
     this.startNextStage();
   }
   private updateTier(tier: TierRuntime, delta: number) {
@@ -492,6 +503,7 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
       tier.segment = "loop";
       for (const layer of tier.layers)
         layer.applySegment("loop", this.amountText());
+      this.applyTierStateGate(tier);
     }
     if (
       tier.endRequested &&
@@ -503,13 +515,14 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
       tier.segment = "end";
       for (const layer of tier.layers)
         layer.applySegment("end", this.amountText());
+      this.applyTierStateGate(tier);
     }
   }
   private drainEnding() {
     const remaining: TierRuntime[] = [];
     for (const tier of this.#ending) {
       if (tierEnded(tier)) {
-        tier.container.visible = false;
+        if (!this.#showing.has(tier)) tier.container.visible = false;
       } else remaining.push(tier);
     }
     this.#ending = remaining;
@@ -544,20 +557,77 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
   }
   private complete() {
     if (this.#active) this.#active.container.visible = false;
+    for (const tier of this.#showing) tier.container.visible = false;
     for (const tier of this.#ending) tier.container.visible = false;
     if (this.#amount) this.#amount.container.visible = false;
     this.#active = null;
+    this.#showing.clear();
     this.#ending = [];
     this.#phase = "complete";
     this.#presentation.setActive(false);
+    this.#presentation.setState(null);
   }
   private clearPlayback() {
     for (const tier of this.#tiers.values()) tier.container.visible = false;
     if (this.#amount) this.#amount.container.visible = false;
     this.#active = null;
+    this.#showing.clear();
     this.#ending = [];
     this.#stages = [];
     this.#stageIndex = -1;
+  }
+  private switchVisibleTiers(state: AwardTierId) {
+    if (this.#resource.manifest.version !== 5) {
+      const tier = this.#tiers.get(state)!;
+      for (const current of this.#showing)
+        if (current !== tier) {
+          requestTierEnd(current, this.amountText());
+          if (!this.#ending.includes(current)) this.#ending.push(current);
+        }
+      this.#showing.clear();
+      this.startTier(tier);
+      return;
+    }
+    const next = new Set(
+      [...this.#tiers.values()].filter((tier) =>
+        tier.layerSpecs.some((layer) =>
+          popupLayerVisibleInState(this.#resource.manifest, layer, state),
+        ),
+      ),
+    );
+    for (const tier of this.#showing)
+      if (!next.has(tier)) {
+        requestTierEnd(tier, this.amountText());
+        if (!this.#ending.includes(tier)) this.#ending.push(tier);
+      }
+    for (const tier of next) {
+      const endingIndex = this.#ending.indexOf(tier);
+      if (endingIndex >= 0) this.#ending.splice(endingIndex, 1);
+      if (!this.#showing.has(tier)) this.startTier(tier);
+      else this.applyTierStateGate(tier, state);
+    }
+    this.#showing.clear();
+    for (const tier of next) this.#showing.add(tier);
+  }
+  private startTier(tier: TierRuntime) {
+    tier.segment = "start";
+    tier.endRequested = false;
+    tier.container.visible = true;
+    for (const layer of tier.layers) layer.enter(this.amountText());
+    this.#showing.add(tier);
+    this.applyTierStateGate(tier);
+  }
+  private applyTierStateGate(tier: TierRuntime, state?: AwardTierId) {
+    if (this.#resource.manifest.version !== 5) return;
+    const current = state ?? this.#stages[this.#stageIndex]?.tierId;
+    if (!current) return;
+    tier.layers.forEach((runtime, index) => {
+      runtime.container.visible = popupLayerVisibleInState(
+        this.#resource.manifest,
+        tier.layerSpecs[index]!,
+        current,
+      );
+    });
   }
   private destroyTier(tier: TierRuntime) {
     if (tier.amountMount && this.#amount?.container.parent === tier.amountMount)
@@ -635,6 +705,14 @@ function detach(container: Container | undefined): void {
   if (container?.parent) container.parent.removeChild(container);
 }
 
+function amountVisibleInState(
+  manifest: PopupManifest,
+  layer: PopupLayer,
+  state: AwardTierId,
+): boolean {
+  return popupLayerVisibleInState(manifest, layer, state);
+}
+
 function defaultLayerFactory(options: {
   readonly layer: PopupLayer;
   readonly resource?: PopupPreparedResource;
@@ -657,7 +735,10 @@ function defaultLayerFactory(options: {
     const sprite = new Sprite(resource.texture);
     sprite.anchor.set(layer.anchor.x, layer.anchor.y);
     container.addChild(sprite);
-    return staticRuntime(container, layer.visibleSegments);
+    return staticRuntime(
+      container,
+      layer.visibleSegments ?? ["start", "loop", "end"],
+    );
   }
   if (layer.kind === "image-string" && resource?.kind === "image-string") {
     const initialText =
@@ -744,7 +825,9 @@ function defaultLayerFactory(options: {
       },
       async init() {},
       enter() {
-        container.visible = layer.visibleSegments.includes("start");
+        container.visible = (
+          layer.visibleSegments ?? ["start", "loop", "end"]
+        ).includes("start");
       },
       updateAmount() {},
       update() {},
@@ -756,7 +839,9 @@ function defaultLayerFactory(options: {
         return true;
       },
       applySegment(segment) {
-        container.visible = layer.visibleSegments.includes(segment);
+        container.visible = (
+          layer.visibleSegments ?? ["start", "loop", "end"]
+        ).includes(segment);
       },
       destroy() {
         renderer.destroy();

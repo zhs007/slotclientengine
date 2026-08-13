@@ -1,8 +1,8 @@
-# Popup package v1 / v2 / v3 / v4
+# Popup package v1 / v2 / v3 / v4 / v5
 
 `popup.manifest.json` 是获奖庆祝与普通 Spine 弹窗的唯一 production 合同。独立 `<id>-popup.zip` 最终由 Game Layout Editor 原样 vendor 到 Scene Layout package。
 
-rendercore 继续原样解析与渲染 v1/v2/v3。Popup Editor 新建项目固定使用 v4；导入合法旧 ZIP 时先按 source version 完成 strict schema、map/hash/closure 与 resource prepare，再原子迁移为 v4。迁移失败不打开半迁移项目，后续 preview/export 只生成 v4。
+rendercore 继续原样解析与渲染 v1–v4。Popup Editor 新建项目固定使用 v5；导入合法旧 ZIP 时先按 source version 完成 strict schema、map/hash/closure 与 resource prepare，再原子迁移为 v5。迁移失败不打开半迁移项目，后续 preview/export 只生成 v5。
 
 ## v2 presentation 扩展
 
@@ -72,15 +72,21 @@ v4 保留 v3 的无界 focus 合同，并要求每个 award layer 与普通 Spin
 
 挂接层的 `x/y/scale/rotation` 是 slot 局部 transform，并继承 official Spine slot 的 bone transform、颜色和 draw order。同一个 `(target, slot)` 由一个稳定 group 承载多个 child；`order` 只要求在同一 resolved parent 内唯一并决定该 group 内的兄弟顺序。不同 slot 的视觉顺序仍由 skeleton draw order 决定。v1/v2/v3 继续使用原有全层 `order` 唯一规则。旧 ImgNumber `parent` 在 Editor 导入时等价迁移为 v4 `attachment`，canonical v4 不再写 `parent`。
 
+## v5 项目状态可见性
+
+v5 保留 v4 的 presentation 与 attachment 合同，并要求 backdrop 和每个 layer kind 都声明 `visibleStates`。`award-celebration` 只接受 `base / standard / bigwin / superwin / megawin`，`spine` 只接受 `start / loop / end`；layer 数组必须非空，backdrop 可为空表示启用但不在任何状态压暗。未知、重复或跨项目类型的状态都会 strict 失败。
+
+Editor 导入合法 v1–v4 时，把旧 `[start, loop, end]` 选择转换为固定三位向量：三项全选表示全程可见，因此 award 扩展为五项全选；部分选择只映射相同 index，例如 `[start, end]` 变为 `[base, bigwin]`。旧版中没有可见性字段的动画层、金额层和 backdrop 按目标类型全选迁移。Spine/VNI 自身的 start/loop/end playback 不因 award 五状态而改变。
+
 ## 坐标、档位与输入
 
-- popup 中心为 `(0, 0)`，向右/向下为正；v1/v2 使用 `designViewport`，v3/v4 只由 focus 建立无界 maximized-focus production transform。
+- popup 中心为 `(0, 0)`，向右/向下为正；v1/v2 使用 `designViewport`，v3/v4/v5 只由 focus 建立无界 maximized-focus production transform。
 - layout 为每个 active variant 保存相对 viewport center 的 `x/y/scale`。
 - 游戏只提交 safe integer `betAmountRaw` 和 `winAmountRaw`；preview 的 bet、win、zoom、guides 不进入 manifest。
 - 档位固定为 `base -> standard -> bigwin -> superwin -> megawin`。`base` 截止 `1×bet`，`standard` 截止 bigwin threshold，后三档 threshold multiplier 显式且严格递增。边界相等时进入对应档，runtime 用 BigInt 比较。
-- 每档必须有非空 `layers`，且必须恰好包含一个 `image-string + win-amount` 图层。金额不参与 `start/loop/end` 可见性：整场只维持一个 renderer/runtime，跨档只更新文本、transform，必要时在同一实例上切换 image-string resource。
+- 每档必须有非空 `layers`，且必须恰好包含一个 `image-string + win-amount` 图层。v5 金额与其它 layer 一样按 award 五状态门控；整场仍只维持一个 renderer/runtime，跨档只更新文本、transform，必要时在同一实例上切换 image-string resource。
 - 每档还可声明任意数量的命名 `text` 和 `binding="manual"` ImgNumber。名称在同档唯一；跨档同名节点视为一个逻辑节点且必须保持 kind 一致。`text` 可省略字体资源或精确引用 package font，并严格保存单行默认文案、字号、字距、纯色或线性渐变、可选描边/投影、`-180..180` 度弧排、anchor、rotation 与可见 segment。游戏应按 exact name 获取 node handle 并调用 `setText()/resetText()`；不得按 label、order 或资源名猜测。manual ImgNumber 保存默认 string、anchor、rotation 与可见 segment。
-- v1/v2/v3 每档严格按全局唯一的 `order` 升序叠放；v4 按 resolved parent 分组校验和排序，数值越小越靠下。跨档时单一金额 renderer 会移动到新档的 resolved parent，不会创建第二个实例。
+- v1/v2/v3 每档严格按全局唯一的 `order` 升序叠放；v4/v5 按 resolved parent 分组校验和排序，数值越小越靠下。跨档时单一金额 renderer 会移动到新档的 resolved parent，不会创建第二个实例。
 - v1/v2/v3 ImgNumber layer 的 `parent` 是 `{ "kind": "popup-root" }` 或
   `{ "kind": "vni-text-layer", "vniLayerId": "...", "textLayerId": "..." }`。后者只能引用
   同档 VNI layer 和该 project 内 exact `type="text"` layer；ImgNumber 的 `x/y/scale/anchor`

@@ -13,6 +13,7 @@ import type {
   AwardTierId,
   PopupLayer,
   PopupOverlayLayer,
+  PopupVisibilityState,
 } from "@slotclientengine/rendercore/popup";
 import {
   addLayer,
@@ -27,6 +28,7 @@ import {
   removePopupResource,
   PopupEditorStore,
   projectToManifest,
+  popupEditorVisibilityStates,
   resourceReferenceCount,
   setPopupVniPlaybackMode,
   type PopupEditorProject,
@@ -309,6 +311,7 @@ export class PopupEditorApp {
               resource: resource.rootKey,
               transform: { x: 0, y: 0, scale: 1, rotation: 0 },
               attachment: { kind: "popup-root" as const },
+              visibleStates: [...popupEditorVisibilityStates("spine")],
             };
             const overlay: PopupOverlayLayer =
               resource.kind === "image"
@@ -316,7 +319,6 @@ export class PopupEditorApp {
                     ...base,
                     kind: "image",
                     anchor: { x: 0.5, y: 0.5 },
-                    visibleSegments: ["start", "loop", "end"],
                   }
                 : resource.kind === "image-string"
                   ? {
@@ -326,7 +328,6 @@ export class PopupEditorApp {
                       binding: "manual",
                       defaultText: "0",
                       anchor: { x: 0.5, y: 0.5 },
-                      visibleSegments: ["start", "loop", "end"],
                     }
                   : resource.kind === "vni"
                     ? {
@@ -359,7 +360,11 @@ export class PopupEditorApp {
         this.#store.transact((draft) => {
           const order = nextOrder(draft.spine.overlays);
           draft.spine.overlays.push(
-            createFontTextLayer(`overlay-${order}`, order),
+            createFontTextLayer(
+              `overlay-${order}`,
+              order,
+              popupEditorVisibilityStates("spine"),
+            ),
           );
         }),
       );
@@ -425,15 +430,13 @@ export class PopupEditorApp {
               )
             )
               (overlay as any).playback[field] = input.value;
-            else if (field.startsWith("segment-")) {
-              const segments = new Set((overlay as any).visibleSegments);
-              const segment = field.slice("segment-".length);
-              input.checked ? segments.add(segment) : segments.delete(segment);
-              (overlay as any).visibleSegments = [
-                "start",
-                "loop",
-                "end",
-              ].filter((item) => segments.has(item));
+            else if (field.startsWith("state-")) {
+              updateVisibleStates(
+                overlay,
+                field.slice("state-".length) as PopupVisibilityState,
+                input.checked,
+                popupEditorVisibilityStates("spine"),
+              );
             }
           });
           if (input.dataset.overlayField === "curvedEnabled")
@@ -494,7 +497,13 @@ export class PopupEditorApp {
         this.#store.transact((draft) => {
           const layers = draft.tiers.get(this.#tier)!.layers;
           const order = nextOrder(layers);
-          layers.push(createFontTextLayer(`text-${order}`, order));
+          layers.push(
+            createFontTextLayer(
+              `text-${order}`,
+              order,
+              popupEditorVisibilityStates("award-celebration"),
+            ),
+          );
         }),
       );
     this.#root
@@ -602,12 +611,12 @@ export class PopupEditorApp {
               )
             )
               (layer as any).playback[field] = input.value;
-            else if (field.startsWith("segment-")) {
-              const segment = field.slice("segment-".length);
-              const segments = new Set((layer as any).visibleSegments);
-              input.checked ? segments.add(segment) : segments.delete(segment);
-              (layer as any).visibleSegments = ["start", "loop", "end"].filter(
-                (item) => segments.has(item),
+            else if (field.startsWith("state-")) {
+              updateVisibleStates(
+                layer,
+                field.slice("state-".length) as PopupVisibilityState,
+                input.checked,
+                popupEditorVisibilityStates("award-celebration"),
               );
             }
           });
@@ -785,7 +794,16 @@ export class PopupEditorApp {
               draft.backdrop.color = input.value;
             else if (field === "backdrop-alpha")
               draft.backdrop.alpha = Number(input.value);
-            else {
+            else if (field.startsWith("backdrop-state-")) {
+              const state = field.slice(
+                "backdrop-state-".length,
+              ) as PopupVisibilityState;
+              const values = new Set(draft.backdrop.visibleStates);
+              input.checked ? values.add(state) : values.delete(state);
+              draft.backdrop.visibleStates = popupEditorVisibilityStates(
+                draft.type,
+              ).filter((item) => values.has(item));
+            } else {
               const key = field as keyof typeof draft.amountFormat;
               (draft.amountFormat as any)[key] =
                 input.type === "checkbox"
@@ -1020,13 +1038,19 @@ function spineMarkup(project: PopupEditorProject) {
 function overlayMarkup(layer: PopupOverlayLayer, project: PopupEditorProject) {
   const input = (field: string, value: string | number, type = "number") =>
     `<label>${field}<input data-overlay-id="${layer.id}" data-overlay-field="${field}" type="${type}" ${type === "number" ? 'step="0.1"' : ""} value="${value}"/></label>`;
+  const visibility = stateControls(
+    "overlay",
+    layer.id,
+    layer.visibleStates ?? popupEditorVisibilityStates("spine"),
+    popupEditorVisibilityStates("spine"),
+  );
   const playback =
     layer.kind === "image"
-      ? `${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${(["start", "loop", "end"] as const).map((segment) => `<label>${segment}<input data-overlay-id="${layer.id}" data-overlay-field="segment-${segment}" type="checkbox" ${layer.visibleSegments.includes(segment) ? "checked" : ""}/></label>`).join("")}`
+      ? `${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}`
       : layer.kind === "image-string"
-        ? `${input("name", layer.name, "text")}${input("defaultText", layer.defaultText, "text")}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${segmentControls("overlay", layer.id, layer.visibleSegments)}`
+        ? `${input("name", layer.name, "text")}${input("defaultText", layer.defaultText, "text")}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}`
         : layer.kind === "text"
-          ? `${input("name", layer.name, "text")}${fontSelectMarkup("overlay", layer.id, layer.resource, project)}${input("defaultText", layer.defaultText, "text")}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${textStyleMarkup("overlay", layer.id, layer.style)}${segmentControls("overlay", layer.id, layer.visibleSegments)}`
+          ? `${input("name", layer.name, "text")}${fontSelectMarkup("overlay", layer.id, layer.resource, project)}${input("defaultText", layer.defaultText, "text")}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${textStyleMarkup("overlay", layer.id, layer.style)}`
           : layer.kind === "spine"
             ? (["startAnimation", "loopAnimation", "endAnimation"] as const)
                 .map((field) => input(field, layer.playback[field], "text"))
@@ -1036,21 +1060,22 @@ function overlayMarkup(layer: PopupOverlayLayer, project: PopupEditorProject) {
                   ? `${input("loopStartTime", layer.playback.loopStartTime)}${input("loopEndTime", layer.playback.loopEndTime)}<label>keepParticlesAlive<input data-overlay-id="${layer.id}" data-overlay-field="keepParticlesAlive" type="checkbox" ${layer.playback.keepParticlesAlive ? "checked" : ""}/></label>`
                   : `<p>VNI once</p>`
               }`;
-  return `<article class="card"><strong>${layer.id}</strong><span>${layer.kind} / ${layer.resource ?? "system"}</span>${attachmentMarkup(layer, project, { kind: "spine-popup" }, "overlay")}${input("order", layer.order)}${input("alpha", layer.alpha ?? 1)}${(["x", "y", "scale", "rotation"] as const).map((field) => input(field, layer.transform[field])).join("")}${playback}<button data-delete-overlay="${layer.id}">删除 overlay</button></article>`;
+  return `<article class="card"><strong>${layer.id}</strong><span>${layer.kind} / ${layer.resource ?? "system"}</span>${attachmentMarkup(layer, project, { kind: "spine-popup" }, "overlay")}${input("order", layer.order)}${input("alpha", layer.alpha ?? 1)}${(["x", "y", "scale", "rotation"] as const).map((field) => input(field, layer.transform[field])).join("")}${visibility}${playback}<button data-delete-overlay="${layer.id}">删除 overlay</button></article>`;
 }
 
-function segmentControls(
+function stateControls(
   owner: "overlay" | "layer",
   id: string,
-  segments: readonly string[],
+  selected: readonly string[],
+  states: readonly string[],
 ) {
   const idAttribute = owner === "overlay" ? "data-overlay-id" : "data-layer-id";
   const fieldAttribute =
     owner === "overlay" ? "data-overlay-field" : "data-layer-field";
-  return (["start", "loop", "end"] as const)
+  return states
     .map(
-      (segment) =>
-        `<label>${segment}<input ${idAttribute}="${id}" ${fieldAttribute}="segment-${segment}" type="checkbox" ${segments.includes(segment) ? "checked" : ""}/></label>`,
+      (state) =>
+        `<label>${state}<input ${idAttribute}="${id}" ${fieldAttribute}="state-${state}" type="checkbox" ${selected.includes(state) ? "checked" : ""}/></label>`,
     )
     .join("");
 }
@@ -1088,7 +1113,11 @@ function nextOrder(layers: readonly { readonly order: number }[]): number {
   return layers.length ? Math.max(...layers.map(({ order }) => order)) + 1 : 0;
 }
 
-function createFontTextLayer(id: string, order: number) {
+function createFontTextLayer(
+  id: string,
+  order: number,
+  visibleStates: readonly PopupVisibilityState[],
+) {
   return {
     id,
     kind: "text" as const,
@@ -1113,8 +1142,20 @@ function createFontTextLayer(id: string, order: number) {
       },
       arcDegrees: 0,
     },
-    visibleSegments: ["start", "loop", "end"] as const,
+    visibleStates: [...visibleStates],
   };
+}
+
+function updateVisibleStates(
+  layer: PopupLayer | PopupOverlayLayer,
+  state: PopupVisibilityState,
+  checked: boolean,
+  states: readonly PopupVisibilityState[],
+) {
+  const values = new Set(layer.visibleStates ?? states);
+  checked ? values.add(state) : values.delete(state);
+  (layer as { visibleStates?: readonly PopupVisibilityState[] }).visibleStates =
+    states.filter((item) => values.has(item));
 }
 
 function updateTextStyleField(
@@ -1328,11 +1369,17 @@ function layerMarkup(
             .map((field) => input(field, layer.playback[field], "text"))
             .join("")
         : layer.kind === "image-string"
-          ? `${input("name", layer.name ?? "win-amount", "text")}${layer.binding === "manual" ? input("defaultText", layer.defaultText ?? "", "text") : ""}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${layer.binding === "manual" ? segmentControls("layer", layer.id, layer.visibleSegments ?? ["start", "loop", "end"]) : '<p class="amount-layer-note">win-amount 全程显示；五档共享一个 runtime，跨档只切换 resource、transform 和文本。</p>'}`
+          ? `${input("name", layer.name ?? "win-amount", "text")}${layer.binding === "manual" ? input("defaultText", layer.defaultText ?? "", "text") : ""}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}`
           : layer.kind === "text"
-            ? `${input("name", layer.name, "text")}${fontSelectMarkup("layer", layer.id, layer.resource, project)}${input("defaultText", layer.defaultText, "text")}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${textStyleMarkup("layer", layer.id, layer.style)}${segmentControls("layer", layer.id, layer.visibleSegments)}`
-            : `${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${(["start", "loop", "end"] as const).map((segment) => `<label>${segment}<input data-layer-id="${layer.id}" data-layer-field="segment-${segment}" type="checkbox" ${layer.visibleSegments.includes(segment) ? "checked" : ""}/></label>`).join("")}`;
-  return `<article class="card"><strong>${layer.id}</strong><span>${layer.kind} / ${layer.resource ?? "system"}</span>${attachmentMarkup(layer, project, { kind: "award", tierId }, "layer")}${input("order", layer.order)}${input("alpha", layer.alpha ?? 1)}${(["x", "y", "scale"] as const).map((field) => input(field, layer.transform[field])).join("")}${layer.kind === "text" || layer.kind === "image-string" ? input("rotation", layer.transform.rotation ?? 0) : ""}${playback}<button data-delete-layer="${layer.id}">删除图层</button></article>`;
+            ? `${input("name", layer.name, "text")}${fontSelectMarkup("layer", layer.id, layer.resource, project)}${input("defaultText", layer.defaultText, "text")}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${textStyleMarkup("layer", layer.id, layer.style)}`
+            : `${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}`;
+  const visibility = stateControls(
+    "layer",
+    layer.id,
+    layer.visibleStates ?? popupEditorVisibilityStates("award-celebration"),
+    popupEditorVisibilityStates("award-celebration"),
+  );
+  return `<article class="card"><strong>${layer.id}</strong><span>${layer.kind} / ${layer.resource ?? "system"}</span>${attachmentMarkup(layer, project, { kind: "award", tierId }, "layer")}${input("order", layer.order)}${input("alpha", layer.alpha ?? 1)}${(["x", "y", "scale"] as const).map((field) => input(field, layer.transform[field])).join("")}${layer.kind === "text" || layer.kind === "image-string" ? input("rotation", layer.transform.rotation ?? 0) : ""}${visibility}${playback}<button data-delete-layer="${layer.id}">删除图层</button></article>`;
 }
 
 function vniPlaybackMarkup(
@@ -1490,7 +1537,13 @@ function projectMarkup(project: PopupEditorProject, errors: readonly string[]) {
     `<label>${field}<input data-project-field="${field}" type="${type}" value="${project.amountFormat[field]}" ${type === "checkbox" && project.amountFormat[field] ? "checked" : ""}/></label>`;
   const preset = detectPopupAmountFormatPreset(project.amountFormat);
   const idError = popupIdValidationError(project.id);
-  const common = `<div class="project-actions"><button id="export-project">导出 Popup ZIP</button><button id="close-project">关闭项目</button></div><h2>项目</h2><p>格式 v${project.formatVersion} · ${project.type === "award-celebration" ? "获奖庆祝" : "Spine 弹窗"}</p><label>项目名<input data-project-field="project-name" value="${project.name}"/></label><label class="field-stack">project id<input id="project-id" value="${project.id}" aria-invalid="${String(Boolean(idError))}" aria-describedby="project-id-error" class="${idError ? "invalid" : ""}"/><small id="project-id-error" class="field-error" ${idError ? "" : "hidden"}>${idError}</small></label><h3>重点区域</h3><p>以 Popup 原点为基准向四边扩展；坐标平面无边界，预览中的绿色框显示必须完整可见的区域。</p><div class="threshold-grid">${(["left", "right", "top", "bottom"] as const).map((side) => `<label>${side}<input data-project-field="focus-${side}" type="number" min="0.001" step="1" value="${project.adaptation.focus[side]}"/></label>`).join("")}</div><h3>全屏压暗底</h3><label><input data-project-field="backdrop-enabled" type="checkbox" ${project.backdrop.enabled ? "checked" : ""}/>启用</label><label>颜色<input data-project-field="backdrop-color" type="color" value="${project.backdrop.color}"/></label><label>透明度<input data-project-field="backdrop-alpha" type="number" min="0" max="1" step="0.05" value="${project.backdrop.alpha}"/></label>`;
+  const backdropStates = popupEditorVisibilityStates(project.type)
+    .map(
+      (state) =>
+        `<label>${state}<input data-project-field="backdrop-state-${state}" type="checkbox" ${project.backdrop.visibleStates.includes(state) ? "checked" : ""}/></label>`,
+    )
+    .join("");
+  const common = `<div class="project-actions"><button id="export-project">导出 Popup ZIP</button><button id="close-project">关闭项目</button></div><h2>项目</h2><p>格式 v${project.formatVersion} · ${project.type === "award-celebration" ? "获奖庆祝" : "Spine 弹窗"}</p><label>项目名<input data-project-field="project-name" value="${project.name}"/></label><label class="field-stack">project id<input id="project-id" value="${project.id}" aria-invalid="${String(Boolean(idError))}" aria-describedby="project-id-error" class="${idError ? "invalid" : ""}"/><small id="project-id-error" class="field-error" ${idError ? "" : "hidden"}>${idError}</small></label><h3>重点区域</h3><p>以 Popup 原点为基准向四边扩展；坐标平面无边界，预览中的绿色框显示必须完整可见的区域。</p><div class="threshold-grid">${(["left", "right", "top", "bottom"] as const).map((side) => `<label>${side}<input data-project-field="focus-${side}" type="number" min="0.001" step="1" value="${project.adaptation.focus[side]}"/></label>`).join("")}</div><h3>全屏压暗底</h3><label><input data-project-field="backdrop-enabled" type="checkbox" ${project.backdrop.enabled ? "checked" : ""}/>启用</label><label>颜色<input data-project-field="backdrop-color" type="color" value="${project.backdrop.color}"/></label><label>透明度<input data-project-field="backdrop-alpha" type="number" min="0" max="1" step="0.05" value="${project.backdrop.alpha}"/></label><div class="threshold-grid">${backdropStates}</div>`;
   const commonWithColorEditor = common.replace(
     `<label>颜色<input data-project-field="backdrop-color" type="color" value="${project.backdrop.color}"/></label>`,
     `<label>颜色<span class="color-control"><input type="color" data-project-color-picker="backdrop-color" value="${project.backdrop.color.slice(0, 7)}"/><input data-project-field="backdrop-color" type="text" value="${project.backdrop.color}"/></span></label>`,

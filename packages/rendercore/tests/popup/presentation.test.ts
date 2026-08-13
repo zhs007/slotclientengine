@@ -169,4 +169,35 @@ describe("popup presentation host contract", () => {
       presentation.applyViewport({ width: 100, height: 100 }),
     ).toThrow(/destroyed/);
   });
+
+  it("gates a v5 backdrop by the active project state", () => {
+    const presentation = createPopupPresentation({
+      version: 5,
+      kind: "popup",
+      type: "spine",
+      id: "state-backdrop",
+      name: "State backdrop",
+      adaptation: {
+        mode: "maximized-focus",
+        focus: { left: 100, right: 100, top: 100, bottom: 100 },
+      },
+      backdrop: {
+        enabled: true,
+        color: "#000000",
+        alpha: 0.5,
+        visibleStates: ["loop"],
+      },
+      resources: {},
+      spine: {} as never,
+    });
+    presentation.applyViewport({ width: 100, height: 100 });
+    presentation.setActive(true);
+    presentation.setState("start");
+    expect(presentation.container.children[0]!.visible).toBe(false);
+    presentation.setState("loop");
+    expect(presentation.container.children[0]!.visible).toBe(true);
+    presentation.setState("end");
+    expect(presentation.container.children[0]!.visible).toBe(false);
+    presentation.destroy();
+  });
 });

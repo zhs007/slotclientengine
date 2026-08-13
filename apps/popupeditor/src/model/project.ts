@@ -1,5 +1,8 @@
 import {
   parsePopupManifest,
+  AWARD_POPUP_STATES,
+  POPUP_SEGMENTS,
+  migrateLegacyPopupSegments,
   resolvePopupLayerAttachment,
   validatePopupLayerAttachmentGraph,
   type AwardTierId,
@@ -8,6 +11,7 @@ import {
   type PopupManifest,
   type PopupOverlayLayer,
   type PopupResourceSpec,
+  type PopupVisibilityState,
 } from "@slotclientengine/rendercore/popup";
 import { validateOfficialSpineResource } from "@slotclientengine/rendercore";
 import type { EditorAssetEntry } from "@slotclientengine/editorresource";
@@ -44,14 +48,19 @@ export interface PopupSpineAttachmentTarget {
   readonly slotNames: readonly string[];
 }
 export interface PopupEditorProject {
-  formatVersion: 4;
+  formatVersion: 5;
   name: string;
   type: "award-celebration" | "spine";
   id: string;
   adaptation: {
     focus: { left: number; right: number; top: number; bottom: number };
   };
-  backdrop: { enabled: boolean; color: string; alpha: number };
+  backdrop: {
+    enabled: boolean;
+    color: string;
+    alpha: number;
+    visibleStates: PopupVisibilityState[];
+  };
   amountFormat: PopupAmountFormat;
   resources: Map<string, PopupEditorResource>;
   assets: Map<string, EditorAssetEntry>;
@@ -102,6 +111,35 @@ export const POPUP_AMOUNT_FORMAT_PRESETS: Readonly<
   }),
 });
 
+export function popupEditorVisibilityStates(
+  type: PopupEditorProject["type"],
+): readonly PopupVisibilityState[] {
+  return type === "award-celebration" ? AWARD_POPUP_STATES : POPUP_SEGMENTS;
+}
+
+export function migratePopupEditorVisibility(
+  project: PopupEditorProject,
+  legacy = true,
+): void {
+  const states = popupEditorVisibilityStates(project.type);
+  if (legacy) project.backdrop.visibleStates = [...states];
+  const layers =
+    project.type === "award-celebration"
+      ? [...project.tiers.values()].flatMap(({ layers }) => layers)
+      : project.spine.overlays;
+  for (const layer of layers) {
+    if (!legacy && layer.visibleStates) continue;
+    const legacySegments =
+      "visibleSegments" in layer && layer.visibleSegments
+        ? layer.visibleSegments
+        : POPUP_SEGMENTS;
+    (layer as { visibleStates?: PopupVisibilityState[] }).visibleStates = [
+      ...migrateLegacyPopupSegments(legacySegments, states as readonly any[]),
+    ];
+    delete (layer as { visibleSegments?: unknown }).visibleSegments;
+  }
+}
+
 export function createPopupAmountFormat(
   presetId: PopupAmountFormatPresetId,
 ): PopupAmountFormat {
@@ -135,14 +173,21 @@ export function createPopupEditorProject(
     layers: [],
   });
   return {
-    formatVersion: 4,
+    formatVersion: 5,
     name: options.name ?? "Untitled Popup",
     type: options.type ?? "award-celebration",
     id: options.id ?? "untitled-popup",
     adaptation: {
       focus: { left: 540, right: 540, top: 960, bottom: 960 },
     },
-    backdrop: { enabled: true, color: "#000000", alpha: 0.5 },
+    backdrop: {
+      enabled: true,
+      color: "#000000",
+      alpha: 0.5,
+      visibleStates: [
+        ...popupEditorVisibilityStates(options.type ?? "award-celebration"),
+      ],
+    },
     amountFormat: createPopupAmountFormat("integer"),
     resources: new Map(),
     assets: new Map(),
@@ -189,7 +234,10 @@ export function clonePopupEditorProject(
   return {
     ...project,
     adaptation: structuredClone(project.adaptation),
-    backdrop: { ...project.backdrop },
+    backdrop: {
+      ...project.backdrop,
+      visibleStates: [...project.backdrop.visibleStates],
+    },
     amountFormat: { ...project.amountFormat },
     spine: structuredClone(project.spine),
     resources: new Map(
@@ -219,7 +267,7 @@ export function clonePopupEditorProject(
 
 export function projectToManifest(project: PopupEditorProject): PopupManifest {
   const common = {
-    version: 4 as const,
+    version: 5 as const,
     kind: "popup" as const,
     id: project.id,
     name: project.name,
@@ -227,25 +275,37 @@ export function projectToManifest(project: PopupEditorProject): PopupManifest {
       mode: "maximized-focus" as const,
       focus: { ...project.adaptation.focus },
     },
-    backdrop: { ...project.backdrop },
+    backdrop: {
+      ...project.backdrop,
+      visibleStates: [...project.backdrop.visibleStates] as any,
+    },
   };
   const canonicalLayer = <T extends PopupLayer>(layer: T) => {
-    const { parent: _parent, ...rest } = layer as T & { parent?: unknown };
+    const {
+      parent: _parent,
+      visibleSegments: _segments,
+      ...rest
+    } = layer as T & { parent?: unknown; visibleSegments?: unknown };
     return {
       ...rest,
       alpha: layer.alpha ?? 1,
       attachment: resolvePopupLayerAttachment(layer),
+      visibleStates: [...(layer.visibleStates ?? AWARD_POPUP_STATES)] as any,
     };
   };
-  const canonicalOverlay = <T extends PopupOverlayLayer>(layer: T) => ({
-    ...layer,
-    alpha: layer.alpha ?? 1,
-    attachment: resolvePopupLayerAttachment(layer),
-  });
+  const canonicalOverlay = <T extends PopupOverlayLayer>(layer: T) => {
+    const { visibleSegments: _segments, ...rest } = layer as any;
+    return {
+      ...rest,
+      alpha: layer.alpha ?? 1,
+      attachment: resolvePopupLayerAttachment(layer),
+      visibleStates: [...(layer.visibleStates ?? POPUP_SEGMENTS)] as any,
+    };
+  };
   if (project.type === "spine") {
     if (project.spine.prompt.enabled)
       throw new Error(
-        "v4 项目不能导出 legacy prompt；请先迁移为命名的字体文字 overlay。",
+        "v5 项目不能导出 legacy prompt；请先迁移为命名的字体文字 overlay。",
       );
     const resourceKey = project.spine.resource;
     if (!resourceKey)
@@ -359,7 +419,7 @@ export function migratePopupPromptToTextLayer(
       fill: { kind: "solid", color: prompt.fill },
       arcDegrees: 0,
     },
-    visibleSegments: ["start", "loop"],
+    visibleStates: ["start", "loop"],
   });
   project.spine.prompt.enabled = false;
   project.spine.prompt.font = null;
@@ -496,6 +556,7 @@ export function addLayer(
     transform: { x: 0, y: 0, scale: 1, rotation: 0 },
     alpha: 1,
     attachment: { kind: "popup-root" as const },
+    visibleStates: [...AWARD_POPUP_STATES],
   };
   let layer: PopupLayer;
   if (resource.kind === "image-string" && !existingAmount)
@@ -516,7 +577,6 @@ export function addLayer(
       defaultText: "0",
       anchor: { x: 0.5, y: 0.5 },
       parent: { kind: "popup-root" },
-      visibleSegments: ["start", "loop", "end"],
     };
   else if (resource.kind === "font")
     layer = {
@@ -539,14 +599,12 @@ export function addLayer(
         },
         arcDegrees: 0,
       },
-      visibleSegments: ["start", "loop", "end"],
     };
   else if (resource.kind === "image")
     layer = {
       ...base,
       kind: "image",
       anchor: { x: 0.5, y: 0.5 },
-      visibleSegments: ["start", "loop", "end"],
     };
   else if (resource.kind === "vni")
     layer = {

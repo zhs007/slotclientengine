@@ -24,6 +24,7 @@ import {
   parsePopupManifest,
   resolvePopupLayerAttachment,
   resolvePopupPackageFiles,
+  upgradePopupManifestToV5,
 } from "@slotclientengine/rendercore/popup";
 import type {
   PopupManifest,
@@ -33,7 +34,7 @@ import { assertVNIProject } from "@slotclientengine/vnicore/core";
 import {
   clonePopupEditorProject,
   createPopupEditorProject,
-  migratePopupPromptToTextLayer,
+  migratePopupEditorVisibility,
   projectToManifest,
 } from "../model/project.js";
 import type { PopupEditorProject } from "../model/project.js";
@@ -81,37 +82,36 @@ export async function importPopupZip(
   );
   const root = files.get(ROOT);
   if (!root) throw new Error(`popup package 缺少 root ${ROOT} sentinel。`);
-  const manifest = parsePopupManifest(parseJson(root, ROOT));
+  const sourceManifest = parsePopupManifest(parseJson(root, ROOT));
   if (!files.has(EDITOR_ASSETS_MAP_PATH))
     throw new Error(
       "legacy popup package 必须先在统一导入审查中为资源指定 filename key。",
     );
-  const virtual = await resolvePopupPackageFiles({ manifest, files });
-  collectPopupPackagePaths({ manifest, files: virtual });
+  const virtual = await resolvePopupPackageFiles({
+    manifest: sourceManifest,
+    files,
+  });
+  collectPopupPackagePaths({ manifest: sourceManifest, files: virtual });
   if (options.prepare !== false) {
-    const resource = await createPopupPackageResource({ manifest, files });
+    const resource = await createPopupPackageResource({
+      manifest: sourceManifest,
+      files,
+    });
     await resource.destroy();
   }
+  const manifest = upgradePopupManifestToV5(sourceManifest);
   const map = decodeEditorAssetsMap(files.get(EDITOR_ASSETS_MAP_PATH)!);
   const project = createPopupEditorProject();
-  project.name = manifest.version === 1 ? manifest.id : manifest.name;
+  project.name = manifest.name;
   project.type = manifest.type;
   project.id = manifest.id;
-  project.adaptation =
-    manifest.version !== 1
-      ? { focus: { ...manifest.adaptation.focus } }
-      : {
-          focus: {
-            left: manifest.designViewport.width / 2,
-            right: manifest.designViewport.width / 2,
-            top: manifest.designViewport.height / 2,
-            bottom: manifest.designViewport.height / 2,
-          },
-        };
-  project.backdrop =
-    manifest.version !== 1
-      ? { ...manifest.backdrop }
-      : { enabled: false, color: "#000000", alpha: 0.5 };
+  project.adaptation = { focus: { ...manifest.adaptation.focus } };
+  project.backdrop = {
+    enabled: manifest.backdrop.enabled,
+    color: manifest.backdrop.color,
+    alpha: manifest.backdrop.alpha,
+    visibleStates: [...manifest.backdrop.visibleStates],
+  };
   project.resources.clear();
   project.assets.clear();
   for (const key of Object.keys(map.files)) {
@@ -133,8 +133,6 @@ export async function importPopupZip(
       keys: resourceClosure(spec, project.assets),
     });
   if (manifest.type === "spine") {
-    const prompt =
-      "prompt" in manifest.spine ? manifest.spine.prompt : undefined;
     project.spine = {
       resource: manifest.spine.resource,
       transform: { ...manifest.spine.transform },
@@ -143,23 +141,14 @@ export async function importPopupZip(
         loopAnimation: manifest.spine.playback.loopAnimation,
         endAnimation: manifest.spine.playback.endAnimation,
       },
-      prompt: prompt
-        ? {
-            enabled: true,
-            font: prompt.font ?? null,
-            defaultText: prompt.defaultText,
-            fill: prompt.fill,
-            order: prompt.order,
-            area: { ...prompt.area },
-          }
-        : {
-            enabled: false,
-            font: null,
-            defaultText: "Press any key to continue",
-            fill: "#ffffff",
-            order: 100,
-            area: { x: 0, y: 500, width: 800, height: 80 },
-          },
+      prompt: {
+        enabled: false,
+        font: null,
+        defaultText: "Press any key to continue",
+        fill: "#ffffff",
+        order: 100,
+        area: { x: 0, y: 500, width: 800, height: 80 },
+      },
       overlays: structuredClone([...(manifest.spine.overlays ?? [])]),
     };
     normalizeImportedProject(project);
@@ -192,7 +181,7 @@ export async function importPopupZip(
 }
 
 function normalizeImportedProject(project: PopupEditorProject): void {
-  migratePopupPromptToTextLayer(project);
+  migratePopupEditorVisibility(project, false);
   for (const tier of project.tiers.values())
     for (const layer of tier.layers) {
       (layer as { alpha?: number }).alpha ??= 1;

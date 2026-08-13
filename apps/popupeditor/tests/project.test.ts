@@ -21,6 +21,7 @@ import {
   getPopupVniTextLayerTargets,
   getPopupSpineAttachmentTargets,
   migratePopupPromptToTextLayer,
+  migratePopupEditorVisibility,
   popupEditorProjectDiagnostics,
   projectToManifest,
   removePopupResource,
@@ -32,10 +33,37 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 describe("popup editor filename-key project", () => {
+  it("uses project-specific states for new layers and legacy migration", () => {
+    const award = createPopupEditorProject();
+    expect(award.backdrop.visibleStates).toEqual([
+      "base",
+      "standard",
+      "bigwin",
+      "superwin",
+      "megawin",
+    ]);
+    const legacyLayer = {
+      id: "legacy",
+      kind: "image",
+      resource: "image",
+      order: 1,
+      alpha: 1,
+      transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+      anchor: { x: 0.5, y: 0.5 },
+      visibleSegments: ["start", "end"],
+    } as any;
+    award.tiers.get("base")!.layers.push(legacyLayer);
+    migratePopupEditorVisibility(award);
+    expect(legacyLayer.visibleStates).toEqual(["base", "bigwin"]);
+    expect(legacyLayer).not.toHaveProperty("visibleSegments");
+
+    const spine = createPopupEditorProject({ type: "spine" });
+    expect(spine.backdrop.visibleStates).toEqual(["start", "loop", "end"]);
+  });
+
   it("exports a standalone Spine popup without award fields", () => {
-    const project = createPopupEditorProject();
+    const project = createPopupEditorProject({ type: "spine" });
     const hash = "a".repeat(64);
-    project.type = "spine";
     project.id = "free-game";
     project.resources.set("effect", {
       rootKey: "effect",
@@ -71,7 +99,7 @@ describe("popup editor filename-key project", () => {
         id: "prompt",
         kind: "text",
         name: "prompt",
-        visibleSegments: ["start", "loop"],
+        visibleStates: ["start", "loop"],
       }),
     );
     expect(Object.keys(manifest.resources)).toEqual(["effect"]);
@@ -106,7 +134,7 @@ describe("popup editor filename-key project", () => {
     expect(project.spine).toEqual(before);
   });
 
-  it("automatically migrates v1 and v2 system-font prompts to canonical v4", async () => {
+  it("automatically migrates v1 and v2 system-font prompts to canonical v5", async () => {
     const skeleton = JSON.stringify({
       skeleton: { spine: "4.3.23" },
       bones: [{ name: "root" }],
@@ -119,8 +147,7 @@ describe("popup editor filename-key project", () => {
       new File(["Spine.png\nsize:1,1\nfilter:Linear,Linear\n"], "Spine.atlas"),
       new File([png(1, 1).buffer], "Spine.png"),
     ]);
-    const project = createPopupEditorProject();
-    project.type = "spine";
+    const project = createPopupEditorProject({ type: "spine" });
     project.id = "free-game";
     await commitImportReview(project, review);
     project.spine.resource = "Spine.json";
@@ -144,6 +171,11 @@ describe("popup editor filename-key project", () => {
     delete manifest.name;
     delete manifest.adaptation;
     delete manifest.backdrop;
+    for (const overlay of manifest.spine.overlays ?? []) {
+      overlay.visibleSegments = overlay.visibleStates;
+      delete overlay.visibleStates;
+      delete overlay.attachment;
+    }
     manifest.spine.prompt = {
       defaultText: "Press any key to continue",
       fill: "#ffffff",
@@ -165,13 +197,13 @@ describe("popup editor filename-key project", () => {
     const imported = await importPopupZip(createDeterministicZip(entries), {
       prepare: false,
     });
-    expect(imported.formatVersion).toBe(4);
+    expect(imported.formatVersion).toBe(5);
     expect(imported.spine.prompt.font).toBeNull();
     expect(imported.spine.prompt.enabled).toBe(false);
     expect(imported.spine.overlays).toContainEqual(
       expect.objectContaining({ id: "prompt", kind: "text", name: "prompt" }),
     );
-    expect(projectToManifest(imported)).toMatchObject({ version: 4 });
+    expect(projectToManifest(imported)).toMatchObject({ version: 5 });
     expect(projectToManifest(imported)).not.toHaveProperty("designViewport");
 
     manifest.version = 2;
@@ -193,13 +225,14 @@ describe("popup editor filename-key project", () => {
     expect(importedLegacyV2.spine.overlays).toContainEqual(
       expect.objectContaining({ id: "prompt", kind: "text", name: "prompt" }),
     );
-    const canonicalV4 = projectToManifest(importedLegacyV2);
-    expect(canonicalV4.version).toBe(4);
-    expect(canonicalV4).not.toHaveProperty("designViewport");
-    if (canonicalV4.type !== "spine") throw new Error("Expected spine popup.");
-    expect(canonicalV4.spine).not.toHaveProperty("prompt");
-    expect(canonicalV4.spine.overlays?.[0]).toMatchObject({
+    const canonicalV5 = projectToManifest(importedLegacyV2);
+    expect(canonicalV5.version).toBe(5);
+    expect(canonicalV5).not.toHaveProperty("designViewport");
+    if (canonicalV5.type !== "spine") throw new Error("Expected spine popup.");
+    expect(canonicalV5.spine).not.toHaveProperty("prompt");
+    expect(canonicalV5.spine.overlays?.[0]).toMatchObject({
       attachment: { kind: "popup-root" },
+      visibleStates: ["start", "loop"],
     });
   });
 
@@ -301,7 +334,7 @@ describe("popup editor filename-key project", () => {
       name: "imgnumber-1",
       binding: "manual",
       defaultText: "0",
-      visibleSegments: ["start", "loop", "end"],
+      visibleStates: ["base", "standard", "bigwin", "superwin", "megawin"],
       parent: { kind: "popup-root" },
     });
 

@@ -4,6 +4,32 @@ import { createSpinePopupOverlayRuntime } from "../../src/popup/spine-overlay-ru
 import type { RendercoreSpinePlayer } from "../../src/spine/runtime-player.js";
 
 describe("spine popup overlay runtime", () => {
+  it("uses v5 visibleStates for every Spine popup phase", async () => {
+    const runtime = createSpinePopupOverlayRuntime({
+      popupId: "free-game",
+      layer: {
+        id: "end-shade",
+        kind: "image",
+        order: 0,
+        alpha: 1,
+        resource: "shade",
+        attachment: { kind: "popup-root" },
+        transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+        anchor: { x: 0.5, y: 0.5 },
+        visibleStates: ["end"],
+      },
+      resource: { kind: "image", texture: Texture.EMPTY },
+    });
+    await runtime.init();
+    runtime.start();
+    expect(runtime.container.visible).toBe(false);
+    runtime.applySegment("loop");
+    expect(runtime.container.visible).toBe(false);
+    runtime.applySegment("end");
+    expect(runtime.container.visible).toBe(true);
+    runtime.destroy();
+  });
+
   it("renders image segments with authored transform and rotation", async () => {
     const runtime = createSpinePopupOverlayRuntime({
       popupId: "free-game",

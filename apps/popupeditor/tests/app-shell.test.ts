@@ -186,7 +186,7 @@ describe("PopupEditorApp", () => {
     app.destroy();
   });
 
-  it("creates a fixed-type v4 project and edits focus-only presentation configuration", async () => {
+  it("creates a fixed-type v5 project and edits focus-only presentation configuration", async () => {
     const { PopupEditorApp } = await import("../src/ui/app-shell.js");
     const root = document.querySelector<HTMLElement>("#app")!;
     const app = new PopupEditorApp(root);
@@ -203,7 +203,10 @@ describe("PopupEditorApp", () => {
     expect(root.querySelector("nav")!.hasAttribute("hidden")).toBe(false);
 
     root.querySelector<HTMLButtonElement>('[data-tab="project"]')!.click();
-    expect(root.textContent).toContain("格式 v4 · Spine 弹窗");
+    expect(root.textContent).toContain("格式 v5 · Spine 弹窗");
+    expect(
+      root.querySelectorAll('[data-project-field^="backdrop-state-"]'),
+    ).toHaveLength(3);
     expect(
       root.querySelector('[data-project-field="viewport-width"]'),
     ).toBeNull();
@@ -578,7 +581,7 @@ describe("PopupEditorApp", () => {
       input.dispatchEvent(new Event("change"));
     }
     const segment = root.querySelector<HTMLInputElement>(
-      `[data-overlay-id="${imageId}"][data-overlay-field="segment-end"]`,
+      `[data-overlay-id="${imageId}"][data-overlay-field="state-end"]`,
     )!;
     segment.checked = false;
     segment.dispatchEvent(new Event("change"));
@@ -894,6 +897,7 @@ function validProject() {
 function validSpineProject() {
   const project = validProject();
   project.type = "spine";
+  project.backdrop.visibleStates = ["start", "loop", "end"];
   project.spine.resource = "Spine.json";
   project.spine.playback = {
     startAnimation: "Start",
