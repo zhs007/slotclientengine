@@ -17,6 +17,11 @@ export type {
   CreateTextRenderObjectOptions,
   TextRenderObject,
 } from "./text-render-object.js";
+export { createImgNumberRenderObject } from "./imgnumber-render-object.js";
+export type {
+  CreateImgNumberRenderObjectOptions,
+  ImgNumberRenderObject,
+} from "./imgnumber-render-object.js";
 export type {
   PresentationMotionOptions,
   PresentationMountTarget,

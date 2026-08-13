@@ -3,6 +3,9 @@
 本文说明 Crave 如何从 RenderCore 旧的 `cloneValue/getValueAnchor/cloneText/getTextAnchor` 迁移到统一
 `RenderObject` API。RenderCore 仓库不会直接修改 Crave；请在 Crave 自己的分支人工应用并执行末尾验收。
 
+Nearwin1/2 按 Gamelayout exact name 创建对象，以及图标中奖字体替换为 standalone ImgNumber 的说明，见
+[`crave-named-render-object-migration.md`](./crave-named-render-object-migration.md)。
+
 ## 1. 新对象模型
 
 - whole symbol、普通文字、symbol 的 value part 与 exact-name text part 都是受控 `RenderObject`。
