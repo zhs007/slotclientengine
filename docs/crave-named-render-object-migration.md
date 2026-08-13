@@ -1,25 +1,22 @@
 # Crave named RenderObject 与 ImgNumber 接入说明
 
-本文只描述 Crave 需要人工完成的调用点迁移。RenderCore 仓库不修改 Crave、Gamelayout manifest 或美术资源；下面的 resource name 必须由 Crave 配置保存，并与最终 Gamelayout 包的 `runtimeResources` key 大小写完全一致。
+本文只描述 Crave 需要人工完成的调用点迁移。RenderCore 仓库不修改 Crave、Gamelayout manifest 或美术资源；下面直接使用 Gamelayout 包 `runtimeResources` 中大小写完全一致的 resource name，不要求 Crave 再增加一层配置。
 
 ## 1. Nearwin1 / Nearwin2
 
 旧代码不再自行执行 path-to-key、`loadRuntimeResource()`、Spine player 创建和逐帧 update。Scene Layout package runtime 直接按 exact name 创建 detached、owned `RenderObject`：
 
 ```ts
-const NEARWIN_RESOURCES = {
-  nearwin1: craveConfig.nearwin1RenderResource,
-  nearwin2: craveConfig.nearwin2RenderResource,
-} as const;
-
-const nearwin1 = await runtime.createRenderObject(NEARWIN_RESOURCES.nearwin1);
+const nearwin1 = await runtime.createRenderObject("nearwin1");
+const nearwin2 = await runtime.createRenderObject("nearwin2");
 nearwin1.setPosition({ x: nearwin1X, y: nearwin1Y });
+nearwin2.setPosition({ x: nearwin2X, y: nearwin2Y });
 ```
 
 Spine object 的 `play()` 必须传 manifest 中真实存在的 exact animation name；Promise 在 package runtime 的正常 ticker 更新到一次播放真正完成后才 resolve：
 
 ```ts
-await nearwin1.play(craveConfig.nearwinAnimation, { signal });
+await nearwin1.play("Loop", { signal });
 nearwin1.stop(); // 业务中断时停止；pending play 会 reject
 ```
 
@@ -30,14 +27,14 @@ Crave 仍负责 Nearwin1/2 的选择、重复次数、触发时序和取消。Re
 factory 返回的对象尚未挂到 display tree。通过已有 presentation scope 挂到 Crave 选定的安全 layer；不要取得或操作 raw Pixi `Container`：
 
 ```ts
-const object = await runtime.createRenderObject(resourceName);
+const nearwin1 = await runtime.createRenderObject("nearwin1");
 
 await area.present(async (scope) => {
   await scope.withNode(
     area.getLayer("win"),
-    object,
+    nearwin1,
     { ownership: "destroy" },
-    () => object.play(animationName, { signal }),
+    () => nearwin1.play("Loop", { signal }),
   );
 });
 ```
@@ -51,13 +48,10 @@ await area.present(async (scope) => {
 等美术把 ImgNumber 资源放入 Gamelayout 包并由 manifest 声明 exact `image-string` program resource 后，按 name、初始文字和可选 anchor 创建：
 
 ```ts
-const winAmount = await runtime.createImgNumberRenderObject(
-  craveConfig.symbolWinAmountRenderResource,
-  {
-    text: formatSymbolWinAmount(initialAmount),
-    anchor: { x: 0.5, y: 0.5 },
-  },
-);
+const winAmount = await runtime.createImgNumberRenderObject("imgnumber", {
+  text: formatSymbolWinAmount(initialAmount),
+  anchor: { x: 0.5, y: 0.5 },
+});
 
 winAmount.setPosition({ x: amountX, y: amountY });
 winAmount.setText(formatSymbolWinAmount(nextAmount));
@@ -78,7 +72,7 @@ clone 与原对象文字、位置和销毁互不联动；二者共享 package-ow
 
 ## 4. Crave 修改清单
 
-1. 为 Nearwin1、Nearwin2 和图标中奖 ImgNumber 保存 Gamelayout manifest 的 exact resource name。
+1. 确认 Gamelayout manifest 中存在 exact resource name：`nearwin1`、`nearwin2` 和 `imgnumber`。
 2. 删除 Nearwin 调用点的 path-to-key、`loadRuntimeResource()`、player materialize 和 player update 代码，改用 `runtime.createRenderObject(name)`。
 3. 保留 Crave 的 Nearwin 时序，只用 `play/stop` 编排。
 4. 把图标中奖的字体文字替换为 `createImgNumberRenderObject()`，位置使用 `setPosition()`，内容使用 `setText()`。
