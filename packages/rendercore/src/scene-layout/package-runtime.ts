@@ -64,6 +64,11 @@ import type {
 } from "./types.js";
 import type { SlotReelPresentationProfileV1 } from "./template-presentation.js";
 import { createSceneLayoutOccurrenceEffectPlayerFactory } from "./occurrence-effect-player.js";
+import {
+  createSceneLayoutRenderObjectFactory,
+  type SceneLayoutRenderObjectFactory,
+  type SceneLayoutRenderObjectFactoryDependencies,
+} from "./render-object-factory.js";
 
 type ReelPresentation = RenderReelSet | RenderGridCellReelSet;
 
@@ -163,6 +168,8 @@ export function createSceneLayoutPackageRuntime(options: {
     readonly url: string;
     readonly fadeOutSeconds: number;
   }) => SceneLayoutTransitionVideoPlayer;
+  /** @internal Deterministic RenderObject factory seams used by package tests. */
+  readonly renderObjectFactoryDependencies?: SceneLayoutRenderObjectFactoryDependencies;
 }): SceneLayoutPackageRuntime {
   return new DefaultSceneLayoutPackageRuntime(
     options.resource,
@@ -177,6 +184,7 @@ export function createSceneLayoutPackageRuntime(options: {
     options.createTransitionPlayer,
     options.createSpinePopupPlayer,
     options.createVideoTransitionPlayer,
+    options.renderObjectFactoryDependencies,
   );
 }
 
@@ -214,6 +222,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     readonly url: string;
     readonly fadeOutSeconds: number;
   }) => SceneLayoutTransitionVideoPlayer;
+  readonly #renderObjectFactory: SceneLayoutRenderObjectFactory;
   readonly #popupRoot = new Container();
   readonly #transitionRoot = new Container();
   readonly #videoBlackoutRoot = new Container();
@@ -301,6 +310,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           readonly fadeOutSeconds: number;
         }) => SceneLayoutTransitionVideoPlayer)
       | undefined,
+    renderObjectFactoryDependencies:
+      | SceneLayoutRenderObjectFactoryDependencies
+      | undefined,
   ) {
     this.#resource = resource;
     this.#presentationOnly = presentationOnly;
@@ -324,6 +336,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       spinePopupPlayerFactory ?? createSpinePopupPlayer;
     this.#createVideoTransitionPlayer =
       createVideoTransitionPlayer ?? createSceneLayoutTransitionVideoPlayer;
+    this.#renderObjectFactory = createSceneLayoutRenderObjectFactory({
+      resource,
+      dependencies: renderObjectFactoryDependencies,
+    });
     this.container = new Container();
     this.container.label = `scene-layout-package:${resource.manifest.id}`;
     this.#popupRoot.label = "scene-layout-popup-root";
@@ -609,6 +625,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.assertReady();
     this.updatePresentationDelayWaiters(deltaSeconds);
     this.#layout.update(deltaSeconds);
+    this.#renderObjectFactory.update(deltaSeconds);
     if (this.#reel && !this.#hostUpdatesMainReel) {
       const geometry = this.#manifest.reels.main;
       if (this.#reel instanceof RenderGridCellReelSet) {
@@ -1936,6 +1953,24 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     return this.#layout.getImageStringText(nodeId);
   }
 
+  createRenderObject(
+    name: string,
+  ): Promise<import("../presentation/index.js").RenderObject> {
+    this.assertReady();
+    return this.#renderObjectFactory.createRenderObject(name);
+  }
+
+  createImgNumberRenderObject(
+    name: string,
+    options: {
+      readonly text: string;
+      readonly anchor?: { readonly x: number; readonly y: number };
+    },
+  ): Promise<import("../presentation/index.js").ImgNumberRenderObject> {
+    this.assertReady();
+    return this.#renderObjectFactory.createImgNumberRenderObject(name, options);
+  }
+
   requestNodeState(nodeId: string, state: string): Promise<void> {
     this.assertReady();
     return this.#layout.requestNodeState(nodeId, state);
@@ -2016,6 +2051,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#spinePopups.clear();
     this.#videoBlackoutRoot.removeChildren();
     this.#videoBlackout.destroy();
+    this.#renderObjectFactory.destroy();
     this.#layout.destroy();
     this.#resource.destroy();
     this.#initialized = false;

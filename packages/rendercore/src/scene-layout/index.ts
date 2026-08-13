@@ -6,6 +6,7 @@ export * from "./resource.js";
 export * from "./package-resource.js";
 export * from "./runtime.js";
 export * from "./package-runtime.js";
+export type { SceneLayoutRenderObjectFactoryDependencies } from "./render-object-factory.js";
 export * from "./video-transition-player.js";
 export * from "./production-zip.js";
 export * from "./template-presentation.js";

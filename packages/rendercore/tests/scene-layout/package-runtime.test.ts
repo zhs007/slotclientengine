@@ -1107,6 +1107,12 @@ describe("scene layout package runtime", () => {
       expect(() => runtime.requestNodeState("bg", "FG")).toThrow(
         /not a stateful Spine/,
       );
+      await expect(runtime.createRenderObject("nearwin1")).rejects.toThrow(
+        /Unknown scene layout runtime resource/,
+      );
+      await expect(
+        runtime.createImgNumberRenderObject("winAmount", { text: "100" }),
+      ).rejects.toThrow(/Unknown scene layout runtime resource/);
       runtime.destroy();
 
       const unexpected = createSceneLayoutPackageRuntime({
