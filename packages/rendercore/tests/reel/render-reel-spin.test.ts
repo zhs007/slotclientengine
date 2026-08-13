@@ -340,6 +340,45 @@ describe("RenderReelSet ReelSpin", () => {
     expect(destroys).toBe(1);
   });
 
+  it("resolves symbol, group, and area anchors into area-local points", () => {
+    const spin = createSpin();
+    spin.resetToVisibleScene([
+      [1, 2, 1],
+      [2, 1, 2],
+    ]);
+    const area = spin.getArea();
+
+    expect(
+      area.resolveAnchor(area.getSymbol({ x: 1, y: 2 }).getAnchor()),
+    ).toEqual({ x: 24.5, y: 30 });
+    expect(
+      area.resolveAnchor(
+        area
+          .getSymbols([
+            { x: 0, y: 0 },
+            { x: 1, y: 2 },
+          ])
+          .getAnchor({ align: "center" }),
+      ),
+    ).toEqual({ x: 16, y: 18 });
+    expect(area.resolveAnchor(area.getAnchor({ x: 30, y: 40 }))).toEqual({
+      x: 30,
+      y: 40,
+    });
+
+    const staleAnchor = area.getSymbol({ x: 0, y: 0 }).getAnchor();
+    spin.replaceSymbol({ x: 0, y: 0 }, { code: 2 });
+    expect(() => area.resolveAnchor(staleAnchor)).toThrow(/stale/);
+    expect(() =>
+      area.resolveAnchor(Object.freeze({ kind: "render-anchor" })),
+    ).toThrow(/active RenderCore runtime/);
+
+    spin.destroy();
+    expect(() => area.resolveAnchor(area.getAnchor({ x: 0, y: 0 }))).toThrow(
+      /destroyed/,
+    );
+  });
+
   it("preflights a SymbolGroup before mutating any member", async () => {
     const spin = createSpin();
     spin.resetToVisibleScene([

@@ -60,6 +60,7 @@ export interface AreaSpinFunctionOptions {
 export interface ReelArea extends SymbolArea {
   readonly spin: AreaSpinController;
   getAnchor(point: RenderPoint): RenderAnchor;
+  resolveAnchor(anchor: RenderAnchor): RenderPoint;
   getLayer(id: SymbolAreaLayerId): SymbolAreaLayer;
   present(
     presentation: (context: SymbolAreaPresentationContext) => Promise<void>,

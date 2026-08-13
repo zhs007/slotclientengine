@@ -121,6 +121,9 @@ const landed = area.getSymbol({ x: 2, y: 1 });
 - `createReelSpinSessionController()` 与 `createCellSpinSessionController()`；
 - `createAreaSpinFunction()` 的 column order 与 landing stagger 装配。
 
+坐标获取、`RenderAnchor`、`ReelArea.resolveAnchor()` 和 PresentationScope 自动换算的完整合同见
+[RenderCore 坐标与 Anchor API](./rendercore-coordinate-and-anchor-api.md)。
+
 典型形态仍然是直接的 `for/await`：
 
 ```ts
@@ -270,6 +273,7 @@ scene/value 权威数据。legacy `GridCellReelSpinPlan` 只作为 game002v2/Cra
 ## 相关文档
 
 - [RenderCore operation 渲染第一层接口设计](./rendercore-operation-first-layer-api.md)
+- [RenderCore 坐标与 Anchor API](./rendercore-coordinate-and-anchor-api.md)
 - [Crave RenderCore direct API 迁移说明](./crave-rendercore-direct-api-migration.md)
 - [Slot operation plan](./slot-operation-plan.md)
 - [Shared game runtime rules](./agent-rules/shared-game-runtime.md)
