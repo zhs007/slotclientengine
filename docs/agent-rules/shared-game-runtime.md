@@ -47,7 +47,7 @@
   prepare/request/event/switch/settle 状态机并公开独立 transition container。
 - operation handler 和游戏取得 symbol 时只使用具体区域实例的 `SymbolArea.getSymbol(pos)`；
   standard reel、legacy grid-cell 和新 CellSpin 必须返回同一 `SymbolRender` 合同。facade 捕获 exact
-  occurrence，hole、未落地、leased、replacement/release 后 stale 必须失败，不得按坐标重绑或暴露
+  occurrence；hole 返回 exact Empty SymbolRender，未落地、leased、replacement/release 后 stale 必须失败，不得按坐标重绑或暴露
   pooled RenderSymbol/display tree。borrowed reel symbol 禁止 destroy，owned clone 由创建者 destroy。
 - 新逐格转使用无 public plan 的 CellSpin `roll/start/settle/cancel` 原子接口；full、selective、hold、
   refill、stagger 和 anticipation 由 operation handler 以 frame delay、Promise 与明确业务事实编排。
@@ -68,6 +68,9 @@
   批量state/play必须先完整preflight。generic motion只移动临时RenderNode或owned clone，复用grid-cell transfer的pure
   path/easing/manual-clock primitive，不取得盘面commit；游戏仍用普通for/await，不新增presentation/motion plan或业务DSL。
 - area spin通用factory只装配column order与stagger并调用逐列ReelSpin；不得接受业务predicate、matrix command或state名。
+- RenderCore相关API按职责分为三层：第一层提供渲染对象与原子动作，第二层负责玩法无关的ownership、坐标、时钟、批量一致性和中断组合，
+  第三层才解释Win/Coin/Wild/Free等玩法结构。第三层默认位于gameframeworks或等价recipes/template模块，必须允许游戏随时回落到第二层或
+  `SymbolArea.getSymbol()`，不得成为唯一入口、复制renderer状态机或在RenderCore重建gameplay plan。
 - `CellSpin`是新grid玩法的正式owner，提供settled mutation、active session、direct transfer/drop；`-1`是CellSpin和grid-cell唯一hole
   标记，其它symbol code非负。Crave仍消费grid-cell期间，相同基础能力同步到grid-cell但不得扩展grid-cell独有高级接口；迁移完成后停止维护。
   新direct/session API复用既有reel/pool/ticker owner，不接受gameplay plan或暴露prepared/manual-progress lifecycle；game002v2旧surface保持兼容。

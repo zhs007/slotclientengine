@@ -9,6 +9,10 @@ resource，不要求内层第二份 map。无 map 的合法 legacy direct path �
 
 `rendercore` 是 slot 前端渲染核心库。它基于 `pixi.js` v8、复用 `@slotclientengine/pixiani` 的基础显示对象生命周期，并复用 `@slotclientengine/logiccore` 的 game config/paytable 契约。`apps/symbolsviewer` 和 `apps/reelsviewer` 是调试 app，业务展示逻辑不放进核心库。
 
+RenderCore相关游戏API按“渲染对象与原子动作 / 安全组合 / 玩法模板”分为三层；第三层默认属于gameframeworks或等价模板模块，
+不是RenderCore core primitive。完整职责、依赖方向和禁止边界见
+[`docs/rendercore-three-layer-api-architecture.md`](../../docs/rendercore-three-layer-api-architecture.md)。
+
 ## Operation 渲染第一层 API
 
 任务 202 增量提供 `SymbolMutationArea`、Reel/Cell active spin session，以及一次 await 的 occurrence transfer/drop。

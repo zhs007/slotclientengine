@@ -3,7 +3,8 @@
 > 状态：任务 199、200 与 202 已实施；本文同时作为第一层 public contract。
 >
 > 本文只定义由 operation 最终驱动的 RenderCore 第一层 public API，以及当前
-> `grid-cell` 的兼容边界。第二层只记录必要方向，不设计第三层模板。
+> `grid-cell` 的兼容边界。三层整体规划与边界见
+> [RenderCore 三层 API 架构与边界](./rendercore-three-layer-api-architecture.md)。
 
 ## 目标
 
@@ -62,7 +63,7 @@ const mainSymbol = mainArea.getSymbol({ x: 2, y: 1 });
 const featureSymbol = featureArea.getSymbol({ x: 0, y: 0 });
 ```
 
-`getSymbol()` 是严格取得接口。坐标越界、合法 hole 或尚未落地的滚动格没有可用 symbol 时显式失败。
+`getSymbol()` 是严格取得接口。合法 hole 返回 exact Empty `SymbolRender`；坐标越界、尚未落地、leased 或 stale 时显式失败。
 只有出现真实的可选探测需求时才考虑独立 `findSymbol()`，第一层不预先增加两套查询。
 
 Standard reel 的完整第一层区域使用 `ReelArea`。它在 `SymbolArea` 之上管理安全 attachment layers、
@@ -481,7 +482,7 @@ refill 同样按实际视觉原语执行：
 
 - 使用单格转补 hole：对每个 hole 调用 `CellSpin.roll()`；
 - 新 symbol 与 surviving symbol 一起下落：以后由独立 fall/drop 原语表达；
-- 第二层将来可以提供 refill 语义封装，但第一层不增加统一 `RefillPlan`。
+- 更高层可以按玩法需要提供 refill 组合或模板，但第一层不增加统一 `RefillPlan`。
 
 ## 第二层安全组合
 
@@ -498,14 +499,14 @@ refill 同样按实际视觉原语执行：
 - motion复用line/cubic path、easing和manual runtime clock，不引入RAF/timer/tween engine；
 - `createAreaSpinFunction()`只装配column order与landing stagger，内部仍调用第一层`ReelSpin`。
 
-第二层仍不知道CM、WM、CO、Win或任何component。`collectCoins/playWins/expandWild`等第三层业务模板等第二层实际consumer
-稳定后另行讨论。
+第二层仍不知道CM、WM、CO、Win或任何component。`collectCoins/playWins/expandWild`等带玩法语义的简化能力属于第三层
+模板；具体边界见三层架构文档。
 
 ## 非目标
 
 - 本文不实施或迁移代码；
 - 不修改 game002v2 当前 grid-cell 行为；
-- 不设计第三层模板；
+- 不在本文设计第三层模板；
 - 不把普通整列转和单格转合并为一个巨型 union API；
 - 不让游戏直接操作内部 Pixi/Spine/VNI display tree；
 - 不允许服务器 scene 反查、缓存或推断服务器真实轮带；
