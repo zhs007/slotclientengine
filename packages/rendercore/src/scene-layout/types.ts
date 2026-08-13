@@ -558,6 +558,18 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   ): import("../reel/index.js").ReelSpinSessionController;
   /** Returns an opaque anchor for an exact named Scene Layout node. */
   getNodeAnchor(id: string): import("../presentation/index.js").RenderAnchor;
+  /** Creates a detached, caller-owned object from an exact program resource name. */
+  createRenderObject(
+    name: string,
+  ): Promise<import("../presentation/index.js").RenderObject>;
+  /** Creates a detached image-string-backed number object from an exact program resource name. */
+  createImgNumberRenderObject(
+    name: string,
+    options: {
+      readonly text: string;
+      readonly anchor?: { readonly x: number; readonly y: number };
+    },
+  ): Promise<import("../presentation/index.js").ImgNumberRenderObject>;
   isMainReelSpinning(): boolean;
   requestMainReelSymbolStates(
     positions: readonly { readonly x: number; readonly y: number }[],

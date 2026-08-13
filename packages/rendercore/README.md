@@ -709,6 +709,14 @@ for (const transfer of transfers) {
 
 完整接口、生命周期、曲线路径、附加效果和 `for + await` 示例见 [`docs/visible-occurrence-transfer.md`](./docs/visible-occurrence-transfer.md)。
 
+## Scene Layout named RenderObject 与 ImgNumber
+
+`SceneLayoutPackageRuntime.createRenderObject(name)` 从 package manifest 的 exact `runtimeResources` name 创建 detached、caller-owned `RenderObject`，支持 image、official Spine 和 VNI；不会把 name 当路径或猜 kind。Spine/VNI 实例由创建它的 package runtime 在 `update(deltaSeconds)` 中推进，object destroy 会注销并释放 player，runtime destroy 会清理剩余实例。image-string 必须使用 typed `createImgNumberRenderObject(name, {text, anchor?})`，video 不支持此对象 factory。
+
+`ImgNumberRenderObject` 是 image-string-backed `CloneableRenderObject`，提供 `setText/getText` 并继承 `setPosition/setVisible/getAnchor/destroy`。它不公开 raw Pixi container；文字变化继续使用 image-string 的原子 glyph validation 与动态 anchor，clone 共享 package-owned resource 但拥有独立 renderer 和生命周期。
+
+Crave 的 Nearwin1/2 与图标中奖迁移示例见 [`docs/crave-named-render-object-migration.md`](../../docs/crave-named-render-object-migration.md)。
+
 ## 通用 symbol win carousel
 
 `createSymbolWinCarousel(...)` 是一个职责收敛的通用效果：按调用方传入的一个或多个组件名解析各自 `usedResults`，同组 `pos` 同时请求 manifest `win`，显示该组 resolver 金额，依次完成首轮后暂停并 lingering。未触发组件跳过，全部未触发时保持 idle；同一 result 被多个组件引用时分别播放并在 snapshot 中保留 `componentName/resultIndex`。
