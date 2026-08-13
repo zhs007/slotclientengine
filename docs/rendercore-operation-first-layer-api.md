@@ -149,6 +149,8 @@ state 保持，不在逐帧 render 时重新调用 formatter。
 
 第一层不提供 `SymbolSnapshot` 或完整 `SymbolGeometry`。跨 symbol、scene node 或其它目标的坐标换算由
 RenderCore 内部 anchor/motion 能力处理，游戏不计算 reel-space、scene-space 和 world-space 变换。
+确需数值坐标时，`ReelArea.resolveAnchor(anchor)`只读解析为该area本地`RenderPoint`；它不开放world coordinate、Pixi
+Container或Matrix。完整合同见[RenderCore 坐标与 Anchor API](./rendercore-coordinate-and-anchor-api.md)。
 
 ### 节点与 clone
 

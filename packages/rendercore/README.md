@@ -101,6 +101,10 @@ line/cubic path与easing sampler，并由同一manual runtime clock推进；gene
 不提交盘面mutation。`createAreaSpinFunction()`用于装配column order和landing stagger，仍只调用第一层ReelSpin原子方法，
 不生成public plan。
 
+`ReelArea.resolveAnchor(anchor)`可在确有数值计算需求时，把任意有效RenderCore Anchor只读解析为该area本地`RenderPoint`；
+它不开放world coordinate或raw target Container。只为挂载/移动时应继续直接使用`mount/withNode/move/transfer`。完整合同见
+[`docs/rendercore-coordinate-and-anchor-api.md`](../../docs/rendercore-coordinate-and-anchor-api.md)。
+
 数字表现有两种严格来源。声明 `valuePresentation` 的 symbol 使用 `setValue/getValue` 和
 `getPart({kind:"value"})`；
 `setValue()` 会按 `maxExclusive` 自动同步 value tier。WL/WM/CM 这类命名 `imageStringNodes` 使用

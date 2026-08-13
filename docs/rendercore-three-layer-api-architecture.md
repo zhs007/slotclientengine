@@ -34,7 +34,7 @@ LogicCore immutable execution result
 
 | 层级   | 当前状态                       | 主要内容                                                                                             |
 | ------ | ------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| 第一层 | 已实施，进入合同收口阶段       | `SymbolArea`、`SymbolRender`、`RenderNode`、`ReelSpin`、`CellSpin`、area layer、原子 mutation        |
+| 第一层 | 已实施，进入合同收口阶段       | `SymbolArea`、`SymbolRender`、`RenderObject`、`ReelSpin`、`CellSpin`、area layer、原子 mutation      |
 | 第二层 | 骨架已实施，继续由真实游戏补齐 | `SymbolGroup`、`RenderAnchor`、`PresentationScope`、motion/transfer、spin session、area spin factory |
 | 第三层 | 只确定方向，尚未实施           | standard reel、cascade、hold-and-respin 等可选玩法模板                                               |
 
@@ -53,8 +53,8 @@ LogicCore immutable execution result
 核心入口和对象包括：
 
 - `SymbolArea.getSymbol(pos)`：从具体 area 实例取得当前位置的 exact `SymbolRender`；
-- `SymbolRender`：改变 state/value/text，播放 state，附加或移除 `RenderNode`，取得位置或 anchor，创建 owned clone；
-- `RenderNode`：统一表达文本、图片、Spine、粒子、光效、VNI 及后续 typed custom node；
+- `SymbolRender`：改变 state/value/text，播放 state，附加或移除 `RenderObject`，取得位置或 anchor，创建 owned clone；
+- `RenderObject`：统一表达文本、图片、Spine、粒子、光效、VNI 及后续 typed custom object；
 - `ReelSpin.roll/start/settle/cancel`：执行单列原子运动；
 - `CellSpin.roll/start/settle/cancel`：执行单格原子运动；
 - `SymbolMutationArea.replaceSymbol/replaceSymbols`、occurrence transfer/drop 等明确盘面 mutation 原语；
@@ -120,6 +120,9 @@ const landed = area.getSymbol({ x: 2, y: 1 });
 - `mount/unmount/withNode/move/transfer`；
 - `createReelSpinSessionController()` 与 `createCellSpinSessionController()`；
 - `createAreaSpinFunction()` 的 column order 与 landing stagger 装配。
+
+坐标获取、`RenderAnchor`、`ReelArea.resolveAnchor()` 和 PresentationScope 自动换算的完整合同见
+[RenderCore 坐标与 Anchor API](./rendercore-coordinate-and-anchor-api.md)。
 
 典型形态仍然是直接的 `for/await`：
 
@@ -270,6 +273,7 @@ scene/value 权威数据。legacy `GridCellReelSpinPlan` 只作为 game002v2/Cra
 ## 相关文档
 
 - [RenderCore operation 渲染第一层接口设计](./rendercore-operation-first-layer-api.md)
+- [RenderCore 坐标与 Anchor API](./rendercore-coordinate-and-anchor-api.md)
 - [Crave RenderCore direct API 迁移说明](./crave-rendercore-direct-api-migration.md)
 - [Slot operation plan](./slot-operation-plan.md)
 - [Shared game runtime rules](./agent-rules/shared-game-runtime.md)

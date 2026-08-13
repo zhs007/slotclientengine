@@ -71,6 +71,8 @@
 - RenderObject是Container-backed的opaque public capability，不继承或公开raw Pixi Container。whole Symbol、普通文字及
   symbol value/text part统一使用clone/getAnchor/mount/transfer；part只通过strict `{kind:"value"}`或
   `{kind:"text",name}`取得，不猜唯一node、不在value/text间fallback。盘面Symbol/part为borrowed，只有owned clone可transfer或destroy。
+- 确需数值坐标时，`ReelArea.resolveAnchor()`只把有效RenderAnchor解析为该area本地RenderPoint；不开放world coordinate、raw
+  Container或Matrix。解析结果是调用时快照，长期presentation/motion继续持有Anchor并在使用时转换，不缓存跨transform坐标。
 - area spin通用factory只装配column order与stagger并调用逐列ReelSpin；不得接受业务predicate、matrix command或state名。
 - RenderCore相关API按职责分为三层：第一层提供渲染对象与原子动作，第二层负责玩法无关的ownership、坐标、时钟、批量一致性和中断组合，
   第三层才解释Win/Coin/Wild/Free等玩法结构。第三层默认位于gameframeworks或等价recipes/template模块，必须允许游戏随时回落到第二层或

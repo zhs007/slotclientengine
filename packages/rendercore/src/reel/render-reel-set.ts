@@ -9,6 +9,7 @@ import { getRenderObjectAdapter } from "../presentation/render-object.js";
 import {
   createContainerRenderAnchor,
   resolveRenderAnchor,
+  type RenderAnchor,
 } from "../presentation/render-anchor.js";
 import {
   getPresentationMountTargetAdapter,
@@ -266,6 +267,10 @@ export class RenderReelSet extends Container implements ReelSpin {
         this.replaceSymbols(replacements),
       getAnchor: (point: RenderPoint) =>
         createContainerRenderAnchor(this, () => point),
+      resolveAnchor: (anchor: RenderAnchor) => {
+        this.assertAlive();
+        return resolveRenderAnchor(anchor, this);
+      },
       getLayer: (id: SymbolAreaLayerId) => this.getLayer(id),
       present: (
         presentation: Parameters<ReelArea["present"]>[0],

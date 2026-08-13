@@ -70,6 +70,7 @@ export interface PresentableSymbolArea extends SymbolArea {
 export interface ReelArea extends PresentableSymbolArea {
   readonly spin: AreaSpinController;
   getAnchor(point: RenderPoint): RenderAnchor;
+  resolveAnchor(anchor: RenderAnchor): RenderPoint;
 }
 
 export const defaultAreaSpinFunction: AreaSpinFunction = Object.freeze({
