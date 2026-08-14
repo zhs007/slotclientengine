@@ -1493,6 +1493,18 @@ describe("scene layout package runtime", () => {
       );
       expect(runtime.getRenderLayer("transition")).toBeDefined();
       expect(runtime.getRenderLayer("popup")).toBeDefined();
+      expect(runtime.getRenderLayer("main.top")).toBe(
+        runtime.getSymbolArea("main").getLayer("top"),
+      );
+      expect(runtime.getRenderLayer("bg")).toBe(
+        runtime.getNodeRenderLayer("bg"),
+      );
+      expect(runtime.getRenderLayer("bg.after")).toBe(
+        runtime.getNodeRenderLayer("bg", "after"),
+      );
+      expect(runtime.getRenderLayer("node:bg")).toBe(
+        runtime.getNodeRenderLayer("bg"),
+      );
       expect(() => runtime.getRenderLayer("hud" as "layout")).toThrow();
       const scopedView = new Container();
       const scopedObject = createRenderObject({

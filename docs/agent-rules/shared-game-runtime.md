@@ -163,9 +163,10 @@
   已启动 prepare 收敛后处理失败/cleanup，并只在全部成功后按 manifest/order 确定性 commit 到 display tree。
 - scene-layout 普通 node 的 optional exact mode scope 缺失时表示全局；runtime 的 init、真实 transition switch 和 editor authoring stable selection 必须复用同一 visibility commit。authoring selection 不得伪装成 production transition，且相同 Symbols binding 不重建 reel/player/sample。
 - `SceneLayoutPackageResource.loadRuntimeResource(key, kind)` 是包内程序资源的 typed async prepare 边界；同 key 并发请求复用同一 Promise，kind/未知 key 精确失败，`getLoadedRuntimeResource` 只返回已成功 prepare 的资源。
-- package runtime 稳定图层 id 仅为 `layout | reel | transition | popup`；additive `getRenderLayer()`与exact node
-  `getNodeRenderLayer(child|before|after)`返回opaque安全attachment façade，presentation-only请求`reel`显式失败。既有
+- package runtime 的canonical `getRenderLayer(ref)`统一解析稳定`layout|reel|transition|popup`、area `<id>.bottom|top|win`、canonical exact node及显式`node:<legacyId>`；底层仍委托各自唯一owner，不合并lifecycle或display parent。返回opaque安全attachment façade，presentation-only请求`reel`/area显式失败。既有
   `getLayer()`和`getNode()` borrowed container seam为host/editor兼容保留，调用方不得destroy或改写内部层级，不强制旧consumer迁移。
+- authored scene node只能通过`getRenderObject(exactId)`取得kind-discriminated borrowed capability；placement/destroy仍由Scene Layout拥有，program visibility只能与mode/variant可见性做AND。程序对象只通过exact runtime resource factory创建并由caller拥有，两者不得按同名互相fallback。
+- Gamelayout authored point由Scene Layout按当前snapshot和configured origin统一换算；logical viewport不是CSS/device viewport。跨parent只通过opaque Anchor和target-local解析，不向app公开world point、Matrix或visual bounds。SymbolGroup只可读取input-order odd middle、members/bounds center与稳定cell footprint，不能从当前display bounds推导业务rect。
 - scene-layout node、main reel 与 Popup binding order 必须是全局唯一安全整数；Popup order 必须高于全部 art/reel order，并在当前 scene 的 `popup` layer 内排序。旧单 Popup v1 缺少 order 时规范化为 `2000`，多个缺省 Popup 的重复值显式失败。
 - `gamelayoutpkgcli` 为每个 runtime resource 输出独立增量组，未请求程序资源不得并入 initial/shared。
 - `columnGap`/`rowGap` 等 manifest geometry 必须一致作用于 standard/grid-cell reel、mask、effect、cascade 和 geometry snapshot。

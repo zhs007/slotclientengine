@@ -42,6 +42,8 @@
 
 - rendercore 拥有 strict gameModes、plural symbolPackages、directed transition schema、exact dependency closure 和 production API。
 - scene-layout authored coordinate origin 只允许 `top-left` / `center`；缺失按 `top-left`。node、art-space Spine transition 与 main reel 的 origin 映射由 rendercore 统一实现，focus rect 继续使用 art 左上角矩形。
+- runtime必须从current snapshot公开authored origin、art/visibleRect九宫格point及authored point↔opaque Anchor；Point/Rect是调用时快照，Anchor延迟解析。不得要求游戏为center origin手工加减半个artSize，也不得把logical visibleRect称为CSS/window/device坐标。
+- canonical layer ref只能由一个strict parser按stable、`node:` legacy、exact area suffix、canonical node顺序解析；unknown/ambiguous/unavailable显式失败，禁止alias或node/resource同名fallback。
 - scene node placement 的 `rotation` 使用角度，normalized `center` 默认 `0.5/0.5`；旧字段缺失分别按 `0` 与默认中心规范化。rendercore 统一应用 node position/scale/pivot/rotation matrix，Spine 的默认中心精确使用 authored origin `(0,0)`。editor/app 不复制 transform，不从 skeleton bounds、atlas texture 或当前动画帧猜另一套默认中心。Popup/transition 仍只用 `x/y/scale`，main reel 仍只用 `x/y`。
 - main reel per-variant placement 只允许 `x/y`，不提供整体 scale；横竖屏适配通过背景素材、art size 和 reel placement 完成，不改写转轮或 per-symbol scale。
 - geometry-only manifest 更新必须先校验 immutable structure，再原子提交并复用 texture、Spine player、当前 mode、reel 与 scene；资源、topology、binding 或 transition 结构变化必须走完整 prepare/commit。

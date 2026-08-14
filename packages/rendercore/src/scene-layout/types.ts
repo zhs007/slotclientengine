@@ -348,6 +348,75 @@ export interface SceneLayoutPackageResource {
 
 export type SceneLayoutLayerId = "layout" | "reel" | "transition" | "popup";
 export type SceneLayoutNodeRenderLayerPlacement = "child" | "before" | "after";
+export type SceneLayoutRenderLayerRef = string;
+
+export type RenderAlignment =
+  | "top-left"
+  | "top"
+  | "top-right"
+  | "left"
+  | "center"
+  | "right"
+  | "bottom-left"
+  | "bottom"
+  | "bottom-right";
+
+/** A point expressed in the manifest's configured authored coordinate space. */
+export interface SceneLayoutPoint {
+  readonly x: number;
+  readonly y: number;
+}
+
+export type SceneLayoutPointSelector =
+  | { readonly kind: "origin" }
+  | { readonly kind: "art"; readonly align: RenderAlignment }
+  | { readonly kind: "viewport"; readonly align: RenderAlignment };
+
+interface SceneLayoutRenderObjectBase {
+  readonly kind: SceneLayoutNodeResourceSpec["kind"];
+  /** Resolves the authored node-local origin without exposing its Pixi node. */
+  getAnchor(): import("../presentation/index.js").RenderAnchor;
+  /** Program visibility is ANDed with authored variant/game-mode visibility. */
+  setVisible(visible: boolean): void;
+}
+
+export interface SceneLayoutImageRenderObject extends SceneLayoutRenderObjectBase {
+  readonly kind: "image";
+}
+
+export interface SceneLayoutSpineLoopRenderObject extends SceneLayoutRenderObjectBase {
+  readonly kind: "spine";
+  readonly playback: "loop";
+  /** Restarts the manifest-declared default animation and loop policy. */
+  play(): void;
+}
+
+export interface SceneLayoutSpineStateRenderObject extends SceneLayoutRenderObjectBase {
+  readonly kind: "spine";
+  readonly playback: "state";
+  requestState(state: string): Promise<void>;
+  canRequestState(state: string): boolean;
+  getStateSnapshot(): SceneLayoutNodeStateSnapshot;
+}
+
+export interface SceneLayoutVniRenderObject extends SceneLayoutRenderObjectBase {
+  readonly kind: "vni";
+  /** Plays the manifest-declared VNI timeline using its owned player. */
+  play(): void;
+}
+
+export interface SceneLayoutImageStringRenderObject extends SceneLayoutRenderObjectBase {
+  readonly kind: "image-string";
+  setText(text: string): void;
+  getText(): string;
+}
+
+export type SceneLayoutRenderObject =
+  | SceneLayoutImageRenderObject
+  | SceneLayoutSpineLoopRenderObject
+  | SceneLayoutSpineStateRenderObject
+  | SceneLayoutVniRenderObject
+  | SceneLayoutImageStringRenderObject;
 
 export interface ResolvedSceneLayoutReelGrid {
   readonly id: string;
@@ -423,6 +492,13 @@ export interface SceneLayoutRuntime {
   ): SceneLayoutSnapshot | null;
   update(deltaSeconds: number): void;
   getSnapshot(): SceneLayoutSnapshot;
+  getLayoutPoint(selector: SceneLayoutPointSelector): SceneLayoutPoint;
+  getLayoutAnchor(
+    point: SceneLayoutPoint,
+  ): import("../presentation/index.js").RenderAnchor;
+  resolveLayoutAnchor(
+    anchor: import("../presentation/index.js").RenderAnchor,
+  ): SceneLayoutPoint;
   getNode(id: string): Container;
   /** Safe program attachment layer above authored layout nodes. */
   getRootRenderLayer(): import("../presentation/index.js").RenderObjectLayer;
@@ -431,6 +507,12 @@ export interface SceneLayoutRuntime {
     nodeId: string,
     placement?: SceneLayoutNodeRenderLayerPlacement,
   ): import("../presentation/index.js").RenderObjectLayer;
+  /** Base runtimes expose layout/node refs; package runtimes add reel/area/popup refs. */
+  getRenderLayer(
+    ref: SceneLayoutRenderLayerRef,
+  ): import("../presentation/index.js").RenderObjectLayer;
+  /** Returns a stable borrowed capability façade for an authored node. */
+  getRenderObject(nodeId: string): SceneLayoutRenderObject | null;
   attachChild(options: AttachChildOptions): () => void;
   attachRelative(options: AttachRelativeOptions): () => void;
   getReelGrid(id: string): ResolvedSceneLayoutReelGrid;
@@ -582,7 +664,7 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   getNodeAnchor(id: string): import("../presentation/index.js").RenderAnchor;
   /** Returns an additive safe RenderObject layer without exposing its Container. */
   getRenderLayer(
-    id: SceneLayoutLayerId,
+    ref: SceneLayoutRenderLayerRef,
   ): import("../presentation/index.js").RenderObjectLayer;
   /** Creates a detached, caller-owned object from an exact program resource name. */
   createRenderObject(

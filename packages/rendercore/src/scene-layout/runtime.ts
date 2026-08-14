@@ -33,12 +33,17 @@ import type {
   SceneLayoutNodeStateSnapshot,
   SceneLayoutVariantId,
   SceneLayoutNodeRenderLayerPlacement,
+  SceneLayoutPoint,
+  SceneLayoutPointSelector,
+  SceneLayoutRenderLayerRef,
+  SceneLayoutRenderObject,
 } from "./types.js";
 import {
   createRenderObjectLayer,
   type RenderObjectLayer,
   type RenderObjectLayerController,
 } from "../presentation/render-object-layer.js";
+import { resolveSceneLayoutRenderLayerRef } from "./render-layer-ref.js";
 
 export interface CreateSceneLayoutRuntimeOptions {
   readonly resource: SceneLayoutResource;
@@ -109,7 +114,9 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   readonly #loadedTextureUrls = new Set<string>();
   readonly #texturesByUrl = new Map<string, Texture>();
   readonly #texturePromisesByUrl = new Map<string, Promise<Texture>>();
-  readonly #activeNodes = new Map<string, boolean>();
+  readonly #authoredNodeActive = new Map<string, boolean>();
+  readonly #programNodeVisible = new Map<string, boolean>();
+  readonly #renderObjects = new Map<string, SceneLayoutRenderObject>();
   #manifest: SceneLayoutResource["manifest"];
   #snapshot: SceneLayoutSnapshot | null = null;
   #artSpaceApplied = false;
@@ -204,7 +211,10 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
         }),
       );
     }
-    for (const node of nodes) this.#activeNodes.set(node.spec.id, true);
+    for (const node of nodes) {
+      this.#authoredNodeActive.set(node.spec.id, true);
+      this.#programNodeVisible.set(node.spec.id, true);
+    }
     this.#rootRenderLayerContainer.label = "scene-layout-render-layer:layout";
     this.#rootRenderLayerContainer.sortableChildren = true;
     this.#rootRenderLayerController = this.createLayerController(
@@ -267,7 +277,9 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     for (const node of this.#nodes) {
       const spec = this.requireCurrentNode(node.spec.id);
       const placement = spec.placements[snapshot.variantId];
-      const active = this.#activeNodes.get(node.spec.id) !== false;
+      const active =
+        this.#authoredNodeActive.get(node.spec.id) !== false &&
+        this.#programNodeVisible.get(node.spec.id) !== false;
       node.slot.visible = Boolean(placement) && active;
       node.slot.renderable = Boolean(placement) && active;
       if (placement) {
@@ -339,6 +351,42 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     return this.#snapshot;
   }
 
+  getLayoutPoint(selector: SceneLayoutPointSelector): SceneLayoutPoint {
+    const snapshot = this.getSnapshot();
+    if (!selector || typeof selector !== "object")
+      throw new SceneLayoutError("Scene layout point selector is invalid.");
+    let artPoint: SceneLayoutPoint;
+    if (selector.kind === "origin")
+      artPoint = this.authoredToArt({ x: 0, y: 0 });
+    else if (selector.kind === "art")
+      artPoint = alignedPoint(
+        { x: 0, y: 0, ...snapshot.artSize },
+        selector.align,
+      );
+    else if (selector.kind === "viewport")
+      artPoint = alignedPoint(snapshot.visibleRect, selector.align);
+    else
+      throw new SceneLayoutError(
+        `Unknown scene layout point selector "${String((selector as { kind?: unknown }).kind)}".`,
+      );
+    return this.artToAuthored(artPoint);
+  }
+
+  getLayoutAnchor(point: SceneLayoutPoint) {
+    this.getSnapshot();
+    assertFiniteSceneLayoutPoint(point, "layout point");
+    return this.#rootRenderLayerController.layer.getAnchor(
+      this.authoredToArt(point),
+    );
+  }
+
+  resolveLayoutAnchor(anchor: import("../presentation/index.js").RenderAnchor) {
+    this.getSnapshot();
+    return this.artToAuthored(
+      this.#rootRenderLayerController.layer.resolveAnchor(anchor),
+    );
+  }
+
   getNode(id: string): Container {
     this.assertReady();
     return this.requireNode(id).named;
@@ -365,6 +413,112 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       );
     }
     return this.#nodeRenderLayerControllers.get(nodeId)![placement].layer;
+  }
+
+  getRenderLayer(ref: SceneLayoutRenderLayerRef): RenderObjectLayer {
+    this.assertReady();
+    return resolveSceneLayoutRenderLayerRef(ref, {
+      stable: (id) => {
+        if (id === "layout") return this.getRootRenderLayer();
+        throw new SceneLayoutError(
+          `Scene layout render layer "${id}" is unavailable in the base runtime.`,
+        );
+      },
+      area: (areaId, placement) => {
+        throw new SceneLayoutError(
+          `Scene layout symbol area layer "${areaId}.${placement}" is unavailable in the base runtime.`,
+        );
+      },
+      node: (nodeId, placement) => this.getNodeRenderLayer(nodeId, placement),
+    });
+  }
+
+  getRenderObject(nodeId: string): SceneLayoutRenderObject | null {
+    this.assertReady();
+    const node = this.requireNode(nodeId);
+    const cached = this.#renderObjects.get(nodeId);
+    if (cached) return cached;
+    const common = {
+      getAnchor: () => this.getNodeRenderLayer(nodeId).getAnchor(),
+      setVisible: (visible: boolean) => {
+        this.assertReady();
+        if (typeof visible !== "boolean")
+          throw new SceneLayoutError(
+            `Scene layout node "${nodeId}" visibility must be boolean.`,
+          );
+        this.#programNodeVisible.set(nodeId, visible);
+        this.refreshNodeVisibility(node);
+      },
+    };
+    let object: SceneLayoutRenderObject | null;
+    switch (node.spec.resource.kind) {
+      case "image":
+        object = Object.freeze({ kind: "image", ...common });
+        break;
+      case "image-string":
+        object = Object.freeze({
+          kind: "image-string",
+          ...common,
+          setText: (text: string) => this.setImageStringText(nodeId, text),
+          getText: () => this.getImageStringText(nodeId),
+        });
+        break;
+      case "vni":
+        object = Object.freeze({
+          kind: "vni",
+          ...common,
+          play: () => {
+            this.assertReady();
+            const player = this.requireNode(nodeId).vniPlayer;
+            if (!player)
+              throw new SceneLayoutError(
+                `Scene layout VNI node "${nodeId}" is not prepared.`,
+              );
+            player.play();
+          },
+        });
+        break;
+      case "spine":
+        if ("stateMachine" in node.spec.resource) {
+          object = Object.freeze({
+            kind: "spine",
+            playback: "state",
+            ...common,
+            requestState: (state: string) =>
+              this.requestNodeState(nodeId, state),
+            canRequestState: (state: string) =>
+              this.canRequestNodeState(nodeId, state),
+            getStateSnapshot: () => this.getNodeStateSnapshot(nodeId),
+          });
+        } else {
+          object = Object.freeze({
+            kind: "spine",
+            playback: "loop",
+            ...common,
+            play: () => {
+              this.assertReady();
+              const current = this.requireNode(nodeId);
+              if (
+                !current.player ||
+                current.spec.resource.kind !== "spine" ||
+                !("defaultAnimation" in current.spec.resource)
+              )
+                throw new SceneLayoutError(
+                  `Scene layout Spine node "${nodeId}" is not prepared.`,
+                );
+              current.player.play({
+                animationName: current.spec.resource.defaultAnimation,
+                loop: current.spec.resource.loop,
+              });
+            },
+          });
+        }
+        break;
+      default:
+        object = null;
+    }
+    if (object) this.#renderObjects.set(nodeId, object);
+    return object;
   }
 
   attachChild(options: AttachChildOptions): () => void {
@@ -427,12 +581,8 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   setNodeActive(nodeId: string, active: boolean): void {
     this.assertReady();
     const node = this.requireNode(nodeId);
-    this.#activeNodes.set(nodeId, active);
-    const placement = this.#snapshot?.variantId
-      ? node.spec.placements[this.#snapshot.variantId]
-      : undefined;
-    node.slot.visible = active && Boolean(placement);
-    node.slot.renderable = active && Boolean(placement);
+    this.#authoredNodeActive.set(nodeId, active);
+    this.refreshNodeVisibility(node);
   }
 
   destroy(): void {
@@ -456,6 +606,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     this.container.parent?.removeChild(this.container);
     this.#resource.destroy();
     this.#snapshot = null;
+    this.#renderObjects.clear();
     this.#artSpaceApplied = false;
     this.#initialized = false;
   }
@@ -656,6 +807,41 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     return node.stateController;
   }
 
+  private refreshNodeVisibility(node: RuntimeNode): void {
+    const spec = this.requireCurrentNode(node.spec.id);
+    const placement = this.#snapshot
+      ? spec.placements[this.#snapshot.variantId]
+      : undefined;
+    const visible =
+      Boolean(placement) &&
+      this.#authoredNodeActive.get(node.spec.id) !== false &&
+      this.#programNodeVisible.get(node.spec.id) !== false;
+    node.slot.visible = visible;
+    node.slot.renderable = visible;
+  }
+
+  private authoredToArt(point: SceneLayoutPoint): SceneLayoutPoint {
+    assertFiniteSceneLayoutPoint(point, "authored point");
+    const snapshot = this.getSnapshot();
+    if ((this.#manifest.coordinateOrigin ?? "top-left") === "top-left")
+      return Object.freeze({ x: point.x, y: point.y });
+    return Object.freeze({
+      x: point.x + snapshot.artSize.width / 2,
+      y: point.y + snapshot.artSize.height / 2,
+    });
+  }
+
+  private artToAuthored(point: SceneLayoutPoint): SceneLayoutPoint {
+    assertFiniteSceneLayoutPoint(point, "art point");
+    const snapshot = this.getSnapshot();
+    if ((this.#manifest.coordinateOrigin ?? "top-left") === "top-left")
+      return Object.freeze({ x: point.x, y: point.y });
+    return Object.freeze({
+      x: point.x - snapshot.artSize.width / 2,
+      y: point.y - snapshot.artSize.height / 2,
+    });
+  }
+
   private defaultVariantId(): SceneLayoutVariantId {
     return this.#manifest.adaptation.mode === "maximized-focus"
       ? "default"
@@ -699,6 +885,49 @@ function applyVniOrigin(
   } else {
     display.pivot.set(0, 0);
   }
+}
+
+function alignedPoint(
+  rect: Readonly<{ x: number; y: number; width: number; height: number }>,
+  align: import("./types.js").RenderAlignment,
+): SceneLayoutPoint {
+  const known = new Set([
+    "top-left",
+    "top",
+    "top-right",
+    "left",
+    "center",
+    "right",
+    "bottom-left",
+    "bottom",
+    "bottom-right",
+  ]);
+  if (typeof align !== "string" || !known.has(align))
+    throw new SceneLayoutError(
+      `Unknown scene layout alignment "${String(align)}".`,
+    );
+  const horizontal = align.includes("left")
+    ? 0
+    : align.includes("right")
+      ? 1
+      : 0.5;
+  const vertical = align.includes("top")
+    ? 0
+    : align.includes("bottom")
+      ? 1
+      : 0.5;
+  return Object.freeze({
+    x: rect.x + rect.width * horizontal,
+    y: rect.y + rect.height * vertical,
+  });
+}
+
+function assertFiniteSceneLayoutPoint(
+  point: SceneLayoutPoint,
+  label: string,
+): void {
+  if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y))
+    throw new SceneLayoutError(`${label} must contain finite coordinates.`);
 }
 
 function applyNodePlacementTransform(

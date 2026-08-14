@@ -53,6 +53,10 @@ import {
   type EditorVniLayoutResource,
   readEditorSpineMetadata,
 } from "./editor-resource.js";
+import {
+  assertCanonicalEditorNodeId,
+  RESERVED_RENDER_LAYER_NODE_IDS,
+} from "./node-id.js";
 import { canonicalizeUploadFileName } from "../io/filename-policy.js";
 import { nextAvailableNodeOrder } from "./layer-order.js";
 
@@ -1002,12 +1006,17 @@ export function suggestNodeId(
   project: EditorProject,
   resourceId: string,
 ): string {
-  const base =
+  const normalized =
     resourceId
       .replace(/\.[^.]+$/u, "")
       .toLowerCase()
       .replace(/[^a-z0-9]+/gu, "-")
       .replace(/^-+|-+$/gu, "") || "layer";
+  const base = RESERVED_RENDER_LAYER_NODE_IDS.includes(
+    normalized as (typeof RESERVED_RENDER_LAYER_NODE_IDS)[number],
+  )
+    ? `${normalized}-node`
+    : normalized;
   if (!project.nodes.some((node) => node.id === base)) return base;
   let suffix = 2;
   while (project.nodes.some((node) => node.id === `${base}-${suffix}`)) {
@@ -1072,9 +1081,7 @@ function assertVariantsAllowed(
 }
 
 function assertNodeIdAvailable(project: EditorProject, nodeId: string): void {
-  if (!/^[a-z0-9][a-z0-9-]*$/u.test(nodeId)) {
-    throw new Error(`node id 必须是小写字母数字与连字符：${nodeId}`);
-  }
+  assertCanonicalEditorNodeId(nodeId);
   if (project.nodes.some((node) => node.id === nodeId)) {
     throw new Error(`节点 id 冲突：${nodeId}`);
   }

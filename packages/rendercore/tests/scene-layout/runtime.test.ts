@@ -83,6 +83,10 @@ describe("scene layout runtime", () => {
     });
     expect(player.setLoop).toHaveBeenCalledWith(false);
     expect(player.play).toHaveBeenCalledOnce();
+    const vniObject = runtime.getRenderObject("vni-fx");
+    expect(vniObject).toMatchObject({ kind: "vni" });
+    if (vniObject?.kind === "vni") vniObject.play();
+    expect(player.play).toHaveBeenCalledTimes(2);
     runtime.update(1 / 60);
     expect(player.update).toHaveBeenCalledOnce();
     const centered = structuredClone(manifest) as any;
@@ -262,6 +266,10 @@ describe("scene layout runtime", () => {
       targetState: null,
       phase: "stable",
     });
+    const stateObject = runtime.getRenderObject("bg");
+    expect(stateObject).toMatchObject({ kind: "spine", playback: "state" });
+    if (stateObject?.kind === "spine" && stateObject.playback === "state")
+      expect(stateObject.getStateSnapshot().stableState).toBe("BG");
     await runtime.requestNodeState("bg", "BG");
     expect(runtime.canRequestNodeState("bg", "BG")).toBe(true);
     expect(runtime.canRequestNodeState("bg", "FG")).toBe(true);
@@ -388,6 +396,12 @@ describe("scene layout runtime", () => {
     });
     expect(runtime.getImageStringText("first")).toBe("001");
     expect(runtime.getImageStringText("second")).toBe("1");
+    const stringObject = runtime.getRenderObject("first");
+    expect(stringObject).toMatchObject({ kind: "image-string" });
+    if (stringObject?.kind === "image-string") {
+      stringObject.setText("101");
+      expect(stringObject.getText()).toBe("101");
+    }
     runtime.setImageStringText("first", "010");
     expect(runtime.getImageStringText("first")).toBe("010");
     expect(runtime.getImageStringText("second")).toBe("1");
@@ -711,6 +725,11 @@ describe("scene layout runtime", () => {
       angle: 90,
       pivot: { x: 0, y: 0 },
     });
+    const loopObject = runtime.getRenderObject("base-bg");
+    expect(loopObject).toMatchObject({ kind: "spine", playback: "loop" });
+    if (loopObject?.kind === "spine" && loopObject.playback === "loop")
+      loopObject.play();
+    expect(players[0]!.play).toHaveBeenCalledTimes(2);
     runtime.setNodeActive("free-bg", false);
     runtime.setNodeActive("base-bg", false);
     runtime.setNodeActive("free-bg", true);

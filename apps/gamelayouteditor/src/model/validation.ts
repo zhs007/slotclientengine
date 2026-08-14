@@ -19,3 +19,4 @@ export {
   uploadSpineResources,
 } from "./resource-commands.js";
 export * from "./game-mode-commands.js";
+export * from "./node-id.js";

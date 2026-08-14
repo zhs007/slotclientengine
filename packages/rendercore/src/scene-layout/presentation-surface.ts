@@ -16,6 +16,10 @@ import type {
   SceneLayoutSnapshot,
   SceneLayoutLayerId,
   SceneLayoutNodeRenderLayerPlacement,
+  SceneLayoutPoint,
+  SceneLayoutPointSelector,
+  SceneLayoutRenderLayerRef,
+  SceneLayoutRenderObject,
 } from "./types.js";
 import type { RenderAnchor, RenderObjectLayer } from "../presentation/index.js";
 
@@ -49,12 +53,16 @@ export interface SceneLayoutPresentationSurface {
   getSpinePopupPlayer(id: string): SpinePopupPlayer;
   getLayer(id: SceneLayoutLayerId): Container;
   getNode(id: string): Container;
-  getRenderLayer(id: SceneLayoutLayerId): RenderObjectLayer;
+  getRenderLayer(ref: SceneLayoutRenderLayerRef): RenderObjectLayer;
   getNodeRenderLayer(
     nodeId: string,
     placement?: SceneLayoutNodeRenderLayerPlacement,
   ): RenderObjectLayer;
   getNodeAnchor(id: string): RenderAnchor;
+  getRenderObject(nodeId: string): SceneLayoutRenderObject | null;
+  getLayoutPoint(selector: SceneLayoutPointSelector): SceneLayoutPoint;
+  getLayoutAnchor(point: SceneLayoutPoint): RenderAnchor;
+  resolveLayoutAnchor(anchor: RenderAnchor): SceneLayoutPoint;
   destroy(): void;
 }
 
@@ -262,9 +270,9 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
     return this.#runtime.getNode(id);
   }
 
-  getRenderLayer(id: SceneLayoutLayerId): RenderObjectLayer {
+  getRenderLayer(ref: SceneLayoutRenderLayerRef): RenderObjectLayer {
     this.assertReady();
-    return this.#runtime.getRenderLayer(id);
+    return this.#runtime.getRenderLayer(ref);
   }
 
   getNodeRenderLayer(
@@ -278,6 +286,26 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
   getNodeAnchor(id: string): RenderAnchor {
     this.assertReady();
     return this.#runtime.getNodeAnchor(id);
+  }
+
+  getRenderObject(nodeId: string): SceneLayoutRenderObject | null {
+    this.assertReady();
+    return this.#runtime.getRenderObject(nodeId);
+  }
+
+  getLayoutPoint(selector: SceneLayoutPointSelector): SceneLayoutPoint {
+    this.assertReady();
+    return this.#runtime.getLayoutPoint(selector);
+  }
+
+  getLayoutAnchor(point: SceneLayoutPoint): RenderAnchor {
+    this.assertReady();
+    return this.#runtime.getLayoutAnchor(point);
+  }
+
+  resolveLayoutAnchor(anchor: RenderAnchor): SceneLayoutPoint {
+    this.assertReady();
+    return this.#runtime.resolveLayoutAnchor(anchor);
   }
 
   destroy(): void {

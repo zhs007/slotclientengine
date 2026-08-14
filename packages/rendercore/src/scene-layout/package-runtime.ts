@@ -67,6 +67,10 @@ import type {
   SceneLayoutPopupStringInput,
   SceneLayoutPopupInputBindingOptions,
   SceneLayoutLayerId,
+  SceneLayoutPoint,
+  SceneLayoutPointSelector,
+  SceneLayoutRenderLayerRef,
+  SceneLayoutRenderObject,
   SceneLayoutSnapshot,
   SceneLayoutSymbolPackageBinding,
 } from "./types.js";
@@ -77,6 +81,7 @@ import {
   type SceneLayoutRenderObjectFactory,
   type SceneLayoutRenderObjectFactoryDependencies,
 } from "./render-object-factory.js";
+import { resolveSceneLayoutRenderLayerRef } from "./render-layer-ref.js";
 
 type ReelPresentation = RenderReelSet | RenderGridCellReelSet;
 
@@ -1578,23 +1583,27 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     }
   }
 
-  getRenderLayer(id: SceneLayoutLayerId): RenderObjectLayer {
+  getRenderLayer(ref: SceneLayoutRenderLayerRef): RenderObjectLayer {
     this.assertReady();
-    switch (id) {
-      case "layout":
-        return this.#layout.getRootRenderLayer();
-      case "reel":
-        this.requireReel("main");
-        return this.#reelRenderLayerController.layer;
-      case "transition":
-        return this.#transitionRenderLayerController.layer;
-      case "popup":
-        return this.#popupRenderLayerController.layer;
-      default:
-        throw new SceneLayoutError(
-          `Unknown scene layout render layer "${String(id)}".`,
-        );
-    }
+    return resolveSceneLayoutRenderLayerRef(ref, {
+      stable: (id) => {
+        switch (id) {
+          case "layout":
+            return this.#layout.getRootRenderLayer();
+          case "reel":
+            this.requireReel("main");
+            return this.#reelRenderLayerController.layer;
+          case "transition":
+            return this.#transitionRenderLayerController.layer;
+          case "popup":
+            return this.#popupRenderLayerController.layer;
+        }
+      },
+      area: (areaId, placement) =>
+        this.getSymbolArea(areaId).getLayer(placement),
+      node: (nodeId, placement) =>
+        this.#layout.getNodeRenderLayer(nodeId, placement),
+    });
   }
 
   getGameModeIds(): readonly string[] {
@@ -1989,6 +1998,21 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     return this.#layout.getSnapshot();
   }
 
+  getLayoutPoint(selector: SceneLayoutPointSelector): SceneLayoutPoint {
+    this.assertReady();
+    return this.#layout.getLayoutPoint(selector);
+  }
+
+  getLayoutAnchor(point: SceneLayoutPoint) {
+    this.assertReady();
+    return this.#layout.getLayoutAnchor(point);
+  }
+
+  resolveLayoutAnchor(anchor: import("../presentation/index.js").RenderAnchor) {
+    this.assertReady();
+    return this.#layout.resolveLayoutAnchor(anchor);
+  }
+
   getNode(id: string): Container {
     this.assertReady();
     return this.#layout.getNode(id);
@@ -2010,6 +2034,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   getNodeAnchor(id: string) {
     this.assertReady();
     return createContainerRenderAnchor(this.#layout.getNode(id));
+  }
+
+  getRenderObject(nodeId: string): SceneLayoutRenderObject | null {
+    this.assertReady();
+    return this.#layout.getRenderObject(nodeId);
   }
 
   attachChild(options: AttachChildOptions): () => void {

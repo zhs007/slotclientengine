@@ -86,8 +86,7 @@ win layer，再调用默认或装配时注入的 `AreaSpinFunction`。游戏不�
 
 Area、Scene Layout顶层和exact named node attachment统一使用增量兼容的`RenderObjectLayer`。既有
 `layer.add(node, order?)/remove(node)`保持不变；新`getAnchor/resolveAnchor/addAt`允许用opaque anchor按调用时
-transform对齐object。`SceneLayoutPackageRuntime.getRenderLayer("layout" | "reel" | "transition" | "popup")`
-取得稳定顶层，`getNodeRenderLayer(nodeId, "child" | "before" | "after")`取得exact node attachment band。
+transform对齐object。`SceneLayoutPackageRuntime.getRenderLayer(ref)`统一取得stable、`main.top|win|bottom`与exact node attachment；canonical node可用裸id或`.child|before|after`，旧带点号node使用`node:<legacyId>`。
 旧`getLayer/getNode/attachChild/attachRelative` borrowed Container seam继续兼容既有host/editor，不要求游戏批量迁移。
 
 Scene Layout package runtime 只为 standard reel 提供 `getReelSpin("main")`；未知
@@ -97,8 +96,8 @@ area、未 ready 或首次 scene 尚未 commit 都严格失败。详细合同见
 ## Operation 渲染第二层 API
 
 第二层保持游戏侧普通 `for/await/Promise.all`，只接管跨 await 容易出错的机械工作。`area.getSymbols(positions)`
-返回捕获 exact occurrences 的 `SymbolGroup`，批量 `setState/playState` 会先完整预检；`getAnchor({align:"center"})`
-返回 opaque `RenderAnchor`，不暴露 Pixi matrix、bounds 或 display tree。单个 Symbol、area-local point和Scene Layout
+返回捕获 exact occurrences 的 `SymbolGroup`，批量 `setState/playState` 会先完整预检；group提供输入顺序的奇数`getMiddleSymbol()`、members/bounds center与稳定area-local `getCellBounds()`，不读取visual bounds。`getAnchor({align:"center"})`
+返回 opaque `RenderAnchor`，不暴露 Pixi matrix 或 display tree。单个 Symbol、area-local point和Scene Layout
 exact named node同样可提供anchor，由RenderCore在实际mount/move时完成坐标转换。
 
 `area.present()` context提供`mount/unmount/withNode/move/transfer`。临时节点声明`detach|destroy` ownership；callback
@@ -138,6 +137,8 @@ renderer 支持原子的 `setText()`、`setAnchor()`、logical/visual snapshot �
 ## Scene Layout API
 
 `@slotclientengine/rendercore/scene-layout` 提供严格且向后兼容的 scene-layout v1 parser、传递精确资源闭包、module/CDN package loader、game002/game003 对应的纯 frame policy 与 focus viewport 组合、image/image-string/official Spine 4.3 stateful node runtime，以及可选 symbols package 绑定的 standard/grid-cell reel 组合 runtime。游戏 app 只加载 package、提交 frame size、可见 scene 与本地视觉 phase，并显式请求业务状态；art、focus、node/reel order、行列、cell/gap、placement、symbol catalog 与播放状态都从 manifest/package 派生。
+
+第一层统一使用`getSymbolArea()`、`getRenderLayer()`、`getRenderObject()`与`createRenderObject()`。authored object按image/Spine/VNI/image-string返回borrowed typed capability，可见性与mode/variant做AND且不开放position/destroy；program object从exact `runtimeResources`异步创建并由caller拥有。`getLayoutPoint/getLayoutAnchor/resolveLayoutAnchor`直接读写configured authored space，center-origin游戏无需复制Pixi左上角偏移。完整ref grammar、ownership、SymbolGroup几何、坐标映射与示例见[`docs/rendercore-layer-symbol-area-render-object-coordinate-guide.md`](../../docs/rendercore-layer-symbol-area-render-object-coordinate-guide.md)。
 
 `inspectSceneLayoutPackageZipBytes()` /
 `loadSceneLayoutPackageFromZipBytes()` 是 canonical production ZIP 边界：使用 bounded

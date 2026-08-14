@@ -32,6 +32,7 @@ import {
   type EditorVniLayoutResource,
   type EditorVideoLayoutResource,
 } from "./editor-resource.js";
+import { assertCanonicalEditorNodeId } from "./node-id.js";
 
 type EditorLayoutResourceDraft =
   | Omit<EditorImageLayoutResource, "id">
@@ -661,6 +662,7 @@ export function editorProjectToPreviewManifest(
 export function editorProjectToManifest(
   project: EditorProject,
 ): SceneLayoutManifestV1 {
+  for (const node of project.nodes) assertCanonicalEditorNodeId(node.id);
   const initialMode = project.gameModes.modes.find(
     (mode) => mode.id === project.gameModes.initialMode,
   );

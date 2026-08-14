@@ -17,6 +17,10 @@ import {
   normalizeEditorPackageZipEntries,
   validateEditorAssetsMapPackage,
 } from "@slotclientengine/editorresource";
+import {
+  migrateSceneLayoutNodeIds,
+  type EditorNodeIdRename,
+} from "../model/node-id.js";
 
 export const LAYOUT_ZIP_LIMITS = Object.freeze({
   maxEntries: 4096,
@@ -30,6 +34,7 @@ export interface ImportedLayoutPackage {
   readonly assets: ReadonlyMap<string, Uint8Array>;
   readonly resource: SceneLayoutResource;
   readonly packageResource: SceneLayoutPackageResource;
+  readonly nodeIdRenames: readonly EditorNodeIdRename[];
   readonly videoMetadata: ReadonlyMap<
     string,
     {
@@ -123,7 +128,10 @@ export async function validateLayoutAssets(
     readonly loadSymbolTextures?: boolean;
   } = {},
 ): Promise<ImportedLayoutPackage> {
-  const manifest = parseSceneLayoutManifest(manifestValue);
+  const migration = migrateSceneLayoutNodeIds(
+    parseSceneLayoutManifest(manifestValue),
+  );
+  const manifest = migration.manifest;
   collectSceneLayoutPackagePaths({ manifest, files: assets });
   if (options.decodeImage) {
     for (const node of manifest.nodes) {
@@ -249,6 +257,7 @@ export async function validateLayoutAssets(
     assets,
     resource: packageResource.layout,
     packageResource,
+    nodeIdRenames: migration.renames,
     videoMetadata,
     destroy(): void {
       if (destroyed) return;

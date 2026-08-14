@@ -1975,15 +1975,24 @@ export class RenderGridCellReelSet
 
   getSymbols(positions: readonly SymbolPosition[]) {
     const keys = new Set<string>();
-    return createSymbolGroup(
-      positions.map((position) => {
-        const key = `${position.x}:${position.y}`;
-        if (keys.has(key))
-          throw new ReelError(`Duplicate SymbolGroup position (${key}).`);
-        keys.add(key);
-        return this.getSymbol(position);
-      }),
-    );
+    const symbols = positions.map((position) => {
+      const key = `${position.x}:${position.y}`;
+      if (keys.has(key))
+        throw new ReelError(`Duplicate SymbolGroup position (${key}).`);
+      keys.add(key);
+      return this.getSymbol(position);
+    });
+    return createSymbolGroup(symbols, {
+      getCellRect: (index) => {
+        const point = symbols[index]!.getPosition();
+        return Object.freeze({
+          x: point.x - this.#cellWidth / 2,
+          y: point.y - this.#cellHeight / 2,
+          width: this.#cellWidth,
+          height: this.#cellHeight,
+        });
+      },
+    });
   }
 
   replaceSymbol(

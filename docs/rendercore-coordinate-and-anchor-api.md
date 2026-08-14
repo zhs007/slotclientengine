@@ -4,6 +4,9 @@
 >
 > 本文只描述受控 public API，不开放 Pixi display tree、world transform、matrix、bounds 或 geometry snapshot。
 
+Layer、SymbolArea、authored/program RenderObject 与坐标的完整选择和端到端示例见
+[`rendercore-layer-symbol-area-render-object-coordinate-guide.md`](./rendercore-layer-symbol-area-render-object-coordinate-guide.md)。
+
 ## 两种定位数据
 
 RenderCore 使用两种不同的数据表达位置：
@@ -48,10 +51,13 @@ const anchor = symbol.getAnchor();
 ```ts
 const group = area.getSymbols(positions);
 const anchor = group.getAnchor({ align: "center" });
+const middle = group.getMiddleSymbol();
+const membersCenter = group.getCenter();
+const boundsCenter = group.getCenter({ mode: "bounds" });
+const cellBounds = group.getCellBounds();
 ```
 
-当前只支持 `center`，它是所有成员中心点在目标坐标系中的算术平均值，不是 bounds center，也不建立 SymbolGeometry。
-成员中任一 occurrence stale 时解析失败。
+`getAnchor({align:"center"})` 与默认 `getCenter()` 都保持成员中心算术平均语义。`getMiddleSymbol()`按传入positions顺序取中间项且只接受奇数成员；`bounds` center来自稳定cell footprint。`getCellBounds()`是area-local格子选择矩形，不是动画、贴图或Pixi visual bounds。成员中任一occurrence stale时整次读取失败。
 
 ### Area 本地点
 
@@ -91,10 +97,25 @@ const sameAnchor = getNamedRenderAnchor(runtime, "coin-meter");
 该 Anchor 指向 Scene Layout exact named node 的局部原点。未知 node、runtime 未 ready 或已 destroy 时显式失败。
 游戏不需要取得 node Container 或读取 world position。
 
+### Gamelayout authored 坐标
+
+```ts
+const origin = runtime.getLayoutPoint({ kind: "origin" });
+const artCenter = runtime.getLayoutPoint({ kind: "art", align: "center" });
+const viewportCenter = runtime.getLayoutPoint({
+  kind: "viewport",
+  align: "center",
+});
+const authored = runtime.resolveLayoutAnchor(symbol.getAnchor());
+const authoredAnchor = runtime.getLayoutAnchor({ x: 100, y: -40 });
+```
+
+这些 point 始终使用 manifest 配置的 `top-left | center` authored space。`viewport` 指当前 Scene Layout logical `visibleRect`，不是 CSS/window/device pixels。Point 是调用时快照；Anchor 在解析时使用当前 transform。
+
 ### RenderObjectLayer 本地点
 
 ```ts
-const source = runtime.getNodeRenderLayer("coin-meter", "child");
+const source = runtime.getRenderLayer("coin-meter");
 const target = runtime.getRenderLayer("layout");
 const anchor = source.getAnchor({ x: 0, y: 0 });
 const pointInTarget = target.resolveAnchor(anchor);

@@ -751,7 +751,18 @@ export class RenderReelSet extends Container implements ReelSpin {
       keys.add(key);
       return this.getSymbol(position);
     });
-    return createSymbolGroup(symbols);
+    return createSymbolGroup(symbols, {
+      getCellRect: (index) => {
+        const point = symbols[index]!.getPosition();
+        const reel = this.reels[positions[index]!.x]!;
+        return Object.freeze({
+          x: point.x - reel.layout.cellWidth / 2,
+          y: point.y - reel.layout.cellHeight / 2,
+          width: reel.layout.cellWidth,
+          height: reel.layout.cellHeight,
+        });
+      },
+    });
   }
 
   replaceSymbol(

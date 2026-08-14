@@ -44,6 +44,13 @@ export type {
   SceneLayoutPresentationSurface,
   SceneLayoutRuntimeResource,
   SceneLayoutNodeRenderLayerPlacement,
+  SceneLayoutRenderLayerRef,
+  SceneLayoutRenderObject,
+  SceneLayoutPoint,
+  SceneLayoutPointSelector,
+  RenderAlignment,
+  SymbolCellBounds,
+  SymbolGroup,
   RenderObjectLayer,
   RenderObjectLayerAddAtOptions,
 } from "@slotclientengine/rendercore";

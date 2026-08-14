@@ -3075,11 +3075,15 @@ export class GameLayoutEditorApp {
           project,
           this.#selectedSymbolId,
         );
-      this.showFeedback(
-        imported.manifest.gameModes
-          ? `已导入 ${project.id}，资源库按完整素材签名重建。`
-          : `已导入 ${project.id}；旧 layout 已升级，导出后将显式保存 gameModes。`,
-      );
+      const importMessage = imported.manifest.gameModes
+        ? `已导入 ${project.id}，资源库按完整素材签名重建。`
+        : `已导入 ${project.id}；旧 layout 已升级，导出后将显式保存 gameModes。`;
+      const renameMessage = imported.nodeIdRenames.length
+        ? ` Node ID 已迁移：${imported.nodeIdRenames
+            .map(({ from, to }) => `${from}→${to}`)
+            .join("，")}。`
+        : "";
+      this.showFeedback(`${importMessage}${renameMessage}`);
     } catch (error) {
       this.#store.setExternalError(error);
     } finally {
