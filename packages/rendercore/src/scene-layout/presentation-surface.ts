@@ -14,7 +14,9 @@ import type {
   SceneLayoutPopupInputBindingOptions,
   SceneLayoutSnapshot,
   SceneLayoutLayerId,
+  SceneLayoutNodeRenderLayerPlacement,
 } from "./types.js";
+import type { RenderAnchor, RenderObjectLayer } from "../presentation/index.js";
 
 export interface SceneLayoutPresentationSurface {
   readonly backgroundContainer: Container;
@@ -38,6 +40,12 @@ export interface SceneLayoutPresentationSurface {
   getSpinePopupPlayer(id: string): SpinePopupPlayer;
   getLayer(id: SceneLayoutLayerId): Container;
   getNode(id: string): Container;
+  getRenderLayer(id: SceneLayoutLayerId): RenderObjectLayer;
+  getNodeRenderLayer(
+    nodeId: string,
+    placement?: SceneLayoutNodeRenderLayerPlacement,
+  ): RenderObjectLayer;
+  getNodeAnchor(id: string): RenderAnchor;
   destroy(): void;
 }
 
@@ -240,6 +248,24 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
   getNode(id: string): Container {
     this.assertReady();
     return this.#runtime.getNode(id);
+  }
+
+  getRenderLayer(id: SceneLayoutLayerId): RenderObjectLayer {
+    this.assertReady();
+    return this.#runtime.getRenderLayer(id);
+  }
+
+  getNodeRenderLayer(
+    nodeId: string,
+    placement: SceneLayoutNodeRenderLayerPlacement = "child",
+  ): RenderObjectLayer {
+    this.assertReady();
+    return this.#runtime.getNodeRenderLayer(nodeId, placement);
+  }
+
+  getNodeAnchor(id: string): RenderAnchor {
+    this.assertReady();
+    return this.#runtime.getNodeAnchor(id);
   }
 
   destroy(): void {

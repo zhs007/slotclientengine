@@ -202,7 +202,14 @@ describe("RenderReelSet ReelSpin", () => {
     });
     const view = new Container();
     const node = createRenderObject({ view, destroy: () => view.destroy() });
-    area.getLayer("win").add(node);
+    area.getLayer("win").addAt(node, {
+      anchor: area.getLayer("top").getAnchor({ x: 12, y: 14 }),
+      offset: { x: 3, y: -4 },
+    });
+    expect(area.getLayer("win").resolveAnchor(node.getAnchor())).toEqual({
+      x: 15,
+      y: 10,
+    });
     let continued = false;
     const presentation = area.present(async (context) => {
       await context.delay(1);

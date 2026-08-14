@@ -43,6 +43,9 @@ export type {
   SceneLayoutPackageRuntime,
   SceneLayoutPresentationSurface,
   SceneLayoutRuntimeResource,
+  SceneLayoutNodeRenderLayerPlacement,
+  RenderObjectLayer,
+  RenderObjectLayerAddAtOptions,
 } from "@slotclientengine/rendercore";
 export type {
   SlotOperationPlanV2,

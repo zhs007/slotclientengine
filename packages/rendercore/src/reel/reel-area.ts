@@ -3,19 +3,14 @@ import type {
   RenderPoint,
 } from "../presentation/render-object.js";
 import type { RenderAnchor } from "../presentation/render-anchor.js";
-import type {
-  PresentationMountTarget,
-  PresentationScopeContext,
-} from "../presentation/presentation-scope.js";
+import type { RenderObjectLayer } from "../presentation/render-object-layer.js";
+import type { PresentationScopeContext } from "../presentation/presentation-scope.js";
 import type { ReelRollTarget, ReelSpin } from "./reel-spin.js";
 import type { SymbolArea } from "./symbol-area.js";
 
 export type SymbolAreaLayerId = "bottom" | "top" | "win";
 
-export interface SymbolAreaLayer extends PresentationMountTarget {
-  add(node: RenderObject, order?: number): void;
-  remove(node: RenderObject): void;
-}
+export interface SymbolAreaLayer extends RenderObjectLayer {}
 
 export interface SymbolAreaPresentationContext extends PresentationScopeContext {}
 

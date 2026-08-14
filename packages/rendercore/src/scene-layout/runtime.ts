@@ -32,7 +32,13 @@ import type {
   SceneLayoutSnapshot,
   SceneLayoutNodeStateSnapshot,
   SceneLayoutVariantId,
+  SceneLayoutNodeRenderLayerPlacement,
 } from "./types.js";
+import {
+  createRenderObjectLayer,
+  type RenderObjectLayer,
+  type RenderObjectLayerController,
+} from "../presentation/render-object-layer.js";
 
 export interface CreateSceneLayoutRuntimeOptions {
   readonly resource: SceneLayoutResource;
@@ -92,6 +98,14 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   readonly #nodes: readonly RuntimeNode[];
   readonly #nodesById: ReadonlyMap<string, RuntimeNode>;
   readonly #artMask = new Graphics();
+  readonly #rootRenderLayerContainer = new Container();
+  readonly #rootRenderLayerController: RenderObjectLayerController;
+  readonly #nodeRenderLayerControllers = new Map<
+    string,
+    Readonly<
+      Record<SceneLayoutNodeRenderLayerPlacement, RenderObjectLayerController>
+    >
+  >();
   readonly #loadedTextureUrls = new Set<string>();
   readonly #texturesByUrl = new Map<string, Texture>();
   readonly #texturePromisesByUrl = new Map<string, Promise<Texture>>();
@@ -150,6 +164,9 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       before.label = `scene-layout-before:${spec.id}`;
       named.label = spec.id;
       after.label = `scene-layout-after:${spec.id}`;
+      before.sortableChildren = true;
+      named.sortableChildren = true;
+      after.sortableChildren = true;
       slot.addChild(before, named, after);
       this.container.addChild(slot);
       return {
@@ -168,13 +185,38 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     });
     this.#nodes = Object.freeze(nodes);
     this.#nodesById = new Map(nodes.map((node) => [node.spec.id, node]));
+    for (const node of nodes) {
+      this.#nodeRenderLayerControllers.set(
+        node.spec.id,
+        Object.freeze({
+          child: this.createLayerController(
+            node.named,
+            `scene layout node "${node.spec.id}" child layer`,
+          ),
+          before: this.createLayerController(
+            node.before,
+            `scene layout node "${node.spec.id}" before layer`,
+          ),
+          after: this.createLayerController(
+            node.after,
+            `scene layout node "${node.spec.id}" after layer`,
+          ),
+        }),
+      );
+    }
     for (const node of nodes) this.#activeNodes.set(node.spec.id, true);
+    this.#rootRenderLayerContainer.label = "scene-layout-render-layer:layout";
+    this.#rootRenderLayerContainer.sortableChildren = true;
+    this.#rootRenderLayerController = this.createLayerController(
+      this.#rootRenderLayerContainer,
+      "scene layout root render layer",
+    );
     this.#artMask.label = "scene-layout-art-mask";
     this.#artMask.visible = true;
     this.#artMask.renderable = true;
     this.#artMask.includeInBuild = false;
     this.#artMask.measurable = false;
-    this.container.addChild(this.#artMask);
+    this.container.addChild(this.#rootRenderLayerContainer, this.#artMask);
     this.container.mask = this.#artMask;
   }
 
@@ -302,6 +344,29 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     return this.requireNode(id).named;
   }
 
+  getRootRenderLayer(): RenderObjectLayer {
+    this.assertReady();
+    return this.#rootRenderLayerController.layer;
+  }
+
+  getNodeRenderLayer(
+    nodeId: string,
+    placement: SceneLayoutNodeRenderLayerPlacement = "child",
+  ): RenderObjectLayer {
+    this.assertReady();
+    this.requireNode(nodeId);
+    if (
+      placement !== "child" &&
+      placement !== "before" &&
+      placement !== "after"
+    ) {
+      throw new SceneLayoutError(
+        `Unknown scene layout node render layer placement "${String(placement)}".`,
+      );
+    }
+    return this.#nodeRenderLayerControllers.get(nodeId)![placement].layer;
+  }
+
   attachChild(options: AttachChildOptions): () => void {
     this.assertReady();
     const node = this.requireNode(options.nodeId);
@@ -374,8 +439,13 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     if (this.#destroyed) return;
     this.#destroyed = true;
     this.container.mask = null;
+    this.#rootRenderLayerController.detachAll();
+    for (const controllers of this.#nodeRenderLayerControllers.values())
+      for (const controller of Object.values(controllers))
+        controller.detachAll();
     this.releaseNodeResources();
     this.#artMask.destroy();
+    this.#rootRenderLayerContainer.destroy({ children: false });
     for (const node of this.#nodes) {
       node.before.removeChildren();
       node.after.removeChildren();
@@ -552,6 +622,18 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     const node = this.#nodesById.get(id);
     if (!node) throw new SceneLayoutError(`Unknown scene layout node "${id}".`);
     return node;
+  }
+
+  private createLayerController(
+    view: Container,
+    label: string,
+  ): RenderObjectLayerController {
+    return createRenderObjectLayer({
+      view,
+      label,
+      assertUsable: () => this.assertReady(),
+      createError: (message) => new SceneLayoutError(message),
+    });
   }
 
   private requireImageStringNode(id: string): RenderImageString {

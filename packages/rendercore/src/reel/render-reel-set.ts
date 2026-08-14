@@ -13,10 +13,13 @@ import {
 } from "../presentation/render-anchor.js";
 import {
   getPresentationMountTargetAdapter,
-  registerPresentationMountTarget,
   type PresentationNodeMountOptions,
   type PresentationScopeContext,
 } from "../presentation/presentation-scope.js";
+import {
+  createRenderObjectLayer,
+  type RenderObjectLayerController,
+} from "../presentation/render-object-layer.js";
 import { prepareVisibleOccurrenceMotion } from "./visible-occurrence-transfer.js";
 import type {
   RenderObject,
@@ -129,7 +132,10 @@ export class RenderReelSet extends Container implements ReelSpin {
     NonNullable<RenderReelSetOptions["reelSpin"]>
   >;
   readonly #areaLayers: ReadonlyMap<SymbolAreaLayerId, Container>;
-  readonly #areaMounted = new Map<SymbolAreaLayerId, Set<RenderObject>>();
+  readonly #areaLayerControllers = new Map<
+    SymbolAreaLayerId,
+    RenderObjectLayerController
+  >();
   readonly #areaSpinFunction: AreaSpinFunction;
   readonly #spinSessionController: ReelSpinSessionController;
   readonly #presentationDelayWaiters = new Set<PresentationDelayWaiter>();
@@ -196,8 +202,16 @@ export class RenderReelSet extends Container implements ReelSpin {
       ["top", topLayer],
       ["win", winLayer],
     ]);
-    for (const id of this.#areaLayers.keys())
-      this.#areaMounted.set(id, new Set());
+    for (const [id, layer] of this.#areaLayers)
+      this.#areaLayerControllers.set(
+        id,
+        createRenderObjectLayer({
+          view: layer,
+          label: `${id} area layer`,
+          assertUsable: () => this.assertAlive(),
+          createError: (message) => new ReelError(message),
+        }),
+      );
     this.#slotLayer = new Container();
     this.#slotLayer.sortableChildren = true;
     this.#cascadeMask = new Graphics()
@@ -303,14 +317,8 @@ export class RenderReelSet extends Container implements ReelSpin {
         );
       attachment.mounted.clear();
     }
-    for (const [id, nodes] of this.#areaMounted) {
-      for (const node of nodes)
-        getRenderObjectAdapter(node).view.parent?.removeChild(
-          getRenderObjectAdapter(node).view,
-        );
-      nodes.clear();
-      this.#areaLayers.get(id)?.removeChildren();
-    }
+    for (const controller of this.#areaLayerControllers.values())
+      controller.detachAll();
     this.cancelContinuous();
     this.cancelActiveDrop();
     this.#symbolPool?.destroy();
@@ -1226,38 +1234,10 @@ export class RenderReelSet extends Container implements ReelSpin {
 
   getLayer(id: SymbolAreaLayerId): SymbolAreaLayer {
     this.assertAlive();
-    const layer = this.#areaLayers.get(id);
-    const mounted = this.#areaMounted.get(id);
-    if (!layer || !mounted)
+    const controller = this.#areaLayerControllers.get(id);
+    if (!controller)
       throw new ReelError(`Unknown symbol area layer "${String(id)}".`);
-    const target = Object.freeze({
-      add: (node: RenderObject, order = 0) => {
-        this.assertAlive();
-        if (!Number.isSafeInteger(order))
-          throw new ReelError("Area node order must be an integer.");
-        if (mounted.has(node))
-          throw new ReelError(
-            `RenderObject is already attached to ${id} layer.`,
-          );
-        const adapter = getRenderObjectAdapter(node);
-        if (adapter.view.parent)
-          throw new ReelError(
-            "RenderObject is already attached to another parent.",
-          );
-        adapter.view.zIndex = order;
-        layer.addChild(adapter.view);
-        mounted.add(node);
-      },
-      remove: (node: RenderObject) => {
-        this.assertAlive();
-        if (!mounted.delete(node)) return;
-        getRenderObjectAdapter(node).view.parent?.removeChild(
-          getRenderObjectAdapter(node).view,
-        );
-      },
-    });
-    registerPresentationMountTarget(target, { view: layer });
-    return target;
+    return controller.layer;
   }
 
   getArea(): ReelArea {
@@ -1618,12 +1598,7 @@ export class RenderReelSet extends Container implements ReelSpin {
   }
 
   private clearAreaLayer(id: SymbolAreaLayerId): void {
-    const mounted = this.#areaMounted.get(id)!;
-    for (const node of mounted)
-      getRenderObjectAdapter(node).view.parent?.removeChild(
-        getRenderObjectAdapter(node).view,
-      );
-    mounted.clear();
+    this.#areaLayerControllers.get(id)!.detachAll();
   }
 
   roll(

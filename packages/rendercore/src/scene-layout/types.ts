@@ -347,6 +347,7 @@ export interface SceneLayoutPackageResource {
 }
 
 export type SceneLayoutLayerId = "layout" | "reel" | "transition" | "popup";
+export type SceneLayoutNodeRenderLayerPlacement = "child" | "before" | "after";
 
 export interface ResolvedSceneLayoutReelGrid {
   readonly id: string;
@@ -423,6 +424,13 @@ export interface SceneLayoutRuntime {
   update(deltaSeconds: number): void;
   getSnapshot(): SceneLayoutSnapshot;
   getNode(id: string): Container;
+  /** Safe program attachment layer above authored layout nodes. */
+  getRootRenderLayer(): import("../presentation/index.js").RenderObjectLayer;
+  /** Safe exact named-node attachment layer. */
+  getNodeRenderLayer(
+    nodeId: string,
+    placement?: SceneLayoutNodeRenderLayerPlacement,
+  ): import("../presentation/index.js").RenderObjectLayer;
   attachChild(options: AttachChildOptions): () => void;
   attachRelative(options: AttachRelativeOptions): () => void;
   getReelGrid(id: string): ResolvedSceneLayoutReelGrid;
@@ -558,6 +566,10 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   ): import("../reel/index.js").ReelSpinSessionController;
   /** Returns an opaque anchor for an exact named Scene Layout node. */
   getNodeAnchor(id: string): import("../presentation/index.js").RenderAnchor;
+  /** Returns an additive safe RenderObject layer without exposing its Container. */
+  getRenderLayer(
+    id: SceneLayoutLayerId,
+  ): import("../presentation/index.js").RenderObjectLayer;
   /** Creates a detached, caller-owned object from an exact program resource name. */
   createRenderObject(
     name: string,

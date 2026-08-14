@@ -30,3 +30,7 @@ export type {
   PresentationScopeContext,
   PresentationTransferOptions,
 } from "./presentation-scope.js";
+export type {
+  RenderObjectLayer,
+  RenderObjectLayerAddAtOptions,
+} from "./render-object-layer.js";

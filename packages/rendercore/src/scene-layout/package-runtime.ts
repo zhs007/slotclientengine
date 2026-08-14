@@ -2,6 +2,11 @@ import type { LogicReels } from "@slotclientengine/logiccore";
 import { Container, Graphics, Rectangle } from "pixi.js";
 import { createContainerRenderAnchor } from "../presentation/render-anchor.js";
 import {
+  createRenderObjectLayer,
+  type RenderObjectLayer,
+  type RenderObjectLayerController,
+} from "../presentation/render-object-layer.js";
+import {
   bindPopupInteractionInput,
   createAwardCelebrationPlayer,
   createSpinePopupPlayer,
@@ -55,6 +60,7 @@ import type {
   SceneLayoutMainReelContinuousSpinInput,
   SceneLayoutMainReelSpinInput,
   SceneLayoutNodeStateSnapshot,
+  SceneLayoutNodeRenderLayerPlacement,
   SceneLayoutPackageResource,
   SceneLayoutPackageRuntime,
   SceneLayoutPopupInputBindingOptions,
@@ -225,6 +231,12 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #renderObjectFactory: SceneLayoutRenderObjectFactory;
   readonly #popupRoot = new Container();
   readonly #transitionRoot = new Container();
+  readonly #popupRenderLayerRoot = new Container();
+  readonly #transitionRenderLayerRoot = new Container();
+  readonly #reelRenderLayerRoot = new Container();
+  readonly #popupRenderLayerController: RenderObjectLayerController;
+  readonly #transitionRenderLayerController: RenderObjectLayerController;
+  readonly #reelRenderLayerController: RenderObjectLayerController;
   readonly #videoBlackoutRoot = new Container();
   readonly #videoBlackout = new Graphics();
   #reel: ReelPresentation | null = null;
@@ -347,6 +359,31 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#popupRoot.eventMode = "none";
     this.#popupRoot.on("pointerdown", this.#onPopupPointerDown);
     this.#transitionRoot.label = "scene-transition-overlay";
+    this.#transitionRoot.sortableChildren = true;
+    this.#popupRenderLayerRoot.label = "scene-layout-render-layer:popup";
+    this.#popupRenderLayerRoot.sortableChildren = true;
+    this.#popupRenderLayerRoot.zIndex = 1_000_000_000;
+    this.#transitionRenderLayerRoot.label =
+      "scene-layout-render-layer:transition";
+    this.#transitionRenderLayerRoot.sortableChildren = true;
+    this.#transitionRenderLayerRoot.zIndex = 1_000_000_000;
+    this.#reelRenderLayerRoot.label = "scene-layout-render-layer:reel";
+    this.#reelRenderLayerRoot.sortableChildren = true;
+    this.#popupRoot.addChild(this.#popupRenderLayerRoot);
+    this.#transitionRoot.addChild(this.#transitionRenderLayerRoot);
+    this.#popupRenderLayerController = this.createLayerController(
+      this.#popupRenderLayerRoot,
+      "scene layout popup render layer",
+    );
+    this.#transitionRenderLayerController = this.createLayerController(
+      this.#transitionRenderLayerRoot,
+      "scene layout transition render layer",
+    );
+    this.#reelRenderLayerController = this.createLayerController(
+      this.#reelRenderLayerRoot,
+      "scene layout reel render layer",
+      true,
+    );
     this.#videoBlackoutRoot.label = "scene-transition-video-blackout";
     this.#videoBlackout.label = "scene-transition-video-black";
     this.#videoBlackoutRoot.visible = false;
@@ -524,6 +561,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           'Bound scene layout reel "main" is missing.',
         );
       this.#reel.position.set(grid.artRect.x, grid.artRect.y);
+      this.#reelRenderLayerRoot.position.set(grid.artRect.x, grid.artRect.y);
       for (const overlay of this.#mainReelOverlays)
         overlay.position.set(grid.artRect.x, grid.artRect.y);
     }
@@ -1537,6 +1575,25 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     }
   }
 
+  getRenderLayer(id: SceneLayoutLayerId): RenderObjectLayer {
+    this.assertReady();
+    switch (id) {
+      case "layout":
+        return this.#layout.getRootRenderLayer();
+      case "reel":
+        this.requireReel("main");
+        return this.#reelRenderLayerController.layer;
+      case "transition":
+        return this.#transitionRenderLayerController.layer;
+      case "popup":
+        return this.#popupRenderLayerController.layer;
+      default:
+        throw new SceneLayoutError(
+          `Unknown scene layout render layer "${String(id)}".`,
+        );
+    }
+  }
+
   getGameModeIds(): readonly string[] {
     this.assertReady();
     return Object.freeze(this.requireGameModes().modes.map((mode) => mode.id));
@@ -1676,6 +1733,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           this.#reel = null;
           this.#catalog = null;
           this.#mainReelSceneCommitted = false;
+          this.#reelRenderLayerController.detachAll();
+          this.#reelRenderLayerRoot.parent?.removeChild(
+            this.#reelRenderLayerRoot,
+          );
         }
         prepared = null;
         this.#activeSymbolPackageId = targetBinding?.id ?? null;
@@ -1918,6 +1979,19 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     return this.#layout.getNode(id);
   }
 
+  getRootRenderLayer(): RenderObjectLayer {
+    this.assertReady();
+    return this.#layout.getRootRenderLayer();
+  }
+
+  getNodeRenderLayer(
+    nodeId: string,
+    placement: SceneLayoutNodeRenderLayerPlacement = "child",
+  ): RenderObjectLayer {
+    this.assertReady();
+    return this.#layout.getNodeRenderLayer(nodeId, placement);
+  }
+
   getNodeAnchor(id: string) {
     this.assertReady();
     return createContainerRenderAnchor(this.#layout.getNode(id));
@@ -2037,6 +2111,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         ),
       );
     }
+    this.#reelRenderLayerController.detachAll();
+    this.#popupRenderLayerController.detachAll();
+    this.#transitionRenderLayerController.detachAll();
+    this.#reelRenderLayerRoot.parent?.removeChild(this.#reelRenderLayerRoot);
     this.#reel?.destroy({ children: true });
     this.#reel = null;
     this.#mainReelSceneCommitted = false;
@@ -2585,6 +2663,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         this.#reel = null;
         this.#catalog = null;
         this.#mainReelSceneCommitted = false;
+        this.#reelRenderLayerController.detachAll();
+        this.#reelRenderLayerRoot.parent?.removeChild(
+          this.#reelRenderLayerRoot,
+        );
       }
       this.#activeSymbolPackageId = this.#targetSymbolPackageId;
       if (previous) {
@@ -2759,6 +2841,28 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#layout.container.addChildAt(reel, insertionIndex);
     const grid = this.#layout.getReelGrid("main");
     reel.position.set(grid.artRect.x, grid.artRect.y);
+    this.#reelRenderLayerRoot.parent?.removeChild(this.#reelRenderLayerRoot);
+    this.#layout.container.addChildAt(
+      this.#reelRenderLayerRoot,
+      this.#layout.container.getChildIndex(reel) + 1,
+    );
+    this.#reelRenderLayerRoot.position.copyFrom(reel.position);
+  }
+
+  private createLayerController(
+    view: Container,
+    label: string,
+    requireReel = false,
+  ): RenderObjectLayerController {
+    return createRenderObjectLayer({
+      view,
+      label,
+      assertUsable: () => {
+        this.assertReady();
+        if (requireReel) this.requireReel("main");
+      },
+      createError: (message) => new SceneLayoutError(message),
+    });
   }
 
   private hideVideoBlackout(): void {

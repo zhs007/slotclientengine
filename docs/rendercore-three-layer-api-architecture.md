@@ -32,11 +32,11 @@ LogicCore immutable execution result
 
 ## 当前状态
 
-| 层级   | 当前状态                       | 主要内容                                                                                             |
-| ------ | ------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| 第一层 | 已实施，进入合同收口阶段       | `SymbolArea`、`SymbolRender`、`RenderObject`、`ReelSpin`、`CellSpin`、area layer、原子 mutation      |
-| 第二层 | 骨架已实施，继续由真实游戏补齐 | `SymbolGroup`、`RenderAnchor`、`PresentationScope`、motion/transfer、spin session、area spin factory |
-| 第三层 | 只确定方向，尚未实施           | standard reel、cascade、hold-and-respin 等可选玩法模板                                               |
+| 层级   | 当前状态                       | 主要内容                                                                                                 |
+| ------ | ------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| 第一层 | 已实施，进入合同收口阶段       | `SymbolArea`、`SymbolRender`、`RenderObject`、`RenderObjectLayer`、`ReelSpin`、`CellSpin`、原子 mutation |
+| 第二层 | 骨架已实施，继续由真实游戏补齐 | `SymbolGroup`、`RenderAnchor`、`PresentationScope`、motion/transfer、spin session、area spin factory     |
+| 第三层 | 只确定方向，尚未实施           | standard reel、cascade、hold-and-respin 等可选玩法模板                                                   |
 
 ## 第一层：渲染对象与原子动作
 
@@ -55,10 +55,12 @@ LogicCore immutable execution result
 - `SymbolArea.getSymbol(pos)`：从具体 area 实例取得当前位置的 exact `SymbolRender`；
 - `SymbolRender`：改变 state/value/text，播放 state，附加或移除 `RenderObject`，取得位置或 anchor，创建 owned clone；
 - `RenderObject`：统一表达文本、图片、Spine、粒子、光效、VNI 及后续 typed custom object；
+- `RenderObjectLayer`：统一表达area、Scene顶层和exact named node的安全attachment、local anchor与原子对齐挂载；
 - `ReelSpin.roll/start/settle/cancel`：执行单列原子运动；
 - `CellSpin.roll/start/settle/cancel`：执行单格原子运动；
 - `SymbolMutationArea.replaceSymbol/replaceSymbols`、occurrence transfer/drop 等明确盘面 mutation 原语；
 - area/reel/cell 的安全 attachment 入口，不向游戏暴露 raw Pixi display tree。
+- Scene Layout `getRenderLayer/getNodeRenderLayer`是additive game-facing façade；旧borrowed Container seam为兼容host/editor保留。
 
 示意：
 

@@ -91,6 +91,18 @@ const sameAnchor = getNamedRenderAnchor(runtime, "coin-meter");
 该 Anchor 指向 Scene Layout exact named node 的局部原点。未知 node、runtime 未 ready 或已 destroy 时显式失败。
 游戏不需要取得 node Container 或读取 world position。
 
+### RenderObjectLayer 本地点
+
+```ts
+const source = runtime.getNodeRenderLayer("coin-meter", "child");
+const target = runtime.getRenderLayer("layout");
+const anchor = source.getAnchor({ x: 0, y: 0 });
+const pointInTarget = target.resolveAnchor(anchor);
+```
+
+Area layer、Scene顶层和named node layer都实现同一合同。`getAnchor()`默认包装local origin；`resolveAnchor()`返回调用时
+target-local snapshot，不返回world point。只为挂载时直接使用`target.addAt(object, {anchor, offset, order})`，无需先保存数值。
+
 ## 将 Anchor 解析为 Area 本地坐标
 
 ```ts
@@ -137,6 +149,22 @@ scope.mount(area.getLayer("win"), node, {
 
 `mount()` 和 `withNode()` 在挂载时把 Anchor 转成目标 layer 的本地坐标。`offset` 属于目标 layer 的本地坐标系，
 计算结果为“已转换 Anchor + offset”。
+
+target可以是area layer，也可以是`getRenderLayer/getNodeRenderLayer`返回的Scene layer。若scope来自`area.present()`，挂到
+Scene layer的临时对象仍在area spin打断时按ownership清理。
+
+### 第一层 addAt
+
+```ts
+targetLayer.addAt(node, {
+  anchor: sourceLayer.getAnchor({ x: 10, y: 20 }),
+  offset: { x: 0, y: -30 },
+  order: 2,
+});
+```
+
+`addAt()`是同步原子attachment：先完整验证layer/object/order/offset/anchor，再提交目标local position、order和parent。
+失败保持position、parent与layer账本不变。它不接管ownership；调用方最终`remove()`后`destroy()`。
 
 ### move
 

@@ -1,6 +1,7 @@
 import { Assets, Container, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
 import { RenderGridCellReelSet, RenderReelSet } from "../../src/reel/index.js";
+import { createRenderObject } from "../../src/presentation/index.js";
 import type { RendercoreSpinePlayer } from "../../src/spine/runtime-player.js";
 import {
   createSceneLayoutPackageResource,
@@ -1476,10 +1477,46 @@ describe("scene layout package runtime", () => {
       expect(runtime.getNodeAnchor("bg")).toEqual({
         kind: "render-anchor",
       });
+      const programView = new Container();
+      const programObject = createRenderObject({
+        view: programView,
+        destroy: () => programView.destroy(),
+      });
+      const reelLayer = runtime.getRenderLayer("reel");
+      reelLayer.addAt(programObject, {
+        anchor: runtime.getNodeRenderLayer("bg").getAnchor(),
+        offset: { x: 2, y: 3 },
+      });
+      expect(programView.parent?.label).toBe("scene-layout-render-layer:reel");
+      expect(runtime.getRenderLayer("layout")).toBe(
+        runtime.getRootRenderLayer(),
+      );
+      expect(runtime.getRenderLayer("transition")).toBeDefined();
+      expect(runtime.getRenderLayer("popup")).toBeDefined();
+      expect(() => runtime.getRenderLayer("hud" as "layout")).toThrow();
+      const scopedView = new Container();
+      const scopedObject = createRenderObject({
+        view: scopedView,
+        destroy: () => scopedView.destroy(),
+      });
+      await runtime.getSymbolArea("main").present((scope) =>
+        scope.withNode(
+          runtime.getNodeRenderLayer("bg", "after"),
+          scopedObject,
+          { ownership: "detach" },
+          async () => {
+            expect(scopedView.parent?.label).toBe("scene-layout-after:bg");
+          },
+        ),
+      );
+      expect(scopedView.parent).toBeNull();
+      scopedObject.destroy();
       expect(() => runtime.getNodeAnchor("missing")).toThrow();
       expect(() => runtime.getSymbolArea("other")).toThrow(/unavailable/);
       expect(() => runtime.getReelSpin("other")).toThrow(/unavailable/);
       runtime.destroy();
+      expect(programView.parent).toBeNull();
+      programObject.destroy();
 
       const dead = createSceneLayoutPackageRuntime({
         resource: await createSceneLayoutPackageResource({

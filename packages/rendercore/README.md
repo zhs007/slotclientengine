@@ -84,6 +84,12 @@ standard reel 的第一层 `ReelArea` façade，并额外公开最高优先级
 win layer，再调用默认或装配时注入的 `AreaSpinFunction`。游戏不持有 interruption signal。`SymbolRender.getPosition()`
 只返回 area-local occurrence 中心；通用 `createTextRenderObject()` 可据此定位后挂入 win layer。
 
+Area、Scene Layout顶层和exact named node attachment统一使用增量兼容的`RenderObjectLayer`。既有
+`layer.add(node, order?)/remove(node)`保持不变；新`getAnchor/resolveAnchor/addAt`允许用opaque anchor按调用时
+transform对齐object。`SceneLayoutPackageRuntime.getRenderLayer("layout" | "reel" | "transition" | "popup")`
+取得稳定顶层，`getNodeRenderLayer(nodeId, "child" | "before" | "after")`取得exact node attachment band。
+旧`getLayer/getNode/attachChild/attachRelative` borrowed Container seam继续兼容既有host/editor，不要求游戏批量迁移。
+
 Scene Layout package runtime 只为 standard reel 提供 `getReelSpin("main")`；未知
 area、未 ready 或首次 scene 尚未 commit 都严格失败。详细合同见
 [`docs/rendercore-operation-first-layer-api.md`](../../docs/rendercore-operation-first-layer-api.md)。
@@ -100,6 +106,9 @@ exact named node同样可提供anchor，由RenderCore在实际mount/move时完�
 line/cubic path与easing sampler，并由同一manual runtime clock推进；generic transfer只移动临时RenderObject/owned clone，
 不提交盘面mutation。`createAreaSpinFunction()`用于装配column order和landing stagger，仍只调用第一层ReelSpin原子方法，
 不生成public plan。
+
+PresentationScope接受任意已登记的`RenderObjectLayer`，因此area scope也可临时挂到Scene/node layer；该对象仍受area spin
+打断。永久Scene attachment使用第一层`add/addAt/remove`并由caller负责最终destroy。
 
 `ReelArea.resolveAnchor(anchor)`可在确有数值计算需求时，把任意有效RenderCore Anchor只读解析为该area本地`RenderPoint`；
 它不开放world coordinate或raw target Container。只为挂载/移动时应继续直接使用`mount/withNode/move/transfer`。完整合同见
@@ -716,6 +725,8 @@ for (const transfer of transfers) {
 `ImgNumberRenderObject` 是 image-string-backed `CloneableRenderObject`，提供 `setText/getText` 并继承 `setPosition/setVisible/getAnchor/destroy`。它不公开 raw Pixi container；文字变化继续使用 image-string 的原子 glyph validation 与动态 anchor，clone 共享 package-owned resource 但拥有独立 renderer 和生命周期。
 
 Crave 的 Nearwin1/2 与图标中奖迁移示例见 [`docs/crave-named-render-object-migration.md`](../../docs/crave-named-render-object-migration.md)。
+area/Scene/node layer挂载、跨layer对齐、兼容与cleanup说明见
+[`docs/crave-render-layer-integration.md`](../../docs/crave-render-layer-integration.md)。
 
 ## 通用 symbol win carousel
 

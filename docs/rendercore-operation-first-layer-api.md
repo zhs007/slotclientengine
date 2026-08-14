@@ -88,6 +88,29 @@ interface ReelArea extends PresentableSymbolArea {
 只提供 `RenderObject add/remove`。`win` 是最高 area presentation layer，金额文字等独立节点放在这里，
 不绑定 symbol 或 reel 生命周期。
 
+## Area 外的 RenderObjectLayer
+
+`SymbolAreaLayer`增量实现通用`RenderObjectLayer`，旧`add(node, order?)/remove(node)`签名不变。Scene Layout package
+runtime通过新名字安全公开相同第一层能力：
+
+```ts
+const scene = runtime.getRenderLayer("layout");
+const node = runtime.getNodeRenderLayer("coin-meter", "after");
+
+scene.addAt(effect, {
+  anchor: node.getAnchor(),
+  offset: { x: 0, y: -20 },
+  order: 1,
+});
+```
+
+稳定顶层id只允许`layout | reel | transition | popup`；named node placement只允许`child | before | after`。
+`getAnchor(point?)`包装layer-local point，`resolveAnchor()`只返回目标layer-local snapshot，`addAt()`在一次原子调用中
+完成调用时坐标转换、position/order和attachment。失败不改变object position/parent。直接layer不拥有object，caller必须
+`remove()`后`destroy()`；跨await ownership与打断继续使用第二层PresentationScope。
+
+现有Scene Layout `getLayer/getNode/attachChild/attachRelative`保留给已有host/editor，不被静默重定向，也不要求当前游戏迁移。
+
 ## SymbolRender
 
 `getSymbol()` 返回游戏可直接操作的 `SymbolRender`。游戏代码不接触 `SymbolHandle` 名称，也不需要理解

@@ -2,6 +2,8 @@
 
 本文只描述 Crave 需要人工完成的调用点迁移。RenderCore 仓库不修改 Crave、Gamelayout manifest 或美术资源；下面直接使用 Gamelayout 包 `runtimeResources` 中大小写完全一致的 resource name，不要求 Crave 再增加一层配置。
 
+对象创建后的area、Scene顶层、exact named node挂载、跨layer对齐和兼容策略见[Crave RenderObject 图层接入说明](./crave-render-layer-integration.md)。本文原有area scope示例继续有效，无需强制迁移。
+
 ## 1. Nearwin1 / Nearwin2
 
 旧代码不再自行执行 path-to-key、`loadRuntimeResource()`、Spine player 创建和逐帧 update。Scene Layout package runtime 直接按 exact name 创建 detached、owned `RenderObject`：

@@ -45,6 +45,24 @@ describe("RenderGridCellReelSet", () => {
     reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
     const source = reelSet.getSymbol({ x: 0, y: 0 });
     const target = reelSet.getSymbol({ x: 1, y: 0 });
+    const markerView = new Container();
+    const marker = createRenderObject({
+      view: markerView,
+      destroy: () => markerView.destroy(),
+    });
+    const sourcePoint = reelSet
+      .getLayer("top")
+      .resolveAnchor(source.getAnchor());
+    reelSet.getLayer("top").addAt(marker, {
+      anchor: source.getAnchor(),
+      offset: { x: 1, y: -2 },
+    });
+    expect(reelSet.getLayer("top").resolveAnchor(marker.getAnchor())).toEqual({
+      x: sourcePoint.x + 1,
+      y: sourcePoint.y - 2,
+    });
+    reelSet.getLayer("top").remove(marker);
+    marker.destroy();
     const view = new Container();
     const flying = createRenderObject({
       view,

@@ -16,10 +16,13 @@ import {
 } from "../presentation/render-object.js";
 import {
   getPresentationMountTargetAdapter,
-  registerPresentationMountTarget,
   type PresentationNodeMountOptions,
   type PresentationScopeContext,
 } from "../presentation/presentation-scope.js";
+import {
+  createRenderObjectLayer,
+  type RenderObjectLayerController,
+} from "../presentation/render-object-layer.js";
 import { RenderReel } from "./render-reel.js";
 import type {
   GridCellCoordinate,
@@ -235,7 +238,10 @@ export class RenderGridCellReelSet
   readonly #transferAboveSymbolsLayer: Container;
   readonly #transferLayer: Container;
   readonly #areaLayers: ReadonlyMap<SymbolAreaLayerId, Container>;
-  readonly #areaMounted = new Map<SymbolAreaLayerId, Set<RenderObject>>();
+  readonly #areaLayerControllers = new Map<
+    SymbolAreaLayerId,
+    RenderObjectLayerController
+  >();
   readonly #effectController: GridCellEffectController | null;
   #occurrenceEffectPlayerFactory: VisibleOccurrenceEffectPlayerFactory | null;
   readonly #presentationDelayWaiters = new Set<PresentationDelayWaiter>();
@@ -324,8 +330,19 @@ export class RenderGridCellReelSet
       ["top", topLayer],
       ["win", winLayer],
     ]);
-    for (const id of this.#areaLayers.keys())
-      this.#areaMounted.set(id, new Set());
+    for (const [id, layer] of this.#areaLayers)
+      this.#areaLayerControllers.set(
+        id,
+        createRenderObjectLayer({
+          view: layer,
+          label: `${id} area layer`,
+          assertUsable: () => {
+            if (this.destroyed)
+              throw new ReelError("Symbol area runtime was destroyed.");
+          },
+          createError: (message) => new ReelError(message),
+        }),
+      );
     this.addChild(bottomLayer);
     this.#transferAboveSymbolsLayer = new Container();
     this.#transferAboveSymbolsLayer.sortableChildren = true;
@@ -2419,36 +2436,12 @@ export class RenderGridCellReelSet
   }
 
   getLayer(id: SymbolAreaLayerId): SymbolAreaLayer {
-    const layer = this.#areaLayers.get(id);
-    const mounted = this.#areaMounted.get(id);
-    if (!layer || !mounted)
+    if (this.destroyed)
+      throw new ReelError("Symbol area presentation runtime was destroyed.");
+    const controller = this.#areaLayerControllers.get(id);
+    if (!controller)
       throw new ReelError(`Unknown symbol area layer "${String(id)}".`);
-    const target = Object.freeze({
-      add: (node: RenderObject, order = 0) => {
-        if (!Number.isSafeInteger(order))
-          throw new ReelError("Area node order must be an integer.");
-        if (mounted.has(node))
-          throw new ReelError(
-            `RenderObject is already attached to ${id} layer.`,
-          );
-        const adapter = getRenderObjectAdapter(node);
-        if (adapter.view.parent)
-          throw new ReelError(
-            "RenderObject is already attached to another parent.",
-          );
-        adapter.view.zIndex = order;
-        layer.addChild(adapter.view);
-        mounted.add(node);
-      },
-      remove: (node: RenderObject) => {
-        if (!mounted.delete(node)) return;
-        getRenderObjectAdapter(node).view.parent?.removeChild(
-          getRenderObjectAdapter(node).view,
-        );
-      },
-    });
-    registerPresentationMountTarget(target, { view: layer });
-    return target;
+    return controller.layer;
   }
 
   async present(
@@ -2749,14 +2742,8 @@ export class RenderGridCellReelSet
 
   override destroy(options?: Parameters<Container["destroy"]>[0]): void {
     this.interruptAreaPresentation();
-    for (const [id, nodes] of this.#areaMounted) {
-      for (const node of nodes)
-        getRenderObjectAdapter(node).view.parent?.removeChild(
-          getRenderObjectAdapter(node).view,
-        );
-      nodes.clear();
-      this.#areaLayers.get(id)?.removeChildren();
-    }
+    for (const controller of this.#areaLayerControllers.values())
+      controller.detachAll();
     this.cancelActiveScopedTransfer(
       new ReelError("Visible occurrence transfer runtime was destroyed."),
     );
