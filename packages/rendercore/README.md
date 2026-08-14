@@ -127,6 +127,8 @@ symbol 的对应 anchor；飞行本身不会推断或提交目标 value。
 
 字体文字 renderer 支持可选 package font（省略时才使用系统字体）、字号、字距、canonical color、纯色/线性渐变、描边、投影、Unicode grapheme 弧排、anchor 与原子 `setText()`。两类 player 都公开稳定的 `textNodes` / `imageStringNodes`，并可按 exact name 或各 kind 零基 index 取得 handle；业务绑定优先使用 exact name。覆盖 string 跨档位和重复播放保持，`resetText()` 恢复 manifest/自动金额值，destroy 后 handle 失效。
 
+Scene Layout transition prelude 可在 `requestGameMode(modeId, { preludePopupStrings })` 中按 `text | image-string` 和 exact name 接收本轮最终 string。runtime 在 Popup start 前应用这些值，并在 complete、失败、取消或 destroy 后恢复调用前 handle 状态；该输入不进入 transition resource prepare/cache identity。需要跨播放保持或在 active Popup 中更新时，继续使用 player 的 exact handle `setText/resetText`。
+
 ## Image String API
 
 `@slotclientengine/rendercore/image-string` 提供中性的图片字符串 v1 合同：严格 manifest parser、PNG/WebP 精确资源闭包、files/Vite/CDN 资源装配、Unicode code point 布局，以及共享 resource 上的 Pixi `RenderImageString`。自然宽度与 fixed advance group 可以混用；fixed group 只改变逻辑 advance，不拉伸纹理。
@@ -727,6 +729,8 @@ for (const transfer of transfers) {
 Crave 的 Nearwin1/2 与图标中奖迁移示例见 [`docs/crave-named-render-object-migration.md`](../../docs/crave-named-render-object-migration.md)。
 area/Scene/node layer挂载、跨layer对齐、兼容与cleanup说明见
 [`docs/crave-render-layer-integration.md`](../../docs/crave-render-layer-integration.md)。
+Scene Layout prelude Popup 的翻译文字、ImgNumber 和 FreeGame 退出顺序见
+[`docs/crave-scene-layout-popup-inputs.md`](../../docs/crave-scene-layout-popup-inputs.md)。
 
 ## 通用 symbol win carousel
 

@@ -50,6 +50,7 @@
 - editor 的 authoring stable-mode selection 必须与 production `requestGameMode()` 隔离：它不要求 directed edge、不播放 overlay，并用同一 visibility commit 同步背景、scoped 普通节点与 displayed mode；相同 symbols binding 不重建或重新抽样，prepare 失败不得留下半切换状态。
 - video 不使用 wall-clock fade，不自动静音，也不在 `play()` 拒绝时 fallback。
 - once/ended settle、iOS gesture-safe prepare、trusted-click synchronous play 和当前 mode popup lifecycle 属于 rendercore。带 prelude 的任意 edge 必须先完整完成 popup start→loop→end，再继续效果；source mode 在 popup complete 前保持不变。带 prelude 的 video 在 complete 后显式等待第二次 trusted gesture，不得预播、静音或与 Popup end 并行。
+- `requestGameMode()`可为exact edge绑定的普通Spine prelude提交本轮`text | image-string` exact-name最终string；这些值不进入prepare/cache identity，并在Popup complete、失败、取消或runtime destroy后恢复调用前handle状态。shared runtime不解释translation key或金额业务。
 - Scene Layout Popup presentation 在 active prelude 或 award celebration 期间必须由 rendercore 的 host-bound input 接收完整 canvas `pointerdown` 与 window 非 repeat `keydown`：prelude 锁存 end 请求，award celebration 执行 advance，等待中的 video 在第二次 trusted gesture 同步启动。显式 DOM binding 期间不得同时走 Pixi fallback；Popup idle 后必须透传输入，editor 与游戏 app 不复制分派或阶段判断。
 - shared code 不硬编码 BaseGame/FreeGame/BonusGame、BG/FG、animation/event 名或业务字段。
 

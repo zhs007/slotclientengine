@@ -44,16 +44,62 @@ class FakeTransitionPlayer implements RendercoreSpinePlayer {
   }
 }
 
+class FakePopupStringNode implements PopupStringNodeHandle {
+  readonly index = 0;
+  #text: string;
+  #overridden = false;
+
+  constructor(
+    readonly kind: "text" | "image-string",
+    readonly name: string,
+    readonly defaultText: string,
+    readonly rejectedText?: string,
+  ) {
+    this.#text = defaultText;
+  }
+
+  get text() {
+    return this.#text;
+  }
+
+  get overridden() {
+    return this.#overridden;
+  }
+
+  setText(text: string) {
+    if (text === this.rejectedText) throw new Error(`rejected text: ${text}`);
+    this.#text = text;
+    this.#overridden = true;
+  }
+
+  resetText() {
+    this.#text = this.defaultText;
+    this.#overridden = false;
+  }
+}
+
 class FakeSpinePopupPlayer implements SpinePopupPlayer {
   readonly container = new Container();
-  readonly textNodes: readonly PopupStringNodeHandle[] = [];
-  readonly imageStringNodes: readonly PopupStringNodeHandle[] = [];
+  readonly heading = new FakePopupStringNode("text", "heading", "DEFAULT");
+  readonly amount = new FakePopupStringNode(
+    "image-string",
+    "amount",
+    "0",
+    "BAD",
+  );
+  readonly textNodes: readonly PopupStringNodeHandle[] = [this.heading];
+  readonly imageStringNodes: readonly PopupStringNodeHandle[] = [this.amount];
+  readonly startSnapshots: Array<{ heading: string; amount: string }> = [];
   phase: SpinePopupPhase = "idle";
   dismissRequested = false;
   destroyed = false;
 
   async init() {}
   start() {
+    this.startSnapshots.push({
+      heading: this.heading.text,
+      amount: this.amount.text,
+    });
     this.phase = "loop";
     this.dismissRequested = false;
   }
@@ -72,11 +118,13 @@ class FakeSpinePopupPlayer implements SpinePopupPlayer {
   isPlaying() {
     return !["idle", "complete"].includes(this.phase);
   }
-  getTextNode(): PopupStringNodeHandle {
-    throw new Error("no text node");
+  getTextNode(selector: string | number): PopupStringNodeHandle {
+    if (selector === "heading" || selector === 0) return this.heading;
+    throw new Error(`text node not found: ${selector}`);
   }
-  getImageStringNode(): PopupStringNodeHandle {
-    throw new Error("no image-string node");
+  getImageStringNode(selector: string | number): PopupStringNodeHandle {
+    if (selector === "amount" || selector === 0) return this.amount;
+    throw new Error(`image-string node not found: ${selector}`);
   }
   destroy() {
     this.destroyed = true;
@@ -407,6 +455,99 @@ describe("scene layout package event-driven game-mode transition", () => {
     disposeInput();
     disposeInput();
     expect(runtime.getGameModeSnapshot().stableMode).toBe("FreeGame");
+    runtime.destroy();
+  });
+
+  it("scopes exact Popup strings to one transition prelude", async () => {
+    const { runtime, players, popups } = createRuntime(true, true);
+    await runtime.init();
+    popups[0].heading.setText("PERSISTENT");
+
+    const pending = runtime.requestGameMode("FreeGame", {
+      preludePopupStrings: [
+        { kind: "text", name: "heading", text: "LOCALIZED" },
+        { kind: "image-string", name: "amount", text: "123.45" },
+      ],
+    });
+    await Promise.resolve();
+
+    expect(popups[0].startSnapshots).toEqual([
+      { heading: "LOCALIZED", amount: "123.45" },
+    ]);
+    expect(popups[0].heading.overridden).toBe(true);
+    expect(popups[0].amount.overridden).toBe(true);
+
+    popups[0].phase = "complete";
+    runtime.update(0.1);
+    await Promise.resolve();
+    expect(popups[0].heading.text).toBe("PERSISTENT");
+    expect(popups[0].heading.overridden).toBe(true);
+    expect(popups[0].amount.text).toBe("0");
+    expect(popups[0].amount.overridden).toBe(false);
+
+    players[0].results.push({
+      completed: true,
+      events: [{ name: "SwitchScene" }],
+    });
+    runtime.update(0.1);
+    await pending;
+    runtime.destroy();
+  });
+
+  it("rolls back Popup strings when one input fails", async () => {
+    const { runtime, popups } = createRuntime(true, true, "none");
+    await runtime.init();
+
+    await expect(
+      runtime.requestGameMode("FreeGame", {
+        preludePopupStrings: [
+          { kind: "text", name: "heading", text: "LOCALIZED" },
+          { kind: "image-string", name: "amount", text: "BAD" },
+        ],
+      }),
+    ).rejects.toThrow(/rejected text/);
+
+    expect(popups[0].phase).toBe("idle");
+    expect(popups[0].heading.text).toBe("DEFAULT");
+    expect(popups[0].heading.overridden).toBe(false);
+    expect(popups[0].amount.text).toBe("0");
+    expect(runtime.getGameModeSnapshot()).toMatchObject({
+      stableMode: "BaseGame",
+      targetMode: null,
+      activePreludePopup: null,
+    });
+    runtime.destroy();
+  });
+
+  it("restores scoped Popup strings when the runtime is destroyed", async () => {
+    const { runtime, popups } = createRuntime(true, true, "none");
+    await runtime.init();
+    const pending = runtime.requestGameMode("FreeGame", {
+      preludePopupStrings: [
+        { kind: "text", name: "heading", text: "LOCALIZED" },
+      ],
+    });
+    await Promise.resolve();
+    expect(popups[0].heading.text).toBe("LOCALIZED");
+
+    runtime.destroy();
+
+    await expect(pending).rejects.toThrow(/destroyed during/);
+    expect(popups[0].heading.text).toBe("DEFAULT");
+    expect(popups[0].heading.overridden).toBe(false);
+  });
+
+  it("rejects prelude Popup strings when the edge has no prelude", async () => {
+    const { runtime } = createRuntime(true, false, "none");
+    await runtime.init();
+    await expect(
+      runtime.requestGameMode("FreeGame", {
+        preludePopupStrings: [
+          { kind: "text", name: "heading", text: "LOCALIZED" },
+        ],
+      }),
+    ).rejects.toThrow(/has no prelude Popup/);
+    expect(runtime.getGameModeSnapshot().stableMode).toBe("BaseGame");
     runtime.destroy();
   });
 

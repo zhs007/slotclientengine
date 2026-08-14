@@ -481,7 +481,21 @@ export interface SceneLayoutGameModeRequestOptions {
   readonly reels?: Readonly<
     Partial<Record<"main", SceneLayoutInitialReelScene>>
   >;
+  /** Final strings applied only for this request's transition prelude Popup. */
+  readonly preludePopupStrings?: readonly SceneLayoutPopupStringInput[];
 }
+
+export type SceneLayoutPopupStringInput =
+  | {
+      readonly kind: "text";
+      readonly name: string;
+      readonly text: string;
+    }
+  | {
+      readonly kind: "image-string";
+      readonly name: string;
+      readonly text: string;
+    };
 
 export interface SceneLayoutPopupInputBindingOptions {
   readonly canvas: EventTarget;

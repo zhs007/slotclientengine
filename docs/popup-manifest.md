@@ -236,5 +236,7 @@ player.getImageStringNode(0).resetText();
 
 两类 player 都提供稳定、只读的 `textNodes` / `imageStringNodes` 清单，以及按 exact name 或各 kind 独立零基 index 查询的 `getTextNode()` / `getImageStringNode()`。handle 的 `setText()` 是原子覆盖并跨档位切换与重复播放保持；`resetText()` 恢复当前 manifest 默认值或 win-amount 自动格式化值。不存在、越界、kind 错误、非法单行文字、ImgNumber 缺 glyph 或已销毁 handle 都显式失败。
 
+普通 Spine Popup 被 Scene Layout transition 用作 `preludePopup` 时，游戏也可通过 `requestGameMode(..., { preludePopupStrings })` 按 exact name 传入仅本轮有效的 text/manual ImgNumber string。Scene Layout 在 Popup 生命周期结束或失败后恢复此前 handle 状态；Popup package/player 本身的 persistent handle 语义不变。
+
 Popup package 本身不拥有游戏模式，也不声明 BaseGame/FreeGame。scene-layout 负责通用
 mode -> award popup binding、普通 Spine popup 显式注册与 viewport-center root placement；Popup Editor 继续独占 popup 内部动画、tier、layer、金额格式、坐标和资源编辑。

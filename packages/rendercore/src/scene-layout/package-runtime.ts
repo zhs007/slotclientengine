@@ -14,6 +14,7 @@ import {
   unhandledPopupInteraction,
   type AwardCelebrationPlayer,
   type PopupInteractionDispatchResult,
+  type PopupStringNodeHandle,
   type SpinePopupPlayer,
 } from "../popup/index.js";
 import {
@@ -63,6 +64,7 @@ import type {
   SceneLayoutNodeRenderLayerPlacement,
   SceneLayoutPackageResource,
   SceneLayoutPackageRuntime,
+  SceneLayoutPopupStringInput,
   SceneLayoutPopupInputBindingOptions,
   SceneLayoutLayerId,
   SceneLayoutSnapshot,
@@ -140,6 +142,7 @@ type ActiveModeTransition =
 interface ActiveModePrelude {
   readonly prepared: PreparedModeTransition;
   readonly popupId: string;
+  readonly restorePopupStrings: () => void;
   phase: "popup" | "awaiting-video-start";
   readonly resolve: () => void;
   readonly reject: (error: SceneLayoutError) => void;
@@ -1802,6 +1805,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       this.assertCanPrepareTransition();
       this.requireMode(modeId);
       if (modeId === this.#stableMode && options.recreateReel !== true) {
+        if (options.preludePopupStrings?.length)
+          throw new SceneLayoutError(
+            "Current game mode has no transition prelude for string inputs.",
+          );
         if (options.reels?.main)
           throw new SceneLayoutError(
             "Current game mode must not receive a redundant reels.main input.",
@@ -1809,6 +1816,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         return Promise.resolve();
       }
       transition = this.findTransition(modeId);
+      if (options.preludePopupStrings?.length && !transition.preludePopup)
+        throw new SceneLayoutError(
+          `Scene transition ${transition.from} -> ${transition.to} has no prelude Popup for string inputs.`,
+        );
     } catch (error) {
       return Promise.reject(asSceneLayoutError(error));
     }
@@ -1829,7 +1840,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           ),
         );
       if (transition.preludePopup)
-        return this.activatePreparedPrelude(prepared, transition.preludePopup);
+        return this.activatePreparedPrelude(
+          prepared,
+          transition.preludePopup,
+          options.preludePopupStrings,
+        );
       // This call is intentionally made before any await or visible mutation.
       let playPromise: Promise<void>;
       try {
@@ -2104,6 +2119,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       this.#activePrelude = null;
       this.refreshPopupPointerInteraction();
       this.#spinePopups.get(active.popupId)?.dismissImmediately();
+      active.restorePopupStrings();
       this.releasePreparedTransition(active.prepared);
       active.reject(
         new SceneLayoutError(
@@ -2332,7 +2348,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           options,
           signature,
           (ready) => {
-            directlyStarted = this.activatePreparedSpineRequest(ready);
+            directlyStarted = this.activatePreparedSpineRequest(
+              ready,
+              options.preludePopupStrings,
+            );
           },
         );
       } finally {
@@ -2344,25 +2363,38 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         "Prepared transition kind changed unexpectedly.",
       );
     if (directlyStarted) return await directlyStarted;
-    return await this.activatePreparedSpineRequest(prepared);
+    return await this.activatePreparedSpineRequest(
+      prepared,
+      options.preludePopupStrings,
+    );
   }
 
   private activatePreparedSpineRequest(
     prepared: Extract<PreparedModeTransition, { readonly kind: "spine" }>,
+    popupStrings?: readonly SceneLayoutPopupStringInput[],
   ): Promise<void> {
     return "preludePopup" in prepared.spec && prepared.spec.preludePopup
-      ? this.activatePreparedPrelude(prepared, prepared.spec.preludePopup)
+      ? this.activatePreparedPrelude(
+          prepared,
+          prepared.spec.preludePopup,
+          popupStrings,
+        )
       : this.activatePreparedSpineTransition(prepared);
   }
 
   private activatePreparedPrelude(
     prepared: PreparedModeTransition,
     popupId: string,
+    popupStrings?: readonly SceneLayoutPopupStringInput[],
   ): Promise<void> {
     this.#preparedTransition = null;
     const popup = this.getSpinePopup(popupId);
+    let restorePopupStrings = () => {};
+    let startingPopup = false;
     try {
+      restorePopupStrings = applyPopupStringInputs(popup, popupStrings);
       popup.dismissImmediately();
+      startingPopup = true;
       popup.start();
       this.#targetMode = prepared.target.id;
       this.#targetSymbolPackageId = prepared.targetSymbolPackageId;
@@ -2370,6 +2402,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         this.#activePrelude = {
           prepared,
           popupId,
+          restorePopupStrings,
           phase: "popup",
           resolve,
           reject,
@@ -2377,6 +2410,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         this.refreshPopupPointerInteraction();
       });
     } catch (error) {
+      if (startingPopup) popup.dismissImmediately();
+      restorePopupStrings();
       this.releasePreparedTransition(prepared);
       throw asSceneLayoutError(error);
     }
@@ -2412,7 +2447,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         "Prepared transition kind changed unexpectedly.",
       );
     return prepared.spec.preludePopup
-      ? this.activatePreparedPrelude(prepared, prepared.spec.preludePopup)
+      ? this.activatePreparedPrelude(
+          prepared,
+          prepared.spec.preludePopup,
+          options.preludePopupStrings,
+        )
       : this.activatePreparedNoneTransition(prepared);
   }
 
@@ -2570,6 +2609,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     if (!active) return;
     const popup = this.getSpinePopup(active.popupId);
     if (popup.getSnapshot().phase !== "complete") return;
+    active.restorePopupStrings();
     if (active.prepared.kind === "video") {
       active.phase = "awaiting-video-start";
       return;
@@ -2591,6 +2631,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#activePrelude = null;
     this.refreshPopupPointerInteraction();
     this.getSpinePopup(active.popupId).dismissImmediately();
+    active.restorePopupStrings();
     this.releasePreparedTransition(active.prepared);
     this.#targetMode = null;
     this.#targetSymbolPackageId = null;
@@ -3151,6 +3192,63 @@ function requestOptionsSignature(
     recreateReel: options.recreateReel === true,
     reels: options.reels ?? null,
   });
+}
+
+function applyPopupStringInputs(
+  popup: SpinePopupPlayer,
+  inputs: readonly SceneLayoutPopupStringInput[] | undefined,
+): () => void {
+  if (!inputs?.length) return () => {};
+  const seen = new Set<string>();
+  const snapshots: {
+    readonly handle: PopupStringNodeHandle;
+    readonly text: string;
+    readonly overridden: boolean;
+  }[] = [];
+  for (const input of inputs) {
+    const key = `${input.kind}\0${input.name}`;
+    if (seen.has(key))
+      throw new SceneLayoutError(
+        `Popup string input duplicated: ${input.kind} "${input.name}".`,
+      );
+    seen.add(key);
+    const handle =
+      input.kind === "text"
+        ? popup.getTextNode(input.name)
+        : popup.getImageStringNode(input.name);
+    snapshots.push({
+      handle,
+      text: handle.text,
+      overridden: handle.overridden,
+    });
+  }
+  try {
+    for (let index = 0; index < inputs.length; index++)
+      snapshots[index]!.handle.setText(inputs[index]!.text);
+  } catch (error) {
+    restorePopupStringHandles(snapshots);
+    throw error;
+  }
+  let restored = false;
+  return () => {
+    if (restored) return;
+    restored = true;
+    restorePopupStringHandles(snapshots);
+  };
+}
+
+function restorePopupStringHandles(
+  snapshots: readonly {
+    readonly handle: PopupStringNodeHandle;
+    readonly text: string;
+    readonly overridden: boolean;
+  }[],
+): void {
+  for (let index = snapshots.length - 1; index >= 0; index--) {
+    const snapshot = snapshots[index]!;
+    if (snapshot.overridden) snapshot.handle.setText(snapshot.text);
+    else snapshot.handle.resetText();
+  }
 }
 
 async function settleAllInOrder(promises: readonly Promise<void>[]) {

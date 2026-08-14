@@ -10,6 +10,7 @@ import { createSceneLayoutPackageRuntime } from "./package-runtime.js";
 import type {
   SceneLayoutGameModeSnapshot,
   SceneLayoutGameMode,
+  SceneLayoutGameModeRequestOptions,
   SceneLayoutPackageResource,
   SceneLayoutPopupInputBindingOptions,
   SceneLayoutSnapshot,
@@ -17,6 +18,11 @@ import type {
   SceneLayoutNodeRenderLayerPlacement,
 } from "./types.js";
 import type { RenderAnchor, RenderObjectLayer } from "../presentation/index.js";
+
+export type SceneLayoutPresentationGameModeRequestOptions = Pick<
+  SceneLayoutGameModeRequestOptions,
+  "preludePopupStrings"
+>;
 
 export interface SceneLayoutPresentationSurface {
   readonly backgroundContainer: Container;
@@ -32,7 +38,10 @@ export interface SceneLayoutPresentationSurface {
   update(deltaSeconds: number): void;
   getGameModeSnapshot(): SceneLayoutGameModeSnapshot;
   prepareGameModeTransition(modeId: string): Promise<void>;
-  requestGameMode(modeId: string): Promise<void>;
+  requestGameMode(
+    modeId: string,
+    options?: SceneLayoutPresentationGameModeRequestOptions,
+  ): Promise<void>;
   startPendingGameModeVideo(): Promise<void>;
   bindPopupInput(options: SceneLayoutPopupInputBindingOptions): () => void;
   requestPrimaryPopupInteraction(): PopupInteractionDispatchResult;
@@ -199,9 +208,12 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
     return this.#runtime.prepareGameModeTransition(modeId);
   }
 
-  requestGameMode(modeId: string): Promise<void> {
+  requestGameMode(
+    modeId: string,
+    options: SceneLayoutPresentationGameModeRequestOptions = {},
+  ): Promise<void> {
     this.assertReady();
-    return this.#runtime.requestGameMode(modeId);
+    return this.#runtime.requestGameMode(modeId, options);
   }
 
   startPendingGameModeVideo(): Promise<void> {

@@ -95,6 +95,8 @@ Game Layout Editor 新导出的所有资源引用是扁平 filename keys：
 
 binding `type` 必须与 nested popup manifest 精确一致。`order` 是 Popup root 的安全整数显示顺序，必须与全部 node、main reel 和其它 Popup order 唯一，并高于全部 node/main reel；旧单 Popup v1 缺省时规范化为 `2000`，多个缺省值造成重复时显式失败。game mode 的 `awardCelebrationPopup` 只能引用 `award-celebration`；普通 Spine popup 可作为独立 programmatic binding，也可由任意效果 transition 的可选 `preludePopup` 引用。package runtime 先保持 source mode 播放 popup；宿主通过 `bindPopupInput()` 绑定完整 canvas 与 keyboard target，runtime 的统一主操作锁存结束请求，popup 完整到达 complete 后才继续当前转场效果。idle 输入透传，未迁移 consumer 可继续使用 Pixi pointer fallback。
 
+production consumer 可在 `requestGameMode()` 的 `preludePopupStrings` 中为本次 edge-bound Spine Popup 提交 `text | image-string` 的 exact name 和最终 string。该 scope 在 Popup start 前应用，并在 complete、失败、取消或 runtime destroy 后恢复调用前 handle 状态；它不修改 manifest，也不参与 transition prepare/cache identity。需要 persistent 或 active-playback 更新时继续使用 player exact handle。
+
 根 `assets.map.json` 将 layout、VNI、image-string、Symbols、Popup 的全部 root/leaf keys 统一映射到 `assets/<完整 SHA-256>.<ext>`。ZIP 只有两个 root control files 和 hash payload 区；禁止 `dependencies/image-strings/**`、`dependencies/symbols/**`、`dependencies/popups/**`。
 
 普通 Spine Popup 内的 prompt 字体与 image/Spine/VNI overlay 仍属于 nested Popup owner。Game Layout Editor 只读预览 prompt 文案（可临时覆盖，留空使用 Popup 默认值），不改字体、区域、内部位置或 overlay。字体与其它 payload 一样按完整 SHA-256 物理去重：不同 Popup 引用相同 font bytes 时，production ZIP 只保存一个 payload，logical filename key 和各自 manifest 引用仍独立。
