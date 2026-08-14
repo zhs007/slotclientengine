@@ -191,7 +191,15 @@ export class RenderReel extends Container {
         'continuous spin direction must be "forward" or "backward".',
       );
     }
-    const currentY = this.#spinStrip ? this.#spinLocalY : this.#currentY;
+    const currentY =
+      options.localPhaseY === undefined
+        ? this.#spinStrip
+          ? this.#spinLocalY
+          : this.#currentY
+        : this.#reels.normalizeY(
+            this.xIndex,
+            normalizeSafeInteger(options.localPhaseY, "localPhaseY"),
+          );
     const currentScene = this.getVisibleScene();
     const currentValues = this.getVisiblePresentationValues();
     const baseY = Math.floor(currentY);
@@ -1298,6 +1306,13 @@ function normalizePositiveFiniteNumber(value: number, label: string): number {
 function normalizePositiveSafeInteger(value: number, label: string): number {
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new ReelError(`${label} must be a positive safe integer.`);
+  }
+  return value;
+}
+
+function normalizeSafeInteger(value: number, label: string): number {
+  if (!Number.isSafeInteger(value)) {
+    throw new ReelError(`${label} must be a safe integer.`);
   }
   return value;
 }

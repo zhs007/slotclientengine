@@ -1,6 +1,10 @@
 import { Assets, Container, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
-import { RenderGridCellReelSet, RenderReelSet } from "../../src/reel/index.js";
+import {
+  RenderGridCellReelSet,
+  RenderReel,
+  RenderReelSet,
+} from "../../src/reel/index.js";
 import { createRenderObject } from "../../src/presentation/index.js";
 import type { RendercoreSpinePlayer } from "../../src/spine/runtime-player.js";
 import {
@@ -714,6 +718,9 @@ describe("scene layout package runtime", () => {
       expect(() => runtime.getReelSpin("main")).toThrow(
         /requires a standard reel runtime/,
       );
+      expect(() =>
+        runtime.startMainReelContinuousSpin({ random: null as never }),
+      ).toThrow(/phase random must be a function/);
       runtime.startMainReelContinuousSpin({
         positions: [{ x: 0, y: 0 }],
         dimming: {
@@ -739,9 +746,19 @@ describe("scene layout package runtime", () => {
         index += 1
       )
         runtime.update(0.05);
-      runtime.startMainReelContinuousSpin();
+      const atomicStart = vi.spyOn(RenderReel.prototype, "startContinuous");
+      const samples = [0.9, 0, 0, 0];
+      let sampleIndex = 0;
+      runtime.startMainReelContinuousSpin({
+        random: () => samples[sampleIndex++]!,
+      });
       runtime.update(0.05);
       expect(runtime.drainMainReelStartedPositions()).toHaveLength(4);
+      expect(sampleIndex).toBe(4);
+      expect(
+        atomicStart.mock.calls.map(([options]) => options.localPhaseY),
+      ).toEqual([1, 0, 0, 1]);
+      atomicStart.mockRestore();
       const target = {
         scene: [
           [0, 1],
@@ -810,6 +827,7 @@ describe("scene layout package runtime", () => {
       });
       for (const input of [
         { positions: [{ x: 0, y: 0 }] },
+        { random: () => 0 },
         { dimming: {} },
         { dimmingActivatedAtStart: true },
       ]) {

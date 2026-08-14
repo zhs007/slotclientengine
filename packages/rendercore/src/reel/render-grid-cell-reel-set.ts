@@ -2,7 +2,10 @@ import { Container, Graphics } from "pixi.js";
 import { assertValidDeltaSeconds } from "../symbol/ani.js";
 import { ReelError } from "./errors.js";
 import { startSymbolStatePlaybackBatch } from "./symbol-state-playback.js";
-import { normalizeGridCellReelOffsetMatrix } from "./grid-cell-reel-offsets.js";
+import {
+  normalizeGridCellReelOffsetMatrix,
+  normalizeGridCellReelPhaseMatrix,
+} from "./grid-cell-reel-offsets.js";
 import { resolveGridCellDimmingAlpha } from "./grid-cell-spin-plan.js";
 import { createReelLayout } from "./layout.js";
 import { prepareVisibleOccurrenceMotion } from "./visible-occurrence-transfer.js";
@@ -144,6 +147,7 @@ interface ActiveEffectSweep {
 interface ActiveContinuousSpin {
   readonly keys: ReadonlySet<string>;
   readonly startAtMsByKey: ReadonlyMap<string, number>;
+  readonly localPhaseYByKey: ReadonlyMap<string, number>;
   readonly direction: ReelSpinDirection;
   readonly speedSymbolsPerSecond: number;
   readonly dimming: GridCellDimmingPattern;
@@ -584,11 +588,27 @@ export class RenderGridCellReelSet
     const startStepMs = options.startStepMs ?? 0;
     assertNonNegativeNumber(startStepMs, "continuous startStepMs");
     const keys = new Set(positions.map(({ x, y }) => createCellKey(x, y)));
+    const cellLocalPhaseYs = options.cellLocalPhaseYs
+      ? normalizeGridCellReelPhaseMatrix(
+          options.cellLocalPhaseYs,
+          this.#columns,
+          this.#rows,
+          this.#reels,
+        )
+      : null;
     const startAtMsByKey = new Map(
       positions.map((position) => [
         createCellKey(position.x, position.y),
         position.startGroupIndex * startStepMs,
       ]),
+    );
+    const localPhaseYByKey = new Map(
+      cellLocalPhaseYs
+        ? positions.map((position) => [
+            createCellKey(position.x, position.y),
+            cellLocalPhaseYs[position.x]![position.y]!,
+          ])
+        : [],
     );
     const dimming = options.dimming ?? ZERO_DIMMING;
     if (typeof dimming.resolveDimmingAlpha !== "function") {
@@ -632,6 +652,7 @@ export class RenderGridCellReelSet
     this.#continuousSpin = {
       keys,
       startAtMsByKey,
+      localPhaseYByKey,
       direction: options.direction,
       speedSymbolsPerSecond: options.speedSymbolsPerSecond,
       dimming,
@@ -696,7 +717,10 @@ export class RenderGridCellReelSet
           );
       const stopAtMs = Math.max(remainingStartMs + 1, planCell.stopAtMs);
       const durationMs = stopAtMs - remainingStartMs;
-      const currentY = cell.reel.getSnapshot().currentY;
+      const currentY = started
+        ? cell.reel.getSnapshot().currentY
+        : (continuous.localPhaseYByKey.get(key) ??
+          cell.reel.getSnapshot().currentY);
       const fractionalY = currentY - Math.floor(currentY);
       const minimumTravel = Math.ceil(
         (durationMs / 1000) * continuous.speedSymbolsPerSecond +
@@ -901,6 +925,9 @@ export class RenderGridCellReelSet
             cell.reel.startContinuous({
               direction: active.direction,
               speedSymbolsPerSecond: active.speedSymbolsPerSecond,
+              ...(active.localPhaseYByKey.has(key)
+                ? { localPhaseY: active.localPhaseYByKey.get(key)! }
+                : {}),
             });
             cell.phase = "spinning";
             cell.hasStartedThisSpin = true;

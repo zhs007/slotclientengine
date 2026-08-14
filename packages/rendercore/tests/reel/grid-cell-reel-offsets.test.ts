@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { LogicReelsModel } from "@slotclientengine/logiccore";
-import { createShuffledGridCellReelOffsetMatrix } from "../../src/reel/index.js";
+import {
+  createShuffledGridCellReelOffsetMatrix,
+  createShuffledGridCellReelPhaseMatrix,
+} from "../../src/reel/index.js";
 import { createBasicReels } from "./helpers.js";
 
 describe("createShuffledGridCellReelOffsetMatrix", () => {
@@ -8,6 +11,20 @@ describe("createShuffledGridCellReelOffsetMatrix", () => {
     const reels = createBasicReels();
     const values = [0.9, 0, 0.5, 0.25, 0.75, 0.1];
     let index = 0;
+    const phases = createShuffledGridCellReelPhaseMatrix({
+      reels,
+      columns: 2,
+      rows: 3,
+      random: () => values[index++]!,
+    });
+
+    expect(phases).toEqual([
+      [7, 1, 5],
+      [2, 6, 0],
+    ]);
+    expect(index).toBe(6);
+
+    index = 0;
     const offsets = createShuffledGridCellReelOffsetMatrix({
       reels,
       columns: 2,

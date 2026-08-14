@@ -143,6 +143,7 @@ export interface GridCellSpinPosition {
 }
 
 export type GridCellReelOffsetMatrix = readonly (readonly number[])[];
+export type GridCellReelPhaseMatrix = readonly (readonly number[])[];
 
 export interface GridCellReelOffsetMatrixOptions {
   readonly columns: number;
@@ -152,12 +153,15 @@ export interface GridCellReelOffsetMatrixOptions {
   readonly originOffset?: number;
 }
 
-export interface ShuffledGridCellReelOffsetMatrixOptions {
+export interface ShuffledGridCellReelPhaseMatrixOptions {
   readonly reels: LogicReels;
   readonly columns: number;
   readonly rows: number;
   readonly random: () => number;
 }
+
+export type ShuffledGridCellReelOffsetMatrixOptions =
+  ShuffledGridCellReelPhaseMatrixOptions;
 
 export type GridCellOrderMode = "top-down-left-right";
 
@@ -175,6 +179,8 @@ export interface GridCellContinuousSpinOptions {
   /** Delay between stable position start groups. */
   readonly startStepMs?: number;
   readonly positions?: readonly GridCellSpinPosition[];
+  /** X-first local public-strip phase applied when each selected cell starts. */
+  readonly cellLocalPhaseYs?: GridCellReelPhaseMatrix;
   readonly dimming?: GridCellDimmingPattern;
   readonly dimmingActivatedAtStart?: boolean;
 }
@@ -294,6 +300,8 @@ export interface RenderReelSpinOptions {
 export interface RenderReelContinuousSpinOptions {
   readonly direction: ReelSpinDirection;
   readonly speedSymbolsPerSecond: number;
+  /** Optional integer local public-strip phase used as the atomic start position. */
+  readonly localPhaseY?: number;
 }
 
 export type RenderReelSetContinuousSpinOptions =

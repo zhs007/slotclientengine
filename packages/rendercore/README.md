@@ -65,6 +65,9 @@ value part 使用 `{kind:"value"}`；whole-symbol flight 直接把 `source` 当 
 
 `createRenderCellSpin()` 提供无 public plan 的逐格 `roll/start/settle/cancel`。不同格可以并发，
 同一格冲突失败；`roll/settle` 只在目标 occurrence 原子落地、可立即 `getSymbol()` 后 resolve。
+`start(pos, { localPhaseY })` 可在切入 `spinBlur` 的同一原子边界把该格重定位到指定本地公开轮带
+phase；当前可见 code/value 在边界保持不变，后续滚动只读取该 phase 后的公开轮带。phase 必须是
+安全整数，不接收 random function、服务器 scene 或业务规则；跨格无重复抽样由上层使用共享 helper 完成。
 `getCell(pos)` 允许在目标落地前附加稳定 cell-space `RenderObject`。full、selective、hold、refill、
 stagger 和 anticipation 由 operation handler 用普通 `async/await`、frame delay 与 `Promise.all()`
 组合，不增加 `CellSpinPlan`。现有 `GridCellReelSpinPlan` 仅作为 game002v2 legacy compatibility
@@ -663,6 +666,14 @@ gridReels.spin(plan);
 剩余 cadence 后直接进入 target-aware spin。grid-cell landing appear 在落点边界 immediate 进入，
 不会先等待 normal loop boundary；完成仍等待该次真实 once appear。
 
+`RenderReel.startContinuous({ localPhaseY })` 是单格 phase 起转的唯一原子 owner。
+`CellSpin.start()` 直接复用它；Crave 仍使用的 legacy grid-cell 只通过
+`cellLocalPhaseYs` 复用同一能力，不建立第二套 phase 状态机。Scene Layout grid-cell facade 的
+`startMainReelContinuousSpin({ random })` 会在请求开始时调用
+`createShuffledGridCellReelPhaseMatrix()`，按列对完整公开轮带做 partial Fisher–Yates，并在每格真实
+start edge 应用 phase。响应早于某格起转时，该格在剩余 cadence 后从已抽取 phase 进入 target-aware
+spin；held 格不应用 phase。省略 `random` 保持旧 consumer 行为，random 必须返回 `[0,1)` 且不得来自服务器。
+
 Scene Layout package runtime 通过 `startMainReelContinuousSpin()`、
 `settleMainReelContinuousSpin()` 和 `cancelMainReelContinuousSpin()` 暴露相同 ownership。一个网络
 请求只创建一个 continuous transaction；响应中的第一个 landing 消费它，之后同一响应内的
@@ -671,6 +682,10 @@ free-game 连续段和 refill 继续调用普通 target-aware spin API，不等�
 continuous primitive，并显式拒绝 positions/dimming 等 grid-cell-only 输入。
 
 `createGridCellOrder({ mode: "top-down-left-right" })` 生成 `(0,0),(0,1)...(0,rows-1),(1,0)...` 的稳定顺序。`createGridCellReelSpinPlan()` 对每个 cell 计算 `startAtMs`、`stopAtMs`、`durationMs`、`axisPlan`、`targetVisibleSymbols` 和目标暗度；默认每个 cell 的最终 y 使用 `reels.normalizeY(x, finalYs[x] + y)`。selective `positions` 可以全部提供非负、从 0 开始且非递减的 `startGroupIndex`；相同 group 的 cell 共享 `startGroupIndex * startStepMs` 起播边界，而 stop timeline 仍按 positions 稳定顺序计算，因此能做同时启动的波纹而不改变既有逐格停轴 cadence。省略 group 时继续使用原来的逐格 sequence index。dimming resolver 同时接收通用 `activated` 布尔上下文；plan 可用 `dimmingActivatedAtStart` 设置起始状态，存在 activation gate 时 runtime 会在 gate 真实 landing edge 切为 `true`。滚动 strip 和 landing fade 都用当前 code 与当前状态重新解析暗度，不缓存业务 symbol 结论。运行时每帧仍对临时 spin strip 中当前真实 slot code 调用同一 resolver，而不是只看 endpoint 或 cell 序号；resolver 必须返回 `[0,1]`，游戏语义由调用方负责，rendercore 不认识具体 symbol 名。如果传入 `cellReelOffsets`，则使用 `reels.normalizeY(x, finalYs[x] + y + cellReelOffsets[x][y])`，让同一列内不同格子也能使用更分散的本地轮带窗口滚动。`createGridCellReelOffsetMatrix()` 适合固定线性 offset；`createShuffledGridCellReelOffsetMatrix()` 则对每一列做 partial Fisher-Yates，从该列完整本地公开轮带相位中为各格无重复抽取相位。调用方每次创建 spin plan 时重新调用即可获得新的视觉相位；注入的 random 必须返回 `[0,1)`，不能使用服务器随机数。两种 helper 都不打乱 symbol 顺序。`targetVisibleSymbols` 仍会注入临时 spin strip 的落点窗口，因此完成后的 `getVisibleScene()` 能还原目标 scene。调用方可以用本地公开轮带提供滚动内容，再把服务器本轮目标窗口叠加到临时 strip，不需要也不应该暴露服务器真实轮带。
+
+`createShuffledGridCellReelPhaseMatrix()` 复用同一 partial Fisher–Yates，但直接返回每格可用于
+continuous start 的 phase；legacy `createShuffledGridCellReelOffsetMatrix()` 继续把抽样结果转换为
+spin plan offset。两者的随机调用顺序和同列无重复合同一致。
 
 activation 时间线可通过 plan 的 `activation` 独立使用，不要求绑定 effect resource；gate
 仍只在目标 cell 的真实 landing edge 打开。Scene Layout package runtime 的 grid-cell spin 输入可选

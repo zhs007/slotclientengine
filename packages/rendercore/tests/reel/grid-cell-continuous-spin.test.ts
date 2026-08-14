@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   RenderGridCellReelSet,
   RenderReel,
@@ -87,19 +87,32 @@ describe("grid-cell continuous spin", () => {
   it("starts targetless cells in stable order and preserves pending cadence after an early response", () => {
     const reel = createSet();
     reel.resetToScene(INITIAL, [0, 1]);
+    const atomicStart = vi.spyOn(RenderReel.prototype, "startContinuous");
+    const targetAwareStart = vi.spyOn(RenderReel.prototype, "start");
     reel.startContinuous({
       direction: "forward",
       speedSymbolsPerSecond: 20,
       startStepMs: 10,
+      cellLocalPhaseYs: [
+        [7, 5, 3],
+        [6, 4, 2],
+      ],
     });
 
     expect(reel.update(0.001).startedCells).toEqual([
       { x: 0, y: 0, orderIndex: 0 },
     ]);
+    expect(atomicStart).toHaveBeenLastCalledWith(
+      expect.objectContaining({ localPhaseY: 7 }),
+    );
     reel.settleContinuous(createPlan());
     expect(reel.update(0.009).startedCells).toEqual([
       { x: 0, y: 1, orderIndex: 1 },
     ]);
+    expect(targetAwareStart.mock.calls[0]?.[0]).toMatchObject({
+      x: 0,
+      startY: 5,
+    });
     expect(reel.update(0.01).startedCells).toEqual([
       { x: 0, y: 2, orderIndex: 2 },
     ]);
@@ -110,6 +123,22 @@ describe("grid-cell continuous spin", () => {
       spinning: false,
       visibleScene: TARGET,
     });
+    atomicStart.mockRestore();
+    targetAwareStart.mockRestore();
+  });
+
+  it("rejects malformed local phase matrices before starting", () => {
+    const reel = createSet();
+    reel.resetToScene(INITIAL, [0, 1]);
+
+    expect(() =>
+      reel.startContinuous({
+        direction: "forward",
+        speedSymbolsPerSecond: 20,
+        cellLocalPhaseYs: [[0, 1, 2]],
+      }),
+    ).toThrow(/cellLocalPhaseYs length/);
+    expect(reel.isContinuousSpinning()).toBe(false);
   });
 
   it("requires settle positions to equal the response-free start positions", () => {

@@ -61,6 +61,20 @@ describe("RenderCellSpin", () => {
     expect(controller.getActive()).toBeNull();
   });
 
+  it("uses the CellSpin start phase without changing the visible occurrence", () => {
+    const spin = createSpin();
+    const visibleBeforeSpin = spin.getSymbol({ x: 0, y: 0 }).code;
+
+    spin.start({ x: 0, y: 0 }, { speedSymbolsPerSecond: 10, localPhaseY: 2 });
+    spin.update(0);
+    spin.cancel({ x: 0, y: 0 });
+
+    expect(spin.getSymbol({ x: 0, y: 0 }).code).toBe(visibleBeforeSpin);
+    expect(() => spin.start({ x: 0, y: 0 }, { localPhaseY: 0.5 })).toThrow(
+      /localPhaseY.*safe integer/,
+    );
+  });
+
   it("replaces between a real and empty cell symbol", () => {
     const spin = createSpin();
     expect(spin.replaceSymbol({ x: 0, y: 0 }, { code: -1 })).toMatchObject({

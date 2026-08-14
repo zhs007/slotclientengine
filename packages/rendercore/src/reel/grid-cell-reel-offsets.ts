@@ -2,7 +2,9 @@ import { ReelError } from "./errors.js";
 import type {
   GridCellReelOffsetMatrix,
   GridCellReelOffsetMatrixOptions,
+  GridCellReelPhaseMatrix,
   ShuffledGridCellReelOffsetMatrixOptions,
+  ShuffledGridCellReelPhaseMatrixOptions,
 } from "./types.js";
 
 export function createGridCellReelOffsetMatrix(
@@ -35,6 +37,15 @@ export function createGridCellReelOffsetMatrix(
 export function createShuffledGridCellReelOffsetMatrix(
   options: ShuffledGridCellReelOffsetMatrixOptions,
 ): GridCellReelOffsetMatrix {
+  const phases = createShuffledGridCellReelPhaseMatrix(options);
+  return Object.freeze(
+    phases.map((column) => Object.freeze(column.map((phase, y) => phase - y))),
+  );
+}
+
+export function createShuffledGridCellReelPhaseMatrix(
+  options: ShuffledGridCellReelPhaseMatrixOptions,
+): GridCellReelPhaseMatrix {
   const columns = assertPositiveInteger(options.columns, "columns");
   const rows = assertPositiveInteger(options.rows, "rows");
   if (options.reels.getReelCount() !== columns) {
@@ -74,9 +85,41 @@ export function createShuffledGridCellReelOffsetMatrix(
               `grid cell reel phase (${x},${y}) is missing after shuffle.`,
             );
           }
-          // Grid-cell plans add y to every reel offset. Subtract it here so
-          // the effective local-strip phase is exactly the shuffled phase.
-          return selectedPhase - y;
+          return selectedPhase;
+        }),
+      );
+    }),
+  );
+}
+
+export function normalizeGridCellReelPhaseMatrix(
+  value: GridCellReelPhaseMatrix,
+  columns: number,
+  rows: number,
+  reels: ShuffledGridCellReelPhaseMatrixOptions["reels"],
+  label = "cellLocalPhaseYs",
+): GridCellReelPhaseMatrix {
+  const parsedColumns = assertPositiveInteger(columns, "columns");
+  const parsedRows = assertPositiveInteger(rows, "rows");
+  if (!Array.isArray(value) || value.length !== parsedColumns) {
+    throw new ReelError(`${label} length must be ${parsedColumns}.`);
+  }
+  if (reels.getReelCount() !== parsedColumns) {
+    throw new ReelError(
+      `${label} columns ${parsedColumns} do not match reels reel count ${reels.getReelCount()}.`,
+    );
+  }
+  return Object.freeze(
+    value.map((column, x) => {
+      if (!Array.isArray(column) || column.length !== parsedRows) {
+        throw new ReelError(`${label}[${x}] length must be ${parsedRows}.`);
+      }
+      return Object.freeze(
+        column.map((phase, y) => {
+          if (!Number.isSafeInteger(phase)) {
+            throw new ReelError(`${label}[${x}][${y}] must be a safe integer.`);
+          }
+          return reels.normalizeY(x, phase);
         }),
       );
     }),

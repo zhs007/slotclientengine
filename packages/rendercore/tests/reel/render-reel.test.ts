@@ -8,6 +8,36 @@ import {
 } from "./helpers.js";
 
 describe("RenderReel", () => {
+  it("starts continuous rolling from an exact local public-strip phase", () => {
+    const reel = new RenderReel({
+      reels: createBasicReels(),
+      x: 0,
+      layout: createBasicLayout(),
+      registry: createBasicRegistry(),
+    });
+    reel.resetToVisibleSymbols([1, 0, 2], 0);
+    const visibleBeforeSpin = reel.getVisibleScene();
+
+    reel.startContinuous({
+      direction: "forward",
+      speedSymbolsPerSecond: 10,
+      localPhaseY: 10,
+    });
+
+    expect(reel.getSnapshot().currentY).toBe(2);
+    expect(reel.getVisibleScene()).toEqual(visibleBeforeSpin);
+    reel.update(0.1);
+    expect(reel.getSnapshot().currentY).toBe(3);
+    expect(() => {
+      reel.cancelContinuous();
+      reel.startContinuous({
+        direction: "forward",
+        speedSymbolsPerSecond: 10,
+        localPhaseY: 1.5,
+      });
+    }).toThrow(/localPhaseY.*safe integer/);
+  });
+
   it("scales spin bounce strength and disables bounce at zero", () => {
     const reels = createBasicReels();
     const createReel = (bounceStrength?: number) =>

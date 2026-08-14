@@ -25,6 +25,7 @@ import {
   createReelLayout,
   createReelSpinPlan,
   createShuffledGridCellReelOffsetMatrix,
+  createShuffledGridCellReelPhaseMatrix,
   type SymbolPresentationValueMatrix,
 } from "../reel/index.js";
 import {
@@ -887,12 +888,37 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           "Continuous grid-cell spin resolved a non-grid-cell runtime.",
         );
       }
+      const geometry = this.#manifest.reels.main!;
+      const binding = this.resolveModeSymbolBinding(
+        this.#stableMode ? this.requireMode(this.#stableMode) : null,
+      );
+      if (!binding)
+        throw new SceneLayoutError(
+          "Scene layout current mode has no active symbol package binding.",
+        );
+      const reels = binding.resource.gameConfig.getReels(
+        binding.binding.reelSet,
+      );
+      if (input.random !== undefined && typeof input.random !== "function")
+        throw new SceneLayoutError(
+          "continuous grid-cell phase random must be a function.",
+        );
+      const cellLocalPhaseYs =
+        input.random === undefined
+          ? undefined
+          : createShuffledGridCellReelPhaseMatrix({
+              reels,
+              columns: geometry.columns,
+              rows: geometry.rows,
+              random: input.random,
+            });
       this.clearMainReelLandingPositions();
       reel.startContinuous({
         direction: profile.direction,
         speedSymbolsPerSecond: profile.timing.speedSymbolsPerSecond,
         startStepMs: profile.timing.startStepMs,
         ...(input.positions ? { positions: input.positions } : {}),
+        ...(cellLocalPhaseYs ? { cellLocalPhaseYs } : {}),
         ...(input.dimming ? { dimming: input.dimming } : {}),
         ...(input.dimmingActivatedAtStart === undefined
           ? {}
@@ -908,6 +934,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     }
     if (
       input.positions !== undefined ||
+      input.random !== undefined ||
       input.dimming !== undefined ||
       input.dimmingActivatedAtStart !== undefined
     )

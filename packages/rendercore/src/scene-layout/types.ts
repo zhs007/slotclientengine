@@ -616,6 +616,8 @@ export interface SceneLayoutMainReelSpinInput extends SceneLayoutInitialReelScen
 
 export interface SceneLayoutMainReelContinuousSpinInput {
   readonly positions?: readonly import("../reel/index.js").GridCellSpinPosition[];
+  /** Optional local-only source for unique per-cell public-strip start phases. */
+  readonly random?: () => number;
   readonly dimming?: import("../reel/index.js").GridCellDimmingPattern;
   readonly dimmingActivatedAtStart?: boolean;
 }

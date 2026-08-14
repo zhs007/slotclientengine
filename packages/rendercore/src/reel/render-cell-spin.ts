@@ -45,6 +45,8 @@ export interface CellRollOptions {
 
 export interface CellRollStartOptions {
   readonly speedSymbolsPerSecond?: number;
+  /** Integer local public-strip phase applied atomically when this cell starts. */
+  readonly localPhaseY?: number;
   readonly signal?: AbortSignal;
 }
 
@@ -522,6 +524,9 @@ export class RenderCellSpin extends Container implements CellSpin {
           options.speedSymbolsPerSecond ?? this.#options.speedSymbolsPerSecond,
           "speedSymbolsPerSecond",
         ),
+        ...(options.localPhaseY === undefined
+          ? {}
+          : { localPhaseY: options.localPhaseY }),
       });
     } catch (error) {
       this.detachActive(active);
