@@ -48,7 +48,7 @@ export interface PopupSpineAttachmentTarget {
   readonly slotNames: readonly string[];
 }
 export interface PopupEditorProject {
-  formatVersion: 5;
+  formatVersion: 6;
   name: string;
   type: "award-celebration" | "spine";
   id: string;
@@ -128,6 +128,11 @@ export function migratePopupEditorVisibility(
       ? [...project.tiers.values()].flatMap(({ layers }) => layers)
       : project.spine.overlays;
   for (const layer of layers) {
+    if (project.type === "award-celebration") {
+      delete (layer as { visibleStates?: unknown }).visibleStates;
+      delete (layer as { visibleSegments?: unknown }).visibleSegments;
+      continue;
+    }
     if (!legacy && layer.visibleStates) continue;
     const legacySegments =
       "visibleSegments" in layer && layer.visibleSegments
@@ -173,7 +178,7 @@ export function createPopupEditorProject(
     layers: [],
   });
   return {
-    formatVersion: 5,
+    formatVersion: 6,
     name: options.name ?? "Untitled Popup",
     type: options.type ?? "award-celebration",
     id: options.id ?? "untitled-popup",
@@ -267,7 +272,7 @@ export function clonePopupEditorProject(
 
 export function projectToManifest(project: PopupEditorProject): PopupManifest {
   const common = {
-    version: 5 as const,
+    version: 6 as const,
     kind: "popup" as const,
     id: project.id,
     name: project.name,
@@ -284,13 +289,17 @@ export function projectToManifest(project: PopupEditorProject): PopupManifest {
     const {
       parent: _parent,
       visibleSegments: _segments,
+      visibleStates: _states,
       ...rest
-    } = layer as T & { parent?: unknown; visibleSegments?: unknown };
+    } = layer as T & {
+      parent?: unknown;
+      visibleSegments?: unknown;
+      visibleStates?: unknown;
+    };
     return {
       ...rest,
       alpha: layer.alpha ?? 1,
       attachment: resolvePopupLayerAttachment(layer),
-      visibleStates: [...(layer.visibleStates ?? AWARD_POPUP_STATES)] as any,
     };
   };
   const canonicalOverlay = <T extends PopupOverlayLayer>(layer: T) => {
@@ -305,7 +314,7 @@ export function projectToManifest(project: PopupEditorProject): PopupManifest {
   if (project.type === "spine") {
     if (project.spine.prompt.enabled)
       throw new Error(
-        "v5 项目不能导出 legacy prompt；请先迁移为命名的字体文字 overlay。",
+        "v6 项目不能导出 legacy prompt；请先迁移为命名的字体文字 overlay。",
       );
     const resourceKey = project.spine.resource;
     if (!resourceKey)
@@ -550,18 +559,18 @@ export function addLayer(
     ? Math.max(...tier.layers.map((layer) => layer.order)) + 1
     : 0;
   const base = {
-    id: `layer-${tierId}-${order}`,
+    id: allocateAwardLayerId(project),
     order,
     resource: resourceKey,
     transform: { x: 0, y: 0, scale: 1, rotation: 0 },
     alpha: 1,
     attachment: { kind: "popup-root" as const },
-    visibleStates: [...AWARD_POPUP_STATES],
   };
   let layer: PopupLayer;
   if (resource.kind === "image-string" && !existingAmount)
     layer = {
       ...base,
+      id: "win-amount",
       kind: "image-string",
       name: "win-amount",
       binding: "win-amount",
@@ -629,6 +638,89 @@ export function addLayer(
       },
     };
   tier.layers = [...tier.layers, layer];
+}
+
+export function addAwardTextLayer(
+  project: PopupEditorProject,
+  tierId: AwardTierId,
+): void {
+  const tier = project.tiers.get(tierId);
+  if (!tier) throw new Error(`tier 不存在：${tierId}`);
+  const id = allocateAwardLayerId(project);
+  const order = tier.layers.length
+    ? Math.max(...tier.layers.map((layer) => layer.order)) + 1
+    : 0;
+  tier.layers = [
+    ...tier.layers,
+    {
+      id,
+      kind: "text",
+      name: id,
+      defaultText: "TEXT",
+      order,
+      alpha: 1,
+      attachment: { kind: "popup-root" },
+      transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+      anchor: { x: 0.5, y: 0.5 },
+      style: {
+        fontSize: 72,
+        letterSpacing: 0,
+        fill: { kind: "solid", color: "#ffffff" },
+        stroke: { color: "#000000", width: 4 },
+        shadow: {
+          color: "#000000",
+          alpha: 0.5,
+          blur: 4,
+          distance: 6,
+          angleDegrees: 90,
+        },
+        arcDegrees: 0,
+      },
+    },
+  ];
+}
+
+export function reuseAwardLayerInTier(
+  project: PopupEditorProject,
+  tierId: AwardTierId,
+  layerId: string,
+): void {
+  const tier = project.tiers.get(tierId);
+  if (!tier) throw new Error(`tier 不存在：${tierId}`);
+  if (tier.layers.some(({ id }) => id === layerId))
+    throw new Error(`${tierId} 已包含逻辑图层：${layerId}`);
+  const source = [...project.tiers.values()]
+    .flatMap(({ layers }) => layers)
+    .find(({ id }) => id === layerId);
+  if (!source) throw new Error(`逻辑图层不存在：${layerId}`);
+  if (
+    source.kind === "image-string" &&
+    source.binding === "win-amount" &&
+    tier.layers.some(
+      (layer) =>
+        layer.kind === "image-string" && layer.binding === "win-amount",
+    )
+  )
+    throw new Error(`${tierId} 已包含 win-amount。`);
+  const order = tier.layers.length
+    ? Math.max(...tier.layers.map((layer) => layer.order)) + 1
+    : 0;
+  tier.layers = [
+    ...tier.layers,
+    { ...structuredClone(source), order } as PopupLayer,
+  ];
+}
+
+function allocateAwardLayerId(project: PopupEditorProject): string {
+  const used = new Set(
+    [...project.tiers.values()].flatMap(({ layers }) =>
+      layers.map(({ id }) => id),
+    ),
+  );
+  for (let index = 0; ; index += 1) {
+    const candidate = `layer-${index}`;
+    if (!used.has(candidate)) return candidate;
+  }
 }
 
 export function getPopupSpineAttachmentTargets(

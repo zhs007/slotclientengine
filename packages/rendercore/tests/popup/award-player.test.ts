@@ -2,7 +2,7 @@ import { Container, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
 import {
   createAwardCelebrationPlayer,
-  upgradePopupManifestToV5,
+  upgradePopupManifestToV6,
   type AwardCelebrationPopupManifestV1,
   type PopupLayerRuntime,
   type PopupPackageResource,
@@ -10,34 +10,70 @@ import {
 import { popupFixture } from "./fixtures.js";
 
 describe("award celebration player", () => {
-  it("gates every v5 award layer by the active five-tier state", async () => {
-    const legacy = staticResource();
-    const manifest = structuredClone(upgradePopupManifestToV5(legacy.manifest));
+  it("starts celebration effects only when their owning tier becomes active", async () => {
+    const legacy = fakeResource();
+    const manifest = upgradePopupManifestToV6(legacy.manifest);
     if (manifest.type !== "award-celebration")
       throw new Error("Expected award popup.");
-    const image = manifest.awardCelebration.base.layers.find(
-      (layer) => layer.kind === "image",
-    )!;
-    (image as { visibleStates: string[] }).visibleStates = ["megawin"];
-    let imageContainer: Container | undefined;
+    const entered: string[] = [];
     const player = createAwardCelebrationPlayer({
       resource: { ...legacy, manifest },
-      layerFactory: ({ layer }) => {
+      layerFactory: ({ layer, tierId }) => {
         const runtime = fakeLayer(layer.kind === "vni");
-        if (layer.id === image.id) imageContainer = runtime.container;
-        return runtime;
+        return {
+          ...runtime,
+          enter(amountText) {
+            entered.push(`${tierId}:${layer.kind}`);
+            runtime.enter(amountText);
+          },
+        };
       },
     });
     await player.init();
     player.start({ betAmountRaw: 100, winAmountRaw: 5000 });
-    expect(imageContainer?.visible).toBe(false);
+    expect(entered).not.toContain("bigwin:vni");
+    expect(entered).not.toContain("superwin:vni");
+    expect(entered).not.toContain("megawin:vni");
     player.requestAdvance();
+    expect(player.getSnapshot().activeTierId).toBe("bigwin");
+    expect(entered).toContain("bigwin:vni");
+    expect(entered).not.toContain("superwin:vni");
     player.update(1);
     player.requestAdvance();
-    player.update(1);
+    expect(player.getSnapshot().activeTierId).toBe("superwin");
+    expect(entered).toContain("superwin:vni");
+    player.destroy();
+  });
+
+  it("reuses a v6 logical layer runtime when its id and source stay stable", async () => {
+    const legacy = fakeResource();
+    const manifest = structuredClone(upgradePopupManifestToV6(legacy.manifest));
+    if (manifest.type !== "award-celebration")
+      throw new Error("Expected award popup.");
+    for (const tier of manifest.awardCelebration.celebrationTiers)
+      (
+        tier.layers.find(({ kind }) => kind === "vni") as { resource: string }
+      ).resource = "bigwin";
+    const configure = vi.fn();
+    let vniCreations = 0;
+    const player = createAwardCelebrationPlayer({
+      resource: { ...legacy, manifest },
+      layerFactory: ({ layer }) => {
+        const runtime = fakeLayer(layer.kind === "vni");
+        if (layer.kind !== "vni") return runtime;
+        vniCreations += 1;
+        return { ...runtime, configure };
+      },
+    });
+    await player.init();
+    expect(vniCreations).toBe(1);
+    player.start({ betAmountRaw: 100, winAmountRaw: 5000 });
     player.requestAdvance();
-    expect(player.getSnapshot().activeTierId).toBe("megawin");
-    expect(imageContainer?.visible).toBe(true);
+    player.update(3);
+    player.requestAdvance();
+    player.update(3);
+    player.requestAdvance();
+    expect(configure).toHaveBeenCalledTimes(3);
     player.destroy();
   });
 
@@ -141,6 +177,7 @@ describe("award celebration player", () => {
     player.update(1);
     player.requestAdvance();
     expect(player.getSnapshot().activeTierId).toBe("superwin");
+    expect((contentRoot.children[2] as Container).visible).toBe(false);
     player.update(1);
     player.requestAdvance();
     expect(player.getSnapshot().activeTierId).toBe("megawin");
@@ -155,6 +192,8 @@ describe("award celebration player", () => {
       displayedAmountRaw: 5000,
     });
     player.requestAdvance();
+    expect(player.getSnapshot().phase).toBe("dismissing");
+    player.requestDismiss();
     expect(player.getSnapshot().phase).toBe("dismissing");
     player.update(1);
     expect(player.getSnapshot().phase).toBe("complete");

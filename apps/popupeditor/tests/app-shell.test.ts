@@ -186,7 +186,7 @@ describe("PopupEditorApp", () => {
     app.destroy();
   });
 
-  it("creates a fixed-type v5 project and edits focus-only presentation configuration", async () => {
+  it("creates a fixed-type v6 project and edits focus-only presentation configuration", async () => {
     const { PopupEditorApp } = await import("../src/ui/app-shell.js");
     const root = document.querySelector<HTMLElement>("#app")!;
     const app = new PopupEditorApp(root);
@@ -203,7 +203,7 @@ describe("PopupEditorApp", () => {
     expect(root.querySelector("nav")!.hasAttribute("hidden")).toBe(false);
 
     root.querySelector<HTMLButtonElement>('[data-tab="project"]')!.click();
-    expect(root.textContent).toContain("格式 v5 · Spine 弹窗");
+    expect(root.textContent).toContain("格式 v6 · Spine 弹窗");
     expect(
       root.querySelectorAll('[data-project-field^="backdrop-state-"]'),
     ).toHaveLength(3);
@@ -338,6 +338,20 @@ describe("PopupEditorApp", () => {
     root
       .querySelector<HTMLInputElement>("#tier-duration")!
       .dispatchEvent(new Event("change"));
+    root.querySelector<HTMLButtonElement>("#add-font-text-layer")!.click();
+    expect(root.querySelectorAll('[data-layer-field^="state-"]')).toHaveLength(
+      0,
+    );
+    root.querySelector<HTMLButtonElement>('[data-tier="standard"]')!.click();
+    expect(
+      root.querySelector<HTMLSelectElement>("#existing-award-layer")!.value,
+    ).toBe("layer-0");
+    root.querySelector<HTMLButtonElement>("#reuse-award-layer")!.click();
+    expect(
+      [...root.querySelectorAll("article.card strong")].map(
+        ({ textContent }) => textContent,
+      ),
+    ).toContain("layer-0");
 
     root.querySelector<HTMLButtonElement>('[data-tab="project"]')!.click();
     const preset = root.querySelector<HTMLSelectElement>(

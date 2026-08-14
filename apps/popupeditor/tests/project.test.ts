@@ -13,6 +13,7 @@ import {
 } from "../src/io/resource-import.js";
 import {
   addLayer,
+  addAwardTextLayer,
   applyImportedResourceBindings,
   assertPopupLayerCanDelete,
   createPopupAmountFormat,
@@ -25,6 +26,7 @@ import {
   popupEditorProjectDiagnostics,
   projectToManifest,
   removePopupResource,
+  reuseAwardLayerInTier,
   resourceReferenceCount,
   setPopupVniPlaybackMode,
   validatePopupEditorAttachments,
@@ -54,7 +56,7 @@ describe("popup editor filename-key project", () => {
     } as any;
     award.tiers.get("base")!.layers.push(legacyLayer);
     migratePopupEditorVisibility(award);
-    expect(legacyLayer.visibleStates).toEqual(["base", "bigwin"]);
+    expect(legacyLayer.visibleStates).toBeUndefined();
     expect(legacyLayer).not.toHaveProperty("visibleSegments");
 
     const spine = createPopupEditorProject({ type: "spine" });
@@ -134,7 +136,7 @@ describe("popup editor filename-key project", () => {
     expect(project.spine).toEqual(before);
   });
 
-  it("automatically migrates v1 and v2 system-font prompts to canonical v5", async () => {
+  it("automatically migrates v1 and v2 system-font prompts to canonical v6", async () => {
     const skeleton = JSON.stringify({
       skeleton: { spine: "4.3.23" },
       bones: [{ name: "root" }],
@@ -197,13 +199,13 @@ describe("popup editor filename-key project", () => {
     const imported = await importPopupZip(createDeterministicZip(entries), {
       prepare: false,
     });
-    expect(imported.formatVersion).toBe(5);
+    expect(imported.formatVersion).toBe(6);
     expect(imported.spine.prompt.font).toBeNull();
     expect(imported.spine.prompt.enabled).toBe(false);
     expect(imported.spine.overlays).toContainEqual(
       expect.objectContaining({ id: "prompt", kind: "text", name: "prompt" }),
     );
-    expect(projectToManifest(imported)).toMatchObject({ version: 5 });
+    expect(projectToManifest(imported)).toMatchObject({ version: 6 });
     expect(projectToManifest(imported)).not.toHaveProperty("designViewport");
 
     manifest.version = 2;
@@ -225,12 +227,12 @@ describe("popup editor filename-key project", () => {
     expect(importedLegacyV2.spine.overlays).toContainEqual(
       expect.objectContaining({ id: "prompt", kind: "text", name: "prompt" }),
     );
-    const canonicalV5 = projectToManifest(importedLegacyV2);
-    expect(canonicalV5.version).toBe(5);
-    expect(canonicalV5).not.toHaveProperty("designViewport");
-    if (canonicalV5.type !== "spine") throw new Error("Expected spine popup.");
-    expect(canonicalV5.spine).not.toHaveProperty("prompt");
-    expect(canonicalV5.spine.overlays?.[0]).toMatchObject({
+    const canonicalV6 = projectToManifest(importedLegacyV2);
+    expect(canonicalV6.version).toBe(6);
+    expect(canonicalV6).not.toHaveProperty("designViewport");
+    if (canonicalV6.type !== "spine") throw new Error("Expected spine popup.");
+    expect(canonicalV6.spine).not.toHaveProperty("prompt");
+    expect(canonicalV6.spine.overlays?.[0]).toMatchObject({
       attachment: { kind: "popup-root" },
       visibleStates: ["start", "loop"],
     });
@@ -302,6 +304,19 @@ describe("popup editor filename-key project", () => {
     ]);
   });
 
+  it("reuses an explicit stable award layer id with state-local config", () => {
+    const project = createPopupEditorProject();
+    addAwardTextLayer(project, "base");
+    const base = project.tiers.get("base")!.layers[0]!;
+    reuseAwardLayerInTier(project, "standard", base.id);
+    const standard = project.tiers.get("standard")!.layers[0]!;
+    expect(standard.id).toBe(base.id);
+    expect(standard).not.toBe(base);
+    (standard.transform as { x: number }).x = 120;
+    expect(base.transform.x).toBe(0);
+    expect(standard).not.toHaveProperty("visibleStates");
+  });
+
   it("imports ImgNumber through the common review and exports deterministic mapped ZIPs", async () => {
     const review = await discoverPopupResources([
       new File([imageStringZip().slice().buffer], "amount.zip"),
@@ -334,7 +349,6 @@ describe("popup editor filename-key project", () => {
       name: "imgnumber-1",
       binding: "manual",
       defaultText: "0",
-      visibleStates: ["base", "standard", "bigwin", "superwin", "megawin"],
       parent: { kind: "popup-root" },
     });
 
@@ -686,7 +700,7 @@ describe("popup editor filename-key project", () => {
     addLayer(project, "base", "number2.json");
     expect(getPopupVniTextLayerTargets(project, "base")).toEqual([
       {
-        vniLayerId: "layer-base-1",
+        vniLayerId: "layer-0",
         textLayerId: "layer_text_mqz6k97v_z",
         textLayerName: "文字",
       },

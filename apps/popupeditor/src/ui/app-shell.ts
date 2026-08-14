@@ -16,6 +16,7 @@ import type {
   PopupVisibilityState,
 } from "@slotclientengine/rendercore/popup";
 import {
+  addAwardTextLayer,
   addLayer,
   applyImportedResourceBindings,
   assertPopupLayerCanDelete,
@@ -26,6 +27,7 @@ import {
   getPopupVniTextLayerTargets,
   getPopupSpineAttachmentTargets,
   removePopupResource,
+  reuseAwardLayerInTier,
   PopupEditorStore,
   projectToManifest,
   popupEditorVisibilityStates,
@@ -494,18 +496,18 @@ export class PopupEditorApp {
     this.#root
       .querySelector<HTMLButtonElement>("#add-font-text-layer")
       ?.addEventListener("click", () =>
-        this.#store.transact((draft) => {
-          const layers = draft.tiers.get(this.#tier)!.layers;
-          const order = nextOrder(layers);
-          layers.push(
-            createFontTextLayer(
-              `text-${order}`,
-              order,
-              popupEditorVisibilityStates("award-celebration"),
-            ),
-          );
-        }),
+        this.#store.transact((draft) => addAwardTextLayer(draft, this.#tier)),
       );
+    this.#root
+      .querySelector<HTMLButtonElement>("#reuse-award-layer")
+      ?.addEventListener("click", () => {
+        const select = this.required<HTMLSelectElement>("existing-award-layer");
+        this.safe(() =>
+          this.#store.transact((draft) =>
+            reuseAwardLayerInTier(draft, this.#tier, select.value),
+          ),
+        );
+      });
     this.#root
       .querySelectorAll<HTMLSelectElement>("[data-layer-font]")
       .forEach((select) =>
@@ -611,14 +613,6 @@ export class PopupEditorApp {
               )
             )
               (layer as any).playback[field] = input.value;
-            else if (field.startsWith("state-")) {
-              updateVisibleStates(
-                layer,
-                field.slice("state-".length) as PopupVisibilityState,
-                input.checked,
-                popupEditorVisibilityStates("award-celebration"),
-              );
-            }
           });
           if (input.dataset.layerField === "curvedEnabled")
             syncCurvedAngleInput(this.#root, "layer", input);
@@ -1334,7 +1328,19 @@ function tiersMarkup(
   const layerResources = [...project.resources.values()].filter(
     ({ kind }) => kind !== "font",
   );
-  return `<nav class="tier-tabs" role="tablist" aria-label="获奖档位">${TIERS.map((id) => `<button role="tab" aria-selected="${id === active}" tabindex="${id === active ? 0 : -1}" data-tier="${id}" class="${id === active ? "active" : ""}"><span>${id}</span><small>${project.tiers.get(id)!.layers.length} 层</small></button>`).join("")}</nav><section class="tier-contract"><h2>累计档位合同</h2><p>base：0 &lt; win ≤ 1×bet；standard：1×bet &lt; win &lt; bigwin。达到某个阈值时进入该档，已达到的前序档位会依次累计播放。</p><div class="threshold-grid">${(["bigwin", "superwin", "megawin"] as const).map((id) => `<label><span>${id}</span><input data-threshold-tier="${id}" type="number" min="2" step="1" value="${project.tiers.get(id)!.thresholdMultiplier}"/><small>× bet</small></label>`).join("")}</div><p class="contract-example">当前倍数边界：1× / ${project.tiers.get("bigwin")!.thresholdMultiplier}× / ${project.tiers.get("superwin")!.thresholdMultiplier}× / ${project.tiers.get("megawin")!.thresholdMultiplier}×；等于阈值时进入对应档。</p><p id="tier-boundaries" class="raw-boundaries">${tierBoundarySummary(project, betRaw)}</p></section><section class="tier-editor"><h2>${active}</h2><p class="layer-order-help">order 数值越小越靠下，只控制当前档位内的图层顺序。</p><label>金额计数时长<input id="tier-duration" type="number" step="0.1" min="0" value="${tier.countDurationSeconds}"/><small>秒</small></label><div class="layer-add"><select id="layer-resource">${layerResources.map((resource) => `<option value="${resource.rootKey}">${resource.rootKey} (${resource.kind})</option>`)}</select><button data-add-layer ${layerResources.length ? "" : "disabled"}>新增 / 切换图层</button><button id="add-font-text-layer">添加字体文字</button></div>${tier.layers.map((layer) => layerMarkup(layer, project, active)).join("")}</section>`;
+  const activeIds = new Set(tier.layers.map(({ id }) => id));
+  const reusable = [
+    ...new Map(
+      [...project.tiers.values()]
+        .flatMap(({ layers }) => layers)
+        .filter(({ id }) => !activeIds.has(id))
+        .map((layer) => [layer.id, layer] as const),
+    ).values(),
+  ];
+  const reuse = reusable.length
+    ? `<div class="layer-add"><select id="existing-award-layer">${reusable.map((layer) => `<option value="${layer.id}">${layer.id} (${layer.kind})</option>`).join("")}</select><button id="reuse-award-layer">复用逻辑图层到当前档</button></div>`
+    : "";
+  return `<nav class="tier-tabs" role="tablist" aria-label="获奖档位">${TIERS.map((id) => `<button role="tab" aria-selected="${id === active}" tabindex="${id === active ? 0 : -1}" data-tier="${id}" class="${id === active ? "active" : ""}"><span>${id}</span><small>${project.tiers.get(id)!.layers.length} 层</small></button>`).join("")}</nav><section class="tier-contract"><h2>累计档位合同</h2><p>base：0 &lt; win ≤ 1×bet；standard：1×bet &lt; win &lt; bigwin。达到某个阈值时进入该档，已达到的前序档位会依次累计播放。</p><div class="threshold-grid">${(["bigwin", "superwin", "megawin"] as const).map((id) => `<label><span>${id}</span><input data-threshold-tier="${id}" type="number" min="2" step="1" value="${project.tiers.get(id)!.thresholdMultiplier}"/><small>× bet</small></label>`).join("")}</div><p class="contract-example">当前倍数边界：1× / ${project.tiers.get("bigwin")!.thresholdMultiplier}× / ${project.tiers.get("superwin")!.thresholdMultiplier}× / ${project.tiers.get("megawin")!.thresholdMultiplier}×；等于阈值时进入对应档。</p><p id="tier-boundaries" class="raw-boundaries">${tierBoundarySummary(project, betRaw)}</p></section><section class="tier-editor"><h2>${active}</h2><p class="layer-order-help">同一 id 在不同档位表示同一逻辑图层；当前档没有该 id 时不可见。order 只控制当前档位内的图层顺序。</p><label>金额计数时长<input id="tier-duration" type="number" step="0.1" min="0" value="${tier.countDurationSeconds}"/><small>秒</small></label><div class="layer-add"><select id="layer-resource">${layerResources.map((resource) => `<option value="${resource.rootKey}">${resource.rootKey} (${resource.kind})</option>`)}</select><button data-add-layer ${layerResources.length ? "" : "disabled"}>新增图层</button><button id="add-font-text-layer">添加字体文字</button></div>${reuse}${tier.layers.map((layer) => layerMarkup(layer, project, active)).join("")}</section>`;
 }
 
 function tierBoundarySummary(project: PopupEditorProject, betRaw: number) {
@@ -1373,13 +1379,7 @@ function layerMarkup(
           : layer.kind === "text"
             ? `${input("name", layer.name, "text")}${fontSelectMarkup("layer", layer.id, layer.resource, project)}${input("defaultText", layer.defaultText, "text")}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${textStyleMarkup("layer", layer.id, layer.style)}`
             : `${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}`;
-  const visibility = stateControls(
-    "layer",
-    layer.id,
-    layer.visibleStates ?? popupEditorVisibilityStates("award-celebration"),
-    popupEditorVisibilityStates("award-celebration"),
-  );
-  return `<article class="card"><strong>${layer.id}</strong><span>${layer.kind} / ${layer.resource ?? "system"}</span>${attachmentMarkup(layer, project, { kind: "award", tierId }, "layer")}${input("order", layer.order)}${input("alpha", layer.alpha ?? 1)}${(["x", "y", "scale"] as const).map((field) => input(field, layer.transform[field])).join("")}${layer.kind === "text" || layer.kind === "image-string" ? input("rotation", layer.transform.rotation ?? 0) : ""}${visibility}${playback}<button data-delete-layer="${layer.id}">删除图层</button></article>`;
+  return `<article class="card"><strong>${layer.id}</strong><span>${layer.kind} / ${layer.resource ?? "system"}</span>${attachmentMarkup(layer, project, { kind: "award", tierId }, "layer")}${input("order", layer.order)}${input("alpha", layer.alpha ?? 1)}${(["x", "y", "scale"] as const).map((field) => input(field, layer.transform[field])).join("")}${layer.kind === "text" || layer.kind === "image-string" ? input("rotation", layer.transform.rotation ?? 0) : ""}${playback}<button data-delete-layer="${layer.id}">删除当前档配置</button></article>`;
 }
 
 function vniPlaybackMarkup(

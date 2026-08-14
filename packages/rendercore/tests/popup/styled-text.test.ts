@@ -35,10 +35,24 @@ describe("popup styled text", () => {
     renderer.setText("AB");
     expect(renderer.text).toBe("AB");
     expect(renderer.container.children[0]!.children).toHaveLength(2);
+    renderer.setPresentation({
+      family: "system-ui",
+      style: { ...style, arcDegrees: 0 },
+      anchor: { x: 0, y: 1 },
+    });
+    expect(renderer.text).toBe("AB");
+    expect(renderer.container.children[0]).not.toBe(arc);
     expect(() => renderer.setText("bad\nline")).toThrow(/single line/);
     expect(renderer.text).toBe("AB");
     renderer.destroy();
     expect(() => renderer.setText("A")).toThrow(/destroyed/);
+    expect(() =>
+      renderer.setPresentation({
+        family: "sans-serif",
+        style,
+        anchor: { x: 0.5, y: 0.5 },
+      }),
+    ).toThrow(/destroyed/);
   });
 
   it("accepts empty single-line strings and rejects non-NFC/control text", () => {

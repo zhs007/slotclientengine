@@ -285,7 +285,7 @@ describe("popup manifest", () => {
   });
 
   it.each([
-    ["unsupported version", (v: any) => (v.version = 5)],
+    ["unsupported version", (v: any) => (v.version = 7)],
     [
       "resource root mismatch",
       (v: any) => (v.resources["bad.png"] = v.resources.effect),

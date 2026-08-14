@@ -26,6 +26,16 @@ export function startPopupVniPlayback(
 export function requestPopupVniPlaybackEnd(
   player: PopupVniTransport,
   playback: PopupVniPlayback,
+  options: { readonly immediate?: boolean } = {},
 ): void {
-  if (playback.mode === "segmented") player.requestSegmentedPlaybackEnd();
+  if (playback.mode !== "segmented") return;
+  if (options.immediate) {
+    player.play({
+      mode: "range",
+      range: { unit: "time", start: playback.loopEndTime },
+      loop: false,
+    });
+    return;
+  }
+  player.requestSegmentedPlaybackEnd();
 }

@@ -12,6 +12,11 @@ export interface PopupStyledTextRenderer {
   readonly container: Container;
   readonly text: string;
   setText(text: string): void;
+  setPresentation(options: {
+    readonly family: string;
+    readonly style: PopupTextStyle;
+    readonly anchor: PopupAnchor;
+  }): void;
   destroy(): void;
 }
 
@@ -23,19 +28,20 @@ export function createPopupStyledText(options: {
   readonly measureText?: (text: string, style: TextStyle) => number;
 }): PopupStyledTextRenderer {
   let text = validatePopupStyledText(options.text);
+  let family = options.family;
+  let style = options.style;
+  let anchor = options.anchor;
   const container = new Container();
   let active = build(text);
   let destroyed = false;
   container.addChild(active.container);
 
   function build(value: string): PreparedStyledText {
-    if (options.style.arcDegrees === 0) {
-      const gradient = createGradient(options.style.fill);
-      const textStyle = new TextStyle(
-        toTextStyle(options.family, options.style, gradient),
-      );
+    if (style.arcDegrees === 0) {
+      const gradient = createGradient(style.fill);
+      const textStyle = new TextStyle(toTextStyle(family, style, gradient));
       const display = new Text({ text: value, style: textStyle });
-      display.anchor.set(options.anchor.x, options.anchor.y);
+      display.anchor.set(anchor.x, anchor.y);
       return {
         container: display,
         destroy() {
@@ -47,9 +53,7 @@ export function createPopupStyledText(options: {
     }
     const group = new Container();
     const graphemes = segmentGraphemes(value);
-    const measurementStyle = new TextStyle(
-      toTextStyle(options.family, options.style, null),
-    );
+    const measurementStyle = new TextStyle(toTextStyle(family, style, null));
     const measure =
       options.measureText ??
       ((part: string, style: TextStyle) =>
@@ -61,21 +65,19 @@ export function createPopupStyledText(options: {
         "popup styled text metrics must be finite and non-negative.",
       );
     }
-    const spacing = options.style.letterSpacing;
+    const spacing = style.letterSpacing;
     const total = Math.max(
       0,
       widths.reduce((sum, width) => sum + width, 0) +
         spacing * Math.max(0, widths.length - 1),
     );
-    const gradient = createGradient(options.style.fill, {
+    const gradient = createGradient(style.fill, {
       width: total,
-      height: options.style.fontSize,
+      height: style.fontSize,
     });
-    const textStyle = new TextStyle(
-      toTextStyle(options.family, options.style, gradient),
-    );
+    const textStyle = new TextStyle(toTextStyle(family, style, gradient));
     measurementStyle.destroy();
-    const arcRadians = (options.style.arcDegrees * Math.PI) / 180;
+    const arcRadians = (style.arcDegrees * Math.PI) / 180;
     const radius = total === 0 ? 0 : total / Math.abs(arcRadians);
     let cursor = -total / 2;
     const boxes: Array<{
@@ -104,10 +106,10 @@ export function createPopupStyledText(options: {
       });
       cursor += width + spacing;
     }
-    const bounds = approximateBounds(boxes, options.style.fontSize);
+    const bounds = approximateBounds(boxes, style.fontSize);
     group.pivot.set(
-      bounds.x + bounds.width * options.anchor.x,
-      bounds.y + bounds.height * options.anchor.y,
+      bounds.x + bounds.width * anchor.x,
+      bounds.y + bounds.height * anchor.y,
     );
     return {
       container: group,
@@ -135,6 +137,21 @@ export function createPopupStyledText(options: {
       active.destroy();
       active = prepared;
       text = validated;
+    },
+    setPresentation(next: {
+      readonly family: string;
+      readonly style: PopupTextStyle;
+      readonly anchor: PopupAnchor;
+    }) {
+      assertUsable();
+      family = next.family;
+      style = next.style;
+      anchor = next.anchor;
+      const prepared = build(text);
+      container.addChild(prepared.container);
+      container.removeChild(active.container);
+      active.destroy();
+      active = prepared;
     },
     destroy() {
       if (destroyed) return;

@@ -1,12 +1,15 @@
 import type {
   AwardPopupLayerV5,
+  AwardPopupLayerV6,
   AwardTierId,
   PopupManifest,
   PopupManifestV5,
+  PopupManifestV6,
   PopupOverlayLayer,
   PopupSegment,
   PopupVisibilityState,
   SpinePopupOverlayLayerV5,
+  SpinePopupOverlayLayerV6,
 } from "./types.js";
 
 export const POPUP_SEGMENTS = Object.freeze([
@@ -49,6 +52,8 @@ export function upgradePopupManifestToV5(
   manifest: PopupManifest,
 ): PopupManifestV5 {
   if (manifest.version === 5) return manifest;
+  if (manifest.version === 6)
+    throw new Error("popup manifest v6 cannot be downgraded to v5.");
   const attachment = (layer: {
     readonly attachment?: unknown;
     readonly parent?: unknown;
@@ -193,10 +198,153 @@ export function upgradePopupManifestToV5(
   });
 }
 
+export function upgradePopupManifestToV6(
+  manifest: PopupManifest,
+): PopupManifestV6 {
+  if (manifest.version === 6) return manifest;
+  const legacy = upgradePopupManifestToV5(manifest);
+  if (legacy.type === "spine")
+    return Object.freeze({
+      ...legacy,
+      version: 6 as const,
+      spine: {
+        ...legacy.spine,
+        ...(legacy.spine.overlays
+          ? {
+              overlays: Object.freeze(
+                legacy.spine.overlays.map(
+                  (layer) => structuredClone(layer) as SpinePopupOverlayLayerV6,
+                ),
+              ),
+            }
+          : {}),
+      },
+    });
+
+  const allLegacyTiers = [
+    legacy.awardCelebration.base,
+    legacy.awardCelebration.standard,
+    ...legacy.awardCelebration.celebrationTiers,
+  ];
+  const identities = new Map<string, string>([
+    [
+      "win-amount",
+      JSON.stringify({
+        kind: "image-string",
+        name: "win-amount",
+        binding: "win-amount",
+      }),
+    ],
+  ]);
+  const allocatedIds = new Set([
+    "win-amount",
+    ...allLegacyTiers.flatMap(({ layers }) => layers.map(({ id }) => id)),
+  ]);
+  const upgradeTier = (
+    state: AwardTierId,
+    tier: {
+      readonly countDurationSeconds: number;
+      readonly layers: readonly AwardPopupLayerV5[];
+    },
+  ) => {
+    const idMap = new Map<string, string>();
+    const candidates = tier.layers.map((layer) => {
+      const preferred =
+        layer.kind === "image-string" && layer.binding === "win-amount"
+          ? "win-amount"
+          : layer.id;
+      const signature = layerIdentitySignature(layer);
+      const existing = identities.get(preferred);
+      const id =
+        existing === undefined || existing === signature
+          ? preferred
+          : allocateStateLayerId(preferred, state, allocatedIds);
+      identities.set(id, signature);
+      allocatedIds.add(id);
+      idMap.set(layer.id, id);
+      const {
+        visibleStates: _visibleStates,
+        visibleSegments: _visibleSegments,
+        ...rest
+      } = layer as AwardPopupLayerV5 & { readonly visibleSegments?: unknown };
+      return { ...rest, id } as AwardPopupLayerV6;
+    });
+    const layers = candidates
+      .map((layer) => ({
+        ...layer,
+        attachment: rewriteAttachmentIds(layer.attachment, idMap),
+      }))
+      .sort((left, right) => left.order - right.order);
+    return Object.freeze({
+      countDurationSeconds: tier.countDurationSeconds,
+      layers: Object.freeze(layers),
+    });
+  };
+  return Object.freeze({
+    ...legacy,
+    version: 6 as const,
+    awardCelebration: {
+      base: upgradeTier("base", legacy.awardCelebration.base),
+      standard: upgradeTier("standard", legacy.awardCelebration.standard),
+      celebrationTiers: Object.freeze(
+        legacy.awardCelebration.celebrationTiers.map((tier) => ({
+          id: tier.id,
+          thresholdMultiplier: tier.thresholdMultiplier,
+          ...upgradeTier(tier.id, tier),
+        })),
+      ),
+    },
+  });
+}
+
+function layerIdentitySignature(layer: AwardPopupLayerV5): string {
+  return JSON.stringify({
+    kind: layer.kind,
+    ...((layer.kind === "text" || layer.kind === "image-string") && layer.name
+      ? { name: layer.name }
+      : {}),
+    ...(layer.kind === "image-string" ? { binding: layer.binding } : {}),
+  });
+}
+
+function allocateStateLayerId(
+  preferred: string,
+  state: AwardTierId,
+  allocated: ReadonlySet<string>,
+): string {
+  const base = `${preferred}-${state}`;
+  if (!allocated.has(base)) return base;
+  for (let suffix = 2; ; suffix += 1) {
+    const candidate = `${base}-${suffix}`;
+    if (!allocated.has(candidate)) return candidate;
+  }
+}
+
+function rewriteAttachmentIds(
+  attachment: AwardPopupLayerV6["attachment"],
+  ids: ReadonlyMap<string, string>,
+): AwardPopupLayerV6["attachment"] {
+  if (attachment.kind === "vni-text-layer")
+    return {
+      ...attachment,
+      vniLayerId: ids.get(attachment.vniLayerId) ?? attachment.vniLayerId,
+    };
+  if (attachment.kind === "spine-slot" && attachment.target.kind === "layer")
+    return {
+      ...attachment,
+      target: {
+        ...attachment.target,
+        layerId:
+          ids.get(attachment.target.layerId) ?? attachment.target.layerId,
+      },
+    };
+  return attachment;
+}
+
 export function popupLayerVisibleInState(
   manifest: PopupManifest,
   layer: { readonly visibleStates?: readonly PopupVisibilityState[] },
   state: PopupVisibilityState,
 ): boolean {
-  return manifest.version !== 5 || layer.visibleStates!.includes(state);
+  return !layer.visibleStates || layer.visibleStates.includes(state);
 }

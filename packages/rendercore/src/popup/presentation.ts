@@ -214,7 +214,7 @@ function backdropVisible(
   return (
     active &&
     manifest.backdrop.enabled &&
-    (manifest.version !== 5 ||
+    (!("visibleStates" in manifest.backdrop) ||
       (state !== null &&
         manifest.backdrop.visibleStates.includes(state as never)))
   );

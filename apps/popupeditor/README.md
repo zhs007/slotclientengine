@@ -8,11 +8,11 @@ VNI bundle 只导入 `purpose=runtime` 的运行发布包：唯一 runtime 自�
 
 同名不同 bytes 默认覆盖，review 显示 hash、bytes、动作和受影响 layer；全项目校验或 preview prepare 失败会完整回滚。不存在文件夹入口、任意 logical resource id 或独立 dependency bytes 区。
 
-新建项目与新导出的 `<id>-popup.zip` 固定使用 Popup v5，由根 `popup.manifest.json`、`assets.map.json` 和完整 SHA-256 payload 构成。v5 沿用 v4 的无界 focus 与 strict attachment，并为压暗底和所有图层保存按项目类型区分的 `visibleStates`：获奖庆祝为 `base / standard / bigwin / superwin / megawin`，普通 Spine 为 `start / loop / end`。导入合法 v1–v4 ZIP 时先完成原版本 strict 校验和资源 prepare，再原子迁移到 v5；旧三阶段全选扩展为目标类型全选，部分选择按固定 index 保留。后续 preview/export 不再写旧版本。普通 Spine 类型接收一组 JSON、atlas 与若干 PNG，并显式配置 start、loop、end 动画；点击在 loop 边界生效。
+新建项目与新导出的 `<id>-popup.zip` 固定使用 Popup v6，由根 `popup.manifest.json`、`assets.map.json` 和完整 SHA-256 payload 构成。v6 的 award 图层由所在档位决定可见性，不再保存跨档 `visibleStates`；同一 exact id 在不同档表示同一逻辑图层，Editor 可显式把已有逻辑图层复用到当前档并独立编辑配置。普通 Spine overlay 与 backdrop 继续保存类型化状态可见性。导入合法 v1–v5 ZIP 时先完成原版本 strict 校验和资源 prepare，再原子迁移到 v6；后续 preview/export 不再写旧版本。普通 Spine 类型接收一组 JSON、atlas 与若干 PNG，并显式配置 start、loop、end 动画；点击仍在 loop 边界生效。
 
 普通 Spine 类型不再提供独立 prompt authoring；提示语与其它文案一样使用命名的字体文字 overlay。旧 v1/v2 prompt 在导入边界自动结构化迁移为 `name=prompt` 的文字层，名称、order 或资源冲突会使整次导入失败。可追加任意数量 image、字体文字、ImgNumber、Spine 或 VNI overlay，编辑其位置、缩放、旋转、order 及各类型 playback/项目状态可见性。
 
-所有获奖档位与普通 Spine overlay 都可添加多个命名字体文字和 manual ImgNumber。字体文字可明确选择已导入的 WOFF2/WOFF/TTF/OTF；未选择资源时才使用 `system-ui, sans-serif`。文字支持单行默认文案、字号、字距、色板或 canonical color string、纯色/线性渐变、描边、投影、正负 Curved Text、anchor、旋转与项目状态可见性。每个获奖档仍必须恰好有一个 `win-amount` ImgNumber，再次添加 ImgNumber 会创建可独立命名和设值的 manual 节点。游戏通过 exact layer name 获取 rendercore handle 并原子 `setText()/resetText()`；Editor 预览不提供临时节点覆盖入口。
+所有获奖档位与普通 Spine overlay 都可添加多个命名字体文字和 manual ImgNumber。字体文字可明确选择已导入的 WOFF2/WOFF/TTF/OTF；未选择资源时才使用 `system-ui, sans-serif`。文字支持单行默认文案、字号、字距、色板或 canonical color string、纯色/线性渐变、描边、投影、正负 Curved Text、anchor 与旋转；普通 Spine overlay 还可编辑三阶段可见性。每个获奖档仍必须恰好有一个 exact id 为 `win-amount` 的 ImgNumber，再次添加 ImgNumber 会创建可独立命名和设值的 manual 节点。游戏通过 exact layer name 获取 rendercore handle 并原子 `setText()/resetText()`；Editor 预览不提供临时节点覆盖入口。
 
 production preview 使用与 runtime 相同的无界 maximized-focus transform：重点区域始终完整可见，宿主宽高比所需的额外空间以 focus 几何中心向外扩展，宿主 placement 再叠加到该矩阵。预览 canvas 后方的颜色持续按红、蓝、黄、绿循环，只用于观察适配和全屏 backdrop，不进入 project、manifest 或 ZIP。production canvas/keyboard binding 仍负责 award advance 与 Spine dismiss，但 input、textarea、select、button 和 contenteditable 的键盘事件会透传，不再阻止表单输入。文字标量输入就地提交并异步重建 player，不替换当前 inspector DOM。
 

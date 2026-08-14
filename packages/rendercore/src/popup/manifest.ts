@@ -6,6 +6,7 @@ import type {
   AwardCelebrationPopupManifestV3,
   AwardCelebrationPopupManifestV4,
   AwardCelebrationPopupManifestV5,
+  AwardCelebrationPopupManifestV6,
   AwardCelebrationSpec,
   AwardCelebrationTier,
   AwardTierPresentation,
@@ -17,6 +18,7 @@ import type {
   PopupManifestV3,
   PopupManifestV4,
   PopupManifestV5,
+  PopupManifestV6,
   PopupOverlayLayer,
   PopupLayerAttachment,
   PopupPromptSpec,
@@ -29,6 +31,7 @@ import type {
   SpinePopupManifestV3,
   SpinePopupManifestV4,
   SpinePopupManifestV5,
+  SpinePopupManifestV6,
 } from "./types.js";
 import { validatePopupLayerAttachmentGraph } from "./layer-attachment.js";
 import { AWARD_POPUP_STATES, POPUP_SEGMENTS } from "./state-visibility.js";
@@ -49,11 +52,14 @@ interface ParsePopupManifest {
   (value: SpinePopupManifestV4): SpinePopupManifestV4;
   (value: AwardCelebrationPopupManifestV5): AwardCelebrationPopupManifestV5;
   (value: SpinePopupManifestV5): SpinePopupManifestV5;
+  (value: AwardCelebrationPopupManifestV6): AwardCelebrationPopupManifestV6;
+  (value: SpinePopupManifestV6): SpinePopupManifestV6;
   (value: PopupManifestV1): PopupManifestV1;
   (value: PopupManifestV2): PopupManifestV2;
   (value: PopupManifestV3): PopupManifestV3;
   (value: PopupManifestV4): PopupManifestV4;
   (value: PopupManifestV5): PopupManifestV5;
+  (value: PopupManifestV6): PopupManifestV6;
   (value: unknown): PopupManifest;
 }
 
@@ -64,9 +70,10 @@ export const parsePopupManifest = ((value: unknown): PopupManifest => {
     record.version !== 2 &&
     record.version !== 3 &&
     record.version !== 4 &&
-    record.version !== 5
+    record.version !== 5 &&
+    record.version !== 6
   )
-    fail("popup manifest.version must be 1, 2, 3, 4, or 5.");
+    fail("popup manifest.version must be 1, 2, 3, 4, 5, or 6.");
   const version = record.version;
   const modern = version !== 1;
   const commonKeys = [
@@ -123,7 +130,7 @@ export const parsePopupManifest = ((value: unknown): PopupManifest => {
           ),
           backdrop: parseBackdrop(
             record.backdrop,
-            version === 5
+            version >= 5
               ? record.type === "award-celebration"
                 ? AWARD_POPUP_STATES
                 : POPUP_SEGMENTS
@@ -179,7 +186,7 @@ export const parsePopupManifest = ((value: unknown): PopupManifest => {
 function parseSpinePopup(
   value: unknown,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2 | 3 | 4 | 5,
+  version: 1 | 2 | 3 | 4 | 5 | 6,
 ) {
   const record = object(value, "spine");
   keys(
@@ -301,7 +308,7 @@ function parsePrompt(
 function parseOverlays(
   value: unknown,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2 | 3 | 4 | 5,
+  version: 1 | 2 | 3 | 4 | 5 | 6,
 ): readonly PopupOverlayLayer[] {
   if (!Array.isArray(value)) fail("spine.overlays must be an array.");
   const overlays = value.map((raw, index) => {
@@ -524,7 +531,7 @@ function parseResource(value: unknown, label: string): PopupResourceSpec {
 function parseAwardCelebration(
   value: unknown,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2 | 3 | 4 | 5,
+  version: 1 | 2 | 3 | 4 | 5 | 6,
 ): AwardCelebrationSpec {
   const record = object(value, "awardCelebration");
   keys(record, ["base", "standard", "celebrationTiers"], "awardCelebration");
@@ -575,6 +582,7 @@ function parseAwardCelebration(
   });
   const variants = allTiers(result).flatMap(({ layers }) => layers);
   validateStringNodeNames(variants, "awardCelebration", true);
+  if (version === 6) validateAwardLayerIdentities(result);
   return result;
 }
 
@@ -582,7 +590,7 @@ function parseTier(
   value: unknown,
   label: string,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2 | 3 | 4 | 5,
+  version: 1 | 2 | 3 | 4 | 5 | 6,
 ): AwardTierPresentation {
   const record = object(value, label);
   const allowed = [
@@ -625,6 +633,8 @@ function parseTier(
     (layer): layer is Extract<PopupLayer, { readonly kind: "image-string" }> =>
       layer.kind === "image-string" && layer.binding === "win-amount",
   )!;
+  if (version === 6 && amount.id !== "win-amount")
+    fail(`${label} win-amount layer id must be win-amount in popup v6.`);
   const amountParent =
     version >= 4
       ? amount.attachment
@@ -649,7 +659,7 @@ function parseLayer(
   value: unknown,
   label: string,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2 | 3 | 4 | 5,
+  version: 1 | 2 | 3 | 4 | 5 | 6,
   visibilityStates: readonly (
     | PopupSegment
     | import("./types.js").AwardTierId
@@ -657,6 +667,8 @@ function parseLayer(
 ): any {
   const record = object(value, label);
   const kind = record.kind;
+  const hasStateVisibility =
+    version === 5 || (version === 6 && visibilityStates === POPUP_SEGMENTS);
   const hasResource = Object.hasOwn(record, "resource");
   const common = [
     "id",
@@ -666,7 +678,7 @@ function parseLayer(
     "transform",
     ...(version !== 1 ? ["alpha"] : []),
     ...(version >= 4 ? ["attachment"] : []),
-    ...(version === 5 ? ["visibleStates"] : []),
+    ...(hasStateVisibility ? ["visibleStates"] : []),
   ];
   if (!hasResource && (version === 1 || kind !== "text"))
     fail(`${label}.resource is required.`);
@@ -711,7 +723,7 @@ function parseLayer(
           }
         : {}),
     },
-    ...(version === 5
+    ...(hasStateVisibility
       ? {
           visibleStates: parseVisibilityStates(
             record.visibleStates,
@@ -725,7 +737,7 @@ function parseLayer(
     if (kind === "image")
       keys(
         record,
-        [...common, "anchor", ...(version === 5 ? [] : ["visibleSegments"])],
+        [...common, "anchor", ...(version >= 5 ? [] : ["visibleSegments"])],
         label,
       );
     else
@@ -738,7 +750,7 @@ function parseLayer(
           ...(Object.hasOwn(record, "defaultText") ? ["defaultText"] : []),
           "anchor",
           ...(version < 4 && Object.hasOwn(record, "parent") ? ["parent"] : []),
-          ...(version !== 5 &&
+          ...(version < 5 &&
           record.binding === "manual" &&
           Object.hasOwn(record, "visibleSegments")
             ? ["visibleSegments"]
@@ -781,7 +793,7 @@ function parseLayer(
         ...(version < 4
           ? { parent: parseImageStringParent(record.parent, `${label}.parent`) }
           : {}),
-        ...(version !== 5 && Object.hasOwn(record, "visibleSegments")
+        ...(version < 5 && Object.hasOwn(record, "visibleSegments")
           ? {
               visibleSegments: parseSegments(
                 record.visibleSegments,
@@ -796,7 +808,7 @@ function parseLayer(
       kind,
       resource: resourceId!,
       anchor: parsedAnchor,
-      ...(version === 5
+      ...(version >= 5
         ? {}
         : {
             visibleSegments: parseSegments(
@@ -815,7 +827,7 @@ function parseLayer(
         "defaultText",
         "anchor",
         "style",
-        ...(version === 5 ? [] : ["visibleSegments"]),
+        ...(version >= 5 ? [] : ["visibleSegments"]),
       ],
       label,
     );
@@ -831,7 +843,7 @@ function parseLayer(
         y: unit(anchor.y, `${label}.anchor.y`),
       },
       style: parseTextStyle(record.style, `${label}.style`),
-      ...(version === 5
+      ...(version >= 5
         ? {}
         : {
             visibleSegments: parseSegments(
@@ -1114,6 +1126,40 @@ function validateStringNodeNames(
     seenInLayerGroup.add(name);
   }
 }
+
+function validateAwardLayerIdentities(spec: AwardCelebrationSpec) {
+  const identities = new Map<
+    string,
+    {
+      readonly kind: PopupLayer["kind"];
+      readonly name?: string;
+      readonly binding?: "win-amount" | "manual";
+    }
+  >();
+  for (const tier of allTiers(spec))
+    for (const layer of tier.layers) {
+      const identity = {
+        kind: layer.kind,
+        ...((layer.kind === "text" || layer.kind === "image-string") &&
+        layer.name
+          ? { name: layer.name }
+          : {}),
+        ...(layer.kind === "image-string" ? { binding: layer.binding } : {}),
+      };
+      const existing = identities.get(layer.id);
+      if (
+        existing &&
+        (existing.kind !== identity.kind ||
+          existing.name !== identity.name ||
+          existing.binding !== identity.binding)
+      )
+        fail(
+          `awardCelebration layer id ${layer.id} must keep the same kind/name/binding across states.`,
+        );
+      identities.set(layer.id, identity);
+    }
+}
+
 function allTiers(spec: AwardCelebrationSpec) {
   return [spec.base, spec.standard, ...spec.celebrationTiers];
 }

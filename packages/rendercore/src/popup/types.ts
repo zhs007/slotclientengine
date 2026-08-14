@@ -490,12 +490,59 @@ export type PopupManifestV5 =
   | AwardCelebrationPopupManifestV5
   | SpinePopupManifestV5;
 
+type WithoutLayerVisibility<Layer> = Layer extends unknown
+  ? Omit<Layer, "visibleSegments" | "visibleStates">
+  : never;
+
+export type AwardPopupLayerV6 = WithoutLayerVisibility<PopupLayerV4>;
+export type SpinePopupOverlayLayerV6 = WithVisibleStates<
+  PopupOverlayLayerV4,
+  PopupSegment
+>;
+export interface AwardTierPresentationV6 {
+  readonly countDurationSeconds: number;
+  readonly layers: readonly AwardPopupLayerV6[];
+}
+export interface AwardCelebrationTierV6 extends AwardTierPresentationV6 {
+  readonly id: "bigwin" | "superwin" | "megawin";
+  readonly thresholdMultiplier: number;
+}
+export interface AwardCelebrationSpecV6 {
+  readonly base: AwardTierPresentationV6;
+  readonly standard: AwardTierPresentationV6;
+  readonly celebrationTiers: readonly AwardCelebrationTierV6[];
+}
+interface PopupManifestBaseV6<State extends PopupVisibilityState> {
+  readonly version: 6;
+  readonly kind: "popup";
+  readonly id: string;
+  readonly name: string;
+  readonly adaptation: PopupAdaptationV3;
+  readonly backdrop: PopupBackdropV5<State>;
+  readonly resources: Readonly<Record<string, PopupResourceSpec>>;
+}
+export interface AwardCelebrationPopupManifestV6 extends PopupManifestBaseV6<AwardTierId> {
+  readonly type: "award-celebration";
+  readonly amountFormat: PopupAmountFormat;
+  readonly awardCelebration: AwardCelebrationSpecV6;
+}
+export interface SpinePopupManifestV6 extends PopupManifestBaseV6<PopupSegment> {
+  readonly type: "spine";
+  readonly spine: Omit<SpinePopupManifestV5["spine"], "overlays"> & {
+    readonly overlays?: readonly SpinePopupOverlayLayerV6[];
+  };
+}
+export type PopupManifestV6 =
+  | AwardCelebrationPopupManifestV6
+  | SpinePopupManifestV6;
+
 export type PopupManifest =
   | PopupManifestV1
   | PopupManifestV2
   | PopupManifestV3
   | PopupManifestV4
-  | PopupManifestV5;
+  | PopupManifestV5
+  | PopupManifestV6;
 
 export interface PopupHostPlacement {
   readonly x: number;

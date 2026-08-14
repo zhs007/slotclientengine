@@ -24,7 +24,7 @@ import {
   parsePopupManifest,
   resolvePopupLayerAttachment,
   resolvePopupPackageFiles,
-  upgradePopupManifestToV5,
+  upgradePopupManifestToV6,
 } from "@slotclientengine/rendercore/popup";
 import type {
   PopupManifest,
@@ -99,7 +99,7 @@ export async function importPopupZip(
     });
     await resource.destroy();
   }
-  const manifest = upgradePopupManifestToV5(sourceManifest);
+  const manifest = upgradePopupManifestToV6(sourceManifest);
   const map = decodeEditorAssetsMap(files.get(EDITOR_ASSETS_MAP_PATH)!);
   const project = createPopupEditorProject();
   project.name = manifest.name;
