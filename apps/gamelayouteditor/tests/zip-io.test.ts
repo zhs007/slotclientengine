@@ -968,7 +968,7 @@ describe("layout zip IO", () => {
     }
   });
 
-  it("normalizes uppercase filename keys in symbols dependencies", async () => {
+  it("preserves legal uppercase filename keys in symbols dependencies", async () => {
     const fixture = compositePackageFixture();
     const legacyManifest = {
       version: 1,
@@ -1021,14 +1021,111 @@ describe("layout zip IO", () => {
       });
       const entries = extractBoundedZip(exported.bytes);
       const map = decodeEditorAssetsMap(entries.get("assets.map.json")!);
-      expect(map.files).toHaveProperty("a.disabled.png");
+      expect(map.files).toHaveProperty("A.disabled.png");
     } finally {
       load.mockRestore();
       unload.mockRestore();
     }
   });
 
-  it("re-sorts symbol package resources after filename-key normalization", async () => {
+  it("round-trips legal uppercase filename keys in v2 symbol manifests", async () => {
+    const fixture = compositePackageFixture();
+    const symbolPackage = {
+      version: 1,
+      kind: "symbol-package",
+      id: "demo-symbols",
+      cellSize: { width: 20, height: 20 },
+      entrypoints: {
+        gameConfig: "gameconfig.json",
+        symbolManifest: "symbol-state-textures.manifest.json",
+      },
+      resources: ["A.disabled.png"],
+    };
+    const symbolManifest = {
+      version: 2,
+      settings: {
+        stateDefinitions: [
+          { id: "normal", phase: "stable", playback: "static" },
+          { id: "spinBlur", phase: "stable", playback: "static" },
+          { id: "disabled", phase: "stable", playback: "static" },
+          {
+            id: "appear",
+            phase: "once",
+            playback: "once",
+            afterComplete: "return-to-default",
+          },
+          {
+            id: "win",
+            phase: "once",
+            playback: "once",
+            afterComplete: "return-to-default",
+          },
+          {
+            id: "remove",
+            phase: "once",
+            playback: "once",
+            afterComplete: "terminal",
+          },
+          { id: "dropdown", phase: "stable", playback: "loop" },
+        ],
+      },
+      states: ["spinBlur", "disabled", "appear", "win", "remove", "dropdown"],
+      symbols: {
+        A: {
+          normal: { kind: "transparent", width: 20, height: 20 },
+          disabled: "./A.disabled.png",
+          scale: 1,
+        },
+      },
+    };
+    const symbolFiles = new Map(fixture.symbolFiles);
+    symbolFiles.set("symbols.package.json", encode(symbolPackage));
+    symbolFiles.set(
+      "symbol-state-textures.manifest.json",
+      encode(symbolManifest),
+    );
+    symbolFiles.delete("a.png");
+    symbolFiles.set(
+      "A.disabled.png",
+      new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 8]),
+    );
+
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    try {
+      const exported = await exportLayoutZip({
+        manifest: fixture.manifest,
+        assets: fixture.assets,
+        symbolFilesById: new Map([["demo-symbols", symbolFiles]]),
+        decodeImage,
+      });
+      const entries = extractBoundedZip(exported.bytes);
+      const rewritten = JSON.parse(
+        new TextDecoder().decode(
+          mappedEntry(entries, "symbol-state-textures.manifest.json")!,
+        ),
+      );
+      expect(rewritten.symbols.A.disabled).toBe("./A.disabled.png");
+      const assetMap = decodeEditorAssetsMap(entries.get("assets.map.json")!);
+      expect(assetMap.files).toHaveProperty("A.disabled.png");
+      expect(assetMap.files["A.disabled.png"]!.path).toMatch(
+        /^assets\/[a-f0-9]{64}\.png$/u,
+      );
+
+      const imported = await importLayoutZip(exported.bytes, {
+        decodeImage,
+        loadSymbolTextures: false,
+      });
+      imported.destroy();
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
+  });
+
+  it("re-sorts symbol package resources without renaming legal keys", async () => {
     const fixture = compositePackageFixture();
     const sourceResources = ["A-+.png", "A-1.png"].sort((left, right) =>
       left.localeCompare(right, "en"),
@@ -1093,7 +1190,7 @@ describe("layout zip IO", () => {
           left.localeCompare(right, "en"),
         ),
       );
-      expect(parsedPackage.resources).toEqual(["a-1.png", "a.png"]);
+      expect(parsedPackage.resources).toEqual(sourceResources);
 
       const imported = await importLayoutZip(exported.bytes, {
         decodeImage,

@@ -27,6 +27,7 @@ import {
 } from "@slotclientengine/vnicore";
 import {
   EDITOR_ASSETS_MAP_PATH,
+  assertEditorAssetKey,
   basenameFromSourcePath,
   commitEditorAssetImport,
   createEditorAssetsMapFromWorkspace,
@@ -307,7 +308,10 @@ export async function normalizeMappedLayoutFilenameKeys(
   readonly manifest: SceneLayoutManifestV1;
   readonly assets: ReadonlyMap<string, Uint8Array>;
 }> {
-  const mapping = createCanonicalFilenameMapping(logicalAssets);
+  const mapping = createCanonicalFilenameMapping(
+    logicalAssets,
+    collectExactSymbolDependencyKeys(manifestValue, logicalAssets),
+  );
   const rewrite = (reference: string): string =>
     rewriteMappedReference(reference, mapping);
   const manifest = parseSceneLayoutManifest(
@@ -347,7 +351,10 @@ async function flattenLayoutClosure(
   manifest: SceneLayoutManifestV1,
   closure: ReadonlyMap<string, Uint8Array>,
 ) {
-  const mapping = createCanonicalFilenameMapping(closure);
+  const mapping = createCanonicalFilenameMapping(
+    closure,
+    collectExactSymbolDependencyKeys(manifest, closure),
+  );
   const virtual = new Map<string, Uint8Array>();
   for (const [path, bytes] of closure) {
     const key = mapping.get(path)!;
@@ -456,6 +463,7 @@ async function flattenLayoutClosure(
 
 function createCanonicalFilenameMapping(
   closure: ReadonlyMap<string, Uint8Array>,
+  exactKeys: ReadonlySet<string> = new Set(),
 ): ReadonlyMap<string, string> {
   const mapping = new Map<string, string>();
   const allocated = new Map<
@@ -466,9 +474,9 @@ function createCanonicalFilenameMapping(
     left.localeCompare(right, "en"),
   )) {
     const bytes = closure.get(sourcePath)!;
-    const requested = canonicalizeImportedFilenameKey(
-      basenameFromSourcePath(sourcePath),
-    );
+    const requested = exactKeys.has(sourcePath)
+      ? assertEditorAssetKey(sourcePath)
+      : canonicalizeImportedFilenameKey(basenameFromSourcePath(sourcePath));
     let candidate = requested;
     let suffix = 2;
     while (true) {
@@ -487,6 +495,65 @@ function createCanonicalFilenameMapping(
     mapping.set(sourcePath, candidate);
   }
   return mapping;
+}
+
+function collectExactSymbolDependencyKeys(
+  manifestValue: unknown,
+  files: ReadonlyMap<string, Uint8Array>,
+): ReadonlySet<string> {
+  const result = new Set<string>();
+  if (
+    !manifestValue ||
+    typeof manifestValue !== "object" ||
+    Array.isArray(manifestValue)
+  )
+    return result;
+  const manifest = manifestValue as Record<string, unknown>;
+  const rootPaths: string[] = [];
+  if (
+    manifest.symbolPackage &&
+    typeof manifest.symbolPackage === "object" &&
+    !Array.isArray(manifest.symbolPackage) &&
+    typeof (manifest.symbolPackage as Record<string, unknown>).manifest ===
+      "string"
+  )
+    rootPaths.push(
+      (manifest.symbolPackage as Record<string, unknown>).manifest as string,
+    );
+  if (
+    manifest.symbolPackages &&
+    typeof manifest.symbolPackages === "object" &&
+    !Array.isArray(manifest.symbolPackages)
+  )
+    for (const binding of Object.values(
+      manifest.symbolPackages as Record<string, unknown>,
+    ))
+      if (
+        binding &&
+        typeof binding === "object" &&
+        !Array.isArray(binding) &&
+        typeof (binding as Record<string, unknown>).manifest === "string"
+      )
+        rootPaths.push((binding as Record<string, unknown>).manifest as string);
+  for (const rootPath of rootPaths) {
+    const rootBytes = files.get(rootPath);
+    if (!rootBytes) continue;
+    const packageManifest = parseSymbolPackageManifest(
+      parseJson(rootBytes, rootPath),
+    );
+    for (const entryPath of collectSymbolPackageEntryPaths(packageManifest)) {
+      const sourcePath =
+        entryPath === "symbols.package.json"
+          ? rootPath
+          : rootPath.includes("/")
+            ? resolvePackagePath(rootPath, entryPath)
+            : entryPath;
+      if (sourcePath.includes("/") || sourcePath.includes("\\")) continue;
+      assertEditorAssetKey(sourcePath);
+      result.add(sourcePath);
+    }
+  }
+  return result;
 }
 
 function canonicalizeImportedFilenameKey(filename: string): string {
@@ -547,7 +614,8 @@ function isPathBearingJson(value: unknown): boolean {
     record.kind === "image-string" ||
     record.kind === "symbol-package" ||
     record.kind === "popup" ||
-    (record.version === 1 && record.symbols !== undefined)
+    ((record.version === 1 || record.version === 2) &&
+      record.symbols !== undefined)
   );
 }
 

@@ -14,7 +14,7 @@
 
 ## Import boundary
 
-- Game Layout Editor 的 loose-file 上传必须在解析前整批校验 ASCII filename 并统一小写；中文、空格、非法字符或小写化 collision 使整批原子失败。完整 mapped Editor ZIP 在 map/hash/size 验证后迁移 logical filename key：NFKC、ASCII 合法字符小写、ASCII 非法字符转连字符、非 ASCII 转稳定 Unicode code-point token，collision 按稳定顺序加扩展名前 suffix；只结构化改写已知 manifest path 引用，不修改业务 identity 或 atlas page logical name。
+- Game Layout Editor 的 loose-file 上传必须在解析前整批校验 ASCII filename 并统一小写；中文、空格、非法字符或小写化 collision 使整批原子失败。完整 mapped Editor ZIP 在 map/hash/size 验证后迁移 Layout-owned logical filename key：NFKC、ASCII 合法字符小写、ASCII 非法字符转连字符、非 ASCII 转稳定 Unicode code-point token，collision 按稳定顺序加扩展名前 suffix；只结构化改写已知 manifest path 引用，不修改业务 identity 或 atlas page logical name。SymbolsEditor 已验证合法的 owner-owned filename key 在 Game Layout Editor 导入、替换、导出和重导时保持 exact case；与全局其它 owner 形成大小写 alias 时显式失败。
 - legacy path 只允许在导入边界迁移，不进入新 draft 或重新导出。
 - 导入时移除 Finder `__MACOSX/**`、`._*`、`.DS_Store` 和恰好一层包裹真实 root manifest 的外目录。
 - 清理后仍严格验证真实 package path、map、hash、缺失文件和 orphan payload；元数据和包裹目录不得进入 workspace。
@@ -22,6 +22,7 @@
 
 ## Content addressing
 
+- logical filename key 与 physical `assets/<sha256>.<ext>` path 是两个独立合同：前者是 owner manifest 的大小写敏感资源身份，后者只按 bytes 内容寻址。consumer editor 不得从 physical path 反推、规范化或改写另一个 editor 已验证合法的 logical key。
 - 上传统一使用 browserartifactio 的 kebab-case logical id、bounded source index、Web Crypto 完整 SHA-256 和 flat allocator。
 - owner payload 路径固定为 `assets/<64-char-sha256>.<canonical-ext>`。
 - manifest、Spine atlas 和 VNI refs 必须结构化同步改写。
