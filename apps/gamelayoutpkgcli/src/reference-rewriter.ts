@@ -9,8 +9,8 @@ import {
   type PopupResourceSpec,
 } from "@slotclientengine/rendercore/popup";
 import {
-  parseSceneLayoutManifest,
-  type SceneLayoutManifestV1,
+  parseSceneLayoutManifestDocument,
+  type SceneLayoutManifest,
 } from "@slotclientengine/rendercore/scene-layout";
 import {
   parseSymbolPackageManifest,
@@ -29,10 +29,10 @@ import type {
 } from "./types.js";
 
 export function rewriteLayoutPackageReferences(options: {
-  readonly manifest: SceneLayoutManifestV1;
+  readonly manifest: SceneLayoutManifest;
   readonly optimization: ImageOptimizationResult;
 }): {
-  readonly manifest: SceneLayoutManifestV1;
+  readonly manifest: SceneLayoutManifest;
   readonly assets: ReadonlyMap<string, OptimizedLogicalAsset>;
 } {
   const sourceFiles = new Map(
@@ -90,10 +90,10 @@ export function rewriteLayoutPackageReferences(options: {
 export function rewriteLayoutManifest(
   value: unknown,
   mapping: ReadonlyMap<string, string>,
-): SceneLayoutManifestV1 {
+): SceneLayoutManifest {
   const manifest = structuredClone(
-    parseSceneLayoutManifest(value),
-  ) as SceneLayoutManifestV1;
+    parseSceneLayoutManifestDocument(value),
+  ) as SceneLayoutManifest;
   const nodes = manifest.nodes.map((node) => {
     if (node.resource.kind === "image")
       return {
@@ -189,7 +189,7 @@ export function rewriteLayoutManifest(
         }),
       )
     : undefined;
-  return parseSceneLayoutManifest({
+  return parseSceneLayoutManifestDocument({
     ...manifest,
     nodes,
     ...(manifest.symbolPackage
@@ -396,7 +396,7 @@ export function encodeStableJson(value: unknown): Uint8Array {
 }
 
 function collectSymbolManifestKeys(
-  manifest: SceneLayoutManifestV1,
+  manifest: SceneLayoutManifest,
   files: ReadonlyMap<string, Uint8Array>,
 ): Set<string> {
   const roots = [

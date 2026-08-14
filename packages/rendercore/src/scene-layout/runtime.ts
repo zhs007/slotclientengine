@@ -26,6 +26,7 @@ import type {
   AttachRelativeOptions,
   ResolvedSceneLayoutReelGrid,
   SceneLayoutNode,
+  SceneLayoutManifest,
   SceneLayoutNodePlacement,
   SceneLayoutResource,
   SceneLayoutRuntime,
@@ -257,6 +258,9 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       resolveSceneLayoutViewport({
         manifest: this.#manifest,
         viewportSize,
+        ...(this.#snapshot
+          ? { previousVariantId: this.#snapshot.variantId }
+          : {}),
       }),
     );
   }
@@ -296,7 +300,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   }
 
   applyGeometryManifest(
-    manifestValue: SceneLayoutResource["manifest"],
+    manifestValue: SceneLayoutManifest,
   ): SceneLayoutSnapshot | null {
     this.assertReady();
     const manifest = parseSceneLayoutManifest(manifestValue);
@@ -307,6 +311,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
         : resolveSceneLayoutViewport({
             manifest,
             viewportSize: this.#snapshot.viewportSize,
+            previousVariantId: this.#snapshot.variantId,
           })
       : null;
     this.#manifest = manifest;

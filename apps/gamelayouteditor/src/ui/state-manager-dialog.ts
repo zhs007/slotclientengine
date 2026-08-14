@@ -8,6 +8,7 @@ export interface StateManagerDialogOptions {
   readonly project: EditorProject;
   readonly selectedModeId: string;
   readonly newModeId: string;
+  readonly newModeType?: "" | EditorProject["mode"];
   readonly renameModeId: string;
   readonly feedback: string;
 }
@@ -41,20 +42,23 @@ export function stateManagerDialogMarkup(
   const rows = options.project.gameModes.modes
     .map((mode) => {
       const initial = mode.id === options.project.gameModes.initialMode;
-      const complete = activeVariantIds(options.project).every((variant) => {
+      const complete = activeVariantIds(mode).every((variant) => {
         const nodeId = mode.backgroundNodes[variant];
         return Boolean(
-          nodeId && options.project.nodes.some((node) => node.id === nodeId),
+          nodeId &&
+          options.project.nodes.some((node) => node.id === nodeId) &&
+          (!mode.reelEnabled || mode.reelPlacements[variant]),
         );
       });
-      return `<button type="button" role="option" data-select-game-mode="${escapeHtml(mode.id)}" aria-selected="${mode.id === selectedModeId}"><span>${escapeHtml(mode.id)}</span><small>${initial ? '<span class="mode-badge">initial</span>' : ""}<span class="mode-readiness ${complete ? "ready" : "incomplete"}">${complete ? "ready" : "incomplete"}</span></small></button>`;
+      return `<button type="button" role="option" data-select-game-mode="${escapeHtml(mode.id)}" aria-selected="${mode.id === selectedModeId}"><span>${escapeHtml(mode.id)}</span><small><span class="mode-badge">${mode.mode}</span><span class="mode-badge">${mode.reelEnabled ? "reel" : "no reel"}</span>${initial ? '<span class="mode-badge">initial</span>' : ""}<span class="mode-readiness ${complete ? "ready" : "incomplete"}">${complete ? "ready" : "incomplete"}</span></small></button>`;
     })
     .join("");
 
   return `<section class="state-manager"><h2>管理主状态</h2>
     <div class="state-manager-list" role="listbox" aria-label="项目主状态">${rows}</div>
-    <div class="state-manager-create"><label>新状态 id<input data-new-game-mode value="${escapeHtml(options.newModeId)}" /></label><button type="button" data-add-game-mode>新建</button></div>
+    <div class="state-manager-create"><label>新状态 id<input data-new-game-mode value="${escapeHtml(options.newModeId)}" /></label><label>适配类型<select data-new-game-mode-type><option value="">请选择</option><option value="maximized-focus" ${options.newModeType === "maximized-focus" ? "selected" : ""}>单背景</option><option value="orientation-focus" ${options.newModeType === "orientation-focus" ? "selected" : ""}>横竖双背景</option></select></label><button type="button" data-add-game-mode ${!options.newModeId || !options.newModeType ? "disabled" : ""}>新建</button></div>
     <p class="state-manager-selected">选中状态：<strong>${escapeHtml(selected.id)}</strong></p>
+    <label><input type="checkbox" data-mode-reel-enabled ${selected.reelEnabled ? "checked" : ""}/> 启用主转轮区域</label>
     <label>重命名为<input data-rename-game-mode-input value="${escapeHtml(options.renameModeId)}" /></label>
     <div class="button-row"><button type="button" data-rename-game-mode>重命名</button><button type="button" data-set-initial-mode ${selectedModeId === options.project.gameModes.initialMode ? "disabled" : ""}>设为 initial</button><button type="button" class="danger" data-delete-game-mode ${deleteReason ? "disabled" : ""}>删除</button></div>
     <output class="state-manager-feedback" data-mode-dialog-feedback aria-live="polite">${escapeHtml([options.feedback, deleteReason].filter(Boolean).join(" · "))}</output>

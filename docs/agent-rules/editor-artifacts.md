@@ -82,6 +82,9 @@
 
 ## Layout Editor dependency
 
+- Gamelayout Editor只编辑和导出Scene Layout latest v2；打开合法可编辑v1时先调用rendercore共享upgrader，再执行Editor node-id migration并原子复验。旧mode id、initial、edge和dependency保持，不自动插入Splash。
+- 新项目显式创建Splash initial与BaseGame；每个内置或后续新增mode都必须由用户从空下拉框选择单背景或横竖双背景类型，不继承当前mode或首项。Splash primary click只引用显式Splash→BaseGame transition。
+- mode的主转轮开关属于v2 draft：新Splash关闭、BaseGame和普通新增mode开启；关闭时保留Editor内可恢复的placement草稿但latest export不写placement，已有Symbols binding必须先显式解除。
 - Gamelayout Editor新建/复制/重命名/导出的scene node id只允许lowercase alphanumeric+kebab并禁止`layout|reel|transition|popup`保留名。旧Layout ZIP先按rendercore v1兼容parser读取，再以确定性rename map原子规范化点号/下划线/保留名和collision，结构化改写adaptation background、mode background与nodeStates key，复验后提交并向用户显示完整old→new；不得覆盖或合并node。production parser继续兼容未重导旧包。
 - gamelayouteditor 把 symbols ZIP 和 popup ZIP 当可多项并存的自包含 dependency library；standalone 校验后以 manifest id 生成稳定扁平 root/leaf key 并结构化改写 nested reference。同 id 再上传走替换并保留 binding/placement/order，提交后只 GC 无其它 owner 的旧 key；不同 id 不得互相覆盖 bytes。每个 active variant 只配置明确 binding 和相对 viewport center 的 popup root `x/y/scale`；root order 可编辑且必须高于全部 scene node/main reel。
 - Popup Spine namespace 只改物理 filename key 和 manifest path value，不得改 atlas page logical name 或 texture map key。后续 filename-key 规范化必须把 Popup `resources` object key、resource root value 和 layer/spine reference 作为一个结构化 identity 原子改写，保持 object key exact 等于 compound root。Popup 导入提交前必须用完整 SHA-256 比较其 namespace 前的 atlas/texture 与 Layout 自有 Spine 同名资产；同名不同 bytes 时列出双方 owner、filename 和 hash，用户可原子取消整次导入或明确继续隔离导入。不得自动覆盖、改名，或推断 skeleton JSON 与新版 atlas/texture 的兼容性。

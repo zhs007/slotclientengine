@@ -31,8 +31,10 @@ import {
 } from "@slotclientengine/rendercore/symbol";
 import {
   activeVariantIds,
+  activateEditorGameMode,
   cloneEditorProject,
   createNewEditorProject,
+  createSplashFirstEditorProject,
   editorProjectToManifest,
   editorProjectToPreviewManifest,
   manifestToEditorProject,
@@ -100,6 +102,7 @@ import {
   setGameModeVideoTransitionFadeOut,
   setGameModeVideoTransitionResource,
   setInitialGameMode,
+  setGameModeReelEnabled,
   setPopupOrder,
   setPopupPlacement,
   setSpinePopupRegistered,
@@ -188,6 +191,7 @@ export class GameLayoutEditorApp {
   #selectedSymbolId: string | null = null;
   #selectedPopupId: string | null = null;
   #modeDialogNewId = "";
+  #modeDialogNewType: "" | EditorProject["mode"] = "";
   #modeDialogRenameId = "";
   #modeDialogFeedback = "";
 
@@ -201,6 +205,22 @@ export class GameLayoutEditorApp {
     const diagnostics = this.requireElement("[data-preview-diagnostics]");
     this.#preview = new LayoutPreview(previewHost, diagnostics, {
       onPopupInputError: (error) => this.#store.setExternalError(error),
+    });
+    previewHost.addEventListener("click", () => {
+      if (this.#preview?.getActiveAwardCelebrationSnapshot()) return;
+      const pending = this.#preview?.requestPrimaryGameModeAction();
+      if (!pending) return;
+      void pending
+        .then(() => {
+          const mode = this.#preview?.getGameModeSnapshot()?.stableMode;
+          if (!mode) return;
+          this.#selectedPreviewMode = mode;
+          if (this.#followEditMode) {
+            this.#selectedGameMode = mode;
+            this.runTransaction((draft) => activateEditorGameMode(draft, mode));
+          }
+        })
+        .catch((error) => this.#store.setExternalError(error));
     });
     await this.#preview.init();
     this.bindStaticActions();
@@ -243,12 +263,18 @@ export class GameLayoutEditorApp {
     const newDialog = this.requireElement(
       "[data-new-project-dialog]",
     ) as HTMLDialogElement;
-    const newProjectMode = this.requireSelect("[data-new-project-mode]");
+    const newProjectSplashMode = this.requireSelect(
+      "[data-new-project-splash-mode]",
+    );
+    const newProjectBaseGameMode = this.requireSelect(
+      "[data-new-project-basegame-mode]",
+    );
     const confirmNewProject = this.requireElement(
       "[data-confirm-new-project]",
     ) as HTMLButtonElement;
     const resetNewProjectDialog = (): void => {
-      newProjectMode.value = "";
+      newProjectSplashMode.value = "";
+      newProjectBaseGameMode.value = "";
       confirmNewProject.disabled = true;
     };
     this.requireElement("[data-new-project]").addEventListener("click", () => {
@@ -256,9 +282,13 @@ export class GameLayoutEditorApp {
       if (typeof newDialog.showModal === "function") newDialog.showModal();
       else newDialog.setAttribute("open", "");
     });
-    newProjectMode.addEventListener("change", () => {
-      confirmNewProject.disabled = newProjectMode.value === "";
-    });
+    const updateNewProjectReady = () => {
+      confirmNewProject.disabled =
+        newProjectSplashMode.value === "" ||
+        newProjectBaseGameMode.value === "";
+    };
+    newProjectSplashMode.addEventListener("change", updateNewProjectReady);
+    newProjectBaseGameMode.addEventListener("change", updateNewProjectReady);
     this.requireElement("[data-cancel-new-project]").addEventListener(
       "click",
       () =>
@@ -269,9 +299,14 @@ export class GameLayoutEditorApp {
     this.requireElement("[data-confirm-new-project]").addEventListener(
       "click",
       () => {
-        const mode = newProjectMode.value as EditorProject["mode"] | "";
-        if (!mode) return;
-        this.createProject(mode);
+        const splashMode = newProjectSplashMode.value as
+          | EditorProject["mode"]
+          | "";
+        const baseGameMode = newProjectBaseGameMode.value as
+          | EditorProject["mode"]
+          | "";
+        if (!splashMode || !baseGameMode) return;
+        this.createProject(splashMode, baseGameMode);
         if (typeof newDialog.close === "function") newDialog.close();
         else newDialog.removeAttribute("open");
       },
@@ -286,6 +321,7 @@ export class GameLayoutEditorApp {
         this.#selectedGameMode,
       );
       this.#modeDialogNewId = "";
+      this.#modeDialogNewType = "";
       this.#modeDialogRenameId = this.#selectedGameMode;
       this.#modeDialogFeedback = "";
       this.renderModeDialog(project);
@@ -352,6 +388,9 @@ export class GameLayoutEditorApp {
         this.#selectedGameMode = (
           event.currentTarget as HTMLSelectElement
         ).value;
+        this.runTransaction((draft) =>
+          activateEditorGameMode(draft, this.#selectedGameMode),
+        );
         if (this.#followEditMode) {
           this.#selectedPreviewMode = this.#selectedGameMode;
         }
@@ -666,7 +705,10 @@ export class GameLayoutEditorApp {
     this.bindPickerActions();
   }
 
-  private createProject(mode: EditorProject["mode"]): void {
+  private createProject(
+    splashMode: EditorProject["mode"],
+    baseGameMode: EditorProject["mode"],
+  ): void {
     this.closePicker(false);
     this.resetSymbolsForProjectReplace();
     this.resetTransientDraftsForProjectReplace();
@@ -674,11 +716,13 @@ export class GameLayoutEditorApp {
     this.#session.selection = null;
     this.#session.expandedResourceIds.clear();
     this.#session.expandedInspectorSections.clear();
-    this.#selectedGameMode = "BaseGame";
-    this.#selectedPreviewMode = "BaseGame";
+    this.#selectedGameMode = "Splash";
+    this.#selectedPreviewMode = "Splash";
     this.#selectedSymbolId = null;
     this.#selectedPopupId = null;
-    this.#store.replace(createNewEditorProject(mode));
+    this.#store.replace(
+      createSplashFirstEditorProject(splashMode, baseGameMode),
+    );
     this.showFeedback("已新建项目。先上传资源，再显式设置背景或添加图层。");
   }
 
@@ -1326,6 +1370,7 @@ export class GameLayoutEditorApp {
       project,
       selectedModeId: this.#selectedGameMode,
       newModeId: this.#modeDialogNewId,
+      newModeType: this.#modeDialogNewType,
       renameModeId: this.#modeDialogRenameId,
       feedback: this.#modeDialogFeedback,
     });
@@ -1340,6 +1385,16 @@ export class GameLayoutEditorApp {
       .querySelector<HTMLInputElement>("[data-new-game-mode]")!
       .addEventListener("input", (event) => {
         this.#modeDialogNewId = (event.currentTarget as HTMLInputElement).value;
+        dialog.querySelector<HTMLButtonElement>(
+          "[data-add-game-mode]",
+        )!.disabled = !this.#modeDialogNewId || !this.#modeDialogNewType;
+      });
+    dialog
+      .querySelector<HTMLSelectElement>("[data-new-game-mode-type]")!
+      .addEventListener("change", (event) => {
+        this.#modeDialogNewType = (event.currentTarget as HTMLSelectElement)
+          .value as "" | EditorProject["mode"];
+        this.renderModeDialog(this.#store.getSnapshot().project);
       });
     dialog
       .querySelector<HTMLInputElement>("[data-rename-game-mode-input]")!
@@ -1349,10 +1404,27 @@ export class GameLayoutEditorApp {
         ).value;
       });
     dialog
+      .querySelector<HTMLInputElement>("[data-mode-reel-enabled]")!
+      .addEventListener("change", (event) => {
+        const enabled = (event.currentTarget as HTMLInputElement).checked;
+        if (
+          !this.runTransaction((draft) =>
+            setGameModeReelEnabled(draft, this.#selectedGameMode, enabled),
+          )
+        ) {
+          this.#modeDialogFeedback =
+            this.#store.getSnapshot().externalError ?? "修改主转轮开关失败。";
+          this.renderModeDialog(this.#store.getSnapshot().project);
+        }
+      });
+    dialog
       .querySelectorAll<HTMLButtonElement>("[data-select-game-mode]")
       .forEach((button) =>
         button.addEventListener("click", () => {
           this.#selectedGameMode = button.dataset.selectGameMode!;
+          this.runTransaction((draft) =>
+            activateEditorGameMode(draft, this.#selectedGameMode),
+          );
           this.#modeDialogRenameId = this.#selectedGameMode;
           this.#modeDialogFeedback = `已选择状态 ${this.#selectedGameMode}`;
           if (this.#followEditMode)
@@ -1367,7 +1439,14 @@ export class GameLayoutEditorApp {
       .querySelector<HTMLButtonElement>("[data-add-game-mode]")!
       .addEventListener("click", () => {
         const id = this.#modeDialogNewId;
-        if (!this.runTransaction((draft) => addGameMode(draft, id))) {
+        const type = this.#modeDialogNewType;
+        if (
+          !type ||
+          !this.runTransaction((draft) => {
+            addGameMode(draft, id, type);
+            activateEditorGameMode(draft, id);
+          })
+        ) {
           this.#modeDialogFeedback =
             this.#store.getSnapshot().externalError ?? "新建状态失败。";
           this.renderModeDialog(this.#store.getSnapshot().project);
@@ -1375,6 +1454,7 @@ export class GameLayoutEditorApp {
         }
         this.#selectedGameMode = id;
         this.#modeDialogNewId = "";
+        this.#modeDialogNewType = "";
         this.#modeDialogRenameId = id;
         this.#modeDialogFeedback = `已创建状态 ${id}`;
         if (this.#followEditMode) this.#selectedPreviewMode = id;
@@ -3727,7 +3807,7 @@ export class GameLayoutEditorApp {
 }
 
 function shellMarkup(): string {
-  return `<main class="editor-shell"><header class="topbar"><div class="brand"><strong>Game Layout Editor</strong><span>scene-layout v1 · state workspaces</span></div><nav aria-label="项目操作"><button type="button" data-new-project>新建项目</button><button type="button" data-import>导入 ZIP</button><button type="button" class="primary" data-export>导出 ZIP</button></nav><output data-project-status></output></header><section class="workspace"><aside class="editor-pane"><section class="state-bar"><label>主状态<select data-game-mode></select></label><button type="button" data-manage-modes>管理状态</button><output data-main-state-status></output></section><div class="workspace-tabs" role="tablist" aria-label="编辑工作区">${(
+  return `<main class="editor-shell"><header class="topbar"><div class="brand"><strong>Game Layout Editor</strong><span>scene-layout v2 · mode workspaces</span></div><nav aria-label="项目操作"><button type="button" data-new-project>新建项目</button><button type="button" data-import>导入 ZIP</button><button type="button" class="primary" data-export>导出 ZIP</button></nav><output data-project-status></output></header><section class="workspace"><aside class="editor-pane"><section class="state-bar"><label>主状态<select data-game-mode></select></label><button type="button" data-manage-modes>管理状态</button><output data-main-state-status></output></section><div class="workspace-tabs" role="tablist" aria-label="编辑工作区">${(
     [
       ["assets", "资源"],
       ["layout", "布局"],
@@ -3743,7 +3823,7 @@ function shellMarkup(): string {
     )
     .join(
       "",
-    )}</div><section id="workspace-panel" role="tabpanel" data-workspace-panel aria-labelledby="tab-assets"></section><div data-symbols-workspace hidden>${symbolsWorkspaceMarkup()}</div><div data-bigwin-workspace hidden>${bigWinWorkspaceMarkup()}</div></aside><section class="preview-column"><div class="preview-toolbar"><label>分辨率<select data-preview-resolution></select></label><label>宽<input type="number" min="1" value="1920" data-preview-width /></label><label>高<input type="number" min="1" value="1080" data-preview-height /></label><label>预览状态<select data-preview-game-mode></select></label><button type="button" data-request-preview-mode>切换到该状态</button><output data-preview-transition-status aria-live="polite"></output><label><input type="checkbox" checked data-follow-edit-mode />跟随编辑状态</label><div class="zoom-controls"><button type="button" data-zoom-out aria-label="缩小">−</button><button type="button" data-zoom-reset><span data-zoom-label>100%</span></button><button type="button" data-zoom-in aria-label="放大">＋</button></div><label><input type="checkbox" checked data-guide-focus /> focus</label><label><input type="checkbox" checked data-guide-reel /> reel/cells</label></div><div class="preview-stage"><div class="preview-page" data-preview-host></div><button class="resize-handle" type="button" aria-label="拖动调整页面尺寸" data-resize-handle>◢</button></div><output class="diagnostics" data-preview-diagnostics></output></section></section><output class="feedback" aria-live="polite" data-feedback></output><aside class="error-panel" aria-live="assertive" data-errors></aside><dialog data-new-project-dialog aria-label="新建项目"><form method="dialog"><h2>新建项目</h2><label>适配模式<select data-new-project-mode><option value="">请选择适配模式</option><option value="maximized-focus">单背景适配（maximized-focus）</option><option value="orientation-focus">横竖双背景适配（orientation-focus）</option></select></label><div class="button-row"><button type="button" data-cancel-new-project>取消</button><button type="button" class="primary" data-confirm-new-project disabled>创建</button></div></form></dialog><dialog data-mode-dialog aria-label="管理主状态"></dialog><dialog class="resource-picker" data-resource-picker aria-label="Resource Picker"></dialog></main>`;
+    )}</div><section id="workspace-panel" role="tabpanel" data-workspace-panel aria-labelledby="tab-assets"></section><div data-symbols-workspace hidden>${symbolsWorkspaceMarkup()}</div><div data-bigwin-workspace hidden>${bigWinWorkspaceMarkup()}</div></aside><section class="preview-column"><div class="preview-toolbar"><label>分辨率<select data-preview-resolution></select></label><label>宽<input type="number" min="1" value="1920" data-preview-width /></label><label>高<input type="number" min="1" value="1080" data-preview-height /></label><label>预览状态<select data-preview-game-mode></select></label><button type="button" data-request-preview-mode>切换到该状态</button><output data-preview-transition-status aria-live="polite"></output><label><input type="checkbox" checked data-follow-edit-mode />跟随编辑状态</label><div class="zoom-controls"><button type="button" data-zoom-out aria-label="缩小">−</button><button type="button" data-zoom-reset><span data-zoom-label>100%</span></button><button type="button" data-zoom-in aria-label="放大">＋</button></div><label><input type="checkbox" checked data-guide-focus /> focus</label><label><input type="checkbox" checked data-guide-reel /> reel/cells</label></div><div class="preview-stage"><div class="preview-page" data-preview-host></div><button class="resize-handle" type="button" aria-label="拖动调整页面尺寸" data-resize-handle>◢</button></div><output class="diagnostics" data-preview-diagnostics></output></section></section><output class="feedback" aria-live="polite" data-feedback></output><aside class="error-panel" aria-live="assertive" data-errors></aside><dialog data-new-project-dialog aria-label="新建项目"><form method="dialog"><h2>新建项目</h2><label>Splash 适配类型<select data-new-project-splash-mode><option value="">请选择</option><option value="maximized-focus">单背景适配（maximized-focus）</option><option value="orientation-focus">横竖双背景适配（orientation-focus）</option></select></label><label>BaseGame 适配类型<select data-new-project-basegame-mode><option value="">请选择</option><option value="maximized-focus">单背景适配（maximized-focus）</option><option value="orientation-focus">横竖双背景适配（orientation-focus）</option></select></label><div class="button-row"><button type="button" data-cancel-new-project>取消</button><button type="button" class="primary" data-confirm-new-project disabled>创建</button></div></form></dialog><dialog data-mode-dialog aria-label="管理主状态"></dialog><dialog class="resource-picker" data-resource-picker aria-label="Resource Picker"></dialog></main>`;
 }
 
 function parseSelectionKey(key: string): LayoutSelection {

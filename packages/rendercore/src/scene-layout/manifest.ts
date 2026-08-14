@@ -5,6 +5,7 @@ import type {
   OrientationFocusSceneLayoutVariant,
   SceneLayoutAdaptation,
   SceneLayoutManifestV1,
+  SceneLayoutManifest,
   SceneLayoutNode,
   SceneLayoutNodePlacement,
   SceneLayoutNodeResourceSpec,
@@ -18,6 +19,10 @@ import type {
   SceneLayoutScaledPlacement,
   SceneLayoutVariantId,
 } from "./types.js";
+import {
+  materializeInitialSceneLayoutManifest,
+  parseSceneLayoutManifestV2,
+} from "./manifest-v2.js";
 
 const PATH_SEGMENT = /^[A-Za-z0-9._-]+$/;
 const IDENTIFIER = /^[a-z0-9][a-z0-9._-]*$/;
@@ -25,6 +30,26 @@ const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 export const DEFAULT_SCENE_LAYOUT_POPUP_ORDER = 2000;
 
 export function parseSceneLayoutManifest(
+  value: unknown,
+): SceneLayoutManifestV1 {
+  const record = readRecord(value, "scene layout manifest");
+  if (record.version === 2)
+    return materializeInitialSceneLayoutManifest(
+      parseSceneLayoutManifestV2(value),
+    );
+  return parseSceneLayoutManifestV1(value);
+}
+
+export function parseSceneLayoutManifestDocument(
+  value: unknown,
+): SceneLayoutManifest {
+  const record = readRecord(value, "scene layout manifest");
+  return record.version === 2
+    ? parseSceneLayoutManifestV2(value)
+    : parseSceneLayoutManifestV1(value);
+}
+
+export function parseSceneLayoutManifestV1(
   value: unknown,
 ): SceneLayoutManifestV1 {
   const record = readRecord(value, "scene layout manifest");
@@ -151,9 +176,9 @@ export function parseSceneLayoutManifest(
 }
 
 export function collectSceneLayoutAssetPaths(
-  manifest: SceneLayoutManifestV1,
+  manifest: SceneLayoutManifest,
 ): readonly string[] {
-  const parsed = parseSceneLayoutManifest(manifest);
+  const parsed = parseSceneLayoutManifestDocument(manifest);
   const paths = new Set<string>();
   for (const node of parsed.nodes) {
     const resource = node.resource;
@@ -772,8 +797,8 @@ function parseCoordinateOrigin(value: unknown): "top-left" | "center" {
 }
 
 export function assertSceneLayoutGeometryCompatible(
-  currentValue: SceneLayoutManifestV1,
-  nextValue: SceneLayoutManifestV1,
+  currentValue: SceneLayoutManifest,
+  nextValue: SceneLayoutManifest,
 ): void {
   const current = parseSceneLayoutManifest(currentValue);
   const next = parseSceneLayoutManifest(nextValue);
@@ -789,25 +814,6 @@ function sceneLayoutStructure(manifest: SceneLayoutManifestV1): unknown {
     version: manifest.version,
     kind: manifest.kind,
     id: manifest.id,
-    adaptation:
-      manifest.adaptation.mode === "maximized-focus"
-        ? {
-            mode: manifest.adaptation.mode,
-            backgroundNode: manifest.adaptation.backgroundNode,
-          }
-        : {
-            mode: manifest.adaptation.mode,
-            variants: {
-              landscape: {
-                backgroundNode:
-                  manifest.adaptation.variants.landscape.backgroundNode,
-              },
-              portrait: {
-                backgroundNode:
-                  manifest.adaptation.variants.portrait.backgroundNode,
-              },
-            },
-          },
     nodes: manifest.nodes.map(({ placements: _placements, ...node }) => node),
     reels: Object.fromEntries(
       Object.entries(manifest.reels).map(
@@ -821,6 +827,9 @@ function sceneLayoutStructure(manifest: SceneLayoutManifestV1): unknown {
     gameModes: manifest.gameModes
       ? {
           ...manifest.gameModes,
+          modes: manifest.gameModes.modes.map(
+            ({ backgroundNodes: _backgroundNodes, ...mode }) => mode,
+          ),
           transitions: manifest.gameModes.transitions?.map((transition) =>
             "placements" in transition.overlay
               ? {

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createNewEditorProject } from "../src/model/editor-project.js";
+import {
+  activateEditorGameMode,
+  createNewEditorProject,
+  createSplashFirstEditorProject,
+} from "../src/model/editor-project.js";
 import {
   addGameMode,
   bindGameModeBackground,
@@ -16,6 +20,7 @@ import {
   createGameModeTransition,
   deleteGameModeTransition,
   setInitialGameMode,
+  setGameModeReelEnabled,
   setGameModeTransitionKind,
   setGameModeTransitionPreludePopup,
   setGameModeVideoTransitionFadeOut,
@@ -25,6 +30,50 @@ import {
 } from "../src/model/game-mode-commands.js";
 
 describe("game mode and popup dependency commands", () => {
+  it("keeps the reel switch explicit and rejects disabling a Symbols-bound mode", () => {
+    const project = createNewEditorProject("maximized-focus");
+    setGameModeReelEnabled(project, "BaseGame", false);
+    expect(project.gameModes.modes[0]?.reelEnabled).toBe(false);
+    project.gameModes.modes[0]!.symbols = {
+      packageId: "symbols",
+      reelSet: "main",
+      renderMode: "standard",
+    };
+    expect(() => setGameModeReelEnabled(project, "BaseGame", false)).toThrow(
+      /Symbols/,
+    );
+  });
+
+  it("creates Splash as the explicit initial click-through mode with independent adaptation", () => {
+    const project = createSplashFirstEditorProject(
+      "orientation-focus",
+      "maximized-focus",
+    );
+    expect(project.gameModes.initialMode).toBe("Splash");
+    expect(project.gameModes.activeModeId).toBe("Splash");
+    expect(project.gameModes.modes).toMatchObject([
+      {
+        id: "Splash",
+        mode: "orientation-focus",
+        reelEnabled: false,
+        primaryActionTargetMode: "BaseGame",
+      },
+      {
+        id: "BaseGame",
+        mode: "maximized-focus",
+        reelEnabled: true,
+        primaryActionTargetMode: null,
+      },
+    ]);
+    expect(project.gameModes.transitions).toEqual([
+      expect.objectContaining({
+        kind: "none",
+        fromModeId: "Splash",
+        toModeId: "BaseGame",
+      }),
+    ]);
+  });
+
   it("keeps different package ids in independent filename-key namespaces", () => {
     const project = createNewEditorProject("maximized-focus");
     importPopupDependency(project, popup("base-win", 1));
@@ -38,7 +87,7 @@ describe("game mode and popup dependency commands", () => {
 
   it("adds, renames, selects and deletes generic modes atomically", () => {
     const project = createNewEditorProject("maximized-focus");
-    addGameMode(project, "FreeGame");
+    addGameMode(project, "FreeGame", project.mode);
     project.nodes.push({
       id: "free-only",
       order: 0,
@@ -53,8 +102,12 @@ describe("game mode and popup dependency commands", () => {
     expect(project.gameModes.modes[1]!.backgroundNodes).toEqual({
       default: "",
     });
-    expect(() => addGameMode(project, "FreeGame")).toThrow(/已存在/);
-    expect(() => addGameMode(project, "bad id")).toThrow(/必须匹配/);
+    expect(() => addGameMode(project, "FreeGame", project.mode)).toThrow(
+      /已存在/,
+    );
+    expect(() => addGameMode(project, "bad id", project.mode)).toThrow(
+      /必须匹配/,
+    );
     renameGameMode(project, "FreeGame", "FG");
     expect(project.nodes[0].gameMode).toBe("FG");
     renameGameMode(project, "FG", "FG");
@@ -72,7 +125,7 @@ describe("game mode and popup dependency commands", () => {
     expect(() => deleteGameMode(project, "BaseGame")).toThrow(/至少/);
     expect(() => renameGameMode(project, "Missing", "Other")).toThrow(/未知/);
     expect(() => setInitialGameMode(project, "Missing")).toThrow(/未知/);
-    addGameMode(project, "Other");
+    addGameMode(project, "Other", project.mode);
     expect(() => deleteGameMode(project, "Missing")).toThrow(/未知/);
   });
 
@@ -163,7 +216,7 @@ describe("game mode and popup dependency commands", () => {
 
   it("binds a Spine popup to one directed Spine transition", () => {
     const project = createNewEditorProject("maximized-focus");
-    addGameMode(project, "FreeGame");
+    addGameMode(project, "FreeGame", project.mode);
     createGameModeTransition(project, "BaseGame", "FreeGame");
     const transition = project.gameModes.transitions[0]!;
     importPopupDependency(project, {
@@ -183,7 +236,7 @@ describe("game mode and popup dependency commands", () => {
 
   it("keeps stable modes state-free and rewrites directed transition references", () => {
     const project = createNewEditorProject("maximized-focus");
-    addGameMode(project, "FreeGame");
+    addGameMode(project, "FreeGame", project.mode);
     createGameModeTransition(project, "BaseGame", "FreeGame");
     expect(project.gameModes.transitions).toHaveLength(1);
     expect(() => deleteGameMode(project, "FreeGame")).toThrow(/转场引用/);
@@ -208,7 +261,7 @@ describe("game mode and popup dependency commands", () => {
       durationSeconds: 3.625,
       hasAudio: true,
     });
-    addGameMode(project, "FreeGame");
+    addGameMode(project, "FreeGame", project.mode);
     createGameModeTransition(project, "BaseGame", "FreeGame");
     project.gameModes.transitions[0]!.preludePopupId = "shared-prelude";
     const none = setGameModeTransitionKind(
@@ -369,7 +422,7 @@ describe("game mode and popup dependency commands", () => {
     project.variants.landscape.backgroundNode = "base-landscape";
     project.variants.portrait.backgroundNode = "base-portrait";
 
-    addGameMode(project, "FreeGame");
+    addGameMode(project, "FreeGame", project.mode);
 
     expect(project.gameModes.modes[1]!.backgroundNodes).toEqual({
       landscape: "",
@@ -404,7 +457,7 @@ describe("game mode and popup dependency commands", () => {
       },
     );
     bindGameModeBackground(project, "BaseGame", "default", "base-background");
-    addGameMode(project, "FreeGame");
+    addGameMode(project, "FreeGame", project.mode);
     bindGameModeBackground(project, "FreeGame", "default", "free-background");
 
     deleteGameMode(project, "FreeGame");
@@ -447,7 +500,7 @@ describe("game mode and popup dependency commands", () => {
         placements: { portrait: { x: 0, y: 0, scale: 1 } },
       },
     );
-    addGameMode(project, "FreeGame");
+    addGameMode(project, "FreeGame", project.mode);
     bindGameModeBackground(project, "BaseGame", "landscape", "base-landscape");
     bindGameModeBackground(project, "BaseGame", "portrait", "base-portrait");
     bindGameModeBackground(project, "FreeGame", "landscape", "free-landscape");
@@ -466,6 +519,7 @@ describe("game mode and popup dependency commands", () => {
       "base-landscape",
       "base-portrait",
     ]);
+    activateEditorGameMode(project, "FreeGame");
     expect(project.variants.landscape.backgroundNode).toBe("free-landscape");
     expect(project.variants.portrait.backgroundNode).toBe("free-portrait");
   });

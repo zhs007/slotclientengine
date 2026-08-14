@@ -16,6 +16,8 @@ export interface ResponsiveArtVariant {
 
 export interface ResponsiveArtViewportOptions {
   readonly viewportSize: RenderViewportSize;
+  /** Retained only when the raw viewport is exactly square. */
+  readonly squareVariant?: ResponsiveArtVariantId;
   readonly variants: {
     readonly landscape?: ResponsiveArtVariant;
     readonly portrait?: ResponsiveArtVariant;
@@ -33,7 +35,9 @@ export function calculateResponsiveArtViewport(
   const variantId: ResponsiveArtVariantId =
     options.viewportSize.height > options.viewportSize.width
       ? "portrait"
-      : "landscape";
+      : options.viewportSize.width > options.viewportSize.height
+        ? "landscape"
+        : (options.squareVariant ?? "landscape");
   const variant = options.variants[variantId];
 
   if (!options.variants.landscape) {

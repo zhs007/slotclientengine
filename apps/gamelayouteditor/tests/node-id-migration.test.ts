@@ -83,9 +83,6 @@ describe("Scene Layout node id policy", () => {
       "main-top",
       "reel-node",
     ]);
-    expect(result.manifest.adaptation).toMatchObject({
-      backgroundNode: "main-top-2",
-    });
     expect(result.manifest.gameModes?.modes[0]?.backgroundNodes).toEqual({
       default: "main-top-2",
     });

@@ -1,7 +1,12 @@
 import {
+  materializeSceneLayoutManifestForMode,
   parseSceneLayoutManifest,
+  parseSceneLayoutManifestDocument,
+  upgradeSceneLayoutManifestToLatest,
   type SceneLayoutCoordinateOrigin,
-  type SceneLayoutManifestV1,
+  type SceneLayoutManifest,
+  type SceneLayoutManifestV2,
+  type SceneLayoutGameModeV2,
   type SceneLayoutNode,
   type SceneLayoutRuntimeResourceSpec,
   type SceneLayoutVariantId,
@@ -134,10 +139,15 @@ export interface EditorPopupDependency {
 
 export interface EditorGameModeDraft {
   id: string;
+  mode: EditorMode;
+  reelEnabled: boolean;
+  variants: EditorProject["variants"];
+  reelPlacements: EditorProject["reel"]["placements"];
   backgroundNodes: Partial<Record<SceneLayoutVariantId, string>>;
   nodeStates: Record<string, string>;
   symbols: EditorModeSymbolBinding | null;
   awardCelebrationPopupId: string | null;
+  primaryActionTargetMode: string | null;
 }
 
 interface EditorGameModeTransitionBaseDraft {
@@ -199,6 +209,7 @@ export interface EditorProject {
   registeredSpinePopupIds: Set<string>;
   runtimeResourceBindings: Map<string, string>;
   gameModes: {
+    activeModeId: string;
     initialMode: string;
     modes: EditorGameModeDraft[];
     transitions: EditorGameModeTransitionDraft[];
@@ -206,7 +217,7 @@ export interface EditorProject {
 }
 
 export function activeVariantIds(
-  project: Pick<EditorProject, "mode">,
+  project: Pick<EditorProject, "mode"> | Pick<EditorGameModeDraft, "mode">,
 ): readonly SceneLayoutVariantId[] {
   return project.mode === "maximized-focus"
     ? ["default"]
@@ -214,14 +225,15 @@ export function activeVariantIds(
 }
 
 export function createNewEditorProject(mode: EditorMode): EditorProject {
-  return {
+  const geometry = createEmptyModeGeometry(mode);
+  const project: EditorProject = {
     id: "new-layout",
     mode,
     coordinateOrigin: "top-left",
     variants: {
-      default: createEmptyVariant(),
-      landscape: createEmptyVariant(),
-      portrait: createEmptyVariant(),
+      default: geometry.variants.default,
+      landscape: geometry.variants.landscape,
+      portrait: geometry.variants.portrait,
     },
     nodes: [],
     reel: {
@@ -232,13 +244,7 @@ export function createNewEditorProject(mode: EditorMode): EditorProject {
       cellHeight: DEFAULT_REEL_CELL_SIZE,
       gapX: 0,
       gapY: 0,
-      placements:
-        mode === "maximized-focus"
-          ? { default: { x: 0, y: 0 } }
-          : {
-              landscape: { x: 0, y: 0 },
-              portrait: { x: 0, y: 0 },
-            },
+      placements: geometry.reelPlacements,
     },
     resources: new Map(),
     assets: new Map(),
@@ -247,21 +253,78 @@ export function createNewEditorProject(mode: EditorMode): EditorProject {
     registeredSpinePopupIds: new Set(),
     runtimeResourceBindings: new Map(),
     gameModes: {
+      activeModeId: "BaseGame",
       initialMode: "BaseGame",
       transitions: [],
       modes: [
         {
           id: "BaseGame",
-          backgroundNodes:
-            mode === "maximized-focus"
-              ? { default: "" }
-              : { landscape: "", portrait: "" },
+          mode,
+          reelEnabled: true,
+          variants: geometry.variants,
+          reelPlacements: geometry.reelPlacements,
+          backgroundNodes: geometry.backgroundNodes,
           nodeStates: {},
           symbols: null,
           awardCelebrationPopupId: null,
+          primaryActionTargetMode: null,
         },
       ],
     },
+  };
+  return project;
+}
+
+export function createSplashFirstEditorProject(
+  splashMode: EditorMode,
+  baseGameMode: EditorMode,
+): EditorProject {
+  const project = createNewEditorProject(baseGameMode);
+  const splash = createEditorGameModeDraft("Splash", splashMode, false);
+  splash.primaryActionTargetMode = "BaseGame";
+  project.gameModes.modes.unshift(splash);
+  project.gameModes.transitions.push({
+    kind: "none",
+    fromModeId: "Splash",
+    toModeId: "BaseGame",
+    preludePopupId: null,
+  });
+  project.gameModes.initialMode = "Splash";
+  activateEditorGameMode(project, "Splash");
+  return project;
+}
+
+export function activateEditorGameMode(
+  project: EditorProject,
+  modeId: string,
+): void {
+  const mode = project.gameModes.modes.find(
+    (candidate) => candidate.id === modeId,
+  );
+  if (!mode) throw new Error(`未知游戏模式：${modeId}`);
+  project.gameModes.activeModeId = mode.id;
+  project.mode = mode.mode;
+  project.variants = mode.variants;
+  project.reel.placements = mode.reelPlacements;
+}
+
+export function createEditorGameModeDraft(
+  id: string,
+  mode: EditorMode,
+  reelEnabled = true,
+): EditorGameModeDraft {
+  const geometry = createEmptyModeGeometry(mode);
+  return {
+    id,
+    mode,
+    reelEnabled,
+    variants: geometry.variants,
+    reelPlacements: geometry.reelPlacements,
+    backgroundNodes: geometry.backgroundNodes,
+    nodeStates: {},
+    symbols: null,
+    awardCelebrationPopupId: null,
+    primaryActionTargetMode: null,
   };
 }
 
@@ -271,6 +334,17 @@ export function initializeVariantFromBackground(
   artSize: { readonly width: number; readonly height: number },
 ): void {
   if (!(artSize.width > 0) || !(artSize.height > 0)) return;
+  const activeMode = project.gameModes.modes.find(
+    (mode) => mode.id === project.gameModes.activeModeId,
+  );
+  if (activeMode && !activeMode.reelEnabled) {
+    const variant = project.variants[variantId];
+    variant.artSize = { ...artSize };
+    variant.focusOffsets = { left: 0, top: 0, right: 0, bottom: 0 };
+    variant.focusRect = { x: 0, y: 0, ...artSize };
+    variant.frameFocusRect = { ...artSize };
+    return;
+  }
   const reel = project.reel;
   const availableWidth = Math.max(1, artSize.width - DEFAULT_FOCUS_PADDING * 2);
   const availableHeight = Math.max(
@@ -330,8 +404,40 @@ export function updateVariantFocusFromReel(
   variantId: SceneLayoutVariantId,
 ): void {
   const variant = project.variants[variantId];
-  const placement = project.reel.placements[variantId];
   const offsets = variant.focusOffsets;
+  const activeMode = project.gameModes.modes.find(
+    (mode) => mode.id === project.gameModes.activeModeId,
+  );
+  if (activeMode && !activeMode.reelEnabled) {
+    if (
+      !(variant.artSize.width > 0) ||
+      !(variant.artSize.height > 0) ||
+      !Object.values(offsets).every(Number.isFinite)
+    )
+      return;
+    const left = Math.max(0, offsets.left);
+    const top = Math.max(0, offsets.top);
+    const right = Math.min(
+      variant.artSize.width,
+      variant.artSize.width + offsets.right,
+    );
+    const bottom = Math.min(
+      variant.artSize.height,
+      variant.artSize.height + offsets.bottom,
+    );
+    variant.focusRect = {
+      x: left,
+      y: top,
+      width: Math.max(0, right - left),
+      height: Math.max(0, bottom - top),
+    };
+    variant.frameFocusRect = {
+      width: variant.focusRect.width,
+      height: variant.focusRect.height,
+    };
+    return;
+  }
+  const placement = project.reel.placements[variantId];
   if (
     !placement ||
     !(variant.artSize.width > 0) ||
@@ -429,6 +535,20 @@ export function updateVariantFocusOffsetsFromRect(
   variantId: SceneLayoutVariantId,
 ): void {
   const variant = project.variants[variantId];
+  const activeMode = project.gameModes.modes.find(
+    (mode) => mode.id === project.gameModes.activeModeId,
+  );
+  if (activeMode && !activeMode.reelEnabled) {
+    variant.focusOffsets = {
+      left: variant.focusRect.x,
+      top: variant.focusRect.y,
+      right:
+        variant.focusRect.x + variant.focusRect.width - variant.artSize.width,
+      bottom:
+        variant.focusRect.y + variant.focusRect.height - variant.artSize.height,
+    };
+    return;
+  }
   const placement = project.reel.placements[variantId];
   if (!placement) return;
   const reelSize = calculateReelSize(project);
@@ -562,39 +682,23 @@ export function editorProjectToPreviewManifest(
   project: EditorProject,
   preferredVariant: SceneLayoutVariantId,
   includeSymbolPackage = false,
-): SceneLayoutManifestV1 | null {
+): SceneLayoutManifest | null {
   try {
     const manifest = editorProjectToManifest(project);
-    if (!manifest.symbolPackages || includeSymbolPackage) return manifest;
-    return parseSceneLayoutManifest({
-      version: manifest.version,
-      kind: manifest.kind,
-      id: manifest.id,
-      adaptation: manifest.adaptation,
-      nodes: manifest.nodes,
-      reels: manifest.reels,
-      ...(manifest.popups ? { popups: manifest.popups } : {}),
-      ...(manifest.gameModes
-        ? {
-            gameModes: {
-              initialMode: manifest.gameModes.initialMode,
-              modes: manifest.gameModes.modes.map((mode) => ({
-                id: mode.id,
-                ...(mode.backgroundNodes
-                  ? { backgroundNodes: mode.backgroundNodes }
-                  : {}),
-                nodeStates: mode.nodeStates,
-                ...(mode.awardCelebrationPopup
-                  ? {
-                      awardCelebrationPopup: mode.awardCelebrationPopup,
-                    }
-                  : {}),
-              })),
-              transitions: manifest.gameModes.transitions ?? [],
-            },
-          }
-        : {}),
-    });
+    const preview = includeSymbolPackage
+      ? manifest
+      : {
+          ...manifest,
+          symbolPackage: undefined,
+          symbolPackages: undefined,
+          gameModes: {
+            ...manifest.gameModes,
+            modes: manifest.gameModes.modes.map(
+              ({ symbolPackage: _symbolPackage, ...mode }) => mode,
+            ),
+          },
+        };
+    return parseSceneLayoutManifestDocument(preview);
   } catch {
     const available = previewVariantOrder(project.mode, preferredVariant).find(
       (variantId) => project.variants[variantId].backgroundNode,
@@ -661,40 +765,18 @@ export function editorProjectToPreviewManifest(
 
 export function editorProjectToManifest(
   project: EditorProject,
-): SceneLayoutManifestV1 {
+): SceneLayoutManifestV2 {
   for (const node of project.nodes) assertCanonicalEditorNodeId(node.id);
   const initialMode = project.gameModes.modes.find(
     (mode) => mode.id === project.gameModes.initialMode,
   );
   if (!initialMode)
     throw new Error(`initial 主状态不存在：${project.gameModes.initialMode}`);
-  const adaptation =
-    project.mode === "maximized-focus"
-      ? {
-          mode: "maximized-focus" as const,
-          artSize: project.variants.default.artSize,
-          focusRect: project.variants.default.focusRect,
-          backgroundNode: initialMode.backgroundNodes.default ?? "",
-        }
-      : {
-          mode: "orientation-focus" as const,
-          variants: {
-            landscape: toOrientationVariant(
-              project.variants.landscape,
-              initialMode.backgroundNodes.landscape ?? "",
-            ),
-            portrait: toOrientationVariant(
-              project.variants.portrait,
-              initialMode.backgroundNodes.portrait ?? "",
-            ),
-          },
-        };
-  return parseSceneLayoutManifest({
-    version: 1,
+  return parseSceneLayoutManifestDocument({
+    version: 2,
     kind: "scene-layout",
     id: project.id,
     coordinateOrigin: project.coordinateOrigin,
-    adaptation,
     nodes: project.nodes.map((node) => ({
       id: node.id,
       order: node.order,
@@ -712,7 +794,6 @@ export function editorProjectToManifest(
           height: project.reel.cellHeight,
         },
         gap: { x: project.reel.gapX, y: project.reel.gapY },
-        placements: project.reel.placements,
       },
     },
     ...(() => {
@@ -802,8 +883,32 @@ export function editorProjectToManifest(
       initialMode: project.gameModes.initialMode,
       modes: project.gameModes.modes.map((mode) => ({
         id: mode.id,
+        adaptation:
+          mode.mode === "maximized-focus"
+            ? {
+                mode: "maximized-focus" as const,
+                artSize: mode.variants.default.artSize,
+                focusRect: mode.variants.default.focusRect,
+              }
+            : {
+                mode: "orientation-focus" as const,
+                variants: {
+                  landscape: toOrientationVariantV2(mode.variants.landscape),
+                  portrait: toOrientationVariantV2(mode.variants.portrait),
+                },
+              },
+        reelEnabled: mode.reelEnabled,
+        reelPlacements: mode.reelEnabled ? { main: mode.reelPlacements } : {},
         backgroundNodes: mode.backgroundNodes,
         nodeStates: {},
+        ...(mode.primaryActionTargetMode
+          ? {
+              primaryAction: {
+                kind: "request-game-mode" as const,
+                targetMode: mode.primaryActionTargetMode,
+              },
+            }
+          : {}),
         ...(mode.symbols ? { symbolPackage: mode.symbols.packageId } : {}),
         ...(mode.awardCelebrationPopupId
           ? { awardCelebrationPopup: mode.awardCelebrationPopupId }
@@ -894,7 +999,7 @@ export function editorProjectToManifest(
           };
         }),
     },
-  });
+  }) as SceneLayoutManifestV2;
 }
 
 export function validateEditorTransitionEvent(
@@ -918,7 +1023,7 @@ export function validateEditorTransitionEvent(
 }
 
 export function manifestToEditorProject(
-  manifest: SceneLayoutManifestV1,
+  manifest: SceneLayoutManifest,
   assets: ReadonlyMap<string, Uint8Array>,
   videoMetadata: ReadonlyMap<
     string,
@@ -930,7 +1035,11 @@ export function manifestToEditorProject(
     }
   > = new Map(),
 ): EditorProject {
-  const parsed = parseSceneLayoutManifest(manifest);
+  const latest = upgradeSceneLayoutManifestToLatest(manifest);
+  const parsed = materializeSceneLayoutManifestForMode(
+    latest,
+    latest.gameModes.initialMode,
+  );
   if (
     parsed.nodes.some(
       (node) =>
@@ -943,7 +1052,10 @@ export function manifestToEditorProject(
     throw new Error(
       "旧 state-machine 主状态转场无法自动迁移：缺少可确定的 switch event；请拆分稳定背景并在“转场”Tab 重新配置。",
     );
-  const project = createNewEditorProject(parsed.adaptation.mode);
+  const initialLatestMode = latest.gameModes.modes.find(
+    (mode) => mode.id === latest.gameModes.initialMode,
+  )!;
+  const project = createNewEditorProject(initialLatestMode.adaptation.mode);
   project.id = parsed.id;
   project.coordinateOrigin = parsed.coordinateOrigin ?? "top-left";
   const resourceIdsBySignature = new Map<string, string>();
@@ -1014,7 +1126,7 @@ export function manifestToEditorProject(
       throw new Error(`导入程序资源 ${key} 重复绑定了资源 ${resourceId}。`);
     project.runtimeResourceBindings.set(key, resourceId);
   }
-  project.nodes = parsed.nodes.map((node) => {
+  project.nodes = latest.nodes.map((node) => {
     const resourceDraft = manifestResourceToEditorResource(
       node.resource,
       assets,
@@ -1058,7 +1170,7 @@ export function manifestToEditorProject(
     };
   });
   const transitionResourceIds = new Map<string, string>();
-  for (const transition of parsed.gameModes?.transitions ?? []) {
+  for (const transition of latest.gameModes.transitions ?? []) {
     const overlay = transition.overlay;
     if ("kind" in overlay) continue;
     let draft: EditorLayoutResourceDraft;
@@ -1128,14 +1240,14 @@ export function manifestToEditorProject(
   project.assets = new Map(
     [...assets].map(([path, bytes]) => [path, bytes.slice()]),
   );
-  const importedSymbolBindings = parsed.symbolPackage
+  const importedSymbolBindings = latest.symbolPackage
     ? [
         [
-          parsed.symbolPackage.manifest.split("/").at(-2)!,
-          parsed.symbolPackage,
+          latest.symbolPackage.manifest.split("/").at(-2)!,
+          latest.symbolPackage,
         ] as const,
       ]
-    : Object.entries(parsed.symbolPackages ?? {});
+    : Object.entries(latest.symbolPackages ?? {});
   for (const [bindingId, binding] of importedSymbolBindings) {
     const mapped = !binding.manifest.includes("/");
     const prefix = mapped
@@ -1169,7 +1281,7 @@ export function manifestToEditorProject(
       ),
     });
   }
-  for (const [id, binding] of Object.entries(parsed.popups ?? {})) {
+  for (const [id, binding] of Object.entries(latest.popups ?? {})) {
     const mapped = !binding.manifest.includes("/");
     const prefix = mapped
       ? ""
@@ -1207,93 +1319,88 @@ export function manifestToEditorProject(
       order: binding.order,
       placements: structuredClone(binding.placements),
     });
-    const usedAsPrelude = (parsed.gameModes?.transitions ?? []).some(
+    const usedAsPrelude = (latest.gameModes.transitions ?? []).some(
       (transition) =>
         "preludePopup" in transition && transition.preludePopup === id,
     );
     if (nested.type === "spine" && !usedAsPrelude)
       project.registeredSpinePopupIds.add(id);
   }
-  project.gameModes = parsed.gameModes
-    ? {
-        initialMode: parsed.gameModes.initialMode,
-        transitions: (parsed.gameModes.transitions ?? []).map((transition) => {
-          const overlay = transition.overlay;
-          const common = {
-            fromModeId: transition.from,
-            toModeId: transition.to,
-            preludePopupId: transition.preludePopup ?? null,
-          };
-          return "kind" in overlay
-            ? { ...common, kind: "none" as const }
-            : "fadeOutSeconds" in overlay
-              ? {
-                  ...common,
-                  kind: "video" as const,
-                  resourceId: transitionResourceIds.get(
-                    `${transition.from}\u0000${transition.to}`,
-                  )!,
-                  fit: "contain" as const,
-                  fadeOutSeconds: overlay.fadeOutSeconds,
-                }
-              : {
-                  ...common,
-                  kind: "spine" as const,
-                  resourceId: transitionResourceIds.get(
-                    `${transition.from}\u0000${transition.to}`,
-                  )!,
-                  animation: overlay.animation,
-                  switchEvent: overlay.switchEvent,
-                  placements: structuredClone(overlay.placements),
-                };
-        }),
-        modes: parsed.gameModes.modes.map((mode) => ({
-          id: mode.id,
-          backgroundNodes: structuredClone(
-            mode.backgroundNodes ?? adaptationBackgroundNodes(parsed),
-          ),
-          nodeStates: { ...mode.nodeStates },
-          symbols: mode.symbolPackage
-            ? {
-                packageId: mode.symbolPackage,
-                reelSet: parsed.symbolPackages![mode.symbolPackage]!.reelSet,
-                renderMode:
-                  parsed.symbolPackages![mode.symbolPackage]!.renderMode,
-              }
-            : parsed.symbolPackage
-              ? {
-                  packageId: parsed.symbolPackage.manifest.split("/").at(-2)!,
-                  reelSet: parsed.symbolPackage.reelSet,
-                  renderMode: parsed.symbolPackage.renderMode,
-                }
-              : null,
-          awardCelebrationPopupId: mode.awardCelebrationPopup ?? null,
-        })),
-      }
-    : {
-        initialMode: "BaseGame",
-        transitions: [],
-        modes: [
-          {
-            id: "BaseGame",
-            backgroundNodes: adaptationBackgroundNodes(parsed),
-            nodeStates: {},
-            symbols: parsed.symbolPackage
-              ? {
-                  packageId: parsed.symbolPackage.manifest.split("/").at(-2)!,
-                  reelSet: parsed.symbolPackage.reelSet,
-                  renderMode: parsed.symbolPackage.renderMode,
-                }
-              : null,
-            awardCelebrationPopupId: null,
-          },
-        ],
+  project.gameModes = {
+    activeModeId: latest.gameModes.initialMode,
+    initialMode: latest.gameModes.initialMode,
+    transitions: (latest.gameModes.transitions ?? []).map((transition) => {
+      const overlay = transition.overlay;
+      const common = {
+        fromModeId: transition.from,
+        toModeId: transition.to,
+        preludePopupId: transition.preludePopup ?? null,
       };
+      return "kind" in overlay
+        ? { ...common, kind: "none" as const }
+        : "fadeOutSeconds" in overlay
+          ? {
+              ...common,
+              kind: "video" as const,
+              resourceId: transitionResourceIds.get(
+                `${transition.from}\u0000${transition.to}`,
+              )!,
+              fit: "contain" as const,
+              fadeOutSeconds: overlay.fadeOutSeconds,
+            }
+          : {
+              ...common,
+              kind: "spine" as const,
+              resourceId: transitionResourceIds.get(
+                `${transition.from}\u0000${transition.to}`,
+              )!,
+              animation: overlay.animation,
+              switchEvent: overlay.switchEvent,
+              placements: structuredClone(overlay.placements),
+            };
+    }),
+    modes: latest.gameModes.modes.map((mode) => {
+      const geometry = editorGeometryFromLatestMode(mode);
+      return {
+        id: mode.id,
+        mode: mode.adaptation.mode,
+        reelEnabled: mode.reelEnabled,
+        variants: geometry.variants,
+        reelPlacements: structuredClone(
+          mode.reelPlacements.main ?? geometry.reelPlacements,
+        ),
+        backgroundNodes: structuredClone(mode.backgroundNodes),
+        nodeStates: { ...mode.nodeStates },
+        symbols: mode.symbolPackage
+          ? {
+              packageId: mode.symbolPackage,
+              reelSet: latest.symbolPackages![mode.symbolPackage]!.reelSet,
+              renderMode:
+                latest.symbolPackages![mode.symbolPackage]!.renderMode,
+            }
+          : latest.symbolPackage
+            ? {
+                packageId: latest.symbolPackage.manifest.split("/").at(-2)!,
+                reelSet: latest.symbolPackage.reelSet,
+                renderMode: latest.symbolPackage.renderMode,
+              }
+            : null,
+        awardCelebrationPopupId: mode.awardCelebrationPopup ?? null,
+        primaryActionTargetMode: mode.primaryAction?.targetMode ?? null,
+      };
+    }),
+  };
+  for (const mode of project.gameModes.modes) {
+    activateEditorGameMode(project, mode.id);
+    for (const variant of activeVariantIds(project))
+      updateVariantFocusOffsetsFromRect(project, variant);
+  }
+  activateEditorGameMode(project, latest.gameModes.initialMode);
   return project;
 }
 
 export function cloneEditorProject(project: EditorProject): EditorProject {
-  return {
+  const clone = {
     ...structuredClone({
       ...project,
       resources: undefined,
@@ -1327,6 +1434,8 @@ export function cloneEditorProject(project: EditorProject): EditorProject {
     registeredSpinePopupIds: new Set(project.registeredSpinePopupIds),
     runtimeResourceBindings: new Map(project.runtimeResourceBindings),
   } as EditorProject;
+  activateEditorGameMode(clone, clone.gameModes.activeModeId);
+  return clone;
 }
 
 export function calculateReelSize(project: EditorProject): {
@@ -1374,6 +1483,30 @@ function createEmptyVariant(): EditorVariantDraft {
   };
 }
 
+function createEmptyModeGeometry(mode: EditorMode): {
+  variants: EditorProject["variants"];
+  reelPlacements: EditorProject["reel"]["placements"];
+  backgroundNodes: Partial<Record<SceneLayoutVariantId, string>>;
+} {
+  const variants = {
+    default: createEmptyVariant(),
+    landscape: createEmptyVariant(),
+    portrait: createEmptyVariant(),
+  };
+  const reelPlacements =
+    mode === "maximized-focus"
+      ? { default: { x: 0, y: 0 } }
+      : {
+          landscape: { x: 0, y: 0 },
+          portrait: { x: 0, y: 0 },
+        };
+  const backgroundNodes =
+    mode === "maximized-focus"
+      ? { default: "" }
+      : { landscape: "", portrait: "" };
+  return { variants, reelPlacements, backgroundNodes };
+}
+
 function previewVariantOrder(
   mode: EditorMode,
   preferred: SceneLayoutVariantId,
@@ -1382,17 +1515,6 @@ function previewVariantOrder(
   return preferred === "portrait"
     ? ["portrait", "landscape"]
     : ["landscape", "portrait"];
-}
-
-function adaptationBackgroundNodes(
-  manifest: SceneLayoutManifestV1,
-): Partial<Record<SceneLayoutVariantId, string>> {
-  return manifest.adaptation.mode === "maximized-focus"
-    ? { default: manifest.adaptation.backgroundNode }
-    : {
-        landscape: manifest.adaptation.variants.landscape.backgroundNode,
-        portrait: manifest.adaptation.variants.portrait.backgroundNode,
-      };
 }
 
 function toOrientationVariant(
@@ -1407,6 +1529,51 @@ function toOrientationVariant(
     frameFocusRect: variant.frameFocusRect,
     ...(hasMargin ? { minFocusMargin: margin } : {}),
     backgroundNode,
+  };
+}
+
+function toOrientationVariantV2(variant: EditorVariantDraft) {
+  const { backgroundNode: _backgroundNode, ...result } = toOrientationVariant(
+    variant,
+    "",
+  );
+  return result;
+}
+
+function editorGeometryFromLatestMode(mode: SceneLayoutGameModeV2): {
+  variants: EditorProject["variants"];
+  reelPlacements: EditorProject["reel"]["placements"];
+} {
+  const variants = {
+    default: createEmptyVariant(),
+    landscape: createEmptyVariant(),
+    portrait: createEmptyVariant(),
+  };
+  if (mode.adaptation.mode === "maximized-focus") {
+    variants.default = {
+      ...createEmptyVariant(),
+      artSize: { ...mode.adaptation.artSize },
+      focusRect: { ...mode.adaptation.focusRect },
+      frameFocusRect: {
+        width: mode.adaptation.focusRect.width,
+        height: mode.adaptation.focusRect.height,
+      },
+      backgroundNode: mode.backgroundNodes.default ?? "",
+    };
+  } else {
+    variants.landscape = fromOrientationVariant({
+      ...mode.adaptation.variants.landscape,
+      backgroundNode: mode.backgroundNodes.landscape ?? "",
+    });
+    variants.portrait = fromOrientationVariant({
+      ...mode.adaptation.variants.portrait,
+      backgroundNode: mode.backgroundNodes.portrait ?? "",
+    });
+  }
+  return {
+    variants,
+    reelPlacements: createEmptyModeGeometry(mode.adaptation.mode)
+      .reelPlacements,
   };
 }
 

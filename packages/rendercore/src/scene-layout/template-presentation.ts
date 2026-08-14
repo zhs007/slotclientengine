@@ -6,7 +6,7 @@ import {
 } from "../symbol/index.js";
 import { SceneLayoutError } from "./errors.js";
 import type {
-  SceneLayoutManifestV1,
+  SceneLayoutManifest,
   SceneLayoutPackageResource,
   SceneLayoutSymbolPackageBinding,
 } from "./types.js";
@@ -169,7 +169,7 @@ export function validateSlotTemplateCompatibility(options: {
   readonly presentation: SlotTemplatePresentationProfileV1;
   readonly packageResource:
     | SceneLayoutPackageResource
-    | { readonly manifest: SceneLayoutManifestV1 };
+    | { readonly manifest: SceneLayoutManifest };
 }): SlotTemplateCompatibilitySnapshot {
   const manifest = options.packageResource.manifest;
   const reel = manifest.reels.main;
@@ -288,7 +288,7 @@ export function validateInspectedSlotTemplateCompatibility(options: {
   readonly roundFlow: SlotRoundFlowProfileV1;
   readonly presentation: SlotTemplatePresentationProfileV1;
   readonly packageInput: {
-    readonly manifest: SceneLayoutManifestV1;
+    readonly manifest: SceneLayoutManifest;
     readonly files: ReadonlyMap<string, Uint8Array>;
   };
 }): SlotTemplateCompatibilitySnapshot {
@@ -393,7 +393,7 @@ function parseJsonBytes(bytes: Uint8Array, path: string): unknown {
 }
 
 function resolveInitialBinding(
-  manifest: SceneLayoutManifestV1,
+  manifest: SceneLayoutManifest,
 ): SceneLayoutSymbolPackageBinding | null {
   if (manifest.symbolPackage) return manifest.symbolPackage;
   const initialModeId = manifest.gameModes?.initialMode;
@@ -406,7 +406,7 @@ function resolveInitialBinding(
 
 function resolveInitialSymbolResource(
   resource: SceneLayoutPackageResource,
-  manifest: SceneLayoutManifestV1,
+  manifest: SceneLayoutManifest,
   binding: SceneLayoutSymbolPackageBinding,
 ) {
   if (manifest.symbolPackage === binding) return resource.symbolPackage;

@@ -134,6 +134,7 @@
 ## Background、viewport 与 UI
 
 - rendercore 拥有通用 art-size、focus-rect、visible viewport、background manifest/resource resolver、Spine state machine 和完整 art clip 算法；app 只配置 art、focus、resource 和显式 state。
+- Scene Layout mode切换可改变adaptation类型与active variants；target geometry/background/reel/presentation必须在同一commit边界生效，失败保持source snapshot和稳定render façade。正方形viewport保持现有方向，首次正方形为landscape。
 - 宿主已经统一承担 viewport/focus transform 时，scene-layout presentation surface 必须使用完整 authored art space（原点 `0,0`）；不得在背景内部再次执行 maximized-focus 偏移。
 - `packages/uiframeworks`/`gameframeworks` 拥有 DOM frame、canvas 逻辑尺寸上限、黑边居中和 viewport resize policy；app 不以私有 CSS/DOM resize 绕过。
 - background、symbol 和 popup 复用官方 runtime、manual update、completion 和 destroy 底层；不得增加静态图、首帧或默认 animation fallback。

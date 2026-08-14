@@ -3,15 +3,60 @@ import {
   applySymbolPackageCellSize,
   cloneEditorProject,
   createNewEditorProject,
+  createSplashFirstEditorProject,
   editorProjectToPreviewManifest,
   editorProjectToManifest,
   manifestToEditorProject,
+  resetVariantGeometry,
   updateVariantFocusFromReel,
 } from "../src/model/editor-project.js";
 import { EditorStore } from "../src/model/editor-store.js";
 import { assetBytes, imageManifest } from "./fixtures.js";
 
 describe("EditorStore", () => {
+  it("uses art-relative focus geometry when the active mode has no reel", () => {
+    const project = createSplashFirstEditorProject(
+      "maximized-focus",
+      "maximized-focus",
+    );
+    resetVariantGeometry(project, "default", { width: 1200, height: 800 });
+    expect(project.gameModes.modes[0]?.reelEnabled).toBe(false);
+    expect(project.variants.default.focusRect).toEqual({
+      x: 0,
+      y: 0,
+      width: 1200,
+      height: 800,
+    });
+    project.variants.default.focusOffsets = {
+      left: 100,
+      top: 50,
+      right: -200,
+      bottom: -150,
+    };
+    updateVariantFocusFromReel(project, "default");
+    expect(project.variants.default.focusRect).toEqual({
+      x: 100,
+      y: 50,
+      width: 900,
+      height: 600,
+    });
+  });
+
+  it("upgrades an editable v1 draft to v2 without inventing Splash", () => {
+    const project = manifestToEditorProject(imageManifest, assetBytes);
+    expect(project.gameModes.initialMode).toBe("BaseGame");
+    expect(project.gameModes.modes.map((mode) => mode.id)).toEqual([
+      "BaseGame",
+    ]);
+    const exported = editorProjectToManifest(project);
+    expect(exported.version).toBe(2);
+    expect(exported).not.toHaveProperty("adaptation");
+    expect(exported.gameModes.modes[0]).toMatchObject({
+      id: "BaseGame",
+      adaptation: { mode: "maximized-focus" },
+    });
+  });
+
   it("starts with a useful 5x3 reel instead of placeholder dimensions", () => {
     const project = createNewEditorProject("maximized-focus");
     expect(project.reel).toMatchObject({
@@ -270,9 +315,11 @@ describe("EditorStore", () => {
       top: 0,
       bottom: 0,
     });
-    expect(editorProjectToManifest(project).adaptation.mode).toBe(
-      "orientation-focus",
-    );
+    expect(
+      editorProjectToManifest(project).gameModes.modes.find(
+        (mode) => mode.id === project.gameModes.initialMode,
+      )?.adaptation.mode,
+    ).toBe("orientation-focus");
     const clone = cloneEditorProject(project);
     clone.assets.get("assets/bg.png")![0] = 99;
     expect(project.assets.get("assets/bg.png")![0]).toBe(137);
@@ -304,8 +351,11 @@ describe("EditorStore", () => {
     project.reel.cellHeight = 100;
     project.reel.placements.landscape = { x: 200, y: 150 };
     const preview = editorProjectToPreviewManifest(project, "landscape");
-    expect(preview?.adaptation.mode).toBe("maximized-focus");
-    expect(preview?.nodes[0].placements.default).toEqual({
+    expect(preview?.version).toBe(1);
+    if (!preview || preview.version !== 1)
+      throw new Error("incomplete preview must use a v1 effective fallback");
+    expect(preview.adaptation.mode).toBe("maximized-focus");
+    expect(preview.nodes[0].placements.default).toEqual({
       x: 0,
       y: 0,
       scale: 1,

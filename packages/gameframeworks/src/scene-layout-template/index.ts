@@ -13,10 +13,11 @@ import {
   createSceneLayoutFramePolicy,
   inspectSceneLayoutPackageZipBytes,
   loadSceneLayoutPackageFromZipBytes,
+  materializeInitialSceneLayoutManifest,
   parseSlotTemplatePresentationProfile,
   validateInspectedSlotTemplateCompatibility,
   validateSlotTemplateCompatibility,
-  type SceneLayoutManifestV1,
+  type SceneLayoutManifest,
   type SlotTemplateCompatibilitySnapshot,
   type SlotTemplatePresentationProfileV1,
 } from "@slotclientengine/rendercore/scene-layout";
@@ -310,17 +311,21 @@ function parseBetOption(value: unknown, path: string): SlotGameBetOption {
   };
 }
 
-function resolveInitialDesignSize(manifest: SceneLayoutManifestV1): {
+function resolveInitialDesignSize(manifest: SceneLayoutManifest): {
   readonly width: number;
   readonly height: number;
 } {
-  return manifest.adaptation.mode === "maximized-focus"
-    ? manifest.adaptation.artSize
-    : manifest.adaptation.variants.landscape.artSize;
+  const effective =
+    manifest.version === 2
+      ? materializeInitialSceneLayoutManifest(manifest)
+      : manifest;
+  return effective.adaptation.mode === "maximized-focus"
+    ? effective.adaptation.artSize
+    : effective.adaptation.variants.landscape.artSize;
 }
 
 function createCapabilityWarnings(
-  manifest: SceneLayoutManifestV1,
+  manifest: SceneLayoutManifest,
 ): readonly string[] {
   const warnings = [
     "运行只使用 ZIP 内公开本地轮带；server authoring repository 不进入运行会话。",

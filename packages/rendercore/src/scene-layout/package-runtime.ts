@@ -41,7 +41,9 @@ import { SceneLayoutError } from "./errors.js";
 import {
   assertSceneLayoutGeometryCompatible,
   parseSceneLayoutManifest,
+  parseSceneLayoutManifestDocument,
 } from "./manifest.js";
+import { materializeSceneLayoutManifestForMode } from "./manifest-v2.js";
 import { transitionResourceKey } from "./resource.js";
 import { createSceneLayoutRuntime } from "./runtime.js";
 import {
@@ -53,6 +55,7 @@ import type {
   AttachRelativeOptions,
   ResolvedSceneLayoutReelGrid,
   SceneLayoutGameMode,
+  SceneLayoutGameModeV2,
   SceneLayoutGameModeTransition,
   SceneLayoutGameModeRequestOptions,
   SceneLayoutGameModeSnapshot,
@@ -72,6 +75,8 @@ import type {
   SceneLayoutRenderLayerRef,
   SceneLayoutRenderObject,
   SceneLayoutSnapshot,
+  SceneLayoutManifest,
+  SceneLayoutManifestV1,
   SceneLayoutSymbolPackageBinding,
 } from "./types.js";
 import type { SlotReelPresentationProfileV1 } from "./template-presentation.js";
@@ -206,7 +211,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly container: Container;
   readonly #resource: SceneLayoutPackageResource;
   readonly #presentationOnly: boolean;
-  #manifest: SceneLayoutPackageResource["manifest"];
+  #document: SceneLayoutManifest;
+  #manifest: SceneLayoutManifestV1;
   readonly #layout;
   readonly #reelPresentation: SlotReelPresentationProfileV1 | null;
   readonly #areaSpinFunction:
@@ -336,7 +342,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   ) {
     this.#resource = resource;
     this.#presentationOnly = presentationOnly;
-    this.#manifest = resource.manifest;
+    this.#document = resource.manifest;
+    this.#manifest =
+      resource.layout.manifest ?? (resource.manifest as SceneLayoutManifestV1);
     this.#areaSpinFunction = areaSpinFunction;
     this.#symbolValueTextBindings = symbolValueTextBindings;
     this.#reelPresentation = reelPresentation ?? null;
@@ -418,7 +426,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       );
     this.#initializing = true;
     try {
-      const initialModeId = this.#manifest.gameModes?.initialMode ?? null;
+      const initialModeId = this.#document.gameModes?.initialMode ?? null;
       const initialMode = initialModeId
         ? this.requireMode(initialModeId)
         : null;
@@ -485,7 +493,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         ...popupEntries.map((entry) => entry.initPromise),
       ]);
       this.assertAlive();
-      this.commitModeVisibility(initialMode);
+      if (this.#document.version === 2) this.commitModeVisibility(initialMode);
       if (activeBinding && !this.#presentationOnly) {
         const initial = options.reels?.main;
         const symbolPackage = activeBinding.resource;
@@ -512,6 +520,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         this.#activeSymbolPackageId = activeBinding.id;
         this.#stableSymbolPackageId = activeBinding.id;
       }
+      this.commitModeVisibility(initialMode);
       for (const { id, popup } of popupEntries) {
         const binding = this.#manifest.popups?.[id];
         if (!binding)
@@ -643,11 +652,15 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       throw new SceneLayoutError(
         "Scene layout geometry cannot change during an active transition or prelude.",
       );
-    const manifest = parseSceneLayoutManifest(manifestValue);
+    const document = parseSceneLayoutManifestDocument(manifestValue);
+    const manifest = materializeSceneLayoutManifestForMode(
+      document,
+      this.#stableMode ?? undefined,
+    );
     assertSceneLayoutGeometryCompatible(this.#manifest, manifest);
     const prepared = this.#preparedTransition;
     const nextPreparedSpec = prepared
-      ? manifest.gameModes?.transitions?.find(
+      ? document.gameModes?.transitions?.find(
           (candidate) =>
             candidate.from === prepared.spec.from &&
             candidate.to === prepared.spec.to,
@@ -658,6 +671,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         "Prepared scene transition is missing from geometry update.",
       );
     this.#layout.applyGeometryManifest(manifest);
+    this.#document = document;
     this.#manifest = manifest;
     if (prepared && nextPreparedSpec) prepared.spec = nextPreparedSpec;
     return this.#viewportSize
@@ -1733,7 +1747,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         }
         prepared = { reel, catalog };
       }
-      this.commitModeVisibility(target);
+      this.commitModeGeometry(target.id);
+      if (this.#document.version === 2) this.commitModeVisibility(target);
       if (bindingChanged) {
         const previous = this.#reel;
         if (prepared) {
@@ -1755,6 +1770,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         previous?.parent?.removeChild(previous);
         previous?.destroy({ children: true });
       }
+      this.commitModeVisibility(target);
       this.#stableMode = target.id;
       this.#displayedMode = target.id;
       this.#stableSymbolPackageId = this.#activeSymbolPackageId;
@@ -1868,6 +1884,20 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     if ("kind" in transition.overlay)
       return this.startNoneTransition(modeId, options, signature);
     return this.startSpineTransition(modeId, options, signature);
+  }
+
+  requestPrimaryGameModeAction(
+    options: SceneLayoutGameModeRequestOptions = {},
+  ): Promise<void> {
+    try {
+      this.assertReady();
+      const mode = this.requireMode(this.#stableMode!);
+      const action = "primaryAction" in mode ? mode.primaryAction : undefined;
+      if (!action) return Promise.resolve();
+      return this.requestGameMode(action.targetMode, options);
+    } catch (error) {
+      return Promise.reject(asSceneLayoutError(error));
+    }
   }
 
   startPendingGameModeVideo(): Promise<void> {
@@ -2721,7 +2751,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   }
 
   private commitPreparedTarget(active: PreparedModeTransitionBase): void {
-    this.commitModeVisibility(active.target);
+    this.commitModeGeometry(active.target.id);
+    if (this.#document.version === 2) this.commitModeVisibility(active.target);
     if (active.bindingChanged) {
       const previous = this.#reel;
       if (active.prepared) {
@@ -2744,6 +2775,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         previous.destroy({ children: true });
       }
     }
+    this.commitModeVisibility(active.target);
     this.#displayedMode = active.target.id;
   }
 
@@ -2757,6 +2789,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#targetMode = null;
     this.#targetSymbolPackageId = null;
     this.#activeTransition = null;
+    this.refreshCommittedGeometryPresentation();
     active.resolve();
   }
 
@@ -2775,6 +2808,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#targetMode = null;
     this.#targetSymbolPackageId = null;
     this.#activeTransition = null;
+    if (active.switched) this.refreshCommittedGeometryPresentation();
     active.reject(error);
   }
 
@@ -2971,7 +3005,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   }
 
   private commitModeVisibility(mode: SceneLayoutGameMode | null): void {
-    const modes = this.#manifest.gameModes?.modes ?? [];
+    const modes = this.#document.gameModes?.modes ?? [];
     const backgroundCandidates = new Set(
       modes.flatMap((candidate) =>
         Object.values(candidate.backgroundNodes ?? {}),
@@ -2988,7 +3022,18 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           node.id,
           node.gameMode === undefined || node.gameMode === mode?.id,
         );
+    if (this.#reel)
+      this.#reel.visible =
+        this.#mainReelSceneCommitted && this.modeHasMainReel(mode?.id ?? null);
     this.#activeBackgroundNodes = Object.freeze([...activeBackgrounds].sort());
+  }
+
+  private modeHasMainReel(modeId: string | null): boolean {
+    if (!modeId || this.#document.version === 1) return true;
+    const mode = this.#document.gameModes.modes.find(
+      (candidate) => candidate.id === modeId,
+    );
+    return Boolean(mode?.reelEnabled);
   }
 
   private requireReel(id: "main"): ReelPresentation {
@@ -3039,7 +3084,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   }
 
   private requireGameModes() {
-    const gameModes = this.#manifest.gameModes;
+    const gameModes = this.#document.gameModes;
     if (!gameModes)
       throw new SceneLayoutError(
         "Scene layout manifest does not declare gameModes.",
@@ -3047,13 +3092,34 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     return gameModes;
   }
 
-  private requireMode(id: string): SceneLayoutGameMode {
+  private requireMode(id: string): SceneLayoutGameMode | SceneLayoutGameModeV2 {
     const mode = this.requireGameModes().modes.find(
       (candidate) => candidate.id === id,
     );
     if (!mode)
       throw new SceneLayoutError(`Unknown scene layout game mode "${id}".`);
     return mode;
+  }
+
+  private commitModeGeometry(modeId: string): void {
+    if (this.#document.version !== 2) return;
+    const effective = materializeSceneLayoutManifestForMode(
+      this.#document,
+      modeId,
+    );
+    this.#layout.applyGeometryManifest(effective);
+    this.#manifest = effective;
+    if (!this.#activeTransition) this.refreshCommittedGeometryPresentation();
+  }
+
+  private refreshCommittedGeometryPresentation(): void {
+    if (!this.#viewportSize) return;
+    if (
+      this.#artSpaceApplied &&
+      this.#manifest.adaptation.mode === "maximized-focus"
+    )
+      this.applyArtSpace();
+    else this.applyViewport(this.#viewportSize);
   }
 
   private playingPopupId(): string | null {

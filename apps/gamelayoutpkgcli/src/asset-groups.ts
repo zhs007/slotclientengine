@@ -8,7 +8,7 @@ import {
   parsePopupManifest,
 } from "@slotclientengine/rendercore/popup";
 import type {
-  SceneLayoutManifestV1,
+  SceneLayoutManifest,
   SceneLayoutNode,
 } from "@slotclientengine/rendercore/scene-layout";
 import {
@@ -31,7 +31,7 @@ type ProvisionalAssetGroup = AssetGroupRecord extends infer Group
   : never;
 
 export function createSceneLayoutAssetGroups(options: {
-  readonly manifest: SceneLayoutManifestV1;
+  readonly manifest: SceneLayoutManifest;
   readonly files: ReadonlyMap<string, Uint8Array>;
   readonly sourceZipBytes: number;
   readonly output: WrittenOptimizedPackage;
@@ -427,7 +427,7 @@ function nodeClosure(
 }
 
 function runtimeResourceClosure(
-  resource: NonNullable<SceneLayoutManifestV1["runtimeResources"]>[string],
+  resource: NonNullable<SceneLayoutManifest["runtimeResources"]>[string],
   files: ReadonlyMap<string, Uint8Array>,
 ): readonly string[] {
   const keys = new Set<string>();
@@ -454,7 +454,7 @@ function runtimeResourceClosure(
 }
 
 function symbolBindings(
-  manifest: SceneLayoutManifestV1,
+  manifest: SceneLayoutManifest,
   files: ReadonlyMap<string, Uint8Array>,
 ): readonly { readonly id: string; readonly manifest: string }[] {
   if (manifest.symbolPackage) {
@@ -471,7 +471,7 @@ function symbolBindings(
 
 function popupClosure(
   popupId: string,
-  manifest: SceneLayoutManifestV1,
+  manifest: SceneLayoutManifest,
   files: ReadonlyMap<string, Uint8Array>,
 ): readonly string[] {
   const binding = manifest.popups?.[popupId];

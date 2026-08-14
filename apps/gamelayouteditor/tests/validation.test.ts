@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { strToU8, zipSync } from "fflate";
 import {
+  activateEditorGameMode,
   cloneEditorProject,
   createNewEditorProject,
   editorProjectToManifest,
@@ -379,7 +380,7 @@ describe("filename-key layout resource commands", () => {
         },
       }),
     });
-    addGameMode(project, "FreeGame");
+    addGameMode(project, "FreeGame", project.mode);
     bindGameModeBackground(project, "FreeGame", "default", "background");
     createGameModeTransition(project, "BaseGame", "FreeGame");
     const transition = project.gameModes.transitions[0];
@@ -446,7 +447,7 @@ describe("filename-key layout resource commands", () => {
     });
     expect(project.assets.size).toBe(3);
 
-    addGameMode(project, "FreeGame");
+    addGameMode(project, "FreeGame", project.mode);
     bindGameModeBackground(project, "FreeGame", "default", "background");
     createGameModeTransition(project, "BaseGame", "FreeGame");
     const spineDraft = project.gameModes.transitions[0]!;
@@ -530,7 +531,7 @@ describe("filename-key layout resource commands", () => {
   it("exports an explicit no-effect transition without a resource", async () => {
     const project = createNewEditorProject("maximized-focus");
     await initializeProjectBackground(project);
-    addGameMode(project, "FreeGame");
+    addGameMode(project, "FreeGame", project.mode);
     bindGameModeBackground(project, "FreeGame", "default", "background");
     createGameModeTransition(project, "BaseGame", "FreeGame");
     setGameModeTransitionKind(
@@ -853,7 +854,7 @@ describe("filename-key layout resource commands", () => {
       nodeId: "background",
       defaultAnimation: "BG",
     });
-    addGameMode(project, "FreeGame");
+    addGameMode(project, "FreeGame", project.mode);
     const reused = assignBackgroundResource({
       project,
       modeId: "FreeGame",
@@ -876,6 +877,9 @@ describe("filename-key layout resource commands", () => {
       {},
       {},
     ]);
+    setVariantArtSizeDimension(project, "default", "width", 2000);
+    setVariantArtSizeDimension(project, "default", "height", 2000);
+    activateEditorGameMode(project, "FreeGame");
     setVariantArtSizeDimension(project, "default", "width", 2000);
     setVariantArtSizeDimension(project, "default", "height", 2000);
     const manifest = editorProjectToManifest(project);
@@ -901,7 +905,7 @@ describe("filename-key layout resource commands", () => {
             : { width: 1174, height: 2000 },
       });
     }
-    addGameMode(project, "FreeGame");
+    addGameMode(project, "FreeGame", project.mode);
     assignBackgroundResource({
       project,
       modeId: "FreeGame",
@@ -1266,7 +1270,7 @@ describe("filename-key layout resource commands", () => {
       nodeId: "second",
       variants: ["portrait"],
     });
-    addGameMode(project, "FreeGame");
+    addGameMode(project, "FreeGame", project.mode);
     setLayerGameMode(project, "second", "FreeGame");
     expect(project.nodes.find((node) => node.id === "second")?.gameMode).toBe(
       "FreeGame",

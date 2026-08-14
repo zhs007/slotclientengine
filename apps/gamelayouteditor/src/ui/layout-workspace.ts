@@ -21,6 +21,7 @@ export function layoutWorkspaceMarkup(
   session: EditorUiSession,
   currentVariant: SceneLayoutVariantId | null = null,
 ): string {
+  const activeMode = project.gameModes.modes.find((mode) => mode.id === modeId);
   const backgroundIds = new Set(
     project.gameModes.modes
       .flatMap((mode) => Object.values(mode.backgroundNodes))
@@ -47,7 +48,7 @@ export function layoutWorkspaceMarkup(
             }),
           )
           .join("")}</div>
-        <div class="outline-group"><strong>主转轮</strong>${outlineRow({ key: "reel:main", label: "main", meta: `${project.reel.columns}×${project.reel.rows} · ready`, selected: selection.kind === "reel" })}</div>
+        <div class="outline-group"><strong>主转轮</strong>${activeMode?.reelEnabled ? outlineRow({ key: "reel:main", label: "main", meta: `${project.reel.columns}×${project.reel.rows} · ready`, selected: selection.kind === "reel" }) : '<span class="outline-empty">当前 mode 未启用主转轮</span>'}</div>
         <div class="outline-group"><strong>图层 · ${layers.length}</strong>${
           layers.length
             ? layers
@@ -135,7 +136,14 @@ function inspectorMarkup(
   if (selection.kind === "background") {
     return backgroundInspector(project, modeId, selection.variant, session);
   }
-  if (selection.kind === "reel") return reelInspector(project, session);
+  if (selection.kind === "reel") {
+    const mode = project.gameModes.modes.find(
+      (candidate) => candidate.id === modeId,
+    );
+    return mode?.reelEnabled
+      ? reelInspector(project, session)
+      : '<div class="empty-state">当前 mode 未启用主转轮；可在“管理状态”中开启。</div>';
+  }
   const node = project.nodes.find((item) => item.id === selection.nodeId);
   return node
     ? layerInspector(project, node, layers, modeId)
@@ -157,7 +165,7 @@ function backgroundInspector(
   const resource = node ? project.resources.get(node.resourceId) : undefined;
   return `<div class="inspector-inner"><div class="inspector-heading" tabindex="-1" data-inspector-heading><span>背景 Inspector</span><h2>${variantId}</h2></div>
     <section class="inspector-section"><h3>资源绑定</h3>${resource && node ? `<p><strong>${escapeHtml(node.id)}</strong> · order ${node.order}</p><p class="path">${escapeHtml(describeResource(resource))}</p>${nodeIdField(node)}${resource.kind === "spine" ? spinePlaybackEditor(resource, node) : ""}` : '<p class="hint">尚未绑定背景资源。</p>'}<div class="button-row"><button type="button" data-choose-background="${variantId}">${resource ? "更换资源" : "选择资源"}</button><button type="button" class="danger" data-clear-background="${variantId}" ${node ? "" : "disabled"}>清除背景</button></div></section>
-    <section class="inspector-section"><h3>Art / Focus</h3><div class="field-grid">${numberField("art width", `variants.${variantId}.artSize.width`, variant.artSize.width)}${numberField("art height", `variants.${variantId}.artSize.height`, variant.artSize.height)}</div><p class="derived">focus ${variant.focusRect.x}, ${variant.focusRect.y}, ${variant.focusRect.width} × ${variant.focusRect.height}</p><details data-inspector-section="layout:background:${variantId}:focus" ${session.expandedInspectorSections.has(`layout:background:${variantId}:focus`) ? "open" : ""}><summary>高级 focus 配置</summary><div class="field-grid">${numberField("left", `variants.${variantId}.focusOffsets.left`, variant.focusOffsets.left)}${numberField("top", `variants.${variantId}.focusOffsets.top`, variant.focusOffsets.top)}${numberField("right", `variants.${variantId}.focusOffsets.right`, variant.focusOffsets.right)}${numberField("bottom", `variants.${variantId}.focusOffsets.bottom`, variant.focusOffsets.bottom)}</div>${project.mode === "orientation-focus" ? `<fieldset><legend>frame focus rect</legend><div class="field-grid">${numberField("width", `variants.${variantId}.frameFocusRect.width`, variant.frameFocusRect.width)}${numberField("height", `variants.${variantId}.frameFocusRect.height`, variant.frameFocusRect.height)}</div></fieldset><fieldset><legend>min focus margins</legend><div class="field-grid">${numberField("left", `variants.${variantId}.minFocusMargin.left`, variant.minFocusMargin.left)}${numberField("right", `variants.${variantId}.minFocusMargin.right`, variant.minFocusMargin.right)}${numberField("top", `variants.${variantId}.minFocusMargin.top`, variant.minFocusMargin.top)}${numberField("bottom", `variants.${variantId}.minFocusMargin.bottom`, variant.minFocusMargin.bottom)}</div></fieldset>` : ""}</details></section>
+    <section class="inspector-section"><h3>Art / Focus</h3><div class="field-grid">${numberField("art width", `variants.${variantId}.artSize.width`, variant.artSize.width)}${numberField("art height", `variants.${variantId}.artSize.height`, variant.artSize.height)}</div><p class="derived">focus ${variant.focusRect.x}, ${variant.focusRect.y}, ${variant.focusRect.width} × ${variant.focusRect.height}</p><p class="hint">${project.gameModes.modes.find((mode) => mode.id === modeId)?.reelEnabled ? "focus 四边值相对主转轮区域外扩。" : "当前 mode 无主转轮；focus 四边值相对 art 边缘配置。"}</p><details data-inspector-section="layout:background:${variantId}:focus" ${session.expandedInspectorSections.has(`layout:background:${variantId}:focus`) ? "open" : ""}><summary>高级 focus 配置</summary><div class="field-grid">${numberField("left", `variants.${variantId}.focusOffsets.left`, variant.focusOffsets.left)}${numberField("top", `variants.${variantId}.focusOffsets.top`, variant.focusOffsets.top)}${numberField("right", `variants.${variantId}.focusOffsets.right`, variant.focusOffsets.right)}${numberField("bottom", `variants.${variantId}.focusOffsets.bottom`, variant.focusOffsets.bottom)}</div>${project.mode === "orientation-focus" ? `<fieldset><legend>frame focus rect</legend><div class="field-grid">${numberField("width", `variants.${variantId}.frameFocusRect.width`, variant.frameFocusRect.width)}${numberField("height", `variants.${variantId}.frameFocusRect.height`, variant.frameFocusRect.height)}</div></fieldset><fieldset><legend>min focus margins</legend><div class="field-grid">${numberField("left", `variants.${variantId}.minFocusMargin.left`, variant.minFocusMargin.left)}${numberField("right", `variants.${variantId}.minFocusMargin.right`, variant.minFocusMargin.right)}${numberField("top", `variants.${variantId}.minFocusMargin.top`, variant.minFocusMargin.top)}${numberField("bottom", `variants.${variantId}.minFocusMargin.bottom`, variant.minFocusMargin.bottom)}</div></fieldset>` : ""}</details></section>
     ${node ? `<section class="inspector-section"><h3>背景 Placement</h3><p class="hint">rotation 使用角度；Spine 的 center 0.5 / 0.5 对应 authored 原点。</p>${placementFields(node, nodeIndex, variantId)}</section>` : ""}
   </div>`;
 }

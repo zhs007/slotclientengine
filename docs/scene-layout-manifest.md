@@ -1,6 +1,60 @@
-# Scene Layout Manifest v1
+# Scene Layout Manifest v1 / v2
 
-根 sentinel 为 `layout.manifest.json`。schema version 仍为 `1`，支持 `maximized-focus` / `orientation-focus`、image/image-string/official Spine 4.3/runtime VNI node、reels、plural `symbolPackages`、award-celebration/普通 Spine `popups`、game modes 与显式有向 transitions。
+根 sentinel 为 `layout.manifest.json`。runtime 兼容 v1；Game Layout Editor 导入 v1 后立即升级，预览与导出恒写 v2。
+
+## v2：每个 mode 拥有自己的适配几何
+
+v1 的根级 `adaptation` 和 `reels.main.placements` 在 v2 中分别下移为
+`gameModes.modes[*].adaptation` 与 `gameModes.modes[*].reelPlacements.main`。根 `reels.main`
+只保存 columns、rows、cellSize、gap 和 order。每个 mode 必须显式选择一种类型：
+
+- `maximized-focus`：一个 `default` 背景、placement 与 focusRect；
+- `orientation-focus`：`landscape`、`portrait` 各自拥有背景、placement 与 focusRect。
+
+每个 mode 还必须显式声明 `reelEnabled`。为 `false` 时 `reelPlacements` 必须为空、不得绑定
+Symbols，runtime 不显示主转轮；focus 四边配置相对 art 边缘。为 `true` 时必须提供 main reel
+placement，focus 由 reel 矩形加四边外扩量得到。v1 升级的旧 mode 一律写为 `true`。
+
+因此同一项目可以使用双背景 Splash 和单背景 BaseGame。方向只由宿主原始宽高判定：高大于宽为
+portrait，宽大于高为 landscape；宽高相等时保持当前方向，首次正方形确定为 landscape。
+
+新项目以 `Splash` 为 `initialMode`，Splash 的 `primaryAction` 指向 BaseGame，并要求存在同方向的
+显式 transition。preview/runtime 只有在真实点击触发 primary action 后才请求该边；边继续使用现有
+none、Spine 或 MP4 overlay。v1 升级会把旧根适配和 reel placement 复制到每个已有 mode，保留
+mode id、initialMode、背景、node scope、Symbols、Popup 与 transition，不会伪造 Splash。
+
+```json
+{
+  "version": 2,
+  "reels": {
+    "main": {
+      "columns": 5,
+      "rows": 3,
+      "cellSize": { "width": 160, "height": 160 },
+      "gap": { "x": 0, "y": 0 }
+    }
+  },
+  "gameModes": {
+    "initialMode": "Splash",
+    "modes": [
+      {
+        "id": "Splash",
+        "adaptation": { "mode": "orientation-focus", "variants": {} },
+        "reelEnabled": false,
+        "reelPlacements": {},
+        "backgroundNodes": {},
+        "nodeStates": {},
+        "primaryAction": {
+          "kind": "request-game-mode",
+          "targetMode": "BaseGame"
+        }
+      }
+    ]
+  }
+}
+```
+
+示例中的空对象只用于展示字段归属，不是合法成品；active variants 必须完整填写。
 
 ## 坐标原点
 
@@ -11,7 +65,7 @@
 - focus、frame focus、min margin 仍是以 art 左上角描述的矩形，不随坐标类型转换。
 - Spine transition overlay 使用与 node 相同的 art-space origin；popup 仍是 viewport center offset，video blackout 仍是 viewport-space。
 
-`reels.main.placements.<variant>` 只包含 `x/y`。placement 在 `top-left` 模式表示转轮矩形左上角，在 `center` 模式表示转轮矩形中心相对 art center 的偏移。scene-layout 不提供主转轮整体缩放；横竖屏适配应调整背景素材、art size 和 reel placement。
+v1 的 `reels.main.placements.<variant>`、v2 的 `gameModes.modes[*].reelPlacements.main.<variant>` 只包含 `x/y`。placement 在 `top-left` 模式表示转轮矩形左上角，在 `center` 模式表示转轮矩形中心相对 art center 的偏移。scene-layout 不提供主转轮整体缩放；横竖屏适配应调整背景素材、art size 和 reel placement。
 
 ## Node transform
 

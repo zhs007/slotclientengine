@@ -1,13 +1,13 @@
 import {
   collectSceneLayoutAssetPaths,
-  type SceneLayoutManifestV1,
+  type SceneLayoutManifest,
 } from "@slotclientengine/rendercore/scene-layout";
 import type { EditorProject } from "../model/editor-project.js";
 import { editorResourcePaths } from "../model/editor-resource.js";
 
 export function collectLayoutPreviewAssetPaths(
   project: EditorProject,
-  manifest: SceneLayoutManifestV1,
+  manifest: SceneLayoutManifest,
 ): ReadonlySet<string> {
   const paths = new Set(collectSceneLayoutAssetPaths(manifest));
   for (const node of manifest.nodes) {

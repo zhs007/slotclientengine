@@ -1,9 +1,10 @@
 import {
   collectSceneLayoutPackagePaths,
   createSceneLayoutPackageResourceFromResolvedFiles,
-  parseSceneLayoutManifest,
+  parseSceneLayoutManifestDocument,
   resolveSceneLayoutPackageFiles,
-  type SceneLayoutManifestV1,
+  type SceneLayoutManifest,
+  type SceneLayoutManifestV2,
   type SceneLayoutPackageResource,
   type SceneLayoutResource,
 } from "@slotclientengine/rendercore/scene-layout";
@@ -30,7 +31,7 @@ export const LAYOUT_ZIP_LIMITS = Object.freeze({
 });
 
 export interface ImportedLayoutPackage {
-  readonly manifest: SceneLayoutManifestV1;
+  readonly manifest: SceneLayoutManifestV2;
   readonly assets: ReadonlyMap<string, Uint8Array>;
   readonly resource: SceneLayoutResource;
   readonly packageResource: SceneLayoutPackageResource;
@@ -95,7 +96,7 @@ export async function importLayoutZip(
       options,
     );
   }
-  const manifest = parseSceneLayoutManifest(rawManifest);
+  const manifest = parseSceneLayoutManifestDocument(rawManifest);
   const resolvedFiles = await resolveSceneLayoutPackageFiles({
     manifest,
     files,
@@ -113,7 +114,7 @@ export async function importLayoutZip(
 }
 
 export async function validateLayoutAssets(
-  manifestValue: SceneLayoutManifestV1,
+  manifestValue: SceneLayoutManifest,
   assets: ReadonlyMap<string, Uint8Array>,
   options: {
     readonly decodeImage?: (
@@ -129,7 +130,7 @@ export async function validateLayoutAssets(
   } = {},
 ): Promise<ImportedLayoutPackage> {
   const migration = migrateSceneLayoutNodeIds(
-    parseSceneLayoutManifest(manifestValue),
+    parseSceneLayoutManifestDocument(manifestValue),
   );
   const manifest = migration.manifest;
   collectSceneLayoutPackagePaths({ manifest, files: assets });

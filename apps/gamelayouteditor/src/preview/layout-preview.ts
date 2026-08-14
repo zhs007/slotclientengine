@@ -5,7 +5,7 @@ import {
   resolveSceneLayoutFrameViewport,
   type SceneLayoutFrameViewport,
   type SceneLayoutInitialReelScene,
-  type SceneLayoutManifestV1,
+  type SceneLayoutManifest,
   type SceneLayoutRuntime,
   type SceneLayoutPackageRuntime,
   type SceneLayoutSnapshot,
@@ -85,7 +85,7 @@ export class LayoutPreview {
   #package: ImportedLayoutPackage | null = null;
   #runtime: SceneLayoutRuntime | null = null;
   #packageRuntime: SceneLayoutPackageRuntime | null = null;
-  #manifest: SceneLayoutManifestV1 | null = null;
+  #manifest: SceneLayoutManifest | null = null;
   #lastLayoutSnapshot: SceneLayoutSnapshot | null = null;
   #frameViewport: SceneLayoutFrameViewport | null = null;
   #pageSize: PreviewSize = { width: 1920, height: 1080 };
@@ -159,7 +159,7 @@ export class LayoutPreview {
   }
 
   async setLayout(
-    manifest: SceneLayoutManifestV1,
+    manifest: SceneLayoutManifest,
     assets: ReadonlyMap<string, Uint8Array>,
   ): Promise<void> {
     this.assertReady();
@@ -295,9 +295,10 @@ export class LayoutPreview {
     this.#packageScenes = packageScenes;
     this.#app.stage.addChildAt(nextRuntime.container, 0);
     this.applySize();
+    await this.preparePrimaryGameModeAction();
   }
 
-  applyGeometryManifest(manifest: SceneLayoutManifestV1): void {
+  applyGeometryManifest(manifest: SceneLayoutManifest): void {
     this.assertReady();
     const runtime = this.#runtime;
     if (!runtime) throw new Error("布局 preview 尚未初始化。");
@@ -372,6 +373,35 @@ export class LayoutPreview {
     await this.#packageRuntime.selectAuthoringGameMode(
       modeId,
       this.gameModeRequestOptions(modeId),
+    );
+    await this.preparePrimaryGameModeAction();
+  }
+
+  async preparePrimaryGameModeAction(): Promise<void> {
+    if (!this.#packageRuntime || this.#manifest?.version !== 2) return;
+    const current = this.#packageRuntime.getGameModeSnapshot().stableMode;
+    const mode = this.#manifest.gameModes.modes.find(
+      (candidate) => candidate.id === current,
+    );
+    const target = mode?.primaryAction?.targetMode;
+    if (!target) return;
+    await this.#packageRuntime.prepareGameModeTransition(
+      target,
+      this.gameModeRequestOptions(target),
+    );
+  }
+
+  requestPrimaryGameModeAction(): Promise<void> {
+    if (!this.#packageRuntime)
+      throw new Error("当前 layout preview 没有 package runtime。");
+    if (this.#manifest?.version !== 2)
+      return this.#packageRuntime.requestPrimaryGameModeAction();
+    const current = this.#packageRuntime.getGameModeSnapshot().stableMode;
+    const target = this.#manifest.gameModes.modes.find(
+      (candidate) => candidate.id === current,
+    )?.primaryAction?.targetMode;
+    return this.#packageRuntime.requestPrimaryGameModeAction(
+      target ? this.gameModeRequestOptions(target) : {},
     );
   }
 
@@ -821,6 +851,9 @@ export class LayoutPreview {
     const frameViewport = resolveSceneLayoutFrameViewport({
       manifest,
       pageSize: this.#pageSize,
+      ...(this.#packageRuntime
+        ? { modeId: this.#packageRuntime.getGameModeSnapshot().displayedMode }
+        : {}),
     });
     this.#frameViewport = frameViewport;
     this.#app.renderer.resize(
@@ -836,7 +869,16 @@ export class LayoutPreview {
       graphics: this.#guides,
       snapshot,
       showFocus: this.#showFocus,
-      showReels: this.#showReels,
+      showReels:
+        this.#showReels &&
+        (manifest.version === 1 ||
+          Boolean(
+            manifest.gameModes.modes.find(
+              (mode) =>
+                mode.id ===
+                this.#packageRuntime?.getGameModeSnapshot().displayedMode,
+            )?.reelEnabled,
+          )),
     });
     this.drawSelectedLayerOutline();
     this.#diagnostics.textContent = [
@@ -1053,7 +1095,7 @@ export class LayoutPreview {
 
   private requirePackagePreviewScene(resolved: {
     readonly id: string;
-    readonly binding: NonNullable<SceneLayoutManifestV1["symbolPackage"]>;
+    readonly binding: NonNullable<SceneLayoutManifest["symbolPackage"]>;
   }): RandomReelSceneSnapshot {
     const binding = resolved.binding;
     const scene =
@@ -1208,11 +1250,11 @@ function freezeGrid(grid: SymbolPreviewGridSize): SymbolPreviewGridSize {
 }
 
 function resolveModeSymbolBinding(
-  manifest: SceneLayoutManifestV1,
+  manifest: SceneLayoutManifest,
   modeId: string | null,
 ): {
   readonly id: string;
-  readonly binding: NonNullable<SceneLayoutManifestV1["symbolPackage"]>;
+  readonly binding: NonNullable<SceneLayoutManifest["symbolPackage"]>;
 } | null {
   if (manifest.symbolPackage)
     return {

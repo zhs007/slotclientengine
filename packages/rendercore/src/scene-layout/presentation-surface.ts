@@ -162,7 +162,7 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
 
   applyArtSpace(): void {
     this.assertReady();
-    const adaptation = this.#resource.manifest.adaptation;
+    const adaptation = this.#resource.layout.manifest.adaptation;
     if (adaptation.mode !== "maximized-focus") {
       throw new SceneLayoutError(
         "Scene layout art-space presentation requires maximized-focus adaptation.",

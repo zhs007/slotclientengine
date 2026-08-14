@@ -10,7 +10,7 @@ import {
 import {
   collectSceneLayoutAssetPaths,
   collectSceneLayoutPackagePaths,
-  parseSceneLayoutManifest,
+  parseSceneLayoutManifestDocument,
   SCENE_LAYOUT_PRODUCTION_ZIP_LIMITS,
 } from "@slotclientengine/rendercore/scene-layout";
 import type { ValidatedLayoutPackage } from "./types.js";
@@ -45,7 +45,7 @@ export async function validateLayoutPackageBytes(
     throw new Error(
       "只支持当前 filename-key Scene Layout ZIP；缺少 assets.map.json。",
     );
-  const manifest = parseSceneLayoutManifest(
+  const manifest = parseSceneLayoutManifestDocument(
     parseJson(manifestBytes, ROOT_MANIFEST),
   );
   if (!manifest.gameModes || manifest.gameModes.modes.length === 0)

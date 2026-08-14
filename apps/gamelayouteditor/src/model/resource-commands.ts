@@ -26,6 +26,7 @@ import {
 } from "@slotclientengine/vnicore";
 import {
   activeVariantIds,
+  activateEditorGameMode,
   createDefaultNodePlacement,
   cloneEditorProject,
   resetVariantGeometry,
@@ -652,7 +653,6 @@ export function assignBackgroundResource(options: {
   readonly nodeId?: string;
   readonly defaultAnimation?: string;
 }): EditorNodeDraft {
-  assertVariantsAllowed(options.project, [options.variant]);
   const resource = requireResource(options.project, options.resourceId);
   if (
     resource.kind === "image-string" ||
@@ -660,12 +660,14 @@ export function assignBackgroundResource(options: {
     resource.kind === "vni"
   )
     throw new Error(`${resource.kind} 资源不能设为背景。`);
-  const variant = options.project.variants[options.variant];
   const modeId = options.modeId ?? options.project.gameModes.initialMode;
   const mode = options.project.gameModes.modes.find(
     (candidate) => candidate.id === modeId,
   );
   if (!mode) throw new Error(`未知主状态：${modeId}`);
+  if (!activeVariantIds(mode).includes(options.variant))
+    throw new Error(`主状态 ${modeId} 不允许 variant：${options.variant}`);
+  const variant = mode.variants[options.variant];
   const currentBackgroundNode = mode.backgroundNodes[options.variant] ?? "";
   let node = currentBackgroundNode
     ? options.project.nodes.find((item) => item.id === currentBackgroundNode)
@@ -744,11 +746,13 @@ export function assignBackgroundResource(options: {
     else node.playback = { kind: "loop", animation: animation!, loop: true };
   }
   mode.backgroundNodes[options.variant] = node.id;
-  if (options.project.gameModes.initialMode === modeId)
-    variant.backgroundNode = node.id;
-  if (nextSize && !hasPreviousSize)
+  variant.backgroundNode = node.id;
+  if (nextSize && !hasPreviousSize) {
+    const activeModeId = options.project.gameModes.activeModeId;
+    activateEditorGameMode(options.project, modeId);
     resetVariantGeometry(options.project, options.variant, nextSize);
-  else if (nextSize && sizeChanged) variant.artSize = { ...nextSize };
+    activateEditorGameMode(options.project, activeModeId);
+  } else if (nextSize && sizeChanged) variant.artSize = { ...nextSize };
   if (
     replacedNode &&
     !options.project.gameModes.modes.some((candidate) =>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createNewEditorProject,
+  createEditorGameModeDraft,
   type EditorGameModeTransitionDraft,
 } from "../src/model/editor-project.js";
 import {
@@ -11,13 +12,9 @@ import {
 describe("transitions workspace", () => {
   it("uses strict resource/animation/event selects and excludes duplicate event names", () => {
     const project = createNewEditorProject("maximized-focus");
-    project.gameModes.modes.push({
-      id: "FreeGame",
-      backgroundNodes: { default: "background" },
-      nodeStates: {},
-      symbols: null,
-      awardCelebrationPopupId: null,
-    });
+    const freeGame = createEditorGameModeDraft("FreeGame", "maximized-focus");
+    freeGame.backgroundNodes.default = "background";
+    project.gameModes.modes.push(freeGame);
     project.resources.set("bridge", {
       id: "bridge",
       kind: "spine",
@@ -103,13 +100,9 @@ describe("transitions workspace", () => {
 
   it("shows the popup root configuration for the popup selected by one exact edge", () => {
     const project = createNewEditorProject("maximized-focus");
-    project.gameModes.modes.push({
-      id: "FreeGame",
-      backgroundNodes: { default: "background" },
-      nodeStates: {},
-      symbols: null,
-      awardCelebrationPopupId: null,
-    });
+    const freeGame = createEditorGameModeDraft("FreeGame", "maximized-focus");
+    freeGame.backgroundNodes.default = "background";
+    project.gameModes.modes.push(freeGame);
     project.popupDependencies.set("enter-free", {
       id: "enter-free",
       type: "spine",
@@ -169,13 +162,9 @@ describe("transitions workspace", () => {
 
   it("lists only video resources and derives fade timing and prepared controls", () => {
     const project = createNewEditorProject("orientation-focus");
-    project.gameModes.modes.push({
-      id: "FreeGame",
-      backgroundNodes: { landscape: "bg", portrait: "bg" },
-      nodeStates: {},
-      symbols: null,
-      awardCelebrationPopupId: null,
-    });
+    const freeGame = createEditorGameModeDraft("FreeGame", "orientation-focus");
+    freeGame.backgroundNodes = { landscape: "bg", portrait: "bg" };
+    project.gameModes.modes.push(freeGame);
     project.resources.set("image", {
       id: "image",
       kind: "image",

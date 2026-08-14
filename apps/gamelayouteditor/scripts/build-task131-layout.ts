@@ -59,7 +59,9 @@ try {
   });
   try {
     if (
-      editedImport.manifest.reels.main?.placements.default?.x !==
+      editedImport.manifest.gameModes.modes.find(
+        (mode) => mode.id === editedImport.manifest.gameModes.initialMode,
+      )?.reelPlacements.main?.default?.x !==
       originalX + 1
     ) {
       throw new Error(

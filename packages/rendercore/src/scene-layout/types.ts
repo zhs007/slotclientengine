@@ -173,6 +173,11 @@ export interface SceneLayoutGameMode {
   readonly awardCelebrationPopup?: string;
 }
 
+export interface SceneLayoutPrimaryAction {
+  readonly kind: "request-game-mode";
+  readonly targetMode: string;
+}
+
 interface SceneLayoutGameModeTransitionBase {
   readonly from: string;
   readonly to: string;
@@ -248,6 +253,50 @@ export type SceneLayoutAdaptation =
   | MaximizedFocusSceneLayoutAdaptation
   | OrientationFocusSceneLayoutAdaptation;
 
+export type SceneLayoutModeAdaptation =
+  | Omit<MaximizedFocusSceneLayoutAdaptation, "backgroundNode">
+  | {
+      readonly mode: "orientation-focus";
+      readonly variants: Readonly<
+        Record<
+          SceneLayoutOrientationVariantId,
+          Omit<OrientationFocusSceneLayoutVariant, "backgroundNode">
+        >
+      >;
+    };
+
+export interface SceneLayoutGameModeV2 extends SceneLayoutGameMode {
+  readonly backgroundNodes: Readonly<
+    Partial<Record<SceneLayoutVariantId, string>>
+  >;
+  readonly adaptation: SceneLayoutModeAdaptation;
+  readonly reelEnabled: boolean;
+  readonly reelPlacements: Readonly<
+    Partial<
+      Record<
+        string,
+        Readonly<
+          Partial<
+            Record<
+              SceneLayoutVariantId,
+              { readonly x: number; readonly y: number }
+            >
+          >
+        >
+      >
+    >
+  >;
+  readonly primaryAction?: SceneLayoutPrimaryAction;
+}
+
+export interface SceneLayoutGameModesV2 {
+  readonly initialMode: string;
+  readonly modes: readonly SceneLayoutGameModeV2[];
+  readonly transitions?: readonly SceneLayoutGameModeTransition[];
+}
+
+export type SceneLayoutReelDefinition = Omit<SceneLayoutReelGrid, "placements">;
+
 export interface SceneLayoutManifestV1 {
   readonly version: 1;
   readonly kind: "scene-layout";
@@ -266,6 +315,27 @@ export interface SceneLayoutManifestV1 {
   >;
   readonly gameModes?: SceneLayoutGameModes;
 }
+
+export interface SceneLayoutManifestV2 {
+  readonly version: 2;
+  readonly kind: "scene-layout";
+  readonly id: string;
+  readonly coordinateOrigin?: SceneLayoutCoordinateOrigin;
+  readonly nodes: readonly SceneLayoutNode[];
+  readonly reels: Readonly<Record<string, SceneLayoutReelDefinition>>;
+  readonly symbolPackage?: SceneLayoutSymbolPackageBinding;
+  readonly symbolPackages?: Readonly<
+    Record<string, SceneLayoutSymbolPackageBinding>
+  >;
+  readonly popups?: Readonly<Record<string, SceneLayoutPopupBinding>>;
+  readonly runtimeResources?: Readonly<
+    Record<string, SceneLayoutRuntimeResourceSpec>
+  >;
+  readonly gameModes: SceneLayoutGameModesV2;
+}
+
+export type SceneLayoutManifest = SceneLayoutManifestV1 | SceneLayoutManifestV2;
+export type SceneLayoutManifestLatest = SceneLayoutManifestV2;
 
 export type SceneLayoutRuntimeResource =
   | {
@@ -326,7 +396,7 @@ export interface SceneLayoutResource {
 }
 
 export interface SceneLayoutPackageResource {
-  readonly manifest: SceneLayoutManifestV1;
+  readonly manifest: SceneLayoutManifest;
   readonly layout: SceneLayoutResource;
   readonly imageStrings: Readonly<Record<string, ImageStringResource>>;
   readonly symbolPackage: SymbolPackageResource | null;
@@ -488,7 +558,7 @@ export interface SceneLayoutRuntime {
    */
   applyArtSpace(): SceneLayoutSnapshot;
   applyGeometryManifest(
-    manifest: SceneLayoutManifestV1,
+    manifest: SceneLayoutManifest,
   ): SceneLayoutSnapshot | null;
   update(deltaSeconds: number): void;
   getSnapshot(): SceneLayoutSnapshot;
@@ -825,6 +895,10 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
    */
   requestGameMode(
     modeId: string,
+    options?: SceneLayoutGameModeRequestOptions,
+  ): Promise<void>;
+  /** Starts the current mode's explicit primary action, if one is declared. */
+  requestPrimaryGameModeAction(
     options?: SceneLayoutGameModeRequestOptions,
   ): Promise<void>;
   /** Starts a video held after a completed transition prelude. Call from a trusted gesture. */

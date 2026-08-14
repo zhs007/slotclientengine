@@ -16,7 +16,7 @@ describe("state manager dialog", () => {
       placements: { default: { x: 0, y: 0, scale: 1 } },
     });
     project.gameModes.modes[0]!.backgroundNodes.default = "base-background";
-    addGameMode(project, "FreeGame");
+    addGameMode(project, "FreeGame", project.mode);
     const host = document.createElement("div");
     host.innerHTML = stateManagerDialogMarkup({
       project,
@@ -58,7 +58,7 @@ describe("state manager dialog", () => {
         .disabled,
     ).toBe(true);
 
-    addGameMode(project, "FreeGame");
+    addGameMode(project, "FreeGame", project.mode);
     host.innerHTML = stateManagerDialogMarkup({
       project,
       selectedModeId: "BaseGame",
