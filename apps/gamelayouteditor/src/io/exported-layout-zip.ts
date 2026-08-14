@@ -1,8 +1,10 @@
 import {
   collectSceneLayoutAssetPaths,
   collectSceneLayoutPackagePaths,
-  parseSceneLayoutManifest,
-  type SceneLayoutManifestV1,
+  parseSceneLayoutManifestDocument,
+  upgradeSceneLayoutManifestToLatest,
+  type SceneLayoutManifest,
+  type SceneLayoutManifestV2,
 } from "@slotclientengine/rendercore/scene-layout";
 import {
   collectImageStringAssetPaths,
@@ -42,7 +44,7 @@ import { assertCanonicalPackagePath } from "./filename-policy.js";
 import { validateLayoutAssets } from "./imported-layout-zip.js";
 
 export async function exportLayoutZip(options: {
-  readonly manifest: SceneLayoutManifestV1;
+  readonly manifest: SceneLayoutManifest;
   readonly assets: ReadonlyMap<string, Uint8Array>;
   readonly symbolFiles?: ReadonlyMap<string, Uint8Array>;
   readonly symbolFilesById?: ReadonlyMap<
@@ -283,10 +285,10 @@ export async function exportLayoutZip(options: {
 }
 
 export async function normalizeLayoutFilenameKeys(
-  manifest: SceneLayoutManifestV1,
+  manifest: SceneLayoutManifest,
   closure: ReadonlyMap<string, Uint8Array>,
 ): Promise<{
-  readonly manifest: SceneLayoutManifestV1;
+  readonly manifest: SceneLayoutManifestV2;
   readonly assets: ReadonlyMap<string, Uint8Array>;
 }> {
   const flattened = await flattenLayoutClosure(manifest, closure);
@@ -305,7 +307,7 @@ export async function normalizeMappedLayoutFilenameKeys(
   manifestValue: unknown,
   logicalAssets: ReadonlyMap<string, Uint8Array>,
 ): Promise<{
-  readonly manifest: SceneLayoutManifestV1;
+  readonly manifest: SceneLayoutManifestV2;
   readonly assets: ReadonlyMap<string, Uint8Array>;
 }> {
   const mapping = createCanonicalFilenameMapping(
@@ -314,7 +316,7 @@ export async function normalizeMappedLayoutFilenameKeys(
   );
   const rewrite = (reference: string): string =>
     rewriteMappedReference(reference, mapping);
-  const manifest = parseSceneLayoutManifest(
+  const manifest = upgradeSceneLayoutManifestToLatest(
     rewriteExactJsonReferences(manifestValue, rewrite),
   );
   const assets = new Map<string, Uint8Array>();
@@ -348,7 +350,7 @@ export async function normalizeMappedLayoutFilenameKeys(
 }
 
 async function flattenLayoutClosure(
-  manifest: SceneLayoutManifestV1,
+  manifest: SceneLayoutManifest,
   closure: ReadonlyMap<string, Uint8Array>,
 ) {
   const mapping = createCanonicalFilenameMapping(
@@ -687,9 +689,9 @@ function rewriteExactJsonReferences(
 }
 
 function rewriteLayoutManifestFilenameKeys(
-  value: SceneLayoutManifestV1,
+  value: SceneLayoutManifest,
   mapping: ReadonlyMap<string, string>,
-): SceneLayoutManifestV1 {
+): SceneLayoutManifestV2 {
   const key = (path: string) => mapping.get(path) ?? path;
   const nodes = value.nodes.map((node) => {
     const resource = node.resource;
@@ -775,7 +777,7 @@ function rewriteLayoutManifestFilenameKeys(
         }),
       )
     : undefined;
-  return parseSceneLayoutManifest({
+  return upgradeSceneLayoutManifestToLatest({
     ...value,
     nodes,
     ...(value.symbolPackage
@@ -850,13 +852,13 @@ function putClosure(
 }
 
 export async function materializeLayoutOwnedAssets(options: {
-  readonly manifest: SceneLayoutManifestV1;
+  readonly manifest: SceneLayoutManifest;
   readonly assets: ReadonlyMap<string, Uint8Array>;
 }): Promise<{
-  readonly manifest: SceneLayoutManifestV1;
+  readonly manifest: SceneLayoutManifestV2;
   readonly assets: ReadonlyMap<string, Uint8Array>;
 }> {
-  const source = parseSceneLayoutManifest(options.manifest);
+  const source = upgradeSceneLayoutManifestToLatest(options.manifest);
   const assets = new Map(
     [...options.assets].map(([path, bytes]) => [path, bytes.slice()] as const),
   );
@@ -918,10 +920,8 @@ function assertSpineAtlasBindings(
       throw new Error(`Spine atlas 包含未绑定 page：${page}`);
 }
 
-export function stableManifestJson(
-  manifestValue: SceneLayoutManifestV1,
-): string {
-  const manifest = parseSceneLayoutManifest(manifestValue);
+export function stableManifestJson(manifestValue: SceneLayoutManifest): string {
+  const manifest = parseSceneLayoutManifestDocument(manifestValue);
   return `${JSON.stringify(sortValue(manifest), null, 2)}\n`;
 }
 

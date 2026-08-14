@@ -8,20 +8,26 @@ import {
 } from "../viewport/index.js";
 import { SceneLayoutError } from "./errors.js";
 import { parseSceneLayoutManifest } from "./manifest.js";
+import { materializeSceneLayoutManifestForMode } from "./manifest-v2.js";
 import type {
   ResolvedSceneLayoutReelGrid,
   SceneLayoutFramePolicy,
   SceneLayoutFrameViewport,
   SceneLayoutManifestV1,
+  SceneLayoutManifest,
   SceneLayoutSnapshot,
   SceneLayoutVariantId,
 } from "./types.js";
 
 export function resolveSceneLayoutFrameViewport(options: {
-  readonly manifest: SceneLayoutManifestV1;
+  readonly manifest: SceneLayoutManifest;
   readonly pageSize: RenderViewportSize;
+  readonly modeId?: string;
 }): SceneLayoutFrameViewport {
-  const manifest = parseSceneLayoutManifest(options.manifest);
+  const manifest = materializeSceneLayoutManifestForMode(
+    options.manifest,
+    options.modeId,
+  );
   const pageSize = validatePageSize(options.pageSize);
   const frameDesignSize =
     manifest.adaptation.mode === "maximized-focus"
@@ -50,7 +56,7 @@ export function resolveSceneLayoutFrameViewport(options: {
 }
 
 export function createSceneLayoutFramePolicy(
-  manifestValue: SceneLayoutManifestV1,
+  manifestValue: SceneLayoutManifest,
 ): SceneLayoutFramePolicy {
   const manifest = parseSceneLayoutManifest(manifestValue);
   if (manifest.adaptation.mode === "maximized-focus") {
@@ -71,6 +77,7 @@ export function createSceneLayoutFramePolicy(
 export function resolveSceneLayoutViewport(options: {
   readonly manifest: SceneLayoutManifestV1;
   readonly viewportSize: RenderViewportSize;
+  readonly previousVariantId?: SceneLayoutVariantId;
 }): SceneLayoutSnapshot {
   const manifest = parseSceneLayoutManifest(options.manifest);
   const viewport =
@@ -86,6 +93,10 @@ export function resolveSceneLayoutViewport(options: {
       : calculateResponsiveArtViewport({
           viewportSize: options.viewportSize,
           variants: manifest.adaptation.variants,
+          ...(options.previousVariantId === "landscape" ||
+          options.previousVariantId === "portrait"
+            ? { squareVariant: options.previousVariantId }
+            : {}),
         });
   const reels: Record<
     string,

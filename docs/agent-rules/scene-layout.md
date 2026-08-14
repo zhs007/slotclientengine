@@ -11,6 +11,10 @@
 
 ## Mode、variant 与稳定节点
 
+- Scene Layout v2 的adaptation、active variant背景/focus和main reel placement由exact mode拥有；v1共享upgrader只复制旧根几何到已有mode，不伪造Splash。Editor只预览和导出latest v2。
+- 每个v2 mode显式声明reelEnabled；关闭时不得绑定Symbols或导出mode reel placement，focus相对art边缘，开启时focus由reel区域与四边外扩派生。runtime不得按mode id猜测开关。
+- orientation variant只由宿主原始page width/height决定；正方形保持当前variant，首次正方形为landscape，focus和派生frame尺寸不得反馈成方向输入。
+- primary action只引用同source的显式direct transition target；runtime复用既有prepare/commit/rollback和trusted gesture边界，不按mode名称推断点击行为。
 - editor 拥有通用 game mode draft，以及 mode 到独立 per-variant background、symbols package 和 award popup 的显式 binding；普通 Spine popup 可绑定到一条有向 Spine transition 或独立显式注册，不伪装成 mode award binding。
 - 新 mode 的 background 默认未绑定；每个 variant 明确选择，不继承另一 mode 的 editable node。
 - background node id 按 mode/variant 稳定生成，不从资源名产生 `-2/-3` identity。

@@ -1,6 +1,8 @@
 import {
-  parseSceneLayoutManifest,
-  type SceneLayoutManifestV1,
+  parseSceneLayoutManifestDocument,
+  upgradeSceneLayoutManifestToLatest,
+  type SceneLayoutManifest,
+  type SceneLayoutManifestV2,
 } from "@slotclientengine/rendercore/scene-layout";
 
 export const RESERVED_RENDER_LAYER_NODE_IDS = Object.freeze([
@@ -25,13 +27,11 @@ export function assertCanonicalEditorNodeId(nodeId: string): void {
     throw new Error(`node id 不得使用 RenderLayer 保留名：${nodeId}`);
 }
 
-export function migrateSceneLayoutNodeIds(
-  manifestValue: SceneLayoutManifestV1,
-): {
-  readonly manifest: SceneLayoutManifestV1;
+export function migrateSceneLayoutNodeIds(manifestValue: SceneLayoutManifest): {
+  readonly manifest: SceneLayoutManifestV2;
   readonly renames: readonly EditorNodeIdRename[];
 } {
-  const manifest = parseSceneLayoutManifest(manifestValue);
+  const manifest = upgradeSceneLayoutManifestToLatest(manifestValue);
   const preserved = new Set(
     manifest.nodes
       .map((node) => node.id)
@@ -61,37 +61,25 @@ export function migrateSceneLayoutNodeIds(
     return Object.freeze({ manifest, renames: Object.freeze([]) });
 
   const rename = (id: string): string => renameById.get(id) ?? id;
-  const draft = structuredClone(manifest) as SceneLayoutManifestV1;
-  (draft as { nodes: SceneLayoutManifestV1["nodes"] }).nodes = draft.nodes.map(
+  const draft = structuredClone(manifest) as SceneLayoutManifestV2;
+  (draft as { nodes: SceneLayoutManifestV2["nodes"] }).nodes = draft.nodes.map(
     (node) => ({ ...node, id: rename(node.id) }),
   );
-  if (draft.adaptation.mode === "maximized-focus") {
-    (draft.adaptation as { backgroundNode: string }).backgroundNode = rename(
-      draft.adaptation.backgroundNode,
-    );
-  } else {
-    for (const variant of Object.values(draft.adaptation.variants))
-      (variant as { backgroundNode: string }).backgroundNode = rename(
-        variant.backgroundNode,
+  for (const mode of draft.gameModes.modes) {
+    for (const [variant, id] of Object.entries(mode.backgroundNodes))
+      if (id)
+        (mode.backgroundNodes as Record<string, string>)[variant] = rename(id);
+    (mode as { nodeStates: Record<string, string> }).nodeStates =
+      Object.fromEntries(
+        Object.entries(mode.nodeStates).map(([id, state]) => [
+          rename(id),
+          state,
+        ]),
       );
   }
-  if (draft.gameModes) {
-    for (const mode of draft.gameModes.modes) {
-      if (mode.backgroundNodes)
-        for (const [variant, id] of Object.entries(mode.backgroundNodes))
-          if (id)
-            (mode.backgroundNodes as Record<string, string>)[variant] =
-              rename(id);
-      (mode as { nodeStates: Record<string, string> }).nodeStates =
-        Object.fromEntries(
-          Object.entries(mode.nodeStates).map(([id, state]) => [
-            rename(id),
-            state,
-          ]),
-        );
-    }
-  }
-  const migrated = parseSceneLayoutManifest(draft);
+  const migrated = parseSceneLayoutManifestDocument(
+    draft,
+  ) as SceneLayoutManifestV2;
   return Object.freeze({
     manifest: migrated,
     renames: Object.freeze(

@@ -20,7 +20,7 @@ import {
   type EditorAssetsMapEntry,
   type EditorAssetsMapV1,
 } from "@slotclientengine/editorresource";
-import type { SceneLayoutManifestV1 } from "@slotclientengine/rendercore/scene-layout";
+import type { SceneLayoutManifest } from "@slotclientengine/rendercore/scene-layout";
 import { validateLayoutPackageBytes } from "./package-reader.js";
 import { encodeStableJson } from "./reference-rewriter.js";
 import type {
@@ -29,7 +29,7 @@ import type {
 } from "./types.js";
 
 export async function buildOptimizedPackage(options: {
-  readonly manifest: SceneLayoutManifestV1;
+  readonly manifest: SceneLayoutManifest;
   readonly assets: ReadonlyMap<string, OptimizedLogicalAsset>;
 }): Promise<WrittenOptimizedPackage> {
   const mapEntries: Record<string, EditorAssetsMapEntry> = {};

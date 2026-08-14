@@ -345,7 +345,10 @@ describe("GameLayoutEditorApp workspace", () => {
       root.querySelectorAll('input[type="radio"][name="new-project-mode"]'),
     ).toHaveLength(0);
     const modeSelect = root.querySelector(
-      "[data-new-project-mode]",
+      "[data-new-project-splash-mode]",
+    ) as HTMLSelectElement;
+    const baseGameModeSelect = root.querySelector(
+      "[data-new-project-basegame-mode]",
     ) as HTMLSelectElement;
     expect([...modeSelect.options].map((option) => option.value)).toEqual([
       "",
@@ -365,6 +368,8 @@ describe("GameLayoutEditorApp workspace", () => {
     (root.querySelector("[data-new-project]") as HTMLButtonElement).click();
     modeSelect.value = "orientation-focus";
     modeSelect.dispatchEvent(new Event("change"));
+    baseGameModeSelect.value = "orientation-focus";
+    baseGameModeSelect.dispatchEvent(new Event("change"));
     (
       root.querySelector("[data-confirm-new-project]") as HTMLButtonElement
     ).click();
@@ -381,6 +386,8 @@ describe("GameLayoutEditorApp workspace", () => {
     );
     modeSelect.value = "maximized-focus";
     modeSelect.dispatchEvent(new Event("change"));
+    baseGameModeSelect.value = "maximized-focus";
+    baseGameModeSelect.dispatchEvent(new Event("change"));
     (
       root.querySelector("[data-confirm-new-project]") as HTMLButtonElement
     ).click();
@@ -410,12 +417,23 @@ describe("GameLayoutEditorApp workspace", () => {
     let input = dialog.querySelector(
       "[data-new-game-mode]",
     ) as HTMLInputElement;
+    const newModeType = dialog.querySelector(
+      "[data-new-game-mode-type]",
+    ) as HTMLSelectElement;
+    newModeType.value = "maximized-focus";
+    newModeType.dispatchEvent(new Event("change"));
+    input = dialog.querySelector("[data-new-game-mode]") as HTMLInputElement;
     input.value = "1bad";
     input.dispatchEvent(new Event("input"));
     (dialog.querySelector("[data-add-game-mode]") as HTMLButtonElement).click();
     expect(dialog.textContent).toContain("游戏模式 id");
     expect(dialog.querySelectorAll('[role="option"]')).toHaveLength(1);
 
+    const duplicateModeType = dialog.querySelector(
+      "[data-new-game-mode-type]",
+    ) as HTMLSelectElement;
+    duplicateModeType.value = "maximized-focus";
+    duplicateModeType.dispatchEvent(new Event("change"));
     input = dialog.querySelector("[data-new-game-mode]") as HTMLInputElement;
     input.value = "FreeGame";
     input.dispatchEvent(new Event("input"));
@@ -432,6 +450,11 @@ describe("GameLayoutEditorApp workspace", () => {
       (root.querySelector("[data-game-mode]") as HTMLSelectElement).value,
     ).toBe("FreeGame");
 
+    const repeatedModeType = dialog.querySelector(
+      "[data-new-game-mode-type]",
+    ) as HTMLSelectElement;
+    repeatedModeType.value = "maximized-focus";
+    repeatedModeType.dispatchEvent(new Event("change"));
     input = dialog.querySelector("[data-new-game-mode]") as HTMLInputElement;
     input.value = "FreeGame";
     input.dispatchEvent(new Event("input"));
@@ -653,10 +676,15 @@ describe("GameLayoutEditorApp workspace", () => {
     ).click();
     (root.querySelector("[data-new-project]") as HTMLButtonElement).click();
     const newProjectMode = root.querySelector(
-      "[data-new-project-mode]",
+      "[data-new-project-splash-mode]",
+    ) as HTMLSelectElement;
+    const newProjectBaseGameMode = root.querySelector(
+      "[data-new-project-basegame-mode]",
     ) as HTMLSelectElement;
     newProjectMode.value = "orientation-focus";
     newProjectMode.dispatchEvent(new Event("change"));
+    newProjectBaseGameMode.value = "orientation-focus";
+    newProjectBaseGameMode.dispatchEvent(new Event("change"));
     (
       root.querySelector("[data-confirm-new-project]") as HTMLButtonElement
     ).click();
@@ -795,13 +823,23 @@ describe("GameLayoutEditorApp workspace", () => {
     const { app, root } = await createApp();
     (root.querySelector("[data-new-project]") as HTMLButtonElement).click();
     const newProjectMode = root.querySelector(
-      "[data-new-project-mode]",
+      "[data-new-project-splash-mode]",
+    ) as HTMLSelectElement;
+    const newProjectBaseGameMode = root.querySelector(
+      "[data-new-project-basegame-mode]",
     ) as HTMLSelectElement;
     newProjectMode.value = "orientation-focus";
     newProjectMode.dispatchEvent(new Event("change"));
+    newProjectBaseGameMode.value = "orientation-focus";
+    newProjectBaseGameMode.dispatchEvent(new Event("change"));
     (
       root.querySelector("[data-confirm-new-project]") as HTMLButtonElement
     ).click();
+    const gameMode = root.querySelector(
+      "[data-game-mode]",
+    ) as HTMLSelectElement;
+    gameMode.value = "BaseGame";
+    gameMode.dispatchEvent(new Event("change"));
     const fileClick = selectFilesOnce([new File(["image"], "shared.png")]);
     (
       root.querySelector("[data-upload-resources]") as HTMLButtonElement
@@ -827,6 +865,11 @@ describe("GameLayoutEditorApp workspace", () => {
     ).click();
 
     (root.querySelector("[data-manage-modes]") as HTMLButtonElement).click();
+    const newModeType = root.querySelector(
+      "[data-new-game-mode-type]",
+    ) as HTMLSelectElement;
+    newModeType.value = "orientation-focus";
+    newModeType.dispatchEvent(new Event("change"));
     const newMode = root.querySelector(
       "[data-new-game-mode]",
     ) as HTMLInputElement;
@@ -955,10 +998,15 @@ describe("GameLayoutEditorApp workspace", () => {
     const { app, root } = await createApp();
     (root.querySelector("[data-new-project]") as HTMLButtonElement).click();
     const mode = root.querySelector(
-      "[data-new-project-mode]",
+      "[data-new-project-splash-mode]",
+    ) as HTMLSelectElement;
+    const baseGameMode = root.querySelector(
+      "[data-new-project-basegame-mode]",
     ) as HTMLSelectElement;
     mode.value = "orientation-focus";
     mode.dispatchEvent(new Event("change"));
+    baseGameMode.value = "orientation-focus";
+    baseGameMode.dispatchEvent(new Event("change"));
     (
       root.querySelector("[data-confirm-new-project]") as HTMLButtonElement
     ).click();
@@ -1126,6 +1174,11 @@ describe("GameLayoutEditorApp workspace", () => {
     expect(root.querySelector("[data-spine-playback-kind]")).toBeNull();
     expect(root.querySelector("[data-add-spine-state]")).toBeNull();
     (root.querySelector("[data-manage-modes]") as HTMLButtonElement).click();
+    const newModeType = root.querySelector(
+      "[data-new-game-mode-type]",
+    ) as HTMLSelectElement;
+    newModeType.value = "maximized-focus";
+    newModeType.dispatchEvent(new Event("change"));
     const newMode = root.querySelector(
       "[data-new-game-mode]",
     ) as HTMLInputElement;
@@ -1395,6 +1448,11 @@ describe("GameLayoutEditorApp workspace", () => {
       ) as HTMLButtonElement
     ).click();
     (root.querySelector("[data-manage-modes]") as HTMLButtonElement).click();
+    const newModeType = root.querySelector(
+      "[data-new-game-mode-type]",
+    ) as HTMLSelectElement;
+    newModeType.value = "maximized-focus";
+    newModeType.dispatchEvent(new Event("change"));
     const newMode = root.querySelector(
       "[data-new-game-mode]",
     ) as HTMLInputElement;
@@ -1686,6 +1744,11 @@ describe("GameLayoutEditorApp workspace", () => {
     videoClick.mockRestore();
 
     (root.querySelector("[data-manage-modes]") as HTMLButtonElement).click();
+    const newModeType = root.querySelector(
+      "[data-new-game-mode-type]",
+    ) as HTMLSelectElement;
+    newModeType.value = "maximized-focus";
+    newModeType.dispatchEvent(new Event("change"));
     const newMode = root.querySelector(
       "[data-new-game-mode]",
     ) as HTMLInputElement;

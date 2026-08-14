@@ -15,9 +15,9 @@ import {
   createSceneLayoutPackageResourceFromResolvedFiles,
   resolveSceneLayoutPackageFiles,
 } from "./package-resource.js";
-import { parseSceneLayoutManifest } from "./manifest.js";
+import { parseSceneLayoutManifestDocument } from "./manifest.js";
 import type {
-  SceneLayoutManifestV1,
+  SceneLayoutManifest,
   SceneLayoutPackageResource,
 } from "./types.js";
 
@@ -32,7 +32,7 @@ export const SCENE_LAYOUT_PRODUCTION_ZIP_LIMITS: BoundedZipLimits =
   });
 
 export interface InspectedSceneLayoutPackage {
-  readonly manifest: SceneLayoutManifestV1;
+  readonly manifest: SceneLayoutManifest;
   readonly files: ReadonlyMap<string, Uint8Array>;
   readonly entryCount: number;
   readonly totalBytes: number;
@@ -61,7 +61,7 @@ export async function inspectSceneLayoutPackageZipBytes(options: {
       `${ROOT_MANIFEST} is invalid: ${formatError(error)}`,
     );
   }
-  const manifest = parseSceneLayoutManifest(rawManifest);
+  const manifest = parseSceneLayoutManifestDocument(rawManifest);
   const mapBytes = files.get(EDITOR_ASSETS_MAP_PATH);
   if (mapBytes)
     await validateEditorAssetsMapPackage({

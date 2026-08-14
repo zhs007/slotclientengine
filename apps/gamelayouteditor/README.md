@@ -1,6 +1,22 @@
 # Game Layout Editor
 
-纯前端 Scene Layout v1 编辑器，覆盖 layout、mode/variant、稳定背景、普通 VNI/Spine 动画图层、Symbols、award-celebration/普通 Spine Popup 与 Spine/MP4 有向转场。
+纯前端 Scene Layout v2 编辑器，覆盖 layout、mode/variant、稳定背景、普通 VNI/Spine 动画图层、Symbols、award-celebration/普通 Spine Popup 与 Spine/MP4 有向转场。合法 v1 ZIP 会在打开事务中自动升级；后续预览和导出只生成 v2。
+
+## Splash-first 与 per-mode 适配
+
+新建项目会分别要求为 Splash 和 BaseGame 选择 `maximized-focus`（单背景）或
+`orientation-focus`（横竖双背景），未选择时不能创建。Splash 是 initial mode，带一条显式
+Splash → BaseGame none transition 和 primary click action；可在转场工作区把该边改为 Spine 或
+MP4。实际 preview 必须点击 Splash 才进入 BaseGame。状态管理器新增 mode 时也必须先选择该
+mode 的适配类型，不继承当前 mode。
+
+状态管理器也保存每个 mode 的“启用主转轮区域”开关。新建 Splash 默认关闭、BaseGame 与后续
+mode 默认开启；关闭的 mode 不显示 reel guide、不能绑定 Symbols，focus 四边相对 art 配置。
+开启的 mode 继续以 main reel 为基准配置 focus 外扩。已有 Symbols 时必须先解绑才能关闭。
+
+适配、focus、背景和 main reel placement 都属于各自 mode。单背景 mode 只有 default focus，
+双背景 mode 的 landscape/portrait 各有独立 focus。预览尺寸宽高相等时维持当前方向；首次以
+正方形启动时选择 landscape。
 
 award-celebration Popup 作为自包含 dependency 通过 `rendercore/popup` 严格校验并原样
 vendor；内部 VNI 的 segmented/once playback、最后一帧保持和 dismiss 生命周期不在

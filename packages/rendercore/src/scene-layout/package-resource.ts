@@ -38,9 +38,12 @@ import { SceneLayoutError } from "./errors.js";
 import {
   collectSceneLayoutAssetPaths,
   parseSceneLayoutManifest,
+  parseSceneLayoutManifestDocument,
 } from "./manifest.js";
+import { materializeInitialSceneLayoutManifest } from "./manifest-v2.js";
 import { createSceneLayoutResource } from "./resource.js";
 import type {
+  SceneLayoutManifest,
   SceneLayoutManifestV1,
   SceneLayoutPackageResource,
   SceneLayoutRuntimeResource,
@@ -74,11 +77,11 @@ export function getInitialSceneLayoutSymbolPackageResource(
 }
 
 export function collectSceneLayoutPackagePaths(options: {
-  readonly manifest: SceneLayoutManifestV1;
+  readonly manifest: SceneLayoutManifest;
   readonly files: ReadonlyMap<string, Uint8Array>;
   readonly allowExtraFiles?: boolean;
 }): readonly string[] {
-  const manifest = parseSceneLayoutManifest(options.manifest);
+  const manifest = parseSceneLayoutManifestDocument(options.manifest);
   const references = collectSceneLayoutAssetPaths(manifest);
   const mapped = references.every((path) => !path.includes("/"));
   if (!mapped && references.some((path) => !path.includes("/")))
@@ -241,7 +244,7 @@ export async function createSceneLayoutPackageResource(options: {
   const manifestValue =
     options.manifest ??
     parseJsonBytes(requireBytes(options.files, ROOT_MANIFEST), ROOT_MANIFEST);
-  const manifest = parseSceneLayoutManifest(manifestValue);
+  const manifest = parseSceneLayoutManifestDocument(manifestValue);
   const files = await resolveSceneLayoutPackageFiles({
     manifest,
     files: options.files,
@@ -275,7 +278,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
   const sourceManifestValue =
     options.manifest ??
     parseJsonBytes(requireBytes(options.files, ROOT_MANIFEST), ROOT_MANIFEST);
-  const manifest = parseSceneLayoutManifest(sourceManifestValue);
+  const manifest = parseSceneLayoutManifestDocument(sourceManifestValue);
   const files = options.files;
   if (!options.lazyRuntimeResources)
     collectSceneLayoutPackagePaths({ manifest, files });
@@ -559,9 +562,16 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
       }
     }
 
-    const layoutManifest = options.lazyRuntimeResources
-      ? parseSceneLayoutManifest({ ...manifest, runtimeResources: undefined })
+    const layoutDocument = options.lazyRuntimeResources
+      ? parseSceneLayoutManifestDocument({
+          ...manifest,
+          runtimeResources: undefined,
+        })
       : manifest;
+    const layoutManifest =
+      layoutDocument.version === 2
+        ? materializeInitialSceneLayoutManifest(layoutDocument)
+        : layoutDocument;
     const layout = createSceneLayoutResource({
       manifest: layoutManifest,
       imageModules,
@@ -869,7 +879,7 @@ export async function loadSceneLayoutPackageFromUrl(options: {
     options.manifestBytes?.slice() ??
     (await fetchBytes(fetchImpl, manifestUrl));
   files.set(ROOT_MANIFEST, manifestBytes);
-  const manifest = parseSceneLayoutManifest(
+  const manifest = parseSceneLayoutManifestDocument(
     parseJsonBytes(manifestBytes, ROOT_MANIFEST),
   );
 
@@ -1056,7 +1066,7 @@ async function fetchPopupTransitive(
 }
 
 function validateBinding(
-  manifest: SceneLayoutManifestV1,
+  manifest: SceneLayoutManifest,
   binding: NonNullable<SceneLayoutManifestV1["symbolPackage"]>,
   resource: SymbolPackageResource,
 ): void {
@@ -1101,7 +1111,7 @@ function validateBinding(
 }
 
 function symbolBindings(
-  manifest: SceneLayoutManifestV1,
+  manifest: SceneLayoutManifest,
 ): readonly (readonly [
   string,
   NonNullable<SceneLayoutManifestV1["symbolPackage"]>,
@@ -1126,7 +1136,7 @@ export async function resolveSceneLayoutPackageFiles(options: {
   readonly files: ReadonlyMap<string, Uint8Array>;
   readonly allowMissingRuntimeResources?: boolean;
 }): Promise<ReadonlyMap<string, Uint8Array>> {
-  const manifest = parseSceneLayoutManifest(options.manifest);
+  const manifest = parseSceneLayoutManifestDocument(options.manifest);
   const mapped = isMappedSceneLayoutManifest(manifest);
   const hasMap = options.files.has(EDITOR_ASSETS_MAP_PATH);
   if (mapped !== hasMap)
@@ -1160,7 +1170,7 @@ function createMappedLogicalLoader(
 }
 
 function resolveRuntimeMappedSceneLayoutPackageFiles(options: {
-  readonly manifest: SceneLayoutManifestV1;
+  readonly manifest: SceneLayoutManifest;
   readonly files: ReadonlyMap<string, Uint8Array>;
   readonly allowMissingRuntimeResources?: boolean;
 }): ReadonlyMap<string, Uint8Array> {
@@ -1177,7 +1187,7 @@ function resolveRuntimeMappedSceneLayoutPackageFiles(options: {
     if (bytes) virtual.set(key, bytes.slice());
   }
   const effectiveManifest = options.allowMissingRuntimeResources
-    ? parseSceneLayoutManifest({
+    ? parseSceneLayoutManifestDocument({
         ...options.manifest,
         runtimeResources: undefined,
       })
@@ -1248,7 +1258,7 @@ function requireRuntimeAssetPath(
   return path;
 }
 
-function isMappedSceneLayoutManifest(manifest: SceneLayoutManifestV1): boolean {
+function isMappedSceneLayoutManifest(manifest: SceneLayoutManifest): boolean {
   const references = collectSceneLayoutAssetPaths(manifest);
   const hasFilenameKey = references.some((path) => !path.includes("/"));
   const hasDirectPath = references.some((path) => path.includes("/"));

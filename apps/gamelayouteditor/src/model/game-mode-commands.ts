@@ -3,12 +3,20 @@ import type { ImportedPopupPackage } from "../io/imported-popup-package.js";
 import type { ImportedSymbolPackage } from "../io/imported-symbol-package.js";
 import {
   activeVariantIds,
+  activateEditorGameMode,
+  createEditorGameModeDraft,
+  resetVariantGeometry,
+  updateVariantFocusOffsetsFromRect,
   validateEditorTransitionEvent,
   type EditorGameModeTransitionDraft,
   type EditorGameModeDraft,
   type EditorProject,
+  type EditorMode,
 } from "./editor-project.js";
-import { editorResourcePaths } from "./editor-resource.js";
+import {
+  editorResourceArtSize,
+  editorResourcePaths,
+} from "./editor-resource.js";
 import {
   nextAvailablePopupOrder,
   setPopupOrder as setEditorPopupOrder,
@@ -16,19 +24,15 @@ import {
 
 const MODE_ID = /^[A-Za-z][A-Za-z0-9_-]*$/u;
 
-export function addGameMode(project: EditorProject, id: string): void {
+export function addGameMode(
+  project: EditorProject,
+  id: string,
+  adaptationMode: EditorMode,
+): void {
   assertModeId(id);
   if (project.gameModes.modes.some((mode) => mode.id === id))
     throw new Error(`游戏模式已存在：${id}`);
-  project.gameModes.modes.push({
-    id,
-    backgroundNodes: Object.fromEntries(
-      activeVariantIds(project).map((variant) => [variant, ""]),
-    ),
-    nodeStates: {},
-    symbols: null,
-    awardCelebrationPopupId: null,
-  });
+  project.gameModes.modes.push(createEditorGameModeDraft(id, adaptationMode));
 }
 
 export function renameGameMode(
@@ -50,8 +54,13 @@ export function renameGameMode(
     if (transition.fromModeId === currentId) transition.fromModeId = nextId;
     if (transition.toModeId === currentId) transition.toModeId = nextId;
   }
+  for (const candidate of project.gameModes.modes)
+    if (candidate.primaryActionTargetMode === currentId)
+      candidate.primaryActionTargetMode = nextId;
   if (project.gameModes.initialMode === currentId)
     project.gameModes.initialMode = nextId;
+  if (project.gameModes.activeModeId === currentId)
+    project.gameModes.activeModeId = nextId;
 }
 
 export function deleteGameMode(project: EditorProject, id: string): void {
@@ -69,6 +78,13 @@ export function deleteGameMode(project: EditorProject, id: string): void {
           (transition) => `${transition.fromModeId} -> ${transition.toModeId}`,
         )
         .join(", ")}`,
+    );
+  const actionReferences = project.gameModes.modes
+    .filter((mode) => mode.primaryActionTargetMode === id)
+    .map((mode) => mode.id);
+  if (actionReferences.length)
+    throw new Error(
+      `游戏模式 ${id} 仍被 primary action 引用：${actionReferences.join(", ")}`,
     );
   const layerReferences = project.nodes
     .filter((node) => node.gameMode === id)
@@ -98,12 +114,27 @@ export function deleteGameMode(project: EditorProject, id: string): void {
 }
 
 export function setInitialGameMode(project: EditorProject, id: string): void {
-  const mode = requireMode(project, id);
+  requireMode(project, id);
   project.gameModes.initialMode = id;
-  for (const variant of activeVariantIds(project))
-    project.variants[variant].backgroundNode =
-      mode.backgroundNodes[variant] ?? "";
   normalizeGameModeNodeOrders(project);
+}
+
+export function setGameModeReelEnabled(
+  project: EditorProject,
+  id: string,
+  enabled: boolean,
+): void {
+  const mode = requireMode(project, id);
+  if (!enabled && mode.symbols)
+    throw new Error(
+      `主状态 ${id} 已绑定 Symbols，关闭主转轮前必须先解除绑定。`,
+    );
+  const activeModeId = project.gameModes.activeModeId;
+  mode.reelEnabled = enabled;
+  activateEditorGameMode(project, id);
+  for (const variant of activeVariantIds(mode))
+    updateVariantFocusOffsetsFromRect(project, variant);
+  activateEditorGameMode(project, activeModeId);
 }
 
 export function bindGameModeBackground(
@@ -112,9 +143,9 @@ export function bindGameModeBackground(
   variant: SceneLayoutVariantId,
   nodeId: string,
 ): void {
-  if (!activeVariantIds(project).includes(variant))
-    throw new Error(`当前项目不使用 ${variant} variant。`);
   const mode = requireMode(project, modeId);
+  if (!activeVariantIds(mode).includes(variant))
+    throw new Error(`游戏模式 ${modeId} 不使用 ${variant} variant。`);
   const node = project.nodes.find((candidate) => candidate.id === nodeId);
   if (!node) throw new Error(`未知背景节点：${nodeId}`);
   if (node.gameMode !== undefined)
@@ -132,8 +163,18 @@ export function bindGameModeBackground(
   if (!node.placements[variant])
     throw new Error(`背景节点 ${nodeId} 缺少 ${variant} placement。`);
   mode.backgroundNodes[variant] = nodeId;
-  if (project.gameModes.initialMode === modeId)
-    project.variants[variant].backgroundNode = nodeId;
+  mode.variants[variant].backgroundNode = nodeId;
+  const artSize = editorResourceArtSize(resource);
+  if (
+    artSize &&
+    (!(mode.variants[variant].artSize.width > 0) ||
+      !(mode.variants[variant].artSize.height > 0))
+  ) {
+    const activeModeId = project.gameModes.activeModeId;
+    activateEditorGameMode(project, modeId);
+    resetVariantGeometry(project, variant, artSize);
+    activateEditorGameMode(project, activeModeId);
+  }
   normalizeGameModeNodeOrders(project);
 }
 
@@ -205,7 +246,10 @@ function hasValidAuthoredOrders(
       orders.includes(project.reel.order))
   )
     return false;
-  for (const variant of activeVariantIds(project)) {
+  const variants = new Set(
+    project.gameModes.modes.flatMap((mode) => [...activeVariantIds(mode)]),
+  );
+  for (const variant of variants) {
     const visible = project.nodes.filter((node) => node.placements[variant]);
     const minimum = Math.min(
       ...visible.map((node) => node.order),
@@ -245,6 +289,7 @@ export function createGameModeTransition(
     )
   )
     throw new Error(`转场已存在：${fromModeId} -> ${toModeId}`);
+  const sourceMode = requireMode(project, fromModeId);
   project.gameModes.transitions.push({
     fromModeId,
     toModeId,
@@ -254,7 +299,7 @@ export function createGameModeTransition(
     animation: "",
     switchEvent: "",
     placements: Object.fromEntries(
-      activeVariantIds(project).map((variant) => [
+      activeVariantIds(sourceMode).map((variant) => [
         variant,
         { x: 0, y: 0, scale: 1 },
       ]),
@@ -286,10 +331,9 @@ export function setGameModeTransitionKind(
             animation: "",
             switchEvent: "",
             placements: Object.fromEntries(
-              activeVariantIds(project).map((variant) => [
-                variant,
-                { x: 0, y: 0, scale: 1 },
-              ]),
+              activeVariantIds(requireMode(project, transition.fromModeId)).map(
+                (variant) => [variant, { x: 0, y: 0, scale: 1 }],
+              ),
             ),
           }
         : {
@@ -448,6 +492,8 @@ export function bindGameModeSymbols(
   } | null,
 ): void {
   const mode = requireMode(project, modeId);
+  if (binding && !mode.reelEnabled)
+    throw new Error(`主状态 ${modeId} 未启用主转轮，不能绑定 Symbols。`);
   if (binding && !project.symbolDependencies.has(binding.packageId))
     throw new Error(`未知 Symbols dependency：${binding.packageId}`);
   mode.symbols = binding ? { ...binding } : null;

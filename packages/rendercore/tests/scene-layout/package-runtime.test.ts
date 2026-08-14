@@ -10,6 +10,7 @@ import type { RendercoreSpinePlayer } from "../../src/spine/runtime-player.js";
 import {
   createSceneLayoutPackageResource,
   createSceneLayoutPackageRuntime,
+  type SceneLayoutManifestV1,
 } from "../../src/scene-layout/index.js";
 import { transitionResourceKey } from "../../src/scene-layout/resource.js";
 import { game002LayoutFixture } from "./fixtures.js";
@@ -93,10 +94,10 @@ function createRuntimeWithTransitions(
     new CompletingTransitionPlayer(),
 ) {
   const transitions = pairs.map(([from, to]) => transitionSpec(from, to));
-  const manifest = {
-    ...resource.manifest,
+  const manifest: SceneLayoutManifestV1 = {
+    ...resource.layout.manifest,
     gameModes: {
-      ...resource.manifest.gameModes!,
+      ...resource.layout.manifest.gameModes!,
       transitions,
     },
   };

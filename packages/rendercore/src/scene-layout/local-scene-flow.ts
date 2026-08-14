@@ -105,7 +105,7 @@ export async function createSceneOtherSceneFlowRuntime(options: {
       application,
       runtime,
       readiness,
-      resource.manifest,
+      resource.layout.manifest,
       options.random ?? secureSceneOtherSceneBoundedRandom,
       options.operationPlan,
     );

@@ -169,7 +169,7 @@ describe("editor UI session and Resource Picker view model", () => {
 
   it("renders mode scope above variants and grays layers hidden in the edit context", () => {
     const project = projectWithResources();
-    addGameMode(project, "FreeGame");
+    addGameMode(project, "FreeGame", project.mode);
     addLayerFromResource({
       project,
       resourceId: "background",
