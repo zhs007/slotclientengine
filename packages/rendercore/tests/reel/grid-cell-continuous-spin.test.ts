@@ -36,6 +36,25 @@ const DIMMING = Object.freeze({
 }) satisfies GridCellDimmingPattern;
 
 describe("grid-cell continuous spin", () => {
+  it("does not materialize slot snapshots in the per-cell update path", () => {
+    const reel = createSet();
+    reel.resetToScene(INITIAL, [0, 1]);
+    const getSlotSnapshots = vi.spyOn(RenderReel.prototype, "getSlotSnapshots");
+    reel.startContinuous({
+      direction: "forward",
+      speedSymbolsPerSecond: 20,
+      dimming: DIMMING,
+    });
+
+    reel.update(0.05);
+    const firstSteadyUpdate = reel.update(0.01);
+    const secondSteadyUpdate = reel.update(0.01);
+
+    expect(getSlotSnapshots).not.toHaveBeenCalled();
+    expect(secondSteadyUpdate).toBe(firstSteadyUpdate);
+    getSlotSnapshots.mockRestore();
+  });
+
   it("rolls without a target and settles the same transaction to an exact target", () => {
     const reel = createSet();
     reel.resetToScene(INITIAL, [0, 1]);

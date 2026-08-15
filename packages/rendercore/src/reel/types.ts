@@ -608,6 +608,20 @@ export interface RenderReelSlotSnapshot {
   readonly presentationValue: number | null;
 }
 
+/**
+ * Stable live view of the render fields for one reel slot.
+ *
+ * Unlike `RenderReelSlotSnapshot`, the view identity is reused and its getters
+ * reflect the current slot contents. It is intended for allocation-sensitive
+ * render coordination that does not need snapshot isolation.
+ */
+export interface RenderReelSlotRenderView {
+  readonly windowY: number;
+  readonly code: number;
+  readonly kind: ReelSymbolKind;
+  readonly symbol: RenderSymbol | null;
+}
+
 export interface RenderReelVisibleOccurrence {
   readonly code: number;
   readonly kind: Exclude<ReelSymbolKind, "empty">;

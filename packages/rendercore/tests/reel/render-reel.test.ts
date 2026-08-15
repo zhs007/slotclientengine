@@ -8,6 +8,33 @@ import {
 } from "./helpers.js";
 
 describe("RenderReel", () => {
+  it("reuses live slot render views and steady update results", () => {
+    const reel = new RenderReel({
+      reels: createBasicReels(),
+      x: 0,
+      layout: createBasicLayout(),
+      registry: createBasicRegistry(),
+    });
+    const views = reel.getSlotRenderViews();
+    const visible = views.find((slot) => slot.windowY === 0)!;
+
+    expect(reel.getSlotRenderViews()).toBe(views);
+    reel.resetToVisibleSymbols([2, 0, 1], 4);
+    expect(reel.getSlotRenderViews()).toBe(views);
+    expect(visible.code).toBe(2);
+    expect(visible.symbol).not.toBeNull();
+    expect(reel.getCurrentY()).toBe(4);
+
+    reel.startContinuous({
+      direction: "forward",
+      speedSymbolsPerSecond: 10,
+    });
+    const first = reel.update(0.01);
+    const second = reel.update(0.01);
+    expect(second).toBe(first);
+    expect(reel.getCurrentY()).toBeCloseTo(4.2);
+  });
+
   it("starts continuous rolling from an exact local public-strip phase", () => {
     const reel = new RenderReel({
       reels: createBasicReels(),

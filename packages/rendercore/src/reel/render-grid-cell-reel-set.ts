@@ -46,6 +46,7 @@ import type {
   RenderGridCellReelSetSpinOptions,
   RenderGridCellReelSetSnapshot,
   RenderGridCellReelSetUpdateResult,
+  RenderReelSlotRenderView,
   RenderVisibleSymbolGeometrySnapshot,
   RenderVisibleSymbolStateSnapshot,
   PreparedVisibleOccurrenceReplacement,
@@ -94,6 +95,7 @@ import type {
 } from "./reel-area.js";
 
 interface RuntimeCell {
+  readonly key: string;
   readonly coordinate: GridCellCoordinate;
   readonly root: Container;
   readonly clipContent: Container;
@@ -101,6 +103,10 @@ interface RuntimeCell {
   readonly clipMask: Graphics;
   readonly dimOverlay: Container;
   readonly dimRows: readonly DimmingRow[];
+  readonly slotRenderViewsByWindowY: ReadonlyMap<
+    number,
+    RenderReelSlotRenderView
+  >;
   planCell: GridCellReelPlanCell | null;
   phase: GridCellReelPhase;
   hasStartedThisSpin: boolean;
@@ -257,6 +263,9 @@ export class RenderGridCellReelSet
     RenderReelVisibleOccurrence["symbol"],
     number
   >();
+  readonly #startedCellsScratch: GridCellCoordinate[] = [];
+  readonly #landedCellsScratch: GridCellCoordinate[] = [];
+  readonly #activationCellsScratch: GridCellCoordinate[] = [];
   #spinPlan: GridCellReelSpinPlan | null = null;
   #continuousSpin: ActiveContinuousSpin | null = null;
   #activeDrop: ActiveDrop | null = null;
@@ -888,34 +897,23 @@ export class RenderGridCellReelSet
           );
         throw error;
       }
-      return Object.freeze({
-        spinning: false,
-        completed,
-        activity: completed ? null : "dropdown",
-        startedCells: Object.freeze([]),
-        landedCells: Object.freeze([]),
-        activationCells: Object.freeze([]),
-      });
+      return completed ? COMPLETED_IDLE_UPDATE_RESULT : DROPDOWN_UPDATE_RESULT;
     }
     if (this.#activeEffectSweep) {
       const completed = this.updateEffectSweep(deltaSeconds);
-      return Object.freeze({
-        spinning: false,
-        completed,
-        activity: completed ? null : "effect-sweep",
-        startedCells: Object.freeze([]),
-        landedCells: Object.freeze([]),
-        activationCells: Object.freeze([]),
-      });
+      return completed
+        ? COMPLETED_IDLE_UPDATE_RESULT
+        : EFFECT_SWEEP_UPDATE_RESULT;
     }
     if (this.#continuousSpin) {
       const active = this.#continuousSpin;
-      const started: GridCellCoordinate[] = [];
+      const started = this.#startedCellsScratch;
+      started.length = 0;
       const deltaMs = deltaSeconds * 1000;
       const previousElapsedMs = this.#elapsedMs;
       this.#elapsedMs += deltaMs;
       for (const cell of this.#cells) {
-        const key = createCellKey(cell.coordinate.x, cell.coordinate.y);
+        const key = cell.key;
         const selected = active.keys.has(key);
         if (selected) {
           const startAtMs = active.startAtMsByKey.get(key) ?? 0;
@@ -957,23 +955,24 @@ export class RenderGridCellReelSet
         }
         this.syncCellRenderOrder(cell);
       }
+      if (started.length === 0) return CONTINUOUS_SPIN_UPDATE_RESULT;
       return Object.freeze({
         spinning: true,
         completed: false,
         activity: "spin",
         startedCells: freezeCoordinates(started),
-        landedCells: Object.freeze([]),
-        activationCells: Object.freeze([]),
+        landedCells: EMPTY_GRID_CELL_COORDINATES,
+        activationCells: EMPTY_GRID_CELL_COORDINATES,
       });
     }
-    let startedCells: readonly GridCellCoordinate[] = Object.freeze([]);
-    let landedCells: readonly GridCellCoordinate[] = Object.freeze([]);
-    let activationCells: readonly GridCellCoordinate[] = Object.freeze([]);
+    const started = this.#startedCellsScratch;
+    const landed = this.#landedCellsScratch;
+    const activated = this.#activationCellsScratch;
+    started.length = 0;
+    landed.length = 0;
+    activated.length = 0;
     if (this.#spinPlan) {
-      const edges = this.updateSpinTimeline(deltaSeconds);
-      startedCells = freezeCoordinates(edges.started);
-      landedCells = freezeCoordinates(edges.landed);
-      activationCells = freezeCoordinates(edges.activated);
+      this.updateSpinTimeline(deltaSeconds, started, landed, activated);
     } else {
       for (const cell of this.#cells) {
         cell.reel.update(deltaSeconds);
@@ -988,13 +987,19 @@ export class RenderGridCellReelSet
       this.#spinPlan = null;
     }
 
+    if (started.length === 0 && landed.length === 0 && activated.length === 0) {
+      if (this.#spinPlan) return ACTIVE_SPIN_UPDATE_RESULT;
+      if (completed) return COMPLETED_SPIN_UPDATE_RESULT;
+      return IDLE_UPDATE_RESULT;
+    }
+
     return Object.freeze({
       spinning: this.#spinPlan !== null,
       completed,
       activity: this.#spinPlan !== null || completed ? "spin" : null,
-      startedCells,
-      landedCells,
-      activationCells,
+      startedCells: freezeCoordinates(started),
+      landedCells: freezeCoordinates(landed),
+      activationCells: freezeCoordinates(activated),
     });
   }
 
@@ -3068,6 +3073,13 @@ export class RenderGridCellReelSet
 
     const dimOverlay = new Container();
     const dimRows = createDimmingRows(this.#cellWidth, this.#cellHeight);
+    const slotRenderViewsByWindowY = new Map<
+      number,
+      RenderReelSlotRenderView
+    >();
+    for (const slot of reel.getSlotRenderViews()) {
+      slotRenderViewsByWindowY.set(slot.windowY, slot);
+    }
     dimOverlay.alpha = 0;
     dimOverlay.y = 0;
     dimOverlay.renderable = false;
@@ -3080,6 +3092,7 @@ export class RenderGridCellReelSet
     root.zIndex = coordinate.orderIndex;
 
     return {
+      key: createCellKey(coordinate.x, coordinate.y),
       coordinate,
       root,
       clipContent,
@@ -3087,6 +3100,7 @@ export class RenderGridCellReelSet
       clipMask,
       dimOverlay,
       dimRows,
+      slotRenderViewsByWindowY,
       planCell: null,
       phase: "idle",
       hasStartedThisSpin: false,
@@ -3099,19 +3113,15 @@ export class RenderGridCellReelSet
     };
   }
 
-  private updateSpinTimeline(deltaSeconds: number): {
-    readonly started: readonly GridCellCoordinate[];
-    readonly landed: readonly GridCellCoordinate[];
-    readonly activated: readonly GridCellCoordinate[];
-  } {
+  private updateSpinTimeline(
+    deltaSeconds: number,
+    started: GridCellCoordinate[],
+    landed: GridCellCoordinate[],
+    activated: GridCellCoordinate[],
+  ): void {
     const plan = this.#spinPlan;
-    if (!plan) {
-      return { started: [], landed: [], activated: [] };
-    }
+    if (!plan) return;
     const endMs = this.#elapsedMs + deltaSeconds * 1000;
-    const started: GridCellCoordinate[] = [];
-    const landed: GridCellCoordinate[] = [];
-    const activated: GridCellCoordinate[] = [];
     let cursorMs = this.#elapsedMs;
     let firstBoundary = true;
 
@@ -3147,7 +3157,6 @@ export class RenderGridCellReelSet
       cursorMs = nextMs;
     }
     this.#elapsedMs = endMs;
-    return { started, landed, activated };
   }
 
   private releaseCell(cell: RuntimeCell): void {
@@ -3660,15 +3669,12 @@ export class RenderGridCellReelSet
     dimming: GridCellDimmingPattern,
     activated = this.#dimmingActivated,
   ): void {
-    const reelY = cell.reel.getSnapshot().currentY;
+    const reelY = cell.reel.getCurrentY();
     cell.dimOverlay.renderable = cell.dimOverlay.alpha > 0;
     const fractionalY = reelY - Math.floor(reelY);
     cell.dimOverlay.y = -fractionalY * this.#cellHeight;
-    const slotsByWindowY = new Map(
-      cell.reel.getSlotSnapshots().map((slot) => [slot.windowY, slot] as const),
-    );
     for (const row of cell.dimRows) {
-      const slot = slotsByWindowY.get(row.windowY);
+      const slot = cell.slotRenderViewsByWindowY.get(row.windowY);
       const dimmingAlpha =
         slot && slot.kind !== "empty"
           ? resolveGridCellDimmingAlpha(dimming, slot.code, activated)
@@ -3691,9 +3697,7 @@ export class RenderGridCellReelSet
     cell.dimOverlay.y = 0;
     cell.dimOverlay.renderable = cell.dimOverlay.alpha > 0;
     for (const row of cell.dimRows) {
-      const slot = cell.reel
-        .getSlotSnapshots()
-        .find((candidate) => candidate.windowY === row.windowY);
+      const slot = cell.slotRenderViewsByWindowY.get(row.windowY);
       const dimmingAlpha =
         row.windowY === 0
           ? resolveGridCellDimmingAlpha(
@@ -3718,9 +3722,7 @@ export class RenderGridCellReelSet
   }
 
   private syncCellRenderOrder(cell: RuntimeCell): void {
-    const visibleSlot = cell.reel
-      .getSlotSnapshots()
-      .find((slot) => slot.windowY === 0);
+    const visibleSlot = cell.slotRenderViewsByWindowY.get(0);
     const renderPriority = visibleSlot?.symbol?.renderPriority ?? 0;
     cell.root.zIndex =
       renderPriority * (this.#order.length + 1) + cell.coordinate.orderIndex;
@@ -3744,9 +3746,7 @@ export class RenderGridCellReelSet
       const rowTop = cell.dimOverlay.y + row.windowY * this.#cellHeight;
       const rowBottom = rowTop + this.#cellHeight;
       if (centerY >= rowTop && centerY < rowBottom) {
-        const symbol = cell.reel
-          .getSlotSnapshots()
-          .find((slot) => slot.windowY === row.windowY)?.symbol;
+        const symbol = cell.slotRenderViewsByWindowY.get(row.windowY)?.symbol;
         if (!symbol) return 0;
         return (((symbol.tint as number) >> 16) & 0xff) / 255;
       }
@@ -3754,6 +3754,72 @@ export class RenderGridCellReelSet
     return 0;
   }
 }
+
+const EMPTY_GRID_CELL_COORDINATES: readonly GridCellCoordinate[] =
+  Object.freeze([]);
+
+const IDLE_UPDATE_RESULT: RenderGridCellReelSetUpdateResult = Object.freeze({
+  spinning: false,
+  completed: false,
+  activity: null,
+  startedCells: EMPTY_GRID_CELL_COORDINATES,
+  landedCells: EMPTY_GRID_CELL_COORDINATES,
+  activationCells: EMPTY_GRID_CELL_COORDINATES,
+});
+
+const COMPLETED_IDLE_UPDATE_RESULT: RenderGridCellReelSetUpdateResult =
+  Object.freeze({
+    spinning: false,
+    completed: true,
+    activity: null,
+    startedCells: EMPTY_GRID_CELL_COORDINATES,
+    landedCells: EMPTY_GRID_CELL_COORDINATES,
+    activationCells: EMPTY_GRID_CELL_COORDINATES,
+  });
+
+const CONTINUOUS_SPIN_UPDATE_RESULT: RenderGridCellReelSetUpdateResult =
+  Object.freeze({
+    spinning: true,
+    completed: false,
+    activity: "spin",
+    startedCells: EMPTY_GRID_CELL_COORDINATES,
+    landedCells: EMPTY_GRID_CELL_COORDINATES,
+    activationCells: EMPTY_GRID_CELL_COORDINATES,
+  });
+
+const ACTIVE_SPIN_UPDATE_RESULT: RenderGridCellReelSetUpdateResult =
+  CONTINUOUS_SPIN_UPDATE_RESULT;
+
+const COMPLETED_SPIN_UPDATE_RESULT: RenderGridCellReelSetUpdateResult =
+  Object.freeze({
+    spinning: false,
+    completed: true,
+    activity: "spin",
+    startedCells: EMPTY_GRID_CELL_COORDINATES,
+    landedCells: EMPTY_GRID_CELL_COORDINATES,
+    activationCells: EMPTY_GRID_CELL_COORDINATES,
+  });
+
+const DROPDOWN_UPDATE_RESULT: RenderGridCellReelSetUpdateResult = Object.freeze(
+  {
+    spinning: false,
+    completed: false,
+    activity: "dropdown",
+    startedCells: EMPTY_GRID_CELL_COORDINATES,
+    landedCells: EMPTY_GRID_CELL_COORDINATES,
+    activationCells: EMPTY_GRID_CELL_COORDINATES,
+  },
+);
+
+const EFFECT_SWEEP_UPDATE_RESULT: RenderGridCellReelSetUpdateResult =
+  Object.freeze({
+    spinning: false,
+    completed: false,
+    activity: "effect-sweep",
+    startedCells: EMPTY_GRID_CELL_COORDINATES,
+    landedCells: EMPTY_GRID_CELL_COORDINATES,
+    activationCells: EMPTY_GRID_CELL_COORDINATES,
+  });
 
 function createDimmingRows(
   cellWidth: number,
@@ -3772,7 +3838,7 @@ function createDimmingRows(
 }
 
 function resetReelSlotSymbolsAndRequestLandingState(cell: RuntimeCell): void {
-  for (const slot of cell.reel.getSlotSnapshots()) {
+  for (const slot of cell.reel.getSlotRenderViews()) {
     slot.symbol?.reset();
     if (slot.windowY !== 0 || !slot.symbol) continue;
     if (cell.targetLandingState)
@@ -3803,7 +3869,7 @@ function validateGridEmptyTargets(
 }
 
 function resetReelSlotSymbolDimming(cell: RuntimeCell): void {
-  for (const slot of cell.reel.getSlotSnapshots()) {
+  for (const slot of cell.reel.getSlotRenderViews()) {
     if (slot.symbol) {
       slot.symbol.alpha = 1;
       slot.symbol.tint = 0xffffff;
@@ -3817,12 +3883,10 @@ function createBrightnessTint(brightness: number): number {
 }
 
 function hasActiveLandingAppear(cell: RuntimeCell): boolean {
-  return cell.reel
-    .getSlotSnapshots()
-    .some(
-      (slot) =>
-        slot.windowY === 0 && slot.symbol?.isLandingAppearActive() === true,
-    );
+  return (
+    cell.slotRenderViewsByWindowY.get(0)?.symbol?.isLandingAppearActive() ===
+    true
+  );
 }
 
 function parseScene(

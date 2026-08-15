@@ -16,6 +16,7 @@ import type {
   RenderReelContinuousSpinOptions,
   RenderReelPhase,
   RenderReelSpinOptions,
+  RenderReelSlotRenderView,
   RenderReelSlotSnapshot,
   RenderVisibleSymbolGeometrySnapshot,
   RenderVisibleSymbolStateSnapshot,
@@ -63,6 +64,7 @@ export class RenderReel extends Container {
   readonly #presentationValueResolver: RenderReelOptions["presentationValueResolver"];
   readonly #bounceStrength: number;
   readonly #slots: readonly ReelSlot[];
+  readonly #slotRenderViews: readonly RenderReelSlotRenderView[];
   readonly #clipMask: Graphics;
   #phase: RenderReelPhase = "idle";
   #plan: ReelAxisSpinPlan | null = null;
@@ -109,6 +111,7 @@ export class RenderReel extends Container {
     this.#clipMask.visible = false;
     this.#clipMask.renderable = false;
     this.#slots = Object.freeze(this.createSlots());
+    this.#slotRenderViews = this.createSlotRenderViews();
     this.addChild(this.#clipMask);
     this.resetToY(0);
   }
@@ -367,11 +370,9 @@ export class RenderReel extends Container {
 
     this.updateVisibleSymbols(landedThisUpdate ? 0 : deltaSeconds);
 
-    return Object.freeze({
-      phase: this.#phase,
-      completed: this.#phase === "stopped",
-      landed: !wasLanded && this.#landed,
-    });
+    return !wasLanded && this.#landed
+      ? LANDED_UPDATE_RESULT
+      : UPDATE_RESULTS_BY_PHASE[this.#phase];
   }
 
   resetToY(y: number): void {
@@ -463,6 +464,18 @@ export class RenderReel extends Container {
     return Object.freeze(
       this.#slots.map((slot) => this.createSlotSnapshot(slot)),
     );
+  }
+
+  /**
+   * Returns stable live views for allocation-sensitive render coordination.
+   * Call `getSlotSnapshots()` when snapshot isolation is required.
+   */
+  getSlotRenderViews(): readonly RenderReelSlotRenderView[] {
+    return this.#slotRenderViews;
+  }
+
+  getCurrentY(): number {
+    return this.#spinStrip ? this.#spinLocalY : this.#currentY;
   }
 
   takeVisibleOccurrence(windowY = 0): RenderReelVisibleOccurrence {
@@ -863,29 +876,37 @@ export class RenderReel extends Container {
     return slots;
   }
 
-  private renderAtY(y: number, state: SymbolStateId): void {
-    const snapshot = this.createWindowSnapshot(y);
+  private createSlotRenderViews(): readonly RenderReelSlotRenderView[] {
+    return Object.freeze(
+      this.#slots.map((slot) =>
+        Object.freeze({
+          windowY: slot.windowY,
+          get code(): number {
+            return slot.code ?? -1;
+          },
+          get kind(): ReelSymbolKind {
+            return slot.kind ?? "empty";
+          },
+          get symbol(): RenderSymbol | null {
+            return slot.symbol;
+          },
+        }),
+      ),
+    );
+  }
 
-    for (const slotData of snapshot.slots) {
-      const slot = this.#slots.find(
-        (candidate) => candidate.windowY === slotData.windowY,
-      );
-      if (!slot) {
-        throw new ReelError(
-          `Missing reel slot for windowY ${slotData.windowY}.`,
-        );
-      }
+  private renderAtY(y: number, state: SymbolStateId): void {
+    const baseY = Math.floor(y);
+    const pixelOffsetY =
+      -(y - baseY) * (this.layout.cellHeight + this.layout.rowGap);
+
+    for (const slot of this.#slots) {
+      const symbolY = baseY + slot.windowY;
+      const code = this.getCodeAt(symbolY, baseY);
       slot.container.x = this.getSlotContainerX();
-      slot.container.y = this.getSlotContainerY(
-        slotData.windowY,
-        snapshot.pixelOffsetY,
-      );
-      slot.container.visible = this.shouldShowSlot(slotData.windowY);
-      this.syncSlot(
-        slot,
-        slotData.code,
-        this.getPresentationValue(slotData.symbolY, slotData.code, y),
-      );
+      slot.container.y = this.getSlotContainerY(slot.windowY, pixelOffsetY);
+      slot.container.visible = this.shouldShowSlot(slot.windowY);
+      this.syncSlot(slot, code, this.getPresentationValue(symbolY, code, y));
       slot.symbol?.requestState(
         state,
         state === "spinBlur" ? "immediate" : "boundary",
@@ -920,6 +941,23 @@ export class RenderReel extends Container {
               }
             : undefined,
     });
+  }
+
+  private getCodeAt(symbolY: number, renderedBaseY: number): number {
+    if (this.#spinStrip) return this.#spinStrip.get(symbolY);
+    if (this.#continuousSpin) {
+      return (
+        this.#continuousSpin.initialCodes.get(symbolY) ??
+        this.#reels.get(this.xIndex, symbolY)
+      );
+    }
+    if (this.#staticVisibleSymbols) {
+      const visibleY = symbolY - renderedBaseY;
+      if (visibleY >= 0 && visibleY < this.layout.visibleRows) {
+        return this.#staticVisibleSymbols[visibleY]!;
+      }
+    }
+    return this.#reels.get(this.xIndex, symbolY);
   }
 
   private syncSlot(
@@ -1115,6 +1153,34 @@ export class RenderReel extends Container {
     );
   }
 }
+
+const UPDATE_RESULTS_BY_PHASE: Readonly<
+  Record<RenderReelPhase, RenderReelUpdateResult>
+> = Object.freeze({
+  idle: Object.freeze({ phase: "idle", completed: false, landed: false }),
+  starting: Object.freeze({
+    phase: "starting",
+    completed: false,
+    landed: false,
+  }),
+  spinning: Object.freeze({
+    phase: "spinning",
+    completed: false,
+    landed: false,
+  }),
+  settling: Object.freeze({
+    phase: "settling",
+    completed: false,
+    landed: false,
+  }),
+  stopped: Object.freeze({ phase: "stopped", completed: true, landed: false }),
+});
+
+const LANDED_UPDATE_RESULT: RenderReelUpdateResult = Object.freeze({
+  phase: "stopped",
+  completed: true,
+  landed: true,
+});
 
 function parsePresentationValues(
   value: readonly (number | null)[] | undefined,

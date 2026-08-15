@@ -539,6 +539,8 @@ cell 尺寸由当前参与 reels 渲染的非空普通图动态计算：单图�
 
 `createReelLayout()` 支持 `columnGap` 控制轴间距；`RenderReel` 只在 starting / spinning / settling 等非静止态裁切单轴内容，停止态会取消裁切，允许偏大的 symbol 自然超出格子外框。
 
+逐帧 presentation 协调需要读取当前 slot 时使用 `getSlotRenderViews()`：返回数组和每个 view 都在 reel 创建时一次建立，字段通过只读 getter 反映当前 code/kind/symbol，不提供 snapshot isolation。诊断、测试或需要冻结时点状态的调用仍使用 `getSlotSnapshots()`。热路径读取当前位置使用 `getCurrentY()`，不要为了一个标量创建完整 `getSnapshot()`。`RenderReel.renderAtY()` 直接遍历既有 slots，`update()` 对相同 phase 复用冻结结果，避免每格每帧创建 window/slot/update 快照。grid-cell runtime 同样复用每格 key、slot view 索引、timeline scratch arrays 和无 edge 的 update result；只有实际 started/landed/activation edge 才生成对外不可变坐标快照。
+
 典型流程：
 
 ```ts
