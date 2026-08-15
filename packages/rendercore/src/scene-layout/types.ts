@@ -772,15 +772,6 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
     text: string,
   ): void;
   getMainReelSymbolImageStringText(x: number, y: number, name: string): string;
-  prepareMainReelVisibleOccurrenceReplacement(options: {
-    readonly x: number;
-    readonly y: number;
-    readonly outputCode: number;
-    readonly outputPresentationValue: number | null;
-  }): import("../reel/index.js").PreparedVisibleOccurrenceReplacement;
-  prepareMainReelVisibleOccurrenceTransferBatch(options: {
-    readonly transfers: readonly import("../reel/index.js").GridCellVisibleOccurrenceTransfer[];
-  }): import("../reel/index.js").PreparedGridCellVisibleOccurrenceTransferBatch;
   transferMainReelSymbols(
     input: import("../reel/index.js").DirectVisibleOccurrenceTransferBatchInput,
   ): Promise<void>;

@@ -215,13 +215,11 @@ await runtime.runMainReelVisibleOccurrenceTransfer(
         order: 0,
       },
     });
-
-    await tx.commit();
   },
 );
 ```
 
-`move()` 完成只表示 moving occurrence 已到达 target geometry，不自动修改 committed reel 数据。callback 必须显式 `await tx.commit()`；callback 无 commit 返回时，外层 Promise reject 并 rollback。
+`move()` 完成表示 moving occurrence 已到达 target geometry。callback 随后正常返回时，runtime 才自动执行唯一原子 finalization；callback 未调用/未完成 `move()` 就返回时，外层 Promise 直接 reject。调用方不持有 prepare/commit/rollback 生命周期。
 
 ## Source replacement 与 hole
 
@@ -374,7 +372,7 @@ stacking: {
 scope 提供两个 identity-bound handle：
 
 - `tx.moving`：source 的完整 occurrence。
-- `tx.target`：commit 前 target 原本存在的 occurrence。
+- `tx.target`：callback 返回并 finalization 前 target 原本存在的 occurrence。
 
 ```ts
 await runtime.runMainReelVisibleOccurrenceTransfer(input, async (tx) => {
@@ -390,20 +388,18 @@ await runtime.runMainReelVisibleOccurrenceTransfer(input, async (tx) => {
       completion: "once-complete",
     }),
   ]);
-
-  await tx.commit();
 });
 ```
 
 生命周期语义：
 
 - 调用 `tx.move()` 后，source pos 被 transfer 租用，通过 pos 重新查询 source 会失败。
-- commit 前 target pos 和 `tx.target` 仍表示原 target occurrence。
-- commit 时 target 获得 moving occurrence，source 获得 replacement 或 hole，原 target 被释放。
-- commit 后原 target handle 变 stale，原 target occurrence effects 自动清理。
-- `tx.moving` 继续表示已经落在 target 的 occurrence，可以用于 commit 后动画。
+- callback 返回前 target pos 和 `tx.target` 仍表示原 target occurrence。
+- callback 正常返回时 target 获得 moving occurrence，source 获得 replacement 或 hole，原 target 被释放。
+- 外层 Promise resolve 后原 target handle 变 stale，原 target occurrence effects 自动清理。
+- finalization 后需要继续操作新 target 时，通过 symbol area/occurrence API 按 target position 重新取得 facade；不要把 callback scope 带出其生命周期。
 
-如果原 target 需要播放 hit/effect，应在 commit 前完成。如果要对新 target 播放落地动画，可在 commit 后继续使用 `tx.moving`。
+如果原 target 需要播放 hit/effect，应在 callback 返回前完成。如果要对新 target 播放落地动画，应在外层 Promise resolve 后重新取得 target facade。
 
 ## Movement 与 effect 组合
 
@@ -421,8 +417,6 @@ await runtime.runMainReelVisibleOccurrenceTransfer(input, async (tx) => {
     tx.move(motion),
     trail.play({ kind: "vni", loop: false }),
   ]);
-
-  await tx.commit();
 });
 ```
 
@@ -440,7 +434,6 @@ await runtime.runMainReelVisibleOccurrenceTransfer(input, async (tx) => {
 
   trail.stop();
   await trailPlayback;
-  await tx.commit();
 });
 ```
 
@@ -466,7 +459,6 @@ await runtime.runMainReelVisibleOccurrenceTransfer(input, async (tx) => {
   ]);
 
   await tx.delay(40);
-  await tx.commit();
 });
 ```
 
@@ -545,8 +537,6 @@ for (const route of routes) {
           completion: "once-complete",
         }),
       ]);
-
-      await tx.commit();
     },
   );
 }
@@ -554,7 +544,7 @@ for (const route of routes) {
 
 rendercore 不检查多条 route 之间的业务冲突。游戏必须提供适合当前顺序执行的 source/target、replacement/value 和 path 参数。
 
-## Abort、rollback 与 destroy
+## Abort、错误 cleanup 与 destroy
 
 ```ts
 const controller = new AbortController();
@@ -570,7 +560,6 @@ const pending = runtime.runMainReelVisibleOccurrenceTransfer(
   async (tx) => {
     await tx.delay(100);
     await tx.move(motion);
-    await tx.commit();
   },
 );
 
@@ -578,34 +567,33 @@ controller.abort();
 await pending; // rejects
 ```
 
-未 commit 时出现以下情况会 rollback：
+出现以下情况会直接 reject，并清理未 finalization 的临时 ownership：
 
-- callback 抛错或正常返回但未 commit。
+- callback 抛错，或正常返回但没有完成 `move()`。
 - delay、movement、symbol state 或 effect playback 失败。
 - `AbortSignal` abort。
 - reel reset。
 - reel/runtime destroy。
 
-rollback 会恢复 source occurrence、释放预创建 replacement、保留原 target，并清理临时 overlay/mask。已经完成并 commit 的前序 transfer 不会因为后续调用失败而倒放。
+cleanup 会结束 source occurrence 的临时 display lease、释放预创建 replacement、保留未被 finalization 覆盖的原 target，并清理 listener/overlay/mask。它不读取旧 scene、不复核或恢复 logic 数据，也不会撤销已经完成的 mutation；已经 finalization 的前序 transfer 不会因为后续调用失败而倒放。
 
 ## 并发与调用限制
 
 - source 和 target 必须不同，且开始时都必须 occupied。
 - 同一个 grid-cell reel 同时只允许一个 scoped transfer。
 - 一个 scope 只能调用一次 `move()`。
-- movement 到达后才能调用 `commit()`。
-- `commit()` 只能调用一次。
-- callback 必须显式 commit。
+- callback 必须等待唯一一次 `move()` 到达后再正常返回。
+- callback 正常返回只触发一次 runtime-owned finalization。
 - 不支持 standard reel。
 - 不提供跨 operation timeline DSL、自动 stagger 或 CO route interpreter。
-- 不自动合并 source/target 业务数据；target 原 occurrence 的后续表现由游戏在 commit 前决定。
+- 不自动合并 source/target 业务数据；target 原 occurrence 的后续表现由游戏在 callback 返回前决定。
 
-## 低层 manual batch API
+## Direct batch API
 
-既有 batch API 继续保留，且支持 exact hole：
+不需要自定义 path/effect choreography 时，使用单次 awaitable batch；它支持 exact hole，且不暴露 manual progress、prepare 或 commit：
 
 ```ts
-const prepared = runtime.prepareMainReelVisibleOccurrenceTransferBatch({
+const transfer = runtime.transferMainReelSymbols({
   transfers: [
     {
       source: { x: 0, y: 0 },
@@ -614,12 +602,11 @@ const prepared = runtime.prepareMainReelVisibleOccurrenceTransferBatch({
       sourceReplacementPresentationValue: null,
     },
   ],
+  durationMs: 320,
+  signal,
 });
 
-prepared.start();
-prepared.setProgress(0.5);
-prepared.setProgress(1);
-prepared.commit();
+await transfer;
 ```
 
-低层 API 保持既有固定直线/ease-out 和 consumer-managed progress，主要用于兼容现有调用。新业务需要 duration、Bezier、effect、delay、abort 和自动 rollback 时，应优先使用 `runMainReelVisibleOccurrenceTransfer()`。
+direct batch 使用 runtime ticker 推进固定直线/ease-out，并在完成时自动 finalization。需要 Bezier、effect、delay 或自定义 stacking 时使用 `runMainReelVisibleOccurrenceTransfer()`；两者都由 runtime 拥有临时资源 cleanup 和 finalization，不提供业务 rollback。

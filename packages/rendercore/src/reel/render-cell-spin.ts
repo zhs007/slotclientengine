@@ -6,7 +6,6 @@ import type { SymbolStateId } from "../symbol/index.js";
 import { getRenderObjectAdapter } from "../presentation/render-object.js";
 import { createContainerRenderAnchor } from "../presentation/render-anchor.js";
 import {
-  createEmptySymbolRender,
   createSymbolRender,
   type SymbolRender,
 } from "../symbol/symbol-render.js";
@@ -165,8 +164,8 @@ interface ActiveCellMotion {
   readonly totalSeconds: number;
   readonly signal?: AbortSignal;
   readonly abortListener?: () => void;
-  readonly commit: () => void;
-  readonly rollback: () => void;
+  readonly finalize: () => void;
+  readonly cleanup: () => void;
   readonly resolve: () => void;
   readonly reject: (error: Error) => void;
   elapsedSeconds: number;
@@ -269,46 +268,24 @@ export class RenderCellSpin extends Container implements CellSpin {
       throw new ReelError(
         `Cannot get symbol at (${position.x},${position.y}) before the cell has landed.`,
       );
-    const slot = cell.reel
-      .getSlotSnapshots()
-      .find((item) => item.windowY === 0);
-    if (!slot)
-      throw new ReelError(`Cannot resolve cell (${position.x},${position.y}).`);
+    const slot = cell.reel.getSlotRenderView(0);
     const getPosition = () => ({
       x: cell.root.x + cell.reel.layout.cellWidth / 2,
       y: cell.root.y + cell.reel.layout.cellHeight / 2,
     });
     if (slot.code === -1) {
-      const capturedContainer = slot.container;
-      const capturedLayer = slot.emptySymbolLayer;
-      return createEmptySymbolRender({
-        view: capturedLayer,
-        owned: false,
+      return cell.reel.createVisibleEmptySymbolRender(0, {
         assertUsable: () => {
-          const current = cell.reel
-            .getSlotSnapshots()
-            .find((item) => item.windowY === 0);
-          if (
-            this.#destroyed ||
-            this.#active.has(keyOf(position)) ||
-            current?.container !== capturedContainer ||
-            current.emptySymbolLayer !== capturedLayer ||
-            current.code !== -1
-          )
+          if (this.#destroyed || this.#active.has(keyOf(position)))
             throw new ReelError("SymbolRender is stale.");
         },
         getPosition,
         getAnchor: () =>
           createContainerRenderAnchor(this, () => {
-            const current = cell.reel
-              .getSlotSnapshots()
-              .find((item) => item.windowY === 0);
             if (
               this.#destroyed ||
               this.#active.has(keyOf(position)) ||
-              current?.container !== capturedContainer ||
-              current.emptySymbolLayer !== capturedLayer ||
-              current.code !== -1
+              cell.reel.getSlotRenderView(0).code !== -1
             )
               throw new ReelError("SymbolRender is stale.");
             return getPosition();
@@ -351,8 +328,7 @@ export class RenderCellSpin extends Container implements CellSpin {
           this.#destroyed ||
           this.#active.has(keyOf(position)) ||
           this.getOccurrenceGeneration(captured) !== generation ||
-          cell.reel.getSlotSnapshots().find((item) => item.windowY === 0)
-            ?.symbol !== captured
+          cell.reel.getSlotRenderView(0).symbol !== captured
         )
           throw new ReelError("SymbolRender is stale.");
       },
@@ -415,9 +391,11 @@ export class RenderCellSpin extends Container implements CellSpin {
     const keys = new Set<string>();
     const prepared: Array<{
       readonly cell: RuntimeCell;
-      readonly previousSymbol: RenderReelVisibleOccurrence["symbol"] | null;
-      readonly previousCode: number;
+      readonly hadSymbol: boolean;
       readonly output: RenderReelVisibleOccurrence | null;
+      previous: RenderReelVisibleOccurrence | null;
+      slotOpened: boolean;
+      outputPlaced: boolean;
     }> = [];
     try {
       for (const { position, target } of replacements) {
@@ -435,21 +413,14 @@ export class RenderCellSpin extends Container implements CellSpin {
           throw new ReelError(
             `Cannot replace symbol at (${position.x},${position.y}) before the cell has landed.`,
           );
-        const previous = cell.reel
-          .getSlotSnapshots()
-          .find((slot) => slot.windowY === 0);
-        if (!previous)
-          throw new ReelError(
-            `Cannot resolve cell (${position.x},${position.y}).`,
-          );
+        const previous = cell.reel.getSlotRenderView(0);
         if (target.code === -1 && (target.value ?? null) !== null)
           throw new ReelError(
             "Empty symbol replacement must have a null presentation value.",
           );
         prepared.push({
           cell,
-          previousSymbol: previous.symbol,
-          previousCode: previous.code,
+          hadSymbol: previous.symbol !== null,
           output:
             target.code === -1
               ? null
@@ -457,39 +428,48 @@ export class RenderCellSpin extends Container implements CellSpin {
                   target.code,
                   target.value ?? null,
                 ),
+          previous: null,
+          slotOpened: false,
+          outputPlaced: false,
         });
       }
+      for (const item of prepared) {
+        item.previous = item.hadSymbol
+          ? item.cell.reel.takeVisibleOccurrence()
+          : null;
+        if (!item.previous) item.cell.reel.openVisibleEmptySlot();
+        item.slotOpened = true;
+      }
+      for (const item of prepared) {
+        if (item.output) item.cell.reel.placeVisibleOccurrence(item.output);
+        else item.cell.reel.placeVisibleEmptySlot();
+        item.outputPlaced = true;
+      }
     } catch (error) {
-      for (const item of prepared)
-        if (item.output) item.cell.reel.releaseDetachedOccurrence(item.output);
+      for (const item of prepared.toReversed()) {
+        if (item.outputPlaced) {
+          if (item.output) {
+            const placed = item.cell.reel.takeVisibleOccurrence();
+            item.cell.reel.releaseDetachedOccurrence(placed);
+          } else {
+            item.cell.reel.openVisibleEmptySlot();
+          }
+        } else if (item.output) {
+          item.cell.reel.releaseDetachedOccurrence(item.output);
+        }
+        if (item.slotOpened) {
+          if (item.previous)
+            item.cell.reel.placeVisibleOccurrence(item.previous);
+          else item.cell.reel.placeVisibleEmptySlot();
+        }
+      }
       throw error;
     }
-    for (const item of prepared) {
-      const current = item.cell.reel
-        .getSlotSnapshots()
-        .find((slot) => slot.windowY === 0);
-      if (
-        current?.symbol !== item.previousSymbol ||
-        current.code !== item.previousCode
-      ) {
-        for (const candidate of prepared)
-          if (candidate.output)
-            candidate.cell.reel.releaseDetachedOccurrence(candidate.output);
-        throw new ReelError("Cell symbol replacement ownership changed.");
+    for (const item of prepared)
+      if (item.previous) {
+        this.bumpOccurrenceGeneration(item.previous.symbol);
+        item.cell.reel.releaseDetachedOccurrence(item.previous);
       }
-    }
-    for (const item of prepared) {
-      const previous = item.previousSymbol
-        ? item.cell.reel.takeVisibleOccurrence()
-        : null;
-      if (!previous) item.cell.reel.openVisibleEmptySlot();
-      if (item.output) item.cell.reel.placeVisibleOccurrence(item.output);
-      else item.cell.reel.placeVisibleEmptySlot();
-      if (previous) {
-        this.bumpOccurrenceGeneration(previous.symbol);
-        item.cell.reel.releaseDetachedOccurrence(previous);
-      }
-    }
     return this.getSymbols(replacements.map(({ position }) => position));
   }
 
@@ -753,9 +733,7 @@ export class RenderCellSpin extends Container implements CellSpin {
         };
       });
       for (const [index, entry] of validated.entries()) {
-        const targetSlot = entry.target.reel
-          .getSlotSnapshots()
-          .find((slot) => slot.windowY === 0);
+        const targetSlot = entry.target.reel.getSlotRenderView(0);
         if (targetSlot?.kind !== "empty" && !sourceKeys.has(entry.targetKey))
           throw new ReelError(
             `Cell drop[${index}] target must be -1 or another movement source.`,
@@ -800,7 +778,7 @@ export class RenderCellSpin extends Container implements CellSpin {
         });
       }
     } catch (error) {
-      this.rollbackPreparedMotion(items);
+      this.cleanupPreparedMotion(items);
       return Promise.reject(error);
     }
     return this.startMotion(
@@ -809,9 +787,7 @@ export class RenderCellSpin extends Container implements CellSpin {
       () => {
         for (const item of items) {
           item.occurrence.symbol.parent?.removeChild(item.occurrence.symbol);
-          const targetSlot = item.target.reel
-            .getSlotSnapshots()
-            .find((slot) => slot.windowY === 0);
+          const targetSlot = item.target.reel.getSlotRenderView(0);
           if (targetSlot?.kind === "empty")
             item.target.reel.openVisibleEmptySlot();
           item.target.reel.placeVisibleOccurrence(item.occurrence);
@@ -821,7 +797,7 @@ export class RenderCellSpin extends Container implements CellSpin {
             commit.position,
           ).reel.setVisibleSymbolPresentationValue(0, commit.value);
       },
-      () => this.rollbackPreparedMotion(items),
+      () => this.cleanupPreparedMotion(items),
     );
   }
 
@@ -905,8 +881,8 @@ export class RenderCellSpin extends Container implements CellSpin {
   private startMotion(
     items: readonly CellMotionItem[],
     signal: AbortSignal | undefined,
-    commit: () => void,
-    rollback: () => void,
+    finalize: () => void,
+    cleanup: () => void,
   ): Promise<void> {
     const totalSeconds = items.reduce(
       (maximum, item) =>
@@ -918,8 +894,8 @@ export class RenderCellSpin extends Container implements CellSpin {
         items: Object.freeze([...items]),
         totalSeconds,
         ...(signal ? { signal } : {}),
-        commit,
-        rollback,
+        finalize,
+        cleanup,
         resolve,
         reject,
         elapsedSeconds: 0,
@@ -961,7 +937,7 @@ export class RenderCellSpin extends Container implements CellSpin {
     }
     if (active.elapsedSeconds < active.totalSeconds) return;
     try {
-      active.commit();
+      active.finalize();
       active.signal?.removeEventListener("abort", active.abortListener!);
       this.#activeMotion = null;
       active.resolve();
@@ -976,14 +952,14 @@ export class RenderCellSpin extends Container implements CellSpin {
     this.#activeMotion = null;
     active.signal?.removeEventListener("abort", active.abortListener!);
     try {
-      active.rollback();
+      active.cleanup();
     } catch {
       // Preserve the original motion failure after best-effort ownership restore.
     }
     active.reject(error);
   }
 
-  private rollbackPreparedMotion(items: readonly CellMotionItem[]): void {
+  private cleanupPreparedMotion(items: readonly CellMotionItem[]): void {
     for (const item of items) {
       item.occurrence.symbol.parent?.removeChild(item.occurrence.symbol);
       if (item.source) item.source.reel.placeVisibleOccurrence(item.occurrence);
@@ -1085,9 +1061,7 @@ export class RenderCellSpin extends Container implements CellSpin {
   }
 
   private bumpCellOccurrenceGeneration(cell: RuntimeCell): void {
-    const symbol = cell.reel
-      .getSlotSnapshots()
-      .find((slot) => slot.windowY === 0)?.symbol;
+    const symbol = cell.reel.getSlotRenderView(0).symbol;
     if (!symbol) return;
     this.bumpOccurrenceGeneration(symbol);
   }

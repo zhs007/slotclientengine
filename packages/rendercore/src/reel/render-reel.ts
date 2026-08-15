@@ -17,7 +17,7 @@ import type {
   RenderReelContinuousSpinOptions,
   RenderReelPhase,
   RenderReelSpinOptions,
-  RenderReelSlotSnapshot,
+  RenderReelSlotRenderView,
   RenderVisibleSymbolGeometrySnapshot,
   RenderVisibleSymbolStateSnapshot,
   ReelWindowSnapshot,
@@ -32,6 +32,11 @@ import type {
   SymbolStatePlaybackOptions,
   SymbolStateTransitionMode,
 } from "../symbol/index.js";
+import {
+  createEmptySymbolRender,
+  type EmptySymbolRenderSource,
+  type SymbolRender,
+} from "../symbol/symbol-render.js";
 
 interface ReelSlot {
   readonly windowY: number;
@@ -78,6 +83,7 @@ export class RenderReel extends Container {
   readonly #presentationValueResolver: RenderReelOptions["presentationValueResolver"];
   readonly #bounceStrength: number;
   readonly #slots: readonly ReelSlot[];
+  readonly #slotRenderViews: readonly RenderReelSlotRenderView[];
   readonly #clipMask: Graphics;
   #phase: RenderReelPhase = "idle";
   #plan: ReelAxisSpinPlan | null = null;
@@ -125,6 +131,7 @@ export class RenderReel extends Container {
     this.#clipMask.visible = false;
     this.#clipMask.renderable = false;
     this.#slots = Object.freeze(this.createSlots());
+    this.#slotRenderViews = this.createSlotRenderViews();
     this.addChild(this.#clipMask);
     this.resetToY(0);
   }
@@ -399,11 +406,9 @@ export class RenderReel extends Container {
 
     this.updateVisibleSymbols(landedThisUpdate ? 0 : deltaSeconds);
 
-    return Object.freeze({
-      phase: this.#phase,
-      completed: this.#phase === "stopped",
-      landed: !wasLanded && this.#landed,
-    });
+    return !wasLanded && this.#landed
+      ? LANDED_UPDATE_RESULT
+      : UPDATE_RESULTS_BY_PHASE[this.#phase];
   }
 
   resetToY(y: number): void {
@@ -493,10 +498,62 @@ export class RenderReel extends Container {
     );
   }
 
-  getSlotSnapshots(): readonly RenderReelSlotSnapshot[] {
-    return Object.freeze(
-      this.#slots.map((slot) => this.createSlotSnapshot(slot)),
-    );
+  /** Returns stable live views for allocation-sensitive render coordination. */
+  getSlotRenderViews(): readonly RenderReelSlotRenderView[] {
+    return this.#slotRenderViews;
+  }
+
+  getSlotRenderView(windowY: number): RenderReelSlotRenderView {
+    return this.#slotRenderViews[this.getSlotIndex(windowY)]!;
+  }
+
+  setSlotBrightness(windowY: number, brightness: number): void {
+    if (!Number.isFinite(brightness) || brightness < 0 || brightness > 1)
+      throw new ReelError(
+        "slot brightness must be finite and between 0 and 1.",
+      );
+    const slot = this.#slots[this.getSlotIndex(windowY)]!;
+    slot.container.alpha = 1;
+    slot.container.tint = createBrightnessTint(brightness);
+  }
+
+  getSlotBrightness(windowY: number): number {
+    const tint = this.#slots[this.getSlotIndex(windowY)]!.container
+      .tint as number;
+    return ((tint >> 16) & 0xff) / 255;
+  }
+
+  resetSlotBrightness(): void {
+    for (const slot of this.#slots) {
+      slot.container.alpha = 1;
+      slot.container.tint = 0xffffff;
+    }
+  }
+
+  createVisibleEmptySymbolRender(
+    windowY: number,
+    source: Omit<EmptySymbolRenderSource, "view" | "owned">,
+  ): SymbolRender {
+    const slot = this.getVisibleSlot(windowY);
+    if (slot.symbol || slot.kind === "textured" || (slot.code ?? -1) !== -1)
+      throw new ReelError(
+        `Cannot create empty SymbolRender for occupied reel ${this.xIndex}, y ${windowY}.`,
+      );
+    return createEmptySymbolRender({
+      view: slot.emptySymbolLayer,
+      owned: false,
+      assertUsable: () => {
+        source.assertUsable();
+        if (slot.symbol || slot.kind === "textured" || (slot.code ?? -1) !== -1)
+          throw new ReelError("SymbolRender is stale.");
+      },
+      ...(source.getPosition ? { getPosition: source.getPosition } : {}),
+      ...(source.getAnchor ? { getAnchor: source.getAnchor } : {}),
+    });
+  }
+
+  getCurrentY(): number {
+    return this.#spinStrip ? this.#spinLocalY : this.#currentY;
   }
 
   takeVisibleOccurrence(windowY = 0): RenderReelVisibleOccurrence {
@@ -749,16 +806,16 @@ export class RenderReel extends Container {
     windowY: number,
   ): RenderVisibleSymbolStateSnapshot {
     const slot = this.getVisibleSlot(windowY);
-    const snapshot = this.createSlotSnapshot(slot);
+    const state = slot.symbol?.getStateSnapshot();
     const completion = slot.symbol?.getAnimationCompletionSnapshot();
     return Object.freeze({
       x: this.xIndex,
       y: windowY,
-      code: snapshot.code,
-      kind: snapshot.kind,
-      requestedState: snapshot.requestedState,
-      resolvedState: snapshot.resolvedState,
-      isOnce: snapshot.isOnce,
+      code: slot.code ?? -1,
+      kind: slot.kind ?? "empty",
+      requestedState: state?.requestedState ?? null,
+      resolvedState: state?.resolvedState ?? null,
+      isOnce: state?.isOnce ?? false,
       loopCompletionCount: completion?.loopCompletionCount ?? 0,
       onceCompletionCount: completion?.onceCompletionCount ?? 0,
     });
@@ -768,12 +825,11 @@ export class RenderReel extends Container {
     windowY: number,
   ): RenderVisibleSymbolGeometrySnapshot {
     const slot = this.getVisibleSlot(windowY);
-    const snapshot = this.createSlotSnapshot(slot);
     return Object.freeze({
       x: this.xIndex,
       y: windowY,
-      code: snapshot.code,
-      kind: snapshot.kind,
+      code: slot.code ?? -1,
+      kind: slot.kind ?? "empty",
       centerX: this.x + this.layout.cellWidth / 2,
       centerY:
         this.y + this.layout.getCellY(windowY) + this.layout.cellHeight / 2,
@@ -807,34 +863,6 @@ export class RenderReel extends Container {
     });
   }
 
-  private createSlotSnapshot(slot: ReelSlot): RenderReelSlotSnapshot {
-    const stateSnapshot = slot.symbol?.getStateSnapshot();
-    const isRolling = !slot.symbol && slot.kind === "textured";
-    return Object.freeze({
-      windowY: slot.windowY,
-      code: slot.code ?? -1,
-      kind: slot.kind ?? "empty",
-      mode: slot.symbol
-        ? "settled"
-        : slot.kind === "textured"
-          ? "rolling"
-          : "empty",
-      symbol: slot.symbol,
-      rollingVisual: slot.rollingSprite,
-      container: slot.container,
-      emptySymbolLayer: slot.emptySymbolLayer,
-      renderPriority: slot.renderPriority,
-      rollingValueTierIndex: slot.rollingValueTierIndex,
-      requestedState:
-        stateSnapshot?.requestedState ?? (isRolling ? "spinBlur" : null),
-      resolvedState:
-        stateSnapshot?.resolvedState ?? (isRolling ? "spinBlur" : null),
-      isOnce: stateSnapshot?.isOnce ?? false,
-      presentationValue:
-        slot.symbol?.getPresentationValue() ?? slot.rollingPresentationValue,
-    });
-  }
-
   private getVisibleSlot(windowY: number): ReelSlot {
     if (
       !Number.isInteger(windowY) ||
@@ -851,14 +879,25 @@ export class RenderReel extends Container {
       );
     }
 
-    const slot = this.#slots.find((candidate) => candidate.windowY === windowY);
-    if (!slot) {
-      throw new ReelError(
-        `Missing visible reel slot for reel ${this.xIndex}, y ${windowY}.`,
-      );
-    }
+    return this.#slots[this.getSlotIndex(windowY)]!;
+  }
 
-    return slot;
+  private getSlotIndex(windowY: number): number {
+    if (!Number.isInteger(windowY))
+      throw new ReelError(
+        `reel slot window y ${windowY} must be an integer for reel ${this.xIndex}.`,
+      );
+    const index = windowY + this.layout.bufferRowsBefore;
+    if (index < 0 || index >= this.#slots.length)
+      throw new ReelError(
+        `reel slot window y ${windowY} is out of range for reel ${this.xIndex}.`,
+      );
+    const slot = this.#slots[index];
+    if (!slot || slot.windowY !== windowY)
+      throw new ReelError(
+        `Missing reel slot for reel ${this.xIndex}, y ${windowY}.`,
+      );
+    return index;
   }
 
   private setStaticVisibleSlot(
@@ -929,41 +968,68 @@ export class RenderReel extends Container {
     return slots;
   }
 
-  private renderAtY(y: number, state: SymbolStateId): void {
-    const snapshot = this.createWindowSnapshot(y);
+  private createSlotRenderViews(): readonly RenderReelSlotRenderView[] {
+    return Object.freeze(
+      this.#slots.map((slot) =>
+        Object.freeze({
+          windowY: slot.windowY,
+          get code(): number {
+            return slot.code ?? -1;
+          },
+          get kind(): ReelSymbolKind {
+            return slot.kind ?? "empty";
+          },
+          get symbol(): RenderSymbol | null {
+            return slot.symbol;
+          },
+          get renderPriority(): number {
+            return slot.renderPriority;
+          },
+          get zIndex(): number {
+            return slot.container.zIndex;
+          },
+          get hasClipMask(): boolean {
+            return slot.container.mask != null;
+          },
+          get presentationValue(): number | null {
+            return (
+              slot.symbol?.getPresentationValue() ??
+              slot.rollingPresentationValue
+            );
+          },
+        }),
+      ),
+    );
+  }
 
-    for (const slotData of snapshot.slots) {
-      const slot = this.#slots.find(
-        (candidate) => candidate.windowY === slotData.windowY,
-      );
-      if (!slot) {
-        throw new ReelError(
-          `Missing reel slot for windowY ${slotData.windowY}.`,
-        );
-      }
+  private renderAtY(y: number, state: SymbolStateId): void {
+    const baseY = Math.floor(y);
+    const pixelOffsetY =
+      -(y - baseY) * (this.layout.cellHeight + this.layout.rowGap);
+
+    for (const slot of this.#slots) {
+      const symbolY = baseY + slot.windowY;
+      const code = this.getCodeAt(symbolY, baseY);
       slot.container.x = this.getSlotContainerX();
-      slot.container.y = this.getSlotContainerY(
-        slotData.windowY,
-        snapshot.pixelOffsetY,
-      );
-      slot.container.visible = this.shouldShowSlot(slotData.windowY);
+      slot.container.y = this.getSlotContainerY(slot.windowY, pixelOffsetY);
+      slot.container.visible = this.shouldShowSlot(slot.windowY);
       const isVisibleStoppedSlot =
         this.#phase === "stopped" &&
-        slotData.windowY >= 0 &&
-        slotData.windowY < this.layout.visibleRows;
+        slot.windowY >= 0 &&
+        slot.windowY < this.layout.visibleRows;
       if (isVisibleStoppedSlot) {
         this.syncSettledSlot(
           slot,
-          slotData.code,
-          this.getPresentationValue(slotData.symbolY, slotData.code, y),
+          code,
+          this.getPresentationValue(symbolY, code, y),
         );
         slot.symbol?.requestState(state, "boundary");
       } else {
         this.syncRollingSlot(
           slot,
-          slotData.code,
+          code,
           "spinBlur",
-          this.getPresentationValue(slotData.symbolY, slotData.code, y),
+          this.getPresentationValue(symbolY, code, y),
         );
       }
     }
@@ -996,6 +1062,23 @@ export class RenderReel extends Container {
               }
             : undefined,
     });
+  }
+
+  private getCodeAt(symbolY: number, renderedBaseY: number): number {
+    if (this.#spinStrip) return this.#spinStrip.get(symbolY);
+    if (this.#continuousSpin) {
+      return (
+        this.#continuousSpin.initialCodes.get(symbolY) ??
+        this.#reels.get(this.xIndex, symbolY)
+      );
+    }
+    if (this.#staticVisibleSymbols) {
+      const visibleY = symbolY - renderedBaseY;
+      if (visibleY >= 0 && visibleY < this.layout.visibleRows) {
+        return this.#staticVisibleSymbols[visibleY]!;
+      }
+    }
+    return this.#reels.get(this.xIndex, symbolY);
   }
 
   private syncSettledSlot(
@@ -1492,6 +1575,34 @@ export class RenderReel extends Container {
   }
 }
 
+const UPDATE_RESULTS_BY_PHASE: Readonly<
+  Record<RenderReelPhase, RenderReelUpdateResult>
+> = Object.freeze({
+  idle: Object.freeze({ phase: "idle", completed: false, landed: false }),
+  starting: Object.freeze({
+    phase: "starting",
+    completed: false,
+    landed: false,
+  }),
+  spinning: Object.freeze({
+    phase: "spinning",
+    completed: false,
+    landed: false,
+  }),
+  settling: Object.freeze({
+    phase: "settling",
+    completed: false,
+    landed: false,
+  }),
+  stopped: Object.freeze({ phase: "stopped", completed: true, landed: false }),
+});
+
+const LANDED_UPDATE_RESULT: RenderReelUpdateResult = Object.freeze({
+  phase: "stopped",
+  completed: true,
+  landed: true,
+});
+
 function parsePresentationValues(
   value: readonly (number | null)[] | undefined,
   expectedLength: number,
@@ -1653,6 +1764,11 @@ function createReelClipMask(layout: ReelLayout): Graphics {
 
 function calculateSlotCount(layout: ReelLayout): number {
   return layout.visibleRows + layout.bufferRowsBefore + layout.bufferRowsAfter;
+}
+
+function createBrightnessTint(brightness: number): number {
+  const channel = Math.round(brightness * 255);
+  return (channel << 16) | (channel << 8) | channel;
 }
 
 function normalizeNonNegativeSafeInteger(value: number, label: string): number {

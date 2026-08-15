@@ -46,10 +46,9 @@ import type {
   RenderGridCellReelSetSpinOptions,
   RenderGridCellReelSetSnapshot,
   RenderGridCellReelSetUpdateResult,
+  RenderReelSlotRenderView,
   RenderVisibleSymbolGeometrySnapshot,
   RenderVisibleSymbolStateSnapshot,
-  PreparedVisibleOccurrenceReplacement,
-  PreparedGridCellVisibleOccurrenceTransferBatch,
   GridCellVisibleOccurrenceTransfer,
   ReelSymbolRegistry,
   SymbolPresentationValueMatrix,
@@ -76,7 +75,6 @@ import type {
   SymbolStateTransitionMode,
 } from "../symbol/index.js";
 import {
-  createEmptySymbolRender,
   createSymbolRender,
   type SymbolRender,
 } from "../symbol/symbol-render.js";
@@ -94,6 +92,7 @@ import type {
 } from "./reel-area.js";
 
 interface RuntimeCell {
+  readonly key: string;
   readonly coordinate: GridCellCoordinate;
   readonly root: Container;
   readonly clipContent: Container;
@@ -101,6 +100,10 @@ interface RuntimeCell {
   readonly clipMask: Graphics;
   readonly dimOverlay: Container;
   readonly dimRows: readonly DimmingRow[];
+  readonly slotRenderViewsByWindowY: ReadonlyMap<
+    number,
+    RenderReelSlotRenderView
+  >;
   planCell: GridCellReelPlanCell | null;
   phase: GridCellReelPhase;
   hasStartedThisSpin: boolean;
@@ -127,8 +130,16 @@ interface ActiveDrop {
   abortListener?: () => void;
 }
 
+interface InternalVisibleOccurrenceTransferBatch {
+  readonly transfers: readonly GridCellVisibleOccurrenceTransfer[];
+  start(): void;
+  setProgress(progress: number): void;
+  finalize(): void;
+  cancel(): void;
+}
+
 interface ActiveDirectTransferBatch {
-  readonly batch: PreparedGridCellVisibleOccurrenceTransferBatch;
+  readonly batch: InternalVisibleOccurrenceTransferBatch;
   readonly durationMs: number;
   readonly signal?: AbortSignal;
   readonly abortListener?: () => void;
@@ -201,7 +212,7 @@ interface OccurrenceEffectAttachment {
 
 interface ActiveScopedTransfer {
   readonly input: VisibleOccurrenceTransferInput;
-  readonly batch: PreparedGridCellVisibleOccurrenceTransferBatch;
+  readonly batch: InternalVisibleOccurrenceTransferBatch;
   readonly movingOccurrence: RenderReelVisibleOccurrence;
   readonly targetOccurrence: RenderReelVisibleOccurrence;
   readonly sourceGeometry: RenderVisibleSymbolGeometrySnapshot;
@@ -212,7 +223,7 @@ interface ActiveScopedTransfer {
   elapsedMs: number;
   started: boolean;
   arrived: boolean;
-  committed: boolean;
+  finalized: boolean;
   moveResolve: (() => void) | null;
   moveReject: ((error: Error) => void) | null;
 }
@@ -257,6 +268,9 @@ export class RenderGridCellReelSet
     RenderReelVisibleOccurrence["symbol"],
     number
   >();
+  readonly #startedCellsScratch: GridCellCoordinate[] = [];
+  readonly #landedCellsScratch: GridCellCoordinate[] = [];
+  readonly #activationCellsScratch: GridCellCoordinate[] = [];
   #spinPlan: GridCellReelSpinPlan | null = null;
   #continuousSpin: ActiveContinuousSpin | null = null;
   #activeDrop: ActiveDrop | null = null;
@@ -267,7 +281,7 @@ export class RenderGridCellReelSet
   #activationGateOpen = false;
   #dimmingActivated = false;
   #elapsedMs = 0;
-  #activeTransferRollback: (() => void) | null = null;
+  #activeTransferCleanup: (() => void) | null = null;
   #activeScopedTransfer: ActiveScopedTransfer | null = null;
   #areaPresentationAbort: AbortController | null = null;
   #areaPresentationFailure: Error | null = null;
@@ -398,7 +412,7 @@ export class RenderGridCellReelSet
     this.cancelActiveScopedTransfer(
       new ReelError("Visible occurrence transfer was interrupted by reset."),
     );
-    this.#activeTransferRollback?.();
+    this.#activeTransferCleanup?.();
     const parsedScene = parseScene(scene, this.#columns, this.#rows);
     const parsedFinalYs = parseFinalYs(finalYs, this.#columns);
     const parsedCellReelOffsets = normalizeGridCellReelOffsetMatrix(
@@ -835,9 +849,7 @@ export class RenderGridCellReelSet
     }> = [];
     try {
       for (const item of selected) {
-        const slot = item.cell.reel
-          .getSlotSnapshots()
-          .find((candidate) => candidate.windowY === 0);
+        const slot = item.cell.reel.getSlotRenderView(0);
         if (
           item.wasOccupied &&
           slot?.symbol &&
@@ -888,34 +900,23 @@ export class RenderGridCellReelSet
           );
         throw error;
       }
-      return Object.freeze({
-        spinning: false,
-        completed,
-        activity: completed ? null : "dropdown",
-        startedCells: Object.freeze([]),
-        landedCells: Object.freeze([]),
-        activationCells: Object.freeze([]),
-      });
+      return completed ? COMPLETED_IDLE_UPDATE_RESULT : DROPDOWN_UPDATE_RESULT;
     }
     if (this.#activeEffectSweep) {
       const completed = this.updateEffectSweep(deltaSeconds);
-      return Object.freeze({
-        spinning: false,
-        completed,
-        activity: completed ? null : "effect-sweep",
-        startedCells: Object.freeze([]),
-        landedCells: Object.freeze([]),
-        activationCells: Object.freeze([]),
-      });
+      return completed
+        ? COMPLETED_IDLE_UPDATE_RESULT
+        : EFFECT_SWEEP_UPDATE_RESULT;
     }
     if (this.#continuousSpin) {
       const active = this.#continuousSpin;
-      const started: GridCellCoordinate[] = [];
+      const started = this.#startedCellsScratch;
+      started.length = 0;
       const deltaMs = deltaSeconds * 1000;
       const previousElapsedMs = this.#elapsedMs;
       this.#elapsedMs += deltaMs;
       for (const cell of this.#cells) {
-        const key = createCellKey(cell.coordinate.x, cell.coordinate.y);
+        const key = cell.key;
         const selected = active.keys.has(key);
         if (selected) {
           const startAtMs = active.startAtMsByKey.get(key) ?? 0;
@@ -957,23 +958,24 @@ export class RenderGridCellReelSet
         }
         this.syncCellRenderOrder(cell);
       }
+      if (started.length === 0) return CONTINUOUS_SPIN_UPDATE_RESULT;
       return Object.freeze({
         spinning: true,
         completed: false,
         activity: "spin",
         startedCells: freezeCoordinates(started),
-        landedCells: Object.freeze([]),
-        activationCells: Object.freeze([]),
+        landedCells: EMPTY_GRID_CELL_COORDINATES,
+        activationCells: EMPTY_GRID_CELL_COORDINATES,
       });
     }
-    let startedCells: readonly GridCellCoordinate[] = Object.freeze([]);
-    let landedCells: readonly GridCellCoordinate[] = Object.freeze([]);
-    let activationCells: readonly GridCellCoordinate[] = Object.freeze([]);
+    const started = this.#startedCellsScratch;
+    const landed = this.#landedCellsScratch;
+    const activated = this.#activationCellsScratch;
+    started.length = 0;
+    landed.length = 0;
+    activated.length = 0;
     if (this.#spinPlan) {
-      const edges = this.updateSpinTimeline(deltaSeconds);
-      startedCells = freezeCoordinates(edges.started);
-      landedCells = freezeCoordinates(edges.landed);
-      activationCells = freezeCoordinates(edges.activated);
+      this.updateSpinTimeline(deltaSeconds, started, landed, activated);
     } else {
       for (const cell of this.#cells) {
         cell.reel.update(deltaSeconds);
@@ -988,13 +990,19 @@ export class RenderGridCellReelSet
       this.#spinPlan = null;
     }
 
+    if (started.length === 0 && landed.length === 0 && activated.length === 0) {
+      if (this.#spinPlan) return ACTIVE_SPIN_UPDATE_RESULT;
+      if (completed) return COMPLETED_SPIN_UPDATE_RESULT;
+      return IDLE_UPDATE_RESULT;
+    }
+
     return Object.freeze({
       spinning: this.#spinPlan !== null,
       completed,
       activity: this.#spinPlan !== null || completed ? "spin" : null,
-      startedCells,
-      landedCells,
-      activationCells,
+      startedCells: freezeCoordinates(started),
+      landedCells: freezeCoordinates(landed),
+      activationCells: freezeCoordinates(activated),
     });
   }
 
@@ -1109,10 +1117,8 @@ export class RenderGridCellReelSet
     this.assertStopped("query visible symbol state capability");
     const cell = this.getCell(x, y);
     if (!cell.occupied) return false;
-    const slot = cell.reel
-      .getSlotSnapshots()
-      .find((candidate) => candidate.windowY === 0);
-    return slot?.symbol?.hasAnimationCapability(state) ?? false;
+    const slot = cell.reel.getSlotRenderView(0);
+    return slot.symbol?.hasAnimationCapability(state) ?? false;
   }
 
   releaseVisibleSymbols(
@@ -1146,10 +1152,8 @@ export class RenderGridCellReelSet
           `Cannot remove empty grid cell (${position.x},${position.y}).`,
         );
       }
-      const slot = cell.reel
-        .getSlotSnapshots()
-        .find((candidate) => candidate.windowY === 0);
-      if (!slot?.symbol) {
+      const slot = cell.reel.getSlotRenderView(0);
+      if (!slot.symbol) {
         throw new ReelError(
           `Cannot remove missing occurrence at grid cell (${position.x},${position.y}).`,
         );
@@ -1180,10 +1184,8 @@ export class RenderGridCellReelSet
                 signal,
               },
               () => {
-                const current = cell.reel
-                  .getSlotSnapshots()
-                  .find((slot) => slot.windowY === 0);
-                if (!cell.occupied || current?.symbol !== symbol) {
+                const current = cell.reel.getSlotRenderView(0);
+                if (!cell.occupied || current.symbol !== symbol) {
                   throw new ReelError(
                     `Terminal remove occurrence ownership changed at grid cell (${cell.coordinate.x},${cell.coordinate.y}).`,
                   );
@@ -1221,15 +1223,7 @@ export class RenderGridCellReelSet
       cell.dimOverlay.y = 0;
       cell.dimOverlay.alpha = 1;
       cell.dimOverlay.renderable = true;
-      const slot = cell.reel
-        .getSlotSnapshots()
-        .find((candidate) => candidate.windowY === 0);
-      if (slot) {
-        slot.container.alpha = 1;
-        slot.container.tint = createBrightnessTint(
-          isHighlighted ? 1 : 1 - dimmingAlpha,
-        );
-      }
+      cell.reel.setSlotBrightness(0, isHighlighted ? 1 : 1 - dimmingAlpha);
       for (const row of cell.dimRows) {
         row.graphic.alpha =
           row.windowY === 0 && cell.occupied && !isHighlighted
@@ -1255,10 +1249,7 @@ export class RenderGridCellReelSet
           Array.from({ length: this.#rows }, (_, y) => {
             const cell = this.getCell(x, y);
             if (!cell.occupied) return -1;
-            const slot = cell.reel
-              .getSlotSnapshots()
-              .find((candidate) => candidate.windowY === 0);
-            return slot?.presentationValue ?? null;
+            return cell.reel.getSlotRenderView(0).presentationValue;
           }),
         ),
       ),
@@ -1291,9 +1282,7 @@ export class RenderGridCellReelSet
               `Dropdown source (${movement.x},${movement.sourceY}) is empty.`,
             );
           }
-          const symbol = cell.reel
-            .getSlotSnapshots()
-            .find((candidate) => candidate.windowY === 0)?.symbol;
+          const symbol = cell.reel.getSlotRenderView(0).symbol;
           if (!symbol) {
             throw new ReelError(
               `Dropdown source occurrence is missing at (${movement.x},${movement.sourceY}).`,
@@ -1332,10 +1321,7 @@ export class RenderGridCellReelSet
           item.occurrence.symbol.requestState("normal");
           item.cell.reel.releaseDetachedOccurrence(item.occurrence);
         } else {
-          item.cell.reel
-            .getSlotSnapshots()
-            .find((candidate) => candidate.windowY === 0)
-            ?.symbol?.requestState("normal");
+          item.cell.reel.getSlotRenderView(0).symbol?.requestState("normal");
         }
       }
       throw error;
@@ -1502,93 +1488,15 @@ export class RenderGridCellReelSet
     return cell.reel.getVisibleSymbolImageStringText(0, name);
   }
 
-  prepareVisibleOccurrenceReplacement(options: {
-    readonly x: number;
-    readonly y: number;
-    readonly outputCode: number;
-    readonly outputPresentationValue: number | null;
-  }): PreparedVisibleOccurrenceReplacement {
-    this.assertStopped("prepare visible occurrence replacement");
-    const cell = this.getCell(options.x, options.y);
-    if (options.outputCode === -1 && options.outputPresentationValue !== null)
-      throw new ReelError(
-        "Empty symbol replacement must have a null presentation value.",
-      );
-    const input = cell.reel
-      .getSlotSnapshots()
-      .find((candidate) => candidate.windowY === 0);
-    if (!input)
-      throw new ReelError(
-        `Cannot replace missing occurrence at grid cell (${options.x},${options.y}).`,
-      );
-    const inputSymbol = input.symbol;
-    const inputOccupied = cell.occupied;
-    const output =
-      options.outputCode === -1
-        ? null
-        : cell.reel.createDetachedOccurrence(
-            options.outputCode,
-            options.outputPresentationValue,
-          );
-    let state: "prepared" | "committed" | "rolled-back" = "prepared";
-    const rollback = (): void => {
-      if (state !== "prepared") return;
-      if (output) cell.reel.releaseDetachedOccurrence(output);
-      state = "rolled-back";
-    };
-    return Object.freeze({
-      x: options.x,
-      y: options.y,
-      outputCode: options.outputCode,
-      commit: (): void => {
-        if (state === "committed") return;
-        if (state !== "prepared") {
-          throw new ReelError(
-            `Cannot commit rolled-back replacement at grid cell (${options.x},${options.y}).`,
-          );
-        }
-        this.assertStopped("commit visible occurrence replacement");
-        const currentSymbol = cell.reel
-          .getSlotSnapshots()
-          .find((candidate) => candidate.windowY === 0)?.symbol;
-        if (cell.occupied !== inputOccupied || currentSymbol !== inputSymbol) {
-          throw new ReelError(
-            `Cannot commit replacement at grid cell (${options.x},${options.y}): occurrence ownership changed.`,
-          );
-        }
-        const previous = inputOccupied
-          ? cell.reel.takeVisibleOccurrence()
-          : null;
-        if (!previous) cell.reel.openVisibleEmptySlot();
-        try {
-          if (output) cell.reel.placeVisibleOccurrence(output);
-          else cell.reel.placeVisibleEmptySlot();
-        } catch (error) {
-          if (previous) cell.reel.placeVisibleOccurrence(previous);
-          else cell.reel.placeVisibleEmptySlot();
-          throw error;
-        }
-        cell.occupied = output !== null;
-        if (previous) {
-          this.bumpOccurrenceGeneration(previous);
-          cell.reel.releaseDetachedOccurrence(previous);
-        }
-        state = "committed";
-      },
-      rollback,
-      destroy: rollback,
-    });
-  }
-
-  prepareVisibleOccurrenceTransferBatch(options: {
+  private createVisibleOccurrenceTransferBatch(options: {
     readonly transfers: readonly GridCellVisibleOccurrenceTransfer[];
-  }): PreparedGridCellVisibleOccurrenceTransferBatch {
+  }): InternalVisibleOccurrenceTransferBatch {
     this.assertStopped("prepare visible occurrence transfer batch");
     if (!Array.isArray(options.transfers) || options.transfers.length === 0)
       throw new ReelError(
         "Visible occurrence transfer batch must contain transfers.",
       );
-    if (this.#activeTransferRollback)
+    if (this.#activeTransferCleanup)
       throw new ReelError("A visible occurrence transfer batch is active.");
     const used = new Set<string>();
     const validated = options.transfers.map((transfer, index) => {
@@ -1658,10 +1566,9 @@ export class RenderGridCellReelSet
           item.source.reel.releaseDetachedOccurrence(item.sourceReplacement);
       throw error;
     }
-    let state: "prepared" | "started" | "committed" | "rolled-back" =
-      "prepared";
-    const rollback = (): void => {
-      if (state === "committed" || state === "rolled-back") return;
+    let state: "prepared" | "started" | "finalized" | "cancelled" = "prepared";
+    const cleanup = (): void => {
+      if (state === "finalized" || state === "cancelled") return;
       for (const item of prepared) {
         if (item.moving) {
           item.source.reel.restoreDetachedVisibleOccurrence(item.moving);
@@ -1673,8 +1580,8 @@ export class RenderGridCellReelSet
       this.#transferLayer.removeChildren();
       this.#cascadeMovementMask.visible = false;
       this.#cascadeMovementMask.renderable = false;
-      this.#activeTransferRollback = null;
-      state = "rolled-back";
+      this.#activeTransferCleanup = null;
+      state = "cancelled";
     };
     const batch = Object.freeze({
       transfers: Object.freeze(prepared.map((item) => item.transfer)),
@@ -1685,7 +1592,7 @@ export class RenderGridCellReelSet
           );
         this.assertStopped("start visible occurrence transfer batch");
         state = "started";
-        this.#activeTransferRollback = rollback;
+        this.#activeTransferCleanup = cleanup;
         this.#cascadeMovementMask.visible = true;
         this.#cascadeMovementMask.renderable = true;
         this.#transferLayer.mask = this.#cascadeMovementMask;
@@ -1698,7 +1605,7 @@ export class RenderGridCellReelSet
             item.moving.symbol.zIndex = item.moving.symbol.renderPriority;
           }
         } catch (error) {
-          rollback();
+          cleanup();
           throw error;
         }
       },
@@ -1721,10 +1628,10 @@ export class RenderGridCellReelSet
           );
         }
       },
-      commit: (): void => {
+      finalize: (): void => {
         if (state !== "started")
           throw new ReelError(
-            "Visible occurrence transfer commit requires a started batch.",
+            "Visible occurrence transfer finalization requires a started batch.",
           );
         for (const item of prepared) {
           const moving = item.source.reel.takeVisibleOccurrence();
@@ -1743,12 +1650,11 @@ export class RenderGridCellReelSet
         this.#transferLayer.mask = null;
         this.#cascadeMovementMask.visible = false;
         this.#cascadeMovementMask.renderable = false;
-        this.#activeTransferRollback = null;
-        state = "committed";
+        this.#activeTransferCleanup = null;
+        state = "finalized";
       },
-      rollback,
-      destroy: rollback,
-    }) satisfies PreparedGridCellVisibleOccurrenceTransferBatch;
+      cancel: cleanup,
+    }) satisfies InternalVisibleOccurrenceTransferBatch;
     return batch;
   }
 
@@ -1767,9 +1673,9 @@ export class RenderGridCellReelSet
       );
     if (input.signal?.aborted)
       return Promise.reject(new ReelError("Direct transfer was aborted."));
-    let batch: PreparedGridCellVisibleOccurrenceTransferBatch;
+    let batch: InternalVisibleOccurrenceTransferBatch;
     try {
-      batch = this.prepareVisibleOccurrenceTransferBatch({
+      batch = this.createVisibleOccurrenceTransferBatch({
         transfers: input.transfers,
       });
       batch.start();
@@ -1897,46 +1803,18 @@ export class RenderGridCellReelSet
         `Cannot get symbol at (${position.x},${position.y}) before the cell has landed.`,
       );
     if (!cell.occupied) {
-      const slot = cell.reel
-        .getSlotSnapshots()
-        .find((candidate) => candidate.windowY === 0);
-      if (!slot)
-        throw new ReelError(
-          `Cannot resolve grid cell (${position.x},${position.y}).`,
-        );
-      const capturedContainer = slot.container;
-      const capturedLayer = slot.emptySymbolLayer;
       const getPosition = () => ({
         x: cell.root.x + this.#cellWidth / 2,
         y: cell.root.y + this.#cellHeight / 2,
       });
-      return createEmptySymbolRender({
-        view: capturedLayer,
-        owned: false,
+      return cell.reel.createVisibleEmptySymbolRender(0, {
         assertUsable: () => {
-          const current = cell.reel
-            .getSlotSnapshots()
-            .find((candidate) => candidate.windowY === 0);
-          if (
-            cell.occupied ||
-            current?.container !== capturedContainer ||
-            current.emptySymbolLayer !== capturedLayer ||
-            current.code !== -1
-          )
-            throw new ReelError("SymbolRender is stale.");
+          if (cell.occupied) throw new ReelError("SymbolRender is stale.");
         },
         getPosition,
         getAnchor: () =>
           createContainerRenderAnchor(this, () => {
-            const current = cell.reel
-              .getSlotSnapshots()
-              .find((candidate) => candidate.windowY === 0);
-            if (
-              cell.occupied ||
-              current?.container !== capturedContainer ||
-              current.emptySymbolLayer !== capturedLayer ||
-              current.code !== -1
-            )
+            if (cell.occupied || cell.reel.getSlotRenderView(0).code !== -1)
               throw new ReelError("SymbolRender is stale.");
             return getPosition();
           }),
@@ -2032,8 +1910,16 @@ export class RenderGridCellReelSet
   replaceSymbols(replacements: readonly SymbolReplacement[]) {
     if (replacements.length === 0)
       throw new ReelError("Symbol replacement batch must not be empty.");
+    this.assertStopped("replace visible symbols");
     const keys = new Set<string>();
-    const prepared: PreparedVisibleOccurrenceReplacement[] = [];
+    const prepared: Array<{
+      readonly cell: RuntimeCell;
+      readonly wasOccupied: boolean;
+      readonly output: RenderReelVisibleOccurrence | null;
+      previous: RenderReelVisibleOccurrence | null;
+      slotOpened: boolean;
+      outputPlaced: boolean;
+    }> = [];
     try {
       for (const { position, target } of replacements) {
         const key = `${position.x}:${position.y}`;
@@ -2042,20 +1928,66 @@ export class RenderGridCellReelSet
             `Duplicate symbol replacement position (${key}).`,
           );
         keys.add(key);
-        prepared.push(
-          this.prepareVisibleOccurrenceReplacement({
-            x: position.x,
-            y: position.y,
-            outputCode: target.code,
-            outputPresentationValue: target.value ?? null,
-          }),
-        );
+        const cell = this.getCell(position.x, position.y);
+        if (target.code === -1 && (target.value ?? null) !== null)
+          throw new ReelError(
+            "Empty symbol replacement must have a null presentation value.",
+          );
+        prepared.push({
+          cell,
+          wasOccupied: cell.occupied,
+          output:
+            target.code === -1
+              ? null
+              : cell.reel.createDetachedOccurrence(
+                  target.code,
+                  target.value ?? null,
+                ),
+          previous: null,
+          slotOpened: false,
+          outputPlaced: false,
+        });
       }
-      for (const replacement of prepared) replacement.commit();
+      for (const item of prepared) {
+        item.previous = item.wasOccupied
+          ? item.cell.reel.takeVisibleOccurrence()
+          : null;
+        if (!item.previous) item.cell.reel.openVisibleEmptySlot();
+        item.slotOpened = true;
+        item.cell.occupied = false;
+      }
+      for (const item of prepared) {
+        if (item.output) item.cell.reel.placeVisibleOccurrence(item.output);
+        else item.cell.reel.placeVisibleEmptySlot();
+        item.outputPlaced = true;
+        item.cell.occupied = item.output !== null;
+      }
     } catch (error) {
-      for (const replacement of prepared) replacement.destroy();
+      for (const item of prepared.toReversed()) {
+        if (item.outputPlaced) {
+          if (item.output) {
+            const placed = item.cell.reel.takeVisibleOccurrence();
+            item.cell.reel.releaseDetachedOccurrence(placed);
+          } else {
+            item.cell.reel.openVisibleEmptySlot();
+          }
+        } else if (item.output) {
+          item.cell.reel.releaseDetachedOccurrence(item.output);
+        }
+        if (item.slotOpened) {
+          if (item.previous)
+            item.cell.reel.placeVisibleOccurrence(item.previous);
+          else item.cell.reel.placeVisibleEmptySlot();
+          item.cell.occupied = item.wasOccupied;
+        }
+      }
       throw error;
     }
+    for (const item of prepared)
+      if (item.previous) {
+        this.bumpOccurrenceGeneration(item.previous);
+        item.cell.reel.releaseDetachedOccurrence(item.previous);
+      }
     return this.getSymbols(replacements.map(({ position }) => position));
   }
 
@@ -2079,7 +2011,7 @@ export class RenderGridCellReelSet
       input.target.x,
       input.target.y,
     );
-    const batch = this.prepareVisibleOccurrenceTransferBatch({
+    const batch = this.createVisibleOccurrenceTransferBatch({
       transfers: [input],
     });
     const active: ActiveScopedTransfer = {
@@ -2099,7 +2031,7 @@ export class RenderGridCellReelSet
       elapsedMs: 0,
       started: false,
       arrived: false,
-      committed: false,
+      finalized: false,
       moveResolve: null,
       moveReject: null,
     };
@@ -2120,35 +2052,25 @@ export class RenderGridCellReelSet
         this.waitForScopedTransferDelay(active, durationMs, signal),
       move: (motion: VisibleOccurrenceMotion) =>
         this.startScopedTransferMotion(active, motion),
-      commit: async (): Promise<void> => {
-        if (this.#activeScopedTransfer !== active)
-          throw new ReelError("Visible occurrence transfer scope is stale.");
-        if (!active.arrived)
-          throw new ReelError(
-            "Visible occurrence transfer must finish move() before commit().",
-          );
-        if (active.committed)
-          throw new ReelError(
-            "Visible occurrence transfer can only commit once.",
-          );
-        active.batch.commit();
-        this.#transferAboveSymbolsLayer.mask = null;
-        this.bumpOccurrenceGeneration(active.targetOccurrence);
-        active.committed = true;
-        if (active.inputAbortListener)
-          input.signal?.removeEventListener("abort", active.inputAbortListener);
-        this.#activeScopedTransfer = null;
-        this.cleanupStaleOccurrenceEffects();
-      },
     }) satisfies VisibleOccurrenceTransferScope;
     try {
       await choreography(scope);
-      if (!active.committed)
+      if (this.#activeScopedTransfer !== active)
+        throw new ReelError("Visible occurrence transfer scope is stale.");
+      if (!active.arrived)
         throw new ReelError(
-          "Visible occurrence transfer choreography returned without commit().",
+          "Visible occurrence transfer choreography must finish move() before returning.",
         );
+      active.batch.finalize();
+      this.#transferAboveSymbolsLayer.mask = null;
+      this.bumpOccurrenceGeneration(active.targetOccurrence);
+      active.finalized = true;
+      if (active.inputAbortListener)
+        input.signal?.removeEventListener("abort", active.inputAbortListener);
+      this.#activeScopedTransfer = null;
+      this.cleanupStaleOccurrenceEffects();
     } catch (error) {
-      if (!active.committed) active.batch.rollback();
+      if (!active.finalized) active.batch.cancel();
       this.#transferAboveSymbolsLayer.mask = null;
       active.controller.abort();
       if (active.inputAbortListener)
@@ -2783,7 +2705,7 @@ export class RenderGridCellReelSet
     this.cancelActiveScopedTransfer(
       new ReelError("Visible occurrence transfer runtime was destroyed."),
     );
-    this.#activeTransferRollback?.();
+    this.#activeTransferCleanup?.();
     this.cancelDirectTransfer(
       new ReelError("Direct transfer runtime was destroyed."),
     );
@@ -2825,7 +2747,7 @@ export class RenderGridCellReelSet
     active.batch.setProgress(active.elapsedMs / active.durationMs);
     if (active.elapsedMs < active.durationMs) return;
     try {
-      active.batch.commit();
+      active.batch.finalize();
       active.signal?.removeEventListener("abort", active.abortListener!);
       this.#activeDirectTransferBatch = null;
       active.resolve();
@@ -2841,7 +2763,7 @@ export class RenderGridCellReelSet
     if (!active) return;
     this.#activeDirectTransferBatch = null;
     active.signal?.removeEventListener("abort", active.abortListener!);
-    active.batch.destroy();
+    active.batch.cancel();
     active.reject(error);
   }
 
@@ -2895,8 +2817,8 @@ export class RenderGridCellReelSet
 
   private cancelActiveScopedTransfer(error: Error): void {
     const active = this.#activeScopedTransfer;
-    if (!active || active.committed) return;
-    active.batch.rollback();
+    if (!active || active.finalized) return;
+    active.batch.cancel();
     this.#transferAboveSymbolsLayer.mask = null;
     active.controller.abort();
     if (active.inputAbortListener)
@@ -2932,9 +2854,7 @@ export class RenderGridCellReelSet
   }
 
   private getCellOccurrence(cell: RuntimeCell): RenderReelVisibleOccurrence {
-    const slot = cell.reel
-      .getSlotSnapshots()
-      .find((candidate) => candidate.windowY === 0);
+    const slot = cell.reel.getSlotRenderView(0);
     if (
       !cell.occupied ||
       !slot?.symbol ||
@@ -2957,12 +2877,8 @@ export class RenderGridCellReelSet
       this.#activeScopedTransfer?.movingOccurrence.symbol === occurrence.symbol
     )
       return true;
-    return this.#cells.some((cell) =>
-      cell.reel
-        .getSlotSnapshots()
-        .some(
-          (slot) => slot.windowY === 0 && slot.symbol === occurrence.symbol,
-        ),
+    return this.#cells.some(
+      (cell) => cell.reel.getSlotRenderView(0).symbol === occurrence.symbol,
     );
   }
 
@@ -2994,11 +2910,7 @@ export class RenderGridCellReelSet
         moving: true,
       };
     for (const cell of this.#cells) {
-      const found = cell.reel
-        .getSlotSnapshots()
-        .some(
-          (slot) => slot.windowY === 0 && slot.symbol === occurrence.symbol,
-        );
+      const found = cell.reel.getSlotRenderView(0).symbol === occurrence.symbol;
       if (found)
         return {
           x: cell.coordinate.x,
@@ -3068,6 +2980,13 @@ export class RenderGridCellReelSet
 
     const dimOverlay = new Container();
     const dimRows = createDimmingRows(this.#cellWidth, this.#cellHeight);
+    const slotRenderViewsByWindowY = new Map<
+      number,
+      RenderReelSlotRenderView
+    >();
+    for (const slot of reel.getSlotRenderViews()) {
+      slotRenderViewsByWindowY.set(slot.windowY, slot);
+    }
     dimOverlay.alpha = 0;
     dimOverlay.y = 0;
     dimOverlay.renderable = false;
@@ -3080,6 +2999,7 @@ export class RenderGridCellReelSet
     root.zIndex = coordinate.orderIndex;
 
     return {
+      key: createCellKey(coordinate.x, coordinate.y),
       coordinate,
       root,
       clipContent,
@@ -3087,6 +3007,7 @@ export class RenderGridCellReelSet
       clipMask,
       dimOverlay,
       dimRows,
+      slotRenderViewsByWindowY,
       planCell: null,
       phase: "idle",
       hasStartedThisSpin: false,
@@ -3099,19 +3020,15 @@ export class RenderGridCellReelSet
     };
   }
 
-  private updateSpinTimeline(deltaSeconds: number): {
-    readonly started: readonly GridCellCoordinate[];
-    readonly landed: readonly GridCellCoordinate[];
-    readonly activated: readonly GridCellCoordinate[];
-  } {
+  private updateSpinTimeline(
+    deltaSeconds: number,
+    started: GridCellCoordinate[],
+    landed: GridCellCoordinate[],
+    activated: GridCellCoordinate[],
+  ): void {
     const plan = this.#spinPlan;
-    if (!plan) {
-      return { started: [], landed: [], activated: [] };
-    }
+    if (!plan) return;
     const endMs = this.#elapsedMs + deltaSeconds * 1000;
-    const started: GridCellCoordinate[] = [];
-    const landed: GridCellCoordinate[] = [];
-    const activated: GridCellCoordinate[] = [];
     let cursorMs = this.#elapsedMs;
     let firstBoundary = true;
 
@@ -3147,7 +3064,6 @@ export class RenderGridCellReelSet
       cursorMs = nextMs;
     }
     this.#elapsedMs = endMs;
-    return { started, landed, activated };
   }
 
   private releaseCell(cell: RuntimeCell): void {
@@ -3528,9 +3444,9 @@ export class RenderGridCellReelSet
         occupied: false,
       });
     }
-    const slot = cell.reel
-      .getSlotSnapshots()
-      .find((candidate) => candidate.windowY === 0);
+    const slot = cell.reel.getSlotRenderView(0);
+    const state = slot.symbol?.getStateSnapshot();
+    const isRolling = !slot.symbol && slot.kind === "textured";
     const visibleSymbol = cell.reel.getVisibleScene()[0];
     if (!Number.isInteger(visibleSymbol)) {
       throw new ReelError(
@@ -3552,14 +3468,14 @@ export class RenderGridCellReelSet
       dimmingOverlayRenderable: cell.dimOverlay.renderable,
       dimmingAlpha: this.getVisibleDimmingAlpha(cell),
       symbolDimmingAlpha: this.getVisibleSymbolBrightness(cell),
-      requestedState: slot?.requestedState ?? null,
-      resolvedState: slot?.resolvedState ?? null,
-      isOnce: slot?.isOnce ?? false,
+      requestedState: state?.requestedState ?? (isRolling ? "spinBlur" : null),
+      resolvedState: state?.resolvedState ?? (isRolling ? "spinBlur" : null),
+      isOnce: state?.isOnce ?? false,
       onceCompletionCount:
-        slot?.symbol?.getAnimationCompletionSnapshot().onceCompletionCount ??
+        slot.symbol?.getAnimationCompletionSnapshot().onceCompletionCount ??
         null,
       visibleSymbol,
-      presentationValue: slot?.presentationValue ?? null,
+      presentationValue: slot.presentationValue,
       occupied: true,
     });
   }
@@ -3660,23 +3576,20 @@ export class RenderGridCellReelSet
     dimming: GridCellDimmingPattern,
     activated = this.#dimmingActivated,
   ): void {
-    const reelY = cell.reel.getSnapshot().currentY;
+    const reelY = cell.reel.getCurrentY();
     cell.dimOverlay.renderable = cell.dimOverlay.alpha > 0;
     const fractionalY = reelY - Math.floor(reelY);
     cell.dimOverlay.y = -fractionalY * this.#cellHeight;
-    const slotsByWindowY = new Map(
-      cell.reel.getSlotSnapshots().map((slot) => [slot.windowY, slot] as const),
-    );
     for (const row of cell.dimRows) {
-      const slot = slotsByWindowY.get(row.windowY);
+      const slot = cell.slotRenderViewsByWindowY.get(row.windowY);
       const dimmingAlpha =
         slot && slot.kind !== "empty"
           ? resolveGridCellDimmingAlpha(dimming, slot.code, activated)
           : 0;
       row.graphic.alpha = dimmingAlpha;
       if (slot) {
-        slot.container.alpha = 1;
-        slot.container.tint = createBrightnessTint(
+        cell.reel.setSlotBrightness(
+          row.windowY,
           1 - cell.dimOverlay.alpha * dimmingAlpha,
         );
       }
@@ -3691,9 +3604,7 @@ export class RenderGridCellReelSet
     cell.dimOverlay.y = 0;
     cell.dimOverlay.renderable = cell.dimOverlay.alpha > 0;
     for (const row of cell.dimRows) {
-      const slot = cell.reel
-        .getSlotSnapshots()
-        .find((candidate) => candidate.windowY === row.windowY);
+      const slot = cell.slotRenderViewsByWindowY.get(row.windowY);
       const dimmingAlpha =
         row.windowY === 0
           ? resolveGridCellDimmingAlpha(
@@ -3704,8 +3615,8 @@ export class RenderGridCellReelSet
           : 0;
       row.graphic.alpha = dimmingAlpha;
       if (slot) {
-        slot.container.alpha = 1;
-        slot.container.tint = createBrightnessTint(
+        cell.reel.setSlotBrightness(
+          row.windowY,
           1 - cell.dimOverlay.alpha * dimmingAlpha,
         );
       }
@@ -3718,9 +3629,7 @@ export class RenderGridCellReelSet
   }
 
   private syncCellRenderOrder(cell: RuntimeCell): void {
-    const visibleSlot = cell.reel
-      .getSlotSnapshots()
-      .find((slot) => slot.windowY === 0);
+    const visibleSlot = cell.slotRenderViewsByWindowY.get(0);
     const renderPriority = visibleSlot?.renderPriority ?? 0;
     cell.root.zIndex =
       renderPriority * (this.#order.length + 1) + cell.coordinate.orderIndex;
@@ -3744,16 +3653,80 @@ export class RenderGridCellReelSet
       const rowTop = cell.dimOverlay.y + row.windowY * this.#cellHeight;
       const rowBottom = rowTop + this.#cellHeight;
       if (centerY >= rowTop && centerY < rowBottom) {
-        const slot = cell.reel
-          .getSlotSnapshots()
-          .find((candidate) => candidate.windowY === row.windowY);
+        const slot = cell.slotRenderViewsByWindowY.get(row.windowY);
         if (!slot || slot.kind === "empty") return 0;
-        return (((slot.container.tint as number) >> 16) & 0xff) / 255;
+        return cell.reel.getSlotBrightness(row.windowY);
       }
     }
     return 0;
   }
 }
+
+const EMPTY_GRID_CELL_COORDINATES: readonly GridCellCoordinate[] =
+  Object.freeze([]);
+
+const IDLE_UPDATE_RESULT: RenderGridCellReelSetUpdateResult = Object.freeze({
+  spinning: false,
+  completed: false,
+  activity: null,
+  startedCells: EMPTY_GRID_CELL_COORDINATES,
+  landedCells: EMPTY_GRID_CELL_COORDINATES,
+  activationCells: EMPTY_GRID_CELL_COORDINATES,
+});
+
+const COMPLETED_IDLE_UPDATE_RESULT: RenderGridCellReelSetUpdateResult =
+  Object.freeze({
+    spinning: false,
+    completed: true,
+    activity: null,
+    startedCells: EMPTY_GRID_CELL_COORDINATES,
+    landedCells: EMPTY_GRID_CELL_COORDINATES,
+    activationCells: EMPTY_GRID_CELL_COORDINATES,
+  });
+
+const CONTINUOUS_SPIN_UPDATE_RESULT: RenderGridCellReelSetUpdateResult =
+  Object.freeze({
+    spinning: true,
+    completed: false,
+    activity: "spin",
+    startedCells: EMPTY_GRID_CELL_COORDINATES,
+    landedCells: EMPTY_GRID_CELL_COORDINATES,
+    activationCells: EMPTY_GRID_CELL_COORDINATES,
+  });
+
+const ACTIVE_SPIN_UPDATE_RESULT: RenderGridCellReelSetUpdateResult =
+  CONTINUOUS_SPIN_UPDATE_RESULT;
+
+const COMPLETED_SPIN_UPDATE_RESULT: RenderGridCellReelSetUpdateResult =
+  Object.freeze({
+    spinning: false,
+    completed: true,
+    activity: "spin",
+    startedCells: EMPTY_GRID_CELL_COORDINATES,
+    landedCells: EMPTY_GRID_CELL_COORDINATES,
+    activationCells: EMPTY_GRID_CELL_COORDINATES,
+  });
+
+const DROPDOWN_UPDATE_RESULT: RenderGridCellReelSetUpdateResult = Object.freeze(
+  {
+    spinning: false,
+    completed: false,
+    activity: "dropdown",
+    startedCells: EMPTY_GRID_CELL_COORDINATES,
+    landedCells: EMPTY_GRID_CELL_COORDINATES,
+    activationCells: EMPTY_GRID_CELL_COORDINATES,
+  },
+);
+
+const EFFECT_SWEEP_UPDATE_RESULT: RenderGridCellReelSetUpdateResult =
+  Object.freeze({
+    spinning: false,
+    completed: false,
+    activity: "effect-sweep",
+    startedCells: EMPTY_GRID_CELL_COORDINATES,
+    landedCells: EMPTY_GRID_CELL_COORDINATES,
+    activationCells: EMPTY_GRID_CELL_COORDINATES,
+  });
 
 function createDimmingRows(
   cellWidth: number,
@@ -3772,7 +3745,7 @@ function createDimmingRows(
 }
 
 function resetReelSlotSymbolsAndRequestLandingState(cell: RuntimeCell): void {
-  for (const slot of cell.reel.getSlotSnapshots()) {
+  for (const slot of cell.reel.getSlotRenderViews()) {
     slot.symbol?.reset();
     if (slot.windowY !== 0 || !slot.symbol) continue;
     if (cell.targetLandingState)
@@ -3803,24 +3776,14 @@ function validateGridEmptyTargets(
 }
 
 function resetReelSlotSymbolDimming(cell: RuntimeCell): void {
-  for (const slot of cell.reel.getSlotSnapshots()) {
-    slot.container.alpha = 1;
-    slot.container.tint = 0xffffff;
-  }
-}
-
-function createBrightnessTint(brightness: number): number {
-  const channel = Math.round(clamp01(brightness) * 255);
-  return (channel << 16) | (channel << 8) | channel;
+  cell.reel.resetSlotBrightness();
 }
 
 function hasActiveLandingAppear(cell: RuntimeCell): boolean {
-  return cell.reel
-    .getSlotSnapshots()
-    .some(
-      (slot) =>
-        slot.windowY === 0 && slot.symbol?.isLandingAppearActive() === true,
-    );
+  return (
+    cell.slotRenderViewsByWindowY.get(0)?.symbol?.isLandingAppearActive() ===
+    true
+  );
 }
 
 function parseScene(

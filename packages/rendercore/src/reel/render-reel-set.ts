@@ -62,7 +62,6 @@ import type {
   GridCellCascadeDropPlan,
   GridCellCascadeValueMatrix,
   RenderReelVisibleOccurrence,
-  PreparedVisibleOccurrenceReplacement,
 } from "./types.js";
 import type {
   RenderSymbol,
@@ -71,7 +70,6 @@ import type {
   SymbolStateTransitionMode,
 } from "../symbol/index.js";
 import {
-  createEmptySymbolRender,
   createSymbolRender,
   type SymbolRender,
 } from "../symbol/symbol-render.js";
@@ -622,13 +620,7 @@ export class RenderReelSet extends Container implements ReelSpin {
       throw new ReelError(
         `Cannot get symbol at (${position.x},${position.y}) before its reel has landed.`,
       );
-    const occurrence = reel
-      .getSlotSnapshots()
-      .find((slot) => slot.windowY === position.y);
-    if (!occurrence)
-      throw new ReelError(
-        `Cannot resolve standard reel cell (${position.x},${position.y}).`,
-      );
+    const occurrence = reel.getSlotRenderView(position.y);
     const getPosition = () =>
       Object.freeze({
         x: reel.x + reel.layout.cellWidth / 2,
@@ -638,35 +630,16 @@ export class RenderReelSet extends Container implements ReelSpin {
           reel.layout.cellHeight / 2,
       });
     if (occurrence.code === -1) {
-      const capturedContainer = occurrence.container;
-      const capturedLayer = occurrence.emptySymbolLayer;
-      return createEmptySymbolRender({
-        view: capturedLayer,
-        owned: false,
+      return reel.createVisibleEmptySymbolRender(position.y, {
         assertUsable: () => {
-          const current = reel
-            .getSlotSnapshots()
-            .find((slot) => slot.windowY === position.y);
-          if (
-            this.#destroyed ||
-            current?.container !== capturedContainer ||
-            current.emptySymbolLayer !== capturedLayer ||
-            current.code !== -1 ||
-            current.kind !== "empty"
-          )
-            throw new ReelError("SymbolRender is stale.");
+          if (this.#destroyed) throw new ReelError("SymbolRender is stale.");
         },
         getPosition,
         getAnchor: () =>
           createContainerRenderAnchor(this, () => {
-            const current = reel
-              .getSlotSnapshots()
-              .find((slot) => slot.windowY === position.y);
             if (
               this.#destroyed ||
-              current?.container !== capturedContainer ||
-              current.emptySymbolLayer !== capturedLayer ||
-              current.code !== -1
+              reel.getSlotRenderView(position.y).code !== -1
             )
               throw new ReelError("SymbolRender is stale.");
             return getPosition();
@@ -775,8 +748,17 @@ export class RenderReelSet extends Container implements ReelSpin {
   replaceSymbols(replacements: readonly SymbolReplacement[]) {
     if (replacements.length === 0)
       throw new ReelError("Symbol replacement batch must not be empty.");
+    this.assertStopped("replace visible symbols");
     const keys = new Set<string>();
-    const prepared: PreparedVisibleOccurrenceReplacement[] = [];
+    const prepared: Array<{
+      readonly reel: RenderReel;
+      readonly y: number;
+      readonly hadSymbol: boolean;
+      readonly output: RenderReelVisibleOccurrence | null;
+      previous: RenderReelVisibleOccurrence | null;
+      slotOpened: boolean;
+      outputPlaced: boolean;
+    }> = [];
     try {
       for (const { position, target } of replacements) {
         const key = `${position.x}:${position.y}`;
@@ -785,20 +767,73 @@ export class RenderReelSet extends Container implements ReelSpin {
             `Duplicate symbol replacement position (${key}).`,
           );
         keys.add(key);
-        prepared.push(
-          this.prepareVisibleOccurrenceReplacement({
-            x: position.x,
-            y: position.y,
-            outputCode: target.code,
-            outputPresentationValue: target.value ?? null,
-          }),
-        );
+        const reel = this.getReelAt(position.x);
+        if (
+          !Number.isInteger(position.y) ||
+          position.y < 0 ||
+          position.y >= reel.layout.visibleRows
+        )
+          throw new ReelError(
+            `visible symbol y ${position.y} is out of range.`,
+          );
+        const current = reel.getSlotRenderView(position.y);
+        if (target.code === -1 && (target.value ?? null) !== null)
+          throw new ReelError(
+            "Empty symbol replacement must have a null presentation value.",
+          );
+        prepared.push({
+          reel,
+          y: position.y,
+          hadSymbol: current.symbol !== null,
+          output:
+            target.code === -1
+              ? null
+              : reel.createDetachedOccurrence(
+                  target.code,
+                  target.value ?? null,
+                ),
+          previous: null,
+          slotOpened: false,
+          outputPlaced: false,
+        });
       }
-      for (const replacement of prepared) replacement.commit();
+      for (const item of prepared) {
+        item.previous = item.hadSymbol
+          ? item.reel.takeVisibleOccurrence(item.y)
+          : null;
+        if (!item.previous) item.reel.openVisibleEmptySlot(item.y);
+        item.slotOpened = true;
+      }
+      for (const item of prepared) {
+        if (item.output) item.reel.placeVisibleOccurrence(item.output, item.y);
+        else item.reel.placeVisibleEmptySlot(item.y);
+        item.outputPlaced = true;
+      }
     } catch (error) {
-      for (const replacement of prepared) replacement.destroy();
+      for (const item of prepared.toReversed()) {
+        if (item.outputPlaced) {
+          if (item.output) {
+            const placed = item.reel.takeVisibleOccurrence(item.y);
+            item.reel.releaseDetachedOccurrence(placed);
+          } else {
+            item.reel.openVisibleEmptySlot(item.y);
+          }
+        } else if (item.output) {
+          item.reel.releaseDetachedOccurrence(item.output);
+        }
+        if (item.slotOpened) {
+          if (item.previous)
+            item.reel.placeVisibleOccurrence(item.previous, item.y);
+          else item.reel.placeVisibleEmptySlot(item.y);
+        }
+      }
       throw error;
     }
+    for (const item of prepared)
+      if (item.previous) {
+        this.bumpOccurrenceGeneration(item.previous.symbol);
+        item.reel.releaseDetachedOccurrence(item.previous);
+      }
     return this.getSymbols(replacements.map(({ position }) => position));
   }
 
@@ -811,92 +846,13 @@ export class RenderReelSet extends Container implements ReelSpin {
     this.getReelAt(x).setVisibleSymbolPresentationValue(y, value);
   }
 
-  prepareVisibleOccurrenceReplacement(options: {
-    readonly x: number;
-    readonly y: number;
-    readonly outputCode: number;
-    readonly outputPresentationValue: number | null;
-  }): PreparedVisibleOccurrenceReplacement {
-    this.assertStopped("prepare visible occurrence replacement");
-    const reel = this.getReelAt(options.x);
-    if (options.outputCode === -1 && options.outputPresentationValue !== null)
-      throw new ReelError(
-        "Empty symbol replacement must have a null presentation value.",
-      );
-    const input = reel
-      .getSlotSnapshots()
-      .find((candidate) => candidate.windowY === options.y);
-    if (!input)
-      throw new ReelError(
-        `Cannot replace missing occurrence at standard reel cell (${options.x},${options.y}).`,
-      );
-    const inputSymbol = input.symbol;
-    const output =
-      options.outputCode === -1
-        ? null
-        : reel.createDetachedOccurrence(
-            options.outputCode,
-            options.outputPresentationValue,
-          );
-    let state: "prepared" | "committed" | "rolled-back" = "prepared";
-    const rollback = (): void => {
-      if (state !== "prepared") return;
-      if (output) reel.releaseDetachedOccurrence(output);
-      state = "rolled-back";
-    };
-    return Object.freeze({
-      x: options.x,
-      y: options.y,
-      outputCode: options.outputCode,
-      commit: (): void => {
-        if (state === "committed") return;
-        if (state !== "prepared")
-          throw new ReelError(
-            `Cannot commit rolled-back replacement at standard reel cell (${options.x},${options.y}).`,
-          );
-        this.assertStopped("commit visible occurrence replacement");
-        const currentSymbol = reel
-          .getSlotSnapshots()
-          .find((candidate) => candidate.windowY === options.y)?.symbol;
-        const currentCode = reel
-          .getSlotSnapshots()
-          .find((candidate) => candidate.windowY === options.y)?.code;
-        if (currentSymbol !== inputSymbol || currentCode !== input.code)
-          throw new ReelError(
-            `Cannot commit replacement at standard reel cell (${options.x},${options.y}): occurrence ownership changed.`,
-          );
-        const previous = inputSymbol
-          ? reel.takeVisibleOccurrence(options.y)
-          : null;
-        if (!previous) reel.openVisibleEmptySlot(options.y);
-        try {
-          if (output) reel.placeVisibleOccurrence(output, options.y);
-          else reel.placeVisibleEmptySlot(options.y);
-        } catch (error) {
-          if (previous) reel.placeVisibleOccurrence(previous, options.y);
-          else reel.placeVisibleEmptySlot(options.y);
-          throw error;
-        }
-        if (previous) {
-          this.bumpOccurrenceGeneration(previous.symbol);
-          reel.releaseDetachedOccurrence(previous);
-        }
-        state = "committed";
-      },
-      rollback,
-      destroy: rollback,
-    });
-  }
-
   hasVisibleSymbolStateCapability(
     x: number,
     y: number,
     state: SymbolStateId,
   ): boolean {
-    const slot = this.getReelAt(x)
-      .getSlotSnapshots()
-      .find((candidate) => candidate.windowY === y);
-    return slot?.symbol?.hasAnimationCapability(state) ?? false;
+    const slot = this.getReelAt(x).getSlotRenderView(y);
+    return slot.symbol?.hasAnimationCapability(state) ?? false;
   }
 
   releaseVisibleSymbols(
@@ -909,9 +865,7 @@ export class RenderReelSet extends Container implements ReelSpin {
       this.reels[0]?.layout.visibleRows ?? 0,
     )) {
       const reel = this.getReelAt(position.x);
-      const symbol = reel
-        .getSlotSnapshots()
-        .find((slot) => slot.windowY === position.y)?.symbol;
+      const symbol = reel.getSlotRenderView(position.y).symbol;
       if (symbol) this.bumpOccurrenceGeneration(symbol);
       reel.releaseVisibleOccurrence(position.y);
     }
@@ -932,7 +886,7 @@ export class RenderReelSet extends Container implements ReelSpin {
       ).map(({ x, y }) => `${x},${y}`),
     );
     for (const reel of this.reels)
-      for (const slot of reel.getSlotSnapshots()) {
+      for (const slot of reel.getSlotRenderViews()) {
         if (
           slot.windowY < 0 ||
           slot.windowY >= reel.layout.visibleRows ||
@@ -940,19 +894,12 @@ export class RenderReelSet extends Container implements ReelSpin {
         )
           continue;
         const bright = highlighted.has(`${reel.xIndex},${slot.windowY}`);
-        slot.container.alpha = 1;
-        slot.container.tint = createBrightnessTint(
-          bright ? 1 : 1 - dimmingAlpha,
-        );
+        reel.setSlotBrightness(slot.windowY, bright ? 1 : 1 - dimmingAlpha);
       }
   }
 
   clearVisibleSymbolDimming(): void {
-    for (const reel of this.reels)
-      for (const slot of reel.getSlotSnapshots()) {
-        slot.container.alpha = 1;
-        slot.container.tint = 0xffffff;
-      }
+    for (const reel of this.reels) reel.resetSlotBrightness();
   }
 
   getCascadeValues(): GridCellCascadeValueMatrix {
@@ -960,7 +907,7 @@ export class RenderReelSet extends Container implements ReelSpin {
       this.reels.map((reel) =>
         Object.freeze(
           reel
-            .getSlotSnapshots()
+            .getSlotRenderViews()
             .filter(
               (slot) =>
                 slot.windowY >= 0 && slot.windowY < reel.layout.visibleRows,
@@ -992,11 +939,7 @@ export class RenderReelSet extends Container implements ReelSpin {
       for (const movement of plan.movements) {
         const reel = this.getReelAt(movement.x);
         if (movement.kind === "existing") {
-          const symbol = reel
-            .getSlotSnapshots()
-            .find(
-              (candidate) => candidate.windowY === movement.sourceY,
-            )?.symbol;
+          const symbol = reel.getSlotRenderView(movement.sourceY).symbol;
           if (!symbol)
             throw new ReelError(
               `Cascade source occurrence is missing at (${movement.x},${movement.sourceY}).`,
@@ -1034,9 +977,8 @@ export class RenderReelSet extends Container implements ReelSpin {
           item.reel.releaseDetachedOccurrence(item.occurrence);
         } else {
           item.reel
-            .getSlotSnapshots()
-            .find((candidate) => candidate.windowY === item.movement.sourceY)
-            ?.symbol?.requestState("normal");
+            .getSlotRenderView(item.movement.sourceY)
+            .symbol?.requestState("normal");
         }
       }
       throw error;
@@ -1851,14 +1793,14 @@ export class RenderReelSet extends Container implements ReelSpin {
   }
 
   private bumpReelOccurrenceGenerations(reel: RenderReel): void {
-    for (const slot of reel.getSlotSnapshots())
+    for (const slot of reel.getSlotRenderViews())
       if (slot.symbol) this.bumpOccurrenceGeneration(slot.symbol);
   }
 
   private isOccurrenceOwned(symbol: RenderSymbol): boolean {
     if (
       this.reels.some((candidate) =>
-        candidate.getSlotSnapshots().some((slot) => slot.symbol === symbol),
+        candidate.getSlotRenderViews().some((slot) => slot.symbol === symbol),
       )
     )
       return true;
@@ -1888,7 +1830,7 @@ export class RenderReelSet extends Container implements ReelSpin {
   private getVisibleOccurrenceSymbols(): ReadonlySet<RenderSymbol> {
     const symbols = new Set<RenderSymbol>();
     for (const reel of this.reels)
-      for (const slot of reel.getSlotSnapshots())
+      for (const slot of reel.getSlotRenderViews())
         if (slot.symbol) symbols.add(slot.symbol);
     return symbols;
   }
@@ -2061,11 +2003,6 @@ function normalizeCascadePositions(
         position !== null,
     ),
   );
-}
-
-function createBrightnessTint(brightness: number): number {
-  const channel = Math.max(0, Math.min(255, Math.round(brightness * 255)));
-  return (channel << 16) | (channel << 8) | channel;
 }
 
 function calculateSlotCount(layout: RenderReelSetOptions["layout"]): number {

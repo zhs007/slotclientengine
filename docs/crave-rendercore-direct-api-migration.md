@@ -1,22 +1,26 @@
 # Crave RenderCore direct API 迁移说明
 
+> 任务 215 的 Crave 精确迁移范围、实际调用点和验收清单见
+> [`crave-task-215-migration.md`](./crave-task-215-migration.md)。本文继续保留任务 202 以来的分阶段 direct API 总体路线。
+
 ## 基线与边界
 
 - Crave 只读基线：`ab86cec8a8cae7bd0c2aa6910be383295518b1b2`，branch `master`，规划检查时工作区 clean。
 - 本文由 slotclientengine 任务 202 交付；任务本身没有修改 `/Users/zerro/gitee.com/pixicrave`。
+- slotclientengine 任务 215 已删除 RenderCore 的通用 reel slot snapshot、公开 prepared transaction 和 consumer-owned `commit()`；本次文档更新仍未修改 Crave 代码。
 - Crave 当前继续使用 grid-cell。RenderCore 已同步提供 direct mutation/transfer/drop 的基础支持；新游戏应使用 CellSpin。
 - 本次建议先迁移 symbol replacement、value mutation 和 occurrence transfer；initial/refill/Nearwin plan 保持不动，以降低玩法时序风险。
 
 ## 新接口映射
 
-| Crave 当前调用                                                                   | 新调用                                                                    | 说明                                         |
-| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------- |
-| `setMainReelSymbolPresentationValue(x,y,value)` 循环                             | `runtime.getSymbolMutationArea("main").getSymbols(pos).setValues(values)` | 全量 preflight 后映射提交                    |
-| `prepareMainReelVisibleOccurrenceReplacement(...); commit(); destroy()`          | `runtime.getSymbolMutationArea("main").replaceSymbol(pos,{code,value})`   | 一次原子 replacement，返回新 SymbolRender    |
-| 多个 replacement 循环                                                            | `replaceSymbols(replacements)`                                            | 整批先 prepare，再提交；返回 SymbolGroup     |
-| `prepareMainReelVisibleOccurrenceTransferBatch + RAF + setProgress + commit`     | `await runtime.transferMainReelSymbols({transfers,durationMs,signal})`    | runtime ticker 推进，无 RAF/manual lifecycle |
-| `createGridCellCascadeDropPlan + startMainReelCascadeDrop + waitForReelActivity` | `await runtime.dropMainReelOccurrences({movements,valueCommits,signal})`  | 仅当 Crave 已有 render-ready movement 时替换 |
-| initial/refill grid-cell plan、Nearwin drain                                     | 暂不迁移                                                                  | task 202 保持 compatibility                  |
+| Crave 当前调用                                                                       | 新调用                                                                    | 说明                                         |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- | -------------------------------------------- |
+| `setMainReelSymbolPresentationValue(x,y,value)` 循环                                 | `runtime.getSymbolMutationArea("main").getSymbols(pos).setValues(values)` | 全量 preflight 后映射提交                    |
+| 已删除：`prepareMainReelVisibleOccurrenceReplacement(...); commit(); destroy()`      | `runtime.getSymbolMutationArea("main").replaceSymbol(pos,{code,value})`   | 一次原子 replacement，返回新 SymbolRender    |
+| 多个 replacement 循环                                                                | `replaceSymbols(replacements)`                                            | 整批先 prepare，再提交；返回 SymbolGroup     |
+| 已删除：`prepareMainReelVisibleOccurrenceTransferBatch + RAF + setProgress + commit` | `await runtime.transferMainReelSymbols({transfers,durationMs,signal})`    | runtime ticker 推进，无 RAF/manual lifecycle |
+| `createGridCellCascadeDropPlan + startMainReelCascadeDrop + waitForReelActivity`     | `await runtime.dropMainReelOccurrences({movements,valueCommits,signal})`  | 仅当 Crave 已有 render-ready movement 时替换 |
+| initial/refill grid-cell plan、Nearwin drain                                         | 暂不迁移                                                                  | task 202 保持 compatibility                  |
 
 `-1` 是 RenderCore 所有 symbol area 与 spin 模型的唯一空图标标记；其它 code 必须非负。不要把 `-1` 转成 BN、空纹理或某个 registry code。`applyMainReelSnapshot()` 同样接受 `-1`，且对应 presentation value 必须是 `null`。
 
@@ -83,11 +87,11 @@ await runtime.transferMainReelSymbols({
 });
 ```
 
-`sourceReplacementCode: -1` 必须同时传 `sourceReplacementPresentationValue: null`。Promise 成功时 source/target 已原子提交；失败/abort 时
-RenderCore 恢复 source occurrence 并释放临时 replacement。之后通过 `getSymbol()` 取得新 target，不保留旧 handle。
+`sourceReplacementCode: -1` 必须同时传 `sourceReplacementPresentationValue: null`。Promise 成功时 source/target 已原子 finalization；失败/abort 时直接 reject，RenderCore 只结束临时 display lease 并释放未提交的 replacement，不执行旧业务 scene rollback。之后通过 `getSymbol()` 取得新 target，不保留旧 handle。
 
 如果 CO 在移动前后还要对 moving/target occurrence 播放不同 effect，当前继续使用已有 scoped
-`runMainReelVisibleOccurrenceTransfer()`；direct batch 是基础线性路径，不替代复杂 choreography。
+`runMainReelVisibleOccurrenceTransfer()`；direct batch 是基础线性路径，不替代复杂 choreography。scoped callback 只调用
+`delay()/move()` 和 occurrence/effect API；`move()` 完成后正常返回即由 runtime 自动 finalization，不再调用 `tx.commit()`。
 
 ## Cascade
 
