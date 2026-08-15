@@ -1,0 +1,62 @@
+:root {
+  color: #f0dfbd;
+  background: #080704;
+  font-family: Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background:
+    radial-gradient(circle at 50% 20%, rgba(105, 91, 64, 0.2), transparent 38%),
+    #080704;
+}
+
+.megalith-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 320px;
+  min-height: 480px;
+  overflow: hidden;
+  isolation: isolate;
+  background: #080704;
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+
+.three-canvas,
+.pixi-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.three-canvas {
+  z-index: 0;
+}
+
+.pixi-canvas {
+  z-index: 1;
+}
+
+.fatal-error {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 48px 24px;
+  color: #ffd1ba;
+  white-space: pre-wrap;
+}

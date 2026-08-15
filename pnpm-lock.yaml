@@ -13,7 +13,7 @@ importers:
         version: 24.12.0
       eslint:
         specifier: ^10.0.0
-        version: 10.1.0(supports-color@7.2.0)
+        version: 10.1.0
       prettier:
         specifier: ^3.8.1
         version: 3.8.1
@@ -50,16 +50,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -84,16 +84,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -130,13 +130,13 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -167,13 +167,13 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -201,16 +201,16 @@ importers:
         version: 8.18.1
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -226,16 +226,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -266,16 +266,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
@@ -306,16 +306,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -331,16 +331,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -362,16 +362,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -390,16 +390,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -424,16 +424,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -464,22 +464,50 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
       happy-dom:
         specifier: ^20.0.10
         version: 20.10.2
+
+  apps/slot3ddemo001:
+    dependencies:
+      pixi.js:
+        specifier: ^8.1.6
+        version: 8.17.1
+      three:
+        specifier: ^0.185.1
+        version: 0.185.1
+    devDependencies:
+      '@eslint/js':
+        specifier: ^9.34.0
+        version: 9.39.4
+      '@types/three':
+        specifier: ^0.185.1
+        version: 0.185.4
+      '@typescript-eslint/eslint-plugin':
+        specifier: ^8.0.0
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
+      '@typescript-eslint/parser':
+        specifier: ^8.0.0
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
+      eslint-config-prettier:
+        specifier: ^9.1.0
+        version: 9.1.2(eslint@10.1.0)
+      globals:
+        specifier: ^15.15.0
+        version: 15.15.0
 
   apps/spine2pixiani-demo:
     dependencies:
@@ -495,16 +523,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -523,16 +551,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -563,16 +591,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -597,16 +625,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -622,16 +650,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -653,16 +681,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -674,16 +702,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -699,16 +727,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -727,16 +755,16 @@ importers:
         version: 24.12.0
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -767,16 +795,16 @@ importers:
         version: 19.2.3(@types/react@19.2.17)
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -804,16 +832,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -828,16 +856,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -855,16 +883,16 @@ importers:
         version: link:../gameloading
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -882,16 +910,16 @@ importers:
         version: link:../gameloading
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -906,16 +934,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -933,10 +961,10 @@ importers:
         version: 8.18.1
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
@@ -945,7 +973,7 @@ importers:
         version: 17.4.0
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -970,16 +998,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -991,16 +1019,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -1016,16 +1044,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -1062,16 +1090,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -1090,16 +1118,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -1121,16 +1149,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -1149,16 +1177,16 @@ importers:
         version: 9.39.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/parser':
         specifier: ^8.0.0
-        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@vitest/coverage-v8':
         specifier: ^4.0.0
         version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(happy-dom@20.10.2)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0)))
       eslint-config-prettier:
         specifier: ^9.1.0
-        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+        version: 9.1.2(eslint@10.1.0)
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -1189,6 +1217,9 @@ packages:
   '@cspotcode/source-map-support@0.8.1':
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
     engines: {node: '>=12'}
+
+  '@dimforge/rapier3d-compat@0.12.0':
+    resolution: {integrity: sha512-uekIGetywIgopfD97oDL5PfeezkFpNhwlzlaEYNOA0N6ghdsOvh/HYjSMek5Q2O1PYvRSDFcqFVJl4r4ZBwOow==}
 
   '@emnapi/core@1.9.1':
     resolution: {integrity: sha512-mukuNALVsoix/w1BJwFzwXBN/dHeejQtuVzcDsfOEsdpCumXb/E9j8w11h5S54tT1xhifGfbbSm/ICrObRb3KA==}
@@ -1446,105 +1477,89 @@ packages:
     resolution: {integrity: sha512-excjX8DfsIcJ10x1Kzr4RcWe1edC9PquDRRPx3YVCvQv+U5p7Yin2s32ftzikXojb1PIFc/9Mt28/y+iRklkrw==}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   '@img/sharp-libvips-linux-arm@1.2.4':
     resolution: {integrity: sha512-bFI7xcKFELdiNCVov8e44Ia4u2byA+l3XtsAj+Q8tfCwO6BQ8iDojYdvoPMqsKDkuoOo+X6HZA0s0q11ANMQ8A==}
     cpu: [arm]
     os: [linux]
-    libc: [glibc]
 
   '@img/sharp-libvips-linux-ppc64@1.2.4':
     resolution: {integrity: sha512-FMuvGijLDYG6lW+b/UvyilUWu5Ayu+3r2d1S8notiGCIyYU/76eig1UfMmkZ7vwgOrzKzlQbFSuQfgm7GYUPpA==}
     cpu: [ppc64]
     os: [linux]
-    libc: [glibc]
 
   '@img/sharp-libvips-linux-riscv64@1.2.4':
     resolution: {integrity: sha512-oVDbcR4zUC0ce82teubSm+x6ETixtKZBh/qbREIOcI3cULzDyb18Sr/Wcyx7NRQeQzOiHTNbZFF1UwPS2scyGA==}
     cpu: [riscv64]
     os: [linux]
-    libc: [glibc]
 
   '@img/sharp-libvips-linux-s390x@1.2.4':
     resolution: {integrity: sha512-qmp9VrzgPgMoGZyPvrQHqk02uyjA0/QrTO26Tqk6l4ZV0MPWIW6LTkqOIov+J1yEu7MbFQaDpwdwJKhbJvuRxQ==}
     cpu: [s390x]
     os: [linux]
-    libc: [glibc]
 
   '@img/sharp-libvips-linux-x64@1.2.4':
     resolution: {integrity: sha512-tJxiiLsmHc9Ax1bz3oaOYBURTXGIRDODBqhveVHonrHJ9/+k89qbLl0bcJns+e4t4rvaNBxaEZsFtSfAdquPrw==}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   '@img/sharp-libvips-linuxmusl-arm64@1.2.4':
     resolution: {integrity: sha512-FVQHuwx1IIuNow9QAbYUzJ+En8KcVm9Lk5+uGUQJHaZmMECZmOlix9HnH7n1TRkXMS0pGxIJokIVB9SuqZGGXw==}
     cpu: [arm64]
     os: [linux]
-    libc: [musl]
 
   '@img/sharp-libvips-linuxmusl-x64@1.2.4':
     resolution: {integrity: sha512-+LpyBk7L44ZIXwz/VYfglaX/okxezESc6UxDSoyo2Ks6Jxc4Y7sGjpgU9s4PMgqgjj1gZCylTieNamqA1MF7Dg==}
     cpu: [x64]
     os: [linux]
-    libc: [musl]
 
   '@img/sharp-linux-arm64@0.34.5':
     resolution: {integrity: sha512-bKQzaJRY/bkPOXyKx5EVup7qkaojECG6NLYswgktOZjaXecSAeCWiZwwiFf3/Y+O1HrauiE3FVsGxFg8c24rZg==}
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   '@img/sharp-linux-arm@0.34.5':
     resolution: {integrity: sha512-9dLqsvwtg1uuXBGZKsxem9595+ujv0sJ6Vi8wcTANSFpwV/GONat5eCkzQo/1O6zRIkh0m/8+5BjrRr7jDUSZw==}
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [arm]
     os: [linux]
-    libc: [glibc]
 
   '@img/sharp-linux-ppc64@0.34.5':
     resolution: {integrity: sha512-7zznwNaqW6YtsfrGGDA6BRkISKAAE1Jo0QdpNYXNMHu2+0dTrPflTLNkpc8l7MUP5M16ZJcUvysVWWrMefZquA==}
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [ppc64]
     os: [linux]
-    libc: [glibc]
 
   '@img/sharp-linux-riscv64@0.34.5':
     resolution: {integrity: sha512-51gJuLPTKa7piYPaVs8GmByo7/U7/7TZOq+cnXJIHZKavIRHAP77e3N2HEl3dgiqdD/w0yUfiJnII77PuDDFdw==}
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [riscv64]
     os: [linux]
-    libc: [glibc]
 
   '@img/sharp-linux-s390x@0.34.5':
     resolution: {integrity: sha512-nQtCk0PdKfho3eC5MrbQoigJ2gd1CgddUMkabUj+rBevs8tZ2cULOx46E7oyX+04WGfABgIwmMC0VqieTiR4jg==}
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [s390x]
     os: [linux]
-    libc: [glibc]
 
   '@img/sharp-linux-x64@0.34.5':
     resolution: {integrity: sha512-MEzd8HPKxVxVenwAa+JRPwEC7QFjoPWuS5NZnBt6B3pu7EG2Ge0id1oLHZpPJdn3OQK+BQDiw9zStiHBTJQQQQ==}
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   '@img/sharp-linuxmusl-arm64@0.34.5':
     resolution: {integrity: sha512-fprJR6GtRsMt6Kyfq44IsChVZeGN97gTD331weR1ex1c1rypDEABN6Tm2xa1wE6lYb5DdEnk03NZPqA7Id21yg==}
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [arm64]
     os: [linux]
-    libc: [musl]
 
   '@img/sharp-linuxmusl-x64@0.34.5':
     resolution: {integrity: sha512-Jg8wNT1MUzIvhBFxViqrEhWDGzqymo3sV7z7ZsaWbZNDLXRJZoRGrjulp60YYtV4wfY8VIKcWidjojlLcWrd8Q==}
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [x64]
     os: [linux]
-    libc: [musl]
 
   '@img/sharp-wasm32@0.34.5':
     resolution: {integrity: sha512-OdWTEiVkY2PHwqkbBI8frFxQQFekHaSSkUIJkwzclWZe64O1X4UlUjqqqLaPbUpMOQk6FBu/HtlGXNblIs0huw==}
@@ -1629,42 +1644,36 @@ packages:
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   '@rolldown/binding-linux-arm64-musl@1.0.0-rc.12':
     resolution: {integrity: sha512-V6/wZztnBqlx5hJQqNWwFdxIKN0m38p8Jas+VoSfgH54HSj9tKTt1dZvG6JRHcjh6D7TvrJPWFGaY9UBVOaWPw==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [linux]
-    libc: [musl]
 
   '@rolldown/binding-linux-ppc64-gnu@1.0.0-rc.12':
     resolution: {integrity: sha512-AP3E9BpcUYliZCxa3w5Kwj9OtEVDYK6sVoUzy4vTOJsjPOgdaJZKFmN4oOlX0Wp0RPV2ETfmIra9x1xuayFB7g==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [ppc64]
     os: [linux]
-    libc: [glibc]
 
   '@rolldown/binding-linux-s390x-gnu@1.0.0-rc.12':
     resolution: {integrity: sha512-nWwpvUSPkoFmZo0kQazZYOrT7J5DGOJ/+QHHzjvNlooDZED8oH82Yg67HvehPPLAg5fUff7TfWFHQS8IV1n3og==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [s390x]
     os: [linux]
-    libc: [glibc]
 
   '@rolldown/binding-linux-x64-gnu@1.0.0-rc.12':
     resolution: {integrity: sha512-RNrafz5bcwRy+O9e6P8Z/OCAJW/A+qtBczIqVYwTs14pf4iV1/+eKEjdOUta93q2TsT/FI0XYDP3TCky38LMAg==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   '@rolldown/binding-linux-x64-musl@1.0.0-rc.12':
     resolution: {integrity: sha512-Jpw/0iwoKWx3LJ2rc1yjFrj+T7iHZn2JDg1Yny1ma0luviFS4mhAIcd1LFNxK3EYu3DHWCps0ydXQ5i/rrJ2ig==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [linux]
-    libc: [musl]
 
   '@rolldown/binding-openharmony-arm64@1.0.0-rc.12':
     resolution: {integrity: sha512-vRugONE4yMfVn0+7lUKdKvN4D5YusEiPilaoO2sgUWpCvrncvWgPMzK00ZFFJuiPgLwgFNP5eSiUlv2tfc+lpA==}
@@ -1737,6 +1746,9 @@ packages:
     cpu: [arm64]
     os: [win32]
 
+  '@tweenjs/tween.js@23.1.3':
+    resolution: {integrity: sha512-vJmvvwFxYuGnF2axRtPYocag6Clbb5YS7kLL+SO/TeVFzHqDIWrNKYtcsPMibjDx9O+bu+psAy9NKfWklassUA==}
+
   '@tybys/wasm-util@0.10.1':
     resolution: {integrity: sha512-9tTaPJLSiejZKx+Bmog4uSubteqTvFrVrURwkmHixBo0G4seD0zUxp98E1DzUBJxLQ3NPwXrGKDiVjwx/DpPsg==}
 
@@ -1771,6 +1783,15 @@ packages:
 
   '@types/react@19.2.17':
     resolution: {integrity: sha512-MXfmqaVPEVgkBT/aY0aGCkRWWtByiYQXo3xdQ8r5RzuFrPiRn8Gar2tQdXSUQ2GKV3bkXckek89V8wQBY2Q/Aw==}
+
+  '@types/stats.js@0.17.4':
+    resolution: {integrity: sha512-jIBvWWShCvlBqBNIZt0KAshWpvSjhkwkEu4ZUcASoAvhmrgAUI2t1dXrjSL4xXVLB4FznPrIsX3nKXFl/Dt4vA==}
+
+  '@types/three@0.185.4':
+    resolution: {integrity: sha512-gAsBIC07NIFrxjbf7tH2t71c38uulFfk/RFoC7FNBSjMRAQ8J1x/RBvusX0N5PJouaYFJawXQqfCQ0RKUx/1nA==}
+
+  '@types/webxr@0.5.24':
+    resolution: {integrity: sha512-h8fgEd/DpoS9CBrjEQXR+dIDraopAEfu4wYVNY2tEPwk60stPWhvZMf4Foo5FakuQ7HFZoa8WceaWFervK2Ovg==}
 
   '@types/whatwg-mimetype@3.0.2':
     resolution: {integrity: sha512-c2AKvDT8ToxLIOUlN51gTiHXflsfIFisS4pO7pDPoKouJCESkhZnEy623gwP9laCy5lnLDAw1vAzu2vM2YLOrA==}
@@ -2291,28 +2312,24 @@ packages:
     engines: {node: '>= 12.0.0'}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   lightningcss-linux-arm64-musl@1.32.0:
     resolution: {integrity: sha512-UpQkoenr4UJEzgVIYpI80lDFvRmPVg6oqboNHfoH4CQIfNA+HOrZ7Mo7KZP02dC6LjghPQJeBsvXhJod/wnIBg==}
     engines: {node: '>= 12.0.0'}
     cpu: [arm64]
     os: [linux]
-    libc: [musl]
 
   lightningcss-linux-x64-gnu@1.32.0:
     resolution: {integrity: sha512-V7Qr52IhZmdKPVr+Vtw8o+WLsQJYCTd8loIfpDaMRWGUZfBOYEJeyJIkqGIDMZPwPx24pUMfwSxxI8phr/MbOA==}
     engines: {node: '>= 12.0.0'}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   lightningcss-linux-x64-musl@1.32.0:
     resolution: {integrity: sha512-bYcLp+Vb0awsiXg/80uCRezCYHNg1/l3mt0gzHnWV9XP1W5sKa5/TCdGWaR/zBM2PeF/HbsQv/j2URNOiVuxWg==}
     engines: {node: '>= 12.0.0'}
     cpu: [x64]
     os: [linux]
-    libc: [musl]
 
   lightningcss-win32-arm64-msvc@1.32.0:
     resolution: {integrity: sha512-8SbC8BR40pS6baCM8sbtYDSwEVQd4JlFTOlaD3gWGHfThTcABnNDBda6eTZeqbofalIJhFx0qKzgHJmcPTnGdw==}
@@ -2353,6 +2370,9 @@ packages:
   math-intrinsics@1.1.0:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
     engines: {node: '>= 0.4'}
+
+  meshoptimizer@1.1.1:
+    resolution: {integrity: sha512-oRFNWJRDA/WTrVj7NWvqa5HqE1t9MYDj2VaWirQCzCCrAd2GHrqR/sQezCxiWATPNlKTcRaPRHPJwIRoPBAp5g==}
 
   mime-db@1.52.0:
     resolution: {integrity: sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg==}
@@ -2499,6 +2519,9 @@ packages:
   supports-color@7.2.0:
     resolution: {integrity: sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw==}
     engines: {node: '>=8'}
+
+  three@0.185.1:
+    resolution: {integrity: sha512-5aojFCXKwnjBRZvUnt3WFfEcvUJgkN5LlijRFN95hMy8WVkG4I0QNcJE+OuWvuJ0bOdStrbfXn0pkd6/QyiAlg==}
 
   tiny-lru@11.4.7:
     resolution: {integrity: sha512-w/Te7uMUVeH0CR8vZIjr+XiN41V+30lkDdK+NRIDCUYKKuL9VcmaUEmaPISuwGhLlrTGh5yu18lENtR9axSxYw==}
@@ -2745,6 +2768,8 @@ snapshots:
     dependencies:
       '@jridgewell/trace-mapping': 0.3.9
 
+  '@dimforge/rapier3d-compat@0.12.0': {}
+
   '@emnapi/core@1.9.1':
     dependencies:
       '@emnapi/wasi-threads': 1.2.0
@@ -2839,17 +2864,17 @@ snapshots:
   '@esbuild/win32-x64@0.27.7':
     optional: true
 
-  '@eslint-community/eslint-utils@4.9.1(eslint@10.1.0(supports-color@7.2.0))':
+  '@eslint-community/eslint-utils@4.9.1(eslint@10.1.0)':
     dependencies:
-      eslint: 10.1.0(supports-color@7.2.0)
+      eslint: 10.1.0
       eslint-visitor-keys: 3.4.3
 
   '@eslint-community/regexpp@4.12.2': {}
 
-  '@eslint/config-array@0.23.3(supports-color@7.2.0)':
+  '@eslint/config-array@0.23.3':
     dependencies:
       '@eslint/object-schema': 3.0.3
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
       minimatch: 10.2.5
     transitivePeerDependencies:
       - supports-color
@@ -3094,6 +3119,8 @@ snapshots:
   '@turbo/windows-arm64@2.9.3':
     optional: true
 
+  '@tweenjs/tween.js@23.1.3': {}
+
   '@tybys/wasm-util@0.10.1':
     dependencies:
       tslib: 2.8.1
@@ -3131,21 +3158,34 @@ snapshots:
     dependencies:
       csstype: 3.2.3
 
+  '@types/stats.js@0.17.4': {}
+
+  '@types/three@0.185.4':
+    dependencies:
+      '@dimforge/rapier3d-compat': 0.12.0
+      '@tweenjs/tween.js': 23.1.3
+      '@types/stats.js': 0.17.4
+      '@types/webxr': 0.5.24
+      fflate: 0.8.3
+      meshoptimizer: 1.1.1
+
+  '@types/webxr@0.5.24': {}
+
   '@types/whatwg-mimetype@3.0.2': {}
 
   '@types/ws@8.18.1':
     dependencies:
       '@types/node': 24.12.0
 
-  '@typescript-eslint/eslint-plugin@8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)':
+  '@typescript-eslint/eslint-plugin@8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)':
     dependencies:
       '@eslint-community/regexpp': 4.12.2
-      '@typescript-eslint/parser': 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+      '@typescript-eslint/parser': 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/scope-manager': 8.58.0
-      '@typescript-eslint/type-utils': 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
-      '@typescript-eslint/utils': 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+      '@typescript-eslint/type-utils': 8.58.0(eslint@10.1.0)(typescript@6.0.2)
+      '@typescript-eslint/utils': 8.58.0(eslint@10.1.0)(typescript@6.0.2)
       '@typescript-eslint/visitor-keys': 8.58.0
-      eslint: 10.1.0(supports-color@7.2.0)
+      eslint: 10.1.0
       ignore: 7.0.5
       natural-compare: 1.4.0
       ts-api-utils: 2.5.0(typescript@6.0.2)
@@ -3153,23 +3193,23 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)':
+  '@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2)':
     dependencies:
       '@typescript-eslint/scope-manager': 8.58.0
       '@typescript-eslint/types': 8.58.0
-      '@typescript-eslint/typescript-estree': 8.58.0(supports-color@7.2.0)(typescript@6.0.2)
+      '@typescript-eslint/typescript-estree': 8.58.0(typescript@6.0.2)
       '@typescript-eslint/visitor-keys': 8.58.0
-      debug: 4.4.3(supports-color@7.2.0)
-      eslint: 10.1.0(supports-color@7.2.0)
+      debug: 4.4.3
+      eslint: 10.1.0
       typescript: 6.0.2
     transitivePeerDependencies:
       - supports-color
 
-  '@typescript-eslint/project-service@8.58.0(supports-color@7.2.0)(typescript@6.0.2)':
+  '@typescript-eslint/project-service@8.58.0(typescript@6.0.2)':
     dependencies:
       '@typescript-eslint/tsconfig-utils': 8.58.0(typescript@6.0.2)
       '@typescript-eslint/types': 8.58.0
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
       typescript: 6.0.2
     transitivePeerDependencies:
       - supports-color
@@ -3183,13 +3223,13 @@ snapshots:
     dependencies:
       typescript: 6.0.2
 
-  '@typescript-eslint/type-utils@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)':
+  '@typescript-eslint/type-utils@8.58.0(eslint@10.1.0)(typescript@6.0.2)':
     dependencies:
       '@typescript-eslint/types': 8.58.0
-      '@typescript-eslint/typescript-estree': 8.58.0(supports-color@7.2.0)(typescript@6.0.2)
-      '@typescript-eslint/utils': 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
-      debug: 4.4.3(supports-color@7.2.0)
-      eslint: 10.1.0(supports-color@7.2.0)
+      '@typescript-eslint/typescript-estree': 8.58.0(typescript@6.0.2)
+      '@typescript-eslint/utils': 8.58.0(eslint@10.1.0)(typescript@6.0.2)
+      debug: 4.4.3
+      eslint: 10.1.0
       ts-api-utils: 2.5.0(typescript@6.0.2)
       typescript: 6.0.2
     transitivePeerDependencies:
@@ -3197,13 +3237,13 @@ snapshots:
 
   '@typescript-eslint/types@8.58.0': {}
 
-  '@typescript-eslint/typescript-estree@8.58.0(supports-color@7.2.0)(typescript@6.0.2)':
+  '@typescript-eslint/typescript-estree@8.58.0(typescript@6.0.2)':
     dependencies:
-      '@typescript-eslint/project-service': 8.58.0(supports-color@7.2.0)(typescript@6.0.2)
+      '@typescript-eslint/project-service': 8.58.0(typescript@6.0.2)
       '@typescript-eslint/tsconfig-utils': 8.58.0(typescript@6.0.2)
       '@typescript-eslint/types': 8.58.0
       '@typescript-eslint/visitor-keys': 8.58.0
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
       minimatch: 10.2.5
       semver: 7.7.4
       tinyglobby: 0.2.15
@@ -3212,13 +3252,13 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@typescript-eslint/utils@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)':
+  '@typescript-eslint/utils@8.58.0(eslint@10.1.0)(typescript@6.0.2)':
     dependencies:
-      '@eslint-community/eslint-utils': 4.9.1(eslint@10.1.0(supports-color@7.2.0))
+      '@eslint-community/eslint-utils': 4.9.1(eslint@10.1.0)
       '@typescript-eslint/scope-manager': 8.58.0
       '@typescript-eslint/types': 8.58.0
-      '@typescript-eslint/typescript-estree': 8.58.0(supports-color@7.2.0)(typescript@6.0.2)
-      eslint: 10.1.0(supports-color@7.2.0)
+      '@typescript-eslint/typescript-estree': 8.58.0(typescript@6.0.2)
+      eslint: 10.1.0
       typescript: 6.0.2
     transitivePeerDependencies:
       - supports-color
@@ -3360,11 +3400,9 @@ snapshots:
 
   csstype@3.2.3: {}
 
-  debug@4.4.3(supports-color@7.2.0):
+  debug@4.4.3:
     dependencies:
       ms: 2.1.3
-    optionalDependencies:
-      supports-color: 7.2.0
 
   deep-is@0.1.4: {}
 
@@ -3434,9 +3472,9 @@ snapshots:
 
   escape-string-regexp@4.0.0: {}
 
-  eslint-config-prettier@9.1.2(eslint@10.1.0(supports-color@7.2.0)):
+  eslint-config-prettier@9.1.2(eslint@10.1.0):
     dependencies:
-      eslint: 10.1.0(supports-color@7.2.0)
+      eslint: 10.1.0
 
   eslint-scope@9.1.2:
     dependencies:
@@ -3449,11 +3487,11 @@ snapshots:
 
   eslint-visitor-keys@5.0.1: {}
 
-  eslint@10.1.0(supports-color@7.2.0):
+  eslint@10.1.0:
     dependencies:
-      '@eslint-community/eslint-utils': 4.9.1(eslint@10.1.0(supports-color@7.2.0))
+      '@eslint-community/eslint-utils': 4.9.1(eslint@10.1.0)
       '@eslint-community/regexpp': 4.12.2
-      '@eslint/config-array': 0.23.3(supports-color@7.2.0)
+      '@eslint/config-array': 0.23.3
       '@eslint/config-helpers': 0.5.3
       '@eslint/core': 1.1.1
       '@eslint/plugin-kit': 0.6.1
@@ -3463,7 +3501,7 @@ snapshots:
       '@types/estree': 1.0.8
       ajv: 6.14.0
       cross-spawn: 7.0.6
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
       escape-string-regexp: 4.0.0
       eslint-scope: 9.1.2
       eslint-visitor-keys: 5.0.1
@@ -3737,6 +3775,8 @@ snapshots:
 
   math-intrinsics@1.1.0: {}
 
+  meshoptimizer@1.1.1: {}
+
   mime-db@1.52.0: {}
 
   mime-types@2.1.35:
@@ -3902,6 +3942,8 @@ snapshots:
   supports-color@7.2.0:
     dependencies:
       has-flag: 4.0.0
+
+  three@0.185.1: {}
 
   tiny-lru@11.4.7: {}
 
