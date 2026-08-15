@@ -5,6 +5,7 @@ import { assertResolvedSymbolAni } from "./animation-resolver.js";
 import { SymbolAnimationError } from "./errors.js";
 import { SymbolStateMachine } from "./state-machine.js";
 import { destroyVniSymbolAnimationCache } from "./vni-animation.js";
+import { destroySpineSymbolAnimationCache } from "./spine-animation.js";
 import type {
   RenderSymbolOptions,
   RenderSymbolUpdateResult,
@@ -736,6 +737,7 @@ export class RenderSymbol extends VisualEntity<void> {
     // processes RenderSymbol-owned children.
     this.gameUnderlayLayer.removeChildren();
     this.gameOverlayLayer.removeChildren();
+    destroySpineSymbolAnimationCache(this);
     destroyVniSymbolAnimationCache(this);
     super.destroy(options);
   }

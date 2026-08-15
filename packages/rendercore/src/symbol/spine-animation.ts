@@ -259,6 +259,11 @@ export class SpineSymbolAni implements SymbolAni {
     if (entry.owners > 0) {
       return;
     }
+    entry.player.view.parent?.removeChild(entry.player.view);
+    if (entry.initialized) {
+      entry.player.reset();
+      return;
+    }
     const rootCache = cachedSpineSymbolPlayers.get(this.#context.root);
     if (rootCache?.get(entry.key) === entry) {
       rootCache.delete(entry.key);
@@ -274,6 +279,17 @@ export class SpineSymbolAni implements SymbolAni {
       );
     }
   }
+}
+
+export function destroySpineSymbolAnimationCache(root: Container): void {
+  const rootCache = cachedSpineSymbolPlayers.get(root);
+  if (!rootCache) return;
+  cachedSpineSymbolPlayers.delete(root);
+  for (const entry of rootCache.values()) {
+    entry.player.view.parent?.removeChild(entry.player.view);
+    entry.player.destroy();
+  }
+  rootCache.clear();
 }
 
 function requireSlotPlayer(

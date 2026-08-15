@@ -41,6 +41,13 @@ stopped 阶段只有实际可见行持有完整 `RenderSymbol`，上下 buffer �
 Sprite 不进入 pool。`RenderReelSlotSnapshot` 的 `mode`、`rollingVisual` 和
 `renderPriority` 用于底层诊断及 grid dimming/order，同一 rollingVisual identity 会跨帧复用。
 
+完整 `RenderSymbol` 内部按实际资源身份复用 runtime instance。普通图片只切稳定 Sprite 的
+texture/visibility；named ImgNumber 和 value ImgNumber 保持稳定 renderer，后者跨 value tier 时
+重绑已加载的 resource/profile、anchor、transform 和 slot，不按 tier 编号重建。official Spine
+按 skeleton/atlas/texture 缓存 player，VNI 延续 root-local cache；离开状态或回池只 reset、pause、
+detach，只有 `RenderSymbol.destroy()` 才销毁这些缓存。不同同时可见 occurrence 仍各自拥有独立
+mutable player/renderer，不跨 Symbol 共享时间轴或文字状态。
+
 RenderCore相关游戏API按“渲染对象与原子动作 / 安全组合 / 玩法模板”分为三层；第三层默认属于gameframeworks或等价模板模块，
 不是RenderCore core primitive。完整职责、依赖方向和禁止边界见
 [`docs/rendercore-three-layer-api-architecture.md`](../../docs/rendercore-three-layer-api-architecture.md)。

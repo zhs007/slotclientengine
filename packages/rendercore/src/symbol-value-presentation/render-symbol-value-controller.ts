@@ -39,11 +39,28 @@ export type RenderSymbolValuePlayerFactory = (options: {
   readonly tier: SymbolValuePresentationResource["tiers"][number];
 }) => RendercoreSpineSlotPlayer;
 
+interface CachedValuePlayer {
+  readonly key: string;
+  readonly player: RendercoreSpineSlotPlayer;
+  readonly initPromise: Promise<void>;
+}
+
+function createValuePlayerKey(
+  tier: SymbolValuePresentationResource["tiers"][number],
+): string {
+  return JSON.stringify({
+    skeleton: tier.spec.skeleton,
+    atlas: tier.spec.atlas,
+    texture: tier.spec.texture,
+  });
+}
+
 class RenderSymbolValueControllerModel implements RenderSymbolValueController {
   readonly #root: RenderSymbol;
   readonly #resource: SymbolValuePresentationResource;
   readonly #playerFactory: RenderSymbolValuePlayerFactory;
   readonly #displayRoot = new Container();
+  readonly #players = new Map<string, CachedValuePlayer>();
   #value: number | null = null;
   #player: ReturnType<typeof createOfficialSpinePlayer> | null = null;
   #tier: SymbolValuePresentationResource["tiers"][number] | null = null;
@@ -117,26 +134,26 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
       this.#value = value;
       return;
     }
-    let player: RendercoreSpineSlotPlayer | null = null;
-    try {
-      player = this.#playerFactory({ tier });
-    } catch (error) {
-      player?.destroy();
-      throw error;
-    }
+    const cached = this.getOrCreatePlayer(tier);
     this.#continuityGeneration += 1;
     this.clearActive();
     this.#value = null;
     const requestId = ++this.#requestId;
     this.#value = value;
-    this.#player = player;
+    this.#player = cached.player;
     this.#tier = tier;
     this.#tierIndex = tierIndex;
-    this.#display = null;
+    if (this.#display?.type === "image-string") {
+      this.#display.setTier?.(tierIndex, value);
+      this.prepareImageStringDisplayRoot(this.#display);
+    } else {
+      this.#display?.destroy();
+      this.#display = null;
+    }
     const transform = tier.spec.transform;
-    player.view.position.set(transform?.x ?? 0, transform?.y ?? 0);
-    player.view.scale.set(transform?.scale ?? 1);
-    void this.initializePlayer({ player, requestId, value, tierIndex });
+    cached.player.view.position.set(transform?.x ?? 0, transform?.y ?? 0);
+    cached.player.view.scale.set(transform?.scale ?? 1);
+    void this.initializePlayer({ cached, requestId, value, tierIndex });
   }
 
   private resolveTierIndex(value: number): number {
@@ -150,26 +167,31 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
   }
 
   private async initializePlayer(options: {
-    readonly player: RendercoreSpineSlotPlayer;
+    readonly cached: CachedValuePlayer;
     readonly requestId: number;
     readonly value: number;
     readonly tierIndex: number;
   }): Promise<void> {
-    const { player, requestId, value, tierIndex } = options;
+    const { cached, requestId, value, tierIndex } = options;
+    const player = cached.player;
     let display: SymbolValueDisplayHandle | null = null;
     try {
-      await player.init();
-      display = await createSymbolValueDisplay({
-        value,
-        tierIndex,
-        resource: this.#resource,
-      });
+      await cached.initPromise;
+      if (this.#display?.type === "image-string") {
+        display = this.#display;
+      } else {
+        display = await createSymbolValueDisplay({
+          value,
+          tierIndex,
+          resource: this.#resource,
+        });
+      }
       if (
         this.#destroyed ||
         this.#requestId !== requestId ||
         this.#player !== player
       ) {
-        display.destroy();
+        if (display !== this.#display) display.destroy();
         return;
       }
       this.#display = display;
@@ -180,11 +202,27 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
       this.playActiveAnimation();
       this.syncPresentationView();
     } catch (error) {
-      display?.destroy();
+      if (display && display !== this.#display) display.destroy();
       if (this.#requestId === requestId && this.#player === player) {
         this.#initializationError = error;
       }
     }
+  }
+
+  private getOrCreatePlayer(
+    tier: SymbolValuePresentationResource["tiers"][number],
+  ): CachedValuePlayer {
+    const key = createValuePlayerKey(tier);
+    const existing = this.#players.get(key);
+    if (existing) return existing;
+    const player = this.#playerFactory({ tier });
+    const cached: CachedValuePlayer = {
+      key,
+      player,
+      initPromise: Promise.resolve(player.init()),
+    };
+    this.#players.set(key, cached);
+    return cached;
   }
 
   getValue(): number | null {
@@ -289,12 +327,18 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
   resetForPoolRelease(): void {
     this.assertNotDestroyed();
     this.clearActive();
+    this.#presentationState = "normal";
+    this.#display?.setProfile?.("normal");
     this.#value = null;
   }
 
   destroy(): void {
     if (this.#destroyed) return;
     this.clearActive();
+    this.#display?.destroy();
+    this.#display = null;
+    for (const cached of this.#players.values()) cached.player.destroy();
+    this.#players.clear();
     this.#displayRoot.destroy({ children: false });
     this.#destroyed = true;
   }
@@ -444,24 +488,22 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
     this.#activeAnimation = null;
     this.#activePlayback = null;
     const player = this.#player;
-    const display = this.#display;
-    if (wasInitialized && player && display) this.detachDisplayFromPlayer();
+    if (wasInitialized && player && this.#display)
+      this.detachDisplayFromPlayer();
     this.#player = null;
     this.#tier = null;
     this.#tierIndex = null;
-    this.#display = null;
     this.#root.baseLayer.visible = true;
     if (player) {
       notifySymbolImageStringSpineInactive(this.#root, player, this);
+      player.view.parent?.removeChild(player.view);
+      if (wasInitialized) player.reset();
     }
     if (this.#displayRoot.parent === this.#root.imageStringOverlayLayer) {
       this.#root.imageStringOverlayLayer.removeChild(this.#displayRoot);
     }
-    this.#displayRoot.removeChildren();
     this.#displayRoot.visible = false;
     this.#displayRoot.renderable = false;
-    display?.destroy();
-    player?.destroy();
   }
 
   private prepareImageStringDisplayRoot(

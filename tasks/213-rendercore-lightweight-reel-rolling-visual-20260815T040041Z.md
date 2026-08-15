@@ -23,6 +23,9 @@ manifest 和生成物均未修改。
   前会再次核对 exact value。兜底创建路径同样严格按 init、set/verify final value、attach 的顺序执行。
 - weighted resolver 改为每 cell 默认最多保留 32 个最近 occurrence，避免 continuous symbolY 令
   随机值 Map 永久增长。
+- 后续继续优化完整 RenderSymbol 内部资源实例：普通 Spine 和 CN tier player 按实际资源身份缓存，
+  value ImgNumber 以稳定 renderer 跨 tier 重绑；状态离开和回池不再销毁这些可复用实例，Symbol
+  真正销毁时统一释放。
 
 ## 确定性证据
 
@@ -47,6 +50,8 @@ manifest 和生成物均未修改。
 - `pnpm --filter @slotclientengine/rendercore build`
 - `pnpm --filter @slotclientengine/gameframeworks typecheck`
 - `pnpm --filter game002v2 typecheck`
+- RenderSymbol 内部资源复用补充验收：5 个定向测试文件，49 tests passed；rendercore 与
+  gameframeworks typecheck、rendercore build 通过
 - `git diff --check`
 - diff 路径检查：`apps/game002v2/**`、`assets/crave/**`、`assets/gamecfg002/**` 零修改
 

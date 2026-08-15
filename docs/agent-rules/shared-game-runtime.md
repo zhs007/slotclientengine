@@ -125,6 +125,11 @@
 
 - symbol manifest parser、animation resolver、VNI/official Spine adapter、resource closure、player lifecycle、裁切和 pooling 属于 rendercore。
 - symbol-state-textures manifest v2 的 `settings.stateDefinitions` 是 once 完成行为的唯一来源；once 必须显式声明 return-to-default 或 terminal，stable 禁止完成行为。合法 v1 只在 rendercore 加载 upgrader中按 exact remove 迁移为 terminal，其它 once 迁移为 return-to-default；runtime、editor preview 和 game 不得保留 state-name fallback。
+- 单个完整 RenderSymbol 的 asset binding 创建后不可变；状态切换与回池必须优先复用其稳定 Sprite、
+  ImgNumber renderer 及按实际 resource identity 缓存的 Spine/VNI player。value tier 变化只重绑
+  ImgNumber resource/profile、geometry 和 slot，不得仅因 tier index 变化重建 renderer；回池只清
+  value、playback、attachment 等 mutable 状态，缓存只在 RenderSymbol 真正 destroy 时销毁。不同
+  occurrence 的 mutable player/renderer 不得共享。
 - composite symbol state 的 base 可见性、underlay/overlay 稳定顺序、每 leaf 独立 player ownership、共享 once/loop completion barrier 与幂等 destroy 属于 rendercore；app/editor 不直接操作其 display tree 或补写时序。
 - symbol 状态完成边界由 rendercore 的 awaitable playback API 表达，宿主 ticker 仍逐帧调用 update 推进。app 不轮询 loop/once completion counter；批量播放必须先完整预检，AbortSignal、reset、回池、destroy 或外部状态取代必须拒绝未完成等待。
 - 通用 symbol state texture versioned preset 与 DOM-free RGBA transform 属于

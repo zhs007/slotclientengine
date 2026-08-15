@@ -15,7 +15,7 @@ export async function createSymbolValueDisplay(options: {
   const text = String(options.value);
   const spec = options.resource.text;
   if (spec.type === "image-string") {
-    const binding = requireImageStringBinding(options);
+    let binding = requireImageStringBinding(options);
     const renderer = createRenderMappedImageString({
       resource: binding.resource,
       text,
@@ -74,7 +74,11 @@ export async function createSymbolValueDisplay(options: {
         get text(): string {
           return currentText;
         },
-        resourcePath: binding.resourcePath,
+        get resourcePath(): string {
+          const profileBinding =
+            currentProfile === "spinBlur" ? binding.spinBlurProfile : binding;
+          return profileBinding?.resourcePath ?? binding.resourcePath;
+        },
         setProfile(profile: "normal" | "spinBlur"): void {
           if (profile === currentProfile) return;
           if (profile === "spinBlur" && !binding.spinBlurProfile) {
@@ -89,6 +93,36 @@ export async function createSymbolValueDisplay(options: {
             specialValueImages: next.specialValueImages,
           });
           currentProfile = profile;
+        },
+        setTier(tierIndex: number, value: number): void {
+          const nextBinding = requireImageStringBinding({
+            resource: options.resource,
+            tierIndex,
+            value,
+          });
+          const nextText = String(value);
+          const nextProfile =
+            currentProfile === "spinBlur" && nextBinding.spinBlurProfile
+              ? "spinBlur"
+              : "normal";
+          const profileBinding =
+            nextProfile === "spinBlur"
+              ? nextBinding.spinBlurProfile!
+              : nextBinding;
+          renderer.setAnchor(nextBinding.anchor);
+          renderer.setProfile({
+            resource: profileBinding.resource,
+            specialValueImages: profileBinding.specialValueImages,
+            text: nextText,
+          });
+          renderer.container.position.set(
+            nextBinding.transform.x,
+            nextBinding.transform.y,
+          );
+          renderer.container.scale.set(nextBinding.transform.scale);
+          binding = nextBinding;
+          currentProfile = nextProfile;
+          currentText = nextText;
         },
         setText(next: string): void {
           renderer.setText(next);

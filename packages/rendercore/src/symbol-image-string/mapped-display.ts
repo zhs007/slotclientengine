@@ -17,7 +17,9 @@ export interface RenderMappedImageString {
     readonly specialValueImages?: Readonly<
       Record<string, SymbolImageStringSpecialImageResource>
     >;
+    readonly text?: string;
   }): void;
+  setAnchor(anchor: Readonly<{ x: number; y: number }>): void;
   validateText(text: string): void;
   setText(text: string): void;
   getText(): string;
@@ -44,6 +46,7 @@ export function createRenderMappedImageString(options: {
   const container = glyphs.container;
   const special = new Sprite();
   let text = options.text;
+  let anchor = options.anchor;
   let destroyed = false;
 
   commit(text);
@@ -55,20 +58,33 @@ export function createRenderMappedImageString(options: {
       readonly specialValueImages?: Readonly<
         Record<string, SymbolImageStringSpecialImageResource>
       >;
+      readonly text?: string;
     }): void {
       assertUsable();
       const nextSpecialValueImages =
         next.specialValueImages ?? Object.freeze({});
+      const nextText = next.text ?? text;
       if (
         next.resource === resource &&
-        nextSpecialValueImages === specialValueImages
+        nextSpecialValueImages === specialValueImages &&
+        nextText === text
       )
         return;
-      const glyphText = resolveInitialGlyphText(text, nextSpecialValueImages);
+      const glyphText = resolveInitialGlyphText(
+        nextText,
+        nextSpecialValueImages,
+      );
       validateImageStringText(glyphText, next.resource.manifest);
       glyphs.setResource(next.resource, glyphText);
       resource = next.resource;
       specialValueImages = nextSpecialValueImages;
+      text = nextText;
+      commit(nextText);
+    },
+    setAnchor(next: Readonly<{ x: number; y: number }>): void {
+      assertUsable();
+      anchor = next;
+      glyphs.setAnchor(next);
       commit(text);
     },
     validateText(nextText: string): void {
@@ -107,10 +123,7 @@ export function createRenderMappedImageString(options: {
       glyphs.setText("");
       special.texture = mapped.texture;
       if (special.parent !== container) container.addChild(special);
-      container.pivot.set(
-        special.width * options.anchor.x,
-        special.height * options.anchor.y,
-      );
+      container.pivot.set(special.width * anchor.x, special.height * anchor.y);
       return;
     }
     if (special.parent === container) container.removeChild(special);

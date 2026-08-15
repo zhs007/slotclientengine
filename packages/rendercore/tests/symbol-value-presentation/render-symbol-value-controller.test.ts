@@ -178,7 +178,7 @@ describe("render symbol value controller", () => {
     expect(players[0].updates).toEqual([0.1, 0.1, 0.1, 0.1]);
     symbol.setPresentationValue(25);
     expect(players[0].removed).toHaveLength(1);
-    expect(players[0].destroyed).toBe(true);
+    expect(players[0].destroyed).toBe(false);
     expect(symbol.baseLayer.visible).toBe(true);
     await flushPromises();
     expect(players[1].tierSkeleton).toBe("./high.json");
@@ -186,9 +186,10 @@ describe("render symbol value controller", () => {
 
     symbol.setPresentationValue(null);
     expect(symbol.getPresentationValue()).toBeNull();
-    expect(players[1].destroyed).toBe(true);
+    expect(players[1].destroyed).toBe(false);
     symbol.resetForPoolRelease();
     symbol.destroy();
+    expect(players.every((player) => player.destroyed)).toBe(true);
   });
 
   it("rejects invalid values and reports async player initialization failures", async () => {
@@ -225,9 +226,10 @@ describe("render symbol value controller", () => {
     await flushPromises();
 
     expect(player.attached).toEqual([]);
-    expect(player.destroyed).toBe(true);
+    expect(player.destroyed).toBe(false);
     expect(symbol.overlayLayer.children).toEqual([]);
     symbol.destroy();
+    expect(player.destroyed).toBe(true);
   });
 
   it("keeps a requested reel-state texture visible across late value-player initialization", async () => {
@@ -490,11 +492,12 @@ describe("render symbol value controller", () => {
     expect(highDisplay).toBe(lowDisplay);
     expect(highDisplay.children).toHaveLength(1);
     const highContent = highDisplay.children[0]!;
+    expect(highContent).toBe(lowContent);
     expect(highContent.children).toHaveLength(2);
     expect(highContent.position).toMatchObject({ x: -2, y: -3 });
     expect(highContent.scale).toMatchObject({ x: 2, y: 2 });
     expect(highContent.pivot).toMatchObject({ x: 2, y: 1 });
-    expect(players[0].destroyed).toBe(true);
+    expect(players[0].destroyed).toBe(false);
 
     const clone = symbol.clonePresentationValue();
     const cloneView = getRenderObjectAdapter(clone).view;
@@ -521,7 +524,16 @@ describe("render symbol value controller", () => {
 
     expect(() => symbol.setPresentationValue(13)).toThrow(/缺少 glyph/);
     expect(symbol.getPresentationValue()).toBe(25);
+    symbol.resetForPoolRelease();
+    symbol.init();
+    symbol.setPresentationValue(1);
+    await flushPromises();
+    expect(players).toHaveLength(2);
+    expect(players[0].destroyed).toBe(false);
+    expect(players[0].attached.at(-1)?.object).toBe(lowDisplay);
+    expect(lowDisplay.children[0]).toBe(lowContent);
     symbol.destroy();
+    expect(players.every((player) => player.destroyed)).toBe(true);
   });
 
   it("keeps two ImgNumber occurrences independent while sharing resources", async () => {
@@ -551,6 +563,43 @@ describe("render symbol value controller", () => {
     );
     first.destroy();
     second.destroy();
+  });
+
+  it("reuses one Spine player when different value tiers bind the same assets", async () => {
+    const base = createImageStringResource();
+    const low = base.tiers[0]!;
+    const resource = Object.freeze({
+      ...base,
+      tiers: Object.freeze([
+        low,
+        Object.freeze({
+          spec: low.spec,
+          skeleton: low.skeleton,
+          atlasText: low.atlasText,
+          textureUrl: low.textureUrl,
+          atlasPage: low.atlasPage,
+        }),
+      ]),
+    });
+    const players: FakeSlotPlayer[] = [];
+    const symbol = createSymbol(() => {
+      const player = new FakeSlotPlayer();
+      players.push(player);
+      return player;
+    }, resource);
+    symbol.init();
+    symbol.setPresentationValue(1);
+    await flushPromises();
+    const display = players[0].attached[0]!.object;
+
+    symbol.setPresentationValue(25);
+    await flushPromises();
+
+    expect(players).toHaveLength(1);
+    expect(players[0].attached.at(-1)?.object).toBe(display);
+    expect(symbol.getPresentationValue()).toBe(25);
+    symbol.destroy();
+    expect(players[0].destroyed).toBe(true);
   });
 
   it("uses only the selected tier special-value image map", async () => {

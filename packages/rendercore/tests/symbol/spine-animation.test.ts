@@ -234,6 +234,7 @@ import { Container, Sprite, Texture } from "pixi.js";
 import {
   SpineSymbolAni,
   createSymbolSpineAnimationResolver,
+  destroySpineSymbolAnimationCache,
   type RendercoreSpineSymbolPlayer,
   type SpineSymbolAniPlayerFactory,
   type SymbolAnimationContext,
@@ -416,7 +417,7 @@ describe("SpineSymbolAni", () => {
     expect(ani.update(1).onceCompleted).toBe(false);
   });
 
-  it("destroys player and mounted Spine viewport idempotently", async () => {
+  it("keeps an idle player until the owning symbol root is destroyed", async () => {
     const context = createContext({ state: "appear" });
     const { factory, calls } = createPlayerFactory();
     const ani = new SpineSymbolAni({
@@ -432,8 +433,11 @@ describe("SpineSymbolAni", () => {
     ani.destroy();
     ani.destroy();
 
-    expect(calls.destroy).toHaveBeenCalledTimes(1);
+    expect(calls.destroy).not.toHaveBeenCalled();
     expect(context.overlayLayer.children).toHaveLength(0);
+    destroySpineSymbolAnimationCache(context.root);
+    destroySpineSymbolAnimationCache(context.root);
+    expect(calls.destroy).toHaveBeenCalledTimes(1);
   });
 
   it("reuses one cached Spine player across states until the last owner is destroyed", async () => {
@@ -482,8 +486,18 @@ describe("SpineSymbolAni", () => {
     expect(normalContext.overlayLayer.children).toEqual([view]);
 
     winAni.destroy();
-    expect(calls.destroy).toHaveBeenCalledTimes(1);
+    expect(calls.destroy).not.toHaveBeenCalled();
     expect(normalContext.overlayLayer.children).toHaveLength(0);
+    const reusedAni = new SpineSymbolAni({
+      context: normalContext,
+      resource: createResource("normal"),
+      playerFactory: factory,
+    });
+    reusedAni.reset();
+    expect(factory).toHaveBeenCalledTimes(1);
+    reusedAni.destroy();
+    destroySpineSymbolAnimationCache(normalContext.root);
+    expect(calls.destroy).toHaveBeenCalledTimes(1);
     expect(() => winAni.update(0)).toThrow(/was destroyed/);
     expect(() => winAni.reset()).toThrow(/was destroyed/);
   });
