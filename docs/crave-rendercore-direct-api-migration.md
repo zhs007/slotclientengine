@@ -1,5 +1,8 @@
 # Crave RenderCore direct API 迁移说明
 
+> 任务 215 的 Crave 精确迁移范围、实际调用点和验收清单见
+> [`crave-task-215-migration.md`](./crave-task-215-migration.md)。本文继续保留任务 202 以来的分阶段 direct API 总体路线。
+
 ## 基线与边界
 
 - Crave 只读基线：`ab86cec8a8cae7bd0c2aa6910be383295518b1b2`，branch `master`，规划检查时工作区 clean。
