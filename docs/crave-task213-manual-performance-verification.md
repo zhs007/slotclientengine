@@ -41,9 +41,33 @@ Crave 已有的 `createGame002v2DefaultSceneValueResolver()` 会从 active Symbo
 heap 呈锯齿并能回落、但随温升掉帧，通常更像持续 CPU/allocation 压力与 thermal throttling；
 heap 基线单调上升则继续查 retention。
 
-## 可选 Crave 手动清理
+## Crave production 发布清理
 
-`apps/game002v2/src/performance-trace.ts` 的 completed spin record 当前会继续留在内部 `spins`
-Map。它不是滚动 RenderSymbol churn 的主因，但长会话中属于独立的小型累积点。若真机 heap 证据显示
-该 Map 增长，可在完成记录输出后手动 `delete` 对应 spin id，并验证 trace 消费方不再读取该记录。
-这项 app 修改不包含在任务 213 的自动改动中。
+以下均属于 `apps/game002v2` 的生产接线调整，不包含在任务 213 的自动改动中，发布前由游戏侧手动
+完成并重新执行浏览器/真机验收。
+
+### 必须移除或替换
+
+- 取消 `main.ts` 对 `createGame002v2PerformanceTrace()` 的默认创建和注入，移除
+  `markStartup()`、round adapter 的 trace 参数以及 framework `performanceObserver` 接线。
+  `performance-trace.ts` 和测试可以保留作开发诊断，但 production 入口不得引用；若 production
+  仍需临时启用，必须由明确的构建级 opt-in 控制，并在 record 输出后删除 completed spin，禁止
+  `spins` Map 随会话永久增长。
+- 移除 framework 的 `rngConsole: { target: window, ... }`。它会安装全局 `window.rng(...)`、允许
+  下一轮请求注入测试服 `lstrand`，并输出服务器 random numbers，只能用于测试环境。
+- 将 `launch.ts` 当前固定的 `wss://gameserv.rgstest.slammerstudios.com/` 替换为经确认的 production
+  WebSocket endpoint。不要恢复玩家可通过 URL 任意覆盖 `serverUrl` 的能力；生产地址应来自受控
+  发布配置。
+- 将 `main.ts` 和 `round-adapter.ts` 中直接使用的 `console.error` 接到 production 错误上报与脱敏
+  展示。不得吞掉 fail-stop 错误，也不得向玩家控制台输出 token、请求/响应 payload、服务器 scene、
+  random numbers 或内部敏感数据。
+- 移除 performance trace 接线后，同步更新 `apps/game002v2/README.md` 中 Task 187/188 timing trace
+  的常驻输出说明。
+
+### 无需作为调试代码删除
+
+- `apps/game002v2/tests/**`、Vitest 配置与 devDependencies 不会由 production 入口打包。
+- Vite dev server 的 `host: "0.0.0.0"`、`port: 5207` 只影响开发服务器；当前 production build
+  没有显式开启 sourcemap。
+- Web Crypto CN 随机、`requestAnimationFrame`、launcher URL 参数解析和正常运行时错误边界属于
+  正式逻辑，不能因名称或浏览器 API 看起来像诊断代码而删除。
