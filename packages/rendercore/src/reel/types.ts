@@ -345,15 +345,6 @@ export interface RenderVisibleSymbolStateSnapshot {
   readonly onceCompletionCount?: number;
 }
 
-export interface PreparedVisibleOccurrenceReplacement {
-  readonly x: number;
-  readonly y: number;
-  readonly outputCode: number;
-  commit(): void;
-  rollback(): void;
-  destroy(): void;
-}
-
 export interface GridCellVisibleOccurrenceTransfer {
   readonly source: { readonly x: number; readonly y: number };
   readonly target: { readonly x: number; readonly y: number };
@@ -463,16 +454,6 @@ export interface VisibleOccurrenceTransferScope {
   readonly target: VisibleOccurrenceHandle;
   delay(durationMs: number, signal?: AbortSignal): Promise<void>;
   move(motion: VisibleOccurrenceMotion): Promise<void>;
-  commit(): Promise<void>;
-}
-
-export interface PreparedGridCellVisibleOccurrenceTransferBatch {
-  readonly transfers: readonly GridCellVisibleOccurrenceTransfer[];
-  start(): void;
-  setProgress(progress: number): void;
-  commit(): void;
-  rollback(): void;
-  destroy(): void;
 }
 
 export interface DirectVisibleOccurrenceTransferBatchInput {
@@ -595,31 +576,18 @@ export interface RenderReelSetSnapshot {
   readonly reels: readonly RenderReelSnapshot[];
 }
 
-export interface RenderReelSlotSnapshot {
-  readonly windowY: number;
-  readonly code: number;
-  readonly kind: ReelSymbolKind;
-  readonly symbol: RenderSymbol | null;
-  readonly container: Container;
-  readonly emptySymbolLayer: Container;
-  readonly requestedState: SymbolStateId | null;
-  readonly resolvedState: SymbolStateId | null;
-  readonly isOnce: boolean;
-  readonly presentationValue: number | null;
-}
-
 /**
  * Stable live view of the render fields for one reel slot.
  *
- * Unlike `RenderReelSlotSnapshot`, the view identity is reused and its getters
- * reflect the current slot contents. It is intended for allocation-sensitive
- * render coordination that does not need snapshot isolation.
+ * The view identity is reused and its getters reflect the current slot
+ * contents. It is intended for allocation-sensitive render coordination.
  */
 export interface RenderReelSlotRenderView {
   readonly windowY: number;
   readonly code: number;
   readonly kind: ReelSymbolKind;
   readonly symbol: RenderSymbol | null;
+  readonly presentationValue: number | null;
 }
 
 export interface RenderReelVisibleOccurrence {

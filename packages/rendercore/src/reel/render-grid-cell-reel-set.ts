@@ -49,8 +49,6 @@ import type {
   RenderReelSlotRenderView,
   RenderVisibleSymbolGeometrySnapshot,
   RenderVisibleSymbolStateSnapshot,
-  PreparedVisibleOccurrenceReplacement,
-  PreparedGridCellVisibleOccurrenceTransferBatch,
   GridCellVisibleOccurrenceTransfer,
   ReelSymbolRegistry,
   SymbolPresentationValueMatrix,
@@ -77,7 +75,6 @@ import type {
   SymbolStateTransitionMode,
 } from "../symbol/index.js";
 import {
-  createEmptySymbolRender,
   createSymbolRender,
   type SymbolRender,
 } from "../symbol/symbol-render.js";
@@ -133,8 +130,16 @@ interface ActiveDrop {
   abortListener?: () => void;
 }
 
+interface InternalVisibleOccurrenceTransferBatch {
+  readonly transfers: readonly GridCellVisibleOccurrenceTransfer[];
+  start(): void;
+  setProgress(progress: number): void;
+  finalize(): void;
+  cancel(): void;
+}
+
 interface ActiveDirectTransferBatch {
-  readonly batch: PreparedGridCellVisibleOccurrenceTransferBatch;
+  readonly batch: InternalVisibleOccurrenceTransferBatch;
   readonly durationMs: number;
   readonly signal?: AbortSignal;
   readonly abortListener?: () => void;
@@ -207,7 +212,7 @@ interface OccurrenceEffectAttachment {
 
 interface ActiveScopedTransfer {
   readonly input: VisibleOccurrenceTransferInput;
-  readonly batch: PreparedGridCellVisibleOccurrenceTransferBatch;
+  readonly batch: InternalVisibleOccurrenceTransferBatch;
   readonly movingOccurrence: RenderReelVisibleOccurrence;
   readonly targetOccurrence: RenderReelVisibleOccurrence;
   readonly sourceGeometry: RenderVisibleSymbolGeometrySnapshot;
@@ -218,7 +223,7 @@ interface ActiveScopedTransfer {
   elapsedMs: number;
   started: boolean;
   arrived: boolean;
-  committed: boolean;
+  finalized: boolean;
   moveResolve: (() => void) | null;
   moveReject: ((error: Error) => void) | null;
 }
@@ -276,7 +281,7 @@ export class RenderGridCellReelSet
   #activationGateOpen = false;
   #dimmingActivated = false;
   #elapsedMs = 0;
-  #activeTransferRollback: (() => void) | null = null;
+  #activeTransferCleanup: (() => void) | null = null;
   #activeScopedTransfer: ActiveScopedTransfer | null = null;
   #areaPresentationAbort: AbortController | null = null;
   #areaPresentationFailure: Error | null = null;
@@ -407,7 +412,7 @@ export class RenderGridCellReelSet
     this.cancelActiveScopedTransfer(
       new ReelError("Visible occurrence transfer was interrupted by reset."),
     );
-    this.#activeTransferRollback?.();
+    this.#activeTransferCleanup?.();
     const parsedScene = parseScene(scene, this.#columns, this.#rows);
     const parsedFinalYs = parseFinalYs(finalYs, this.#columns);
     const parsedCellReelOffsets = normalizeGridCellReelOffsetMatrix(
@@ -844,9 +849,7 @@ export class RenderGridCellReelSet
     }> = [];
     try {
       for (const item of selected) {
-        const slot = item.cell.reel
-          .getSlotSnapshots()
-          .find((candidate) => candidate.windowY === 0);
+        const slot = item.cell.reel.getSlotRenderView(0);
         if (
           item.wasOccupied &&
           slot?.symbol &&
@@ -1114,10 +1117,8 @@ export class RenderGridCellReelSet
     this.assertStopped("query visible symbol state capability");
     const cell = this.getCell(x, y);
     if (!cell.occupied) return false;
-    const slot = cell.reel
-      .getSlotSnapshots()
-      .find((candidate) => candidate.windowY === 0);
-    return slot?.symbol?.hasAnimationCapability(state) ?? false;
+    const slot = cell.reel.getSlotRenderView(0);
+    return slot.symbol?.hasAnimationCapability(state) ?? false;
   }
 
   releaseVisibleSymbols(
@@ -1151,10 +1152,8 @@ export class RenderGridCellReelSet
           `Cannot remove empty grid cell (${position.x},${position.y}).`,
         );
       }
-      const slot = cell.reel
-        .getSlotSnapshots()
-        .find((candidate) => candidate.windowY === 0);
-      if (!slot?.symbol) {
+      const slot = cell.reel.getSlotRenderView(0);
+      if (!slot.symbol) {
         throw new ReelError(
           `Cannot remove missing occurrence at grid cell (${position.x},${position.y}).`,
         );
@@ -1185,10 +1184,8 @@ export class RenderGridCellReelSet
                 signal,
               },
               () => {
-                const current = cell.reel
-                  .getSlotSnapshots()
-                  .find((slot) => slot.windowY === 0);
-                if (!cell.occupied || current?.symbol !== symbol) {
+                const current = cell.reel.getSlotRenderView(0);
+                if (!cell.occupied || current.symbol !== symbol) {
                   throw new ReelError(
                     `Terminal remove occurrence ownership changed at grid cell (${cell.coordinate.x},${cell.coordinate.y}).`,
                   );
@@ -1226,9 +1223,7 @@ export class RenderGridCellReelSet
       cell.dimOverlay.y = 0;
       cell.dimOverlay.alpha = 1;
       cell.dimOverlay.renderable = true;
-      const symbol = cell.reel
-        .getSlotSnapshots()
-        .find((slot) => slot.windowY === 0)?.symbol;
+      const symbol = cell.reel.getSlotRenderView(0).symbol;
       if (symbol) {
         symbol.alpha = 1;
         symbol.tint = createBrightnessTint(
@@ -1260,10 +1255,7 @@ export class RenderGridCellReelSet
           Array.from({ length: this.#rows }, (_, y) => {
             const cell = this.getCell(x, y);
             if (!cell.occupied) return -1;
-            const slot = cell.reel
-              .getSlotSnapshots()
-              .find((candidate) => candidate.windowY === 0);
-            return slot?.presentationValue ?? null;
+            return cell.reel.getSlotRenderView(0).presentationValue;
           }),
         ),
       ),
@@ -1296,9 +1288,7 @@ export class RenderGridCellReelSet
               `Dropdown source (${movement.x},${movement.sourceY}) is empty.`,
             );
           }
-          const symbol = cell.reel
-            .getSlotSnapshots()
-            .find((candidate) => candidate.windowY === 0)?.symbol;
+          const symbol = cell.reel.getSlotRenderView(0).symbol;
           if (!symbol) {
             throw new ReelError(
               `Dropdown source occurrence is missing at (${movement.x},${movement.sourceY}).`,
@@ -1337,10 +1327,7 @@ export class RenderGridCellReelSet
           item.occurrence.symbol.requestState("normal");
           item.cell.reel.releaseDetachedOccurrence(item.occurrence);
         } else {
-          item.cell.reel
-            .getSlotSnapshots()
-            .find((candidate) => candidate.windowY === 0)
-            ?.symbol?.requestState("normal");
+          item.cell.reel.getSlotRenderView(0).symbol?.requestState("normal");
         }
       }
       throw error;
@@ -1507,93 +1494,15 @@ export class RenderGridCellReelSet
     return cell.reel.getVisibleSymbolImageStringText(0, name);
   }
 
-  prepareVisibleOccurrenceReplacement(options: {
-    readonly x: number;
-    readonly y: number;
-    readonly outputCode: number;
-    readonly outputPresentationValue: number | null;
-  }): PreparedVisibleOccurrenceReplacement {
-    this.assertStopped("prepare visible occurrence replacement");
-    const cell = this.getCell(options.x, options.y);
-    if (options.outputCode === -1 && options.outputPresentationValue !== null)
-      throw new ReelError(
-        "Empty symbol replacement must have a null presentation value.",
-      );
-    const input = cell.reel
-      .getSlotSnapshots()
-      .find((candidate) => candidate.windowY === 0);
-    if (!input)
-      throw new ReelError(
-        `Cannot replace missing occurrence at grid cell (${options.x},${options.y}).`,
-      );
-    const inputSymbol = input.symbol;
-    const inputOccupied = cell.occupied;
-    const output =
-      options.outputCode === -1
-        ? null
-        : cell.reel.createDetachedOccurrence(
-            options.outputCode,
-            options.outputPresentationValue,
-          );
-    let state: "prepared" | "committed" | "rolled-back" = "prepared";
-    const rollback = (): void => {
-      if (state !== "prepared") return;
-      if (output) cell.reel.releaseDetachedOccurrence(output);
-      state = "rolled-back";
-    };
-    return Object.freeze({
-      x: options.x,
-      y: options.y,
-      outputCode: options.outputCode,
-      commit: (): void => {
-        if (state === "committed") return;
-        if (state !== "prepared") {
-          throw new ReelError(
-            `Cannot commit rolled-back replacement at grid cell (${options.x},${options.y}).`,
-          );
-        }
-        this.assertStopped("commit visible occurrence replacement");
-        const currentSymbol = cell.reel
-          .getSlotSnapshots()
-          .find((candidate) => candidate.windowY === 0)?.symbol;
-        if (cell.occupied !== inputOccupied || currentSymbol !== inputSymbol) {
-          throw new ReelError(
-            `Cannot commit replacement at grid cell (${options.x},${options.y}): occurrence ownership changed.`,
-          );
-        }
-        const previous = inputOccupied
-          ? cell.reel.takeVisibleOccurrence()
-          : null;
-        if (!previous) cell.reel.openVisibleEmptySlot();
-        try {
-          if (output) cell.reel.placeVisibleOccurrence(output);
-          else cell.reel.placeVisibleEmptySlot();
-        } catch (error) {
-          if (previous) cell.reel.placeVisibleOccurrence(previous);
-          else cell.reel.placeVisibleEmptySlot();
-          throw error;
-        }
-        cell.occupied = output !== null;
-        if (previous) {
-          this.bumpOccurrenceGeneration(previous);
-          cell.reel.releaseDetachedOccurrence(previous);
-        }
-        state = "committed";
-      },
-      rollback,
-      destroy: rollback,
-    });
-  }
-
-  prepareVisibleOccurrenceTransferBatch(options: {
+  private createVisibleOccurrenceTransferBatch(options: {
     readonly transfers: readonly GridCellVisibleOccurrenceTransfer[];
-  }): PreparedGridCellVisibleOccurrenceTransferBatch {
+  }): InternalVisibleOccurrenceTransferBatch {
     this.assertStopped("prepare visible occurrence transfer batch");
     if (!Array.isArray(options.transfers) || options.transfers.length === 0)
       throw new ReelError(
         "Visible occurrence transfer batch must contain transfers.",
       );
-    if (this.#activeTransferRollback)
+    if (this.#activeTransferCleanup)
       throw new ReelError("A visible occurrence transfer batch is active.");
     const used = new Set<string>();
     const validated = options.transfers.map((transfer, index) => {
@@ -1663,10 +1572,9 @@ export class RenderGridCellReelSet
           item.source.reel.releaseDetachedOccurrence(item.sourceReplacement);
       throw error;
     }
-    let state: "prepared" | "started" | "committed" | "rolled-back" =
-      "prepared";
-    const rollback = (): void => {
-      if (state === "committed" || state === "rolled-back") return;
+    let state: "prepared" | "started" | "finalized" | "cancelled" = "prepared";
+    const cleanup = (): void => {
+      if (state === "finalized" || state === "cancelled") return;
       for (const item of prepared) {
         if (item.moving) {
           item.source.reel.restoreDetachedVisibleOccurrence(item.moving);
@@ -1678,8 +1586,8 @@ export class RenderGridCellReelSet
       this.#transferLayer.removeChildren();
       this.#cascadeMovementMask.visible = false;
       this.#cascadeMovementMask.renderable = false;
-      this.#activeTransferRollback = null;
-      state = "rolled-back";
+      this.#activeTransferCleanup = null;
+      state = "cancelled";
     };
     const batch = Object.freeze({
       transfers: Object.freeze(prepared.map((item) => item.transfer)),
@@ -1690,7 +1598,7 @@ export class RenderGridCellReelSet
           );
         this.assertStopped("start visible occurrence transfer batch");
         state = "started";
-        this.#activeTransferRollback = rollback;
+        this.#activeTransferCleanup = cleanup;
         this.#cascadeMovementMask.visible = true;
         this.#cascadeMovementMask.renderable = true;
         this.#transferLayer.mask = this.#cascadeMovementMask;
@@ -1703,7 +1611,7 @@ export class RenderGridCellReelSet
             item.moving.symbol.zIndex = item.moving.symbol.renderPriority;
           }
         } catch (error) {
-          rollback();
+          cleanup();
           throw error;
         }
       },
@@ -1726,10 +1634,10 @@ export class RenderGridCellReelSet
           );
         }
       },
-      commit: (): void => {
+      finalize: (): void => {
         if (state !== "started")
           throw new ReelError(
-            "Visible occurrence transfer commit requires a started batch.",
+            "Visible occurrence transfer finalization requires a started batch.",
           );
         for (const item of prepared) {
           const moving = item.source.reel.takeVisibleOccurrence();
@@ -1748,12 +1656,11 @@ export class RenderGridCellReelSet
         this.#transferLayer.mask = null;
         this.#cascadeMovementMask.visible = false;
         this.#cascadeMovementMask.renderable = false;
-        this.#activeTransferRollback = null;
-        state = "committed";
+        this.#activeTransferCleanup = null;
+        state = "finalized";
       },
-      rollback,
-      destroy: rollback,
-    }) satisfies PreparedGridCellVisibleOccurrenceTransferBatch;
+      cancel: cleanup,
+    }) satisfies InternalVisibleOccurrenceTransferBatch;
     return batch;
   }
 
@@ -1772,9 +1679,9 @@ export class RenderGridCellReelSet
       );
     if (input.signal?.aborted)
       return Promise.reject(new ReelError("Direct transfer was aborted."));
-    let batch: PreparedGridCellVisibleOccurrenceTransferBatch;
+    let batch: InternalVisibleOccurrenceTransferBatch;
     try {
-      batch = this.prepareVisibleOccurrenceTransferBatch({
+      batch = this.createVisibleOccurrenceTransferBatch({
         transfers: input.transfers,
       });
       batch.start();
@@ -1902,46 +1809,18 @@ export class RenderGridCellReelSet
         `Cannot get symbol at (${position.x},${position.y}) before the cell has landed.`,
       );
     if (!cell.occupied) {
-      const slot = cell.reel
-        .getSlotSnapshots()
-        .find((candidate) => candidate.windowY === 0);
-      if (!slot)
-        throw new ReelError(
-          `Cannot resolve grid cell (${position.x},${position.y}).`,
-        );
-      const capturedContainer = slot.container;
-      const capturedLayer = slot.emptySymbolLayer;
       const getPosition = () => ({
         x: cell.root.x + this.#cellWidth / 2,
         y: cell.root.y + this.#cellHeight / 2,
       });
-      return createEmptySymbolRender({
-        view: capturedLayer,
-        owned: false,
+      return cell.reel.createVisibleEmptySymbolRender(0, {
         assertUsable: () => {
-          const current = cell.reel
-            .getSlotSnapshots()
-            .find((candidate) => candidate.windowY === 0);
-          if (
-            cell.occupied ||
-            current?.container !== capturedContainer ||
-            current.emptySymbolLayer !== capturedLayer ||
-            current.code !== -1
-          )
-            throw new ReelError("SymbolRender is stale.");
+          if (cell.occupied) throw new ReelError("SymbolRender is stale.");
         },
         getPosition,
         getAnchor: () =>
           createContainerRenderAnchor(this, () => {
-            const current = cell.reel
-              .getSlotSnapshots()
-              .find((candidate) => candidate.windowY === 0);
-            if (
-              cell.occupied ||
-              current?.container !== capturedContainer ||
-              current.emptySymbolLayer !== capturedLayer ||
-              current.code !== -1
-            )
+            if (cell.occupied || cell.reel.getSlotRenderView(0).code !== -1)
               throw new ReelError("SymbolRender is stale.");
             return getPosition();
           }),
@@ -2037,8 +1916,16 @@ export class RenderGridCellReelSet
   replaceSymbols(replacements: readonly SymbolReplacement[]) {
     if (replacements.length === 0)
       throw new ReelError("Symbol replacement batch must not be empty.");
+    this.assertStopped("replace visible symbols");
     const keys = new Set<string>();
-    const prepared: PreparedVisibleOccurrenceReplacement[] = [];
+    const prepared: Array<{
+      readonly cell: RuntimeCell;
+      readonly wasOccupied: boolean;
+      readonly output: RenderReelVisibleOccurrence | null;
+      previous: RenderReelVisibleOccurrence | null;
+      slotOpened: boolean;
+      outputPlaced: boolean;
+    }> = [];
     try {
       for (const { position, target } of replacements) {
         const key = `${position.x}:${position.y}`;
@@ -2047,20 +1934,66 @@ export class RenderGridCellReelSet
             `Duplicate symbol replacement position (${key}).`,
           );
         keys.add(key);
-        prepared.push(
-          this.prepareVisibleOccurrenceReplacement({
-            x: position.x,
-            y: position.y,
-            outputCode: target.code,
-            outputPresentationValue: target.value ?? null,
-          }),
-        );
+        const cell = this.getCell(position.x, position.y);
+        if (target.code === -1 && (target.value ?? null) !== null)
+          throw new ReelError(
+            "Empty symbol replacement must have a null presentation value.",
+          );
+        prepared.push({
+          cell,
+          wasOccupied: cell.occupied,
+          output:
+            target.code === -1
+              ? null
+              : cell.reel.createDetachedOccurrence(
+                  target.code,
+                  target.value ?? null,
+                ),
+          previous: null,
+          slotOpened: false,
+          outputPlaced: false,
+        });
       }
-      for (const replacement of prepared) replacement.commit();
+      for (const item of prepared) {
+        item.previous = item.wasOccupied
+          ? item.cell.reel.takeVisibleOccurrence()
+          : null;
+        if (!item.previous) item.cell.reel.openVisibleEmptySlot();
+        item.slotOpened = true;
+        item.cell.occupied = false;
+      }
+      for (const item of prepared) {
+        if (item.output) item.cell.reel.placeVisibleOccurrence(item.output);
+        else item.cell.reel.placeVisibleEmptySlot();
+        item.outputPlaced = true;
+        item.cell.occupied = item.output !== null;
+      }
     } catch (error) {
-      for (const replacement of prepared) replacement.destroy();
+      for (const item of prepared.toReversed()) {
+        if (item.outputPlaced) {
+          if (item.output) {
+            const placed = item.cell.reel.takeVisibleOccurrence();
+            item.cell.reel.releaseDetachedOccurrence(placed);
+          } else {
+            item.cell.reel.openVisibleEmptySlot();
+          }
+        } else if (item.output) {
+          item.cell.reel.releaseDetachedOccurrence(item.output);
+        }
+        if (item.slotOpened) {
+          if (item.previous)
+            item.cell.reel.placeVisibleOccurrence(item.previous);
+          else item.cell.reel.placeVisibleEmptySlot();
+          item.cell.occupied = item.wasOccupied;
+        }
+      }
       throw error;
     }
+    for (const item of prepared)
+      if (item.previous) {
+        this.bumpOccurrenceGeneration(item.previous);
+        item.cell.reel.releaseDetachedOccurrence(item.previous);
+      }
     return this.getSymbols(replacements.map(({ position }) => position));
   }
 
@@ -2084,7 +2017,7 @@ export class RenderGridCellReelSet
       input.target.x,
       input.target.y,
     );
-    const batch = this.prepareVisibleOccurrenceTransferBatch({
+    const batch = this.createVisibleOccurrenceTransferBatch({
       transfers: [input],
     });
     const active: ActiveScopedTransfer = {
@@ -2104,7 +2037,7 @@ export class RenderGridCellReelSet
       elapsedMs: 0,
       started: false,
       arrived: false,
-      committed: false,
+      finalized: false,
       moveResolve: null,
       moveReject: null,
     };
@@ -2125,35 +2058,25 @@ export class RenderGridCellReelSet
         this.waitForScopedTransferDelay(active, durationMs, signal),
       move: (motion: VisibleOccurrenceMotion) =>
         this.startScopedTransferMotion(active, motion),
-      commit: async (): Promise<void> => {
-        if (this.#activeScopedTransfer !== active)
-          throw new ReelError("Visible occurrence transfer scope is stale.");
-        if (!active.arrived)
-          throw new ReelError(
-            "Visible occurrence transfer must finish move() before commit().",
-          );
-        if (active.committed)
-          throw new ReelError(
-            "Visible occurrence transfer can only commit once.",
-          );
-        active.batch.commit();
-        this.#transferAboveSymbolsLayer.mask = null;
-        this.bumpOccurrenceGeneration(active.targetOccurrence);
-        active.committed = true;
-        if (active.inputAbortListener)
-          input.signal?.removeEventListener("abort", active.inputAbortListener);
-        this.#activeScopedTransfer = null;
-        this.cleanupStaleOccurrenceEffects();
-      },
     }) satisfies VisibleOccurrenceTransferScope;
     try {
       await choreography(scope);
-      if (!active.committed)
+      if (this.#activeScopedTransfer !== active)
+        throw new ReelError("Visible occurrence transfer scope is stale.");
+      if (!active.arrived)
         throw new ReelError(
-          "Visible occurrence transfer choreography returned without commit().",
+          "Visible occurrence transfer choreography must finish move() before returning.",
         );
+      active.batch.finalize();
+      this.#transferAboveSymbolsLayer.mask = null;
+      this.bumpOccurrenceGeneration(active.targetOccurrence);
+      active.finalized = true;
+      if (active.inputAbortListener)
+        input.signal?.removeEventListener("abort", active.inputAbortListener);
+      this.#activeScopedTransfer = null;
+      this.cleanupStaleOccurrenceEffects();
     } catch (error) {
-      if (!active.committed) active.batch.rollback();
+      if (!active.finalized) active.batch.cancel();
       this.#transferAboveSymbolsLayer.mask = null;
       active.controller.abort();
       if (active.inputAbortListener)
@@ -2788,7 +2711,7 @@ export class RenderGridCellReelSet
     this.cancelActiveScopedTransfer(
       new ReelError("Visible occurrence transfer runtime was destroyed."),
     );
-    this.#activeTransferRollback?.();
+    this.#activeTransferCleanup?.();
     this.cancelDirectTransfer(
       new ReelError("Direct transfer runtime was destroyed."),
     );
@@ -2830,7 +2753,7 @@ export class RenderGridCellReelSet
     active.batch.setProgress(active.elapsedMs / active.durationMs);
     if (active.elapsedMs < active.durationMs) return;
     try {
-      active.batch.commit();
+      active.batch.finalize();
       active.signal?.removeEventListener("abort", active.abortListener!);
       this.#activeDirectTransferBatch = null;
       active.resolve();
@@ -2846,7 +2769,7 @@ export class RenderGridCellReelSet
     if (!active) return;
     this.#activeDirectTransferBatch = null;
     active.signal?.removeEventListener("abort", active.abortListener!);
-    active.batch.destroy();
+    active.batch.cancel();
     active.reject(error);
   }
 
@@ -2900,8 +2823,8 @@ export class RenderGridCellReelSet
 
   private cancelActiveScopedTransfer(error: Error): void {
     const active = this.#activeScopedTransfer;
-    if (!active || active.committed) return;
-    active.batch.rollback();
+    if (!active || active.finalized) return;
+    active.batch.cancel();
     this.#transferAboveSymbolsLayer.mask = null;
     active.controller.abort();
     if (active.inputAbortListener)
@@ -2937,9 +2860,7 @@ export class RenderGridCellReelSet
   }
 
   private getCellOccurrence(cell: RuntimeCell): RenderReelVisibleOccurrence {
-    const slot = cell.reel
-      .getSlotSnapshots()
-      .find((candidate) => candidate.windowY === 0);
+    const slot = cell.reel.getSlotRenderView(0);
     if (
       !cell.occupied ||
       !slot?.symbol ||
@@ -2962,12 +2883,8 @@ export class RenderGridCellReelSet
       this.#activeScopedTransfer?.movingOccurrence.symbol === occurrence.symbol
     )
       return true;
-    return this.#cells.some((cell) =>
-      cell.reel
-        .getSlotSnapshots()
-        .some(
-          (slot) => slot.windowY === 0 && slot.symbol === occurrence.symbol,
-        ),
+    return this.#cells.some(
+      (cell) => cell.reel.getSlotRenderView(0).symbol === occurrence.symbol,
     );
   }
 
@@ -2999,11 +2916,7 @@ export class RenderGridCellReelSet
         moving: true,
       };
     for (const cell of this.#cells) {
-      const found = cell.reel
-        .getSlotSnapshots()
-        .some(
-          (slot) => slot.windowY === 0 && slot.symbol === occurrence.symbol,
-        );
+      const found = cell.reel.getSlotRenderView(0).symbol === occurrence.symbol;
       if (found)
         return {
           x: cell.coordinate.x,
@@ -3537,9 +3450,8 @@ export class RenderGridCellReelSet
         occupied: false,
       });
     }
-    const slot = cell.reel
-      .getSlotSnapshots()
-      .find((candidate) => candidate.windowY === 0);
+    const slot = cell.reel.getSlotRenderView(0);
+    const state = slot.symbol?.getStateSnapshot();
     const visibleSymbol = cell.reel.getVisibleScene()[0];
     if (!Number.isInteger(visibleSymbol)) {
       throw new ReelError(
@@ -3561,14 +3473,14 @@ export class RenderGridCellReelSet
       dimmingOverlayRenderable: cell.dimOverlay.renderable,
       dimmingAlpha: this.getVisibleDimmingAlpha(cell),
       symbolDimmingAlpha: this.getVisibleSymbolBrightness(cell),
-      requestedState: slot?.requestedState ?? null,
-      resolvedState: slot?.resolvedState ?? null,
-      isOnce: slot?.isOnce ?? false,
+      requestedState: state?.requestedState ?? null,
+      resolvedState: state?.resolvedState ?? null,
+      isOnce: state?.isOnce ?? false,
       onceCompletionCount:
-        slot?.symbol?.getAnimationCompletionSnapshot().onceCompletionCount ??
+        slot.symbol?.getAnimationCompletionSnapshot().onceCompletionCount ??
         null,
       visibleSymbol,
-      presentationValue: slot?.presentationValue ?? null,
+      presentationValue: slot.presentationValue,
       occupied: true,
     });
   }

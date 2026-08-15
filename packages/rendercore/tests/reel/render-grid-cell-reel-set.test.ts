@@ -246,7 +246,7 @@ describe("RenderGridCellReelSet", () => {
     expect(reelSet.getVisibleScene()[0]).toEqual([-1, 0, 2]);
   });
 
-  it("rolls back direct transfer and existing drop when aborted", async () => {
+  it("rejects and cleans up direct transfer and existing drop when aborted", async () => {
     const reelSet = createGridReelSet();
     reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
     const transferAbort = new AbortController();
@@ -1086,47 +1086,30 @@ describe("RenderGridCellReelSet", () => {
     reelSet.destroy();
   });
 
-  it("prepares visible occurrence replacement without mutation and commits atomically", () => {
+  it("preflights and applies visible occurrence replacements atomically", () => {
     const reelSet = createGridReelSet();
     reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
     const before = reelSet.getVisibleScene();
-    const rolledBack = reelSet.prepareVisibleOccurrenceReplacement({
-      x: 0,
-      y: 0,
-      outputCode: 2,
-      outputPresentationValue: null,
-    });
-    expect(reelSet.getVisibleScene()).toEqual(before);
-    rolledBack.rollback();
-    expect(() => rolledBack.commit()).toThrow(/rolled-back/);
+    expect(() =>
+      reelSet.replaceSymbols([
+        { position: { x: 0, y: 0 }, target: { code: 2, value: null } },
+        { position: { x: 1, y: 0 }, target: { code: 999, value: null } },
+      ]),
+    ).toThrow();
     expect(reelSet.getVisibleScene()).toEqual(before);
 
-    const prepared = reelSet.prepareVisibleOccurrenceReplacement({
-      x: 0,
-      y: 0,
-      outputCode: 2,
-      outputPresentationValue: null,
-    });
-    prepared.commit();
-    prepared.commit();
+    reelSet.replaceSymbol({ x: 0, y: 0 }, { code: 2, value: null });
     expect(reelSet.getVisibleScene()[0][0]).toBe(2);
-    const trusted = reelSet.prepareVisibleOccurrenceReplacement({
-      x: 0,
-      y: 0,
-      outputCode: 2,
-      outputPresentationValue: null,
-    });
-    trusted.rollback();
   });
 
-  it("moves a complete visible occurrence and commits source replacement as one batch", () => {
+  it("moves a complete visible occurrence and finalizes source replacement as one batch", async () => {
     const reelSet = createGridReelSet();
     reelSet.resetToScene(INITIAL_SCENE, FINAL_YS, undefined, [
       [7, null, null],
       [null, null, null],
     ]);
     const before = reelSet.getVisibleScene();
-    const prepared = reelSet.prepareVisibleOccurrenceTransferBatch({
+    const transfer = reelSet.transferSymbols({
       transfers: [
         {
           source: { x: 0, y: 0 },
@@ -1135,13 +1118,13 @@ describe("RenderGridCellReelSet", () => {
           sourceReplacementPresentationValue: null,
         },
       ],
+      durationMs: 100,
     });
     expect(reelSet.getVisibleScene()).toEqual(before);
-    prepared.start();
-    prepared.setProgress(0.5);
+    reelSet.update(0.05);
     expect(reelSet.getVisibleScene()).toEqual(before);
-    prepared.setProgress(1);
-    prepared.commit();
+    reelSet.update(0.05);
+    await transfer;
     expect(reelSet.getVisibleScene()).toEqual([
       [2, 0, 2],
       [1, 1, 0],
@@ -1149,12 +1132,12 @@ describe("RenderGridCellReelSet", () => {
     expect(reelSet.getCascadeValues()[1][0]).toBe(7);
   });
 
-  it("commits an exact -1/null source hole and rejects invalid hole values before mutation", () => {
+  it("finalizes an exact -1/null source hole and rejects invalid hole values before mutation", async () => {
     const reelSet = createGridReelSet();
     reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
     const before = reelSet.getVisibleScene();
-    expect(() =>
-      reelSet.prepareVisibleOccurrenceTransferBatch({
+    await expect(
+      reelSet.transferSymbols({
         transfers: [
           {
             source: { x: 0, y: 0 },
@@ -1163,11 +1146,12 @@ describe("RenderGridCellReelSet", () => {
             sourceReplacementPresentationValue: 7,
           },
         ],
+        durationMs: 100,
       }),
-    ).toThrow(/must be null/);
+    ).rejects.toThrow(/must be null/);
     expect(reelSet.getVisibleScene()).toEqual(before);
 
-    const prepared = reelSet.prepareVisibleOccurrenceTransferBatch({
+    const transfer = reelSet.transferSymbols({
       transfers: [
         {
           source: { x: 0, y: 0 },
@@ -1176,17 +1160,17 @@ describe("RenderGridCellReelSet", () => {
           sourceReplacementPresentationValue: null,
         },
       ],
+      durationMs: 100,
     });
-    prepared.start();
-    prepared.setProgress(1);
-    prepared.commit();
+    reelSet.update(0.1);
+    await transfer;
     expect(reelSet.getVisibleScene()).toEqual([
       [-1, 0, 2],
       [1, 1, 0],
     ]);
   });
 
-  it("awaits scoped motion, keeps target identity until commit, and drives delays from update", async () => {
+  it("awaits scoped motion, keeps target identity until finalization, and drives delays from update", async () => {
     const reelSet = createGridReelSet();
     reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
     const originalTarget = reelSet.getVisibleOccurrenceHandle(1, 0);
@@ -1210,7 +1194,6 @@ describe("RenderGridCellReelSet", () => {
           stacking: { layer: "above-effects", order: 4 },
         });
         arrived = true;
-        await tx.commit();
       },
     );
     reelSet.update(0.049);
@@ -1227,6 +1210,24 @@ describe("RenderGridCellReelSet", () => {
       [1, 1, 0],
     ]);
     expect(() => originalTarget.getSnapshot()).toThrow(/stale/);
+  });
+
+  it("rejects and cleans up when scoped choreography returns without completing move", async () => {
+    const reelSet = createGridReelSet();
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
+    const before = reelSet.getVisibleScene();
+    await expect(
+      reelSet.runVisibleOccurrenceTransfer(
+        {
+          source: { x: 0, y: 0 },
+          target: { x: 1, y: 0 },
+          sourceReplacementCode: 2,
+          sourceReplacementPresentationValue: null,
+        },
+        async () => {},
+      ),
+    ).rejects.toThrow(/finish move/);
+    expect(reelSet.getVisibleScene()).toEqual(before);
   });
 
   it("keeps occurrence effects identity-bound and cleans the overwritten target effect", async () => {
@@ -1270,7 +1271,6 @@ describe("RenderGridCellReelSet", () => {
           easing: { kind: "linear" },
           stacking: { layer: "above-symbols", order: 0 },
         });
-        await tx.commit();
       },
     );
     reelSet.update(0.01);
@@ -1279,7 +1279,7 @@ describe("RenderGridCellReelSet", () => {
     expect(moving.getSnapshot()).toMatchObject({ x: 1, y: 0, code: 1 });
   });
 
-  it("rolls back and rejects scoped motion when reset interrupts it", async () => {
+  it("rejects and cleans up scoped motion when reset interrupts it", async () => {
     const reelSet = createGridReelSet();
     reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
     const transfer = reelSet.runVisibleOccurrenceTransfer(
@@ -1296,7 +1296,6 @@ describe("RenderGridCellReelSet", () => {
           easing: { kind: "linear" },
           stacking: { layer: "above-effects", order: 0 },
         });
-        await tx.commit();
       },
     );
     reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);

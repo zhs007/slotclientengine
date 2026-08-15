@@ -19,10 +19,13 @@ describe("RenderReel", () => {
     const visible = views.find((slot) => slot.windowY === 0)!;
 
     expect(reel.getSlotRenderViews()).toBe(views);
+    expect(reel.getSlotRenderView(0)).toBe(visible);
+    expect(() => reel.getSlotRenderView(99)).toThrow(/out of range/);
     reel.resetToVisibleSymbols([2, 0, 1], 4);
     expect(reel.getSlotRenderViews()).toBe(views);
     expect(visible.code).toBe(2);
     expect(visible.symbol).not.toBeNull();
+    expect(visible.presentationValue).toBeNull();
     expect(reel.getCurrentY()).toBe(4);
 
     reel.startContinuous({
@@ -136,15 +139,22 @@ describe("RenderReel", () => {
     expect(activeMask?.renderable).toBe(true);
     expect(activeMask?.includeInBuild).toBe(false);
     expect(
-      reel.getSlotSnapshots().every((slot) => slot.container.visible),
+      reel
+        .getSlotRenderViews()
+        .every((slot) =>
+          slot.kind === "empty" ? slot.symbol === null : slot.symbol !== null,
+        ),
     ).toBe(true);
 
     reel.update(0.05);
     expect(
       reel
-        .getSlotSnapshots()
+        .getSlotRenderViews()
         .filter((slot) => slot.symbol)
-        .every((slot) => slot.requestedState === "spinBlur"),
+        .every(
+          (slot) =>
+            slot.symbol?.getStateSnapshot().requestedState === "spinBlur",
+        ),
     ).toBe(true);
 
     const landed = reel.update(0.3);
@@ -159,13 +169,17 @@ describe("RenderReel", () => {
     });
     expect(reel.getVisibleScene()).toEqual([2, 3, 1]);
     expect(
-      reel.getSlotSnapshots().filter((slot) => slot.container.visible),
+      reel
+        .getSlotRenderViews()
+        .filter((slot) => slot.windowY >= 0 && slot.windowY < 3),
     ).toHaveLength(3);
     expect(
       reel
-        .getSlotSnapshots()
+        .getSlotRenderViews()
         .filter((slot) => slot.symbol)
-        .every((slot) => slot.requestedState === "normal"),
+        .every(
+          (slot) => slot.symbol?.getStateSnapshot().requestedState === "normal",
+        ),
     ).toBe(true);
   });
 
@@ -178,14 +192,20 @@ describe("RenderReel", () => {
     });
 
     const visibleSlots = reel
-      .getSlotSnapshots()
-      .filter((slot) => slot.container.visible);
+      .getSlotRenderViews()
+      .filter((slot) => slot.windowY >= 0 && slot.windowY < 3);
 
     expect(visibleSlots).toHaveLength(3);
-    expect(visibleSlots.map((slot) => slot.container.x)).toEqual([
-      7.5, 7.5, 7.5,
-    ]);
-    expect(visibleSlots.map((slot) => slot.container.y)).toEqual([6, 18, 30]);
+    expect(
+      visibleSlots.map(
+        (slot) => reel.getVisibleSymbolGeometrySnapshot(slot.windowY).centerX,
+      ),
+    ).toEqual([7.5, 7.5, 7.5]);
+    expect(
+      visibleSlots.map(
+        (slot) => reel.getVisibleSymbolGeometrySnapshot(slot.windowY).centerY,
+      ),
+    ).toEqual([6, 18, 30]);
     expect(
       visibleSlots
         .filter((slot) => slot.symbol)
@@ -221,27 +241,17 @@ describe("RenderReel", () => {
     });
 
     reel.resetToVisibleSymbols([1, 2, 2]);
-    const highPriorityTop = reel
-      .getSlotSnapshots()
-      .find((slot) => slot.windowY === 0);
-    const lowPriorityBottom = reel
-      .getSlotSnapshots()
-      .find((slot) => slot.windowY === 2);
-    expect(highPriorityTop?.symbol?.renderPriority).toBe(2);
-    expect(lowPriorityBottom?.symbol?.renderPriority).toBe(0);
-    expect(highPriorityTop?.container.zIndex).toBeGreaterThan(
-      lowPriorityBottom?.container.zIndex ?? Number.POSITIVE_INFINITY,
+    const highPriorityTop = reel.getSlotRenderView(0);
+    const lowPriorityBottom = reel.getSlotRenderView(2);
+    expect(highPriorityTop.symbol?.renderPriority).toBe(2);
+    expect(lowPriorityBottom.symbol?.renderPriority).toBe(0);
+    expect(getSlotContainer(reel, 0).zIndex).toBeGreaterThan(
+      getSlotContainer(reel, 2).zIndex,
     );
 
     reel.resetToVisibleSymbols([2, 2, 2]);
-    const samePriorityTop = reel
-      .getSlotSnapshots()
-      .find((slot) => slot.windowY === 0);
-    const samePriorityBottom = reel
-      .getSlotSnapshots()
-      .find((slot) => slot.windowY === 2);
-    expect(samePriorityBottom?.container.zIndex).toBeGreaterThan(
-      samePriorityTop?.container.zIndex ?? Number.POSITIVE_INFINITY,
+    expect(getSlotContainer(reel, 2).zIndex).toBeGreaterThan(
+      getSlotContainer(reel, 0).zIndex,
     );
   });
 
@@ -378,6 +388,12 @@ describe("RenderReel", () => {
     expect(() => reel.getVisibleSymbolGeometrySnapshot(0)).toThrow(/phase/);
   });
 });
+
+function getSlotContainer(reel: RenderReel, windowY: number) {
+  const container = reel.getSlotRenderView(windowY).symbol?.parent?.parent;
+  if (!container) throw new Error(`Missing reel slot container at ${windowY}.`);
+  return container;
+}
 
 function findReelClipMask(reel: RenderReel): Graphics {
   const clipMask = reel.children.find(

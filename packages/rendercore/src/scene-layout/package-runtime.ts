@@ -830,21 +830,21 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       });
       return;
     }
-    const replacements: import("../reel/index.js").PreparedVisibleOccurrenceReplacement[] =
-      [];
+    const replacements: import("../reel/index.js").SymbolReplacement[] = [];
     try {
       for (let x = 0; x < geometry.columns; x++)
         for (let y = 0; y < geometry.rows; y++)
           if (current[x]![y] !== scene[x]![y])
             replacements.push(
-              reel.prepareVisibleOccurrenceReplacement({
-                x,
-                y,
-                outputCode: scene[x]![y]!,
-                outputPresentationValue: values?.[x]?.[y] ?? null,
+              Object.freeze({
+                position: Object.freeze({ x, y }),
+                target: Object.freeze({
+                  code: scene[x]![y]!,
+                  value: values?.[x]?.[y] ?? null,
+                }),
               }),
             );
-      for (const replacement of replacements) replacement.commit();
+      if (replacements.length > 0) reel.replaceSymbols(replacements);
       for (let x = 0; x < geometry.columns; x++)
         for (let y = 0; y < geometry.rows; y++)
           if (current[x]![y] === scene[x]![y] && scene[x]![y] !== -1)
@@ -854,7 +854,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
               values?.[x]?.[y] ?? null,
             );
     } catch (error) {
-      for (const replacement of replacements) replacement.rollback();
       this.applyReelScene(reel, binding.resource, binding.binding, {
         scene: current,
         localPhaseYs: Object.freeze(
@@ -1231,30 +1230,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         "Visible symbol image-string text requires a grid-cell main reel.",
       );
     return reel.getVisibleSymbolImageStringText(x, y, name);
-  }
-
-  prepareMainReelVisibleOccurrenceReplacement(options: {
-    readonly x: number;
-    readonly y: number;
-    readonly outputCode: number;
-    readonly outputPresentationValue: number | null;
-  }) {
-    this.assertReady();
-    return this.requireReel("main").prepareVisibleOccurrenceReplacement(
-      options,
-    );
-  }
-
-  prepareMainReelVisibleOccurrenceTransferBatch(options: {
-    readonly transfers: readonly import("../reel/index.js").GridCellVisibleOccurrenceTransfer[];
-  }) {
-    this.assertReady();
-    const reel = this.requireReel("main");
-    if (!(reel instanceof RenderGridCellReelSet))
-      throw new SceneLayoutError(
-        "Visible occurrence transfer requires a grid-cell main reel.",
-      );
-    return reel.prepareVisibleOccurrenceTransferBatch(options);
   }
 
   transferMainReelSymbols(

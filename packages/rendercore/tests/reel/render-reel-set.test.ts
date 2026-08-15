@@ -506,8 +506,8 @@ describe("RenderReelSet", () => {
       ],
       [0, 0],
     );
-    const leftHigh = getVisibleSlotSnapshot(prioritizedReelSet, 0, 0);
-    const rightLow = getVisibleSlotSnapshot(prioritizedReelSet, 1, 2);
+    const leftHigh = getVisibleSlotTestView(prioritizedReelSet, 0, 0);
+    const rightLow = getVisibleSlotTestView(prioritizedReelSet, 1, 2);
     expect(leftHigh.container.parent).toBe(rightLow.container.parent);
     expect(leftHigh.container.parent?.sortableChildren).toBe(true);
     expect(leftHigh.symbol?.renderPriority).toBe(2);
@@ -528,14 +528,14 @@ describe("RenderReelSet", () => {
       [0, 0],
     );
     expect(
-      getVisibleSlotSnapshot(defaultReelSet, 0, 2).container.zIndex,
+      getVisibleSlotTestView(defaultReelSet, 0, 2).container.zIndex,
     ).toBeGreaterThan(
-      getVisibleSlotSnapshot(defaultReelSet, 0, 0).container.zIndex,
+      getVisibleSlotTestView(defaultReelSet, 0, 0).container.zIndex,
     );
     expect(
-      getVisibleSlotSnapshot(defaultReelSet, 1, 0).container.zIndex,
+      getVisibleSlotTestView(defaultReelSet, 1, 0).container.zIndex,
     ).toBeGreaterThan(
-      getVisibleSlotSnapshot(defaultReelSet, 0, 2).container.zIndex,
+      getVisibleSlotTestView(defaultReelSet, 0, 2).container.zIndex,
     );
   });
 
@@ -568,7 +568,7 @@ describe("RenderReelSet", () => {
       ],
     });
     reelSet.update(0);
-    expect(getVisibleSlotSnapshot(reelSet, 0, 0).container.mask).not.toBeNull();
+    expect(getVisibleSlotTestView(reelSet, 0, 0).container.mask).not.toBeNull();
 
     let result = reelSet.update(0.05);
     for (let index = 0; index < 20 && !result.completed; index += 1) {
@@ -576,8 +576,8 @@ describe("RenderReelSet", () => {
     }
 
     expect(result.completed).toBe(true);
-    const leftHigh = getVisibleSlotSnapshot(reelSet, 0, 0);
-    const rightLow = getVisibleSlotSnapshot(reelSet, 1, 2);
+    const leftHigh = getVisibleSlotTestView(reelSet, 0, 0);
+    const rightLow = getVisibleSlotTestView(reelSet, 1, 2);
     expect(leftHigh.container.mask ?? null).toBeNull();
     expect(rightLow.container.mask ?? null).toBeNull();
     expect(leftHigh.container.zIndex).toBeGreaterThan(
@@ -850,7 +850,7 @@ describe("RenderReelSet", () => {
 
     expect(
       reelSet.reels[1]
-        .getSlotSnapshots()
+        .getSlotRenderViews()
         .some((slot) => slot.symbol === firstA),
     ).toBe(true);
     expect(reelSet.getSymbolPoolStats()).toMatchObject({
@@ -888,7 +888,7 @@ describe("RenderReelSet", () => {
     expect(reelSet.getSymbolPoolStats()?.idlePerCode[0]).toBeUndefined();
     expect(
       reelSet.reels
-        .flatMap((reel) => reel.getSlotSnapshots())
+        .flatMap((reel) => reel.getSlotRenderViews())
         .filter((slot) => slot.windowY >= 0 && slot.windowY < 3)
         .every((slot) => slot.symbol === null),
     ).toBe(true);
@@ -1002,21 +1002,16 @@ describe("RenderReelSet", () => {
 });
 
 function getVisibleSlotSymbol(reelSet: RenderReelSet, x: number, y: number) {
-  const symbol = reelSet.reels[x]
-    .getSlotSnapshots()
-    .find((slot) => slot.windowY === y)?.symbol;
+  const symbol = reelSet.reels[x].getSlotRenderView(y).symbol;
   if (!symbol) {
     throw new Error(`Missing visible symbol at ${x},${y}.`);
   }
   return symbol;
 }
 
-function getVisibleSlotSnapshot(reelSet: RenderReelSet, x: number, y: number) {
-  const slot = reelSet.reels[x]
-    .getSlotSnapshots()
-    .find((candidate) => candidate.windowY === y);
-  if (!slot) {
-    throw new Error(`Missing visible slot at ${x},${y}.`);
-  }
-  return slot;
+function getVisibleSlotTestView(reelSet: RenderReelSet, x: number, y: number) {
+  const view = reelSet.reels[x].getSlotRenderView(y);
+  const container = view.symbol?.parent?.parent;
+  if (!container) throw new Error(`Missing visible slot at ${x},${y}.`);
+  return { symbol: view.symbol, container };
 }

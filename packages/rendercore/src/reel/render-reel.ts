@@ -17,7 +17,6 @@ import type {
   RenderReelPhase,
   RenderReelSpinOptions,
   RenderReelSlotRenderView,
-  RenderReelSlotSnapshot,
   RenderVisibleSymbolGeometrySnapshot,
   RenderVisibleSymbolStateSnapshot,
   ReelWindowSnapshot,
@@ -32,6 +31,11 @@ import type {
   SymbolStatePlaybackOptions,
   SymbolStateTransitionMode,
 } from "../symbol/index.js";
+import {
+  createEmptySymbolRender,
+  type EmptySymbolRenderSource,
+  type SymbolRender,
+} from "../symbol/symbol-render.js";
 
 interface ReelSlot {
   readonly windowY: number;
@@ -460,18 +464,35 @@ export class RenderReel extends Container {
     );
   }
 
-  getSlotSnapshots(): readonly RenderReelSlotSnapshot[] {
-    return Object.freeze(
-      this.#slots.map((slot) => this.createSlotSnapshot(slot)),
-    );
-  }
-
-  /**
-   * Returns stable live views for allocation-sensitive render coordination.
-   * Call `getSlotSnapshots()` when snapshot isolation is required.
-   */
+  /** Returns stable live views for allocation-sensitive render coordination. */
   getSlotRenderViews(): readonly RenderReelSlotRenderView[] {
     return this.#slotRenderViews;
+  }
+
+  getSlotRenderView(windowY: number): RenderReelSlotRenderView {
+    return this.#slotRenderViews[this.getSlotIndex(windowY)]!;
+  }
+
+  createVisibleEmptySymbolRender(
+    windowY: number,
+    source: Omit<EmptySymbolRenderSource, "view" | "owned">,
+  ): SymbolRender {
+    const slot = this.getVisibleSlot(windowY);
+    if (slot.symbol || slot.kind === "textured" || (slot.code ?? -1) !== -1)
+      throw new ReelError(
+        `Cannot create empty SymbolRender for occupied reel ${this.xIndex}, y ${windowY}.`,
+      );
+    return createEmptySymbolRender({
+      view: slot.emptySymbolLayer,
+      owned: false,
+      assertUsable: () => {
+        source.assertUsable();
+        if (slot.symbol || slot.kind === "textured" || (slot.code ?? -1) !== -1)
+          throw new ReelError("SymbolRender is stale.");
+      },
+      ...(source.getPosition ? { getPosition: source.getPosition } : {}),
+      ...(source.getAnchor ? { getAnchor: source.getAnchor } : {}),
+    });
   }
 
   getCurrentY(): number {
@@ -723,16 +744,16 @@ export class RenderReel extends Container {
     windowY: number,
   ): RenderVisibleSymbolStateSnapshot {
     const slot = this.getVisibleSlot(windowY);
-    const snapshot = this.createSlotSnapshot(slot);
+    const state = slot.symbol?.getStateSnapshot();
     const completion = slot.symbol?.getAnimationCompletionSnapshot();
     return Object.freeze({
       x: this.xIndex,
       y: windowY,
-      code: snapshot.code,
-      kind: snapshot.kind,
-      requestedState: snapshot.requestedState,
-      resolvedState: snapshot.resolvedState,
-      isOnce: snapshot.isOnce,
+      code: slot.code ?? -1,
+      kind: slot.kind ?? "empty",
+      requestedState: state?.requestedState ?? null,
+      resolvedState: state?.resolvedState ?? null,
+      isOnce: state?.isOnce ?? false,
       loopCompletionCount: completion?.loopCompletionCount ?? 0,
       onceCompletionCount: completion?.onceCompletionCount ?? 0,
     });
@@ -742,12 +763,11 @@ export class RenderReel extends Container {
     windowY: number,
   ): RenderVisibleSymbolGeometrySnapshot {
     const slot = this.getVisibleSlot(windowY);
-    const snapshot = this.createSlotSnapshot(slot);
     return Object.freeze({
       x: this.xIndex,
       y: windowY,
-      code: snapshot.code,
-      kind: snapshot.kind,
+      code: slot.code ?? -1,
+      kind: slot.kind ?? "empty",
       centerX: this.x + this.layout.cellWidth / 2,
       centerY:
         this.y + this.layout.getCellY(windowY) + this.layout.cellHeight / 2,
@@ -781,22 +801,6 @@ export class RenderReel extends Container {
     });
   }
 
-  private createSlotSnapshot(slot: ReelSlot): RenderReelSlotSnapshot {
-    const stateSnapshot = slot.symbol?.getStateSnapshot();
-    return Object.freeze({
-      windowY: slot.windowY,
-      code: slot.code ?? -1,
-      kind: slot.kind ?? "empty",
-      symbol: slot.symbol,
-      container: slot.container,
-      emptySymbolLayer: slot.emptySymbolLayer,
-      requestedState: stateSnapshot?.requestedState ?? null,
-      resolvedState: stateSnapshot?.resolvedState ?? null,
-      isOnce: stateSnapshot?.isOnce ?? false,
-      presentationValue: slot.symbol?.getPresentationValue() ?? null,
-    });
-  }
-
   private getVisibleSlot(windowY: number): ReelSlot {
     if (
       !Number.isInteger(windowY) ||
@@ -813,14 +817,25 @@ export class RenderReel extends Container {
       );
     }
 
-    const slot = this.#slots.find((candidate) => candidate.windowY === windowY);
-    if (!slot) {
-      throw new ReelError(
-        `Missing visible reel slot for reel ${this.xIndex}, y ${windowY}.`,
-      );
-    }
+    return this.#slots[this.getSlotIndex(windowY)]!;
+  }
 
-    return slot;
+  private getSlotIndex(windowY: number): number {
+    if (!Number.isInteger(windowY))
+      throw new ReelError(
+        `reel slot window y ${windowY} must be an integer for reel ${this.xIndex}.`,
+      );
+    const index = windowY + this.layout.bufferRowsBefore;
+    if (index < 0 || index >= this.#slots.length)
+      throw new ReelError(
+        `reel slot window y ${windowY} is out of range for reel ${this.xIndex}.`,
+      );
+    const slot = this.#slots[index];
+    if (!slot || slot.windowY !== windowY)
+      throw new ReelError(
+        `Missing reel slot for reel ${this.xIndex}, y ${windowY}.`,
+      );
+    return index;
   }
 
   private setStaticVisibleSlot(
@@ -889,6 +904,9 @@ export class RenderReel extends Container {
           },
           get symbol(): RenderSymbol | null {
             return slot.symbol;
+          },
+          get presentationValue(): number | null {
+            return slot.symbol?.getPresentationValue() ?? null;
           },
         }),
       ),

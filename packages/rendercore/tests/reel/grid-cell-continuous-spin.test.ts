@@ -39,7 +39,10 @@ describe("grid-cell continuous spin", () => {
   it("does not materialize slot snapshots in the per-cell update path", () => {
     const reel = createSet();
     reel.resetToScene(INITIAL, [0, 1]);
-    const getSlotSnapshots = vi.spyOn(RenderReel.prototype, "getSlotSnapshots");
+    const getSlotRenderViews = vi.spyOn(
+      RenderReel.prototype,
+      "getSlotRenderViews",
+    );
     reel.startContinuous({
       direction: "forward",
       speedSymbolsPerSecond: 20,
@@ -50,9 +53,9 @@ describe("grid-cell continuous spin", () => {
     const firstSteadyUpdate = reel.update(0.01);
     const secondSteadyUpdate = reel.update(0.01);
 
-    expect(getSlotSnapshots).not.toHaveBeenCalled();
+    expect(getSlotRenderViews).not.toHaveBeenCalled();
     expect(secondSteadyUpdate).toBe(firstSteadyUpdate);
-    getSlotSnapshots.mockRestore();
+    getSlotRenderViews.mockRestore();
   });
 
   it("rolls without a target and settles the same transaction to an exact target", () => {

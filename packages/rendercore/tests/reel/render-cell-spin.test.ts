@@ -87,6 +87,24 @@ describe("RenderCellSpin", () => {
     expect(spin.getSymbol({ x: 0, y: 0 }).getValue()).toBe(5);
   });
 
+  it("does not partially replace a batch when preflight fails", () => {
+    const spin = createSpin();
+    const before = [
+      spin.getSymbol({ x: 0, y: 0 }).code,
+      spin.getSymbol({ x: 1, y: 0 }).code,
+    ];
+    expect(() =>
+      spin.replaceSymbols([
+        { position: { x: 0, y: 0 }, target: { code: 2 } },
+        { position: { x: 1, y: 0 }, target: { code: 999 } },
+      ]),
+    ).toThrow();
+    expect([
+      spin.getSymbol({ x: 0, y: 0 }).code,
+      spin.getSymbol({ x: 1, y: 0 }).code,
+    ]).toEqual(before);
+  });
+
   it("transfers and drops occurrences with direct await APIs", async () => {
     const spin = createSpin();
     const previousTarget = spin.getSymbol({ x: 1, y: 0 });

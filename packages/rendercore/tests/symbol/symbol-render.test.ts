@@ -54,16 +54,29 @@ describe("SymbolRender", () => {
       [2, 1, 2],
     ]);
     const old = area.getSymbol({ x: 0, y: 0 });
-    area
-      .prepareVisibleOccurrenceReplacement({
-        x: 0,
-        y: 0,
-        outputCode: 2,
-        outputPresentationValue: null,
-      })
-      .commit();
+    area.replaceSymbol({ x: 0, y: 0 }, { code: 2, value: null });
     expect(area.getSymbol({ x: 0, y: 0 }).code).toBe(2);
     expect(() => old.setState("normal")).toThrow(/stale/);
+  });
+
+  it("does not partially replace a standard-reel batch when preflight fails", () => {
+    const area = new RenderReelSet({
+      reels: createBasicReels(),
+      layout: createBasicLayout(),
+      registry: createBasicRegistry(),
+    });
+    area.resetToVisibleScene([
+      [1, 2, 1],
+      [2, 1, 2],
+    ]);
+    const before = area.getVisibleScene();
+    expect(() =>
+      area.replaceSymbols([
+        { position: { x: 0, y: 0 }, target: { code: 2 } },
+        { position: { x: 1, y: 0 }, target: { code: 999 } },
+      ]),
+    ).toThrow();
+    expect(area.getVisibleScene()).toEqual(before);
   });
 
   it("returns a lightweight empty SymbolRender for -1", () => {

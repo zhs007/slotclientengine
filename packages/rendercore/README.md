@@ -539,7 +539,7 @@ cell 尺寸由当前参与 reels 渲染的非空普通图动态计算：单图�
 
 `createReelLayout()` 支持 `columnGap` 控制轴间距；`RenderReel` 只在 starting / spinning / settling 等非静止态裁切单轴内容，停止态会取消裁切，允许偏大的 symbol 自然超出格子外框。
 
-逐帧 presentation 协调需要读取当前 slot 时使用 `getSlotRenderViews()`：返回数组和每个 view 都在 reel 创建时一次建立，字段通过只读 getter 反映当前 code/kind/symbol，不提供 snapshot isolation。诊断、测试或需要冻结时点状态的调用仍使用 `getSlotSnapshots()`。热路径读取当前位置使用 `getCurrentY()`，不要为了一个标量创建完整 `getSnapshot()`。`RenderReel.renderAtY()` 直接遍历既有 slots，`update()` 对相同 phase 复用冻结结果，避免每格每帧创建 window/slot/update 快照。grid-cell runtime 同样复用每格 key、slot view 索引、timeline scratch arrays 和无 edge 的 update result；只有实际 started/landed/activation edge 才生成对外不可变坐标快照。
+逐帧 presentation 协调读取当前 slot 时使用 `getSlotRenderViews()`，exact `windowY` 读取使用 `getSlotRenderView(windowY)`：数组和每个 view 都在 reel 创建时一次建立，字段通过只读 getter 反映当前 code/kind/symbol/presentation value，不提供 snapshot isolation。RenderCore 不再提供包含 display object 的通用 slot snapshot；状态、几何和 aggregate diagnostics 使用各自的标量 snapshot。热路径读取当前位置使用 `getCurrentY()`，不要为了一个标量创建完整 `getSnapshot()`。`RenderReel.renderAtY()` 直接遍历既有 slots，`update()` 对相同 phase 复用冻结结果，避免每格每帧创建 window/slot/update 快照。grid-cell runtime 同样复用每格 key、slot view 索引、timeline scratch arrays 和无 edge 的 update result；只有实际 started/landed/activation edge 才生成对外不可变坐标快照。
 
 典型流程：
 
@@ -713,7 +713,7 @@ grid-cell 可选 effect API 把逐格 presentation 与 symbol state 分离。`cr
 
 grid-cell main reel 还提供 occurrence identity 能力：`getMainReelVisibleOccurrence(x, y)` 返回受控 handle，可读取状态/几何、播放 state、设置 presentation value，并用 exact Scene Layout `spine | vni` runtime resource 附着 occurrence effect；它不暴露 Pixi Container、RenderSymbol 或 raw zIndex。occurrence effect 随同一 symbol identity 移动，和固定在坐标上的既有 cell effect 是两套独立 ownership；显式 `detach()`、occurrence release/回池或 runtime destroy 会清理 attachment。
 
-`runMainReelVisibleOccurrenceTransfer(input, choreography)` 是单次显式提交事务。`tx.delay()` 和 `tx.move()` 都只由宿主唯一的 `runtime.update(deltaSeconds)` 推进，不使用 GSAP、RAF 或 wall-clock timer。空间 path 支持 `line` 和多段 `cubic-bezier-path`（按总弧长采样），时间 easing 独立支持 `linear` 和 CSS-style cubic Bezier；`above-symbols | above-effects` 加非负整数 order 表达语义叠放。移动完成不会自动改数据，必须 `await tx.commit()`；callback 无 commit、reject、abort、reset 或 destroy 都会 rollback。source replacement 可为非负 symbol code，或 exact `-1/null` hole：
+`runMainReelVisibleOccurrenceTransfer(input, choreography)` 是 runtime-owned 的单次异步事务。`tx.delay()` 和 `tx.move()` 都只由宿主唯一的 `runtime.update(deltaSeconds)` 推进，不使用 GSAP、RAF 或 wall-clock timer。空间 path 支持 `line` 和多段 `cubic-bezier-path`（按总弧长采样），时间 easing 独立支持 `linear` 和 CSS-style cubic Bezier；`above-symbols | above-effects` 加非负整数 order 表达语义叠放。callback 在 `move()` 完成后正常返回时，runtime 自动执行唯一原子 finalization；callback 未完成 move、reject、abort、reset 或 destroy 时直接 reject，并只清理尚未 finalization 的临时 display lease、listener、mask 和预创建资源，不执行旧 scene/业务数据 rollback。source replacement 可为非负 symbol code，或 exact `-1/null` hole：
 
 ```ts
 for (const transfer of transfers) {
@@ -729,7 +729,6 @@ for (const transfer of transfers) {
       }),
       trail.play({ kind: "vni" }),
     ]);
-    await tx.commit();
   });
 }
 ```
