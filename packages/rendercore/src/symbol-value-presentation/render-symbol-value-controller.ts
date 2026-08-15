@@ -191,6 +191,23 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
     return this.#value;
   }
 
+  getReadiness(): Readonly<{
+    status: "ready" | "pending" | "failed";
+    error: unknown;
+  }> {
+    this.assertNotDestroyed();
+    if (this.#initializationError) {
+      return Object.freeze({
+        status: "failed" as const,
+        error: this.#initializationError,
+      });
+    }
+    if (this.#value === null || this.#initialized) {
+      return Object.freeze({ status: "ready" as const, error: null });
+    }
+    return Object.freeze({ status: "pending" as const, error: null });
+  }
+
   cloneValue(): CloneableRenderObject {
     this.assertNotDestroyed();
     if (!this.#initialized || !this.#display)

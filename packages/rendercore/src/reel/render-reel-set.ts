@@ -936,22 +936,23 @@ export class RenderReelSet extends Container implements ReelSpin {
         if (
           slot.windowY < 0 ||
           slot.windowY >= reel.layout.visibleRows ||
-          !slot.symbol
+          slot.kind === "empty"
         )
           continue;
         const bright = highlighted.has(`${reel.xIndex},${slot.windowY}`);
-        slot.symbol.alpha = 1;
-        slot.symbol.tint = createBrightnessTint(bright ? 1 : 1 - dimmingAlpha);
+        slot.container.alpha = 1;
+        slot.container.tint = createBrightnessTint(
+          bright ? 1 : 1 - dimmingAlpha,
+        );
       }
   }
 
   clearVisibleSymbolDimming(): void {
     for (const reel of this.reels)
-      for (const slot of reel.getSlotSnapshots())
-        if (slot.symbol) {
-          slot.symbol.alpha = 1;
-          slot.symbol.tint = 0xffffff;
-        }
+      for (const slot of reel.getSlotSnapshots()) {
+        slot.container.alpha = 1;
+        slot.container.tint = 0xffffff;
+      }
   }
 
   getCascadeValues(): GridCellCascadeValueMatrix {

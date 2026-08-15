@@ -1221,12 +1221,12 @@ export class RenderGridCellReelSet
       cell.dimOverlay.y = 0;
       cell.dimOverlay.alpha = 1;
       cell.dimOverlay.renderable = true;
-      const symbol = cell.reel
+      const slot = cell.reel
         .getSlotSnapshots()
-        .find((slot) => slot.windowY === 0)?.symbol;
-      if (symbol) {
-        symbol.alpha = 1;
-        symbol.tint = createBrightnessTint(
+        .find((candidate) => candidate.windowY === 0);
+      if (slot) {
+        slot.container.alpha = 1;
+        slot.container.tint = createBrightnessTint(
           isHighlighted ? 1 : 1 - dimmingAlpha,
         );
       }
@@ -3674,9 +3674,9 @@ export class RenderGridCellReelSet
           ? resolveGridCellDimmingAlpha(dimming, slot.code, activated)
           : 0;
       row.graphic.alpha = dimmingAlpha;
-      if (slot?.symbol) {
-        slot.symbol.alpha = 1;
-        slot.symbol.tint = createBrightnessTint(
+      if (slot) {
+        slot.container.alpha = 1;
+        slot.container.tint = createBrightnessTint(
           1 - cell.dimOverlay.alpha * dimmingAlpha,
         );
       }
@@ -3703,9 +3703,9 @@ export class RenderGridCellReelSet
             )
           : 0;
       row.graphic.alpha = dimmingAlpha;
-      if (slot?.symbol) {
-        slot.symbol.alpha = 1;
-        slot.symbol.tint = createBrightnessTint(
+      if (slot) {
+        slot.container.alpha = 1;
+        slot.container.tint = createBrightnessTint(
           1 - cell.dimOverlay.alpha * dimmingAlpha,
         );
       }
@@ -3721,7 +3721,7 @@ export class RenderGridCellReelSet
     const visibleSlot = cell.reel
       .getSlotSnapshots()
       .find((slot) => slot.windowY === 0);
-    const renderPriority = visibleSlot?.symbol?.renderPriority ?? 0;
+    const renderPriority = visibleSlot?.renderPriority ?? 0;
     cell.root.zIndex =
       renderPriority * (this.#order.length + 1) + cell.coordinate.orderIndex;
   }
@@ -3744,11 +3744,11 @@ export class RenderGridCellReelSet
       const rowTop = cell.dimOverlay.y + row.windowY * this.#cellHeight;
       const rowBottom = rowTop + this.#cellHeight;
       if (centerY >= rowTop && centerY < rowBottom) {
-        const symbol = cell.reel
+        const slot = cell.reel
           .getSlotSnapshots()
-          .find((slot) => slot.windowY === row.windowY)?.symbol;
-        if (!symbol) return 0;
-        return (((symbol.tint as number) >> 16) & 0xff) / 255;
+          .find((candidate) => candidate.windowY === row.windowY);
+        if (!slot || slot.kind === "empty") return 0;
+        return (((slot.container.tint as number) >> 16) & 0xff) / 255;
       }
     }
     return 0;
@@ -3804,10 +3804,8 @@ function validateGridEmptyTargets(
 
 function resetReelSlotSymbolDimming(cell: RuntimeCell): void {
   for (const slot of cell.reel.getSlotSnapshots()) {
-    if (slot.symbol) {
-      slot.symbol.alpha = 1;
-      slot.symbol.tint = 0xffffff;
-    }
+    slot.container.alpha = 1;
+    slot.container.tint = 0xffffff;
   }
 }
 

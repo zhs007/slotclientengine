@@ -14,25 +14,53 @@ export function createWeightedGridCellPresentationValueResolver(options: {
     context: GridCellSymbolPresentationValueContext,
   ) => readonly GameConfigNumberWeightEntry[] | null;
   readonly randomUint32: ReelRandomUint32Source;
+  readonly maxCachedValuesPerCell?: number;
 }): GridCellSymbolPresentationValueResolver {
   if (typeof options.resolveTable !== "function")
     throw new ReelError("resolveTable must be a function.");
   if (typeof options.randomUint32 !== "function")
     throw new ReelError("randomUint32 must be a function.");
 
-  const values = new Map<string, number>();
+  const maxCachedValuesPerCell = normalizeCacheLimit(
+    options.maxCachedValuesPerCell ?? 32,
+  );
+  const valuesByCell = new Map<string, Map<string, number>>();
   const totals = new WeakMap<readonly object[], number>();
 
   return (context) => {
     const table = options.resolveTable(context);
     if (table === null) return null;
-    const key = `${context.x}:${context.y}:${context.symbolY}:${context.code}`;
+    const cellKey = `${context.x}:${context.y}`;
+    const key = `${context.symbolY}:${context.code}`;
+    let values = valuesByCell.get(cellKey);
+    if (!values) {
+      values = new Map();
+      valuesByCell.set(cellKey, values);
+    }
     const existing = values.get(key);
-    if (existing !== undefined) return existing;
+    if (existing !== undefined) {
+      values.delete(key);
+      values.set(key, existing);
+      return existing;
+    }
     const value = sampleNumberWeightTable(table, options.randomUint32, totals);
     values.set(key, value);
+    while (values.size > maxCachedValuesPerCell) {
+      const oldest = values.keys().next().value;
+      if (oldest === undefined) break;
+      values.delete(oldest);
+    }
     return value;
   };
+}
+
+function normalizeCacheLimit(value: number): number {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new ReelError(
+      "maxCachedValuesPerCell must be a positive safe integer.",
+    );
+  }
+  return value;
 }
 
 function sampleNumberWeightTable(

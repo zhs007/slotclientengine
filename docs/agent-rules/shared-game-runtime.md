@@ -57,6 +57,18 @@
   full/held/stagger/barrier 由 operation handler 以 frame delay 和 Promise 编排。落停 Promise resolve 时
   整列 `getSymbol()` 必须可用。standard legacy batch façade只能复用同一 RenderReel 单轴运动 owner，
   不得复制另一套 motion/pool/player 状态机。
+- standard 与 legacy grid-cell 的 `RenderReel` 在 rolling 阶段只能用每个 slot 稳定持有的轻量
+  Sprite 显示 registry 解析后的 rolling texture；不得为经过的轮带 code 构造、初始化或 update
+  完整 `RenderSymbol`。target-aware start/settle 只提前准备最终可见 occurrence；official
+  Spine、VNI 或 value display 未 ready 时保持最终 rolling frame，全部 ready 后才提交 settled
+  occurrence。stopped buffer 不持有完整 symbol；rolling Sprite 不属于 `SymbolRender`，不能被
+  state、value、clone、cascade 或 transfer API 操作。
+- 带 valuePresentation 的 lightweight rolling view 必须使用游戏注入的 presentation-value resolver
+  取得中间随机值，并按 manifest value tier 显示对应轻量 image-string resource；不得创建 tier
+  Spine。随机 occurrence cache 必须有界。显式 target scene 中的 value symbol 必须同时提供最终
+  non-null value；最终 rolling frame 与 settled commit 只能使用该值，不得回退随机/default value。
+  完整 `RenderSymbol` 必须在离屏 prepare 时写入最终 value，并在 value resource ready 且挂载前
+  复核；禁止先把完整 symbol 挂到可见树，再把 rolling/random value 改成最终 value。
 - standard ReelArea 与 Crave legacy grid-cell 的共同 PresentableSymbolArea 拥有
   `bottom < symbols < top < win` 图层及 game-owned await presentation；standard ReelArea 额外拥有 area-local
   point anchor 与最高优先级 area.spin。游戏决定 idle/win 等循环内容，但不接触 interruption signal；spin

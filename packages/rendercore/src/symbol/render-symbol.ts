@@ -475,6 +475,21 @@ export class RenderSymbol extends VisualEntity<void> {
     return this.#presentationValue;
   }
 
+  getPresentationReadiness(): Readonly<{
+    status: "ready" | "pending" | "failed";
+    error: unknown;
+  }> {
+    this.assertNotDestroyed();
+    const animation = this.#currentAni.getReadiness?.();
+    if (animation?.status === "failed" || animation?.status === "pending") {
+      return animation;
+    }
+    return (
+      this.#valueController?.getReadiness?.() ??
+      Object.freeze({ status: "ready" as const, error: null })
+    );
+  }
+
   clonePresentationValue(): import("../presentation/render-object.js").CloneableRenderObject {
     this.assertNotDestroyed();
     if (!this.#valueController)

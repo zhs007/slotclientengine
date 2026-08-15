@@ -3,7 +3,7 @@ import type {
   LogicReels,
   SceneMatrix,
 } from "@slotclientengine/logiccore";
-import type { Container, Texture } from "pixi.js";
+import type { Container, Sprite, Texture } from "pixi.js";
 import type {
   RenderSymbol,
   SymbolAnimationResolver,
@@ -60,6 +60,19 @@ export interface ReelSymbolRegistryEntry {
   readonly kind: ReelSymbolKind;
 }
 
+export interface ReelRollingVisualDescriptor {
+  readonly texture: Texture;
+  readonly scale: number;
+  readonly renderPriority: number;
+}
+
+export interface ReelRollingValueVisual {
+  readonly container: Container;
+  readonly tierIndex: number;
+  setValue(value: number): void;
+  destroy(): void;
+}
+
 export interface ReelSymbolRegistryValidation {
   readonly texturedSymbols: readonly string[];
   readonly configuredEmptySymbols: readonly string[];
@@ -73,6 +86,16 @@ export interface ReelSymbolRegistry {
   getEntryByCode(code: number): ReelSymbolRegistryEntry;
   getEntryBySymbol(symbol: string): ReelSymbolRegistryEntry;
   getCellSize(): ReelCellSize;
+  getRollingVisualByCode(
+    code: number,
+    state: SymbolStateId,
+  ): ReelRollingVisualDescriptor | null;
+  requiresPresentationValueByCode(code: number): boolean;
+  resolveRollingValueTierByCode(code: number, value: number): number | null;
+  createRollingValueVisualByCode(
+    code: number,
+    value: number,
+  ): ReelRollingValueVisual | null;
   createRenderSymbolByCode(code: number): RenderSymbol | null;
 }
 
@@ -599,9 +622,13 @@ export interface RenderReelSlotSnapshot {
   readonly windowY: number;
   readonly code: number;
   readonly kind: ReelSymbolKind;
+  readonly mode: "empty" | "rolling" | "settled";
   readonly symbol: RenderSymbol | null;
+  readonly rollingVisual: Sprite;
   readonly container: Container;
   readonly emptySymbolLayer: Container;
+  readonly renderPriority: number;
+  readonly rollingValueTierIndex: number | null;
   readonly requestedState: SymbolStateId | null;
   readonly resolvedState: SymbolStateId | null;
   readonly isOnce: boolean;

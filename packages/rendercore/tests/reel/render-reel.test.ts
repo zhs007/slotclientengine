@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { Graphics } from "pixi.js";
+import { Container, Graphics } from "pixi.js";
 import { RenderReel, createReelSpinPlan } from "../../src/reel/index.js";
+import type { ReelSymbolRegistry } from "../../src/reel/index.js";
 import {
   createBasicLayout,
   createBasicReels,
@@ -73,13 +74,33 @@ describe("RenderReel", () => {
     expect(() => createReel(-1)).toThrow(/bounceStrength/);
   });
 
-  it("requests spinBlur while spinning and normal after landing", () => {
+  it("uses stable lightweight spinBlur visuals while spinning and complete symbols only after landing", () => {
     const reels = createBasicReels();
+    const baseRegistry = createBasicRegistry();
+    let completeSymbolCreations = 0;
+    const registry: ReelSymbolRegistry = {
+      getValidation: () => baseRegistry.getValidation(),
+      getEntryByCode: (code) => baseRegistry.getEntryByCode(code),
+      getEntryBySymbol: (symbol) => baseRegistry.getEntryBySymbol(symbol),
+      getCellSize: () => baseRegistry.getCellSize(),
+      getRollingVisualByCode: (code, state) =>
+        baseRegistry.getRollingVisualByCode(code, state),
+      requiresPresentationValueByCode: (code) =>
+        baseRegistry.requiresPresentationValueByCode(code),
+      resolveRollingValueTierByCode: (code, value) =>
+        baseRegistry.resolveRollingValueTierByCode(code, value),
+      createRollingValueVisualByCode: (code, value) =>
+        baseRegistry.createRollingValueVisualByCode(code, value),
+      createRenderSymbolByCode: (code) => {
+        completeSymbolCreations += 1;
+        return baseRegistry.createRenderSymbolByCode(code);
+      },
+    };
     const reel = new RenderReel({
       reels,
       x: 0,
       layout: createBasicLayout(),
-      registry: createBasicRegistry(),
+      registry,
     });
     const axisPlan = createReelSpinPlan({
       reels,
@@ -93,6 +114,7 @@ describe("RenderReel", () => {
     }).axes[0];
 
     const visibleBeforeSpin = reel.getVisibleScene();
+    const creationsBeforeSpin = completeSymbolCreations;
     const clipMask = findReelClipMask(reel);
     expect(reel.mask ?? null).toBeNull();
     expect(clipMask.visible).toBe(false);
@@ -111,14 +133,29 @@ describe("RenderReel", () => {
     expect(
       reel.getSlotSnapshots().every((slot) => slot.container.visible),
     ).toBe(true);
+    const rollingVisuals = reel
+      .getSlotSnapshots()
+      .map((slot) => slot.rollingVisual);
+    const creationsAfterPrepare = completeSymbolCreations;
+    expect(reel.getSlotSnapshots().every((slot) => slot.symbol === null)).toBe(
+      true,
+    );
+    expect(creationsAfterPrepare - creationsBeforeSpin).toBe(2);
 
     reel.update(0.05);
+    const rollingSlots = reel
+      .getSlotSnapshots()
+      .filter((slot) => slot.kind === "textured");
+    expect(rollingSlots.every((slot) => slot.mode === "rolling")).toBe(true);
+    expect(
+      rollingSlots.every((slot) => slot.requestedState === "spinBlur"),
+    ).toBe(true);
     expect(
       reel
         .getSlotSnapshots()
-        .filter((slot) => slot.symbol)
-        .every((slot) => slot.requestedState === "spinBlur"),
+        .every((slot, index) => slot.rollingVisual === rollingVisuals[index]),
     ).toBe(true);
+    expect(completeSymbolCreations).toBe(creationsAfterPrepare);
 
     const landed = reel.update(0.3);
     expect(landed.landed).toBe(true);
@@ -134,12 +171,286 @@ describe("RenderReel", () => {
     expect(
       reel.getSlotSnapshots().filter((slot) => slot.container.visible),
     ).toHaveLength(3);
+    expect(reel.getSlotSnapshots().filter((slot) => slot.symbol)).toHaveLength(
+      2,
+    );
+    expect(
+      reel
+        .getSlotSnapshots()
+        .filter((slot) => !slot.container.visible)
+        .every((slot) => slot.symbol === null),
+    ).toBe(true);
+    expect(completeSymbolCreations).toBe(creationsAfterPrepare);
     expect(
       reel
         .getSlotSnapshots()
         .filter((slot) => slot.symbol)
         .every((slot) => slot.requestedState === "normal"),
     ).toBe(true);
+  });
+
+  it("prepares adjacent equal-code landing occurrences independently", () => {
+    const reels = createBasicReels();
+    const reel = new RenderReel({
+      reels,
+      x: 0,
+      layout: createBasicLayout(),
+      registry: createBasicRegistry(),
+    });
+    const axisPlan = createReelSpinPlan({
+      reels,
+      finalYs: [2, 1],
+      visibleRows: 3,
+      minimumSpinCycles: 2,
+      baseDurationMs: 300,
+      speedSymbolsPerSecond: 30,
+      startDelayMs: 0,
+      stopDelayMs: 0,
+    }).axes[0];
+
+    reel.start(axisPlan, {
+      targetVisibleSymbols: [1, 1, 1],
+      targetVisiblePresentationValues: [10, 20, 30],
+    });
+    expect(reel.getSlotSnapshots().every((slot) => slot.symbol === null)).toBe(
+      true,
+    );
+    reel.update(0.3);
+
+    const landed = reel
+      .getSlotSnapshots()
+      .filter((slot) => slot.windowY >= 0 && slot.windowY < 3);
+    expect(landed.map((slot) => slot.presentationValue)).toEqual([10, 20, 30]);
+    expect(new Set(landed.map((slot) => slot.symbol)).size).toBe(3);
+    expect(landed.every((slot) => slot.mode === "settled")).toBe(true);
+  });
+
+  it("rolls back detached landing preparation before changing the stopped reel", () => {
+    const reels = createBasicReels();
+    const baseRegistry = createBasicRegistry();
+    let failPreparation = false;
+    const preparedSymbols: NonNullable<
+      ReturnType<ReelSymbolRegistry["createRenderSymbolByCode"]>
+    >[] = [];
+    const registry: ReelSymbolRegistry = {
+      getValidation: () => baseRegistry.getValidation(),
+      getEntryByCode: (code) => baseRegistry.getEntryByCode(code),
+      getEntryBySymbol: (symbol) => baseRegistry.getEntryBySymbol(symbol),
+      getCellSize: () => baseRegistry.getCellSize(),
+      getRollingVisualByCode: (code, state) =>
+        baseRegistry.getRollingVisualByCode(code, state),
+      requiresPresentationValueByCode: (code) =>
+        baseRegistry.requiresPresentationValueByCode(code),
+      resolveRollingValueTierByCode: (code, value) =>
+        baseRegistry.resolveRollingValueTierByCode(code, value),
+      createRollingValueVisualByCode: (code, value) =>
+        baseRegistry.createRollingValueVisualByCode(code, value),
+      createRenderSymbolByCode: (code) => {
+        if (failPreparation && code === 1) {
+          throw new Error("prepared landing failed");
+        }
+        const symbol = baseRegistry.createRenderSymbolByCode(code);
+        if (failPreparation && symbol) preparedSymbols.push(symbol);
+        return symbol;
+      },
+    };
+    const reel = new RenderReel({
+      reels,
+      x: 0,
+      layout: createBasicLayout(),
+      registry,
+    });
+    const before = reel.getSlotSnapshots().map((slot) => slot.symbol);
+    const axisPlan = createReelSpinPlan({
+      reels,
+      finalYs: [2, 1],
+      visibleRows: 3,
+      minimumSpinCycles: 2,
+      baseDurationMs: 300,
+      speedSymbolsPerSecond: 30,
+      startDelayMs: 0,
+      stopDelayMs: 0,
+    }).axes[0];
+
+    failPreparation = true;
+    expect(() =>
+      reel.start(axisPlan, { targetVisibleSymbols: [2, 1, 2] }),
+    ).toThrow("prepared landing failed");
+    expect(reel.getSnapshot().phase).toBe("stopped");
+    expect(reel.getSlotSnapshots().map((slot) => slot.symbol)).toEqual(before);
+    expect(preparedSymbols).toHaveLength(1);
+    expect(preparedSymbols[0]?.destroyed).toBe(true);
+  });
+
+  it("keeps the final rolling frame until every prepared value is ready", () => {
+    const reels = createBasicReels();
+    const baseRegistry = createBasicRegistry();
+    let prepareAsPending = false;
+    let ready = false;
+    const registry: ReelSymbolRegistry = {
+      getValidation: () => baseRegistry.getValidation(),
+      getEntryByCode: (code) => baseRegistry.getEntryByCode(code),
+      getEntryBySymbol: (symbol) => baseRegistry.getEntryBySymbol(symbol),
+      getCellSize: () => baseRegistry.getCellSize(),
+      getRollingVisualByCode: (code, state) =>
+        baseRegistry.getRollingVisualByCode(code, state),
+      requiresPresentationValueByCode: (code) =>
+        baseRegistry.requiresPresentationValueByCode(code),
+      resolveRollingValueTierByCode: (code, value) =>
+        baseRegistry.resolveRollingValueTierByCode(code, value),
+      createRollingValueVisualByCode: (code, value) =>
+        baseRegistry.createRollingValueVisualByCode(code, value),
+      createRenderSymbolByCode: (code) => {
+        const symbol = baseRegistry.createRenderSymbolByCode(code);
+        if (prepareAsPending && symbol) {
+          Object.defineProperty(symbol, "getPresentationReadiness", {
+            configurable: true,
+            value: () =>
+              Object.freeze({
+                status: ready ? ("ready" as const) : ("pending" as const),
+                error: null,
+              }),
+          });
+        }
+        return symbol;
+      },
+    };
+    const reel = new RenderReel({
+      reels,
+      x: 0,
+      layout: createBasicLayout(),
+      registry,
+    });
+    const axisPlan = createReelSpinPlan({
+      reels,
+      finalYs: [2, 1],
+      visibleRows: 3,
+      minimumSpinCycles: 2,
+      baseDurationMs: 300,
+      speedSymbolsPerSecond: 30,
+      startDelayMs: 0,
+      stopDelayMs: 0,
+    }).axes[0];
+
+    prepareAsPending = true;
+    reel.start(axisPlan, { targetVisibleSymbols: [1, 1, 1] });
+    expect(reel.update(0.3)).toMatchObject({
+      phase: "settling",
+      landed: false,
+      completed: false,
+    });
+    expect(reel.getSlotSnapshots().every((slot) => slot.symbol === null)).toBe(
+      true,
+    );
+
+    ready = true;
+    expect(reel.update(0)).toMatchObject({
+      phase: "stopped",
+      landed: true,
+      completed: true,
+    });
+    expect(
+      reel
+        .getSlotSnapshots()
+        .filter((slot) => slot.container.visible)
+        .every((slot) => slot.mode === "settled"),
+    ).toBe(true);
+  });
+
+  it("uses configured rolling values by tier and never substitutes them for explicit final values", () => {
+    const reels = createBasicReels();
+    const baseRegistry = createBasicRegistry();
+    let prepareAsPending = false;
+    let ready = false;
+    const createdTiers: number[] = [];
+    const preparedFullSymbols: NonNullable<
+      ReturnType<ReelSymbolRegistry["createRenderSymbolByCode"]>
+    >[] = [];
+    const registry: ReelSymbolRegistry = {
+      getValidation: () => baseRegistry.getValidation(),
+      getEntryByCode: (code) => baseRegistry.getEntryByCode(code),
+      getEntryBySymbol: (symbol) => baseRegistry.getEntryBySymbol(symbol),
+      getCellSize: () => baseRegistry.getCellSize(),
+      getRollingVisualByCode: (code, state) =>
+        baseRegistry.getRollingVisualByCode(code, state),
+      requiresPresentationValueByCode: (code) => code === 1,
+      resolveRollingValueTierByCode: (code, value) =>
+        code === 1 ? (value < 10 ? 0 : value < 100 ? 1 : 2) : null,
+      createRollingValueVisualByCode: (code, value) => {
+        if (code !== 1) return null;
+        const tierIndex = value < 10 ? 0 : value < 100 ? 1 : 2;
+        createdTiers.push(tierIndex);
+        return {
+          container: new Container(),
+          tierIndex,
+          setValue: () => undefined,
+          destroy: () => undefined,
+        };
+      },
+      createRenderSymbolByCode: (code) => {
+        const symbol = baseRegistry.createRenderSymbolByCode(code);
+        if (prepareAsPending && symbol) {
+          preparedFullSymbols.push(symbol);
+          Object.defineProperty(symbol, "getPresentationReadiness", {
+            configurable: true,
+            value: () =>
+              Object.freeze({
+                status: ready ? ("ready" as const) : ("pending" as const),
+                error: null,
+              }),
+          });
+        }
+        return symbol;
+      },
+    };
+    const reel = new RenderReel({
+      reels,
+      x: 0,
+      layout: createBasicLayout(),
+      registry,
+      presentationValueResolver: ({ code }) => (code === 1 ? 5 : null),
+    });
+    const axisPlan = createReelSpinPlan({
+      reels,
+      finalYs: [2, 1],
+      visibleRows: 3,
+      minimumSpinCycles: 2,
+      baseDurationMs: 300,
+      speedSymbolsPerSecond: 30,
+      startDelayMs: 0,
+      stopDelayMs: 0,
+    }).axes[0];
+
+    expect(() =>
+      reel.start(axisPlan, { targetVisibleSymbols: [1, 1, 1] }),
+    ).toThrow(/explicit final presentation value/);
+
+    prepareAsPending = true;
+    reel.start(axisPlan, {
+      targetVisibleSymbols: [1, 1, 1],
+      targetVisiblePresentationValues: [5, 50, 500],
+    });
+    expect(reel.getSlotSnapshots().every((slot) => slot.symbol === null)).toBe(
+      true,
+    );
+    expect(
+      preparedFullSymbols.map((symbol) => symbol.getPresentationValue()),
+    ).toEqual([5, 50, 500]);
+    reel.update(0.3);
+    const finalRolling = reel
+      .getSlotSnapshots()
+      .filter((slot) => slot.windowY >= 0 && slot.windowY < 3);
+    expect(finalRolling.map((slot) => slot.presentationValue)).toEqual([
+      5, 50, 500,
+    ]);
+    expect(finalRolling.map((slot) => slot.rollingValueTierIndex)).toEqual([
+      0, 1, 2,
+    ]);
+    expect(createdTiers).toEqual(expect.arrayContaining([0, 1, 2]));
+
+    ready = true;
+    reel.update(0);
+    expect(reel.getVisiblePresentationValues()).toEqual([5, 50, 500]);
   });
 
   it("centers each symbol container in its cell", () => {

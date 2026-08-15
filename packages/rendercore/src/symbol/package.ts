@@ -24,6 +24,10 @@ import type {
   ReelSymbolRegistryValidation,
   ReelSymbolScaleMap,
 } from "../reel/types.js";
+import {
+  createRollingValueVisual,
+  resolveRollingValueTier,
+} from "../reel/rolling-value-visual.js";
 import { SymbolAssetError } from "./errors.js";
 import {
   createSymbolAnimationCapabilityMapFromManifest,
@@ -48,6 +52,7 @@ import type {
   SymbolAnimationResolver,
   SymbolAssetMap,
   SymbolNormalTextureSource,
+  SymbolStateId,
   SymbolStatePreset,
   SymbolTextureSet,
 } from "./types.js";
@@ -767,6 +772,46 @@ export function createSymbolPackageReelRegistryFromCatalog(
     getEntryBySymbol: (symbol: string): ReelSymbolRegistryEntry =>
       requireEntry(bySymbol.get(symbol), `"${symbol}"`),
     getCellSize: () => resource.packageManifest.cellSize,
+    getRollingVisualByCode(code: number, state: SymbolStateId) {
+      const entry = requireEntry(byCode.get(code), `code ${code}`);
+      const textureSet = catalog.getTextureSet(entry.symbol);
+      const normal = textureSet.normal;
+      const normalTexture =
+        typeof normal === "string"
+          ? undefined
+          : "kind" in normal
+            ? normal.kind === "single"
+              ? normal.texture
+              : undefined
+            : normal;
+      const texture = textureSet.states?.[state] ?? normalTexture;
+      if (!texture || typeof texture === "string") {
+        throw new SymbolAssetError(
+          `Display symbol "${entry.symbol}" cannot resolve loaded rolling state texture "${state}".`,
+        );
+      }
+      return Object.freeze({
+        texture,
+        scale: resource.symbolScales[entry.symbol] ?? 1,
+        renderPriority: resource.symbolRenderPriorities[entry.symbol] ?? 0,
+      });
+    },
+    requiresPresentationValueByCode(code: number): boolean {
+      const entry = requireEntry(byCode.get(code), `code ${code}`);
+      return resource.valuePresentationResources[entry.symbol] !== undefined;
+    },
+    resolveRollingValueTierByCode(code: number, value: number): number | null {
+      const entry = requireEntry(byCode.get(code), `code ${code}`);
+      const presentation = resource.valuePresentationResources[entry.symbol];
+      return presentation ? resolveRollingValueTier(presentation, value) : null;
+    },
+    createRollingValueVisualByCode(code: number, value: number) {
+      const entry = requireEntry(byCode.get(code), `code ${code}`);
+      const presentation = resource.valuePresentationResources[entry.symbol];
+      return presentation
+        ? createRollingValueVisual({ resource: presentation, value })
+        : null;
+    },
     createRenderSymbolByCode(code: number): RenderSymbol {
       const entry = requireEntry(byCode.get(code), `code ${code}`);
       return catalog.createRenderSymbol(entry.symbol, {

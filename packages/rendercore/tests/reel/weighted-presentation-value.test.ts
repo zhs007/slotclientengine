@@ -58,4 +58,29 @@ describe("weighted grid-cell presentation values", () => {
     expect(resolver(CONTEXT)).toBeNull();
     expect(randomUint32).not.toHaveBeenCalled();
   });
+
+  it("bounds random occurrence retention per cell without changing active values", () => {
+    const randomUint32 = vi
+      .fn()
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(1)
+      .mockReturnValueOnce(2)
+      .mockReturnValueOnce(0);
+    const resolver = createWeightedGridCellPresentationValueResolver({
+      resolveTable: () => [
+        { value: 10, weight: 1 },
+        { value: 20, weight: 1 },
+        { value: 30, weight: 1 },
+      ],
+      randomUint32,
+      maxCachedValuesPerCell: 2,
+    });
+
+    expect(resolver({ ...CONTEXT, symbolY: 7 })).toBe(10);
+    expect(resolver({ ...CONTEXT, symbolY: 8 })).toBe(20);
+    expect(resolver({ ...CONTEXT, symbolY: 8 })).toBe(20);
+    expect(resolver({ ...CONTEXT, symbolY: 9 })).toBe(30);
+    expect(resolver({ ...CONTEXT, symbolY: 7 })).toBe(10);
+    expect(randomUint32).toHaveBeenCalledTimes(4);
+  });
 });

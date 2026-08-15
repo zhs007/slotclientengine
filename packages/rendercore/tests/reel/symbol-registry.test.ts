@@ -9,6 +9,7 @@ import {
   basicGameConfig,
   createTextureSet,
 } from "./helpers.js";
+import type { SymbolValuePresentationResource } from "../../src/symbol-value-presentation/index.js";
 
 describe("ReelSymbolRegistry", () => {
   it("tracks explicit empty symbols, missing-asset empty symbols and orphan assets", () => {
@@ -80,9 +81,10 @@ describe("ReelSymbolRegistry", () => {
   });
 
   it("passes configured render priorities into render symbols", () => {
+    const assets = createBasicAssets();
     const registry = createReelSymbolRegistry({
       gameConfig: createGameConfig(basicGameConfig),
-      assets: createBasicAssets(),
+      assets,
       emptySymbols: ["BN"],
       symbolRenderPriorities: {
         A: 2,
@@ -95,6 +97,84 @@ describe("ReelSymbolRegistry", () => {
     expect(registry.createRenderSymbolByCode(1)?.renderPriority).toBe(2);
     expect(registry.createRenderSymbolByCode(2)?.renderPriority).toBe(0);
     expect(registry.createRenderSymbolByCode(0)).toBeNull();
+    expect(registry.getRollingVisualByCode(1, "spinBlur")).toMatchObject({
+      scale: 1,
+      renderPriority: 2,
+    });
+    const asset = assets.A;
+    if (!asset || typeof asset !== "object" || !("states" in asset)) {
+      throw new Error("Test asset A must be a texture set.");
+    }
+    expect(registry.getRollingVisualByCode(1, "spinBlur")?.texture).toBe(
+      asset.states?.spinBlur,
+    );
+    expect(registry.getRollingVisualByCode(0, "spinBlur")).toBeNull();
+  });
+
+  it("creates a lightweight tiered image-string visual for rolling values", () => {
+    const imageStringResource = Object.freeze({
+      manifest: Object.freeze({
+        version: 1 as const,
+        kind: "image-string" as const,
+        id: "rolling-digits",
+        metrics: Object.freeze({ lineHeight: 12, letterSpacing: 0 }),
+        glyphs: Object.freeze({
+          "5": Object.freeze({
+            path: "5.png",
+            size: Object.freeze({ width: 8, height: 12 }),
+            offset: Object.freeze({ x: 0, y: 0 }),
+          }),
+        }),
+        fixedAdvanceGroups: Object.freeze([]),
+      }),
+      textures: Object.freeze({ "5.png": createTextureSet(8, 12).normal }),
+      destroyed: false,
+      assertUsable: () => undefined,
+      destroy: async () => undefined,
+    });
+    const valueResource = {
+      symbol: "A",
+      defaultValues: [5],
+      activeSpineAnimations: {},
+      tiers: [{ maxExclusive: 10 }, {}],
+      text: { type: "image-string" },
+      textImageUrls: {},
+      imageStringTierBindings: [
+        {
+          resourcePath: "tier-0.json",
+          resource: imageStringResource,
+          slot: "coin",
+          anchor: { x: 0.5, y: 0.5 },
+          transform: { x: 0, y: 0, scale: 1 },
+          followSlotColor: true,
+          specialValueImages: {},
+        },
+        {
+          resourcePath: "tier-1.json",
+          resource: imageStringResource,
+          slot: "coin",
+          anchor: { x: 0.5, y: 0.5 },
+          transform: { x: 0, y: 0, scale: 1 },
+          followSlotColor: true,
+          specialValueImages: {},
+        },
+      ],
+    } as unknown as SymbolValuePresentationResource;
+    const registry = createReelSymbolRegistry({
+      gameConfig: createGameConfig(basicGameConfig),
+      assets: createBasicAssets(),
+      emptySymbols: ["BN"],
+      valuePresentationResources: { A: valueResource },
+      texturePolicy: { requiredStateTextures: ["spinBlur"] },
+    });
+
+    expect(registry.requiresPresentationValueByCode(1)).toBe(true);
+    expect(registry.resolveRollingValueTierByCode(1, 5)).toBe(0);
+    const visual = registry.createRollingValueVisualByCode(1, 5);
+    expect(visual?.tierIndex).toBe(0);
+    expect(visual?.container.children).toHaveLength(1);
+    visual?.setValue(5);
+    visual?.destroy();
   });
 
   it("accepts layered normal sources and keeps layered render symbols", () => {

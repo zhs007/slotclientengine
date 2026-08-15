@@ -22,12 +22,18 @@ import type {
   SymbolTextureSet,
 } from "../symbol/index.js";
 import { ReelAssetError } from "./errors.js";
+import {
+  createRollingValueVisual,
+  resolveRollingValueTier,
+} from "./rolling-value-visual.js";
 import type {
   ReelCellSize,
   ReelSymbolRegistry,
   ReelSymbolRegistryEntry,
   ReelSymbolRegistryOptions,
   ReelSymbolRegistryValidation,
+  ReelRollingVisualDescriptor,
+  ReelRollingValueVisual,
 } from "./types.js";
 
 interface NormalizedTextureSet {
@@ -217,6 +223,50 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
 
   getCellSize(): ReelCellSize {
     return Object.freeze({ ...this.#cellSize });
+  }
+
+  getRollingVisualByCode(
+    code: number,
+    state: SymbolStateId,
+  ): ReelRollingVisualDescriptor | null {
+    const entry = this.getEntryByCode(code);
+    if (entry.kind === "empty") return null;
+    const textureSet = this.#textureSetsByCode.get(code);
+    const texture =
+      textureSet?.states?.[state] ??
+      (textureSet?.normal.kind === "single"
+        ? textureSet.normal.texture
+        : undefined);
+    if (!textureSet || !texture) {
+      throw new ReelAssetError(
+        `Textured symbol code ${code} cannot resolve rolling state texture "${state}".`,
+      );
+    }
+    return Object.freeze({
+      texture,
+      scale: textureSet.scale,
+      renderPriority: textureSet.renderPriority,
+    });
+  }
+
+  requiresPresentationValueByCode(code: number): boolean {
+    const entry = this.getEntryByCode(code);
+    return this.#valuePresentationResources[entry.symbol] !== undefined;
+  }
+
+  resolveRollingValueTierByCode(code: number, value: number): number | null {
+    const entry = this.getEntryByCode(code);
+    const resource = this.#valuePresentationResources[entry.symbol];
+    return resource ? resolveRollingValueTier(resource, value) : null;
+  }
+
+  createRollingValueVisualByCode(
+    code: number,
+    value: number,
+  ): ReelRollingValueVisual | null {
+    const entry = this.getEntryByCode(code);
+    const resource = this.#valuePresentationResources[entry.symbol];
+    return resource ? createRollingValueVisual({ resource, value }) : null;
   }
 
   createRenderSymbolByCode(code: number): RenderSymbol | null {

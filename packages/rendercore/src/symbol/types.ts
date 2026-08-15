@@ -93,6 +93,10 @@ export interface SymbolAni {
   readonly playback: SymbolPlaybackKind;
   readonly continuityKey?: string;
   adoptContinuation?(next: SymbolAni): void;
+  getReadiness?(): Readonly<{
+    status: "ready" | "pending" | "failed";
+    error: unknown;
+  }>;
   reset(): void;
   update(deltaSeconds: number): SymbolAniUpdateResult;
   destroy?(): void;
@@ -140,6 +144,10 @@ export interface RenderSymbolValueController {
   cloneValue(): CloneableRenderObject;
   getValueView(): Container;
   syncState(state: SymbolStateId): void;
+  getReadiness?(): Readonly<{
+    status: "ready" | "pending" | "failed";
+    error: unknown;
+  }>;
   createActiveSpineAnimation(
     context: SymbolAnimationContext,
     playback?: SymbolManifestAnimationPlaybackSpec,

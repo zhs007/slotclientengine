@@ -107,8 +107,16 @@ describe("render symbol value controller", () => {
     symbol.init();
     symbol.setPresentationValue(5);
     expect(symbol.getPresentationValue()).toBe(5);
+    expect(symbol.getPresentationReadiness()).toEqual({
+      status: "pending",
+      error: null,
+    });
     expect(symbol.baseLayer.visible).toBe(true);
     await flushPromises();
+    expect(symbol.getPresentationReadiness()).toEqual({
+      status: "ready",
+      error: null,
+    });
     expect(players).toHaveLength(1);
     expect(players[0].tierSkeleton).toBe("./low.json");
     expect(players[0].plays).toEqual([{ animationName: "Loop", loop: true }]);
@@ -193,6 +201,10 @@ describe("render symbol value controller", () => {
     );
     symbol.setPresentationValue(1);
     await flushPromises();
+    expect(symbol.getPresentationReadiness()).toEqual({
+      status: "failed",
+      error,
+    });
     expect(() => symbol.update(0.01)).toThrow(error);
     symbol.destroy();
     expect(() => symbol.setPresentationValue(1)).toThrow(/destroyed/);

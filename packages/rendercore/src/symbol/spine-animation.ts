@@ -133,6 +133,23 @@ export class SpineSymbolAni implements SymbolAni {
     return EMPTY_UPDATE_RESULT;
   }
 
+  getReadiness(): Readonly<{
+    status: "ready" | "pending" | "failed";
+    error: unknown;
+  }> {
+    this.assertNotDestroyed();
+    if (this.#initError) {
+      return Object.freeze({
+        status: "failed" as const,
+        error: this.#initError,
+      });
+    }
+    return Object.freeze({
+      status: this.#initialized ? ("ready" as const) : ("pending" as const),
+      error: null,
+    });
+  }
+
   adoptContinuation(next: SymbolAni): void {
     if (!(next instanceof SpineSymbolAni)) {
       throw new SymbolAnimationError(

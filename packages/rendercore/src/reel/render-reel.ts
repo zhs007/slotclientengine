@@ -1,4 +1,4 @@
-import { Container, Graphics } from "pixi.js";
+import { Container, Graphics, Sprite, Texture } from "pixi.js";
 import { assertValidDeltaSeconds } from "../symbol/ani.js";
 import { ReelError } from "./errors.js";
 import { createReelWindowSnapshot } from "./reel-window.js";
@@ -12,6 +12,7 @@ import type {
   ReelLayout,
   ReelSymbolKind,
   ReelSymbolRegistry,
+  ReelRollingValueVisual,
   RenderReelOptions,
   RenderReelContinuousSpinOptions,
   RenderReelPhase,
@@ -38,9 +39,16 @@ interface ReelSlot {
   readonly container: Container;
   readonly contentLayer: Container;
   readonly emptySymbolLayer: Container;
+  readonly rollingSprite: Sprite;
+  readonly rollingValueLayer: Container;
+  readonly rollingValueVisuals: Map<string, ReelRollingValueVisual>;
+  activeRollingValueKey: string | null;
+  rollingPresentationValue: number | null;
+  rollingValueTierIndex: number | null;
   code: number | null;
   kind: ReelSymbolKind | null;
   symbol: RenderSymbol | null;
+  renderPriority: number;
 }
 
 interface ActiveContinuousSpin {
@@ -48,6 +56,13 @@ interface ActiveContinuousSpin {
   readonly speedSymbolsPerSecond: number;
   readonly initialCodes: ReadonlyMap<number, number>;
   readonly initialPresentationValues: ReadonlyMap<number, number | null>;
+}
+
+interface PreparedLandingSlot {
+  readonly code: number;
+  readonly kind: ReelSymbolKind;
+  readonly presentationValue: number | null;
+  readonly occurrence: RenderReelVisibleOccurrence | null;
 }
 
 export class RenderReel extends Container {
@@ -79,6 +94,7 @@ export class RenderReel extends Container {
   #staticVisiblePresentationValues: readonly (number | null)[] | null = null;
   #targetVisiblePresentationValues: readonly (number | null)[] | null = null;
   #targetVisibleStates: readonly SymbolStateId[] | null = null;
+  #preparedLanding: Map<number, PreparedLandingSlot> | null = null;
   #landed = false;
 
   constructor(options: RenderReelOptions) {
@@ -145,10 +161,12 @@ export class RenderReel extends Container {
       targetVisibleStates,
       "targetVisibleSymbols",
     );
+    this.validateExplicitTargetPresentationValues(
+      targetVisibleSymbols,
+      targetVisiblePresentationValues,
+    );
 
-    this.#plan = plan;
-    this.#continuousSpin = null;
-    this.#spinStrip = createTemporaryReelStrip({
+    const spinStrip = createTemporaryReelStrip({
       reels: this.#reels,
       x: this.xIndex,
       layout: this.layout,
@@ -159,6 +177,12 @@ export class RenderReel extends Container {
       targetVisiblePresentationValues,
       presentationValueResolver: this.#presentationValueResolver,
     });
+    const preparedLanding = this.prepareLanding(plan, spinStrip);
+    this.discardPreparedLanding();
+    this.#plan = plan;
+    this.#continuousSpin = null;
+    this.#spinStrip = spinStrip;
+    this.#preparedLanding = preparedLanding;
     this.#staticVisibleSymbols = null;
     this.#staticVisiblePresentationValues = null;
     this.#targetVisibleSymbols = targetVisibleSymbols ?? null;
@@ -203,6 +227,7 @@ export class RenderReel extends Container {
     const currentScene = this.getVisibleScene();
     const currentValues = this.getVisiblePresentationValues();
     const baseY = Math.floor(currentY);
+    this.discardPreparedLanding();
     this.#continuousSpin = {
       direction: options.direction,
       speedSymbolsPerSecond,
@@ -268,13 +293,16 @@ export class RenderReel extends Container {
       targetVisibleStates,
       "targetVisibleSymbols",
     );
+    this.validateExplicitTargetPresentationValues(
+      targetVisibleSymbols,
+      targetVisiblePresentationValues,
+    );
     const currentScene = this.getVisibleScene();
     const currentValues = this.getVisiblePresentationValues();
     const startY = Math.floor(this.#currentY);
     const startLocalY = this.#currentY - startY;
     const settlePlan = Object.freeze({ ...plan, startY });
-    this.#plan = settlePlan;
-    this.#spinStrip = createTemporaryReelStrip({
+    const spinStrip = createTemporaryReelStrip({
       reels: this.#reels,
       x: this.xIndex,
       layout: this.layout,
@@ -285,6 +313,11 @@ export class RenderReel extends Container {
       targetVisiblePresentationValues,
       presentationValueResolver: this.#presentationValueResolver,
     });
+    const preparedLanding = this.prepareLanding(settlePlan, spinStrip);
+    this.discardPreparedLanding();
+    this.#plan = settlePlan;
+    this.#spinStrip = spinStrip;
+    this.#preparedLanding = preparedLanding;
     this.#continuousSpin = null;
     this.#targetVisibleSymbols = targetVisibleSymbols ?? null;
     this.#targetVisiblePresentationValues =
@@ -345,8 +378,7 @@ export class RenderReel extends Container {
           : this.#elapsedMs / this.#plan.durationMs;
 
       if (progress >= 1) {
-        this.land();
-        landedThisUpdate = true;
+        landedThisUpdate = this.land();
       } else {
         this.#phase =
           progress < 0.12
@@ -375,6 +407,7 @@ export class RenderReel extends Container {
   }
 
   resetToY(y: number): void {
+    this.discardPreparedLanding();
     this.#plan = null;
     this.#continuousSpin = null;
     this.#spinStrip = null;
@@ -412,6 +445,7 @@ export class RenderReel extends Container {
       this.layout.visibleRows,
       "presentationValues",
     );
+    this.discardPreparedLanding();
     this.#plan = null;
     this.#continuousSpin = null;
     this.#spinStrip = null;
@@ -482,6 +516,8 @@ export class RenderReel extends Container {
     slot.code = null;
     slot.kind = null;
     slot.symbol = null;
+    slot.renderPriority = 0;
+    this.syncSlotRenderOrder(slot);
     this.setStaticVisibleSlot(windowY, -1, null);
     return occurrence;
   }
@@ -559,6 +595,7 @@ export class RenderReel extends Container {
     slot.code = occurrence.code;
     slot.kind = occurrence.kind;
     slot.symbol = occurrence.symbol;
+    slot.renderPriority = occurrence.symbol.renderPriority;
     slot.contentLayer.addChild(occurrence.symbol);
     occurrence.symbol.position.set(0);
     occurrence.symbol.visible = true;
@@ -584,6 +621,7 @@ export class RenderReel extends Container {
       );
     slot.code = null;
     slot.kind = null;
+    slot.renderPriority = 0;
     this.setStaticVisibleSlot(windowY, -1, null);
   }
 
@@ -595,6 +633,7 @@ export class RenderReel extends Container {
       );
     slot.code = -1;
     slot.kind = "empty";
+    slot.renderPriority = 0;
     this.setStaticVisibleSlot(windowY, -1, null);
     this.syncSlotRenderOrder(slot);
   }
@@ -770,17 +809,29 @@ export class RenderReel extends Container {
 
   private createSlotSnapshot(slot: ReelSlot): RenderReelSlotSnapshot {
     const stateSnapshot = slot.symbol?.getStateSnapshot();
+    const isRolling = !slot.symbol && slot.kind === "textured";
     return Object.freeze({
       windowY: slot.windowY,
       code: slot.code ?? -1,
       kind: slot.kind ?? "empty",
+      mode: slot.symbol
+        ? "settled"
+        : slot.kind === "textured"
+          ? "rolling"
+          : "empty",
       symbol: slot.symbol,
+      rollingVisual: slot.rollingSprite,
       container: slot.container,
       emptySymbolLayer: slot.emptySymbolLayer,
-      requestedState: stateSnapshot?.requestedState ?? null,
-      resolvedState: stateSnapshot?.resolvedState ?? null,
+      renderPriority: slot.renderPriority,
+      rollingValueTierIndex: slot.rollingValueTierIndex,
+      requestedState:
+        stateSnapshot?.requestedState ?? (isRolling ? "spinBlur" : null),
+      resolvedState:
+        stateSnapshot?.resolvedState ?? (isRolling ? "spinBlur" : null),
       isOnce: stateSnapshot?.isOnce ?? false,
-      presentationValue: slot.symbol?.getPresentationValue() ?? null,
+      presentationValue:
+        slot.symbol?.getPresentationValue() ?? slot.rollingPresentationValue,
     });
   }
 
@@ -842,6 +893,14 @@ export class RenderReel extends Container {
       const container = new Container();
       const contentLayer = new Container();
       const emptySymbolLayer = new Container();
+      const rollingSprite = new Sprite(Texture.EMPTY);
+      const rollingValueLayer = new Container();
+      rollingSprite.anchor.set(0.5);
+      rollingSprite.visible = false;
+      rollingSprite.renderable = false;
+      rollingValueLayer.visible = false;
+      rollingValueLayer.renderable = false;
+      contentLayer.addChild(rollingSprite, rollingValueLayer);
       container.addChild(contentLayer, emptySymbolLayer);
       const renderOrder = this.#slotRenderOrderOffset + orderIndex;
       container.x = this.getSlotContainerX();
@@ -854,9 +913,16 @@ export class RenderReel extends Container {
         container,
         contentLayer,
         emptySymbolLayer,
+        rollingSprite,
+        rollingValueLayer,
+        rollingValueVisuals: new Map(),
+        activeRollingValueKey: null,
+        rollingPresentationValue: null,
+        rollingValueTierIndex: null,
         code: null,
         kind: null,
         symbol: null,
+        renderPriority: 0,
       });
       orderIndex += 1;
     }
@@ -881,15 +947,25 @@ export class RenderReel extends Container {
         snapshot.pixelOffsetY,
       );
       slot.container.visible = this.shouldShowSlot(slotData.windowY);
-      this.syncSlot(
-        slot,
-        slotData.code,
-        this.getPresentationValue(slotData.symbolY, slotData.code, y),
-      );
-      slot.symbol?.requestState(
-        state,
-        state === "spinBlur" ? "immediate" : "boundary",
-      );
+      const isVisibleStoppedSlot =
+        this.#phase === "stopped" &&
+        slotData.windowY >= 0 &&
+        slotData.windowY < this.layout.visibleRows;
+      if (isVisibleStoppedSlot) {
+        this.syncSettledSlot(
+          slot,
+          slotData.code,
+          this.getPresentationValue(slotData.symbolY, slotData.code, y),
+        );
+        slot.symbol?.requestState(state, "boundary");
+      } else {
+        this.syncRollingSlot(
+          slot,
+          slotData.code,
+          "spinBlur",
+          this.getPresentationValue(slotData.symbolY, slotData.code, y),
+        );
+      }
     }
   }
 
@@ -922,27 +998,62 @@ export class RenderReel extends Container {
     });
   }
 
-  private syncSlot(
+  private syncSettledSlot(
     slot: ReelSlot,
     code: number,
     presentationValue: number | null,
   ): void {
-    if (slot.code === code) {
+    slot.rollingSprite.visible = false;
+    slot.rollingSprite.renderable = false;
+    this.hideRollingValue(slot);
+    const prepared = this.#preparedLanding?.get(slot.windowY);
+    if (prepared) {
+      if (
+        prepared.code !== code ||
+        prepared.presentationValue !== presentationValue
+      ) {
+        throw new ReelError(
+          `Prepared landing at reel ${this.xIndex}, y ${slot.windowY} does not match the committed target.`,
+        );
+      }
+      const preparedSymbol = prepared.occurrence?.symbol ?? null;
+      if (
+        preparedSymbol &&
+        preparedSymbol.getPresentationValue() !== prepared.presentationValue
+      ) {
+        throw new ReelError(
+          `Prepared landing symbol at reel ${this.xIndex}, y ${slot.windowY} does not contain the committed presentation value before attachment.`,
+        );
+      }
+      this.#preparedLanding?.delete(slot.windowY);
+      this.releaseSlotSymbol(slot);
+      slot.emptySymbolLayer.removeChildren();
+      slot.emptySymbolLayer.position.set(0);
+      slot.emptySymbolLayer.visible = true;
+      slot.emptySymbolLayer.renderable = true;
+      slot.code = prepared.code;
+      slot.kind = prepared.kind;
+      slot.symbol = preparedSymbol;
+      if (slot.symbol) {
+        slot.contentLayer.addChild(slot.symbol);
+        slot.symbol.position.set(0);
+        slot.symbol.visible = true;
+        slot.symbol.renderable = true;
+        slot.renderPriority = slot.symbol.renderPriority;
+      } else {
+        slot.renderPriority = 0;
+      }
+      this.syncSlotRenderOrder(slot);
+      return;
+    }
+    if (slot.code === code && slot.symbol) {
       slot.symbol?.setPresentationValue(presentationValue);
+      slot.renderPriority = slot.symbol.renderPriority;
       this.syncSlotRenderOrder(slot);
       return;
     }
 
-    if (slot.symbol && slot.code !== null && slot.kind !== "empty") {
-      if (this.#symbolPool) {
-        this.#symbolPool.release(slot.code, slot.symbol);
-      } else {
-        slot.symbol.destroy({ children: true });
-      }
-    } else {
-      slot.symbol?.destroy({ children: true });
-    }
-    slot.contentLayer.removeChildren();
+    this.releaseSlotSymbol(slot);
     slot.emptySymbolLayer.removeChildren();
     slot.emptySymbolLayer.position.set(0);
     slot.emptySymbolLayer.visible = true;
@@ -951,25 +1062,173 @@ export class RenderReel extends Container {
     if (code === -1) {
       slot.kind = "empty";
       slot.symbol = null;
+      slot.renderPriority = 0;
       this.syncSlotRenderOrder(slot);
       return;
     }
     const entry = this.#registry.getEntryByCode(code);
     slot.kind = entry.kind;
-    slot.symbol =
+    const symbol =
       entry.kind === "empty" ? null : this.acquireTexturedSymbol(code);
-    if (slot.symbol) {
-      slot.contentLayer.addChild(slot.symbol);
-      slot.symbol.init();
-      slot.symbol.setPresentationValue(presentationValue);
+    if (symbol) {
+      try {
+        symbol.init();
+        symbol.setPresentationValue(presentationValue);
+        if (symbol.getPresentationValue() !== presentationValue) {
+          throw new ReelError(
+            `Settled symbol at reel ${this.xIndex}, y ${slot.windowY} does not contain its presentation value before attachment.`,
+          );
+        }
+      } catch (error) {
+        if (this.#symbolPool) {
+          this.#symbolPool.release(code, symbol);
+        } else {
+          symbol.destroy({ children: true });
+        }
+        throw error;
+      }
+      slot.symbol = symbol;
+      slot.contentLayer.addChild(symbol);
+      slot.renderPriority = symbol.renderPriority;
+    } else {
+      slot.symbol = null;
+      slot.renderPriority = 0;
     }
     this.syncSlotRenderOrder(slot);
   }
 
+  private syncRollingSlot(
+    slot: ReelSlot,
+    code: number,
+    state: SymbolStateId,
+    presentationValue: number | null,
+  ): void {
+    const wasAlreadyRolling =
+      !slot.symbol &&
+      slot.code === code &&
+      (code === -1 || slot.kind !== null) &&
+      (code === -1 || slot.kind === "empty" || slot.rollingSprite.visible);
+    if (wasAlreadyRolling) {
+      this.syncRollingValue(slot, code, presentationValue);
+      this.syncSlotRenderOrder(slot);
+      return;
+    }
+    this.releaseSlotSymbol(slot);
+    slot.emptySymbolLayer.removeChildren();
+    slot.emptySymbolLayer.position.set(0);
+    slot.emptySymbolLayer.visible = true;
+    slot.emptySymbolLayer.renderable = true;
+    slot.code = code;
+    if (code === -1) {
+      slot.kind = "empty";
+      slot.renderPriority = 0;
+      slot.rollingSprite.visible = false;
+      slot.rollingSprite.renderable = false;
+      this.hideRollingValue(slot);
+      this.syncSlotRenderOrder(slot);
+      return;
+    }
+
+    const entry = this.#registry.getEntryByCode(code);
+    slot.kind = entry.kind;
+    const visual = this.#registry.getRollingVisualByCode(code, state);
+    if (!visual) {
+      slot.renderPriority = 0;
+      slot.rollingSprite.visible = false;
+      slot.rollingSprite.renderable = false;
+      this.hideRollingValue(slot);
+      this.syncSlotRenderOrder(slot);
+      return;
+    }
+    slot.rollingSprite.texture = visual.texture;
+    slot.rollingSprite.scale.set(visual.scale);
+    slot.rollingSprite.visible = true;
+    slot.rollingSprite.renderable = true;
+    slot.renderPriority = visual.renderPriority;
+    this.syncRollingValue(slot, code, presentationValue);
+    this.syncSlotRenderOrder(slot);
+  }
+
+  private syncRollingValue(
+    slot: ReelSlot,
+    code: number,
+    value: number | null,
+  ): void {
+    if (value === null) {
+      if (this.#registry.requiresPresentationValueByCode(code)) {
+        throw new ReelError(
+          `Rolling symbol code ${code} requires a game-configured presentation value.`,
+        );
+      }
+      this.hideRollingValue(slot);
+      return;
+    }
+    const tierIndex = this.#registry.resolveRollingValueTierByCode(code, value);
+    if (tierIndex === null) {
+      this.hideRollingValue(slot);
+      return;
+    }
+    const key = `${code}:${tierIndex}`;
+    let visual = slot.rollingValueVisuals.get(key);
+    if (!visual) {
+      const created = this.#registry.createRollingValueVisualByCode(
+        code,
+        value,
+      );
+      if (!created) {
+        this.hideRollingValue(slot);
+        return;
+      }
+      visual = created;
+      if (visual.tierIndex !== tierIndex) {
+        visual.destroy();
+        throw new ReelError(
+          `Rolling value visual for code ${code} returned tier ${visual.tierIndex}, expected ${tierIndex}.`,
+        );
+      }
+      slot.rollingValueVisuals.set(key, visual);
+      slot.rollingValueLayer.addChild(visual.container);
+    }
+    visual.setValue(value);
+    for (const [candidateKey, candidate] of slot.rollingValueVisuals) {
+      const active = candidateKey === key;
+      candidate.container.visible = active;
+      candidate.container.renderable = active;
+    }
+    slot.activeRollingValueKey = key;
+    slot.rollingPresentationValue = value;
+    slot.rollingValueTierIndex = tierIndex;
+    slot.rollingValueLayer.visible = true;
+    slot.rollingValueLayer.renderable = true;
+  }
+
+  private hideRollingValue(slot: ReelSlot): void {
+    slot.activeRollingValueKey = null;
+    slot.rollingPresentationValue = null;
+    slot.rollingValueTierIndex = null;
+    slot.rollingValueLayer.visible = false;
+    slot.rollingValueLayer.renderable = false;
+    for (const visual of slot.rollingValueVisuals.values()) {
+      visual.container.visible = false;
+      visual.container.renderable = false;
+    }
+  }
+
+  private releaseSlotSymbol(slot: ReelSlot): void {
+    const symbol = slot.symbol;
+    if (!symbol) return;
+    symbol.parent?.removeChild(symbol);
+    if (slot.code !== null && slot.kind === "textured" && this.#symbolPool) {
+      this.#symbolPool.release(slot.code, symbol);
+    } else {
+      symbol.destroy({ children: true });
+    }
+    slot.symbol = null;
+  }
+
   private syncSlotRenderOrder(slot: ReelSlot): void {
-    const renderPriority = slot.symbol?.renderPriority ?? 0;
     slot.container.zIndex =
-      renderPriority * this.#slotRenderOrderStride + slot.renderOrder;
+      slot.renderPriority * this.#slotRenderOrderStride + slot.renderOrder;
   }
 
   private acquireTexturedSymbol(code: number): RenderSymbol {
@@ -990,10 +1249,86 @@ export class RenderReel extends Container {
     }
   }
 
-  private land(): void {
+  private prepareLanding(
+    plan: ReelAxisSpinPlan,
+    spinStrip: TemporaryReelStrip,
+  ): Map<number, PreparedLandingSlot> {
+    const prepared = new Map<number, PreparedLandingSlot>();
+    const targetBaseY =
+      plan.direction === "forward" ? plan.travelSymbols : -plan.travelSymbols;
+    try {
+      for (let windowY = 0; windowY < this.layout.visibleRows; windowY += 1) {
+        const symbolY = targetBaseY + windowY;
+        const code = spinStrip.get(symbolY);
+        const presentationValue = spinStrip.getPresentationValue(symbolY);
+        if (code === -1) {
+          prepared.set(
+            windowY,
+            Object.freeze({
+              code,
+              kind: "empty" as const,
+              presentationValue: null,
+              occurrence: null,
+            }),
+          );
+          continue;
+        }
+        const entry = this.#registry.getEntryByCode(code);
+        const occurrence =
+          entry.kind === "textured"
+            ? this.createDetachedOccurrence(code, presentationValue)
+            : null;
+        prepared.set(
+          windowY,
+          Object.freeze({
+            code,
+            kind: entry.kind,
+            presentationValue,
+            occurrence,
+          }),
+        );
+      }
+      return prepared;
+    } catch (error) {
+      for (const entry of prepared.values()) {
+        if (entry.occurrence) this.releaseDetachedOccurrence(entry.occurrence);
+      }
+      throw error;
+    }
+  }
+
+  private discardPreparedLanding(releaseToPool = true): void {
+    const prepared = this.#preparedLanding;
+    this.#preparedLanding = null;
+    if (!prepared) return;
+    for (const entry of prepared.values()) {
+      if (!entry.occurrence) continue;
+      if (releaseToPool) {
+        this.releaseDetachedOccurrence(entry.occurrence);
+      } else {
+        entry.occurrence.symbol.destroy({ children: true });
+      }
+    }
+  }
+
+  private land(): boolean {
     const plan = this.#plan;
     if (!plan) {
-      return;
+      return false;
+    }
+    const readiness = this.getPreparedLandingReadiness();
+    if (readiness.status === "failed") {
+      throw readiness.error;
+    }
+    if (readiness.status === "pending") {
+      this.#elapsedMs = plan.durationMs;
+      this.#phase = "settling";
+      this.#spinLocalY =
+        plan.direction === "forward" ? plan.travelSymbols : -plan.travelSymbols;
+      this.y = 0;
+      this.syncClippingForPhase();
+      this.renderAtY(this.#spinLocalY, "spinBlur");
+      return false;
     }
 
     this.#elapsedMs = plan.durationMs;
@@ -1015,9 +1350,41 @@ export class RenderReel extends Container {
     this.y = 0;
     this.syncClippingForPhase();
     this.renderAtY(plan.finalY, "normal");
+    this.discardPreparedLanding();
     targetVisibleStates?.forEach((state, y) =>
       this.requestVisibleSymbolState(y, state, "immediate"),
     );
+    return true;
+  }
+
+  private getPreparedLandingReadiness(): Readonly<{
+    status: "ready" | "pending" | "failed";
+    error: unknown;
+  }> {
+    for (const entry of this.#preparedLanding?.values() ?? []) {
+      const readiness = entry.occurrence?.symbol.getPresentationReadiness();
+      if (readiness?.status === "failed") return readiness;
+      if (readiness?.status === "pending") return readiness;
+    }
+    return Object.freeze({ status: "ready" as const, error: null });
+  }
+
+  private validateExplicitTargetPresentationValues(
+    symbols: readonly number[] | undefined,
+    values: readonly (number | null)[] | undefined,
+  ): void {
+    if (!symbols) return;
+    symbols.forEach((code, windowY) => {
+      if (
+        code !== -1 &&
+        this.#registry.requiresPresentationValueByCode(code) &&
+        values?.[windowY] == null
+      ) {
+        throw new ReelError(
+          `Target symbol code ${code} at reel ${this.xIndex}, y ${windowY} requires an explicit final presentation value.`,
+        );
+      }
+    });
   }
 
   private calculateSpinLocalY(progress: number): number {
@@ -1059,6 +1426,15 @@ export class RenderReel extends Container {
     for (const slot of this.#slots) {
       slot.container.mask = enabled ? this.#clipMask : null;
     }
+  }
+
+  override destroy(options?: Parameters<Container["destroy"]>[0]): void {
+    this.discardPreparedLanding(false);
+    for (const slot of this.#slots) {
+      for (const visual of slot.rollingValueVisuals.values()) visual.destroy();
+      slot.rollingValueVisuals.clear();
+    }
+    super.destroy(options);
   }
 
   private getSlotContainerX(): number {

@@ -9,6 +9,38 @@ resource，不要求内层第二份 map。无 map 的合法 legacy direct path �
 
 `rendercore` 是 slot 前端渲染核心库。它基于 `pixi.js` v8、复用 `@slotclientengine/pixiani` 的基础显示对象生命周期，并复用 `@slotclientengine/logiccore` 的 game config/paytable 契约。`apps/symbolsviewer` 和 `apps/reelsviewer` 是调试 app，业务展示逻辑不放进核心库。
 
+## Reel rolling 与 settled occurrence
+
+`RenderReel` 的每个 buffer slot 固定拥有一个轻量 rolling Sprite。reel 处于
+`starting | spinning | settling` 时只替换该 Sprite 的 registry texture、scale 和
+render priority；不会为滚动途中经过的 code 创建 `RenderSymbol`，snapshot 中此时
+`mode="rolling"`、`symbol=null`。Sprite 只是内部滚动视觉，不是可操作的
+`SymbolRender`。
+
+带 `valuePresentation` 的 rolling symbol 还会消费游戏注入的
+`presentationValueResolver`。每个 slot 按 `symbol code + value tier` 有界缓存轻量
+image-string view，同 tier 只更新文字，跨 tier 切换对应 manifest resource；不会创建 tier
+Spine。`createWeightedGridCellPresentationValueResolver()` 默认按 cell 保留最近 32 个
+occurrence，保证当前滚动值稳定且不会随 continuous `symbolY` 永久增长。游戏负责选择权重表和
+随机源；RenderCore 不猜业务值。
+
+有明确 target 的 start/settle 会在离屏位置为最终可见非空 occurrence 各准备一个完整
+`RenderSymbol`。相邻相同 code 仍是独立 occurrence，并分别保存 presentation value。
+一旦显式传入 target scene，任何带 `valuePresentation` 的 target 都必须同时传入非 null 的
+target value；最终 rolling frame 和 settled occurrence 都只使用该 explicit value，不允许回退
+随机 resolver。
+完整 `RenderSymbol` 必须在离屏状态下先写入该最终 value，并在挂到可见树前再次核对；不允许
+先显示 rolling/random value，再修改为最终 value。
+normal official Spine、VNI 或 value presentation 尚未 ready 时，reel 保持最终
+spinBlur frame 和 clip；全部 ready 后 landing 才挂载 prepared occurrence 并对外发布 stopped
+状态。准备失败会在改变原 stopped 画面前回滚；replacement、reset 和 destroy 会释放未提交
+owner。
+
+stopped 阶段只有实际可见行持有完整 `RenderSymbol`，上下 buffer 只保留隐藏的轻量 view，
+所以 idle update 不会推进隐藏动画。既有 symbol pool 仍只服务 settled occurrence；rolling
+Sprite 不进入 pool。`RenderReelSlotSnapshot` 的 `mode`、`rollingVisual` 和
+`renderPriority` 用于底层诊断及 grid dimming/order，同一 rollingVisual identity 会跨帧复用。
+
 RenderCore相关游戏API按“渲染对象与原子动作 / 安全组合 / 玩法模板”分为三层；第三层默认属于gameframeworks或等价模板模块，
 不是RenderCore core primitive。完整职责、依赖方向和禁止边界见
 [`docs/rendercore-three-layer-api-architecture.md`](../../docs/rendercore-three-layer-api-architecture.md)。
