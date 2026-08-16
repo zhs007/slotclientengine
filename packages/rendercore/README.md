@@ -178,7 +178,7 @@ renderer 支持原子的 `setText()`、`setAnchor()`、logical/visual snapshot �
 
 ## Scene Layout API
 
-`@slotclientengine/rendercore/scene-layout` 提供严格且向后兼容的 scene-layout v1 parser、传递精确资源闭包、module/CDN package loader、game002/game003 对应的纯 frame policy 与 focus viewport 组合、image/image-string/official Spine 4.3 stateful node runtime，以及可选 symbols package 绑定的 standard/grid-cell reel 组合 runtime。游戏 app 只加载 package、提交 frame size、可见 scene 与本地视觉 phase，并显式请求业务状态；art、focus、node/reel order、行列、cell/gap、placement、symbol catalog 与播放状态都从 manifest/package 派生。
+`@slotclientengine/rendercore/scene-layout` 提供严格且向后兼容的 scene-layout v1/v2/v3 parser、传递精确资源闭包、module/CDN package loader、game002/game003 对应的纯 frame policy 与 focus viewport 组合、image/image-string/official Spine 4.3 stateful node runtime，以及可选 symbols package 绑定的 standard/grid-cell reel 组合 runtime。package resource会把合法v1/v2直接规范化为v3并生成确定性的`runtimeAllocation`；原生v3必须完整且与typed引用严格一致。为兼容已有宿主，`resource.manifest`继续暴露initial-mode的v1视图，package runtime只执行strict `resource.runtimeManifest` v3。游戏 app 只加载 package、提交 frame size、可见 scene 与本地视觉 phase，并显式请求业务状态；art、focus、node/reel order、行列、cell/gap、placement、symbol catalog 与播放状态都从 manifest/package 派生。
 
 第一层统一使用`getSymbolArea()`、`getRenderLayer()`、`getRenderObject()`与`createRenderObject()`。authored object按image/Spine/VNI/image-string返回borrowed typed capability，可见性与mode/variant做AND且不开放position/destroy；program object从exact `runtimeResources`异步创建并由caller拥有。`getLayoutPoint/getLayoutAnchor/resolveLayoutAnchor`直接读写configured authored space，center-origin游戏无需复制Pixi左上角偏移。完整ref grammar、ownership、SymbolGroup几何、坐标映射与示例见[`docs/rendercore-layer-symbol-area-render-object-coordinate-guide.md`](../../docs/rendercore-layer-symbol-area-render-object-coordinate-guide.md)。
 
@@ -234,9 +234,11 @@ scene/operation flow 完成只结束编排调度，不结束 preview renderer �
 该 facade 不解析 server round 或 component，也不创建 DOM 配置 UI；runtime owner 负责
 Pixi Application、package resource 与所有 player 的 destroy。
 
-低层 `createSceneLayoutResource()` / `createSceneLayoutRuntime()` 保持用于 layout-only 和自定义 attachment；自包含 production 包使用 `createSceneLayoutPackageResource()` / `loadSceneLayoutPackageFromUrl()` 与 `createSceneLayoutPackageRuntime()`。URL loader 可接收 loading 阶段已取得的 `manifestBytes`，随后仍只按 manifest 与 assets map 的实际引用获取 package 文件。未声明 `symbolPackage` 的旧 v1 manifest 行为不变，但组合 reel 初始化与 reset API 会显式不可用。
+低层 `createSceneLayoutResource()` / `createSceneLayoutRuntime()` 保持用于 layout-only 和自定义 attachment；自包含 production 包使用 `createSceneLayoutPackageResource()` / `loadSceneLayoutPackageFromUrl()` 与 `createSceneLayoutPackageRuntime()`。URL loader 可接收 loading 阶段已取得的 `manifestBytes`，随后仍只按 manifest 与 assets map 的实际引用获取 package 文件。旧v1/v2无需Editor重导；缺Symbols binding时组合reel初始化与reset API仍显式不可用。
 
 完整 package runtime 可以 deferred prepare main reel：首次合法 scene commit 前 reel 不可见，scene/value/spin API 会严格失败。业务自定义 grid-cell controller 可通过 ownership-transfer factory 注入，package 仍拥有唯一 reel、manifest placement/order 和最终 destroy；cascade 等借用 overlay 通过 typed attach disposer 接入，保持在 transition/popup 下方。
+
+多Symbols binding package会在runtime init按allocation准备稳定reel entry。首次进入尚无scene的entry必须提交完整`reels.main`；之后离开和返回复用同一reel、catalog、player与settled scene，dormant entry不update。`recreateReel: true`是唯一强制替换入口，旧entry只在candidate成功commit后销毁；普通transition player仍按edge request创建和释放，Popup继续按exact id保持package owner。
 
 `getInitialSceneLayoutSymbolPackageResource(resource)` 按 layout 的 legacy binding 或
 `gameModes.initialMode` 返回初始稳定模式实际选择的 Symbols package resource。游戏需要读取同一

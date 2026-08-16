@@ -82,7 +82,7 @@
 
 ## Layout Editor dependency
 
-- Gamelayout Editor只编辑和导出Scene Layout latest v2；打开合法可编辑v1时先调用rendercore共享upgrader，再执行Editor node-id migration并原子复验。旧mode id、initial、edge和dependency保持，不自动插入Splash。
+- Gamelayout Editor只编辑和导出Scene Layout latest v3；打开合法v1/v2时先调用RenderCore共享upgrader生成默认`runtimeAllocation`，再执行Editor node-id migration并原子复验。每次导出都由RenderCore从typed draft重建并strict复验allocation；旧mode id、initial、edge和dependency保持，不自动插入Splash。
 - 新项目显式创建Splash initial与BaseGame；每个内置或后续新增mode都必须由用户从空下拉框选择单背景或横竖双背景类型，不继承当前mode或首项。Splash primary click只引用显式Splash→BaseGame transition。
 - mode的主转轮开关属于v2 draft：新Splash关闭、BaseGame和普通新增mode开启；关闭时保留Editor内可恢复的placement草稿但latest export不写placement，已有Symbols binding必须先显式解除。
 - Gamelayout Editor新建/复制/重命名/导出的scene node id只允许lowercase alphanumeric+kebab并禁止`layout|reel|transition|popup`保留名。旧Layout ZIP先按rendercore v1兼容parser读取，再以确定性rename map原子规范化点号/下划线/保留名和collision，结构化改写adaptation background、mode background与nodeStates key，复验后提交并向用户显示完整old→new；不得覆盖或合并node。production parser继续兼容未重导旧包。

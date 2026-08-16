@@ -41,6 +41,7 @@ import {
   parseSceneLayoutManifestDocument,
 } from "./manifest.js";
 import { materializeInitialSceneLayoutManifest } from "./manifest-v2.js";
+import { upgradeSceneLayoutManifestToLatest } from "./manifest-v3.js";
 import { createSceneLayoutResource } from "./resource.js";
 import type {
   SceneLayoutManifest,
@@ -56,14 +57,19 @@ const ROOT_MANIFEST = "layout.manifest.json";
 export function getInitialSceneLayoutSymbolPackageResource(
   resource: SceneLayoutPackageResource,
 ): SymbolPackageResource {
-  if (resource.manifest.symbolPackage) {
+  const manifest =
+    resource.runtimeManifest ??
+    (resource.manifest.version
+      ? upgradeSceneLayoutManifestToLatest(resource.manifest)
+      : (resource.manifest as never));
+  if (manifest.symbolPackage) {
     if (!resource.symbolPackage)
       throw new SceneLayoutError(
         "Scene layout legacy symbol package resource is unavailable.",
       );
     return resource.symbolPackage;
   }
-  const modes = resource.manifest.gameModes;
+  const modes = manifest.gameModes;
   const initialMode = modes?.modes.find(
     (mode) => mode.id === modes.initialMode,
   );
@@ -278,7 +284,8 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
   const sourceManifestValue =
     options.manifest ??
     parseJsonBytes(requireBytes(options.files, ROOT_MANIFEST), ROOT_MANIFEST);
-  const manifest = parseSceneLayoutManifestDocument(sourceManifestValue);
+  const sourceDocument = parseSceneLayoutManifestDocument(sourceManifestValue);
+  const manifest = upgradeSceneLayoutManifestToLatest(sourceDocument);
   const files = options.files;
   if (!options.lazyRuntimeResources)
     collectSceneLayoutPackagePaths({ manifest, files });
@@ -562,16 +569,16 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
       }
     }
 
-    const layoutDocument = options.lazyRuntimeResources
-      ? parseSceneLayoutManifestDocument({
-          ...manifest,
+    const materializedLayout =
+      sourceDocument.version === 1
+        ? sourceDocument
+        : materializeInitialSceneLayoutManifest(manifest);
+    const layoutManifest = options.lazyRuntimeResources
+      ? parseSceneLayoutManifest({
+          ...materializedLayout,
           runtimeResources: undefined,
         })
-      : manifest;
-    const layoutManifest =
-      layoutDocument.version === 2
-        ? materializeInitialSceneLayoutManifest(layoutDocument)
-        : layoutDocument;
+      : materializedLayout;
     const layout = createSceneLayoutResource({
       manifest: layoutManifest,
       imageModules,
@@ -591,7 +598,8 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
     const lazyImageStrings: ImageStringResource[] = [];
     let destroyed = false;
     return Object.freeze({
-      manifest,
+      manifest: layoutManifest,
+      runtimeManifest: manifest,
       layout,
       imageStrings: Object.freeze({ ...imageStrings }),
       symbolPackage,

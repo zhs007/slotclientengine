@@ -6,6 +6,7 @@ import type {
 } from "../popup/index.js";
 import type { RenderViewportSize } from "../viewport/index.js";
 import { SceneLayoutError } from "./errors.js";
+import { upgradeSceneLayoutManifestToLatest } from "./manifest-v3.js";
 import { createSceneLayoutPackageRuntime } from "./package-runtime.js";
 import type {
   SceneLayoutGameModeSnapshot,
@@ -339,7 +340,12 @@ function resolveInitialMode(
   resource: SceneLayoutPackageResource,
   requested: string | undefined,
 ): SceneLayoutGameMode | null {
-  const gameModes = resource.manifest.gameModes;
+  const gameModes = (
+    resource.runtimeManifest ??
+    (resource.manifest.version
+      ? upgradeSceneLayoutManifestToLatest(resource.manifest)
+      : (resource.manifest as never))
+  ).gameModes;
   if (!gameModes) {
     if (requested !== undefined) {
       throw new SceneLayoutError(

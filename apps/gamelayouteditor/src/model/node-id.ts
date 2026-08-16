@@ -1,8 +1,7 @@
 import {
-  parseSceneLayoutManifestDocument,
   upgradeSceneLayoutManifestToLatest,
   type SceneLayoutManifest,
-  type SceneLayoutManifestV2,
+  type SceneLayoutManifestLatest,
 } from "@slotclientengine/rendercore/scene-layout";
 
 export const RESERVED_RENDER_LAYER_NODE_IDS = Object.freeze([
@@ -28,7 +27,7 @@ export function assertCanonicalEditorNodeId(nodeId: string): void {
 }
 
 export function migrateSceneLayoutNodeIds(manifestValue: SceneLayoutManifest): {
-  readonly manifest: SceneLayoutManifestV2;
+  readonly manifest: SceneLayoutManifestLatest;
   readonly renames: readonly EditorNodeIdRename[];
 } {
   const manifest = upgradeSceneLayoutManifestToLatest(manifestValue);
@@ -61,10 +60,9 @@ export function migrateSceneLayoutNodeIds(manifestValue: SceneLayoutManifest): {
     return Object.freeze({ manifest, renames: Object.freeze([]) });
 
   const rename = (id: string): string => renameById.get(id) ?? id;
-  const draft = structuredClone(manifest) as SceneLayoutManifestV2;
-  (draft as { nodes: SceneLayoutManifestV2["nodes"] }).nodes = draft.nodes.map(
-    (node) => ({ ...node, id: rename(node.id) }),
-  );
+  const draft = structuredClone(manifest) as SceneLayoutManifestLatest;
+  (draft as { nodes: SceneLayoutManifestLatest["nodes"] }).nodes =
+    draft.nodes.map((node) => ({ ...node, id: rename(node.id) }));
   for (const mode of draft.gameModes.modes) {
     for (const [variant, id] of Object.entries(mode.backgroundNodes))
       if (id)
@@ -77,9 +75,11 @@ export function migrateSceneLayoutNodeIds(manifestValue: SceneLayoutManifest): {
         ]),
       );
   }
-  const migrated = parseSceneLayoutManifestDocument(
-    draft,
-  ) as SceneLayoutManifestV2;
+  const { runtimeAllocation: _runtimeAllocation, ...v2Fields } = draft;
+  const migrated = upgradeSceneLayoutManifestToLatest({
+    ...v2Fields,
+    version: 2,
+  });
   return Object.freeze({
     manifest: migrated,
     renames: Object.freeze(

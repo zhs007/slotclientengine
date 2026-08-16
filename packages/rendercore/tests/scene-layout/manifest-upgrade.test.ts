@@ -7,10 +7,10 @@ import {
 } from "../../src/scene-layout/index.js";
 import { game002LayoutFixture } from "./fixtures.js";
 
-describe("scene layout manifest v2", () => {
+describe("scene layout manifest latest upgrade", () => {
   it("upgrades v1 without inventing Splash and copies root geometry to each mode", () => {
     const latest = upgradeSceneLayoutManifestToLatest(game002LayoutFixture);
-    expect(latest.version).toBe(2);
+    expect(latest.version).toBe(3);
     expect(latest.gameModes.initialMode).toBe("BaseGame");
     expect(latest.gameModes.modes.map((mode) => mode.id)).toEqual(["BaseGame"]);
     expect(latest.gameModes.modes[0]).toMatchObject({
@@ -21,6 +21,18 @@ describe("scene layout manifest v2", () => {
       reelEnabled: true,
       backgroundNodes: { default: "bg" },
       reelPlacements: { main: { default: { x: 640, y: 337 } } },
+    });
+    expect(latest.runtimeAllocation).toEqual({
+      version: 1,
+      package: { nodes: ["bg"], symbolPackages: [], popups: [] },
+      onDemand: { transitions: [], runtimeResources: [] },
+      modes: {
+        BaseGame: {
+          variants: { default: { activeNodes: ["bg"] } },
+          symbolPackage: null,
+          awardCelebrationPopup: null,
+        },
+      },
     });
     expect(upgradeSceneLayoutManifestToLatest(latest)).toEqual(latest);
   });

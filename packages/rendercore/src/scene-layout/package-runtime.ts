@@ -45,6 +45,7 @@ import {
   parseSceneLayoutManifestDocument,
 } from "./manifest.js";
 import { materializeSceneLayoutManifestForMode } from "./manifest-v2.js";
+import { upgradeSceneLayoutManifestToLatest } from "./manifest-v3.js";
 import { transitionResourceKey } from "./resource.js";
 import { createSceneLayoutRuntime } from "./runtime.js";
 import {
@@ -91,10 +92,19 @@ import { resolveSceneLayoutRenderLayerRef } from "./render-layer-ref.js";
 
 type ReelPresentation = RenderReelSet | RenderGridCellReelSet;
 
-interface PreparedModeTarget {
+interface ResolvedSymbolBinding {
+  readonly id: string;
+  readonly binding: SceneLayoutSymbolPackageBinding;
+  readonly resource: SymbolPackageResource;
+}
+
+interface ReelEntry extends ResolvedSymbolBinding {
   readonly reel: ReelPresentation;
   readonly catalog: SymbolCatalogModel;
+  sceneCommitted: boolean;
 }
+
+type PreparedModeTarget = ReelEntry;
 
 interface PreparedModeTransitionBase {
   spec: SceneLayoutGameModeTransition;
@@ -255,6 +265,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #videoBlackoutRoot = new Container();
   readonly #videoBlackout = new Graphics();
   #reel: ReelPresentation | null = null;
+  readonly #reelEntries = new Map<string, ReelEntry>();
   #mainReelSceneCommitted = false;
   readonly #mainReelOverlays = new Set<Container>();
   #catalog: SymbolCatalogModel | null = null;
@@ -343,7 +354,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   ) {
     this.#resource = resource;
     this.#presentationOnly = presentationOnly;
-    this.#document = resource.manifest;
+    this.#document =
+      resource.runtimeManifest ??
+      (resource.manifest.version
+        ? upgradeSceneLayoutManifestToLatest(resource.manifest)
+        : (resource.manifest as never));
     this.#manifest =
       resource.layout.manifest ?? (resource.manifest as SceneLayoutManifestV1);
     this.#areaSpinFunction = areaSpinFunction;
@@ -442,28 +457,54 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         );
 
       const layoutPromise = this.#layout.init();
-      const reelPromise = Promise.resolve().then(async () => {
-        if (!activeBinding || this.#presentationOnly) return;
-        const symbolPackage = activeBinding.resource;
-        if (this.#createGridCellReel) {
-          if (activeBinding.binding.renderMode !== "grid-cell")
-            throw new SceneLayoutError(
-              "Injected grid-cell reel requires a grid-cell symbol binding.",
-            );
-          this.#reel = this.#createGridCellReel();
-          this.#catalog = null;
-          return;
-        }
-        this.#catalog = await symbolPackage.createCatalog();
-        this.assertAlive();
-        this.#reel = this.createReelPresentation(
-          symbolPackage,
-          this.#catalog,
-          activeBinding.binding,
+      const allBindings = this.resolveAllSymbolBindings();
+      if (this.#createGridCellReel && allBindings.length > 1)
+        throw new SceneLayoutError(
+          "Injected grid-cell reel factory cannot own multiple symbol package bindings.",
         );
-        await this.prepareReelPresentation(this.#reel);
-        this.assertAlive();
-      });
+      const reelPromises = this.#presentationOnly
+        ? []
+        : this.#createGridCellReel
+          ? [
+              Promise.resolve().then(async () => {
+                if (!activeBinding) return;
+                if (activeBinding.binding.renderMode !== "grid-cell")
+                  throw new SceneLayoutError(
+                    "Injected grid-cell reel requires a grid-cell symbol binding.",
+                  );
+                this.#reel = this.#createGridCellReel!();
+                this.#catalog = null;
+                await this.prepareReelPresentation(this.#reel);
+                this.assertAlive();
+              }),
+            ]
+          : allBindings.map((binding) =>
+              Promise.resolve().then(async () => {
+                const catalog = await binding.resource.createCatalog();
+                this.assertAlive();
+                const reel = this.createReelPresentation(
+                  binding.resource,
+                  catalog,
+                  binding.binding,
+                );
+                const entry: ReelEntry = {
+                  ...binding,
+                  reel,
+                  catalog,
+                  sceneCommitted: false,
+                };
+                this.#reelEntries.set(binding.id, entry);
+                reel.visible = false;
+                try {
+                  await this.prepareReelPresentation(reel);
+                  this.assertAlive();
+                } catch (error) {
+                  this.#reelEntries.delete(binding.id);
+                  reel.destroy({ children: true });
+                  throw error;
+                }
+              }),
+            );
       const popupEntries = Object.entries(this.#resource.popupPackages).map(
         ([id, resource]) => {
           const popup =
@@ -490,20 +531,22 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
 
       await settleAllInOrder([
         layoutPromise,
-        reelPromise,
+        ...reelPromises,
         ...popupEntries.map((entry) => entry.initPromise),
       ]);
       this.assertAlive();
-      if (this.#document.version === 2) this.commitModeVisibility(initialMode);
       if (activeBinding && !this.#presentationOnly) {
         const initial = options.reels?.main;
         const symbolPackage = activeBinding.resource;
-        const reel = this.#reel;
+        const entry = this.#reelEntries.get(activeBinding.id);
+        const reel = this.#createGridCellReel ? this.#reel : entry?.reel;
         if (!reel)
           throw new SceneLayoutError(
             "Scene layout active reel preparation completed without a reel.",
           );
         this.attachReel(reel);
+        this.#reel = reel;
+        this.#catalog = entry?.catalog ?? null;
         if (initial) {
           this.applyReelScene(
             reel,
@@ -512,6 +555,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
             initial,
           );
           this.#mainReelSceneCommitted = true;
+          if (entry) entry.sceneCommitted = true;
         } else {
           reel.visible = false;
         }
@@ -653,11 +697,15 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       throw new SceneLayoutError(
         "Scene layout geometry cannot change during an active transition or prelude.",
       );
-    const document = parseSceneLayoutManifestDocument(manifestValue);
-    const manifest = materializeSceneLayoutManifestForMode(
-      document,
-      this.#stableMode ?? undefined,
-    );
+    const sourceDocument = parseSceneLayoutManifestDocument(manifestValue);
+    const document = upgradeSceneLayoutManifestToLatest(sourceDocument);
+    const manifest =
+      sourceDocument.version === 1
+        ? sourceDocument
+        : materializeSceneLayoutManifestForMode(
+            document,
+            this.#stableMode ?? undefined,
+          );
     assertSceneLayoutGeometryCompatible(this.#manifest, manifest);
     const prepared = this.#preparedTransition;
     const nextPreparedSpec = prepared
@@ -1715,10 +1763,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       throw new SceneLayoutError(
         "Authoring modes sharing a symbol package must not receive reels.main input.",
       );
-    if (bindingChanged && targetBinding && !targetInput)
-      throw new SceneLayoutError(
-        `Scene layout game mode "${target.id}" requires target reels.main input.`,
-      );
     if (!targetBinding && targetInput)
       throw new SceneLayoutError(
         `Scene layout game mode "${target.id}" has no symbol package and must not receive reels.main input.`,
@@ -1726,39 +1770,18 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#modeRequestInProgress = true;
     let prepared: PreparedModeTarget | null = null;
     try {
-      if (bindingChanged && targetBinding) {
-        const catalog = await targetBinding.resource.createCatalog();
-        this.assertReady();
-        const reel = this.createReelPresentation(
-          targetBinding.resource,
-          catalog,
-          targetBinding.binding,
+      if (bindingChanged && targetBinding)
+        prepared = await this.prepareTargetReelEntry(
+          targetBinding,
+          targetInput,
+          false,
         );
-        try {
-          await this.prepareReelPresentation(reel);
-          this.assertReady();
-          this.applyReelScene(
-            reel,
-            targetBinding.resource,
-            targetBinding.binding,
-            targetInput!,
-          );
-        } catch (error) {
-          reel.destroy({ children: true });
-          throw error;
-        }
-        prepared = { reel, catalog };
-      }
       this.commitModeGeometry(target.id);
-      if (this.#document.version === 2) this.commitModeVisibility(target);
       if (bindingChanged) {
-        const previous = this.#reel;
         if (prepared) {
-          this.attachReel(prepared.reel);
-          this.#reel = prepared.reel;
-          this.#catalog = prepared.catalog;
-          this.#mainReelSceneCommitted = true;
+          this.activateReelEntry(prepared);
         } else {
+          const previous = this.#reel;
           this.#reel = null;
           this.#catalog = null;
           this.#mainReelSceneCommitted = false;
@@ -1766,18 +1789,18 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           this.#reelRenderLayerRoot.parent?.removeChild(
             this.#reelRenderLayerRoot,
           );
+          previous?.parent?.removeChild(previous);
+          if (previous) previous.visible = false;
+          this.#activeSymbolPackageId = null;
         }
         prepared = null;
-        this.#activeSymbolPackageId = targetBinding?.id ?? null;
-        previous?.parent?.removeChild(previous);
-        previous?.destroy({ children: true });
       }
       this.commitModeVisibility(target);
       this.#stableMode = target.id;
       this.#displayedMode = target.id;
       this.#stableSymbolPackageId = this.#activeSymbolPackageId;
     } catch (error) {
-      prepared?.reel.destroy({ children: true });
+      this.releasePreparedTarget(prepared);
       throw asSceneLayoutError(error);
     } finally {
       this.#modeRequestInProgress = false;
@@ -2168,7 +2191,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       const active = this.#activeTransition;
       this.#activeTransition = null;
       active.player.destroy();
-      if (!active.switched) active.prepared?.reel.destroy({ children: true });
+      if (!active.switched) this.releasePreparedTarget(active.prepared);
       active.reject(
         new SceneLayoutError(
           "Scene layout package runtime was destroyed during a game mode transition.",
@@ -2192,7 +2215,16 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#popupRenderLayerController.detachAll();
     this.#transitionRenderLayerController.detachAll();
     this.#reelRenderLayerRoot.parent?.removeChild(this.#reelRenderLayerRoot);
-    this.#reel?.destroy({ children: true });
+    const retainedReels = new Set(
+      [...this.#reelEntries.values()].map((entry) => entry.reel),
+    );
+    for (const reel of retainedReels) {
+      reel.parent?.removeChild(reel);
+      reel.destroy({ children: true });
+    }
+    if (this.#reel && !retainedReels.has(this.#reel))
+      this.#reel.destroy({ children: true });
+    this.#reelEntries.clear();
     this.#reel = null;
     this.#mainReelSceneCommitted = false;
     for (const overlay of this.#mainReelOverlays)
@@ -2299,39 +2331,18 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       throw new SceneLayoutError(
         "Game modes sharing a symbol package must not receive reels.main input.",
       );
-    if (bindingChanged && targetBinding && !targetInput)
-      throw new SceneLayoutError(
-        `Scene layout game mode "${target.id}" requires target reels.main input.`,
-      );
     if (!targetBinding && targetInput)
       throw new SceneLayoutError(
         `Scene layout game mode "${target.id}" has no symbol package and must not receive reels.main input.`,
       );
     let prepared: PreparedModeTarget | null = null;
     try {
-      if (bindingChanged && targetBinding) {
-        const catalog = await targetBinding.resource.createCatalog();
-        this.assertAlive();
-        const reel = this.createReelPresentation(
-          targetBinding.resource,
-          catalog,
-          targetBinding.binding,
+      if (bindingChanged && targetBinding)
+        prepared = await this.prepareTargetReelEntry(
+          targetBinding,
+          targetInput,
+          recreateReel,
         );
-        try {
-          await this.prepareReelPresentation(reel);
-          this.assertAlive();
-          this.applyReelScene(
-            reel,
-            targetBinding.resource,
-            targetBinding.binding,
-            targetInput!,
-          );
-        } catch (error) {
-          reel.destroy({ children: true });
-          throw error;
-        }
-        prepared = { reel, catalog };
-      }
       const common = {
         spec: transition,
         source,
@@ -2382,7 +2393,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       onSpinePrepared?.(result);
       return result;
     } catch (error) {
-      prepared?.reel.destroy({ children: true });
+      this.releasePreparedTarget(prepared);
       throw error;
     }
   }
@@ -2530,7 +2541,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       this.#targetMode = null;
       this.#targetSymbolPackageId = null;
     } catch (error) {
-      prepared.prepared?.reel.destroy({ children: true });
+      this.releasePreparedTarget(prepared.prepared);
       this.#targetMode = null;
       this.#targetSymbolPackageId = null;
       throw asSceneLayoutError(error);
@@ -2630,7 +2641,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   ): void {
     if (!prepared) return;
     if (prepared.kind !== "none") prepared.player.destroy();
-    prepared.prepared?.reel.destroy({ children: true });
+    this.releasePreparedTarget(prepared.prepared);
   }
 
   private updateActiveTransition(deltaSeconds: number): void {
@@ -2754,15 +2765,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
 
   private commitPreparedTarget(active: PreparedModeTransitionBase): void {
     this.commitModeGeometry(active.target.id);
-    if (this.#document.version === 2) this.commitModeVisibility(active.target);
     if (active.bindingChanged) {
-      const previous = this.#reel;
       if (active.prepared) {
-        this.attachReel(active.prepared.reel);
-        this.#reel = active.prepared.reel;
-        this.#catalog = active.prepared.catalog;
-        this.#mainReelSceneCommitted = true;
+        this.activateReelEntry(active.prepared);
       } else {
+        const previous = this.#reel;
         this.#reel = null;
         this.#catalog = null;
         this.#mainReelSceneCommitted = false;
@@ -2770,11 +2777,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         this.#reelRenderLayerRoot.parent?.removeChild(
           this.#reelRenderLayerRoot,
         );
-      }
-      this.#activeSymbolPackageId = this.#targetSymbolPackageId;
-      if (previous) {
-        previous.parent?.removeChild(previous);
-        previous.destroy({ children: true });
+        previous?.parent?.removeChild(previous);
+        if (previous) previous.visible = false;
+        this.#activeSymbolPackageId = null;
       }
     }
     this.commitModeVisibility(active.target);
@@ -2802,7 +2807,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     if (this.#activeTransition !== active) return;
     active.player.destroy();
     if (active.kind === "video") this.hideVideoBlackout();
-    if (!active.switched) active.prepared?.reel.destroy({ children: true });
+    if (!active.switched) this.releasePreparedTarget(active.prepared);
     else {
       this.#stableMode = active.target.id;
       this.#stableSymbolPackageId = this.#activeSymbolPackageId;
@@ -2891,6 +2896,87 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     });
   }
 
+  private async prepareTargetReelEntry(
+    binding: ResolvedSymbolBinding,
+    input: SceneLayoutInitialReelScene | undefined,
+    recreate: boolean,
+  ): Promise<ReelEntry> {
+    const retained = this.#reelEntries.get(binding.id);
+    if (!recreate && retained && !input) {
+      if (!retained.sceneCommitted)
+        throw new SceneLayoutError(
+          `Scene layout symbol package "${binding.id}" requires target reels.main input before its first activation.`,
+        );
+      return retained;
+    }
+    if (!recreate && retained && input && !retained.sceneCommitted) {
+      this.applyReelScene(
+        retained.reel,
+        retained.resource,
+        retained.binding,
+        input,
+      );
+      retained.sceneCommitted = true;
+      return retained;
+    }
+    if (!input)
+      throw new SceneLayoutError(
+        `Scene layout symbol package "${binding.id}" requires target reels.main input.`,
+      );
+    const catalog = await binding.resource.createCatalog();
+    this.assertReady();
+    const reel = this.createReelPresentation(
+      binding.resource,
+      catalog,
+      binding.binding,
+    );
+    const candidate: ReelEntry = {
+      ...binding,
+      reel,
+      catalog,
+      sceneCommitted: false,
+    };
+    try {
+      await this.prepareReelPresentation(reel);
+      this.assertReady();
+      this.applyReelScene(reel, binding.resource, binding.binding, input);
+      candidate.sceneCommitted = true;
+      reel.visible = false;
+      return candidate;
+    } catch (error) {
+      reel.destroy({ children: true });
+      throw error;
+    }
+  }
+
+  private activateReelEntry(entry: ReelEntry): void {
+    const retained = this.#reelEntries.get(entry.id);
+    if (retained !== entry) {
+      this.#reelEntries.set(entry.id, entry);
+      if (retained) {
+        retained.reel.parent?.removeChild(retained.reel);
+        retained.reel.destroy({ children: true });
+      }
+    }
+    const previous = this.#reel;
+    this.attachReel(entry.reel);
+    this.#reel = entry.reel;
+    this.#catalog = entry.catalog;
+    this.#mainReelSceneCommitted = entry.sceneCommitted;
+    this.#activeSymbolPackageId = entry.id;
+    if (previous && previous !== entry.reel && previous !== retained?.reel) {
+      previous.parent?.removeChild(previous);
+      previous.visible = false;
+    }
+  }
+
+  private releasePreparedTarget(entry: PreparedModeTarget | null): void {
+    if (!entry) return;
+    if (this.#reelEntries.get(entry.id) === entry) return;
+    if (this.#reel === entry.reel) return;
+    entry.reel.destroy({ children: true });
+  }
+
   private async prepareReelPresentation(reel: ReelPresentation): Promise<void> {
     if (reel instanceof RenderGridCellReelSet) {
       if (this.#createGridCellReel)
@@ -2944,13 +3030,24 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     const insertionIndex = this.#manifest.nodes.filter(
       (node) => node.order < order,
     ).length;
+    for (const overlay of this.#mainReelOverlays)
+      overlay.parent?.removeChild(overlay);
     this.#layout.container.addChildAt(reel, insertionIndex);
     const grid = this.#layout.getReelGrid("main");
     reel.position.set(grid.artRect.x, grid.artRect.y);
+    for (const [offset, overlay] of [...this.#mainReelOverlays].entries()) {
+      this.#layout.container.addChildAt(
+        overlay,
+        this.#layout.container.getChildIndex(reel) + 1 + offset,
+      );
+      overlay.position.copyFrom(reel.position);
+    }
     this.#reelRenderLayerRoot.parent?.removeChild(this.#reelRenderLayerRoot);
     this.#layout.container.addChildAt(
       this.#reelRenderLayerRoot,
-      this.#layout.container.getChildIndex(reel) + 1,
+      this.#layout.container.getChildIndex(reel) +
+        1 +
+        this.#mainReelOverlays.size,
     );
     this.#reelRenderLayerRoot.position.copyFrom(reel.position);
   }
@@ -2977,11 +3074,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#videoBlackout.alpha = 1;
   }
 
-  private resolveModeSymbolBinding(mode: SceneLayoutGameMode | null): {
-    readonly id: string;
-    readonly binding: SceneLayoutSymbolPackageBinding;
-    readonly resource: SymbolPackageResource;
-  } | null {
+  private resolveModeSymbolBinding(
+    mode: SceneLayoutGameMode | null,
+  ): ResolvedSymbolBinding | null {
     const legacyBinding = this.#manifest.symbolPackage;
     if (legacyBinding) {
       const resource = this.#resource.symbolPackage;
@@ -3004,6 +3099,30 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         `Scene layout symbol package "${id}" is unavailable.`,
       );
     return { id, binding, resource };
+  }
+
+  private resolveAllSymbolBindings(): readonly ResolvedSymbolBinding[] {
+    if (this.#manifest.symbolPackage) {
+      const binding = this.resolveModeSymbolBinding(null);
+      return binding ? Object.freeze([binding]) : Object.freeze([]);
+    }
+    const ids =
+      this.#document.version === 3
+        ? this.#document.runtimeAllocation.package.symbolPackages
+        : Object.keys(this.#manifest.symbolPackages ?? {}).sort((left, right) =>
+            left.localeCompare(right, "en"),
+          );
+    return Object.freeze(
+      ids.map((id) => {
+        const binding = this.#manifest.symbolPackages?.[id];
+        const resource = this.#resource.symbolPackages[id];
+        if (!binding || !resource)
+          throw new SceneLayoutError(
+            `Scene layout symbol package "${id}" is unavailable.`,
+          );
+        return Object.freeze({ id, binding, resource });
+      }),
+    );
   }
 
   private commitModeVisibility(mode: SceneLayoutGameMode | null): void {
@@ -3031,7 +3150,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   }
 
   private modeHasMainReel(modeId: string | null): boolean {
-    if (!modeId || this.#document.version === 1) return true;
+    if (
+      !modeId ||
+      (this.#document.version !== 2 && this.#document.version !== 3)
+    )
+      return true;
     const mode = this.#document.gameModes.modes.find(
       (candidate) => candidate.id === modeId,
     );
@@ -3104,7 +3227,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   }
 
   private commitModeGeometry(modeId: string): void {
-    if (this.#document.version !== 2) return;
+    if (this.#document.version !== 2 && this.#document.version !== 3) return;
     const effective = materializeSceneLayoutManifestForMode(
       this.#document,
       modeId,

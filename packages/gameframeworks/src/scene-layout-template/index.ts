@@ -316,7 +316,7 @@ function resolveInitialDesignSize(manifest: SceneLayoutManifest): {
   readonly height: number;
 } {
   const effective =
-    manifest.version === 2
+    manifest.version !== 1
       ? materializeInitialSceneLayoutManifest(manifest)
       : manifest;
   return effective.adaptation.mode === "maximized-focus"

@@ -37,9 +37,9 @@ describe("scene layout presentation surface", () => {
     expect(() =>
       createSceneLayoutPresentationSurface({
         resource,
-        initialMode: "BaseGame",
+        initialMode: "Missing",
       }),
-    ).toThrow(/manifest has no gameModes/);
+    ).toThrow(/initial mode "Missing" is unavailable/);
 
     const surface = createSceneLayoutPresentationSurface({ resource });
     expect(() => surface.applyViewport({ width: 1125, height: 2000 })).toThrow(

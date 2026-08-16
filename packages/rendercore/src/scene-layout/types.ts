@@ -334,8 +334,45 @@ export interface SceneLayoutManifestV2 {
   readonly gameModes: SceneLayoutGameModesV2;
 }
 
-export type SceneLayoutManifest = SceneLayoutManifestV1 | SceneLayoutManifestV2;
-export type SceneLayoutManifestLatest = SceneLayoutManifestV2;
+export interface SceneLayoutRuntimeAllocationMode {
+  readonly variants: Readonly<
+    Partial<
+      Record<SceneLayoutVariantId, { readonly activeNodes: readonly string[] }>
+    >
+  >;
+  readonly symbolPackage: string | null;
+  readonly awardCelebrationPopup: string | null;
+}
+
+export interface SceneLayoutRuntimeAllocationV1 {
+  readonly version: 1;
+  readonly package: {
+    readonly nodes: readonly string[];
+    readonly symbolPackages: readonly string[];
+    readonly popups: readonly string[];
+  };
+  readonly onDemand: {
+    readonly transitions: readonly string[];
+    readonly runtimeResources: readonly string[];
+  };
+  readonly modes: Readonly<Record<string, SceneLayoutRuntimeAllocationMode>>;
+}
+
+export interface SceneLayoutManifestV3 extends Omit<
+  SceneLayoutManifestV2,
+  "version"
+> {
+  readonly version: 3;
+  readonly runtimeAllocation: SceneLayoutRuntimeAllocationV1;
+}
+
+export type SceneLayoutManifestModern =
+  | SceneLayoutManifestV2
+  | SceneLayoutManifestV3;
+export type SceneLayoutManifest =
+  | SceneLayoutManifestV1
+  | SceneLayoutManifestModern;
+export type SceneLayoutManifestLatest = SceneLayoutManifestV3;
 
 export type SceneLayoutRuntimeResource =
   | {
@@ -396,7 +433,10 @@ export interface SceneLayoutResource {
 }
 
 export interface SceneLayoutPackageResource {
-  readonly manifest: SceneLayoutManifest;
+  /** Initial-mode v1-compatible view preserved for existing host inspection. */
+  readonly manifest: SceneLayoutManifestV1;
+  /** Canonical v3 document used by package runtime allocation and activation. */
+  readonly runtimeManifest: SceneLayoutManifestLatest;
   readonly layout: SceneLayoutResource;
   readonly imageStrings: Readonly<Record<string, ImageStringResource>>;
   readonly symbolPackage: SymbolPackageResource | null;

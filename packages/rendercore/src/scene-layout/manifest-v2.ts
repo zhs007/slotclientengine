@@ -4,6 +4,7 @@ import type {
   SceneLayoutAdaptation,
   SceneLayoutGameModeV2,
   SceneLayoutManifest,
+  SceneLayoutManifestModern,
   SceneLayoutManifestV1,
   SceneLayoutManifestV2,
   SceneLayoutModeAdaptation,
@@ -142,7 +143,7 @@ export function parseSceneLayoutManifestV2(
   return deepFreeze(draft);
 }
 
-export function upgradeSceneLayoutManifestToLatest(
+export function upgradeSceneLayoutManifestToV2(
   value: unknown,
 ): SceneLayoutManifestV2 {
   const raw = record(value, "scene layout manifest");
@@ -213,7 +214,7 @@ export function upgradeSceneLayoutManifestToLatest(
 }
 
 export function materializeInitialSceneLayoutManifest(
-  manifest: SceneLayoutManifestV2,
+  manifest: SceneLayoutManifestModern,
 ): SceneLayoutManifestV1 {
   return materializeSceneLayoutManifestForMode(
     manifest,
@@ -226,14 +227,14 @@ export function materializeSceneLayoutManifestForMode(
   modeId?: string,
 ): SceneLayoutManifestV1 {
   if (manifest.version === 1) return parseSceneLayoutManifestV1(manifest);
-  const parsed = parseSceneLayoutManifestV2WithoutMaterialization(manifest);
+  const parsed = parseSceneLayoutManifestModernWithoutMaterialization(manifest);
   const selected = modeId ?? parsed.gameModes.initialMode;
   return parseSceneLayoutManifestV1(materializeModeDraft(parsed, selected));
 }
 
-function parseSceneLayoutManifestV2WithoutMaterialization(
-  value: SceneLayoutManifestV2,
-): SceneLayoutManifestV2 {
+function parseSceneLayoutManifestModernWithoutMaterialization(
+  value: SceneLayoutManifestModern,
+): SceneLayoutManifestModern {
   const mode = value.gameModes.modes.find(
     (candidate) => candidate.id === value.gameModes.initialMode,
   );
@@ -242,7 +243,7 @@ function parseSceneLayoutManifestV2WithoutMaterialization(
 }
 
 function materializeModeDraft(
-  manifest: SceneLayoutManifestV2,
+  manifest: SceneLayoutManifestModern,
   modeId: string,
 ): SceneLayoutManifestV1 {
   const mode = manifest.gameModes.modes.find(

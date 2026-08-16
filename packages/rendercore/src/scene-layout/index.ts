@@ -2,6 +2,8 @@ export * from "./errors.js";
 export * from "./types.js";
 export * from "./manifest.js";
 export * from "./manifest-v2.js";
+export * from "./manifest-v3.js";
+export * from "./runtime-allocation.js";
 export * from "./geometry.js";
 export * from "./resource.js";
 export * from "./package-resource.js";

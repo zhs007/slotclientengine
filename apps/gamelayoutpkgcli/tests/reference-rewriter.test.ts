@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { upgradePopupManifestToV5 } from "@slotclientengine/rendercore/popup";
+import { upgradeSceneLayoutManifestToLatest } from "@slotclientengine/rendercore/scene-layout";
 import {
   rewriteImageStringManifest,
   rewriteLayoutManifest,
@@ -132,6 +133,18 @@ describe("typed asset reference rewriting", () => {
       from: "Alpha",
       to: "Beta",
       overlay: { kind: "none" },
+    });
+  });
+
+  it("preserves a canonical v3 runtime allocation while rewriting paths", () => {
+    const latest = upgradeSceneLayoutManifestToLatest(layoutFixture());
+    const rewritten = rewriteLayoutManifest(latest, mapping);
+    expect(rewritten.version).toBe(3);
+    if (rewritten.version !== 3) throw new Error("Expected layout v3.");
+    expect(rewritten.runtimeAllocation).toEqual(latest.runtimeAllocation);
+    expect(rewritten.nodes[0]?.resource).toMatchObject({
+      kind: "image",
+      path: "alpha.webp",
     });
   });
 

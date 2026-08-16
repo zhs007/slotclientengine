@@ -4,7 +4,7 @@ import {
   parseSceneLayoutManifestDocument,
   upgradeSceneLayoutManifestToLatest,
   type SceneLayoutManifest,
-  type SceneLayoutManifestV2,
+  type SceneLayoutManifestLatest,
 } from "@slotclientengine/rendercore/scene-layout";
 import {
   collectImageStringAssetPaths,
@@ -288,7 +288,7 @@ export async function normalizeLayoutFilenameKeys(
   manifest: SceneLayoutManifest,
   closure: ReadonlyMap<string, Uint8Array>,
 ): Promise<{
-  readonly manifest: SceneLayoutManifestV2;
+  readonly manifest: SceneLayoutManifestLatest;
   readonly assets: ReadonlyMap<string, Uint8Array>;
 }> {
   const flattened = await flattenLayoutClosure(manifest, closure);
@@ -307,7 +307,7 @@ export async function normalizeMappedLayoutFilenameKeys(
   manifestValue: unknown,
   logicalAssets: ReadonlyMap<string, Uint8Array>,
 ): Promise<{
-  readonly manifest: SceneLayoutManifestV2;
+  readonly manifest: SceneLayoutManifestLatest;
   readonly assets: ReadonlyMap<string, Uint8Array>;
 }> {
   const mapping = createCanonicalFilenameMapping(
@@ -691,7 +691,7 @@ function rewriteExactJsonReferences(
 function rewriteLayoutManifestFilenameKeys(
   value: SceneLayoutManifest,
   mapping: ReadonlyMap<string, string>,
-): SceneLayoutManifestV2 {
+): SceneLayoutManifestLatest {
   const key = (path: string) => mapping.get(path) ?? path;
   const nodes = value.nodes.map((node) => {
     const resource = node.resource;
@@ -855,7 +855,7 @@ export async function materializeLayoutOwnedAssets(options: {
   readonly manifest: SceneLayoutManifest;
   readonly assets: ReadonlyMap<string, Uint8Array>;
 }): Promise<{
-  readonly manifest: SceneLayoutManifestV2;
+  readonly manifest: SceneLayoutManifestLatest;
   readonly assets: ReadonlyMap<string, Uint8Array>;
 }> {
   const source = upgradeSceneLayoutManifestToLatest(options.manifest);

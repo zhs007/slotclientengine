@@ -177,8 +177,10 @@
 ## Scene layout 与生成配置
 
 - rendercore 拥有 strict scene-layout manifest parsing、exact asset closure、named-node attachment、focus/reel geometry、variant application、mode-aware visibility 和 production runtime。
+- Scene Layout package resource必须在RenderCore内把合法v1/v2直接规范化为latest v3并确定性生成缺失的`runtimeAllocation`；不得要求先经Editor重导。为兼容已有宿主，公开`manifest`保留initial-mode v1视图，package runtime只执行strict `runtimeManifest` v3。原生v3 allocation与typed mode/node/Symbols/Popup/transition/runtime-resource引用不一致时显式失败，Editor只导出完整v3。
 - scene-layout init 可并发 prepare 相互独立的 node、reel/Symbol/effect 和 popup 资源，但必须等待所有
   已启动 prepare 收敛后处理失败/cleanup，并只在全部成功后按 manifest/order 确定性 commit 到 display tree。
+- scene-layout package runtime按exact Symbols binding持有package-lifetime reel entry；active entry独占update和业务API，dormant entry保留已提交scene但不tick。跨mode返回不得释放重建；只有显式`recreateReel`或package destroy可替换/销毁，main reel overlay和render layer随active entry稳定重挂。
 - scene-layout 普通 node 的 optional exact mode scope 缺失时表示全局；runtime 的 init、真实 transition switch 和 editor authoring stable selection 必须复用同一 visibility commit。authoring selection 不得伪装成 production transition，且相同 Symbols binding 不重建 reel/player/sample。
 - `SceneLayoutPackageResource.loadRuntimeResource(key, kind)` 是包内程序资源的 typed async prepare 边界；同 key 并发请求复用同一 Promise，kind/未知 key 精确失败，`getLoadedRuntimeResource` 只返回已成功 prepare 的资源。
 - package runtime 的canonical `getRenderLayer(ref)`统一解析稳定`layout|reel|transition|popup`、area `<id>.bottom|top|win`、canonical exact node及显式`node:<legacyId>`；底层仍委托各自唯一owner，不合并lifecycle或display parent。返回opaque安全attachment façade，presentation-only请求`reel`/area显式失败。既有

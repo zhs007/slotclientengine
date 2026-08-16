@@ -11,7 +11,7 @@
 
 ## Mode、variant 与稳定节点
 
-- Scene Layout v2 的adaptation、active variant背景/focus和main reel placement由exact mode拥有；v1共享upgrader只复制旧根几何到已有mode，不伪造Splash。Editor只预览和导出latest v2。
+- Scene Layout v3沿用v2的exact mode geometry并新增Editor生成的strict `runtimeAllocation`。RenderCore runtime直接接受v1/v2，读取后确定性补齐allocation并统一规范化为v3；v1共享upgrader只复制旧根几何到已有mode，不伪造Splash。Editor可导入v1/v2/v3，但只预览和导出canonical v3。
 - 每个v2 mode显式声明reelEnabled；关闭时不得绑定Symbols或导出mode reel placement，focus相对art边缘，开启时focus由reel区域与四边外扩派生。runtime不得按mode id猜测开关。
 - orientation variant只由宿主原始page width/height决定；正方形保持当前variant，首次正方形为landscape，focus和派生frame尺寸不得反馈成方向输入。
 - primary action只引用同source的显式direct transition target；runtime复用既有prepare/commit/rollback和trusted gesture边界，不按mode名称推断点击行为。
@@ -67,6 +67,7 @@
 - production export 先从 layout 收集实际引用的 root，再按有向依赖计算 exact closure。共享 atlas/贴图可由任一被用到的 Spine JSON root 带入；同批未引用的 sibling JSON root 不得因共享 leaf 被反向导出。
 - 替换或重绑资源必须保留稳定 node identity、order、各 variant placement/visibility，并尽可能保留仍兼容的 animation、loop 与 image-string 配置。资源尺寸变化不得自动重置 reel、focus 或 placement；现有几何与新 art size 冲突时必须严格失败。
 - 相同 symbols binding 的 mode 切换默认保留 reel、scene 和 player；只有显式 `recreateReel` 才重建。
+- v3 `runtimeAllocation`只保存typed owner id、mode/variant active node和package/on-demand lifetime，不保存physical path/hash/bytes。package runtime在init准备全部声明的Symbols reel entry；首次激活需要显式scene，之后跨binding返回恢复原entry，dormant entry不update且只在package destroy或显式replacement时销毁。
 - production full package runtime 可显式 deferred prepare main reel；首次 scene commit 前 reel 不可见且业务 API 必须失败。自定义 reel factory 采用 ownership transfer，package 仍负责 manifest order/placement 与 destroy；借用 overlay 只能通过 typed attach/dispose API 接入并位于 transition/popup 下方。
 - background visibility、target scene commit、active standard/grid-cell reel prepare/swap 和 popup lifecycle 原子完成。
 - 底层 named-node state machine 可供独立 consumer 使用，但不得成为 `requestGameMode()` 的隐藏入口或 fallback。

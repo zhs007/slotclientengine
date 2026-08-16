@@ -909,7 +909,7 @@ describe("layout zip IO", () => {
       ]);
       const imported = await importLayoutZip(first.bytes, { decodeImage });
       expect(imported.manifest).toMatchObject({
-        version: 2,
+        version: 3,
         id: fixture.manifest.id,
         symbolPackages: fixture.manifest.symbolPackages,
       });
@@ -1254,7 +1254,7 @@ describe("layout zip IO", () => {
     expect(first.bytes).toEqual(second.bytes);
     const imported = await importLayoutZip(first.bytes, { decodeImage });
     expect(imported.manifest).toMatchObject({
-      version: 2,
+      version: 3,
       id: imageManifest.id,
     });
     expect(

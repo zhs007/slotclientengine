@@ -1,6 +1,7 @@
 import type { GameConfigNumberWeightEntry } from "@slotclientengine/logiccore";
 import type { SymbolPackageResource } from "../symbol/index.js";
 import { SceneLayoutError } from "./errors.js";
+import { upgradeSceneLayoutManifestToLatest } from "./manifest-v3.js";
 import { loadSceneLayoutPackageFromZipBytes } from "./production-zip.js";
 import {
   parseSlotReelPresentationProfile,
@@ -743,7 +744,11 @@ function resolveInitialSymbolBinding(resource: SceneLayoutPackageResource): {
   readonly id: string;
   readonly symbolResource: SymbolPackageResource;
 } {
-  const manifest = resource.manifest;
+  const manifest =
+    resource.runtimeManifest ??
+    (resource.manifest.version
+      ? upgradeSceneLayoutManifestToLatest(resource.manifest)
+      : (resource.manifest as never));
   if (manifest.symbolPackage && resource.symbolPackage)
     return {
       binding: manifest.symbolPackage,

@@ -5,7 +5,7 @@ import {
   upgradeSceneLayoutManifestToLatest,
   type SceneLayoutCoordinateOrigin,
   type SceneLayoutManifest,
-  type SceneLayoutManifestV2,
+  type SceneLayoutManifestLatest,
   type SceneLayoutGameModeV2,
   type SceneLayoutNode,
   type SceneLayoutRuntimeResourceSpec,
@@ -765,14 +765,14 @@ export function editorProjectToPreviewManifest(
 
 export function editorProjectToManifest(
   project: EditorProject,
-): SceneLayoutManifestV2 {
+): SceneLayoutManifestLatest {
   for (const node of project.nodes) assertCanonicalEditorNodeId(node.id);
   const initialMode = project.gameModes.modes.find(
     (mode) => mode.id === project.gameModes.initialMode,
   );
   if (!initialMode)
     throw new Error(`initial 主状态不存在：${project.gameModes.initialMode}`);
-  return parseSceneLayoutManifestDocument({
+  return upgradeSceneLayoutManifestToLatest({
     version: 2,
     kind: "scene-layout",
     id: project.id,
@@ -999,7 +999,7 @@ export function editorProjectToManifest(
           };
         }),
     },
-  }) as SceneLayoutManifestV2;
+  });
 }
 
 export function validateEditorTransitionEvent(

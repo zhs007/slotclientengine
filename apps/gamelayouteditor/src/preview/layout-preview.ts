@@ -378,7 +378,12 @@ export class LayoutPreview {
   }
 
   async preparePrimaryGameModeAction(): Promise<void> {
-    if (!this.#packageRuntime || this.#manifest?.version !== 2) return;
+    if (
+      !this.#packageRuntime ||
+      !this.#manifest ||
+      this.#manifest.version === 1
+    )
+      return;
     const current = this.#packageRuntime.getGameModeSnapshot().stableMode;
     const mode = this.#manifest.gameModes.modes.find(
       (candidate) => candidate.id === current,
@@ -394,7 +399,7 @@ export class LayoutPreview {
   requestPrimaryGameModeAction(): Promise<void> {
     if (!this.#packageRuntime)
       throw new Error("当前 layout preview 没有 package runtime。");
-    if (this.#manifest?.version !== 2)
+    if (!this.#manifest || this.#manifest.version === 1)
       return this.#packageRuntime.requestPrimaryGameModeAction();
     const current = this.#packageRuntime.getGameModeSnapshot().stableMode;
     const target = this.#manifest.gameModes.modes.find(

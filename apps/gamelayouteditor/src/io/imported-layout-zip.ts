@@ -4,7 +4,7 @@ import {
   parseSceneLayoutManifestDocument,
   resolveSceneLayoutPackageFiles,
   type SceneLayoutManifest,
-  type SceneLayoutManifestV2,
+  type SceneLayoutManifestLatest,
   type SceneLayoutPackageResource,
   type SceneLayoutResource,
 } from "@slotclientengine/rendercore/scene-layout";
@@ -31,7 +31,7 @@ export const LAYOUT_ZIP_LIMITS = Object.freeze({
 });
 
 export interface ImportedLayoutPackage {
-  readonly manifest: SceneLayoutManifestV2;
+  readonly manifest: SceneLayoutManifestLatest;
   readonly assets: ReadonlyMap<string, Uint8Array>;
   readonly resource: SceneLayoutResource;
   readonly packageResource: SceneLayoutPackageResource;

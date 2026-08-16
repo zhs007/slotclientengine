@@ -10,6 +10,7 @@ import type { RendercoreSpinePlayer } from "../../src/spine/runtime-player.js";
 import {
   createSceneLayoutPackageResource,
   createSceneLayoutPackageRuntime,
+  upgradeSceneLayoutManifestToLatest,
   type SceneLayoutManifestV1,
 } from "../../src/scene-layout/index.js";
 import { transitionResourceKey } from "../../src/scene-layout/resource.js";
@@ -94,13 +95,14 @@ function createRuntimeWithTransitions(
     new CompletingTransitionPlayer(),
 ) {
   const transitions = pairs.map(([from, to]) => transitionSpec(from, to));
-  const manifest: SceneLayoutManifestV1 = {
+  const layoutManifest: SceneLayoutManifestV1 = {
     ...resource.layout.manifest,
     gameModes: {
       ...resource.layout.manifest.gameModes!,
       transitions,
     },
   };
+  const manifest = upgradeSceneLayoutManifestToLatest(layoutManifest);
   const spineResources = { ...resource.layout.spineResources };
   for (const [from, to] of pairs) {
     spineResources[transitionResourceKey(from, to)] = {
@@ -112,8 +114,9 @@ function createRuntimeWithTransitions(
   return createSceneLayoutPackageRuntime({
     resource: {
       ...resource,
-      manifest,
-      layout: { ...resource.layout, manifest, spineResources },
+      manifest: layoutManifest,
+      runtimeManifest: manifest,
+      layout: { ...resource.layout, manifest: layoutManifest, spineResources },
     },
     createTransitionPlayer,
   });
@@ -938,6 +941,7 @@ describe("scene layout package runtime", () => {
       ]);
       const runtime = createRuntimeWithTransitions(resource, [
         ["BaseGame", "FreeGame"],
+        ["FreeGame", "BaseGame"],
         ["FreeGame", "BonusGame"],
         ["BonusGame", "FreeGame"],
         ["FreeGame", "EmptyGame"],
@@ -983,11 +987,17 @@ describe("scene layout package runtime", () => {
       const freeReel = runtime.getReelPresentation("main");
       expect(freeReel).toBeInstanceOf(RenderGridCellReelSet);
       expect(freeReel).not.toBe(baseReel);
-      expect(baseReel.destroyed).toBe(true);
+      expect(baseReel.destroyed).toBe(false);
       expect(runtime.getGameModeSnapshot()).toMatchObject({
         stableMode: "FreeGame",
         stableSymbolPackage: "alt-symbols",
       });
+
+      await completeModeRequest(runtime, "BaseGame");
+      expect(runtime.getReelPresentation("main")).toBe(baseReel);
+      expect(freeReel.destroyed).toBe(false);
+      await completeModeRequest(runtime, "FreeGame");
+      expect(runtime.getReelPresentation("main")).toBe(freeReel);
 
       await completeModeRequest(runtime, "BonusGame");
       expect(runtime.getReelPresentation("main")).toBe(freeReel);
@@ -1006,12 +1016,14 @@ describe("scene layout package runtime", () => {
 
       await completeModeRequest(runtime, "EmptyGame");
       expect(() => runtime.getReelPresentation("main")).toThrow(/unavailable/);
-      expect(forcedReel.destroyed).toBe(true);
+      expect(forcedReel.destroyed).toBe(false);
       expect(runtime.getGameModeSnapshot()).toMatchObject({
         stableMode: "EmptyGame",
         stableSymbolPackage: null,
       });
       runtime.destroy();
+      expect(baseReel.destroyed).toBe(true);
+      expect(forcedReel.destroyed).toBe(true);
     } finally {
       load.mockRestore();
       unload.mockRestore();
@@ -1074,7 +1086,7 @@ describe("scene layout package runtime", () => {
       runtime.update(0.5);
       const targetReel = runtime.getReelPresentation("main");
       expect(targetReel).not.toBe(sourceReel);
-      expect(sourceReel.destroyed).toBe(true);
+      expect(sourceReel.destroyed).toBe(false);
       expect(runtime.getGameModeSnapshot()).toMatchObject({
         stableMode: "BaseGame",
         displayedMode: "FreeGame",
@@ -1232,7 +1244,7 @@ describe("scene layout package runtime", () => {
         stableSymbolPackage: null,
         displayedSymbolPackage: null,
         targetSymbolPackage: null,
-        activeBackgroundNodes: [],
+        activeBackgroundNodes: ["bg"],
       });
       await expect(
         runtime.requestGameMode("BaseGame"),
@@ -1272,7 +1284,7 @@ describe("scene layout package runtime", () => {
     }
   });
 
-  it("keeps legacy low-level package runtime and rejects new game-mode APIs", async () => {
+  it("loads legacy v1 directly through the default latest game-mode flow", async () => {
     const load = vi
       .spyOn(Assets, "load")
       .mockResolvedValue(Texture.WHITE as never);
@@ -1284,15 +1296,16 @@ describe("scene layout package runtime", () => {
       });
       const runtime = createSceneLayoutPackageRuntime({ resource });
       await runtime.init();
-      expect(() => runtime.getGameModeIds()).toThrow(
-        /does not declare gameModes/,
-      );
-      expect(() => runtime.getGameModeSnapshot()).toThrow(
-        /does not declare gameModes/,
-      );
-      await expect(runtime.requestGameMode("BaseGame")).rejects.toThrow(
-        /does not declare gameModes/,
-      );
+      expect(resource.manifest.version).toBe(1);
+      expect(resource.runtimeManifest.version).toBe(3);
+      expect(runtime.getGameModeIds()).toEqual(["BaseGame"]);
+      expect(runtime.getGameModeSnapshot()).toMatchObject({
+        stableMode: "BaseGame",
+        displayedMode: "BaseGame",
+      });
+      await expect(
+        runtime.requestGameMode("BaseGame"),
+      ).resolves.toBeUndefined();
       runtime.destroy();
     } finally {
       load.mockRestore();
