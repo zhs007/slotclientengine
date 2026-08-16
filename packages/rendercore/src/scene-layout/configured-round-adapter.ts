@@ -205,7 +205,7 @@ class DefaultConfiguredSceneLayoutRoundAdapter implements ConfiguredSceneLayoutR
   playSpin(logic: GameLogic): Promise<void> {
     try {
       this.assertAlive();
-      if (this.#coordinator?.getSnapshot().running)
+      if (this.#coordinator?.isRunning())
         throw new SceneLayoutError(
           "Configured scene-layout round is already in progress.",
         );
@@ -270,9 +270,9 @@ class DefaultConfiguredSceneLayoutRoundAdapter implements ConfiguredSceneLayoutR
     const runtime = this.#runtime;
     if (!app || !runtime || this.#destroyed) return;
     try {
-      const deltaSeconds = Math.min(app.ticker.deltaMS / 1000, 1 / 30);
+      const deltaSeconds = Math.max(0, app.ticker.deltaMS / 1000);
       const coordinator = this.#coordinator;
-      if (coordinator?.getSnapshot().running) coordinator.update(deltaSeconds);
+      if (coordinator?.isRunning()) coordinator.update(deltaSeconds);
       else runtime.update(deltaSeconds);
     } catch (error) {
       this.#coordinator?.cleanup("execution-failure");

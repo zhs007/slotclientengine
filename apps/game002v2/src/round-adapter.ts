@@ -344,12 +344,7 @@ class DirectRoundAdapter implements SlotGameAdapter {
     const runtime = this.#runtime;
     if (!runtime || this.#destroyed) return;
     try {
-      let remainingSeconds = Math.min(this.#app.ticker.deltaMS / 1000, 0.25);
-      while (remainingSeconds > 0) {
-        const sliceSeconds = Math.min(remainingSeconds, 1 / 30);
-        runtime.update(sliceSeconds);
-        remainingSeconds -= sliceSeconds;
-      }
+      runtime.update(Math.max(0, this.#app.ticker.deltaMS / 1000));
       const started = runtime.drainMainReelStartedPositions();
       if (started.length > 0 && !this.#spinStartPaintPending) {
         this.#spinStartPaintPending = true;

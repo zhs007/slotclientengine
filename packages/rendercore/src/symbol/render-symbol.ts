@@ -67,7 +67,9 @@ export class RenderSymbol extends VisualEntity<void> {
   readonly #landingAppearEnabled: boolean;
   readonly #animationCapabilities: ReadonlySet<SymbolStateId>;
   #currentAni: SymbolAni;
-  #lastAniKey: string;
+  #lastAniRevision: number;
+  #cachedUpdateSnapshot: SymbolStateSnapshot | null = null;
+  #cachedUpdateResults: Array<RenderSymbolUpdateResult | undefined> = [];
   #defaultScaleX = 1;
   #defaultScaleY = 1;
   #presentationValue: number | null = null;
@@ -140,7 +142,7 @@ export class RenderSymbol extends VisualEntity<void> {
       throw error;
     }
 
-    this.#lastAniKey = this.createAniKey(this.#stateMachine.getSnapshot());
+    this.#lastAniRevision = this.#stateMachine.getActiveStateRevision();
     this.#currentAni = this.createCurrentAni();
     this.#currentAni.reset();
     this.#imageStringController?.syncState(
@@ -204,7 +206,7 @@ export class RenderSymbol extends VisualEntity<void> {
   }
 
   setDefaultState(state: string): void {
-    const before = this.createAniKey(this.#stateMachine.getSnapshot());
+    const before = this.#stateMachine.getActiveStateRevision();
     this.#stateMachine.setDefaultState(state);
     this.syncAniIfNeeded(before, false);
   }
@@ -218,7 +220,7 @@ export class RenderSymbol extends VisualEntity<void> {
         `Render symbol "${this.symbol}" state playback was superseded by requestState("${state}").`,
       ),
     );
-    const before = this.createAniKey(this.#stateMachine.getSnapshot());
+    const before = this.#stateMachine.getActiveStateRevision();
     this.#stateMachine.requestState(state, transitionMode);
     const stateChanged = this.syncAniIfNeeded(before);
     const current = this.#stateMachine.getSnapshot();
@@ -304,7 +306,7 @@ export class RenderSymbol extends VisualEntity<void> {
     options: SymbolStatePlaybackOptions,
   ): Promise<void> {
     this.validateStatePlayback(state, options);
-    const before = this.createAniKey(this.#stateMachine.getSnapshot());
+    const before = this.#stateMachine.getActiveStateRevision();
     this.#stateMachine.requestState(
       state,
       options.transitionMode ?? "boundary",
@@ -403,7 +405,7 @@ export class RenderSymbol extends VisualEntity<void> {
         `Render symbol "${this.symbol}" state playback was interrupted by returnToDefaultState().`,
       ),
     );
-    const before = this.createAniKey(this.#stateMachine.getSnapshot());
+    const before = this.#stateMachine.getActiveStateRevision();
     this.#stateMachine.reset();
     this.syncAniIfNeeded(before);
   }
@@ -441,8 +443,8 @@ export class RenderSymbol extends VisualEntity<void> {
     this.#valueTextBindingsDirty = false;
     this.#preparedPresentationValue = null;
     if (this.#valueController && previous !== value) {
-      const before = this.#lastAniKey;
-      this.#lastAniKey = "";
+      const before = this.#lastAniRevision;
+      this.#lastAniRevision = -1;
       this.syncAniIfNeeded(before, false);
     }
   }
@@ -576,7 +578,7 @@ export class RenderSymbol extends VisualEntity<void> {
     assertValidDeltaSeconds(deltaSeconds);
     try {
       const beforeSnapshot = this.#stateMachine.getSnapshot();
-      const before = this.createAniKey(beforeSnapshot);
+      const before = this.#stateMachine.getActiveStateRevision();
       const aniResult = this.#currentAni.update(deltaSeconds);
       if (aniResult.loopCompleted) {
         this.#loopCompletionCount += 1;
@@ -587,13 +589,11 @@ export class RenderSymbol extends VisualEntity<void> {
         const terminal = this.completeActiveTerminalPlayback(beforeSnapshot);
         if (terminal) {
           const snapshot = this.#stateMachine.getSnapshot();
-          return Object.freeze({
-            requestedState: snapshot.requestedState,
-            resolvedState: snapshot.resolvedState,
-            loopCompleted: aniResult.loopCompleted,
-            onceCompleted: true,
-            stateChanged: false,
-          });
+          return this.getCachedUpdateResult(
+            snapshot,
+            aniResult.loopCompleted,
+            true,
+          );
         }
         this.#stateMachine.notifyOnceComplete();
       }
@@ -601,6 +601,14 @@ export class RenderSymbol extends VisualEntity<void> {
       const stateChanged = this.syncAniIfNeeded(before);
       const snapshot = this.#stateMachine.getSnapshot();
       this.advanceActivePlayback(beforeSnapshot, snapshot, aniResult);
+
+      if (!stateChanged) {
+        return this.getCachedUpdateResult(
+          snapshot,
+          aniResult.loopCompleted,
+          aniResult.onceCompleted,
+        );
+      }
 
       return Object.freeze({
         requestedState: snapshot.requestedState,
@@ -631,8 +639,8 @@ export class RenderSymbol extends VisualEntity<void> {
     this.#onceCompletionCount = 0;
     this.#stateMachine.reset();
     resetBaseDisplay(this.createAnimationContext());
-    const before = this.#lastAniKey;
-    this.#lastAniKey = "";
+    const before = this.#lastAniRevision;
+    this.#lastAniRevision = -1;
     this.syncAniIfNeeded(before, false);
   }
 
@@ -654,7 +662,9 @@ export class RenderSymbol extends VisualEntity<void> {
     this.gameUnderlayLayer.removeChildren();
     this.gameOverlayLayer.removeChildren();
     this.#stateMachine.reset();
-    this.#lastAniKey = "";
+    this.#lastAniRevision = -1;
+    this.#cachedUpdateSnapshot = null;
+    this.#cachedUpdateResults.length = 0;
     this.#currentAni = createReleasedSymbolAni();
     resetBaseDisplay(this.createAnimationContext());
     this.visible = true;
@@ -743,18 +753,21 @@ export class RenderSymbol extends VisualEntity<void> {
   }
 
   private syncAniIfNeeded(
-    previousKey: string,
+    previousRevision: number,
     preserveEquivalentTimeline = true,
   ): boolean {
-    const snapshot = this.#stateMachine.getSnapshot();
-    const nextKey = this.createAniKey(snapshot);
-    if (nextKey === previousKey && nextKey === this.#lastAniKey) {
+    const nextRevision = this.#stateMachine.getActiveStateRevision();
+    if (
+      nextRevision === previousRevision &&
+      nextRevision === this.#lastAniRevision
+    ) {
       return false;
     }
 
+    const snapshot = this.#stateMachine.getSnapshot();
     const nextAni = this.createCurrentAni();
     const previousAni = this.#currentAni;
-    this.#lastAniKey = nextKey;
+    this.#lastAniRevision = nextRevision;
     if (
       preserveEquivalentTimeline &&
       previousAni.continuityKey !== undefined &&
@@ -837,10 +850,6 @@ export class RenderSymbol extends VisualEntity<void> {
     });
   }
 
-  private createAniKey(snapshot: SymbolStateSnapshot): string {
-    return `${snapshot.requestedState}->${snapshot.resolvedState}`;
-  }
-
   private createAnimationContextWithoutActiveFactory(): SymbolAnimationContext {
     const snapshot = this.#stateMachine.getSnapshot();
     return Object.freeze({
@@ -861,6 +870,29 @@ export class RenderSymbol extends VisualEntity<void> {
       stateSprite: this.stateSprite,
       overlayLayer: this.overlayLayer,
     });
+  }
+
+  private getCachedUpdateResult(
+    snapshot: SymbolStateSnapshot,
+    loopCompleted: boolean,
+    onceCompleted: boolean,
+  ): RenderSymbolUpdateResult {
+    if (this.#cachedUpdateSnapshot !== snapshot) {
+      this.#cachedUpdateSnapshot = snapshot;
+      this.#cachedUpdateResults.length = 0;
+    }
+    const key = (loopCompleted ? 1 : 0) | (onceCompleted ? 2 : 0);
+    const cached = this.#cachedUpdateResults[key];
+    if (cached) return cached;
+    const result = Object.freeze({
+      requestedState: snapshot.requestedState,
+      resolvedState: snapshot.resolvedState,
+      loopCompleted,
+      onceCompleted,
+      stateChanged: false,
+    });
+    this.#cachedUpdateResults[key] = result;
+    return result;
   }
 
   private advanceActivePlayback(

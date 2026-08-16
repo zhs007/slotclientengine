@@ -361,6 +361,10 @@ export class RenderReel extends Container {
     return this.#continuousSpin !== null;
   }
 
+  getPhase(): RenderReelPhase {
+    return this.#phase;
+  }
+
   update(deltaSeconds: number): RenderReelUpdateResult {
     assertValidDeltaSeconds(deltaSeconds);
     const wasLanded = this.#landed;
@@ -855,7 +859,7 @@ export class RenderReel extends Container {
     return Object.freeze({
       x: this.xIndex,
       phase: this.#phase,
-      currentY: this.#spinStrip ? this.#spinLocalY : this.#currentY,
+      currentY: this.getCurrentY(),
       finalY: this.#plan?.finalY ?? null,
       startY: this.#plan?.startY ?? null,
       elapsedMs: this.#elapsedMs,

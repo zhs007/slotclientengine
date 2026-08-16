@@ -12,6 +12,47 @@ import {
 } from "../../src/slot-operation/index.js";
 
 describe("slot operation coordinator", () => {
+  it("exposes direct phase queries and defers waiters added during update", async () => {
+    const registry = createSlotOperationHandlerRegistry();
+    let nestedFrameCount = 0;
+    registry.register({
+      kind: "slot:scene-landing",
+      version: 2,
+      handler: {
+        async start(_operation, context) {
+          let nested!: Promise<void>;
+          await context.waitForFrame(() => {
+            nested = context.waitForFrame(() => {
+              nestedFrameCount += 1;
+              return true;
+            });
+            return true;
+          });
+          await nested;
+        },
+      },
+    });
+    const coordinator = createSlotOperationCoordinator({
+      registry,
+      cleanup: () => undefined,
+    });
+
+    expect(coordinator.isRunning()).toBe(false);
+    expect(coordinator.getPhase()).toBe("idle");
+    const completion = coordinator.start(plan());
+    expect(coordinator.isRunning()).toBe(true);
+    expect(coordinator.getPhase()).toBe("running");
+
+    coordinator.update(0.016);
+    expect(nestedFrameCount).toBe(0);
+    coordinator.update(0.016);
+    await completion;
+
+    expect(nestedFrameCount).toBe(1);
+    expect(coordinator.isRunning()).toBe(false);
+    expect(coordinator.getPhase()).toBe("complete");
+  });
+
   it("executes one async start chain and advances frame waits", async () => {
     const events: string[] = [];
     const registry = createSlotOperationHandlerRegistry();

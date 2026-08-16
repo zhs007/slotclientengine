@@ -261,10 +261,7 @@ export class RenderCellSpin extends Container implements CellSpin {
 
   getSymbol(position: SymbolPosition): SymbolRender {
     const cell = this.getRuntimeCell(position);
-    if (
-      this.#active.has(keyOf(position)) ||
-      cell.reel.getSnapshot().phase !== "stopped"
-    )
+    if (this.#active.has(keyOf(position)) || cell.reel.getPhase() !== "stopped")
       throw new ReelError(
         `Cannot get symbol at (${position.x},${position.y}) before the cell has landed.`,
       );
@@ -406,10 +403,7 @@ export class RenderCellSpin extends Container implements CellSpin {
           );
         keys.add(key);
         const cell = this.getRuntimeCell(position);
-        if (
-          this.#active.has(key) ||
-          cell.reel.getSnapshot().phase !== "stopped"
-        )
+        if (this.#active.has(key) || cell.reel.getPhase() !== "stopped")
           throw new ReelError(
             `Cannot replace symbol at (${position.x},${position.y}) before the cell has landed.`,
           );

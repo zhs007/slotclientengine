@@ -73,7 +73,9 @@ describe("symbol cascade player", () => {
     });
 
     target.completeRequestedState();
-    expect(player.update(0.1)).toEqual({ completed: true });
+    const completed = player.update(0.1);
+    expect(completed).toEqual({ completed: true });
+    expect(player.update(0.1)).toBe(completed);
     expect(
       target.requests.filter((request) => request.startsWith("win:")),
     ).toEqual(["win:0,0|0,1", "win:0,1"]);

@@ -249,12 +249,12 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
     if (this.#phase === "destroyed") return;
     if (this.#operationFailure) throw this.#operationFailure;
     const coordinator = this.#operationCoordinator;
-    if (coordinator?.getSnapshot().running) coordinator.update(deltaSeconds);
+    if (coordinator?.isRunning()) coordinator.update(deltaSeconds);
     else this.#runtime.update(deltaSeconds);
     if (this.#phase !== "playing") return;
 
     if (coordinator) {
-      if (coordinator.getSnapshot().phase === "complete") {
+      if (coordinator.getPhase() === "complete") {
         this.#phase = "completed";
         this.#flowPhase = "idle";
       }

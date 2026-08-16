@@ -758,7 +758,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     for (const [id, popup] of this.#popups)
       if (popup.isPlaying())
         try {
-          popup.update(deltaSeconds);
+          popup.tick(deltaSeconds);
         } catch (error) {
           if (this.#activeAwardCelebrationWaiter?.popupId === id) {
             const waiter = this.#activeAwardCelebrationWaiter;
@@ -770,7 +770,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     for (const [id, popup] of this.#spinePopups)
       if (popup.isPlaying())
         try {
-          popup.update(deltaSeconds);
+          popup.tick(deltaSeconds);
         } catch (error) {
           if (this.#activePrelude?.popupId === id) {
             this.failActivePrelude(

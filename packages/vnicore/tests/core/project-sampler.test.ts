@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import bigwinData from "../fixtures/export/bigwin.json";
 import {
+  createRuntimeProjectSampler,
   sampleLayerAtTime,
   sampleProjectAtTime,
 } from "../../src/core/project-sampler";
@@ -61,6 +62,40 @@ function layer(
 }
 
 describe("project-sampler", () => {
+  it("keeps pure samples independent and runtime samples identity-stable", () => {
+    const project: V5GProjectConfig = {
+      schemaVersion: "V5G_0.0014",
+      editor: { name: "victory_editor_v5_g", version: "V5G_0.0014" },
+      engineTarget: { name: "cocos_creator", version: "3.8.6" },
+      name: "sample",
+      stage: {
+        width: 1600,
+        height: 1600,
+        coordinate: "center",
+        duration: 10,
+        backgroundColor: "#101827",
+      },
+      assets: [],
+      layerGroups: [defaultLayerGroup],
+      layers: [layer()],
+      particles: [],
+    };
+    const pureA = sampleProjectAtTime(project, 1.25);
+    const pureB = sampleProjectAtTime(project, 1.25);
+    const runtime = createRuntimeProjectSampler(project);
+    const runtimeA = runtime.sample(1.25);
+    const layerState = runtimeA.layers[0];
+    const transformState = layerState!.transform;
+    const runtimeB = runtime.sample(1.75);
+
+    expect(pureB).not.toBe(pureA);
+    expect(pureB.layers[0]).not.toBe(pureA.layers[0]);
+    expect(runtimeB).toBe(runtimeA);
+    expect(runtimeB.layers[0]).toBe(layerState);
+    expect(runtimeB.layers[0]!.transform).toBe(transformState);
+    expect(runtimeB.time).toBe(1.75);
+  });
+
   it("samples card_carousel_3d source opacity while keeping the effect active", () => {
     const carousel = cardCarouselAnimation();
     const sourceLayer = layer({ opacity: 0.8 }, [carousel]);

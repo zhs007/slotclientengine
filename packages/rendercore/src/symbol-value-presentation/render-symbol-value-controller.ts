@@ -27,6 +27,13 @@ import {
   type CloneableRenderObject,
 } from "../presentation/render-object.js";
 
+const ACTIVE_UPDATE_RESULTS = Object.freeze({
+  running: Object.freeze({ completed: false, loopCompleted: false }),
+  loop: Object.freeze({ completed: false, loopCompleted: true }),
+  complete: Object.freeze({ completed: true, loopCompleted: false }),
+  completeLoop: Object.freeze({ completed: true, loopCompleted: true }),
+});
+
 export function createRenderSymbolValueController(options: {
   readonly root: RenderSymbol;
   readonly resource: SymbolValuePresentationResource;
@@ -452,14 +459,17 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
       !this.#initialized ||
       !this.#player
     ) {
-      return Object.freeze({ completed: false, loopCompleted: false });
+      return ACTIVE_UPDATE_RESULTS.running;
     }
     const result = this.#player.update(deltaSeconds);
     this.syncPresentationView();
-    return Object.freeze({
-      completed: result.completed,
-      loopCompleted: result.loopCompleted === true,
-    });
+    return result.completed
+      ? result.loopCompleted === true
+        ? ACTIVE_UPDATE_RESULTS.completeLoop
+        : ACTIVE_UPDATE_RESULTS.complete
+      : result.loopCompleted === true
+        ? ACTIVE_UPDATE_RESULTS.loop
+        : ACTIVE_UPDATE_RESULTS.running;
   }
 
   deactivate(animation: ActiveSpineValueAni): void {

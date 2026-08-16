@@ -15,6 +15,8 @@ import type {
 } from "./types.js";
 
 type Position = Readonly<{ readonly x: number; readonly y: number }>;
+const CASCADE_INCOMPLETE_RESULT = Object.freeze({ completed: false });
+const CASCADE_COMPLETE_RESULT = Object.freeze({ completed: true });
 
 interface LegacyExecutionPlan {
   readonly mode: "legacy";
@@ -96,6 +98,9 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
   #itemIncrementStarted = false;
   #emphasisElapsedSeconds = 0;
   #overlappingCollectItems: OverlappingCollectItemRuntime[] = [];
+  readonly #activeOverlappingCollectItemsScratch: OverlappingCollectItemRuntime[] =
+    [];
+  readonly #overlappingPositionsScratch: Position[] = [];
   #collectStartElapsedSeconds = 0;
   #removal: TerminalRemovalRuntime | null = null;
   readonly #prestartedSequentialLoops = new Set<number>();
@@ -156,7 +161,9 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
       );
     }
     if (this.#phase === "idle" || this.#phase === "complete") {
-      return Object.freeze({ completed: this.#phase === "complete" });
+      return this.#phase === "complete"
+        ? CASCADE_COMPLETE_RESULT
+        : CASCADE_INCOMPLETE_RESULT;
     }
     this.#options.target.update(deltaSeconds);
     this.#summary?.update(deltaSeconds);
@@ -253,7 +260,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
         this.getAllWinPositions(),
         this.resolveCurrentDimmingAlpha(),
       );
-      return Object.freeze({ completed: false });
+      return CASCADE_INCOMPLETE_RESULT;
     }
     this.#options.target.clearVisibleSymbolDimming();
     return this.startPlanAt(0);
@@ -270,7 +277,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
       const summaryComplete =
         plan.mode === "legacy" || !this.#summary?.getSnapshot().counting;
       if (!symbolComplete || !summaryComplete) {
-        return Object.freeze({ completed: false });
+        return CASCADE_INCOMPLETE_RESULT;
       }
       if (plan.group.removePositions.length > 0) {
         this.#removal = this.startTerminalRemoval(
@@ -278,7 +285,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
           plan.removeState,
         );
         this.#phase = "remove";
-        return Object.freeze({ completed: false });
+        return CASCADE_INCOMPLETE_RESULT;
       }
       this.hideAmount(this.#index);
       return this.startPlanAt(this.#index + 1);
@@ -289,7 +296,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
       );
     }
     if (!this.requireRemovalComplete()) {
-      return Object.freeze({ completed: false });
+      return CASCADE_INCOMPLETE_RESULT;
     }
     this.#removal = null;
     this.hideAmount(this.#index);
@@ -304,20 +311,20 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
   } {
     if (this.#phase === "collect-start") {
       if (!statesReturnedToNormal(this.#options, plan.group.positions)) {
-        return Object.freeze({ completed: false });
+        return CASCADE_INCOMPLETE_RESULT;
       }
       this.#options.target.requestVisibleSymbolStates(
         plan.primaryPositions,
         plan.loopState,
       );
       this.#phase = "collect-loop";
-      return Object.freeze({ completed: false });
+      return CASCADE_INCOMPLETE_RESULT;
     }
     if (this.#phase === "collect-loop") {
       if (
         !statesResolvedAs(this.#options, plan.primaryPositions, plan.loopState)
       ) {
-        return Object.freeze({ completed: false });
+        return CASCADE_INCOMPLETE_RESULT;
       }
       if (this.getSequentialCollectStartIntervalSeconds() !== null) {
         this.#overlappingCollectItems = [];
@@ -350,7 +357,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
         snapshot.resolvedState !== "normal" ||
         this.requireSummary().getSnapshot().counting
       ) {
-        return Object.freeze({ completed: false });
+        return CASCADE_INCOMPLETE_RESULT;
       }
       if (plan.retainPrimaryPositionsAfterCollect) {
         if (this.#itemIndex + 1 < plan.items.length) {
@@ -364,7 +371,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
         plan.removeState,
       );
       this.#phase = "collect-remove";
-      return Object.freeze({ completed: false });
+      return CASCADE_INCOMPLETE_RESULT;
     }
     if (this.#phase !== "collect-remove") {
       throw new Error(
@@ -372,7 +379,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
       );
     }
     if (!this.requireRemovalComplete()) {
-      return Object.freeze({ completed: false });
+      return CASCADE_INCOMPLETE_RESULT;
     }
     this.#removal = null;
     if (this.#itemIndex + 1 < plan.items.length) {
@@ -396,7 +403,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
       plan.collectState,
     );
     this.#phase = "collect-item";
-    return Object.freeze({ completed: false });
+    return CASCADE_INCOMPLETE_RESULT;
   }
 
   private updateOverlappingCollectItems(
@@ -430,7 +437,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
       this.#overlappingCollectItems.length > 0 ||
       this.requireSummary().getSnapshot().counting
     ) {
-      return Object.freeze({ completed: false });
+      return CASCADE_INCOMPLETE_RESULT;
     }
     this.hideAmount(this.#index);
     return this.startPlanAt(this.#index + 1);
@@ -443,12 +450,23 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
         runtime.released = true;
       }
     }
-    const active = this.#overlappingCollectItems.filter(
-      (runtime) => !runtime.released,
-    );
-    const snapshots = this.#options.target.getVisibleSymbolStateSnapshots(
-      active.map((runtime) => plan.items[runtime.itemIndex]!.context.position),
-    );
+    const active = this.#activeOverlappingCollectItemsScratch;
+    const positions = this.#overlappingPositionsScratch;
+    active.length = 0;
+    positions.length = 0;
+    for (const runtime of this.#overlappingCollectItems) {
+      if (runtime.released) continue;
+      const item = plan.items[runtime.itemIndex];
+      if (!item) {
+        throw new Error(
+          `symbol cascade overlapping collect item[${runtime.itemIndex}] is missing.`,
+        );
+      }
+      active.push(runtime);
+      positions.push(item.context.position);
+    }
+    const snapshots =
+      this.#options.target.getVisibleSymbolStateSnapshots(positions);
     for (const [activeIndex, runtime] of active.entries()) {
       const item = plan.items[runtime.itemIndex];
       const snapshot = snapshots[activeIndex];
@@ -493,9 +511,11 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
         runtime.released = true;
       }
     }
-    this.#overlappingCollectItems = this.#overlappingCollectItems.filter(
-      (runtime) => !runtime.released,
-    );
+    let writeIndex = 0;
+    for (const runtime of this.#overlappingCollectItems)
+      if (!runtime.released)
+        this.#overlappingCollectItems[writeIndex++] = runtime;
+    this.#overlappingCollectItems.length = writeIndex;
   }
 
   private startOverlappingCollectItem(
@@ -522,7 +542,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
     );
     this.#phase =
       index + 1 < plan.items.length ? "collect-item" : "collect-remove";
-    return Object.freeze({ completed: false });
+    return CASCADE_INCOMPLETE_RESULT;
   }
 
   private startTerminalRemoval(
@@ -628,7 +648,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
       this.#phase = "complete";
       this.#index = -1;
       this.#itemIndex = -1;
-      return Object.freeze({ completed: true });
+      return CASCADE_COMPLETE_RESULT;
     }
     this.#index = index;
     this.#itemIndex = -1;
@@ -642,7 +662,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
       this.#phase = this.#prestartedSequentialLoops.has(index)
         ? "collect-loop"
         : "collect-start";
-      return Object.freeze({ completed: false });
+      return CASCADE_INCOMPLETE_RESULT;
     }
     if (this.#options.startPresentationsWithEmphasis !== true) {
       this.requestPlanOpening(plan);
@@ -654,7 +674,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
       this.requireSummary().incrementBy(plan.groupAmount);
     }
     this.#phase = "win";
-    return Object.freeze({ completed: false });
+    return CASCADE_INCOMPLETE_RESULT;
   }
 
   private requestPlanOpening(plan: ExecutionPlan): void {

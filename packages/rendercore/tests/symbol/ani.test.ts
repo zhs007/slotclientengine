@@ -79,7 +79,8 @@ describe("ManualSymbolAni", () => {
 
   it("reports loop and once completion as edge events", () => {
     const loop = createLoopSymbolAni({ stateId: "loop", durationSeconds: 1 });
-    expect(loop.update(0.5)).toEqual({
+    const running = loop.update(0.5);
+    expect(running).toEqual({
       loopCompleted: false,
       onceCompleted: false,
     });
@@ -87,6 +88,7 @@ describe("ManualSymbolAni", () => {
       loopCompleted: true,
       onceCompleted: false,
     });
+    expect(loop.update(0.1)).toBe(running);
     expect(loop.update(0.1)).toEqual({
       loopCompleted: false,
       onceCompleted: false,

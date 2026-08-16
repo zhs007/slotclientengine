@@ -37,6 +37,45 @@ function animation(
 }
 
 describe("animation-sampler", () => {
+  it("reuses an explicit result target without changing the pure-call contract", () => {
+    const target = {
+      transform: { ...baseTransform },
+      opacity: 0,
+      visualRotation: 0,
+    };
+    const animations = [animation("fade", { fromOpacity: 0, toOpacity: 1 })];
+
+    const first = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      animations,
+      0.25,
+      target,
+    );
+    const second = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      animations,
+      0.75,
+      target,
+    );
+    const pureA = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      animations,
+      0.5,
+    );
+    const pureB = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      animations,
+      0.5,
+    );
+
+    expect(first).toBe(target);
+    expect(second).toBe(target);
+    expect(second.opacity).toBe(0.75);
+    expect(pureB).not.toBe(pureA);
+    expect(pureB.transform).not.toBe(pureA.transform);
+    expect(pureB).toEqual(pureA);
+  });
+
   it("samples supported easing curves", () => {
     expect(easeProgress(0.5, "linear")).toBe(0.5);
     expect(easeProgress(0.5, "easeInQuad")).toBe(0.25);
@@ -696,20 +735,30 @@ describe("animation-sampler", () => {
   });
 
   it("applies overlapping animations in startTime order", () => {
+    const animations = [
+      animation("fade", { fromOpacity: 0, toOpacity: 1 }, { startTime: 0 }),
+      animation(
+        "fade",
+        { fromOpacity: 0.2, toOpacity: 0.8 },
+        { startTime: 0.1 },
+      ),
+    ];
     const sampled = sampleLayerAnimationsAtTime(
       { transform: baseTransform, opacity: 1 },
-      [
-        animation("fade", { fromOpacity: 0, toOpacity: 1 }, { startTime: 0 }),
-        animation(
-          "fade",
-          { fromOpacity: 0.2, toOpacity: 0.8 },
-          { startTime: 0.1 },
-        ),
-      ],
+      animations,
       0.6,
     );
 
     expect(sampled.opacity).toBe(0.5);
+
+    animations[1]!.startTime = -0.1;
+    expect(
+      sampleLayerAnimationsAtTime(
+        { transform: baseTransform, opacity: 1 },
+        animations,
+        0.6,
+      ).opacity,
+    ).toBe(0.6);
   });
 
   it("throws for unknown easing", () => {

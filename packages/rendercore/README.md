@@ -166,6 +166,8 @@ symbol 的对应 anchor；飞行本身不会推断或提交目标 value。
 
 `@slotclientengine/rendercore/popup` 提供 strict `award-celebration | spine` popup parser、Popup id validator、typed filename-key namespace rewrite、传递资源闭包、files/CDN loader、snapshot 与共享 input binding。v1–v5 保持兼容；v3 删除有限 `designViewport`，v4 增加 strict attachment graph，v5 增加 type-aware `visibleStates`。canonical v6 让 award layer 由 containing tier 决定可见性，并用跨档稳定 id 表达逻辑图层；相同 id/kind/core resource 复用 runtime，切档原子隐藏旧画面并应用新配置。普通 Spine Popup 继续使用三阶段 `visibleStates` 和独立 start→loop→end 状态机。award 分段 VNI 的最终点击直接从 loop end 播放 end range并等待 drain，player complete 后隐藏但可再次 start。获奖庆祝支持文字/ImgNumber 节点、五档 BigInt threshold sequence 与金额格式，并要求每档恰好一个 stable `win-amount`。Scene Layout 的 transition 可复用该 player；host 绑定真实 canvas 与 keyboard target 后，active Popup 在 eligible input 上执行唯一主操作，idle 完全透传。Popup binding 的 root `order` 与 node/main reel 全局唯一且必须更高，runtime 在当前 scene 的顶层 Popup root 内按该值排序。
 
+两类 Popup player 的 `update(deltaSeconds)` 保留 snapshot 返回合同；只负责 production ticker 推进且不消费 snapshot 的 owner 使用 `tick(deltaSeconds)`，避免每帧构造未使用的诊断值。阶段、输入和完成边界不因此改变。
+
 字体文字 renderer 支持可选 package font（省略时才使用系统字体）、字号、字距、canonical color、纯色/线性渐变、描边、投影、Unicode grapheme 弧排、anchor 与原子 `setText()`。两类 player 都公开稳定的 `textNodes` / `imageStringNodes`，并可按 exact name 或各 kind 零基 index 取得 handle；业务绑定优先使用 exact name。覆盖 string 跨档位和重复播放保持，`resetText()` 恢复 manifest/自动金额值，destroy 后 handle 失效。
 
 Scene Layout transition prelude 可在 `requestGameMode(modeId, { preludePopupStrings })` 中按 `text | image-string` 和 exact name 接收本轮最终 string。runtime 在 Popup start 前应用这些值，并在 complete、失败、取消或 destroy 后恢复调用前 handle 状态；该输入不进入 transition resource prepare/cache identity。需要跨播放保持或在 active Popup 中更新时，继续使用 player 的 exact handle `setText/resetText`。
@@ -580,7 +582,7 @@ cell 尺寸由当前参与 reels 渲染的非空普通图动态计算：单图�
 
 `createReelLayout()` 支持 `columnGap` 控制轴间距；`RenderReel` 只在 starting / spinning / settling 等非静止态裁切单轴内容，停止态会取消裁切，允许偏大的 symbol 自然超出格子外框。
 
-逐帧 presentation 协调读取当前 slot 时使用 `getSlotRenderViews()`，exact `windowY` 读取使用 `getSlotRenderView(windowY)`：数组和每个 view 都在 reel 创建时一次建立，字段通过只读 getter 反映当前 code/kind/symbol/presentation value，不提供 snapshot isolation。RenderCore 不再提供包含 display object 的通用 slot snapshot；状态、几何和 aggregate diagnostics 使用各自的标量 snapshot。热路径读取当前位置使用 `getCurrentY()`，不要为了一个标量创建完整 `getSnapshot()`。`RenderReel.renderAtY()` 直接遍历既有 slots，`update()` 对相同 phase 复用冻结结果，避免每格每帧创建 window/slot/update 快照。grid-cell runtime 同样复用每格 key、slot view 索引、timeline scratch arrays 和无 edge 的 update result；只有实际 started/landed/activation edge 才生成对外不可变坐标快照。
+逐帧 presentation 协调读取当前 slot 时使用 `getSlotRenderViews()`，exact `windowY` 读取使用 `getSlotRenderView(windowY)`：数组和每个 view 都在 reel 创建时一次建立，字段通过只读 getter 反映当前 code/kind/symbol/presentation value，不提供 snapshot isolation。RenderCore 不再提供包含 display object 的通用 slot snapshot；状态、几何和 aggregate diagnostics 使用各自的标量 snapshot。热路径读取当前位置和阶段使用 `getCurrentY()` / `getPhase()`，不要为了一个标量创建完整 `getSnapshot()`。`RenderReel.renderAtY()` 直接遍历既有 slots，`update()` 对相同 phase 复用冻结结果，避免每格每帧创建 window/slot/update 快照。standard ReelSet 在内部按固定 slice 消费宿主提交的完整 delta，复用 stopped/start 聚合 scratch，仅在真实 start/landing/completion edge 创建不可变结果；宿主不得再次 clamp 或对子 runtime 重复切片。grid-cell runtime 同样复用每格 key、slot view 索引、timeline scratch arrays 和无 edge 的 update result；只有实际 started/landed/activation edge 才生成对外不可变坐标快照。
 
 典型流程：
 

@@ -12,6 +12,14 @@ const EMPTY_UPDATE_RESULT: SymbolAniUpdateResult = Object.freeze({
   loopCompleted: false,
   onceCompleted: false,
 });
+const LOOP_COMPLETED_UPDATE_RESULT: SymbolAniUpdateResult = Object.freeze({
+  loopCompleted: true,
+  onceCompleted: false,
+});
+const ONCE_COMPLETED_UPDATE_RESULT: SymbolAniUpdateResult = Object.freeze({
+  loopCompleted: false,
+  onceCompleted: true,
+});
 
 const WIN_SHINE_MAX_ALPHA = 0.95;
 const WIN_SHINE_MAX_SCALE = 1.2;
@@ -61,10 +69,7 @@ export class ManualSymbolAni implements SymbolAni {
     assertValidDeltaSeconds(deltaSeconds);
 
     if (this.playback === "static") {
-      return Object.freeze({
-        loopCompleted: true,
-        onceCompleted: false,
-      });
+      return LOOP_COMPLETED_UPDATE_RESULT;
     }
 
     if (deltaSeconds === 0) {
@@ -84,10 +89,7 @@ export class ManualSymbolAni implements SymbolAni {
     this.#elapsedSeconds = nextElapsed % this.#durationSeconds;
     this.#onProgress?.(this.#elapsedSeconds / this.#durationSeconds);
 
-    return Object.freeze({
-      loopCompleted,
-      onceCompleted: false,
-    });
+    return loopCompleted ? LOOP_COMPLETED_UPDATE_RESULT : EMPTY_UPDATE_RESULT;
   }
 
   private updateOnce(deltaSeconds: number): SymbolAniUpdateResult {
@@ -105,10 +107,7 @@ export class ManualSymbolAni implements SymbolAni {
     if (this.#elapsedSeconds >= this.#durationSeconds) {
       this.#onceCompleted = true;
       this.#onComplete?.();
-      return Object.freeze({
-        loopCompleted: false,
-        onceCompleted: true,
-      });
+      return ONCE_COMPLETED_UPDATE_RESULT;
     }
 
     return EMPTY_UPDATE_RESULT;

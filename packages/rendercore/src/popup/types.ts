@@ -629,6 +629,7 @@ export interface AwardCelebrationPlayer {
   ): PopupPresentationSnapshot;
   init(): Promise<void>;
   start(input: AwardCelebrationInput): void;
+  tick(deltaSeconds: number): void;
   update(deltaSeconds: number): AwardCelebrationSnapshot;
   requestAdvance(): void;
   requestDismiss(): void;
@@ -657,6 +658,7 @@ export interface SpinePopupPlayer {
   ): PopupPresentationSnapshot;
   init(): Promise<void>;
   start(text?: string): void;
+  tick(deltaSeconds: number): void;
   update(deltaSeconds: number): SpinePopupSnapshot;
   requestDismiss(): void;
   dismissImmediately(): void;

@@ -90,6 +90,13 @@ interface ActiveAtomicReel {
 }
 
 const MAX_UPDATE_SLICE_SECONDS = 1 / 60;
+const EMPTY_REEL_AXES: readonly number[] = Object.freeze([]);
+const IDLE_REEL_SET_UPDATE_RESULT: RenderReelSetUpdateResult = Object.freeze({
+  completed: false,
+  spinning: false,
+  startedAxes: EMPTY_REEL_AXES,
+  stoppedAxes: EMPTY_REEL_AXES,
+});
 
 interface PresentationDelayWaiter {
   remainingSeconds: number;
@@ -147,6 +154,12 @@ export class RenderReelSet extends Container implements ReelSpin {
   #spinOptions: RenderReelSetSpinOptions | null = null;
   #elapsedMs = 0;
   #startedAxes = new Set<number>();
+  #startedAxesSnapshot: readonly number[] = EMPTY_REEL_AXES;
+  #startedAxesSnapshotDirty = false;
+  readonly #stoppedAxesScratch: number[] = [];
+  #stableUpdateResult: RenderReelSetUpdateResult = IDLE_REEL_SET_UPDATE_RESULT;
+  #stableUpdateStartedAxes: readonly number[] = EMPTY_REEL_AXES;
+  #stableUpdateSpinning = false;
   #continuousSpinActive = false;
   #settlingContinuous = false;
   #activeDrop: {
@@ -355,7 +368,7 @@ export class RenderReelSet extends Container implements ReelSpin {
     this.#spinPlan = plan;
     this.#spinOptions = options;
     this.#elapsedMs = 0;
-    this.#startedAxes = new Set();
+    this.replaceStartedAxes();
     this.#settlingContinuous = false;
   }
 
@@ -384,7 +397,7 @@ export class RenderReelSet extends Container implements ReelSpin {
     this.#spinPlan = null;
     this.#spinOptions = null;
     this.#elapsedMs = 0;
-    this.#startedAxes = new Set(this.reels.map((reel) => reel.xIndex));
+    this.replaceStartedAxes(this.reels.map((reel) => reel.xIndex));
     this.#continuousSpinActive = true;
     this.#settlingContinuous = false;
     for (const symbol of previousSymbols) this.bumpOccurrenceGeneration(symbol);
@@ -432,7 +445,7 @@ export class RenderReelSet extends Container implements ReelSpin {
     this.#spinPlan = plan;
     this.#spinOptions = options;
     this.#elapsedMs = 0;
-    this.#startedAxes = new Set(plan.axes.map((axis) => axis.x));
+    this.replaceStartedAxes(plan.axes.map((axis) => axis.x));
     this.#continuousSpinActive = false;
     this.#settlingContinuous = true;
   }
@@ -442,10 +455,9 @@ export class RenderReelSet extends Container implements ReelSpin {
     for (const reel of this.reels) {
       if (this.#continuousSpinActive) reel.cancelContinuous();
       else {
-        const snapshot = reel.getSnapshot();
         reel.resetToVisibleSymbols(
           reel.getVisibleScene(),
-          Math.floor(snapshot.currentY),
+          Math.floor(reel.getCurrentY()),
           reel.getVisiblePresentationValues(),
         );
       }
@@ -455,7 +467,7 @@ export class RenderReelSet extends Container implements ReelSpin {
     this.#continuousSpinActive = false;
     this.#settlingContinuous = false;
     this.#elapsedMs = 0;
-    this.#startedAxes = new Set();
+    this.replaceStartedAxes();
   }
 
   isContinuousSpinning(): boolean {
@@ -473,26 +485,18 @@ export class RenderReelSet extends Container implements ReelSpin {
     let remaining = deltaSeconds;
     let first = true;
     let completed = false;
-    const startedAxes = new Set<number>();
-    const stoppedAxes = new Set<number>();
+    const stoppedAxes = this.#stoppedAxesScratch;
+    stoppedAxes.length = 0;
     while (first || remaining > 0) {
       first = false;
       const slice = Math.min(remaining, MAX_UPDATE_SLICE_SECONDS);
       remaining = Math.max(0, remaining - slice);
-      const result = this.updateSlice(slice);
-      completed ||= result.completed;
-      for (const x of result.startedAxes) startedAxes.add(x);
-      for (const x of result.stoppedAxes) stoppedAxes.add(x);
+      completed = this.updateSlice(slice, stoppedAxes) || completed;
     }
-    return Object.freeze({
-      completed,
-      spinning: this.getSnapshot().spinning,
-      startedAxes: Object.freeze([...startedAxes].sort((a, b) => a - b)),
-      stoppedAxes: Object.freeze([...stoppedAxes].sort((a, b) => a - b)),
-    });
+    return this.createUpdateResult(completed, stoppedAxes);
   }
 
-  private updateSlice(deltaSeconds: number): RenderReelSetUpdateResult {
+  private updateSlice(deltaSeconds: number, stoppedAxes: number[]): boolean {
     this.updatePresentationDelays(deltaSeconds);
     this.updatePresentationMotions(deltaSeconds);
     const previousElapsedMs = this.#elapsedMs;
@@ -504,7 +508,6 @@ export class RenderReelSet extends Container implements ReelSpin {
       this.startDueAxes();
     }
 
-    const stoppedAxes: number[] = [];
     for (const reel of this.reels) {
       const axisPlan = this.#spinPlan?.axes[reel.xIndex];
       let reelDeltaSeconds = deltaSeconds;
@@ -523,7 +526,7 @@ export class RenderReelSet extends Container implements ReelSpin {
         this.detachAtomic(atomic);
         atomic.resolve?.();
       }
-      if (result.completed) {
+      if (result.landed) {
         stoppedAxes.push(reel.xIndex);
       }
     }
@@ -533,7 +536,7 @@ export class RenderReelSet extends Container implements ReelSpin {
     const completed = Boolean(
       this.#spinPlan &&
       this.#spinPlan.axes.every((axis) => this.#startedAxes.has(axis.x)) &&
-      this.reels.every((reel) => reel.getSnapshot().phase === "stopped"),
+      this.reels.every((reel) => reel.getPhase() === "stopped"),
     );
 
     if (completed) {
@@ -542,18 +545,7 @@ export class RenderReelSet extends Container implements ReelSpin {
       this.#settlingContinuous = false;
     }
 
-    return Object.freeze({
-      completed,
-      spinning:
-        this.#spinPlan !== null ||
-        this.#continuousSpinActive ||
-        this.#atomicActive.size > 0 ||
-        this.#activeDrop !== null,
-      startedAxes: Object.freeze(
-        [...this.#startedAxes].sort((left, right) => left - right),
-      ),
-      stoppedAxes: Object.freeze(stoppedAxes),
-    });
+    return completed;
   }
 
   resetToFinalYs(finalYs: readonly number[]): void {
@@ -570,7 +562,7 @@ export class RenderReelSet extends Container implements ReelSpin {
     this.#continuousSpinActive = false;
     this.#settlingContinuous = false;
     this.#elapsedMs = 0;
-    this.#startedAxes = new Set();
+    this.replaceStartedAxes();
     for (const [x, y] of finalYs.entries()) {
       this.reels[x].resetToY(y);
     }
@@ -594,7 +586,7 @@ export class RenderReelSet extends Container implements ReelSpin {
     this.#continuousSpinActive = false;
     this.#settlingContinuous = false;
     this.#elapsedMs = 0;
-    this.#startedAxes = new Set();
+    this.replaceStartedAxes();
     for (const [x, column] of visibleScene.entries()) {
       this.reels[x].resetToVisibleSymbols(column, finalYs?.[x] ?? 0);
     }
@@ -613,7 +605,7 @@ export class RenderReelSet extends Container implements ReelSpin {
     )
       throw new ReelError(`visible symbol y ${position.y} is out of range.`);
     if (
-      reel.getSnapshot().phase !== "stopped" ||
+      reel.getPhase() !== "stopped" ||
       this.#atomicActive.has(position.x) ||
       (this.#spinPlan !== null && !this.#startedAxes.has(position.x))
     )
@@ -1037,7 +1029,7 @@ export class RenderReelSet extends Container implements ReelSpin {
   ): void {
     for (const position of positions) {
       const reel = this.getReelAt(position.x);
-      if (reel.getSnapshot().phase !== "stopped")
+      if (reel.getPhase() !== "stopped")
         throw new ReelError(
           `Cannot request landed symbol state while reel ${position.x} is spinning.`,
         );
@@ -1171,11 +1163,7 @@ export class RenderReelSet extends Container implements ReelSpin {
 
   getSnapshot(): RenderReelSetSnapshot {
     return Object.freeze({
-      spinning:
-        this.#spinPlan !== null ||
-        this.#continuousSpinActive ||
-        this.#atomicActive.size > 0 ||
-        this.#activeDrop !== null,
+      spinning: this.isSpinning(),
       elapsedMs: this.#elapsedMs,
       visibleScene: this.getVisibleScene(),
       reels: Object.freeze(this.reels.map((reel) => reel.getSnapshot())),
@@ -1926,7 +1914,63 @@ export class RenderReelSet extends Container implements ReelSpin {
         targetVisibleStates: this.#spinOptions?.targetVisibleStates?.[axis.x],
       });
       this.#startedAxes.add(axis.x);
+      this.#startedAxesSnapshotDirty = true;
     }
+  }
+
+  private isSpinning(): boolean {
+    return (
+      this.#spinPlan !== null ||
+      this.#continuousSpinActive ||
+      this.#atomicActive.size > 0 ||
+      this.#activeDrop !== null
+    );
+  }
+
+  private replaceStartedAxes(axes: Iterable<number> = EMPTY_REEL_AXES): void {
+    this.#startedAxes = new Set(axes);
+    this.#startedAxesSnapshotDirty = true;
+  }
+
+  private getStartedAxesSnapshot(): readonly number[] {
+    if (!this.#startedAxesSnapshotDirty) return this.#startedAxesSnapshot;
+    this.#startedAxesSnapshotDirty = false;
+    return (this.#startedAxesSnapshot = Object.freeze(
+      [...this.#startedAxes].sort((left, right) => left - right),
+    ));
+  }
+
+  private createUpdateResult(
+    completed: boolean,
+    stoppedAxesScratch: readonly number[],
+  ): RenderReelSetUpdateResult {
+    const spinning = this.isSpinning();
+    const startedAxes = this.getStartedAxesSnapshot();
+    if (!completed && stoppedAxesScratch.length === 0) {
+      if (
+        this.#stableUpdateStartedAxes === startedAxes &&
+        this.#stableUpdateSpinning === spinning
+      ) {
+        return this.#stableUpdateResult;
+      }
+      this.#stableUpdateStartedAxes = startedAxes;
+      this.#stableUpdateSpinning = spinning;
+      return (this.#stableUpdateResult = Object.freeze({
+        completed: false,
+        spinning,
+        startedAxes,
+        stoppedAxes: EMPTY_REEL_AXES,
+      }));
+    }
+    return Object.freeze({
+      completed,
+      spinning,
+      startedAxes,
+      stoppedAxes:
+        stoppedAxesScratch.length === 0
+          ? EMPTY_REEL_AXES
+          : Object.freeze([...stoppedAxesScratch]),
+    });
   }
 
   private assertTargetVisibleScene(

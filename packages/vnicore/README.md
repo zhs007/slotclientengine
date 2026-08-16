@@ -82,6 +82,8 @@ Manual carrier visuals may reference a validated project asset or a host-provide
 
 `VNIPlayer` uses RAF by default. Embedders that already have a game ticker can pass `autoTick: false` and call `update(deltaSeconds)` themselves; this is the path used by `rendercore` symbol animations to keep VNI playback synchronized with Pixi slot updates. `fitPadding` defaults to the existing responsive padding, and can be set to `0` when the host needs VNI stage coordinates to map directly to a host-controlled viewport or mask.
 
+Pure sampling APIs continue to return independent result objects. `VNIPlayer` instead owns per-layer mutable sample buffers, a separate auxiliary buffer for particle-time sampling, cached animation order, and reusable mask lookup sets/maps. A runtime sample is valid only until that sampler's next synchronous `sample()` call and must not escape the owning player; callers that require retained snapshots must use the pure APIs.
+
 `play()` uses every animation's authored `seed` by default, so the Pixi runtime
 matches the editor preview. Pass `ignoreAuthoredSeed: true` to any `play()`
 mode when a fresh runtime-random distribution is wanted:

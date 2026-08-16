@@ -106,6 +106,7 @@ class FakeSpinePopupPlayer implements SpinePopupPlayer {
   update() {
     return this.getSnapshot();
   }
+  tick() {}
   requestDismiss() {
     this.dismissRequested = true;
   }

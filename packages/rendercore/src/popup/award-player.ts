@@ -130,6 +130,7 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
   #final = 0;
   #active: TierRuntime | null = null;
   readonly #showing = new Set<TierRuntime>();
+  readonly #tiersToUpdate: TierRuntime[] = [];
   #ending: TierRuntime[] = [];
   #amount: PopupLayerRuntime | null = null;
   constructor(options: {
@@ -210,17 +211,24 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
     this.startNextStage();
   }
   update(deltaSeconds: number): AwardCelebrationSnapshot {
+    this.tick(deltaSeconds);
+    return this.getSnapshot();
+  }
+  tick(deltaSeconds: number): void {
     this.assertReady();
     if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0)
       throw new Error("deltaSeconds must be finite and non-negative.");
-    for (const tier of new Set([...this.#showing, ...this.#ending]))
-      this.updateTier(tier, deltaSeconds);
+    this.#tiersToUpdate.length = 0;
+    for (const tier of this.#showing) this.#tiersToUpdate.push(tier);
+    for (const tier of this.#ending)
+      if (!this.#showing.has(tier)) this.#tiersToUpdate.push(tier);
+    for (const tier of this.#tiersToUpdate) this.updateTier(tier, deltaSeconds);
     this.drainEnding();
     if (this.#phase === "dismissing") {
       if (!this.#showing.size && !this.#ending.length) this.complete();
-      return this.getSnapshot();
+      return;
     }
-    if (this.#phase !== "counting" || !this.#active) return this.getSnapshot();
+    if (this.#phase !== "counting" || !this.#active) return;
     const stage = this.#stages[this.#stageIndex]!;
     this.#elapsed = Math.min(
       stage.durationSeconds,
@@ -233,7 +241,6 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
       Math.floor((stage.toAmountRaw - stage.fromAmountRaw) * progress);
     this.updateAmount();
     if (progress >= 1) this.finishStage();
-    return this.getSnapshot();
   }
   requestAdvance(): void {
     this.assertReady();

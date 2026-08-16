@@ -129,7 +129,7 @@ class Game003v2RoundAdapter implements SlotGameAdapter {
     if (this.#preSpinActive)
       throw new Error("game003v2 continuous spin is already active.");
     const runtime = this.requireRuntime();
-    if (this.requireCoordinator().getSnapshot().running)
+    if (this.requireCoordinator().isRunning())
       throw new Error("game003v2 operation plan is still running.");
     runtime.getReelArea("main").spin.start();
     this.#preSpinActive = true;
@@ -218,7 +218,7 @@ class Game003v2RoundAdapter implements SlotGameAdapter {
     const coordinator = this.#coordinator;
     if (!runtime || !coordinator) return;
     const deltaSeconds = Math.max(0, ticker.deltaMS / 1000);
-    if (coordinator.getSnapshot().running) coordinator.update(deltaSeconds);
+    if (coordinator.isRunning()) coordinator.update(deltaSeconds);
     else runtime.update(deltaSeconds);
   };
 

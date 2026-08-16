@@ -28,6 +28,22 @@ export interface RendercoreSpinePlaybackEvent {
   readonly name: string;
 }
 
+const EMPTY_SPINE_PLAYBACK_EVENTS: readonly RendercoreSpinePlaybackEvent[] =
+  Object.freeze([]);
+const RUNNING_SPINE_UPDATE_RESULT = Object.freeze({
+  completed: false,
+  events: EMPTY_SPINE_PLAYBACK_EVENTS,
+});
+const COMPLETED_SPINE_UPDATE_RESULT = Object.freeze({
+  completed: true,
+  events: EMPTY_SPINE_PLAYBACK_EVENTS,
+});
+const LOOP_COMPLETED_SPINE_UPDATE_RESULT = Object.freeze({
+  completed: false,
+  loopCompleted: true as const,
+  events: EMPTY_SPINE_PLAYBACK_EVENTS,
+});
+
 export interface RendercoreSpineAnimationEventOccurrence {
   readonly name: string;
   readonly time: number;
@@ -231,7 +247,7 @@ class OfficialSpinePlayer implements RendercoreSpineSlotPlayer {
     }
     this.#completed = false;
     this.#loopCompleted = false;
-    this.#events = [];
+    this.#events.length = 0;
     spine.state.clearTracks();
     spine.state.clearListeners();
     spine.skeleton.setupPose();
@@ -265,8 +281,14 @@ class OfficialSpinePlayer implements RendercoreSpineSlotPlayer {
     this.getSpine().update(deltaSeconds);
     const loopCompleted = this.#loopCompleted;
     this.#loopCompleted = false;
+    if (this.#events.length === 0) {
+      if (loopCompleted) return LOOP_COMPLETED_SPINE_UPDATE_RESULT;
+      return this.#completed
+        ? COMPLETED_SPINE_UPDATE_RESULT
+        : RUNNING_SPINE_UPDATE_RESULT;
+    }
     const events = Object.freeze(this.#events.slice());
-    this.#events = [];
+    this.#events.length = 0;
     return Object.freeze({
       completed: this.#completed,
       ...(loopCompleted ? { loopCompleted: true } : {}),
@@ -318,7 +340,7 @@ class OfficialSpinePlayer implements RendercoreSpineSlotPlayer {
     this.assertNotDestroyed();
     this.#completed = false;
     this.#loopCompleted = false;
-    this.#events = [];
+    this.#events.length = 0;
     if (this.#spine) {
       this.#spine.state.clearTracks();
       this.#spine.state.clearListeners();
@@ -336,7 +358,7 @@ class OfficialSpinePlayer implements RendercoreSpineSlotPlayer {
     for (const object of [...this.#slotObjects.keys()]) {
       this.detachSlotObject(object);
     }
-    this.#events = [];
+    this.#events.length = 0;
     this.#spine?.destroy();
     this.#spine = null;
     this.view.removeChildren();

@@ -17,6 +17,11 @@ import type {
   V5GProjectConfig,
   V5GTransformConfig,
 } from "./types.js";
+import type { V5GBasicAnimationSample } from "./basic-animation.js";
+import type {
+  V5GAnimationSampleBase,
+  V5GAnimationSampleResult,
+} from "./animation-sampler.js";
 
 const VISUAL_ENTRY_SCALE_THRESHOLD = 0.011;
 
@@ -40,6 +45,10 @@ export interface SampledLayerState {
 export interface SampledProjectState {
   time: number;
   layers: SampledLayerState[];
+}
+
+export interface RuntimeProjectSampler {
+  sample(time: number): SampledProjectState;
 }
 
 export function sampleProjectAtTime(
@@ -68,6 +77,77 @@ export function sampleLayerAtTime(
     layer.animations,
     time,
   );
+  return applyLayerSample(
+    layer,
+    time,
+    sampled,
+    createSampledLayerState(layer.id, sampled.transform),
+  );
+}
+
+export function createRuntimeProjectSampler(
+  project: V5GProjectConfig,
+): RuntimeProjectSampler {
+  const samplers = project.layers.map((layer) =>
+    createRuntimeLayerSampler(layer),
+  );
+  const state: SampledProjectState = {
+    time: 0,
+    layers: samplers.map((sampler) => sampler.state),
+  };
+  return {
+    sample(time: number): SampledProjectState {
+      const clampedTime = roundTo(
+        clampNumber(time, 0, project.stage.duration),
+        4,
+      );
+      state.time = clampedTime;
+      for (const sampler of samplers) sampler.sample(clampedTime);
+      return state;
+    },
+  };
+}
+
+function createRuntimeLayerSampler(layer: V5GLayerConfig): {
+  readonly state: SampledLayerState;
+  sample(time: number): void;
+} {
+  const basic: V5GBasicAnimationSample = {
+    transform: createTransform(),
+    opacity: 0,
+  };
+  const animation: V5GAnimationSampleResult = {
+    transform: createTransform(),
+    opacity: 0,
+    visualRotation: 0,
+  };
+  const animationBase: V5GAnimationSampleBase = {
+    transform: basic.transform,
+    opacity: 0,
+  };
+  const state = createSampledLayerState(layer.id, animation.transform);
+  return {
+    state,
+    sample(time: number): void {
+      sampleBasicAnimationAtTime(layer, time, basic);
+      animationBase.opacity = basic.opacity;
+      sampleLayerAnimationsAtTime(
+        animationBase,
+        layer.animations,
+        time,
+        animation,
+      );
+      applyLayerSample(layer, time, animation, state);
+    },
+  };
+}
+
+function applyLayerSample(
+  layer: V5GLayerConfig,
+  time: number,
+  sampled: V5GAnimationSampleResult,
+  result: SampledLayerState,
+): SampledLayerState {
   const hasActiveScaleEntryStart = layer.animations.some(
     (animation) =>
       animation.enabled &&
@@ -114,21 +194,52 @@ export function sampleLayerAtTime(
       activeSafeGlow ||
       activeCardCarousel);
 
+  result.visualRotation = sampled.visualRotation;
+  result.baseOpacity = baseOpacity;
+  result.opacity = opacity;
+  result.visible = visible;
+  result.renderImageDisplay = layer.visible && opacity > 0;
+  result.hasActiveParticleAnimation = activeParticleAnimation;
+  result.hasActiveChaserLightAnimation = activeChaserLight;
+  result.hasActiveRenderEffect = activeRenderEffect;
+  result.hasActiveDeterministicEffect = activeDeterministicEffect;
+  result.hasActiveSafeGlowAnimation = activeSafeGlow;
+  result.hasActiveCardCarousel3D = activeCardCarousel;
+  result.blendMode = layer.blendMode;
+  return result;
+}
+
+function createSampledLayerState(
+  layerId: string,
+  transform: V5GTransformConfig,
+): SampledLayerState {
   return {
-    layerId: layer.id,
-    transform: sampled.transform,
-    visualRotation: sampled.visualRotation,
-    baseOpacity,
-    opacity,
-    visible,
-    renderImageDisplay: layer.visible && opacity > 0,
-    hasActiveParticleAnimation: activeParticleAnimation,
-    hasActiveChaserLightAnimation: activeChaserLight,
-    hasActiveRenderEffect: activeRenderEffect,
-    hasActiveDeterministicEffect: activeDeterministicEffect,
-    hasActiveSafeGlowAnimation: activeSafeGlow,
-    hasActiveCardCarousel3D: activeCardCarousel,
-    blendMode: layer.blendMode,
+    layerId,
+    transform,
+    visualRotation: 0,
+    baseOpacity: 0,
+    opacity: 0,
+    visible: false,
+    renderImageDisplay: false,
+    hasActiveParticleAnimation: false,
+    hasActiveChaserLightAnimation: false,
+    hasActiveRenderEffect: false,
+    hasActiveDeterministicEffect: false,
+    hasActiveSafeGlowAnimation: false,
+    hasActiveCardCarousel3D: false,
+    blendMode: "normal",
+  };
+}
+
+function createTransform(): V5GTransformConfig {
+  return {
+    x: 0,
+    y: 0,
+    scaleX: 1,
+    scaleY: 1,
+    rotation: 0,
+    anchorX: 0.5,
+    anchorY: 0.5,
   };
 }
 

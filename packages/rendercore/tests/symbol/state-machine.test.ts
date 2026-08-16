@@ -171,6 +171,27 @@ describe("SymbolStateMachine validation", () => {
 });
 
 describe("SymbolStateMachine transitions", () => {
+  it("reuses immutable snapshots until observable state changes", () => {
+    const machine = new SymbolStateMachine(createDefinition());
+    const initial = machine.getSnapshot();
+    const initialRevision = machine.getActiveStateRevision();
+
+    expect(machine.getSnapshot()).toBe(initial);
+    machine.requestState("normal");
+    expect(machine.getSnapshot()).toBe(initial);
+    expect(machine.getActiveStateRevision()).toBe(initialRevision);
+
+    machine.setDefaultState("spinBlur");
+    const defaultChanged = machine.getSnapshot();
+    expect(defaultChanged).not.toBe(initial);
+    expect(machine.getSnapshot()).toBe(defaultChanged);
+    expect(machine.getActiveStateRevision()).toBe(initialRevision);
+
+    machine.requestState("appear");
+    expect(machine.getSnapshot()).not.toBe(defaultChanged);
+    expect(machine.getActiveStateRevision()).toBe(initialRevision + 1);
+  });
+
   it("switches immediately from static states and rejects unknown requests", () => {
     const machine = new SymbolStateMachine(createDefinition());
 

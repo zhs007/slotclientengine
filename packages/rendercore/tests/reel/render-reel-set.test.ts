@@ -23,6 +23,81 @@ import {
 } from "./helpers.js";
 
 describe("RenderReelSet", () => {
+  it("reuses the no-event update result while idle", () => {
+    const reelSet = new RenderReelSet({
+      reels: createBasicReels(),
+      layout: createBasicLayout(),
+      registry: createBasicRegistry(),
+    });
+
+    const first = reelSet.update(0);
+    const second = reelSet.update(0);
+
+    expect(second).toBe(first);
+    expect(second).toEqual({
+      completed: false,
+      spinning: false,
+      startedAxes: [],
+      stoppedAxes: [],
+    });
+  });
+
+  it("consumes one low-FPS delta with the same landing outcome as small updates", () => {
+    const createSpinningSet = () => {
+      const reels = createBasicReels();
+      const reelSet = new RenderReelSet({
+        reels,
+        layout: createBasicLayout(),
+        registry: createBasicRegistry(),
+      });
+      reelSet.resetToVisibleScene(
+        [
+          [1, 2, 1],
+          [2, 1, 2],
+        ],
+        [0, 0],
+      );
+      reelSet.spin(
+        createReelSpinPlan({
+          reels,
+          finalYs: [2, 3],
+          visibleRows: 3,
+          minimumSpinCycles: 1,
+          baseDurationMs: 100,
+          speedSymbolsPerSecond: 100,
+          startDelayMs: 30,
+          stopDelayMs: 20,
+        }),
+      );
+      return reelSet;
+    };
+    const lowFps = createSpinningSet();
+    const stepped = createSpinningSet();
+
+    const lowFpsResult = lowFps.update(0.5);
+    const steppedStoppedAxes: number[] = [];
+    let steppedResult = stepped.update(0);
+    let steppedCompleted = false;
+    for (let index = 0; index < 30; index += 1) {
+      steppedResult = stepped.update(0.5 / 30);
+      steppedCompleted ||= steppedResult.completed;
+      steppedStoppedAxes.push(...steppedResult.stoppedAxes);
+    }
+
+    expect(lowFpsResult).toMatchObject({
+      completed: true,
+      spinning: false,
+      stoppedAxes: [0, 1],
+    });
+    expect(steppedCompleted).toBe(true);
+    expect(steppedResult.spinning).toBe(false);
+    expect(steppedStoppedAxes).toEqual([0, 1]);
+    expect(lowFps.getVisibleScene()).toEqual(stepped.getVisibleScene());
+    expect(lowFps.getSnapshot().reels.map((reel) => reel.currentY)).toEqual(
+      stepped.getSnapshot().reels.map((reel) => reel.currentY),
+    );
+  });
+
   it("starts, settles, and cancels continuous spins across standard reels", () => {
     const reels = createBasicReels();
     const reelSet = new RenderReelSet({

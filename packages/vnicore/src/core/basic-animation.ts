@@ -14,51 +14,56 @@ export interface V5GBasicAnimationSample {
 export function sampleBasicAnimationAtTime(
   layer: V5GLayerConfig,
   time: number,
+  target?: V5GBasicAnimationSample,
 ): V5GBasicAnimationSample {
+  const result =
+    target ??
+    ({
+      transform: { ...layer.transform },
+      opacity: 0,
+    } satisfies V5GBasicAnimationSample);
+  const transform = result.transform;
+  transform.anchorX = layer.transform.anchorX;
+  transform.anchorY = layer.transform.anchorY;
   const basic = layer.basicAnimation;
   if (!basic) {
-    return {
-      transform: { ...layer.transform },
-      opacity: roundTo(clampNumber(layer.opacity, 0, 1), 4),
-    };
+    transform.x = layer.transform.x;
+    transform.y = layer.transform.y;
+    transform.scaleX = layer.transform.scaleX;
+    transform.scaleY = layer.transform.scaleY;
+    transform.rotation = layer.transform.rotation;
+    result.opacity = roundTo(clampNumber(layer.opacity, 0, 1), 4);
+    return result;
   }
-  return {
-    transform: {
-      ...layer.transform,
-      x: roundTo(
-        sampleBasicAnimationTrack(basic.positionX, layer.transform.x, time),
-        4,
-      ),
-      y: roundTo(
-        sampleBasicAnimationTrack(basic.positionY, layer.transform.y, time),
-        4,
-      ),
-      scaleX: roundTo(
-        sampleBasicAnimationTrack(basic.scaleX, layer.transform.scaleX, time),
-        4,
-      ),
-      scaleY: roundTo(
-        sampleBasicAnimationTrack(basic.scaleY, layer.transform.scaleY, time),
-        4,
-      ),
-      rotation: roundTo(
-        sampleBasicAnimationTrack(
-          basic.rotation,
-          layer.transform.rotation,
-          time,
-        ),
-        4,
-      ),
-    },
-    opacity: roundTo(
-      clampNumber(
-        sampleBasicAnimationTrack(basic.opacity, layer.opacity, time),
-        0,
-        1,
-      ),
-      4,
+  transform.x = roundTo(
+    sampleBasicAnimationTrack(basic.positionX, layer.transform.x, time),
+    4,
+  );
+  transform.y = roundTo(
+    sampleBasicAnimationTrack(basic.positionY, layer.transform.y, time),
+    4,
+  );
+  transform.scaleX = roundTo(
+    sampleBasicAnimationTrack(basic.scaleX, layer.transform.scaleX, time),
+    4,
+  );
+  transform.scaleY = roundTo(
+    sampleBasicAnimationTrack(basic.scaleY, layer.transform.scaleY, time),
+    4,
+  );
+  transform.rotation = roundTo(
+    sampleBasicAnimationTrack(basic.rotation, layer.transform.rotation, time),
+    4,
+  );
+  result.opacity = roundTo(
+    clampNumber(
+      sampleBasicAnimationTrack(basic.opacity, layer.opacity, time),
+      0,
+      1,
     ),
-  };
+    4,
+  );
+  return result;
 }
 
 export function sampleBasicAnimationTrack(

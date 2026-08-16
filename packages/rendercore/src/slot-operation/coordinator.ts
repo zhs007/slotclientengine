@@ -15,6 +15,7 @@ import type {
 
 interface FrameWaiter {
   readonly signal: AbortSignal;
+  readonly eligibleUpdateEpoch: number;
   readonly update: (deltaSeconds: number) => boolean;
   readonly resolve: () => void;
   readonly reject: (error: Error) => void;
@@ -38,6 +39,8 @@ class DefaultSlotOperationCoordinator implements SlotOperationCoordinator {
   #activeAbort: AbortController | null = null;
   #resolve: (() => void) | null = null;
   #reject: ((error: Error) => void) | null = null;
+  #updateEpoch = 0;
+  #updating = false;
 
   constructor(options: SlotOperationCoordinatorOptions) {
     this.#options = options;
@@ -72,14 +75,19 @@ class DefaultSlotOperationCoordinator implements SlotOperationCoordinator {
         "Slot operation deltaSeconds must be finite and non-negative.",
       );
     if (!this.#plan || this.#phase !== "running") return;
+    const updateEpoch = (this.#updateEpoch += 1);
+    this.#updating = true;
     try {
       this.#options.updateRuntime?.(deltaSeconds);
-      for (const waiter of [...this.#frameWaiters]) {
+      for (const waiter of this.#frameWaiters) {
+        if (waiter.eligibleUpdateEpoch > updateEpoch) continue;
         if (waiter.signal.aborted) continue;
         if (waiter.update(deltaSeconds)) this.resolveFrameWaiter(waiter);
       }
     } catch (error) {
       this.fail(asError(error));
+    } finally {
+      this.#updating = false;
     }
   }
 
@@ -106,6 +114,14 @@ class DefaultSlotOperationCoordinator implements SlotOperationCoordinator {
         : interruption,
     );
     if (cleanupError) throw cleanupError;
+  }
+
+  isRunning(): boolean {
+    return this.#plan !== null && this.#phase === "running";
+  }
+
+  getPhase(): SlotOperationCoordinatorPhase {
+    return this.#phase;
   }
 
   getSnapshot(): SlotOperationCoordinatorSnapshot {
@@ -232,6 +248,7 @@ class DefaultSlotOperationCoordinator implements SlotOperationCoordinator {
     return new Promise<void>((resolve, reject) => {
       const waiter: FrameWaiter = {
         signal,
+        eligibleUpdateEpoch: this.#updateEpoch + (this.#updating ? 1 : 0),
         update,
         resolve,
         reject,

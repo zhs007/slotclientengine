@@ -26,6 +26,8 @@ export class SymbolStateMachine {
   #resolvedState: SymbolStateId;
   #defaultState: SymbolStateId;
   #pendingState: SymbolStateId | null = null;
+  #activeStateRevision = 0;
+  #snapshot: SymbolStateSnapshot | null = null;
 
   constructor(definition: SymbolDefinition) {
     const validated = validateSymbolDefinition(definition);
@@ -54,13 +56,17 @@ export class SymbolStateMachine {
   }
 
   getSnapshot(): SymbolStateSnapshot {
-    return Object.freeze({
+    return (this.#snapshot ??= Object.freeze({
       requestedState: this.#requestedState,
       resolvedState: this.#resolvedState,
       defaultState: this.#defaultState,
       pendingState: this.#pendingState,
       isOnce: this.getCurrentStateDefinition().phase === "once",
-    });
+    }));
+  }
+
+  getActiveStateRevision(): number {
+    return this.#activeStateRevision;
   }
 
   setDefaultState(state: SymbolStateId): void {
@@ -70,7 +76,10 @@ export class SymbolStateMachine {
         `Default symbol state "${state}" must be stable.`,
       );
     }
-    this.#defaultState = state;
+    if (this.#defaultState !== state) {
+      this.#defaultState = state;
+      this.#snapshot = null;
+    }
   }
 
   requestState(
@@ -84,7 +93,7 @@ export class SymbolStateMachine {
       );
     }
     if (transitionMode === "immediate") {
-      this.#pendingState = null;
+      this.clearPendingState();
       this.switchTo(state);
       return;
     }
@@ -99,7 +108,10 @@ export class SymbolStateMachine {
       return;
     }
 
-    this.#pendingState = state;
+    if (this.#pendingState !== state) {
+      this.#pendingState = state;
+      this.#snapshot = null;
+    }
   }
 
   notifyLoopComplete(): void {
@@ -109,7 +121,7 @@ export class SymbolStateMachine {
 
     if (this.#pendingState !== null) {
       const next = this.#pendingState;
-      this.#pendingState = null;
+      this.clearPendingState();
       this.switchTo(next);
     }
   }
@@ -120,7 +132,7 @@ export class SymbolStateMachine {
       return;
     }
 
-    this.#pendingState = null;
+    this.clearPendingState();
     if (current.afterComplete === "return-to-default") {
       this.switchTo(this.#defaultState);
     }
@@ -131,7 +143,7 @@ export class SymbolStateMachine {
   }
 
   reset(): void {
-    this.#pendingState = null;
+    this.clearPendingState();
     this.switchTo(this.#defaultState);
   }
 
@@ -155,8 +167,23 @@ export class SymbolStateMachine {
 
   private switchTo(requestedState: SymbolStateId): void {
     this.assertKnownState(requestedState);
+    const resolvedState = this.resolveState(requestedState);
+    if (
+      this.#requestedState === requestedState &&
+      this.#resolvedState === resolvedState
+    ) {
+      return;
+    }
     this.#requestedState = requestedState;
-    this.#resolvedState = this.resolveState(requestedState);
+    this.#resolvedState = resolvedState;
+    this.#activeStateRevision += 1;
+    this.#snapshot = null;
+  }
+
+  private clearPendingState(): void {
+    if (this.#pendingState === null) return;
+    this.#pendingState = null;
+    this.#snapshot = null;
   }
 
   private assertKnownState(state: SymbolStateId): void {

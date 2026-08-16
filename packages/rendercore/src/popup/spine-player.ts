@@ -219,10 +219,15 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
   }
 
   update(deltaSeconds: number): SpinePopupSnapshot {
+    this.tick(deltaSeconds);
+    return this.getSnapshot();
+  }
+
+  tick(deltaSeconds: number): void {
     this.assertReady();
     if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0)
       throw new Error("deltaSeconds must be finite and non-negative.");
-    if (!this.isPlaying()) return this.getSnapshot();
+    if (!this.isPlaying()) return;
     const result = this.#player.update(deltaSeconds);
     for (const overlay of this.#overlays) overlay.update(deltaSeconds);
     if (this.#phase === "start" && result.completed) {
@@ -236,7 +241,6 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
     } else if (this.#phase === "end" && result.completed) {
       this.complete();
     }
-    return this.getSnapshot();
   }
 
   requestDismiss(): void {

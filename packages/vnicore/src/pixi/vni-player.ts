@@ -1,7 +1,11 @@
 import * as PIXI from "pixi.js";
 import { toPixiBlendMode } from "./blend-mode.js";
 import { editorToPixi } from "../core/coordinates.js";
-import { sampleProjectAtTime } from "../core/project-sampler.js";
+import {
+  createRuntimeProjectSampler,
+  type RuntimeProjectSampler,
+  type SampledLayerState,
+} from "../core/project-sampler.js";
 import {
   assertVNIAdjacentLayerGroupSlot,
   getVNIProjectLayerGroupSlots,
@@ -79,7 +83,6 @@ import {
   isPrecomposedLightMaskBlendMode,
 } from "./precomposed-light-mask.js";
 import type { AssetUrlManifest } from "../core/asset-manifest.js";
-import type { SampledLayerState } from "../core/project-sampler.js";
 import type {
   V5GAssetConfig,
   V5GLayerConfig,
@@ -304,6 +307,8 @@ export class VNIPlayer implements VNIManualPlaybackHost {
   private readonly project: VNIProjectConfig;
   private readonly assetUrls: AssetUrlManifest;
   private readonly autoTick: boolean;
+  private readonly projectSampler: RuntimeProjectSampler;
+  private readonly auxiliaryProjectSampler: RuntimeProjectSampler;
   private readonly assetsById: ReadonlyMap<string, V5GAssetConfig>;
   private readonly layerGroups: readonly VNIRenderGroupInfo[];
   private readonly layerGroupSlots: readonly VNILayerGroupSlot[];
@@ -323,6 +328,12 @@ export class VNIPlayer implements VNIManualPlaybackHost {
   private readonly chaserLightSpritesByLayer = new Map<string, PIXI.Sprite[]>();
   private readonly maskSpritesByTargetLayer = new Map<string, PIXI.Sprite>();
   private readonly maskCacheKeysByTargetLayer = new Map<string, string>();
+  private readonly sampledLayersByIdScratch = new Map<
+    string,
+    SampledLayerState
+  >();
+  private readonly activeNativeMaskTargetsScratch = new Set<string>();
+  private readonly activePrecomposedMaskTargetsScratch = new Set<string>();
   private readonly precomposedLightMasksByTargetLayer = new Map<
     string,
     VNIPrecomposedLightMaskState
@@ -402,6 +413,8 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     this.profilePurpose = options.profilePurpose;
     this.assetScale = options.assetScale;
     this.project = options.project;
+    this.projectSampler = createRuntimeProjectSampler(this.project);
+    this.auxiliaryProjectSampler = createRuntimeProjectSampler(this.project);
     this.assetUrls = options.assetUrls;
     this.autoTick = options.autoTick ?? true;
     normalizeFitPadding(options.fitPadding);
@@ -1497,7 +1510,7 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     const frame = this.particleRuntime.beginDrain();
     const particleSpriteCount = this.renderParticleSamples(frame.particles);
     this.updateDiagnostics(
-      sampled.layers.filter((layer) => layer.visible).length,
+      countVisibleLayers(sampled.layers),
       particleSpriteCount,
       renderEffectSpriteCount,
       deterministicEffectSpriteCount,
@@ -1517,7 +1530,7 @@ export class VNIPlayer implements VNIManualPlaybackHost {
   private advanceParticleDrain(deltaSeconds: number): void {
     const frame = this.particleRuntime.advanceDrain(deltaSeconds);
     const particleSpriteCount = this.renderParticleSamples(frame.particles);
-    const sampled = sampleProjectAtTime(this.project, this.currentTime);
+    const sampled = this.projectSampler.sample(this.currentTime);
     const safeGlowSpriteCount = this.renderSafeGlowSamples(
       sampled.layers,
       this.currentTime,
@@ -1530,7 +1543,7 @@ export class VNIPlayer implements VNIManualPlaybackHost {
       this.currentTime,
     );
     this.updateDiagnostics(
-      sampled.layers.filter((layer) => layer.visible).length,
+      countVisibleLayers(sampled.layers),
       particleSpriteCount,
       this.getRenderedRenderEffectCount(),
       deterministicEffectSpriteCount,
@@ -1549,9 +1562,7 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     this.segmentedPlayback?.markParticleDrainComplete();
     this.clearParticles();
     this.updateDiagnostics(
-      sampleProjectAtTime(this.project, this.currentTime).layers.filter(
-        (layer) => layer.visible,
-      ).length,
+      countVisibleLayers(this.projectSampler.sample(this.currentTime).layers),
       0,
       this.getRenderedRenderEffectCount(),
       this.getRenderedDeterministicEffectCount(),
@@ -1822,7 +1833,7 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     );
     const particleSpriteCount = this.renderParticleSamples(particles);
     this.updateDiagnostics(
-      sampled.layers.filter((layer) => layer.visible).length,
+      countVisibleLayers(sampled.layers),
       particleSpriteCount,
       renderEffectSpriteCount,
       deterministicEffectSpriteCount,
@@ -1858,7 +1869,7 @@ export class VNIPlayer implements VNIManualPlaybackHost {
       options.particleLayerTime === undefined ||
       options.particleLayerTime === sampled.time
         ? sampled.layers
-        : sampleProjectAtTime(this.project, options.particleLayerTime).layers;
+        : this.auxiliaryProjectSampler.sample(options.particleLayerTime).layers;
     const particleLayers = this.getParticleRuntimeLayers(
       particleSampledLayers,
       sampled.layers,
@@ -1878,7 +1889,7 @@ export class VNIPlayer implements VNIManualPlaybackHost {
         );
     const particleSpriteCount = this.renderParticleSamples(frame.particles);
     this.updateDiagnostics(
-      sampled.layers.filter((layer) => layer.visible).length,
+      countVisibleLayers(sampled.layers),
       particleSpriteCount,
       renderEffectSpriteCount,
       deterministicEffectSpriteCount,
@@ -1893,7 +1904,7 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     time: number;
     layers: SampledLayerState[];
   } {
-    const sampled = sampleProjectAtTime(this.project, time);
+    const sampled = this.projectSampler.sample(time);
     this.currentTime = sampled.time;
     for (const sampledLayer of sampled.layers) {
       const instance = this.layerInstances.get(sampledLayer.layerId);
@@ -1943,11 +1954,15 @@ export class VNIPlayer implements VNIManualPlaybackHost {
   }
 
   private applyLayerMasks(sampledLayers: readonly SampledLayerState[]): void {
-    const sampledByLayerId = new Map(
-      sampledLayers.map((layer) => [layer.layerId, layer] as const),
-    );
-    const activeNativeTargetLayerIds = new Set<string>();
-    const activePrecomposedTargetLayerIds = new Set<string>();
+    const sampledByLayerId = this.sampledLayersByIdScratch;
+    const activeNativeTargetLayerIds = this.activeNativeMaskTargetsScratch;
+    const activePrecomposedTargetLayerIds =
+      this.activePrecomposedMaskTargetsScratch;
+    sampledByLayerId.clear();
+    activeNativeTargetLayerIds.clear();
+    activePrecomposedTargetLayerIds.clear();
+    for (const layer of sampledLayers)
+      sampledByLayerId.set(layer.layerId, layer);
 
     for (const layer of this.project.layers) {
       const mask = layer.mask;
@@ -2016,11 +2031,11 @@ export class VNIPlayer implements VNIManualPlaybackHost {
       }
     }
 
-    for (const [layerId, sprite] of [...this.maskSpritesByTargetLayer]) {
+    for (const [layerId] of this.maskSpritesByTargetLayer) {
       if (activeNativeTargetLayerIds.has(layerId)) continue;
       this.clearNativeMaskForTarget(layerId);
     }
-    for (const layerId of [...this.precomposedLightMasksByTargetLayer.keys()]) {
+    for (const layerId of this.precomposedLightMasksByTargetLayer.keys()) {
       if (activePrecomposedTargetLayerIds.has(layerId)) continue;
       this.clearPrecomposedLightMask(layerId);
     }
@@ -3159,6 +3174,14 @@ function normalizeViewportScale(value: number): number {
     );
   }
   return value;
+}
+
+function countVisibleLayers(layers: readonly SampledLayerState[]): number {
+  let count = 0;
+  for (const layer of layers) {
+    if (layer.visible) count += 1;
+  }
+  return count;
 }
 
 function assertCompatibleCloneAssets(

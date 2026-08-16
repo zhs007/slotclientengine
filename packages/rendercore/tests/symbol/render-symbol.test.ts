@@ -48,6 +48,19 @@ const createSizedTexture = (width: number, height: number) => {
 };
 
 describe("RenderSymbol", () => {
+  it("reuses snapshot and update results while the state is unchanged", () => {
+    const renderSymbol = new RenderSymbol({
+      definition: createDefinition(),
+      texture: Texture.WHITE,
+      animationResolver: createTestDefaultSymbolAnimationResolver(),
+    });
+
+    expect(renderSymbol.getStateSnapshot()).toBe(
+      renderSymbol.getStateSnapshot(),
+    );
+    expect(renderSymbol.update(0)).toBe(renderSymbol.update(0));
+  });
+
   it("can enter landing appear immediately from an active stable loop", () => {
     const renderSymbol = new RenderSymbol({
       definition: createDefinition(),
@@ -294,10 +307,12 @@ describe("RenderSymbol", () => {
     expect(sprite.texture).toBe(Texture.WHITE);
     expect(renderSymbol.children).toEqual([
       renderSymbol.underlayLayer,
+      renderSymbol.gameUnderlayLayer,
       renderSymbol.baseLayer,
       renderSymbol.stateSprite,
       renderSymbol.overlayLayer,
       renderSymbol.imageStringOverlayLayer,
+      renderSymbol.gameOverlayLayer,
     ]);
 
     renderSymbol.requestState("appear");

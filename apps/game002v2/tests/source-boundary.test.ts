@@ -16,4 +16,17 @@ describe("game002v2 source boundary", () => {
     expect(source).not.toMatch(/releaseMainReelSymbols/u);
     expect(source).not.toMatch(/(?:state|id)\s*[!=]==?\s*["']remove["']/u);
   });
+
+  it("passes the complete ticker delta to the runtime once", () => {
+    const source = readFileSync(
+      resolve(__dirname, "../src/round-adapter.ts"),
+      "utf8",
+    );
+
+    expect(source).toContain(
+      "runtime.update(Math.max(0, this.#app.ticker.deltaMS / 1000));",
+    );
+    expect(source).not.toMatch(/remainingSeconds|sliceSeconds/u);
+    expect(source).not.toMatch(/Math\.min\([^\n]*deltaMS/u);
+  });
 });

@@ -168,20 +168,35 @@ interface BounceJumpCacheEntry {
 
 const bounceJumpCache = new WeakMap<V5GAnimationConfig, BounceJumpCacheEntry>();
 
+interface SortedAnimationCacheEntry {
+  readonly source: readonly V5GAnimationConfig[];
+  readonly sorted: readonly V5GAnimationConfig[];
+  readonly startTimes: readonly number[];
+}
+
+const sortedAnimationCache = new WeakMap<
+  readonly V5GAnimationConfig[],
+  SortedAnimationCacheEntry
+>();
+
 export function sampleLayerAnimationsAtTime(
   base: V5GAnimationSampleBase,
   animations: readonly V5GAnimationConfig[],
   time: number,
+  target?: V5GAnimationSampleResult,
 ): V5GAnimationSampleResult {
-  const result: V5GAnimationSampleResult = {
-    transform: { ...base.transform },
-    opacity: base.opacity,
-    visualRotation: 0,
-  };
+  const result: V5GAnimationSampleResult =
+    target ??
+    ({
+      transform: { ...base.transform },
+      opacity: base.opacity,
+      visualRotation: 0,
+    } satisfies V5GAnimationSampleResult);
+  copyTransform(result.transform, base.transform);
+  result.opacity = base.opacity;
+  result.visualRotation = 0;
 
-  for (const animation of [...animations].sort(
-    (a, b) => a.startTime - b.startTime,
-  )) {
+  for (const animation of getSortedAnimations(animations)) {
     if (!animation.enabled) continue;
 
     const progress = getAnimationProgressForSampling(animation, time);
@@ -250,6 +265,45 @@ export function sampleLayerAnimationsAtTime(
   result.opacity = roundTo(clampNumber(result.opacity, 0, 1), 4);
   result.visualRotation = roundTo(result.visualRotation, 4);
   return result;
+}
+
+function getSortedAnimations(
+  animations: readonly V5GAnimationConfig[],
+): readonly V5GAnimationConfig[] {
+  const cached = sortedAnimationCache.get(animations);
+  if (cached && cached.source.length === animations.length) {
+    let current = true;
+    for (let index = 0; index < animations.length; index += 1) {
+      if (
+        cached.source[index] !== animations[index] ||
+        cached.startTimes[index] !== animations[index]!.startTime
+      ) {
+        current = false;
+        break;
+      }
+    }
+    if (current) return cached.sorted;
+  }
+  const sorted = [...animations].sort((a, b) => a.startTime - b.startTime);
+  sortedAnimationCache.set(animations, {
+    source: [...animations],
+    sorted,
+    startTimes: animations.map((animation) => animation.startTime),
+  });
+  return sorted;
+}
+
+function copyTransform(
+  target: V5GTransformConfig,
+  source: V5GTransformConfig,
+): void {
+  target.x = source.x;
+  target.y = source.y;
+  target.scaleX = source.scaleX;
+  target.scaleY = source.scaleY;
+  target.rotation = source.rotation;
+  target.anchorX = source.anchorX;
+  target.anchorY = source.anchorY;
 }
 
 export function easeProgress(progress: number, easing: V5GEasingName): number {
