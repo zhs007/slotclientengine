@@ -54,15 +54,13 @@ class FakePreludePopup {
   start() {
     this.phase = "loop";
   }
-  update() {
-    return this.getSnapshot();
-  }
+  update() {}
   requestDismiss() {}
   dismissImmediately() {
     this.phase = "complete";
   }
-  getSnapshot() {
-    return { phase: this.phase, dismissRequested: false };
+  getPhase() {
+    return this.phase;
   }
   isPlaying() {
     return this.phase === "loop";
@@ -147,7 +145,7 @@ function createRuntime(player: FakeVideoPlayer, prelude?: FakePreludePopup) {
       destroy: vi.fn(),
     } as never,
     createVideoTransitionPlayer: () => player,
-    ...(prelude ? { createSpinePopupPlayer: () => prelude as never } : {}),
+    ...(prelude ? { createSpinePopupRuntime: () => prelude as never } : {}),
   });
 }
 

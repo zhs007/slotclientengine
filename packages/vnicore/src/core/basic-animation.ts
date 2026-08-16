@@ -14,14 +14,19 @@ export interface V5GBasicAnimationSample {
 export function sampleBasicAnimationAtTime(
   layer: V5GLayerConfig,
   time: number,
-  target?: V5GBasicAnimationSample,
 ): V5GBasicAnimationSample {
-  const result =
-    target ??
-    ({
-      transform: { ...layer.transform },
-      opacity: 0,
-    } satisfies V5GBasicAnimationSample);
+  return sampleBasicAnimationAtTimeInto(layer, time, {
+    transform: { ...layer.transform },
+    opacity: 0,
+  });
+}
+
+/** @internal Runtime-owned target sampling; not exported from the core barrel. */
+export function sampleBasicAnimationAtTimeInto(
+  layer: V5GLayerConfig,
+  time: number,
+  result: V5GBasicAnimationSample,
+): V5GBasicAnimationSample {
   const transform = result.transform;
   transform.anchorX = layer.transform.anchorX;
   transform.anchorY = layer.transform.anchorY;

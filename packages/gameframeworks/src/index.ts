@@ -184,7 +184,7 @@ export {
   suggestSlotRoundFlow,
   validateSlotRoundFlowCatalogCompatibility,
 } from "./scene-layout-template/index.js";
-export { createSpinePopupPlayer } from "@slotclientengine/rendercore/popup";
+export { createSpinePopupRuntime } from "@slotclientengine/rendercore/popup";
 export type {
   PopupManifest,
   PopupManifestV1,
@@ -201,8 +201,7 @@ export type {
   SpinePopupManifestV4,
   SpinePopupManifestV5,
   SpinePopupPhase,
-  SpinePopupPlayer,
-  SpinePopupSnapshot,
+  SpinePopupRuntime,
 } from "@slotclientengine/rendercore/popup";
 export type {
   SceneLayoutSlotTemplateConfigV1,

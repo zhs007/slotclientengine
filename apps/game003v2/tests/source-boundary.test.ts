@@ -38,6 +38,8 @@ describe("game003v2 source boundary", () => {
     expect(source).not.toMatch(
       /selectMiddleSymbol|defaultAreaSpinFunction|AreaSpinFunctionContext|area\.getLayer\("win"\)\.remove/u,
     );
+    expect(source).toContain("getActiveAwardCelebrationPhase()");
+    expect(source).not.toContain("getActiveAwardCelebrationSnapshot()");
   });
 
   it("serves the art-owned package directly without generated bindings", () => {

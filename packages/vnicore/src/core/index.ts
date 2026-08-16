@@ -1,7 +1,28 @@
 export * from "./types.js";
 export * from "./coordinates.js";
-export * from "./animation-sampler.js";
-export * from "./basic-animation.js";
+export {
+  DETERMINISTIC_EFFECT_ANIMATION_TYPES,
+  PARTICLE_ANIMATION_TYPES,
+  SUPPORTED_ANIMATION_TYPES,
+  SUPPORTED_EASINGS,
+  backOutProgress,
+  easeProgress,
+  getDefaultEasing,
+  isDeterministicEffectAnimationType,
+  isParticleAnimationType,
+  isSupportedAnimationType,
+  isSupportedEasing,
+  sampleLayerAnimationsAtTime,
+  shouldHideLayerOutsideActiveAnimation,
+  type V5GAnimationSampleBase,
+  type V5GAnimationSampleResult,
+  type V5GEasingName,
+} from "./animation-sampler.js";
+export {
+  sampleBasicAnimationAtTime,
+  sampleBasicAnimationTrack,
+  type V5GBasicAnimationSample,
+} from "./basic-animation.js";
 export * from "./particle-sampler.js";
 export * from "./particle-runtime.js";
 export * from "./particle-combo-variant.js";
@@ -14,7 +35,12 @@ export * from "./safe-glow-sampler.js";
 export * from "./sequence-layer.js";
 export * from "./timeline-progress.js";
 export * from "./playback-sequence.js";
-export * from "./project-sampler.js";
+export {
+  sampleLayerAtTime,
+  sampleProjectAtTime,
+  type SampledLayerState,
+  type SampledProjectState,
+} from "./project-sampler.js";
 export * from "./layer-groups.js";
 export * from "./validation.js";
 export * from "./asset-manifest.js";

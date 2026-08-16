@@ -26,7 +26,6 @@ export class SymbolStateMachine {
   #resolvedState: SymbolStateId;
   #defaultState: SymbolStateId;
   #pendingState: SymbolStateId | null = null;
-  #activeStateRevision = 0;
   #snapshot: SymbolStateSnapshot | null = null;
 
   constructor(definition: SymbolDefinition) {
@@ -63,10 +62,6 @@ export class SymbolStateMachine {
       pendingState: this.#pendingState,
       isOnce: this.getCurrentStateDefinition().phase === "once",
     }));
-  }
-
-  getActiveStateRevision(): number {
-    return this.#activeStateRevision;
   }
 
   setDefaultState(state: SymbolStateId): void {
@@ -176,7 +171,6 @@ export class SymbolStateMachine {
     }
     this.#requestedState = requestedState;
     this.#resolvedState = resolvedState;
-    this.#activeStateRevision += 1;
     this.#snapshot = null;
   }
 

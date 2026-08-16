@@ -4,7 +4,7 @@ import type { RendercoreSpinePlayer } from "../../src/spine/runtime-player.js";
 import type {
   PopupStringNodeHandle,
   SpinePopupPhase,
-  SpinePopupPlayer,
+  SpinePopupRuntime,
 } from "../../src/popup/index.js";
 
 const state = vi.hoisted(() => ({
@@ -78,7 +78,7 @@ class FakePopupStringNode implements PopupStringNodeHandle {
   }
 }
 
-class FakeSpinePopupPlayer implements SpinePopupPlayer {
+class FakeSpinePopupRuntime implements SpinePopupRuntime {
   readonly container = new Container();
   readonly heading = new FakePopupStringNode("text", "heading", "DEFAULT");
   readonly amount = new FakePopupStringNode(
@@ -103,18 +103,15 @@ class FakeSpinePopupPlayer implements SpinePopupPlayer {
     this.phase = "loop";
     this.dismissRequested = false;
   }
-  update() {
-    return this.getSnapshot();
-  }
-  tick() {}
+  update() {}
   requestDismiss() {
     this.dismissRequested = true;
   }
   dismissImmediately() {
     this.phase = "complete";
   }
-  getSnapshot() {
-    return { phase: this.phase, dismissRequested: this.dismissRequested };
+  getPhase() {
+    return this.phase;
   }
   isPlaying() {
     return !["idle", "complete"].includes(this.phase);
@@ -221,7 +218,7 @@ function createRuntime(
   effect: "spine" | "none" = "spine",
 ) {
   const players: FakeTransitionPlayer[] = [];
-  const popups: FakeSpinePopupPlayer[] = [];
+  const popups: FakeSpinePopupRuntime[] = [];
   const runtime = createSceneLayoutPackageRuntime({
     resource: packageResource(withEdge, withPrelude, effect) as never,
     createTransitionPlayer: () => {
@@ -229,8 +226,8 @@ function createRuntime(
       players.push(player);
       return player;
     },
-    createSpinePopupPlayer: () => {
-      const popup = new FakeSpinePopupPlayer();
+    createSpinePopupRuntime: () => {
+      const popup = new FakeSpinePopupRuntime();
       popups.push(popup);
       return popup;
     },

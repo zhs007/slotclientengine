@@ -7,6 +7,13 @@ export default defineConfig({
   resolve: {
     alias: [
       {
+        find: "@slotclientengine/rendercore/scene-layout/editor",
+        replacement: resolve(
+          __dirname,
+          "../../packages/rendercore/src/scene-layout/editor.ts",
+        ),
+      },
+      {
         find: "@slotclientengine/rendercore/popup",
         replacement: resolve(
           __dirname,

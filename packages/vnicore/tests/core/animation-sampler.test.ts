@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   easeProgress,
   sampleLayerAnimationsAtTime,
+  sampleLayerAnimationsAtTimeInto,
 } from "../../src/core/animation-sampler";
 import type {
   V5GAnimationConfig,
@@ -45,13 +46,13 @@ describe("animation-sampler", () => {
     };
     const animations = [animation("fade", { fromOpacity: 0, toOpacity: 1 })];
 
-    const first = sampleLayerAnimationsAtTime(
+    const first = sampleLayerAnimationsAtTimeInto(
       { transform: baseTransform, opacity: 1 },
       animations,
       0.25,
       target,
     );
-    const second = sampleLayerAnimationsAtTime(
+    const second = sampleLayerAnimationsAtTimeInto(
       { transform: baseTransform, opacity: 1 },
       animations,
       0.75,

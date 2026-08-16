@@ -114,11 +114,11 @@ docs/agent-rules/**
 
 ## 7. 实施步骤
 
-1. 缓存Symbol snapshot/revision与steady update result，复用Spine/ani无事件结果。
+1. 缓存Symbol snapshot与steady update result；RenderSymbol内部按语义 state 比较，复用Spine/ani无事件结果。
 2. 将standard ReelSet slice改为内部scratch聚合和direct phase query，加入no-event identity与低FPS事件测试。
 3. 增加coordinator `isRunning()`并迁移仓库consumer；移除game002v2/configured adapter的app层clamp/全runtime切片。
-4. 增加VNI runtime sampler、stable buffers、animation-order cache及mask scratch，保留pure sampler fresh identity测试。
-5. Popup增加void tick并由package runtime调用；Cascade用共享结果和in-place active compaction。
+4. 增加VNI内部 runtime sampler、stable buffers、animation-order cache及mask scratch，保留pure sampler fresh identity测试且不扩大public API。
+5. Popup拆分轻量Runtime与复用同一Core的editor snapshot wrapper；package runtime只调用void update/query；Cascade用共享结果和in-place active compaction。
 6. 更新README、Crave手工迁移文档和定向测试，生成UTC执行报告。
 
 ## 8. 测试与验收
@@ -161,7 +161,7 @@ git diff --check
 
 - 本任务不修改YAML或生成物。
 - README只记录稳定hot-path合同；具体命令和结果进入执行报告。
-- 架构职责不变，默认不修改领域规则。
+- 补充一份canonical state/Core、game轻量Runtime、editor diagnostic wrapper的稳定领域规则。
 
 ## 11. 风险与假设
 
@@ -176,3 +176,4 @@ git diff --check
 - [x] game002v2消费完整delta，Crave零修改且文档完整。
 - [x] RenderCore/VNI与直接consumer验收通过。
 - [x] diff/格式检查通过并生成UTC中文执行报告。
+- [x] follow-up移除Symbol revision与VNI mutable sampler public surface，Popup按Core/Editor wrapper收口。

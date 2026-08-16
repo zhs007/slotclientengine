@@ -53,6 +53,11 @@ describe("gamelayout popup dependency", () => {
       { decodeImage: async () => ({ width: 1, height: 1 }) },
     );
     expect(imported.manifest.version).toBe(5);
+    if (
+      imported.manifest.version !== 5 ||
+      imported.manifest.type !== "award-celebration"
+    )
+      throw new Error("Expected v5 award popup.");
     expect(imported.manifest.backdrop.visibleStates).toEqual([
       "base",
       "standard",
@@ -60,8 +65,6 @@ describe("gamelayout popup dependency", () => {
       "superwin",
       "megawin",
     ]);
-    if (imported.manifest.type !== "award-celebration")
-      throw new Error("Expected v5 award popup.");
     expect(
       imported.manifest.awardCelebration.base.layers[0]?.visibleStates,
     ).toEqual(imported.manifest.backdrop.visibleStates);

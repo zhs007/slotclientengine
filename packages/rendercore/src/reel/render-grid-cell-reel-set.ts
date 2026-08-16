@@ -2374,11 +2374,7 @@ export class RenderGridCellReelSet
 
   getSnapshot(): RenderGridCellReelSetSnapshot {
     return Object.freeze({
-      spinning:
-        this.#spinPlan !== null ||
-        this.#continuousSpin !== null ||
-        this.#activeDrop !== null ||
-        this.#activeEffectSweep !== null,
+      spinning: this.isSpinning(),
       completed:
         this.#spinPlan === null &&
         this.#continuousSpin === null &&
@@ -2391,6 +2387,15 @@ export class RenderGridCellReelSet
       cells: Object.freeze(this.#cells.map((cell) => this.snapshotCell(cell))),
       effects: this.#effectController?.getSnapshot() ?? null,
     });
+  }
+
+  isSpinning(): boolean {
+    return (
+      this.#spinPlan !== null ||
+      this.#continuousSpin !== null ||
+      this.#activeDrop !== null ||
+      this.#activeEffectSweep !== null
+    );
   }
 
   getLayer(id: SymbolAreaLayerId): SymbolAreaLayer {

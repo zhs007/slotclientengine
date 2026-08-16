@@ -5,10 +5,7 @@ import type {
 } from "@slotclientengine/vnicore";
 import type { ImageStringResource } from "../image-string/index.js";
 import type { SymbolPackageResource } from "../symbol/package.js";
-import type {
-  AwardCelebrationPlayer,
-  PopupPackageResource,
-} from "../popup/index.js";
+import type { PopupPackageResource } from "../popup/index.js";
 import type {
   FocusedArtViewport,
   RenderViewportMargin,
@@ -884,8 +881,10 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   /** Attaches a borrowed reel-space overlay above the main reel and below transitions/popups. */
   attachMainReelOverlay(overlay: Container): () => void;
   getReelPresentation(reelId: "main"): Container;
-  getAwardCelebrationPopup(id: string): AwardCelebrationPlayer;
-  getSpinePopup(id: string): import("../popup/index.js").SpinePopupPlayer;
+  getAwardCelebrationPopup(
+    id: string,
+  ): import("../popup/index.js").AwardCelebrationRuntime;
+  getSpinePopup(id: string): import("../popup/index.js").SpinePopupRuntime;
   /** Layout-only layer for hosts that own their business reel. */
   getBackgroundPresentation(): Container;
   /** Transition overlay layer for hosts that own their business reel. */
@@ -954,8 +953,8 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   requestAdvanceAwardCelebration(): void;
   /** Immediately clears the active mode popup and its pending end lifecycle. */
   dismissActiveAwardCelebrationImmediately(): void;
-  /** Returns the active mode popup snapshot, or null when no popup is active. */
-  getActiveAwardCelebrationSnapshot():
-    | import("../popup/index.js").AwardCelebrationSnapshot
+  /** Returns the active mode popup phase without constructing a diagnostic snapshot. */
+  getActiveAwardCelebrationPhase():
+    | import("../popup/index.js").AwardCelebrationPhase
     | null;
 }

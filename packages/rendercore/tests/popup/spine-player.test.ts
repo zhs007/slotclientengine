@@ -2,10 +2,11 @@ import { Container } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
 import type { RendercoreSpinePlayer } from "../../src/spine/runtime-player.js";
 import {
-  createSpinePopupPlayer,
+  createSpinePopupRuntime,
   type PopupPackageResource,
   type SpinePopupManifestV1,
 } from "../../src/popup/index.js";
+import { createSpinePopupPlayer } from "../../src/popup/editor.js";
 
 const promptSetText = vi.hoisted(() => vi.fn());
 const createPromptText = vi.hoisted(() => vi.fn());
@@ -21,6 +22,19 @@ vi.mock("../../src/popup/prompt-text.js", async (original) => {
 });
 
 describe("spine popup player", () => {
+  it("keeps the game runtime command/query surface snapshot-free", async () => {
+    const runtime = createSpinePopupRuntime({
+      resource: spineResource(),
+      playerFactory: () => new FakeSpinePlayer(),
+    });
+    expect("getSnapshot" in runtime).toBe(false);
+    await runtime.init();
+    runtime.start();
+    expect(runtime.update(0)).toBeUndefined();
+    expect(runtime.getPhase()).toBe("start");
+    runtime.destroy();
+  });
+
   it("ignores start clicks and exits loop immediately without waiting for its boundary", async () => {
     const leaf = new FakeSpinePlayer();
     const player = createSpinePopupPlayer({

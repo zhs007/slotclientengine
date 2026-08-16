@@ -42,8 +42,18 @@ describe("gameframeworks UI factory source boundary", () => {
     );
   });
 
-  it("does not add lower-level dependencies to game002 or game003", () => {
-    for (const appName of ["game002", "game003"]) {
+  it("exports the lightweight Popup runtime without the editor snapshot surface", () => {
+    const source = readFileSync(join(PACKAGE_ROOT, "src/index.ts"), "utf8");
+
+    expect(source).toContain("createSpinePopupRuntime");
+    expect(source).toContain("SpinePopupRuntime");
+    expect(source).not.toContain("createSpinePopupPlayer");
+    expect(source).not.toContain("SpinePopupPlayer");
+    expect(source).not.toContain("SpinePopupSnapshot");
+  });
+
+  it("does not add lower-level dependencies to game002v2 or game003v2", () => {
+    for (const appName of ["game002v2", "game003v2"]) {
       const pkg = JSON.parse(
         readFileSync(join(REPO_ROOT, "apps", appName, "package.json"), "utf8"),
       ) as { dependencies?: Record<string, string> };

@@ -176,7 +176,7 @@ describe("scene layout presentation surface", () => {
         true,
       )?.visible,
     ).toBe(false);
-    expect(() => surface.getAwardCelebrationPlayer("missing")).toThrow(
+    expect(() => surface.getAwardCelebrationRuntime("missing")).toThrow(
       /unavailable/,
     );
     surface.applyArtSpace();

@@ -50,7 +50,7 @@
 - VNI export bundle 只把 `purpose=runtime` 作为运行候选：唯一 runtime 自动选择，多个 runtime 才枚举；禁止手输 profile id，`purpose=editing` 不进入候选。
 - popup package 使用完整 SHA-256 content-addressed owned payload，并保持 exact closure。
 - Popup 字体与其它 payload 一样按完整 SHA-256 物理去重；logical filename key 与 owner 引用不得从 hash path 反推或合并。
-- `packages/rendercore/popup` 拥有 popup manifest/parser、focus presentation Container、全 viewport backdrop、image/VNI/official Spine/image-string/字体文字 layer、字体效果与 grapheme 弧排、按 name/kind-index 的 string node registry、BigInt threshold sequence、金额格式、canvas/keyboard input binding、点击/dismiss/end drain、普通 Spine start/loop/end 边界状态机和 runtime snapshot；editor/game app 只创建宿主 canvas、挂载节点并呈现错误，不复制分派。Popup Editor 必须让表单与 contenteditable 的 keyboard event 在 shared binding eligibility 边界透传，不能让播放中的 Popup 阻止输入。
+- `packages/rendercore/popup` 拥有 popup manifest/parser、focus presentation Container、全 viewport backdrop、image/VNI/official Spine/image-string/字体文字 layer、字体效果与 grapheme 弧排、按 name/kind-index 的 string node registry、BigInt threshold sequence、金额格式、canvas/keyboard input binding、点击/dismiss/end drain和普通 Spine start/loop/end 边界状态机；game使用轻量Runtime，Popup Editor从`popup/editor` wrapper读取完整snapshot，两者复用同一Core。editor/game app只创建宿主canvas、挂载节点并呈现错误，不复制分派。Popup Editor 必须让表单与 contenteditable 的 keyboard event 在 shared binding eligibility 边界透传，不能让播放中的 Popup 阻止输入。
 
 ## Symbols Editor
 

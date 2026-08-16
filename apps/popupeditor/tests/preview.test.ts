@@ -63,6 +63,11 @@ const resource = {
 vi.mock("@slotclientengine/rendercore/popup", async (original) => ({
   ...(await original<typeof import("@slotclientengine/rendercore/popup")>()),
   createPopupPackageResource: vi.fn(async () => resource),
+}));
+vi.mock("@slotclientengine/rendercore/popup/editor", async (original) => ({
+  ...(await original<
+    typeof import("@slotclientengine/rendercore/popup/editor")
+  >()),
   createAwardCelebrationPlayer: vi.fn(() => player),
   createSpinePopupPlayer: vi.fn(() => player),
 }));
@@ -119,7 +124,7 @@ describe("PopupPreview", () => {
   it("uses the production player, freezes input on play, updates snapshots and cleans owners", async () => {
     const { PopupPreview } = await import("../src/preview/popup-preview.js");
     const { createAwardCelebrationPlayer } =
-      await import("@slotclientengine/rendercore/popup");
+      await import("@slotclientengine/rendercore/popup/editor");
     const preview = new PopupPreview(
       document.querySelector("#host")!,
       document.querySelector("#status")!,

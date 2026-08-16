@@ -1,15 +1,32 @@
 import { Container, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
 import {
-  createAwardCelebrationPlayer,
+  createAwardCelebrationRuntime,
   upgradePopupManifestToV6,
   type AwardCelebrationPopupManifestV1,
   type PopupLayerRuntime,
   type PopupPackageResource,
 } from "../../src/popup/index.js";
+import { createAwardCelebrationPlayer } from "../../src/popup/editor.js";
 import { popupFixture } from "./fixtures.js";
+import * as popupCoreApi from "../../src/popup/index.js";
 
 describe("award celebration player", () => {
+  it("keeps the game runtime command/query surface snapshot-free", async () => {
+    expect("createAwardCelebrationPlayer" in popupCoreApi).toBe(false);
+    expect("createSpinePopupPlayer" in popupCoreApi).toBe(false);
+    const runtime = createAwardCelebrationRuntime({
+      resource: fakeResource(),
+      layerFactory: ({ layer }) => fakeLayer(layer.kind === "vni"),
+    });
+    expect("getSnapshot" in runtime).toBe(false);
+    await runtime.init();
+    runtime.start({ betAmountRaw: 100, winAmountRaw: 5000 });
+    expect(runtime.update(0)).toBeUndefined();
+    expect(runtime.getPhase()).toBe("counting");
+    runtime.destroy();
+  });
+
   it("starts celebration effects only when their owning tier becomes active", async () => {
     const legacy = fakeResource();
     const manifest = upgradePopupManifestToV6(legacy.manifest);

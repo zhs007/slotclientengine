@@ -13,8 +13,10 @@ import {
   upgradeSceneLayoutManifestToLatest,
   type SceneLayoutManifestV1,
 } from "../../src/scene-layout/index.js";
+import { createSceneLayoutPackageRuntimeInspector } from "../../src/scene-layout/editor.js";
 import { transitionResourceKey } from "../../src/scene-layout/resource.js";
 import { game002LayoutFixture } from "./fixtures.js";
+import * as sceneLayoutCoreApi from "../../src/scene-layout/index.js";
 
 const encode = (value: unknown) =>
   new TextEncoder().encode(`${JSON.stringify(value)}\n`);
@@ -1203,6 +1205,9 @@ describe("scene layout package runtime", () => {
   });
 
   it("owns generic game-mode snapshots and rejects popup fallbacks", async () => {
+    expect(
+      "createSceneLayoutPackageRuntimeInspector" in sceneLayoutCoreApi,
+    ).toBe(false);
     const load = vi
       .spyOn(Assets, "load")
       .mockResolvedValue(Texture.WHITE as never);
@@ -1225,6 +1230,7 @@ describe("scene layout package runtime", () => {
       const runtime = createRuntimeWithTransitions(resource, [
         ["BaseGame", "FreeGame"],
       ]);
+      const inspector = createSceneLayoutPackageRuntimeInspector(runtime);
       await runtime.init();
       runtime.applyViewport({ width: 2000, height: 2000 });
       expect(runtime.getGameModeIds()).toEqual(["BaseGame", "FreeGame"]);
@@ -1275,7 +1281,8 @@ describe("scene layout package runtime", () => {
       expect(() => runtime.requestAdvanceAwardCelebration()).toThrow(
         /No award celebration/,
       );
-      expect(runtime.getActiveAwardCelebrationSnapshot()).toBeNull();
+      expect(inspector.getActiveAwardCelebrationSnapshot()).toBeNull();
+      expect(runtime.getActiveAwardCelebrationPhase()).toBeNull();
       runtime.dismissActiveAwardCelebrationImmediately();
       runtime.destroy();
     } finally {
@@ -1327,6 +1334,7 @@ describe("scene layout package runtime", () => {
       const runtime = createRuntimeWithTransitions(resource, [
         ["BaseGame", "FreeGame"],
       ]);
+      const inspector = createSceneLayoutPackageRuntimeInspector(runtime);
       await runtime.init();
       runtime.applyViewport({ width: 200, height: 100 });
       const popup = runtime.getAwardCelebrationPopup("celebration");
@@ -1348,10 +1356,11 @@ describe("scene layout package runtime", () => {
         betAmountRaw: 100,
         winAmountRaw: 6000,
       });
-      expect(runtime.getActiveAwardCelebrationSnapshot()).toMatchObject({
+      expect(inspector.getActiveAwardCelebrationSnapshot()).toMatchObject({
         phase: "counting",
         finalAmountRaw: 6000,
       });
+      expect(runtime.getActiveAwardCelebrationPhase()).toBe("counting");
       expect(() =>
         runtime.startAwardCelebrationForCurrentMode({
           betAmountRaw: 100,
@@ -1363,7 +1372,7 @@ describe("scene layout package runtime", () => {
       );
       runtime.update(0.25);
       expect(
-        runtime.getActiveAwardCelebrationSnapshot()!.displayedAmountRaw,
+        inspector.getActiveAwardCelebrationSnapshot()!.displayedAmountRaw,
       ).toBeGreaterThan(0);
       const popupPresentation = runtime.getPopupPresentation();
       expect(popupPresentation.eventMode).toBe("static");
@@ -1371,7 +1380,8 @@ describe("scene layout package runtime", () => {
       runtime.dismissActiveAwardCelebrationImmediately();
       await expect(celebrationComplete).resolves.toBeUndefined();
       expect(popupPresentation.eventMode).toBe("none");
-      expect(runtime.getActiveAwardCelebrationSnapshot()).toBeNull();
+      expect(inspector.getActiveAwardCelebrationSnapshot()).toBeNull();
+      expect(runtime.getActiveAwardCelebrationPhase()).toBeNull();
       await completeModeRequest(runtime, "FreeGame");
       expect(() =>
         runtime.startAwardCelebrationForCurrentMode({

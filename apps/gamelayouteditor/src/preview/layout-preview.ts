@@ -11,6 +11,10 @@ import {
   type SceneLayoutSnapshot,
   type SceneLayoutVariantId,
 } from "@slotclientengine/rendercore/scene-layout";
+import {
+  createSceneLayoutPackageRuntimeInspector,
+  type SceneLayoutPackageRuntimeInspector,
+} from "@slotclientengine/rendercore/scene-layout/editor";
 import type { PopupInteractionDispatchResult } from "@slotclientengine/rendercore/popup";
 import {
   createSymbolPackageValueControllerFactory,
@@ -85,6 +89,7 @@ export class LayoutPreview {
   #package: ImportedLayoutPackage | null = null;
   #runtime: SceneLayoutRuntime | null = null;
   #packageRuntime: SceneLayoutPackageRuntime | null = null;
+  #packageRuntimeInspector: SceneLayoutPackageRuntimeInspector | null = null;
   #manifest: SceneLayoutManifest | null = null;
   #lastLayoutSnapshot: SceneLayoutSnapshot | null = null;
   #frameViewport: SceneLayoutFrameViewport | null = null;
@@ -290,6 +295,9 @@ export class LayoutPreview {
     this.#packageRuntime = needsPackageRuntime
       ? (nextRuntime as SceneLayoutPackageRuntime)
       : null;
+    this.#packageRuntimeInspector = this.#packageRuntime
+      ? createSceneLayoutPackageRuntimeInspector(this.#packageRuntime)
+      : null;
     this.#disposePopupInputBinding = disposePopupInputBinding;
     this.#manifest = manifest;
     this.#packageScenes = packageScenes;
@@ -417,7 +425,9 @@ export class LayoutPreview {
   }
 
   getActiveAwardCelebrationSnapshot() {
-    return this.#packageRuntime?.getActiveAwardCelebrationSnapshot() ?? null;
+    return (
+      this.#packageRuntimeInspector?.getActiveAwardCelebrationSnapshot() ?? null
+    );
   }
 
   async prepareGameModeTransition(modeId: string): Promise<void> {
@@ -930,6 +940,7 @@ export class LayoutPreview {
     this.#runtime?.destroy();
     this.#runtime = null;
     this.#packageRuntime = null;
+    this.#packageRuntimeInspector = null;
     this.#packageScenes.clear();
     this.#lastLayoutSnapshot = null;
     this.#frameViewport = null;

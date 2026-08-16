@@ -8,15 +8,17 @@ import {
 } from "../presentation/render-object-layer.js";
 import {
   bindPopupInteractionInput,
-  createAwardCelebrationPlayer,
-  createSpinePopupPlayer,
+  createAwardCelebrationRuntime,
+  createSpinePopupRuntime,
   handledPopupInteraction,
   unhandledPopupInteraction,
-  type AwardCelebrationPlayer,
+  type AwardCelebrationRuntime,
+  type AwardCelebrationSnapshot,
   type PopupInteractionDispatchResult,
   type PopupStringNodeHandle,
-  type SpinePopupPlayer,
+  type SpinePopupRuntime,
 } from "../popup/index.js";
+import { inspectAwardCelebrationRuntime } from "../popup/award-player.js";
 import {
   RenderGridCellReelSet,
   RenderReelSet,
@@ -169,6 +171,11 @@ interface ActiveModePrelude {
   readonly reject: (error: SceneLayoutError) => void;
 }
 
+const activeAwardSnapshotReaders = new WeakMap<
+  SceneLayoutPackageRuntime,
+  () => AwardCelebrationSnapshot | null
+>();
+
 export function createSceneLayoutPackageRuntime(options: {
   readonly resource: SceneLayoutPackageResource;
   /**
@@ -191,9 +198,9 @@ export function createSceneLayoutPackageRuntime(options: {
   readonly createTransitionPlayer?: (options: {
     readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
   }) => RendercoreSpinePlayer;
-  readonly createSpinePopupPlayer?: (options: {
+  readonly createSpinePopupRuntime?: (options: {
     readonly resource: SceneLayoutPackageResource["popupPackages"][string];
-  }) => SpinePopupPlayer;
+  }) => SpinePopupRuntime;
   readonly createVideoTransitionPlayer?: (options: {
     readonly url: string;
     readonly fadeOutSeconds: number;
@@ -212,10 +219,22 @@ export function createSceneLayoutPackageRuntime(options: {
     options.hostUpdatesMainReel === true,
     options.formatPopupAmount,
     options.createTransitionPlayer,
-    options.createSpinePopupPlayer,
+    options.createSpinePopupRuntime,
     options.createVideoTransitionPlayer,
     options.renderObjectFactoryDependencies,
   );
+}
+
+/** @internal Editor/diagnostic bridge; omitted from the scene-layout barrel. */
+export function inspectActiveAwardCelebrationRuntime(
+  runtime: SceneLayoutPackageRuntime,
+): AwardCelebrationSnapshot | null {
+  const read = activeAwardSnapshotReaders.get(runtime);
+  if (!read)
+    throw new SceneLayoutError(
+      "Scene layout award celebration inspection is unavailable.",
+    );
+  return read();
 }
 
 class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
@@ -246,9 +265,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #createTransitionPlayer: (options: {
     readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
   }) => RendercoreSpinePlayer;
-  readonly #createSpinePopupPlayer: (options: {
+  readonly #createSpinePopupRuntime: (options: {
     readonly resource: SceneLayoutPackageResource["popupPackages"][string];
-  }) => SpinePopupPlayer;
+  }) => SpinePopupRuntime;
   readonly #createVideoTransitionPlayer: (options: {
     readonly url: string;
     readonly fadeOutSeconds: number;
@@ -273,8 +292,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   #stableSymbolPackageId: string | null = null;
   #targetSymbolPackageId: string | null = null;
   #activeBackgroundNodes: readonly string[] = Object.freeze([]);
-  readonly #popups = new Map<string, AwardCelebrationPlayer>();
-  readonly #spinePopups = new Map<string, SpinePopupPlayer>();
+  readonly #popups = new Map<string, AwardCelebrationRuntime>();
+  readonly #spinePopups = new Map<string, SpinePopupRuntime>();
   #initialized = false;
   #initializing = false;
   #destroyed = false;
@@ -337,10 +356,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
         }) => RendercoreSpinePlayer)
       | undefined,
-    spinePopupPlayerFactory:
+    spinePopupRuntimeFactory:
       | ((options: {
           readonly resource: SceneLayoutPackageResource["popupPackages"][string];
-        }) => SpinePopupPlayer)
+        }) => SpinePopupRuntime)
       | undefined,
     createVideoTransitionPlayer:
       | ((options: {
@@ -376,14 +395,17 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           resource: options.resource,
           createError: (message) => new SceneLayoutError(message),
         }));
-    this.#createSpinePopupPlayer =
-      spinePopupPlayerFactory ?? createSpinePopupPlayer;
+    this.#createSpinePopupRuntime =
+      spinePopupRuntimeFactory ?? createSpinePopupRuntime;
     this.#createVideoTransitionPlayer =
       createVideoTransitionPlayer ?? createSceneLayoutTransitionVideoPlayer;
     this.#renderObjectFactory = createSceneLayoutRenderObjectFactory({
       resource,
       dependencies: renderObjectFactoryDependencies,
     });
+    activeAwardSnapshotReaders.set(this, () =>
+      this.#createActiveAwardCelebrationSnapshot(),
+    );
     this.container = new Container();
     this.container.label = `scene-layout-package:${resource.manifest.id}`;
     this.#popupRoot.label = "scene-layout-popup-root";
@@ -509,14 +531,14 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         ([id, resource]) => {
           const popup =
             resource.manifest.type === "spine"
-              ? this.#createSpinePopupPlayer({ resource })
-              : createAwardCelebrationPlayer({
+              ? this.#createSpinePopupRuntime({ resource })
+              : createAwardCelebrationRuntime({
                   resource,
                   formatAmount: this.#formatPopupAmount,
                 });
           if (resource.manifest.type === "spine")
-            this.#spinePopups.set(id, popup as SpinePopupPlayer);
-          else this.#popups.set(id, popup as AwardCelebrationPlayer);
+            this.#spinePopups.set(id, popup as SpinePopupRuntime);
+          else this.#popups.set(id, popup as AwardCelebrationRuntime);
           return Object.freeze({
             id,
             resource,
@@ -758,7 +780,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     for (const [id, popup] of this.#popups)
       if (popup.isPlaying())
         try {
-          popup.tick(deltaSeconds);
+          popup.update(deltaSeconds);
         } catch (error) {
           if (this.#activeAwardCelebrationWaiter?.popupId === id) {
             const waiter = this.#activeAwardCelebrationWaiter;
@@ -770,7 +792,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     for (const [id, popup] of this.#spinePopups)
       if (popup.isPlaying())
         try {
-          popup.tick(deltaSeconds);
+          popup.update(deltaSeconds);
         } catch (error) {
           if (this.#activePrelude?.popupId === id) {
             this.failActivePrelude(
@@ -1231,10 +1253,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
 
   isMainReelSpinning(): boolean {
     this.assertReady();
-    const reel = this.requireReel("main");
-    return reel instanceof RenderGridCellReelSet
-      ? reel.getSnapshot().spinning
-      : reel.getSnapshot().spinning;
+    return this.requireReel("main").isSpinning();
   }
 
   requestMainReelSymbolStates(
@@ -1550,7 +1569,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     return this.requireReel(reelId);
   }
 
-  getAwardCelebrationPopup(id: string): AwardCelebrationPlayer {
+  getAwardCelebrationPopup(id: string): AwardCelebrationRuntime {
     this.assertReady();
     const popup = this.#popups.get(id);
     if (!popup)
@@ -1560,7 +1579,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     return popup;
   }
 
-  getSpinePopup(id: string): SpinePopupPlayer {
+  getSpinePopup(id: string): SpinePopupRuntime {
     this.assertReady();
     const popup = this.#spinePopups.get(id);
     if (!popup)
@@ -2041,11 +2060,18 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     }
   }
 
-  getActiveAwardCelebrationSnapshot() {
+  getActiveAwardCelebrationPhase() {
     this.assertReady();
     const id = this.#activePopupId ?? this.playingPopupId();
     if (!id) return null;
-    return this.getAwardCelebrationPopup(id).getSnapshot();
+    return this.getAwardCelebrationPopup(id).getPhase();
+  }
+
+  #createActiveAwardCelebrationSnapshot() {
+    this.assertReady();
+    const id = this.#activePopupId ?? this.playingPopupId();
+    if (!id) return null;
+    return inspectAwardCelebrationRuntime(this.getAwardCelebrationPopup(id));
   }
 
   getSnapshot(): SceneLayoutSnapshot {
@@ -2680,7 +2706,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     const active = this.#activePrelude;
     if (!active) return;
     const popup = this.getSpinePopup(active.popupId);
-    if (popup.getSnapshot().phase !== "complete") return;
+    if (popup.getPhase() !== "complete") return;
     active.restorePopupStrings();
     if (active.prepared.kind === "video") {
       active.phase = "awaiting-video-start";
@@ -3415,7 +3441,7 @@ function requestOptionsSignature(
 }
 
 function applyPopupStringInputs(
-  popup: SpinePopupPlayer,
+  popup: SpinePopupRuntime,
   inputs: readonly SceneLayoutPopupStringInput[] | undefined,
 ): () => void {
   if (!inputs?.length) return () => {};

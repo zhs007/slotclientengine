@@ -11,6 +11,7 @@ import type {
   V5GLayerConfig,
   V5GProjectConfig,
 } from "../../src/core/types";
+import * as coreApi from "../../src/core/index";
 
 const defaultLayerGroup = {
   id: "group_default",
@@ -62,6 +63,10 @@ function layer(
 }
 
 describe("project-sampler", () => {
+  it("keeps the mutable runtime sampler off the public core surface", () => {
+    expect("createRuntimeProjectSampler" in coreApi).toBe(false);
+  });
+
   it("keeps pure samples independent and runtime samples identity-stable", () => {
     const project: V5GProjectConfig = {
       schemaVersion: "V5G_0.0014",

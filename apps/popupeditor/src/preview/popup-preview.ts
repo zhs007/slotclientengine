@@ -1,17 +1,19 @@
 import { extractBoundedZip } from "@slotclientengine/browserartifactio";
 import {
   bindPopupInteractionInput,
-  createAwardCelebrationPlayer,
-  createSpinePopupPlayer,
   createPopupPackageResource,
   formatPopupAmount,
   handledPopupInteraction,
   unhandledPopupInteraction,
-  type AwardCelebrationPlayer,
-  type SpinePopupPlayer,
   type PopupPackageResource,
   type PopupPresentationSnapshot,
 } from "@slotclientengine/rendercore/popup";
+import {
+  createAwardCelebrationPlayer,
+  createSpinePopupPlayer,
+  type AwardCelebrationPlayer,
+  type SpinePopupPlayer,
+} from "@slotclientengine/rendercore/popup/editor";
 import { Application, Container, Graphics } from "pixi.js";
 import type { PopupEditorProject } from "../model/project.js";
 import { exportPopupZip, importPopupZip } from "../io/popup-zip.js";

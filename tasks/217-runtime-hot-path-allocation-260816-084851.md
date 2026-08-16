@@ -5,32 +5,31 @@
 任务 217 已完成 RenderCore/VNI 剩余可静态确认的 ticker 热路径优化，并保持现有状态、事件、视觉和低 FPS
 完整 elapsed-time 语义：
 
-- Symbol state snapshot 按变化失效，animation 同步改用 revision；稳定 update result 和 ani completion result 可复用。
+- Symbol state snapshot 按变化失效，animation 同步使用 RenderSymbol 内部语义 state 比较；稳定 update result 和 ani completion result 可复用，不暴露 revision API。
 - official Spine 无事件帧不再复制空数组/结果；真实 event 仍按调用独立冻结。
 - standard ReelSet 不再逐 slice 创建 Set、排序 started axes、构造完整 reel snapshot 或中间 frozen result；
   start/landing/completion edge 与一次大 delta parity 有测试保护。
 - coordinator 增加 `isRunning/getPhase`，直接迭代 waiter Set，并用 update epoch 保持帧内新增 waiter 延后一帧。
 - game002v2 与 configured scene-layout ticker 一次提交完整 non-negative delta，切片只由 RenderCore owner 执行。
 - VNIPlayer 使用 stable main/auxiliary project sampler、animation-order cache 和 mask scratch；pure sampler fresh identity 不变。
-- production Popup 改用 void `tick`，Cascade/符号值 presentation 复用结果并移除 overlapping collect 临时数组链。
+- production Popup 使用轻量 Core `update(): void` 与 phase query；完整 snapshot 只由复用同一 Core 的 editor wrapper 提供。Cascade/符号值 presentation 复用结果并移除 overlapping collect 临时数组链。
 - Crave 外部仓库零修改；新增完整共享 runtime + app 手工迁移文档。
 
 ## 2. 主要修改
 
 ### RenderCore
 
-- `packages/rendercore/src/symbol/**`：snapshot revision/cache、RenderSymbol result cache、ani 常量结果。
+- `packages/rendercore/src/symbol/**`：snapshot cache、RenderSymbol内部语义state同步/result cache、ani常量结果。
 - `packages/rendercore/src/spine/runtime-player.ts`：空事件帧共享结果和 event buffer 原位清空。
 - `packages/rendercore/src/reel/{render-reel,render-reel-set,render-cell-spin}.ts`：direct phase/currentY query、
   ReelSet scratch/cached axis results和完整 delta 内部切片。
 - `packages/rendercore/src/slot-operation/**` 与 scene-layout consumers：无分配 phase query及 waiter epoch。
-- `packages/rendercore/src/popup/**`、`scene-layout/package-runtime.ts`：production void tick。
+- `packages/rendercore/src/popup/**`、`scene-layout/package-runtime.ts`：单一Core、production void update/query与editor snapshot wrapper。
 - `packages/rendercore/src/symbol-cascade/**`、`symbol-value-presentation/**`：共享结果和 stable scratch。
 
 ### VNI 与 apps
 
-- `packages/vnicore/src/core/{basic-animation,animation-sampler,project-sampler}.ts`：可选 target、稳定 runtime sampler、
-  可失效的排序缓存。
+- `packages/vnicore/src/core/{basic-animation,animation-sampler,project-sampler}.ts`：internal `*Into` target、稳定 internal runtime sampler、可失效的排序缓存；mutable API不从core barrel导出。
 - `packages/vnicore/src/pixi/vni-player.ts`：主/辅助 sampler、mask Map/Set scratch、无 filter visible count。
 - `apps/game002v2/src/round-adapter.ts`：删除 0.25 秒截断和 app 层 1/30 循环。
 - `apps/game003v2/src/round-adapter.ts`：coordinator direct running query。
@@ -44,13 +43,13 @@
 
 ## 3. 关键决策与计划偏差
 
-1. public diagnostic/pure sampler 仍提供 immutable/fresh value；只有 runtime owner 使用可变 stable buffer，避免把热路径优化
-   变成 snapshot isolation 破坏。
+1. public pure sampler 仍提供 immutable/fresh value；只有 VNIPlayer 内部使用可变 stable buffer，runtime sampler/target helper 不进入 public barrel。
 2. 宿主提交完整 delta，standard ReelSet 继续在内部用 `1/60` slice 保证运动确定性；没有通过截断 elapsed time 换性能。
 3. waiter Set 改为直接迭代后加入 eligible epoch，复现旧 `[...waiters]` 的“本 update 新增项不推进”边界。
 4. 计划预计 Crave 文档重点说明 round adapter；只读核对发现 Crave 还复制了完整 RenderCore/VNI，因此文档扩大为同名共享
    runtime 全量迁移清单，但仍未修改外部仓库。
 5. 定向测试暴露既有 RenderSymbol children 断言漏掉早已存在的 game underlay/overlay；只更新该错误期望，生产结构未改变。
+6. follow-up按架构复核收回了新增的Symbol revision与VNI mutable sampler public surface；Popup不再提供并列`tick/update`，而是game Runtime与editor wrapper两套类型包装同一Core。
 
 ## 4. 自动验收
 
@@ -105,3 +104,15 @@ git diff --check
 - Crave 外部仓库只读状态最终仍为 clean；其代码优化需用户按迁移文档手工执行并单独验收。
 
 自动化范围内无未完成项。
+
+## 7. API 收口 follow-up
+
+根据后续架构复核，最终边界调整为“一份 canonical state / 一个 Core / 两类消费包装”：
+
+- game Runtime 只提供 command、`update(): void`、标量 query 与 edge drain；业务数据仍由 LogicCore 提供。
+- Popup Editor 从独立 `@slotclientengine/rendercore/popup/editor` 入口使用 snapshot player wrapper；wrapper 委托同一个 Runtime，不复制状态机。
+- `gameframeworks` 只导出 `createSpinePopupRuntime` / `SpinePopupRuntime`，不导出 editor player/snapshot。
+- Symbol revision 和 VNI mutable target/runtime sampler 均从 public surface 移除；VNIPlayer继续内部复用 stable buffer。
+- Scene Layout 的 Popup ticker、Prelude phase、award phase 与 ReelSet spinning 判断均改用 Core command/query；完整award snapshot迁到`scene-layout/editor` inspector，不为游戏布尔判断构造snapshot。
+
+follow-up 定向验收通过：RenderCore/VNI typecheck，RenderCore Popup/Scene Layout/Symbol/Reel 相关 9 个文件 124 个测试，VNI sampler 2 个文件 56 个测试，gameframeworks source-boundary 5 个、game003v2 source-boundary 3 个、Popup Editor preview 5 个、Game Layout Editor相关14个测试，以及 game002v2/game003v2/popupeditor/gamelayouteditor/gameframeworks 直接依赖链 typecheck。Crave 仍未修改，手工迁移文档已同步为最终 API。

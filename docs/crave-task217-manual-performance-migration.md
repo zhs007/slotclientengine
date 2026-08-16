@@ -20,11 +20,9 @@
 
 - `packages/rendercore/src/symbol/state-machine.ts`
   - 缓存 immutable `SymbolStateSnapshot`，只有 requested/resolved/default/pending 真正变化时失效。
-  - 增加单调 `activeStateRevision` 与 `getActiveStateRevision()`；只有 active requested/resolved state
-    真正切换时递增，pending/default 单独变化不递增。
   - 相同 state request/default set 必须保持 no-op。
 - `packages/rendercore/src/symbol/render-symbol.ts`
-  - 用 revision 比较替代每帧 `${requested}->${resolved}` 字符串 key。
+  - 用内部保存的 requested/resolved state 比较替代每帧 `${requested}->${resolved}` 字符串 key；不要向 state machine 增加 revision API。
   - 按 snapshot 和 loop/once completion 位缓存 immutable update result；状态切换 edge 仍返回本次真实结果。
   - value/reset 强制刷新通过 revision sentinel 触发，不能漏掉 ani 重建。
 - `packages/rendercore/src/symbol/ani.ts`
@@ -47,6 +45,8 @@
   - `startedAxes` 仅在轴真正加入时标脏，按需排序并缓存 frozen 数组。
   - 无 completion/landing edge 且 started/spinning 未变时复用 update result；有 edge 时才创建对外 immutable 数组。
   - cancel 时用 `getCurrentY()`，不要为 currentY 构造 reel snapshot。
+- `packages/rendercore/src/reel/render-grid-cell-reel-set.ts`
+  - 增加轻量 `isSpinning()`；Scene Layout 只判断 spinning 时不得构造完整 ReelSet snapshot。
 - `packages/rendercore/src/reel/render-cell-spin.ts`
   - 只检查 phase 的位置改用 `getPhase()`。
 
@@ -65,38 +65,39 @@
 - `configured-round-adapter.ts` 的 ticker 必须把 `Math.max(0, deltaMS / 1000)` 完整交给 coordinator/runtime，
   删除 `1/30` clamp；内部 ReelSet 已拥有切片职责。
 - `packages/rendercore/src/popup/types.ts`、`award-player.ts`、`spine-player.ts`
-  - 两类 player 增加 `tick(deltaSeconds): void`。
-  - `update()` 仅兼容性地执行 `tick()` 后返回 snapshot。
+  - 每类 Popup 只维护一份 Core 状态。
+  - 游戏 Runtime 的 `update(deltaSeconds): void` 只推进状态，并提供 `getPhase()` / `isPlaying()` query；不公开 snapshot。
+  - Editor player wrapper 从独立 `@slotclientengine/rendercore/popup/editor` 入口导入，委托同一个 Runtime，额外提供 `update() -> snapshot` 与 `getSnapshot()`；production popup入口不导出editor factory。
   - award player 复用 tier update scratch，替代逐帧 spread Set。
 - `packages/rendercore/src/scene-layout/package-runtime.ts`
-  - production popup ticker 调 `popup.tick(deltaSeconds)`；只有确实消费 snapshot 的调用点保留 `update()`。
+  - production popup 使用 `createAwardCelebrationRuntime()` / `createSpinePopupRuntime()` 并调用 void `update()`；阶段分支使用 query。
+  - `isMainReelSpinning()` 调 ReelSet `isSpinning()`，不取完整 snapshot。
+  - 游戏轮询award只调用`getActiveAwardCelebrationPhase()`；完整snapshot迁到`@slotclientengine/rendercore/scene-layout/editor` inspector，供Game Layout Editor使用。
 - `packages/rendercore/src/symbol-cascade/create-symbol-cascade-player.ts`
   - 复用 `{completed:false}` / `{completed:true}` frozen 常量。
   - overlapping collect 使用 owner scratch 与原位 compact，删除逐帧 `filter/map/filter` 临时数组。
 
-同步 public interface 后，Crave 中所有实现 `SpinePopupPlayer` 的测试 fake 也必须增加 `tick()`；所有 coordinator
-consumer 必须通过类型检查，不能用 cast 掩盖遗漏。
+同步 public interface 后，Crave 中 production fake 实现 `SpinePopupRuntime`（void `update` + `getPhase`）；只有 Popup Editor 测试继续使用 snapshot player wrapper。所有 coordinator consumer 必须通过类型检查，不能用 cast 掩盖遗漏。
 
 ## 3. VNI 源码同步清单
 
 - `packages/vnicore/src/core/basic-animation.ts`
-  - `sampleBasicAnimationAtTime(layer, time, target?)` 支持写入显式 target；省略 target 的 pure API 仍返回 fresh value。
+  - public `sampleBasicAnimationAtTime(layer, time)` 始终返回 fresh value。
+  - 另设不从core barrel导出的internal `sampleBasicAnimationAtTimeInto(layer, time, target)`。
 - `packages/vnicore/src/core/animation-sampler.ts`
-  - `sampleLayerAnimationsAtTime(..., target?)` 原位写 transform/opacity/visualRotation。
+  - public `sampleLayerAnimationsAtTime(...)` 始终返回 fresh value；internal `sampleLayerAnimationsAtTimeInto(...)` 原位写 transform/opacity/visualRotation且不从barrel导出。
   - 以 animations 数组 identity 缓存 startTime 排序；缓存命中前校验长度、元素 identity 和 startTime，
     authoring 数据原位变化时必须重建，不能返回陈旧顺序。
 - `packages/vnicore/src/core/project-sampler.ts`
   - 保留 `sampleProjectAtTime` / `sampleLayerAtTime` 的 fresh identity。
-  - 新增 `createRuntimeProjectSampler(project)`，为每 layer 持有稳定 basic/animation/state transform buffer，
-    每次 `sample()` 原位更新。
+  - internal `createRuntimeProjectSampler(project)` 为每 layer 持有稳定 basic/animation/state transform buffer，每次 `sample()` 原位更新；VNIPlayer可直接模块内引用，但`core/index.ts`不得导出它。
 - `packages/vnicore/src/pixi/vni-player.ts`
   - player 持有一个主 sampler 和一个 auxiliary sampler；particle layer time 与主 time 不同时使用 auxiliary，
     避免同一 mutable buffer 覆盖主帧结果。
   - mask layer lookup Map、native/precomposed active target Set 改为 player-owned scratch，并在每帧 clear 后复用。
   - visible layer 计数用 loop，不用 `filter(...).length`。
 
-重要：runtime sampler 返回值只保证在该 sampler 下一次 `sample()` 前有效，不能暴露给宿主或跨帧保存。
-需要 snapshot isolation 的调用方必须继续使用 pure sampler。
+重要：runtime sampler/`*Into`只供VNIPlayer内部使用，不能暴露给宿主或跨帧保存。外部需要保留值时必须使用public pure sampler。
 
 ## 4. Crave app 的精确修改
 
@@ -126,11 +127,12 @@ runtime.update(Math.max(0, this.#app.ticker.deltaMS / 1000));
 - Spine/ani：无 event 结果复用；真实 event 数组互相隔离；loop/once edge 不丢失。
 - ReelSet：idle result identity；staggered axes；一次大 delta 与等量小 delta 的最终 scene/edge parity。
 - Coordinator：`isRunning/getPhase` 生命周期；waiter callback 内新增 waiter 不在同一次 update 被推进。
-- Popup/Cascade：package runtime 使用 `tick`；完成/未完成结果 identity；阶段与 amount/collect 顺序不变。
-- VNI：pure sample fresh identity；runtime sample/state/transform stable identity；animation startTime 修改能使排序缓存失效；
+- Popup/Cascade：package runtime 使用Core void `update`与phase query；Runtime无snapshot方法，editor wrapper snapshot完整；完成/未完成结果 identity与阶段、amount/collect顺序不变。
+- VNI：pure sample fresh identity；public barrel不含runtime sampler/`*Into`；内部 runtime sample/state/transform stable identity；animation startTime 修改能使排序缓存失效；
   主/auxiliary sampler 不互相覆盖。
 - Crave source boundary：断言 round adapter 包含一次完整 `runtime.update(Math.max(0, ...))`，且不再出现
   `remainingSeconds`、`sliceSeconds` 或针对 ticker delta 的 `Math.min`。
+- game consumer source boundary：只出现award phase query，不出现`getActiveAwardCelebrationSnapshot()`。
 
 ## 6. 建议验收命令
 

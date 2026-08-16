@@ -256,6 +256,12 @@ vi.mock("@slotclientengine/rendercore/scene-layout", () => ({
   createSceneLayoutPackageRuntime: () => state.packageRuntime,
   resolveSceneLayoutFrameViewport: state.resolveFrame,
 }));
+vi.mock("@slotclientengine/rendercore/scene-layout/editor", () => ({
+  createSceneLayoutPackageRuntimeInspector: () => ({
+    getActiveAwardCelebrationSnapshot:
+      state.packageRuntime.getActiveAwardCelebrationSnapshot,
+  }),
+}));
 
 vi.mock("../src/preview/preview-guides.js", () => ({
   drawPreviewGuides: vi.fn(),

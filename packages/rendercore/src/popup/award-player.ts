@@ -16,8 +16,9 @@ import {
   requestPopupVniPlaybackEnd,
   startPopupVniPlayback,
 } from "./vni-playback.js";
+import type { AwardCelebrationPlayer } from "./editor-types.js";
 import type {
-  AwardCelebrationPlayer,
+  AwardCelebrationRuntime,
   AwardCelebrationSnapshot,
   AwardTierId,
   PopupLayer,
@@ -91,19 +92,44 @@ interface TierRuntime {
   endRequested: boolean;
 }
 
+const awardSnapshotReaders = new WeakMap<
+  AwardCelebrationRuntime,
+  () => AwardCelebrationSnapshot
+>();
+
 export function createAwardCelebrationPlayer(options: {
   readonly resource: PopupPackageResource;
   readonly layerFactory?: PopupLayerRuntimeFactory;
   readonly formatAmount?: PopupAmountFormatter | undefined;
 }): AwardCelebrationPlayer {
+  return new AwardCelebrationEditorPlayer(
+    createAwardCelebrationRuntime(options),
+  );
+}
+
+export function createAwardCelebrationRuntime(options: {
+  readonly resource: PopupPackageResource;
+  readonly layerFactory?: PopupLayerRuntimeFactory;
+  readonly formatAmount?: PopupAmountFormatter | undefined;
+}): AwardCelebrationRuntime {
   if (options.resource.manifest.type !== "award-celebration")
     throw new Error(
       "Award celebration player requires an award-celebration popup package.",
     );
-  return new DefaultAwardCelebrationPlayer(options);
+  return new DefaultAwardCelebrationRuntime(options);
 }
 
-class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
+/** @internal Editor/diagnostic bridge; intentionally omitted from the popup barrel. */
+export function inspectAwardCelebrationRuntime(
+  runtime: AwardCelebrationRuntime,
+): AwardCelebrationSnapshot {
+  const read = awardSnapshotReaders.get(runtime);
+  if (!read)
+    throw new Error("Award celebration runtime inspection is unavailable.");
+  return read();
+}
+
+class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
   readonly container: Container;
   readonly #resource: PopupPackageResource & {
     readonly manifest: Extract<
@@ -158,6 +184,7 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
     this.#nodes = createPopupStringNodeRegistry(
       collectAwardStringNodeDefinitions(this.#resource.manifest),
     );
+    awardSnapshotReaders.set(this, () => this.#createSnapshot());
   }
   get textNodes(): readonly PopupStringNodeHandle[] {
     return this.#nodes.textNodes;
@@ -175,10 +202,10 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
   }
   applyViewport(
     viewportSize: Parameters<
-      NonNullable<AwardCelebrationPlayer["applyViewport"]>
+      NonNullable<AwardCelebrationRuntime["applyViewport"]>
     >[0],
     placement?: Parameters<
-      NonNullable<AwardCelebrationPlayer["applyViewport"]>
+      NonNullable<AwardCelebrationRuntime["applyViewport"]>
     >[1],
   ) {
     return this.#presentation.applyViewport(viewportSize, placement);
@@ -210,11 +237,7 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
     }
     this.startNextStage();
   }
-  update(deltaSeconds: number): AwardCelebrationSnapshot {
-    this.tick(deltaSeconds);
-    return this.getSnapshot();
-  }
-  tick(deltaSeconds: number): void {
+  update(deltaSeconds: number): void {
     this.assertReady();
     if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0)
       throw new Error("deltaSeconds must be finite and non-negative.");
@@ -289,7 +312,7 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
     this.assertReady();
     if (this.isPlaying()) this.complete();
   }
-  getSnapshot(): AwardCelebrationSnapshot {
+  #createSnapshot(): AwardCelebrationSnapshot {
     this.assertUsable();
     return Object.freeze({
       phase: this.#phase,
@@ -307,6 +330,9 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
   }
   isPlaying(): boolean {
     return !["idle", "complete"].includes(this.#phase);
+  }
+  getPhase(): AwardCelebrationSnapshot["phase"] {
+    return this.#phase;
   }
   destroy(): void {
     if (this.#destroyed) return;
@@ -681,6 +707,64 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
   private assertUsable() {
     if (this.#destroyed)
       throw new Error("award celebration player was destroyed.");
+  }
+}
+
+class AwardCelebrationEditorPlayer implements AwardCelebrationPlayer {
+  readonly #runtime: AwardCelebrationRuntime;
+  constructor(runtime: AwardCelebrationRuntime) {
+    this.#runtime = runtime;
+  }
+  get container() {
+    return this.#runtime.container;
+  }
+  get textNodes() {
+    return this.#runtime.textNodes;
+  }
+  get imageStringNodes() {
+    return this.#runtime.imageStringNodes;
+  }
+  applyViewport(
+    ...args: Parameters<NonNullable<AwardCelebrationRuntime["applyViewport"]>>
+  ) {
+    return this.#runtime.applyViewport!(...args);
+  }
+  init() {
+    return this.#runtime.init();
+  }
+  start(input: Parameters<AwardCelebrationRuntime["start"]>[0]) {
+    this.#runtime.start(input);
+  }
+  update(deltaSeconds: number) {
+    this.#runtime.update(deltaSeconds);
+    return inspectAwardCelebrationRuntime(this.#runtime);
+  }
+  requestAdvance() {
+    this.#runtime.requestAdvance();
+  }
+  requestDismiss() {
+    this.#runtime.requestDismiss();
+  }
+  dismissImmediately() {
+    this.#runtime.dismissImmediately();
+  }
+  getSnapshot() {
+    return inspectAwardCelebrationRuntime(this.#runtime);
+  }
+  getPhase() {
+    return this.#runtime.getPhase();
+  }
+  isPlaying() {
+    return this.#runtime.isPlaying();
+  }
+  getTextNode(selector: PopupStringNodeSelector) {
+    return this.#runtime.getTextNode(selector);
+  }
+  getImageStringNode(selector: PopupStringNodeSelector) {
+    return this.#runtime.getImageStringNode(selector);
+  }
+  destroy() {
+    this.#runtime.destroy();
   }
 }
 

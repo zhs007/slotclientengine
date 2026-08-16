@@ -1918,7 +1918,7 @@ export class RenderReelSet extends Container implements ReelSpin {
     }
   }
 
-  private isSpinning(): boolean {
+  isSpinning(): boolean {
     return (
       this.#spinPlan !== null ||
       this.#continuousSpinActive ||

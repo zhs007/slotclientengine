@@ -183,15 +183,21 @@ export function sampleLayerAnimationsAtTime(
   base: V5GAnimationSampleBase,
   animations: readonly V5GAnimationConfig[],
   time: number,
-  target?: V5GAnimationSampleResult,
 ): V5GAnimationSampleResult {
-  const result: V5GAnimationSampleResult =
-    target ??
-    ({
-      transform: { ...base.transform },
-      opacity: base.opacity,
-      visualRotation: 0,
-    } satisfies V5GAnimationSampleResult);
+  return sampleLayerAnimationsAtTimeInto(base, animations, time, {
+    transform: { ...base.transform },
+    opacity: base.opacity,
+    visualRotation: 0,
+  });
+}
+
+/** @internal Runtime-owned target sampling; not exported from the core barrel. */
+export function sampleLayerAnimationsAtTimeInto(
+  base: V5GAnimationSampleBase,
+  animations: readonly V5GAnimationConfig[],
+  time: number,
+  result: V5GAnimationSampleResult,
+): V5GAnimationSampleResult {
   copyTransform(result.transform, base.transform);
   result.opacity = base.opacity;
   result.visualRotation = 0;

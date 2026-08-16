@@ -8,9 +8,10 @@ import type {
   PopupPackageResource,
   PopupStringNodeHandle,
   PopupStringNodeSelector,
-  SpinePopupPlayer,
+  SpinePopupRuntime,
   SpinePopupSnapshot,
 } from "./types.js";
+import type { SpinePopupPlayer } from "./editor-types.js";
 import { createPopupPromptText } from "./prompt-text.js";
 import { createPopupStringNodeRegistry } from "./string-node-registry.js";
 import {
@@ -23,6 +24,11 @@ import {
   type PopupLayerAttachmentHandle,
 } from "./layer-attachment.js";
 
+const spineSnapshotReaders = new WeakMap<
+  SpinePopupRuntime,
+  () => SpinePopupSnapshot
+>();
+
 export function createSpinePopupPlayer(options: {
   readonly resource: PopupPackageResource;
   readonly playerFactory?: () => RendercoreSpinePlayer;
@@ -31,6 +37,17 @@ export function createSpinePopupPlayer(options: {
     readonly height: number;
   };
 }): SpinePopupPlayer {
+  return new SpinePopupEditorPlayer(createSpinePopupRuntime(options));
+}
+
+export function createSpinePopupRuntime(options: {
+  readonly resource: PopupPackageResource;
+  readonly playerFactory?: () => RendercoreSpinePlayer;
+  readonly measurePromptText?: (text: Text) => {
+    readonly width: number;
+    readonly height: number;
+  };
+}): SpinePopupRuntime {
   if (options.resource.manifest.type !== "spine")
     throw new Error("Spine popup player requires a spine popup package.");
   const manifest = options.resource.manifest;
@@ -40,7 +57,7 @@ export function createSpinePopupPlayer(options: {
   const player = options.playerFactory
     ? options.playerFactory()
     : createOfficialSpinePlayer({ resource: prepared.resource });
-  return new DefaultSpinePopupPlayer(
+  return new DefaultSpinePopupRuntime(
     options.resource as PopupPackageResource & {
       readonly manifest: typeof manifest;
     },
@@ -49,7 +66,7 @@ export function createSpinePopupPlayer(options: {
   );
 }
 
-class DefaultSpinePopupPlayer implements SpinePopupPlayer {
+class DefaultSpinePopupRuntime implements SpinePopupRuntime {
   readonly container: Container;
   readonly #manifest: Extract<
     PopupPackageResource["manifest"],
@@ -127,6 +144,7 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
     this.#nodes = createPopupStringNodeRegistry(
       collectSpineStringNodeDefinitions(manifest),
     );
+    spineSnapshotReaders.set(this, () => this.#createSnapshot());
     for (const overlay of this.#overlays)
       if (overlay.stringNode)
         this.#nodes.setTarget(overlay.stringNode.name, overlay.stringNode);
@@ -154,8 +172,10 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
     return this.#nodes.getImageStringNode(selector);
   }
   applyViewport(
-    viewportSize: Parameters<NonNullable<SpinePopupPlayer["applyViewport"]>>[0],
-    placement?: Parameters<NonNullable<SpinePopupPlayer["applyViewport"]>>[1],
+    viewportSize: Parameters<
+      NonNullable<SpinePopupRuntime["applyViewport"]>
+    >[0],
+    placement?: Parameters<NonNullable<SpinePopupRuntime["applyViewport"]>>[1],
   ) {
     return this.#presentation.applyViewport(viewportSize, placement);
   }
@@ -218,12 +238,7 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
     });
   }
 
-  update(deltaSeconds: number): SpinePopupSnapshot {
-    this.tick(deltaSeconds);
-    return this.getSnapshot();
-  }
-
-  tick(deltaSeconds: number): void {
+  update(deltaSeconds: number): void {
     this.assertReady();
     if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0)
       throw new Error("deltaSeconds must be finite and non-negative.");
@@ -262,7 +277,7 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
     if (this.isPlaying()) this.complete();
   }
 
-  getSnapshot(): SpinePopupSnapshot {
+  #createSnapshot(): SpinePopupSnapshot {
     this.assertUsable();
     return Object.freeze({
       phase: this.#phase,
@@ -272,6 +287,10 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
 
   isPlaying(): boolean {
     return ["start", "loop", "end"].includes(this.#phase);
+  }
+
+  getPhase(): SpinePopupSnapshot["phase"] {
+    return this.#phase;
   }
 
   destroy(): void {
@@ -305,6 +324,67 @@ class DefaultSpinePopupPlayer implements SpinePopupPlayer {
   private assertUsable(): void {
     if (this.#destroyed) throw new Error("Spine popup player was destroyed.");
   }
+}
+
+class SpinePopupEditorPlayer implements SpinePopupPlayer {
+  readonly #runtime: SpinePopupRuntime;
+  constructor(runtime: SpinePopupRuntime) {
+    this.#runtime = runtime;
+  }
+  get container() {
+    return this.#runtime.container;
+  }
+  get textNodes() {
+    return this.#runtime.textNodes;
+  }
+  get imageStringNodes() {
+    return this.#runtime.imageStringNodes;
+  }
+  applyViewport(
+    ...args: Parameters<NonNullable<SpinePopupRuntime["applyViewport"]>>
+  ) {
+    return this.#runtime.applyViewport!(...args);
+  }
+  init() {
+    return this.#runtime.init();
+  }
+  start(text?: string) {
+    this.#runtime.start(text);
+  }
+  update(deltaSeconds: number) {
+    this.#runtime.update(deltaSeconds);
+    return inspectSpinePopupRuntime(this.#runtime);
+  }
+  requestDismiss() {
+    this.#runtime.requestDismiss();
+  }
+  dismissImmediately() {
+    this.#runtime.dismissImmediately();
+  }
+  getSnapshot() {
+    return inspectSpinePopupRuntime(this.#runtime);
+  }
+  getPhase() {
+    return this.#runtime.getPhase();
+  }
+  isPlaying() {
+    return this.#runtime.isPlaying();
+  }
+  getTextNode(selector: PopupStringNodeSelector) {
+    return this.#runtime.getTextNode(selector);
+  }
+  getImageStringNode(selector: PopupStringNodeSelector) {
+    return this.#runtime.getImageStringNode(selector);
+  }
+  destroy() {
+    this.#runtime.destroy();
+  }
+}
+
+function inspectSpinePopupRuntime(runtime: SpinePopupRuntime) {
+  const read = spineSnapshotReaders.get(runtime);
+  if (!read) throw new Error("Spine popup runtime inspection is unavailable.");
+  return read();
 }
 
 function isSpineSlotPlayer(

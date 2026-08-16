@@ -67,7 +67,8 @@ export class RenderSymbol extends VisualEntity<void> {
   readonly #landingAppearEnabled: boolean;
   readonly #animationCapabilities: ReadonlySet<SymbolStateId>;
   #currentAni: SymbolAni;
-  #lastAniRevision: number;
+  #lastAniRequestedState: SymbolStateId;
+  #lastAniResolvedState: SymbolStateId;
   #cachedUpdateSnapshot: SymbolStateSnapshot | null = null;
   #cachedUpdateResults: Array<RenderSymbolUpdateResult | undefined> = [];
   #defaultScaleX = 1;
@@ -142,7 +143,9 @@ export class RenderSymbol extends VisualEntity<void> {
       throw error;
     }
 
-    this.#lastAniRevision = this.#stateMachine.getActiveStateRevision();
+    const initialState = this.#stateMachine.getSnapshot();
+    this.#lastAniRequestedState = initialState.requestedState;
+    this.#lastAniResolvedState = initialState.resolvedState;
     this.#currentAni = this.createCurrentAni();
     this.#currentAni.reset();
     this.#imageStringController?.syncState(
@@ -206,7 +209,7 @@ export class RenderSymbol extends VisualEntity<void> {
   }
 
   setDefaultState(state: string): void {
-    const before = this.#stateMachine.getActiveStateRevision();
+    const before = this.#stateMachine.getSnapshot();
     this.#stateMachine.setDefaultState(state);
     this.syncAniIfNeeded(before, false);
   }
@@ -220,7 +223,7 @@ export class RenderSymbol extends VisualEntity<void> {
         `Render symbol "${this.symbol}" state playback was superseded by requestState("${state}").`,
       ),
     );
-    const before = this.#stateMachine.getActiveStateRevision();
+    const before = this.#stateMachine.getSnapshot();
     this.#stateMachine.requestState(state, transitionMode);
     const stateChanged = this.syncAniIfNeeded(before);
     const current = this.#stateMachine.getSnapshot();
@@ -306,7 +309,7 @@ export class RenderSymbol extends VisualEntity<void> {
     options: SymbolStatePlaybackOptions,
   ): Promise<void> {
     this.validateStatePlayback(state, options);
-    const before = this.#stateMachine.getActiveStateRevision();
+    const before = this.#stateMachine.getSnapshot();
     this.#stateMachine.requestState(
       state,
       options.transitionMode ?? "boundary",
@@ -405,7 +408,7 @@ export class RenderSymbol extends VisualEntity<void> {
         `Render symbol "${this.symbol}" state playback was interrupted by returnToDefaultState().`,
       ),
     );
-    const before = this.#stateMachine.getActiveStateRevision();
+    const before = this.#stateMachine.getSnapshot();
     this.#stateMachine.reset();
     this.syncAniIfNeeded(before);
   }
@@ -443,9 +446,7 @@ export class RenderSymbol extends VisualEntity<void> {
     this.#valueTextBindingsDirty = false;
     this.#preparedPresentationValue = null;
     if (this.#valueController && previous !== value) {
-      const before = this.#lastAniRevision;
-      this.#lastAniRevision = -1;
-      this.syncAniIfNeeded(before, false);
+      this.syncAniIfNeeded(this.#stateMachine.getSnapshot(), false, true);
     }
   }
 
@@ -578,7 +579,6 @@ export class RenderSymbol extends VisualEntity<void> {
     assertValidDeltaSeconds(deltaSeconds);
     try {
       const beforeSnapshot = this.#stateMachine.getSnapshot();
-      const before = this.#stateMachine.getActiveStateRevision();
       const aniResult = this.#currentAni.update(deltaSeconds);
       if (aniResult.loopCompleted) {
         this.#loopCompletionCount += 1;
@@ -598,7 +598,7 @@ export class RenderSymbol extends VisualEntity<void> {
         this.#stateMachine.notifyOnceComplete();
       }
 
-      const stateChanged = this.syncAniIfNeeded(before);
+      const stateChanged = this.syncAniIfNeeded(beforeSnapshot);
       const snapshot = this.#stateMachine.getSnapshot();
       this.advanceActivePlayback(beforeSnapshot, snapshot, aniResult);
 
@@ -639,9 +639,7 @@ export class RenderSymbol extends VisualEntity<void> {
     this.#onceCompletionCount = 0;
     this.#stateMachine.reset();
     resetBaseDisplay(this.createAnimationContext());
-    const before = this.#lastAniRevision;
-    this.#lastAniRevision = -1;
-    this.syncAniIfNeeded(before, false);
+    this.syncAniIfNeeded(this.#stateMachine.getSnapshot(), false, true);
   }
 
   resetForPoolRelease(): void {
@@ -662,7 +660,8 @@ export class RenderSymbol extends VisualEntity<void> {
     this.gameUnderlayLayer.removeChildren();
     this.gameOverlayLayer.removeChildren();
     this.#stateMachine.reset();
-    this.#lastAniRevision = -1;
+    this.#lastAniRequestedState = "";
+    this.#lastAniResolvedState = "";
     this.#cachedUpdateSnapshot = null;
     this.#cachedUpdateResults.length = 0;
     this.#currentAni = createReleasedSymbolAni();
@@ -753,21 +752,25 @@ export class RenderSymbol extends VisualEntity<void> {
   }
 
   private syncAniIfNeeded(
-    previousRevision: number,
+    previousState: SymbolStateSnapshot,
     preserveEquivalentTimeline = true,
+    force = false,
   ): boolean {
-    const nextRevision = this.#stateMachine.getActiveStateRevision();
+    const snapshot = this.#stateMachine.getSnapshot();
     if (
-      nextRevision === previousRevision &&
-      nextRevision === this.#lastAniRevision
+      !force &&
+      snapshot.requestedState === previousState.requestedState &&
+      snapshot.resolvedState === previousState.resolvedState &&
+      snapshot.requestedState === this.#lastAniRequestedState &&
+      snapshot.resolvedState === this.#lastAniResolvedState
     ) {
       return false;
     }
 
-    const snapshot = this.#stateMachine.getSnapshot();
     const nextAni = this.createCurrentAni();
     const previousAni = this.#currentAni;
-    this.#lastAniRevision = nextRevision;
+    this.#lastAniRequestedState = snapshot.requestedState;
+    this.#lastAniResolvedState = snapshot.resolvedState;
     if (
       preserveEquivalentTimeline &&
       previousAni.continuityKey !== undefined &&

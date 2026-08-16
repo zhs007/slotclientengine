@@ -329,11 +329,9 @@ function playAward(
     winAmountRaw: value.winAmountRaw as number,
   });
   return context.waitForFrame(() => {
-    const phase = runtime.getActiveAwardCelebrationSnapshot()?.phase;
+    const phase = runtime.getActiveAwardCelebrationPhase();
     return (
-      phase === undefined ||
-      phase === "awaiting-dismiss" ||
-      phase === "complete"
+      phase === null || phase === "awaiting-dismiss" || phase === "complete"
     );
   });
 }

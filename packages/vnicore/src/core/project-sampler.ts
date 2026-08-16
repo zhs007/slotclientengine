@@ -1,9 +1,13 @@
 import { clampNumber, roundTo } from "./coordinates.js";
 import {
   sampleLayerAnimationsAtTime,
+  sampleLayerAnimationsAtTimeInto,
   shouldHideLayerOutsideActiveAnimation,
 } from "./animation-sampler.js";
-import { sampleBasicAnimationAtTime } from "./basic-animation.js";
+import {
+  sampleBasicAnimationAtTime,
+  sampleBasicAnimationAtTimeInto,
+} from "./basic-animation.js";
 import { hasActiveChaserLightAnimation } from "./chaser-light-sampler.js";
 import { hasActiveDeterministicEffectAnimation } from "./effect-sampler.js";
 import { hasActiveParticleAnimation } from "./particle-sampler.js";
@@ -129,9 +133,9 @@ function createRuntimeLayerSampler(layer: V5GLayerConfig): {
   return {
     state,
     sample(time: number): void {
-      sampleBasicAnimationAtTime(layer, time, basic);
+      sampleBasicAnimationAtTimeInto(layer, time, basic);
       animationBase.opacity = basic.opacity;
-      sampleLayerAnimationsAtTime(
+      sampleLayerAnimationsAtTimeInto(
         animationBase,
         layer.animations,
         time,

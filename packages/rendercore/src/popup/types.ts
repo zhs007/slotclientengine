@@ -619,7 +619,7 @@ export interface PopupPackageResource<
   destroy(): void | Promise<void>;
 }
 
-export interface AwardCelebrationPlayer {
+export interface AwardCelebrationRuntime {
   readonly container: Container;
   readonly textNodes: readonly PopupStringNodeHandle[];
   readonly imageStringNodes: readonly PopupStringNodeHandle[];
@@ -629,12 +629,11 @@ export interface AwardCelebrationPlayer {
   ): PopupPresentationSnapshot;
   init(): Promise<void>;
   start(input: AwardCelebrationInput): void;
-  tick(deltaSeconds: number): void;
-  update(deltaSeconds: number): AwardCelebrationSnapshot;
+  update(deltaSeconds: number): void;
   requestAdvance(): void;
   requestDismiss(): void;
   dismissImmediately(): void;
-  getSnapshot(): AwardCelebrationSnapshot;
+  getPhase(): AwardCelebrationPhase;
   isPlaying(): boolean;
   getTextNode(selector: PopupStringNodeSelector): PopupStringNodeHandle;
   getImageStringNode(selector: PopupStringNodeSelector): PopupStringNodeHandle;
@@ -648,7 +647,7 @@ export interface SpinePopupSnapshot {
   readonly dismissRequested: boolean;
 }
 
-export interface SpinePopupPlayer {
+export interface SpinePopupRuntime {
   readonly container: Container;
   readonly textNodes: readonly PopupStringNodeHandle[];
   readonly imageStringNodes: readonly PopupStringNodeHandle[];
@@ -658,11 +657,10 @@ export interface SpinePopupPlayer {
   ): PopupPresentationSnapshot;
   init(): Promise<void>;
   start(text?: string): void;
-  tick(deltaSeconds: number): void;
-  update(deltaSeconds: number): SpinePopupSnapshot;
+  update(deltaSeconds: number): void;
   requestDismiss(): void;
   dismissImmediately(): void;
-  getSnapshot(): SpinePopupSnapshot;
+  getPhase(): SpinePopupPhase;
   isPlaying(): boolean;
   getTextNode(selector: PopupStringNodeSelector): PopupStringNodeHandle;
   getImageStringNode(selector: PopupStringNodeSelector): PopupStringNodeHandle;
