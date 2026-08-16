@@ -1,5 +1,5 @@
 import { clampNumber } from "./coordinates.js";
-import type { V5GAssetConfig, V5GLayerConfig } from "./types.js";
+import type { V5GAssetConfig, V5GLayerConfig } from "../data/types.js";
 
 export function getSequenceFrameAssetId(
   layer: V5GLayerConfig,

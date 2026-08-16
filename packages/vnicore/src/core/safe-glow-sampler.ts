@@ -5,7 +5,7 @@ import type {
   V5GBlendMode,
   V5GLayerConfig,
   V5GTransformConfig,
-} from "./types.js";
+} from "../data/types.js";
 
 export interface VNISafeGlowLayerSampleState {
   layerId: string;

@@ -1,4 +1,4 @@
-import { VNIPlayer } from "@slotclientengine/vnicore/pixi";
+import { VNIRuntime } from "@slotclientengine/vnicore/core";
 import type { Container } from "pixi.js";
 import {
   createOfficialSpinePlayer,
@@ -34,16 +34,10 @@ export function createSceneLayoutOccurrenceEffectPlayerFactory(
       throw new SceneLayoutError(
         `VNI occurrence effect "${attachment.key}" must have a runtime exportProfile.`,
       );
-    const player = new VNIPlayer({
+    const player = new VNIRuntime({
       parent,
-      projectId: attachment.key,
-      bundleId: attachment.key,
-      profileId: profile.id,
-      profilePurpose: profile.purpose,
-      assetScale: profile.assetScale,
       project: loaded.project,
       assetUrls: loaded.assetUrls,
-      autoTick: false,
     });
     await player.init();
     return new VniOccurrenceEffectPlayer(player, loaded.project.stage.duration);
@@ -108,13 +102,13 @@ class SpineOccurrenceEffectPlayer implements VisibleOccurrenceEffectPlayer {
 }
 
 class VniOccurrenceEffectPlayer implements VisibleOccurrenceEffectPlayer {
-  readonly #player: VNIPlayer;
+  readonly #player: VNIRuntime;
   readonly #duration: number;
   #disposeCompletion: (() => void) | null = null;
   #resolve: (() => void) | null = null;
   #reject: ((error: Error) => void) | null = null;
 
-  constructor(player: VNIPlayer, duration: number) {
+  constructor(player: VNIRuntime, duration: number) {
     this.#player = player;
     this.#duration = duration;
   }

@@ -5,7 +5,7 @@ import {
   isRenderEffectAnimationType,
   sampleRenderEffectSpritesForLayer,
 } from "../../src/core/render-effect-sampler";
-import type { V5GAnimationConfig, V5GLayerConfig } from "../../src/core/types";
+import type { V5GAnimationConfig, V5GLayerConfig } from "../../src/data/types";
 
 const transform = {
   x: 0,

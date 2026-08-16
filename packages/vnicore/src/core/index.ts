@@ -1,46 +1,58 @@
-export * from "./types.js";
-export * from "./coordinates.js";
 export {
-  DETERMINISTIC_EFFECT_ANIMATION_TYPES,
-  PARTICLE_ANIMATION_TYPES,
-  SUPPORTED_ANIMATION_TYPES,
-  SUPPORTED_EASINGS,
-  backOutProgress,
-  easeProgress,
-  getDefaultEasing,
-  isDeterministicEffectAnimationType,
-  isParticleAnimationType,
-  isSupportedAnimationType,
-  isSupportedEasing,
-  sampleLayerAnimationsAtTime,
-  shouldHideLayerOutsideActiveAnimation,
-  type V5GAnimationSampleBase,
-  type V5GAnimationSampleResult,
-  type V5GEasingName,
-} from "./animation-sampler.js";
+  VNIRuntime,
+  type VNIAttachExternalImageBetweenLayerGroupsOptions,
+  type VNIAttachImageBetweenLayerGroupsOptions,
+  type VNIAttachImageToTextLayerOptions,
+  type VNIAttachNodeBetweenLayerGroupsOptions,
+  type VNIAttachNodeToTextLayerOptions,
+  type VNIAttachTextToTextLayerOptions,
+  type VNILayerGroupInfo,
+  type VNIPlayOptions,
+  type VNIPlaybackCompleteContext,
+  type VNIPlaybackEventContext,
+  type VNIPlaybackEventOptions,
+  type VNIPlaybackMode,
+  type VNIPlaybackPoint,
+  type VNIPlaybackRange,
+  type VNIPlaybackState,
+  type VNIPlayRangeOptions,
+  type VNIRuntimeOptions,
+  type VNISegmentedPlaybackOptions,
+  type VNISegmentedPlaybackPhase,
+  type VNITextLayerTextBinding,
+} from "./vni-runtime.js";
 export {
-  sampleBasicAnimationAtTime,
-  sampleBasicAnimationTrack,
-  type V5GBasicAnimationSample,
-} from "./basic-animation.js";
-export * from "./particle-sampler.js";
-export * from "./particle-runtime.js";
-export * from "./particle-combo-variant.js";
-export * from "./chaser-light-sampler.js";
-export * from "./card-carousel-3d.js";
-export * from "./cyclic-selection.js";
-export * from "./render-effect-sampler.js";
-export * from "./effect-sampler.js";
-export * from "./safe-glow-sampler.js";
-export * from "./sequence-layer.js";
-export * from "./timeline-progress.js";
-export * from "./playback-sequence.js";
+  VNIPlaybackCancelledError,
+  type VNIAnimationRuntimeRef,
+  type VNICyclicAuthoredPreviewDescriptor,
+  type VNICyclicSelectionController,
+  type VNICyclicSelectionItem,
+  type VNICyclicSelectionState,
+  type VNICyclicSelectionTransaction,
+  type VNIManualAnimationController,
+  type VNIManualAnimationInfo,
+  type VNIManualPlaybackSession,
+  type VNIManualPlaybackState,
+  type VNIPlaybackOperation,
+  type VNIPlaybackOperationComplete,
+  type VNIRuntimeAnimationCapability,
+  type VNITimelineHoldHandle,
+} from "./manual-playback.js";
 export {
-  sampleLayerAtTime,
-  sampleProjectAtTime,
-  type SampledLayerState,
-  type SampledProjectState,
-} from "./project-sampler.js";
-export * from "./layer-groups.js";
-export * from "./validation.js";
-export * from "./asset-manifest.js";
+  VNIRuntimePoolManager,
+  type VNIParticleComboLeaseOptions,
+  type VNIParticleComboPlayerLease,
+  type VNIRuntimePool,
+  type VNIRuntimePoolManagerOptions,
+  type VNIRuntimePoolStats,
+} from "./vni-runtime-pool.js";
+export {
+  createVNIParticleComboTargetVariant,
+  listVNIParticleComboTargetAnimations,
+  type VNIParticleComboAnimationDescriptor,
+  type VNIParticleComboAnimationRef,
+  type VNIParticleComboTarget,
+  type VNIParticleComboTargetVariant,
+  type VNIParticleComboTimingDescriptor,
+  type VNIParticleComboTimingMode,
+} from "./particle-combo-variant.js";

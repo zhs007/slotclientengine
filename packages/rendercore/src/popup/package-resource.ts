@@ -16,7 +16,7 @@ import {
   assertVNIProject,
   resolveProjectAssetUrls,
   rewriteVNIProjectAssetPaths,
-} from "@slotclientengine/vnicore/core";
+} from "@slotclientengine/vnicore/data";
 import {
   collectImageStringAssetPaths,
   createImageStringResourceFromResolvedFiles,

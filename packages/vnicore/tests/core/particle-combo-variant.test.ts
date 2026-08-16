@@ -3,7 +3,7 @@ import {
   createVNIParticleComboTargetVariant,
   listVNIParticleComboTargetAnimations,
 } from "../../src/core/particle-combo-variant";
-import type { VNIProjectConfig } from "../../src/core/types";
+import type { VNIProjectConfig } from "../../src/data/types";
 
 describe("particle_combo target variants", () => {
   it("preserves authored nominal speed and leaves the input untouched", () => {

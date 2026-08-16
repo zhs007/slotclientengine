@@ -1,4 +1,4 @@
-import { VNIPlayer } from "@slotclientengine/vnicore";
+import { VNIRuntime } from "@slotclientengine/vnicore/core";
 import { Assets, Container, Sprite, type Texture } from "pixi.js";
 import { createManagedImgNumberRenderObject } from "../presentation/imgnumber-render-object.js";
 import {
@@ -104,17 +104,10 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
           throw new SceneLayoutError(
             `Scene layout VNI runtime resource "${playerOptions.name}" is missing a runtime exportProfile.`,
           );
-        return new VNIPlayer({
+        return new VNIRuntime({
           parent: playerOptions.parent,
-          projectId: playerOptions.name,
-          bundleId: resource.manifest.id,
-          profileId: profile.id,
-          profilePurpose: profile.purpose,
-          assetScale: profile.assetScale,
           project: playerOptions.resource.project,
           assetUrls: playerOptions.resource.assetUrls,
-          autoTick: false,
-          fitPadding: 0,
         });
       });
   }

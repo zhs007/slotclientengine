@@ -7,15 +7,15 @@ import {
   type VNIParticleComboTarget,
   type VNIParticleComboTimingDescriptor,
   type VNIParticleComboTimingMode,
-} from "../core/particle-combo-variant.js";
+} from "./particle-combo-variant.js";
 import type {
   V5GAnimationConfig,
   V5GLayerConfig,
   VNIProjectConfig,
-} from "../core/types.js";
-import { VNIPlayer, type VNIPlaybackCompleteContext } from "./vni-player.js";
+} from "../data/types.js";
+import { VNIRuntime, type VNIPlaybackCompleteContext } from "./vni-runtime.js";
 
-export interface VNIPlayerPoolManagerOptions {
+export interface VNIRuntimePoolManagerOptions {
   readonly maxIdleInstancesPerPlayer?: number;
 }
 
@@ -25,7 +25,7 @@ export interface VNIParticleComboLeaseOptions {
   readonly timing?: VNIParticleComboTimingMode;
 }
 
-export interface VNIPlayerPoolStats {
+export interface VNIRuntimePoolStats {
   readonly active: number;
   readonly idle: number;
   readonly created: number;
@@ -33,44 +33,44 @@ export interface VNIPlayerPoolStats {
 }
 
 export interface VNIParticleComboPlayerLease {
-  readonly player: VNIPlayer;
+  readonly player: VNIRuntime;
   readonly timing: VNIParticleComboTimingDescriptor;
   playOnce(): Promise<VNIPlaybackCompleteContext>;
   release(): void;
 }
 
-export interface VNIPlayerPool {
+export interface VNIRuntimePool {
   listParticleComboAnimations(): readonly VNIParticleComboAnimationDescriptor[];
-  getStats(): VNIPlayerPoolStats;
+  getStats(): VNIRuntimePoolStats;
   acquire(
     options: VNIParticleComboLeaseOptions,
   ): Promise<VNIParticleComboPlayerLease>;
 }
 
 interface PoolEntry {
-  readonly player: VNIPlayer;
+  readonly player: VNIRuntime;
   readonly project: VNIProjectConfig;
   generation: number;
   lease: VNIParticleComboPlayerLeaseImpl | null;
 }
 
-const managersByTemplate = new WeakMap<VNIPlayer, VNIPlayerPoolManager>();
+const managersByTemplate = new WeakMap<VNIRuntime, VNIRuntimePoolManager>();
 
-export class VNIPlayerPoolManager {
-  private readonly pools = new Map<VNIPlayer, VNIPlayerPoolImpl>();
+export class VNIRuntimePoolManager {
+  private readonly pools = new Map<VNIRuntime, VNIRuntimePoolImpl>();
   private readonly maxIdleInstancesPerPlayer: number;
   private destroyed = false;
 
-  constructor(options: VNIPlayerPoolManagerOptions = {}) {
+  constructor(options: VNIRuntimePoolManagerOptions = {}) {
     this.maxIdleInstancesPerPlayer = normalizeMaxIdleInstances(
       options.maxIdleInstancesPerPlayer ?? 2,
     );
   }
 
-  getPool(template: VNIPlayer): VNIPlayerPool {
+  getPool(template: VNIRuntime): VNIRuntimePool {
     if (this.destroyed) {
       throw new Error(
-        "Cannot get a pool from a destroyed VNIPlayerPoolManager.",
+        "Cannot get a pool from a destroyed VNIRuntimePoolManager.",
       );
     }
     const existing = this.pools.get(template);
@@ -78,10 +78,10 @@ export class VNIPlayerPoolManager {
     const currentManager = managersByTemplate.get(template);
     if (currentManager && currentManager !== this) {
       throw new Error(
-        "A VNIPlayer template cannot be registered with multiple live pool managers.",
+        "A VNIRuntime template cannot be registered with multiple live pool managers.",
       );
     }
-    const pool = new VNIPlayerPoolImpl(
+    const pool = new VNIRuntimePoolImpl(
       template,
       this.maxIdleInstancesPerPlayer,
       () => {
@@ -96,7 +96,7 @@ export class VNIPlayerPoolManager {
     return pool;
   }
 
-  destroyPool(template: VNIPlayer): void {
+  destroyPool(template: VNIRuntime): void {
     this.pools.get(template)?.destroy();
   }
 
@@ -108,7 +108,7 @@ export class VNIPlayerPoolManager {
   }
 }
 
-class VNIPlayerPoolImpl implements VNIPlayerPool {
+class VNIRuntimePoolImpl implements VNIRuntimePool {
   private readonly authoredProject: VNIProjectConfig;
   private readonly parent: PIXI.Container;
   private readonly idle: PoolEntry[] = [];
@@ -119,7 +119,7 @@ class VNIPlayerPoolImpl implements VNIPlayerPool {
   private destroyed = false;
 
   constructor(
-    private readonly template: VNIPlayer,
+    private readonly template: VNIRuntime,
     private readonly maxIdleInstances: number,
     private readonly onDestroy: () => void,
   ) {
@@ -127,7 +127,7 @@ class VNIPlayerPoolImpl implements VNIPlayerPool {
     const parent = template.getDisplayObject().parent;
     if (!parent) {
       throw new Error(
-        "VNIPlayer pool template must be initialized and attached to a parent.",
+        "VNIRuntime pool template must be initialized and attached to a parent.",
       );
     }
     this.parent = parent;
@@ -139,7 +139,7 @@ class VNIPlayerPoolImpl implements VNIPlayerPool {
     return listVNIParticleComboTargetAnimations(this.authoredProject);
   }
 
-  getStats(): VNIPlayerPoolStats {
+  getStats(): VNIRuntimePoolStats {
     return Object.freeze({
       active: this.active.size,
       idle: this.idle.length,
@@ -181,7 +181,7 @@ class VNIPlayerPoolImpl implements VNIPlayerPool {
       }
       if (this.destroyed) {
         player.destroy();
-        throw new Error("VNIPlayer pool was destroyed during acquire().");
+        throw new Error("VNIRuntime pool was destroyed during acquire().");
       }
       entry = {
         player,
@@ -256,7 +256,7 @@ class VNIPlayerPoolImpl implements VNIPlayerPool {
 
   private assertAvailable(): void {
     if (this.destroyed) {
-      throw new Error("VNIPlayer pool has been destroyed.");
+      throw new Error("VNIRuntime pool has been destroyed.");
     }
   }
 }
@@ -268,13 +268,13 @@ class VNIParticleComboPlayerLeaseImpl implements VNIParticleComboPlayerLease {
   private rejectPending: ((error: Error) => void) | null = null;
 
   constructor(
-    private readonly pool: VNIPlayerPoolImpl,
+    private readonly pool: VNIRuntimePoolImpl,
     private readonly entry: PoolEntry,
     private readonly generation: number,
     readonly timing: VNIParticleComboTimingDescriptor,
   ) {}
 
-  get player(): VNIPlayer {
+  get player(): VNIRuntime {
     return this.entry.player;
   }
 

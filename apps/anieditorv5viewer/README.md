@@ -15,7 +15,7 @@ lease，再销毁 pool/template。
 
 The animation runtime comes from `@slotclientengine/vnicore`. This app owns upload handling, zip parsing, profile selection, controls, styles, Blob URL lifecycle, and browser assembly. Validation, sequence frame selection, `multi_move` sampling, Pixi.js v8 rendering, texture-size checks, masks, particles, VNI_0.070 deterministic effects, playback ranges, segmented playback, particle-draining, and diagnostics live in `packages/vnicore`.
 
-The viewer owns the browser Pixi `Application` and canvas. It passes `app.stage` to `VNIPlayer`, then uses `viewport` / `setViewportSize(...)`, `setViewportScale(...)`, and `requestRender` to keep the player aligned with the viewer mount. `VNIPlayer` itself does not create a canvas.
+The viewer owns the browser Pixi `Application` and canvas. It passes `app.stage` to `VNIViewer`, then uses `viewport` / `setViewportSize(...)`, `setViewportScale(...)`, and `requestRender` to keep the preview aligned with the viewer mount. `VNIViewer` composes the host-driven `VNIRuntime`; neither creates a canvas.
 
 ## Uploaded Zip Formats
 
@@ -74,7 +74,7 @@ Supported by `@slotclientengine/vnicore`:
 - VNI_0.074 `multi_move` path transforms, including ended transform handoff and empty-frame hiding
 - VNI_0.087 strict `basicAnimation` tracks, `bounce_jump`, current and legacy rotate, and pressure-separated outer/inner rotation
 - VNI_0.095 strict `card_carousel_3d` image/sequence playback through vnicore, with summary diagnostics for phase, card count, texture count, slices, and maximum slice pool size
-- text layer replacement through `VNIPlayer` public APIs for dynamic text and image binding
+- text layer replacement through `VNIViewer` public APIs for dynamic text and image binding
 - Pixi `precompose_light_alpha` masks with explicit `sourceLayerId` validation and vnicore-owned light-mask precomposition
 - `normal`, `add`, `screen`, `multiply`, `lighten` blend modes
 - VNI_0.070 deterministic effects: `gather_particles`, `smoke_mist`, `energy_ring`, `slash_light`, `flame_flicker`, `wave_band`, `wave_distort`, `speed_lines`, `drift_fall`, and `path_particles`
@@ -104,7 +104,7 @@ For VNI_0.087, the summary reports enabled basic-track and point counts only. Tr
 
 ## Browser Diagnostics
 
-The stage mount receives runtime diagnostics from `VNIPlayer`:
+The stage mount receives runtime diagnostics from `VNIViewer`:
 
 - `data-vni-project-id`
 - `data-vni-time`
@@ -129,15 +129,15 @@ Legacy `data-v5g-*` aliases are still written for old browser checks and are cle
 
 ## Advanced Playback UI
 
-The viewer has a separate advanced playback section for segmented playback. It passes `loopStart`, `loopEnd`, and `维持粒子活动` directly to `VNIPlayer.play({ mode: "segmented", ... })`, and calls `requestSegmentedPlaybackEnd()` for the end button. The viewer does not own the segmented state machine; it only validates form input, displays the current phase, and mirrors runtime errors.
+The viewer has a separate advanced playback section for segmented playback. It passes `loopStart`, `loopEnd`, and `维持粒子活动` directly to `VNIViewer.play({ mode: "segmented", ... })`, and calls `requestSegmentedPlaybackEnd()` for the end button. The viewer does not own the segmented state machine; it only validates form input, displays the current phase, and mirrors runtime errors.
 
 ## Canvas Zoom
 
-The Pixi preview keeps the outer stage mount, inner canvas, renderer, and `VNIPlayer` viewport at the same clipped viewer size. Zoom buttons call the public `setViewportScale(...)` API, so only the VNI display tree scales around the viewport center; the clipping rectangle never shrinks with zoom. Supported steps run from 10% through 400%, with 100% as reset.
+The Pixi preview keeps the outer stage mount, inner canvas, renderer, and `VNIViewer` viewport at the same clipped viewer size. Zoom buttons call the public `setViewportScale(...)` API, so only the VNI display tree scales around the viewport center; the clipping rectangle never shrinks with zoom. Supported steps run from 10% through 400%, with 100% as reset.
 
 ## Text Replacement UI
 
-The viewer exposes a text layer replacement panel for uploaded projects with text layers. It lists text layers from the current project, supports dynamic text and image replacement, and uses only `VNIPlayer.attachTextToTextLayer(...)` / `attachImageToTextLayer(...)` plus the returned dispose or `setText()` handles. It does not inspect or mutate private Pixi layer containers.
+The viewer exposes a text layer replacement panel for uploaded projects with text layers. It lists text layers from the current project, supports dynamic text and image replacement, and uses only `VNIViewer.attachTextToTextLayer(...)` / `attachImageToTextLayer(...)` plus the returned dispose or `setText()` handles. It does not inspect or mutate private Pixi layer containers.
 
 ## Commands
 

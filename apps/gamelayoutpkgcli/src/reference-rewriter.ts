@@ -21,7 +21,7 @@ import {
   assertVNIProject,
   rewriteVNIProjectAssetPaths,
   type VNIProjectConfig,
-} from "@slotclientengine/vnicore/core";
+} from "@slotclientengine/vnicore/data";
 import { parseJson } from "./package-reader.js";
 import type {
   ImageOptimizationResult,

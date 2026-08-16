@@ -23,7 +23,7 @@ import {
   rewriteVNIProjectAssetPaths,
   validateManifestProjectProfile,
   validateVNIBundleManifest,
-} from "@slotclientengine/vnicore";
+} from "@slotclientengine/vnicore/data";
 import {
   activeVariantIds,
   activateEditorGameMode,

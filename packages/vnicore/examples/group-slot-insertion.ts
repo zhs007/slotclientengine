@@ -1,8 +1,8 @@
 import * as PIXI from "pixi.js";
-import type { VNIPlayer } from "@slotclientengine/vnicore/pixi";
+import type { VNIViewer } from "@slotclientengine/vnicore/viewer";
 
 export function mountFirstLayerGroupSlotImage(
-  player: VNIPlayer,
+  player: VNIViewer,
   assetId: string,
 ): () => void {
   const [slot] = player.getLayerGroupSlots();
@@ -23,7 +23,7 @@ export function mountFirstLayerGroupSlotImage(
   });
 }
 
-export function mountFirstLayerGroupSlotNode(player: VNIPlayer): () => void {
+export function mountFirstLayerGroupSlotNode(player: VNIViewer): () => void {
   const [slot] = player.getLayerGroupSlots();
   if (!slot) {
     throw new Error("The VNI project has no adjacent layer group slot.");
@@ -41,7 +41,7 @@ export function mountFirstLayerGroupSlotNode(player: VNIPlayer): () => void {
 }
 
 export async function mountFirstLayerGroupSlotExternalImage(
-  player: VNIPlayer,
+  player: VNIViewer,
   imageUrl: string,
 ): Promise<() => void> {
   const [slot] = player.getLayerGroupSlots();
@@ -63,6 +63,6 @@ export async function mountFirstLayerGroupSlotExternalImage(
   });
 }
 
-export function clearExampleSlotMount(player: VNIPlayer): void {
+export function clearExampleSlotMount(player: VNIViewer): void {
   player.detachMountedNode("example-slot-node");
 }

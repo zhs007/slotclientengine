@@ -2,13 +2,13 @@ import {
   getDefaultEasing,
   isSupportedAnimationType,
   isSupportedEasing,
-} from "./animation-sampler.js";
+} from "./animation-contract.js";
 import {
   getVNIProjectRenderGroupOrder,
   normalizeVNIProjectLayerGroups,
 } from "./layer-groups.js";
 import { parseMultiMovePointsJson } from "./multi-move.js";
-import { getCardCarousel3DSyncedDuration } from "./card-carousel-3d.js";
+import { getCardCarousel3DSyncedDuration } from "./card-carousel-contract.js";
 import type {
   V5GAnimationConfig,
   V5GAnimationParamValue,

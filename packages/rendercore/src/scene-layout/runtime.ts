@@ -1,5 +1,5 @@
 import { Assets, Container, Graphics, Sprite, type Texture } from "pixi.js";
-import { VNIPlayer } from "@slotclientengine/vnicore";
+import { VNIRuntime } from "@slotclientengine/vnicore/core";
 import {
   assertValidSpineDeltaSeconds,
   createOfficialSpinePlayer,
@@ -148,17 +148,10 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
             `Scene layout VNI node "${playerOptions.node.id}" is missing a runtime exportProfile.`,
           );
         }
-        return new VNIPlayer({
+        return new VNIRuntime({
           parent: playerOptions.parent,
-          projectId: playerOptions.node.id,
-          bundleId: options.resource.manifest.id,
-          profileId: profile.id,
-          profilePurpose: profile.purpose,
-          assetScale: profile.assetScale,
           project: playerOptions.resource.project,
           assetUrls: playerOptions.resource.assetUrls,
-          autoTick: false,
-          fitPadding: 0,
         });
       });
     this.container.label = `scene-layout:${options.resource.manifest.id}`;

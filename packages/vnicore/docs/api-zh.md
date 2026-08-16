@@ -1,209 +1,46 @@
-# vnicore API
+# VniCore API
 
-## 高级 manual / cyclic-selection
+## 公开入口
 
-`VNIPlayer.createManualPlaybackSession()` 创建唯一的高级手工播放 session。`VNIManualPlaybackSession` 提供可等待、可取消的 `playRange()` / `advanceFor()`、主时间轴 `holdTimeline()`、稳定 animation ref 查询和 capability controller。manual range 复用真实 timeline marker、终点粒子排空和 complete listener，operation 在排空后 resolve；listener 抛错继续向调用栈传播。session 存在时，legacy `play/restart/seek/playRange` 显式失败，避免两个 transport 同时写时间轴；operation 在 cancel、session/player destroy 时以 `VNIPlaybackCancelledError` reject。
+- `@slotclientengine/vnicore/data`：`VNI*` 数据类型、`assertVNIProject()`、manifest/profile 校验、asset URL 解析和路径重写。
+- `@slotclientengine/vnicore/core`：`VNIRuntime`、manual playback、particle-combo variant 和 core runtime pool。
+- `@slotclientengine/vnicore/viewer`：`VNIViewer`、viewer preview pool，以及 viewer 需要的 transport 类型。
 
-`listAnimations({ capability: "cyclic-selection" })` 只返回 runtime 明确声明能力的 animation，不按名称或参数猜测。`VNICyclicSelectionController.getAuthoredPreviewDescriptor()` 提供 intro、hold、continuous phase、ending 和 authored target。`demoIdleDuration` 只是 full-demo/default preview 建议时长，不限制 production continuous wait。
+包根路径、`./pixi` 和 `V5G*` public alias 均不再提供。
 
-carrier 数量和 identity 固定。`setInitialItems()` 接受已校验 project asset 或宿主 `PIXI.Texture`；新内容只在 renderer 报告 carrier 不可见的 update 边界原子提交。`VNICyclicSelectionTransaction` 可等待、可取消，destroy 会拒绝 pending transaction。project/host 继续拥有 source texture，vnicore 只拥有 ref-counted slice view；任意 live `PIXI.Container` 不属于该合同。
+## VNIRuntime
 
-## import surface
+构造参数只有：
 
-- `@slotclientengine/vnicore`: re-export `./core` 和 `./pixi`。
-- `@slotclientengine/vnicore/core`: 类型、校验、采样、资源 manifest 纯函数。
-- `@slotclientengine/vnicore/pixi`: Pixi.js v8 player 和 Pixi helper。
+```ts
+interface VNIRuntimeOptions {
+  parent: PIXI.Container;
+  project: VNIProjectConfig;
+  assetUrls: AssetUrlManifest;
+}
+```
 
-## 主要类型
+稳定方法包括 `init()`、`play()`、`pause()`、`restart()`、`seek()`、`playRange()`、`requestSegmentedPlaybackEnd()`、`update(deltaSeconds)`、marker/complete listener、manual playback、group slot/text replacement、`getDisplayObject()`、标量播放状态查询和 `destroy()`。
 
-- `VNIProjectConfig`: VNI/V5G export JSON 的项目结构。
-- `VNISequenceConfig`: `type: "sequence"` layer 的帧序列配置，包含 `frameAssetIds`、`cycleDuration` 和 `loop`。
-- `VNIBundleManifest`: VNI bundle manifest 结构；profile/project 一致性通过 schema 与测试中的 manifest 数据校验。
-- `AssetUrlManifest`: `Readonly<Record<string, string>>`，key 是 `asset.path`。
-- `VNIPlayerOptions`: `VNIPlayer` 构造参数。
-- `VNIPlaybackRange`: time 或 frame range。
-- `VNIPlayOptions`: `play()` 的可选参数，支持普通 timeline、range 和 segmented 三段式播放。
-- `VNISegmentedPlaybackOptions`: `loopStart` / `loopEnd` / `keepParticlesAlive` 高级播放参数。
-- `VNIPlaybackState`: 当前 mode、phase、主时间轴、粒子排空和 live 粒子数量。
-- `VNIPlaybackEventOptions`: marker 注册参数。
-- `VNIPlaybackCompleteContext`: range、全时长非循环或 segmented 视觉完全结束事件。
-- `VNILayerGroupConfig`: `project.layerGroups[]` 的 group 元数据。它不是 `type: "group"` layer。
-- `VNILayerGroupSlot`: 两个相邻 render group 之间的可挂接 slot。
-- `VNIAttachNodeBetweenLayerGroupsOptions` / `VNIAttachImageBetweenLayerGroupsOptions` / `VNIAttachExternalImageBetweenLayerGroupsOptions`: 组间挂接 Pixi node、project asset image 或显式外部图片 URL 的参数。
-- `VNIAttachNodeToTextLayerOptions` / `VNIAttachTextToTextLayerOptions` / `VNIAttachImageToTextLayerOptions`: 文字层 placeholder 绑定自定义 Pixi 节点、动态文本或图片的参数。
-- `VNITextLayerTextBinding`: 动态文字绑定句柄，提供 `dispose()` 和 `setText(text)`。
+Core 不启动 RAF。每个 game/runtime 宿主必须从自己的 ticker 调用 `update(deltaSeconds)`。`deltaSeconds` 必须是正有限数；未知或冲突状态显式失败。
 
-`V5G*` 类型仍作为 legacy schema alias 导出；新代码使用 `VNI*`。
+`getInspection()` 返回即时只读检查值，仅用于调试或 viewer adapter；game hot path 优先使用 `needsUpdate()`、`getLoopIndex()`、`getPlaybackPhase()`、`getLiveParticleCount()` 等标量查询。
 
-`VNIPlayerOptions` 还支持嵌入相关选项：
+## VNIViewer
 
-- `parent: PIXI.Container`：必填，由宿主提供的 Pixi 父节点。`VNIPlayer` 不创建 `PIXI.Application`、renderer 或 canvas。
-- `diagnosticsElement?: HTMLElement`：可选，写入 `data-vni-*` / `data-v5g-*` diagnostics 的宿主 DOM 节点。
-- `viewport?: { width: number; height: number }`：可选，用于 standalone viewer 这类需要 player 适配宿主可视区域的场景。
-- `viewportScale?: number`：可选，默认 `1`；只缩放 VNI stage display tree，不改变 viewport/renderer 的裁剪尺寸。
-- `requestRender?: () => void`：可选，宿主手动渲染时由 player 在画面变化后请求外部 renderer render。
-- `autoTick?: boolean`：默认 `true`，由 player 自己使用 RAF 推进；设为 `false` 时宿主必须显式调用 `update(deltaSeconds)`。
-- `fitPadding?: number`：默认保持既有响应式 padding；设为 `0` 时 VNI stage 坐标不再额外留边，适合宿主用自己的 Pixi viewport 或 mask 做精确裁切。
+`VNIViewer` 组合而非继承 `VNIRuntime`。它额外拥有：
 
-## core 函数
+- RAF 调度；
+- `setViewportSize()` / `setViewportScale()`；
+- DOM `data-vni-*` diagnostics；
+- `requestRender`、`onTimeChange`、`onPlayingChange`；
+- `VNIViewerPoolManager` 对 pooled core clone 的 viewport 和 RAF 驱动。
 
-- `listVNIParticleComboTargetAnimations(project)`：列出启用的
-  `particle_combo` 及其 authored target、名义距离、时长、速度和播放区间。
-- `createVNIParticleComboTargetVariant(options)`：按精确
-  `layerId + animationId` 创建不修改输入的 fresh project。默认
-  `preserve-authored-speed`；也可传
-  `{ mode: "fixed-duration", durationSeconds }`。返回 authored/effective
-  target、distance、duration、speed 和可直接传给 `playRange()` 的 time
-  range。target 是 layer-local VNI offset，不是 Pixi 坐标。
-- `assertVNIProject(value)`: 结构断言并返回 `VNIProjectConfig`。
-- `validateVNIProject(project)`: 验证 schema、stage、asset、layer、animation 和 export profile 契约。
-- `assertVNIBundleManifest(value)` / `validateVNIBundleManifest(manifest)`: bundle manifest 断言和验证。
-- `validateManifestProjectProfile(entry, project)`: 验证 manifest entry 与 project `exportProfile` 对齐。
-- `parseColorHex(value)`: 解析 `#RRGGBB`。
-- `sampleProjectAtTime(project, time)`: 采样整个 project。
-- `sampleLayerAtTime(layer, time)`: 采样单 layer。
-- `sampleLayerAnimationsAtTime(base, animations, time)`: 采样 animation 栈，包含 VNI_0.074 `multi_move`、结束位移持续采样和不裁掉超调的位移插值。
-- `sampleBasicAnimationAtTime(layer, time)` / `sampleBasicAnimationTrack(track, baseValue, time)`: 采样 VNI_0.087 六条基础属性轨道；先于 preset stack，段 easing 属于右点，端点持续。
-- `prepareCardCarousel3D(animation)`：严格参数通过校验后预计算 VNI_0.095 五阶段旋转、reveal rank、stop 对齐和静态几何常量。
-- `createCardCarousel3DSampleBuffer(prepared)` / `sampleCardCarousel3D(prepared, input, output)`：创建一次并复用 card/slice output buffer；采样 sequence modulo、透视、切片 frame/transform/tint 和稳定 z 顺序。
-- `getCardCarousel3DSyncedDuration(animation)`：按 `phasePreviewMode` 和五段参数派生、以 `0.05s` snap 的导出时长。
-- `getSequenceFrameAssetId(layer, time)`: 按 sequence 配置和当前时间解析当前帧 asset id；非 loop 序列停在最后一帧。
-- `getLayerDisplayAssetId(layer, time)` / `getLayerDisplayAsset(layer, time, assetsById)`: 获取 image/sequence layer 当前显示资源。
-- `sampleParticleSpritesForLayer(layer, sampledLayer, textureSize, time)`: 确定性采样粒子 sprite。
-- `sampleChaserLightSpritesForLayer(layer, sampledLayer, textureSize, time)`: 确定性采样 `chaser_light` sprite。
-- `sampleRenderEffectSpritesForLayer(layer, sampledLayer, textureSize, time)`: 确定性采样 `shatter` / `glow` render effect sprite。
-- `sampleSafeGlowSpritesForLayer(layer, sampledLayer, time)`: 采样 `safe_glow` 同图副本高亮 sprite；它不是 `render-effect-sampler` 的 effect。
-- `sampleDeterministicEffectSpritesForLayer(layer, sampledLayer, textureSize, time)`: 确定性采样 VNI_0.070 新增 sequence effects。返回普通 sprite、`wave_distort` texture slice 或 `speed_lines` line sample。
-- `hasActiveDeterministicEffectAnimation(layer, time)`: 判断 image/sequence layer 是否有活跃 VNI_0.070 deterministic effect。
-- `sampleLiveParticleSprites(layers, stage, time)`: 生成带 Pixi 坐标的 live 粒子 sample。
-- `VNIParticleRuntime`: 保存 live 粒子状态，支持停止发射后的排空。
-- `hasActiveChaserLightAnimation(layer, time)`: 判断 layer 是否有活跃走马灯 runtime effect。
-- `VNISegmentedPlaybackSequence`: 三段式播放纯状态机。
-- `hasActiveParticleAnimation(layer, time)`: 判断 layer 是否有活跃粒子动画。
-- `DEFAULT_VNI_LAYER_GROUP_ID`: legacy 无 group 导出规范化后的默认 group id。
-- `normalizeVNIProjectLayerGroups(project)`: 只对“整个 project 无 group 信息”的旧导出补 `group_default`；半新半旧合同会显式失败。
-- `getVNIProjectRenderGroupOrder(project)`: 按 `project.layers` 生成连续 group run，不能用 `layerGroups.order` 重排画面。
-- `getVNIProjectLayerGroupSlots(project)`: 返回相邻 group run 之间的合法 slot。
-- `createAssetUrlManifest(modules)`: 把 Vite asset modules 转成 `AssetUrlManifest`。
-- `resolveProjectAssetUrls(project, manifest)`: 从 manifest 中解析 project 需要的所有 asset URL。
+`autoTick: false` 只用于 deterministic viewer tests 或已有外层 preview scheduler；它不是 core 选项。
 
-## Pixi player
+## Ownership
 
-`VNIPlayerPoolManager` 是显式生命周期对象。`getPool(template)` 对每个已
-初始化模板返回唯一 pool；同一模板不能同时属于两个活跃 manager。pool 的
-`acquire({ animation, target, timing })` 返回
-`VNIParticleComboPlayerLease`：
-
-- `lease.player` 是共享已加载 texture、但拥有独立 mutable runtime/tree 的 clone；
-- `lease.timing` 是此次变体的完整 timing descriptor；
-- `lease.playOnce()` 播放返回 range，并在视觉完成后自动归还；
-- 手工控制 `lease.player` 时必须在 `finally` 调用幂等 `lease.release()`。
-
-归还会恢复 authored target/duration、重算 particle drain 时长、清除 transport、
-listener 和 mounted state，并在进入 idle 前 detach。manager/template destroy 会
-清理 idle 与 active clone。`maxIdleInstancesPerPlayer` 必须是有限的非负整数。
-
-`VNIPlayer` stable public methods:
-
-- `init(): Promise<void>`
-- `play(options?: VNIPlayOptions): void`
-- `pause(): void`
-- `restart(): void`
-- `seek(time: number): void`
-- `setLoop(loop: boolean): void`
-- `getLoop(): boolean`
-- `getTime(): number`
-- `isPlaying(): boolean`
-- `update(deltaSeconds: number): void`
-- `getDisplayObject(): PIXI.Container`
-- `setViewportSize(width: number, height: number): void`
-- `setViewportScale(scale: number): void`
-- `getViewportScale(): number`
-- `playRange(options: VNIPlayRangeOptions): void`
-- `requestSegmentedPlaybackEnd(): void`
-- `getPlaybackState(): VNIPlaybackState`
-- `addPlaybackEvent(options: VNIPlaybackEventOptions): () => void`
-- `clearPlaybackEvent(id: string): void`
-- `clearPlaybackEvents(): void`
-- `onPlaybackComplete(listener): () => void`
-- `getLayerGroups(): readonly VNILayerGroupInfo[]`
-- `getLayerGroupSlots(): readonly VNILayerGroupSlot[]`
-- `attachNodeBetweenLayerGroups(options): () => void`
-- `attachImageBetweenLayerGroups(options): () => void`
-- `attachExternalImageBetweenLayerGroups(options): Promise<() => void>`
-- `attachNodeToTextLayer(options): () => void`
-- `attachTextToTextLayer(options): VNITextLayerTextBinding`
-- `attachImageToTextLayer(options): Promise<() => void>`
-- `detachMountedNode(id: string): void`
-- `clearMountedNodes(): void`
-- `destroy(): void`
-
-`play()` 无参数时仍是普通时间轴播放。三种 `play()` mode 都可传
-`ignoreAuthoredSeed?: boolean`，默认或 `false` 使用导出 animation 的 `seed`，保持和编辑器 Pixi
-preview 一致；`true` 会为本次新播放生成 runtime seed，忽略 authored seed。runtime seed 在同一次
-播放的逐帧采样、seek/restart、pause/resume、loop 和 particle drain 内稳定，不会逐帧重新随机；新的
-range 或 segmented `play()` 才会重新生成。`playRange(...)`、manual playback 和 pool `playOnce()`
-不接受这个开关，继续使用 authored seed。`play({ mode: "range", range, loop })` 等价于
-`playRange(...)` 的时间范围语义。`play({ mode: "segmented", loopStart, loopEnd, keepParticlesAlive })`
-会按 start / loop / end 三段播放；`loopStart === loopEnd` 是停帧 loop，`loopStart < loopEnd` 是区间
-loop。`keepParticlesAlive` 开启时，loop phase 的发射器配置跟随 loop 点或 loop 段，但 live 粒子按运行时
-delta 继续老化、移动和发射，不会随播放时间停住或回绕。`requestSegmentedPlaybackEnd()` 只允许在
-active segmented playback 中调用，否则显式抛错。
-
-`update(deltaSeconds)` 主要用于测试或宿主手动推进；默认 `play()` 仍然使用 RAF 自动推进。需要接入外部游戏 ticker 时，构造 `VNIPlayer` 时传入 `autoTick: false`，再由宿主每帧调用 `update(deltaSeconds)`。`onPlaybackComplete(...)` 在视觉完全结束后触发，也就是时间轴到终点并且 live 粒子排空后触发；如果终点没有可排空粒子，则可以立即触发。
-
-`project.stage.backgroundColor` 是导出 schema 中保留的背景元数据；`VNIPlayer` 是 runtime-only，不读取、不绘制、不提供开关，画面始终保持透明，只渲染 layer/effect/particle/mounted node。
-
-`type: "sequence"` layer 是 texture-backed layer，`assetId` 必须为 `null`，当前显示帧只来自 `sequence.frameAssetIds`。`VNIPlayer` 会在同一个 Pixi sprite 上按时间切换 texture，mask、粒子、deterministic effect 都使用当前帧的 texture/尺寸；不会把 sequence 展开成多层，也不会在 viewer 里复制切帧逻辑。
-
-`diagnosticsElement` 会写入 `data-vni-deterministic-effect-sprites`，用于统计 VNI_0.070 新增效果生成的 sprite / texture slice / line sample。它和 `data-vni-render-effect-sprites`、`data-vni-safe-glow-sprites` 分开统计；旧 `data-v5g-*` alias 同步保留。
-
-文字层是 runtime placeholder。`attachNodeToTextLayer(...)` 要求 `layerId` 指向 `type === "text"` 的 layer，同一个 mounted id 不能重复；默认隐藏原始文字，传 `hideOriginal: false` 才保留。`attachTextToTextLayer(...)` 创建 Pixi `Text` 并返回 `setText()`，更新文本时不会重建 player 或 layer tree。`attachImageToTextLayer(...)` 支持当前 project asset 或显式 `imageUrl`，project asset 继续走 texture size 校验和 logical/file size compensation。返回的 dispose、`clearMountedNodes()`、`destroy()` 都会清理绑定节点并恢复原始文字。
-
-所有 image layer 用法都属于 `add` / `screen` / `lighten` 的 JPG 或 RGB PNG 黑底光效图，会在加载阶段派生为带透明 alpha 的 matte texture。这个处理不修改原始美术资源，只避免 Pixi v8 在透明宿主 canvas 上把没有有效 alpha 的黑色背景写成不透明黑框；已有透明 alpha 的 PNG、normal layer、被 normal layer 复用的图片和未被叠加 blend 引用的图片不受影响。派生过程只使用一次性纹理预处理 canvas，不是 `VNIPlayer` 自己的播放 canvas。
-
-Layer group 合同：
-
-- 新 group schema 是 `project.layerGroups + layer.groupId`，不是 `type: "group"` layer，也不是 `parentId` 嵌套。
-- 旧导出只有在完全没有 `layerGroups` 且所有 layer 都没有 `groupId` 时，才会规范化为单个 `group_default`。
-- 一旦提供 `layerGroups`，每个 layer 都必须有合法 `groupId`，group id/order 不能重复，group 在 `project.layers` 中必须连续。
-- render order 来自 `project.layers`；`layerGroups.order` 只作为 editor 元数据保留，不改变 Pixi child 顺序。
-- `getLayerGroupSlots()` 只返回相邻 group 之间的 slot。未知、反向或非相邻 group id 会显式抛错。
-- 挂接节点坐标是 Pixi stage content 坐标，`x=0,y=0` 是 stage 左上角。外部传入 node 默认只 remove，不 destroy；`destroyOnDetach === true` 才销毁。
-- `attachImageBetweenLayerGroups(...)` 只使用当前 project 已加载且已通过 texture size 校验的 asset texture。
-- `attachExternalImageBetweenLayerGroups(...)` 使用宿主传入的 `imageUrl` 加载图片，适合 viewer 的当前 assets 目录中未被当前 project 引用的资源；它不把外部图片伪装成 project asset，也不绕过 group slot 相邻校验。
-
-新增动画类型：
-
-- `idle`: coverage-only no-op，不改 transform/opacity。
-- `multi_move`: VNI_0.074 多段位移，要求 `pointsJson` 为 JSON string 数组，每个点声明 `x/y/time/easing`；每段使用到达点 easing，`backOut` 等超调不被 clamp。非法 JSON、非数组、少于两个点、非 finite 数字、坐标越界、time 越过 animation duration 或未知 easing 都显式失败。
-- `bounce_jump`: VNI_0.087 弹跳，严格要求 `height/anticipationRatio/squash/stretch/topSquash/bounceCount/bounceDecay/landSquash`；只在自身闭区间内参与采样。
-- `rotate`: 旧合同严格使用 `fromRotation/toRotation`；VNI_0.087 新合同严格使用 `turns/direction/accelRatio/decelRatio/pressure/pressureStretch`。两组不能混用。pressure 开启时 sampled outer transform 保持不累加该旋转，旋转量进入 runtime 内部 `visualRotation` 并应用到稳定 content root。
-- `shatter`: deterministic render effect，要求 `count/pieceSize/force/impactAngle/spreadAngle/gravity/spin/sourceOpacity`，`fadeOut` 可选 boolean。
-- `glow`: deterministic render effect，要求 `intensity/spread/minAlpha/maxAlpha/pulses/blendMode`，`keepOriginal` 可选 boolean；`blendMode` 数值为 `0=add`、`1=screen`、`2=lighten`。
-- `safe_glow`: 普通同图副本高亮，要求 `spread/minOpacity/maxOpacity/pulses`，`keepOriginal` 可选 boolean；副本继承当前 layer `blendMode`，不进入 `VNIRenderEffectType`。
-- `particle_stream`: 持续发射的 layer 粒子，要求 `spawnRate/lifetime/spread/speed/emissionAngle/emissionSpreadAngle/size/gravity/trailCount/trailSpacing/trailFade/randomRotationDegrees/spinSpeed`，`fadeOut/rotateParticles/randomRotation` 可选 boolean；segmented hold 中 live elapsed 继续推进，drain duration 以 `lifetime` 为主。
-- `chaser_light`: 走马灯 runtime effect，要求 `totalCount/spacing/lightDuration/interval/trajectory/radius/centerX/centerY/endX/endY/curve/lightSize/dimAlpha`，`keepOriginal` 可选 boolean；`totalCount` 校验上限为 200。灯位固定在轨迹采样点上，只推进亮灭窗口；圆形轨迹按 `index * spacing / max(radius, 1) - PI / 2` 把 `spacing` 当弧长换算角度，直线/曲线按 `index / (totalCount - 1)` 静态分布；每盏灯的错位周期是 `lightDuration + interval`，不是单独的 `interval`。
-- `gather_particles`: VNI_0.070 deterministic effect，要求 `count/size/sourceOpacity/spawnRadius/spawnRatio/targetX/targetY/travelMode/curve/spiralTurns/staggerRatio/trailCount/trailSpacing/trailFade/vanishMode/vanishRatio/flashScale/flashIntensity`。
-- `smoke_mist`: 要求 `count/size/sourceOpacity/spawnRadius/spread/windX/windY/swirl/startAlpha/fadePower/grow/sizeRandom/rotationSpeed`。
-- `energy_ring`: 要求 `ringCount/startScale/endScale/sourceOpacity/alpha/stagger/rotation/pulse/vanishMode`，`additive` 可选 boolean。
-- `slash_light`: 要求 `mode/angle/travel/lengthScale/widthScale/sourceOpacity/flashAlpha/startScale/fadeRatio/curve`，`additive` 可选 boolean。
-- `flame_flicker`: 要求 `count/emitterWidth/height/direction/spreadAngle/vanishSpread/lengthRandom/size/sway/turbulence/grow/sourceOpacity/alpha/flicker`，`cycles` 可选；旧导出里的 `speed` 只在本类型作为显式兼容字段读取。
-- `wave_band`: 要求 `mode/count/length/amplitude/frequency/speed/direction/size/alpha/trailFade`，`keepOriginal/rotateToWave` 可选 boolean。
-- `wave_distort`: 要求 `rows/amplitude/frequency/phaseOffset/verticalBob/alpha/edgeFeather`，`cycles` 可选；旧导出里的 `speed` 只在本类型作为显式兼容字段读取。Pixi runtime 以复用 source texture 的 slice 渲染，不复制全图贴图。
-- `speed_lines`: 要求 `mode/count/radius/length/speed/direction/spreadAngle/lineWidth/alpha`，`keepOriginal/fadeOut` 可选 boolean。
-- `drift_fall`: 要求 `count/areaWidth/areaHeight/wind/swayAmplitude/swayFrequency/size/sizeRandom/rotationSpeed/alpha`，`cycles` 可选；旧导出里的 `fallSpeed` 只在本类型作为显式兼容字段读取。
-- `path_particles`: 要求 `pathMode/count/size/endX/endY/curve/amplitude/frequency/radiusStart/radiusEnd/turns/speed/stagger/oneShotStagger/trailCount/trailSpacing/trailFade/alpha`，`keepOriginal/rotateToPath/fadeEnds/loop` 可选 boolean。
-
-所有 layer animation 的覆盖区间都是首尾帧闭区间：`time === startTime` 有效，`time === startTime + duration` 也有效；只有超过 end 的时间才视为 inactive。`move` / `multi_move` / `slide_in` / `slide_out` / `squash_stretch` 结束后仍以 progress 1 参与 transform 累加，用于后续动画接力；visibility 单独判断，当前时间不在任何 enabled animation 覆盖区间内时仍隐藏空帧。新增 deterministic effects 可挂在 image 或 sequence layer 上；text layer 不渲染这些 effect。
-
-Mask 合同：
-
-- `layer.mask.enabled=true` 时必须有合法 `sourceLayerId`，不能指向自身，不能指向不存在的 layer。
-- 当前只支持 `mode: "alpha"`；Pixi runtime 目标只接受 `precompose_light_alpha` 作为可播放导出，Cocos-compatible `legacy_alpha` 项目或启用的 layer mask 会显式失败。
-- `showSourceLayer=false` 会隐藏普通 source layer，但 mask source 仍用于目标层。
-- `precompose_light_alpha` 在 target/source 都是 image 且 target blendMode 为 `add` / `screen` / `lighten` 时，按编辑器 Pixi 预览做 stage-sized 光效预合成：target 光效像素 alpha 来自 `max(r,g,b) * targetAlpha * maskSourceAlpha * maskOpacity`，生成的 texture 会按 stage、asset、texture、transform、opacity 和 blendMode 缓存，输入不变不会每帧重建。非 light blendMode 仍走普通 Pixi alpha mask。
-
-## 内部 helper 边界
-
-`blend-mode`、`layer-instance` 等 Pixi helper 是实现支撑和测试辅助，不承诺像 `VNIPlayer`、core validation/sampler、asset manifest 函数一样稳定。不要从应用层绕开 `VNIPlayer` 直接装配内部 layer instance 或直接操作 group/slot container；宿主只负责提供外部 Pixi parent、ticker/render 调度和 DOM diagnostics 节点。
+- 宿主持有 Pixi Application、renderer、canvas 和传入的 parent。
+- Core 持有自己的 display tree、mutable playback state、particle、listener、派生 texture view 和 cache。
+- Project/host source texture 不由 runtime 销毁；runtime 只释放自己创建的派生资源。
+- `destroy()` 后所有公开 mutation 显式失败；异步 init/attach 失败不得留下半提交节点。

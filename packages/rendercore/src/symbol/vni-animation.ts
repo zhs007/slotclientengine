@@ -1,8 +1,8 @@
 import { Container } from "pixi.js";
 import {
-  VNIPlayer,
-  type VNIPlayerOptions,
-} from "@slotclientengine/vnicore/pixi";
+  VNIRuntime,
+  type VNIRuntimeOptions,
+} from "@slotclientengine/vnicore/core";
 import {
   assertValidDeltaSeconds,
   createAppearSymbolAni,
@@ -49,14 +49,14 @@ export interface VniSymbolAniPlayer {
     readonly loop: boolean;
   }): void;
   update(deltaSeconds: number): void;
-  getPlaybackState(): Readonly<{ readonly loopIndex: number }>;
+  getLoopIndex(): number;
   onPlaybackComplete(listener: () => void): () => void;
   pause?(): void;
   destroy(): void;
 }
 
 export type VniSymbolAniPlayerFactory = (
-  options: VNIPlayerOptions,
+  options: VNIRuntimeOptions,
 ) => VniSymbolAniPlayer;
 
 export interface VniSymbolAniOptions {
@@ -119,7 +119,7 @@ export class VniSymbolAni implements SymbolAni {
     this.continuityKey = createVniAnimationContinuityKey(options.resource);
     this.#playerFactory =
       options.playerFactory ??
-      ((playerOptions) => new VNIPlayer(playerOptions));
+      ((playerOptions) => new VNIRuntime(playerOptions));
   }
 
   reset(): void {
@@ -160,7 +160,7 @@ export class VniSymbolAni implements SymbolAni {
     const player = this.#cacheEntry?.player;
     player?.update(deltaSeconds);
     if (this.playback === "loop" && player) {
-      const loopIndex = player.getPlaybackState().loopIndex;
+      const loopIndex = player.getLoopIndex();
       const loopCompleted = loopIndex > this.#loopIndex;
       this.#loopIndex = loopIndex;
       if (loopCompleted) {
@@ -262,7 +262,7 @@ export class VniSymbolAni implements SymbolAni {
         },
         loop: this.#resource.spec.playback.loop,
       });
-      this.#loopIndex = player.getPlaybackState().loopIndex;
+      this.#loopIndex = player.getLoopIndex();
       this.#initialized = true;
     } catch (error) {
       if (this.#cacheEntry === entry && this.#playRequestId === requestId) {
@@ -324,15 +324,8 @@ function getOrCreateCachedVniSymbolPlayer(options: {
 
   const player = options.playerFactory({
     parent: options.context.overlayLayer,
-    projectId: `${options.context.symbol}-${options.context.resolvedState}`,
-    bundleId: "symbol-manifest",
-    profileId: "symbol-vni",
-    profilePurpose: "symbol-animation",
-    assetScale: 1,
     project: options.resource.project,
     assetUrls: options.resource.assetUrls,
-    autoTick: false,
-    fitPadding: 0,
   });
   const entry: CachedVniSymbolPlayer = {
     key,

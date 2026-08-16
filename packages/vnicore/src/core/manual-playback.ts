@@ -4,14 +4,14 @@ import {
   createCardCarousel3DResolvePlan,
   sampleCardCarousel3DResolveMotion,
   type VNICardCarousel3DMotionSample,
-} from "../core/card-carousel-3d.js";
+} from "./card-carousel-3d.js";
 import {
   normalizePlaybackPoint,
   normalizePlaybackRange,
   type VNIPlaybackPoint,
   type VNIPlaybackRange,
-} from "../core/playback-sequence.js";
-import type { V5GAnimationConfig } from "../core/types.js";
+} from "./playback-sequence.js";
+import type { V5GAnimationConfig } from "../data/types.js";
 import type { VNICardCarousel3DPixiRuntime } from "./card-carousel-3d-renderer.js";
 
 export type VNIRuntimeAnimationCapability =

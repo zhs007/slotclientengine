@@ -1,5 +1,5 @@
 import { clampNumber } from "./coordinates.js";
-import type { V5GAnimationConfig } from "./types.js";
+import type { V5GAnimationConfig } from "../data/types.js";
 
 export function getTimelineAnimationProgress(
   animation: V5GAnimationConfig,

@@ -1,6 +1,6 @@
 import type * as PIXI from "pixi.js";
 
-export class VNIPlayerLoadedResources {
+export class VNIRuntimeLoadedResources {
   private referenceCount = 1;
   private released = false;
 
@@ -9,7 +9,7 @@ export class VNIPlayerLoadedResources {
     private readonly ownedTextures: ReadonlySet<PIXI.Texture>,
   ) {}
 
-  retain(): VNIPlayerLoadedResources {
+  retain(): VNIRuntimeLoadedResources {
     if (this.released) {
       throw new Error("Cannot retain released VNI player loaded resources.");
     }

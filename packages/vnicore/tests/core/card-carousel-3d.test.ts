@@ -8,7 +8,7 @@ import {
 import type {
   V5GAnimationConfig,
   V5GTransformConfig,
-} from "../../src/core/types";
+} from "../../src/data/types";
 
 const transform: V5GTransformConfig = {
   x: 0,

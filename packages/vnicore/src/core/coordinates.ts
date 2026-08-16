@@ -3,6 +3,8 @@ export interface Point2D {
   y: number;
 }
 
+export { clampNumber, roundTo } from "../data/numeric.js";
+
 export function editorToPixi(
   x: number,
   y: number,
@@ -25,14 +27,4 @@ export function pixiToEditor(
     x: x - stageWidth / 2,
     y: stageHeight / 2 - y,
   };
-}
-
-export function clampNumber(value: number, min: number, max: number): number {
-  if (Number.isNaN(value)) return min;
-  return Math.min(max, Math.max(min, value));
-}
-
-export function roundTo(value: number, digits = 2): number {
-  const factor = 10 ** digits;
-  return Math.round(value * factor) / factor;
 }

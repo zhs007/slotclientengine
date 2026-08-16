@@ -301,6 +301,9 @@ const playerMock = vi.hoisted(() => {
   class MockVNIPlayerPoolManager {
     readonly pools = new Map<MockVNIPlayer, MockPool>();
     readonly destroy = vi.fn();
+    readonly destroyPool = vi.fn((template: MockVNIPlayer) => {
+      this.pools.delete(template);
+    });
 
     getPool(template: MockVNIPlayer): MockPool {
       const existing = this.pools.get(template);
@@ -374,9 +377,10 @@ const pixiMock = vi.hoisted(() => {
   return { instances, MockApplication };
 });
 
-vi.mock("@slotclientengine/vnicore/pixi", () => ({
-  VNIPlayer: playerMock.MockVNIPlayer,
-  VNIPlayerPoolManager: playerMock.MockVNIPlayerPoolManager,
+vi.mock("@slotclientengine/vnicore/viewer", async (importOriginal) => ({
+  ...(await importOriginal()),
+  VNIViewer: playerMock.MockVNIPlayer,
+  VNIViewerPoolManager: playerMock.MockVNIPlayerPoolManager,
 }));
 
 vi.mock("pixi.js", () => ({

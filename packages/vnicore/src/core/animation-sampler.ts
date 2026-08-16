@@ -1,22 +1,36 @@
 import { clampNumber, roundTo } from "./coordinates.js";
 import {
+  getDefaultEasing,
+  isDeterministicEffectAnimationType,
+  isParticleAnimationType,
+  isSupportedAnimationType,
+  isSupportedEasing,
+  type V5GEasingName,
+} from "../data/animation-contract.js";
+import {
   parseMultiMovePointsJson,
   type V5GMultiMovePoint,
-} from "./multi-move.js";
+} from "../data/multi-move.js";
 import { getTimelineAnimationProgress } from "./timeline-progress.js";
 import type {
   V5GAnimationConfig,
   V5GAnimationParamValue,
   V5GAnimationType,
   V5GTransformConfig,
-} from "./types.js";
+} from "../data/types.js";
 
-export type V5GEasingName =
-  | "linear"
-  | "easeInQuad"
-  | "easeOutQuad"
-  | "easeInOutQuad"
-  | "backOut";
+export {
+  DETERMINISTIC_EFFECT_ANIMATION_TYPES,
+  PARTICLE_ANIMATION_TYPES,
+  SUPPORTED_ANIMATION_TYPES,
+  SUPPORTED_EASINGS,
+  getDefaultEasing,
+  isDeterministicEffectAnimationType,
+  isParticleAnimationType,
+  isSupportedAnimationType,
+  isSupportedEasing,
+  type V5GEasingName,
+} from "../data/animation-contract.js";
 
 export interface V5GAnimationSampleBase {
   transform: V5GTransformConfig;
@@ -28,124 +42,6 @@ export interface V5GAnimationSampleResult {
   opacity: number;
   visualRotation: number;
 }
-
-export const SUPPORTED_EASINGS: readonly V5GEasingName[] = [
-  "linear",
-  "easeInQuad",
-  "easeOutQuad",
-  "easeInOutQuad",
-  "backOut",
-];
-
-export const PARTICLE_ANIMATION_TYPES: readonly V5GAnimationType[] = [
-  "particles",
-  "particle_stream",
-  "particle_twinkle",
-  "particle_wall",
-  "particle_combo",
-];
-
-export const DETERMINISTIC_EFFECT_ANIMATION_TYPES: readonly V5GAnimationType[] =
-  [
-    "gather_particles",
-    "smoke_mist",
-    "energy_ring",
-    "slash_light",
-    "flame_flicker",
-    "wave_band",
-    "wave_distort",
-    "speed_lines",
-    "drift_fall",
-    "path_particles",
-  ];
-
-export const SUPPORTED_ANIMATION_TYPES: readonly V5GAnimationType[] = [
-  "idle",
-  "move",
-  "multi_move",
-  "fade",
-  "scale_up",
-  "scale_down",
-  "scale_in",
-  "scale_out",
-  "pop",
-  "bounce_jump",
-  "shake",
-  "blink",
-  "rotate",
-  "slide_in",
-  "slide_out",
-  "bounce_in",
-  "pulse",
-  "float",
-  "swing",
-  "particles",
-  "particle_stream",
-  "particle_twinkle",
-  "particle_wall",
-  "particle_combo",
-  "chaser_light",
-  "gather_particles",
-  "smoke_mist",
-  "energy_ring",
-  "slash_light",
-  "flame_flicker",
-  "wave_band",
-  "wave_distort",
-  "speed_lines",
-  "drift_fall",
-  "path_particles",
-  "shatter",
-  "glow",
-  "safe_glow",
-  "squash_stretch",
-  "card_carousel_3d",
-];
-
-const DEFAULT_EASING_BY_TYPE: Readonly<
-  Record<V5GAnimationType, V5GEasingName>
-> = {
-  idle: "linear",
-  move: "easeOutQuad",
-  multi_move: "linear",
-  fade: "linear",
-  scale_up: "easeOutQuad",
-  scale_down: "easeOutQuad",
-  scale_in: "easeOutQuad",
-  scale_out: "easeInQuad",
-  pop: "easeOutQuad",
-  bounce_jump: "linear",
-  shake: "linear",
-  blink: "linear",
-  rotate: "linear",
-  slide_in: "easeOutQuad",
-  slide_out: "easeInQuad",
-  bounce_in: "backOut",
-  pulse: "linear",
-  float: "linear",
-  swing: "linear",
-  particles: "linear",
-  particle_stream: "linear",
-  particle_twinkle: "linear",
-  particle_wall: "linear",
-  particle_combo: "easeInOutQuad",
-  chaser_light: "linear",
-  gather_particles: "easeInOutQuad",
-  smoke_mist: "easeOutQuad",
-  energy_ring: "easeOutQuad",
-  slash_light: "easeOutQuad",
-  flame_flicker: "linear",
-  wave_band: "linear",
-  wave_distort: "linear",
-  speed_lines: "linear",
-  drift_fall: "linear",
-  path_particles: "linear",
-  shatter: "easeOutQuad",
-  glow: "linear",
-  safe_glow: "linear",
-  squash_stretch: "easeOutQuad",
-  card_carousel_3d: "linear",
-};
 
 interface MultiMovePointCacheEntry {
   readonly source: string;
@@ -323,26 +219,6 @@ export function easeProgress(progress: number, easing: V5GEasingName): number {
   throw new Error(`Unsupported V5G easing: ${String(easing)}`);
 }
 
-export function isSupportedAnimationType(
-  value: string,
-): value is V5GAnimationType {
-  return SUPPORTED_ANIMATION_TYPES.includes(value as V5GAnimationType);
-}
-
-export function isParticleAnimationType(
-  value: string,
-): value is V5GAnimationType {
-  return PARTICLE_ANIMATION_TYPES.includes(value as V5GAnimationType);
-}
-
-export function isDeterministicEffectAnimationType(
-  value: string,
-): value is V5GAnimationType {
-  return DETERMINISTIC_EFFECT_ANIMATION_TYPES.includes(
-    value as V5GAnimationType,
-  );
-}
-
 function isSourceOpacityEffectAnimationType(
   value: string,
 ): value is V5GAnimationType {
@@ -382,10 +258,6 @@ function isKeepOriginalEffectAnimationType(
   );
 }
 
-export function isSupportedEasing(value: string): value is V5GEasingName {
-  return SUPPORTED_EASINGS.includes(value as V5GEasingName);
-}
-
 export function shouldHideLayerOutsideActiveAnimation(
   animations: readonly V5GAnimationConfig[],
   time: number,
@@ -397,14 +269,6 @@ export function shouldHideLayerOutsideActiveAnimation(
     const end = animation.startTime + animation.duration;
     return time >= start && time <= end;
   });
-}
-
-export function getDefaultEasing(type: V5GAnimationType): V5GEasingName {
-  const easing = DEFAULT_EASING_BY_TYPE[type];
-  if (!easing) {
-    throw new Error(`Unsupported V5G animation type: ${String(type)}`);
-  }
-  return easing;
 }
 
 export function backOutProgress(progress: number, overshoot: number): number {

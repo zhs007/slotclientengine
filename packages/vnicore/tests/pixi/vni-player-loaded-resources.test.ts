@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Texture } from "pixi.js";
-import { VNIPlayerLoadedResources } from "../../src/pixi/vni-player-loaded-resources";
+import { VNIRuntimeLoadedResources } from "../../src/core/vni-runtime-loaded-resources";
 
-describe("VNIPlayerLoadedResources", () => {
+describe("VNIRuntimeLoadedResources", () => {
   it("destroys owned textures only after the final retained reference", () => {
     const destroy = vi.fn();
     const texture = { destroy } as unknown as Texture;
-    const resources = new VNIPlayerLoadedResources(
+    const resources = new VNIRuntimeLoadedResources(
       new Map([["asset", texture]]),
       new Set([texture]),
     );

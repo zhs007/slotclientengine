@@ -1,10 +1,10 @@
 import type {
   VNICyclicSelectionItem,
-  VNIPlayer,
-} from "@slotclientengine/vnicore/pixi";
+  VNIViewer,
+} from "@slotclientengine/vnicore/viewer";
 
 export async function playCyclicSelectionRound(options: {
-  player: VNIPlayer;
+  player: VNIViewer;
   animation: { layerId: string; animationId: string };
   initialItems: readonly VNICyclicSelectionItem[];
   requestResult: () => Promise<{

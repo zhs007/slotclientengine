@@ -10,9 +10,9 @@ import {
   validateManifestProjectProfile,
   validateVNIBundleManifest,
   validateVNIProject,
-  type V5GBundleManifestEntry,
-  type V5GProjectConfig,
-} from "@slotclientengine/vnicore/core";
+  type VNIBundleManifestEntry,
+  type VNIProjectConfig,
+} from "@slotclientengine/vnicore/data";
 
 export interface SymbolVniBundleRuntimeProfile {
   readonly id: string;
@@ -36,8 +36,8 @@ export interface MaterializedSymbolVniBundleRuntime {
 interface InspectedBundle {
   readonly entries: ReadonlyMap<string, Uint8Array>;
   readonly profiles: readonly SymbolVniBundleRuntimeProfile[];
-  readonly runtimeEntries: ReadonlyMap<string, V5GBundleManifestEntry>;
-  readonly projects: ReadonlyMap<string, V5GProjectConfig>;
+  readonly runtimeEntries: ReadonlyMap<string, VNIBundleManifestEntry>;
+  readonly projects: ReadonlyMap<string, VNIProjectConfig>;
 }
 
 export function inspectSymbolVniExportBundle(
@@ -124,8 +124,8 @@ function inspectBundle(
   validateVNIBundleManifest(manifest);
 
   const knownPaths = new Set(["manifest.json"]);
-  const projects = new Map<string, V5GProjectConfig>();
-  const runtimeEntries = new Map<string, V5GBundleManifestEntry>();
+  const projects = new Map<string, VNIProjectConfig>();
+  const runtimeEntries = new Map<string, VNIBundleManifestEntry>();
   const profiles: SymbolVniBundleRuntimeProfile[] = [];
   for (const entry of manifest.exports) {
     knownPaths.add(entry.path);

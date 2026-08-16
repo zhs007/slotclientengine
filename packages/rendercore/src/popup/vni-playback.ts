@@ -1,8 +1,8 @@
-import type { VNIPlayer } from "@slotclientengine/vnicore/pixi";
+import type { VNIRuntime } from "@slotclientengine/vnicore/core";
 import type { PopupVniPlayback } from "./types.js";
 
 type PopupVniTransport = Pick<
-  VNIPlayer,
+  VNIRuntime,
   "play" | "requestSegmentedPlaybackEnd" | "setLoop"
 >;
 

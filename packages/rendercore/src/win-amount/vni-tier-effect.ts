@@ -4,11 +4,11 @@ import {
   createAssetUrlManifest,
   resolveProjectAssetUrls,
   type VNIProjectConfig,
-} from "@slotclientengine/vnicore/core";
+} from "@slotclientengine/vnicore/data";
 import {
-  VNIPlayer,
-  type VNIPlayerOptions,
-} from "@slotclientengine/vnicore/pixi";
+  VNIRuntime,
+  type VNIRuntimeOptions,
+} from "@slotclientengine/vnicore/core";
 import type {
   CreateWinAmountAnimationTiersFromManifestModulesOptions,
   CreateWinAmountAnimationTiersOptions,
@@ -41,7 +41,7 @@ export interface WinAmountVniPlayer {
 }
 
 export type WinAmountVniPlayerFactory = (
-  options: VNIPlayerOptions,
+  options: VNIRuntimeOptions,
 ) => WinAmountVniPlayer;
 
 export interface WinAmountTierEffectOptions {
@@ -71,7 +71,7 @@ export class WinAmountTierEffect {
     this.#parent = options.parent;
     this.#playerFactory =
       options.playerFactory ??
-      ((playerOptions) => new VNIPlayer(playerOptions));
+      ((playerOptions) => new VNIRuntime(playerOptions));
     applyTierContainerLayout(this.container, options.layout);
   }
 
@@ -130,15 +130,8 @@ export class WinAmountTierEffect {
     try {
       const player = this.#playerFactory({
         parent: this.container,
-        projectId: `win-amount-${this.id}`,
-        bundleId: "win-amount",
-        profileId: "win-amount",
-        profilePurpose: "win-amount-animation",
-        assetScale: 1,
         project: this.#tier.vniProject,
         assetUrls: this.#tier.assetUrls,
-        autoTick: false,
-        fitPadding: 0,
       });
       this.#player = player;
       await player.init();

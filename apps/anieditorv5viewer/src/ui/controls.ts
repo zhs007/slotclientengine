@@ -1,19 +1,21 @@
 import type {
   VNILayerGroupSlot,
+  VNIProjectConfig,
+} from "@slotclientengine/vnicore/data";
+import type {
   VNIParticleComboAnimationDescriptor,
   VNIParticleComboTimingDescriptor,
   VNIParticleComboTimingMode,
   VNIPlaybackRange,
   VNIPlaybackState,
-  VNIProjectConfig,
-} from "@slotclientengine/vnicore/core";
-import { createVNIParticleComboTargetVariant } from "@slotclientengine/vnicore/core";
+} from "@slotclientengine/vnicore/viewer";
+import { createVNIParticleComboTargetVariant } from "@slotclientengine/vnicore/viewer";
 import type {
   VNIAnimationRuntimeRef,
   VNICyclicAuthoredPreviewDescriptor,
   VNIManualPlaybackState,
-  VNIPlayerPoolStats,
-} from "@slotclientengine/vnicore/pixi";
+  VNIViewerPoolStats,
+} from "@slotclientengine/vnicore/viewer";
 
 export interface ViewerControlsProfile {
   id: string;
@@ -114,7 +116,7 @@ export interface ViewerControls {
   ): void;
   setTargetPreviewState(
     timing: VNIParticleComboTimingDescriptor | null,
-    stats: VNIPlayerPoolStats | null,
+    stats: VNIViewerPoolStats | null,
   ): void;
   setTargetError(message: string | null): void;
   setLayerGroupSlots(slots: readonly VNILayerGroupSlot[]): void;
@@ -141,7 +143,7 @@ export function createViewerControls(
   let cyclicAnimations: readonly ViewerCyclicAnimationOption[] = [];
   let targetAnimations: readonly VNIParticleComboAnimationDescriptor[] = [];
   let targetPreviewTiming: VNIParticleComboTimingDescriptor | null = null;
-  let targetPoolStats: VNIPlayerPoolStats | null = null;
+  let targetPoolStats: VNIViewerPoolStats | null = null;
 
   const root = document.createElement("div");
   root.className = "viewer-controls";

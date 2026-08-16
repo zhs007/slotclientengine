@@ -30,7 +30,7 @@ import type {
   PopupManifest,
   PopupResourceSpec,
 } from "@slotclientengine/rendercore/popup";
-import { assertVNIProject } from "@slotclientengine/vnicore/core";
+import { assertVNIProject } from "@slotclientengine/vnicore/data";
 import {
   clonePopupEditorProject,
   createPopupEditorProject,

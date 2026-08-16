@@ -9,8 +9,8 @@ import {
   type VNICardCarousel3DSampleBuffer,
   type VNICardCarousel3DSampleInput,
   type VNICardCarousel3DTextureInfo,
-} from "../core/card-carousel-3d.js";
-import type { V5GAnimationConfig } from "../core/types.js";
+} from "./card-carousel-3d.js";
+import type { V5GAnimationConfig } from "../data/types.js";
 
 export interface VNICardCarousel3DPixiRuntimeStats {
   readonly cardContainersCreated: number;

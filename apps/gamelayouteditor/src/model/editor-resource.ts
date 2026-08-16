@@ -1,7 +1,7 @@
 import type { SceneLayoutVariantId } from "@slotclientengine/rendercore/scene-layout";
 import type { ImageStringManifestV1 } from "@slotclientengine/rendercore/image-string";
 import type { EditorResourceProvenance } from "@slotclientengine/browserartifactio";
-import type { VNIProjectConfig } from "@slotclientengine/vnicore";
+import type { VNIProjectConfig } from "@slotclientengine/vnicore/data";
 
 export interface EditorImageLayoutResource {
   readonly id: string;

@@ -16,7 +16,7 @@ import {
   serializeEditorAssetsMap,
   type EditorAssetRewriteAdapter,
 } from "@slotclientengine/editorresource";
-import { rewriteVNIProjectAssetPaths } from "@slotclientengine/vnicore/core";
+import { rewriteVNIProjectAssetPaths } from "@slotclientengine/vnicore/data";
 import { upgradeSymbolStateTextureManifest } from "./manifest.js";
 import {
   collectSymbolManifestResourcePaths,

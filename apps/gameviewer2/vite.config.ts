@@ -36,12 +36,12 @@ export default defineConfig({
       ),
       alias("@slotclientengine/pixiani", "../../packages/pixiani/src/index.ts"),
       alias(
-        "@slotclientengine/vnicore/core",
-        "../../packages/vnicore/src/core/index.ts",
+        "@slotclientengine/vnicore/data",
+        "../../packages/vnicore/src/data/index.ts",
       ),
       alias(
-        "@slotclientengine/vnicore/pixi",
-        "../../packages/vnicore/src/pixi/index.ts",
+        "@slotclientengine/vnicore/core",
+        "../../packages/vnicore/src/core/index.ts",
       ),
     ],
   },

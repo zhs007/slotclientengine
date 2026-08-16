@@ -1,2 +1,2 @@
-export * from "./core/index.js";
-export * from "./pixi/index.js";
+// The package root is intentionally not exported. Choose data, core, or viewer.
+export {};

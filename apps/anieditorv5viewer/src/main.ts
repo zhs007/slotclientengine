@@ -5,15 +5,15 @@ import {
   type UploadedVNIProjectBundle,
 } from "./runtime/uploaded-zip-project";
 import {
-  VNIPlayer,
-  VNIPlayerPoolManager,
+  VNIViewer,
+  VNIViewerPoolManager,
   type VNIAnimationRuntimeRef,
   type VNIManualPlaybackSession,
-  type VNIParticleComboPlayerLease,
+  type VNIParticleComboViewerLease,
   type VNIPlaybackOperation,
-  type VNIPlayerPool,
+  type VNIViewerPool,
   type VNITextLayerTextBinding,
-} from "@slotclientengine/vnicore/pixi";
+} from "@slotclientengine/vnicore/viewer";
 import { Application } from "pixi.js";
 import { createViewerControls } from "./ui/controls";
 
@@ -63,7 +63,7 @@ async function bootstrap(): Promise<void> {
   shell.append(stage, controlsMount);
   appRoot.appendChild(shell);
 
-  let player: VNIPlayer | null = null;
+  let player: VNIViewer | null = null;
   let pixiApp: Application | null = null;
   let disposeResize: (() => void) | null = null;
   let disposeInsertedNode: (() => void) | null = null;
@@ -76,11 +76,11 @@ async function bootstrap(): Promise<void> {
   let manualPreviewToken = 0;
   let manualPreviewSession: VNIManualPlaybackSession | null = null;
   let manualPreviewOperation: VNIPlaybackOperation | null = null;
-  const playerPoolManager = new VNIPlayerPoolManager({
+  const playerPoolManager = new VNIViewerPoolManager({
     maxIdleInstancesPerPlayer: 2,
   });
-  let targetPreviewPool: VNIPlayerPool | null = null;
-  let targetPreviewLease: VNIParticleComboPlayerLease | null = null;
+  let targetPreviewPool: VNIViewerPool | null = null;
+  let targetPreviewLease: VNIParticleComboViewerLease | null = null;
   let targetPreviewToken = 0;
 
   const controls = createViewerControls({
@@ -328,7 +328,7 @@ async function bootstrap(): Promise<void> {
     token: number,
   ): Promise<void> {
     const nextApp = new Application();
-    let nextPlayer: VNIPlayer | null = null;
+    let nextPlayer: VNIViewer | null = null;
     try {
       await nextApp.init({
         backgroundAlpha: 0,
@@ -340,7 +340,7 @@ async function bootstrap(): Promise<void> {
       stageCanvasLayer.appendChild(nextApp.canvas);
       const nextViewport = applyStageCanvasViewport(nextApp, null);
 
-      nextPlayer = new VNIPlayer({
+      nextPlayer = new VNIViewer({
         parent: nextApp.stage,
         diagnosticsElement: stageMount,
         viewport: nextViewport,
@@ -415,8 +415,12 @@ async function bootstrap(): Promise<void> {
     disposeInsertedNode?.();
     disposeInsertedNode = null;
     clearTextReplacement();
-    player?.destroy();
+    if (player) {
+      playerPoolManager.destroyPool(player);
+      player.destroy();
+    }
     player = null;
+    targetPreviewPool = null;
     disposeResize?.();
     disposeResize = null;
     pixiApp?.destroy({ removeView: true });
@@ -438,7 +442,7 @@ async function bootstrap(): Promise<void> {
     targetPreviewPool = null;
   }
 
-  function inspectCyclicAnimations(currentPlayer: VNIPlayer): void {
+  function inspectCyclicAnimations(currentPlayer: VNIViewer): void {
     const session = currentPlayer.createManualPlaybackSession();
     try {
       const animations = session.listAnimations({
@@ -584,7 +588,7 @@ async function bootstrap(): Promise<void> {
 
   function assertCurrentManualPreview(
     token: number,
-    currentPlayer: VNIPlayer,
+    currentPlayer: VNIViewer,
     session: VNIManualPlaybackSession,
   ): void {
     if (
@@ -672,7 +676,7 @@ async function bootstrap(): Promise<void> {
 
   function applyStageCanvasViewport(
     app: Application,
-    viewportPlayer: VNIPlayer | null,
+    viewportPlayer: VNIViewer | null,
   ): { readonly width: number; readonly height: number } {
     const viewport = getMountViewport(stageMount);
     stageCanvasLayer.style.width = `${viewport.width}px`;

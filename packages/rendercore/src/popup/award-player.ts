@@ -1,5 +1,5 @@
 import { Container, Sprite } from "pixi.js";
-import { VNIPlayer } from "@slotclientengine/vnicore/pixi";
+import { VNIRuntime } from "@slotclientengine/vnicore/core";
 import { createRenderImageString } from "../image-string/index.js";
 import {
   createOfficialSpinePlayer,
@@ -1084,17 +1084,10 @@ function defaultLayerFactory(options: {
     };
   }
   if (layer.kind === "vni" && resource?.kind === "vni") {
-    const player = new VNIPlayer({
+    const player = new VNIRuntime({
       parent: container,
-      projectId: `${options.popupId}-${options.tierId}-${layer.id}`,
-      bundleId: "popup",
-      profileId: "popup",
-      profilePurpose: "award-celebration",
-      assetScale: 1,
       project: resource.project,
       assetUrls: resource.assetUrls,
-      autoTick: false,
-      fitPadding: 0,
     });
     let elapsed = 0;
     let currentPlayback = layer.playback;

@@ -3,7 +3,7 @@ import {
   resolveProjectAssetUrls,
   type AssetUrlManifest,
   type VNIProjectConfig,
-} from "@slotclientengine/vnicore/core";
+} from "@slotclientengine/vnicore/data";
 
 const assetModules = import.meta.glob("./assets/*", {
   eager: true,

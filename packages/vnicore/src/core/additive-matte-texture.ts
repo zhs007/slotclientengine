@@ -3,7 +3,7 @@ import type {
   V5GAssetConfig,
   V5GBlendMode,
   V5GProjectConfig,
-} from "../core/types.js";
+} from "../data/types.js";
 
 const ADDITIVE_MATTE_BLEND_MODES = new Set<V5GBlendMode>([
   "add",

@@ -1,4 +1,5 @@
 import { clampNumber } from "./coordinates.js";
+export { getCardCarousel3DSyncedDuration } from "../data/card-carousel-contract.js";
 import {
   createVNICyclicMotionSnapshot,
   createVNICyclicResolvePlan,
@@ -10,7 +11,7 @@ import type {
   V5GAnimationConfig,
   V5GBlendMode,
   V5GTransformConfig,
-} from "./types.js";
+} from "../data/types.js";
 
 export type VNICardCarousel3DPhasePreviewMode =
   | "full_demo"
@@ -530,35 +531,6 @@ export function getCardCarousel3DProgress(
   return animation.type === "card_carousel_3d"
     ? getTimelineAnimationProgress(animation, time)
     : null;
-}
-
-export function getCardCarousel3DSyncedDuration(
-  animation: V5GAnimationConfig,
-): number {
-  const mode = getStringParam(
-    animation,
-    "phasePreviewMode",
-  ) as VNICardCarousel3DPhasePreviewMode;
-  let duration: number;
-  if (mode === "intro") duration = getNumberParam(animation, "introDuration");
-  else if (mode === "idle")
-    duration = getNumberParam(animation, "demoIdleDuration");
-  else if (mode === "fast")
-    duration = getNumberParam(animation, "fastDuration");
-  else if (mode === "stop")
-    duration = getNumberParam(animation, "stopDuration");
-  else if (mode === "hold")
-    duration = getNumberParam(animation, "holdDuration");
-  else {
-    duration =
-      getNumberParam(animation, "introDuration") +
-      getNumberParam(animation, "demoIdleDuration") +
-      getNumberParam(animation, "fastDuration") +
-      getNumberParam(animation, "stopDuration") +
-      getNumberParam(animation, "holdDuration");
-  }
-  const snapped = Math.round(Math.round(duration / 0.05) * 0.05 * 100) / 100;
-  return Math.min(3600, Math.max(0.05, snapped));
 }
 
 function samplePhase(

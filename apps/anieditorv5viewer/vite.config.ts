@@ -6,22 +6,18 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: "@slotclientengine/vnicore/core",
+        find: "@slotclientengine/vnicore/data",
         replacement: resolve(
           __dirname,
-          "../../packages/vnicore/src/core/index.ts",
+          "../../packages/vnicore/src/data/index.ts",
         ),
       },
       {
-        find: "@slotclientengine/vnicore/pixi",
+        find: "@slotclientengine/vnicore/viewer",
         replacement: resolve(
           __dirname,
-          "../../packages/vnicore/src/pixi/index.ts",
+          "../../packages/vnicore/src/viewer/index.ts",
         ),
-      },
-      {
-        find: "@slotclientengine/vnicore",
-        replacement: resolve(__dirname, "../../packages/vnicore/src/index.ts"),
       },
     ],
   },

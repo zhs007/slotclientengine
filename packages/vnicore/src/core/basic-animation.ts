@@ -4,7 +4,7 @@ import type {
   V5GBasicAnimationTrackConfig,
   V5GLayerConfig,
   V5GTransformConfig,
-} from "./types.js";
+} from "../data/types.js";
 
 export interface V5GBasicAnimationSample {
   transform: V5GTransformConfig;

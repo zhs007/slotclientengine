@@ -5,12 +5,12 @@ import {
   sampleLayerAtTime,
   sampleProjectAtTime,
 } from "../../src/core/project-sampler";
-import { assertV5GProject } from "../../src/core/validation";
+import { assertV5GProject } from "../../src/data/validation";
 import type {
   V5GAnimationConfig,
   V5GLayerConfig,
   V5GProjectConfig,
-} from "../../src/core/types";
+} from "../../src/data/types";
 import * as coreApi from "../../src/core/index";
 
 const defaultLayerGroup = {

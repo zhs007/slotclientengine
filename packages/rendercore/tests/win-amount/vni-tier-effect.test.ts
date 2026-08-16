@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   rewriteVNIProjectAssetPaths,
   type VNIProjectConfig,
-} from "@slotclientengine/vnicore/core";
+} from "@slotclientengine/vnicore/data";
 import {
   getMinecart2AwardVniProjectPath,
   readMinecart2LogicalJson,

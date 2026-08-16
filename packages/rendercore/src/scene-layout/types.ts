@@ -2,7 +2,7 @@ import type { Container } from "pixi.js";
 import type {
   AssetUrlManifest,
   VNIProjectConfig,
-} from "@slotclientengine/vnicore";
+} from "@slotclientengine/vnicore/data";
 import type { ImageStringResource } from "../image-string/index.js";
 import type { SymbolPackageResource } from "../symbol/package.js";
 import type { PopupPackageResource } from "../popup/index.js";

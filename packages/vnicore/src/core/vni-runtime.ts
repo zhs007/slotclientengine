@@ -1,32 +1,32 @@
 import * as PIXI from "pixi.js";
 import { toPixiBlendMode } from "./blend-mode.js";
-import { editorToPixi } from "../core/coordinates.js";
+import { editorToPixi } from "./coordinates.js";
 import {
   createRuntimeProjectSampler,
   type RuntimeProjectSampler,
   type SampledLayerState,
-} from "../core/project-sampler.js";
+} from "./project-sampler.js";
 import {
   assertVNIAdjacentLayerGroupSlot,
   getVNIProjectLayerGroupSlots,
   getVNIProjectRenderGroupOrder,
   type VNILayerGroupSlot,
   type VNIRenderGroupInfo,
-} from "../core/layer-groups.js";
+} from "../data/layer-groups.js";
 import {
   sampleChaserLightSpritesForLayer,
   type VNIChaserLightSpriteSample,
-} from "../core/chaser-light-sampler.js";
+} from "./chaser-light-sampler.js";
 import {
   sampleDeterministicEffectSpritesForLayer,
   type VNIDeterministicEffectSample,
-} from "../core/effect-sampler.js";
+} from "./effect-sampler.js";
 import {
   VNIParticleRuntime,
   sampleLiveParticleSprites,
   type VNILiveParticleSpriteSample,
   type VNIParticleRuntimeLayer,
-} from "../core/particle-runtime.js";
+} from "./particle-runtime.js";
 import {
   VNISegmentedPlaybackSequence,
   assertPositiveFinite,
@@ -42,15 +42,15 @@ import {
   type VNIPlayRangeOptions,
   type VNISegmentedPlaybackOptions,
   type VNISegmentedPlaybackPhase,
-} from "../core/playback-sequence.js";
+} from "./playback-sequence.js";
 import {
   sampleRenderEffectSpritesForLayer,
   type VNIRenderEffectSpriteSample,
-} from "../core/render-effect-sampler.js";
+} from "./render-effect-sampler.js";
 import {
   sampleSafeGlowSpritesForLayer,
   type VNISafeGlowSpriteSample,
-} from "../core/safe-glow-sampler.js";
+} from "./safe-glow-sampler.js";
 import {
   applySampledLayerState,
   createLayerInstance,
@@ -59,8 +59,8 @@ import {
   updateLayerInstanceDisplayAsset,
   type V5GLayerInstance,
 } from "./layer-instance.js";
-import { getLayerDisplayAsset } from "../core/sequence-layer.js";
-import { getCardCarousel3DProgress } from "../core/card-carousel-3d.js";
+import { getLayerDisplayAsset } from "./sequence-layer.js";
+import { getCardCarousel3DProgress } from "./card-carousel-3d.js";
 import {
   VNICardCarousel3DPixiRenderer,
   type VNICardCarousel3DPixiRuntime,
@@ -82,15 +82,15 @@ import {
   createPrecomposedLightMaskTexture,
   isPrecomposedLightMaskBlendMode,
 } from "./precomposed-light-mask.js";
-import type { AssetUrlManifest } from "../core/asset-manifest.js";
+import type { AssetUrlManifest } from "../data/asset-manifest.js";
 import type {
   V5GAssetConfig,
   V5GLayerConfig,
   VNIBlendMode,
   VNIProjectConfig,
-} from "../core/types.js";
-import { validateVNIProject } from "../core/validation.js";
-import { VNIPlayerLoadedResources } from "./vni-player-loaded-resources.js";
+} from "../data/types.js";
+import { validateVNIProject } from "../data/validation.js";
+import { VNIRuntimeLoadedResources } from "./vni-runtime-loaded-resources.js";
 
 export type {
   VNIPlayOptions,
@@ -125,30 +125,34 @@ export interface VNIPlaybackCompleteContext {
   loopIndex: number;
 }
 
-export interface VNIPlayerOptions {
-  parent: PIXI.Container;
-  diagnosticsElement?: HTMLElement;
-  viewport?: {
-    readonly width: number;
-    readonly height: number;
-  };
-  viewportScale?: number;
-  requestRender?: () => void;
-  projectId: string;
-  bundleId: string;
-  profileId: string;
-  profilePurpose: string;
-  assetScale: number;
-  project: VNIProjectConfig;
-  assetUrls: AssetUrlManifest;
-  autoTick?: boolean;
-  fitPadding?: number;
-  onTimeChange?: (time: number) => void;
-  onPlayingChange?: (isPlaying: boolean) => void;
+/** @internal Viewer projection input; game consumers use scalar queries. */
+export interface VNIRuntimeInspection {
+  readonly visibleLayerCount: number;
+  readonly particleSpriteCount: number;
+  readonly renderEffectSpriteCount: number;
+  readonly deterministicEffectSpriteCount: number;
+  readonly safeGlowSpriteCount: number;
+  readonly chaserLightSpriteCount: number;
+  readonly maskSpriteCount: number;
+  readonly mountedNodeCount: number;
+  readonly textLayerBindingCount: number;
+  readonly layerGroupCount: number;
+  readonly layerGroupSlotCount: number;
+  readonly cardCarouselVisibleCards: number;
+  readonly cardCarouselVisibleSlices: number;
+  readonly cardCarouselCardPoolSize: number;
+  readonly cardCarouselSlicePoolSize: number;
+  readonly cardCarouselSliceTextureCount: number;
 }
 
-interface VNIPlayerInternalOptions {
-  readonly loadedResources?: VNIPlayerLoadedResources;
+export interface VNIRuntimeOptions {
+  parent: PIXI.Container;
+  project: VNIProjectConfig;
+  assetUrls: AssetUrlManifest;
+}
+
+interface VNIRuntimeInternalOptions {
+  readonly loadedResources?: VNIRuntimeLoadedResources;
 }
 
 export interface VNILayerGroupInfo {
@@ -294,36 +298,26 @@ interface VNICardCarousel3DState {
   readonly runtime: VNICardCarousel3DPixiRuntime;
 }
 
-export class VNIPlayer implements VNIManualPlaybackHost {
+export class VNIRuntime implements VNIManualPlaybackHost {
   private readonly stageRoot = new PIXI.Container();
   private readonly parent: PIXI.Container;
-  private readonly diagnosticsElement: HTMLElement | undefined;
-  private readonly requestRenderCallback: (() => void) | undefined;
-  private readonly projectId: string;
-  private readonly bundleId: string;
-  private readonly profileId: string;
-  private readonly profilePurpose: string;
-  private readonly assetScale: number;
   private readonly project: VNIProjectConfig;
   private readonly assetUrls: AssetUrlManifest;
-  private readonly autoTick: boolean;
   private readonly projectSampler: RuntimeProjectSampler;
   private readonly auxiliaryProjectSampler: RuntimeProjectSampler;
   private readonly assetsById: ReadonlyMap<string, V5GAssetConfig>;
   private readonly layerGroups: readonly VNIRenderGroupInfo[];
   private readonly layerGroupSlots: readonly VNILayerGroupSlot[];
   private readonly additiveMatteAssetIds: ReadonlySet<string>;
-  private readonly onTimeChange?: (time: number) => void;
-  private readonly onPlayingChange?: (isPlaying: boolean) => void;
-  private readonly cloneOptions: VNIPlayerOptions;
+  private readonly cloneOptions: VNIRuntimeOptions;
   private readonly layerInstances = new Map<string, V5GLayerInstance>();
   private readonly slotContainersByKey = new Map<string, PIXI.Container>();
   private readonly mountedNodesById = new Map<string, VNIMountedNode>();
   private readonly particleRuntime: VNIParticleRuntime;
   private texturesByAssetId: ReadonlyMap<string, PIXI.Texture> = new Map();
   private readonly ownedTextures = new Set<PIXI.Texture>();
-  private loadedResources: VNIPlayerLoadedResources | null = null;
-  private readonly injectedLoadedResources: VNIPlayerLoadedResources | null;
+  private loadedResources: VNIRuntimeLoadedResources | null = null;
+  private readonly injectedLoadedResources: VNIRuntimeLoadedResources | null;
   private readonly safeGlowSpritesByLayer = new Map<string, PIXI.Container[]>();
   private readonly chaserLightSpritesByLayer = new Map<string, PIXI.Sprite[]>();
   private readonly maskSpritesByTargetLayer = new Map<string, PIXI.Sprite>();
@@ -363,10 +357,6 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     string,
     PIXI.Sprite[]
   >();
-  private rafId: number | null = null;
-  private viewport: { width: number; height: number } | null = null;
-  private viewportScale = 1;
-  private lastTickMs = 0;
   private currentTime = 0;
   private loop = true;
   private playing = false;
@@ -389,10 +379,17 @@ export class VNIPlayer implements VNIManualPlaybackHost {
   private manualRangeCompletion: (() => void) | null = null;
   private destroyed = false;
   private readonly destroyListeners = new Set<() => void>();
+  private diagnosticVisibleLayerCount = 0;
+  private diagnosticParticleSpriteCount = 0;
+  private diagnosticRenderEffectSpriteCount = 0;
+  private diagnosticDeterministicEffectSpriteCount = 0;
+  private diagnosticSafeGlowSpriteCount = 0;
+  private diagnosticChaserLightSpriteCount = 0;
+  private diagnosticCardCarouselVisibleCards = 0;
 
   constructor(
-    options: VNIPlayerOptions,
-    internalOptions: VNIPlayerInternalOptions = {},
+    options: VNIRuntimeOptions,
+    internalOptions: VNIRuntimeInternalOptions = {},
   ) {
     if (options.project.maskCompositeMode === "legacy_alpha") {
       throw new Error(
@@ -401,23 +398,10 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     }
     this.parent = options.parent;
     this.cloneOptions = options;
-    this.diagnosticsElement = options.diagnosticsElement;
-    this.requestRenderCallback = options.requestRender;
-    this.viewport = options.viewport
-      ? normalizeViewportSize(options.viewport)
-      : null;
-    this.viewportScale = normalizeViewportScale(options.viewportScale ?? 1);
-    this.projectId = options.projectId;
-    this.bundleId = options.bundleId;
-    this.profileId = options.profileId;
-    this.profilePurpose = options.profilePurpose;
-    this.assetScale = options.assetScale;
     this.project = options.project;
     this.projectSampler = createRuntimeProjectSampler(this.project);
     this.auxiliaryProjectSampler = createRuntimeProjectSampler(this.project);
     this.assetUrls = options.assetUrls;
-    this.autoTick = options.autoTick ?? true;
-    normalizeFitPadding(options.fitPadding);
     this.assetsById = new Map(
       options.project.assets.map((asset) => [asset.id, asset] as const),
     );
@@ -425,18 +409,16 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     this.layerGroupSlots = getVNIProjectLayerGroupSlots(options.project);
     this.additiveMatteAssetIds = getAdditiveMatteAssetIds(options.project);
     this.particleRuntime = new VNIParticleRuntime(options.project.layers);
-    this.onTimeChange = options.onTimeChange;
-    this.onPlayingChange = options.onPlayingChange;
     this.injectedLoadedResources = internalOptions.loadedResources ?? null;
     this.loadedResources = this.injectedLoadedResources;
   }
 
   async init(): Promise<void> {
     if (this.destroyed) {
-      throw new Error("Cannot initialize a destroyed VNIPlayer.");
+      throw new Error("Cannot initialize a destroyed VNIRuntime.");
     }
     if (this.initialized || this.stageRoot.parent) {
-      throw new Error("VNIPlayer.init() may only be called once.");
+      throw new Error("VNIRuntime.init() may only be called once.");
     }
     try {
       this.parent.addChild(this.stageRoot);
@@ -445,7 +427,7 @@ export class VNIPlayer implements VNIManualPlaybackHost {
         this.texturesByAssetId = this.injectedLoadedResources.texturesByAssetId;
       } else {
         this.texturesByAssetId = await this.loadTextures();
-        this.loadedResources = new VNIPlayerLoadedResources(
+        this.loadedResources = new VNIRuntimeLoadedResources(
           this.texturesByAssetId,
           new Set(this.ownedTextures),
         );
@@ -482,7 +464,6 @@ export class VNIPlayer implements VNIManualPlaybackHost {
         }
       }
       this.initializeCardCarousel3D();
-      this.applyViewportLayout();
       this.initialized = true;
       this.renderDeterministicFrame(0);
     } catch (error) {
@@ -536,7 +517,6 @@ export class VNIPlayer implements VNIManualPlaybackHost {
       slotContainer,
       destroyOnDetach: options.destroyOnDetach === true,
     });
-    this.updateMountedNodeDiagnostics();
     let disposed = false;
     return () => {
       if (disposed) return;
@@ -611,7 +591,6 @@ export class VNIPlayer implements VNIManualPlaybackHost {
       hideOriginal: options.hideOriginal ?? true,
     });
     this.updateTextLayerOriginalVisibility(instance.layer.id);
-    this.updateMountedNodeDiagnostics();
     let disposed = false;
     return () => {
       if (disposed) return;
@@ -752,7 +731,6 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     if (mounted.textLayerId) {
       this.updateTextLayerOriginalVisibility(mounted.textLayerId);
     }
-    this.updateMountedNodeDiagnostics();
   }
 
   clearMountedNodes(): void {
@@ -780,7 +758,6 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     this.assertInitialized("play");
     if (this.particleRuntime.isDraining()) {
       this.drainPaused = false;
-      this.ensureTicker();
       return;
     }
     if (!this.playbackSeedSessionActive) {
@@ -794,9 +771,6 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     this.activeRange = null;
     this.segmentedPlayback = null;
     this.playing = true;
-    this.lastTickMs = performance.now();
-    this.onPlayingChange?.(true);
-    this.ensureTicker();
   }
 
   pause(): void {
@@ -805,8 +779,6 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     }
     if (!this.playing) return;
     this.playing = false;
-    this.cancelTicker();
-    this.onPlayingChange?.(false);
   }
 
   restart(): void {
@@ -819,9 +791,6 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     this.drainPaused = false;
     this.particleRuntime.reset();
     this.renderDeterministicFrame(0);
-    if (this.playing) {
-      this.lastTickMs = performance.now();
-    }
   }
 
   seek(time: number): void {
@@ -852,6 +821,36 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     return this.playing || this.manualClockActive;
   }
 
+  isParticleDraining(): boolean {
+    return this.particleRuntime.isDraining();
+  }
+
+  needsUpdate(): boolean {
+    return (
+      this.playing ||
+      this.manualClockActive ||
+      (this.particleRuntime.isDraining() && !this.drainPaused)
+    );
+  }
+
+  getPlaybackMode(): VNIPlaybackMode {
+    return this.playbackMode;
+  }
+
+  getPlaybackPhase(): VNISegmentedPlaybackPhase {
+    return this.getEffectivePlaybackPhase();
+  }
+
+  getLoopIndex(): number {
+    return (
+      this.segmentedPlayback?.getLoopIndex() ?? this.activeRange?.loopIndex ?? 0
+    );
+  }
+
+  getLiveParticleCount(): number {
+    return this.getRenderedParticleCount();
+  }
+
   getPlaybackState(): VNIPlaybackState {
     const phase = this.getEffectivePlaybackPhase();
     return {
@@ -869,6 +868,34 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     };
   }
 
+  /** @internal Used by the viewer wrapper; never called by the game ticker. */
+  getInspection(): VNIRuntimeInspection {
+    const cardStats = this.cardCarouselRenderer.getStats();
+    let textLayerBindingCount = 0;
+    for (const mounted of this.mountedNodesById.values()) {
+      if (mounted.textLayerId) textLayerBindingCount += 1;
+    }
+    return Object.freeze({
+      visibleLayerCount: this.diagnosticVisibleLayerCount,
+      particleSpriteCount: this.diagnosticParticleSpriteCount,
+      renderEffectSpriteCount: this.diagnosticRenderEffectSpriteCount,
+      deterministicEffectSpriteCount:
+        this.diagnosticDeterministicEffectSpriteCount,
+      safeGlowSpriteCount: this.diagnosticSafeGlowSpriteCount,
+      chaserLightSpriteCount: this.diagnosticChaserLightSpriteCount,
+      maskSpriteCount: this.getRenderedMaskCount(),
+      mountedNodeCount: this.mountedNodesById.size,
+      textLayerBindingCount,
+      layerGroupCount: this.layerGroups.length,
+      layerGroupSlotCount: this.layerGroupSlots.length,
+      cardCarouselVisibleCards: this.diagnosticCardCarouselVisibleCards,
+      cardCarouselVisibleSlices: cardStats.visibleSlices,
+      cardCarouselCardPoolSize: cardStats.cardContainersCreated,
+      cardCarouselSlicePoolSize: cardStats.sliceSpritesCreated,
+      cardCarouselSliceTextureCount: cardStats.sliceTexturesCreated,
+    });
+  }
+
   getDisplayObject(): PIXI.Container {
     return this.stageRoot;
   }
@@ -878,25 +905,20 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     return structuredClone(this.project);
   }
 
-  createLoadedClone(project: VNIProjectConfig): VNIPlayer {
+  createLoadedClone(project: VNIProjectConfig): VNIRuntime {
     this.assertInitialized("createLoadedClone");
     validateVNIProject(project);
     assertCompatibleCloneAssets(this.project, project);
     const resources = this.loadedResources;
     if (!resources) {
-      throw new Error("VNIPlayer loaded resources are unavailable.");
+      throw new Error("VNIRuntime loaded resources are unavailable.");
     }
     resources.retain();
     try {
-      return new VNIPlayer(
+      return new VNIRuntime(
         {
           ...this.cloneOptions,
           project,
-          viewport: this.viewport ?? undefined,
-          viewportScale: this.viewportScale,
-          diagnosticsElement: undefined,
-          onTimeChange: undefined,
-          onPlayingChange: undefined,
         },
         { loadedResources: resources },
       );
@@ -906,7 +928,7 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     }
   }
 
-  /** @internal Owned by VNIPlayerPoolManager lease lifecycle. */
+  /** @internal Owned by VNIRuntimePoolManager lease lifecycle. */
   resetForPoolReuse(): void {
     this.assertInitialized("resetForPoolReuse");
     this.manualSession?.destroy();
@@ -948,22 +970,6 @@ export class VNIPlayer implements VNIManualPlaybackHost {
       disposed = true;
       this.destroyListeners.delete(listener);
     };
-  }
-
-  setViewportSize(width: number, height: number): void {
-    this.viewport = normalizeViewportSize({ width, height });
-    this.applyViewportLayout();
-    this.requestHostRender();
-  }
-
-  setViewportScale(scale: number): void {
-    this.viewportScale = normalizeViewportScale(scale);
-    this.applyViewportLayout();
-    this.requestHostRender();
-  }
-
-  getViewportScale(): number {
-    return this.viewportScale;
   }
 
   update(deltaSeconds: number): void {
@@ -1008,9 +1014,6 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     if (!this.playing) {
       this.playing = true;
       this.drainPaused = false;
-      this.lastTickMs = performance.now();
-      this.onPlayingChange?.(true);
-      this.ensureTicker();
     }
   }
 
@@ -1055,11 +1058,6 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     this.renderPlaybackFrame(normalized.startTime, normalized.startTime);
     if (!this.playing) {
       this.playing = true;
-      this.lastTickMs = performance.now();
-      this.onPlayingChange?.(true);
-      this.ensureTicker();
-    } else {
-      this.lastTickMs = performance.now();
     }
   }
 
@@ -1082,11 +1080,6 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     this.renderPlaybackFrame(0, 0);
     if (!this.playing) {
       this.playing = true;
-      this.lastTickMs = performance.now();
-      this.onPlayingChange?.(true);
-      this.ensureTicker();
-    } else {
-      this.lastTickMs = performance.now();
     }
   }
 
@@ -1144,7 +1137,7 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     this.assertInitialized("createManualPlaybackSession");
     if (this.manualSession) {
       throw new Error(
-        "VNIPlayer already has an active manual playback session.",
+        "VNIRuntime already has an active manual playback session.",
       );
     }
     this.pause();
@@ -1237,17 +1230,10 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     this.particleRuntime.reset();
     this.playbackPhase = "idle";
     this.drainPaused = false;
-    if (!this.isTickerNeeded()) this.cancelTicker();
   }
 
   setManualClockActive(active: boolean): void {
     this.manualClockActive = active;
-    if (active) {
-      this.lastTickMs = performance.now();
-      this.ensureTicker();
-    } else if (!this.isTickerNeeded()) {
-      this.cancelTicker();
-    }
   }
 
   detachManualSession(session: VNIManualPlaybackSessionImpl): void {
@@ -1282,7 +1268,6 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     this.clearChaserLights();
     this.clearMasks();
     this.clearParticles();
-    this.clearDiagnostics();
     this.stageRoot.parent?.removeChild(this.stageRoot);
     this.stageRoot.destroy({ children: true });
     this.loadedResources?.release();
@@ -1294,25 +1279,6 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     for (const listener of [...this.destroyListeners]) listener();
     this.destroyListeners.clear();
   }
-
-  private readonly tick = (now: number): void => {
-    if (!this.isTickerNeeded()) {
-      this.rafId = null;
-      return;
-    }
-    const deltaSeconds = (now - this.lastTickMs) / 1000;
-    if (Number.isFinite(now)) {
-      this.lastTickMs = now;
-    }
-    if (Number.isFinite(deltaSeconds) && deltaSeconds > 0) {
-      this.update(deltaSeconds);
-    }
-    if (this.isTickerNeeded()) {
-      this.rafId = requestAnimationFrame(this.tick);
-    } else {
-      this.rafId = null;
-    }
-  };
 
   private advanceFullTimeline(deltaSeconds: number): void {
     const duration = this.project.stage.duration;
@@ -1479,7 +1445,6 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     this.currentTime = endTime;
     this.pendingComplete = completeEvent;
     this.playbackPhase = "particle-draining";
-    this.onPlayingChange?.(false);
     const sampled = this.applyProjectSample(endTime);
     const safeGlowSpriteCount = this.renderSafeGlowSamples(
       sampled.layers,
@@ -1517,14 +1482,11 @@ export class VNIPlayer implements VNIManualPlaybackHost {
       safeGlowSpriteCount,
       chaserLightSpriteCount,
     );
-    this.onTimeChange?.(this.currentTime);
-    this.renderIfHostDriven();
     if (frame.isComplete) {
       this.finishParticleDrain();
       return;
     }
     this.drainPaused = false;
-    this.ensureTicker();
   }
 
   private advanceParticleDrain(deltaSeconds: number): void {
@@ -1554,7 +1516,6 @@ export class VNIPlayer implements VNIManualPlaybackHost {
       this.finishParticleDrain();
       return;
     }
-    this.renderIfHostDriven();
   }
 
   private finishParticleDrain(): void {
@@ -1569,7 +1530,6 @@ export class VNIPlayer implements VNIManualPlaybackHost {
       this.getRenderedSafeGlowCount(),
       this.getRenderedChaserLightCount(),
     );
-    this.renderIfHostDriven();
     const event = this.pendingComplete;
     this.pendingComplete = null;
     this.clearPlaybackSeedSession();
@@ -1613,49 +1573,14 @@ export class VNIPlayer implements VNIManualPlaybackHost {
 
   private assertInitialized(methodName: string): void {
     if (!this.initialized) {
-      throw new Error(`VNIPlayer.${methodName}() requires init() first.`);
+      throw new Error(`VNIRuntime.${methodName}() requires init() first.`);
     }
-  }
-
-  private ensureTicker(): void {
-    if (!this.autoTick) return;
-    if (this.rafId !== null) return;
-    this.lastTickMs = performance.now();
-    this.rafId = requestAnimationFrame(this.tick);
-  }
-
-  private cancelTicker(): void {
-    if (this.rafId === null) return;
-    cancelAnimationFrame(this.rafId);
-    this.rafId = null;
-  }
-
-  private isTickerNeeded(): boolean {
-    return (
-      this.playing ||
-      this.manualClockActive ||
-      (this.particleRuntime.isDraining() && !this.drainPaused)
-    );
   }
 
   private getEffectivePlaybackPhase(): VNISegmentedPlaybackPhase {
     if (this.particleRuntime.isDraining()) return "particle-draining";
     if (this.segmentedPlayback) return this.segmentedPlayback.getPhase();
     return this.playbackPhase;
-  }
-
-  private applyViewportLayout(): void {
-    const viewport = this.viewport;
-    if (!viewport) {
-      return;
-    }
-    const { width, height } = viewport;
-    this.stageRoot.position.set(width / 2, height / 2);
-    this.stageRoot.pivot.set(
-      this.project.stage.width / 2,
-      this.project.stage.height / 2,
-    );
-    this.stageRoot.scale.set(this.viewportScale);
   }
 
   private initializeCardCarousel3D(): void {
@@ -1740,28 +1665,14 @@ export class VNIPlayer implements VNIManualPlaybackHost {
         ? state.runtime.renderControlled(controlledMotion, ...args)
         : state.runtime.render(progress, ...args);
     }
-    const diagnostics = this.diagnosticsElement;
-    if (diagnostics) {
-      const stats = this.cardCarouselRenderer.getStats();
-      diagnostics.dataset.vniCardCarouselCards = String(visibleCards);
-      diagnostics.dataset.vniCardCarouselSlices = String(stats.visibleSlices);
-      diagnostics.dataset.vniCardCarouselCardPool = String(
-        stats.cardContainersCreated,
-      );
-      diagnostics.dataset.vniCardCarouselSlicePool = String(
-        stats.sliceSpritesCreated,
-      );
-      diagnostics.dataset.vniCardCarouselSliceTextures = String(
-        stats.sliceTexturesCreated,
-      );
-    }
+    this.diagnosticCardCarouselVisibleCards = visibleCards;
     return visibleCards;
   }
 
   private assertLegacyTransportAvailable(methodName: string): void {
     if (this.manualSession) {
       throw new Error(
-        `VNIPlayer.${methodName}() cannot run while a manual playback session is active.`,
+        `VNIRuntime.${methodName}() cannot run while a manual playback session is active.`,
       );
     }
   }
@@ -1840,8 +1751,6 @@ export class VNIPlayer implements VNIManualPlaybackHost {
       safeGlowSpriteCount,
       chaserLightSpriteCount,
     );
-    this.onTimeChange?.(this.currentTime);
-    this.renderIfHostDriven();
   }
 
   private renderPlaybackFrame(
@@ -1896,8 +1805,6 @@ export class VNIPlayer implements VNIManualPlaybackHost {
       safeGlowSpriteCount,
       chaserLightSpriteCount,
     );
-    this.onTimeChange?.(this.currentTime);
-    this.renderIfHostDriven();
   }
 
   private applyProjectSample(time: number): {
@@ -1921,16 +1828,6 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     }
     this.applyLayerMasks(sampled.layers);
     return sampled;
-  }
-
-  private renderIfHostDriven(): void {
-    this.requestHostRender();
-  }
-
-  private requestHostRender(): void {
-    if (this.initialized) {
-      this.requestRenderCallback?.();
-    }
   }
 
   private getTextLayerInstance(layerId: string): V5GLayerInstance {
@@ -3007,20 +2904,6 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     return count;
   }
 
-  private updateMountedNodeDiagnostics(): void {
-    if (!this.diagnosticsElement) {
-      return;
-    }
-    this.diagnosticsElement.dataset.vniMountedNodes = String(
-      this.mountedNodesById.size,
-    );
-    this.diagnosticsElement.dataset.vniTextLayerBindings = String(
-      [...this.mountedNodesById.values()].filter(
-        (mounted) => mounted.textLayerId,
-      ).length,
-    );
-  }
-
   private updateDiagnostics(
     visibleLayerCount: number,
     particleSpriteCount: number,
@@ -3029,81 +2912,13 @@ export class VNIPlayer implements VNIManualPlaybackHost {
     safeGlowSpriteCount: number,
     chaserLightSpriteCount: number,
   ): void {
-    const diagnostics = this.diagnosticsElement;
-    if (!diagnostics) {
-      return;
-    }
-    diagnostics.dataset.vniProjectId = this.projectId;
-    diagnostics.dataset.vniTime = this.currentTime.toFixed(2);
-    diagnostics.dataset.vniVisibleLayers = String(visibleLayerCount);
-    diagnostics.dataset.vniParticleSprites = String(particleSpriteCount);
-    diagnostics.dataset.vniRenderEffectSprites = String(
-      renderEffectSpriteCount,
-    );
-    diagnostics.dataset.vniDeterministicEffectSprites = String(
-      deterministicEffectSpriteCount,
-    );
-    diagnostics.dataset.vniSafeGlowSprites = String(safeGlowSpriteCount);
-    diagnostics.dataset.vniChaserLightSprites = String(chaserLightSpriteCount);
-    diagnostics.dataset.vniMaskSprites = String(this.getRenderedMaskCount());
-    diagnostics.dataset.vniPlaybackMode = this.playbackMode;
-    diagnostics.dataset.vniPlaybackPhase = this.getEffectivePlaybackPhase();
-    diagnostics.dataset.vniParticleDraining = String(
-      this.particleRuntime.isDraining(),
-    );
-    diagnostics.dataset.vniLiveParticles = String(particleSpriteCount);
-    diagnostics.dataset.vniLayerGroups = String(this.layerGroups.length);
-    diagnostics.dataset.vniLayerGroupSlots = String(
-      this.layerGroupSlots.length,
-    );
-    diagnostics.dataset.vniViewportScale = String(this.viewportScale);
-    this.updateMountedNodeDiagnostics();
-    diagnostics.dataset.v5gProjectId = this.projectId;
-    diagnostics.dataset.v5gTime = this.currentTime.toFixed(2);
-    diagnostics.dataset.v5gVisibleLayers = String(visibleLayerCount);
-    diagnostics.dataset.v5gParticleSprites = String(particleSpriteCount);
-    diagnostics.dataset.vniBundleId = this.bundleId;
-    diagnostics.dataset.vniProfileId = this.profileId;
-    diagnostics.dataset.vniAssetScale = String(this.assetScale);
-    diagnostics.dataset.vniProfilePurpose = this.profilePurpose;
-  }
-
-  private clearDiagnostics(): void {
-    const diagnostics = this.diagnosticsElement;
-    if (!diagnostics) {
-      return;
-    }
-    delete diagnostics.dataset.vniProjectId;
-    delete diagnostics.dataset.vniTime;
-    delete diagnostics.dataset.vniVisibleLayers;
-    delete diagnostics.dataset.vniParticleSprites;
-    delete diagnostics.dataset.vniRenderEffectSprites;
-    delete diagnostics.dataset.vniDeterministicEffectSprites;
-    delete diagnostics.dataset.vniSafeGlowSprites;
-    delete diagnostics.dataset.vniChaserLightSprites;
-    delete diagnostics.dataset.vniMaskSprites;
-    delete diagnostics.dataset.vniPlaybackMode;
-    delete diagnostics.dataset.vniPlaybackPhase;
-    delete diagnostics.dataset.vniParticleDraining;
-    delete diagnostics.dataset.vniLiveParticles;
-    delete diagnostics.dataset.vniLayerGroups;
-    delete diagnostics.dataset.vniLayerGroupSlots;
-    delete diagnostics.dataset.vniViewportScale;
-    delete diagnostics.dataset.vniCardCarouselCards;
-    delete diagnostics.dataset.vniCardCarouselSlices;
-    delete diagnostics.dataset.vniCardCarouselCardPool;
-    delete diagnostics.dataset.vniCardCarouselSlicePool;
-    delete diagnostics.dataset.vniCardCarouselSliceTextures;
-    delete diagnostics.dataset.vniMountedNodes;
-    delete diagnostics.dataset.vniTextLayerBindings;
-    delete diagnostics.dataset.v5gProjectId;
-    delete diagnostics.dataset.v5gTime;
-    delete diagnostics.dataset.v5gVisibleLayers;
-    delete diagnostics.dataset.v5gParticleSprites;
-    delete diagnostics.dataset.vniBundleId;
-    delete diagnostics.dataset.vniProfileId;
-    delete diagnostics.dataset.vniAssetScale;
-    delete diagnostics.dataset.vniProfilePurpose;
+    this.diagnosticVisibleLayerCount = visibleLayerCount;
+    this.diagnosticParticleSpriteCount = particleSpriteCount;
+    this.diagnosticRenderEffectSpriteCount = renderEffectSpriteCount;
+    this.diagnosticDeterministicEffectSpriteCount =
+      deterministicEffectSpriteCount;
+    this.diagnosticSafeGlowSpriteCount = safeGlowSpriteCount;
+    this.diagnosticChaserLightSpriteCount = chaserLightSpriteCount;
   }
 }
 
@@ -3135,45 +2950,6 @@ function deriveRuntimeAnimationSeed(
     hash = Math.imul(hash, 16777619);
   }
   return hash >>> 0;
-}
-
-function normalizeFitPadding(value: number | undefined): number | undefined {
-  if (value === undefined) {
-    return value;
-  }
-  if (!Number.isFinite(value) || value < 0) {
-    throw new Error(
-      "VNIPlayer fitPadding must be a finite non-negative number.",
-    );
-  }
-  return value;
-}
-
-function normalizeViewportSize(value: {
-  readonly width: number;
-  readonly height: number;
-}): { readonly width: number; readonly height: number } {
-  if (
-    !Number.isFinite(value.width) ||
-    value.width <= 0 ||
-    !Number.isFinite(value.height) ||
-    value.height <= 0
-  ) {
-    throw new Error("VNIPlayer viewport width and height must be positive.");
-  }
-  return Object.freeze({
-    width: value.width,
-    height: value.height,
-  });
-}
-
-function normalizeViewportScale(value: number): number {
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new Error(
-      "VNIPlayer viewport scale must be a positive finite number.",
-    );
-  }
-  return value;
 }
 
 function countVisibleLayers(layers: readonly SampledLayerState[]): number {
@@ -3215,8 +2991,8 @@ function assertCompatibleCloneAssets(
   }
 }
 
-export type V5GPlayerOptions = VNIPlayerOptions;
-export const V5GPlayer = VNIPlayer;
+export type V5GPlayerOptions = VNIRuntimeOptions;
+export const V5GPlayer = VNIRuntime;
 
 function getLayerGroupSlotKey(slot: {
   afterGroupId: string;

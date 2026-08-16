@@ -1,11 +1,11 @@
 import * as PIXI from "pixi.js";
-import { editorToPixi } from "../core/coordinates.js";
+import { editorToPixi } from "./coordinates.js";
 import type {
   V5GAssetConfig,
   V5GBlendMode,
   V5GProjectConfig,
   V5GTransformConfig,
-} from "../core/types.js";
+} from "../data/types.js";
 
 type CanvasLike = HTMLCanvasElement | OffscreenCanvas;
 type Canvas2DContext =

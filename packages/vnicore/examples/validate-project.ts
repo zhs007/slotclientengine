@@ -1,13 +1,13 @@
 import {
   assertVNIBundleManifest,
   assertVNIProject,
-  sampleProjectAtTime,
   validateManifestProjectProfile,
   validateVNIBundleManifest,
   validateVNIProject,
   type VNIBundleManifestEntry,
   type VNIProjectConfig,
-} from "@slotclientengine/vnicore/core";
+} from "@slotclientengine/vnicore/data";
+import { sampleProjectAtTime } from "../src/core/project-sampler.js";
 
 export function loadValidatedProject(data: unknown): VNIProjectConfig {
   const project = assertVNIProject(data);

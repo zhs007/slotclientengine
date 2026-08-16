@@ -4,7 +4,7 @@ import type { OfficialSpinePlayerResource } from "../spine/runtime-player.js";
 import type {
   AssetUrlManifest,
   VNIProjectConfig,
-} from "@slotclientengine/vnicore/core";
+} from "@slotclientengine/vnicore/data";
 
 export type PopupSegment = "start" | "loop" | "end";
 export type AwardTierId =

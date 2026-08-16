@@ -5,7 +5,7 @@ import type {
   V5GBlendMode,
   V5GLayerConfig,
   V5GTransformConfig,
-} from "./types.js";
+} from "../data/types.js";
 
 const MAX_CHASER_LIGHT_SPRITES = 200;
 

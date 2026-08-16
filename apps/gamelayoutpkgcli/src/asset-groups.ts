@@ -2,7 +2,7 @@ import {
   collectImageStringAssetPaths,
   parseImageStringManifest,
 } from "@slotclientengine/rendercore/image-string";
-import { assertVNIProject } from "@slotclientengine/vnicore/core";
+import { assertVNIProject } from "@slotclientengine/vnicore/data";
 import {
   collectMappedPopupAssetKeys,
   parsePopupManifest,

@@ -11,7 +11,7 @@ import {
   type VNIBundleManifestEntry,
   type VNIExportProfileConfig,
   type VNIProjectConfig,
-} from "@slotclientengine/vnicore/core";
+} from "@slotclientengine/vnicore/data";
 
 export type UploadedVNIProjectPurpose = "editing" | "runtime" | "legacy";
 

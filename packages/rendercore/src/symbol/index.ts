@@ -24,7 +24,7 @@ export * from "./symbol-group.js";
 export * from "./package.js";
 export * from "./materialize-package.js";
 export * from "./state-texture-generation.js";
-export { rewriteVNIProjectAssetPaths } from "@slotclientengine/vnicore/core";
+export { rewriteVNIProjectAssetPaths } from "@slotclientengine/vnicore/data";
 export type {
   SymbolValuePresentationSpec,
   SymbolValuePresentationTextSpec,

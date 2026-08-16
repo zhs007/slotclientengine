@@ -1,16 +1,16 @@
 import * as PIXI from "pixi.js";
 import { toPixiBlendMode } from "./blend-mode.js";
-import { editorToPixi } from "../core/coordinates.js";
+import { editorToPixi } from "./coordinates.js";
 import {
   getLayerDisplayAsset,
   getLayerDisplayAssetId,
-} from "../core/sequence-layer.js";
-import type { SampledLayerState } from "../core/project-sampler.js";
+} from "./sequence-layer.js";
+import type { SampledLayerState } from "./project-sampler.js";
 import type {
   V5GLayerConfig,
   V5GProjectConfig,
   V5GAssetConfig,
-} from "../core/types.js";
+} from "../data/types.js";
 
 export interface V5GLayerInstance {
   layer: V5GLayerConfig;

@@ -15,7 +15,7 @@ import {
 } from "@slotclientengine/rendercore/popup";
 import { validateOfficialSpineResource } from "@slotclientengine/rendercore";
 import type { EditorAssetEntry } from "@slotclientengine/editorresource";
-import { assertVNIProject } from "@slotclientengine/vnicore/core";
+import { assertVNIProject } from "@slotclientengine/vnicore/data";
 
 export interface PopupEditorResource {
   readonly rootKey: string;

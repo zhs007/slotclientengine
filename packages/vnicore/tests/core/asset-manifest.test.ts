@@ -3,8 +3,8 @@ import {
   createAssetUrlManifest,
   resolveProjectAssetUrls,
   rewriteVNIProjectAssetPaths,
-} from "../../src/core/asset-manifest";
-import { assertVNIProject } from "../../src/core/validation";
+} from "../../src/data/asset-manifest";
+import { assertVNIProject } from "../../src/data/validation";
 import bigwinData from "../fixtures/export/bigwin.json";
 import roundreelData from "../fixtures/export/roundreel.json";
 

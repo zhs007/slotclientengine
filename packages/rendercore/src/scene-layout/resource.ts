@@ -4,7 +4,7 @@ import {
   resolveProjectAssetUrls,
   type AssetUrlManifest,
   type VNIProjectConfig,
-} from "@slotclientengine/vnicore";
+} from "@slotclientengine/vnicore/data";
 import {
   loadImageStringResourceFromUrl,
   validateImageStringText,

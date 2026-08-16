@@ -2,8 +2,8 @@ import type {
   V5GAnimationConfig,
   V5GLayerConfig,
   VNIProjectConfig,
-} from "./types.js";
-import { validateVNIProject } from "./validation.js";
+} from "../data/types.js";
+import { validateVNIProject } from "../data/validation.js";
 
 export interface VNIParticleComboAnimationRef {
   readonly layerId: string;

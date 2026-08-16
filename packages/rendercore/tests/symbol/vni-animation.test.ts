@@ -307,7 +307,7 @@ function createPlayerFactory() {
         complete?.();
       }
     }),
-    getPlaybackState: vi.fn(() => ({ loopIndex })),
+    getLoopIndex: vi.fn(() => loopIndex),
     destroy: vi.fn(() => {
       root.parent?.removeChild(root);
     }),
@@ -325,7 +325,7 @@ function createPlayerFactory() {
       getDisplayObject: calls.getDisplayObject,
       playRange: calls.playRange,
       update: calls.update,
-      getPlaybackState: calls.getPlaybackState,
+      getLoopIndex: calls.getLoopIndex,
       destroy: calls.destroy,
       pause: calls.pause,
       onPlaybackComplete: calls.onPlaybackComplete,
@@ -355,7 +355,6 @@ describe("VniSymbolAni", () => {
     expect(factory).toHaveBeenCalledWith(
       expect.objectContaining({
         parent: expect.any(pixiMock.MockContainer),
-        autoTick: false,
       }),
     );
     expect(root.parent).toBe(factory.mock.calls[0]?.[0].parent);
@@ -483,7 +482,7 @@ describe("VniSymbolAni", () => {
         getDisplayObject: () => root as unknown as Container,
         playRange: calls.playRange,
         update: vi.fn(),
-        getPlaybackState: vi.fn(() => ({ loopIndex: 0 })),
+        getLoopIndex: vi.fn(() => 0),
         destroy: calls.destroy,
         pause: calls.pause,
         onPlaybackComplete: vi.fn(() => vi.fn()),

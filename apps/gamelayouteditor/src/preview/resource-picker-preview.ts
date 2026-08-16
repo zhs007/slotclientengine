@@ -3,7 +3,7 @@ import {
   ObjectUrlRegistry,
 } from "@slotclientengine/browserartifactio";
 import { createOfficialSpinePlayer } from "@slotclientengine/rendercore";
-import { VNIPlayer } from "@slotclientengine/vnicore";
+import { VNIRuntime } from "@slotclientengine/vnicore/core";
 import { Application } from "pixi.js";
 import type { EditorProject } from "../model/editor-project.js";
 import {
@@ -314,7 +314,7 @@ async function prepareVni(
   if (!profile || profile.purpose !== "runtime")
     throw new Error("VNI resource 缺少 runtime export profile。");
   const urls = new ObjectUrlRegistry();
-  let player: VNIPlayer | null = null;
+  let player: VNIRuntime | null = null;
   try {
     const assetUrls = Object.fromEntries(
       resource.project.assets.map((asset) => [
@@ -326,17 +326,10 @@ async function prepareVni(
         ),
       ]),
     );
-    player = new VNIPlayer({
+    player = new VNIRuntime({
       parent: app.stage,
-      viewport: { width: app.canvas.width, height: app.canvas.height },
-      projectId: resource.id,
-      bundleId: resource.id,
-      profileId: profile.id,
-      profilePurpose: profile.purpose,
-      assetScale: profile.assetScale,
       project: resource.project,
       assetUrls,
-      autoTick: false,
     });
     await player.init();
     player.setLoop(true);

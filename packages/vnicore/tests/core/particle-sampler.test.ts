@@ -10,7 +10,7 @@ import type {
   V5GAnimationConfig,
   V5GLayerConfig,
   V5GTransformConfig,
-} from "../../src/core/types";
+} from "../../src/data/types";
 
 const transform: V5GTransformConfig = {
   x: 100,

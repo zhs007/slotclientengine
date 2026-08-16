@@ -13,7 +13,7 @@ import type {
   V5GAnimationConfig,
   V5GLayerConfig,
   V5GStageConfig,
-} from "./types.js";
+} from "../data/types.js";
 
 export interface VNIParticleRuntimeLayer {
   layer: V5GLayerConfig;

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   rewriteVNIProjectAssetPaths,
   type VNIProjectConfig,
-} from "@slotclientengine/vnicore/core";
+} from "@slotclientengine/vnicore/data";
 import {
   getMinecart2AwardVniProjectPath,
   readMinecart2LogicalJson,
@@ -13,7 +13,7 @@ import {
   createWinAmountAnimationTiersFromModules,
   type WinAmountVniPlayer,
 } from "../../src/win-amount/index.js";
-import type { VNIPlayerOptions } from "@slotclientengine/vnicore/pixi";
+import type { VNIRuntimeOptions } from "@slotclientengine/vnicore/core";
 
 const bigwinProject = readLegacyWinAmountProject(
   getMinecart2AwardVniProjectPath("bigwin"),
@@ -152,7 +152,7 @@ describe("win amount animation player", () => {
     await flushMicrotasks();
     expect(
       FakeVniPlayer.instances.map((instance) => instance.projectId),
-    ).toEqual(["win-amount-bigwin"]);
+    ).toEqual(["big win0721"]);
 
     player.requestAdvance();
     expect(player.update(0)).toMatchObject({
@@ -219,7 +219,7 @@ describe("win amount animation player", () => {
     await flushMicrotasks();
     expect(
       FakeVniPlayer.instances.map((instance) => instance.projectId),
-    ).toEqual(["win-amount-bigwin"]);
+    ).toEqual(["big win0721"]);
 
     expect(player.update(1.45).displayedAmountRaw).toBe(225);
     expect(player.update(1.45)).toMatchObject({
@@ -233,7 +233,7 @@ describe("win amount animation player", () => {
     ).toEqual([1, 0]);
     expect(
       FakeVniPlayer.instances.map((instance) => instance.projectId),
-    ).toEqual(["win-amount-bigwin", "win-amount-superwin"]);
+    ).toEqual(["big win0721", "super win0721"]);
     expect(getEffectLayer(player).children).toEqual([
       FakeVniPlayer.instances[0].parent,
       FakeVniPlayer.instances[1].parent,
@@ -251,11 +251,7 @@ describe("win amount animation player", () => {
     ).toEqual([1, 1, 0]);
     expect(
       FakeVniPlayer.instances.map((instance) => instance.projectId),
-    ).toEqual([
-      "win-amount-bigwin",
-      "win-amount-superwin",
-      "win-amount-megawin",
-    ]);
+    ).toEqual(["big win0721", "super win0721", "mega win0721"]);
     expect(getEffectLayer(player).children).toEqual([
       FakeVniPlayer.instances[1].parent,
       FakeVniPlayer.instances[2].parent,
@@ -309,7 +305,7 @@ describe("win amount animation player", () => {
     });
     expect(
       FakeVniPlayer.instances.map((instance) => instance.projectId),
-    ).toEqual(["win-amount-bigwin"]);
+    ).toEqual(["big win0721"]);
   });
 
   it("explicitly dismisses the top tier during an overlapped transition", async () => {
@@ -324,7 +320,7 @@ describe("win amount animation player", () => {
 
     expect(
       FakeVniPlayer.instances.map((instance) => instance.projectId),
-    ).toEqual(["win-amount-bigwin", "win-amount-superwin"]);
+    ).toEqual(["big win0721", "super win0721"]);
     player.requestDismiss();
     expect(
       FakeVniPlayer.instances.map((instance) => instance.endRequests),
@@ -335,7 +331,7 @@ describe("win amount animation player", () => {
     });
     expect(
       FakeVniPlayer.instances.map((instance) => instance.projectId),
-    ).toEqual(["win-amount-bigwin", "win-amount-superwin"]);
+    ).toEqual(["big win0721", "super win0721"]);
   });
 
   it("destroys active and ending tiers when dismissed immediately", async () => {
@@ -349,7 +345,7 @@ describe("win amount animation player", () => {
     await flushMicrotasks();
     expect(
       FakeVniPlayer.instances.map((instance) => instance.projectId),
-    ).toEqual(["win-amount-bigwin", "win-amount-superwin"]);
+    ).toEqual(["big win0721", "super win0721"]);
 
     player.dismissImmediately();
 
@@ -544,8 +540,8 @@ class FakeVniPlayer implements WinAmountVniPlayer {
   endRequests = 0;
   completed = false;
 
-  constructor(options: VNIPlayerOptions) {
-    this.projectId = options.projectId;
+  constructor(options: VNIRuntimeOptions) {
+    this.projectId = options.project.name;
     this.parent = options.parent;
     FakeVniPlayer.instances.push(this);
   }

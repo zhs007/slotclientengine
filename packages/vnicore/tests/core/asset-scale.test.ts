@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { toPixiBlendMode } from "../../src/pixi/blend-mode";
+import { toPixiBlendMode } from "../../src/core/blend-mode";
 import {
   getAssetDisplayCompensation,
   getAssetTextureSize,
   getLayerAsset,
-} from "../../src/pixi/layer-instance";
+} from "../../src/core/layer-instance";
 import type {
   V5GAssetConfig,
   V5GBlendMode,
   V5GLayerConfig,
-} from "../../src/core/types";
+} from "../../src/data/types";
 
 function asset(overrides: Partial<V5GAssetConfig> = {}): V5GAssetConfig {
   return {

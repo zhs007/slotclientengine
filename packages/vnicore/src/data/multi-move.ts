@@ -1,5 +1,5 @@
-import { roundTo } from "./coordinates.js";
-import type { V5GEasingName } from "./animation-sampler.js";
+import { roundTo } from "./numeric.js";
+import type { V5GEasingName } from "./animation-contract.js";
 
 export interface V5GMultiMovePoint {
   readonly x: number;

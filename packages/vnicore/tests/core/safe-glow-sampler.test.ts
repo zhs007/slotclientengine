@@ -8,7 +8,7 @@ import type {
   V5GAnimationConfig,
   V5GBlendMode,
   V5GLayerConfig,
-} from "../../src/core/types";
+} from "../../src/data/types";
 
 const transform = {
   x: 0,

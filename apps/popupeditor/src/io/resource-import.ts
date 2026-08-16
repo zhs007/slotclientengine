@@ -38,7 +38,7 @@ import {
   assertVNIProject,
   validateManifestProjectProfile,
   validateVNIBundleManifest,
-} from "@slotclientengine/vnicore/core";
+} from "@slotclientengine/vnicore/data";
 import {
   clonePopupEditorProject,
   validatePopupEditorAttachments,

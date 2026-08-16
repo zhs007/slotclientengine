@@ -1,5 +1,5 @@
 import { Container, Sprite } from "pixi.js";
-import { VNIPlayer } from "@slotclientengine/vnicore/pixi";
+import { VNIRuntime } from "@slotclientengine/vnicore/core";
 import {
   createOfficialSpinePlayer,
   type RendercoreSpinePlayer,
@@ -39,7 +39,7 @@ export function createSpinePopupOverlayRuntime(options: {
   readonly layer: PopupOverlayLayer | SpinePopupOverlayLayerV5;
   readonly resource?: PopupPreparedResource;
   readonly spinePlayerFactory?: () => RendercoreSpinePlayer;
-  readonly vniPlayerFactory?: (parent: Container) => VNIPlayer;
+  readonly vniPlayerFactory?: (parent: Container) => VNIRuntime;
 }): SpinePopupOverlayRuntime {
   const { layer, resource } = options;
   if (layer.kind === "text") {
@@ -185,17 +185,10 @@ export function createSpinePopupOverlayRuntime(options: {
   if (layer.kind === "vni" && resource?.kind === "vni") {
     const player = options.vniPlayerFactory
       ? options.vniPlayerFactory(container)
-      : new VNIPlayer({
+      : new VNIRuntime({
           parent: container,
-          projectId: `${options.popupId}-overlay-${layer.id}`,
-          bundleId: "popup",
-          profileId: "popup",
-          profilePurpose: "spine-popup-overlay",
-          assetScale: 1,
           project: resource.project,
           assetUrls: resource.assetUrls,
-          autoTick: false,
-          fitPadding: 0,
         });
     return {
       container,

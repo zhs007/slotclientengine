@@ -2,7 +2,7 @@ import type { Container } from "pixi.js";
 import type {
   AssetUrlManifest,
   VNIProjectConfig,
-} from "@slotclientengine/vnicore/core";
+} from "@slotclientengine/vnicore/data";
 
 export interface WinAmountAnimationInput {
   readonly betAmountRaw: number;

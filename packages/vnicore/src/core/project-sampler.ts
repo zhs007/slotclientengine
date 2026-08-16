@@ -20,7 +20,7 @@ import type {
   V5GLayerConfig,
   V5GProjectConfig,
   V5GTransformConfig,
-} from "./types.js";
+} from "../data/types.js";
 import type { V5GBasicAnimationSample } from "./basic-animation.js";
 import type {
   V5GAnimationSampleBase,

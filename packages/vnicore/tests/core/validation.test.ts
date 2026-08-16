@@ -27,17 +27,17 @@ import {
   validateV5GProject,
   validateVNIBundleManifest,
   validateVNIProject,
-} from "../../src/core/validation";
+} from "../../src/data/validation";
 import {
   DEFAULT_VNI_LAYER_GROUP_ID,
   getVNIProjectLayerGroupSlots,
   getVNIProjectRenderGroupOrder,
-} from "../../src/core/layer-groups";
+} from "../../src/data/layer-groups";
 import type {
   V5GAnimationConfig,
   V5GAnimationType,
   V5GProjectConfig,
-} from "../../src/core/types";
+} from "../../src/data/types";
 
 const bundledProjectData = [
   projectData,

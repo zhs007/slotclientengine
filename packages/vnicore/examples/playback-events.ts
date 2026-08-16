@@ -1,6 +1,6 @@
-import type { VNIPlayer } from "@slotclientengine/vnicore/pixi";
+import type { VNIViewer } from "@slotclientengine/vnicore/viewer";
 
-export function wirePlaybackEvents(player: VNIPlayer): () => void {
+export function wirePlaybackEvents(player: VNIViewer): () => void {
   player.playRange({
     range: { unit: "frame", start: 30, end: 120, fps: 60 },
     loop: false,
@@ -36,6 +36,6 @@ export function wirePlaybackEvents(player: VNIPlayer): () => void {
   };
 }
 
-export function playToProjectEnd(player: VNIPlayer): void {
+export function playToProjectEnd(player: VNIViewer): void {
   player.playRange({ range: { unit: "time", start: 0, end: -1 } });
 }

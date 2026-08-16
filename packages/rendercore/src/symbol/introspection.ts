@@ -1,4 +1,4 @@
-import { assertVNIProject } from "@slotclientengine/vnicore/core";
+import { assertVNIProject } from "@slotclientengine/vnicore/data";
 import {
   AtlasAttachmentLoader,
   SkeletonJson,

@@ -26,7 +26,7 @@ import {
 import {
   assertVNIProject,
   rewriteVNIProjectAssetPaths,
-} from "@slotclientengine/vnicore";
+} from "@slotclientengine/vnicore/data";
 import {
   EDITOR_ASSETS_MAP_PATH,
   assertEditorAssetKey,

@@ -1,8 +1,8 @@
 import type {
   AssetUrlManifest,
   VNIProjectConfig,
-} from "@slotclientengine/vnicore/core";
-import { VNIPlayer } from "@slotclientengine/vnicore/pixi";
+} from "@slotclientengine/vnicore/data";
+import { VNIViewer } from "@slotclientengine/vnicore/viewer";
 import { Application } from "pixi.js";
 
 export interface BasicPlayerArgs {
@@ -17,7 +17,7 @@ export interface BasicPlayerArgs {
 
 export interface BasicPlayerHandle {
   readonly app: Application;
-  readonly player: VNIPlayer;
+  readonly player: VNIViewer;
   readonly disposeTextReplacement?: () => void;
 }
 
@@ -38,7 +38,7 @@ export async function createBasicPlayer(
     height: args.container.clientHeight || 1,
   };
   app.renderer.resize(viewport.width, viewport.height);
-  const player = new VNIPlayer({
+  const player = new VNIViewer({
     parent: app.stage,
     diagnosticsElement: args.container,
     viewport,

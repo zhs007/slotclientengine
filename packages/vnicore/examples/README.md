@@ -6,7 +6,7 @@
 pnpm --filter @slotclientengine/vnicore examples:typecheck
 ```
 
-- `basic-player.ts`: 创建 `VNIPlayer`、`init()`、`play()`、`seek()`、`destroy()`，并演示可选文字层替换绑定。
+- `basic-player.ts`: 创建 `VNIViewer`、`init()`、`play()`、`seek()`、`destroy()`，并演示可选文字层替换绑定。
 - `playback-events.ts`: 使用 `playRange(...)`、time/frame range、marker、complete listener 和 disposer。
 - `segmented-playback.ts`: 使用 hold-frame 和 range-loop 三段式高级播放。
 - `manual-cyclic-playback.ts`: 宿主编排 intro、任意时长 continuous wait、safe selection commit 和动态 ending。

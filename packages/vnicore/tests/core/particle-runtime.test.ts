@@ -9,7 +9,7 @@ import type {
   V5GLayerConfig,
   V5GStageConfig,
   V5GTransformConfig,
-} from "../../src/core/types";
+} from "../../src/data/types";
 
 const stage: V5GStageConfig = {
   width: 400,

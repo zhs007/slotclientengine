@@ -4,9 +4,9 @@
     "baseUrl": ".",
     "ignoreDeprecations": "6.0",
     "paths": {
-      "@slotclientengine/vnicore": ["src/index.ts"],
+      "@slotclientengine/vnicore/data": ["src/data/index.ts"],
       "@slotclientengine/vnicore/core": ["src/core/index.ts"],
-      "@slotclientengine/vnicore/pixi": ["src/pixi/index.ts"]
+      "@slotclientengine/vnicore/viewer": ["src/viewer/index.ts"]
     },
     "types": ["node", "vite/client"]
   },

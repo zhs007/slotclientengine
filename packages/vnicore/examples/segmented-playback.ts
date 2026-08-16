@@ -1,6 +1,6 @@
-import type { VNIPlayer } from "@slotclientengine/vnicore/pixi";
+import type { VNIViewer } from "@slotclientengine/vnicore/viewer";
 
-export function playSegmentedHold(player: VNIPlayer): void {
+export function playSegmentedHold(player: VNIViewer): void {
   player.play({
     mode: "segmented",
     loopStart: { unit: "time", at: 3 },
@@ -9,7 +9,7 @@ export function playSegmentedHold(player: VNIPlayer): void {
   });
 }
 
-export function playSegmentedRangeLoop(player: VNIPlayer): void {
+export function playSegmentedRangeLoop(player: VNIViewer): void {
   player.play({
     mode: "segmented",
     loopStart: { unit: "time", at: 2.5 },
@@ -17,7 +17,7 @@ export function playSegmentedRangeLoop(player: VNIPlayer): void {
   });
 }
 
-export function requestSegmentedEnd(player: VNIPlayer): void {
+export function requestSegmentedEnd(player: VNIViewer): void {
   if (player.getPlaybackState().mode === "segmented") {
     player.requestSegmentedPlaybackEnd();
   }

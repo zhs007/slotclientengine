@@ -1,4 +1,4 @@
-import type { V5GBlendMode } from "../core/types.js";
+import type { V5GBlendMode } from "../data/types.js";
 
 export function toPixiBlendMode(blendMode: V5GBlendMode): V5GBlendMode {
   if (

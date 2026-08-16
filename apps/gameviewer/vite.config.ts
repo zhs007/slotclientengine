@@ -70,17 +70,17 @@ export default defineConfig({
         replacement: resolve(__dirname, "../../packages/pixiani/src/index.ts"),
       },
       {
+        find: "@slotclientengine/vnicore/data",
+        replacement: resolve(
+          __dirname,
+          "../../packages/vnicore/src/data/index.ts",
+        ),
+      },
+      {
         find: "@slotclientengine/vnicore/core",
         replacement: resolve(
           __dirname,
           "../../packages/vnicore/src/core/index.ts",
-        ),
-      },
-      {
-        find: "@slotclientengine/vnicore/pixi",
-        replacement: resolve(
-          __dirname,
-          "../../packages/vnicore/src/pixi/index.ts",
         ),
       },
     ],
