@@ -57,6 +57,7 @@
 
 - `packages/rendercore/src/slot-operation/types.ts`、`coordinator.ts`
   - public coordinator 增加 `isRunning()`、`getPhase()`。
+  - 删除无人消费的`SlotOperationCoordinatorSnapshot/getSnapshot()`；运行状态只通过轻量query读取，未来editor诊断需要完整状态时另建inspector。
   - update 直接迭代 waiter Set，不创建 `[...waiters]`；为 update 中新建的 waiter 记录 eligible epoch，
     强制从下一帧开始，保持原 snapshot-iteration 边界。
 - 将以下 hot path 的 `coordinator.getSnapshot().running/phase` 改为 direct query：

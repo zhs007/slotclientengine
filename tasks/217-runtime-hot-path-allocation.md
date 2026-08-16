@@ -18,6 +18,7 @@ Set、排序和完整快照构造。game002v2 宿主把完整 elapsed delta 一�
       每 slice 重复展开排序；低 FPS 仍消费完整 delta并保留确定性 start/landing/completion。
 - [x] SlotOperationCoordinator 提供无分配 running 查询，生产 ticker 不再每帧构造 coordinator snapshot；waiter
       推进不复制 Set且保持本帧边界语义。
+- [x] 无生产或editor消费者的coordinator snapshot类型与方法已删除；Core只保留`isRunning/getPhase`。
 - [x] game002v2 和 configured scene-layout adapter 不 clamp 或在 app 层重复推进整个 runtime；切片职责留在
       RenderCore motion/reel owner。
 - [x] VNI player 使用 runtime-owned stable sample buffers、缓存稳定 animation order，并复用 mask lookup/set；public

@@ -52,20 +52,12 @@ export type SlotOperationCoordinatorPhase =
   | "fatal"
   | "destroyed";
 
-export interface SlotOperationCoordinatorSnapshot {
-  readonly phase: SlotOperationCoordinatorPhase;
-  readonly operationIndex: number | null;
-  readonly operationKey: string | null;
-  readonly running: boolean;
-}
-
 export interface SlotOperationCoordinator {
   start(plan: SlotOperationPlanV2): Promise<void>;
   update(deltaSeconds: number): void;
   cleanup(reason: Exclude<SlotOperationCleanupReason, "destroy">): void;
   isRunning(): boolean;
   getPhase(): SlotOperationCoordinatorPhase;
-  getSnapshot(): SlotOperationCoordinatorSnapshot;
   destroy(): void;
 }
 

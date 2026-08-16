@@ -9,7 +9,6 @@ import type {
   SlotOperationCoordinator,
   SlotOperationCoordinatorOptions,
   SlotOperationCoordinatorPhase,
-  SlotOperationCoordinatorSnapshot,
   SlotOperationExecutionContext,
 } from "./types.js";
 
@@ -122,18 +121,6 @@ class DefaultSlotOperationCoordinator implements SlotOperationCoordinator {
 
   getPhase(): SlotOperationCoordinatorPhase {
     return this.#phase;
-  }
-
-  getSnapshot(): SlotOperationCoordinatorSnapshot {
-    const operation = this.#plan?.operations[this.#cursor];
-    return Object.freeze({
-      phase: this.#phase,
-      operationIndex: operation?.operationIndex ?? null,
-      operationKey: operation
-        ? toSlotOperationKey(operation.kind, operation.version)
-        : null,
-      running: this.#plan !== null,
-    });
   }
 
   destroy(): void {

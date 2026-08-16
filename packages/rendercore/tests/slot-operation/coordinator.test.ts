@@ -39,6 +39,7 @@ describe("slot operation coordinator", () => {
 
     expect(coordinator.isRunning()).toBe(false);
     expect(coordinator.getPhase()).toBe("idle");
+    expect("getSnapshot" in coordinator).toBe(false);
     const completion = coordinator.start(plan());
     expect(coordinator.isRunning()).toBe(true);
     expect(coordinator.getPhase()).toBe("running");
@@ -88,10 +89,8 @@ describe("slot operation coordinator", () => {
       "frame:0.016",
       "complete",
     ]);
-    expect(coordinator.getSnapshot()).toMatchObject({
-      phase: "complete",
-      running: false,
-    });
+    expect(coordinator.getPhase()).toBe("complete");
+    expect(coordinator.isRunning()).toBe(false);
   });
 
   it("supports ticker-driven delays without a handler update method", async () => {
@@ -188,7 +187,7 @@ describe("slot operation coordinator", () => {
 
     await expect(coordinator.start(plan())).rejects.toThrow("start failed");
     expect(events).toEqual(["next-spin", "execution-failure"]);
-    expect(coordinator.getSnapshot().phase).toBe("fatal");
+    expect(coordinator.getPhase()).toBe("fatal");
   });
 
   it("normalizes non-Error synchronous handler failures", async () => {

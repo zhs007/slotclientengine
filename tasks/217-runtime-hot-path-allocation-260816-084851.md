@@ -24,6 +24,7 @@
 - `packages/rendercore/src/reel/{render-reel,render-reel-set,render-cell-spin}.ts`：direct phase/currentY query、
   ReelSet scratch/cached axis results和完整 delta 内部切片。
 - `packages/rendercore/src/slot-operation/**` 与 scene-layout consumers：无分配 phase query及 waiter epoch。
+- coordinator最终只保留`isRunning/getPhase`，删除无人消费的snapshot类型与方法。
 - `packages/rendercore/src/popup/**`、`scene-layout/package-runtime.ts`：单一Core、production void update/query与editor snapshot wrapper。
 - `packages/rendercore/src/symbol-cascade/**`、`symbol-value-presentation/**`：共享结果和 stable scratch。
 
@@ -114,5 +115,6 @@ git diff --check
 - `gameframeworks` 只导出 `createSpinePopupRuntime` / `SpinePopupRuntime`，不导出 editor player/snapshot。
 - Symbol revision 和 VNI mutable target/runtime sampler 均从 public surface 移除；VNIPlayer继续内部复用 stable buffer。
 - Scene Layout 的 Popup ticker、Prelude phase、award phase 与 ReelSet spinning 判断均改用 Core command/query；完整award snapshot迁到`scene-layout/editor` inspector，不为游戏布尔判断构造snapshot。
+- SlotOperationCoordinator删除无人消费的snapshot类型与方法，只保留`isRunning/getPhase`；12个coordinator定向测试通过。
 
 follow-up 定向验收通过：RenderCore/VNI typecheck，RenderCore Popup/Scene Layout/Symbol/Reel 相关 9 个文件 124 个测试，VNI sampler 2 个文件 56 个测试，gameframeworks source-boundary 5 个、game003v2 source-boundary 3 个、Popup Editor preview 5 个、Game Layout Editor相关14个测试，以及 game002v2/game003v2/popupeditor/gamelayouteditor/gameframeworks 直接依赖链 typecheck。Crave 仍未修改，手工迁移文档已同步为最终 API。
