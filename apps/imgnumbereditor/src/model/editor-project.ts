@@ -1,7 +1,7 @@
 import {
   parseImageStringManifest,
   type ImageStringManifestV1,
-} from "@slotclientengine/rendercore/image-string";
+} from "@slotclientengine/rendercore/image-string/data";
 import type { EditorAssetEntry } from "@slotclientengine/editorresource";
 
 export interface UploadedImageDraft extends EditorAssetEntry {

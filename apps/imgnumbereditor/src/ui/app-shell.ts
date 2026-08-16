@@ -1,7 +1,7 @@
 import {
   createImageStringResourceFromFiles,
   type ImageStringResource,
-} from "@slotclientengine/rendercore/image-string";
+} from "@slotclientengine/rendercore/image-string/editor";
 import {
   confirmGlyphMapping,
   cloneEditorProject,

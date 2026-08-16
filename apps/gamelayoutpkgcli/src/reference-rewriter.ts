@@ -1,7 +1,7 @@
 import {
   parseImageStringManifest,
   type ImageStringManifestV1,
-} from "@slotclientengine/rendercore/image-string";
+} from "@slotclientengine/rendercore/image-string/data";
 import { editorAssetKeyCollisionToken } from "@slotclientengine/editorresource";
 import {
   parsePopupManifest,

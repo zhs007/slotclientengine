@@ -1,6 +1,6 @@
 import { Container, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
-import type { ImageStringResource } from "../../src/image-string/index.js";
+import type { ImageStringResource } from "../../src/image-string/core/index.js";
 import { getRenderObjectAdapter } from "../../src/presentation/render-object.js";
 import { createSceneLayoutRenderObjectFactory } from "../../src/scene-layout/render-object-factory.js";
 import type {

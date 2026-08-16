@@ -32,7 +32,7 @@ import {
   parseImageStringManifest,
   validateImageStringPackageContents,
   type ImageStringManifestV1,
-} from "@slotclientengine/rendercore/image-string";
+} from "@slotclientengine/rendercore/image-string/editor";
 
 export type EditorAssetKind =
   | "image"

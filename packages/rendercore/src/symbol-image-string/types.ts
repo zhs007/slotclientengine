@@ -1,4 +1,4 @@
-import type { ImageStringResource } from "../image-string/types.js";
+import type { ImageStringResource } from "../image-string/core/types.js";
 import type {
   SymbolImageStringNodeSpec,
   SymbolImageStringSpecialValueImageSpec,

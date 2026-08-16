@@ -1,12 +1,14 @@
 import { resolvePackagePath } from "@slotclientengine/browserartifactio";
 import {
   collectImageStringAssetPaths,
-  createImageStringResource,
   parseImageStringManifest,
   validateImageStringText,
   type ImageStringManifestV1,
+} from "../image-string/data/index.js";
+import {
+  createImageStringResource,
   type ImageStringResource,
-} from "../image-string/index.js";
+} from "../image-string/core/index.js";
 import { SymbolAssetError } from "../symbol/errors.js";
 import type { ParsedSymbolStateTextureManifest } from "../symbol/manifest.js";
 import type {

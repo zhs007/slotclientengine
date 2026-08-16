@@ -1,6 +1,6 @@
 import { Container, Sprite } from "pixi.js";
 import { VNIRuntime } from "@slotclientengine/vnicore/core";
-import { createRenderImageString } from "../image-string/index.js";
+import { createRenderImageString } from "../image-string/core/index.js";
 import {
   createOfficialSpinePlayer,
   type RendercoreSpineSlotPlayer,

@@ -8,7 +8,7 @@ import {
   EDITOR_ASSETS_MAP_PATH,
   validateEditorAssetsMapPackage,
 } from "@slotclientengine/editorresource";
-import type { DecodeImageStringImage } from "../image-string/index.js";
+import type { DecodeImageStringImage } from "../image-string/core/index.js";
 import { SceneLayoutError } from "./errors.js";
 import {
   collectSceneLayoutPackagePaths,

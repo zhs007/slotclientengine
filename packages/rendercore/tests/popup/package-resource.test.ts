@@ -10,14 +10,18 @@ import {
 } from "../../../../test-utils/minecart2-fixtures.js";
 
 const destroyImageString = vi.hoisted(() => vi.fn(async () => {}));
-vi.mock("../../src/image-string/index.js", async (original) => {
+vi.mock("../../src/image-string/package-runtime.js", async (original) => {
   const actual =
-    await original<typeof import("../../src/image-string/index.js")>();
+    await original<
+      typeof import("../../src/image-string/package-runtime.js")
+    >();
+  const { parseImageStringManifest } =
+    await import("../../src/image-string/data/index.js");
   return {
     ...actual,
     createImageStringResourceFromFiles: vi.fn(
       async (options: { files: ReadonlyMap<string, Uint8Array> }) => ({
-        manifest: actual.parseImageStringManifest(
+        manifest: parseImageStringManifest(
           JSON.parse(
             new TextDecoder().decode(
               options.files.get("image-string.manifest.json"),

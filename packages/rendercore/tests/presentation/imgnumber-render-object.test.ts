@@ -1,6 +1,6 @@
 import { Texture } from "pixi.js";
 import { describe, expect, it } from "vitest";
-import type { ImageStringResource } from "../../src/image-string/index.js";
+import type { ImageStringResource } from "../../src/image-string/core/index.js";
 import { createImgNumberRenderObject } from "../../src/presentation/imgnumber-render-object.js";
 import { getRenderObjectAdapter } from "../../src/presentation/render-object.js";
 

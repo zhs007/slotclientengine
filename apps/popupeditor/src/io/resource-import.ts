@@ -23,9 +23,11 @@ import {
 import {
   collectImageStringAssetPaths,
   parseImageStringManifest,
-  parseWinAmountAnimationManifest,
   resolveImageStringPackageFiles,
   validateImageStringPackageContents,
+} from "@slotclientengine/rendercore/image-string/editor";
+import {
+  parseWinAmountAnimationManifest,
   validateOfficialSpineResource,
 } from "@slotclientengine/rendercore";
 import { validatePopupFontBytes } from "@slotclientengine/rendercore/popup";

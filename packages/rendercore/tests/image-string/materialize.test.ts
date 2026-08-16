@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { materializeImageStringPackage } from "../../src/image-string/index.js";
+import { materializeImageStringPackage } from "../../src/image-string/editor/index.js";
 
 const png = (seed: number) =>
   new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, seed]);

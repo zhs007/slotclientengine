@@ -2,6 +2,9 @@
 
 纯前端 image-string v1 编辑器。目录固定为 `apps/imgnumbereditor`，package name 为 `imgnumbereditor`。
 
+authoring schema 使用 `rendercore/image-string/data`，mapped ZIP、preview resource 与 inspection 使用
+`rendercore/image-string/editor`；应用继续拥有 Pixi Application、canvas 与 UI session。
+
 编辑器只有一个支持多选图片和 ZIP 的“导入资源”入口。资源身份始终是用户文件名（保留大小写、空格和合法 Unicode），字符建议只用于 UI，不改名也不自动绑定。字符、offset、lineHeight、letterSpacing 和 fixed-advance group 是业务配置，不是资源 id。
 
 同名不同 bytes 的 review 主操作是覆盖；key 和全部 glyph 引用保持不变。提交前会验证类型、尺寸和完整 manifest，失败时项目不变。没有文件夹上传、logical id prompt、自动 lowercase 或 `-2/-3` 后缀。

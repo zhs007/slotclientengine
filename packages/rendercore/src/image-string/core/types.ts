@@ -1,29 +1,5 @@
 import type { Container, Texture } from "pixi.js";
-
-export interface ImageStringGlyphSpec {
-  readonly path: string;
-  readonly size: { readonly width: number; readonly height: number };
-  readonly offset: { readonly x: number; readonly y: number };
-}
-
-export interface ImageStringFixedAdvanceGroup {
-  readonly id: string;
-  readonly characters: readonly string[];
-  readonly advanceWidth: number;
-  readonly align: "start" | "center" | "end";
-}
-
-export interface ImageStringManifestV1 {
-  readonly version: 1;
-  readonly kind: "image-string";
-  readonly id: string;
-  readonly metrics: {
-    readonly lineHeight: number;
-    readonly letterSpacing: number;
-  };
-  readonly glyphs: Readonly<Record<string, ImageStringGlyphSpec>>;
-  readonly fixedAdvanceGroups: readonly ImageStringFixedAdvanceGroup[];
-}
+import type { ImageStringManifestV1 } from "../data/types.js";
 
 export interface ImageStringResource {
   readonly manifest: ImageStringManifestV1;
@@ -65,6 +41,11 @@ export interface RenderImageString {
   setResource(resource: ImageStringResource, text?: string): void;
   setText(text: string): void;
   setAnchor(anchor: { readonly x: number; readonly y: number }): void;
-  getSnapshot(): ImageStringSnapshot;
+  getText(): string;
+  getGeometry(): Readonly<{
+    logicalBounds: ImageStringRect;
+    visualBounds: ImageStringRect | null;
+    anchor: Readonly<{ x: number; y: number }>;
+  }>;
   destroy(): void;
 }

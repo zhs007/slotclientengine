@@ -1,5 +1,5 @@
 import type { Container, Texture } from "pixi.js";
-import type { ImageStringResource } from "../image-string/index.js";
+import type { ImageStringResource } from "../image-string/core/index.js";
 import type { OfficialSpinePlayerResource } from "../spine/runtime-player.js";
 import type {
   AssetUrlManifest,

@@ -1,14 +1,15 @@
-import { Assets, Texture } from "pixi.js";
+import { Assets, Sprite, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
 import {
   createImageStringResource,
   createImageStringResourceFromFiles,
   createImageStringResourceFromResolvedFiles,
   createRenderImageString,
+  inspectImageStringRenderer,
   loadImageStringResourceFromUrl,
   resolveImageStringPackageFiles,
   validateImageStringPackageContents,
-} from "../../src/image-string/index.js";
+} from "../../src/image-string/editor/index.js";
 import { imageStringManifestFixture } from "./fixtures.js";
 import { createMappedPackageFiles } from "../editor-assets-map-fixture.js";
 
@@ -214,9 +215,9 @@ describe("image-string resource", () => {
     expect(renderer.container.pivot.x).toBe(10);
     renderer.setText("010");
     expect(renderer.container.pivot.x).toBe(14);
-    const beforeFailure = renderer.getSnapshot();
+    const beforeFailure = inspectImageStringRenderer(renderer);
     expect(() => renderer.setText("2")).toThrow("缺少 glyph");
-    expect(renderer.getSnapshot()).toBe(beforeFailure);
+    expect(inspectImageStringRenderer(renderer)).toEqual(beforeFailure);
     renderer.setText("");
     expect(renderer.container.children).toHaveLength(0);
     renderer.setText("0");
@@ -233,7 +234,7 @@ describe("image-string resource", () => {
     renderer.setResource(alternate, "10");
     expect(renderer.container).toBe(stableContainer);
     expect(renderer.container.children).toEqual(firstChildren);
-    expect(renderer.getSnapshot()).toMatchObject({
+    expect(inspectImageStringRenderer(renderer)).toMatchObject({
       text: "10",
       logicalBounds: { width: 20, height: 20 },
     });
@@ -242,6 +243,32 @@ describe("image-string resource", () => {
     expect(() => renderer.setText("0")).toThrow("已销毁");
     await alternate.destroy();
     await resource.destroy();
+  });
+
+  it("bounds inactive sprite retention after a historical long string", async () => {
+    const destroy = vi.spyOn(Sprite.prototype, "destroy");
+    const manifest = {
+      ...imageStringManifestFixture,
+      glyphs: { "0": imageStringManifestFixture.glyphs["0"] },
+      fixedAdvanceGroups: [],
+    };
+    const resource = await createImageStringResource({
+      manifest,
+      imageModules: {
+        [manifest.glyphs["0"].path]: Texture.EMPTY,
+      },
+    });
+    const renderer = createRenderImageString({
+      resource,
+      text: "0".repeat(64),
+    });
+    renderer.setText("");
+    expect(renderer.container.children).toHaveLength(0);
+    expect(destroy).toHaveBeenCalledTimes(48);
+    renderer.destroy();
+    expect(destroy).toHaveBeenCalledTimes(64);
+    await resource.destroy();
+    destroy.mockRestore();
   });
 
   it("loads the manifest and exact glyph closure from a contained http URL", async () => {

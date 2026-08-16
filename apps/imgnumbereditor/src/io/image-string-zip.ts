@@ -9,7 +9,7 @@ import {
   resolveImageStringPackageFiles,
   validateImageStringPackageContents,
   type DecodeImageStringImage,
-} from "@slotclientengine/rendercore/image-string";
+} from "@slotclientengine/rendercore/image-string/editor";
 import {
   EDITOR_ASSETS_MAP_PATH,
   assertNoEditorAssetKeyAliases,

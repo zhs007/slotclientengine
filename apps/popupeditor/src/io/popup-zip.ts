@@ -17,7 +17,7 @@ import type { EditorAssetRewriteAdapter } from "@slotclientengine/editorresource
 import {
   collectImageStringAssetPaths,
   parseImageStringManifest,
-} from "@slotclientengine/rendercore/image-string";
+} from "@slotclientengine/rendercore/image-string/data";
 import {
   collectPopupPackagePaths,
   createPopupPackageResource,

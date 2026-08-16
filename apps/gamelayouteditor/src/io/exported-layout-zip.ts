@@ -9,7 +9,7 @@ import {
 import {
   collectImageStringAssetPaths,
   parseImageStringManifest,
-} from "@slotclientengine/rendercore/image-string";
+} from "@slotclientengine/rendercore/image-string/data";
 import {
   collectSymbolPackageEntryPaths,
   parseSymbolPackageManifest,

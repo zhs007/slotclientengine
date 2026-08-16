@@ -27,10 +27,17 @@ export default defineConfig({
         ),
       },
       {
-        find: "@slotclientengine/rendercore/image-string",
+        find: "@slotclientengine/rendercore/image-string/data",
         replacement: resolve(
           __dirname,
-          "../../packages/rendercore/src/image-string/index.ts",
+          "../../packages/rendercore/src/image-string/data/index.ts",
+        ),
+      },
+      {
+        find: "@slotclientengine/rendercore/image-string/editor",
+        replacement: resolve(
+          __dirname,
+          "../../packages/rendercore/src/image-string/editor/index.ts",
         ),
       },
       {

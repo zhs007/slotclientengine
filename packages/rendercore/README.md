@@ -176,9 +176,15 @@ Scene Layout transition prelude 可在 `requestGameMode(modeId, { preludePopupSt
 
 ## Image String API
 
-`@slotclientengine/rendercore/image-string` 提供中性的图片字符串 v1 合同：严格 manifest parser、PNG/WebP 精确资源闭包、files/Vite/CDN 资源装配、Unicode code point 布局，以及共享 resource 上的 Pixi `RenderImageString`。自然宽度与 fixed advance group 可以混用；fixed group 只改变逻辑 advance，不拉伸纹理。
+Image String 使用三个显式入口：`image-string/data` 提供 v1 schema、strict parser 与纯校验；
+`image-string/core` 提供游戏 runtime 使用的 Pixi resource/renderer；`image-string/editor` 组合前两层，
+提供 mapped package、materialize 与按需 inspection。旧的混合 `image-string` 入口已移除。
 
-renderer 支持原子的 `setText()`、`setAnchor()`、logical/visual snapshot 和 sprite 复用，不创建 `Application`、canvas、DOM、RAF 或字体 fallback。anchor 以当前 `visualBounds` 计算；中心 anchor 会随字符串实际宽高变化重算 pivot，空字符串才使用 logical bounds。完整 schema、公式、ZIP 与生命周期示例见 [`docs/image-string-manifest.md`](../../docs/image-string-manifest.md)。
+core renderer 支持原子的 `setText()`、`setResource()`、`setAnchor()`、必要 geometry query 与有界
+Sprite 复用，不创建 snapshot、`Application`、canvas、DOM、RAF 或字体 fallback。anchor 以当前
+`visualBounds` 计算；中心 anchor 会随字符串实际宽高变化重算 pivot，空字符串才使用 logical bounds。
+完整 occurrence snapshot 只由 editor inspection 按需物化。完整 schema、公式、ZIP 与生命周期示例见
+[`docs/image-string-manifest.md`](../../docs/image-string-manifest.md)。
 
 ## Scene Layout API
 

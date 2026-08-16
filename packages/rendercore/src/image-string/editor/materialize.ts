@@ -15,8 +15,8 @@ import {
 import {
   collectImageStringAssetPaths,
   parseImageStringManifest,
-} from "./manifest.js";
-import type { ImageStringManifestV1 } from "./types.js";
+} from "../data/manifest.js";
+import type { ImageStringManifestV1 } from "../data/types.js";
 
 export interface MaterializedImageStringPackage {
   readonly manifest: ImageStringManifestV1;

@@ -5,7 +5,7 @@ import {
   SYMBOL_STATE_TEXTURE_GENERATION_PRESET,
   type SymbolStateTexturePixels,
 } from "@slotclientengine/rendercore/symbol";
-import type { ImageStringManifestV1 } from "@slotclientengine/rendercore/image-string";
+import type { ImageStringManifestV1 } from "@slotclientengine/rendercore/image-string/data";
 import {
   cloneSymbolEditorProject,
   installImageStringDependency,

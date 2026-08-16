@@ -1,4 +1,4 @@
-import type { ImageStringManifestV1 } from "../../src/image-string/index.js";
+import type { ImageStringManifestV1 } from "../../src/image-string/data/index.js";
 
 export const imageStringManifestFixture = {
   version: 1,

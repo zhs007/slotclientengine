@@ -19,12 +19,14 @@ import {
 } from "@slotclientengine/vnicore/data";
 import {
   collectImageStringAssetPaths,
-  createImageStringResourceFromResolvedFiles,
-  createImageStringResourceFromFiles,
   parseImageStringManifest,
   validateImageStringText,
+} from "../image-string/data/index.js";
+import {
+  createImageStringResourceFromResolvedFiles,
   type DecodeImageStringImage,
-} from "../image-string/index.js";
+} from "../image-string/core/index.js";
+import { createImageStringResourceFromFiles } from "../image-string/package-runtime.js";
 import { validateOfficialSpineResource } from "../spine/runtime-player.js";
 import { collectPopupDirectPaths, parsePopupManifest } from "./manifest.js";
 import { resolvePopupLayerAttachment } from "./layer-attachment.js";

@@ -43,10 +43,20 @@
       "types": "./dist/scene-layout/editor.d.ts",
       "import": "./dist/scene-layout/editor.js"
     },
-    "./image-string": {
-      "source": "./src/image-string/index.ts",
-      "types": "./dist/image-string/index.d.ts",
-      "import": "./dist/image-string/index.js"
+    "./image-string/data": {
+      "source": "./src/image-string/data/index.ts",
+      "types": "./dist/image-string/data/index.d.ts",
+      "import": "./dist/image-string/data/index.js"
+    },
+    "./image-string/core": {
+      "source": "./src/image-string/core/index.ts",
+      "types": "./dist/image-string/core/index.d.ts",
+      "import": "./dist/image-string/core/index.js"
+    },
+    "./image-string/editor": {
+      "source": "./src/image-string/editor/index.ts",
+      "types": "./dist/image-string/editor/index.d.ts",
+      "import": "./dist/image-string/editor/index.js"
     },
     "./symbol-image-string": {
       "source": "./src/symbol-image-string/index.ts",
@@ -77,6 +87,7 @@
   "scripts": {
     "prepare:deps": "pnpm --filter @slotclientengine/browserartifactio build && pnpm --filter @slotclientengine/editorresource build && pnpm --filter @slotclientengine/logiccore build && pnpm --filter @slotclientengine/pixiani build && pnpm --filter @slotclientengine/vnicore build",
     "build": "pnpm run prepare:deps && tsc -p tsconfig.build.json",
+    "benchmark:image-string": "node ./benchmarks/image-string-hot-path.mjs",
     "generate:symbol-state-textures": "node ./scripts/generate-symbol-state-textures.mjs",
     "lint": "eslint .",
     "test": "vitest run --coverage",

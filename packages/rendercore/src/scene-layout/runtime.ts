@@ -9,7 +9,7 @@ import { SpineStateController } from "../spine/state-controller.js";
 import {
   createRenderImageString,
   type RenderImageString,
-} from "../image-string/index.js";
+} from "../image-string/core/index.js";
 import type { RenderViewportSize } from "../viewport/index.js";
 import { SceneLayoutError } from "./errors.js";
 import {
@@ -558,7 +558,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
 
   getImageStringText(nodeId: string): string {
     this.assertReady();
-    return this.requireImageStringNode(nodeId).getSnapshot().text;
+    return this.requireImageStringNode(nodeId).getText();
   }
 
   requestNodeState(nodeId: string, state: string): Promise<void> {
@@ -981,15 +981,15 @@ function resolveNodePlacementPivot(
     };
   }
   if (resource.kind === "image-string") {
-    const snapshot = node.imageString?.getSnapshot();
-    if (!snapshot)
+    const geometry = node.imageString?.getGeometry();
+    if (!geometry)
       throw new SceneLayoutError(
         `Scene layout image-string node "${node.spec.id}" is not prepared.`,
       );
-    const bounds = snapshot.visualBounds ?? snapshot.logicalBounds;
+    const bounds = geometry.visualBounds ?? geometry.logicalBounds;
     return validNodePivot(node.spec.id, {
-      x: (center.x - snapshot.anchor.x) * bounds.width,
-      y: (center.y - snapshot.anchor.y) * bounds.height,
+      x: (center.x - geometry.anchor.x) * bounds.width,
+      y: (center.y - geometry.anchor.y) * bounds.height,
     });
   }
   if (center.x === 0.5 && center.y === 0.5) return { x: 0, y: 0 };

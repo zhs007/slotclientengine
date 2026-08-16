@@ -61,7 +61,7 @@ import {
   collectImageStringAssetPaths,
   parseImageStringManifest,
   validateImageStringText,
-} from "../image-string/index.js";
+} from "../image-string/data/index.js";
 import {
   createSymbolImageStringControllerFactories,
   createSymbolImageStringResourcePool,

@@ -12,7 +12,7 @@ import {
   createSymbolImageStringResourcePool,
   type SymbolImageStringResourcePool,
 } from "../symbol-image-string/index.js";
-import { validateImageStringText } from "../image-string/index.js";
+import { validateImageStringText } from "../image-string/data/index.js";
 import {
   createSymbolValuePresentationImagePath,
   parseSymbolStateTextureManifest,

@@ -5,11 +5,9 @@ import {
   type AssetUrlManifest,
   type VNIProjectConfig,
 } from "@slotclientengine/vnicore/data";
-import {
-  loadImageStringResourceFromUrl,
-  validateImageStringText,
-  type ImageStringResource,
-} from "../image-string/index.js";
+import { validateImageStringText } from "../image-string/data/index.js";
+import type { ImageStringResource } from "../image-string/core/index.js";
+import { loadImageStringResourceFromUrl } from "../image-string/package-runtime.js";
 import { SceneLayoutError } from "./errors.js";
 import {
   collectSceneLayoutAssetPaths,

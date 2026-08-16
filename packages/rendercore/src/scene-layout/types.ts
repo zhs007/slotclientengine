@@ -3,7 +3,7 @@ import type {
   AssetUrlManifest,
   VNIProjectConfig,
 } from "@slotclientengine/vnicore/data";
-import type { ImageStringResource } from "../image-string/index.js";
+import type { ImageStringResource } from "../image-string/core/index.js";
 import type { SymbolPackageResource } from "../symbol/package.js";
 import type { PopupPackageResource } from "../popup/index.js";
 import type {

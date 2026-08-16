@@ -1,4 +1,4 @@
-import { layoutImageString } from "../../src/image-string/index.js";
+import { layoutImageString } from "../../src/image-string/editor/index.js";
 import { describe, expect, it } from "vitest";
 import { imageStringManifestFixture } from "./fixtures.js";
 

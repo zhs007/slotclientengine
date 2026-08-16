@@ -10,7 +10,7 @@ import {
   resolveImageStringPackageFiles,
   validateImageStringPackageContents,
   type DecodeImageStringImage,
-} from "@slotclientengine/rendercore/image-string";
+} from "@slotclientengine/rendercore/image-string/editor";
 import type { Texture } from "pixi.js";
 import type { ImportedEditorImageStringDependency } from "../model/editor-project.js";
 

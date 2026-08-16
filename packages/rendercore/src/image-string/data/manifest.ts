@@ -1,11 +1,3 @@
-import {
-  assertCanonicalPackagePath,
-  assertNoPackagePathAliases,
-} from "@slotclientengine/browserartifactio";
-import {
-  assertEditorAssetKey,
-  assertNoEditorAssetKeyAliases,
-} from "@slotclientengine/editorresource";
 import { ImageStringError } from "./errors.js";
 import type {
   ImageStringFixedAdvanceGroup,
@@ -59,11 +51,10 @@ export function parseImageStringManifest(
       fail(`${path}.path`, "不得混用 filename key 与 direct package path");
     referenceKind = kind;
     try {
-      if (kind === "filename") assetPath = assertEditorAssetKey(spec.path);
+      if (kind === "filename")
+        assetPath = assertImageStringFilenameKey(spec.path);
       else {
-        assetPath = assertCanonicalPackagePath(spec.path, {
-          requireLowercase: true,
-        });
+        assetPath = assertImageStringPackagePath(spec.path);
         if (!ASCII_PATTERN.test(assetPath))
           fail(`${path}.path`, "legacy path 必须是 ASCII");
         if (!assetPath.startsWith("assets/"))
@@ -97,8 +88,7 @@ export function parseImageStringManifest(
     };
   }
   try {
-    if (referenceKind === "filename") assertNoEditorAssetKeyAliases(paths);
-    else assertNoPackagePathAliases(paths);
+    assertNoImageStringReferenceAliases(paths, referenceKind === "filename");
   } catch (error) {
     fail("glyphs", formatError(error));
   }
@@ -194,14 +184,21 @@ export function validateImageStringText(
   text: string,
   manifest?: ImageStringManifestV1,
 ): readonly string[] {
+  assertImageStringText(text, manifest);
+  return Array.from(text);
+}
+
+export function assertImageStringText(
+  text: string,
+  manifest?: ImageStringManifestV1,
+): void {
   if (typeof text !== "string")
     throw new ImageStringError("image-string text 必须是 string。");
   if (text.normalize("NFC") !== text)
     throw new ImageStringError("image-string text 必须使用 Unicode NFC。");
   if (CONTROL_PATTERN.test(text))
     throw new ImageStringError("image-string text 不得包含控制字符。");
-  const characters = Array.from(text);
-  for (const character of characters) {
+  for (const character of text) {
     const codePoint = character.codePointAt(0)!;
     if (codePoint >= 0xd800 && codePoint <= 0xdfff)
       throw new ImageStringError(
@@ -212,7 +209,6 @@ export function validateImageStringText(
         `image-string text 缺少 glyph ${JSON.stringify(character)}。`,
       );
   }
-  return characters;
 }
 
 function assertGlyphCharacter(
@@ -298,4 +294,64 @@ function fail(path: string, message: string): never {
 
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function assertImageStringFilenameKey(value: string): string {
+  if (!value || value.normalize("NFC") !== value)
+    throw new Error("asset filename key 必须是非空 NFC 字符串");
+  if (
+    value === "." ||
+    value === ".." ||
+    value.includes("/") ||
+    value.includes("\\")
+  )
+    throw new Error("asset filename key 必须是单个 basename");
+  if (
+    [...value].some((character) => {
+      const codePoint = character.codePointAt(0)!;
+      return codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f);
+    })
+  )
+    throw new Error("asset filename key 不得包含控制字符");
+  const dot = value.lastIndexOf(".");
+  const extension = value.slice(dot + 1).toLocaleLowerCase("en-US");
+  if (dot <= 0 || dot === value.length - 1 || !/^[a-z0-9]+$/u.test(extension))
+    throw new Error("asset filename key 必须包含合法扩展名");
+  return value;
+}
+
+function assertImageStringPackagePath(value: string): string {
+  if (!value || value.includes("\0") || value.includes("\\"))
+    throw new Error("package path 必须是非空 POSIX 路径");
+  if (/^(?:\/|[A-Za-z]:|[A-Za-z][A-Za-z0-9+.-]*:)/u.test(value))
+    throw new Error("package path 不得是绝对路径或 URL");
+  if (/[?#]/u.test(value) || /%[0-9A-Fa-f]{2}/u.test(value))
+    throw new Error("package path 不得包含 query、hash 或 percent escape");
+  if (value.normalize("NFC") !== value || value !== value.toLowerCase())
+    throw new Error("package path 必须使用 NFC lowercase");
+  if (
+    value
+      .split("/")
+      .some((segment) => !segment || segment === "." || segment === "..")
+  )
+    throw new Error("package path 包含非法 segment");
+  return value;
+}
+
+function assertNoImageStringReferenceAliases(
+  paths: readonly string[],
+  filenameKeys: boolean,
+): void {
+  const seen = new Map<string, string>();
+  for (const path of paths) {
+    if (filenameKeys) assertImageStringFilenameKey(path);
+    else assertImageStringPackagePath(path);
+    const token = path.normalize("NFC").toLocaleLowerCase("en-US");
+    const previous = seen.get(token);
+    if (previous !== undefined && previous !== path)
+      throw new Error(
+        `资源引用 canonical alias collision：${previous} / ${path}`,
+      );
+    seen.set(token, path);
+  }
 }

@@ -6,7 +6,7 @@ import {
   parseSceneLayoutManifest,
 } from "../../src/scene-layout/index.js";
 import type { RendercoreSpinePlayer } from "../../src/spine/runtime-player.js";
-import type { ImageStringResource } from "../../src/image-string/index.js";
+import type { ImageStringResource } from "../../src/image-string/core/index.js";
 import type { SceneLayoutVniPlayer } from "../../src/scene-layout/runtime.js";
 import { game002LayoutFixture, game003LayoutFixture } from "./fixtures.js";
 

@@ -21,13 +21,16 @@ const renderer = {
     pivot: { x: 10, y: 5 },
   },
   setText: vi.fn(),
-  getSnapshot: vi.fn(() => ({
-    text: "01",
-    logicalBounds: { x: 0, y: 0, width: 20, height: 10 },
-    visualBounds: { x: 1, y: 1, width: 18, height: 8 },
-    anchor: { x: 0.5, y: 0.5 },
-  })),
+  getText: vi.fn(() => "01"),
+  getGeometry: vi.fn(),
   destroy: vi.fn(),
+};
+
+const snapshot = {
+  text: "01",
+  logicalBounds: { x: 0, y: 0, width: 20, height: 10 },
+  visualBounds: { x: 1, y: 1, width: 18, height: 8 },
+  anchor: { x: 0.5, y: 0.5 },
 };
 
 const graphics = {
@@ -60,8 +63,9 @@ vi.mock("pixi.js", () => ({
   },
 }));
 
-vi.mock("@slotclientengine/rendercore/image-string", () => ({
+vi.mock("@slotclientengine/rendercore/image-string/editor", () => ({
   createRenderImageString: vi.fn(() => renderer),
+  inspectImageStringRenderer: vi.fn(() => snapshot),
 }));
 
 import { ImageStringPreview } from "../src/preview/image-string-preview.js";

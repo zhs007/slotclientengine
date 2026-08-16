@@ -79,6 +79,7 @@
 - editor 只编辑一个共享 dependency、共同 slot、center alignment 和 transform；导出时按稳定 runtime schema 物化为内容一致的 per-tier binding。
 - 不恢复每 tier 重复编辑同一 animation 或 ImgNumber node。
 - glyph layout、dynamic visualBounds anchor、Pixi sprite 和 `setText()` 生命周期属于 rendercore image-string。
+- ImgNumber Editor 与其它 editor 的 standalone ImgNumber package 导入使用 `rendercore/image-string/editor`；纯 schema/reference rewrite 使用 `data`；Popup/Symbol/Scene Layout production preview 继续使用各自 owner runtime，不直接创建第二个 ImgNumber core。editor wrapper 只包装同一个 core，不复制 layout 或 Sprite 生命周期。
 
 ## Layout Editor dependency
 

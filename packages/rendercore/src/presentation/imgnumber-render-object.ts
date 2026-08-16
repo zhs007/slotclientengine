@@ -1,5 +1,5 @@
-import type { ImageStringResource } from "../image-string/index.js";
-import { createRenderImageString } from "../image-string/index.js";
+import type { ImageStringResource } from "../image-string/core/index.js";
+import { createRenderImageString } from "../image-string/core/index.js";
 import {
   createCloneableRenderObject,
   getRenderObjectAdapter,
@@ -39,12 +39,12 @@ export function createManagedImgNumberRenderObject(
   let object!: ImgNumberRenderObject;
   let destroyed = false;
   const clone = (): ImgNumberRenderObject => {
-    const snapshot = renderer.getSnapshot();
+    const geometry = renderer.getGeometry();
     return createManagedImgNumberRenderObject(
       {
         resource: options.resource,
-        text: snapshot.text,
-        anchor: snapshot.anchor,
+        text: renderer.getText(),
+        anchor: geometry.anchor,
       },
       lifecycle,
     );
@@ -62,7 +62,7 @@ export function createManagedImgNumberRenderObject(
   object = Object.freeze({
     ...base,
     setText: (text: string) => renderer.setText(text),
-    getText: () => renderer.getSnapshot().text,
+    getText: () => renderer.getText(),
     clone,
   }) satisfies ImgNumberRenderObject;
   registerRenderObjectAlias(object, getRenderObjectAdapter(base));

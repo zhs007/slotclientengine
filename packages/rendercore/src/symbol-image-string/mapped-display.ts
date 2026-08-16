@@ -1,9 +1,9 @@
 import { Container, Sprite, type Texture } from "pixi.js";
+import { validateImageStringText } from "../image-string/data/index.js";
 import {
   createRenderImageString,
-  validateImageStringText,
   type ImageStringResource,
-} from "../image-string/index.js";
+} from "../image-string/core/index.js";
 
 export interface SymbolImageStringSpecialImageResource {
   readonly path: string;

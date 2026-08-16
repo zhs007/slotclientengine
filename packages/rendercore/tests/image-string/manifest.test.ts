@@ -3,7 +3,7 @@ import {
   ImageStringError,
   parseImageStringManifest,
   validateImageStringText,
-} from "../../src/image-string/index.js";
+} from "../../src/image-string/data/index.js";
 import { describe, expect, it } from "vitest";
 import { cloneFixture, imageStringManifestFixture } from "./fixtures.js";
 

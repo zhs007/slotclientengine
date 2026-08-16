@@ -1,5 +1,5 @@
 import { Assets, Sprite, Text, type Texture } from "pixi.js";
-import { validateImageStringText } from "../image-string/index.js";
+import { validateImageStringText } from "../image-string/data/index.js";
 import { createRenderMappedImageString } from "../symbol-image-string/mapped-display.js";
 import { SymbolAssetError } from "../symbol/errors.js";
 import type {

@@ -27,7 +27,7 @@ import type {
   SymbolStatePreset,
 } from "./types.js";
 import { resolvePackagePath } from "@slotclientengine/browserartifactio";
-import { validateImageStringAnchor } from "../image-string/layout.js";
+import { validateImageStringAnchor } from "../image-string/core/layout.js";
 
 export interface SymbolCascadeGroupPlaybackPresentation {
   readonly mode: "group";

@@ -1,4 +1,4 @@
-import type { ImageStringResource } from "@slotclientengine/rendercore/image-string";
+import type { ImageStringResource } from "@slotclientengine/rendercore/image-string/editor";
 import { describe, expect, it, vi } from "vitest";
 import { createImageStringAppShell } from "../src/ui/app-shell.js";
 import { projectFixture } from "./helpers.js";

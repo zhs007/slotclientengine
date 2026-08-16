@@ -1,5 +1,5 @@
 import type { Container } from "pixi.js";
-import type { ImageStringResource } from "../image-string/types.js";
+import type { ImageStringResource } from "../image-string/core/types.js";
 import type { SymbolImageStringSpecialImageResource } from "../symbol-image-string/mapped-display.js";
 import type { RenderVisibleSymbolGeometrySnapshot } from "../reel/types.js";
 import type {

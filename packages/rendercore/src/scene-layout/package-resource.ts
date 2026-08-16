@@ -12,13 +12,15 @@ import {
 } from "@slotclientengine/vnicore/data";
 import {
   collectImageStringAssetPaths,
-  createImageStringResourceFromFiles,
-  createImageStringResourceFromResolvedFiles,
   parseImageStringManifest,
   validateImageStringText,
+} from "../image-string/data/index.js";
+import {
+  createImageStringResourceFromResolvedFiles,
   type DecodeImageStringImage,
   type ImageStringResource,
-} from "../image-string/index.js";
+} from "../image-string/core/index.js";
+import { createImageStringResourceFromFiles } from "../image-string/package-runtime.js";
 import {
   collectSymbolPackageEntryPaths,
   createSymbolPackageResourceFromResolvedFiles,

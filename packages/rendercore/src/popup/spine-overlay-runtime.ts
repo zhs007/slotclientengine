@@ -9,7 +9,7 @@ import {
   requestPopupVniPlaybackEnd,
   startPopupVniPlayback,
 } from "./vni-playback.js";
-import { createRenderImageString } from "../image-string/index.js";
+import { createRenderImageString } from "../image-string/core/index.js";
 import { createPopupStyledText } from "./styled-text.js";
 import type {
   PopupOverlayLayer,

@@ -1,10 +1,11 @@
 import { Application, Graphics } from "pixi.js";
 import {
   createRenderImageString,
+  inspectImageStringRenderer,
   type ImageStringResource,
   type ImageStringSnapshot,
   type RenderImageString,
-} from "@slotclientengine/rendercore/image-string";
+} from "@slotclientengine/rendercore/image-string/editor";
 
 export class ImageStringPreview {
   readonly #application: Application;
@@ -51,7 +52,7 @@ export class ImageStringPreview {
   }
   getSnapshot(): ImageStringSnapshot {
     this.#assertUsable();
-    return this.#renderer.getSnapshot();
+    return inspectImageStringRenderer(this.#renderer);
   }
   destroy(): void {
     if (this.#destroyed) return;
@@ -61,7 +62,7 @@ export class ImageStringPreview {
     this.#application.destroy(true);
   }
   #drawGuides(): void {
-    const snapshot = this.#renderer.getSnapshot();
+    const snapshot = inspectImageStringRenderer(this.#renderer);
     const originX =
       this.#renderer.container.position.x -
       this.#renderer.container.pivot.x * this.#renderer.container.scale.x;

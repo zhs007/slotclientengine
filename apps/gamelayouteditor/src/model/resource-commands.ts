@@ -4,7 +4,7 @@ import {
   resolveImageStringPackageFiles,
   validateImageStringPackageContents,
   validateImageStringText,
-} from "@slotclientengine/rendercore/image-string";
+} from "@slotclientengine/rendercore/image-string/editor";
 import {
   createBoundedSourceIndex,
   detectRasterAssetType,
