@@ -350,7 +350,7 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
       throw new SceneLayoutError(
         "Scene layout runtime resource name must be a non-empty exact manifest key.",
       );
-    const spec = this.#resource.manifest.runtimeResources?.[name];
+    const spec = this.#resource.runtimeManifest.runtimeResources?.[name];
     if (!spec)
       throw new SceneLayoutError(
         `Unknown scene layout runtime resource: ${name}.`,

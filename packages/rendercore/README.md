@@ -195,6 +195,8 @@ Sprite 复用，不创建 snapshot、`Application`、canvas、DOM、RAF 或字�
 
 第一层统一使用`getSymbolArea()`、`getRenderLayer()`、`getRenderObject()`与`createRenderObject()`。authored object按image/Spine/VNI/image-string返回borrowed typed capability，可见性与mode/variant做AND且不开放position/destroy；program object从exact `runtimeResources`异步创建并由caller拥有。`getLayoutPoint/getLayoutAnchor/resolveLayoutAnchor`直接读写configured authored space，center-origin游戏无需复制Pixi左上角偏移。完整ref grammar、ownership、SymbolGroup几何、坐标映射与示例见[`docs/rendercore-layer-symbol-area-render-object-coordinate-guide.md`](../../docs/rendercore-layer-symbol-area-render-object-coordinate-guide.md)。
 
+外部`applyGeometryManifest()`仍在mutation前校验immutable structure；package-owned mode target已经过manifest parse与transition prepare，switch commit直接应用prepared geometry、visibility和背景层序，不在热路径重复解析或全结构比较。lazy runtime resource的exact key/kind来自canonical runtime manifest，initial layout view省略程序资源只影响prepare时机，不改变可创建对象目录。
+
 `inspectSceneLayoutPackageZipBytes()` /
 `loadSceneLayoutPackageFromZipBytes()` 是 canonical production ZIP 边界：使用 bounded
 extract、严格 path collision、assets map hash/size/media/orphan 与 nested exact closure

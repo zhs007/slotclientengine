@@ -90,6 +90,13 @@ export function createSceneLayoutRuntime(
   return new DefaultSceneLayoutRuntime(options);
 }
 
+/** @internal Package runtimes use this only after validating their owned document. */
+export function createPreparedSceneLayoutRuntime(
+  options: CreateSceneLayoutRuntimeOptions,
+) {
+  return new DefaultSceneLayoutRuntime(options);
+}
+
 class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   readonly container = new Container();
   readonly #resource: SceneLayoutResource;
@@ -298,6 +305,19 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     this.assertReady();
     const manifest = parseSceneLayoutManifest(manifestValue);
     assertSceneLayoutGeometryCompatible(this.#manifest, manifest);
+    return this.commitGeometryManifest(manifest);
+  }
+
+  commitPreparedGeometryManifest(
+    manifest: SceneLayoutResource["manifest"],
+  ): SceneLayoutSnapshot | null {
+    this.assertReady();
+    return this.commitGeometryManifest(manifest);
+  }
+
+  private commitGeometryManifest(
+    manifest: SceneLayoutResource["manifest"],
+  ): SceneLayoutSnapshot | null {
     const nextSnapshot = this.#snapshot
       ? this.#artSpaceApplied
         ? resolveSceneLayoutArtSpace(manifest)
@@ -308,6 +328,8 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
           })
       : null;
     this.#manifest = manifest;
+    for (const [index, spec] of manifest.nodes.entries())
+      this.container.setChildIndex(this.requireNode(spec.id).slot, index);
     for (const node of this.#nodes)
       if (node.imageSprite)
         node.imageSprite.anchor.set(

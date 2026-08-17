@@ -3,14 +3,81 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createSceneLayoutResource,
   createSceneLayoutRuntime,
+  materializeSceneLayoutManifestForMode,
   parseSceneLayoutManifest,
+  upgradeSceneLayoutManifestToLatest,
 } from "../../src/scene-layout/index.js";
 import type { RendercoreSpinePlayer } from "../../src/spine/runtime-player.js";
 import type { ImageStringResource } from "../../src/image-string/core/index.js";
-import type { SceneLayoutVniPlayer } from "../../src/scene-layout/runtime.js";
+import {
+  createPreparedSceneLayoutRuntime,
+  type SceneLayoutVniPlayer,
+} from "../../src/scene-layout/runtime.js";
 import { game002LayoutFixture, game003LayoutFixture } from "./fixtures.js";
 
 describe("scene layout runtime", () => {
+  it("commits prepared mode background order without repeating the public structure check", async () => {
+    const initial = parseSceneLayoutManifest({
+      ...game002LayoutFixture,
+      nodes: [
+        game002LayoutFixture.nodes[0],
+        {
+          ...game002LayoutFixture.nodes[0],
+          id: "free-bg",
+          order: 1,
+          resource: {
+            ...game002LayoutFixture.nodes[0].resource,
+            path: "assets/free-bg.png",
+          },
+        },
+      ],
+      gameModes: {
+        initialMode: "BaseGame",
+        modes: [
+          {
+            id: "BaseGame",
+            backgroundNodes: { default: "bg" },
+            nodeStates: {},
+          },
+          {
+            id: "FreeGame",
+            backgroundNodes: { default: "free-bg" },
+            nodeStates: {},
+          },
+        ],
+        transitions: [],
+      },
+    });
+    const free = materializeSceneLayoutManifestForMode(
+      upgradeSceneLayoutManifestToLatest(initial),
+      "FreeGame",
+    );
+    const runtime = createPreparedSceneLayoutRuntime({
+      resource: createSceneLayoutResource({
+        manifest: initial,
+        imageModules: {
+          "assets/bg.png": "memory:bg",
+          "assets/free-bg.png": "memory:free-bg",
+        },
+      }),
+      loadTexture: async () => Texture.WHITE,
+      unloadTexture: async () => undefined,
+    });
+    await runtime.init();
+
+    expect(() => runtime.applyGeometryManifest(free)).toThrow(
+      /changed immutable structure/,
+    );
+    expect(runtime.commitPreparedGeometryManifest(free)).toBeNull();
+    expect(
+      runtime.container.children
+        .map((child) => child.label)
+        .filter((label) => label.startsWith("scene-layout-slot:")),
+    ).toEqual(["scene-layout-slot:free-bg", "scene-layout-slot:bg"]);
+
+    runtime.destroy();
+  });
+
   it("creates an independent manual VNI player and only advances it while renderable", async () => {
     const manifest = parseSceneLayoutManifest({
       ...game002LayoutFixture,
