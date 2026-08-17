@@ -3,17 +3,32 @@ import {
   createSymbolCascadeWinPresentationMapFromManifest,
   createSymbolStatePresetFromManifest,
   parseSymbolStateTextureManifest,
-} from "../../src/index.js";
+} from "../../src/symbol/data/index.js";
 
 describe("symbol manifest cascade presentation", () => {
   it("derives additional state definitions and validates generic choreography", () => {
     const manifest = createManifest();
     const parsed = parseSymbolStateTextureManifest(manifest);
     expect(parsed.statePreset.states.slice(-4)).toEqual([
-      { id: "burst", phase: "once", playback: "once" },
+      {
+        id: "burst",
+        phase: "once",
+        playback: "once",
+        afterComplete: "return-to-default",
+      },
       { id: "hover", phase: "stable", playback: "loop" },
-      { id: "take", phase: "once", playback: "once" },
-      { id: "fade", phase: "once", playback: "once" },
+      {
+        id: "take",
+        phase: "once",
+        playback: "once",
+        afterComplete: "return-to-default",
+      },
+      {
+        id: "fade",
+        phase: "once",
+        playback: "once",
+        afterComplete: "return-to-default",
+      },
     ]);
     expect(createSymbolStatePresetFromManifest(manifest)).toEqual(
       parsed.statePreset,

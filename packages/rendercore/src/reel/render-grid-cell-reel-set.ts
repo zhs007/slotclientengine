@@ -75,9 +75,9 @@ import type {
   SymbolStateTransitionMode,
 } from "../symbol/index.js";
 import {
-  createSymbolRender,
-  type SymbolRender,
-} from "../symbol/symbol-render.js";
+  createSymbolHandle,
+  type SymbolHandle,
+} from "../symbol/symbol-handle.js";
 import { createSymbolGroup } from "../symbol/symbol-group.js";
 import type {
   SymbolArea,
@@ -1796,7 +1796,7 @@ export class RenderGridCellReelSet
     return this.createOccurrenceHandle(this.getCellOccurrence(cell));
   }
 
-  getSymbol(position: SymbolPosition): SymbolRender {
+  getSymbol(position: SymbolPosition): SymbolHandle {
     const cell = this.getCell(position.x, position.y);
     if (cell.phase === "waiting" || cell.phase === "spinning")
       throw new ReelError(
@@ -1807,15 +1807,15 @@ export class RenderGridCellReelSet
         x: cell.root.x + this.#cellWidth / 2,
         y: cell.root.y + this.#cellHeight / 2,
       });
-      return cell.reel.createVisibleEmptySymbolRender(0, {
+      return cell.reel.createVisibleEmptySymbolHandle(0, {
         assertUsable: () => {
-          if (cell.occupied) throw new ReelError("SymbolRender is stale.");
+          if (cell.occupied) throw new ReelError("SymbolHandle is stale.");
         },
         getPosition,
         getAnchor: () =>
           createContainerRenderAnchor(this, () => {
             if (cell.occupied || cell.reel.getSlotRenderView(0).code !== -1)
-              throw new ReelError("SymbolRender is stale.");
+              throw new ReelError("SymbolHandle is stale.");
             return getPosition();
           }),
       });
@@ -1830,7 +1830,7 @@ export class RenderGridCellReelSet
         symbol: ownedOccurrence.symbol,
         owned: true,
         assertUsable: () => {
-          if (released) throw new ReelError("Owned SymbolRender is stale.");
+          if (released) throw new ReelError("Owned SymbolHandle is stale.");
         },
         clone: () =>
           createOwnedSource(
@@ -1846,7 +1846,7 @@ export class RenderGridCellReelSet
         },
       };
     };
-    return createSymbolRender({
+    return createSymbolHandle({
       symbol: occurrence.symbol,
       owned: false,
       assertUsable: () => {
@@ -1903,7 +1903,7 @@ export class RenderGridCellReelSet
   replaceSymbol(
     position: SymbolPosition,
     target: SymbolReplacementTarget,
-  ): SymbolRender {
+  ): SymbolHandle {
     return this.replaceSymbols([{ position, target }]).symbols[0]!;
   }
 

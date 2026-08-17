@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   createSymbolValuePresentationImagePath,
-  createSymbolValuePresentationResourcesFromManifest,
   parseSymbolStateTextureManifest,
-} from "../../src/index.js";
+} from "../../src/symbol/data/index.js";
+import { createSymbolValuePresentationResourcesFromManifest } from "../../src/symbol-value-presentation/index.js";
 
 const TEST_SPINE_SKELETON = {
   skeleton: { spine: "4.3.23" },

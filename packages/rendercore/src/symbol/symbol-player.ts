@@ -7,8 +7,8 @@ import { SymbolStateMachine } from "./state-machine.js";
 import { destroyVniSymbolAnimationCache } from "./vni-animation.js";
 import { destroySpineSymbolAnimationCache } from "./spine-animation.js";
 import type {
-  RenderSymbolOptions,
-  RenderSymbolUpdateResult,
+  SymbolPlayerOptions,
+  SymbolPlayerUpdateResult,
   SymbolAni,
   SymbolAnimationContext,
   SymbolNormalTextureSource,
@@ -18,8 +18,8 @@ import type {
   SymbolStateSnapshot,
   SymbolStateTransitionMode,
   SymbolVisualLayer,
-  RenderSymbolValueController,
-  RenderSymbolImageStringController,
+  SymbolPlayerValueController,
+  SymbolPlayerImageStringController,
 } from "./types.js";
 import type { SymbolManifestAnimationPlaybackSpec } from "./manifest.js";
 
@@ -41,7 +41,7 @@ interface PreparedPresentationValue {
   readonly textUpdates: readonly Readonly<{ name: string; text: string }>[];
 }
 
-export class RenderSymbol extends VisualEntity<void> {
+export class SymbolPlayer extends VisualEntity<void> {
   readonly code: number;
   readonly symbol: string;
   readonly pays: readonly number[];
@@ -60,9 +60,9 @@ export class RenderSymbol extends VisualEntity<void> {
   readonly normalSource: SymbolNormalTextureSource<Texture>;
   readonly renderPriority: number;
   readonly #stateMachine: SymbolStateMachine;
-  readonly #animationResolver: RenderSymbolOptions["animationResolver"];
-  readonly #valueController: RenderSymbolValueController | null;
-  readonly #imageStringController: RenderSymbolImageStringController | null;
+  readonly #animationResolver: SymbolPlayerOptions["animationResolver"];
+  readonly #valueController: SymbolPlayerValueController | null;
+  readonly #imageStringController: SymbolPlayerImageStringController | null;
   readonly #valueTextBindings: ReadonlyMap<string, (value: number) => string>;
   readonly #landingAppearEnabled: boolean;
   readonly #animationCapabilities: ReadonlySet<SymbolStateId>;
@@ -70,7 +70,7 @@ export class RenderSymbol extends VisualEntity<void> {
   #lastAniRequestedState: SymbolStateId;
   #lastAniResolvedState: SymbolStateId;
   #cachedUpdateSnapshot: SymbolStateSnapshot | null = null;
-  #cachedUpdateResults: Array<RenderSymbolUpdateResult | undefined> = [];
+  #cachedUpdateResults: Array<SymbolPlayerUpdateResult | undefined> = [];
   #defaultScaleX = 1;
   #defaultScaleY = 1;
   #presentationValue: number | null = null;
@@ -82,12 +82,12 @@ export class RenderSymbol extends VisualEntity<void> {
   #activePlayback: ActiveSymbolStatePlayback | null = null;
   #destroyed = false;
 
-  constructor(options: RenderSymbolOptions) {
+  constructor(options: SymbolPlayerOptions) {
     super();
     this.code = options.definition.code;
     this.symbol = options.definition.symbol;
     this.pays = Object.freeze([...options.definition.pays]);
-    this.normalSource = normalizeRenderSymbolNormalSource(options.texture);
+    this.normalSource = normalizeSymbolPlayerNormalSource(options.texture);
     this.texture =
       this.normalSource.kind === "single"
         ? this.normalSource.texture
@@ -575,7 +575,7 @@ export class RenderSymbol extends VisualEntity<void> {
     return this.#stateMachine.getSnapshot().resolvedState === "appear";
   }
 
-  update(deltaSeconds: number): RenderSymbolUpdateResult {
+  update(deltaSeconds: number): SymbolPlayerUpdateResult {
     assertValidDeltaSeconds(deltaSeconds);
     try {
       const beforeSnapshot = this.#stateMachine.getSnapshot();
@@ -743,7 +743,7 @@ export class RenderSymbol extends VisualEntity<void> {
     this.#valueController?.destroy();
     this.#imageStringController?.destroy();
     // Game attachments are borrowed. Detach them before Container.destroy()
-    // processes RenderSymbol-owned children.
+    // processes SymbolPlayer-owned children.
     this.gameUnderlayLayer.removeChildren();
     this.gameOverlayLayer.removeChildren();
     destroySpineSymbolAnimationCache(this);
@@ -879,7 +879,7 @@ export class RenderSymbol extends VisualEntity<void> {
     snapshot: SymbolStateSnapshot,
     loopCompleted: boolean,
     onceCompleted: boolean,
-  ): RenderSymbolUpdateResult {
+  ): SymbolPlayerUpdateResult {
     if (this.#cachedUpdateSnapshot !== snapshot) {
       this.#cachedUpdateSnapshot = snapshot;
       this.#cachedUpdateResults.length = 0;
@@ -1018,7 +1018,7 @@ function createReleasedSymbolAni(): SymbolAni {
   });
 }
 
-function normalizeRenderSymbolNormalSource(
+function normalizeSymbolPlayerNormalSource(
   texture: Texture | SymbolNormalTextureSource<Texture>,
 ): SymbolNormalTextureSource<Texture> {
   if (isNormalSource(texture)) {
@@ -1208,7 +1208,7 @@ function normalizeRenderPriority(value: number, symbol: string): number {
 function normalizeValueTextBindings(
   symbol: string,
   value: import("./types.js").SymbolValueTextBindings | undefined,
-  controller: RenderSymbolImageStringController | null,
+  controller: SymbolPlayerImageStringController | null,
 ): ReadonlyMap<string, (value: number) => string> {
   if (value === undefined) return new Map();
   if (typeof value !== "object" || value === null || Array.isArray(value)) {

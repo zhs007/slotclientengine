@@ -15,7 +15,7 @@ import {
   type SymbolValuePresentationResourceMap,
   type SymbolStatePreset,
   type SymbolSequenceStep,
-} from "@slotclientengine/rendercore";
+} from "@slotclientengine/rendercore/symbol/editor";
 import {
   SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
   createSymbolRenderPriorityMapFromManifest,

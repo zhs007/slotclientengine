@@ -13,13 +13,13 @@ export * from "./composite-animation.js";
 export * from "./sequence.js";
 export * from "./catalog.js";
 export * from "./standalone-catalog.js";
-export * from "./render-symbol.js";
+export * from "./symbol-player.js";
 export type {
   SymbolCloneOptions,
   SymbolNodeOptions,
-  SymbolRender,
-  SymbolRenderPartRef,
-} from "./symbol-render.js";
+  SymbolHandle,
+  SymbolHandlePartRef,
+} from "./symbol-handle.js";
 export * from "./symbol-group.js";
 export * from "./package.js";
 export * from "./materialize-package.js";

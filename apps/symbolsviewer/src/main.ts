@@ -1,10 +1,11 @@
 import { Application, Assets, Container, Text, type Texture } from "pixi.js";
 import {
-  createRenderSymbolValueController,
+  createSymbolPlayerValueController,
+  createSymbolPreviewPlayer,
   createSymbolAnimationCapabilityMapFromManifest,
   createSymbolCatalog,
   SymbolStateSequenceController,
-  type RenderSymbol,
+  type SymbolPreviewPlayer,
   type SymbolAssetInput,
   type SymbolAssetMap,
   type SymbolCatalog,
@@ -14,7 +15,7 @@ import {
   type SymbolStateId,
   type SymbolStatePreset,
   type SymbolTextureSet,
-} from "@slotclientengine/rendercore";
+} from "@slotclientengine/rendercore/symbol/editor";
 import { createGameConfig } from "@slotclientengine/logiccore";
 import {
   createStatefulSymbolAssetMapFromModules,
@@ -41,7 +42,7 @@ const MIN_SYMBOL_CELL_GAP = 24;
 
 interface RenderedViewerSymbol {
   readonly symbol: string;
-  readonly renderSymbol: RenderSymbol;
+  readonly symbolPlayer: SymbolPreviewPlayer;
   readonly label: Text;
   readonly cellWidth: number;
   readonly cellHeight: number;
@@ -161,10 +162,10 @@ async function bootstrap(): Promise<void> {
 
   const broadcastState = (state: SymbolStateId) => {
     for (const item of renderedSymbols) {
-      item.renderSymbol.requestState(
+      item.symbolPlayer.requestState(
         resolveViewerStateForSymbol(
           activeSymbolSet,
-          item.renderSymbol.symbol,
+          item.symbolPlayer.symbol,
           state,
         ),
       );
@@ -305,8 +306,8 @@ async function bootstrap(): Promise<void> {
   resetButton.addEventListener("click", () => {
     sequenceController.reset();
     for (const item of renderedSymbols) {
-      item.renderSymbol.setPresentationValue(null);
-      item.renderSymbol.reset();
+      item.symbolPlayer.setPresentationValue(null);
+      item.symbolPlayer.reset();
     }
     broadcastState(sequenceController.getCurrentStep().state);
     syncSequenceDom();
@@ -330,21 +331,21 @@ async function bootstrap(): Promise<void> {
     if (!rendered) throw new Error(`symbolsviewer cannot find ${symbol}.`);
     for (const item of renderedSymbols) {
       if (item !== rendered && activeValueSymbols.includes(item.symbol)) {
-        item.renderSymbol.setPresentationValue(null);
+        item.symbolPlayer.setPresentationValue(null);
       }
     }
-    rendered.renderSymbol.setPresentationValue(value);
+    rendered.symbolPlayer.setPresentationValue(value);
     updateStatusPanel();
   });
   clearValueButton.addEventListener("click", () => {
     for (const item of renderedSymbols) {
-      item.renderSymbol.setPresentationValue(null);
+      item.symbolPlayer.setPresentationValue(null);
     }
     updateStatusPanel();
   });
   defaultStateSelect.addEventListener("change", () => {
     for (const item of renderedSymbols) {
-      item.renderSymbol.setDefaultState(defaultStateSelect.value);
+      item.symbolPlayer.setDefaultState(defaultStateSelect.value);
     }
   });
 
@@ -439,12 +440,12 @@ async function bootstrap(): Promise<void> {
   function updateStatusPanel(): void {
     const currentStep = sequenceController.getCurrentStep();
     const lines = renderedSymbols.map((item) => {
-      const snapshot = item.renderSymbol.getStateSnapshot();
+      const snapshot = item.symbolPlayer.getStateSnapshot();
       const renderPriority = getSymbolRenderPriority(
         activeSymbolSet,
-        item.renderSymbol.symbol,
+        item.symbolPlayer.symbol,
       );
-      return `${item.renderSymbol.symbol}: ${snapshot.requestedState} -> ${snapshot.resolvedState} / ${snapshot.defaultState}${snapshot.pendingState ? ` / ${snapshot.pendingState}` : ""} / priority ${renderPriority}`;
+      return `${item.symbolPlayer.symbol}: ${snapshot.requestedState} -> ${snapshot.resolvedState} / ${snapshot.defaultState}${snapshot.pendingState ? ` / ${snapshot.pendingState}` : ""} / priority ${renderPriority}`;
     });
     statusPanel.replaceChildren(
       createStatusLine(`Set ${activeSymbolSet.label}`),
@@ -469,7 +470,7 @@ async function bootstrap(): Promise<void> {
       (state) => state.id === currentStep.state,
     );
     const results = renderedSymbols.map((item) =>
-      item.renderSymbol.update(deltaSeconds),
+      item.symbolPlayer.update(deltaSeconds),
     );
     const onceCompleted =
       currentState?.phase === "once" &&
@@ -603,17 +604,21 @@ function createRenderedSymbols(
 ): RenderedViewerSymbol[] {
   const entries = symbols.map((symbol) => {
     const resource = config.symbolValuePresentationResources?.[symbol];
-    const renderSymbol = catalog.createRenderSymbol(symbol, {
-      ...(resource
-        ? {
-            valueControllerFactory: (root) =>
-              createRenderSymbolValueController({ root, resource }),
-          }
-        : {}),
+    const symbolPlayer = createSymbolPreviewPlayer({
+      catalog,
+      symbol,
+      player: {
+        ...(resource
+          ? {
+              valueControllerFactory: (root) =>
+                createSymbolPlayerValueController({ root, resource }),
+            }
+          : {}),
+      },
     });
-    const maxTextureSize = getRenderSymbolMaxTextureSize(renderSymbol);
+    const maxTextureSize = getSymbolPlayerMaxTextureSize(symbolPlayer);
     const scale = getSymbolScale(config, symbol);
-    return { symbol, renderSymbol, maxTextureSize, scale };
+    return { symbol, symbolPlayer, maxTextureSize, scale };
   });
   const maxScaledTextureSize = Math.max(
     1,
@@ -626,7 +631,7 @@ function createRenderedSymbols(
     (STAGE_HEIGHT - STAGE_TOP_PADDING - STAGE_BOTTOM_PADDING) / rows;
 
   return entries.map(
-    ({ symbol, renderSymbol, maxTextureSize, scale }, index) => {
+    ({ symbol, symbolPlayer, maxTextureSize, scale }, index) => {
       const row = Math.floor(index / columns);
       const column = index % columns;
       const rowLength = Math.min(columns, symbols.length - row * columns);
@@ -634,8 +639,8 @@ function createRenderedSymbols(
       const x = rowStartX + cellWidth * column;
       const y = STAGE_TOP_PADDING + cellHeight * row + cellHeight / 2;
       const scaledSize = maxTextureSize * scale;
-      renderSymbol.position.set(x, y);
-      renderSymbol.scale.set(scale);
+      symbolPlayer.view.position.set(x, y);
+      symbolPlayer.view.scale.set(scale);
 
       const label = new Text({
         text: symbol,
@@ -648,12 +653,12 @@ function createRenderedSymbols(
       });
       label.anchor.set(0.5);
       label.position.set(
-        renderSymbol.x,
+        symbolPlayer.view.x,
         Math.min(STAGE_HEIGHT - 18, y + scaledSize / 2 + SYMBOL_LABEL_GAP),
       );
 
-      root.addChild(renderSymbol, label);
-      return { symbol, renderSymbol, label, cellWidth, cellHeight };
+      root.addChild(symbolPlayer.view, label);
+      return { symbol, symbolPlayer, label, cellWidth, cellHeight };
     },
   );
 }
@@ -709,14 +714,14 @@ function getSymbolColumnCount(
   );
 }
 
-function getRenderSymbolMaxTextureSize(renderSymbol: RenderSymbol): number {
+function getSymbolPlayerMaxTextureSize(
+  symbolPlayer: SymbolPreviewPlayer,
+): number {
   return Math.max(
     1,
-    ...renderSymbol
-      .getLayerSprites()
-      .map((layer) =>
-        Math.max(layer.texture.width || 1, layer.texture.height || 1),
-      ),
+    ...symbolPlayer
+      .getLayerTextures()
+      .map((texture) => Math.max(texture.width || 1, texture.height || 1)),
   );
 }
 
@@ -851,7 +856,7 @@ function destroyRenderedSymbols(
   renderedSymbols: readonly RenderedViewerSymbol[],
 ): void {
   for (const item of renderedSymbols) {
-    item.renderSymbol.destroy({ children: true });
+    item.symbolPlayer.destroy();
     item.label.destroy();
   }
 }

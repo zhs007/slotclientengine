@@ -14,7 +14,7 @@ import {
   type LogicGameConfig,
 } from "@slotclientengine/logiccore";
 import { Assets, Cache, type Texture } from "pixi.js";
-import { createRenderSymbolValueController } from "../symbol-value-presentation/render-symbol-value-controller.js";
+import { createSymbolPlayerValueController } from "../symbol-value-presentation/symbol-player-value-controller.js";
 import { createSymbolValuePresentationResourcesFromManifest } from "../symbol-value-presentation/create-symbol-value-presenter.js";
 import type { SymbolValuePresentationResourceMap } from "../symbol-value-presentation/types.js";
 import type {
@@ -46,7 +46,7 @@ import { createSymbolManifestAnimationResolver } from "./vni-animation.js";
 import { createDefaultSymbolAnimationResolver } from "./animation-resolver.js";
 import { createSymbolCatalog, type SymbolCatalogModel } from "./catalog.js";
 import type {
-  RenderSymbolValueController,
+  SymbolPlayerValueController,
   SymbolValueTextBindingMap,
   SymbolValueTextBindings,
   SymbolAnimationResolver,
@@ -56,7 +56,7 @@ import type {
   SymbolStatePreset,
   SymbolTextureSet,
 } from "./types.js";
-import type { RenderSymbol } from "./render-symbol.js";
+import type { SymbolPlayer } from "./symbol-player.js";
 import {
   collectImageStringAssetPaths,
   parseImageStringManifest,
@@ -626,6 +626,7 @@ export async function createSymbolPackageResourceFromResolvedFiles(options: {
         (path) => [path, files.get(path)!.slice()] as const,
       ),
     );
+    let catalogPromise: Promise<SymbolCatalogModel> | null = null;
     const resource: SymbolPackageResource = {
       packageManifest,
       rawGameConfig,
@@ -648,17 +649,20 @@ export async function createSymbolPackageResourceFromResolvedFiles(options: {
             "symbol package resource was created without loaded textures.",
           );
         }
-        return createSymbolCatalog({
-          gameConfig,
-          assets: assetMap,
-          symbolRenderPriorities,
-          statePreset,
-          animationResolver,
-          symbolAnimationCapabilities: animationCapabilities,
-          symbolImageStringControllerFactories:
-            createSymbolImageStringControllerFactories(imageStringResources),
-          texturePolicy: { requiredStateTextures: [] },
-        });
+        catalogPromise ??= Promise.resolve(
+          createSymbolCatalog({
+            gameConfig,
+            assets: assetMap,
+            symbolRenderPriorities,
+            statePreset,
+            animationResolver,
+            symbolAnimationCapabilities: animationCapabilities,
+            symbolImageStringControllerFactories:
+              createSymbolImageStringControllerFactories(imageStringResources),
+            texturePolicy: { requiredStateTextures: [] },
+          }),
+        );
+        return catalogPromise;
       },
       destroy(): void {
         if (destroyed) return;
@@ -713,11 +717,11 @@ function unloadCachedPackageTextures(textureUrls: readonly string[]): void {
 export function createSymbolPackageValueControllerFactory(
   resource: SymbolPackageResource,
   symbol: string,
-): ((root: RenderSymbol) => RenderSymbolValueController) | undefined {
+): ((root: SymbolPlayer) => SymbolPlayerValueController) | undefined {
   const presentation = resource.valuePresentationResources[symbol];
   if (!presentation) return undefined;
   return (root) =>
-    createRenderSymbolValueController({ root, resource: presentation });
+    createSymbolPlayerValueController({ root, resource: presentation });
 }
 
 export async function createSymbolPackageReelRegistry(
@@ -812,9 +816,9 @@ export function createSymbolPackageReelRegistryFromCatalog(
         ? createRollingValueVisual({ resource: presentation, value })
         : null;
     },
-    createRenderSymbolByCode(code: number): RenderSymbol {
+    createSymbolPlayerByCode(code: number): SymbolPlayer {
       const entry = requireEntry(byCode.get(code), `code ${code}`);
-      return catalog.createRenderSymbol(entry.symbol, {
+      return catalog.createSymbolPlayer(entry.symbol, {
         valueControllerFactory: createSymbolPackageValueControllerFactory(
           resource,
           entry.symbol,

@@ -3,7 +3,7 @@ import type {
   GameConfigPaytableEntry,
   LogicGameConfig,
 } from "@slotclientengine/logiccore";
-import type { RenderSymbol } from "./render-symbol.js";
+import type { SymbolPlayer } from "./symbol-player.js";
 import type { CloneableRenderObject } from "../presentation/render-object.js";
 import type { SymbolManifestAnimationPlaybackSpec } from "./manifest.js";
 
@@ -129,7 +129,7 @@ export type SymbolAnimationResolver = (
   context: SymbolAnimationContext,
 ) => SymbolAni;
 
-export interface RenderSymbolUpdateResult {
+export interface SymbolPlayerUpdateResult {
   readonly requestedState: SymbolStateId;
   readonly resolvedState: SymbolStateId;
   readonly loopCompleted: boolean;
@@ -137,7 +137,7 @@ export interface RenderSymbolUpdateResult {
   readonly stateChanged: boolean;
 }
 
-export interface RenderSymbolValueController {
+export interface SymbolPlayerValueController {
   validateValue?(value: number | null): void;
   setValue(value: number | null): void;
   getValue(): number | null;
@@ -156,7 +156,7 @@ export interface RenderSymbolValueController {
   destroy(): void;
 }
 
-export interface RenderSymbolImageStringController {
+export interface SymbolPlayerImageStringController {
   getNodeNames(): readonly string[];
   validateTexts?(
     values: readonly Readonly<{ name: string; text: string }>[],
@@ -181,7 +181,7 @@ export type SymbolValueTextBindingMap = Readonly<
   Record<string, SymbolValueTextBindings>
 >;
 
-export interface RenderSymbolOptions {
+export interface SymbolPlayerOptions {
   readonly definition: SymbolDefinition;
   readonly texture: Texture | SymbolNormalTextureSource<Texture>;
   readonly stateTextures?: Readonly<Partial<Record<SymbolStateId, Texture>>>;
@@ -191,11 +191,11 @@ export interface RenderSymbolOptions {
   readonly landingAppearEnabled?: boolean;
   readonly animationCapabilities?: readonly SymbolStateId[];
   readonly valueControllerFactory?: (
-    root: RenderSymbol,
-  ) => RenderSymbolValueController;
+    root: SymbolPlayer,
+  ) => SymbolPlayerValueController;
   readonly imageStringControllerFactory?: (
-    root: RenderSymbol,
-  ) => RenderSymbolImageStringController;
+    root: SymbolPlayer,
+  ) => SymbolPlayerImageStringController;
   readonly valueTextBindings?: SymbolValueTextBindings;
 }
 
@@ -268,7 +268,7 @@ export interface CreateSymbolCatalogOptions {
     Record<string, readonly SymbolStateId[]>
   >;
   readonly symbolImageStringControllerFactories?: Readonly<
-    Record<string, (root: RenderSymbol) => RenderSymbolImageStringController>
+    Record<string, (root: SymbolPlayer) => SymbolPlayerImageStringController>
   >;
 }
 
@@ -285,17 +285,17 @@ export interface CreateStandaloneSymbolCatalogOptions {
   >;
 }
 
-export interface CreateCatalogRenderSymbolOptions {
+export interface CreateCatalogSymbolPlayerOptions {
   readonly texture?: Texture | SymbolNormalTextureSource<Texture>;
   readonly stateTextures?: Readonly<Partial<Record<SymbolStateId, Texture>>>;
   readonly animationResolver?: SymbolAnimationResolver;
   readonly renderPriority?: number;
   readonly valueControllerFactory?: (
-    root: RenderSymbol,
-  ) => RenderSymbolValueController;
+    root: SymbolPlayer,
+  ) => SymbolPlayerValueController;
   readonly imageStringControllerFactory?: (
-    root: RenderSymbol,
-  ) => RenderSymbolImageStringController;
+    root: SymbolPlayer,
+  ) => SymbolPlayerImageStringController;
   readonly valueTextBindings?: SymbolValueTextBindings;
 }
 
@@ -341,10 +341,10 @@ export interface SymbolCatalog {
   getAsset(symbol: string): Texture | string;
   getTextureSet(symbol: string): SymbolTextureSet;
   getNormalTextureSource(symbol: string): SymbolNormalTextureSource;
-  createRenderSymbol(
+  createSymbolPlayer(
     symbol: string,
-    options?: CreateCatalogRenderSymbolOptions,
-  ): RenderSymbol;
+    options?: CreateCatalogSymbolPlayerOptions,
+  ): SymbolPlayer;
 }
 
 export interface StandaloneSymbolCatalog extends SymbolCatalog {}

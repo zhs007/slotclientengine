@@ -1,4 +1,4 @@
-import type { SymbolGroup, SymbolRender } from "../symbol/index.js";
+import type { SymbolGroup, SymbolHandle } from "../symbol/index.js";
 import { ReelError } from "./errors.js";
 import type {
   CellRollOptions,
@@ -47,7 +47,7 @@ export interface SpinningCell {
   land(
     target: CellRollTarget,
     options?: CellRollOptions,
-  ): Promise<SymbolRender>;
+  ): Promise<SymbolHandle>;
   cancel(): void;
 }
 

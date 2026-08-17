@@ -49,11 +49,13 @@ export type {
   SceneLayoutPoint,
   SceneLayoutPointSelector,
   RenderAlignment,
-  SymbolCellBounds,
-  SymbolGroup,
   RenderObjectLayer,
   RenderObjectLayerAddAtOptions,
 } from "@slotclientengine/rendercore";
+export type {
+  SymbolCellBounds,
+  SymbolGroup,
+} from "@slotclientengine/rendercore/symbol/core";
 export type {
   SlotOperationPlanV2,
   SlotOperationSource,

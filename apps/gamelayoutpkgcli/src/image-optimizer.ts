@@ -8,7 +8,7 @@ import {
   canonicalExtensionOfEditorAssetKey,
   editorAssetKeyCollisionToken,
 } from "@slotclientengine/editorresource";
-import { inspectSymbolSpineAtlas } from "@slotclientengine/rendercore/symbol";
+import { inspectSymbolSpineAtlas } from "@slotclientengine/rendercore/symbol/data";
 import type {
   CwebpRunner,
   ImageOptimizationResult,

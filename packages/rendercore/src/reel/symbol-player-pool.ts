@@ -1,18 +1,18 @@
 import { ReelError } from "./errors.js";
 import type {
-  RenderSymbolPool,
-  RenderSymbolPoolOptions,
-  RenderSymbolPoolStats,
+  SymbolPlayerPool,
+  SymbolPlayerPoolOptions,
+  SymbolPlayerPoolStats,
 } from "./types.js";
-import type { RenderSymbol } from "../symbol/index.js";
+import type { SymbolPlayer } from "../symbol/index.js";
 
 interface IdleSymbolEntry {
   readonly code: number;
-  readonly symbol: RenderSymbol;
+  readonly symbol: SymbolPlayer;
   lastUsedSequence: number;
 }
 
-interface NormalizedRenderSymbolPoolOptions {
+interface NormalizedSymbolPlayerPoolOptions {
   readonly targetIdlePerCode: number;
   readonly maxIdlePerCode: number;
   readonly maxIdleTotal: number;
@@ -22,20 +22,20 @@ const DEFAULT_TARGET_IDLE_PER_CODE = 5;
 const DEFAULT_MAX_IDLE_PER_CODE = 10;
 const DEFAULT_MAX_IDLE_TOTAL = 80;
 
-export class RenderSymbolPoolModel implements RenderSymbolPool {
-  readonly #options: NormalizedRenderSymbolPoolOptions;
+export class SymbolPlayerPoolModel implements SymbolPlayerPool {
+  readonly #options: NormalizedSymbolPlayerPoolOptions;
   readonly #idleByCode = new Map<number, IdleSymbolEntry[]>();
   #sequence = 0;
   #destroyed = false;
 
-  constructor(options: RenderSymbolPoolOptions = {}) {
-    this.#options = normalizeRenderSymbolPoolOptions(options);
+  constructor(options: SymbolPlayerPoolOptions = {}) {
+    this.#options = normalizeSymbolPlayerPoolOptions(options);
   }
 
   acquire(
     code: number,
-    create: () => RenderSymbol | null,
-  ): RenderSymbol | null {
+    create: () => SymbolPlayer | null,
+  ): SymbolPlayer | null {
     this.assertNotDestroyed();
     assertSymbolCode(code);
 
@@ -51,7 +51,7 @@ export class RenderSymbolPoolModel implements RenderSymbolPool {
     return create();
   }
 
-  release(code: number, symbol: RenderSymbol): void {
+  release(code: number, symbol: SymbolPlayer): void {
     this.assertNotDestroyed();
     assertSymbolCode(code);
     if (symbol.code !== code) {
@@ -108,7 +108,7 @@ export class RenderSymbolPoolModel implements RenderSymbolPool {
     this.#idleByCode.clear();
   }
 
-  getStats(): RenderSymbolPoolStats {
+  getStats(): SymbolPlayerPoolStats {
     const idlePerCode: Record<number, number> = {};
     for (const [code, bucket] of this.#idleByCode.entries()) {
       idlePerCode[code] = bucket.length;
@@ -180,23 +180,23 @@ export class RenderSymbolPoolModel implements RenderSymbolPool {
 
   private assertNotDestroyed(): void {
     if (this.#destroyed) {
-      throw new ReelError("RenderSymbolPool was destroyed.");
+      throw new ReelError("SymbolPlayerPool was destroyed.");
     }
   }
 }
 
-export function createRenderSymbolPool(
-  options: RenderSymbolPoolOptions | undefined,
-): RenderSymbolPool | null {
+export function createSymbolPlayerPool(
+  options: SymbolPlayerPoolOptions | undefined,
+): SymbolPlayerPool | null {
   if (!options?.enabled) {
     return null;
   }
-  return new RenderSymbolPoolModel(options);
+  return new SymbolPlayerPoolModel(options);
 }
 
-function normalizeRenderSymbolPoolOptions(
-  options: RenderSymbolPoolOptions,
-): NormalizedRenderSymbolPoolOptions {
+function normalizeSymbolPlayerPoolOptions(
+  options: SymbolPlayerPoolOptions,
+): NormalizedSymbolPlayerPoolOptions {
   const targetIdlePerCode =
     options.targetIdlePerCode ?? DEFAULT_TARGET_IDLE_PER_CODE;
   const maxIdlePerCode = options.maxIdlePerCode ?? DEFAULT_MAX_IDLE_PER_CODE;

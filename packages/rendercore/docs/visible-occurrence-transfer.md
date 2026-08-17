@@ -64,7 +64,7 @@ await pending; // rejects
 const occurrence = runtime.getMainReelVisibleOccurrence(2, 1);
 ```
 
-返回 `VisibleOccurrenceHandle`，不暴露 Pixi `Container`、`RenderSymbol`、raw zIndex 或 destroy 权限。
+返回 `VisibleOccurrenceHandle`，不暴露 Pixi `Container`、`SymbolPlayer`、raw zIndex 或 destroy 权限。
 
 ### 状态快照
 

@@ -27,16 +27,16 @@ import type {
 } from "./types.js";
 import type { LogicReels } from "@slotclientengine/logiccore";
 import type {
-  RenderSymbol,
+  SymbolPlayer,
   SymbolStateId,
   SymbolStatePlaybackOptions,
   SymbolStateTransitionMode,
 } from "../symbol/index.js";
 import {
-  createEmptySymbolRender,
-  type EmptySymbolRenderSource,
-  type SymbolRender,
-} from "../symbol/symbol-render.js";
+  createEmptySymbolHandle,
+  type EmptySymbolHandleSource,
+  type SymbolHandle,
+} from "../symbol/symbol-handle.js";
 
 interface ReelSlot {
   readonly windowY: number;
@@ -52,7 +52,7 @@ interface ReelSlot {
   rollingValueTierIndex: number | null;
   code: number | null;
   kind: ReelSymbolKind | null;
-  symbol: RenderSymbol | null;
+  symbol: SymbolPlayer | null;
   renderPriority: number;
 }
 
@@ -534,22 +534,22 @@ export class RenderReel extends Container {
     }
   }
 
-  createVisibleEmptySymbolRender(
+  createVisibleEmptySymbolHandle(
     windowY: number,
-    source: Omit<EmptySymbolRenderSource, "view" | "owned">,
-  ): SymbolRender {
+    source: Omit<EmptySymbolHandleSource, "view" | "owned">,
+  ): SymbolHandle {
     const slot = this.getVisibleSlot(windowY);
     if (slot.symbol || slot.kind === "textured" || (slot.code ?? -1) !== -1)
       throw new ReelError(
-        `Cannot create empty SymbolRender for occupied reel ${this.xIndex}, y ${windowY}.`,
+        `Cannot create empty SymbolHandle for occupied reel ${this.xIndex}, y ${windowY}.`,
       );
-    return createEmptySymbolRender({
+    return createEmptySymbolHandle({
       view: slot.emptySymbolLayer,
       owned: false,
       assertUsable: () => {
         source.assertUsable();
         if (slot.symbol || slot.kind === "textured" || (slot.code ?? -1) !== -1)
-          throw new ReelError("SymbolRender is stale.");
+          throw new ReelError("SymbolHandle is stale.");
       },
       ...(source.getPosition ? { getPosition: source.getPosition } : {}),
       ...(source.getAnchor ? { getAnchor: source.getAnchor } : {}),
@@ -845,7 +845,7 @@ export class RenderReel extends Container {
   private getVisiblePlayableSymbol(
     windowY: number,
     state: SymbolStateId,
-  ): RenderSymbol {
+  ): SymbolPlayer {
     const slot = this.getVisibleSlot(windowY);
     if (slot.kind === "empty" || !slot.symbol) {
       throw new ReelError(
@@ -983,7 +983,7 @@ export class RenderReel extends Container {
           get kind(): ReelSymbolKind {
             return slot.kind ?? "empty";
           },
-          get symbol(): RenderSymbol | null {
+          get symbol(): SymbolPlayer | null {
             return slot.symbol;
           },
           get renderPriority(): number {
@@ -1318,12 +1318,12 @@ export class RenderReel extends Container {
       slot.renderPriority * this.#slotRenderOrderStride + slot.renderOrder;
   }
 
-  private acquireTexturedSymbol(code: number): RenderSymbol {
+  private acquireTexturedSymbol(code: number): SymbolPlayer {
     const symbol = this.#symbolPool
       ? this.#symbolPool.acquire(code, () =>
-          this.#registry.createRenderSymbolByCode(code),
+          this.#registry.createSymbolPlayerByCode(code),
         )
-      : this.#registry.createRenderSymbolByCode(code);
+      : this.#registry.createSymbolPlayerByCode(code);
     if (!symbol) {
       throw new ReelError(`Textured symbol code ${code} created no symbol.`);
     }

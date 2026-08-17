@@ -3,7 +3,7 @@ import { Assets, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
 import { decodeEditorAssetsMap } from "@slotclientengine/editorresource";
 import { parsePopupManifest } from "@slotclientengine/rendercore/popup/editor";
-import { parseSymbolPackageManifest } from "@slotclientengine/rendercore/symbol";
+import { parseSymbolPackageManifest } from "@slotclientengine/rendercore/symbol/data";
 import { materializeInitialSceneLayoutManifest } from "@slotclientengine/rendercore/scene-layout";
 import {
   exportLayoutZip,

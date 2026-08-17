@@ -1,16 +1,16 @@
 import { Sprite, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
 import {
-  RenderSymbol,
+  SymbolPlayer,
   createDefaultSymbolStatePreset,
   createSymbolDefinitionFromPreset,
 } from "../../src/symbol/index.js";
-import { RenderSymbolPoolModel } from "../../src/reel/index.js";
+import { SymbolPlayerPoolModel } from "../../src/reel/index.js";
 import { createTestSymbolAnimationResolver } from "./helpers.js";
 
-describe("RenderSymbolPool", () => {
+describe("SymbolPlayerPool", () => {
   it("reuses symbols only within the same code bucket", () => {
-    const pool = new RenderSymbolPoolModel({
+    const pool = new SymbolPlayerPoolModel({
       targetIdlePerCode: 2,
       maxIdlePerCode: 4,
       maxIdleTotal: 10,
@@ -26,7 +26,7 @@ describe("RenderSymbolPool", () => {
   });
 
   it("trims a code bucket from maxIdlePerCode back to targetIdlePerCode", () => {
-    const pool = new RenderSymbolPoolModel({
+    const pool = new SymbolPlayerPoolModel({
       targetIdlePerCode: 2,
       maxIdlePerCode: 3,
       maxIdleTotal: 10,
@@ -49,7 +49,7 @@ describe("RenderSymbolPool", () => {
   });
 
   it("trims the global idle pool by oldest release first", () => {
-    const pool = new RenderSymbolPoolModel({
+    const pool = new SymbolPlayerPoolModel({
       targetIdlePerCode: 10,
       maxIdlePerCode: 10,
       maxIdleTotal: 3,
@@ -75,7 +75,7 @@ describe("RenderSymbolPool", () => {
   });
 
   it("cleans display, state and animation residue before reuse", () => {
-    const pool = new RenderSymbolPoolModel({
+    const pool = new SymbolPlayerPoolModel({
       targetIdlePerCode: 2,
       maxIdlePerCode: 4,
       maxIdleTotal: 10,
@@ -112,7 +112,7 @@ describe("RenderSymbolPool", () => {
   });
 
   it("destroys all idle symbols when the pool is destroyed", () => {
-    const pool = new RenderSymbolPoolModel();
+    const pool = new SymbolPlayerPoolModel();
     const first = createSymbol(1, "A");
     const second = createSymbol(2, "B");
     const firstDestroy = vi.spyOn(first, "destroy");
@@ -129,24 +129,24 @@ describe("RenderSymbolPool", () => {
   });
 
   it("validates pool watermarks explicitly", () => {
-    expect(() => new RenderSymbolPoolModel({ targetIdlePerCode: -1 })).toThrow(
+    expect(() => new SymbolPlayerPoolModel({ targetIdlePerCode: -1 })).toThrow(
       /targetIdlePerCode/,
     );
     expect(
       () =>
-        new RenderSymbolPoolModel({
+        new SymbolPlayerPoolModel({
           targetIdlePerCode: 3,
           maxIdlePerCode: 2,
         }),
     ).toThrow(/maxIdlePerCode/);
-    expect(() => new RenderSymbolPoolModel({ maxIdleTotal: -1 })).toThrow(
+    expect(() => new SymbolPlayerPoolModel({ maxIdleTotal: -1 })).toThrow(
       /maxIdleTotal/,
     );
   });
 });
 
-function createSymbol(code: number, symbol: string): RenderSymbol {
-  const renderSymbol = new RenderSymbol({
+function createSymbol(code: number, symbol: string): SymbolPlayer {
+  const symbolPlayer = new SymbolPlayer({
     definition: createSymbolDefinitionFromPreset({
       code,
       symbol,
@@ -156,6 +156,6 @@ function createSymbol(code: number, symbol: string): RenderSymbol {
     texture: Texture.WHITE,
     animationResolver: createTestSymbolAnimationResolver(),
   });
-  renderSymbol.init();
-  return renderSymbol;
+  symbolPlayer.init();
+  return symbolPlayer;
 }

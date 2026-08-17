@@ -1,4 +1,4 @@
-import type { SymbolStateTexturePixels } from "@slotclientengine/rendercore/symbol";
+import type { SymbolStateTexturePixels } from "@slotclientengine/rendercore/symbol/editor";
 
 export const MAX_GENERATED_IMAGE_PIXELS = 16_777_216;
 

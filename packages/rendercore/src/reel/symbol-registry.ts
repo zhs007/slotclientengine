@@ -3,8 +3,8 @@ import type {
   LogicGameConfig,
 } from "@slotclientengine/logiccore";
 import type { Texture } from "pixi.js";
-import { RenderSymbol } from "../symbol/render-symbol.js";
-import { createRenderSymbolValueController } from "../symbol-value-presentation/render-symbol-value-controller.js";
+import { SymbolPlayer } from "../symbol/symbol-player.js";
+import { createSymbolPlayerValueController } from "../symbol-value-presentation/symbol-player-value-controller.js";
 import type { SymbolValuePresentationResourceMap } from "../symbol-value-presentation/types.js";
 import {
   createDefaultSymbolAnimationResolver,
@@ -269,7 +269,7 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
     return resource ? createRollingValueVisual({ resource, value }) : null;
   }
 
-  createRenderSymbolByCode(code: number): RenderSymbol | null {
+  createSymbolPlayerByCode(code: number): SymbolPlayer | null {
     const entry = this.getEntryByCode(code);
     if (entry.kind === "empty") {
       return null;
@@ -284,7 +284,7 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
     }
 
     const valueResource = this.#valuePresentationResources[entry.symbol];
-    const renderSymbol = new RenderSymbol({
+    const symbolPlayer = new SymbolPlayer({
       definition,
       texture: textureSet.normal,
       stateTextures: textureSet.states,
@@ -298,14 +298,14 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
         ? {}
         : {
             valueControllerFactory: (root) =>
-              createRenderSymbolValueController({
+              createSymbolPlayerValueController({
                 root,
                 resource: valueResource,
               }),
           }),
     });
-    renderSymbol.scale.set(textureSet.scale);
-    return renderSymbol;
+    symbolPlayer.scale.set(textureSet.scale);
+    return symbolPlayer;
   }
 
   private addEntry(

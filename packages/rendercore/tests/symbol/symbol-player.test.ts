@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createAppearSymbolAni,
   ManualSymbolAni,
-  RenderSymbol,
+  SymbolPlayer,
   SymbolAnimationError,
   createDefaultSymbolAnimationResolver,
   createDefaultSymbolStatePreset,
@@ -47,22 +47,22 @@ const createSizedTexture = (width: number, height: number) => {
   return texture;
 };
 
-describe("RenderSymbol", () => {
+describe("SymbolPlayer", () => {
   it("reuses snapshot and update results while the state is unchanged", () => {
-    const renderSymbol = new RenderSymbol({
+    const symbolPlayer = new SymbolPlayer({
       definition: createDefinition(),
       texture: Texture.WHITE,
       animationResolver: createTestDefaultSymbolAnimationResolver(),
     });
 
-    expect(renderSymbol.getStateSnapshot()).toBe(
-      renderSymbol.getStateSnapshot(),
+    expect(symbolPlayer.getStateSnapshot()).toBe(
+      symbolPlayer.getStateSnapshot(),
     );
-    expect(renderSymbol.update(0)).toBe(renderSymbol.update(0));
+    expect(symbolPlayer.update(0)).toBe(symbolPlayer.update(0));
   });
 
   it("can enter landing appear immediately from an active stable loop", () => {
-    const renderSymbol = new RenderSymbol({
+    const symbolPlayer = new SymbolPlayer({
       definition: createDefinition(),
       texture: Texture.WHITE,
       animationResolver: (context) =>
@@ -73,11 +73,11 @@ describe("RenderSymbol", () => {
         }),
       landingAppearEnabled: true,
     });
-    renderSymbol.requestState("dropdown", "immediate");
+    symbolPlayer.requestState("dropdown", "immediate");
 
-    expect(renderSymbol.requestLandingAppear("immediate")).toBe(true);
+    expect(symbolPlayer.requestLandingAppear("immediate")).toBe(true);
 
-    expect(renderSymbol.getStateSnapshot()).toMatchObject({
+    expect(symbolPlayer.getStateSnapshot()).toMatchObject({
       requestedState: "appear",
       resolvedState: "appear",
       pendingState: null,
@@ -85,23 +85,23 @@ describe("RenderSymbol", () => {
   });
 
   it("awaits entered and real once completion while update remains the time source", async () => {
-    const renderSymbol = new RenderSymbol({
+    const symbolPlayer = new SymbolPlayer({
       definition: createDefinition(),
       texture: Texture.WHITE,
       animationResolver: createTestDefaultSymbolAnimationResolver(),
     });
 
-    await renderSymbol.playState("spinBlur", {
+    await symbolPlayer.playState("spinBlur", {
       transitionMode: "immediate",
       completion: "entered",
     });
-    expect(renderSymbol.getStateSnapshot()).toMatchObject({
+    expect(symbolPlayer.getStateSnapshot()).toMatchObject({
       requestedState: "spinBlur",
       resolvedState: "normal",
     });
 
     let completed = false;
-    const playback = renderSymbol
+    const playback = symbolPlayer
       .playState("appear", {
         transitionMode: "immediate",
         completion: "once-complete",
@@ -109,12 +109,12 @@ describe("RenderSymbol", () => {
       .then(() => {
         completed = true;
       });
-    renderSymbol.update(0.41);
+    symbolPlayer.update(0.41);
     await Promise.resolve();
     expect(completed).toBe(false);
-    renderSymbol.update(0.02);
+    symbolPlayer.update(0.02);
     await playback;
-    expect(renderSymbol.getStateSnapshot()).toMatchObject({
+    expect(symbolPlayer.getStateSnapshot()).toMatchObject({
       requestedState: "normal",
       resolvedState: "normal",
     });
@@ -122,7 +122,7 @@ describe("RenderSymbol", () => {
 
   it("does not count an outgoing loop as the requested target loop", async () => {
     const preset = createDefaultSymbolStatePreset();
-    const renderSymbol = new RenderSymbol({
+    const symbolPlayer = new SymbolPlayer({
       definition: createSymbolDefinitionFromPreset({
         code: 1,
         symbol: "S00",
@@ -143,9 +143,9 @@ describe("RenderSymbol", () => {
           durationSeconds: 0.5,
         }),
     });
-    renderSymbol.requestState("dropdown", "immediate");
+    symbolPlayer.requestState("dropdown", "immediate");
     let completed = false;
-    const playback = renderSymbol
+    const playback = symbolPlayer
       .playState("loop2", {
         transitionMode: "boundary",
         completion: "next-loop-complete",
@@ -154,35 +154,35 @@ describe("RenderSymbol", () => {
         completed = true;
       });
 
-    renderSymbol.update(0.5);
+    symbolPlayer.update(0.5);
     await Promise.resolve();
-    expect(renderSymbol.getStateSnapshot().requestedState).toBe("loop2");
+    expect(symbolPlayer.getStateSnapshot().requestedState).toBe("loop2");
     expect(completed).toBe(false);
 
-    renderSymbol.update(0.5);
+    symbolPlayer.update(0.5);
     await playback;
     expect(completed).toBe(true);
   });
 
   it("rejects incompatible completion modes before changing state", () => {
-    const renderSymbol = new RenderSymbol({
+    const symbolPlayer = new SymbolPlayer({
       definition: createDefinition(),
       texture: Texture.WHITE,
       animationResolver: createTestDefaultSymbolAnimationResolver(),
     });
 
     expect(() =>
-      renderSymbol.playState("appear", {
+      symbolPlayer.playState("appear", {
         transitionMode: "immediate",
         completion: "next-loop-complete",
       }),
     ).toThrow(/expected "loop"/);
-    expect(renderSymbol.getStateSnapshot().requestedState).toBe("normal");
+    expect(symbolPlayer.getStateSnapshot().requestedState).toBe("normal");
   });
 
   it("rejects pending playback on abort, reset, pool release and destroy", async () => {
     const createSymbol = () =>
-      new RenderSymbol({
+      new SymbolPlayer({
         definition: createDefinition(),
         texture: Texture.WHITE,
         animationResolver: createTestDefaultSymbolAnimationResolver(),
@@ -229,22 +229,22 @@ describe("RenderSymbol", () => {
   });
 
   it("owns presentation values without a visual value controller and clears them on pool release", () => {
-    const renderSymbol = new RenderSymbol({
+    const symbolPlayer = new SymbolPlayer({
       definition: createDefinition(),
       texture: Texture.WHITE,
       animationResolver: createTestDefaultSymbolAnimationResolver(),
     });
 
-    expect(renderSymbol.getPresentationValue()).toBeNull();
-    renderSymbol.setPresentationValue(1);
-    expect(renderSymbol.getPresentationValue()).toBe(1);
+    expect(symbolPlayer.getPresentationValue()).toBeNull();
+    symbolPlayer.setPresentationValue(1);
+    expect(symbolPlayer.getPresentationValue()).toBe(1);
 
-    renderSymbol.reset();
-    expect(renderSymbol.getPresentationValue()).toBe(1);
+    symbolPlayer.reset();
+    expect(symbolPlayer.getPresentationValue()).toBe(1);
 
-    renderSymbol.resetForPoolRelease();
-    expect(renderSymbol.getPresentationValue()).toBeNull();
-    expect(() => renderSymbol.setPresentationValue(0)).toThrow(
+    symbolPlayer.resetForPoolRelease();
+    expect(symbolPlayer.getPresentationValue()).toBeNull();
+    expect(() => symbolPlayer.setPresentationValue(0)).toThrow(
       /positive safe integer or null/,
     );
   });
@@ -252,7 +252,7 @@ describe("RenderSymbol", () => {
   it("keeps an equivalent live animation timeline across semantic state changes", () => {
     let resets = 0;
     let destroys = 0;
-    const renderSymbol = new RenderSymbol({
+    const symbolPlayer = new SymbolPlayer({
       definition: createDefinition(),
       texture: Texture.WHITE,
       animationResolver: (context) => ({
@@ -274,87 +274,87 @@ describe("RenderSymbol", () => {
     });
 
     expect(resets).toBe(1);
-    renderSymbol.requestState("dropdown");
+    symbolPlayer.requestState("dropdown");
 
-    expect(renderSymbol.getStateSnapshot()).toMatchObject({
+    expect(symbolPlayer.getStateSnapshot()).toMatchObject({
       requestedState: "dropdown",
       resolvedState: "dropdown",
     });
     expect(resets).toBe(1);
     expect(destroys).toBe(1);
-    renderSymbol.returnToDefaultState();
-    expect(renderSymbol.getStateSnapshot()).toMatchObject({
+    symbolPlayer.returnToDefaultState();
+    expect(symbolPlayer.getStateSnapshot()).toMatchObject({
       requestedState: "normal",
       resolvedState: "normal",
     });
     expect(resets).toBe(1);
     expect(destroys).toBe(2);
-    renderSymbol.destroy();
+    symbolPlayer.destroy();
     expect(destroys).toBe(3);
   });
 
   it("keeps paytable data and reuses one main sprite texture across states", () => {
-    const renderSymbol = new RenderSymbol({
+    const symbolPlayer = new SymbolPlayer({
       definition: createDefinition(),
       texture: Texture.WHITE,
       animationResolver: createTestDefaultSymbolAnimationResolver(),
     });
 
-    const sprite = renderSymbol.getMainSprite();
-    expect(renderSymbol.code).toBe(1);
-    expect(renderSymbol.symbol).toBe("S00");
-    expect(renderSymbol.pays).toEqual([0, 2, 4]);
+    const sprite = symbolPlayer.getMainSprite();
+    expect(symbolPlayer.code).toBe(1);
+    expect(symbolPlayer.symbol).toBe("S00");
+    expect(symbolPlayer.pays).toEqual([0, 2, 4]);
     expect(sprite.texture).toBe(Texture.WHITE);
-    expect(renderSymbol.children).toEqual([
-      renderSymbol.underlayLayer,
-      renderSymbol.gameUnderlayLayer,
-      renderSymbol.baseLayer,
-      renderSymbol.stateSprite,
-      renderSymbol.overlayLayer,
-      renderSymbol.imageStringOverlayLayer,
-      renderSymbol.gameOverlayLayer,
+    expect(symbolPlayer.children).toEqual([
+      symbolPlayer.underlayLayer,
+      symbolPlayer.gameUnderlayLayer,
+      symbolPlayer.baseLayer,
+      symbolPlayer.stateSprite,
+      symbolPlayer.overlayLayer,
+      symbolPlayer.imageStringOverlayLayer,
+      symbolPlayer.gameOverlayLayer,
     ]);
 
-    renderSymbol.requestState("appear");
-    renderSymbol.update(0.2);
-    expect(renderSymbol.getMainSprite()).toBe(sprite);
+    symbolPlayer.requestState("appear");
+    symbolPlayer.update(0.2);
+    expect(symbolPlayer.getMainSprite()).toBe(sprite);
     expect(sprite.texture).toBe(Texture.WHITE);
 
-    renderSymbol.update(1);
-    renderSymbol.requestState("win");
-    renderSymbol.update(0.2);
-    expect(renderSymbol.getMainSprite()).toBe(sprite);
+    symbolPlayer.update(1);
+    symbolPlayer.requestState("win");
+    symbolPlayer.update(0.2);
+    expect(symbolPlayer.getMainSprite()).toBe(sprite);
     expect(sprite.texture).toBe(Texture.WHITE);
   });
 
   it("reports once completion as an edge event and returns to default", () => {
-    const renderSymbol = new RenderSymbol({
+    const symbolPlayer = new SymbolPlayer({
       definition: createDefinition(),
       texture: Texture.WHITE,
       animationResolver: createTestDefaultSymbolAnimationResolver(),
     });
 
-    renderSymbol.requestState("appear");
-    expect(renderSymbol.update(0.41).onceCompleted).toBe(false);
-    const completed = renderSymbol.update(0.02);
+    symbolPlayer.requestState("appear");
+    expect(symbolPlayer.update(0.41).onceCompleted).toBe(false);
+    const completed = symbolPlayer.update(0.02);
     expect(completed.onceCompleted).toBe(true);
     expect(completed.stateChanged).toBe(true);
-    expect(renderSymbol.getStateSnapshot()).toMatchObject({
+    expect(symbolPlayer.getStateSnapshot()).toMatchObject({
       requestedState: "normal",
       resolvedState: "normal",
     });
-    expect(renderSymbol.update(1).onceCompleted).toBe(false);
+    expect(symbolPlayer.update(1).onceCompleted).toBe(false);
   });
 
   it("holds terminal completion and can replay the same terminal state", async () => {
-    const renderSymbol = new RenderSymbol({
+    const symbolPlayer = new SymbolPlayer({
       definition: createDefinition(),
       texture: Texture.WHITE,
       animationResolver: createTestDefaultSymbolAnimationResolver(),
     });
     let completionCount = 0;
     const play = () =>
-      renderSymbol.playTerminalState(
+      symbolPlayer.playTerminalState(
         "remove",
         { transitionMode: "immediate", completion: "once-complete" },
         () => {
@@ -363,16 +363,16 @@ describe("RenderSymbol", () => {
       );
 
     const first = play();
-    renderSymbol.update(0.59);
+    symbolPlayer.update(0.59);
     await first;
-    expect(renderSymbol.getStateSnapshot()).toMatchObject({
+    expect(symbolPlayer.getStateSnapshot()).toMatchObject({
       requestedState: "remove",
       resolvedState: "remove",
     });
 
     const replay = play();
-    expect(renderSymbol.update(0.57).onceCompleted).toBe(false);
-    expect(renderSymbol.update(0.02).onceCompleted).toBe(true);
+    expect(symbolPlayer.update(0.57).onceCompleted).toBe(false);
+    expect(symbolPlayer.update(0.02).onceCompleted).toBe(true);
     await replay;
     expect(completionCount).toBe(2);
   });
@@ -380,7 +380,7 @@ describe("RenderSymbol", () => {
   it("resolves spinBlur and disabled to normal while retaining requested state", () => {
     const spinBlurTexture = createDistinctTexture();
     const disabledTexture = createDistinctTexture();
-    const renderSymbol = new RenderSymbol({
+    const symbolPlayer = new SymbolPlayer({
       definition: createDefinition(),
       texture: Texture.WHITE,
       stateTextures: {
@@ -391,29 +391,29 @@ describe("RenderSymbol", () => {
       animationResolver: createTestDefaultSymbolAnimationResolver(),
     });
 
-    renderSymbol.requestState("spinBlur");
-    expect(renderSymbol.getStateSnapshot()).toMatchObject({
+    symbolPlayer.requestState("spinBlur");
+    expect(symbolPlayer.getStateSnapshot()).toMatchObject({
       requestedState: "spinBlur",
       resolvedState: "normal",
     });
-    expect(renderSymbol.sprite.texture).toBe(spinBlurTexture);
+    expect(symbolPlayer.sprite.texture).toBe(spinBlurTexture);
 
-    renderSymbol.requestState("disabled");
-    expect(renderSymbol.getStateSnapshot()).toMatchObject({
+    symbolPlayer.requestState("disabled");
+    expect(symbolPlayer.getStateSnapshot()).toMatchObject({
       requestedState: "disabled",
       resolvedState: "normal",
     });
-    expect(renderSymbol.sprite.texture).toBe(disabledTexture);
+    expect(symbolPlayer.sprite.texture).toBe(disabledTexture);
 
-    renderSymbol.requestState("normal");
-    expect(renderSymbol.sprite.texture).toBe(Texture.WHITE);
+    symbolPlayer.requestState("normal");
+    expect(symbolPlayer.sprite.texture).toBe(Texture.WHITE);
   });
 
   it("creates ordered layered sprites and swaps to stateSprite for generated states", () => {
     const bottom = createSizedTexture(24, 24);
     const top = createSizedTexture(24, 24);
     const spinBlurTexture = createSizedTexture(24, 24);
-    const renderSymbol = new RenderSymbol({
+    const symbolPlayer = new SymbolPlayer({
       definition: { ...createDefinition(), symbol: "SC" },
       texture: {
         kind: "layered",
@@ -428,61 +428,61 @@ describe("RenderSymbol", () => {
       animationResolver: createTestDefaultSymbolAnimationResolver(),
     });
 
-    expect(renderSymbol.texture).toBe(bottom);
-    expect(renderSymbol.getBaseLayer().children).toEqual([
-      renderSymbol.getLayerSprites()[0].sprite,
-      renderSymbol.getLayerSprites()[1].sprite,
+    expect(symbolPlayer.texture).toBe(bottom);
+    expect(symbolPlayer.getBaseLayer().children).toEqual([
+      symbolPlayer.getLayerSprites()[0].sprite,
+      symbolPlayer.getLayerSprites()[1].sprite,
     ]);
     expect(
-      renderSymbol.getLayerSprites().map((layer) => layer.texture),
+      symbolPlayer.getLayerSprites().map((layer) => layer.texture),
     ).toEqual([bottom, top]);
 
-    renderSymbol.requestState("spinBlur");
-    expect(renderSymbol.getBaseLayer().visible).toBe(false);
-    expect(renderSymbol.getStateSprite().visible).toBe(true);
-    expect(renderSymbol.getStateSprite().texture).toBe(spinBlurTexture);
+    symbolPlayer.requestState("spinBlur");
+    expect(symbolPlayer.getBaseLayer().visible).toBe(false);
+    expect(symbolPlayer.getStateSprite().visible).toBe(true);
+    expect(symbolPlayer.getStateSprite().texture).toBe(spinBlurTexture);
 
-    renderSymbol.requestState("normal");
-    expect(renderSymbol.getBaseLayer().visible).toBe(true);
-    expect(renderSymbol.getStateSprite().visible).toBe(false);
-    expect(renderSymbol.getLayerSprites()[0].sprite.texture).toBe(bottom);
-    expect(renderSymbol.getLayerSprites()[1].sprite.texture).toBe(top);
+    symbolPlayer.requestState("normal");
+    expect(symbolPlayer.getBaseLayer().visible).toBe(true);
+    expect(symbolPlayer.getStateSprite().visible).toBe(false);
+    expect(symbolPlayer.getLayerSprites()[0].sprite.texture).toBe(bottom);
+    expect(symbolPlayer.getLayerSprites()[1].sprite.texture).toBe(top);
   });
 
   it("creates transparent symbols with stable dimensions and no visible base pixels", () => {
-    const renderSymbol = new RenderSymbol({
+    const symbolPlayer = new SymbolPlayer({
       definition: { ...createDefinition(), symbol: "normal" },
       texture: { kind: "transparent", width: 172, height: 158 },
       animationResolver: createTestDefaultSymbolAnimationResolver(),
     });
 
-    expect(renderSymbol.texture).toBe(Texture.EMPTY);
-    expect(renderSymbol.normalSource).toEqual({
+    expect(symbolPlayer.texture).toBe(Texture.EMPTY);
+    expect(symbolPlayer.normalSource).toEqual({
       kind: "transparent",
       width: 172,
       height: 158,
     });
-    expect(renderSymbol.sprite.alpha).toBe(0);
-    expect(renderSymbol.sprite.width).toBe(172);
-    expect(renderSymbol.sprite.height).toBe(158);
+    expect(symbolPlayer.sprite.alpha).toBe(0);
+    expect(symbolPlayer.sprite.width).toBe(172);
+    expect(symbolPlayer.sprite.height).toBe(158);
 
-    renderSymbol.requestState("win");
-    renderSymbol.update(0.3);
-    renderSymbol.update(1);
+    symbolPlayer.requestState("win");
+    symbolPlayer.update(0.3);
+    symbolPlayer.update(1);
 
-    expect(renderSymbol.getStateSnapshot()).toMatchObject({
+    expect(symbolPlayer.getStateSnapshot()).toMatchObject({
       requestedState: "normal",
       resolvedState: "normal",
     });
-    expect(renderSymbol.sprite.alpha).toBe(0);
-    expect(renderSymbol.sprite.width).toBe(172);
-    expect(renderSymbol.sprite.height).toBe(158);
+    expect(symbolPlayer.sprite.alpha).toBe(0);
+    expect(symbolPlayer.sprite.width).toBe(172);
+    expect(symbolPlayer.sprite.height).toBe(158);
   });
 
   it("resets all layered sprite transforms and masks", () => {
     const staticTexture = createSizedTexture(24, 24);
     const keyframeTexture = createSizedTexture(24, 24);
-    const renderSymbol = new RenderSymbol({
+    const symbolPlayer = new SymbolPlayer({
       definition: { ...createDefinition(), symbol: "SC" },
       texture: {
         kind: "layered",
@@ -497,18 +497,18 @@ describe("RenderSymbol", () => {
       },
       animationResolver: createTestDefaultSymbolAnimationResolver(),
     });
-    const [, topLayer] = renderSymbol.getLayerSprites();
-    renderSymbol.underlayLayer.addChild(new Sprite(Texture.WHITE));
+    const [, topLayer] = symbolPlayer.getLayerSprites();
+    symbolPlayer.underlayLayer.addChild(new Sprite(Texture.WHITE));
     topLayer.sprite.texture = keyframeTexture;
     topLayer.sprite.position.set(4, 5);
     topLayer.sprite.scale.set(2);
     topLayer.sprite.rotation = 0.4;
     topLayer.sprite.alpha = 0.2;
-    topLayer.sprite.mask = renderSymbol.overlayLayer;
+    topLayer.sprite.mask = symbolPlayer.overlayLayer;
 
-    renderSymbol.reset();
+    symbolPlayer.reset();
 
-    expect(renderSymbol.underlayLayer.children.length).toBe(0);
+    expect(symbolPlayer.underlayLayer.children.length).toBe(0);
     expect(topLayer.keyframes).toEqual([staticTexture, keyframeTexture]);
     expect(topLayer.sprite.texture).toBe(staticTexture);
     expect(topLayer.sprite.position.x).toBe(0);
@@ -522,7 +522,7 @@ describe("RenderSymbol", () => {
   it("restores the configured default state texture after once animations complete", () => {
     const spinBlurTexture = createDistinctTexture();
     const disabledTexture = createDistinctTexture();
-    const renderSymbol = new RenderSymbol({
+    const symbolPlayer = new SymbolPlayer({
       definition: createDefinition(),
       texture: Texture.WHITE,
       stateTextures: {
@@ -532,25 +532,25 @@ describe("RenderSymbol", () => {
       animationResolver: createTestDefaultSymbolAnimationResolver(),
     });
 
-    renderSymbol.setDefaultState("spinBlur");
-    renderSymbol.requestState("appear");
-    expect(renderSymbol.sprite.texture).toBe(Texture.WHITE);
-    expect(renderSymbol.update(1).onceCompleted).toBe(true);
-    expect(renderSymbol.getStateSnapshot()).toMatchObject({
+    symbolPlayer.setDefaultState("spinBlur");
+    symbolPlayer.requestState("appear");
+    expect(symbolPlayer.sprite.texture).toBe(Texture.WHITE);
+    expect(symbolPlayer.update(1).onceCompleted).toBe(true);
+    expect(symbolPlayer.getStateSnapshot()).toMatchObject({
       requestedState: "spinBlur",
       resolvedState: "normal",
     });
-    expect(renderSymbol.sprite.texture).toBe(spinBlurTexture);
+    expect(symbolPlayer.sprite.texture).toBe(spinBlurTexture);
 
-    renderSymbol.setDefaultState("disabled");
-    renderSymbol.requestState("win");
-    expect(renderSymbol.sprite.texture).toBe(Texture.WHITE);
-    expect(renderSymbol.update(1).onceCompleted).toBe(true);
-    expect(renderSymbol.getStateSnapshot()).toMatchObject({
+    symbolPlayer.setDefaultState("disabled");
+    symbolPlayer.requestState("win");
+    expect(symbolPlayer.sprite.texture).toBe(Texture.WHITE);
+    expect(symbolPlayer.update(1).onceCompleted).toBe(true);
+    expect(symbolPlayer.getStateSnapshot()).toMatchObject({
       requestedState: "disabled",
       resolvedState: "normal",
     });
-    expect(renderSymbol.sprite.texture).toBe(disabledTexture);
+    expect(symbolPlayer.sprite.texture).toBe(disabledTexture);
   });
 
   it("allows custom resolver differences for the same state on different symbols", () => {
@@ -563,12 +563,12 @@ describe("RenderSymbol", () => {
         durationSeconds: 0.1,
       });
     };
-    const first = new RenderSymbol({
+    const first = new SymbolPlayer({
       definition: createDefinition(),
       texture: Texture.WHITE,
       animationResolver: resolver,
     });
-    const second = new RenderSymbol({
+    const second = new SymbolPlayer({
       definition: { ...createDefinition(), code: 5, symbol: "S10" },
       texture: Texture.WHITE,
       animationResolver: resolver,
@@ -597,56 +597,56 @@ describe("RenderSymbol", () => {
       ani.destroy = () => destroyed.push(context.resolvedState);
       return ani;
     };
-    const renderSymbol = new RenderSymbol({
+    const symbolPlayer = new SymbolPlayer({
       definition: createDefinition(),
       texture: Texture.WHITE,
       animationResolver: trackedResolver,
     });
 
-    renderSymbol.requestState("win");
+    symbolPlayer.requestState("win");
     expect(destroyed).toEqual(["normal"]);
-    renderSymbol.update(1);
+    symbolPlayer.update(1);
     expect(destroyed).toEqual(["normal", "win"]);
 
-    renderSymbol.destroy();
+    symbolPlayer.destroy();
 
     expect(destroyed).toEqual(["normal", "win", "normal"]);
   });
 
   it("cleans appear scale, win overlay and pending state on reset", () => {
-    const renderSymbol = new RenderSymbol({
+    const symbolPlayer = new SymbolPlayer({
       definition: createDefinition(),
       texture: Texture.WHITE,
       animationResolver: createTestDefaultSymbolAnimationResolver(),
     });
 
-    renderSymbol.requestState("appear");
-    renderSymbol.update(0.2);
-    expect(renderSymbol.sprite.scale.x).toBeGreaterThan(1);
-    renderSymbol.reset();
-    expect(renderSymbol.sprite.scale.x).toBe(1);
-    expect(renderSymbol.overlayLayer.children.length).toBe(0);
-    expect(renderSymbol.getStateSnapshot().pendingState).toBeNull();
+    symbolPlayer.requestState("appear");
+    symbolPlayer.update(0.2);
+    expect(symbolPlayer.sprite.scale.x).toBeGreaterThan(1);
+    symbolPlayer.reset();
+    expect(symbolPlayer.sprite.scale.x).toBe(1);
+    expect(symbolPlayer.overlayLayer.children.length).toBe(0);
+    expect(symbolPlayer.getStateSnapshot().pendingState).toBeNull();
 
-    renderSymbol.requestState("win");
-    renderSymbol.update(0.2);
-    expect(renderSymbol.overlayLayer.children.length).toBe(2);
-    expect(renderSymbol.sprite.mask ?? null).toBeNull();
-    expect(renderSymbol.overlayLayer.children[0]?.mask).toBe(
-      renderSymbol.overlayLayer.children[1],
+    symbolPlayer.requestState("win");
+    symbolPlayer.update(0.2);
+    expect(symbolPlayer.overlayLayer.children.length).toBe(2);
+    expect(symbolPlayer.sprite.mask ?? null).toBeNull();
+    expect(symbolPlayer.overlayLayer.children[0]?.mask).toBe(
+      symbolPlayer.overlayLayer.children[1],
     );
-    expect(renderSymbol.sprite.scale.x).toBeGreaterThan(1);
-    expect(renderSymbol.overlayLayer.scale.x).toBeGreaterThan(1);
-    renderSymbol.reset();
-    expect(renderSymbol.sprite.scale.x).toBe(1);
-    expect(renderSymbol.overlayLayer.scale.x).toBe(1);
-    expect(renderSymbol.overlayLayer.children.length).toBe(0);
+    expect(symbolPlayer.sprite.scale.x).toBeGreaterThan(1);
+    expect(symbolPlayer.overlayLayer.scale.x).toBeGreaterThan(1);
+    symbolPlayer.reset();
+    expect(symbolPlayer.sprite.scale.x).toBe(1);
+    expect(symbolPlayer.overlayLayer.scale.x).toBe(1);
+    expect(symbolPlayer.overlayLayer.children.length).toBe(0);
   });
 
   it("rejects resolver playback mismatches", () => {
     expect(
       () =>
-        new RenderSymbol({
+        new SymbolPlayer({
           definition: createDefinition(),
           texture: Texture.WHITE,
           animationResolver: (context) =>

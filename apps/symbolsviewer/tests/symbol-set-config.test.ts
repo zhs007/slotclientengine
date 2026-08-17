@@ -14,7 +14,7 @@ import {
 import {
   SpineSymbolAni,
   type SymbolAnimationContext,
-} from "@slotclientengine/rendercore";
+} from "@slotclientengine/rendercore/symbol/editor";
 
 afterEach(() => {
   vi.restoreAllMocks();

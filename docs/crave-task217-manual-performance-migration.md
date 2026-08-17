@@ -21,7 +21,7 @@
 - `packages/rendercore/src/symbol/state-machine.ts`
   - 缓存 immutable `SymbolStateSnapshot`，只有 requested/resolved/default/pending 真正变化时失效。
   - 相同 state request/default set 必须保持 no-op。
-- `packages/rendercore/src/symbol/render-symbol.ts`
+- `packages/rendercore/src/symbol/symbol-player.ts`
   - 用内部保存的 requested/resolved state 比较替代每帧 `${requested}->${resolved}` 字符串 key；不要向 state machine 增加 revision API。
   - 按 snapshot 和 loop/once completion 位缓存 immutable update result；状态切换 edge 仍返回本次真实结果。
   - value/reset 强制刷新通过 revision sentinel 触发，不能漏掉 ani 重建。
@@ -31,7 +31,7 @@
   - `play/reset/destroy` 使用 `events.length = 0`，不替换数组。
   - 无真实 Spine event 时返回共享 running/completed/loop-completed result；有 event 时仍复制并冻结独立数组，
     保持事件顺序与调用隔离。
-- `packages/rendercore/src/symbol-value-presentation/render-symbol-value-controller.ts`
+- `packages/rendercore/src/symbol-value-presentation/symbol-player-value-controller.ts`
   - 复用 active player 的四种 completed/loopCompleted 结果组合。
 
 ### Standard ReelSet

@@ -1,10 +1,10 @@
 import { assertValidDeltaSeconds } from "../symbol/ani.js";
 import type {
-  RenderSymbol,
+  SymbolPlayer,
   SymbolAni,
   SymbolAnimationContext,
   SymbolAniUpdateResult,
-  RenderSymbolValueController,
+  SymbolPlayerValueController,
 } from "../symbol/index.js";
 import type { SymbolManifestAnimationPlaybackSpec } from "../symbol/manifest.js";
 import { createOfficialSpinePlayer } from "../spine/runtime-player.js";
@@ -34,15 +34,15 @@ const ACTIVE_UPDATE_RESULTS = Object.freeze({
   completeLoop: Object.freeze({ completed: true, loopCompleted: true }),
 });
 
-export function createRenderSymbolValueController(options: {
-  readonly root: RenderSymbol;
+export function createSymbolPlayerValueController(options: {
+  readonly root: SymbolPlayer;
   readonly resource: SymbolValuePresentationResource;
-  readonly playerFactory?: RenderSymbolValuePlayerFactory;
-}): RenderSymbolValueController {
-  return new RenderSymbolValueControllerModel(options);
+  readonly playerFactory?: SymbolPlayerValuePlayerFactory;
+}): SymbolPlayerValueController {
+  return new SymbolPlayerValueControllerModel(options);
 }
 
-export type RenderSymbolValuePlayerFactory = (options: {
+export type SymbolPlayerValuePlayerFactory = (options: {
   readonly tier: SymbolValuePresentationResource["tiers"][number];
 }) => RendercoreSpineSlotPlayer;
 
@@ -62,10 +62,10 @@ function createValuePlayerKey(
   });
 }
 
-class RenderSymbolValueControllerModel implements RenderSymbolValueController {
-  readonly #root: RenderSymbol;
+class SymbolPlayerValueControllerModel implements SymbolPlayerValueController {
+  readonly #root: SymbolPlayer;
   readonly #resource: SymbolValuePresentationResource;
-  readonly #playerFactory: RenderSymbolValuePlayerFactory;
+  readonly #playerFactory: SymbolPlayerValuePlayerFactory;
   readonly #displayRoot = new Container();
   readonly #players = new Map<string, CachedValuePlayer>();
   #value: number | null = null;
@@ -84,9 +84,9 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
   #destroyed = false;
 
   constructor(options: {
-    readonly root: RenderSymbol;
+    readonly root: SymbolPlayer;
     readonly resource: SymbolValuePresentationResource;
-    readonly playerFactory?: RenderSymbolValuePlayerFactory;
+    readonly playerFactory?: SymbolPlayerValuePlayerFactory;
   }) {
     this.#root = options.root;
     this.#resource = options.resource;
@@ -537,13 +537,13 @@ class ActiveSpineValueAni implements SymbolAni {
   stateId: string;
   playback: SymbolAni["playback"];
   readonly continuityKey: string;
-  readonly #controller: RenderSymbolValueControllerModel;
+  readonly #controller: SymbolPlayerValueControllerModel;
   readonly #playbackSpec: SymbolManifestAnimationPlaybackSpec;
   #reportedComplete = false;
   #destroyed = false;
 
   constructor(options: {
-    readonly controller: RenderSymbolValueControllerModel;
+    readonly controller: SymbolPlayerValueControllerModel;
     readonly context: SymbolAnimationContext;
     readonly playback: SymbolManifestAnimationPlaybackSpec;
   }) {

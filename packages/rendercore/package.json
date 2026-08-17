@@ -13,10 +13,20 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./symbol": {
-      "source": "./src/symbol/index.ts",
-      "types": "./dist/symbol/index.d.ts",
-      "import": "./dist/symbol/index.js"
+    "./symbol/data": {
+      "source": "./src/symbol/data/index.ts",
+      "types": "./dist/symbol/data/index.d.ts",
+      "import": "./dist/symbol/data/index.js"
+    },
+    "./symbol/core": {
+      "source": "./src/symbol/core/index.ts",
+      "types": "./dist/symbol/core/index.d.ts",
+      "import": "./dist/symbol/core/index.js"
+    },
+    "./symbol/editor": {
+      "source": "./src/symbol/editor/index.ts",
+      "types": "./dist/symbol/editor/index.d.ts",
+      "import": "./dist/symbol/editor/index.js"
     },
     "./background": {
       "source": "./src/background/index.ts",
@@ -94,6 +104,7 @@
     "build": "pnpm run prepare:deps && tsc -p tsconfig.build.json",
     "benchmark:image-string": "node ./benchmarks/image-string-hot-path.mjs",
     "benchmark:popup": "node ./benchmarks/popup-runtime-hot-path.mjs",
+    "benchmark:symbol": "node --expose-gc ./benchmarks/symbol-runtime-hot-path.mjs",
     "generate:symbol-state-textures": "node ./scripts/generate-symbol-state-textures.mjs",
     "lint": "eslint .",
     "test": "vitest run --coverage",

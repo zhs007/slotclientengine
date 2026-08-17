@@ -4,7 +4,7 @@ import {
   generateSymbolStateTextureRgba,
   SYMBOL_STATE_TEXTURE_GENERATION_PRESET,
   type SymbolStateTexturePixels,
-} from "@slotclientengine/rendercore/symbol";
+} from "@slotclientengine/rendercore/symbol/editor";
 import type { ImageStringManifestV1 } from "@slotclientengine/rendercore/image-string/data";
 import {
   cloneSymbolEditorProject,

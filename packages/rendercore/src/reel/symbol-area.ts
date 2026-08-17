@@ -1,4 +1,4 @@
-import type { SymbolGroup, SymbolRender } from "../symbol/index.js";
+import type { SymbolGroup, SymbolHandle } from "../symbol/index.js";
 
 export interface SymbolPosition {
   readonly x: number;
@@ -16,7 +16,7 @@ export interface SymbolReplacement {
 }
 
 export interface SymbolArea {
-  getSymbol(position: SymbolPosition): SymbolRender;
+  getSymbol(position: SymbolPosition): SymbolHandle;
   getSymbols(positions: readonly SymbolPosition[]): SymbolGroup;
 }
 
@@ -24,6 +24,6 @@ export interface SymbolMutationArea extends SymbolArea {
   replaceSymbol(
     position: SymbolPosition,
     target: SymbolReplacementTarget,
-  ): SymbolRender;
+  ): SymbolHandle;
   replaceSymbols(replacements: readonly SymbolReplacement[]): SymbolGroup;
 }

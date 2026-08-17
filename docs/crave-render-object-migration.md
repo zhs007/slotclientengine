@@ -20,7 +20,7 @@ Nearwin1/2 按 Gamelayout exact name 创建对象，以及图标中奖字体替�
 import type {
   CloneableRenderObject,
   RenderObject,
-  SymbolRenderPartRef,
+  SymbolHandlePartRef,
 } from "@slotclientengine/rendercore";
 ```
 

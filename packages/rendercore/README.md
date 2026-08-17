@@ -13,9 +13,9 @@ resource，不要求内层第二份 map。无 map 的合法 legacy direct path �
 
 `RenderReel` 的每个 buffer slot 固定拥有一个轻量 rolling Sprite。reel 处于
 `starting | spinning | settling` 时只替换该 Sprite 的 registry texture、scale 和
-render priority；不会为滚动途中经过的 code 创建 `RenderSymbol`，snapshot 中此时
+render priority；不会为滚动途中经过的 code 创建 `SymbolPlayer`，snapshot 中此时
 `mode="rolling"`、`symbol=null`。Sprite 只是内部滚动视觉，不是可操作的
-`SymbolRender`。
+`SymbolHandle`。
 
 带 `valuePresentation` 的 rolling symbol 还会消费游戏注入的
 `presentationValueResolver`。每个 slot 按 `symbol code + value tier` 有界缓存轻量
@@ -25,27 +25,27 @@ occurrence，保证当前滚动值稳定且不会随 continuous `symbolY` 永久
 随机源；RenderCore 不猜业务值。
 
 有明确 target 的 start/settle 会在离屏位置为最终可见非空 occurrence 各准备一个完整
-`RenderSymbol`。相邻相同 code 仍是独立 occurrence，并分别保存 presentation value。
+`SymbolPlayer`。相邻相同 code 仍是独立 occurrence，并分别保存 presentation value。
 一旦显式传入 target scene，任何带 `valuePresentation` 的 target 都必须同时传入非 null 的
 target value；最终 rolling frame 和 settled occurrence 都只使用该 explicit value，不允许回退
 随机 resolver。
-完整 `RenderSymbol` 必须在离屏状态下先写入该最终 value，并在挂到可见树前再次核对；不允许
+完整 `SymbolPlayer` 必须在离屏状态下先写入该最终 value，并在挂到可见树前再次核对；不允许
 先显示 rolling/random value，再修改为最终 value。
 normal official Spine、VNI 或 value presentation 尚未 ready 时，reel 保持最终
 spinBlur frame 和 clip；全部 ready 后 landing 才挂载 prepared occurrence 并对外发布 stopped
 状态。准备失败会在改变原 stopped 画面前回滚；replacement、reset 和 destroy 会释放未提交
 owner。
 
-stopped 阶段只有实际可见行持有完整 `RenderSymbol`，上下 buffer 只保留隐藏的轻量 view，
+stopped 阶段只有实际可见行持有完整 `SymbolPlayer`，上下 buffer 只保留隐藏的轻量 view，
 所以 idle update 不会推进隐藏动画。既有 symbol pool 仍只服务 settled occurrence；rolling
 Sprite 不进入 pool。`RenderReelSlotSnapshot` 的 `mode`、`rollingVisual` 和
 `renderPriority` 用于底层诊断及 grid dimming/order，同一 rollingVisual identity 会跨帧复用。
 
-完整 `RenderSymbol` 内部按实际资源身份复用 runtime instance。普通图片只切稳定 Sprite 的
+完整 `SymbolPlayer` 内部按实际资源身份复用 runtime instance。普通图片只切稳定 Sprite 的
 texture/visibility；named ImgNumber 和 value ImgNumber 保持稳定 renderer，后者跨 value tier 时
 重绑已加载的 resource/profile、anchor、transform 和 slot，不按 tier 编号重建。official Spine
 按 skeleton/atlas/texture 缓存 player，VNI 延续 root-local cache；离开状态或回池只 reset、pause、
-detach，只有 `RenderSymbol.destroy()` 才销毁这些缓存。不同同时可见 occurrence 仍各自拥有独立
+detach，只有 `SymbolPlayer.destroy()` 才销毁这些缓存。不同同时可见 occurrence 仍各自拥有独立
 mutable player/renderer，不跨 Symbol 共享时间轴或文字状态。
 
 RenderCore相关游戏API按“渲染对象与原子动作 / 安全组合 / 玩法模板”分为三层；第三层默认属于gameframeworks或等价模板模块，
@@ -57,7 +57,7 @@ RenderCore相关游戏API按“渲染对象与原子动作 / 安全组合 / 玩�
 任务 202 增量提供 `SymbolMutationArea`、Reel/Cell active spin session，以及一次 await 的 occurrence transfer/drop。
 `CellSpin` 是后续新游戏的主实现；Crave/game002v2 仍使用 grid-cell 时，grid-cell 同步提供相同基础 mutation/transfer/drop
 能力，但不继续发展独有的高级接口。RenderCore 的所有 symbol area 与 spin 模型都约定 `-1` 是唯一空图标标记；其它 symbol code 必须为非负整数，
-`-1` 不进入 registry、轮带或 RenderSymbol pool。`getSymbol(pos)` 对空位返回内置轻量 `SymbolRender`（`code: -1`、`kind: "empty"`）：它不创建贴图或动画资源，但保留位置、anchor 和节点挂载能力；state、文字和非 null value 等依赖真实 symbol 资源的操作会显式失败。
+`-1` 不进入 registry、轮带或 SymbolPlayer pool。`getSymbol(pos)` 对空位返回内置轻量 `SymbolHandle`（`code: -1`、`kind: "empty"`）：它不创建贴图或动画资源，但保留位置、anchor 和节点挂载能力；state、文字和非 null value 等依赖真实 symbol 资源的操作会显式失败。
 
 ```ts
 const changed = mutations.replaceSymbol(pos, { code, value });
@@ -71,17 +71,17 @@ await cellSpin.dropOccurrences({ movements, values });
 ```
 
 `replaceSymbols()`、`SymbolGroup.setValues()/setStates()` 均先完整 preflight。session 中的 `overlay` 是稳定 cell/reel
-attachment；land Promise resolve 后统一通过 `getSymbol()` 取得 exact symbol（包括 `-1` Empty SymbolRender）。现有 game002v2 plan/drain/polling API
+attachment；land Promise resolve 后统一通过 `getSymbol()` 取得 exact symbol（包括 `-1` Empty SymbolHandle）。现有 game002v2 plan/drain/polling API
 保持兼容；新能力不继续扩展 plan surface。
 
 `SymbolArea.getSymbol({x,y})` 是 standard reel、legacy grid-cell 与新 `CellSpin`
-共同的实例级入口；没有全局 rendercore singleton。它返回简单的 `SymbolRender`，可直接
+共同的实例级入口；没有全局 rendercore singleton。它返回简单的 `SymbolHandle`，可直接
 `setState()` / `playState()`、读写 presentation value、`add/remove` 通用 `RenderObject`，以及
-创建独立 player/display identity 的 `clone()`。facade 捕获 exact symbol：尚未落地、leased、replacement/release 后的 stale 引用都会显式失败，不按相同坐标重绑；hole 返回 exact Empty SymbolRender，而不是失败。reel 内 symbol 是
+创建独立 player/display identity 的 `clone()`。facade 捕获 exact symbol：尚未落地、leased、replacement/release 后的 stale 引用都会显式失败，不按相同坐标重绑；hole 返回 exact Empty SymbolHandle，而不是失败。reel 内 symbol 是
 borrowed，不能 destroy；clone 是 owned `RenderObject`，由调用方 remove 后 destroy。
 
 `RenderObject` 是 Container-backed 的 opaque capability，不是 Pixi `Container` 子类，也不公开
-`parent/children/worldTransform`。`SymbolRender`、普通文字对象以及 symbol 的 value/text part 使用同一
+`parent/children/worldTransform`。`SymbolHandle`、普通文字对象以及 symbol 的 value/text part 使用同一
 `getAnchor()/clone()/transfer()` 组合；只有可复制对象暴露 `clone()`。例如：
 
 ```ts
@@ -123,7 +123,7 @@ attachment 入口。
 `getSymbol()`、`bottom|top|win` 安全图层和 `present(async context => ...)`。`getReelArea("main")` 只返回
 standard reel 的第一层 `ReelArea` façade，并额外公开最高优先级
 `area.spin.start/land/cancel`。游戏用普通 await 编排 idle/win loop；spin 内部中断当前 presentation并清理
-win layer，再调用默认或装配时注入的 `AreaSpinFunction`。游戏不持有 interruption signal。`SymbolRender.getPosition()`
+win layer，再调用默认或装配时注入的 `AreaSpinFunction`。游戏不持有 interruption signal。`SymbolHandle.getPosition()`
 只返回 area-local occurrence 中心；通用 `createTextRenderObject()` 可据此定位后挂入 win layer。
 
 Area、Scene Layout顶层和exact named node attachment统一使用增量兼容的`RenderObjectLayer`。既有
@@ -265,23 +265,22 @@ slot operation handler 只实现一个异步 `start(operation, context)`。业�
 
 ## Symbol API
 
-`@slotclientengine/rendercore/symbol` 同时提供 strict symbol-package v1 container parser、symbol-state-textures manifest v1/v2 parser 与 v1→v2 upgrader、game config/display set 交叉校验、direct/indirect exact resource closure，以及 browser bytes → texture/VNI/official Spine/value resource 的通用组装。package 加载后只暴露 canonical v2 symbol manifest；editor app 只处理 File/Blob/UI，不复制 migration 或 player。完整 ZIP 合同见 [`docs/symbol-package.md`](../../docs/symbol-package.md)。
+Symbols API 使用三个显式入口：`@slotclientengine/rendercore/symbol/data` 提供 strict manifest/package parser、upgrade 与闭包；`/core` 提供游戏 runtime resource、catalog、reel registry 和公开 `SymbolHandle`；`/editor` 叠加 mapped package、materialize、introspection、生成和 standalone preview wrapper。旧 `./symbol` 与 root symbol wildcard 已移除。完整 ZIP 合同见 [`docs/symbol-package.md`](../../docs/symbol-package.md)。
 
 主要入口：
 
 ```ts
 import {
-  RenderSymbol,
-  SymbolStateMachine,
-  SymbolStateSequenceController,
-  createDefaultSymbolAnimationResolver,
-  createDefaultSymbolStatePreset,
-  createSymbolManifestAnimationResolver,
-  createSymbolCatalog,
-} from "@slotclientengine/rendercore";
+  parseSymbolPackageManifest,
+  parseSymbolStateTextureManifest,
+} from "@slotclientengine/rendercore/symbol/data";
+import type {
+  SymbolHandle,
+  SymbolPackageResource,
+} from "@slotclientengine/rendercore/symbol/core";
 ```
 
-`SymbolDefinition` 保留 paytable 关联信息：`code`、`symbol`、`pays`。`RenderSymbol` 支持单图 symbol 和多层 symbol：单图会创建一个 layer sprite，多层会按 `0, 1, 2...` 顺序创建多个 layer sprite，`0` 在最下面。`getMainSprite()` 仍返回 layer `0` 以兼容旧代码；复杂动画应使用 `getLayerSprites()` 或 animation context 的 `layers`。
+游戏不构造或持有内部 `SymbolPlayer`；通过 `SymbolArea.getSymbol()`、replace、land 或 clone 取得 exact `SymbolHandle`。Symbols Editor 和独立 viewer 使用 `/editor` 的 `SymbolPreviewPlayer`，app 仍拥有 Application、canvas 与 ticker。
 
 ## 状态语义
 
@@ -347,9 +346,9 @@ layer index 必须从 `0` 开始连续，不能重复、缺层或为负数；已
 
 `getTextureSet(symbol)` 返回规范化后的 source；`getAsset(symbol)` 只用于旧单图 symbol，遇到 layered symbol 会抛错，避免把 layer `0` 伪装成普通图。
 
-`states` 可以提供 `spinBlur`、`disabled` 等状态贴图。`spinBlur` / `disabled` 可以在状态机语义上继续等价到 `normal`，但默认静态 ani 会按 `requestedState` 选择状态贴图；因此 snapshot 仍可显示 `spinBlur -> normal`，画面使用 `spinBlur` 贴图。多层 symbol 进入状态贴图时，`RenderSymbol` 会隐藏普通 layers，并用单张 `stateSprite` 展示合成后的状态图；回到 `normal`、`appear`、`win` 后恢复普通 layers。
+`states` 可以提供 `spinBlur`、`disabled` 等状态贴图。`spinBlur` / `disabled` 可以在状态机语义上继续等价到 `normal`，但默认静态 ani 会按 `requestedState` 选择状态贴图；因此 snapshot 仍可显示 `spinBlur -> normal`，画面使用 `spinBlur` 贴图。多层 symbol 进入状态贴图时，`SymbolPlayer` 会隐藏普通 layers，并用单张 `stateSprite` 展示合成后的状态图；回到 `normal`、`appear`、`win` 后恢复普通 layers。
 
-`texturePolicy.requiredStateTextures` 用于声明某些状态贴图必须存在。缺少必需贴图、状态贴图声明了未知 state，或 `createRenderSymbol()` 收到尚未加载的 URL 字符串时都会抛错，避免静默回退到普通图。
+`texturePolicy.requiredStateTextures` 用于声明某些状态贴图必须存在。缺少必需贴图、状态贴图声明了未知 state，或 `createSymbolPlayer()` 收到尚未加载的 URL 字符串时都会抛错，避免静默回退到普通图。
 
 ## Symbol Manifest
 
@@ -399,9 +398,9 @@ resolver context 同时包含 `requestedState` 和 `resolvedState`，所以调�
 - manifest `kind: "builtin"` 的 `appear`：单次放大弹回，结束后 scale 复位；需要显式正数 `durationSeconds`。
 - manifest `kind: "builtin"` 的 `win`：单次扫光 overlay，结束后清理 overlay；需要显式正数 `durationSeconds`。
 
-`createSymbolManifestAnimationResolver()` 会优先使用 manifest 声明的 animation，再回落到调用方传入的 fallback resolver。VNI animation 直接把 `VNIRuntime` 的 Pixi display tree 挂到当前 symbol 的 `overlayLayer` 中；runtime 不创建隐藏 canvas、canvas-to-texture、额外 renderer、`stageRect` viewport 或 mask。VNI root 按 project stage 中心对齐，project 的 stage background 不会作为 symbol 动画背景绘制。VNI 与 Spine 都把资源和 lifecycle 编排分离：normal/stable loop 使用循环 playback，once state 使用单次 playback，VNI stable/loop 在真实 range loop boundary 上报 `loopCompleted`。Spine animation 由 rendercore 的 Spine adapter 解析 atlas/skeleton/texture，并把 display tree 挂到同一个 `overlayLayer`，不由 app 侧直接 import Spine parser 或播放状态机；rendercore 只接受 Spine `4.3.x` skeleton，并使用锁定在 `4.3.x` 的官方 Pixi v8 runtime。3.8、4.2、未知版本、malformed skeleton 或 runtime major/minor 不匹配都会显式失败。composite 为每个 leaf 建立独立 player slot，按声明顺序挂到共享 underlay/overlay，并统一拥有 reset、完成 barrier 与 destroy。对 `normal.kind: "spine"` 的 symbol，如果 `appear` / `win` 没有 manifest animation，resolver 只退回该 symbol 自身 normal Spine 展示并按当前 once 状态完成，不退回通用 builtin/default 动画；manifest 中显式声明的 Spine animation name 仍必须真实存在且大小写完全一致。动画生命周期由 `RenderSymbol.update(deltaSeconds)` 推进。manifest Spine、active value Spine 与 VNI ani 都提供实际资源/playback 的 continuity key；状态名改变但 key 相同时，`RenderSymbol` 保留当前 player 和时间轴，不 reset/replay 等价动画。reset、value/tier 改变或 key 不同仍销毁旧 ani 并创建新 ani。
+`createSymbolManifestAnimationResolver()` 会优先使用 manifest 声明的 animation，再回落到调用方传入的 fallback resolver。VNI animation 直接把 `VNIRuntime` 的 Pixi display tree 挂到当前 symbol 的 `overlayLayer` 中；runtime 不创建隐藏 canvas、canvas-to-texture、额外 renderer、`stageRect` viewport 或 mask。VNI root 按 project stage 中心对齐，project 的 stage background 不会作为 symbol 动画背景绘制。VNI 与 Spine 都把资源和 lifecycle 编排分离：normal/stable loop 使用循环 playback，once state 使用单次 playback，VNI stable/loop 在真实 range loop boundary 上报 `loopCompleted`。Spine animation 由 rendercore 的 Spine adapter 解析 atlas/skeleton/texture，并把 display tree 挂到同一个 `overlayLayer`，不由 app 侧直接 import Spine parser 或播放状态机；rendercore 只接受 Spine `4.3.x` skeleton，并使用锁定在 `4.3.x` 的官方 Pixi v8 runtime。3.8、4.2、未知版本、malformed skeleton 或 runtime major/minor 不匹配都会显式失败。composite 为每个 leaf 建立独立 player slot，按声明顺序挂到共享 underlay/overlay，并统一拥有 reset、完成 barrier 与 destroy。对 `normal.kind: "spine"` 的 symbol，如果 `appear` / `win` 没有 manifest animation，resolver 只退回该 symbol 自身 normal Spine 展示并按当前 once 状态完成，不退回通用 builtin/default 动画；manifest 中显式声明的 Spine animation name 仍必须真实存在且大小写完全一致。动画生命周期由 `SymbolPlayer.update(deltaSeconds)` 推进。manifest Spine、active value Spine 与 VNI ani 都提供实际资源/playback 的 continuity key；状态名改变但 key 相同时，`SymbolPlayer` 保留当前 player 和时间轴，不 reset/replay 等价动画。reset、value/tier 改变或 key 不同仍销毁旧 ani 并创建新 ani。
 
-业务编排等待 symbol 状态时使用 `RenderSymbol.playState(state, options)`，reel 消费方使用 `playVisibleSymbolStates(positions, state, options)`。Promise 只表达完成边界，动画仍由宿主逐帧调用 `update(deltaSeconds)` 推进；`completion` 必须显式选择进入状态、once 完成或目标 loop 的下一次完整边界：
+业务编排等待 symbol 状态时使用 `SymbolPlayer.playState(state, options)`，reel 消费方使用 `playVisibleSymbolStates(positions, state, options)`。Promise 只表达完成边界，动画仍由宿主逐帧调用 `update(deltaSeconds)` 推进；`completion` 必须显式选择进入状态、once 完成或目标 loop 的下一次完整边界：
 
 ```ts
 await reelSet.playVisibleSymbolStates(positions, "win", {
@@ -496,10 +495,10 @@ catalog 只把 paytable 与资源 map 的交集加入 `displayableSymbols`。请
 
 ## Ticker
 
-`RenderSymbol` 不创建 Pixi `Application`，也不从磁盘加载图片。调用方负责加载 `Texture`，并在游戏主循环里显式推进：
+`SymbolPlayer` 不创建 Pixi `Application`，也不从磁盘加载图片。调用方负责加载 `Texture`，并在游戏主循环里显式推进：
 
 ```ts
-const symbol = catalog.createRenderSymbol("S00", { texture });
+const symbol = catalog.createSymbolPlayer("S00", { texture });
 stage.addChild(symbol);
 
 app.ticker.add((ticker) => {
@@ -581,14 +580,14 @@ import {
 
 `ReelSymbolRegistry` 把 `LogicGameConfig` 的 paytable、已加载 `Texture`、空图标配置和 symbol 状态贴图合并成可渲染 registry：
 
-- `texturedSymbols`：paytable 中有普通图且可创建 `RenderSymbol` 的 symbol。
+- `texturedSymbols`：paytable 中有普通图且可创建 `SymbolPlayer` 的 symbol。
 - `configuredEmptySymbols`：调用方显式配置为空的 symbol，例如 viewer 里的 `BN`。
 - `missingAssetEmptySymbols`：paytable 中缺少普通图的 symbol，按空 cell 处理。
 - `ignoredAssetsWithoutPaytable`：有图片但不在 paytable 的孤儿资产，不参与 reels 渲染。
 
-空图标会占据 cell 和 reel 位置，但 `createRenderSymbolByCode()` 返回 `null`，状态请求是 no-op。有普通图的 symbol 如果缺少 `texturePolicy.requiredStateTextures` 声明的状态贴图会直接抛错，不会静默回退到普通图。
+空图标会占据 cell 和 reel 位置，但 `createSymbolPlayerByCode()` 返回 `null`，状态请求是 no-op。有普通图的 symbol 如果缺少 `texturePolicy.requiredStateTextures` 声明的状态贴图会直接抛错，不会静默回退到普通图。
 
-cell 尺寸由当前参与 reels 渲染的非空普通图动态计算：单图使用普通 texture 尺寸，多层 symbol 使用 layer 共同尺寸；若配置了 `symbolScales`，则使用 `texture width/height * scale` 后的尺寸参与最大宽高计算。显式空图标、缺图空图标、孤儿图片和状态贴图都不参与尺寸计算。`RenderReel` 会把每个非空 symbol 放在 cell 中心，并在创建 `RenderSymbol` 时把对应 `scale` 应用到根容器。`symbolScales` 只能配置 paytable 中存在的 symbol，缩放系数必须是正数。`symbolRenderPriorities` 同样只能配置 paytable 中存在的 symbol，值必须是非负安全整数；普通 reel、reel set 和 grid-cell reel 都只用它调整 Pixi render order，所有值为 `0` 时保留默认层级。
+cell 尺寸由当前参与 reels 渲染的非空普通图动态计算：单图使用普通 texture 尺寸，多层 symbol 使用 layer 共同尺寸；若配置了 `symbolScales`，则使用 `texture width/height * scale` 后的尺寸参与最大宽高计算。显式空图标、缺图空图标、孤儿图片和状态贴图都不参与尺寸计算。`RenderReel` 会把每个非空 symbol 放在 cell 中心，并在创建 `SymbolPlayer` 时把对应 `scale` 应用到根容器。`symbolScales` 只能配置 paytable 中存在的 symbol，缩放系数必须是正数。`symbolRenderPriorities` 同样只能配置 paytable 中存在的 symbol，值必须是非负安全整数；普通 reel、reel set 和 grid-cell reel 都只用它调整 Pixi render order，所有值为 `0` 时保留默认层级。
 
 `createReelLayout()` 支持 `columnGap` 控制轴间距；`RenderReel` 只在 starting / spinning / settling 等非静止态裁切单轴内容，停止态会取消裁切，允许偏大的 symbol 自然超出格子外框。
 
@@ -646,7 +645,7 @@ reelSet.spin(plan, { targetVisibleScene: scene });
 
 - 旋转中，非空 symbol 请求 `spinBlur`。
 - 落点刷新后，可见非空 symbol 请求 `appear`。
-- `appear` 播放完成后，`RenderSymbol` 回到默认 `normal`。
+- `appear` 播放完成后，`SymbolPlayer` 回到默认 `normal`。
 
 ## Grid Cell Reel API
 
@@ -754,17 +753,17 @@ occurrence context 选择 number-weight table，rendercore 对 `(x,y,symbolY,cod
 uint32 rejection sampling 避免 modulo bias。空表、重复/非正 value 或 weight、总权重越界和非法随机值
 全部失败；helper 不选择业务表、不读取 server random，也不把抽样值写入 scene/轮带。
 
-grid-cell API 会 fail-fast 校验 scene 尺寸、final y 长度、order 重复/越界/缺失、offset 矩阵尺寸和整数值、timing、alpha 范围和 reel 列数。资源状态缺失仍由 `ReelSymbolRegistry` / `RenderSymbol` 按 `texturePolicy.requiredStateTextures` 显式失败，不会静默回退到普通图。
+grid-cell API 会 fail-fast 校验 scene 尺寸、final y 长度、order 重复/越界/缺失、offset 矩阵尺寸和整数值、timing、alpha 范围和 reel 列数。资源状态缺失仍由 `ReelSymbolRegistry` / `SymbolPlayer` 按 `texturePolicy.requiredStateTextures` 显式失败，不会静默回退到普通图。
 
 grid-cell 可选 effect API 把逐格 presentation 与 symbol state 分离。`createGridCellEffectResourcesFromManifest()` 用精确 module maps 校验官方 Spine 4.3 skeleton、atlas page/texture closure、大小写精确 animation 和官方 duration；cell effect `loopCount` 接受正安全整数。`GridCellEffectController` 在 prepare 阶段按总循环时长和 schedule-derived capacity 初始化有界 player pool，并用一个完整 grid rect mask 承载 cell-center overlay；即使单次 update 跨越多个循环，也会逐个官方 Spine loop boundary 切片并计数，达到请求次数才释放。spin plan 可为每格声明完整 effect lead 和可选 activation gate；runtime 只在真实 gate landing edge 后开放 gated effect，全部真实 loop completion 必须先于同边界 landing。`startEffectSweep()` 支持已排序 position 副本和 stagger，当前 sweep 合同仍为一次真实 loop，并等待最后一个真实 loop edge；reset/error/destroy 会清理并归还全部 player，不用 timer、symbol state 或 app 私有 Spine track。
 
 `parseReelManifest()` 读取独立 reel manifest 的 `spin.bounceStrength` 和 `spin.dimmingAlpha`。`bounceStrength=1` 等于 rendercore 既有回弹力度，正数按比例缩放，`0` 完全关闭回弹；`dimmingAlpha` 必须位于 `[0,1]`，由游戏作为通用 dimming resolver 的输入。负数、非有限值、缺字段和未知字段都显式失败。`RenderReel`、`RenderReelSet` 与 `RenderGridCellReelSet` 都接收同一 `bounceStrength`，未传时保持默认 `1`；具体哪些 symbol 保持全亮仍由游戏 resolver 决定。游戏应从自己的 reel manifest 传入这两项 spin 表现值，不在 app runtime 再维护第二份数值。
 
-`RenderGridCellReelSet.update(deltaSeconds)` 在每个 cell landed 后先把目标 symbol 复位到最终 y，再只对 registry 显式启用的 symbol 请求一次 `appear`。once appear 完成后 `RenderSymbol` 回到 normal；grid-cell 完成边界会等待所有 cell landed、滚动暗层恢复且所有已请求的 landing appear 完成。没有 manifest appear 的 symbol 不应进入 `landingAppearSymbols`，不能伪造 builtin/default fallback。该逐格调度只属于 `RenderGridCellReelSet`，不改变普通 `RenderReelSet`。snapshot 提供 `phase`、`hasClipMask`、`cellX/cellY`、`reelX/reelY`、当前可见 `dimmingAlpha` / `symbolDimmingAlpha`、`dimmingOverlayRenderable`、`requestedState` 和 `visibleSymbol`，用于游戏层诊断和测试，不暴露可变内部对象。
+`RenderGridCellReelSet.update(deltaSeconds)` 在每个 cell landed 后先把目标 symbol 复位到最终 y，再只对 registry 显式启用的 symbol 请求一次 `appear`。once appear 完成后 `SymbolPlayer` 回到 normal；grid-cell 完成边界会等待所有 cell landed、滚动暗层恢复且所有已请求的 landing appear 完成。没有 manifest appear 的 symbol 不应进入 `landingAppearSymbols`，不能伪造 builtin/default fallback。该逐格调度只属于 `RenderGridCellReelSet`，不改变普通 `RenderReelSet`。snapshot 提供 `phase`、`hasClipMask`、`cellX/cellY`、`reelX/reelY`、当前可见 `dimmingAlpha` / `symbolDimmingAlpha`、`dimmingOverlayRenderable`、`requestedState` 和 `visibleSymbol`，用于游戏层诊断和测试，不暴露可变内部对象。
 
 停轴后，`RenderReelSet`（逐轴 spin）和 `RenderGridCellReelSet`（逐格 spin）都结构化实现 `VisibleSymbolPresentationTarget`：批量请求可见 symbol state、读取状态/几何快照并推进 animation。这个共同能力不合并两种 spin plan；grid-cell 的几何会把内部单行 reel 坐标转换为完整 grid 本地坐标，且 idle `update()` 会继续推进 `win once -> normal`。
 
-grid-cell main reel 还提供 occurrence identity 能力：`getMainReelVisibleOccurrence(x, y)` 返回受控 handle，可读取状态/几何、播放 state、设置 presentation value，并用 exact Scene Layout `spine | vni` runtime resource 附着 occurrence effect；它不暴露 Pixi Container、RenderSymbol 或 raw zIndex。occurrence effect 随同一 symbol identity 移动，和固定在坐标上的既有 cell effect 是两套独立 ownership；显式 `detach()`、occurrence release/回池或 runtime destroy 会清理 attachment。
+grid-cell main reel 还提供 occurrence identity 能力：`getMainReelVisibleOccurrence(x, y)` 返回受控 handle，可读取状态/几何、播放 state、设置 presentation value，并用 exact Scene Layout `spine | vni` runtime resource 附着 occurrence effect；它不暴露 Pixi Container、SymbolPlayer 或 raw zIndex。occurrence effect 随同一 symbol identity 移动，和固定在坐标上的既有 cell effect 是两套独立 ownership；显式 `detach()`、occurrence release/回池或 runtime destroy 会清理 attachment。
 
 `runMainReelVisibleOccurrenceTransfer(input, choreography)` 是 runtime-owned 的单次异步事务。`tx.delay()` 和 `tx.move()` 都只由宿主唯一的 `runtime.update(deltaSeconds)` 推进，不使用 GSAP、RAF 或 wall-clock timer。空间 path 支持 `line` 和多段 `cubic-bezier-path`（按总弧长采样），时间 easing 独立支持 `linear` 和 CSS-style cubic Bezier；`above-symbols | above-effects` 加非负整数 order 表达语义叠放。callback 在 `move()` 完成后正常返回时，runtime 自动执行唯一原子 finalization；callback 未完成 move、reject、abort、reset 或 destroy 时直接 reject，并只清理尚未 finalization 的临时 display lease、listener、mask 和预创建资源，不执行旧 scene/业务数据 rollback。source replacement 可为非负 symbol code，或 exact `-1/null` hole：
 
@@ -838,7 +837,7 @@ symbol cascade 的 `WinSummaryCollectOptions.sequentialCollectStartIntervalSecon
 
 ## 全局序列
 
-`SymbolStateSequenceController` 只决定下一步请求哪个状态，不直接操作 Pixi。viewer 或游戏层把返回的状态广播给全部 `RenderSymbol`。`once` 状态需要等全部 symbol 都上报 `onceCompleted` 后再推进。
+`SymbolStateSequenceController` 只决定下一步请求哪个状态，不直接操作 Pixi。viewer 或游戏层把返回的状态广播给全部 `SymbolPlayer`。`once` 状态需要等全部 symbol 都上报 `onceCompleted` 后再推进。
 
 ## 命令
 
@@ -872,19 +871,19 @@ symbol 可声明零到多个有唯一 name 的 `imageStringNodes`。新配置用
 
 命名 node 与 `valuePresentation.text.type: "image-string"` 的每个 tier binding 都支持可选 `specialValueImages: [{ value, image }]`。`value` 在所属 node/binding 内是唯一 safe integer，`image` 是 contained local 图片路径；完全匹配 `String(value)` 时整张 Sprite 替代该档 glyph renderer，其他字符串仍严格走该档 glyph closure。映射图片进入 package/Vite 精确闭包并与 glyph 纹理共享资源所有权，切换文本保持所属 binding 的 anchor、transform、target/slot 与 `followSlotColor`。parser 兼容旧的 `valuePresentation.text.specialValueImages`，将其规范化到每档；canonical typed 输出不保留共享字段，新旧位置同时声明会失败。
 
-`RenderSymbol` 公开 `getImageStringNodeNames()`、`setImageStringText(name, text)`、`getImageStringText(name)`。string 原样保存，缺 glyph/控制字符/非 NFC 或 unknown name 时原子失败；节点随目标 state/player attach/detach，保留等价 Loop 时间轴，并受 reel texture 显式优先级约束。consumer 不接触 Spine track、slot 私有对象或 Pixi glyph children。旧 `setPresentationValue()` value-presentation 合同独立保留，不会自动变成命名节点。
+`SymbolPlayer` 公开 `getImageStringNodeNames()`、`setImageStringText(name, text)`、`getImageStringText(name)`。string 原样保存，缺 glyph/控制字符/非 NFC 或 unknown name 时原子失败；节点随目标 state/player attach/detach，保留等价 Loop 时间轴，并受 reel texture 显式优先级约束。consumer 不接触 Spine track、slot 私有对象或 Pixi glyph children。旧 `setPresentationValue()` value-presentation 合同独立保留，不会自动变成命名节点。
 
 symbol manifest 可为任意 symbol 声明可选 `valuePresentation`。新 image-string wire 使用与 Spine tiers 等长的 `tierResources[]`，每档保存 normal ImgNumber JSON，并可用等长 `tierSpinBlurProfiles[]` 的 object/null 项显式绑定该档 non-Spine `spinBlur`；`slot`、anchor、transform、`followSlotColor` 与 special map 是一份共享 Normal 配置。旧完整 `text.tiers[]` 继续按原档位语义运行并可带同形 `spinBlurProfile`；shared 与 legacy 字段严格互斥。runtime 维持一个稳定外层 ImgNumber container：同档改值只 `setText()`，normal/spinBlur 在同一 renderer 切 profile并在 tier slot/顶层 overlay间移动，跨档替换内部 profile 而不改变外层 identity。
 
 `createSymbolValuePresentationResourceBundleFromManifest()` 为 value-tier binding 创建可销毁的共享 image-string resource pool，并逐档校验 skeleton animation 与该档 exact slot；相同 canonical dependency 只加载一次，每个 occurrence 只创建独立轻量 renderer。`createSymbolValuePresenter()` 与 reel controller 共用 display factory 和 official Spine slot API，提供 `prepare/show/update/clear/destroy`。font Text、完整数值 Sprite 或 mapped `RenderImageString` 都通过 slot-follow wrapper 挂在当前 tier player 内：wrapper 接收 Spine bone matrix，内部 display 保留自己的 offset、scale、anchor/pivot，再继承 slot 的可见性与颜色。image 模式仍要求完整值图片；image-string 先检查 exact 特殊值映射，未匹配时渲染 `String(rawValue)` 并要求每个字符存在。缺图片、glyph、slot、resource 或晚到初始化失败都在可见提交前回滚，不提供跨模式 fallback。
 
-reel 可为每个本地 symbol occurrence 携带可选 presentation value。`TemporaryReelStrip` 会把 current endpoint、公开本地轮带中间 occurrence 和 target endpoint 的值与 code 一起冻结；`RenderSymbol` 的通用 value controller 据此直接在实际 reel slot 内播放命中 tier 的 Spine，并把文字只创建、attach 一次。normal/appear/win/remove/dropdown 都在同一 tier player 上切 animation，slot object 不重建；只有 value 真正改变、occurrence release 或 destroy 才 detach/destroy。
+reel 可为每个本地 symbol occurrence 携带可选 presentation value。`TemporaryReelStrip` 会把 current endpoint、公开本地轮带中间 occurrence 和 target endpoint 的值与 code 一起冻结；`SymbolPlayer` 的通用 value controller 据此直接在实际 reel slot 内播放命中 tier 的 Spine，并把文字只创建、attach 一次。normal/appear/win/remove/dropdown 都在同一 tier player 上切 animation，slot object 不重建；只有 value 真正改变、occurrence release 或 destroy 才 detach/destroy。
 
 当 requested state 通过 equivalence 解析到 normal、但 requested state 自身有显式 reel texture（例如 `spinBlur` 或 `disabled`）时，显式 texture 优先，ImgNumber exact target 同样使用 requested presentation state；active Spine 不得在异步 init 完成后把 texture 或 direct ImgNumber 隐藏。回到真正的 active-Spine state 前先同步 ImgNumber attachment 资格，再重新显示 tier player。相同 active Spine resource/playback 跨 semantic state 复用时间轴时，animation 必须同步新的 semantic playback；official Spine player 会逐次上报真实 loop completion，以便状态机在 loop boundary 推进 pending once state。
 
 ## 通用 symbol cascade 与 grid-cell 级联
 
-`createSymbolCascadePlayer()` 按冻结的中奖组执行 `aggregate emphasis -> ordered group/collect choreography`。emphasis 期间同时显示各组金额，并通过 target API 同步压暗全部中奖坐标之外的格子遮罩与 RenderSymbol 本体，因此跨格美术也会完整变暗；fade-in、hold、fade-out 和目标 alpha 均由调用方配置。调用方可选 `startPresentationsWithEmphasis`，让全部 group win 与 sequential start/companion win 在压暗开始的同一边界并行起播；sequential start 完成后可在 emphasis 期间进入 loop，强调结束后仍按稳定顺序 remove/collect，且不会重播 opening state。未启用该选项时保持既有的 emphasis 结束后逐组 `win -> remove` 行为。
+`createSymbolCascadePlayer()` 按冻结的中奖组执行 `aggregate emphasis -> ordered group/collect choreography`。emphasis 期间同时显示各组金额，并通过 target API 同步压暗全部中奖坐标之外的格子遮罩与 SymbolPlayer 本体，因此跨格美术也会完整变暗；fade-in、hold、fade-out 和目标 alpha 均由调用方配置。调用方可选 `startPresentationsWithEmphasis`，让全部 group win 与 sequential start/companion win 在压暗开始的同一边界并行起播；sequential start 完成后可在 emphasis 期间进入 loop，强调结束后仍按稳定顺序 remove/collect，且不会重播 opening state。未启用该选项时保持既有的 emphasis 结束后逐组 `win -> remove` 行为。
 
 配置单一 `winSummaryCollect` 后，player 从 manifest 的 canonical `stateDefinitions` 和每个 symbol 的 `cascadeWinPresentation` 派生 state preset、稳定 `order`、group 或 sequential-collect mode 及状态 id。group mode 在 win 请求同一边界把 positive safe integer group amount 累加到 Pixi summary，并等待动画和 `0 -> target` tween 都完成后 remove；sequential mode 执行“全部 primary start once，并行播放调用方批准的 group-mode companion win -> 等全部完成 -> 全部 primary loop -> 按调用方稳定 item 顺序逐枚 collect once + item amount -> remove once -> release”。companion 不进入 item/loop/collect/remove，也不贡献金额；哪些实际 symbol 可作为 companion 完全由调用方 predicate 决定，rendercore 不认识 wild。计数只在 snapshot 的 `resolvedState` 真正进入 collect state后开始，loop pending 不会提前计数。summary 为 0 时隐藏，跨多次 `start()` 保留累计，只有 `clear()`/`destroy()` 重置。rendercore 不解析游戏组件、coin/cash 字段、symbol code 或专属动画名。
 

@@ -1,4 +1,4 @@
-import type { SymbolPackageResource } from "@slotclientengine/rendercore/symbol";
+import type { SymbolPackageResource } from "@slotclientengine/rendercore/symbol/editor";
 import type { RandomReelSceneSnapshot } from "./random-reel-scene.js";
 import type { RandomUint32Source } from "./random-reel-scene.js";
 import { sampleNumberWeightTable } from "./number-weight-table.js";

@@ -121,9 +121,9 @@ describe("RenderReel", () => {
         baseRegistry.resolveRollingValueTierByCode(code, value),
       createRollingValueVisualByCode: (code, value) =>
         baseRegistry.createRollingValueVisualByCode(code, value),
-      createRenderSymbolByCode: (code) => {
+      createSymbolPlayerByCode: (code) => {
         completeSymbolCreations += 1;
-        return baseRegistry.createRenderSymbolByCode(code);
+        return baseRegistry.createSymbolPlayerByCode(code);
       },
     };
     const reel = new RenderReel({
@@ -246,7 +246,7 @@ describe("RenderReel", () => {
     const baseRegistry = createBasicRegistry();
     let failPreparation = false;
     const preparedSymbols: NonNullable<
-      ReturnType<ReelSymbolRegistry["createRenderSymbolByCode"]>
+      ReturnType<ReelSymbolRegistry["createSymbolPlayerByCode"]>
     >[] = [];
     const registry: ReelSymbolRegistry = {
       getValidation: () => baseRegistry.getValidation(),
@@ -261,11 +261,11 @@ describe("RenderReel", () => {
         baseRegistry.resolveRollingValueTierByCode(code, value),
       createRollingValueVisualByCode: (code, value) =>
         baseRegistry.createRollingValueVisualByCode(code, value),
-      createRenderSymbolByCode: (code) => {
+      createSymbolPlayerByCode: (code) => {
         if (failPreparation && code === 1) {
           throw new Error("prepared landing failed");
         }
-        const symbol = baseRegistry.createRenderSymbolByCode(code);
+        const symbol = baseRegistry.createSymbolPlayerByCode(code);
         if (failPreparation && symbol) preparedSymbols.push(symbol);
         return symbol;
       },
@@ -318,8 +318,8 @@ describe("RenderReel", () => {
         baseRegistry.resolveRollingValueTierByCode(code, value),
       createRollingValueVisualByCode: (code, value) =>
         baseRegistry.createRollingValueVisualByCode(code, value),
-      createRenderSymbolByCode: (code) => {
-        const symbol = baseRegistry.createRenderSymbolByCode(code);
+      createSymbolPlayerByCode: (code) => {
+        const symbol = baseRegistry.createSymbolPlayerByCode(code);
         if (prepareAsPending && symbol) {
           Object.defineProperty(symbol, "getPresentationReadiness", {
             configurable: true,
@@ -382,7 +382,7 @@ describe("RenderReel", () => {
     let ready = false;
     const createdTiers: number[] = [];
     const preparedFullSymbols: NonNullable<
-      ReturnType<ReelSymbolRegistry["createRenderSymbolByCode"]>
+      ReturnType<ReelSymbolRegistry["createSymbolPlayerByCode"]>
     >[] = [];
     const registry: ReelSymbolRegistry = {
       getValidation: () => baseRegistry.getValidation(),
@@ -405,8 +405,8 @@ describe("RenderReel", () => {
           destroy: () => undefined,
         };
       },
-      createRenderSymbolByCode: (code) => {
-        const symbol = baseRegistry.createRenderSymbolByCode(code);
+      createSymbolPlayerByCode: (code) => {
+        const symbol = baseRegistry.createSymbolPlayerByCode(code);
         if (prepareAsPending && symbol) {
           preparedFullSymbols.push(symbol);
           Object.defineProperty(symbol, "getPresentationReadiness", {

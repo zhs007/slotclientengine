@@ -108,10 +108,10 @@ describe("createSymbolCatalog", () => {
         disabled: disabledTexture,
       },
     });
-    const renderSymbol = catalog.createRenderSymbol("S00");
-    expect(renderSymbol.stateTextures.spinBlur).toBe(spinBlurTexture);
-    expect(renderSymbol.stateTextures.disabled).toBe(disabledTexture);
-    expect(renderSymbol.requiredStateTextures).toEqual([
+    const symbolPlayer = catalog.createSymbolPlayer("S00");
+    expect(symbolPlayer.stateTextures.spinBlur).toBe(spinBlurTexture);
+    expect(symbolPlayer.stateTextures.disabled).toBe(disabledTexture);
+    expect(symbolPlayer.requiredStateTextures).toEqual([
       "spinBlur",
       "disabled",
     ]);
@@ -128,9 +128,9 @@ describe("createSymbolCatalog", () => {
       },
     });
 
-    expect(catalog.createRenderSymbol("S00").renderPriority).toBe(4);
+    expect(catalog.createSymbolPlayer("S00").renderPriority).toBe(4);
     expect(
-      catalog.createRenderSymbol("S00", { renderPriority: 7 }).renderPriority,
+      catalog.createSymbolPlayer("S00", { renderPriority: 7 }).renderPriority,
     ).toBe(7);
     expect(() =>
       createSymbolCatalog({
@@ -192,12 +192,12 @@ describe("createSymbolCatalog", () => {
         { index: 1, texture: top },
       ],
     });
-    const renderSymbol = catalog.createRenderSymbol("SC");
-    expect(renderSymbol.getLayerSprites().map((layer) => layer.index)).toEqual([
+    const symbolPlayer = catalog.createSymbolPlayer("SC");
+    expect(symbolPlayer.getLayerSprites().map((layer) => layer.index)).toEqual([
       0, 1,
     ]);
-    expect(renderSymbol.getLayerSprites()[0].sprite.texture).toBe(bottom);
-    expect(renderSymbol.getLayerSprites()[0].keyframes).toEqual([
+    expect(symbolPlayer.getLayerSprites()[0].sprite.texture).toBe(bottom);
+    expect(symbolPlayer.getLayerSprites()[0].keyframes).toEqual([
       bottom,
       openFrame,
     ]);
@@ -393,7 +393,7 @@ describe("createSymbolCatalog", () => {
   it("does not create render symbols from unloaded URL assets", () => {
     const catalog = createCatalog();
 
-    expect(() => catalog.createRenderSymbol("S00")).toThrow(SymbolAssetError);
+    expect(() => catalog.createSymbolPlayer("S00")).toThrow(SymbolAssetError);
   });
 
   it("does not create render symbols from unloaded state texture URL assets", () => {
@@ -410,7 +410,7 @@ describe("createSymbolCatalog", () => {
       },
     });
 
-    expect(() => catalog.createRenderSymbol("S00")).toThrow(SymbolAssetError);
+    expect(() => catalog.createSymbolPlayer("S00")).toThrow(SymbolAssetError);
   });
 
   it("does not create render symbols from unloaded layer keyframe URL assets", () => {
@@ -433,7 +433,7 @@ describe("createSymbolCatalog", () => {
       },
     });
 
-    expect(() => catalog.createRenderSymbol("SC")).toThrow(
+    expect(() => catalog.createSymbolPlayer("SC")).toThrow(
       /keyframe texture is a URL string/,
     );
   });

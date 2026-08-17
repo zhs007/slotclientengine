@@ -3,8 +3,8 @@ import {
   createSymbolCascadePlayer,
   type CreateSymbolCascadePlayerOptions,
   type SymbolCascadeGroup,
-  type SymbolCascadeWinPresentationMap,
 } from "../../src/index.js";
+import type { SymbolCascadeWinPresentationMap } from "../../src/symbol/data/index.js";
 
 describe("symbol cascade win summary collect", () => {
   it("starts every win presentation with emphasis before sequential removal", () => {

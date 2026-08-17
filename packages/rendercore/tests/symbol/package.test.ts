@@ -164,9 +164,9 @@ describe("symbol package game config and resources", () => {
         A: [{ spec: { name: "multiplier" } }],
       },
     } as unknown as SymbolPackageResource;
-    const createRenderSymbol = vi.fn(() => ({ symbol: "A" }));
+    const createSymbolPlayer = vi.fn(() => ({ symbol: "A" }));
     const catalog = {
-      createRenderSymbol,
+      createSymbolPlayer,
     } as unknown as SymbolCatalogModel;
     const formatMultiplier = (value: number) => `x${value}`;
 
@@ -195,8 +195,8 @@ describe("symbol package game config and resources", () => {
         valueTextBindings: { A: { multiplier: formatMultiplier } },
       },
     );
-    registry.createRenderSymbolByCode(0);
-    expect(createRenderSymbol).toHaveBeenCalledWith(
+    registry.createSymbolPlayerByCode(0);
+    expect(createSymbolPlayer).toHaveBeenCalledWith(
       "A",
       expect.objectContaining({
         valueTextBindings: { multiplier: formatMultiplier },
@@ -523,7 +523,7 @@ describe("symbol package game config and resources", () => {
     }
   });
 
-  it("creates a transparent-only resource, catalog and RenderSymbol with no resource entries", async () => {
+  it("creates a transparent-only resource, catalog and SymbolPlayer with no resource entries", async () => {
     const emptyManifest = {
       version: 1,
       states: [],
@@ -548,7 +548,8 @@ describe("symbol package game config and resources", () => {
       files: emptyFiles,
     });
     const catalog = await resource.createCatalog();
-    const symbol = catalog.createRenderSymbol("A");
+    expect(await resource.createCatalog()).toBe(catalog);
+    const symbol = catalog.createSymbolPlayer("A");
     symbol.init();
     symbol.requestState("appear", "immediate");
     expect(symbol.getBaseLayer().visible).toBe(false);

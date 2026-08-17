@@ -1,5 +1,4 @@
 export * from "./background/index.js";
-export * from "./symbol/index.js";
 export * from "./presentation/index.js";
 export * from "./reel/index.js";
 export * from "./viewport/index.js";

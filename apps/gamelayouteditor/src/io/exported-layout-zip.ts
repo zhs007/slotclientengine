@@ -13,7 +13,7 @@ import {
 import {
   collectSymbolPackageEntryPaths,
   parseSymbolPackageManifest,
-} from "@slotclientengine/rendercore/symbol";
+} from "@slotclientengine/rendercore/symbol/data";
 import {
   collectPopupPackagePaths,
   parsePopupManifest,

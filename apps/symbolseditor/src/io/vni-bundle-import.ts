@@ -2,7 +2,7 @@ import {
   inspectSymbolVniExportBundle,
   materializeSymbolVniExportBundleRuntime,
   type SymbolVniBundleRuntimeProfile,
-} from "@slotclientengine/rendercore/symbol";
+} from "@slotclientengine/rendercore/symbol/editor";
 import type { EditorImportSourceFile } from "@slotclientengine/editorresource";
 
 export type SymbolVniRuntimeProfile = SymbolVniBundleRuntimeProfile;

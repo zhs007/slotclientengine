@@ -30,6 +30,13 @@ export default defineConfig({
         replacement: resolve(__dirname, "../logiccore/src/index.ts"),
       },
       {
+        find: "@slotclientengine/rendercore/symbol/core",
+        replacement: resolve(
+          __dirname,
+          "../rendercore/src/symbol/core/index.ts",
+        ),
+      },
+      {
         find: "@slotclientengine/rendercore/scene-layout",
         replacement: resolve(
           __dirname,

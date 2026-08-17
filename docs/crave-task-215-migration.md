@@ -157,7 +157,7 @@ replacement 和 target replacement 最终都写入 `item.code/item.multiplier`�
 - awaitable transfer resolve 后才可读取最终 target；reject 时让错误继续向上传递。
 - Crave 不缓存旧 logic scene 用于 renderer rollback，不在 `catch` 中逆向写回 symbol。
 - Crave 自己创建的 fireworks、overlay 等临时对象仍由 Crave 按原 ownership 清理；这不属于业务 rollback。
-- 不保留移动前取得的旧 `SymbolRender` handle；完成后需要对象时重新通过 mutation area 查询。
+- 不保留移动前取得的旧 `SymbolHandle` handle；完成后需要对象时重新通过 mutation area 查询。
 
 ## 自动验收
 

@@ -1,4 +1,4 @@
-import type { SymbolPackageResource } from "@slotclientengine/rendercore";
+import type { SymbolPackageResource } from "@slotclientengine/rendercore/symbol/core";
 import { describe, expect, it, vi } from "vitest";
 import { createGame002v2DefaultSceneValueResolver } from "../src/default-scene-values.js";
 

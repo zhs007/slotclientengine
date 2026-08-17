@@ -14,7 +14,7 @@ import type {
 import {
   collectSymbolPackageEntryPaths,
   parseSymbolPackageManifest,
-} from "@slotclientengine/rendercore/symbol";
+} from "@slotclientengine/rendercore/symbol/data";
 import { parseJson } from "./package-reader.js";
 import { encodeStableJson } from "./reference-rewriter.js";
 import type {

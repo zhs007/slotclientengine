@@ -1,8 +1,8 @@
 import type { RendercoreSpineSlotPlayer } from "../spine/runtime-player.js";
 import { Container } from "pixi.js";
 import { SymbolAnimationError } from "../symbol/errors.js";
-import type { RenderSymbol } from "../symbol/render-symbol.js";
-import type { RenderSymbolImageStringController } from "../symbol/types.js";
+import type { SymbolPlayer } from "../symbol/symbol-player.js";
+import type { SymbolPlayerImageStringController } from "../symbol/types.js";
 import type {
   SymbolImageStringNodeResource,
   SymbolImageStringResourceMap,
@@ -22,8 +22,8 @@ type ImageStringTextUpdate = Readonly<{ name: string; text: string }>;
 
 const controllers = new WeakMap<Container, SymbolImageStringController>();
 
-export class SymbolImageStringController implements RenderSymbolImageStringController {
-  readonly #root: RenderSymbol;
+export class SymbolImageStringController implements SymbolPlayerImageStringController {
+  readonly #root: SymbolPlayer;
   readonly #nodes: readonly ActiveNode[];
   readonly #byName: ReadonlyMap<string, ActiveNode>;
   readonly #names: readonly string[];
@@ -36,7 +36,7 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
   #destroyed = false;
 
   constructor(options: {
-    readonly root: RenderSymbol;
+    readonly root: SymbolPlayer;
     readonly nodes: readonly SymbolImageStringNodeResource[];
   }) {
     this.#root = options.root;
@@ -328,13 +328,13 @@ export function notifySymbolImageStringSpineInactive(
 export function createSymbolImageStringControllerFactories(
   resources: SymbolImageStringResourceMap,
 ): Readonly<
-  Record<string, (root: RenderSymbol) => RenderSymbolImageStringController>
+  Record<string, (root: SymbolPlayer) => SymbolPlayerImageStringController>
 > {
   return Object.freeze(
     Object.fromEntries(
       Object.entries(resources).map(([symbol, nodes]) => [
         symbol,
-        (root: RenderSymbol) =>
+        (root: SymbolPlayer) =>
           new SymbolImageStringController({ root, nodes }),
       ]),
     ),

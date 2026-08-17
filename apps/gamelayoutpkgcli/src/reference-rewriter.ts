@@ -16,7 +16,7 @@ import {
   parseSymbolPackageManifest,
   parseSymbolStateTextureManifest,
   type SymbolPackageManifestV1,
-} from "@slotclientengine/rendercore/symbol";
+} from "@slotclientengine/rendercore/symbol/data";
 import {
   assertVNIProject,
   rewriteVNIProjectAssetPaths,

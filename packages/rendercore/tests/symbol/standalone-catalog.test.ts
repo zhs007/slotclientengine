@@ -40,15 +40,15 @@ describe("standalone symbol catalog", () => {
     });
     expect(() => catalog.getAsset("empty")).toThrow(/transparent/);
 
-    const boost = catalog.createRenderSymbol("boost");
+    const boost = catalog.createSymbolPlayer("boost");
     expect(boost.scale.x).toBe(0.5);
     expect(boost.scale.y).toBe(0.5);
     expect(boost.renderPriority).toBe(3);
     expect(
-      catalog.createRenderSymbol("boost", { renderPriority: 5 }).renderPriority,
+      catalog.createSymbolPlayer("boost", { renderPriority: 5 }).renderPriority,
     ).toBe(5);
 
-    const empty = catalog.createRenderSymbol("empty");
+    const empty = catalog.createSymbolPlayer("empty");
     empty.requestState("win");
     empty.update(1);
     expect(empty.getStateSnapshot()).toMatchObject({

@@ -1,8 +1,9 @@
 import {
   createSymbolPackageValueControllerFactory,
-  type RenderSymbol,
+  createSymbolPreviewPlayer,
+  type SymbolPreviewPlayer,
   type SymbolPackageResource,
-} from "@slotclientengine/rendercore/symbol";
+} from "@slotclientengine/rendercore/symbol/editor";
 import { Application, Container, Graphics, Text, type Ticker } from "pixi.js";
 
 export type SymbolPreviewCellStatus =
@@ -27,7 +28,7 @@ export class SymbolEditorPreview {
   readonly #host: HTMLElement;
   readonly #app = new Application();
   readonly #gallery = new Container();
-  readonly #symbols: RenderSymbol[] = [];
+  readonly #symbols: SymbolPreviewPlayer[] = [];
   #resource: SymbolPackageResource | null = null;
   #cells: readonly SymbolPreviewCell[] = [];
   #selectedState = "normal";
@@ -92,7 +93,7 @@ export class SymbolEditorPreview {
     );
     const rows = Math.max(1, Math.ceil(cells.length / columns));
     const nextRoots: Container[] = [];
-    const nextSymbols: RenderSymbol[] = [];
+    const nextSymbols: SymbolPreviewPlayer[] = [];
     try {
       cells.forEach((cell, index) => {
         const root = new Container();
@@ -115,23 +116,30 @@ export class SymbolEditorPreview {
           available.has(cell.symbol) &&
           cell.status === "configured"
         ) {
-          const renderSymbol = catalog.createRenderSymbol(cell.symbol, {
-            valueControllerFactory: resource
-              ? createSymbolPackageValueControllerFactory(resource, cell.symbol)
-              : undefined,
+          const symbolPlayer = createSymbolPreviewPlayer({
+            catalog,
+            symbol: cell.symbol,
+            player: {
+              valueControllerFactory: resource
+                ? createSymbolPackageValueControllerFactory(
+                    resource,
+                    cell.symbol,
+                  )
+                : undefined,
+            },
           });
-          nextSymbols.push(renderSymbol);
-          renderSymbol.scale.set(resource?.symbolScales[cell.symbol] ?? 1);
-          renderSymbol.init();
+          nextSymbols.push(symbolPlayer);
+          symbolPlayer.view.scale.set(resource?.symbolScales[cell.symbol] ?? 1);
+          symbolPlayer.init();
           if (cell.value !== undefined)
-            renderSymbol.setPresentationValue(cell.value);
+            symbolPlayer.setPresentationValue(cell.value);
           for (const [name, text] of Object.entries(
             cell.imageStringTexts ?? {},
           )) {
-            renderSymbol.setImageStringText(name, text);
+            symbolPlayer.setImageStringText(name, text);
           }
-          if (state !== "normal") renderSymbol.requestState(state, "immediate");
-          root.addChild(renderSymbol);
+          if (state !== "normal") symbolPlayer.requestState(state, "immediate");
+          root.addChild(symbolPlayer.view);
         } else {
           root.addChild(
             new Text({

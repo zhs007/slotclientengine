@@ -5,14 +5,14 @@ import type {
 import type { Texture } from "pixi.js";
 import { createDefaultSymbolAnimationResolver } from "./animation-resolver.js";
 import { SymbolAssetError } from "./errors.js";
-import { RenderSymbol } from "./render-symbol.js";
+import { SymbolPlayer } from "./symbol-player.js";
 import {
   createDefaultSymbolStatePreset,
   createSymbolDefinitionFromPreset,
   validateSymbolStatePreset,
 } from "./state-machine.js";
 import type {
-  CreateCatalogRenderSymbolOptions,
+  CreateCatalogSymbolPlayerOptions,
   CreateSymbolCatalogOptions,
   SymbolAnimationResolver,
   SymbolAssetMap,
@@ -185,10 +185,10 @@ export class SymbolCatalogModel implements SymbolCatalog {
     return cloneNormalTextureSource(this.getTextureSet(symbol).normal);
   }
 
-  createRenderSymbol(
+  createSymbolPlayer(
     symbol: string,
-    options: CreateCatalogRenderSymbolOptions = {},
-  ): RenderSymbol {
+    options: CreateCatalogSymbolPlayerOptions = {},
+  ): SymbolPlayer {
     const textureSet = this.getTextureSet(symbol);
     const asset = options.texture ?? textureSet.normal;
     const normalSource = assertLoadedNormalSource(symbol, asset);
@@ -198,7 +198,7 @@ export class SymbolCatalogModel implements SymbolCatalog {
       stateTextures,
     );
 
-    return new RenderSymbol({
+    return new SymbolPlayer({
       definition: this.getDefinition(symbol),
       texture: normalSource,
       stateTextures: loadedStateTextures,
@@ -508,7 +508,7 @@ function assertLoadedNormalSource(
   if (normalized.kind === "single") {
     if (typeof normalized.texture === "string") {
       throw new SymbolAssetError(
-        `Symbol "${symbol}" asset is a URL string; pass a loaded Texture to createRenderSymbol().`,
+        `Symbol "${symbol}" asset is a URL string; pass a loaded Texture to createSymbolPlayer().`,
       );
     }
     return Object.freeze({

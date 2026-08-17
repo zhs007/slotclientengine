@@ -3,7 +3,7 @@ import {
   generateSymbolStateTextureRgba,
   type GeneratedSymbolStateTextureId,
   type SymbolStateTexturePixels,
-} from "@slotclientengine/rendercore/symbol";
+} from "@slotclientengine/rendercore/symbol/editor";
 import {
   addSymbolState,
   moveSymbolState,

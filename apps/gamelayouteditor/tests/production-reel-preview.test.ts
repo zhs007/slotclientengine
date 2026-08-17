@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import {
   parseSymbolPackageGameConfig,
   parseSymbolStateTextureManifest,
-} from "@slotclientengine/rendercore/symbol";
+} from "@slotclientengine/rendercore/symbol/data";
 import { describe, expect, it } from "vitest";
 import {
   inspectReelSets,

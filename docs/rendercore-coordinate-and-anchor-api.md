@@ -42,7 +42,7 @@ const anchor = symbol.getAnchor();
 不等于 world coordinate。
 
 `getAnchor()` 返回捕获 exact occurrence 的 Anchor。解析时会重新检查 occurrence；replacement、release、回池或 area destroy
-后旧 Anchor stale。普通 symbol 和 `-1` Empty SymbolRender 都支持位置与 Anchor。
+后旧 Anchor stale。普通 symbol 和 `-1` Empty SymbolHandle 都支持位置与 Anchor。
 
 尚未落地、leased、stale 或坐标越界时显式失败，不按相同 position 重绑到新 occurrence。
 

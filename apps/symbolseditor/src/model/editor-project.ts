@@ -26,7 +26,7 @@ import {
   type SymbolPackageManifestV1,
   type SymbolImageStringNodeSpec,
   type SymbolValuePresentationSpec,
-} from "@slotclientengine/rendercore/symbol";
+} from "@slotclientengine/rendercore/symbol/editor";
 import {
   collectImageStringAssetPaths,
   parseImageStringManifest,
