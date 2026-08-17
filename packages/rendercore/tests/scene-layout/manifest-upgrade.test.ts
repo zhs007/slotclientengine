@@ -37,6 +37,108 @@ describe("scene layout manifest latest upgrade", () => {
     expect(upgradeSceneLayoutManifestToLatest(latest)).toEqual(latest);
   });
 
+  it("upgrades game002-style mode backgrounds without a synthetic reel order conflict", () => {
+    const legacy = structuredClone(game002LayoutFixture) as any;
+    legacy.nodes.push({
+      ...structuredClone(legacy.nodes[0]),
+      id: "free-bg",
+      order: 1,
+      resource: {
+        ...structuredClone(legacy.nodes[0].resource),
+        path: "assets/free-bg.png",
+      },
+    });
+    legacy.reels.main.order = 2;
+    legacy.gameModes = {
+      initialMode: "BaseGame",
+      modes: [
+        {
+          id: "BaseGame",
+          backgroundNodes: { default: "bg" },
+          nodeStates: {},
+        },
+        {
+          id: "FreeGame",
+          backgroundNodes: { default: "free-bg" },
+          nodeStates: {},
+        },
+      ],
+      transitions: [],
+    };
+
+    const latest = upgradeSceneLayoutManifestToLatest(legacy);
+    expect(latest.nodes.map((node) => node.order)).toEqual([0, 1]);
+    expect(latest.reels.main.order).toBe(2);
+    const freeGame = materializeSceneLayoutManifestForMode(latest, "FreeGame");
+    expect(freeGame.nodes.map((node) => [node.id, node.order])).toEqual([
+      ["free-bg", 0],
+      ["bg", 1],
+    ]);
+    expect(freeGame.reels.main.order).toBe(2);
+  });
+
+  it("keeps the reel between three mode background orders", () => {
+    const legacy = structuredClone(game002LayoutFixture) as any;
+    legacy.nodes.push(
+      {
+        ...structuredClone(legacy.nodes[0]),
+        id: "free-bg",
+        order: 1,
+        resource: {
+          ...structuredClone(legacy.nodes[0].resource),
+          path: "assets/free-bg.png",
+        },
+      },
+      {
+        ...structuredClone(legacy.nodes[0]),
+        id: "bonus-bg",
+        order: 3,
+        resource: {
+          ...structuredClone(legacy.nodes[0].resource),
+          path: "assets/bonus-bg.png",
+        },
+      },
+    );
+    legacy.reels.main.order = 2;
+    legacy.gameModes = {
+      initialMode: "BaseGame",
+      modes: [
+        {
+          id: "BaseGame",
+          backgroundNodes: { default: "bg" },
+          nodeStates: {},
+        },
+        {
+          id: "FreeGame",
+          backgroundNodes: { default: "free-bg" },
+          nodeStates: {},
+        },
+        {
+          id: "BonusGame",
+          backgroundNodes: { default: "bonus-bg" },
+          nodeStates: {},
+        },
+      ],
+      transitions: [],
+    };
+
+    const latest = upgradeSceneLayoutManifestToLatest(legacy);
+    expect(latest.nodes.map((node) => node.order)).toEqual([0, 1, 3]);
+    expect(latest.reels.main.order).toBe(2);
+    for (const [modeId, backgroundId] of [
+      ["BaseGame", "bg"],
+      ["FreeGame", "free-bg"],
+      ["BonusGame", "bonus-bg"],
+    ] as const) {
+      const view = materializeSceneLayoutManifestForMode(latest, modeId);
+      expect(view.nodes.find((node) => node.id === backgroundId)?.order).toBe(
+        0,
+      );
+      expect(view.nodes.map((node) => node.order)).toEqual([0, 1, 3]);
+      expect(view.reels.main.order).toBe(2);
+    }
+  });
+
   it("accepts mixed per-mode adaptation and materializes either stable geometry", () => {
     const mixed = parseSceneLayoutManifestDocument({
       version: 2,

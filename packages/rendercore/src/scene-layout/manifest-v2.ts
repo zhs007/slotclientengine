@@ -259,18 +259,32 @@ function materializeModeDraft(
     ),
   );
   const activeBackgroundNodeIds = new Set(Object.values(backgrounds));
-  const maximumNodeOrder = Math.max(
-    ...manifest.nodes.map((node) => node.order),
-    0,
+  const backgroundOrders = manifest.nodes
+    .filter((node) => backgroundNodeIds.has(node.id))
+    .map((node) => node.order)
+    .sort((left, right) => left - right);
+  const orderedBackgrounds = manifest.nodes
+    .map((node, index) => ({ node, index }))
+    .filter(({ node }) => backgroundNodeIds.has(node.id))
+    .sort(
+      (left, right) =>
+        Number(!activeBackgroundNodeIds.has(left.node.id)) -
+          Number(!activeBackgroundNodeIds.has(right.node.id)) ||
+        left.node.order - right.node.order ||
+        left.index - right.index,
+    );
+  const materializedBackgroundOrders = new Map(
+    orderedBackgrounds.map(({ node }, index) => [
+      node.id,
+      backgroundOrders[index]!,
+    ]),
   );
-  const nodes = manifest.nodes.map((node, index) => ({
+  const nodes = manifest.nodes.map((node) => ({
     ...structuredClone(node),
-    // Foreign mode backgrounds stay in the stable node façade, but are placed
-    // behind the active mode's background-order validation and remain hidden.
-    order:
-      backgroundNodeIds.has(node.id) && !activeBackgroundNodeIds.has(node.id)
-        ? maximumNodeOrder + index + 1
-        : node.order,
+    // Keep the authored background-order value set, but give the active mode
+    // its lowest values. Foreign backgrounds remain hidden without colliding
+    // with the authored main reel or Popup roots.
+    order: materializedBackgroundOrders.get(node.id) ?? node.order,
     placements: effectivePlacements(node, variants),
   }));
   const validationBackgrounds = Object.fromEntries(
