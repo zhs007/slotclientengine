@@ -37,7 +37,8 @@ spinBlur frame 和 clip；全部 ready 后 landing 才挂载 prepared occurrence
 owner。
 
 stopped 阶段只有实际可见行持有完整 `SymbolPlayer`，上下 buffer 只保留隐藏的轻量 view，
-所以 idle update 不会推进隐藏动画。既有 symbol pool 仍只服务 settled occurrence；rolling
+且不解析隐藏 buffer 的 code/presentation value，所以 idle update 不会推进隐藏动画或索取
+业务滚动值。既有 symbol pool 仍只服务 settled occurrence；rolling
 Sprite 不进入 pool。`RenderReelSlotSnapshot` 的 `mode`、`rollingVisual` 和
 `renderPriority` 用于底层诊断及 grid dimming/order，同一 rollingVisual identity 会跨帧复用。
 
