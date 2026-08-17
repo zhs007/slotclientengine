@@ -7,6 +7,11 @@ import {
   type EditorStateVisual,
   type SymbolEditorProject,
 } from "../model/editor-project.js";
+import {
+  intersectSpineMetadataNames,
+  spineMetadataNames,
+  stripLocalRef,
+} from "../model/spine-binding-reconciliation.js";
 
 export type ResourceBindingContext =
   | {
@@ -264,10 +269,12 @@ export function applyResourceBinding(
     const tier = value.tiers[context.tierIndex];
     if (!tier) throw new Error(`value tier ${context.tierIndex + 1} 不存在。`);
     if (context.field === "atlas") {
+      if (stripLocalRef(tier.animation.atlas) === path) return;
       const binding = path ? resolveSpineAtlasBinding(project, path) : null;
       tier.animation.atlas = binding ? `./${binding.atlasPath}` : "";
       tier.animation.texture = binding ? `./${binding.texturePath}` : "";
     } else {
+      if (stripLocalRef(tier.animation.skeleton) === path) return;
       tier.animation.skeleton = path ? `./${path}` : "";
       if (!tier.animation.atlas) {
         const binding = getDefaultSpineAtlasBinding(project);
@@ -276,17 +283,35 @@ export function applyResourceBinding(
           tier.animation.texture = `./${binding.texturePath}`;
         }
       }
-    }
-    if (context.field === "skeleton") {
-      tier.animation.playback.animationName = "";
-      if (value.text.type === "image-string") {
-        if ("tierResources" in value.text) value.text.slot = "";
-        else {
-          const binding = value.text.tiers[context.tierIndex];
-          if (binding) binding.slot = "";
+      const skeletonKeys = value.tiers.map((candidate) =>
+        stripLocalRef(candidate.animation.skeleton),
+      );
+      const sharedAnimations = intersectSpineMetadataNames(
+        project,
+        skeletonKeys,
+        "animationNames",
+      );
+      const currentAnimation =
+        value.tiers[0]?.animation.playback.animationName ?? "";
+      if (currentAnimation && !sharedAnimations.has(currentAnimation)) {
+        for (const candidate of value.tiers)
+          candidate.animation.playback.animationName = "";
+      }
+      preserveCompatibleValueSlot(
+        project,
+        value,
+        context.tierIndex,
+        skeletonKeys,
+      );
+      const sharedStateAnimations = sharedAnimations;
+      for (const [state, stateVisual] of symbol.states) {
+        if (
+          stateVisual.kind === "activeSpine" &&
+          stateVisual.animationName &&
+          !sharedStateAnimations.has(stateVisual.animationName)
+        ) {
+          symbol.states.set(state, { ...stateVisual, animationName: "" });
         }
-      } else {
-        value.text.slot = "";
       }
     }
     setValuePresentation(project, context.symbol, value as never);
@@ -368,13 +393,18 @@ export function applyResourceBinding(
       updateCompositeLayer(project, context, next, (animation) => {
         if (animation.kind !== "spine")
           throw new Error("当前 composite layer 不是 Spine 类型。");
+        if (animation.skeletonPath === path) return animation;
         const binding = animation.atlasPath
           ? null
           : getDefaultSpineAtlasBinding(project);
         return {
           ...animation,
           skeletonPath: path,
-          animationName: "",
+          animationName: compatibleAnimationName(
+            project,
+            path,
+            animation.animationName,
+          ),
           ...(binding
             ? {
                 atlasPath: binding.atlasPath,
@@ -386,13 +416,14 @@ export function applyResourceBinding(
       return;
     }
     if (next.kind !== "spine") throw new Error("当前 state 不是 Spine 类型。");
+    if (next.skeletonPath === path) return;
     const binding = next.atlasPath
       ? null
       : getDefaultSpineAtlasBinding(project);
     setStateVisual(project, context.symbol, context.state, {
       ...next,
       skeletonPath: path,
-      animationName: "",
+      animationName: compatibleAnimationName(project, path, next.animationName),
       ...(binding
         ? {
             atlasPath: binding.atlasPath,
@@ -407,6 +438,7 @@ export function applyResourceBinding(
       updateCompositeLayer(project, context, next, (animation) => {
         if (animation.kind !== "spine")
           throw new Error("当前 composite layer 不是 Spine 类型。");
+        if (animation.atlasPath === path) return animation;
         const binding = path ? resolveSpineAtlasBinding(project, path) : null;
         return {
           ...animation,
@@ -417,6 +449,7 @@ export function applyResourceBinding(
       return;
     }
     if (next.kind !== "spine") throw new Error("当前 state 不是 Spine 类型。");
+    if (next.atlasPath === path) return;
     const binding = path ? resolveSpineAtlasBinding(project, path) : null;
     setStateVisual(project, context.symbol, context.state, {
       ...next,
@@ -438,6 +471,55 @@ export function applyResourceBinding(
     ...next,
     projectPath: path,
   });
+}
+
+function compatibleAnimationName(
+  project: SymbolEditorProject,
+  skeletonPath: string,
+  animationName: string,
+): string {
+  return skeletonPath &&
+    animationName &&
+    spineMetadataNames(project, skeletonPath, "animationNames").has(
+      animationName,
+    )
+    ? animationName
+    : "";
+}
+
+function preserveCompatibleValueSlot(
+  project: SymbolEditorProject,
+  value: {
+    tiers: Array<{ animation: { skeleton: string } }>;
+    text:
+      | { type: "font" | "image"; slot: string }
+      | { type: "image-string"; tiers: Array<{ slot: string }> }
+      | { type: "image-string"; tierResources: string[]; slot: string };
+  },
+  tierIndex: number,
+  skeletonKeys: readonly string[],
+): void {
+  if (value.text.type === "image-string" && !("tierResources" in value.text)) {
+    const binding = value.text.tiers[tierIndex];
+    const skeletonKey = skeletonKeys[tierIndex];
+    if (
+      binding?.slot &&
+      (!skeletonKey ||
+        !spineMetadataNames(project, skeletonKey, "slotNames").has(
+          binding.slot,
+        ))
+    ) {
+      binding.slot = "";
+    }
+    return;
+  }
+  const sharedSlots = intersectSpineMetadataNames(
+    project,
+    skeletonKeys,
+    "slotNames",
+  );
+  if (value.text.slot && !sharedSlots.has(value.text.slot))
+    value.text.slot = "";
 }
 
 function updateCompositeLayer(

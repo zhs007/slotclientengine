@@ -11,14 +11,22 @@ import {
   prepareSymbolResourceImport,
 } from "../src/model/resource-import.js";
 import { applyStateTextureImageBinding } from "../src/model/state-texture-generation.js";
-import { readCraveFixture } from "./crave-fixture.js";
+import { readMinecart2SymbolFixtureBytes } from "../../../test-utils/minecart2-fixtures.js";
 
 const gameConfig = {
   paytable: { "1": { code: 1, symbol: "A", pays: [1] } },
   symbolCodes: { A: 1 },
   reels: { main: [[1]] },
 };
-const image = (name: string) => readCraveFixture(name);
+const multiSymbolGameConfig = {
+  paytable: {
+    "1": { code: 1, symbol: "A", pays: [1] },
+    "2": { code: 2, symbol: "B", pays: [1] },
+  },
+  symbolCodes: { A: 1, B: 2 },
+  reels: { main: [[1, 2]] },
+};
+const image = (name: string) => readMinecart2SymbolFixtureBytes(name);
 const encode = (value: unknown) =>
   new TextEncoder().encode(JSON.stringify(value));
 const spineSkeleton = (animations: readonly string[], slots = ["Num"]) =>
@@ -32,6 +40,10 @@ const spineSkeleton = (animations: readonly string[], slots = ["Num"]) =>
 const spineAtlas = new TextEncoder().encode(
   "Symbol.png\nsize: 1,1\nformat: RGBA8888\nfilter: Linear,Linear\nrepeat: none\n",
 );
+const spineAtlasFor = (page: string, filter = "Linear,Linear") =>
+  new TextEncoder().encode(
+    `${page}\nsize: 1,1\nformat: RGBA8888\nfilter: ${filter}\nrepeat: none\n`,
+  );
 
 function source(key: string, bytes: Uint8Array) {
   return {
@@ -43,9 +55,12 @@ function source(key: string, bytes: Uint8Array) {
   };
 }
 
-function configureSpineProject() {
+function configureSpineProject(
+  rawGameConfig: unknown = gameConfig,
+  symbols: readonly string[] = ["A"],
+) {
   const project = createFromGameConfig({
-    rawGameConfig: gameConfig,
+    rawGameConfig,
     fileName: "gameconfig.json",
   });
   uploadAssetBatch(project, [
@@ -53,28 +68,114 @@ function configureSpineProject() {
     { path: "Symbol.atlas", bytes: spineAtlas },
     { path: "Symbol.png", bytes: image("H1.png") },
   ]);
-  setStateVisual(project, "A", "normal", {
-    kind: "spine",
-    baseVisual: { kind: "empty", width: 160, height: 160 },
-    skeletonPath: "Symbol.json",
-    atlasPath: "Symbol.atlas",
-    texturePath: "Symbol.png",
-    animationName: "Idle",
-    transform: { x: 3, scale: 1.2 },
-  });
-  addSymbolState(project, "A", "win");
-  setStateVisual(project, "A", "win", {
-    kind: "spine",
-    skeletonPath: "Symbol.json",
-    atlasPath: "Symbol.atlas",
-    texturePath: "Symbol.png",
-    animationName: "Win",
-    transform: { y: 4, scale: 0.8 },
-  });
+  for (const symbol of symbols) {
+    setStateVisual(project, symbol, "normal", {
+      kind: "spine",
+      baseVisual: { kind: "empty", width: 160, height: 160 },
+      skeletonPath: "Symbol.json",
+      atlasPath: "Symbol.atlas",
+      texturePath: "Symbol.png",
+      animationName: "Idle",
+      transform: { x: 3, scale: 1.2 },
+    });
+    addSymbolState(project, symbol, "win");
+    setStateVisual(project, symbol, "win", {
+      kind: "spine",
+      skeletonPath: "Symbol.json",
+      atlasPath: "Symbol.atlas",
+      texturePath: "Symbol.png",
+      animationName: "Win",
+      transform: { y: 4, scale: 0.8 },
+    });
+  }
   return project;
 }
 
 describe("symbol resource import transaction", () => {
+  it("replaces a complete Spine art batch without re-authoring compatible states", async () => {
+    const project = configureSpineProject(multiSymbolGameConfig, ["A", "B"]);
+    const before = structuredClone(project.symbols);
+    const prepared = await prepareSymbolResourceImport({
+      project,
+      sources: [
+        source("Symbol.json", spineSkeleton(["Idle", "Win", "Appear"])),
+        source("Symbol.atlas", spineAtlasFor("Symbol.png", "Nearest,Nearest")),
+        source("Symbol.png", image("H2.png")),
+      ],
+    });
+    const result = await commitSymbolResourceImport({
+      project,
+      prepared,
+      resolutions: prepared.review.items.flatMap((item, itemIndex) =>
+        item.action === "overwrite"
+          ? [{ itemIndex, resolution: "overwrite" as const }]
+          : [],
+      ),
+    });
+
+    expect(result.clearedAnimations).toEqual([]);
+    expect(result.rewrittenTextures).toEqual([]);
+    expect(result.project.symbols).toEqual(before);
+    expect(
+      result.project.assetLibrary.records.get("Symbol.png")!.bytes,
+    ).toEqual(image("H2.png"));
+    expect(project.assetLibrary.records.get("Symbol.png")!.bytes).toEqual(
+      image("H1.png"),
+    );
+  });
+
+  it("rewrites exact texture bindings when an overwritten atlas changes page", async () => {
+    const project = configureSpineProject();
+    const beforeNormal = structuredClone(
+      project.symbols.get("A")!.states.get("normal"),
+    );
+    const beforeWin = structuredClone(
+      project.symbols.get("A")!.states.get("win"),
+    );
+    const prepared = await prepareSymbolResourceImport({
+      project,
+      sources: [
+        source("Symbol.atlas", spineAtlasFor("Symbol-v2.png")),
+        source("Symbol-v2.png", image("H2.png")),
+      ],
+    });
+    const atlasIndex = prepared.review.items.findIndex(
+      ({ targetKey }) => targetKey === "Symbol.atlas",
+    );
+    const result = await commitSymbolResourceImport({
+      project,
+      prepared,
+      resolutions: [{ itemIndex: atlasIndex, resolution: "overwrite" }],
+    });
+
+    expect(result.clearedAnimations).toEqual([]);
+    expect(result.rewrittenTextures).toEqual([
+      {
+        location: "A.normal",
+        atlasPath: "Symbol.atlas",
+        previousTexturePath: "Symbol.png",
+        texturePath: "Symbol-v2.png",
+      },
+      {
+        location: "A.win",
+        atlasPath: "Symbol.atlas",
+        previousTexturePath: "Symbol.png",
+        texturePath: "Symbol-v2.png",
+      },
+    ]);
+    expect(result.project.symbols.get("A")!.states.get("normal")).toEqual({
+      ...beforeNormal,
+      texturePath: "Symbol-v2.png",
+    });
+    expect(result.project.symbols.get("A")!.states.get("win")).toEqual({
+      ...beforeWin,
+      texturePath: "Symbol-v2.png",
+    });
+    expect(project.symbols.get("A")!.states.get("normal")).toEqual(
+      beforeNormal,
+    );
+  });
+
   it("overwrites bytes while preserving configured state semantics", async () => {
     const project = createFromGameConfig({
       rawGameConfig: gameConfig,

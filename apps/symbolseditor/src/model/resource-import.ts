@@ -17,18 +17,23 @@ import {
   type EditorAssetRecord,
   type SymbolEditorProject,
 } from "./editor-project.js";
+import {
+  reconcileSpineResourceOverwrites,
+  spineMetadataNames,
+  type ClearedSpineAnimationBinding,
+  type RewrittenSpineTextureBinding,
+} from "./spine-binding-reconciliation.js";
 import { exportSymbolPackageZip } from "../io/symbol-package-zip.js";
+
+export type {
+  ClearedSpineAnimationBinding,
+  RewrittenSpineTextureBinding,
+} from "./spine-binding-reconciliation.js";
 
 export interface PreparedSymbolResourceImport {
   readonly review: EditorImportReview;
   readonly records: readonly EditorAssetRecord[];
   readonly sources: readonly EditorImportSourceFile[];
-}
-
-export interface ClearedSpineAnimationBinding {
-  readonly location: string;
-  readonly animationName: string;
-  readonly skeletonKeys: readonly string[];
 }
 
 export async function prepareSymbolResourceImport(options: {
@@ -90,6 +95,7 @@ export async function commitSymbolResourceImport(options: {
   readonly project: SymbolEditorProject;
   readonly review: EditorImportReview;
   readonly clearedAnimations: readonly ClearedSpineAnimationBinding[];
+  readonly rewrittenTextures: readonly RewrittenSpineTextureBinding[];
 }> {
   const workspace = await createEditorAssetWorkspace(
     [...options.project.assetLibrary.records.values()].map((record) => ({
@@ -140,10 +146,21 @@ export async function commitSymbolResourceImport(options: {
         : [],
     ),
   );
-  const clearedAnimations = reconcileMissingSpineAnimations(
-    project,
-    overwrittenSkeletonKeys,
+  const overwrittenAtlasKeys = new Set(
+    review.items.flatMap((item, index) =>
+      item.action === "overwrite" &&
+      options.prepared.records[index]?.kind === "spine-atlas"
+        ? [item.targetKey]
+        : [],
+    ),
   );
+  const { clearedAnimations, rewrittenTextures } =
+    reconcileSpineResourceOverwrites({
+      before: options.project,
+      candidate: project,
+      overwrittenSkeletonKeys,
+      overwrittenAtlasKeys,
+    });
   options.mutateCandidate?.(project, review);
   if (clearedAnimations.length > 0) {
     await validateReconciledSpineImport({
@@ -154,7 +171,8 @@ export async function commitSymbolResourceImport(options: {
     return Object.freeze({
       project,
       review,
-      clearedAnimations: Object.freeze(clearedAnimations),
+      clearedAnimations,
+      rewrittenTextures,
     });
   }
   const newDiagnostics = getProjectDiagnostics(project).filter(
@@ -168,6 +186,7 @@ export async function commitSymbolResourceImport(options: {
     project,
     review,
     clearedAnimations: Object.freeze([]),
+    rewrittenTextures,
   });
 }
 
@@ -197,7 +216,7 @@ function validationAnimationName(
   binding: ClearedSpineAnimationBinding,
 ): string | undefined {
   const [first, ...rest] = binding.skeletonKeys.map((key) =>
-    animationNamesFor(project, key),
+    spineMetadataNames(project, key, "animationNames"),
   );
   return [...(first ?? [])].find((name) =>
     rest.every((names) => names.has(name)),
@@ -247,128 +266,6 @@ function applyValidationAnimationName(
     }
   }
   throw new Error(`动画清理目标不是 Spine binding：${binding.location}。`);
-}
-
-function reconcileMissingSpineAnimations(
-  project: SymbolEditorProject,
-  overwrittenSkeletonKeys: ReadonlySet<string>,
-): ClearedSpineAnimationBinding[] {
-  if (overwrittenSkeletonKeys.size === 0) return [];
-  const cleared: ClearedSpineAnimationBinding[] = [];
-  for (const symbol of project.symbols.values()) {
-    for (const [state, visual] of symbol.states) {
-      if (
-        visual.kind !== "spine" ||
-        !overwrittenSkeletonKeys.has(visual.skeletonPath) ||
-        !visual.animationName ||
-        animationNamesFor(project, visual.skeletonPath).has(
-          visual.animationName,
-        )
-      ) {
-        continue;
-      }
-      symbol.states.set(state, { ...visual, animationName: "" });
-      cleared.push({
-        location: `${symbol.symbol}.${state}`,
-        animationName: visual.animationName,
-        skeletonKeys: Object.freeze([visual.skeletonPath]),
-      });
-      continue;
-    }
-    for (const [state, visual] of symbol.states) {
-      if (visual.kind !== "composite") continue;
-      let changed = false;
-      const layers = visual.layers.map((layer) => {
-        const animation = layer.animation;
-        if (
-          animation.kind !== "spine" ||
-          !overwrittenSkeletonKeys.has(animation.skeletonPath) ||
-          !animation.animationName ||
-          animationNamesFor(project, animation.skeletonPath).has(
-            animation.animationName,
-          )
-        ) {
-          return layer;
-        }
-        changed = true;
-        cleared.push({
-          location: `${symbol.symbol}.${state}.layers.${layer.id}`,
-          animationName: animation.animationName,
-          skeletonKeys: Object.freeze([animation.skeletonPath]),
-        });
-        return {
-          ...layer,
-          animation: { ...animation, animationName: "" },
-        };
-      });
-      if (changed) symbol.states.set(state, { ...visual, layers });
-    }
-
-    const value = symbol.valuePresentation;
-    if (!value) continue;
-    const skeletonKeys = value.tiers.map((tier) =>
-      stripLocalRef(tier.animation.skeleton),
-    );
-    if (!skeletonKeys.some((key) => overwrittenSkeletonKeys.has(key))) continue;
-    const sharedAnimations = intersectAnimationNames(project, skeletonKeys);
-    const normalAnimation = value.tiers[0]?.animation.playback.animationName;
-    if (normalAnimation && !sharedAnimations.has(normalAnimation)) {
-      for (const tier of value.tiers) {
-        (tier.animation.playback as { animationName: string }).animationName =
-          "";
-      }
-      cleared.push({
-        location: `${symbol.symbol}.valuePresentation.normal`,
-        animationName: normalAnimation,
-        skeletonKeys: Object.freeze([...skeletonKeys]),
-      });
-    }
-    for (const [state, visual] of symbol.states) {
-      if (
-        visual.kind !== "activeSpine" ||
-        !visual.animationName ||
-        sharedAnimations.has(visual.animationName)
-      ) {
-        continue;
-      }
-      symbol.states.set(state, { ...visual, animationName: "" });
-      cleared.push({
-        location: `${symbol.symbol}.${state}`,
-        animationName: visual.animationName,
-        skeletonKeys: Object.freeze([...skeletonKeys]),
-      });
-    }
-  }
-  return cleared;
-}
-
-function intersectAnimationNames(
-  project: SymbolEditorProject,
-  skeletonKeys: readonly string[],
-): Set<string> {
-  const [first, ...rest] = skeletonKeys.map((key) =>
-    animationNamesFor(project, key),
-  );
-  if (!first) return new Set();
-  return new Set(
-    [...first].filter((name) => rest.every((names) => names.has(name))),
-  );
-}
-
-function animationNamesFor(
-  project: SymbolEditorProject,
-  skeletonKey: string,
-): Set<string> {
-  return new Set(
-    metadataList(
-      project.assetLibrary.records.get(skeletonKey),
-      "animationNames",
-    ),
-  );
-}
-
-function stripLocalRef(path: string): string {
-  return path.startsWith("./") ? path.slice(2) : path;
 }
 
 export function validateSymbolResourceDiscovery(

@@ -52,6 +52,110 @@ function createProject() {
 }
 
 describe("typed resource picker", () => {
+  it("keeps compatible Spine animation when confirming or changing skeleton", () => {
+    const project = createProject();
+    const animationName = (
+      project.assetLibrary.records.get("H1.json")?.metadata?.animationNames as
+        | string[]
+        | undefined
+    )?.[0];
+    expect(animationName).toBeTruthy();
+    uploadAssetBatch(project, [
+      {
+        path: "H1-copy.json",
+        bytes: fixture("assets/sample-skin/H1.json"),
+      },
+    ]);
+    setStateVisual(project, "A", "normal", {
+      kind: "spine",
+      baseVisual: { kind: "empty", width: 160, height: 160 },
+      skeletonPath: "H1.json",
+      atlasPath: "Symbol.atlas",
+      texturePath: "Symbol.png",
+      animationName: animationName!,
+      transform: { x: 4, y: 5, scale: 1.2 },
+    });
+
+    const before = structuredClone(
+      project.symbols.get("A")!.states.get("normal"),
+    );
+    applyResourceBinding(
+      project,
+      { kind: "spine-skeleton", symbol: "A", state: "normal" },
+      "H1.json",
+    );
+    expect(project.symbols.get("A")!.states.get("normal")).toEqual(before);
+
+    applyResourceBinding(
+      project,
+      { kind: "spine-skeleton", symbol: "A", state: "normal" },
+      "H1-copy.json",
+    );
+    expect(project.symbols.get("A")!.states.get("normal")).toEqual({
+      ...before,
+      skeletonPath: "H1-copy.json",
+    });
+  });
+
+  it("treats the current value-tier skeleton as a no-op", () => {
+    const project = createProject();
+    const metadata = project.assetLibrary.records.get("H1.json")?.metadata;
+    const animationName = (
+      metadata?.animationNames as string[] | undefined
+    )?.[0];
+    const slot = (metadata?.slotNames as string[] | undefined)?.[0];
+    expect(animationName).toBeTruthy();
+    expect(slot).toBeTruthy();
+    setValuePresentation(project, "A", {
+      defaultValues: [1],
+      reelStates: {
+        normal: { kind: "transparent", width: 160, height: 160 },
+        states: {},
+      },
+      tiers: [
+        {
+          animation: {
+            kind: "spine",
+            skeleton: "./H1.json",
+            atlas: "./Symbol.atlas",
+            texture: "./Symbol.png",
+            playback: {
+              mode: "animation",
+              animationName: animationName!,
+              loop: true,
+            },
+          },
+        },
+      ],
+      text: {
+        type: "font",
+        slot: slot!,
+        x: 0,
+        y: 0,
+        fontFamily: "Arial",
+        fontSize: 24,
+        fontWeight: "700",
+        fill: "#ffffff",
+        stroke: "#000000",
+        strokeWidth: 1,
+      },
+    });
+    const before = structuredClone(project.symbols.get("A")!.valuePresentation);
+
+    applyResourceBinding(
+      project,
+      {
+        kind: "value-tier-resource",
+        symbol: "A",
+        tierIndex: 0,
+        field: "skeleton",
+      },
+      "H1.json",
+    );
+
+    expect(project.symbols.get("A")!.valuePresentation).toEqual(before);
+  });
+
   it("binds normal images to named and value ImgNumber special mappings", () => {
     const project = createProject();
     setSymbolImageStringNodes(project, "A", [

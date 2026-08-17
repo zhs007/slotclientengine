@@ -29,6 +29,15 @@ value ImgNumber 的每个档位也可显式生成并绑定自己的 `spinBlurPro
 
 单文件、多文件和通用资源 ZIP 使用同一导入事务；ZIP 内路径在 review 前扁平为原始 basename。同名不同 bytes 必须先 review：可以逐项或批量覆盖，也可以显式保留两份。覆盖保持所有 state/value/node 引用；保留两份在扩展名前使用最小可用 `-1`、`-2` suffix，且普通新资源不会自动绑定；用户从目标 state 执行“上传并使用”时，review 成功后的 resolved key 会显式绑定回该 state。唯一例外是被覆盖的有效 Spine skeleton 不再包含已选动画：编辑器只清空受影响的 exact `animationName`（包括 composite 的 exact leaf），并提示用户重新选择；tiered Spine 的共享 normal/activeSpine 动画按全部档位交集一起处理。slot、glyph、atlas page、closure 或其它不兼容仍整批回滚。大小写合法文件名原样保留，不生成 logical id、目录前缀或静默后缀。unused key 可留在 draft，但不会进入 production closure。
 
+美术增量更新应一次选择同一 Spine closure 的 skeleton JSON、atlas 和 page 图片，并在 review
+中对原 filename key 选择覆盖。编辑器在导入后完整 candidate 上统一复验：animation/slot
+仍存在时保留所有 symbol/state、transform、composite layer、value tier、ImgNumber 与音效
+配置；atlas 的唯一 page logical name 合法变化时，只结构化同步 exact 引用该 atlas 的
+texture key。Picker 再次确认当前 skeleton/atlas 是 no-op；改选兼容 skeleton 也保留仍有效的
+animation/slot。缺失 animation 只清理并报告 exact binding，其它 closure 或 typed binding
+不兼容则整批回滚。若导入的是另一套独立但同名的 Spine 美术，overwrite 仍表示更新同一
+logical resource，不会静默创建第二份；应先提供不同合法 filename key。
+
 带根 `manifest.json` 的 VNI export bundle 会先按正式 manifest/profile 合同识别，再进入上述
 统一导入事务。只有 `purpose=runtime` 是候选：唯一 runtime 自动选择，多个 runtime 必须在
 受控下拉框中明确选择，`purpose=editing` 不入库。所选 project 及其 exact asset closure 在

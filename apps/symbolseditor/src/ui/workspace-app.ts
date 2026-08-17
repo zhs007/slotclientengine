@@ -129,6 +129,11 @@ interface OrdinaryImportOutcome {
     readonly location: string;
     readonly animationName: string;
   }[];
+  readonly rewrittenTextures: readonly {
+    readonly location: string;
+    readonly previousTexturePath: string;
+    readonly texturePath: string;
+  }[];
 }
 
 export class SymbolsEditorApp {
@@ -2458,9 +2463,11 @@ export class SymbolsEditorApp {
       this.showSuccess(
         outcome.boundPath
           ? `已上传并使用 ${outcome.boundPath}`
-          : outcome.clearedAnimations.length === 0
-            ? `已上传 ${outcome.changed} 个资源；现有配置保持不变`
-            : `已上传 ${outcome.changed} 个资源；已清空 ${outcome.clearedAnimations.length} 个不存在的 Spine 动画：${outcome.clearedAnimations.map(({ location, animationName }) => `${location}（${animationName}）`).join("、")}`,
+          : outcome.clearedAnimations.length > 0
+            ? `已上传 ${outcome.changed} 个资源；已清空 ${outcome.clearedAnimations.length} 个不存在的 Spine 动画：${outcome.clearedAnimations.map(({ location, animationName }) => `${location}（${animationName}）`).join("、")}`
+            : outcome.rewrittenTextures.length > 0
+              ? `已上传 ${outcome.changed} 个资源；现有动画配置保持不变，已同步 ${outcome.rewrittenTextures.length} 个 Atlas page 引用：${outcome.rewrittenTextures.map(({ location, previousTexturePath, texturePath }) => `${location}（${previousTexturePath} → ${texturePath}）`).join("、")}`
+              : `已上传 ${outcome.changed} 个资源；现有配置保持不变`,
       );
       this.render(this.#store.getSnapshot());
     } catch (error) {
@@ -2610,6 +2617,7 @@ export class SymbolsEditorApp {
           .length,
         ...(boundPath ? { boundPath } : {}),
         clearedAnimations: result.clearedAnimations,
+        rewrittenTextures: result.rewrittenTextures,
       });
     } finally {
       if (suspended) this.resumePickerDialog();
