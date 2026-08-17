@@ -120,6 +120,7 @@
   重放，也不得驱动本地公开轮带、reel phase 或其它 presentation random。
 - `otherScenes` 是变化数据：业务 component 触发但 auxiliary matrix 未变化时可以没有 update。logiccore 不强制每个 component 恰好一份，app 负责区分可推导省略和不可推导的新值。
 - `renderPriority` 只允许非负安全整数，默认 `0`；只影响 Pixi display order，不改变 scene、stop、result、state、金额或点击逻辑。同优先级保持默认稳定顺序。
+- stopped reel 的不可见 buffer slot 不解析公开轮带 code 或 presentation value，也不向游戏 resolver 索值；只有实际可见或正在滚动的 value symbol 才执行严格非 null 校验。
 
 ## Symbol、Spine 与 image-string
 

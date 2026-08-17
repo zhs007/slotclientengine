@@ -468,6 +468,82 @@ describe("RenderReel", () => {
     expect(reel.getVisiblePresentationValues()).toEqual([5, 50, 500]);
   });
 
+  it("skips hidden stopped values but keeps strict checks when the buffer starts rolling", () => {
+    const reels = createBasicReels();
+    const baseRegistry = createBasicRegistry();
+    const registry: ReelSymbolRegistry = {
+      getValidation: () => baseRegistry.getValidation(),
+      getEntryByCode: (code) => baseRegistry.getEntryByCode(code),
+      getEntryBySymbol: (symbol) => baseRegistry.getEntryBySymbol(symbol),
+      getCellSize: () => baseRegistry.getCellSize(),
+      getRollingVisualByCode: (code, state) =>
+        baseRegistry.getRollingVisualByCode(code, state),
+      requiresPresentationValueByCode: (code) => code === 1,
+      resolveRollingValueTierByCode: () => 0,
+      createRollingValueVisualByCode: () => ({
+        container: new Container(),
+        tierIndex: 0,
+        setValue: () => undefined,
+        destroy: () => undefined,
+      }),
+      createSymbolPlayerByCode: (code) =>
+        baseRegistry.createSymbolPlayerByCode(code),
+    };
+    const presentationValueResolver = vi.fn(({ code }) =>
+      code === 1 ? 5 : null,
+    );
+    const reel = new RenderReel({
+      reels,
+      x: 0,
+      layout: createBasicLayout(),
+      registry,
+      presentationValueResolver,
+    });
+    presentationValueResolver.mockClear();
+
+    reel.resetToY(1);
+
+    expect(reel.getVisibleScene()).toEqual([0, 2, 3]);
+    expect(presentationValueResolver.mock.calls).toEqual([
+      [{ x: 0, symbolY: 1, code: 0 }],
+      [{ x: 0, symbolY: 2, code: 2 }],
+      [{ x: 0, symbolY: 3, code: 3 }],
+    ]);
+    expect(
+      reel
+        .getSlotRenderViews()
+        .filter((slot) => slot.windowY < 0 || slot.windowY >= 3)
+        .map((slot) => ({
+          code: slot.code,
+          kind: slot.kind,
+          presentationValue: slot.presentationValue,
+        })),
+    ).toEqual([
+      { code: -1, kind: "empty", presentationValue: null },
+      { code: -1, kind: "empty", presentationValue: null },
+    ]);
+
+    presentationValueResolver.mockImplementation(() => null);
+    const axisPlan = createReelSpinPlan({
+      reels,
+      finalYs: [2, 1],
+      visibleRows: 3,
+      minimumSpinCycles: 2,
+      baseDurationMs: 300,
+      speedSymbolsPerSecond: 30,
+      startDelayMs: 0,
+      stopDelayMs: 0,
+    }).axes[0];
+    expect(() =>
+      reel.start(axisPlan, {
+        targetVisibleSymbols: [2, 2, 2],
+        targetVisiblePresentationValues: [null, null, null],
+      }),
+    ).toThrow(
+      "Rolling symbol code 1 requires a game-configured presentation value.",
+    );
+  });
+
   it("centers each symbol container in its cell", () => {
     const reel = new RenderReel({
       reels: createBasicReels(),

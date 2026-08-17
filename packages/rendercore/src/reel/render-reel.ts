@@ -1012,11 +1012,15 @@ export class RenderReel extends Container {
       -(y - baseY) * (this.layout.cellHeight + this.layout.rowGap);
 
     for (const slot of this.#slots) {
-      const symbolY = baseY + slot.windowY;
-      const code = this.getCodeAt(symbolY, baseY);
       slot.container.x = this.getSlotContainerX();
       slot.container.y = this.getSlotContainerY(slot.windowY, pixelOffsetY);
       slot.container.visible = this.shouldShowSlot(slot.windowY);
+      if (!slot.container.visible) {
+        this.syncDormantSlot(slot);
+        continue;
+      }
+      const symbolY = baseY + slot.windowY;
+      const code = this.getCodeAt(symbolY, baseY);
       const isVisibleStoppedSlot =
         this.#phase === "stopped" &&
         slot.windowY >= 0 &&
@@ -1037,6 +1041,18 @@ export class RenderReel extends Container {
         );
       }
     }
+  }
+
+  private syncDormantSlot(slot: ReelSlot): void {
+    this.releaseSlotSymbol(slot);
+    slot.emptySymbolLayer.removeChildren();
+    slot.code = null;
+    slot.kind = null;
+    slot.renderPriority = 0;
+    slot.rollingSprite.visible = false;
+    slot.rollingSprite.renderable = false;
+    this.hideRollingValue(slot);
+    this.syncSlotRenderOrder(slot);
   }
 
   private createWindowSnapshot(y: number): ReelWindowSnapshot {
