@@ -567,6 +567,32 @@ describe("symbol state texture manifest helpers", () => {
     expect(() => parseSymbolStateTextureManifest(manifest)).toThrow(/array/);
   });
 
+  it("allows multiple audio cues on any state owned by the Symbol", () => {
+    const manifest = structuredClone(
+      upgradeSymbolStateTextureManifest(createManifest()),
+    ) as any;
+    manifest.audio.effects = ["coin", "cheer"].map((name) => ({
+      name,
+      asset: { sources: [{ path: `${name}.wav`, mediaType: "audio/wav" }] },
+      playback: "once",
+      offsetSeconds: 0,
+      voices: { maxConcurrent: 4, overflow: "restart-oldest" },
+      bgm: { kind: "keep" },
+    }));
+    manifest.symbols.L1.audioCues = [
+      { state: "win", effect: "coin" },
+      { state: "win", effect: "cheer" },
+    ];
+    expect(
+      parseSymbolStateTextureManifest(manifest).symbols.L1.audioCues,
+    ).toEqual(manifest.symbols.L1.audioCues);
+
+    manifest.symbols.L1.audioCues[0].state = "missing";
+    expect(() => parseSymbolStateTextureManifest(manifest)).toThrow(
+      /state is not declared/u,
+    );
+  });
+
   it("parses settings, display symbols, scales, single normals and layered normals", () => {
     const manifest = createManifest();
 

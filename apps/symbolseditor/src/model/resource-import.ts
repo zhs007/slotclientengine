@@ -424,6 +424,19 @@ function mediaTypeForKey(key: string): string {
       return "application/json";
     case "atlas":
       return "text/plain";
+    case "mp3":
+      return "audio/mpeg";
+    case "ogg":
+      return "audio/ogg";
+    case "wav":
+      return "audio/wav";
+    case "m4a":
+    case "mp4":
+      return "audio/mp4";
+    case "aac":
+      return "audio/aac";
+    case "webm":
+      return "audio/webm";
     default:
       throw new Error(`Symbols Editor 不支持资源类型：${key}`);
   }

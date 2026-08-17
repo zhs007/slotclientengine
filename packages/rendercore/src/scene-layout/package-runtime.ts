@@ -1342,15 +1342,18 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           const symbol = symbolPackage.gameConfig.getPaytableEntry(
             snapshot.code,
           )?.symbol;
-          const cue = symbol
-            ? symbolPackage.symbolManifest.symbols[symbol]?.audioCues.find(
+          const cues = symbol
+            ? (symbolPackage.symbolManifest.symbols[symbol]?.audioCues.filter(
                 (candidate) => candidate.state === request.state,
-              )
-            : undefined;
-          if (cue)
-            this.#symbolAudioHandles.set(cueOwner, [
-              this.#audio.playEffect(`${bindingId}.${cue.effect}`),
-            ]);
+              ) ?? [])
+            : [];
+          if (cues.length > 0)
+            this.#symbolAudioHandles.set(
+              cueOwner,
+              cues.map((cue) =>
+                this.#audio.playEffect(`${bindingId}.${cue.effect}`),
+              ),
+            );
         }
       }
     }

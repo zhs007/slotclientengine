@@ -186,6 +186,46 @@ describe("PopupEditorApp", () => {
     app.destroy();
   });
 
+  it("configures multiple audio effects inside each Popup state", async () => {
+    const { PopupEditorApp } = await import("../src/ui/app-shell.js");
+    const root = document.querySelector<HTMLElement>("#app")!;
+    const app = new PopupEditorApp(root);
+    await app.init();
+    createProject(root);
+    root.querySelector<HTMLButtonElement>('[data-tab="tiers"]')!.click();
+
+    const wav = new Uint8Array(12);
+    wav.set(new TextEncoder().encode("RIFF"), 0);
+    wav.set(new TextEncoder().encode("WAVE"), 8);
+    const input = root.querySelector<HTMLInputElement>(
+      '[data-import-popup-audio][data-popup-audio-target="award-tier:base"]',
+    )!;
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [
+        new File([wav], "coin.wav", { type: "audio/wav" }),
+        new File([wav], "cheer.wav", { type: "audio/wav" }),
+      ],
+    });
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.waitFor(() =>
+      expect(root.querySelectorAll("[data-popup-audio-card]")).toHaveLength(2),
+    );
+
+    root.querySelector<HTMLButtonElement>('[data-tier="bigwin"]')!.click();
+    expect(
+      root.querySelector(
+        '[data-import-popup-audio][data-popup-audio-target="award-tier:bigwin"]',
+      ),
+    ).not.toBeNull();
+    expect(root.querySelectorAll("[data-popup-audio-card]")).toHaveLength(0);
+
+    root.querySelector<HTMLButtonElement>('[data-tab="project"]')!.click();
+    expect(root.textContent).toContain("当前共 2 条状态音效");
+    expect(root.querySelector("[data-import-popup-audio]")).toBeNull();
+    app.destroy();
+  });
+
   it("creates a fixed-type v6 project and edits focus-only presentation configuration", async () => {
     const { PopupEditorApp } = await import("../src/ui/app-shell.js");
     const root = document.querySelector<HTMLElement>("#app")!;

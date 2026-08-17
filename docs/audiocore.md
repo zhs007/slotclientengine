@@ -37,8 +37,8 @@ effect 可配置：
 ## 编辑器与交付
 
 - Game Layout Editor：导入/试听 BGM 与 Layout effect，为 mode 选择 optional BGM，维护程序 effect allowlist。
-- Popup Editor：配置 local effect，并绑定 award tier 或 segment cue。
-- Symbols Editor：配置 local effect，并绑定 symbol state cue；画面仍预览全部 symbol，但通过单选下拉框决定唯一发声 symbol，该选择不导出。
+- Popup Editor：在每个 award tier 或 start/loop/end segment 内配置零到多条 local effect；进入状态时全部 cue 按各自延迟触发。
+- Symbols Editor：在每个 Symbol 的每个 state 内配置零到多条独立 local effect；画面仍预览全部 symbol，但通过项目页单选下拉框决定唯一发声 symbol，该选择不导出。
 
 生产 ZIP 保留所有实际引用的音频和 nested package exact closure。`gamelayoutpkgcli` 把音频放入独立 `audio:scene-layout` group，并排除在 `initialAssets` 之外，因此不阻塞 splash loading。这里的“按需”不等于所有格式或浏览器都采用 network streaming；`@pixi/sound` 的 WebAudio 路径仍可能下载并解码完整文件。
 

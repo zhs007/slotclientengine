@@ -55,7 +55,7 @@
 ## Symbols Editor
 
 - 内层 symbol-state-textures manifest 的 canonical authoring 版本为 v3：沿用 v2 state lifecycle，并新增 package-local audio effect/cue。打开合法 v1/v2 时只调用 rendercore 的统一 upgrader；新导出恒写 v3，editor preview/Replay 不按 state 名判断。
-- Popup/Symbol effect 配置复用 `audiocore/editor` 的同一字段合同，只保存 local name。Symbols Editor 视觉上仍播放全部 symbol 的所选 state，但音频试听必须通过 preview-only 单选下拉框只放一个 symbol，且该选择不写 manifest。
+- Popup/Symbol effect 配置复用 `audiocore/editor` 的同一字段合同，只保存 local name。Popup 的每个 tier/segment 与每个 Symbol 的每个 state 都在自身编辑区维护零到多条独立 effect；不得用项目级 effect 表单加单一 cue 的两步流程覆盖同状态旧配置。Symbols Editor 视觉上仍播放全部 symbol 的所选 state，但音频试听必须通过 preview-only 单选下拉框只放一个 symbol，且该选择不写 manifest。
 - `apps/symbolseditor` 只拥有 browser editing/IO/UI、typed draft transaction、dependency library、资源引用图、per-symbol state assignment、value/cascade 表单和固定 all-symbol single-state preview。普通 symbol 的 shared ImgNumber slot 候选取全部 top-level Spine state skeleton slot 交集，value-managed symbol 取全部 tier skeleton 交集；每个 value-managed symbol 只有一个 preview value，由 threshold 自动命中档位。该值只属于 UI session，不得进入 manifest/ZIP。
 - Symbols 资源覆盖保持 owner-owned 配置和 filename-key 引用；被覆盖的有效 Spine skeleton 缺少已选 exact animation 时，只清空受影响的 animation selection（tiered shared animation 按全部 tier 一起清空）并显式报告，其它 candidate bytes 不能满足现有 typed binding 时整批回滚。完整 Symbols project ZIP 只能单独打开，不作为普通资源合并；project 与 preview failure 必须分层显式呈现。
 - Symbols composite state 必须显式声明 normal/stateTexture base 与非空有序 layer；layer id 唯一且为 lowercase kebab-case，placement 只能是 underlay/overlay，leaf 只能是 Spine/VNI。Editor 的绑定、覆盖清理、引用图和导出必须定位 exact layer，不允许 filename guess、隐式 reorder 或降级为单层。

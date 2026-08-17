@@ -8,7 +8,7 @@ VNI bundle 只导入 `purpose=runtime` 的运行发布包：唯一 runtime 自�
 
 同名不同 bytes 默认覆盖，review 显示 hash、bytes、动作和受影响 layer；全项目校验或 preview prepare 失败会完整回滚。不存在文件夹入口、任意 logical resource id 或独立 dependency bytes 区。
 
-新建项目与新导出的 `<id>-popup.zip` 固定使用 Popup v7。默认 loader 接受全部受支持的 v1–v7，先 strict 校验 source，再统一规范化并复验为 latest v7。v7 沿用 v6 的 award 图层语义，并新增 package-local 音效与 tier/segment cue；名字只在 Game Layout 组合时获得 binding 前缀。普通 Spine 类型仍显式配置 start、loop、end 动画。
+新建项目与新导出的 `<id>-popup.zip` 固定使用 Popup v7。默认 loader 接受全部受支持的 v1–v7，先 strict 校验 source，再统一规范化并复验为 latest v7。v7 沿用 v6 的 award 图层语义，并新增 package-local 音效与 tier/segment cue；每个 award 档位或普通 Spine 的 start/loop/end 段都在自身编辑区内维护零到多条音效，名字只在 Game Layout 组合时获得 binding 前缀。普通 Spine 类型仍显式配置 start、loop、end 动画。
 
 普通 Spine 类型不再提供独立 prompt authoring；提示语与其它文案一样使用命名的字体文字 overlay。旧 v1/v2 prompt 在导入边界自动结构化迁移为 `name=prompt` 的文字层，名称、order 或资源冲突会使整次导入失败。可追加任意数量 image、字体文字、ImgNumber、Spine 或 VNI overlay，编辑其位置、缩放、旋转、order 及各类型 playback/项目状态可见性。
 

@@ -12,6 +12,7 @@ UTC：2026-08-17T06:19:14Z
 - `gamelayoutpkgcli` 结构化改写 root/nested audio reference，输出独立 `audio:scene-layout` group，并从 `initialAssets` 排除全部实际引用音频。
 - `gameframeworks` 暴露音频 handle/type；game002v2、game003v2 在 spin trusted gesture 解锁音频，并将 framework mute 状态传给 Scene Layout runtime。
 - 更新长期规则、三个 Editor/RenderCore README 与 `docs/audiocore.md`。外部 Crave 游戏未直接修改，手动步骤写入 `docs/crave/task-223-external-audio-migration.md`；仓库 `assets/crave` 未改动。
+- 后续按验收反馈调整 authoring：Popup 的每个 tier/segment、Symbols 的每个 Symbol/state 均在状态内部维护多条独立音效卡片；项目级页面不再承担 effect/cue 绑定。Symbols preview 与 game runtime 同步改为播放同状态全部 cues。
 
 ## 关键决策与计划偏差
 

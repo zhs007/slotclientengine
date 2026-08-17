@@ -46,7 +46,7 @@ export class SymbolEditorPreview {
   #resizeObserver: ResizeObserver | null = null;
   #audio: AudioRuntime | null = null;
   #audioUrls: string[] = [];
-  #audioCueByState = new Map<string, string>();
+  #audioCuesByState = new Map<string, string[]>();
 
   constructor(host: HTMLElement) {
     this.#host = host;
@@ -215,9 +215,11 @@ export class SymbolEditorPreview {
     this.clearAudio();
     const symbol = project.symbols.get(symbolName);
     if (!symbol || project.audio.effects.length === 0) return;
-    this.#audioCueByState = new Map(
-      symbol.audioCues.map((cue) => [cue.state, cue.effect]),
-    );
+    for (const cue of symbol.audioCues) {
+      const effects = this.#audioCuesByState.get(cue.state) ?? [];
+      effects.push(cue.effect);
+      this.#audioCuesByState.set(cue.state, effects);
+    }
     this.#audio = createAudioRuntime({
       backend: createPixiSoundBackend(),
       effects: Object.fromEntries(
@@ -245,8 +247,8 @@ export class SymbolEditorPreview {
   }
 
   playAudioCue(state: string): void {
-    const effect = this.#audioCueByState.get(state);
-    if (effect) this.#audio?.playEffect(effect);
+    for (const effect of this.#audioCuesByState.get(state) ?? [])
+      this.#audio?.playEffect(effect);
   }
 
   fitAll(): number {
@@ -289,7 +291,7 @@ export class SymbolEditorPreview {
     this.#audio = null;
     for (const url of this.#audioUrls) URL.revokeObjectURL(url);
     this.#audioUrls = [];
-    this.#audioCueByState.clear();
+    this.#audioCuesByState.clear();
   }
 
   private resizeAndFit(): void {

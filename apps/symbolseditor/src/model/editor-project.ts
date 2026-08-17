@@ -541,6 +541,26 @@ export function removeSymbolState(
   if (references.length > 0) {
     throw new Error(`${symbol}.${state} 仍被引用：${references.join("、")}。`);
   }
+  const removedEffects = new Set(
+    draft.audioCues
+      .filter((cue) => cue.state === state)
+      .map((cue) => cue.effect),
+  );
+  draft.audioCues = draft.audioCues.filter((cue) => cue.state !== state);
+  const remainingEffects = new Set(
+    [...project.symbols.values()].flatMap((candidate) =>
+      candidate.audioCues.map((cue) => cue.effect),
+    ),
+  );
+  if ([...removedEffects].some((effect) => !remainingEffects.has(effect))) {
+    project.audio = {
+      ...project.audio,
+      effects: project.audio.effects.filter(
+        (effect) =>
+          !removedEffects.has(effect.name) || remainingEffects.has(effect.name),
+      ),
+    };
+  }
   draft.states.delete(state);
   draft.stateOrder = draft.stateOrder.filter(
     (candidate) => candidate !== state,

@@ -591,7 +591,11 @@ export function parseSymbolStateTextureManifest(
     const audioCues = parseSymbolAudioCues(
       rawSymbolRecord.audioCues,
       symbol,
-      stateSet,
+      new Set([
+        "normal",
+        ...Object.keys(parsedStates),
+        ...Object.keys(animations),
+      ]),
       audioEffects,
       sourceVersion,
     );
