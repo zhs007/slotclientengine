@@ -899,7 +899,11 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   getLayer(id: SceneLayoutLayerId): Container;
   /** Returns the manifest-declared mode ids in their stable declaration order. */
   getGameModeIds(): readonly string[];
-  /** Returns the committed mode and any transition target without mutating playback. */
+  /** Allocation-free committed mode query for game runtime hot paths. */
+  getStableGameMode(): string;
+  /** Allocation-free transition phase query for game runtime hot paths. */
+  getGameModePhase(): "stable" | "transitioning";
+  /** @deprecated Editor diagnostics should use SceneLayoutPackageRuntimeInspector. */
   getGameModeSnapshot(): SceneLayoutGameModeSnapshot;
   /**
    * Selects a stable mode without playing its directed transition.

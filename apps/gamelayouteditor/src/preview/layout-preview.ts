@@ -10,7 +10,7 @@ import {
   type SceneLayoutPackageRuntime,
   type SceneLayoutSnapshot,
   type SceneLayoutVariantId,
-} from "@slotclientengine/rendercore/scene-layout";
+} from "@slotclientengine/rendercore/scene-layout/core";
 import {
   createSceneLayoutPackageRuntimeInspector,
   type SceneLayoutPackageRuntimeInspector,
@@ -369,7 +369,7 @@ export class LayoutPreview {
   }
 
   getGameModeSnapshot() {
-    return this.#packageRuntime?.getGameModeSnapshot() ?? null;
+    return this.#packageRuntimeInspector?.getGameModeSnapshot() ?? null;
   }
 
   getCurrentVariantId(): SceneLayoutVariantId | null {
@@ -393,7 +393,7 @@ export class LayoutPreview {
       this.#manifest.version === 1
     )
       return;
-    const current = this.#packageRuntime.getGameModeSnapshot().stableMode;
+    const current = this.#packageRuntime.getStableGameMode();
     const mode = this.#manifest.gameModes.modes.find(
       (candidate) => candidate.id === current,
     );
@@ -410,7 +410,7 @@ export class LayoutPreview {
       throw new Error("当前 layout preview 没有 package runtime。");
     if (!this.#manifest || this.#manifest.version === 1)
       return this.#packageRuntime.requestPrimaryGameModeAction();
-    const current = this.#packageRuntime.getGameModeSnapshot().stableMode;
+    const current = this.#packageRuntime.getStableGameMode();
     const target = this.#manifest.gameModes.modes.find(
       (candidate) => candidate.id === current,
     )?.primaryAction?.targetMode;
@@ -456,7 +456,7 @@ export class LayoutPreview {
   }
 
   private gameModeRequestOptions(modeId: string) {
-    const current = this.#packageRuntime!.getGameModeSnapshot();
+    const current = this.#packageRuntimeInspector!.getGameModeSnapshot();
     const sourceBinding = resolveModeSymbolBinding(
       this.#manifest!,
       current.stableMode,
@@ -868,7 +868,11 @@ export class LayoutPreview {
       manifest,
       pageSize: this.#pageSize,
       ...(this.#packageRuntime
-        ? { modeId: this.#packageRuntime.getGameModeSnapshot().displayedMode }
+        ? {
+            modeId:
+              this.#packageRuntimeInspector!.getGameModeSnapshot()
+                .displayedMode,
+          }
         : {}),
     });
     this.#frameViewport = frameViewport;
@@ -892,7 +896,8 @@ export class LayoutPreview {
             manifest.gameModes.modes.find(
               (mode) =>
                 mode.id ===
-                this.#packageRuntime?.getGameModeSnapshot().displayedMode,
+                this.#packageRuntimeInspector?.getGameModeSnapshot()
+                  .displayedMode,
             )?.reelEnabled,
           )),
     });
@@ -1139,7 +1144,7 @@ export class LayoutPreview {
     const runtime = this.#packageRuntime;
     const manifest = this.#manifest;
     if (!runtime || !manifest) return;
-    const snapshot = runtime.getGameModeSnapshot();
+    const snapshot = this.#packageRuntimeInspector!.getGameModeSnapshot();
     const resolved = resolveModeSymbolBinding(manifest, snapshot.stableMode);
     if (!resolved) return;
     const scene = this.requirePackagePreviewScene(resolved);

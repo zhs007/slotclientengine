@@ -4,7 +4,7 @@ import {
   type EditorNodeDraft,
   type EditorProject,
 } from "../model/editor-project.js";
-import type { SceneLayoutVariantId } from "@slotclientengine/rendercore/scene-layout";
+import type { SceneLayoutVariantId } from "@slotclientengine/rendercore/scene-layout/data";
 import type { EditorLayoutResource } from "../model/editor-resource.js";
 import { describeResource } from "../model/resource-commands.js";
 import {

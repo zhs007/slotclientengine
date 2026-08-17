@@ -11,12 +11,14 @@ import {
 import {
   createGridCellCascadeDropPlan,
   createGridCellCascadeDropdownPlan,
+} from "@slotclientengine/rendercore";
+import {
   createSceneLayoutPackageRuntime,
   getInitialSceneLayoutSymbolPackageResource,
   type SceneLayoutGridCellSpinPlanStage,
   type SceneLayoutPackageResource,
   type SceneLayoutPackageRuntime,
-} from "@slotclientengine/rendercore";
+} from "@slotclientengine/rendercore/scene-layout/core";
 import { Application } from "pixi.js";
 import { createGame002v2DefaultSceneValueResolver } from "./default-scene-values.js";
 import { Game002v2NearwinController } from "./nearwin.js";
@@ -197,7 +199,7 @@ class DirectRoundAdapter implements SlotGameAdapter {
     const runtime = this.requireRuntime();
     runtime.dismissActiveAwardCelebrationImmediately();
     this.#anticipationActive = false;
-    const freeGame = runtime.getGameModeSnapshot().stableMode === "FreeGame";
+    const freeGame = runtime.getStableGameMode() === "FreeGame";
     const inputScene = runtime.getMainReelSceneSnapshot();
     const inputValues = runtime.getMainReelCascadeValues();
     runtime.startMainReelContinuousSpin(
@@ -300,7 +302,7 @@ class DirectRoundAdapter implements SlotGameAdapter {
       this.#performanceTrace?.markActiveSpin("remove-complete");
       if (
         step.hasComponent("bg-triggerfg") &&
-        runtime.getGameModeSnapshot().stableMode !== "FreeGame"
+        runtime.getStableGameMode() !== "FreeGame"
       ) {
         await runtime.prepareGameModeTransition("FreeGame");
         await runtime.requestGameMode("FreeGame");
@@ -312,7 +314,7 @@ class DirectRoundAdapter implements SlotGameAdapter {
         "game002v2 round did not provide a pre-spin landing scene.",
       );
 
-    if (runtime.getGameModeSnapshot().stableMode === "FreeGame") {
+    if (runtime.getStableGameMode() === "FreeGame") {
       await runtime.prepareGameModeTransition("BaseGame");
       await runtime.requestGameMode("BaseGame");
     }

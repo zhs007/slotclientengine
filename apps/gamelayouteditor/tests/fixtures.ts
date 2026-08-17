@@ -1,4 +1,4 @@
-import type { SceneLayoutManifestV1 } from "@slotclientengine/rendercore/scene-layout";
+import type { SceneLayoutManifestV1 } from "@slotclientengine/rendercore/scene-layout/core";
 
 export const imageManifest = {
   version: 1,

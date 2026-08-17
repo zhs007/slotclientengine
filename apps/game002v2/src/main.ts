@@ -7,7 +7,7 @@ import {
 import "@slotclientengine/gameframeworks/styles.css";
 import { createLeoSlotGameUiFactory } from "@slotclientengine/game-ui-leo";
 import "@slotclientengine/game-ui-leo/styles.css";
-import { createSceneLayoutFramePolicy } from "@slotclientengine/rendercore";
+import { createSceneLayoutFramePolicy } from "@slotclientengine/rendercore/scene-layout/data";
 import type { SlotPlatformBootstrapHandle } from "@slotclientengine/platformbootstrap";
 import { createCraveLoadingResources, createCraveResource } from "./crave.js";
 import type { Game002v2LaunchConfig } from "./launch.js";

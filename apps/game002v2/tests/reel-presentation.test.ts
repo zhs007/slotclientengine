@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { SceneLayoutPackageResource } from "@slotclientengine/rendercore";
+import type { SceneLayoutPackageResource } from "@slotclientengine/rendercore/scene-layout/core";
 import { prepareGame002v2ReelPresentation } from "../src/reel-presentation.js";
 
 describe("game002v2 reel presentation resources", () => {

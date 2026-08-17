@@ -1,4 +1,4 @@
-import type { SceneLayoutCoordinateOrigin } from "@slotclientengine/rendercore/scene-layout";
+import type { SceneLayoutCoordinateOrigin } from "@slotclientengine/rendercore/scene-layout/data";
 import {
   activeVariantIds,
   calculateReelSize,

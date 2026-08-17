@@ -7,16 +7,18 @@ import type {
   SlotOperationV2,
 } from "@slotclientengine/gameframeworks";
 import {
-  createSceneLayoutPackageRuntime,
   createSlotOperationCoordinator,
   createSlotOperationHandlerRegistry,
   createTextRenderObject,
   createAreaSpinFunction,
   type ReelArea,
-  type SceneLayoutPackageRuntime,
   type SymbolAreaPresentationContext,
   type SlotOperationExecutionContext,
 } from "@slotclientengine/rendercore";
+import {
+  createSceneLayoutPackageRuntime,
+  type SceneLayoutPackageRuntime,
+} from "@slotclientengine/rendercore/scene-layout/core";
 import { GAME003V2_CONFIG } from "./config.js";
 import { formatGame003v2Amount } from "./money.js";
 import type { Game003v2Resource } from "./resource.js";

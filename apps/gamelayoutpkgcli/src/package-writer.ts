@@ -20,7 +20,7 @@ import {
   type EditorAssetsMapEntry,
   type EditorAssetsMapV1,
 } from "@slotclientengine/editorresource";
-import type { SceneLayoutManifest } from "@slotclientengine/rendercore/scene-layout";
+import type { SceneLayoutManifest } from "@slotclientengine/rendercore/scene-layout/data";
 import { validateLayoutPackageBytes } from "./package-reader.js";
 import { encodeStableJson } from "./reference-rewriter.js";
 import type {

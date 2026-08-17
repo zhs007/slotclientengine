@@ -1,5 +1,7 @@
-import { loadSceneLayoutPackageFromUrl } from "@slotclientengine/rendercore";
-import type { SceneLayoutPackageResource } from "@slotclientengine/rendercore";
+import {
+  loadSceneLayoutPackageFromUrl,
+  type SceneLayoutPackageResource,
+} from "@slotclientengine/rendercore/scene-layout/core";
 import type { SymbolPackageResource } from "@slotclientengine/rendercore/symbol/core";
 
 export interface Game003v2Resource {

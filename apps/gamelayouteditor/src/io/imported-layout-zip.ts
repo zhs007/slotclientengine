@@ -7,7 +7,7 @@ import {
   type SceneLayoutManifestLatest,
   type SceneLayoutPackageResource,
   type SceneLayoutResource,
-} from "@slotclientengine/rendercore/scene-layout";
+} from "@slotclientengine/rendercore/scene-layout/editor";
 import {
   assertCanonicalPackagePath,
   extractBoundedZip as extractSharedBoundedZip,

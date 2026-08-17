@@ -1,7 +1,7 @@
 import {
   parseSceneOtherSceneFlowProject,
   type SceneOtherSceneFlowProjectV2,
-} from "@slotclientengine/rendercore/scene-layout";
+} from "@slotclientengine/rendercore/scene-layout/editor";
 import {
   parseSlotOperationAuthoringProject,
   type SlotOperationAuthoringProjectV2,

@@ -175,6 +175,10 @@ const activeAwardSnapshotReaders = new WeakMap<
   SceneLayoutPackageRuntime,
   () => AwardCelebrationSnapshot | null
 >();
+const gameModeSnapshotReaders = new WeakMap<
+  SceneLayoutPackageRuntime,
+  () => SceneLayoutGameModeSnapshot
+>();
 
 export function createSceneLayoutPackageRuntime(options: {
   readonly resource: SceneLayoutPackageResource;
@@ -233,6 +237,18 @@ export function inspectActiveAwardCelebrationRuntime(
   if (!read)
     throw new SceneLayoutError(
       "Scene layout award celebration inspection is unavailable.",
+    );
+  return read();
+}
+
+/** @internal Editor/diagnostic bridge; omitted from the core public facade. */
+export function inspectSceneLayoutGameModeRuntime(
+  runtime: SceneLayoutPackageRuntime,
+): SceneLayoutGameModeSnapshot {
+  const read = gameModeSnapshotReaders.get(runtime);
+  if (!read)
+    throw new SceneLayoutError(
+      "Scene layout game mode inspection is unavailable.",
     );
   return read();
 }
@@ -300,6 +316,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #presentationDelayWaiters =
     new Set<PackagePresentationDelayWaiter>();
   #stableMode: string | null = null;
+  #gameModeIds: readonly string[] = Object.freeze([]);
   #displayedMode: string | null = null;
   #targetMode: string | null = null;
   #modeRequestInProgress = false;
@@ -406,6 +423,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     activeAwardSnapshotReaders.set(this, () =>
       this.#createActiveAwardCelebrationSnapshot(),
     );
+    gameModeSnapshotReaders.set(this, () => this.getGameModeSnapshot());
     this.container = new Container();
     this.container.label = `scene-layout-package:${resource.manifest.id}`;
     this.#popupRoot.label = "scene-layout-popup-root";
@@ -600,6 +618,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       this.#popupRoot.sortChildren();
       this.#stableMode = initialModeId;
       this.#displayedMode = initialModeId;
+      this.#gameModeIds = Object.freeze(
+        this.requireGameModes().modes.map((mode) => mode.id),
+      );
       this.#initialized = true;
     } catch (error) {
       this.destroy();
@@ -1691,7 +1712,17 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
 
   getGameModeIds(): readonly string[] {
     this.assertReady();
-    return Object.freeze(this.requireGameModes().modes.map((mode) => mode.id));
+    return this.#gameModeIds;
+  }
+
+  getStableGameMode(): string {
+    this.assertReady();
+    return this.#stableMode!;
+  }
+
+  getGameModePhase(): "stable" | "transitioning" {
+    this.assertReady();
+    return this.#targetMode ? "transitioning" : "stable";
   }
 
   getGameModeSnapshot(): SceneLayoutGameModeSnapshot {
@@ -2193,6 +2224,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
+    activeAwardSnapshotReaders.delete(this);
+    gameModeSnapshotReaders.delete(this);
     for (const waiter of this.#presentationDelayWaiters) {
       waiter.signal?.removeEventListener("abort", waiter.abortListener!);
       waiter.reject(
@@ -2269,6 +2302,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#resource.destroy();
     this.#initialized = false;
     this.#stableMode = null;
+    this.#gameModeIds = Object.freeze([]);
     this.#displayedMode = null;
     this.#targetMode = null;
     this.#modeRequestInProgress = false;

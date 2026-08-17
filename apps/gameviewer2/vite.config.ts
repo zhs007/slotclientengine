@@ -11,8 +11,16 @@ export default defineConfig({
   resolve: {
     alias: [
       alias(
-        "@slotclientengine/rendercore/scene-layout",
-        "../../packages/rendercore/src/scene-layout/index.ts",
+        "@slotclientengine/rendercore/scene-layout/editor",
+        "../../packages/rendercore/src/scene-layout/editor/index.ts",
+      ),
+      alias(
+        "@slotclientengine/rendercore/scene-layout/data",
+        "../../packages/rendercore/src/scene-layout/data/index.ts",
+      ),
+      alias(
+        "@slotclientengine/rendercore/scene-layout/core",
+        "../../packages/rendercore/src/scene-layout/core/index.ts",
       ),
       alias(
         "@slotclientengine/rendercore",

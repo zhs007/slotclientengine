@@ -10,7 +10,7 @@ import {
   type SceneLayoutNode,
   type SceneLayoutRuntimeResourceSpec,
   type SceneLayoutVariantId,
-} from "@slotclientengine/rendercore/scene-layout";
+} from "@slotclientengine/rendercore/scene-layout/data";
 import {
   collectImageStringAssetPaths,
   parseImageStringManifest,

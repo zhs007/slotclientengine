@@ -6,8 +6,8 @@ import {
   parseReelManifest,
   type GridCellEffectResourceMap,
   type ParsedReelManifest,
-  type SceneLayoutPackageResource,
 } from "@slotclientengine/rendercore";
+import type { SceneLayoutPackageResource } from "@slotclientengine/rendercore/scene-layout/core";
 
 export interface Game002v2ReelPresentation {
   readonly manifest: ParsedReelManifest;

@@ -76,7 +76,7 @@ describe("gamelayouteditor production ownership boundary", () => {
     expect(preview).not.toMatch(
       /createAwardCelebrationRuntime|createSpinePopupRuntime|createAwardCelebrationPlayer|createSpinePopupPlayer/u,
     );
-    expect(preview).toContain("@slotclientengine/rendercore/scene-layout");
+    expect(preview).toContain("@slotclientengine/rendercore/scene-layout/core");
   });
 });
 

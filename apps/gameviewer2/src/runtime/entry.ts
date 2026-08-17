@@ -1,4 +1,4 @@
-import { createSceneOtherSceneFlowRuntime } from "@slotclientengine/rendercore/scene-layout";
+import { createSceneOtherSceneFlowRuntime } from "@slotclientengine/rendercore/scene-layout/editor";
 import { receiveRuntimePayload } from "./launch-channel.js";
 
 export async function startRuntimeWindow(root: HTMLElement): Promise<void> {

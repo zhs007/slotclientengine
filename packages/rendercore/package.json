@@ -43,15 +43,20 @@
       "types": "./dist/viewport/index.d.ts",
       "import": "./dist/viewport/index.js"
     },
-    "./scene-layout": {
-      "source": "./src/scene-layout/index.ts",
-      "types": "./dist/scene-layout/index.d.ts",
-      "import": "./dist/scene-layout/index.js"
+    "./scene-layout/data": {
+      "source": "./src/scene-layout/data/index.ts",
+      "types": "./dist/scene-layout/data/index.d.ts",
+      "import": "./dist/scene-layout/data/index.js"
+    },
+    "./scene-layout/core": {
+      "source": "./src/scene-layout/core/index.ts",
+      "types": "./dist/scene-layout/core/index.d.ts",
+      "import": "./dist/scene-layout/core/index.js"
     },
     "./scene-layout/editor": {
-      "source": "./src/scene-layout/editor.ts",
-      "types": "./dist/scene-layout/editor.d.ts",
-      "import": "./dist/scene-layout/editor.js"
+      "source": "./src/scene-layout/editor/index.ts",
+      "types": "./dist/scene-layout/editor/index.d.ts",
+      "import": "./dist/scene-layout/editor/index.js"
     },
     "./image-string/data": {
       "source": "./src/image-string/data/index.ts",
@@ -105,6 +110,7 @@
     "benchmark:image-string": "node ./benchmarks/image-string-hot-path.mjs",
     "benchmark:popup": "node ./benchmarks/popup-runtime-hot-path.mjs",
     "benchmark:symbol": "node --expose-gc ./benchmarks/symbol-runtime-hot-path.mjs",
+    "benchmark:scene-layout": "node --expose-gc ./benchmarks/scene-layout-runtime-hot-path.mjs",
     "generate:symbol-state-textures": "node ./scripts/generate-symbol-state-textures.mjs",
     "lint": "eslint .",
     "test": "vitest run --coverage",

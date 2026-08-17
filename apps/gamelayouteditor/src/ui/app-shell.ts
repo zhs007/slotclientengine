@@ -1,7 +1,7 @@
 import {
   type SceneLayoutGameModeSnapshot,
   type SceneLayoutVariantId,
-} from "@slotclientengine/rendercore/scene-layout";
+} from "@slotclientengine/rendercore/scene-layout/editor";
 import {
   createBoundedSourceIndex,
   ephemeralContentFingerprint,

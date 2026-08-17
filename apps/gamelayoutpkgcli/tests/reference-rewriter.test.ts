@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { upgradeSceneLayoutManifestToLatest } from "@slotclientengine/rendercore/scene-layout";
+import { upgradeSceneLayoutManifestToLatest } from "@slotclientengine/rendercore/scene-layout/data";
 import {
   rewriteImageStringManifest,
   rewriteLayoutManifest,

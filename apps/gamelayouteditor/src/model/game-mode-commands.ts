@@ -1,4 +1,4 @@
-import type { SceneLayoutVariantId } from "@slotclientengine/rendercore/scene-layout";
+import type { SceneLayoutVariantId } from "@slotclientengine/rendercore/scene-layout/data";
 import type { ImportedPopupPackage } from "../io/imported-popup-package.js";
 import type { ImportedSymbolPackage } from "../io/imported-symbol-package.js";
 import {

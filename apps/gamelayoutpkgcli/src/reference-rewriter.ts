@@ -11,7 +11,7 @@ import {
 import {
   parseSceneLayoutManifestDocument,
   type SceneLayoutManifest,
-} from "@slotclientengine/rendercore/scene-layout";
+} from "@slotclientengine/rendercore/scene-layout/data";
 import {
   parseSymbolPackageManifest,
   parseSymbolStateTextureManifest,

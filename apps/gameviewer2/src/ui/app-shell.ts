@@ -10,7 +10,7 @@ import {
   type SceneOtherSceneFlowPackageSummary,
   type SceneOtherSceneFlowProjectV2,
   type SceneOtherSceneFlowStateSnapshotV2,
-} from "@slotclientengine/rendercore/scene-layout";
+} from "@slotclientengine/rendercore/scene-layout/editor";
 import {
   finalizeSlotOperationAuthoringProject,
   type SlotOperationAuthoringProjectV2,

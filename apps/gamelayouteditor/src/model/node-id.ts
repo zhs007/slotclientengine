@@ -2,7 +2,7 @@ import {
   upgradeSceneLayoutManifestToLatest,
   type SceneLayoutManifest,
   type SceneLayoutManifestLatest,
-} from "@slotclientengine/rendercore/scene-layout";
+} from "@slotclientengine/rendercore/scene-layout/data";
 
 export const RESERVED_RENDER_LAYER_NODE_IDS = Object.freeze([
   "layout",

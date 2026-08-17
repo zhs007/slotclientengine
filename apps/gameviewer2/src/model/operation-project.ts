@@ -1,7 +1,7 @@
 import type {
   SceneOtherSceneFlowPackageSummary,
   SceneOtherSceneFlowProjectV2,
-} from "@slotclientengine/rendercore/scene-layout";
+} from "@slotclientengine/rendercore/scene-layout/editor";
 import type {
   SlotOperationAuthoringProjectV2,
   SlotOperationAuthoringEdge,

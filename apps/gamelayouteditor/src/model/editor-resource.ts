@@ -1,4 +1,4 @@
-import type { SceneLayoutVariantId } from "@slotclientengine/rendercore/scene-layout";
+import type { SceneLayoutVariantId } from "@slotclientengine/rendercore/scene-layout/data";
 import type { ImageStringManifestV1 } from "@slotclientengine/rendercore/image-string/data";
 import type { EditorResourceProvenance } from "@slotclientengine/browserartifactio";
 import type { VNIProjectConfig } from "@slotclientengine/vnicore/data";

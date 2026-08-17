@@ -267,7 +267,7 @@ vi.mock("../src/io/imported-layout-zip.js", () => ({
   validateLayoutAssets: state.validate,
 }));
 
-vi.mock("@slotclientengine/rendercore/scene-layout", () => ({
+vi.mock("@slotclientengine/rendercore/scene-layout/core", () => ({
   createSceneLayoutRuntime: () => state.runtime,
   createSceneLayoutPackageRuntime: () => state.packageRuntime,
   resolveSceneLayoutFrameViewport: state.resolveFrame,
@@ -276,6 +276,7 @@ vi.mock("@slotclientengine/rendercore/scene-layout/editor", () => ({
   createSceneLayoutPackageRuntimeInspector: () => ({
     getActiveAwardCelebrationSnapshot:
       state.packageRuntime.getActiveAwardCelebrationSnapshot,
+    getGameModeSnapshot: state.packageRuntime.getGameModeSnapshot,
   }),
 }));
 

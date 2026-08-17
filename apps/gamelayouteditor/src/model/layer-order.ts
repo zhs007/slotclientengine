@@ -1,4 +1,4 @@
-import { DEFAULT_SCENE_LAYOUT_POPUP_ORDER } from "@slotclientengine/rendercore/scene-layout";
+import { DEFAULT_SCENE_LAYOUT_POPUP_ORDER } from "@slotclientengine/rendercore/scene-layout/data";
 import type { EditorProject } from "./editor-project.js";
 
 export function setNodeOrder(

@@ -3,7 +3,7 @@ import {
   assertCanonicalEditorNodeId,
   migrateSceneLayoutNodeIds,
 } from "../src/model/node-id.js";
-import type { SceneLayoutManifestV1 } from "@slotclientengine/rendercore/scene-layout";
+import type { SceneLayoutManifestV1 } from "@slotclientengine/rendercore/scene-layout/core";
 
 describe("Scene Layout node id policy", () => {
   it("migrates dot/reserved ids deterministically and rewrites typed references", () => {

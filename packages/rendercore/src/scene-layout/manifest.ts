@@ -1,6 +1,4 @@
 import { SceneLayoutError } from "./errors.js";
-import { assertNoPackagePathAliases } from "@slotclientengine/browserartifactio";
-import { assertEditorAssetKey } from "@slotclientengine/editorresource";
 import type {
   OrientationFocusSceneLayoutVariant,
   SceneLayoutAdaptation,
@@ -1444,6 +1442,35 @@ function videoOwnedPath(value: unknown, label: string): string {
       `${label} must be a filename key or assets/<full-lowercase-sha256>.mp4.`,
     );
   return path;
+}
+
+function assertEditorAssetKey(value: string): string {
+  if (
+    value.length === 0 ||
+    value.normalize("NFC") !== value ||
+    value === "." ||
+    value === ".." ||
+    value.includes("/") ||
+    value.includes("\\") ||
+    !/\.[^.]+$/u.test(value) ||
+    [...value].some((character) => {
+      const codePoint = character.codePointAt(0)!;
+      return codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f);
+    })
+  )
+    fail(`asset filename key is invalid: ${value}`);
+  return value;
+}
+
+function assertNoPackagePathAliases(paths: readonly string[]): void {
+  const canonical = new Map<string, string>();
+  for (const path of paths) {
+    const key = path.normalize("NFC").toLocaleLowerCase("en-US");
+    const previous = canonical.get(key);
+    if (previous !== undefined && previous !== path)
+      fail(`package path canonical alias collision: ${previous} / ${path}`);
+    canonical.set(key, path);
+  }
 }
 
 function activeVariantIds(

@@ -1,4 +1,4 @@
-import type { SceneLayoutGameModeSnapshot } from "@slotclientengine/rendercore/scene-layout";
+import type { SceneLayoutGameModeSnapshot } from "@slotclientengine/rendercore/scene-layout/editor";
 import {
   activeVariantIds,
   validateEditorTransitionEvent,

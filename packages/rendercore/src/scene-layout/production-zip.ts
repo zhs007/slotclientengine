@@ -20,16 +20,11 @@ import type {
   SceneLayoutManifest,
   SceneLayoutPackageResource,
 } from "./types.js";
+import { SCENE_LAYOUT_PRODUCTION_ZIP_LIMITS } from "./data/package-limits.js";
 
 const ROOT_MANIFEST = "layout.manifest.json";
 
-export const SCENE_LAYOUT_PRODUCTION_ZIP_LIMITS: BoundedZipLimits =
-  Object.freeze({
-    maxEntries: 4096,
-    maxCompressedBytes: 200 * 1024 * 1024,
-    maxFileBytes: 50 * 1024 * 1024,
-    maxTotalBytes: 500 * 1024 * 1024,
-  });
+export { SCENE_LAYOUT_PRODUCTION_ZIP_LIMITS };
 
 export interface InspectedSceneLayoutPackage {
   readonly manifest: SceneLayoutManifest;

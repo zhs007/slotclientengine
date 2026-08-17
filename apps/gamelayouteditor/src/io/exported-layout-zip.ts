@@ -5,7 +5,7 @@ import {
   upgradeSceneLayoutManifestToLatest,
   type SceneLayoutManifest,
   type SceneLayoutManifestLatest,
-} from "@slotclientengine/rendercore/scene-layout";
+} from "@slotclientengine/rendercore/scene-layout/editor";
 import {
   collectImageStringAssetPaths,
   parseImageStringManifest,

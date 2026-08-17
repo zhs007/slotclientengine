@@ -10,7 +10,7 @@ import {
 import type {
   SceneLayoutManifest,
   SceneLayoutNode,
-} from "@slotclientengine/rendercore/scene-layout";
+} from "@slotclientengine/rendercore/scene-layout/data";
 import {
   collectSymbolPackageEntryPaths,
   parseSymbolPackageManifest,

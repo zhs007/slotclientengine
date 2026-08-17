@@ -1,4 +1,4 @@
-import { assertSceneLayoutGeometryCompatible } from "@slotclientengine/rendercore/scene-layout";
+import { assertSceneLayoutGeometryCompatible } from "@slotclientengine/rendercore/scene-layout/data";
 import {
   cloneEditorProject,
   editorProjectToManifest,

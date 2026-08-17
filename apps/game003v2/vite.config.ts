@@ -23,6 +23,20 @@ export default defineConfig({
         ),
       },
       {
+        find: "@slotclientengine/rendercore/scene-layout/data",
+        replacement: resolve(
+          __dirname,
+          "../../packages/rendercore/src/scene-layout/data/index.ts",
+        ),
+      },
+      {
+        find: "@slotclientengine/rendercore/scene-layout/core",
+        replacement: resolve(
+          __dirname,
+          "../../packages/rendercore/src/scene-layout/core/index.ts",
+        ),
+      },
+      {
         find: "@slotclientengine/rendercore",
         replacement: resolve(
           __dirname,

@@ -177,6 +177,8 @@
 
 ## Scene layout 与生成配置
 
+- Scene Layout public contract 固定拆为 `scene-layout/data → scene-layout/core → scene-layout/editor`：data 只拥有 versioned schema、latest normalization、allocation 和纯 geometry/reference；core 只拥有 production resolved-resource/runtime/presentation，并由宿主 ticker 推进；editor 只包装 mapped ZIP、authoring/standalone viewer 与复用同一 core 的 inspector。禁止恢复旧 `./scene-layout` 混合入口或 root Scene Layout wildcard。
+- 游戏、gameframeworks production facade 使用 data/core，稳定帧和业务判断优先使用标量 query 与 edge drain，不物化完整 diagnostic snapshot。完整 mode/award snapshot、独立 Application/canvas/ticker/RAF 只属于 editor inspector/standalone viewer；editor wrapper 不复制 runtime 状态机。只做纯 manifest/reference rewrite 的工具使用 data；需要验证/materialize mapped production ZIP 的 CLI 属于 editor package adapter。
 - rendercore 拥有 strict scene-layout manifest parsing、exact asset closure、named-node attachment、focus/reel geometry、variant application、mode-aware visibility 和 production runtime。
 - Scene Layout package resource必须在RenderCore内把合法v1/v2直接规范化为latest v3并确定性生成缺失的`runtimeAllocation`；不得要求先经Editor重导。为兼容已有宿主，公开`manifest`保留initial-mode v1视图，package runtime只执行strict `runtimeManifest` v3。原生v3 allocation与typed mode/node/Symbols/Popup/transition/runtime-resource引用不一致时显式失败，Editor只导出完整v3。
 - scene-layout init 可并发 prepare 相互独立的 node、reel/Symbol/effect 和 popup 资源，但必须等待所有

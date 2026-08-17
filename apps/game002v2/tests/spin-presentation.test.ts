@@ -1,7 +1,5 @@
-import type {
-  GridCellReelSpinPlan,
-  SceneLayoutGridCellSpinPlanStage,
-} from "@slotclientengine/rendercore";
+import type { GridCellReelSpinPlan } from "@slotclientengine/rendercore";
+import type { SceneLayoutGridCellSpinPlanStage } from "@slotclientengine/rendercore/scene-layout/core";
 import { describe, expect, it, vi } from "vitest";
 import {
   buildGame002v2FreeGameSpinPlan,

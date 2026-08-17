@@ -1,5 +1,5 @@
 import { Graphics } from "pixi.js";
-import type { SceneLayoutSnapshot } from "@slotclientengine/rendercore/scene-layout";
+import type { SceneLayoutSnapshot } from "@slotclientengine/rendercore/scene-layout/data";
 
 export function drawPreviewGuides(options: {
   readonly graphics: Graphics;

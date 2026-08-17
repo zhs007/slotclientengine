@@ -109,7 +109,7 @@ const flow = {
 
 const mocks = vi.hoisted(() => ({ launch: vi.fn(), download: vi.fn() }));
 
-vi.mock("@slotclientengine/rendercore/scene-layout", () => ({
+vi.mock("@slotclientengine/rendercore/scene-layout/editor", () => ({
   inspectSceneOtherSceneFlowPackage: vi.fn(async () => summary),
   createDefaultSceneOtherSceneFlowProject: vi.fn(() => structuredClone(flow)),
   inspectSceneOtherSceneFlowReadiness: vi.fn(async ({ project }) => ({

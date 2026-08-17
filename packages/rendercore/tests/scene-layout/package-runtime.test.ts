@@ -1234,7 +1234,10 @@ describe("scene layout package runtime", () => {
       await runtime.init();
       runtime.applyViewport({ width: 2000, height: 2000 });
       expect(runtime.getGameModeIds()).toEqual(["BaseGame", "FreeGame"]);
-      expect(runtime.getGameModeSnapshot()).toEqual({
+      expect(runtime.getGameModeIds()).toBe(runtime.getGameModeIds());
+      expect(runtime.getStableGameMode()).toBe("BaseGame");
+      expect(runtime.getGameModePhase()).toBe("stable");
+      expect(inspector.getGameModeSnapshot()).toEqual({
         stableMode: "BaseGame",
         displayedMode: "BaseGame",
         targetMode: null,
@@ -1256,7 +1259,8 @@ describe("scene layout package runtime", () => {
         runtime.requestGameMode("BaseGame"),
       ).resolves.toBeUndefined();
       await completeModeRequest(runtime, "FreeGame");
-      expect(runtime.getGameModeSnapshot().stableMode).toBe("FreeGame");
+      expect(runtime.getStableGameMode()).toBe("FreeGame");
+      expect(inspector.getGameModeSnapshot().stableMode).toBe("FreeGame");
       await expect(runtime.requestGameMode("Missing")).rejects.toThrow(
         /Unknown/,
       );

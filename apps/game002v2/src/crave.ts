@@ -2,7 +2,7 @@ import type {
   GameLoadingResource,
   GameLoadingResourceContext,
 } from "@slotclientengine/gameloading";
-import { createSceneLayoutPackageResource } from "@slotclientengine/rendercore";
+import { createSceneLayoutPackageResource } from "@slotclientengine/rendercore/scene-layout/core";
 import craveMap from "../../../assets/crave/assets.map.json" with { type: "json" };
 
 const ROOT_FILES = Object.freeze(["layout.manifest.json", "assets.map.json"]);

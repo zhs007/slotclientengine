@@ -1,4 +1,4 @@
-import { collectSceneLayoutAssetPaths } from "@slotclientengine/rendercore/scene-layout";
+import { collectSceneLayoutAssetPaths } from "@slotclientengine/rendercore/scene-layout/data";
 import {
   activeVariantIds,
   editorProjectToManifest,

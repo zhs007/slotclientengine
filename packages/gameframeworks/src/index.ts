@@ -36,7 +36,7 @@ export {
   createSceneLayoutPackageResource,
   createSceneLayoutPackageRuntime,
   createSceneLayoutPresentationSurface,
-} from "@slotclientengine/rendercore";
+} from "@slotclientengine/rendercore/scene-layout/core";
 export type {
   SceneLayoutLayerId,
   SceneLayoutPackageResource,
@@ -49,6 +49,8 @@ export type {
   SceneLayoutPoint,
   SceneLayoutPointSelector,
   RenderAlignment,
+} from "@slotclientengine/rendercore/scene-layout/core";
+export type {
   RenderObjectLayer,
   RenderObjectLayerAddAtOptions,
 } from "@slotclientengine/rendercore";

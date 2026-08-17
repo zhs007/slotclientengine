@@ -132,7 +132,7 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
       await this.#runtime.init();
       this.assertAlive();
       if (this.#initialMode) {
-        const mode = this.#runtime.getGameModeSnapshot().stableMode;
+        const mode = this.#runtime.getStableGameMode();
         if (mode !== this.#initialMode.id)
           throw new SceneLayoutError(
             `Scene layout presentation initial mode "${this.#initialMode.id}" does not match manifest initial mode "${String(mode)}".`,

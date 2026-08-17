@@ -1,7 +1,7 @@
 import {
   collectSceneLayoutAssetPaths,
   type SceneLayoutManifest,
-} from "@slotclientengine/rendercore/scene-layout";
+} from "@slotclientengine/rendercore/scene-layout/data";
 import type { EditorProject } from "../model/editor-project.js";
 import { editorResourcePaths } from "../model/editor-resource.js";
 

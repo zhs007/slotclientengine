@@ -1,9 +1,16 @@
 import type { AwardCelebrationSnapshot } from "../popup/core/types.js";
-import { inspectActiveAwardCelebrationRuntime } from "./package-runtime.js";
-import type { SceneLayoutPackageRuntime } from "./types.js";
+import {
+  inspectActiveAwardCelebrationRuntime,
+  inspectSceneLayoutGameModeRuntime,
+} from "./package-runtime.js";
+import type {
+  SceneLayoutGameModeSnapshot,
+  SceneLayoutPackageRuntime,
+} from "./types.js";
 
 export interface SceneLayoutPackageRuntimeInspector {
   getActiveAwardCelebrationSnapshot(): AwardCelebrationSnapshot | null;
+  getGameModeSnapshot(): SceneLayoutGameModeSnapshot;
 }
 
 export function createSceneLayoutPackageRuntimeInspector(
@@ -12,5 +19,6 @@ export function createSceneLayoutPackageRuntimeInspector(
   return Object.freeze({
     getActiveAwardCelebrationSnapshot: () =>
       inspectActiveAwardCelebrationRuntime(runtime),
+    getGameModeSnapshot: () => inspectSceneLayoutGameModeRuntime(runtime),
   });
 }

@@ -1,4 +1,4 @@
-import type { SceneLayoutGridCellSpinPlanStage } from "@slotclientengine/rendercore";
+import type { SceneLayoutGridCellSpinPlanStage } from "@slotclientengine/rendercore/scene-layout/core";
 import type { SymbolPackageResource } from "@slotclientengine/rendercore/symbol/core";
 import { orderGridCellPositions } from "@slotclientengine/rendercore";
 import { createNearwinLandingState } from "./nearwin.js";

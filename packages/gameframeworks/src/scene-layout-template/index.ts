@@ -20,7 +20,7 @@ import {
   type SceneLayoutManifest,
   type SlotTemplateCompatibilitySnapshot,
   type SlotTemplatePresentationProfileV1,
-} from "@slotclientengine/rendercore/scene-layout";
+} from "@slotclientengine/rendercore/scene-layout/editor";
 import { createSlotGameFramework } from "../framework.js";
 import { validateLiveServerUrl } from "../session.js";
 import type {

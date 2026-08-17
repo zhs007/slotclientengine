@@ -44,6 +44,8 @@
 
 ## Rendercore production runtime
 
+- 公开入口固定为 `@slotclientengine/rendercore/scene-layout/data|core|editor`，不再提供混合 `scene-layout` 或 root wildcard。游戏 runtime 只依赖 data/core；Gamelayout Editor、Game Viewer/Viewer2 和需要 mapped ZIP/standalone Application 的工具依赖 editor 包装，但预览必须复用包装内部的同一个 core runtime。
+- core 不创建 Application、canvas、ticker 或 RAF，不拥有 workspace/authoring session；宿主逐帧调用 `update(deltaSeconds)`。游戏热路径使用 `getStableGameMode()`、`getGameModePhase()` 等标量 query；完整 game-mode/award snapshot 只由 editor inspector 读取。
 - rendercore 拥有 strict gameModes、plural symbolPackages、directed transition schema、exact dependency closure 和 production API。
 - scene-layout authored coordinate origin 只允许 `top-left` / `center`；缺失按 `top-left`。node、art-space Spine transition 与 main reel 的 origin 映射由 rendercore 统一实现，focus rect 继续使用 art 左上角矩形。
 - runtime必须从current snapshot公开authored origin、art/visibleRect九宫格point及authored point↔opaque Anchor；Point/Rect是调用时快照，Anchor延迟解析。不得要求游戏为center origin手工加减半个artSize，也不得把logical visibleRect称为CSS/window/device坐标。

@@ -2,7 +2,7 @@ import type {
   EditorAssetsMapEntry,
   EditorAssetsMapV1,
 } from "@slotclientengine/editorresource";
-import type { SceneLayoutManifest } from "@slotclientengine/rendercore/scene-layout";
+import type { SceneLayoutManifest } from "@slotclientengine/rendercore/scene-layout/data";
 
 export interface ValidatedLayoutPackage {
   readonly zipBytes: Uint8Array;

@@ -9,10 +9,10 @@ import {
 } from "@slotclientengine/editorresource";
 import {
   collectSceneLayoutAssetPaths,
-  collectSceneLayoutPackagePaths,
   parseSceneLayoutManifestDocument,
   SCENE_LAYOUT_PRODUCTION_ZIP_LIMITS,
-} from "@slotclientengine/rendercore/scene-layout";
+} from "@slotclientengine/rendercore/scene-layout/data";
+import { collectSceneLayoutPackagePaths } from "@slotclientengine/rendercore/scene-layout/editor";
 import type { ValidatedLayoutPackage } from "./types.js";
 
 const ROOT_MANIFEST = "layout.manifest.json";

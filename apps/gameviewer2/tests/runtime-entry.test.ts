@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../src/runtime/launch-channel.js", () => ({
   receiveRuntimePayload: mocks.receive,
 }));
-vi.mock("@slotclientengine/rendercore/scene-layout", () => ({
+vi.mock("@slotclientengine/rendercore/scene-layout/editor", () => ({
   createSceneOtherSceneFlowRuntime: mocks.create,
 }));
 

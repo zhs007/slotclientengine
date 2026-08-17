@@ -6,7 +6,7 @@ import {
   type SlotGameFramework,
 } from "@slotclientengine/gameframeworks";
 import "@slotclientengine/gameframeworks/styles.css";
-import { createSceneLayoutFramePolicy } from "@slotclientengine/rendercore";
+import { createSceneLayoutFramePolicy } from "@slotclientengine/rendercore/scene-layout/data";
 import { GAME003V2_CONFIG } from "./config.js";
 import { parseGame003v2Launch } from "./launch.js";
 import {

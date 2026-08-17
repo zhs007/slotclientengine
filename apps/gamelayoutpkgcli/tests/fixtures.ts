@@ -12,7 +12,7 @@ import {
 import {
   parseSceneLayoutManifest,
   type SceneLayoutManifestV1,
-} from "@slotclientengine/rendercore/scene-layout";
+} from "@slotclientengine/rendercore/scene-layout/core";
 
 export const text = (value: unknown): Uint8Array =>
   new TextEncoder().encode(`${JSON.stringify(value, null, 2)}\n`);

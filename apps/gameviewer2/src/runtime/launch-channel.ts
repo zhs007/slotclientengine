@@ -1,4 +1,4 @@
-import type { SceneOtherSceneFlowProjectV2 } from "@slotclientengine/rendercore/scene-layout";
+import type { SceneOtherSceneFlowProjectV2 } from "@slotclientengine/rendercore/scene-layout/editor";
 import type { finalizeSlotOperationAuthoringProject } from "@slotclientengine/slotoperationauthoring";
 
 export interface GameViewer2LaunchPayloadV4 {

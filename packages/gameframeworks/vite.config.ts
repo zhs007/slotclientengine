@@ -37,10 +37,17 @@ export default defineConfig({
         ),
       },
       {
-        find: "@slotclientengine/rendercore/scene-layout",
+        find: "@slotclientengine/rendercore/scene-layout/editor",
         replacement: resolve(
           __dirname,
-          "../rendercore/src/scene-layout/index.ts",
+          "../rendercore/src/scene-layout/editor/index.ts",
+        ),
+      },
+      {
+        find: "@slotclientengine/rendercore/scene-layout/core",
+        replacement: resolve(
+          __dirname,
+          "../rendercore/src/scene-layout/core/index.ts",
         ),
       },
     ],
