@@ -71,7 +71,7 @@
   - Editor player wrapper 从独立 `@slotclientengine/rendercore/popup/editor` 入口导入，委托同一个 Runtime，额外提供 `update() -> snapshot` 与 `getSnapshot()`；production popup入口不导出editor factory。
   - award player 复用 tier update scratch，替代逐帧 spread Set。
 - `packages/rendercore/src/scene-layout/package-runtime.ts`
-  - production popup 使用 `createAwardCelebrationRuntime()` / `createSpinePopupRuntime()` 并调用 void `update()`；阶段分支使用 query。
+  - production popup 从 `@slotclientengine/rendercore/popup/core` 使用 `createAwardCelebrationRuntime()` / `createSpinePopupRuntime()` 并调用 void `update()`；阶段分支使用 query。
   - `isMainReelSpinning()` 调 ReelSet `isSpinning()`，不取完整 snapshot。
   - 游戏轮询award只调用`getActiveAwardCelebrationPhase()`；完整snapshot迁到`@slotclientengine/rendercore/scene-layout/editor` inspector，供Game Layout Editor使用。
 - `packages/rendercore/src/symbol-cascade/create-symbol-cascade-player.ts`

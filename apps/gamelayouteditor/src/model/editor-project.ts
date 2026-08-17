@@ -24,7 +24,7 @@ import {
   collectPopupPackagePaths,
   parsePopupManifest,
   type PopupManifest,
-} from "@slotclientengine/rendercore/popup";
+} from "@slotclientengine/rendercore/popup/editor";
 import { assertVNIProject } from "@slotclientengine/vnicore/data";
 import {
   editorResourcePaths,

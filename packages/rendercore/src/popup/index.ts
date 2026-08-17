@@ -1,5 +1,6 @@
 export * from "./types.js";
 export * from "./manifest.js";
+export * from "./data/normalize.js";
 export * from "./amount-format.js";
 export * from "./award-sequence.js";
 export * from "./package-resource.js";

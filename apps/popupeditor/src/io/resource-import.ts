@@ -30,11 +30,11 @@ import {
   parseWinAmountAnimationManifest,
   validateOfficialSpineResource,
 } from "@slotclientengine/rendercore";
-import { validatePopupFontBytes } from "@slotclientengine/rendercore/popup";
+import { validatePopupFontBytes } from "@slotclientengine/rendercore/popup/editor";
 import type {
   AwardTierId,
   PopupResourceSpec,
-} from "@slotclientengine/rendercore/popup";
+} from "@slotclientengine/rendercore/popup/editor";
 import {
   assertVNIBundleManifest,
   assertVNIProject,

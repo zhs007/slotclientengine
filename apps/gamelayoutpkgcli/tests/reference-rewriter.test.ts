@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { upgradePopupManifestToV5 } from "@slotclientengine/rendercore/popup";
 import { upgradeSceneLayoutManifestToLatest } from "@slotclientengine/rendercore/scene-layout";
 import {
   rewriteImageStringManifest,
@@ -340,19 +339,19 @@ describe("typed asset reference rewriting", () => {
       name: "bonus-count",
       resource: "bonus.hash.json",
     });
-    const v5 = rewritePopupManifest(upgradePopupManifestToV5(popup), new Map());
-    expect(v5.version).toBe(5);
-    expect(v5.backdrop.visibleStates).toEqual([
+    const latest = rewritePopupManifest(popup, new Map());
+    expect(latest.version).toBe(6);
+    expect(latest.backdrop.visibleStates).toEqual([
       "base",
       "standard",
       "bigwin",
       "superwin",
       "megawin",
     ]);
-    if (v5.type !== "award-celebration")
-      throw new Error("Expected v5 award popup.");
-    expect(v5.awardCelebration.base.layers[0]?.visibleStates).toEqual(
-      v5.backdrop.visibleStates,
+    if (latest.type !== "award-celebration")
+      throw new Error("Expected latest award popup.");
+    expect(latest.awardCelebration.base.layers[0]).not.toHaveProperty(
+      "visibleStates",
     );
   });
 
@@ -430,49 +429,14 @@ describe("typed asset reference rewriting", () => {
     );
     expect(popup.type).toBe("spine");
     if (popup.type !== "spine") throw new Error("Expected Spine popup.");
+    expect(popup.version).toBe(6);
     expect(popup.spine).toMatchObject({
       resource: "effect.hash.json",
-      prompt: { font: "title.hash.woff2" },
       overlays: [
+        { name: "prompt", resource: "title.hash.woff2" },
         { name: "bonus-count", resource: "bonus.hash.json" },
         { name: "heading", resource: "title.hash.woff2" },
       ],
-    });
-
-    const systemPrompt = { ...popup.spine.prompt! };
-    delete systemPrompt.font;
-    const systemFontPopup = rewritePopupManifest(
-      { ...popup, spine: { ...popup.spine, prompt: systemPrompt } },
-      mapping,
-    );
-    expect(systemFontPopup.type).toBe("spine");
-    if (systemFontPopup.type !== "spine")
-      throw new Error("Expected Spine popup.");
-    expect(systemFontPopup.spine.prompt).not.toHaveProperty("font");
-    const popupV2 = rewritePopupManifest(
-      {
-        ...popup,
-        version: 2,
-        name: "Spine Popup V2",
-        adaptation: {
-          mode: "maximized-focus",
-          focus: { left: 50, right: 50, top: 50, bottom: 50 },
-        },
-        backdrop: { enabled: true, color: "#000000", alpha: 0.5 },
-        spine: {
-          ...popup.spine,
-          overlays: popup.spine.overlays?.map((overlay) => ({
-            ...overlay,
-            alpha: 1,
-          })),
-        },
-      },
-      mapping,
-    );
-    expect(popupV2).toMatchObject({
-      version: 2,
-      name: "Spine Popup V2",
-      backdrop: { alpha: 0.5 },
     });
   });
 
@@ -515,7 +479,7 @@ describe("typed asset reference rewriting", () => {
       ]),
     );
     expect(popup).toMatchObject({
-      version: 3,
+      version: 6,
       adaptation: {
         focus: { left: 1000, right: 2000, top: 3000, bottom: 4000 },
       },
@@ -584,7 +548,7 @@ describe("typed asset reference rewriting", () => {
       ]),
     );
     expect(popup).toMatchObject({
-      version: 4,
+      version: 6,
       spine: {
         resource: "effect.hash.json",
         overlays: [

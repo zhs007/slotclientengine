@@ -5,7 +5,7 @@ import type {
 } from "@slotclientengine/vnicore/data";
 import type { ImageStringResource } from "../image-string/core/index.js";
 import type { SymbolPackageResource } from "../symbol/package.js";
-import type { PopupPackageResource } from "../popup/index.js";
+import type { PopupPackageResource } from "../popup/core/types.js";
 import type {
   FocusedArtViewport,
   RenderViewportMargin,
@@ -883,8 +883,8 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   getReelPresentation(reelId: "main"): Container;
   getAwardCelebrationPopup(
     id: string,
-  ): import("../popup/index.js").AwardCelebrationRuntime;
-  getSpinePopup(id: string): import("../popup/index.js").SpinePopupRuntime;
+  ): import("../popup/core/types.js").AwardCelebrationRuntime;
+  getSpinePopup(id: string): import("../popup/core/types.js").SpinePopupRuntime;
   /** Layout-only layer for hosts that own their business reel. */
   getBackgroundPresentation(): Container;
   /** Transition overlay layer for hosts that own their business reel. */
@@ -894,7 +894,7 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   /** Routes whole-canvas pointer and keyboard input through the active Popup. */
   bindPopupInput(options: SceneLayoutPopupInputBindingOptions): () => void;
   /** Performs the active Popup phase's single primary interaction. */
-  requestPrimaryPopupInteraction(): import("../popup/index.js").PopupInteractionDispatchResult;
+  requestPrimaryPopupInteraction(): import("../popup/input-binding.js").PopupInteractionDispatchResult;
   /** Returns a borrowed package-owned layer. Callers must not destroy it. */
   getLayer(id: SceneLayoutLayerId): Container;
   /** Returns the manifest-declared mode ids in their stable declaration order. */
@@ -955,6 +955,6 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   dismissActiveAwardCelebrationImmediately(): void;
   /** Returns the active mode popup phase without constructing a diagnostic snapshot. */
   getActiveAwardCelebrationPhase():
-    | import("../popup/index.js").AwardCelebrationPhase
+    | import("../popup/core/types.js").AwardCelebrationPhase
     | null;
 }

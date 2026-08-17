@@ -12,7 +12,7 @@ import {
   type PopupOverlayLayer,
   type PopupResourceSpec,
   type PopupVisibilityState,
-} from "@slotclientengine/rendercore/popup";
+} from "@slotclientengine/rendercore/popup/editor";
 import { validateOfficialSpineResource } from "@slotclientengine/rendercore";
 import type { EditorAssetEntry } from "@slotclientengine/editorresource";
 import { assertVNIProject } from "@slotclientengine/vnicore/data";

@@ -13,11 +13,11 @@ import {
   handledPopupInteraction,
   unhandledPopupInteraction,
   type AwardCelebrationRuntime,
-  type AwardCelebrationSnapshot,
   type PopupInteractionDispatchResult,
   type PopupStringNodeHandle,
   type SpinePopupRuntime,
-} from "../popup/index.js";
+} from "../popup/core/index.js";
+import type { AwardCelebrationSnapshot } from "../popup/core/types.js";
 import { inspectAwardCelebrationRuntime } from "../popup/award-player.js";
 import {
   RenderGridCellReelSet,
@@ -194,7 +194,7 @@ export function createSceneLayoutPackageRuntime(options: {
   readonly createGridCellReel?: () => RenderGridCellReelSet;
   /** The host advances an injected main reel and drains its update result. */
   readonly hostUpdatesMainReel?: boolean;
-  readonly formatPopupAmount?: import("../popup/index.js").PopupAmountFormatter;
+  readonly formatPopupAmount?: import("../popup/data/types.js").PopupAmountFormatter;
   readonly createTransitionPlayer?: (options: {
     readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
   }) => RendercoreSpinePlayer;
@@ -260,7 +260,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #createGridCellReel: (() => RenderGridCellReelSet) | undefined;
   readonly #hostUpdatesMainReel: boolean;
   readonly #formatPopupAmount:
-    | import("../popup/index.js").PopupAmountFormatter
+    | import("../popup/data/types.js").PopupAmountFormatter
     | undefined;
   readonly #createTransitionPlayer: (options: {
     readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
@@ -349,7 +349,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     createGridCellReel: (() => RenderGridCellReelSet) | undefined,
     hostUpdatesMainReel: boolean,
     formatPopupAmount:
-      | import("../popup/index.js").PopupAmountFormatter
+      | import("../popup/data/types.js").PopupAmountFormatter
       | undefined,
     createTransitionPlayer:
       | ((options: {

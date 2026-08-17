@@ -2,7 +2,7 @@
 
 `popup.manifest.json` 是获奖庆祝与普通 Spine 弹窗的唯一 production 合同。独立 `<id>-popup.zip` 最终由 Game Layout Editor 原样 vendor 到 Scene Layout package。
 
-rendercore 继续解析全部历史版本。Popup Editor 新建项目固定使用 v6；导入合法 v1–v5 ZIP 时先按 source version 完成 strict schema、map/hash/closure 与 resource prepare，再原子迁移为 v6。迁移失败不打开半迁移项目，后续 preview/export 只生成 v6。
+rendercore 继续解析全部历史版本。`@slotclientengine/rendercore/popup/data` 的 `loadPopupManifest()` 是唯一默认入口：它先按 source version strict validate，再确定性升级并 strict revalidate 为 `LATEST_POPUP_MANIFEST_VERSION`（当前 v6），同时返回 `sourceVersion` 供迁移提示。游戏、所有 editor 与 CLI 都不在默认流程自行挑选版本 upgrader；未知未来版本显式失败。Popup Editor 新建项目固定使用 v6；导入合法 v1–v5 ZIP 时先完成 source package 的 map/hash/closure 与 resource 校验，再原子迁移为 v6。迁移失败不打开半迁移项目，后续 preview/export 只生成 v6。
 
 ## v2 presentation 扩展
 
@@ -230,8 +230,11 @@ award 的分段 VNI 收到最终关闭请求时立即从 exact `loopEndTime` 启
 owned payload 固定为 `assets/<64位 lowercase sha256>.<canonical-extension>`。VNI project 和 Spine atlas 在叶子路径确定后结构化改写，再对 canonical bytes 求 hash；standalone image-string 保持自包含。parser 递归拒绝 unknown key，ZIP 必须与传递闭包精确相等，并拒绝 traversal、case-fold collision、missing 和 orphan。
 
 ```ts
+import { createPopupPackageResource } from "@slotclientengine/rendercore/popup/editor";
+import { createAwardCelebrationRuntime } from "@slotclientengine/rendercore/popup/core";
+
 const resource = await createPopupPackageResource({ files });
-const player = createAwardCelebrationPlayer({ resource });
+const player = createAwardCelebrationRuntime({ resource });
 await player.init();
 player.start({ betAmountRaw: 100, winAmountRaw: 6000 });
 player.update(deltaSeconds);
@@ -242,7 +245,7 @@ player.getImageStringNode("bonus-count").setText("8");
 player.getImageStringNode(0).resetText();
 ```
 
-普通 Spine 类型使用 `createSpinePopupPlayer({ resource })`，调用 `start(translatedText?)`、逐帧 `update(deltaSeconds)` 并把用户点击转发给 `requestDismiss()`。
+普通 Spine production 类型使用 `popup/core` 的 `createSpinePopupRuntime({ resource })`，调用 `start(translatedText?)`、逐帧 `update(deltaSeconds)` 并把用户点击转发给 `requestDismiss()`。需要完整 snapshot 的 Popup Editor 使用 `popup/editor` 的同 Core player wrapper。
 
 两类 player 都提供稳定、只读的 `textNodes` / `imageStringNodes` 清单，以及按 exact name 或各 kind 独立零基 index 查询的 `getTextNode()` / `getImageStringNode()`。handle 的 `setText()` 是原子覆盖并跨档位切换与重复播放保持；`resetText()` 恢复当前 manifest 默认值或 win-amount 自动格式化值。不存在、越界、kind 错误、非法单行文字、ImgNumber 缺 glyph 或已销毁 handle 都显式失败。
 

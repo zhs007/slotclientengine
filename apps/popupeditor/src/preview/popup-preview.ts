@@ -7,8 +7,6 @@ import {
   unhandledPopupInteraction,
   type PopupPackageResource,
   type PopupPresentationSnapshot,
-} from "@slotclientengine/rendercore/popup";
-import {
   createAwardCelebrationPlayer,
   createSpinePopupPlayer,
   type AwardCelebrationPlayer,

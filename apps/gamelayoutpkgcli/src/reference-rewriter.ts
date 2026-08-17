@@ -4,10 +4,10 @@ import {
 } from "@slotclientengine/rendercore/image-string/data";
 import { editorAssetKeyCollisionToken } from "@slotclientengine/editorresource";
 import {
-  parsePopupManifest,
-  type PopupManifest,
+  loadPopupManifest,
+  type LatestPopupManifest,
   type PopupResourceSpec,
-} from "@slotclientengine/rendercore/popup";
+} from "@slotclientengine/rendercore/popup/data";
 import {
   parseSceneLayoutManifestDocument,
   type SceneLayoutManifest,
@@ -304,8 +304,8 @@ export function rewriteSymbolManifest(
 export function rewritePopupManifest(
   value: unknown,
   mapping: ReadonlyMap<string, string>,
-): PopupManifest {
-  const manifest = parsePopupManifest(value);
+): LatestPopupManifest {
+  const manifest = loadPopupManifest(value).manifest;
   const resources: Record<string, PopupResourceSpec> = {};
   const resourceIds = new Map<string, string>();
   for (const [id, resource] of Object.entries(manifest.resources)) {
@@ -330,27 +330,13 @@ export function rewritePopupManifest(
       }),
     }) as T;
   if (manifest.type === "spine")
-    return parsePopupManifest({
+    return loadPopupManifest({
       ...manifest,
       resources,
       spine: {
         ...manifest.spine,
         resource:
           resourceIds.get(manifest.spine.resource) ?? manifest.spine.resource,
-        ...(manifest.spine.prompt
-          ? {
-              prompt: {
-                ...manifest.spine.prompt,
-                ...(manifest.spine.prompt.font
-                  ? {
-                      font:
-                        resourceIds.get(manifest.spine.prompt.font) ??
-                        manifest.spine.prompt.font,
-                    }
-                  : {}),
-              },
-            }
-          : {}),
         ...(manifest.spine.overlays
           ? {
               overlays: manifest.spine.overlays.map((layer) => ({
@@ -365,8 +351,8 @@ export function rewritePopupManifest(
             }
           : {}),
       },
-    });
-  return parsePopupManifest({
+    }).manifest;
+  return loadPopupManifest({
     ...manifest,
     resources,
     awardCelebration: {
@@ -375,7 +361,7 @@ export function rewritePopupManifest(
       celebrationTiers:
         manifest.awardCelebration.celebrationTiers.map(rewriteTier),
     },
-  });
+  }).manifest;
 }
 
 export function rewriteVniProject(

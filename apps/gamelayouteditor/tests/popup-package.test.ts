@@ -15,7 +15,7 @@ import { vi } from "vitest";
 import {
   parsePopupManifest,
   upgradePopupManifestToV5,
-} from "@slotclientengine/rendercore/popup";
+} from "@slotclientengine/rendercore/popup/editor";
 import {
   findPopupSpineAssetConflicts,
   importPopupPackageZip,
@@ -33,7 +33,7 @@ import {
 } from "../../../test-utils/minecart2-fixtures.js";
 
 describe("gamelayout popup dependency", () => {
-  it("imports Popup v5 without changing state visibility", async () => {
+  it("imports Popup v5 through the default latest normalizer", async () => {
     const load = vi
       .spyOn(Assets, "load")
       .mockResolvedValue(Texture.WHITE as never);
@@ -52,12 +52,12 @@ describe("gamelayout popup dependency", () => {
       createDeterministicZip(await mappedPopupFiles(popup)),
       { decodeImage: async () => ({ width: 1, height: 1 }) },
     );
-    expect(imported.manifest.version).toBe(5);
+    expect(imported.manifest.version).toBe(6);
     if (
-      imported.manifest.version !== 5 ||
+      imported.manifest.version !== 6 ||
       imported.manifest.type !== "award-celebration"
     )
-      throw new Error("Expected v5 award popup.");
+      throw new Error("Expected latest award popup.");
     expect(imported.manifest.backdrop.visibleStates).toEqual([
       "base",
       "standard",
@@ -66,8 +66,8 @@ describe("gamelayout popup dependency", () => {
       "megawin",
     ]);
     expect(
-      imported.manifest.awardCelebration.base.layers[0]?.visibleStates,
-    ).toEqual(imported.manifest.backdrop.visibleStates);
+      imported.manifest.awardCelebration.base.layers[0],
+    ).not.toHaveProperty("visibleStates");
     load.mockRestore();
     unload.mockRestore();
   });
@@ -131,7 +131,7 @@ describe("gamelayout popup dependency", () => {
     unload.mockRestore();
   });
 
-  it("imports and preserves a focus-only v3 Popup package", async () => {
+  it("imports focus-only v3/v4 Popup packages as latest", async () => {
     const load = vi
       .spyOn(Assets, "load")
       .mockResolvedValue(Texture.WHITE as never);
@@ -163,10 +163,10 @@ describe("gamelayout popup dependency", () => {
       createDeterministicZip(await mappedPopupFiles(popup)),
       { decodeImage: async () => ({ width: 1, height: 1 }) },
     );
-    expect(imported.manifest.version).toBe(3);
+    expect(imported.manifest.version).toBe(6);
     expect(imported.manifest).not.toHaveProperty("designViewport");
-    if (imported.manifest.version !== 3)
-      throw new Error("Expected v3 Popup package.");
+    if (imported.manifest.version !== 6)
+      throw new Error("Expected latest Popup package.");
     expect(imported.manifest.adaptation.focus).toEqual({
       left: 1000,
       right: 2000,
@@ -176,7 +176,7 @@ describe("gamelayout popup dependency", () => {
     const rewritten = JSON.parse(
       new TextDecoder().decode(imported.files.get(imported.rootKey)),
     );
-    expect(rewritten.version).toBe(3);
+    expect(rewritten.version).toBe(6);
     expect(rewritten).not.toHaveProperty("designViewport");
 
     manifest.version = 4;
@@ -196,12 +196,12 @@ describe("gamelayout popup dependency", () => {
       createDeterministicZip(await mappedPopupFiles(popup)),
       { decodeImage: async () => ({ width: 1, height: 1 }) },
     );
-    expect(importedV4.manifest.version).toBe(4);
+    expect(importedV4.manifest.version).toBe(6);
     if (
-      importedV4.manifest.version !== 4 ||
+      importedV4.manifest.version !== 6 ||
       importedV4.manifest.type !== "award-celebration"
     )
-      throw new Error("Expected v4 Popup package.");
+      throw new Error("Expected latest Popup package.");
     expect(
       importedV4.manifest.awardCelebration.base.layers[0]?.attachment,
     ).toEqual({ kind: "popup-root" });
@@ -395,8 +395,8 @@ function spinePopupFiles(): Map<string, Uint8Array> {
       transform: { x: 0, y: 0, scale: 1 },
       playback: {
         mode: "segmented-animations",
-        startAnimation: "start",
-        loopAnimation: "Loop",
+        startAnimation: "Start",
+        loopAnimation: "Idle",
         endAnimation: "Win",
       },
     },

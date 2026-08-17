@@ -62,6 +62,8 @@ ZIP 与 JSON 作为一对提交，第二个文件提交失败时会回滚第一�
 - 根目录只有正式 control files 与 content-addressed payload；
 - `layout.manifest.json` 和 nested image-string、Symbols、Popup、VNI JSON 中受支持的
   typed 图片引用会更新为 WebP filename key；
+- Popup reference rewrite 只依赖 `rendercore/popup/data`，任一受支持的 v1–v6 source manifest 都先
+  strict 规范化为 latest v6；CLI 不加载 mapped editor workspace 或 Pixi runtime；
 - Spine atlas page logical name、VNI `originalName` 和业务 identity 保持不变；
 - Popup 的 WOFF2/WOFF/TTF/OTF 字体引用保持不变，并继续按 payload SHA-256 去重；
 - `assets.map.json` 的 path、SHA-256、media type 和 byte length 按优化后 bytes

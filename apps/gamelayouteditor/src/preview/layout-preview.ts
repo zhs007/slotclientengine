@@ -15,7 +15,7 @@ import {
   createSceneLayoutPackageRuntimeInspector,
   type SceneLayoutPackageRuntimeInspector,
 } from "@slotclientengine/rendercore/scene-layout/editor";
-import type { PopupInteractionDispatchResult } from "@slotclientengine/rendercore/popup";
+import type { PopupInteractionDispatchResult } from "@slotclientengine/rendercore/popup/core";
 import {
   createSymbolPackageValueControllerFactory,
   type RenderSymbol,

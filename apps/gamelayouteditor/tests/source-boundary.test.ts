@@ -68,6 +68,16 @@ describe("gamelayouteditor production ownership boundary", () => {
     expect(sceneLayout).not.toMatch(/setTimeout\s*\(/u);
     expect(sceneLayout).toMatch(/new VideoSource/u);
   });
+
+  it("vendors Popup packages through the editor adapter but previews through Scene Layout", () => {
+    const source = readSourceTree(join(APP_ROOT, "src"));
+    const preview = readSourceTree(join(APP_ROOT, "src/preview"));
+    expect(source).toContain("@slotclientengine/rendercore/popup/editor");
+    expect(preview).not.toMatch(
+      /createAwardCelebrationRuntime|createSpinePopupRuntime|createAwardCelebrationPlayer|createSpinePopupPlayer/u,
+    );
+    expect(preview).toContain("@slotclientengine/rendercore/scene-layout");
+  });
 });
 
 function readSourceTree(directory: string): string {

@@ -3,7 +3,7 @@ import type {
   AwardCelebrationRuntime,
   PopupInteractionDispatchResult,
   SpinePopupRuntime,
-} from "../popup/index.js";
+} from "../popup/core/index.js";
 import type { RenderViewportSize } from "../viewport/index.js";
 import { SceneLayoutError } from "./errors.js";
 import { upgradeSceneLayoutManifestToLatest } from "./manifest-v3.js";
@@ -70,7 +70,7 @@ export interface SceneLayoutPresentationSurface {
 export function createSceneLayoutPresentationSurface(options: {
   readonly resource: SceneLayoutPackageResource;
   readonly initialMode?: string;
-  readonly formatPopupAmount?: import("../popup/index.js").PopupAmountFormatter;
+  readonly formatPopupAmount?: import("../popup/data/types.js").PopupAmountFormatter;
 }): SceneLayoutPresentationSurface {
   return new DefaultSceneLayoutPresentationSurface(options);
 }
@@ -89,7 +89,7 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
   constructor(options: {
     readonly resource: SceneLayoutPackageResource;
     readonly initialMode?: string;
-    readonly formatPopupAmount?: import("../popup/index.js").PopupAmountFormatter;
+    readonly formatPopupAmount?: import("../popup/data/types.js").PopupAmountFormatter;
   }) {
     this.#resource = options.resource;
     this.#runtime = createSceneLayoutPackageRuntime({

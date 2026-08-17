@@ -9,7 +9,7 @@ export default defineConfig({
         find: "@slotclientengine/rendercore/popup/editor",
         replacement: resolve(
           __dirname,
-          "../../packages/rendercore/src/popup/editor.ts",
+          "../../packages/rendercore/src/popup/editor/index.ts",
         ),
       },
       {
@@ -20,10 +20,17 @@ export default defineConfig({
         ),
       },
       {
-        find: "@slotclientengine/rendercore/popup",
+        find: "@slotclientengine/rendercore/popup/data",
         replacement: resolve(
           __dirname,
-          "../../packages/rendercore/src/popup/index.ts",
+          "../../packages/rendercore/src/popup/data/index.ts",
+        ),
+      },
+      {
+        find: "@slotclientengine/rendercore/popup/core",
+        replacement: resolve(
+          __dirname,
+          "../../packages/rendercore/src/popup/core/index.ts",
         ),
       },
       {

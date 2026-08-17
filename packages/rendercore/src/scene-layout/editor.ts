@@ -1,4 +1,4 @@
-import type { AwardCelebrationSnapshot } from "../popup/index.js";
+import type { AwardCelebrationSnapshot } from "../popup/core/types.js";
 import { inspectActiveAwardCelebrationRuntime } from "./package-runtime.js";
 import type { SceneLayoutPackageRuntime } from "./types.js";
 

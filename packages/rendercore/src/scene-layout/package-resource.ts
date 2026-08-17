@@ -30,11 +30,13 @@ import {
 } from "../symbol/package.js";
 import {
   collectPopupPackagePaths,
-  collectPopupDirectPaths,
   createPopupPackageResourceFromResolvedFiles,
-  parsePopupManifest,
-  type PopupPackageResource,
-} from "../popup/index.js";
+} from "../popup/package-resource.js";
+import {
+  collectPopupDirectPaths,
+  loadPopupManifest,
+} from "../popup/data/index.js";
+import type { PopupPackageResource } from "../popup/core/types.js";
 import { validateOfficialSpineResource } from "../spine/runtime-player.js";
 import { SceneLayoutError } from "./errors.js";
 import {
@@ -206,7 +208,7 @@ export function collectSceneLayoutPackagePaths(options: {
       requireBytes(options.files, popup.manifest),
       popup.manifest,
     );
-    const nested = parsePopupManifest(nestedValue);
+    const nested = loadPopupManifest(nestedValue).manifest;
     if (nested.type !== popup.type) {
       throw new SceneLayoutError(
         `Scene layout popup type mismatch at "${popup.manifest}": binding=${popup.type}, nested=${nested.type}.`,
@@ -393,7 +395,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
         files,
         directoryOf(popup.manifest),
       );
-      const nestedManifest = parsePopupManifest(
+      const nestedManifest = loadPopupManifest(
         parseJsonBytes(
           requireBytes(
             mapped ? files : nestedFiles,
@@ -401,7 +403,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
           ),
           popup.manifest,
         ),
-      );
+      ).manifest;
       popupPackages[popupId] =
         await createPopupPackageResourceFromResolvedFiles({
           manifest: nestedManifest,
@@ -996,9 +998,9 @@ export async function loadSceneLayoutPackageFromUrl(options: {
     }
   }
   for (const popup of Object.values(manifest.popups ?? {})) {
-    const nested = parsePopupManifest(
+    const nested = loadPopupManifest(
       parseJsonBytes(requireBytes(files, popup.manifest), popup.manifest),
-    );
+    ).manifest;
     const nestedFiles = new Map<string, Uint8Array>();
     nestedFiles.set("popup.manifest.json", requireBytes(files, popup.manifest));
     const direct = collectPopupDirectPaths(nested);
@@ -1031,7 +1033,7 @@ export async function loadSceneLayoutPackageFromUrl(options: {
 async function fetchPopupTransitive(
   fetchImpl: typeof fetch,
   layoutManifestUrl: URL,
-  manifest: ReturnType<typeof parsePopupManifest>,
+  manifest: ReturnType<typeof loadPopupManifest>["manifest"],
   nestedFiles: Map<string, Uint8Array>,
   popupManifestPath: string,
   layoutFiles: Map<string, Uint8Array>,
@@ -1312,7 +1314,7 @@ function mappedSymbolFiles(
 function mappedPopupFiles(
   files: ReadonlyMap<string, Uint8Array>,
   rootKey: string,
-  manifest: ReturnType<typeof parsePopupManifest>,
+  manifest: ReturnType<typeof loadPopupManifest>["manifest"],
 ): ReadonlyMap<string, Uint8Array> {
   const keys = new Set(collectPopupDirectPaths(manifest));
   for (const resource of Object.values(manifest.resources)) {

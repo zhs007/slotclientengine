@@ -18,7 +18,7 @@ import {
   collectPopupPackagePaths,
   parsePopupManifest,
   rewritePopupManifestFilenameKeys,
-} from "@slotclientengine/rendercore/popup";
+} from "@slotclientengine/rendercore/popup/editor";
 import {
   createDeterministicZip,
   resolvePackagePath,

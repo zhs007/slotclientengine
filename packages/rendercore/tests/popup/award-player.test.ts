@@ -323,6 +323,28 @@ describe("award celebration player", () => {
     player.destroy();
   });
 
+  it("does not reformat or recommit an unchanged amount on stable frames", async () => {
+    const formatAmount = vi.fn((amountRaw: number) => String(amountRaw));
+    const updateAmount = vi.fn();
+    const runtime = createAwardCelebrationRuntime({
+      resource: fakeResource(),
+      formatAmount,
+      layerFactory: ({ layer }) => ({
+        ...fakeLayer(layer.kind === "vni"),
+        ...(layer.kind === "image-string" ? { updateAmount } : {}),
+      }),
+    });
+    await runtime.init();
+    runtime.start({ betAmountRaw: 100, winAmountRaw: 5000 });
+    runtime.update(0);
+    const formatterCalls = formatAmount.mock.calls.length;
+    const amountCommits = updateAmount.mock.calls.length;
+    for (let index = 0; index < 100; index += 1) runtime.update(0);
+    expect(formatAmount).toHaveBeenCalledTimes(formatterCalls);
+    expect(updateAmount).toHaveBeenCalledTimes(amountCommits);
+    runtime.destroy();
+  });
+
   it("exposes the win amount by name and index with persistent overrides", async () => {
     const writes: string[] = [];
     const player = createAwardCelebrationPlayer({

@@ -14,14 +14,16 @@ import {
   createPopupPackageResource,
   flattenPopupPackageFiles,
   namespaceMappedPopupPackageFiles,
+  loadPopupManifest,
   parsePopupManifest,
   resolvePopupPackageFiles,
-} from "@slotclientengine/rendercore/popup";
+  type LatestPopupManifest,
+} from "@slotclientengine/rendercore/popup/editor";
 import { LAYOUT_ZIP_LIMITS } from "./imported-layout-zip.js";
 import { packageKeyPrefix } from "./package-key-prefix.js";
 
 export interface ImportedPopupPackage {
-  readonly manifest: ReturnType<typeof parsePopupManifest>;
+  readonly manifest: LatestPopupManifest;
   readonly files: ReadonlyMap<string, Uint8Array>;
   readonly rootKey: string;
   readonly sourceSpineAssets: readonly ImportedPopupSpineAsset[];
@@ -66,7 +68,7 @@ export async function importPopupPackageZip(
   );
   const root = files.get("popup.manifest.json");
   if (!root) throw new Error("Popup ZIP 缺少根 popup.manifest.json sentinel。");
-  const manifest = parsePopupManifest(
+  const sourceManifest = parsePopupManifest(
     JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(root)),
   );
   const assetsMap = files.get(EDITOR_ASSETS_MAP_PATH);
@@ -76,14 +78,18 @@ export async function importPopupPackageZip(
       files,
       allowControlPaths: ["popup.manifest.json"],
     });
-  const virtual = await resolvePopupPackageFiles({ manifest, files });
-  collectPopupPackagePaths({ manifest, files: virtual });
+  const virtual = await resolvePopupPackageFiles({
+    manifest: sourceManifest,
+    files,
+  });
+  collectPopupPackagePaths({ manifest: sourceManifest, files: virtual });
   const resource = await createPopupPackageResource({
-    manifest,
+    manifest: sourceManifest,
     files,
     ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
   });
   await resource.destroy();
+  const manifest = loadPopupManifest(sourceManifest).manifest;
   const flattened = flattenPopupPackageFiles({ manifest, files: virtual });
   const sourceSpineAssets = await collectImportedPopupSpineAssets(flattened);
   const namespaced = namespaceMappedPopupPackageFiles({
@@ -91,7 +97,7 @@ export async function importPopupPackageZip(
     keyPrefix: packageKeyPrefix(flattened.manifest.id),
   });
   return Object.freeze({
-    manifest: namespaced.manifest,
+    manifest: loadPopupManifest(namespaced.manifest).manifest,
     files: new Map(
       [...namespaced.files].map(
         ([path, payload]) => [path, payload.slice()] as const,

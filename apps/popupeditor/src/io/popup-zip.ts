@@ -24,12 +24,12 @@ import {
   parsePopupManifest,
   resolvePopupLayerAttachment,
   resolvePopupPackageFiles,
-  upgradePopupManifestToV6,
-} from "@slotclientengine/rendercore/popup";
+  loadPopupManifest,
+} from "@slotclientengine/rendercore/popup/editor";
 import type {
   PopupManifest,
   PopupResourceSpec,
-} from "@slotclientengine/rendercore/popup";
+} from "@slotclientengine/rendercore/popup/editor";
 import { assertVNIProject } from "@slotclientengine/vnicore/data";
 import {
   clonePopupEditorProject,
@@ -99,7 +99,7 @@ export async function importPopupZip(
     });
     await resource.destroy();
   }
-  const manifest = upgradePopupManifestToV6(sourceManifest);
+  const manifest = loadPopupManifest(sourceManifest).manifest;
   const map = decodeEditorAssetsMap(files.get(EDITOR_ASSETS_MAP_PATH)!);
   const project = createPopupEditorProject();
   project.name = manifest.name;

@@ -3,7 +3,7 @@ import {
   extractBoundedZip,
 } from "@slotclientengine/browserartifactio";
 import { describe, expect, it } from "vitest";
-import type { PopupOverlayLayer } from "@slotclientengine/rendercore/popup";
+import type { PopupOverlayLayer } from "@slotclientengine/rendercore/popup/editor";
 import { exportPopupZip, importPopupZip } from "../src/io/popup-zip.js";
 import {
   commitImportReview,

@@ -8,13 +8,13 @@ import {
   formatPopupAmount,
   resolvePopupLayerAttachment,
   validatePopupId,
-} from "@slotclientengine/rendercore/popup";
+} from "@slotclientengine/rendercore/popup/editor";
 import type {
   AwardTierId,
   PopupLayer,
   PopupOverlayLayer,
   PopupVisibilityState,
-} from "@slotclientengine/rendercore/popup";
+} from "@slotclientengine/rendercore/popup/editor";
 import {
   addAwardTextLayer,
   addLayer,

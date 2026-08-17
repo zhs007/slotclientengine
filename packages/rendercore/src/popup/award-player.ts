@@ -154,6 +154,8 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
   #elapsed = 0;
   #displayed = 0;
   #final = 0;
+  #lastAutomaticAmount: number | null = null;
+  #lastFormattedAmount = "";
   #active: TierRuntime | null = null;
   readonly #showing = new Set<TierRuntime>();
   readonly #tiersToUpdate: TierRuntime[] = [];
@@ -228,7 +230,9 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     this.#presentation.setActive(true);
     this.#final = input.winAmountRaw;
     this.#displayed = 0;
-    this.#nodes.setAutomaticText("win-amount", this.formatAmount(0));
+    this.#lastAutomaticAmount = 0;
+    this.#lastFormattedAmount = this.formatAmount(0);
+    this.#nodes.setAutomaticText("win-amount", this.#lastFormattedAmount);
     this.#stages = createAwardCountStages(this.#resource.manifest, input);
     if (!this.#stages.length) {
       this.#phase = "complete";
@@ -552,12 +556,7 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
   }
   private updateTier(tier: TierRuntime, delta: number) {
     for (const layer of tier.layers) layer.update(delta);
-    if (
-      tier.segment === "start" &&
-      tier.layers
-        .filter((layer) => layer.animated)
-        .every((layer) => layer.isLoopReady())
-    ) {
+    if (tier.segment === "start" && animatedLayersLoopReady(tier.layers)) {
       tier.segment = "loop";
       for (const layer of tier.layers)
         layer.applySegment("loop", this.amountText());
@@ -566,9 +565,7 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     if (
       tier.endRequested &&
       tier.segment !== "end" &&
-      tier.layers
-        .filter((layer) => layer.animated)
-        .every((layer) => layer.isLoopReady())
+      animatedLayersLoopReady(tier.layers)
     ) {
       tier.segment = "end";
       for (const layer of tier.layers)
@@ -577,17 +574,23 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     }
   }
   private drainEnding() {
-    const remaining: TierRuntime[] = [];
+    let write = 0;
     for (const tier of this.#ending) {
       if (tierEnded(tier)) {
         if (!this.#showing.has(tier)) tier.container.visible = false;
-      } else remaining.push(tier);
+      } else {
+        this.#ending[write] = tier;
+        write += 1;
+      }
     }
-    this.#ending = remaining;
+    this.#ending.length = write;
   }
   private updateAmount() {
-    const automatic = this.formatAmount(Math.floor(this.#displayed));
-    this.#nodes.setAutomaticText("win-amount", automatic);
+    const amount = Math.floor(this.#displayed);
+    if (amount === this.#lastAutomaticAmount) return;
+    this.#lastAutomaticAmount = amount;
+    this.#lastFormattedAmount = this.formatAmount(amount);
+    this.#nodes.setAutomaticText("win-amount", this.#lastFormattedAmount);
     this.#amount?.updateAmount(this.amountText());
   }
   private amountText() {
@@ -633,6 +636,8 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     this.#ending = [];
     this.#stages = [];
     this.#stageIndex = -1;
+    this.#lastAutomaticAmount = null;
+    this.#lastFormattedAmount = "";
   }
   private switchVisibleTiers(state: AwardTierId) {
     const next = this.#tiers.get(state)!;
@@ -809,6 +814,11 @@ function requestTierEnd(tier: TierRuntime, text: string) {
     tier.segment = "end";
     for (const layer of tier.layers) layer.applySegment("end", text);
   }
+}
+function animatedLayersLoopReady(layers: readonly PopupLayerRuntime[]) {
+  for (const layer of layers)
+    if (layer.animated && !layer.isLoopReady()) return false;
+  return true;
 }
 function tierEnded(tier: TierRuntime) {
   return (

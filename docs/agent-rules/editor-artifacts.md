@@ -50,7 +50,7 @@
 - VNI export bundle 只把 `purpose=runtime` 作为运行候选：唯一 runtime 自动选择，多个 runtime 才枚举；禁止手输 profile id，`purpose=editing` 不进入候选。
 - popup package 使用完整 SHA-256 content-addressed owned payload，并保持 exact closure。
 - Popup 字体与其它 payload 一样按完整 SHA-256 物理去重；logical filename key 与 owner 引用不得从 hash path 反推或合并。
-- `packages/rendercore/popup` 拥有 popup manifest/parser、focus presentation Container、全 viewport backdrop、image/VNI/official Spine/image-string/字体文字 layer、字体效果与 grapheme 弧排、按 name/kind-index 的 string node registry、BigInt threshold sequence、金额格式、canvas/keyboard input binding、点击/dismiss/end drain和普通 Spine start/loop/end 边界状态机；game使用轻量Runtime，Popup Editor从`popup/editor` wrapper读取完整snapshot，两者复用同一Core。editor/game app只创建宿主canvas、挂载节点并呈现错误，不复制分派。Popup Editor 必须让表单与 contenteditable 的 keyboard event 在 shared binding eligibility 边界透传，不能让播放中的 Popup 阻止输入。
+- Popup 必须保持 `popup/data → popup/core → popup/editor` 单向分层：data 拥有 v1–v6 strict source parser、唯一默认 latest normalizer与纯引用合同；core 拥有 production resolved-resource prepare、focus/presentation、layer、string registry、金额、input与 award/Spine 状态机；editor 只组合 mapped standalone package、namespace/materialize 和同 Core snapshot wrapper。任何 editor/game runtime 都必须用默认 loader 把受支持版本转为 latest，不能自行选择升级函数。Popup Editor 与需要封装 standalone Popup 的 editor 使用 editor wrapper；只做 manifest/reference rewrite 的 CLI 使用 data；通过 Scene Layout 预览的 editor 不直接创建第二个 Popup core。editor/game app只创建宿主canvas、挂载节点并呈现错误，不复制分派。Popup Editor 必须让表单与 contenteditable 的 keyboard event 在 shared binding eligibility 边界透传，不能让播放中的 Popup 阻止输入。
 
 ## Symbols Editor
 

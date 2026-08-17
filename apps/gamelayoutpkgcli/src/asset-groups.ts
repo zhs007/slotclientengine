@@ -6,7 +6,7 @@ import { assertVNIProject } from "@slotclientengine/vnicore/data";
 import {
   collectMappedPopupAssetKeys,
   parsePopupManifest,
-} from "@slotclientengine/rendercore/popup";
+} from "@slotclientengine/rendercore/popup/data";
 import type {
   SceneLayoutManifest,
   SceneLayoutNode,

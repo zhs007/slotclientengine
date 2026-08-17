@@ -68,15 +68,20 @@
       "types": "./dist/win-amount/index.d.ts",
       "import": "./dist/win-amount/index.js"
     },
-    "./popup": {
-      "source": "./src/popup/index.ts",
-      "types": "./dist/popup/index.d.ts",
-      "import": "./dist/popup/index.js"
+    "./popup/data": {
+      "source": "./src/popup/data/index.ts",
+      "types": "./dist/popup/data/index.d.ts",
+      "import": "./dist/popup/data/index.js"
+    },
+    "./popup/core": {
+      "source": "./src/popup/core/index.ts",
+      "types": "./dist/popup/core/index.d.ts",
+      "import": "./dist/popup/core/index.js"
     },
     "./popup/editor": {
-      "source": "./src/popup/editor.ts",
-      "types": "./dist/popup/editor.d.ts",
-      "import": "./dist/popup/editor.js"
+      "source": "./src/popup/editor/index.ts",
+      "types": "./dist/popup/editor/index.d.ts",
+      "import": "./dist/popup/editor/index.js"
     },
     "./package.json": "./package.json"
   },
@@ -88,6 +93,7 @@
     "prepare:deps": "pnpm --filter @slotclientengine/browserartifactio build && pnpm --filter @slotclientengine/editorresource build && pnpm --filter @slotclientengine/logiccore build && pnpm --filter @slotclientengine/pixiani build && pnpm --filter @slotclientengine/vnicore build",
     "build": "pnpm run prepare:deps && tsc -p tsconfig.build.json",
     "benchmark:image-string": "node ./benchmarks/image-string-hot-path.mjs",
+    "benchmark:popup": "node ./benchmarks/popup-runtime-hot-path.mjs",
     "generate:symbol-state-textures": "node ./scripts/generate-symbol-state-textures.mjs",
     "lint": "eslint .",
     "test": "vitest run --coverage",
