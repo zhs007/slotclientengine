@@ -1,6 +1,6 @@
 # Game Layout Editor
 
-纯前端 Scene Layout v2 编辑器，覆盖 layout、mode/variant、稳定背景、普通 VNI/Spine 动画图层、Symbols、award-celebration/普通 Spine Popup 与 Spine/MP4 有向转场。合法 v1 ZIP 会在打开事务中自动升级；后续预览和导出只生成 v2。
+纯前端 Scene Layout v4 编辑器，覆盖 layout、mode/variant、optional loop BGM、程序音效、稳定背景、普通 VNI/Spine 动画图层、Symbols、award-celebration/普通 Spine Popup 与 Spine/MP4 有向转场。合法 v1–v3 ZIP 会在打开事务中自动升级；后续预览和导出只生成 v4。
 
 ## Splash-first 与 per-mode 适配
 
@@ -18,7 +18,7 @@ mode 默认开启；关闭的 mode 不显示 reel guide、不能绑定 Symbols�
 双背景 mode 的 landscape/portrait 各有独立 focus。预览尺寸宽高相等时维持当前方向；首次以
 正方形启动时选择 landscape。
 
-award-celebration Popup 作为自包含 dependency，通过 `rendercore/popup/editor` 完成 standalone ZIP 校验、flatten、namespace 与 vendor。任一受支持的 Popup v1–v6 都先按 source strict 校验，再由默认 loader 转成 latest v6；内部 VNI 的 segmented/once playback、最后一帧保持和 dismiss 生命周期不在 Layout Editor 复制或改写。画面预览继续只走 Scene Layout production runtime/inspector，不直接创建第二个 Popup core。
+award-celebration Popup 作为自包含 dependency，通过 `rendercore/popup/editor` 完成 standalone ZIP 校验、flatten、namespace 与 vendor。任一受支持的 Popup v1–v7 都先按 source strict 校验，再由默认 loader 转成 latest v7；Popup/Symbol 音效保持 local name，直到 Scene Layout 按 binding id 聚合为全局 route。画面和音频预览继续只走 Scene Layout production runtime/inspector。
 普通 Spine Popup 导入后可直接在具体 Spine 转场中选择；Popup 工作区的显式注册只用于 programmatic 播放。Popup root 的 placement、order 与 start/loop/end 预览由 Layout Editor 配置并随 layout vendor。
 若 package 带单行 prompt，Popup 工作区可输入临时预览文案；留空使用 package 默认值。字体、渲染区域和 image/Spine/VNI overlay 保持只读，须回 Popup Editor 修改。相同字体 bytes 与其它 payload 一样在最终 `assets.map.json` 中按 SHA-256 物理去重。
 

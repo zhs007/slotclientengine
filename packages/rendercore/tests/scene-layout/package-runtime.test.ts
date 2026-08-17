@@ -1308,7 +1308,7 @@ describe("scene layout package runtime", () => {
       const runtime = createSceneLayoutPackageRuntime({ resource });
       await runtime.init();
       expect(resource.manifest.version).toBe(1);
-      expect(resource.runtimeManifest.version).toBe(3);
+      expect(resource.runtimeManifest.version).toBe(4);
       expect(runtime.getGameModeIds()).toEqual(["BaseGame"]);
       expect(runtime.getGameModeSnapshot()).toMatchObject({
         stableMode: "BaseGame",
@@ -1353,8 +1353,16 @@ describe("scene layout package runtime", () => {
         resource.popupPackages.celebration.manifest.awardCelebration
           .celebrationTiers[0]!.layers[1],
       ).toMatchObject({ playback: { mode: "once" } });
-      expect(popup.container.position).toMatchObject({ x: 103, y: 46 });
-      expect(popup.container.scale).toMatchObject({ x: 0.8, y: 0.8 });
+      expect(popup.container.position).toMatchObject({ x: 0, y: 0 });
+      expect(popup.container.scale).toMatchObject({ x: 1, y: 1 });
+      expect(popup.container.children.at(-1)?.position).toMatchObject({
+        x: 103,
+        y: 46,
+      });
+      expect(popup.container.children.at(-1)?.scale).toMatchObject({
+        x: 0.8,
+        y: 0.8,
+      });
       expect(popup.container.zIndex).toBe(2000);
       const celebrationComplete = runtime.playAwardCelebrationForCurrentMode({
         betAmountRaw: 100,

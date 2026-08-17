@@ -1,4 +1,5 @@
 import {
+  createSceneLayoutRuntimeAllocation,
   upgradeSceneLayoutManifestToLatest,
   type SceneLayoutManifest,
   type SceneLayoutManifestLatest,
@@ -75,10 +76,9 @@ export function migrateSceneLayoutNodeIds(manifestValue: SceneLayoutManifest): {
         ]),
       );
   }
-  const { runtimeAllocation: _runtimeAllocation, ...v2Fields } = draft;
   const migrated = upgradeSceneLayoutManifestToLatest({
-    ...v2Fields,
-    version: 2,
+    ...draft,
+    runtimeAllocation: createSceneLayoutRuntimeAllocation(draft),
   });
   return Object.freeze({
     manifest: migrated,

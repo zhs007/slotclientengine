@@ -1,9 +1,11 @@
 import { extractBoundedZip } from "@slotclientengine/browserartifactio";
 import {
+  createEditorAssetEntry,
   normalizeEditorPackageZipEntries,
   type EditorImportConflictResolution,
   type EditorImportResolution,
 } from "@slotclientengine/editorresource";
+import { detectAudioMediaType } from "@slotclientengine/audiocore/editor";
 import {
   formatPopupAmount,
   resolvePopupLayerAttachment,
@@ -772,6 +774,106 @@ export class PopupEditorApp {
         );
       });
     });
+    const importAudio = this.#root.querySelector<HTMLInputElement>(
+      "[data-import-popup-audio]",
+    );
+    importAudio?.addEventListener("change", () => {
+      void this.importPopupAudio([...(importAudio.files ?? [])]);
+      importAudio.value = "";
+    });
+    this.#root
+      .querySelectorAll<HTMLButtonElement>("[data-delete-popup-audio]")
+      .forEach((button) =>
+        button.addEventListener("click", () =>
+          this.#store.transact((draft) => {
+            const name = button.dataset.deletePopupAudio!;
+            draft.audio = {
+              ...draft.audio,
+              effects: draft.audio.effects.filter(
+                (effect) => effect.name !== name,
+              ),
+              cues: draft.audio.cues.filter((cue) => cue.effect !== name),
+            };
+          }),
+        ),
+      );
+    this.#root
+      .querySelectorAll<
+        HTMLInputElement | HTMLSelectElement
+      >("[data-popup-audio-field]")
+      .forEach((input) =>
+        input.addEventListener("change", () =>
+          this.#store.transact((draft) => {
+            const name = input.dataset.popupAudioName!;
+            draft.audio = {
+              ...draft.audio,
+              effects: draft.audio.effects.map((effect) => {
+                if (effect.name !== name) return effect;
+                if (input.dataset.popupAudioField === "offsetSeconds")
+                  return { ...effect, offsetSeconds: Number(input.value) };
+                if (input.dataset.popupAudioField === "playback")
+                  return {
+                    ...effect,
+                    playback: input.value as "once" | "loop",
+                    voices: {
+                      ...effect.voices,
+                      maxConcurrent: input.value === "loop" ? 1 : 4,
+                    },
+                  };
+                const kind = input.value;
+                return {
+                  ...effect,
+                  bgm:
+                    kind === "duck"
+                      ? {
+                          kind: "duck" as const,
+                          targetGain: 0.35,
+                          attackSeconds: 0.2,
+                          releaseSeconds: 0.5,
+                        }
+                      : kind === "pause"
+                        ? {
+                            kind: "pause" as const,
+                            fadeOutSeconds: 0.2,
+                            fadeInSeconds: 0.5,
+                          }
+                        : { kind: "keep" as const },
+                };
+              }),
+            };
+          }),
+        ),
+      );
+    this.#root
+      .querySelector<HTMLButtonElement>("[data-add-popup-audio-cue]")
+      ?.addEventListener("click", () => {
+        const target = this.#root.querySelector<HTMLSelectElement>(
+          "[data-popup-audio-target]",
+        )!.value;
+        const effect = this.#root.querySelector<HTMLSelectElement>(
+          "[data-popup-audio-effect]",
+        )!.value;
+        this.#store.transact((draft) => {
+          if (!effect) throw new Error("请选择 Popup 音效。");
+          const parsedTarget =
+            draft.type === "spine"
+              ? {
+                  kind: "segment" as const,
+                  segment: target as "start" | "loop" | "end",
+                }
+              : { kind: "award-tier" as const, tier: target as AwardTierId };
+          draft.audio = {
+            ...draft.audio,
+            cues: [
+              ...draft.audio.cues.filter(
+                (cue) =>
+                  JSON.stringify(cue.target) !== JSON.stringify(parsedTarget),
+              ),
+              { effect, target: parsedTarget },
+            ],
+          };
+        });
+      });
     this.#root
       .querySelectorAll<HTMLInputElement>("[data-project-field]")
       .forEach((input) =>
@@ -827,6 +929,55 @@ export class PopupEditorApp {
         this.renderDiagnostics();
       });
     }, 120);
+  }
+
+  private async importPopupAudio(files: readonly File[]): Promise<void> {
+    await this.action(async () => {
+      const entries = await Promise.all(
+        files.map(async (file) => {
+          const key = file.name.toLowerCase();
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const mediaType = detectAudioMediaType(bytes);
+          if (!mediaType) throw new Error(`无法识别音频格式：${file.name}`);
+          const name = key
+            .replace(/\.[^.]+$/u, "")
+            .replace(/[^a-z0-9]+/gu, "-")
+            .replace(/^-+|-+$/gu, "");
+          return {
+            name,
+            mediaType,
+            entry: await createEditorAssetEntry({ key, mediaType, bytes }),
+          };
+        }),
+      );
+      this.#store.transact((draft) => {
+        for (const { name, mediaType, entry } of entries) {
+          const existing = draft.assets.get(entry.key);
+          if (existing && existing.sha256 !== entry.sha256)
+            throw new Error(
+              `音频 filename key 已存在且 bytes 不同：${entry.key}`,
+            );
+          if (draft.audio.effects.some((effect) => effect.name === name))
+            throw new Error(`Popup 音效名称重复：${name}`);
+          draft.assets.set(entry.key, entry);
+          draft.audio = {
+            ...draft.audio,
+            effects: [
+              ...draft.audio.effects,
+              {
+                name,
+                asset: { sources: [{ path: entry.key, mediaType }] },
+                playback: "once",
+                offsetSeconds: 0,
+                voices: { maxConcurrent: 4, overflow: "restart-oldest" },
+                bgm: { kind: "keep" },
+              },
+            ],
+          };
+        }
+      });
+      this.#notice = `已导入 ${entries.length} 个 Popup 音效。`;
+    });
   }
   private async importProject(file: File) {
     await this.action(async () => {
@@ -1552,7 +1703,12 @@ function projectMarkup(project: PopupEditorProject, errors: readonly string[]) {
     project.type === "award-celebration"
       ? `<h3>金额合同</h3><label>preset<select id="amount-format-preset"><option value="integer" ${preset === "integer" ? "selected" : ""}>纯数字整数（raw 100 → 100）</option><option value="decimal" ${preset === "decimal" ? "selected" : ""}>纯数字两位小数（raw 100 → 1.00）</option><option value="custom" ${preset === "custom" ? "selected" : ""}>自定义</option></select></label><p class="preset-help">整数预设使用 rawScale=1，只要求 glyph 0–9；两位小数预设使用 rawScale=100，要求 glyph 0–9 和 .。两者均不输出货币符号或千分位。</p>${amountInput("rawScale", "number")}${amountInput("fractionDigits", "number")}${amountInput("useGrouping", "checkbox")}${amountInput("groupSeparator")}${amountInput("decimalSeparator")}${amountInput("prefix")}${amountInput("suffix")}<p>rounding: floor（strict contract）</p>`
       : "";
-  return `${commonWithColorEditor}${amount}<h3>配置 diagnostics</h3><pre>${errors.join("\n") || "通过"}</pre><h3>Production manifest preview</h3><pre>${manifest}</pre>`;
+  const targets =
+    project.type === "spine"
+      ? ["start", "loop", "end"]
+      : ["base", "standard", "bigwin", "superwin", "megawin"];
+  const audio = `<h3>音效</h3><p>局部名称只在 Popup 内编辑；导入 Game Layout 后由 Popup binding 名聚合，例如 award.coin。字段与 Symbols / Game Layout 一致。</p><label>导入音效<input data-import-popup-audio type="file" accept="audio/mpeg,audio/ogg,audio/wav,audio/mp4,audio/aac,audio/webm" multiple></label>${project.audio.effects.map((effect) => `<article class="card"><code>${effect.name}</code><label>播放<select data-popup-audio-field="playback" data-popup-audio-name="${effect.name}"><option value="once" ${effect.playback === "once" ? "selected" : ""}>once</option><option value="loop" ${effect.playback === "loop" ? "selected" : ""}>loop</option></select></label><label>延迟秒<input type="number" min="0" step="0.01" value="${effect.offsetSeconds}" data-popup-audio-field="offsetSeconds" data-popup-audio-name="${effect.name}"></label><label>BGM<select data-popup-audio-field="bgm" data-popup-audio-name="${effect.name}"><option value="keep" ${effect.bgm.kind === "keep" ? "selected" : ""}>keep</option><option value="duck" ${effect.bgm.kind === "duck" ? "selected" : ""}>duck</option><option value="pause" ${effect.bgm.kind === "pause" ? "selected" : ""}>pause</option></select></label><button data-delete-popup-audio="${effect.name}">删除</button></article>`).join("") || "<p>尚未配置音效。</p>"}<h4>动画 cue</h4><div class="form-row"><select data-popup-audio-target>${targets.map((target) => `<option value="${target}">${target}</option>`).join("")}</select><select data-popup-audio-effect>${project.audio.effects.map((effect) => `<option value="${effect.name}">${effect.name}</option>`).join("")}</select><button data-add-popup-audio-cue>绑定</button></div><ul>${project.audio.cues.map((cue) => `<li>${cue.target.kind === "segment" ? cue.target.segment : cue.target.tier} → ${cue.effect}</li>`).join("") || "<li>尚无 cue</li>"}</ul>`;
+  return `${commonWithColorEditor}${amount}${audio}<h3>配置 diagnostics</h3><pre>${errors.join("\n") || "通过"}</pre><h3>Production manifest preview</h3><pre>${manifest}</pre>`;
 }
 
 function popupIdValidationError(value: string): string {

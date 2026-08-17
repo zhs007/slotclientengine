@@ -1,3 +1,4 @@
+import { parseAudioEffectBindingV1 } from "@slotclientengine/audiocore/data";
 import type {
   AwardCelebrationPopupManifestV1,
   AwardCelebrationPopupManifestV2,
@@ -5,6 +6,7 @@ import type {
   AwardCelebrationPopupManifestV4,
   AwardCelebrationPopupManifestV5,
   AwardCelebrationPopupManifestV6,
+  AwardCelebrationPopupManifestV7,
   AwardCelebrationSpec,
   AwardCelebrationTier,
   AwardTierPresentation,
@@ -17,6 +19,7 @@ import type {
   PopupManifestV4,
   PopupManifestV5,
   PopupManifestV6,
+  PopupManifestV7,
   PopupOverlayLayer,
   PopupLayerAttachment,
   PopupPromptSpec,
@@ -30,6 +33,7 @@ import type {
   SpinePopupManifestV4,
   SpinePopupManifestV5,
   SpinePopupManifestV6,
+  SpinePopupManifestV7,
 } from "./types.js";
 import { validatePopupLayerAttachmentGraph } from "./attachment.js";
 import { assertPopupFilenameKey, assertPopupPackagePath } from "./path.js";
@@ -53,12 +57,15 @@ interface ParsePopupManifest {
   (value: SpinePopupManifestV5): SpinePopupManifestV5;
   (value: AwardCelebrationPopupManifestV6): AwardCelebrationPopupManifestV6;
   (value: SpinePopupManifestV6): SpinePopupManifestV6;
+  (value: AwardCelebrationPopupManifestV7): AwardCelebrationPopupManifestV7;
+  (value: SpinePopupManifestV7): SpinePopupManifestV7;
   (value: PopupManifestV1): PopupManifestV1;
   (value: PopupManifestV2): PopupManifestV2;
   (value: PopupManifestV3): PopupManifestV3;
   (value: PopupManifestV4): PopupManifestV4;
   (value: PopupManifestV5): PopupManifestV5;
   (value: PopupManifestV6): PopupManifestV6;
+  (value: PopupManifestV7): PopupManifestV7;
   (value: unknown): PopupManifest;
 }
 
@@ -70,9 +77,10 @@ export const parsePopupManifest = ((value: unknown): PopupManifest => {
     record.version !== 3 &&
     record.version !== 4 &&
     record.version !== 5 &&
-    record.version !== 6
+    record.version !== 6 &&
+    record.version !== 7
   )
-    fail("popup manifest.version must be 1, 2, 3, 4, 5, or 6.");
+    fail("popup manifest.version must be 1, 2, 3, 4, 5, 6, or 7.");
   const version = record.version;
   const modern = version !== 1;
   const commonKeys = [
@@ -82,6 +90,7 @@ export const parsePopupManifest = ((value: unknown): PopupManifest => {
     "type",
     ...(version === 1 || version === 2 ? ["designViewport"] : []),
     "resources",
+    ...(version === 7 ? ["audio"] : []),
     ...(modern ? ["name", "adaptation", "backdrop"] : []),
   ];
   keys(
@@ -146,6 +155,9 @@ export const parsePopupManifest = ((value: unknown): PopupManifest => {
         }
       : {}),
     resources,
+    ...(version === 7
+      ? { audio: parsePopupAudio(record.audio, record.type) }
+      : {}),
   };
   if (record.type === "spine") {
     const spine = parseSpinePopup(record.spine, resources, version);
@@ -185,7 +197,7 @@ export const parsePopupManifest = ((value: unknown): PopupManifest => {
 function parseSpinePopup(
   value: unknown,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2 | 3 | 4 | 5 | 6,
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7,
 ) {
   const record = object(value, "spine");
   keys(
@@ -307,7 +319,7 @@ function parsePrompt(
 function parseOverlays(
   value: unknown,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2 | 3 | 4 | 5 | 6,
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7,
 ): readonly PopupOverlayLayer[] {
   if (!Array.isArray(value)) fail("spine.overlays must be an array.");
   const overlays = value.map((raw, index) => {
@@ -364,7 +376,77 @@ export function collectPopupDirectPaths(
       for (const path of Object.values(resource.textures)) result.add(path);
     }
   }
+  if (parsed.version === 7)
+    for (const effect of parsed.audio.effects)
+      for (const source of effect.asset.sources) result.add(source.path);
   return Object.freeze([...result].sort());
+}
+
+function parsePopupAudio(value: unknown, type: unknown) {
+  const audio = object(value, "popup audio");
+  keys(audio, ["version", "effects", "cues"], "popup audio");
+  if (audio.version !== 1) fail("popup audio.version must be 1.");
+  if (!Array.isArray(audio.effects))
+    fail("popup audio.effects must be an array.");
+  const effects = audio.effects.map((effect, index) =>
+    parseAudioEffectBindingV1(effect, `popup audio.effects[${index}]`),
+  );
+  unique(
+    effects.map(({ name }) => name),
+    "popup audio effect name",
+  );
+  if (!Array.isArray(audio.cues)) fail("popup audio.cues must be an array.");
+  const effectNames = new Set(effects.map(({ name }) => name));
+  const cues = audio.cues.map((rawCue, index) => {
+    const label = `popup audio.cues[${index}]`;
+    const cue = object(rawCue, label);
+    keys(cue, ["effect", "target"], label);
+    const effect = identifier(cue.effect, `${label}.effect`);
+    if (!effectNames.has(effect))
+      fail(`${label}.effect is not declared: ${effect}`);
+    const target = object(cue.target, `${label}.target`);
+    if (target.kind === "segment") {
+      if (type !== "spine")
+        fail(`${label}.target segment is only valid for spine popup.`);
+      keys(target, ["kind", "segment"], `${label}.target`);
+      if (!POPUP_SEGMENTS.includes(target.segment as PopupSegment))
+        fail(`${label}.target.segment is invalid.`);
+      return freeze({
+        effect,
+        target: {
+          kind: "segment" as const,
+          segment: target.segment as PopupSegment,
+        },
+      });
+    }
+    if (target.kind === "award-tier") {
+      if (type !== "award-celebration")
+        fail(`${label}.target award-tier is only valid for award popup.`);
+      keys(target, ["kind", "tier"], `${label}.target`);
+      if (
+        !AWARD_POPUP_STATES.includes(
+          target.tier as import("./types.js").AwardTierId,
+        )
+      )
+        fail(`${label}.target.tier is invalid.`);
+      return freeze({
+        effect,
+        target: {
+          kind: "award-tier" as const,
+          tier: target.tier as import("./types.js").AwardTierId,
+        },
+      });
+    }
+    return fail(`${label}.target.kind is invalid.`);
+  });
+  unique(
+    cues.map(
+      ({ effect, target }) =>
+        `${target.kind}:${"segment" in target ? target.segment : target.tier}:${effect}`,
+    ),
+    "popup audio cue",
+  );
+  return freeze({ version: 1 as const, effects, cues });
 }
 
 function parseAdaptation(value: unknown, designViewport?: PopupSize) {
@@ -530,7 +612,7 @@ function parseResource(value: unknown, label: string): PopupResourceSpec {
 function parseAwardCelebration(
   value: unknown,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2 | 3 | 4 | 5 | 6,
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7,
 ): AwardCelebrationSpec {
   const record = object(value, "awardCelebration");
   keys(record, ["base", "standard", "celebrationTiers"], "awardCelebration");
@@ -581,7 +663,7 @@ function parseAwardCelebration(
   });
   const variants = allTiers(result).flatMap(({ layers }) => layers);
   validateStringNodeNames(variants, "awardCelebration", true);
-  if (version === 6) validateAwardLayerIdentities(result);
+  if (version >= 6) validateAwardLayerIdentities(result);
   return result;
 }
 
@@ -589,7 +671,7 @@ function parseTier(
   value: unknown,
   label: string,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2 | 3 | 4 | 5 | 6,
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7,
 ): AwardTierPresentation {
   const record = object(value, label);
   const allowed = [
@@ -632,7 +714,7 @@ function parseTier(
     (layer): layer is Extract<PopupLayer, { readonly kind: "image-string" }> =>
       layer.kind === "image-string" && layer.binding === "win-amount",
   )!;
-  if (version === 6 && amount.id !== "win-amount")
+  if (version >= 6 && amount.id !== "win-amount")
     fail(`${label} win-amount layer id must be win-amount in popup v6.`);
   const amountParent =
     version >= 4
@@ -658,7 +740,7 @@ function parseLayer(
   value: unknown,
   label: string,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2 | 3 | 4 | 5 | 6,
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7,
   visibilityStates: readonly (
     | PopupSegment
     | import("./types.js").AwardTierId
@@ -667,7 +749,7 @@ function parseLayer(
   const record = object(value, label);
   const kind = record.kind;
   const hasStateVisibility =
-    version === 5 || (version === 6 && visibilityStates === POPUP_SEGMENTS);
+    version === 5 || (version >= 6 && visibilityStates === POPUP_SEGMENTS);
   const hasResource = Object.hasOwn(record, "resource");
   const common = [
     "id",

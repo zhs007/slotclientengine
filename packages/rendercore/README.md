@@ -164,9 +164,9 @@ symbol 的对应 anchor；飞行本身不会推断或提交目标 value。
 
 ## Popup API
 
-Popup 使用三个显式入口：`popup/data` 提供 v1–v6 strict source parser、纯数据校验、引用闭包和唯一默认 latest normalizer；`popup/core` 提供 production resolved-resource prepare、轻量 Runtime、presentation 与宿主 input binding；`popup/editor` 组合前两层，提供 mapped standalone package、namespace/materialize 与完整 snapshot wrapper。旧的混合 `popup` 入口和 rendercore root Popup wildcard export 已移除。
+Popup 使用三个显式入口：`popup/data` 提供 v1–v7 strict source parser、纯数据校验、引用闭包和唯一默认 latest normalizer；`popup/core` 提供 production resolved-resource prepare、轻量 Runtime、presentation 与宿主 input binding；`popup/editor` 组合前两层，提供 mapped standalone package、namespace/materialize 与完整 snapshot wrapper。旧的混合 `popup` 入口和 rendercore root Popup wildcard export 已移除。
 
-`loadPopupManifest()` 接受任一受支持版本，先按 source version strict validate，再确定性升级并复验为 `LATEST_POPUP_MANIFEST_VERSION`（当前为 v6）；返回值同时保留 `sourceVersion` 供迁移提示。游戏、Scene Layout、Popup Editor、Game Layout Editor 与 CLI 的默认工作流都消费 latest，不自行挑选某个 `upgradeToVn`。未知未来版本继续显式失败。v3 删除有限 `designViewport`，v4 增加 strict attachment graph，v5 增加 type-aware `visibleStates`；canonical v6 让 award layer 由 containing tier 决定可见性，并用跨档稳定 id 表达逻辑图层。普通 Spine Popup 继续使用三阶段 `visibleStates` 和独立 start→loop→end 状态机。
+`loadPopupManifest()` 接受任一受支持版本，先按 source version strict validate，再确定性升级并复验为 `LATEST_POPUP_MANIFEST_VERSION`（当前为 v7）。v7 沿用 v6 图层语义并新增 package-local audio effect/cue；未知未来版本继续显式失败。
 
 两类 Popup 都只有一份 Core 状态。游戏和 Scene Layout 从 `@slotclientengine/rendercore/popup/core` 使用 `createAwardCelebrationRuntime()` / `createSpinePopupRuntime()`：`update(deltaSeconds): void` 只推进状态，阶段判断使用 `getPhase()` / `isPlaying()`，不会构造完整 snapshot。Popup Editor 从 `@slotclientengine/rendercore/popup/editor` 使用 player wrapper；wrapper 委托同一个 Runtime，并额外提供 `update() -> snapshot` 与 `getSnapshot()`。游戏 facade 不导出 editor package adapter、factory/player 或 snapshot。
 
@@ -190,7 +190,7 @@ Sprite 复用，不创建 snapshot、`Application`、canvas、DOM、RAF 或字�
 
 ## Scene Layout API
 
-`@slotclientengine/rendercore/scene-layout` 提供严格且向后兼容的 scene-layout v1/v2/v3 parser、传递精确资源闭包、module/CDN package loader、game002/game003 对应的纯 frame policy 与 focus viewport 组合、image/image-string/official Spine 4.3 stateful node runtime，以及可选 symbols package 绑定的 standard/grid-cell reel 组合 runtime。package resource会把合法v1/v2直接规范化为v3并生成确定性的`runtimeAllocation`；原生v3必须完整且与typed引用严格一致。为兼容已有宿主，`resource.manifest`继续暴露initial-mode的v1视图，package runtime只执行strict `resource.runtimeManifest` v3。游戏 app 只加载 package、提交 frame size、可见 scene 与本地视觉 phase，并显式请求业务状态；art、focus、node/reel order、行列、cell/gap、placement、symbol catalog 与播放状态都从 manifest/package 派生。
+`@slotclientengine/rendercore/scene-layout` 提供严格且向后兼容的 scene-layout v1–v4 parser、精确资源闭包和 production package runtime。package resource会把合法v1–v3规范化为v4并生成确定性的`runtimeAllocation`与空音频合同；原生v4必须完整且与typed引用严格一致。v4 按 mode 配置 optional loop BGM，在成功 commit 后 crossfade，并把 Popup/Symbol local effect 聚合为严格全局 route。
 
 第一层统一使用`getSymbolArea()`、`getRenderLayer()`、`getRenderObject()`与`createRenderObject()`。authored object按image/Spine/VNI/image-string返回borrowed typed capability，可见性与mode/variant做AND且不开放position/destroy；program object从exact `runtimeResources`异步创建并由caller拥有。`getLayoutPoint/getLayoutAnchor/resolveLayoutAnchor`直接读写configured authored space，center-origin游戏无需复制Pixi左上角偏移。完整ref grammar、ownership、SymbolGroup几何、坐标映射与示例见[`docs/rendercore-layer-symbol-area-render-object-coordinate-guide.md`](../../docs/rendercore-layer-symbol-area-render-object-coordinate-guide.md)。
 
@@ -246,7 +246,7 @@ scene/operation flow 完成只结束编排调度，不结束 preview renderer �
 该 facade 不解析 server round 或 component，也不创建 DOM 配置 UI；runtime owner 负责
 Pixi Application、package resource 与所有 player 的 destroy。
 
-低层 `createSceneLayoutResource()` / `createSceneLayoutRuntime()` 保持用于 layout-only 和自定义 attachment；自包含 production 包使用 `createSceneLayoutPackageResource()` / `loadSceneLayoutPackageFromUrl()` 与 `createSceneLayoutPackageRuntime()`。URL loader 可接收 loading 阶段已取得的 `manifestBytes`，随后仍只按 manifest 与 assets map 的实际引用获取 package 文件。旧v1/v2无需Editor重导；缺Symbols binding时组合reel初始化与reset API仍显式不可用。
+低层 `createSceneLayoutResource()` / `createSceneLayoutRuntime()` 保持用于 layout-only 和自定义 attachment；自包含 production 包使用 `createSceneLayoutPackageResource()` / `loadSceneLayoutPackageFromUrl()` 与 `createSceneLayoutPackageRuntime()`。URL loader 可接收 loading 阶段已取得的 `manifestBytes`，随后仍只按 manifest 与 assets map 的实际引用获取 package 文件。旧v1–v3无需Editor重导；缺Symbols binding时组合reel初始化与reset API仍显式不可用。
 
 完整 package runtime 可以 deferred prepare main reel：首次合法 scene commit 前 reel 不可见，scene/value/spin API 会严格失败。业务自定义 grid-cell controller 可通过 ownership-transfer factory 注入，package 仍拥有唯一 reel、manifest placement/order 和最终 destroy；cascade 等借用 overlay 通过 typed attach disposer 接入，保持在 transition/popup 下方。
 
@@ -294,7 +294,7 @@ import type {
 - 当前状态是 `static` 时，请求切换会立即生效。
 - 显式 `frameDurationSeconds` 不得小于 `1 / 60` 秒。
 
-默认 preset 包含 `normal`、`spinBlur`、`disabled`、`appear`、`win`、`remove`、`dropdown`。其中 `spinBlur -> normal`、`disabled -> normal` 是状态等价配置；等价目标必须存在、phase 必须一致、链路不能有环。symbol manifest v2 在 `settings.stateDefinitions` 保存完整 builtin/custom 定义，once 必须显式保存完成行为，stable 禁止该字段。合法 v1 加载时只在 upgrader 中把 exact `remove` 迁移为 `terminal`，其它 once 迁移为 `return-to-default`；v2 runtime 不按 state id 推断。
+默认 preset 包含 `normal`、`spinBlur`、`disabled`、`appear`、`win`、`remove`、`dropdown`。symbol manifest v3 沿用 v2 的完整 state lifecycle，并新增 package-local effect 与 state cue；合法 v1/v2 统一由 upgrader 迁移，runtime 不按 state id 推断。
 
 ## 状态贴图
 

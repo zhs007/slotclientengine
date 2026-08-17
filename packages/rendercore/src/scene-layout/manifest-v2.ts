@@ -658,7 +658,10 @@ export function normalizeLegacySceneLayoutPresentationOrders(
   const source = mutableRecord(value);
   if (
     !source ||
-    (source.version !== 1 && source.version !== 2 && source.version !== 3)
+    (source.version !== 1 &&
+      source.version !== 2 &&
+      source.version !== 3 &&
+      source.version !== 4)
   )
     return value;
   const draft = structuredClone(source);

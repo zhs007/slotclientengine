@@ -43,18 +43,19 @@
 
 - `apps/popupeditor` 输出 strict `award-celebration` 或普通 `spine` popup package；两种类型使用互斥 schema，不保留无关字段。
 - Popup Editor 启动时没有隐式项目；项目只能通过“创建项目”dialog（名称与固定类型）或单独导入 Popup ZIP 建立。项目 ZIP 与资源导入是两个入口，资源入口中 VNI/ImgNumber 只接受各自 Editor 导出的 ZIP，Spine 必须以完整 JSON/atlas/texture 组导入。同名不同 bytes 必须由用户逐项选择覆盖或自动 suffix 保留两份，不能默认提交。
-- Popup v6 沿用无界 focus、backdrop、layer alpha 与 strict attachment。award layer 由 containing tier 决定可见性，同一 exact id 跨档表示同一逻辑图层，当前档缺失即不可见；普通 Spine overlay 与 backdrop 保留 type-aware `visibleStates`。Popup Editor 新建项目固定为 v6；合法 v1–v5 ZIP 必须先按原版本 strict 校验与 prepare，再原子迁移为 v6，后续 preview/export 只写 v6。迁移以旧 award layer 所在 tier 为状态权威，固定 `win-amount` id，并确定性拆分稳定 identity 冲突。
+- Popup v7 沿用无界 focus、backdrop、layer alpha 与 strict attachment，并新增 package-local audio effect/cue；award layer 由 containing tier 决定可见性，同一 exact id 跨档表示同一逻辑图层，当前档缺失即不可见。Popup Editor 新建项目固定为 v7；合法 v1–v6 ZIP 必须先按原版本 strict 校验与 prepare，再原子迁移为 v7，后续 preview/export 只写 v7。
 - Popup Editor 独立预览页拥有唯一的 Pixi Application/canvas，并把 rendercore Popup player 的 Container 挂入其中；rendercore Popup 与游戏/Scene Layout consumer 不得创建 canvas、Renderer、ticker 或 RAF。预览在合法配置变化后自动 rebuild，不提供 Build、advance、dismiss 或 immediate-dismiss UI；普通交互只来自完整 preview canvas 或 keyboard input。
 - 新 Popup v6 authoring 不提供独立 Spine prompt；旧 prompt 在 v1/v2 导入迁移时结构化转换为 `name=prompt` 的字体文字 overlay，冲突使整次导入失败。award 各档与 Spine overlay 都可声明多个命名字体文字和 manual ImgNumber；文字省略 resource 时使用系统字体，显式选择时只接受 package-owned WOFF2/WOFF/TTF/OTF，失效引用不降级。award 的状态由档位 presence 表达，Editor 必须提供显式 stable-id 复用操作而不得按资源猜测合并；每个档仍必须恰好有一个 exact id 为 `win-amount` 的金额层。
-- Popup v4–v6 的 image、字体文字、ImgNumber、VNI 与 Spine layer 可挂 Popup root 或同作用域 official Spine exact slot；普通 Spine Popup 还可挂主 Spine，ImgNumber 保留 VNI text-layer attachment。Editor 候选必须来自 shared Spine/VNI strict metadata，不猜首项；循环 target、跨作用域引用、缺 slot、同父 order 冲突、覆盖后失效与删除被引用 target 都阻止 transaction，不自动回根。
+- Popup v4–v7 的 image、字体文字、ImgNumber、VNI 与 Spine layer 可挂 Popup root 或同作用域 official Spine exact slot；普通 Spine Popup 还可挂主 Spine，ImgNumber 保留 VNI text-layer attachment。Editor 候选必须来自 shared Spine/VNI strict metadata，不猜首项；循环 target、跨作用域引用、缺 slot、同父 order 冲突、覆盖后失效与删除被引用 target 都阻止 transaction，不自动回根。
 - VNI export bundle 只把 `purpose=runtime` 作为运行候选：唯一 runtime 自动选择，多个 runtime 才枚举；禁止手输 profile id，`purpose=editing` 不进入候选。
 - popup package 使用完整 SHA-256 content-addressed owned payload，并保持 exact closure。
 - Popup 字体与其它 payload 一样按完整 SHA-256 物理去重；logical filename key 与 owner 引用不得从 hash path 反推或合并。
-- Popup 必须保持 `popup/data → popup/core → popup/editor` 单向分层：data 拥有 v1–v6 strict source parser、唯一默认 latest normalizer与纯引用合同；core 拥有 production resolved-resource prepare、focus/presentation、layer、string registry、金额、input与 award/Spine 状态机；editor 只组合 mapped standalone package、namespace/materialize 和同 Core snapshot wrapper。任何 editor/game runtime 都必须用默认 loader 把受支持版本转为 latest，不能自行选择升级函数。Popup Editor 与需要封装 standalone Popup 的 editor 使用 editor wrapper；只做 manifest/reference rewrite 的 CLI 使用 data；通过 Scene Layout 预览的 editor 不直接创建第二个 Popup core。editor/game app只创建宿主canvas、挂载节点并呈现错误，不复制分派。Popup Editor 必须让表单与 contenteditable 的 keyboard event 在 shared binding eligibility 边界透传，不能让播放中的 Popup 阻止输入。
+- Popup 必须保持 `popup/data → popup/core → popup/editor` 单向分层：data 拥有 v1–v7 strict source parser、唯一默认 latest normalizer与纯引用合同；core 拥有 production resolved-resource prepare、focus/presentation、layer、string registry、金额、input与 award/Spine 状态机；editor 只组合 mapped standalone package、namespace/materialize 和同 Core snapshot wrapper。任何 editor/game runtime 都必须用默认 loader把受支持版本转为latest。
 
 ## Symbols Editor
 
-- 内层 symbol-state-textures manifest 的 canonical authoring 版本为 v2：`settings.stateDefinitions` 保存完整 builtin/custom lifecycle，once 必须显式配置 `afterComplete`，stable 禁止该字段。打开合法 v1 时只调用 rendercore 的统一 upgrader，exact remove→terminal、其它 once→return-to-default；新导出恒写 v2，editor preview/Replay 不按 state 名判断。
+- 内层 symbol-state-textures manifest 的 canonical authoring 版本为 v3：沿用 v2 state lifecycle，并新增 package-local audio effect/cue。打开合法 v1/v2 时只调用 rendercore 的统一 upgrader；新导出恒写 v3，editor preview/Replay 不按 state 名判断。
+- Popup/Symbol effect 配置复用 `audiocore/editor` 的同一字段合同，只保存 local name。Symbols Editor 视觉上仍播放全部 symbol 的所选 state，但音频试听必须通过 preview-only 单选下拉框只放一个 symbol，且该选择不写 manifest。
 - `apps/symbolseditor` 只拥有 browser editing/IO/UI、typed draft transaction、dependency library、资源引用图、per-symbol state assignment、value/cascade 表单和固定 all-symbol single-state preview。普通 symbol 的 shared ImgNumber slot 候选取全部 top-level Spine state skeleton slot 交集，value-managed symbol 取全部 tier skeleton 交集；每个 value-managed symbol 只有一个 preview value，由 threshold 自动命中档位。该值只属于 UI session，不得进入 manifest/ZIP。
 - Symbols 资源覆盖保持 owner-owned 配置和 filename-key 引用；被覆盖的有效 Spine skeleton 缺少已选 exact animation 时，只清空受影响的 animation selection（tiered shared animation 按全部 tier 一起清空）并显式报告，其它 candidate bytes 不能满足现有 typed binding 时整批回滚。完整 Symbols project ZIP 只能单独打开，不作为普通资源合并；project 与 preview failure 必须分层显式呈现。
 - Symbols composite state 必须显式声明 normal/stateTexture base 与非空有序 layer；layer id 唯一且为 lowercase kebab-case，placement 只能是 underlay/overlay，leaf 只能是 Spine/VNI。Editor 的绑定、覆盖清理、引用图和导出必须定位 exact layer，不允许 filename guess、隐式 reorder 或降级为单层。
@@ -83,7 +84,8 @@
 
 ## Layout Editor dependency
 
-- Gamelayout Editor只编辑和导出Scene Layout latest v3；打开合法v1/v2时先调用RenderCore共享upgrader生成默认`runtimeAllocation`，再执行Editor node-id migration并原子复验。每次导出都由RenderCore从typed draft重建并strict复验allocation；旧mode id、initial、edge和dependency保持，不自动插入Splash。
+- Gamelayout Editor只编辑和导出Scene Layout latest v4；打开合法v1–v3时先调用RenderCore共享upgrader生成默认`runtimeAllocation`与空音频合同，再执行Editor node-id migration并原子复验。每次导出都由RenderCore从typed draft重建并strict复验allocation；旧mode id、initial、edge和dependency保持，不自动插入Splash。
+- BGM 只由 Game Layout Editor 按 mode 可选配置并在 production preview 试听；effect 在 Popup/Symbol owner 中只使用 local name，组合到 Scene Layout 时才按 binding id 形成 `award.coin` 一类 route。未被 cue 引用但允许程序播放的 route 必须进入显式 programmatic allowlist。
 - 新项目显式创建Splash initial与BaseGame；每个内置或后续新增mode都必须由用户从空下拉框选择单背景或横竖双背景类型，不继承当前mode或首项。Splash primary click只引用显式Splash→BaseGame transition。
 - mode的主转轮开关属于v2 draft：新Splash关闭、BaseGame和普通新增mode开启；关闭时保留Editor内可恢复的placement草稿但latest export不写placement，已有Symbols binding必须先显式解除。
 - Gamelayout Editor新建/复制/重命名/导出的scene node id只允许lowercase alphanumeric+kebab并禁止`layout|reel|transition|popup`保留名。旧Layout ZIP先按rendercore v1兼容parser读取，再以确定性rename map原子规范化点号/下划线/保留名和collision，结构化改写adaptation background、mode background与nodeStates key，复验后提交并向用户显示完整old→new；不得覆盖或合并node。production parser继续兼容未重导旧包。

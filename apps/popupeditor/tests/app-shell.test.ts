@@ -203,7 +203,7 @@ describe("PopupEditorApp", () => {
     expect(root.querySelector("nav")!.hasAttribute("hidden")).toBe(false);
 
     root.querySelector<HTMLButtonElement>('[data-tab="project"]')!.click();
-    expect(root.textContent).toContain("格式 v6 · Spine 弹窗");
+    expect(root.textContent).toContain("格式 v7 · Spine 弹窗");
     expect(
       root.querySelectorAll('[data-project-field^="backdrop-state-"]'),
     ).toHaveLength(3);

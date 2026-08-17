@@ -112,6 +112,7 @@ export async function importPopupZip(
     alpha: manifest.backdrop.alpha,
     visibleStates: [...manifest.backdrop.visibleStates],
   };
+  project.audio = structuredClone(manifest.audio);
   project.resources.clear();
   project.assets.clear();
   for (const key of Object.keys(map.files)) {
@@ -203,6 +204,9 @@ function popupManifestAssetClosure(
   const keys = new Set<string>();
   for (const spec of Object.values(manifest.resources))
     for (const key of resourceClosure(spec, assets)) keys.add(key);
+  if (manifest.version === 7)
+    for (const effect of manifest.audio.effects)
+      for (const source of effect.asset.sources) keys.add(source.path);
   return Object.freeze([...keys].sort((a, b) => a.localeCompare(b, "en")));
 }
 

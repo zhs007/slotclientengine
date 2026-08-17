@@ -9,6 +9,7 @@ import {
   type PopupAmountFormat,
   type PopupLayer,
   type PopupManifest,
+  type PopupAudioV1,
   type PopupOverlayLayer,
   type PopupResourceSpec,
   type PopupVisibilityState,
@@ -48,7 +49,7 @@ export interface PopupSpineAttachmentTarget {
   readonly slotNames: readonly string[];
 }
 export interface PopupEditorProject {
-  formatVersion: 6;
+  formatVersion: 7;
   name: string;
   type: "award-celebration" | "spine";
   id: string;
@@ -62,6 +63,7 @@ export interface PopupEditorProject {
     visibleStates: PopupVisibilityState[];
   };
   amountFormat: PopupAmountFormat;
+  audio: PopupAudioV1;
   resources: Map<string, PopupEditorResource>;
   assets: Map<string, EditorAssetEntry>;
   tiers: Map<AwardTierId, PopupEditorTier>;
@@ -178,7 +180,7 @@ export function createPopupEditorProject(
     layers: [],
   });
   return {
-    formatVersion: 6,
+    formatVersion: 7,
     name: options.name ?? "Untitled Popup",
     type: options.type ?? "award-celebration",
     id: options.id ?? "untitled-popup",
@@ -194,6 +196,7 @@ export function createPopupEditorProject(
       ],
     },
     amountFormat: createPopupAmountFormat("integer"),
+    audio: { version: 1, effects: [], cues: [] },
     resources: new Map(),
     assets: new Map(),
     tiers: new Map([
@@ -244,6 +247,7 @@ export function clonePopupEditorProject(
       visibleStates: [...project.backdrop.visibleStates],
     },
     amountFormat: { ...project.amountFormat },
+    audio: structuredClone(project.audio),
     spine: structuredClone(project.spine),
     resources: new Map(
       [...project.resources].map(([id, resource]) => [
@@ -272,7 +276,7 @@ export function clonePopupEditorProject(
 
 export function projectToManifest(project: PopupEditorProject): PopupManifest {
   const common = {
-    version: 6 as const,
+    version: 7 as const,
     kind: "popup" as const,
     id: project.id,
     name: project.name,
@@ -284,6 +288,7 @@ export function projectToManifest(project: PopupEditorProject): PopupManifest {
       ...project.backdrop,
       visibleStates: [...project.backdrop.visibleStates] as any,
     },
+    audio: structuredClone(project.audio),
   };
   const canonicalLayer = <T extends PopupLayer>(layer: T) => {
     const {

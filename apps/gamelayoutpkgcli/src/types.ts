@@ -65,6 +65,14 @@ export type AssetGroupRecord =
       readonly incrementalAssets: readonly string[];
     }
   | {
+      readonly id: "audio:scene-layout";
+      readonly kind: "audio";
+      readonly owner: "scene-layout";
+      readonly usedByModes: readonly string[];
+      readonly requiredAssets: readonly string[];
+      readonly incrementalAssets: readonly string[];
+    }
+  | {
       readonly id: string;
       readonly kind: "runtime-resource";
       readonly resourceKey: string;

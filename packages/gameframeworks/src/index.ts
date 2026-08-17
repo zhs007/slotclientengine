@@ -1,5 +1,11 @@
 import "./styles.css";
 
+export type {
+  AudioPlaybackHandle,
+  AudioPlaybackState,
+  AudioRuntimeSnapshot,
+} from "@slotclientengine/audiocore/core";
+
 export {
   applySlotOperationChanges,
   applySlotOperationValueUpdates,

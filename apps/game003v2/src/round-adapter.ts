@@ -4,6 +4,7 @@ import type {
   SlotGameAdapter,
   SlotGameInitialState,
   SlotGameMountContext,
+  SlotGameStateSnapshot,
   SlotOperationV2,
 } from "@slotclientengine/gameframeworks";
 import {
@@ -43,6 +44,7 @@ class Game003v2RoundAdapter implements SlotGameAdapter {
   #unbindPopup: (() => void) | null = null;
   #preSpinActive = false;
   #destroyed = false;
+  #muted = false;
 
   constructor(resource: Game003v2Resource) {
     this.#resource = resource;
@@ -99,6 +101,7 @@ class Game003v2RoundAdapter implements SlotGameAdapter {
           },
         },
       });
+      runtime.setAudioMuted(this.#muted);
       const area = runtime.getReelArea("main");
       const registry = this.createRegistry(runtime, area);
       const coordinator = createSlotOperationCoordinator({
@@ -128,6 +131,7 @@ class Game003v2RoundAdapter implements SlotGameAdapter {
   }
 
   startSpinPresentation(): void {
+    void this.requireRuntime().unlockAudio();
     if (this.#preSpinActive)
       throw new Error("game003v2 continuous spin is already active.");
     const runtime = this.requireRuntime();
@@ -135,6 +139,11 @@ class Game003v2RoundAdapter implements SlotGameAdapter {
       throw new Error("game003v2 operation plan is still running.");
     runtime.getReelArea("main").spin.start();
     this.#preSpinActive = true;
+  }
+
+  setFrameworkState(state: SlotGameStateSnapshot): void {
+    this.#muted = state.muted;
+    this.#runtime?.setAudioMuted(state.muted);
   }
 
   cancelSpinPresentation(_error: Error): void {

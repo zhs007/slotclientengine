@@ -449,10 +449,26 @@ export class LayoutPreview {
   async requestGameMode(modeId: string): Promise<void> {
     if (!this.#packageRuntime)
       throw new Error("当前 layout preview 没有 package runtime。");
-    await this.#packageRuntime.requestGameMode(
+    const unlock = this.#packageRuntime.unlockAudio?.() ?? Promise.resolve();
+    const transition = this.#packageRuntime.requestGameMode(
       modeId,
       this.gameModeRequestOptions(modeId),
     );
+    await unlock;
+    await transition;
+  }
+
+  playEffect(route: string): void {
+    if (!this.#packageRuntime)
+      throw new Error("当前 layout preview 没有 package runtime。");
+    void this.#packageRuntime.unlockAudio?.();
+    this.#packageRuntime.playEffect(route);
+  }
+
+  stopEffect(route: string): void {
+    if (!this.#packageRuntime)
+      throw new Error("当前 layout preview 没有 package runtime。");
+    this.#packageRuntime.stopEffect(route);
   }
 
   private gameModeRequestOptions(modeId: string) {

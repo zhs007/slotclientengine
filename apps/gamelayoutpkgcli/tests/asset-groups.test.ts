@@ -142,6 +142,68 @@ describe("asset-groups v1 parser", () => {
       )?.requiredAssets,
     ).toEqual([]);
   });
+
+  it("keeps audio in its deferred group even when the initial mode uses BGM", () => {
+    const keys = ["base.png", "base.mp3", "click.ogg"];
+    const manifest = {
+      version: 4,
+      kind: "scene-layout",
+      id: "layout",
+      nodes: [imageNode("base-bg", "base.png")],
+      audio: {
+        version: 1,
+        music: [
+          {
+            name: "base",
+            asset: { sources: [{ path: "base.mp3", mediaType: "audio/mpeg" }] },
+            loop: true,
+            fadeOutSeconds: 0.5,
+            fadeInSeconds: 0.5,
+          },
+        ],
+        effects: [
+          {
+            name: "click",
+            asset: { sources: [{ path: "click.ogg", mediaType: "audio/ogg" }] },
+            playback: "once",
+            offsetSeconds: 0,
+            voices: { maxConcurrent: 1, overflow: "restart-oldest" },
+            bgm: { kind: "keep" },
+          },
+        ],
+        programmaticEffects: ["click"],
+      },
+      gameModes: {
+        initialMode: "BaseGame",
+        modes: [
+          {
+            id: "BaseGame",
+            bgm: "base",
+            backgroundNodes: { default: "base-bg" },
+          },
+        ],
+        transitions: [],
+      },
+    } as never;
+    const groups = createSceneLayoutAssetGroups({
+      manifest,
+      files: new Map(),
+      sourceZipBytes: 3,
+      output: outputFixture(keys),
+      quality: 80,
+      cwebpVersion: "test",
+      convertedImageCount: 0,
+    });
+    expect(groups.initialAssets).toEqual(["base.png"]);
+    expect(
+      groups.groups.find((group) => group.id === "audio:scene-layout"),
+    ).toMatchObject({
+      kind: "audio",
+      usedByModes: ["BaseGame"],
+      requiredAssets: ["base.mp3", "click.ogg"],
+      incrementalAssets: ["base.mp3", "click.ogg"],
+    });
+  });
 });
 
 function imageNode(id: string, path: string) {
@@ -151,6 +213,47 @@ function imageNode(id: string, path: string) {
     resource: { kind: "image", path, size: { width: 1, height: 1 } },
     placements: { default: { x: 0, y: 0, scale: 1 } },
   };
+}
+
+function outputFixture(keys: readonly string[]) {
+  return {
+    zipBytes: new Uint8Array(),
+    assets: new Map(
+      keys.map((key) => [
+        key,
+        {
+          key,
+          sourceKey: key,
+          bytes: new Uint8Array([1]),
+          sourceByteLength: 1,
+          converted: false,
+          mediaType: key.endsWith(".png")
+            ? "image/png"
+            : key.endsWith(".mp3")
+              ? "audio/mpeg"
+              : "audio/ogg",
+        },
+      ]),
+    ),
+    assetsMap: {
+      version: 1,
+      files: Object.fromEntries(
+        keys.map((key) => [
+          key,
+          {
+            path: key,
+            mediaType: key.endsWith(".png")
+              ? "image/png"
+              : key.endsWith(".mp3")
+                ? "audio/mpeg"
+                : "audio/ogg",
+            sha256: "a".repeat(64),
+            byteLength: 1,
+          },
+        ]),
+      ),
+    },
+  } as never;
 }
 
 function fixture() {

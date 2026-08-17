@@ -169,6 +169,7 @@ describe("popup editor filename-key project", () => {
       new TextDecoder().decode(entries.get("popup.manifest.json")),
     );
     manifest.version = 1;
+    delete manifest.audio;
     manifest.designViewport = { width: 1080, height: 1920 };
     delete manifest.name;
     delete manifest.adaptation;
@@ -199,16 +200,17 @@ describe("popup editor filename-key project", () => {
     const imported = await importPopupZip(createDeterministicZip(entries), {
       prepare: false,
     });
-    expect(imported.formatVersion).toBe(6);
+    expect(imported.formatVersion).toBe(7);
     expect(imported.spine.prompt.font).toBeNull();
     expect(imported.spine.prompt.enabled).toBe(false);
     expect(imported.spine.overlays).toContainEqual(
       expect.objectContaining({ id: "prompt", kind: "text", name: "prompt" }),
     );
-    expect(projectToManifest(imported)).toMatchObject({ version: 6 });
+    expect(projectToManifest(imported)).toMatchObject({ version: 7 });
     expect(projectToManifest(imported)).not.toHaveProperty("designViewport");
 
     manifest.version = 2;
+    delete manifest.audio;
     manifest.name = "Task 190 Legacy Prompt";
     manifest.adaptation = {
       mode: "maximized-focus",
@@ -227,12 +229,12 @@ describe("popup editor filename-key project", () => {
     expect(importedLegacyV2.spine.overlays).toContainEqual(
       expect.objectContaining({ id: "prompt", kind: "text", name: "prompt" }),
     );
-    const canonicalV6 = projectToManifest(importedLegacyV2);
-    expect(canonicalV6.version).toBe(6);
-    expect(canonicalV6).not.toHaveProperty("designViewport");
-    if (canonicalV6.type !== "spine") throw new Error("Expected spine popup.");
-    expect(canonicalV6.spine).not.toHaveProperty("prompt");
-    expect(canonicalV6.spine.overlays?.[0]).toMatchObject({
+    const canonicalV7 = projectToManifest(importedLegacyV2);
+    expect(canonicalV7.version).toBe(7);
+    expect(canonicalV7).not.toHaveProperty("designViewport");
+    if (canonicalV7.type !== "spine") throw new Error("Expected spine popup.");
+    expect(canonicalV7.spine).not.toHaveProperty("prompt");
+    expect(canonicalV7.spine.overlays?.[0]).toMatchObject({
       attachment: { kind: "popup-root" },
       visibleStates: ["start", "loop"],
     });

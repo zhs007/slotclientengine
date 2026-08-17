@@ -1,4 +1,5 @@
 import { SceneLayoutError } from "./errors.js";
+import { collectAudioAssetPaths } from "@slotclientengine/audiocore/data";
 import type {
   OrientationFocusSceneLayoutVariant,
   SceneLayoutAdaptation,
@@ -33,7 +34,7 @@ export function parseSceneLayoutManifest(
   value: unknown,
 ): SceneLayoutManifestV1 {
   const sourceRecord = readRecord(value, "scene layout manifest");
-  if (sourceRecord.version === 3)
+  if (sourceRecord.version === 3 || sourceRecord.version === 4)
     return materializeInitialSceneLayoutManifest(
       upgradeSceneLayoutManifestToLatest(value),
     );
@@ -50,7 +51,7 @@ export function parseSceneLayoutManifestDocument(
   value: unknown,
 ): SceneLayoutManifest {
   const sourceRecord = readRecord(value, "scene layout manifest");
-  if (sourceRecord.version === 3)
+  if (sourceRecord.version === 3 || sourceRecord.version === 4)
     return upgradeSceneLayoutManifestToLatest(value);
   const normalized = normalizeLegacySceneLayoutPresentationOrders(value);
   const record = readRecord(normalized, "scene layout manifest");
@@ -189,6 +190,8 @@ export function collectSceneLayoutAssetPaths(
 ): readonly string[] {
   const parsed = parseSceneLayoutManifestDocument(manifest);
   const paths = new Set<string>();
+  if (parsed.version === 4)
+    for (const path of collectAudioAssetPaths(parsed.audio)) paths.add(path);
   for (const node of parsed.nodes) {
     const resource = node.resource;
     if (resource.kind === "image") paths.add(resource.path);

@@ -5,6 +5,7 @@ import {
   type SlotGameAdapter,
   type SlotGameInitialState,
   type SlotGameMountContext,
+  type SlotGameStateSnapshot,
   compileSlotCascadeFacts,
   deriveSlotCascadeDropdownValues,
 } from "@slotclientengine/gameframeworks";
@@ -98,6 +99,7 @@ class DirectRoundAdapter implements SlotGameAdapter {
   #resourceOwned = true;
   #spinStartPaintPending = false;
   #anticipationActive = false;
+  #muted = false;
   #preSpinActive = false;
   #preSpinInputScene: SceneMatrix | null = null;
   #preSpinInputValues: readonly (readonly (number | null | -1)[])[] | null =
@@ -170,6 +172,7 @@ class DirectRoundAdapter implements SlotGameAdapter {
           },
         },
       });
+      runtime.setAudioMuted(this.#muted);
       this.#performanceTrace?.markStartup("runtime-init-complete");
     } catch (error) {
       runtime.destroy();
@@ -192,6 +195,7 @@ class DirectRoundAdapter implements SlotGameAdapter {
   }
 
   startSpinPresentation(): void {
+    void this.requireRuntime().unlockAudio();
     if (this.#preSpinActive)
       throw new Error("game002v2 pre-spin presentation is already active.");
     if (this.#spinWaiter)
@@ -213,6 +217,11 @@ class DirectRoundAdapter implements SlotGameAdapter {
     this.#preSpinInputScene = inputScene;
     this.#preSpinInputValues = inputValues;
     this.#preSpinActive = true;
+  }
+
+  setFrameworkState(state: SlotGameStateSnapshot): void {
+    this.#muted = state.muted;
+    this.#runtime?.setAudioMuted(state.muted);
   }
 
   cancelSpinPresentation(_error: Error): void {

@@ -105,7 +105,7 @@
     "README.md"
   ],
   "scripts": {
-    "prepare:deps": "pnpm --filter @slotclientengine/browserartifactio build && pnpm --filter @slotclientengine/editorresource build && pnpm --filter @slotclientengine/logiccore build && pnpm --filter @slotclientengine/pixiani build && pnpm --filter @slotclientengine/vnicore build",
+    "prepare:deps": "pnpm --filter @slotclientengine/browserartifactio build && pnpm --filter @slotclientengine/editorresource build && pnpm --filter @slotclientengine/audiocore build && pnpm --filter @slotclientengine/logiccore build && pnpm --filter @slotclientengine/pixiani build && pnpm --filter @slotclientengine/vnicore build",
     "build": "pnpm run prepare:deps && tsc -p tsconfig.build.json",
     "benchmark:image-string": "node ./benchmarks/image-string-hot-path.mjs",
     "benchmark:popup": "node ./benchmarks/popup-runtime-hot-path.mjs",
@@ -120,6 +120,7 @@
   },
   "dependencies": {
     "@esotericsoftware/spine-pixi-v8": "~4.3.10",
+    "@slotclientengine/audiocore": "workspace:*",
     "@slotclientengine/browserartifactio": "workspace:*",
     "@slotclientengine/editorresource": "workspace:*",
     "@slotclientengine/logiccore": "workspace:*",

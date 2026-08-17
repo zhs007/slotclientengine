@@ -51,6 +51,7 @@ export type {
   SymbolManifestTransparentNormal,
   SymbolManifestLayer,
   ParsedSymbolManifestSymbol,
+  SymbolAudioCueV1,
   ParsedSymbolStateTextureManifest,
   ParseSymbolStateTextureManifestOptions,
 } from "../manifest.js";

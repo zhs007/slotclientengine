@@ -1,0 +1,52 @@
+{
+  "name": "@slotclientengine/audiocore",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Versioned audio data, game runtime, and editor support for slotclientengine.",
+  "packageManager": "pnpm@10.0.0",
+  "type": "module",
+  "exports": {
+    "./data": {
+      "source": "./src/data/index.ts",
+      "types": "./dist/data/index.d.ts",
+      "import": "./dist/data/index.js"
+    },
+    "./core": {
+      "source": "./src/core/index.ts",
+      "types": "./dist/core/index.d.ts",
+      "import": "./dist/core/index.js"
+    },
+    "./editor": {
+      "source": "./src/editor/index.ts",
+      "types": "./dist/editor/index.d.ts",
+      "import": "./dist/editor/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "prepare:deps": "pnpm --filter @slotclientengine/browserartifactio build && pnpm --filter @slotclientengine/editorresource build",
+    "build": "pnpm run prepare:deps && tsc -p tsconfig.build.json",
+    "benchmark": "node ./benchmarks/audio-runtime-hot-path.mjs",
+    "lint": "eslint .",
+    "test": "vitest run --coverage",
+    "typecheck": "pnpm run prepare:deps && tsc -p tsconfig.json --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@pixi/sound": "6.0.1",
+    "@slotclientengine/editorresource": "workspace:*"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.34.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vitest/coverage-v8": "^4.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^15.15.0"
+  }
+}

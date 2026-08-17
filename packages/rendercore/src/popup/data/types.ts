@@ -7,6 +7,19 @@ export type AwardTierId =
   | "megawin";
 export type PopupVisibilityState = AwardTierId | PopupSegment;
 
+export interface PopupAudioCueV1 {
+  readonly effect: string;
+  readonly target:
+    | { readonly kind: "segment"; readonly segment: PopupSegment }
+    | { readonly kind: "award-tier"; readonly tier: AwardTierId };
+}
+
+export interface PopupAudioV1 {
+  readonly version: 1;
+  readonly effects: readonly import("@slotclientengine/audiocore/data").AudioEffectBindingV1[];
+  readonly cues: readonly PopupAudioCueV1[];
+}
+
 export interface PopupAmountFormat {
   readonly rawScale: number;
   readonly fractionDigits: number;
@@ -518,10 +531,31 @@ export type PopupManifestV6 =
   | AwardCelebrationPopupManifestV6
   | SpinePopupManifestV6;
 
+interface PopupManifestBaseV7<State extends PopupVisibilityState> extends Omit<
+  PopupManifestBaseV6<State>,
+  "version"
+> {
+  readonly version: 7;
+  readonly audio: PopupAudioV1;
+}
+export interface AwardCelebrationPopupManifestV7 extends PopupManifestBaseV7<AwardTierId> {
+  readonly type: "award-celebration";
+  readonly amountFormat: PopupAmountFormat;
+  readonly awardCelebration: AwardCelebrationSpecV6;
+}
+export interface SpinePopupManifestV7 extends PopupManifestBaseV7<PopupSegment> {
+  readonly type: "spine";
+  readonly spine: SpinePopupManifestV6["spine"];
+}
+export type PopupManifestV7 =
+  | AwardCelebrationPopupManifestV7
+  | SpinePopupManifestV7;
+
 export type PopupManifest =
   | PopupManifestV1
   | PopupManifestV2
   | PopupManifestV3
   | PopupManifestV4
   | PopupManifestV5
-  | PopupManifestV6;
+  | PopupManifestV6
+  | PopupManifestV7;

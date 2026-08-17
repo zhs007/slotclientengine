@@ -52,8 +52,10 @@ export function upgradePopupManifestToV5(
   manifest: PopupManifest,
 ): PopupManifestV5 {
   if (manifest.version === 5) return manifest;
-  if (manifest.version === 6)
-    throw new Error("popup manifest v6 cannot be downgraded to v5.");
+  if (manifest.version >= 6)
+    throw new Error(
+      `popup manifest v${manifest.version} cannot be downgraded to v5.`,
+    );
   const attachment = (layer: {
     readonly attachment?: unknown;
     readonly parent?: unknown;
@@ -202,6 +204,8 @@ export function upgradePopupManifestToV6(
   manifest: PopupManifest,
 ): PopupManifestV6 {
   if (manifest.version === 6) return manifest;
+  if (manifest.version === 7)
+    throw new Error("popup manifest v7 cannot be downgraded to v6.");
   const legacy = upgradePopupManifestToV5(manifest);
   if (legacy.type === "spine")
     return Object.freeze({

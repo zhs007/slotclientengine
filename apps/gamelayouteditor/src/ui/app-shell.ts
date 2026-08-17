@@ -8,6 +8,7 @@ import {
   extractBoundedZip,
 } from "@slotclientengine/browserartifactio";
 import { normalizeEditorPackageZipEntries } from "@slotclientengine/editorresource";
+import { detectAudioMediaType } from "@slotclientengine/audiocore/editor";
 import {
   assertCanonicalUploadFileNames,
   canonicalizeUploadFileName,
@@ -156,6 +157,19 @@ interface FocusSnapshot {
   readonly selectionStart: number | null;
   readonly selectionEnd: number | null;
   readonly selectionDirection: "forward" | "backward" | "none" | null;
+}
+
+function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
+  return (
+    left.byteLength === right.byteLength &&
+    left.every((value, index) => value === right[index])
+  );
+}
+
+function isAudioPathReferenced(project: EditorProject, path: string): boolean {
+  return [...project.audio.effects, ...project.audio.music].some((binding) =>
+    binding.asset.sources.some((source) => source.path === path),
+  );
 }
 
 export class GameLayoutEditorApp {
@@ -2268,6 +2282,100 @@ export class GameLayoutEditorApp {
         }),
       );
     panel
+      .querySelector<HTMLInputElement>("[data-import-bgm]")
+      ?.addEventListener("change", (event) => {
+        const input = event.currentTarget as HTMLInputElement;
+        void this.importAudioFiles([...(input.files ?? [])], "music");
+        input.value = "";
+      });
+    panel
+      .querySelector<HTMLInputElement>("[data-import-audio-effect]")
+      ?.addEventListener("change", (event) => {
+        const input = event.currentTarget as HTMLInputElement;
+        void this.importAudioFiles([...(input.files ?? [])], "effect");
+        input.value = "";
+      });
+    panel
+      .querySelectorAll<HTMLSelectElement>("[data-mode-bgm]")
+      .forEach((select) =>
+        select.addEventListener("change", () =>
+          this.runTransaction((draft) => {
+            const mode = draft.gameModes.modes.find(
+              (candidate) => candidate.id === select.dataset.modeBgm,
+            );
+            if (!mode) throw new Error("BGM mode 不存在。");
+            mode.bgm = select.value || null;
+          }),
+        ),
+      );
+    panel
+      .querySelectorAll<HTMLButtonElement>("[data-delete-music]")
+      .forEach((button) =>
+        button.addEventListener("click", () =>
+          this.runTransaction((draft) => {
+            const name = button.dataset.deleteMusic!;
+            const binding = draft.audio.music.find(
+              (item) => item.name === name,
+            );
+            draft.audio = {
+              ...draft.audio,
+              music: draft.audio.music.filter((item) => item.name !== name),
+            };
+            for (const mode of draft.gameModes.modes)
+              if (mode.bgm === name) mode.bgm = null;
+            if (binding)
+              for (const source of binding.asset.sources)
+                if (!isAudioPathReferenced(draft, source.path))
+                  draft.assets.delete(source.path);
+          }),
+        ),
+      );
+    panel
+      .querySelectorAll<HTMLButtonElement>("[data-delete-audio-effect]")
+      .forEach((button) =>
+        button.addEventListener("click", () =>
+          this.runTransaction((draft) => {
+            const name = button.dataset.deleteAudioEffect!;
+            const binding = draft.audio.effects.find(
+              (item) => item.name === name,
+            );
+            draft.audio = {
+              ...draft.audio,
+              effects: draft.audio.effects.filter((item) => item.name !== name),
+              programmaticEffects: draft.audio.programmaticEffects.filter(
+                (route) => route !== name,
+              ),
+            };
+            if (binding)
+              for (const source of binding.asset.sources)
+                if (!isAudioPathReferenced(draft, source.path))
+                  draft.assets.delete(source.path);
+          }),
+        ),
+      );
+    panel
+      .querySelectorAll<HTMLButtonElement>("[data-preview-audio-effect]")
+      .forEach((button) =>
+        button.addEventListener("click", () => {
+          try {
+            this.#preview?.playEffect(button.dataset.previewAudioEffect!);
+          } catch (error) {
+            this.#store.setExternalError(error);
+          }
+        }),
+      );
+    panel
+      .querySelectorAll<HTMLButtonElement>("[data-stop-audio-effect]")
+      .forEach((button) =>
+        button.addEventListener("click", () => {
+          try {
+            this.#preview?.stopEffect(button.dataset.stopAudioEffect!);
+          } catch (error) {
+            this.#store.setExternalError(error);
+          }
+        }),
+      );
+    panel
       .querySelector<HTMLButtonElement>("[data-toggle-coordinate-origin]")
       ?.addEventListener("click", (event) => {
         const target = (event.currentTarget as HTMLButtonElement).dataset
@@ -3636,6 +3744,85 @@ export class GameLayoutEditorApp {
     } catch (error) {
       this.#store.setExternalError(error);
       return false;
+    }
+  }
+
+  private async importAudioFiles(
+    files: readonly File[],
+    kind: "music" | "effect",
+  ): Promise<void> {
+    try {
+      const prepared = await Promise.all(
+        files.map(async (file) => {
+          const path = canonicalizeUploadFileName(file.name);
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const mediaType = detectAudioMediaType(bytes);
+          if (!mediaType) throw new Error(`无法识别音频格式：${file.name}`);
+          const name = path
+            .replace(/\.[^.]+$/u, "")
+            .replace(/[^a-z0-9]+/gu, "-")
+            .replace(/^-+|-+$/gu, "");
+          if (!name) throw new Error(`无法从文件名生成音频名称：${file.name}`);
+          return { path, bytes, mediaType, name };
+        }),
+      );
+      this.runTransaction(
+        (draft) => {
+          for (const item of prepared) {
+            const existing = draft.assets.get(item.path);
+            if (existing && !equalBytes(existing, item.bytes))
+              throw new Error(
+                `音频 filename key 已存在且 bytes 不同：${item.path}`,
+              );
+            draft.assets.set(item.path, item.bytes);
+            if (kind === "music") {
+              if (draft.audio.music.some((entry) => entry.name === item.name))
+                throw new Error(`BGM 名称重复：${item.name}`);
+              draft.audio = {
+                ...draft.audio,
+                music: [
+                  ...draft.audio.music,
+                  {
+                    name: item.name,
+                    asset: {
+                      sources: [{ path: item.path, mediaType: item.mediaType }],
+                    },
+                    loop: true,
+                    fadeOutSeconds: 1,
+                    fadeInSeconds: 1,
+                  },
+                ],
+              };
+            } else {
+              if (draft.audio.effects.some((entry) => entry.name === item.name))
+                throw new Error(`音效名称重复：${item.name}`);
+              draft.audio = {
+                ...draft.audio,
+                effects: [
+                  ...draft.audio.effects,
+                  {
+                    name: item.name,
+                    asset: {
+                      sources: [{ path: item.path, mediaType: item.mediaType }],
+                    },
+                    playback: "once",
+                    offsetSeconds: 0,
+                    voices: { maxConcurrent: 4, overflow: "restart-oldest" },
+                    bgm: { kind: "keep" },
+                  },
+                ],
+                programmaticEffects: [
+                  ...draft.audio.programmaticEffects,
+                  item.name,
+                ],
+              };
+            }
+          }
+        },
+        `已导入 ${prepared.length} 个${kind === "music" ? " BGM" : "音效"}。`,
+      );
+    } catch (error) {
+      this.#store.setExternalError(error);
     }
   }
 

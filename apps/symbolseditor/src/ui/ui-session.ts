@@ -25,6 +25,7 @@ export class SymbolsEditorUiSession {
   inspector: SymbolInspectorTab = "basic";
   selectedSymbol = "";
   selectedState = "normal";
+  audioPreviewSymbol = "";
   previewState = "normal";
   assetQuery = "";
   assetKind: AssetKindFilter = "all";
@@ -106,6 +107,11 @@ export class SymbolsEditorUiSession {
         "";
     }
     const symbol = project.symbols.get(this.selectedSymbol);
+    if (
+      !this.audioPreviewSymbol ||
+      !project.symbols.has(this.audioPreviewSymbol)
+    )
+      this.audioPreviewSymbol = this.selectedSymbol;
     if (!symbol?.states.has(this.selectedState)) this.selectedState = "normal";
     if (
       !project.stateDefinitions.some(

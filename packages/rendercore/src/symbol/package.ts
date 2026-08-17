@@ -264,6 +264,8 @@ export function collectSymbolManifestResourcePaths(options: {
   const packageFiles = options.files;
   const add = (reference: string) =>
     paths.add(resolvePackagePath(manifestPath, reference));
+  for (const effect of manifest.audio.effects)
+    for (const source of effect.asset.sources) add(source.path);
   const addImageStringDependency = (options: {
     readonly resource: string;
     readonly text: string;

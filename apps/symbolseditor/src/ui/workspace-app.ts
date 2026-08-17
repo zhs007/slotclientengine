@@ -12,6 +12,7 @@ import {
   normalizeEditorPackageZipEntries,
   type EditorImportSourceFile,
 } from "@slotclientengine/editorresource";
+import type { AudioMediaType } from "@slotclientengine/audiocore/data";
 import {
   addCustomStateDefinition,
   addStateAnimationLayer,
@@ -730,6 +731,122 @@ export class SymbolsEditorApp {
         }),
       );
     }
+    const audioPreviewSymbol = panel.querySelector<HTMLSelectElement>(
+      "[data-audio-preview-symbol]",
+    );
+    audioPreviewSymbol?.addEventListener("change", () => {
+      this.#session.audioPreviewSymbol = audioPreviewSymbol.value;
+      this.render(this.#store.getSnapshot());
+    });
+    panel
+      .querySelector<HTMLElement>("[data-add-audio-effect]")
+      ?.addEventListener("click", () => {
+        try {
+          const name = panel
+            .querySelector<HTMLInputElement>("[data-new-audio-name]")!
+            .value.trim();
+          const path = panel.querySelector<HTMLSelectElement>(
+            "[data-new-audio-path]",
+          )!.value;
+          const playback = panel.querySelector<HTMLSelectElement>(
+            "[data-new-audio-playback]",
+          )!.value as "once" | "loop";
+          const offsetSeconds = Number(
+            panel.querySelector<HTMLInputElement>("[data-new-audio-delay]")!
+              .value,
+          );
+          const focus = panel.querySelector<HTMLSelectElement>(
+            "[data-new-audio-bgm]",
+          )!.value;
+          this.#store.transact((draft) => {
+            const record = draft.assetLibrary.records.get(path);
+            if (!record || record.kind !== "audio" || record.diagnostics.length)
+              throw new Error("必须选择一个可用音频资源。");
+            if (draft.audio.effects.some((effect) => effect.name === name))
+              throw new Error(`音效名称重复：${name}`);
+            const mediaType = record.metadata?.mediaType;
+            if (typeof mediaType !== "string")
+              throw new Error("音频资源缺少 mediaType。");
+            draft.audio = {
+              ...draft.audio,
+              effects: [
+                ...draft.audio.effects,
+                {
+                  name,
+                  asset: {
+                    sources: [{ path, mediaType: mediaType as AudioMediaType }],
+                  },
+                  playback,
+                  offsetSeconds,
+                  voices: {
+                    maxConcurrent: playback === "loop" ? 1 : 4,
+                    overflow: "restart-oldest",
+                  },
+                  bgm:
+                    focus === "duck"
+                      ? {
+                          kind: "duck",
+                          targetGain: 0.35,
+                          attackSeconds: 0.2,
+                          releaseSeconds: 0.5,
+                        }
+                      : focus === "pause"
+                        ? {
+                            kind: "pause",
+                            fadeOutSeconds: 0.2,
+                            fadeInSeconds: 0.5,
+                          }
+                        : { kind: "keep" },
+                },
+              ],
+            };
+          });
+        } catch (error) {
+          this.#store.setExternalError(error);
+        }
+      });
+    panel
+      .querySelectorAll<HTMLElement>("[data-remove-audio-effect]")
+      .forEach((button) =>
+        button.addEventListener("click", () => {
+          const name = button.dataset.removeAudioEffect!;
+          this.#store.transact((draft) => {
+            draft.audio = {
+              ...draft.audio,
+              effects: draft.audio.effects.filter(
+                (effect) => effect.name !== name,
+              ),
+            };
+            for (const symbol of draft.symbols.values())
+              symbol.audioCues = symbol.audioCues.filter(
+                (cue) => cue.effect !== name,
+              );
+          });
+        }),
+      );
+    panel
+      .querySelector<HTMLElement>("[data-add-audio-cue]")
+      ?.addEventListener("click", () => {
+        const state = panel.querySelector<HTMLSelectElement>(
+          "[data-audio-cue-state]",
+        )!.value;
+        const effect = panel.querySelector<HTMLSelectElement>(
+          "[data-audio-cue-effect]",
+        )!.value;
+        try {
+          this.#store.transact((draft) => {
+            const symbol = draft.symbols.get(this.#session.audioPreviewSymbol);
+            if (!symbol) throw new Error("请选择单一试听 Symbol。");
+            if (!effect) throw new Error("请选择音效。");
+            symbol.audioCues = [
+              ...symbol.audioCues.filter((cue) => cue.state !== state),
+              { state, effect },
+            ];
+          });
+        } catch (error) {
+          this.#store.setExternalError(error);
+        }
+      });
     panel
       .querySelector<HTMLElement>("[data-add-custom]")
       ?.addEventListener("click", () => {
@@ -2544,6 +2661,7 @@ export class SymbolsEditorApp {
     const request = ++this.#previewRequest;
     const project = snapshot.project;
     if (!project || !this.#preview) return;
+    this.#preview.configureAudio?.(project, this.#session.audioPreviewSymbol);
     const cells = createPreviewCells(
       project,
       this.#session.previewState,
@@ -2574,6 +2692,7 @@ export class SymbolsEditorApp {
         cells,
         this.#session.previewState,
       );
+      this.#preview.playAudioCue?.(this.#session.previewState);
       this.clearPreviewError();
       this.updateZoom(this.#preview.getZoom());
     } catch (error) {
@@ -2792,7 +2911,7 @@ function workspaceMarkup(
       ? assetsWorkspaceMarkup(project, session, thumbnail)
       : session.workspace === "symbols"
         ? symbolsWorkspaceMarkup(project, session, thumbnail)
-        : projectWorkspaceMarkup(project);
+        : projectWorkspaceMarkup(project, session);
   return `<div class="workspace-tabs" role="tablist" aria-label="编辑工作区">
     ${tabs.map(([id, label]) => tabMarkup(id, label, session.workspace === id, "workspace")).join("")}
   </div>
@@ -3580,8 +3699,33 @@ function cascadeInspectorMarkup(
   return `<section class="cascade-editor"><h2>Cascade presentation</h2><p>只编辑 manifest 编排；右侧预览仍只播放单一 state。</p><label>Mode <select data-cascade-mode><option value="" ${!mode ? "selected" : ""}>未启用</option>${option("group", "group", mode === "group")}${option("sequentialCollect", "sequentialCollect", mode === "sequentialCollect")}</select></label>${mode ? fields : '<div class="empty-feature"><p>选择 mode 后显示其所需字段；候选受 state lifecycle 约束。</p></div>'}</section>`;
 }
 
-function projectWorkspaceMarkup(project: SymbolEditorProject): string {
+function projectWorkspaceMarkup(
+  project: SymbolEditorProject,
+  session: SymbolsEditorUiSession,
+): string {
+  const audioAssets = [...project.assetLibrary.records.values()].filter(
+    (record) => record.kind === "audio" && record.diagnostics.length === 0,
+  );
   return `<section class="project-config"><div class="section-heading"><div><h1>项目配置</h1><p>全局内容独立于单个 symbol Inspector。</p></div></div><div class="form-grid"><label>Package / project id <input data-project-id data-focus-key="project-id" value="${escapeAttr(project.id)}"></label><label>Cell width <input data-cell-width type="number" min="1" value="${project.cellSize.width}"></label><label>Cell height <input data-cell-height type="number" min="1" value="${project.cellSize.height}"></label></div>
+    <section class="audio-config"><h2>音效</h2><p>与 Popup / Game Layout 使用同一 effect 字段。这里只保存局部名称；导入 Game Layout 后会成为 package.effect。音效文件先在“资源”上传。</p><div class="form-row"><input data-new-audio-name placeholder="effect-name"><select data-new-audio-path><option value="">选择音频资源</option>${audioAssets.map((record) => `<option value="${escapeAttr(record.path)}">${escapeHtml(record.path)}</option>`).join("")}</select><select data-new-audio-playback><option value="once">once</option><option value="loop">loop</option></select><input data-new-audio-delay type="number" min="0" step="0.01" value="0" aria-label="延迟秒"><select data-new-audio-bgm><option value="keep">BGM keep</option><option value="duck">BGM duck</option><option value="pause">BGM pause</option></select><button data-add-audio-effect>添加音效</button></div><ul>${project.audio.effects.map((effect) => `<li><code>${escapeHtml(effect.name)}</code> · ${effect.playback} · delay ${effect.offsetSeconds}s · BGM ${effect.bgm.kind}<button data-remove-audio-effect="${escapeAttr(effect.name)}">删除</button></li>`).join("") || "<li>尚未配置</li>"}</ul><h3>状态 cue / 单 Symbol 试听</h3><label>试听 Symbol（单选）<select data-audio-preview-symbol>${[
+      ...project.symbols.values(),
+    ]
+      .filter((symbol) => symbol.included)
+      .map(
+        (symbol) =>
+          `<option value="${escapeAttr(symbol.symbol)}" ${symbol.symbol === session.audioPreviewSymbol ? "selected" : ""}>${escapeHtml(symbol.symbol)}</option>`,
+      )
+      .join(
+        "",
+      )}</select></label><p class="hint">该选择只控制声音 sink；画面仍可同时预览全部 Symbol。</p><div class="form-row"><select data-audio-cue-state>${project.stateDefinitions.map((state) => `<option value="${escapeAttr(state.id)}">${escapeHtml(state.id)}</option>`).join("")}</select><select data-audio-cue-effect>${project.audio.effects.map((effect) => `<option value="${escapeAttr(effect.name)}">${escapeHtml(effect.name)}</option>`).join("")}</select><button data-add-audio-cue>绑定到试听 Symbol</button></div><ul>${
+      project.symbols
+        .get(session.audioPreviewSymbol)
+        ?.audioCues.map(
+          (cue) =>
+            `<li>${escapeHtml(cue.state)} → ${escapeHtml(cue.effect)}</li>`,
+        )
+        .join("") || "<li>当前 Symbol 无 cue</li>"
+    }</ul></section>
     <h2>项目状态定义</h2><div class="definition-list">${project.stateDefinitions.map((item) => `<div class="definition-row"><code>${escapeHtml(item.id)}</code><small>${item.phase} / ${item.playback}</small><span>${item.source === "custom" ? "Custom" : "Built-in"}</span>${item.afterComplete ? `<label>完成后 <select data-state-after-complete="${escapeAttr(item.id)}">${option("return-to-default", "回到 normal", item.afterComplete === "return-to-default")}${option("terminal", "停在终止帧", item.afterComplete === "terminal")}</select></label>` : ""}${item.source === "custom" ? `<button data-remove-custom="${escapeAttr(item.id)}">删除</button>` : ""}</div>`).join("")}</div><div class="form-row add-definition"><input data-custom-id placeholder="custom state id"><select data-custom-lifecycle><option value="once">once / once</option><option value="loop">stable / loop</option></select><select data-custom-after-complete><option value="return-to-default">完成后回到 normal</option><option value="terminal">完成后停在终止帧</option></select><button class="primary" data-add-custom>增加 custom state</button></div>
     <details class="advanced-summary"><summary>Legacy 导入兼容数据</summary><p>这些字段只为无损 round-trip 保留，不是现代 state texture 生成配置。</p><pre>${escapeHtml(JSON.stringify({ textureStateOrder: project.legacyTextureStateOrder, settings: project.legacyStateSettings }, null, 2))}</pre></details>
     <details class="advanced-summary"><summary>高级导出摘要</summary><dl class="summary-grid"><div><dt>Game config</dt><dd>${escapeHtml(project.gameConfigFileName)}</dd></div><div><dt>Symbols</dt><dd>${project.symbols.size}</dd></div><div><dt>Included</dt><dd>${getIncludedSymbols(project).length}</dd></div><div><dt>Library resources</dt><dd>${project.assetLibrary.records.size}</dd></div></dl><p>UI Tab、筛选、选择和展开状态不进入 ZIP。</p></details>

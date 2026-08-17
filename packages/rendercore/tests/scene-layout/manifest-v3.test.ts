@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  collectSceneLayoutAssetPaths,
   parseSceneLayoutManifestDocument,
   parseSceneLayoutManifestV3,
   upgradeSceneLayoutManifestToLatest,
@@ -30,7 +31,7 @@ describe("scene layout manifest v3", () => {
 
   it("normalizes both v1 and v2 through the same RenderCore latest path", () => {
     const fromV1 = upgradeSceneLayoutManifestToLatest(game002LayoutFixture);
-    const { runtimeAllocation: _allocation, ...modern } = fromV1;
+    const { runtimeAllocation: _allocation, audio: _audio, ...modern } = fromV1;
     const fromV2 = upgradeSceneLayoutManifestToLatest({
       ...modern,
       version: 2,
@@ -76,7 +77,7 @@ describe("scene layout manifest v3", () => {
     ).toEqual([1, 2]);
 
     const validV3 = upgradeSceneLayoutManifestToLatest(game002LayoutFixture);
-    const { runtimeAllocation: _allocation, ...v2 } = validV3;
+    const { runtimeAllocation: _allocation, audio: _audio, ...v2 } = validV3;
     const conflictedV2 = structuredClone({ ...v2, version: 2 }) as any;
     conflictedV2.reels.main.order = conflictedV2.nodes[0].order;
     const parsedV2 = parseSceneLayoutManifestDocument(conflictedV2);
@@ -86,17 +87,76 @@ describe("scene layout manifest v3", () => {
     expect(repairedV2.nodes[0].order).toBe(1);
     expect(repairedV2.reels.main.order).toBe(0);
 
-    const conflictedV3 = structuredClone(validV3) as any;
+    const { audio: _latestAudio, ...v3Source } = validV3;
+    const conflictedV3 = structuredClone({ ...v3Source, version: 3 }) as any;
     conflictedV3.reels.main.order = conflictedV3.nodes[0].order;
     expect(() => parseSceneLayoutManifestV3(conflictedV3)).toThrow(
       /order.*unique/,
     );
     const repairedV3 = parseSceneLayoutManifestDocument(conflictedV3);
-    expect(repairedV3.version).toBe(3);
+    expect(repairedV3.version).toBe(4);
     expect(repairedV3.nodes[0].order).toBe(1);
     expect(repairedV3.reels.main.order).toBe(0);
     expect(upgradeSceneLayoutManifestToLatest(conflictedV3)).toEqual(
       repairedV3,
     );
+  });
+
+  it("parses optional per-mode BGM and global programmatic routes in v4", () => {
+    const latest = upgradeSceneLayoutManifestToLatest(game002LayoutFixture);
+    const modeId = latest.gameModes.modes[0]!.id;
+    const withAudio = upgradeSceneLayoutManifestToLatest({
+      ...latest,
+      audio: {
+        version: 1,
+        effects: [
+          {
+            name: "click",
+            asset: {
+              sources: [{ path: "click.mp3", mediaType: "audio/mpeg" }],
+            },
+            playback: "once",
+            offsetSeconds: 0.1,
+            voices: { maxConcurrent: 2, overflow: "restart-oldest" },
+            bgm: { kind: "keep" },
+          },
+        ],
+        music: [
+          {
+            name: "base",
+            asset: {
+              sources: [{ path: "base.ogg", mediaType: "audio/ogg" }],
+            },
+            loop: true,
+            fadeOutSeconds: 0.5,
+            fadeInSeconds: 0.75,
+          },
+        ],
+        programmaticEffects: ["click", "award.coin"],
+      },
+      gameModes: {
+        ...latest.gameModes,
+        modes: latest.gameModes.modes.map((mode) =>
+          mode.id === modeId ? { ...mode, bgm: "base" } : mode,
+        ),
+      },
+    });
+    expect(withAudio.version).toBe(4);
+    expect(withAudio.gameModes.modes[0]!.bgm).toBe("base");
+    expect(collectSceneLayoutAssetPaths(withAudio)).toEqual(
+      expect.arrayContaining(["base.ogg", "click.mp3"]),
+    );
+    expect(() =>
+      upgradeSceneLayoutManifestToLatest({
+        ...withAudio,
+        gameModes: {
+          ...withAudio.gameModes,
+          modes: withAudio.gameModes.modes.map((mode) => ({
+            ...mode,
+            bgm: "missing",
+          })),
+        },
+      }),
+    ).toThrow(/unknown BGM/);
   });
 });

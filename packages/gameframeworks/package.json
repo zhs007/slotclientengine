@@ -28,7 +28,7 @@
     "README.md"
   ],
   "scripts": {
-    "prepare:deps": "pnpm --filter @slotclientengine/uiframeworks build && pnpm --filter @slotclientengine/netcore build && pnpm --filter @slotclientengine/logiccore build && pnpm --filter @slotclientengine/rendercore build",
+    "prepare:deps": "pnpm --filter @slotclientengine/uiframeworks build && pnpm --filter @slotclientengine/netcore build && pnpm --filter @slotclientengine/logiccore build && pnpm --filter @slotclientengine/audiocore build && pnpm --filter @slotclientengine/rendercore build",
     "build": "pnpm run prepare:deps && vite build && tsc -p tsconfig.build.json --emitDeclarationOnly && tsc -p tsconfig.static-config-build.json",
     "lint": "eslint .",
     "test": "vitest run --coverage",
@@ -37,6 +37,7 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
+    "@slotclientengine/audiocore": "workspace:*",
     "@slotclientengine/logiccore": "workspace:*",
     "@slotclientengine/netcore": "workspace:*",
     "@slotclientengine/rendercore": "workspace:*",

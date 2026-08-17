@@ -1,0 +1,603 @@
+import type {
+  AudioBgmFocusPolicyV1,
+  AudioEffectBindingV1,
+  AudioMusicBindingV1,
+} from "../data/index.js";
+import type {
+  AudioBackend,
+  AudioBackendInstance,
+  AudioBackendSound,
+  AudioBackendSource,
+} from "./backend.js";
+
+export interface ResolvedAudioEffect {
+  readonly binding: AudioEffectBindingV1;
+  readonly sources: readonly AudioBackendSource[];
+}
+
+export interface ResolvedAudioMusic {
+  readonly binding: AudioMusicBindingV1;
+  readonly sources: readonly AudioBackendSource[];
+}
+
+export type AudioPlaybackState =
+  | "pending"
+  | "playing"
+  | "ended"
+  | "stopped"
+  | "failed";
+
+export interface AudioPlaybackHandle {
+  readonly id: number;
+  readonly route: string;
+  readonly state: AudioPlaybackState;
+  readonly error: unknown | null;
+  readonly finished: Promise<AudioPlaybackState>;
+  stop(): void;
+}
+
+export interface AudioRuntimeSnapshot {
+  readonly pendingEffects: number;
+  readonly activeEffects: number;
+  readonly preparedSounds: number;
+  readonly activeMusic: string | null;
+  readonly musicVoices: number;
+  readonly focus: "keep" | "duck" | "pause";
+  readonly focusGain: number;
+}
+
+export interface AudioRuntime {
+  prepare(routes: readonly string[]): Promise<void>;
+  playEffect(
+    route: string,
+    options?: { readonly delaySeconds?: number },
+  ): AudioPlaybackHandle;
+  stopEffect(route: string): void;
+  requestMusic(name: string | null): Promise<void>;
+  update(deltaSeconds: number): void;
+  unlock(): Promise<void>;
+  setMasterMuted(muted: boolean): void;
+  setMusicVolume(volume: number): void;
+  setEffectVolume(volume: number): void;
+  getSnapshot(): AudioRuntimeSnapshot;
+  destroy(): void;
+}
+
+interface PendingEffect {
+  readonly handle: MutablePlaybackHandle;
+  readonly resolved: ResolvedAudioEffect;
+  remainingSeconds: number;
+  sound: AudioBackendSound | null;
+  ready: boolean;
+  cancelled: boolean;
+}
+
+interface ActiveEffect {
+  readonly handle: MutablePlaybackHandle;
+  readonly resolved: ResolvedAudioEffect;
+  readonly instance: AudioBackendInstance;
+  readonly disposeEnded: () => void;
+  readonly sequence: number;
+}
+
+interface MusicVoice {
+  readonly name: string;
+  readonly binding: AudioMusicBindingV1;
+  readonly instance: AudioBackendInstance;
+  transitionGain: number;
+  startGain: number;
+  targetGain: number;
+  elapsedSeconds: number;
+  durationSeconds: number;
+  stopping: boolean;
+}
+
+class MutablePlaybackHandle implements AudioPlaybackHandle {
+  readonly id: number;
+  readonly route: string;
+  state: AudioPlaybackState = "pending";
+  error: unknown | null = null;
+  readonly finished: Promise<AudioPlaybackState>;
+  readonly #stop: () => void;
+  #resolve!: (state: AudioPlaybackState) => void;
+  #settled = false;
+
+  constructor(id: number, route: string, stop: () => void) {
+    this.id = id;
+    this.route = route;
+    this.#stop = stop;
+    this.finished = new Promise((resolve) => {
+      this.#resolve = resolve;
+    });
+  }
+
+  stop(): void {
+    this.#stop();
+  }
+  settle(
+    state: Extract<AudioPlaybackState, "ended" | "stopped" | "failed">,
+    error: unknown = null,
+  ): void {
+    if (this.#settled) return;
+    this.#settled = true;
+    this.state = state;
+    this.error = error;
+    this.#resolve(state);
+  }
+}
+
+export function createAudioRuntime(options: {
+  readonly backend: AudioBackend;
+  readonly effects: Readonly<Record<string, ResolvedAudioEffect>>;
+  readonly music?: Readonly<Record<string, ResolvedAudioMusic>>;
+}): AudioRuntime {
+  return new DefaultAudioRuntime(
+    options.backend,
+    options.effects,
+    options.music ?? {},
+  );
+}
+
+class DefaultAudioRuntime implements AudioRuntime {
+  readonly #backend: AudioBackend;
+  readonly #effects: Readonly<Record<string, ResolvedAudioEffect>>;
+  readonly #music: Readonly<Record<string, ResolvedAudioMusic>>;
+  readonly #sounds = new Map<string, AudioBackendSound>();
+  readonly #preparing = new Map<string, Promise<AudioBackendSound>>();
+  readonly #pending = new Map<number, PendingEffect>();
+  readonly #active = new Map<number, ActiveEffect>();
+  readonly #focus = new Map<number, AudioBgmFocusPolicyV1>();
+  readonly #musicVoices: MusicVoice[] = [];
+  #nextId = 1;
+  #sequence = 1;
+  #masterMuted = false;
+  #musicVolume = 1;
+  #effectVolume = 1;
+  #focusGain = 1;
+  #focusStartGain = 1;
+  #focusTargetGain = 1;
+  #focusElapsedSeconds = 0;
+  #focusDurationSeconds = 0;
+  #focusKind: "keep" | "duck" | "pause" = "keep";
+  #currentMusic: string | null = null;
+  #musicRequest = 0;
+  #destroyed = false;
+
+  constructor(
+    backend: AudioBackend,
+    effects: Readonly<Record<string, ResolvedAudioEffect>>,
+    music: Readonly<Record<string, ResolvedAudioMusic>>,
+  ) {
+    this.#backend = backend;
+    this.#effects = Object.freeze({ ...effects });
+    this.#music = Object.freeze({ ...music });
+  }
+
+  async prepare(routes: readonly string[]): Promise<void> {
+    this.assertAlive();
+    await Promise.all(
+      routes.map((route) => {
+        const effect = this.#effects[route];
+        if (!effect) throw new Error(`unknown audio effect route: ${route}`);
+        return this.prepareSound(`effect:${route}`, effect.sources);
+      }),
+    );
+  }
+
+  playEffect(
+    route: string,
+    options: { readonly delaySeconds?: number } = {},
+  ): AudioPlaybackHandle {
+    this.assertAlive();
+    const resolved = this.#effects[route];
+    if (!resolved) throw new Error(`unknown audio effect route: ${route}`);
+    const delaySeconds = options.delaySeconds ?? resolved.binding.offsetSeconds;
+    if (!Number.isFinite(delaySeconds) || delaySeconds < 0)
+      throw new Error(
+        "audio effect delaySeconds must be finite and non-negative.",
+      );
+    if (resolved.binding.playback === "loop") {
+      const existing = [
+        ...this.#pending.values(),
+        ...this.#active.values(),
+      ].find(
+        (entry) =>
+          entry.handle.route === route &&
+          entry.resolved.binding.playback === "loop",
+      );
+      if (existing) return existing.handle;
+    }
+    const current = this.activeForRoute(route);
+    if (
+      resolved.binding.playback === "once" &&
+      current.length >= resolved.binding.voices.maxConcurrent
+    ) {
+      if (resolved.binding.voices.overflow === "reject")
+        return this.failedHandle(
+          route,
+          new Error(`audio effect voice limit reached: ${route}`),
+        );
+      this.stopById(current[0]!.handle.id);
+    }
+    const id = this.#nextId++;
+    const handle = new MutablePlaybackHandle(id, route, () =>
+      this.stopById(id),
+    );
+    const pending: PendingEffect = {
+      handle,
+      resolved,
+      remainingSeconds: delaySeconds,
+      sound: null,
+      ready: false,
+      cancelled: false,
+    };
+    this.#pending.set(id, pending);
+    void this.prepareSound(`effect:${route}`, resolved.sources).then(
+      (sound) => {
+        if (this.#destroyed || pending.cancelled || !this.#pending.has(id))
+          return;
+        pending.sound = sound;
+        pending.ready = true;
+        this.tryStartPending(pending);
+      },
+      (error) => this.failPending(pending, error),
+    );
+    this.tryStartPending(pending);
+    return handle;
+  }
+
+  stopEffect(route: string): void {
+    this.assertAlive();
+    if (!this.#effects[route])
+      throw new Error(`unknown audio effect route: ${route}`);
+    for (const entry of [...this.#pending.values(), ...this.#active.values()])
+      if (entry.handle.route === route) this.stopById(entry.handle.id);
+  }
+
+  async requestMusic(name: string | null): Promise<void> {
+    this.assertAlive();
+    if (name === this.#currentMusic) return;
+    const request = ++this.#musicRequest;
+    if (name === null) {
+      this.#currentMusic = null;
+      for (const voice of this.#musicVoices)
+        this.rampMusic(voice, 0, voice.binding.fadeOutSeconds, true);
+      return;
+    }
+    const resolved = this.#music[name];
+    if (!resolved) throw new Error(`unknown audio music binding: ${name}`);
+    const sound = await this.prepareSound(`music:${name}`, resolved.sources);
+    this.assertAlive();
+    if (request !== this.#musicRequest) return;
+    let instance: AudioBackendInstance;
+    try {
+      instance = await sound.play({ loop: true, volume: 0 });
+    } catch (error) {
+      throw new Error(
+        `failed to start audio music ${name}: ${formatError(error)}`,
+      );
+    }
+    if (this.#destroyed) {
+      instance.stop();
+      throw new Error("audio runtime is destroyed.");
+    }
+    if (request !== this.#musicRequest) {
+      instance.stop();
+      return;
+    }
+    const next: MusicVoice = {
+      name,
+      binding: resolved.binding,
+      instance,
+      transitionGain: 0,
+      startGain: 0,
+      targetGain: 1,
+      elapsedSeconds: 0,
+      durationSeconds: resolved.binding.fadeInSeconds,
+      stopping: false,
+    };
+    for (const voice of this.#musicVoices)
+      this.rampMusic(voice, 0, voice.binding.fadeOutSeconds, true);
+    this.#musicVoices.push(next);
+    this.#currentMusic = name;
+    this.applyMusicState();
+  }
+
+  update(deltaSeconds: number): void {
+    this.assertAlive();
+    if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0)
+      throw new Error(
+        "audio runtime deltaSeconds must be finite and non-negative.",
+      );
+    for (const pending of this.#pending.values()) {
+      pending.remainingSeconds = Math.max(
+        0,
+        pending.remainingSeconds - deltaSeconds,
+      );
+      this.tryStartPending(pending);
+    }
+    this.updateFocus(deltaSeconds);
+    for (let index = this.#musicVoices.length - 1; index >= 0; index -= 1) {
+      const voice = this.#musicVoices[index]!;
+      if (voice.transitionGain !== voice.targetGain) {
+        voice.elapsedSeconds += deltaSeconds;
+        const progress =
+          voice.durationSeconds === 0
+            ? 1
+            : Math.min(1, voice.elapsedSeconds / voice.durationSeconds);
+        voice.transitionGain =
+          voice.startGain + (voice.targetGain - voice.startGain) * progress;
+      }
+      if (voice.stopping && voice.transitionGain === 0) {
+        voice.instance.stop();
+        this.#musicVoices.splice(index, 1);
+      }
+    }
+    this.applyEffectVolumes();
+    this.applyMusicState();
+  }
+
+  async unlock(): Promise<void> {
+    this.assertAlive();
+    await this.#backend.unlock();
+  }
+
+  setMasterMuted(muted: boolean): void {
+    this.assertAlive();
+    this.#masterMuted = muted;
+    this.applyEffectVolumes();
+    this.applyMusicState();
+  }
+  setMusicVolume(volume: number): void {
+    this.#musicVolume = unit(volume, "music volume");
+    this.applyMusicState();
+  }
+  setEffectVolume(volume: number): void {
+    this.#effectVolume = unit(volume, "effect volume");
+    this.applyEffectVolumes();
+  }
+
+  getSnapshot(): AudioRuntimeSnapshot {
+    return Object.freeze({
+      pendingEffects: this.#pending.size,
+      activeEffects: this.#active.size,
+      preparedSounds: this.#sounds.size,
+      activeMusic: this.#currentMusic,
+      musicVoices: this.#musicVoices.length,
+      focus: this.#focusKind,
+      focusGain: this.#focusGain,
+    });
+  }
+
+  destroy(): void {
+    if (this.#destroyed) return;
+    this.#destroyed = true;
+    for (const pending of this.#pending.values()) {
+      pending.cancelled = true;
+      pending.handle.settle("stopped");
+    }
+    this.#pending.clear();
+    for (const active of [...this.#active.values()])
+      this.finishActive(active, "stopped", true);
+    for (const voice of this.#musicVoices) voice.instance.stop();
+    this.#musicVoices.length = 0;
+    this.#focus.clear();
+    for (const sound of this.#sounds.values()) sound.destroy();
+    this.#sounds.clear();
+    this.#preparing.clear();
+    this.#currentMusic = null;
+  }
+
+  private prepareSound(
+    key: string,
+    sources: readonly AudioBackendSource[],
+  ): Promise<AudioBackendSound> {
+    const cached = this.#sounds.get(key);
+    if (cached) return Promise.resolve(cached);
+    const pending = this.#preparing.get(key);
+    if (pending) return pending;
+    const operation = this.#backend.prepare(sources).then(
+      (sound) => {
+        this.#preparing.delete(key);
+        if (this.#destroyed) {
+          sound.destroy();
+          throw new Error("audio runtime is destroyed.");
+        }
+        this.#sounds.set(key, sound);
+        return sound;
+      },
+      (error) => {
+        this.#preparing.delete(key);
+        throw error;
+      },
+    );
+    this.#preparing.set(key, operation);
+    return operation;
+  }
+
+  private tryStartPending(pending: PendingEffect): void {
+    if (
+      pending.cancelled ||
+      !pending.ready ||
+      pending.remainingSeconds > 0 ||
+      !pending.sound
+    )
+      return;
+    this.#pending.delete(pending.handle.id);
+    void Promise.resolve(
+      pending.sound.play({
+        loop: pending.resolved.binding.playback === "loop",
+        volume: this.effectGain(),
+      }),
+    ).then(
+      (instance) => {
+        if (this.#destroyed || pending.cancelled) {
+          instance.stop();
+          pending.handle.settle("stopped");
+          return;
+        }
+        pending.handle.state = "playing";
+        let active!: ActiveEffect;
+        const disposeEnded = instance.onEnded(() =>
+          this.finishActive(active, "ended", false),
+        );
+        active = {
+          handle: pending.handle,
+          resolved: pending.resolved,
+          instance,
+          disposeEnded,
+          sequence: this.#sequence++,
+        };
+        this.#active.set(pending.handle.id, active);
+        if (pending.resolved.binding.bgm.kind !== "keep") {
+          this.#focus.set(pending.handle.id, pending.resolved.binding.bgm);
+          this.recomputeFocus(pending.resolved.binding.bgm, "acquire");
+        }
+        this.applyEffectVolumes();
+      },
+      (error) => pending.handle.settle("failed", error),
+    );
+  }
+
+  private failPending(pending: PendingEffect, error: unknown): void {
+    if (!this.#pending.delete(pending.handle.id)) return;
+    pending.cancelled = true;
+    pending.handle.settle("failed", error);
+  }
+
+  private stopById(id: number): void {
+    const pending = this.#pending.get(id);
+    if (pending) {
+      this.#pending.delete(id);
+      pending.cancelled = true;
+      pending.handle.settle("stopped");
+      return;
+    }
+    const active = this.#active.get(id);
+    if (active) this.finishActive(active, "stopped", true);
+  }
+
+  private finishActive(
+    active: ActiveEffect,
+    state: "ended" | "stopped",
+    stop: boolean,
+  ): void {
+    if (!this.#active.delete(active.handle.id)) return;
+    active.disposeEnded();
+    if (stop) active.instance.stop();
+    const focus = this.#focus.get(active.handle.id);
+    if (focus) {
+      this.#focus.delete(active.handle.id);
+      this.recomputeFocus(focus, "release");
+    }
+    active.handle.settle(state);
+  }
+
+  private activeForRoute(route: string): (PendingEffect | ActiveEffect)[] {
+    return [...this.#pending.values(), ...this.#active.values()]
+      .filter((entry) => entry.handle.route === route)
+      .sort(
+        (a, b) =>
+          ("sequence" in a ? a.sequence : a.handle.id) -
+          ("sequence" in b ? b.sequence : b.handle.id),
+      );
+  }
+
+  private failedHandle(route: string, error: unknown): AudioPlaybackHandle {
+    const handle = new MutablePlaybackHandle(this.#nextId++, route, () => {});
+    handle.settle("failed", error);
+    return handle;
+  }
+
+  private recomputeFocus(
+    changed: AudioBgmFocusPolicyV1,
+    phase: "acquire" | "release",
+  ): void {
+    const policies = [...this.#focus.values()];
+    const pause = policies.some((policy) => policy.kind === "pause");
+    const ducks = policies.filter(
+      (policy): policy is Extract<AudioBgmFocusPolicyV1, { kind: "duck" }> =>
+        policy.kind === "duck",
+    );
+    const kind = pause ? "pause" : ducks.length ? "duck" : "keep";
+    const target = pause
+      ? 0
+      : ducks.length
+        ? Math.min(...ducks.map(({ targetGain }) => targetGain))
+        : 1;
+    const duration =
+      changed.kind === "keep"
+        ? 0
+        : changed.kind === "duck"
+          ? phase === "acquire"
+            ? changed.attackSeconds
+            : changed.releaseSeconds
+          : phase === "acquire"
+            ? changed.fadeOutSeconds
+            : changed.fadeInSeconds;
+    if (this.#focusKind === "pause" && kind !== "pause")
+      for (const voice of this.#musicVoices) voice.instance.paused = false;
+    this.#focusKind = kind;
+    this.#focusStartGain = this.#focusGain;
+    this.#focusTargetGain = target;
+    this.#focusElapsedSeconds = 0;
+    this.#focusDurationSeconds = duration;
+    if (duration === 0) this.#focusGain = target;
+    this.applyMusicState();
+  }
+
+  private updateFocus(deltaSeconds: number): void {
+    if (this.#focusGain === this.#focusTargetGain) return;
+    this.#focusElapsedSeconds += deltaSeconds;
+    const progress =
+      this.#focusDurationSeconds === 0
+        ? 1
+        : Math.min(1, this.#focusElapsedSeconds / this.#focusDurationSeconds);
+    this.#focusGain =
+      this.#focusStartGain +
+      (this.#focusTargetGain - this.#focusStartGain) * progress;
+  }
+
+  private rampMusic(
+    voice: MusicVoice,
+    target: number,
+    duration: number,
+    stopping: boolean,
+  ): void {
+    voice.startGain = voice.transitionGain;
+    voice.targetGain = target;
+    voice.elapsedSeconds = 0;
+    voice.durationSeconds = duration;
+    voice.stopping = stopping;
+  }
+
+  private applyEffectVolumes(): void {
+    const volume = this.effectGain();
+    for (const active of this.#active.values()) active.instance.volume = volume;
+  }
+
+  private applyMusicState(): void {
+    const base = this.#masterMuted ? 0 : this.#musicVolume;
+    for (const voice of this.#musicVoices) {
+      voice.instance.volume = base * voice.transitionGain * this.#focusGain;
+      if (this.#focusKind === "pause" && this.#focusGain === 0)
+        voice.instance.paused = true;
+    }
+  }
+
+  private effectGain(): number {
+    return this.#masterMuted ? 0 : this.#effectVolume;
+  }
+  private assertAlive(): void {
+    if (this.#destroyed) throw new Error("audio runtime is destroyed.");
+  }
+}
+
+function unit(value: number, label: string): number {
+  if (!Number.isFinite(value) || value < 0 || value > 1)
+    throw new Error(`${label} must be between 0 and 1.`);
+  return value;
+}
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}

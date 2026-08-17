@@ -11,7 +11,8 @@
 
 ## Mode、variant 与稳定节点
 
-- Scene Layout v3沿用v2的exact mode geometry并新增Editor生成的strict `runtimeAllocation`。RenderCore runtime直接接受v1/v2，读取后确定性补齐allocation并统一规范化为v3；v1共享upgrader只复制旧根几何到已有mode，不伪造Splash。Editor可导入v1/v2/v3，但只预览和导出canonical v3。
+- Scene Layout v4沿用v3的strict `runtimeAllocation`并新增音频目录、程序 effect allowlist 与 per-mode optional BGM。RenderCore runtime直接接受v1–v3，读取后确定性补齐allocation与空音频合同并统一规范化为v4；共享upgrader不伪造Splash或BGM。Editor可导入v1–v4，但只预览和导出canonical v4。
+- 每个 mode 可选择零或一首 loop BGM；Splash 通常留空但 schema 不强制。成功 mode commit 后才以显式 fade-out/fade-in 切歌，相同 BGM 不重启；失败或 rollback 保留原 BGM。
 - 每个v2 mode显式声明reelEnabled；关闭时不得绑定Symbols或导出mode reel placement，focus相对art边缘，开启时focus由reel区域与四边外扩派生。runtime不得按mode id猜测开关。
 - orientation variant只由宿主原始page width/height决定；正方形保持当前variant，首次正方形为landscape，focus和派生frame尺寸不得反馈成方向输入。
 - primary action只引用同source的显式direct transition target；runtime复用既有prepare/commit/rollback和trusted gesture边界，不按mode名称推断点击行为。
@@ -22,7 +23,7 @@
 - stable Spine background 只使用显式 single loop。未来稳定背景 kind 也遵守 exact-resource 和 stable-node 合同。
 - 普通 scene node 可使用 official Spine 或 runtime VNI：Spine 显式选择 animation/loop，VNI 播放完整 timeline 并显式选择 loop；每个 node 保持独立 player/playhead。新建普通 Spine node 的骨架原点放在各 variant art center（`top-left` 坐标写入 `artSize / 2`，`center` 坐标写入 `0,0`），不得要求或使用 skeleton bounds/atlas texture 尺寸；Spine background 仍要求显式完整 art size。VNI 不得作为 background 或 transition。
 - VNI scene node 的 `project.stage` 是 100% art-space 尺寸；top-left 原点对齐 stage 左上角，center 原点对齐 stage 中心。runtime 使用宿主 ticker 手动 update，并跳过不可渲染节点。
-- 普通 scene node 和 main reel 的 order 可由用户显式编辑并保留稀疏值；canonical v3 中 node、main reel、Popup root 的 order 全局唯一。历史数据（包括此前已导出的 v3）的冲突只由 RenderCore 默认 parser/latest upgrader 确定性重排，修复 v3 时同步重建 runtimeAllocation，所有 editor 和 game runtime 复用该结果；显式 v3 parser 仍执行 strict canonical 校验，Editor 重导后写入已修复的 v3。Popup root 默认从 `2000` 分配且必须高于全部 node/main reel。背景与 main reel 在 editor 大纲中继续特殊展示，不以此禁止普通 node 跨越 reel order。
+- 普通 scene node 和 main reel 的 order 可由用户显式编辑并保留稀疏值；canonical v4 中 node、main reel、Popup root 的 order 全局唯一。历史 v1–v3 冲突只由 RenderCore 默认 parser/latest upgrader 确定性重排并同步重建 runtimeAllocation；显式 v4 parser 执行 strict canonical 校验。Popup root 默认从 `2000` 分配且必须高于全部 node/main reel。
 - 普通 scene node 的 optional `gameMode` 表示 exact 单一 mode 作用域；字段缺失表示全局并兼容旧 v1 数据。background node 禁止声明该字段。最终可见性是 mode 作用域匹配与当前 variant placement 的 AND；不可见不删除 node、不改变全局 order。mode rename 必须改写引用，仍有 scoped node 引用时禁止删除。
 
 ## Symbols binding 与 preview
@@ -46,6 +47,7 @@
 
 - 公开入口固定为 `@slotclientengine/rendercore/scene-layout/data|core|editor`，不再提供混合 `scene-layout` 或 root wildcard。游戏 runtime 只依赖 data/core；Gamelayout Editor、Game Viewer/Viewer2 和需要 mapped ZIP/standalone Application 的工具依赖 editor 包装，但预览必须复用包装内部的同一个 core runtime。
 - core 不创建 Application、canvas、ticker 或 RAF，不拥有 workspace/authoring session；宿主逐帧调用 `update(deltaSeconds)`。游戏热路径使用 `getStableGameMode()`、`getGameModePhase()` 等标量 query；完整 game-mode/award snapshot 只由 editor inspector 读取。
+- Scene Layout 在组合 Popup/Symbol package 时才把 local effect name 编译为 `<binding>.<local>` route；程序只能播放/停止显式 allowlist route。cue delay 使用宿主 `update(deltaSeconds)` 时钟，stop、切状态、rollback 与 destroy 必须取消未触发播放并清理 owner-scoped instance。
 - rendercore 拥有 strict gameModes、plural symbolPackages、directed transition schema、exact dependency closure 和 production API。
 - scene-layout authored coordinate origin 只允许 `top-left` / `center`；缺失按 `top-left`。node、art-space Spine transition 与 main reel 的 origin 映射由 rendercore 统一实现，focus rect 继续使用 art 左上角矩形。
 - runtime必须从current snapshot公开authored origin、art/visibleRect九宫格point及authored point↔opaque Anchor；Point/Rect是调用时快照，Anchor延迟解析。不得要求游戏为center origin手工加减半个artSize，也不得把logical visibleRect称为CSS/window/device坐标。
@@ -70,7 +72,7 @@
 - production export 先从 layout 收集实际引用的 root，再按有向依赖计算 exact closure。共享 atlas/贴图可由任一被用到的 Spine JSON root 带入；同批未引用的 sibling JSON root 不得因共享 leaf 被反向导出。
 - 替换或重绑资源必须保留稳定 node identity、order、各 variant placement/visibility，并尽可能保留仍兼容的 animation、loop 与 image-string 配置。资源尺寸变化不得自动重置 reel、focus 或 placement；现有几何与新 art size 冲突时必须严格失败。
 - 相同 symbols binding 的 mode 切换默认保留 reel、scene 和 player；只有显式 `recreateReel` 才重建。
-- v3 `runtimeAllocation`只保存typed owner id、mode/variant active node和package/on-demand lifetime，不保存physical path/hash/bytes。package runtime在init准备全部声明的Symbols reel entry；首次激活需要显式scene，之后跨binding返回恢复原entry，dormant entry不update且只在package destroy或显式replacement时销毁。
+- v4 `runtimeAllocation`只保存typed owner id、mode/variant active node和package/on-demand lifetime，不保存physical path/hash/bytes。package runtime在init准备全部声明的Symbols reel entry；首次激活需要显式scene，之后跨binding返回恢复原entry，dormant entry不update且只在package destroy或显式replacement时销毁。
 - production full package runtime 可显式 deferred prepare main reel；首次 scene commit 前 reel 不可见且业务 API 必须失败。自定义 reel factory 采用 ownership transfer，package 仍负责 manifest order/placement 与 destroy；借用 overlay 只能通过 typed attach/dispose API 接入并位于 transition/popup 下方。
 - background visibility、target scene commit、active standard/grid-cell reel prepare/swap 和 popup lifecycle 原子完成。
 - 底层 named-node state machine 可供独立 consumer 使用，但不得成为 `requestGameMode()` 的隐藏入口或 fallback。
@@ -88,6 +90,7 @@
 - 没有显式 mode ownership 的 runtime resource 归 shared/initial；共享 Spine atlas/texture leaf 可去重，但 leaf 不反向拥有或带入未声明的 sibling skeleton root。
 - 每个 group 同时保存完整 `requiredAssets` 与相对 initial 的 `incrementalAssets`；完整闭包允许重叠，但全部优化资源必须至少被一个 group 覆盖。
 - versioned asset-groups JSON 是 ZIP 外的独立交付物，不进入 production ZIP；它可供后续合图或 loading 优化消费，但 CLI 本身不修改 runtime loading 行为。
+- 音频形成独立 `audio:scene-layout` group，必须从 `initialAssets` 排除；实际引用仍保留在 production ZIP 与 typed closure 中，由 mode/effect owner 在运行期按需准备。
 
 ## Popup placement
 

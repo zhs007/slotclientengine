@@ -1,4 +1,11 @@
 import type { LogicReels } from "@slotclientengine/logiccore";
+import {
+  createAudioRuntime,
+  createPixiSoundBackend,
+  type AudioBackend,
+  type AudioPlaybackHandle,
+  type AudioRuntime,
+} from "@slotclientengine/audiocore/core";
 import { Container, Graphics, Rectangle } from "pixi.js";
 import { createContainerRenderAnchor } from "../presentation/render-anchor.js";
 import {
@@ -209,6 +216,8 @@ export function createSceneLayoutPackageRuntime(options: {
     readonly url: string;
     readonly fadeOutSeconds: number;
   }) => SceneLayoutTransitionVideoPlayer;
+  /** @internal Deterministic audio adapter seam used by package tests. */
+  readonly audioBackend?: AudioBackend;
   /** @internal Deterministic RenderObject factory seams used by package tests. */
   readonly renderObjectFactoryDependencies?: SceneLayoutRenderObjectFactoryDependencies;
 }): SceneLayoutPackageRuntime {
@@ -225,6 +234,7 @@ export function createSceneLayoutPackageRuntime(options: {
     options.createTransitionPlayer,
     options.createSpinePopupRuntime,
     options.createVideoTransitionPlayer,
+    options.audioBackend,
     options.renderObjectFactoryDependencies,
   );
 }
@@ -289,6 +299,13 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     readonly fadeOutSeconds: number;
   }) => SceneLayoutTransitionVideoPlayer;
   readonly #renderObjectFactory: SceneLayoutRenderObjectFactory;
+  readonly #audio: AudioRuntime;
+  #audioUnlocked = false;
+  #audioMode: string | null = null;
+  #audioFailure: SceneLayoutError | null = null;
+  readonly #popupAudioStates = new Map<string, string>();
+  readonly #popupAudioHandles = new Map<string, AudioPlaybackHandle[]>();
+  readonly #symbolAudioHandles = new Map<string, AudioPlaybackHandle[]>();
   readonly #popupRoot = new Container();
   readonly #transitionRoot = new Container();
   readonly #popupRenderLayerRoot = new Container();
@@ -384,6 +401,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           readonly fadeOutSeconds: number;
         }) => SceneLayoutTransitionVideoPlayer)
       | undefined,
+    audioBackend: AudioBackend | undefined,
     renderObjectFactoryDependencies:
       | SceneLayoutRenderObjectFactoryDependencies
       | undefined,
@@ -405,6 +423,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#hostUpdatesMainReel = hostUpdatesMainReel;
     this.#formatPopupAmount = formatPopupAmount;
     this.#layout = createSceneLayoutRuntime({ resource: resource.layout });
+    this.#audio = createAudioRuntime({
+      backend: audioBackend ?? createPixiSoundBackend(),
+      effects: resource.audioEffects,
+      music: resource.audioMusic,
+    });
     this.#createTransitionPlayer =
       createTransitionPlayer ??
       ((options) =>
@@ -775,6 +798,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
 
   update(deltaSeconds: number): void {
     this.assertReady();
+    if (this.#audioFailure) throw this.#audioFailure;
+    this.syncStableModeMusic();
+    this.#audio.update(deltaSeconds);
     this.updatePresentationDelayWaiters(deltaSeconds);
     this.#layout.update(deltaSeconds);
     this.#renderObjectFactory.update(deltaSeconds);
@@ -822,6 +848,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
             );
           } else throw error;
         }
+    this.updatePopupAudioCues();
     this.updateActivePrelude();
     this.updateActiveTransition(deltaSeconds);
     if (
@@ -1294,10 +1321,74 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     options?: import("../reel/index.js").VisibleSymbolStatePlaybackBatchOptions,
   ): Promise<void> {
     this.assertReady();
-    return this.requireReel("main").playVisibleSymbolStateBatch(
-      requests,
-      options,
-    );
+    const reel = this.requireReel("main");
+    const bindingId = this.#activeSymbolPackageId;
+    const symbolPackage = bindingId
+      ? (this.#resource.symbolPackages[bindingId] ??
+        this.#resource.symbolPackage)
+      : null;
+    if (bindingId && symbolPackage) {
+      for (const request of requests) {
+        const snapshots = reel.getVisibleSymbolStateSnapshots(
+          request.positions,
+        );
+        for (const snapshot of snapshots) {
+          const cueOwner = `${bindingId}:${snapshot.x}:${snapshot.y}`;
+          this.cancelPendingAudioHandles(
+            this.#symbolAudioHandles.get(cueOwner),
+          );
+          this.#symbolAudioHandles.delete(cueOwner);
+          if (snapshot.code < 0) continue;
+          const symbol = symbolPackage.gameConfig.getPaytableEntry(
+            snapshot.code,
+          )?.symbol;
+          const cue = symbol
+            ? symbolPackage.symbolManifest.symbols[symbol]?.audioCues.find(
+                (candidate) => candidate.state === request.state,
+              )
+            : undefined;
+          if (cue)
+            this.#symbolAudioHandles.set(cueOwner, [
+              this.#audio.playEffect(`${bindingId}.${cue.effect}`),
+            ]);
+        }
+      }
+    }
+    return reel.playVisibleSymbolStateBatch(requests, options);
+  }
+
+  playEffect(route: string): AudioPlaybackHandle {
+    this.assertReady();
+    this.assertProgrammaticAudioRoute(route);
+    return this.#audio.playEffect(route);
+  }
+
+  stopEffect(route: string): void {
+    this.assertReady();
+    this.assertProgrammaticAudioRoute(route);
+    this.#audio.stopEffect(route);
+  }
+
+  async unlockAudio(): Promise<void> {
+    this.assertReady();
+    await this.#audio.unlock();
+    this.#audioUnlocked = true;
+    this.syncStableModeMusic(true);
+  }
+
+  setAudioMuted(muted: boolean): void {
+    this.assertReady();
+    this.#audio.setMasterMuted(muted);
+  }
+
+  setMusicVolume(volume: number): void {
+    this.assertReady();
+    this.#audio.setMusicVolume(volume);
+  }
+
+  setEffectVolume(volume: number): void {
+    this.assertReady();
+    this.#audio.setEffectVolume(volume);
   }
 
   setMainReelSymbolPresentationValue(
@@ -2295,9 +2386,13 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#popups.clear();
     for (const popup of this.#spinePopups.values()) popup.destroy();
     this.#spinePopups.clear();
+    this.#popupAudioStates.clear();
+    this.#popupAudioHandles.clear();
+    this.#symbolAudioHandles.clear();
     this.#videoBlackoutRoot.removeChildren();
     this.#videoBlackout.destroy();
     this.#renderObjectFactory.destroy();
+    this.#audio.destroy();
     this.#layout.destroy();
     this.#resource.destroy();
     this.#initialized = false;
@@ -2312,6 +2407,81 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#targetSymbolPackageId = null;
     this.#activeBackgroundNodes = Object.freeze([]);
     this.#viewportSize = null;
+  }
+
+  private assertProgrammaticAudioRoute(route: string): void {
+    if (!this.#resource.programmaticAudioEffects.has(route))
+      throw new SceneLayoutError(
+        `Audio effect route is not programmatic: ${route}.`,
+      );
+  }
+
+  private updatePopupAudioCues(): void {
+    for (const [popupId, resource] of Object.entries(
+      this.#resource.popupPackages,
+    )) {
+      if (resource.manifest.version !== 7) continue;
+      let target: string | null = null;
+      const award = this.#popups.get(popupId);
+      if (award?.isPlaying()) {
+        const snapshot = inspectAwardCelebrationRuntime(award);
+        if (snapshot.activeTierId)
+          target = `award-tier:${snapshot.activeTierId}`;
+      }
+      const spine = this.#spinePopups.get(popupId);
+      if (spine?.isPlaying()) {
+        const phase = spine.getPhase();
+        if (phase === "start" || phase === "loop" || phase === "end")
+          target = `segment:${phase}`;
+      }
+      if (target === null) {
+        this.cancelPendingAudioHandles(this.#popupAudioHandles.get(popupId));
+        this.#popupAudioHandles.delete(popupId);
+        this.#popupAudioStates.delete(popupId);
+        continue;
+      }
+      if (this.#popupAudioStates.get(popupId) === target) continue;
+      this.cancelPendingAudioHandles(this.#popupAudioHandles.get(popupId));
+      this.#popupAudioHandles.delete(popupId);
+      this.#popupAudioStates.set(popupId, target);
+      const handles: AudioPlaybackHandle[] = [];
+      for (const cue of resource.manifest.audio.cues) {
+        const cueTarget =
+          cue.target.kind === "segment"
+            ? `segment:${cue.target.segment}`
+            : `award-tier:${cue.target.tier}`;
+        if (cueTarget === target)
+          handles.push(this.#audio.playEffect(`${popupId}.${cue.effect}`));
+      }
+      if (handles.length) this.#popupAudioHandles.set(popupId, handles);
+    }
+  }
+
+  private cancelPendingAudioHandles(
+    handles: readonly AudioPlaybackHandle[] | undefined,
+  ): void {
+    for (const handle of handles ?? [])
+      if (handle.state === "pending") handle.stop();
+  }
+
+  private syncStableModeMusic(force = false): void {
+    if (!this.#audioUnlocked) return;
+    const modeId = this.#stableMode;
+    if (!modeId || (!force && this.#audioMode === modeId)) return;
+    const mode = this.#resource.runtimeManifest.gameModes.modes.find(
+      (candidate) => candidate.id === modeId,
+    );
+    if (!mode)
+      throw new SceneLayoutError(
+        `Stable Scene Layout mode is unknown: ${modeId}.`,
+      );
+    this.#audioMode = modeId;
+    void this.#audio.requestMusic(mode.bgm ?? null).catch((error: unknown) => {
+      if (this.#destroyed || this.#audioMode !== modeId) return;
+      this.#audioFailure = new SceneLayoutError(
+        `Failed to activate BGM for mode "${modeId}": ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
   }
 
   private updatePresentationDelayWaiters(deltaSeconds: number): void {

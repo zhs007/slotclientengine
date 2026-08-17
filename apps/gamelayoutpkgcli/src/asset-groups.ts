@@ -14,6 +14,7 @@ import type {
 import {
   collectSymbolPackageEntryPaths,
   parseSymbolPackageManifest,
+  parseSymbolStateTextureManifest,
 } from "@slotclientengine/rendercore/symbol/data";
 import { parseJson } from "./package-reader.js";
 import { encodeStableJson } from "./reference-rewriter.js";
@@ -50,6 +51,7 @@ export function createSceneLayoutAssetGroups(options: {
     (node) => !allBackgroundIds.has(node.id) && node.gameMode === undefined,
   );
   const sharedRequired = nodeClosure(sharedNodes, options.files);
+  const audioAssets = collectAudioAssets(options.manifest, options.files);
   const provisional: ProvisionalAssetGroup[] = [
     {
       id: "shared",
@@ -57,6 +59,19 @@ export function createSceneLayoutAssetGroups(options: {
       requiredAssets: sharedRequired,
     },
   ];
+  if (audioAssets.length) {
+    provisional.push({
+      id: "audio:scene-layout",
+      kind: "audio",
+      owner: "scene-layout",
+      usedByModes: sortUnique(
+        gameModes.modes
+          .filter((mode) => "bgm" in mode && mode.bgm !== undefined)
+          .map((mode) => mode.id),
+      ),
+      requiredAssets: audioAssets,
+    });
+  }
   for (const [resourceKey, resource] of Object.entries(
     options.manifest.runtimeResources ?? {},
   ))
@@ -194,7 +209,9 @@ export function createSceneLayoutAssetGroups(options: {
           group.usedByTransitions.some((edge) =>
             edge.startsWith(`${gameModes.initialMode}->`),
           )));
-    if (include) for (const key of group.requiredAssets) initial.add(key);
+    if (include)
+      for (const key of group.requiredAssets)
+        if (!audioAssets.includes(key)) initial.add(key);
   }
   const initialAssets = sortUnique([...initial]);
   const groups = provisional
@@ -241,6 +258,45 @@ export function createSceneLayoutAssetGroups(options: {
   return parseSceneLayoutAssetGroups(result);
 }
 
+function collectAudioAssets(
+  manifest: SceneLayoutManifest,
+  files: ReadonlyMap<string, Uint8Array>,
+): readonly string[] {
+  const paths: string[] = [];
+  if (manifest.version === 4)
+    paths.push(
+      ...[...manifest.audio.effects, ...manifest.audio.music].flatMap(
+        (binding) => binding.asset.sources.map((source) => source.path),
+      ),
+    );
+  for (const binding of symbolBindings(manifest, files)) {
+    const packageManifest = parseSymbolPackageManifest(
+      parseRequiredJson(files, binding.manifest),
+    );
+    const symbolManifest = parseSymbolStateTextureManifest(
+      parseRequiredJson(files, packageManifest.entrypoints.symbolManifest),
+    );
+    if (symbolManifest.version === 3)
+      paths.push(
+        ...symbolManifest.audio.effects.flatMap((effect) =>
+          effect.asset.sources.map((source) => source.path),
+        ),
+      );
+  }
+  for (const binding of Object.values(manifest.popups ?? {})) {
+    const popup = parsePopupManifest(
+      parseRequiredJson(files, binding.manifest),
+    );
+    if (popup.version === 7)
+      paths.push(
+        ...popup.audio.effects.flatMap((effect) =>
+          effect.asset.sources.map((source) => source.path),
+        ),
+      );
+  }
+  return sortUnique(paths);
+}
+
 function finalizeGroup(
   group: ProvisionalAssetGroup,
   initial: ReadonlySet<string>,
@@ -251,6 +307,8 @@ function finalizeGroup(
   );
   switch (group.kind) {
     case "shared":
+      return { ...group, requiredAssets, incrementalAssets };
+    case "audio":
       return { ...group, requiredAssets, incrementalAssets };
     case "runtime-resource":
       return { ...group, requiredAssets, incrementalAssets };
@@ -497,19 +555,21 @@ function validateGroup(
   const extras =
     kind === "shared"
       ? []
-      : kind === "runtime-resource"
-        ? ["resourceKey", "resourceKind"]
-        : kind === "mode"
-          ? ["modeId", "initial"]
-          : kind === "transition"
-            ? ["ownerMode", "from", "to"]
-            : kind === "symbols"
-              ? ["packageId", "usedByModes"]
-              : kind === "award-celebration"
-                ? ["popupId", "usedByModes"]
-                : kind === "spine-popup"
-                  ? ["popupId", "usedByTransitions"]
-                  : null;
+      : kind === "audio"
+        ? ["owner", "usedByModes"]
+        : kind === "runtime-resource"
+          ? ["resourceKey", "resourceKind"]
+          : kind === "mode"
+            ? ["modeId", "initial"]
+            : kind === "transition"
+              ? ["ownerMode", "from", "to"]
+              : kind === "symbols"
+                ? ["packageId", "usedByModes"]
+                : kind === "award-celebration"
+                  ? ["popupId", "usedByModes"]
+                  : kind === "spine-popup"
+                    ? ["popupId", "usedByTransitions"]
+                    : null;
   if (!extras) throw new Error(`groups[${index}].kind 无效。`);
   exactKeys(group, [...common, ...extras], `groups[${index}]`);
   const id = nonEmptyString(group.id, `groups[${index}].id`);
@@ -527,6 +587,10 @@ function validateGroup(
     throw new Error(`${id}.incrementalAssets 不是 required - initial。`);
   if (kind === "shared") {
     if (id !== "shared") throw new Error("shared group id 必须是 shared。");
+  } else if (kind === "audio") {
+    if (id !== "audio:scene-layout" || group.owner !== "scene-layout")
+      throw new Error("audio group identity 无效。");
+    stringArray(group.usedByModes, `${id}.usedByModes`);
   } else if (kind === "runtime-resource") {
     nonEmptyString(group.resourceKey, `${id}.resourceKey`);
     nonEmptyString(group.resourceKind, `${id}.resourceKind`);

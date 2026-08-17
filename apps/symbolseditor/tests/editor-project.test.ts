@@ -100,7 +100,7 @@ describe("symbol editor typed project", () => {
       project.stateDefinitions.find((definition) => definition.id === "win"),
     ).toMatchObject({ afterComplete: "return-to-default" });
     expect(compileSymbolEditorManifest(project)).toMatchObject({
-      version: 2,
+      version: 3,
       settings: { stateDefinitions: expect.any(Array) },
     });
   });
@@ -153,7 +153,7 @@ describe("symbol editor typed project", () => {
     const snapshot = exportSnapshot(project);
     expect(snapshot.packageManifest.resources).toEqual([]);
     expect(snapshot.symbolManifest).toMatchObject({
-      version: 2,
+      version: 3,
       states: [],
       symbols: {
         A: {

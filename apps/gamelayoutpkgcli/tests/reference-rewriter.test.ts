@@ -138,8 +138,8 @@ describe("typed asset reference rewriting", () => {
   it("preserves a canonical v3 runtime allocation while rewriting paths", () => {
     const latest = upgradeSceneLayoutManifestToLatest(layoutFixture());
     const rewritten = rewriteLayoutManifest(latest, mapping);
-    expect(rewritten.version).toBe(3);
-    if (rewritten.version !== 3) throw new Error("Expected layout v3.");
+    expect(rewritten.version).toBe(4);
+    if (rewritten.version !== 4) throw new Error("Expected layout v4.");
     expect(rewritten.runtimeAllocation).toEqual(latest.runtimeAllocation);
     expect(rewritten.nodes[0]?.resource).toMatchObject({
       kind: "image",
@@ -340,7 +340,7 @@ describe("typed asset reference rewriting", () => {
       resource: "bonus.hash.json",
     });
     const latest = rewritePopupManifest(popup, new Map());
-    expect(latest.version).toBe(6);
+    expect(latest.version).toBe(7);
     expect(latest.backdrop.visibleStates).toEqual([
       "base",
       "standard",
@@ -429,7 +429,7 @@ describe("typed asset reference rewriting", () => {
     );
     expect(popup.type).toBe("spine");
     if (popup.type !== "spine") throw new Error("Expected Spine popup.");
-    expect(popup.version).toBe(6);
+    expect(popup.version).toBe(7);
     expect(popup.spine).toMatchObject({
       resource: "effect.hash.json",
       overlays: [
@@ -479,7 +479,7 @@ describe("typed asset reference rewriting", () => {
       ]),
     );
     expect(popup).toMatchObject({
-      version: 6,
+      version: 7,
       adaptation: {
         focus: { left: 1000, right: 2000, top: 3000, bottom: 4000 },
       },
@@ -548,7 +548,7 @@ describe("typed asset reference rewriting", () => {
       ]),
     );
     expect(popup).toMatchObject({
-      version: 6,
+      version: 7,
       spine: {
         resource: "effect.hash.json",
         overlays: [

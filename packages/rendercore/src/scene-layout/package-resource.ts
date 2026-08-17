@@ -4,6 +4,14 @@ import {
   resolvePackagePath,
 } from "@slotclientengine/browserartifactio";
 import { EDITOR_ASSETS_MAP_PATH } from "@slotclientengine/editorresource";
+import type {
+  ResolvedAudioEffect,
+  ResolvedAudioMusic,
+} from "@slotclientengine/audiocore/core";
+import type {
+  AudioEffectBindingV1,
+  AudioMusicBindingV1,
+} from "@slotclientengine/audiocore/data";
 import {
   assertVNIProject,
   resolveProjectAssetUrls,
@@ -414,6 +422,100 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
         });
     }
 
+    const audioUrls = new Map<string, string>();
+    const resolveAudioPath = (path: string, ownerManifest?: string): string => {
+      const filePath = mapped
+        ? path
+        : ownerManifest
+          ? resolvePackagePath(ownerManifest, path)
+          : path;
+      let url = audioUrls.get(filePath);
+      if (!url) {
+        url = createObjectUrl(
+          requireBytes(files, filePath),
+          filePath,
+          objectUrls,
+        );
+        audioUrls.set(filePath, url);
+      }
+      return url;
+    };
+    const resolveEffect = (
+      binding: AudioEffectBindingV1,
+      ownerManifest?: string,
+    ): ResolvedAudioEffect =>
+      Object.freeze({
+        binding,
+        sources: Object.freeze(
+          binding.asset.sources.map((source) =>
+            Object.freeze({
+              url: resolveAudioPath(source.path, ownerManifest),
+              mediaType: source.mediaType,
+            }),
+          ),
+        ),
+      });
+    const resolveMusic = (binding: AudioMusicBindingV1): ResolvedAudioMusic =>
+      Object.freeze({
+        binding,
+        sources: Object.freeze(
+          binding.asset.sources.map((source) =>
+            Object.freeze({
+              url: resolveAudioPath(source.path),
+              mediaType: source.mediaType,
+            }),
+          ),
+        ),
+      });
+    const audioEffects: Record<string, ResolvedAudioEffect> = {};
+    const addEffect = (
+      route: string,
+      binding: AudioEffectBindingV1,
+      ownerManifest?: string,
+    ) => {
+      if (audioEffects[route])
+        throw new SceneLayoutError(
+          `Duplicate aggregated audio route: ${route}.`,
+        );
+      audioEffects[route] = resolveEffect(binding, ownerManifest);
+    };
+    for (const effect of manifest.audio.effects) addEffect(effect.name, effect);
+    for (const [bindingId, binding] of symbolBindings(manifest)) {
+      const resource = manifest.symbolPackage
+        ? symbolPackage
+        : symbolPackages[bindingId];
+      if (!resource)
+        throw new SceneLayoutError(
+          `Symbol package resource "${bindingId}" is unavailable for audio aggregation.`,
+        );
+      for (const effect of resource.symbolManifest.audio.effects)
+        addEffect(`${bindingId}.${effect.name}`, effect, binding.manifest);
+    }
+    for (const [popupId, binding] of Object.entries(manifest.popups ?? {})) {
+      const popup = popupPackages[popupId];
+      if (!popup)
+        throw new SceneLayoutError(
+          `Popup package resource "${popupId}" is unavailable for audio aggregation.`,
+        );
+      if (popup.manifest.version !== 7) continue;
+      for (const effect of popup.manifest.audio.effects)
+        addEffect(`${popupId}.${effect.name}`, effect, binding.manifest);
+    }
+    const programmaticAudioEffects = new Set(
+      manifest.audio.programmaticEffects,
+    );
+    for (const route of programmaticAudioEffects)
+      if (!audioEffects[route])
+        throw new SceneLayoutError(
+          `Programmatic audio route is not declared by the Scene Layout package: ${route}.`,
+        );
+    const audioMusic = Object.fromEntries(
+      manifest.audio.music.map((binding) => [
+        binding.name,
+        resolveMusic(binding),
+      ]),
+    ) as Record<string, ResolvedAudioMusic>;
+
     const imageModules: Record<string, string> = {};
     const skeletonModules: Record<string, unknown> = {};
     const atlasModules: Record<string, string> = {};
@@ -609,6 +711,9 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
       symbolPackage,
       symbolPackages: Object.freeze({ ...symbolPackages }),
       popupPackages: Object.freeze({ ...popupPackages }),
+      audioEffects: Object.freeze(audioEffects),
+      audioMusic: Object.freeze(audioMusic),
+      programmaticAudioEffects: Object.freeze(programmaticAudioEffects),
       runtimeResources,
       getLoadedRuntimeResource<Kind extends SceneLayoutRuntimeResource["kind"]>(
         key: string,

@@ -428,7 +428,7 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
             ? this.#resource.resources[layer.resource]
             : undefined;
           const variantKey =
-            manifest.version === 6 ? awardLayerVariantKey(layer) : null;
+            manifest.version >= 6 ? awardLayerVariantKey(layer) : null;
           let runtime = variantKey
             ? this.#runtimeVariants.get(variantKey)
             : undefined;
@@ -466,7 +466,7 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
           } as PopupLayerRuntime);
           tier.amountMount = amountMount;
           tier.amountParent = amountMount;
-          if (manifest.version !== 6)
+          if (manifest.version < 6)
             tier.attachmentHandle = attachPopupLayerRuntimes({
               layers: orderedLayers,
               runtimes: runtimesById,
@@ -645,7 +645,7 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
       if (tier !== next) {
         tier.container.visible = false;
         requestTierEnd(tier, this.amountText());
-        if (this.#resource.manifest.version === 6) {
+        if (this.#resource.manifest.version >= 6) {
           tier.attachmentHandle?.destroy();
           tier.attachmentHandle = undefined;
         }
@@ -660,7 +660,7 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
   private startTier(tier: TierRuntime) {
     tier.segment = "start";
     tier.endRequested = false;
-    if (this.#resource.manifest.version === 6) {
+    if (this.#resource.manifest.version >= 6) {
       tier.layers.forEach((runtime, index) =>
         configureAwardRuntime(runtime, tier.layerSpecs[index]!),
       );

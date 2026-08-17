@@ -26,6 +26,7 @@ import {
   type PopupManifest,
 } from "@slotclientengine/rendercore/popup/editor";
 import { assertVNIProject } from "@slotclientengine/vnicore/data";
+import type { AudioCatalogManifestV1 } from "@slotclientengine/audiocore/data";
 import {
   editorResourcePaths,
   editorResourceSignature,
@@ -148,6 +149,7 @@ export interface EditorGameModeDraft {
   symbols: EditorModeSymbolBinding | null;
   awardCelebrationPopupId: string | null;
   primaryActionTargetMode: string | null;
+  bgm: string | null;
 }
 
 interface EditorGameModeTransitionBaseDraft {
@@ -208,6 +210,7 @@ export interface EditorProject {
   popupDependencies: Map<string, EditorPopupDependency>;
   registeredSpinePopupIds: Set<string>;
   runtimeResourceBindings: Map<string, string>;
+  audio: AudioCatalogManifestV1;
   gameModes: {
     activeModeId: string;
     initialMode: string;
@@ -252,6 +255,7 @@ export function createNewEditorProject(mode: EditorMode): EditorProject {
     popupDependencies: new Map(),
     registeredSpinePopupIds: new Set(),
     runtimeResourceBindings: new Map(),
+    audio: { version: 1, effects: [], music: [], programmaticEffects: [] },
     gameModes: {
       activeModeId: "BaseGame",
       initialMode: "BaseGame",
@@ -268,6 +272,7 @@ export function createNewEditorProject(mode: EditorMode): EditorProject {
           symbols: null,
           awardCelebrationPopupId: null,
           primaryActionTargetMode: null,
+          bgm: null,
         },
       ],
     },
@@ -325,6 +330,7 @@ export function createEditorGameModeDraft(
     symbols: null,
     awardCelebrationPopupId: null,
     primaryActionTargetMode: null,
+    bgm: null,
   };
 }
 
@@ -772,7 +778,7 @@ export function editorProjectToManifest(
   );
   if (!initialMode)
     throw new Error(`initial 主状态不存在：${project.gameModes.initialMode}`);
-  return upgradeSceneLayoutManifestToLatest({
+  const base = upgradeSceneLayoutManifestToLatest({
     version: 2,
     kind: "scene-layout",
     id: project.id,
@@ -998,6 +1004,20 @@ export function editorProjectToManifest(
             },
           };
         }),
+    },
+  });
+  return upgradeSceneLayoutManifestToLatest({
+    ...base,
+    version: 4,
+    audio: project.audio,
+    gameModes: {
+      ...base.gameModes,
+      modes: base.gameModes.modes.map((mode) => {
+        const draft = project.gameModes.modes.find(
+          (candidate) => candidate.id === mode.id,
+        )!;
+        return { ...mode, ...(draft.bgm ? { bgm: draft.bgm } : {}) };
+      }),
     },
   });
 }
@@ -1240,6 +1260,7 @@ export function manifestToEditorProject(
   project.assets = new Map(
     [...assets].map(([path, bytes]) => [path, bytes.slice()]),
   );
+  project.audio = structuredClone(latest.audio);
   const importedSymbolBindings = latest.symbolPackage
     ? [
         [
@@ -1387,6 +1408,7 @@ export function manifestToEditorProject(
             : null,
         awardCelebrationPopupId: mode.awardCelebrationPopup ?? null,
         primaryActionTargetMode: mode.primaryAction?.targetMode ?? null,
+        bgm: mode.bgm ?? null,
       };
     }),
   };

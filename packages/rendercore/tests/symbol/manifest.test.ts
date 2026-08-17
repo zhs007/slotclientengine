@@ -166,7 +166,7 @@ function createProject() {
 }
 
 describe("symbol state texture manifest helpers", () => {
-  it("strictly upgrades v1 lifecycle defaults into a frozen canonical v2 manifest", () => {
+  it("strictly upgrades v1 lifecycle defaults into a frozen canonical v3 manifest", () => {
     const legacy = createManifest() as any;
     legacy.settings.additionalStateDefinitions = [
       { id: "burst", phase: "once", playback: "once" },
@@ -175,7 +175,7 @@ describe("symbol state texture manifest helpers", () => {
     const upgraded = upgradeSymbolStateTextureManifest(legacy) as any;
     const definitions = upgraded.settings.stateDefinitions;
 
-    expect(upgraded.version).toBe(2);
+    expect(upgraded.version).toBe(3);
     expect(upgraded.settings.additionalStateDefinitions).toBeUndefined();
     expect(definitions.find((item: any) => item.id === "remove")).toMatchObject(
       { afterComplete: "terminal" },
@@ -186,7 +186,7 @@ describe("symbol state texture manifest helpers", () => {
     expect(definitions.find((item: any) => item.id === "burst")).toMatchObject({
       afterComplete: "return-to-default",
     });
-    expect(parseSymbolStateTextureManifest(upgraded).version).toBe(2);
+    expect(parseSymbolStateTextureManifest(upgraded).version).toBe(3);
     expect(upgradeSymbolStateTextureManifest(upgraded)).toEqual(upgraded);
     expect(Object.isFrozen(upgraded.settings.stateDefinitions)).toBe(true);
   });

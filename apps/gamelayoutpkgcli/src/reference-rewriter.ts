@@ -3,6 +3,7 @@ import {
   type ImageStringManifestV1,
 } from "@slotclientengine/rendercore/image-string/data";
 import { editorAssetKeyCollisionToken } from "@slotclientengine/editorresource";
+import { rewriteAudioAssetPaths } from "@slotclientengine/audiocore/data";
 import {
   loadPopupManifest,
   type LatestPopupManifest,
@@ -191,6 +192,9 @@ export function rewriteLayoutManifest(
     : undefined;
   return parseSceneLayoutManifestDocument({
     ...manifest,
+    ...(manifest.version === 4
+      ? { audio: rewriteAudioAssetPaths(manifest.audio, mapping) }
+      : {}),
     nodes,
     ...(manifest.symbolPackage
       ? {
@@ -273,6 +277,8 @@ export function rewriteSymbolManifest(
 ): unknown {
   parseSymbolStateTextureManifest(value);
   const manifest = structuredClone(value) as Record<string, unknown>;
+  if (isRecord(manifest.audio))
+    manifest.audio = rewriteAudioAssetPaths(manifest.audio as never, mapping);
   const states = Array.isArray(manifest.states)
     ? manifest.states.filter(
         (state): state is string => typeof state === "string",
@@ -306,6 +312,16 @@ export function rewritePopupManifest(
   mapping: ReadonlyMap<string, string>,
 ): LatestPopupManifest {
   const manifest = loadPopupManifest(value).manifest;
+  const audio =
+    manifest.version === 7
+      ? {
+          ...manifest.audio,
+          ...rewriteAudioAssetPaths(
+            { version: 1 as const, effects: manifest.audio.effects },
+            mapping,
+          ),
+        }
+      : undefined;
   const resources: Record<string, PopupResourceSpec> = {};
   const resourceIds = new Map<string, string>();
   for (const [id, resource] of Object.entries(manifest.resources)) {
@@ -332,6 +348,7 @@ export function rewritePopupManifest(
   if (manifest.type === "spine")
     return loadPopupManifest({
       ...manifest,
+      ...(audio ? { audio } : {}),
       resources,
       spine: {
         ...manifest.spine,
@@ -354,6 +371,7 @@ export function rewritePopupManifest(
     }).manifest;
   return loadPopupManifest({
     ...manifest,
+    ...(audio ? { audio } : {}),
     resources,
     awardCelebration: {
       base: rewriteTier(manifest.awardCelebration.base),

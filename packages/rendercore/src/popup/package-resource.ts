@@ -27,7 +27,7 @@ export { collectMappedPopupAssetKeys } from "./data/package-closure.js";
 import type { PopupFontLoader } from "./font-resource.js";
 import type {
   PopupManifest,
-  PopupManifestV6,
+  PopupManifestV7,
   PopupLayer,
   PopupPackageResource,
   PopupResourceSpec,
@@ -43,7 +43,7 @@ export async function createPopupPackageResource(options: {
   readonly decodeImage?: DecodeImageStringImage;
   readonly loadTexture?: (url: string, path: string) => Promise<Texture>;
   readonly loadFont?: PopupFontLoader;
-}): Promise<PopupPackageResource<PopupManifestV6>> {
+}): Promise<PopupPackageResource<PopupManifestV7>> {
   const manifest = loadPopupManifest(
     options.manifest ?? parseJson(requireBytes(options.files, ROOT), ROOT),
   ).manifest;
@@ -255,7 +255,7 @@ export async function loadPopupPackageFromUrl(options: {
   readonly fetchImpl?: typeof fetch;
   readonly decodeImage?: DecodeImageStringImage;
   readonly loadTexture?: (url: string, path: string) => Promise<Texture>;
-}): Promise<PopupPackageResource<PopupManifestV6>> {
+}): Promise<PopupPackageResource<PopupManifestV7>> {
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   if (typeof fetchImpl !== "function")
     throw new Error("fetchImpl is required.");

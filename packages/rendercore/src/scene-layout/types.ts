@@ -7,6 +7,10 @@ import type { ImageStringResource } from "../image-string/core/index.js";
 import type { SymbolPackageResource } from "../symbol/package.js";
 import type { PopupPackageResource } from "../popup/core/types.js";
 import type {
+  ResolvedAudioEffect,
+  ResolvedAudioMusic,
+} from "@slotclientengine/audiocore/core";
+import type {
   FocusedArtViewport,
   RenderViewportMargin,
   RenderViewportRect,
@@ -286,10 +290,22 @@ export interface SceneLayoutGameModeV2 extends SceneLayoutGameMode {
   readonly primaryAction?: SceneLayoutPrimaryAction;
 }
 
+export interface SceneLayoutGameModeV4 extends SceneLayoutGameModeV2 {
+  /** Optional loop BGM name from the root audio catalog. */
+  readonly bgm?: string;
+}
+
 export interface SceneLayoutGameModesV2 {
   readonly initialMode: string;
   readonly modes: readonly SceneLayoutGameModeV2[];
   readonly transitions?: readonly SceneLayoutGameModeTransition[];
+}
+
+export interface SceneLayoutGameModesV4 extends Omit<
+  SceneLayoutGameModesV2,
+  "modes"
+> {
+  readonly modes: readonly SceneLayoutGameModeV4[];
 }
 
 export type SceneLayoutReelDefinition = Omit<SceneLayoutReelGrid, "placements">;
@@ -363,13 +379,23 @@ export interface SceneLayoutManifestV3 extends Omit<
   readonly runtimeAllocation: SceneLayoutRuntimeAllocationV1;
 }
 
+export interface SceneLayoutManifestV4 extends Omit<
+  SceneLayoutManifestV3,
+  "version" | "gameModes"
+> {
+  readonly version: 4;
+  readonly gameModes: SceneLayoutGameModesV4;
+  readonly audio: import("@slotclientengine/audiocore/data").AudioCatalogManifestV1;
+}
+
 export type SceneLayoutManifestModern =
   | SceneLayoutManifestV2
-  | SceneLayoutManifestV3;
+  | SceneLayoutManifestV3
+  | SceneLayoutManifestV4;
 export type SceneLayoutManifest =
   | SceneLayoutManifestV1
   | SceneLayoutManifestModern;
-export type SceneLayoutManifestLatest = SceneLayoutManifestV3;
+export type SceneLayoutManifestLatest = SceneLayoutManifestV4;
 
 export type SceneLayoutRuntimeResource =
   | {
@@ -432,13 +458,17 @@ export interface SceneLayoutResource {
 export interface SceneLayoutPackageResource {
   /** Initial-mode v1-compatible view preserved for existing host inspection. */
   readonly manifest: SceneLayoutManifestV1;
-  /** Canonical v3 document used by package runtime allocation and activation. */
+  /** Canonical v4 document used by package runtime allocation and activation. */
   readonly runtimeManifest: SceneLayoutManifestLatest;
   readonly layout: SceneLayoutResource;
   readonly imageStrings: Readonly<Record<string, ImageStringResource>>;
   readonly symbolPackage: SymbolPackageResource | null;
   readonly symbolPackages: Readonly<Record<string, SymbolPackageResource>>;
   readonly popupPackages: Readonly<Record<string, PopupPackageResource>>;
+  /** Fully-qualified effect routes aggregated at the Scene Layout boundary. */
+  readonly audioEffects: Readonly<Record<string, ResolvedAudioEffect>>;
+  readonly audioMusic: Readonly<Record<string, ResolvedAudioMusic>>;
+  readonly programmaticAudioEffects: ReadonlySet<string>;
   readonly runtimeResources: Readonly<
     Record<string, SceneLayoutRuntimeResource>
   >;
@@ -735,6 +765,17 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
       Partial<Record<"main", SceneLayoutInitialReelScene>>
     >;
   }): Promise<void>;
+  /** Plays a Game Layout allowlisted global route such as `award.coin`. */
+  playEffect(
+    route: string,
+  ): import("@slotclientengine/audiocore/core").AudioPlaybackHandle;
+  /** Idempotently cancels delayed and active instances for an allowlisted route. */
+  stopEffect(route: string): void;
+  /** Must be called from a valid browser user gesture before audible preview/game playback. */
+  unlockAudio(): Promise<void>;
+  setAudioMuted(muted: boolean): void;
+  setMusicVolume(volume: number): void;
+  setEffectVolume(volume: number): void;
   /** True only after the first exact server-authorized main scene is committed. */
   hasCommittedMainReelScene(): boolean;
   /** Confirms that an ownership-transferred host reel has atomically committed its initial scene. */

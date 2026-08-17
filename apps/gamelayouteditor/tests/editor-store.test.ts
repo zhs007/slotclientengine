@@ -49,7 +49,7 @@ describe("EditorStore", () => {
       "BaseGame",
     ]);
     const exported = editorProjectToManifest(project);
-    expect(exported.version).toBe(3);
+    expect(exported.version).toBe(4);
     expect(exported.runtimeAllocation.modes.BaseGame).toBeDefined();
     expect(exported).not.toHaveProperty("adaptation");
     expect(exported.gameModes.modes[0]).toMatchObject({

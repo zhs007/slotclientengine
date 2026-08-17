@@ -33,6 +33,9 @@ import {
   validateImageStringPackageContents,
   type ImageStringManifestV1,
 } from "@slotclientengine/rendercore/image-string/editor";
+import type { AudioEffectManifestV1 } from "@slotclientengine/audiocore/data";
+import { detectAudioMediaType } from "@slotclientengine/audiocore/editor";
+import type { SymbolAudioCueV1 } from "@slotclientengine/rendercore/symbol/data";
 
 export type EditorAssetKind =
   | "image"
@@ -40,6 +43,7 @@ export type EditorAssetKind =
   | "spine-atlas"
   | "vni-project"
   | "image-string-manifest"
+  | "audio"
   | "json-unknown"
   | "unsupported";
 
@@ -143,6 +147,7 @@ export interface EditorSymbolDraft {
   valuePresentation?: SymbolValuePresentationSpec;
   cascadeWinPresentation?: SymbolCascadeWinPresentation;
   imageStringNodes: SymbolImageStringNodeSpec[];
+  audioCues: SymbolAudioCueV1[];
 }
 
 export interface EditorImageStringDependency {
@@ -167,6 +172,7 @@ export interface SymbolEditorProject {
   legacyStateSettings: Record<string, unknown>;
   assetLibrary: EditorAssetLibrary;
   imageStringDependencies: Map<string, EditorImageStringDependency>;
+  audio: AudioEffectManifestV1;
   nextUploadBatch: number;
 }
 
@@ -214,6 +220,7 @@ export function createFromGameConfig(options: {
     legacyStateSettings: {},
     assetLibrary: { records: new Map(), batches: [] },
     imageStringDependencies: new Map(),
+    audio: { version: 1, effects: [] },
     nextUploadBatch: 1,
   };
   return project;
@@ -340,6 +347,7 @@ export function createFromImportedPackage(options: {
       imageStringNodes: manifestSymbol.imageStringNodes.map((node) =>
         cloneValue(node),
       ),
+      audioCues: manifestSymbol.audioCues.map((cue) => cloneValue(cue)),
     });
     void rawSymbol;
   }
@@ -376,6 +384,7 @@ export function createFromImportedPackage(options: {
     legacyStateSettings: rawSettings,
     assetLibrary: library,
     imageStringDependencies,
+    audio: cloneValue(parsed.audio),
     nextUploadBatch: 1,
   };
   for (const symbol of project.symbols.values()) {
@@ -417,6 +426,7 @@ export function cloneSymbolEditorProject(
           imageStringNodes: draft.imageStringNodes.map((node) =>
             cloneValue(node),
           ),
+          audioCues: draft.audioCues.map((cue) => cloneValue(cue)),
         },
       ]),
     ),
@@ -438,6 +448,7 @@ export function cloneSymbolEditorProject(
         cloneImageStringDependency(dependency),
       ]),
     ),
+    audio: cloneValue(project.audio),
     nextUploadBatch: project.nextUploadBatch,
   };
 }
@@ -1304,6 +1315,12 @@ export function getAssetReferences(
       }
     }
   }
+  for (const effect of project.audio.effects)
+    for (const source of effect.asset.sources)
+      references.push({
+        path: stripLocalRef(source.path),
+        location: `audio.${effect.name}`,
+      });
   return Object.freeze(
     references.filter(
       (reference) => onlyPath === undefined || reference.path === onlyPath,
@@ -1442,13 +1459,16 @@ export function compileSymbolEditorManifest(
     if (symbol.cascadeWinPresentation) {
       entry.cascadeWinPresentation = cloneValue(symbol.cascadeWinPresentation);
     }
+    if (symbol.audioCues.length > 0)
+      entry.audioCues = symbol.audioCues.map((cue) => cloneValue(cue));
     manifestSymbols[symbol.symbol] = entry;
   }
   return {
-    version: 2,
+    version: 3,
     states: textureStates,
     ...(Object.keys(settings).length > 0 ? { settings } : {}),
     symbols: manifestSymbols,
+    audio: cloneValue(project.audio),
   };
 }
 
@@ -1596,6 +1616,7 @@ function createBlankSymbol(
       ["normal", { kind: "empty", width, height } satisfies EditorBaseVisual],
     ]),
     imageStringNodes: [],
+    audioCues: [],
   };
 }
 
@@ -1919,6 +1940,11 @@ export function createEditorAssetRecord(
     } catch (error) {
       diagnostics.push(`图片解析失败：${formatError(error)}`);
     }
+  } else if (/\.(?:mp3|ogg|wav|m4a|mp4|aac|webm)$/u.test(lower)) {
+    kind = "audio";
+    const mediaType = detectAudioMediaType(bytes);
+    if (!mediaType) diagnostics.push("音频 signature 无法识别");
+    else metadata = { mediaType };
   } else if (lower.endsWith(".atlas")) {
     kind = "spine-atlas";
     try {

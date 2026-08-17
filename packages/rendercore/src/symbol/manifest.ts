@@ -4,6 +4,10 @@ import {
   type AssetUrlManifest,
   type VNIProjectConfig,
 } from "@slotclientengine/vnicore/data";
+import {
+  parseAudioEffectManifestV1,
+  type AudioEffectManifestV1,
+} from "@slotclientengine/audiocore/data";
 import type {
   ReelSymbolRenderPriorityMap,
   ReelSymbolScaleMap,
@@ -288,12 +292,19 @@ export interface ParsedSymbolManifestSymbol {
   readonly valuePresentation?: SymbolValuePresentationSpec;
   readonly imageStringNodes: readonly SymbolImageStringNodeSpec[];
   readonly cascadeWinPresentation?: SymbolCascadeWinPresentation;
+  readonly audioCues: readonly SymbolAudioCueV1[];
+}
+
+export interface SymbolAudioCueV1 {
+  readonly effect: string;
+  readonly state: SymbolStateId;
 }
 
 export interface ParsedSymbolStateTextureManifest {
-  readonly version: 2;
+  readonly version: 3;
   readonly states: readonly SymbolStateId[];
   readonly statePreset: SymbolStatePreset;
+  readonly audio: AudioEffectManifestV1;
   readonly symbols: Readonly<Record<string, ParsedSymbolManifestSymbol>>;
 }
 
@@ -390,6 +401,7 @@ const TOP_LEVEL_MANIFEST_KEYS = Object.freeze([
   "states",
   "settings",
   "symbols",
+  "audio",
 ]);
 
 export function parseSymbolStateTextureManifest(
@@ -402,9 +414,9 @@ export function parseSymbolStateTextureManifest(
     "symbol state texture manifest",
     TOP_LEVEL_MANIFEST_KEYS,
   );
-  if (record.version !== 1 && record.version !== 2) {
+  if (record.version !== 1 && record.version !== 2 && record.version !== 3) {
     throw new SymbolAssetError(
-      "Symbol state texture manifest version must be 1 or 2.",
+      "Symbol state texture manifest version must be 1, 2, or 3.",
     );
   }
   const sourceVersion = record.version;
@@ -424,6 +436,15 @@ export function parseSymbolStateTextureManifest(
     sourceVersion,
   );
   const stateSet = new Set(states);
+  const audio =
+    sourceVersion === 3
+      ? parseAudioEffectManifestV1(record.audio)
+      : parseAudioEffectManifestV1({ version: 1, effects: [] });
+  if (sourceVersion !== 3 && record.audio !== undefined)
+    throw new SymbolAssetError(
+      "Symbol manifest audio is only supported in v3.",
+    );
+  const audioEffects = new Set(audio.effects.map(({ name }) => name));
   for (const state of options.requiredStates ?? []) {
     if (!stateSet.has(state)) {
       throw new SymbolAssetError(
@@ -466,6 +487,7 @@ export function parseSymbolStateTextureManifest(
       "valuePresentation",
       "imageStringNodes",
       "cascadeWinPresentation",
+      "audioCues",
       ...states,
     ];
     assertOnlyKnownKeys(
@@ -566,6 +588,13 @@ export function parseSymbolStateTextureManifest(
             stateDefinitions,
             animations,
           );
+    const audioCues = parseSymbolAudioCues(
+      rawSymbolRecord.audioCues,
+      symbol,
+      stateSet,
+      audioEffects,
+      sourceVersion,
+    );
     symbols[symbol] = Object.freeze({
       normal:
         valuePresentation?.reelStates.normal ??
@@ -579,6 +608,7 @@ export function parseSymbolStateTextureManifest(
       ),
       animations,
       imageStringNodes,
+      audioCues,
       ...(valuePresentation !== undefined ? { valuePresentation } : {}),
       ...(cascadeWinPresentation !== undefined
         ? { cascadeWinPresentation }
@@ -587,9 +617,10 @@ export function parseSymbolStateTextureManifest(
   }
 
   return Object.freeze({
-    version: 2,
+    version: 3,
     states,
     statePreset,
+    audio,
     symbols: Object.freeze(symbols),
   });
 }
@@ -619,9 +650,52 @@ export function upgradeSymbolStateTextureManifest(
       ? { afterComplete: definition.afterComplete }
       : {}),
   }));
-  record.version = 2;
+  record.version = 3;
   record.settings = settings;
+  record.audio = parsed.audio;
   return deepFreezeManifest(record);
+}
+
+function parseSymbolAudioCues(
+  value: unknown,
+  symbol: string,
+  states: ReadonlySet<string>,
+  effects: ReadonlySet<string>,
+  sourceVersion: 1 | 2 | 3,
+): readonly SymbolAudioCueV1[] {
+  if (sourceVersion !== 3) {
+    if (value !== undefined)
+      throw new SymbolAssetError(
+        `Symbol "${symbol}" audioCues are only supported in v3.`,
+      );
+    return Object.freeze([]);
+  }
+  if (value === undefined) return Object.freeze([]);
+  if (!Array.isArray(value))
+    throw new SymbolAssetError(
+      `Symbol "${symbol}" audioCues must be an array.`,
+    );
+  const seen = new Set<string>();
+  return Object.freeze(
+    value.map((raw, index) => {
+      const label = `Symbol "${symbol}" audioCues[${index}]`;
+      const cue = assertRecord(raw, label);
+      assertOnlyKnownKeys(cue, label, ["effect", "state"]);
+      const effect = assertString(cue.effect, `${label}.effect`);
+      const state = assertString(cue.state, `${label}.state`);
+      if (!effects.has(effect))
+        throw new SymbolAssetError(
+          `${label}.effect is not declared: ${effect}.`,
+        );
+      if (!states.has(state))
+        throw new SymbolAssetError(`${label}.state is not declared: ${state}.`);
+      const key = `${state}:${effect}`;
+      if (seen.has(key))
+        throw new SymbolAssetError(`${label} duplicates ${key}.`);
+      seen.add(key);
+      return Object.freeze({ effect, state });
+    }),
+  );
 }
 
 function parseImageStringNodes(
@@ -1071,14 +1145,14 @@ function finitePositiveNumber(value: unknown, label: string): number {
 function parseManifestStatePreset(
   settings: unknown,
   textureStates: readonly SymbolStateId[],
-  version: 1 | 2,
+  version: 1 | 2 | 3,
 ): SymbolStatePreset {
   const base =
     version === 1
       ? createLegacyV1UpgradedStatePreset()
       : createDefaultSymbolStatePreset();
   if (version === 1 && settings === undefined) return base;
-  if (version === 2 && settings === undefined) {
+  if (version >= 2 && settings === undefined) {
     throw new SymbolAssetError(
       "Symbol state texture manifest v2 settings must declare stateDefinitions.",
     );
@@ -1091,7 +1165,7 @@ function parseManifestStatePreset(
     ...textureStates,
     version === 1 ? "additionalStateDefinitions" : "stateDefinitions",
   ]);
-  if (version === 2) {
+  if (version >= 2) {
     return parseManifestStatePresetV2(record, base);
   }
   if (record.additionalStateDefinitions === undefined) return base;
