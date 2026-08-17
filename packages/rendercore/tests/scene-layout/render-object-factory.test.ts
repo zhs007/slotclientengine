@@ -32,7 +32,9 @@ function imageStringResource(): ImageStringResource {
   };
 }
 
-function createResource(): SceneLayoutPackageResource {
+function createResource(options?: {
+  readonly lazyRuntimeResources?: boolean;
+}): SceneLayoutPackageResource {
   const resources = {
     nearwin1: {
       kind: "spine" as const,
@@ -62,30 +64,34 @@ function createResource(): SceneLayoutPackageResource {
       mimeType: "video/mp4" as const,
     },
   } satisfies Readonly<Record<string, SceneLayoutRuntimeResource>>;
-  return {
-    manifest: {
-      id: "factory-test",
-      runtimeResources: {
-        nearwin1: {
-          kind: "spine",
-          skeleton: "nearwin.json",
-          atlas: "nearwin.atlas",
-          textures: { "nearwin.png": "nearwin.png" },
-        },
-        badge: {
-          kind: "image",
-          path: "badge.png",
-          size: { width: 1, height: 1 },
-        },
-        winAmount: { kind: "image-string", manifest: "digits.json" },
-        sparkle: { kind: "vni", project: "sparkle.json" },
-        intro: {
-          kind: "video",
-          path: "intro.mp4",
-          mimeType: "video/mp4",
-        },
+  const runtimeManifest = {
+    id: "factory-test",
+    runtimeResources: {
+      nearwin1: {
+        kind: "spine",
+        skeleton: "nearwin.json",
+        atlas: "nearwin.atlas",
+        textures: { "nearwin.png": "nearwin.png" },
       },
-    } as unknown as SceneLayoutPackageResource["manifest"],
+      badge: {
+        kind: "image",
+        path: "badge.png",
+        size: { width: 1, height: 1 },
+      },
+      winAmount: { kind: "image-string", manifest: "digits.json" },
+      sparkle: { kind: "vni", project: "sparkle.json" },
+      intro: {
+        kind: "video",
+        path: "intro.mp4",
+        mimeType: "video/mp4",
+      },
+    },
+  } as unknown as SceneLayoutPackageResource["runtimeManifest"];
+  return {
+    manifest: (options?.lazyRuntimeResources
+      ? { id: "factory-test" }
+      : runtimeManifest) as SceneLayoutPackageResource["manifest"],
+    runtimeManifest,
     runtimeResources: resources,
     loadRuntimeResource: async (
       key: string,
@@ -156,6 +162,21 @@ class ManualVniPlayer {
 }
 
 describe("Scene Layout named RenderObject factory", () => {
+  it("resolves lazy runtime resource specs from the canonical manifest", async () => {
+    const resource = createResource({ lazyRuntimeResources: true });
+    expect(resource.manifest.runtimeResources).toBeUndefined();
+
+    const factory = createSceneLayoutRenderObjectFactory({
+      resource,
+      dependencies: { createSpinePlayer: () => new ManualSpinePlayer() },
+    });
+    const object = await factory.createRenderObject("nearwin1");
+    expect(getRenderObjectAdapter(object).view.parent).toBeNull();
+
+    object.destroy();
+    factory.destroy();
+  });
+
   it("uses exact names, typed image-string dispatch, and detached ownership", async () => {
     const resource = createResource();
     const factory = createSceneLayoutRenderObjectFactory({

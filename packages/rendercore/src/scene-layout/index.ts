@@ -7,7 +7,11 @@ export * from "./runtime-allocation.js";
 export * from "./geometry.js";
 export * from "./resource.js";
 export * from "./package-resource.js";
-export * from "./runtime.js";
+export {
+  createSceneLayoutRuntime,
+  type CreateSceneLayoutRuntimeOptions,
+  type SceneLayoutVniPlayer,
+} from "./runtime.js";
 export { createSceneLayoutPackageRuntime } from "./package-runtime.js";
 export type { SceneLayoutRenderObjectFactoryDependencies } from "./render-object-factory.js";
 export * from "./video-transition-player.js";

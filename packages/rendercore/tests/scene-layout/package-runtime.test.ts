@@ -436,6 +436,91 @@ function popupLayoutFixture() {
 }
 
 describe("scene layout package runtime", () => {
+  it("commits a prepared v4 background order change without a second structure check", async () => {
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    try {
+      const manifest = {
+        ...game002LayoutFixture,
+        nodes: [
+          game002LayoutFixture.nodes[0],
+          {
+            ...game002LayoutFixture.nodes[0],
+            id: "free-bg",
+            order: 1,
+            resource: {
+              ...game002LayoutFixture.nodes[0].resource,
+              path: "assets/free-bg.png",
+            },
+          },
+        ],
+        gameModes: {
+          initialMode: "BaseGame",
+          modes: [
+            {
+              id: "BaseGame",
+              backgroundNodes: { default: "bg" },
+              nodeStates: {},
+            },
+            {
+              id: "FreeGame",
+              backgroundNodes: { default: "free-bg" },
+              nodeStates: {},
+            },
+          ],
+          transitions: [
+            {
+              from: "BaseGame",
+              to: "FreeGame",
+              overlay: { kind: "none" as const },
+            },
+          ],
+        },
+        runtimeResources: {
+          badge: {
+            kind: "image" as const,
+            path: "assets/badge.png",
+            size: { width: 1, height: 1 },
+          },
+        },
+      };
+      const resource = await createSceneLayoutPackageResource({
+        manifest,
+        files: new Map([
+          ["assets/bg.png", new Uint8Array([1])],
+          ["assets/free-bg.png", new Uint8Array([2])],
+          ["assets/badge.png", new Uint8Array([3])],
+        ]),
+        lazyRuntimeResources: true,
+        decodeImage: async () => ({ width: 1, height: 1 }),
+      });
+      expect(resource.runtimeManifest.version).toBe(4);
+      expect(resource.layout.manifest.runtimeResources).toBeUndefined();
+      const runtime = createSceneLayoutPackageRuntime({
+        resource,
+        presentationOnly: true,
+      });
+      await runtime.init();
+      runtime.applyViewport({ width: 2000, height: 2000 });
+      const badge = await runtime.createRenderObject("badge");
+
+      await expect(
+        runtime.requestGameMode("FreeGame"),
+      ).resolves.toBeUndefined();
+      expect(runtime.getStableGameMode()).toBe("FreeGame");
+      expect(runtime.getNode("free-bg").parent?.visible).toBe(true);
+      expect(runtime.getNode("bg").parent?.visible).toBe(false);
+
+      badge.destroy();
+      runtime.destroy();
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
+  });
+
   for (const renderMode of ["standard", "grid-cell"] as const) {
     it(`creates, orders and resets the ${renderMode} reel from package contracts`, async () => {
       const load = vi

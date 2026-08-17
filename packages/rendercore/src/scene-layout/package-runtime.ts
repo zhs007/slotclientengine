@@ -56,7 +56,7 @@ import {
 import { materializeSceneLayoutManifestForMode } from "./manifest-v2.js";
 import { upgradeSceneLayoutManifestToLatest } from "./manifest-v3.js";
 import { transitionResourceKey } from "./resource.js";
-import { createSceneLayoutRuntime } from "./runtime.js";
+import { createPreparedSceneLayoutRuntime } from "./runtime.js";
 import {
   createSceneLayoutTransitionVideoPlayer,
   type SceneLayoutTransitionVideoPlayer,
@@ -117,6 +117,7 @@ type PreparedModeTarget = ReelEntry;
 
 interface PreparedModeTransitionBase {
   spec: SceneLayoutGameModeTransition;
+  geometry: SceneLayoutManifestV1 | null;
   readonly source: SceneLayoutGameMode;
   readonly target: SceneLayoutGameMode;
   readonly prepared: PreparedModeTarget | null;
@@ -422,7 +423,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#createGridCellReel = createGridCellReel;
     this.#hostUpdatesMainReel = hostUpdatesMainReel;
     this.#formatPopupAmount = formatPopupAmount;
-    this.#layout = createSceneLayoutRuntime({ resource: resource.layout });
+    this.#layout = createPreparedSceneLayoutRuntime({
+      resource: resource.layout,
+    });
     this.#audio = createAudioRuntime({
       backend: audioBackend ?? createPixiSoundBackend(),
       effects: resource.audioEffects,
@@ -781,14 +784,20 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
             candidate.to === prepared.spec.to,
         )
       : null;
+    const nextPreparedGeometry = prepared
+      ? materializeModeGeometry(document, prepared.target.id)
+      : null;
     if (prepared && !nextPreparedSpec)
       throw new SceneLayoutError(
         "Prepared scene transition is missing from geometry update.",
       );
-    this.#layout.applyGeometryManifest(manifest);
+    this.#layout.commitPreparedGeometryManifest(manifest);
     this.#document = document;
     this.#manifest = manifest;
-    if (prepared && nextPreparedSpec) prepared.spec = nextPreparedSpec;
+    if (prepared && nextPreparedSpec) {
+      prepared.spec = nextPreparedSpec;
+      prepared.geometry = nextPreparedGeometry;
+    }
     return this.#viewportSize
       ? this.#artSpaceApplied
         ? this.applyArtSpace()
@@ -2539,6 +2548,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     const transition = this.findTransition(modeId);
     const source = this.requireMode(this.#stableMode!);
     const target = this.requireMode(modeId);
+    const geometry = materializeModeGeometry(this.#document, target.id);
     if (
       options.recreateReel !== undefined &&
       typeof options.recreateReel !== "boolean"
@@ -2578,6 +2588,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         );
       const common = {
         spec: transition,
+        geometry,
         source,
         target,
         prepared,
@@ -2997,7 +3008,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   }
 
   private commitPreparedTarget(active: PreparedModeTransitionBase): void {
-    this.commitModeGeometry(active.target.id);
+    this.commitModeGeometry(active.target.id, active.geometry);
     if (active.bindingChanged) {
       if (active.prepared) {
         this.activateReelEntry(active.prepared);
@@ -3459,14 +3470,18 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     return mode;
   }
 
-  private commitModeGeometry(modeId: string): void {
-    if (this.#document.version !== 2 && this.#document.version !== 3) return;
-    const effective = materializeSceneLayoutManifestForMode(
-      this.#document,
-      modeId,
-    );
-    this.#layout.applyGeometryManifest(effective);
+  private commitModeGeometry(
+    modeId: string,
+    preparedGeometry?: SceneLayoutManifestV1 | null,
+  ): void {
+    const effective =
+      preparedGeometry === undefined
+        ? materializeModeGeometry(this.#document, modeId)
+        : preparedGeometry;
+    if (!effective) return;
+    this.#layout.commitPreparedGeometryManifest(effective);
     this.#manifest = effective;
+    if (this.#reel) this.attachReel(this.#reel);
     if (!this.#activeTransition) this.refreshCommittedGeometryPresentation();
   }
 
@@ -3497,6 +3512,19 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     if (this.#destroyed)
       throw new SceneLayoutError("Scene layout package runtime was destroyed.");
   }
+}
+
+function materializeModeGeometry(
+  document: SceneLayoutManifest,
+  modeId: string,
+): SceneLayoutManifestV1 | null {
+  if (
+    document.version !== 2 &&
+    document.version !== 3 &&
+    document.version !== 4
+  )
+    return null;
+  return materializeSceneLayoutManifestForMode(document, modeId);
 }
 
 function validateScene(

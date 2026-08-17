@@ -7,6 +7,7 @@ const state = vi.hoisted(() => ({ runtime: null as any }));
 
 vi.mock("../../src/scene-layout/runtime.js", () => ({
   createSceneLayoutRuntime: () => state.runtime,
+  createPreparedSceneLayoutRuntime: () => state.runtime,
 }));
 
 import { createSceneLayoutPackageRuntime } from "../../src/scene-layout/package-runtime.js";
@@ -156,6 +157,7 @@ describe("scene layout package video-blackout transition", () => {
       container,
       init: vi.fn(async () => undefined),
       applyViewport: vi.fn(() => snapshot()),
+      commitPreparedGeometryManifest: vi.fn(() => null),
       update: vi.fn(),
       getSnapshot: vi.fn(() => snapshot()),
       getNode: vi.fn(),
