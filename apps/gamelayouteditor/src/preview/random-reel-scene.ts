@@ -1,4 +1,4 @@
-import type { SymbolPackageResource } from "@slotclientengine/rendercore/symbol";
+import type { SymbolPackageResource } from "@slotclientengine/rendercore/symbol/editor";
 
 const UINT32_RANGE = 0x1_0000_0000;
 

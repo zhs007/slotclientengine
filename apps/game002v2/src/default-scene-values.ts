@@ -1,8 +1,8 @@
 import {
   createWeightedGridCellPresentationValueResolver,
   type GridCellSymbolPresentationValueResolver,
-  type SymbolPackageResource,
 } from "@slotclientengine/rendercore";
+import type { SymbolPackageResource } from "@slotclientengine/rendercore/symbol/core";
 
 export function createGame002v2DefaultSceneValueResolver(
   symbols: SymbolPackageResource,

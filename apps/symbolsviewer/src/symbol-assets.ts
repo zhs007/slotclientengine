@@ -13,7 +13,7 @@ import {
   type SymbolCatalogModel,
   type SymbolStatePreset,
   type StandaloneSymbolCatalog,
-} from "@slotclientengine/rendercore";
+} from "@slotclientengine/rendercore/symbol/editor";
 
 export const SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES = [
   "spinBlur",

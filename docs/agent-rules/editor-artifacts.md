@@ -100,3 +100,7 @@
 - 上传资源不会自动绑定 glyph/state/node/background/placement；所有 binding 都要求用户显式选择。目标
   state 的“上传并使用”本身视为一次显式绑定动作，必须在统一 review 成功后使用 resolved key 绑定。
 - 真实 award ImgNumber 未提供时，game002/game003 保留当前 production win-amount 路径，不用字体、CN digits 或 fixture glyph 冒充迁移完成。
+
+## Symbols Editor wrapper
+
+Symbols Editor 使用 `rendercore/symbol/data` 与 `rendercore/symbol/editor`；mapped package、materialize、authoring introspection、生成和 standalone preview 属于 editor wrapper。其它 editor 只解析/重写 manifest 时使用 data，通过 Scene Layout 托管 production preview 时不得另建 symbol player；只有直接托管 standalone Symbols preview 才使用 editor wrapper。Application、canvas、ticker、ZIP/UI session 始终由 app 拥有。

@@ -1,20 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
   createSymbolGroup,
-  type SymbolRender,
+  type SymbolHandle,
 } from "../../src/symbol/index.js";
 
 function symbol(
   x: number,
   y: number,
   assertUsable = () => undefined,
-): SymbolRender {
+): SymbolHandle {
   return {
     getPosition: () => {
       assertUsable();
       return { x, y };
     },
-  } as unknown as SymbolRender;
+  } as unknown as SymbolHandle;
 }
 
 describe("SymbolGroup stable geometry", () => {

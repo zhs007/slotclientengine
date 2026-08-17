@@ -13,7 +13,7 @@ export * from "./grid-cell-cascade-plan.js";
 export * from "./grid-cell-effect-player.js";
 export * from "./grid-cell-effect-resource.js";
 export * from "./reel-window.js";
-export * from "./render-symbol-pool.js";
+export * from "./symbol-player-pool.js";
 export * from "./render-reel.js";
 export * from "./render-reel-set.js";
 export * from "./render-grid-cell-reel-set.js";

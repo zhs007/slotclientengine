@@ -42,10 +42,17 @@ export default defineConfig({
         ),
       },
       {
-        find: "@slotclientengine/rendercore/symbol",
+        find: "@slotclientengine/rendercore/symbol/data",
         replacement: resolve(
           __dirname,
-          "../../packages/rendercore/src/symbol/index.ts",
+          "../../packages/rendercore/src/symbol/data/index.ts",
+        ),
+      },
+      {
+        find: "@slotclientengine/rendercore/symbol/editor",
+        replacement: resolve(
+          __dirname,
+          "../../packages/rendercore/src/symbol/editor/index.ts",
         ),
       },
       {

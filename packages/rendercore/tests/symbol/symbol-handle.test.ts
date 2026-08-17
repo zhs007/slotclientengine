@@ -8,7 +8,7 @@ import {
   createBasicReels,
 } from "../reel/helpers.js";
 
-describe("SymbolRender", () => {
+describe("SymbolHandle", () => {
   it("directly changes state, mounts stable nodes, clones, and enforces ownership", () => {
     const area = new RenderReelSet({
       reels: createBasicReels(),
@@ -79,7 +79,7 @@ describe("SymbolRender", () => {
     expect(area.getVisibleScene()).toEqual(before);
   });
 
-  it("returns a lightweight empty SymbolRender for -1", () => {
+  it("returns a lightweight empty SymbolHandle for -1", () => {
     const area = new RenderReelSet({
       reels: createBasicReels(),
       layout: createBasicLayout(),
@@ -122,7 +122,7 @@ describe("SymbolRender", () => {
     expect(() => empty.getPosition()).toThrow(/stale/);
   });
 
-  it("replaces between a real and empty SymbolRender", () => {
+  it("replaces between a real and empty SymbolHandle", () => {
     const area = new RenderReelSet({
       reels: createBasicReels(),
       layout: createBasicLayout(),

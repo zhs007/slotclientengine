@@ -28,7 +28,7 @@ import {
 import {
   createSymbolPackageResource,
   parseSymbolPackageManifest,
-} from "@slotclientengine/rendercore/symbol";
+} from "@slotclientengine/rendercore/symbol/editor";
 import {
   activeVariantIds,
   activateEditorGameMode,

@@ -46,9 +46,9 @@
   或 popup lifecycle。需要 mode transition 时，surface 必须委托 package runtime 的
   prepare/request/event/switch/settle 状态机并公开独立 transition container。
 - operation handler 和游戏取得 symbol 时只使用具体区域实例的 `SymbolArea.getSymbol(pos)`；
-  standard reel、legacy grid-cell 和新 CellSpin 必须返回同一 `SymbolRender` 合同。facade 捕获 exact
-  occurrence；hole 返回 exact Empty SymbolRender，未落地、leased、replacement/release 后 stale 必须失败，不得按坐标重绑或暴露
-  pooled RenderSymbol/display tree。borrowed reel symbol 禁止 destroy，owned clone 由创建者 destroy。
+  standard reel、legacy grid-cell 和新 CellSpin 必须返回同一 `SymbolHandle` 合同。facade 捕获 exact
+  occurrence；hole 返回 exact Empty SymbolHandle，未落地、leased、replacement/release 后 stale 必须失败，不得按坐标重绑或暴露
+  pooled SymbolPlayer/display tree。borrowed reel symbol 禁止 destroy，owned clone 由创建者 destroy。
 - 新逐格转使用无 public plan 的 CellSpin `roll/start/settle/cancel` 原子接口；full、selective、hold、
   refill、stagger 和 anticipation 由 operation handler 以 frame delay、Promise 与明确业务事实编排。
   不新增 CellSpinPlan/RefillPlan 或 renderer 业务 predicate。game002v2 的 GridCellReelSpinPlan 仅为
@@ -59,15 +59,15 @@
   不得复制另一套 motion/pool/player 状态机。
 - standard 与 legacy grid-cell 的 `RenderReel` 在 rolling 阶段只能用每个 slot 稳定持有的轻量
   Sprite 显示 registry 解析后的 rolling texture；不得为经过的轮带 code 构造、初始化或 update
-  完整 `RenderSymbol`。target-aware start/settle 只提前准备最终可见 occurrence；official
+  完整 `SymbolPlayer`。target-aware start/settle 只提前准备最终可见 occurrence；official
   Spine、VNI 或 value display 未 ready 时保持最终 rolling frame，全部 ready 后才提交 settled
-  occurrence。stopped buffer 不持有完整 symbol；rolling Sprite 不属于 `SymbolRender`，不能被
+  occurrence。stopped buffer 不持有完整 symbol；rolling Sprite 不属于 `SymbolHandle`，不能被
   state、value、clone、cascade 或 transfer API 操作。
 - 带 valuePresentation 的 lightweight rolling view 必须使用游戏注入的 presentation-value resolver
   取得中间随机值，并按 manifest value tier 显示对应轻量 image-string resource；不得创建 tier
   Spine。随机 occurrence cache 必须有界。显式 target scene 中的 value symbol 必须同时提供最终
   non-null value；最终 rolling frame 与 settled commit 只能使用该值，不得回退随机/default value。
-  完整 `RenderSymbol` 必须在离屏 prepare 时写入最终 value，并在 value resource ready 且挂载前
+  完整 `SymbolPlayer` 必须在离屏 prepare 时写入最终 value，并在 value resource ready 且挂载前
   复核；禁止先把完整 symbol 挂到可见树，再把 rolling/random value 改成最终 value。
 - standard ReelArea 与 Crave legacy grid-cell 的共同 PresentableSymbolArea 拥有
   `bottom < symbols < top < win` 图层及 game-owned await presentation；standard ReelArea 额外拥有 area-local
@@ -125,10 +125,10 @@
 
 - symbol manifest parser、animation resolver、VNI/official Spine adapter、resource closure、player lifecycle、裁切和 pooling 属于 rendercore。
 - symbol-state-textures manifest v2 的 `settings.stateDefinitions` 是 once 完成行为的唯一来源；once 必须显式声明 return-to-default 或 terminal，stable 禁止完成行为。合法 v1 只在 rendercore 加载 upgrader中按 exact remove 迁移为 terminal，其它 once 迁移为 return-to-default；runtime、editor preview 和 game 不得保留 state-name fallback。
-- 单个完整 RenderSymbol 的 asset binding 创建后不可变；状态切换与回池必须优先复用其稳定 Sprite、
+- 单个完整 SymbolPlayer 的 asset binding 创建后不可变；状态切换与回池必须优先复用其稳定 Sprite、
   ImgNumber renderer 及按实际 resource identity 缓存的 Spine/VNI player。value tier 变化只重绑
   ImgNumber resource/profile、geometry 和 slot，不得仅因 tier index 变化重建 renderer；回池只清
-  value、playback、attachment 等 mutable 状态，缓存只在 RenderSymbol 真正 destroy 时销毁。不同
+  value、playback、attachment 等 mutable 状态，缓存只在 SymbolPlayer 真正 destroy 时销毁。不同
   occurrence 的 mutable player/renderer 不得共享。
 - composite symbol state 的 base 可见性、underlay/overlay 稳定顺序、每 leaf 独立 player ownership、共享 once/loop completion barrier 与幂等 destroy 属于 rendercore；app/editor 不直接操作其 display tree 或补写时序。
 - symbol 状态完成边界由 rendercore 的 awaitable playback API 表达，宿主 ticker 仍逐帧调用 update 推进。app 不轮询 loop/once completion counter；批量播放必须先完整预检，AbortSignal、reset、回池、destroy 或外部状态取代必须拒绝未完成等待。
@@ -194,3 +194,7 @@
 - 游戏静态 YAML 只承载可发布的美术和静态配置，不承载 token、cookie、服务器真实轮带或本轮下注。
 - YAML 保留中文注释说明字段用途和坐标基准；注释不作为构建逻辑。
 - `game-static.generated.ts`、`game-loading.generated.ts` 等生成物由对应构建工具生成，修改 YAML 后同步生成并执行 `--check`。
+
+## Symbols public boundary
+
+Symbols 能力只从 `@slotclientengine/rendercore/symbol/data|core|editor` 按职责导入；禁止恢复旧 `./symbol` 混合入口或 root symbol wildcard。游戏 runtime、reel、Scene Layout 和 gameframeworks 使用 data/core，内部 mutable Pixi occurrence 为 `SymbolPlayer` 且不得作为 game API 导出；`SymbolArea` 对游戏暴露的 borrowed/owned/empty capability 统一为 `SymbolHandle`。

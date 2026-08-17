@@ -18,10 +18,11 @@ import {
 import type { PopupInteractionDispatchResult } from "@slotclientengine/rendercore/popup/core";
 import {
   createSymbolPackageValueControllerFactory,
-  type RenderSymbol,
+  createSymbolPreviewPlayer,
+  type SymbolPreviewPlayer,
   type SymbolCatalogModel,
   type SymbolPackageResource,
-} from "@slotclientengine/rendercore/symbol";
+} from "@slotclientengine/rendercore/symbol/editor";
 import { Application, Container, Graphics } from "pixi.js";
 import {
   validateLayoutAssets,
@@ -106,7 +107,7 @@ export class LayoutPreview {
   #symbolPreview: SymbolPackagePreviewSnapshot | null = null;
   #renderedSymbolPreview: SymbolPackagePreviewSnapshot | null = null;
   #symbolGrid: SymbolPreviewGridSize | null = null;
-  #renderSymbols: RenderSymbol[] = [];
+  #renderSymbols: SymbolPreviewPlayer[] = [];
   #symbolDiagnostic = "";
   #symbolBindings: readonly SymbolOtherScenePreviewBinding[] = Object.freeze(
     [],
@@ -482,7 +483,7 @@ export class LayoutPreview {
     this.assertReady();
     this.#layoutRequest += 1;
     this.clearRuntime();
-    this.clearRenderSymbols();
+    this.clearSymbolPlayers();
     this.#manifest = null;
     this.#guides.clear();
     this.#selectionOutline.clear();
@@ -956,23 +957,23 @@ export class LayoutPreview {
     const scene = preview?.scene;
     const reel = snapshot.reels.main;
     if (this.#packageRuntime) {
-      this.clearRenderSymbols();
+      this.clearSymbolPlayers();
       this.#symbolDiagnostic = preview?.scene
         ? `symbols=${preview.packageId} · combined-runtime · reel=${preview.scene.reelSetName} · stops=[${preview.scene.stopYs.join(",")}]`
         : "symbols=combined-runtime · waiting for an explicit local scene";
       return;
     }
     if (!resource || !catalog || !preview || !reel) {
-      this.clearRenderSymbols();
+      this.clearSymbolPlayers();
       return;
     }
     if (!scene) {
-      this.clearRenderSymbols();
+      this.clearSymbolPlayers();
       this.#symbolDiagnostic = `symbols=${preview.packageId} · ${preview.message}`;
       return;
     }
     if (scene.columns !== reel.columns || scene.rows !== reel.rows) {
-      this.clearRenderSymbols();
+      this.clearSymbolPlayers();
       this.#symbolDiagnostic = `symbols=${preview.packageId} · sampled scene ${scene.columns}×${scene.rows} 与 runtime grid ${reel.columns}×${reel.rows} 不匹配`;
       return;
     }
@@ -988,7 +989,7 @@ export class LayoutPreview {
       this.#symbolDiagnostic = `symbols=${preview.packageId} · reel=${scene.reelSetName} · stops=[${scene.stopYs.join(",")}] · mappings=${formatBindings(preview.bindings)} · otherScene=${formatOtherScene(preview.otherScene?.matrix ?? [])}`;
       return;
     }
-    const nextSymbols: RenderSymbol[] = [];
+    const nextSymbols: SymbolPreviewPlayer[] = [];
     const assignmentByCell = new Map(
       (preview.otherScene?.assignments ?? []).map((assignment) => [
         `${assignment.x},${assignment.y}`,
@@ -999,54 +1000,58 @@ export class LayoutPreview {
       for (let y = 0; y < reel.rows; y += 1) {
         for (let x = 0; x < reel.columns; x += 1) {
           const symbol = scene.symbols[x][y];
-          const renderSymbol = catalog.createRenderSymbol(symbol, {
-            valueControllerFactory: createSymbolPackageValueControllerFactory(
-              resource,
-              symbol,
-            ),
+          const symbolPlayer = createSymbolPreviewPlayer({
+            catalog,
+            symbol,
+            player: {
+              valueControllerFactory: createSymbolPackageValueControllerFactory(
+                resource,
+                symbol,
+              ),
+            },
           });
           const orderIndex = y * reel.columns + x;
-          renderSymbol.scale.set(resource.symbolScales[symbol] ?? 1);
-          renderSymbol.zIndex =
+          symbolPlayer.view.scale.set(resource.symbolScales[symbol] ?? 1);
+          symbolPlayer.view.zIndex =
             (resource.symbolRenderPriorities[symbol] ?? 0) * cellCount +
             orderIndex;
-          renderSymbol.init();
-          renderSymbol.position.set(
+          symbolPlayer.init();
+          symbolPlayer.view.position.set(
             x * reel.stride.width + reel.cellSize.width / 2,
             y * reel.stride.height + reel.cellSize.height / 2,
           );
           const presentation =
             resource.symbolManifest.symbols[symbol]?.valuePresentation;
           if (presentation)
-            renderSymbol.setPresentationValue(presentation.defaultValues[0]);
+            symbolPlayer.setPresentationValue(presentation.defaultValues[0]);
           for (const node of resource.symbolManifest.symbols[symbol]
             ?.imageStringNodes ?? [])
-            renderSymbol.setImageStringText(node.name, node.initialText);
+            symbolPlayer.setImageStringText(node.name, node.initialText);
           const assignment = assignmentByCell.get(`${x},${y}`);
           if (assignment?.target.kind === "image-string-node") {
-            renderSymbol.setImageStringText(
+            symbolPlayer.setImageStringText(
               assignment.target.name,
               String(assignment.value),
             );
           } else if (assignment) {
-            renderSymbol.setPresentationValue(assignment.value);
+            symbolPlayer.setPresentationValue(assignment.value);
           }
-          nextSymbols.push(renderSymbol);
+          nextSymbols.push(symbolPlayer);
         }
       }
     } catch (error) {
       for (const symbol of nextSymbols) symbol.destroy();
       throw error;
     }
-    this.clearRenderSymbols();
+    this.clearSymbolPlayers();
     this.#symbolOverlay.position.set(reel.viewportRect.x, reel.viewportRect.y);
-    this.#symbolOverlay.addChild(...nextSymbols);
+    this.#symbolOverlay.addChild(...nextSymbols.map((symbol) => symbol.view));
     this.#renderSymbols = nextSymbols;
     this.#renderedSymbolPreview = preview;
     this.#symbolDiagnostic = `symbols=${preview.packageId} · reel=${scene.reelSetName} · stops=[${scene.stopYs.join(",")}] · mappings=${formatBindings(preview.bindings)} · otherScene=${formatOtherScene(preview.otherScene?.matrix ?? [])}`;
   }
 
-  private clearRenderSymbols(): void {
+  private clearSymbolPlayers(): void {
     for (const symbol of this.#renderSymbols) symbol.destroy();
     this.#renderSymbols = [];
     this.#renderedSymbolPreview = null;
@@ -1100,7 +1105,7 @@ export class LayoutPreview {
   }
 
   private clearSymbolPackage(): void {
-    this.clearRenderSymbols();
+    this.clearSymbolPlayers();
     this.#symbolCatalog = null;
     this.#symbolResource?.destroy();
     this.#symbolResource = null;

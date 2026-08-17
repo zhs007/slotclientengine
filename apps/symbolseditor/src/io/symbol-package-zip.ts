@@ -8,7 +8,7 @@ import {
   materializeMappedSymbolPackageContents,
   parseSymbolPackageManifest,
   type SymbolPackageResource,
-} from "@slotclientengine/rendercore/symbol";
+} from "@slotclientengine/rendercore/symbol/editor";
 import {
   createFromImportedPackage,
   exportSnapshot,

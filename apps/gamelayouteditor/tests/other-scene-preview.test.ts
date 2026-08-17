@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseSymbolPackageGameConfig } from "@slotclientengine/rendercore/symbol";
+import { parseSymbolPackageGameConfig } from "@slotclientengine/rendercore/symbol/data";
 import { sampleNumberWeightTable } from "../src/preview/number-weight-table.js";
 import { createOtherScenePreview } from "../src/preview/other-scene-preview.js";
 import type {

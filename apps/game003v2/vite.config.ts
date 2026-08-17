@@ -16,6 +16,13 @@ export default defineConfig({
         ),
       },
       {
+        find: "@slotclientengine/rendercore/symbol/core",
+        replacement: resolve(
+          __dirname,
+          "../../packages/rendercore/src/symbol/core/index.ts",
+        ),
+      },
+      {
         find: "@slotclientengine/rendercore",
         replacement: resolve(
           __dirname,

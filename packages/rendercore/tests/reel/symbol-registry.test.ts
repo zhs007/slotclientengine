@@ -39,8 +39,8 @@ describe("ReelSymbolRegistry", () => {
       code: 3,
       kind: "empty",
     });
-    expect(registry.createRenderSymbolByCode(0)).toBeNull();
-    expect(registry.createRenderSymbolByCode(1)?.symbol).toBe("A");
+    expect(registry.createSymbolPlayerByCode(0)).toBeNull();
+    expect(registry.createSymbolPlayerByCode(1)?.symbol).toBe("A");
   });
 
   it("calculates cell size from non-empty paytable textures only", () => {
@@ -75,9 +75,9 @@ describe("ReelSymbolRegistry", () => {
     });
 
     expect(registry.getCellSize()).toEqual({ width: 15, height: 18 });
-    expect(registry.createRenderSymbolByCode(1)?.scale.x).toBe(1.5);
-    expect(registry.createRenderSymbolByCode(1)?.scale.y).toBe(1.5);
-    expect(registry.createRenderSymbolByCode(2)?.scale.x).toBe(1);
+    expect(registry.createSymbolPlayerByCode(1)?.scale.x).toBe(1.5);
+    expect(registry.createSymbolPlayerByCode(1)?.scale.y).toBe(1.5);
+    expect(registry.createSymbolPlayerByCode(2)?.scale.x).toBe(1);
   });
 
   it("passes configured render priorities into render symbols", () => {
@@ -94,9 +94,9 @@ describe("ReelSymbolRegistry", () => {
       },
     });
 
-    expect(registry.createRenderSymbolByCode(1)?.renderPriority).toBe(2);
-    expect(registry.createRenderSymbolByCode(2)?.renderPriority).toBe(0);
-    expect(registry.createRenderSymbolByCode(0)).toBeNull();
+    expect(registry.createSymbolPlayerByCode(1)?.renderPriority).toBe(2);
+    expect(registry.createSymbolPlayerByCode(2)?.renderPriority).toBe(0);
+    expect(registry.createSymbolPlayerByCode(0)).toBeNull();
     expect(registry.getRollingVisualByCode(1, "spinBlur")).toMatchObject({
       scale: 1,
       renderPriority: 2,
@@ -207,11 +207,11 @@ describe("ReelSymbolRegistry", () => {
     });
 
     expect(registry.getCellSize()).toEqual({ width: 18, height: 22 });
-    const renderSymbol = registry.createRenderSymbolByCode(1);
-    expect(renderSymbol?.getLayerSprites().map((layer) => layer.index)).toEqual(
+    const symbolPlayer = registry.createSymbolPlayerByCode(1);
+    expect(symbolPlayer?.getLayerSprites().map((layer) => layer.index)).toEqual(
       [0, 1],
     );
-    expect(renderSymbol?.getLayerSprites()[1].keyframes).toEqual([
+    expect(symbolPlayer?.getLayerSprites()[1].keyframes).toEqual([
       layerOne,
       layerOneOpen,
     ]);
@@ -235,9 +235,9 @@ describe("ReelSymbolRegistry", () => {
     });
 
     expect(registry.getCellSize()).toEqual({ width: 17, height: 19 });
-    const renderSymbol = registry.createRenderSymbolByCode(1);
-    expect(renderSymbol?.symbol).toBe("A");
-    expect(renderSymbol?.normalSource).toEqual({
+    const symbolPlayer = registry.createSymbolPlayerByCode(1);
+    expect(symbolPlayer?.symbol).toBe("A");
+    expect(symbolPlayer?.normalSource).toEqual({
       kind: "transparent",
       width: 17,
       height: 19,

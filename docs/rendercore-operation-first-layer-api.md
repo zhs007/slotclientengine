@@ -26,7 +26,7 @@ RenderCore 不是进程级 singleton，一个游戏可以同时拥有多个转�
 
 ```ts
 interface SymbolArea {
-  getSymbol(pos: SymbolPosition): SymbolRender;
+  getSymbol(pos: SymbolPosition): SymbolHandle;
 }
 
 interface SymbolPosition {
@@ -39,7 +39,7 @@ interface SymbolPosition {
 
 ```ts
 interface SymbolMutationArea extends SymbolArea {
-  replaceSymbol(pos, target): SymbolRender;
+  replaceSymbol(pos, target): SymbolHandle;
   replaceSymbols(replacements): SymbolGroup;
 }
 ```
@@ -48,7 +48,7 @@ interface SymbolMutationArea extends SymbolArea {
 CellSpin 同时正式拥有 active cell session、`transferSymbols()` 和 `dropOccurrences()`；grid-cell 在 Crave 仍使用期间同步支持相同基础能力。
 RenderCore 的所有 symbol area 与 spin 模型统一使用 `-1` 表示空图标，其它负数非法。CellSpin、snapshot、remove 以及未来 ReelSpin 的空位能力都使用同一语义，不得各自定义 hole code。新接口不接收 RenderCore gameplay plan；game002v2 旧入口保持兼容。
 
-空图标仍是可由 `getSymbol(pos)` 取得的内置轻量 `SymbolRender`。它不拥有贴图、Spine、粒子或对象池 entry，只复用 position 已有容器来提供坐标、anchor 与附加节点能力；需要真实 symbol 资源的 state、text 和非 null value 操作必须显式失败。
+空图标仍是可由 `getSymbol(pos)` 取得的内置轻量 `SymbolHandle`。它不拥有贴图、Spine、粒子或对象池 entry，只复用 position 已有容器来提供坐标、anchor 与附加节点能力；需要真实 symbol 资源的 state、text 和非 null value 操作必须显式失败。
 
 区域如何从 package runtime、游戏 runtime 或依赖注入中取得，后续结合 runtime 装配接口确定；
 `getSymbol()` 必须属于具体区域实例，不能成为全局 `rendercore.symbol(pos)`。
@@ -63,7 +63,7 @@ const mainSymbol = mainArea.getSymbol({ x: 2, y: 1 });
 const featureSymbol = featureArea.getSymbol({ x: 0, y: 0 });
 ```
 
-`getSymbol()` 是严格取得接口。合法 hole 返回 exact Empty `SymbolRender`；坐标越界、尚未落地、leased 或 stale 时显式失败。
+`getSymbol()` 是严格取得接口。合法 hole 返回 exact Empty `SymbolHandle`；坐标越界、尚未落地、leased 或 stale 时显式失败。
 只有出现真实的可选探测需求时才考虑独立 `findSymbol()`，第一层不预先增加两套查询。
 
 Standard reel 与 Crave legacy grid-cell 共同用 `PresentableSymbolArea` 管理安全 attachment layers 和
@@ -111,15 +111,15 @@ scene.addAt(effect, {
 
 现有Scene Layout `getLayer/getNode/attachChild/attachRelative`保留给已有host/editor，不被静默重定向，也不要求当前游戏迁移。
 
-## SymbolRender
+## SymbolHandle
 
-`getSymbol()` 返回游戏可直接操作的 `SymbolRender`。游戏代码不接触 `SymbolHandle` 名称，也不需要理解
+`getSymbol()` 返回游戏可直接操作的 `SymbolHandle`。游戏代码不接触 `SymbolHandle` 名称，也不需要理解
 内部 occurrence generation、player、pool 或 display tree ownership。
 
 第一层目标形状：
 
 ```ts
-interface SymbolRender {
+interface SymbolHandle {
   getPosition(): RenderPoint;
   setState(state: string): void;
   playState(state: string, options?: SymbolPlayOptions): Promise<void>;
@@ -134,7 +134,7 @@ interface SymbolRender {
   add(node: RenderObject, options?: SymbolNodeOptions): void;
   remove(node: RenderObject): void;
 
-  clone(options?: SymbolCloneOptions): SymbolRender;
+  clone(options?: SymbolCloneOptions): SymbolHandle;
 }
 ```
 
@@ -178,7 +178,7 @@ Container或Matrix。完整合同见[RenderCore 坐标与 Anchor API](./renderco
 ### 节点与 clone
 
 Spine、VNI、粒子、光效、图片和后续 typed custom node 应统一表现为 `RenderObject`，而不是为每种资源在
-`SymbolRender` 上增加专用方法。节点的创建、播放和资源校验属于 RenderCore；`add/remove` 只负责附加关系。
+`SymbolHandle` 上增加专用方法。节点的创建、播放和资源校验属于 RenderCore；`add/remove` 只负责附加关系。
 
 `RenderObject` 内部由 Pixi `Container` 承载，但 public interface 不继承或返回 Container。对象统一提供受控
 position/visibility/play/stop/anchor/destroy；`CloneableRenderObject` 额外提供 clone。whole symbol、value part和
@@ -193,14 +193,14 @@ operation scope 与 pool 冻结，但不向普通游戏暴露一组复杂 owners
 
 ### occurrence 生命周期
 
-`SymbolRender` 是简单 public façade，不是把内部、可被 reel 回池的 `RenderSymbol` 原样返回给游戏。内部需要保留
+`SymbolHandle` 是简单 public façade，不是把内部、可被 reel 回池的 `SymbolPlayer` 原样返回给游戏。内部需要保留
 严格的失效检查：
 
 - selective spin 未参与格继续指向原 symbol；
 - dropdown 搬运 surviving occurrence 时保持同一个 symbol identity；
 - 某格落地后，即使其它格仍在转，`getSymbol(pos)` 已可返回该格最终 symbol；
 - 尚未落地的滚动格调用 `getSymbol(pos)` 显式失败；
-- replacement、remove、release 或回池后，旧 `SymbolRender` 的后续操作显式失败；
+- replacement、remove、release 或回池后，旧 `SymbolHandle` 的后续操作显式失败；
 - active transfer 已独占 occurrence 时，冲突操作显式失败。
 
 这些检查留在 RenderCore 内部，不改变游戏侧的简单对象模型。
@@ -219,7 +219,7 @@ Public surface 支持三种 spin 形态，但后续只主力维护两种新接�
 continuous、cascade、effect 或 edge 时序。
 
 “不再维护 grid-cell”指不再扩展其 public gameplay contract。资源泄漏、destroy、浏览器兼容和共享底层错误仍需
-修复；`SymbolRender`、资源播放器和 pool 等共同基础能力可以同步改进。新游戏不选择 legacy `grid-cell`，未来第二层
+修复；`SymbolHandle`、资源播放器和 pool 等共同基础能力可以同步改进。新游戏不选择 legacy `grid-cell`，未来第二层
 也只面向 `CellSpin` 和 `ReelSpin`。
 
 ## 新 CellSpin 第一层
@@ -430,7 +430,7 @@ await Promise.all(landings);
 - 不再由 game003v2 计算或传入每轮 `localPhaseYs/finalY`，目标只包含服务器 scene/value；
 - 不再轮询 `isMainReelSpinning()`，`roll/settle` Promise 本身就是 landing barrier；
 - game ticker 把完整 delta 交给 runtime，由 ReelSpin 内部切片，不能以 `1/30` clamp 丢弃时间；
-- win carousel 暂时继续使用现有 occurrence geometry compatibility API，本任务不把 geometry 加回 `SymbolRender`。
+- win carousel 暂时继续使用现有 occurrence geometry compatibility API，本任务不把 geometry 加回 `SymbolHandle`。
 
 game003v2 迁移后，legacy standard Scene Layout 方法仍暂时可用，但它们只是同一 ReelSpin owner 的兼容入口。新游戏和新
 operation handler 直接使用 `getReelSpin()`。
@@ -503,7 +503,7 @@ game002v2 当前依赖的以下能力保持：
 - existing/refill cascade movement；
 - 当前 low-FPS、mask、pool、held 和 landing 行为。
 
-兼容实现只增加 `SymbolArea.getSymbol()` 和对应 `SymbolRender` 能力。game002v2 可以逐步使用新 symbol 接口，但不要求
+兼容实现只增加 `SymbolArea.getSymbol()` 和对应 `SymbolHandle` 能力。game002v2 可以逐步使用新 symbol 接口，但不要求
 在同一任务迁移已有 batch state、spin plan、Nearwin controller 或 cascade 调用。现有 batch preflight 和 fail-stop
 边界不能因改写成零散 Promise 而退化。
 

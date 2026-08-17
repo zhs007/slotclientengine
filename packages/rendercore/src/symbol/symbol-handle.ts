@@ -11,7 +11,7 @@ import {
   type RenderObjectPlayOptions,
   type RenderPoint,
 } from "../presentation/render-object.js";
-import type { RenderSymbol } from "./render-symbol.js";
+import type { SymbolPlayer } from "./symbol-player.js";
 import type {
   SymbolStateId,
   SymbolStatePlaybackOptions,
@@ -27,11 +27,11 @@ export interface SymbolCloneOptions {
   readonly state?: "normal" | "current";
 }
 
-export type SymbolRenderPartRef =
+export type SymbolHandlePartRef =
   | { readonly kind: "value" }
   | { readonly kind: "text"; readonly name: string };
 
-export interface SymbolRender extends CloneableRenderObject {
+export interface SymbolHandle extends CloneableRenderObject {
   readonly code: number;
   readonly symbol: string;
   readonly kind: "symbol" | "empty";
@@ -49,24 +49,24 @@ export interface SymbolRender extends CloneableRenderObject {
   getValue(): number | null;
   setText(name: string, text: string): void;
   getText(name: string): string;
-  getPart(ref: SymbolRenderPartRef): CloneableRenderObject;
+  getPart(ref: SymbolHandlePartRef): CloneableRenderObject;
   add(node: RenderObject, options?: SymbolNodeOptions): void;
   remove(node: RenderObject): void;
-  clone(options?: SymbolCloneOptions): SymbolRender;
+  clone(options?: SymbolCloneOptions): SymbolHandle;
 }
 
-export interface SymbolRenderSource {
-  readonly symbol: RenderSymbol;
+export interface SymbolHandleSource {
+  readonly symbol: SymbolPlayer;
   readonly owned: boolean;
   assertUsable(): void;
-  clone(): SymbolRenderSource;
+  clone(): SymbolHandleSource;
   getPosition?: () => RenderPoint;
   getAnchor?: () => RenderAnchor;
   getPresentationSignal?(): AbortSignal | undefined;
   release?(): void;
 }
 
-export interface EmptySymbolRenderSource {
+export interface EmptySymbolHandleSource {
   readonly view: Container;
   readonly owned: boolean;
   assertUsable(): void;
@@ -78,7 +78,7 @@ const DEFAULT_PLAY_OPTIONS: SymbolStatePlaybackOptions = Object.freeze({
   completion: "entered",
 });
 
-interface SymbolRenderAdapter {
+interface SymbolHandleAdapter {
   assertUsable(): void;
   validateValue(value: number | null): void;
   validateStateRequest(
@@ -91,14 +91,14 @@ interface SymbolRenderAdapter {
   ): void;
 }
 
-const symbolRenderAdapters = new WeakMap<SymbolRender, SymbolRenderAdapter>();
+const symbolHandleAdapters = new WeakMap<SymbolHandle, SymbolHandleAdapter>();
 
-export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
+export function createSymbolHandle(source: SymbolHandleSource): SymbolHandle {
   const mounted = new Set<RenderObject>();
   let destroyed = false;
   const assertUsable = (): void => {
     if (destroyed)
-      throw new SymbolAnimationError("SymbolRender was destroyed.");
+      throw new SymbolAnimationError("SymbolHandle was destroyed.");
     source.assertUsable();
   };
   const detachMounted = (): void => {
@@ -110,7 +110,7 @@ export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
     mounted.clear();
   };
 
-  let render!: SymbolRender;
+  let render!: SymbolHandle;
   const baseNode = createRenderObject({
     view: source.symbol as Container,
     owned: source.owned,
@@ -119,7 +119,7 @@ export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
       if (!name)
         return Promise.reject(
           new SymbolAnimationError(
-            "SymbolRender.play() requires an exact symbol state.",
+            "SymbolHandle.play() requires an exact symbol state.",
           ),
         );
       return source.symbol.playState(name, {
@@ -131,7 +131,7 @@ export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
     destroy: () => {
       if (!source.owned) {
         throw new SymbolAnimationError(
-          "Borrowed reel SymbolRender cannot be destroyed.",
+          "Borrowed reel SymbolHandle cannot be destroyed.",
         );
       }
       detachMounted();
@@ -147,7 +147,7 @@ export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
       assertUsable();
       if (!source.getPosition)
         throw new SymbolAnimationError(
-          "SymbolRender has no SymbolArea position.",
+          "SymbolHandle has no SymbolArea position.",
         );
       return source.getPosition();
     },
@@ -155,7 +155,7 @@ export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
       assertUsable();
       if (!source.getAnchor)
         throw new SymbolAnimationError(
-          "SymbolRender has no SymbolArea anchor.",
+          "SymbolHandle has no SymbolArea anchor.",
         );
       return source.getAnchor();
     },
@@ -179,7 +179,7 @@ export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
       assertUsable();
       if (!source.owned)
         throw new SymbolAnimationError(
-          "Borrowed reel SymbolRender cannot be destroyed.",
+          "Borrowed reel SymbolHandle cannot be destroyed.",
         );
       baseNode.destroy();
     },
@@ -221,7 +221,7 @@ export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
       assertUsable();
       return source.symbol.getImageStringText(name);
     },
-    getPart: (ref: SymbolRenderPartRef) => createSymbolRenderPart(source, ref),
+    getPart: (ref: SymbolHandlePartRef) => createSymbolHandlePart(source, ref),
     add: (node: RenderObject, options: SymbolNodeOptions = {}) => {
       assertUsable();
       if (mounted.has(node))
@@ -247,7 +247,7 @@ export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
       assertUsable();
       if (!mounted.delete(node))
         throw new SymbolAnimationError(
-          "RenderObject is not attached to this SymbolRender.",
+          "RenderObject is not attached to this SymbolHandle.",
         );
       getRenderObjectAdapter(node).view.parent?.removeChild(
         getRenderObjectAdapter(node).view,
@@ -256,7 +256,7 @@ export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
     clone: (options: SymbolCloneOptions = {}) => {
       assertUsable();
       const clonedSource = source.clone();
-      const clone = createSymbolRender(clonedSource);
+      const clone = createSymbolHandle(clonedSource);
       clone.setValue(source.symbol.getPresentationValue());
       if (options.state === "current") {
         const snapshot = source.symbol.getStateSnapshot();
@@ -270,9 +270,9 @@ export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
       }
       return clone;
     },
-  }) satisfies SymbolRender;
+  }) satisfies SymbolHandle;
   registerRenderObjectAlias(render, getRenderObjectAdapter(baseNode));
-  symbolRenderAdapters.set(render, {
+  symbolHandleAdapters.set(render, {
     assertUsable,
     validateValue: (value) => {
       assertUsable();
@@ -290,20 +290,20 @@ export function createSymbolRender(source: SymbolRenderSource): SymbolRender {
   return render;
 }
 
-export function createEmptySymbolRender(
-  source: EmptySymbolRenderSource,
-): SymbolRender {
+export function createEmptySymbolHandle(
+  source: EmptySymbolHandleSource,
+): SymbolHandle {
   const mounted = new Set<RenderObject>();
   let destroyed = false;
   const assertUsable = (): void => {
     if (destroyed)
-      throw new SymbolAnimationError("Empty SymbolRender was destroyed.");
+      throw new SymbolAnimationError("Empty SymbolHandle was destroyed.");
     source.assertUsable();
   };
   const unsupported = (operation: string): never => {
     assertUsable();
     throw new SymbolAnimationError(
-      `Empty SymbolRender does not support ${operation}.`,
+      `Empty SymbolHandle does not support ${operation}.`,
     );
   };
   const rejectUnsupported = (operation: string): Promise<never> => {
@@ -327,7 +327,7 @@ export function createEmptySymbolRender(
     destroy: () => {
       if (!source.owned)
         throw new SymbolAnimationError(
-          "Borrowed reel SymbolRender cannot be destroyed.",
+          "Borrowed reel SymbolHandle cannot be destroyed.",
         );
       detachMounted();
       destroyed = true;
@@ -342,7 +342,7 @@ export function createEmptySymbolRender(
       assertUsable();
       if (!source.getPosition)
         throw new SymbolAnimationError(
-          "SymbolRender has no SymbolArea position.",
+          "SymbolHandle has no SymbolArea position.",
         );
       return source.getPosition();
     },
@@ -350,7 +350,7 @@ export function createEmptySymbolRender(
       assertUsable();
       if (!source.getAnchor)
         throw new SymbolAnimationError(
-          "SymbolRender has no SymbolArea anchor.",
+          "SymbolHandle has no SymbolArea anchor.",
         );
       return source.getAnchor();
     },
@@ -368,7 +368,7 @@ export function createEmptySymbolRender(
       assertUsable();
       if (!source.owned)
         throw new SymbolAnimationError(
-          "Borrowed reel SymbolRender cannot be destroyed.",
+          "Borrowed reel SymbolHandle cannot be destroyed.",
         );
       baseNode.destroy();
     },
@@ -378,7 +378,7 @@ export function createEmptySymbolRender(
       assertUsable();
       if (value !== null)
         throw new SymbolAnimationError(
-          "Empty SymbolRender presentation value must be null.",
+          "Empty SymbolHandle presentation value must be null.",
         );
     },
     getValue: () => {
@@ -410,27 +410,27 @@ export function createEmptySymbolRender(
       assertUsable();
       if (!mounted.delete(node))
         throw new SymbolAnimationError(
-          "RenderObject is not attached to this SymbolRender.",
+          "RenderObject is not attached to this SymbolHandle.",
         );
       getRenderObjectAdapter(node).view.parent?.removeChild(
         getRenderObjectAdapter(node).view,
       );
     },
     clone: () =>
-      createEmptySymbolRender({
+      createEmptySymbolHandle({
         view: new Container(),
         owned: true,
         assertUsable: () => {},
       }),
-  }) satisfies SymbolRender;
+  }) satisfies SymbolHandle;
   registerRenderObjectAlias(render, getRenderObjectAdapter(baseNode));
-  symbolRenderAdapters.set(render, {
+  symbolHandleAdapters.set(render, {
     assertUsable,
     validateValue: (value) => {
       assertUsable();
       if (value !== null)
         throw new SymbolAnimationError(
-          "Empty SymbolRender presentation value must be null.",
+          "Empty SymbolHandle presentation value must be null.",
         );
     },
     validateStateRequest: () => unsupported("symbol states"),
@@ -439,19 +439,19 @@ export function createEmptySymbolRender(
   return render;
 }
 
-function createSymbolRenderPart(
-  source: SymbolRenderSource,
-  ref: SymbolRenderPartRef,
+function createSymbolHandlePart(
+  source: SymbolHandleSource,
+  ref: SymbolHandlePartRef,
 ): CloneableRenderObject {
   source.assertUsable();
   if (ref.kind !== "value" && ref.kind !== "text") {
     throw new SymbolAnimationError(
-      `Unknown SymbolRender part kind "${String((ref as { kind?: unknown }).kind)}".`,
+      `Unknown SymbolHandle part kind "${String((ref as { kind?: unknown }).kind)}".`,
     );
   }
   if (ref.kind === "text" && (typeof ref.name !== "string" || ref.name === ""))
     throw new SymbolAnimationError(
-      "SymbolRender text part requires a non-empty exact name.",
+      "SymbolHandle text part requires a non-empty exact name.",
     );
   if (ref.kind === "value") source.symbol.getPresentationValueView();
   else source.symbol.getImageStringTextView(ref.name);
@@ -475,13 +475,13 @@ function createSymbolRenderPart(
   });
 }
 
-export function getSymbolRenderAdapter(
-  render: SymbolRender,
-): SymbolRenderAdapter {
-  const adapter = symbolRenderAdapters.get(render);
+export function getSymbolHandleAdapter(
+  render: SymbolHandle,
+): SymbolHandleAdapter {
+  const adapter = symbolHandleAdapters.get(render);
   if (!adapter)
     throw new SymbolAnimationError(
-      "SymbolRender was not created by the active RenderCore runtime.",
+      "SymbolHandle was not created by the active RenderCore runtime.",
     );
   return adapter;
 }

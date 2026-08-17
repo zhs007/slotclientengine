@@ -3,7 +3,7 @@ import {
   SymbolStateSequenceController,
   createDefaultSymbolStatePreset,
   createSymbolCatalog,
-} from "@slotclientengine/rendercore";
+} from "@slotclientengine/rendercore/symbol/editor";
 import game2Config from "../../../assets/gamecfg/game2.json";
 import { describe, expect, it } from "vitest";
 import {
@@ -436,7 +436,7 @@ describe("symbolsviewer assets", () => {
       ignoredPaytableSymbolsWithoutAssets: [],
       ignoredAssetsWithoutPaytable: [],
     });
-    const transparentSymbol = catalog.createRenderSymbol("normal");
+    const transparentSymbol = catalog.createSymbolPlayer("normal");
     const transparentLayer = transparentSymbol.getLayerSprites()[0];
     expect(transparentLayer).toMatchObject({
       transparent: true,

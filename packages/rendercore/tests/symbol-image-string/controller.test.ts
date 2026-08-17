@@ -7,7 +7,7 @@ import {
   notifySymbolImageStringSpineActive,
   notifySymbolImageStringSpineInactive,
 } from "../../src/symbol-image-string/index.js";
-import { RenderSymbol } from "../../src/symbol/render-symbol.js";
+import { SymbolPlayer } from "../../src/symbol/symbol-player.js";
 import { createDefaultSymbolStatePreset } from "../../src/symbol/state-machine.js";
 import type { RendercoreSpineSlotPlayer } from "../../src/spine/runtime-player.js";
 import {
@@ -614,9 +614,9 @@ describe("SymbolImageStringController", () => {
   });
 });
 
-function createSymbol(): RenderSymbol {
+function createSymbol(): SymbolPlayer {
   const preset = createDefaultSymbolStatePreset();
-  return new RenderSymbol({
+  return new SymbolPlayer({
     definition: {
       code: 0,
       symbol: "A",

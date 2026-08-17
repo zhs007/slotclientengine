@@ -1,4 +1,4 @@
-import { parseSymbolPackageGameConfig } from "@slotclientengine/rendercore/symbol";
+import { parseSymbolPackageGameConfig } from "@slotclientengine/rendercore/symbol/data";
 import { describe, expect, it, vi } from "vitest";
 import {
   createWebCryptoRandomUint32Source,

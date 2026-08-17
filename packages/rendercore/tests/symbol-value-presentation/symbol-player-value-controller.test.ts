@@ -3,11 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import type { RendercoreSpineSlotPlayer } from "../../src/spine/runtime-player.js";
 import {
   createDefaultSymbolAnimationResolver,
-  RenderSymbol,
+  SymbolPlayer,
 } from "../../src/symbol/index.js";
-import { createSymbolRender } from "../../src/symbol/symbol-render.js";
+import { createSymbolHandle } from "../../src/symbol/symbol-handle.js";
 import {
-  createRenderSymbolValueController,
+  createSymbolPlayerValueController,
   type SymbolValuePresentationResource,
 } from "../../src/symbol-value-presentation/index.js";
 import { SymbolImageStringController } from "../../src/symbol-image-string/index.js";
@@ -313,10 +313,10 @@ describe("render symbol value controller", () => {
       render.getPart({ kind: "text", name: "missing" }).getAnchor(),
     ).toThrow(/no image-string node named "missing"/);
     expect(() => render.getPart({ kind: "unknown" } as never)).toThrow(
-      /Unknown SymbolRender part kind/,
+      /Unknown SymbolHandle part kind/,
     );
     usable = false;
-    expect(() => textPart.clone()).toThrow(/Test SymbolRender is stale/);
+    expect(() => textPart.clone()).toThrow(/Test SymbolHandle is stale/);
 
     finish();
     await flushPromises();
@@ -629,14 +629,14 @@ describe("render symbol value controller", () => {
 });
 
 function createFacade(
-  symbol: RenderSymbol,
+  symbol: SymbolPlayer,
   isUsable: () => boolean = () => true,
 ) {
-  return createSymbolRender({
+  return createSymbolHandle({
     symbol,
     owned: false,
     assertUsable: () => {
-      if (!isUsable()) throw new Error("Test SymbolRender is stale.");
+      if (!isUsable()) throw new Error("Test SymbolHandle is stale.");
     },
     clone: () => {
       throw new Error("Test facade clone is not configured.");
@@ -651,12 +651,12 @@ function createSymbol(
   ) => RendercoreSpineSlotPlayer,
   resource: SymbolValuePresentationResource = createResource(),
   imageStringControllerFactory?: (
-    root: RenderSymbol,
+    root: SymbolPlayer,
   ) => SymbolImageStringController,
   valueTextBindings?: Readonly<Record<string, (value: number) => string>>,
-): RenderSymbol {
-  let symbol!: RenderSymbol;
-  symbol = new RenderSymbol({
+): SymbolPlayer {
+  let symbol!: SymbolPlayer;
+  symbol = new SymbolPlayer({
     definition: {
       code: 8,
       symbol: "GOLD",
@@ -707,7 +707,7 @@ function createSymbol(
     animationCapabilities: ["appear", "win", "remove", "collect", "dropdown"],
     landingAppearEnabled: true,
     valueControllerFactory: (root) =>
-      createRenderSymbolValueController({
+      createSymbolPlayerValueController({
         root,
         resource,
         playerFactory: ({ tier }) => createPlayer(tier),

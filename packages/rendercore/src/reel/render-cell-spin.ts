@@ -6,14 +6,14 @@ import type { SymbolStateId } from "../symbol/index.js";
 import { getRenderObjectAdapter } from "../presentation/render-object.js";
 import { createContainerRenderAnchor } from "../presentation/render-anchor.js";
 import {
-  createSymbolRender,
-  type SymbolRender,
-} from "../symbol/symbol-render.js";
+  createSymbolHandle,
+  type SymbolHandle,
+} from "../symbol/symbol-handle.js";
 import { createSymbolGroup } from "../symbol/symbol-group.js";
 import { ReelError } from "./errors.js";
 import { createReelLayout } from "./layout.js";
 import { RenderReel } from "./render-reel.js";
-import { createRenderSymbolPool } from "./render-symbol-pool.js";
+import { createSymbolPlayerPool } from "./symbol-player-pool.js";
 import type {
   SymbolArea,
   SymbolPosition,
@@ -26,8 +26,8 @@ import type {
   ReelSymbolRegistry,
   RenderReelUpdateResult,
   RenderReelVisibleOccurrence,
-  RenderSymbolPool,
-  RenderSymbolPoolOptions,
+  SymbolPlayerPool,
+  SymbolPlayerPoolOptions,
 } from "./types.js";
 
 export interface CellRollTarget {
@@ -127,7 +127,7 @@ export interface RenderCellSpinOptions {
   readonly speedSymbolsPerSecond?: number;
   readonly minimumSpinCycles?: number;
   readonly bounceStrength?: number;
-  readonly symbolPool?: RenderSymbolPoolOptions;
+  readonly symbolPool?: SymbolPlayerPoolOptions;
 }
 
 interface RuntimeCell {
@@ -184,7 +184,7 @@ export class RenderCellSpin extends Container implements CellSpin {
     >
   > &
     RenderCellSpinOptions;
-  readonly #pool: RenderSymbolPool | null;
+  readonly #pool: SymbolPlayerPool | null;
   readonly #cells: readonly RuntimeCell[];
   readonly #active = new Map<string, ActiveCell>();
   readonly #motionLayer = new Container();
@@ -213,7 +213,7 @@ export class RenderCellSpin extends Container implements CellSpin {
       columnGap: normalizeNonNegative(options.columnGap ?? 0, "columnGap"),
       rowGap: normalizeNonNegative(options.rowGap ?? 0, "rowGap"),
     };
-    this.#pool = createRenderSymbolPool(options.symbolPool);
+    this.#pool = createSymbolPlayerPool(options.symbolPool);
     this.#motionLayer.sortableChildren = true;
     const cells: RuntimeCell[] = [];
     for (const [x, column] of options.initialScene.entries()) {
@@ -259,7 +259,7 @@ export class RenderCellSpin extends Container implements CellSpin {
     this.addChild(this.#motionLayer);
   }
 
-  getSymbol(position: SymbolPosition): SymbolRender {
+  getSymbol(position: SymbolPosition): SymbolHandle {
     const cell = this.getRuntimeCell(position);
     if (this.#active.has(keyOf(position)) || cell.reel.getPhase() !== "stopped")
       throw new ReelError(
@@ -271,10 +271,10 @@ export class RenderCellSpin extends Container implements CellSpin {
       y: cell.root.y + cell.reel.layout.cellHeight / 2,
     });
     if (slot.code === -1) {
-      return cell.reel.createVisibleEmptySymbolRender(0, {
+      return cell.reel.createVisibleEmptySymbolHandle(0, {
         assertUsable: () => {
           if (this.#destroyed || this.#active.has(keyOf(position)))
-            throw new ReelError("SymbolRender is stale.");
+            throw new ReelError("SymbolHandle is stale.");
         },
         getPosition,
         getAnchor: () =>
@@ -284,7 +284,7 @@ export class RenderCellSpin extends Container implements CellSpin {
               this.#active.has(keyOf(position)) ||
               cell.reel.getSlotRenderView(0).code !== -1
             )
-              throw new ReelError("SymbolRender is stale.");
+              throw new ReelError("SymbolHandle is stale.");
             return getPosition();
           }),
       });
@@ -301,7 +301,7 @@ export class RenderCellSpin extends Container implements CellSpin {
         symbol: occurrence.symbol,
         owned: true,
         assertUsable: () => {
-          if (released) throw new ReelError("Owned SymbolRender is stale.");
+          if (released) throw new ReelError("Owned SymbolHandle is stale.");
         },
         clone: () =>
           createOwnedSource(
@@ -317,7 +317,7 @@ export class RenderCellSpin extends Container implements CellSpin {
         },
       };
     };
-    return createSymbolRender({
+    return createSymbolHandle({
       symbol: captured,
       owned: false,
       assertUsable: () => {
@@ -327,7 +327,7 @@ export class RenderCellSpin extends Container implements CellSpin {
           this.getOccurrenceGeneration(captured) !== generation ||
           cell.reel.getSlotRenderView(0).symbol !== captured
         )
-          throw new ReelError("SymbolRender is stale.");
+          throw new ReelError("SymbolHandle is stale.");
       },
       clone: () =>
         createOwnedSource(
@@ -344,7 +344,7 @@ export class RenderCellSpin extends Container implements CellSpin {
             this.#active.has(keyOf(position)) ||
             this.getOccurrenceGeneration(captured) !== generation
           )
-            throw new ReelError("SymbolRender is stale.");
+            throw new ReelError("SymbolHandle is stale.");
           return {
             x: cell.root.x + cell.reel.layout.cellWidth / 2,
             y: cell.root.y + cell.reel.layout.cellHeight / 2,
@@ -378,7 +378,7 @@ export class RenderCellSpin extends Container implements CellSpin {
   replaceSymbol(
     position: SymbolPosition,
     target: SymbolReplacementTarget,
-  ): SymbolRender {
+  ): SymbolHandle {
     return this.replaceSymbols([{ position, target }]).symbols[0]!;
   }
 

@@ -3,7 +3,7 @@ import type { RenderPoint } from "../presentation/render-object.js";
 import { combineRenderAnchors } from "../presentation/render-anchor.js";
 import { startSymbolStatePlaybackBatch } from "../reel/symbol-state-playback.js";
 import { SymbolAnimationError } from "./errors.js";
-import { getSymbolRenderAdapter, type SymbolRender } from "./symbol-render.js";
+import { getSymbolHandleAdapter, type SymbolHandle } from "./symbol-handle.js";
 import type {
   SymbolStateId,
   SymbolStatePlaybackOptions,
@@ -15,10 +15,10 @@ export interface SymbolGroupPlaybackOptions extends SymbolStatePlaybackOptions {
 }
 
 export interface SymbolGroup {
-  readonly symbols: readonly SymbolRender[];
+  readonly symbols: readonly SymbolHandle[];
   getAnchor(options?: { readonly align?: "center" }): RenderAnchor;
   /** Returns the input-order middle member. Even-sized groups are ambiguous and fail. */
-  getMiddleSymbol(): SymbolRender;
+  getMiddleSymbol(): SymbolHandle;
   /** Returns an area-local snapshot using member centers or selected cell bounds. */
   getCenter(options?: { readonly mode?: "members" | "bounds" }): RenderPoint;
   /** Stable area-local selected-cell footprint; never a display/texture bound. */
@@ -48,7 +48,7 @@ export interface SymbolGroupGeometrySource {
 }
 
 export function createSymbolGroup(
-  symbols: readonly SymbolRender[],
+  symbols: readonly SymbolHandle[],
   geometry?: SymbolGroupGeometrySource,
 ): SymbolGroup {
   if (symbols.length === 0)
@@ -97,7 +97,7 @@ export function createSymbolGroup(
       transitionMode?: SymbolStateTransitionMode,
     ) => {
       for (const symbol of members)
-        getSymbolRenderAdapter(symbol).validateStateRequest(
+        getSymbolHandleAdapter(symbol).validateStateRequest(
           state,
           transitionMode,
         );
@@ -109,7 +109,7 @@ export function createSymbolGroup(
     ) => {
       assertMappedLength(states, members.length, "states");
       for (const [index, symbol] of members.entries())
-        getSymbolRenderAdapter(symbol).validateStateRequest(
+        getSymbolHandleAdapter(symbol).validateStateRequest(
           states[index]!,
           transitionMode,
         );
@@ -119,7 +119,7 @@ export function createSymbolGroup(
     setValues: (values: readonly (number | null)[]) => {
       assertMappedLength(values, members.length, "values");
       for (const [index, symbol] of members.entries())
-        getSymbolRenderAdapter(symbol).validateValue(values[index]!);
+        getSymbolHandleAdapter(symbol).validateValue(values[index]!);
       for (const [index, symbol] of members.entries())
         symbol.setValue(values[index]!);
     },
@@ -135,7 +135,7 @@ export function createSymbolGroup(
           ),
         );
       for (const symbol of members)
-        getSymbolRenderAdapter(symbol).validateStatePlayback(state, playback);
+        getSymbolHandleAdapter(symbol).validateStatePlayback(state, playback);
       if (mode === "sequential")
         return members.reduce(
           (job, symbol) => job.then(() => symbol.playState(state, playback)),
@@ -153,13 +153,13 @@ export function createSymbolGroup(
 }
 
 function preflightMembers(
-  symbols: readonly SymbolRender[],
+  symbols: readonly SymbolHandle[],
 ): readonly RenderPoint[] {
   return symbols.map((symbol) => symbol.getPosition());
 }
 
 function resolveCellBounds(
-  symbols: readonly SymbolRender[],
+  symbols: readonly SymbolHandle[],
   geometry: SymbolGroupGeometrySource | undefined,
 ): SymbolCellBounds {
   preflightMembers(symbols);

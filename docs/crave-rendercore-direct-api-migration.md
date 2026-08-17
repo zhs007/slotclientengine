@@ -16,7 +16,7 @@
 | Crave 当前调用                                                                       | 新调用                                                                    | 说明                                         |
 | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- | -------------------------------------------- |
 | `setMainReelSymbolPresentationValue(x,y,value)` 循环                                 | `runtime.getSymbolMutationArea("main").getSymbols(pos).setValues(values)` | 全量 preflight 后映射提交                    |
-| 已删除：`prepareMainReelVisibleOccurrenceReplacement(...); commit(); destroy()`      | `runtime.getSymbolMutationArea("main").replaceSymbol(pos,{code,value})`   | 一次原子 replacement，返回新 SymbolRender    |
+| 已删除：`prepareMainReelVisibleOccurrenceReplacement(...); commit(); destroy()`      | `runtime.getSymbolMutationArea("main").replaceSymbol(pos,{code,value})`   | 一次原子 replacement，返回新 SymbolHandle    |
 | 多个 replacement 循环                                                                | `replaceSymbols(replacements)`                                            | 整批先 prepare，再提交；返回 SymbolGroup     |
 | 已删除：`prepareMainReelVisibleOccurrenceTransferBatch + RAF + setProgress + commit` | `await runtime.transferMainReelSymbols({transfers,durationMs,signal})`    | runtime ticker 推进，无 RAF/manual lifecycle |
 | `createGridCellCascadeDropPlan + startMainReelCascadeDrop + waitForReelActivity`     | `await runtime.dropMainReelOccurrences({movements,valueCommits,signal})`  | 仅当 Crave 已有 render-ready movement 时替换 |

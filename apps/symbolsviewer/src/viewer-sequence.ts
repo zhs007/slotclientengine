@@ -2,7 +2,7 @@ import type {
   SymbolCascadeWinPresentationMap,
   SymbolSequenceStep,
   SymbolStatePreset,
-} from "@slotclientengine/rendercore";
+} from "@slotclientengine/rendercore/symbol/editor";
 
 export const VIEWER_STATE_ORDER = Object.freeze([
   "normal",

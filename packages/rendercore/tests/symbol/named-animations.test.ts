@@ -1,7 +1,7 @@
 import { Texture } from "pixi.js";
 import { describe, expect, it } from "vitest";
 import {
-  RenderSymbol,
+  SymbolPlayer,
   SymbolAnimationError,
   createDefaultSymbolAnimationResolver,
   createDefaultSymbolStatePreset,
@@ -31,10 +31,10 @@ const createTexture = (width = 32, height = 32) => {
   return texture;
 };
 
-function createLayeredRenderSymbol(
+function createLayeredSymbolPlayer(
   profiles: SymbolAnimationProfileMap,
-): RenderSymbol {
-  return new RenderSymbol({
+): SymbolPlayer {
+  return new SymbolPlayer({
     definition: createDefinition(),
     texture: {
       kind: "layered",
@@ -51,10 +51,10 @@ function createLayeredRenderSymbol(
   });
 }
 
-function createLayeredRenderSymbolWithKeyframes(
+function createLayeredSymbolPlayerWithKeyframes(
   profiles: SymbolAnimationProfileMap,
 ): {
-  readonly renderSymbol: RenderSymbol;
+  readonly symbolPlayer: SymbolPlayer;
   readonly frames: readonly Texture[];
 } {
   const frames = [
@@ -66,7 +66,7 @@ function createLayeredRenderSymbolWithKeyframes(
   ];
   return {
     frames,
-    renderSymbol: new RenderSymbol({
+    symbolPlayer: new SymbolPlayer({
       definition: createDefinition("RS"),
       texture: {
         kind: "layered",
@@ -86,7 +86,7 @@ function createLayeredRenderSymbolWithKeyframes(
 
 describe("named symbol animations", () => {
   it("runs layer bounce and layer shine without changing layer 0", () => {
-    const renderSymbol = createLayeredRenderSymbol({
+    const symbolPlayer = createLayeredSymbolPlayer({
       SC: {
         appear: {
           playback: "once",
@@ -117,11 +117,11 @@ describe("named symbol animations", () => {
       },
     });
 
-    renderSymbol.requestState("appear");
-    expect(renderSymbol.overlayLayer.children.length).toBe(2);
-    renderSymbol.update(0.1);
+    symbolPlayer.requestState("appear");
+    expect(symbolPlayer.overlayLayer.children.length).toBe(2);
+    symbolPlayer.update(0.1);
 
-    const [baseLayer, bounceLayer, shineLayer] = renderSymbol.getLayerSprites();
+    const [baseLayer, bounceLayer, shineLayer] = symbolPlayer.getLayerSprites();
     expect(baseLayer.sprite.scale.x).toBe(1);
     expect(baseLayer.sprite.y).toBe(0);
     expect(bounceLayer.sprite.scale.x).toBeGreaterThan(1);
@@ -129,21 +129,21 @@ describe("named symbol animations", () => {
     expect(bounceLayer.sprite.rotation).toBeLessThan(0);
     expect(shineLayer.sprite.scale.x).toBeGreaterThan(1);
     expect(shineLayer.sprite.rotation).toBeGreaterThan(0);
-    expect(renderSymbol.overlayLayer.children[0]?.alpha ?? 0).toBeGreaterThan(
+    expect(symbolPlayer.overlayLayer.children[0]?.alpha ?? 0).toBeGreaterThan(
       0,
     );
 
-    const completed = renderSymbol.update(1);
+    const completed = symbolPlayer.update(1);
     expect(completed.onceCompleted).toBe(true);
     expect(bounceLayer.sprite.scale.x).toBe(1);
     expect(bounceLayer.sprite.rotation).toBe(0);
     expect(shineLayer.sprite.scale.x).toBe(1);
     expect(shineLayer.sprite.rotation).toBe(0);
-    expect(renderSymbol.overlayLayer.children.length).toBe(0);
+    expect(symbolPlayer.overlayLayer.children.length).toBe(0);
   });
 
   it("runs staggered shine across explicit layers", () => {
-    const renderSymbol = createLayeredRenderSymbol({
+    const symbolPlayer = createLayeredSymbolPlayer({
       SC: {
         win: {
           playback: "once",
@@ -163,24 +163,24 @@ describe("named symbol animations", () => {
       },
     });
 
-    renderSymbol.requestState("win");
-    expect(renderSymbol.overlayLayer.children.length).toBe(6);
-    renderSymbol.update(0.12);
+    symbolPlayer.requestState("win");
+    expect(symbolPlayer.overlayLayer.children.length).toBe(6);
+    symbolPlayer.update(0.12);
     const [firstLayer, secondLayer, thirdLayer] =
-      renderSymbol.getLayerSprites();
+      symbolPlayer.getLayerSprites();
     expect(firstLayer.sprite.scale.x).toBeGreaterThan(1);
     expect(secondLayer.sprite.scale.x).toBeGreaterThanOrEqual(1);
     expect(thirdLayer.sprite.scale.x).toBe(1);
 
-    renderSymbol.update(1);
-    expect(renderSymbol.overlayLayer.children.length).toBe(0);
+    symbolPlayer.update(1);
+    expect(symbolPlayer.overlayLayer.children.length).toBe(0);
     expect(
-      renderSymbol.getLayerSprites().map((layer) => layer.sprite.scale.x),
+      symbolPlayer.getLayerSprites().map((layer) => layer.sprite.scale.x),
     ).toEqual([1, 1, 1]);
   });
 
   it("runs layer texture sequence and restores the static layer texture on completion", () => {
-    const { renderSymbol, frames } = createLayeredRenderSymbolWithKeyframes({
+    const { symbolPlayer, frames } = createLayeredSymbolPlayerWithKeyframes({
       RS: {
         win: {
           playback: "once",
@@ -198,26 +198,26 @@ describe("named symbol animations", () => {
         },
       },
     });
-    const [, animatedLayer, shineLayer] = renderSymbol.getLayerSprites();
+    const [, animatedLayer, shineLayer] = symbolPlayer.getLayerSprites();
 
-    renderSymbol.requestState("win");
+    symbolPlayer.requestState("win");
     expect(animatedLayer.sprite.texture).toBe(frames[0]);
-    expect(renderSymbol.overlayLayer.children.length).toBe(4);
+    expect(symbolPlayer.overlayLayer.children.length).toBe(4);
 
-    renderSymbol.update(0.11);
+    symbolPlayer.update(0.11);
     expect(animatedLayer.sprite.texture).toBe(frames[1]);
     expect(shineLayer.sprite.scale.x).toBeGreaterThanOrEqual(1);
 
-    renderSymbol.update(0.11);
+    symbolPlayer.update(0.11);
     expect(animatedLayer.sprite.texture).toBe(frames[2]);
 
-    renderSymbol.update(1);
+    symbolPlayer.update(1);
     expect(animatedLayer.sprite.texture).toBe(frames[0]);
-    expect(renderSymbol.overlayLayer.children.length).toBe(0);
+    expect(symbolPlayer.overlayLayer.children.length).toBe(0);
   });
 
   it("supports explicit frame duration and delayed layer texture sequences", () => {
-    const { renderSymbol, frames } = createLayeredRenderSymbolWithKeyframes({
+    const { symbolPlayer, frames } = createLayeredSymbolPlayerWithKeyframes({
       RS: {
         win: {
           playback: "once",
@@ -236,18 +236,18 @@ describe("named symbol animations", () => {
         },
       },
     });
-    const animatedLayer = renderSymbol.getLayerSprites()[1];
+    const animatedLayer = symbolPlayer.getLayerSprites()[1];
 
-    renderSymbol.requestState("win");
-    renderSymbol.update(0.04);
+    symbolPlayer.requestState("win");
+    symbolPlayer.update(0.04);
     expect(animatedLayer.sprite.texture).toBe(frames[0]);
 
-    renderSymbol.update(0.11);
+    symbolPlayer.update(0.11);
     expect(animatedLayer.sprite.texture).toBe(frames[2]);
   });
 
   it("keeps single sprite appear and win shine available through named profiles", () => {
-    const renderSymbol = new RenderSymbol({
+    const symbolPlayer = new SymbolPlayer({
       definition: createDefinition("S00"),
       texture: createTexture(),
       animationResolver: createNamedSymbolAnimationResolver({
@@ -273,22 +273,22 @@ describe("named symbol animations", () => {
       }),
     });
 
-    renderSymbol.requestState("appear");
-    renderSymbol.update(0.2);
-    expect(renderSymbol.sprite.scale.x).toBeGreaterThan(1.39);
-    renderSymbol.update(1);
-    expect(renderSymbol.sprite.scale.x).toBe(1);
+    symbolPlayer.requestState("appear");
+    symbolPlayer.update(0.2);
+    expect(symbolPlayer.sprite.scale.x).toBeGreaterThan(1.39);
+    symbolPlayer.update(1);
+    expect(symbolPlayer.sprite.scale.x).toBe(1);
 
-    renderSymbol.requestState("win");
-    expect(renderSymbol.overlayLayer.children.length).toBe(2);
-    renderSymbol.update(0.2);
-    expect(renderSymbol.sprite.scale.x).toBeGreaterThan(1.19);
-    renderSymbol.update(1);
-    expect(renderSymbol.overlayLayer.children.length).toBe(0);
+    symbolPlayer.requestState("win");
+    expect(symbolPlayer.overlayLayer.children.length).toBe(2);
+    symbolPlayer.update(0.2);
+    expect(symbolPlayer.sprite.scale.x).toBeGreaterThan(1.19);
+    symbolPlayer.update(1);
+    expect(symbolPlayer.overlayLayer.children.length).toBe(0);
   });
 
   it("runs single sprite underlay scale without scaling the main sprite", () => {
-    const renderSymbol = new RenderSymbol({
+    const symbolPlayer = new SymbolPlayer({
       definition: createDefinition("WL"),
       texture: createTexture(),
       animationResolver: createNamedSymbolAnimationResolver({
@@ -310,26 +310,26 @@ describe("named symbol animations", () => {
       }),
     });
 
-    renderSymbol.requestState("appear");
-    expect(renderSymbol.underlayLayer.children.length).toBe(1);
-    const underlaySprite = renderSymbol.underlayLayer
+    symbolPlayer.requestState("appear");
+    expect(symbolPlayer.underlayLayer.children.length).toBe(1);
+    const underlaySprite = symbolPlayer.underlayLayer
       .children[0] as import("pixi.js").Sprite;
 
-    renderSymbol.update(0.2);
-    expect(renderSymbol.sprite.scale.x).toBe(1);
+    symbolPlayer.update(0.2);
+    expect(symbolPlayer.sprite.scale.x).toBe(1);
     expect(underlaySprite.scale.x).toBeGreaterThan(1.59);
     expect(underlaySprite.alpha).toBeGreaterThan(0);
     expect(underlaySprite.alpha).toBeLessThanOrEqual(0.4);
 
-    renderSymbol.update(1);
-    expect(renderSymbol.sprite.scale.x).toBe(1);
-    expect(renderSymbol.underlayLayer.children.length).toBe(0);
+    symbolPlayer.update(1);
+    expect(symbolPlayer.sprite.scale.x).toBe(1);
+    expect(symbolPlayer.underlayLayer.children.length).toBe(0);
   });
 
   it("fails fast for missing fallback, unknown effects, bad layers and invalid params", () => {
     expect(
       () =>
-        new RenderSymbol({
+        new SymbolPlayer({
           definition: createDefinition(),
           texture: createTexture(),
           animationResolver: createNamedSymbolAnimationResolver({
@@ -339,7 +339,7 @@ describe("named symbol animations", () => {
     ).toThrow(SymbolAnimationError);
 
     expect(() =>
-      createLayeredRenderSymbol({
+      createLayeredSymbolPlayer({
         SC: {
           appear: {
             playback: "once",
@@ -351,7 +351,7 @@ describe("named symbol animations", () => {
     ).toThrow(/Unknown symbol animation/);
 
     expect(() =>
-      createLayeredRenderSymbol({
+      createLayeredSymbolPlayer({
         SC: {
           appear: {
             playback: "once",
@@ -363,7 +363,7 @@ describe("named symbol animations", () => {
     ).toThrow(/layer 9/);
 
     expect(() =>
-      createLayeredRenderSymbol({
+      createLayeredSymbolPlayer({
         SC: {
           appear: {
             playback: "once",
@@ -380,7 +380,7 @@ describe("named symbol animations", () => {
     ).toThrow(/maxScale/);
 
     expect(() =>
-      createLayeredRenderSymbol({
+      createLayeredSymbolPlayer({
         SC: {
           appear: {
             playback: "once",
@@ -397,7 +397,7 @@ describe("named symbol animations", () => {
     ).toThrow(/rotationDegrees/);
 
     expect(() =>
-      createLayeredRenderSymbol({
+      createLayeredSymbolPlayer({
         SC: {
           appear: {
             playback: "once",
@@ -414,7 +414,7 @@ describe("named symbol animations", () => {
     ).toThrow(/single-image symbol/);
 
     expect(() =>
-      new RenderSymbol({
+      new SymbolPlayer({
         definition: createDefinition("WL"),
         texture: createTexture(),
         animationResolver: createNamedSymbolAnimationResolver({
@@ -438,7 +438,7 @@ describe("named symbol animations", () => {
     ).toThrow(/maxScale/);
 
     expect(() =>
-      new RenderSymbol({
+      new SymbolPlayer({
         definition: createDefinition("WL"),
         texture: createTexture(),
         animationResolver: createNamedSymbolAnimationResolver({
@@ -462,7 +462,7 @@ describe("named symbol animations", () => {
     ).toThrow(/maxAlpha/);
 
     expect(() =>
-      createLayeredRenderSymbol({
+      createLayeredSymbolPlayer({
         SC: {
           appear: {
             playback: "loop",
@@ -474,7 +474,7 @@ describe("named symbol animations", () => {
     ).toThrow(/playback/);
 
     expect(() =>
-      createLayeredRenderSymbol({
+      createLayeredSymbolPlayer({
         SC: {
           win: {
             playback: "once",
@@ -486,7 +486,7 @@ describe("named symbol animations", () => {
     ).toThrow(/keyframes/);
 
     expect(() =>
-      createLayeredRenderSymbol({
+      createLayeredSymbolPlayer({
         SC: {
           win: {
             playback: "once",
@@ -498,7 +498,7 @@ describe("named symbol animations", () => {
     ).toThrow(/layer 9/);
 
     expect(() =>
-      createLayeredRenderSymbolWithKeyframes({
+      createLayeredSymbolPlayerWithKeyframes({
         RS: {
           win: {
             playback: "once",
@@ -511,11 +511,11 @@ describe("named symbol animations", () => {
             ],
           },
         },
-      }).renderSymbol.requestState("win"),
+      }).symbolPlayer.requestState("win"),
     ).toThrow(/durationRatio/);
 
     expect(() =>
-      createLayeredRenderSymbolWithKeyframes({
+      createLayeredSymbolPlayerWithKeyframes({
         RS: {
           win: {
             playback: "once",
@@ -528,7 +528,7 @@ describe("named symbol animations", () => {
             ],
           },
         },
-      }).renderSymbol.requestState("win"),
+      }).symbolPlayer.requestState("win"),
     ).toThrow(/Unknown animation param/);
   });
 });

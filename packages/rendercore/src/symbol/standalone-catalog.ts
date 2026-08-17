@@ -5,7 +5,7 @@ import type {
 import { SymbolAssetError } from "./errors.js";
 import { SymbolCatalogModel } from "./catalog.js";
 import type {
-  CreateCatalogRenderSymbolOptions,
+  CreateCatalogSymbolPlayerOptions,
   CreateStandaloneSymbolCatalogOptions,
   StandaloneSymbolCatalog,
 } from "./types.js";
@@ -52,19 +52,19 @@ export function createStandaloneSymbolCatalog(
     getTextureSet: (symbol: string) => base.getTextureSet(symbol),
     getNormalTextureSource: (symbol: string) =>
       base.getNormalTextureSource(symbol),
-    createRenderSymbol: (
+    createSymbolPlayer: (
       symbol: string,
-      renderOptions: CreateCatalogRenderSymbolOptions = {},
+      renderOptions: CreateCatalogSymbolPlayerOptions = {},
     ) => {
-      const renderSymbol = base.createRenderSymbol(symbol, {
+      const symbolPlayer = base.createSymbolPlayer(symbol, {
         ...renderOptions,
         renderPriority:
           renderOptions.renderPriority ??
           symbolRenderPriorities.get(symbol) ??
           0,
       });
-      renderSymbol.scale.set(symbolScales.get(symbol) ?? 1);
-      return renderSymbol;
+      symbolPlayer.scale.set(symbolScales.get(symbol) ?? 1);
+      return symbolPlayer;
     },
   });
 }

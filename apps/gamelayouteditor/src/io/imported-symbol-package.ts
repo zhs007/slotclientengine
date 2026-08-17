@@ -6,7 +6,7 @@ import {
   parseSymbolPackageManifest,
   resolveSymbolPackageFiles,
   type SymbolPackageResource,
-} from "@slotclientengine/rendercore/symbol";
+} from "@slotclientengine/rendercore/symbol/editor";
 import { packageKeyPrefix } from "./package-key-prefix.js";
 
 export const SYMBOL_ZIP_LIMITS = Object.freeze({

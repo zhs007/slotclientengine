@@ -5,7 +5,7 @@
 - `game002-s3`：任务 91 的发布目标，13 个主 symbol、12 个 Spine 4.3.23 skeleton。
 - `game003-s1`：现有游戏资源，Spine 4.3.23；由 rendercore 的官方 4.3.x runtime 解析和播放。
 
-`game002-s3` 的 display set 固定为 `WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN`，所有 scale 为 `1`。viewer 只把这 13 项放进 symbol selector；同名主 skeleton 仍是 12 个。`CN_1..CN_4` 仅作为当前 `CN.valuePresentation` manifest 精确引用的附属 Spine，通过生成闭包和 rendercore 的 `RenderSymbol` value controller 预览，不成为独立 symbol；`Nearwin*` 与 `WM_Fx` 仍不会被宽泛 glob 接入。
+`game002-s3` 的 display set 固定为 `WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN`，所有 scale 为 `1`。viewer 只把这 13 项放进 symbol selector；同名主 skeleton 仍是 12 个。`CN_1..CN_4` 仅作为当前 `CN.valuePresentation` manifest 精确引用的附属 Spine，通过生成闭包和 rendercore 的 `SymbolPlayer` value controller 预览，不成为独立 symbol；`Nearwin*` 与 `WM_Fx` 仍不会被宽泛 glob 接入。
 
 当当前 set 含 `valuePresentation` 时，toolbar 显示 positive integer Value、Apply Value 和 Clear Value。默认值 `25` 可预览当前 CN 第二档；输入 `9/10/99/100/999/1000` 可核对 manifest 边界和 ImgNumber。viewer 在 async set prepare 边界调用 rendercore 装配共享 nested dependency，数字按 resolved tier binding 挂到该档 exact slot；切 set、Reset、Clear 或销毁会释放 renderer/resource。viewer 不解析阈值、glyph 或 Spine slot lifecycle。
 

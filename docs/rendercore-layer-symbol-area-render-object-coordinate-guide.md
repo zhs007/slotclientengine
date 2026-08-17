@@ -63,7 +63,7 @@ const anchor = symbol.getAnchor();
 
 `getPosition()` 是当前 occurrence 中心在 area-local 坐标系中的数值快照。`getAnchor()` 捕获 exact occurrence，可在其它父节点下延迟解析。replacement、release、回池或 destroy 后旧 symbol/Anchor stale，不按相同格位绑定新 occurrence。
 
-空格唯一 code 为 `-1`，仍返回带位置与 Anchor 的 Empty `SymbolRender`；依赖真实素材的 state/text/value 操作会失败。
+空格唯一 code 为 `-1`，仍返回带位置与 Anchor 的 Empty `SymbolHandle`；依赖真实素材的 state/text/value 操作会失败。
 
 ### 一组 Symbols
 

@@ -3,7 +3,7 @@ import { assertValidDeltaSeconds } from "../symbol/ani.js";
 import { ReelError } from "./errors.js";
 import { assertLayoutMatchesReels } from "./layout.js";
 import { RenderReel } from "./render-reel.js";
-import { createRenderSymbolPool } from "./render-symbol-pool.js";
+import { createSymbolPlayerPool } from "./symbol-player-pool.js";
 import { startSymbolStatePlaybackBatch } from "./symbol-state-playback.js";
 import { getRenderObjectAdapter } from "../presentation/render-object.js";
 import {
@@ -55,24 +55,24 @@ import type {
   RenderReelSetSpinOptions,
   RenderReelSetSnapshot,
   RenderReelSetUpdateResult,
-  RenderSymbolPoolStats,
+  SymbolPlayerPoolStats,
   RenderVisibleSymbolGeometrySnapshot,
   RenderVisibleSymbolStateSnapshot,
-  RenderSymbolPool,
+  SymbolPlayerPool,
   GridCellCascadeDropPlan,
   GridCellCascadeValueMatrix,
   RenderReelVisibleOccurrence,
 } from "./types.js";
 import type {
-  RenderSymbol,
+  SymbolPlayer,
   SymbolStateId,
   SymbolStatePlaybackOptions,
   SymbolStateTransitionMode,
 } from "../symbol/index.js";
 import {
-  createSymbolRender,
-  type SymbolRender,
-} from "../symbol/symbol-render.js";
+  createSymbolHandle,
+  type SymbolHandle,
+} from "../symbol/symbol-handle.js";
 import { createSymbolGroup } from "../symbol/symbol-group.js";
 import type {
   SymbolPosition,
@@ -124,10 +124,10 @@ interface PresentationMotion {
 
 export class RenderReelSet extends Container implements ReelSpin {
   readonly reels: readonly RenderReel[];
-  readonly #symbolPool: RenderSymbolPool | null;
+  readonly #symbolPool: SymbolPlayerPool | null;
   readonly #slotLayer: Container;
   readonly #cascadeMask: Graphics;
-  readonly #occurrenceGenerations = new WeakMap<RenderSymbol, number>();
+  readonly #occurrenceGenerations = new WeakMap<SymbolPlayer, number>();
   readonly #atomicActive = new Map<number, ActiveAtomicReel>();
   readonly #reelAttachments: readonly {
     readonly layer: Container;
@@ -176,7 +176,7 @@ export class RenderReelSet extends Container implements ReelSpin {
     super();
     this.sortableChildren = true;
     assertLayoutMatchesReels(options.layout, options.reels.getReelCount());
-    this.#symbolPool = createRenderSymbolPool(options.symbolPool);
+    this.#symbolPool = createSymbolPlayerPool(options.symbolPool);
     const reelSpinDirection = options.reelSpin?.direction ?? "forward";
     if (reelSpinDirection !== "forward" && reelSpinDirection !== "backward")
       throw new ReelError(
@@ -596,7 +596,7 @@ export class RenderReelSet extends Container implements ReelSpin {
     return Object.freeze(this.reels.map((reel) => reel.getVisibleScene()));
   }
 
-  getSymbol(position: SymbolPosition): SymbolRender {
+  getSymbol(position: SymbolPosition): SymbolHandle {
     const reel = this.getReelAt(position.x);
     if (
       !Number.isInteger(position.y) ||
@@ -622,9 +622,9 @@ export class RenderReelSet extends Container implements ReelSpin {
           reel.layout.cellHeight / 2,
       });
     if (occurrence.code === -1) {
-      return reel.createVisibleEmptySymbolRender(position.y, {
+      return reel.createVisibleEmptySymbolHandle(position.y, {
         assertUsable: () => {
-          if (this.#destroyed) throw new ReelError("SymbolRender is stale.");
+          if (this.#destroyed) throw new ReelError("SymbolHandle is stale.");
         },
         getPosition,
         getAnchor: () =>
@@ -633,7 +633,7 @@ export class RenderReelSet extends Container implements ReelSpin {
               this.#destroyed ||
               reel.getSlotRenderView(position.y).code !== -1
             )
-              throw new ReelError("SymbolRender is stale.");
+              throw new ReelError("SymbolHandle is stale.");
             return getPosition();
           }),
       });
@@ -652,7 +652,7 @@ export class RenderReelSet extends Container implements ReelSpin {
         symbol: symbolOccurrence.symbol,
         owned: true,
         assertUsable: () => {
-          if (released) throw new ReelError("Owned SymbolRender is stale.");
+          if (released) throw new ReelError("Owned SymbolHandle is stale.");
         },
         clone: () =>
           createOwnedSource(
@@ -668,7 +668,7 @@ export class RenderReelSet extends Container implements ReelSpin {
         },
       };
     };
-    return createSymbolRender({
+    return createSymbolHandle({
       symbol: captured,
       owned: false,
       assertUsable: () => {
@@ -677,7 +677,7 @@ export class RenderReelSet extends Container implements ReelSpin {
           this.getOccurrenceGeneration(captured) !== generation ||
           !this.isOccurrenceOwned(captured)
         )
-          throw new ReelError("SymbolRender is stale.");
+          throw new ReelError("SymbolHandle is stale.");
       },
       clone: () =>
         createOwnedSource(
@@ -694,7 +694,7 @@ export class RenderReelSet extends Container implements ReelSpin {
             this.getOccurrenceGeneration(captured) !== generation ||
             !this.isOccurrenceOwned(captured)
           )
-            throw new ReelError("SymbolRender is stale.");
+            throw new ReelError("SymbolHandle is stale.");
           return {
             x: reel.x + reel.layout.cellWidth / 2,
             y:
@@ -733,7 +733,7 @@ export class RenderReelSet extends Container implements ReelSpin {
   replaceSymbol(
     position: SymbolPosition,
     target: SymbolReplacementTarget,
-  ): SymbolRender {
+  ): SymbolHandle {
     return this.replaceSymbols([{ position, target }]).symbols[0]!;
   }
 
@@ -1170,7 +1170,7 @@ export class RenderReelSet extends Container implements ReelSpin {
     });
   }
 
-  getSymbolPoolStats(): RenderSymbolPoolStats | null {
+  getSymbolPoolStats(): SymbolPlayerPoolStats | null {
     return this.#symbolPool?.getStats() ?? null;
   }
 
@@ -1785,7 +1785,7 @@ export class RenderReelSet extends Container implements ReelSpin {
       if (slot.symbol) this.bumpOccurrenceGeneration(slot.symbol);
   }
 
-  private isOccurrenceOwned(symbol: RenderSymbol): boolean {
+  private isOccurrenceOwned(symbol: SymbolPlayer): boolean {
     if (
       this.reels.some((candidate) =>
         candidate.getSlotRenderViews().some((slot) => slot.symbol === symbol),
@@ -1799,11 +1799,11 @@ export class RenderReelSet extends Container implements ReelSpin {
     );
   }
 
-  private getOccurrenceGeneration(symbol: RenderSymbol): number {
+  private getOccurrenceGeneration(symbol: SymbolPlayer): number {
     return this.#occurrenceGenerations.get(symbol) ?? 0;
   }
 
-  private bumpOccurrenceGeneration(symbol: RenderSymbol): void {
+  private bumpOccurrenceGeneration(symbol: SymbolPlayer): void {
     this.#occurrenceGenerations.set(
       symbol,
       this.getOccurrenceGeneration(symbol) + 1,
@@ -1815,8 +1815,8 @@ export class RenderReelSet extends Container implements ReelSpin {
       this.bumpOccurrenceGeneration(symbol);
   }
 
-  private getVisibleOccurrenceSymbols(): ReadonlySet<RenderSymbol> {
-    const symbols = new Set<RenderSymbol>();
+  private getVisibleOccurrenceSymbols(): ReadonlySet<SymbolPlayer> {
+    const symbols = new Set<SymbolPlayer>();
     for (const reel of this.reels)
       for (const slot of reel.getSlotRenderViews())
         if (slot.symbol) symbols.add(slot.symbol);

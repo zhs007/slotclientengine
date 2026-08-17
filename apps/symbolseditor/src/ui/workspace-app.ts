@@ -1,7 +1,7 @@
 import {
   createSymbolPackageResource,
   type GeneratedSymbolStateTextureId,
-} from "@slotclientengine/rendercore/symbol";
+} from "@slotclientengine/rendercore/symbol/editor";
 import {
   createBoundedSourceIndex,
   ephemeralContentFingerprint,

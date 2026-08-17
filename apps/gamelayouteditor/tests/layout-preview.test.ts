@@ -143,10 +143,10 @@ function symbolResource(
     0: { code: 0, symbol: "A", pays: [1] },
     1: { code: 1, symbol: "B", pays: [1] },
   } as const;
-  const renderSymbols: Array<ReturnType<typeof createRenderSymbol>> = [];
+  const renderSymbols: Array<ReturnType<typeof createSymbolPlayer>> = [];
   const catalog = {
-    createRenderSymbol: vi.fn((symbol: string) => {
-      const rendered = createRenderSymbol(symbol);
+    createSymbolPlayer: vi.fn((symbol: string) => {
+      const rendered = createSymbolPlayer(symbol);
       renderSymbols.push(rendered);
       return rendered;
     }),
@@ -190,7 +190,7 @@ function symbolResource(
   return { resource, catalog, renderSymbols };
 }
 
-function createRenderSymbol(symbol: string) {
+function createSymbolPlayer(symbol: string) {
   return {
     symbol,
     scale: { set: vi.fn() },
@@ -243,8 +243,24 @@ vi.mock("pixi.js", () => ({
   },
 }));
 
-vi.mock("@slotclientengine/rendercore/symbol", () => ({
+vi.mock("@slotclientengine/rendercore/symbol/editor", () => ({
   createSymbolPackageValueControllerFactory: vi.fn(() => undefined),
+  createSymbolPreviewPlayer: vi.fn(
+    ({
+      catalog,
+      symbol,
+    }: {
+      catalog: {
+        createSymbolPlayer(
+          symbol: string,
+        ): ReturnType<typeof createSymbolPlayer>;
+      };
+      symbol: string;
+    }) => {
+      const player = catalog.createSymbolPlayer(symbol);
+      return { ...player, view: player };
+    },
+  ),
 }));
 
 vi.mock("../src/io/imported-layout-zip.js", () => ({
@@ -491,7 +507,7 @@ describe("LayoutPreview", () => {
       ["B", "A"],
       ["B", "A"],
     ]);
-    expect(catalog.createRenderSymbol).toHaveBeenCalledTimes(4);
+    expect(catalog.createSymbolPlayer).toHaveBeenCalledTimes(4);
     expect(renderSymbols[0].position.set).toHaveBeenCalledWith(10, 10);
     expect(renderSymbols[1].position.set).toHaveBeenCalledWith(35, 10);
     expect(renderSymbols[2].position.set).toHaveBeenCalledWith(10, 33);
@@ -538,7 +554,7 @@ describe("LayoutPreview", () => {
     preview.setSelectedLayer("bg");
 
     expect(state.runtime.applyGeometryManifest).toHaveBeenCalledOnce();
-    expect(catalog.createRenderSymbol).toHaveBeenCalledTimes(4);
+    expect(catalog.createSymbolPlayer).toHaveBeenCalledTimes(4);
     expect(state.graphicsRect).toHaveBeenCalledWith(12, 14, 30, 40);
     expect(state.graphicsStroke).toHaveBeenCalledWith({
       alpha: 1,

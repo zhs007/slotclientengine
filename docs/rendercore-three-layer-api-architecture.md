@@ -34,7 +34,7 @@ LogicCore immutable execution result
 
 | 层级   | 当前状态                       | 主要内容                                                                                                 |
 | ------ | ------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| 第一层 | 已实施，进入合同收口阶段       | `SymbolArea`、`SymbolRender`、`RenderObject`、`RenderObjectLayer`、`ReelSpin`、`CellSpin`、原子 mutation |
+| 第一层 | 已实施，进入合同收口阶段       | `SymbolArea`、`SymbolHandle`、`RenderObject`、`RenderObjectLayer`、`ReelSpin`、`CellSpin`、原子 mutation |
 | 第二层 | 骨架已实施，继续由真实游戏补齐 | `SymbolGroup`、`RenderAnchor`、`PresentationScope`、motion/transfer、spin session、area spin factory     |
 | 第三层 | 只确定方向，尚未实施           | standard reel、cascade、hold-and-respin 等可选玩法模板                                                   |
 
@@ -52,8 +52,8 @@ LogicCore immutable execution result
 
 核心入口和对象包括：
 
-- `SymbolArea.getSymbol(pos)`：从具体 area 实例取得当前位置的 exact `SymbolRender`；
-- `SymbolRender`：改变 state/value/text，播放 state，附加或移除 `RenderObject`，取得位置或 anchor，创建 owned clone；
+- `SymbolArea.getSymbol(pos)`：从具体 area 实例取得当前位置的 exact `SymbolHandle`；
+- `SymbolHandle`：改变 state/value/text，播放 state，附加或移除 `RenderObject`，取得位置或 anchor，创建 owned clone；
 - `RenderObject`：统一表达文本、图片、Spine、粒子、光效、VNI 及后续 typed custom object；
 - `RenderObjectLayer`：统一表达area、Scene顶层和exact named node的安全attachment、local anchor与原子对齐挂载；
 - `ReelSpin.roll/start/settle/cancel`：执行单列原子运动；
@@ -81,10 +81,10 @@ const landed = area.getSymbol({ x: 2, y: 1 });
 - 不论普通整列转、单格转或 legacy grid-cell，落停后都通过相同的 `getSymbol(pos)` 取得 symbol。
 - `getSymbol()` 捕获 exact occurrence。replacement、release、回池或 area destroy 后旧 façade stale，不按坐标偷偷重绑。
 - `-1` 是所有 symbol area 和 spin 模型唯一的空图标 code，其它负数非法。
-- 空位置同样返回内置的轻量 Empty `SymbolRender`。它没有贴图、动画资源或 pool entry，但保留 position、anchor 和节点附加能力；需要真实资源的 state、text 和非 null value 操作显式失败。
+- 空位置同样返回内置的轻量 Empty `SymbolHandle`。它没有贴图、动画资源或 pool entry，但保留 position、anchor 和节点附加能力；需要真实资源的 state、text 和非 null value 操作显式失败。
 - reel 内 occurrence 是 borrowed，游戏不能 destroy；`clone()` 等显式创建的对象是 owned，按调用合同清理。
 - state、资源、节点名、symbol code、position、ownership 或生命周期非法时显式失败，不使用 fallback 或 placeholder。
-- 游戏不能取得内部 `RenderSymbol`、player、pool entry、Pixi `Container`、matrix 或 mutable display tree。
+- 游戏不能取得内部 `SymbolPlayer`、player、pool entry、Pixi `Container`、matrix 或 mutable display tree。
 
 ### 第一层禁止内容
 

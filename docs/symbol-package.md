@@ -35,3 +35,7 @@ non-Spine `spinBlur` target 可显式声明 `spinBlurProfile`，引用一份布�
 Symbols Editor 只有一个多文件/ZIP importer和一个全局 asset workspace。image-string dependency 只保存 root/keys/manifest 描述，bytes 不另建 namespace。Game Layout vendoring 也只把 dependency root/keys 合并进全局 map。
 
 JSON/ZIP deterministic；同 bytes + extension 可以共享物理 payload，但每个 filename key 和业务绑定保持独立。
+
+## RenderCore 入口
+
+Symbols package 的公开入口按职责拆分为 `@slotclientengine/rendercore/symbol/data`、`/core` 与 `/editor`。旧 `@slotclientengine/rendercore/symbol` 和 root symbol wildcard 已移除。游戏 runtime 使用 data/core；Symbols authoring、mapped package 和 standalone preview 使用 editor。公开 occurrence capability 为 `SymbolHandle`，内部 mutable Pixi player 不属于 package API。
