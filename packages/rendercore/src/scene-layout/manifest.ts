@@ -24,7 +24,7 @@ import {
   normalizeLegacySceneLayoutPresentationOrders,
   parseSceneLayoutManifestV2,
 } from "./manifest-v2.js";
-import { parseSceneLayoutManifestV3 } from "./manifest-v3.js";
+import { upgradeSceneLayoutManifestToLatest } from "./manifest-v3.js";
 
 const PATH_SEGMENT = /^[A-Za-z0-9._-]+$/;
 const IDENTIFIER = /^[a-z0-9][a-z0-9._-]*$/;
@@ -34,13 +34,16 @@ export const DEFAULT_SCENE_LAYOUT_POPUP_ORDER = 2000;
 export function parseSceneLayoutManifest(
   value: unknown,
 ): SceneLayoutManifestV1 {
+  const sourceRecord = readRecord(value, "scene layout manifest");
+  if (sourceRecord.version === 3)
+    return materializeInitialSceneLayoutManifest(
+      upgradeSceneLayoutManifestToLatest(value),
+    );
   const normalized = normalizeLegacySceneLayoutPresentationOrders(value);
   const record = readRecord(normalized, "scene layout manifest");
-  if (record.version === 2 || record.version === 3)
+  if (record.version === 2)
     return materializeInitialSceneLayoutManifest(
-      record.version === 3
-        ? parseSceneLayoutManifestV3(normalized)
-        : parseSceneLayoutManifestV2(normalized),
+      parseSceneLayoutManifestV2(normalized),
     );
   return parseSceneLayoutManifestV1(normalized);
 }
@@ -48,9 +51,11 @@ export function parseSceneLayoutManifest(
 export function parseSceneLayoutManifestDocument(
   value: unknown,
 ): SceneLayoutManifest {
+  const sourceRecord = readRecord(value, "scene layout manifest");
+  if (sourceRecord.version === 3)
+    return upgradeSceneLayoutManifestToLatest(value);
   const normalized = normalizeLegacySceneLayoutPresentationOrders(value);
   const record = readRecord(normalized, "scene layout manifest");
-  if (record.version === 3) return parseSceneLayoutManifestV3(normalized);
   if (record.version === 2) return parseSceneLayoutManifestV2(normalized);
   return parseSceneLayoutManifestV1(normalized);
 }

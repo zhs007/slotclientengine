@@ -1,5 +1,6 @@
 import { SceneLayoutError } from "./errors.js";
 import {
+  normalizeLegacySceneLayoutPresentationOrders,
   parseSceneLayoutManifestV2,
   upgradeSceneLayoutManifestToV2,
 } from "./manifest-v2.js";
@@ -39,7 +40,20 @@ export function upgradeSceneLayoutManifestToLatest(
   value: unknown,
 ): SceneLayoutManifestLatest {
   const root = record(value, "scene layout manifest");
-  if (root.version === 3) return parseSceneLayoutManifestV3(value);
+  if (root.version === 3) {
+    const normalized = normalizeLegacySceneLayoutPresentationOrders(value);
+    if (normalized === value) return parseSceneLayoutManifestV3(value);
+    const { runtimeAllocation: _allocation, ...source } = record(
+      normalized,
+      "scene layout manifest",
+    );
+    const parsedV2 = parseSceneLayoutManifestV2({ ...source, version: 2 });
+    return parseSceneLayoutManifestV3({
+      ...parsedV2,
+      version: 3,
+      runtimeAllocation: createSceneLayoutRuntimeAllocation(parsedV2),
+    });
+  }
   const source = upgradeSceneLayoutManifestToV2(value);
   return parseSceneLayoutManifestV3({
     ...source,

@@ -22,7 +22,7 @@
 - stable Spine background 只使用显式 single loop。未来稳定背景 kind 也遵守 exact-resource 和 stable-node 合同。
 - 普通 scene node 可使用 official Spine 或 runtime VNI：Spine 显式选择 animation/loop，VNI 播放完整 timeline 并显式选择 loop；每个 node 保持独立 player/playhead。新建普通 Spine node 的骨架原点放在各 variant art center（`top-left` 坐标写入 `artSize / 2`，`center` 坐标写入 `0,0`），不得要求或使用 skeleton bounds/atlas texture 尺寸；Spine background 仍要求显式完整 art size。VNI 不得作为 background 或 transition。
 - VNI scene node 的 `project.stage` 是 100% art-space 尺寸；top-left 原点对齐 stage 左上角，center 原点对齐 stage 中心。runtime 使用宿主 ticker 手动 update，并跳过不可渲染节点。
-- 普通 scene node 和 main reel 的 order 可由用户显式编辑并保留稀疏值；canonical v3 中 node、main reel、Popup root 的 order 全局唯一。v1/v2 老数据的冲突只由 RenderCore 默认 parser/latest upgrader 确定性重排，所有 editor 和 game runtime 复用该结果；Editor 重导后写入已修复的 v3。Popup root 默认从 `2000` 分配且必须高于全部 node/main reel。背景与 main reel 在 editor 大纲中继续特殊展示，不以此禁止普通 node 跨越 reel order。
+- 普通 scene node 和 main reel 的 order 可由用户显式编辑并保留稀疏值；canonical v3 中 node、main reel、Popup root 的 order 全局唯一。历史数据（包括此前已导出的 v3）的冲突只由 RenderCore 默认 parser/latest upgrader 确定性重排，修复 v3 时同步重建 runtimeAllocation，所有 editor 和 game runtime 复用该结果；显式 v3 parser 仍执行 strict canonical 校验，Editor 重导后写入已修复的 v3。Popup root 默认从 `2000` 分配且必须高于全部 node/main reel。背景与 main reel 在 editor 大纲中继续特殊展示，不以此禁止普通 node 跨越 reel order。
 - 普通 scene node 的 optional `gameMode` 表示 exact 单一 mode 作用域；字段缺失表示全局并兼容旧 v1 数据。background node 禁止声明该字段。最终可见性是 mode 作用域匹配与当前 variant placement 的 AND；不可见不删除 node、不改变全局 order。mode rename 必须改写引用，仍有 scoped node 引用时禁止删除。
 
 ## Symbols binding 与 preview

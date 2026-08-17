@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   parseSceneLayoutManifestDocument,
+  parseSceneLayoutManifestV3,
   upgradeSceneLayoutManifestToLatest,
 } from "../../src/scene-layout/index.js";
 import { game002LayoutFixture } from "./fixtures.js";
@@ -87,8 +88,15 @@ describe("scene layout manifest v3", () => {
 
     const conflictedV3 = structuredClone(validV3) as any;
     conflictedV3.reels.main.order = conflictedV3.nodes[0].order;
-    expect(() => upgradeSceneLayoutManifestToLatest(conflictedV3)).toThrow(
+    expect(() => parseSceneLayoutManifestV3(conflictedV3)).toThrow(
       /order.*unique/,
+    );
+    const repairedV3 = parseSceneLayoutManifestDocument(conflictedV3);
+    expect(repairedV3.version).toBe(3);
+    expect(repairedV3.nodes[0].order).toBe(1);
+    expect(repairedV3.reels.main.order).toBe(0);
+    expect(upgradeSceneLayoutManifestToLatest(conflictedV3)).toEqual(
+      repairedV3,
     );
   });
 });

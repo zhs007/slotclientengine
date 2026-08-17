@@ -642,7 +642,11 @@ export function normalizeLegacySceneLayoutPresentationOrders(
   value: unknown,
 ): unknown {
   const source = mutableRecord(value);
-  if (!source || (source.version !== 1 && source.version !== 2)) return value;
+  if (
+    !source ||
+    (source.version !== 1 && source.version !== 2 && source.version !== 3)
+  )
+    return value;
   const draft = structuredClone(source);
   const nodes = Array.isArray(draft.nodes) ? draft.nodes : undefined;
   if (!nodes || nodes.length === 0) return draft;
@@ -669,7 +673,9 @@ export function normalizeLegacySceneLayoutPresentationOrders(
   const hasArtConflict =
     new Set(authoredOrders).size !== authoredOrders.length ||
     (typeof reelOrder === "number" && authoredOrders.includes(reelOrder));
+  let repaired = false;
   if (hasArtConflict) {
+    repaired = true;
     const { initialBackgrounds, allBackgrounds } =
       legacyBackgroundGroups(draft);
     validNodes.sort((left, right) => {
@@ -707,24 +713,25 @@ export function normalizeLegacySceneLayoutPresentationOrders(
     }
   }
 
-  normalizeLegacyPopupOrders(draft, validNodes, reelOrder);
-  return draft;
+  repaired =
+    normalizeLegacyPopupOrders(draft, validNodes, reelOrder) || repaired;
+  return repaired ? draft : value;
 }
 
 function normalizeLegacyPopupOrders(
   draft: Record<string, unknown>,
   nodes: readonly { readonly node: Record<string, unknown> }[],
   reelOrder: unknown,
-): void {
+): boolean {
   const popups = mutableRecord(draft.popups);
-  if (!popups) return;
+  if (!popups) return false;
   const indexedPopups = Object.entries(popups).map(([id, value], index) => {
     const popup = mutableRecord(value);
     const order = popup?.order === undefined ? 2000 : popup.order;
     if (!popup || !Number.isSafeInteger(order)) return undefined;
     return { id, popup, order: order as number, index };
   });
-  if (indexedPopups.some((popup) => popup === undefined)) return;
+  if (indexedPopups.some((popup) => popup === undefined)) return false;
   const validPopups = indexedPopups.filter(
     (popup): popup is NonNullable<typeof popup> => popup !== undefined,
   );
@@ -738,18 +745,19 @@ function normalizeLegacyPopupOrders(
     new Set([...artOrders, ...popupOrders]).size !==
       artOrders.length + popupOrders.length ||
     popupOrders.some((order) => order <= maximumArtOrder);
-  if (!hasConflict) return;
+  if (!hasConflict) return false;
   const firstOrder = Math.max(2000, maximumArtOrder + 1);
   if (
     !Number.isSafeInteger(firstOrder) ||
     firstOrder > Number.MAX_SAFE_INTEGER - validPopups.length + 1
   )
-    return;
+    return false;
   validPopups
     .sort((left, right) => left.order - right.order || left.index - right.index)
     .forEach(({ popup }, index) => {
       popup.order = firstOrder + index;
     });
+  return true;
 }
 
 function legacyBackgroundGroups(value: Record<string, unknown>): {
