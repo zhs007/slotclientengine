@@ -146,9 +146,10 @@ export function parseSceneLayoutManifestV2(
 export function upgradeSceneLayoutManifestToV2(
   value: unknown,
 ): SceneLayoutManifestV2 {
-  const raw = record(value, "scene layout manifest");
-  if (raw.version === 2) return parseSceneLayoutManifestV2(value);
-  const source = parseSceneLayoutManifestV1(value);
+  const normalized = normalizeLegacySceneLayoutPresentationOrders(value);
+  const raw = record(normalized, "scene layout manifest");
+  if (raw.version === 2) return parseSceneLayoutManifestV2(normalized);
+  const source = parseSceneLayoutManifestV1(normalized);
   const fallbackBackgrounds = adaptationBackgrounds(source.adaptation);
   const sourceModes = source.gameModes?.modes ?? [
     {
@@ -635,4 +636,176 @@ function deepFreeze<T>(value: T): T {
       deepFreeze(child);
   }
   return value;
+}
+
+export function normalizeLegacySceneLayoutPresentationOrders(
+  value: unknown,
+): unknown {
+  const source = mutableRecord(value);
+  if (!source || (source.version !== 1 && source.version !== 2)) return value;
+  const draft = structuredClone(source);
+  const nodes = Array.isArray(draft.nodes) ? draft.nodes : undefined;
+  if (!nodes || nodes.length === 0) return draft;
+  const indexedNodes = nodes.map((value, index) => {
+    const node = mutableRecord(value);
+    if (
+      !node ||
+      typeof node.id !== "string" ||
+      !Number.isSafeInteger(node.order)
+    )
+      return undefined;
+    return { node, id: node.id, order: node.order as number, index };
+  });
+  if (indexedNodes.some((node) => node === undefined)) return draft;
+  const validNodes = indexedNodes.filter(
+    (node): node is NonNullable<typeof node> => node !== undefined,
+  );
+  const reels = mutableRecord(draft.reels);
+  const main = mutableRecord(reels?.main);
+  const reelOrder = main?.order;
+  if (reelOrder !== undefined && !Number.isSafeInteger(reelOrder)) return draft;
+
+  const authoredOrders = validNodes.map((node) => node.order);
+  const hasArtConflict =
+    new Set(authoredOrders).size !== authoredOrders.length ||
+    (typeof reelOrder === "number" && authoredOrders.includes(reelOrder));
+  if (hasArtConflict) {
+    const { initialBackgrounds, allBackgrounds } =
+      legacyBackgroundGroups(draft);
+    validNodes.sort((left, right) => {
+      const group = (nodeId: string): number =>
+        initialBackgrounds.has(nodeId) ? 0 : allBackgrounds.has(nodeId) ? 1 : 2;
+      return (
+        group(left.id) - group(right.id) ||
+        left.order - right.order ||
+        left.index - right.index
+      );
+    });
+    if (typeof reelOrder !== "number") {
+      validNodes.forEach(({ node }, order) => {
+        node.order = order;
+      });
+    } else {
+      let reelInsertionIndex = validNodes.filter(
+        (node) => node.order < reelOrder,
+      ).length;
+      const availableBelow = reelOrder - Number.MIN_SAFE_INTEGER;
+      const availableAbove = Number.MAX_SAFE_INTEGER - reelOrder;
+      reelInsertionIndex = Math.min(reelInsertionIndex, availableBelow);
+      reelInsertionIndex = Math.max(
+        reelInsertionIndex,
+        validNodes.length - availableAbove,
+      );
+      const belowStart =
+        reelOrder >= reelInsertionIndex ? 0 : reelOrder - reelInsertionIndex;
+      validNodes.forEach(({ node }, index) => {
+        node.order =
+          index < reelInsertionIndex
+            ? belowStart + index
+            : reelOrder + 1 + index - reelInsertionIndex;
+      });
+    }
+  }
+
+  normalizeLegacyPopupOrders(draft, validNodes, reelOrder);
+  return draft;
+}
+
+function normalizeLegacyPopupOrders(
+  draft: Record<string, unknown>,
+  nodes: readonly { readonly node: Record<string, unknown> }[],
+  reelOrder: unknown,
+): void {
+  const popups = mutableRecord(draft.popups);
+  if (!popups) return;
+  const indexedPopups = Object.entries(popups).map(([id, value], index) => {
+    const popup = mutableRecord(value);
+    const order = popup?.order === undefined ? 2000 : popup.order;
+    if (!popup || !Number.isSafeInteger(order)) return undefined;
+    return { id, popup, order: order as number, index };
+  });
+  if (indexedPopups.some((popup) => popup === undefined)) return;
+  const validPopups = indexedPopups.filter(
+    (popup): popup is NonNullable<typeof popup> => popup !== undefined,
+  );
+  const artOrders = [
+    ...nodes.map(({ node }) => node.order as number),
+    ...(typeof reelOrder === "number" ? [reelOrder] : []),
+  ];
+  const maximumArtOrder = Math.max(...artOrders, Number.MIN_SAFE_INTEGER);
+  const popupOrders = validPopups.map((popup) => popup.order);
+  const hasConflict =
+    new Set([...artOrders, ...popupOrders]).size !==
+      artOrders.length + popupOrders.length ||
+    popupOrders.some((order) => order <= maximumArtOrder);
+  if (!hasConflict) return;
+  const firstOrder = Math.max(2000, maximumArtOrder + 1);
+  if (
+    !Number.isSafeInteger(firstOrder) ||
+    firstOrder > Number.MAX_SAFE_INTEGER - validPopups.length + 1
+  )
+    return;
+  validPopups
+    .sort((left, right) => left.order - right.order || left.index - right.index)
+    .forEach(({ popup }, index) => {
+      popup.order = firstOrder + index;
+    });
+}
+
+function legacyBackgroundGroups(value: Record<string, unknown>): {
+  readonly initialBackgrounds: ReadonlySet<string>;
+  readonly allBackgrounds: ReadonlySet<string>;
+} {
+  const initialBackgrounds = new Set<string>();
+  const allBackgrounds = new Set<string>();
+  addBackgroundIds(
+    mutableRecord(value.adaptation),
+    initialBackgrounds,
+    allBackgrounds,
+  );
+  const gameModes = mutableRecord(value.gameModes);
+  const initialMode = gameModes?.initialMode;
+  const modes = Array.isArray(gameModes?.modes) ? gameModes.modes : [];
+  for (const rawMode of modes) {
+    const mode = mutableRecord(rawMode);
+    if (!mode) continue;
+    const target = mode.id === initialMode ? initialBackgrounds : undefined;
+    addStringValues(mode.backgroundNodes, target, allBackgrounds);
+  }
+  return { initialBackgrounds, allBackgrounds };
+}
+
+function addBackgroundIds(
+  adaptation: Record<string, unknown> | undefined,
+  initial: Set<string>,
+  all: Set<string>,
+): void {
+  if (!adaptation) return;
+  addStringValues(adaptation.backgroundNode, initial, all);
+  const variants = mutableRecord(adaptation.variants);
+  for (const variant of Object.values(variants ?? {}))
+    addStringValues(mutableRecord(variant)?.backgroundNode, initial, all);
+}
+
+function addStringValues(
+  value: unknown,
+  primary: Set<string> | undefined,
+  all: Set<string>,
+): void {
+  const values =
+    typeof value === "string"
+      ? [value]
+      : Object.values(mutableRecord(value) ?? {}).filter(
+          (candidate): candidate is string => typeof candidate === "string",
+        );
+  for (const candidate of values) {
+    primary?.add(candidate);
+    all.add(candidate);
+  }
+}
+
+function mutableRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }

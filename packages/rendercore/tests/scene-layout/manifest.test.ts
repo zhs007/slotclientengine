@@ -3,6 +3,7 @@ import {
   assertSceneLayoutGeometryCompatible,
   collectSceneLayoutAssetPaths,
   parseSceneLayoutManifest,
+  parseSceneLayoutManifestV1,
   resolveSceneLayoutReelGrid,
   resolveSceneLayoutViewport,
 } from "../../src/scene-layout/index.js";
@@ -636,16 +637,16 @@ describe("scene layout manifest", () => {
 
     const duplicate = gameModeManifest() as any;
     duplicate.popups["free-popup"].order = 2000;
-    expect(() => parseSceneLayoutManifest(duplicate)).toThrow(
+    expect(() => parseSceneLayoutManifestV1(duplicate)).toThrow(
       /node\/reel\/popup order.*unique/,
     );
 
     const belowArt = structuredClone(gameModeManifest()) as any;
     belowArt.reels.main.order = 999;
     belowArt.popups["base-popup"].order = 999;
-    expect(() => parseSceneLayoutManifest(belowArt)).toThrow(/order.*unique/);
+    expect(() => parseSceneLayoutManifestV1(belowArt)).toThrow(/order.*unique/);
     belowArt.popups["base-popup"].order = 500;
-    expect(() => parseSceneLayoutManifest(belowArt)).toThrow(
+    expect(() => parseSceneLayoutManifestV1(belowArt)).toThrow(
       /greater than every node\/reel order/,
     );
   });
@@ -916,7 +917,7 @@ describe("scene layout manifest", () => {
       }),
     ).toThrow(/animation.*unique/);
     expect(() =>
-      parseSceneLayoutManifest({
+      parseSceneLayoutManifestV1({
         ...game002LayoutFixture,
         reels: { main: { ...game002LayoutFixture.reels.main, order: 0 } },
         symbolPackage: {

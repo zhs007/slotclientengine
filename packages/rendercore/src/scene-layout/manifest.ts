@@ -21,6 +21,7 @@ import type {
 } from "./types.js";
 import {
   materializeInitialSceneLayoutManifest,
+  normalizeLegacySceneLayoutPresentationOrders,
   parseSceneLayoutManifestV2,
 } from "./manifest-v2.js";
 import { parseSceneLayoutManifestV3 } from "./manifest-v3.js";
@@ -33,23 +34,25 @@ export const DEFAULT_SCENE_LAYOUT_POPUP_ORDER = 2000;
 export function parseSceneLayoutManifest(
   value: unknown,
 ): SceneLayoutManifestV1 {
-  const record = readRecord(value, "scene layout manifest");
+  const normalized = normalizeLegacySceneLayoutPresentationOrders(value);
+  const record = readRecord(normalized, "scene layout manifest");
   if (record.version === 2 || record.version === 3)
     return materializeInitialSceneLayoutManifest(
       record.version === 3
-        ? parseSceneLayoutManifestV3(value)
-        : parseSceneLayoutManifestV2(value),
+        ? parseSceneLayoutManifestV3(normalized)
+        : parseSceneLayoutManifestV2(normalized),
     );
-  return parseSceneLayoutManifestV1(value);
+  return parseSceneLayoutManifestV1(normalized);
 }
 
 export function parseSceneLayoutManifestDocument(
   value: unknown,
 ): SceneLayoutManifest {
-  const record = readRecord(value, "scene layout manifest");
-  if (record.version === 3) return parseSceneLayoutManifestV3(value);
-  if (record.version === 2) return parseSceneLayoutManifestV2(value);
-  return parseSceneLayoutManifestV1(value);
+  const normalized = normalizeLegacySceneLayoutPresentationOrders(value);
+  const record = readRecord(normalized, "scene layout manifest");
+  if (record.version === 3) return parseSceneLayoutManifestV3(normalized);
+  if (record.version === 2) return parseSceneLayoutManifestV2(normalized);
+  return parseSceneLayoutManifestV1(normalized);
 }
 
 export function parseSceneLayoutManifestV1(
