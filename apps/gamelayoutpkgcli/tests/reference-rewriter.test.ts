@@ -4,6 +4,7 @@ import {
   rewriteImageStringManifest,
   rewriteLayoutManifest,
   rewritePopupManifest,
+  rewriteOptimizedAudioAssets,
   rewriteSymbolManifest,
   rewriteSymbolPackageManifest,
   rewriteVniProject,
@@ -23,9 +24,61 @@ const mapping = new Map([
   ["effect.json", "effect.hash.json"],
   ["effect.atlas", "effect.hash.atlas"],
   ["effect.png", "effect.webp"],
+  ["base.wav", "base.m4a"],
+  ["coin.ogg", "coin.m4a"],
 ]);
 
 describe("typed asset reference rewriting", () => {
+  it("rewrites optimized audio paths and media types together", () => {
+    expect(
+      rewriteOptimizedAudioAssets(
+        {
+          version: 1,
+          music: [
+            {
+              name: "base",
+              asset: {
+                sources: [{ path: "base.wav", mediaType: "audio/wav" }],
+              },
+              loop: true,
+              fadeOutSeconds: 1,
+              fadeInSeconds: 1,
+            },
+          ],
+          effects: [
+            {
+              name: "coin",
+              asset: {
+                sources: [{ path: "coin.ogg", mediaType: "audio/ogg" }],
+              },
+              playback: "once",
+              offsetSeconds: 0,
+              voices: { maxConcurrent: 1, overflow: "restart-oldest" },
+              bgm: { kind: "keep" },
+            },
+          ],
+          programmaticEffects: ["coin"],
+        },
+        mapping,
+      ),
+    ).toMatchObject({
+      music: [
+        {
+          asset: {
+            sources: [{ path: "base.m4a", mediaType: "audio/mp4" }],
+          },
+        },
+      ],
+      effects: [
+        {
+          asset: {
+            sources: [{ path: "coin.m4a", mediaType: "audio/mp4" }],
+          },
+        },
+      ],
+    });
+  });
+
   it("rewrites layout and image-string image fields", () => {
     const layout = rewriteLayoutManifest(layoutFixture(), mapping);
     expect(layout.nodes[0]?.resource).toMatchObject({

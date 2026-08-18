@@ -3,6 +3,7 @@ import {
   createSceneLayoutAssetGroups,
   serializeSceneLayoutAssetGroups,
 } from "./asset-groups.js";
+import { optimizeLayoutAudio, nodeAudioToolRunner } from "./audio-optimizer.js";
 import { optimizeLayoutImages, nodeCwebpRunner } from "./image-optimizer.js";
 import {
   readAndValidateLayoutPackage,
@@ -11,6 +12,7 @@ import {
 import { buildOptimizedPackage, commitOutputPair } from "./package-writer.js";
 import { rewriteLayoutPackageReferences } from "./reference-rewriter.js";
 import type {
+  AudioToolRunner,
   CwebpRunner,
   GamelayoutPkgCliOptions,
   ResolvedGamelayoutPkgCliOptions,
@@ -27,6 +29,7 @@ export async function runGamelayoutPkgCli(
     console.log(
       `图片 ${result.convertedImageCount} 个，ZIP ${result.inputZipBytes} -> ${result.outputZipBytes} bytes。`,
     );
+    console.log(`AAC 音频 ${result.convertedAudioCount} 个。`);
   } catch (error) {
     process.exitCode = 1;
     console.error(
@@ -44,6 +47,11 @@ export function parseCliArgs(argv: readonly string[]): GamelayoutPkgCliOptions {
     "--assets-json",
     "--quality",
     "--cwebp",
+    "--ffmpeg",
+    "--ffprobe",
+    "--bgm-bitrate",
+    "--effect-mono-bitrate",
+    "--effect-stereo-bitrate",
   ]);
   for (let index = 0; index < args.length; index += 1) {
     const flag = args[index]!;
@@ -61,12 +69,28 @@ export function parseCliArgs(argv: readonly string[]): GamelayoutPkgCliOptions {
   const quality = Number(qualityRaw);
   if (!Number.isFinite(quality) || quality < 0 || quality > 100)
     throw new Error("--quality 必须是 0..100 的有限数。");
+  const bgmBitrateKbps = parseBitrate(values, "--bgm-bitrate", 128);
+  const effectMonoBitrateKbps = parseBitrate(
+    values,
+    "--effect-mono-bitrate",
+    64,
+  );
+  const effectStereoBitrateKbps = parseBitrate(
+    values,
+    "--effect-stereo-bitrate",
+    96,
+  );
   return Object.freeze({
     inputPath,
     outputPath: values.get("--output"),
     assetsJsonPath: values.get("--assets-json"),
     quality,
     cwebpExecutable: values.get("--cwebp") ?? "cwebp",
+    ffmpegExecutable: values.get("--ffmpeg") ?? "ffmpeg",
+    ffprobeExecutable: values.get("--ffprobe") ?? "ffprobe",
+    bgmBitrateKbps,
+    effectMonoBitrateKbps,
+    effectStereoBitrateKbps,
   });
 }
 
@@ -95,29 +119,48 @@ export function resolveCliOptions(
     assetsJsonPath,
     quality: options.quality,
     cwebpExecutable: options.cwebpExecutable,
+    ffmpegExecutable: options.ffmpegExecutable ?? "ffmpeg",
+    ffprobeExecutable: options.ffprobeExecutable ?? "ffprobe",
+    bgmBitrateKbps: options.bgmBitrateKbps ?? 128,
+    effectMonoBitrateKbps: options.effectMonoBitrateKbps ?? 64,
+    effectStereoBitrateKbps: options.effectStereoBitrateKbps ?? 96,
   });
 }
 
 export async function optimizeLayoutPackageFile(
   options: ResolvedGamelayoutPkgCliOptions,
-  runner: CwebpRunner = nodeCwebpRunner,
+  cwebpRunner: CwebpRunner = nodeCwebpRunner,
+  audioRunner: AudioToolRunner = nodeAudioToolRunner,
 ): Promise<{
   readonly outputPath: string;
   readonly assetsJsonPath: string;
   readonly inputZipBytes: number;
   readonly outputZipBytes: number;
   readonly convertedImageCount: number;
+  readonly convertedAudioCount: number;
 }> {
   const source = await readAndValidateLayoutPackage(options.inputPath);
   const optimization = await optimizeLayoutImages({
     source,
     quality: options.quality,
     cwebpExecutable: options.cwebpExecutable,
-    runner,
+    runner: cwebpRunner,
+  });
+  const audioOptimization = await optimizeLayoutAudio({
+    source,
+    optimization,
+    audio: {
+      ffmpegExecutable: options.ffmpegExecutable,
+      ffprobeExecutable: options.ffprobeExecutable,
+      bgmBitrateKbps: options.bgmBitrateKbps,
+      effectMonoBitrateKbps: options.effectMonoBitrateKbps,
+      effectStereoBitrateKbps: options.effectStereoBitrateKbps,
+    },
+    runner: audioRunner,
   });
   const rewritten = rewriteLayoutPackageReferences({
     manifest: source.manifest,
-    optimization,
+    optimization: audioOptimization,
   });
   const output = await buildOptimizedPackage(rewritten);
   const verified = await validateLayoutPackageBytes(output.zipBytes);
@@ -129,6 +172,8 @@ export async function optimizeLayoutPackageFile(
     quality: options.quality,
     cwebpVersion: optimization.cwebpVersion,
     convertedImageCount: optimization.convertedImageCount,
+    audioOptimization,
+    audioOptions: options,
   });
   const assetsJsonBytes = serializeSceneLayoutAssetGroups(assetGroups);
   await commitOutputPair({
@@ -143,5 +188,19 @@ export async function optimizeLayoutPackageFile(
     inputZipBytes: source.zipBytes.byteLength,
     outputZipBytes: output.zipBytes.byteLength,
     convertedImageCount: optimization.convertedImageCount,
+    convertedAudioCount: audioOptimization.convertedAudioCount,
   });
+}
+
+function parseBitrate(
+  values: ReadonlyMap<string, string>,
+  flag: string,
+  fallback: number,
+): number {
+  const raw = values.get(flag);
+  if (raw === undefined) return fallback;
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value < 8 || value > 512)
+    throw new Error(`${flag} 必须是 8..512 的整数 kbps。`);
+  return value;
 }

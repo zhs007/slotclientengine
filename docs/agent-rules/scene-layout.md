@@ -91,6 +91,7 @@
 - 每个 group 同时保存完整 `requiredAssets` 与相对 initial 的 `incrementalAssets`；完整闭包允许重叠，但全部优化资源必须至少被一个 group 覆盖。
 - versioned asset-groups JSON 是 ZIP 外的独立交付物，不进入 production ZIP；它可供后续合图或 loading 优化消费，但 CLI 本身不修改 runtime loading 行为。
 - 音频形成独立 `audio:scene-layout` group，必须从 `initialAssets` 排除；实际引用仍保留在 production ZIP 与 typed closure 中，由 mode/effect owner 在运行期按需准备。
+- `gamelayoutpkgcli` 的 production 音频后处理固定输出 M4A/AAC-LC：从 Scene Layout、Symbols、Popup typed audio binding 收集 exact source，结构化同步改写 path/mediaType，重新生成 content-addressed payload/map 并 strict 复验；不得扫描扩展名猜 owner、处理 video 内嵌音轨、自动改声道/采样率或静默保留失败输入。已证明为目标码率以内的 AAC-LC/M4A 可原样保留；其它输入由显式 FFmpeg/FFprobe transaction 转码，版本与码率进入 versioned asset-groups metadata。
 
 ## Popup placement
 

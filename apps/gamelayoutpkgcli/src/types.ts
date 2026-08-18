@@ -24,11 +24,30 @@ export interface OptimizedLogicalAsset {
   readonly mediaType: string;
 }
 
-export interface ImageOptimizationResult {
-  readonly cwebpVersion: string;
+export interface AssetOptimizationResult {
   readonly keyMapping: ReadonlyMap<string, string>;
   readonly assets: ReadonlyMap<string, OptimizedLogicalAsset>;
+}
+
+export interface ImageOptimizationResult extends AssetOptimizationResult {
+  readonly cwebpVersion: string;
   readonly convertedImageCount: number;
+}
+
+export interface AudioProbeResult {
+  readonly codecName: string;
+  readonly profile: string | null;
+  readonly channels: number;
+  readonly sampleRate: number;
+  readonly bitRate: number | null;
+}
+
+export interface AudioOptimizationResult extends AssetOptimizationResult {
+  readonly ffmpegVersion: string | null;
+  readonly ffprobeVersion: string | null;
+  readonly convertedAudioCount: number;
+  readonly inputAudioBytes: number;
+  readonly outputAudioBytes: number;
 }
 
 export interface WrittenOptimizedPackage {
@@ -45,6 +64,30 @@ export interface CwebpRunner {
     readonly inputPath: string;
     readonly outputPath: string;
   }): Promise<void>;
+}
+
+export interface AudioToolRunner {
+  ffmpegVersion(executable: string): Promise<string>;
+  ffprobeVersion(executable: string): Promise<string>;
+  probe(options: {
+    readonly executable: string;
+    readonly inputPath: string;
+    readonly label: string;
+  }): Promise<AudioProbeResult>;
+  encode(options: {
+    readonly executable: string;
+    readonly inputPath: string;
+    readonly outputPath: string;
+    readonly bitrateKbps: number;
+  }): Promise<void>;
+}
+
+export interface AudioOptimizationOptions {
+  readonly ffmpegExecutable: string;
+  readonly ffprobeExecutable: string;
+  readonly bgmBitrateKbps: number;
+  readonly effectMonoBitrateKbps: number;
+  readonly effectStereoBitrateKbps: number;
 }
 
 export interface AssetGroupAsset {
@@ -141,12 +184,44 @@ export interface SceneLayoutAssetGroupsV1 {
   readonly groups: readonly AssetGroupRecord[];
 }
 
+export interface SceneLayoutAssetGroupsV2 {
+  readonly version: 2;
+  readonly kind: "scene-layout-asset-groups";
+  readonly layoutId: string;
+  readonly initialMode: string;
+  readonly optimization: SceneLayoutAssetGroupsV1["optimization"] & {
+    readonly audioCodec: "aac-lc";
+    readonly audioContainer: "m4a";
+    readonly bgmBitrateKbps: number;
+    readonly effectMonoBitrateKbps: number;
+    readonly effectStereoBitrateKbps: number;
+    readonly ffmpegVersion: string | null;
+    readonly ffprobeVersion: string | null;
+    readonly convertedAudioCount: number;
+    readonly inputAudioBytes: number;
+    readonly outputAudioBytes: number;
+  };
+  readonly controlFiles: readonly ["assets.map.json", "layout.manifest.json"];
+  readonly assets: Readonly<Record<string, AssetGroupAsset>>;
+  readonly initialAssets: readonly string[];
+  readonly groups: readonly AssetGroupRecord[];
+}
+
+export type SceneLayoutAssetGroups =
+  | SceneLayoutAssetGroupsV1
+  | SceneLayoutAssetGroupsV2;
+
 export interface GamelayoutPkgCliOptions {
   readonly inputPath: string;
   readonly outputPath?: string;
   readonly assetsJsonPath?: string;
   readonly quality: number;
   readonly cwebpExecutable: string;
+  readonly ffmpegExecutable?: string;
+  readonly ffprobeExecutable?: string;
+  readonly bgmBitrateKbps?: number;
+  readonly effectMonoBitrateKbps?: number;
+  readonly effectStereoBitrateKbps?: number;
 }
 
 export interface ResolvedGamelayoutPkgCliOptions {
@@ -155,4 +230,9 @@ export interface ResolvedGamelayoutPkgCliOptions {
   readonly assetsJsonPath: string;
   readonly quality: number;
   readonly cwebpExecutable: string;
+  readonly ffmpegExecutable: string;
+  readonly ffprobeExecutable: string;
+  readonly bgmBitrateKbps: number;
+  readonly effectMonoBitrateKbps: number;
+  readonly effectStereoBitrateKbps: number;
 }

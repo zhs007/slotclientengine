@@ -13,6 +13,11 @@ describe("gamelayoutpkg CLI", () => {
       assetsJsonPath: undefined,
       quality: 80,
       cwebpExecutable: "cwebp",
+      ffmpegExecutable: "ffmpeg",
+      ffprobeExecutable: "ffprobe",
+      bgmBitrateKbps: 128,
+      effectMonoBitrateKbps: 64,
+      effectStereoBitrateKbps: 96,
     });
     expect(
       parseCliArgs([
@@ -27,10 +32,25 @@ describe("gamelayoutpkg CLI", () => {
         "72.5",
         "--cwebp",
         "/opt/tools/cwebp",
+        "--ffmpeg",
+        "/opt/tools/ffmpeg",
+        "--ffprobe",
+        "/opt/tools/ffprobe",
+        "--bgm-bitrate",
+        "120",
+        "--effect-mono-bitrate",
+        "56",
+        "--effect-stereo-bitrate",
+        "88",
       ]),
     ).toMatchObject({
       quality: 72.5,
       cwebpExecutable: "/opt/tools/cwebp",
+      ffmpegExecutable: "/opt/tools/ffmpeg",
+      ffprobeExecutable: "/opt/tools/ffprobe",
+      bgmBitrateKbps: 120,
+      effectMonoBitrateKbps: 56,
+      effectStereoBitrateKbps: 88,
     });
   });
 
@@ -48,6 +68,12 @@ describe("gamelayoutpkg CLI", () => {
     expect(() =>
       parseCliArgs(["--input", "a.zip", "--quality", "101"]),
     ).toThrow(/0\.\.100/);
+    expect(() =>
+      parseCliArgs(["--input", "a.zip", "--bgm-bitrate", "7"]),
+    ).toThrow(/8\.\.512/);
+    expect(() =>
+      parseCliArgs(["--input", "a.zip", "--effect-mono-bitrate", "64.5"]),
+    ).toThrow(/整数/);
   });
 
   it("derives sibling outputs and rejects aliased paths", () => {

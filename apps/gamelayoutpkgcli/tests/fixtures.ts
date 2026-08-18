@@ -13,6 +13,7 @@ import {
   parseSceneLayoutManifest,
   type SceneLayoutManifestV1,
 } from "@slotclientengine/rendercore/scene-layout/core";
+import type { SceneLayoutManifest } from "@slotclientengine/rendercore/scene-layout/data";
 
 export const text = (value: unknown): Uint8Array =>
   new TextEncoder().encode(`${JSON.stringify(value, null, 2)}\n`);
@@ -149,7 +150,7 @@ export function logicalFixtureFiles(): ReadonlyMap<string, Uint8Array> {
 
 export async function createMappedLayoutZip(
   options: {
-    readonly manifest?: SceneLayoutManifestV1;
+    readonly manifest?: SceneLayoutManifest;
     readonly logicalFiles?: ReadonlyMap<string, Uint8Array>;
     readonly mutateMap?: (map: EditorAssetsMapV1) => EditorAssetsMapV1;
   } = {},
@@ -192,6 +193,10 @@ export function mediaType(key: string): string {
   if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
   if (lower.endsWith(".webp")) return "image/webp";
   if (lower.endsWith(".mp4")) return "video/mp4";
+  if (lower.endsWith(".wav")) return "audio/wav";
+  if (lower.endsWith(".mp3")) return "audio/mpeg";
+  if (lower.endsWith(".ogg")) return "audio/ogg";
+  if (lower.endsWith(".m4a")) return "audio/mp4";
   if (lower.endsWith(".json")) return "application/json";
   if (lower.endsWith(".atlas")) return "text/plain";
   for (const extension of ["woff2", "woff", "ttf", "otf"])

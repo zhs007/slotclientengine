@@ -3,7 +3,13 @@ import {
   type ImageStringManifestV1,
 } from "@slotclientengine/rendercore/image-string/data";
 import { editorAssetKeyCollisionToken } from "@slotclientengine/editorresource";
-import { rewriteAudioAssetPaths } from "@slotclientengine/audiocore/data";
+import {
+  parseAudioCatalogManifestV1,
+  parseAudioEffectManifestV1,
+  rewriteAudioAssetPaths,
+  type AudioCatalogManifestV1,
+  type AudioEffectManifestV1,
+} from "@slotclientengine/audiocore/data";
 import {
   loadPopupManifest,
   type LatestPopupManifest,
@@ -25,13 +31,13 @@ import {
 } from "@slotclientengine/vnicore/data";
 import { parseJson } from "./package-reader.js";
 import type {
-  ImageOptimizationResult,
+  AssetOptimizationResult,
   OptimizedLogicalAsset,
 } from "./types.js";
 
 export function rewriteLayoutPackageReferences(options: {
   readonly manifest: SceneLayoutManifest;
-  readonly optimization: ImageOptimizationResult;
+  readonly optimization: AssetOptimizationResult;
 }): {
   readonly manifest: SceneLayoutManifest;
   readonly assets: ReadonlyMap<string, OptimizedLogicalAsset>;
@@ -193,7 +199,7 @@ export function rewriteLayoutManifest(
   return parseSceneLayoutManifestDocument({
     ...manifest,
     ...(manifest.version === 4
-      ? { audio: rewriteAudioAssetPaths(manifest.audio, mapping) }
+      ? { audio: rewriteOptimizedAudioAssets(manifest.audio, mapping) }
       : {}),
     nodes,
     ...(manifest.symbolPackage
@@ -278,7 +284,10 @@ export function rewriteSymbolManifest(
   parseSymbolStateTextureManifest(value);
   const manifest = structuredClone(value) as Record<string, unknown>;
   if (isRecord(manifest.audio))
-    manifest.audio = rewriteAudioAssetPaths(manifest.audio as never, mapping);
+    manifest.audio = rewriteOptimizedAudioAssets(
+      manifest.audio as unknown as AudioEffectManifestV1,
+      mapping,
+    );
   const states = Array.isArray(manifest.states)
     ? manifest.states.filter(
         (state): state is string => typeof state === "string",
@@ -316,7 +325,7 @@ export function rewritePopupManifest(
     manifest.version === 7
       ? {
           ...manifest.audio,
-          ...rewriteAudioAssetPaths(
+          ...rewriteOptimizedAudioAssets(
             { version: 1 as const, effects: manifest.audio.effects },
             mapping,
           ),
@@ -397,6 +406,41 @@ export function encodeStableJson(value: unknown): Uint8Array {
   return new TextEncoder().encode(
     `${JSON.stringify(sortValue(value), null, 2)}\n`,
   );
+}
+
+export function rewriteOptimizedAudioAssets<
+  T extends AudioEffectManifestV1 | AudioCatalogManifestV1,
+>(value: T, mapping: ReadonlyMap<string, string>): T {
+  const rewritten = rewriteAudioAssetPaths(value, mapping);
+  const rewriteBinding = <Binding extends { readonly asset: unknown }>(
+    binding: Binding,
+  ): Binding => ({
+    ...binding,
+    asset: {
+      ...(binding.asset as { readonly sources: readonly unknown[] }),
+      sources: (
+        binding.asset as {
+          readonly sources: readonly {
+            readonly path: string;
+            readonly mediaType: string;
+          }[];
+        }
+      ).sources.map((source) => ({
+        ...source,
+        mediaType: source.path.toLowerCase().endsWith(".m4a")
+          ? "audio/mp4"
+          : source.mediaType,
+      })),
+    },
+  });
+  const effects = rewritten.effects.map(rewriteBinding);
+  if (!("music" in rewritten))
+    return parseAudioEffectManifestV1({ version: 1, effects }) as T;
+  return parseAudioCatalogManifestV1({
+    ...rewritten,
+    effects,
+    music: rewritten.music.map(rewriteBinding),
+  }) as T;
 }
 
 function collectSymbolManifestKeys(

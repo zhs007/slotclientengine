@@ -14,14 +14,17 @@ import type {
 import {
   collectSymbolPackageEntryPaths,
   parseSymbolPackageManifest,
-  parseSymbolStateTextureManifest,
 } from "@slotclientengine/rendercore/symbol/data";
+import { collectPackageAudioAssets } from "./audio-assets.js";
 import { parseJson } from "./package-reader.js";
 import { encodeStableJson } from "./reference-rewriter.js";
 import type {
+  AudioOptimizationOptions,
+  AudioOptimizationResult,
   AssetGroupRecord,
   OptimizedLogicalAsset,
-  SceneLayoutAssetGroupsV1,
+  SceneLayoutAssetGroups,
+  SceneLayoutAssetGroupsV2,
   WrittenOptimizedPackage,
 } from "./types.js";
 
@@ -39,7 +42,9 @@ export function createSceneLayoutAssetGroups(options: {
   readonly quality: number;
   readonly cwebpVersion: string;
   readonly convertedImageCount: number;
-}): SceneLayoutAssetGroupsV1 {
+  readonly audioOptimization: AudioOptimizationResult;
+  readonly audioOptions: AudioOptimizationOptions;
+}): SceneLayoutAssetGroupsV2 {
   const gameModes = options.manifest.gameModes;
   if (!gameModes) throw new Error("资源分组要求 Scene Layout gameModes。");
   const allBackgroundIds = new Set(
@@ -51,7 +56,10 @@ export function createSceneLayoutAssetGroups(options: {
     (node) => !allBackgroundIds.has(node.id) && node.gameMode === undefined,
   );
   const sharedRequired = nodeClosure(sharedNodes, options.files);
-  const audioAssets = collectAudioAssets(options.manifest, options.files);
+  const audioAssets = collectPackageAudioAssets(
+    options.manifest,
+    options.files,
+  );
   const provisional: ProvisionalAssetGroup[] = [
     {
       id: "shared",
@@ -237,8 +245,8 @@ export function createSceneLayoutAssetGroups(options: {
         ];
       }),
   );
-  const result: SceneLayoutAssetGroupsV1 = {
-    version: 1,
+  const result: SceneLayoutAssetGroupsV2 = {
+    version: 2,
     kind: "scene-layout-asset-groups",
     layoutId: options.manifest.id,
     initialMode: gameModes.initialMode,
@@ -249,52 +257,26 @@ export function createSceneLayoutAssetGroups(options: {
       inputZipBytes: options.sourceZipBytes,
       outputZipBytes: options.output.zipBytes.byteLength,
       convertedImageCount: options.convertedImageCount,
+      audioCodec: "aac-lc",
+      audioContainer: "m4a",
+      bgmBitrateKbps: options.audioOptions.bgmBitrateKbps,
+      effectMonoBitrateKbps: options.audioOptions.effectMonoBitrateKbps,
+      effectStereoBitrateKbps: options.audioOptions.effectStereoBitrateKbps,
+      ffmpegVersion: options.audioOptimization.ffmpegVersion,
+      ffprobeVersion: options.audioOptimization.ffprobeVersion,
+      convertedAudioCount: options.audioOptimization.convertedAudioCount,
+      inputAudioBytes: options.audioOptimization.inputAudioBytes,
+      outputAudioBytes: options.audioOptimization.outputAudioBytes,
     },
     controlFiles: ["assets.map.json", "layout.manifest.json"],
     assets,
     initialAssets,
     groups,
   };
-  return parseSceneLayoutAssetGroups(result);
-}
-
-function collectAudioAssets(
-  manifest: SceneLayoutManifest,
-  files: ReadonlyMap<string, Uint8Array>,
-): readonly string[] {
-  const paths: string[] = [];
-  if (manifest.version === 4)
-    paths.push(
-      ...[...manifest.audio.effects, ...manifest.audio.music].flatMap(
-        (binding) => binding.asset.sources.map((source) => source.path),
-      ),
-    );
-  for (const binding of symbolBindings(manifest, files)) {
-    const packageManifest = parseSymbolPackageManifest(
-      parseRequiredJson(files, binding.manifest),
-    );
-    const symbolManifest = parseSymbolStateTextureManifest(
-      parseRequiredJson(files, packageManifest.entrypoints.symbolManifest),
-    );
-    if (symbolManifest.version === 3)
-      paths.push(
-        ...symbolManifest.audio.effects.flatMap((effect) =>
-          effect.asset.sources.map((source) => source.path),
-        ),
-      );
-  }
-  for (const binding of Object.values(manifest.popups ?? {})) {
-    const popup = parsePopupManifest(
-      parseRequiredJson(files, binding.manifest),
-    );
-    if (popup.version === 7)
-      paths.push(
-        ...popup.audio.effects.flatMap((effect) =>
-          effect.asset.sources.map((source) => source.path),
-        ),
-      );
-  }
-  return sortUnique(paths);
+  const parsed = parseSceneLayoutAssetGroups(result);
+  if (parsed.version !== 2)
+    throw new Error("内部错误：新生成的 asset groups 不是 v2。");
+  return parsed;
 }
 
 function finalizeGroup(
@@ -327,7 +309,7 @@ function finalizeGroup(
 
 export function parseSceneLayoutAssetGroups(
   value: unknown,
-): SceneLayoutAssetGroupsV1 {
+): SceneLayoutAssetGroups {
   const root = record(value, "asset groups");
   exactKeys(
     root,
@@ -344,21 +326,37 @@ export function parseSceneLayoutAssetGroups(
     ],
     "asset groups",
   );
-  if (root.version !== 1 || root.kind !== "scene-layout-asset-groups")
+  if (
+    (root.version !== 1 && root.version !== 2) ||
+    root.kind !== "scene-layout-asset-groups"
+  )
     throw new Error("asset groups version/kind 无效。");
   nonEmptyString(root.layoutId, "layoutId");
   const initialMode = nonEmptyString(root.initialMode, "initialMode");
   const optimization = record(root.optimization, "optimization");
+  const imageFields = [
+    "imageCodec",
+    "quality",
+    "cwebpVersion",
+    "inputZipBytes",
+    "outputZipBytes",
+    "convertedImageCount",
+  ];
+  const audioFields = [
+    "audioCodec",
+    "audioContainer",
+    "bgmBitrateKbps",
+    "effectMonoBitrateKbps",
+    "effectStereoBitrateKbps",
+    "ffmpegVersion",
+    "ffprobeVersion",
+    "convertedAudioCount",
+    "inputAudioBytes",
+    "outputAudioBytes",
+  ];
   exactKeys(
     optimization,
-    [
-      "imageCodec",
-      "quality",
-      "cwebpVersion",
-      "inputZipBytes",
-      "outputZipBytes",
-      "convertedImageCount",
-    ],
+    root.version === 2 ? [...imageFields, ...audioFields] : imageFields,
     "optimization",
   );
   if (
@@ -372,6 +370,7 @@ export function parseSceneLayoutAssetGroups(
   nonEmptyString(optimization.cwebpVersion, "optimization.cwebpVersion");
   for (const key of ["inputZipBytes", "outputZipBytes", "convertedImageCount"])
     nonNegativeInteger(optimization[key], `optimization.${key}`);
+  if (root.version === 2) validateAudioOptimization(optimization);
   if (
     JSON.stringify(root.controlFiles) !==
     JSON.stringify(["assets.map.json", "layout.manifest.json"])
@@ -446,13 +445,48 @@ export function parseSceneLayoutAssetGroups(
   const uncovered = assetKeys.filter((key) => !covered.has(key));
   if (uncovered.length)
     throw new Error(`asset groups 未覆盖资源：${uncovered.join(", ")}`);
-  return Object.freeze(structuredClone(value) as SceneLayoutAssetGroupsV1);
+  return Object.freeze(structuredClone(value) as SceneLayoutAssetGroups);
 }
 
 export function serializeSceneLayoutAssetGroups(
-  value: SceneLayoutAssetGroupsV1,
+  value: SceneLayoutAssetGroups,
 ): Uint8Array {
   return encodeStableJson(parseSceneLayoutAssetGroups(value));
+}
+
+function validateAudioOptimization(
+  optimization: Record<string, unknown>,
+): void {
+  if (
+    optimization.audioCodec !== "aac-lc" ||
+    optimization.audioContainer !== "m4a"
+  )
+    throw new Error("optimization audio codec/container 无效。");
+  for (const key of [
+    "bgmBitrateKbps",
+    "effectMonoBitrateKbps",
+    "effectStereoBitrateKbps",
+  ]) {
+    const bitrate = nonNegativeInteger(
+      optimization[key],
+      `optimization.${key}`,
+    );
+    if (bitrate < 8 || bitrate > 512)
+      throw new Error(`optimization.${key} 必须是 8..512 kbps。`);
+  }
+  for (const key of [
+    "convertedAudioCount",
+    "inputAudioBytes",
+    "outputAudioBytes",
+  ])
+    nonNegativeInteger(optimization[key], `optimization.${key}`);
+  const hasAudio = optimization.inputAudioBytes !== 0;
+  for (const key of ["ffmpegVersion", "ffprobeVersion"]) {
+    const value = optimization[key];
+    if (hasAudio) nonEmptyString(value, `optimization.${key}`);
+    else if (value !== null)
+      throw new Error(`optimization.${key} 无音频时必须是 null。`);
+  }
 }
 
 function nodeClosure(

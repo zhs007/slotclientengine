@@ -4,7 +4,7 @@ import {
   parseSceneLayoutAssetGroups,
 } from "../src/asset-groups.js";
 
-describe("asset-groups v1 parser", () => {
+describe("asset-groups versioned parser", () => {
   it("rejects unknown fields, uncovered assets and wrong deltas", () => {
     const valid = fixture();
     expect(parseSceneLayoutAssetGroups(valid).initialMode).toBe("Alpha");
@@ -30,6 +30,43 @@ describe("asset-groups v1 parser", () => {
         ),
       }),
     ).toThrow(/required - initial/);
+  });
+
+  it("accepts explicit v2 audio optimization metadata and rejects partial fields", () => {
+    const valid = fixture();
+    const v2 = {
+      ...valid,
+      version: 2,
+      optimization: {
+        ...valid.optimization,
+        audioCodec: "aac-lc",
+        audioContainer: "m4a",
+        bgmBitrateKbps: 128,
+        effectMonoBitrateKbps: 64,
+        effectStereoBitrateKbps: 96,
+        ffmpegVersion: null,
+        ffprobeVersion: null,
+        convertedAudioCount: 0,
+        inputAudioBytes: 0,
+        outputAudioBytes: 0,
+      },
+    };
+    expect(parseSceneLayoutAssetGroups(v2).version).toBe(2);
+    const { ffprobeVersion: _missing, ...incomplete } = v2.optimization;
+    expect(() =>
+      parseSceneLayoutAssetGroups({ ...v2, optimization: incomplete }),
+    ).toThrow(/fields/);
+    expect(() =>
+      parseSceneLayoutAssetGroups({
+        ...v2,
+        optimization: {
+          ...v2.optimization,
+          inputAudioBytes: 1,
+          ffmpegVersion: null,
+          ffprobeVersion: null,
+        },
+      }),
+    ).toThrow(/ffmpegVersion/);
   });
 
   it("accepts a standalone spine-popup group without mode ownership", () => {
@@ -124,7 +161,9 @@ describe("asset-groups v1 parser", () => {
       quality: 80,
       cwebpVersion: "test",
       convertedImageCount: 0,
+      ...audioOptimizationFixture(),
     });
+    expect(groups.version).toBe(2);
     expect(
       groups.groups.find((group) => group.id === "shared")?.requiredAssets,
     ).toEqual(["shared.png"]);
@@ -193,6 +232,7 @@ describe("asset-groups v1 parser", () => {
       quality: 80,
       cwebpVersion: "test",
       convertedImageCount: 0,
+      ...audioOptimizationFixture({ input: 2, output: 2 }),
     });
     expect(groups.initialAssets).toEqual(["base.png"]);
     expect(
@@ -254,6 +294,33 @@ function outputFixture(keys: readonly string[]) {
       ),
     },
   } as never;
+}
+
+function audioOptimizationFixture(
+  sizes: { readonly input: number; readonly output: number } = {
+    input: 0,
+    output: 0,
+  },
+) {
+  const used = sizes.input > 0;
+  return {
+    audioOptimization: {
+      keyMapping: new Map(),
+      assets: new Map(),
+      ffmpegVersion: used ? "fixture-ffmpeg 1" : null,
+      ffprobeVersion: used ? "fixture-ffprobe 1" : null,
+      convertedAudioCount: used ? 2 : 0,
+      inputAudioBytes: sizes.input,
+      outputAudioBytes: sizes.output,
+    },
+    audioOptions: {
+      ffmpegExecutable: "ffmpeg",
+      ffprobeExecutable: "ffprobe",
+      bgmBitrateKbps: 128,
+      effectMonoBitrateKbps: 64,
+      effectStereoBitrateKbps: 96,
+    },
+  } as const;
 }
 
 function fixture() {

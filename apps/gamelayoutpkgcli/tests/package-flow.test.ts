@@ -2,11 +2,12 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { extractBoundedZip } from "@slotclientengine/browserartifactio";
+import { upgradeSceneLayoutManifestToLatest } from "@slotclientengine/rendercore/scene-layout/data";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { optimizeLayoutPackageFile, resolveCliOptions } from "../src/cli.js";
 import { parseSceneLayoutAssetGroups } from "../src/asset-groups.js";
 import { validateLayoutPackageBytes } from "../src/package-reader.js";
-import type { CwebpRunner } from "../src/types.js";
+import type { AudioToolRunner, CwebpRunner } from "../src/types.js";
 import {
   createMappedLayoutZip,
   fakeWebp,
@@ -22,6 +23,106 @@ afterEach(async () => {
 });
 
 describe("optimized package flow", () => {
+  it("transcodes typed root audio to AAC-LC M4A and emits v2 metadata", async () => {
+    const root = await makeRoot();
+    const input = join(root, "layout-audio.zip");
+    const latest = upgradeSceneLayoutManifestToLatest(layoutFixture());
+    const manifest = {
+      ...latest,
+      audio: {
+        version: 1 as const,
+        music: [
+          {
+            name: "base",
+            asset: {
+              sources: [{ path: "base.wav", mediaType: "audio/wav" as const }],
+            },
+            loop: true as const,
+            fadeOutSeconds: 1,
+            fadeInSeconds: 1,
+          },
+        ],
+        effects: [
+          {
+            name: "click",
+            asset: {
+              sources: [{ path: "click.wav", mediaType: "audio/wav" as const }],
+            },
+            playback: "once" as const,
+            offsetSeconds: 0,
+            voices: { maxConcurrent: 1, overflow: "restart-oldest" as const },
+            bgm: { kind: "keep" as const },
+          },
+        ],
+        programmaticEffects: ["click"],
+      },
+      gameModes: {
+        ...latest.gameModes,
+        modes: latest.gameModes!.modes.map((mode) =>
+          mode.id === latest.gameModes!.initialMode
+            ? { ...mode, bgm: "base" }
+            : mode,
+        ),
+      },
+    };
+    await writeFile(
+      input,
+      await createMappedLayoutZip({
+        manifest,
+        logicalFiles: new Map([
+          ...logicalFixtureFiles(),
+          ["base.wav", new Uint8Array([1, 2, 3])],
+          ["click.wav", new Uint8Array([4, 5])],
+        ]),
+      }),
+    );
+    const options = resolveCliOptions({
+      inputPath: input,
+      quality: 80,
+      cwebpExecutable: "cwebp",
+    });
+    const result = await optimizeLayoutPackageFile(
+      options,
+      fakeRunner(),
+      fakeAudioRunner(),
+    );
+    expect(result.convertedAudioCount).toBe(2);
+    const validated = await validateLayoutPackageBytes(
+      new Uint8Array(await readFile(result.outputPath)),
+    );
+    expect(validated.files.has("base.m4a")).toBe(true);
+    expect(validated.files.has("click.m4a")).toBe(true);
+    expect(validated.files.has("base.wav")).toBe(false);
+    if (validated.manifest.version !== 4)
+      throw new Error("Expected Scene Layout v4.");
+    expect(validated.manifest.audio.music[0]?.asset.sources).toEqual([
+      { path: "base.m4a", mediaType: "audio/mp4" },
+    ]);
+    expect(validated.manifest.audio.effects[0]?.asset.sources).toEqual([
+      { path: "click.m4a", mediaType: "audio/mp4" },
+    ]);
+    const groups = parseSceneLayoutAssetGroups(
+      JSON.parse(await readFile(result.assetsJsonPath, "utf8")),
+    );
+    expect(groups.version).toBe(2);
+    if (groups.version !== 2) throw new Error("Expected asset groups v2.");
+    expect(groups.optimization).toMatchObject({
+      audioCodec: "aac-lc",
+      audioContainer: "m4a",
+      convertedAudioCount: 2,
+      bgmBitrateKbps: 128,
+      effectMonoBitrateKbps: 64,
+      effectStereoBitrateKbps: 96,
+    });
+    expect(
+      groups.groups.find((group) => group.id === "audio:scene-layout"),
+    ).toMatchObject({
+      requiredAssets: ["base.m4a", "click.m4a"],
+      incrementalAssets: ["base.m4a", "click.m4a"],
+    });
+    expect(groups.initialAssets).not.toContain("base.m4a");
+  });
+
   it("writes a verified WebP package and external initial/delta groups", async () => {
     const root = await makeRoot();
     const input = join(root, "layout.zip");
@@ -187,6 +288,39 @@ function fakeRunner(): CwebpRunner & {
     encode: vi.fn(async ({ outputPath }: { outputPath: string }) => {
       await writeFile(outputPath, fakeWebp(seed));
       seed += 1;
+    }),
+  };
+}
+
+function fakeAudioRunner(): AudioToolRunner {
+  return {
+    ffmpegVersion: vi.fn(async () => "fixture-ffmpeg 1"),
+    ffprobeVersion: vi.fn(async () => "fixture-ffprobe 1"),
+    probe: vi.fn(async ({ label }) => ({
+      codecName: label.endsWith(".m4a") ? "aac" : "pcm_s16le",
+      profile: label.endsWith(".m4a") ? "LC" : null,
+      channels: label.startsWith("click") ? 1 : 2,
+      sampleRate: 48_000,
+      bitRate: label.endsWith(".m4a") ? 96_000 : 768_000,
+    })),
+    encode: vi.fn(async ({ outputPath, bitrateKbps }) => {
+      await writeFile(
+        outputPath,
+        new Uint8Array([
+          0,
+          0,
+          0,
+          16,
+          0x66,
+          0x74,
+          0x79,
+          0x70,
+          bitrateKbps,
+          0,
+          0,
+          0,
+        ]),
+      );
     }),
   };
 }
