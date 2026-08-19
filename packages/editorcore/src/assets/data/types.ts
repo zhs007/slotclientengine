@@ -12,7 +12,8 @@ export type EditorAssetRootKind =
   | "vni"
   | "image-string"
   | "popup"
-  | "symbols";
+  | "symbols"
+  | "game-layout";
 
 export type EditorAssetNodeKind =
   | EditorAssetRootKind

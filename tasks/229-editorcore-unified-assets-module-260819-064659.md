@@ -10,7 +10,7 @@ EditorCore 公开 `assets/data`、`assets/core`、`assets/adapters`、`assets/ui
 
 ## 实现摘要
 
-- 支持 image、audio、video、spine、vni、image-string、popup、symbols 八类顶层 root。
+- 支持 image、audio、video、spine、vni、image-string、popup、symbols、game-layout 九类顶层 root。
 - Spine 和 Popup 内部 Spine 在 prepare 阶段建立 skeleton → atlas → texture；内部 leaf 只读，root 才能 bind/delete/rename。
 - graph 保存唯一 node/typed relation，树仅为多 root 共享 leaf 的 UI 投影；关系环、dangling、未知格式和不完整 closure 显式失败。
 - 一个导入按钮支持普通文件和 ZIP；profile、同名覆盖/keep-both、host candidate validation 完成后才提交，失败保留旧 snapshot。
@@ -25,7 +25,7 @@ EditorCore 公开 `assets/data`、`assets/core`、`assets/adapters`、`assets/ui
 - 新增 `packages/editorcore/**`、`apps/editordemo/**`。
 - 更新 `pnpm-lock.yaml` 的两个 workspace importer；没有新增第三方 runtime 依赖。
 - 更新 `AGENTS.md` 路由、`docs/agent-rules/editor-artifacts.md` 和 `packages/editorresource/README.md`，固化“flat identity + typed tree projection + physical hash dedupe”边界。
-- owner public API 已足够，本任务没有修改 RenderCore、VNICore、AudioCore 或正式 Editor。
+- owner public API 已足够；交付包补验仅修正 RenderCore 的 VNI bundle profile 校验边界，没有修改 VNICore、AudioCore 或正式 Editor。
 
 ## 自动验收
 
@@ -49,3 +49,11 @@ EditorCore 公开 `assets/data`、`assets/core`、`assets/adapters`、`assets/ui
 浏览器人工验收按用户要求由用户执行，本报告不将其记为已通过。建议运行 `pnpm --filter editordemo dev`，重点检查混合导入/review、Spine/Popup/Symbols 展开、程序 binding 与删除阻止、导出重导，以及 10,000-root 搜索/滚动。
 
 规划稿的验收级别由 L3 调整为用户指定的定向 L2；原因是本任务没有开始迁移正式 Editor。除此之外没有扩大到 production schema/runtime/app，也没有新增第三方 UI 或 virtualization 依赖。
+
+## 交付包兼容补验
+
+- 修正 VNI bundle profile 边界：editing backup 只校验结构、profile 和闭包，选中的 runtime profile 继续执行完整运行时校验。
+- Symbols mapped ZIP 允许 package manifest 声明的 game config 与 symbol manifest 作为正式 control files。
+- 新增 `game-layout` package root，复用 RenderCore Scene Layout parser 与 exact closure collector。
+- 真实交付包验证通过：`bamboo2.zip` 导入为 11-key VNI root，`symbols.zip` 导入为 114-key Symbols root，`layout9.zip` 导入为 218-key Game Layout root，均无 blocking error。
+- EditorCore：typecheck、lint、4 files / 21 tests 通过；RenderCore VNI bundle 定向测试 6 tests、typecheck、定向 lint 通过；Editordemo typecheck 通过。

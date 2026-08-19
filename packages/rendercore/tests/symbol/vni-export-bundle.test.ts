@@ -135,6 +135,27 @@ describe("symbol VNI export bundle", () => {
     });
   });
 
+  it("does not apply runtime validation to an editing backup", () => {
+    const entries = bundleEntries();
+    const editing = project("edit_full", "editing");
+    editing.stage.width = 0;
+    entries.set("edit_full/l1.json", encode(editing));
+
+    expect(inspectSymbolVniExportBundle(entries)?.map(({ id }) => id)).toEqual([
+      "runtime_100",
+    ]);
+    expect(
+      materializeSymbolVniExportBundleRuntime({ entries }).profile.id,
+    ).toBe("runtime_100");
+
+    const invalidRuntime = project("runtime_100", "runtime");
+    invalidRuntime.stage.width = 0;
+    entries.set("runtime_100/l1.json", encode(invalidRuntime));
+    expect(() => inspectSymbolVniExportBundle(entries)).toThrow(
+      /project\.stage\.width/,
+    );
+  });
+
   it("requires an explicit valid selection when multiple runtime profiles exist", () => {
     const entries = bundleEntries({ extraRuntime: true });
     expect(() => materializeSymbolVniExportBundleRuntime({ entries })).toThrow(

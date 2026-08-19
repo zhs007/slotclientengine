@@ -40,6 +40,10 @@ import {
   materializeSymbolVniExportBundleRuntime,
 } from "@slotclientengine/rendercore/symbol/editor";
 import {
+  collectSceneLayoutPackagePaths,
+  parseSceneLayoutManifestDocument,
+} from "@slotclientengine/rendercore/scene-layout/editor";
+import {
   assertVNIProject,
   rewriteVNIProjectAssetPaths,
   validateVNIProject,
@@ -124,6 +128,7 @@ export async function discoverDefaultEditorAssets(options: {
           "image-string.manifest.json",
           "popup.manifest.json",
           "symbols.package.json",
+          "layout.manifest.json",
           "manifest.json",
         ],
       );
@@ -277,6 +282,12 @@ async function discoverZipAssets(options: {
       profiles: [],
       errors: [],
     };
+  if (options.entries.has("layout.manifest.json"))
+    return {
+      drafts: [await discoverGameLayoutPackage(options.entries)],
+      profiles: [],
+      errors: [],
+    };
   if (options.entries.has("manifest.json")) {
     const inspected = inspectSymbolVniExportBundle(options.entries);
     if (inspected) {
@@ -383,14 +394,25 @@ async function discoverPopupPackage(
 async function discoverSymbolsPackage(
   entries: ReadonlyMap<string, Uint8Array>,
 ): Promise<EditorAssetRootDraft> {
-  const { logical } = await resolveMappedPackage(entries, [
-    "symbols.package.json",
-  ]);
   const rawPackage = parseJson(
     requiredBytes(entries, "symbols.package.json"),
     "symbols.package.json",
   );
   const packageManifest = parseSymbolPackageManifest(rawPackage);
+  const controlPaths = [
+    "symbols.package.json",
+    packageManifest.entrypoints.gameConfig,
+    packageManifest.entrypoints.symbolManifest,
+  ];
+  const { logical: mappedLogical } = await resolveMappedPackage(
+    entries,
+    controlPaths,
+  );
+  const logical = new Map(mappedLogical);
+  for (const key of controlPaths.slice(1)) {
+    const bytes = entries.get(key);
+    if (bytes) logical.set(key, bytes);
+  }
   const validationFiles = new Map(logical);
   validationFiles.set(
     "symbols.package.json",
@@ -455,6 +477,36 @@ async function discoverSymbolsPackage(
       materialized.packageManifest.entrypoints.gameConfig,
       materialized.packageManifest.entrypoints.symbolManifest,
     ],
+  });
+}
+
+async function discoverGameLayoutPackage(
+  entries: ReadonlyMap<string, Uint8Array>,
+): Promise<EditorAssetRootDraft> {
+  const manifest = parseSceneLayoutManifestDocument(
+    parseJson(
+      requiredBytes(entries, "layout.manifest.json"),
+      "layout.manifest.json",
+    ),
+  );
+  const { logical } = await resolveMappedPackage(entries, [
+    "layout.manifest.json",
+  ]);
+  const closure = collectSceneLayoutPackagePaths({ manifest, files: logical });
+  const rootKey = `${manifest.id}-layout.manifest.json`;
+  const inputs = [
+    input(rootKey, "application/json", encodeJson(manifest)),
+    ...closure.map((key) => {
+      const bytes = requiredBytes(logical, key);
+      return input(key, mediaTypeForKey(key, bytes), bytes);
+    }),
+  ];
+  return createPackageDraft({
+    kind: "game-layout",
+    rootKey,
+    owner: `game-layout:${manifest.id}`,
+    inputs,
+    manifest,
   });
 }
 
@@ -637,7 +689,7 @@ function createImageStringDraft(
 }
 
 function createPackageDraft(options: {
-  kind: "popup" | "symbols";
+  kind: "popup" | "symbols" | "game-layout";
   rootKey: string;
   owner: string;
   inputs: readonly EditorAssetInput[];
@@ -689,13 +741,21 @@ function createPackageDraft(options: {
             : [resource.path];
       addResourceTree(nodes, relations, rootManifest.id, keys, inputByKey);
     }
-  } else {
+  } else if (options.kind === "symbols") {
     const manifest = parseSymbolPackageManifest(options.manifest);
     addResourceTree(
       nodes,
       relations,
       rootManifest.id,
       manifest.resources,
+      inputByKey,
+    );
+  } else {
+    addResourceTree(
+      nodes,
+      relations,
+      rootManifest.id,
+      options.inputs.slice(1).map(({ key }) => key),
       inputByKey,
     );
   }

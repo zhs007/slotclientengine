@@ -194,27 +194,25 @@ describe("default adapters", () => {
       resources: ["A.png"],
     };
     const entries = await mappedEntries([
-      {
-        key: "gameconfig.json",
-        mediaType: "application/json",
-        bytes: encode({
-          paytable: { "0": { code: 0, symbol: "A", pays: [1] } },
-          symbolCodes: { A: 0 },
-          reels: { main: [[0]] },
-        }),
-      },
-      {
-        key: "symbol-state-textures.manifest.json",
-        mediaType: "application/json",
-        bytes: encode({
-          version: 1,
-          states: [],
-          symbols: { A: { normal: "./A.png", scale: 1 } },
-        }),
-      },
       { key: "A.png", mediaType: "image/png", bytes: PNG },
     ]);
     entries.set("symbols.package.json", encode(packageManifest));
+    entries.set(
+      "gameconfig.json",
+      encode({
+        paytable: { "0": { code: 0, symbol: "A", pays: [1] } },
+        symbolCodes: { A: 0 },
+        reels: { main: [[0]] },
+      }),
+    );
+    entries.set(
+      "symbol-state-textures.manifest.json",
+      encode({
+        version: 1,
+        states: [],
+        symbols: { A: { normal: "./A.png", scale: 1 } },
+      }),
+    );
     const result = await discoverDefaultEditorAssets({
       sources: zipSources("symbols.zip", entries),
     });
@@ -224,6 +222,60 @@ describe("default adapters", () => {
       key: "demo-symbols-symbols.package.json",
     });
     expect(result.drafts[0]!.exactKeys).toContain("demo-symbols-A.png");
+  });
+
+  it("discovers an existing mapped Game Layout package", async () => {
+    const manifest = {
+      version: 1,
+      kind: "scene-layout",
+      id: "demo-layout",
+      adaptation: {
+        mode: "maximized-focus",
+        artSize: { width: 100, height: 100 },
+        focusRect: { x: 0, y: 0, width: 100, height: 100 },
+        backgroundNode: "bg",
+      },
+      nodes: [
+        {
+          id: "bg",
+          order: 0,
+          resource: {
+            kind: "image",
+            path: "bg.png",
+            size: { width: 1, height: 1 },
+          },
+          placements: { default: { x: 0, y: 0, scale: 1 } },
+        },
+      ],
+      reels: {
+        main: {
+          columns: 1,
+          rows: 1,
+          cellSize: { width: 1, height: 1 },
+          gap: { x: 0, y: 0 },
+          placements: { default: { x: 0, y: 0 } },
+        },
+      },
+    };
+    const entries = await mappedEntries([
+      { key: "bg.png", mediaType: "image/png", bytes: PNG },
+    ]);
+    entries.set("layout.manifest.json", encode(manifest));
+
+    const result = await discoverDefaultEditorAssets({
+      sources: zipSources("layout.zip", entries),
+    });
+
+    expect(result.blockingErrors).toEqual([]);
+    expect(result.drafts[0]).toMatchObject({
+      kind: "game-layout",
+      key: "demo-layout-layout.manifest.json",
+      owner: "game-layout:demo-layout",
+    });
+    expect(result.drafts[0]!.exactKeys).toEqual([
+      "demo-layout-layout.manifest.json",
+      "bg.png",
+    ]);
   });
 
   it("binds Spine skeleton -> atlas -> page during prepare", async () => {
@@ -437,6 +489,13 @@ function zipSources(
 function vniBundleEntries(): Map<string, Uint8Array> {
   const exports = [
     {
+      id: "edit_full",
+      purpose: "editing",
+      assetScale: 1,
+      path: "edit_full/project.json",
+      label: "editing backup",
+    },
+    {
       id: "runtime_100",
       purpose: "runtime",
       assetScale: 1,
@@ -451,11 +510,15 @@ function vniBundleEntries(): Map<string, Uint8Array> {
       label: "50%",
     },
   ];
+  const editing = vniProject("edit_full", "editing");
+  editing.stage.width = 0;
   return new Map([
     [
       "manifest.json",
       encode({ type: "vni_export_bundle", version: "VNI_0.087", exports }),
     ],
+    ["edit_full/project.json", encode(editing)],
+    ["edit_full/assets/spark.png", PNG],
     ["runtime_100/project.json", encode(vniProject("runtime_100", "runtime"))],
     ["runtime_100/assets/spark.png", PNG],
     ["runtime_50/project.json", encode(vniProject("runtime_50", "runtime"))],
