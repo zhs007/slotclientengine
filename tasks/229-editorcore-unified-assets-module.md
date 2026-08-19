@@ -11,12 +11,12 @@ Task 229 先证明共享模块本身成立，不在同一任务中重构 `imgnum
 ### 完成定义
 
 - [x] `@slotclientengine/editorcore` 提供稳定的 `assets/data`、`assets/core`、`assets/adapters`、`assets/ui` public exports；headless 合同不依赖 DOM/Pixi，UI 可挂载到宿主 HTMLElement 并可完整 destroy。
-- [x] 统一导入 API 和一个 UI 按钮可在同一批次混选普通文件与 ZIP，严格识别 PNG/JPEG/WebP、当前 AudioCore 支持的音频、MP4、VNI、Spine、ImgNumber、Popup、Symbols；未知、歧义、缺失、orphan 或不兼容输入使整个事务显式失败。
+- [x] 统一导入 API 和一个 UI 按钮可在同一批次混选普通文件与 ZIP，严格识别 PNG/JPEG/WebP、当前 AudioCore 支持的音频、MP4、VNI、Spine、ImgNumber、Popup、Symbols、Game Layout；未知、歧义、缺失、orphan 或不兼容输入使整个事务显式失败。
 - [x] Assets 外层是可搜索、筛选、虚拟滚动的 root 列表；展开 root 后可逐层查看 typed closure，包括 Spine skeleton → atlas → page texture，以及 package → nested resource → payload。
 - [x] Spine atlas/page 关系在导入 prepare 阶段由 strict parser 确定并随 root 原子提交；atlas page texture 只能作为所属 Spine closure 的内部节点，不能被 Picker、业务引用或程序 binding 单独使用。
 - [x] 若确实要复用 Spine texture，用户必须另行导入一个独立顶层图片 key；相同 bytes 最终仍由 `assets.map.json` 的完整 SHA-256 payload 物理去重，两个 logical identity 不合并。
 - [x] 每个 root 和内部节点都可查看 direct/transitive 使用位置；程序使用只来自宿主显式 typed binding。两种状态由引用图派生，不保存可能漂移的 `used/programmatic` 布尔副本。
-- [x] ImgNumber、Popup、Symbols ZIP 可作为 typed dependency root；Popup/Symbols 内嵌 ImgNumber 的 owner、引用方向和 exact closure 在树中保留，leaf 不反向拥有或带入 sibling root。
+- [x] ImgNumber、Popup、Symbols、Game Layout ZIP 可作为 typed dependency root；Popup/Symbols/Game Layout 的 nested owner、引用方向和 exact closure 在树中保留，leaf 不反向拥有或带入 sibling root。
 - [x] `editordemo` 可完成导入、冲突 review、展开/折叠、搜索/筛选、选择/检查、程序 binding、删除、导出、重导和 rollback 验证，并提供大数据测试集验证布局不会一次创建全部 DOM rows。
 - [x] 相同 bytes 的不同 logical keys/不同 owner 在导出物中共享同一个 content-addressed payload；重导后 root identity、树关系、引用/程序 binding 和 hash 去重结果一致。
 - [ ] public API、README、领域规则、自动测试和构建完成；Editordemo 达到可由用户执行浏览器人工验收的状态，报告明确记录其结果待用户回填。
@@ -34,7 +34,7 @@ Task 229 先证明共享模块本身成立，不在同一任务中重构 `imgnum
   - atomic video：MP4；
   - VNI：project JSON 或正式 runtime export ZIP；
   - Spine 4.3：一至多个 skeleton JSON、atlas 和 atlas 声明的全部 page textures；
-  - package：ImgNumber、Popup、Symbols 的 mapped ZIP 与其 nested exact closure。
+  - package：ImgNumber、Popup、Symbols、Game Layout 的 mapped ZIP 与其 nested exact closure。
 - 统一 Assets UI：工具栏、单一导入入口、筛选/search、虚拟化 tree list、状态列、inspector、import review、错误/空/loading 状态和可插拔 preview surface。
 - `apps/editordemo` 的最小 host project、程序 binding、导出/导入和规模化 fixture；它只用于验证 EditorCore，不承载真实游戏/Editor 业务。
 - 必要的 package manifest、workspace lockfile、README、领域规则和 source-boundary 测试。
@@ -42,7 +42,7 @@ Task 229 先证明共享模块本身成立，不在同一任务中重构 `imgnum
 ### 不包含
 
 - 不迁移或修改四个正式 Editor 的 draft、UI、ZIP 或 preview；迁移应拆成后续独立任务。
-- Scene Layout ZIP 是 Game Layout 项目本身，不作为 Task 229 的 asset dependency；Task 229 只验证未来 Game Layout 会消费的 ImgNumber、Popup、Symbols root。
+- Game Layout ZIP 作为可检查、可展开的 package root 导入；EditorCore 只管理其 manifest 与 exact asset closure，不接管 Game Layout 的项目编辑、配置或业务预览。
 - 不实现统一“项目、配置、业务预览”模块；只为 Assets 提供内容检查与 preview provider 接口。
 - 不在 EditorCore 复制 Pixi、official Spine、VNI、Popup、Symbols 或 ImgNumber runtime player；Task 229 的默认检查器只显示图片、原生 audio/video 和 compound metadata。动画预览由未来 host 注入 owner preview provider。
 - 不做 atlas packing、图片/音视频转码、压缩、云端资源库、上传/CDN、多人协作或自动业务绑定。
@@ -95,7 +95,7 @@ apps/{imgnumbereditor,popupeditor,symbolseditor,gamelayouteditor}/README.md
 
 1. “树状结构”指 typed ownership/dependency 的可展开 forest，不指磁盘目录。最外层只列可被 host
    选择的 asset roots；内部 JSON、atlas、texture、nested package payload 通过关系向下查看。
-2. 图片、音频、视频是单节点 root；VNI 和 Spine 是 compound root；ImgNumber、Popup、Symbols 是
+2. 图片、音频、视频是单节点 root；VNI 和 Spine 是 compound root；ImgNumber、Popup、Symbols、Game Layout 是
    package root。不同 host 通过 capability allowlist 决定允许导入/程序绑定哪些 root kind，但调用同一
    `importAssets()` 和同一个按钮。
 3. “是否被使用”包含 direct host reference 和由已使用 root 传递到 leaf 的 transitive usage；
@@ -135,7 +135,7 @@ apps/{imgnumbereditor,popupeditor,symbolseditor,gamelayouteditor}/README.md
 - **`assets/ui`**：`mountEditorAssetsView()`（最终名称执行时固定并记录）、event delegation、virtual rows、inspector、review dialog、preview provider slot、Object URL/revoke 和 destroy；不得持有业务 project 真相。
 - **host adapter**：clone project、collect typed references、collect/set program binding、rename references、
   validate candidate 和可选 preview provider。EditorCore 不猜 node/state/layer/mode 的业务语义。
-- **基础数据**：payload 继续使用 `EditorAssetEntry`/`EditorAssetWorkspace`；compound descriptor 至少声明 `kind`、root identity、owner、exact keys 和 typed relations。root kind 固定为 `image | audio | video | spine | vni | image-string | popup | symbols`，未知值 strict fail。
+- **基础数据**：payload 继续使用 `EditorAssetEntry`/`EditorAssetWorkspace`；compound descriptor 至少声明 `kind`、root identity、owner、exact keys 和 typed relations。root kind 固定为 `image | audio | video | spine | vni | image-string | popup | symbols | game-layout`，未知值 strict fail。
 - **关系方向**：只允许 root/manifest/skeleton 指向 dependency；atlas/page、glyph、VNI image、nested
   package leaf 不反向拥有 root。shared leaf 不会使未使用 sibling root 进入 closure。
 - **使用状态**：root 的 direct reference、program binding、transitive exportability 分开呈现；leaf 显示
@@ -214,7 +214,7 @@ assets/**
      被引用 root、内部 leaf 或失效 binding 不得绕过 validator。
 
 4. **实现统一 adapter 与导入事务**
-   - 复用 bounded ingestion 和 EditorResource review/commit；实现 atomic、Spine、VNI、ImgNumber、Popup、Symbols
+   - 复用 bounded ingestion 和 EditorResource review/commit；实现 atomic、Spine、VNI、ImgNumber、Popup、Symbols、Game Layout
      adapters 与明确 claim priority。
    - Spine 在 prepare 解析 skeleton/atlas/pages，多 skeleton 共享 leaf；VNI 多 runtime profile 要求显式选择；
      nested package 只提交 exact mapped closure。
@@ -253,7 +253,7 @@ assets/**
 ### 测试原则
 
 - adapter 测试使用真实 strict owner manifest/atlas 结构和最小 bytes，不用只返回成功的 fake parser 代替。
-- 覆盖图片/音频/视频、VNI profile、单/多 skeleton、shared atlas、多 page、三类 package 和 nested ImgNumber。
+- 覆盖图片/音频/视频、VNI profile、单/多 skeleton、shared atlas、多 page、四类 package 和 nested ImgNumber。
 - 覆盖同 key 同 bytes noop、同 key 不同 bytes review、keep-both 结构化 rewrite、跨 owner 同 bytes hash dedupe。
 - 覆盖 direct/transitive/programmatic/unused 四种状态、leaf 越权操作、引用中删除、取消 binding 后 closure 变化。
 - 覆盖 unknown/ambiguous/orphan/missing/cycle/bad hash/bad media/profile 未选、prepare failure 与完整 rollback。
@@ -283,7 +283,7 @@ git diff --check
 
 ### 人工验收
 
-- 在真实浏览器打开 Editordemo，一次混选 loose image/audio/video/Spine 与 VNI/ImgNumber/Popup/Symbols ZIP，
+- 在真实浏览器打开 Editordemo，一次混选 loose image/audio/video/Spine 与 VNI/ImgNumber/Popup/Symbols/Game Layout ZIP，
   确认只有一个入口和一份 review，commit 后 root/child 层级正确。
 - 展开 Spine 和 nested package，确认 atlas texture/internal ImgNumber leaf 不能被单独 bind；另行导入同 bytes
   图片后出现独立 top-level root，导出 ZIP 只有一份相同 hash payload。
@@ -376,7 +376,7 @@ lockfile 变化、自动化结果、浏览器/大数据验收、计划偏差和�
 ## 13. 完成清单
 
 - [x] EditorCore Assets 数据、core、adapter、UI 分层和唯一导入入口完成。
-- [x] 八类 root、Spine/VNI/package tree、nested dependency 和 leaf 权限符合计划。
+- [x] 九类 root、Spine/VNI/package tree、nested dependency 和 leaf 权限符合计划。
 - [x] usage/programmatic、rename/delete/conflict、rollback/destroy 和 exact closure 有测试。
 - [x] logical identity 与 hash payload 去重严格分离，demo 导出/重导一致。
 - [ ] 大数据 virtual tree 自动化与真实浏览器验收完成。

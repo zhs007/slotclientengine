@@ -51,7 +51,7 @@ export function mountEditorAssetsView<TProject>(
         <input data-assets-search type="search" placeholder="搜索名称或 key" aria-label="搜索 Assets" />
         <select data-assets-kind aria-label="按类型筛选">
           <option value="all">全部类型</option>
-          ${["image", "audio", "video", "spine", "vni", "image-string", "popup", "symbols"].map((value) => `<option value="${value}">${value}</option>`).join("")}
+          ${["image", "audio", "video", "spine", "vni", "image-string", "popup", "symbols", "game-layout"].map((value) => `<option value="${value}">${value}</option>`).join("")}
         </select>
         <select data-assets-status aria-label="按使用状态筛选">
           <option value="all">全部状态</option><option value="used">已使用</option>

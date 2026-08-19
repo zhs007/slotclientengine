@@ -135,8 +135,11 @@ function inspectBundle(
       `VNI bundle export ${entry.id}`,
     );
     const project = assertVNIProject(parseJson(projectBytes, entry.path));
-    validateVNIProject(project);
     validateManifestProjectProfile(entry, project);
+    // Editing exports are archival authoring backups. They can retain editor
+    // state that is intentionally absent from the runtime profile, so only a
+    // runtime export is required to satisfy the Pixi runtime contract.
+    if (entry.purpose === "runtime") validateVNIProject(project);
     projects.set(entry.id, project);
     let byteLength = projectBytes.byteLength;
     for (const asset of project.assets) {
