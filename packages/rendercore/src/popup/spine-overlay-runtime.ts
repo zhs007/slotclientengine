@@ -15,6 +15,7 @@ import type {
   PopupOverlayLayer,
   PopupPreparedResource,
   PopupSegment,
+  SingleStatePopupLayerV8,
   SpinePopupOverlayLayerV5,
 } from "./types.js";
 
@@ -27,6 +28,10 @@ export interface SpinePopupOverlayRuntime {
     readonly defaultText: string;
     setText(text: string): void;
   };
+  mountNodeToTextLayer?(options: {
+    readonly textLayerId: string;
+    readonly node: Container;
+  }): () => void;
   init(): Promise<void>;
   start(): void;
   update(deltaSeconds: number): void;
@@ -36,7 +41,10 @@ export interface SpinePopupOverlayRuntime {
 
 export function createSpinePopupOverlayRuntime(options: {
   readonly popupId: string;
-  readonly layer: PopupOverlayLayer | SpinePopupOverlayLayerV5;
+  readonly layer:
+    | PopupOverlayLayer
+    | SpinePopupOverlayLayerV5
+    | SingleStatePopupLayerV8;
   readonly resource?: PopupPreparedResource;
   readonly spinePlayerFactory?: () => RendercoreSpinePlayer;
   readonly vniPlayerFactory?: (parent: Container) => VNIRuntime;
@@ -85,7 +93,7 @@ export function createSpinePopupOverlayRuntime(options: {
       container,
       stringNode: {
         kind: "image-string",
-        name: layer.name,
+        name: "name" in layer ? layer.name : layer.id,
         defaultText: layer.defaultText,
         setText(text) {
           renderer.setText(text);
@@ -117,7 +125,7 @@ export function createSpinePopupOverlayRuntime(options: {
       container,
       stringNode: {
         kind: "text",
-        name: layer.name,
+        name: "name" in layer ? layer.name : layer.id,
         defaultText: layer.defaultText,
         setText(text) {
           renderer.setText(text);
@@ -152,14 +160,20 @@ export function createSpinePopupOverlayRuntime(options: {
       start() {
         segment = "start";
         container.visible = visibleInSegment(layer, "start");
-        player.play({
-          animationName: layer.playback.startAnimation,
-          loop: false,
-        });
+        if ("playback" in layer)
+          player.play({
+            animationName: layer.playback.startAnimation,
+            loop: false,
+          });
+        else if (layer.autoplay)
+          player.play({
+            animationName: layer.autoplay.animation,
+            loop: layer.autoplay.loop,
+          });
       },
       update(deltaSeconds) {
         const result = player.update(deltaSeconds);
-        if (segment === "start" && result.completed) {
+        if ("playback" in layer && segment === "start" && result.completed) {
           segment = "loop";
           player.play({
             animationName: layer.playback.loopAnimation,
@@ -169,7 +183,8 @@ export function createSpinePopupOverlayRuntime(options: {
       },
       applySegment(next) {
         container.visible = visibleInSegment(layer, next);
-        if (next !== "end" || segment === "end") return;
+        if (!("playback" in layer) || next !== "end" || segment === "end")
+          return;
         segment = "end";
         player.play({
           animationName: layer.playback.endAnimation,
@@ -190,6 +205,7 @@ export function createSpinePopupOverlayRuntime(options: {
           project: resource.project,
           assetUrls: resource.assetUrls,
         });
+    let mountIndex = 0;
     return {
       container,
       async init() {
@@ -203,15 +219,26 @@ export function createSpinePopupOverlayRuntime(options: {
       },
       start() {
         container.visible = visibleInSegment(layer, "start");
-        startPopupVniPlayback(player, layer.playback);
+        const playback = "playback" in layer ? layer.playback : layer.autoplay;
+        if (playback) startPopupVniPlayback(player, playback);
       },
       update(deltaSeconds) {
         player.update(deltaSeconds);
       },
       applySegment(segment) {
         container.visible = visibleInSegment(layer, segment);
-        if (segment === "end")
+        if (segment === "end" && "playback" in layer)
           requestPopupVniPlaybackEnd(player, layer.playback);
+      },
+      mountNodeToTextLayer({ textLayerId, node }) {
+        mountIndex += 1;
+        return player.attachNodeToTextLayer({
+          id: `popup-text-mount-${layer.id}-${mountIndex}`,
+          layerId: textLayerId,
+          node,
+          destroyOnDetach: false,
+          hideOriginal: true,
+        });
       },
       destroy() {
         player.destroy();
@@ -223,10 +250,11 @@ export function createSpinePopupOverlayRuntime(options: {
 }
 
 function visibleInSegment(
-  layer: PopupOverlayLayer | SpinePopupOverlayLayerV5,
+  layer: PopupOverlayLayer | SpinePopupOverlayLayerV5 | SingleStatePopupLayerV8,
   segment: PopupSegment,
 ): boolean {
-  if (layer.visibleStates) return layer.visibleStates.includes(segment);
+  if ("visibleStates" in layer && layer.visibleStates)
+    return layer.visibleStates.includes(segment);
   if ("visibleSegments" in layer && layer.visibleSegments)
     return layer.visibleSegments.includes(segment);
   return true;

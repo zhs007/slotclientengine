@@ -187,17 +187,24 @@ export function createSceneLayoutAssetGroups(options: {
             ),
             requiredAssets,
           }
-        : {
-            id: `award-celebration:${popupId}`,
-            kind: "award-celebration" as const,
-            popupId,
-            requiredAssets,
-            usedByModes: sortUnique(
-              gameModes.modes
-                .filter((mode) => mode.awardCelebrationPopup === popupId)
-                .map((mode) => mode.id),
-            ),
-          },
+        : nested.type === "single-state"
+          ? {
+              id: `single-state-popup:${popupId}`,
+              kind: "single-state-popup" as const,
+              popupId,
+              requiredAssets,
+            }
+          : {
+              id: `award-celebration:${popupId}`,
+              kind: "award-celebration" as const,
+              popupId,
+              requiredAssets,
+              usedByModes: sortUnique(
+                gameModes.modes
+                  .filter((mode) => mode.awardCelebrationPopup === popupId)
+                  .map((mode) => mode.id),
+              ),
+            },
     );
   }
 
@@ -216,7 +223,8 @@ export function createSceneLayoutAssetGroups(options: {
         (group.usedByTransitions.length === 0 ||
           group.usedByTransitions.some((edge) =>
             edge.startsWith(`${gameModes.initialMode}->`),
-          )));
+          ))) ||
+      group.kind === "single-state-popup";
     if (include)
       for (const key of group.requiredAssets)
         if (!audioAssets.includes(key)) initial.add(key);
@@ -303,6 +311,8 @@ function finalizeGroup(
     case "award-celebration":
       return { ...group, requiredAssets, incrementalAssets };
     case "spine-popup":
+      return { ...group, requiredAssets, incrementalAssets };
+    case "single-state-popup":
       return { ...group, requiredAssets, incrementalAssets };
   }
 }
@@ -603,7 +613,9 @@ function validateGroup(
                   ? ["popupId", "usedByModes"]
                   : kind === "spine-popup"
                     ? ["popupId", "usedByTransitions"]
-                    : null;
+                    : kind === "single-state-popup"
+                      ? ["popupId"]
+                      : null;
   if (!extras) throw new Error(`groups[${index}].kind 无效。`);
   exactKeys(group, [...common, ...extras], `groups[${index}]`);
   const id = nonEmptyString(group.id, `groups[${index}].id`);
@@ -641,9 +653,11 @@ function validateGroup(
       `${id} identity`,
     );
     stringArray(group.usedByModes, `${id}.usedByModes`);
-  } else {
+  } else if (kind === "spine-popup") {
     nonEmptyString(group.popupId, `${id}.popupId`);
     stringArray(group.usedByTransitions, `${id}.usedByTransitions`);
+  } else {
+    nonEmptyString(group.popupId, `${id}.popupId`);
   }
   return group as unknown as AssetGroupRecord;
 }

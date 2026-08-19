@@ -3,6 +3,8 @@ import {
   createSceneLayoutAssetGroups,
   parseSceneLayoutAssetGroups,
 } from "../src/asset-groups.js";
+import { upgradeSceneLayoutManifestToLatest } from "@slotclientengine/rendercore/scene-layout/data";
+import { layoutFixture, text } from "./fixtures.js";
 
 describe("asset-groups versioned parser", () => {
   it("rejects unknown fields, uncovered assets and wrong deltas", () => {
@@ -94,6 +96,70 @@ describe("asset-groups versioned parser", () => {
       kind: "spine-popup",
       popupId: "free-game",
     });
+  });
+
+  it("creates a standalone single-state Popup group in initial assets", () => {
+    const popupKey = "freeform-popup.manifest.json";
+    const popup = {
+      version: 8,
+      kind: "popup",
+      id: "freeform",
+      name: "Freeform",
+      type: "single-state",
+      adaptation: {
+        mode: "maximized-focus",
+        focus: { left: 50, right: 50, top: 50, bottom: 50 },
+      },
+      backdrop: {
+        enabled: false,
+        color: "#000000",
+        alpha: 0.5,
+        visibleStates: ["active"],
+      },
+      resources: {},
+      audio: { version: 1, effects: [], cues: [] },
+      singleState: { layers: [] },
+    } as const;
+    const latest = upgradeSceneLayoutManifestToLatest(layoutFixture());
+    const manifest = {
+      ...latest,
+      popups: {
+        freeform: {
+          type: "single-state",
+          manifest: popupKey,
+          order: 2000,
+          placements: { default: { x: 0, y: 0, scale: 1 } },
+        },
+      },
+    } as never;
+    const keys = [
+      "alpha.png",
+      "beta.jpg",
+      "shared.webp",
+      "alpha-to-beta.mp4",
+      "beta-to-alpha.mp4",
+      popupKey,
+    ];
+    const groups = createSceneLayoutAssetGroups({
+      manifest,
+      files: new Map([[popupKey, text(popup)]]),
+      sourceZipBytes: 4,
+      output: outputFixture(keys),
+      quality: 80,
+      cwebpVersion: "test",
+      convertedImageCount: 0,
+      ...audioOptimizationFixture(),
+    });
+    expect(
+      groups.groups.find((group) => group.id === "single-state-popup:freeform"),
+    ).toMatchObject({
+      kind: "single-state-popup",
+      popupId: "freeform",
+      requiredAssets: [popupKey],
+      incrementalAssets: [],
+    });
+    expect(groups.initialAssets).toContain(popupKey);
+    expect(parseSceneLayoutAssetGroups(groups)).toEqual(groups);
   });
 
   it("keeps global layer assets shared and assigns scoped layers to one mode", () => {

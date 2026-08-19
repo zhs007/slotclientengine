@@ -26,10 +26,16 @@ export const AWARD_POPUP_STATES = Object.freeze([
   "megawin",
 ] as const satisfies readonly AwardTierId[]);
 
+export const SINGLE_STATE_POPUP_STATES = Object.freeze(["active"] as const);
+
 export function popupVisibilityStates(
   type: PopupManifest["type"],
 ): readonly PopupVisibilityState[] {
-  return type === "award-celebration" ? AWARD_POPUP_STATES : POPUP_SEGMENTS;
+  return type === "award-celebration"
+    ? AWARD_POPUP_STATES
+    : type === "spine"
+      ? POPUP_SEGMENTS
+      : SINGLE_STATE_POPUP_STATES;
 }
 
 export function migrateLegacyPopupSegments<State extends PopupVisibilityState>(
@@ -56,6 +62,8 @@ export function upgradePopupManifestToV5(
     throw new Error(
       `popup manifest v${manifest.version} cannot be downgraded to v5.`,
     );
+  if (manifest.type === "single-state")
+    throw new Error("single-state popup cannot be downgraded to v5.");
   const attachment = (layer: {
     readonly attachment?: unknown;
     readonly parent?: unknown;
@@ -204,8 +212,12 @@ export function upgradePopupManifestToV6(
   manifest: PopupManifest,
 ): PopupManifestV6 {
   if (manifest.version === 6) return manifest;
-  if (manifest.version === 7)
-    throw new Error("popup manifest v7 cannot be downgraded to v6.");
+  if (manifest.version >= 7)
+    throw new Error(
+      `popup manifest v${manifest.version} cannot be downgraded to v6.`,
+    );
+  if (manifest.type === "single-state")
+    throw new Error("single-state popup cannot be downgraded to v6.");
   const legacy = upgradePopupManifestToV5(manifest);
   if (legacy.type === "spine")
     return Object.freeze({

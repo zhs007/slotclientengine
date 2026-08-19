@@ -133,6 +133,16 @@ export async function importPopupZip(
       spec: structuredClone(spec),
       keys: resourceClosure(spec, project.assets),
     });
+  if (manifest.type === "single-state") {
+    project.singleState.layers = structuredClone([
+      ...manifest.singleState.layers,
+    ]);
+    normalizeImportedProject(project);
+    const closure = popupManifestAssetClosure(manifest, project.assets);
+    if (closure.length !== project.assets.size)
+      throw new Error("popup assets map 包含未引用 entry。");
+    return clonePopupEditorProject(project);
+  }
   if (manifest.type === "spine") {
     project.spine = {
       resource: manifest.spine.resource,
@@ -195,6 +205,11 @@ function normalizeImportedProject(project: PopupEditorProject): void {
     (overlay as { attachment?: unknown }).attachment =
       resolvePopupLayerAttachment(overlay);
   }
+  for (const layer of project.singleState.layers) {
+    (layer as { alpha?: number }).alpha ??= 1;
+    (layer as { attachment?: unknown }).attachment =
+      resolvePopupLayerAttachment(layer);
+  }
 }
 
 function popupManifestAssetClosure(
@@ -204,7 +219,7 @@ function popupManifestAssetClosure(
   const keys = new Set<string>();
   for (const spec of Object.values(manifest.resources))
     for (const key of resourceClosure(spec, assets)) keys.add(key);
-  if (manifest.version === 7)
+  if ("audio" in manifest)
     for (const effect of manifest.audio.effects)
       for (const source of effect.asset.sources) keys.add(source.path);
   return Object.freeze([...keys].sort((a, b) => a.localeCompare(b, "en")));

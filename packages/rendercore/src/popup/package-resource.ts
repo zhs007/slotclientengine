@@ -27,7 +27,7 @@ export { collectMappedPopupAssetKeys } from "./data/package-closure.js";
 import type { PopupFontLoader } from "./font-resource.js";
 import type {
   PopupManifest,
-  PopupManifestV7,
+  PopupManifestV8,
   PopupLayer,
   PopupPackageResource,
   PopupResourceSpec,
@@ -43,7 +43,7 @@ export async function createPopupPackageResource(options: {
   readonly decodeImage?: DecodeImageStringImage;
   readonly loadTexture?: (url: string, path: string) => Promise<Texture>;
   readonly loadFont?: PopupFontLoader;
-}): Promise<PopupPackageResource<PopupManifestV7>> {
+}): Promise<PopupPackageResource<PopupManifestV8>> {
   const manifest = loadPopupManifest(
     options.manifest ?? parseJson(requireBytes(options.files, ROOT), ROOT),
   ).manifest;
@@ -255,7 +255,7 @@ export async function loadPopupPackageFromUrl(options: {
   readonly fetchImpl?: typeof fetch;
   readonly decodeImage?: DecodeImageStringImage;
   readonly loadTexture?: (url: string, path: string) => Promise<Texture>;
-}): Promise<PopupPackageResource<PopupManifestV7>> {
+}): Promise<PopupPackageResource<PopupManifestV8>> {
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   if (typeof fetchImpl !== "function")
     throw new Error("fetchImpl is required.");
@@ -376,16 +376,34 @@ function rewritePopupManifestWithMapping(
           resources,
           spine: rewriteSpineReferences(manifest.spine, resourceKeys),
         }
-      : {
-          ...manifest,
-          resources,
-          awardCelebration: {
-            base: rewriteLayers(manifest.awardCelebration.base),
-            standard: rewriteLayers(manifest.awardCelebration.standard),
-            celebrationTiers:
-              manifest.awardCelebration.celebrationTiers.map(rewriteLayers),
+      : manifest.type === "single-state"
+        ? {
+            ...manifest,
+            resources,
+            singleState: {
+              layers: manifest.singleState.layers.map((layer) => ({
+                ...layer,
+                ...(layer.resource
+                  ? {
+                      resource: requiredPopupResourceKey(
+                        resourceKeys,
+                        layer.resource,
+                      ),
+                    }
+                  : {}),
+              })),
+            },
+          }
+        : {
+            ...manifest,
+            resources,
+            awardCelebration: {
+              base: rewriteLayers(manifest.awardCelebration.base),
+              standard: rewriteLayers(manifest.awardCelebration.standard),
+              celebrationTiers:
+                manifest.awardCelebration.celebrationTiers.map(rewriteLayers),
+            },
           },
-        },
   );
 }
 

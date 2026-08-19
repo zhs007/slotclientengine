@@ -508,7 +508,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
         throw new SceneLayoutError(
           `Popup package resource "${popupId}" is unavailable for audio aggregation.`,
         );
-      if (popup.manifest.version !== 7) continue;
+      if (!("audio" in popup.manifest)) continue;
       for (const effect of popup.manifest.audio.effects)
         addEffect(`${popupId}.${effect.name}`, effect, binding.manifest);
     }

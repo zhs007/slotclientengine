@@ -7,6 +7,8 @@ import type {
   RenderObject,
   RenderObjectLayer,
 } from "../../presentation/index.js";
+import type { PopupStringNodeHandle } from "../../popup/core/index.js";
+import type { PopupManifest } from "../../popup/data/index.js";
 import { SceneLayoutError } from "../errors.js";
 import type {
   SceneLayoutGameModeSnapshot,
@@ -38,12 +40,7 @@ interface EndpointBase<K extends GameLayoutRuntimeAddressKind> {
   readonly descriptor: GameLayoutRuntimeAddressDescriptor;
 }
 export interface GameLayoutStructuralEndpoint extends EndpointBase<
-  | "mode"
-  | "mode-bgm"
-  | "transition"
-  | "popup"
-  | "popup-layer"
-  | "symbol-package"
+  "mode" | "mode-bgm" | "transition" | "popup" | "symbol-package"
 > {
   getGameModeSnapshot(): SceneLayoutGameModeSnapshot;
 }
@@ -56,9 +53,13 @@ export interface GameLayoutRenderLayerEndpoint extends EndpointBase<"layer"> {
 export interface GameLayoutReelEndpoint extends EndpointBase<"reel"> {
   getArea(): import("../../reel/index.js").PresentableSymbolArea;
 }
+export interface GameLayoutPopupLayerEndpoint extends EndpointBase<"popup-layer"> {
+  get(): RenderObject;
+}
 export interface GameLayoutPopupStringEndpoint extends EndpointBase<"popup-string"> {
   readonly stringKind: "text" | "image-string";
   readonly name: string;
+  get(): PopupStringNodeHandle;
   input(text: string): SceneLayoutPopupStringInput;
 }
 export interface GameLayoutAudioEffectEndpoint extends EndpointBase<"audio-effect"> {
@@ -81,6 +82,7 @@ export type GameLayoutRuntimeEndpoint =
   | GameLayoutRenderObjectEndpoint
   | GameLayoutRenderLayerEndpoint
   | GameLayoutReelEndpoint
+  | GameLayoutPopupLayerEndpoint
   | GameLayoutPopupStringEndpoint
   | GameLayoutAudioEffectEndpoint
   | GameLayoutAudioMusicEndpoint
@@ -109,6 +111,12 @@ interface RuntimeBridge {
   playEffect(route: string): AudioPlaybackHandle;
   stopEffect(route: string): void;
   getAudioSnapshot(): AudioRuntimeSnapshot;
+  getPopupLayer(popupId: string, layerId: string): RenderObject;
+  getPopupString(
+    popupId: string,
+    kind: "text" | "image-string",
+    name: string,
+  ): PopupStringNodeHandle;
   createRenderObject(name: string): Promise<RenderObject>;
   createImgNumberRenderObject(
     name: string,
@@ -328,8 +336,13 @@ export function createGameLayoutRuntimeAddresses(
         [...owner, "layer", layerId],
         "popup-layer",
         owner,
-        "structural",
-        structural,
+        "borrowed",
+        (descriptor) =>
+          Object.freeze({
+            kind: "popup-layer",
+            descriptor,
+            get: () => bridge.getPopupLayer(popupId, layerId),
+          }),
       );
     for (const item of nested.strings)
       add(
@@ -343,6 +356,7 @@ export function createGameLayoutRuntimeAddresses(
             descriptor,
             stringKind: item.kind,
             name: item.name,
+            get: () => bridge.getPopupString(popupId, item.kind, item.name),
             input: (text: string) =>
               Object.freeze({ kind: item.kind, name: item.name, text }),
           }),
@@ -557,32 +571,52 @@ export function createGameLayoutRuntimeAddresses(
   });
 }
 
-function collectPopupAddresses(manifest: object) {
+function collectPopupAddresses(manifest: PopupManifest) {
   const layers = new Set<string>();
   const strings = new Map<string, "text" | "image-string">();
-  const visit = (value: unknown, inLayers = false): void => {
-    if (Array.isArray(value)) {
-      for (const item of value) visit(item, inLayers);
-      return;
-    }
-    if (!value || typeof value !== "object") return;
-    const record = value as Record<string, unknown>;
-    if (inLayers && typeof record.id === "string") layers.add(record.id);
-    if (
-      (record.kind === "text" || record.kind === "image-string") &&
-      typeof record.name === "string"
-    ) {
-      const previous = strings.get(record.name);
-      if (previous && previous !== record.kind)
-        throw new SceneLayoutError(
-          `Popup string name has conflicting kinds: ${record.name}.`,
-        );
-      strings.set(record.name, record.kind);
-    }
-    for (const [key, child] of Object.entries(record))
-      visit(child, key === "layers" || key === "overlays");
+  const addString = (name: string, kind: "text" | "image-string") => {
+    const previous = strings.get(name);
+    if (previous && previous !== kind)
+      throw new SceneLayoutError(
+        `Popup string name has conflicting kinds: ${name}.`,
+      );
+    strings.set(name, kind);
   };
-  visit(manifest);
+  if (manifest.type === "single-state") {
+    for (const layer of manifest.singleState.layers) {
+      layers.add(layer.id);
+      if (layer.kind === "text" || layer.kind === "image-string")
+        addString(layer.id, layer.kind);
+    }
+  } else if (manifest.type === "spine") {
+    if (!("spine" in manifest))
+      return Object.freeze({
+        layers: Object.freeze([]),
+        strings: Object.freeze([]),
+      });
+    if (manifest.spine.prompt) addString("prompt", "text");
+    for (const layer of manifest.spine.overlays ?? []) {
+      layers.add(layer.id);
+      if (layer.kind === "text" || layer.kind === "image-string")
+        addString(layer.name, layer.kind);
+    }
+  } else {
+    if (!("awardCelebration" in manifest))
+      return Object.freeze({
+        layers: Object.freeze([]),
+        strings: Object.freeze([]),
+      });
+    for (const tier of [
+      manifest.awardCelebration.base,
+      manifest.awardCelebration.standard,
+      ...manifest.awardCelebration.celebrationTiers,
+    ])
+      for (const layer of tier.layers) {
+        layers.add(layer.id);
+        if (layer.kind === "text" || layer.kind === "image-string")
+          addString(layer.name ?? "win-amount", layer.kind);
+      }
+  }
   return Object.freeze({
     layers: Object.freeze([...layers].sort((a, b) => a.localeCompare(b, "en"))),
     strings: Object.freeze(

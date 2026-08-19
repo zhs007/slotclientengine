@@ -142,12 +142,20 @@ Game Layout Editor 新导出的所有资源引用是扁平 filename keys：
       "manifest": "free-game-popup.manifest.json",
       "order": 2001,
       "placements": { "default": { "x": 0, "y": 0, "scale": 1 } }
+    },
+    "help-panel": {
+      "type": "single-state",
+      "manifest": "help-panel-popup.manifest.json",
+      "order": 2002,
+      "placements": { "default": { "x": 0, "y": 0, "scale": 1 } }
     }
   }
 }
 ```
 
-binding `type` 必须与 nested popup manifest 精确一致。`order` 是 Popup root 的安全整数显示顺序，必须与全部 node、main reel 和其它 Popup order 唯一，并高于全部 node/main reel；旧单 Popup v1 缺省时规范化为 `2000`，多个缺省值造成重复时显式失败。game mode 的 `awardCelebrationPopup` 只能引用 `award-celebration`；普通 Spine popup 可作为独立 programmatic binding，也可由任意效果 transition 的可选 `preludePopup` 引用。package runtime 先保持 source mode 播放 popup；宿主通过 `bindPopupInput()` 绑定完整 canvas 与 keyboard target，runtime 的统一主操作锁存结束请求，popup 完整到达 complete 后才继续当前转场效果。idle 输入透传，未迁移 consumer 可继续使用 Pixi pointer fallback。
+binding `type` 必须与 nested popup manifest 精确一致。`order` 是 Popup root 的安全整数显示顺序，必须与全部 node、main reel 和其它 Popup order 唯一，并高于全部 node/main reel；旧单 Popup v1 缺省时规范化为 `2000`，多个缺省值造成重复时显式失败。game mode 的 `awardCelebrationPopup` 只能引用 `award-celebration`；普通 Spine popup 可作为独立 programmatic binding，也可由任意效果 transition 的可选 `preludePopup` 引用。`single-state` 只能显式注册并由程序调用 `getSingleStatePopup(id)` 后 start/dismiss，不得绑定 award 或 transition prelude。package runtime 先保持 source mode 播放 prelude popup；宿主通过 `bindPopupInput()` 绑定完整 canvas 与 keyboard target，runtime 的统一主操作锁存结束请求，popup 完整到达 complete 后才继续当前转场效果。idle 输入透传，未迁移 consumer 可继续使用 Pixi pointer fallback。
+
+single-state Popup 的 layer id 进入任务 228 的 typed runtime address catalog：`gamelayout:/popups/<popup-id>/layers/<layer-id>` 的 endpoint `get()` 与 `getSingleStatePopup(id).getLayer(layerId)` 返回同一个 borrowed `RenderObject`；text/image-string 还分别通过 `gamelayout:/popups/<popup-id>/strings/<name>` 的 `get()` 和 `input(value)` 取得同一个 string handle、设置文字。catalog 只从 nested Popup typed schema 枚举，不递归扫描任意 JSON `id/name`。未知地址、kind mismatch 或 runtime destroy 后访问都显式失败，caller 不销毁 borrowed 对象。
 
 production consumer 可在 `requestGameMode()` 的 `preludePopupStrings` 中为本次 edge-bound Spine Popup 提交 `text | image-string` 的 exact name 和最终 string。该 scope 在 Popup start 前应用，并在 complete、失败、取消或 runtime destroy 后恢复调用前 handle 状态；它不修改 manifest，也不参与 transition prepare/cache identity。需要 persistent 或 active-playback 更新时继续使用 player exact handle。
 
@@ -225,7 +233,7 @@ transition 是独立有向边：
 - Spine overlay 声明 skeleton/atlas/page filename keys、exact animation、exact single event occurrence 与 per-variant placement；边可额外声明引用普通 Spine Popup binding 的 `preludePopup`，popup complete 前不得启动 overlay 或切换 source mode；
 - video blackout 声明 MP4 filename key、`mimeType: "video/mp4"`、`fit: "contain"` 与小于真实 duration 的 positive `fadeOutSeconds`。
 
-`preludePopup` 不能引用 award-celebration，但可用于无效果、Spine 或 video；缺省时不弹 Popup。每条 `from → to` 边独立保存该引用，因此多个转场可分别不配置、选择同一个或选择不同的普通 Spine Popup。snapshot 的 `transitionKind` 为 `none | spine | video`，`transitionPhase` 为 `popup | awaiting-video-start | before-switch | after-switch`，并用 `activePreludePopup` 报告当前前置弹窗。
+`preludePopup` 只能引用普通 Spine Popup，不能引用 award-celebration 或 single-state；可用于无效果、Spine 或 video，缺省时不弹 Popup。每条 `from → to` 边独立保存该引用，因此多个转场可分别不配置、选择同一个或选择不同的普通 Spine Popup。snapshot 的 `transitionKind` 为 `none | spine | video`，`transitionPhase` 为 `popup | awaiting-video-start | before-switch | after-switch`，并用 `activePreludePopup` 报告当前前置弹窗。
 
 三分支字段严格互斥。runtime 只准备当前 stable source 到所选 target 的直接边；缺边不瞬切、不反向复用、不寻路。Spine event、video media-time fadeStart 或 none direct commit 边界原子切换 background/reel/displayed mode；prepare/once/ended/play rejection 均可 rollback。audible `play()` 必须在 trusted pointer/key 调用栈内同步触发，不自动静音或 wall-clock fallback。带 Popup 的 video 在 Popup complete 后进入 `awaiting-video-start`，下一次 host-bound 真实用户手势由统一主操作同步启动视频；一次输入不得同时进入 DOM binding 与 Pixi fallback。
 

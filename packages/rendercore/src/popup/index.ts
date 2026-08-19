@@ -10,6 +10,7 @@ export type {
   PopupLayerRuntimeFactory,
 } from "./award-player.js";
 export { createSpinePopupRuntime } from "./spine-player.js";
+export { createSingleStatePopupRuntime } from "./single-state-player.js";
 export * from "./styled-text.js";
 export * from "./font-resource.js";
 export * from "./prompt-text.js";

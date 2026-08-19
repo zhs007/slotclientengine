@@ -2,6 +2,7 @@ import {
   type SceneLayoutGameModeSnapshot,
   type SceneLayoutVariantId,
 } from "@slotclientengine/rendercore/scene-layout/editor";
+import { parsePopupManifest } from "@slotclientengine/rendercore/popup/editor";
 import {
   createBoundedSourceIndex,
   ephemeralContentFingerprint,
@@ -156,6 +157,45 @@ import {
   editorResourcePaths,
   type EditorLayoutResource,
 } from "../model/editor-resource.js";
+
+type PopupDependencyValue =
+  EditorProject["popupDependencies"] extends Map<string, infer Value>
+    ? Value
+    : never;
+
+function popupRuntimeAddressesMarkup(
+  project: EditorProject,
+  dependency: PopupDependencyValue | undefined,
+): string {
+  if (!dependency) return "";
+  const popupAddress = `gamelayout:/popup/${encodeURIComponent(dependency.id)}`;
+  if (dependency.type !== "single-state")
+    return `<p class="hint">Popup runtime address：<code>${escapeHtml(popupAddress)}</code></p>`;
+  try {
+    const bytes = project.assets.get(dependency.rootKey);
+    if (!bytes) throw new Error(`缺少 ${dependency.rootKey}`);
+    const manifest = parsePopupManifest(
+      JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)),
+    );
+    if (manifest.type !== "single-state")
+      throw new Error("dependency type 与 nested manifest 不一致");
+    const addresses = [
+      popupAddress,
+      ...manifest.singleState.layers.flatMap((layer) => {
+        const layerAddress = `${popupAddress}/layer/${encodeURIComponent(layer.id)}`;
+        return layer.kind === "text" || layer.kind === "image-string"
+          ? [
+              layerAddress,
+              `${popupAddress}/string/${layer.kind}/${encodeURIComponent(layer.id)}`,
+            ]
+          : [layerAddress];
+      }),
+    ];
+    return `<details data-runtime-address-inspector><summary>通用 runtime 地址 (${addresses.length})</summary><ul>${addresses.map((address) => `<li><code>${escapeHtml(address)}</code></li>`).join("")}</ul><p class="hint">layer 地址 resolve 后 get()；string 地址可 get() 后 setText()/resetText()。</p></details>`;
+  } catch (error) {
+    return `<p class="warning-text">runtime 地址读取失败：${escapeHtml(error instanceof Error ? error.message : String(error))}</p>`;
+  }
+}
 
 interface FocusSnapshot {
   readonly selector: string;
@@ -541,7 +581,9 @@ export class GameLayoutEditorApp {
             dependency.id,
             prompt.length ? prompt : undefined,
           );
-        } else
+        } else if (dependency?.type === "single-state")
+          this.#preview?.playSingleStatePopup(dependency.id);
+        else
           this.#preview?.playAwardCelebration({
             betAmountRaw: Number(this.requireInput("[data-popup-bet]").value),
             winAmountRaw: Number(this.requireInput("[data-popup-win]").value),
@@ -562,6 +604,8 @@ export class GameLayoutEditorApp {
             : undefined;
           if (dependency?.type === "spine")
             this.#preview?.requestDismissSpinePopup(dependency.id);
+          else if (dependency?.type === "single-state")
+            this.#preview?.requestDismissSingleStatePopup(dependency.id);
           else this.#preview?.advanceAwardCelebration();
           this.renderPopupControls(this.#store.getSnapshot());
         } catch (error) {
@@ -579,6 +623,8 @@ export class GameLayoutEditorApp {
           : undefined;
         if (dependency?.type === "spine")
           this.#preview?.dismissSpinePopupImmediately(dependency.id);
+        else if (dependency?.type === "single-state")
+          this.#preview?.dismissSingleStatePopupImmediately(dependency.id);
         else this.#preview?.dismissAwardCelebrationImmediately();
         this.renderPopupControls(this.#store.getSnapshot());
       },
@@ -1345,15 +1391,18 @@ export class GameLayoutEditorApp {
     const registerButton = this.requireElement(
       "[data-register-popup]",
     ) as HTMLButtonElement;
-    registerButton.disabled = dependency?.type !== "spine";
+    registerButton.disabled =
+      dependency?.type !== "spine" && dependency?.type !== "single-state";
     registerButton.textContent = dependency
       ? project.registeredSpinePopupIds.has(dependency.id)
-        ? "取消注册 Spine Popup"
-        : "注册 Spine Popup"
-      : "注册 Spine Popup";
+        ? "取消注册独立 Popup"
+        : "注册独立 Popup"
+      : "注册独立 Popup";
     this.requireElement("[data-popup-metadata]").textContent = dependency
-      ? `${dependency.id} · ${dependency.type} · ${dependency.keys.length} files · ${totalBytes} bytes · ${dependency.type === "spine" ? `Scene Layout：${project.registeredSpinePopupIds.has(dependency.id) ? "已注册" : "未注册"}` : `引用：${references.join(", ") || "无"}`}`
+      ? `${dependency.id} · ${dependency.type} · ${dependency.keys.length} files · ${totalBytes} bytes · ${dependency.type === "spine" || dependency.type === "single-state" ? `Scene Layout：${project.registeredSpinePopupIds.has(dependency.id) ? "已注册" : "未注册"}` : `引用：${references.join(", ") || "无"}`}`
       : "未导入 Popup dependency。";
+    this.requireElement("[data-popup-runtime-addresses]").innerHTML =
+      popupRuntimeAddressesMarkup(project, dependency);
     const popupOrderInput = this.requireInput("[data-popup-order]");
     popupOrderInput.disabled = !dependency;
     popupOrderInput.value = String(dependency?.order ?? 2000);
@@ -1551,8 +1600,9 @@ export class GameLayoutEditorApp {
     const selectedDependency = this.#selectedPopupId
       ? project.popupDependencies.get(this.#selectedPopupId)
       : undefined;
-    const selectedSpineReady = Boolean(
-      selectedDependency?.type === "spine" &&
+    const selectedIndependentPopupReady = Boolean(
+      (selectedDependency?.type === "spine" ||
+        selectedDependency?.type === "single-state") &&
       project.registeredSpinePopupIds.has(selectedDependency.id),
     );
     const transitioning = Boolean(
@@ -1583,17 +1633,18 @@ export class GameLayoutEditorApp {
     (this.requireElement("[data-play-popup]") as HTMLButtonElement).disabled =
       Boolean(
         transitioning ||
-        (!stableMode?.awardCelebrationPopupId && !selectedSpineReady),
+        (!stableMode?.awardCelebrationPopupId &&
+          !selectedIndependentPopupReady),
       );
     (
       this.requireElement("[data-advance-popup]") as HTMLButtonElement
-    ).disabled = !popupActive && !selectedSpineReady;
+    ).disabled = !popupActive && !selectedIndependentPopupReady;
     (
       this.requireElement("[data-dismiss-popup]") as HTMLButtonElement
-    ).disabled = !popupActive && !selectedSpineReady;
+    ).disabled = !popupActive && !selectedIndependentPopupReady;
     this.requireElement("[data-popup-runtime-status]").textContent =
-      selectedSpineReady
-        ? `spine popup ${selectedDependency!.id} · 已注册，可独立播放`
+      selectedIndependentPopupReady
+        ? `${selectedDependency!.type} popup ${selectedDependency!.id} · 已注册，可独立播放`
         : modeSnapshot
           ? `mode ${modeSnapshot.phase}: stable=${modeSnapshot.stableMode} displayed=${modeSnapshot.displayedMode}${modeSnapshot.targetMode ? ` target=${modeSnapshot.targetMode} ${modeSnapshot.transitionPhase}` : ""} · popup=${stableMode?.awardCelebrationPopupId ?? "无"}${popupSnapshot ? ` · ${popupSnapshot.phase}/${popupSnapshot.activeTierId ?? "none"}/${popupSnapshot.activeSegment ?? "none"}` : ""}`
           : `mode=${mode.id} · popup=${mode.awardCelebrationPopupId ?? "无"}`;

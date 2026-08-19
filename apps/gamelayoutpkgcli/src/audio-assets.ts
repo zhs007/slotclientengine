@@ -38,7 +38,7 @@ export function collectPackageAudioAssetRoles(
     const popup = parsePopupManifest(
       parseRequiredJson(files, binding.manifest),
     );
-    if (popup.version === 7)
+    if ("audio" in popup)
       for (const effect of popup.audio.effects)
         addBinding(roles, effect.asset.sources, "effect");
   }

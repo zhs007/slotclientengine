@@ -1,4 +1,7 @@
-import type { AwardCelebrationPopupManifestV1 } from "../../src/popup/index.js";
+import type {
+  AwardCelebrationPopupManifestV1,
+  SingleStatePopupManifestV8,
+} from "../../src/popup/index.js";
 
 const digest = "0".repeat(64);
 const amountLayer = (scale = 1) => ({
@@ -73,6 +76,48 @@ export function popupFixture(): AwardCelebrationPopupManifestV1 {
           thresholdMultiplier: 50,
           countDurationSeconds: 2.9,
           layers: [vniLayer("effect", "megawin"), amountLayer(1.5)],
+        },
+      ],
+    },
+  };
+}
+
+export function singleStatePopupFixture(): SingleStatePopupManifestV8 {
+  return {
+    version: 8,
+    kind: "popup",
+    id: "freeform-popup",
+    name: "Freeform Popup",
+    type: "single-state",
+    adaptation: {
+      mode: "maximized-focus",
+      focus: { left: 540, right: 540, top: 960, bottom: 960 },
+    },
+    backdrop: {
+      enabled: true,
+      color: "#000000",
+      alpha: 0.5,
+      visibleStates: ["active"],
+    },
+    audio: { version: 1, effects: [], cues: [] },
+    resources: {},
+    singleState: {
+      layers: [
+        {
+          id: "heading",
+          kind: "text",
+          defaultText: "READY",
+          order: 0,
+          transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+          alpha: 1,
+          attachment: { kind: "popup-root" },
+          anchor: { x: 0.5, y: 0.5 },
+          style: {
+            fontSize: 72,
+            letterSpacing: 0,
+            fill: { kind: "solid", color: "#ffffff" },
+            arcDegrees: 0,
+          },
         },
       ],
     },

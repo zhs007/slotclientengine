@@ -155,7 +155,7 @@ export interface SceneLayoutSymbolPackageBinding {
 }
 
 export interface SceneLayoutPopupBinding {
-  readonly type: "award-celebration" | "spine";
+  readonly type: "award-celebration" | "spine" | "single-state";
   readonly manifest: string;
   /** Root presentation order. Missing legacy v1 values normalize to 2000. */
   readonly order: number;
@@ -928,6 +928,9 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
     id: string,
   ): import("../popup/core/types.js").AwardCelebrationRuntime;
   getSpinePopup(id: string): import("../popup/core/types.js").SpinePopupRuntime;
+  getSingleStatePopup(
+    id: string,
+  ): import("../popup/core/types.js").SingleStatePopupRuntime;
   /** Layout-only layer for hosts that own their business reel. */
   getBackgroundPresentation(): Container;
   /** Transition overlay layer for hosts that own their business reel. */

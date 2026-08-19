@@ -1,6 +1,6 @@
 # Popup Editor
 
-纯前端 strict `award-celebration` 与普通 `spine` popup package 编辑器。
+纯前端 strict `award-celebration`、普通 `spine` 与 `single-state` popup package 编辑器。
 
 资源 tab 只有一个支持多文件/多 ZIP 的“导入资源”入口，识别 image、WOFF2/WOFF/TTF/OTF 字体、official Spine 4.3、VNI、standalone ImgNumber ZIP 和 Popup ZIP。字体会校验扩展名与文件签名。所有 closure 在提交前结构化抹平为 filename keys，普通导入只入库；layer/tier 仍由用户显式绑定。
 
@@ -8,7 +8,9 @@ VNI bundle 只导入 `purpose=runtime` 的运行发布包：唯一 runtime 自�
 
 同名不同 bytes 默认覆盖，review 显示 hash、bytes、动作和受影响 layer；全项目校验或 preview prepare 失败会完整回滚。不存在文件夹入口、任意 logical resource id 或独立 dependency bytes 区。
 
-新建项目与新导出的 `<id>-popup.zip` 固定使用 Popup v7。默认 loader 接受全部受支持的 v1–v7，先 strict 校验 source，再统一规范化并复验为 latest v7。v7 沿用 v6 的 award 图层语义，并新增 package-local 音效与 tier/segment cue；每个 award 档位或普通 Spine 的 start/loop/end 段都在自身编辑区内维护零到多条音效，名字只在 Game Layout 组合时获得 binding 前缀。普通 Spine 类型仍显式配置 start、loop、end 动画。
+新建项目与新导出的 `<id>-popup.zip` 固定使用 Popup v8。默认 loader 接受全部受支持的 v1–v8，先 strict 校验 source，再统一规范化并复验为 latest v8。v8 保留 v7 的音效合同，并新增无强制图层的 `single-state`；该类型可保持零图层，也可组合 image、字体文字、ImgNumber、Spine 与 VNI，Spine/VNI autoplay 均可省略。
+
+`single-state` 图层的 exact `id` 同时是 Editor name、runtime lookup name 和 Game Layout 地址 segment。父节点只能选择同一 Popup 中已经存在的 Spine exact slot，或由 ImgNumber 选择已经存在的 VNI 文字层；不提供主 Spine fallback。runtime 通过 `getLayer(name)` 取得 borrowed `RenderObject`，通过 `getTextNode(name)` / `getImageStringNode(name)` 修改文字。
 
 普通 Spine 类型不再提供独立 prompt authoring；提示语与其它文案一样使用命名的字体文字 overlay。旧 v1/v2 prompt 在导入边界自动结构化迁移为 `name=prompt` 的文字层，名称、order 或资源冲突会使整次导入失败。可追加任意数量 image、字体文字、ImgNumber、Spine 或 VNI overlay，编辑其位置、缩放、旋转、order 及各类型 playback/项目状态可见性。
 

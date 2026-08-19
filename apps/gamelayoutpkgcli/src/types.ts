@@ -163,6 +163,13 @@ export type AssetGroupRecord =
       readonly usedByTransitions: readonly string[];
       readonly requiredAssets: readonly string[];
       readonly incrementalAssets: readonly string[];
+    }
+  | {
+      readonly id: string;
+      readonly kind: "single-state-popup";
+      readonly popupId: string;
+      readonly requiredAssets: readonly string[];
+      readonly incrementalAssets: readonly string[];
     };
 
 export interface SceneLayoutAssetGroupsV1 {

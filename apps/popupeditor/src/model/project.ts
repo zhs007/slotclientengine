@@ -12,6 +12,7 @@ import {
   type PopupAudioV1,
   type PopupOverlayLayer,
   type PopupResourceSpec,
+  type SingleStatePopupLayerV8,
   type PopupVisibilityState,
 } from "@slotclientengine/rendercore/popup/editor";
 import { validateOfficialSpineResource } from "@slotclientengine/rendercore";
@@ -49,9 +50,9 @@ export interface PopupSpineAttachmentTarget {
   readonly slotNames: readonly string[];
 }
 export interface PopupEditorProject {
-  formatVersion: 7;
+  formatVersion: 8;
   name: string;
-  type: "award-celebration" | "spine";
+  type: "award-celebration" | "spine" | "single-state";
   id: string;
   adaptation: {
     focus: { left: number; right: number; top: number; bottom: number };
@@ -85,6 +86,9 @@ export interface PopupEditorProject {
     };
     overlays: PopupOverlayLayer[];
   };
+  singleState: {
+    layers: SingleStatePopupLayerV8[];
+  };
 }
 
 export type PopupAmountFormatPresetId = "integer" | "decimal";
@@ -116,7 +120,11 @@ export const POPUP_AMOUNT_FORMAT_PRESETS: Readonly<
 export function popupEditorVisibilityStates(
   type: PopupEditorProject["type"],
 ): readonly PopupVisibilityState[] {
-  return type === "award-celebration" ? AWARD_POPUP_STATES : POPUP_SEGMENTS;
+  return type === "award-celebration"
+    ? AWARD_POPUP_STATES
+    : type === "single-state"
+      ? (["active"] as const)
+      : POPUP_SEGMENTS;
 }
 
 export function migratePopupEditorVisibility(
@@ -128,14 +136,17 @@ export function migratePopupEditorVisibility(
   const layers =
     project.type === "award-celebration"
       ? [...project.tiers.values()].flatMap(({ layers }) => layers)
-      : project.spine.overlays;
+      : project.type === "single-state"
+        ? project.singleState.layers
+        : project.spine.overlays;
   for (const layer of layers) {
     if (project.type === "award-celebration") {
       delete (layer as { visibleStates?: unknown }).visibleStates;
       delete (layer as { visibleSegments?: unknown }).visibleSegments;
       continue;
     }
-    if (!legacy && layer.visibleStates) continue;
+    if (project.type === "single-state") continue;
+    if (!legacy && "visibleStates" in layer && layer.visibleStates) continue;
     const legacySegments =
       "visibleSegments" in layer && layer.visibleSegments
         ? layer.visibleSegments
@@ -172,7 +183,7 @@ export function createPopupEditorProject(
   options: {
     readonly name?: string;
     readonly id?: string;
-    readonly type?: "award-celebration" | "spine";
+    readonly type?: "award-celebration" | "spine" | "single-state";
   } = {},
 ): PopupEditorProject {
   const empty = (): PopupEditorTier => ({
@@ -180,7 +191,7 @@ export function createPopupEditorProject(
     layers: [],
   });
   return {
-    formatVersion: 7,
+    formatVersion: 8,
     name: options.name ?? "Untitled Popup",
     type: options.type ?? "award-celebration",
     id: options.id ?? "untitled-popup",
@@ -233,6 +244,7 @@ export function createPopupEditorProject(
       },
       overlays: [],
     },
+    singleState: { layers: [] },
   };
 }
 
@@ -249,6 +261,7 @@ export function clonePopupEditorProject(
     amountFormat: { ...project.amountFormat },
     audio: structuredClone(project.audio),
     spine: structuredClone(project.spine),
+    singleState: structuredClone(project.singleState),
     resources: new Map(
       [...project.resources].map(([id, resource]) => [
         id,
@@ -276,7 +289,7 @@ export function clonePopupEditorProject(
 
 export function projectToManifest(project: PopupEditorProject): PopupManifest {
   const common = {
-    version: 7 as const,
+    version: 8 as const,
     kind: "popup" as const,
     id: project.id,
     name: project.name,
@@ -316,6 +329,28 @@ export function projectToManifest(project: PopupEditorProject): PopupManifest {
       visibleStates: [...(layer.visibleStates ?? POPUP_SEGMENTS)] as any,
     };
   };
+  if (project.type === "single-state") {
+    const used = new Set(
+      project.singleState.layers.flatMap(({ resource }) =>
+        resource ? [resource] : [],
+      ),
+    );
+    return parsePopupManifest({
+      ...common,
+      type: "single-state",
+      resources: Object.fromEntries(
+        [...used].sort().map((id) => {
+          const resource = project.resources.get(id);
+          if (!resource)
+            throw new Error(`single-state layer 引用缺失 resource：${id}`);
+          return [id, resource.spec];
+        }),
+      ),
+      singleState: {
+        layers: structuredClone(project.singleState.layers),
+      },
+    });
+  }
   if (project.type === "spine") {
     if (project.spine.prompt.enabled)
       throw new Error(
@@ -460,6 +495,16 @@ export function popupEditorProjectDiagnostics(
       ]);
     }
   }
+  if (project.type === "single-state") {
+    try {
+      projectToManifest(project);
+      return Object.freeze([]);
+    } catch (error) {
+      return Object.freeze([
+        error instanceof Error ? error.message : String(error),
+      ]);
+    }
+  }
   const incompleteTiers = (
     ["base", "standard", "bigwin", "superwin", "megawin"] as const
   ).filter((tierId) => !project.tiers.get(tierId)?.layers.length);
@@ -518,12 +563,15 @@ export function popupEditorProjectDiagnostics(
 
 export function getPopupVniTextLayerTargets(
   project: PopupEditorProject,
-  tierId: AwardTierId,
+  tierId: AwardTierId | "single-state",
 ): readonly PopupVniTextLayerTarget[] {
-  const tier = project.tiers.get(tierId);
-  if (!tier) throw new Error(`tier 不存在：${tierId}`);
+  const layers =
+    tierId === "single-state"
+      ? project.singleState.layers
+      : project.tiers.get(tierId)?.layers;
+  if (!layers) throw new Error(`tier 不存在：${tierId}`);
   const targets: PopupVniTextLayerTarget[] = [];
-  for (const layer of tier.layers) {
+  for (const layer of layers) {
     if (layer.kind !== "vni") continue;
     if (!layer.resource)
       throw new Error(`VNI layer 缺少 resource：${layer.id}`);
@@ -547,6 +595,131 @@ export function getPopupVniTextLayerTargets(
         );
   }
   return Object.freeze(targets);
+}
+
+export function addSingleStateLayer(
+  project: PopupEditorProject,
+  resourceKey: string,
+): void {
+  const resource = project.resources.get(resourceKey);
+  if (!resource) throw new Error(`resource 不存在：${resourceKey}`);
+  const layers = project.singleState.layers;
+  const order = layers.length
+    ? Math.max(...layers.map((layer) => layer.order)) + 1
+    : 0;
+  const id = allocateSingleStateLayerId(project, resource.kind);
+  const base = {
+    id,
+    order,
+    resource: resourceKey,
+    transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+    alpha: 1,
+    attachment: { kind: "popup-root" as const },
+  };
+  const layer: SingleStatePopupLayerV8 =
+    resource.kind === "image-string"
+      ? {
+          ...base,
+          kind: "image-string",
+          defaultText: "0",
+          anchor: { x: 0.5, y: 0.5 },
+        }
+      : resource.kind === "font"
+        ? {
+            ...base,
+            kind: "text",
+            defaultText: "TEXT",
+            anchor: { x: 0.5, y: 0.5 },
+            style: defaultPopupTextStyle(),
+          }
+        : resource.kind === "image"
+          ? { ...base, kind: "image", anchor: { x: 0.5, y: 0.5 } }
+          : resource.kind === "vni"
+            ? { ...base, kind: "vni" }
+            : { ...base, kind: "spine" };
+  project.singleState.layers = [...layers, layer];
+}
+
+export function addSingleStateTextLayer(project: PopupEditorProject): void {
+  const layers = project.singleState.layers;
+  const order = layers.length
+    ? Math.max(...layers.map((layer) => layer.order)) + 1
+    : 0;
+  const id = allocateSingleStateLayerId(project, "text");
+  project.singleState.layers = [
+    ...layers,
+    {
+      id,
+      kind: "text",
+      defaultText: "TEXT",
+      order,
+      transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+      alpha: 1,
+      attachment: { kind: "popup-root" },
+      anchor: { x: 0.5, y: 0.5 },
+      style: defaultPopupTextStyle(),
+    },
+  ];
+}
+
+export function renameSingleStateLayer(
+  project: PopupEditorProject,
+  previousId: string,
+  nextId: string,
+): void {
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(nextId))
+    throw new Error("single-state 图层 name 必须是 lowercase kebab-case。");
+  if (
+    previousId !== nextId &&
+    project.singleState.layers.some(({ id }) => id === nextId)
+  )
+    throw new Error(`single-state 图层 name 重复：${nextId}`);
+  const target = project.singleState.layers.find(({ id }) => id === previousId);
+  if (!target) throw new Error(`single-state 图层不存在：${previousId}`);
+  (target as { id: string }).id = nextId;
+  for (const layer of project.singleState.layers) {
+    const attachment = layer.attachment;
+    if (
+      attachment.kind === "spine-slot" &&
+      attachment.target.kind === "layer" &&
+      attachment.target.layerId === previousId
+    )
+      (attachment.target as { layerId: string }).layerId = nextId;
+    if (
+      attachment.kind === "vni-text-layer" &&
+      attachment.vniLayerId === previousId
+    )
+      (attachment as { vniLayerId: string }).vniLayerId = nextId;
+  }
+}
+
+function allocateSingleStateLayerId(
+  project: PopupEditorProject,
+  kind: PopupResourceSpec["kind"] | "text",
+): string {
+  const stem = kind === "image-string" ? "imgnumber" : kind;
+  const used = new Set(project.singleState.layers.map(({ id }) => id));
+  for (let index = 0; ; index += 1) {
+    const candidate = `${stem}-${index}`;
+    if (!used.has(candidate)) return candidate;
+  }
+}
+
+function defaultPopupTextStyle() {
+  return {
+    fontSize: 72,
+    letterSpacing: 0,
+    fill: { kind: "solid" as const, color: "#ffffff" },
+    stroke: { color: "#000000", width: 4 },
+    shadow: {
+      color: "#000000",
+      alpha: 0.5,
+      blur: 4,
+      distance: 6,
+      angleDegrees: 90,
+    },
+    arcDegrees: 0,
+  };
 }
 
 export function addLayer(
@@ -732,7 +905,8 @@ export function getPopupSpineAttachmentTargets(
   project: PopupEditorProject,
   options:
     | { readonly kind: "award"; readonly tierId: AwardTierId }
-    | { readonly kind: "spine-popup" },
+    | { readonly kind: "spine-popup" }
+    | { readonly kind: "single-state" },
 ): readonly PopupSpineAttachmentTarget[] {
   const targets: PopupSpineAttachmentTarget[] = [];
   if (options.kind === "spine-popup" && project.spine.resource)
@@ -746,7 +920,9 @@ export function getPopupSpineAttachmentTargets(
   const layers =
     options.kind === "award"
       ? (project.tiers.get(options.tierId)?.layers ?? [])
-      : project.spine.overlays;
+      : options.kind === "single-state"
+        ? project.singleState.layers
+        : project.spine.overlays;
   for (const layer of layers) {
     if (layer.kind !== "spine" || !layer.resource) continue;
     targets.push(
@@ -761,22 +937,24 @@ export function getPopupSpineAttachmentTargets(
 }
 
 export function assertPopupLayerCanDelete(
-  layers: readonly (PopupLayer | PopupOverlayLayer)[],
+  layers: readonly (PopupLayer | PopupOverlayLayer | SingleStatePopupLayerV8)[],
   layerId: string,
 ): void {
   const dependents = layers
     .filter((layer) => {
       const attachment = resolvePopupLayerAttachment(layer);
       return (
-        attachment.kind === "spine-slot" &&
-        attachment.target.kind === "layer" &&
-        attachment.target.layerId === layerId
+        (attachment.kind === "spine-slot" &&
+          attachment.target.kind === "layer" &&
+          attachment.target.layerId === layerId) ||
+        (attachment.kind === "vni-text-layer" &&
+          attachment.vniLayerId === layerId)
       );
     })
     .map(({ id }) => id);
   if (dependents.length)
     throw new Error(
-      `Spine 图层 ${layerId} 仍被以下图层挂接，禁止删除：${dependents.join("、")}。`,
+      `图层 ${layerId} 仍被以下图层作为父节点，禁止删除：${dependents.join("、")}。`,
     );
 }
 
@@ -784,7 +962,11 @@ export function validatePopupEditorAttachments(
   project: PopupEditorProject,
 ): void {
   const validateScope = (
-    layers: readonly (PopupLayer | PopupOverlayLayer)[],
+    layers: readonly (
+      | PopupLayer
+      | PopupOverlayLayer
+      | SingleStatePopupLayerV8
+    )[],
     label: string,
     allowMainSpine: boolean,
     getTargets: () => readonly PopupSpineAttachmentTarget[],
@@ -809,6 +991,12 @@ export function validatePopupEditorAttachments(
   if (project.type === "spine") {
     validateScope(project.spine.overlays, "spine.overlays", true, () =>
       getPopupSpineAttachmentTargets(project, { kind: "spine-popup" }),
+    );
+    return;
+  }
+  if (project.type === "single-state") {
+    validateScope(project.singleState.layers, "singleState.layers", false, () =>
+      getPopupSpineAttachmentTargets(project, { kind: "single-state" }),
     );
     return;
   }
@@ -894,6 +1082,10 @@ export function applyImportedResourceBindings(
 ): void {
   const resource = project.resources.get(resourceKey);
   if (!resource) throw new Error(`resource 不存在：${resourceKey}`);
+  if (project.type === "single-state") {
+    addSingleStateLayer(project, resourceKey);
+    return;
+  }
   if (resource.kind === "image-string") {
     for (const tierId of project.tiers.keys())
       if (
@@ -931,6 +1123,9 @@ export function resourceReferenceCount(
     count += 1;
   count += project.spine.overlays.filter(
     (overlay) => overlay.resource === resourceKey,
+  ).length;
+  count += project.singleState.layers.filter(
+    (layer) => layer.resource === resourceKey,
   ).length;
   for (const tier of project.tiers.values())
     count += tier.layers.filter(

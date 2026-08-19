@@ -3,6 +3,7 @@ import type {
   AwardCelebrationRuntime,
   PopupInteractionDispatchResult,
   SpinePopupRuntime,
+  SingleStatePopupRuntime,
 } from "../popup/core/index.js";
 import type { RenderViewportSize } from "../viewport/index.js";
 import { SceneLayoutError } from "./errors.js";
@@ -52,6 +53,7 @@ export interface SceneLayoutPresentationSurface {
   requestPrimaryPopupInteraction(): PopupInteractionDispatchResult;
   getAwardCelebrationRuntime(id: string): AwardCelebrationRuntime;
   getSpinePopupRuntime(id: string): SpinePopupRuntime;
+  getSingleStatePopupRuntime(id: string): SingleStatePopupRuntime;
   getLayer(id: SceneLayoutLayerId): Container;
   getNode(id: string): Container;
   getRenderLayer(ref: SceneLayoutRenderLayerRef): RenderObjectLayer;
@@ -184,7 +186,9 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
       const popup =
         binding?.type === "spine"
           ? this.#runtime.getSpinePopup(id)
-          : this.#runtime.getAwardCelebrationPopup(id);
+          : binding?.type === "single-state"
+            ? this.#runtime.getSingleStatePopup(id)
+            : this.#runtime.getAwardCelebrationPopup(id);
       const placement = binding?.placements[variantId];
       if (!binding || !placement) {
         throw new SceneLayoutError(
@@ -248,6 +252,11 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
   getSpinePopupRuntime(id: string): SpinePopupRuntime {
     this.assertReady();
     return this.#runtime.getSpinePopup(id);
+  }
+
+  getSingleStatePopupRuntime(id: string): SingleStatePopupRuntime {
+    this.assertReady();
+    return this.#runtime.getSingleStatePopup(id);
   }
 
   getLayer(id: SceneLayoutLayerId): Container {

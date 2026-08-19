@@ -5,6 +5,7 @@ import type {
 } from "@slotclientengine/vnicore/data";
 import type { ImageStringResource } from "../../image-string/core/index.js";
 import type { OfficialSpinePlayerResource } from "../../spine/runtime-player.js";
+import type { RenderObject } from "../../presentation/render-object.js";
 import type {
   AwardTierId,
   PopupManifest,
@@ -139,6 +140,32 @@ export interface SpinePopupRuntime {
   dismissImmediately(): void;
   getPhase(): SpinePopupPhase;
   isPlaying(): boolean;
+  getTextNode(selector: PopupStringNodeSelector): PopupStringNodeHandle;
+  getImageStringNode(selector: PopupStringNodeSelector): PopupStringNodeHandle;
+  destroy(): void;
+}
+
+export type SingleStatePopupPhase = "idle" | "active" | "complete";
+export interface SingleStatePopupSnapshot {
+  readonly phase: SingleStatePopupPhase;
+  readonly activeLayerCount: number;
+}
+export interface SingleStatePopupRuntime {
+  readonly container: Container;
+  readonly textNodes: readonly PopupStringNodeHandle[];
+  readonly imageStringNodes: readonly PopupStringNodeHandle[];
+  applyViewport?(
+    viewportSize: PopupSize,
+    placement?: PopupHostPlacement,
+  ): PopupPresentationSnapshot;
+  init(): Promise<void>;
+  start(): void;
+  update(deltaSeconds: number): void;
+  requestDismiss(): void;
+  dismissImmediately(): void;
+  getPhase(): SingleStatePopupPhase;
+  isPlaying(): boolean;
+  getLayer(name: string): RenderObject;
   getTextNode(selector: PopupStringNodeSelector): PopupStringNodeHandle;
   getImageStringNode(selector: PopupStringNodeSelector): PopupStringNodeHandle;
   destroy(): void;
