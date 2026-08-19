@@ -11,7 +11,7 @@ Task 229 先证明共享模块本身成立，不在同一任务中重构 `imgnum
 ### 完成定义
 
 - [x] `@slotclientengine/editorcore` 提供稳定的 `assets/data`、`assets/core`、`assets/adapters`、`assets/ui` public exports；headless 合同不依赖 DOM/Pixi，UI 可挂载到宿主 HTMLElement 并可完整 destroy。
-- [x] 统一导入 API 和一个 UI 按钮可在同一批次混选普通文件与 ZIP，严格识别 PNG/JPEG/WebP、当前 AudioCore 支持的音频、MP4、VNI、Spine、ImgNumber、Popup、Symbols、Game Layout；未知、歧义、缺失、orphan 或不兼容输入使整个事务显式失败。
+- [x] 统一导入 API 和一个 UI 按钮可在同一批次混选普通文件与 ZIP，严格识别 PNG/JPEG/WebP、当前 AudioCore 支持的音频、MP4、VNI、Spine、ImgNumber、Popup、Symbols、Game Layout；尚无 loader 的文件保留为 opaque text/binary，已知格式错误、歧义、缺失、orphan 或不兼容输入使整个事务显式失败。
 - [x] Assets 外层是可搜索、筛选、虚拟滚动的 root 列表；展开 root 后可逐层查看 typed closure，包括 Spine skeleton → atlas → page texture，以及 package → nested resource → payload。
 - [x] Spine atlas/page 关系在导入 prepare 阶段由 strict parser 确定并随 root 原子提交；atlas page texture 只能作为所属 Spine closure 的内部节点，不能被 Picker、业务引用或程序 binding 单独使用。
 - [x] 若确实要复用 Spine texture，用户必须另行导入一个独立顶层图片 key；相同 bytes 最终仍由 `assets.map.json` 的完整 SHA-256 payload 物理去重，两个 logical identity 不合并。
@@ -135,7 +135,7 @@ apps/{imgnumbereditor,popupeditor,symbolseditor,gamelayouteditor}/README.md
 - **`assets/ui`**：`mountEditorAssetsView()`（最终名称执行时固定并记录）、event delegation、virtual rows、inspector、review dialog、preview provider slot、Object URL/revoke 和 destroy；不得持有业务 project 真相。
 - **host adapter**：clone project、collect typed references、collect/set program binding、rename references、
   validate candidate 和可选 preview provider。EditorCore 不猜 node/state/layer/mode 的业务语义。
-- **基础数据**：payload 继续使用 `EditorAssetEntry`/`EditorAssetWorkspace`；compound descriptor 至少声明 `kind`、root identity、owner、exact keys 和 typed relations。root kind 固定为 `image | audio | video | spine | vni | image-string | popup | symbols | game-layout`，未知值 strict fail。
+- **基础数据**：payload 继续使用 `EditorAssetEntry`/`EditorAssetWorkspace`；compound descriptor 至少声明 `kind`、root identity、owner、exact keys 和 typed relations。root kind 固定为 `image | audio | video | spine | vni | image-string | popup | symbols | game-layout | text | binary`，未知值 strict fail。
 - **关系方向**：只允许 root/manifest/skeleton 指向 dependency；atlas/page、glyph、VNI image、nested
   package leaf 不反向拥有 root。shared leaf 不会使未使用 sibling root 进入 closure。
 - **使用状态**：root 的 direct reference、program binding、transitive exportability 分开呈现；leaf 显示
@@ -376,7 +376,7 @@ lockfile 变化、自动化结果、浏览器/大数据验收、计划偏差和�
 ## 13. 完成清单
 
 - [x] EditorCore Assets 数据、core、adapter、UI 分层和唯一导入入口完成。
-- [x] 九类 root、Spine/VNI/package tree、nested dependency 和 leaf 权限符合计划。
+- [x] 十一类 root、Spine/VNI/package tree、nested dependency、opaque fallback 和 leaf 权限符合计划。
 - [x] usage/programmatic、rename/delete/conflict、rollback/destroy 和 exact closure 有测试。
 - [x] logical identity 与 hash payload 去重严格分离，demo 导出/重导一致。
 - [ ] 大数据 virtual tree 自动化与真实浏览器验收完成。

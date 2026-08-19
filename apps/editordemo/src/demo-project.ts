@@ -228,6 +228,8 @@ const ROOT_KINDS = new Set([
   "popup",
   "symbols",
   "game-layout",
+  "text",
+  "binary",
 ]);
 const NODE_KINDS = new Set([
   ...ROOT_KINDS,

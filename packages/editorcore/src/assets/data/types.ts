@@ -13,7 +13,9 @@ export type EditorAssetRootKind =
   | "image-string"
   | "popup"
   | "symbols"
-  | "game-layout";
+  | "game-layout"
+  | "text"
+  | "binary";
 
 export type EditorAssetNodeKind =
   | EditorAssetRootKind

@@ -10,7 +10,7 @@ EditorCore 公开 `assets/data`、`assets/core`、`assets/adapters`、`assets/ui
 
 ## 实现摘要
 
-- 支持 image、audio、video、spine、vni、image-string、popup、symbols、game-layout 九类顶层 root。
+- 支持 image、audio、video、spine、vni、image-string、popup、symbols、game-layout、text、binary 十一类顶层 root。
 - Spine 和 Popup 内部 Spine 在 prepare 阶段建立 skeleton → atlas → texture；内部 leaf 只读，root 才能 bind/delete/rename。
 - graph 保存唯一 node/typed relation，树仅为多 root 共享 leaf 的 UI 投影；关系环、dangling、未知格式和不完整 closure 显式失败。
 - 一个导入按钮支持普通文件和 ZIP；profile、同名覆盖/keep-both、host candidate validation 完成后才提交，失败保留旧 snapshot。
@@ -56,4 +56,5 @@ EditorCore 公开 `assets/data`、`assets/core`、`assets/adapters`、`assets/ui
 - Symbols mapped ZIP 允许 package manifest 声明的 game config 与 symbol manifest 作为正式 control files。
 - 新增 `game-layout` package root，复用 RenderCore Scene Layout parser 与 exact closure collector。
 - 真实交付包验证通过：`bamboo2.zip` 导入为 11-key VNI root，`symbols.zip` 导入为 114-key Symbols root，`layout9.zip` 导入为 218-key Game Layout root，均无 blocking error。
-- EditorCore：typecheck、lint、4 files / 21 tests 通过；RenderCore VNI bundle 定向测试 6 tests、typecheck、定向 lint 通过；Editordemo typecheck 通过。
+- EditorCore：typecheck、lint、4 files / 21 tests 通过；RenderCore Symbols materializer 与 VNI bundle 2 files / 15 tests、typecheck、定向 lint 通过；Editordemo typecheck、4 tests 和 build 通过。
+- 尚无 loader 的 loose/通用 ZIP 文件按内容保存为 opaque `text` 或 `binary` root；未来 loader 在该 fallback 前 claim。已知格式错误和 package 完整性错误不降级。
