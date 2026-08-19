@@ -409,11 +409,24 @@ describe("EditorAssetsView", () => {
       root.querySelector<HTMLImageElement>(".editor-assets-preview")?.src,
     ).toContain("blob:coin");
     const program = required<HTMLInputElement>(root, "[data-program-name]");
+    expect(program.value).toBe("coin.png");
     program.value = "coin";
     click(required(root, "[data-program-save]"));
     await flush();
     expect(controller.snapshot.project.programs).toEqual({ coin: "coin.png" });
     expect(root.textContent).toContain("程序 binding 已保存");
+
+    const status = required<HTMLSelectElement>(root, "[data-assets-status]");
+    status.value = "programmatic";
+    status.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(root.querySelectorAll(".editor-assets-row")).toHaveLength(1);
+    status.value = "all";
+    status.dispatchEvent(new Event("change", { bubbles: true }));
+    required<HTMLInputElement>(root, "[data-program-name]").value = "";
+    click(required(root, "[data-program-save]"));
+    await flush();
+    expect(controller.snapshot.project.programs).toEqual({ coin: "coin.png" });
+    expect(root.textContent).toContain("程序键不能为空");
 
     const tree = required<HTMLElement>(root, ".editor-assets-tree");
     tree.dispatchEvent(
@@ -434,9 +447,10 @@ describe("EditorAssetsView", () => {
     );
 
     click(required(root, "[data-select]"));
-    required<HTMLInputElement>(root, "[data-program-name]").value = "";
-    click(required(root, "[data-program-save]"));
+    click(required(root, "[data-program-cancel]"));
     await flush();
+    expect(controller.snapshot.project.programs).toEqual({});
+    expect(root.textContent).toContain("程序 binding 已取消");
     click(required(root, "[data-root-delete]"));
     await flush();
     expect(controller.snapshot.catalog.roots.size).toBe(0);
