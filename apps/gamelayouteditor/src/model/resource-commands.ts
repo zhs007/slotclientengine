@@ -35,6 +35,7 @@ import {
   createDefaultNodePlacement,
   cloneEditorProject,
   resetVariantGeometry,
+  updateVariantFocusFromReel,
   type EditorNodeDraft,
   type EditorNodePlacement,
   type EditorProject,
@@ -989,7 +990,13 @@ export function assignBackgroundResource(options: {
     activateEditorGameMode(options.project, modeId);
     resetVariantGeometry(options.project, options.variant, nextSize);
     activateEditorGameMode(options.project, activeModeId);
-  } else if (nextSize && sizeChanged) variant.artSize = { ...nextSize };
+  } else if (nextSize && sizeChanged) {
+    const activeModeId = options.project.gameModes.activeModeId;
+    activateEditorGameMode(options.project, modeId);
+    variant.artSize = { ...nextSize };
+    updateVariantFocusFromReel(options.project, options.variant);
+    activateEditorGameMode(options.project, activeModeId);
+  }
   if (
     replacedNode &&
     !options.project.gameModes.modes.some((candidate) =>

@@ -1128,7 +1128,7 @@ describe("filename-key layout resource commands", () => {
     });
   });
 
-  it("initializes first background geometry and preserves authored geometry across size changes", async () => {
+  it("initializes first background geometry and preserves top-left geometry across size changes", async () => {
     const project = createNewEditorProject("maximized-focus");
     await uploadImageResource({
       project,
