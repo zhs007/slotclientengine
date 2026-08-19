@@ -1,6 +1,6 @@
 # Editor artifact rules
 
-适用于 `apps/imgnumbereditor`、`popupeditor`、`symbolseditor`、`gamelayouteditor`、`packages/editorresource`、`packages/browserartifactio` 以及 consumer 的 dependency vendoring。
+适用于 `apps/imgnumbereditor`、`popupeditor`、`symbolseditor`、`gamelayouteditor`、`apps/editordemo`、`packages/editorcore`、`packages/editorresource`、`packages/browserartifactio` 以及 consumer 的 dependency vendoring。
 
 ## 统一 filename-key workspace
 
@@ -11,6 +11,14 @@
 - manifest 只保留 owner-owned 结构语义和 filename-key 引用；不恢复目录上传、logical resource、按类型拆分 importer 或 `dependencies/` 资源目录。
 - 编辑器的强制导出必须建模为 manifest 内稳定程序键到 typed root 的显式 binding；不得用 orphan allowlist、UI session 状态或 raw payload 路径替代。取消 binding 后，无其它 owner 引用的资源恢复为不导出。
 - node/package/mode 等业务 identity 和资源列表标签不得从 `assets/<SHA-256>.*` physical payload path 重建；ZIP 往返后继续使用 manifest identity 与 logical filename key。
+
+## Shared typed Assets catalog
+
+- `packages/editorcore` 在 `editorresource` 的扁平 filename-key workspace 之上拥有共享 typed asset graph、root tree projection、使用状态、程序 binding 事务、格式 adapter 与 UI；不得反向复制 key/hash/map/ZIP 安全算法。
+- 顶层 root kind 固定为 image、audio、video、spine、vni、image-string、popup、symbols。权威数据是唯一 node 与有向 typed relation 的 graph；最外层 UI 只列 root，树 occurrence 只是展开共享 leaf 的视图，不是持久 identity 或虚拟目录。
+- Spine atlas/page、VNI image、ImgNumber glyph 和 Popup/Symbols package leaf 只能由 owner root 传递使用，不能独立进入 Picker、程序 binding、改名或删除。复用 leaf 必须另行导入顶层 root，最终只在 physical payload 层按完整 SHA-256 去重。
+- `used`、`programmatic` 和 leaf transitive usage 必须从宿主 typed reference/program binding 与 graph 实时派生，不保存可漂移的布尔副本。root 命令和导入必须在 candidate project/catalog/workspace 全部验证后原子提交。
+- 正式 Editor 迁移只能消费已由 `apps/editordemo` 和自动测试证明的 EditorCore public contract；迁移前不得删除 owner 现有正式 schema/parser/runtime，也不得在 EditorCore 猜测 owner manifest 语义。
 
 ## Import boundary
 
