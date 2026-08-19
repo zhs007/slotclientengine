@@ -284,33 +284,16 @@ export function mapAnchorRectToArt(
   options: MapAnchorRectToArtOptions,
 ): RenderViewportRect {
   const artSize = validateSize(options.artSize, "artSize");
-  const anchorRect = validateRect(options.anchorRect, "anchorRect");
+  const anchorRect = validateUnboundedRect(options.anchorRect, "anchorRect");
   const rect = validateAnchorChildRect(options.rect, "rect");
+  void artSize;
 
-  if (
-    anchorRect.x + anchorRect.width > artSize.width ||
-    anchorRect.y + anchorRect.height > artSize.height
-  ) {
-    throw new Error("anchorRect must fit inside artSize.");
-  }
-
-  const mappedRect = freezeRect({
+  return freezeRect({
     x: anchorRect.x + rect.x,
     y: anchorRect.y + rect.y,
     width: rect.width,
     height: rect.height,
   });
-
-  if (
-    mappedRect.x < 0 ||
-    mappedRect.y < 0 ||
-    mappedRect.x + mappedRect.width > artSize.width ||
-    mappedRect.y + mappedRect.height > artSize.height
-  ) {
-    throw new Error("rect mapped from anchorRect must fit inside artSize.");
-  }
-
-  return mappedRect;
 }
 
 function validateAnchorChildRect(
@@ -332,25 +315,15 @@ export function mapReferenceRectToArt(options: {
 }): RenderViewportRect {
   const artSize = validateSize(options.artSize, "artSize");
   const referenceSize = validateSize(options.referenceSize, "referenceSize");
-  const referenceRect = validateRect(options.referenceRect, "referenceRect");
+  const referenceRect = validateUnboundedRect(
+    options.referenceRect,
+    "referenceRect",
+  );
   const align = options.align ?? "center";
 
   if (align !== "center") {
     throw new Error("align must be center.");
   }
-  if (
-    referenceSize.width > artSize.width ||
-    referenceSize.height > artSize.height
-  ) {
-    throw new Error("referenceSize must not exceed artSize.");
-  }
-  if (
-    referenceRect.x + referenceRect.width > referenceSize.width ||
-    referenceRect.y + referenceRect.height > referenceSize.height
-  ) {
-    throw new Error("referenceRect must fit inside referenceSize.");
-  }
-
   return freezeRect({
     x: referenceRect.x + (artSize.width - referenceSize.width) / 2,
     y: referenceRect.y + (artSize.height - referenceSize.height) / 2,
@@ -370,20 +343,6 @@ function validateSize(
 
 function freezeSize(size: RenderViewportSize): RenderViewportSize {
   return Object.freeze({ width: size.width, height: size.height });
-}
-
-function validateRect(
-  rect: RenderViewportRect,
-  label: string,
-): RenderViewportRect {
-  assertFinite(rect.x, `${label}.x`);
-  assertFinite(rect.y, `${label}.y`);
-  assertPositiveFinite(rect.width, `${label}.width`);
-  assertPositiveFinite(rect.height, `${label}.height`);
-  if (rect.x < 0 || rect.y < 0) {
-    throw new Error(`${label} origin must be non-negative.`);
-  }
-  return freezeRect(rect);
 }
 
 function validateUnboundedRect(

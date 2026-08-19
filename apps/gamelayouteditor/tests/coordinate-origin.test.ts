@@ -228,4 +228,36 @@ describe("coordinate origin conversion", () => {
     });
     expect(() => editorProjectToManifest(project)).not.toThrow();
   });
+
+  it("exports negative positions with a top-left origin", async () => {
+    const project = createNewEditorProject("maximized-focus");
+    await uploadImageResource({
+      project,
+      file: new File(
+        [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])],
+        "background.png",
+      ),
+      decodeImage: async () => ({ width: 1000, height: 1000 }),
+    });
+    assignBackgroundResource({
+      project,
+      variant: "default",
+      resourceId: "background.png",
+    });
+    project.reel.placements.default = { x: -400, y: -300 };
+    project.variants.default.focusRect = {
+      x: -500,
+      y: -350,
+      width: 900,
+      height: 700,
+    };
+    project.nodes[0]!.placements.default = {
+      ...project.nodes[0]!.placements.default!,
+      x: -100,
+      y: -200,
+    };
+
+    expect(project.coordinateOrigin).toBe("top-left");
+    expect(() => editorProjectToManifest(project)).not.toThrow();
+  });
 });

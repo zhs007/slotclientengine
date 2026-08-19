@@ -1102,7 +1102,7 @@ describe("scene layout manifest", () => {
       reels: {
         main: {
           ...game002LayoutFixture.reels.main,
-          placements: { default: { x: 1500, y: 337 } },
+          placements: { default: { x: -1500, y: -337 } },
         },
       },
     });
@@ -1117,8 +1117,8 @@ describe("scene layout manifest", () => {
       height: 500,
     });
     expect(manifest.reels.main.placements.default).toEqual({
-      x: 1500,
-      y: 337,
+      x: -1500,
+      y: -337,
     });
   });
 

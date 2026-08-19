@@ -174,6 +174,23 @@ describe("focused art viewport", () => {
     ).toEqual(FOCUS_RECT);
   });
 
+  it("maps negative top-left coordinates without clamping them", () => {
+    expect(
+      mapReferenceRectToArt({
+        artSize: { width: 100, height: 100 },
+        referenceSize: { width: 200, height: 200 },
+        referenceRect: { x: -30, y: -20, width: 40, height: 50 },
+      }),
+    ).toEqual({ x: -80, y: -70, width: 40, height: 50 });
+    expect(
+      mapAnchorRectToArt({
+        artSize: { width: 100, height: 100 },
+        anchorRect: { x: -50, y: -40, width: 20, height: 20 },
+        rect: { x: -10, y: -5, width: 30, height: 40 },
+      }),
+    ).toEqual({ x: -60, y: -45, width: 30, height: 40 });
+  });
+
   it("preserves the portrait reference crop inside the 2000 x 2000 art", () => {
     const viewport = calculateFocusedArtViewport({
       artSize: ART_SIZE,
@@ -424,18 +441,16 @@ describe("focused art viewport", () => {
   it("rejects invalid reference mappings", () => {
     expect(() =>
       mapReferenceRectToArt({
-        artSize: { width: 100, height: 100 },
-        referenceSize: { width: 200, height: 100 },
-        referenceRect: { x: 0, y: 0, width: 10, height: 10 },
-      }),
-    ).toThrow(/referenceSize/);
-    expect(() =>
-      mapReferenceRectToArt({
         artSize: ART_SIZE,
         referenceSize: REFERENCE_SIZE,
-        referenceRect: { x: 1000, y: 0, width: 200, height: 100 },
+        referenceRect: {
+          x: Number.NaN,
+          y: 0,
+          width: 200,
+          height: 100,
+        },
       }),
-    ).toThrow(/referenceRect/);
+    ).toThrow(/referenceRect.x/);
     expect(() =>
       mapReferenceRectToArt({
         artSize: ART_SIZE,
@@ -471,27 +486,6 @@ describe("focused art viewport", () => {
   });
 
   it("rejects invalid anchored rect mappings", () => {
-    expect(() =>
-      mapAnchorRectToArt({
-        artSize: ART_SIZE,
-        anchorRect: { x: 1900, y: 0, width: 200, height: 100 },
-        rect: { x: 0, y: 0, width: 50, height: 50 },
-      }),
-    ).toThrow(/anchorRect/);
-    expect(() =>
-      mapAnchorRectToArt({
-        artSize: ART_SIZE,
-        anchorRect: { x: 288, y: 588, width: 1424, height: 824 },
-        rect: { x: 1400, y: 0, width: 400, height: 100 },
-      }),
-    ).toThrow(/rect mapped/);
-    expect(() =>
-      mapAnchorRectToArt({
-        artSize: ART_SIZE,
-        anchorRect: { x: 288, y: 588, width: 1424, height: 824 },
-        rect: { x: 0, y: -600, width: 400, height: 100 },
-      }),
-    ).toThrow(/rect mapped/);
     expect(() =>
       mapAnchorRectToArt({
         artSize: ART_SIZE,
