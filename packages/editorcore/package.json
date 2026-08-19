@@ -1,0 +1,60 @@
+{
+  "name": "@slotclientengine/editorcore",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared editor asset catalog, transactions, adapters, and DOM UI.",
+  "type": "module",
+  "exports": {
+    "./assets": {
+      "types": "./dist/assets/index.d.ts",
+      "import": "./dist/assets/index.js"
+    },
+    "./assets/data": {
+      "types": "./dist/assets/data/index.d.ts",
+      "import": "./dist/assets/data/index.js"
+    },
+    "./assets/core": {
+      "types": "./dist/assets/core/index.d.ts",
+      "import": "./dist/assets/core/index.js"
+    },
+    "./assets/adapters": {
+      "types": "./dist/assets/adapters/index.d.ts",
+      "import": "./dist/assets/adapters/index.js"
+    },
+    "./assets/ui": {
+      "types": "./dist/assets/ui/index.d.ts",
+      "import": "./dist/assets/ui/index.js"
+    },
+    "./assets/ui.css": "./dist/assets/ui/assets-view.css",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "prepare:deps": "pnpm --filter @slotclientengine/browserartifactio build && pnpm --filter @slotclientengine/editorresource build && pnpm --filter @slotclientengine/audiocore build && pnpm --filter @slotclientengine/vnicore build && pnpm --filter @slotclientengine/rendercore build",
+    "build": "pnpm run prepare:deps && tsc -p tsconfig.build.json && mkdir -p dist/assets/ui && cp src/assets/ui/assets-view.css dist/assets/ui/assets-view.css",
+    "lint": "eslint .",
+    "test": "pnpm run prepare:deps && vitest run --coverage",
+    "typecheck": "pnpm run prepare:deps && tsc -p tsconfig.json --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@slotclientengine/audiocore": "workspace:*",
+    "@slotclientengine/browserartifactio": "workspace:*",
+    "@slotclientengine/editorresource": "workspace:*",
+    "@slotclientengine/rendercore": "workspace:*",
+    "@slotclientengine/vnicore": "workspace:*"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.34.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vitest/coverage-v8": "^4.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^15.15.0",
+    "happy-dom": "^20.0.10"
+  }
+}

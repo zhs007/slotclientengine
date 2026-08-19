@@ -1,0 +1,31 @@
+{
+  "name": "editordemo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "prepare:deps": "pnpm --filter @slotclientengine/editorcore build",
+    "dev": "pnpm run prepare:deps && node ../../scripts/run-vite-dev.mjs",
+    "build": "pnpm run prepare:deps && vite build",
+    "lint": "eslint .",
+    "test": "pnpm run prepare:deps && vitest run --coverage",
+    "typecheck": "pnpm run prepare:deps && tsc -p tsconfig.json --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@slotclientengine/browserartifactio": "workspace:*",
+    "@slotclientengine/editorcore": "workspace:*",
+    "@slotclientengine/editorresource": "workspace:*"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.34.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vitest/coverage-v8": "^4.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^15.15.0",
+    "happy-dom": "^20.0.10"
+  }
+}

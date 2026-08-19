@@ -5,3 +5,5 @@
 本包不依赖 DOM renderer、Pixi、Node `fs` 或游戏业务。格式结构解释和路径字段改写仍由 rendercore/vnicore owner adapter 完成。ZIP 目录只存在于解析阶段，提交前必须扁平化；同名不同 bytes 的初始计划为覆盖，review consumer 可以要求用户显式选择 `overwrite` 或 `keep-both`。只有显式 `keep-both` resolution 才调用共享 allocator 在扩展名前分配最小可用 `-1`、`-2` suffix；错误和普通导入不得自动追加 suffix。
 
 ZIP 导入边界会忽略 Finder 生成的 `__MACOSX/**`、`._*` 与 `.DS_Store`，并且仅在剥离唯一一层外包装目录后能找到调用方指定的根 manifest 时移除该目录。规范化后的真实包内容仍执行原有路径、manifest、`assets.map.json`、SHA-256、缺失文件与孤儿 payload 严格校验；这些 macOS 元数据和外包装目录不会进入 workspace 或重新导出的 ZIP。
+
+`@slotclientengine/editorcore` 的 typed Assets catalog 建在本包之上：EditorResource 继续唯一拥有 filename key、bytes、hash、map、冲突 review 和 commit primitives；EditorCore 拥有 compound root/关系、宿主 usage 和共享 UI。树形视图不会改变这里的扁平 identity，也不会把 owner 内部 leaf 晋升成可独立使用的资源。

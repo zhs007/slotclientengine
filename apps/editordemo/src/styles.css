@@ -1,0 +1,81 @@
+:root {
+  color-scheme: dark;
+  background: #050a12;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-width: 960px;
+  min-height: 100vh;
+}
+button,
+input,
+label {
+  font: inherit;
+}
+
+.demo-shell {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 14px;
+  height: 100vh;
+  padding: 20px;
+}
+
+.demo-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.demo-header h1 {
+  margin: 2px 0 6px;
+  font-size: 28px;
+}
+.demo-header p {
+  margin: 0;
+  color: #96a8c2;
+}
+.demo-eyebrow {
+  color: #69a8ff !important;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.demo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: 8px;
+}
+.demo-actions button,
+.demo-actions label {
+  cursor: pointer;
+  color: #e8eef8;
+  background: #162235;
+  border: 1px solid #354764;
+  border-radius: 8px;
+  padding: 8px 11px;
+}
+.demo-actions button:hover,
+.demo-actions label:hover {
+  border-color: #69a8ff;
+}
+.demo-status {
+  margin: 0;
+  min-height: 20px;
+  color: #94b9e9;
+}
+.demo-status.is-error {
+  color: #ff9d9d;
+}
+.demo-workspace {
+  min-width: 0;
+  min-height: 0;
+}
