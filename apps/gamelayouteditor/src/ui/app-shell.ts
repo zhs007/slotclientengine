@@ -1682,6 +1682,17 @@ export class GameLayoutEditorApp {
           if (!transition) throw new Error("所选转场已不存在。");
           setGameModeTransitionKind(draft, transition, value);
         });
+        this.#root
+          .querySelectorAll<HTMLButtonElement>("[data-copy-runtime-address]")
+          .forEach((button) => {
+            button.addEventListener("click", () => {
+              const address = button.dataset.copyRuntimeAddress;
+              if (!address) return;
+              void navigator.clipboard
+                .writeText(address)
+                .catch((error) => this.#store.setExternalError(error));
+            });
+          });
       });
     panel
       .querySelector<HTMLSelectElement>("[data-transition-resource]")

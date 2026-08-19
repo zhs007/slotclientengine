@@ -72,6 +72,40 @@ function effect(
 }
 
 describe("audio runtime", () => {
+  it("emits music lifecycle only after start and fade-out stop", async () => {
+    const backend = new FakeBackend();
+    const music = parseAudioMusicBindingV1({
+      name: "base",
+      asset: { sources: [{ path: "base.mp3", mediaType: "audio/mpeg" }] },
+      loop: true,
+      fadeOutSeconds: 0.5,
+      fadeInSeconds: 0.1,
+    });
+    const runtime = createAudioRuntime({
+      backend,
+      effects: {},
+      music: {
+        base: {
+          binding: music,
+          sources: [{ url: "base.mp3", mediaType: "audio/mpeg" }],
+        },
+      },
+    });
+    const events: string[] = [];
+    runtime.observeMusic((event) =>
+      events.push(`${event.name}:${event.phase}`),
+    );
+    await runtime.requestMusic("base");
+    expect(events).toEqual(["base:started"]);
+    runtime.update(0.1);
+    await runtime.requestMusic(null);
+    runtime.update(0.49);
+    expect(events).toEqual(["base:started"]);
+    runtime.update(0.01);
+    expect(events).toEqual(["base:started", "base:stopped"]);
+    runtime.destroy();
+  });
+
   it("deduplicates prepare, cancels pending delay, and deduplicates loop", async () => {
     const backend = new FakeBackend();
     const loop = effect("coin", "loop");

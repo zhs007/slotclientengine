@@ -42,6 +42,8 @@ export {
   createSceneLayoutPackageResource,
   createSceneLayoutPackageRuntime,
   createSceneLayoutPresentationSurface,
+  formatGameLayoutRuntimeAddress,
+  parseGameLayoutRuntimeAddress,
 } from "@slotclientengine/rendercore/scene-layout/core";
 export { attachRenderObjectToSpineSlot } from "@slotclientengine/rendercore";
 export type {
@@ -56,6 +58,13 @@ export type {
   SceneLayoutPoint,
   SceneLayoutPointSelector,
   RenderAlignment,
+  GameLayoutRuntimeAddress,
+  GameLayoutRuntimeAddressDescriptor,
+  GameLayoutRuntimeAddressKind,
+  GameLayoutRuntimeAddresses,
+  GameLayoutRuntimeEndpoint,
+  GameLayoutRuntimeEvent,
+  GameLayoutRuntimeEventListener,
 } from "@slotclientengine/rendercore/scene-layout/core";
 export type {
   AttachRenderObjectToSpineSlotOptions,

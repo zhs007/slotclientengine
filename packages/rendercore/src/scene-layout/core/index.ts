@@ -7,3 +7,4 @@ export { createSceneLayoutPackageRuntime } from "../package-runtime.js";
 export type { SceneLayoutRenderObjectFactoryDependencies } from "../render-object-factory.js";
 export * from "../video-transition-player.js";
 export * from "../presentation-surface.js";
+export * from "./runtime-address.js";

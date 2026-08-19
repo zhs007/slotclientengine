@@ -4,6 +4,9 @@
 
 facade 同时公开 Scene Layout package runtime 与 slot operation coordinator 的 app-facing factory/type；游戏可以注入只含异步 `start` 的 typed 业务 handler，但无需从 package 内部 display tree 重建 root/reel 层级。
 
+facade re-export `gamelayout:/` runtime address formatter、parser、resolver 与 endpoint/event 类型。
+程序接入见 [`docs/gamelayout-runtime-addresses.md`](../../docs/gamelayout-runtime-addresses.md)。
+
 ## Scene-layout 零代码模板
 
 `@slotclientengine/gameframeworks/scene-layout-template` 是 app-facing 的唯一模板入口。

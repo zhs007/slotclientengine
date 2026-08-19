@@ -277,6 +277,18 @@ describe("scene layout package event-driven game-mode transition", () => {
   it("commits the complete lower scene at the event and settles at completion", async () => {
     const { runtime, players } = createRuntime();
     await runtime.init();
+    const occurrences: Array<{
+      readonly sequence: number;
+      readonly displayedMode: string;
+    }> = [];
+    const disposeEvent = runtime.addresses.bind(
+      "gamelayout:/transition/BaseGame/FreeGame/effect/spine/event/SwitchScene",
+      (event) =>
+        occurrences.push({
+          sequence: event.sequence,
+          displayedMode: runtime.getGameModeSnapshot().displayedMode,
+        }),
+    );
     runtime.applyViewport({ width: 800, height: 600 });
     state.runtime.setNodeActive.mockClear();
     const pending = runtime.requestGameMode("FreeGame");
@@ -315,6 +327,7 @@ describe("scene layout package event-driven game-mode transition", () => {
       transitionPhase: "after-switch",
       activeBackgroundNodes: ["free-bg"],
     });
+    expect(occurrences).toEqual([{ sequence: 1, displayedMode: "FreeGame" }]);
     expect(player.destroyed).toBe(false);
     player.results.push({ completed: true, events: [] });
     runtime.update(0.5);
@@ -326,6 +339,7 @@ describe("scene layout package event-driven game-mode transition", () => {
       transitionPhase: null,
     });
     expect(state.runtime.requestNodeState).not.toHaveBeenCalled();
+    disposeEvent();
     runtime.destroy();
   });
 

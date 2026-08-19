@@ -198,6 +198,7 @@
 - package runtime 的canonical `getRenderLayer(ref)`统一解析稳定`layout|reel|transition|popup`、area `<id>.bottom|top|win`、canonical exact node及显式`node:<legacyId>`；底层仍委托各自唯一owner，不合并lifecycle或display parent。返回opaque安全attachment façade，presentation-only请求`reel`/area显式失败。既有
   `getLayer()`和`getNode()` borrowed container seam为host/editor兼容保留，调用方不得destroy或改写内部层级，不强制旧consumer迁移。
 - authored scene node只能通过`getRenderObject(exactId)`取得kind-discriminated borrowed capability；placement/destroy仍由Scene Layout拥有，program visibility只能与mode/variant可见性做AND。程序对象只通过exact runtime resource factory创建并由caller拥有，两者不得按同名互相fallback。
+- Game Layout production对象统一通过owner-first `gamelayout:/` runtime address定位；地址只从canonical manifest及nested owner identity派生，不写回manifest，不允许JSON Pointer、filename/path/hash、alias或raw display/audio fallback。package runtime只公开可枚举descriptor、strict kind endpoint与bind/wait事件；Spine transition event必须复用唯一official update drain并在target scene提交后派发，BGM lifecycle必须对应backend instance真实start及fade-out stop。
 - Gamelayout authored point由Scene Layout按当前snapshot和configured origin统一换算；logical viewport不是CSS/device viewport。跨parent只通过opaque Anchor和target-local解析，不向app公开world point、Matrix或visual bounds。SymbolGroup只可读取input-order odd middle、members/bounds center与稳定cell footprint，不能从当前display bounds推导业务rect。
 - scene-layout node、main reel 与 Popup binding order 必须是全局唯一安全整数；Popup order 必须高于全部 art/reel order，并在当前 scene 的 `popup` layer 内排序。旧单 Popup v1 缺少 order 时规范化为 `2000`，多个缺省 Popup 的重复值显式失败。
 - `gamelayoutpkgcli` 为每个 runtime resource 输出独立增量组，未请求程序资源不得并入 initial/shared。

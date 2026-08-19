@@ -63,3 +63,4 @@ export type {
   SceneLayoutFramePolicy,
   RenderAlignment,
 } from "../types.js";
+export * from "./runtime-address.js";

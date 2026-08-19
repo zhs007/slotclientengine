@@ -760,6 +760,8 @@ export interface SceneLayoutMainReelContinuousSpinInput {
 }
 
 export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
+  /** Canonical owner-first lookup, capability, and event subscription SPI. */
+  readonly addresses: import("./core/runtime-address.js").GameLayoutRuntimeAddresses;
   init(options?: {
     readonly reels?: Readonly<
       Partial<Record<"main", SceneLayoutInitialReelScene>>

@@ -98,6 +98,12 @@ import {
   type SceneLayoutRenderObjectFactoryDependencies,
 } from "./render-object-factory.js";
 import { resolveSceneLayoutRenderLayerRef } from "./render-layer-ref.js";
+import {
+  createGameLayoutRuntimeAddresses,
+  type GameLayoutRuntimeAddressController,
+  type GameLayoutRuntimeAddresses,
+} from "./core/runtime-address.js";
+import { formatGameLayoutRuntimeAddress } from "./data/runtime-address.js";
 
 type ReelPresentation = RenderReelSet | RenderGridCellReelSet;
 
@@ -265,6 +271,8 @@ export function inspectSceneLayoutGameModeRuntime(
 }
 
 class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
+  readonly addresses: GameLayoutRuntimeAddresses;
+  readonly #addressController: GameLayoutRuntimeAddressController;
   readonly container: Container;
   readonly #resource: SceneLayoutPackageResource;
   readonly #presentationOnly: boolean;
@@ -301,6 +309,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   }) => SceneLayoutTransitionVideoPlayer;
   readonly #renderObjectFactory: SceneLayoutRenderObjectFactory;
   readonly #audio: AudioRuntime;
+  readonly #disposeAudioMusicObserver: () => void;
   #audioUnlocked = false;
   #audioMode: string | null = null;
   #audioFailure: SceneLayoutError | null = null;
@@ -445,6 +454,45 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#renderObjectFactory = createSceneLayoutRenderObjectFactory({
       resource,
       dependencies: renderObjectFactoryDependencies,
+    });
+    this.#addressController = createGameLayoutRuntimeAddresses(resource, {
+      getRenderObject: (id) => this.getRenderObject(id),
+      getRenderLayer: (ref) => this.getRenderLayer(ref),
+      getArea: (id) => this.getSymbolArea(id),
+      getGameModeSnapshot: () => this.getGameModeSnapshot(),
+      playEffect: (route) => this.playEffect(route),
+      stopEffect: (route) => this.stopEffect(route),
+      getAudioSnapshot: () => this.#audio.getSnapshot(),
+      createRenderObject: (name) => this.createRenderObject(name),
+      createImgNumberRenderObject: (name, options) =>
+        this.createImgNumberRenderObject(name, options),
+      assertReady: () => this.assertReady(),
+    });
+    this.addresses = this.#addressController.addresses;
+    this.#disposeAudioMusicObserver = this.#audio.observeMusic((event) => {
+      const detail = Object.freeze({ music: event.name, phase: event.phase });
+      this.#addressController.emit(
+        formatGameLayoutRuntimeAddress(
+          "audio",
+          "music",
+          event.name,
+          "lifecycle",
+          event.phase,
+        ),
+        detail,
+      );
+      for (const mode of resource.runtimeManifest?.gameModes.modes ?? [])
+        if (mode.bgm === event.name)
+          this.#addressController.emit(
+            formatGameLayoutRuntimeAddress(
+              "mode",
+              mode.id,
+              "bgm",
+              "lifecycle",
+              event.phase,
+            ),
+            Object.freeze({ ...detail, mode: mode.id }),
+          );
     });
     activeAwardSnapshotReaders.set(this, () =>
       this.#createActiveAwardCelebrationSnapshot(),
@@ -2403,6 +2451,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#symbolAudioHandles.clear();
     this.#videoBlackoutRoot.removeChildren();
     this.#videoBlackout.destroy();
+    this.#disposeAudioMusicObserver();
+    this.#addressController.destroy();
     this.#renderObjectFactory.destroy();
     this.#audio.destroy();
     this.#layout.destroy();
@@ -2863,12 +2913,35 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       this.redrawVideoBlackout(this.#viewportSize);
       started = true;
       return await new Promise<void>((resolve, reject) => {
-        this.#activeTransition = {
+        const active: Extract<
+          ActiveModeTransition,
+          { readonly kind: "video" }
+        > = {
           ...prepared,
           switched: false,
           resolve,
           reject,
         };
+        this.#activeTransition = active;
+        try {
+          this.#addressController.emit(
+            formatGameLayoutRuntimeAddress(
+              "transition",
+              prepared.spec.from,
+              prepared.spec.to,
+              "effect",
+              "video",
+              "lifecycle",
+              "started",
+            ),
+            Object.freeze({
+              from: prepared.spec.from,
+              to: prepared.spec.to,
+            }),
+          );
+        } catch (error) {
+          this.failActiveTransition(active, asSceneLayoutError(error));
+        }
       });
     } catch (error) {
       if (this.#preparedTransition === prepared)
@@ -2908,6 +2981,23 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
             `Scene transition ${active.spec.from} -> ${active.spec.to} emitted switch event "${event.name}" more than once.`,
           );
         this.commitActiveTransition(active);
+        this.#addressController.emit(
+          formatGameLayoutRuntimeAddress(
+            "transition",
+            active.spec.from,
+            active.spec.to,
+            "effect",
+            "spine",
+            "event",
+            event.name,
+          ),
+          Object.freeze({
+            from: active.spec.from,
+            to: active.spec.to,
+            animation: overlay.animation,
+            event: event.name,
+          }),
+        );
       }
       if (!result.completed) return;
       if (!active.switched)
@@ -3041,6 +3131,25 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#targetSymbolPackageId = null;
     this.#activeTransition = null;
     this.refreshCommittedGeometryPresentation();
+    if (active.kind === "video") {
+      try {
+        this.#addressController.emit(
+          formatGameLayoutRuntimeAddress(
+            "transition",
+            active.spec.from,
+            active.spec.to,
+            "effect",
+            "video",
+            "lifecycle",
+            "ended",
+          ),
+          Object.freeze({ from: active.spec.from, to: active.spec.to }),
+        );
+      } catch (error) {
+        active.reject(asSceneLayoutError(error));
+        return;
+      }
+    }
     active.resolve();
   }
 

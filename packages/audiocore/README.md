@@ -9,3 +9,6 @@
 Popup/Symbol package 只保存 local effect name。Game Layout 绑定 package 后才把 binding path 与 local name 编译为全局 route，例如 `award.coin`。游戏只通过编译后的 `playEffect(route)` / `stopEffect(route)` 使用音效。
 
 BGM 对每个 mode 都是可选的；已配置的 BGM 始终 loop，切 mode 使用绑定声明的渐隐/渐现。音频不加入 splash/loading 进度 gate，是否按需准备由对应 mode/animation owner 决定。
+
+`AudioRuntime.observeMusic()` 只在 loop instance 成功启动后发布 `started`，在 fade-out 到零并 stop 后发布
+`stopped`；Scene Layout 将该实例生命周期映射为 `gamelayout:/audio/music/...` 与 mode BGM event 地址。

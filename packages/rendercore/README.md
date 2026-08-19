@@ -9,6 +9,10 @@ resource，不要求内层第二份 map。无 map 的合法 legacy direct path �
 
 `rendercore` 是 slot 前端渲染核心库。它基于 `pixi.js` v8、复用 `@slotclientengine/pixiani` 的基础显示对象生命周期，并复用 `@slotclientengine/logiccore` 的 game config/paytable 契约。`apps/symbolsviewer` 和 `apps/reelsviewer` 是调试 app，业务展示逻辑不放进核心库。
 
+Game Layout production runtime 的统一对象定位、资源 factory 与事件订阅使用
+`SceneLayoutPackageRuntime.addresses`。完整地址表、ownership 和示例见
+[`docs/gamelayout-runtime-addresses.md`](../../docs/gamelayout-runtime-addresses.md)。
+
 ## Reel rolling 与 settled occurrence
 
 `RenderReel` 的每个 buffer slot 固定拥有一个轻量 rolling Sprite。reel 处于

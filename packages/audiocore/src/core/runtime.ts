@@ -46,6 +46,11 @@ export interface AudioRuntimeSnapshot {
   readonly focusGain: number;
 }
 
+export interface AudioMusicLifecycleEvent {
+  readonly name: string;
+  readonly phase: "started" | "stopped";
+}
+
 export interface AudioRuntime {
   prepare(routes: readonly string[]): Promise<void>;
   playEffect(
@@ -54,6 +59,7 @@ export interface AudioRuntime {
   ): AudioPlaybackHandle;
   stopEffect(route: string): void;
   requestMusic(name: string | null): Promise<void>;
+  observeMusic(listener: (event: AudioMusicLifecycleEvent) => void): () => void;
   update(deltaSeconds: number): void;
   unlock(): Promise<void>;
   setMasterMuted(muted: boolean): void;
@@ -148,6 +154,9 @@ class DefaultAudioRuntime implements AudioRuntime {
   readonly #active = new Map<number, ActiveEffect>();
   readonly #focus = new Map<number, AudioBgmFocusPolicyV1>();
   readonly #musicVoices: MusicVoice[] = [];
+  readonly #musicListeners = new Set<
+    (event: AudioMusicLifecycleEvent) => void
+  >();
   #nextId = 1;
   #sequence = 1;
   #masterMuted = false;
@@ -301,6 +310,20 @@ class DefaultAudioRuntime implements AudioRuntime {
     this.#musicVoices.push(next);
     this.#currentMusic = name;
     this.applyMusicState();
+    this.emitMusic(name, "started");
+  }
+
+  observeMusic(
+    listener: (event: AudioMusicLifecycleEvent) => void,
+  ): () => void {
+    this.assertAlive();
+    this.#musicListeners.add(listener);
+    let active = true;
+    return () => {
+      if (!active) return;
+      active = false;
+      this.#musicListeners.delete(listener);
+    };
   }
 
   update(deltaSeconds: number): void {
@@ -331,6 +354,7 @@ class DefaultAudioRuntime implements AudioRuntime {
       if (voice.stopping && voice.transitionGain === 0) {
         voice.instance.stop();
         this.#musicVoices.splice(index, 1);
+        this.emitMusic(voice.name, "stopped");
       }
     }
     this.applyEffectVolumes();
@@ -372,6 +396,7 @@ class DefaultAudioRuntime implements AudioRuntime {
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
+    this.#musicListeners.clear();
     for (const pending of this.#pending.values()) {
       pending.cancelled = true;
       pending.handle.settle("stopped");
@@ -386,6 +411,14 @@ class DefaultAudioRuntime implements AudioRuntime {
     this.#sounds.clear();
     this.#preparing.clear();
     this.#currentMusic = null;
+  }
+
+  private emitMusic(
+    name: string,
+    phase: AudioMusicLifecycleEvent["phase"],
+  ): void {
+    const event = Object.freeze({ name, phase });
+    for (const listener of [...this.#musicListeners]) listener(event);
   }
 
   private prepareSound(

@@ -93,6 +93,24 @@ describe("transitions workspace", () => {
     expect(host.querySelector("input[data-transition-event]")).toBeNull();
     expect(host.textContent).toContain("Duplicate × 2");
     expect(
+      [...host.querySelectorAll<HTMLElement>("[data-runtime-address]")].map(
+        (element) => element.textContent,
+      ),
+    ).toEqual([
+      "gamelayout:/transition/BaseGame/FreeGame",
+      "gamelayout:/transition/BaseGame/FreeGame/effect/spine/event/SwitchScene",
+    ]);
+    expect(
+      [
+        ...host.querySelectorAll<HTMLButtonElement>(
+          "[data-copy-runtime-address]",
+        ),
+      ].map((button) => button.dataset.copyRuntimeAddress),
+    ).toEqual([
+      "gamelayout:/transition/BaseGame/FreeGame",
+      "gamelayout:/transition/BaseGame/FreeGame/effect/spine/event/SwitchScene",
+    ]);
+    expect(
       (host.querySelector("[data-request-transition]") as HTMLButtonElement)
         .disabled,
     ).toBe(false);
