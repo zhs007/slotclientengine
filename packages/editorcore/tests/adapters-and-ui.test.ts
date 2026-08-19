@@ -9,6 +9,7 @@ import {
   serializeEditorAssetsMap,
 } from "@slotclientengine/editorresource";
 import {
+  DEFAULT_EDITOR_ASSET_INGESTION_LIMITS,
   discoverDefaultEditorAssets,
   createDefaultEditorAssetsController,
   ingestAndDiscoverDefaultEditorAssets,
@@ -21,6 +22,15 @@ import type {
 import { mountEditorAssetsView } from "../src/assets/ui/index.js";
 
 describe("default adapters", () => {
+  it("allows compressed ZIP sources to reach the stricter payload limits", () => {
+    expect(DEFAULT_EDITOR_ASSET_INGESTION_LIMITS.files.maxFileBytes).toBe(
+      DEFAULT_EDITOR_ASSET_INGESTION_LIMITS.zip.maxCompressedBytes,
+    );
+    expect(DEFAULT_EDITOR_ASSET_INGESTION_LIMITS.zip.maxFileBytes).toBe(
+      50 * 1024 * 1024,
+    );
+  });
+
   it("discovers supported atomic image, audio, and video signatures", async () => {
     const mp3 = new Uint8Array([0x49, 0x44, 0x33, 1]);
     const mp4 = new Uint8Array(12);

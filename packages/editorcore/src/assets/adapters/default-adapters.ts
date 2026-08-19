@@ -55,7 +55,9 @@ import type {
 export const DEFAULT_EDITOR_ASSET_INGESTION_LIMITS = Object.freeze({
   files: Object.freeze({
     maxEntries: 4096,
-    maxFileBytes: 50 * 1024 * 1024,
+    // ZIP sources must reach the ZIP reader before their compressed-size and
+    // expanded-payload limits can be applied.
+    maxFileBytes: 200 * 1024 * 1024,
     maxTotalBytes: 500 * 1024 * 1024,
   }),
   zip: Object.freeze({
@@ -80,6 +82,17 @@ export async function ingestAndDiscoverDefaultEditorAssets(options: {
     files: options.files,
     limits: DEFAULT_EDITOR_ASSET_INGESTION_LIMITS,
   });
+  for (const source of sources) {
+    if (
+      source.container === "file" &&
+      source.bytes.byteLength >
+        DEFAULT_EDITOR_ASSET_INGESTION_LIMITS.zip.maxFileBytes
+    ) {
+      throw new Error(
+        `loose asset 超过 ${DEFAULT_EDITOR_ASSET_INGESTION_LIMITS.zip.maxFileBytes} bytes 上限：${source.key}`,
+      );
+    }
+  }
   return discoverDefaultEditorAssets({
     sources,
     profileSelections: options.profileSelections,
