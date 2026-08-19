@@ -125,4 +125,40 @@ describe("coordinate origin conversion", () => {
     expect(store.getSnapshot()).toMatchObject({ revision: before.revision });
     expect(store.getSnapshot().project).toBe(beforeProject);
   });
+
+  it("converts reel placements for every game mode before changing the global origin", () => {
+    const project = manifestToEditorProject(imageManifest, assetBytes);
+    project.reel.placements.default = { x: 40, y: 20 };
+    const secondMode = structuredClone(project.gameModes.modes[0]!);
+    secondMode.id = "FreeGame";
+    project.gameModes.modes.push(secondMode);
+    const store = new EditorStore(project);
+
+    store.transact((draft) => convertProjectCoordinateOrigin(draft, "center"));
+
+    const centered = store.getSnapshot();
+    expect(centered.errors).toEqual([]);
+    expect(
+      centered.project.gameModes.modes.map(
+        (mode) => mode.reelPlacements.default,
+      ),
+    ).toEqual([
+      { x: 12.5, y: -8.5 },
+      { x: 12.5, y: -8.5 },
+    ]);
+
+    store.transact((draft) =>
+      convertProjectCoordinateOrigin(draft, "top-left"),
+    );
+
+    expect(store.getSnapshot().errors).toEqual([]);
+    expect(
+      store
+        .getSnapshot()
+        .project.gameModes.modes.map((mode) => mode.reelPlacements.default),
+    ).toEqual([
+      { x: 40, y: 20 },
+      { x: 40, y: 20 },
+    ]);
+  });
 });

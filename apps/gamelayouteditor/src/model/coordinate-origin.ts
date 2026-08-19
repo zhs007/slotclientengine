@@ -47,13 +47,6 @@ export function convertProjectCoordinateOrigin(
         }
       }
     }
-    const reelPlacement = project.reel.placements[variantId];
-    if (!reelPlacement)
-      throw new Error(`main reel 缺少 ${variantId} placement。`);
-    assertPlacement(reelPlacement, `main reel ${variantId}`);
-    const reelSize = calculateReelSize(project);
-    reelPlacement.x += (toCenter ? 1 : -1) * (reelSize.width / 2 - center.x);
-    reelPlacement.y += (toCenter ? 1 : -1) * (reelSize.height / 2 - center.y);
     for (const transition of project.gameModes.transitions) {
       if (transition.kind !== "spine") continue;
       const placement = transition.placements[variantId];
@@ -64,6 +57,25 @@ export function convertProjectCoordinateOrigin(
       );
       placement.x += (toCenter ? -1 : 1) * center.x;
       placement.y += (toCenter ? -1 : 1) * center.y;
+    }
+  }
+  const reelSize = calculateReelSize(project);
+  assertPositiveSize(reelSize, "main reel size");
+  for (const mode of project.gameModes.modes) {
+    for (const variantId of activeVariantIds(mode)) {
+      const placement = mode.reelPlacements[variantId];
+      if (!placement) {
+        if (mode.reelEnabled)
+          throw new Error(`${mode.id} main reel 缺少 ${variantId} placement。`);
+        continue;
+      }
+      const artSize = mode.variants[variantId].artSize;
+      assertPositiveSize(artSize, `${mode.id} ${variantId} artSize`);
+      assertPlacement(placement, `${mode.id} main reel ${variantId}`);
+      placement.x +=
+        (toCenter ? 1 : -1) * (reelSize.width / 2 - artSize.width / 2);
+      placement.y +=
+        (toCenter ? 1 : -1) * (reelSize.height / 2 - artSize.height / 2);
     }
   }
   project.coordinateOrigin = target;
