@@ -923,6 +923,29 @@ describe("symbol state texture manifest helpers", () => {
     });
   });
 
+  it("binds every page of a multi-page Spine atlas", () => {
+    const atlas = `${TEST_SPINE_ATLAS}\nSymbol_2.png\nsize: 1,1\nformat: RGBA8888\nfilter: Linear,Linear\n`;
+    const resources = createSymbolSpineAnimationResourcesFromManifest({
+      manifest: createManifest(),
+      requiredStates,
+      spineSkeletonModules: {
+        "../../../assets/sample-skin/H1.json": TEST_SPINE_SKELETON,
+      },
+      spineAtlasModules: {
+        "../../../assets/sample-skin/Symbol.atlas": atlas,
+      },
+      spineTextureModules: {
+        "../../../assets/sample-skin/Symbol.png": "/assets/Symbol.png",
+        "../../../assets/sample-skin/Symbol_2.png": "/assets/Symbol_2.png",
+      },
+    });
+
+    expect(resources.H1?.normal?.textureUrls).toEqual({
+      "Symbol.png": "/assets/Symbol.png",
+      "Symbol_2.png": "/assets/Symbol_2.png",
+    });
+  });
+
   it("binds an optimized Spine texture key without comparing it to the atlas page name", () => {
     const manifest = structuredClone(createManifest());
     for (const animation of Object.values(manifest.symbols.H1.animations)) {

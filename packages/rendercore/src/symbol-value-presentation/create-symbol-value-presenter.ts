@@ -105,19 +105,29 @@ export function createSymbolValuePresentationResourcesFromManifest(
           `${symbol} value tier ${index} texture`,
         );
         let atlasPage: string;
+        let textureUrls: Readonly<Record<string, string>>;
         try {
           const atlasPages = readOfficialSpineAtlasPages(atlasText);
-          if (atlasPages.length !== 1) {
-            throw new Error(
-              "value presentation Spine atlas must contain exactly one page for its single texture.",
-            );
-          }
           atlasPage = atlasPages[0]!;
+          textureUrls = Object.freeze(
+            Object.fromEntries(
+              atlasPages.map((page, pageIndex) => [
+                page,
+                pageIndex === 0
+                  ? textureUrl
+                  : requireStringModule(
+                      textures,
+                      `./${getBaseName(page)}`,
+                      `${symbol} value tier ${index} atlas page ${page}`,
+                    ),
+              ]),
+            ),
+          );
           validateOfficialSpineResource({
             resource: {
               skeleton,
               atlasText,
-              textureUrls: { [atlasPage]: textureUrl },
+              textureUrls,
             },
             requiredAnimations: [
               tier.animation.playback.animationName,
@@ -149,6 +159,7 @@ export function createSymbolValuePresentationResourcesFromManifest(
           atlasText,
           textureUrl,
           atlasPage,
+          textureUrls,
         });
       });
       const text = presentation.text;
@@ -667,7 +678,7 @@ function createDefaultPlayer(options: {
     resource: {
       skeleton: options.resource.skeleton,
       atlasText: options.resource.atlasText,
-      textureUrls: {
+      textureUrls: options.resource.textureUrls ?? {
         [options.resource.atlasPage]: options.resource.textureUrl,
       },
     },

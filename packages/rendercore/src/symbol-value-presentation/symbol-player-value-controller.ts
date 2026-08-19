@@ -97,7 +97,9 @@ class SymbolPlayerValueControllerModel implements SymbolPlayerValueController {
           resource: {
             skeleton: tier.skeleton,
             atlasText: tier.atlasText,
-            textureUrls: { [tier.atlasPage]: tier.textureUrl },
+            textureUrls: tier.textureUrls ?? {
+              [tier.atlasPage]: tier.textureUrl,
+            },
           },
         }));
     this.#displayRoot.visible = false;

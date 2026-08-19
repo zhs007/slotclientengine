@@ -332,6 +332,46 @@ describe("symbol package game config and resources", () => {
     ]);
   });
 
+  it("collects every structured page dependency from a multi-page Spine atlas", () => {
+    const manifest = {
+      version: 1,
+      states: [],
+      symbols: {
+        A: {
+          normal: "./A.png",
+          animations: {
+            normal: {
+              kind: "spine",
+              skeleton: "./Symbol.json",
+              atlas: "./Symbol.atlas",
+              texture: "./Symbol.png",
+              playback: {
+                mode: "animation",
+                animationName: "Idle",
+                loop: true,
+              },
+            },
+          },
+        },
+      },
+    };
+    const packageFiles = new Map([
+      [
+        "Symbol.atlas",
+        new TextEncoder().encode(
+          "Symbol.png\nsize: 1,1\nfilter: Linear,Linear\n\nSymbol_2.png\nsize: 1,1\nfilter: Linear,Linear\n",
+        ),
+      ],
+    ]);
+
+    expect(
+      collectSymbolManifestResourcePaths({
+        symbolManifest: manifest,
+        files: packageFiles,
+      }),
+    ).toContain("Symbol_2.png");
+  });
+
   it("derives the exact nested image-string dependency closure", () => {
     const nestedManifest = {
       version: 1,

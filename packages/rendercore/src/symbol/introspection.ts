@@ -99,11 +99,6 @@ export function inspectSymbolSpineBundle(options: {
 }> {
   const skeleton = inspectSymbolSpineSkeleton(options.skeleton);
   const atlasMetadata = inspectSymbolSpineAtlas(options.atlasText);
-  if (atlasMetadata.pageNames.length !== 1) {
-    throw new SymbolAssetError(
-      "Spine symbol schema currently supports exactly one atlas page.",
-    );
-  }
   fileName(options.texturePath);
   try {
     const atlas = new TextureAtlas(options.atlasText);

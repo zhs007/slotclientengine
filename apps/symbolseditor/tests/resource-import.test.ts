@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addSymbolState,
   createFromGameConfig,
+  exportSnapshot,
   setStateVisual,
   setValuePresentation,
   uploadAssetBatch,
@@ -43,6 +44,15 @@ const spineAtlas = new TextEncoder().encode(
 const spineAtlasFor = (page: string, filter = "Linear,Linear") =>
   new TextEncoder().encode(
     `${page}\nsize: 1,1\nformat: RGBA8888\nfilter: ${filter}\nrepeat: none\n`,
+  );
+const spineAtlasForPages = (pages: readonly string[]) =>
+  new TextEncoder().encode(
+    pages
+      .map(
+        (page) =>
+          `${page}\nsize: 1,1\nformat: RGBA8888\nfilter: Linear,Linear\nrepeat: none\n`,
+      )
+      .join("\n"),
   );
 
 function source(key: string, bytes: Uint8Array) {
@@ -173,6 +183,35 @@ describe("symbol resource import transaction", () => {
     });
     expect(project.symbols.get("A")!.states.get("normal")).toEqual(
       beforeNormal,
+    );
+  });
+
+  it("materializes every page when an existing Spine atlas becomes multi-page", async () => {
+    const project = configureSpineProject();
+    const prepared = await prepareSymbolResourceImport({
+      project,
+      sources: [
+        source(
+          "Symbol.atlas",
+          spineAtlasForPages(["Symbol.png", "Symbol_2.png"]),
+        ),
+        source("Symbol_2.png", image("H2.png")),
+      ],
+    });
+    const atlasIndex = prepared.review.items.findIndex(
+      ({ targetKey }) => targetKey === "Symbol.atlas",
+    );
+    const result = await commitSymbolResourceImport({
+      project,
+      prepared,
+      resolutions: [{ itemIndex: atlasIndex, resolution: "overwrite" }],
+    });
+
+    expect(result.clearedAnimations).toEqual([]);
+    expect(result.rewrittenTextures).toEqual([]);
+    expect(result.project.assetLibrary.records.has("Symbol_2.png")).toBe(true);
+    expect(exportSnapshot(result.project).packageManifest.resources).toContain(
+      "Symbol_2.png",
     );
   });
 

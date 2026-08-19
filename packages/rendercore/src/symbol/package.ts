@@ -45,6 +45,7 @@ import {
 import { createSymbolManifestAnimationResolver } from "./vni-animation.js";
 import { createDefaultSymbolAnimationResolver } from "./animation-resolver.js";
 import { createSymbolCatalog, type SymbolCatalogModel } from "./catalog.js";
+import { inspectSymbolSpineAtlas } from "./introspection.js";
 import type {
   SymbolPlayerValueController,
   SymbolValueTextBindingMap,
@@ -264,6 +265,25 @@ export function collectSymbolManifestResourcePaths(options: {
   const packageFiles = options.files;
   const add = (reference: string) =>
     paths.add(resolvePackagePath(manifestPath, reference));
+  const addSpine = (options: {
+    readonly skeleton: string;
+    readonly atlas: string;
+    readonly texture: string;
+  }) => {
+    add(options.skeleton);
+    const atlasPath = resolvePackagePath(manifestPath, options.atlas);
+    paths.add(atlasPath);
+    add(options.texture);
+    if (!packageFiles) return;
+    const atlasBytes = packageFiles.get(atlasPath);
+    if (!atlasBytes) return;
+    const atlasText = decodeUtf8(atlasBytes, atlasPath);
+    const pages = inspectSymbolSpineAtlas(atlasText).pageNames;
+    // `texture` is the legacy/canonical binding for the first atlas page.
+    // Every additional page is a structured dependency of the atlas itself.
+    for (const page of pages.slice(1))
+      paths.add(resolvePackagePath(atlasPath, page));
+  };
   for (const effect of manifest.audio.effects)
     for (const source of effect.asset.sources) add(source.path);
   const addImageStringDependency = (options: {
@@ -355,18 +375,14 @@ export function collectSymbolManifestResourcePaths(options: {
             }
           }
         } else {
-          add(leaf.skeleton);
-          add(leaf.atlas);
-          add(leaf.texture);
+          addSpine(leaf);
         }
       }
     }
     const presentation = entry.valuePresentation;
     if (presentation) {
       for (const tier of presentation.tiers) {
-        add(tier.animation.skeleton);
-        add(tier.animation.atlas);
-        add(tier.animation.texture);
+        addSpine(tier.animation);
       }
       if (presentation.text.type === "image") {
         for (const value of presentation.defaultValues) {

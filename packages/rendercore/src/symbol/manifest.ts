@@ -378,6 +378,7 @@ export interface SymbolSpineAnimationResource {
   readonly atlasText: string;
   readonly textureUrl: string;
   readonly atlasPage: string;
+  readonly textureUrls?: Readonly<Record<string, string>>;
   readonly instanceKey?: string;
 }
 
@@ -2185,14 +2186,15 @@ export function createSymbolSpineAnimationResourcesFromManifest(
       if (!animation) continue;
       for (const leaf of manifestAnimationLeaves(state, animation)) {
         if (leaf.animation.kind !== "spine") continue;
+        const spineAnimation = leaf.animation;
         const skeleton = resolveManifestModule(
           options.spineSkeletonModules,
-          leaf.animation.skeleton,
+          spineAnimation.skeleton,
           `Symbol "${symbol}" ${state} Spine skeleton`,
         );
         const atlas = resolveManifestModule(
           options.spineAtlasModules,
-          leaf.animation.atlas,
+          spineAnimation.atlas,
           `Symbol "${symbol}" ${state} Spine atlas`,
         );
         if (typeof atlas !== "string" || atlas.trim().length === 0) {
@@ -2202,19 +2204,19 @@ export function createSymbolSpineAnimationResourcesFromManifest(
         }
         const texture = resolveManifestModule(
           options.spineTextureModules,
-          leaf.animation.texture,
+          spineAnimation.texture,
           `Symbol "${symbol}" ${state} Spine texture`,
         );
         if (typeof texture !== "string" || texture.trim().length === 0) {
           throw new SymbolAssetError(
-            `Symbol "${symbol}" ${state} Spine texture is missing from modules: ${leaf.animation.texture}.`,
+            `Symbol "${symbol}" ${state} Spine texture is missing from modules: ${spineAnimation.texture}.`,
           );
         }
 
-        const atlasPage = validateSpineAtlasAndSkeleton({
+        const atlasPages = validateSpineAtlasAndSkeleton({
           symbol,
           state,
-          spec: leaf.animation,
+          spec: spineAnimation,
           skeleton,
           atlasText: atlas,
           requiredSlots:
@@ -2230,15 +2232,36 @@ export function createSymbolSpineAnimationResourcesFromManifest(
                 )
               : [],
         });
+        const atlasPage = atlasPages[0]!;
+        const textureUrls = Object.freeze(
+          Object.fromEntries(
+            atlasPages.map((page, index) => [
+              page,
+              index === 0
+                ? texture
+                : resolveManifestModule(
+                    options.spineTextureModules,
+                    toManifestLocalPath(
+                      resolvePackagePath(
+                        spineAnimation.atlas.replace(/^\.\//u, ""),
+                        page,
+                      ),
+                    ),
+                    `Symbol "${symbol}" ${state} Spine atlas page ${page}`,
+                  ),
+            ]),
+          ),
+        );
         resources[symbol] = resources[symbol] ?? {};
         resources[symbol][leaf.resourceKey] = Object.freeze({
           symbol,
           state: leaf.resourceKey,
-          spec: leaf.animation,
+          spec: spineAnimation,
           skeleton,
           atlasText: atlas,
           textureUrl: texture,
           atlasPage,
+          textureUrls,
           ...(animation.kind === "composite"
             ? { instanceKey: leaf.resourceKey }
             : {}),
@@ -2915,7 +2938,7 @@ function validateSpineAtlasAndSkeleton(options: {
   readonly skeleton: unknown;
   readonly atlasText: string;
   readonly requiredSlots?: readonly string[];
-}): string {
+}): readonly string[] {
   try {
     readSupportedSpineSkeletonVersion(options.skeleton);
   } catch (error) {
@@ -2933,7 +2956,7 @@ function validateOfficialSpineAtlasAndSkeleton(options: {
   readonly skeleton: unknown;
   readonly atlasText: string;
   readonly requiredSlots?: readonly string[];
-}): string {
+}): readonly string[] {
   let atlas: TextureAtlas;
   try {
     atlas = new TextureAtlas(options.atlasText);
@@ -2942,12 +2965,12 @@ function validateOfficialSpineAtlasAndSkeleton(options: {
       `Symbol "${options.symbol}" ${options.state} Spine atlas failed to parse: ${formatUnknownError(error)}.`,
     );
   }
-  if (atlas.pages.length !== 1 || !atlas.pages[0]?.name) {
+  if (atlas.pages.length === 0 || atlas.pages.some((page) => !page.name)) {
     throw new SymbolAssetError(
-      `Symbol "${options.symbol}" ${options.state} Spine atlas must contain exactly one named page.`,
+      `Symbol "${options.symbol}" ${options.state} Spine atlas must contain named pages.`,
     );
   }
-  const atlasPage = atlas.pages[0].name;
+  const atlasPages = Object.freeze(atlas.pages.map((page) => page.name));
 
   try {
     const skeletonData = new SkeletonJson(
@@ -2980,7 +3003,11 @@ function validateOfficialSpineAtlasAndSkeleton(options: {
     );
   }
 
-  return atlasPage;
+  return atlasPages;
+}
+
+function toManifestLocalPath(path: string): string {
+  return path.startsWith("./") ? path : `./${path}`;
 }
 
 function resolveManifestModule<T>(

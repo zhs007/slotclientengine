@@ -23,6 +23,7 @@ export interface SymbolValuePresentationTierResource {
   readonly atlasText: string;
   readonly textureUrl: string;
   readonly atlasPage: string;
+  readonly textureUrls?: Readonly<Record<string, string>>;
 }
 
 export interface SymbolValuePresentationResource {

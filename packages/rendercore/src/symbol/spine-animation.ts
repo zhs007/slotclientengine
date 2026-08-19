@@ -416,7 +416,7 @@ function createSpineSymbolPlayerCacheKey(
     resource.spec.skeleton,
     resource.spec.atlas,
     resource.spec.texture,
-    resource.atlasPage,
+    stableTextureUrlKey(resolveTextureUrls(resource)),
   ].join("\u0000");
 }
 
@@ -428,6 +428,7 @@ function createSpineAnimationContinuityKey(
     skeleton: resource.spec.skeleton,
     atlas: resource.spec.atlas,
     texture: resource.spec.texture,
+    textureUrls: stableTextureUrlKey(resolveTextureUrls(resource)),
     playback: resource.spec.playback,
     transform: resource.spec.transform ?? null,
   })}`;
@@ -441,12 +442,31 @@ function createDefaultSpineSymbolPlayer(options: {
     resource: {
       skeleton: options.resource.skeleton,
       atlasText: options.resource.atlasText,
-      textureUrls: Object.freeze({
-        [options.resource.atlasPage]: options.resource.textureUrl,
-      }),
+      textureUrls: resolveTextureUrls(options.resource),
     },
     createError: (message) => new SymbolAnimationError(message),
   });
+}
+
+function stableTextureUrlKey(
+  textureUrls: Readonly<Record<string, string>>,
+): string {
+  return JSON.stringify(
+    Object.fromEntries(
+      Object.entries(textureUrls).sort(([left], [right]) =>
+        left.localeCompare(right),
+      ),
+    ),
+  );
+}
+
+function resolveTextureUrls(
+  resource: SymbolSpineAnimationResource,
+): Readonly<Record<string, string>> {
+  return (
+    resource.textureUrls ??
+    Object.freeze({ [resource.atlasPage]: resource.textureUrl })
+  );
 }
 
 export function createSymbolSpineAnimationResolver(options: {
