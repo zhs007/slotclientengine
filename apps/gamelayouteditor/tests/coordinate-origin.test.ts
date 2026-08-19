@@ -4,6 +4,7 @@ import {
   createNewEditorProject,
   editorProjectToManifest,
   manifestToEditorProject,
+  updateVariantFocusOffsetsFromRect,
 } from "../src/model/editor-project.js";
 import { EditorStore } from "../src/model/editor-store.js";
 import {
@@ -167,7 +168,7 @@ describe("coordinate origin conversion", () => {
     ]);
   });
 
-  it("preserves independent center-origin reel and focus geometry when art size changes", async () => {
+  it("rederives focus from the shifted main reel when center-origin art size changes", async () => {
     const project = createNewEditorProject("orientation-focus");
     project.reel.columns = 5;
     project.reel.rows = 5;
@@ -208,6 +209,7 @@ describe("coordinate origin conversion", () => {
       width: 1954,
       height: 940,
     };
+    updateVariantFocusOffsetsFromRect(project, "landscape");
     convertProjectCoordinateOrigin(project, "center");
     assignBackgroundResource({
       project,
@@ -222,7 +224,7 @@ describe("coordinate origin conversion", () => {
     });
     expect(project.variants.landscape.focusRect).toEqual({
       x: 22,
-      y: 94,
+      y: 531.5,
       width: 1954,
       height: 940,
     });
