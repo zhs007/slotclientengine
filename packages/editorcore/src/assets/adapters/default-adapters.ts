@@ -28,6 +28,7 @@ import {
 import { namespaceMappedPopupPackageFiles } from "@slotclientengine/rendercore/popup/editor";
 import {
   collectSymbolManifestResourcePaths,
+  collectSymbolPackageEntryPaths,
   inspectSymbolSpineAtlas,
   inspectSymbolSpineSkeleton,
   parseSymbolPackageManifest,
@@ -166,20 +167,35 @@ function discoverLooseAssets(files: readonly EditorImportSourceFile[]): {
   }[] = [];
   const skeletons: EditorImportSourceFile[] = [];
   for (const file of json) {
-    const value = parseJson(file.bytes, file.key);
+    let value: unknown;
     try {
-      const project = assertVNIProject(value);
-      validateVNIProject(project);
+      value = parseJson(file.bytes, file.key);
+    } catch {
+      // Invalid or unknown JSON remains importable as an opaque text file.
+      continue;
+    }
+    let project: ReturnType<typeof assertVNIProject> | undefined;
+    try {
+      project = assertVNIProject(value);
+    } catch {
+      // Not a VNI project; Spine inspection below gets the next claim.
+    }
+    if (project) {
+      try {
+        validateVNIProject(project);
+      } catch (error) {
+        errors.push(`${file.key}: ${formatError(error)}`);
+        claimed.add(file);
+        continue;
+      }
       vni.push({ file, project });
       continue;
-    } catch {
-      // A JSON file can be a Spine skeleton; strict inspection below decides.
     }
     try {
       inspectSymbolSpineSkeleton(value);
       skeletons.push(file);
     } catch {
-      errors.push(`无法识别 JSON asset：${file.key}`);
+      // Other JSON files are opaque text roots until a loader claims them.
     }
   }
   for (const item of vni) {
@@ -278,13 +294,13 @@ async function discoverZipAssets(options: {
     };
   if (options.entries.has("symbols.package.json"))
     return {
-      drafts: [await discoverSymbolsPackage(options.entries)],
+      drafts: await discoverSymbolsPackage(options.entries),
       profiles: [],
       errors: [],
     };
   if (options.entries.has("layout.manifest.json"))
     return {
-      drafts: [await discoverGameLayoutPackage(options.entries)],
+      drafts: await discoverGameLayoutPackage(options.entries),
       profiles: [],
       errors: [],
     };
@@ -393,7 +409,7 @@ async function discoverPopupPackage(
 
 async function discoverSymbolsPackage(
   entries: ReadonlyMap<string, Uint8Array>,
-): Promise<EditorAssetRootDraft> {
+): Promise<EditorAssetRootDraft[]> {
   const rawPackage = parseJson(
     requiredBytes(entries, "symbols.package.json"),
     "symbols.package.json",
@@ -407,13 +423,18 @@ async function discoverSymbolsPackage(
   const { logical: mappedLogical } = await resolveMappedPackage(
     entries,
     controlPaths,
+    { includeOpaqueControls: true },
   );
   const logical = new Map(mappedLogical);
   for (const key of controlPaths.slice(1)) {
     const bytes = entries.get(key);
     if (bytes) logical.set(key, bytes);
   }
-  const validationFiles = new Map(logical);
+  const expectedKeys = new Set(collectSymbolPackageEntryPaths(packageManifest));
+  const packageLogical = new Map(
+    [...logical].filter(([key]) => expectedKeys.has(key)),
+  );
+  const validationFiles = new Map(packageLogical);
   validationFiles.set(
     "symbols.package.json",
     requiredBytes(entries, "symbols.package.json"),
@@ -423,27 +444,35 @@ async function discoverSymbolsPackage(
     files: validationFiles,
   });
   const rawGameConfig = parseJson(
-    requiredBytes(logical, packageManifest.entrypoints.gameConfig),
+    requiredBytes(packageLogical, packageManifest.entrypoints.gameConfig),
     packageManifest.entrypoints.gameConfig,
   );
   const rawSymbolManifest = parseJson(
-    requiredBytes(logical, packageManifest.entrypoints.symbolManifest),
+    requiredBytes(packageLogical, packageManifest.entrypoints.symbolManifest),
     packageManifest.entrypoints.symbolManifest,
   );
   validateSymbolPackageGameConfig({
     rawGameConfig,
     symbolManifest: rawSymbolManifest,
   });
-  collectSymbolManifestResourcePaths({
+  const referencedResources = collectSymbolManifestResourcePaths({
     symbolManifest: rawSymbolManifest,
     symbolManifestPath: packageManifest.entrypoints.symbolManifest,
-    files: logical,
+    files: packageLogical,
   });
+  const ownerKeys = new Set([
+    packageManifest.entrypoints.gameConfig,
+    packageManifest.entrypoints.symbolManifest,
+    ...referencedResources,
+  ]);
+  const ownerLogical = new Map(
+    [...packageLogical].filter(([key]) => ownerKeys.has(key)),
+  );
   const materialized = await materializeMappedSymbolPackageContents({
     packageManifest,
     rawGameConfig,
     rawSymbolManifest,
-    assets: logical,
+    assets: ownerLogical,
     keyPrefix: packageManifest.id,
   });
   const rootKey = `${packageManifest.id}-symbols.package.json`;
@@ -467,32 +496,41 @@ async function discoverSymbolsPackage(
       input(key, mediaTypeForKey(key, bytes), bytes),
     ),
   ];
-  return createPackageDraft({
-    kind: "symbols",
-    rootKey,
-    owner: `symbols:${packageManifest.id}`,
-    inputs: uniqueInputs(inputs),
-    manifest: materialized.packageManifest,
-    entrypoints: [
-      materialized.packageManifest.entrypoints.gameConfig,
-      materialized.packageManifest.entrypoints.symbolManifest,
-    ],
-  });
+  return [
+    createPackageDraft({
+      kind: "symbols",
+      rootKey,
+      owner: `symbols:${packageManifest.id}`,
+      inputs: uniqueInputs(inputs),
+      manifest: materialized.packageManifest,
+      entrypoints: [
+        materialized.packageManifest.entrypoints.gameConfig,
+        materialized.packageManifest.entrypoints.symbolManifest,
+      ],
+    }),
+    ...opaqueDrafts(logical, ownerKeys, "symbols package"),
+  ];
 }
 
 async function discoverGameLayoutPackage(
   entries: ReadonlyMap<string, Uint8Array>,
-): Promise<EditorAssetRootDraft> {
+): Promise<EditorAssetRootDraft[]> {
   const manifest = parseSceneLayoutManifestDocument(
     parseJson(
       requiredBytes(entries, "layout.manifest.json"),
       "layout.manifest.json",
     ),
   );
-  const { logical } = await resolveMappedPackage(entries, [
-    "layout.manifest.json",
-  ]);
-  const closure = collectSceneLayoutPackagePaths({ manifest, files: logical });
+  const { logical } = await resolveMappedPackage(
+    entries,
+    ["layout.manifest.json"],
+    { includeOpaqueControls: true },
+  );
+  const closure = collectSceneLayoutPackagePaths({
+    manifest,
+    files: logical,
+    allowExtraFiles: true,
+  });
   const rootKey = `${manifest.id}-layout.manifest.json`;
   const inputs = [
     input(rootKey, "application/json", encodeJson(manifest)),
@@ -501,13 +539,39 @@ async function discoverGameLayoutPackage(
       return input(key, mediaTypeForKey(key, bytes), bytes);
     }),
   ];
-  return createPackageDraft({
-    kind: "game-layout",
-    rootKey,
-    owner: `game-layout:${manifest.id}`,
-    inputs,
-    manifest,
-  });
+  return [
+    createPackageDraft({
+      kind: "game-layout",
+      rootKey,
+      owner: `game-layout:${manifest.id}`,
+      inputs,
+      manifest,
+    }),
+    ...opaqueDrafts(logical, new Set(closure), "game-layout package"),
+  ];
+}
+
+function opaqueDrafts(
+  files: ReadonlyMap<string, Uint8Array>,
+  claimedKeys: ReadonlySet<string>,
+  label: string,
+): EditorAssetRootDraft[] {
+  return [...files]
+    .filter(([key]) => !claimedKeys.has(key))
+    .sort(([left], [right]) => compare(left, right))
+    .map(([key, bytes]) => {
+      try {
+        return createAtomicDraft({
+          sourcePath: key,
+          key,
+          bytes,
+          container: "file",
+          containerName: label,
+        });
+      } catch (error) {
+        throw new Error(`${label} extra ${key}: ${formatError(error)}`);
+      }
+    });
 }
 
 function discoverVniBundle(
@@ -559,7 +623,8 @@ function createAtomicDraft(file: EditorImportSourceFile): EditorAssetRootDraft {
     mediaType = "video/mp4";
     if (!isIsoBaseMedia(file.bytes)) throw new Error("MP4 signature 无效");
   } else {
-    throw new Error("unsupported loose asset");
+    mediaType = mediaTypeForKey(file.key, file.bytes);
+    kind = mediaType === "application/octet-stream" ? "binary" : "text";
   }
   const rootId = rootNodeId(kind, file.key);
   const payload = fileNode(file.key, kind === "image" ? "texture" : "payload");
@@ -847,16 +912,34 @@ function addAtlasPages(
 async function resolveMappedPackage(
   entries: ReadonlyMap<string, Uint8Array>,
   controls: readonly string[],
+  options: { readonly includeOpaqueControls?: boolean } = {},
 ): Promise<{ logical: ReadonlyMap<string, Uint8Array> }> {
   const mapBytes = requiredBytes(entries, EDITOR_ASSETS_MAP_PATH);
   const map = decodeEditorAssetsMap(mapBytes);
+  const opaqueControls = options.includeOpaqueControls
+    ? [...entries].filter(
+        ([path]) =>
+          path !== EDITOR_ASSETS_MAP_PATH &&
+          !path.startsWith("assets/") &&
+          !controls.includes(path),
+      )
+    : [];
   const resolved = await validateEditorAssetsMapPackage({
     map,
     files: entries,
-    allowControlPaths: controls,
+    allowControlPaths: [...controls, ...opaqueControls.map(([path]) => path)],
   });
+  const logical = new Map(
+    [...resolved].map(([key, value]) => [key, value.bytes] as const),
+  );
+  for (const [path, bytes] of opaqueControls) {
+    const key = basenameFromSourcePath(path);
+    if (logical.has(key))
+      throw new Error(`opaque control filename key collision：${key}`);
+    logical.set(key, bytes);
+  }
   return {
-    logical: new Map([...resolved].map(([key, value]) => [key, value.bytes])),
+    logical,
   };
 }
 
@@ -952,7 +1035,22 @@ function mediaTypeForKey(key: string, bytes: Uint8Array): string {
   if (/\.(?:mp3|ogg|wav|m4a|aac|webm)$/u.test(lower))
     return mediaTypeForAudioFilenameKey(key);
   if (lower.endsWith(".mp4")) return "video/mp4";
-  return "application/octet-stream";
+  return isPlainText(bytes) ? "text/plain" : "application/octet-stream";
+}
+
+function isPlainText(bytes: Uint8Array): boolean {
+  let value: string;
+  try {
+    value = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return false;
+  }
+  for (const character of value) {
+    const code = character.codePointAt(0)!;
+    if (code < 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d)
+      return false;
+  }
+  return true;
 }
 
 function requiredUniqueFile(

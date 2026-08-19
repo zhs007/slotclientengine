@@ -5,6 +5,7 @@ import {
   materializeSymbolPackageContents,
   materializeSymbolPackageFiles,
   parseSymbolPackageManifest,
+  upgradeSymbolStateTextureManifest,
 } from "../../src/symbol/index.js";
 
 const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 7]);
@@ -81,7 +82,32 @@ describe("symbol package materialization", () => {
         rawSymbolManifest,
         assets: new Map([...inputs, ["unsupported.bin", new Uint8Array()]]),
       }),
-    ).rejects.toThrow(/extension/);
+    ).resolves.toBeDefined();
+
+    const withAudio = structuredClone(
+      upgradeSymbolStateTextureManifest(structuredClone(rawSymbolManifest)),
+    ) as { audio: { effects: unknown[] } };
+    withAudio.audio.effects = [
+      {
+        name: "coin",
+        asset: {
+          sources: [{ path: "coin.wav", mediaType: "audio/wav" }],
+        },
+        playback: "once",
+        offsetSeconds: 0,
+        voices: { maxConcurrent: 1, overflow: "restart-oldest" },
+        bgm: { kind: "keep" },
+      },
+    ];
+    const wav = new Uint8Array([0x52, 0x49, 0x46, 0x46]);
+    const mappedAudio = await materializeMappedSymbolPackageContents({
+      packageManifest,
+      rawGameConfig,
+      rawSymbolManifest: withAudio,
+      assets: new Map([...inputs, ["coin.wav", wav]]),
+    });
+    expect(mappedAudio.packageManifest.resources).toContain("coin.wav");
+    expect(mappedAudio.assets.get("coin.wav")).toEqual(wav);
   });
 
   it("rewrites named and value image-string owner references with a package prefix", async () => {
@@ -232,7 +258,7 @@ describe("symbol package materialization", () => {
     });
 
     expect(mapped.rawSymbolManifest).toMatchObject({
-      version: 2,
+      version: 3,
       settings: { stateDefinitions: expect.any(Array) },
       symbols: {
         A: {

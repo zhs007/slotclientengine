@@ -15,7 +15,8 @@
 ## Shared typed Assets catalog
 
 - `packages/editorcore` 在 `editorresource` 的扁平 filename-key workspace 之上拥有共享 typed asset graph、root tree projection、使用状态、程序 binding 事务、格式 adapter 与 UI；不得反向复制 key/hash/map/ZIP 安全算法。
-- 顶层 root kind 固定为 image、audio、video、spine、vni、image-string、popup、symbols、game-layout。权威数据是唯一 node 与有向 typed relation 的 graph；最外层 UI 只列 root，树 occurrence 只是展开共享 leaf 的视图，不是持久 identity 或虚拟目录。
+- 顶层 root kind 固定为 image、audio、video、spine、vni、image-string、popup、symbols、game-layout、text、binary。权威数据是唯一 node 与有向 typed relation 的 graph；最外层 UI 只列 root，树 occurrence 只是展开共享 leaf 的视图，不是持久 identity 或虚拟目录。
+- 尚无 loader 的文件按严格 UTF-8/control-character 检测保存为 opaque text 或 binary；新增 owner loader 后应在 generic fallback 前显式 claim。已知格式的坏签名/schema、坏 hash、缺失引用和 package physical orphan 仍显式失败，不得降级为 opaque 文件。
 - Spine atlas/page、VNI image、ImgNumber glyph 和 Popup/Symbols/Game Layout package leaf 只能由 owner root 传递使用，不能独立进入 Picker、程序 binding、改名或删除。复用 leaf 必须另行导入顶层 root，最终只在 physical payload 层按完整 SHA-256 去重。
 - `used`、`programmatic` 和 leaf transitive usage 必须从宿主 typed reference/program binding 与 graph 实时派生，不保存可漂移的布尔副本。root 命令和导入必须在 candidate project/catalog/workspace 全部验证后原子提交。
 - 正式 Editor 迁移只能消费已由 `apps/editordemo` 和自动测试证明的 EditorCore public contract；迁移前不得删除 owner 现有正式 schema/parser/runtime，也不得在 EditorCore 猜测 owner manifest 语义。

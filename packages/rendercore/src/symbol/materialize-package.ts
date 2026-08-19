@@ -191,7 +191,7 @@ export async function materializeMappedSymbolPackageContents(options: {
   });
   const incoming = resources.map((key) => ({
     key,
-    mediaType: symbolAssetMediaType(key),
+    mediaType: symbolAssetMediaType(key, requiredBytes(flattened.assets, key)),
     bytes: requiredBytes(flattened.assets, key),
   }));
   const empty = createEmptyEditorAssetWorkspace();
@@ -302,7 +302,7 @@ function flattenSymbolAssets(
       putFile(assets, target, encodeStableJson(rewritten));
       continue;
     }
-    throw new Error(`symbol asset extension 不支持：${path}`);
+    putFile(assets, target, bytes);
   }
   return { mapping, assets };
 }
@@ -406,14 +406,40 @@ function rewriteImageStringSpecialValuePaths(
   }
 }
 
-function symbolAssetMediaType(key: string): string {
+function symbolAssetMediaType(key: string, bytes: Uint8Array): string {
   const extension = key.slice(key.lastIndexOf(".") + 1).toLowerCase();
   if (extension === "png") return "image/png";
   if (extension === "jpg" || extension === "jpeg") return "image/jpeg";
   if (extension === "webp") return "image/webp";
   if (extension === "json") return "application/json";
   if (extension === "atlas") return "text/plain";
-  throw new Error(`symbol mapped asset extension 不支持：${key}`);
+  if (extension === "mp3") return "audio/mpeg";
+  if (extension === "ogg") return "audio/ogg";
+  if (extension === "wav") return "audio/wav";
+  if (extension === "m4a") return "audio/mp4";
+  if (extension === "aac") return "audio/aac";
+  if (extension === "webm") return "audio/webm";
+  if (extension === "mp4") return "video/mp4";
+  if (extension === "woff2") return "font/woff2";
+  if (extension === "woff") return "font/woff";
+  if (extension === "ttf") return "font/ttf";
+  if (extension === "otf") return "font/otf";
+  return isPlainText(bytes) ? "text/plain" : "application/octet-stream";
+}
+
+function isPlainText(bytes: Uint8Array): boolean {
+  let value: string;
+  try {
+    value = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return false;
+  }
+  for (const character of value) {
+    const code = character.codePointAt(0)!;
+    if (code < 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d)
+      return false;
+  }
+  return true;
 }
 
 function rewriteValueImagePaths(

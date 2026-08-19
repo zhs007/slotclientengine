@@ -55,6 +55,28 @@ describe("default adapters", () => {
     expect(invalid.blockingErrors[0]).toMatch(/signature/u);
   });
 
+  it("keeps files without a loader as opaque text or binary roots", async () => {
+    const result = await discoverDefaultEditorAssets({
+      sources: [
+        loose("notes.custom", encode("future loader input")),
+        loose("payload.custom", new Uint8Array([0, 0xff, 1])),
+        loose("unknown.json", encode({ futureFormat: true })),
+      ],
+    });
+
+    expect(result.blockingErrors).toEqual([]);
+    expect(result.drafts.map(({ key, kind }) => ({ key, kind }))).toEqual([
+      { key: "notes.custom", kind: "text" },
+      { key: "payload.custom", kind: "binary" },
+      { key: "unknown.json", kind: "text" },
+    ]);
+    expect(result.drafts.map(({ inputs }) => inputs[0]!.mediaType)).toEqual([
+      "text/plain",
+      "application/octet-stream",
+      "application/json",
+    ]);
+  });
+
   it("discovers a loose VNI project and rewrites its image to a flat key", async () => {
     const result = await discoverDefaultEditorAssets({
       sources: [
@@ -195,6 +217,16 @@ describe("default adapters", () => {
     };
     const entries = await mappedEntries([
       { key: "A.png", mediaType: "image/png", bytes: PNG },
+      {
+        key: "future-symbol.txt",
+        mediaType: "text/plain",
+        bytes: encode("future symbol loader"),
+      },
+      {
+        key: "future-symbol.bin",
+        mediaType: "application/octet-stream",
+        bytes: new Uint8Array([0, 0xff]),
+      },
     ]);
     entries.set("symbols.package.json", encode(packageManifest));
     entries.set(
@@ -217,6 +249,11 @@ describe("default adapters", () => {
       sources: zipSources("symbols.zip", entries),
     });
     expect(result.blockingErrors).toEqual([]);
+    expect(result.drafts.map(({ kind }) => kind)).toEqual([
+      "symbols",
+      "binary",
+      "text",
+    ]);
     expect(result.drafts[0]).toMatchObject({
       kind: "symbols",
       key: "demo-symbols-symbols.package.json",
@@ -259,6 +296,11 @@ describe("default adapters", () => {
     };
     const entries = await mappedEntries([
       { key: "bg.png", mediaType: "image/png", bytes: PNG },
+      {
+        key: "future-layout.dat",
+        mediaType: "application/octet-stream",
+        bytes: new Uint8Array([0, 0xff]),
+      },
     ]);
     entries.set("layout.manifest.json", encode(manifest));
 
@@ -267,6 +309,10 @@ describe("default adapters", () => {
     });
 
     expect(result.blockingErrors).toEqual([]);
+    expect(result.drafts.map(({ kind }) => kind)).toEqual([
+      "game-layout",
+      "binary",
+    ]);
     expect(result.drafts[0]).toMatchObject({
       kind: "game-layout",
       key: "demo-layout-layout.manifest.json",
@@ -307,14 +353,6 @@ describe("default adapters", () => {
       "uses-atlas",
       "uses-texture",
     ]);
-  });
-
-  it("rejects unknown loose JSON instead of treating it as a generic asset", async () => {
-    const result = await discoverDefaultEditorAssets({
-      sources: [loose("unknown.json", new TextEncoder().encode("{}"))],
-    });
-    expect(result.drafts).toEqual([]);
-    expect(result.blockingErrors[0]).toMatch(/无法识别 JSON/u);
   });
 });
 
