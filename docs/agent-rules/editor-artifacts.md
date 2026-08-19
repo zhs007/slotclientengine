@@ -85,7 +85,7 @@
 ## Layout Editor dependency
 
 - Gamelayout Editor只编辑和导出Scene Layout latest v4；打开合法v1–v3时先调用RenderCore共享upgrader生成默认`runtimeAllocation`与空音频合同，再执行Editor node-id migration并原子复验。每次导出都由RenderCore从typed draft重建并strict复验allocation；旧mode id、initial、edge和dependency保持，不自动插入Splash。
-- BGM 只由 Game Layout Editor 按 mode 可选配置并在 production preview 试听；effect 在 Popup/Symbol owner 中只使用 local name，组合到 Scene Layout 时才按 binding id 形成 `award.coin` 一类 route。未被 cue 引用但允许程序播放的 route 必须进入显式 programmatic allowlist。
+- BGM 只由 Game Layout Editor 按 mode 从已导入 audio asset 中可选配置，新绑定固定 loop，并在 production preview 试听；root 程序音效同样从 audio asset 显式命名并进入 programmatic allowlist，不复用通用 runtime-resource 键。effect 在 Popup/Symbol owner 中只使用 local name，组合到 Scene Layout 时才按 binding id 形成 `award.coin` 一类 route。未被 cue 引用但允许程序播放的 route 必须进入显式 programmatic allowlist；未绑定 audio asset 不进入 production ZIP。
 - 新项目显式创建Splash initial与BaseGame；每个内置或后续新增mode都必须由用户从空下拉框选择单背景或横竖双背景类型，不继承当前mode或首项。Splash primary click只引用显式Splash→BaseGame transition。
 - mode的主转轮开关属于v2 draft：新Splash关闭、BaseGame和普通新增mode开启；关闭时保留Editor内可恢复的placement草稿但latest export不写placement，已有Symbols binding必须先显式解除。
 - Gamelayout Editor新建/复制/重命名/导出的scene node id只允许lowercase alphanumeric+kebab并禁止`layout|reel|transition|popup`保留名。旧Layout ZIP先按rendercore v1兼容parser读取，再以确定性rename map原子规范化点号/下划线/保留名和collision，结构化改写adaptation background、mode background与nodeStates key，复验后提交并向用户显示完整old→new；不得覆盖或合并node。production parser继续兼容未重导旧包。

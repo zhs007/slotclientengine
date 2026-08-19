@@ -13,6 +13,7 @@
 
 - Scene Layout v4沿用v3的strict `runtimeAllocation`并新增音频目录、程序 effect allowlist 与 per-mode optional BGM。RenderCore runtime直接接受v1–v3，读取后确定性补齐allocation与空音频合同并统一规范化为v4；共享upgrader不伪造Splash或BGM。Editor可导入v1–v4，但只预览和导出canonical v4。
 - 每个 mode 可选择零或一首 loop BGM；Splash 通常留空但 schema 不强制。成功 mode commit 后才以显式 fade-out/fade-in 切歌，相同 BGM 不重启；失败或 rollback 保留原 BGM。
+- Game Layout Editor 中 root 音频先作为统一 filename-key asset 导入，不因文件名自动绑定用途；BGM 只在 exact mode 上选择，程序音效只通过 strict local name 进入 `audio.effects` 与 `programmaticEffects`。未绑定音频保留在 authoring workspace，但不进入 production closure；audio 不得伪装成 scene node 或通用 `runtimeResources`。
 - 每个v2 mode显式声明reelEnabled；关闭时不得绑定Symbols或导出mode reel placement，focus相对art边缘，开启时focus由reel区域与四边外扩派生。runtime不得按mode id猜测开关。
 - orientation variant只由宿主原始page width/height决定；正方形保持当前variant，首次正方形为landscape，focus和派生frame尺寸不得反馈成方向输入。
 - primary action只引用同source的显式direct transition target；runtime复用既有prepare/commit/rollback和trusted gesture边界，不按mode名称推断点击行为。

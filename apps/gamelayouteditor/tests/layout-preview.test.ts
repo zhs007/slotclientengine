@@ -58,6 +58,7 @@ const state = vi.hoisted(() => {
     ),
     requestGameMode: vi.fn(async () => undefined),
     selectAuthoringGameMode: vi.fn(async () => undefined),
+    unlockAudio: vi.fn(async () => undefined),
     resetReelScene: vi.fn(),
   };
   const pkg = {
@@ -404,6 +405,31 @@ describe("LayoutPreview", () => {
     expect(
       state.packageRuntime.requestPrimaryPopupInteraction,
     ).toHaveBeenCalledTimes(2);
+  });
+
+  it("unlocks runtime audio explicitly and preserves it across preview rebuilds", async () => {
+    const host = document.createElement("div");
+    const diagnostics = document.createElement("div");
+    document.body.append(host, diagnostics);
+    const preview = new LayoutPreview(host, diagnostics);
+    await preview.init();
+    const manifest = {
+      ...imageManifest,
+      gameModes: {
+        initialMode: "BaseGame",
+        modes: [{ id: "BaseGame", nodeStates: {} }],
+      },
+    };
+
+    await preview.setLayout(manifest, assetBytes);
+    expect(preview.isAudioUnlocked()).toBe(false);
+    await preview.unlockAudio();
+    expect(preview.isAudioUnlocked()).toBe(true);
+    expect(state.packageRuntime.unlockAudio).toHaveBeenCalledTimes(1);
+
+    await preview.setLayout(manifest, assetBytes);
+    expect(state.packageRuntime.unlockAudio).toHaveBeenCalledTimes(2);
+    preview.destroy();
   });
 
   it("passes default presentation values to the combined package runtime", async () => {

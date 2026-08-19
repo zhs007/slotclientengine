@@ -45,7 +45,14 @@ export interface EditorUiSession {
   activeTab: WorkspaceTab;
   selection: LayoutSelection | null;
   resourceQuery: string;
-  resourceType: "all" | "image" | "spine" | "vni" | "image-string" | "video";
+  resourceType:
+    | "all"
+    | "image"
+    | "spine"
+    | "vni"
+    | "image-string"
+    | "video"
+    | "audio";
   resourceStatus: "all" | "referenced" | "runtime" | "unused" | "error";
   expandedResourceIds: Set<string>;
   expandedInspectorSections: Set<string>;
