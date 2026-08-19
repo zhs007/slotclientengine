@@ -1,8 +1,23 @@
+import { resolve } from "node:path";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   base: "./",
-  server: { host: "0.0.0.0" },
+  resolve: {
+    alias: [
+      {
+        find: /^@slotclientengine\/logiccore$/u,
+        replacement: resolve(
+          __dirname,
+          "../../packages/logiccore/src/index.ts",
+        ),
+      },
+    ],
+  },
+  server: {
+    host: "0.0.0.0",
+    fs: { allow: [resolve(__dirname, "../..")] },
+  },
   test: {
     globals: true,
     environment: "happy-dom",
