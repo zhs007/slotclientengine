@@ -1,8 +1,8 @@
-# Popup package v1 / v2 / v3 / v4 / v5 / v6
+# Popup package v1–v8
 
-`popup.manifest.json` 是获奖庆祝与普通 Spine 弹窗的唯一 production 合同。独立 `<id>-popup.zip` 最终由 Game Layout Editor 原样 vendor 到 Scene Layout package。
+`popup.manifest.json` 是获奖庆祝、普通 Spine 弹窗与单状态自由弹窗的唯一 production 合同。独立 `<id>-popup.zip` 最终由 Game Layout Editor 原样 vendor 到 Scene Layout package。
 
-rendercore 继续解析全部历史版本。`@slotclientengine/rendercore/popup/data` 的 `loadPopupManifest()` 是唯一默认入口：它先按 source version strict validate，再确定性升级并 strict revalidate 为 `LATEST_POPUP_MANIFEST_VERSION`（当前 v6），同时返回 `sourceVersion` 供迁移提示。游戏、所有 editor 与 CLI 都不在默认流程自行挑选版本 upgrader；未知未来版本显式失败。Popup Editor 新建项目固定使用 v6；导入合法 v1–v5 ZIP 时先完成 source package 的 map/hash/closure 与 resource 校验，再原子迁移为 v6。迁移失败不打开半迁移项目，后续 preview/export 只生成 v6。
+rendercore 继续解析全部历史版本。`@slotclientengine/rendercore/popup/data` 的 `loadPopupManifest()` 是唯一默认入口：它先按 source version strict validate，再确定性升级并 strict revalidate 为 `LATEST_POPUP_MANIFEST_VERSION`（当前 v8），同时返回 `sourceVersion` 供迁移提示。游戏、所有 editor 与 CLI 都不在默认流程自行挑选版本 upgrader；未知未来版本显式失败。Popup Editor 新建项目固定使用 v8；导入合法 v1–v7 ZIP 时先完成 source package 的 map/hash/closure 与 resource 校验，再原子迁移为 v8。迁移失败不打开半迁移项目，后续 preview/export 只生成 v8。历史版本只包含获奖庆祝与普通 Spine 类型；`single-state` 从 v8 开始存在，不能降级到旧版本。
 
 ## v2 presentation 扩展
 
@@ -88,15 +88,50 @@ v1–v5 award 升级时以 layer 所在 tier 为状态权威并移除 layer visi
 
 award 的分段 VNI 收到最终关闭请求时立即从 exact `loopEndTime` 启动非循环 end range，不等待当前 loop 完成；end 和粒子 drain 完成后 Popup 隐藏并进入 complete。tier 切换则立即隐藏 outgoing tier，避免旧 bigwin 在新档背后继续显示。普通 Spine Popup 的三阶段点击边界不受此规则影响。
 
+## v7 audio 与 v8 单状态自由弹窗
+
+v7 在两个既有类型上增加严格的 `audio` 合同；v8 保留该合同并新增互斥的 `type="single-state"`。single-state 不包含 `amountFormat`、`awardCelebration` 或 `spine` 主状态机，也没有强制图层；`singleState.layers` 可以为空，所有内容只在唯一的 `active` 状态中显示。其 `audio` 当前必须是 `{ "version": 1, "effects": [], "cues": [] }`，不能借用 award tier 或 Spine segment cue。
+
+single-state 支持 image、text、image-string、VNI 与 official Spine 五种 typed layer。每个 layer 的 lowercase kebab-case `id` 同时是唯一 runtime name；text 与 image-string 的 string name 也就是该 id，不保存第二份 alias。VNI/Spine 的 `autoplay` 可省略；省略只表示 Popup `start()` 时不自动播放，caller 仍可通过按 name 取得的 borrowed layer 操作底层 typed 渲染对象。
+
+每个 layer 必须显式声明 `attachment`。父节点只能是已存在于同一 Popup 的 layer metadata：`popup-root`、某个 official Spine layer 的 exact slot，或某个 VNI layer 的 exact text layer。single-state 不存在 `main-spine` target。parser 在 materialize display tree 前拒绝 missing/self/cycle、非对应 kind、缺 slot/text layer 与跨 Popup 引用；Editor rename 原子改写引用，删除或资源替换不能留下悬空 target。
+
+最小合法 v8 single-state package 可以没有任何图层：
+
+```json
+{
+  "version": 8,
+  "kind": "popup",
+  "id": "freeform-help",
+  "name": "Freeform Help",
+  "type": "single-state",
+  "adaptation": {
+    "mode": "maximized-focus",
+    "focus": { "left": 540, "right": 540, "top": 960, "bottom": 960 }
+  },
+  "backdrop": {
+    "enabled": false,
+    "color": "#000000",
+    "alpha": 0.5,
+    "visibleStates": ["active"]
+  },
+  "resources": {},
+  "audio": { "version": 1, "effects": [], "cues": [] },
+  "singleState": { "layers": [] }
+}
+```
+
+非空 layer 必须引用 `resources` 中 kind 匹配的资源；未被 layer 闭包使用的资源仍按 production strict closure 拒绝。Spine autoplay 保存 exact `animation/loop`；VNI autoplay 使用既有 `once | segmented` union。静态 image/text/image-string 不接受 autoplay。
+
 ## 坐标、档位与输入
 
-- popup 中心为 `(0, 0)`，向右/向下为正；v1/v2 使用 `designViewport`，v3–v6 只由 focus 建立无界 maximized-focus production transform。
+- popup 中心为 `(0, 0)`，向右/向下为正；v1/v2 使用 `designViewport`，v3–v8 只由 focus 建立无界 maximized-focus production transform。
 - layout 为每个 active variant 保存相对 viewport center 的 `x/y/scale`。
 - 游戏只提交 safe integer `betAmountRaw` 和 `winAmountRaw`；preview 的 bet、win、zoom、guides 不进入 manifest。
 - 档位固定为 `base -> standard -> bigwin -> superwin -> megawin`。`base` 截止 `1×bet`，`standard` 截止 bigwin threshold，后三档 threshold multiplier 显式且严格递增。边界相等时进入对应档，runtime 用 BigInt 比较。
 - 每档必须有非空 `layers`，且必须恰好包含一个 `image-string + win-amount` 图层。v6 金额层的 exact id 固定为 `win-amount`；整场只维持一个 renderer/runtime，跨档更新文本、transform 和显式资源绑定。
 - 每档还可声明任意数量的命名 `text` 和 `binding="manual"` ImgNumber。名称在同档唯一；跨档同名节点视为一个逻辑节点且必须保持 kind 一致。`text` 可省略字体资源或精确引用 package font，并严格保存单行默认文案、字号、字距、纯色或线性渐变、可选描边/投影、`-180..180` 度弧排、anchor、rotation 与可见 segment。游戏应按 exact name 获取 node handle 并调用 `setText()/resetText()`；不得按 label、order 或资源名猜测。manual ImgNumber 保存默认 string、anchor、rotation 与可见 segment。
-- v1/v2/v3 每档严格按全局唯一的 `order` 升序叠放；v4–v6 按 resolved parent 分组校验和排序，数值越小越靠下。跨档时单一金额 renderer 会移动到新档的 resolved parent，不会创建第二个实例。
+- v1/v2/v3 每档严格按全局唯一的 `order` 升序叠放；v4–v8 按 resolved parent 分组校验和排序，数值越小越靠下。跨档时单一金额 renderer 会移动到新档的 resolved parent，不会创建第二个实例。
 - v1/v2/v3 ImgNumber layer 的 `parent` 是 `{ "kind": "popup-root" }` 或
   `{ "kind": "vni-text-layer", "vniLayerId": "...", "textLayerId": "..." }`。后者只能引用
   同档 VNI layer 和该 project 内 exact `type="text"` layer；ImgNumber 的 `x/y/scale/anchor`
@@ -231,7 +266,10 @@ owned payload 固定为 `assets/<64位 lowercase sha256>.<canonical-extension>`�
 
 ```ts
 import { createPopupPackageResource } from "@slotclientengine/rendercore/popup/editor";
-import { createAwardCelebrationRuntime } from "@slotclientengine/rendercore/popup/core";
+import {
+  createAwardCelebrationRuntime,
+  createSingleStatePopupRuntime,
+} from "@slotclientengine/rendercore/popup/core";
 
 const resource = await createPopupPackageResource({ files });
 const player = createAwardCelebrationRuntime({ resource });
@@ -243,13 +281,22 @@ player.requestAdvance();
 player.getTextNode("congratulations").setText("恭喜获奖！");
 player.getImageStringNode("bonus-count").setText("8");
 player.getImageStringNode(0).resetText();
+
+const freeform = createSingleStatePopupRuntime({ resource: freeformResource });
+await freeform.init();
+freeform.start();
+const title = freeform.getTextNode("title");
+title.setText("新的标题");
+const counter = freeform.getImageStringNode("counter");
+counter.setText("12");
+const layer = freeform.getLayer("counter");
 ```
 
 普通 Spine production 类型使用 `popup/core` 的 `createSpinePopupRuntime({ resource })`，调用 `start(translatedText?)`、逐帧 `update(deltaSeconds)` 并把用户点击转发给 `requestDismiss()`。需要完整 snapshot 的 Popup Editor 使用 `popup/editor` 的同 Core player wrapper。
 
-两类 player 都提供稳定、只读的 `textNodes` / `imageStringNodes` 清单，以及按 exact name 或各 kind 独立零基 index 查询的 `getTextNode()` / `getImageStringNode()`。handle 的 `setText()` 是原子覆盖并跨档位切换与重复播放保持；`resetText()` 恢复当前 manifest 默认值或 win-amount 自动格式化值。不存在、越界、kind 错误、非法单行文字、ImgNumber 缺 glyph 或已销毁 handle 都显式失败。
+三类 player 都提供稳定、只读的 `textNodes` / `imageStringNodes` 清单，以及按 exact name 或各 kind 独立零基 index 查询的 `getTextNode()` / `getImageStringNode()`。handle 的 `setText()` 是原子覆盖并跨档位切换与重复播放保持；`resetText()` 恢复当前 manifest 默认值或 win-amount 自动格式化值。不存在、越界、kind 错误、非法单行文字、ImgNumber 缺 glyph 或已销毁 handle 都显式失败。single-state 另提供 `getLayer(name)`，返回 runtime-owned、caller-borrowed 的 `RenderObject`；caller 不销毁它，Popup destroy 后旧 handle/对象不得继续使用。
 
 普通 Spine Popup 被 Scene Layout transition 用作 `preludePopup` 时，游戏也可通过 `requestGameMode(..., { preludePopupStrings })` 按 exact name 传入仅本轮有效的 text/manual ImgNumber string。Scene Layout 在 Popup 生命周期结束或失败后恢复此前 handle 状态；Popup package/player 本身的 persistent handle 语义不变。
 
 Popup package 本身不拥有游戏模式，也不声明 BaseGame/FreeGame。scene-layout 负责通用
-mode -> award popup binding、普通 Spine popup 显式注册与 viewport-center root placement；Popup Editor 继续独占 popup 内部动画、tier、layer、金额格式、坐标和资源编辑。
+mode -> award popup binding、普通 Spine/single-state popup 显式注册与 viewport-center root placement；Popup Editor 继续独占 popup 内部动画、tier、layer、金额格式、坐标和资源编辑。single-state 只能 programmatic start/dismiss，不进入 award binding 或 transition prelude。

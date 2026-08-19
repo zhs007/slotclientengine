@@ -16,12 +16,14 @@ import {
 import {
   bindPopupInteractionInput,
   createAwardCelebrationRuntime,
+  createSingleStatePopupRuntime,
   createSpinePopupRuntime,
   handledPopupInteraction,
   unhandledPopupInteraction,
   type AwardCelebrationRuntime,
   type PopupInteractionDispatchResult,
   type PopupStringNodeHandle,
+  type SingleStatePopupRuntime,
   type SpinePopupRuntime,
 } from "../popup/core/index.js";
 import type { AwardCelebrationSnapshot } from "../popup/core/types.js";
@@ -337,6 +339,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   #activeBackgroundNodes: readonly string[] = Object.freeze([]);
   readonly #popups = new Map<string, AwardCelebrationRuntime>();
   readonly #spinePopups = new Map<string, SpinePopupRuntime>();
+  readonly #singleStatePopups = new Map<string, SingleStatePopupRuntime>();
   #initialized = false;
   #initializing = false;
   #destroyed = false;
@@ -463,6 +466,27 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       playEffect: (route) => this.playEffect(route),
       stopEffect: (route) => this.stopEffect(route),
       getAudioSnapshot: () => this.#audio.getSnapshot(),
+      getPopupLayer: (popupId, layerId) => {
+        const popup = this.#singleStatePopups.get(popupId);
+        if (!popup)
+          throw new SceneLayoutError(
+            `Popup layer runtime is unavailable for non-single-state popup "${popupId}".`,
+          );
+        return popup.getLayer(layerId);
+      },
+      getPopupString: (popupId, kind, name) => {
+        const popup =
+          this.#singleStatePopups.get(popupId) ??
+          this.#spinePopups.get(popupId) ??
+          this.#popups.get(popupId);
+        if (!popup)
+          throw new SceneLayoutError(
+            `Scene layout popup "${popupId}" is unavailable.`,
+          );
+        return kind === "text"
+          ? popup.getTextNode(name)
+          : popup.getImageStringNode(name);
+      },
       createRenderObject: (name) => this.createRenderObject(name),
       createImgNumberRenderObject: (name, options) =>
         this.createImgNumberRenderObject(name, options),
@@ -624,12 +648,16 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           const popup =
             resource.manifest.type === "spine"
               ? this.#createSpinePopupRuntime({ resource })
-              : createAwardCelebrationRuntime({
-                  resource,
-                  formatAmount: this.#formatPopupAmount,
-                });
+              : resource.manifest.type === "single-state"
+                ? createSingleStatePopupRuntime({ resource })
+                : createAwardCelebrationRuntime({
+                    resource,
+                    formatAmount: this.#formatPopupAmount,
+                  });
           if (resource.manifest.type === "spine")
             this.#spinePopups.set(id, popup as SpinePopupRuntime);
+          else if (resource.manifest.type === "single-state")
+            this.#singleStatePopups.set(id, popup as SingleStatePopupRuntime);
           else this.#popups.set(id, popup as AwardCelebrationRuntime);
           return Object.freeze({
             id,
@@ -776,6 +804,22 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         popup.container.scale.set(placement.scale);
       }
     }
+    for (const [id, popup] of this.#singleStatePopups) {
+      const binding = this.#manifest.popups?.[id];
+      const placement = binding?.placements[snapshot.variantId];
+      if (!binding || !placement)
+        throw new SceneLayoutError(
+          `Scene layout popup "${id}" has no ${snapshot.variantId} placement.`,
+        );
+      if (popup.applyViewport) popup.applyViewport(viewportSize, placement);
+      else {
+        popup.container.position.set(
+          viewportSize.width / 2 + placement.x,
+          viewportSize.height / 2 + placement.y,
+        );
+        popup.container.scale.set(placement.scale);
+      }
+    }
     this.#transitionRoot.position.set(
       snapshot.worldOffset.x,
       snapshot.worldOffset.y,
@@ -905,6 +949,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
             );
           } else throw error;
         }
+    for (const popup of this.#singleStatePopups.values())
+      if (popup.isPlaying()) popup.update(deltaSeconds);
     this.updatePopupAudioCues();
     this.updateActivePrelude();
     this.updateActiveTransition(deltaSeconds);
@@ -1761,6 +1807,16 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     return popup;
   }
 
+  getSingleStatePopup(id: string): SingleStatePopupRuntime {
+    this.assertReady();
+    const popup = this.#singleStatePopups.get(id);
+    if (!popup)
+      throw new SceneLayoutError(
+        `Scene layout single-state popup "${id}" is unavailable.`,
+      );
+    return popup;
+  }
+
   getBackgroundPresentation(): Container {
     this.assertReady();
     return this.#layout.container;
@@ -2446,6 +2502,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#popups.clear();
     for (const popup of this.#spinePopups.values()) popup.destroy();
     this.#spinePopups.clear();
+    for (const popup of this.#singleStatePopups.values()) popup.destroy();
+    this.#singleStatePopups.clear();
     this.#popupAudioStates.clear();
     this.#popupAudioHandles.clear();
     this.#symbolAudioHandles.clear();
@@ -2482,7 +2540,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     for (const [popupId, resource] of Object.entries(
       this.#resource.popupPackages,
     )) {
-      if (resource.manifest.version !== 7) continue;
+      if (!("audio" in resource.manifest)) continue;
       let target: string | null = null;
       const award = this.#popups.get(popupId);
       if (award?.isPlaying()) {

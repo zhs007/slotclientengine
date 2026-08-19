@@ -321,16 +321,13 @@ export function rewritePopupManifest(
   mapping: ReadonlyMap<string, string>,
 ): LatestPopupManifest {
   const manifest = loadPopupManifest(value).manifest;
-  const audio =
-    manifest.version === 7
-      ? {
-          ...manifest.audio,
-          ...rewriteOptimizedAudioAssets(
-            { version: 1 as const, effects: manifest.audio.effects },
-            mapping,
-          ),
-        }
-      : undefined;
+  const audio = {
+    ...manifest.audio,
+    ...rewriteOptimizedAudioAssets(
+      { version: 1 as const, effects: manifest.audio.effects },
+      mapping,
+    ),
+  };
   const resources: Record<string, PopupResourceSpec> = {};
   const resourceIds = new Map<string, string>();
   for (const [id, resource] of Object.entries(manifest.resources)) {
@@ -343,44 +340,45 @@ export function rewritePopupManifest(
     resources[nextId] = rewritten;
     resourceIds.set(id, nextId);
   }
+  const rewriteLayers = <T extends readonly unknown[]>(layers: T): T =>
+    layers.map((rawLayer) => {
+      const layer = record(rawLayer, "popup layer");
+      return typeof layer.resource === "string"
+        ? {
+            ...layer,
+            resource: resourceIds.get(layer.resource) ?? layer.resource,
+          }
+        : layer;
+    }) as unknown as T;
   const rewriteTier = <T extends { readonly layers: readonly unknown[] }>(
     tier: T,
-  ): T =>
-    ({
-      ...tier,
-      layers: tier.layers.map((rawLayer) => {
-        const layer = record(rawLayer, "popup layer");
-        const resource = String(layer.resource);
-        return { ...layer, resource: resourceIds.get(resource) ?? resource };
-      }),
-    }) as T;
+  ): T => ({ ...tier, layers: rewriteLayers(tier.layers) }) as T;
   if (manifest.type === "spine")
     return loadPopupManifest({
       ...manifest,
-      ...(audio ? { audio } : {}),
+      audio,
       resources,
       spine: {
         ...manifest.spine,
         resource:
           resourceIds.get(manifest.spine.resource) ?? manifest.spine.resource,
         ...(manifest.spine.overlays
-          ? {
-              overlays: manifest.spine.overlays.map((layer) => ({
-                ...layer,
-                ...(layer.resource
-                  ? {
-                      resource:
-                        resourceIds.get(layer.resource) ?? layer.resource,
-                    }
-                  : {}),
-              })),
-            }
+          ? { overlays: rewriteLayers(manifest.spine.overlays) }
           : {}),
+      },
+    }).manifest;
+  if (manifest.type === "single-state")
+    return loadPopupManifest({
+      ...manifest,
+      audio,
+      resources,
+      singleState: {
+        layers: rewriteLayers(manifest.singleState.layers),
       },
     }).manifest;
   return loadPopupManifest({
     ...manifest,
-    ...(audio ? { audio } : {}),
+    audio,
     resources,
     awardCelebration: {
       base: rewriteTier(manifest.awardCelebration.base),

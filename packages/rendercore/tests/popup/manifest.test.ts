@@ -6,9 +6,39 @@ import {
   requiredPopupAmountCharacters,
   validatePopupId,
 } from "../../src/popup/index.js";
-import { popupFixture } from "./fixtures.js";
+import { popupFixture, singleStatePopupFixture } from "./fixtures.js";
 
 describe("popup manifest", () => {
+  it("strictly parses a zero-or-more-layer single-state popup", () => {
+    const parsed = parsePopupManifest(singleStatePopupFixture());
+    expect(parsed).toMatchObject({ version: 8, type: "single-state" });
+    if (parsed.type !== "single-state")
+      throw new Error("Expected single-state popup.");
+    expect(parsed.singleState.layers[0]?.id).toBe("heading");
+    expect(
+      parsePopupManifest({
+        ...singleStatePopupFixture(),
+        singleState: { layers: [] },
+      }),
+    ).toMatchObject({ singleState: { layers: [] } });
+    expect(() =>
+      parsePopupManifest({
+        ...singleStatePopupFixture(),
+        singleState: {
+          layers: [
+            {
+              ...singleStatePopupFixture().singleState.layers[0],
+              attachment: {
+                kind: "spine-slot",
+                target: { kind: "main-spine" },
+                slot: "root",
+              },
+            },
+          ],
+        },
+      }),
+    ).toThrow(/main-spine/);
+  });
   it("exposes the exact popup id contract for authoring validation", () => {
     expect(validatePopupId("free-game", "project id")).toBe("free-game");
     for (const value of ["", "Free-game", "free_game", "free--game", "-free"])

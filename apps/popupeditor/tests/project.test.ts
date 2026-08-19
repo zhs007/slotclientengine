@@ -13,6 +13,8 @@ import {
 } from "../src/io/resource-import.js";
 import {
   addLayer,
+  addSingleStateLayer,
+  addSingleStateTextLayer,
   addAwardTextLayer,
   applyImportedResourceBindings,
   assertPopupLayerCanDelete,
@@ -26,6 +28,7 @@ import {
   popupEditorProjectDiagnostics,
   projectToManifest,
   removePopupResource,
+  renameSingleStateLayer,
   reuseAwardLayerInTier,
   resourceReferenceCount,
   setPopupVniPlaybackMode,
@@ -35,6 +38,37 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 describe("popup editor filename-key project", () => {
+  it("authors an unconstrained single-state project with exact runtime names", () => {
+    const project = createPopupEditorProject({ type: "single-state" });
+    expect(project.backdrop.visibleStates).toEqual(["active"]);
+    expect(projectToManifest(project)).toMatchObject({
+      version: 8,
+      type: "single-state",
+      singleState: { layers: [] },
+    });
+    addSingleStateTextLayer(project);
+    renameSingleStateLayer(project, "text-0", "headline");
+    project.resources.set("hero", {
+      rootKey: "hero",
+      kind: "image",
+      spec: {
+        kind: "image",
+        path: "hero.png",
+        size: { width: 100, height: 50 },
+      },
+      keys: ["hero.png"],
+    });
+    addSingleStateLayer(project, "hero");
+    const manifest = projectToManifest(project);
+    if (manifest.type !== "single-state")
+      throw new Error("Expected single-state popup.");
+    expect(manifest.singleState.layers.map(({ id }) => id)).toEqual([
+      "headline",
+      "image-0",
+    ]);
+    expect(manifest).not.toHaveProperty("awardCelebration");
+    expect(manifest).not.toHaveProperty("spine");
+  });
   it("uses project-specific states for new layers and legacy migration", () => {
     const award = createPopupEditorProject();
     expect(award.backdrop.visibleStates).toEqual([
@@ -200,13 +234,13 @@ describe("popup editor filename-key project", () => {
     const imported = await importPopupZip(createDeterministicZip(entries), {
       prepare: false,
     });
-    expect(imported.formatVersion).toBe(7);
+    expect(imported.formatVersion).toBe(8);
     expect(imported.spine.prompt.font).toBeNull();
     expect(imported.spine.prompt.enabled).toBe(false);
     expect(imported.spine.overlays).toContainEqual(
       expect.objectContaining({ id: "prompt", kind: "text", name: "prompt" }),
     );
-    expect(projectToManifest(imported)).toMatchObject({ version: 7 });
+    expect(projectToManifest(imported)).toMatchObject({ version: 8 });
     expect(projectToManifest(imported)).not.toHaveProperty("designViewport");
 
     manifest.version = 2;
@@ -229,12 +263,12 @@ describe("popup editor filename-key project", () => {
     expect(importedLegacyV2.spine.overlays).toContainEqual(
       expect.objectContaining({ id: "prompt", kind: "text", name: "prompt" }),
     );
-    const canonicalV7 = projectToManifest(importedLegacyV2);
-    expect(canonicalV7.version).toBe(7);
-    expect(canonicalV7).not.toHaveProperty("designViewport");
-    if (canonicalV7.type !== "spine") throw new Error("Expected spine popup.");
-    expect(canonicalV7.spine).not.toHaveProperty("prompt");
-    expect(canonicalV7.spine.overlays?.[0]).toMatchObject({
+    const canonicalV8 = projectToManifest(importedLegacyV2);
+    expect(canonicalV8.version).toBe(8);
+    expect(canonicalV8).not.toHaveProperty("designViewport");
+    if (canonicalV8.type !== "spine") throw new Error("Expected spine popup.");
+    expect(canonicalV8.spine).not.toHaveProperty("prompt");
+    expect(canonicalV8.spine.overlays?.[0]).toMatchObject({
       attachment: { kind: "popup-root" },
       visibleStates: ["start", "loop"],
     });
@@ -276,6 +310,34 @@ describe("popup editor filename-key project", () => {
     expect(() => validatePopupEditorAttachments(project)).toThrow(
       /a -> b -> a/,
     );
+
+    const vniParent = {
+      id: "copy-effect",
+      kind: "vni",
+      resource: "copy-effect",
+      order: 1,
+      alpha: 1,
+      attachment: { kind: "popup-root" },
+      transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+    } as const;
+    const amountChild = {
+      id: "counter",
+      kind: "image-string",
+      resource: "counter",
+      defaultText: "0",
+      order: 2,
+      alpha: 1,
+      attachment: {
+        kind: "vni-text-layer",
+        vniLayerId: "copy-effect",
+        textLayerId: "counter-slot",
+      },
+      transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+      anchor: { x: 0.5, y: 0.5 },
+    } as const;
+    expect(() =>
+      assertPopupLayerCanDelete([vniParent, amountChild], "copy-effect"),
+    ).toThrow(/counter/);
   });
 
   it("keeps the five-tier amount contract", () => {

@@ -85,8 +85,9 @@ ZIP 与 JSON 作为一对提交，第二个文件提交失败时会回滚第一�
 - 根目录只有正式 control files 与 content-addressed payload；
 - `layout.manifest.json` 和 nested image-string、Symbols、Popup、VNI JSON 中受支持的
   typed 图片引用会更新为 WebP filename key；
-- Popup reference rewrite 只依赖 `rendercore/popup/data`，任一受支持的 v1–v6 source manifest 都先
-  strict 规范化为 latest v6；CLI 不加载 mapped editor workspace 或 Pixi runtime；
+- Popup reference rewrite 只依赖 `rendercore/popup/data`，任一受支持的 v1–v8 source manifest 都先
+  strict 规范化为 latest v8；v7/v8 typed audio 与三种 Popup 的资源引用均结构化改写，CLI 不加载 mapped editor
+  workspace 或 Pixi runtime；
 - Spine atlas page logical name、VNI `originalName` 和业务 identity 保持不变；
 - Popup 的 WOFF2/WOFF/TTF/OTF 字体引用保持不变，并继续按 payload SHA-256 去重；
 - `assets.map.json` 的 path、SHA-256、media type 和 byte length 按优化后 bytes
@@ -108,11 +109,11 @@ ZIP 与 JSON 作为一对提交，第二个文件提交失败时会回滚第一�
   不执行，对应 version 为 `null`；parser 仍可显式读取历史 version 1 JSON。
 
 分组类型包括 `shared`、`runtime-resource`、`mode`、`transition`、`symbols`、
-`award-celebration` 和 `spine-popup`。每个 manifest `runtimeResources` 程序键拥有独立的
+`award-celebration`、`spine-popup` 和 `single-state-popup`。每个 manifest `runtimeResources` 程序键拥有独立的
 `runtime-resource:<key>` 增量闭包，不进入 initial/shared。模式名不硬编码为 BaseGame/FreeGame。转场由 source mode
 拥有：`A -> B` 属于 A，`B -> A` 属于 B。初始集合包含 shared、initial mode、
 initial mode 使用的 symbols、award popup，以及 initial mode 发出的转场及其 prelude closure；
-没有 transition owner 的 programmatic Spine Popup 进入 initial，非 initial source 的 transition-only Popup 留在增量组。
+没有 transition owner 的 programmatic Spine Popup 与只能 programmatic 使用的 single-state Popup 进入 initial，非 initial source 的 transition-only Popup 留在增量组。
 缺少 node `gameMode` 的旧普通图层和显式全局普通图层进入 `shared` 并出现在每个 mode 的完整闭包；绑定单一 `gameMode` 的普通图层只进入 exact mode。背景继续由各 mode 的 `backgroundNodes` 拥有，图层 `order` 不参与资源归属。
 
 资源允许同时出现在多个 `requiredAssets` 闭包中，但每个优化资源必须至少被一个 group

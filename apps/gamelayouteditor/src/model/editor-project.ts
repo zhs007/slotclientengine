@@ -1340,7 +1340,10 @@ export function manifestToEditorProject(
       (transition) =>
         "preludePopup" in transition && transition.preludePopup === id,
     );
-    if (nested.type === "spine" && !usedAsPrelude)
+    if (
+      (nested.type === "spine" && !usedAsPrelude) ||
+      nested.type === "single-state"
+    )
       project.registeredSpinePopupIds.add(id);
   }
   project.gameModes = {

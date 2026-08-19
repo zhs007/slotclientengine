@@ -9,8 +9,10 @@ import {
   type PopupPresentationSnapshot,
   createAwardCelebrationPlayer,
   createSpinePopupPlayer,
+  createSingleStatePopupPlayer,
   type AwardCelebrationPlayer,
   type SpinePopupPlayer,
+  type SingleStatePopupPlayer,
 } from "@slotclientengine/rendercore/popup/editor";
 import { Application, Container, Graphics } from "pixi.js";
 import type { PopupEditorProject } from "../model/project.js";
@@ -71,8 +73,12 @@ export class PopupPreview {
   readonly #host: HTMLElement;
   readonly #status: HTMLElement;
   #resource: PopupPackageResource | null = null;
-  #player: AwardCelebrationPlayer | SpinePopupPlayer | null = null;
-  #type: "award-celebration" | "spine" = "award-celebration";
+  #player:
+    | AwardCelebrationPlayer
+    | SpinePopupPlayer
+    | SingleStatePopupPlayer
+    | null = null;
+  #type: "award-celebration" | "spine" | "single-state" = "award-celebration";
   #ready = false;
   #size = { width: 1080, height: 1920 };
   #zoom: number | "fit" = "fit";
@@ -125,9 +131,10 @@ export class PopupPreview {
             ? snapshot.activeTierId
               ? `award-tier:${snapshot.activeTierId}`
               : null
-            : snapshot.phase === "start" ||
-                snapshot.phase === "loop" ||
-                snapshot.phase === "end"
+            : "dismissRequested" in snapshot &&
+                (snapshot.phase === "start" ||
+                  snapshot.phase === "loop" ||
+                  snapshot.phase === "end")
               ? `segment:${snapshot.phase}`
               : null;
         if (cueState && cueState !== this.#audioCueState) {
@@ -143,7 +150,9 @@ export class PopupPreview {
         this.#status.textContent =
           "activeTierId" in snapshot
             ? `${snapshot.activeTierId ?? "-"} / ${snapshot.activeSegment ?? "-"} / ${snapshot.phase} / ${snapshot.formattedAmount} / layers ${snapshot.activeLayerCount}+${snapshot.endingLayerCount}`
-            : `${snapshot.phase} / dismissRequested=${snapshot.dismissRequested}`;
+            : "dismissRequested" in snapshot
+              ? `${snapshot.phase} / dismissRequested=${snapshot.dismissRequested}`
+              : `${snapshot.phase} / layers ${snapshot.activeLayerCount}`;
       }
     });
     this.#ready = true;
@@ -158,16 +167,22 @@ export class PopupPreview {
     });
     await importPopupZip(exported.bytes);
     const resource = await createPopupPackageResource({ files });
-    let player: AwardCelebrationPlayer | SpinePopupPlayer | null = null;
+    let player:
+      | AwardCelebrationPlayer
+      | SpinePopupPlayer
+      | SingleStatePopupPlayer
+      | null = null;
     try {
       player =
         resource.manifest.type === "spine"
           ? createSpinePopupPlayer({ resource })
-          : createAwardCelebrationPlayer({
-              resource,
-              formatAmount: (amountRaw) =>
-                formatPopupPreviewAmount(amountRaw, this.#amountFormat),
-            });
+          : resource.manifest.type === "single-state"
+            ? createSingleStatePopupPlayer({ resource })
+            : createAwardCelebrationPlayer({
+                resource,
+                formatAmount: (amountRaw) =>
+                  formatPopupPreviewAmount(amountRaw, this.#amountFormat),
+              });
       await player.init();
     } catch (error) {
       player?.destroy();
@@ -220,9 +235,10 @@ export class PopupPreview {
     if (!this.#player) throw new Error("请先生成有效 production preview。");
     this.#player.dismissImmediately();
     this.#audioCueState = null;
-    void this.#audio?.unlock();
-    if (this.#type === "spine") (this.#player as SpinePopupPlayer).start();
-    else (this.#player as AwardCelebrationPlayer).start(this.#input);
+    void this.#audio?.unlock().catch(() => {});
+    if (this.#type === "award-celebration")
+      (this.#player as AwardCelebrationPlayer).start(this.#input);
+    else (this.#player as SpinePopupPlayer | SingleStatePopupPlayer).start();
   }
   reset() {
     this.#rebuildGeneration += 1;
@@ -304,7 +320,7 @@ export class PopupPreview {
     if (!this.#player?.isPlaying()) return unhandledPopupInteraction();
     if (this.#type === "award-celebration")
       (this.#player as AwardCelebrationPlayer).requestAdvance();
-    else (this.#player as SpinePopupPlayer).requestDismiss();
+    else this.#player.requestDismiss();
     return handledPopupInteraction();
   }
   private clear() {

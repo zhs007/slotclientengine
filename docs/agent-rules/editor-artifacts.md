@@ -50,16 +50,16 @@
 
 ## Popup Editor
 
-- `apps/popupeditor` 输出 strict `award-celebration` 或普通 `spine` popup package；两种类型使用互斥 schema，不保留无关字段。
+- `apps/popupeditor` 输出 strict `award-celebration`、普通 `spine` 或 `single-state` popup package；三种类型使用互斥 schema，不保留无关字段。
 - Popup Editor 启动时没有隐式项目；项目只能通过“创建项目”dialog（名称与固定类型）或单独导入 Popup ZIP 建立。项目 ZIP 与资源导入是两个入口，资源入口中 VNI/ImgNumber 只接受各自 Editor 导出的 ZIP，Spine 必须以完整 JSON/atlas/texture 组导入。同名不同 bytes 必须由用户逐项选择覆盖或自动 suffix 保留两份，不能默认提交。
-- Popup v7 沿用无界 focus、backdrop、layer alpha 与 strict attachment，并新增 package-local audio effect/cue；award layer 由 containing tier 决定可见性，同一 exact id 跨档表示同一逻辑图层，当前档缺失即不可见。Popup Editor 新建项目固定为 v7；合法 v1–v6 ZIP 必须先按原版本 strict 校验与 prepare，再原子迁移为 v7，后续 preview/export 只写 v7。
+- Popup v8 沿用 v7 的 focus、backdrop、audio 与 strict attachment，并新增零到多图层的 `single-state`；其 exact layer id 同时是 Editor name、runtime name 与地址 segment，Spine/VNI autoplay 可省略，父节点只能引用同 Popup 已存在图层。Popup Editor 新建项目固定为 v8；合法 v1–v7 ZIP 必须先按原版本 strict 校验与 prepare，再原子迁移为 v8，后续 preview/export 只写 v8。
 - Popup Editor 独立预览页拥有唯一的 Pixi Application/canvas，并把 rendercore Popup player 的 Container 挂入其中；rendercore Popup 与游戏/Scene Layout consumer 不得创建 canvas、Renderer、ticker 或 RAF。预览在合法配置变化后自动 rebuild，不提供 Build、advance、dismiss 或 immediate-dismiss UI；普通交互只来自完整 preview canvas 或 keyboard input。
 - 新 Popup v6 authoring 不提供独立 Spine prompt；旧 prompt 在 v1/v2 导入迁移时结构化转换为 `name=prompt` 的字体文字 overlay，冲突使整次导入失败。award 各档与 Spine overlay 都可声明多个命名字体文字和 manual ImgNumber；文字省略 resource 时使用系统字体，显式选择时只接受 package-owned WOFF2/WOFF/TTF/OTF，失效引用不降级。award 的状态由档位 presence 表达，Editor 必须提供显式 stable-id 复用操作而不得按资源猜测合并；每个档仍必须恰好有一个 exact id 为 `win-amount` 的金额层。
-- Popup v4–v7 的 image、字体文字、ImgNumber、VNI 与 Spine layer 可挂 Popup root 或同作用域 official Spine exact slot；普通 Spine Popup 还可挂主 Spine，ImgNumber 保留 VNI text-layer attachment。Editor 候选必须来自 shared Spine/VNI strict metadata，不猜首项；循环 target、跨作用域引用、缺 slot、同父 order 冲突、覆盖后失效与删除被引用 target 都阻止 transaction，不自动回根。
+- Popup v4–v8 的 image、字体文字、ImgNumber、VNI 与 Spine layer 可挂 Popup root 或同作用域 official Spine exact slot；普通 Spine Popup 还可挂主 Spine，ImgNumber 保留 VNI text-layer attachment。Editor 候选必须来自 shared Spine/VNI strict metadata，不猜首项；循环 target、跨作用域引用、缺 slot、同父 order 冲突、覆盖后失效与删除被引用 target 都阻止 transaction，不自动回根。
 - VNI export bundle 只把 `purpose=runtime` 作为运行候选：唯一 runtime 自动选择，多个 runtime 才枚举；禁止手输 profile id，`purpose=editing` 不进入候选。
 - popup package 使用完整 SHA-256 content-addressed owned payload，并保持 exact closure。
 - Popup 字体与其它 payload 一样按完整 SHA-256 物理去重；logical filename key 与 owner 引用不得从 hash path 反推或合并。
-- Popup 必须保持 `popup/data → popup/core → popup/editor` 单向分层：data 拥有 v1–v7 strict source parser、唯一默认 latest normalizer与纯引用合同；core 拥有 production resolved-resource prepare、focus/presentation、layer、string registry、金额、input与 award/Spine 状态机；editor 只组合 mapped standalone package、namespace/materialize 和同 Core snapshot wrapper。任何 editor/game runtime 都必须用默认 loader把受支持版本转为latest。
+- Popup 必须保持 `popup/data → popup/core → popup/editor` 单向分层：data 拥有 v1–v8 strict source parser、唯一默认 latest normalizer与纯引用合同；core 拥有 production resolved-resource prepare、focus/presentation、layer、string registry、金额、input与 award/Spine/single-state 状态机；editor 只组合 mapped standalone package、namespace/materialize 和同 Core snapshot wrapper。任何 editor/game runtime 都必须用默认 loader把受支持版本转为latest。
 
 ## Symbols Editor
 
@@ -102,7 +102,7 @@
 - gamelayouteditor 把 symbols ZIP 和 popup ZIP 当可多项并存的自包含 dependency library；standalone 校验后以 manifest id 生成稳定扁平 root/leaf key 并结构化改写 nested reference。同 id 再上传走替换并保留 binding/placement/order，提交后只 GC 无其它 owner 的旧 key；不同 id 不得互相覆盖 bytes。每个 active variant 只配置明确 binding 和相对 viewport center 的 popup root `x/y/scale`；root order 可编辑且必须高于全部 scene node/main reel。
 - Popup Spine namespace 只改物理 filename key 和 manifest path value，不得改 atlas page logical name 或 texture map key。后续 filename-key 规范化必须把 Popup `resources` object key、resource root value 和 layer/spine reference 作为一个结构化 identity 原子改写，保持 object key exact 等于 compound root。Popup 导入提交前必须用完整 SHA-256 比较其 namespace 前的 atlas/texture 与 Layout 自有 Spine 同名资产；同名不同 bytes 时列出双方 owner、filename 和 hash，用户可原子取消整次导入或明确继续隔离导入。不得自动覆盖、改名，或推断 skeleton JSON 与新版 atlas/texture 的兼容性。
 - gamelayouteditor 的普通 node mode 作用域属于 layout manifest typed contract：缺少 `gameMode` 的旧数据按全局处理，单 mode scope 必须在结构化导入、导出、优化改写和重导中原样保留；不得把它存入 UI session、文件名约定或第二份资源表。scope/variant 隐藏不改变 node 的全局 order 或资源 identity。
-- 普通 Spine popup 导入 gamelayouteditor 后只进入 dependency library；每条有向 transition 不论使用 none、Spine 或 video 效果，都可独立选择不同的 `preludePopup`，或由显式 programmatic registration 引用，之后才进入 Scene Layout manifest 与 production ZIP；不能绑定为 game mode award celebration。未引用 Symbols/Popup library item 不导出。
+- 普通 Spine 与 single-state popup 导入 gamelayouteditor 后只进入 dependency library；single-state 只能显式 programmatic registration，不能作为 mode award celebration 或 transition prelude；普通 Spine 仍可作为 transition `preludePopup` 或显式注册。未引用 Symbols/Popup library item 不导出。
 - Symbols dependency 对 gamelayouteditor 是只读 symbol 状态机合同。Layout Editor 可以校验 package id、cell size、display symbols、公开 reel/state capability 和 exact closure，并调用 production preview；不得提供内部图片、Spine/VNI animation、state layer、ImgNumber/value 或 cascade 的编辑控件，也不得重写这些 owner-owned manifest 字段。
 - Symbols dependency 的导入、预览、替换和 layout ZIP 重导必须保留其完整
   state/ImgNumber multi-target closure；headless authoring 可以显式跳过 texture load，

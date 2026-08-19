@@ -205,6 +205,21 @@ describe("game mode and popup dependency commands", () => {
     deletePopupDependency(project, "free-game");
   });
 
+  it("registers single-state only as an independent popup", () => {
+    const project = createNewEditorProject("maximized-focus");
+    importPopupDependency(project, {
+      manifest: { id: "freeform", type: "single-state" } as never,
+      rootKey: "freeform-popup.manifest.json",
+      files: new Map([["freeform-popup.manifest.json", new Uint8Array([1])]]),
+      sourceSpineAssets: [],
+    });
+    expect(() => bindGameModePopup(project, "BaseGame", "freeform")).toThrow(
+      /award-celebration/,
+    );
+    setSpinePopupRegistered(project, "freeform", true);
+    expect(project.registeredSpinePopupIds.has("freeform")).toBe(true);
+  });
+
   it("allocates a distinct popup root order from 2000", () => {
     const project = createNewEditorProject("maximized-focus");
     importPopupDependency(project, popup("base-popup", 1));

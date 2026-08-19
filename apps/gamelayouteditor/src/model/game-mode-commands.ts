@@ -695,8 +695,8 @@ export function setSpinePopupRegistered(
 ): void {
   const dependency = project.popupDependencies.get(id);
   if (!dependency) throw new Error(`未知 Popup dependency：${id}`);
-  if (dependency.type !== "spine")
-    throw new Error(`只有普通 Spine Popup 可以独立注册到 Scene Layout。`);
+  if (dependency.type !== "spine" && dependency.type !== "single-state")
+    throw new Error(`只有普通 Spine 或 single-state Popup 可以独立注册。`);
   if (registered) project.registeredSpinePopupIds.add(id);
   else project.registeredSpinePopupIds.delete(id);
 }

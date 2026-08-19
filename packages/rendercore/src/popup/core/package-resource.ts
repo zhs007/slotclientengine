@@ -21,8 +21,9 @@ import { collectPopupDirectPaths } from "../data/manifest.js";
 import { loadPopupManifest } from "../data/normalize.js";
 import type {
   PopupLayer,
-  PopupManifestV7,
+  PopupManifestV8,
   PopupOverlayLayer,
+  SingleStatePopupLayerV8,
 } from "../data/types.js";
 import {
   acquirePopupFont,
@@ -40,7 +41,7 @@ export async function createPopupPackageResourceFromResolvedFiles(options: {
   readonly decodeImage?: DecodeImageStringImage;
   readonly loadTexture?: (url: string, path: string) => Promise<Texture>;
   readonly loadFont?: PopupFontLoader;
-}): Promise<PopupPackageResource<PopupManifestV7>> {
+}): Promise<PopupPackageResource<PopupManifestV8>> {
   const manifest = loadPopupManifest(
     options.manifest ?? parseJson(requireBytes(options.files, ROOT), ROOT),
   ).manifest;
@@ -213,7 +214,7 @@ async function releasePrepared(
 }
 
 function validateAnimationBindings(
-  manifest: PopupManifestV7,
+  manifest: PopupManifestV8,
   resources: Readonly<Record<string, PopupPreparedResource>>,
 ): void {
   if (manifest.type === "spine") {
@@ -272,6 +273,60 @@ function validateAnimationBindings(
             `popup VNI overlay ${overlay.id} loopEndTime exceeds project duration.`,
           );
       }
+    }
+    return;
+  }
+  if (manifest.type === "single-state") {
+    for (const layer of manifest.singleState.layers) {
+      const resource = layer.resource ? resources[layer.resource] : undefined;
+      if (layer.kind === "image-string") {
+        if (resource?.kind !== "image-string")
+          throw new Error("single-state popup ImgNumber resource mismatch.");
+        validateImageStringText(layer.defaultText, resource.resource.manifest);
+      } else if (layer.kind === "text") {
+        if (resource && resource.kind !== "font")
+          throw new Error("single-state popup text resource mismatch.");
+      } else if (layer.kind === "vni") {
+        if (resource?.kind !== "vni")
+          throw new Error("single-state popup VNI resource mismatch.");
+        if (
+          layer.autoplay?.mode === "segmented" &&
+          layer.autoplay.loopEndTime > resource.project.stage.duration
+        )
+          throw new Error(
+            `single-state popup VNI layer ${layer.id} loopEndTime exceeds project duration.`,
+          );
+      } else if (layer.kind === "spine") {
+        if (resource?.kind !== "spine")
+          throw new Error("single-state popup Spine resource mismatch.");
+        validateOfficialSpineResource({
+          resource: resource.resource,
+          requiredAnimations: layer.autoplay ? [layer.autoplay.animation] : [],
+          requiredSlots: requiredPopupSpineSlots(
+            manifest.singleState.layers,
+            layer.id,
+          ),
+        });
+      }
+    }
+    for (const layer of manifest.singleState.layers) {
+      const attachment = resolvePopupLayerAttachment(layer);
+      if (attachment.kind !== "vni-text-layer") continue;
+      const target = manifest.singleState.layers.find(
+        ({ id }) => id === attachment.vniLayerId,
+      );
+      const targetResource = target?.resource
+        ? resources[target.resource]
+        : undefined;
+      if (target?.kind !== "vni" || targetResource?.kind !== "vni")
+        throw new Error("single-state popup ImgNumber VNI parent mismatch.");
+      const textLayer = targetResource.project.layers.find(
+        ({ id }) => id === attachment.textLayerId,
+      );
+      if (!textLayer || textLayer.type !== "text")
+        throw new Error(
+          `single-state popup ImgNumber layer ${layer.id} references missing VNI text layer ${attachment.textLayerId}.`,
+        );
     }
     return;
   }
@@ -343,7 +398,7 @@ function validateAnimationBindings(
 }
 
 function requiredPopupSpineSlots(
-  layers: readonly (PopupLayer | PopupOverlayLayer)[],
+  layers: readonly (PopupLayer | PopupOverlayLayer | SingleStatePopupLayerV8)[],
   target: string,
 ): readonly string[] {
   const slots = new Set<string>();
@@ -360,7 +415,7 @@ function requiredPopupSpineSlots(
 }
 
 function awardAmountResourceIds(
-  manifest: Extract<PopupManifestV7, { readonly type: "award-celebration" }>,
+  manifest: Extract<PopupManifestV8, { readonly type: "award-celebration" }>,
 ): ReadonlySet<string> {
   const result = new Set<string>();
   for (const tier of [

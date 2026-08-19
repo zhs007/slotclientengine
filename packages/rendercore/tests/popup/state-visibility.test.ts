@@ -65,7 +65,7 @@ describe("popup state visibility", () => {
         loaded.manifest,
       );
     }
-    expect(() => loadPopupManifest({ ...v6, version: 7 })).toThrow(/version/);
+    expect(() => loadPopupManifest({ ...v6, version: 9 })).toThrow(/version/);
   });
 
   it("expands legacy full selection and migrates partial selection by index", () => {

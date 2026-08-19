@@ -393,7 +393,7 @@ describe("typed asset reference rewriting", () => {
       resource: "bonus.hash.json",
     });
     const latest = rewritePopupManifest(popup, new Map());
-    expect(latest.version).toBe(7);
+    expect(latest.version).toBe(8);
     expect(latest.backdrop.visibleStates).toEqual([
       "base",
       "standard",
@@ -482,7 +482,7 @@ describe("typed asset reference rewriting", () => {
     );
     expect(popup.type).toBe("spine");
     if (popup.type !== "spine") throw new Error("Expected Spine popup.");
-    expect(popup.version).toBe(7);
+    expect(popup.version).toBe(8);
     expect(popup.spine).toMatchObject({
       resource: "effect.hash.json",
       overlays: [
@@ -532,7 +532,7 @@ describe("typed asset reference rewriting", () => {
       ]),
     );
     expect(popup).toMatchObject({
-      version: 7,
+      version: 8,
       adaptation: {
         focus: { left: 1000, right: 2000, top: 3000, bottom: 4000 },
       },
@@ -601,7 +601,7 @@ describe("typed asset reference rewriting", () => {
       ]),
     );
     expect(popup).toMatchObject({
-      version: 7,
+      version: 8,
       spine: {
         resource: "effect.hash.json",
         overlays: [
@@ -614,6 +614,126 @@ describe("typed asset reference rewriting", () => {
           },
         ],
       },
+    });
+  });
+
+  it("rewrites v7 Popup audio and v8 single-state layer resources", () => {
+    const legacyAudio = rewritePopupManifest(
+      {
+        version: 7,
+        kind: "popup",
+        id: "audio-popup",
+        name: "Audio Popup",
+        type: "spine",
+        adaptation: {
+          mode: "maximized-focus",
+          focus: { left: 50, right: 50, top: 50, bottom: 50 },
+        },
+        backdrop: {
+          enabled: true,
+          color: "#000000",
+          alpha: 0.5,
+          visibleStates: ["start", "loop", "end"],
+        },
+        resources: {
+          "effect.json": {
+            kind: "spine",
+            skeleton: "effect.json",
+            atlas: "effect.atlas",
+            textures: { "effect.png": "effect.png" },
+          },
+        },
+        audio: {
+          version: 1,
+          effects: [
+            {
+              name: "coin",
+              asset: {
+                sources: [{ path: "coin.ogg", mediaType: "audio/ogg" }],
+              },
+              playback: "once",
+              offsetSeconds: 0,
+              voices: { maxConcurrent: 1, overflow: "restart-oldest" },
+              bgm: { kind: "keep" },
+            },
+          ],
+          cues: [
+            {
+              effect: "coin",
+              target: { kind: "segment", segment: "start" },
+            },
+          ],
+        },
+        spine: {
+          resource: "effect.json",
+          transform: { x: 0, y: 0, scale: 1 },
+          playback: {
+            mode: "segmented-animations",
+            startAnimation: "Start",
+            loopAnimation: "Loop",
+            endAnimation: "End",
+          },
+        },
+      },
+      mapping,
+    );
+    expect(legacyAudio.version).toBe(8);
+    expect(legacyAudio.audio.effects[0]?.asset.sources).toEqual([
+      { path: "coin.m4a", mediaType: "audio/mp4" },
+    ]);
+
+    const singleState = rewritePopupManifest(
+      {
+        version: 8,
+        kind: "popup",
+        id: "freeform",
+        name: "Freeform",
+        type: "single-state",
+        adaptation: {
+          mode: "maximized-focus",
+          focus: { left: 50, right: 50, top: 50, bottom: 50 },
+        },
+        backdrop: {
+          enabled: false,
+          color: "#000000",
+          alpha: 0.5,
+          visibleStates: ["active"],
+        },
+        resources: {
+          "popup.png": {
+            kind: "image",
+            path: "popup.png",
+            size: { width: 1, height: 1 },
+          },
+        },
+        audio: { version: 1, effects: [], cues: [] },
+        singleState: {
+          layers: [
+            {
+              id: "hero",
+              kind: "image",
+              order: 0,
+              resource: "popup.png",
+              transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+              alpha: 1,
+              attachment: { kind: "popup-root" },
+              anchor: { x: 0.5, y: 0.5 },
+            },
+          ],
+        },
+      },
+      mapping,
+    );
+    expect(singleState.type).toBe("single-state");
+    if (singleState.type !== "single-state")
+      throw new Error("Expected single-state Popup.");
+    expect(singleState.resources["popup.webp"]).toMatchObject({
+      kind: "image",
+      path: "popup.webp",
+    });
+    expect(singleState.singleState.layers[0]).toMatchObject({
+      id: "hero",
+      resource: "popup.webp",
     });
   });
 

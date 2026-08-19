@@ -902,8 +902,14 @@ function parsePopupBindings(
     const label = `scene layout popups.${id}`;
     const binding = readRecord(raw, label);
     known(binding, ["type", "manifest", "order", "placements"], label);
-    if (binding.type !== "award-celebration" && binding.type !== "spine")
-      fail(`${label}.type must be "award-celebration" or "spine".`);
+    if (
+      binding.type !== "award-celebration" &&
+      binding.type !== "spine" &&
+      binding.type !== "single-state"
+    )
+      fail(
+        `${label}.type must be "award-celebration", "spine", or "single-state".`,
+      );
     const placementsRecord = readRecord(
       binding.placements,
       `${label}.placements`,

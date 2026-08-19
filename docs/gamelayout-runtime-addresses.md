@@ -156,14 +156,16 @@ const value = runtime.addresses.resolve(
 );
 if (value.kind !== "popup-string") throw new Error("kind mismatch");
 
+const handle = value.get();
+handle.setText(totalWin.toString());
+
 await runtime.requestGameMode("FreeGame", {
   preludePopupStrings: [value.input(totalWin.toString())],
 });
 ```
 
-`input()` 只构造 typed input，不直接修改 Popup。现有 transition request 仍负责 apply/restore transaction；
-因此失败、结束或取消后不会把临时字符串留给下次 Popup。Popup layer 地址当前提供稳定结构定位与 metadata，
-不开放 Popup 内部 Container 或 placement mutation。
+`get()` 返回 package-owned string handle，可直接 `setText()/resetText()`；`input()` 只构造 typed input，不直接修改 Popup。现有 transition request 仍负责 apply/restore transaction；
+因此失败、结束或取消后不会把临时字符串留给下次 Popup。`single-state` 的 popup-layer 地址提供 `get()`，返回 borrowed `RenderObject`；其它 Popup 类型的 layer 地址没有可取的 layer runtime，并会显式失败。地址不会开放内部 Container。
 
 ## 音效与 BGM
 

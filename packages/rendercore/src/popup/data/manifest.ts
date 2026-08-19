@@ -7,6 +7,7 @@ import type {
   AwardCelebrationPopupManifestV5,
   AwardCelebrationPopupManifestV6,
   AwardCelebrationPopupManifestV7,
+  AwardCelebrationPopupManifestV8,
   AwardCelebrationSpec,
   AwardCelebrationTier,
   AwardTierPresentation,
@@ -20,6 +21,7 @@ import type {
   PopupManifestV5,
   PopupManifestV6,
   PopupManifestV7,
+  PopupManifestV8,
   PopupOverlayLayer,
   PopupLayerAttachment,
   PopupPromptSpec,
@@ -27,6 +29,9 @@ import type {
   PopupSegment,
   PopupSize,
   PopupTextStyle,
+  PopupVisibilityState,
+  SingleStatePopupLayerV8,
+  SingleStatePopupManifestV8,
   SpinePopupManifestV1,
   SpinePopupManifestV2,
   SpinePopupManifestV3,
@@ -34,10 +39,15 @@ import type {
   SpinePopupManifestV5,
   SpinePopupManifestV6,
   SpinePopupManifestV7,
+  SpinePopupManifestV8,
 } from "./types.js";
 import { validatePopupLayerAttachmentGraph } from "./attachment.js";
 import { assertPopupFilenameKey, assertPopupPackagePath } from "./path.js";
-import { AWARD_POPUP_STATES, POPUP_SEGMENTS } from "./state-visibility.js";
+import {
+  AWARD_POPUP_STATES,
+  POPUP_SEGMENTS,
+  SINGLE_STATE_POPUP_STATES,
+} from "./state-visibility.js";
 
 const IDS = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const OWNED_PATH =
@@ -59,6 +69,9 @@ interface ParsePopupManifest {
   (value: SpinePopupManifestV6): SpinePopupManifestV6;
   (value: AwardCelebrationPopupManifestV7): AwardCelebrationPopupManifestV7;
   (value: SpinePopupManifestV7): SpinePopupManifestV7;
+  (value: AwardCelebrationPopupManifestV8): AwardCelebrationPopupManifestV8;
+  (value: SpinePopupManifestV8): SpinePopupManifestV8;
+  (value: SingleStatePopupManifestV8): SingleStatePopupManifestV8;
   (value: PopupManifestV1): PopupManifestV1;
   (value: PopupManifestV2): PopupManifestV2;
   (value: PopupManifestV3): PopupManifestV3;
@@ -66,6 +79,7 @@ interface ParsePopupManifest {
   (value: PopupManifestV5): PopupManifestV5;
   (value: PopupManifestV6): PopupManifestV6;
   (value: PopupManifestV7): PopupManifestV7;
+  (value: PopupManifestV8): PopupManifestV8;
   (value: unknown): PopupManifest;
 }
 
@@ -78,9 +92,10 @@ export const parsePopupManifest = ((value: unknown): PopupManifest => {
     record.version !== 4 &&
     record.version !== 5 &&
     record.version !== 6 &&
-    record.version !== 7
+    record.version !== 7 &&
+    record.version !== 8
   )
-    fail("popup manifest.version must be 1, 2, 3, 4, 5, 6, or 7.");
+    fail("popup manifest.version must be 1, 2, 3, 4, 5, 6, 7, or 8.");
   const version = record.version;
   const modern = version !== 1;
   const commonKeys = [
@@ -90,19 +105,29 @@ export const parsePopupManifest = ((value: unknown): PopupManifest => {
     "type",
     ...(version === 1 || version === 2 ? ["designViewport"] : []),
     "resources",
-    ...(version === 7 ? ["audio"] : []),
+    ...(version >= 7 ? ["audio"] : []),
     ...(modern ? ["name", "adaptation", "backdrop"] : []),
   ];
   keys(
     record,
     record.type === "spine"
       ? [...commonKeys, "spine"]
-      : [...commonKeys, "amountFormat", "awardCelebration"],
+      : record.type === "single-state"
+        ? [...commonKeys, "singleState"]
+        : [...commonKeys, "amountFormat", "awardCelebration"],
     "popup manifest",
   );
   if (record.kind !== "popup") fail('popup manifest.kind must be "popup".');
-  if (record.type !== "award-celebration" && record.type !== "spine")
-    fail('popup manifest.type must be "award-celebration" or "spine".');
+  if (
+    record.type !== "award-celebration" &&
+    record.type !== "spine" &&
+    record.type !== "single-state"
+  )
+    fail(
+      'popup manifest.type must be "award-celebration", "spine", or "single-state".',
+    );
+  if (record.type === "single-state" && version !== 8)
+    fail("single-state popup requires manifest version 8.");
   const id = validatePopupId(record.id);
   const viewport =
     version === 1 || version === 2
@@ -141,7 +166,9 @@ export const parsePopupManifest = ((value: unknown): PopupManifest => {
             version >= 5
               ? record.type === "award-celebration"
                 ? AWARD_POPUP_STATES
-                : POPUP_SEGMENTS
+                : record.type === "spine"
+                  ? POPUP_SEGMENTS
+                  : SINGLE_STATE_POPUP_STATES
               : undefined,
           ),
         }
@@ -155,7 +182,7 @@ export const parsePopupManifest = ((value: unknown): PopupManifest => {
         }
       : {}),
     resources,
-    ...(version === 7
+    ...(version >= 7
       ? { audio: parsePopupAudio(record.audio, record.type) }
       : {}),
   };
@@ -171,6 +198,24 @@ export const parsePopupManifest = ((value: unknown): PopupManifest => {
     if (unused.length)
       fail(`popup production resources 包含未引用项：${unused.join(", ")}`);
     return freeze({ ...base, type: "spine" as const, spine }) as PopupManifest;
+  }
+  if (record.type === "single-state") {
+    const singleState = parseSingleStatePopup(record.singleState, resources);
+    const used = new Set(
+      singleState.layers.flatMap((layer) =>
+        "resource" in layer && layer.resource ? [layer.resource] : [],
+      ),
+    );
+    const unused = Object.keys(resources).filter(
+      (resourceId) => !used.has(resourceId),
+    );
+    if (unused.length)
+      fail(`popup production resources 包含未引用项：${unused.join(", ")}`);
+    return freeze({
+      ...base,
+      type: "single-state" as const,
+      singleState,
+    }) as unknown as PopupManifest;
   }
   const awardCelebration = parseAwardCelebration(
     record.awardCelebration,
@@ -197,7 +242,7 @@ export const parsePopupManifest = ((value: unknown): PopupManifest => {
 function parseSpinePopup(
   value: unknown,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7,
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8,
 ) {
   const record = object(value, "spine");
   keys(
@@ -319,7 +364,7 @@ function parsePrompt(
 function parseOverlays(
   value: unknown,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7,
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8,
 ): readonly PopupOverlayLayer[] {
   if (!Array.isArray(value)) fail("spine.overlays must be an array.");
   const overlays = value.map((raw, index) => {
@@ -360,6 +405,190 @@ function parseOverlays(
   return Object.freeze([...overlays].sort((a, b) => a.order - b.order));
 }
 
+function parseSingleStatePopup(
+  value: unknown,
+  resources: Readonly<Record<string, PopupResourceSpec>>,
+): SingleStatePopupManifestV8["singleState"] {
+  const record = object(value, "singleState");
+  keys(record, ["layers"], "singleState");
+  if (!Array.isArray(record.layers))
+    fail("singleState.layers must be an array.");
+  const layers = record.layers.map((raw, index) =>
+    parseSingleStateLayer(raw, `singleState.layers[${index}]`, resources),
+  );
+  unique(
+    layers.map(({ id }) => id),
+    "singleState.layers.id",
+  );
+  validatePopupLayerAttachmentGraph({
+    layers,
+    label: "singleState.layers",
+    allowMainSpine: false,
+  });
+  return freeze({
+    layers: Object.freeze(
+      [...layers].sort((left, right) => left.order - right.order),
+    ),
+  });
+}
+
+function parseSingleStateLayer(
+  value: unknown,
+  label: string,
+  resources: Readonly<Record<string, PopupResourceSpec>>,
+): SingleStatePopupLayerV8 {
+  const record = object(value, label);
+  const kind = record.kind;
+  const hasResource = Object.hasOwn(record, "resource");
+  const hasAutoplay = Object.hasOwn(record, "autoplay");
+  const common = [
+    "id",
+    "kind",
+    "order",
+    ...(hasResource ? ["resource"] : []),
+    "transform",
+    "alpha",
+    "attachment",
+    ...(hasAutoplay ? ["autoplay"] : []),
+  ];
+  if (!hasResource && kind !== "text") fail(`${label}.resource is required.`);
+  if (hasAutoplay && kind !== "spine" && kind !== "vni")
+    fail(`${label}.autoplay is only valid for spine or vni.`);
+  const resourceId = hasResource
+    ? resourceKey(record.resource, `${label}.resource`)
+    : undefined;
+  const expectedResourceKind = kind === "text" ? "font" : kind;
+  if (
+    resourceId &&
+    (!resources[resourceId] ||
+      resources[resourceId]!.kind !== expectedResourceKind)
+  )
+    fail(`${label}.resource 必须引用相同 kind 的 resource。`);
+  const transform = object(record.transform, `${label}.transform`);
+  keys(transform, ["x", "y", "scale", "rotation"], `${label}.transform`);
+  const base = {
+    id: identifier(record.id, `${label}.id`),
+    order: nonNegativeSafe(record.order, `${label}.order`),
+    ...(resourceId ? { resource: resourceId } : {}),
+    transform: {
+      x: finite(transform.x, `${label}.transform.x`),
+      y: finite(transform.y, `${label}.transform.y`),
+      scale: positive(transform.scale, `${label}.transform.scale`),
+      rotation: finite(transform.rotation, `${label}.transform.rotation`),
+    },
+    alpha: unit(record.alpha, `${label}.alpha`),
+    attachment: parseLayerAttachment(record.attachment, `${label}.attachment`),
+  };
+  if (kind === "image" || kind === "image-string" || kind === "text") {
+    keys(
+      record,
+      [
+        ...common,
+        ...(kind === "image-string" || kind === "text" ? ["defaultText"] : []),
+        "anchor",
+        ...(kind === "text" ? ["style"] : []),
+      ],
+      label,
+    );
+    const anchor = object(record.anchor, `${label}.anchor`);
+    keys(anchor, ["x", "y"], `${label}.anchor`);
+    const parsedAnchor = {
+      x: unit(anchor.x, `${label}.anchor.x`),
+      y: unit(anchor.y, `${label}.anchor.y`),
+    };
+    if (kind === "image")
+      return freeze({
+        ...base,
+        kind: "image" as const,
+        resource: resourceId!,
+        anchor: parsedAnchor,
+      });
+    if (kind === "image-string")
+      return freeze({
+        ...base,
+        kind: "image-string" as const,
+        resource: resourceId!,
+        defaultText: singleLine(record.defaultText, `${label}.defaultText`),
+        anchor: parsedAnchor,
+      });
+    return freeze({
+      ...base,
+      kind: "text" as const,
+      defaultText: singleLine(record.defaultText, `${label}.defaultText`),
+      anchor: parsedAnchor,
+      style: parseTextStyle(record.style, `${label}.style`),
+    });
+  }
+  if (kind === "vni") {
+    keys(record, common, label);
+    return freeze({
+      ...base,
+      kind: "vni" as const,
+      resource: resourceId!,
+      ...(hasAutoplay
+        ? {
+            autoplay: parsePopupVniPlayback(
+              record.autoplay,
+              `${label}.autoplay`,
+            ),
+          }
+        : {}),
+    });
+  }
+  if (kind === "spine") {
+    keys(record, common, label);
+    const autoplay = hasAutoplay
+      ? (() => {
+          const value = object(record.autoplay, `${label}.autoplay`);
+          keys(value, ["animation", "loop"], `${label}.autoplay`);
+          if (typeof value.loop !== "boolean")
+            fail(`${label}.autoplay.loop must be boolean.`);
+          return freeze({
+            animation: nonEmpty(value.animation, `${label}.autoplay.animation`),
+            loop: value.loop,
+          });
+        })()
+      : undefined;
+    return freeze({
+      ...base,
+      kind: "spine" as const,
+      resource: resourceId!,
+      ...(autoplay ? { autoplay } : {}),
+    });
+  }
+  fail(`${label}.kind invalid.`);
+}
+
+function parsePopupVniPlayback(value: unknown, label: string) {
+  const playback = object(value, label);
+  if (playback.mode === "once") {
+    keys(playback, ["mode"], label);
+    return freeze({ mode: "once" as const });
+  }
+  keys(
+    playback,
+    ["mode", "loopStartTime", "loopEndTime", "keepParticlesAlive"],
+    label,
+  );
+  if (
+    playback.mode !== "segmented" ||
+    typeof playback.keepParticlesAlive !== "boolean"
+  )
+    fail(`${label} invalid.`);
+  const loopStartTime = nonNegative(
+    playback.loopStartTime,
+    `${label}.loopStartTime`,
+  );
+  const loopEndTime = positive(playback.loopEndTime, `${label}.loopEndTime`);
+  if (loopStartTime >= loopEndTime) fail(`${label} loop points invalid.`);
+  return freeze({
+    mode: "segmented" as const,
+    loopStartTime,
+    loopEndTime,
+    keepParticlesAlive: playback.keepParticlesAlive,
+  });
+}
+
 export function collectPopupDirectPaths(
   manifest: PopupManifest,
 ): readonly string[] {
@@ -376,7 +605,7 @@ export function collectPopupDirectPaths(
       for (const path of Object.values(resource.textures)) result.add(path);
     }
   }
-  if (parsed.version === 7)
+  if ("audio" in parsed)
     for (const effect of parsed.audio.effects)
       for (const source of effect.asset.sources) result.add(source.path);
   return Object.freeze([...result].sort());
@@ -388,6 +617,8 @@ function parsePopupAudio(value: unknown, type: unknown) {
   if (audio.version !== 1) fail("popup audio.version must be 1.");
   if (!Array.isArray(audio.effects))
     fail("popup audio.effects must be an array.");
+  if (type === "single-state" && audio.effects.length)
+    fail("single-state popup audio.effects must be empty.");
   const effects = audio.effects.map((effect, index) =>
     parseAudioEffectBindingV1(effect, `popup audio.effects[${index}]`),
   );
@@ -396,6 +627,8 @@ function parsePopupAudio(value: unknown, type: unknown) {
     "popup audio effect name",
   );
   if (!Array.isArray(audio.cues)) fail("popup audio.cues must be an array.");
+  if (type === "single-state" && audio.cues.length)
+    fail("single-state popup audio.cues must be empty.");
   const effectNames = new Set(effects.map(({ name }) => name));
   const cues = audio.cues.map((rawCue, index) => {
     const label = `popup audio.cues[${index}]`;
@@ -475,7 +708,7 @@ function parseAdaptation(value: unknown, designViewport?: PopupSize) {
 
 function parseBackdrop(
   value: unknown,
-  states?: readonly (PopupSegment | import("./types.js").AwardTierId)[],
+  states?: readonly PopupVisibilityState[],
 ) {
   const record = object(value, "backdrop");
   keys(
@@ -612,7 +845,7 @@ function parseResource(value: unknown, label: string): PopupResourceSpec {
 function parseAwardCelebration(
   value: unknown,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7,
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8,
 ): AwardCelebrationSpec {
   const record = object(value, "awardCelebration");
   keys(record, ["base", "standard", "celebrationTiers"], "awardCelebration");
@@ -671,7 +904,7 @@ function parseTier(
   value: unknown,
   label: string,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7,
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8,
 ): AwardTierPresentation {
   const record = object(value, label);
   const allowed = [
@@ -740,7 +973,7 @@ function parseLayer(
   value: unknown,
   label: string,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7,
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8,
   visibilityStates: readonly (
     | PopupSegment
     | import("./types.js").AwardTierId
@@ -1079,9 +1312,7 @@ function parseSegments(value: unknown, label: string): readonly PopupSegment[] {
   return Object.freeze(SEGMENTS.filter((item) => values.includes(item)));
 }
 
-function parseVisibilityStates<
-  State extends PopupSegment | import("./types.js").AwardTierId,
->(
+function parseVisibilityStates<State extends PopupVisibilityState>(
   value: unknown,
   states: readonly State[],
   label: string,

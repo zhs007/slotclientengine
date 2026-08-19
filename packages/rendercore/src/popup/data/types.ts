@@ -5,7 +5,7 @@ export type AwardTierId =
   | "bigwin"
   | "superwin"
   | "megawin";
-export type PopupVisibilityState = AwardTierId | PopupSegment;
+export type PopupVisibilityState = AwardTierId | PopupSegment | "active";
 
 export interface PopupAudioCueV1 {
   readonly effect: string;
@@ -126,6 +126,66 @@ export type PopupVniPlayback =
     }
   | {
       readonly mode: "once";
+    };
+
+export interface PopupSingleStateSpineAutoplay {
+  readonly animation: string;
+  readonly loop: boolean;
+}
+
+export type SingleStatePopupLayerV8 =
+  | {
+      readonly id: string;
+      readonly kind: "image";
+      readonly order: number;
+      readonly resource: string;
+      readonly transform: PopupOverlayTransform;
+      readonly alpha: number;
+      readonly attachment: PopupLayerAttachment;
+      readonly anchor: PopupAnchor;
+    }
+  | {
+      readonly id: string;
+      readonly kind: "image-string";
+      readonly order: number;
+      readonly resource: string;
+      readonly defaultText: string;
+      readonly transform: PopupOverlayTransform;
+      readonly alpha: number;
+      readonly attachment: PopupLayerAttachment;
+      readonly anchor: PopupAnchor;
+    }
+  | {
+      readonly id: string;
+      readonly kind: "text";
+      readonly order: number;
+      readonly resource?: string;
+      readonly defaultText: string;
+      readonly transform: PopupOverlayTransform;
+      readonly alpha: number;
+      readonly attachment: PopupLayerAttachment;
+      readonly anchor: PopupAnchor;
+      readonly style: PopupTextStyle;
+    }
+  | {
+      readonly id: string;
+      readonly kind: "vni";
+      readonly order: number;
+      readonly resource: string;
+      readonly transform: PopupOverlayTransform;
+      readonly alpha: number;
+      readonly attachment: PopupLayerAttachment;
+      readonly autoplay?: PopupVniPlayback;
+    }
+  | {
+      readonly id: string;
+      readonly kind: "spine";
+      readonly order: number;
+      readonly resource: string;
+      readonly transform: PopupOverlayTransform;
+      readonly alpha: number;
+      readonly attachment: PopupLayerAttachment;
+      readonly autoplay?: PopupSingleStateSpineAutoplay;
     };
 export type PopupLayer =
   | (PopupLayerBase & {
@@ -551,6 +611,32 @@ export type PopupManifestV7 =
   | AwardCelebrationPopupManifestV7
   | SpinePopupManifestV7;
 
+interface PopupManifestBaseV8<State extends PopupVisibilityState> extends Omit<
+  PopupManifestBaseV7<State>,
+  "version"
+> {
+  readonly version: 8;
+}
+export interface AwardCelebrationPopupManifestV8 extends PopupManifestBaseV8<AwardTierId> {
+  readonly type: "award-celebration";
+  readonly amountFormat: PopupAmountFormat;
+  readonly awardCelebration: AwardCelebrationSpecV6;
+}
+export interface SpinePopupManifestV8 extends PopupManifestBaseV8<PopupSegment> {
+  readonly type: "spine";
+  readonly spine: SpinePopupManifestV6["spine"];
+}
+export interface SingleStatePopupManifestV8 extends PopupManifestBaseV8<"active"> {
+  readonly type: "single-state";
+  readonly singleState: {
+    readonly layers: readonly SingleStatePopupLayerV8[];
+  };
+}
+export type PopupManifestV8 =
+  | AwardCelebrationPopupManifestV8
+  | SpinePopupManifestV8
+  | SingleStatePopupManifestV8;
+
 export type PopupManifest =
   | PopupManifestV1
   | PopupManifestV2
@@ -558,4 +644,5 @@ export type PopupManifest =
   | PopupManifestV4
   | PopupManifestV5
   | PopupManifestV6
-  | PopupManifestV7;
+  | PopupManifestV7
+  | PopupManifestV8;

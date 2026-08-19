@@ -15,12 +15,15 @@ import type {
   AwardTierId,
   PopupLayer,
   PopupOverlayLayer,
+  SingleStatePopupLayerV8,
   PopupVisibilityState,
 } from "@slotclientengine/rendercore/popup/editor";
 import type { PopupAudioCueV1 } from "@slotclientengine/rendercore/popup/data";
 import {
   addAwardTextLayer,
   addLayer,
+  addSingleStateLayer,
+  addSingleStateTextLayer,
   applyImportedResourceBindings,
   assertPopupLayerCanDelete,
   clonePopupEditorProject,
@@ -30,6 +33,7 @@ import {
   getPopupVniTextLayerTargets,
   getPopupSpineAttachmentTargets,
   removePopupResource,
+  renameSingleStateLayer,
   reuseAwardLayerInTier,
   PopupEditorStore,
   projectToManifest,
@@ -131,7 +135,9 @@ export class PopupEditorApp {
         : this.#tab === "tiers"
           ? project.type === "spine"
             ? spineMarkup(project)
-            : tiersMarkup(project, this.#tier, this.#previewBetRaw)
+            : project.type === "single-state"
+              ? singleStateMarkup(project)
+              : tiersMarkup(project, this.#tier, this.#previewBetRaw)
           : projectMarkup(project, this.#errors);
     this.required("diagnostics").textContent =
       [this.#notice, ...this.#errors].filter(Boolean).join("\n") ||
@@ -158,7 +164,7 @@ export class PopupEditorApp {
       if (!(input instanceof HTMLInputElement)) return;
       if (
         input.matches(
-          "[data-overlay-field], [data-layer-field], [data-project-field], [data-spine-popup-field]",
+          "[data-overlay-field], [data-layer-field], [data-single-field], [data-project-field], [data-spine-popup-field]",
         )
       )
         input.dispatchEvent(new Event("change"));
@@ -179,7 +185,7 @@ export class PopupEditorApp {
         "create-project-name",
       ).value.trim();
       const type = this.required<HTMLSelectElement>("create-project-type")
-        .value as "award-celebration" | "spine";
+        .value as "award-celebration" | "spine" | "single-state";
       if (!name) {
         this.#notice = "项目名不能为空。";
         return;
@@ -290,6 +296,185 @@ export class PopupEditorApp {
           this.#tier = button.dataset.tier as AwardTierId;
           this.renderWorkspace(project);
         }),
+      );
+    this.#root
+      .querySelector<HTMLButtonElement>("#add-single-layer")
+      ?.addEventListener("click", () =>
+        this.safe(() => {
+          const select = this.required<HTMLSelectElement>(
+            "single-layer-resource",
+          );
+          this.#store.transact((draft) =>
+            addSingleStateLayer(draft, select.value),
+          );
+        }),
+      );
+    this.#root
+      .querySelector<HTMLButtonElement>("#add-single-text")
+      ?.addEventListener("click", () =>
+        this.#store.transact((draft) => addSingleStateTextLayer(draft)),
+      );
+    this.#root
+      .querySelectorAll<HTMLButtonElement>("[data-delete-single-layer]")
+      .forEach((button) =>
+        button.addEventListener("click", () =>
+          this.safe(() =>
+            this.#store.transact((draft) => {
+              const id = button.dataset.deleteSingleLayer!;
+              assertPopupLayerCanDelete(draft.singleState.layers, id);
+              draft.singleState.layers = draft.singleState.layers.filter(
+                (layer) => layer.id !== id,
+              );
+            }),
+          ),
+        ),
+      );
+    this.#root
+      .querySelectorAll<HTMLInputElement>("[data-single-field]")
+      .forEach((input) =>
+        input.addEventListener("change", () =>
+          this.safe(() =>
+            this.#store.transact((draft) => {
+              const id = input.dataset.singleId!;
+              const layer = draft.singleState.layers.find(
+                (candidate) => candidate.id === id,
+              );
+              if (!layer) throw new Error(`single-state 图层不存在：${id}`);
+              const field = input.dataset.singleField!;
+              if (field === "id") {
+                renameSingleStateLayer(draft, id, input.value.trim());
+                return;
+              }
+              if (["x", "y", "scale", "rotation"].includes(field))
+                (layer.transform as any)[field] = Number(input.value);
+              else if (field === "order" || field === "alpha")
+                (layer as any)[field] = Number(input.value);
+              else if (field === "defaultText")
+                (layer as any).defaultText = input.value;
+              else if (["anchor-x", "anchor-y"].includes(field))
+                (layer as any).anchor[field.at(-1)!] = Number(input.value);
+              else if (
+                layer.kind === "text" &&
+                updateTextStyleField(layer as any, field, input)
+              )
+                return;
+              else if (field === "autoplay") {
+                if (layer.kind === "vni")
+                  (layer as any).autoplay = input.checked
+                    ? { mode: "once" }
+                    : undefined;
+                else if (layer.kind === "spine")
+                  (layer as any).autoplay = input.checked
+                    ? { animation: "", loop: true }
+                    : undefined;
+              } else if (field === "animation" && layer.kind === "spine")
+                (layer as any).autoplay.animation = input.value;
+              else if (field === "loop" && layer.kind === "spine")
+                (layer as any).autoplay.loop = input.checked;
+              else if (
+                ["loopStartTime", "loopEndTime"].includes(field) &&
+                layer.kind === "vni"
+              )
+                (layer as any).autoplay[field] = Number(input.value);
+              else if (field === "keepParticlesAlive" && layer.kind === "vni")
+                (layer as any).autoplay.keepParticlesAlive = input.checked;
+            }),
+          ),
+        ),
+      );
+    this.#root
+      .querySelectorAll<HTMLSelectElement>("[data-single-font]")
+      .forEach((select) =>
+        select.addEventListener("change", () =>
+          this.safe(() =>
+            this.#store.transact((draft) => {
+              const layer = draft.singleState.layers.find(
+                ({ id }) => id === select.dataset.singleFont,
+              );
+              if (!layer || layer.kind !== "text")
+                throw new Error("single-state 文字图层不存在。");
+              setTextLayerFont(layer as any, select.value, draft);
+            }),
+          ),
+        ),
+      );
+    this.#root
+      .querySelectorAll<HTMLSelectElement>("[data-single-fill-kind]")
+      .forEach((select) =>
+        select.addEventListener("change", () =>
+          this.safe(() =>
+            this.#store.transact((draft) => {
+              const layer = draft.singleState.layers.find(
+                ({ id }) => id === select.dataset.singleFillKind,
+              );
+              if (!layer || layer.kind !== "text")
+                throw new Error("single-state 文字图层不存在。");
+              setTextFillKind(layer as any, select.value);
+            }),
+          ),
+        ),
+      );
+    this.#root
+      .querySelectorAll<HTMLSelectElement>("[data-single-vni-mode]")
+      .forEach((select) =>
+        select.addEventListener("change", () =>
+          this.safe(() =>
+            this.#store.transact((draft) => {
+              const layer = draft.singleState.layers.find(
+                ({ id }) => id === select.dataset.singleVniMode,
+              );
+              if (!layer || layer.kind !== "vni" || !layer.autoplay)
+                throw new Error("single-state VNI autoplay 不存在。");
+              (layer as any).autoplay =
+                select.value === "once"
+                  ? { mode: "once" }
+                  : {
+                      mode: "segmented",
+                      loopStartTime: 1,
+                      loopEndTime: 2.5,
+                      keepParticlesAlive: true,
+                    };
+            }),
+          ),
+        ),
+      );
+    this.#root
+      .querySelectorAll<HTMLSelectElement>("[data-single-parent]")
+      .forEach((select) =>
+        select.addEventListener("change", () =>
+          this.safe(() =>
+            this.#store.transact((draft) => {
+              const layer = draft.singleState.layers.find(
+                ({ id }) => id === select.dataset.singleParent,
+              );
+              if (!layer) throw new Error("single-state 图层不存在。");
+              (
+                layer as { attachment: SingleStatePopupLayerV8["attachment"] }
+              ).attachment = parseSingleStateParent(select.value);
+            }),
+          ),
+        ),
+      );
+    this.#root
+      .querySelectorAll<HTMLSelectElement>("[data-single-slot]")
+      .forEach((select) =>
+        select.addEventListener("change", () =>
+          this.safe(() =>
+            this.#store.transact((draft) => {
+              const layer = draft.singleState.layers.find(
+                ({ id }) => id === select.dataset.singleSlot,
+              );
+              if (!layer || layer.attachment.kind !== "spine-slot")
+                throw new Error("single-state Spine slot 挂接不存在。");
+              (
+                layer as { attachment: SingleStatePopupLayerV8["attachment"] }
+              ).attachment = {
+                ...layer.attachment,
+                slot: select.value,
+              };
+            }),
+          ),
+        ),
       );
     this.#root
       .querySelector<HTMLButtonElement>("#add-spine-overlay")
@@ -1097,7 +1282,7 @@ export class PopupEditorApp {
           candidates,
           resolutions,
         );
-        if (draft.type === "award-celebration")
+        if (draft.type === "award-celebration" || draft.type === "single-state")
           for (const candidate of candidates) {
             const rootKey =
               committed.assets.items.find((item) =>
@@ -1154,10 +1339,125 @@ export class PopupEditorApp {
 }
 
 function shell() {
-  return `<header><h1>Popup Editor</h1><nav class="primary-tabs" role="tablist" aria-label="编辑区域"><button role="tab" data-tab="resources">资源</button><button role="tab" data-tab="tiers">动画 / 档位</button><button role="tab" data-tab="project">项目</button></nav></header><main><section class="left"><div id="workspace" role="tabpanel"></div><pre id="diagnostics"></pre></section><aside><div class="preview-controls"><select id="preview-resolution"><option value="1920x1080">1920×1080</option><option value="1080x1920" selected>1080×1920</option><option value="2000x2000">2000×2000</option><option value="custom">custom</option></select><label>width<input id="preview-width" type="number" min="1" value="1080"/></label><label>height<input id="preview-height" type="number" min="1" value="1920"/></label><select id="preview-zoom"><option value="fit">fit</option>${[0.25, 0.5, 0.75, 1, 1.5, 2].map((v) => `<option value="${v}">${v * 100}%</option>`)}</select><label><input id="preview-guides" type="checkbox" checked/>guides</label><label>bet raw<input id="preview-bet" type="number" value="100"/></label><label>win raw<input id="preview-win" type="number" value="5000"/></label><label>小数位数（仅预览）<input id="preview-fraction-digits" type="number" min="0" max="6" step="1" value="0"/></label><label><input id="preview-use-grouping" type="checkbox"/>千位分隔（仅预览）</label><button id="preview-play">Play / Replay</button></div><div id="preview-canvas"></div><output id="preview-status"></output></aside></main><dialog id="create-project-dialog"><h2>创建 Popup 项目</h2><label>项目名<input id="create-project-name"/></label><label>类型<select id="create-project-type"><option value="award-celebration">获奖庆祝</option><option value="spine">Spine 弹窗</option></select></label><button id="create-project-confirm">创建</button><button id="create-project-cancel">取消</button></dialog><dialog id="vni-runtime-choice"><h2>选择 VNI runtime</h2><p id="vni-runtime-description"></p><label class="vni-runtime-options">运行版本<select id="vni-runtime-select"></select></label><button id="vni-runtime-confirm">确认 runtime</button><button id="vni-runtime-cancel">取消导入</button></dialog><dialog id="import-review"><h2>Import review</h2><div id="review-body"></div><button id="review-confirm">确认导入</button><button id="review-cancel">取消</button></dialog>`;
+  return `<header><h1>Popup Editor</h1><nav class="primary-tabs" role="tablist" aria-label="编辑区域"><button role="tab" data-tab="resources">资源</button><button role="tab" data-tab="tiers">动画 / 档位</button><button role="tab" data-tab="project">项目</button></nav></header><main><section class="left"><div id="workspace" role="tabpanel"></div><pre id="diagnostics"></pre></section><aside><div class="preview-controls"><select id="preview-resolution"><option value="1920x1080">1920×1080</option><option value="1080x1920" selected>1080×1920</option><option value="2000x2000">2000×2000</option><option value="custom">custom</option></select><label>width<input id="preview-width" type="number" min="1" value="1080"/></label><label>height<input id="preview-height" type="number" min="1" value="1920"/></label><select id="preview-zoom"><option value="fit">fit</option>${[0.25, 0.5, 0.75, 1, 1.5, 2].map((v) => `<option value="${v}">${v * 100}%</option>`)}</select><label><input id="preview-guides" type="checkbox" checked/>guides</label><label>bet raw<input id="preview-bet" type="number" value="100"/></label><label>win raw<input id="preview-win" type="number" value="5000"/></label><label>小数位数（仅预览）<input id="preview-fraction-digits" type="number" min="0" max="6" step="1" value="0"/></label><label><input id="preview-use-grouping" type="checkbox"/>千位分隔（仅预览）</label><button id="preview-play">Play / Replay</button></div><div id="preview-canvas"></div><output id="preview-status"></output></aside></main><dialog id="create-project-dialog"><h2>创建 Popup 项目</h2><label>项目名<input id="create-project-name"/></label><label>类型<select id="create-project-type"><option value="award-celebration">获奖庆祝</option><option value="spine">Spine 弹窗</option><option value="single-state">单状态自由弹窗</option></select></label><button id="create-project-confirm">创建</button><button id="create-project-cancel">取消</button></dialog><dialog id="vni-runtime-choice"><h2>选择 VNI runtime</h2><p id="vni-runtime-description"></p><label class="vni-runtime-options">运行版本<select id="vni-runtime-select"></select></label><button id="vni-runtime-confirm">确认 runtime</button><button id="vni-runtime-cancel">取消导入</button></dialog><dialog id="import-review"><h2>Import review</h2><div id="review-body"></div><button id="review-confirm">确认导入</button><button id="review-cancel">取消</button></dialog>`;
 }
 function resourcesMarkup(project: PopupEditorProject) {
   return `<section class="resource-import-panel"><h2>资源库</h2><p>这里只导入资源：VNI 与 ImgNumber 使用 ZIP；图片、字体使用文件；Spine 每次选择完整 JSON、atlas、PNG 组。Popup 项目 ZIP 请使用项目入口。同名不同 bytes 必须在 review 中选择覆盖或保留两份。</p><div class="resource-actions"><label class="file-action">上传资源<input id="import-assets" type="file" accept="image/png,image/webp,image/jpeg,.json,.atlas,.zip,.woff2,.woff,.ttf,.otf" multiple/></label></div></section><div class="resource-list">${[...project.resources.values()].map((resource) => `<article class="card"><strong>${resource.rootKey}</strong><span>${resource.kind}</span><details><summary>${resource.keys.length} filename keys</summary><code>${resource.keys.join("\n")}</code></details><span>${resourceReferenceCount(project, resource.rootKey)} 个图层绑定</span><button data-delete-resource="${resource.rootKey}">删除</button></article>`).join("") || '<p class="empty-state">尚无资源</p>'}</div>`;
+}
+
+function singleStateMarkup(project: PopupEditorProject) {
+  const resources = [...project.resources.values()];
+  return `<section class="tier-editor"><h2>单状态自由弹窗</h2><p>没有强制图层或动画配置；所有图层在 active 状态显示。图层 name 是 runtime 与 Game Layout 通用地址中的精确标识。</p><div class="layer-add"><select id="single-layer-resource">${resources.map((resource) => `<option value="${resource.rootKey}">${resource.rootKey} (${resource.kind})</option>`).join("")}</select><button id="add-single-layer" ${resources.length ? "" : "disabled"}>添加资源图层</button><button id="add-single-text">添加系统字体文字</button></div>${project.singleState.layers.map((layer) => singleStateLayerMarkup(layer, project)).join("") || '<p class="empty-state">可保持零图层，或添加任意受支持图层。</p>'}</section>`;
+}
+
+function singleStateLayerMarkup(
+  layer: SingleStatePopupLayerV8,
+  project: PopupEditorProject,
+) {
+  const input = (field: string, value: string | number, type = "number") =>
+    `<label>${field}<input data-single-id="${layer.id}" data-single-field="${field}" type="${type}" ${type === "number" ? 'step="0.1"' : ""} value="${value}"/></label>`;
+  const font = fontSelectMarkup(
+    "overlay",
+    layer.id,
+    layer.kind === "text" ? layer.resource : undefined,
+    project,
+  )
+    .replaceAll("data-overlay-font", "data-single-font")
+    .replaceAll("data-overlay-id", "data-single-id");
+  const textStyle =
+    layer.kind === "text"
+      ? textStyleMarkup("overlay", layer.id, layer.style)
+          .replaceAll("data-overlay-id", "data-single-id")
+          .replaceAll("data-overlay-field", "data-single-field")
+          .replaceAll("data-overlay-fill-kind", "data-single-fill-kind")
+      : "";
+  const specific =
+    layer.kind === "image"
+      ? `${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}`
+      : layer.kind === "image-string"
+        ? `${input("defaultText", layer.defaultText, "text")}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}`
+        : layer.kind === "text"
+          ? `${font}${input("defaultText", layer.defaultText, "text")}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${textStyle}`
+          : layer.kind === "spine"
+            ? `<label><input data-single-id="${layer.id}" data-single-field="autoplay" type="checkbox" ${layer.autoplay ? "checked" : ""}/>autoplay</label>${layer.autoplay ? `${input("animation", layer.autoplay.animation, "text")}<label>loop<input data-single-id="${layer.id}" data-single-field="loop" type="checkbox" ${layer.autoplay.loop ? "checked" : ""}/></label>` : ""}`
+            : `<label><input data-single-id="${layer.id}" data-single-field="autoplay" type="checkbox" ${layer.autoplay ? "checked" : ""}/>autoplay</label>${layer.autoplay ? `<label>mode<select data-single-vni-mode="${layer.id}"><option value="once" ${layer.autoplay.mode === "once" ? "selected" : ""}>once</option><option value="segmented" ${layer.autoplay.mode === "segmented" ? "selected" : ""}>segmented</option></select></label>${layer.autoplay.mode === "segmented" ? `${input("loopStartTime", layer.autoplay.loopStartTime)}${input("loopEndTime", layer.autoplay.loopEndTime)}<label>keepParticlesAlive<input data-single-id="${layer.id}" data-single-field="keepParticlesAlive" type="checkbox" ${layer.autoplay.keepParticlesAlive ? "checked" : ""}/></label>` : ""}` : ""}`;
+  return `<article class="card"><strong>${layer.id}</strong><span>${layer.kind} / ${layer.resource ?? "system"}</span>${input("id", layer.id, "text")}${singleStateParentMarkup(layer, project)}${input("order", layer.order)}${input("alpha", layer.alpha)}${(["x", "y", "scale", "rotation"] as const).map((field) => input(field, layer.transform[field])).join("")}${specific}<button data-delete-single-layer="${layer.id}">删除图层</button></article>`;
+}
+
+function singleStateParentMarkup(
+  layer: SingleStatePopupLayerV8,
+  project: PopupEditorProject,
+) {
+  const attachment = layer.attachment;
+  const selected =
+    attachment.kind === "popup-root"
+      ? "popup-root"
+      : attachment.kind === "vni-text-layer"
+        ? `vni:${encodeURIComponent(attachment.vniLayerId)}:${encodeURIComponent(attachment.textLayerId)}`
+        : `spine:${encodeURIComponent(
+            attachment.target.kind === "layer"
+              ? attachment.target.layerId
+              : "main-spine",
+          )}`;
+  let spineTargets: ReturnType<typeof getPopupSpineAttachmentTargets> = [];
+  try {
+    spineTargets = getPopupSpineAttachmentTargets(project, {
+      kind: "single-state",
+    }).filter(({ key }) => key !== layer.id);
+  } catch {
+    // Project diagnostics reports exact invalid resource details.
+  }
+  let vniOptions: readonly string[] = [];
+  if (layer.kind === "image-string")
+    try {
+      vniOptions = getPopupVniTextLayerTargets(project, "single-state")
+        .filter(({ vniLayerId }) => vniLayerId !== layer.id)
+        .map(({ vniLayerId, textLayerId, textLayerName }) => {
+          const value = `vni:${encodeURIComponent(vniLayerId)}:${encodeURIComponent(textLayerId)}`;
+          return `<option value="${value}" ${value === selected ? "selected" : ""}>VNI 文字层：${vniLayerId} / ${textLayerName} (${textLayerId})</option>`;
+        });
+    } catch {
+      // Project diagnostics reports exact invalid resource details.
+    }
+  const options = [
+    `<option value="popup-root" ${selected === "popup-root" ? "selected" : ""}>Popup 根节点</option>`,
+    ...vniOptions,
+    ...spineTargets.map(({ key, label }) => {
+      const value = `spine:${encodeURIComponent(key)}`;
+      return `<option value="${value}" ${value === selected ? "selected" : ""}>${label}</option>`;
+    }),
+  ];
+  const targetKey =
+    attachment.kind === "spine-slot" && attachment.target.kind === "layer"
+      ? attachment.target.layerId
+      : null;
+  const target = spineTargets.find(({ key }) => key === targetKey);
+  const slot = attachment.kind === "spine-slot" ? attachment.slot : "";
+  const slotMarkup =
+    attachment.kind === "spine-slot"
+      ? `<label>Spine slot<select data-single-slot="${layer.id}"><option value="">请选择 exact slot</option>${(target?.slotNames ?? []).map((name) => `<option value="${name}" ${name === slot ? "selected" : ""}>${name}</option>`).join("")}</select></label>`
+      : "";
+  return `<fieldset class="attachment-editor"><legend>父节点</legend><label>已存在图层<select data-single-parent="${layer.id}">${options.join("")}</select></label>${slotMarkup}</fieldset>`;
+}
+
+function parseSingleStateParent(
+  value: string,
+): SingleStatePopupLayerV8["attachment"] {
+  if (value === "popup-root") return { kind: "popup-root" };
+  const [kind, encodedLayer, encodedChild] = value.split(":");
+  if (kind === "vni" && encodedLayer && encodedChild)
+    return {
+      kind: "vni-text-layer",
+      vniLayerId: decodeURIComponent(encodedLayer),
+      textLayerId: decodeURIComponent(encodedChild),
+    };
+  if (kind === "spine" && encodedLayer)
+    return {
+      kind: "spine-slot",
+      target: { kind: "layer", layerId: decodeURIComponent(encodedLayer) },
+      slot: "",
+    };
+  throw new Error(`未知 single-state 父节点：${value}`);
 }
 
 function spineMarkup(project: PopupEditorProject) {
@@ -1636,6 +1936,8 @@ function resourceImportNotice(
     .map(({ rootKey }) => rootKey);
   if (project.type === "spine")
     return `资源导入成功。${unbound.length ? `尚未绑定：${unbound.join("、")}。` : "Spine 资源已绑定。"}`;
+  if (project.type === "single-state")
+    return `资源导入成功。${unbound.length ? `尚未绑定：${unbound.join("、")}。` : "资源已各自建立单状态图层。"}`;
   const incompleteTiers = TIERS.filter(
     (tierId) => !project.tiers.get(tierId)?.layers.length,
   );
@@ -1692,7 +1994,7 @@ function projectMarkup(project: PopupEditorProject, errors: readonly string[]) {
         `<label>${state}<input data-project-field="backdrop-state-${state}" type="checkbox" ${project.backdrop.visibleStates.includes(state) ? "checked" : ""}/></label>`,
     )
     .join("");
-  const common = `<div class="project-actions"><button id="export-project">导出 Popup ZIP</button><button id="close-project">关闭项目</button></div><h2>项目</h2><p>格式 v${project.formatVersion} · ${project.type === "award-celebration" ? "获奖庆祝" : "Spine 弹窗"}</p><label>项目名<input data-project-field="project-name" value="${project.name}"/></label><label class="field-stack">project id<input id="project-id" value="${project.id}" aria-invalid="${String(Boolean(idError))}" aria-describedby="project-id-error" class="${idError ? "invalid" : ""}"/><small id="project-id-error" class="field-error" ${idError ? "" : "hidden"}>${idError}</small></label><h3>重点区域</h3><p>以 Popup 原点为基准向四边扩展；坐标平面无边界，预览中的绿色框显示必须完整可见的区域。</p><div class="threshold-grid">${(["left", "right", "top", "bottom"] as const).map((side) => `<label>${side}<input data-project-field="focus-${side}" type="number" min="0.001" step="1" value="${project.adaptation.focus[side]}"/></label>`).join("")}</div><h3>全屏压暗底</h3><label><input data-project-field="backdrop-enabled" type="checkbox" ${project.backdrop.enabled ? "checked" : ""}/>启用</label><label>颜色<input data-project-field="backdrop-color" type="color" value="${project.backdrop.color}"/></label><label>透明度<input data-project-field="backdrop-alpha" type="number" min="0" max="1" step="0.05" value="${project.backdrop.alpha}"/></label><div class="threshold-grid">${backdropStates}</div>`;
+  const common = `<div class="project-actions"><button id="export-project">导出 Popup ZIP</button><button id="close-project">关闭项目</button></div><h2>项目</h2><p>格式 v${project.formatVersion} · ${project.type === "award-celebration" ? "获奖庆祝" : project.type === "single-state" ? "单状态自由弹窗" : "Spine 弹窗"}</p><label>项目名<input data-project-field="project-name" value="${project.name}"/></label><label class="field-stack">project id<input id="project-id" value="${project.id}" aria-invalid="${String(Boolean(idError))}" aria-describedby="project-id-error" class="${idError ? "invalid" : ""}"/><small id="project-id-error" class="field-error" ${idError ? "" : "hidden"}>${idError}</small></label><h3>重点区域</h3><p>以 Popup 原点为基准向四边扩展；坐标平面无边界，预览中的绿色框显示必须完整可见的区域。</p><div class="threshold-grid">${(["left", "right", "top", "bottom"] as const).map((side) => `<label>${side}<input data-project-field="focus-${side}" type="number" min="0.001" step="1" value="${project.adaptation.focus[side]}"/></label>`).join("")}</div><h3>全屏压暗底</h3><label><input data-project-field="backdrop-enabled" type="checkbox" ${project.backdrop.enabled ? "checked" : ""}/>启用</label><label>颜色<input data-project-field="backdrop-color" type="color" value="${project.backdrop.color}"/></label><label>透明度<input data-project-field="backdrop-alpha" type="number" min="0" max="1" step="0.05" value="${project.backdrop.alpha}"/></label><div class="threshold-grid">${backdropStates}</div>`;
   const commonWithColorEditor = common.replace(
     `<label>颜色<input data-project-field="backdrop-color" type="color" value="${project.backdrop.color}"/></label>`,
     `<label>颜色<span class="color-control"><input type="color" data-project-color-picker="backdrop-color" value="${project.backdrop.color.slice(0, 7)}"/><input data-project-field="backdrop-color" type="text" value="${project.backdrop.color}"/></span></label>`,
