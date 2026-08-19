@@ -100,6 +100,7 @@ export class LayoutPreview {
   #showReels = true;
   #ready = false;
   #destroyed = false;
+  #audioUnlocked = false;
   #layoutRequest = 0;
   #symbolRequest = 0;
   #symbolResource: SymbolPackageResource | null = null;
@@ -304,6 +305,8 @@ export class LayoutPreview {
     this.#packageScenes = packageScenes;
     this.#app.stage.addChildAt(nextRuntime.container, 0);
     this.applySize();
+    if (this.#audioUnlocked && this.#packageRuntime)
+      await this.#packageRuntime.unlockAudio();
     await this.preparePrimaryGameModeAction();
   }
 
@@ -449,7 +452,11 @@ export class LayoutPreview {
   async requestGameMode(modeId: string): Promise<void> {
     if (!this.#packageRuntime)
       throw new Error("当前 layout preview 没有 package runtime。");
-    const unlock = this.#packageRuntime.unlockAudio?.() ?? Promise.resolve();
+    const unlock = (
+      this.#packageRuntime.unlockAudio?.() ?? Promise.resolve()
+    ).then(() => {
+      this.#audioUnlocked = true;
+    });
     const transition = this.#packageRuntime.requestGameMode(
       modeId,
       this.gameModeRequestOptions(modeId),
@@ -461,8 +468,23 @@ export class LayoutPreview {
   playEffect(route: string): void {
     if (!this.#packageRuntime)
       throw new Error("当前 layout preview 没有 package runtime。");
-    void this.#packageRuntime.unlockAudio?.();
+    void (this.#packageRuntime.unlockAudio?.() ?? Promise.resolve()).then(
+      () => {
+        this.#audioUnlocked = true;
+      },
+    );
     this.#packageRuntime.playEffect(route);
+  }
+
+  async unlockAudio(): Promise<void> {
+    if (!this.#packageRuntime)
+      throw new Error("当前 layout preview 没有 package runtime。");
+    await this.#packageRuntime.unlockAudio();
+    this.#audioUnlocked = true;
+  }
+
+  isAudioUnlocked(): boolean {
+    return this.#audioUnlocked;
   }
 
   stopEffect(route: string): void {

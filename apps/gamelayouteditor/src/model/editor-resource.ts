@@ -2,6 +2,7 @@ import type { SceneLayoutVariantId } from "@slotclientengine/rendercore/scene-la
 import type { ImageStringManifestV1 } from "@slotclientengine/rendercore/image-string/data";
 import type { EditorResourceProvenance } from "@slotclientengine/browserartifactio";
 import type { VNIProjectConfig } from "@slotclientengine/vnicore/data";
+import type { AudioMediaType } from "@slotclientengine/audiocore/data";
 
 export interface EditorImageLayoutResource {
   readonly id: string;
@@ -50,6 +51,14 @@ export interface EditorVideoLayoutResource {
   readonly provenance?: EditorResourceProvenance;
 }
 
+export interface EditorAudioLayoutResource {
+  readonly id: string;
+  readonly kind: "audio";
+  readonly path: string;
+  readonly mediaType: AudioMediaType;
+  readonly provenance?: EditorResourceProvenance;
+}
+
 export interface EditorVniLayoutResource {
   readonly id: string;
   readonly kind: "vni";
@@ -64,11 +73,17 @@ export type EditorLayoutResource =
   | EditorSpineLayoutResource
   | EditorImageStringLayoutResource
   | EditorVniLayoutResource
+  | EditorAudioLayoutResource
   | EditorVideoLayoutResource;
 
 export interface EditorResourceReference {
   readonly nodeId: string;
-  readonly role: "layer" | "background" | "scene-transition";
+  readonly role:
+    | "layer"
+    | "background"
+    | "scene-transition"
+    | "mode-bgm"
+    | "programmatic-audio";
   readonly variants: readonly SceneLayoutVariantId[];
 }
 
@@ -78,6 +93,7 @@ export function editorResourcePrimaryPath(
   if (resource.kind === "image") return resource.path;
   if (resource.kind === "spine") return resource.skeleton;
   if (resource.kind === "video") return resource.path;
+  if (resource.kind === "audio") return resource.path;
   if (resource.kind === "vni") return resource.projectPath;
   return resource.manifestPath;
 }
@@ -93,6 +109,7 @@ export function editorResourcePaths(
       ...Object.values(resource.textures),
     ];
   if (resource.kind === "video") return [resource.path];
+  if (resource.kind === "audio") return [resource.path];
   if (resource.kind === "vni")
     return [resource.projectPath, ...resource.assetPaths];
   return [resource.manifestPath, ...resource.assetPaths];
@@ -138,6 +155,13 @@ export function editorResourceSignature(
       size: resource.size,
       durationSeconds: resource.durationSeconds,
       hasAudio: resource.hasAudio,
+    });
+  }
+  if (resource.kind === "audio") {
+    return JSON.stringify({
+      kind: resource.kind,
+      path: resource.path,
+      mediaType: resource.mediaType,
     });
   }
   if (resource.kind === "vni") {

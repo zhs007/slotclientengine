@@ -26,12 +26,16 @@ import {
   type PopupManifest,
 } from "@slotclientengine/rendercore/popup/editor";
 import { assertVNIProject } from "@slotclientengine/vnicore/data";
-import type { AudioCatalogManifestV1 } from "@slotclientengine/audiocore/data";
+import type {
+  AudioCatalogManifestV1,
+  AudioMediaType,
+} from "@slotclientengine/audiocore/data";
 import {
   editorResourcePaths,
   editorResourceSignature,
   readEditorSpineMetadata,
   type EditorImageLayoutResource,
+  type EditorAudioLayoutResource,
   type EditorImageStringLayoutResource,
   type EditorLayoutResource,
   type EditorSpineLayoutResource,
@@ -42,6 +46,7 @@ import { assertCanonicalEditorNodeId } from "./node-id.js";
 
 type EditorLayoutResourceDraft =
   | Omit<EditorImageLayoutResource, "id">
+  | Omit<EditorAudioLayoutResource, "id">
   | Omit<EditorSpineLayoutResource, "id">
   | Omit<EditorImageStringLayoutResource, "id">
   | Omit<EditorVniLayoutResource, "id">
@@ -664,8 +669,10 @@ export function resolveEditorNodeResource(
       loop: node.playback.loop,
     };
   }
-  if (resource.kind === "video")
-    throw new Error(`video 资源 ${resource.id} 不能创建 scene node。`);
+  if (resource.kind === "video" || resource.kind === "audio")
+    throw new Error(
+      `${resource.kind} 资源 ${resource.id} 不能创建 scene node。`,
+    );
   if (node.imageString !== undefined)
     throw new Error(`Spine 节点 ${node.id} 不得声明 imageString。`);
   const playback = node.playback;
@@ -1009,7 +1016,7 @@ export function editorProjectToManifest(
   return upgradeSceneLayoutManifestToLatest({
     ...base,
     version: 4,
-    audio: project.audio,
+    audio: canonicalEditorAudioCatalog(project),
     gameModes: {
       ...base.gameModes,
       modes: base.gameModes.modes.map((mode) => {
@@ -1093,13 +1100,15 @@ export function manifestToEditorProject(
     const resourceKey =
       resourceDraft.kind === "image"
         ? resourceDraft.path
-        : resourceDraft.kind === "spine"
-          ? resourceDraft.skeleton
-          : resourceDraft.kind === "vni"
-            ? resourceDraft.projectPath
-            : resourceDraft.kind === "video"
-              ? resourceDraft.path
-              : resourceDraft.manifestPath;
+        : resourceDraft.kind === "audio"
+          ? resourceDraft.path
+          : resourceDraft.kind === "spine"
+            ? resourceDraft.skeleton
+            : resourceDraft.kind === "vni"
+              ? resourceDraft.projectPath
+              : resourceDraft.kind === "video"
+                ? resourceDraft.path
+                : resourceDraft.manifestPath;
     const temporary = {
       ...resourceDraft,
       id: resourceKey,
@@ -1260,7 +1269,33 @@ export function manifestToEditorProject(
   project.assets = new Map(
     [...assets].map(([path, bytes]) => [path, bytes.slice()]),
   );
-  project.audio = structuredClone(latest.audio);
+  const referencedMusic = new Set(
+    latest.gameModes.modes.flatMap((mode) => (mode.bgm ? [mode.bgm] : [])),
+  );
+  const rootProgrammatic = new Set(
+    latest.audio.programmaticEffects.filter((route) => !route.includes(".")),
+  );
+  project.audio = {
+    ...structuredClone(latest.audio),
+    music: structuredClone(
+      latest.audio.music.filter((binding) => referencedMusic.has(binding.name)),
+    ),
+    effects: structuredClone(
+      latest.audio.effects.filter((binding) =>
+        rootProgrammatic.has(binding.name),
+      ),
+    ),
+  };
+  for (const binding of [...project.audio.music, ...project.audio.effects]) {
+    for (const source of binding.asset.sources) {
+      requiredAsset(assets.get(source.path), source.path);
+      registerResource({
+        kind: "audio",
+        path: source.path,
+        mediaType: source.mediaType,
+      });
+    }
+  }
   const importedSymbolBindings = latest.symbolPackage
     ? [
         [
@@ -1713,12 +1748,79 @@ function editorResourceToRuntimeSpec(
     return { kind: "vni", project: resource.projectPath };
   if (resource.kind === "video")
     return { kind: "video", path: resource.path, mimeType: "video/mp4" };
+  if (resource.kind === "audio")
+    throw new Error(
+      `audio asset ${resource.id} 必须通过 BGM 或程序音效绑定使用，不能作为 runtimeResources。`,
+    );
   return {
     kind: "spine",
     skeleton: resource.skeleton,
     atlas: resource.atlas,
     textures: resource.textures,
   };
+}
+
+function canonicalEditorAudioCatalog(
+  project: EditorProject,
+): AudioCatalogManifestV1 {
+  const musicNames = new Set(
+    project.gameModes.modes.flatMap((mode) => (mode.bgm ? [mode.bgm] : [])),
+  );
+  const music = project.audio.music.filter((binding) =>
+    musicNames.has(binding.name),
+  );
+  for (const name of musicNames)
+    if (!music.some((binding) => binding.name === name))
+      throw new Error(`game mode 引用了未知 BGM：${name}`);
+
+  const rootEffectNames = new Set(
+    project.audio.programmaticEffects.filter((route) => !route.includes(".")),
+  );
+  const effects = project.audio.effects.filter((binding) =>
+    rootEffectNames.has(binding.name),
+  );
+  for (const name of rootEffectNames)
+    if (!effects.some((binding) => binding.name === name))
+      throw new Error(`程序音效 allowlist 引用了未知 root effect：${name}`);
+  assertEditorAudioSources(project, [...music, ...effects]);
+  return {
+    version: 1,
+    effects,
+    music,
+    programmaticEffects: project.audio.programmaticEffects,
+  };
+}
+
+function assertEditorAudioSources(
+  project: EditorProject,
+  bindings: readonly {
+    readonly name: string;
+    readonly asset: {
+      readonly sources: readonly {
+        readonly path: string;
+        readonly mediaType: AudioMediaType;
+      }[];
+    };
+  }[],
+): void {
+  for (const binding of bindings) {
+    for (const source of binding.asset.sources) {
+      const resource = [...project.resources.values()].find(
+        (candidate): candidate is EditorAudioLayoutResource =>
+          candidate.kind === "audio" && candidate.path === source.path,
+      );
+      if (!resource)
+        throw new Error(
+          `audio binding ${binding.name} 引用了未知 asset：${source.path}`,
+        );
+      if (resource.mediaType !== source.mediaType)
+        throw new Error(
+          `audio binding ${binding.name} media type 与 asset 不一致：${source.path}`,
+        );
+      if (!project.assets.has(source.path))
+        throw new Error(`audio asset 缺少 bytes：${source.path}`);
+    }
+  }
 }
 
 function manifestRuntimeResourceToEditorResource(

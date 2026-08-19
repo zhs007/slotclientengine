@@ -8,7 +8,6 @@ import {
   extractBoundedZip,
 } from "@slotclientengine/browserartifactio";
 import { normalizeEditorPackageZipEntries } from "@slotclientengine/editorresource";
-import { detectAudioMediaType } from "@slotclientengine/audiocore/editor";
 import {
   assertCanonicalUploadFileNames,
   canonicalizeUploadFileName,
@@ -51,6 +50,8 @@ import {
 import {
   addLayerFromResource,
   assignBackgroundResource,
+  bindModeBgm,
+  bindProgrammaticAudioEffect,
   bindRuntimeResource,
   clearBackground,
   deleteLayoutResource,
@@ -60,10 +61,12 @@ import {
   removeLayer,
   renameNode,
   replaceImageResource,
+  replaceAudioResource,
   replaceImageStringResource,
   replaceSpineResource,
   replaceVideoResource,
   setLayerVariantVisibility,
+  setModeBgmFade,
   setLayerGameMode,
   setImageStringLayerAnchor,
   setImageStringLayerText,
@@ -76,8 +79,10 @@ import {
   getRuntimeResourceKey,
   normalizeRuntimeResourceKey,
   uploadImageResource,
+  uploadAudioResources,
   uploadSpineResources,
   uploadVideoResource,
+  unbindProgrammaticAudioEffect,
   unbindRuntimeResource,
 } from "../model/resource-commands.js";
 import {
@@ -157,19 +162,6 @@ interface FocusSnapshot {
   readonly selectionStart: number | null;
   readonly selectionEnd: number | null;
   readonly selectionDirection: "forward" | "backward" | "none" | null;
-}
-
-function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
-  return (
-    left.byteLength === right.byteLength &&
-    left.every((value, index) => value === right[index])
-  );
-}
-
-function isAudioPathReferenced(project: EditorProject, path: string): boolean {
-  return [...project.audio.effects, ...project.audio.music].some((binding) =>
-    binding.asset.sources.some((source) => source.path === path),
-  );
 }
 
 export class GameLayoutEditorApp {
@@ -450,6 +442,22 @@ export class GameLayoutEditorApp {
     this.requireElement("[data-request-preview-mode]").addEventListener(
       "click",
       () => this.requestPreviewMode(this.#selectedPreviewMode),
+    );
+    this.requireElement("[data-unlock-preview-audio]").addEventListener(
+      "click",
+      () => {
+        const button = this.requireElement(
+          "[data-unlock-preview-audio]",
+        ) as HTMLButtonElement;
+        void this.#preview
+          ?.unlockAudio()
+          .then(() => {
+            button.textContent = "声音已启用";
+            button.disabled = true;
+            this.showFeedback("Preview 声音已通过 production runtime 解锁。");
+          })
+          .catch((error: unknown) => this.#store.setExternalError(error));
+      },
     );
     this.requireSelect("[data-mode-popup]").addEventListener(
       "change",
@@ -1856,7 +1864,8 @@ export class GameLayoutEditorApp {
         | "spine"
         | "vni"
         | "image-string"
-        | "video";
+        | "video"
+        | "audio";
       this.renderWorkspace(this.#store.getSnapshot());
     });
     const status = panel.querySelector<HTMLSelectElement>(
@@ -2282,76 +2291,63 @@ export class GameLayoutEditorApp {
         }),
       );
     panel
-      .querySelector<HTMLInputElement>("[data-import-bgm]")
+      .querySelector<HTMLSelectElement>("[data-mode-bgm-asset]")
       ?.addEventListener("change", (event) => {
-        const input = event.currentTarget as HTMLInputElement;
-        void this.importAudioFiles([...(input.files ?? [])], "music");
-        input.value = "";
+        const value = (event.currentTarget as HTMLSelectElement).value;
+        this.runTransaction(
+          (draft) => bindModeBgm(draft, this.#selectedGameMode, value || null),
+          value
+            ? `已为 ${this.#selectedGameMode} 绑定 loop BGM。`
+            : `已清除 ${this.#selectedGameMode} BGM。`,
+        );
       });
     panel
-      .querySelector<HTMLInputElement>("[data-import-audio-effect]")
-      ?.addEventListener("change", (event) => {
-        const input = event.currentTarget as HTMLInputElement;
-        void this.importAudioFiles([...(input.files ?? [])], "effect");
-        input.value = "";
-      });
-    panel
-      .querySelectorAll<HTMLSelectElement>("[data-mode-bgm]")
-      .forEach((select) =>
-        select.addEventListener("change", () =>
-          this.runTransaction((draft) => {
-            const mode = draft.gameModes.modes.find(
-              (candidate) => candidate.id === select.dataset.modeBgm,
-            );
-            if (!mode) throw new Error("BGM mode 不存在。");
-            mode.bgm = select.value || null;
-          }),
+      .querySelectorAll<HTMLInputElement>("[data-mode-bgm-fade]")
+      .forEach((input) =>
+        input.addEventListener("change", () =>
+          this.runTransaction((draft) =>
+            setModeBgmFade(
+              draft,
+              this.#selectedGameMode,
+              input.dataset.modeBgmFade as "fadeOutSeconds" | "fadeInSeconds",
+              Number(input.value),
+            ),
+          ),
         ),
       );
     panel
-      .querySelectorAll<HTMLButtonElement>("[data-delete-music]")
+      .querySelectorAll<HTMLButtonElement>("[data-bind-audio-effect]")
       .forEach((button) =>
-        button.addEventListener("click", () =>
-          this.runTransaction((draft) => {
-            const name = button.dataset.deleteMusic!;
-            const binding = draft.audio.music.find(
-              (item) => item.name === name,
-            );
-            draft.audio = {
-              ...draft.audio,
-              music: draft.audio.music.filter((item) => item.name !== name),
-            };
-            for (const mode of draft.gameModes.modes)
-              if (mode.bgm === name) mode.bgm = null;
-            if (binding)
-              for (const source of binding.asset.sources)
-                if (!isAudioPathReferenced(draft, source.path))
-                  draft.assets.delete(source.path);
-          }),
-        ),
-      );
-    panel
-      .querySelectorAll<HTMLButtonElement>("[data-delete-audio-effect]")
-      .forEach((button) =>
-        button.addEventListener("click", () =>
-          this.runTransaction((draft) => {
-            const name = button.dataset.deleteAudioEffect!;
-            const binding = draft.audio.effects.find(
-              (item) => item.name === name,
-            );
-            draft.audio = {
-              ...draft.audio,
-              effects: draft.audio.effects.filter((item) => item.name !== name),
-              programmaticEffects: draft.audio.programmaticEffects.filter(
-                (route) => route !== name,
+        button.addEventListener("click", () => {
+          const resourceId = button.dataset.bindAudioEffect!;
+          const input = [
+            ...panel.querySelectorAll<HTMLInputElement>(
+              "[data-audio-effect-name]",
+            ),
+          ].find(
+            (candidate) => candidate.dataset.audioEffectName === resourceId,
+          );
+          this.runTransaction(
+            (draft) =>
+              bindProgrammaticAudioEffect(
+                draft,
+                resourceId,
+                input?.value ?? "",
               ),
-            };
-            if (binding)
-              for (const source of binding.asset.sources)
-                if (!isAudioPathReferenced(draft, source.path))
-                  draft.assets.delete(source.path);
-          }),
-        ),
+            `已添加程序音效 ${input?.value.trim().toLowerCase() ?? ""}。`,
+          );
+        }),
+      );
+    panel
+      .querySelectorAll<HTMLButtonElement>("[data-unbind-audio-effect]")
+      .forEach((button) =>
+        button.addEventListener("click", () => {
+          const name = button.dataset.unbindAudioEffect!;
+          this.runTransaction(
+            (draft) => unbindProgrammaticAudioEffect(draft, name),
+            `已取消程序音效 ${name}；asset bytes 仍保留在资源库。`,
+          );
+        }),
       );
     panel
       .querySelectorAll<HTMLButtonElement>("[data-preview-audio-effect]")
@@ -2802,7 +2798,7 @@ export class GameLayoutEditorApp {
 
   private async uploadResources(fromPicker = false): Promise<void> {
     const files = await pickFiles(
-      ".png,.jpg,.jpeg,.webp,.json,.atlas,.mp4,video/mp4,.zip,application/zip",
+      ".png,.jpg,.jpeg,.webp,.json,.atlas,.mp4,.mp3,.ogg,.wav,.m4a,.aac,.webm,video/mp4,audio/*,.zip,application/zip",
       true,
     );
     if (files.length === 0) return;
@@ -2954,6 +2950,21 @@ export class GameLayoutEditorApp {
       }
       return;
     }
+    if (files.every((file) => isAudioAssetFile(file))) {
+      try {
+        const project = cloneEditorProject(this.#store.getSnapshot().project);
+        const resources = await uploadAudioResources({ project, files });
+        const imported = resources.map(({ id }) => id);
+        if (!confirmImportReview(project, imported, files)) return;
+        this.#store.replace(project);
+        this.showFeedback(
+          `导入审查确认 ${files.length} 个 audio filename-key assets；尚未绑定 BGM 或程序音效。`,
+        );
+      } catch (error) {
+        this.#store.setExternalError(error);
+      }
+      return;
+    }
     if (files.every((file) => /\.(?:png|jpe?g|webp)$/iu.test(file.name))) {
       try {
         const project = cloneEditorProject(this.#store.getSnapshot().project);
@@ -2984,17 +2995,29 @@ export class GameLayoutEditorApp {
       const groups = groupSourceFiles(files);
       const imported: string[] = [];
       for (const group of groups) {
-        if (group.every((file) => file.name.toLowerCase().endsWith(".mp4"))) {
-          for (const file of group) {
+        const audioFiles = group.filter(isAudioAssetFile);
+        if (audioFiles.length) {
+          imported.push(
+            ...(await uploadAudioResources({ project, files: audioFiles })).map(
+              ({ id }) => id,
+            ),
+          );
+        }
+        const visualFiles = group.filter((file) => !isAudioAssetFile(file));
+        if (visualFiles.length === 0) continue;
+        if (
+          visualFiles.every((file) => file.name.toLowerCase().endsWith(".mp4"))
+        ) {
+          for (const file of visualFiles) {
             const resourceId = defaultResourceKey(project, file.name);
             imported.push(
               (await uploadVideoResource({ project, file, resourceId })).id,
             );
           }
         } else if (
-          group.every((file) => /\.(?:png|jpe?g|webp)$/iu.test(file.name))
+          visualFiles.every((file) => /\.(?:png|jpe?g|webp)$/iu.test(file.name))
         ) {
-          for (const file of group) {
+          for (const file of visualFiles) {
             const resourceId = defaultResourceKey(project, file.name);
             imported.push(
               (await uploadImageResource({ project, file, resourceId })).id,
@@ -3002,9 +3025,9 @@ export class GameLayoutEditorApp {
           }
         } else {
           imported.push(
-            ...(await uploadSpineResources({ project, files: group })).map(
-              ({ id }) => id,
-            ),
+            ...(
+              await uploadSpineResources({ project, files: visualFiles })
+            ).map(({ id }) => id),
           );
         }
       }
@@ -3053,7 +3076,9 @@ export class GameLayoutEditorApp {
           ? ".json,.atlas,.png,.jpg,.jpeg,.webp"
           : current.kind === "video"
             ? ".mp4,video/mp4"
-            : ".zip,application/zip",
+            : current.kind === "audio"
+              ? ".mp3,.ogg,.wav,.m4a,.aac,.webm,audio/*"
+              : ".zip,application/zip",
       current.kind === "spine",
     );
     if (files.length === 0) return;
@@ -3082,6 +3107,10 @@ export class GameLayoutEditorApp {
             resourceId,
             file: files[0],
           });
+        } else if (current.kind === "audio") {
+          if (files.length !== 1)
+            throw new Error("audio 替换必须选择一个同 filename key 文件。");
+          await replaceAudioResource({ project, resourceId, file: files[0] });
         } else if (current.kind === "vni") {
           if (files.length !== 1)
             throw new Error("VNI 替换必须选择一个 bundle ZIP。");
@@ -3747,85 +3776,6 @@ export class GameLayoutEditorApp {
     }
   }
 
-  private async importAudioFiles(
-    files: readonly File[],
-    kind: "music" | "effect",
-  ): Promise<void> {
-    try {
-      const prepared = await Promise.all(
-        files.map(async (file) => {
-          const path = canonicalizeUploadFileName(file.name);
-          const bytes = new Uint8Array(await file.arrayBuffer());
-          const mediaType = detectAudioMediaType(bytes);
-          if (!mediaType) throw new Error(`无法识别音频格式：${file.name}`);
-          const name = path
-            .replace(/\.[^.]+$/u, "")
-            .replace(/[^a-z0-9]+/gu, "-")
-            .replace(/^-+|-+$/gu, "");
-          if (!name) throw new Error(`无法从文件名生成音频名称：${file.name}`);
-          return { path, bytes, mediaType, name };
-        }),
-      );
-      this.runTransaction(
-        (draft) => {
-          for (const item of prepared) {
-            const existing = draft.assets.get(item.path);
-            if (existing && !equalBytes(existing, item.bytes))
-              throw new Error(
-                `音频 filename key 已存在且 bytes 不同：${item.path}`,
-              );
-            draft.assets.set(item.path, item.bytes);
-            if (kind === "music") {
-              if (draft.audio.music.some((entry) => entry.name === item.name))
-                throw new Error(`BGM 名称重复：${item.name}`);
-              draft.audio = {
-                ...draft.audio,
-                music: [
-                  ...draft.audio.music,
-                  {
-                    name: item.name,
-                    asset: {
-                      sources: [{ path: item.path, mediaType: item.mediaType }],
-                    },
-                    loop: true,
-                    fadeOutSeconds: 1,
-                    fadeInSeconds: 1,
-                  },
-                ],
-              };
-            } else {
-              if (draft.audio.effects.some((entry) => entry.name === item.name))
-                throw new Error(`音效名称重复：${item.name}`);
-              draft.audio = {
-                ...draft.audio,
-                effects: [
-                  ...draft.audio.effects,
-                  {
-                    name: item.name,
-                    asset: {
-                      sources: [{ path: item.path, mediaType: item.mediaType }],
-                    },
-                    playback: "once",
-                    offsetSeconds: 0,
-                    voices: { maxConcurrent: 4, overflow: "restart-oldest" },
-                    bgm: { kind: "keep" },
-                  },
-                ],
-                programmaticEffects: [
-                  ...draft.audio.programmaticEffects,
-                  item.name,
-                ],
-              };
-            }
-          }
-        },
-        `已导入 ${prepared.length} 个${kind === "music" ? " BGM" : "音效"}。`,
-      );
-    } catch (error) {
-      this.#store.setExternalError(error);
-    }
-  }
-
   private showFeedback(message: string): void {
     const target = this.requireElement("[data-feedback]");
     target.textContent = message;
@@ -4010,7 +3960,7 @@ function shellMarkup(): string {
     )
     .join(
       "",
-    )}</div><section id="workspace-panel" role="tabpanel" data-workspace-panel aria-labelledby="tab-assets"></section><div data-symbols-workspace hidden>${symbolsWorkspaceMarkup()}</div><div data-bigwin-workspace hidden>${bigWinWorkspaceMarkup()}</div></aside><section class="preview-column"><div class="preview-toolbar"><label>分辨率<select data-preview-resolution></select></label><label>宽<input type="number" min="1" value="1920" data-preview-width /></label><label>高<input type="number" min="1" value="1080" data-preview-height /></label><label>预览状态<select data-preview-game-mode></select></label><button type="button" data-request-preview-mode>切换到该状态</button><output data-preview-transition-status aria-live="polite"></output><label><input type="checkbox" checked data-follow-edit-mode />跟随编辑状态</label><div class="zoom-controls"><button type="button" data-zoom-out aria-label="缩小">−</button><button type="button" data-zoom-reset><span data-zoom-label>100%</span></button><button type="button" data-zoom-in aria-label="放大">＋</button></div><label><input type="checkbox" checked data-guide-focus /> focus</label><label><input type="checkbox" checked data-guide-reel /> reel/cells</label></div><div class="preview-stage"><div class="preview-page" data-preview-host></div><button class="resize-handle" type="button" aria-label="拖动调整页面尺寸" data-resize-handle>◢</button></div><output class="diagnostics" data-preview-diagnostics></output></section></section><output class="feedback" aria-live="polite" data-feedback></output><aside class="error-panel" aria-live="assertive" data-errors></aside><dialog data-new-project-dialog aria-label="新建项目"><form method="dialog"><h2>新建项目</h2><label>Splash 适配类型<select data-new-project-splash-mode><option value="">请选择</option><option value="maximized-focus">单背景适配（maximized-focus）</option><option value="orientation-focus">横竖双背景适配（orientation-focus）</option></select></label><label>BaseGame 适配类型<select data-new-project-basegame-mode><option value="">请选择</option><option value="maximized-focus">单背景适配（maximized-focus）</option><option value="orientation-focus">横竖双背景适配（orientation-focus）</option></select></label><div class="button-row"><button type="button" data-cancel-new-project>取消</button><button type="button" class="primary" data-confirm-new-project disabled>创建</button></div></form></dialog><dialog data-mode-dialog aria-label="管理主状态"></dialog><dialog class="resource-picker" data-resource-picker aria-label="Resource Picker"></dialog></main>`;
+    )}</div><section id="workspace-panel" role="tabpanel" data-workspace-panel aria-labelledby="tab-assets"></section><div data-symbols-workspace hidden>${symbolsWorkspaceMarkup()}</div><div data-bigwin-workspace hidden>${bigWinWorkspaceMarkup()}</div></aside><section class="preview-column"><div class="preview-toolbar"><label>分辨率<select data-preview-resolution></select></label><label>宽<input type="number" min="1" value="1920" data-preview-width /></label><label>高<input type="number" min="1" value="1080" data-preview-height /></label><label>预览状态<select data-preview-game-mode></select></label><button type="button" data-request-preview-mode>切换到该状态</button><button type="button" data-unlock-preview-audio>启用声音</button><output data-preview-transition-status aria-live="polite"></output><label><input type="checkbox" checked data-follow-edit-mode />跟随编辑状态</label><div class="zoom-controls"><button type="button" data-zoom-out aria-label="缩小">−</button><button type="button" data-zoom-reset><span data-zoom-label>100%</span></button><button type="button" data-zoom-in aria-label="放大">＋</button></div><label><input type="checkbox" checked data-guide-focus /> focus</label><label><input type="checkbox" checked data-guide-reel /> reel/cells</label></div><div class="preview-stage"><div class="preview-page" data-preview-host></div><button class="resize-handle" type="button" aria-label="拖动调整页面尺寸" data-resize-handle>◢</button></div><output class="diagnostics" data-preview-diagnostics></output></section></section><output class="feedback" aria-live="polite" data-feedback></output><aside class="error-panel" aria-live="assertive" data-errors></aside><dialog data-new-project-dialog aria-label="新建项目"><form method="dialog"><h2>新建项目</h2><label>Splash 适配类型<select data-new-project-splash-mode><option value="">请选择</option><option value="maximized-focus">单背景适配（maximized-focus）</option><option value="orientation-focus">横竖双背景适配（orientation-focus）</option></select></label><label>BaseGame 适配类型<select data-new-project-basegame-mode><option value="">请选择</option><option value="maximized-focus">单背景适配（maximized-focus）</option><option value="orientation-focus">横竖双背景适配（orientation-focus）</option></select></label><div class="button-row"><button type="button" data-cancel-new-project>取消</button><button type="button" class="primary" data-confirm-new-project disabled>创建</button></div></form></dialog><dialog data-mode-dialog aria-label="管理主状态"></dialog><dialog class="resource-picker" data-resource-picker aria-label="Resource Picker"></dialog></main>`;
 }
 
 function parseSelectionKey(key: string): LayoutSelection {
@@ -4064,6 +4014,10 @@ function defaultResourceKey(
   sourceName: string,
 ): string {
   return canonicalizeUploadFileName(sourceName);
+}
+
+function isAudioAssetFile(file: Pick<File, "name">): boolean {
+  return /\.(?:mp3|ogg|wav|m4a|aac|webm)$/iu.test(file.name);
 }
 
 function confirmImportReview(

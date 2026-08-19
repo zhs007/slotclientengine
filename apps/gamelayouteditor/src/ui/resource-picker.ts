@@ -5,6 +5,7 @@ import {
 import {
   editorResourcePrimaryPath,
   type EditorLayoutResource,
+  type EditorAudioLayoutResource,
   type EditorVideoLayoutResource,
 } from "../model/editor-resource.js";
 import { getLayoutResourceReferences } from "../model/resource-commands.js";
@@ -89,7 +90,14 @@ export function getResourcePickerCandidates(
 ): readonly LayoutResourcePickerCandidate[] {
   const query = state.query.trim().toLowerCase();
   return [...project.resources.values()]
-    .filter((resource) => resource.kind !== "video")
+    .filter(
+      (
+        resource,
+      ): resource is Exclude<
+        EditorLayoutResource,
+        EditorVideoLayoutResource | EditorAudioLayoutResource
+      > => resource.kind !== "video" && resource.kind !== "audio",
+    )
     .filter((resource) => state.type === "all" || resource.kind === state.type)
     .filter((resource) => {
       if (!query) return true;
@@ -106,7 +114,10 @@ export function getResourcePickerCandidates(
 
 function candidateFromResource(
   project: EditorProject,
-  resource: Exclude<EditorLayoutResource, EditorVideoLayoutResource>,
+  resource: Exclude<
+    EditorLayoutResource,
+    EditorVideoLayoutResource | EditorAudioLayoutResource
+  >,
   context: LayoutResourceBindingContext,
 ): LayoutResourcePickerCandidate {
   const referenceCount = getLayoutResourceReferences(

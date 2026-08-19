@@ -826,6 +826,12 @@ function layoutMediaType(key: string): string {
   if (extension === "jpg" || extension === "jpeg") return "image/jpeg";
   if (extension === "webp") return "image/webp";
   if (extension === "mp4") return "video/mp4";
+  if (extension === "mp3") return "audio/mpeg";
+  if (extension === "ogg") return "audio/ogg";
+  if (extension === "wav") return "audio/wav";
+  if (extension === "m4a") return "audio/mp4";
+  if (extension === "aac") return "audio/aac";
+  if (extension === "webm") return "audio/webm";
   if (extension === "json") return "application/json";
   if (extension === "atlas") return "text/plain";
   if (["woff2", "woff", "ttf", "otf"].includes(extension))

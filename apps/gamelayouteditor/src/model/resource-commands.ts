@@ -18,6 +18,11 @@ import {
   normalizeEditorPackageZipEntries,
 } from "@slotclientengine/editorresource";
 import {
+  audioEditorFormatAdapter,
+  mediaTypeForAudioFilenameKey,
+} from "@slotclientengine/audiocore/editor";
+import { parseAudioEffectBindingV1 } from "@slotclientengine/audiocore/data";
+import {
   assertVNIBundleManifest,
   assertVNIProject,
   rewriteVNIProjectAssetPaths,
@@ -47,6 +52,7 @@ import {
   editorResourcePrimaryPath,
   editorResourceArtSize,
   type EditorLayoutResource,
+  type EditorAudioLayoutResource,
   type EditorImageStringLayoutResource,
   type EditorResourceReference,
   type EditorSpineLayoutResource,
@@ -315,6 +321,29 @@ export async function uploadImageResource(options: {
   return prepared.resource;
 }
 
+export async function uploadAudioResources(options: {
+  readonly project: EditorProject;
+  readonly files: readonly File[];
+}): Promise<readonly EditorAudioLayoutResource[]> {
+  if (options.files.length === 0) throw new Error("至少选择一个音频文件。");
+  createBoundedSourceIndex(options.files, EDITOR_SOURCE_LIMITS);
+  const prepared = await Promise.all(
+    options.files.map((file) => prepareAudioResource({ file })),
+  );
+  const candidate = cloneEditorProject(options.project);
+  for (const item of prepared) {
+    const existing = candidate.resources.get(item.resource.id);
+    if (existing) commitResourceReplacement(candidate, existing, item);
+    else {
+      assertNewResourceAvailable(candidate, item.resource);
+      commitNewResource(candidate, item);
+    }
+  }
+  options.project.resources = candidate.resources;
+  options.project.assets = candidate.assets;
+  return Object.freeze(prepared.map(({ resource }) => resource));
+}
+
 export async function uploadSpineResource(options: {
   readonly project: EditorProject;
   readonly files: readonly File[];
@@ -428,6 +457,24 @@ export async function replaceVideoResource(options: {
   return prepared.resource;
 }
 
+export async function replaceAudioResource(options: {
+  readonly project: EditorProject;
+  readonly resourceId: string;
+  readonly file: File;
+}): Promise<EditorAudioLayoutResource> {
+  const current = requireResource(options.project, options.resourceId);
+  if (current.kind !== "audio") throw new Error("资源类型必须保持为 audio。");
+  const sourceKey = canonicalizeUploadFileName(options.file.name);
+  if (sourceKey !== current.path)
+    throw new Error(`替换音频必须保持 filename key：${current.path}`);
+  const prepared = await prepareAudioResource({
+    file: options.file,
+    resourceId: current.id,
+  });
+  commitResourceReplacement(options.project, current, prepared);
+  return prepared.resource;
+}
+
 export function getLayoutResourceReferences(
   project: EditorProject,
   resourceId: string,
@@ -459,7 +506,188 @@ export function getLayoutResourceReferences(
         variants: Object.freeze(activeVariantIds(project)),
       }),
     );
-  return Object.freeze([...nodes, ...transitions]);
+  const resource = project.resources.get(resourceId);
+  if (resource?.kind !== "audio")
+    return Object.freeze([...nodes, ...transitions]);
+  const musicNames = new Set(
+    project.audio.music
+      .filter((binding) =>
+        binding.asset.sources.some((source) => source.path === resource.path),
+      )
+      .map(({ name }) => name),
+  );
+  const modes = project.gameModes.modes
+    .filter((mode) => mode.bgm !== null && musicNames.has(mode.bgm))
+    .map((mode) =>
+      Object.freeze({
+        nodeId: mode.id,
+        role: "mode-bgm" as const,
+        variants: Object.freeze([]),
+      }),
+    );
+  const allowlist = new Set(project.audio.programmaticEffects);
+  const effects = project.audio.effects
+    .filter(
+      (binding) =>
+        allowlist.has(binding.name) &&
+        binding.asset.sources.some((source) => source.path === resource.path),
+    )
+    .map((binding) =>
+      Object.freeze({
+        nodeId: binding.name,
+        role: "programmatic-audio" as const,
+        variants: Object.freeze([]),
+      }),
+    );
+  return Object.freeze([...nodes, ...transitions, ...modes, ...effects]);
+}
+
+export function getModeBgmResourceId(
+  project: EditorProject,
+  modeId: string,
+): string | null {
+  const mode = requireGameMode(project, modeId);
+  if (!mode.bgm) return null;
+  const binding = project.audio.music.find(({ name }) => name === mode.bgm);
+  if (!binding) throw new Error(`主状态 ${modeId} 引用了未知 BGM：${mode.bgm}`);
+  const source = binding.asset.sources[0];
+  if (!source) throw new Error(`BGM ${binding.name} 没有音频 source。`);
+  const resource = [...project.resources.values()].find(
+    (candidate) => candidate.kind === "audio" && candidate.path === source.path,
+  );
+  if (!resource)
+    throw new Error(
+      `BGM ${binding.name} 引用了未知 audio asset：${source.path}`,
+    );
+  return resource.id;
+}
+
+export function bindModeBgm(
+  project: EditorProject,
+  modeId: string,
+  resourceId: string | null,
+): void {
+  const mode = requireGameMode(project, modeId);
+  if (resourceId === null) {
+    mode.bgm = null;
+    pruneUnusedMusicBindings(project);
+    return;
+  }
+  const resource = requireAudioResource(project, resourceId);
+  const matching = project.audio.music.filter((binding) =>
+    binding.asset.sources.some((source) => source.path === resource.path),
+  );
+  if (matching.length > 1)
+    throw new Error(
+      `audio asset ${resource.id} 对应多个 BGM 名称：${matching.map(({ name }) => name).join(", ")}。`,
+    );
+  let binding = matching[0];
+  if (!binding) {
+    const name = suggestAudioBindingName(resource.id);
+    const occupied = project.audio.music.find((item) => item.name === name);
+    if (occupied) throw new Error(`BGM 名称 ${name} 已绑定其它 audio asset。`);
+    binding = {
+      name,
+      asset: {
+        sources: [{ path: resource.path, mediaType: resource.mediaType }],
+      },
+      loop: true,
+      fadeOutSeconds: 1,
+      fadeInSeconds: 1,
+    };
+    project.audio = {
+      ...project.audio,
+      music: [...project.audio.music, binding],
+    };
+  }
+  mode.bgm = binding.name;
+  pruneUnusedMusicBindings(project);
+}
+
+export function setModeBgmFade(
+  project: EditorProject,
+  modeId: string,
+  field: "fadeOutSeconds" | "fadeInSeconds",
+  value: number,
+): void {
+  if (!Number.isFinite(value) || value <= 0)
+    throw new Error("BGM fade 必须是有限正数。");
+  const mode = requireGameMode(project, modeId);
+  if (!mode.bgm) throw new Error(`主状态 ${modeId} 尚未绑定 BGM。`);
+  let found = false;
+  const music = project.audio.music.map((binding) => {
+    if (binding.name !== mode.bgm) return binding;
+    found = true;
+    return { ...binding, [field]: value };
+  });
+  if (!found) throw new Error(`主状态 ${modeId} 引用了未知 BGM：${mode.bgm}`);
+  project.audio = { ...project.audio, music };
+}
+
+export function getProgrammaticAudioEffects(
+  project: EditorProject,
+  resourceId: string,
+) {
+  const resource = requireAudioResource(project, resourceId);
+  const allowed = new Set(project.audio.programmaticEffects);
+  return Object.freeze(
+    project.audio.effects.filter(
+      (binding) =>
+        allowed.has(binding.name) &&
+        binding.asset.sources.some((source) => source.path === resource.path),
+    ),
+  );
+}
+
+export function bindProgrammaticAudioEffect(
+  project: EditorProject,
+  resourceId: string,
+  requestedName: string,
+): void {
+  const resource = requireAudioResource(project, resourceId);
+  const name = normalizeAudioBindingName(requestedName);
+  const binding = parseAudioEffectBindingV1({
+    name,
+    asset: {
+      sources: [{ path: resource.path, mediaType: resource.mediaType }],
+    },
+    playback: "once",
+    offsetSeconds: 0,
+    voices: { maxConcurrent: 4, overflow: "restart-oldest" },
+    bgm: { kind: "keep" },
+  });
+  const existing = project.audio.effects.find((item) => item.name === name);
+  if (existing) {
+    const same = existing.asset.sources.some(
+      (source) => source.path === resource.path,
+    );
+    if (!same) throw new Error(`程序音效名称 ${name} 已绑定其它 audio asset。`);
+    if (project.audio.programmaticEffects.includes(name)) return;
+  }
+  project.audio = {
+    ...project.audio,
+    effects: existing
+      ? project.audio.effects
+      : [...project.audio.effects, binding],
+    programmaticEffects: [...project.audio.programmaticEffects, name],
+  };
+}
+
+export function unbindProgrammaticAudioEffect(
+  project: EditorProject,
+  name: string,
+): void {
+  if (!project.audio.programmaticEffects.includes(name))
+    throw new Error(`未知程序音效：${name}`);
+  project.audio = {
+    ...project.audio,
+    programmaticEffects: project.audio.programmaticEffects.filter(
+      (candidate) => candidate !== name,
+    ),
+    effects: project.audio.effects.filter(
+      (candidate) => candidate.name !== name,
+    ),
+  };
 }
 
 export function getRuntimeResourceKey(
@@ -478,7 +706,11 @@ export function bindRuntimeResource(
   resourceId: string,
   key: string,
 ): void {
-  requireResource(project, resourceId);
+  const resource = requireResource(project, resourceId);
+  if (resource.kind === "audio")
+    throw new Error(
+      "audio asset 必须通过 BGM 或程序音效绑定使用，不能设为普通程序资源。",
+    );
   const normalizedKey = normalizeRuntimeResourceKey(key);
   if (!/^[a-z0-9][a-z0-9._-]*$/u.test(normalizedKey))
     throw new Error(
@@ -530,7 +762,11 @@ export function deleteLayoutResource(
             ? `${reference.nodeId} (${reference.variants.join(", ")} 背景)`
             : reference.role === "scene-transition"
               ? `${reference.nodeId} (scene-transition)`
-              : `${reference.nodeId} (图层)`,
+              : reference.role === "mode-bgm"
+                ? `${reference.nodeId} (mode BGM)`
+                : reference.role === "programmatic-audio"
+                  ? `${reference.nodeId} (程序音效)`
+                  : `${reference.nodeId} (图层)`,
         )
         .join("、")} 引用，不能删除。`,
     );
@@ -551,8 +787,8 @@ export function addLayerFromResource(options: {
   readonly loop?: boolean;
 }): EditorNodeDraft {
   const resource = requireResource(options.project, options.resourceId);
-  if (resource.kind === "video")
-    throw new Error("video 资源只能绑定黑场视频转场，不能创建普通图层。");
+  if (resource.kind === "video" || resource.kind === "audio")
+    throw new Error(`${resource.kind} 资源不能创建普通图层。`);
   assertNodeIdAvailable(options.project, options.nodeId);
   assertVariantsAllowed(options.project, options.variants);
   const defaultAnimation = validateAnimation(
@@ -604,8 +840,8 @@ export function rebindLayerResource(options: {
   const previousPlayback = node.playback;
   const previousImageString = node.imageString;
   const resource = requireResource(options.project, options.resourceId);
-  if (resource.kind === "video")
-    throw new Error("video 资源只能绑定黑场视频转场，不能重绑普通图层。");
+  if (resource.kind === "video" || resource.kind === "audio")
+    throw new Error(`${resource.kind} 资源不能重绑普通图层。`);
   const defaultAnimation =
     resource.kind === "spine"
       ? validateAnimation(
@@ -657,7 +893,8 @@ export function assignBackgroundResource(options: {
   if (
     resource.kind === "image-string" ||
     resource.kind === "video" ||
-    resource.kind === "vni"
+    resource.kind === "vni" ||
+    resource.kind === "audio"
   )
     throw new Error(`${resource.kind} 资源不能设为背景。`);
   const modeId = options.modeId ?? options.project.gameModes.initialMode;
@@ -1054,6 +1291,51 @@ function requireResource(
   return resource;
 }
 
+function requireAudioResource(
+  project: EditorProject,
+  resourceId: string,
+): EditorAudioLayoutResource {
+  const resource = requireResource(project, resourceId);
+  if (resource.kind !== "audio")
+    throw new Error(`资源 ${resourceId} 不是 audio asset。`);
+  return resource;
+}
+
+function requireGameMode(project: EditorProject, modeId: string) {
+  const mode = project.gameModes.modes.find(
+    (candidate) => candidate.id === modeId,
+  );
+  if (!mode) throw new Error(`未知主状态：${modeId}`);
+  return mode;
+}
+
+function normalizeAudioBindingName(value: string): string {
+  return value.trim().toLocaleLowerCase("en-US");
+}
+
+export function suggestAudioBindingName(resourceId: string): string {
+  const basename = resourceId.split("/").at(-1) ?? resourceId;
+  const dot = basename.lastIndexOf(".");
+  const stem = dot > 0 ? basename.slice(0, dot) : basename;
+  const name = normalizeAudioBindingName(stem)
+    .replace(/[^a-z0-9]+/gu, "-")
+    .replace(/^-+|-+$/gu, "");
+  if (!name) throw new Error(`无法从 audio asset 生成名称：${resourceId}`);
+  return name;
+}
+
+function pruneUnusedMusicBindings(project: EditorProject): void {
+  const referenced = new Set(
+    project.gameModes.modes.flatMap((mode) => (mode.bgm ? [mode.bgm] : [])),
+  );
+  project.audio = {
+    ...project.audio,
+    music: project.audio.music.filter((binding) =>
+      referenced.has(binding.name),
+    ),
+  };
+}
+
 function requireLayer(project: EditorProject, nodeId: string): EditorNodeDraft {
   const node = project.nodes.find((item) => item.id === nodeId);
   if (!node) throw new Error(`未知节点：${nodeId}`);
@@ -1150,6 +1432,57 @@ async function prepareImageResource(options: {
         sourceNames: Object.freeze([options.file.name]),
         sourceKind: "files",
         batchLabel: `image:${options.file.name}`,
+      },
+    },
+    assets: new Map([[path, bytes]]),
+  };
+}
+
+async function prepareAudioResource(options: {
+  readonly file: File;
+  readonly resourceId?: string;
+}): Promise<
+  PreparedResource & { readonly resource: EditorAudioLayoutResource }
+> {
+  createBoundedSourceIndex([options.file], EDITOR_SOURCE_LIMITS);
+  const path = canonicalizeUploadFileName(options.file.name);
+  if (path.toLowerCase().endsWith(".mp4"))
+    throw new Error(".mp4 保留为视频资源；ISO audio 请使用 .m4a。");
+  const bytes = new Uint8Array(await options.file.arrayBuffer());
+  const [candidate] = await audioEditorFormatAdapter.discover([
+    {
+      sourcePath: options.file.name,
+      key: path,
+      bytes,
+      container: "file",
+      containerName: options.file.name,
+    },
+  ]);
+  if (!candidate) throw new Error(`不支持的音频扩展名：${options.file.name}`);
+  if (candidate.diagnostics.length)
+    throw new Error(candidate.diagnostics.join("；"));
+  const mediaType = mediaTypeForAudioFilenameKey(path);
+  if (candidate.parsed.mediaType !== mediaType)
+    throw new Error(`音频 media type 解析不一致：${path}`);
+  if (
+    options.file.type &&
+    options.file.type.startsWith("audio/") &&
+    options.file.type !== mediaType
+  )
+    throw new Error(
+      `音频 MIME 与扩展名不匹配：${path} expected=${mediaType}, actual=${options.file.type}`,
+    );
+  const id = options.resourceId ?? requiredResourceId(options.file.name);
+  return {
+    resource: {
+      id,
+      kind: "audio",
+      path,
+      mediaType,
+      provenance: {
+        sourceNames: Object.freeze([options.file.name]),
+        sourceKind: "files",
+        batchLabel: `audio:${options.file.name}`,
       },
     },
     assets: new Map([[path, bytes]]),
@@ -1735,6 +2068,8 @@ export function describeResource(resource: EditorLayoutResource): string {
     return `${editorResourcePrimaryPath(resource)} · ${Object.keys(resource.manifest.glyphs).length} glyphs · lineHeight ${resource.manifest.metrics.lineHeight}`;
   if (resource.kind === "video")
     return `${resource.path} · ${resource.size.width}×${resource.size.height} · ${resource.durationSeconds.toFixed(3)}s · audio ${String(resource.hasAudio)}`;
+  if (resource.kind === "audio")
+    return `${resource.path} · ${resource.mediaType}`;
   if (resource.kind === "vni")
     return `${resource.projectPath} · ${resource.project.stage.width}×${resource.project.stage.height} · ${resource.project.stage.duration}s · ${resource.assetPaths.length} assets`;
   return `${editorResourcePrimaryPath(resource)} · ${resource.animationNames.length} animations${resource.bounds ? ` · export bounds ${resource.bounds.width}×${resource.bounds.height}（非 art size）` : " · 无 export bounds"}`;
