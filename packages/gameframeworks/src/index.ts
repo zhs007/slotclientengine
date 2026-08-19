@@ -43,6 +43,7 @@ export {
   createSceneLayoutPackageRuntime,
   createSceneLayoutPresentationSurface,
 } from "@slotclientengine/rendercore/scene-layout/core";
+export { attachRenderObjectToSpineSlot } from "@slotclientengine/rendercore";
 export type {
   SceneLayoutLayerId,
   SceneLayoutPackageResource,
@@ -57,8 +58,15 @@ export type {
   RenderAlignment,
 } from "@slotclientengine/rendercore/scene-layout/core";
 export type {
+  AttachRenderObjectToSpineSlotOptions,
+  ImgNumberRenderObject,
+  RenderObject,
   RenderObjectLayer,
   RenderObjectLayerAddAtOptions,
+  RenderObjectLayerMove,
+  RenderObjectLayerMoveOptions,
+  RenderObjectPlayOptions,
+  SpineSlotRenderObjectAttachment,
 } from "@slotclientengine/rendercore";
 export type {
   SymbolCellBounds,

@@ -1,4 +1,6 @@
 import type { SymbolGroup, SymbolHandle } from "../symbol/index.js";
+import type { RenderAnchor } from "../presentation/render-anchor.js";
+import type { RenderPoint } from "../presentation/render-object.js";
 
 export interface SymbolPosition {
   readonly x: number;
@@ -18,6 +20,10 @@ export interface SymbolReplacement {
 export interface SymbolArea {
   getSymbol(position: SymbolPosition): SymbolHandle;
   getSymbols(positions: readonly SymbolPosition[]): SymbolGroup;
+  /** Stable logical cell-center anchor. It remains valid while the cell spins. */
+  getCellAnchor(position: SymbolPosition): RenderAnchor;
+  /** Resolves any valid RenderCore anchor into this area's local coordinates. */
+  resolveAnchor(anchor: RenderAnchor): RenderPoint;
 }
 
 export interface SymbolMutationArea extends SymbolArea {

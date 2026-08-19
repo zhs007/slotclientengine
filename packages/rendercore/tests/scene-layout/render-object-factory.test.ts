@@ -2,12 +2,13 @@ import { Container, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
 import type { ImageStringResource } from "../../src/image-string/core/index.js";
 import { getRenderObjectAdapter } from "../../src/presentation/render-object.js";
+import { attachRenderObjectToSpineSlot } from "../../src/presentation/spine-slot-attachment.js";
 import { createSceneLayoutRenderObjectFactory } from "../../src/scene-layout/render-object-factory.js";
 import type {
   SceneLayoutPackageResource,
   SceneLayoutRuntimeResource,
 } from "../../src/scene-layout/types.js";
-import type { RendercoreSpinePlayer } from "../../src/spine/runtime-player.js";
+import type { RendercoreSpineSlotPlayer } from "../../src/spine/runtime-player.js";
 
 function imageStringResource(): ImageStringResource {
   return {
@@ -54,6 +55,7 @@ function createResource(options?: {
     sparkle: {
       kind: "vni" as const,
       project: {
+        stage: { duration: 0.2 },
         exportProfile: { id: "runtime", purpose: "runtime", assetScale: 1 },
       } as never,
       assetUrls: {},
@@ -113,21 +115,31 @@ function createResource(options?: {
   } as unknown as SceneLayoutPackageResource;
 }
 
-class ManualSpinePlayer implements RendercoreSpinePlayer {
+class ManualSpinePlayer implements RendercoreSpineSlotPlayer {
   readonly view = new Container();
   readonly plays: string[] = [];
+  readonly loops: boolean[] = [];
+  readonly slots = new Map<Container, string>();
   updates = 0;
   resets = 0;
   destroyed = false;
+  loop = false;
   init() {}
-  play(options: { readonly animationName: string }) {
+  play(options: { readonly animationName: string; readonly loop: boolean }) {
     if (options.animationName !== "Nearwin")
       throw new Error("unknown animation");
     this.plays.push(options.animationName);
+    this.loops.push(options.loop);
+    this.loop = options.loop;
+    this.updates = 0;
   }
   update() {
     this.updates += 1;
-    return { completed: this.updates === 2, events: [] };
+    return {
+      completed: !this.loop && this.updates === 2,
+      ...(this.loop && this.updates === 2 ? { loopCompleted: true } : {}),
+      events: [],
+    };
   }
   reset() {
     this.resets += 1;
@@ -135,16 +147,31 @@ class ManualSpinePlayer implements RendercoreSpinePlayer {
   destroy() {
     this.destroyed = true;
   }
+  attachSlotObject(options: {
+    readonly slot: string;
+    readonly object: Container;
+  }) {
+    if (options.slot !== "amount") throw new Error("unknown slot");
+    this.view.addChild(options.object);
+    this.slots.set(options.object, options.slot);
+  }
+  removeSlotObject(object: Container) {
+    object.parent?.removeChild(object);
+    this.slots.delete(object);
+  }
 }
 
 class ManualVniPlayer {
   readonly listeners = new Set<() => void>();
   updates = 0;
+  loops: boolean[] = [];
   destroyed = false;
   init() {
     return Promise.resolve();
   }
-  setLoop() {}
+  setLoop(loop: boolean) {
+    this.loops.push(loop);
+  }
   play() {}
   pause() {}
   restart() {}
@@ -230,6 +257,79 @@ describe("Scene Layout named RenderObject factory", () => {
     expect(player.destroyed).toBe(true);
   });
 
+  it("resolves looping playback at the first loop edge and keeps it running", async () => {
+    const player = new ManualSpinePlayer();
+    const factory = createSceneLayoutRenderObjectFactory({
+      resource: createResource(),
+      dependencies: { createSpinePlayer: () => player },
+    });
+    const object = await factory.createRenderObject("nearwin1");
+    const playback = object.play("Nearwin", { loop: true });
+    factory.update(0.1);
+    let completed = false;
+    void playback.then(() => {
+      completed = true;
+    });
+    await Promise.resolve();
+    expect(completed).toBe(false);
+    factory.update(0.1);
+    await expect(playback).resolves.toBeUndefined();
+    expect(player.loops).toEqual([true]);
+
+    factory.update(0.1);
+    expect(player.updates).toBe(3);
+    object.stop();
+    expect(player.resets).toBe(1);
+    object.destroy();
+    factory.destroy();
+  });
+
+  it("attaches an ImgNumber RenderObject to an exact program Spine slot", async () => {
+    const player = new ManualSpinePlayer();
+    const factory = createSceneLayoutRenderObjectFactory({
+      resource: createResource(),
+      dependencies: { createSpinePlayer: () => player },
+    });
+    const spine = await factory.createRenderObject("nearwin1");
+    const amount = await factory.createImgNumberRenderObject("winAmount", {
+      text: "1",
+      anchor: { x: 0.5, y: 0.5 },
+    });
+    amount.setPosition({ x: 3, y: 4 });
+    const amountView = getRenderObjectAdapter(amount).view;
+
+    const attachment = attachRenderObjectToSpineSlot({
+      spine,
+      child: amount,
+      slot: "amount",
+    });
+    expect(player.slots.get(amountView)).toBe("amount");
+    expect(amountView.position).toMatchObject({ x: 3, y: 4 });
+    amount.setText("11");
+    expect(amount.getText()).toBe("11");
+    attachment.detach();
+    attachment.detach();
+    expect(amountView.parent).toBeNull();
+
+    expect(() =>
+      attachRenderObjectToSpineSlot({
+        spine,
+        child: amount,
+        slot: "missing",
+      }),
+    ).toThrow(/unknown slot/);
+    const automatic = attachRenderObjectToSpineSlot({
+      spine,
+      child: amount,
+      slot: "amount",
+    });
+    amount.destroy();
+    expect(player.slots.size).toBe(0);
+    automatic.detach();
+    spine.destroy();
+    factory.destroy();
+  });
+
   it("advances VNI authored playback and rejects named animation input", async () => {
     const player = new ManualVniPlayer();
     const factory = createSceneLayoutRenderObjectFactory({
@@ -245,6 +345,29 @@ describe("Scene Layout named RenderObject factory", () => {
     await expect(playback).resolves.toBeUndefined();
     object.destroy();
     expect(player.destroyed).toBe(true);
+  });
+
+  it("resolves VNI looping playback at the authored first-cycle duration", async () => {
+    const player = new ManualVniPlayer();
+    const factory = createSceneLayoutRenderObjectFactory({
+      resource: createResource(),
+      dependencies: { createVniPlayer: () => player },
+    });
+    const object = await factory.createRenderObject("sparkle");
+    const playback = object.play(undefined, { loop: true });
+    factory.update(0.1);
+    let completed = false;
+    void playback.then(() => {
+      completed = true;
+    });
+    await Promise.resolve();
+    expect(completed).toBe(false);
+    factory.update(0.1);
+    await expect(playback).resolves.toBeUndefined();
+    expect(player.loops).toEqual([true]);
+    object.stop();
+    object.destroy();
+    factory.destroy();
   });
 
   it("settles pending playback on abort and factory destroy", async () => {

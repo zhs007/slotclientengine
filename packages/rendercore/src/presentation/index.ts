@@ -9,9 +9,15 @@ export type {
   CloneableRenderObjectAdapter,
   RenderObject,
   RenderObjectAdapter,
+  RenderObjectSpineSlotAdapter,
   RenderObjectPlayOptions,
   RenderPoint,
 } from "./render-object.js";
+export { attachRenderObjectToSpineSlot } from "./spine-slot-attachment.js";
+export type {
+  AttachRenderObjectToSpineSlotOptions,
+  SpineSlotRenderObjectAttachment,
+} from "./spine-slot-attachment.js";
 export { createTextRenderObject } from "./text-render-object.js";
 export type {
   CreateTextRenderObjectOptions,
@@ -33,4 +39,6 @@ export type {
 export type {
   RenderObjectLayer,
   RenderObjectLayerAddAtOptions,
+  RenderObjectLayerMove,
+  RenderObjectLayerMoveOptions,
 } from "./render-object-layer.js";

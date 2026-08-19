@@ -18,6 +18,7 @@ import {
 } from "../presentation/presentation-scope.js";
 import {
   createRenderObjectLayer,
+  restoreRenderObjectLayerMove,
   type RenderObjectLayerController,
 } from "../presentation/render-object-layer.js";
 import { prepareVisibleOccurrenceMotion } from "./visible-occurrence-transfer.js";
@@ -284,6 +285,7 @@ export class RenderReelSet extends Container implements ReelSpin {
       getSymbol: (position: SymbolPosition) => this.getSymbol(position),
       getSymbols: (positions: readonly SymbolPosition[]) =>
         this.getSymbols(positions),
+      getCellAnchor: (position: SymbolPosition) => this.getCellAnchor(position),
       replaceSymbol: (
         position: SymbolPosition,
         target: SymbolReplacementTarget,
@@ -292,10 +294,7 @@ export class RenderReelSet extends Container implements ReelSpin {
         this.replaceSymbols(replacements),
       getAnchor: (point: RenderPoint) =>
         createContainerRenderAnchor(this, () => point),
-      resolveAnchor: (anchor: RenderAnchor) => {
-        this.assertAlive();
-        return resolveRenderAnchor(anchor, this);
-      },
+      resolveAnchor: (anchor: RenderAnchor) => this.resolveAnchor(anchor),
       getLayer: (id: SymbolAreaLayerId) => this.getLayer(id),
       present: (
         presentation: Parameters<ReelArea["present"]>[0],
@@ -594,6 +593,31 @@ export class RenderReelSet extends Container implements ReelSpin {
 
   getVisibleScene(): readonly (readonly number[])[] {
     return Object.freeze(this.reels.map((reel) => reel.getVisibleScene()));
+  }
+
+  getCellAnchor(position: SymbolPosition): RenderAnchor {
+    const reel = this.getReelAt(position.x);
+    if (
+      !Number.isInteger(position.y) ||
+      position.y < 0 ||
+      position.y >= reel.layout.visibleRows
+    )
+      throw new ReelError(`visible symbol y ${position.y} is out of range.`);
+    return createContainerRenderAnchor(this, () => {
+      this.assertAlive();
+      return {
+        x: reel.x + reel.layout.cellWidth / 2,
+        y:
+          reel.y +
+          reel.layout.getCellY(position.y) +
+          reel.layout.cellHeight / 2,
+      };
+    });
+  }
+
+  resolveAnchor(anchor: RenderAnchor): RenderPoint {
+    this.assertAlive();
+    return resolveRenderAnchor(anchor, this);
   }
 
   getSymbol(position: SymbolPosition): SymbolHandle {
@@ -1804,6 +1828,7 @@ export class RenderReelSet extends Container implements ReelSpin {
   }
 
   private bumpOccurrenceGeneration(symbol: SymbolPlayer): void {
+    restoreRenderObjectLayerMove(symbol);
     this.#occurrenceGenerations.set(
       symbol,
       this.getOccurrenceGeneration(symbol) + 1,

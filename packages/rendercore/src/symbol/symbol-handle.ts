@@ -116,6 +116,12 @@ export function createSymbolHandle(source: SymbolHandleSource): SymbolHandle {
     owned: source.owned,
     assertUsable,
     play: (name, options) => {
+      if (options?.loop !== undefined)
+        return Promise.reject(
+          new SymbolAnimationError(
+            "SymbolHandle playback loop is defined by the symbol state manifest.",
+          ),
+        );
       if (!name)
         return Promise.reject(
           new SymbolAnimationError(

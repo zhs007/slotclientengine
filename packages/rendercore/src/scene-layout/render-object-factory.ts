@@ -10,6 +10,7 @@ import type { ImgNumberRenderObject } from "../presentation/imgnumber-render-obj
 import {
   createOfficialSpinePlayer,
   type RendercoreSpinePlayer,
+  type RendercoreSpineSlotPlayer,
 } from "../spine/runtime-player.js";
 import { SceneLayoutError } from "./errors.js";
 import type {
@@ -225,11 +226,14 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
       throw error;
     }
     let active = createPendingPlayback();
+    let looping = false;
     let object!: RenderObject;
     const stop = (reason: string): void => {
       player.reset();
+      looping = false;
       active = rejectPendingPlayback(active, reason);
     };
+    const slotPlayer = isSpineSlotPlayer(player) ? player : null;
     object = createRenderObject({
       view: player.view,
       play: (animationName, playOptions) => {
@@ -243,9 +247,11 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
           active,
           `Scene layout Spine runtime resource "${name}" playback was superseded.`,
         );
-        player.play({ animationName, loop: false });
+        looping = playOptions?.loop ?? false;
+        player.play({ animationName, loop: looping });
         active = startPendingPlayback(playOptions, () => {
           player.reset();
+          looping = false;
           active = createPendingPlayback();
         });
         return active.promise!;
@@ -260,14 +266,31 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
           active,
           `Scene layout Spine runtime resource "${name}" was destroyed during playback.`,
         );
+        looping = false;
         player.destroy();
       },
+      ...(slotPlayer
+        ? {
+            spineSlots: {
+              attach: (attachment) =>
+                slotPlayer.attachSlotObject({
+                  slot: attachment.slot,
+                  object: attachment.object,
+                  ...(attachment.followSlotColor === undefined
+                    ? {}
+                    : { followSlotColor: attachment.followSlotColor }),
+                }),
+              remove: (child) => slotPlayer.removeSlotObject(child),
+            },
+          }
+        : {}),
     });
     this.register({
       object,
       update: (deltaSeconds) => {
         const result = player.update(deltaSeconds);
-        if (result.completed) active = resolvePendingPlayback(active);
+        if ((looping && result.loopCompleted) || (!looping && result.completed))
+          active = resolvePendingPlayback(active);
       },
     });
     return object;
@@ -291,13 +314,16 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
     }
     const initializedPlayer = player;
     let active = createPendingPlayback();
+    let loopFirstCycleRemaining: number | null = null;
     const disposeComplete = initializedPlayer.onPlaybackComplete(() => {
-      active = resolvePendingPlayback(active);
+      if (loopFirstCycleRemaining === null)
+        active = resolvePendingPlayback(active);
     });
     let object!: RenderObject;
     const stop = (reason: string): void => {
       initializedPlayer.pause();
       initializedPlayer.restart();
+      loopFirstCycleRemaining = null;
       active = rejectPendingPlayback(active, reason);
     };
     object = createRenderObject({
@@ -313,12 +339,15 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
           active,
           `Scene layout VNI runtime resource "${name}" playback was superseded.`,
         );
-        initializedPlayer.setLoop(false);
+        const loop = playOptions?.loop ?? false;
+        initializedPlayer.setLoop(loop);
+        loopFirstCycleRemaining = loop ? resource.project.stage.duration : null;
         initializedPlayer.restart();
         initializedPlayer.play();
         active = startPendingPlayback(playOptions, () => {
           initializedPlayer.pause();
           initializedPlayer.restart();
+          loopFirstCycleRemaining = null;
           active = createPendingPlayback();
         });
         return active.promise!;
@@ -334,13 +363,22 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
           `Scene layout VNI runtime resource "${name}" was destroyed during playback.`,
         );
         disposeComplete();
+        loopFirstCycleRemaining = null;
         initializedPlayer.destroy();
         host.destroy({ children: true });
       },
     });
     this.register({
       object,
-      update: (deltaSeconds) => initializedPlayer.update(deltaSeconds),
+      update: (deltaSeconds) => {
+        initializedPlayer.update(deltaSeconds);
+        if (loopFirstCycleRemaining === null) return;
+        loopFirstCycleRemaining -= deltaSeconds;
+        if (loopFirstCycleRemaining <= 0) {
+          loopFirstCycleRemaining = null;
+          active = resolvePendingPlayback(active);
+        }
+      },
     });
     return object;
   }
@@ -431,6 +469,16 @@ function rejectPendingPlayback(
   active.signal?.removeEventListener("abort", active.abortListener!);
   active.reject!(new SceneLayoutError(message));
   return createPendingPlayback();
+}
+
+function isSpineSlotPlayer(
+  player: RendercoreSpinePlayer,
+): player is RendercoreSpineSlotPlayer {
+  const candidate = player as Partial<RendercoreSpineSlotPlayer>;
+  return (
+    typeof candidate.attachSlotObject === "function" &&
+    typeof candidate.removeSlotObject === "function"
+  );
 }
 
 async function loadRenderObjectTexture(url: string): Promise<Texture> {

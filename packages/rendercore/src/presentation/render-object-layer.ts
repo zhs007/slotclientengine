@@ -21,10 +21,23 @@ export interface RenderObjectLayerAddAtOptions {
   readonly order?: number;
 }
 
+export interface RenderObjectLayerMoveOptions {
+  readonly order?: number;
+}
+
+export interface RenderObjectLayerMove {
+  /** Restores the original parent/position/order when the object is still here. */
+  restore(): void;
+}
+
 export interface RenderObjectLayer extends PresentationMountTarget {
   getAnchor(point?: RenderPoint): RenderAnchor;
   resolveAnchor(anchor: RenderAnchor): RenderPoint;
   addAt(node: RenderObject, options: RenderObjectLayerAddAtOptions): void;
+  moveHere(
+    node: RenderObject,
+    options?: RenderObjectLayerMoveOptions,
+  ): RenderObjectLayerMove;
 }
 
 export interface RenderObjectLayerController {
@@ -42,9 +55,11 @@ export function createRenderObjectLayer(options: {
   const createError =
     options.createError ??
     ((message: string) => new SymbolAnimationError(message));
+  const getView = (): Container =>
+    typeof options.view === "function" ? options.view() : options.view;
   const resolveView = (): Container => {
     options.assertUsable?.();
-    return typeof options.view === "function" ? options.view() : options.view;
+    return getView();
   };
   const fail = (message: string): never => {
     throw createError(message);
@@ -88,6 +103,7 @@ export function createRenderObjectLayer(options: {
       objectView.zIndex = order;
       target.addChild(objectView);
       mounted.set(node, objectView);
+      layerRegistrations.set(objectView, { target, mounted, node });
     } catch (error) {
       if (objectView.parent === target) target.removeChild(objectView);
       objectView.position.set(previous.x, previous.y);
@@ -106,7 +122,11 @@ export function createRenderObjectLayer(options: {
       const objectView = mounted.get(node);
       if (!objectView) return;
       mounted.delete(node);
-      objectView.parent?.removeChild(objectView);
+      const target = resolveView();
+      if (objectView.parent === target) {
+        target.removeChild(objectView);
+        layerRegistrations.delete(objectView);
+      }
     },
     getAnchor: (point: RenderPoint = { x: 0, y: 0 }): RenderAnchor => {
       const snapshot = snapshotPoint(point, "anchor point");
@@ -134,6 +154,76 @@ export function createRenderObjectLayer(options: {
       );
       commitAdd(node, prepared.target, prepared.objectView, order, position);
     },
+    moveHere: (
+      node: RenderObject,
+      moveOptions: RenderObjectLayerMoveOptions = {},
+    ): RenderObjectLayerMove => {
+      const target = resolveView();
+      const order = moveOptions.order ?? 0;
+      assertOrder(order);
+      const objectView = getRenderObjectAdapter(node).view;
+      const source = objectView.parent;
+      if (!source)
+        fail("RenderObject must be attached before it can switch layers.");
+      const sourceParent = source as Container;
+      if (sourceParent === target)
+        fail(`RenderObject is already attached to ${options.label}.`);
+      const anchor = resolveRenderAnchor(node.getAnchor(), target);
+      const targetPosition = snapshotPoint(anchor, "moved position");
+      const previous = Object.freeze({
+        source: sourceParent,
+        x: objectView.x,
+        y: objectView.y,
+        zIndex: objectView.zIndex,
+      });
+      const sourceLayer = layerRegistrations.get(objectView);
+      sourceLayer?.mounted.delete(sourceLayer.node);
+      let committed = false;
+      try {
+        sourceParent.removeChild(objectView);
+        objectView.position.set(targetPosition.x, targetPosition.y);
+        objectView.zIndex = order;
+        target.addChild(objectView);
+        mounted.set(node, objectView);
+        layerRegistrations.set(objectView, { target, mounted, node });
+        committed = true;
+      } finally {
+        if (!committed) {
+          objectView.parent?.removeChild(objectView);
+          objectView.position.set(previous.x, previous.y);
+          objectView.zIndex = previous.zIndex;
+          previous.source.addChild(objectView);
+          if (sourceLayer) {
+            sourceLayer.mounted.set(sourceLayer.node, objectView);
+            layerRegistrations.set(objectView, sourceLayer);
+          }
+        }
+      }
+
+      let active = true;
+      const restore = (): void => {
+        if (!active) return;
+        active = false;
+        activeMoves.delete(objectView);
+        mounted.delete(node);
+        if (objectView.parent !== target) return;
+        target.removeChild(objectView);
+        objectView.position.set(previous.x, previous.y);
+        objectView.zIndex = previous.zIndex;
+        previous.source.addChild(objectView);
+        if (sourceLayer) {
+          sourceLayer.mounted.set(sourceLayer.node, objectView);
+          layerRegistrations.set(objectView, sourceLayer);
+        } else {
+          layerRegistrations.delete(objectView);
+        }
+      };
+      const existing = activeMoves.get(objectView);
+      existing?.restore();
+      const movement = Object.freeze({ restore });
+      activeMoves.set(objectView, movement);
+      return movement;
+    },
   }) satisfies RenderObjectLayer;
   registerPresentationMountTarget(layer, {
     get view(): Container {
@@ -143,9 +233,31 @@ export function createRenderObjectLayer(options: {
   return Object.freeze({
     layer,
     detachAll: (): void => {
+      const target = getView();
       for (const objectView of mounted.values())
-        objectView.parent?.removeChild(objectView);
+        if (objectView.parent === target) {
+          const movement = activeMoves.get(objectView);
+          if (movement) movement.restore();
+          else {
+            objectView.parent.removeChild(objectView);
+            layerRegistrations.delete(objectView);
+          }
+        }
       mounted.clear();
     },
   });
+}
+
+interface LayerRegistration {
+  readonly target: Container;
+  readonly mounted: Map<RenderObject, Container>;
+  readonly node: RenderObject;
+}
+
+const layerRegistrations = new WeakMap<Container, LayerRegistration>();
+const activeMoves = new WeakMap<Container, RenderObjectLayerMove>();
+
+/** @internal Reel owners call this before invalidating a borrowed occurrence. */
+export function restoreRenderObjectLayerMove(view: Container): void {
+  activeMoves.get(view)?.restore();
 }

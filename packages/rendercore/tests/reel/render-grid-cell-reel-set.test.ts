@@ -114,6 +114,22 @@ describe("RenderGridCellReelSet", () => {
     reelSet.cancelContinuous();
   });
 
+  it("keeps logical cell anchors resolvable during continuous spin", () => {
+    const reelSet = createGridReelSet();
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
+    const anchor = reelSet.getCellAnchor({ x: 1, y: 2 });
+    expect(reelSet.resolveAnchor(anchor)).toEqual({ x: 22.5, y: 30 });
+    reelSet.startContinuous({
+      direction: "forward",
+      speedSymbolsPerSecond: 10,
+    });
+    expect(reelSet.resolveAnchor(anchor)).toEqual({ x: 22.5, y: 30 });
+    expect(() => reelSet.getSymbol({ x: 1, y: 2 })).toThrow(
+      /before the cell has landed/,
+    );
+    reelSet.cancelContinuous();
+  });
+
   it("treats -1 as the shared direct-grid hole marker", () => {
     const reelSet = createGridReelSet();
     reelSet.resetToScene(

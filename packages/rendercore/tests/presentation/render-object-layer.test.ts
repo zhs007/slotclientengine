@@ -138,4 +138,41 @@ describe("RenderObjectLayer", () => {
     liveTargetView.destroy({ children: true });
     view.destroy({ children: true });
   });
+
+  it("moves an attached object atomically and can restore its source layer", () => {
+    const stage = new Container();
+    const sourceView = new Container({ position: { x: 30, y: 20 } });
+    const targetView = new Container({ position: { x: -10, y: 5 } });
+    stage.addChild(sourceView, targetView);
+    const source = createRenderObjectLayer({
+      view: sourceView,
+      label: "source layer",
+    });
+    const target = createRenderObjectLayer({
+      view: targetView,
+      label: "target layer",
+    });
+    const entry = objectAt(4, 6);
+    source.layer.add(entry.object, 2);
+    const expected = target.layer.resolveAnchor(entry.object.getAnchor());
+
+    const movement = target.layer.moveHere(entry.object, { order: 9 });
+    expect(entry.view.parent).toBe(targetView);
+    expect(entry.view.position.x).toBeCloseTo(expected.x);
+    expect(entry.view.position.y).toBeCloseTo(expected.y);
+    expect(entry.view.zIndex).toBe(9);
+
+    target.detachAll();
+    expect(entry.view.parent).toBe(sourceView);
+    expect(entry.view.position).toMatchObject({ x: 4, y: 6 });
+    expect(entry.view.zIndex).toBe(2);
+    movement.restore();
+    movement.restore();
+    expect(entry.view.parent).toBe(sourceView);
+    expect(entry.view.position).toMatchObject({ x: 4, y: 6 });
+    expect(entry.view.zIndex).toBe(2);
+    source.layer.remove(entry.object);
+    entry.object.destroy();
+    stage.destroy({ children: true });
+  });
 });

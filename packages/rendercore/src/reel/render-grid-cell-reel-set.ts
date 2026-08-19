@@ -12,10 +12,12 @@ import { prepareVisibleOccurrenceMotion } from "./visible-occurrence-transfer.js
 import {
   createContainerRenderAnchor,
   resolveRenderAnchor,
+  type RenderAnchor,
 } from "../presentation/render-anchor.js";
 import {
   getRenderObjectAdapter,
   type RenderObject,
+  type RenderPoint,
 } from "../presentation/render-object.js";
 import {
   getPresentationMountTargetAdapter,
@@ -24,6 +26,7 @@ import {
 } from "../presentation/presentation-scope.js";
 import {
   createRenderObjectLayer,
+  restoreRenderObjectLayerMove,
   type RenderObjectLayerController,
 } from "../presentation/render-object-layer.js";
 import { RenderReel } from "./render-reel.js";
@@ -1796,6 +1799,24 @@ export class RenderGridCellReelSet
     return this.createOccurrenceHandle(this.getCellOccurrence(cell));
   }
 
+  getCellAnchor(position: SymbolPosition): RenderAnchor {
+    const cell = this.getCell(position.x, position.y);
+    return createContainerRenderAnchor(this, () => {
+      if (this.destroyed)
+        throw new ReelError("Symbol area presentation runtime was destroyed.");
+      return {
+        x: cell.root.x + this.#cellWidth / 2,
+        y: cell.root.y + this.#cellHeight / 2,
+      };
+    });
+  }
+
+  resolveAnchor(anchor: RenderAnchor): RenderPoint {
+    if (this.destroyed)
+      throw new ReelError("Symbol area presentation runtime was destroyed.");
+    return resolveRenderAnchor(anchor, this);
+  }
+
   getSymbol(position: SymbolPosition): SymbolHandle {
     const cell = this.getCell(position.x, position.y);
     if (cell.phase === "waiting" || cell.phase === "spinning")
@@ -2896,6 +2917,7 @@ export class RenderGridCellReelSet
   private bumpOccurrenceGeneration(
     occurrence: RenderReelVisibleOccurrence,
   ): void {
+    restoreRenderObjectLayerMove(occurrence.symbol);
     this.#occurrenceGenerations.set(
       occurrence.symbol,
       this.getOccurrenceGeneration(occurrence) + 1,

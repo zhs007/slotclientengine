@@ -226,11 +226,15 @@ describe("RenderCellSpin", () => {
     const view = new Container();
     const node = createRenderObject({ view, destroy: () => view.destroy() });
     const cell = spin.getCell({ x: 0, y: 1 });
+    const stableCell = spin.getCellAnchor({ x: 0, y: 1 });
+    expect(spin.resolveAnchor(stableCell)).toEqual({ x: 7.5, y: 18 });
     cell.add(node, 3);
     expect(view.parent).not.toBeNull();
 
     spin.start({ x: 0, y: 1 });
     spin.update(0.2);
+    expect(spin.resolveAnchor(stableCell)).toEqual({ x: 7.5, y: 18 });
+    expect(() => spin.getSymbol({ x: 0, y: 1 })).toThrow(/before.*landed/);
     const settled = spin.settle(
       { x: 0, y: 1 },
       { code: 1, state: "normal" },

@@ -7,6 +7,8 @@ import {
 
 export interface RenderObjectPlayOptions {
   readonly signal?: AbortSignal;
+  /** Plays continuously. The returned Promise resolves after the first loop. */
+  readonly loop?: boolean;
 }
 
 export interface RenderPoint {
@@ -33,7 +35,17 @@ export interface RenderObjectAdapter {
   assertUsable?(): void;
   play?(name?: string, options?: RenderObjectPlayOptions): Promise<void>;
   stop?(): void;
+  readonly spineSlots?: RenderObjectSpineSlotAdapter;
   destroy(): void;
+}
+
+export interface RenderObjectSpineSlotAdapter {
+  attach(options: {
+    readonly slot: string;
+    readonly object: Container;
+    readonly followSlotColor?: boolean;
+  }): void;
+  remove(object: Container): void;
 }
 
 export interface CloneableRenderObjectAdapter extends RenderObjectAdapter {
@@ -46,10 +58,15 @@ export interface RegisteredRenderObjectAdapter {
   assertUsable(): void;
   play?(name?: string, options?: RenderObjectPlayOptions): Promise<void>;
   stop?(): void;
+  readonly spineSlots?: RenderObjectSpineSlotAdapter;
   destroy(): void;
 }
 
 const adapters = new WeakMap<RenderObject, RegisteredRenderObjectAdapter>();
+const cleanupByAdapter = new WeakMap<
+  RegisteredRenderObjectAdapter,
+  Set<() => void>
+>();
 
 export function createRenderObject(adapter: RenderObjectAdapter): RenderObject {
   return createRenderObjectBase(adapter);
@@ -88,6 +105,7 @@ function createRenderObjectBase(adapter: RenderObjectAdapter): RenderObject {
     assertUsable,
     ...(adapter.play ? { play: adapter.play } : {}),
     ...(adapter.stop ? { stop: adapter.stop } : {}),
+    ...(adapter.spineSlots ? { spineSlots: adapter.spineSlots } : {}),
     destroy: adapter.destroy,
   }) satisfies RegisteredRenderObjectAdapter;
   let object!: RenderObject;
@@ -114,6 +132,12 @@ function createRenderObjectBase(adapter: RenderObjectAdapter): RenderObject {
         return Promise.reject(
           new SymbolAnimationError("RenderObject playback was aborted."),
         );
+      if (options?.loop !== undefined && typeof options.loop !== "boolean")
+        return Promise.reject(
+          new SymbolAnimationError(
+            "RenderObject playback loop must be boolean.",
+          ),
+        );
       if (!adapter.play)
         return Promise.reject(
           new SymbolAnimationError("RenderObject does not support playback."),
@@ -136,6 +160,7 @@ function createRenderObjectBase(adapter: RenderObjectAdapter): RenderObject {
           "Borrowed RenderObject cannot be destroyed.",
         );
       const view = resolveView();
+      runRenderObjectCleanup(registered);
       view.parent?.removeChild(view);
       destroyed = true;
       adapter.destroy();
@@ -162,4 +187,26 @@ export function registerRenderObjectAlias(
   adapter: RegisteredRenderObjectAdapter,
 ): void {
   adapters.set(object, adapter);
+}
+
+/** @internal Presentation capabilities use this to release relationships before destroy. */
+export function registerRenderObjectCleanup(
+  object: RenderObject,
+  cleanup: () => void,
+): () => void {
+  const adapter = getRenderObjectAdapter(object);
+  let callbacks = cleanupByAdapter.get(adapter);
+  if (!callbacks) {
+    callbacks = new Set();
+    cleanupByAdapter.set(adapter, callbacks);
+  }
+  callbacks.add(cleanup);
+  return () => callbacks?.delete(cleanup);
+}
+
+function runRenderObjectCleanup(adapter: RegisteredRenderObjectAdapter): void {
+  const callbacks = cleanupByAdapter.get(adapter);
+  if (!callbacks) return;
+  cleanupByAdapter.delete(adapter);
+  for (const cleanup of [...callbacks]) cleanup();
 }

@@ -65,6 +65,19 @@ const anchor = symbol.getAnchor();
 
 空格唯一 code 为 `-1`，仍返回带位置与 Anchor 的 Empty `SymbolHandle`；依赖真实素材的 state/text/value 操作会失败。
 
+需要不依赖 occurrence、并可在 rolling 中使用的逻辑格位中心时：
+
+```ts
+const cellAnchor = area.getCellAnchor({ x: 2, y: 1 });
+const areaPoint = area.resolveAnchor(cellAnchor);
+const pointInWinLayer = runtime
+  .getRenderLayer("main.win")
+  .resolveAnchor(cellAnchor);
+```
+
+cell Anchor 来自稳定 grid geometry。它不代表 rolling Sprite；落停后与同格 Symbol 中心重合。rolling 中
+`getSymbol()` 仍失败，不能用 cell Anchor 取得或伪造 Symbol。
+
 ### 一组 Symbols
 
 ```ts
@@ -204,6 +217,28 @@ target.addAt(sparkle, {
   order: 10,
 });
 ```
+
+已挂载 RenderObject 或 settled Symbol 切换 parent 使用：
+
+```ts
+const movement = target.moveHere(sparkle, { order: 10 });
+movement.restore();
+```
+
+`moveHere()` 在 target-local 中保持当前视觉原点，失败不部分修改；`restore()` 幂等。完整动画、Spine slot
+绑定和换层生命周期见
+[`rendercore-game-runtime-composition-api.md`](./rendercore-game-runtime-composition-api.md)。
+
+已挂载 RenderObject 或 settled Symbol 切换 parent 使用：
+
+```ts
+const movement = target.moveHere(sparkle, { order: 10 });
+movement.restore();
+```
+
+`moveHere()` 在 target-local 中保持当前视觉原点，失败不部分修改；`restore()` 幂等。完整动画、Spine slot
+绑定和换层生命周期见
+[`rendercore-game-runtime-composition-api.md`](./rendercore-game-runtime-composition-api.md)。
 
 转换内部由 RenderCore 在解析时执行 source owner → global → target local；public API 不返回 global point 或 Matrix。Point 是快照，Anchor 在每次解析时使用当前 transform。
 

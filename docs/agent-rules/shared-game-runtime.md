@@ -86,6 +86,12 @@
   `{kind:"text",name}`取得，不猜唯一node、不在value/text间fallback。盘面Symbol/part为borrowed，只有owned clone可transfer或destroy。
 - 确需数值坐标时，`ReelArea.resolveAnchor()`只把有效RenderAnchor解析为该area本地RenderPoint；不开放world coordinate、raw
   Container或Matrix。解析结果是调用时快照，长期presentation/motion继续持有Anchor并在使用时转换，不缓存跨transform坐标。
+- standard ReelSpin、CellSpin与legacy grid-cell统一提供与occurrence解耦的稳定cell-center Anchor；它在rolling/部分落停期间可解析，
+  settled后与同格Symbol中心一致。rolling `getSymbol()`、stale occurrence与leased Symbol仍显式失败。
+- game runtime的program Spine/VNI RenderObject可显式`play(...,{loop:true})`；Promise在首圈完成后resolve且循环继续，直到stop、supersede或destroy。
+  detached owned RenderObject只可按exact Spine slot通过opaque attachment绑定，不猜slot/root且不转移destroy ownership。
+- registered RenderObjectLayer可原子移动已挂载RenderObject并保持视觉原点；settled borrowed Symbol临时换层必须在spin、replacement、release或destroy前由reel owner恢复，
+  不公开symbols主层、raw Container、world coordinate或直接zIndex。
 - area spin通用factory只装配column order与stagger并调用逐列ReelSpin；不得接受业务predicate、matrix command或state名。
 - RenderCore相关API按职责分为三层：第一层提供渲染对象与原子动作，第二层负责玩法无关的ownership、坐标、时钟、批量一致性和中断组合，
   第三层才解释Win/Coin/Wild/Free等玩法结构。第三层默认位于gameframeworks或等价recipes/template模块，必须允许游戏随时回落到第二层或

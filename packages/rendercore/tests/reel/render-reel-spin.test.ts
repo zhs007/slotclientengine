@@ -399,6 +399,12 @@ describe("RenderReelSet ReelSpin", () => {
       x: 30,
       y: 40,
     });
+    const stableCell = area.getCellAnchor({ x: 1, y: 2 });
+    expect(area.resolveAnchor(stableCell)).toEqual({ x: 24.5, y: 30 });
+    spin.start(1);
+    expect(area.resolveAnchor(stableCell)).toEqual({ x: 24.5, y: 30 });
+    expect(() => area.getSymbol({ x: 1, y: 2 })).toThrow(/before.*landed/);
+    spin.cancel(1);
 
     const staleAnchor = area.getSymbol({ x: 0, y: 0 }).getAnchor();
     spin.replaceSymbol({ x: 0, y: 0 }, { code: 2 });
@@ -411,6 +417,26 @@ describe("RenderReelSet ReelSpin", () => {
     expect(() => area.resolveAnchor(area.getAnchor({ x: 0, y: 0 }))).toThrow(
       /destroyed/,
     );
+  });
+
+  it("temporarily moves a settled Symbol to a public layer and restores it before spin", () => {
+    const spin = createSpin();
+    spin.resetToVisibleScene([
+      [1, 2, 1],
+      [2, 1, 2],
+    ]);
+    const area = spin.getArea();
+    const symbol = area.getSymbol({ x: 0, y: 0 });
+    const movement = area.getLayer("win").moveHere(symbol, { order: 7 });
+    expect(area.getLayer("win").resolveAnchor(symbol.getAnchor())).toEqual({
+      x: 7.5,
+      y: 6,
+    });
+
+    spin.start(0);
+    expect(() => symbol.getValue()).toThrow(/stale/);
+    movement.restore();
+    spin.cancel(0);
   });
 
   it("preflights a SymbolGroup before mutating any member", async () => {
@@ -505,6 +531,12 @@ describe("RenderReelSet ReelSpin", () => {
             throw new Error("unused");
           },
           getSymbols: () => {
+            throw new Error("unused");
+          },
+          getCellAnchor: () => {
+            throw new Error("unused");
+          },
+          resolveAnchor: () => {
             throw new Error("unused");
           },
         },

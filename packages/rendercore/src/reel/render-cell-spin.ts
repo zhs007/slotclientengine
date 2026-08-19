@@ -4,7 +4,13 @@ import { assertValidDeltaSeconds } from "../symbol/ani.js";
 import type { RenderObject } from "../presentation/render-object.js";
 import type { SymbolStateId } from "../symbol/index.js";
 import { getRenderObjectAdapter } from "../presentation/render-object.js";
-import { createContainerRenderAnchor } from "../presentation/render-anchor.js";
+import {
+  createContainerRenderAnchor,
+  resolveRenderAnchor,
+  type RenderAnchor,
+} from "../presentation/render-anchor.js";
+import type { RenderPoint } from "../presentation/render-object.js";
+import { restoreRenderObjectLayerMove } from "../presentation/render-object-layer.js";
 import {
   createSymbolHandle,
   type SymbolHandle,
@@ -373,6 +379,19 @@ export class RenderCellSpin extends Container implements CellSpin {
         });
       },
     });
+  }
+
+  getCellAnchor(position: SymbolPosition): RenderAnchor {
+    const cell = this.getRuntimeCell(position);
+    return createContainerRenderAnchor(this, () => {
+      this.assertAlive();
+      return cellCenter(cell, this.#options);
+    });
+  }
+
+  resolveAnchor(anchor: RenderAnchor): RenderPoint {
+    this.assertAlive();
+    return resolveRenderAnchor(anchor, this);
   }
 
   replaceSymbol(
@@ -1063,6 +1082,7 @@ export class RenderCellSpin extends Container implements CellSpin {
   private bumpOccurrenceGeneration(
     symbol: RenderReelVisibleOccurrence["symbol"],
   ): void {
+    restoreRenderObjectLayerMove(symbol);
     this.#occurrenceGenerations.set(
       symbol,
       this.getOccurrenceGeneration(symbol) + 1,

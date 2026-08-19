@@ -127,10 +127,20 @@ standard reel 的第一层 `ReelArea` façade，并额外公开最高优先级
 win layer，再调用默认或装配时注入的 `AreaSpinFunction`。游戏不持有 interruption signal。`SymbolHandle.getPosition()`
 只返回 area-local occurrence 中心；通用 `createTextRenderObject()` 可据此定位后挂入 win layer。
 
+需要与 occurrence 解耦的格位坐标时使用 `area.getCellAnchor({x,y})`。它在 standard ReelSpin、CellSpin 和
+legacy grid-cell 的 rolling/部分落停期间仍有效；用 `area.resolveAnchor(anchor)` 或目标
+`RenderObjectLayer.resolveAnchor(anchor)` 取得明确的 target-local 数值。rolling 中 `getSymbol()` 仍严格失败。
+
 Area、Scene Layout顶层和exact named node attachment统一使用增量兼容的`RenderObjectLayer`。既有
 `layer.add(node, order?)/remove(node)`保持不变；新`getAnchor/resolveAnchor/addAt`允许用opaque anchor按调用时
-transform对齐object。`SceneLayoutPackageRuntime.getRenderLayer(ref)`统一取得stable、`main.top|win|bottom`与exact node attachment；canonical node可用裸id或`.child|before|after`，旧带点号node使用`node:<legacyId>`。
+transform对齐object；`moveHere(node,{order})`可把已挂载 RenderObject 或 settled Symbol 原子切到目标层并保持视觉原点，返回幂等 `restore()`。
+`SceneLayoutPackageRuntime.getRenderLayer(ref)`统一取得stable、`main.top|win|bottom`与exact node attachment；canonical node可用裸id或`.child|before|after`，旧带点号node使用`node:<legacyId>`。
 旧`getLayer/getNode/attachChild/attachRelative` borrowed Container seam继续兼容既有host/editor，不要求游戏批量迁移。
+
+程序 Spine/VNI `RenderObject.play(name?, {loop:true})` 在首圈完成后 resolve 并继续后台循环，调用方用
+`stop()` 结束。`attachRenderObjectToSpineSlot()` 可把 detached owned ImgNumber/RenderObject 绑定到 program
+Spine 的 exact slot；不转移 destroy ownership。完整 game runtime API 和 cleanup 示例见
+[`docs/rendercore-game-runtime-composition-api.md`](../../docs/rendercore-game-runtime-composition-api.md)。
 
 Scene Layout package runtime 只为 standard reel 提供 `getReelSpin("main")`；未知
 area、未 ready 或首次 scene 尚未 commit 都严格失败。详细合同见
