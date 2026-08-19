@@ -263,7 +263,7 @@ export function mountEditorAssetsView<TProject>(
       <dt>使用</dt><dd>${nodeUsage?.directReferences.map(({ location }) => escapeHtml(location)).join("、") || "无"}</dd>
       <dt>程序</dt><dd>${nodeUsage?.programBindings.map(({ name }) => escapeHtml(name)).join("、") || "无"}</dd></dl>
       ${Object.keys(row.node.metadata).length ? `<pre>${escapeHtml(JSON.stringify(row.node.metadata, null, 2))}</pre>` : ""}
-      ${isRoot ? `<div class="editor-assets-inspector-actions"><label>程序键<input data-program-name value="${escapeHtml(nodeUsage?.programBindings[0]?.name ?? "")}" /></label><button type="button" data-program-save="${escapeHtml(root.key)}">保存程序标记</button><button class="danger" type="button" data-root-delete="${escapeHtml(root.key)}">删除 Root</button></div>` : '<p class="editor-assets-internal">内部 leaf 只读；如需独立复用，请重新导入顶层 asset。</p>'}`;
+      ${isRoot ? `<div class="editor-assets-inspector-actions"><label>程序键<input data-program-name value="${escapeHtml(nodeUsage?.programBindings[0]?.name ?? root.key)}" /></label><button type="button" data-program-save="${escapeHtml(root.key)}">保存程序标记</button>${nodeUsage?.programBindings.length ? `<button type="button" data-program-cancel="${escapeHtml(root.key)}">取消程序标记</button>` : ""}<button class="danger" type="button" data-root-delete="${escapeHtml(root.key)}">删除 Root</button></div>` : '<p class="editor-assets-internal">内部 leaf 只读；如需独立复用，请重新导入顶层 asset。</p>'}`;
   }
 
   function renderReview(value: EditorAssetImportPreparation) {
@@ -355,15 +355,31 @@ export function mountEditorAssetsView<TProject>(
         inspector,
         "[data-program-name]",
       ).value.trim();
+      if (!value) {
+        setMessage("程序键不能为空。", "error");
+        return;
+      }
       try {
         await options.controller.setProgramBinding(
           programButton.dataset.programSave!,
-          value || null,
+          value,
         );
-        setMessage(
-          value ? "程序 binding 已保存。" : "程序 binding 已取消。",
-          "ready",
+        setMessage("程序 binding 已保存。", "ready");
+      } catch (error) {
+        setMessage(formatError(error), "error");
+      }
+      return;
+    }
+    const programCancelButton = target.closest<HTMLElement>(
+      "[data-program-cancel]",
+    );
+    if (programCancelButton) {
+      try {
+        await options.controller.setProgramBinding(
+          programCancelButton.dataset.programCancel!,
+          null,
         );
+        setMessage("程序 binding 已取消。", "ready");
       } catch (error) {
         setMessage(formatError(error), "error");
       }
