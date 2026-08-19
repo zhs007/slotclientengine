@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { convertProjectCoordinateOrigin } from "../src/model/coordinate-origin.js";
 import {
+  createNewEditorProject,
   editorProjectToManifest,
   manifestToEditorProject,
 } from "../src/model/editor-project.js";
 import { EditorStore } from "../src/model/editor-store.js";
+import {
+  assignBackgroundResource,
+  uploadImageResource,
+} from "../src/model/resource-commands.js";
 import { assetBytes, imageManifest } from "./fixtures.js";
 
 describe("coordinate origin conversion", () => {
@@ -160,5 +165,67 @@ describe("coordinate origin conversion", () => {
       { x: 40, y: 20 },
       { x: 40, y: 20 },
     ]);
+  });
+
+  it("preserves independent center-origin reel and focus geometry when art size changes", async () => {
+    const project = createNewEditorProject("orientation-focus");
+    project.reel.columns = 5;
+    project.reel.rows = 5;
+    project.reel.cellWidth = 172;
+    project.reel.cellHeight = 130;
+    project.reel.gapX = 6;
+    project.reel.gapY = 0;
+    const uploadBackground = async (
+      name: string,
+      width: number,
+      height: number,
+    ) =>
+      uploadImageResource({
+        project,
+        file: new File(
+          [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])],
+          name,
+        ),
+        decodeImage: async () => ({ width, height }),
+      });
+    await uploadBackground("landscape.png", 2000, 1125);
+    await uploadBackground("portrait.png", 1174, 2000);
+    await uploadBackground("square.png", 2000, 2000);
+    assignBackgroundResource({
+      project,
+      variant: "landscape",
+      resourceId: "landscape.png",
+    });
+    assignBackgroundResource({
+      project,
+      variant: "portrait",
+      resourceId: "portrait.png",
+    });
+    project.reel.placements.landscape = { x: 682, y: 254 };
+    project.variants.landscape.focusRect = {
+      x: 22,
+      y: 94,
+      width: 1954,
+      height: 940,
+    };
+    convertProjectCoordinateOrigin(project, "center");
+    assignBackgroundResource({
+      project,
+      variant: "landscape",
+      resourceId: "square.png",
+    });
+
+    expect(project.reel.placements.landscape).toEqual({ x: 124, y: 16.5 });
+    expect(project.variants.landscape.artSize).toEqual({
+      width: 2000,
+      height: 2000,
+    });
+    expect(project.variants.landscape.focusRect).toEqual({
+      x: 22,
+      y: 94,
+      width: 1954,
+      height: 940,
+    });
+    expect(() => editorProjectToManifest(project)).not.toThrow();
   });
 });

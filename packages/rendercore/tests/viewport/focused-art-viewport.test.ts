@@ -142,7 +142,7 @@ describe("focused art viewport", () => {
     ).toThrow(/width/);
   });
 
-  it("creates a reusable maximized-focus policy and rejects invalid input", () => {
+  it("creates a reusable maximized-focus policy", () => {
     const policy = createMaximizedFocusedArtViewportPolicy({
       artSize: ART_SIZE,
       focusRect: { x: 577.5, y: 270, width: 840, height: 1200 },
@@ -155,12 +155,13 @@ describe("focused art viewport", () => {
     expect(() =>
       policy.resolveViewportSize({ width: 0, height: 1200 }),
     ).toThrow(/pageSize.width/);
-    expect(() =>
-      createMaximizedFocusedArtViewportPolicy({
-        artSize: ART_SIZE,
-        focusRect: { x: 1500, y: 0, width: 600, height: 100 },
-      }),
-    ).toThrow(/focusRect/);
+    const outOfArtPolicy = createMaximizedFocusedArtViewportPolicy({
+      artSize: ART_SIZE,
+      focusRect: { x: 1500, y: 0, width: 600, height: 100 },
+    });
+    expect(
+      outOfArtPolicy.resolveViewportSize({ width: 1000, height: 1000 }),
+    ).toEqual({ width: 600, height: 600 });
   });
 
   it("maps a centered reference rect into the larger art coordinate space", () => {
@@ -337,21 +338,49 @@ describe("focused art viewport", () => {
     });
   });
 
-  it("fails fast for invalid sizes, focus rects and impossible margins", () => {
-    expect(() =>
+  it("extends the visible plane when authored focus geometry is outside art", () => {
+    const right = calculateFocusedArtViewport({
+      artSize: ART_SIZE,
+      viewportSize: { width: 1000, height: 1000 },
+      focusRect: { x: 1500, y: 0, width: 600, height: 100 },
+    });
+    expect(right.visibleRect).toEqual({
+      x: 1100,
+      y: 0,
+      width: 1000,
+      height: 1000,
+    });
+    expect(right.focusRectInViewport).toEqual({
+      x: 400,
+      y: 0,
+      width: 600,
+      height: 100,
+    });
+
+    const negative = calculateFocusedArtViewport({
+      artSize: ART_SIZE,
+      viewportSize: { width: 1000, height: 1000 },
+      focusRect: { x: -100, y: -50, width: 200, height: 100 },
+    });
+    expect(negative.visibleRect).toEqual({
+      x: -100,
+      y: -50,
+      width: 1000,
+      height: 1000,
+    });
+  });
+
+  it("allows a viewport larger than art and exposes the uncovered area", () => {
+    expect(
       calculateFocusedArtViewport({
         artSize: ART_SIZE,
-        viewportSize: { width: 2001, height: 1000 },
+        viewportSize: { width: 2200, height: 2100 },
         focusRect: FOCUS_RECT,
-      }),
-    ).toThrow(/must not exceed/);
-    expect(() =>
-      calculateFocusedArtViewport({
-        artSize: ART_SIZE,
-        viewportSize: { width: 1000, height: 1000 },
-        focusRect: { x: 1500, y: 0, width: 600, height: 100 },
-      }),
-    ).toThrow(/focusRect/);
+      }).visibleRect,
+    ).toEqual({ x: -100, y: -50, width: 2200, height: 2100 });
+  });
+
+  it("fails fast for invalid sizes and impossible margins", () => {
     expect(() =>
       calculateFocusedArtViewport({
         artSize: ART_SIZE,
@@ -382,13 +411,6 @@ describe("focused art viewport", () => {
         focusRect: FOCUS_RECT,
       }),
     ).toThrow(/viewportSize.width/);
-    expect(() =>
-      calculateFocusedArtViewport({
-        artSize: ART_SIZE,
-        viewportSize: { width: 1000, height: 1000 },
-        focusRect: { x: -1, y: 0, width: 10, height: 10 },
-      }),
-    ).toThrow(/origin/);
     expect(() =>
       calculateFocusedArtViewport({
         artSize: ART_SIZE,
@@ -424,21 +446,21 @@ describe("focused art viewport", () => {
     ).toThrow(/align/);
   });
 
-  it("rejects invalid art rect viewport mappings", () => {
-    expect(() =>
+  it("maps authored rects outside art without correcting them", () => {
+    expect(
       mapArtRectToViewport({
         artSize: ART_SIZE,
         visibleRect: { x: 900, y: 0, width: 1200, height: 1200 },
         rect: FOCUS_RECT,
       }),
-    ).toThrow(/visibleRect/);
-    expect(() =>
+    ).toEqual({ x: -262.5, y: 330, width: 720, height: 1080 });
+    expect(
       mapArtRectToViewport({
         artSize: ART_SIZE,
         visibleRect: { x: 0, y: 0, width: 1200, height: 1200 },
         rect: { x: 1500, y: 0, width: 600, height: 100 },
       }),
-    ).toThrow(/rect/);
+    ).toEqual({ x: 1500, y: 0, width: 600, height: 100 });
     expect(() =>
       mapArtRectToViewport({
         artSize: ART_SIZE,

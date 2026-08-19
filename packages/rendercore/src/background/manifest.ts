@@ -52,16 +52,6 @@ export function parseSpineBackgroundManifest(
     adaptationRecord.focusRect,
     "background adaptation.focusRect",
   );
-  if (
-    focusRect.x < 0 ||
-    focusRect.y < 0 ||
-    focusRect.x + focusRect.width > artSize.width ||
-    focusRect.y + focusRect.height > artSize.height
-  ) {
-    throw new BackgroundManifestError(
-      "Background adaptation.focusRect must fit inside artSize.",
-    );
-  }
 
   const resourceRecord = assertRecord(record.resource, "background resource");
   assertOnlyKnownKeys(resourceRecord, "background resource", [

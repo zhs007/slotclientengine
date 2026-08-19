@@ -1058,7 +1058,7 @@ describe("scene layout manifest", () => {
     });
   });
 
-  it("rejects unknown fields, missing variants, invalid bounds and collisions", () => {
+  it("rejects unknown fields, missing variants and collisions", () => {
     expect(() =>
       parseSceneLayoutManifest({ ...game002LayoutFixture, extra: true }),
     ).toThrow(/unknown key/);
@@ -1076,26 +1076,6 @@ describe("scene layout manifest", () => {
     expect(() =>
       parseSceneLayoutManifest({
         ...game002LayoutFixture,
-        reels: {
-          main: {
-            ...game002LayoutFixture.reels.main,
-            placements: { default: { x: 1500, y: 337 } },
-          },
-        },
-      }),
-    ).toThrow(/fit inside artSize/);
-    expect(() =>
-      parseSceneLayoutManifest({
-        ...game002LayoutFixture,
-        adaptation: {
-          ...game002LayoutFixture.adaptation,
-          focusRect: { x: 700, y: 400, width: 500, height: 500 },
-        },
-      }),
-    ).toThrow(/focusRect must contain reel/);
-    expect(() =>
-      parseSceneLayoutManifest({
-        ...game002LayoutFixture,
         nodes: [
           game002LayoutFixture.nodes[0],
           {
@@ -1110,6 +1090,36 @@ describe("scene layout manifest", () => {
         ],
       }),
     ).toThrow(/alias collision/);
+  });
+
+  it("preserves independent art, focus and reel geometry", () => {
+    const manifest = parseSceneLayoutManifest({
+      ...game002LayoutFixture,
+      adaptation: {
+        ...game002LayoutFixture.adaptation,
+        focusRect: { x: -100, y: 400, width: 500, height: 500 },
+      },
+      reels: {
+        main: {
+          ...game002LayoutFixture.reels.main,
+          placements: { default: { x: 1500, y: 337 } },
+        },
+      },
+    });
+
+    expect(manifest.adaptation.mode).toBe("maximized-focus");
+    if (manifest.adaptation.mode !== "maximized-focus")
+      throw new Error("expected maximized-focus fixture");
+    expect(manifest.adaptation.focusRect).toEqual({
+      x: -100,
+      y: 400,
+      width: 500,
+      height: 500,
+    });
+    expect(manifest.reels.main.placements.default).toEqual({
+      x: 1500,
+      y: 337,
+    });
   });
 
   it("allows exact content path reuse without merging resource semantics", () => {

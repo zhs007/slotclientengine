@@ -67,6 +67,8 @@ focusRect.x/y        = focus 相对完整背景左上角的位置
 
 背景表现可以是静态 texture，也可以是 `@slotclientengine/rendercore/background` 提供的 manifest-driven Spine player。无论表现来源如何，适配只消费 `artSize`、`focusRect` 和 viewport policy：
 
+- `artSize` 描述背景覆盖的 art 区域，`focusRect` 描述必须纳入适配计算的重点区域；二者不要求互相包含。
+- focus、reel 或最终 visible rect 可以越出 art。超出部分会按真实结果表现为未覆盖、裁切或不可见，不由 parser/runtime 自动修正。
 - 静态 texture 的像素尺寸不能隐式覆盖已配置 art。
 - Spine skeleton bounds、atlas page 数量、当前 animation 和逻辑 state 都不能改变 art/focus/viewport。
 - Spine display tree 必须先按 manifest transform 映射到 art 坐标，再裁切到 manifest art rect；之后与 reel、overlay 一起放入同一个 art world 并统一应用 `worldOffset`。
@@ -357,12 +359,10 @@ interface FocusedArtViewport {
 显式失败条件包括：
 
 - `artSize`、`viewportSize`、`focusRect` 包含非有限数或非正尺寸；
-- `viewportSize` 超过 `artSize`；
-- `focusRect` 超出 `artSize`；
 - viewport 无法容纳 focus 和 `minMargin`；
 - margin 为负数或非有限数。
 
-不要捕获这些错误后静默 fallback。配置错误应在开发、构建或 loading 阶段明确暴露。
+`viewportSize`、`focusRect` 或 reel 超出 `artSize` 不是配置错误，不得据此阻断或自动校正；未被背景覆盖的区域按实际结果呈现。其余结构错误不要捕获后静默 fallback，应在开发、构建或 loading 阶段明确暴露。
 
 ## 6. 如何选择方案
 

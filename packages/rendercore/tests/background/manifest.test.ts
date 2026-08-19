@@ -79,10 +79,6 @@ describe("Spine background manifest", () => {
     ["wrong adaptation mode", (value: any) => (value.adaptation.mode = "fit")],
     ["non-finite art size", (value: any) => (value.artSize.width = Number.NaN)],
     ["zero art size", (value: any) => (value.artSize.height = 0)],
-    [
-      "focus outside art",
-      (value: any) => (value.adaptation.focusRect.x = 1900),
-    ],
     ["absolute path", (value: any) => (value.resource.skeleton = "/BG.json")],
     ["escaping path", (value: any) => (value.resource.atlas = "../BG.atlas")],
     [
@@ -112,6 +108,20 @@ describe("Spine background manifest", () => {
     const value = structuredClone(TEST_MANIFEST);
     mutate(value);
     expect(() => parseSpineBackgroundManifest(value)).toThrow();
+  });
+
+  it("preserves focus geometry outside art bounds", () => {
+    const value = structuredClone(TEST_MANIFEST) as any;
+    value.adaptation.focusRect = {
+      x: -100,
+      y: 1900,
+      width: 2200,
+      height: 200,
+    };
+
+    expect(parseSpineBackgroundManifest(value).adaptation.focusRect).toEqual(
+      value.adaptation.focusRect,
+    );
   });
 
   it("uses explicit atlas-page keys without comparing mapped texture basenames", () => {

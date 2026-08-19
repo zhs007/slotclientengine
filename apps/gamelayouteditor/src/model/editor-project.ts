@@ -426,16 +426,10 @@ export function updateVariantFocusFromReel(
       !Object.values(offsets).every(Number.isFinite)
     )
       return;
-    const left = Math.max(0, offsets.left);
-    const top = Math.max(0, offsets.top);
-    const right = Math.min(
-      variant.artSize.width,
-      variant.artSize.width + offsets.right,
-    );
-    const bottom = Math.min(
-      variant.artSize.height,
-      variant.artSize.height + offsets.bottom,
-    );
+    const left = offsets.left;
+    const top = offsets.top;
+    const right = variant.artSize.width + offsets.right;
+    const bottom = variant.artSize.height + offsets.bottom;
     variant.focusRect = {
       x: left,
       y: top,
@@ -463,16 +457,10 @@ export function updateVariantFocusFromReel(
   }
   const reelSize = calculateReelSize(project);
   const reelTopLeft = resolveEditorReelTopLeft(project, variantId);
-  const left = Math.max(0, reelTopLeft.x + offsets.left);
-  const top = Math.max(0, reelTopLeft.y + offsets.top);
-  const right = Math.min(
-    variant.artSize.width,
-    reelTopLeft.x + reelSize.width + offsets.right,
-  );
-  const bottom = Math.min(
-    variant.artSize.height,
-    reelTopLeft.y + reelSize.height + offsets.bottom,
-  );
+  const left = reelTopLeft.x + offsets.left;
+  const top = reelTopLeft.y + offsets.top;
+  const right = reelTopLeft.x + reelSize.width + offsets.right;
+  const bottom = reelTopLeft.y + reelSize.height + offsets.bottom;
   variant.focusRect = {
     x: left,
     y: top,
@@ -594,33 +582,6 @@ export function applySymbolPackageCellSize(
   project.reel.cellHeight = cellSize.height;
   for (const variantId of activeVariantIds(project)) {
     updateVariantFocusFromReel(project, variantId);
-    const variant = project.variants[variantId];
-    const placement = project.reel.placements[variantId];
-    if (!placement || variant.artSize.width <= 0 || variant.artSize.height <= 0)
-      continue;
-    const size = calculateReelSize(project);
-    const topLeft = resolveEditorReelTopLeft(project, variantId);
-    if (
-      topLeft.x < 0 ||
-      topLeft.y < 0 ||
-      topLeft.x + size.width > variant.artSize.width ||
-      topLeft.y + size.height > variant.artSize.height
-    ) {
-      throw new Error(
-        `symbols package cellSize 使 ${variantId} main grid 越出 art；禁止 auto-fit。`,
-      );
-    }
-    const focus = variant.focusRect;
-    if (
-      focus.x > topLeft.x ||
-      focus.y > topLeft.y ||
-      focus.x + focus.width < topLeft.x + size.width ||
-      focus.y + focus.height < topLeft.y + size.height
-    ) {
-      throw new Error(
-        `symbols package cellSize 使 ${variantId} main grid 越出 focus；禁止 auto-fit。`,
-      );
-    }
   }
 }
 

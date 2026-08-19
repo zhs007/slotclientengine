@@ -105,7 +105,7 @@ describe("EditorStore", () => {
     });
   });
 
-  it("applies package cellSize while preserving grid topology and rejects art overflow atomically", () => {
+  it("applies package cellSize while preserving independent art geometry", () => {
     const store = new EditorStore(createNewEditorProject("maximized-focus"));
     store.transact((draft) =>
       applySymbolPackageCellSize(draft, { width: 120, height: 120 }),
@@ -135,14 +135,15 @@ describe("EditorStore", () => {
     bounded.variants.default.artSize = { width: 500, height: 500 };
     bounded.reel.placements.default = { x: 0, y: 0 };
     updateVariantFocusFromReel(bounded, "default");
-    const boundedStore = new EditorStore(bounded);
-    expect(() =>
-      boundedStore.transact((draft) =>
-        applySymbolPackageCellSize(draft, { width: 200, height: 120 }),
-      ),
-    ).toThrow(/越出 art/);
-    expect(boundedStore.getSnapshot().project.reel.cellWidth).toBe(160);
-    expect(boundedStore.getSnapshot().project.reel.cellHeight).toBe(160);
+    applySymbolPackageCellSize(bounded, { width: 200, height: 120 });
+    expect(bounded.reel.cellWidth).toBe(200);
+    expect(bounded.reel.cellHeight).toBe(120);
+    expect(bounded.variants.default.focusRect).toEqual({
+      x: -60,
+      y: -60,
+      width: 1120,
+      height: 480,
+    });
   });
 
   it("keeps invalid intermediate values and atomically replaces imports", () => {

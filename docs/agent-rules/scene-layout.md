@@ -51,6 +51,7 @@
 - Scene Layout 在组合 Popup/Symbol package 时才把 local effect name 编译为 `<binding>.<local>` route；程序只能播放/停止显式 allowlist route。cue delay 使用宿主 `update(deltaSeconds)` 时钟，stop、切状态、rollback 与 destroy 必须取消未触发播放并清理 owner-scoped instance。
 - rendercore 拥有 strict gameModes、plural symbolPackages、directed transition schema、exact dependency closure 和 production API。
 - scene-layout authored coordinate origin 只允许 `top-left` / `center`；缺失按 `top-left`。node、art-space Spine transition 与 main reel 的 origin 映射由 rendercore 统一实现，focus rect 继续使用 art 左上角矩形。
+- `artSize`、`focusRect`、`frameFocusRect` 与 reel placement 是相互独立的 authored geometry；parser、runtime 与 editor 不要求它们互相包含，也不因越出 art 自动裁切或修正。适配与预览必须呈现实际几何，越界、裁切、不可见或未被背景覆盖的区域由编辑者判断和调整。
 - runtime必须从current snapshot公开authored origin、art/visibleRect九宫格point及authored point↔opaque Anchor；Point/Rect是调用时快照，Anchor延迟解析。不得要求游戏为center origin手工加减半个artSize，也不得把logical visibleRect称为CSS/window/device坐标。
 - canonical layer ref只能由一个strict parser按stable、`node:` legacy、exact area suffix、canonical node顺序解析；unknown/ambiguous/unavailable显式失败，禁止alias或node/resource同名fallback。
 - scene node placement 的 `rotation` 使用角度，normalized `center` 默认 `0.5/0.5`；旧字段缺失分别按 `0` 与默认中心规范化。rendercore 统一应用 node position/scale/pivot/rotation matrix，Spine 的默认中心精确使用 authored origin `(0,0)`。editor/app 不复制 transform，不从 skeleton bounds、atlas texture 或当前动画帧猜另一套默认中心。Popup/transition 仍只用 `x/y/scale`，main reel 仍只用 `x/y`。
@@ -71,7 +72,7 @@
 - owned MP4、Spine、VNI project/assets、image、symbols 和 popup dependencies 都进入 exact closure；runtime 复用精确 bytes。
 - 不属于 scene node/transition、但由程序读取的资源必须通过根 manifest 的唯一稳定程序键声明为 typed runtime resource；五类现有 root 均按正向 exact closure 导出。runtime consumer 按 canonical runtime manifest 的 key/kind 严格解析，即使 initial layout view 为 lazy prepare 而省略这些声明也不得误判 unknown；不得猜 filename 或 physical hash path。
 - production export 先从 layout 收集实际引用的 root，再按有向依赖计算 exact closure。共享 atlas/贴图可由任一被用到的 Spine JSON root 带入；同批未引用的 sibling JSON root 不得因共享 leaf 被反向导出。
-- 替换或重绑资源必须保留稳定 node identity、order、各 variant placement/visibility，并尽可能保留仍兼容的 animation、loop 与 image-string 配置。资源尺寸变化不得自动重置 reel、focus 或 placement；现有几何与新 art size 冲突时必须严格失败。
+- 替换或重绑资源必须保留稳定 node identity、order、各 variant placement/visibility，并尽可能保留仍兼容的 animation、loop 与 image-string 配置。资源尺寸变化不得自动重置 reel、focus 或 placement，也不得以这些几何与新 art size 不互相包含为由失败。
 - 相同 symbols binding 的 mode 切换默认保留 reel、scene 和 player；只有显式 `recreateReel` 才重建。
 - v4 `runtimeAllocation`只保存typed owner id、mode/variant active node和package/on-demand lifetime，不保存physical path/hash/bytes。package runtime在init准备全部声明的Symbols reel entry；首次激活需要显式scene，之后跨binding返回恢复原entry，dormant entry不update且只在package destroy或显式replacement时销毁。
 - production full package runtime 可显式 deferred prepare main reel；首次 scene commit 前 reel 不可见且业务 API 必须失败。自定义 reel factory 采用 ownership transfer，package 仍负责 manifest order/placement 与 destroy；借用 overlay 只能通过 typed attach/dispose API 接入并位于 transition/popup 下方。

@@ -1179,9 +1179,7 @@ describe("filename-key layout resource commands", () => {
       width: 920,
       height: 600,
     });
-    expect(() => editorProjectToManifest(project)).toThrow(
-      /fit inside artSize/,
-    );
+    expect(() => editorProjectToManifest(project)).not.toThrow();
     clearBackground(project, "default");
     expect(project.nodes).toHaveLength(0);
     expect(project.resources.size).toBe(2);

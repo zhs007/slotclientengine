@@ -54,7 +54,9 @@ export interface FocusedArtViewport {
 /**
  * Resolves the logical canvas size used by a focus-aware DOM frame.
  * The returned size preserves the page aspect while keeping the required
- * focus and margins visible, capped by the selected art's design bounds.
+ * focus and margins visible. When that requires a design size beyond the
+ * selected art, the caller sees the uncovered area instead of a validation
+ * failure.
  */
 export function calculateFocusedFrameDesignSize(
   options: FocusedFrameDesignSizeOptions,
@@ -76,29 +78,31 @@ export function calculateFocusedFrameDesignSize(
   ) {
     throw new Error("preferredPortraitSize must not exceed maxDesignSize.");
   }
-  if (
-    minimumWidth > maxDesignSize.width ||
-    minimumHeight > maxDesignSize.height
-  ) {
-    throw new Error("focusSize and minMargin must fit inside maxDesignSize.");
-  }
+  const effectiveMaxDesignSize = freezeSize({
+    width: Math.max(maxDesignSize.width, minimumWidth),
+    height: Math.max(maxDesignSize.height, minimumHeight),
+  });
+  const effectivePreferredPortraitSize = freezeSize({
+    width: Math.max(preferredPortraitSize.width, minimumWidth),
+    height: Math.max(preferredPortraitSize.height, minimumHeight),
+  });
 
   const pageAspect = pageSize.width / pageSize.height;
   const portraitAspect =
     preferredPortraitSize.width / preferredPortraitSize.height;
-  const maximumWideAspect = maxDesignSize.width / minimumHeight;
+  const maximumWideAspect = effectiveMaxDesignSize.width / minimumHeight;
   let width: number;
   let height: number;
 
   if (pageAspect <= portraitAspect) {
-    height = maxDesignSize.height;
+    height = effectiveMaxDesignSize.height;
     width = clamp(
       height * pageAspect,
       minimumWidth,
-      preferredPortraitSize.width,
+      effectivePreferredPortraitSize.width,
     );
   } else if (pageAspect >= maximumWideAspect) {
-    width = maxDesignSize.width;
+    width = effectiveMaxDesignSize.width;
     height = minimumHeight;
   } else {
     height = Math.max(minimumHeight, minimumWidth / pageAspect);
@@ -106,8 +110,8 @@ export function calculateFocusedFrameDesignSize(
   }
 
   return freezeSize({
-    width: clamp(width, minimumWidth, maxDesignSize.width),
-    height: clamp(height, minimumHeight, maxDesignSize.height),
+    width: clamp(width, minimumWidth, effectiveMaxDesignSize.width),
+    height: clamp(height, minimumHeight, effectiveMaxDesignSize.height),
   });
 }
 
@@ -128,21 +132,8 @@ export function calculateFocusedArtViewport(
 ): FocusedArtViewport {
   const artSize = validateSize(options.artSize, "artSize");
   const viewportSize = validateSize(options.viewportSize, "viewportSize");
-  const focusRect = validateRect(options.focusRect, "focusRect");
+  const focusRect = validateUnboundedRect(options.focusRect, "focusRect");
   const minMargin = normalizeMargin(options.minMargin);
-
-  if (
-    viewportSize.width > artSize.width ||
-    viewportSize.height > artSize.height
-  ) {
-    throw new Error("viewportSize must not exceed artSize.");
-  }
-  if (
-    focusRect.x + focusRect.width > artSize.width ||
-    focusRect.y + focusRect.height > artSize.height
-  ) {
-    throw new Error("focusRect must fit inside artSize.");
-  }
 
   const minimumWidth = focusRect.width + minMargin.left + minMargin.right;
   const minimumHeight = focusRect.height + minMargin.top + minMargin.bottom;
@@ -153,21 +144,29 @@ export function calculateFocusedArtViewport(
     throw new Error("viewportSize.height cannot contain focusRect minMargin.");
   }
 
-  const focusedX = clampOrigin(
-    focusRect.x + focusRect.width / 2 - viewportSize.width / 2,
-    artSize.width,
-    viewportSize.width,
-  );
+  const focusedX = focusRect.x + focusRect.width / 2 - viewportSize.width / 2;
   const artCenteredX = (artSize.width - viewportSize.width) / 2;
-  const visibleX =
+  const preferredX =
     viewportSize.height === artSize.height &&
     satisfiesHorizontalMargin(artCenteredX, viewportSize, focusRect, minMargin)
       ? artCenteredX
-      : focusedX;
-  const visibleY = clampOrigin(
-    focusRect.y + focusRect.height / 2 - viewportSize.height / 2,
-    artSize.height,
+      : preferArtBoundedOrigin(focusedX, artSize.width, viewportSize.width);
+  const visibleX = containFocusOrigin(
+    preferredX,
+    viewportSize.width,
+    focusRect.x,
+    focusRect.width,
+    minMargin.left,
+    minMargin.right,
+  );
+  const focusedY = focusRect.y + focusRect.height / 2 - viewportSize.height / 2;
+  const visibleY = containFocusOrigin(
+    preferArtBoundedOrigin(focusedY, artSize.height, viewportSize.height),
     viewportSize.height,
+    focusRect.y,
+    focusRect.height,
+    minMargin.top,
+    minMargin.bottom,
   );
   const visibleRect = freezeRect({
     x: visibleX,
@@ -181,8 +180,6 @@ export function calculateFocusedArtViewport(
     width: focusRect.width,
     height: focusRect.height,
   });
-
-  assertMarginSatisfied(focusRectInViewport, viewportSize, minMargin);
 
   return Object.freeze({
     artSize,
@@ -199,16 +196,16 @@ export function calculateFocusedArtViewport(
 /**
  * Maximizes one art-space focus rect inside the current page.
  * The focus rect is scaled with contain semantics, then the page aspect ratio
- * is projected back into art space so all available background remains visible.
- * An axis is capped only when the requested viewport exceeds artSize.
+ * is projected back into art space. Art bounds remain a preferred visible
+ * range, but focus geometry may extend the viewport beyond them so the caller
+ * can render uncovered regions as-authored.
  */
 export function calculateMaximizedFocusedArtViewport(
   options: MaximizedFocusedArtViewportOptions,
 ): FocusedArtViewport {
   const artSize = validateSize(options.artSize, "artSize");
   const pageSize = validateSize(options.pageSize, "pageSize");
-  const focusRect = validateRect(options.focusRect, "focusRect");
-  assertRectFitsSize(focusRect, artSize, "focusRect", "artSize");
+  const focusRect = validateUnboundedRect(options.focusRect, "focusRect");
 
   const focusScale = Math.min(
     pageSize.width / focusRect.width,
@@ -245,7 +242,7 @@ function normalizeProjectedLength(
     32;
   if (Math.abs(projected - lowerBound) <= tolerance) return lowerBound;
   if (Math.abs(projected - upperBound) <= tolerance) return upperBound;
-  return Math.min(upperBound, projected);
+  return Math.min(Math.max(upperBound, lowerBound), projected);
 }
 
 export function createMaximizedFocusedArtViewportPolicy(options: {
@@ -253,8 +250,7 @@ export function createMaximizedFocusedArtViewportPolicy(options: {
   readonly focusRect: RenderViewportRect;
 }): MaximizedFocusedArtViewportPolicy {
   const artSize = validateSize(options.artSize, "artSize");
-  const focusRect = validateRect(options.focusRect, "focusRect");
-  assertRectFitsSize(focusRect, artSize, "focusRect", "artSize");
+  const focusRect = validateUnboundedRect(options.focusRect, "focusRect");
 
   return Object.freeze({
     mode: "maximized-focus" as const,
@@ -272,21 +268,9 @@ export function mapArtRectToViewport(
   options: MapArtRectToViewportOptions,
 ): RenderViewportRect {
   const artSize = validateSize(options.artSize, "artSize");
-  const visibleRect = validateRect(options.visibleRect, "visibleRect");
-  const rect = validateRect(options.rect, "rect");
-
-  if (
-    visibleRect.x + visibleRect.width > artSize.width ||
-    visibleRect.y + visibleRect.height > artSize.height
-  ) {
-    throw new Error("visibleRect must fit inside artSize.");
-  }
-  if (
-    rect.x + rect.width > artSize.width ||
-    rect.y + rect.height > artSize.height
-  ) {
-    throw new Error("rect must fit inside artSize.");
-  }
+  const visibleRect = validateUnboundedRect(options.visibleRect, "visibleRect");
+  const rect = validateUnboundedRect(options.rect, "rect");
+  void artSize;
 
   return freezeRect({
     x: rect.x - visibleRect.x,
@@ -388,17 +372,6 @@ function freezeSize(size: RenderViewportSize): RenderViewportSize {
   return Object.freeze({ width: size.width, height: size.height });
 }
 
-function assertRectFitsSize(
-  rect: RenderViewportRect,
-  size: RenderViewportSize,
-  rectLabel: string,
-  sizeLabel: string,
-): void {
-  if (rect.x + rect.width > size.width || rect.y + rect.height > size.height) {
-    throw new Error(`${rectLabel} must fit inside ${sizeLabel}.`);
-  }
-}
-
 function validateRect(
   rect: RenderViewportRect,
   label: string,
@@ -410,6 +383,17 @@ function validateRect(
   if (rect.x < 0 || rect.y < 0) {
     throw new Error(`${label} origin must be non-negative.`);
   }
+  return freezeRect(rect);
+}
+
+function validateUnboundedRect(
+  rect: RenderViewportRect,
+  label: string,
+): RenderViewportRect {
+  assertFinite(rect.x, `${label}.x`);
+  assertFinite(rect.y, `${label}.y`);
+  assertPositiveFinite(rect.width, `${label}.width`);
+  assertPositiveFinite(rect.height, `${label}.height`);
   return freezeRect(rect);
 }
 
@@ -429,31 +413,6 @@ function normalizeMargin(
   return normalized;
 }
 
-function assertMarginSatisfied(
-  focusRectInViewport: RenderViewportRect,
-  viewportSize: RenderViewportSize,
-  minMargin: Required<RenderViewportMargin>,
-): void {
-  if (focusRectInViewport.x < minMargin.left) {
-    throw new Error("focusRect minMargin.left cannot fit inside artSize.");
-  }
-  if (focusRectInViewport.y < minMargin.top) {
-    throw new Error("focusRect minMargin.top cannot fit inside artSize.");
-  }
-  if (
-    viewportSize.width - focusRectInViewport.x - focusRectInViewport.width <
-    minMargin.right
-  ) {
-    throw new Error("focusRect minMargin.right cannot fit inside artSize.");
-  }
-  if (
-    viewportSize.height - focusRectInViewport.y - focusRectInViewport.height <
-    minMargin.bottom
-  ) {
-    throw new Error("focusRect minMargin.bottom cannot fit inside artSize.");
-  }
-}
-
 function satisfiesHorizontalMargin(
   visibleX: number,
   viewportSize: RenderViewportSize,
@@ -467,12 +426,27 @@ function satisfiesHorizontalMargin(
   );
 }
 
-function clampOrigin(
-  origin: number,
+function preferArtBoundedOrigin(
+  focusedOrigin: number,
   artLength: number,
   viewportLength: number,
 ): number {
-  return Math.min(Math.max(origin, 0), artLength - viewportLength);
+  if (viewportLength > artLength) return (artLength - viewportLength) / 2;
+  return clamp(focusedOrigin, 0, artLength - viewportLength);
+}
+
+function containFocusOrigin(
+  preferredOrigin: number,
+  viewportLength: number,
+  focusOrigin: number,
+  focusLength: number,
+  beforeMargin: number,
+  afterMargin: number,
+): number {
+  const minimumOrigin =
+    focusOrigin + focusLength + afterMargin - viewportLength;
+  const maximumOrigin = focusOrigin - beforeMargin;
+  return clamp(preferredOrigin, minimumOrigin, maximumOrigin);
 }
 
 function clamp(value: number, min: number, max: number): number {

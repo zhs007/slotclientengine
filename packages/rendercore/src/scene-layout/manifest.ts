@@ -161,13 +161,7 @@ export function parseSceneLayoutManifestV1(
     fail("scene layout node gameMode requires gameModes.");
   if (symbolPackages && !gameModes)
     fail("scene layout symbolPackages requires gameModes.");
-  validateReferencesAndBounds(
-    coordinateOrigin ?? "top-left",
-    adaptation,
-    nodes,
-    nodeIds,
-    reels,
-  );
+  validateReferences(adaptation, nodes, nodeIds);
   validatePathClosure(nodes, runtimeResources);
   return deepFreeze({
     version: 1,
@@ -244,7 +238,6 @@ function parseAdaptation(value: unknown): SceneLayoutAdaptation {
     );
     const artSize = size(record.artSize, "adaptation.artSize");
     const focusRect = rect(record.focusRect, "adaptation.focusRect");
-    fits(focusRect, artSize, "adaptation.focusRect");
     return deepFreeze({
       mode: "maximized-focus" as const,
       artSize,
@@ -300,30 +293,11 @@ function parseOrientationVariant(
   );
   const artSize = size(record.artSize, `${label}.artSize`);
   const focusRect = rect(record.focusRect, `${label}.focusRect`);
-  fits(focusRect, artSize, `${label}.focusRect`);
   const frameFocusRect = size(record.frameFocusRect, `${label}.frameFocusRect`);
-  if (
-    frameFocusRect.width > artSize.width ||
-    frameFocusRect.height > artSize.height
-  ) {
-    fail(`${label}.frameFocusRect must fit inside artSize.`);
-  }
   const minFocusMargin =
     record.minFocusMargin === undefined
       ? undefined
       : margin(record.minFocusMargin, `${label}.minFocusMargin`);
-  if (
-    frameFocusRect.width +
-      (minFocusMargin?.left ?? 0) +
-      (minFocusMargin?.right ?? 0) >
-      artSize.width ||
-    frameFocusRect.height +
-      (minFocusMargin?.top ?? 0) +
-      (minFocusMargin?.bottom ?? 0) >
-      artSize.height
-  ) {
-    fail(`${label}.frameFocusRect and minFocusMargin must fit inside artSize.`);
-  }
   return deepFreeze({
     artSize,
     focusRect,
@@ -724,12 +698,10 @@ function parseReel(
   });
 }
 
-function validateReferencesAndBounds(
-  coordinateOrigin: "top-left" | "center",
+function validateReferences(
   adaptation: SceneLayoutAdaptation,
   nodes: readonly SceneLayoutNode[],
   nodeIds: Set<unknown>,
-  reels: Readonly<Record<string, SceneLayoutReelGrid>>,
 ): void {
   const variants: readonly SceneLayoutVariantId[] =
     adaptation.mode === "maximized-focus"
@@ -767,36 +739,6 @@ function validateReferencesAndBounds(
       fail(
         `backgroundNode "${backgroundNode}" must have the lowest order in ${variantId}.`,
       );
-    for (const [reelId, reel] of Object.entries(reels)) {
-      const placement = reel.placements[variantId]!;
-      const width =
-        reel.columns * reel.cellSize.width + (reel.columns - 1) * reel.gap.x;
-      const height =
-        reel.rows * reel.cellSize.height + (reel.rows - 1) * reel.gap.y;
-      const reelRect = {
-        x:
-          coordinateOrigin === "center"
-            ? variant.artSize.width / 2 + placement.x - width / 2
-            : placement.x,
-        y:
-          coordinateOrigin === "center"
-            ? variant.artSize.height / 2 + placement.y - height / 2
-            : placement.y,
-        width,
-        height,
-      };
-      fits(
-        reelRect,
-        variant.artSize,
-        `scene layout reel "${reelId}" ${variantId} placement`,
-      );
-      contains(
-        variant.focusRect,
-        reelRect,
-        `scene layout ${variantId} focusRect`,
-        `reel "${reelId}"`,
-      );
-    }
   }
 }
 
@@ -1685,8 +1627,8 @@ function rect(value: unknown, label: string) {
   const record = readRecord(value, label);
   known(record, ["x", "y", "width", "height"], label);
   return deepFreeze({
-    x: nonNegative(record.x, `${label}.x`),
-    y: nonNegative(record.y, `${label}.y`),
+    x: finite(record.x, `${label}.x`),
+    y: finite(record.y, `${label}.y`),
     width: positive(record.width, `${label}.width`),
     height: positive(record.height, `${label}.height`),
   });
@@ -1699,34 +1641,6 @@ function margin(value: unknown, label: string) {
     if (record[key] !== undefined)
       result[key] = nonNegative(record[key], `${label}.${key}`);
   return deepFreeze(result);
-}
-function fits(
-  rectValue: { x: number; y: number; width: number; height: number },
-  sizeValue: { width: number; height: number },
-  label: string,
-): void {
-  if (
-    rectValue.x < 0 ||
-    rectValue.y < 0 ||
-    rectValue.x + rectValue.width > sizeValue.width ||
-    rectValue.y + rectValue.height > sizeValue.height
-  )
-    fail(`${label} must fit inside artSize.`);
-}
-function contains(
-  outer: { x: number; y: number; width: number; height: number },
-  inner: { x: number; y: number; width: number; height: number },
-  outerLabel: string,
-  innerLabel: string,
-): void {
-  if (
-    inner.x < outer.x ||
-    inner.y < outer.y ||
-    inner.x + inner.width > outer.x + outer.width ||
-    inner.y + inner.height > outer.y + outer.height
-  ) {
-    fail(`${outerLabel} must contain ${innerLabel}.`);
-  }
 }
 function unique(values: readonly unknown[], label: string): Set<unknown> {
   const set = new Set(values);

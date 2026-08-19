@@ -89,8 +89,8 @@ describe("responsive art viewport", () => {
     ).toThrow(/portrait/);
   });
 
-  it("keeps focused viewport validation for invalid focus rects and margins", () => {
-    expect(() =>
+  it("preserves out-of-art focus geometry and validates impossible margins", () => {
+    expect(
       calculateResponsiveArtViewport({
         viewportSize: { width: 1200, height: 900 },
         variants: {
@@ -100,8 +100,8 @@ describe("responsive art viewport", () => {
           },
           portrait: PORTRAIT,
         },
-      }),
-    ).toThrow(/focusRect/);
+      }).visibleRect,
+    ).toEqual({ x: 900, y: 0, width: 1200, height: 900 });
 
     expect(() =>
       calculateResponsiveArtViewport({
