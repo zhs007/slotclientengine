@@ -5,6 +5,7 @@ import {
   createSceneLayoutPackageResource,
   getInitialSceneLayoutSymbolPackageResource,
   loadSceneLayoutPackageFromUrl,
+  upgradeSceneLayoutManifestToLatest,
   type SceneLayoutPackageResource,
 } from "../../src/scene-layout/index.js";
 import type { SymbolPackageResource } from "../../src/symbol/index.js";
@@ -109,6 +110,70 @@ function packageFiles(): Map<string, Uint8Array> {
 }
 
 describe("scene layout package resources", () => {
+  it("preserves the declared MIME type for ZIP-backed BGM object URLs", async () => {
+    const upgraded = upgradeSceneLayoutManifestToLatest({
+      ...game002LayoutFixture,
+      gameModes: {
+        initialMode: "BaseGame",
+        modes: [
+          {
+            id: "BaseGame",
+            backgroundNodes: { default: "bg" },
+            nodeStates: {},
+          },
+        ],
+        transitions: [],
+      },
+    });
+    const manifest = {
+      ...upgraded,
+      gameModes: {
+        ...upgraded.gameModes,
+        modes: upgraded.gameModes.modes.map((mode) => ({
+          ...mode,
+          bgm: "base-bgm",
+        })),
+      },
+      audio: {
+        version: 1 as const,
+        effects: [],
+        music: [
+          {
+            name: "base-bgm",
+            asset: {
+              sources: [
+                {
+                  path: "assets/bg-bgm.mp3",
+                  mediaType: "audio/mpeg" as const,
+                },
+              ],
+            },
+            loop: true as const,
+            fadeOutSeconds: 1,
+            fadeInSeconds: 1,
+          },
+        ],
+        programmaticEffects: [],
+      },
+    };
+    const resource = await createSceneLayoutPackageResource({
+      manifest,
+      files: new Map([
+        ["assets/bg.png", new Uint8Array([1])],
+        ["assets/bg-bgm.mp3", new Uint8Array([0x49, 0x44, 0x33])],
+      ]),
+      decodeImage: async () => ({ width: 1, height: 1 }),
+    });
+    try {
+      const response = await fetch(
+        resource.audioMusic["base-bgm"]!.sources[0]!.url,
+      );
+      expect(response.headers.get("content-type")).toBe("audio/mpeg");
+    } finally {
+      resource.destroy();
+    }
+  });
+
   it("exposes the Symbols resource selected by the initial layout mode", () => {
     const legacy = {} as SymbolPackageResource;
     expect(

@@ -14,8 +14,14 @@ export function createPixiSoundBackend(): AudioBackend {
       if (sources.length === 0)
         throw new Error("audio backend sources must not be empty.");
       const { Sound } = await import("@pixi/sound");
+      const audio = document.createElement("audio");
+      const source = sources.find(
+        ({ mediaType }) =>
+          audio.canPlayType(mediaType).replace(/^no$/u, "") !== "",
+      );
+      if (!source) throw new Error("No supported file type found");
       const sound = Sound.from({
-        url: sources.map(({ url }) => url),
+        url: source.url,
         preload: false,
       });
       await waitUntilLoaded(sound);

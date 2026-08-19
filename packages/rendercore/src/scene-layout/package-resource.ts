@@ -10,6 +10,7 @@ import type {
 } from "@slotclientengine/audiocore/core";
 import type {
   AudioEffectBindingV1,
+  AudioMediaType,
   AudioMusicBindingV1,
 } from "@slotclientengine/audiocore/data";
 import {
@@ -423,20 +424,26 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
     }
 
     const audioUrls = new Map<string, string>();
-    const resolveAudioPath = (path: string, ownerManifest?: string): string => {
+    const resolveAudioPath = (
+      path: string,
+      mediaType: AudioMediaType,
+      ownerManifest?: string,
+    ): string => {
       const filePath = mapped
         ? path
         : ownerManifest
           ? resolvePackagePath(ownerManifest, path)
           : path;
-      let url = audioUrls.get(filePath);
+      const cacheKey = `${filePath}\0${mediaType}`;
+      let url = audioUrls.get(cacheKey);
       if (!url) {
         url = createObjectUrl(
           requireBytes(files, filePath),
           filePath,
           objectUrls,
+          mediaType,
         );
-        audioUrls.set(filePath, url);
+        audioUrls.set(cacheKey, url);
       }
       return url;
     };
@@ -449,7 +456,11 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
         sources: Object.freeze(
           binding.asset.sources.map((source) =>
             Object.freeze({
-              url: resolveAudioPath(source.path, ownerManifest),
+              url: resolveAudioPath(
+                source.path,
+                source.mediaType,
+                ownerManifest,
+              ),
               mediaType: source.mediaType,
             }),
           ),
@@ -461,7 +472,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
         sources: Object.freeze(
           binding.asset.sources.map((source) =>
             Object.freeze({
-              url: resolveAudioPath(source.path),
+              url: resolveAudioPath(source.path, source.mediaType),
               mediaType: source.mediaType,
             }),
           ),
@@ -1466,10 +1477,9 @@ function createObjectUrl(
   bytes: Uint8Array,
   path: string,
   owned: string[],
+  type = mimeType(path),
 ): string {
-  const url = URL.createObjectURL(
-    new Blob([bytes as BlobPart], { type: mimeType(path) }),
-  );
+  const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type }));
   owned.push(url);
   return url;
 }
