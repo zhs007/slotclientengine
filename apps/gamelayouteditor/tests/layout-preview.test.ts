@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => {
   const canvas = document.createElement("canvas");
+  const tickerCallbacks: Array<(ticker: { deltaMS: number }) => void> = [];
   const runtime = {
     container: {},
     init: vi.fn(async () => undefined),
@@ -56,8 +57,11 @@ const state = vi.hoisted(() => {
         };
       },
     ),
-    requestGameMode: vi.fn(async () => undefined),
-    selectAuthoringGameMode: vi.fn(async () => undefined),
+    requestGameMode: vi.fn(async (_modeId: string): Promise<void> => undefined),
+    requestPrimaryGameModeAction: vi.fn(async () => undefined),
+    selectAuthoringGameMode: vi.fn(
+      async (_modeId: string): Promise<void> => undefined,
+    ),
     unlockAudio: vi.fn(async () => undefined),
     resetReelScene: vi.fn(),
   };
@@ -75,7 +79,9 @@ const state = vi.hoisted(() => {
     resize: vi.fn(),
     stageAdd: vi.fn(),
     stageAddAt: vi.fn(),
-    tickerAdd: vi.fn(),
+    tickerAdd: vi.fn((callback: (ticker: { deltaMS: number }) => void) => {
+      tickerCallbacks.push(callback);
+    }),
     appDestroy: vi.fn(),
     graphicsClear: vi.fn(),
     graphicsRect: vi.fn(),
@@ -85,6 +91,7 @@ const state = vi.hoisted(() => {
     containerInstances: [] as Array<{
       position: { set: ReturnType<typeof vi.fn> };
     }>,
+    tickerCallbacks,
     resolveFrame: vi.fn(
       ({ pageSize }: { pageSize: { width: number; height: number } }) =>
         pageSize.width === 800 && pageSize.height === 600
@@ -291,9 +298,45 @@ import { imageManifest, assetBytes } from "./fixtures.js";
 describe("LayoutPreview", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    state.packageRuntime.getGameModeSnapshot.mockImplementation(() => ({
+      stableMode: "BaseGame",
+      displayedMode: "BaseGame",
+      targetMode: null,
+      phase: "stable",
+    }));
+    state.packageRuntime.selectAuthoringGameMode.mockImplementation(
+      async () => undefined,
+    );
+    state.packageRuntime.requestGameMode.mockImplementation(
+      async () => undefined,
+    );
+    state.packageRuntime.requestPrimaryGameModeAction.mockImplementation(
+      async () => undefined,
+    );
+    state.resolveFrame.mockImplementation(
+      ({ pageSize }: { pageSize: { width: number; height: number } }) =>
+        pageSize.width === 800 && pageSize.height === 600
+          ? {
+              pageSize,
+              frameDesignSize: { width: 1600, height: 1000 },
+              scale: 0.5,
+              cssSize: { width: 800, height: 500 },
+              offsetX: 0,
+              offsetY: 50,
+            }
+          : {
+              pageSize,
+              frameDesignSize: pageSize,
+              scale: 1,
+              cssSize: pageSize,
+              offsetX: 0,
+              offsetY: 0,
+            },
+    );
     state.pkg.resource = {};
     state.pkg.packageResource = {};
     state.containerInstances.length = 0;
+    state.tickerCallbacks.length = 0;
     state.canvas.removeAttribute("style");
     state.runtime.applyViewport.mockReturnValue({
       variantId: "default",
@@ -405,6 +448,107 @@ describe("LayoutPreview", () => {
     expect(
       state.packageRuntime.requestPrimaryPopupInteraction,
     ).toHaveBeenCalledTimes(2);
+  });
+
+  it("recomputes renderer geometry after switching between different mode art sizes", async () => {
+    const host = document.createElement("div");
+    const diagnostics = document.createElement("div");
+    document.body.append(host, diagnostics);
+    let displayedMode = "Square";
+    state.packageRuntime.getGameModeSnapshot.mockImplementation(() => ({
+      stableMode: displayedMode,
+      displayedMode,
+      targetMode: null,
+      phase: "stable",
+    }));
+    state.packageRuntime.selectAuthoringGameMode.mockImplementation(
+      async (modeId: string) => {
+        displayedMode = modeId;
+      },
+    );
+    state.resolveFrame.mockImplementation(
+      ({
+        pageSize,
+        modeId,
+      }: {
+        pageSize: { width: number; height: number };
+        modeId?: string;
+      }) => {
+        const frameDesignSize =
+          modeId === "Square"
+            ? { width: 2000, height: 2000 }
+            : { width: 2000, height: 1125 };
+        const scale = Math.min(
+          pageSize.width / frameDesignSize.width,
+          pageSize.height / frameDesignSize.height,
+        );
+        const cssSize = {
+          width: frameDesignSize.width * scale,
+          height: frameDesignSize.height * scale,
+        };
+        return {
+          pageSize,
+          frameDesignSize,
+          scale,
+          cssSize,
+          offsetX: (pageSize.width - cssSize.width) / 2,
+          offsetY: (pageSize.height - cssSize.height) / 2,
+        };
+      },
+    );
+    const manifest = {
+      ...imageManifest,
+      gameModes: {
+        initialMode: "Square",
+        modes: [
+          { id: "Square", nodeStates: {} },
+          { id: "Wide", nodeStates: {} },
+        ],
+      },
+    };
+    const preview = new LayoutPreview(host, diagnostics);
+    await preview.init();
+    await preview.setLayout(manifest, assetBytes);
+    expect(state.resize).toHaveBeenLastCalledWith(2000, 2000);
+
+    await preview.selectAuthoringGameMode("Wide");
+    expect(state.resize).toHaveBeenLastCalledWith(2000, 1125);
+    expect(state.runtime.applyViewport).toHaveBeenLastCalledWith({
+      width: 2000,
+      height: 1125,
+    });
+
+    await preview.selectAuthoringGameMode("Square");
+    expect(state.resize).toHaveBeenLastCalledWith(2000, 2000);
+    expect(state.runtime.applyViewport).toHaveBeenLastCalledWith({
+      width: 2000,
+      height: 2000,
+    });
+
+    state.packageRuntime.requestGameMode.mockImplementation(
+      async (modeId: string) => {
+        displayedMode = modeId;
+      },
+    );
+    await preview.requestGameMode("Wide");
+    expect(state.resize).toHaveBeenLastCalledWith(2000, 1125);
+
+    state.packageRuntime.requestPrimaryGameModeAction.mockImplementation(
+      async () => {
+        displayedMode = "Square";
+      },
+    );
+    await preview.requestPrimaryGameModeAction();
+    expect(state.resize).toHaveBeenLastCalledWith(2000, 2000);
+
+    displayedMode = "Wide";
+    state.tickerCallbacks.at(-1)!({ deltaMS: 16 });
+    expect(state.resize).toHaveBeenLastCalledWith(2000, 1125);
+    expect(state.runtime.applyViewport).toHaveBeenLastCalledWith({
+      width: 2000,
+      height: 1125,
+    });
+    preview.destroy();
   });
 
   it("unlocks runtime audio explicitly and preserves it across preview rebuilds", async () => {

@@ -94,6 +94,7 @@ export class LayoutPreview {
   #manifest: SceneLayoutManifest | null = null;
   #lastLayoutSnapshot: SceneLayoutSnapshot | null = null;
   #frameViewport: SceneLayoutFrameViewport | null = null;
+  #laidOutDisplayedMode: string | null = null;
   #pageSize: PreviewSize = { width: 1920, height: 1080 };
   #zoom = 1;
   #showFocus = true;
@@ -158,6 +159,15 @@ export class LayoutPreview {
     );
     this.#app.ticker.add((ticker) => {
       if (this.#runtime) this.#runtime.update(ticker.deltaMS / 1000);
+      const displayedMode =
+        this.#packageRuntimeInspector?.getGameModeSnapshot().displayedMode ??
+        null;
+      if (
+        displayedMode &&
+        displayedMode !== this.#laidOutDisplayedMode &&
+        this.#runtime
+      )
+        this.applySize();
       for (const symbol of this.#renderSymbols)
         symbol.update(ticker.deltaMS / 1000);
       if (this.#selectedLayerId) this.drawSelectedLayerOutline();
@@ -406,6 +416,7 @@ export class LayoutPreview {
       modeId,
       this.gameModeRequestOptions(modeId),
     );
+    this.applySize();
     await this.preparePrimaryGameModeAction();
   }
 
@@ -428,18 +439,23 @@ export class LayoutPreview {
     );
   }
 
-  requestPrimaryGameModeAction(): Promise<void> {
+  async requestPrimaryGameModeAction(): Promise<void> {
     if (!this.#packageRuntime)
       throw new Error("当前 layout preview 没有 package runtime。");
-    if (!this.#manifest || this.#manifest.version === 1)
-      return this.#packageRuntime.requestPrimaryGameModeAction();
-    const current = this.#packageRuntime.getStableGameMode();
-    const target = this.#manifest.gameModes.modes.find(
-      (candidate) => candidate.id === current,
-    )?.primaryAction?.targetMode;
-    return this.#packageRuntime.requestPrimaryGameModeAction(
-      target ? this.gameModeRequestOptions(target) : {},
-    );
+    let transition: Promise<void>;
+    if (!this.#manifest || this.#manifest.version === 1) {
+      transition = this.#packageRuntime.requestPrimaryGameModeAction();
+    } else {
+      const current = this.#packageRuntime.getStableGameMode();
+      const target = this.#manifest.gameModes.modes.find(
+        (candidate) => candidate.id === current,
+      )?.primaryAction?.targetMode;
+      transition = this.#packageRuntime.requestPrimaryGameModeAction(
+        target ? this.gameModeRequestOptions(target) : {},
+      );
+    }
+    await transition;
+    this.applySize();
   }
 
   requestPrimaryPopupInteraction(): PopupInteractionDispatchResult {
@@ -483,6 +499,7 @@ export class LayoutPreview {
     );
     await unlock;
     await transition;
+    this.applySize();
   }
 
   playEffect(route: string): void {
@@ -922,17 +939,14 @@ export class LayoutPreview {
     const manifest = this.#manifest;
     const runtime = this.#runtime;
     if (!manifest || !runtime) return;
+    const displayedMode =
+      this.#packageRuntimeInspector?.getGameModeSnapshot().displayedMode;
     const frameViewport = resolveSceneLayoutFrameViewport({
       manifest,
       pageSize: this.#pageSize,
-      ...(this.#packageRuntime
-        ? {
-            modeId:
-              this.#packageRuntimeInspector!.getGameModeSnapshot()
-                .displayedMode,
-          }
-        : {}),
+      ...(displayedMode ? { modeId: displayedMode } : {}),
     });
+    this.#laidOutDisplayedMode = displayedMode ?? null;
     this.#frameViewport = frameViewport;
     this.#app.renderer.resize(
       frameViewport.frameDesignSize.width,
@@ -1008,6 +1022,7 @@ export class LayoutPreview {
     this.#packageScenes.clear();
     this.#lastLayoutSnapshot = null;
     this.#frameViewport = null;
+    this.#laidOutDisplayedMode = null;
     this.#package?.destroy();
     this.#package = null;
   }

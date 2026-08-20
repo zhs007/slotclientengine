@@ -1117,6 +1117,78 @@ describe("scene layout package runtime", () => {
     }
   });
 
+  it("keeps the main reel aligned with guide geometry across mode art-size switches", async () => {
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    try {
+      const fixture = canonicalMultiSymbolFixture();
+      const manifest = structuredClone(
+        upgradeSceneLayoutManifestToLatest(fixture.manifest),
+      ) as any;
+      manifest.coordinateOrigin = "center";
+      for (const mode of manifest.gameModes.modes) {
+        const square = mode.id === "BaseGame" || mode.id === "BonusGame";
+        mode.adaptation = {
+          mode: "maximized-focus",
+          artSize: {
+            width: 2000,
+            height: square ? 2000 : 1125,
+          },
+          focusRect: {
+            x: 0,
+            y: 0,
+            width: 2000,
+            height: square ? 2000 : 1125,
+          },
+        };
+        mode.reelPlacements.main.default = { x: 0, y: 0 };
+      }
+      const resource = await createSceneLayoutPackageResource({
+        manifest,
+        files: fixture.files,
+      });
+      const runtime = createSceneLayoutPackageRuntime({ resource });
+      const input = {
+        scene: [
+          [0, 1],
+          [1, 0],
+        ],
+        localPhaseYs: [0, 0],
+      };
+      await runtime.init({ reels: { main: input } });
+
+      const expectAligned = (viewportSize: {
+        width: number;
+        height: number;
+      }) => {
+        const snapshot = runtime.applyViewport(viewportSize);
+        const guideRect = snapshot.reels.main.viewportRect;
+        const reel = runtime.getReelPresentation("main");
+        expect({
+          x: reel.position.x + reel.parent!.position.x,
+          y: reel.position.y + reel.parent!.position.y,
+        }).toEqual({ x: guideRect.x, y: guideRect.y });
+      };
+
+      expectAligned({ width: 2000, height: 2000 });
+      await runtime.selectAuthoringGameMode("FreeGame", {
+        reels: { main: input },
+      });
+      expectAligned({ width: 2000, height: 1125 });
+      await runtime.selectAuthoringGameMode("BonusGame");
+      expectAligned({ width: 2000, height: 2000 });
+      await runtime.selectAuthoringGameMode("FreeGame");
+      expectAligned({ width: 2000, height: 1125 });
+
+      runtime.destroy();
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
+  });
+
   it("keeps the source reel before the event and swaps the complete scene at the event", async () => {
     const load = vi
       .spyOn(Assets, "load")
