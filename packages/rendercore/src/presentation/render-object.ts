@@ -16,10 +16,17 @@ export interface RenderPoint {
   readonly y: number;
 }
 
+export interface RenderScale {
+  readonly x: number;
+  readonly y: number;
+}
+
 export interface RenderObject {
   setPosition(position: RenderPoint): void;
   /** Sets the object's local clockwise rotation in degrees. */
   setRotation(rotationDegrees: number): void;
+  /** Sets the object's local scale; negative factors mirror that axis. */
+  setScale(scale: RenderScale): void;
   setVisible(visible: boolean): void;
   play(name?: string, options?: RenderObjectPlayOptions): Promise<void>;
   stop(): void;
@@ -127,6 +134,14 @@ function createRenderObjectBase(adapter: RenderObjectAdapter): RenderObject {
           "RenderObject rotation must be a finite number of degrees.",
         );
       resolveView().angle = rotationDegrees;
+    },
+    setScale: (scale: RenderScale) => {
+      assertUsable();
+      if (!Number.isFinite(scale.x) || !Number.isFinite(scale.y))
+        throw new SymbolAnimationError(
+          "RenderObject scale must contain finite factors.",
+        );
+      resolveView().scale.set(scale.x, scale.y);
     },
     setVisible: (visible: boolean) => {
       assertUsable();

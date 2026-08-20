@@ -12,6 +12,7 @@ export type {
   RenderObjectSpineSlotAdapter,
   RenderObjectPlayOptions,
   RenderPoint,
+  RenderScale,
 } from "./render-object.js";
 export { attachRenderObjectToSpineSlot } from "./spine-slot-attachment.js";
 export type {

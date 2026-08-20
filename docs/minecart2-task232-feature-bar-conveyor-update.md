@@ -45,9 +45,6 @@ type Variant = "landscape" | "portrait";
 
 const COMPONENT = "bg-bar";
 const FEATURE_COUNT = 5;
-// The portrait Spine conveyor has a mirrored parent transform, so a local
-// counter-clockwise turn produces the required clockwise screen rotation.
-const PORTRAIT_FEATURE_ROTATION_DEGREES = -90;
 const SLOT_BY_INDEX = [
   "conveyor1_4",
   "conveyor1_3",
@@ -269,7 +266,6 @@ class DefaultFeatureBarConveyor implements FeatureBarConveyor {
       slot: SLOT_BY_INDEX[index]!,
       object: this.#pool.get(feature)![index]!,
     }));
-    setFeatureRotation(bindings, next);
     if (next === this.#variant) {
       this.#attachment = this.#nodes[next].bindSlotObjects(bindings);
       return;
@@ -282,7 +278,6 @@ class DefaultFeatureBarConveyor implements FeatureBarConveyor {
       this.#attachment = this.#nodes[next].bindSlotObjects(bindings);
       this.#variant = next;
     } catch (error) {
-      setFeatureRotation(bindings, previousVariant);
       this.#attachment = this.#nodes[previousVariant].bindSlotObjects(bindings);
       throw error;
     }
@@ -305,15 +300,6 @@ class DefaultFeatureBarConveyor implements FeatureBarConveyor {
   #assertReady(): void {
     if (this.#destroyed) throw new Error("feature bar conveyor is destroyed");
   }
-}
-
-function setFeatureRotation(
-  bindings: readonly { readonly object: RenderObject }[],
-  variant: Variant,
-): void {
-  const rotation =
-    variant === "portrait" ? PORTRAIT_FEATURE_ROTATION_DEGREES : 0;
-  for (const binding of bindings) binding.object.setRotation(rotation);
 }
 
 function requireConveyor(
@@ -362,8 +348,6 @@ function asError(error: unknown): Error {
 这里有意预创建 `3 × 5 = 15` 个 occurrence-owned 图片对象。同一个 feature 在五个位置各有独立
 `RenderObject`，不会把一个 mutable display occurrence 同时绑定多个 slot。方向切换时先同步 detach
 旧 conveyor，再绑定同一批对象到新 conveyor；若新绑定失败，代码立即把旧 conveyor 绑定恢复。
-竖版 Spine conveyor 的父变换包含镜像，因此图片在绑定前通过 `RenderObject.setRotation(-90)` 得到屏幕上
-向右 90° 的结果，横版恢复为 `0`；Spine slot 本身不旋转。
 
 ## 2. 修改 `round-adapter.ts`
 

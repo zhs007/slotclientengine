@@ -9,7 +9,7 @@ import {
 import { createTextRenderObject } from "../../src/presentation/text-render-object.js";
 
 describe("RenderObject", () => {
-  it("sets finite local clockwise rotation in degrees", () => {
+  it("sets finite local rotation and scale", () => {
     const view = new Container();
     const object = createRenderObject({
       view,
@@ -18,10 +18,18 @@ describe("RenderObject", () => {
 
     object.setRotation(90);
     expect(view.angle).toBe(90);
+    object.setScale({ x: -1, y: 0.5 });
+    expect(view.scale.x).toBe(-1);
+    expect(view.scale.y).toBe(0.5);
     expect(() => object.setRotation(Number.POSITIVE_INFINITY)).toThrow(
       /finite number of degrees/,
     );
+    expect(() => object.setScale({ x: 1, y: Number.NaN })).toThrow(
+      /finite factors/,
+    );
     expect(view.angle).toBe(90);
+    expect(view.scale.x).toBe(-1);
+    expect(view.scale.y).toBe(0.5);
 
     object.destroy();
   });

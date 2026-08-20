@@ -93,12 +93,11 @@ PASS  pnpm --filter @slotclientengine/rendercore typecheck
 PASS  git diff --check
 ```
 
-## 浏览器验收跟进：竖版 Feature 图片旋转
+## 浏览器验收跟进：RenderObject transform
 
-竖版 Feature Bar 图片需要相对自身向右旋转 90°。实现保持 Spine slot attachment 合同不变，
-在 `RenderObject` 增加 finite 顺时针度数的 `setRotation()` opaque setter。竖版 conveyor 父变换包含镜像，
-所以 Minecart2 在竖版绑定前设置局部 `-90` 以得到屏幕上向右 90° 的结果；横版设置 `0`，方向迁移失败时
-同时恢复旧方向角度。rendercore 更新已同步到 Minecart2。
+rendercore 增加 finite 的 `RenderObject.setRotation()`、`setScale()` opaque setter，供后续玩法设置
+对象自身的局部旋转、缩放或镜像，并已同步到 Minecart2。浏览器验证确认当前竖版 conveyor 同时包含
+rotation 与 mirrored scale；Minecart2 对 Feature 图片的 transform 补偿已按用户要求撤销，改由美术修正 Spine。
 
 ```text
 PASS  pnpm --filter @slotclientengine/rendercore exec vitest run tests/presentation/render-object.test.ts tests/symbol/symbol-handle.test.ts tests/background/runtime-player.test.ts tests/scene-layout/runtime.test.ts

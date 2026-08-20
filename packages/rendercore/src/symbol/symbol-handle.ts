@@ -10,6 +10,7 @@ import {
   type RenderObject,
   type RenderObjectPlayOptions,
   type RenderPoint,
+  type RenderScale,
 } from "../presentation/render-object.js";
 import type { SymbolPlayer } from "./symbol-player.js";
 import type {
@@ -172,6 +173,10 @@ export function createSymbolHandle(source: SymbolHandleSource): SymbolHandle {
     setRotation: (rotationDegrees: number) => {
       assertUsable();
       baseNode.setRotation(rotationDegrees);
+    },
+    setScale: (scale: RenderScale) => {
+      assertUsable();
+      baseNode.setScale(scale);
     },
     setVisible: (visible: boolean) => {
       assertUsable();
@@ -371,6 +376,10 @@ export function createEmptySymbolHandle(
     setRotation: (rotationDegrees: number) => {
       assertUsable();
       baseNode.setRotation(rotationDegrees);
+    },
+    setScale: (scale: RenderScale) => {
+      assertUsable();
+      baseNode.setScale(scale);
     },
     setVisible: (visible: boolean) => {
       assertUsable();
