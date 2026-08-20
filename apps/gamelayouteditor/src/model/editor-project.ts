@@ -213,7 +213,7 @@ export interface EditorProject {
   assets: Map<string, Uint8Array>;
   symbolDependencies: Map<string, EditorSymbolPackageDependency>;
   popupDependencies: Map<string, EditorPopupDependency>;
-  registeredSpinePopupIds: Set<string>;
+  programmaticPopupIds: Set<string>;
   runtimeResourceBindings: Map<string, string>;
   audio: AudioCatalogManifestV1;
   gameModes: {
@@ -258,7 +258,7 @@ export function createNewEditorProject(mode: EditorMode): EditorProject {
     assets: new Map(),
     symbolDependencies: new Map(),
     popupDependencies: new Map(),
-    registeredSpinePopupIds: new Set(),
+    programmaticPopupIds: new Set(),
     runtimeResourceBindings: new Map(),
     audio: { version: 1, effects: [], music: [], programmaticEffects: [] },
     gameModes: {
@@ -816,7 +816,7 @@ export function editorProjectToManifest(
       for (const transition of project.gameModes.transitions)
         if (transition.preludePopupId)
           referenced.add(transition.preludePopupId);
-      for (const id of project.registeredSpinePopupIds) referenced.add(id);
+      for (const id of project.programmaticPopupIds) referenced.add(id);
       if (referenced.size === 0) return {};
       return {
         popups: Object.fromEntries(
@@ -1340,11 +1340,10 @@ export function manifestToEditorProject(
       (transition) =>
         "preludePopup" in transition && transition.preludePopup === id,
     );
-    if (
-      (nested.type === "spine" && !usedAsPrelude) ||
-      nested.type === "single-state"
-    )
-      project.registeredSpinePopupIds.add(id);
+    const usedAsAward = latest.gameModes.modes.some(
+      (mode) => mode.awardCelebrationPopup === id,
+    );
+    if (!usedAsPrelude && !usedAsAward) project.programmaticPopupIds.add(id);
   }
   project.gameModes = {
     activeModeId: latest.gameModes.initialMode,
@@ -1428,7 +1427,7 @@ export function cloneEditorProject(project: EditorProject): EditorProject {
       assets: undefined,
       symbolDependencies: undefined,
       popupDependencies: undefined,
-      registeredSpinePopupIds: undefined,
+      programmaticPopupIds: undefined,
       runtimeResourceBindings: undefined,
     }),
     resources: new Map(
@@ -1452,7 +1451,7 @@ export function cloneEditorProject(project: EditorProject): EditorProject {
         structuredClone(dependency),
       ]),
     ),
-    registeredSpinePopupIds: new Set(project.registeredSpinePopupIds),
+    programmaticPopupIds: new Set(project.programmaticPopupIds),
     runtimeResourceBindings: new Map(project.runtimeResourceBindings),
   } as EditorProject;
   activateEditorGameMode(clone, clone.gameModes.activeModeId);

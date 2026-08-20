@@ -13,6 +13,7 @@ import {
   upgradeSceneLayoutManifestToLatest,
   type SceneLayoutManifestV1,
 } from "../../src/scene-layout/index.js";
+import { formatGameLayoutRuntimeAddress } from "../../src/scene-layout/data/runtime-address.js";
 import { createSceneLayoutPackageRuntimeInspector } from "../../src/scene-layout/editor.js";
 import { transitionResourceKey } from "../../src/scene-layout/resource.js";
 import { game002LayoutFixture, game003LayoutFixture } from "./fixtures.js";
@@ -1614,6 +1615,91 @@ describe("scene layout package runtime", () => {
         }),
       ).toThrow(/has no award celebration/);
       runtime.destroy();
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
+  });
+
+  it("opens one exact Popup address, drains one close, and reuses the cached player", async () => {
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    try {
+      const fixture = popupLayoutFixture();
+      const resource = await createSceneLayoutPackageResource({
+        ...fixture,
+        decodeImage: async () => ({ width: 1, height: 1 }),
+      });
+      const runtime = createSceneLayoutPackageRuntime({ resource });
+      await runtime.init();
+      const address = formatGameLayoutRuntimeAddress("popup", "celebration");
+      const cachedPlayer = runtime.getAwardCelebrationPopup("celebration");
+
+      expect(() =>
+        runtime.openPopup({ address, type: "single-state" }),
+      ).toThrow(/type mismatch/);
+      expect(runtime.getActivePopupAddress()).toBeNull();
+
+      const first = runtime.openPopup({
+        address,
+        type: "award-celebration",
+        betAmountRaw: 100,
+        winAmountRaw: 1_000,
+      });
+      expect(first).toMatchObject({
+        address,
+        type: "award-celebration",
+      });
+      expect(runtime.getActivePopupAddress()).toBe(address);
+      expect(runtime.getAwardCelebrationPopup("celebration")).toBe(
+        cachedPlayer,
+      );
+      expect(() =>
+        runtime.openPopup({
+          address,
+          type: "award-celebration",
+          betAmountRaw: 100,
+          winAmountRaw: 1_000,
+        }),
+      ).toThrow(/already active/);
+
+      const closed = runtime.closePopup();
+      for (
+        let index = 0;
+        index < 10 && runtime.getActivePopupAddress();
+        index += 1
+      )
+        runtime.update(1);
+      await expect(closed).resolves.toBeUndefined();
+      await expect(first.finished).resolves.toBeUndefined();
+      expect(runtime.getActivePopupAddress()).toBeNull();
+
+      const second = runtime.openPopup({
+        address,
+        type: "award-celebration",
+        betAmountRaw: 100,
+        winAmountRaw: 1_000,
+      });
+      expect(runtime.getAwardCelebrationPopup("celebration")).toBe(
+        cachedPlayer,
+      );
+      await expect(
+        runtime.closePopup({ behavior: "immediate" }),
+      ).resolves.toBeUndefined();
+      await expect(second.finished).resolves.toBeUndefined();
+      expect(runtime.getActivePopupAddress()).toBeNull();
+      const destroyed = runtime.openPopup({
+        address,
+        type: "award-celebration",
+        betAmountRaw: 100,
+        winAmountRaw: 1_000,
+      });
+      runtime.destroy();
+      await expect(destroyed.finished).rejects.toThrow(
+        /destroyed during Popup playback/,
+      );
     } finally {
       load.mockRestore();
       unload.mockRestore();

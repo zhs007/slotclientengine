@@ -14,7 +14,10 @@ import type {
   SceneLayoutGameMode,
   SceneLayoutGameModeRequestOptions,
   SceneLayoutPackageResource,
+  SceneLayoutPopupCloseOptions,
   SceneLayoutPopupInputBindingOptions,
+  SceneLayoutPopupOpenRequest,
+  SceneLayoutPopupSession,
   SceneLayoutSnapshot,
   SceneLayoutLayerId,
   SceneLayoutNodeRenderLayerPlacement,
@@ -51,6 +54,11 @@ export interface SceneLayoutPresentationSurface {
   startPendingGameModeVideo(): Promise<void>;
   bindPopupInput(options: SceneLayoutPopupInputBindingOptions): () => void;
   requestPrimaryPopupInteraction(): PopupInteractionDispatchResult;
+  openPopup(request: SceneLayoutPopupOpenRequest): SceneLayoutPopupSession;
+  closePopup(options?: SceneLayoutPopupCloseOptions): Promise<void>;
+  getActivePopupAddress():
+    | import("./data/runtime-address.js").GameLayoutRuntimeAddress
+    | null;
   getAwardCelebrationRuntime(id: string): AwardCelebrationRuntime;
   getSpinePopupRuntime(id: string): SpinePopupRuntime;
   getSingleStatePopupRuntime(id: string): SingleStatePopupRuntime;
@@ -242,6 +250,23 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
   requestPrimaryPopupInteraction(): PopupInteractionDispatchResult {
     this.assertReady();
     return this.#runtime.requestPrimaryPopupInteraction();
+  }
+
+  openPopup(request: SceneLayoutPopupOpenRequest): SceneLayoutPopupSession {
+    this.assertReady();
+    return this.#runtime.openPopup(request);
+  }
+
+  closePopup(options?: SceneLayoutPopupCloseOptions): Promise<void> {
+    this.assertReady();
+    return this.#runtime.closePopup(options);
+  }
+
+  getActivePopupAddress():
+    | import("./data/runtime-address.js").GameLayoutRuntimeAddress
+    | null {
+    this.assertReady();
+    return this.#runtime.getActivePopupAddress();
   }
 
   getAwardCelebrationRuntime(id: string): AwardCelebrationRuntime {

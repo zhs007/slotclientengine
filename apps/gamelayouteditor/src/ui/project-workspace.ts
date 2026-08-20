@@ -23,7 +23,7 @@ export function projectWorkspaceMarkup(
   for (const transition of project.gameModes.transitions)
     if (transition.preludePopupId)
       referencedPopupIds.add(transition.preludePopupId);
-  for (const id of project.registeredSpinePopupIds) referencedPopupIds.add(id);
+  for (const id of project.programmaticPopupIds) referencedPopupIds.add(id);
   const unusedPopups = [...project.popupDependencies.keys()].filter(
     (id) => !referencedPopupIds.has(id),
   );

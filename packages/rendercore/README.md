@@ -185,7 +185,7 @@ Popup 使用三个显式入口：`popup/data` 提供 v1–v8 strict source parse
 
 三类 Popup 都只有一份 Core 状态。游戏和 Scene Layout 从 `@slotclientengine/rendercore/popup/core` 使用 `createAwardCelebrationRuntime()` / `createSpinePopupRuntime()` / `createSingleStatePopupRuntime()`：`update(deltaSeconds): void` 只推进状态，阶段判断使用 `getPhase()` / `isPlaying()`，不会构造完整 snapshot。Popup Editor 从 `@slotclientengine/rendercore/popup/editor` 使用 player wrapper；wrapper 委托同一个 Runtime，并额外提供 `update() -> snapshot` 与 `getSnapshot()`。游戏 facade 不导出 editor package adapter、factory/player 或 snapshot。
 
-Scene Layout package runtime同样只向游戏暴露`getActiveAwardCelebrationPhase()`；Game Layout Editor需要完整award诊断值时，从`@slotclientengine/rendercore/scene-layout/editor`创建inspector。inspector借用现有package runtime，不创建第二份Popup或Scene状态。
+Scene Layout package runtime 以 `openPopup(request)`、`closePopup(options)` 和 `getActivePopupAddress()` 作为三类 Popup 的统一 production 编排入口。open 请求必须携带 task 228 exact `gamelayout:/popup/<id>` 地址和与 binding 一致的 discriminated input；一个 package runtime 只有一个 active slot，程序 Popup、mode award 和 transition prelude 互斥，不堆叠、不替换、不排队。每个导出 binding 的 player 在 package 生命周期中缓存一个并可在关闭后复用，session 只暴露 immutable address/type/finished，不转移 player ownership。raw `get*Popup()` 仅为 editor diagnostics 和迁移兼容保留并标记 deprecated。Game Layout Editor 需要完整 award 诊断值时，从 `@slotclientengine/rendercore/scene-layout/editor` 创建 inspector；inspector 借用现有 package runtime，不创建第二份 Popup 或 Scene 状态。
 
 字体文字 renderer 支持可选 package font（省略时才使用系统字体）、字号、字距、canonical color、纯色/线性渐变、描边、投影、Unicode grapheme 弧排、anchor 与原子 `setText()`。三类 player 都公开稳定的 `textNodes` / `imageStringNodes`，并可按 exact name 或各 kind 零基 index 取得 handle；业务绑定优先使用 exact name。覆盖 string 跨档位和重复播放保持，`resetText()` 恢复 manifest/自动金额值，destroy 后 handle 失效。
 

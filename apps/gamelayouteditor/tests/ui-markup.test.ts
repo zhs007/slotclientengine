@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { escapeHtml, numberField, statusText } from "../src/ui/ui-markup.js";
+import {
+  escapeHtml,
+  numberField,
+  runtimeAddressMarkup,
+  statusText,
+} from "../src/ui/ui-markup.js";
 
 describe("ui markup", () => {
   it("escapes every HTML metacharacter and renders number fields", () => {
@@ -18,5 +23,18 @@ describe("ui markup", () => {
     ["error", "错误"],
   ] as const)("maps %s status", (status, text) => {
     expect(statusText(status)).toBe(text);
+  });
+
+  it("renders one copyable canonical runtime address", () => {
+    const markup = runtimeAddressMarkup(
+      "ImgNumber factory",
+      "gamelayout:/resource/image-string/win&amount",
+    );
+    expect(markup).toContain(
+      "gamelayout:/resource/image-string/win&amp;amount",
+    );
+    expect(markup).toContain(
+      'data-copy-runtime-address="gamelayout:/resource/image-string/win&amp;amount"',
+    );
   });
 });

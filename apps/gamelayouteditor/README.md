@@ -19,7 +19,7 @@ mode 默认开启；关闭的 mode 不显示 reel guide、不能绑定 Symbols�
 正方形启动时选择 landscape。
 
 award-celebration Popup 作为自包含 dependency，通过 `rendercore/popup/editor` 完成 standalone ZIP 校验、flatten、namespace 与 vendor。任一受支持的 Popup v1–v8 都先按 source strict 校验，再由默认 loader 转成 latest v8；Popup/Symbol 音效保持 local name，直到 Scene Layout 按 binding id 聚合为全局 route。画面和音频预览继续只走 Scene Layout production runtime/inspector。
-普通 Spine Popup 导入后可直接在具体 Spine 转场中选择；Popup 工作区的显式注册只用于 programmatic 播放。Popup root 的 placement、order 与 start/loop/end 预览由 Layout Editor 配置并随 layout vendor。
+三类 Popup 都可在 Popup 工作区设为“程序 Popup”。这只负责让没有 mode/transition 直接引用的 package 仍进入 production `popups`；已有直接引用的 Popup 本来就可从相同 canonical 地址打开。普通 Spine 仍可在具体转场中选择。Popup root 的 placement、order 与统一 open/close 预览由 Layout Editor 配置并随 layout vendor；一个 preview runtime 同时只允许一个 active Popup。
 若 package 带单行 prompt，Popup 工作区可输入临时预览文案；留空使用 package 默认值。字体、渲染区域和 image/Spine/VNI overlay 保持只读，须回 Popup Editor 修改。相同字体 bytes 与其它 payload 一样在最终 `assets.map.json` 中按 SHA-256 物理去重。
 
 SymbolsEditor ZIP 同样作为自包含、只读的 symbol 状态机 dependency；Symbols 与 Popup library 都允许导入多个不同 package id，同 id 再上传进入替换并保留现有 mode/transition binding。Layout Editor 只选择
@@ -51,7 +51,9 @@ main reel 只提供横竖屏 `x/y` placement，不提供整体缩放。双背景
 
 Popup Spine 的 atlas page logical name 不随物理 filename key 前缀化。导入提交前会用完整 SHA-256 比较 Popup 与 Layout 自有 Spine 中同名的 atlas/texture；同名不同 bytes 时列出冲突，由用户取消整次导入或确认继续隔离导入，不自动覆盖、改名或推断 skeleton JSON 兼容性。
 
-资源列表可把任一已识别的 image、Spine、VNI、ImgNumber 或 MP4 root 设为“程序资源”。程序键默认取 root filename 去扩展名并转小写；手工输入也会 trim 并转小写。最终键必须唯一，以字母或数字开头，且只允许字母、数字、点、下划线和连字符。该资源即使没有 Scene 引用也会写入 production ZIP。取消绑定后，若没有其它引用，它恢复为不会导出。程序键和 typed resource spec 保存在 `layout.manifest.json` 的 `runtimeResources`，ZIP 重新导入或图片优化后仍保持不变。Audio 使用上一段的 `audio.effects` / `programmaticEffects` typed binding，不进入这套通用程序资源 union。
+资源列表可把任一已识别的 image、Spine、VNI、ImgNumber 或 MP4 root 设为“程序资源”。程序键默认取 root filename 去扩展名并转小写；手工输入也会 trim 并转小写。最终键必须唯一，以字母或数字开头，且只允许字母、数字、点、下划线和连字符。该资源即使没有 Scene 引用也会写入 production ZIP。取消绑定后，若没有其它引用，它恢复为不会导出。程序键和 typed resource spec 保存在 `layout.manifest.json` 的 `runtimeResources`，ZIP 重新导入或图片优化后仍保持不变。展开已绑定资源的详情可复制 canonical 地址；ImgNumber 例如 `gamelayout:/resource/image-string/win-amount`。Audio 使用上一段的 `audio.effects` / `programmaticEffects` typed binding，不进入这套通用程序资源 union。
+
+手工验收例子：导入一个 ImgNumber ZIP，在资源行填写 `win-amount` 并点“设为程序资源”，展开详情复制 factory 地址；再导入一个未绑定 mode/transition 的 Popup ZIP，在 Popup 工作区点“设为程序 Popup”，复制 `gamelayout:/popup/<id>`，点播放后状态区应显示该 exact 地址。Popup active 时再次播放应明确报错，点“立即关闭”后应可用同一地址再次播放。导出并重导 ZIP 后，两项程序用途和地址应保持。
 
 Spine atlas 的 page 是 atlas 内部逻辑名，texture map 的 value 才是全局 filename key。导入时若旧素材名为 `BG.png`、实际字节为 WebP，atlas 仍保留 `BG.png` page，物理 key 规范化为 `BG.webp`，并由 texture map 精确关联；不会伪造 MIME 或改写 atlas 逻辑页。Spine 背景还必须在 Picker 明确填写完整 `art size`，不能从 skeleton export bounds 或 atlas texture 尺寸推导；例如 game002-s3 使用 `2000 × 2000`，初始 placement 为 `(1000, 1000, 1)`。
 

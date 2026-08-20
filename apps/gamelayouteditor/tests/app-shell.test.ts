@@ -29,6 +29,9 @@ const previewSpies = vi.hoisted(() => ({
   ),
   requestNodeState: vi.fn(async () => undefined),
   playAwardCelebration: vi.fn(),
+  openPopup: vi.fn(),
+  closePopup: vi.fn(async () => undefined),
+  getActivePopupAddress: vi.fn((): string | null => null),
   advanceAwardCelebration: vi.fn(),
   dismissAwardCelebrationImmediately: vi.fn(),
   prepareGameModeTransition: vi.fn(
@@ -148,6 +151,9 @@ vi.mock("../src/preview/layout-preview.js", () => ({
     getSpineNodeStates = previewSpies.getSpineNodeStates;
     requestNodeState = previewSpies.requestNodeState;
     playAwardCelebration = previewSpies.playAwardCelebration;
+    openPopup = previewSpies.openPopup;
+    closePopup = previewSpies.closePopup;
+    getActivePopupAddress = previewSpies.getActivePopupAddress;
     advanceAwardCelebration = previewSpies.advanceAwardCelebration;
     dismissAwardCelebrationImmediately =
       previewSpies.dismissAwardCelebrationImmediately;
@@ -545,7 +551,7 @@ describe("GameLayoutEditorApp workspace", () => {
     ) as HTMLSelectElement;
     binding.value = "fixture-popup";
     binding.dispatchEvent(new Event("change"));
-    previewSpies.playAwardCelebration.mockClear();
+    previewSpies.openPopup.mockClear();
     placement.value = "12";
     placement.dispatchEvent(new Event("change"));
     const inactivePlacement = root.querySelector(
@@ -570,11 +576,12 @@ describe("GameLayoutEditorApp workspace", () => {
       ).value,
     ).toBe("77");
     (root.querySelector("[data-advance-popup]") as HTMLButtonElement).click();
-    expect(previewSpies.playAwardCelebration).toHaveBeenCalledWith({
+    expect(previewSpies.openPopup).toHaveBeenCalledWith("fixture-popup", {
+      type: "award-celebration",
       betAmountRaw: 100,
       winAmountRaw: 6000,
     });
-    expect(previewSpies.advanceAwardCelebration).toHaveBeenCalled();
+    expect(previewSpies.requestPrimaryPopupInteraction).toHaveBeenCalled();
     binding.value = "";
     binding.dispatchEvent(new Event("change"));
     (root.querySelector("[data-clear-popup]") as HTMLButtonElement).click();

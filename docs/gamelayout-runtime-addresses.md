@@ -147,6 +147,10 @@ image-string factory 强制要求 `text`；其它 kind 禁止传 image-string op
 `coordinateOrigin`：`center` 时图片中心是对象原点，挂到 Spine slot 或其它 anchor 时无需由游戏手工减去
 半个图片尺寸；缺失/`top-left` 时继续以图片左上角为对象原点。
 
+在 Game Layout Editor 中导入 ImgNumber ZIP 后，在资源详情填写程序键（例如 `win-amount`）并点击
+“设为程序资源”；展开详情即可复制由共享 formatter 生成的
+`gamelayout:/resource/image-string/win-amount`。未绑定的 ImgNumber 不会显示程序工厂地址，也不会仅因导入而进入 production closure。
+
 ## Authored loop Spine
 
 `gamelayout:/node/<exact-id>` 返回的 authored Spine 仍由 Scene Layout runtime 拥有。对
@@ -200,6 +204,30 @@ const dispose = runtime.addresses.bind(
 
 首次 apply、同 variant resize 和失败 apply 不派发。`detail` 包含
 `previousVariantId` 与 `variantId`；回调仍必须同步返回，异步编排使用 `wait()`。
+
+## 统一打开和关闭 Popup
+
+顶层 `popups` 中的三类 binding 都使用 exact owner 地址打开。Game Layout Editor 中没有 mode/transition 直接引用的 package，
+需要在 Popup 工作区点击“设为程序 Popup”后才会保留到顶层 `popups` 并显示可复制地址。
+
+```ts
+import { formatGameLayoutRuntimeAddress } from "@slotclientengine/gameframeworks";
+
+const address = formatGameLayoutRuntimeAddress("popup", "help-panel");
+const session = runtime.openPopup({
+  address,
+  type: "single-state",
+});
+
+// 默认等待该类型的正式 end/dismiss 流程；cleanup 可传 immediate。
+await runtime.closePopup();
+await session.finished;
+```
+
+`openPopup()` 会同时校验 owner 地址存在、binding type 与请求输入；Award 还严格校验 raw 金额。一个 package runtime
+只有一个 active Popup slot，第二次 open、mode award 或 transition prelude 会在画面 mutation 前显式失败，不自动叠加、替换或排队。
+每个 binding 的 player 在 runtime 初始化时创建一次，关闭后可从相同地址再次打开；`getActivePopupAddress()` 返回当前 owner 或 `null`。
+`closePopup({ behavior: "immediate" })` 用于明确取消或宿主 cleanup。session 不拥有 player，caller 不得 destroy package-owned Popup。
 
 ## Popup 深层字符串
 

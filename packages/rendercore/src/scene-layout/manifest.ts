@@ -1228,19 +1228,6 @@ function parseGameModes(
   for (const id of Object.keys(symbolPackages ?? {}))
     if (!referencedSymbols.has(id))
       fail(`scene layout symbol package "${id}" is orphaned by gameModes.`);
-  const referenced = new Set([
-    ...modes.flatMap((mode) =>
-      mode.awardCelebrationPopup ? [mode.awardCelebrationPopup] : [],
-    ),
-    ...transitions.flatMap((transition) =>
-      "preludePopup" in transition && transition.preludePopup
-        ? [transition.preludePopup]
-        : [],
-    ),
-  ]);
-  for (const [id, binding] of Object.entries(popups ?? {}))
-    if (binding.type === "award-celebration" && !referenced.has(id))
-      fail(`scene layout popup "${id}" is orphaned by gameModes.`);
   return deepFreeze({ initialMode, modes, transitions });
 }
 

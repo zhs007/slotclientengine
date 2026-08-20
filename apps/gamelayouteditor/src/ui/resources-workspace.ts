@@ -1,4 +1,5 @@
 import type { EditorProject } from "../model/editor-project.js";
+import { formatGameLayoutRuntimeAddress } from "@slotclientengine/rendercore/scene-layout/data";
 import {
   editorResourcePrimaryPath,
   type EditorLayoutResource,
@@ -12,7 +13,7 @@ import {
   suggestRuntimeResourceKey,
 } from "../model/resource-commands.js";
 import type { EditorUiSession } from "./ui-session.js";
-import { escapeHtml, statusText } from "./ui-markup.js";
+import { escapeHtml, runtimeAddressMarkup, statusText } from "./ui-markup.js";
 
 export function resourcesWorkspaceMarkup(options: {
   readonly project: EditorProject;
@@ -145,5 +146,9 @@ function resourceDetailsMarkup(
     resource.kind === "spine"
       ? `<p><strong>Animations：</strong>${resource.animationNames.map(escapeHtml).join(", ")}</p>`
       : "";
-  return `<div class="resource-details"><ul>${dependencies}</ul>${animations}<p><strong>Typed 引用：</strong>${references.length > 0 ? references.map((reference) => `${escapeHtml(reference.nodeId)} (${reference.role}${reference.variants.length ? `: ${reference.variants.join(", ")}` : ""})`).join("；") : "无"}</p><p><strong>程序使用：</strong>${resource.kind === "audio" ? (programmaticEffects.length ? programmaticEffects.map(escapeHtml).join(", ") : references.length === 0 ? "未绑定，不会导出" : "未绑定；由 mode BGM 引用导出") : runtimeKey ? `${escapeHtml(runtimeKey)}（强制导出）` : references.length === 0 ? "未引用，不会导出" : "未设置；由 Scene 引用导出"}</p></div>`;
+  const runtimeAddress =
+    runtimeKey && resource.kind !== "audio"
+      ? formatGameLayoutRuntimeAddress("resource", resource.kind, runtimeKey)
+      : null;
+  return `<div class="resource-details"><ul>${dependencies}</ul>${animations}<p><strong>Typed 引用：</strong>${references.length > 0 ? references.map((reference) => `${escapeHtml(reference.nodeId)} (${reference.role}${reference.variants.length ? `: ${reference.variants.join(", ")}` : ""})`).join("；") : "无"}</p><p><strong>程序使用：</strong>${resource.kind === "audio" ? (programmaticEffects.length ? programmaticEffects.map(escapeHtml).join(", ") : references.length === 0 ? "未绑定，不会导出" : "未绑定；由 mode BGM 引用导出") : runtimeKey ? `${escapeHtml(runtimeKey)}（强制导出）` : references.length === 0 ? "未引用，不会导出且没有程序地址" : "未设置；由 Scene 引用导出，但没有程序工厂地址"}</p>${runtimeAddress ? runtimeAddressMarkup(resource.kind === "image-string" ? "ImgNumber factory runtime address" : "Program resource runtime address", runtimeAddress, "由程序键派生；地址不写入 manifest。") : ""}</div>`;
 }

@@ -6,7 +6,7 @@ import {
   type EditorGameModeTransitionDraft,
   type EditorProject,
 } from "../model/editor-project.js";
-import { escapeHtml, numberField } from "./ui-markup.js";
+import { escapeHtml, numberField, runtimeAddressMarkup } from "./ui-markup.js";
 import type { PreviewTransitionUiState } from "./ui-session.js";
 
 export function transitionKey(
@@ -256,10 +256,6 @@ function spineInspector(
       )
     : null;
   return `<section class="inspector-section"><h3>Official Spine once</h3><label>Spine resource<select data-transition-resource><option value="">必须明确选择</option>${resources.map((candidate) => `<option value="${escapeHtml(candidate.id)}" ${candidate.id === transition.resourceId ? "selected" : ""}>${escapeHtml(candidate.id)}</option>`).join("")}</select></label><label>once animation<select data-transition-animation ${resource?.kind === "spine" ? "" : "disabled"}><option value="">必须明确选择</option>${animationOptions}</select></label><label>switch event<select data-transition-event ${transition.animation ? "" : "disabled"}><option value="">必须明确选择</option>${uniqueEvents.map(([name]) => `<option value="${escapeHtml(name)}" ${name === transition.switchEvent ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select></label>${duplicateDiagnostics}<p class="hint">event 边界原子提交完整目标 scene。</p>${eventAddress ? runtimeAddressMarkup("Spine event runtime address", eventAddress) : '<p class="derived">选择唯一 event 后生成 runtime address。</p>'}</section><section class="inspector-section"><h3>Art-space Placement</h3>${placements}</section>`;
-}
-
-function runtimeAddressMarkup(label: string, address: string): string {
-  return `<section class="inspector-section" data-runtime-address-inspector><h3>${escapeHtml(label)}</h3><p class="path"><code data-runtime-address>${escapeHtml(address)}</code></p><button type="button" data-copy-runtime-address="${escapeHtml(address)}">复制地址</button><p class="hint">由当前 editor identity 派生，不写入 manifest。</p></section>`;
 }
 
 function videoInspector(
