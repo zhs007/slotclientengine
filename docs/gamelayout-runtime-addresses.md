@@ -163,6 +163,7 @@ const conveyor = endpoint.get();
 if (conveyor.kind !== "spine" || conveyor.playback !== "loop")
   throw new Error("expected authored loop Spine");
 
+firstImage.setRotation(90);
 const attachment = conveyor.bindSlotObjects([
   { slot: "slot-0", object: firstImage },
   { slot: "slot-1", object: secondImage },
@@ -178,7 +179,8 @@ attachment.detach();
 runtime destroy 也会 reject 对应 waiter。unknown animation/slot、重复 slot/object、borrowed
 child 或已挂载 child 显式失败。一次 batch 替换失败会恢复该 authored node 原有 attachment；
 handle 的 `detach()` 幂等，child destroy 和 runtime destroy 都会清理关系，但 child ownership
-始终留在调用者。state-machine Spine 只能继续使用 `requestState()`。
+始终留在调用者。图片等 child 的局部旋转由 `RenderObject.setRotation()` 设置，单位为顺时针度数；
+Spine attachment 不解释或改写 child transform。state-machine Spine 只能继续使用 `requestState()`。
 
 ## Layout variant 事件
 

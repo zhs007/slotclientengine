@@ -90,7 +90,7 @@
 - standard ReelSpin、CellSpin与legacy grid-cell统一提供与occurrence解耦的稳定cell-center Anchor；它在rolling/部分落停期间可解析，
   settled后与同格Symbol中心一致。rolling `getSymbol()`、stale occurrence与leased Symbol仍显式失败。
 - game runtime的program Spine/VNI RenderObject可显式`play(...,{loop:true})`；Promise在首圈完成后resolve且循环继续，直到stop、supersede或destroy。
-  detached owned RenderObject只可按exact Spine slot通过opaque attachment绑定，不猜slot/root且不转移destroy ownership。
+  detached owned RenderObject只可按exact Spine slot通过opaque attachment绑定，不猜slot/root且不转移destroy ownership。RenderObject局部旋转只通过finite顺时针度数的opaque setter设置，Spine attachment不解释或改写child transform。
 - registered RenderObjectLayer可原子移动已挂载RenderObject并保持视觉原点；settled borrowed Symbol临时换层必须在spin、replacement、release或destroy前由reel owner恢复，
   不公开symbols主层、raw Container、world coordinate或直接zIndex。
 - area spin通用factory只装配column order与stagger并调用逐列ReelSpin；不得接受业务predicate、matrix command或state名。

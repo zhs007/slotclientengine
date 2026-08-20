@@ -18,6 +18,8 @@ export interface RenderPoint {
 
 export interface RenderObject {
   setPosition(position: RenderPoint): void;
+  /** Sets the object's local clockwise rotation in degrees. */
+  setRotation(rotationDegrees: number): void;
   setVisible(visible: boolean): void;
   play(name?: string, options?: RenderObjectPlayOptions): Promise<void>;
   stop(): void;
@@ -117,6 +119,14 @@ function createRenderObjectBase(adapter: RenderObjectAdapter): RenderObject {
           "RenderObject position must contain finite coordinates.",
         );
       resolveView().position.set(position.x, position.y);
+    },
+    setRotation: (rotationDegrees: number) => {
+      assertUsable();
+      if (!Number.isFinite(rotationDegrees))
+        throw new SymbolAnimationError(
+          "RenderObject rotation must be a finite number of degrees.",
+        );
+      resolveView().angle = rotationDegrees;
     },
     setVisible: (visible: boolean) => {
       assertUsable();

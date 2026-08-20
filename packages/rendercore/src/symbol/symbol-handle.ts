@@ -169,6 +169,10 @@ export function createSymbolHandle(source: SymbolHandleSource): SymbolHandle {
       assertUsable();
       baseNode.setPosition(position);
     },
+    setRotation: (rotationDegrees: number) => {
+      assertUsable();
+      baseNode.setRotation(rotationDegrees);
+    },
     setVisible: (visible: boolean) => {
       assertUsable();
       baseNode.setVisible(visible);
@@ -363,6 +367,10 @@ export function createEmptySymbolHandle(
     setPosition: (position: RenderPoint) => {
       assertUsable();
       baseNode.setPosition(position);
+    },
+    setRotation: (rotationDegrees: number) => {
+      assertUsable();
+      baseNode.setRotation(rotationDegrees);
     },
     setVisible: (visible: boolean) => {
       assertUsable();

@@ -93,6 +93,28 @@ PASS  pnpm --filter @slotclientengine/rendercore typecheck
 PASS  git diff --check
 ```
 
+## 浏览器验收跟进：竖版 Feature 图片旋转
+
+竖版 Feature Bar 图片需要相对自身向右旋转 90°。实现保持 Spine slot attachment 合同不变，
+在 `RenderObject` 增加 finite 顺时针度数的 `setRotation()` opaque setter。竖版 conveyor 父变换包含镜像，
+所以 Minecart2 在竖版绑定前设置局部 `-90` 以得到屏幕上向右 90° 的结果；横版设置 `0`，方向迁移失败时
+同时恢复旧方向角度。rendercore 更新已同步到 Minecart2。
+
+```text
+PASS  pnpm --filter @slotclientengine/rendercore exec vitest run tests/presentation/render-object.test.ts tests/symbol/symbol-handle.test.ts tests/background/runtime-player.test.ts tests/scene-layout/runtime.test.ts
+      4 files, 24 tests passed
+PASS  pnpm --filter @slotclientengine/rendercore typecheck
+PASS  piximinecart2: pnpm --filter @slotclientengine/rendercore exec vitest run tests/presentation/render-object.test.ts tests/symbol/symbol-handle.test.ts
+      2 files, 9 tests passed
+PASS  piximinecart2: pnpm --filter minecart2 test
+      3 files, 9 tests passed
+PASS  piximinecart2: pnpm --filter minecart2 build
+PASS  git diff --check（两个仓库）
+```
+
+`piximinecart2` 的 rendercore 全量 typecheck 仍因仓库未包含 `test-utils/minecart2-fixtures.js` 与
+`assets/gamecfg/game2.json` 失败；报错全部位于未修改的测试文件，定向测试与 Minecart2 build 已覆盖本次改动。
+
 ## 待用户完成
 
 按 `docs/minecart2-task232-feature-bar-conveyor-update.md` 同步 packages并修改 Minecart2 后，在真实浏览器验证：

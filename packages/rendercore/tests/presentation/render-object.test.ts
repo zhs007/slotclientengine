@@ -3,11 +3,29 @@ import { describe, expect, it } from "vitest";
 import { resolveRenderAnchor } from "../../src/presentation/render-anchor.js";
 import {
   createCloneableRenderObject,
+  createRenderObject,
   getRenderObjectAdapter,
 } from "../../src/presentation/render-object.js";
 import { createTextRenderObject } from "../../src/presentation/text-render-object.js";
 
 describe("RenderObject", () => {
+  it("sets finite local clockwise rotation in degrees", () => {
+    const view = new Container();
+    const object = createRenderObject({
+      view,
+      destroy: () => view.destroy(),
+    });
+
+    object.setRotation(90);
+    expect(view.angle).toBe(90);
+    expect(() => object.setRotation(Number.POSITIVE_INFINITY)).toThrow(
+      /finite number of degrees/,
+    );
+    expect(view.angle).toBe(90);
+
+    object.destroy();
+  });
+
   it("resolves a logical object's current Container without exposing it", () => {
     const root = new Container();
     const first = new Container({ position: { x: 10, y: 20 } });
