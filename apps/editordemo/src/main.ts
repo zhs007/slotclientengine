@@ -7,8 +7,8 @@ import type {
   EditorAssetsSnapshot,
 } from "@slotclientengine/editorcore/assets/data";
 import {
-  mountEditorAssetsView,
-  type EditorAssetsView,
+  mountEditorAssetsDialog,
+  type EditorAssetsDialog,
 } from "@slotclientengine/editorcore/assets/ui";
 import {
   createDemoProjectArchive,
@@ -37,8 +37,8 @@ app.innerHTML = `
         <button type="button" data-action="reset">清空</button>
       </div>
     </header>
-    <p class="demo-status" data-status role="status">可从 Assets 工具栏统一导入文件或 ZIP。</p>
-    <section class="demo-workspace" data-workspace></section>
+    <p class="demo-status" data-status role="status">点击 Assets 管理，在共享 Dialog 中导入、预览和导出资源。</p>
+    <section class="demo-workspace" data-workspace aria-label="共享 Assets 管理入口"></section>
   </main>`;
 
 const workspaceElement = requiredQuery<HTMLElement>(app, "[data-workspace]");
@@ -48,7 +48,7 @@ const projectInput = requiredQuery<HTMLInputElement>(
   "[data-project-input]",
 );
 let controller: EditorAssetsController<DemoProject>;
-let view: EditorAssetsView;
+let dialog: EditorAssetsDialog;
 
 mount();
 
@@ -106,17 +106,18 @@ async function openProject(): Promise<void> {
 }
 
 function mount(initial?: EditorAssetsSnapshot<DemoProject>): void {
-  view?.destroy();
+  dialog?.destroy();
   controller?.destroy();
   controller = createDefaultEditorAssetsController({
     project: initial?.project ?? createEmptyDemoProject(),
     host: demoProjectHost,
     ...(initial ? { initial } : {}),
   });
-  view = mountEditorAssetsView({
+  dialog = mountEditorAssetsDialog({
     controller,
     root: workspaceElement,
     title: "Assets",
+    triggerLabel: "Assets 管理",
   });
 }
 

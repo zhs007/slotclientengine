@@ -11,6 +11,7 @@ import {
 } from "@slotclientengine/editorresource";
 import type {
   EditorAssetCatalog,
+  EditorAssetExportArtifact,
   EditorAssetExportPlan,
   EditorAssetHostAdapter,
   EditorAssetImportPreparation,
@@ -41,6 +42,7 @@ export interface EditorAssetsController<TProject> {
   deleteRoot(rootKey: string): Promise<void>;
   renameRoot(rootKey: string, nextKey: string): Promise<void>;
   setProgramBinding(rootKey: string, name: string | null): Promise<void>;
+  exportRoot(rootKey: string): Promise<EditorAssetExportArtifact>;
   createExportPlan(rootKeys?: readonly string[]): EditorAssetExportPlan;
   createAssetsMap(
     rootKeys?: readonly string[],
@@ -63,6 +65,10 @@ export function createEditorAssetsController<TProject>(options: {
     readonly profiles: EditorAssetImportPreparation["profiles"];
     readonly blockingErrors: readonly string[];
   }>;
+  readonly exportAsset?: (
+    snapshot: EditorAssetsSnapshot<TProject>,
+    rootKey: string,
+  ) => Promise<EditorAssetExportArtifact>;
 }): EditorAssetsController<TProject> {
   let snapshot =
     options.initial ?? createEmptyEditorAssetsSnapshot(options.project);
@@ -238,6 +244,25 @@ export function createEditorAssetsController<TProject>(options: {
       );
       snapshot = Object.freeze({ ...snapshot, project });
       emit();
+    },
+    async exportRoot(rootKey) {
+      assertAlive();
+      if (!snapshot.catalog.roots.has(rootKey))
+        throw new Error(`asset root 不存在：${rootKey}`);
+      if (!options.exportAsset)
+        throw new Error("EditorAssetsController 未配置 asset export adapter。");
+      const artifact = await options.exportAsset(snapshot, rootKey);
+      if (!artifact.filename.trim())
+        throw new Error("asset export filename 为空。");
+      if (!artifact.mediaType.trim())
+        throw new Error("asset export mediaType 为空。");
+      if (!(artifact.bytes instanceof Uint8Array))
+        throw new Error("asset export bytes 必须是 Uint8Array。");
+      return Object.freeze({
+        filename: artifact.filename,
+        mediaType: artifact.mediaType,
+        bytes: artifact.bytes.slice(),
+      });
     },
     createExportPlan(rootKeys) {
       assertAlive();

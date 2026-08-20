@@ -20,7 +20,7 @@ label {
 
 .demo-shell {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
   gap: 14px;
   height: 100vh;
   padding: 20px;
@@ -78,4 +78,7 @@ label {
 .demo-workspace {
   min-width: 0;
   min-height: 0;
+}
+.demo-workspace .editor-assets-dialog-trigger:hover {
+  border-color: #69a8ff;
 }
