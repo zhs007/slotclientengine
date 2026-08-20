@@ -1404,7 +1404,6 @@ export class RenderGridCellReelSet
     requests: readonly VisibleSymbolStatePlaybackRequest[],
     options?: VisibleSymbolStatePlaybackBatchOptions,
   ): Promise<void> {
-    this.assertStopped("play visible symbol states");
     if (requests.length === 0) {
       throw new ReelError(
         "Visible symbol state playback batch must not be empty.",
@@ -1418,6 +1417,11 @@ export class RenderGridCellReelSet
         "coalesce",
       ).map((position) => {
         const cell = this.getCell(position.x, position.y);
+        if (cell.phase !== "landed" && cell.phase !== "completed") {
+          throw new ReelError(
+            `Cannot play landed symbol state while grid cell (${position.x},${position.y}) is spinning.`,
+          );
+        }
         if (!cell.occupied) {
           throw new ReelError(
             `Cannot play state for empty grid cell (${position.x},${position.y}).`,

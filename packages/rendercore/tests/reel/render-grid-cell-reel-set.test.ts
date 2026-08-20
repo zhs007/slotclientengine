@@ -7,6 +7,7 @@ import {
   createGridCellReelSpinPlan,
   createGridCellCascadeDropPlan as createRendererCascadeDropPlan,
   type GridCellDimmingPattern,
+  type GridCellEffectController,
   type GridCellReelSpinTiming,
   type AwaitableVisibleSymbolPresentationTarget,
   type VisibleSymbolPresentationTarget,
@@ -451,6 +452,105 @@ describe("RenderGridCellReelSet", () => {
     await releaseAssertion;
   });
 
+  it("plays a landed cell state while later grid cells are still spinning", async () => {
+    const reelSet = createGridReelSet();
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
+    reelSet.spin(createPlan());
+
+    let update = reelSet.update(0);
+    for (
+      let index = 0;
+      index < 30 && update.landedCells.length === 0;
+      index += 1
+    ) {
+      update = reelSet.update(0.01);
+    }
+
+    expect(update.spinning).toBe(true);
+    const landed = update.landedCells[0];
+    expect(landed).toBeDefined();
+    const pending = reelSet
+      .getSnapshot()
+      .cells.find(
+        (cell) => cell.phase === "waiting" || cell.phase === "spinning",
+      );
+    expect(pending).toBeDefined();
+
+    const landedStateBefore = reelSet.getVisibleSymbolStateSnapshot(
+      landed!.x,
+      landed!.y,
+    ).requestedState;
+    expect(() =>
+      reelSet.playVisibleSymbolStateBatch([
+        {
+          positions: [landed!],
+          state: "win",
+          options: {
+            transitionMode: "immediate",
+            completion: "once-complete",
+          },
+        },
+        {
+          positions: [{ x: pending!.x, y: pending!.y }],
+          state: "win",
+          options: {
+            transitionMode: "immediate",
+            completion: "once-complete",
+          },
+        },
+      ]),
+    ).toThrow(/Cannot play landed symbol state.*is spinning/);
+    expect(
+      reelSet.getVisibleSymbolStateSnapshot(landed!.x, landed!.y)
+        .requestedState,
+    ).toBe(landedStateBefore);
+
+    const playback = reelSet.playVisibleSymbolStates([landed!], "win", {
+      transitionMode: "immediate",
+      completion: "once-complete",
+    });
+    expect(
+      reelSet.getVisibleSymbolStateSnapshot(landed!.x, landed!.y)
+        .requestedState,
+    ).toBe("win");
+
+    reelSet.update(0.58);
+    await playback;
+  });
+
+  it("plays an occupied cell state during an unrelated empty-cell effect sweep", async () => {
+    const effectController = createPendingGridCellEffectController();
+    const reelSet = createGridReelSet({}, undefined, effectController);
+    reelSet.resetToScene(
+      [
+        [-1, 0, 2],
+        [2, 1, 0],
+      ],
+      FINAL_YS,
+    );
+    reelSet.startEffectSweep({
+      effectId: "empty-cell-sweep",
+      positions: [{ x: 0, y: 0 }],
+      loopCount: 1,
+      startStepMs: 0,
+    });
+
+    const playback = reelSet.playVisibleSymbolStates([{ x: 1, y: 1 }], "win", {
+      transitionMode: "immediate",
+      completion: "once-complete",
+    });
+    expect(reelSet.getVisibleSymbolStateSnapshot(1, 1).requestedState).toBe(
+      "win",
+    );
+
+    reelSet.update(0.58);
+    await playback;
+    expect(reelSet.getSnapshot()).toMatchObject({
+      spinning: true,
+      completed: false,
+    });
+  });
+
   it("retains cascade values for symbols without a visual value controller", () => {
     const reelSet = createGridReelSet();
     const values = [
@@ -864,7 +964,7 @@ describe("RenderGridCellReelSet", () => {
     ).toThrow(/columns/);
   });
 
-  it("releases holes and completes existing plus refill symbols in one fall", () => {
+  it("releases holes and completes existing plus refill symbols in one fall", async () => {
     const reelSet = createGridReelSet();
     const cascadeInitial = [
       [1, 2, 2],
@@ -923,6 +1023,17 @@ describe("RenderGridCellReelSet", () => {
       spinning: true,
       completed: false,
     });
+    const unaffectedPlayback = reelSet.playVisibleSymbolStates(
+      [{ x: 0, y: 2 }],
+      "win",
+      {
+        transitionMode: "immediate",
+        completion: "once-complete",
+      },
+    );
+    expect(reelSet.getVisibleSymbolStateSnapshot(0, 2).requestedState).toBe(
+      "win",
+    );
     expect(() => reelSet.releaseVisibleSymbols([{ x: 0, y: 1 }])).toThrow(
       /spinning/,
     );
@@ -940,6 +1051,8 @@ describe("RenderGridCellReelSet", () => {
       [null, 50, null],
       [null, 75, 100],
     ]);
+    reelSet.update(0.58);
+    await unaffectedPlayback;
   });
 
   it("lets a falling symbol pass behind a fixed higher-priority symbol", () => {
@@ -1402,6 +1515,7 @@ function getCellRoot(
 function createGridReelSet(
   registryOptions: Parameters<typeof createBasicRegistry>[0] = {},
   occurrenceEffectPlayerFactory?: VisibleOccurrenceEffectPlayerFactory,
+  effectController?: GridCellEffectController,
 ): RenderGridCellReelSet {
   return new RenderGridCellReelSet({
     reels: createBasicReels(),
@@ -1414,6 +1528,7 @@ function createGridReelSet(
           C: ["dropdown"],
         },
     }),
+    effectController,
     columns: 2,
     rows: 3,
     cellWidth: 15,
@@ -1425,6 +1540,40 @@ function createGridReelSet(
     }),
     occurrenceEffectPlayerFactory,
   });
+}
+
+function createPendingGridCellEffectController(): GridCellEffectController {
+  const container = new Container();
+  let active: {
+    readonly effectId: string;
+    readonly x: number;
+    readonly y: number;
+  } | null = null;
+  return {
+    container,
+    prepare: () => {},
+    startScheduledEffect: ({ effectId, position }) => {
+      active = { effectId, x: position.x, y: position.y };
+    },
+    update: () => ({ completed: [] }),
+    isActive: (effectId, position) =>
+      active?.effectId === effectId &&
+      active.x === position.x &&
+      active.y === position.y,
+    cancelAll: () => {
+      active = null;
+    },
+    getSnapshot: () => ({
+      prepared: true,
+      active: active ? [{ ...active, completedLoops: 0 }] : [],
+      activeCount: active ? 1 : 0,
+      idleCount: active ? 0 : 1,
+      capacity: 1,
+    }),
+    destroy: () => {
+      active = null;
+    },
+  };
 }
 
 function createPlan(
