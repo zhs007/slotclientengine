@@ -4,6 +4,7 @@ import {
   assertValidSpineDeltaSeconds,
   createOfficialSpinePlayer,
   type RendercoreSpinePlayer,
+  type RendercoreSpineSlotPlayer,
 } from "../spine/runtime-player.js";
 import { SpineStateController } from "../spine/state-controller.js";
 import {
@@ -38,6 +39,9 @@ import type {
   SceneLayoutPointSelector,
   SceneLayoutRenderLayerRef,
   SceneLayoutRenderObject,
+  SceneLayoutSpineAnimationPlayOptions,
+  SceneLayoutSpineSlotObjectAttachment,
+  SceneLayoutSpineSlotObjectBinding,
 } from "./types.js";
 import {
   createRenderObjectLayer,
@@ -45,6 +49,10 @@ import {
   type RenderObjectLayerController,
 } from "../presentation/render-object-layer.js";
 import { resolveSceneLayoutRenderLayerRef } from "./render-layer-ref.js";
+import {
+  getRenderObjectAdapter,
+  registerRenderObjectCleanup,
+} from "../presentation/render-object.js";
 
 export interface CreateSceneLayoutRuntimeOptions {
   readonly resource: SceneLayoutResource;
@@ -82,6 +90,31 @@ interface RuntimeNode {
   imageString: RenderImageString | null;
   imageSprite: Sprite | null;
   texture: Texture | null;
+  programPlayback: NodeProgramPlayback | null;
+  slotObjectAttachment: ActiveNodeSlotObjectAttachment | null;
+}
+
+interface NodeProgramPlayback {
+  readonly loop: boolean;
+  readonly promise: Promise<void>;
+  readonly resolve: () => void;
+  readonly reject: (error: Error) => void;
+  readonly signal?: AbortSignal;
+  readonly abortListener?: () => void;
+}
+
+interface PreparedNodeSlotObjectBinding {
+  readonly slot: string;
+  readonly object: SceneLayoutSpineSlotObjectBinding["object"];
+  readonly view: Container;
+  readonly followSlotColor?: boolean;
+}
+
+interface ActiveNodeSlotObjectAttachment {
+  active: boolean;
+  readonly bindings: readonly PreparedNodeSlotObjectBinding[];
+  readonly unregisterCleanup: (() => void)[];
+  detach(): void;
 }
 
 export function createSceneLayoutRuntime(
@@ -189,6 +222,8 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
         imageString: null,
         imageSprite: null,
         texture: null,
+        programPlayback: null,
+        slotObjectAttachment: null,
       };
     });
     this.#nodes = Object.freeze(nodes);
@@ -357,6 +392,14 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       if (node.player && node.slot.renderable) {
         const result = node.player.update(deltaSeconds);
         node.stateController?.updateCompleted(result.completed);
+        const playback = node.programPlayback;
+        if (
+          playback &&
+          ((playback.loop && result.loopCompleted) ||
+            (!playback.loop && result.completed))
+        ) {
+          this.resolveNodeProgramPlayback(node, playback);
+        }
       }
       if (node.vniPlayer && node.slot.renderable)
         node.vniPlayer.update(deltaSeconds);
@@ -526,11 +569,23 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
                 throw new SceneLayoutError(
                   `Scene layout Spine node "${nodeId}" is not prepared.`,
                 );
+              this.rejectNodeProgramPlayback(
+                current,
+                `Scene layout Spine node "${nodeId}" playback was superseded.`,
+              );
               current.player.play({
                 animationName: current.spec.resource.defaultAnimation,
                 loop: current.spec.resource.loop,
               });
             },
+            playAnimation: (
+              animationName: string,
+              options?: SceneLayoutSpineAnimationPlayOptions,
+            ) => this.playNodeAnimation(nodeId, animationName, options),
+            stopAnimation: () => this.stopNodeAnimation(nodeId),
+            bindSlotObjects: (
+              bindings: readonly SceneLayoutSpineSlotObjectBinding[],
+            ) => this.bindNodeSlotObjects(nodeId, bindings),
           });
         }
         break;
@@ -739,6 +794,12 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
 
   private releaseNodeResources(): void {
     for (const node of this.#nodes) {
+      node.slotObjectAttachment?.detach();
+      node.slotObjectAttachment = null;
+      this.rejectNodeProgramPlayback(
+        node,
+        `Scene layout Spine node "${node.spec.id}" was destroyed during playback.`,
+      );
       node.stateController?.destroy(
         `Scene layout Spine node "${node.spec.id}" was destroyed.`,
       );
@@ -825,6 +886,246 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       );
     }
     return node.stateController;
+  }
+
+  private playNodeAnimation(
+    nodeId: string,
+    animationName: string,
+    options: SceneLayoutSpineAnimationPlayOptions = {},
+  ): Promise<void> {
+    this.assertReady();
+    const node = this.requireProgramSpineNode(nodeId);
+    if (
+      typeof animationName !== "string" ||
+      animationName.length === 0 ||
+      animationName !== animationName.trim()
+    )
+      return Promise.reject(
+        new SceneLayoutError(
+          `Scene layout Spine node "${nodeId}" requires an exact non-empty animation name.`,
+        ),
+      );
+    if (options.loop !== undefined && typeof options.loop !== "boolean")
+      return Promise.reject(
+        new SceneLayoutError(
+          `Scene layout Spine node "${nodeId}" playback loop must be boolean.`,
+        ),
+      );
+    if (options.signal?.aborted)
+      return Promise.reject(
+        new SceneLayoutError(
+          `Scene layout Spine node "${nodeId}" playback was aborted.`,
+        ),
+      );
+
+    this.rejectNodeProgramPlayback(
+      node,
+      `Scene layout Spine node "${nodeId}" playback was superseded.`,
+    );
+    const loop = options.loop ?? false;
+    let resolve!: () => void;
+    let reject!: (error: Error) => void;
+    const promise = new Promise<void>((resolvePromise, rejectPromise) => {
+      resolve = resolvePromise;
+      reject = rejectPromise;
+    });
+    let playback!: NodeProgramPlayback;
+    const abortListener = options.signal
+      ? () => {
+          if (node.programPlayback !== playback) return;
+          node.player?.reset();
+          this.rejectNodeProgramPlayback(
+            node,
+            `Scene layout Spine node "${nodeId}" playback was aborted.`,
+          );
+        }
+      : undefined;
+    playback = {
+      loop,
+      promise,
+      resolve,
+      reject,
+      ...(options.signal ? { signal: options.signal } : {}),
+      ...(abortListener ? { abortListener } : {}),
+    };
+    node.programPlayback = playback;
+    options.signal?.addEventListener("abort", abortListener!, { once: true });
+    try {
+      node.player!.play({ animationName, loop });
+    } catch (error) {
+      this.rejectNodeProgramPlayback(
+        node,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+    return promise;
+  }
+
+  private stopNodeAnimation(nodeId: string): void {
+    this.assertReady();
+    const node = this.requireProgramSpineNode(nodeId);
+    node.player!.reset();
+    this.rejectNodeProgramPlayback(
+      node,
+      `Scene layout Spine node "${nodeId}" playback was stopped.`,
+    );
+  }
+
+  private resolveNodeProgramPlayback(
+    node: RuntimeNode,
+    playback: NodeProgramPlayback,
+  ): void {
+    if (node.programPlayback !== playback) return;
+    playback.signal?.removeEventListener("abort", playback.abortListener!);
+    node.programPlayback = null;
+    playback.resolve();
+  }
+
+  private rejectNodeProgramPlayback(node: RuntimeNode, message: string): void {
+    const playback = node.programPlayback;
+    if (!playback) return;
+    playback.signal?.removeEventListener("abort", playback.abortListener!);
+    node.programPlayback = null;
+    playback.reject(new SceneLayoutError(message));
+  }
+
+  private bindNodeSlotObjects(
+    nodeId: string,
+    bindings: readonly SceneLayoutSpineSlotObjectBinding[],
+  ): SceneLayoutSpineSlotObjectAttachment {
+    this.assertReady();
+    const node = this.requireProgramSpineNode(nodeId);
+    const player = requireSpineSlotPlayer(node.player!, nodeId);
+    const previous = node.slotObjectAttachment;
+    const previousObjects = new Set(
+      previous?.bindings.map((binding) => binding.object) ?? [],
+    );
+    if (!Array.isArray(bindings) || bindings.length === 0)
+      throw new SceneLayoutError(
+        `Scene layout Spine node "${nodeId}" slot bindings must not be empty.`,
+      );
+    const slots = new Set<string>();
+    const objects = new Set<SceneLayoutSpineSlotObjectBinding["object"]>();
+    const prepared = bindings.map((binding, index) => {
+      if (!binding || typeof binding !== "object")
+        throw new SceneLayoutError(
+          `Scene layout Spine node "${nodeId}" slot binding[${index}] is invalid.`,
+        );
+      if (
+        typeof binding.slot !== "string" ||
+        binding.slot.length === 0 ||
+        binding.slot !== binding.slot.trim()
+      )
+        throw new SceneLayoutError(
+          `Scene layout Spine node "${nodeId}" slot binding[${index}] requires an exact non-empty slot.`,
+        );
+      if (slots.has(binding.slot))
+        throw new SceneLayoutError(
+          `Scene layout Spine node "${nodeId}" has duplicate slot binding "${binding.slot}".`,
+        );
+      slots.add(binding.slot);
+      if (objects.has(binding.object))
+        throw new SceneLayoutError(
+          `Scene layout Spine node "${nodeId}" reuses one RenderObject in multiple slots.`,
+        );
+      objects.add(binding.object);
+      if (
+        binding.followSlotColor !== undefined &&
+        typeof binding.followSlotColor !== "boolean"
+      )
+        throw new SceneLayoutError(
+          `Scene layout Spine node "${nodeId}" slot followSlotColor must be boolean.`,
+        );
+      const adapter = getRenderObjectAdapter(binding.object);
+      if (!adapter.owned)
+        throw new SceneLayoutError(
+          `Scene layout Spine node "${nodeId}" slot objects must be caller-owned.`,
+        );
+      if (adapter.view.parent && !previousObjects.has(binding.object))
+        throw new SceneLayoutError(
+          `Scene layout Spine node "${nodeId}" slot object is already attached.`,
+        );
+      return Object.freeze({
+        slot: binding.slot,
+        object: binding.object,
+        view: adapter.view,
+        ...(binding.followSlotColor === undefined
+          ? {}
+          : { followSlotColor: binding.followSlotColor }),
+      });
+    });
+
+    const detachBindings = (
+      values: readonly PreparedNodeSlotObjectBinding[],
+    ) => {
+      for (const binding of values) player.removeSlotObject(binding.view);
+    };
+    const attachBindings = (
+      values: readonly PreparedNodeSlotObjectBinding[],
+    ) => {
+      for (const binding of values)
+        player.attachSlotObject({
+          slot: binding.slot,
+          object: binding.view,
+          ...(binding.followSlotColor === undefined
+            ? {}
+            : { followSlotColor: binding.followSlotColor }),
+        });
+    };
+
+    const oldBindings = previous?.bindings ?? [];
+    detachBindings(oldBindings);
+    try {
+      attachBindings(prepared);
+    } catch (error) {
+      detachBindings(prepared);
+      try {
+        attachBindings(oldBindings);
+      } catch (rollbackError) {
+        previous?.unregisterCleanup.splice(0).forEach((dispose) => dispose());
+        if (previous) previous.active = false;
+        node.slotObjectAttachment = null;
+        throw new SceneLayoutError(
+          `Scene layout Spine node "${nodeId}" slot binding failed and rollback failed: ${formatRuntimeError(error)}; ${formatRuntimeError(rollbackError)}.`,
+        );
+      }
+      throw asSceneLayoutError(error);
+    }
+
+    previous?.unregisterCleanup.splice(0).forEach((dispose) => dispose());
+    if (previous) previous.active = false;
+    const active: ActiveNodeSlotObjectAttachment = {
+      active: true,
+      bindings: Object.freeze(prepared),
+      unregisterCleanup: [],
+      detach: () => {
+        if (!active.active) return;
+        active.active = false;
+        active.unregisterCleanup.splice(0).forEach((dispose) => dispose());
+        detachBindings(active.bindings);
+        if (node.slotObjectAttachment === active)
+          node.slotObjectAttachment = null;
+      },
+    };
+    for (const binding of prepared)
+      active.unregisterCleanup.push(
+        registerRenderObjectCleanup(binding.object, active.detach),
+      );
+    node.slotObjectAttachment = active;
+    return Object.freeze({ detach: active.detach });
+  }
+
+  private requireProgramSpineNode(nodeId: string): RuntimeNode {
+    const node = this.requireNode(nodeId);
+    if (
+      node.spec.resource.kind !== "spine" ||
+      "stateMachine" in node.spec.resource ||
+      !node.player
+    )
+      throw new SceneLayoutError(
+        `Scene layout node "${nodeId}" is not a prepared loop Spine node.`,
+      );
+    return node;
   }
 
   private refreshNodeVisibility(node: RuntimeNode): void {
@@ -1101,6 +1402,25 @@ function createDisposer(parent: Container, object: Container): () => void {
     disposed = true;
     if (object.parent === parent) parent.removeChild(object);
   };
+}
+
+function requireSpineSlotPlayer(
+  player: RendercoreSpinePlayer,
+  nodeId: string,
+): RendercoreSpineSlotPlayer {
+  const candidate = player as Partial<RendercoreSpineSlotPlayer>;
+  if (
+    typeof candidate.attachSlotObject !== "function" ||
+    typeof candidate.removeSlotObject !== "function"
+  )
+    throw new SceneLayoutError(
+      `Scene layout Spine node "${nodeId}" does not support slot objects.`,
+    );
+  return candidate as RendercoreSpineSlotPlayer;
+}
+
+function formatRuntimeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function asSceneLayoutError(error: unknown): SceneLayoutError {

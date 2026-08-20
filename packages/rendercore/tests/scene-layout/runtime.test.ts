@@ -8,6 +8,7 @@ import {
   upgradeSceneLayoutManifestToLatest,
 } from "../../src/scene-layout/index.js";
 import type { RendercoreSpinePlayer } from "../../src/spine/runtime-player.js";
+import { createRenderObject } from "../../src/presentation/index.js";
 import type { ImageStringResource } from "../../src/image-string/core/index.js";
 import {
   createPreparedSceneLayoutRuntime,
@@ -16,6 +17,149 @@ import {
 import { game002LayoutFixture, game003LayoutFixture } from "./fixtures.js";
 
 describe("scene layout runtime", () => {
+  it("plays exact authored loop Spine animations and atomically binds slot objects", async () => {
+    const manifest = parseSceneLayoutManifest({
+      ...game002LayoutFixture,
+      adaptation: {
+        ...game002LayoutFixture.adaptation,
+        backgroundNode: "machine",
+      },
+      nodes: [
+        {
+          id: "machine",
+          order: 0,
+          resource: {
+            kind: "spine",
+            skeleton: "machine.json",
+            atlas: "machine.atlas",
+            textures: { "machine.png": "machine.png" },
+            defaultAnimation: "Idle",
+            loop: true,
+          },
+          placements: { default: { x: 0, y: 0, scale: 1 } },
+        },
+      ],
+    });
+    let result: {
+      completed: boolean;
+      loopCompleted?: boolean;
+      events: readonly { name: string }[];
+    } = { completed: false, events: [] };
+    const slots = new Map<Container, string>();
+    const player = {
+      view: new Container(),
+      init: vi.fn(),
+      play: vi.fn(),
+      update: vi.fn(() => {
+        const current = result;
+        result = { completed: false, events: [] };
+        return current;
+      }),
+      reset: vi.fn(),
+      destroy: vi.fn(),
+      attachSlotObject(options: { slot: string; object: Container }) {
+        if (options.slot !== "left" && options.slot !== "right")
+          throw new Error(`unknown slot ${options.slot}`);
+        const wrapper = new Container();
+        wrapper.addChild(options.object);
+        slots.set(options.object, options.slot);
+      },
+      removeSlotObject(object: Container) {
+        object.parent?.removeChild(object);
+        slots.delete(object);
+      },
+    } satisfies RendercoreSpinePlayer & {
+      attachSlotObject(options: { slot: string; object: Container }): void;
+      removeSlotObject(object: Container): void;
+    };
+    const runtime = createSceneLayoutRuntime({
+      resource: {
+        manifest,
+        imageUrls: {},
+        imageStringResources: {},
+        vniResources: {},
+        videoUrls: {},
+        runtimeResources: {},
+        spineResources: {
+          machine: { skeleton: {}, atlasText: "", textureUrls: {} },
+        },
+        destroy: vi.fn(),
+      },
+      createSpinePlayer: () => player,
+    });
+    await runtime.init();
+    runtime.applyViewport({ width: 2000, height: 2000 });
+    const object = runtime.getRenderObject("machine");
+    if (object?.kind !== "spine" || object.playback !== "loop")
+      throw new Error("expected loop Spine object");
+
+    const once = object.playAnimation("Start");
+    expect(player.play).toHaveBeenLastCalledWith({
+      animationName: "Start",
+      loop: false,
+    });
+    runtime.update(1 / 60);
+    result = { completed: true, events: [] };
+    runtime.update(1 / 60);
+    await expect(once).resolves.toBeUndefined();
+
+    const firstLoop = object.playAnimation("Idle", { loop: true });
+    result = { completed: false, loopCompleted: true, events: [] };
+    runtime.update(1 / 60);
+    await expect(firstLoop).resolves.toBeUndefined();
+
+    const superseded = object.playAnimation("Start");
+    const replacement = object.playAnimation("Idle", { loop: true });
+    await expect(superseded).rejects.toThrow(/superseded/);
+    object.stopAnimation();
+    await expect(replacement).rejects.toThrow(/stopped/);
+
+    const controller = new AbortController();
+    const aborted = object.playAnimation("Start", {
+      signal: controller.signal,
+    });
+    controller.abort();
+    await expect(aborted).rejects.toThrow(/aborted/);
+
+    const left = createRenderObject({
+      view: new Container(),
+      destroy() {},
+    });
+    const right = createRenderObject({
+      view: new Container(),
+      destroy() {},
+    });
+    const next = createRenderObject({
+      view: new Container(),
+      destroy() {},
+    });
+    const attachment = object.bindSlotObjects([
+      { slot: "left", object: left },
+      { slot: "right", object: right },
+    ]);
+    expect([...slots.values()].sort()).toEqual(["left", "right"]);
+    expect(() =>
+      object.bindSlotObjects([
+        { slot: "left", object: next },
+        { slot: "missing", object: right },
+      ]),
+    ).toThrow(/unknown slot/);
+    expect([...slots.values()].sort()).toEqual(["left", "right"]);
+    const replacementAttachment = object.bindSlotObjects([
+      { slot: "left", object: next },
+    ]);
+    attachment.detach();
+    expect([...slots.values()]).toEqual(["left"]);
+    next.destroy();
+    expect(slots.size).toBe(0);
+    replacementAttachment.detach();
+    left.destroy();
+    right.destroy();
+    const destroyedPlayback = object.playAnimation("Start");
+    runtime.destroy();
+    await expect(destroyedPlayback).rejects.toThrow(/destroyed/);
+  });
+
   it("commits prepared mode background order without repeating the public structure check", async () => {
     const initial = parseSceneLayoutManifest({
       ...game002LayoutFixture,

@@ -80,6 +80,8 @@
 - background visibility、target scene commit、active standard/grid-cell reel prepare/swap 和 popup lifecycle 原子完成。
 - 底层 named-node state machine 可供独立 consumer 使用，但不得成为 `requestGameMode()` 的隐藏入口或 fallback。
 - app/editor 不复制 event drain、official Spine player、image-string、background visibility、reel placement 或 transition state machine。
+- authored loop Spine 的 exact animation await/stop 与 caller-owned RenderObject exact-slot batch attachment 由 production runtime 持有；不公开 player/Container，不猜 animation/slot alias，失败、supersede、abort、child/runtime destroy 必须清理或回滚。
+- `gamelayout:/event/variant-changed` 只描述 package runtime 已提交的 variant edge；首次 apply、同 variant resize 与失败 apply 不产生 occurrence，app 不以 raw viewport listener 复制第二套 variant 判定。
 - 游戏程序对象优先使用rendercore additive `getRenderLayer()`或exact node
   `getNodeRenderLayer(child|before|after)`；这些façade必须复用production runtime已有root与named-node attachment band、继承
   variant/mode transform并保持旧raw host/editor接口兼容，不返回world坐标或mutable display tree。

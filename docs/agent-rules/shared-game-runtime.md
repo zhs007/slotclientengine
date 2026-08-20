@@ -6,6 +6,7 @@
 
 - `packages/gameframeworks` 是后续游戏默认 facade，整合 UI、网络、logic 数据流和 production scene-layout API。
 - `packages/logiccore` 只拥有通用 server round/component/result/otherScenes 解析、strict selector/generator、scene/value output 校验和不可变 `SlotOperationPlanV2` finalizer；业务 component、symbol、金额语义与渲染提交粒度由 app 注入。logiccore 不提供通用画面 mutation DSL 或 renderer identity。
+- 已展开为 JSON 的 protobuf component 可由 logiccore 按 exact type 与通用字段 shape 提供 name-parameterized readonly query；shared parser 不限制业务 component 名、value 枚举、队列长度或跨 response 关系，也不猜测/解码 binary Any。
 - operation kind/version/effect、source evidence、state output 和 plan final closure
   必须由 logiccore strict compiler/finalizer 证明。正式 server source 与本地
   snapshot-authored source 不得互相 fallback；本地 suggestion 只存在于独立
@@ -200,7 +201,9 @@
 - package runtime 的canonical `getRenderLayer(ref)`统一解析稳定`layout|reel|transition|popup`、area `<id>.bottom|top|win`、canonical exact node及显式`node:<legacyId>`；底层仍委托各自唯一owner，不合并lifecycle或display parent。返回opaque安全attachment façade，presentation-only请求`reel`/area显式失败。既有
   `getLayer()`和`getNode()` borrowed container seam为host/editor兼容保留，调用方不得destroy或改写内部层级，不强制旧consumer迁移。
 - authored scene node只能通过`getRenderObject(exactId)`取得kind-discriminated borrowed capability；placement/destroy仍由Scene Layout拥有，program visibility只能与mode/variant可见性做AND。程序对象只通过exact runtime resource factory创建并由caller拥有，两者不得按同名互相fallback。
+- authored non-state-machine Spine 的程序播放只接受 exact animation，并复用 Scene Layout 唯一 update/completion drain；once、首圈 loop、abort、stop、supersede 与 destroy 边界必须收敛。caller-owned detached RenderObject 可按 exact slot 批量绑定，失败恢复原 attachment，detach/child destroy/runtime destroy 清理关系且不转移 child ownership；state-machine node 不得绕过 `requestState()`。
 - Game Layout production对象统一通过owner-first `gamelayout:/` runtime address定位；地址只从canonical manifest及nested owner identity派生，不写回manifest，不允许JSON Pointer、filename/path/hash、alias或raw display/audio fallback。package runtime只公开可枚举descriptor、strict kind endpoint与bind/wait事件；Spine transition event必须复用唯一official update drain并在target scene提交后派发，BGM lifecycle必须对应backend instance真实start及fade-out stop。
+- package-level layout variant event 必须来自成功提交后的 snapshot diff；首次 apply、同 variant resize 与失败 apply 不派发，detail 只携带 previous/current variant identity，不把 raw window resize 当作 variant commit。
 - Gamelayout authored point由Scene Layout按当前snapshot和configured origin统一换算；logical viewport不是CSS/device viewport。跨parent只通过opaque Anchor和target-local解析，不向app公开world point、Matrix或visual bounds。SymbolGroup只可读取input-order odd middle、members/bounds center与稳定cell footprint，不能从当前display bounds推导业务rect。
 - scene-layout node、main reel 与 Popup binding order 必须是全局唯一安全整数；Popup order 必须高于全部 art/reel order，并在当前 scene 的 `popup` layer 内排序。旧单 Popup v1 缺少 order 时规范化为 `2000`，多个缺省 Popup 的重复值显式失败。
 - `gamelayoutpkgcli` 为每个 runtime resource 输出独立增量组，未请求程序资源不得并入 initial/shared。

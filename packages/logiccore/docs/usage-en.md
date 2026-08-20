@@ -221,6 +221,24 @@ Component index fields are validated strictly:
 If a component is listed in `historyComponents` but missing from
 `mapComponents`, querying that component throws `LogicParseError`.
 
+### Decoded FeatureBar2 data
+
+When the server has already expanded `sgc7pb.FeatureBar2Data` into a JSON object
+with its exact `@type`, query it with the game-provided component name:
+
+```ts
+const data = logic.getStep(0).getFeatureBar2Data("feature-bar");
+const sameData = logic.getFeatureBar2Data(0, "feature-bar");
+```
+
+An untriggered component returns `undefined`. A triggered component throws
+`LogicParseError` when its protobuf type or field shape is wrong. The returned
+object and its `features`, `usedFeatures`, and `cacheFeatures` arrays are frozen.
+
+`logiccore` does not constrain feature names, queue length, ordering, or the
+relationship between responses. It also does not decode binary protobuf `Any`
+payloads.
+
 ## Protobuf Any Boundary
 
 Some component payloads may be encoded as protobuf `Any` data. `logiccore` keeps

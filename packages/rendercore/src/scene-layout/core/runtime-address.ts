@@ -199,6 +199,8 @@ export function createGameLayoutRuntimeAddresses(
     descriptor: GameLayoutRuntimeAddressDescriptor,
   ): GameLayoutEventEndpoint => Object.freeze({ kind: "event", descriptor });
 
+  add(["event", "variant-changed"], "event", null, "event", eventEndpoint);
+
   for (const id of ["layout", "reel", "transition", "popup"])
     add(["layer", id], "layer", null, "borrowed", (descriptor) =>
       Object.freeze({

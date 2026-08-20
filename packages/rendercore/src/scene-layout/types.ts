@@ -526,6 +526,32 @@ export interface SceneLayoutSpineLoopRenderObject extends SceneLayoutRenderObjec
   readonly playback: "loop";
   /** Restarts the manifest-declared default animation and loop policy. */
   play(): void;
+  /** Plays an exact animation and resolves at its once/first-loop boundary. */
+  playAnimation(
+    animationName: string,
+    options?: SceneLayoutSpineAnimationPlayOptions,
+  ): Promise<void>;
+  /** Stops exact program playback and rejects its pending completion. */
+  stopAnimation(): void;
+  /** Atomically replaces this authored Spine node's caller-owned slot objects. */
+  bindSlotObjects(
+    bindings: readonly SceneLayoutSpineSlotObjectBinding[],
+  ): SceneLayoutSpineSlotObjectAttachment;
+}
+
+export interface SceneLayoutSpineAnimationPlayOptions {
+  readonly signal?: AbortSignal;
+  readonly loop?: boolean;
+}
+
+export interface SceneLayoutSpineSlotObjectBinding {
+  readonly slot: string;
+  readonly object: import("../presentation/index.js").RenderObject;
+  readonly followSlotColor?: boolean;
+}
+
+export interface SceneLayoutSpineSlotObjectAttachment {
+  detach(): void;
 }
 
 export interface SceneLayoutSpineStateRenderObject extends SceneLayoutRenderObjectBase {

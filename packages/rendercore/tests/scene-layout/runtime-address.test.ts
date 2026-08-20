@@ -8,6 +8,46 @@ import { createGameLayoutRuntimeAddresses } from "../../src/scene-layout/core/ru
 import { singleStatePopupFixture } from "../popup/fixtures.js";
 
 describe("Game Layout runtime address", () => {
+  it("publishes the global orientation variant event through bind and wait", async () => {
+    const controller = createGameLayoutRuntimeAddresses(
+      {
+        manifest: {
+          adaptation: { mode: "orientation-focus" },
+          nodes: [],
+          reels: {},
+          gameModes: { modes: [], transitions: [] },
+        },
+        popupPackages: {},
+      } as any,
+      {} as any,
+    );
+    const address = formatGameLayoutRuntimeAddress("event", "variant-changed");
+    expect(controller.addresses.describe(address)).toMatchObject({
+      kind: "event",
+      ownerAddress: null,
+      capability: "event",
+    });
+    const occurrences: unknown[] = [];
+    const dispose = controller.addresses.bind(address, (event) => {
+      occurrences.push(event);
+    });
+    const waiting = controller.addresses.wait(address);
+    controller.emit(address, {
+      previousVariantId: "landscape",
+      variantId: "portrait",
+    });
+    await expect(waiting).resolves.toMatchObject({
+      sequence: 1,
+      detail: {
+        previousVariantId: "landscape",
+        variantId: "portrait",
+      },
+    });
+    expect(occurrences).toHaveLength(1);
+    dispose();
+    controller.destroy();
+  });
+
   it("exposes typed get endpoints for single-state popup layers and strings", () => {
     const layer = {} as any;
     const string = {

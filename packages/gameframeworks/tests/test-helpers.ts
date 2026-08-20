@@ -88,6 +88,7 @@ export function createMockGameLogic(totalwin = 0): GameLogic {
             usedResultIndexes: totalwin > 0 ? [0] : [],
           }
         : undefined,
+    getFeatureBar2Data: (_name: string) => undefined,
     getComponentScenes: (name: string) =>
       name === "lineWin" ? [[[1, 2, 3]]] : [],
     getComponentOtherScenes: (name: string) =>
@@ -124,6 +125,7 @@ export function createMockGameLogic(totalwin = 0): GameLogic {
     getResult: () => ({ pos: [0, 0], coinWin: totalwin, cashWin: totalwin }),
     hasComponent: (_stepIndex, name) => name === "lineWin",
     getComponent: (_stepIndex, name) => step.getComponent(name),
+    getFeatureBar2Data: (_stepIndex, name) => step.getFeatureBar2Data(name),
     getComponentScenes: (_stepIndex, name) => step.getComponentScenes(name),
     getComponentOtherScenes: (_stepIndex, name) =>
       step.getComponentOtherScenes(name),

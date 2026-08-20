@@ -131,6 +131,13 @@ export interface LogicComponent {
   readonly usedResultIndexes: readonly number[];
 }
 
+export interface FeatureBar2Data {
+  readonly features: readonly string[];
+  readonly usedFeatures: readonly string[];
+  readonly cacheFeatures: readonly string[];
+  readonly curFeature: string;
+}
+
 export interface GameLogic {
   getGameModuleName(): string | undefined;
   getGameId(): number | undefined;
@@ -150,6 +157,10 @@ export interface GameLogic {
   getResult(stepIndex: number, resultIndex: number): WinResult;
   hasComponent(stepIndex: number, name: string): boolean;
   getComponent(stepIndex: number, name: string): LogicComponent | undefined;
+  getFeatureBar2Data(
+    stepIndex: number,
+    name: string,
+  ): FeatureBar2Data | undefined;
   getComponentScenes(stepIndex: number, name: string): readonly SceneMatrix[];
   getComponentOtherScenes(
     stepIndex: number,
@@ -189,6 +200,7 @@ export interface GameLogicStep {
   getResults(): readonly WinResult[];
   hasComponent(name: string): boolean;
   getComponent(name: string): LogicComponent | undefined;
+  getFeatureBar2Data(name: string): FeatureBar2Data | undefined;
   getComponentScenes(name: string): readonly SceneMatrix[];
   getComponentOtherScenes(name: string): readonly OtherSceneMatrix[];
   getComponentResults(name: string): readonly WinResult[];

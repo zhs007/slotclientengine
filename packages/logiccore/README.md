@@ -235,6 +235,24 @@ logic.getStep(0).getResult(999); // RangeError
 
 ## protobuf Any 组件
 
+### FeatureBar2 明文组件
+
+服务器已经把 `sgc7pb.FeatureBar2Data` 展开为带 exact `@type` 的 JSON object 时，
+可继续按业务提供的 exact component name 查询：
+
+```ts
+const data = logic.getStep(0).getFeatureBar2Data("feature-bar");
+const sameData = logic.getFeatureBar2Data(0, "feature-bar");
+```
+
+未触发该 component 时返回 `undefined`。已触发但 `@type` 不是
+`type.googleapis.com/sgc7pb.FeatureBar2Data`，或 `features`、`usedFeatures`、
+`cacheFeatures` 不是字符串数组、`curFeature` 不是字符串时抛
+`LogicParseError`。返回 object 和数组均冻结。
+
+`logiccore` 不限制 feature 名、数量、顺序或相邻 spin 的移位关系；这些属于游戏业务。
+该接口也不解码 protobuf binary `Any`。
+
 如果触发组件存在于 `mapComponents`，但没有明文 `basicComponentData`，例如：
 
 ```json

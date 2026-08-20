@@ -145,6 +145,56 @@ const winNumber = await numberFactory.create({
 image-string factory 强制要求 `text`；其它 kind 禁止传 image-string options。返回对象由调用者 detach/destroy。
 兼容接口 `createRenderObject()` 与 `createImgNumberRenderObject()` 仍可使用。
 
+## Authored loop Spine
+
+`gamelayout:/node/<exact-id>` 返回的 authored Spine 仍由 Scene Layout runtime 拥有。对
+`kind === "spine" && playback === "loop"` 的对象，可以请求 exact animation，并把
+caller-owned、当前 detached 的程序 `RenderObject` 批量绑定到 exact slots：
+
+```ts
+const endpoint = runtime.addresses.resolve(
+  "gamelayout:/node/conveyor",
+  "render-object",
+);
+if (endpoint.kind !== "render-object") throw new Error("kind mismatch");
+const conveyor = endpoint.get();
+if (conveyor.kind !== "spine" || conveyor.playback !== "loop")
+  throw new Error("expected authored loop Spine");
+
+const attachment = conveyor.bindSlotObjects([
+  { slot: "slot-0", object: firstImage },
+  { slot: "slot-1", object: secondImage },
+]);
+
+await conveyor.playAnimation("Start"); // once，完成时 resolve
+await conveyor.playAnimation("Idle", { loop: true }); // 第一圈完成时 resolve，动画继续
+conveyor.stopAnimation();
+attachment.detach();
+```
+
+新 playback 会 reject 被 supersede 的未完成 playback；`stopAnimation()`、AbortSignal、
+runtime destroy 也会 reject 对应 waiter。unknown animation/slot、重复 slot/object、borrowed
+child 或已挂载 child 显式失败。一次 batch 替换失败会恢复该 authored node 原有 attachment；
+handle 的 `detach()` 幂等，child destroy 和 runtime destroy 都会清理关系，但 child ownership
+始终留在调用者。state-machine Spine 只能继续使用 `requestState()`。
+
+## Layout variant 事件
+
+每个 package runtime 都声明全局 `gamelayout:/event/variant-changed`。它只在一次
+`applyViewport()`/art-space apply 成功提交且 `variantId` 与上次已发布值不同后同步派发：
+
+```ts
+const dispose = runtime.addresses.bind(
+  "gamelayout:/event/variant-changed",
+  ({ detail }) => {
+    console.log(detail.previousVariantId, detail.variantId);
+  },
+);
+```
+
+首次 apply、同 variant resize 和失败 apply 不派发。`detail` 包含
+`previousVariantId` 与 `variantId`；回调仍必须同步返回，异步编排使用 `wait()`。
+
 ## Popup 深层字符串
 
 Popup 地址以 Scene Layout 的 popup binding id 为 owner，并使用 Popup Editor 中的 exact layer id/string name：

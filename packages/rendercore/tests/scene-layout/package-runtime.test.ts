@@ -15,7 +15,7 @@ import {
 } from "../../src/scene-layout/index.js";
 import { createSceneLayoutPackageRuntimeInspector } from "../../src/scene-layout/editor.js";
 import { transitionResourceKey } from "../../src/scene-layout/resource.js";
-import { game002LayoutFixture } from "./fixtures.js";
+import { game002LayoutFixture, game003LayoutFixture } from "./fixtures.js";
 import * as sceneLayoutCoreApi from "../../src/scene-layout/index.js";
 
 const encode = (value: unknown) =>
@@ -436,6 +436,61 @@ function popupLayoutFixture() {
 }
 
 describe("scene layout package runtime", () => {
+  it("emits one committed variant event and ignores initial or same-variant resize", async () => {
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    try {
+      const manifest = {
+        ...game003LayoutFixture,
+        nodes: game003LayoutFixture.nodes.slice(0, 2),
+      };
+      const resource = await createSceneLayoutPackageResource({
+        manifest,
+        files: new Map([
+          ["assets/bg1.png", new Uint8Array([1])],
+          ["assets/bg2.png", new Uint8Array([2])],
+        ]),
+      });
+      const runtime = createSceneLayoutPackageRuntime({
+        resource,
+        presentationOnly: true,
+      });
+      await runtime.init();
+      const events: unknown[] = [];
+      const dispose = runtime.addresses.bind(
+        "gamelayout:/event/variant-changed",
+        (event) => events.push(event),
+      );
+
+      runtime.applyViewport({ width: 1920, height: 1080 });
+      runtime.applyViewport({ width: 1600, height: 900 });
+      expect(events).toEqual([]);
+      runtime.applyViewport({ width: 1200, height: 1800 });
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        sequence: 1,
+        detail: {
+          previousVariantId: "landscape",
+          variantId: "portrait",
+        },
+      });
+      runtime.applyViewport({ width: 1300, height: 1900 });
+      expect(events).toHaveLength(1);
+      expect(() => runtime.applyViewport({ width: 1000, height: 900 })).toThrow(
+        /cannot contain focusRect/,
+      );
+      expect(events).toHaveLength(1);
+
+      dispose();
+      runtime.destroy();
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
+  });
+
   it("commits a prepared v4 background order change without a second structure check", async () => {
     const load = vi
       .spyOn(Assets, "load")

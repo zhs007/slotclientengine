@@ -9,7 +9,9 @@ import {
   hasTriggeredComponent,
 } from "./component";
 import { parseGameModuleInfoMessage, parseGmiWithMeta } from "./parser";
+import { getFeatureBar2DataForStep } from "./feature-bar2";
 import {
+  FeatureBar2Data,
   GameLogic,
   GameLogicMeta,
   GameLogicStep,
@@ -116,6 +118,13 @@ export class GameLogicModel implements GameLogic {
 
   getComponent(stepIndex: number, name: string): LogicComponent | undefined {
     return this.getStep(stepIndex).getComponent(name);
+  }
+
+  getFeatureBar2Data(
+    stepIndex: number,
+    name: string,
+  ): FeatureBar2Data | undefined {
+    return this.getStep(stepIndex).getFeatureBar2Data(name);
   }
 
   getComponentScenes(stepIndex: number, name: string): readonly SceneMatrix[] {
@@ -239,6 +248,10 @@ export class GameLogicStepModel implements GameLogicStep {
 
   getComponent(name: string): LogicComponent | undefined {
     return buildLogicComponent(this.#data, name);
+  }
+
+  getFeatureBar2Data(name: string): FeatureBar2Data | undefined {
+    return getFeatureBar2DataForStep(this.#data, name);
   }
 
   getComponentScenes(name: string): readonly SceneMatrix[] {

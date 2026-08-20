@@ -275,6 +275,10 @@ export function inspectSceneLayoutGameModeRuntime(
 class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly addresses: GameLayoutRuntimeAddresses;
   readonly #addressController: GameLayoutRuntimeAddressController;
+  readonly #variantChangedAddress = formatGameLayoutRuntimeAddress(
+    "event",
+    "variant-changed",
+  );
   readonly container: Container;
   readonly #resource: SceneLayoutPackageResource;
   readonly #presentationOnly: boolean;
@@ -343,6 +347,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   #initialized = false;
   #initializing = false;
   #destroyed = false;
+  #publishedVariantId: SceneLayoutSnapshot["variantId"] | null = null;
   readonly #presentationDelayWaiters =
     new Set<PackagePresentationDelayWaiter>();
   #stableMode: string | null = null;
@@ -847,6 +852,13 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     if (activeTransition?.kind === "video")
       activeTransition.player.applyViewport(viewportSize);
     this.redrawVideoBlackout(viewportSize);
+    const previousVariantId = this.#publishedVariantId;
+    this.#publishedVariantId = snapshot.variantId;
+    if (previousVariantId !== null && previousVariantId !== snapshot.variantId)
+      this.#addressController.emit(this.#variantChangedAddress, {
+        previousVariantId,
+        variantId: snapshot.variantId,
+      });
     return snapshot;
   }
 
@@ -2431,6 +2443,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
+    this.#publishedVariantId = null;
     activeAwardSnapshotReaders.delete(this);
     gameModeSnapshotReaders.delete(this);
     for (const waiter of this.#presentationDelayWaiters) {

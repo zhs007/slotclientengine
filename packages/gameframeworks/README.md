@@ -234,6 +234,10 @@ framePolicy: {
 
 本包重新导出 `GameLogic`、`GameLogicStep`、`LogicComponent`、`SceneMatrix`、`WinResult` 等常用类型。游戏可通过 `logic.getStep(index)`、`logic.getComponentScenes(stepIndex, name)`，或以下 helper 按组件名读取：
 
+facade 同时重新导出 `FeatureBar2Data` 与 `parseFeatureBar2Data()`；游戏通常直接调用
+`logic.getFeatureBar2Data(stepIndex, exactName)`，未触发时得到 `undefined`，错误 type/shape
+显式失败。feature 名、队列长度和显示映射仍由游戏拥有。
+
 - `findComponentSteps(logic, name)`
 - `getComponentScenesByName(logic, name, options?)`
 - `getComponentResultsByName(logic, name, options?)`
