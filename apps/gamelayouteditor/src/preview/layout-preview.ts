@@ -386,6 +386,7 @@ export class LayoutPreview {
       modeId,
       this.gameModeRequestOptions(modeId),
     );
+    this.applySize();
     await this.preparePrimaryGameModeAction();
   }
 
@@ -408,18 +409,23 @@ export class LayoutPreview {
     );
   }
 
-  requestPrimaryGameModeAction(): Promise<void> {
+  async requestPrimaryGameModeAction(): Promise<void> {
     if (!this.#packageRuntime)
       throw new Error("当前 layout preview 没有 package runtime。");
-    if (!this.#manifest || this.#manifest.version === 1)
-      return this.#packageRuntime.requestPrimaryGameModeAction();
-    const current = this.#packageRuntime.getStableGameMode();
-    const target = this.#manifest.gameModes.modes.find(
-      (candidate) => candidate.id === current,
-    )?.primaryAction?.targetMode;
-    return this.#packageRuntime.requestPrimaryGameModeAction(
-      target ? this.gameModeRequestOptions(target) : {},
-    );
+    let transition: Promise<void>;
+    if (!this.#manifest || this.#manifest.version === 1) {
+      transition = this.#packageRuntime.requestPrimaryGameModeAction();
+    } else {
+      const current = this.#packageRuntime.getStableGameMode();
+      const target = this.#manifest.gameModes.modes.find(
+        (candidate) => candidate.id === current,
+      )?.primaryAction?.targetMode;
+      transition = this.#packageRuntime.requestPrimaryGameModeAction(
+        target ? this.gameModeRequestOptions(target) : {},
+      );
+    }
+    await transition;
+    this.applySize();
   }
 
   requestPrimaryPopupInteraction(): PopupInteractionDispatchResult {
@@ -463,6 +469,7 @@ export class LayoutPreview {
     );
     await unlock;
     await transition;
+    this.applySize();
   }
 
   playEffect(route: string): void {
