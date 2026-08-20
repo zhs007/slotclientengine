@@ -5,15 +5,22 @@ import {
   type EditorAssetsController,
 } from "../core/index.js";
 import type {
+  EditorAssetExportArtifact,
   EditorAssetFilter,
   EditorAssetImportPreparation,
   EditorAssetImportResolution,
   EditorAssetRootKind,
   EditorAssetTreeOccurrence,
 } from "../data/index.js";
+import {
+  createDefaultEditorAssetPreview,
+  type EditorAssetPreviewFactory,
+  type EditorAssetPreviewHandle,
+} from "./default-preview.js";
 
 export interface EditorAssetsView {
   readonly element: HTMLElement;
+  setActive(active: boolean): void;
   destroy(): void;
 }
 
@@ -23,6 +30,8 @@ export interface MountEditorAssetsViewOptions<TProject> {
   readonly title?: string;
   readonly rowHeight?: number;
   readonly overscan?: number;
+  readonly previewFactory?: EditorAssetPreviewFactory<TProject>;
+  readonly download?: (artifact: EditorAssetExportArtifact) => void;
 }
 
 export function mountEditorAssetsView<TProject>(
@@ -30,17 +39,24 @@ export function mountEditorAssetsView<TProject>(
 ): EditorAssetsView {
   const rowHeight = options.rowHeight ?? 44;
   const overscan = options.overscan ?? 8;
+  const previewFactory =
+    options.previewFactory ?? createDefaultEditorAssetPreview<TProject>;
+  const download = options.download ?? downloadArtifact;
   let destroyed = false;
+  let active = true;
   let query = "";
   let status: EditorAssetFilter["status"] = "all";
   let kind = "all" as "all" | EditorAssetRootKind;
   let selectedId: string | null = null;
+  let markingRootKey: string | null = null;
   let expanded = new Set<string>();
   let visibleRows: readonly EditorAssetTreeOccurrence[] = [];
   let pendingFiles: readonly SourceFileLike[] = [];
   let preparation: EditorAssetImportPreparation | null = null;
-  let previewUrl: string | null = null;
+  let preview: EditorAssetPreviewHandle | null = null;
+  let previewGeneration = 0;
   let unsubscribe: () => void = () => {};
+  let dragging = false;
 
   options.root.classList.add("editor-assets-host");
   options.root.innerHTML = `
@@ -62,13 +78,19 @@ export function mountEditorAssetsView<TProject>(
         <div class="editor-assets-tree" role="treegrid" tabindex="0" aria-label="Asset tree">
           <div class="editor-assets-spacer"><div class="editor-assets-rows"></div></div>
         </div>
+        <div class="editor-assets-splitter" role="separator" tabindex="0" aria-label="调整 Asset tree 宽度" aria-orientation="vertical" aria-valuemin="220" aria-valuemax="720" aria-valuenow="300"></div>
         <aside class="editor-assets-inspector"><div class="editor-assets-empty">选择一个 Asset 查看详情</div></aside>
       </div>
       <div class="editor-assets-message" data-assets-message role="status"></div>
       <div class="editor-assets-review" data-assets-review hidden></div>
     </section>`;
 
+  const body = required<HTMLElement>(options.root, ".editor-assets-body");
   const tree = required<HTMLElement>(options.root, ".editor-assets-tree");
+  const splitter = required<HTMLElement>(
+    options.root,
+    ".editor-assets-splitter",
+  );
   const spacer = required<HTMLElement>(options.root, ".editor-assets-spacer");
   const rowsElement = required<HTMLElement>(
     options.root,
@@ -121,7 +143,33 @@ export function mountEditorAssetsView<TProject>(
   };
   const onScroll = () => renderRows();
   const onClick = (event: MouseEvent) => void handleClick(event);
-  const onKeyDown = (event: KeyboardEvent) => handleKey(event);
+  const onKeyDown = (event: KeyboardEvent) => handleTreeKey(event);
+  const onSplitterDown = (event: PointerEvent) => {
+    if (event.button !== 0 || stackedLayout()) return;
+    dragging = true;
+    splitter.setPointerCapture?.(event.pointerId);
+    setTreeWidth(event.clientX - body.getBoundingClientRect().left);
+    event.preventDefault();
+  };
+  const onSplitterMove = (event: PointerEvent) => {
+    if (dragging)
+      setTreeWidth(event.clientX - body.getBoundingClientRect().left);
+  };
+  const onSplitterUp = (event: PointerEvent) => {
+    if (!dragging) return;
+    dragging = false;
+    splitter.releasePointerCapture?.(event.pointerId);
+  };
+  const onSplitterKey = (event: KeyboardEvent) => {
+    if (stackedLayout() || !["ArrowLeft", "ArrowRight"].includes(event.key))
+      return;
+    const current =
+      Number.parseFloat(
+        getComputedStyle(body).getPropertyValue("--assets-tree-width"),
+      ) || 300;
+    setTreeWidth(current + (event.key === "ArrowLeft" ? -16 : 16));
+    event.preventDefault();
+  };
 
   fileInput.addEventListener("change", onInput);
   searchInput.addEventListener("input", onSearch);
@@ -130,16 +178,31 @@ export function mountEditorAssetsView<TProject>(
   tree.addEventListener("scroll", onScroll);
   options.root.addEventListener("click", onClick);
   tree.addEventListener("keydown", onKeyDown);
+  splitter.addEventListener("pointerdown", onSplitterDown);
+  splitter.addEventListener("pointermove", onSplitterMove);
+  splitter.addEventListener("pointerup", onSplitterUp);
+  splitter.addEventListener("pointercancel", onSplitterUp);
+  splitter.addEventListener("keydown", onSplitterKey);
   unsubscribe = options.controller.subscribe(render);
   render();
 
   return Object.freeze({
     element: options.root,
+    setActive(next: boolean) {
+      if (destroyed || active === next) return;
+      active = next;
+      if (!active) {
+        cancelPreparation();
+        void destroyPreview();
+      } else render();
+    },
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      active = false;
       unsubscribe();
-      revokePreview();
+      cancelPreparation();
+      void destroyPreview();
       fileInput.removeEventListener("change", onInput);
       searchInput.removeEventListener("input", onSearch);
       kindSelect.removeEventListener("change", onKind);
@@ -147,6 +210,11 @@ export function mountEditorAssetsView<TProject>(
       tree.removeEventListener("scroll", onScroll);
       options.root.removeEventListener("click", onClick);
       tree.removeEventListener("keydown", onKeyDown);
+      splitter.removeEventListener("pointerdown", onSplitterDown);
+      splitter.removeEventListener("pointermove", onSplitterMove);
+      splitter.removeEventListener("pointerup", onSplitterUp);
+      splitter.removeEventListener("pointercancel", onSplitterUp);
+      splitter.removeEventListener("keydown", onSplitterKey);
       options.root.replaceChildren();
       options.root.classList.remove("editor-assets-host");
     },
@@ -174,7 +242,7 @@ export function mountEditorAssetsView<TProject>(
   }
 
   function render() {
-    if (destroyed) return;
+    if (destroyed || !active) return;
     const snapshot = options.controller.snapshot;
     const usage = computeEditorAssetUsage({
       catalog: snapshot.catalog,
@@ -226,7 +294,7 @@ export function mountEditorAssetsView<TProject>(
   }
 
   function renderInspector() {
-    revokePreview();
+    void destroyPreview();
     const row = visibleRows.find(({ id }) => id === selectedId);
     if (!row) {
       inspector.innerHTML =
@@ -235,35 +303,62 @@ export function mountEditorAssetsView<TProject>(
     }
     const snapshot = options.controller.snapshot;
     const root = snapshot.catalog.roots.get(row.rootKey)!;
-    const entry = snapshot.workspace.entries.get(row.node.key);
     const usage = computeEditorAssetUsage({
       catalog: snapshot.catalog,
       project: snapshot.project,
       host: options.controller.host,
-    });
-    const nodeUsage = usage.byNodeId.get(row.node.id);
+    }).byRootKey.get(root.key);
+    const binding = usage?.programBindings[0];
     const isRoot = row.depth === 0;
-    let preview = "";
-    if (entry && ["image", "audio", "video"].includes(root.kind)) {
-      previewUrl = URL.createObjectURL(
-        new Blob([entry.bytes as BlobPart], { type: entry.mediaType }),
-      );
-      preview =
-        root.kind === "image"
-          ? `<img class="editor-assets-preview" src="${previewUrl}" alt="" />`
-          : root.kind === "audio"
-            ? `<audio class="editor-assets-preview" controls src="${previewUrl}"></audio>`
-            : `<video class="editor-assets-preview" controls src="${previewUrl}"></video>`;
+    const marking = markingRootKey === root.key && !binding;
+    inspector.innerHTML = `<div class="editor-assets-inspector-content">
+      <dl class="editor-assets-summary">
+        <dt>名称</dt><dd>${escapeHtml(row.node.label)}</dd>
+        <dt>Root</dt><dd>${escapeHtml(root.key)}</dd>
+        <dt>类型</dt><dd>${escapeHtml(row.node.kind)}</dd>
+      </dl>
+      ${isRoot ? '<section class="editor-assets-preview-region" data-preview><p>正在准备预览…</p></section>' : '<p class="editor-assets-internal">内部 leaf 只读；如需独立复用，请重新导入顶层 asset。</p>'}
+      ${
+        isRoot
+          ? `<div class="editor-assets-inspector-actions">
+        <div class="editor-assets-program-action">
+          ${binding ? `<label>程序 key<input data-program-name value="${escapeHtml(binding.name)}" /></label><button type="button" data-program-save="${escapeHtml(root.key)}">保存程序 key</button><button type="button" data-program-cancel="${escapeHtml(root.key)}">取消标记</button>` : marking ? `<label>程序 key<input data-program-name value="" placeholder="输入程序 key" autofocus /></label><button type="button" data-program-confirm="${escapeHtml(root.key)}">确认标记</button><button type="button" data-program-abort>取消</button>` : `<label>程序 key<input value="" placeholder="标记后可编辑" disabled /></label><button type="button" data-program-begin="${escapeHtml(root.key)}">标记为程序使用</button>`}
+        </div>
+        <button type="button" data-root-export="${escapeHtml(root.key)}">导出</button>
+        <button class="danger" type="button" data-root-delete="${escapeHtml(root.key)}">删除</button>
+      </div>`
+          : ""
+      }
+    </div>`;
+    if (isRoot) void mountPreview(root.key);
+  }
+
+  async function mountPreview(rootKey: string): Promise<void> {
+    const generation = ++previewGeneration;
+    const element = inspector.querySelector<HTMLElement>("[data-preview]");
+    if (!element || !active || destroyed) return;
+    try {
+      const candidate = await previewFactory({
+        snapshot: options.controller.snapshot,
+        rootKey,
+        element,
+      });
+      if (generation !== previewGeneration || !active || destroyed) {
+        await candidate.destroy();
+        return;
+      }
+      preview = candidate;
+    } catch (error) {
+      if (generation !== previewGeneration || !element.isConnected) return;
+      element.innerHTML = `<p class="editor-assets-preview-error">${escapeHtml(formatError(error))}</p>`;
     }
-    inspector.innerHTML = `<h3>${escapeHtml(row.node.label)}</h3>
-      <span class="editor-assets-kind">${escapeHtml(row.node.kind)}</span>${preview}
-      <dl><dt>Root</dt><dd>${escapeHtml(row.rootKey)}</dd><dt>Owner</dt><dd>${escapeHtml(root.owner)}</dd>
-      <dt>Logical key</dt><dd>${escapeHtml(row.node.key)}</dd>
-      ${entry ? `<dt>SHA-256</dt><dd class="hash">${entry.sha256}</dd><dt>Bytes</dt><dd>${entry.byteLength}</dd>` : ""}
-      <dt>使用</dt><dd>${nodeUsage?.directReferences.map(({ location }) => escapeHtml(location)).join("、") || "无"}</dd>
-      <dt>程序</dt><dd>${nodeUsage?.programBindings.map(({ name }) => escapeHtml(name)).join("、") || "无"}</dd></dl>
-      ${Object.keys(row.node.metadata).length ? `<pre>${escapeHtml(JSON.stringify(row.node.metadata, null, 2))}</pre>` : ""}
-      ${isRoot ? `<div class="editor-assets-inspector-actions"><label>程序键<input data-program-name value="${escapeHtml(nodeUsage?.programBindings[0]?.name ?? root.key)}" /></label><button type="button" data-program-save="${escapeHtml(root.key)}">保存程序标记</button>${nodeUsage?.programBindings.length ? `<button type="button" data-program-cancel="${escapeHtml(root.key)}">取消程序标记</button>` : ""}<button class="danger" type="button" data-root-delete="${escapeHtml(root.key)}">删除 Root</button></div>` : '<p class="editor-assets-internal">内部 leaf 只读；如需独立复用，请重新导入顶层 asset。</p>'}`;
+  }
+
+  async function destroyPreview(): Promise<void> {
+    previewGeneration += 1;
+    const current = preview;
+    preview = null;
+    if (current) await current.destroy();
   }
 
   function renderReview(value: EditorAssetImportPreparation) {
@@ -292,13 +387,12 @@ export function mountEditorAssetsView<TProject>(
     const selectButton = target.closest<HTMLElement>("[data-select]");
     if (selectButton) {
       selectedId = selectButton.dataset.select!;
+      markingRootKey = null;
       render();
       return;
     }
     if (target.closest("[data-review-cancel]")) {
-      preparation = null;
-      pendingFiles = [];
-      reviewElement.hidden = true;
+      cancelPreparation();
       setMessage("已取消导入。", "ready");
       return;
     }
@@ -329,27 +423,28 @@ export function mountEditorAssetsView<TProject>(
         }));
       try {
         await options.controller.commitImport(preparation, resolutions);
-        preparation = null;
-        pendingFiles = [];
-        reviewElement.hidden = true;
+        cancelPreparation();
         setMessage("Assets 已原子提交。", "ready");
       } catch (error) {
         setMessage(formatError(error), "error");
       }
       return;
     }
-    const deleteButton = target.closest<HTMLElement>("[data-root-delete]");
-    if (deleteButton) {
-      try {
-        await options.controller.deleteRoot(deleteButton.dataset.rootDelete!);
-        selectedId = null;
-        setMessage("Asset root 已删除。", "ready");
-      } catch (error) {
-        setMessage(formatError(error), "error");
-      }
+    const begin = target.closest<HTMLElement>("[data-program-begin]");
+    if (begin) {
+      markingRootKey = begin.dataset.programBegin!;
+      renderInspector();
+      inspector.querySelector<HTMLInputElement>("[data-program-name]")?.focus();
       return;
     }
-    const programButton = target.closest<HTMLElement>("[data-program-save]");
+    if (target.closest("[data-program-abort]")) {
+      markingRootKey = null;
+      renderInspector();
+      return;
+    }
+    const programButton = target.closest<HTMLElement>(
+      "[data-program-confirm], [data-program-save]",
+    );
     if (programButton) {
       const value = required<HTMLInputElement>(
         inspector,
@@ -359,34 +454,63 @@ export function mountEditorAssetsView<TProject>(
         setMessage("程序键不能为空。", "error");
         return;
       }
+      const rootKey =
+        programButton.dataset.programConfirm ??
+        programButton.dataset.programSave!;
       try {
-        await options.controller.setProgramBinding(
-          programButton.dataset.programSave!,
-          value,
-        );
+        await options.controller.setProgramBinding(rootKey, value);
+        markingRootKey = null;
         setMessage("程序 binding 已保存。", "ready");
       } catch (error) {
         setMessage(formatError(error), "error");
       }
       return;
     }
-    const programCancelButton = target.closest<HTMLElement>(
-      "[data-program-cancel]",
-    );
-    if (programCancelButton) {
+    const programCancel = target.closest<HTMLElement>("[data-program-cancel]");
+    if (programCancel) {
       try {
         await options.controller.setProgramBinding(
-          programCancelButton.dataset.programCancel!,
+          programCancel.dataset.programCancel!,
           null,
         );
         setMessage("程序 binding 已取消。", "ready");
       } catch (error) {
         setMessage(formatError(error), "error");
       }
+      return;
+    }
+    const exportButton =
+      target.closest<HTMLButtonElement>("[data-root-export]");
+    if (exportButton) {
+      exportButton.disabled = true;
+      setMessage("正在校验并导出 Asset…", "loading");
+      try {
+        const exported = await options.controller.exportRoot(
+          exportButton.dataset.rootExport!,
+        );
+        download(exported);
+        setMessage(`已导出 ${exported.filename}。`, "ready");
+      } catch (error) {
+        setMessage(formatError(error), "error");
+      } finally {
+        exportButton.disabled = false;
+      }
+      return;
+    }
+    const deleteButton = target.closest<HTMLElement>("[data-root-delete]");
+    if (deleteButton) {
+      try {
+        await options.controller.deleteRoot(deleteButton.dataset.rootDelete!);
+        selectedId = null;
+        markingRootKey = null;
+        setMessage("Asset root 已删除。", "ready");
+      } catch (error) {
+        setMessage(formatError(error), "error");
+      }
     }
   }
 
-  function handleKey(event: KeyboardEvent) {
+  function handleTreeKey(event: KeyboardEvent) {
     if (!visibleRows.length) return;
     let index = visibleRows.findIndex(({ id }) => id === selectedId);
     if (event.key === "ArrowDown")
@@ -397,9 +521,9 @@ export function mountEditorAssetsView<TProject>(
       event.key === "ArrowRight" &&
       index >= 0 &&
       visibleRows[index]!.hasChildren
-    ) {
+    )
       expanded = new Set(expanded).add(visibleRows[index]!.id);
-    } else if (event.key === "ArrowLeft" && index >= 0) {
+    else if (event.key === "ArrowLeft" && index >= 0) {
       expanded = new Set(expanded);
       expanded.delete(visibleRows[index]!.id);
     } else return;
@@ -408,16 +532,41 @@ export function mountEditorAssetsView<TProject>(
     render();
   }
 
-  function revokePreview() {
-    if (!previewUrl) return;
-    URL.revokeObjectURL(previewUrl);
-    previewUrl = null;
+  function setTreeWidth(requested: number): void {
+    const width = body.clientWidth || 960;
+    const maximum = Math.max(220, Math.min(720, width - 320, width * 0.55));
+    const next = Math.round(Math.min(maximum, Math.max(220, requested)));
+    body.style.setProperty("--assets-tree-width", `${next}px`);
+    splitter.setAttribute("aria-valuemax", String(Math.round(maximum)));
+    splitter.setAttribute("aria-valuenow", String(next));
+  }
+
+  function stackedLayout(): boolean {
+    return globalThis.matchMedia?.("(max-width: 840px)").matches ?? false;
+  }
+
+  function cancelPreparation(): void {
+    preparation = null;
+    pendingFiles = [];
+    reviewElement.hidden = true;
+    reviewElement.replaceChildren();
   }
 
   function setMessage(text: string, state: "loading" | "ready" | "error") {
     message.textContent = text;
     message.dataset.state = state;
   }
+}
+
+function downloadArtifact(artifact: EditorAssetExportArtifact): void {
+  const url = URL.createObjectURL(
+    new Blob([artifact.bytes.slice().buffer], { type: artifact.mediaType }),
+  );
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = artifact.filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 function required<T extends Element>(root: ParentNode, selector: string): T {

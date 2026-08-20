@@ -164,3 +164,9 @@ export interface EditorAssetExportPlan {
   readonly assetKeys: readonly string[];
   readonly workspace: EditorAssetWorkspace;
 }
+
+export interface EditorAssetExportArtifact {
+  readonly filename: string;
+  readonly mediaType: string;
+  readonly bytes: Uint8Array;
+}

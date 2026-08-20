@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { createDeterministicZip } from "@slotclientengine/browserartifactio";
+import {
+  createDeterministicZip,
+  extractBoundedZip,
+} from "@slotclientengine/browserartifactio";
 import {
   EDITOR_ASSETS_MAP_PATH,
   createEditorAssetWorkspace,
@@ -19,7 +22,11 @@ import type {
   EditorAssetHostAdapter,
   EditorAssetRootDraft,
 } from "../src/assets/data/index.js";
-import { mountEditorAssetsView } from "../src/assets/ui/index.js";
+import {
+  createDefaultEditorAssetPreview,
+  mountEditorAssetsDialog,
+  mountEditorAssetsView,
+} from "../src/assets/ui/index.js";
 
 describe("default adapters", () => {
   it("allows compressed ZIP sources to reach the stricter payload limits", () => {
@@ -90,6 +97,14 @@ describe("default adapters", () => {
       key: "project.json",
       exactKeys: ["project.json", "spark.png"],
     });
+    const controller = createTestController();
+    const preparation = await controller.prepareImport([
+      source("project.json", encode(vniProject("runtime", "runtime"))),
+      source("spark.png", PNG),
+    ]);
+    await controller.commitImport(preparation);
+    const exported = await controller.exportRoot("project.json");
+    expectZipHas(exported.bytes, ["project.json", "spark.png"]);
   });
 
   it("ingests a mapped ImgNumber ZIP through the single public importer", async () => {
@@ -123,6 +138,19 @@ describe("default adapters", () => {
     expect(result.drafts[0]!.exactKeys).toEqual([
       "digits-image-string.manifest.json",
       "digits-0.png",
+    ]);
+    const controller = createTestController();
+    const preparation = await controller.prepareImport([
+      source("digits.zip", zip),
+    ]);
+    await controller.commitImport(preparation);
+    const exported = await controller.exportRoot(
+      "digits-image-string.manifest.json",
+    );
+    expect(exported.filename).toBe("digits-image-string.zip");
+    expectZipHas(exported.bytes, [
+      "image-string.manifest.json",
+      EDITOR_ASSETS_MAP_PATH,
     ]);
   });
 
@@ -201,6 +229,26 @@ describe("default adapters", () => {
     expect(
       result.drafts[0]!.relations.some(({ kind }) => kind === "uses-texture"),
     ).toBe(true);
+    const controller = createTestController();
+    const preparation = await controller.prepareImport([
+      source("popup.zip", createDeterministicZip(entries)),
+    ]);
+    await controller.commitImport(preparation);
+    const exported = await controller.exportRoot(
+      "demo-popup-popup.manifest.json",
+    );
+    expectZipHas(exported.bytes, [
+      "popup.manifest.json",
+      EDITOR_ASSETS_MAP_PATH,
+    ]);
+    const previewRoot = document.createElement("div");
+    const preview = await createDefaultEditorAssetPreview({
+      snapshot: controller.snapshot,
+      rootKey: "demo-popup-popup.manifest.json",
+      element: previewRoot,
+    });
+    expect(previewRoot.textContent).toContain("暂不支持预览");
+    preview.destroy();
   });
 
   it("discovers and namespaces a strict mapped Symbols package", async () => {
@@ -259,6 +307,15 @@ describe("default adapters", () => {
       key: "demo-symbols-symbols.package.json",
     });
     expect(result.drafts[0]!.exactKeys).toContain("demo-symbols-A.png");
+    const controller = createTestController();
+    const preparation = await controller.prepareImport([
+      source("symbols.zip", createDeterministicZip(entries)),
+    ]);
+    await controller.commitImport(preparation);
+    const exported = await controller.exportRoot(
+      "demo-symbols-symbols.package.json",
+    );
+    expectZipHas(exported.bytes, ["symbols.package.json"]);
   });
 
   it("discovers an existing mapped Game Layout package", async () => {
@@ -322,6 +379,18 @@ describe("default adapters", () => {
       "demo-layout-layout.manifest.json",
       "bg.png",
     ]);
+    const controller = createTestController();
+    const preparation = await controller.prepareImport([
+      source("layout.zip", createDeterministicZip(entries)),
+    ]);
+    await controller.commitImport(preparation);
+    const exported = await controller.exportRoot(
+      "demo-layout-layout.manifest.json",
+    );
+    expectZipHas(exported.bytes, [
+      "layout.manifest.json",
+      EDITOR_ASSETS_MAP_PATH,
+    ]);
   });
 
   it("binds Spine skeleton -> atlas -> page during prepare", async () => {
@@ -353,10 +422,64 @@ describe("default adapters", () => {
       "uses-atlas",
       "uses-texture",
     ]);
+    const controller = createTestController();
+    const preparation = await controller.prepareImport([
+      source("hero.json", skeleton),
+      source("hero.atlas", atlas),
+      source("page.png", png),
+    ]);
+    await controller.commitImport(preparation);
+    const exported = await controller.exportRoot("hero.json");
+    expectZipHas(exported.bytes, ["hero.json", "hero.atlas", "page.png"]);
   });
 });
 
 describe("EditorAssetsView", () => {
+  it("previews native image, audio, and video roots and releases their URLs", async () => {
+    const mp3 = new Uint8Array([0x49, 0x44, 0x33, 1]);
+    const mp4 = new Uint8Array(12);
+    mp4.set(new TextEncoder().encode("ftyp"), 4);
+    const controller = createTestController();
+    const preparation = await controller.prepareImport([
+      source("coin.png", PNG),
+      source("win.mp3", mp3),
+      source("intro.mp4", mp4),
+      source("notes.custom", new TextEncoder().encode("notes")),
+    ]);
+    await controller.commitImport(preparation);
+    for (const [key, tag] of [
+      ["coin.png", "IMG"],
+      ["win.mp3", "AUDIO"],
+      ["intro.mp4", "VIDEO"],
+    ] as const) {
+      const element = document.createElement("div");
+      const preview = await createDefaultEditorAssetPreview({
+        snapshot: controller.snapshot,
+        rootKey: key,
+        element,
+      });
+      expect(element.firstElementChild?.tagName).toBe(tag);
+      preview.destroy();
+      preview.destroy();
+      expect(element.childElementCount).toBe(0);
+    }
+    const textElement = document.createElement("div");
+    const textPreview = await createDefaultEditorAssetPreview({
+      snapshot: controller.snapshot,
+      rootKey: "notes.custom",
+      element: textElement,
+    });
+    expect(textElement.textContent).toContain("没有预览");
+    textPreview.destroy();
+    await expect(
+      createDefaultEditorAssetPreview({
+        snapshot: controller.snapshot,
+        rootKey: "missing.png",
+        element: document.createElement("div"),
+      }),
+    ).rejects.toThrow(/preview root 不存在/u);
+  });
+
   it("virtualizes a 10,000-root tree and destroys its DOM", () => {
     const drafts = Array.from({ length: 10_000 }, (_, index) =>
       atomicDraft(`asset-${String(index).padStart(5, "0")}.png`),
@@ -408,10 +531,16 @@ describe("EditorAssetsView", () => {
     expect(
       root.querySelector<HTMLImageElement>(".editor-assets-preview")?.src,
     ).toContain("blob:coin");
+    expect(
+      root.querySelector<HTMLInputElement>(
+        ".editor-assets-program-action input",
+      )?.disabled,
+    ).toBe(true);
+    expect(root.querySelector("[data-program-cancel]")).toBeNull();
+    click(required(root, "[data-program-begin]"));
     const program = required<HTMLInputElement>(root, "[data-program-name]");
-    expect(program.value).toBe("coin.png");
     program.value = "coin";
-    click(required(root, "[data-program-save]"));
+    click(required(root, "[data-program-confirm]"));
     await flush();
     expect(controller.snapshot.project.programs).toEqual({ coin: "coin.png" });
     expect(root.textContent).toContain("程序 binding 已保存");
@@ -459,6 +588,69 @@ describe("EditorAssetsView", () => {
     expect(revokeUrl).toHaveBeenCalledWith("blob:coin");
   });
 
+  it("opens a non-invasive dialog, adjusts its splitter, exports, and destroys preview", async () => {
+    const controller = createTestController();
+    const prepared = await controller.prepareImport([source("coin.png", PNG)]);
+    await controller.commitImport(prepared);
+    const destroyPreview = vi.fn();
+    const download = vi.fn();
+    const root = document.createElement("div");
+    document.body.append(root);
+    const dialog = mountEditorAssetsDialog({
+      controller,
+      root,
+      previewFactory: async ({ element }) => {
+        element.textContent = "preview mounted";
+        return { destroy: destroyPreview };
+      },
+      download,
+    });
+
+    expect(root.textContent).toContain("Assets 管理");
+    expect(dialog.element.hasAttribute("open")).toBe(false);
+    click(dialog.trigger);
+    expect(dialog.element.hasAttribute("open")).toBe(true);
+    click(required(root, "[data-select]"));
+    await flush();
+    expect(root.textContent).toContain("preview mounted");
+    expect(root.textContent).not.toContain("SHA-256");
+
+    const splitter = required<HTMLElement>(root, ".editor-assets-splitter");
+    splitter.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
+    );
+    expect(
+      required<HTMLElement>(root, ".editor-assets-body").style.getPropertyValue(
+        "--assets-tree-width",
+      ),
+    ).toBe("316px");
+
+    click(required(root, "[data-root-export]"));
+    await flush();
+    expect(download).toHaveBeenCalledWith(
+      expect.objectContaining({ filename: "coin.png", bytes: PNG }),
+    );
+    click(required(root, "[data-assets-dialog-close]"));
+    await flush();
+    expect(dialog.element.hasAttribute("open")).toBe(false);
+    expect(destroyPreview).toHaveBeenCalledTimes(1);
+    Object.defineProperty(dialog.element, "showModal", {
+      configurable: true,
+      value: undefined,
+    });
+    Object.defineProperty(dialog.element, "close", {
+      configurable: true,
+      value: undefined,
+    });
+    dialog.open();
+    expect(dialog.element.hasAttribute("open")).toBe(true);
+    dialog.close();
+    expect(dialog.element.hasAttribute("open")).toBe(false);
+    dialog.destroy();
+    expect(root.childElementCount).toBe(0);
+    expect(() => dialog.open()).toThrow(/已销毁/u);
+  });
+
   it("runs import prepare, review, commit, and cancel from the single file input", async () => {
     const controller = createTestController();
     const root = document.createElement("div");
@@ -501,6 +693,12 @@ function loose(sourcePath: string, bytes: Uint8Array) {
 }
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const TEST_ZIP_LIMITS = Object.freeze({
+  maxEntries: 1024,
+  maxCompressedBytes: 20 * 1024 * 1024,
+  maxFileBytes: 10 * 1024 * 1024,
+  maxTotalBytes: 40 * 1024 * 1024,
+});
 
 function source(name: string, bytes: Uint8Array) {
   return {
@@ -670,6 +868,11 @@ function required<T extends Element>(root: ParentNode, selector: string): T {
 
 function click(element: Element): void {
   element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+}
+
+function expectZipHas(bytes: Uint8Array, paths: readonly string[]): void {
+  const files = extractBoundedZip(bytes, { limits: TEST_ZIP_LIMITS });
+  for (const path of paths) expect(files.has(path), path).toBe(true);
 }
 
 async function flush(): Promise<void> {

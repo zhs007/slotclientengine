@@ -9,6 +9,9 @@ import type {
   EditorAssetsSnapshot,
 } from "../data/index.js";
 import { ingestAndDiscoverDefaultEditorAssets } from "./default-adapters.js";
+import { exportDefaultEditorAsset } from "./default-export.js";
+
+export * from "./default-export.js";
 
 export function createDefaultEditorAssetsController<TProject>(options: {
   readonly project: TProject;
@@ -19,5 +22,6 @@ export function createDefaultEditorAssetsController<TProject>(options: {
     ...options,
     discoverAssets: (files, profileSelections) =>
       ingestAndDiscoverDefaultEditorAssets({ files, profileSelections }),
+    exportAsset: exportDefaultEditorAsset,
   });
 }
