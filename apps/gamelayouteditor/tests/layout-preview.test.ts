@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => {
   const canvas = document.createElement("canvas");
+  const tickerCallbacks: Array<(ticker: { deltaMS: number }) => void> = [];
   const runtime = {
     container: {},
     init: vi.fn(async () => undefined),
@@ -78,7 +79,9 @@ const state = vi.hoisted(() => {
     resize: vi.fn(),
     stageAdd: vi.fn(),
     stageAddAt: vi.fn(),
-    tickerAdd: vi.fn(),
+    tickerAdd: vi.fn((callback: (ticker: { deltaMS: number }) => void) => {
+      tickerCallbacks.push(callback);
+    }),
     appDestroy: vi.fn(),
     graphicsClear: vi.fn(),
     graphicsRect: vi.fn(),
@@ -88,6 +91,7 @@ const state = vi.hoisted(() => {
     containerInstances: [] as Array<{
       position: { set: ReturnType<typeof vi.fn> };
     }>,
+    tickerCallbacks,
     resolveFrame: vi.fn(
       ({ pageSize }: { pageSize: { width: number; height: number } }) =>
         pageSize.width === 800 && pageSize.height === 600
@@ -296,6 +300,7 @@ describe("LayoutPreview", () => {
     vi.clearAllMocks();
     state.packageRuntime.getGameModeSnapshot.mockImplementation(() => ({
       stableMode: "BaseGame",
+      displayedMode: "BaseGame",
       targetMode: null,
       phase: "stable",
     }));
@@ -331,6 +336,7 @@ describe("LayoutPreview", () => {
     state.pkg.resource = {};
     state.pkg.packageResource = {};
     state.containerInstances.length = 0;
+    state.tickerCallbacks.length = 0;
     state.canvas.removeAttribute("style");
     state.runtime.applyViewport.mockReturnValue({
       variantId: "default",
@@ -534,6 +540,14 @@ describe("LayoutPreview", () => {
     );
     await preview.requestPrimaryGameModeAction();
     expect(state.resize).toHaveBeenLastCalledWith(2000, 2000);
+
+    displayedMode = "Wide";
+    state.tickerCallbacks.at(-1)!({ deltaMS: 16 });
+    expect(state.resize).toHaveBeenLastCalledWith(2000, 1125);
+    expect(state.runtime.applyViewport).toHaveBeenLastCalledWith({
+      width: 2000,
+      height: 1125,
+    });
     preview.destroy();
   });
 

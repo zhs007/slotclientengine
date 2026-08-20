@@ -94,6 +94,7 @@ export class LayoutPreview {
   #manifest: SceneLayoutManifest | null = null;
   #lastLayoutSnapshot: SceneLayoutSnapshot | null = null;
   #frameViewport: SceneLayoutFrameViewport | null = null;
+  #laidOutDisplayedMode: string | null = null;
   #pageSize: PreviewSize = { width: 1920, height: 1080 };
   #zoom = 1;
   #showFocus = true;
@@ -158,6 +159,15 @@ export class LayoutPreview {
     );
     this.#app.ticker.add((ticker) => {
       if (this.#runtime) this.#runtime.update(ticker.deltaMS / 1000);
+      const displayedMode =
+        this.#packageRuntimeInspector?.getGameModeSnapshot().displayedMode ??
+        null;
+      if (
+        displayedMode &&
+        displayedMode !== this.#laidOutDisplayedMode &&
+        this.#runtime
+      )
+        this.applySize();
       for (const symbol of this.#renderSymbols)
         symbol.update(ticker.deltaMS / 1000);
       if (this.#selectedLayerId) this.drawSelectedLayerOutline();
@@ -909,17 +919,14 @@ export class LayoutPreview {
     const manifest = this.#manifest;
     const runtime = this.#runtime;
     if (!manifest || !runtime) return;
+    const displayedMode =
+      this.#packageRuntimeInspector?.getGameModeSnapshot().displayedMode;
     const frameViewport = resolveSceneLayoutFrameViewport({
       manifest,
       pageSize: this.#pageSize,
-      ...(this.#packageRuntime
-        ? {
-            modeId:
-              this.#packageRuntimeInspector!.getGameModeSnapshot()
-                .displayedMode,
-          }
-        : {}),
+      ...(displayedMode ? { modeId: displayedMode } : {}),
     });
+    this.#laidOutDisplayedMode = displayedMode ?? null;
     this.#frameViewport = frameViewport;
     this.#app.renderer.resize(
       frameViewport.frameDesignSize.width,
@@ -995,6 +1002,7 @@ export class LayoutPreview {
     this.#packageScenes.clear();
     this.#lastLayoutSnapshot = null;
     this.#frameViewport = null;
+    this.#laidOutDisplayedMode = null;
     this.#package?.destroy();
     this.#package = null;
   }
