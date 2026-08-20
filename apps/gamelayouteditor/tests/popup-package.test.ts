@@ -124,6 +124,23 @@ describe("gamelayout popup dependency", () => {
     });
     expect(project.assets.has(imported.rootKey)).toBe(true);
     expect(editorProjectToManifest(project).popups).toEqual(manifest.popups);
+    const programmaticManifest = {
+      ...manifest,
+      gameModes: {
+        initialMode: "BaseGame",
+        modes: [{ id: "BaseGame", nodeStates: {} }],
+      },
+    };
+    const programmaticProject = manifestToEditorProject(
+      programmaticManifest,
+      layoutAssets,
+    );
+    expect(programmaticProject.programmaticPopupIds.has("fixture-popup")).toBe(
+      true,
+    );
+    expect(editorProjectToManifest(programmaticProject).popups).toEqual(
+      manifest.popups,
+    );
     const clone = cloneEditorProject(project);
     clone.assets.get(imported.rootKey)![0] = 0;
     expect(project.assets.get(imported.rootKey)![0]).not.toBe(0);

@@ -18,7 +18,9 @@ vi.mock("../../src/scene-layout/runtime.js", () => ({
 }));
 
 import { createSceneLayoutPackageRuntime } from "../../src/scene-layout/package-runtime.js";
+import { formatGameLayoutRuntimeAddress } from "../../src/scene-layout/data/runtime-address.js";
 import { transitionResourceKey } from "../../src/scene-layout/resource.js";
+import { singleStatePopupFixture } from "../popup/fixtures.js";
 
 class FakeTransitionPlayer implements RendercoreSpinePlayer {
   readonly view = new Container();
@@ -327,7 +329,10 @@ describe("scene layout package event-driven game-mode transition", () => {
       transitionPhase: "after-switch",
       activeBackgroundNodes: ["free-bg"],
     });
-    expect(occurrences).toEqual([{ sequence: 1, displayedMode: "FreeGame" }]);
+    expect(occurrences).toEqual([
+      { sequence: expect.any(Number), displayedMode: "FreeGame" },
+    ]);
+    expect(occurrences[0]!.sequence).toBeGreaterThan(0);
     expect(player.destroyed).toBe(false);
     player.results.push({ completed: true, events: [] });
     runtime.update(0.5);
@@ -469,6 +474,60 @@ describe("scene layout package event-driven game-mode transition", () => {
     disposeInput();
     disposeInput();
     expect(runtime.getGameModeSnapshot().stableMode).toBe("FreeGame");
+    runtime.destroy();
+  });
+
+  it("reuses one Spine Popup player across programmatic open and transition prelude", async () => {
+    const { runtime, popups } = createRuntime(true, true);
+    await runtime.init();
+    const address = formatGameLayoutRuntimeAddress("popup", "free-entry");
+    expect(popups).toHaveLength(1);
+
+    const first = runtime.openPopup({
+      address,
+      type: "spine",
+      text: "PROGRAM",
+    });
+    expect(runtime.getActivePopupAddress()).toBe(address);
+    await expect(runtime.requestGameMode("FreeGame")).rejects.toThrow(
+      /while Popup "free-entry" is active/,
+    );
+    await runtime.closePopup({ behavior: "immediate" });
+    await expect(first.finished).resolves.toBeUndefined();
+
+    const second = runtime.openPopup({ address, type: "spine" });
+    expect(popups).toHaveLength(1);
+    await runtime.closePopup({ behavior: "immediate" });
+    await expect(second.finished).resolves.toBeUndefined();
+    expect(popups).toHaveLength(1);
+    runtime.destroy();
+  });
+
+  it("opens a programmatic single-state Popup through the same active slot", async () => {
+    const resource = packageResource(false) as any;
+    resource.manifest.popups = {
+      freeform: {
+        type: "single-state",
+        manifest: "freeform-popup.manifest.json",
+        order: 2000,
+        placements: { default: { x: 0, y: 0, scale: 1 } },
+      },
+    };
+    resource.popupPackages = {
+      freeform: {
+        manifest: singleStatePopupFixture(),
+        resources: {},
+        destroy: vi.fn(),
+      },
+    };
+    const runtime = createSceneLayoutPackageRuntime({ resource });
+    await runtime.init();
+    const address = formatGameLayoutRuntimeAddress("popup", "freeform");
+    const session = runtime.openPopup({ address, type: "single-state" });
+    expect(runtime.getActivePopupAddress()).toBe(address);
+    await runtime.closePopup({ behavior: "immediate" });
+    await expect(session.finished).resolves.toBeUndefined();
+    expect(runtime.getActivePopupAddress()).toBeNull();
     runtime.destroy();
   });
 

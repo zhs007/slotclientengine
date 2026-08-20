@@ -2,12 +2,14 @@ import {
   createSceneLayoutRuntime,
   createSceneLayoutPackageRuntime,
   createSceneLayoutTransitionVideoPlayer,
+  formatGameLayoutRuntimeAddress,
   resolveSceneLayoutFrameViewport,
   type SceneLayoutFrameViewport,
   type SceneLayoutInitialReelScene,
   type SceneLayoutManifest,
   type SceneLayoutRuntime,
   type SceneLayoutPackageRuntime,
+  type SceneLayoutPopupOpenRequest,
   type SceneLayoutSnapshot,
   type SceneLayoutVariantId,
 } from "@slotclientengine/rendercore/scene-layout/core";
@@ -345,6 +347,37 @@ export class LayoutPreview {
     this.#packageRuntime.startAwardCelebrationForCurrentMode(input);
   }
 
+  openPopup(
+    id: string,
+    input:
+      | Omit<
+          Extract<SceneLayoutPopupOpenRequest, { type: "award-celebration" }>,
+          "address"
+        >
+      | Omit<Extract<SceneLayoutPopupOpenRequest, { type: "spine" }>, "address">
+      | Omit<
+          Extract<SceneLayoutPopupOpenRequest, { type: "single-state" }>,
+          "address"
+        >,
+  ): void {
+    if (!this.#packageRuntime)
+      throw new Error("当前 layout preview 没有 package runtime。");
+    this.#packageRuntime.openPopup({
+      ...input,
+      address: formatGameLayoutRuntimeAddress("popup", id),
+    } as SceneLayoutPopupOpenRequest);
+  }
+
+  closePopup(behavior: "complete" | "immediate" = "complete"): Promise<void> {
+    if (!this.#packageRuntime)
+      throw new Error("当前 layout preview 没有 package runtime。");
+    return this.#packageRuntime.closePopup({ behavior });
+  }
+
+  getActivePopupAddress() {
+    return this.#packageRuntime?.getActivePopupAddress() ?? null;
+  }
+
   advanceAwardCelebration(): void {
     if (!this.#packageRuntime)
       throw new Error("当前 layout preview 没有 package runtime。");
@@ -358,43 +391,34 @@ export class LayoutPreview {
   }
 
   playSpinePopup(id: string, text?: string): void {
-    if (!this.#packageRuntime)
-      throw new Error("当前 layout preview 没有 package runtime。");
-    const player = this.#packageRuntime.getSpinePopup(id);
-    player.dismissImmediately();
-    player.start(text);
+    this.openPopup(id, {
+      type: "spine",
+      ...(text === undefined ? {} : { text }),
+    });
   }
 
   requestDismissSpinePopup(id: string): void {
-    if (!this.#packageRuntime)
-      throw new Error("当前 layout preview 没有 package runtime。");
-    this.#packageRuntime.getSpinePopup(id).requestDismiss();
+    void id;
+    void this.closePopup();
   }
 
   dismissSpinePopupImmediately(id: string): void {
-    if (!this.#packageRuntime)
-      throw new Error("当前 layout preview 没有 package runtime。");
-    this.#packageRuntime.getSpinePopup(id).dismissImmediately();
+    void id;
+    void this.closePopup("immediate");
   }
 
   playSingleStatePopup(id: string): void {
-    if (!this.#packageRuntime)
-      throw new Error("当前 layout preview 没有 package runtime。");
-    const popup = this.#packageRuntime.getSingleStatePopup(id);
-    popup.dismissImmediately();
-    popup.start();
+    this.openPopup(id, { type: "single-state" });
   }
 
   requestDismissSingleStatePopup(id: string): void {
-    if (!this.#packageRuntime)
-      throw new Error("当前 layout preview 没有 package runtime。");
-    this.#packageRuntime.getSingleStatePopup(id).requestDismiss();
+    void id;
+    void this.closePopup();
   }
 
   dismissSingleStatePopupImmediately(id: string): void {
-    if (!this.#packageRuntime)
-      throw new Error("当前 layout preview 没有 package runtime。");
-    this.#packageRuntime.getSingleStatePopup(id).dismissImmediately();
+    void id;
+    void this.closePopup("immediate");
   }
 
   getGameModeIds(): readonly string[] {

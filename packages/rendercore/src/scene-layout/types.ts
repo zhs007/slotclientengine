@@ -748,6 +748,33 @@ export interface SceneLayoutPopupInputBindingOptions {
   readonly onError: (error: unknown) => void;
 }
 
+export type SceneLayoutPopupOpenRequest =
+  | {
+      readonly address: import("./data/runtime-address.js").GameLayoutRuntimeAddress;
+      readonly type: "award-celebration";
+      readonly betAmountRaw: number;
+      readonly winAmountRaw: number;
+    }
+  | {
+      readonly address: import("./data/runtime-address.js").GameLayoutRuntimeAddress;
+      readonly type: "spine";
+      readonly text?: string;
+    }
+  | {
+      readonly address: import("./data/runtime-address.js").GameLayoutRuntimeAddress;
+      readonly type: "single-state";
+    };
+
+export interface SceneLayoutPopupSession {
+  readonly address: import("./data/runtime-address.js").GameLayoutRuntimeAddress;
+  readonly type: SceneLayoutPopupBinding["type"];
+  readonly finished: Promise<void>;
+}
+
+export interface SceneLayoutPopupCloseOptions {
+  readonly behavior?: "complete" | "immediate";
+}
+
 export interface SceneLayoutInitialReelScene {
   readonly scene: readonly (readonly number[])[];
   readonly localPhaseYs: readonly number[];
@@ -950,10 +977,13 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   /** Attaches a borrowed reel-space overlay above the main reel and below transitions/popups. */
   attachMainReelOverlay(overlay: Container): () => void;
   getReelPresentation(reelId: "main"): Container;
+  /** @deprecated Use openPopup()/closePopup(); retained for editor diagnostics and migration only. */
   getAwardCelebrationPopup(
     id: string,
   ): import("../popup/core/types.js").AwardCelebrationRuntime;
+  /** @deprecated Use openPopup()/closePopup(); retained for editor diagnostics and migration only. */
   getSpinePopup(id: string): import("../popup/core/types.js").SpinePopupRuntime;
+  /** @deprecated Use openPopup()/closePopup(); retained for editor diagnostics and migration only. */
   getSingleStatePopup(
     id: string,
   ): import("../popup/core/types.js").SingleStatePopupRuntime;
@@ -967,6 +997,14 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   bindPopupInput(options: SceneLayoutPopupInputBindingOptions): () => void;
   /** Performs the active Popup phase's single primary interaction. */
   requestPrimaryPopupInteraction(): import("../popup/input-binding.js").PopupInteractionDispatchResult;
+  /** Opens one exact exported Popup. A second active Popup is rejected instead of stacked. */
+  openPopup(request: SceneLayoutPopupOpenRequest): SceneLayoutPopupSession;
+  /** Requests or immediately performs closure of the one active Popup. */
+  closePopup(options?: SceneLayoutPopupCloseOptions): Promise<void>;
+  /** Allocation-free query for the one active Popup owner address. */
+  getActivePopupAddress():
+    | import("./data/runtime-address.js").GameLayoutRuntimeAddress
+    | null;
   /** Returns a borrowed package-owned layer. Callers must not destroy it. */
   getLayer(id: SceneLayoutLayerId): Container;
   /** Returns the manifest-declared mode ids in their stable declaration order. */

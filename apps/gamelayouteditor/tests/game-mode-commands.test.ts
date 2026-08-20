@@ -3,6 +3,7 @@ import {
   activateEditorGameMode,
   createNewEditorProject,
   createSplashFirstEditorProject,
+  editorProjectToManifest,
 } from "../src/model/editor-project.js";
 import {
   addGameMode,
@@ -26,7 +27,7 @@ import {
   setGameModeVideoTransitionFadeOut,
   setGameModeVideoTransitionResource,
   setPopupPlacement,
-  setSpinePopupRegistered,
+  setPopupProgrammatic,
 } from "../src/model/game-mode-commands.js";
 
 describe("game mode and popup dependency commands", () => {
@@ -183,7 +184,7 @@ describe("game mode and popup dependency commands", () => {
     );
   });
 
-  it("requires explicit registration for standalone Spine popups", () => {
+  it("keeps any Popup type for programmatic use without a direct binding", () => {
     const project = createNewEditorProject("maximized-focus");
     const imported = {
       manifest: { id: "free-game", type: "spine" } as never,
@@ -192,16 +193,16 @@ describe("game mode and popup dependency commands", () => {
       sourceSpineAssets: [],
     };
     importPopupDependency(project, imported);
-    expect(project.registeredSpinePopupIds.size).toBe(0);
+    expect(project.programmaticPopupIds.size).toBe(0);
     expect(() => bindGameModePopup(project, "BaseGame", "free-game")).toThrow(
       /award-celebration/,
     );
-    setSpinePopupRegistered(project, "free-game", true);
-    expect(project.registeredSpinePopupIds.has("free-game")).toBe(true);
+    setPopupProgrammatic(project, "free-game", true);
+    expect(project.programmaticPopupIds.has("free-game")).toBe(true);
     expect(() => deletePopupDependency(project, "free-game")).toThrow(
-      /Scene Layout/,
+      /程序 Popup/,
     );
-    setSpinePopupRegistered(project, "free-game", false);
+    setPopupProgrammatic(project, "free-game", false);
     deletePopupDependency(project, "free-game");
   });
 
@@ -216,8 +217,33 @@ describe("game mode and popup dependency commands", () => {
     expect(() => bindGameModePopup(project, "BaseGame", "freeform")).toThrow(
       /award-celebration/,
     );
-    setSpinePopupRegistered(project, "freeform", true);
-    expect(project.registeredSpinePopupIds.has("freeform")).toBe(true);
+    setPopupProgrammatic(project, "freeform", true);
+    expect(project.programmaticPopupIds.has("freeform")).toBe(true);
+  });
+
+  it("keeps an unbound award Popup for programmatic use", () => {
+    const project = createNewEditorProject("maximized-focus");
+    project.resources.set("art", {
+      id: "art",
+      kind: "image",
+      path: "assets/art.png",
+      size: { width: 100, height: 100 },
+    });
+    project.assets.set("assets/art.png", new Uint8Array([1]));
+    project.nodes.push({
+      id: "base-background",
+      order: 0,
+      resourceId: "art",
+      placements: { default: { x: 0, y: 0, scale: 1 } },
+    });
+    bindGameModeBackground(project, "BaseGame", "default", "base-background");
+    importPopupDependency(project, popup("program-award", 1));
+    setPopupProgrammatic(project, "program-award", true);
+    expect(project.programmaticPopupIds.has("program-award")).toBe(true);
+    expect(editorProjectToManifest(project).popups).toHaveProperty(
+      "program-award.type",
+      "award-celebration",
+    );
   });
 
   it("allocates a distinct popup root order from 2000", () => {

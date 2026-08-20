@@ -676,8 +676,8 @@ export function deletePopupDependency(
     .map((mode) => mode.id);
   if (users.length)
     throw new Error(`Popup ${id} 仍被游戏模式引用：${users.join(", ")}`);
-  if (project.registeredSpinePopupIds.has(id))
-    throw new Error(`Popup ${id} 仍注册在 Scene Layout。`);
+  if (project.programmaticPopupIds.has(id))
+    throw new Error(`Popup ${id} 仍配置为程序 Popup。`);
   const transitions = project.gameModes.transitions
     .filter((transition) => transition.preludePopupId === id)
     .map((transition) => `${transition.fromModeId} -> ${transition.toModeId}`);
@@ -688,17 +688,15 @@ export function deletePopupDependency(
   garbageCollectDependencyAssets(project, dependency.keys);
 }
 
-export function setSpinePopupRegistered(
+export function setPopupProgrammatic(
   project: EditorProject,
   id: string,
-  registered: boolean,
+  programmatic: boolean,
 ): void {
   const dependency = project.popupDependencies.get(id);
   if (!dependency) throw new Error(`未知 Popup dependency：${id}`);
-  if (dependency.type !== "spine" && dependency.type !== "single-state")
-    throw new Error(`只有普通 Spine 或 single-state Popup 可以独立注册。`);
-  if (registered) project.registeredSpinePopupIds.add(id);
-  else project.registeredSpinePopupIds.delete(id);
+  if (programmatic) project.programmaticPopupIds.add(id);
+  else project.programmaticPopupIds.delete(id);
 }
 
 export function setPopupPlacement(

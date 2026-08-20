@@ -2,6 +2,7 @@ import {
   type SceneLayoutGameModeSnapshot,
   type SceneLayoutVariantId,
 } from "@slotclientengine/rendercore/scene-layout/editor";
+import { formatGameLayoutRuntimeAddress } from "@slotclientengine/rendercore/scene-layout/data";
 import { parsePopupManifest } from "@slotclientengine/rendercore/popup/editor";
 import {
   createBoundedSourceIndex,
@@ -112,7 +113,7 @@ import {
   setGameModeReelEnabled,
   setPopupOrder,
   setPopupPlacement,
-  setSpinePopupRegistered,
+  setPopupProgrammatic,
 } from "../model/game-mode-commands.js";
 import { setNodeOrder, setReelOrder } from "../model/layer-order.js";
 import {
@@ -152,7 +153,7 @@ import {
   stateManagerDialogMarkup,
 } from "./state-manager-dialog.js";
 import { ResourcePickerPreview } from "../preview/resource-picker-preview.js";
-import { escapeHtml } from "./ui-markup.js";
+import { escapeHtml, runtimeAddressMarkup } from "./ui-markup.js";
 import {
   editorResourcePaths,
   type EditorLayoutResource,
@@ -168,9 +169,11 @@ function popupRuntimeAddressesMarkup(
   dependency: PopupDependencyValue | undefined,
 ): string {
   if (!dependency) return "";
-  const popupAddress = `gamelayout:/popup/${encodeURIComponent(dependency.id)}`;
+  if (!isPopupExported(project, dependency.id))
+    return '<p class="hint">该 dependency 尚未被直接引用或设为程序 Popup，因此不会导出，也没有 production runtime 地址。</p>';
+  const popupAddress = formatGameLayoutRuntimeAddress("popup", dependency.id);
   if (dependency.type !== "single-state")
-    return `<p class="hint">Popup runtime address：<code>${escapeHtml(popupAddress)}</code></p>`;
+    return runtimeAddressMarkup("Popup runtime address", popupAddress);
   try {
     const bytes = project.assets.get(dependency.rootKey);
     if (!bytes) throw new Error(`缺少 ${dependency.rootKey}`);
@@ -182,19 +185,42 @@ function popupRuntimeAddressesMarkup(
     const addresses = [
       popupAddress,
       ...manifest.singleState.layers.flatMap((layer) => {
-        const layerAddress = `${popupAddress}/layer/${encodeURIComponent(layer.id)}`;
+        const layerAddress = formatGameLayoutRuntimeAddress(
+          "popup",
+          dependency.id,
+          "layer",
+          layer.id,
+        );
         return layer.kind === "text" || layer.kind === "image-string"
           ? [
               layerAddress,
-              `${popupAddress}/string/${layer.kind}/${encodeURIComponent(layer.id)}`,
+              formatGameLayoutRuntimeAddress(
+                "popup",
+                dependency.id,
+                "string",
+                layer.kind,
+                layer.id,
+              ),
             ]
           : [layerAddress];
       }),
     ];
-    return `<details data-runtime-address-inspector><summary>通用 runtime 地址 (${addresses.length})</summary><ul>${addresses.map((address) => `<li><code>${escapeHtml(address)}</code></li>`).join("")}</ul><p class="hint">layer 地址 resolve 后 get()；string 地址可 get() 后 setText()/resetText()。</p></details>`;
+    return `<details data-runtime-address-inspector><summary>通用 runtime 地址 (${addresses.length})</summary>${addresses.map((address, index) => runtimeAddressMarkup(index === 0 ? "Popup owner" : "Popup member", address, index === 0 ? "统一 openPopup 使用该 owner 地址。" : "layer/string endpoint 继续提供 borrowed capability。")).join("")}</details>`;
   } catch (error) {
     return `<p class="warning-text">runtime 地址读取失败：${escapeHtml(error instanceof Error ? error.message : String(error))}</p>`;
   }
+}
+
+function isPopupExported(project: EditorProject, id: string): boolean {
+  return (
+    project.programmaticPopupIds.has(id) ||
+    project.gameModes.modes.some(
+      (mode) => mode.awardCelebrationPopupId === id,
+    ) ||
+    project.gameModes.transitions.some(
+      (transition) => transition.preludePopupId === id,
+    )
+  );
 }
 
 interface FocusSnapshot {
@@ -543,10 +569,10 @@ export class GameLayoutEditorApp {
       () => {
         if (!this.#selectedPopupId) return;
         this.runTransaction((project) =>
-          setSpinePopupRegistered(
+          setPopupProgrammatic(
             project,
             this.#selectedPopupId!,
-            !project.registeredSpinePopupIds.has(this.#selectedPopupId!),
+            !project.programmaticPopupIds.has(this.#selectedPopupId!),
           ),
         );
         this.renderPopupControls(this.#store.getSnapshot());
@@ -570,11 +596,14 @@ export class GameLayoutEditorApp {
     });
     this.requireElement("[data-play-popup]").addEventListener("click", () => {
       try {
-        const dependency = this.#selectedPopupId
-          ? this.#store
-              .getSnapshot()
-              .project.popupDependencies.get(this.#selectedPopupId)
+        const project = this.#store.getSnapshot().project;
+        const selectedDependency = this.#selectedPopupId
+          ? project.popupDependencies.get(this.#selectedPopupId)
           : undefined;
+        const dependency =
+          selectedDependency && isPopupExported(project, selectedDependency.id)
+            ? selectedDependency
+            : undefined;
         if (dependency?.type === "spine") {
           const prompt = this.requireInput("[data-popup-prompt]").value;
           this.#preview?.playSpinePopup(
@@ -583,6 +612,12 @@ export class GameLayoutEditorApp {
           );
         } else if (dependency?.type === "single-state")
           this.#preview?.playSingleStatePopup(dependency.id);
+        else if (dependency?.type === "award-celebration")
+          this.#preview?.openPopup(dependency.id, {
+            type: "award-celebration",
+            betAmountRaw: Number(this.requireInput("[data-popup-bet]").value),
+            winAmountRaw: Number(this.requireInput("[data-popup-win]").value),
+          });
         else
           this.#preview?.playAwardCelebration({
             betAmountRaw: Number(this.requireInput("[data-popup-bet]").value),
@@ -602,10 +637,7 @@ export class GameLayoutEditorApp {
                 .getSnapshot()
                 .project.popupDependencies.get(this.#selectedPopupId)
             : undefined;
-          if (dependency?.type === "spine")
-            this.#preview?.requestDismissSpinePopup(dependency.id);
-          else if (dependency?.type === "single-state")
-            this.#preview?.requestDismissSingleStatePopup(dependency.id);
+          if (dependency) this.requestPreviewPopupInteraction();
           else this.#preview?.advanceAwardCelebration();
           this.renderPopupControls(this.#store.getSnapshot());
         } catch (error) {
@@ -621,10 +653,7 @@ export class GameLayoutEditorApp {
               .getSnapshot()
               .project.popupDependencies.get(this.#selectedPopupId)
           : undefined;
-        if (dependency?.type === "spine")
-          this.#preview?.dismissSpinePopupImmediately(dependency.id);
-        else if (dependency?.type === "single-state")
-          this.#preview?.dismissSingleStatePopupImmediately(dependency.id);
+        if (dependency) void this.#preview?.closePopup("immediate");
         else this.#preview?.dismissAwardCelebrationImmediately();
         this.renderPopupControls(this.#store.getSnapshot());
       },
@@ -1391,15 +1420,14 @@ export class GameLayoutEditorApp {
     const registerButton = this.requireElement(
       "[data-register-popup]",
     ) as HTMLButtonElement;
-    registerButton.disabled =
-      dependency?.type !== "spine" && dependency?.type !== "single-state";
+    registerButton.disabled = !dependency;
     registerButton.textContent = dependency
-      ? project.registeredSpinePopupIds.has(dependency.id)
-        ? "取消注册独立 Popup"
-        : "注册独立 Popup"
-      : "注册独立 Popup";
+      ? project.programmaticPopupIds.has(dependency.id)
+        ? "取消程序用途"
+        : "设为程序 Popup"
+      : "设为程序 Popup";
     this.requireElement("[data-popup-metadata]").textContent = dependency
-      ? `${dependency.id} · ${dependency.type} · ${dependency.keys.length} files · ${totalBytes} bytes · ${dependency.type === "spine" || dependency.type === "single-state" ? `Scene Layout：${project.registeredSpinePopupIds.has(dependency.id) ? "已注册" : "未注册"}` : `引用：${references.join(", ") || "无"}`}`
+      ? `${dependency.id} · ${dependency.type} · ${dependency.keys.length} files · ${totalBytes} bytes · 程序用途：${project.programmaticPopupIds.has(dependency.id) ? "已保留" : "未保留"} · 直接引用：${references.join(", ") || "无"}`
       : "未导入 Popup dependency。";
     this.requireElement("[data-popup-runtime-addresses]").innerHTML =
       popupRuntimeAddressesMarkup(project, dependency);
@@ -1600,17 +1628,22 @@ export class GameLayoutEditorApp {
     const selectedDependency = this.#selectedPopupId
       ? project.popupDependencies.get(this.#selectedPopupId)
       : undefined;
-    const selectedIndependentPopupReady = Boolean(
-      (selectedDependency?.type === "spine" ||
-        selectedDependency?.type === "single-state") &&
-      project.registeredSpinePopupIds.has(selectedDependency.id),
+    const selectedProgrammaticPopupReady = Boolean(
+      selectedDependency &&
+      (project.programmaticPopupIds.has(selectedDependency.id) ||
+        project.gameModes.modes.some(
+          (candidate) =>
+            candidate.awardCelebrationPopupId === selectedDependency.id,
+        ) ||
+        project.gameModes.transitions.some(
+          (candidate) => candidate.preludePopupId === selectedDependency.id,
+        )),
     );
     const transitioning = Boolean(
       this.#previewModeBusy || modeSnapshot?.phase === "transitioning",
     );
-    const popupActive = Boolean(
-      popupSnapshot && !["idle", "complete"].includes(popupSnapshot.phase),
-    );
+    const activePopupAddress = this.#preview?.getActivePopupAddress?.() ?? null;
+    const popupActive = activePopupAddress !== null;
     const transitionReady = Boolean(
       modeSnapshot &&
       this.#session.previewTransition.phase === "ready" &&
@@ -1634,17 +1667,17 @@ export class GameLayoutEditorApp {
       Boolean(
         transitioning ||
         (!stableMode?.awardCelebrationPopupId &&
-          !selectedIndependentPopupReady),
+          !selectedProgrammaticPopupReady),
       );
     (
       this.requireElement("[data-advance-popup]") as HTMLButtonElement
-    ).disabled = !popupActive && !selectedIndependentPopupReady;
+    ).disabled = !popupActive && !selectedProgrammaticPopupReady;
     (
       this.requireElement("[data-dismiss-popup]") as HTMLButtonElement
-    ).disabled = !popupActive && !selectedIndependentPopupReady;
+    ).disabled = !popupActive && !selectedProgrammaticPopupReady;
     this.requireElement("[data-popup-runtime-status]").textContent =
-      selectedIndependentPopupReady
-        ? `${selectedDependency!.type} popup ${selectedDependency!.id} · 已注册，可独立播放`
+      selectedProgrammaticPopupReady
+        ? `${selectedDependency!.type} popup ${selectedDependency!.id} · ${activePopupAddress ?? "可通过 canonical 地址打开"}`
         : modeSnapshot
           ? `mode ${modeSnapshot.phase}: stable=${modeSnapshot.stableMode} displayed=${modeSnapshot.displayedMode}${modeSnapshot.targetMode ? ` target=${modeSnapshot.targetMode} ${modeSnapshot.transitionPhase}` : ""} · popup=${stableMode?.awardCelebrationPopupId ?? "无"}${popupSnapshot ? ` · ${popupSnapshot.phase}/${popupSnapshot.activeTierId ?? "none"}/${popupSnapshot.activeSegment ?? "none"}` : ""}`
           : `mode=${mode.id} · popup=${mode.awardCelebrationPopupId ?? "无"}`;
@@ -1660,6 +1693,17 @@ export class GameLayoutEditorApp {
 
   private bindWorkspaceActions(project: EditorProject): void {
     const panel = this.requireElement("[data-workspace-panel]");
+    panel
+      .querySelectorAll<HTMLButtonElement>("[data-copy-runtime-address]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          const address = button.dataset.copyRuntimeAddress;
+          if (!address) return;
+          void navigator.clipboard
+            .writeText(address)
+            .catch((error) => this.#store.setExternalError(error));
+        });
+      });
     panel
       .querySelector<HTMLSelectElement>("[data-new-transition-from]")
       ?.addEventListener("change", (event) => {
@@ -1733,17 +1777,6 @@ export class GameLayoutEditorApp {
           if (!transition) throw new Error("所选转场已不存在。");
           setGameModeTransitionKind(draft, transition, value);
         });
-        this.#root
-          .querySelectorAll<HTMLButtonElement>("[data-copy-runtime-address]")
-          .forEach((button) => {
-            button.addEventListener("click", () => {
-              const address = button.dataset.copyRuntimeAddress;
-              if (!address) return;
-              void navigator.clipboard
-                .writeText(address)
-                .catch((error) => this.#store.setExternalError(error));
-            });
-          });
       });
     panel
       .querySelector<HTMLSelectElement>("[data-transition-resource]")

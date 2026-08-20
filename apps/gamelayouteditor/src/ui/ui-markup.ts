@@ -24,3 +24,11 @@ export function statusText(status: "ready" | "incomplete" | "error"): string {
   if (status === "incomplete") return "不完整";
   return "错误";
 }
+
+export function runtimeAddressMarkup(
+  label: string,
+  address: string,
+  hint = "由当前 editor identity 派生，不写入 manifest。",
+): string {
+  return `<section class="inspector-section" data-runtime-address-inspector><h3>${escapeHtml(label)}</h3><p class="path"><code data-runtime-address>${escapeHtml(address)}</code></p><button type="button" data-copy-runtime-address="${escapeHtml(address)}">复制地址</button><p class="hint">${escapeHtml(hint)}</p></section>`;
+}

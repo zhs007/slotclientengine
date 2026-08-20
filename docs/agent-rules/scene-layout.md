@@ -65,6 +65,7 @@
 - once/ended settle、iOS gesture-safe prepare、trusted-click synchronous play 和当前 mode popup lifecycle 属于 rendercore。带 prelude 的任意 edge 必须先完整完成 popup start→loop→end，再继续效果；source mode 在 popup complete 前保持不变。带 prelude 的 video 在 complete 后显式等待第二次 trusted gesture，不得预播、静音或与 Popup end 并行。
 - `requestGameMode()`可为exact edge绑定的普通Spine prelude提交本轮`text | image-string` exact-name最终string；这些值不进入prepare/cache identity，并在Popup complete、失败、取消或runtime destroy后恢复调用前handle状态。shared runtime不解释translation key或金额业务。
 - Scene Layout Popup presentation 在 active prelude 或 award celebration 期间必须由 rendercore 的 host-bound input 接收完整 canvas `pointerdown` 与 window 非 repeat `keydown`：prelude 锁存 end 请求，award celebration 执行 advance，等待中的 video 在第二次 trusted gesture 同步启动。显式 DOM binding 期间不得同时走 Pixi fallback；Popup idle 后必须透传输入，editor 与游戏 app 不复制分派或阶段判断。
+- 三类Popup都可作为顶层programmatic binding保留；Editor只对直接引用或显式程序用途的binding导出并显示canonical owner地址。package runtime的统一open/close必须覆盖program Popup、mode award和transition prelude的单active排他，正常关闭锁存到正式end完成，immediate仅用于显式取消/cleanup。
 - 游戏判断 active award 生命周期只使用 package runtime 的 phase query；完整 award snapshot 只从 `@slotclientengine/rendercore/scene-layout/editor` inspector 读取，inspector复用同一个package runtime且不得进入game facade。
 - shared code 不硬编码 BaseGame/FreeGame/BonusGame、BG/FG、animation/event 名或业务字段。
 

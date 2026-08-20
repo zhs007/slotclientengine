@@ -707,10 +707,11 @@ describe("scene layout manifest", () => {
       (value) => (value.gameModes.modes[1].awardCelebrationPopup = "missing"),
       /unknown popup/,
     );
-    invalid((value) => {
-      delete value.gameModes.modes[0].awardCelebrationPopup;
-      delete value.gameModes.modes[2].awardCelebrationPopup;
-    }, /orphaned/);
+    const programmaticPopup: MutableGameModeManifest =
+      structuredClone(gameModeManifest());
+    delete programmaticPopup.gameModes.modes[0].awardCelebrationPopup;
+    delete programmaticPopup.gameModes.modes[2].awardCelebrationPopup;
+    expect(() => parseSceneLayoutManifest(programmaticPopup)).not.toThrow();
     invalid(
       (value) =>
         (value.popups["base-popup"]!.manifest =
