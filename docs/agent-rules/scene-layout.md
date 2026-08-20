@@ -51,7 +51,7 @@
 - core 不创建 Application、canvas、ticker 或 RAF，不拥有 workspace/authoring session；宿主逐帧调用 `update(deltaSeconds)`。游戏热路径使用 `getStableGameMode()`、`getGameModePhase()` 等标量 query；完整 game-mode/award snapshot 只由 editor inspector 读取。
 - Scene Layout 在组合 Popup/Symbol package 时才把 local effect name 编译为 `<binding>.<local>` route；程序只能播放/停止显式 allowlist route。cue delay 使用宿主 `update(deltaSeconds)` 时钟，stop、切状态、rollback 与 destroy 必须取消未触发播放并清理 owner-scoped instance。
 - rendercore 拥有 strict gameModes、plural symbolPackages、directed transition schema、exact dependency closure 和 production API。
-- scene-layout authored coordinate origin 只允许 `top-left` / `center`；缺失按 `top-left`。原点类型只定义换算基准，不限制坐标符号；两种原点下 authored x/y 都允许任意有限负数。node、art-space Spine transition 与 main reel 的 origin 映射由 rendercore 统一实现，focus rect 继续使用 art 左上角矩形。
+- scene-layout authored coordinate origin 只允许 `top-left` / `center`；缺失按 `top-left`。原点类型只定义换算基准，不限制坐标符号；两种原点下 authored x/y 都允许任意有限负数。node、art-space Spine transition、main reel 与 `runtimeResources` image RenderObject 的 origin 映射由 rendercore 统一实现；center origin 的程序图片以自身中心对齐挂载点，游戏不得手工减半图片尺寸，focus rect 继续使用 art 左上角矩形。
 - `artSize`、`focusRect`、`frameFocusRect` 与 reel placement 不要求互相包含；parser、runtime 与 editor 不因越出 art 自动裁切或修正。reel-enabled mode 的 focus 始终由 main reel art rect 与 authored 四边外扩量派生：center origin 下 artSize 变化导致 main 的 art rect 平移时，focus 必须保持外扩量并同步平移。适配与预览必须呈现实际几何，越界、裁切、不可见或未被背景覆盖的区域由编辑者判断和调整。
 - runtime必须从current snapshot公开authored origin、art/visibleRect九宫格point及authored point↔opaque Anchor；Point/Rect是调用时快照，Anchor延迟解析。不得要求游戏为center origin手工加减半个artSize，也不得把logical visibleRect称为CSS/window/device坐标。
 - canonical layer ref只能由一个strict parser按stable、`node:` legacy、exact area suffix、canonical node顺序解析；unknown/ambiguous/unavailable显式失败，禁止alias或node/resource同名fallback。

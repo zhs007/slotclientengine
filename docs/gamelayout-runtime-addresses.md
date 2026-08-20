@@ -143,7 +143,9 @@ const winNumber = await numberFactory.create({
 ```
 
 image-string factory 强制要求 `text`；其它 kind 禁止传 image-string options。返回对象由调用者 detach/destroy。
-兼容接口 `createRenderObject()` 与 `createImgNumberRenderObject()` 仍可使用。
+兼容接口 `createRenderObject()` 与 `createImgNumberRenderObject()` 仍可使用。程序图片沿用 package
+`coordinateOrigin`：`center` 时图片中心是对象原点，挂到 Spine slot 或其它 anchor 时无需由游戏手工减去
+半个图片尺寸；缺失/`top-left` 时继续以图片左上角为对象原点。
 
 ## Authored loop Spine
 

@@ -76,6 +76,23 @@ tests/reel/render-reel.test.ts:492       vi is not defined
 
 依赖目录起初不存在，使用 frozen lockfile恢复；没有修改 `pnpm-lock.yaml` 或 workspace配置。
 
+## 浏览器验收跟进：center origin slot 对齐
+
+用户同步到 Minecart2 后发现 feature 图片以左上角而不是中心对齐 Spine slot。跟进确认
+authored image node 已按 package `coordinateOrigin` 设置 Sprite anchor，但
+`SceneLayoutRenderObjectFactory` 创建的 `runtimeResources` image 始终保留 Pixi 默认 `(0,0)` anchor。
+
+已于 `2026-08-20T07:15:37Z` 在 rendercore 统一修复：`coordinateOrigin: "center"` 的程序图片使用
+`anchor=(0.5,0.5)`，缺失/`top-left` 继续使用 `(0,0)`。Minecart2 无需写死 `-width/2,-height/2`
+偏移；同一 runtime image 挂到 Spine slot 或其它 anchor 时都遵守 package 坐标合同。
+
+```text
+PASS  pnpm --filter @slotclientengine/rendercore exec vitest run tests/scene-layout/render-object-factory.test.ts tests/scene-layout/runtime.test.ts
+      2 files, 23 tests passed
+PASS  pnpm --filter @slotclientengine/rendercore typecheck
+PASS  git diff --check
+```
+
 ## 待用户完成
 
 按 `docs/minecart2-task232-feature-bar-conveyor-update.md` 同步 packages并修改 Minecart2 后，在真实浏览器验证：

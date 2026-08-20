@@ -196,6 +196,11 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
         `Scene layout runtime image "${name}" size mismatch: expected ${resource.size.width}x${resource.size.height}, actual ${texture.source.width}x${texture.source.height}.`,
       );
     const sprite = new Sprite(texture);
+    sprite.anchor.set(
+      (this.#resource.manifest.coordinateOrigin ?? "top-left") === "center"
+        ? 0.5
+        : 0,
+    );
     sprite.label = `scene-layout-runtime-image:${name}`;
     let object!: RenderObject;
     object = createRenderObject({
