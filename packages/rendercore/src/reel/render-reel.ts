@@ -57,6 +57,7 @@ interface ReelSlot {
 }
 
 interface ActiveContinuousSpin {
+  readonly reels: LogicReels;
   readonly direction: ReelSpinDirection;
   readonly speedSymbolsPerSecond: number;
   readonly initialCodes: ReadonlyMap<number, number>;
@@ -174,7 +175,7 @@ export class RenderReel extends Container {
     );
 
     const spinStrip = createTemporaryReelStrip({
-      reels: this.#reels,
+      reels: options.reels ?? this.#reels,
       x: this.xIndex,
       layout: this.layout,
       plan,
@@ -222,12 +223,13 @@ export class RenderReel extends Container {
         'continuous spin direction must be "forward" or "backward".',
       );
     }
+    const reels = options.reels ?? this.#reels;
     const currentY =
       options.localPhaseY === undefined
         ? this.#spinStrip
           ? this.#spinLocalY
           : this.#currentY
-        : this.#reels.normalizeY(
+        : reels.normalizeY(
             this.xIndex,
             normalizeSafeInteger(options.localPhaseY, "localPhaseY"),
           );
@@ -236,6 +238,7 @@ export class RenderReel extends Container {
     const baseY = Math.floor(currentY);
     this.discardPreparedLanding();
     this.#continuousSpin = {
+      reels,
       direction: options.direction,
       speedSymbolsPerSecond,
       initialCodes: new Map(
@@ -310,7 +313,7 @@ export class RenderReel extends Container {
     const startLocalY = this.#currentY - startY;
     const settlePlan = Object.freeze({ ...plan, startY });
     const spinStrip = createTemporaryReelStrip({
-      reels: this.#reels,
+      reels: options.reels ?? continuous.reels,
       x: this.xIndex,
       layout: this.layout,
       plan: settlePlan,
@@ -1071,7 +1074,7 @@ export class RenderReel extends Container {
         : continuousSpin
           ? (symbolY) =>
               continuousSpin.initialCodes.get(symbolY) ??
-              this.#reels.get(this.xIndex, symbolY)
+              continuousSpin.reels.get(this.xIndex, symbolY)
           : staticVisibleSymbols
             ? (symbolY) => {
                 const visibleY = symbolY - staticBaseY;
@@ -1089,7 +1092,7 @@ export class RenderReel extends Container {
     if (this.#continuousSpin) {
       return (
         this.#continuousSpin.initialCodes.get(symbolY) ??
-        this.#reels.get(this.xIndex, symbolY)
+        this.#continuousSpin.reels.get(this.xIndex, symbolY)
       );
     }
     if (this.#staticVisibleSymbols) {

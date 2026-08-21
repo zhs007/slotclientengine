@@ -119,6 +119,10 @@
   落停由 rendercore 拥有。预转阶段只能使用本地公开轮带；服务器目标只能在 settle 边界注入。
   standard 与 grid-cell reel presentation 必须复用同一 Scene Layout start/settle/cancel ownership；
   standard 不接受 positions/dimming 等 grid-cell-only 参数，也不得复制 app-owned continuous 状态机。
+  Crave legacy grid-cell 兼容入口可由 app 以 x-first `localReels` 二维数组覆盖单次 spin 的公开视觉轮带；
+  覆盖不写回 Symbol package/gameconfig，targetless start 与 response settle 必须传入同一数组，服务器 scene
+  仍只覆盖最终可见落点。rendercore 不为该 raw 数组另建预校验层，非法列数、轮带长度或 symbol code
+  由现有 phase、reel 与 symbol registry 消费边界显式失败；standard profile 必须拒绝该参数。
   每个请求只有一个 continuous transaction，由响应内第一个 landing 消费；同一响应后续 FG/refill
   使用普通 target-aware presentation，不重新等待或预转。失败 cleanup 必须只取消一次并 fail-stop。
 - standard ReelSpin 的跨列 targetless start 可由同步 hook 同帧逐列调用；response landing cadence 留在

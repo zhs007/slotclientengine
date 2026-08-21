@@ -893,10 +893,21 @@ describe("scene layout package runtime", () => {
         index += 1
       )
         runtime.update(0.05);
+      expect(() =>
+        runtime.startMainReelContinuousSpin({
+          localReels: [[0], [1]],
+          random: () => 0,
+        }),
+      ).toThrow(/grid rows 2 exceed reel 0 length 1/);
       const atomicStart = vi.spyOn(RenderReel.prototype, "startContinuous");
       const samples = [0.9, 0, 0, 0];
       let sampleIndex = 0;
+      const localReels = [
+        [1, 1, 0, 0],
+        [0, 0, 1, 1],
+      ] as const;
       runtime.startMainReelContinuousSpin({
+        localReels,
         random: () => samples[sampleIndex++]!,
       });
       runtime.update(0.05);
@@ -904,20 +915,38 @@ describe("scene layout package runtime", () => {
       expect(sampleIndex).toBe(4);
       expect(
         atomicStart.mock.calls.map(([options]) => options.localPhaseY),
-      ).toEqual([1, 0, 0, 1]);
+      ).toEqual([3, 1, 0, 1]);
+      expect(
+        atomicStart.mock.calls.every(
+          ([options]) =>
+            options.reels?.getName() === "scene-layout-local-spin" &&
+            options.reels.getLength(0) === 4,
+        ),
+      ).toBe(true);
       atomicStart.mockRestore();
+      const atomicSettle = vi.spyOn(RenderReel.prototype, "settleContinuous");
       const target = {
         scene: [
           [0, 1],
           [1, 0],
         ],
         localPhaseYs: [0, 0],
+        localReels,
         random: () => 0,
       };
       expect(() => runtime.spinMainReelToScene(target)).toThrow(
         /must be settled through/,
       );
       runtime.settleMainReelContinuousSpin(target);
+      expect(atomicSettle).toHaveBeenCalledTimes(4);
+      expect(
+        atomicSettle.mock.calls.every(
+          ([, options]) =>
+            options?.reels?.getName() === "scene-layout-local-spin" &&
+            options.reels.getLength(1) === 4,
+        ),
+      ).toBe(true);
+      atomicSettle.mockRestore();
       for (
         let index = 0;
         index < 20 && runtime.isMainReelSpinning();
@@ -973,6 +1002,12 @@ describe("scene layout package runtime", () => {
         },
       });
       for (const input of [
+        {
+          localReels: [
+            [0, 1],
+            [1, 0],
+          ],
+        },
         { positions: [{ x: 0, y: 0 }] },
         { random: () => 0 },
         { dimming: {} },

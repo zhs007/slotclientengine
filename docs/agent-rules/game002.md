@@ -87,6 +87,9 @@
 ## 本地视觉 phase
 
 - grid-cell initial spin 和 anticipation selective refill 每次按列重新生成本地视觉 phase。
+- FreeGame 可在 Scene Layout 的 targetless start 与 response settle 同时传入同一份 x-first
+  `localReels` 二维数组，仅覆盖该次 grid-cell spin 的公开视觉轮带；不修改 Crave Symbols package
+  的 gameconfig，BaseGame、plain spin、cascade 与 refill 不自动继承该覆盖。
 - rendercore 对每列完整公开轮带做 partial Fisher-Yates，为同列各格无重复抽取 phase；只洗 phase，不洗 symbol 顺序。
 - game002 注入独立 `spinPhaseRandom`；production 使用 Web Crypto，不消费 server randomNumbers、全局 `Math.random` 或 CN presentation random。
 - 最终服务器 scene 只覆盖本轮临时 strip 落点窗口，不改变方向、速度、timing 或公开轮带边界。

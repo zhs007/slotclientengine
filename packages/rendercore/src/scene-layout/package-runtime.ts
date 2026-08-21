@@ -1,4 +1,4 @@
-import type { LogicReels } from "@slotclientengine/logiccore";
+import { LogicReelsModel, type LogicReels } from "@slotclientengine/logiccore";
 import {
   createAudioRuntime,
   createPixiSoundBackend,
@@ -1254,9 +1254,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         throw new SceneLayoutError(
           "Scene layout current mode has no active symbol package binding.",
         );
-      const reels = binding.resource.gameConfig.getReels(
-        binding.binding.reelSet,
-      );
+      const reels =
+        input.localReels === undefined
+          ? binding.resource.gameConfig.getReels(binding.binding.reelSet)
+          : new LogicReelsModel("scene-layout-local-spin", input.localReels);
       if (input.random !== undefined && typeof input.random !== "function")
         throw new SceneLayoutError(
           "continuous grid-cell phase random must be a function.",
@@ -1272,6 +1273,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
             });
       this.clearMainReelLandingPositions();
       reel.startContinuous({
+        reels,
         direction: profile.direction,
         speedSymbolsPerSecond: profile.timing.speedSymbolsPerSecond,
         startStepMs: profile.timing.startStepMs,
@@ -1291,6 +1293,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       );
     }
     if (
+      input.localReels !== undefined ||
       input.positions !== undefined ||
       input.random !== undefined ||
       input.dimming !== undefined ||
@@ -1384,6 +1387,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       );
     if (typeof input.random !== "function")
       throw new SceneLayoutError("spin random must be a function.");
+    if (profile.kind !== "grid-cell" && input.localReels !== undefined)
+      throw new SceneLayoutError(
+        "localReels requires a grid-cell reel profile.",
+      );
     if (
       input.buildGridCellSpinPlan !== undefined &&
       typeof input.buildGridCellSpinPlan !== "function"
@@ -1396,7 +1403,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       geometry.rows,
       binding.resource,
     );
-    const reels = binding.resource.gameConfig.getReels(binding.binding.reelSet);
+    const reels =
+      input.localReels === undefined
+        ? binding.resource.gameConfig.getReels(binding.binding.reelSet)
+        : new LogicReelsModel("scene-layout-local-spin", input.localReels);
     const phases = validatePhases(input.localPhaseYs, geometry.columns, reels);
     const values = validateValues(
       input.presentationValues,
@@ -1463,6 +1473,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           )
         : createPlan();
       const spinOptions = {
+        reels,
         ...(values ? { targetPresentationValues: values } : {}),
         ...(landingStates ? { targetLandingStates: landingStates } : {}),
       };

@@ -203,6 +203,8 @@ export interface GridCellReelSpinTiming {
 export interface GridCellContinuousSpinOptions {
   readonly direction: ReelSpinDirection;
   readonly speedSymbolsPerSecond: number;
+  /** Optional per-spin public visual reels. */
+  readonly reels?: LogicReels;
   /** Delay between stable position start groups. */
   readonly startStepMs?: number;
   readonly positions?: readonly GridCellSpinPosition[];
@@ -318,6 +320,8 @@ export interface RenderReelOptions {
 }
 
 export interface RenderReelSpinOptions {
+  /** Optional per-spin public visual reels. */
+  readonly reels?: LogicReels;
   readonly targetVisibleSymbols?: readonly number[];
   readonly targetVisiblePresentationValues?: readonly (number | null)[];
   /** Requested immediately after the target occurrence is committed at land. */
@@ -327,6 +331,8 @@ export interface RenderReelSpinOptions {
 export interface RenderReelContinuousSpinOptions {
   readonly direction: ReelSpinDirection;
   readonly speedSymbolsPerSecond: number;
+  /** Optional per-spin public visual reels. */
+  readonly reels?: LogicReels;
   /** Optional integer local public-strip phase used as the atomic start position. */
   readonly localPhaseY?: number;
 }
@@ -698,6 +704,8 @@ export interface GridCellCascadeDropPlan {
 }
 
 export interface RenderGridCellReelSetSpinOptions {
+  /** Optional per-spin public visual reels. */
+  readonly reels?: LogicReels;
   readonly targetPresentationValues?: SymbolPresentationValueMatrix;
   /** X-first state matrix committed independently at each cell landing. */
   readonly targetLandingStates?: readonly (readonly SymbolStateId[])[];
