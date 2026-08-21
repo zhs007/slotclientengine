@@ -1602,6 +1602,21 @@ describe("scene layout package runtime", () => {
       const popupPresentation = runtime.getPopupPresentation();
       expect(popupPresentation.eventMode).toBe("static");
       popupPresentation.emit("pointerdown", {} as never);
+      runtime.requestAdvanceAwardCelebration();
+      runtime.requestAdvanceAwardCelebration();
+      runtime.requestAdvanceAwardCelebration();
+      expect(inspector.getActiveAwardCelebrationSnapshot()).toMatchObject({
+        phase: "awaiting-dismiss",
+        activeTierId: "megawin",
+        displayedAmountRaw: 6000,
+      });
+      popupPresentation.emit("pointerdown", {} as never);
+      expect(inspector.getActiveAwardCelebrationSnapshot()).toMatchObject({
+        phase: "awaiting-dismiss",
+        activeTierId: "megawin",
+        displayedAmountRaw: 6000,
+      });
+      expect(popupPresentation.eventMode).toBe("static");
       runtime.dismissActiveAwardCelebrationImmediately();
       await expect(celebrationComplete).resolves.toBeUndefined();
       expect(popupPresentation.eventMode).toBe("none");

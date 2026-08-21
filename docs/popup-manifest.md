@@ -88,6 +88,10 @@ v1–v5 award 升级时以 layer 所在 tier 为状态权威并移除 layer visi
 
 award 的分段 VNI 收到最终关闭请求时立即从 exact `loopEndTime` 启动非循环 end range，不等待当前 loop 完成；end 和粒子 drain 完成后 Popup 隐藏并进入 complete。tier 切换则立即隐藏 outgoing tier，避免旧 bigwin 在新档背后继续显示。普通 Spine Popup 的三阶段点击边界不受此规则影响。
 
+award 的玩家 advance 同时推进金额和画面档位。bigwin 以前点击时，未达到 bigwin 的获奖直接进入最后实际可达的 base/standard 档并提交最终金额；达到 bigwin 及以上则把共享 `win-amount` 与 active tier 同步跳到 bigwin 阈值。进入 bigwin 后每次点击只跳到下一个实际可达的 superwin/megawin 阈值；没有下一档时提交最终金额。自动播放仍按每档 `countDurationSeconds` 连续计数。
+
+最终金额进入 `awaiting-dismiss` 后保留最后 active tier 的 loop，`requestAdvance()` 幂等且不会播放 end。该 phase 只等待宿主下一次 spin cleanup 或显式 API 关闭，不要求玩家再点击一次；`requestDismiss()` 仍执行正式 end/drain，`dismissImmediately()` 用于 next-spin、失败或 destroy 的同步清理。
+
 ## v7 audio 与 v8 单状态自由弹窗
 
 v7 在两个既有类型上增加严格的 `audio` 合同；v8 保留该合同并新增互斥的 `type="single-state"`。single-state 不包含 `amountFormat`、`awardCelebration` 或 `spine` 主状态机，也没有强制图层；`singleState.layers` 可以为空，所有内容只在唯一的 `active` 状态中显示。其 `audio` 当前必须是 `{ "version": 1, "effects": [], "cues": [] }`，不能借用 award tier 或 Spine segment cue。
@@ -276,7 +280,10 @@ const player = createAwardCelebrationRuntime({ resource });
 await player.init();
 player.start({ betAmountRaw: 100, winAmountRaw: 6000 });
 player.update(deltaSeconds);
+// 玩家点击：金额与 big/super/mega 画面同步跳到下一个可达里程碑。
 player.requestAdvance();
+// 最终档继续 loop；下一次 spin 前由宿主清理。
+player.dismissImmediately();
 
 player.getTextNode("congratulations").setText("恭喜获奖！");
 player.getImageStringNode("bonus-count").setText("8");

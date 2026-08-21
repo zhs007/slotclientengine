@@ -110,8 +110,11 @@ export interface AwardCelebrationRuntime {
   init(): Promise<void>;
   start(input: AwardCelebrationInput): void;
   update(deltaSeconds: number): void;
+  /** Advances to the next reachable amount/tier milestone; final hold is a no-op. */
   requestAdvance(): void;
+  /** Explicitly requests the final hold or its graceful end lifecycle. */
   requestDismiss(): void;
+  /** Immediately clears any active presentation, including the final hold. */
   dismissImmediately(): void;
   getPhase(): AwardCelebrationPhase;
   isPlaying(): boolean;
