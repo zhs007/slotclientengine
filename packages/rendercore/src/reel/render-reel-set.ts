@@ -21,7 +21,10 @@ import {
   restoreRenderObjectLayerMove,
   type RenderObjectLayerController,
 } from "../presentation/render-object-layer.js";
-import { prepareVisibleOccurrenceMotion } from "./visible-occurrence-transfer.js";
+import {
+  createRenderObjectMotionRuntime,
+  type RenderObjectMotionRuntime,
+} from "../presentation/render-object-motion.js";
 import type {
   RenderObject,
   RenderPoint,
@@ -113,16 +116,6 @@ interface PresentationMountedNode {
   readonly ownership: PresentationNodeMountOptions["ownership"];
 }
 
-interface PresentationMotion {
-  readonly node: RenderObject;
-  readonly prepared: ReturnType<typeof prepareVisibleOccurrenceMotion>;
-  readonly signal: AbortSignal;
-  readonly abortListener: () => void;
-  elapsedSeconds: number;
-  resolve(): void;
-  reject(error: Error): void;
-}
-
 export class RenderReelSet extends Container implements ReelSpin {
   readonly reels: readonly RenderReel[];
   readonly #symbolPool: SymbolPlayerPool | null;
@@ -145,7 +138,7 @@ export class RenderReelSet extends Container implements ReelSpin {
   readonly #areaSpinFunction: AreaSpinFunction;
   readonly #spinSessionController: ReelSpinSessionController;
   readonly #presentationDelayWaiters = new Set<PresentationDelayWaiter>();
-  readonly #presentationMotions = new Set<PresentationMotion>();
+  readonly #renderObjectMotionRuntime: RenderObjectMotionRuntime;
   #presentationAbort: AbortController | null = null;
   #presentationFailure: Error | null = null;
   #areaSpinStarted = false;
@@ -200,6 +193,9 @@ export class RenderReelSet extends Container implements ReelSpin {
     };
     this.#areaSpinFunction =
       options.areaSpinFunction ?? defaultAreaSpinFunction;
+    this.#renderObjectMotionRuntime = createRenderObjectMotionRuntime({
+      createError: (message) => new ReelError(message),
+    });
     const bottomLayer = new Container();
     const topLayer = new Container();
     const winLayer = new Container();
@@ -222,6 +218,7 @@ export class RenderReelSet extends Container implements ReelSpin {
           label: `${id} area layer`,
           assertUsable: () => this.assertAlive(),
           createError: (message) => new ReelError(message),
+          motionRuntime: this.#renderObjectMotionRuntime,
         }),
       );
     this.#slotLayer = new Container();
@@ -329,6 +326,7 @@ export class RenderReelSet extends Container implements ReelSpin {
     }
     for (const controller of this.#areaLayerControllers.values())
       controller.detachAll();
+    this.#renderObjectMotionRuntime.destroy();
     this.cancelContinuous();
     this.cancelActiveDrop();
     this.#symbolPool?.destroy();
@@ -497,7 +495,7 @@ export class RenderReelSet extends Container implements ReelSpin {
 
   private updateSlice(deltaSeconds: number, stoppedAxes: number[]): boolean {
     this.updatePresentationDelays(deltaSeconds);
-    this.updatePresentationMotions(deltaSeconds);
+    this.#renderObjectMotionRuntime.update(deltaSeconds);
     const previousElapsedMs = this.#elapsedMs;
     if (this.#spinPlan) {
       this.#elapsedMs = Math.min(
@@ -1286,7 +1284,6 @@ export class RenderReelSet extends Container implements ReelSpin {
     const mounted = new Map<RenderObject, PresentationMountedNode>();
     const cleanupNode = (entry: PresentationMountedNode): void => {
       mounted.delete(entry.node);
-      this.cancelPresentationMotionsForNode(entry.node);
       try {
         entry.target.remove(entry.node);
       } catch (error) {
@@ -1332,9 +1329,9 @@ export class RenderReelSet extends Container implements ReelSpin {
         throw new ReelError("RenderObject is not mounted in this scope.");
       cleanupNode(entry);
     };
-    const move = (
+    const animate = (
       node: RenderObject,
-      options: Parameters<PresentationScopeContext["move"]>[1],
+      options: Parameters<PresentationScopeContext["animate"]>[1],
     ): Promise<void> => {
       const entry = mounted.get(node);
       if (!entry)
@@ -1342,37 +1339,25 @@ export class RenderReelSet extends Container implements ReelSpin {
           new ReelError("Presentation motion node is not mounted."),
         );
       const targetView = getPresentationMountTargetAdapter(entry.target).view;
-      const from = getRenderObjectAdapter(node).view.position;
-      const to = resolveRenderAnchor(options.to, targetView);
-      const prepared = prepareVisibleOccurrenceMotion(
-        {
-          durationMs: options.durationSeconds * 1000,
-          path: options.path ?? { kind: "line" },
-          easing: options.easing ?? { kind: "linear" },
-          stacking: { layer: "above-effects", order: 0 },
-        },
-        { x: from.x, y: from.y },
-        to,
-      );
-      return new Promise<void>((resolve, reject) => {
-        let motion!: PresentationMotion;
-        const abortListener = () => {
-          if (!this.#presentationMotions.delete(motion)) return;
-          reject(new ReelError("Symbol area presentation was interrupted."));
-        };
-        motion = {
-          node,
-          prepared,
-          signal,
-          abortListener,
-          elapsedSeconds: 0,
-          resolve,
-          reject,
-        };
-        signal.addEventListener("abort", abortListener, { once: true });
-        this.#presentationMotions.add(motion);
+      return node.motion.animate({
+        durationSeconds: options.durationSeconds,
+        ...(options.to
+          ? { position: resolveRenderAnchor(options.to, targetView) }
+          : {}),
+        ...(options.opacity === undefined ? {} : { opacity: options.opacity }),
+        ...(options.scale === undefined ? {} : { scale: options.scale }),
+        ...(options.rotationDegrees === undefined
+          ? {}
+          : { rotationDegrees: options.rotationDegrees }),
+        ...(options.path === undefined ? {} : { path: options.path }),
+        ...(options.easing === undefined ? {} : { easing: options.easing }),
+        signal,
       });
     };
+    const move = (
+      node: RenderObject,
+      options: Parameters<PresentationScopeContext["move"]>[1],
+    ): Promise<void> => animate(node, options);
     const context: PresentationScopeContext = Object.freeze({
       delay: (seconds: number) =>
         this.waitForPresentationDelay(seconds, signal),
@@ -1392,6 +1377,7 @@ export class RenderReelSet extends Container implements ReelSpin {
           if (entry) cleanupNode(entry);
         }
       },
+      animate,
       move,
       transfer: async (
         target: Parameters<PresentationScopeContext["transfer"]>[0],
@@ -1525,41 +1511,6 @@ export class RenderReelSet extends Container implements ReelSpin {
       this.#presentationDelayWaiters.delete(waiter);
       waiter.signal.removeEventListener("abort", waiter.abortListener);
       waiter.resolve();
-    }
-  }
-
-  private updatePresentationMotions(deltaSeconds: number): void {
-    for (const motion of [...this.#presentationMotions]) {
-      if (motion.signal.aborted) {
-        this.#presentationMotions.delete(motion);
-        motion.signal.removeEventListener("abort", motion.abortListener);
-        motion.reject(
-          new ReelError("Symbol area presentation was interrupted."),
-        );
-        continue;
-      }
-      motion.elapsedSeconds = Math.min(
-        motion.elapsedSeconds + deltaSeconds,
-        motion.prepared.durationMs / 1000,
-      );
-      motion.node.setPosition(
-        motion.prepared.sample(
-          motion.elapsedSeconds / (motion.prepared.durationMs / 1000),
-        ),
-      );
-      if (motion.elapsedSeconds < motion.prepared.durationMs / 1000) continue;
-      this.#presentationMotions.delete(motion);
-      motion.signal.removeEventListener("abort", motion.abortListener);
-      motion.resolve();
-    }
-  }
-
-  private cancelPresentationMotionsForNode(node: RenderObject): void {
-    for (const motion of [...this.#presentationMotions]) {
-      if (motion.node !== node) continue;
-      this.#presentationMotions.delete(motion);
-      motion.signal.removeEventListener("abort", motion.abortListener);
-      motion.reject(new ReelError("Presentation motion node was unmounted."));
     }
   }
 

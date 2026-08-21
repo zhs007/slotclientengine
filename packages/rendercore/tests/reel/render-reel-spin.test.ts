@@ -338,6 +338,18 @@ describe("RenderReelSet ReelSpin", () => {
           await motion;
           expect(view.position.x).toBeCloseTo(30);
           expect(view.position.y).toBeCloseTo(40);
+          const properties = context.animate(node, {
+            opacity: 0.25,
+            scale: { x: 1.5, y: -0.5 },
+            rotationDegrees: 180,
+            durationSeconds: 0.1,
+          });
+          spin.update(0.1);
+          await properties;
+          expect(view.alpha).toBe(0.25);
+          expect(view.scale.x).toBe(1.5);
+          expect(view.scale.y).toBe(-0.5);
+          expect(view.angle).toBeCloseTo(180);
         },
       );
     });

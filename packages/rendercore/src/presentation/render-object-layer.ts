@@ -10,6 +10,10 @@ import {
   type RenderObject,
   type RenderPoint,
 } from "./render-object.js";
+import type {
+  RenderObjectMotionAttachment,
+  RenderObjectMotionRuntime,
+} from "./render-object-motion.js";
 import {
   registerPresentationMountTarget,
   type PresentationMountTarget,
@@ -50,6 +54,7 @@ export function createRenderObjectLayer(options: {
   readonly label: string;
   readonly assertUsable?: () => void;
   readonly createError?: (message: string) => Error;
+  readonly motionRuntime?: RenderObjectMotionRuntime;
 }): RenderObjectLayerController {
   const mounted = new Map<RenderObject, Container>();
   const createError =
@@ -98,13 +103,22 @@ export function createRenderObjectLayer(options: {
       y: objectView.y,
       zIndex: objectView.zIndex,
     };
+    let motionAttachment: RenderObjectMotionAttachment | null = null;
     try {
       if (position) objectView.position.set(position.x, position.y);
       objectView.zIndex = order;
       target.addChild(objectView);
+      motionAttachment = options.motionRuntime?.attach(node) ?? null;
       mounted.set(node, objectView);
-      layerRegistrations.set(objectView, { target, mounted, node });
+      layerRegistrations.set(objectView, {
+        target,
+        mounted,
+        node,
+        motionRuntime: options.motionRuntime ?? null,
+        motionAttachment,
+      });
     } catch (error) {
+      motionAttachment?.detach();
       if (objectView.parent === target) target.removeChild(objectView);
       objectView.position.set(previous.x, previous.y);
       objectView.zIndex = previous.zIndex;
@@ -125,6 +139,7 @@ export function createRenderObjectLayer(options: {
       const target = resolveView();
       if (objectView.parent === target) {
         target.removeChild(objectView);
+        layerRegistrations.get(objectView)?.motionAttachment?.detach();
         layerRegistrations.delete(objectView);
       }
     },
@@ -178,24 +193,40 @@ export function createRenderObjectLayer(options: {
       });
       const sourceLayer = layerRegistrations.get(objectView);
       sourceLayer?.mounted.delete(sourceLayer.node);
+      sourceLayer?.motionAttachment?.detach();
+      let targetMotionAttachment: RenderObjectMotionAttachment | null = null;
       let committed = false;
       try {
         sourceParent.removeChild(objectView);
         objectView.position.set(targetPosition.x, targetPosition.y);
         objectView.zIndex = order;
         target.addChild(objectView);
+        targetMotionAttachment = options.motionRuntime?.attach(node) ?? null;
         mounted.set(node, objectView);
-        layerRegistrations.set(objectView, { target, mounted, node });
+        layerRegistrations.set(objectView, {
+          target,
+          mounted,
+          node,
+          motionRuntime: options.motionRuntime ?? null,
+          motionAttachment: targetMotionAttachment,
+        });
         committed = true;
       } finally {
         if (!committed) {
+          targetMotionAttachment?.detach();
           objectView.parent?.removeChild(objectView);
           objectView.position.set(previous.x, previous.y);
           objectView.zIndex = previous.zIndex;
           previous.source.addChild(objectView);
           if (sourceLayer) {
+            const restoredMotionAttachment = sourceLayer.motionRuntime?.attach(
+              sourceLayer.node,
+            );
             sourceLayer.mounted.set(sourceLayer.node, objectView);
-            layerRegistrations.set(objectView, sourceLayer);
+            layerRegistrations.set(objectView, {
+              ...sourceLayer,
+              motionAttachment: restoredMotionAttachment ?? null,
+            });
           }
         }
       }
@@ -207,13 +238,20 @@ export function createRenderObjectLayer(options: {
         activeMoves.delete(objectView);
         mounted.delete(node);
         if (objectView.parent !== target) return;
+        layerRegistrations.get(objectView)?.motionAttachment?.detach();
         target.removeChild(objectView);
         objectView.position.set(previous.x, previous.y);
         objectView.zIndex = previous.zIndex;
         previous.source.addChild(objectView);
         if (sourceLayer) {
+          const restoredMotionAttachment = sourceLayer.motionRuntime?.attach(
+            sourceLayer.node,
+          );
           sourceLayer.mounted.set(sourceLayer.node, objectView);
-          layerRegistrations.set(objectView, sourceLayer);
+          layerRegistrations.set(objectView, {
+            ...sourceLayer,
+            motionAttachment: restoredMotionAttachment ?? null,
+          });
         } else {
           layerRegistrations.delete(objectView);
         }
@@ -239,6 +277,7 @@ export function createRenderObjectLayer(options: {
           const movement = activeMoves.get(objectView);
           if (movement) movement.restore();
           else {
+            layerRegistrations.get(objectView)?.motionAttachment?.detach();
             objectView.parent.removeChild(objectView);
             layerRegistrations.delete(objectView);
           }
@@ -252,6 +291,8 @@ interface LayerRegistration {
   readonly target: Container;
   readonly mounted: Map<RenderObject, Container>;
   readonly node: RenderObject;
+  readonly motionRuntime: RenderObjectMotionRuntime | null;
+  readonly motionAttachment: RenderObjectMotionAttachment | null;
 }
 
 const layerRegistrations = new WeakMap<Container, LayerRegistration>();

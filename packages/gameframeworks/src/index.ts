@@ -46,7 +46,10 @@ export {
   formatGameLayoutRuntimeAddress,
   parseGameLayoutRuntimeAddress,
 } from "@slotclientengine/rendercore/scene-layout/core";
-export { attachRenderObjectToSpineSlot } from "@slotclientengine/rendercore";
+export {
+  attachRenderObjectToSpineSlot,
+  createRenderObjectMotionRuntime,
+} from "@slotclientengine/rendercore";
 export type {
   SceneLayoutLayerId,
   SceneLayoutPackageResource,
@@ -59,6 +62,12 @@ export type {
   SceneLayoutNodeRenderLayerPlacement,
   SceneLayoutRenderLayerRef,
   SceneLayoutRenderObject,
+  SceneLayoutRenderObjectMotion,
+  SceneLayoutRenderObjectMotionAxis,
+  SceneLayoutRenderObjectMotionOptions,
+  SceneLayoutRenderObjectMotionSelfAlignment,
+  SceneLayoutRenderObjectMotionTarget,
+  SceneLayoutRenderObjectPropertyAnimation,
   SceneLayoutSpineLoopRenderObject,
   SceneLayoutSpineAnimationPlayOptions,
   SceneLayoutSpineSlotObjectAttachment,
@@ -77,12 +86,22 @@ export type {
 export type {
   AttachRenderObjectToSpineSlotOptions,
   ImgNumberRenderObject,
+  PresentationObjectAnimationOptions,
   RenderObject,
+  RenderObjectFadeOptions,
   RenderObjectLayer,
   RenderObjectLayerAddAtOptions,
   RenderObjectLayerMove,
   RenderObjectLayerMoveOptions,
   RenderObjectPlayOptions,
+  RenderObjectMotion,
+  RenderObjectMotionAnimation,
+  RenderObjectMotionEasing,
+  RenderObjectMotionPath,
+  RenderObjectMotionRuntime,
+  RenderObjectMotionTarget,
+  RenderPoint,
+  RenderScale,
   SpineSlotRenderObjectAttachment,
 } from "@slotclientengine/rendercore";
 export type {

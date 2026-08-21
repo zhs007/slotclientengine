@@ -7,6 +7,11 @@ facade 同时公开 Scene Layout package runtime 与 slot operation coordinator 
 facade re-export `gamelayout:/` runtime address formatter、parser、resolver 与 endpoint/event 类型。
 程序接入见 [`docs/gamelayout-runtime-addresses.md`](../../docs/gamelayout-runtime-addresses.md)。
 
+facade 同时 re-export RenderCore 的 `RenderObject.motion` 合同与 manual-clock runtime factory。受 Scene Layout、
+reel presentation layer 或 exact Spine slot 管理的 owned object 可用 `animate()` 同时缓动位置、透明度、x/y 缩放和
+顺时针角度，也可用 `fadeIn()` / `fadeOut()`；fade 不改变 `visible`。游戏继续用 `await` / `Promise.all()` 编排，
+不需要建立 timeline DSL。settled borrowed Symbol/part 必须先 clone，不能借 motion 绕过 reel owner。
+
 ## Scene-layout 零代码模板
 
 `@slotclientengine/gameframeworks/scene-layout-template` 是 app-facing 的唯一模板入口。

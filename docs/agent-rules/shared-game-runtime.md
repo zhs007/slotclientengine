@@ -80,8 +80,10 @@
 - RenderCore第一层的opaque `RenderObjectLayer`统一area、Scene顶层和exact named node attachment；保留既有add/remove并增加
   layer-local anchor/resolve与原子aligned add，不公开world coordinate、raw Container或Matrix。RenderCore第二层只组合第一层对象：PresentationScope拥有临时node的mount/withNode、明确detach/destroy ownership、repeat
   child scope和interruption cleanup；opaque RenderAnchor负责Symbol/Group/area point/named Scene node坐标转换；SymbolGroup
-  批量state/play必须先完整preflight。generic motion只移动临时RenderObject或owned clone，复用grid-cell transfer的pure
-  path/easing/manual-clock primitive，不取得盘面commit；游戏仍用普通for/await，不新增presentation/motion plan或业务DSL。
+  批量state/play必须先完整preflight。generic motion只作用于受exact owner clock/lease保护的RenderObject或owned clone，
+  在同一manual-clock transaction中支持position、`[0,1]` opacity、x/y scale、clockwise degree rotation及多属性并行；
+  position复用line/cubic path，所有属性共享duration/easing。它不取得盘面commit；游戏仍用普通for/await/Promise.all，
+  不新增presentation/motion plan或业务DSL。
 - RenderObject是Container-backed的opaque public capability，不继承或公开raw Pixi Container。whole Symbol、普通文字及
   symbol value/text part统一使用clone/getAnchor/mount/transfer；part只通过strict `{kind:"value"}`或
   `{kind:"text",name}`取得，不猜唯一node、不在value/text间fallback。盘面Symbol/part为borrowed，只有owned clone可transfer或destroy。
@@ -90,7 +92,7 @@
 - standard ReelSpin、CellSpin与legacy grid-cell统一提供与occurrence解耦的稳定cell-center Anchor；它在rolling/部分落停期间可解析，
   settled后与同格Symbol中心一致。rolling `getSymbol()`、stale occurrence与leased Symbol仍显式失败。
 - game runtime的program Spine/VNI RenderObject可显式`play(...,{loop:true})`；Promise在首圈完成后resolve且循环继续，直到stop、supersede或destroy。
-  detached owned RenderObject只可按exact Spine slot通过opaque attachment绑定，不猜slot/root且不转移destroy ownership。RenderObject局部旋转和缩放只通过finite值的opaque setter设置，旋转使用顺时针度数、负scale表示对应轴镜像；Spine attachment不解释或改写child transform。
+  detached owned RenderObject只可按exact Spine slot通过opaque attachment绑定，不猜slot/root且不转移destroy ownership。RenderObject局部opacity/rotation/scale可通过strict opaque setter或同一motion capability修改；fade只缓动opacity，不改visible，旋转使用不归一化的顺时针度数，负scale表示对应轴镜像。direct setter、新motion、abort、detach、owner interruption与destroy必须确定性cancel/reject旧transaction且不泄漏；Spine attachment不解释或改写child transform。
 - registered RenderObjectLayer可原子移动已挂载RenderObject并保持视觉原点；settled borrowed Symbol临时换层必须在spin、replacement、release或destroy前由reel owner恢复，
   不公开symbols主层、raw Container、world coordinate或直接zIndex。
 - area spin通用factory只装配column order与stagger并调用逐列ReelSpin；不得接受业务predicate、matrix command或state名。

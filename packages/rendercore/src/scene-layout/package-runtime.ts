@@ -14,6 +14,10 @@ import {
   type RenderObjectLayerController,
 } from "../presentation/render-object-layer.js";
 import {
+  createRenderObjectMotionRuntime,
+  type RenderObjectMotionRuntime,
+} from "../presentation/render-object-motion.js";
+import {
   bindPopupInteractionInput,
   createAwardCelebrationRuntime,
   createSingleStatePopupRuntime,
@@ -348,6 +352,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #popupRenderLayerController: RenderObjectLayerController;
   readonly #transitionRenderLayerController: RenderObjectLayerController;
   readonly #reelRenderLayerController: RenderObjectLayerController;
+  readonly #renderObjectMotionRuntime: RenderObjectMotionRuntime;
   readonly #videoBlackoutRoot = new Container();
   readonly #videoBlackout = new Graphics();
   #reel: ReelPresentation | null = null;
@@ -448,6 +453,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       | SceneLayoutRenderObjectFactoryDependencies
       | undefined,
   ) {
+    this.#renderObjectMotionRuntime = createRenderObjectMotionRuntime({
+      createError: (message) => new SceneLayoutError(message),
+    });
     this.#resource = resource;
     this.#presentationOnly = presentationOnly;
     this.#document =
@@ -940,6 +948,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#audio.update(deltaSeconds);
     this.updatePresentationDelayWaiters(deltaSeconds);
     this.#layout.update(deltaSeconds);
+    this.#renderObjectMotionRuntime.update(deltaSeconds);
     this.#renderObjectFactory.update(deltaSeconds);
     if (this.#reel && !this.#hostUpdatesMainReel) {
       const geometry = this.#manifest.reels.main;
@@ -2674,6 +2683,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#reelRenderLayerController.detachAll();
     this.#popupRenderLayerController.detachAll();
     this.#transitionRenderLayerController.detachAll();
+    this.#renderObjectMotionRuntime.destroy();
     this.#reelRenderLayerRoot.parent?.removeChild(this.#reelRenderLayerRoot);
     const retainedReels = new Set(
       [...this.#reelEntries.values()].map((entry) => entry.reel),
@@ -3671,6 +3681,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         if (requireReel) this.requireReel("main");
       },
       createError: (message) => new SceneLayoutError(message),
+      motionRuntime: this.#renderObjectMotionRuntime,
     });
   }
 

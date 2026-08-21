@@ -513,8 +513,55 @@ interface SceneLayoutRenderObjectBase {
   readonly kind: SceneLayoutNodeResourceSpec["kind"];
   /** Resolves the authored node-local origin without exposing its Pixi node. */
   getAnchor(): import("../presentation/index.js").RenderAnchor;
+  /** Animates owner-controlled program properties on the host runtime clock. */
+  readonly motion: SceneLayoutRenderObjectMotion;
   /** Program visibility is ANDed with authored variant/game-mode visibility. */
   setVisible(visible: boolean): void;
+}
+
+export type SceneLayoutRenderObjectMotionAxis = "x" | "y" | "both";
+export type SceneLayoutRenderObjectMotionSelfAlignment =
+  | RenderAlignment
+  | "origin";
+
+export interface SceneLayoutRenderObjectMotionTarget {
+  readonly anchor: import("../presentation/index.js").RenderAnchor;
+  readonly selfAlign: SceneLayoutRenderObjectMotionSelfAlignment;
+  readonly axis: SceneLayoutRenderObjectMotionAxis;
+  readonly offset?: SceneLayoutPoint;
+}
+
+export interface SceneLayoutRenderObjectMotionOptions extends SceneLayoutRenderObjectMotionTarget {
+  readonly durationSeconds: number;
+  readonly easing?: import("../presentation/index.js").RenderObjectMotionEasing;
+  readonly signal?: AbortSignal;
+}
+
+export interface SceneLayoutRenderObjectPropertyAnimation {
+  readonly position?: SceneLayoutRenderObjectMotionTarget;
+  readonly opacity?: number;
+  /** Multipliers applied to the authored placement scale. */
+  readonly scale?: import("../presentation/index.js").RenderScale;
+  /** Clockwise degrees added to the authored placement rotation. */
+  readonly rotationDegrees?: number;
+  readonly durationSeconds: number;
+  readonly easing?: import("../presentation/index.js").RenderObjectMotionEasing;
+  readonly signal?: AbortSignal;
+}
+
+export interface SceneLayoutRenderObjectMotion {
+  getHomeAnchor(): import("../presentation/index.js").RenderAnchor;
+  snap(target: SceneLayoutRenderObjectMotionTarget): void;
+  move(options: SceneLayoutRenderObjectMotionOptions): Promise<void>;
+  animate(animation: SceneLayoutRenderObjectPropertyAnimation): Promise<void>;
+  fadeIn(
+    options: import("../presentation/index.js").RenderObjectFadeOptions,
+  ): Promise<void>;
+  fadeOut(
+    options: import("../presentation/index.js").RenderObjectFadeOptions,
+  ): Promise<void>;
+  cancel(): void;
+  reset(): void;
 }
 
 export interface SceneLayoutImageRenderObject extends SceneLayoutRenderObjectBase {

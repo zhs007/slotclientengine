@@ -4,6 +4,10 @@ import {
   registerRenderObjectCleanup,
   type RenderObject,
 } from "./render-object.js";
+import {
+  attachToRenderObjectMotionOwner,
+  type RenderObjectMotionAttachment,
+} from "./render-object-motion.js";
 
 export interface SpineSlotRenderObjectAttachment {
   detach(): void;
@@ -80,6 +84,17 @@ export function attachRenderObjectToSpineSlot(
       : { followSlotColor: options.followSlotColor }),
   });
 
+  let motionAttachment: RenderObjectMotionAttachment | null = null;
+  try {
+    motionAttachment = attachToRenderObjectMotionOwner(
+      spine,
+      options.child,
+    );
+  } catch (error) {
+    spine.spineSlots.remove(child.view);
+    throw error;
+  }
+
   const active: ActiveAttachment = { detached: false };
   attachedChildren.set(child, active);
   let unregisterSpineCleanup = () => {};
@@ -90,6 +105,7 @@ export function attachRenderObjectToSpineSlot(
     attachedChildren.delete(child);
     unregisterSpineCleanup();
     unregisterChildCleanup();
+    motionAttachment?.detach();
     spine.spineSlots!.remove(child.view);
   };
   unregisterSpineCleanup = registerRenderObjectCleanup(options.spine, detach);

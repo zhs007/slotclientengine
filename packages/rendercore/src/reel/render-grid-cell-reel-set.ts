@@ -29,6 +29,10 @@ import {
   restoreRenderObjectLayerMove,
   type RenderObjectLayerController,
 } from "../presentation/render-object-layer.js";
+import {
+  createRenderObjectMotionRuntime,
+  type RenderObjectMotionRuntime,
+} from "../presentation/render-object-motion.js";
 import { RenderReel } from "./render-reel.js";
 import type {
   GridCellCoordinate,
@@ -195,16 +199,6 @@ interface AreaPresentationMountedNode {
   readonly ownership: PresentationNodeMountOptions["ownership"];
 }
 
-interface AreaPresentationMotion {
-  readonly node: RenderObject;
-  readonly prepared: ReturnType<typeof prepareVisibleOccurrenceMotion>;
-  readonly signal: AbortSignal;
-  readonly abortListener: () => void;
-  elapsedSeconds: number;
-  resolve(): void;
-  reject(error: Error): void;
-}
-
 interface OccurrenceEffectAttachment {
   readonly occurrence: RenderReelVisibleOccurrence;
   readonly generation: number;
@@ -265,7 +259,7 @@ export class RenderGridCellReelSet
   readonly #presentationDelayWaiters = new Set<PresentationDelayWaiter>();
   readonly #areaPresentationDelayWaiters =
     new Set<AreaPresentationDelayWaiter>();
-  readonly #areaPresentationMotions = new Set<AreaPresentationMotion>();
+  readonly #renderObjectMotionRuntime: RenderObjectMotionRuntime;
   readonly #occurrenceEffects = new Set<OccurrenceEffectAttachment>();
   readonly #occurrenceGenerations = new WeakMap<
     RenderReelVisibleOccurrence["symbol"],
@@ -292,6 +286,9 @@ export class RenderGridCellReelSet
   constructor(options: RenderGridCellReelSetOptions) {
     super();
     this.sortableChildren = true;
+    this.#renderObjectMotionRuntime = createRenderObjectMotionRuntime({
+      createError: (message) => new ReelError(message),
+    });
     this.#columns = assertPositiveInteger(options.columns, "columns");
     this.#rows = assertPositiveInteger(options.rows, "rows");
     this.#cellWidth = assertPositiveNumber(options.cellWidth, "cellWidth");
@@ -362,6 +359,7 @@ export class RenderGridCellReelSet
               throw new ReelError("Symbol area runtime was destroyed.");
           },
           createError: (message) => new ReelError(message),
+          motionRuntime: this.#renderObjectMotionRuntime,
         }),
       );
     this.addChild(bottomLayer);
@@ -887,7 +885,7 @@ export class RenderGridCellReelSet
       throw failure;
     }
     this.updateAreaPresentationDelays(deltaSeconds);
-    this.updateAreaPresentationMotions(deltaSeconds);
+    this.#renderObjectMotionRuntime.update(deltaSeconds);
     this.updatePresentationWaiters(deltaSeconds);
     this.updateDirectTransfer(deltaSeconds);
     this.updateScopedTransfer(deltaSeconds);
@@ -2510,7 +2508,6 @@ export class RenderGridCellReelSet
     const mounted = new Map<RenderObject, AreaPresentationMountedNode>();
     const cleanupNode = (entry: AreaPresentationMountedNode): void => {
       mounted.delete(entry.node);
-      this.cancelAreaPresentationMotionsForNode(entry.node);
       try {
         entry.target.remove(entry.node);
       } catch (error) {
@@ -2556,9 +2553,9 @@ export class RenderGridCellReelSet
         throw new ReelError("RenderObject is not mounted in this scope.");
       cleanupNode(entry);
     };
-    const move = (
+    const animate = (
       node: RenderObject,
-      options: Parameters<PresentationScopeContext["move"]>[1],
+      options: Parameters<PresentationScopeContext["animate"]>[1],
     ): Promise<void> => {
       const entry = mounted.get(node);
       if (!entry)
@@ -2566,37 +2563,25 @@ export class RenderGridCellReelSet
           new ReelError("Presentation motion node is not mounted."),
         );
       const targetView = getPresentationMountTargetAdapter(entry.target).view;
-      const from = getRenderObjectAdapter(node).view.position;
-      const to = resolveRenderAnchor(options.to, targetView);
-      const prepared = prepareVisibleOccurrenceMotion(
-        {
-          durationMs: options.durationSeconds * 1000,
-          path: options.path ?? { kind: "line" },
-          easing: options.easing ?? { kind: "linear" },
-          stacking: { layer: "above-effects", order: 0 },
-        },
-        { x: from.x, y: from.y },
-        to,
-      );
-      return new Promise<void>((resolve, reject) => {
-        let motion!: AreaPresentationMotion;
-        const abortListener = () => {
-          if (!this.#areaPresentationMotions.delete(motion)) return;
-          reject(new ReelError("Symbol area presentation was interrupted."));
-        };
-        motion = {
-          node,
-          prepared,
-          signal,
-          abortListener,
-          elapsedSeconds: 0,
-          resolve,
-          reject,
-        };
-        signal.addEventListener("abort", abortListener, { once: true });
-        this.#areaPresentationMotions.add(motion);
+      return node.motion.animate({
+        durationSeconds: options.durationSeconds,
+        ...(options.to
+          ? { position: resolveRenderAnchor(options.to, targetView) }
+          : {}),
+        ...(options.opacity === undefined ? {} : { opacity: options.opacity }),
+        ...(options.scale === undefined ? {} : { scale: options.scale }),
+        ...(options.rotationDegrees === undefined
+          ? {}
+          : { rotationDegrees: options.rotationDegrees }),
+        ...(options.path === undefined ? {} : { path: options.path }),
+        ...(options.easing === undefined ? {} : { easing: options.easing }),
+        signal,
       });
     };
+    const move = (
+      node: RenderObject,
+      options: Parameters<PresentationScopeContext["move"]>[1],
+    ): Promise<void> => animate(node, options);
     const context: PresentationScopeContext = Object.freeze({
       delay: (seconds: number) =>
         this.waitForAreaPresentationDelay(seconds, signal),
@@ -2616,6 +2601,7 @@ export class RenderGridCellReelSet
           if (entry) cleanupNode(entry);
         }
       },
+      animate,
       move,
       transfer: async (
         target: Parameters<PresentationScopeContext["transfer"]>[0],
@@ -2693,45 +2679,11 @@ export class RenderGridCellReelSet
     }
   }
 
-  private updateAreaPresentationMotions(deltaSeconds: number): void {
-    for (const motion of [...this.#areaPresentationMotions]) {
-      if (motion.signal.aborted) {
-        this.#areaPresentationMotions.delete(motion);
-        motion.signal.removeEventListener("abort", motion.abortListener);
-        motion.reject(
-          new ReelError("Symbol area presentation was interrupted."),
-        );
-        continue;
-      }
-      motion.elapsedSeconds = Math.min(
-        motion.elapsedSeconds + deltaSeconds,
-        motion.prepared.durationMs / 1000,
-      );
-      motion.node.setPosition(
-        motion.prepared.sample(
-          motion.elapsedSeconds / (motion.prepared.durationMs / 1000),
-        ),
-      );
-      if (motion.elapsedSeconds < motion.prepared.durationMs / 1000) continue;
-      this.#areaPresentationMotions.delete(motion);
-      motion.signal.removeEventListener("abort", motion.abortListener);
-      motion.resolve();
-    }
-  }
-
-  private cancelAreaPresentationMotionsForNode(node: RenderObject): void {
-    for (const motion of [...this.#areaPresentationMotions]) {
-      if (motion.node !== node) continue;
-      this.#areaPresentationMotions.delete(motion);
-      motion.signal.removeEventListener("abort", motion.abortListener);
-      motion.reject(new ReelError("Presentation motion node was unmounted."));
-    }
-  }
-
   override destroy(options?: Parameters<Container["destroy"]>[0]): void {
     this.interruptAreaPresentation();
     for (const controller of this.#areaLayerControllers.values())
       controller.detachAll();
+    this.#renderObjectMotionRuntime.destroy();
     this.cancelActiveScopedTransfer(
       new ReelError("Visible occurrence transfer runtime was destroyed."),
     );

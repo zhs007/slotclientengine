@@ -3,7 +3,12 @@ import type {
   VisibleOccurrenceMotionPath,
   VisibleOccurrenceTimeEasing,
 } from "../reel/types.js";
-import type { RenderObject, RenderPoint } from "./render-object.js";
+import type {
+  RenderObject,
+  RenderPoint,
+  RenderScale,
+} from "./render-object.js";
+import type { RenderObjectMotionEasing } from "./render-object-motion.js";
 import type { RenderAnchor } from "./render-anchor.js";
 
 export type PresentationNodeOwnership = "detach" | "destroy";
@@ -20,6 +25,16 @@ export interface PresentationMotionOptions {
   readonly durationSeconds: number;
   readonly path?: VisibleOccurrenceMotionPath;
   readonly easing?: VisibleOccurrenceTimeEasing;
+}
+
+export interface PresentationObjectAnimationOptions {
+  readonly to?: RenderAnchor;
+  readonly opacity?: number;
+  readonly scale?: RenderScale;
+  readonly rotationDegrees?: number;
+  readonly durationSeconds: number;
+  readonly path?: VisibleOccurrenceMotionPath;
+  readonly easing?: RenderObjectMotionEasing;
 }
 
 export interface PresentationTransferOptions
@@ -47,6 +62,10 @@ export interface PresentationScopeContext {
     playback: () => Promise<T>,
   ): Promise<T>;
   move(node: RenderObject, options: PresentationMotionOptions): Promise<void>;
+  animate(
+    node: RenderObject,
+    options: PresentationObjectAnimationOptions,
+  ): Promise<void>;
   transfer(
     target: PresentationMountTarget,
     node: RenderObject,

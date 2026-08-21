@@ -170,6 +170,10 @@ export function createSymbolHandle(source: SymbolHandleSource): SymbolHandle {
       assertUsable();
       baseNode.setPosition(position);
     },
+    setOpacity: (opacity: number) => {
+      assertUsable();
+      baseNode.setOpacity(opacity);
+    },
     setRotation: (rotationDegrees: number) => {
       assertUsable();
       baseNode.setRotation(rotationDegrees);
@@ -182,6 +186,7 @@ export function createSymbolHandle(source: SymbolHandleSource): SymbolHandle {
       assertUsable();
       baseNode.setVisible(visible);
     },
+    motion: baseNode.motion,
     play: (name?: string, options?: RenderObjectPlayOptions) => {
       assertUsable();
       return baseNode.play(name, options);
@@ -373,6 +378,10 @@ export function createEmptySymbolHandle(
       assertUsable();
       baseNode.setPosition(position);
     },
+    setOpacity: (opacity: number) => {
+      assertUsable();
+      baseNode.setOpacity(opacity);
+    },
     setRotation: (rotationDegrees: number) => {
       assertUsable();
       baseNode.setRotation(rotationDegrees);
@@ -385,6 +394,7 @@ export function createEmptySymbolHandle(
       assertUsable();
       baseNode.setVisible(visible);
     },
+    motion: baseNode.motion,
     play: () => rejectUnsupported("playback"),
     stop: () => unsupported("playback"),
     destroy: () => {
