@@ -7,6 +7,12 @@ import {
   assertUniqueEditorAssetKeys,
   canonicalExtensionOfEditorAssetKey,
 } from "@slotclientengine/editorresource";
+import { resolvePackagePath } from "@slotclientengine/browserartifactio";
+import {
+  inspectSymbolSpineAtlas,
+  parseSymbolPackageManifest,
+} from "@slotclientengine/rendercore/symbol/data";
+import { parseJson } from "./package-reader.js";
 import type {
   CwebpRunner,
   ImageOptimizationResult,
@@ -65,12 +71,18 @@ export async function optimizeLayoutImages(options: {
 }): Promise<ImageOptimizationResult> {
   const runner = options.runner ?? nodeCwebpRunner;
   const cwebpVersion = await runner.version(options.cwebpExecutable);
+  const preservedLogicalKeys = collectImplicitSymbolAtlasPageKeys(
+    options.source,
+  );
   const keyMapping = new Map<string, string>();
   const convertedKeys = new Set<string>();
   const targetKeys: string[] = [];
   for (const [key, entry] of options.source.sourceEntries) {
     const converted = isConvertible(entry.mediaType, key);
-    const target = converted ? replaceWithWebpExtension(key) : key;
+    const target =
+      converted && !preservedLogicalKeys.has(key)
+        ? replaceWithWebpExtension(key)
+        : key;
     if (converted) convertedKeys.add(key);
     keyMapping.set(key, target);
     targetKeys.push(target);
@@ -132,6 +144,38 @@ export async function optimizeLayoutImages(options: {
   });
 }
 
+function collectImplicitSymbolAtlasPageKeys(
+  source: ValidatedLayoutPackage,
+): ReadonlySet<string> {
+  const roots = [
+    ...(source.manifest.symbolPackage
+      ? [source.manifest.symbolPackage.manifest]
+      : []),
+    ...Object.values(source.manifest.symbolPackages ?? {}).map(
+      (binding) => binding.manifest,
+    ),
+  ];
+  const keys = new Set<string>();
+  for (const root of roots) {
+    const packageBytes = source.files.get(root);
+    if (!packageBytes)
+      throw new Error(`Symbols package manifest 缺失：${root}`);
+    const packageManifest = parseSymbolPackageManifest(
+      parseJson(packageBytes, root),
+    );
+    for (const atlasKey of packageManifest.resources.filter((key) =>
+      key.toLowerCase().endsWith(".atlas"),
+    )) {
+      const atlasBytes = source.files.get(atlasKey);
+      if (!atlasBytes) throw new Error(`Symbols Spine atlas 缺失：${atlasKey}`);
+      const atlasText = decodeUtf8(atlasBytes, atlasKey);
+      for (const page of inspectSymbolSpineAtlas(atlasText).pageNames.slice(1))
+        keys.add(resolvePackagePath(atlasKey, page));
+    }
+  }
+  return keys;
+}
+
 function isConvertible(mediaType: string, key: string): boolean {
   const extension = canonicalExtensionOfEditorAssetKey(key);
   if (mediaType === "image/png") return extension === "png";
@@ -144,6 +188,16 @@ function isConvertible(mediaType: string, key: string): boolean {
 
 function replaceWithWebpExtension(key: string): string {
   return `${key.slice(0, key.lastIndexOf("."))}.webp`;
+}
+
+function decodeUtf8(bytes: Uint8Array, label: string): string {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch (error) {
+    throw new Error(`Symbols Spine atlas 不是合法 UTF-8：${label}`, {
+      cause: error,
+    });
+  }
 }
 
 function assertWebp(bytes: Uint8Array, sourceKey: string): void {

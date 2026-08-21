@@ -161,4 +161,85 @@ describe("image optimizer", () => {
       new TextDecoder().decode(result.assets.get("symbol.atlas")?.bytes),
     ).toBe(atlas);
   });
+
+  it("preserves implicit extra Symbols atlas page keys while encoding their bytes as WebP", async () => {
+    const atlas =
+      "Symbol.png\nsize:1,1\nfilter:Linear,Linear\nregion\nbounds:0,0,1,1\n\nSymbol_2.png\nsize:1,1\nfilter:Linear,Linear\nregion-2\nbounds:0,0,1,1\n";
+    const packageManifest = {
+      version: 1,
+      kind: "symbol-package",
+      id: "symbols-one",
+      cellSize: { width: 1, height: 1 },
+      entrypoints: {
+        gameConfig: "gameconfig.json",
+        symbolManifest: "symbol-manifest.json",
+      },
+      resources: [
+        "Symbol.atlas",
+        "Symbol.png",
+        "Symbol_2.png",
+        "symbol.json",
+      ].sort((left, right) => left.localeCompare(right, "en")),
+    };
+    const base = source({
+      "symbols.package.json": {
+        mediaType: "application/json",
+        bytes: new TextEncoder().encode(JSON.stringify(packageManifest)),
+      },
+      "gameconfig.json": {
+        mediaType: "application/json",
+        bytes: new Uint8Array([1]),
+      },
+      "symbol-manifest.json": {
+        mediaType: "application/json",
+        bytes: new Uint8Array([2]),
+      },
+      "Symbol.atlas": {
+        mediaType: "text/plain",
+        bytes: new TextEncoder().encode(atlas),
+      },
+      "Symbol.png": {
+        mediaType: "image/png",
+        bytes: new Uint8Array([3]),
+      },
+      "Symbol_2.png": {
+        mediaType: "image/png",
+        bytes: new Uint8Array([4]),
+      },
+      "symbol.json": {
+        mediaType: "application/json",
+        bytes: new Uint8Array([5]),
+      },
+    });
+    const result = await optimizeLayoutImages({
+      source: {
+        ...base,
+        manifest: {
+          symbolPackages: {
+            "symbols-one": {
+              manifest: "symbols.package.json",
+            },
+          },
+        } as never,
+        files: new Map([
+          [
+            "symbols.package.json",
+            new TextEncoder().encode(JSON.stringify(packageManifest)),
+          ],
+          ["Symbol.atlas", new TextEncoder().encode(atlas)],
+        ]),
+      },
+      quality: 80,
+      cwebpExecutable: "cwebp",
+      runner: runner(),
+    });
+
+    expect(result.keyMapping.get("Symbol.png")).toBe("Symbol.webp");
+    expect(result.keyMapping.get("Symbol_2.png")).toBe("Symbol_2.png");
+    expect(result.assets.get("Symbol_2.png")).toMatchObject({
+      converted: true,
+      mediaType: "image/webp",
+    });
+    expect(result.assets.has("Symbol_2.webp")).toBe(false);
+  });
 });
