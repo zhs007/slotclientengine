@@ -1061,7 +1061,11 @@ describe("RenderReelSet", () => {
     expect(reelSet.reels[0]!.getSlotBrightness(0)).toBeCloseTo(0.2, 2);
     expect(reelSet.reels[0]!.getSlotBrightness(1)).toBe(1);
     expect(reelSet.reels[1]!.getSlotBrightness(2)).toBeCloseTo(0.2, 2);
+    reelSet.releaseVisibleSymbols([{ x: 0, y: 1 }]);
+    area.setSymbolDimming([{ x: 0, y: 1 }], 0.7);
+    expect(reelSet.reels[0]!.getSlotEmptyDimmingAlpha(1)).toBeCloseTo(0.7, 2);
     area.setSymbolDimming([{ x: 1, y: 1 }], 0.5);
+    expect(reelSet.reels[0]!.getSlotEmptyDimmingAlpha(1)).toBe(0);
     expect(reelSet.reels[0]!.getSlotBrightness(0)).toBe(1);
     expect(reelSet.reels[1]!.getSlotBrightness(1)).toBeCloseTo(0.5, 2);
     area.clearSymbolDimming();

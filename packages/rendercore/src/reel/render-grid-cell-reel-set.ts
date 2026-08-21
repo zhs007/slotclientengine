@@ -1256,10 +1256,12 @@ export class RenderGridCellReelSet
       cell.dimOverlay.y = 0;
       cell.dimOverlay.alpha = 1;
       cell.dimOverlay.renderable = true;
-      cell.reel.setSlotBrightness(0, isDimmed ? 1 - dimmingAlpha : 1);
+      cell.reel.setSlotBrightness(
+        0,
+        isDimmed && cell.occupied ? 1 - dimmingAlpha : 1,
+      );
       for (const row of cell.dimRows) {
-        row.graphic.alpha =
-          row.windowY === 0 && cell.occupied && isDimmed ? dimmingAlpha : 0;
+        row.graphic.alpha = row.windowY === 0 && isDimmed ? dimmingAlpha : 0;
       }
     }
   }
@@ -3450,8 +3452,8 @@ export class RenderGridCellReelSet
         reelX: cell.reel.x,
         reelY: cell.reel.y,
         dimmingOnReel: true,
-        dimmingOverlayRenderable: false,
-        dimmingAlpha: 0,
+        dimmingOverlayRenderable: cell.dimOverlay.renderable,
+        dimmingAlpha: this.getVisibleDimmingAlpha(cell),
         symbolDimmingAlpha: 0,
         requestedState: null,
         resolvedState: null,

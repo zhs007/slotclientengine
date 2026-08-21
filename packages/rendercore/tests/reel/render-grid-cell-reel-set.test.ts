@@ -651,6 +651,15 @@ describe("RenderGridCellReelSet", () => {
     );
     expect(replacement?.dimmingAlpha).toBe(0.4);
     expect(replacement?.symbolDimmingAlpha).toBeCloseTo(0.6, 2);
+    reelSet.releaseVisibleSymbols([{ x: 1, y: 1 }]);
+    reelSet.setSymbolDimming([{ x: 1, y: 1 }], 0.7);
+    expect(
+      reelSet.getSnapshot().cells.find((cell) => cell.x === 1 && cell.y === 1),
+    ).toMatchObject({
+      occupied: false,
+      dimmingOverlayRenderable: true,
+      dimmingAlpha: 0.7,
+    });
     reelSet.clearSymbolDimming();
     expect(
       reelSet.getSnapshot().cells.every((cell) => cell.dimmingAlpha === 0),
