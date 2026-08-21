@@ -111,6 +111,20 @@ describe("responsive art viewport", () => {
     );
   });
 
+  it("accepts a height-constrained layout25 page without floating-point containment failure", () => {
+    const viewport = calculateMaximizedResponsiveArtViewport({
+      pageSize: { width: 100, height: 104 },
+      variants: {
+        landscape: LAYOUT25_LANDSCAPE,
+        portrait: LAYOUT25_PORTRAIT,
+      },
+    });
+
+    expect(viewport.variantId).toBe("portrait");
+    expect(viewport.viewportSize.height).toBe(1435);
+    expect(viewport.focusRectInViewport.height).toBe(1435);
+  });
+
   it("retains the prior square variant in an instance-local policy", () => {
     const variants = {
       landscape: LAYOUT25_LANDSCAPE,

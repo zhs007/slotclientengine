@@ -45,6 +45,17 @@ describe("unbounded maximized focused viewport", () => {
     });
   });
 
+  it("does not underflow the constrained focus axis through floating-point projection", () => {
+    const result = calculateUnboundedMaximizedFocusedViewport({
+      pageSize: { width: 100, height: 104 },
+      focusRect: { x: 499, y: 253, width: 1056, height: 1435 },
+    });
+
+    expect(result.viewportSize.height).toBe(1435);
+    expect(result.viewportSize.width).toBeGreaterThan(1056);
+    expect(result.focusRectInViewport.height).toBe(1435);
+  });
+
   it("rejects non-finite and non-positive geometry", () => {
     expect(() =>
       calculateUnboundedMaximizedFocusedViewport({

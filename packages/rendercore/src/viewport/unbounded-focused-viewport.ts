@@ -30,8 +30,11 @@ export function calculateUnboundedMaximizedFocusedViewport(
     pageSize.height / focusRect.height,
   );
   const viewportSize = freezeSize({
-    width: pageSize.width / focusScale,
-    height: pageSize.height / focusScale,
+    // Division on the constrained axis can underflow the exact authored
+    // focus dimension by one floating-point ULP. Preserve the contain
+    // contract before downstream strict geometry validation.
+    width: Math.max(pageSize.width / focusScale, focusRect.width),
+    height: Math.max(pageSize.height / focusScale, focusRect.height),
   });
   const visibleRect = freezeRect({
     x: focusRect.x + focusRect.width / 2 - viewportSize.width / 2,
