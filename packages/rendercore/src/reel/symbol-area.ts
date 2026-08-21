@@ -20,7 +20,7 @@ export interface SymbolReplacement {
 export interface SymbolArea {
   getSymbol(position: SymbolPosition): SymbolHandle;
   getSymbols(positions: readonly SymbolPosition[]): SymbolGroup;
-  /** Replaces settled symbol dimming so only the selected positions are dimmed. */
+  /** Replaces settled cell dimming so only the selected positions are dimmed, including empty cells. */
   setSymbolDimming(
     dimmedPositions: readonly SymbolPosition[],
     dimmingAlpha: number,

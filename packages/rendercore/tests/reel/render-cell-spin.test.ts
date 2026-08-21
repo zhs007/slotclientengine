@@ -103,6 +103,15 @@ describe("RenderCellSpin", () => {
     expect(brightness.mock.calls.map(([, value]) => value)).toEqual([
       0.25, 1, 1, 0.25,
     ]);
+    spin.replaceSymbol({ x: 1, y: 0 }, { code: -1 });
+    spin.setSymbolDimming([{ x: 1, y: 0 }], 0.7);
+    const emptyDimmingCalls = brightness.mock.calls
+      .slice(-4)
+      .map(([, value]) => value);
+    expect(emptyDimmingCalls[0]).toBe(1);
+    expect(emptyDimmingCalls[1]).toBe(1);
+    expect(emptyDimmingCalls[2]).toBeCloseTo(0.3, 10);
+    expect(emptyDimmingCalls[3]).toBe(1);
     spin.clearSymbolDimming();
     expect(reset).toHaveBeenCalledTimes(4);
     expect(() => spin.setSymbolDimming([], 0.5)).toThrow(/must not be empty/);

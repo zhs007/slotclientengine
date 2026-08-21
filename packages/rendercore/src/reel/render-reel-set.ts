@@ -927,11 +927,7 @@ export class RenderReelSet extends Container implements ReelSpin {
     );
     for (const reel of this.reels)
       for (const slot of reel.getSlotRenderViews()) {
-        if (
-          slot.windowY < 0 ||
-          slot.windowY >= reel.layout.visibleRows ||
-          slot.kind === "empty"
-        )
+        if (slot.windowY < 0 || slot.windowY >= reel.layout.visibleRows)
           continue;
         const isSelected = selected.has(`${reel.xIndex},${slot.windowY}`);
         const isDimmed = selection === "dimmed" ? isSelected : !isSelected;

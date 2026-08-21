@@ -44,6 +44,7 @@ interface ReelSlot {
   readonly container: Container;
   readonly contentLayer: Container;
   readonly emptySymbolLayer: Container;
+  readonly emptyDimmingOverlay: Graphics;
   readonly rollingSprite: Sprite;
   readonly rollingValueLayer: Container;
   readonly rollingValueVisuals: Map<string, ReelRollingValueVisual>;
@@ -520,8 +521,14 @@ export class RenderReel extends Container {
         "slot brightness must be finite and between 0 and 1.",
       );
     const slot = this.#slots[this.getSlotIndex(windowY)]!;
+    const isEmpty =
+      slot.symbol === null &&
+      (slot.kind === "empty" || (slot.code === null && slot.kind === null));
     slot.container.alpha = 1;
-    slot.container.tint = createBrightnessTint(brightness);
+    slot.container.tint = createBrightnessTint(isEmpty ? 1 : brightness);
+    const emptyDimmingAlpha = isEmpty ? 1 - brightness : 0;
+    slot.emptyDimmingOverlay.alpha = emptyDimmingAlpha;
+    slot.emptyDimmingOverlay.renderable = emptyDimmingAlpha > 0;
   }
 
   getSlotBrightness(windowY: number): number {
@@ -530,10 +537,16 @@ export class RenderReel extends Container {
     return ((tint >> 16) & 0xff) / 255;
   }
 
+  getSlotEmptyDimmingAlpha(windowY: number): number {
+    return this.#slots[this.getSlotIndex(windowY)]!.emptyDimmingOverlay.alpha;
+  }
+
   resetSlotBrightness(): void {
     for (const slot of this.#slots) {
       slot.container.alpha = 1;
       slot.container.tint = 0xffffff;
+      slot.emptyDimmingOverlay.alpha = 0;
+      slot.emptyDimmingOverlay.renderable = false;
     }
   }
 
@@ -939,6 +952,14 @@ export class RenderReel extends Container {
       const container = new Container();
       const contentLayer = new Container();
       const emptySymbolLayer = new Container();
+      const emptyDimmingOverlay = new Graphics()
+        .rect(
+          -this.layout.cellWidth / 2,
+          -this.layout.cellHeight / 2,
+          this.layout.cellWidth,
+          this.layout.cellHeight,
+        )
+        .fill({ color: 0x000000, alpha: 1 });
       const rollingSprite = new Sprite(Texture.EMPTY);
       const rollingValueLayer = new Container();
       rollingSprite.anchor.set(0.5);
@@ -946,8 +967,10 @@ export class RenderReel extends Container {
       rollingSprite.renderable = false;
       rollingValueLayer.visible = false;
       rollingValueLayer.renderable = false;
+      emptyDimmingOverlay.alpha = 0;
+      emptyDimmingOverlay.renderable = false;
       contentLayer.addChild(rollingSprite, rollingValueLayer);
-      container.addChild(contentLayer, emptySymbolLayer);
+      container.addChild(contentLayer, emptySymbolLayer, emptyDimmingOverlay);
       const renderOrder = this.#slotRenderOrderOffset + orderIndex;
       container.x = this.getSlotContainerX();
       container.y = this.getSlotContainerY(windowY, 0);
@@ -959,6 +982,7 @@ export class RenderReel extends Container {
         container,
         contentLayer,
         emptySymbolLayer,
+        emptyDimmingOverlay,
         rollingSprite,
         rollingValueLayer,
         rollingValueVisuals: new Map(),
