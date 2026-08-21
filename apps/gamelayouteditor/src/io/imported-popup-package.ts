@@ -3,11 +3,8 @@ import {
   sha256Hex,
 } from "@slotclientengine/browserartifactio";
 import {
-  decodeEditorAssetsMap,
   editorAssetKeyCollisionToken,
-  EDITOR_ASSETS_MAP_PATH,
   normalizeEditorPackageZipEntries,
-  validateEditorAssetsMapPackage,
 } from "@slotclientengine/editorresource";
 import {
   collectPopupPackagePaths,
@@ -71,13 +68,6 @@ export async function importPopupPackageZip(
   const sourceManifest = parsePopupManifest(
     JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(root)),
   );
-  const assetsMap = files.get(EDITOR_ASSETS_MAP_PATH);
-  if (assetsMap)
-    await validateEditorAssetsMapPackage({
-      map: decodeEditorAssetsMap(assetsMap),
-      files,
-      allowControlPaths: ["popup.manifest.json"],
-    });
   const virtual = await resolvePopupPackageFiles({
     manifest: sourceManifest,
     files,

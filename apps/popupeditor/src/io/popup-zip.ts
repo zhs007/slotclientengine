@@ -115,7 +115,8 @@ export async function importPopupZip(
   project.audio = structuredClone(manifest.audio);
   project.resources.clear();
   project.assets.clear();
-  for (const key of Object.keys(map.files)) {
+  for (const key of virtual.keys()) {
+    if (key === ROOT) continue;
     const entry = map.files[key]!;
     project.assets.set(key, {
       key,

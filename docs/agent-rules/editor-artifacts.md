@@ -23,10 +23,10 @@
 
 ## Import boundary
 
-- Game Layout Editor 的 loose-file 上传必须在解析前整批校验 ASCII filename 并统一小写；中文、空格、非法字符或小写化 collision 使整批原子失败。完整 mapped Editor ZIP 在 map/hash/size 验证后迁移 Layout-owned logical filename key：NFKC、ASCII 合法字符小写、ASCII 非法字符转连字符、非 ASCII 转稳定 Unicode code-point token，collision 按稳定顺序加扩展名前 suffix；只结构化改写已知 manifest path 引用，不修改业务 identity 或 atlas page logical name。SymbolsEditor 已验证合法的 owner-owned filename key 在 Game Layout Editor 导入、替换、导出和重导时保持 exact case；与全局其它 owner 形成大小写 alias 时显式失败。
+- Game Layout Editor 的 loose-file 上传必须在解析前整批校验 ASCII filename 并统一小写；中文、空格、非法字符或小写化 collision 使整批原子失败。完整 mapped Editor ZIP 按 map 路由提取 typed manifest 实际引用闭包后迁移 Layout-owned logical filename key：NFKC、ASCII 合法字符小写、ASCII 非法字符转连字符、非 ASCII 转稳定 Unicode code-point token，collision 按稳定顺序加扩展名前 suffix；只结构化改写已知 manifest path 引用，不修改业务 identity 或 atlas page logical name。SymbolsEditor 已验证合法的 owner-owned filename key 在 Game Layout Editor 导入、替换、导出和重导时保持 exact case；与全局其它 owner 形成大小写 alias 时显式失败。
 - legacy path 只允许在导入边界迁移，不进入新 draft 或重新导出。
 - 导入时移除 Finder `__MACOSX/**`、`._*`、`.DS_Store` 和恰好一层包裹真实 root manifest 的外目录。
-- 清理后仍严格验证真实 package path、map、hash、缺失文件和 orphan payload；元数据和包裹目录不得进入 workspace。
+- owner Editor 重开自身项目与 export/build checker 仍严格验证真实 package path、map、hash、缺失文件和 orphan payload；consumer Editor vendoring 已导出的 Symbols、Popup、Image String 或 Scene Layout 时只按 typed manifest 与 assets map 路由物化实际引用闭包，不比较 hash/byteLength/content-addressed filename，也不因未消费的 map entry 或 ZIP entry 阻断导入。实际引用缺失、路径不安全、schema/parser/decoder 不兼容仍在消费点显式失败；元数据和包裹目录不得进入 workspace。
 - ZIP/path/Object URL 的 bounded 安全和 source index 属于 `packages/browserartifactio`，editor app 不复制。
 
 ## Content addressing
@@ -100,7 +100,7 @@
 - mode的主转轮开关属于v2 draft：新Splash关闭、BaseGame和普通新增mode开启；关闭时保留Editor内可恢复的placement草稿但latest export不写placement，已有Symbols binding必须先显式解除。
 - Gamelayout Editor新建/复制/重命名/导出的scene node id只允许lowercase alphanumeric+kebab并禁止`layout|reel|transition|popup`保留名。旧Layout ZIP先按rendercore v1兼容parser读取，再以确定性rename map原子规范化点号/下划线/保留名和collision，结构化改写adaptation background、mode background与nodeStates key，复验后提交并向用户显示完整old→new；不得覆盖或合并node。production parser继续兼容未重导旧包。
 - gamelayouteditor 把 symbols ZIP 和 popup ZIP 当可多项并存的自包含 dependency library；standalone 校验后以 manifest id 生成稳定扁平 root/leaf key 并结构化改写 nested reference。同 id 再上传走替换并保留 binding/placement/order，提交后只 GC 无其它 owner 的旧 key；不同 id 不得互相覆盖 bytes。每个 active variant 只配置明确 binding 和相对 viewport center 的 popup root `x/y/scale`；root order 可编辑且必须高于全部 scene node/main reel。
-- Popup Spine namespace 只改物理 filename key 和 manifest path value，不得改 atlas page logical name 或 texture map key。后续 filename-key 规范化必须把 Popup `resources` object key、resource root value 和 layer/spine reference 作为一个结构化 identity 原子改写，保持 object key exact 等于 compound root。Popup 导入提交前必须用完整 SHA-256 比较其 namespace 前的 atlas/texture 与 Layout 自有 Spine 同名资产；同名不同 bytes 时列出双方 owner、filename 和 hash，用户可原子取消整次导入或明确继续隔离导入。不得自动覆盖、改名，或推断 skeleton JSON 与新版 atlas/texture 的兼容性。
+- Popup Spine namespace 只改物理 filename key 和 manifest path value，不得改 atlas page logical name 或 texture map key。后续 filename-key 规范化必须把 Popup `resources` object key、resource root value、layer/spine reference 与 `audio.effects[].asset.sources[].path` 作为一个结构化 identity 原子改写，保持 object key exact 等于 compound root；Symbols dependency namespace 同样必须结构化改写其 audio source path 并携带对应 bytes。Popup 导入提交前必须用完整 SHA-256 比较其 namespace 前的 atlas/texture 与 Layout 自有 Spine 同名资产；同名不同 bytes 时列出双方 owner、filename 和 hash，用户可原子取消整次导入或明确继续隔离导入。不得自动覆盖、改名，或推断 skeleton JSON 与新版 atlas/texture 的兼容性。
 - gamelayouteditor 的普通 node mode 作用域属于 layout manifest typed contract：缺少 `gameMode` 的旧数据按全局处理，单 mode scope 必须在结构化导入、导出、优化改写和重导中原样保留；不得把它存入 UI session、文件名约定或第二份资源表。scope/variant 隐藏不改变 node 的全局 order 或资源 identity。
 - 三类 Popup 导入 gamelayouteditor 后先进入 dependency library；任一类型都可显式设为程序 Popup并进入顶层`popups`。award-celebration仍只有mode可以直接引用，普通Spine仍可作为transition `preludePopup`，single-state没有直接引用位。没有直接引用且未设程序用途的Popup library item不得导出；地址只对实际导出的binding显示。
 - Symbols dependency 对 gamelayouteditor 是只读 symbol 状态机合同。Layout Editor 可以校验 package id、cell size、display symbols、公开 reel/state capability 和 exact closure，并调用 production preview；不得提供内部图片、Spine/VNI animation、state layer、ImgNumber/value 或 cascade 的编辑控件，也不得重写这些 owner-owned manifest 字段。

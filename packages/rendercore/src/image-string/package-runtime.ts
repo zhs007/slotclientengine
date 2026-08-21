@@ -52,16 +52,28 @@ export async function resolveImageStringPackageFiles(options: {
         : "legacy image-string package 不得混入 assets.map.json。",
     );
   if (!hasMap) {
-    validateImageStringPackageContents({ manifest, files: options.files });
-    return Object.freeze({ manifest, files: options.files, mapped: false });
+    const rootBytes = options.files.get("image-string.manifest.json");
+    if (!rootBytes)
+      throw new ImageStringError(
+        "image-string package 缺少 image-string.manifest.json。",
+      );
+    const exact = new Map<string, Uint8Array>([
+      ["image-string.manifest.json", rootBytes.slice()],
+    ]);
+    for (const key of references) {
+      const bytes = options.files.get(key);
+      if (!bytes) throw new ImageStringError(`image-string asset 缺失：${key}`);
+      exact.set(key, bytes.slice());
+    }
+    validateImageStringPackageContents({ manifest, files: exact });
+    return Object.freeze({ manifest, files: exact, mapped: false });
   }
   const map = decodeEditorAssetsMap(options.files.get(EDITOR_ASSETS_MAP_PATH)!);
-  const resolved = resolveEditorAssetsMapPackage({ map, files: options.files });
-  assertExactImageStringKeys(
-    Object.keys(map.files).sort(),
-    [...references].sort(),
-    "image-string assets map entries",
-  );
+  const resolved = resolveEditorAssetsMapPackage({
+    map,
+    files: options.files,
+    keys: references,
+  });
   const rootBytes = options.files.get("image-string.manifest.json");
   if (!rootBytes)
     throw new ImageStringError(

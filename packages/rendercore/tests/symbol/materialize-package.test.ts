@@ -105,9 +105,28 @@ describe("symbol package materialization", () => {
       rawGameConfig,
       rawSymbolManifest: withAudio,
       assets: new Map([...inputs, ["coin.wav", wav]]),
+      keyPrefix: "pkg-2-s3",
     });
-    expect(mappedAudio.packageManifest.resources).toContain("coin.wav");
-    expect(mappedAudio.assets.get("coin.wav")).toEqual(wav);
+    expect(mappedAudio.packageManifest.resources).toContain(
+      "pkg-2-s3-coin.wav",
+    );
+    expect(mappedAudio.assets.get("pkg-2-s3-coin.wav")).toEqual(wav);
+    expect(
+      (mappedAudio.rawSymbolManifest as any).audio.effects[0].asset,
+    ).toEqual({
+      sources: [{ path: "pkg-2-s3-coin.wav", mediaType: "audio/wav" }],
+    });
+
+    const directAudio = await materializeSymbolPackageContents({
+      packageManifest,
+      rawGameConfig,
+      rawSymbolManifest: withAudio,
+      assets: new Map([...inputs, ["coin.wav", wav]]),
+    });
+    const directAudioPath = (directAudio.rawSymbolManifest as any).audio
+      .effects[0].asset.sources[0].path as string;
+    expect(directAudioPath).toMatch(/^assets\/[a-f0-9]{64}\.wav$/u);
+    expect(directAudio.assets.get(directAudioPath)).toEqual(wav);
   });
 
   it("rewrites named and value image-string owner references with a package prefix", async () => {

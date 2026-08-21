@@ -57,6 +57,7 @@ export function collectMappedPopupAssetKeys(options: {
 export function collectPopupPackagePaths(options: {
   readonly manifest: unknown;
   readonly files: ReadonlyMap<string, Uint8Array>;
+  readonly allowExtraFiles?: boolean;
 }): readonly string[] {
   const manifest = parsePopupManifest(options.manifest);
   const expected = collectMappedPopupAssetKeys({
@@ -78,10 +79,14 @@ export function collectPopupPackagePaths(options: {
     )
     .sort((left, right) => left.localeCompare(right, "en"));
   assertNoPathAliases(actual);
-  if (JSON.stringify(expected) !== JSON.stringify(actual))
+  if (
+    !options.allowExtraFiles &&
+    JSON.stringify(expected) !== JSON.stringify(actual)
+  )
     throw new Error(
       `popup package entries must exactly match transitive closure; expected=${expected.join(",")}, actual=${actual.join(",")}.`,
     );
+  for (const path of expected) requireBytes(options.files, path);
   return expected;
 }
 

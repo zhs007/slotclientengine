@@ -89,6 +89,27 @@ describe("image-string resource", () => {
       files: mapped.files,
     });
     expect(resolved.mapped).toBe(true);
+    const firstEntry = Object.values(mapped.map.files)[0]!;
+    const withUnusedMapEntry = new Map(mapped.files);
+    withUnusedMapEntry.set(
+      "assets.map.json",
+      encoder.encode(
+        JSON.stringify({
+          ...mapped.map,
+          files: {
+            ...mapped.map.files,
+            "unused.png": {
+              ...firstEntry,
+              path: `assets/${"b".repeat(64)}.png`,
+              sha256: "b".repeat(64),
+            },
+          },
+        }),
+      ),
+    );
+    await expect(
+      resolveImageStringPackageFiles({ manifest, files: withUnusedMapEntry }),
+    ).resolves.toMatchObject({ mapped: true });
     const direct = await createImageStringResourceFromResolvedFiles({
       manifest,
       files: resolved.files,

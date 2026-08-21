@@ -16,7 +16,7 @@ import {
   decodeEditorAssetsMap,
   EDITOR_ASSETS_MAP_PATH,
   normalizeEditorPackageZipEntries,
-  validateEditorAssetsMapPackage,
+  resolveEditorAssetsMapPackage,
 } from "@slotclientengine/editorresource";
 import {
   migrateSceneLayoutNodeIds,
@@ -77,14 +77,21 @@ export async function importLayoutZip(
   if (mapBytes) {
     const { normalizeMappedLayoutFilenameKeys } =
       await import("./exported-layout-zip.js");
-    const resolved = await validateEditorAssetsMapPackage({
-      map: decodeEditorAssetsMap(mapBytes),
+    const map = decodeEditorAssetsMap(mapBytes);
+    const resolved = resolveEditorAssetsMapPackage({
+      map,
       files,
-      allowControlPaths: ["layout.manifest.json"],
+      keys: Object.entries(map.files)
+        .filter(([, entry]) => files.has(entry.path))
+        .map(([key]) => key),
     });
     const normalized = await normalizeMappedLayoutFilenameKeys(
       rawManifest,
-      new Map([...resolved].map(([key, entry]) => [key, entry.bytes] as const)),
+      new Map(
+        [...resolved].map(
+          ([key, entry]) => [key, entry.bytes.slice()] as const,
+        ),
+      ),
     );
     collectSceneLayoutPackagePaths({
       manifest: normalized.manifest,

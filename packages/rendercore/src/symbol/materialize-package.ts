@@ -98,6 +98,17 @@ export async function materializeSymbolPackageContents(options: {
     putFile(output, target, canonical);
     mapping.set(path, target);
   }
+  for (const [path, bytes] of options.assets) {
+    if (!/\.(?:mp3|ogg|wav|m4a|mp4|aac|webm)$/iu.test(path)) continue;
+    const extension = basenameFromSourcePath(path).split(".").at(-1);
+    if (!extension) throw new Error(`symbol asset 缺少扩展名：${path}`);
+    const target = allocateContentAddressedPath({
+      digest: await sha256Hex(bytes),
+      extension: extension.toLowerCase(),
+    });
+    putFile(output, target, bytes);
+    mapping.set(path, target);
+  }
   const rawSymbolManifest = upgradeSymbolStateTextureManifest(
     rewriteSymbolManifestPaths(options.rawSymbolManifest, mapping),
   );
@@ -325,6 +336,20 @@ function rewriteSymbolManifestPaths(
   mapping: ReadonlyMap<string, string>,
 ): unknown {
   const manifest = structuredClone(value) as Record<string, unknown>;
+  if (manifest.audio !== undefined) {
+    const audio = record(manifest.audio, "symbol manifest.audio");
+    if (Array.isArray(audio.effects))
+      for (const rawEffect of audio.effects) {
+        const effect = record(rawEffect, "symbol audio effect");
+        const asset = record(effect.asset, "symbol audio effect.asset");
+        if (!Array.isArray(asset.sources)) continue;
+        for (const rawSource of asset.sources) {
+          const source = record(rawSource, "symbol audio effect source");
+          if (typeof source.path === "string")
+            source.path = rewriteRef(source.path, mapping);
+        }
+      }
+  }
   const stateIds = Array.isArray(manifest.states)
     ? manifest.states.filter(
         (state): state is string => typeof state === "string",

@@ -1273,7 +1273,20 @@ export async function resolveSceneLayoutPackageFiles(options: {
         ? "Filename-key scene layout package is missing assets.map.json."
         : "Legacy scene layout package must not contain assets.map.json.",
     );
-  if (!mapped) return options.files;
+  if (!mapped) {
+    const paths = collectSceneLayoutPackagePaths({
+      manifest,
+      files: options.files,
+      allowExtraFiles: true,
+    });
+    const required = new Map<string, Uint8Array>();
+    const rootBytes = options.files.get(ROOT_MANIFEST);
+    if (rootBytes) required.set(ROOT_MANIFEST, rootBytes.slice());
+    for (const path of paths)
+      required.set(path, requireBytes(options.files, path).slice());
+    collectSceneLayoutPackagePaths({ manifest, files: required });
+    return required;
+  }
   return resolveRuntimeMappedSceneLayoutPackageFiles({
     manifest,
     files: options.files,

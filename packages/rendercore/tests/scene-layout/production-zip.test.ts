@@ -112,7 +112,7 @@ describe("scene-layout production ZIP", () => {
     ).rejects.toThrow(/layout.manifest.json is invalid/);
   });
 
-  it("explicitly validates mapped package integrity at the ZIP boundary", async () => {
+  it("routes present mapped payloads without digest or byteLength auditing", async () => {
     const mappedManifest = {
       ...game002LayoutFixture,
       nodes: game002LayoutFixture.nodes.map((node) => ({
@@ -131,6 +131,6 @@ describe("scene-layout production ZIP", () => {
       inspectSceneLayoutPackageZipBytes({
         zipBytes: createDeterministicZip(drifted),
       }),
-    ).rejects.toThrow(/byteLength|SHA-256/);
+    ).resolves.toMatchObject({ manifest: { id: "game002" } });
   });
 });

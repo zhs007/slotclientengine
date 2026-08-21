@@ -76,7 +76,14 @@ export async function resolvePopupPackageFiles(options: {
         ? "filename-key popup package 缺少 assets.map.json。"
         : "legacy popup package 不得混入 assets.map.json。",
     );
-  if (!mapped) return options.files;
+  if (!mapped) {
+    const required = collectPopupPackagePaths({
+      manifest,
+      files: options.files,
+      allowExtraFiles: true,
+    });
+    return exactPopupFiles(options.files, required);
+  }
   const rootBytes = requireBytes(options.files, ROOT);
   const map = decodeEditorAssetsMap(
     requireBytes(options.files, EDITOR_ASSETS_MAP_PATH),
@@ -84,11 +91,20 @@ export async function resolvePopupPackageFiles(options: {
   const resolved = resolveEditorAssetsMapPackage({
     map,
     files: options.files,
+    keys: collectPopupDirectPaths(manifest),
   });
   const virtual = new Map<string, Uint8Array>([[ROOT, rootBytes.slice()]]);
   for (const [key, asset] of resolved) virtual.set(key, asset.bytes.slice());
-  collectPopupPackagePaths({ manifest, files: virtual });
-  return virtual;
+  const required = collectMappedPopupAssetKeys({ manifest, files: virtual });
+  const closure = resolveEditorAssetsMapPackage({
+    map,
+    files: options.files,
+    keys: required,
+  });
+  const exact = new Map<string, Uint8Array>([[ROOT, rootBytes.slice()]]);
+  for (const [key, asset] of closure) exact.set(key, asset.bytes.slice());
+  collectPopupPackagePaths({ manifest, files: exact });
+  return exact;
 }
 
 export function rewritePopupManifestFilenameKeys(options: {
@@ -369,16 +385,35 @@ function rewritePopupManifestWithMapping(
           : {}),
       })),
     }) as T;
+  const audio =
+    "audio" in manifest
+      ? {
+          audio: {
+            ...manifest.audio,
+            effects: manifest.audio.effects.map((effect) => ({
+              ...effect,
+              asset: {
+                sources: effect.asset.sources.map((source) => ({
+                  ...source,
+                  path: requirePopupMapping(mapping, source.path),
+                })),
+              },
+            })),
+          },
+        }
+      : {};
   return parsePopupManifest(
     manifest.type === "spine"
       ? {
           ...manifest,
+          ...audio,
           resources,
           spine: rewriteSpineReferences(manifest.spine, resourceKeys),
         }
       : manifest.type === "single-state"
         ? {
             ...manifest,
+            ...audio,
             resources,
             singleState: {
               layers: manifest.singleState.layers.map((layer) => ({
@@ -396,6 +431,7 @@ function rewritePopupManifestWithMapping(
           }
         : {
             ...manifest,
+            ...audio,
             resources,
             awardCelebration: {
               base: rewriteLayers(manifest.awardCelebration.base),
@@ -405,6 +441,18 @@ function rewritePopupManifestWithMapping(
             },
           },
   );
+}
+
+function exactPopupFiles(
+  files: ReadonlyMap<string, Uint8Array>,
+  required: readonly string[],
+): ReadonlyMap<string, Uint8Array> {
+  const exact = new Map<string, Uint8Array>([
+    [ROOT, requireBytes(files, ROOT).slice()],
+  ]);
+  for (const path of required)
+    exact.set(path, requireBytes(files, path).slice());
+  return exact;
 }
 
 function popupResourceRoot(spec: PopupResourceSpec): string {

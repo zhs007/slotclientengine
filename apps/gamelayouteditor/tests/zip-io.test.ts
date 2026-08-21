@@ -1451,18 +1451,18 @@ describe("layout zip IO", () => {
     imported.destroy();
   });
 
-  it("rejects extra, unsafe and noncanonical entries", async () => {
+  it("ignores unconsumed entries and rejects unsafe or noncanonical paths", async () => {
     const manifest = strToU8(`${JSON.stringify(imageManifest)}\n`);
-    await expect(
-      importLayoutZip(
-        zipSync({
-          "layout.manifest.json": manifest,
-          "assets/bg.png": new Uint8Array([1]),
-          "assets/extra.png": new Uint8Array([2]),
-        }),
-        { decodeImage },
-      ),
-    ).rejects.toThrow(/精确一致/);
+    const imported = await importLayoutZip(
+      zipSync({
+        "layout.manifest.json": manifest,
+        "assets/bg.png": new Uint8Array([1]),
+        "assets/extra.png": new Uint8Array([2]),
+      }),
+      { decodeImage },
+    );
+    expect(imported.assets.has("assets/extra.png")).toBe(false);
+    imported.destroy();
     await expect(
       importLayoutZip(
         zipSync({
@@ -1501,7 +1501,7 @@ describe("layout zip IO", () => {
         }),
         { decodeImage },
       ),
-    ).rejects.toThrow(/精确一致/);
+    ).rejects.toThrow(/missing|缺失|缺少/);
     await expect(
       importLayoutZip(
         zipSync({

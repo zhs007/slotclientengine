@@ -151,10 +151,15 @@ export async function validateEditorAssetsMapPackage(options: {
 export function resolveEditorAssetsMapPackage(options: {
   readonly map: EditorAssetsMapV1 | unknown;
   readonly files: ReadonlyMap<string, Uint8Array>;
+  readonly keys?: readonly string[];
 }): ReadonlyMap<EditorAssetKey, ResolvedEditorAsset> {
   const map = parseEditorAssetsMap(options.map);
   const resolved = new Map<EditorAssetKey, ResolvedEditorAsset>();
-  for (const [key, entry] of Object.entries(map.files)) {
+  const keys = options.keys ?? Object.keys(map.files);
+  assertUniqueEditorAssetKeys(keys);
+  for (const key of keys) {
+    const entry = map.files[key];
+    if (!entry) throw new Error(`assets map 未声明 filename key：${key}`);
     const bytes = options.files.get(entry.path);
     if (!bytes) throw new Error(`assets map payload 缺失：${entry.path}`);
     resolved.set(key, Object.freeze({ key, ...entry, bytes: bytes.slice() }));

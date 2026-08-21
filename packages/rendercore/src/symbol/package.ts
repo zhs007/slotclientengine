@@ -704,18 +704,28 @@ export async function resolveSymbolPackageFiles(options: {
   readonly files: ReadonlyMap<string, Uint8Array>;
 }): Promise<ReadonlyMap<string, Uint8Array>> {
   const manifest = parseSymbolPackageManifest(options.packageManifest);
-  if (!options.files.has(EDITOR_ASSETS_MAP_PATH)) return options.files;
   const controls = [
     "symbols.package.json",
     manifest.entrypoints.gameConfig,
     manifest.entrypoints.symbolManifest,
   ];
+  if (!options.files.has(EDITOR_ASSETS_MAP_PATH)) {
+    const virtual = new Map<string, Uint8Array>();
+    for (const path of collectSymbolPackageEntryPaths(manifest))
+      virtual.set(path, requirePackageBytes(options.files, path).slice());
+    validateSymbolPackageContents({
+      packageManifest: manifest,
+      files: virtual,
+    });
+    return virtual;
+  }
   const map = decodeEditorAssetsMap(
     requirePackageBytes(options.files, EDITOR_ASSETS_MAP_PATH),
   );
   const resolved = resolveEditorAssetsMapPackage({
     map,
     files: options.files,
+    keys: manifest.resources,
   });
   const virtual = new Map<string, Uint8Array>();
   for (const path of controls)

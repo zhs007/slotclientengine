@@ -310,6 +310,23 @@ describe("assets.map.json", () => {
       ]),
     });
     expect(resolved.get("A.png")?.bytes).toEqual(changed);
+    const selected = resolveEditorAssetsMapPackage({
+      map: {
+        ...map,
+        files: {
+          ...map.files,
+          "unused.png": {
+            path: `assets/${"b".repeat(64)}.png`,
+            sha256: "b".repeat(64),
+            mediaType: "image/png",
+            byteLength: PNG.byteLength,
+          },
+        },
+      },
+      files: new Map([[path, changed]]),
+      keys: ["A.png"],
+    });
+    expect([...selected.keys()]).toEqual(["A.png"]);
     expect(() =>
       resolveEditorAssetsMapPackage({ map, files: new Map() }),
     ).toThrow(/缺失/u);

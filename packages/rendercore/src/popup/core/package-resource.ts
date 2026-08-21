@@ -46,7 +46,7 @@ export async function createPopupPackageResourceFromResolvedFiles(options: {
     options.manifest ?? parseJson(requireBytes(options.files, ROOT), ROOT),
   ).manifest;
   const files = options.files;
-  collectPopupPackagePaths({ manifest, files });
+  collectPopupPackagePaths({ manifest, files, allowExtraFiles: true });
   const mapped = collectPopupDirectPaths(manifest).every(
     (reference) => !reference.includes("/"),
   );

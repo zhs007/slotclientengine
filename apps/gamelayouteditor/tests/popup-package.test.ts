@@ -13,6 +13,7 @@ import { describe, expect, it } from "vitest";
 import { Assets, Texture } from "pixi.js";
 import { vi } from "vitest";
 import {
+  loadPopupManifest,
   parsePopupManifest,
   upgradePopupManifestToV5,
 } from "@slotclientengine/rendercore/popup/editor";
@@ -33,6 +34,69 @@ import {
 } from "../../../test-utils/minecart2-fixtures.js";
 
 describe("gamelayout popup dependency", () => {
+  it("namespaces Popup audio sources together with the typed resource closure", async () => {
+    const popup = popupFiles();
+    const latest = structuredClone(
+      loadPopupManifest(
+        JSON.parse(new TextDecoder().decode(popup.get("popup.manifest.json"))),
+      ).manifest,
+    );
+    const withAudio = {
+      ...latest,
+      audio: {
+        version: 1 as const,
+        effects: [
+          {
+            name: "bigwin",
+            asset: {
+              sources: [{ path: "bigwin.mp3", mediaType: "audio/mpeg" }],
+            },
+            playback: "loop" as const,
+            offsetSeconds: 0,
+            voices: {
+              maxConcurrent: 1,
+              overflow: "restart-oldest" as const,
+            },
+            bgm: { kind: "keep" as const },
+          },
+        ],
+        cues: [
+          {
+            effect: "bigwin",
+            target: {
+              kind: "award-tier" as const,
+              tier: "bigwin" as const,
+            },
+          },
+        ],
+      },
+    };
+    popup.set(
+      "popup.manifest.json",
+      new TextEncoder().encode(JSON.stringify(withAudio)),
+    );
+    popup.set("bigwin.mp3", new Uint8Array([0x49, 0x44, 0x33]));
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    try {
+      const imported = await importPopupPackageZip(
+        createDeterministicZip(await mappedPopupFiles(popup)),
+        { decodeImage: async () => ({ width: 1, height: 1 }) },
+      );
+      const audioPath =
+        imported.manifest.audio.effects[0]!.asset.sources[0]!.path;
+      expect(audioPath).toBe("pkg-13-fixture-popup-bigwin.mp3");
+      expect(imported.files.get(audioPath)).toEqual(
+        new Uint8Array([0x49, 0x44, 0x33]),
+      );
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
+  });
+
   it("imports Popup v5 through the default latest normalizer", async () => {
     const load = vi
       .spyOn(Assets, "load")
@@ -226,7 +290,7 @@ describe("gamelayout popup dependency", () => {
     unload.mockRestore();
   });
 
-  it("rejects missing sentinel, orphan entries and unknown manifest fields", async () => {
+  it("rejects missing sentinel and unknown fields while ignoring unconsumed ZIP entries", async () => {
     await expect(
       importPopupPackageZip(
         createDeterministicZip(new Map([["x.txt", new Uint8Array([1])]])),
@@ -234,9 +298,20 @@ describe("gamelayout popup dependency", () => {
     ).rejects.toThrow(/sentinel/);
     const orphan = await mappedPopupFiles(popupFiles());
     orphan.set("orphan.bin", new Uint8Array([1]));
-    await expect(
-      importPopupPackageZip(createDeterministicZip(orphan)),
-    ).rejects.toThrow(/未声明|exactly match/);
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    try {
+      await expect(
+        importPopupPackageZip(createDeterministicZip(orphan), {
+          decodeImage: async () => ({ width: 1, height: 1 }),
+        }),
+      ).resolves.toMatchObject({ manifest: { id: "fixture-popup" } });
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
     const invalid = await mappedPopupFiles(popupFiles());
     const manifest = JSON.parse(
       new TextDecoder().decode(invalid.get("popup.manifest.json")),
@@ -435,6 +510,7 @@ function spinePopupFiles(): Map<string, Uint8Array> {
 function popupMediaType(key: string): string {
   if (key.endsWith(".json")) return "application/json";
   if (key.endsWith(".atlas")) return "text/plain";
+  if (key.endsWith(".mp3")) return "audio/mpeg";
   return "image/png";
 }
 
