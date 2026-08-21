@@ -9,14 +9,16 @@ import {
 import { createTextRenderObject } from "../../src/presentation/text-render-object.js";
 
 describe("RenderObject", () => {
-  it("sets finite local rotation and scale", () => {
+  it("sets strict local opacity, rotation, and scale", () => {
     const view = new Container();
     const object = createRenderObject({
       view,
       destroy: () => view.destroy(),
     });
 
+    object.setOpacity(0.4);
     object.setRotation(90);
+    expect(view.alpha).toBe(0.4);
     expect(view.angle).toBe(90);
     object.setScale({ x: -1, y: 0.5 });
     expect(view.scale.x).toBe(-1);
@@ -27,6 +29,8 @@ describe("RenderObject", () => {
     expect(() => object.setScale({ x: 1, y: Number.NaN })).toThrow(
       /finite factors/,
     );
+    expect(() => object.setOpacity(1.1)).toThrow(/between 0 and 1/);
+    expect(view.alpha).toBe(0.4);
     expect(view.angle).toBe(90);
     expect(view.scale.x).toBe(-1);
     expect(view.scale.y).toBe(0.5);

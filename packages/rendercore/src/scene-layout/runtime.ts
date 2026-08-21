@@ -39,6 +39,10 @@ import type {
   SceneLayoutPointSelector,
   SceneLayoutRenderLayerRef,
   SceneLayoutRenderObject,
+  SceneLayoutRenderObjectMotion,
+  SceneLayoutRenderObjectMotionOptions,
+  SceneLayoutRenderObjectMotionTarget,
+  SceneLayoutRenderObjectPropertyAnimation,
   SceneLayoutSpineAnimationPlayOptions,
   SceneLayoutSpineSlotObjectAttachment,
   SceneLayoutSpineSlotObjectBinding,
@@ -53,6 +57,22 @@ import {
   getRenderObjectAdapter,
   registerRenderObjectCleanup,
 } from "../presentation/render-object.js";
+import {
+  createContainerRenderAnchor,
+  resolveRenderAnchor,
+} from "../presentation/render-anchor.js";
+import {
+  attachRenderObjectMotionAdapter,
+  cancelRenderObjectMotion,
+  createRenderObjectMotionBinding,
+  createRenderObjectMotionController,
+  createRenderObjectMotionRuntime,
+  type RenderObjectMotion,
+  type RenderObjectMotionAttachment,
+  type RenderObjectMotionBinding,
+  type RenderObjectMotionRuntime,
+  type RenderObjectMotionState,
+} from "../presentation/render-object-motion.js";
 
 export interface CreateSceneLayoutRuntimeOptions {
   readonly resource: SceneLayoutResource;
@@ -91,6 +111,14 @@ interface RuntimeNode {
   imageSprite: Sprite | null;
   texture: Texture | null;
   programPlayback: NodeProgramPlayback | null;
+  programMotion: RenderObjectMotion | null;
+  programMotionAttachment: RenderObjectMotionAttachment | null;
+  readonly programMotionBinding: RenderObjectMotionBinding;
+  homeX: number;
+  homeY: number;
+  homeScale: number;
+  homeRotationDegrees: number;
+  motionState: RenderObjectMotionState;
   slotObjectAttachment: ActiveNodeSlotObjectAttachment | null;
 }
 
@@ -114,6 +142,7 @@ interface ActiveNodeSlotObjectAttachment {
   active: boolean;
   readonly bindings: readonly PreparedNodeSlotObjectBinding[];
   readonly unregisterCleanup: (() => void)[];
+  readonly motionAttachments: RenderObjectMotionAttachment[];
   detach(): void;
 }
 
@@ -158,6 +187,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   readonly #authoredNodeActive = new Map<string, boolean>();
   readonly #programNodeVisible = new Map<string, boolean>();
   readonly #renderObjects = new Map<string, SceneLayoutRenderObject>();
+  readonly #renderObjectMotionRuntime: RenderObjectMotionRuntime;
   #manifest: SceneLayoutResource["manifest"];
   #snapshot: SceneLayoutSnapshot | null = null;
   #artSpaceApplied = false;
@@ -166,6 +196,9 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   #destroyed = false;
 
   constructor(options: CreateSceneLayoutRuntimeOptions) {
+    this.#renderObjectMotionRuntime = createRenderObjectMotionRuntime({
+      createError: (message) => new SceneLayoutError(message),
+    });
     this.#resource = options.resource;
     this.#manifest = options.resource.manifest;
     this.#loadTexture = options.loadTexture ?? loadSceneLayoutTexture;
@@ -223,6 +256,14 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
         imageSprite: null,
         texture: null,
         programPlayback: null,
+        programMotion: null,
+        programMotionAttachment: null,
+        programMotionBinding: createRenderObjectMotionBinding(),
+        homeX: 0,
+        homeY: 0,
+        homeScale: 1,
+        homeRotationDegrees: 0,
+        motionState: createNeutralNodeMotionState(),
         slotObjectAttachment: null,
       };
     });
@@ -307,6 +348,11 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   }
 
   private applySnapshot(snapshot: SceneLayoutSnapshot): SceneLayoutSnapshot {
+    const variantChanged =
+      this.#snapshot !== null &&
+      this.#snapshot.variantId !== snapshot.variantId;
+    if (variantChanged)
+      this.resetAllNodeMotions("Scene layout variant was replaced.");
     this.#snapshot = snapshot;
     this.container.position.set(snapshot.worldOffset.x, snapshot.worldOffset.y);
     this.#artMask.clear();
@@ -362,6 +408,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
             previousVariantId: this.#snapshot.variantId,
           })
       : null;
+    this.resetAllNodeMotions("Scene layout geometry was replaced.");
     this.#manifest = manifest;
     for (const [index, spec] of manifest.nodes.entries())
       this.container.setChildIndex(this.requireNode(spec.id).slot, index);
@@ -388,6 +435,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     } catch (error) {
       throw asSceneLayoutError(error);
     }
+    this.#renderObjectMotionRuntime.update(deltaSeconds);
     for (const node of this.#nodes) {
       if (node.player && node.slot.renderable) {
         const result = node.player.update(deltaSeconds);
@@ -503,6 +551,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     if (cached) return cached;
     const common = {
       getAnchor: () => this.getNodeRenderLayer(nodeId).getAnchor(),
+      motion: this.createNodeMotion(nodeId),
       setVisible: (visible: boolean) => {
         this.assertReady();
         if (typeof visible !== "boolean")
@@ -669,6 +718,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       for (const controller of Object.values(controllers))
         controller.detachAll();
     this.releaseNodeResources();
+    this.#renderObjectMotionRuntime.destroy();
     this.#artMask.destroy();
     this.#rootRenderLayerContainer.destroy({ children: false });
     for (const node of this.#nodes) {
@@ -794,6 +844,10 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
 
   private releaseNodeResources(): void {
     for (const node of this.#nodes) {
+      node.programMotionAttachment?.detach();
+      node.programMotionAttachment = null;
+      node.programMotion = null;
+      node.motionState = createNeutralNodeMotionState();
       node.slotObjectAttachment?.detach();
       node.slotObjectAttachment = null;
       this.rejectNodeProgramPlayback(
@@ -865,6 +919,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       label,
       assertUsable: () => this.assertReady(),
       createError: (message) => new SceneLayoutError(message),
+      motionRuntime: this.#renderObjectMotionRuntime,
     });
   }
 
@@ -989,6 +1044,178 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     playback.reject(new SceneLayoutError(message));
   }
 
+  private createNodeMotion(nodeId: string): SceneLayoutRenderObjectMotion {
+    const node = this.requireNode(nodeId);
+    if (node.programMotion)
+      throw new SceneLayoutError(
+        `Scene layout node "${nodeId}" motion was already created.`,
+      );
+    const adapter = Object.freeze({
+      owned: true,
+      assertUsable: () => this.assertReady(),
+      capture: () => node.motionState,
+      apply: (state: RenderObjectMotionState) => {
+        this.assertReady();
+        node.motionState = state;
+        applyNodeProgramTransform(node);
+      },
+    });
+    node.programMotionAttachment = attachRenderObjectMotionAdapter(
+      this.#renderObjectMotionRuntime,
+      node.programMotionBinding,
+      adapter,
+    );
+    const common = createRenderObjectMotionController(
+      node.programMotionBinding,
+      () => this.assertReady(),
+    );
+    node.programMotion = common;
+    const homeAnchor = createContainerRenderAnchor(
+      () => {
+        this.assertReady();
+        return this.container;
+      },
+      () => {
+        this.assertReady();
+        return { x: node.homeX, y: node.homeY };
+      },
+    );
+    return Object.freeze({
+      getHomeAnchor: () => {
+        this.assertReady();
+        return homeAnchor;
+      },
+      snap: (target: SceneLayoutRenderObjectMotionTarget) => {
+        common.snap({ position: this.resolveNodeMotionTarget(node, target) });
+      },
+      move: (options: SceneLayoutRenderObjectMotionOptions) =>
+        common.animate({
+          position: this.resolveNodeMotionTarget(node, options),
+          durationSeconds: options.durationSeconds,
+          ...(options.easing ? { easing: options.easing } : {}),
+          ...(options.signal ? { signal: options.signal } : {}),
+        }),
+      animate: (animation: SceneLayoutRenderObjectPropertyAnimation) => {
+        if (!animation || typeof animation !== "object")
+          return Promise.reject(
+            new SceneLayoutError(
+              `Scene layout node "${nodeId}" motion animation is required.`,
+            ),
+          );
+        let position: SceneLayoutPoint | undefined;
+        try {
+          position = animation.position
+            ? this.resolveNodeMotionTarget(node, animation.position, {
+                scale: animation.scale ?? node.motionState.scale,
+                rotationDegrees:
+                  animation.rotationDegrees ?? node.motionState.rotationDegrees,
+              })
+            : undefined;
+        } catch (error) {
+          return Promise.reject(asSceneLayoutError(error));
+        }
+        return common.animate({
+          durationSeconds: animation.durationSeconds,
+          ...(position ? { position } : {}),
+          ...(animation.opacity === undefined
+            ? {}
+            : { opacity: animation.opacity }),
+          ...(animation.scale === undefined ? {} : { scale: animation.scale }),
+          ...(animation.rotationDegrees === undefined
+            ? {}
+            : { rotationDegrees: animation.rotationDegrees }),
+          ...(animation.easing ? { easing: animation.easing } : {}),
+          ...(animation.signal ? { signal: animation.signal } : {}),
+        });
+      },
+      fadeIn: (
+        options: import("../presentation/index.js").RenderObjectFadeOptions,
+      ) => common.fadeIn(options),
+      fadeOut: (
+        options: import("../presentation/index.js").RenderObjectFadeOptions,
+      ) => common.fadeOut(options),
+      cancel: () => common.cancel(),
+      reset: () => {
+        cancelRenderObjectMotion(
+          node.programMotionBinding,
+          `Scene layout node "${nodeId}" motion was reset.`,
+        );
+        common.snap(createNeutralNodeMotionState());
+      },
+    });
+  }
+
+  private resolveNodeMotionTarget(
+    node: RuntimeNode,
+    target: SceneLayoutRenderObjectMotionTarget,
+    finalTransform: Pick<
+      RenderObjectMotionState,
+      "scale" | "rotationDegrees"
+    > = node.motionState,
+  ): SceneLayoutPoint {
+    if (!target || typeof target !== "object")
+      throw new SceneLayoutError(
+        `Scene layout node "${node.spec.id}" motion target is invalid.`,
+      );
+    if (target.axis !== "x" && target.axis !== "y" && target.axis !== "both")
+      throw new SceneLayoutError(
+        `Unknown scene layout node motion axis "${String(target.axis)}".`,
+      );
+    const bounds = node.slot.getLocalBounds();
+    if (
+      !Number.isFinite(bounds.x) ||
+      !Number.isFinite(bounds.y) ||
+      !Number.isFinite(bounds.width) ||
+      !Number.isFinite(bounds.height) ||
+      bounds.width <= 0 ||
+      bounds.height <= 0
+    )
+      throw new SceneLayoutError(
+        `Scene layout node "${node.spec.id}" has no finite positive visual bounds for motion.`,
+      );
+    const selfLocal =
+      target.selfAlign === "origin"
+        ? Object.freeze({ x: 0, y: 0 })
+        : alignedPoint(bounds, target.selfAlign);
+    const selfRoot = this.container.toLocal(node.slot.toGlobal(selfLocal));
+    const destination = resolveRenderAnchor(target.anchor, this.container);
+    const offset = target.offset ?? { x: 0, y: 0 };
+    assertFiniteSceneLayoutPoint(offset, "scene layout node motion offset");
+    const desiredRoot = {
+      x: target.axis === "y" ? selfRoot.x : destination.x + offset.x,
+      y: target.axis === "x" ? selfRoot.y : destination.y + offset.y,
+    };
+    const angleRadians =
+      ((node.homeRotationDegrees + finalTransform.rotationDegrees) * Math.PI) /
+      180;
+    const cos = Math.cos(angleRadians);
+    const sin = Math.sin(angleRadians);
+    const localX =
+      (selfLocal.x - node.slot.pivot.x) *
+      node.homeScale *
+      finalTransform.scale.x;
+    const localY =
+      (selfLocal.y - node.slot.pivot.y) *
+      node.homeScale *
+      finalTransform.scale.y;
+    const finalOffset = {
+      x: localX * cos - localY * sin,
+      y: localX * sin + localY * cos,
+    };
+    return Object.freeze({
+      x: desiredRoot.x - node.homeX - finalOffset.x,
+      y: desiredRoot.y - node.homeY - finalOffset.y,
+    });
+  }
+
+  private resetAllNodeMotions(message: string): void {
+    for (const node of this.#nodes) {
+      cancelRenderObjectMotion(node.programMotionBinding, message);
+      node.motionState = createNeutralNodeMotionState();
+      applyNodeProgramTransform(node);
+    }
+  }
+
   private bindNodeSlotObjects(
     nodeId: string,
     bindings: readonly SceneLayoutSpineSlotObjectBinding[],
@@ -1074,13 +1301,25 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     };
 
     const oldBindings = previous?.bindings ?? [];
+    previous?.motionAttachments.splice(0).forEach((item) => item.detach());
     detachBindings(oldBindings);
+    const preparedMotionAttachments: RenderObjectMotionAttachment[] = [];
     try {
       attachBindings(prepared);
+      for (const binding of prepared)
+        preparedMotionAttachments.push(
+          this.#renderObjectMotionRuntime.attach(binding.object),
+        );
     } catch (error) {
+      preparedMotionAttachments.splice(0).forEach((item) => item.detach());
       detachBindings(prepared);
       try {
         attachBindings(oldBindings);
+        if (previous)
+          for (const binding of oldBindings)
+            previous.motionAttachments.push(
+              this.#renderObjectMotionRuntime.attach(binding.object),
+            );
       } catch (rollbackError) {
         previous?.unregisterCleanup.splice(0).forEach((dispose) => dispose());
         if (previous) previous.active = false;
@@ -1098,10 +1337,12 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       active: true,
       bindings: Object.freeze(prepared),
       unregisterCleanup: [],
+      motionAttachments: preparedMotionAttachments,
       detach: () => {
         if (!active.active) return;
         active.active = false;
         active.unregisterCleanup.splice(0).forEach((dispose) => dispose());
+        active.motionAttachments.splice(0).forEach((item) => item.detach());
         detachBindings(active.bindings);
         if (node.slotObjectAttachment === active)
           node.slotObjectAttachment = null;
@@ -1266,12 +1507,33 @@ function applyNodePlacementTransform(
     placement,
   );
   node.slot.pivot.set(pivot.x, pivot.y);
-  node.slot.scale.set(placement.scale);
-  node.slot.angle = placement.rotation ?? 0;
+  node.homeX = base.x + pivot.x * placement.scale;
+  node.homeY = base.y + pivot.y * placement.scale;
+  node.homeScale = placement.scale;
+  node.homeRotationDegrees = placement.rotation ?? 0;
+  applyNodeProgramTransform(node);
+}
+
+function applyNodeProgramTransform(node: RuntimeNode): void {
   node.slot.position.set(
-    base.x + pivot.x * placement.scale,
-    base.y + pivot.y * placement.scale,
+    node.homeX + node.motionState.position.x,
+    node.homeY + node.motionState.position.y,
   );
+  node.slot.alpha = node.motionState.opacity;
+  node.slot.scale.set(
+    node.homeScale * node.motionState.scale.x,
+    node.homeScale * node.motionState.scale.y,
+  );
+  node.slot.angle = node.homeRotationDegrees + node.motionState.rotationDegrees;
+}
+
+function createNeutralNodeMotionState(): RenderObjectMotionState {
+  return Object.freeze({
+    position: Object.freeze({ x: 0, y: 0 }),
+    opacity: 1,
+    scale: Object.freeze({ x: 1, y: 1 }),
+    rotationDegrees: 0,
+  });
 }
 
 function resolveNodePlacementPivot(

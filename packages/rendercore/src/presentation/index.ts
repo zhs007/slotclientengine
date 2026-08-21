@@ -14,6 +14,24 @@ export type {
   RenderPoint,
   RenderScale,
 } from "./render-object.js";
+export {
+  createRenderObjectMotionRuntime,
+  prepareRenderObjectMotionEasing,
+  prepareRenderObjectPositionMotion,
+} from "./render-object-motion.js";
+export type {
+  PreparedRenderObjectPositionMotion,
+  RenderObjectFadeOptions,
+  RenderObjectMotion,
+  RenderObjectMotionAnimation,
+  RenderObjectMotionAttachment,
+  RenderObjectMotionEasing,
+  RenderObjectMotionPath,
+  RenderObjectMotionRuntime,
+  RenderObjectMotionRuntimeOptions,
+  RenderObjectMotionState,
+  RenderObjectMotionTarget,
+} from "./render-object-motion.js";
 export { attachRenderObjectToSpineSlot } from "./spine-slot-attachment.js";
 export type {
   AttachRenderObjectToSpineSlotOptions,
@@ -30,6 +48,7 @@ export type {
   ImgNumberRenderObject,
 } from "./imgnumber-render-object.js";
 export type {
+  PresentationObjectAnimationOptions,
   PresentationMotionOptions,
   PresentationMountTarget,
   PresentationNodeMountOptions,

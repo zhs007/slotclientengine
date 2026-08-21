@@ -166,6 +166,25 @@ line/cubic path与easing sampler，并由同一manual runtime clock推进；gene
 PresentationScope接受任意已登记的`RenderObjectLayer`，因此area scope也可临时挂到Scene/node layer；该对象仍受area spin
 打断。永久Scene attachment使用第一层`add/addAt/remove`并由caller负责最终destroy。
 
+所有挂入受管 `RenderObjectLayer` 或 exact Spine slot 的 owned `RenderObject` 都有同一套
+manual-clock `motion`。`animate()` 可在一个命令中并行缓动 position、`[0,1]` opacity、x/y scale
+和顺时针度数 rotation；position 可选 line/cubic path，所有属性共享 duration/easing。`fadeIn()` / `fadeOut()`
+只改 opacity，不改 `visible`、不自动卸载对象；负 scale 保留镜像语义，rotation 不归一化，因此可显式写多圈目标。
+direct setter、新 motion、abort、detach、scope/spin interruption 和 destroy 都会确定性结束旧 Promise。borrowed settled
+Symbol/part 仍不能绕过 owner 做任意属性 motion，应先取得 owned clone。authored Scene Layout object 也公开相同属性能力，
+其位置/scale/rotation 分别叠加到 manifest home，opacity 只乘在 authored slot 上；variant/geometry replacement 会取消并复位。
+
+```ts
+await node.motion.animate({
+  position: { x: 320, y: 180 },
+  opacity: 0.25,
+  scale: { x: 1.2, y: -1.2 },
+  rotationDegrees: 720,
+  durationSeconds: 0.4,
+});
+await node.motion.fadeIn({ durationSeconds: 0.15 });
+```
+
 `ReelArea.resolveAnchor(anchor)`可在确有数值计算需求时，把任意有效RenderCore Anchor只读解析为该area本地`RenderPoint`；
 它不开放world coordinate或raw target Container。只为挂载/移动时应继续直接使用`mount/withNode/move/transfer`。完整合同见
 [`docs/rendercore-coordinate-and-anchor-api.md`](../../docs/rendercore-coordinate-and-anchor-api.md)。

@@ -19,6 +19,10 @@ import type {
   GridCellEffectController,
   GridCellEffectSnapshot,
 } from "./grid-cell-effect-player.js";
+import type {
+  RenderObjectMotionEasing,
+  RenderObjectMotionPath,
+} from "../presentation/render-object-motion.js";
 
 export type ReelSymbolKind = "textured" | "empty";
 export type ReelSpinDirection = "forward" | "backward";
@@ -380,26 +384,11 @@ export interface VisibleOccurrencePoint {
   readonly y: number;
 }
 
-export type VisibleOccurrenceMotionPath =
-  | { readonly kind: "line" }
-  | {
-      readonly kind: "cubic-bezier-path";
-      readonly segments: readonly {
-        readonly control1: VisibleOccurrencePoint;
-        readonly control2: VisibleOccurrencePoint;
-        readonly end: VisibleOccurrencePoint;
-      }[];
-    };
+/** @deprecated Use RenderObjectMotionPath from the presentation API. */
+export type VisibleOccurrenceMotionPath = RenderObjectMotionPath;
 
-export type VisibleOccurrenceTimeEasing =
-  | { readonly kind: "linear" }
-  | {
-      readonly kind: "cubic-bezier";
-      readonly x1: number;
-      readonly y1: number;
-      readonly x2: number;
-      readonly y2: number;
-    };
+/** @deprecated Use RenderObjectMotionEasing from the presentation API. */
+export type VisibleOccurrenceTimeEasing = RenderObjectMotionEasing;
 
 export interface VisibleOccurrenceStacking {
   readonly layer: "above-symbols" | "above-effects";

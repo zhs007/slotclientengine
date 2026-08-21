@@ -4,6 +4,14 @@ import {
   createContainerRenderAnchor,
   type RenderAnchor,
 } from "./render-anchor.js";
+import {
+  cancelRenderObjectMotion,
+  createRenderObjectMotionBinding,
+  createRenderObjectMotionController,
+  type RenderObjectMotion,
+  type RenderObjectMotionBinding,
+  type RenderObjectMotionPropertyAdapter,
+} from "./render-object-motion.js";
 
 export interface RenderObjectPlayOptions {
   readonly signal?: AbortSignal;
@@ -23,11 +31,14 @@ export interface RenderScale {
 
 export interface RenderObject {
   setPosition(position: RenderPoint): void;
+  /** Sets local opacity in the inclusive 0..1 range. */
+  setOpacity(opacity: number): void;
   /** Sets the object's local clockwise rotation in degrees. */
   setRotation(rotationDegrees: number): void;
   /** Sets the object's local scale; negative factors mirror that axis. */
   setScale(scale: RenderScale): void;
   setVisible(visible: boolean): void;
+  readonly motion: RenderObjectMotion;
   play(name?: string, options?: RenderObjectPlayOptions): Promise<void>;
   stop(): void;
   getAnchor(): RenderAnchor;
@@ -68,6 +79,9 @@ export interface RegisteredRenderObjectAdapter {
   play?(name?: string, options?: RenderObjectPlayOptions): Promise<void>;
   stop?(): void;
   readonly spineSlots?: RenderObjectSpineSlotAdapter;
+  readonly motionChildren: Set<RenderObject>;
+  readonly motionBinding: RenderObjectMotionBinding;
+  readonly motionAdapter: RenderObjectMotionPropertyAdapter;
   destroy(): void;
 }
 
@@ -98,6 +112,7 @@ export function createCloneableRenderObject(
 
 function createRenderObjectBase(adapter: RenderObjectAdapter): RenderObject {
   let destroyed = false;
+  const motionBinding = createRenderObjectMotionBinding();
   const resolveView = (): Container =>
     typeof adapter.view === "function" ? adapter.view() : adapter.view;
   const assertUsable = (): void => {
@@ -115,9 +130,40 @@ function createRenderObjectBase(adapter: RenderObjectAdapter): RenderObject {
     ...(adapter.play ? { play: adapter.play } : {}),
     ...(adapter.stop ? { stop: adapter.stop } : {}),
     ...(adapter.spineSlots ? { spineSlots: adapter.spineSlots } : {}),
+    motionChildren: new Set<RenderObject>(),
+    motionBinding,
+    motionAdapter: Object.freeze({
+      owned: adapter.owned ?? true,
+      assertUsable,
+      capture: () => {
+        assertUsable();
+        const view = resolveView();
+        return Object.freeze({
+          position: Object.freeze({ x: view.x, y: view.y }),
+          opacity: view.alpha,
+          scale: Object.freeze({ x: view.scale.x, y: view.scale.y }),
+          rotationDegrees: view.angle,
+        });
+      },
+      apply: (
+        state: import("./render-object-motion.js").RenderObjectMotionState,
+      ) => {
+        assertUsable();
+        const view = resolveView();
+        view.position.set(state.position.x, state.position.y);
+        view.alpha = state.opacity;
+        view.scale.set(state.scale.x, state.scale.y);
+        view.angle = state.rotationDegrees;
+      },
+    }),
     destroy: adapter.destroy,
   }) satisfies RegisteredRenderObjectAdapter;
   let object!: RenderObject;
+  const motion = createRenderObjectMotionController(
+    motionBinding,
+    assertUsable,
+    registered.motionAdapter,
+  );
   object = Object.freeze({
     setPosition: (position: RenderPoint) => {
       assertUsable();
@@ -125,7 +171,23 @@ function createRenderObjectBase(adapter: RenderObjectAdapter): RenderObject {
         throw new SymbolAnimationError(
           "RenderObject position must contain finite coordinates.",
         );
+      cancelRenderObjectMotion(
+        motionBinding,
+        "RenderObject motion was superseded by a direct position change.",
+      );
       resolveView().position.set(position.x, position.y);
+    },
+    setOpacity: (opacity: number) => {
+      assertUsable();
+      if (!Number.isFinite(opacity) || opacity < 0 || opacity > 1)
+        throw new SymbolAnimationError(
+          "RenderObject opacity must be between 0 and 1.",
+        );
+      cancelRenderObjectMotion(
+        motionBinding,
+        "RenderObject motion was superseded by a direct opacity change.",
+      );
+      resolveView().alpha = opacity;
     },
     setRotation: (rotationDegrees: number) => {
       assertUsable();
@@ -133,6 +195,10 @@ function createRenderObjectBase(adapter: RenderObjectAdapter): RenderObject {
         throw new SymbolAnimationError(
           "RenderObject rotation must be a finite number of degrees.",
         );
+      cancelRenderObjectMotion(
+        motionBinding,
+        "RenderObject motion was superseded by a direct rotation change.",
+      );
       resolveView().angle = rotationDegrees;
     },
     setScale: (scale: RenderScale) => {
@@ -141,6 +207,10 @@ function createRenderObjectBase(adapter: RenderObjectAdapter): RenderObject {
         throw new SymbolAnimationError(
           "RenderObject scale must contain finite factors.",
         );
+      cancelRenderObjectMotion(
+        motionBinding,
+        "RenderObject motion was superseded by a direct scale change.",
+      );
       resolveView().scale.set(scale.x, scale.y);
     },
     setVisible: (visible: boolean) => {
@@ -151,6 +221,7 @@ function createRenderObjectBase(adapter: RenderObjectAdapter): RenderObject {
         );
       resolveView().visible = visible;
     },
+    motion,
     play: (name?: string, options?: RenderObjectPlayOptions) => {
       assertUsable();
       if (options?.signal?.aborted)
@@ -186,6 +257,10 @@ function createRenderObjectBase(adapter: RenderObjectAdapter): RenderObject {
         );
       const view = resolveView();
       runRenderObjectCleanup(registered);
+      cancelRenderObjectMotion(
+        motionBinding,
+        "RenderObject was destroyed during motion.",
+      );
       view.parent?.removeChild(view);
       destroyed = true;
       adapter.destroy();
