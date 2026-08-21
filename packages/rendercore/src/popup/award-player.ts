@@ -272,27 +272,27 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
   requestAdvance(): void {
     this.assertReady();
     if (!this.isPlaying()) return;
-    if (this.#phase === "awaiting-dismiss") {
-      this.requestDismiss();
-      return;
-    }
+    if (this.#phase === "awaiting-dismiss") return;
     if (this.#phase !== "counting") return;
+    const current = this.#stages[this.#stageIndex]!;
     const nextCelebration = this.#stages.findIndex(
       (stage, index) =>
         index > this.#stageIndex &&
         !["base", "standard"].includes(stage.tierId),
     );
-    if (
-      ["base", "standard"].includes(this.#stages[this.#stageIndex]!.tierId) &&
-      nextCelebration >= 0
-    ) {
-      this.#stageIndex = nextCelebration - 1;
-      this.transitionToNext();
+    if (["base", "standard"].includes(current.tierId)) {
+      if (nextCelebration >= 0) {
+        this.startStage(
+          nextCelebration,
+          this.#stages[nextCelebration]!.fromAmountRaw,
+        );
+      } else this.holdFinalAmount();
       return;
     }
-    this.#displayed = this.#stages[this.#stageIndex]!.toAmountRaw;
-    this.updateAmount();
-    this.finishStage();
+    if (this.#stageIndex + 1 < this.#stages.length) {
+      const nextIndex = this.#stageIndex + 1;
+      this.startStage(nextIndex, this.#stages[nextIndex]!.fromAmountRaw);
+    } else this.holdFinalAmount();
   }
   requestDismiss(): void {
     this.assertReady();
@@ -508,16 +508,20 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     }
   }
   private startNextStage() {
-    this.#stageIndex += 1;
-    const stage = this.#stages[this.#stageIndex];
+    const nextIndex = this.#stageIndex + 1;
+    const stage = this.#stages[nextIndex];
     if (!stage) {
-      this.#displayed = this.#final;
-      this.updateAmount();
-      this.#phase = "awaiting-dismiss";
+      this.holdFinalAmount();
       return;
     }
+    this.startStage(nextIndex, stage.fromAmountRaw);
+  }
+  private startStage(stageIndex: number, displayedAmountRaw: number) {
+    const stage = this.#stages[stageIndex]!;
     this.#elapsed = 0;
-    this.#displayed = stage.fromAmountRaw;
+    this.#displayed = displayedAmountRaw;
+    this.updateAmount();
+    this.#stageIndex = stageIndex;
     const tier = this.#tiers.get(stage.tierId)!;
     this.switchVisibleTiers(stage.tierId);
     if (!this.#showing.has(tier)) this.startTier(tier);
@@ -542,13 +546,19 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     this.#presentation.setState(stage.tierId);
     this.#phase = "counting";
   }
-  private finishStage() {
-    if (this.#stageIndex + 1 < this.#stages.length) this.transitionToNext();
+  private holdFinalAmount() {
+    const finalStageIndex = this.#stages.length - 1;
+    if (this.#stageIndex !== finalStageIndex)
+      this.startStage(finalStageIndex, this.#final);
     else {
       this.#displayed = this.#final;
       this.updateAmount();
-      this.#phase = "awaiting-dismiss";
     }
+    this.#phase = "awaiting-dismiss";
+  }
+  private finishStage() {
+    if (this.#stageIndex + 1 < this.#stages.length) this.transitionToNext();
+    else this.holdFinalAmount();
   }
   private transitionToNext() {
     this.#active = null;
