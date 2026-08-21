@@ -20,6 +20,12 @@ export interface SymbolReplacement {
 export interface SymbolArea {
   getSymbol(position: SymbolPosition): SymbolHandle;
   getSymbols(positions: readonly SymbolPosition[]): SymbolGroup;
+  /** Replaces settled symbol dimming so only the selected positions are dimmed. */
+  setSymbolDimming(
+    dimmedPositions: readonly SymbolPosition[],
+    dimmingAlpha: number,
+  ): void;
+  clearSymbolDimming(): void;
   /** Stable logical cell-center anchor. It remains valid while the cell spins. */
   getCellAnchor(position: SymbolPosition): RenderAnchor;
   /** Resolves any valid RenderCore anchor into this area's local coordinates. */

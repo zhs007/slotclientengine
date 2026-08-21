@@ -1205,6 +1205,25 @@ export class RenderGridCellReelSet
     highlightedPositions: readonly { readonly x: number; readonly y: number }[],
     dimmingAlpha: number,
   ): void {
+    this.applyVisibleSymbolDimming(
+      highlightedPositions,
+      dimmingAlpha,
+      "highlighted",
+    );
+  }
+
+  setSymbolDimming(
+    dimmedPositions: readonly { readonly x: number; readonly y: number }[],
+    dimmingAlpha: number,
+  ): void {
+    this.applyVisibleSymbolDimming(dimmedPositions, dimmingAlpha, "dimmed");
+  }
+
+  private applyVisibleSymbolDimming(
+    positions: readonly { readonly x: number; readonly y: number }[],
+    dimmingAlpha: number,
+    selection: "highlighted" | "dimmed",
+  ): void {
     this.assertStopped("set visible symbol dimming");
     if (
       !Number.isFinite(dimmingAlpha) ||
@@ -1213,28 +1232,31 @@ export class RenderGridCellReelSet
     ) {
       throw new ReelError("dimmingAlpha must be finite and between 0 and 1.");
     }
-    const highlighted = new Set(
-      normalizePositions(highlightedPositions, this.#columns, this.#rows).map(
+    const selected = new Set(
+      normalizePositions(positions, this.#columns, this.#rows).map(
         ({ x, y }) => `${x},${y}`,
       ),
     );
     for (const cell of this.#cells) {
       const key = `${cell.coordinate.x},${cell.coordinate.y}`;
-      const isHighlighted = highlighted.has(key);
+      const isSelected = selected.has(key);
+      const isDimmed = selection === "dimmed" ? isSelected : !isSelected;
       cell.dimOverlay.y = 0;
       cell.dimOverlay.alpha = 1;
       cell.dimOverlay.renderable = true;
-      cell.reel.setSlotBrightness(0, isHighlighted ? 1 : 1 - dimmingAlpha);
+      cell.reel.setSlotBrightness(0, isDimmed ? 1 - dimmingAlpha : 1);
       for (const row of cell.dimRows) {
         row.graphic.alpha =
-          row.windowY === 0 && cell.occupied && !isHighlighted
-            ? dimmingAlpha
-            : 0;
+          row.windowY === 0 && cell.occupied && isDimmed ? dimmingAlpha : 0;
       }
     }
   }
 
   clearVisibleSymbolDimming(): void {
+    this.clearSymbolDimming();
+  }
+
+  clearSymbolDimming(): void {
     for (const cell of this.#cells) {
       cell.dimOverlay.alpha = 0;
       cell.dimOverlay.y = 0;

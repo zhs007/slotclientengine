@@ -282,6 +282,11 @@ export class RenderReelSet extends Container implements ReelSpin {
       getSymbol: (position: SymbolPosition) => this.getSymbol(position),
       getSymbols: (positions: readonly SymbolPosition[]) =>
         this.getSymbols(positions),
+      setSymbolDimming: (
+        positions: readonly SymbolPosition[],
+        dimmingAlpha: number,
+      ) => this.setSymbolDimming(positions, dimmingAlpha),
+      clearSymbolDimming: () => this.clearSymbolDimming(),
       getCellAnchor: (position: SymbolPosition) => this.getCellAnchor(position),
       replaceSymbol: (
         position: SymbolPosition,
@@ -889,12 +894,33 @@ export class RenderReelSet extends Container implements ReelSpin {
     highlightedPositions: readonly { readonly x: number; readonly y: number }[],
     dimmingAlpha: number,
   ): void {
+    this.applyVisibleSymbolDimming(
+      highlightedPositions,
+      dimmingAlpha,
+      "highlighted",
+    );
+  }
+
+  setSymbolDimming(
+    dimmedPositions: readonly { readonly x: number; readonly y: number }[],
+    dimmingAlpha: number,
+  ): void {
+    if (!Array.isArray(dimmedPositions) || dimmedPositions.length === 0)
+      throw new ReelError("dimmed positions must not be empty.");
+    this.applyVisibleSymbolDimming(dimmedPositions, dimmingAlpha, "dimmed");
+  }
+
+  private applyVisibleSymbolDimming(
+    positions: readonly { readonly x: number; readonly y: number }[],
+    dimmingAlpha: number,
+    selection: "highlighted" | "dimmed",
+  ): void {
     this.assertStopped("set visible symbol dimming");
     if (!Number.isFinite(dimmingAlpha) || dimmingAlpha < 0 || dimmingAlpha > 1)
       throw new ReelError("dimmingAlpha must be finite and between 0 and 1.");
-    const highlighted = new Set(
+    const selected = new Set(
       normalizeCascadePositions(
-        highlightedPositions,
+        positions,
         this.reels.length,
         this.reels[0]?.layout.visibleRows ?? 0,
       ).map(({ x, y }) => `${x},${y}`),
@@ -907,12 +933,17 @@ export class RenderReelSet extends Container implements ReelSpin {
           slot.kind === "empty"
         )
           continue;
-        const bright = highlighted.has(`${reel.xIndex},${slot.windowY}`);
-        reel.setSlotBrightness(slot.windowY, bright ? 1 : 1 - dimmingAlpha);
+        const isSelected = selected.has(`${reel.xIndex},${slot.windowY}`);
+        const isDimmed = selection === "dimmed" ? isSelected : !isSelected;
+        reel.setSlotBrightness(slot.windowY, isDimmed ? 1 - dimmingAlpha : 1);
       }
   }
 
   clearVisibleSymbolDimming(): void {
+    this.clearSymbolDimming();
+  }
+
+  clearSymbolDimming(): void {
     for (const reel of this.reels) reel.resetSlotBrightness();
   }
 
