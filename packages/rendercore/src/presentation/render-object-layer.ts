@@ -54,7 +54,7 @@ export function createRenderObjectLayer(options: {
   readonly label: string;
   readonly assertUsable?: () => void;
   readonly createError?: (message: string) => Error;
-  readonly motionRuntime?: RenderObjectMotionRuntime;
+  readonly motionRuntime: RenderObjectMotionRuntime;
 }): RenderObjectLayerController {
   const mounted = new Map<RenderObject, Container>();
   const createError =
@@ -108,13 +108,13 @@ export function createRenderObjectLayer(options: {
       if (position) objectView.position.set(position.x, position.y);
       objectView.zIndex = order;
       target.addChild(objectView);
-      motionAttachment = options.motionRuntime?.attach(node) ?? null;
+      motionAttachment = options.motionRuntime.attach(node);
       mounted.set(node, objectView);
       layerRegistrations.set(objectView, {
         target,
         mounted,
         node,
-        motionRuntime: options.motionRuntime ?? null,
+        motionRuntime: options.motionRuntime,
         motionAttachment,
       });
     } catch (error) {
@@ -201,13 +201,13 @@ export function createRenderObjectLayer(options: {
         objectView.position.set(targetPosition.x, targetPosition.y);
         objectView.zIndex = order;
         target.addChild(objectView);
-        targetMotionAttachment = options.motionRuntime?.attach(node) ?? null;
+        targetMotionAttachment = options.motionRuntime.attach(node);
         mounted.set(node, objectView);
         layerRegistrations.set(objectView, {
           target,
           mounted,
           node,
-          motionRuntime: options.motionRuntime ?? null,
+          motionRuntime: options.motionRuntime,
           motionAttachment: targetMotionAttachment,
         });
         committed = true;
@@ -291,7 +291,7 @@ interface LayerRegistration {
   readonly target: Container;
   readonly mounted: Map<RenderObject, Container>;
   readonly node: RenderObject;
-  readonly motionRuntime: RenderObjectMotionRuntime | null;
+  readonly motionRuntime: RenderObjectMotionRuntime;
   readonly motionAttachment: RenderObjectMotionAttachment | null;
 }
 

@@ -131,6 +131,7 @@ interface RuntimeRegistration {
   readonly runtime: DefaultRenderObjectMotionRuntime;
   readonly binding: RenderObjectMotionBinding;
   readonly adapter: RenderObjectMotionPropertyAdapter;
+  readonly update?: (deltaSeconds: number) => void;
   readonly childAttachments: Map<RenderObject, RenderObjectMotionAttachment>;
   active: ActiveAnimation | null;
   detached: boolean;
@@ -358,6 +359,7 @@ class DefaultRenderObjectMotionRuntime implements RenderObjectMotionRuntime {
     const attachment = this.attachAdapter(
       registered.motionBinding,
       registered.motionAdapter,
+      registered.update,
     );
     try {
       const registration = registered.motionBinding.registration!;
@@ -384,6 +386,7 @@ class DefaultRenderObjectMotionRuntime implements RenderObjectMotionRuntime {
   attachAdapter(
     binding: RenderObjectMotionBinding,
     adapter: RenderObjectMotionPropertyAdapter,
+    update?: (deltaSeconds: number) => void,
   ): RenderObjectMotionAttachment {
     this.assertAlive();
     adapter.assertUsable();
@@ -401,6 +404,7 @@ class DefaultRenderObjectMotionRuntime implements RenderObjectMotionRuntime {
       runtime: this,
       binding,
       adapter,
+      ...(update ? { update } : {}),
       childAttachments: new Map(),
       active: null,
       detached: false,
@@ -490,6 +494,9 @@ class DefaultRenderObjectMotionRuntime implements RenderObjectMotionRuntime {
         "RenderObject motion deltaSeconds must be finite and non-negative.",
       );
     for (const registration of [...this.#ownedRegistrations]) {
+      if (registration.detached) continue;
+      registration.update?.(deltaSeconds);
+      if (registration.detached) continue;
       const active = registration.active;
       if (!active) continue;
       if (active.signal?.aborted) {

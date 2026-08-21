@@ -87,6 +87,7 @@
 - RenderObject是Container-backed的opaque public capability，不继承或公开raw Pixi Container。whole Symbol、普通文字及
   symbol value/text part统一使用clone/getAnchor/mount/transfer；part只通过strict `{kind:"value"}`或
   `{kind:"text",name}`取得，不猜唯一node、不在value/text间fallback。盘面Symbol/part为borrowed，只有owned clone可transfer或destroy。
+- 带object-owned playback update的RenderObject只在挂载到registered layer或attachment后继承该owner clock；remove/detach暂停驱动，重新挂载后继续，destroy必须解绑。borrowed reel Symbol仍只由reel owner驱动，临时换层不得取得第二个update clock；游戏不手动调用或注册update。
 - 确需数值坐标时，`ReelArea.resolveAnchor()`只把有效RenderAnchor解析为该area本地RenderPoint；不开放world coordinate、raw
   Container或Matrix。解析结果是调用时快照，长期presentation/motion继续持有Anchor并在使用时转换，不缓存跨transform坐标。
 - standard ReelSpin、CellSpin与legacy grid-cell统一提供与occurrence解耦的稳定cell-center Anchor；它在rolling/部分落停期间可解析，

@@ -53,6 +53,8 @@ export interface RenderObjectAdapter {
   readonly view: Container | (() => Container);
   readonly owned?: boolean;
   assertUsable?(): void;
+  /** Advances object-owned playback while the object is mounted to an owner clock. */
+  update?(deltaSeconds: number): void;
   play?(name?: string, options?: RenderObjectPlayOptions): Promise<void>;
   stop?(): void;
   readonly spineSlots?: RenderObjectSpineSlotAdapter;
@@ -76,6 +78,7 @@ export interface RegisteredRenderObjectAdapter {
   readonly view: Container;
   readonly owned: boolean;
   assertUsable(): void;
+  update?(deltaSeconds: number): void;
   play?(name?: string, options?: RenderObjectPlayOptions): Promise<void>;
   stop?(): void;
   readonly spineSlots?: RenderObjectSpineSlotAdapter;
@@ -127,6 +130,7 @@ function createRenderObjectBase(adapter: RenderObjectAdapter): RenderObject {
     },
     owned: adapter.owned ?? true,
     assertUsable,
+    ...(adapter.update ? { update: adapter.update } : {}),
     ...(adapter.play ? { play: adapter.play } : {}),
     ...(adapter.stop ? { stop: adapter.stop } : {}),
     ...(adapter.spineSlots ? { spineSlots: adapter.spineSlots } : {}),

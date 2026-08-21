@@ -9,6 +9,76 @@ import {
 } from "../reel/helpers.js";
 
 describe("SymbolHandle", () => {
+  it("drives an owned clone state only while it is mounted to an area layer", async () => {
+    const area = new RenderReelSet({
+      reels: createBasicReels(),
+      layout: createBasicLayout(),
+      registry: createBasicRegistry(),
+    });
+    area.resetToVisibleScene([
+      [1, 2, 1],
+      [2, 1, 2],
+    ]);
+    const clone = area.getSymbol({ x: 0, y: 0 }).clone();
+    const top = area.getLayer("top");
+    const playback = clone.playState("appear", {
+      transitionMode: "immediate",
+      completion: "once-complete",
+    });
+    let completed = false;
+    void playback.then(() => {
+      completed = true;
+    });
+
+    area.update(1);
+    await Promise.resolve();
+    expect(completed).toBe(false);
+    top.add(clone);
+    area.update(0.2);
+    top.remove(clone);
+    area.update(1);
+    await Promise.resolve();
+    expect(completed).toBe(false);
+    top.add(clone);
+    area.update(0.22);
+    await expect(playback).resolves.toBeUndefined();
+
+    top.remove(clone);
+    clone.destroy();
+    area.destroy({ children: true });
+  });
+
+  it("does not double-update a borrowed reel symbol moved to an area layer", async () => {
+    const area = new RenderReelSet({
+      reels: createBasicReels(),
+      layout: createBasicLayout(),
+      registry: createBasicRegistry(),
+    });
+    area.resetToVisibleScene([
+      [1, 2, 1],
+      [2, 1, 2],
+    ]);
+    const symbol = area.getSymbol({ x: 0, y: 0 });
+    const moved = area.getLayer("top").moveHere(symbol);
+    const playback = symbol.playState("appear", {
+      transitionMode: "immediate",
+      completion: "once-complete",
+    });
+    let completed = false;
+    void playback.then(() => {
+      completed = true;
+    });
+
+    area.update(0.21);
+    await Promise.resolve();
+    expect(completed).toBe(false);
+    area.update(0.21);
+    await expect(playback).resolves.toBeUndefined();
+
+    moved.restore();
+    area.destroy({ children: true });
+  });
+
   it("directly changes state, mounts stable nodes, clones, and enforces ownership", () => {
     const area = new RenderReelSet({
       reels: createBasicReels(),

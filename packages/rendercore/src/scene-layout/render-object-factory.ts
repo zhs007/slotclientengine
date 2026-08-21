@@ -53,13 +53,11 @@ export interface SceneLayoutRenderObjectFactory {
       readonly anchor?: { readonly x: number; readonly y: number };
     },
   ): Promise<ImgNumberRenderObject>;
-  update(deltaSeconds: number): void;
   destroy(): void;
 }
 
 interface ManagedRenderObject {
   readonly object: RenderObject;
-  readonly update?: (deltaSeconds: number) => void;
 }
 
 export function createSceneLayoutRenderObjectFactory(options: {
@@ -165,11 +163,6 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
     );
   }
 
-  update(deltaSeconds: number): void {
-    this.assertAlive();
-    for (const record of this.#objects.values()) record.update?.(deltaSeconds);
-  }
-
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
@@ -241,6 +234,11 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
     const slotPlayer = isSpineSlotPlayer(player) ? player : null;
     object = createRenderObject({
       view: player.view,
+      update: (deltaSeconds) => {
+        const result = player.update(deltaSeconds);
+        if ((looping && result.loopCompleted) || (!looping && result.completed))
+          active = resolvePendingPlayback(active);
+      },
       play: (animationName, playOptions) => {
         if (!animationName?.trim())
           return Promise.reject(
@@ -290,14 +288,7 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
           }
         : {}),
     });
-    this.register({
-      object,
-      update: (deltaSeconds) => {
-        const result = player.update(deltaSeconds);
-        if ((looping && result.loopCompleted) || (!looping && result.completed))
-          active = resolvePendingPlayback(active);
-      },
-    });
+    this.register({ object });
     return object;
   }
 
@@ -333,6 +324,15 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
     };
     object = createRenderObject({
       view: host,
+      update: (deltaSeconds) => {
+        initializedPlayer.update(deltaSeconds);
+        if (loopFirstCycleRemaining === null) return;
+        loopFirstCycleRemaining -= deltaSeconds;
+        if (loopFirstCycleRemaining <= 0) {
+          loopFirstCycleRemaining = null;
+          active = resolvePendingPlayback(active);
+        }
+      },
       play: (timelineName, playOptions) => {
         if (timelineName !== undefined)
           return Promise.reject(
@@ -373,18 +373,7 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
         host.destroy({ children: true });
       },
     });
-    this.register({
-      object,
-      update: (deltaSeconds) => {
-        initializedPlayer.update(deltaSeconds);
-        if (loopFirstCycleRemaining === null) return;
-        loopFirstCycleRemaining -= deltaSeconds;
-        if (loopFirstCycleRemaining <= 0) {
-          loopFirstCycleRemaining = null;
-          active = resolvePendingPlayback(active);
-        }
-      },
-    });
+    this.register({ object });
     return object;
   }
 
