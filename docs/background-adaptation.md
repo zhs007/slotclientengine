@@ -9,7 +9,7 @@
 | 方案                    | 适用资源                       | 对外入口                                                                              | 当前示例       |
 | ----------------------- | ------------------------------ | ------------------------------------------------------------------------------------- | -------------- |
 | 单背景、单 focus 最大化 | 横竖屏共用一张完整背景         | `createMaximizedFocusedArtViewportPolicy()`、`calculateMaximizedFocusedArtViewport()` | `apps/game002` |
-| 横竖双背景、双 variant  | 横屏和竖屏使用不同背景及坐标系 | `calculateResponsiveArtViewport()`，配合 framework `orientation-focus` frame policy   | `apps/game003` |
+| 横竖双背景、双 variant  | 横屏和竖屏使用不同背景及坐标系 | `calculateMaximizedResponsiveArtViewport()`、`calculateResponsiveArtViewport()`       | `apps/game003` |
 
 以下能力不算第三种背景适配方案：
 
@@ -29,7 +29,7 @@
 - `visibleRect`：当前 viewport 最终显示的 art 区域。
 - `worldOffset`：完整 art world 在当前 Pixi viewport 中的偏移，等于 `-visibleRect.x/y`。
 - `focusRectInViewport`：focus 在当前 viewport 中的位置，主要用于布局诊断和自动化验收。
-- `frameFocusRect`：仅双背景 YAML/frame policy 使用的 DOM frame 重点尺寸，只有 `width/height`；它不是 art 坐标，不负责场景部件定位。
+- `frameFocusRect`：legacy 双背景 YAML/generic frame policy 使用的 DOM frame 重点尺寸，只有 `width/height`；它不是 art 坐标，不负责场景部件定位，也不覆盖 Scene Layout actual `focusRect` 的最大化。
 - `minFocusMargin`：focus 周围必须保留的最小逻辑留白；只有确实存在视觉安全边界时才配置。
 
 ### 2.2 坐标基准
@@ -223,25 +223,29 @@ focus.y + focus.height >= board.y + board.height
 
 ### 4.2 variant 选择规则
 
-`calculateResponsiveArtViewport()` 的选择规则固定为：
+`calculateMaximizedResponsiveArtViewport()` 只使用宿主原始 `pageSize` 选择方向：
 
 ```text
-viewportSize.height > viewportSize.width
+pageSize.height > pageSize.width
   -> portrait
 
-否则，包括正方形
+pageSize.width > pageSize.height
   -> landscape
+
+正方形
+  -> 保持上一 variant；首次为 landscape
 ```
 
-两套 variant 都必须存在，不能只配置当前测试到的方向，也不能在缺失时 fallback 到另一张背景。
+focus、artSize 和反推的逻辑 viewport 都不得反馈参与方向判断。两套 variant 都必须存在，不能只配置当前测试到的方向，也不能在缺失时 fallback 到另一张背景。
 
 ### 4.3 rendercore 配置
 
 ```ts
-import { calculateResponsiveArtViewport } from "@slotclientengine/rendercore";
+import { calculateMaximizedResponsiveArtViewport } from "@slotclientengine/rendercore";
 
-const viewport = calculateResponsiveArtViewport({
-  viewportSize,
+const viewport = calculateMaximizedResponsiveArtViewport({
+  pageSize,
+  squareVariant: previousVariantId,
   variants: {
     landscape: {
       artSize: { width: 2000, height: 2000 },
@@ -256,7 +260,7 @@ const viewport = calculateResponsiveArtViewport({
 });
 ```
 
-选中 variant 后，rendercore 调用 `calculateFocusedArtViewport()` 完成：
+选中 variant 后，rendercore 先按 contain 计算 actual focus 的最大 scale，再用 `pageSize / focusScale` 反推逻辑 viewport；没有显式 margin 时，focus 映射到 CSS 页面后至少一轴与页面相等。随后调用 `calculateFocusedArtViewport()` 完成：
 
 - focus 完整性校验；
 - focus 与 margin 是否能放入 viewport 的校验；
@@ -265,6 +269,8 @@ const viewport = calculateResponsiveArtViewport({
 - `visibleRect`、`worldOffset` 和 `focusRectInViewport` 计算。
 
 本方案不会在 rendercore 内加载图片。app 必须根据返回的 `variantId` 使用对应背景和对应场景部件配置。
+
+已经持有权威逻辑 `viewportSize` 的底层 consumer 仍可调用 `calculateResponsiveArtViewport()` 完成 variant art 裁切；它不得用该派生尺寸重新替代原始页面方向。Scene Layout frame、runtime 与 Editor preview 通过 shared helper/previous variant 保持一致，不在 app 复制公式。
 
 ### 4.4 YAML 与 DOM frame policy
 
@@ -316,6 +322,8 @@ art:
 | `minFocusMargin` | focus 周围逻辑留白              | gameframeworks/uiframeworks   | 约束 DOM frame 的视觉安全边界；生成 frame policy 时不会自动变成 rendercore 的 `minMargin` |
 
 `focusRect` 与 `frameFocusRect` 可以数值不同。不能用 `frameFocusRect` 定位 Pixi 部件，也不能让 DOM frame policy 推导主转轮、传送带或 board 的 art 坐标。
+
+上述 static-config helper 是 legacy generic DOM policy。Scene Layout package 使用 `createSceneLayoutFramePolicy()`；对 `orientation-focus` manifest，它由 rendercore 根据原始页面选择 variant并最大化该 variant 的 actual `focusRect`。`minFocusMargin` 只作为 focus 外的显式安全边界一起最大化；`frameFocusRect` 不再以“最大设计尺寸/最低容纳”公式覆盖绿色 focus guide。
 
 `ResponsiveArtVariant.minMargin` 是 rendercore 侧可选参数。如果游戏的 art 裁切也需要 margin，app 必须从同一份已校验静态配置显式传入，不能假设 `createSlotGameFramePolicyFromStaticConfig()` 会自动替 rendercore 接线，也不要维护第二份手写 margin。
 
@@ -401,8 +409,8 @@ interface FocusedArtViewport {
 2. 分别在两套 art 坐标中配置 `focusRect`。
 3. 在 YAML 中配置两套 `background`、`focusRect`、`frameFocusRect` 和必要 margin。
 4. 生成静态配置，禁止手改 generated TS。
-5. 用生成配置创建 `orientation-focus` frame policy。
-6. 把横竖 variant 传给 `calculateResponsiveArtViewport()`。
+5. Scene Layout 使用 `createSceneLayoutFramePolicy()`；legacy static-config consumer 才使用生成的 generic `orientation-focus` policy。
+6. 把原始page和横竖variant传给`calculateMaximizedResponsiveArtViewport()`，后续已有逻辑viewport的art裁切可复用`calculateResponsiveArtViewport()`。
 7. 根据 `variantId` 选择对应背景和场景部件配置。
 8. 验证方向切换时不复用错误坐标、错误背景或旧 texture。
 
@@ -458,9 +466,11 @@ offsetY = 0
 ### 8.3 双背景方案专项断言
 
 - `height > width` 必须选择 portrait；其它情况必须选择 landscape。
-- 正方形必须选择 landscape。
+- 正方形必须保持上一 variant，首次正方形为 landscape。
 - 缺少任一 variant 必须显式失败。
 - 每套 focus 必须位于对应 art 内。
+- 没有显式 margin 时，选中 focus 的 CSS 映射必须满足 `focusWidth == pageWidth || focusHeight == pageHeight`（浮点容差内）。
+- 方向断言必须使用原始page；focus、art或派生逻辑viewport不得反馈改变variant。
 - 横竖 background、focus、frameFocusRect 和场景部件不能串用。
 - YAML 修改后 `generate:static-config` 与 `check:static-config` 必须通过。
 

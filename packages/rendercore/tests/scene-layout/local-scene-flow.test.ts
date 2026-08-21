@@ -188,6 +188,7 @@ describe("local scene flow runtime", () => {
     mocks.initError = null;
     mocks.applicationInitError = null;
     mocks.readiness = readiness;
+    mocks.runtimeViewport.mockReturnValue({ variantId: "portrait" });
   });
 
   it("runs unified spin nodes, later settled snapshot and replay", async () => {
@@ -218,6 +219,12 @@ describe("local scene flow runtime", () => {
       top: "0px",
       width: "1000px",
       height: "600px",
+    });
+    runtime.applyViewport({ width: 500, height: 500 });
+    expect(mocks.resolveFrame).toHaveBeenLastCalledWith({
+      manifest: {},
+      pageSize: { width: 500, height: 500 },
+      previousVariantId: "portrait",
     });
     expect(() => runtime.applyViewport({ width: 0, height: 1 })).toThrow(
       /positive/,

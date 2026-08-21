@@ -17,6 +17,7 @@
 - Game Layout Editor 中 root 音频先作为统一 filename-key asset 导入，不因文件名自动绑定用途；BGM 只在 exact mode 上选择，程序音效只通过 strict local name 进入 `audio.effects` 与 `programmaticEffects`。未绑定音频保留在 authoring workspace，但不进入 production closure；audio 不得伪装成 scene node 或通用 `runtimeResources`。
 - 每个v2 mode显式声明reelEnabled；关闭时不得绑定Symbols或导出mode reel placement，focus相对art边缘，开启时focus由reel区域与四边外扩派生。runtime不得按mode id猜测开关。
 - orientation variant只由宿主原始page width/height决定；正方形保持当前variant，首次正方形为landscape，focus和派生frame尺寸不得反馈成方向输入。
+- orientation variant选定后必须把该variant的actual focusRect（及显式margin）按contain最大化；无margin时focus映射到CSS page后至少一轴与page相等。Scene Layout不得让legacy frameFocusRect的最大设计尺寸/最低容纳规则覆盖actual focus，也不得在Editor、app或CSS复制第二套公式。
 - primary action只引用同source的显式direct transition target；runtime复用既有prepare/commit/rollback和trusted gesture边界，不按mode名称推断点击行为。
 - editor 拥有通用 game mode draft，以及 mode 到独立 per-variant background、symbols package 和 award popup 的显式 binding；普通 Spine popup 可绑定到一条有向 Spine transition 或独立显式注册，不伪装成 mode award binding。
 - 新 mode 的 background 默认未绑定；每个 variant 明确选择，不继承另一 mode 的 editable node。

@@ -142,6 +142,7 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
   #completed = new Set<string>();
   #started = new Set<string>();
   #operationFailure: Error | null = null;
+  #variantId: "landscape" | "portrait" | null = null;
 
   constructor(
     application: Application,
@@ -222,12 +223,17 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
     const frame = resolveSceneLayoutFrameViewport({
       manifest: this.#manifest,
       pageSize: size,
+      ...(this.#variantId ? { previousVariantId: this.#variantId } : {}),
     });
     this.#application.renderer.resize(
       frame.frameDesignSize.width,
       frame.frameDesignSize.height,
     );
-    this.#runtime.applyViewport(frame.frameDesignSize);
+    const snapshot = this.#runtime.applyViewport(frame.frameDesignSize);
+    this.#variantId =
+      snapshot.variantId === "landscape" || snapshot.variantId === "portrait"
+        ? snapshot.variantId
+        : null;
     Object.assign(this.canvas.style, {
       position: "absolute",
       left: `${frame.offsetX}px`,
