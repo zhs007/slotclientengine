@@ -2,7 +2,6 @@ import {
   parseImageStringManifest,
   type ImageStringManifestV1,
 } from "@slotclientengine/rendercore/image-string/data";
-import { editorAssetKeyCollisionToken } from "@slotclientengine/editorresource";
 import {
   parseAudioCatalogManifestV1,
   parseAudioEffectManifestV1,
@@ -585,21 +584,12 @@ function rewriteSpineTextures(
   values: Readonly<Record<string, string>>,
   mapping: ReadonlyMap<string, string>,
 ): Record<string, string> {
-  const targetsByToken = new Map(
-    [...mapping].map(([source, target]) => [
-      editorAssetKeyCollisionToken(source),
-      target,
+  return Object.fromEntries(
+    Object.entries(values).map(([page, value]) => [
+      page,
+      rewriteRef(value, mapping),
     ]),
   );
-  const rewritten: Record<string, string> = {};
-  for (const [page, value] of Object.entries(values)) {
-    const targetPage =
-      targetsByToken.get(editorAssetKeyCollisionToken(page)) ?? page;
-    if (targetPage in rewritten)
-      throw new Error(`Spine texture 页名重写后冲突：${targetPage}`);
-    rewritten[targetPage] = rewriteRef(value, mapping);
-  }
-  return rewritten;
 }
 
 function rewriteRef(

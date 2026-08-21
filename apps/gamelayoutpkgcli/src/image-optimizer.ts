@@ -6,9 +6,7 @@ import { promisify } from "node:util";
 import {
   assertUniqueEditorAssetKeys,
   canonicalExtensionOfEditorAssetKey,
-  editorAssetKeyCollisionToken,
 } from "@slotclientengine/editorresource";
-import { inspectSymbolSpineAtlas } from "@slotclientengine/rendercore/symbol/data";
 import type {
   CwebpRunner,
   ImageOptimizationResult,
@@ -67,9 +65,6 @@ export async function optimizeLayoutImages(options: {
 }): Promise<ImageOptimizationResult> {
   const runner = options.runner ?? nodeCwebpRunner;
   const cwebpVersion = await runner.version(options.cwebpExecutable);
-  const atlasPageBindings = collectAtlasPageBindings(
-    options.source.sourceEntries,
-  );
   const keyMapping = new Map<string, string>();
   const convertedKeys = new Set<string>();
   const targetKeys: string[] = [];
@@ -91,15 +86,6 @@ export async function optimizeLayoutImages(options: {
       const key = keyMapping.get(sourceKey)!;
       const converted = convertedKeys.has(sourceKey);
       let bytes = entry.bytes.slice();
-      const atlasPages = atlasPageBindings.get(sourceKey);
-      if (atlasPages)
-        bytes = new TextEncoder().encode(
-          rewriteAtlasPageNames(
-            new TextDecoder().decode(bytes),
-            atlasPages,
-            keyMapping,
-          ),
-        );
       if (converted) {
         convertedImageCount += 1;
         const cached = cache.get(entry.sha256);
@@ -144,55 +130,6 @@ export async function optimizeLayoutImages(options: {
     assets: readonlyMap(assets),
     convertedImageCount,
   });
-}
-
-function collectAtlasPageBindings(
-  entries: ValidatedLayoutPackage["sourceEntries"],
-): ReadonlyMap<string, ReadonlyMap<string, string>> {
-  const sourceKeysByToken = new Map(
-    [...entries.keys()].map((key) => [editorAssetKeyCollisionToken(key), key]),
-  );
-  const bindings = new Map<string, ReadonlyMap<string, string>>();
-  for (const [key, entry] of entries) {
-    if (!key.toLowerCase().endsWith(".atlas")) continue;
-    let atlasText: string;
-    try {
-      atlasText = new TextDecoder("utf-8", { fatal: true }).decode(entry.bytes);
-    } catch (error) {
-      throw new Error(
-        `Spine atlas 不是合法 UTF-8：${key} (${formatError(error)})`,
-      );
-    }
-    const pages = new Map<string, string>();
-    for (const page of inspectSymbolSpineAtlas(atlasText).pageNames) {
-      const sourceKey = sourceKeysByToken.get(
-        editorAssetKeyCollisionToken(page),
-      );
-      if (!sourceKey)
-        throw new Error(`Spine atlas 页资源不存在：${key} -> ${page}`);
-      pages.set(page, sourceKey);
-    }
-    bindings.set(key, pages);
-  }
-  return bindings;
-}
-
-function rewriteAtlasPageNames(
-  atlasText: string,
-  pages: ReadonlyMap<string, string>,
-  keyMapping: ReadonlyMap<string, string>,
-): string {
-  const parts = atlasText.split(/(\r?\n)/u);
-  let cursor = 0;
-  for (const [page, sourceKey] of pages) {
-    const index = parts.findIndex(
-      (part, candidate) => candidate >= cursor && part === page,
-    );
-    if (index < 0) throw new Error(`Spine atlas 页名无法重写：${page}`);
-    parts[index] = keyMapping.get(sourceKey)!;
-    cursor = index + 1;
-  }
-  return parts.join("");
 }
 
 function isConvertible(mediaType: string, key: string): boolean {
