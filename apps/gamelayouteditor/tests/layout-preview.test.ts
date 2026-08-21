@@ -394,6 +394,29 @@ describe("LayoutPreview", () => {
     preview.destroy();
   });
 
+  it("passes the committed orientation variant into square frame sizing", async () => {
+    const host = document.createElement("div");
+    const diagnostics = document.createElement("div");
+    document.body.append(host, diagnostics);
+    const preview = new LayoutPreview(host, diagnostics);
+    await preview.init();
+    state.runtime.applyViewport.mockReturnValue({
+      ...gridSnapshot(),
+      variantId: "portrait",
+    });
+    await preview.setLayout(imageManifest, assetBytes);
+
+    preview.setPageSize({ width: 500, height: 500 });
+
+    expect(state.resolveFrame).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        pageSize: { width: 500, height: 500 },
+        previousVariantId: "portrait",
+      }),
+    );
+    preview.destroy();
+  });
+
   it("uses the production package runtime for game modes without symbols", async () => {
     const host = document.createElement("div");
     const diagnostics = document.createElement("div");

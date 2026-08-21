@@ -969,6 +969,10 @@ export class LayoutPreview {
       manifest,
       pageSize: this.#pageSize,
       ...(displayedMode ? { modeId: displayedMode } : {}),
+      ...(this.#lastLayoutSnapshot?.variantId === "landscape" ||
+      this.#lastLayoutSnapshot?.variantId === "portrait"
+        ? { previousVariantId: this.#lastLayoutSnapshot.variantId }
+        : {}),
     });
     this.#laidOutDisplayedMode = displayedMode ?? null;
     this.#frameViewport = frameViewport;

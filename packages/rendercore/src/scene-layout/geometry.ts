@@ -1,9 +1,11 @@
 import {
-  calculateFocusedFrameDesignSize,
   calculateMaximizedFocusedArtViewport,
+  calculateMaximizedResponsiveArtViewport,
   calculateResponsiveArtViewport,
   createMaximizedFocusedArtViewportPolicy,
+  createMaximizedResponsiveArtViewportPolicy,
   mapArtRectToViewport,
+  type ResponsiveArtViewportOptions,
   type RenderViewportSize,
 } from "../viewport/index.js";
 import { SceneLayoutError } from "./errors.js";
@@ -23,6 +25,7 @@ export function resolveSceneLayoutFrameViewport(options: {
   readonly manifest: SceneLayoutManifest;
   readonly pageSize: RenderViewportSize;
   readonly modeId?: string;
+  readonly previousVariantId?: SceneLayoutVariantId;
 }): SceneLayoutFrameViewport {
   const manifest = materializeSceneLayoutManifestForMode(
     options.manifest,
@@ -36,7 +39,16 @@ export function resolveSceneLayoutFrameViewport(options: {
           pageSize,
           focusRect: manifest.adaptation.focusRect,
         }).viewportSize
-      : resolveOrientationFrameDesignSize(manifest, pageSize);
+      : calculateMaximizedResponsiveArtViewport({
+          pageSize,
+          variants: createOrientationViewportVariants(
+            manifest.adaptation.variants,
+          ),
+          ...(options.previousVariantId === "landscape" ||
+          options.previousVariantId === "portrait"
+            ? { squareVariant: options.previousVariantId }
+            : {}),
+        }).viewportSize;
   const scale = Math.min(
     pageSize.width / frameDesignSize.width,
     pageSize.height / frameDesignSize.height,
@@ -65,12 +77,8 @@ export function createSceneLayoutFramePolicy(
       focusRect: manifest.adaptation.focusRect,
     });
   }
-  return Object.freeze({
-    mode: "orientation-focus" as const,
-    variants: Object.freeze({
-      landscape: createFrameVariant(manifest.adaptation.variants.landscape),
-      portrait: createFrameVariant(manifest.adaptation.variants.portrait),
-    }),
+  return createMaximizedResponsiveArtViewportPolicy({
+    variants: createOrientationViewportVariants(manifest.adaptation.variants),
   });
 }
 
@@ -92,7 +100,9 @@ export function resolveSceneLayoutViewport(options: {
         }
       : calculateResponsiveArtViewport({
           viewportSize: options.viewportSize,
-          variants: manifest.adaptation.variants,
+          variants: createOrientationViewportVariants(
+            manifest.adaptation.variants,
+          ),
           ...(options.previousVariantId === "landscape" ||
           options.previousVariantId === "portrait"
             ? { squareVariant: options.previousVariantId }
@@ -245,45 +255,6 @@ export function resolveSceneLayoutReelGrid(
   });
 }
 
-function createFrameVariant(variant: {
-  readonly artSize: RenderViewportSize;
-  readonly frameFocusRect: RenderViewportSize;
-  readonly minFocusMargin?: {
-    readonly left?: number;
-    readonly right?: number;
-    readonly top?: number;
-    readonly bottom?: number;
-  };
-}) {
-  return Object.freeze({
-    maxDesignSize: variant.artSize,
-    focusRect: variant.frameFocusRect,
-    ...(variant.minFocusMargin
-      ? { minFocusMargin: variant.minFocusMargin }
-      : {}),
-  });
-}
-
-function resolveOrientationFrameDesignSize(
-  manifest: SceneLayoutManifestV1,
-  pageSize: RenderViewportSize,
-): RenderViewportSize {
-  if (manifest.adaptation.mode !== "orientation-focus") {
-    throw new SceneLayoutError("Expected orientation-focus adaptation.");
-  }
-  const variant =
-    pageSize.height > pageSize.width
-      ? manifest.adaptation.variants.portrait
-      : manifest.adaptation.variants.landscape;
-  return calculateFocusedFrameDesignSize({
-    pageSize,
-    maxDesignSize: variant.artSize,
-    preferredPortraitSize: variant.artSize,
-    focusSize: variant.frameFocusRect,
-    minMargin: variant.minFocusMargin,
-  });
-}
-
 function validatePageSize(size: RenderViewportSize): RenderViewportSize {
   if (!Number.isFinite(size.width) || size.width <= 0) {
     throw new SceneLayoutError(
@@ -296,4 +267,22 @@ function validatePageSize(size: RenderViewportSize): RenderViewportSize {
     );
   }
   return Object.freeze({ width: size.width, height: size.height });
+}
+
+function createOrientationViewportVariants(
+  variants: Extract<
+    SceneLayoutManifestV1["adaptation"],
+    { readonly mode: "orientation-focus" }
+  >["variants"],
+): ResponsiveArtViewportOptions["variants"] {
+  const createVariant = (variant: (typeof variants)["landscape"]) =>
+    Object.freeze({
+      artSize: variant.artSize,
+      focusRect: variant.focusRect,
+      ...(variant.minFocusMargin ? { minMargin: variant.minFocusMargin } : {}),
+    });
+  return Object.freeze({
+    landscape: createVariant(variants.landscape),
+    portrait: createVariant(variants.portrait),
+  });
 }
