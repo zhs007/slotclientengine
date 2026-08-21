@@ -341,9 +341,7 @@ function playAward(
   });
   return context.waitForFrame(() => {
     const phase = runtime.getActiveAwardCelebrationPhase();
-    return (
-      phase === null || phase === "awaiting-dismiss" || phase === "complete"
-    );
+    return phase === null || phase === "complete";
   });
 }
 

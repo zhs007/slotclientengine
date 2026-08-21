@@ -90,7 +90,7 @@ award 的分段 VNI 收到最终关闭请求时立即从 exact `loopEndTime` 启
 
 award 的玩家 advance 同时推进金额和画面档位。bigwin 以前点击时，未达到 bigwin 的获奖直接进入最后实际可达的 base/standard 档并提交最终金额；达到 bigwin 及以上则把共享 `win-amount` 与 active tier 同步跳到 bigwin 阈值。进入 bigwin 后每次点击只跳到下一个实际可达的 superwin/megawin 阈值；没有下一档时提交最终金额。自动播放仍按每档 `countDurationSeconds` 连续计数。
 
-最终金额进入 `awaiting-dismiss` 后保留最后 active tier 的 loop，`requestAdvance()` 幂等且不会播放 end。该 phase 只等待宿主下一次 spin cleanup 或显式 API 关闭，不要求玩家再点击一次；`requestDismiss()` 仍执行正式 end/drain，`dismissImmediately()` 用于 next-spin、失败或 destroy 的同步清理。
+最终金额提交后立即进入 `dismissing`，最后 active tier 直接播放 end，并在动画与粒子 drain 完成后隐藏 Popup、进入 `complete`，不需要玩家或宿主再发一次关闭输入。`requestDismiss()` 会先提交最终金额再执行同一正式 end/drain；`dismissImmediately()` 仍用于失败或 destroy 的同步清理。
 
 ## v7 audio 与 v8 单状态自由弹窗
 

@@ -151,7 +151,7 @@ describe("award celebration player", () => {
     );
   });
 
-  it("keeps amount and celebration tiers synchronized and holds the final loop", async () => {
+  it("keeps amount and celebration tiers synchronized and auto-dismisses after the final amount", async () => {
     const resource = fakeResource();
     const createdKinds: string[] = [];
     const layerContainers = new Map<string, Container>();
@@ -236,29 +236,22 @@ describe("award celebration player", () => {
     expect(amountRebinds).toBe(4);
     player.requestAdvance();
     expect(player.getSnapshot()).toMatchObject({
-      phase: "awaiting-dismiss",
-      displayedAmountRaw: 5000,
-    });
-    player.update(0.2);
-    player.requestAdvance();
-    expect(player.getSnapshot()).toMatchObject({
-      phase: "awaiting-dismiss",
+      phase: "dismissing",
       activeTierId: "megawin",
-      activeSegment: "loop",
+      activeSegment: "end",
       displayedAmountRaw: 5000,
       formattedAmount: "$50.00",
     });
-    player.requestDismiss();
-    expect(player.getSnapshot().phase).toBe("dismissing");
-    player.update(1);
+    player.update(0.2);
+    player.requestAdvance();
     expect(player.getSnapshot().phase).toBe("complete");
     player.start({ betAmountRaw: 100, winAmountRaw: 50 });
     player.requestAdvance();
     expect(player.getSnapshot()).toMatchObject({
-      phase: "awaiting-dismiss",
+      phase: "dismissing",
       displayedAmountRaw: 50,
     });
-    player.dismissImmediately();
+    player.update(0.2);
     expect(player.isPlaying()).toBe(false);
     player.destroy();
     expect(() => player.start({ betAmountRaw: 100, winAmountRaw: 1 })).toThrow(
@@ -266,7 +259,7 @@ describe("award celebration player", () => {
     );
   });
 
-  it("jumps a non-celebration win to its final amount and final visible tier", async () => {
+  it("jumps a non-celebration win to its final amount and starts dismissal", async () => {
     const amountWrites: string[] = [];
     const player = createAwardCelebrationPlayer({
       resource: fakeResource(),
@@ -286,14 +279,15 @@ describe("award celebration player", () => {
     player.requestAdvance();
 
     expect(player.getSnapshot()).toMatchObject({
-      phase: "awaiting-dismiss",
+      phase: "dismissing",
       activeTierId: "standard",
+      activeSegment: "end",
       displayedAmountRaw: 101,
       formattedAmount: "$1.01",
     });
     expect(amountWrites.at(-1)).toBe("$1.01");
     player.requestAdvance();
-    expect(player.getSnapshot().phase).toBe("awaiting-dismiss");
+    expect(player.getSnapshot().phase).toBe("dismissing");
     player.destroy();
   });
 
@@ -314,7 +308,7 @@ describe("award celebration player", () => {
     player.requestAdvance();
 
     expect(player.getSnapshot()).toMatchObject({
-      phase: "awaiting-dismiss",
+      phase: "dismissing",
       activeTierId: "bigwin",
       displayedAmountRaw: 2000,
       formattedAmount: "$20.00",
@@ -341,19 +335,17 @@ describe("award celebration player", () => {
     expect(player.getSnapshot().activeTierId).toBe("standard");
     player.update(2);
     expect(player.getSnapshot()).toMatchObject({
-      phase: "awaiting-dismiss",
+      phase: "dismissing",
       displayedAmountRaw: 101,
       formattedAmount: "$1.01",
     });
-    player.requestDismiss();
     player.update(0);
     expect(player.getSnapshot().phase).toBe("complete");
     player.start({ betAmountRaw: 100, winAmountRaw: 50 });
     player.requestDismiss();
-    expect(player.getSnapshot().phase).toBe("awaiting-dismiss");
-    player.requestDismiss();
     expect(player.getSnapshot().phase).toBe("dismissing");
     player.update(0);
+    expect(player.getSnapshot().phase).toBe("complete");
     player.destroy();
   });
 
@@ -561,7 +553,7 @@ describe("award celebration player", () => {
     player.start({ betAmountRaw: 100, winAmountRaw: 101 });
     player.requestAdvance();
     expect(player.getSnapshot()).toMatchObject({
-      phase: "awaiting-dismiss",
+      phase: "dismissing",
       activeTierId: "standard",
       displayedAmountRaw: 101,
     });
@@ -587,9 +579,8 @@ describe("award celebration player", () => {
     });
     expect(bigwinContainer.visible).toBe(true);
     player.update(3);
-    expect(player.getSnapshot().phase).toBe("awaiting-dismiss");
+    expect(player.getSnapshot().phase).toBe("dismissing");
     expect(bigwinContainer.visible).toBe(true);
-    player.requestDismiss();
     player.update(0);
     expect(player.getSnapshot().phase).toBe("complete");
     expect(bigwinContainer.visible).toBe(false);

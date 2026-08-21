@@ -49,7 +49,6 @@ export interface AwardCelebrationInput {
 export type AwardCelebrationPhase =
   | "idle"
   | "counting"
-  | "awaiting-dismiss"
   | "dismissing"
   | "complete";
 export interface AwardCelebrationSnapshot {
@@ -110,11 +109,11 @@ export interface AwardCelebrationRuntime {
   init(): Promise<void>;
   start(input: AwardCelebrationInput): void;
   update(deltaSeconds: number): void;
-  /** Advances to the next reachable amount/tier milestone; final hold is a no-op. */
+  /** Advances to the next reachable amount/tier milestone; reaching the final amount starts graceful dismissal. */
   requestAdvance(): void;
-  /** Explicitly requests the final hold or its graceful end lifecycle. */
+  /** Commits the final amount and starts the graceful end lifecycle. */
   requestDismiss(): void;
-  /** Immediately clears any active presentation, including the final hold. */
+  /** Immediately clears any active presentation. */
   dismissImmediately(): void;
   getPhase(): AwardCelebrationPhase;
   isPlaying(): boolean;

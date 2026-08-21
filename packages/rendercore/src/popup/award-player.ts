@@ -279,7 +279,6 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
   requestAdvance(): void {
     this.assertReady();
     if (!this.isPlaying()) return;
-    if (this.#phase === "awaiting-dismiss") return;
     if (this.#phase !== "counting") return;
     const current = this.#stages[this.#stageIndex]!;
     const nextCelebration = this.#stages.findIndex(
@@ -293,24 +292,23 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
           nextCelebration,
           this.#stages[nextCelebration]!.fromAmountRaw,
         );
-      } else this.holdFinalAmount();
+      } else this.finishAtFinalAmount();
       return;
     }
     if (this.#stageIndex + 1 < this.#stages.length) {
       const nextIndex = this.#stageIndex + 1;
       this.startStage(nextIndex, this.#stages[nextIndex]!.fromAmountRaw);
-    } else this.holdFinalAmount();
+    } else this.finishAtFinalAmount();
   }
   requestDismiss(): void {
     this.assertReady();
     if (!this.isPlaying()) return;
     if (this.#phase === "dismissing") return;
-    if (this.#phase !== "awaiting-dismiss") {
-      this.#displayed = this.#final;
-      this.updateAmount();
-      this.#phase = "awaiting-dismiss";
-      return;
-    }
+    this.#displayed = this.#final;
+    this.updateAmount();
+    this.beginDismissing();
+  }
+  private beginDismissing() {
     this.#phase = "dismissing";
     for (const tier of this.#showing) {
       requestTierEnd(tier, this.amountText());
@@ -518,7 +516,7 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     const nextIndex = this.#stageIndex + 1;
     const stage = this.#stages[nextIndex];
     if (!stage) {
-      this.holdFinalAmount();
+      this.finishAtFinalAmount();
       return;
     }
     this.startStage(nextIndex, stage.fromAmountRaw);
@@ -553,7 +551,7 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     this.#presentation.setState(stage.tierId);
     this.#phase = "counting";
   }
-  private holdFinalAmount() {
+  private finishAtFinalAmount() {
     const finalStageIndex = this.#stages.length - 1;
     if (this.#stageIndex !== finalStageIndex)
       this.startStage(finalStageIndex, this.#final);
@@ -561,11 +559,11 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
       this.#displayed = this.#final;
       this.updateAmount();
     }
-    this.#phase = "awaiting-dismiss";
+    this.beginDismissing();
   }
   private finishStage() {
     if (this.#stageIndex + 1 < this.#stages.length) this.transitionToNext();
-    else this.holdFinalAmount();
+    else this.finishAtFinalAmount();
   }
   private transitionToNext() {
     this.#active = null;
@@ -577,16 +575,6 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
       tier.segment = "loop";
       for (const layer of tier.layers)
         layer.applySegment("loop", this.amountText());
-      this.applyTierStateGate(tier);
-    }
-    if (
-      tier.endRequested &&
-      tier.segment !== "end" &&
-      animatedLayersLoopReady(tier.layers)
-    ) {
-      tier.segment = "end";
-      for (const layer of tier.layers)
-        layer.applySegment("end", this.amountText());
       this.applyTierStateGate(tier);
     }
   }
@@ -825,12 +813,11 @@ function collectAwardStringNodeDefinitions(
 }
 
 function requestTierEnd(tier: TierRuntime, text: string) {
+  if (tier.endRequested) return;
   tier.endRequested = true;
+  tier.segment = "end";
   for (const layer of tier.layers) layer.requestEnd();
-  if (!tier.layers.some((layer) => layer.animated)) {
-    tier.segment = "end";
-    for (const layer of tier.layers) layer.applySegment("end", text);
-  }
+  for (const layer of tier.layers) layer.applySegment("end", text);
 }
 function animatedLayersLoopReady(layers: readonly PopupLayerRuntime[]) {
   for (const layer of layers)

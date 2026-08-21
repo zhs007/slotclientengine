@@ -62,7 +62,7 @@
 - framework HUD、result overlay 和 package award popup 复用 `formatServerAmount`；服务器整数按 cents 解释，不显示货币符号。
 - package popup 的 `amountFormat` 可供编辑器预览，runtime 必须注入 game-owned formatter。
 - popup tier、VNI project、asset closure 和 segmented timing 只来自 package popup manifest/project，不在 app 或测试维护第二份正式业务表。
-- 点击只调用 popup/player 的 advance/dismiss contract；awaiting-dismiss 不阻塞 spin，下一 spin 清理残留。
+- 点击只调用 popup/player 的 advance/dismiss contract；最终金额自动进入 end/drain 并关闭，round await 以 Popup `complete` 为结束边界。
 
 ## 验收
 
