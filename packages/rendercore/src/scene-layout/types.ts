@@ -861,6 +861,8 @@ export interface SceneLayoutGridCellSpinPlanStage {
 
 export interface SceneLayoutMainReelSpinInput extends SceneLayoutInitialReelScene {
   readonly random: () => number;
+  /** Optional x-first public visual reel strips used only by this grid-cell spin. */
+  readonly localReels?: readonly (readonly number[])[];
   /** X-first state matrix applied inside each exact reel landing transaction. */
   readonly landingStates?: readonly (readonly string[])[];
   /** Optional game-owned extension invoked after common grid-cell input validation. */
@@ -871,6 +873,8 @@ export interface SceneLayoutMainReelSpinInput extends SceneLayoutInitialReelScen
 
 export interface SceneLayoutMainReelContinuousSpinInput {
   readonly positions?: readonly import("../reel/index.js").GridCellSpinPosition[];
+  /** Optional x-first public visual reel strips used only by this grid-cell roll. */
+  readonly localReels?: readonly (readonly number[])[];
   /** Optional local-only source for unique per-cell public-strip start phases. */
   readonly random?: () => number;
   readonly dimming?: import("../reel/index.js").GridCellDimmingPattern;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Container, Graphics } from "pixi.js";
+import { LogicReelsModel } from "@slotclientengine/logiccore";
 import { RenderReel, createReelSpinPlan } from "../../src/reel/index.js";
 import type { ReelSymbolRegistry } from "../../src/reel/index.js";
 import {
@@ -67,6 +68,69 @@ describe("RenderReel", () => {
         localPhaseY: 1.5,
       });
     }).toThrow(/localPhaseY.*safe integer/);
+  });
+
+  it("uses per-spin public reels while rolling and keeps the response scene as the landing target", () => {
+    const localReels = new LogicReelsModel("local-spin", [
+      [1, 1, 1, 1, 1, 1, 1, 1],
+      [0, 0, 0, 0, 0, 0, 0, 0],
+    ]);
+    const reel = new RenderReel({
+      reels: createBasicReels(),
+      x: 0,
+      layout: createBasicLayout(),
+      registry: createBasicRegistry(),
+    });
+    reel.resetToVisibleSymbols([0, 0, 0], 0);
+    reel.startContinuous({
+      reels: localReels,
+      direction: "forward",
+      speedSymbolsPerSecond: 10,
+      localPhaseY: 0,
+    });
+
+    reel.update(0.4);
+    expect(reel.getVisibleScene()).toEqual([1, 1, 1]);
+
+    const responseScene = [0, 1, 0];
+    const axisPlan = createReelSpinPlan({
+      reels: localReels,
+      finalYs: [0, 0],
+      visibleRows: 3,
+      minimumSpinCycles: 1,
+      baseDurationMs: 100,
+      speedSymbolsPerSecond: 20,
+      startDelayMs: 0,
+      stopDelayMs: 0,
+    }).axes[0];
+    reel.settleContinuous(axisPlan, {
+      reels: localReels,
+      targetVisibleSymbols: responseScene,
+    });
+    reel.update(0.2);
+
+    expect(reel.getVisibleScene()).toEqual(responseScene);
+  });
+
+  it("lets the existing symbol registry reject an invalid per-spin reel code", () => {
+    const reel = new RenderReel({
+      reels: createBasicReels(),
+      x: 0,
+      layout: createBasicLayout(),
+      registry: createBasicRegistry(),
+    });
+    reel.resetToVisibleSymbols([0, 0, 0], 0);
+    expect(() =>
+      reel.startContinuous({
+        reels: new LogicReelsModel("invalid-local-spin", [
+          [99, 99, 99, 99, 99, 99, 99, 99],
+          [0, 0, 0, 0, 0, 0, 0, 0],
+        ]),
+        direction: "forward",
+        speedSymbolsPerSecond: 10,
+        localPhaseY: 0,
+      }),
+    ).toThrow(/Symbol code 99 does not exist in reel registry/);
   });
 
   it("scales spin bounce strength and disables bounce at zero", () => {

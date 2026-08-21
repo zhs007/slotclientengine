@@ -163,6 +163,7 @@ interface ActiveEffectSweep {
 }
 
 interface ActiveContinuousSpin {
+  readonly reels: LogicReels;
   readonly keys: ReadonlySet<string>;
   readonly startAtMsByKey: ReadonlyMap<string, number>;
   readonly localPhaseYByKey: ReadonlyMap<string, number>;
@@ -269,6 +270,7 @@ export class RenderGridCellReelSet
   readonly #landedCellsScratch: GridCellCoordinate[] = [];
   readonly #activationCellsScratch: GridCellCoordinate[] = [];
   #spinPlan: GridCellReelSpinPlan | null = null;
+  #spinReels: LogicReels | null = null;
   #continuousSpin: ActiveContinuousSpin | null = null;
   #activeDrop: ActiveDrop | null = null;
   #activeDirectTransferBatch: ActiveDirectTransferBatch | null = null;
@@ -427,6 +429,7 @@ export class RenderGridCellReelSet
       this.#rows,
     );
     this.#spinPlan = null;
+    this.#spinReels = null;
     this.#continuousSpin = null;
     this.clearDropOccurrences();
     this.#activeEffectSweep = null;
@@ -531,6 +534,7 @@ export class RenderGridCellReelSet
     }
 
     this.interruptAreaPresentation();
+    this.#spinReels = options.reels ?? this.#reels;
     this.#spinPlan = plan;
     this.#elapsedMs = 0;
     this.#effectController?.cancelAll();
@@ -603,12 +607,13 @@ export class RenderGridCellReelSet
     const startStepMs = options.startStepMs ?? 0;
     assertNonNegativeNumber(startStepMs, "continuous startStepMs");
     const keys = new Set(positions.map(({ x, y }) => createCellKey(x, y)));
+    const reels = options.reels ?? this.#reels;
     const cellLocalPhaseYs = options.cellLocalPhaseYs
       ? normalizeGridCellReelPhaseMatrix(
           options.cellLocalPhaseYs,
           this.#columns,
           this.#rows,
-          this.#reels,
+          reels,
         )
       : null;
     const startAtMsByKey = new Map(
@@ -665,6 +670,7 @@ export class RenderGridCellReelSet
       this.syncCellRenderOrder(cell);
     }
     this.#continuousSpin = {
+      reels,
       keys,
       startAtMsByKey,
       localPhaseYByKey,
@@ -769,6 +775,8 @@ export class RenderGridCellReelSet
     const cellsByKey = new Map(
       normalizedCells.map((cell) => [createCellKey(cell.x, cell.y), cell]),
     );
+    const reels = options.reels ?? continuous.reels;
+    this.#spinReels = reels;
     for (const cell of this.#cells) {
       const planCell = cellsByKey.get(
         createCellKey(cell.coordinate.x, cell.coordinate.y),
@@ -790,6 +798,7 @@ export class RenderGridCellReelSet
         : null;
       if (planCell && cell.hasStartedThisSpin) {
         cell.reel.settleContinuous(planCell.axisPlan, {
+          reels,
           targetVisibleSymbols: planCell.targetVisibleSymbols,
           targetVisiblePresentationValues: [cell.targetPresentationValue],
           ...(cell.targetLandingState
@@ -825,6 +834,7 @@ export class RenderGridCellReelSet
       this.syncCellRenderOrder(cell);
     }
     this.#continuousSpin = null;
+    this.#spinReels = null;
     this.#elapsedMs = 0;
   }
 
@@ -925,6 +935,7 @@ export class RenderGridCellReelSet
             const waitingDeltaMs = Math.max(0, startAtMs - previousElapsedMs);
             if (waitingDeltaMs > 0) cell.reel.update(waitingDeltaMs / 1000);
             cell.reel.startContinuous({
+              reels: active.reels,
               direction: active.direction,
               speedSymbolsPerSecond: active.speedSymbolsPerSecond,
               ...(active.localPhaseYByKey.has(key)
@@ -989,6 +1000,7 @@ export class RenderGridCellReelSet
     );
     if (completed) {
       this.#spinPlan = null;
+      this.#spinReels = null;
     }
 
     if (started.length === 0 && landed.length === 0 && activated.length === 0) {
@@ -3274,6 +3286,7 @@ export class RenderGridCellReelSet
       }
       this.setCellClipMask(cell, true);
       cell.reel.start(planCell.axisPlan, {
+        reels: this.#spinReels ?? this.#reels,
         targetVisibleSymbols: planCell.targetVisibleSymbols,
         targetVisiblePresentationValues: [cell.targetPresentationValue],
       });
