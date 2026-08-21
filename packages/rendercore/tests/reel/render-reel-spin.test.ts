@@ -545,6 +545,8 @@ describe("RenderReelSet ReelSpin", () => {
           getSymbols: () => {
             throw new Error("unused");
           },
+          setSymbolDimming: () => undefined,
+          clearSymbolDimming: () => undefined,
           getCellAnchor: () => {
             throw new Error("unused");
           },

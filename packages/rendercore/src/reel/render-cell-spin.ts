@@ -381,6 +381,34 @@ export class RenderCellSpin extends Container implements CellSpin {
     });
   }
 
+  setSymbolDimming(
+    dimmedPositions: readonly SymbolPosition[],
+    dimmingAlpha: number,
+  ): void {
+    this.assertDimmingAvailable();
+    if (!Number.isFinite(dimmingAlpha) || dimmingAlpha < 0 || dimmingAlpha > 1)
+      throw new ReelError("dimmingAlpha must be finite and between 0 and 1.");
+    if (!Array.isArray(dimmedPositions) || dimmedPositions.length === 0)
+      throw new ReelError("dimmed positions must not be empty.");
+    const selected = new Set<string>();
+    for (const position of dimmedPositions) {
+      this.getRuntimeCell(position);
+      const key = keyOf(position);
+      if (selected.has(key))
+        throw new ReelError(`dimmed positions contains duplicate ${key}.`);
+      selected.add(key);
+    }
+    for (const cell of this.#cells) {
+      const isDimmed = selected.has(keyOf(cell.position));
+      cell.reel.setSlotBrightness(0, isDimmed ? 1 - dimmingAlpha : 1);
+    }
+  }
+
+  clearSymbolDimming(): void {
+    this.assertAlive();
+    for (const cell of this.#cells) cell.reel.resetSlotBrightness();
+  }
+
   getCellAnchor(position: SymbolPosition): RenderAnchor {
     const cell = this.getRuntimeCell(position);
     return createContainerRenderAnchor(this, () => {
@@ -1065,6 +1093,12 @@ export class RenderCellSpin extends Container implements CellSpin {
 
   private assertAlive(): void {
     if (this.#destroyed) throw new ReelError("CellSpin was destroyed.");
+  }
+
+  private assertDimmingAvailable(): void {
+    this.assertAlive();
+    if (this.#activeMotion || this.#active.size > 0)
+      throw new ReelError("Cannot set symbol dimming while cells are active.");
   }
 
   private getOccurrenceGeneration(

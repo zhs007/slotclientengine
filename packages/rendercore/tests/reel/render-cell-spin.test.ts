@@ -1,6 +1,7 @@
 import { Container } from "pixi.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  RenderReel,
   createCellSpinSessionController,
   createRenderCellSpin,
 } from "../../src/reel/index.js";
@@ -85,6 +86,43 @@ describe("RenderCellSpin", () => {
       spin.replaceSymbol({ x: 0, y: 0 }, { code: 2, value: 5 }),
     ).toMatchObject({ code: 2, kind: "symbol" });
     expect(spin.getSymbol({ x: 0, y: 0 }).getValue()).toBe(5);
+  });
+
+  it("dims selected settled positions through the shared symbol-area contract", () => {
+    const brightness = vi.spyOn(RenderReel.prototype, "setSlotBrightness");
+    const reset = vi.spyOn(RenderReel.prototype, "resetSlotBrightness");
+    const spin = createSpin();
+
+    spin.setSymbolDimming(
+      [
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+      ],
+      0.75,
+    );
+    expect(brightness.mock.calls.map(([, value]) => value)).toEqual([
+      0.25, 1, 1, 0.25,
+    ]);
+    spin.clearSymbolDimming();
+    expect(reset).toHaveBeenCalledTimes(4);
+    expect(() => spin.setSymbolDimming([], 0.5)).toThrow(/must not be empty/);
+    expect(() =>
+      spin.setSymbolDimming(
+        [
+          { x: 0, y: 0 },
+          { x: 0, y: 0 },
+        ],
+        0.5,
+      ),
+    ).toThrow(/duplicate/);
+
+    spin.start({ x: 0, y: 0 });
+    expect(() => spin.setSymbolDimming([{ x: 1, y: 0 }], 0.5)).toThrow(
+      /cells are active/,
+    );
+    spin.cancel({ x: 0, y: 0 });
+    brightness.mockRestore();
+    reset.mockRestore();
   });
 
   it("does not partially replace a batch when preflight fails", () => {

@@ -620,6 +620,44 @@ describe("RenderGridCellReelSet", () => {
         .cells.filter((cell) => cell.visibleSymbol !== 0)
         .every((cell) => cell.symbolDimmingAlpha === 1),
     ).toBe(true);
+    reelSet.setSymbolDimming(
+      [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+      ],
+      0.75,
+    );
+    const selectedDimming = reelSet.getSnapshot().cells;
+    const firstSelected = selectedDimming.find(
+      (cell) => cell.x === 0 && cell.y === 0,
+    );
+    const secondSelected = selectedDimming.find(
+      (cell) => cell.x === 1 && cell.y === 0,
+    );
+    expect(firstSelected?.dimmingAlpha).toBe(0.75);
+    expect(firstSelected?.symbolDimmingAlpha).toBeCloseTo(0.25, 2);
+    expect(secondSelected?.dimmingAlpha).toBe(0.75);
+    expect(secondSelected?.symbolDimmingAlpha).toBeCloseTo(0.25, 2);
+    expect(
+      selectedDimming.find((cell) => cell.x === 1 && cell.y === 1),
+    ).toMatchObject({ dimmingAlpha: 0, symbolDimmingAlpha: 1 });
+    reelSet.setSymbolDimming([{ x: 0, y: 2 }], 0.4);
+    const replacedDimming = reelSet.getSnapshot().cells;
+    expect(
+      replacedDimming.find((cell) => cell.x === 0 && cell.y === 0),
+    ).toMatchObject({ dimmingAlpha: 0, symbolDimmingAlpha: 1 });
+    const replacement = replacedDimming.find(
+      (cell) => cell.x === 0 && cell.y === 2,
+    );
+    expect(replacement?.dimmingAlpha).toBe(0.4);
+    expect(replacement?.symbolDimmingAlpha).toBeCloseTo(0.6, 2);
+    reelSet.clearSymbolDimming();
+    expect(
+      reelSet.getSnapshot().cells.every((cell) => cell.dimmingAlpha === 0),
+    ).toBe(true);
+    expect(() => reelSet.setSymbolDimming([], 0.5)).toThrow(
+      /must not be empty/,
+    );
     expect(() => reelSet.setVisibleSymbolDimming([], 1.1)).toThrow(
       /between 0 and 1/,
     );

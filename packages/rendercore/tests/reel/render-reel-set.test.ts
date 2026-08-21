@@ -1050,6 +1050,30 @@ describe("RenderReelSet", () => {
       ],
       [0, 0],
     );
+    const area = reelSet.getArea();
+    area.setSymbolDimming(
+      [
+        { x: 0, y: 0 },
+        { x: 1, y: 2 },
+      ],
+      0.8,
+    );
+    expect(reelSet.reels[0]!.getSlotBrightness(0)).toBeCloseTo(0.2, 2);
+    expect(reelSet.reels[0]!.getSlotBrightness(1)).toBe(1);
+    expect(reelSet.reels[1]!.getSlotBrightness(2)).toBeCloseTo(0.2, 2);
+    area.setSymbolDimming([{ x: 1, y: 1 }], 0.5);
+    expect(reelSet.reels[0]!.getSlotBrightness(0)).toBe(1);
+    expect(reelSet.reels[1]!.getSlotBrightness(1)).toBeCloseTo(0.5, 2);
+    area.clearSymbolDimming();
+    expect(
+      reelSet.reels.every((reel) =>
+        reel
+          .getSlotRenderViews()
+          .filter((slot) => slot.windowY >= 0 && slot.windowY < 3)
+          .every((slot) => reel.getSlotBrightness(slot.windowY) === 1),
+      ),
+    ).toBe(true);
+    expect(() => area.setSymbolDimming([], 0.5)).toThrow(/must not be empty/);
     expect(() =>
       reelSet.releaseVisibleSymbols([
         { x: 0, y: 0 },
