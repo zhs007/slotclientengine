@@ -1,9 +1,60 @@
 import { describe, expect, it } from "vitest";
 import { Container } from "pixi.js";
-import { createPopupPresentation } from "../../src/popup/presentation.js";
+import {
+  createPopupBackdropController,
+  createPopupPresentation,
+} from "../../src/popup/presentation.js";
 import type { PopupManifest, PopupManifestV1 } from "../../src/popup/types.js";
 
 describe("popup presentation host contract", () => {
+  it("shares one host-owned backdrop across serialized Popup presentations", () => {
+    const backdrop = createPopupBackdropController("test shared backdrop");
+    const host = new Container();
+    host.addChild(backdrop.view);
+    const manifest = {
+      version: 3,
+      kind: "popup",
+      type: "spine",
+      id: "shared-popup",
+      name: "Shared Popup",
+      adaptation: {
+        mode: "maximized-focus",
+        focus: { left: 100, right: 100, top: 100, bottom: 100 },
+      },
+      backdrop: { enabled: true, color: "#000000", alpha: 0.5 },
+      resources: {},
+      spine: {} as never,
+    } satisfies PopupManifest;
+    const first = createPopupPresentation(manifest, {
+      backdropController: backdrop,
+    });
+    const second = createPopupPresentation(
+      { ...manifest, id: "shared-popup-2", name: "Shared Popup 2" },
+      { backdropController: backdrop },
+    );
+    host.addChild(first.container, second.container);
+    first.applyViewport({ width: 800, height: 600 });
+    second.applyViewport({ width: 800, height: 600 });
+
+    expect(first.container.children).toHaveLength(1);
+    expect(second.container.children).toHaveLength(1);
+    expect(
+      host.children.filter((child) => child === backdrop.view),
+    ).toHaveLength(1);
+    first.setActive(true);
+    expect(backdrop.view.visible).toBe(true);
+    second.setActive(true);
+    first.setActive(false);
+    expect(backdrop.view.visible).toBe(true);
+    second.setActive(false);
+    expect(backdrop.view.visible).toBe(false);
+
+    first.destroy();
+    second.destroy();
+    expect(backdrop.view.destroyed).toBe(false);
+    backdrop.destroy();
+  });
+
   it("adapts v3 content from focus alone on an unbounded authored plane", () => {
     const presentation = createPopupPresentation({
       version: 3,

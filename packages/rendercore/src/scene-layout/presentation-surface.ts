@@ -55,6 +55,7 @@ export interface SceneLayoutPresentationSurface {
   bindPopupInput(options: SceneLayoutPopupInputBindingOptions): () => void;
   requestPrimaryPopupInteraction(): PopupInteractionDispatchResult;
   openPopup(request: SceneLayoutPopupOpenRequest): SceneLayoutPopupSession;
+  enqueuePopup(request: SceneLayoutPopupOpenRequest): SceneLayoutPopupSession;
   closePopup(options?: SceneLayoutPopupCloseOptions): Promise<void>;
   getActivePopupAddress():
     | import("./data/runtime-address.js").GameLayoutRuntimeAddress
@@ -255,6 +256,11 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
   openPopup(request: SceneLayoutPopupOpenRequest): SceneLayoutPopupSession {
     this.assertReady();
     return this.#runtime.openPopup(request);
+  }
+
+  enqueuePopup(request: SceneLayoutPopupOpenRequest): SceneLayoutPopupSession {
+    this.assertReady();
+    return this.#runtime.enqueuePopup(request);
   }
 
   closePopup(options?: SceneLayoutPopupCloseOptions): Promise<void> {

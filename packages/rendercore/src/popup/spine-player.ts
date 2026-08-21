@@ -18,7 +18,10 @@ import {
   createSpinePopupOverlayRuntime,
   type SpinePopupOverlayRuntime,
 } from "./spine-overlay-runtime.js";
-import { createPopupPresentation } from "./presentation.js";
+import {
+  createPopupPresentation,
+  type PopupBackdropController,
+} from "./presentation.js";
 import {
   attachPopupLayerRuntimes,
   type PopupLayerAttachmentHandle,
@@ -47,6 +50,7 @@ export function createSpinePopupRuntime(options: {
     readonly width: number;
     readonly height: number;
   };
+  readonly backdropController?: PopupBackdropController;
 }): SpinePopupRuntime {
   if (options.resource.manifest.type !== "spine")
     throw new Error("Spine popup player requires a spine popup package.");
@@ -63,6 +67,7 @@ export function createSpinePopupRuntime(options: {
     },
     player,
     options.measurePromptText,
+    options.backdropController,
   );
 }
 
@@ -96,11 +101,14 @@ class DefaultSpinePopupRuntime implements SpinePopupRuntime {
       readonly width: number;
       readonly height: number;
     },
+    backdropController?: PopupBackdropController,
   ) {
     const manifest = resource.manifest;
     this.#manifest = manifest;
     this.#player = player;
-    this.#presentation = createPopupPresentation(manifest);
+    this.#presentation = createPopupPresentation(manifest, {
+      backdropController,
+    });
     this.container = this.#presentation.container;
     this.#popupRoot.position.set(
       manifest.spine.transform.x,

@@ -29,4 +29,8 @@ export {
 export { createAwardCelebrationRuntime } from "../award-player.js";
 export { createSpinePopupRuntime } from "../spine-player.js";
 export { createSingleStatePopupRuntime } from "../single-state-player.js";
+export {
+  createPopupBackdropController,
+  type PopupBackdropController,
+} from "../presentation.js";
 export { createPopupPackageResourceFromResolvedFiles } from "./package-resource.js";

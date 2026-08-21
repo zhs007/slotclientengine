@@ -768,8 +768,26 @@ export type SceneLayoutPopupOpenRequest =
 export interface SceneLayoutPopupSession {
   readonly address: import("./data/runtime-address.js").GameLayoutRuntimeAddress;
   readonly type: SceneLayoutPopupBinding["type"];
+  /** Current scheduler-owned lifecycle state for this exact request. */
+  readonly state: SceneLayoutPopupSessionState;
+  /** Resolves after this queued request becomes active and reaches its first stable presentation. */
+  readonly presented: Promise<void>;
+  /** Resolves after this exact request closes or is cancelled; runtime destruction rejects it. */
   readonly finished: Promise<void>;
+  /** Closes only this exact session. A stale session never closes a later Popup. */
+  close(options?: SceneLayoutPopupCloseOptions): Promise<void>;
+  /** Cancels a queued request or immediately closes this exact active session. */
+  cancel(): Promise<void>;
 }
+
+export type SceneLayoutPopupSessionState =
+  | "queued"
+  | "opening"
+  | "active"
+  | "closing"
+  | "finished"
+  | "cancelled"
+  | "failed";
 
 export interface SceneLayoutPopupCloseOptions {
   readonly behavior?: "complete" | "immediate";
@@ -997,8 +1015,10 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   bindPopupInput(options: SceneLayoutPopupInputBindingOptions): () => void;
   /** Performs the active Popup phase's single primary interaction. */
   requestPrimaryPopupInteraction(): import("../popup/input-binding.js").PopupInteractionDispatchResult;
-  /** Opens one exact exported Popup. A second active Popup is rejected instead of stacked. */
+  /** Opens one exact exported Popup only when no Popup work is active or queued. */
   openPopup(request: SceneLayoutPopupOpenRequest): SceneLayoutPopupSession;
+  /** Queues one exact exported Popup behind all previously requested Popup lifecycles. */
+  enqueuePopup(request: SceneLayoutPopupOpenRequest): SceneLayoutPopupSession;
   /** Requests or immediately performs closure of the one active Popup. */
   closePopup(options?: SceneLayoutPopupCloseOptions): Promise<void>;
   /** Allocation-free query for the one active Popup owner address. */
@@ -1053,7 +1073,7 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   requestDismissGameModePrelude(): void;
   /** Cancels an active transition prelude and keeps the stable source mode. */
   dismissGameModePreludeImmediately(): void;
-  /** Starts the award-celebration popup explicitly bound to the current stable mode. */
+  /** Queues the award-celebration popup explicitly bound to the current stable mode. */
   startAwardCelebrationForCurrentMode(input: {
     readonly betAmountRaw: number;
     readonly winAmountRaw: number;

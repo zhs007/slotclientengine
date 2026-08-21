@@ -31,7 +31,10 @@ import type {
   PopupStringNodeSelector,
   PopupManifest,
 } from "./types.js";
-import { createPopupPresentation } from "./presentation.js";
+import {
+  createPopupPresentation,
+  type PopupBackdropController,
+} from "./presentation.js";
 import {
   attachPopupLayerRuntimes,
   type PopupLayerAttachmentHandle,
@@ -111,6 +114,7 @@ export function createAwardCelebrationRuntime(options: {
   readonly resource: PopupPackageResource;
   readonly layerFactory?: PopupLayerRuntimeFactory;
   readonly formatAmount?: PopupAmountFormatter | undefined;
+  readonly backdropController?: PopupBackdropController;
 }): AwardCelebrationRuntime {
   if (options.resource.manifest.type !== "award-celebration")
     throw new Error(
@@ -165,6 +169,7 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     readonly resource: PopupPackageResource;
     readonly layerFactory?: PopupLayerRuntimeFactory;
     readonly formatAmount?: PopupAmountFormatter | undefined;
+    readonly backdropController?: PopupBackdropController;
   }) {
     if (options.resource.manifest.type !== "award-celebration")
       throw new Error(
@@ -176,7 +181,9 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
         { readonly type: "award-celebration" }
       >;
     };
-    this.#presentation = createPopupPresentation(this.#resource.manifest);
+    this.#presentation = createPopupPresentation(this.#resource.manifest, {
+      backdropController: options.backdropController,
+    });
     this.container = this.#presentation.container;
     this.#factory = options.layerFactory ?? defaultLayerFactory;
     this.#formatAmount =

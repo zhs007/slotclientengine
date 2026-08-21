@@ -16,11 +16,13 @@ import {
 import {
   bindPopupInteractionInput,
   createAwardCelebrationRuntime,
+  createPopupBackdropController,
   createSingleStatePopupRuntime,
   createSpinePopupRuntime,
   handledPopupInteraction,
   unhandledPopupInteraction,
   type AwardCelebrationRuntime,
+  type PopupBackdropController,
   type PopupInteractionDispatchResult,
   type PopupStringNodeHandle,
   type SingleStatePopupRuntime,
@@ -83,6 +85,7 @@ import type {
   SceneLayoutPopupCloseOptions,
   SceneLayoutPopupOpenRequest,
   SceneLayoutPopupSession,
+  SceneLayoutPopupSessionState,
   SceneLayoutPopupStringInput,
   SceneLayoutPopupInputBindingOptions,
   SceneLayoutLayerId,
@@ -178,11 +181,36 @@ interface ActiveProgrammaticPopup {
   readonly id: string;
   readonly address: GameLayoutRuntimeAddress;
   readonly type: SceneLayoutPopupOpenRequest["type"];
+  readonly sessionId: number;
 }
 
 interface PopupCompletionWaiter {
   readonly resolve: () => void;
   readonly reject: (error: SceneLayoutError) => void;
+}
+
+interface PopupSessionDeferred {
+  readonly promise: Promise<void>;
+  readonly resolve: () => void;
+  readonly reject: (error: SceneLayoutError) => void;
+  settled: boolean;
+}
+
+interface ProgrammaticPopupSessionController {
+  readonly sessionId: number;
+  readonly request: SceneLayoutPopupOpenRequest;
+  readonly id: string;
+  readonly presented: PopupSessionDeferred;
+  readonly finished: PopupSessionDeferred;
+  state: SceneLayoutPopupSessionState;
+  readonly session: SceneLayoutPopupSession;
+  activation?: PendingPopupActivation;
+}
+
+interface PendingPopupActivation {
+  readonly source: "programmatic" | "award" | "prelude";
+  start(): void;
+  cancel(error: SceneLayoutError): void;
 }
 
 type ActiveModeTransition =
@@ -238,6 +266,7 @@ export function createSceneLayoutPackageRuntime(options: {
   }) => RendercoreSpinePlayer;
   readonly createSpinePopupRuntime?: (options: {
     readonly resource: SceneLayoutPackageResource["popupPackages"][string];
+    readonly backdropController?: PopupBackdropController;
   }) => SpinePopupRuntime;
   readonly createVideoTransitionPlayer?: (options: {
     readonly url: string;
@@ -326,6 +355,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   }) => RendercoreSpinePlayer;
   readonly #createSpinePopupRuntime: (options: {
     readonly resource: SceneLayoutPackageResource["popupPackages"][string];
+    readonly backdropController?: PopupBackdropController;
   }) => SpinePopupRuntime;
   readonly #createVideoTransitionPlayer: (options: {
     readonly url: string;
@@ -341,6 +371,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #popupAudioHandles = new Map<string, AudioPlaybackHandle[]>();
   readonly #symbolAudioHandles = new Map<string, AudioPlaybackHandle[]>();
   readonly #popupRoot = new Container();
+  readonly #popupBackdrop: PopupBackdropController;
   readonly #transitionRoot = new Container();
   readonly #popupRenderLayerRoot = new Container();
   readonly #transitionRenderLayerRoot = new Container();
@@ -379,6 +410,13 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   #activePopupId: string | null = null;
   #activeAwardCelebrationWaiter: ActiveAwardCelebrationWaiter | null = null;
   #activeProgrammaticPopup: ActiveProgrammaticPopup | null = null;
+  #nextPopupSessionId = 1;
+  readonly #programmaticPopupSessions = new Map<
+    number,
+    ProgrammaticPopupSessionController
+  >();
+  readonly #pendingPopupActivations: PendingPopupActivation[] = [];
+  #popupScheduleFailure: SceneLayoutError | null = null;
   readonly #popupCompletionWaiters = new Map<
     string,
     Set<PopupCompletionWaiter>
@@ -568,7 +606,14 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#transitionRenderLayerRoot.zIndex = 1_000_000_000;
     this.#reelRenderLayerRoot.label = "scene-layout-render-layer:reel";
     this.#reelRenderLayerRoot.sortableChildren = true;
-    this.#popupRoot.addChild(this.#popupRenderLayerRoot);
+    this.#popupBackdrop = createPopupBackdropController(
+      "scene-layout-shared-popup-backdrop",
+    );
+    this.#popupBackdrop.view.zIndex = Number.MIN_SAFE_INTEGER;
+    this.#popupRoot.addChild(
+      this.#popupBackdrop.view,
+      this.#popupRenderLayerRoot,
+    );
     this.#transitionRoot.addChild(this.#transitionRenderLayerRoot);
     this.#popupRenderLayerController = this.createLayerController(
       this.#popupRenderLayerRoot,
@@ -676,12 +721,19 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         ([id, resource]) => {
           const popup =
             resource.manifest.type === "spine"
-              ? this.#createSpinePopupRuntime({ resource })
+              ? this.#createSpinePopupRuntime({
+                  resource,
+                  backdropController: this.#popupBackdrop,
+                })
               : resource.manifest.type === "single-state"
-                ? createSingleStatePopupRuntime({ resource })
+                ? createSingleStatePopupRuntime({
+                    resource,
+                    backdropController: this.#popupBackdrop,
+                  })
                 : createAwardCelebrationRuntime({
                     resource,
                     formatAmount: this.#formatPopupAmount,
+                    backdropController: this.#popupBackdrop,
                   });
           if (resource.manifest.type === "spine")
             this.#spinePopups.set(id, popup as SpinePopupRuntime);
@@ -935,6 +987,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
 
   update(deltaSeconds: number): void {
     this.assertReady();
+    if (this.#popupScheduleFailure) throw this.#popupScheduleFailure;
     if (this.#audioFailure) throw this.#audioFailure;
     this.syncStableModeMusic();
     this.#audio.update(deltaSeconds);
@@ -969,8 +1022,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           const failure = asSceneLayoutError(error);
           this.rejectPopupCompletion(id, failure);
           popup.dismissImmediately();
-          if (this.#activeProgrammaticPopup?.id === id)
-            this.#activeProgrammaticPopup = null;
+          this.failActiveProgrammaticPopup(id, failure);
           if (this.#activePopupId === id) this.#activePopupId = null;
           if (this.#activeAwardCelebrationWaiter?.popupId === id) {
             const waiter = this.#activeAwardCelebrationWaiter;
@@ -989,7 +1041,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           this.rejectPopupCompletion(id, failure);
           if (this.#activeProgrammaticPopup?.id === id) {
             popup.dismissImmediately();
-            this.#activeProgrammaticPopup = null;
+            this.failActiveProgrammaticPopup(id, failure);
             this.refreshPopupPointerInteraction();
           }
           if (this.#activePrelude?.popupId === id) {
@@ -1004,11 +1056,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           const failure = asSceneLayoutError(error);
           this.rejectPopupCompletion(id, failure);
           popup.dismissImmediately();
-          if (this.#activeProgrammaticPopup?.id === id)
-            this.#activeProgrammaticPopup = null;
+          this.failActiveProgrammaticPopup(id, failure);
           this.refreshPopupPointerInteraction();
           throw error;
         }
+    this.updateActiveProgrammaticPopupPresented();
     for (const id of this.#closingPopupIds) {
       const binding = this.#document.popups?.[id];
       if (!binding) continue;
@@ -1016,29 +1068,21 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       if (popup.isPlaying()) popup.requestDismiss();
     }
     for (const [id, binding] of Object.entries(this.#document.popups ?? {}))
-      if (!this.popupRuntime(id, binding.type).isPlaying())
+      if (!this.popupRuntime(id, binding.type).isPlaying()) {
+        if (this.#activeProgrammaticPopup?.id === id) {
+          const controller = this.#programmaticPopupSessions.get(
+            this.#activeProgrammaticPopup.sessionId,
+          );
+          if (controller) this.finishProgrammaticPopupSession(controller);
+        }
+        if (this.#activePopupId === id) this.completeActiveAwardCelebration(id);
         this.settlePopupCompletion(id);
+      }
     this.updatePopupAudioCues();
     this.updateActivePrelude();
     this.updateActiveTransition(deltaSeconds);
-    if (
-      this.#activePopupId &&
-      !this.#popups.get(this.#activePopupId)?.isPlaying()
-    ) {
-      const completedId = this.#activePopupId;
-      this.completeActiveAwardCelebration(completedId);
-      this.refreshPopupPointerInteraction();
-    }
-    if (
-      this.#activeProgrammaticPopup &&
-      !this.popupRuntime(
-        this.#activeProgrammaticPopup.id,
-        this.#activeProgrammaticPopup.type,
-      ).isPlaying()
-    ) {
-      this.#activeProgrammaticPopup = null;
-      this.refreshPopupPointerInteraction();
-    }
+    this.refreshPopupPointerInteraction();
+    this.drainPopupActivations();
   }
 
   resetReelScene(reelId: "main", input: SceneLayoutInitialReelScene): void {
@@ -1972,59 +2016,33 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         "Cannot open a programmatic Popup during a game mode transition.",
       );
     this.assertNoActivePopup("open a programmatic Popup");
-    this.addresses.resolve(request.address, "popup");
-    const segments = splitGameLayoutRuntimeAddress(request.address);
-    if (segments.length !== 2 || segments[0] !== "popup")
+    if (this.#pendingPopupActivations.length)
       throw new SceneLayoutError(
-        `Game Layout Popup address is invalid: ${request.address}.`,
+        "Cannot open a programmatic Popup while Popup requests are queued; use enqueuePopup() to preserve request order.",
       );
-    const id = segments[1]!;
-    const binding = this.#document.popups?.[id];
-    if (!binding)
-      throw new SceneLayoutError(
-        `Scene layout Popup address is unavailable: ${request.address}.`,
-      );
-    if (binding.type !== request.type)
-      throw new SceneLayoutError(
-        `Scene layout Popup "${id}" type mismatch: expected ${binding.type}, received ${request.type}.`,
-      );
-    if (request.type === "award-celebration")
-      this.assertAwardCelebrationInput(request);
-    else if (request.type === "spine") {
-      if (request.text !== undefined && typeof request.text !== "string")
-        throw new SceneLayoutError("Spine Popup text must be a string.");
-    }
-
-    const active = Object.freeze({
-      id,
-      address: request.address,
-      type: request.type,
-    }) satisfies ActiveProgrammaticPopup;
+    const controller = this.createProgrammaticPopupSession(request);
     try {
-      if (request.type === "award-celebration") {
-        this.getAwardCelebrationPopup(id).start({
-          betAmountRaw: request.betAmountRaw,
-          winAmountRaw: request.winAmountRaw,
-        });
-      } else if (request.type === "spine") {
-        this.getSpinePopup(id).start(request.text);
-      } else this.getSingleStatePopup(id).start();
+      this.activateProgrammaticPopupSession(controller);
     } catch (error) {
-      this.popupRuntime(id, request.type).dismissImmediately();
-      throw asSceneLayoutError(error);
+      const failure = asSceneLayoutError(error);
+      this.failProgrammaticPopupSession(controller, failure);
+      throw failure;
     }
+    return controller.session;
+  }
 
-    const runtime = this.popupRuntime(id, request.type);
-    const finished = runtime.isPlaying()
-      ? this.waitForPopupCompletion(id)
-      : Promise.resolve();
-    if (runtime.isPlaying()) this.#activeProgrammaticPopup = active;
-    this.refreshPopupPointerInteraction();
-    return Object.freeze({
-      address: request.address,
-      type: request.type,
-      finished,
-    });
+  enqueuePopup(request: SceneLayoutPopupOpenRequest): SceneLayoutPopupSession {
+    this.assertReady();
+    const controller = this.createProgrammaticPopupSession(request);
+    const activation: PendingPopupActivation = {
+      source: "programmatic",
+      start: () => this.activateProgrammaticPopupSession(controller),
+      cancel: (error) => this.failProgrammaticPopupSession(controller, error),
+    };
+    controller.activation = activation;
+    this.#pendingPopupActivations.push(activation);
+    this.drainPopupActivations();
+    return controller.session;
   }
 
   closePopup(options: SceneLayoutPopupCloseOptions = {}): Promise<void> {
@@ -2039,6 +2057,13 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     const active = this.activePopupOwner();
     if (!active) return Promise.resolve();
     const runtime = this.popupRuntime(active.id, active.type);
+    const programmaticController =
+      active.source === "programmatic" && this.#activeProgrammaticPopup
+        ? this.#programmaticPopupSessions.get(
+            this.#activeProgrammaticPopup.sessionId,
+          )
+        : undefined;
+    if (programmaticController) programmaticController.state = "closing";
     if (behavior === "immediate") {
       this.#closingPopupIds.delete(active.id);
       if (active.source === "prelude") {
@@ -2047,9 +2072,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         runtime.dismissImmediately();
         if (active.source === "award")
           this.completeActiveAwardCelebration(active.id);
-        else this.#activeProgrammaticPopup = null;
+        else if (programmaticController)
+          this.finishProgrammaticPopupSession(programmaticController);
         this.settlePopupCompletion(active.id);
         this.refreshPopupPointerInteraction();
+        this.drainPopupActivations();
       }
       return Promise.resolve();
     }
@@ -2058,10 +2085,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     if (!runtime.isPlaying()) {
       if (active.source === "award")
         this.completeActiveAwardCelebration(active.id);
-      else if (active.source === "programmatic")
-        this.#activeProgrammaticPopup = null;
+      else if (programmaticController)
+        this.finishProgrammaticPopupSession(programmaticController);
       this.settlePopupCompletion(active.id);
       this.refreshPopupPointerInteraction();
+      this.drainPopupActivations();
       return Promise.resolve();
     }
     return this.waitForPopupCompletion(active.id);
@@ -2254,6 +2282,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       throw asSceneLayoutError(error);
     } finally {
       this.#modeRequestInProgress = false;
+      this.drainPopupActivations();
     }
   }
 
@@ -2261,7 +2290,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     modeId: string,
     options: SceneLayoutGameModeRequestOptions = {},
   ): Promise<void> {
-    this.assertCanPrepareTransition();
+    this.assertCanPrepareTransition(true);
     const signature = requestOptionsSignature(options);
     if (
       this.#preparedTransition?.target.id === modeId &&
@@ -2283,6 +2312,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       throw asSceneLayoutError(error);
     } finally {
       this.#modeRequestInProgress = false;
+      this.drainPopupActivations();
     }
   }
 
@@ -2302,7 +2332,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   ): Promise<void> {
     let transition: SceneLayoutGameModeTransition;
     try {
-      this.assertCanPrepareTransition();
+      this.assertCanPrepareTransition(true);
       this.requireMode(modeId);
       if (modeId === this.#stableMode && options.recreateReel !== true) {
         if (options.preludePopupStrings?.length)
@@ -2316,6 +2346,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         return Promise.resolve();
       }
       transition = this.findTransition(modeId);
+      if (!transition.preludePopup)
+        this.assertNoPopupWork("change scene layout game mode");
       if (options.preludePopupStrings?.length && !transition.preludePopup)
         throw new SceneLayoutError(
           `Scene transition ${transition.from} -> ${transition.to} has no prelude Popup for string inputs.`,
@@ -2433,7 +2465,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       throw new SceneLayoutError(
         "Cannot start an award celebration during a game mode transition.",
       );
-    this.assertNoActivePopup("start an award celebration");
     this.assertAwardCelebrationInput(input);
     const mode = modes.modes.find(
       (candidate) => candidate.id === this.#stableMode,
@@ -2442,29 +2473,38 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       throw new SceneLayoutError(
         `Scene layout game mode "${mode.id}" has no award celebration popup.`,
       );
-    const popup = this.getAwardCelebrationPopup(mode.awardCelebrationPopup);
-    try {
-      popup.start(input);
-    } catch (error) {
-      popup.dismissImmediately();
-      throw asSceneLayoutError(error);
-    }
-    if (popup.isPlaying()) {
-      this.#activePopupId = mode.awardCelebrationPopup;
-      this.refreshPopupPointerInteraction();
-    }
+    this.enqueueAwardCelebration(mode.awardCelebrationPopup, input, null);
   }
 
   playAwardCelebrationForCurrentMode(input: {
     readonly betAmountRaw: number;
     readonly winAmountRaw: number;
   }): Promise<void> {
-    this.startAwardCelebrationForCurrentMode(input);
-    const popupId = this.#activePopupId;
-    if (!popupId) return Promise.resolve();
-    return new Promise<void>((resolve, reject) => {
-      this.#activeAwardCelebrationWaiter = { popupId, resolve, reject };
-    });
+    try {
+      this.assertReady();
+      const modes = this.requireGameModes();
+      if (this.#targetMode)
+        throw new SceneLayoutError(
+          "Cannot start an award celebration during a game mode transition.",
+        );
+      this.assertAwardCelebrationInput(input);
+      const mode = modes.modes.find(
+        (candidate) => candidate.id === this.#stableMode,
+      )!;
+      if (!mode.awardCelebrationPopup)
+        throw new SceneLayoutError(
+          `Scene layout game mode "${mode.id}" has no award celebration popup.`,
+        );
+      const completion = createPopupSessionDeferred();
+      this.enqueueAwardCelebration(
+        mode.awardCelebrationPopup,
+        input,
+        completion,
+      );
+      return completion.promise;
+    } catch (error) {
+      return Promise.reject(asSceneLayoutError(error));
+    }
   }
 
   requestAdvanceAwardCelebration(): void {
@@ -2482,6 +2522,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.completeActiveAwardCelebration(id);
     this.settlePopupCompletion(id);
     this.refreshPopupPointerInteraction();
+    this.drainPopupActivations();
   }
 
   getActiveAwardCelebrationPhase() {
@@ -2639,10 +2680,15 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     const popupDestroyError = new SceneLayoutError(
       "Scene layout package runtime was destroyed during Popup playback.",
     );
+    for (const activation of this.#pendingPopupActivations.splice(0))
+      activation.cancel(popupDestroyError);
+    for (const controller of [...this.#programmaticPopupSessions.values()])
+      this.failProgrammaticPopupSession(controller, popupDestroyError);
     for (const id of [...this.#popupCompletionWaiters.keys()])
       this.rejectPopupCompletion(id, popupDestroyError);
     this.#closingPopupIds.clear();
     this.#activeProgrammaticPopup = null;
+    this.#popupScheduleFailure = null;
     this.#disposePopupInputBinding?.();
     this.#disposePopupInputBinding = null;
     this.releasePreparedTransition(this.#preparedTransition);
@@ -2698,6 +2744,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#spinePopups.clear();
     for (const popup of this.#singleStatePopups.values()) popup.destroy();
     this.#singleStatePopups.clear();
+    this.#popupBackdrop.destroy();
     this.#popupAudioStates.clear();
     this.#popupAudioHandles.clear();
     this.#symbolAudioHandles.clear();
@@ -2809,13 +2856,14 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     }
   }
 
-  private assertCanPrepareTransition(): void {
+  private assertCanPrepareTransition(allowPopupQueue = false): void {
     this.assertReady();
     if (this.#modeRequestInProgress || this.#targetMode)
       throw new SceneLayoutError(
         `A scene layout game mode transition is already in progress${this.#targetMode ? ` to "${this.#targetMode}"` : " during target preparation"}.`,
       );
-    this.assertNoActivePopup("change scene layout game mode");
+    if (!allowPopupQueue)
+      this.assertNoPopupWork("change scene layout game mode");
   }
 
   private findTransition(modeId: string): SceneLayoutGameModeTransition {
@@ -2946,7 +2994,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     options: SceneLayoutGameModeRequestOptions,
     signature: string,
   ): Promise<void> {
-    this.assertCanPrepareTransition();
+    this.assertCanPrepareTransition(true);
     let prepared = this.#preparedTransition;
     let directlyStarted: Promise<void> | null = null;
     if (
@@ -2971,6 +3019,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         );
       } finally {
         this.#modeRequestInProgress = false;
+        this.drainPopupActivations();
       }
     }
     if (prepared.kind !== "spine")
@@ -3002,35 +3051,61 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     popupId: string,
     popupStrings?: readonly SceneLayoutPopupStringInput[],
   ): Promise<void> {
-    this.assertNoActivePopup("start a game mode transition prelude");
     this.#preparedTransition = null;
-    const popup = this.getSpinePopup(popupId);
-    let restorePopupStrings = () => {};
-    let startingPopup = false;
-    try {
-      restorePopupStrings = applyPopupStringInputs(popup, popupStrings);
-      popup.dismissImmediately();
-      startingPopup = true;
-      popup.start();
-      this.#targetMode = prepared.target.id;
-      this.#targetSymbolPackageId = prepared.targetSymbolPackageId;
-      return new Promise<void>((resolve, reject) => {
-        this.#activePrelude = {
-          prepared,
-          popupId,
-          restorePopupStrings,
-          phase: "popup",
-          resolve,
-          reject,
-        };
-        this.refreshPopupPointerInteraction();
-      });
-    } catch (error) {
-      if (startingPopup) popup.dismissImmediately();
-      restorePopupStrings();
-      this.releasePreparedTransition(prepared);
-      throw asSceneLayoutError(error);
-    }
+    this.#targetMode = prepared.target.id;
+    this.#targetSymbolPackageId = prepared.targetSymbolPackageId;
+    return new Promise<void>((resolve, reject) => {
+      const activation: PendingPopupActivation = {
+        source: "prelude",
+        start: () => {
+          const popup = this.getSpinePopup(popupId);
+          let restorePopupStrings = () => {};
+          let startingPopup = false;
+          try {
+            restorePopupStrings = applyPopupStringInputs(popup, popupStrings);
+            popup.dismissImmediately();
+            startingPopup = true;
+            popup.start();
+          } catch (error) {
+            if (startingPopup) popup.dismissImmediately();
+            restorePopupStrings();
+            throw asSceneLayoutError(error);
+          }
+          if (!popup.isPlaying()) {
+            restorePopupStrings();
+            const continuation =
+              prepared.kind === "none"
+                ? this.activatePreparedNoneTransition(prepared)
+                : prepared.kind === "spine"
+                  ? this.activatePreparedSpineTransition(prepared)
+                  : Promise.reject(
+                      new SceneLayoutError(
+                        "A completed video prelude must await a trusted video start.",
+                      ),
+                    );
+            void continuation.then(resolve, reject);
+            return;
+          }
+          this.#activePrelude = {
+            prepared,
+            popupId,
+            restorePopupStrings,
+            phase: "popup",
+            resolve,
+            reject,
+          };
+          this.refreshPopupPointerInteraction();
+        },
+        cancel: (error) => {
+          this.releasePreparedTransition(prepared);
+          this.#targetMode = null;
+          this.#targetSymbolPackageId = null;
+          reject(error);
+        },
+      };
+      this.#pendingPopupActivations.push(activation);
+      this.drainPopupActivations();
+    });
   }
 
   private async startNoneTransition(
@@ -3038,7 +3113,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     options: SceneLayoutGameModeRequestOptions,
     signature: string,
   ): Promise<void> {
-    this.assertCanPrepareTransition();
+    this.assertCanPrepareTransition(true);
     let prepared = this.#preparedTransition;
     if (
       prepared?.kind !== "none" ||
@@ -3090,6 +3165,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       this.#targetSymbolPackageId = null;
       throw asSceneLayoutError(error);
     }
+    this.drainPopupActivations();
   }
 
   private async activatePreparedSpineTransition(
@@ -3276,7 +3352,16 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       active.prepared.kind === "none"
         ? this.activatePreparedNoneTransition(active.prepared)
         : this.activatePreparedSpineTransition(active.prepared);
-    void continuation.then(active.resolve, active.reject);
+    void continuation.then(
+      () => {
+        active.resolve();
+        this.drainPopupActivations();
+      },
+      (error) => {
+        active.reject(error);
+        this.drainPopupActivations();
+      },
+    );
   }
 
   private failActivePrelude(
@@ -3293,6 +3378,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#targetMode = null;
     this.#targetSymbolPackageId = null;
     active.reject(error);
+    this.drainPopupActivations();
   }
 
   private refreshPopupPointerInteraction(): void {
@@ -3404,6 +3490,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       }
     }
     active.resolve();
+    this.drainPopupActivations();
   }
 
   private failActiveTransition(
@@ -3423,6 +3510,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#activeTransition = null;
     if (active.switched) this.refreshCommittedGeometryPresentation();
     active.reject(error);
+    this.drainPopupActivations();
   }
 
   private createReelPresentation(
@@ -3915,6 +4003,14 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     );
   }
 
+  private assertNoPopupWork(action: string): void {
+    this.assertNoActivePopup(action);
+    if (this.#pendingPopupActivations.length)
+      throw new SceneLayoutError(
+        `Cannot ${action} while ${this.#pendingPopupActivations.length} Popup request${this.#pendingPopupActivations.length === 1 ? " is" : "s are"} queued.`,
+      );
+  }
+
   private popupRuntime(
     id: string,
     type: SceneLayoutPopupOpenRequest["type"],
@@ -3922,6 +4018,302 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     if (type === "award-celebration") return this.getAwardCelebrationPopup(id);
     if (type === "spine") return this.getSpinePopup(id);
     return this.getSingleStatePopup(id);
+  }
+
+  private validateProgrammaticPopupRequest(
+    request: SceneLayoutPopupOpenRequest,
+  ): string {
+    this.addresses.resolve(request.address, "popup");
+    const segments = splitGameLayoutRuntimeAddress(request.address);
+    if (segments.length !== 2 || segments[0] !== "popup")
+      throw new SceneLayoutError(
+        `Game Layout Popup address is invalid: ${request.address}.`,
+      );
+    const id = segments[1]!;
+    const binding = this.#document.popups?.[id];
+    if (!binding)
+      throw new SceneLayoutError(
+        `Scene layout Popup address is unavailable: ${request.address}.`,
+      );
+    if (binding.type !== request.type)
+      throw new SceneLayoutError(
+        `Scene layout Popup "${id}" type mismatch: expected ${binding.type}, received ${request.type}.`,
+      );
+    if (request.type === "award-celebration")
+      this.assertAwardCelebrationInput(request);
+    else if (
+      request.type === "spine" &&
+      request.text !== undefined &&
+      typeof request.text !== "string"
+    )
+      throw new SceneLayoutError("Spine Popup text must be a string.");
+    return id;
+  }
+
+  private createProgrammaticPopupSession(
+    request: SceneLayoutPopupOpenRequest,
+  ): ProgrammaticPopupSessionController {
+    const id = this.validateProgrammaticPopupRequest(request);
+    const capturedRequest = Object.freeze({
+      ...request,
+    }) as SceneLayoutPopupOpenRequest;
+    const presented = createPopupSessionDeferred();
+    const finished = createPopupSessionDeferred();
+    const sessionId = this.#nextPopupSessionId++;
+    let controller!: ProgrammaticPopupSessionController;
+    const session = Object.freeze({
+      address: capturedRequest.address,
+      type: capturedRequest.type,
+      get state() {
+        return controller.state;
+      },
+      presented: presented.promise,
+      finished: finished.promise,
+      close: (options?: SceneLayoutPopupCloseOptions) =>
+        this.closeProgrammaticPopupSession(sessionId, options),
+      cancel: () =>
+        this.closeProgrammaticPopupSession(sessionId, {
+          behavior: "immediate",
+        }),
+    }) satisfies SceneLayoutPopupSession;
+    controller = {
+      sessionId,
+      request: capturedRequest,
+      id,
+      presented,
+      finished,
+      state: "queued",
+      session,
+    };
+    this.#programmaticPopupSessions.set(sessionId, controller);
+    return controller;
+  }
+
+  private activateProgrammaticPopupSession(
+    controller: ProgrammaticPopupSessionController,
+  ): void {
+    if (controller.state !== "queued") return;
+    controller.activation = undefined;
+    controller.state = "opening";
+    const request = controller.request;
+    try {
+      if (request.type === "award-celebration") {
+        this.getAwardCelebrationPopup(controller.id).start({
+          betAmountRaw: request.betAmountRaw,
+          winAmountRaw: request.winAmountRaw,
+        });
+      } else if (request.type === "spine") {
+        this.getSpinePopup(controller.id).start(request.text);
+      } else this.getSingleStatePopup(controller.id).start();
+    } catch (error) {
+      this.popupRuntime(controller.id, request.type).dismissImmediately();
+      throw asSceneLayoutError(error);
+    }
+
+    const runtime = this.popupRuntime(controller.id, request.type);
+    if (!runtime.isPlaying()) {
+      this.resolveProgrammaticPopupPresented(controller);
+      this.finishProgrammaticPopupSession(controller);
+      return;
+    }
+    this.#activeProgrammaticPopup = Object.freeze({
+      id: controller.id,
+      address: request.address,
+      type: request.type,
+      sessionId: controller.sessionId,
+    });
+    this.updateProgrammaticPopupPresented(controller);
+    this.refreshPopupPointerInteraction();
+  }
+
+  private updateActiveProgrammaticPopupPresented(): void {
+    const active = this.#activeProgrammaticPopup;
+    if (!active) return;
+    const controller = this.#programmaticPopupSessions.get(active.sessionId);
+    if (controller) this.updateProgrammaticPopupPresented(controller);
+  }
+
+  private updateProgrammaticPopupPresented(
+    controller: ProgrammaticPopupSessionController,
+  ): void {
+    if (controller.presented.settled) return;
+    const runtime = this.popupRuntime(controller.id, controller.request.type);
+    let presented = false;
+    if (controller.request.type === "spine") {
+      const phase = (runtime as SpinePopupRuntime).getPhase();
+      presented = phase !== "idle" && phase !== "start";
+    } else presented = runtime.isPlaying();
+    if (presented) this.resolveProgrammaticPopupPresented(controller);
+  }
+
+  private resolveProgrammaticPopupPresented(
+    controller: ProgrammaticPopupSessionController,
+  ): void {
+    controller.presented.resolve();
+    if (controller.state === "opening") controller.state = "active";
+  }
+
+  private finishProgrammaticPopupSession(
+    controller: ProgrammaticPopupSessionController,
+  ): void {
+    if (
+      controller.state === "finished" ||
+      controller.state === "cancelled" ||
+      controller.state === "failed"
+    )
+      return;
+    if (!controller.presented.settled)
+      controller.presented.reject(
+        new SceneLayoutError(
+          `Popup session ${controller.sessionId} closed before it was presented.`,
+        ),
+      );
+    controller.state = "finished";
+    controller.finished.resolve();
+    this.#programmaticPopupSessions.delete(controller.sessionId);
+    if (this.#activeProgrammaticPopup?.sessionId === controller.sessionId)
+      this.#activeProgrammaticPopup = null;
+  }
+
+  private failProgrammaticPopupSession(
+    controller: ProgrammaticPopupSessionController,
+    error: SceneLayoutError,
+  ): void {
+    if (
+      controller.state === "finished" ||
+      controller.state === "cancelled" ||
+      controller.state === "failed"
+    )
+      return;
+    controller.state = "failed";
+    controller.presented.reject(error);
+    controller.finished.reject(error);
+    this.#programmaticPopupSessions.delete(controller.sessionId);
+    if (this.#activeProgrammaticPopup?.sessionId === controller.sessionId)
+      this.#activeProgrammaticPopup = null;
+  }
+
+  private failActiveProgrammaticPopup(
+    id: string,
+    error: SceneLayoutError,
+  ): void {
+    const active = this.#activeProgrammaticPopup;
+    if (!active || active.id !== id) return;
+    const controller = this.#programmaticPopupSessions.get(active.sessionId);
+    if (controller) this.failProgrammaticPopupSession(controller, error);
+    else this.#activeProgrammaticPopup = null;
+  }
+
+  private cancelQueuedProgrammaticPopupSession(
+    controller: ProgrammaticPopupSessionController,
+  ): void {
+    const activation = controller.activation;
+    if (activation) {
+      const index = this.#pendingPopupActivations.indexOf(activation);
+      if (index >= 0) this.#pendingPopupActivations.splice(index, 1);
+      controller.activation = undefined;
+    }
+    controller.state = "cancelled";
+    controller.presented.reject(
+      new SceneLayoutError(
+        `Popup session ${controller.sessionId} was cancelled before presentation.`,
+      ),
+    );
+    controller.finished.resolve();
+    this.#programmaticPopupSessions.delete(controller.sessionId);
+    this.drainPopupActivations();
+  }
+
+  private closeProgrammaticPopupSession(
+    sessionId: number,
+    options: SceneLayoutPopupCloseOptions = {},
+  ): Promise<void> {
+    try {
+      this.assertReady();
+      const controller = this.#programmaticPopupSessions.get(sessionId);
+      if (!controller) return Promise.resolve();
+      if (controller.state === "queued") {
+        this.cancelQueuedProgrammaticPopupSession(controller);
+        return Promise.resolve();
+      }
+      if (this.#activeProgrammaticPopup?.sessionId !== sessionId)
+        return controller.finished.promise;
+      return this.closePopup(options);
+    } catch (error) {
+      return Promise.reject(asSceneLayoutError(error));
+    }
+  }
+
+  private drainPopupActivations(): void {
+    if (this.#destroyed || !this.#initialized) return;
+    if (
+      this.activePopupOwner() ||
+      this.#activePrelude ||
+      this.#activeTransition ||
+      (this.#modeRequestInProgress &&
+        this.#pendingPopupActivations[0]?.source !== "prelude")
+    )
+      return;
+    while (this.#pendingPopupActivations.length) {
+      const activation = this.#pendingPopupActivations.shift()!;
+      try {
+        activation.start();
+      } catch (error) {
+        activation.cancel(asSceneLayoutError(error));
+        continue;
+      }
+      if (
+        this.activePopupOwner() ||
+        this.#activePrelude ||
+        this.#activeTransition ||
+        (this.#modeRequestInProgress &&
+          this.#pendingPopupActivations[0]?.source !== "prelude")
+      )
+        return;
+    }
+  }
+
+  private enqueueAwardCelebration(
+    popupId: string,
+    input: { readonly betAmountRaw: number; readonly winAmountRaw: number },
+    completion: PopupSessionDeferred | null,
+  ): void {
+    let scheduling = true;
+    let synchronousFailure: SceneLayoutError | null = null;
+    const activation: PendingPopupActivation = {
+      source: "award",
+      start: () => {
+        const popup = this.getAwardCelebrationPopup(popupId);
+        try {
+          popup.start(input);
+        } catch (error) {
+          popup.dismissImmediately();
+          throw asSceneLayoutError(error);
+        }
+        if (!popup.isPlaying()) {
+          completion?.resolve();
+          return;
+        }
+        this.#activePopupId = popupId;
+        this.#activeAwardCelebrationWaiter = completion
+          ? {
+              popupId,
+              resolve: completion.resolve,
+              reject: completion.reject,
+            }
+          : null;
+        this.refreshPopupPointerInteraction();
+      },
+      cancel: (error) => {
+        completion?.reject(error);
+        if (scheduling) synchronousFailure = error;
+        else if (!completion) this.#popupScheduleFailure = error;
+      },
+    };
+    this.#pendingPopupActivations.push(activation);
+    this.drainPopupActivations();
+    scheduling = false;
+    if (synchronousFailure) throw synchronousFailure;
   }
 
   private assertAwardCelebrationInput(input: {
@@ -4225,4 +4617,29 @@ function asSceneLayoutError(error: unknown): SceneLayoutError {
     : new SceneLayoutError(
         error instanceof Error ? error.message : String(error),
       );
+}
+
+function createPopupSessionDeferred(): PopupSessionDeferred {
+  let resolvePromise!: () => void;
+  let rejectPromise!: (error: SceneLayoutError) => void;
+  const promise = new Promise<void>((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  });
+  const deferred: PopupSessionDeferred = {
+    promise,
+    settled: false,
+    resolve: () => {
+      if (deferred.settled) return;
+      deferred.settled = true;
+      resolvePromise();
+    },
+    reject: (error) => {
+      if (deferred.settled) return;
+      deferred.settled = true;
+      rejectPromise(error);
+    },
+  };
+  void promise.catch(() => {});
+  return deferred;
 }

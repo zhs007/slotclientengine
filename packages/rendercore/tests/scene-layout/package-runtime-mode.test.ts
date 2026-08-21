@@ -477,29 +477,63 @@ describe("scene layout package event-driven game-mode transition", () => {
     runtime.destroy();
   });
 
-  it("reuses one Spine Popup player across programmatic open and transition prelude", async () => {
-    const { runtime, popups } = createRuntime(true, true);
+  it("serializes a programmatic Popup before the fixed transition prelude", async () => {
+    const { runtime, players, popups } = createRuntime(true, true);
     await runtime.init();
     const address = formatGameLayoutRuntimeAddress("popup", "free-entry");
     expect(popups).toHaveLength(1);
 
-    const first = runtime.openPopup({
+    const first = runtime.enqueuePopup({
       address,
       type: "spine",
       text: "PROGRAM",
     });
+    await expect(first.presented).resolves.toBeUndefined();
     expect(runtime.getActivePopupAddress()).toBe(address);
-    await expect(runtime.requestGameMode("FreeGame")).rejects.toThrow(
-      /while Popup "free-entry" is active/,
-    );
-    await runtime.closePopup({ behavior: "immediate" });
+    const transition = runtime.requestGameMode("FreeGame");
+    await Promise.resolve();
+    expect(popups[0].startSnapshots).toEqual([
+      { heading: "DEFAULT", amount: "0" },
+    ]);
+    await first.cancel();
     await expect(first.finished).resolves.toBeUndefined();
+    expect(first.state).toBe("finished");
+    expect(popups[0].startSnapshots).toHaveLength(2);
+    expect(runtime.getGameModeSnapshot().activePreludePopup).toBe("free-entry");
+    popups[0].phase = "complete";
+    runtime.update(0.1);
+    players[0].results.push({
+      completed: true,
+      events: [{ name: "SwitchScene" }],
+    });
+    runtime.update(0.1);
+    await transition;
+    expect(popups).toHaveLength(1);
+    runtime.destroy();
+  });
 
-    const second = runtime.openPopup({ address, type: "spine" });
-    expect(popups).toHaveLength(1);
-    await runtime.closePopup({ behavior: "immediate" });
+  it("runs queued sessions in FIFO order and stale sessions cannot close the next Popup", async () => {
+    const { runtime } = createRuntime(true, true);
+    await runtime.init();
+    const address = formatGameLayoutRuntimeAddress("popup", "free-entry");
+    const first = runtime.enqueuePopup({ address, type: "spine" });
+    const second = runtime.enqueuePopup({ address, type: "spine" });
+    const cancelled = runtime.enqueuePopup({ address, type: "spine" });
+
+    await expect(first.presented).resolves.toBeUndefined();
+    expect(first.state).toBe("active");
+    expect(second.state).toBe("queued");
+    await cancelled.cancel();
+    expect(cancelled.state).toBe("cancelled");
+    await expect(cancelled.presented).rejects.toThrow(/before presentation/);
+    await expect(cancelled.finished).resolves.toBeUndefined();
+    await first.cancel();
+    await expect(second.presented).resolves.toBeUndefined();
+    expect(second.state).toBe("active");
+    await first.close();
+    expect(second.state).toBe("active");
+    await second.cancel();
     await expect(second.finished).resolves.toBeUndefined();
-    expect(popups).toHaveLength(1);
     runtime.destroy();
   });
 
