@@ -1,10 +1,11 @@
 import { Container } from "pixi.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createRenderObjectLayer } from "../../src/presentation/render-object-layer.js";
 import {
   createRenderObject,
   getRenderObjectAdapter,
 } from "../../src/presentation/render-object.js";
+import { createRenderObjectMotionRuntime } from "../../src/presentation/render-object-motion.js";
 
 function objectAt(x = 0, y = 0) {
   const view = new Container({ position: { x, y } });
@@ -18,7 +19,37 @@ function objectAt(x = 0, y = 0) {
 }
 
 describe("RenderObjectLayer", () => {
+  it("drives object playback updates only while mounted", () => {
+    const runtime = createRenderObjectMotionRuntime();
+    const view = new Container();
+    const update = vi.fn();
+    const object = createRenderObject({
+      view,
+      update,
+      destroy: () => view.destroy(),
+    });
+    const controller = createRenderObjectLayer({
+      view: new Container(),
+      label: "clocked layer",
+      motionRuntime: runtime,
+    });
+
+    runtime.update(0.1);
+    expect(update).not.toHaveBeenCalled();
+    controller.layer.add(object);
+    runtime.update(0.2);
+    expect(update).toHaveBeenCalledOnce();
+    expect(update).toHaveBeenLastCalledWith(0.2);
+    controller.layer.remove(object);
+    runtime.update(0.3);
+    expect(update).toHaveBeenCalledOnce();
+
+    object.destroy();
+    runtime.destroy();
+  });
+
   it("adds, removes, resolves anchors, and aligns across transformed layers", () => {
+    const runtime = createRenderObjectMotionRuntime();
     const stage = new Container();
     const sourceView = new Container({
       position: { x: 100, y: 50 },
@@ -36,10 +67,12 @@ describe("RenderObjectLayer", () => {
     const source = createRenderObjectLayer({
       view: sourceView,
       label: "source layer",
+      motionRuntime: runtime,
     });
     const target = createRenderObjectLayer({
       view: targetView,
       label: "target layer",
+      motionRuntime: runtime,
     });
     const anchor = source.layer.getAnchor({ x: 3, y: 4 });
     const resolved = target.layer.resolveAnchor(anchor);
@@ -60,15 +93,18 @@ describe("RenderObjectLayer", () => {
     target.layer.remove(object);
     expect(view.parent).toBeNull();
     object.destroy();
+    runtime.destroy();
     stage.destroy({ children: true });
   });
 
   it("preflights aligned add without mutating an attached object", () => {
+    const runtime = createRenderObjectMotionRuntime();
     const targetView = new Container();
     const other = new Container();
     const controller = createRenderObjectLayer({
       view: targetView,
       label: "test layer",
+      motionRuntime: runtime,
     });
     const { object, view } = objectAt(7, 8);
     view.zIndex = 3;
@@ -100,16 +136,19 @@ describe("RenderObjectLayer", () => {
     expect(view.position).toMatchObject({ x: 7, y: 8 });
     expect(view.zIndex).toBe(3);
     object.destroy();
+    runtime.destroy();
     targetView.destroy({ children: true });
     other.destroy({ children: true });
   });
 
   it("detaches all nodes without taking object ownership", () => {
+    const runtime = createRenderObjectMotionRuntime();
     const view = new Container();
     let usable = true;
     const controller = createRenderObjectLayer({
       view,
       label: "owned layer",
+      motionRuntime: runtime,
       assertUsable: () => {
         if (!usable) throw new Error("layer was destroyed");
       },
@@ -129,17 +168,20 @@ describe("RenderObjectLayer", () => {
     const liveTarget = createRenderObjectLayer({
       view: liveTargetView,
       label: "live target",
+      motionRuntime: runtime,
     });
     expect(() => liveTarget.layer.resolveAnchor(staleAnchor)).toThrow(
       /destroyed/,
     );
     first.object.destroy();
     second.object.destroy();
+    runtime.destroy();
     liveTargetView.destroy({ children: true });
     view.destroy({ children: true });
   });
 
   it("moves an attached object atomically and can restore its source layer", () => {
+    const runtime = createRenderObjectMotionRuntime();
     const stage = new Container();
     const sourceView = new Container({ position: { x: 30, y: 20 } });
     const targetView = new Container({ position: { x: -10, y: 5 } });
@@ -147,10 +189,12 @@ describe("RenderObjectLayer", () => {
     const source = createRenderObjectLayer({
       view: sourceView,
       label: "source layer",
+      motionRuntime: runtime,
     });
     const target = createRenderObjectLayer({
       view: targetView,
       label: "target layer",
+      motionRuntime: runtime,
     });
     const entry = objectAt(4, 6);
     source.layer.add(entry.object, 2);
@@ -173,6 +217,7 @@ describe("RenderObjectLayer", () => {
     expect(entry.view.zIndex).toBe(2);
     source.layer.remove(entry.object);
     entry.object.destroy();
+    runtime.destroy();
     stage.destroy({ children: true });
   });
 });

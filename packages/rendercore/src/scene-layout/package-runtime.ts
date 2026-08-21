@@ -949,7 +949,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.updatePresentationDelayWaiters(deltaSeconds);
     this.#layout.update(deltaSeconds);
     this.#renderObjectMotionRuntime.update(deltaSeconds);
-    this.#renderObjectFactory.update(deltaSeconds);
     if (this.#reel && !this.#hostUpdatesMainReel) {
       const geometry = this.#manifest.reels.main;
       if (this.#reel instanceof RenderGridCellReelSet) {

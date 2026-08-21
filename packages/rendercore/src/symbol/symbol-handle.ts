@@ -116,6 +116,9 @@ export function createSymbolHandle(source: SymbolHandleSource): SymbolHandle {
     view: source.symbol as Container,
     owned: source.owned,
     assertUsable,
+    ...(source.owned
+      ? { update: (deltaSeconds: number) => source.symbol.update(deltaSeconds) }
+      : {}),
     play: (name, options) => {
       if (options?.loop !== undefined)
         return Promise.reject(

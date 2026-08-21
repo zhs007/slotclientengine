@@ -2,6 +2,7 @@ import { Container, Sprite, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
 import type { ImageStringResource } from "../../src/image-string/core/index.js";
 import { getRenderObjectAdapter } from "../../src/presentation/render-object.js";
+import { createRenderObjectMotionRuntime } from "../../src/presentation/render-object-motion.js";
 import { attachRenderObjectToSpineSlot } from "../../src/presentation/spine-slot-attachment.js";
 import { createSceneLayoutRenderObjectFactory } from "../../src/scene-layout/render-object-factory.js";
 import type {
@@ -259,13 +260,14 @@ describe("Scene Layout named RenderObject factory", () => {
     centeredFactory.destroy();
   });
 
-  it("advances Spine playback only through runtime updates", async () => {
+  it("advances Spine playback only through mounted owner-clock updates", async () => {
     const player = new ManualSpinePlayer();
     const factory = createSceneLayoutRenderObjectFactory({
       resource: createResource(),
       dependencies: { createSpinePlayer: () => player },
     });
     const object = await factory.createRenderObject("nearwin1");
+    const clock = createRenderObjectMotionRuntime();
     const playback = object.play("Nearwin");
     let completed = false;
     void playback.then(() => {
@@ -273,15 +275,21 @@ describe("Scene Layout named RenderObject factory", () => {
     });
     await Promise.resolve();
     expect(completed).toBe(false);
-    factory.update(0.1);
+    clock.update(0.1);
     await Promise.resolve();
     expect(completed).toBe(false);
-    factory.update(0.1);
+    const mount = clock.attach(object);
+    clock.update(0.1);
+    await Promise.resolve();
+    expect(completed).toBe(false);
+    clock.update(0.1);
     await expect(playback).resolves.toBeUndefined();
     expect(player.plays).toEqual(["Nearwin"]);
 
     object.destroy();
     expect(player.destroyed).toBe(true);
+    mount.detach();
+    clock.destroy();
   });
 
   it("resolves looping playback at the first loop edge and keeps it running", async () => {
@@ -291,23 +299,26 @@ describe("Scene Layout named RenderObject factory", () => {
       dependencies: { createSpinePlayer: () => player },
     });
     const object = await factory.createRenderObject("nearwin1");
+    const clock = createRenderObjectMotionRuntime();
+    clock.attach(object);
     const playback = object.play("Nearwin", { loop: true });
-    factory.update(0.1);
+    clock.update(0.1);
     let completed = false;
     void playback.then(() => {
       completed = true;
     });
     await Promise.resolve();
     expect(completed).toBe(false);
-    factory.update(0.1);
+    clock.update(0.1);
     await expect(playback).resolves.toBeUndefined();
     expect(player.loops).toEqual([true]);
 
-    factory.update(0.1);
+    clock.update(0.1);
     expect(player.updates).toBe(3);
     object.stop();
     expect(player.resets).toBe(1);
     object.destroy();
+    clock.destroy();
     factory.destroy();
   });
 
@@ -364,14 +375,17 @@ describe("Scene Layout named RenderObject factory", () => {
       dependencies: { createVniPlayer: () => player },
     });
     const object = await factory.createRenderObject("sparkle");
+    const clock = createRenderObjectMotionRuntime();
+    clock.attach(object);
     await expect(object.play("named")).rejects.toThrow(
       /does not accept an animation name/,
     );
     const playback = object.play();
-    factory.update(0.1);
+    clock.update(0.1);
     await expect(playback).resolves.toBeUndefined();
     object.destroy();
     expect(player.destroyed).toBe(true);
+    clock.destroy();
   });
 
   it("resolves VNI looping playback at the authored first-cycle duration", async () => {
@@ -381,19 +395,22 @@ describe("Scene Layout named RenderObject factory", () => {
       dependencies: { createVniPlayer: () => player },
     });
     const object = await factory.createRenderObject("sparkle");
+    const clock = createRenderObjectMotionRuntime();
+    clock.attach(object);
     const playback = object.play(undefined, { loop: true });
-    factory.update(0.1);
+    clock.update(0.1);
     let completed = false;
     void playback.then(() => {
       completed = true;
     });
     await Promise.resolve();
     expect(completed).toBe(false);
-    factory.update(0.1);
+    clock.update(0.1);
     await expect(playback).resolves.toBeUndefined();
     expect(player.loops).toEqual([true]);
     object.stop();
     object.destroy();
+    clock.destroy();
     factory.destroy();
   });
 
