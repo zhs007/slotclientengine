@@ -123,15 +123,6 @@ export function getEditorAssetDiagnostics(
       : record.kind === "spine-atlas"
         ? record.metadata?.pageNames
         : undefined;
-  if (
-    record.kind === "spine-atlas" &&
-    Array.isArray(dependencyNames) &&
-    dependencyNames.length !== 1
-  ) {
-    diagnostics.push(
-      `Symbol Spine 当前只支持单 page atlas，实际为 ${dependencyNames.length} pages`,
-    );
-  }
   if (Array.isArray(dependencyNames)) {
     for (const dependency of dependencyNames) {
       if (typeof dependency === "string")
@@ -168,10 +159,10 @@ export function resolveSpineAtlasBinding(
   const pages = atlas.metadata?.pageNames;
   if (
     !Array.isArray(pages) ||
-    pages.length !== 1 ||
+    pages.length === 0 ||
     typeof pages[0] !== "string"
   ) {
-    throw new Error(`Spine atlas ${atlasPath} 必须声明一个 page。`);
+    throw new Error(`Spine atlas ${atlasPath} 必须声明至少一个 page。`);
   }
   const texturePath = resolvePackagePath(atlasPath, pages[0]);
   const texture = project.assetLibrary.records.get(texturePath);

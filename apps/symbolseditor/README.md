@@ -4,15 +4,15 @@
 
 资源工作区只有一个支持多文件和 ZIP 的“导入资源”入口。image、Spine、VNI、standalone ImgNumber ZIP 与已有 Symbols ZIP 都进入同一扁平 filename-key namespace；Picker 只提交明确的 filename key/typed descriptor，不从 symbol code 或文件名猜绑定。
 
-symbol code、state、lifecycle、scale、renderPriority、value/cascade 配置仍是业务身份。image state 引用图片 key；Spine 引用 skeleton/atlas/page keys；VNI 引用 project key；image-string dependency 只记录 root key、manifest 与 closure keys，真实 bytes 只存在全局 asset library。
+symbol code、state、lifecycle、scale、renderPriority、value/cascade 配置仍是业务身份。image state 引用图片 key；Spine 在 UI 中只选择 skeleton 与 atlas，atlas 的全部 page 图片由结构化引用自动确定；VNI 引用 project key；image-string dependency 只记录 root key、manifest 与 closure keys，真实 bytes 只存在全局 asset library。
 
 项目状态定义为每个 once state 显式编辑 `afterComplete`：`return-to-default` 完成后回 normal/default，`terminal` 保持终态；stable state 不显示该字段。打开旧 v1/v2 ZIP 时统一由 rendercore upgrader 迁移，新导出只写完整 v3。v3 在每个 Symbol 的每个 state 编辑区内维护零到多条独立 package-local 音效；画面仍同时预览全部 symbol，但项目页的 preview-only 单选框决定唯一发声音的 symbol。
 
 任意非 value-managed state 都直接提供“增加动画层”，不要求先把旧 visual 重新选择为多图层类型。首次增加时，现有图片会原样保留为 normal/stateTexture base，现有 Spine/VNI 会原样迁移为第一层，再追加一份待绑定的新层；已导入的旧 ZIP 因此不需要重新录入既有资源。附加层按稳定列表顺序逐项选择 `underlay | overlay` 以及 Spine/VNI 资源与播放参数。层 id 必须唯一且为 lowercase kebab-case；至少保留一层。导入、预览、导出与资源覆盖都按 exact layer binding 处理，不按文件名猜层，也不把多层静默降级成单层。
 
-同一导入批次允许多份 Spine skeleton 共用唯一一份 atlas 及其单页 texture；各 skeleton 仍作为独立资源供 state/value tier 显式选择。缺 skeleton、缺 atlas、多 atlas 或 atlas page 不唯一时继续拒绝整批导入。
+同一导入批次允许多份 Spine skeleton 共用唯一一份单页或多页 atlas；各 skeleton 仍作为独立资源供 state/value tier 显式选择，全部 page 图片按 atlas 内的 exact logical name 自动校验和绑定。缺 skeleton、缺 atlas、多 atlas、page 图片缺失或大小写匹配歧义时继续拒绝整批导入。
 
-value-presentation 的编辑顺序固定为“档位 → 状态”：每张档位卡同时选择 Spine skeleton/atlas/texture、阈值、normal ImgNumber JSON，并可为该档生成和绑定 exact non-Spine `spinBlur` profile；normal、win、remove 等动画在状态页选择一次，并要求所有档位存在同名动画。ImgNumber 的 exact slot、transform、颜色跟随和特殊数值图片仍只在 Normal 配置一次，并由全部档位和 Spine state 共用；`spinBlur` symbol 本体静态图仍独立选择。整个 symbol 只设置一个预览数值，预览根据档位阈值自动选择对应 Spine tier 与 normal/blur ImgNumber；该值只属于当前 UI session，新建或打开项目时重置，不进入 manifest 或 ZIP。
+value-presentation 的编辑顺序固定为“档位 → 状态”：每张档位卡选择 Spine skeleton/atlas、阈值、normal ImgNumber JSON，贴图由 atlas pages 自动确定，并可为该档生成和绑定 exact non-Spine `spinBlur` profile；normal、win、remove 等动画在状态页选择一次，并要求所有档位存在同名动画。ImgNumber 的 exact slot、transform、颜色跟随和特殊数值图片仍只在 Normal 配置一次，并由全部档位和 Spine state 共用；`spinBlur` symbol 本体静态图仍独立选择。整个 symbol 只设置一个预览数值，预览根据档位阈值自动选择对应 Spine tier 与 normal/blur ImgNumber；该值只属于当前 UI session，新建或打开项目时重置，不进入 manifest 或 ZIP。
 
 新命名 ImgNumber node 使用一个 `spineSlot` 覆盖全部 Spine state；普通 symbol 的候选 slot 是全部 top-level Spine state skeleton 的交集，value-managed symbol 则是全部 tier skeleton 的交集，交集为空时不猜首项。显示、移动和出现时机由 Spine animation 控制。非 Spine state 继续用 exact `targets[]` 决定同一 instance 是否显示在固定顶层 overlay。旧逐 Spine state target 与旧 per-tier 完整 binding 可无损导入、编辑和导出，不会自动扩大状态覆盖。
 
@@ -32,8 +32,8 @@ value ImgNumber 的每个档位也可显式生成并绑定自己的 `spinBlurPro
 美术增量更新应一次选择同一 Spine closure 的 skeleton JSON、atlas 和 page 图片，并在 review
 中对原 filename key 选择覆盖。编辑器在导入后完整 candidate 上统一复验：animation/slot
 仍存在时保留所有 symbol/state、transform、composite layer、value tier、ImgNumber 与音效
-配置；atlas 的唯一 page logical name 合法变化时，只结构化同步 exact 引用该 atlas 的
-texture key。Picker 再次确认当前 skeleton/atlas 是 no-op；改选兼容 skeleton 也保留仍有效的
+配置；atlas 的首个 page logical name 合法变化时，只结构化同步 manifest 内部用于兼容的首
+page texture key，其余 page 始终由 atlas 自动解析。Picker 再次确认当前 skeleton/atlas 是 no-op；改选兼容 skeleton 也保留仍有效的
 animation/slot。缺失 animation 只清理并报告 exact binding，其它 closure 或 typed binding
 不兼容则整批回滚。若导入的是另一套独立但同名的 Spine 美术，overwrite 仍表示更新同一
 logical resource，不会静默创建第二份；应先提供不同合法 filename key。

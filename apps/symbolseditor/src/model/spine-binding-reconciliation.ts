@@ -70,10 +70,10 @@ function rewriteChangedAtlasPages(options: {
 }): RewrittenSpineTextureBinding[] {
   const rewritten: RewrittenSpineTextureBinding[] = [];
   for (const atlasPath of options.overwrittenAtlasKeys) {
-    const previousTexturePath = singleAtlasTexturePath(
+    const previousTexturePath = firstAtlasTexturePath(
       options.before.assetLibrary.records.get(atlasPath),
     );
-    const texturePath = singleAtlasTexturePath(
+    const texturePath = firstAtlasTexturePath(
       options.candidate.assetLibrary.records.get(atlasPath),
     );
     if (
@@ -94,13 +94,13 @@ function rewriteChangedAtlasPages(options: {
   return rewritten;
 }
 
-function singleAtlasTexturePath(
+function firstAtlasTexturePath(
   record: EditorAssetRecord | undefined,
 ): string | undefined {
   if (record?.kind !== "spine-atlas" || record.diagnostics.length > 0)
     return undefined;
   const pages = metadataList(record, "pageNames");
-  return pages.length === 1
+  return pages.length > 0
     ? resolvePackagePath(record.path, pages[0]!)
     : undefined;
 }

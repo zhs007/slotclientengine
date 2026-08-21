@@ -490,7 +490,7 @@ describe("symbols editor app shell", () => {
     ).toBe("underlay");
   });
 
-  it("defaults the only ready Spine atlas and derives its texture without another picker", async () => {
+  it("defaults the only ready Spine atlas without exposing a texture binding", async () => {
     await createProject(root);
     const upload = root.querySelector<HTMLInputElement>("[data-upload-input]")!;
     const files = ["H1.json", "Symbol.atlas", "Symbol.png"].map(
@@ -512,8 +512,7 @@ describe("symbols editor app shell", () => {
     kind.dispatchEvent(new Event("change", { bubbles: true }));
 
     expect(root.textContent).toContain("Symbol.atlas");
-    expect(root.textContent).toContain("Texture · 由 Atlas page 自动解析");
-    expect(root.textContent).toContain("Symbol.png");
+    expect(root.textContent).not.toContain("Texture · 由 Atlas page 自动解析");
     expect(
       root.querySelector('[data-open-picker*="spine-texture"]'),
     ).toBeNull();
@@ -669,7 +668,7 @@ describe("symbols editor app shell", () => {
     expect(root.querySelector(".tier-list")).toBeNull();
     click(root, "[data-enable-value]");
     expect(root.querySelectorAll("[data-tier-index]")).toHaveLength(1);
-    expect(root.textContent).toContain("Texture · 由 Atlas page 自动解析");
+    expect(root.textContent).not.toContain("Texture · 由 Atlas page 自动解析");
     expect(
       [...root.querySelectorAll("[data-open-picker]")].some((element) =>
         element.getAttribute("data-open-picker")?.includes('"field":"texture"'),

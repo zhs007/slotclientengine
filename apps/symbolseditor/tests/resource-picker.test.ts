@@ -323,6 +323,34 @@ describe("typed resource picker", () => {
     });
   });
 
+  it("accepts a multi-page atlas and derives its compatibility texture from the first page", () => {
+    const project = createProject();
+    uploadAssetBatch(project, [
+      {
+        path: "Multi.atlas",
+        bytes: new TextEncoder().encode(
+          "Symbol.png\nsize: 1,1\nformat: RGBA8888\nfilter: Linear,Linear\nrepeat: none\n\nSymbol-2.png\nsize: 1,1\nformat: RGBA8888\nfilter: Linear,Linear\nrepeat: none\n",
+        ),
+      },
+      {
+        path: "Symbol-2.png",
+        bytes: fixture("assets/sample-skin/Symbol.png"),
+      },
+    ]);
+
+    expect(
+      getResourcePickerCandidates(project, {
+        kind: "spine-atlas",
+        symbol: "A",
+        state: "normal",
+      }).find(({ path }) => path === "Multi.atlas"),
+    ).toMatchObject({ status: "ready" });
+    expect(resolveSpineAtlasBinding(project, "Multi.atlas")).toEqual({
+      atlasPath: "Multi.atlas",
+      texturePath: "Symbol.png",
+    });
+  });
+
   it("confirms one atomic store transaction and rejects stale targets", () => {
     const store = new SymbolEditorStore();
     store.replace(createProject());

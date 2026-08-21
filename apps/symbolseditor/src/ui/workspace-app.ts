@@ -3210,7 +3210,7 @@ function inspectorMarkup(
         : session.inspector === "image-string"
           ? imageStringInspectorMarkup(project, symbol, session)
           : session.inspector === "value"
-            ? valueInspectorMarkup(project, symbol, session, thumbnail)
+            ? valueInspectorMarkup(project, symbol, session)
             : cascadeInspectorMarkup(project, symbol);
   return `<header class="inspector-heading"><div><small>当前 symbol</small><h1>${escapeHtml(symbol.symbol)} <span>· code ${symbol.code}</span></h1></div><span class="included-badge">${symbol.included ? "Included" : "Excluded"}</span></header>
     <div class="inspector-tabs" role="tablist" aria-label="Symbol Inspector">
@@ -3458,7 +3458,6 @@ function visualFieldsMarkup(
     return `${state === "normal" ? baseVisualMarkup(project, symbol, visual.baseVisual, thumbnail) : ""}
       ${resourceBindingMarkup("Skeleton", visual.skeletonPath, { kind: "spine-skeleton", symbol: symbol.symbol, state })}
       ${resourceBindingMarkup("Atlas", visual.atlasPath, { kind: "spine-atlas", symbol: symbol.symbol, state })}
-      ${derivedResourceMarkup("Texture · 由 Atlas page 自动解析", visual.texturePath, thumbnail(visual.texturePath))}
       ${selectField("animationName", "Animation", visual.animationName, animations)}
       <details class="advanced-fields"><summary>Transform</summary><div class="form-grid">${numberField("transform.x", "X", visual.transform?.x ?? 0)}${numberField("transform.y", "Y", visual.transform?.y ?? 0)}${numberField("transform.scale", "Scale", visual.transform?.scale ?? 1)}</div></details>`;
   }
@@ -3507,7 +3506,7 @@ function compositeVisualMarkup(
                 project.assetLibrary.records.get(animation.skeletonPath),
                 "animationNames",
               );
-              return `${resourceBindingMarkup("Skeleton", animation.skeletonPath, { kind: "spine-skeleton", symbol: symbol.symbol, state, compositeLayerIndex: index })}${resourceBindingMarkup("Atlas", animation.atlasPath, { kind: "spine-atlas", symbol: symbol.symbol, state, compositeLayerIndex: index })}${derivedResourceMarkup("Texture · 由 Atlas page 自动解析", animation.texturePath, thumbnail(animation.texturePath))}<label>Animation <select data-composite-layer-field="animationName" data-composite-layer-index="${index}"><option value="">选择动画…</option>${animations.map((name) => option(name, name, name === animation.animationName)).join("")}</select></label><details class="advanced-fields"><summary>Transform</summary><div class="form-grid">${compositeNumberField(index, "transform.x", "X", animation.transform?.x ?? 0)}${compositeNumberField(index, "transform.y", "Y", animation.transform?.y ?? 0)}${compositeNumberField(index, "transform.scale", "Scale", animation.transform?.scale ?? 1)}</div></details>`;
+              return `${resourceBindingMarkup("Skeleton", animation.skeletonPath, { kind: "spine-skeleton", symbol: symbol.symbol, state, compositeLayerIndex: index })}${resourceBindingMarkup("Atlas", animation.atlasPath, { kind: "spine-atlas", symbol: symbol.symbol, state, compositeLayerIndex: index })}<label>Animation <select data-composite-layer-field="animationName" data-composite-layer-index="${index}"><option value="">选择动画…</option>${animations.map((name) => option(name, name, name === animation.animationName)).join("")}</select></label><details class="advanced-fields"><summary>Transform</summary><div class="form-grid">${compositeNumberField(index, "transform.x", "X", animation.transform?.x ?? 0)}${compositeNumberField(index, "transform.y", "Y", animation.transform?.y ?? 0)}${compositeNumberField(index, "transform.scale", "Scale", animation.transform?.scale ?? 1)}</div></details>`;
             })()
           : `${resourceBindingMarkup("VNI project", animation.projectPath, { kind: "vni-project", symbol: symbol.symbol, state, compositeLayerIndex: index })}<div class="form-grid">${compositeNumberField(index, "startTime", "Start", animation.startTime)}${compositeNumberField(index, "endTime", "End", animation.endTime)}</div>`;
       return `<article class="layer-card composite-layer-card"><header><strong>Animation layer ${index + 1}</strong><div class="button-row"><button data-composite-layer-action="up" data-composite-layer-index="${index}" ${index === 0 ? "disabled" : ""}>↑</button><button data-composite-layer-action="down" data-composite-layer-index="${index}" ${index === visual.layers.length - 1 ? "disabled" : ""}>↓</button><button data-composite-layer-action="remove" data-composite-layer-index="${index}" ${visual.layers.length === 1 ? "disabled" : ""}>删除</button></div></header><div class="form-grid"><label>Layer id <input data-composite-layer-field="id" data-composite-layer-index="${index}" value="${escapeAttr(layer.id)}"></label><label>位置 <select data-composite-layer-field="placement" data-composite-layer-index="${index}">${option("underlay", "图标下方", layer.placement === "underlay")}${option("overlay", "图标上方", layer.placement === "overlay")}</select></label><label>动画类型 <select data-composite-layer-field="kind" data-composite-layer-index="${index}">${option("spine", "Spine 4.3", animation.kind === "spine")}${option("vni", "VNI", animation.kind === "vni")}</select></label></div>${fields}</article>`;
@@ -3595,19 +3594,10 @@ function resourceBindingMarkup(
   return `<div class="resource-binding"><span class="binding-label">${escapeHtml(label)}</span><span class="binding-thumb">${thumbnail ? `<img src="${escapeAttr(thumbnail)}" alt="">` : assetIcon(context.kind.includes("image") || context.kind.includes("texture") ? "image" : context.kind.includes("spine") ? "spine-skeleton" : "vni-project")}</span><span class="binding-path" title="${escapeAttr(path || "未选择")}">${escapeHtml(path || "未选择资源")}</span><button data-open-picker="${serialized}">${path ? "更换" : "选择"}</button><button data-clear-resource="${serialized}" ${path ? "" : "disabled"}>清除</button></div>`;
 }
 
-function derivedResourceMarkup(
-  label: string,
-  path: string,
-  thumbnail?: string,
-): string {
-  return `<div class="resource-binding derived-resource"><span class="binding-label">${escapeHtml(label)}</span><span class="binding-thumb">${thumbnail ? `<img src="${escapeAttr(thumbnail)}" alt="">` : assetIcon("image")}</span><span class="binding-path" title="${escapeAttr(path || "等待 Atlas")}">${escapeHtml(path || "等待 Atlas")}</span></div>`;
-}
-
 function valueInspectorMarkup(
   project: SymbolEditorProject,
   symbol: EditorSymbolDraft,
   session: SymbolsEditorUiSession,
-  thumbnail: (path: string) => string | undefined,
 ): string {
   const value = symbol.valuePresentation;
   if (!value)
@@ -3617,11 +3607,11 @@ function valueInspectorMarkup(
     project,
     symbol.symbol,
   );
-  return `<section class="value-editor"><div class="section-heading"><div><h2>Spine 档位</h2><p>每档只配置 skeleton / atlas / texture 与阈值；状态动画在下一步统一配置。</p></div><button data-disable-value>停用</button></div>
+  return `<section class="value-editor"><div class="section-heading"><div><h2>Spine 档位</h2><p>每档只配置 skeleton / atlas 与阈值；atlas pages 自动确定贴图资源，状态动画在下一步统一配置。</p></div><button data-disable-value>停用</button></div>
     <section class="tier-preview active"><label>预览数值 <input data-value-preview type="number" min="1" step="1" value="${previewValue}"></label><span class="status-ready">当前命中 Tier ${activePreviewTier + 1}</span><small>输入一个数值，由档位阈值自动选择 Spine 与 ImgNumber；仅当前编辑会话生效</small></section>
     <h3>Default values</h3><div class="compact-list">${value.defaultValues.map((candidate, index) => `<div class="form-row"><input data-value-field="defaultValues.${index}" data-value-type="number" type="number" min="1" step="1" value="${candidate}"><button data-value-action="move-default" data-value-index="${index}" data-direction="-1" aria-label="上移 value">↑</button><button data-value-action="move-default" data-value-index="${index}" data-direction="1" aria-label="下移 value">↓</button><button data-value-action="remove-default" data-value-index="${index}">删除</button></div>`).join("")}</div><div class="form-row"><input data-new-default type="number" min="1" step="1" value="1"><button data-value-action="add-default">增加 value</button></div>
     <h3>Reel normal</h3><div class="form-grid">${valueNumberField("reelStates.normal.width", value.reelStates.normal.width, "Width")}${valueNumberField("reelStates.normal.height", value.reelStates.normal.height, "Height")}</div>
-    <h3>Spine tiers</h3><div class="tier-list">${value.tiers.map((tier, index) => valueTierMarkup(project, symbol, tier, index, index === activePreviewTier, session.expandedTier === index, thumbnail)).join("")}</div><button data-value-action="add-tier">增加 tier</button>
+    <h3>Spine tiers</h3><div class="tier-list">${value.tiers.map((tier, index) => valueTierMarkup(project, symbol, tier, index, index === activePreviewTier, session.expandedTier === index)).join("")}</div><button data-value-action="add-tier">增加 tier</button>
     <p class="hint">档位资源完成后，进入“状态”统一选择 normal / win / remove 等动画；静态模糊图在对应状态单独配置。</p>
     ${valueNumberPresentationMarkup(project, symbol)}
   </section>`;
@@ -3691,13 +3681,11 @@ function valueTierMarkup(
   index: number,
   activePreview: boolean,
   expanded: boolean,
-  thumbnail: (path: string) => string | undefined,
 ): string {
   const skeleton = tier.animation.skeleton.replace(/^\.\//u, "");
   const atlas = tier.animation.atlas.replace(/^\.\//u, "");
-  const texture = tier.animation.texture.replace(/^\.\//u, "");
-  const ready = Boolean(skeleton && atlas && texture);
-  return `<details class="tier-card ${activePreview ? "active-preview" : ""}" data-tier-index="${index}" ${expanded ? "open" : ""}><summary><strong>Tier ${index + 1}</strong><span>${index < (symbol.valuePresentation?.tiers.length ?? 0) - 1 ? `&lt; ${tier.maxExclusive}` : "unbounded"}</span>${activePreview ? '<span class="status-ready">当前预览档位</span>' : ""}<span class="status-${ready ? "ready" : "missing"}">${ready ? "Spine 就绪" : "Spine 未完成"}</span></summary><div class="tier-body">${index < symbol.valuePresentation!.tiers.length - 1 ? valueNumberField(`tiers.${index}.maxExclusive`, tier.maxExclusive!, "maxExclusive") : '<p class="empty">最终 tier 无上界</p>'}${resourceBindingMarkup("Skeleton", skeleton, { kind: "value-tier-resource", symbol: symbol.symbol, tierIndex: index, field: "skeleton" })}${resourceBindingMarkup("Atlas", atlas, { kind: "value-tier-resource", symbol: symbol.symbol, tierIndex: index, field: "atlas" })}${derivedResourceMarkup("Texture · 由 Atlas page 自动解析", texture, thumbnail(texture))}${valueTierImageStringMarkup(project, symbol, index)}<details class="advanced-fields"><summary>Spine Transform</summary><div class="form-grid">${valueNumberField(`tiers.${index}.animation.transform.x`, tier.animation.transform?.x ?? 0, "X")}${valueNumberField(`tiers.${index}.animation.transform.y`, tier.animation.transform?.y ?? 0, "Y")}${valueNumberField(`tiers.${index}.animation.transform.scale`, tier.animation.transform?.scale ?? 1, "Scale")}</div></details><div class="button-row"><button data-value-action="move-tier" data-value-index="${index}" data-direction="-1" ${index === 0 ? "disabled" : ""}>↑</button><button data-value-action="move-tier" data-value-index="${index}" data-direction="1" ${index === symbol.valuePresentation!.tiers.length - 1 ? "disabled" : ""}>↓</button><button data-value-action="remove-tier" data-value-index="${index}">删除 tier</button></div></div></details>`;
+  const ready = Boolean(skeleton && atlas && tier.animation.texture);
+  return `<details class="tier-card ${activePreview ? "active-preview" : ""}" data-tier-index="${index}" ${expanded ? "open" : ""}><summary><strong>Tier ${index + 1}</strong><span>${index < (symbol.valuePresentation?.tiers.length ?? 0) - 1 ? `&lt; ${tier.maxExclusive}` : "unbounded"}</span>${activePreview ? '<span class="status-ready">当前预览档位</span>' : ""}<span class="status-${ready ? "ready" : "missing"}">${ready ? "Spine 就绪" : "Spine 未完成"}</span></summary><div class="tier-body">${index < symbol.valuePresentation!.tiers.length - 1 ? valueNumberField(`tiers.${index}.maxExclusive`, tier.maxExclusive!, "maxExclusive") : '<p class="empty">最终 tier 无上界</p>'}${resourceBindingMarkup("Skeleton", skeleton, { kind: "value-tier-resource", symbol: symbol.symbol, tierIndex: index, field: "skeleton" })}${resourceBindingMarkup("Atlas", atlas, { kind: "value-tier-resource", symbol: symbol.symbol, tierIndex: index, field: "atlas" })}${valueTierImageStringMarkup(project, symbol, index)}<details class="advanced-fields"><summary>Spine Transform</summary><div class="form-grid">${valueNumberField(`tiers.${index}.animation.transform.x`, tier.animation.transform?.x ?? 0, "X")}${valueNumberField(`tiers.${index}.animation.transform.y`, tier.animation.transform?.y ?? 0, "Y")}${valueNumberField(`tiers.${index}.animation.transform.scale`, tier.animation.transform?.scale ?? 1, "Scale")}</div></details><div class="button-row"><button data-value-action="move-tier" data-value-index="${index}" data-direction="-1" ${index === 0 ? "disabled" : ""}>↑</button><button data-value-action="move-tier" data-value-index="${index}" data-direction="1" ${index === symbol.valuePresentation!.tiers.length - 1 ? "disabled" : ""}>↓</button><button data-value-action="remove-tier" data-value-index="${index}">删除 tier</button></div></div></details>`;
 }
 
 function valueTierImageStringMarkup(
