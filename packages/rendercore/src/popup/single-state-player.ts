@@ -16,7 +16,10 @@ import {
   createSpinePopupOverlayRuntime,
   type SpinePopupOverlayRuntime,
 } from "./spine-overlay-runtime.js";
-import { createPopupPresentation } from "./presentation.js";
+import {
+  createPopupPresentation,
+  type PopupBackdropController,
+} from "./presentation.js";
 import {
   attachPopupLayerRuntimes,
   type PopupLayerAttachmentHandle,
@@ -37,6 +40,7 @@ export function createSingleStatePopupPlayer(options: {
 
 export function createSingleStatePopupRuntime(options: {
   readonly resource: PopupPackageResource;
+  readonly backdropController?: PopupBackdropController;
 }): SingleStatePopupRuntime {
   if (options.resource.manifest.type !== "single-state")
     throw new Error(
@@ -49,6 +53,7 @@ export function createSingleStatePopupRuntime(options: {
         { readonly type: "single-state" }
       >;
     },
+    options.backdropController,
   );
 }
 
@@ -76,9 +81,12 @@ class DefaultSingleStatePopupRuntime implements SingleStatePopupRuntime {
         { readonly type: "single-state" }
       >;
     },
+    backdropController?: PopupBackdropController,
   ) {
     this.#manifest = resource.manifest;
-    this.#presentation = createPopupPresentation(this.#manifest);
+    this.#presentation = createPopupPresentation(this.#manifest, {
+      backdropController,
+    });
     this.container = this.#presentation.container;
     this.container.visible = false;
     this.#popupRoot.sortableChildren = true;

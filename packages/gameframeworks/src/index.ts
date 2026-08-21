@@ -57,6 +57,7 @@ export type {
   SceneLayoutPopupCloseOptions,
   SceneLayoutPopupOpenRequest,
   SceneLayoutPopupSession,
+  SceneLayoutPopupSessionState,
   SceneLayoutPresentationSurface,
   SceneLayoutRuntimeResource,
   SceneLayoutNodeRenderLayerPlacement,

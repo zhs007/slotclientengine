@@ -214,20 +214,25 @@ const dispose = runtime.addresses.bind(
 import { formatGameLayoutRuntimeAddress } from "@slotclientengine/gameframeworks";
 
 const address = formatGameLayoutRuntimeAddress("popup", "help-panel");
-const session = runtime.openPopup({
+const session = runtime.enqueuePopup({
   address,
   type: "single-state",
 });
 
-// 默认等待该类型的正式 end/dismiss 流程；cleanup 可传 immediate。
-await runtime.closePopup();
+await session.presented;
+await delayTime(2);
+// 默认等待该类型的正式 end/dismiss 流程；cleanup 可用 session.cancel()。
+await session.close();
 await session.finished;
 ```
 
-`openPopup()` 会同时校验 owner 地址存在、binding type 与请求输入；Award 还严格校验 raw 金额。一个 package runtime
-只有一个 active Popup slot，第二次 open、mode award 或 transition prelude 会在画面 mutation 前显式失败，不自动叠加、替换或排队。
-每个 binding 的 player 在 runtime 初始化时创建一次，关闭后可从相同地址再次打开；`getActivePopupAddress()` 返回当前 owner 或 `null`。
-`closePopup({ behavior: "immediate" })` 用于明确取消或宿主 cleanup。session 不拥有 player，caller 不得 destroy package-owned Popup。
+`enqueuePopup()` 会同时校验 owner 地址存在、binding type 与请求输入；Award 还严格校验 raw 金额。程序 Popup、mode award 与
+transition prelude 共用一个 FIFO 和 active slot，当前项完整关闭后才启动下一项。`openPopup()` 是明确的 fail-fast 立即入口，存在 active、
+pending 或 mode transition 时失败。session 的 `close()` 只操作自身 identity；queued session 会被取消，stale session 不会关闭后来项。
+`presented` 在请求真正轮到并进入首个稳定展示阶段时完成，`finished` 在正常/立即关闭或 queued cancel 后完成，runtime destroy 时 reject。
+每个 binding 的 player 在 runtime 初始化时创建一次并跨请求复用；全部 Scene Layout Popup 共用一个 runtime-owned 压暗层，按当前 manifest
+更新颜色、透明度和 visibleStates。`getActivePopupAddress()` 只返回当前 active owner 或 `null`。全局 `closePopup()` 保留给不持有 session
+的宿主 cleanup；session 不拥有 player，caller 不得 destroy package-owned Popup。
 
 ## Popup 深层字符串
 

@@ -1586,12 +1586,10 @@ describe("scene layout package runtime", () => {
         finalAmountRaw: 6000,
       });
       expect(runtime.getActiveAwardCelebrationPhase()).toBe("counting");
-      expect(() =>
-        runtime.startAwardCelebrationForCurrentMode({
-          betAmountRaw: 100,
-          winAmountRaw: 6000,
-        }),
-      ).toThrow(/already active/);
+      const queuedCelebration = runtime.playAwardCelebrationForCurrentMode({
+        betAmountRaw: 100,
+        winAmountRaw: 3000,
+      });
       await expect(runtime.requestGameMode("FreeGame")).rejects.toThrow(
         /while an award celebration is active/,
       );
@@ -1619,6 +1617,9 @@ describe("scene layout package runtime", () => {
       expect(popupPresentation.eventMode).toBe("static");
       runtime.dismissActiveAwardCelebrationImmediately();
       await expect(celebrationComplete).resolves.toBeUndefined();
+      expect(runtime.getActiveAwardCelebrationPhase()).toBe("counting");
+      runtime.dismissActiveAwardCelebrationImmediately();
+      await expect(queuedCelebration).resolves.toBeUndefined();
       expect(popupPresentation.eventMode).toBe("none");
       expect(inspector.getActiveAwardCelebrationSnapshot()).toBeNull();
       expect(runtime.getActiveAwardCelebrationPhase()).toBeNull();
@@ -1651,6 +1652,18 @@ describe("scene layout package runtime", () => {
       await runtime.init();
       const address = formatGameLayoutRuntimeAddress("popup", "celebration");
       const cachedPlayer = runtime.getAwardCelebrationPopup("celebration");
+      expect(
+        runtime
+          .getPopupPresentation()
+          .children.filter(
+            (child) => child.label === "scene-layout-shared-popup-backdrop",
+          ),
+      ).toHaveLength(1);
+      expect(
+        cachedPlayer.container.children.some((child) =>
+          child.label.endsWith("backdrop"),
+        ),
+      ).toBe(false);
 
       expect(() =>
         runtime.openPopup({ address, type: "single-state" }),
@@ -1711,8 +1724,17 @@ describe("scene layout package runtime", () => {
         betAmountRaw: 100,
         winAmountRaw: 1_000,
       });
+      const queuedAtDestroy = runtime.enqueuePopup({
+        address,
+        type: "award-celebration",
+        betAmountRaw: 100,
+        winAmountRaw: 2_000,
+      });
       runtime.destroy();
       await expect(destroyed.finished).rejects.toThrow(
+        /destroyed during Popup playback/,
+      );
+      await expect(queuedAtDestroy.finished).rejects.toThrow(
         /destroyed during Popup playback/,
       );
     } finally {

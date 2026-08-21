@@ -29,24 +29,88 @@ export interface PopupPresentation {
   destroy(): void;
 }
 
+export interface PopupBackdropController {
+  readonly view: Graphics;
+  update(
+    owner: object,
+    spec: Exclude<PopupManifest, { readonly version: 1 }>["backdrop"],
+    viewport: PopupSize,
+    active: boolean,
+    state: PopupVisibilityState | null,
+  ): void;
+  release(owner: object): void;
+  destroy(): void;
+}
+
+export function createPopupBackdropController(
+  label = "shared popup backdrop",
+): PopupBackdropController {
+  const view = new Graphics();
+  let currentOwner: object | null = null;
+  let destroyed = false;
+  view.label = label;
+  view.eventMode = "none";
+  view.visible = false;
+  return Object.freeze({
+    view,
+    update(
+      owner: object,
+      spec: Exclude<PopupManifest, { readonly version: 1 }>["backdrop"],
+      viewport: PopupSize,
+      active: boolean,
+      state: PopupVisibilityState | null,
+    ) {
+      assertUsable();
+      if (!active) {
+        if (currentOwner === owner) {
+          currentOwner = null;
+          view.visible = false;
+        }
+        return;
+      }
+      currentOwner = owner;
+      redrawBackdrop(view, spec, viewport, true, state);
+    },
+    release(owner: object) {
+      if (destroyed || currentOwner !== owner) return;
+      currentOwner = null;
+      view.visible = false;
+    },
+    destroy() {
+      if (destroyed) return;
+      destroyed = true;
+      currentOwner = null;
+      view.destroy();
+    },
+  });
+
+  function assertUsable() {
+    if (destroyed) throw new Error("popup backdrop controller was destroyed.");
+  }
+}
+
 export function createPopupPresentation(
   manifest: PopupManifest,
+  options: { readonly backdropController?: PopupBackdropController } = {},
 ): PopupPresentation {
   const container = new Container();
   const contentRoot = new Container();
   const modern = manifest.version === 1 ? null : manifest;
-  const backdrop = modern ? new Graphics() : null;
+  const ownedBackdrop =
+    modern && !options.backdropController
+      ? createPopupBackdropController(`popup ${manifest.id} backdrop`)
+      : null;
+  const backdrop = modern
+    ? (options.backdropController ?? ownedBackdrop!)
+    : null;
+  const backdropOwner = Object.freeze({});
   let destroyed = false;
   let active = false;
   let state: PopupVisibilityState | null = null;
+  let appliedViewport: PopupSize | null = null;
   container.label = `popup ${manifest.id}`;
   contentRoot.label = `popup ${manifest.id} content`;
-  if (backdrop) {
-    backdrop.label = `popup ${manifest.id} backdrop`;
-    backdrop.eventMode = "none";
-    backdrop.visible = false;
-    container.addChild(backdrop);
-  }
+  if (ownedBackdrop) container.addChild(ownedBackdrop.view);
   container.addChild(contentRoot);
 
   return Object.freeze({
@@ -59,6 +123,7 @@ export function createPopupPresentation(
       assertUsable();
       const viewport = size(viewportSize, "viewportSize");
       const placement = hostPlacement(rawPlacement);
+      appliedViewport = viewport;
       if (!modern) {
         container.position.set(
           viewport.width / 2 + placement.x,
@@ -124,7 +189,7 @@ export function createPopupPresentation(
       });
       contentRoot.position.set(contentPosition.x, contentPosition.y);
       contentRoot.scale.set(contentScale);
-      redrawBackdrop(backdrop!, modern.backdrop, viewport, active, state);
+      backdrop!.update(backdropOwner, modern.backdrop, viewport, active, state);
       return Object.freeze({
         viewportSize: viewport,
         contentScale,
@@ -152,17 +217,33 @@ export function createPopupPresentation(
     setActive(next: boolean) {
       assertUsable();
       active = next;
-      if (backdrop) backdrop.visible = backdropVisible(modern!, next, state);
+      if (backdrop && appliedViewport)
+        backdrop.update(
+          backdropOwner,
+          modern!.backdrop,
+          appliedViewport,
+          next,
+          state,
+        );
+      else if (backdrop && !next) backdrop.release(backdropOwner);
     },
     setState(next: PopupVisibilityState | null) {
       assertUsable();
       state = next;
-      if (backdrop) backdrop.visible = backdropVisible(modern!, active, state);
+      if (backdrop && appliedViewport)
+        backdrop.update(
+          backdropOwner,
+          modern!.backdrop,
+          appliedViewport,
+          active,
+          state,
+        );
     },
     destroy() {
       if (destroyed) return;
       destroyed = true;
-      backdrop?.destroy();
+      backdrop?.release(backdropOwner);
+      ownedBackdrop?.destroy();
       contentRoot.destroy({ children: false });
       container.destroy({ children: false });
     },
@@ -204,20 +285,6 @@ function redrawBackdrop(
         (spec.visibleStates as readonly PopupVisibilityState[]).includes(
           state,
         )));
-}
-
-function backdropVisible(
-  manifest: Exclude<PopupManifest, { readonly version: 1 }>,
-  active: boolean,
-  state: PopupVisibilityState | null,
-): boolean {
-  return (
-    active &&
-    manifest.backdrop.enabled &&
-    (!("visibleStates" in manifest.backdrop) ||
-      (state !== null &&
-        manifest.backdrop.visibleStates.includes(state as never)))
-  );
 }
 
 function size(value: PopupSize, label: string): PopupSize {
