@@ -152,7 +152,7 @@ describe("AAC audio optimizer", () => {
     ).rejects.toThrow(/恰好一个 source/);
   });
 
-  it("parses one ffprobe audio stream and rejects ambiguous streams", () => {
+  it("parses exactly one audio stream while allowing an attached cover", () => {
     expect(
       parseAudioProbeJson(
         JSON.stringify({
@@ -164,6 +164,11 @@ describe("AAC audio optimizer", () => {
               channels: 2,
               sample_rate: "48000",
             },
+            {
+              codec_type: "video",
+              codec_name: "mjpeg",
+              disposition: { attached_pic: 1 },
+            },
           ],
           format: { format_name: "mov,mp4,m4a", bit_rate: "96000" },
         }),
@@ -172,8 +177,35 @@ describe("AAC audio optimizer", () => {
     ).toMatchObject({ codecName: "aac", channels: 2, bitRate: 96_000 });
     expect(() =>
       parseAudioProbeJson(
-        JSON.stringify({ streams: [{}, {}], format: {} }),
+        JSON.stringify({
+          streams: [
+            {
+              codec_type: "audio",
+              codec_name: "aac",
+              profile: "LC",
+              channels: 2,
+              sample_rate: "48000",
+            },
+            {
+              codec_type: "audio",
+              codec_name: "aac",
+              profile: "LC",
+              channels: 2,
+              sample_rate: "48000",
+            },
+          ],
+          format: {},
+        }),
         "bad.mp4",
+      ),
+    ).toThrow(/恰好/);
+    expect(() =>
+      parseAudioProbeJson(
+        JSON.stringify({
+          streams: [{ codec_type: "video", codec_name: "mjpeg" }],
+          format: {},
+        }),
+        "silent.mp4",
       ),
     ).toThrow(/恰好/);
   });

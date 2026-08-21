@@ -94,6 +94,8 @@ ZIP 与 JSON 作为一对提交，第二个文件提交失败时会回滚第一�
   重新生成；
 - root Scene Layout、nested Symbols 与 Popup 的 typed 音频 path 同步改成 `.m4a`，media type
   同步改成 `audio/mp4`；video transition 的内嵌音轨不属于 audio catalog，不会被改写；
+- 每个 typed 音频资源必须恰好包含一条音频 stream；MP3 等音频文件中的内附封面等
+  非音频 stream 不进入 M4A 输出；
 - 旧图片 payload 和资源分组 JSON 不进入 ZIP。
 
 新输出的外置 `scene-layout-asset-groups` version 2 JSON 包含：

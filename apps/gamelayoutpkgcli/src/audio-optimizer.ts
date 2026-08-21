@@ -248,11 +248,16 @@ export function parseAudioProbeJson(
     throw new Error(`ffprobe JSON 无效 ${label}：${formatError(error)}`);
   }
   const root = record(parsed, `ffprobe ${label}`);
-  if (!Array.isArray(root.streams) || root.streams.length !== 1)
+  if (!Array.isArray(root.streams))
     throw new Error(`${label} 必须恰好包含一条音频 stream。`);
-  const stream = record(root.streams[0], `ffprobe ${label}.stream`);
-  if (stream.codec_type !== "audio")
-    throw new Error(`${label} 包含非音频 stream。`);
+  const audioStreams = root.streams
+    .map((stream, index) =>
+      record(stream, `ffprobe ${label}.streams[${index}]`),
+    )
+    .filter((stream) => stream.codec_type === "audio");
+  if (audioStreams.length !== 1)
+    throw new Error(`${label} 必须恰好包含一条音频 stream。`);
+  const stream = audioStreams[0]!;
   const codecName = nonEmptyString(stream.codec_name, `${label}.codec_name`);
   const channels = positiveInteger(stream.channels, `${label}.channels`);
   const sampleRate = positiveIntegerString(
