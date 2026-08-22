@@ -42,6 +42,24 @@ export interface SceneLayoutRenderObjectFactoryDependencies {
       { readonly kind: "vni" }
     >;
   }) => NamedVniPlayer;
+  /** @internal Package runtime instrumentation; not a RenderObject hook. */
+  readonly observeSpinePlayback?: (
+    event: SceneLayoutRuntimeSpinePlaybackEvent,
+  ) => void;
+}
+
+export interface SceneLayoutRuntimeSpinePlaybackEvent {
+  readonly resourceKey: string;
+  readonly animation: string;
+  readonly loop: boolean;
+  readonly phase: "started" | "ended";
+  readonly outcome?:
+    | "completed"
+    | "stopped"
+    | "superseded"
+    | "aborted"
+    | "failed"
+    | "destroyed";
 }
 
 export interface SceneLayoutRenderObjectFactory {
@@ -79,6 +97,9 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
   readonly #createVniPlayer: NonNullable<
     SceneLayoutRenderObjectFactoryDependencies["createVniPlayer"]
   >;
+  readonly #observeSpinePlayback?: (
+    event: SceneLayoutRuntimeSpinePlaybackEvent,
+  ) => void;
   readonly #objects = new Map<RenderObject, ManagedRenderObject>();
   #destroyed = false;
 
@@ -109,6 +130,7 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
           assetUrls: playerOptions.resource.assetUrls,
         });
       });
+    this.#observeSpinePlayback = dependencies.observeSpinePlayback;
   }
 
   async createRenderObject(name: string): Promise<RenderObject> {
@@ -225,19 +247,55 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
     }
     let active = createPendingPlayback();
     let looping = false;
+    let lifecycle: {
+      readonly animation: string;
+      readonly loop: boolean;
+    } | null = null;
     let object!: RenderObject;
-    const stop = (reason: string): void => {
+    const endLifecycle = (
+      outcome: NonNullable<SceneLayoutRuntimeSpinePlaybackEvent["outcome"]>,
+    ): void => {
+      if (!lifecycle) return;
+      const ended = lifecycle;
+      lifecycle = null;
+      this.#observeSpinePlayback?.({
+        resourceKey: name,
+        animation: ended.animation,
+        loop: ended.loop,
+        phase: "ended",
+        outcome,
+      });
+    };
+    const stop = (
+      reason: string,
+      outcome: NonNullable<SceneLayoutRuntimeSpinePlaybackEvent["outcome"]>,
+    ): void => {
       player.reset();
       looping = false;
       active = rejectPendingPlayback(active, reason);
+      endLifecycle(outcome);
     };
     const slotPlayer = isSpineSlotPlayer(player) ? player : null;
     object = createRenderObject({
       view: player.view,
       update: (deltaSeconds) => {
-        const result = player.update(deltaSeconds);
-        if ((looping && result.loopCompleted) || (!looping && result.completed))
-          active = resolvePendingPlayback(active);
+        try {
+          const result = player.update(deltaSeconds);
+          if (
+            (looping && result.loopCompleted) ||
+            (!looping && result.completed)
+          ) {
+            active = resolvePendingPlayback(active);
+            if (!looping) endLifecycle("completed");
+          }
+        } catch (error) {
+          active = rejectPendingPlayback(
+            active,
+            error instanceof Error ? error.message : String(error),
+          );
+          endLifecycle("failed");
+          throw error;
+        }
       },
       play: (animationName, playOptions) => {
         if (!animationName?.trim())
@@ -246,22 +304,38 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
               `Scene layout Spine runtime resource "${name}" requires an exact animation name.`,
             ),
           );
+        if (playOptions?.signal?.aborted)
+          return Promise.reject(
+            new SceneLayoutError(
+              `Scene layout Spine runtime resource "${name}" playback was aborted.`,
+            ),
+          );
         active = rejectPendingPlayback(
           active,
           `Scene layout Spine runtime resource "${name}" playback was superseded.`,
         );
+        endLifecycle("superseded");
         looping = playOptions?.loop ?? false;
         player.play({ animationName, loop: looping });
+        lifecycle = { animation: animationName, loop: looping };
+        this.#observeSpinePlayback?.({
+          resourceKey: name,
+          animation: animationName,
+          loop: looping,
+          phase: "started",
+        });
         active = startPendingPlayback(playOptions, () => {
           player.reset();
           looping = false;
           active = createPendingPlayback();
+          endLifecycle("aborted");
         });
         return active.promise!;
       },
       stop: () =>
         stop(
           `Scene layout Spine runtime resource "${name}" playback was stopped.`,
+          "stopped",
         ),
       destroy: () => {
         this.#objects.delete(object);
@@ -270,6 +344,7 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
           `Scene layout Spine runtime resource "${name}" was destroyed during playback.`,
         );
         looping = false;
+        endLifecycle("destroyed");
         player.destroy();
       },
       ...(slotPlayer

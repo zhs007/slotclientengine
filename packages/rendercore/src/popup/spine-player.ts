@@ -8,6 +8,7 @@ import type {
   PopupPackageResource,
   PopupStringNodeHandle,
   PopupStringNodeSelector,
+  PopupRuntimeStateObserver,
   SpinePopupRuntime,
   SpinePopupSnapshot,
 } from "./types.js";
@@ -51,6 +52,7 @@ export function createSpinePopupRuntime(options: {
     readonly height: number;
   };
   readonly backdropController?: PopupBackdropController;
+  readonly observeState?: PopupRuntimeStateObserver;
 }): SpinePopupRuntime {
   if (options.resource.manifest.type !== "spine")
     throw new Error("Spine popup player requires a spine popup package.");
@@ -68,6 +70,7 @@ export function createSpinePopupRuntime(options: {
     player,
     options.measurePromptText,
     options.backdropController,
+    options.observeState,
   );
 }
 
@@ -82,6 +85,7 @@ class DefaultSpinePopupRuntime implements SpinePopupRuntime {
   readonly #prompt: ReturnType<typeof createPopupPromptText> | null;
   readonly #nodes: ReturnType<typeof createPopupStringNodeRegistry>;
   readonly #presentation: ReturnType<typeof createPopupPresentation>;
+  readonly #observeState: PopupRuntimeStateObserver | undefined;
   readonly #popupRoot = new Container();
   #attachmentHandle: PopupLayerAttachmentHandle | null = null;
   #phase: SpinePopupSnapshot["phase"] = "idle";
@@ -102,6 +106,7 @@ class DefaultSpinePopupRuntime implements SpinePopupRuntime {
       readonly height: number;
     },
     backdropController?: PopupBackdropController,
+    observeState?: PopupRuntimeStateObserver,
   ) {
     const manifest = resource.manifest;
     this.#manifest = manifest;
@@ -109,6 +114,7 @@ class DefaultSpinePopupRuntime implements SpinePopupRuntime {
     this.#presentation = createPopupPresentation(manifest, {
       backdropController,
     });
+    this.#observeState = observeState;
     this.container = this.#presentation.container;
     this.#popupRoot.position.set(
       manifest.spine.transform.x,
@@ -232,7 +238,7 @@ class DefaultSpinePopupRuntime implements SpinePopupRuntime {
       throw new Error("Spine popup does not define a prompt.");
     }
     this.#dismissRequested = false;
-    this.#phase = "start";
+    this.setPhase("start");
     this.#presentation.setState("start");
     this.container.visible = true;
     this.#presentation.setActive(true);
@@ -254,7 +260,7 @@ class DefaultSpinePopupRuntime implements SpinePopupRuntime {
     const result = this.#player.update(deltaSeconds);
     for (const overlay of this.#overlays) overlay.update(deltaSeconds);
     if (this.#phase === "start" && result.completed) {
-      this.#phase = "loop";
+      this.setPhase("loop");
       this.#presentation.setState("loop");
       for (const overlay of this.#overlays) overlay.applySegment("loop");
       this.#player.play({
@@ -270,7 +276,7 @@ class DefaultSpinePopupRuntime implements SpinePopupRuntime {
     this.assertReady();
     if (this.#phase !== "loop") return;
     this.#dismissRequested = true;
-    this.#phase = "end";
+    this.setPhase("end");
     this.#presentation.setState("end");
     if (this.#prompt) this.#prompt.text.visible = false;
     for (const overlay of this.#overlays) overlay.applySegment("end");
@@ -301,6 +307,13 @@ class DefaultSpinePopupRuntime implements SpinePopupRuntime {
     return this.#phase;
   }
 
+  private setPhase(next: SpinePopupSnapshot["phase"]): void {
+    const previous = this.#phase;
+    if (previous === next) return;
+    this.#phase = next;
+    this.#observeState?.({ kind: "phase", previous, current: next });
+  }
+
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
@@ -317,7 +330,7 @@ class DefaultSpinePopupRuntime implements SpinePopupRuntime {
   private complete(): void {
     this.#player.reset();
     if (this.#prompt) this.#prompt.text.visible = false;
-    this.#phase = "complete";
+    this.setPhase("complete");
     this.#presentation.setState(null);
     this.container.visible = false;
     this.#presentation.setActive(false);

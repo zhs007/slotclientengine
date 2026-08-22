@@ -294,9 +294,13 @@ describe("Scene Layout named RenderObject factory", () => {
 
   it("resolves looping playback at the first loop edge and keeps it running", async () => {
     const player = new ManualSpinePlayer();
+    const lifecycle: unknown[] = [];
     const factory = createSceneLayoutRenderObjectFactory({
       resource: createResource(),
-      dependencies: { createSpinePlayer: () => player },
+      dependencies: {
+        createSpinePlayer: () => player,
+        observeSpinePlayback: (event) => lifecycle.push(event),
+      },
     });
     const object = await factory.createRenderObject("nearwin1");
     const clock = createRenderObjectMotionRuntime();
@@ -317,6 +321,15 @@ describe("Scene Layout named RenderObject factory", () => {
     expect(player.updates).toBe(3);
     object.stop();
     expect(player.resets).toBe(1);
+    expect(lifecycle).toEqual([
+      expect.objectContaining({
+        resourceKey: "nearwin1",
+        animation: "Nearwin",
+        loop: true,
+        phase: "started",
+      }),
+      expect.objectContaining({ phase: "ended", outcome: "stopped" }),
+    ]);
     object.destroy();
     clock.destroy();
     factory.destroy();

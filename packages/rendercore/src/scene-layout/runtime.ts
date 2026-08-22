@@ -87,6 +87,26 @@ export interface CreateSceneLayoutRuntimeOptions {
     readonly parent: Container;
     readonly resource: SceneLayoutResource["vniResources"][string];
   }) => SceneLayoutVniPlayer;
+  /** @internal Package runtime instrumentation; not an authored layout hook. */
+  readonly observeSpinePlayback?: (
+    event: SceneLayoutSpinePlaybackEvent,
+  ) => void;
+}
+
+export type SceneLayoutSpinePlaybackOutcome =
+  | "completed"
+  | "stopped"
+  | "superseded"
+  | "aborted"
+  | "failed"
+  | "destroyed";
+
+export interface SceneLayoutSpinePlaybackEvent {
+  readonly nodeId: string;
+  readonly animation: string;
+  readonly loop: boolean;
+  readonly phase: "started" | "ended";
+  readonly outcome?: SceneLayoutSpinePlaybackOutcome;
 }
 
 export interface SceneLayoutVniPlayer {
@@ -123,6 +143,7 @@ interface RuntimeNode {
 }
 
 interface NodeProgramPlayback {
+  readonly animation: string;
   readonly loop: boolean;
   readonly promise: Promise<void>;
   readonly resolve: () => void;
@@ -170,6 +191,9 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   readonly #createVniPlayer: NonNullable<
     CreateSceneLayoutRuntimeOptions["createVniPlayer"]
   >;
+  readonly #observeSpinePlayback?: (
+    event: SceneLayoutSpinePlaybackEvent,
+  ) => void;
   readonly #nodes: readonly RuntimeNode[];
   readonly #nodesById: ReadonlyMap<string, RuntimeNode>;
   readonly #artMask = new Graphics();
@@ -227,6 +251,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
           assetUrls: playerOptions.resource.assetUrls,
         });
       });
+    this.#observeSpinePlayback = options.observeSpinePlayback;
     this.container.label = `scene-layout:${options.resource.manifest.id}`;
     this.container.sortableChildren = false;
     const nodes = options.resource.manifest.nodes.map((spec) => {
@@ -621,6 +646,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
               this.rejectNodeProgramPlayback(
                 current,
                 `Scene layout Spine node "${nodeId}" playback was superseded.`,
+                "superseded",
               );
               current.player.play({
                 animationName: current.spec.resource.defaultAnimation,
@@ -853,6 +879,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       this.rejectNodeProgramPlayback(
         node,
         `Scene layout Spine node "${node.spec.id}" was destroyed during playback.`,
+        "destroyed",
       );
       node.stateController?.destroy(
         `Scene layout Spine node "${node.spec.id}" was destroyed.`,
@@ -976,6 +1003,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     this.rejectNodeProgramPlayback(
       node,
       `Scene layout Spine node "${nodeId}" playback was superseded.`,
+      "superseded",
     );
     const loop = options.loop ?? false;
     let resolve!: () => void;
@@ -992,10 +1020,12 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
           this.rejectNodeProgramPlayback(
             node,
             `Scene layout Spine node "${nodeId}" playback was aborted.`,
+            "aborted",
           );
         }
       : undefined;
     playback = {
+      animation: animationName,
       loop,
       promise,
       resolve,
@@ -1011,8 +1041,16 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       this.rejectNodeProgramPlayback(
         node,
         error instanceof Error ? error.message : String(error),
+        "failed",
       );
+      return promise;
     }
+    this.#observeSpinePlayback?.({
+      nodeId,
+      animation: animationName,
+      loop,
+      phase: "started",
+    });
     return promise;
   }
 
@@ -1023,6 +1061,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     this.rejectNodeProgramPlayback(
       node,
       `Scene layout Spine node "${nodeId}" playback was stopped.`,
+      "stopped",
     );
   }
 
@@ -1034,14 +1073,32 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     playback.signal?.removeEventListener("abort", playback.abortListener!);
     node.programPlayback = null;
     playback.resolve();
+    this.#observeSpinePlayback?.({
+      nodeId: node.spec.id,
+      animation: playback.animation,
+      loop: playback.loop,
+      phase: "ended",
+      outcome: "completed",
+    });
   }
 
-  private rejectNodeProgramPlayback(node: RuntimeNode, message: string): void {
+  private rejectNodeProgramPlayback(
+    node: RuntimeNode,
+    message: string,
+    outcome: Exclude<SceneLayoutSpinePlaybackOutcome, "completed">,
+  ): void {
     const playback = node.programPlayback;
     if (!playback) return;
     playback.signal?.removeEventListener("abort", playback.abortListener!);
     node.programPlayback = null;
     playback.reject(new SceneLayoutError(message));
+    this.#observeSpinePlayback?.({
+      nodeId: node.spec.id,
+      animation: playback.animation,
+      loop: playback.loop,
+      phase: "ended",
+      outcome,
+    });
   }
 
   private createNodeMotion(nodeId: string): SceneLayoutRenderObjectMotion {

@@ -83,6 +83,7 @@ export type {
   GameLayoutRuntimeEndpoint,
   GameLayoutRuntimeEvent,
   GameLayoutRuntimeEventListener,
+  GameLayoutRuntimeWaitOptions,
 } from "@slotclientengine/rendercore/scene-layout/core";
 export type {
   AttachRenderObjectToSpineSlotOptions,

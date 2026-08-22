@@ -249,6 +249,9 @@ export class RenderReelSet extends Container implements ReelSpin {
           slotParent: this.#slotLayer,
           slotRenderOrderOffset: x * slotCount,
           slotRenderOrderStride,
+          ...(options.symbolStateObserver
+            ? { symbolStateObserver: options.symbolStateObserver }
+            : {}),
           ...(options.bounceStrength === undefined
             ? {}
             : { bounceStrength: options.bounceStrength }),

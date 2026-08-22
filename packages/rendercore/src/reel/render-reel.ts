@@ -83,6 +83,7 @@ export class RenderReel extends Container {
   readonly #slotRenderOrderOffset: number;
   readonly #slotRenderOrderStride: number;
   readonly #presentationValueResolver: RenderReelOptions["presentationValueResolver"];
+  readonly #symbolStateObserver: RenderReelOptions["symbolStateObserver"];
   readonly #bounceStrength: number;
   readonly #slots: readonly ReelSlot[];
   readonly #slotRenderViews: readonly RenderReelSlotRenderView[];
@@ -113,6 +114,7 @@ export class RenderReel extends Container {
     this.#registry = options.registry;
     this.#symbolPool = options.symbolPool;
     this.#presentationValueResolver = options.presentationValueResolver;
+    this.#symbolStateObserver = options.symbolStateObserver;
     this.#bounceStrength = normalizeNonNegativeFiniteNumber(
       options.bounceStrength ?? 1,
       "bounceStrength",
@@ -736,7 +738,25 @@ export class RenderReel extends Container {
       );
     }
 
+    const shouldObserve =
+      (this.#phase === "idle" || this.#phase === "stopped") &&
+      !!this.#symbolStateObserver?.hasAnyInterest(slot.symbol.symbol);
+    const before = shouldObserve ? slot.symbol.getStateSnapshot() : null;
     slot.symbol.requestState(state, transitionMode);
+    if (before) {
+      const after = slot.symbol.getStateSnapshot();
+      if (before.resolvedState !== after.resolvedState)
+        this.#symbolStateObserver!.observe({
+          x: this.xIndex,
+          y: windowY,
+          code: slot.symbol.code,
+          symbol: slot.symbol.symbol,
+          previousRequestedState: before.requestedState,
+          previousResolvedState: before.resolvedState,
+          requestedState: after.requestedState,
+          resolvedState: after.resolvedState,
+        });
+    }
   }
 
   validateVisibleSymbolStatePlayback(
@@ -755,10 +775,11 @@ export class RenderReel extends Container {
     state: SymbolStateId,
     options: SymbolStatePlaybackOptions,
   ): Promise<void> {
-    return this.getVisiblePlayableSymbol(windowY, state).playState(
-      state,
-      options,
-    );
+    const symbol = this.getVisiblePlayableSymbol(windowY, state);
+    const before = this.captureObservedState(symbol);
+    const playback = symbol.playState(state, options);
+    this.observeCapturedState(windowY, symbol, before);
+    return playback;
   }
 
   playVisibleTerminalSymbolState(
@@ -767,11 +788,11 @@ export class RenderReel extends Container {
     options: SymbolStatePlaybackOptions,
     terminalComplete: () => void,
   ): Promise<void> {
-    return this.getVisiblePlayableSymbol(windowY, state).playTerminalState(
-      state,
-      options,
-      terminalComplete,
-    );
+    const symbol = this.getVisiblePlayableSymbol(windowY, state);
+    const before = this.captureObservedState(symbol);
+    const playback = symbol.playTerminalState(state, options, terminalComplete);
+    this.observeCapturedState(windowY, symbol, before);
+    return playback;
   }
 
   hasVisibleTerminalSymbolState(
@@ -1374,9 +1395,72 @@ export class RenderReel extends Container {
   }
 
   private updateVisibleSymbols(deltaSeconds: number): void {
-    for (const slot of this.#slots) {
-      slot.symbol?.update(deltaSeconds);
+    let visible: Map<
+      SymbolPlayer,
+      {
+        readonly y: number;
+        readonly before: ReturnType<SymbolPlayer["getStateSnapshot"]>;
+      }
+    > | null = null;
+    if (
+      this.#symbolStateObserver &&
+      (this.#phase === "idle" || this.#phase === "stopped")
+    ) {
+      for (let y = 0; y < this.layout.visibleRows; y++) {
+        const symbol = this.getVisibleSlot(y).symbol;
+        if (symbol && this.#symbolStateObserver.hasAnyInterest(symbol.symbol)) {
+          visible ??= new Map();
+          visible.set(symbol, { y, before: symbol.getStateSnapshot() });
+        }
+      }
     }
+    for (const slot of this.#slots) {
+      if (!slot.symbol) continue;
+      const result = slot.symbol.update(deltaSeconds);
+      const observed = visible?.get(slot.symbol);
+      if (
+        observed &&
+        result.stateChanged &&
+        observed.before.resolvedState !== result.resolvedState
+      )
+        this.#symbolStateObserver!.observe({
+          x: this.xIndex,
+          y: observed.y,
+          code: slot.symbol.code,
+          symbol: slot.symbol.symbol,
+          previousRequestedState: observed.before.requestedState,
+          previousResolvedState: observed.before.resolvedState,
+          requestedState: result.requestedState,
+          resolvedState: result.resolvedState,
+        });
+    }
+  }
+
+  private captureObservedState(symbol: SymbolPlayer) {
+    return (this.#phase === "idle" || this.#phase === "stopped") &&
+      this.#symbolStateObserver?.hasAnyInterest(symbol.symbol)
+      ? symbol.getStateSnapshot()
+      : null;
+  }
+
+  private observeCapturedState(
+    windowY: number,
+    symbol: SymbolPlayer,
+    before: ReturnType<SymbolPlayer["getStateSnapshot"]> | null,
+  ): void {
+    if (!before) return;
+    const after = symbol.getStateSnapshot();
+    if (before.resolvedState === after.resolvedState) return;
+    this.#symbolStateObserver!.observe({
+      x: this.xIndex,
+      y: windowY,
+      code: symbol.code,
+      symbol: symbol.symbol,
+      previousRequestedState: before.requestedState,
+      previousResolvedState: before.resolvedState,
+      requestedState: after.requestedState,
+      resolvedState: after.resolvedState,
+    });
   }
 
   private prepareLanding(

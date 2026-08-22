@@ -28,6 +28,8 @@ import {
   type AwardCelebrationRuntime,
   type PopupBackdropController,
   type PopupInteractionDispatchResult,
+  type PopupRuntimeStateObserver,
+  type PopupRuntimeStateTransition,
   type PopupStringNodeHandle,
   type SingleStatePopupRuntime,
   type SpinePopupRuntime,
@@ -44,6 +46,8 @@ import {
   createShuffledGridCellReelOffsetMatrix,
   createShuffledGridCellReelPhaseMatrix,
   type SymbolPresentationValueMatrix,
+  type RenderReelSymbolStateObserver,
+  type RenderReelSymbolStateTransition,
 } from "../reel/index.js";
 import {
   createSymbolPackageReelRegistryFromCatalog,
@@ -64,7 +68,10 @@ import {
 import { materializeSceneLayoutManifestForMode } from "./manifest-v2.js";
 import { upgradeSceneLayoutManifestToLatest } from "./manifest-v3.js";
 import { transitionResourceKey } from "./resource.js";
-import { createPreparedSceneLayoutRuntime } from "./runtime.js";
+import {
+  createPreparedSceneLayoutRuntime,
+  type SceneLayoutSpinePlaybackEvent,
+} from "./runtime.js";
 import {
   createSceneLayoutTransitionVideoPlayer,
   type SceneLayoutTransitionVideoPlayer,
@@ -108,6 +115,7 @@ import {
   createSceneLayoutRenderObjectFactory,
   type SceneLayoutRenderObjectFactory,
   type SceneLayoutRenderObjectFactoryDependencies,
+  type SceneLayoutRuntimeSpinePlaybackEvent,
 } from "./render-object-factory.js";
 import { resolveSceneLayoutRenderLayerRef } from "./render-layer-ref.js";
 import {
@@ -271,6 +279,7 @@ export function createSceneLayoutPackageRuntime(options: {
   readonly createSpinePopupRuntime?: (options: {
     readonly resource: SceneLayoutPackageResource["popupPackages"][string];
     readonly backdropController?: PopupBackdropController;
+    readonly observeState?: PopupRuntimeStateObserver;
   }) => SpinePopupRuntime;
   readonly createVideoTransitionPlayer?: (options: {
     readonly url: string;
@@ -360,6 +369,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #createSpinePopupRuntime: (options: {
     readonly resource: SceneLayoutPackageResource["popupPackages"][string];
     readonly backdropController?: PopupBackdropController;
+    readonly observeState?: PopupRuntimeStateObserver;
   }) => SpinePopupRuntime;
   readonly #createVideoTransitionPlayer: (options: {
     readonly url: string;
@@ -390,7 +400,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #reelEntries = new Map<string, ReelEntry>();
   #mainReelSceneCommitted = false;
   readonly #mainReelOverlays = new Set<Container>();
-  #catalog: SymbolCatalogModel | null = null;
   #activeSymbolPackageId: string | null = null;
   #stableSymbolPackageId: string | null = null;
   #targetSymbolPackageId: string | null = null;
@@ -512,6 +521,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#formatPopupAmount = formatPopupAmount;
     this.#layout = createPreparedSceneLayoutRuntime({
       resource: resource.layout,
+      observeSpinePlayback: (event) => this.observeAuthoredSpinePlayback(event),
     });
     this.#audio = createAudioRuntime({
       backend: audioBackend ?? createPixiSoundBackend(),
@@ -531,7 +541,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       createVideoTransitionPlayer ?? createSceneLayoutTransitionVideoPlayer;
     this.#renderObjectFactory = createSceneLayoutRenderObjectFactory({
       resource,
-      dependencies: renderObjectFactoryDependencies,
+      dependencies: {
+        ...renderObjectFactoryDependencies,
+        observeSpinePlayback: (event) =>
+          this.observeRuntimeSpinePlayback(event),
+      },
     });
     this.#addressController = createGameLayoutRuntimeAddresses(resource, {
       getRenderObject: (id) => this.getRenderObject(id),
@@ -693,7 +707,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
                     "Injected grid-cell reel requires a grid-cell symbol binding.",
                   );
                 this.#reel = this.#createGridCellReel!();
-                this.#catalog = null;
                 await this.prepareReelPresentation(this.#reel);
                 this.assertAlive();
               }),
@@ -703,6 +716,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
                 const catalog = await binding.resource.createCatalog();
                 this.assertAlive();
                 const reel = this.createReelPresentation(
+                  binding.id,
                   binding.resource,
                   catalog,
                   binding.binding,
@@ -732,16 +746,22 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
               ? this.#createSpinePopupRuntime({
                   resource,
                   backdropController: this.#popupBackdrop,
+                  observeState: (transition) =>
+                    this.observePopupState(id, transition),
                 })
               : resource.manifest.type === "single-state"
                 ? createSingleStatePopupRuntime({
                     resource,
                     backdropController: this.#popupBackdrop,
+                    observeState: (transition) =>
+                      this.observePopupState(id, transition),
                   })
                 : createAwardCelebrationRuntime({
                     resource,
                     formatAmount: this.#formatPopupAmount,
                     backdropController: this.#popupBackdrop,
+                    observeState: (transition) =>
+                      this.observePopupState(id, transition),
                   });
           if (resource.manifest.type === "spine")
             this.#spinePopups.set(id, popup as SpinePopupRuntime);
@@ -777,7 +797,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           );
         this.attachReel(reel);
         this.#reel = reel;
-        this.#catalog = entry?.catalog ?? null;
         if (initial) {
           this.applyReelScene(
             reel,
@@ -807,8 +826,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         this.#popupRoot.addChild(popup.container);
       }
       this.#popupRoot.sortChildren();
-      this.#stableMode = initialModeId;
       this.#displayedMode = initialModeId;
+      this.#stableMode = initialModeId;
       this.#gameModeIds = Object.freeze(
         this.requireGameModes().modes.map((mode) => mode.id),
       );
@@ -2082,7 +2101,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
             this.#activeProgrammaticPopup.sessionId,
           )
         : undefined;
-    if (programmaticController) programmaticController.state = "closing";
+    if (programmaticController)
+      this.setProgrammaticPopupSessionState(programmaticController, "closing");
     if (behavior === "immediate") {
       this.#closingPopupIds.delete(active.id);
       if (active.source === "prelude") {
@@ -2228,6 +2248,84 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     });
   }
 
+  private setDisplayedMode(modeId: string | null): void {
+    const previous = this.#displayedMode;
+    if (previous === modeId) return;
+    this.#displayedMode = modeId;
+    if (previous)
+      this.#addressController.emit(
+        formatGameLayoutRuntimeAddress(
+          "mode",
+          previous,
+          "state",
+          "displayed",
+          "exited",
+        ),
+        () => ({ previous, mode: modeId, state: "displayed" }),
+      );
+    if (modeId)
+      this.#addressController.emit(
+        formatGameLayoutRuntimeAddress(
+          "mode",
+          modeId,
+          "state",
+          "displayed",
+          "entered",
+        ),
+        () => ({ previous, mode: modeId, state: "displayed" }),
+      );
+  }
+
+  private setStableMode(modeId: string | null): void {
+    const previous = this.#stableMode;
+    if (previous === modeId) return;
+    this.#stableMode = modeId;
+    if (previous)
+      this.#addressController.emit(
+        formatGameLayoutRuntimeAddress(
+          "mode",
+          previous,
+          "state",
+          "stable",
+          "exited",
+        ),
+        () => ({ previous, mode: modeId, state: "stable" }),
+      );
+    if (modeId)
+      this.#addressController.emit(
+        formatGameLayoutRuntimeAddress(
+          "mode",
+          modeId,
+          "state",
+          "stable",
+          "entered",
+        ),
+        () => ({ previous, mode: modeId, state: "stable" }),
+      );
+  }
+
+  private emitTransitionLifecycle(
+    transition: Pick<PreparedModeTransitionBase, "spec">,
+    lifecycle: "started" | "switched" | "ended" | "failed",
+    extra: Readonly<Record<string, string | number | boolean | null>> = {},
+  ): void {
+    this.#addressController.emit(
+      formatGameLayoutRuntimeAddress(
+        "transition",
+        transition.spec.from,
+        transition.spec.to,
+        "lifecycle",
+        lifecycle,
+      ),
+      () => ({
+        from: transition.spec.from,
+        to: transition.spec.to,
+        lifecycle,
+        ...extra,
+      }),
+    );
+  }
+
   async selectAuthoringGameMode(
     modeId: string,
     options: SceneLayoutGameModeRequestOptions = {},
@@ -2280,7 +2378,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         } else {
           const previous = this.#reel;
           this.#reel = null;
-          this.#catalog = null;
           this.#mainReelSceneCommitted = false;
           this.#reelRenderLayerController.detachAll();
           this.#reelRenderLayerRoot.parent?.removeChild(
@@ -2293,8 +2390,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         prepared = null;
       }
       this.commitModeVisibility(target);
-      this.#stableMode = target.id;
-      this.#displayedMode = target.id;
+      this.setDisplayedMode(target.id);
+      this.setStableMode(target.id);
       this.#stableSymbolPackageId = this.#activeSymbolPackageId;
     } catch (error) {
       this.releasePreparedTarget(prepared);
@@ -2757,7 +2854,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       overlay.parent?.removeChild(overlay);
     this.#mainReelOverlays.clear();
     this.clearMainReelLandingPositions();
-    this.#catalog = null;
     for (const popup of this.#popups.values()) popup.destroy();
     this.#popups.clear();
     for (const popup of this.#spinePopups.values()) popup.destroy();
@@ -2795,6 +2891,128 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       throw new SceneLayoutError(
         `Audio effect route is not programmatic: ${route}.`,
       );
+  }
+
+  private observeAuthoredSpinePlayback(
+    event: SceneLayoutSpinePlaybackEvent,
+  ): void {
+    const address = formatGameLayoutRuntimeAddress(
+      "node",
+      event.nodeId,
+      "animation",
+      "lifecycle",
+      event.phase,
+    );
+    this.#addressController.emit(address, () => ({
+      nodeId: event.nodeId,
+      animation: event.animation,
+      loop: event.loop,
+      ...(event.outcome ? { outcome: event.outcome } : {}),
+    }));
+  }
+
+  private observeRuntimeSpinePlayback(
+    event: SceneLayoutRuntimeSpinePlaybackEvent,
+  ): void {
+    const address = formatGameLayoutRuntimeAddress(
+      "resource",
+      "spine",
+      event.resourceKey,
+      "animation",
+      "lifecycle",
+      event.phase,
+    );
+    this.#addressController.emit(address, () => ({
+      resourceKey: event.resourceKey,
+      animation: event.animation,
+      loop: event.loop,
+      ...(event.outcome ? { outcome: event.outcome } : {}),
+    }));
+  }
+
+  private observePopupState(
+    popupId: string,
+    transition: PopupRuntimeStateTransition,
+  ): void {
+    const emit = (
+      segments: readonly string[],
+      detail: Readonly<Record<string, string | number | boolean | null>>,
+    ): void => {
+      const address = formatGameLayoutRuntimeAddress(
+        "popup",
+        popupId,
+        ...segments,
+      );
+      this.#addressController.emit(address, () => ({ popupId, ...detail }));
+    };
+    if (transition.kind === "phase") {
+      emit(["phase", transition.previous, "exited"], {
+        previous: transition.previous,
+        current: transition.current,
+      });
+      emit(["phase", transition.current, "entered"], {
+        previous: transition.previous,
+        current: transition.current,
+      });
+      return;
+    }
+    if (transition.kind === "segment") {
+      emit(
+        ["tier", transition.tier, "segment", transition.previous, "exited"],
+        {
+          tier: transition.tier,
+          previous: transition.previous,
+          current: transition.current,
+        },
+      );
+      emit(
+        ["tier", transition.tier, "segment", transition.current, "entered"],
+        {
+          tier: transition.tier,
+          previous: transition.previous,
+          current: transition.current,
+        },
+      );
+      return;
+    }
+    if (transition.previous) {
+      if (transition.previousSegment)
+        emit(
+          [
+            "tier",
+            transition.previous,
+            "segment",
+            transition.previousSegment,
+            "exited",
+          ],
+          {
+            tier: transition.previous,
+            segment: transition.previousSegment,
+          },
+        );
+      emit(["tier", transition.previous, "exited"], {
+        tier: transition.previous,
+      });
+    }
+    if (transition.current) {
+      emit(["tier", transition.current, "entered"], {
+        tier: transition.current,
+      });
+      if (transition.currentSegment)
+        emit(
+          [
+            "tier",
+            transition.current,
+            "segment",
+            transition.currentSegment,
+            "entered",
+          ],
+          {
+            tier: transition.current,
+            segment: transition.currentSegment,
+          },
+        );
+    }
   }
 
   private updatePopupAudioCues(): void {
@@ -3172,17 +3390,28 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#preparedTransition = null;
     this.#targetMode = prepared.target.id;
     this.#targetSymbolPackageId = prepared.targetSymbolPackageId;
+    let committed = false;
     try {
+      this.emitTransitionLifecycle(prepared, "started");
       this.commitPreparedTarget(prepared);
-      this.#stableMode = prepared.target.id;
-      this.#displayedMode = prepared.target.id;
+      committed = true;
+      this.emitTransitionLifecycle(prepared, "switched");
+      this.setStableMode(prepared.target.id);
       this.#stableSymbolPackageId = this.#activeSymbolPackageId;
       this.#targetMode = null;
       this.#targetSymbolPackageId = null;
+      this.emitTransitionLifecycle(prepared, "ended");
     } catch (error) {
-      this.releasePreparedTarget(prepared.prepared);
+      if (!committed) this.releasePreparedTarget(prepared.prepared);
+      else {
+        this.#stableMode = prepared.target.id;
+        this.#stableSymbolPackageId = this.#activeSymbolPackageId;
+      }
       this.#targetMode = null;
       this.#targetSymbolPackageId = null;
+      this.emitTransitionLifecycle(prepared, "failed", {
+        error: asSceneLayoutError(error).message,
+      });
       throw asSceneLayoutError(error);
     }
     this.drainPopupActivations();
@@ -3217,13 +3446,22 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       prepared.player.view.scale.set(placement.scale);
       started = true;
       return await new Promise<void>((resolve, reject) => {
-        this.#activeTransition = {
+        const active: Extract<
+          ActiveModeTransition,
+          { readonly kind: "spine" }
+        > = {
           ...prepared,
           switched: false,
           switchEventCount: 0,
           resolve,
           reject,
         };
+        this.#activeTransition = active;
+        try {
+          this.emitTransitionLifecycle(prepared, "started");
+        } catch (error) {
+          this.failActiveTransition(active, asSceneLayoutError(error));
+        }
       });
     } catch (error) {
       if (!started) this.releasePreparedTransition(prepared);
@@ -3270,6 +3508,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         };
         this.#activeTransition = active;
         try {
+          this.emitTransitionLifecycle(prepared, "started");
           this.#addressController.emit(
             formatGameLayoutRuntimeAddress(
               "transition",
@@ -3454,6 +3693,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     if (active.switched) return;
     this.commitPreparedTarget(active);
     active.switched = true;
+    this.emitTransitionLifecycle(active, "switched");
   }
 
   private commitPreparedTarget(active: PreparedModeTransitionBase): void {
@@ -3464,7 +3704,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       } else {
         const previous = this.#reel;
         this.#reel = null;
-        this.#catalog = null;
         this.#mainReelSceneCommitted = false;
         this.#reelRenderLayerController.detachAll();
         this.#reelRenderLayerRoot.parent?.removeChild(
@@ -3476,39 +3715,33 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       }
     }
     this.commitModeVisibility(active.target);
-    this.#displayedMode = active.target.id;
+    this.setDisplayedMode(active.target.id);
   }
 
   private completeActiveTransition(active: ActiveModeTransition): void {
     if (this.#activeTransition !== active) return;
     active.player.destroy();
     if (active.kind === "video") this.hideVideoBlackout();
-    this.#stableMode = active.target.id;
-    this.#displayedMode = active.target.id;
+    this.setStableMode(active.target.id);
     this.#stableSymbolPackageId = this.#activeSymbolPackageId;
     this.#targetMode = null;
     this.#targetSymbolPackageId = null;
-    this.#activeTransition = null;
     this.refreshCommittedGeometryPresentation();
-    if (active.kind === "video") {
-      try {
-        this.#addressController.emit(
-          formatGameLayoutRuntimeAddress(
-            "transition",
-            active.spec.from,
-            active.spec.to,
-            "effect",
-            "video",
-            "lifecycle",
-            "ended",
-          ),
-          Object.freeze({ from: active.spec.from, to: active.spec.to }),
-        );
-      } catch (error) {
-        active.reject(asSceneLayoutError(error));
-        return;
-      }
-    }
+    this.emitTransitionLifecycle(active, "ended");
+    if (active.kind === "video")
+      this.#addressController.emit(
+        formatGameLayoutRuntimeAddress(
+          "transition",
+          active.spec.from,
+          active.spec.to,
+          "effect",
+          "video",
+          "lifecycle",
+          "ended",
+        ),
+        Object.freeze({ from: active.spec.from, to: active.spec.to }),
+      );
+    this.#activeTransition = null;
     active.resolve();
     this.drainPopupActivations();
   }
@@ -3522,7 +3755,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     if (active.kind === "video") this.hideVideoBlackout();
     if (!active.switched) this.releasePreparedTarget(active.prepared);
     else {
-      this.#stableMode = active.target.id;
+      this.setStableMode(active.target.id);
       this.#stableSymbolPackageId = this.#activeSymbolPackageId;
     }
     this.#targetMode = null;
@@ -3530,10 +3763,62 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#activeTransition = null;
     if (active.switched) this.refreshCommittedGeometryPresentation();
     active.reject(error);
+    this.emitTransitionLifecycle(active, "failed", { error: error.message });
     this.drainPopupActivations();
   }
 
+  private createSymbolStateObserver(
+    bindingId: string,
+  ): RenderReelSymbolStateObserver {
+    return Object.freeze({
+      hasAnyInterest: (symbol: string) =>
+        this.#addressController.hasSymbolInterest(bindingId, symbol),
+      observe: (transition: RenderReelSymbolStateTransition) => {
+        this.emitSymbolStateTransition(bindingId, transition);
+      },
+    });
+  }
+
+  private emitSymbolStateTransition(
+    bindingId: string,
+    transition: RenderReelSymbolStateTransition,
+  ): void {
+    const emit = (state: string, edge: "entered" | "exited") => {
+      const address = formatGameLayoutRuntimeAddress(
+        "symbol-package",
+        bindingId,
+        "symbol",
+        transition.symbol,
+        "instance",
+        "reel",
+        "main",
+        "x",
+        String(transition.x),
+        "y",
+        String(transition.y),
+        "state",
+        state,
+        edge,
+      );
+      this.#addressController.emit(address, () => ({
+        symbolPackageId: bindingId,
+        reelId: "main",
+        x: transition.x,
+        y: transition.y,
+        code: transition.code,
+        symbol: transition.symbol,
+        previousRequestedState: transition.previousRequestedState,
+        previousResolvedState: transition.previousResolvedState,
+        requestedState: transition.requestedState,
+        resolvedState: transition.resolvedState,
+      }));
+    };
+    emit(transition.previousResolvedState, "exited");
+    emit(transition.resolvedState, "entered");
+  }
+
   private createReelPresentation(
+    bindingId: string,
     resource: SymbolPackageResource,
     catalog: SymbolCatalogModel,
     binding: SceneLayoutSymbolPackageBinding,
@@ -3545,6 +3830,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       catalog,
       { valueTextBindings: this.#symbolValueTextBindings },
     );
+    const symbolStateObserver = this.createSymbolStateObserver(bindingId);
     if (binding.renderMode === "standard") {
       return new RenderReelSet({
         reels,
@@ -3557,6 +3843,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           columnGap: geometry.gap.x,
           rowGap: geometry.gap.y,
         }),
+        symbolStateObserver,
         ...(this.#reelPresentation?.kind === "standard"
           ? { bounceStrength: this.#reelPresentation.bounceStrength }
           : {}),
@@ -3590,6 +3877,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         rows: geometry.rows,
         mode: "top-down-left-right",
       }),
+      symbolStateObserver,
       ...(this.#reelPresentation?.kind === "grid-cell"
         ? { bounceStrength: this.#reelPresentation.bounceStrength }
         : {}),
@@ -3640,6 +3928,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     const catalog = await binding.resource.createCatalog();
     this.assertReady();
     const reel = this.createReelPresentation(
+      binding.id,
       binding.resource,
       catalog,
       binding.binding,
@@ -3675,7 +3964,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     const previous = this.#reel;
     this.attachReel(entry.reel);
     this.#reel = entry.reel;
-    this.#catalog = entry.catalog;
     this.#mainReelSceneCommitted = entry.sceneCommitted;
     this.#activeSymbolPackageId = entry.id;
     if (previous && previous !== entry.reel && previous !== retained?.reel) {
@@ -4107,7 +4395,37 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       session,
     };
     this.#programmaticPopupSessions.set(sessionId, controller);
+    this.emitProgrammaticPopupSessionState(controller, null);
     return controller;
+  }
+
+  private setProgrammaticPopupSessionState(
+    controller: ProgrammaticPopupSessionController,
+    state: SceneLayoutPopupSessionState,
+  ): void {
+    const previous = controller.state;
+    if (previous === state) return;
+    controller.state = state;
+    this.emitProgrammaticPopupSessionState(controller, previous);
+  }
+
+  private emitProgrammaticPopupSessionState(
+    controller: ProgrammaticPopupSessionController,
+    previous: SceneLayoutPopupSessionState | null,
+  ): void {
+    const address = formatGameLayoutRuntimeAddress(
+      "popup",
+      controller.id,
+      "session",
+      controller.state,
+    );
+    this.#addressController.emit(address, () => ({
+      popupId: controller.id,
+      popupType: controller.request.type,
+      sessionId: controller.sessionId,
+      previous,
+      state: controller.state,
+    }));
   }
 
   private activateProgrammaticPopupSession(
@@ -4115,7 +4433,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   ): void {
     if (controller.state !== "queued") return;
     controller.activation = undefined;
-    controller.state = "opening";
+    this.setProgrammaticPopupSessionState(controller, "opening");
     const request = controller.request;
     try {
       if (request.type === "award-celebration") {
@@ -4171,7 +4489,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     controller: ProgrammaticPopupSessionController,
   ): void {
     controller.presented.resolve();
-    if (controller.state === "opening") controller.state = "active";
+    if (controller.state === "opening")
+      this.setProgrammaticPopupSessionState(controller, "active");
   }
 
   private finishProgrammaticPopupSession(
@@ -4189,7 +4508,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           `Popup session ${controller.sessionId} closed before it was presented.`,
         ),
       );
-    controller.state = "finished";
+    this.setProgrammaticPopupSessionState(controller, "finished");
     controller.finished.resolve();
     this.#programmaticPopupSessions.delete(controller.sessionId);
     if (this.#activeProgrammaticPopup?.sessionId === controller.sessionId)
@@ -4206,7 +4525,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       controller.state === "failed"
     )
       return;
-    controller.state = "failed";
+    this.setProgrammaticPopupSessionState(controller, "failed");
     controller.presented.reject(error);
     controller.finished.reject(error);
     this.#programmaticPopupSessions.delete(controller.sessionId);
@@ -4234,7 +4553,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       if (index >= 0) this.#pendingPopupActivations.splice(index, 1);
       controller.activation = undefined;
     }
-    controller.state = "cancelled";
+    this.setProgrammaticPopupSessionState(controller, "cancelled");
     controller.presented.reject(
       new SceneLayoutError(
         `Popup session ${controller.sessionId} was cancelled before presentation.`,

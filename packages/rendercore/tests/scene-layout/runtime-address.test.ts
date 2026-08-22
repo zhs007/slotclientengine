@@ -45,6 +45,12 @@ describe("Game Layout runtime address", () => {
     });
     expect(occurrences).toHaveLength(1);
     dispose();
+    const abortController = new AbortController();
+    const aborted = controller.addresses.wait(address, {
+      signal: abortController.signal,
+    });
+    abortController.abort();
+    await expect(aborted).rejects.toMatchObject({ name: "AbortError" });
     controller.destroy();
   });
 
@@ -110,6 +116,78 @@ describe("Game Layout runtime address", () => {
     });
     controller.destroy();
   });
+
+  it("matches symbol instance wildcards encoded directly in addresses", () => {
+    const controller = createGameLayoutRuntimeAddresses(
+      {
+        manifest: {
+          nodes: [],
+          reels: { main: { columns: 3, rows: 2 } },
+          symbolPackages: {
+            base: { reel: "main", reelSet: "base", renderMode: "standard" },
+          },
+          gameModes: { modes: [], transitions: [] },
+        },
+        symbolPackages: {
+          base: {
+            symbolManifest: { symbols: { WL: {} } },
+            statePreset: {
+              defaultState: "normal",
+              states: [{ id: "win", phase: "stable", playback: "loop" }],
+            },
+          },
+        },
+        popupPackages: {},
+      } as any,
+      {} as any,
+    );
+    const address = (x: number | "*", y: number | "*") =>
+      formatGameLayoutRuntimeAddress(
+        "symbol-package",
+        "base",
+        "symbol",
+        "WL",
+        "instance",
+        "reel",
+        "main",
+        "x",
+        String(x),
+        "y",
+        String(y),
+        "state",
+        "win",
+        "entered",
+      );
+    const exact = address(2, 1);
+    const received: string[] = [];
+    const disposers = [
+      controller.addresses.bind(exact, (event) => received.push(event.address)),
+      controller.addresses.bind(address(2, "*"), (event) =>
+        received.push(event.address),
+      ),
+      controller.addresses.bind(address("*", 1), (event) =>
+        received.push(event.address),
+      ),
+      controller.addresses.bind(address("*", "*"), (event) =>
+        received.push(event.address),
+      ),
+    ];
+    controller.emit(exact, { x: 2, y: 1 });
+    expect(received).toEqual([exact, exact, exact, exact]);
+    expect(controller.addresses.describe(address(2, "*")).kind).toBe("event");
+    expect(() => controller.addresses.bind(address(3, "*"), () => {})).toThrow(
+      "Unknown Game Layout runtime address",
+    );
+    for (const dispose of disposers) dispose();
+    let factoryCalls = 0;
+    controller.emit(exact, () => {
+      factoryCalls += 1;
+      return { x: 2, y: 1 };
+    });
+    expect(factoryCalls).toBe(0);
+    controller.destroy();
+  });
+
   it("round-trips exact owner identities with canonical segment encoding", () => {
     const address = formatGameLayoutRuntimeAddress(
       "transition",

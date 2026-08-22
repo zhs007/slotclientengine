@@ -291,6 +291,21 @@ describe("scene layout package event-driven game-mode transition", () => {
           displayedMode: runtime.getGameModeSnapshot().displayedMode,
         }),
     );
+    const stateEvents: string[] = [];
+    const stateEventAddresses = [
+      "gamelayout:/transition/BaseGame/FreeGame/lifecycle/started",
+      "gamelayout:/mode/BaseGame/state/displayed/exited",
+      "gamelayout:/mode/FreeGame/state/displayed/entered",
+      "gamelayout:/transition/BaseGame/FreeGame/lifecycle/switched",
+      "gamelayout:/mode/BaseGame/state/stable/exited",
+      "gamelayout:/mode/FreeGame/state/stable/entered",
+      "gamelayout:/transition/BaseGame/FreeGame/lifecycle/ended",
+    ];
+    const disposeStateEvents = stateEventAddresses.map((address) =>
+      runtime.addresses.bind(address, (event) =>
+        stateEvents.push(event.address),
+      ),
+    );
     runtime.applyViewport({ width: 800, height: 600 });
     state.runtime.setNodeActive.mockClear();
     const pending = runtime.requestGameMode("FreeGame");
@@ -344,7 +359,9 @@ describe("scene layout package event-driven game-mode transition", () => {
       transitionPhase: null,
     });
     expect(state.runtime.requestNodeState).not.toHaveBeenCalled();
+    expect(stateEvents).toEqual(stateEventAddresses);
     disposeEvent();
+    for (const dispose of disposeStateEvents) dispose();
     runtime.destroy();
   });
 
@@ -516,6 +533,26 @@ describe("scene layout package event-driven game-mode transition", () => {
     const { runtime } = createRuntime(true, true);
     await runtime.init();
     const address = formatGameLayoutRuntimeAddress("popup", "free-entry");
+    const sessionStates: string[] = [];
+    const disposeSessionEvents = [
+      "queued",
+      "opening",
+      "active",
+      "closing",
+      "finished",
+      "cancelled",
+      "failed",
+    ].map((stateId) =>
+      runtime.addresses.bind(
+        formatGameLayoutRuntimeAddress(
+          "popup",
+          "free-entry",
+          "session",
+          stateId,
+        ),
+        ({ detail }) => sessionStates.push(String(detail.state)),
+      ),
+    );
     const first = runtime.enqueuePopup({ address, type: "spine" });
     const second = runtime.enqueuePopup({ address, type: "spine" });
     const cancelled = runtime.enqueuePopup({ address, type: "spine" });
@@ -534,6 +571,10 @@ describe("scene layout package event-driven game-mode transition", () => {
     expect(second.state).toBe("active");
     await second.cancel();
     await expect(second.finished).resolves.toBeUndefined();
+    expect(sessionStates).toEqual(
+      expect.arrayContaining(["queued", "opening", "active", "cancelled"]),
+    );
+    for (const dispose of disposeSessionEvents) dispose();
     runtime.destroy();
   });
 

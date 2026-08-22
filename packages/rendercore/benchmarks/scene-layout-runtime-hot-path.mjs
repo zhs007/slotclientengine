@@ -3,6 +3,8 @@ import { Texture } from "pixi.js";
 import {
   createSceneLayoutResource,
   createSceneLayoutRuntime,
+  createGameLayoutRuntimeAddresses,
+  formatGameLayoutRuntimeAddress,
 } from "../dist/scene-layout/core/index.js";
 
 const manifest = {
@@ -62,6 +64,69 @@ if (typeof globalThis.gc === "function") globalThis.gc();
 const heapAfter = process.memoryUsage().heapUsed;
 runtime.destroy();
 
+const eventController = createGameLayoutRuntimeAddresses(
+  {
+    manifest: {
+      nodes: [],
+      reels: { main: { columns: 5, rows: 3 } },
+      symbolPackages: {
+        base: { reel: "main", reelSet: "base", renderMode: "standard" },
+      },
+      gameModes: { modes: [], transitions: [] },
+    },
+    symbolPackages: {
+      base: {
+        symbolManifest: { symbols: { WL: {} } },
+        statePreset: {
+          defaultState: "normal",
+          states: [{ id: "win", phase: "stable", playback: "loop" }],
+        },
+      },
+    },
+    popupPackages: {},
+  },
+  {},
+);
+const symbolEventAddress = (x, y) =>
+  formatGameLayoutRuntimeAddress(
+    "symbol-package",
+    "base",
+    "symbol",
+    "WL",
+    "instance",
+    "reel",
+    "main",
+    "x",
+    String(x),
+    "y",
+    String(y),
+    "state",
+    "win",
+    "entered",
+  );
+const exactSymbolEvent = symbolEventAddress(2, 1);
+let detailFactoryCalls = 0;
+const zeroSubscriberStarted = performance.now();
+for (let index = 0; index < iterations; index += 1)
+  eventController.emit(exactSymbolEvent, () => {
+    detailFactoryCalls += 1;
+    return { x: 2, y: 1 };
+  });
+const zeroSubscriberElapsedMs = performance.now() - zeroSubscriberStarted;
+let wildcardOccurrences = 0;
+const disposeWildcard = eventController.addresses.bind(
+  symbolEventAddress(2, "*"),
+  () => {
+    wildcardOccurrences += 1;
+  },
+);
+const wildcardStarted = performance.now();
+for (let index = 0; index < iterations; index += 1)
+  eventController.emit(exactSymbolEvent, { x: 2, y: 1 });
+const wildcardElapsedMs = performance.now() - wildcardStarted;
+disposeWildcard();
+eventController.destroy();
+
 console.log(
   JSON.stringify(
     {
@@ -70,6 +135,22 @@ console.log(
       updatesPerSecond: Math.round(iterations / (elapsedMs / 1_000)),
       heapDeltaBytes: heapAfter - heapBefore,
       gcExposed: typeof globalThis.gc === "function",
+      events: {
+        zeroSubscriber: {
+          elapsedMs: Number(zeroSubscriberElapsedMs.toFixed(3)),
+          dispatchesPerSecond: Math.round(
+            iterations / (zeroSubscriberElapsedMs / 1_000),
+          ),
+          detailFactoryCalls,
+        },
+        wildcardAddress: {
+          elapsedMs: Number(wildcardElapsedMs.toFixed(3)),
+          dispatchesPerSecond: Math.round(
+            iterations / (wildcardElapsedMs / 1_000),
+          ),
+          occurrences: wildcardOccurrences,
+        },
+      },
     },
     null,
     2,

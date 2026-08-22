@@ -4,12 +4,14 @@ import { singleStatePopupFixture } from "./fixtures.js";
 
 describe("single-state popup runtime", () => {
   it("resolves layers and mutable string handles by exact authored name", async () => {
+    const transitions: unknown[] = [];
     const runtime = createSingleStatePopupRuntime({
       resource: {
         manifest: singleStatePopupFixture(),
         resources: {},
         destroy() {},
       },
+      observeState: (transition) => transitions.push(transition),
     });
     await runtime.init();
     runtime.start();
@@ -23,6 +25,10 @@ describe("single-state popup runtime", () => {
     expect(() => runtime.getLayer("missing")).toThrow(/not found/);
     runtime.requestDismiss();
     expect(runtime.getPhase()).toBe("complete");
+    expect(transitions).toEqual([
+      { kind: "phase", previous: "idle", current: "active" },
+      { kind: "phase", previous: "active", current: "complete" },
+    ]);
     runtime.destroy();
     expect(() => text.setText("LATE")).toThrow(/destroyed/);
   });

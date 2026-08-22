@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Container, Graphics } from "pixi.js";
 import { LogicReelsModel } from "@slotclientengine/logiccore";
 import { RenderReel, createReelSpinPlan } from "../../src/reel/index.js";
@@ -761,11 +761,16 @@ describe("RenderReel", () => {
 
   it("requests visible symbol states after stopping and advances once animations", () => {
     const reels = createBasicReels();
+    const transitions: unknown[] = [];
     const reel = new RenderReel({
       reels,
       x: 0,
       layout: createBasicLayout(),
       registry: createBasicRegistry(),
+      symbolStateObserver: {
+        hasAnyInterest: () => true,
+        observe: (transition) => transitions.push(transition),
+      },
     });
     const axisPlan = createReelSpinPlan({
       reels,
@@ -802,6 +807,20 @@ describe("RenderReel", () => {
       isOnce: false,
       onceCompletionCount: 1,
     });
+    expect(transitions).toEqual([
+      expect.objectContaining({
+        x: 0,
+        y: 0,
+        previousResolvedState: "normal",
+        resolvedState: "win",
+      }),
+      expect.objectContaining({
+        x: 0,
+        y: 0,
+        previousResolvedState: "win",
+        resolvedState: "normal",
+      }),
+    ]);
 
     expect(() => reel.requestVisibleSymbolState(1, "win")).toThrow(/empty/);
     expect(() => reel.requestVisibleSymbolState(3, "win")).toThrow(

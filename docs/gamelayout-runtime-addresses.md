@@ -205,6 +205,48 @@ const dispose = runtime.addresses.bind(
 首次 apply、同 variant resize 和失败 apply 不派发。`detail` 包含
 `previousVariantId` 与 `variantId`；回调仍必须同步返回，异步编排使用 `wait()`。
 
+## Runtime 状态与动画事件
+
+每个 package runtime 使用同一个 package-owned event manager 发布已经提交的离散边界：
+
+```text
+gamelayout:/popup/<id>/session/<queued|opening|active|closing|finished|cancelled|failed>
+gamelayout:/popup/<id>/phase/<phase>/<entered|exited>
+gamelayout:/popup/<id>/tier/<tier>/<entered|exited>
+gamelayout:/popup/<id>/tier/<tier>/segment/<start|loop|end>/<entered|exited>
+gamelayout:/mode/<id>/state/<displayed|stable>/<entered|exited>
+gamelayout:/transition/<from>/<to>/lifecycle/<started|switched|ended|failed>
+gamelayout:/node/<id>/animation/lifecycle/<started|ended>
+gamelayout:/resource/spine/<key>/animation/lifecycle/<started|ended>
+```
+
+mode 的 `displayed` 表示 target scene 已提交，`stable` 表示整个 transition 已结束。Spine `started`
+只在底层成功接管播放后发布；`ended.detail.outcome` 区分 `completed/stopped/superseded/aborted/failed/destroyed`。
+Popup tier 名来自 exact manifest（例如 `bigwin`、`megawin`），shared runtime 不维护业务别名。
+
+Symbol instance 直接属于 address，不通过 `bind()`/`wait()` 的额外参数传递：
+
+```text
+gamelayout:/symbol-package/<binding-id>/symbol/<symbol-id>/instance/reel/<reel-id>/x/<x|*>/y/<y|*>/state/<state-id>/<entered|exited>
+```
+
+例如只监听第 2 列全部行可绑定：
+
+```ts
+runtime.addresses.bind(
+  "gamelayout:/symbol-package/base/symbol/WL/instance/reel/main/x/2/y/*/state/win/entered",
+  ({ address, detail }) => {
+    console.log(address, detail.x, detail.y);
+  },
+);
+```
+
+`x/y` 的 exact 坐标和 `*` 组合都由 catalog 预编译；unknown reel、越界坐标或任意非 catalog 组合显式失败。
+事件 occurrence 的 `address` 始终是实际 exact instance address，即使 listener 绑定的是 wildcard address。
+manager 每次 symbol dispatch 只查询 exact/exact、exact/_、_/exact、_/_ 四个地址，不解析 glob；没有相关
+listener/waiter 时不创建 occurrence/detail，也不调用 detail factory。symbol 只在当前 visible、settled occurrence
+的 resolved visual state 实际变化时按旧 state exited、新 state entered 的顺序发布。
+
 ## 统一打开和关闭 Popup
 
 顶层 `popups` 中的三类 binding 都使用 exact owner 地址打开。Game Layout Editor 中没有 mode/transition 直接引用的 package，

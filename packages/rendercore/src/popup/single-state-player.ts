@@ -7,6 +7,7 @@ import type {
   PopupPackageResource,
   PopupStringNodeHandle,
   PopupStringNodeSelector,
+  PopupRuntimeStateObserver,
   SingleStatePopupRuntime,
   SingleStatePopupSnapshot,
 } from "./types.js";
@@ -41,6 +42,7 @@ export function createSingleStatePopupPlayer(options: {
 export function createSingleStatePopupRuntime(options: {
   readonly resource: PopupPackageResource;
   readonly backdropController?: PopupBackdropController;
+  readonly observeState?: PopupRuntimeStateObserver;
 }): SingleStatePopupRuntime {
   if (options.resource.manifest.type !== "single-state")
     throw new Error(
@@ -54,6 +56,7 @@ export function createSingleStatePopupRuntime(options: {
       >;
     },
     options.backdropController,
+    options.observeState,
   );
 }
 
@@ -68,6 +71,7 @@ class DefaultSingleStatePopupRuntime implements SingleStatePopupRuntime {
   readonly #renderObjects: ReadonlyMap<string, RenderObject>;
   readonly #nodes: ReturnType<typeof createPopupStringNodeRegistry>;
   readonly #presentation: ReturnType<typeof createPopupPresentation>;
+  readonly #observeState: PopupRuntimeStateObserver | undefined;
   readonly #popupRoot = new Container();
   #attachmentHandle: PopupLayerAttachmentHandle | null = null;
   #phase: SingleStatePopupSnapshot["phase"] = "idle";
@@ -82,11 +86,13 @@ class DefaultSingleStatePopupRuntime implements SingleStatePopupRuntime {
       >;
     },
     backdropController?: PopupBackdropController,
+    observeState?: PopupRuntimeStateObserver,
   ) {
     this.#manifest = resource.manifest;
     this.#presentation = createPopupPresentation(this.#manifest, {
       backdropController,
     });
+    this.#observeState = observeState;
     this.container = this.#presentation.container;
     this.container.visible = false;
     this.#popupRoot.sortableChildren = true;
@@ -183,7 +189,7 @@ class DefaultSingleStatePopupRuntime implements SingleStatePopupRuntime {
     this.assertReady();
     if (this.isPlaying())
       throw new Error("Single-state popup is already playing.");
-    this.#phase = "active";
+    this.setPhase("active");
     this.#presentation.setState("active");
     this.container.visible = true;
     this.#presentation.setActive(true);
@@ -209,6 +215,13 @@ class DefaultSingleStatePopupRuntime implements SingleStatePopupRuntime {
 
   getPhase(): SingleStatePopupSnapshot["phase"] {
     return this.#phase;
+  }
+
+  private setPhase(next: SingleStatePopupSnapshot["phase"]): void {
+    const previous = this.#phase;
+    if (previous === next) return;
+    this.#phase = next;
+    this.#observeState?.({ kind: "phase", previous, current: next });
   }
 
   isPlaying(): boolean {
@@ -252,7 +265,7 @@ class DefaultSingleStatePopupRuntime implements SingleStatePopupRuntime {
   }
 
   private complete(): void {
-    this.#phase = "complete";
+    this.setPhase("complete");
     this.#presentation.setState(null);
     this.container.visible = false;
     this.#presentation.setActive(false);

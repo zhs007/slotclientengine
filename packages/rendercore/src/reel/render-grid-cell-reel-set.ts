@@ -244,6 +244,7 @@ export class RenderGridCellReelSet
   readonly #columnGap: number;
   readonly #rowGap: number;
   readonly #bounceStrength: number | undefined;
+  readonly #symbolStateObserver: RenderGridCellReelSetOptions["symbolStateObserver"];
   readonly #order: readonly GridCellCoordinate[];
   readonly #cells: readonly RuntimeCell[];
   readonly #cellsByKey: ReadonlyMap<string, RuntimeCell>;
@@ -301,6 +302,7 @@ export class RenderGridCellReelSet
     );
     this.#rowGap = assertNonNegativeNumber(options.rowGap ?? 0, "rowGap");
     this.#bounceStrength = options.bounceStrength;
+    this.#symbolStateObserver = options.symbolStateObserver;
     if (options.reels.getReelCount() !== this.#columns) {
       throw new ReelError(
         `grid columns ${this.#columns} do not match reels reel count ${options.reels.getReelCount()}.`,
@@ -2260,7 +2262,14 @@ export class RenderGridCellReelSet
         options: SymbolStatePlaybackOptions,
       ) => {
         assertUsable();
-        return occurrence.symbol.playState(state, options);
+        const position = this.findOccurrencePosition(occurrence);
+        return position.moving
+          ? occurrence.symbol.playState(state, options)
+          : this.getCell(position.x, position.y).reel.playVisibleSymbolState(
+              0,
+              state,
+              options,
+            );
       },
       attachEffect: (options: VisibleOccurrenceEffectAttachmentOptions) => {
         assertUsable();
@@ -2981,6 +2990,20 @@ export class RenderGridCellReelSet
         columnGap: 0,
       }),
       registry,
+      ...(this.#symbolStateObserver
+        ? {
+            symbolStateObserver: {
+              hasAnyInterest: (symbol: string) =>
+                this.#symbolStateObserver!.hasAnyInterest(symbol),
+              observe: (transition) =>
+                this.#symbolStateObserver!.observe({
+                  ...transition,
+                  x: coordinate.x,
+                  y: coordinate.y,
+                }),
+            },
+          }
+        : {}),
       ...(this.#bounceStrength === undefined
         ? {}
         : { bounceStrength: this.#bounceStrength }),

@@ -30,6 +30,7 @@ import type {
   PopupStringNodeHandle,
   PopupStringNodeSelector,
   PopupManifest,
+  PopupRuntimeStateObserver,
 } from "./types.js";
 import {
   createPopupPresentation,
@@ -115,6 +116,7 @@ export function createAwardCelebrationRuntime(options: {
   readonly layerFactory?: PopupLayerRuntimeFactory;
   readonly formatAmount?: PopupAmountFormatter | undefined;
   readonly backdropController?: PopupBackdropController;
+  readonly observeState?: PopupRuntimeStateObserver;
 }): AwardCelebrationRuntime {
   if (options.resource.manifest.type !== "award-celebration")
     throw new Error(
@@ -145,6 +147,7 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
   readonly #factory: PopupLayerRuntimeFactory;
   readonly #formatAmount: PopupAmountFormatter;
   readonly #nodes: ReturnType<typeof createPopupStringNodeRegistry>;
+  readonly #observeState: PopupRuntimeStateObserver | undefined;
   readonly #tiers = new Map<AwardTierId, TierRuntime>();
   readonly #runtimeVariants = new Map<string, PopupLayerRuntime>();
   readonly #initializedRuntimes = new WeakSet<PopupLayerRuntime>();
@@ -170,6 +173,7 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     readonly layerFactory?: PopupLayerRuntimeFactory;
     readonly formatAmount?: PopupAmountFormatter | undefined;
     readonly backdropController?: PopupBackdropController;
+    readonly observeState?: PopupRuntimeStateObserver;
   }) {
     if (options.resource.manifest.type !== "award-celebration")
       throw new Error(
@@ -193,6 +197,7 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     this.#nodes = createPopupStringNodeRegistry(
       collectAwardStringNodeDefinitions(this.#resource.manifest),
     );
+    this.#observeState = options.observeState;
     awardSnapshotReaders.set(this, () => this.#createSnapshot());
   }
   get textNodes(): readonly PopupStringNodeHandle[] {
@@ -242,7 +247,7 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     this.#nodes.setAutomaticText("win-amount", this.#lastFormattedAmount);
     this.#stages = createAwardCountStages(this.#resource.manifest, input);
     if (!this.#stages.length) {
-      this.#phase = "complete";
+      this.setPhase("complete");
       this.#presentation.setActive(false);
       return;
     }
@@ -309,9 +314,11 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     this.beginDismissing();
   }
   private beginDismissing() {
-    this.#phase = "dismissing";
+    this.setPhase("dismissing");
     for (const tier of this.#showing) {
-      requestTierEnd(tier, this.amountText());
+      requestTierEnd(tier, this.amountText(), (previous, current) =>
+        this.observeSegment(tier, previous, current),
+      );
       if (!this.#ending.includes(tier)) this.#ending.push(tier);
     }
     this.#showing.clear();
@@ -342,6 +349,42 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
   }
   getPhase(): AwardCelebrationSnapshot["phase"] {
     return this.#phase;
+  }
+  private setPhase(next: AwardCelebrationSnapshot["phase"]): void {
+    const previous = this.#phase;
+    if (previous === next) return;
+    this.#phase = next;
+    this.#observeState?.({ kind: "phase", previous, current: next });
+  }
+  private setActiveTier(next: TierRuntime | null): void {
+    const previous = this.#active;
+    if (previous === next) return;
+    this.#active = next;
+    this.#observeState?.({
+      kind: "tier",
+      previous: previous?.id ?? null,
+      previousSegment: previous?.segment ?? null,
+      current: next?.id ?? null,
+      currentSegment: next?.segment ?? null,
+    });
+  }
+  private setTierSegment(tier: TierRuntime, next: PopupSegment): void {
+    const previous = tier.segment;
+    if (previous === next) return;
+    tier.segment = next;
+    this.observeSegment(tier, previous, next);
+  }
+  private observeSegment(
+    tier: TierRuntime,
+    previous: PopupSegment,
+    current: PopupSegment,
+  ): void {
+    this.#observeState?.({
+      kind: "segment",
+      tier: tier.id,
+      previous,
+      current,
+    });
   }
   destroy(): void {
     if (this.#destroyed) return;
@@ -547,9 +590,9 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
       tier.amountLayer,
       stage.tierId,
     );
-    this.#active = tier;
+    this.setActiveTier(tier);
     this.#presentation.setState(stage.tierId);
-    this.#phase = "counting";
+    this.setPhase("counting");
   }
   private finishAtFinalAmount() {
     const finalStageIndex = this.#stages.length - 1;
@@ -566,13 +609,13 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     else this.finishAtFinalAmount();
   }
   private transitionToNext() {
-    this.#active = null;
+    this.setActiveTier(null);
     this.startNextStage();
   }
   private updateTier(tier: TierRuntime, delta: number) {
     for (const layer of tier.layers) layer.update(delta);
     if (tier.segment === "start" && animatedLayersLoopReady(tier.layers)) {
-      tier.segment = "loop";
+      this.setTierSegment(tier, "loop");
       for (const layer of tier.layers)
         layer.applySegment("loop", this.amountText());
       this.applyTierStateGate(tier);
@@ -626,17 +669,17 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     for (const tier of this.#showing) tier.container.visible = false;
     for (const tier of this.#ending) tier.container.visible = false;
     if (this.#amount) this.#amount.container.visible = false;
-    this.#active = null;
+    this.setActiveTier(null);
     this.#showing.clear();
     this.#ending = [];
-    this.#phase = "complete";
+    this.setPhase("complete");
     this.#presentation.setActive(false);
     this.#presentation.setState(null);
   }
   private clearPlayback() {
     for (const tier of this.#tiers.values()) tier.container.visible = false;
     if (this.#amount) this.#amount.container.visible = false;
-    this.#active = null;
+    this.setActiveTier(null);
     this.#showing.clear();
     this.#ending = [];
     this.#stages = [];
@@ -649,7 +692,9 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     for (const tier of this.#showing)
       if (tier !== next) {
         tier.container.visible = false;
-        requestTierEnd(tier, this.amountText());
+        requestTierEnd(tier, this.amountText(), (previous, current) =>
+          this.observeSegment(tier, previous, current),
+        );
         if (this.#resource.manifest.version >= 6) {
           tier.attachmentHandle?.destroy();
           tier.attachmentHandle = undefined;
@@ -663,7 +708,7 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     this.#showing.add(next);
   }
   private startTier(tier: TierRuntime) {
-    tier.segment = "start";
+    this.setTierSegment(tier, "start");
     tier.endRequested = false;
     if (this.#resource.manifest.version >= 6) {
       tier.layers.forEach((runtime, index) =>
@@ -812,10 +857,16 @@ function collectAwardStringNodeDefinitions(
   return result;
 }
 
-function requestTierEnd(tier: TierRuntime, text: string) {
+function requestTierEnd(
+  tier: TierRuntime,
+  text: string,
+  observe: (previous: PopupSegment, current: PopupSegment) => void,
+) {
   if (tier.endRequested) return;
   tier.endRequested = true;
+  const previous = tier.segment;
   tier.segment = "end";
+  if (previous !== tier.segment) observe(previous, tier.segment);
   for (const layer of tier.layers) layer.requestEnd();
   for (const layer of tier.layers) layer.applySegment("end", text);
 }

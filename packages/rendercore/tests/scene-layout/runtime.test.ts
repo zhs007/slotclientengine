@@ -72,6 +72,7 @@ describe("scene layout runtime", () => {
       attachSlotObject(options: { slot: string; object: Container }): void;
       removeSlotObject(object: Container): void;
     };
+    const lifecycle: unknown[] = [];
     const runtime = createSceneLayoutRuntime({
       resource: {
         manifest,
@@ -86,6 +87,7 @@ describe("scene layout runtime", () => {
         destroy: vi.fn(),
       },
       createSpinePlayer: () => player,
+      observeSpinePlayback: (event) => lifecycle.push(event),
     });
     await runtime.init();
     runtime.applyViewport({ width: 2000, height: 2000 });
@@ -158,6 +160,19 @@ describe("scene layout runtime", () => {
     const destroyedPlayback = object.playAnimation("Start");
     runtime.destroy();
     await expect(destroyedPlayback).rejects.toThrow(/destroyed/);
+    expect(lifecycle).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          animation: "Start",
+          phase: "ended",
+          outcome: "completed",
+        }),
+        expect.objectContaining({ phase: "ended", outcome: "superseded" }),
+        expect.objectContaining({ phase: "ended", outcome: "stopped" }),
+        expect.objectContaining({ phase: "ended", outcome: "aborted" }),
+        expect.objectContaining({ phase: "ended", outcome: "destroyed" }),
+      ]),
+    );
   });
 
   it("commits prepared mode background order without repeating the public structure check", async () => {

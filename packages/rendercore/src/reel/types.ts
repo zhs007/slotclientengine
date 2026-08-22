@@ -317,6 +317,23 @@ export interface RenderReelOptions {
   readonly slotRenderOrderStride?: number;
   readonly presentationValueResolver?: ReelSymbolPresentationValueResolver;
   readonly bounceStrength?: number;
+  readonly symbolStateObserver?: RenderReelSymbolStateObserver;
+}
+
+export interface RenderReelSymbolStateTransition {
+  readonly x: number;
+  readonly y: number;
+  readonly code: number;
+  readonly symbol: string;
+  readonly previousRequestedState: SymbolStateId;
+  readonly previousResolvedState: SymbolStateId;
+  readonly requestedState: SymbolStateId;
+  readonly resolvedState: SymbolStateId;
+}
+
+export interface RenderReelSymbolStateObserver {
+  hasAnyInterest(symbol: string): boolean;
+  observe(transition: RenderReelSymbolStateTransition): void;
 }
 
 export interface RenderReelSpinOptions {
@@ -550,6 +567,7 @@ export interface RenderReelSetOptions {
   readonly bounceStrength?: number;
   readonly reelSpin?: import("./reel-spin.js").ReelSpinDefaults;
   readonly areaSpinFunction?: import("./reel-area.js").AreaSpinFunction;
+  readonly symbolStateObserver?: RenderReelSymbolStateObserver;
 }
 
 export interface SymbolPlayerPoolOptions {
@@ -632,6 +650,7 @@ export interface RenderGridCellReelSetOptions {
   readonly bounceStrength?: number;
   readonly effectController?: GridCellEffectController;
   readonly occurrenceEffectPlayerFactory?: VisibleOccurrenceEffectPlayerFactory;
+  readonly symbolStateObserver?: RenderReelSymbolStateObserver;
 }
 
 export interface GridCellSymbolPresentationValueContext {

@@ -24,6 +24,29 @@ export interface PopupStringNodeHandle {
 }
 export type PopupStringNodeSelector = string | number;
 
+export type PopupRuntimeStateTransition =
+  | {
+      readonly kind: "phase";
+      readonly previous: string;
+      readonly current: string;
+    }
+  | {
+      readonly kind: "tier";
+      readonly previous: string | null;
+      readonly previousSegment: PopupSegment | null;
+      readonly current: string | null;
+      readonly currentSegment: PopupSegment | null;
+    }
+  | {
+      readonly kind: "segment";
+      readonly tier: string;
+      readonly previous: PopupSegment;
+      readonly current: PopupSegment;
+    };
+export type PopupRuntimeStateObserver = (
+  transition: PopupRuntimeStateTransition,
+) => void;
+
 export interface PopupHostPlacement {
   readonly x: number;
   readonly y: number;

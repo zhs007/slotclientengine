@@ -13,6 +13,7 @@ import {
   type VisibleSymbolPresentationTarget,
   type VisibleOccurrenceEffectPlayer,
   type VisibleOccurrenceEffectPlayerFactory,
+  type RenderReelSymbolStateObserver,
 } from "../../src/reel/index.js";
 import { createRenderObject } from "../../src/presentation/index.js";
 import { compileSlotCascadeFacts } from "@slotclientengine/logiccore";
@@ -377,6 +378,26 @@ describe("RenderGridCellReelSet", () => {
       onceCompletionCount: 1,
       requestedState: "normal",
     });
+  });
+
+  it("reports public grid coordinates for settled symbol state changes", () => {
+    const transitions: unknown[] = [];
+    const observer: RenderReelSymbolStateObserver = {
+      hasAnyInterest: () => true,
+      observe: (transition) => transitions.push(transition),
+    };
+    const reelSet = createGridReelSet({}, undefined, undefined, observer);
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
+    reelSet.requestVisibleSymbolState(1, 1, "win");
+    expect(transitions).toEqual([
+      expect.objectContaining({
+        x: 1,
+        y: 1,
+        previousResolvedState: "normal",
+        resolvedState: "win",
+      }),
+    ]);
+    reelSet.destroy();
   });
 
   it("selectively spins into released and visually empty cascade holes", () => {
@@ -1563,6 +1584,7 @@ function createGridReelSet(
   registryOptions: Parameters<typeof createBasicRegistry>[0] = {},
   occurrenceEffectPlayerFactory?: VisibleOccurrenceEffectPlayerFactory,
   effectController?: GridCellEffectController,
+  symbolStateObserver?: RenderReelSymbolStateObserver,
 ): RenderGridCellReelSet {
   return new RenderGridCellReelSet({
     reels: createBasicReels(),
@@ -1586,6 +1608,7 @@ function createGridReelSet(
       mode: "top-down-left-right",
     }),
     occurrenceEffectPlayerFactory,
+    ...(symbolStateObserver ? { symbolStateObserver } : {}),
   });
 }
 

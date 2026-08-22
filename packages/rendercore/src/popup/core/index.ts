@@ -11,6 +11,8 @@ export type {
   PopupPreparedSpine,
   PopupPreparedVni,
   PopupPresentationSnapshot,
+  PopupRuntimeStateObserver,
+  PopupRuntimeStateTransition,
   PopupStringNodeHandle,
   PopupStringNodeSelector,
   SingleStatePopupPhase,

@@ -15,15 +15,23 @@ describe("award celebration player", () => {
   it("keeps the game runtime command/query surface snapshot-free", async () => {
     expect("createAwardCelebrationPlayer" in popupCoreApi).toBe(false);
     expect("createSpinePopupPlayer" in popupCoreApi).toBe(false);
+    const transitions: unknown[] = [];
     const runtime = createAwardCelebrationRuntime({
       resource: fakeResource(),
       layerFactory: ({ layer }) => fakeLayer(layer.kind === "vni"),
+      observeState: (transition) => transitions.push(transition),
     });
     expect("getSnapshot" in runtime).toBe(false);
     await runtime.init();
     runtime.start({ betAmountRaw: 100, winAmountRaw: 5000 });
     expect(runtime.update(0)).toBeUndefined();
     expect(runtime.getPhase()).toBe("counting");
+    expect(transitions).toEqual(
+      expect.arrayContaining([
+        { kind: "phase", previous: "idle", current: "counting" },
+        expect.objectContaining({ kind: "tier", current: "base" }),
+      ]),
+    );
     runtime.destroy();
   });
 

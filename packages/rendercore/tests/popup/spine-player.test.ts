@@ -23,15 +23,20 @@ vi.mock("../../src/popup/prompt-text.js", async (original) => {
 
 describe("spine popup player", () => {
   it("keeps the game runtime command/query surface snapshot-free", async () => {
+    const transitions: unknown[] = [];
     const runtime = createSpinePopupRuntime({
       resource: spineResource(),
       playerFactory: () => new FakeSpinePlayer(),
+      observeState: (transition) => transitions.push(transition),
     });
     expect("getSnapshot" in runtime).toBe(false);
     await runtime.init();
     runtime.start();
     expect(runtime.update(0)).toBeUndefined();
     expect(runtime.getPhase()).toBe("start");
+    expect(transitions).toEqual([
+      { kind: "phase", previous: "idle", current: "start" },
+    ]);
     runtime.destroy();
   });
 
