@@ -24,6 +24,7 @@ import {
   TextureLoader,
   UnsignedByteType,
   type Texture,
+  Vector2,
   Vector3,
   WebGLRenderer,
 } from "three";
@@ -46,6 +47,7 @@ import {
   type TurfTextureSet,
 } from "./textures.js";
 import { createWindMaterial, type WindMaterialHandle } from "./wind.js";
+import { WatercolorPass } from "./watercolor-pass.js";
 import {
   createSessionSeed,
   createSymbolPlacements,
@@ -71,6 +73,8 @@ export class GardenBoardRenderer {
   readonly #renderer: WebGLRenderer;
   readonly #scene = new Scene();
   readonly #camera = new PerspectiveCamera(36, 1, 0.1, 80);
+  readonly #drawingBufferSize = new Vector2();
+  readonly #watercolorPass = new WatercolorPass();
   readonly #root = new Group();
   readonly #textures: TurfTextureSet[] = [];
   readonly #standaloneTextures: Texture[] = [];
@@ -125,6 +129,11 @@ export class GardenBoardRenderer {
     this.#camera.updateProjectionMatrix();
     this.#renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.65));
     this.#renderer.setSize(safeWidth, safeHeight, false);
+    this.#renderer.getDrawingBufferSize(this.#drawingBufferSize);
+    this.#watercolorPass.setSize(
+      this.#drawingBufferSize.x,
+      this.#drawingBufferSize.y,
+    );
   }
 
   destroy(): void {
@@ -147,6 +156,7 @@ export class GardenBoardRenderer {
     for (const texture of this.#textures) texture.dispose();
     for (const texture of this.#standaloneTextures) texture.dispose();
     this.#symbols.disposeTextures();
+    this.#watercolorPass.dispose();
     this.#renderer.dispose();
     this.#renderer.domElement.remove();
   }
@@ -157,7 +167,7 @@ export class GardenBoardRenderer {
     for (const handle of this.#windMaterials) handle.setTime(timeSeconds);
     this.#flowers.update(timeSeconds);
     this.#symbols.update(timeSeconds);
-    this.#renderer.render(this.#scene, this.#camera);
+    this.#watercolorPass.render(this.#renderer, this.#scene, this.#camera);
   };
 
   readonly #replaceSymbols = (): void => {
@@ -242,6 +252,8 @@ export class GardenBoardRenderer {
       new MeshToonMaterial({
         color: 0xc2c2c2,
         map: textures.albedo,
+        bumpMap: textures.bump,
+        bumpScale: 0.012,
         gradientMap: this.#boardToonGradient,
         emissive: 0x245c21,
         emissiveIntensity: 0.04,

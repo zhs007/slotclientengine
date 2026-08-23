@@ -26,6 +26,63 @@ function configure(texture: Texture, repeatX: number, repeatY: number): void {
   texture.repeat.set(repeatX, repeatY);
 }
 
+function paintWatercolorGrain(
+  context: CanvasRenderingContext2D,
+  bumpContext: CanvasRenderingContext2D,
+  size: number,
+  random: ReturnType<typeof createRandom>,
+  base: Color,
+  strength: number,
+): void {
+  for (let index = 0; index < 28; index += 1) {
+    const wash = base
+      .clone()
+      .offsetHSL(
+        random.range(-0.018, 0.018),
+        random.range(-0.04, 0.025),
+        random.range(-0.11, 0.12),
+      );
+    context.fillStyle = `#${wash.getHexString()}`;
+    context.globalAlpha = random.range(0.018, 0.052) * strength;
+    context.beginPath();
+    context.ellipse(
+      random.range(0, size),
+      random.range(0, size),
+      random.range(size * 0.025, size * 0.12),
+      random.range(size * 0.012, size * 0.055),
+      random.range(0, Math.PI),
+      0,
+      Math.PI * 2,
+    );
+    context.fill();
+  }
+
+  for (let index = 0; index < 420; index += 1) {
+    const x = random.range(0, size);
+    const y = random.range(0, size);
+    const length = random.range(0.8, 4.8);
+    const paperValue = Math.floor(random.range(205, 248));
+    context.strokeStyle = `rgb(${paperValue}, ${paperValue}, ${paperValue - 8})`;
+    context.globalAlpha = random.range(0.025, 0.09) * strength;
+    context.lineWidth = random.range(0.35, 0.9);
+    context.beginPath();
+    context.moveTo(x, y);
+    context.lineTo(x + length, y + random.range(-0.55, 0.55));
+    context.stroke();
+
+    const bumpValue = Math.floor(random.range(105, 165));
+    bumpContext.strokeStyle = `rgb(${bumpValue}, ${bumpValue}, ${bumpValue})`;
+    bumpContext.globalAlpha = random.range(0.035, 0.12) * strength;
+    bumpContext.lineWidth = random.range(0.35, 0.85);
+    bumpContext.beginPath();
+    bumpContext.moveTo(x, y);
+    bumpContext.lineTo(x + length, y + random.range(-0.45, 0.45));
+    bumpContext.stroke();
+  }
+  context.globalAlpha = 1;
+  bumpContext.globalAlpha = 1;
+}
+
 export function createTurfTextures(
   seed: number,
   baseColor: string,
@@ -100,6 +157,7 @@ export function createTurfTextures(
     );
     bumpContext.stroke();
   }
+  paintWatercolorGrain(albedoContext, bumpContext, size, random, base, 0.7);
   albedoContext.globalAlpha = 1;
   roughnessContext.globalAlpha = 1;
   bumpContext.globalAlpha = 1;
@@ -188,6 +246,7 @@ export function createCartoonTileTextures(
     albedoContext.lineTo(x + lean, y - height);
     albedoContext.stroke();
   }
+  paintWatercolorGrain(albedoContext, bumpContext, size, random, base, 1.15);
   albedoContext.globalAlpha = 1;
   bumpContext.globalAlpha = 1;
 
