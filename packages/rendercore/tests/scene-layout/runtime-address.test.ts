@@ -5,6 +5,7 @@ import {
   splitGameLayoutRuntimeAddress,
 } from "../../src/scene-layout/data/runtime-address.js";
 import { createGameLayoutRuntimeAddresses } from "../../src/scene-layout/core/runtime-address.js";
+import { compileGameLayoutRuntimeEventCatalog } from "../../src/scene-layout/core/runtime-address-catalog.js";
 import { singleStatePopupFixture } from "../popup/fixtures.js";
 
 describe("Game Layout runtime address", () => {
@@ -185,6 +186,65 @@ describe("Game Layout runtime address", () => {
       return { x: 2, y: 1 };
     });
     expect(factoryCalls).toBe(0);
+    controller.destroy();
+  });
+
+  it("uses the same pure event catalog as the runtime resolver", () => {
+    const manifest = {
+      nodes: [
+        {
+          id: "nearwin1",
+          resource: {
+            kind: "spine",
+            skeleton: "nearwin.json",
+            atlas: "nearwin.atlas",
+            textures: { "nearwin.png": "nearwin.png" },
+            defaultAnimation: "NearWin",
+            loop: false,
+          },
+        },
+      ],
+      reels: { main: { columns: 2, rows: 1 } },
+      symbolPackages: {
+        base: { reel: "main", reelSet: "main", renderMode: "standard" },
+      },
+      popups: {},
+      gameModes: {
+        modes: [{ id: "BaseGame", bgm: "base" }],
+        transitions: [],
+      },
+      runtimeResources: {},
+    } as any;
+    const source = {
+      manifest,
+      symbolPackages: { base: { symbols: ["WL"], states: ["win"] } },
+      popupManifests: {},
+      audioMusicNames: ["base"],
+    } as const;
+    const compiled = compileGameLayoutRuntimeEventCatalog(source);
+    const controller = createGameLayoutRuntimeAddresses(
+      {
+        manifest,
+        runtimeManifest: manifest,
+        symbolPackages: {
+          base: {
+            symbolManifest: { symbols: { WL: {} } },
+            statePreset: {
+              defaultState: "win",
+              states: [{ id: "win", phase: "stable", playback: "loop" }],
+            },
+          },
+        },
+        popupPackages: {},
+        audioMusic: { base: {} },
+      } as any,
+      {} as any,
+    );
+    expect(
+      controller.addresses
+        .list({ kind: "event" })
+        .map(({ address }) => address),
+    ).toEqual(compiled.entries.map(({ descriptor }) => descriptor.address));
     controller.destroy();
   });
 

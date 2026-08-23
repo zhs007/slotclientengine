@@ -7,3 +7,4 @@ export * from "../template-presentation.js";
 export * from "../configured-round-adapter.js";
 export * from "../editor.js";
 export { collectSceneLayoutPackagePaths } from "../package-resource.js";
+export * from "./runtime-event-catalog.js";

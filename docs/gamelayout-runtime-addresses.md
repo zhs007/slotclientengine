@@ -332,6 +332,15 @@ instance 已 stop 后发生。同一首 BGM 的 mode 切换不会制造重复 st
 
 ## 生命周期和错误处理
 
+Editor 工具需要枚举 event 时必须调用 RenderCore 的纯 catalog/inspection API，而不是解析地址字符串或维护另一张
+业务 event 表。`inspectSceneLayoutRuntimeEventCatalog({ manifest, files })` 会严格检查完整 mapped Layout closure 与
+嵌套 Symbols/Popup manifest，再返回与 production runtime 共用 compiler 生成的 frozen event descriptor、family 和
+facets；该过程不创建 Pixi Application、player、texture、Object URL 或 ticker。
+
+EditorCore 的 event group dialog 只把 catalog facets 用作渐进式筛选，最终保存的仍是 exact canonical address。
+Symbol 的全部、指定列、指定行和指定 cell 分别选择 catalog 已有的 `*/*`、`x/*`、`*/y`、`x/y` entry；selector
+不会变成 `bind()/wait()` 的额外参数，也不会生成 catalog 外的组合。
+
 | capability                              | ownership                      | 失效边界                                              |
 | --------------------------------------- | ------------------------------ | ----------------------------------------------------- |
 | authored RenderObject/RenderObjectLayer | runtime-owned borrowed         | runtime destroy；active owner 还受 mode/reel 状态约束 |

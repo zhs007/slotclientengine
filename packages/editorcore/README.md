@@ -11,6 +11,11 @@
 
 Assets UI 默认可通过 `mountEditorAssetsDialog()` 作为一枚管理按钮接入宿主。按钮打开 native modal dialog，宿主无需为 Assets 永久划分 panel；底层 `mountEditorAssetsView()` 仍保留给需要自行组合容器的 consumer。
 
+Game Layout event group 使用独立的 `mountEditorGameLayoutEventDialog()`。它只读取已经由统一 Assets 入口提交的
+`game-layout` root，并从该 root 的完整 ZIP closure 编译候选；具体 node、Symbol、state、Popup、mode、坐标和
+lifecycle 不由 EditorCore 预置。Dialog 左侧维护有序 event 列表，右侧一次只展开一个 catalog facet；候选较多时
+提供当前层搜索和可回退 breadcrumb，避免多层树状下拉。
+
 底层 logical identity 仍是 `@slotclientengine/editorresource` 的扁平 filename key；树是 owner 关系的视图，不是目录。Spine atlas page、VNI 图片和 package leaf 只能随其顶层 root 使用，不能独立绑定。需要复用时应单独导入顶层资源；相同 bytes 在 `assets.map.json` materialization 时共享 content-addressed payload，logical identity 不合并。
 
 ## Host 接入
@@ -30,6 +35,29 @@ const dialog = mountEditorAssetsDialog({
 dialog.destroy();
 controller.destroy();
 ```
+
+Event group 由 host 控制并在确认时整组提交：
+
+```ts
+import type { EditorGameLayoutEventGroup } from "@slotclientengine/editorcore/assets/adapters";
+import { mountEditorGameLayoutEventDialog } from "@slotclientengine/editorcore/assets/ui";
+
+let eventGroup: EditorGameLayoutEventGroup | null = null;
+const events = mountEditorGameLayoutEventDialog({
+  controller,
+  root: toolbarElement,
+  value: eventGroup,
+  onConfirm(value) {
+    eventGroup = value;
+    events.setValue(value);
+  },
+});
+```
+
+输出固定为 immutable `{ rootKey, events: readonly { address, descriptor }[] }`。新增/修改先保存在 row draft，只有
+“保存修改”才进入 dialog draft；关闭或取消 dialog 不调用 host。替换同名 Layout 后组件按 exact address 复验旧项，
+已消失项明确失效并阻止确认；切换到另一 Layout 必须显式清空已有列表。宿主卸载时先销毁两个 dialog，再销毁
+controller。
 
 `host` 必须负责 clone project、收集业务引用、收集/写入显式程序 binding、结构化重写 root 引用；建议实现 candidate project/catalog/workspace 的最终校验。`used` 和 `programmatic` 均从 host 合同实时派生，不持久化布尔副本。
 

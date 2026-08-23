@@ -27,6 +27,7 @@ import {
   createRuntimeEventManager,
   type RuntimeEventAddressMetadata,
 } from "./runtime-event-manager.js";
+import { compileGameLayoutRuntimeEventCatalog } from "./runtime-address-catalog.js";
 
 export interface GameLayoutRuntimeEvent {
   readonly address: GameLayoutRuntimeAddress;
@@ -203,8 +204,6 @@ export function createGameLayoutRuntimeAddresses(
     descriptor: GameLayoutRuntimeAddressDescriptor,
   ): GameLayoutEventEndpoint => Object.freeze({ kind: "event", descriptor });
 
-  add(["event", "variant-changed"], "event", null, "event", eventEndpoint);
-
   for (const id of ["layout", "reel", "transition", "popup"])
     add(["layer", id], "layer", null, "borrowed", (descriptor) =>
       Object.freeze({
@@ -249,16 +248,6 @@ export function createGameLayoutRuntimeAddresses(
             get: () => bridge.getRenderLayer(`node:${node.id}:${placement}`),
           }),
       );
-    if (node.resource?.kind === "spine" && !("stateMachine" in node.resource))
-      for (const lifecycle of ["started", "ended"])
-        add(
-          [...owner, "animation", "lifecycle", lifecycle],
-          "event",
-          owner,
-          "event",
-          eventEndpoint,
-          { eventFamily: "animation" },
-        );
   }
   for (const reelId of Object.keys(manifest.reels).sort()) {
     const owner = ["reel", reelId];
@@ -291,103 +280,15 @@ export function createGameLayoutRuntimeAddresses(
       "structural",
       structural,
     );
-    const symbolPackage = resource.symbolPackages[id];
-    if (!symbolPackage) continue;
-    const interestGroups = new Map<string, string>();
-    symbolInterestGroups.set(id, interestGroups);
-    for (const symbol of Object.keys(
-      symbolPackage.symbolManifest.symbols,
-    ).sort())
-      for (const state of symbolPackage.statePreset.states)
-        for (const edge of ["entered", "exited"])
-          for (const [reelId, reel] of [
-            ["main", manifest.reels.main!],
-          ] as const) {
-            const addresses = new Map<string, GameLayoutRuntimeAddress>();
-            const interestGroup = symbolInterestGroup(id, symbol);
-            interestGroups.set(symbol, interestGroup);
-            const addInstanceAddress = (x: number | "*", y: number | "*") => {
-              const address = add(
-                [
-                  "symbol-package",
-                  id,
-                  "symbol",
-                  symbol,
-                  "instance",
-                  "reel",
-                  reelId,
-                  "x",
-                  String(x),
-                  "y",
-                  String(y),
-                  "state",
-                  state.id,
-                  edge,
-                ],
-                "event",
-                ["symbol-package", id],
-                "event",
-                eventEndpoint,
-                {
-                  eventFamily: "symbol-state",
-                  symbolPackageId: id,
-                  symbol,
-                  reelId,
-                  x: String(x),
-                  y: String(y),
-                  state: state.id,
-                },
-              );
-              eventMetadata.set(address, {
-                dispatchAddresses: Object.freeze([address]),
-                interestGroup,
-              });
-              addresses.set(`${String(x)}\u0000${String(y)}`, address);
-              return address;
-            };
-            addInstanceAddress("*", "*");
-            for (let x = 0; x < reel.columns; x++) addInstanceAddress(x, "*");
-            for (let y = 0; y < reel.rows; y++) addInstanceAddress("*", y);
-            for (let x = 0; x < reel.columns; x++)
-              for (let y = 0; y < reel.rows; y++) {
-                const exact = addInstanceAddress(x, y);
-                eventMetadata.set(exact, {
-                  dispatchAddresses: Object.freeze([
-                    exact,
-                    addresses.get(`${String(x)}\u0000*`)!,
-                    addresses.get(`*\u0000${String(y)}`)!,
-                    addresses.get("*\u0000*")!,
-                  ]),
-                  interestGroup,
-                });
-              }
-          }
   }
   for (const mode of manifest.gameModes?.modes ?? []) {
     const owner = ["mode", mode.id];
     add(owner, "mode", null, "structural", structural);
-    for (const state of ["displayed", "stable"])
-      for (const edge of ["entered", "exited"])
-        add(
-          [...owner, "state", state, edge],
-          "event",
-          owner,
-          "event",
-          eventEndpoint,
-        );
     if (mode.bgm) {
       const bgm = [...owner, "bgm"];
       add(bgm, "mode-bgm", owner, "structural", structural, {
         music: mode.bgm,
       });
-      for (const lifecycle of ["started", "stopped"])
-        add(
-          [...bgm, "lifecycle", lifecycle],
-          "event",
-          bgm,
-          "event",
-          eventEndpoint,
-        );
     }
   }
   for (const transition of manifest.gameModes?.transitions ?? []) {
@@ -399,34 +300,8 @@ export function createGameLayoutRuntimeAddresses(
           ? "video"
           : "none";
     add(owner, "transition", null, "structural", structural, { effectKind });
-    for (const lifecycle of ["started", "switched", "ended", "failed"])
-      add(
-        [...owner, "lifecycle", lifecycle],
-        "event",
-        owner,
-        "event",
-        eventEndpoint,
-      );
     const effectOwner = [...owner, "effect", effectKind];
     add(effectOwner, "transition", owner, "structural", structural);
-    if (effectKind === "spine" && "switchEvent" in transition.overlay)
-      add(
-        [...effectOwner, "event", transition.overlay.switchEvent],
-        "event",
-        effectOwner,
-        "event",
-        eventEndpoint,
-        { animation: transition.overlay.animation },
-      );
-    if (effectKind === "video")
-      for (const lifecycle of ["started", "ended"])
-        add(
-          [...effectOwner, "lifecycle", lifecycle],
-          "event",
-          effectOwner,
-          "event",
-          eventEndpoint,
-        );
   }
   for (const [popupId, popup] of Object.entries(resource.popupPackages).sort(
     ([a], [b]) => a.localeCompare(b, "en"),
@@ -435,51 +310,6 @@ export function createGameLayoutRuntimeAddresses(
     add(owner, "popup", null, "structural", structural, {
       popupType: popup.manifest.type,
     });
-    for (const state of [
-      "queued",
-      "opening",
-      "active",
-      "closing",
-      "finished",
-      "cancelled",
-      "failed",
-    ])
-      add([...owner, "session", state], "event", owner, "event", eventEndpoint);
-    for (const phase of popupPhases(popup.manifest))
-      for (const edge of ["entered", "exited"])
-        add(
-          [...owner, "phase", phase, edge],
-          "event",
-          owner,
-          "event",
-          eventEndpoint,
-        );
-    if (popup.manifest.type === "award-celebration")
-      for (const tier of [
-        "base",
-        "standard",
-        ...popup.manifest.awardCelebration.celebrationTiers.map(
-          (item) => item.id,
-        ),
-      ]) {
-        for (const edge of ["entered", "exited"])
-          add(
-            [...owner, "tier", tier, edge],
-            "event",
-            owner,
-            "event",
-            eventEndpoint,
-          );
-        for (const segment of ["start", "loop", "end"])
-          for (const edge of ["entered", "exited"])
-            add(
-              [...owner, "tier", tier, "segment", segment, edge],
-              "event",
-              owner,
-              "event",
-              eventEndpoint,
-            );
-      }
     const nested = collectPopupAddresses(popup.manifest);
     for (const layerId of nested.layers)
       add(
@@ -521,14 +351,6 @@ export function createGameLayoutRuntimeAddresses(
         getSnapshot: bridge.getAudioSnapshot,
       }),
     );
-    for (const lifecycle of ["started", "stopped"])
-      add(
-        [...owner, "lifecycle", lifecycle],
-        "event",
-        owner,
-        "event",
-        eventEndpoint,
-      );
   }
   for (const route of [...(resource.programmaticAudioEffects ?? [])].sort())
     add(
@@ -579,16 +401,60 @@ export function createGameLayoutRuntimeAddresses(
           },
         }),
     );
-    if (spec.kind === "spine")
-      for (const lifecycle of ["started", "ended"])
-        add(
-          ["resource", "spine", name, "animation", "lifecycle", lifecycle],
-          "event",
-          ["resource", "spine", name],
-          "event",
-          eventEndpoint,
-          { eventFamily: "animation" },
+  }
+
+  const eventCatalog = compileGameLayoutRuntimeEventCatalog({
+    manifest,
+    symbolPackages: Object.fromEntries(
+      Object.entries(resource.symbolPackages ?? {}).map(
+        ([id, symbolPackage]) => [
+          id,
+          Object.freeze({
+            symbols: Object.freeze(
+              Object.keys(symbolPackage.symbolManifest.symbols),
+            ),
+            states: Object.freeze(
+              symbolPackage.statePreset.states.map((state) => state.id),
+            ),
+          }),
+        ],
+      ),
+    ),
+    popupManifests: Object.fromEntries(
+      Object.entries(resource.popupPackages).map(([id, popup]) => [
+        id,
+        popup.manifest,
+      ]),
+    ),
+    audioMusicNames: Object.freeze(Object.keys(resource.audioMusic ?? {})),
+  });
+  for (const entry of eventCatalog.entries) {
+    if (entries.has(entry.descriptor.address))
+      throw new SceneLayoutError(
+        `Duplicate Game Layout runtime address: ${entry.descriptor.address}.`,
+      );
+    entries.set(entry.descriptor.address, {
+      descriptor: entry.descriptor,
+      endpoint: () => eventEndpoint(entry.descriptor),
+    });
+    eventMetadata.set(entry.descriptor.address, {
+      dispatchAddresses: entry.dispatchAddresses,
+      ...(entry.interestGroup ? { interestGroup: entry.interestGroup } : {}),
+    });
+    if (entry.interestGroup) {
+      const symbolPackageId = entry.descriptor.detail?.symbolPackageId;
+      const symbol = entry.descriptor.detail?.symbol;
+      if (typeof symbolPackageId !== "string" || typeof symbol !== "string")
+        throw new SceneLayoutError(
+          `Symbol event is missing interest metadata: ${entry.descriptor.address}.`,
         );
+      let groups = symbolInterestGroups.get(symbolPackageId);
+      if (!groups) {
+        groups = new Map<string, string>();
+        symbolInterestGroups.set(symbolPackageId, groups);
+      }
+      groups.set(symbol, entry.interestGroup);
+    }
   }
 
   const requireEntry = (value: string): CatalogEntry => {
@@ -679,21 +545,6 @@ export function createGameLayoutRuntimeAddresses(
       eventManager.destroy();
     },
   });
-}
-
-function symbolInterestGroup(symbolPackageId: string, symbol: string): string {
-  return `${symbolPackageId}\u0000${symbol}`;
-}
-
-function popupPhases(manifest: PopupManifest): readonly string[] {
-  switch (manifest.type) {
-    case "award-celebration":
-      return Object.freeze(["idle", "counting", "dismissing", "complete"]);
-    case "spine":
-      return Object.freeze(["idle", "start", "loop", "end", "complete"]);
-    case "single-state":
-      return Object.freeze(["idle", "active", "complete"]);
-  }
 }
 
 function collectPopupAddresses(manifest: PopupManifest) {

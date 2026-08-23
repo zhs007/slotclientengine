@@ -1,4 +1,5 @@
 export * from "./default-adapters.js";
+export * from "./game-layout-events.js";
 
 import {
   createEditorAssetsController,
