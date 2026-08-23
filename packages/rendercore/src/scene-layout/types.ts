@@ -8,8 +8,10 @@ import type { SymbolPackageResource } from "../symbol/package.js";
 import type { PopupPackageResource } from "../popup/core/types.js";
 import type {
   ResolvedAudioEffect,
+  ResolvedAudioEventTrack,
   ResolvedAudioMusic,
 } from "@slotclientengine/audiocore/core";
+import type { GameLayoutRuntimeAddress } from "./data/runtime-address.js";
 import type {
   FocusedArtViewport,
   RenderViewportMargin,
@@ -388,14 +390,35 @@ export interface SceneLayoutManifestV4 extends Omit<
   readonly audio: import("@slotclientengine/audiocore/data").AudioCatalogManifestV1;
 }
 
+export interface SceneLayoutEventAudioBindingV1 {
+  readonly event: GameLayoutRuntimeAddress;
+  readonly audio: import("@slotclientengine/audiocore/data").AudioEventTrackBindingV1;
+  readonly endEvent?: GameLayoutRuntimeAddress;
+}
+
+export interface SceneLayoutEventAudioV1 {
+  readonly version: 1;
+  readonly ignoreLegacyAudio: boolean;
+  readonly bindings: readonly SceneLayoutEventAudioBindingV1[];
+}
+
+export interface SceneLayoutManifestV5 extends Omit<
+  SceneLayoutManifestV4,
+  "version"
+> {
+  readonly version: 5;
+  readonly eventAudio: SceneLayoutEventAudioV1;
+}
+
 export type SceneLayoutManifestModern =
   | SceneLayoutManifestV2
   | SceneLayoutManifestV3
-  | SceneLayoutManifestV4;
+  | SceneLayoutManifestV4
+  | SceneLayoutManifestV5;
 export type SceneLayoutManifest =
   | SceneLayoutManifestV1
   | SceneLayoutManifestModern;
-export type SceneLayoutManifestLatest = SceneLayoutManifestV4;
+export type SceneLayoutManifestLatest = SceneLayoutManifestV5;
 
 export type SceneLayoutRuntimeResource =
   | {
@@ -458,7 +481,7 @@ export interface SceneLayoutResource {
 export interface SceneLayoutPackageResource {
   /** Initial-mode v1-compatible view preserved for existing host inspection. */
   readonly manifest: SceneLayoutManifestV1;
-  /** Canonical v4 document used by package runtime allocation and activation. */
+  /** Canonical latest document used by package runtime allocation and activation. */
   readonly runtimeManifest: SceneLayoutManifestLatest;
   readonly layout: SceneLayoutResource;
   readonly imageStrings: Readonly<Record<string, ImageStringResource>>;
@@ -468,6 +491,7 @@ export interface SceneLayoutPackageResource {
   /** Fully-qualified effect routes aggregated at the Scene Layout boundary. */
   readonly audioEffects: Readonly<Record<string, ResolvedAudioEffect>>;
   readonly audioMusic: Readonly<Record<string, ResolvedAudioMusic>>;
+  readonly audioEventTracks: Readonly<Record<string, ResolvedAudioEventTrack>>;
   readonly programmaticAudioEffects: ReadonlySet<string>;
   readonly runtimeResources: Readonly<
     Record<string, SceneLayoutRuntimeResource>

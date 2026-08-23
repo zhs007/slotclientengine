@@ -1135,3 +1135,41 @@ dialog:not(.resource-picker) .button-row {
     grid-template-columns: 500px minmax(0, 1fr);
   }
 }
+
+.event-audio-project-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.event-audio-project-actions label,
+.event-audio-fields > label,
+.event-audio-fields fieldset {
+  display: grid;
+  gap: 6px;
+}
+
+.event-audio-project-actions label {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+
+.event-audio-fields {
+  display: grid;
+  gap: 12px;
+  padding: 12px 0 2px;
+}
+
+.event-audio-fields fieldset {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  padding: 12px;
+  border: 1px solid #314158;
+  border-radius: 8px;
+}
+
+.event-audio-fields fieldset legend,
+.event-audio-fields fieldset .hint {
+  grid-column: 1 / -1;
+}

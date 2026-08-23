@@ -5,6 +5,7 @@ import {
   compileAudioEffectRoutes,
   parseAudioCatalogManifestV1,
   parseAudioEffectBindingV1,
+  parseAudioEventTrackBindingV1,
   rewriteAudioAssetPaths,
 } from "../src/data/index.js";
 
@@ -84,5 +85,41 @@ describe("audio data", () => {
         },
       }),
     ).toThrow(/targetGain/u);
+  });
+
+  it("strictly parses generic event tracks and loop focus rules", () => {
+    expect(
+      parseAudioEventTrackBindingV1({
+        name: "big-win",
+        asset: {
+          sources: [{ path: "big-win.mp3", mediaType: "audio/mpeg" }],
+        },
+        category: "effect",
+        playback: "once",
+        voices: { maxConcurrent: 2, overflow: "restart-oldest" },
+        focus: {
+          bgm: { targetGain: 0.5 },
+          effects: { scope: "all", targetGain: 0 },
+        },
+      }),
+    ).toMatchObject({
+      category: "effect",
+      focus: {
+        bgm: { targetGain: 0.5 },
+        effects: { scope: "all", targetGain: 0 },
+      },
+    });
+    expect(() =>
+      parseAudioEventTrackBindingV1({
+        name: "loop",
+        asset: {
+          sources: [{ path: "loop.mp3", mediaType: "audio/mpeg" }],
+        },
+        category: "music",
+        playback: "loop",
+        voices: { maxConcurrent: 1, overflow: "restart-oldest" },
+        focus: { bgm: { targetGain: 0.5 } },
+      }),
+    ).toThrow(/focus must be empty/u);
   });
 });

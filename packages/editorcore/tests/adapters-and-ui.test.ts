@@ -485,6 +485,47 @@ describe("default adapters", () => {
     expect(host.textContent).toContain(columnWin!.descriptor.address);
     dialog.close();
 
+    const configuredHost = document.createElement("div");
+    document.body.append(configuredHost);
+    let configuredConfirmation: unknown = null;
+    const configuredDialog = mountEditorGameLayoutEventDialog({
+      root: configuredHost,
+      sources: [{ key: rootKey, label: "当前项目" }],
+      value: { rootKey, events: [] },
+      inspectCatalog: () => catalog,
+      configuration: {
+        create: () => ({ gain: 50 }),
+        clone: (value) => ({ ...value }),
+        mount(configurationRoot, context) {
+          configurationRoot.textContent = `gain:${context.value.gain}`;
+          context.setValue({ gain: 25 });
+        },
+        validate(value) {
+          if (value.gain < 0) throw new Error("gain must be non-negative");
+        },
+        summarize: (value) => `gain:${value.gain}`,
+      },
+      onConfirm(value) {
+        configuredConfirmation = value;
+      },
+    });
+    configuredDialog.open();
+    await flush();
+    click(required(configuredHost, '[data-event-action="add"]'));
+    pickEventChoice(configuredHost, "symbol-state", "family");
+    for (const value of ["base", "A", "win", "column", "1", "entered"])
+      pickEventChoice(configuredHost, value, "pick");
+    expect(configuredHost.textContent).toContain("gain:50");
+    click(required(configuredHost, '[data-event-action="save-row"]'));
+    expect(configuredHost.textContent).toContain("gain:25");
+    click(required(configuredHost, "[data-event-confirm]"));
+    await flush();
+    expect(configuredConfirmation).toMatchObject({
+      rootKey,
+      events: [{ configuration: { gain: 25 } }],
+    });
+    configuredDialog.destroy();
+
     const second = await controller.prepareImport([
       source(
         "event-layout.zip",

@@ -42,19 +42,64 @@ describe("EditorStore", () => {
     });
   });
 
-  it("upgrades an editable v1 draft to latest v3 without inventing Splash", () => {
+  it("upgrades an editable v1 draft to latest v5 without inventing Splash", () => {
     const project = manifestToEditorProject(imageManifest, assetBytes);
     expect(project.gameModes.initialMode).toBe("BaseGame");
     expect(project.gameModes.modes.map((mode) => mode.id)).toEqual([
       "BaseGame",
     ]);
     const exported = editorProjectToManifest(project);
-    expect(exported.version).toBe(4);
+    expect(exported.version).toBe(5);
     expect(exported.runtimeAllocation.modes.BaseGame).toBeDefined();
     expect(exported).not.toHaveProperty("adaptation");
     expect(exported.gameModes.modes[0]).toMatchObject({
       id: "BaseGame",
       adaptation: { mode: "maximized-focus" },
+    });
+  });
+
+  it("round-trips global event audio while preserving the legacy-audio gate", () => {
+    const project = manifestToEditorProject(imageManifest, assetBytes);
+    project.assets.set("assets/event-base.mp3", new Uint8Array([1, 2, 3]));
+    project.resources.set("assets/event-base.mp3", {
+      id: "assets/event-base.mp3",
+      kind: "audio",
+      path: "assets/event-base.mp3",
+      mediaType: "audio/mpeg",
+    });
+    project.eventAudio = {
+      version: 1,
+      ignoreLegacyAudio: true,
+      bindings: [
+        {
+          event: "gamelayout:/mode/BaseGame/state/stable/entered",
+          endEvent: "gamelayout:/mode/BaseGame/state/stable/exited",
+          audio: {
+            name: "event-base",
+            asset: {
+              sources: [
+                {
+                  path: "assets/event-base.mp3",
+                  mediaType: "audio/mpeg",
+                },
+              ],
+            },
+            category: "music",
+            playback: "loop",
+            voices: { maxConcurrent: 1, overflow: "restart-oldest" },
+            focus: {},
+          },
+        },
+      ],
+    };
+
+    const exported = editorProjectToManifest(project);
+    expect(exported.eventAudio).toEqual(project.eventAudio);
+    const imported = manifestToEditorProject(exported, project.assets);
+    expect(imported.eventAudio).toEqual(project.eventAudio);
+    expect(imported.resources.get("assets/event-base.mp3")).toMatchObject({
+      kind: "audio",
+      path: "assets/event-base.mp3",
     });
   });
 

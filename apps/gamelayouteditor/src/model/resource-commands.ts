@@ -540,7 +540,26 @@ export function getLayoutResourceReferences(
         variants: Object.freeze([]),
       }),
     );
-  return Object.freeze([...nodes, ...transitions, ...modes, ...effects]);
+  const eventAudio = project.eventAudio.bindings
+    .filter((binding) =>
+      binding.audio.asset.sources.some(
+        (source) => source.path === resource.path,
+      ),
+    )
+    .map((binding) =>
+      Object.freeze({
+        nodeId: binding.event,
+        role: "event-audio" as const,
+        variants: Object.freeze([]),
+      }),
+    );
+  return Object.freeze([
+    ...nodes,
+    ...transitions,
+    ...modes,
+    ...effects,
+    ...eventAudio,
+  ]);
 }
 
 export function getModeBgmResourceId(
@@ -765,9 +784,11 @@ export function deleteLayoutResource(
               ? `${reference.nodeId} (scene-transition)`
               : reference.role === "mode-bgm"
                 ? `${reference.nodeId} (mode BGM)`
-                : reference.role === "programmatic-audio"
-                  ? `${reference.nodeId} (程序音效)`
-                  : `${reference.nodeId} (图层)`,
+                : reference.role === "event-audio"
+                  ? `${reference.nodeId} (event audio)`
+                  : reference.role === "programmatic-audio"
+                    ? `${reference.nodeId} (程序音效)`
+                    : `${reference.nodeId} (图层)`,
         )
         .join("、")} 引用，不能删除。`,
     );

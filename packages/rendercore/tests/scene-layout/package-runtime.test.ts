@@ -1,5 +1,10 @@
 import { Assets, Container, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
+import type {
+  AudioBackend,
+  AudioBackendInstance,
+  AudioBackendSound,
+} from "@slotclientengine/audiocore/core";
 import {
   RenderGridCellReelSet,
   RenderReel,
@@ -21,6 +26,41 @@ import * as sceneLayoutCoreApi from "../../src/scene-layout/index.js";
 
 const encode = (value: unknown) =>
   new TextEncoder().encode(`${JSON.stringify(value)}\n`);
+
+class EventAudioInstance implements AudioBackendInstance {
+  volume = 1;
+  paused = false;
+  stopped = false;
+  stop() {
+    this.stopped = true;
+  }
+  onEnded() {
+    return () => {};
+  }
+}
+
+class EventAudioSound implements AudioBackendSound {
+  readonly instances: EventAudioInstance[] = [];
+  play() {
+    const instance = new EventAudioInstance();
+    this.instances.push(instance);
+    return instance;
+  }
+  destroy() {}
+}
+
+class EventAudioBackend implements AudioBackend {
+  readonly sounds: EventAudioSound[] = [];
+  unlockCount = 0;
+  async prepare() {
+    const sound = new EventAudioSound();
+    this.sounds.push(sound);
+    return sound;
+  }
+  async unlock() {
+    this.unlockCount += 1;
+  }
+}
 
 class CompletingTransitionPlayer implements RendercoreSpinePlayer {
   readonly view = new Container();
@@ -471,7 +511,7 @@ describe("scene layout package runtime", () => {
       runtime.applyViewport({ width: 1200, height: 1800 });
       expect(events).toHaveLength(1);
       expect(events[0]).toMatchObject({
-        sequence: 1,
+        sequence: 3,
         detail: {
           previousVariantId: "landscape",
           variantId: "portrait",
@@ -552,7 +592,7 @@ describe("scene layout package runtime", () => {
         lazyRuntimeResources: true,
         decodeImage: async () => ({ width: 1, height: 1 }),
       });
-      expect(resource.runtimeManifest.version).toBe(4);
+      expect(resource.runtimeManifest.version).toBe(5);
       expect(resource.layout.manifest.runtimeResources).toBeUndefined();
       const runtime = createSceneLayoutPackageRuntime({
         resource,
@@ -1556,7 +1596,7 @@ describe("scene layout package runtime", () => {
       const runtime = createSceneLayoutPackageRuntime({ resource });
       await runtime.init();
       expect(resource.manifest.version).toBe(1);
-      expect(resource.runtimeManifest.version).toBe(4);
+      expect(resource.runtimeManifest.version).toBe(5);
       expect(runtime.getGameModeIds()).toEqual(["BaseGame"]);
       expect(runtime.getGameModeSnapshot()).toMatchObject({
         stableMode: "BaseGame",
@@ -1963,6 +2003,71 @@ describe("scene layout package runtime", () => {
       });
       dead.destroy();
       await expect(dead.init()).rejects.toThrow(/destroyed/);
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
+  });
+
+  it("retains an initial-mode loop event until trusted audio unlock", async () => {
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    const backend = new EventAudioBackend();
+    try {
+      const latest = upgradeSceneLayoutManifestToLatest(game002LayoutFixture);
+      const resource = await createSceneLayoutPackageResource({
+        manifest: {
+          ...latest,
+          eventAudio: {
+            version: 1,
+            ignoreLegacyAudio: false,
+            bindings: [
+              {
+                event: "gamelayout:/mode/BaseGame/state/stable/entered",
+                endEvent: "gamelayout:/mode/BaseGame/state/stable/exited",
+                audio: {
+                  name: "initial-loop",
+                  asset: {
+                    sources: [
+                      {
+                        path: "assets/event-base.mp3",
+                        mediaType: "audio/mpeg",
+                      },
+                    ],
+                  },
+                  category: "music",
+                  playback: "loop",
+                  voices: {
+                    maxConcurrent: 1,
+                    overflow: "restart-oldest",
+                  },
+                  focus: {},
+                },
+              },
+            ],
+          },
+        },
+        files: new Map([
+          ["assets/bg.png", new Uint8Array([1])],
+          ["assets/event-base.mp3", new Uint8Array([2])],
+        ]),
+      });
+      const runtime = createSceneLayoutPackageRuntime({
+        resource,
+        presentationOnly: true,
+        audioBackend: backend,
+      });
+      await runtime.init();
+      expect(backend.sounds).toHaveLength(0);
+      await runtime.unlockAudio();
+      for (let index = 0; index < 5; index += 1) await Promise.resolve();
+      expect(backend.unlockCount).toBe(1);
+      expect(backend.sounds).toHaveLength(1);
+      expect(backend.sounds[0]?.instances).toHaveLength(1);
+      runtime.destroy();
+      expect(backend.sounds[0]?.instances[0]?.stopped).toBe(true);
     } finally {
       load.mockRestore();
       unload.mockRestore();

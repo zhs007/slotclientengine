@@ -224,6 +224,8 @@ mode 的 `displayed` 表示 target scene 已提交，`stable` 表示整个 trans
 只在底层成功接管播放后发布；`ended.detail.outcome` 区分 `completed/stopped/superseded/aborted/failed/destroyed`。
 Popup tier 名来自 exact manifest（例如 `bigwin`、`megawin`），shared runtime 不维护业务别名。
 
+package runtime 首次 `init()` 成功后也会为 initial mode 发布 `displayed/entered`，随后发布 `stable/entered`；失败或 rollback 不发布半初始化 occurrence。Scene Layout v5 的 event audio 只消费这份统一 catalog 和 occurrence，不反向生成 audio-track lifecycle event，因此不会形成递归触发族。解锁前的 loop start 保留 intent，once occurrence 不补播。
+
 Symbol instance 直接属于 address，不通过 `bind()`/`wait()` 的额外参数传递：
 
 ```text

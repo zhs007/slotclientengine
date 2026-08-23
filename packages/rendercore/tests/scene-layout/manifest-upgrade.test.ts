@@ -10,7 +10,12 @@ import { game002LayoutFixture } from "./fixtures.js";
 describe("scene layout manifest latest upgrade", () => {
   it("upgrades v1 without inventing Splash and copies root geometry to each mode", () => {
     const latest = upgradeSceneLayoutManifestToLatest(game002LayoutFixture);
-    expect(latest.version).toBe(3);
+    expect(latest.version).toBe(5);
+    expect(latest.eventAudio).toEqual({
+      version: 1,
+      ignoreLegacyAudio: false,
+      bindings: [],
+    });
     expect(latest.gameModes.initialMode).toBe("BaseGame");
     expect(latest.gameModes.modes.map((mode) => mode.id)).toEqual(["BaseGame"]);
     expect(latest.gameModes.modes[0]).toMatchObject({

@@ -10,6 +10,7 @@ import {
 } from "../src/core/index.js";
 import {
   parseAudioEffectBindingV1,
+  parseAudioEventTrackBindingV1,
   parseAudioMusicBindingV1,
 } from "../src/data/index.js";
 
@@ -68,6 +69,22 @@ function effect(
     offsetSeconds: 0.5,
     voices: { maxConcurrent: playback === "loop" ? 1 : 2, overflow: "reject" },
     bgm,
+  });
+}
+
+function track(
+  name: string,
+  path: string,
+  category: "music" | "effect",
+  focus: unknown = {},
+) {
+  return parseAudioEventTrackBindingV1({
+    name,
+    asset: { sources: [{ path, mediaType: "audio/mpeg" }] },
+    category,
+    playback: "once",
+    voices: { maxConcurrent: 8, overflow: "restart-oldest" },
+    focus,
   });
 }
 
@@ -142,8 +159,8 @@ describe("audio runtime", () => {
     });
     const pause = effect("pause", "loop", {
       kind: "pause",
-      fadeOutSeconds: 0,
-      fadeInSeconds: 0,
+      fadeOutSeconds: 0.001,
+      fadeInSeconds: 0.001,
     });
     const music = parseAudioMusicBindingV1({
       name: "base",
@@ -178,13 +195,88 @@ describe("audio runtime", () => {
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
-    runtime.update(0);
+    runtime.update(0.001);
     expect(runtime.getSnapshot().focus).toBe("pause");
     runtime.stopEffect("pause");
     expect(runtime.getSnapshot().focus).toBe("duck");
     (backend.sounds[1]!.instances[0] ?? backend.sounds[0]!.instances[0])?.end();
     runtime.stopEffect("duck");
     expect(runtime.getSnapshot().focus).toBe("keep");
+    runtime.destroy();
+  });
+
+  it("applies event focus leases by category and restores targets on release", async () => {
+    const backend = new FakeBackend();
+    const music = parseAudioMusicBindingV1({
+      name: "base",
+      asset: { sources: [{ path: "base.mp3", mediaType: "audio/mpeg" }] },
+      loop: true,
+      fadeOutSeconds: 0.001,
+      fadeInSeconds: 0.001,
+    });
+    const runtime = createAudioRuntime({
+      backend,
+      effects: {},
+      music: {
+        base: {
+          binding: music,
+          sources: [{ url: "base.mp3", mediaType: "audio/mpeg" }],
+        },
+      },
+      tracks: {
+        coin: {
+          binding: track("coin", "coin.mp3", "effect"),
+          sources: [{ url: "coin.mp3", mediaType: "audio/mpeg" }],
+        },
+        bigwin: {
+          binding: track("bigwin", "bigwin.mp3", "effect", {
+            bgm: { targetGain: 0.5 },
+            effects: { scope: "all", targetGain: 0.25 },
+          }),
+          sources: [{ url: "bigwin.mp3", mediaType: "audio/mpeg" }],
+        },
+      },
+    });
+    await runtime.requestMusic("base");
+    runtime.update(0.001);
+    runtime.playTrack("coin");
+    await flushMicrotasks();
+    const owner = runtime.playTrack("bigwin");
+    await flushMicrotasks();
+    runtime.update(0);
+    expect(backend.sounds[0]!.instances[0]!.volume).toBe(0.5);
+    expect(backend.sounds[1]!.instances[0]!.volume).toBe(0.25);
+    expect(backend.sounds[2]!.instances[0]!.volume).toBe(1);
+    owner.stop();
+    expect(backend.sounds[0]!.instances[0]!.volume).toBe(1);
+    expect(backend.sounds[1]!.instances[0]!.volume).toBe(1);
+    runtime.destroy();
+  });
+
+  it("same-audio focus lowers earlier matching voices but not its owner", async () => {
+    const backend = new FakeBackend();
+    const runtime = createAudioRuntime({
+      backend,
+      effects: {},
+      tracks: {
+        coin: {
+          binding: track("coin", "coin.mp3", "effect", {
+            effects: { scope: "same-audio", targetGain: 0.5 },
+          }),
+          sources: [{ url: "coin.mp3", mediaType: "audio/mpeg" }],
+        },
+      },
+    });
+    runtime.playTrack("coin");
+    await flushMicrotasks();
+    const second = runtime.playTrack("coin");
+    await flushMicrotasks();
+    runtime.update(0);
+    expect(backend.sounds[0]!.instances.map(({ volume }) => volume)).toEqual([
+      0.5, 1,
+    ]);
+    second.stop();
+    expect(backend.sounds[0]!.instances[0]!.volume).toBe(1);
     runtime.destroy();
   });
 
@@ -205,3 +297,7 @@ describe("audio runtime", () => {
     timeline.update(2);
   });
 });
+
+async function flushMicrotasks(): Promise<void> {
+  for (let index = 0; index < 6; index += 1) await Promise.resolve();
+}

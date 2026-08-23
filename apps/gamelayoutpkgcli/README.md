@@ -92,7 +92,7 @@ ZIP 与 JSON 作为一对提交，第二个文件提交失败时会回滚第一�
 - Popup 的 WOFF2/WOFF/TTF/OTF 字体引用保持不变，并继续按 payload SHA-256 去重；
 - `assets.map.json` 的 path、SHA-256、media type 和 byte length 按优化后 bytes
   重新生成；
-- root Scene Layout、nested Symbols 与 Popup 的 typed 音频 path 同步改成 `.m4a`，media type
+- root Scene Layout 旧音频目录与 v5 event audio、nested Symbols 与 Popup 的 typed 音频 path 同步改成 `.m4a`，media type
   同步改成 `audio/mp4`；video transition 的内嵌音轨不属于 audio catalog，不会被改写；
 - 每个 typed 音频资源必须恰好包含一条音频 stream；MP3 等音频文件中的内附封面等
   非音频 stream 不进入 M4A 输出；

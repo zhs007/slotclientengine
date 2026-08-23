@@ -1,7 +1,9 @@
 import {
   assertAudioRoute,
   parseAudioCatalogManifestV1,
+  parseAudioEventTrackBindingV1,
 } from "@slotclientengine/audiocore/data";
+import { parseGameLayoutRuntimeAddress } from "./data/runtime-address.js";
 import { SceneLayoutError } from "./errors.js";
 import {
   normalizeLegacySceneLayoutPresentationOrders,
@@ -16,6 +18,7 @@ import type {
   SceneLayoutManifestLatest,
   SceneLayoutManifestV3,
   SceneLayoutManifestV4,
+  SceneLayoutManifestV5,
 } from "./types.js";
 
 export function parseSceneLayoutManifestV3(
@@ -45,32 +48,121 @@ export function upgradeSceneLayoutManifestToLatest(
   value: unknown,
 ): SceneLayoutManifestLatest {
   const root = record(value, "scene layout manifest");
-  if (root.version === 4) return parseSceneLayoutManifestV4(value);
+  if (root.version === 5) return parseSceneLayoutManifestV5(value);
+  if (root.version === 4)
+    return upgradeV4ToV5(parseSceneLayoutManifestV4(value));
   if (root.version === 3) {
     const normalized = normalizeLegacySceneLayoutPresentationOrders(value);
     if (normalized === value)
-      return upgradeV3ToV4(parseSceneLayoutManifestV3(value));
+      return upgradeV4ToV5(upgradeV3ToV4(parseSceneLayoutManifestV3(value)));
     const { runtimeAllocation: _allocation, ...source } = record(
       normalized,
       "scene layout manifest",
     );
     const parsedV2 = parseSceneLayoutManifestV2({ ...source, version: 2 });
-    return upgradeV3ToV4(
-      parseSceneLayoutManifestV3({
-        ...parsedV2,
-        version: 3,
-        runtimeAllocation: createSceneLayoutRuntimeAllocation(parsedV2),
-      }),
+    return upgradeV4ToV5(
+      upgradeV3ToV4(
+        parseSceneLayoutManifestV3({
+          ...parsedV2,
+          version: 3,
+          runtimeAllocation: createSceneLayoutRuntimeAllocation(parsedV2),
+        }),
+      ),
     );
   }
   const source = upgradeSceneLayoutManifestToV2(value);
-  return upgradeV3ToV4(
-    parseSceneLayoutManifestV3({
-      ...source,
-      version: 3,
-      runtimeAllocation: createSceneLayoutRuntimeAllocation(source),
-    }),
+  return upgradeV4ToV5(
+    upgradeV3ToV4(
+      parseSceneLayoutManifestV3({
+        ...source,
+        version: 3,
+        runtimeAllocation: createSceneLayoutRuntimeAllocation(source),
+      }),
+    ),
   );
+}
+
+export function parseSceneLayoutManifestV5(
+  value: unknown,
+): SceneLayoutManifestV5 {
+  const root = record(value, "scene layout manifest");
+  if (root.version !== 5)
+    throw new SceneLayoutError("scene layout manifest.version must be 5.");
+  if (!Object.hasOwn(root, "eventAudio"))
+    throw new SceneLayoutError(
+      "scene layout manifest v5.eventAudio is required.",
+    );
+  const eventAudio = record(
+    root.eventAudio,
+    "scene layout manifest.eventAudio",
+  );
+  known(
+    eventAudio,
+    ["version", "ignoreLegacyAudio", "bindings"],
+    "scene layout manifest.eventAudio",
+  );
+  if (eventAudio.version !== 1)
+    throw new SceneLayoutError(
+      "scene layout manifest.eventAudio.version must be 1.",
+    );
+  if (typeof eventAudio.ignoreLegacyAudio !== "boolean")
+    throw new SceneLayoutError(
+      "scene layout manifest.eventAudio.ignoreLegacyAudio must be boolean.",
+    );
+  if (!Array.isArray(eventAudio.bindings))
+    throw new SceneLayoutError(
+      "scene layout manifest.eventAudio.bindings must be an array.",
+    );
+  const startEvents = new Set<string>();
+  const trackNames = new Set<string>();
+  const bindings = eventAudio.bindings.map((value, index) => {
+    const label = `scene layout manifest.eventAudio.bindings[${index}]`;
+    const binding = record(value, label);
+    known(binding, ["event", "audio", "endEvent"], label);
+    const event = parseRuntimeEventAddress(binding.event, `${label}.event`);
+    if (startEvents.has(event))
+      throw new SceneLayoutError(`${label}.event duplicates ${event}.`);
+    startEvents.add(event);
+    let audio;
+    try {
+      audio = parseAudioEventTrackBindingV1(binding.audio, `${label}.audio`);
+    } catch (error) {
+      throw new SceneLayoutError(
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+    if (trackNames.has(audio.name))
+      throw new SceneLayoutError(
+        `${label}.audio.name duplicates ${audio.name}.`,
+      );
+    trackNames.add(audio.name);
+    const endEvent =
+      binding.endEvent === undefined
+        ? undefined
+        : parseRuntimeEventAddress(binding.endEvent, `${label}.endEvent`);
+    if (audio.playback === "loop" && !endEvent)
+      throw new SceneLayoutError(
+        `${label}.endEvent is required for loop audio.`,
+      );
+    if (audio.playback === "once" && endEvent)
+      throw new SceneLayoutError(
+        `${label}.endEvent is forbidden for once audio.`,
+      );
+    if (endEvent === event)
+      throw new SceneLayoutError(`${label}.endEvent must differ from event.`);
+    return deepFreeze({ event, audio, ...(endEvent ? { endEvent } : {}) });
+  });
+  const { eventAudio: _eventAudio, version: _version, ...source } = root;
+  const parsedV4 = parseSceneLayoutManifestV4({ ...source, version: 4 });
+  return deepFreeze({
+    ...parsedV4,
+    version: 5,
+    eventAudio: {
+      version: 1,
+      ignoreLegacyAudio: eventAudio.ignoreLegacyAudio,
+      bindings,
+    },
+  });
 }
 
 export function parseSceneLayoutManifestV4(
@@ -165,6 +257,37 @@ function upgradeV3ToV4(value: SceneLayoutManifestV3): SceneLayoutManifestV4 {
     version: 4,
     audio: { version: 1, effects: [], music: [], programmaticEffects: [] },
   });
+}
+
+function upgradeV4ToV5(value: SceneLayoutManifestV4): SceneLayoutManifestV5 {
+  return parseSceneLayoutManifestV5({
+    ...value,
+    version: 5,
+    eventAudio: { version: 1, ignoreLegacyAudio: false, bindings: [] },
+  });
+}
+
+function parseRuntimeEventAddress(value: unknown, label: string) {
+  if (typeof value !== "string")
+    throw new SceneLayoutError(`${label} must be a string.`);
+  try {
+    return parseGameLayoutRuntimeAddress(value);
+  } catch (error) {
+    throw new SceneLayoutError(
+      `${label} is invalid: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+function known(
+  value: Record<string, unknown>,
+  allowed: readonly string[],
+  label: string,
+): void {
+  const set = new Set(allowed);
+  for (const key of Object.keys(value))
+    if (!set.has(key))
+      throw new SceneLayoutError(`${label} contains unknown field "${key}".`);
 }
 
 function record(value: unknown, label: string): Record<string, unknown> {

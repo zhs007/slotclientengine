@@ -106,6 +106,7 @@ import type {
   SceneLayoutRenderObject,
   SceneLayoutSnapshot,
   SceneLayoutManifest,
+  SceneLayoutEventAudioV1,
   SceneLayoutManifestV1,
   SceneLayoutSymbolPackageBinding,
 } from "./types.js";
@@ -130,6 +131,18 @@ import {
 } from "./data/runtime-address.js";
 
 type ReelPresentation = RenderReelSet | RenderGridCellReelSet;
+
+function readEventAudio(
+  document: SceneLayoutManifest,
+): SceneLayoutEventAudioV1 {
+  return document.version === 5
+    ? document.eventAudio
+    : Object.freeze({
+        version: 1,
+        ignoreLegacyAudio: false,
+        bindings: Object.freeze([]),
+      });
+}
 
 interface ResolvedSymbolBinding {
   readonly id: string;
@@ -343,6 +356,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #resource: SceneLayoutPackageResource;
   readonly #presentationOnly: boolean;
   #document: SceneLayoutManifest;
+  #eventAudio: SceneLayoutEventAudioV1;
   #manifest: SceneLayoutManifestV1;
   readonly #layout;
   readonly #reelPresentation: SlotReelPresentationProfileV1 | null;
@@ -378,6 +392,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #renderObjectFactory: SceneLayoutRenderObjectFactory;
   readonly #audio: AudioRuntime;
   readonly #disposeAudioMusicObserver: () => void;
+  readonly #disposeEventAudioBindings: (() => void)[] = [];
+  readonly #eventAudioLoopIntents = new Set<string>();
   #audioUnlocked = false;
   #audioMode: string | null = null;
   #audioFailure: SceneLayoutError | null = null;
@@ -510,6 +526,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       (resource.manifest.version
         ? upgradeSceneLayoutManifestToLatest(resource.manifest)
         : (resource.manifest as never));
+    this.#eventAudio = readEventAudio(this.#document);
     this.#manifest =
       resource.layout.manifest ?? (resource.manifest as SceneLayoutManifestV1);
     this.#areaSpinFunction = areaSpinFunction;
@@ -527,6 +544,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       backend: audioBackend ?? createPixiSoundBackend(),
       effects: resource.audioEffects,
       music: resource.audioMusic,
+      tracks: resource.audioEventTracks,
     });
     this.#createTransitionPlayer =
       createTransitionPlayer ??
@@ -582,6 +600,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       assertReady: () => this.assertReady(),
     });
     this.addresses = this.#addressController.addresses;
+    this.bindEventAudio();
     this.#disposeAudioMusicObserver = this.#audio.observeMusic((event) => {
       const detail = Object.freeze({ music: event.name, phase: event.phase });
       this.#addressController.emit(
@@ -832,6 +851,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         this.requireGameModes().modes.map((mode) => mode.id),
       );
       this.#initialized = true;
+      this.emitInitialModeEvents(initialModeId);
     } catch (error) {
       this.destroy();
       throw asSceneLayoutError(error);
@@ -1000,6 +1020,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       );
     this.#layout.commitPreparedGeometryManifest(manifest);
     this.#document = document;
+    this.#eventAudio = document.eventAudio;
     this.#manifest = manifest;
     if (prepared && nextPreparedSpec) {
       prepared.spec = nextPreparedSpec;
@@ -1584,7 +1605,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       ? (this.#resource.symbolPackages[bindingId] ??
         this.#resource.symbolPackage)
       : null;
-    if (bindingId && symbolPackage) {
+    if (!this.#eventAudio.ignoreLegacyAudio && bindingId && symbolPackage) {
       for (const request of requests) {
         const snapshots = reel.getVisibleSymbolStateSnapshots(
           request.positions,
@@ -1634,6 +1655,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     await this.#audio.unlock();
     this.#audioUnlocked = true;
     this.syncStableModeMusic(true);
+    for (const track of this.#eventAudioLoopIntents)
+      this.observeEventAudioHandle(track, this.#audio.playTrack(track));
   }
 
   setAudioMuted(muted: boolean): void {
@@ -2867,6 +2890,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#videoBlackoutRoot.removeChildren();
     this.#videoBlackout.destroy();
     this.#disposeAudioMusicObserver();
+    for (const dispose of this.#disposeEventAudioBindings.splice(0)) dispose();
+    this.#eventAudioLoopIntents.clear();
     this.#addressController.destroy();
     this.#renderObjectFactory.destroy();
     this.#audio.destroy();
@@ -3016,6 +3041,13 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   }
 
   private updatePopupAudioCues(): void {
+    if (this.#eventAudio.ignoreLegacyAudio) {
+      for (const handles of this.#popupAudioHandles.values())
+        this.cancelPendingAudioHandles(handles);
+      this.#popupAudioHandles.clear();
+      this.#popupAudioStates.clear();
+      return;
+    }
     for (const [popupId, resource] of Object.entries(
       this.#resource.popupPackages,
     )) {
@@ -3065,6 +3097,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
 
   private syncStableModeMusic(force = false): void {
     if (!this.#audioUnlocked) return;
+    if (this.#eventAudio.ignoreLegacyAudio) return;
     const modeId = this.#stableMode;
     if (!modeId || (!force && this.#audioMode === modeId)) return;
     const mode = this.#resource.runtimeManifest.gameModes.modes.find(
@@ -3081,6 +3114,60 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         `Failed to activate BGM for mode "${modeId}": ${error instanceof Error ? error.message : String(error)}`,
       );
     });
+  }
+
+  private bindEventAudio(): void {
+    for (const binding of this.#eventAudio.bindings) {
+      this.addresses.resolve(binding.event, "event");
+      if (binding.endEvent) this.addresses.resolve(binding.endEvent, "event");
+      const track = binding.audio.name;
+      this.#disposeEventAudioBindings.push(
+        this.addresses.bind(binding.event, () => {
+          if (binding.audio.playback === "loop") {
+            this.#eventAudioLoopIntents.add(track);
+            if (this.#audioUnlocked)
+              this.observeEventAudioHandle(track, this.#audio.playTrack(track));
+            return;
+          }
+          if (this.#audioUnlocked)
+            this.observeEventAudioHandle(track, this.#audio.playTrack(track));
+        }),
+      );
+      if (binding.endEvent)
+        this.#disposeEventAudioBindings.push(
+          this.addresses.bind(binding.endEvent, () => {
+            this.#eventAudioLoopIntents.delete(track);
+            this.#audio.stopTrack(track);
+          }),
+        );
+    }
+  }
+
+  private observeEventAudioHandle(
+    track: string,
+    handle: AudioPlaybackHandle,
+  ): void {
+    void handle.finished.then((state) => {
+      if (this.#destroyed || state !== "failed") return;
+      this.#audioFailure = new SceneLayoutError(
+        `Failed to play event audio track "${track}": ${handle.error instanceof Error ? handle.error.message : String(handle.error)}`,
+      );
+    });
+  }
+
+  private emitInitialModeEvents(modeId: string | null): void {
+    if (!modeId) return;
+    for (const state of ["displayed", "stable"] as const)
+      this.#addressController.emit(
+        formatGameLayoutRuntimeAddress(
+          "mode",
+          modeId,
+          "state",
+          state,
+          "entered",
+        ),
+        Object.freeze({ previous: null, mode: modeId, state }),
+      );
   }
 
   private updatePresentationDelayWaiters(deltaSeconds: number): void {
@@ -4110,7 +4197,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       return binding ? Object.freeze([binding]) : Object.freeze([]);
     }
     const ids =
-      this.#document.version === 3
+      this.#document.version === 3 ||
+      this.#document.version === 4 ||
+      this.#document.version === 5
         ? this.#document.runtimeAllocation.package.symbolPackages
         : Object.keys(this.#manifest.symbolPackages ?? {}).sort((left, right) =>
             left.localeCompare(right, "en"),
@@ -4155,7 +4244,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   private modeHasMainReel(modeId: string | null): boolean {
     if (
       !modeId ||
-      (this.#document.version !== 2 && this.#document.version !== 3)
+      (this.#document.version !== 2 &&
+        this.#document.version !== 3 &&
+        this.#document.version !== 4 &&
+        this.#document.version !== 5)
     )
       return true;
     const mode = this.#document.gameModes.modes.find(
@@ -4732,7 +4824,8 @@ function materializeModeGeometry(
   if (
     document.version !== 2 &&
     document.version !== 3 &&
-    document.version !== 4
+    document.version !== 4 &&
+    document.version !== 5
   )
     return null;
   return materializeSceneLayoutManifestForMode(document, modeId);
