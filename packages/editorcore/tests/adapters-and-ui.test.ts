@@ -11,11 +11,15 @@ import {
   materializeEditorAssetPayloads,
   serializeEditorAssetsMap,
 } from "@slotclientengine/editorresource";
+import { upgradeSceneLayoutManifestToLatest } from "@slotclientengine/rendercore/scene-layout/editor";
 import {
   DEFAULT_EDITOR_ASSET_INGESTION_LIMITS,
   discoverDefaultEditorAssets,
   createDefaultEditorAssetsController,
   ingestAndDiscoverDefaultEditorAssets,
+  inspectEditorGameLayoutEventCatalog,
+  validateEditorGameLayoutEventGroup,
+  type EditorGameLayoutEventGroup,
 } from "../src/assets/adapters/index.js";
 import { mergeEditorAssetCatalog } from "../src/assets/core/index.js";
 import type {
@@ -25,6 +29,7 @@ import type {
 import {
   createDefaultEditorAssetPreview,
   mountEditorAssetsDialog,
+  mountEditorGameLayoutEventDialog,
   mountEditorAssetsView,
 } from "../src/assets/ui/index.js";
 
@@ -393,6 +398,127 @@ describe("default adapters", () => {
     ]);
   });
 
+  it("derives editable events from a complete Game Layout ZIP and rejects stale rows after replacement", async () => {
+    const controller = createTestController();
+    const firstZip = createDeterministicZip(
+      await gameLayoutEventEntries("win"),
+    );
+    const first = await controller.prepareImport([
+      source("event-layout.zip", firstZip),
+    ]);
+    expect(first.blockingErrors).toEqual([]);
+    await controller.commitImport(first);
+
+    const rootKey = "event-layout-layout.manifest.json";
+    const catalog = inspectEditorGameLayoutEventCatalog(
+      controller.snapshot,
+      rootKey,
+    );
+    const columnWin = catalog.entries.find(
+      (entry) =>
+        entry.family === "symbol-state" &&
+        entry.facets.some(
+          ({ key, value }) => key === "state" && value === "win",
+        ) &&
+        entry.facets.some(
+          ({ key, value }) => key === "scope" && value === "column",
+        ) &&
+        entry.facets.some(({ key, value }) => key === "x" && value === "1") &&
+        entry.facets.some(
+          ({ key, value }) => key === "edge" && value === "entered",
+        ),
+    );
+    expect(columnWin).toBeDefined();
+    expect(catalog.entries.some(({ family }) => family === "variant")).toBe(
+      true,
+    );
+
+    const host = document.createElement("div");
+    document.body.append(host);
+    const confirmation: { value: EditorGameLayoutEventGroup | null } = {
+      value: null,
+    };
+    const dialog = mountEditorGameLayoutEventDialog({
+      controller,
+      root: host,
+      onConfirm(value) {
+        confirmation.value = value;
+      },
+    });
+    dialog.open();
+    const rootSelect = required<HTMLSelectElement>(host, "[data-event-root]");
+    rootSelect.value = rootKey;
+    rootSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    await flush();
+    click(required(host, '[data-event-action="add"]'));
+    pickEventChoice(host, "symbol-state", "family");
+    for (const value of ["base", "A", "win", "column", "1", "entered"])
+      pickEventChoice(host, value, "pick");
+    expect(host.textContent).toContain("选择完成");
+    click(required(host, '[data-event-action="save-row"]'));
+    expect(host.textContent).toContain(columnWin!.descriptor.address);
+    click(required(host, '[data-event-action="edit"]'));
+    click(required(host, '[data-event-action="truncate"][data-count="5"]'));
+    pickEventChoice(host, "exited", "pick");
+    click(required(host, '[data-event-action="save-row"]'));
+    expect(host.textContent).not.toContain(columnWin!.descriptor.address);
+    click(required(host, '[data-event-action="remove"]'));
+    expect(host.textContent).toContain("尚未添加 event");
+    click(required(host, '[data-event-action="add"]'));
+    pickEventChoice(host, "symbol-state", "family");
+    for (const value of ["base", "A", "win", "column", "1", "entered"])
+      pickEventChoice(host, value, "pick");
+    click(required(host, '[data-event-action="save-row"]'));
+    click(required(host, "[data-event-confirm]"));
+    await flush();
+    const confirmed = confirmation.value;
+    if (!confirmed) throw new Error("event dialog did not confirm a value");
+    expect(confirmed.events.map(({ address }) => address)).toEqual([
+      columnWin!.descriptor.address,
+    ]);
+    dialog.open();
+    await flush();
+    click(required(host, '[data-event-action="remove"]'));
+    click(required(host, "[data-event-cancel]"));
+    dialog.open();
+    await flush();
+    expect(host.textContent).toContain(columnWin!.descriptor.address);
+    dialog.close();
+
+    const second = await controller.prepareImport([
+      source(
+        "event-layout.zip",
+        createDeterministicZip(await gameLayoutEventEntries("appear", "B")),
+      ),
+    ]);
+    await controller.commitImport(
+      second,
+      second.review.items
+        .map((item, itemIndex) => ({ item, itemIndex }))
+        .filter(({ item }) => item.action === "overwrite")
+        .map(({ itemIndex }) => ({
+          itemIndex,
+          resolution: "overwrite" as const,
+        })),
+    );
+    const replacement = inspectEditorGameLayoutEventCatalog(
+      controller.snapshot,
+      rootKey,
+    );
+    expect(() =>
+      validateEditorGameLayoutEventGroup(replacement, confirmed!),
+    ).toThrow(/不属于当前 Game Layout ZIP/u);
+    dialog.setValue(confirmed);
+    dialog.open();
+    await flush();
+    expect(host.textContent).toContain("已失效");
+    expect(
+      required<HTMLButtonElement>(host, "[data-event-confirm]").disabled,
+    ).toBe(true);
+    dialog.destroy();
+    controller.destroy();
+  });
+
   it("binds Spine skeleton -> atlas -> page during prepare", async () => {
     const skeleton = new TextEncoder().encode(
       JSON.stringify({
@@ -723,6 +849,113 @@ async function mappedEntries(
   ]);
 }
 
+async function gameLayoutEventEntries(state: "win" | "appear", symbol = "A") {
+  const packageManifest = {
+    version: 1,
+    kind: "symbol-package",
+    id: "base",
+    cellSize: { width: 1, height: 1 },
+    entrypoints: {
+      gameConfig: "base-gameconfig.json",
+      symbolManifest: "base-symbols.manifest.json",
+    },
+    resources: ["base-symbol-state.png", "base-symbol.png"],
+  };
+  const symbolManifest = {
+    version: 1,
+    states: [state],
+    symbols: {
+      [symbol]: {
+        normal: "./base-symbol.png",
+        [state]: "./base-symbol-state.png",
+        scale: 1,
+      },
+    },
+  };
+  const layoutManifest = upgradeSceneLayoutManifestToLatest({
+    version: 1,
+    kind: "scene-layout",
+    id: "event-layout",
+    adaptation: {
+      mode: "maximized-focus",
+      artSize: { width: 100, height: 100 },
+      focusRect: { x: 0, y: 0, width: 100, height: 100 },
+      backgroundNode: "bg",
+    },
+    nodes: [
+      {
+        id: "bg",
+        order: 0,
+        resource: {
+          kind: "image",
+          path: "event-bg.png",
+          size: { width: 1, height: 1 },
+        },
+        placements: { default: { x: 0, y: 0, scale: 1 } },
+      },
+    ],
+    reels: {
+      main: {
+        order: 1,
+        columns: 3,
+        rows: 2,
+        cellSize: { width: 1, height: 1 },
+        gap: { x: 0, y: 0 },
+        placements: { default: { x: 0, y: 0 } },
+      },
+    },
+    symbolPackages: {
+      base: {
+        manifest: "base-symbols.package.json",
+        reel: "main",
+        reelSet: "main",
+        renderMode: "standard",
+      },
+    },
+    gameModes: {
+      initialMode: "BaseGame",
+      modes: [
+        {
+          id: "BaseGame",
+          backgroundNodes: { default: "bg" },
+          nodeStates: {},
+          symbolPackage: "base",
+        },
+      ],
+    },
+  });
+  const entries = await mappedEntries([
+    { key: "event-bg.png", mediaType: "image/png", bytes: PNG },
+    {
+      key: "base-symbols.package.json",
+      mediaType: "application/json",
+      bytes: encode(packageManifest),
+    },
+    {
+      key: "base-gameconfig.json",
+      mediaType: "application/json",
+      bytes: encode({
+        paytable: { "0": { code: 0, symbol, pays: [1] } },
+        symbolCodes: { [symbol]: 0 },
+        reels: { main: [[0], [0], [0]] },
+      }),
+    },
+    {
+      key: "base-symbols.manifest.json",
+      mediaType: "application/json",
+      bytes: encode(symbolManifest),
+    },
+    { key: "base-symbol.png", mediaType: "image/png", bytes: PNG },
+    {
+      key: "base-symbol-state.png",
+      mediaType: "image/png",
+      bytes: new Uint8Array([...PNG, state === "win" ? 1 : 2]),
+    },
+  ]);
+  entries.set("layout.manifest.json", encode(layoutManifest));
+  return entries;
+}
+
 function zipSources(
   containerName: string,
   entries: ReadonlyMap<string, Uint8Array>,
@@ -868,6 +1101,20 @@ function required<T extends Element>(root: ParentNode, selector: string): T {
 
 function click(element: Element): void {
   element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+}
+
+function pickEventChoice(
+  root: ParentNode,
+  value: string,
+  action: "family" | "pick",
+): void {
+  const button = [
+    ...root.querySelectorAll<HTMLButtonElement>(
+      `[data-event-action="${action}"]`,
+    ),
+  ].find((candidate) => candidate.dataset.value === value);
+  if (!button) throw new Error(`test missing event choice ${action}:${value}`);
+  click(button);
 }
 
 function expectZipHas(bytes: Uint8Array, paths: readonly string[]): void {

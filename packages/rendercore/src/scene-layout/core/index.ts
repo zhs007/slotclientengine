@@ -8,3 +8,4 @@ export type { SceneLayoutRenderObjectFactoryDependencies } from "../render-objec
 export * from "../video-transition-player.js";
 export * from "../presentation-surface.js";
 export * from "./runtime-address.js";
+export * from "./runtime-address-catalog.js";

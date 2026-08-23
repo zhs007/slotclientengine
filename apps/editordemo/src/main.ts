@@ -8,8 +8,11 @@ import type {
 } from "@slotclientengine/editorcore/assets/data";
 import {
   mountEditorAssetsDialog,
+  mountEditorGameLayoutEventDialog,
   type EditorAssetsDialog,
+  type EditorGameLayoutEventDialog,
 } from "@slotclientengine/editorcore/assets/ui";
+import type { EditorGameLayoutEventGroup } from "@slotclientengine/editorcore/assets/adapters";
 import {
   createDemoProjectArchive,
   openDemoProjectArchive,
@@ -37,18 +40,32 @@ app.innerHTML = `
         <button type="button" data-action="reset">清空</button>
       </div>
     </header>
-    <p class="demo-status" data-status role="status">点击 Assets 管理，在共享 Dialog 中导入、预览和导出资源。</p>
-    <section class="demo-workspace" data-workspace aria-label="共享 Assets 管理入口"></section>
+    <p class="demo-status" data-status role="status">先在 Assets 管理中导入 Gamelayout Editor ZIP，再编辑 Event 组。</p>
+    <section class="demo-tools" aria-label="EditorCore Dialog 实验入口">
+      <div data-workspace></div>
+      <div data-event-workspace></div>
+    </section>
+    <section class="demo-event-result" data-event-result aria-label="当前 Event 组"></section>
   </main>`;
 
 const workspaceElement = requiredQuery<HTMLElement>(app, "[data-workspace]");
 const statusElement = requiredQuery<HTMLElement>(app, "[data-status]");
+const eventWorkspaceElement = requiredQuery<HTMLElement>(
+  app,
+  "[data-event-workspace]",
+);
+const eventResultElement = requiredQuery<HTMLElement>(
+  app,
+  "[data-event-result]",
+);
 const projectInput = requiredQuery<HTMLInputElement>(
   app,
   "[data-project-input]",
 );
 let controller: EditorAssetsController<DemoProject>;
 let dialog: EditorAssetsDialog;
+let eventDialog: EditorGameLayoutEventDialog;
+let eventGroup: EditorGameLayoutEventGroup | null = null;
 
 mount();
 
@@ -106,6 +123,7 @@ async function openProject(): Promise<void> {
 }
 
 function mount(initial?: EditorAssetsSnapshot<DemoProject>): void {
+  eventDialog?.destroy();
   dialog?.destroy();
   controller?.destroy();
   controller = createDefaultEditorAssetsController({
@@ -119,6 +137,30 @@ function mount(initial?: EditorAssetsSnapshot<DemoProject>): void {
     title: "Assets",
     triggerLabel: "Assets 管理",
   });
+  eventGroup = null;
+  eventDialog = mountEditorGameLayoutEventDialog({
+    controller,
+    root: eventWorkspaceElement,
+    title: "Game Layout Event 组",
+    triggerLabel: "编辑 Event 组",
+    value: eventGroup,
+    onConfirm(value) {
+      eventGroup = value;
+      eventDialog.setValue(value);
+      renderEventGroup();
+      setStatus(`已确认 ${value.events.length} 个 Event。`);
+    },
+  });
+  renderEventGroup();
+}
+
+function renderEventGroup(): void {
+  if (!eventGroup) {
+    eventResultElement.innerHTML = `<strong>当前 Event 组</strong><p>尚未创建。导入 Game Layout ZIP 后打开“编辑 Event 组”。</p>`;
+    return;
+  }
+  eventResultElement.innerHTML = `<strong>当前 Event 组 · ${escapeHtml(eventGroup.rootKey)}</strong>
+    <ol>${eventGroup.events.map((item) => `<li><code>${escapeHtml(item.address)}</code></li>`).join("") || "<li>空组</li>"}</ol>`;
 }
 
 function createLargeFixture(count: number): EditorAssetsSnapshot<DemoProject> {
@@ -193,4 +235,13 @@ function requiredQuery<T extends Element>(
 
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }

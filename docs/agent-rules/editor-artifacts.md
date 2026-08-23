@@ -20,6 +20,7 @@
 - Spine atlas/page、VNI image、ImgNumber glyph 和 Popup/Symbols/Game Layout package leaf 只能由 owner root 传递使用，不能独立进入 Picker、程序 binding、改名或删除。复用 leaf 必须另行导入顶层 root，最终只在 physical payload 层按完整 SHA-256 去重。
 - `used`、`programmatic` 和 leaf transitive usage 必须从宿主 typed reference/program binding 与 graph 实时派生，不保存可漂移的布尔副本。root 命令和导入必须在 candidate project/catalog/workspace 全部验证后原子提交。
 - 正式 Editor 迁移只能消费已由 `apps/editordemo` 和自动测试证明的 EditorCore public contract；迁移前不得删除 owner 现有正式 schema/parser/runtime，也不得在 EditorCore 猜测 owner manifest 语义。
+- EditorCore 的 Game Layout event group UI 只能消费 committed `game-layout` root，并调用 RenderCore editor inspector 从该 root 的 exact closure 编译候选；具体 family identity、owner、state、坐标和 lifecycle 不得硬编码、从 filename/hash 推断或由 raw address 输入补造。row draft 与 group draft 分层提交，Layout 替换后按 exact address 复验，切换 root 不按相似名称迁移。
 
 ## Import boundary
 

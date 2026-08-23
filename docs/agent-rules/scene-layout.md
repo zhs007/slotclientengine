@@ -69,6 +69,7 @@
 - 三类Popup都可作为顶层programmatic binding保留；Editor只对直接引用或显式程序用途的binding导出并显示canonical owner地址。package runtime必须把program Popup、mode award和transition prelude放入同一个FIFO，保持单active并在完整关闭后自动启动下一项；严格立即打开另有fail-fast入口。session close/cancel必须绑定exact请求identity，queued cancel和stale close不得影响其它项；正常关闭锁存到正式end完成，immediate仅用于显式取消/cleanup。同一Scene Layout runtime的全部Popup只创建一个共享压暗display object，并按当前active Popup的backdrop配置与状态更新。
 - 游戏判断 active award 生命周期只使用 package runtime 的 phase query；完整 award snapshot 只从 `@slotclientengine/rendercore/scene-layout/editor` inspector 读取，inspector复用同一个package runtime且不得进入game facade。
 - shared code 不硬编码 BaseGame/FreeGame/BonusGame、BG/FG、animation/event 名或业务字段。
+- production runtime 与 editor package inspection 必须共用唯一的纯 Game Layout event catalog compiler。editor inspector 只从 strict Layout、Symbols、Popup 和 audio manifest closure 返回 frozen descriptor/family/facets，不创建 renderer/player/browser resource；EditorCore 和 app 不解析 canonical address 重建第二份 event 语义表。
 
 ## Resource lifecycle
 

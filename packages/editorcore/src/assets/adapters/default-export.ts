@@ -25,10 +25,7 @@ import {
   createSymbolPackageResource,
   materializeMappedSymbolPackageContents,
 } from "@slotclientengine/rendercore/symbol/editor";
-import {
-  collectSceneLayoutPackagePaths,
-  parseSceneLayoutManifestDocument,
-} from "@slotclientengine/rendercore/scene-layout/editor";
+import { collectSceneLayoutPackagePaths } from "@slotclientengine/rendercore/scene-layout/editor";
 import {
   assertVNIProject,
   validateVNIProject,
@@ -39,6 +36,7 @@ import type {
   EditorAssetRoot,
   EditorAssetsSnapshot,
 } from "../data/index.js";
+import { materializeEditorGameLayoutRoot } from "./game-layout-events.js";
 
 const ZIP_MEDIA_TYPE = "application/zip";
 
@@ -201,15 +199,11 @@ async function exportGameLayout<TProject>(
   snapshot: EditorAssetsSnapshot<TProject>,
   root: EditorAssetRoot,
 ): Promise<EditorAssetExportArtifact> {
-  const manifestBytes = requiredEntry(snapshot, root.key).bytes;
-  const manifest = parseSceneLayoutManifestDocument(
-    parseJson(manifestBytes, root.key),
-  );
-  const assetKeys = root.exactKeys.filter((key) => key !== root.key);
-  const logical = logicalFiles(snapshot, assetKeys);
+  const materialized = materializeEditorGameLayoutRoot(snapshot, root.key);
+  const { manifest, manifestBytes } = materialized;
   const closure = collectSceneLayoutPackagePaths({
     manifest,
-    files: logical,
+    files: materialized.files,
     allowExtraFiles: false,
   });
   assertExactClosure(root, new Set([root.key, ...closure]));
