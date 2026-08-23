@@ -44,7 +44,8 @@ export const SYMBOL_TYPES = [
 ] as const;
 
 const SYMBOL_STAGGER_SECONDS = 0.014;
-const SYMBOL_CAMERA_TILT_RADIANS = (Math.PI / 180) * 12;
+const SYMBOL_CAMERA_TILT_RADIANS = (Math.PI / 180) * 30;
+const SYMBOL_TILT_ROTATION_X = -Math.PI / 2 + SYMBOL_CAMERA_TILT_RADIANS;
 
 export type SymbolType = (typeof SYMBOL_TYPES)[number];
 
@@ -81,6 +82,8 @@ interface ToonStyleResources {
 
 interface AnimatedSymbol {
   readonly pivot: Group;
+  readonly tilt: Group;
+  readonly spinner: Group;
   readonly shadow: Mesh<CircleGeometry, MeshBasicMaterial>;
   readonly placement: SymbolPlacement;
 }
@@ -920,11 +923,18 @@ export class SymbolField extends Group {
       const pivot = new Group();
       pivot.name = `${placement.type}-symbol`;
       pivot.position.set(placement.x, BOARD.cellHeight + 0.55, placement.z);
-      pivot.rotation.y = placement.rotation;
       pivot.scale.setScalar(0);
+      const tilt = new Group();
+      tilt.name = `${placement.type}-camera-tilt`;
+      tilt.rotation.x = SYMBOL_TILT_ROTATION_X;
+      const spinner = new Group();
+      spinner.name = `${placement.type}-inclined-spinner`;
+      spinner.rotation.z = placement.rotation;
       const model = this.#masters.get(placement.type)!.clone(true);
-      model.rotation.x = -Math.PI / 2 + SYMBOL_CAMERA_TILT_RADIANS;
-      pivot.add(model);
+      if (placement.type === "banana") model.rotation.z += Math.PI;
+      spinner.add(model);
+      tilt.add(spinner);
+      pivot.add(tilt);
       const shadow = new Mesh(
         this.#shadowGeometry,
         new MeshBasicMaterial({
@@ -939,7 +949,7 @@ export class SymbolField extends Group {
       shadow.position.set(placement.x, BOARD.cellHeight + 0.025, placement.z);
       shadow.scale.set(1, 0.58, 1);
       this.add(shadow, pivot);
-      this.#symbols.push({ pivot, shadow, placement });
+      this.#symbols.push({ pivot, tilt, spinner, shadow, placement });
     }
   }
 
@@ -994,10 +1004,11 @@ export class SymbolField extends Group {
       0.55 +
       Math.sin(timeSeconds * 1.25 + symbol.placement.phase) * 0.075 +
       yOffset;
-    symbol.pivot.rotation.y = symbol.placement.rotation - timeSeconds * 0.56;
-    symbol.pivot.rotation.x =
-      Math.sin(timeSeconds * 0.9 + symbol.placement.phase) * 0.095;
-    symbol.pivot.rotation.z =
+    symbol.spinner.rotation.z = symbol.placement.rotation - timeSeconds * 0.56;
+    symbol.tilt.rotation.x =
+      SYMBOL_TILT_ROTATION_X +
+      Math.sin(timeSeconds * 0.9 + symbol.placement.phase) * 0.065;
+    symbol.tilt.rotation.y =
       Math.sin(timeSeconds * 0.62 + symbol.placement.phase * 0.73) * 0.025;
     const shadowPulse =
       1 - Math.sin(timeSeconds * 1.25 + symbol.placement.phase) * 0.08;

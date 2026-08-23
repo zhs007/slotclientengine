@@ -1,5 +1,6 @@
 import {
   AmbientLight,
+  BackSide,
   Color,
   DataTexture,
   DirectionalLight,
@@ -10,6 +11,7 @@ import {
   InstancedMesh,
   Matrix4,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   MeshToonMaterial,
   NearestFilter,
@@ -50,10 +52,10 @@ import {
   SymbolField,
 } from "./symbols.js";
 
-function createToonGradient(): DataTexture {
+function createToonGradient(levels = [52, 122, 198, 255]): DataTexture {
   const gradient = new DataTexture(
-    new Uint8Array([52, 122, 198, 255]),
-    4,
+    new Uint8Array(levels),
+    levels.length,
     1,
     RedFormat,
     UnsignedByteType,
@@ -74,6 +76,7 @@ export class GardenBoardRenderer {
   readonly #standaloneTextures: Texture[] = [];
   readonly #windMaterials: WindMaterialHandle[] = [];
   readonly #toonGradient = createToonGradient();
+  readonly #boardToonGradient = createToonGradient([66, 166, 255]);
   readonly #flowers: FlowerField;
   readonly #symbols: SymbolField;
   #destroyed = false;
@@ -89,7 +92,7 @@ export class GardenBoardRenderer {
     this.#renderer.setClearColor(0x4b8934, 1);
     this.#renderer.shadowMap.enabled = true;
     this.#renderer.shadowMap.type = PCFShadowMap;
-    this.#standaloneTextures.push(this.#toonGradient);
+    this.#standaloneTextures.push(this.#toonGradient, this.#boardToonGradient);
     host.append(this.#renderer.domElement);
     this.#scene.background = new Color(0x4b8934);
     this.#scene.fog = new FogExp2(0x4b8934, 0.018);
@@ -200,13 +203,13 @@ export class GardenBoardRenderer {
   #createBoard(): void {
     const lightTextures = createCartoonTileTextures(
       0x481f2b,
-      "#82d94a",
-      "#4eae34",
+      "#8be651",
+      "#50ad37",
     );
     const darkTextures = createCartoonTileTextures(
       0x229af1,
-      "#59bc38",
-      "#318c2d",
+      "#5cc63e",
+      "#318c31",
     );
     this.#textures.push(lightTextures, darkTextures);
     const geometry = new RoundedBoxGeometry(
@@ -219,9 +222,9 @@ export class GardenBoardRenderer {
     const makeMaterial = (textures: TurfTextureSet) =>
       new MeshToonMaterial({
         map: textures.albedo,
-        bumpMap: textures.bump,
-        bumpScale: 0.008,
-        gradientMap: this.#toonGradient,
+        gradientMap: this.#boardToonGradient,
+        emissive: 0x173d17,
+        emissiveIntensity: 0.08,
       });
     const count = (BOARD.columns * BOARD.rows) / 2;
     const light = new InstancedMesh(
@@ -234,11 +237,24 @@ export class GardenBoardRenderer {
       makeMaterial(darkTextures),
       count,
     );
+    const outlineGeometry = geometry.clone();
+    outlineGeometry.scale(1.032, 1.08, 1.032);
+    const outlines = new InstancedMesh(
+      outlineGeometry,
+      new MeshBasicMaterial({
+        color: 0x31572c,
+        side: BackSide,
+        toneMapped: false,
+      }),
+      BOARD.columns * BOARD.rows,
+    );
     light.name = "light-checker-cells";
     dark.name = "dark-checker-cells";
+    outlines.name = "cartoon-checker-cell-outlines";
     const matrix = new Matrix4();
     let lightIndex = 0;
     let darkIndex = 0;
+    let outlineIndex = 0;
     for (let row = 0; row < BOARD.rows; row += 1) {
       for (let column = 0; column < BOARD.columns; column += 1) {
         const x =
@@ -253,15 +269,18 @@ export class GardenBoardRenderer {
         const target = (row + column) % 2 === 0 ? light : dark;
         const index = (row + column) % 2 === 0 ? lightIndex++ : darkIndex++;
         target.setMatrixAt(index, matrix);
+        outlines.setMatrixAt(outlineIndex++, matrix);
       }
     }
     light.instanceMatrix.needsUpdate = true;
     dark.instanceMatrix.needsUpdate = true;
+    outlines.instanceMatrix.needsUpdate = true;
     light.receiveShadow = true;
     dark.receiveShadow = true;
     light.castShadow = true;
     dark.castShadow = true;
-    this.#root.add(light, dark);
+    outlines.renderOrder = -1;
+    this.#root.add(outlines, light, dark);
   }
 
   #createFoliage(): void {
