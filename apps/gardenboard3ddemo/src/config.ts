@@ -23,7 +23,7 @@ export const VEGETATION = {
 } as const;
 
 export const SYMBOLS = {
-  count: 12,
+  count: BOARD.columns * BOARD.rows,
 } as const;
 
 export const boardWidth =
