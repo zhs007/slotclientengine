@@ -30,4 +30,15 @@ describe("game symbol placement", () => {
       createSymbolPlacements(1, BOARD.columns * BOARD.rows + 1),
     ).toThrow(RangeError);
   });
+
+  it("can fill every board cell exactly once", () => {
+    const placements = createSymbolPlacements(
+      424242,
+      BOARD.columns * BOARD.rows,
+    );
+    expect(placements).toHaveLength(BOARD.columns * BOARD.rows);
+    expect(
+      new Set(placements.map(({ column, row }) => `${column}:${row}`)).size,
+    ).toBe(BOARD.columns * BOARD.rows);
+  });
 });

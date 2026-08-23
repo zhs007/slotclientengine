@@ -11,11 +11,13 @@ import {
   ExtrudeGeometry,
   FrontSide,
   Group,
+  InstancedMesh,
   LatheGeometry,
   Mesh,
   MeshBasicMaterial,
   MeshPhysicalMaterial,
   MeshStandardMaterial,
+  Object3D,
   RepeatWrapping,
   Shape,
   ShapeGeometry,
@@ -375,27 +377,47 @@ function createDonut(textures: SurfaceTextureSet[]): Group {
       new MeshPhysicalMaterial({ color, roughness: 0.33, clearcoat: 0.35 }),
   );
   const random = createRandom(0x5a12);
+  const sprinkleCounts = sprinkleMaterials.map(
+    (_, materialIndex) =>
+      Array.from({ length: 15 }, (_, index) => index).filter(
+        (index) => index % sprinkleMaterials.length === materialIndex,
+      ).length,
+  );
+  const sprinkleMeshes = sprinkleMaterials.map((material, index) => {
+    const mesh = new InstancedMesh(
+      sprinkleGeometry,
+      material,
+      sprinkleCounts[index],
+    );
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    group.add(mesh);
+    return mesh;
+  });
+  const sprinkleIndices = sprinkleMaterials.map(() => 0);
+  const dummy = new Object3D();
   for (let index = 0; index < 15; index += 1) {
     const angle = (index / 15) * Math.PI * 2 + random.range(-0.12, 0.12);
     const radius = random.range(0.25, 0.37);
-    const sprinkle = registerMesh(
-      new Mesh(
-        sprinkleGeometry,
-        sprinkleMaterials[index % sprinkleMaterials.length],
-      ),
-    );
-    sprinkle.position.set(
+    dummy.position.set(
       Math.cos(angle) * radius,
       Math.sin(angle) * radius,
       0.205,
     );
-    sprinkle.rotation.set(
+    dummy.rotation.set(
       Math.PI / 2,
       random.range(-0.8, 0.8),
       angle + random.range(-0.7, 0.7),
     );
-    group.add(sprinkle);
+    dummy.updateMatrix();
+    const materialIndex = index % sprinkleMaterials.length;
+    sprinkleMeshes[materialIndex].setMatrixAt(
+      sprinkleIndices[materialIndex],
+      dummy.matrix,
+    );
+    sprinkleIndices[materialIndex] += 1;
   }
+  for (const mesh of sprinkleMeshes) mesh.instanceMatrix.needsUpdate = true;
   group.name = "donut-model";
   return group;
 }
@@ -553,28 +575,40 @@ function createStrawberry(textures: SurfaceTextureSet[]): Group {
     [0.19, 0.35, 6],
     [0.33, 0.25, 4],
   ] as const;
+  const seeds = new InstancedMesh(
+    seedGeometry,
+    seedMaterial,
+    seedRows.reduce((total, [, , count]) => total + count, 0),
+  );
+  seeds.castShadow = true;
+  seeds.receiveShadow = true;
+  const seedDummy = new Object3D();
+  let seedIndex = 0;
   for (const [rowY, radius, count] of seedRows) {
     for (let index = 0; index < count; index += 1) {
       const angle =
         (index / count) * Math.PI * 2 +
         (Math.round((rowY + 0.4) * 10) % 2) * 0.42;
-      const seed = registerMesh(new Mesh(seedGeometry, seedMaterial));
-      seed.position.set(
+      seedDummy.position.set(
         Math.cos(angle) * (radius + 0.012),
         rowY,
         Math.sin(angle) * (radius + 0.012),
       );
-      seed.scale.set(0.72, 1.18, 0.5);
-      seed.lookAt(
+      seedDummy.scale.set(0.72, 1.18, 0.5);
+      seedDummy.lookAt(
         new Vector3(
           Math.cos(angle) * radius * 2,
           rowY,
           Math.sin(angle) * radius * 2,
         ),
       );
-      group.add(seed);
+      seedDummy.updateMatrix();
+      seeds.setMatrixAt(seedIndex, seedDummy.matrix);
+      seedIndex += 1;
     }
   }
+  seeds.instanceMatrix.needsUpdate = true;
+  group.add(seeds);
 
   const leafGeometry = createLeafGeometry();
   const leafMaterial = makeStandardMaterial(leafTexture, {
@@ -724,7 +758,7 @@ export function createSymbolPlacements(
       scale: random.range(0.78, 0.9),
       phase: random.range(0, Math.PI * 2),
       rotation: random.range(-0.35, 0.35),
-      delay: index * 0.055 + random.range(0, 0.14),
+      delay: (row + column) * 0.035 + random.range(0, 0.12),
     };
   });
 }
