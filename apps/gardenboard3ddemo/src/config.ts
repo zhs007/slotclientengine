@@ -22,6 +22,10 @@ export const VEGETATION = {
   seed: 0x6a17d39b,
 } as const;
 
+export const SYMBOLS = {
+  count: 12,
+} as const;
+
 export const boardWidth =
   BOARD.columns * BOARD.cellSize + (BOARD.columns - 1) * BOARD.cellGap;
 export const boardDepth =
