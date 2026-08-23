@@ -15,7 +15,6 @@ import {
   LatheGeometry,
   Mesh,
   MeshBasicMaterial,
-  MeshPhysicalMaterial,
   MeshStandardMaterial,
   Object3D,
   RepeatWrapping,
@@ -59,6 +58,7 @@ interface SurfaceTextureSet {
   readonly albedo: CanvasTexture;
   readonly roughness: CanvasTexture;
   readonly bump: CanvasTexture;
+  readonly baseColor: Color;
   dispose(): void;
 }
 
@@ -102,30 +102,31 @@ function createSurfaceTextures(options: SurfaceOptions): SurfaceTextureSet {
   const bump = requireContext(bumpCanvas);
   albedo.fillStyle = options.base;
   albedo.fillRect(0, 0, size, size);
-  roughness.fillStyle = "#bdbdbd";
+  roughness.fillStyle = "#d4d4d4";
   roughness.fillRect(0, 0, size, size);
   bump.fillStyle = "#7b7b7b";
   bump.fillRect(0, 0, size, size);
 
   const accent = new Color(options.accent);
-  const marks = options.pattern === "pores" ? 520 : 250;
+  const marks =
+    options.pattern === "pores" ? 180 : options.pattern === "spots" ? 70 : 110;
   for (let index = 0; index < marks; index += 1) {
     const x = random.range(0, size);
     const y = random.range(0, size);
     const radius =
       options.pattern === "spots"
-        ? random.range(2.4, 7.2)
+        ? random.range(3.5, 8.5)
         : options.pattern === "pores"
-          ? random.range(0.45, 1.8)
-          : random.range(0.8, 3.2);
+          ? random.range(1, 2.8)
+          : random.range(1.8, 4.6);
     const color = accent
       .clone()
       .offsetHSL(random.range(-0.02, 0.02), 0, random.range(-0.08, 0.08));
     albedo.fillStyle = `#${color.getHexString()}`;
-    albedo.globalAlpha = random.range(0.13, 0.5);
+    albedo.globalAlpha = random.range(0.1, 0.32);
     if (options.pattern === "ridges" || options.pattern === "veins") {
       albedo.strokeStyle = albedo.fillStyle;
-      albedo.lineWidth = random.range(0.5, 1.5);
+      albedo.lineWidth = random.range(1, 2.2);
       albedo.beginPath();
       albedo.moveTo(x, y);
       albedo.lineTo(x + random.range(-3, 3), y + random.range(7, 18));
@@ -144,9 +145,9 @@ function createSurfaceTextures(options: SurfaceOptions): SurfaceTextureSet {
       albedo.fill();
     }
 
-    const roughValue = Math.floor(random.range(132, 224));
+    const roughValue = Math.floor(random.range(190, 236));
     roughness.fillStyle = `rgb(${roughValue}, ${roughValue}, ${roughValue})`;
-    roughness.globalAlpha = random.range(0.25, 0.72);
+    roughness.globalAlpha = random.range(0.18, 0.44);
     roughness.beginPath();
     roughness.arc(
       x + random.range(-2, 2),
@@ -159,11 +160,11 @@ function createSurfaceTextures(options: SurfaceOptions): SurfaceTextureSet {
 
     const bumpValue = Math.floor(
       options.pattern === "pores"
-        ? random.range(35, 95)
-        : random.range(110, 225),
+        ? random.range(70, 115)
+        : random.range(120, 190),
     );
     bump.fillStyle = `rgb(${bumpValue}, ${bumpValue}, ${bumpValue})`;
-    bump.globalAlpha = random.range(0.38, 0.8);
+    bump.globalAlpha = random.range(0.25, 0.55);
     bump.beginPath();
     bump.ellipse(
       x,
@@ -191,6 +192,7 @@ function createSurfaceTextures(options: SurfaceOptions): SurfaceTextureSet {
     albedo: albedoTexture,
     roughness: roughnessTexture,
     bump: bumpTexture,
+    baseColor: new Color(options.base),
     dispose: () => {
       albedoTexture.dispose();
       roughnessTexture.dispose();
@@ -204,26 +206,21 @@ function makeStandardMaterial(
   options: {
     readonly roughness: number;
     readonly bumpScale: number;
-    readonly clearcoat?: number;
     readonly side?: typeof DoubleSide;
   },
-): MeshStandardMaterial | MeshPhysicalMaterial {
-  const parameters = {
+): MeshStandardMaterial {
+  return new MeshStandardMaterial({
     map: textures.albedo,
     roughnessMap: textures.roughness,
     bumpMap: textures.bump,
-    roughness: options.roughness,
-    bumpScale: options.bumpScale,
+    roughness: Math.max(options.roughness, 0.72),
+    bumpScale: options.bumpScale * 0.42,
     metalness: 0,
     side: options.side ?? FrontSide,
-  };
-  return options.clearcoat
-    ? new MeshPhysicalMaterial({
-        ...parameters,
-        clearcoat: options.clearcoat,
-        clearcoatRoughness: 0.22,
-      })
-    : new MeshStandardMaterial(parameters);
+    emissive: textures.baseColor,
+    emissiveIntensity: 0.12,
+    flatShading: true,
+  });
 }
 
 function registerMesh(mesh: Mesh): Mesh {
@@ -283,8 +280,8 @@ function createTaperedTubeGeometry(): BufferGeometry {
     new Vector3(0.42, 0.08, 0),
     new Vector3(0.46, 0.22, 0),
   ]);
-  const tubularSegments = 30;
-  const radialSegments = 10;
+  const tubularSegments = 24;
+  const radialSegments = 8;
   const frames = curve.computeFrenetFrames(tubularSegments, false);
   const positions: number[] = [];
   const uvs: number[] = [];
@@ -342,30 +339,29 @@ function createDonut(textures: SurfaceTextureSet[]): Group {
   const group = new Group();
   const doughTexture = createSurfaceTextures({
     seed: 0xd011,
-    base: "#B96522",
-    accent: "#F0B35D",
+    base: "#C96F2D",
+    accent: "#F3B568",
     pattern: "pores",
   });
   const icingTexture = createSurfaceTextures({
     seed: 0x1c1c,
-    base: "#F25F8D",
-    accent: "#FF9DBA",
+    base: "#FF6FA3",
+    accent: "#FFB0C8",
     pattern: "mottle",
   });
   textures.push(doughTexture, icingTexture);
   const dough = registerMesh(
     new Mesh(
-      new TorusGeometry(0.31, 0.145, 16, 32),
+      new TorusGeometry(0.31, 0.145, 10, 22),
       makeStandardMaterial(doughTexture, { roughness: 0.72, bumpScale: 0.018 }),
     ),
   );
   const icing = registerMesh(
     new Mesh(
-      new TorusGeometry(0.31, 0.123, 14, 32),
+      new TorusGeometry(0.31, 0.123, 9, 22),
       makeStandardMaterial(icingTexture, {
-        roughness: 0.28,
+        roughness: 0.74,
         bumpScale: 0.012,
-        clearcoat: 0.28,
       }),
     ),
   );
@@ -376,12 +372,17 @@ function createDonut(textures: SurfaceTextureSet[]): Group {
   const sprinkleGeometry = new CylinderGeometry(0.014, 0.014, 0.09, 6);
   const sprinkleMaterials = [0xffdf48, 0x56c9ee, 0xffffff, 0x7aca35].map(
     (color) =>
-      new MeshPhysicalMaterial({ color, roughness: 0.33, clearcoat: 0.35 }),
+      new MeshStandardMaterial({
+        color,
+        roughness: 0.78,
+        flatShading: true,
+      }),
   );
   const random = createRandom(0x5a12);
+  const sprinkleCount = 11;
   const sprinkleCounts = sprinkleMaterials.map(
     (_, materialIndex) =>
-      Array.from({ length: 15 }, (_, index) => index).filter(
+      Array.from({ length: sprinkleCount }, (_, index) => index).filter(
         (index) => index % sprinkleMaterials.length === materialIndex,
       ).length,
   );
@@ -398,8 +399,9 @@ function createDonut(textures: SurfaceTextureSet[]): Group {
   });
   const sprinkleIndices = sprinkleMaterials.map(() => 0);
   const dummy = new Object3D();
-  for (let index = 0; index < 15; index += 1) {
-    const angle = (index / 15) * Math.PI * 2 + random.range(-0.12, 0.12);
+  for (let index = 0; index < sprinkleCount; index += 1) {
+    const angle =
+      (index / sprinkleCount) * Math.PI * 2 + random.range(-0.12, 0.12);
     const radius = random.range(0.25, 0.37);
     dummy.position.set(
       Math.cos(angle) * radius,
@@ -428,14 +430,14 @@ function createToast(textures: SurfaceTextureSet[]): Group {
   const group = new Group();
   const crustTexture = createSurfaceTextures({
     seed: 0x70a57,
-    base: "#B95418",
-    accent: "#E78A2F",
+    base: "#C96725",
+    accent: "#EC9645",
     pattern: "ridges",
   });
   const crumbTexture = createSurfaceTextures({
     seed: 0xc2a6b,
-    base: "#F4C66E",
-    accent: "#A95A22",
+    base: "#FFD27B",
+    accent: "#D98A3D",
     pattern: "pores",
   });
   textures.push(crustTexture, crumbTexture);
@@ -485,7 +487,7 @@ function createBanana(textures: SurfaceTextureSet[]): Group {
   const group = new Group();
   const peelTexture = createSurfaceTextures({
     seed: 0xba4a4a,
-    base: "#F1C62D",
+    base: "#FFD83D",
     accent: "#9B691C",
     pattern: "spots",
   });
@@ -500,9 +502,8 @@ function createBanana(textures: SurfaceTextureSet[]): Group {
     new Mesh(
       createTaperedTubeGeometry(),
       makeStandardMaterial(peelTexture, {
-        roughness: 0.52,
+        roughness: 0.75,
         bumpScale: 0.016,
-        clearcoat: 0.12,
       }),
     ),
   );
@@ -529,8 +530,8 @@ function createStrawberry(textures: SurfaceTextureSet[]): Group {
   const group = new Group();
   const berryTexture = createSurfaceTextures({
     seed: 0x57a9,
-    base: "#D91D17",
-    accent: "#F65A3E",
+    base: "#EF3F36",
+    accent: "#FF7665",
     pattern: "seeds",
   });
   const leafTexture = createSurfaceTextures({
@@ -550,14 +551,13 @@ function createStrawberry(textures: SurfaceTextureSet[]): Group {
     new Vector2(0.2, 0.4),
     new Vector2(0.055, 0.43),
   ];
-  const berryGeometry = new LatheGeometry(berryProfile, 24);
+  const berryGeometry = new LatheGeometry(berryProfile, 16);
   const berry = registerMesh(
     new Mesh(
       berryGeometry,
       makeStandardMaterial(berryTexture, {
-        roughness: 0.42,
+        roughness: 0.76,
         bumpScale: 0.018,
-        clearcoat: 0.18,
       }),
     ),
   );
@@ -566,16 +566,16 @@ function createStrawberry(textures: SurfaceTextureSet[]): Group {
   const seedGeometry = new SphereGeometry(0.029, 7, 5);
   const seedMaterial = new MeshStandardMaterial({
     color: 0xf6d56b,
-    emissive: 0x694812,
-    emissiveIntensity: 0.24,
-    roughness: 0.58,
+    emissive: 0x3d2b0b,
+    emissiveIntensity: 0.12,
+    roughness: 0.78,
+    flatShading: true,
   });
   const seedRows = [
-    [-0.35, 0.18, 4],
-    [-0.18, 0.29, 6],
-    [0.01, 0.36, 7],
-    [0.19, 0.35, 6],
-    [0.33, 0.25, 4],
+    [-0.31, 0.22, 3],
+    [-0.11, 0.34, 4],
+    [0.11, 0.37, 5],
+    [0.3, 0.27, 4],
   ] as const;
   const seeds = new InstancedMesh(
     seedGeometry,
@@ -618,10 +618,10 @@ function createStrawberry(textures: SurfaceTextureSet[]): Group {
     bumpScale: 0.022,
     side: DoubleSide,
   });
-  for (let index = 0; index < 7; index += 1) {
+  for (let index = 0; index < 5; index += 1) {
     const leaf = registerMesh(new Mesh(leafGeometry, leafMaterial));
     leaf.position.set(0, 0.39, 0);
-    leaf.rotation.set(Math.PI / 2 - 0.2, (index / 7) * Math.PI * 2, 0);
+    leaf.rotation.set(Math.PI / 2 - 0.2, (index / 5) * Math.PI * 2, 0);
     leaf.scale.set(0.62, 0.55, 0.62);
     group.add(leaf);
   }
@@ -638,8 +638,8 @@ function createCarrot(textures: SurfaceTextureSet[]): Group {
   const group = new Group();
   const rootTexture = createSurfaceTextures({
     seed: 0xca2207,
-    base: "#EA7217",
-    accent: "#B94B0E",
+    base: "#FF8B28",
+    accent: "#D45B15",
     pattern: "ridges",
   });
   const leafTexture = createSurfaceTextures({
@@ -661,11 +661,10 @@ function createCarrot(textures: SurfaceTextureSet[]): Group {
   }
   const root = registerMesh(
     new Mesh(
-      new LatheGeometry(profile, 22),
+      new LatheGeometry(profile, 16),
       makeStandardMaterial(rootTexture, {
-        roughness: 0.58,
+        roughness: 0.76,
         bumpScale: 0.025,
-        clearcoat: 0.08,
       }),
     ),
   );
@@ -673,6 +672,7 @@ function createCarrot(textures: SurfaceTextureSet[]): Group {
   const grooveMaterial = new MeshStandardMaterial({
     color: 0xbd4c0e,
     roughness: 0.82,
+    flatShading: true,
   });
   for (const [radius, y, arc] of [
     [0.245, -0.02, 0.75],
