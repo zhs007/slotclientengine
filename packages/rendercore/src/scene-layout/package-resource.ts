@@ -6,10 +6,12 @@ import {
 import { EDITOR_ASSETS_MAP_PATH } from "@slotclientengine/editorresource";
 import type {
   ResolvedAudioEffect,
+  ResolvedAudioEventTrack,
   ResolvedAudioMusic,
 } from "@slotclientengine/audiocore/core";
 import type {
   AudioEffectBindingV1,
+  AudioEventTrackBindingV1,
   AudioMediaType,
   AudioMusicBindingV1,
 } from "@slotclientengine/audiocore/data";
@@ -478,6 +480,20 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
           ),
         ),
       });
+    const resolveEventTrack = (
+      binding: AudioEventTrackBindingV1,
+    ): ResolvedAudioEventTrack =>
+      Object.freeze({
+        binding,
+        sources: Object.freeze(
+          binding.asset.sources.map((source) =>
+            Object.freeze({
+              url: resolveAudioPath(source.path, source.mediaType),
+              mediaType: source.mediaType,
+            }),
+          ),
+        ),
+      });
     const audioEffects: Record<string, ResolvedAudioEffect> = {};
     const addEffect = (
       route: string,
@@ -526,6 +542,14 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
         resolveMusic(binding),
       ]),
     ) as Record<string, ResolvedAudioMusic>;
+    const audioEventTracks: Record<string, ResolvedAudioEventTrack> = {};
+    for (const { audio } of manifest.eventAudio.bindings) {
+      if (audioEventTracks[audio.name])
+        throw new SceneLayoutError(
+          `Duplicate event audio track name: ${audio.name}.`,
+        );
+      audioEventTracks[audio.name] = resolveEventTrack(audio);
+    }
 
     const imageModules: Record<string, string> = {};
     const skeletonModules: Record<string, unknown> = {};
@@ -724,6 +748,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
       popupPackages: Object.freeze({ ...popupPackages }),
       audioEffects: Object.freeze(audioEffects),
       audioMusic: Object.freeze(audioMusic),
+      audioEventTracks: Object.freeze(audioEventTracks),
       programmaticAudioEffects: Object.freeze(programmaticAudioEffects),
       runtimeResources,
       getLoadedRuntimeResource<Kind extends SceneLayoutRuntimeResource["kind"]>(

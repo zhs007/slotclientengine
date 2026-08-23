@@ -5,6 +5,7 @@ import type {
   AudioCueV1,
   AudioEffectBindingV1,
   AudioEffectManifestV1,
+  AudioEventTrackBindingV1,
   AudioMediaType,
   AudioMusicBindingV1,
   AudioSourceV1,
@@ -114,6 +115,84 @@ export function parseAudioMusicBindingV1(
     fadeOutSeconds: positive(item.fadeOutSeconds, `${label}.fadeOutSeconds`),
     fadeInSeconds: positive(item.fadeInSeconds, `${label}.fadeInSeconds`),
   });
+}
+
+export function parseAudioEventTrackBindingV1(
+  value: unknown,
+  label = "audio event track",
+): AudioEventTrackBindingV1 {
+  const item = record(value, label);
+  keys(
+    item,
+    ["name", "asset", "category", "playback", "voices", "focus"],
+    label,
+  );
+  if (item.category !== "music" && item.category !== "effect")
+    fail(`${label}.category must be music or effect.`);
+  if (item.playback !== "once" && item.playback !== "loop")
+    fail(`${label}.playback must be once or loop.`);
+  const voices = record(item.voices, `${label}.voices`);
+  keys(voices, ["maxConcurrent", "overflow"], `${label}.voices`);
+  if (voices.overflow !== "reject" && voices.overflow !== "restart-oldest")
+    fail(`${label}.voices.overflow must be reject or restart-oldest.`);
+  const maxConcurrent = positiveInteger(
+    voices.maxConcurrent,
+    `${label}.voices.maxConcurrent`,
+  );
+  if (item.playback === "loop" && maxConcurrent !== 1)
+    fail(`${label}.voices.maxConcurrent must be 1 for loop playback.`);
+  const focus = record(item.focus, `${label}.focus`);
+  known(focus, ["bgm", "effects"], `${label}.focus`);
+  if (
+    item.playback === "loop" &&
+    (focus.bgm !== undefined || focus.effects !== undefined)
+  )
+    fail(`${label}.focus must be empty for loop playback.`);
+  const bgm =
+    focus.bgm !== undefined
+      ? parseTargetGain(focus.bgm, `${label}.focus.bgm`)
+      : undefined;
+  let effects:
+    | { readonly scope: "same-audio" | "all"; readonly targetGain: number }
+    | undefined;
+  if (focus.effects !== undefined) {
+    const raw = record(focus.effects, `${label}.focus.effects`);
+    keys(raw, ["scope", "targetGain"], `${label}.focus.effects`);
+    if (raw.scope !== "same-audio" && raw.scope !== "all")
+      fail(`${label}.focus.effects.scope must be same-audio or all.`);
+    effects = {
+      scope: raw.scope,
+      targetGain: unitGain(raw.targetGain, `${label}.focus.effects.targetGain`),
+    };
+  }
+  return freeze({
+    name: localName(item.name, `${label}.name`),
+    asset: parseAsset(item.asset, `${label}.asset`),
+    category: item.category,
+    playback: item.playback,
+    voices: { maxConcurrent, overflow: voices.overflow },
+    focus: {
+      ...(bgm ? { bgm } : {}),
+      ...(effects ? { effects } : {}),
+    },
+  });
+}
+
+function parseTargetGain(
+  value: unknown,
+  label: string,
+): { readonly targetGain: number } {
+  const item = record(value, label);
+  keys(item, ["targetGain"], label);
+  return freeze({
+    targetGain: unitGain(item.targetGain, `${label}.targetGain`),
+  });
+}
+
+function unitGain(value: unknown, label: string): number {
+  const gain = finite(value, label);
+  if (gain < 0 || gain > 1) fail(`${label} must be between 0 and 1.`);
+  return gain;
 }
 
 export function collectAudioAssetPaths(
@@ -358,6 +437,15 @@ function keys(
     fail(`${label} contains unknown keys: ${extras.join(", ")}.`);
   for (const key of allowed)
     if (!Object.hasOwn(value, key)) fail(`${label}.${key} is required.`);
+}
+function known(
+  value: Record<string, unknown>,
+  allowed: readonly string[],
+  label: string,
+): void {
+  const extras = Object.keys(value).filter((key) => !allowed.includes(key));
+  if (extras.length)
+    fail(`${label} contains unknown keys: ${extras.join(", ")}.`);
 }
 function unique(values: readonly string[], label: string): void {
   if (new Set(values).size !== values.length) fail(`${label} must be unique.`);

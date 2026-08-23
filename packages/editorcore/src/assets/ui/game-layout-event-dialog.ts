@@ -8,26 +8,69 @@ import {
   type EditorGameLayoutEventItem,
 } from "../adapters/game-layout-events.js";
 
-export interface EditorGameLayoutEventDialog {
+export interface EditorConfiguredGameLayoutEventItem<
+  TConfiguration,
+> extends EditorGameLayoutEventItem {
+  readonly configuration?: TConfiguration;
+}
+
+export interface EditorConfiguredGameLayoutEventGroup<
+  TConfiguration,
+> extends Omit<EditorGameLayoutEventGroup, "events"> {
+  readonly events: readonly EditorConfiguredGameLayoutEventItem<TConfiguration>[];
+}
+
+export interface EditorGameLayoutEventConfigurationAdapter<TConfiguration> {
+  create(
+    entry: EditorGameLayoutEventCatalog["entries"][number],
+  ): TConfiguration;
+  clone(value: TConfiguration): TConfiguration;
+  mount(
+    root: HTMLElement,
+    options: {
+      readonly entry: EditorGameLayoutEventCatalog["entries"][number];
+      readonly value: TConfiguration;
+      readonly setValue: (value: TConfiguration) => void;
+    },
+  ): void | (() => void);
+  validate(
+    value: TConfiguration,
+    entry: EditorGameLayoutEventCatalog["entries"][number],
+  ): void;
+  summarize?(value: TConfiguration): string;
+}
+
+export interface EditorGameLayoutEventDialog<TConfiguration = never> {
   readonly element: HTMLDialogElement;
   readonly trigger: HTMLButtonElement;
   open(): void;
   close(): void;
-  setValue(value: EditorGameLayoutEventGroup | null): void;
+  setValue(
+    value: EditorConfiguredGameLayoutEventGroup<TConfiguration> | null,
+  ): void;
   destroy(): void;
 }
 
-export interface MountEditorGameLayoutEventDialogOptions<TProject> {
+export interface MountEditorGameLayoutEventDialogOptions<
+  TProject,
+  TConfiguration = never,
+> {
   readonly root: HTMLElement;
-  readonly controller: EditorAssetsController<TProject>;
-  readonly value?: EditorGameLayoutEventGroup | null;
+  readonly controller?: EditorAssetsController<TProject>;
+  readonly sources?: readonly {
+    readonly key: string;
+    readonly label: string;
+  }[];
+  readonly subscribe?: (listener: () => void) => () => void;
+  readonly value?: EditorConfiguredGameLayoutEventGroup<TConfiguration> | null;
   readonly title?: string;
   readonly triggerLabel?: string;
   readonly inspectCatalog?: (
     rootKey: string,
   ) => EditorGameLayoutEventCatalog | Promise<EditorGameLayoutEventCatalog>;
+  readonly configuration?: EditorGameLayoutEventConfigurationAdapter<TConfiguration>;
   readonly onConfirm: (
-    value: EditorGameLayoutEventGroup,
+    value: EditorConfiguredGameLayoutEventGroup<TConfiguration>,
   ) => void | Promise<void>;
 }
 
@@ -37,12 +80,40 @@ interface ProgressiveSelection {
   query: string;
 }
 
-export function mountEditorGameLayoutEventDialog<TProject>(
-  options: MountEditorGameLayoutEventDialogOptions<TProject>,
-): EditorGameLayoutEventDialog {
+export function mountEditorGameLayoutEventDialog<
+  TProject,
+  TConfiguration = never,
+>(
+  options: MountEditorGameLayoutEventDialogOptions<TProject, TConfiguration>,
+): EditorGameLayoutEventDialog<TConfiguration> {
+  if (!options.controller && !options.sources)
+    throw new Error("Editor Event Dialog 需要 controller 或固定 sources。");
+  const cloneConfiguration = (
+    value: TConfiguration | undefined,
+  ): TConfiguration | undefined =>
+    value === undefined
+      ? undefined
+      : options.configuration
+        ? options.configuration.clone(value)
+        : structuredClone(value);
+  const cloneDialogGroup = (
+    value: EditorConfiguredGameLayoutEventGroup<TConfiguration> | null,
+  ) =>
+    value
+      ? {
+          rootKey: value.rootKey,
+          events: value.events.map((item) => ({
+            address: item.address,
+            descriptor: item.descriptor,
+            ...(item.configuration === undefined
+              ? {}
+              : { configuration: cloneConfiguration(item.configuration) }),
+          })),
+        }
+      : null;
   let destroyed = false;
-  let hostValue = cloneGroup(options.value ?? null);
-  let draft = cloneGroup(hostValue) ?? { rootKey: "", events: [] };
+  let hostValue = cloneDialogGroup(options.value ?? null);
+  let draft = cloneDialogGroup(hostValue) ?? { rootKey: "", events: [] };
   let catalog: EditorGameLayoutEventCatalog | null = null;
   let catalogError = "";
   let loading = false;
@@ -53,6 +124,8 @@ export function mountEditorGameLayoutEventDialog<TProject>(
   let selection: ProgressiveSelection = emptySelection();
   let status = "";
   let confirming = false;
+  let rowConfiguration: TConfiguration | undefined;
+  let disposeConfiguration: (() => void) | null = null;
 
   options.root.classList.add("editor-event-dialog-host");
   options.root.innerHTML = `
@@ -98,13 +171,13 @@ export function mountEditorGameLayoutEventDialog<TProject>(
     options.inspectCatalog ??
     ((rootKey: string) =>
       inspectEditorGameLayoutEventCatalog(
-        options.controller.snapshot,
+        options.controller!.snapshot,
         rootKey,
       ));
 
   const open = () => {
     assertAlive();
-    draft = cloneGroup(hostValue) ?? { rootKey: "", events: [] };
+    draft = cloneDialogGroup(hostValue) ?? { rootKey: "", events: [] };
     resetRowEditor();
     pendingRootKey = "";
     status = "";
@@ -215,6 +288,7 @@ export function mountEditorGameLayoutEventDialog<TProject>(
         facets: entry.facets.map(({ key, value }) => ({ key, value })),
         query: "",
       };
+      rowConfiguration = cloneConfiguration(item?.configuration);
       status = "";
       render();
       return;
@@ -227,6 +301,7 @@ export function mountEditorGameLayoutEventDialog<TProject>(
       return;
     }
     if (action === "family") {
+      rowConfiguration = undefined;
       selection = {
         family: button.dataset.value ?? null,
         facets: [],
@@ -240,11 +315,13 @@ export function mountEditorGameLayoutEventDialog<TProject>(
       const value = button.dataset.value;
       if (!next || value === undefined) return;
       selection.facets.push({ key: next.key, value });
+      rowConfiguration = undefined;
       selection.query = "";
       render();
       return;
     }
     if (action === "family-back") {
+      rowConfiguration = undefined;
       selection = emptySelection();
       render();
       return;
@@ -253,6 +330,7 @@ export function mountEditorGameLayoutEventDialog<TProject>(
       const count = Number(button.dataset.count);
       if (!Number.isSafeInteger(count) || count < 0) return;
       selection.facets.splice(count);
+      rowConfiguration = undefined;
       selection.query = "";
       render();
       return;
@@ -275,12 +353,28 @@ export function mountEditorGameLayoutEventDialog<TProject>(
     confirming = true;
     render();
     try {
-      const value = validateEditorGameLayoutEventGroup(catalog, {
+      const validated = validateEditorGameLayoutEventGroup(catalog, {
         rootKey: draft.rootKey,
         events: draft.events,
       });
+      const value = {
+        rootKey: validated.rootKey,
+        events: validated.events.map((item) => {
+          const source = draft.events.find(
+            (candidate) => candidate.address === item.address,
+          );
+          return {
+            ...item,
+            ...(source?.configuration === undefined
+              ? {}
+              : {
+                  configuration: cloneConfiguration(source.configuration),
+                }),
+          };
+        }),
+      };
       await options.onConfirm(value);
-      hostValue = cloneGroup(value);
+      hostValue = cloneDialogGroup(value);
       close();
     } catch (error) {
       status = formatError(error);
@@ -306,12 +400,28 @@ export function mountEditorGameLayoutEventDialog<TProject>(
       render();
       return;
     }
-    const item = createEditorGameLayoutEventItem(entry);
-    if (editIndex === null) draft.events.push(item);
-    else draft.events[editIndex] = item;
-    resetRowEditor();
-    status = "";
-    render();
+    try {
+      const item = createEditorGameLayoutEventItem(entry);
+      if (options.configuration) {
+        if (rowConfiguration === undefined)
+          rowConfiguration = options.configuration.create(entry);
+        options.configuration.validate(rowConfiguration, entry);
+      }
+      const configured = {
+        ...item,
+        ...(rowConfiguration === undefined
+          ? {}
+          : { configuration: cloneConfiguration(rowConfiguration) }),
+      };
+      if (editIndex === null) draft.events.push(configured);
+      else draft.events[editIndex] = configured;
+      resetRowEditor();
+      status = "";
+      render();
+    } catch (error) {
+      status = formatError(error);
+      render();
+    }
   }
 
   async function loadCatalog(): Promise<void> {
@@ -359,16 +469,21 @@ export function mountEditorGameLayoutEventDialog<TProject>(
   }
 
   function render(): void {
-    const roots = [...options.controller.snapshot.catalog.roots.values()]
-      .filter(({ kind }) => kind === "game-layout")
-      .sort((left, right) => left.key.localeCompare(right.key, "en"));
+    disposeConfiguration?.();
+    disposeConfiguration = null;
+    const roots = options.sources
+      ? [...options.sources].sort((left, right) => compare(left.key, right.key))
+      : [...options.controller!.snapshot.catalog.roots.values()]
+          .filter(({ kind }) => kind === "game-layout")
+          .map(({ key }) => ({ key, label: key }))
+          .sort((left, right) => compare(left.key, right.key));
     const invalid = new Set(invalidEvents());
     body.innerHTML = `
       <section class="editor-event-source">
         <label>Game Layout ZIP
           <select data-event-root ${editorActive || loading ? "disabled" : ""}>
             <option value="">请选择已导入的 Game Layout</option>
-            ${roots.map((root) => `<option value="${escapeHtml(root.key)}" ${root.key === draft.rootKey ? "selected" : ""}>${escapeHtml(root.key)}</option>`).join("")}
+            ${roots.map((root) => `<option value="${escapeHtml(root.key)}" ${root.key === draft.rootKey ? "selected" : ""}>${escapeHtml(root.label)}</option>`).join("")}
           </select>
         </label>
         <span>${catalog ? `${catalog.entries.length} 个可侦听 event` : loading ? "正在检查完整 ZIP…" : catalogError ? "ZIP 检查失败" : "event 完全由所选 ZIP 决定"}</span>
@@ -386,6 +501,21 @@ export function mountEditorGameLayoutEventDialog<TProject>(
           ${renderProgressiveEditor()}
         </section>
       </div>`;
+    const selected = selectedEntry();
+    const configurationRoot = body.querySelector<HTMLElement>(
+      "[data-event-configuration]",
+    );
+    if (selected && configurationRoot && options.configuration) {
+      rowConfiguration ??= options.configuration.create(selected);
+      disposeConfiguration =
+        options.configuration.mount(configurationRoot, {
+          entry: selected,
+          value: rowConfiguration,
+          setValue(value) {
+            rowConfiguration = value;
+          },
+        }) ?? null;
+    }
     statusElement.textContent = status;
     confirmButton.disabled =
       confirming || loading || !catalog || !draft.rootKey || invalid.size > 0;
@@ -393,7 +523,7 @@ export function mountEditorGameLayoutEventDialog<TProject>(
   }
 
   function renderEventRow(
-    item: EditorGameLayoutEventItem,
+    item: EditorConfiguredGameLayoutEventItem<TConfiguration>,
     index: number,
     invalid: boolean,
   ): string {
@@ -405,8 +535,12 @@ export function mountEditorGameLayoutEventDialog<TProject>(
           .map(({ key, value }) => `${facetLabel(key)}: ${value}`)
           .join(" · ")
       : "当前 ZIP 中不存在";
+    const configuredSummary =
+      item.configuration !== undefined && options.configuration?.summarize
+        ? options.configuration.summarize(item.configuration)
+        : "";
     return `<li class="editor-event-row ${invalid ? "invalid" : ""}">
-      <div><strong>${index + 1}. ${escapeHtml(entry ? familyLabel(entry.family) : "失效 Event")}</strong><span>${escapeHtml(summary)}</span><code>${escapeHtml(item.address)}</code></div>
+      <div><strong>${index + 1}. ${escapeHtml(entry ? familyLabel(entry.family) : "失效 Event")}</strong><span>${escapeHtml(summary)}</span>${configuredSummary ? `<span>${escapeHtml(configuredSummary)}</span>` : ""}<code>${escapeHtml(item.address)}</code></div>
       <button type="button" data-event-action="copy" data-address="${escapeHtml(item.address)}">复制</button>
       <button type="button" data-event-action="edit" data-index="${index}" ${!catalog || editorActive ? "disabled" : ""}>修改</button>
       <button type="button" data-event-action="remove" data-index="${index}" ${editorActive ? "disabled" : ""}>移除</button>
@@ -430,7 +564,7 @@ export function mountEditorGameLayoutEventDialog<TProject>(
     const next = nextFacet();
     return `<header><strong>${editIndex === null ? "添加 Event" : `修改第 ${editIndex + 1} 项`}</strong><button type="button" data-event-action="cancel-row">取消编辑</button></header>
       <nav class="editor-event-breadcrumbs" aria-label="当前选择路径">${breadcrumbs || "尚未选择类型"}</nav>
-      ${!selection.family ? `<div class="editor-event-choices"><h3>选择 Event 类型</h3>${families.map((family) => `<button type="button" data-event-action="family" data-value="${escapeHtml(family)}"><strong>${escapeHtml(familyLabel(family))}</strong><span>${catalog!.entries.filter((entry) => entry.family === family).length} 个选项</span></button>`).join("")}</div>` : selected ? `<div class="editor-event-result"><strong>选择完成</strong><code>${escapeHtml(selected.descriptor.address)}</code><button type="button" data-event-action="copy" data-address="${escapeHtml(selected.descriptor.address)}">复制 canonical address</button><dl>${selected.facets.map(({ key, value }) => `<dt>${escapeHtml(facetLabel(key))}</dt><dd>${escapeHtml(value)}</dd>`).join("")}</dl></div>` : next ? renderNextFacet(next) : `<div class="editor-event-error">当前选择路径无法唯一确定 event。</div>`}
+      ${!selection.family ? `<div class="editor-event-choices"><h3>选择 Event 类型</h3>${families.map((family) => `<button type="button" data-event-action="family" data-value="${escapeHtml(family)}"><strong>${escapeHtml(familyLabel(family))}</strong><span>${catalog!.entries.filter((entry) => entry.family === family).length} 个选项</span></button>`).join("")}</div>` : selected ? `<div class="editor-event-result"><strong>选择完成</strong><code>${escapeHtml(selected.descriptor.address)}</code><button type="button" data-event-action="copy" data-address="${escapeHtml(selected.descriptor.address)}">复制 canonical address</button><dl>${selected.facets.map(({ key, value }) => `<dt>${escapeHtml(facetLabel(key))}</dt><dd>${escapeHtml(value)}</dd>`).join("")}</dl></div>${options.configuration ? '<section class="editor-event-configuration" data-event-configuration></section>' : ""}` : next ? renderNextFacet(next) : `<div class="editor-event-error">当前选择路径无法唯一确定 event。</div>`}
       <footer><button type="button" data-event-action="save-row" ${selected ? "" : "disabled"}>${editIndex === null ? "添加到组" : "保存修改"}</button></footer>`;
   }
 
@@ -503,9 +637,15 @@ export function mountEditorGameLayoutEventDialog<TProject>(
     editorActive = false;
     editIndex = null;
     selection = emptySelection();
+    rowConfiguration = undefined;
   }
 
-  const unsubscribe = options.controller.subscribe(() => {
+  const subscribe =
+    options.subscribe ??
+    (options.controller
+      ? (listener: () => void) => options.controller!.subscribe(listener)
+      : () => () => {});
+  const unsubscribe = subscribe(() => {
     if (!element.open || !draft.rootKey) {
       render();
       return;
@@ -523,19 +663,20 @@ export function mountEditorGameLayoutEventDialog<TProject>(
   body.addEventListener("click", onBodyClick);
   render();
 
-  const api: EditorGameLayoutEventDialog = {
+  const api: EditorGameLayoutEventDialog<TConfiguration> = {
     element,
     trigger,
     open,
     close,
     setValue(value) {
       assertAlive();
-      hostValue = cloneGroup(value);
+      hostValue = cloneDialogGroup(value);
     },
     destroy() {
       if (destroyed) return;
       close();
       destroyed = true;
+      disposeConfiguration?.();
       unsubscribe();
       trigger.removeEventListener("click", open);
       closeButton.removeEventListener("click", close);
@@ -557,19 +698,6 @@ export function mountEditorGameLayoutEventDialog<TProject>(
 
 function emptySelection(): ProgressiveSelection {
   return { family: null, facets: [], query: "" };
-}
-
-function cloneGroup(
-  value: EditorGameLayoutEventGroup | null,
-): { rootKey: string; events: EditorGameLayoutEventItem[] } | null {
-  if (!value) return null;
-  return {
-    rootKey: value.rootKey,
-    events: value.events.map((item) => ({
-      address: item.address,
-      descriptor: item.descriptor,
-    })),
-  };
 }
 
 function familyLabel(value: string): string {

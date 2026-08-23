@@ -661,7 +661,8 @@ export function normalizeLegacySceneLayoutPresentationOrders(
     (source.version !== 1 &&
       source.version !== 2 &&
       source.version !== 3 &&
-      source.version !== 4)
+      source.version !== 4 &&
+      source.version !== 5)
   )
     return value;
   const draft = structuredClone(source);

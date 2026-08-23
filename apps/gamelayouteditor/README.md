@@ -1,6 +1,6 @@
 # Game Layout Editor
 
-纯前端 Scene Layout v4 编辑器，覆盖 layout、mode/variant、optional loop BGM、程序音效、稳定背景、普通 VNI/Spine 动画图层、Symbols、award-celebration/普通 Spine/single-state Popup 与 Spine/MP4 有向转场。合法 v1–v3 ZIP 会在打开事务中自动升级；后续预览和导出只生成 v4。
+纯前端 Scene Layout v5 编辑器，覆盖 layout、mode/variant、optional loop BGM、全局 event 音乐音效、程序音效、稳定背景、普通 VNI/Spine 动画图层、Symbols、award-celebration/普通 Spine/single-state Popup 与 Spine/MP4 有向转场。合法 v1–v4 ZIP 会在打开事务中自动升级；后续预览和导出只生成 v5。
 
 ## Splash-first 与 per-mode 适配
 
@@ -85,7 +85,7 @@ Spine atlas 的 page 是 atlas 内部逻辑名，texture map 的 value 才是全
 - 根 `assets.map.json`；
 - 一个 `assets/<完整 SHA-256>.<ext>` payload 区。
 
-layout、audio、VNI、image-string、Symbols、Popup 和程序资源的全部配置引用均为 filename keys；production export 只写传递可达 exact closure，不写 nested dependency 目录或 unused key。只有被 mode BGM 或程序音效绑定引用的 root audio asset 才写入 ZIP；重新导入会恢复 audio resource、exact binding name 和 mode BGM。Spine 只要某个 JSON 根被 Scene 或程序键引用，就导出该根及其 atlas/贴图闭包；共享 leaf 只写一份，同批未引用的 sibling JSON 不导出。VNI project 只结构化改写 schema 声明的 asset path。重新导入、Blob preview、package resource 与 CDN URL loader 共享 rendercore map resolver。无 map 的合法 legacy package 继续按 direct-path 合同加载；Editor 导入后升级为新格式。
+layout、audio、VNI、image-string、Symbols、Popup 和程序资源的全部配置引用均为 filename keys；production export 只写传递可达 exact closure，不写 nested dependency 目录或 unused key。只有被 mode BGM、程序音效或 event audio binding 引用的 root audio asset 才写入 ZIP；重新导入会恢复 audio resource、exact binding、event 地址与旧音频忽略开关。项目 Tab 的“编辑音乐音效”复用 EditorCore event dialog，只选择 Assets 中已上传的 audio；loop 必须配置不同的结束 event。Spine 只要某个 JSON 根被 Scene 或程序键引用，就导出该根及其 atlas/贴图闭包；共享 leaf 只写一份，同批未引用的 sibling JSON 不导出。VNI project 只结构化改写 schema 声明的 asset path。重新导入、Blob preview、package resource 与 CDN URL loader 共享 rendercore map resolver。无 map 的合法 legacy package 继续按 direct-path 合同加载；Editor 导入后升级为新格式。
 
 每个 mode 可独立选择 Symbols 与 award-celebration Popup。每条有向转场显式选择无效果、Spine 顶层特效或黑场视频，并可独立选择“无”或一个普通 Spine `preludePopup`；切换效果类型会保留 Popup binding。未选 Popup 时直接执行效果，无效果分支在目标 scene prepare 成功后原子切换；已选时保持 source mode，复用 Popup 的 start→loop→end 状态机，完整 end 后再继续效果。preview 将完整 canvas 与 window keyboard 绑定到 rendercore：active Popup 可在 canvas 任意位置点击或按任意非 repeat 键，idle 时输入透传。带 Popup 的视频随后进入等待阶段，必须由第二次真实 pointer/key 启动有声媒体。Popup 直接渲染在当前状态的顶层 Popup root，不建立独立 scene。
 

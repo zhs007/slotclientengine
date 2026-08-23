@@ -7,10 +7,12 @@ import {
   type SceneLayoutManifest,
   type SceneLayoutManifestLatest,
   type SceneLayoutGameModeV2,
+  type SceneLayoutEventAudioV1,
   type SceneLayoutNode,
   type SceneLayoutRuntimeResourceSpec,
   type SceneLayoutVariantId,
 } from "@slotclientengine/rendercore/scene-layout/data";
+import { inspectSceneLayoutRuntimeEventCatalog } from "@slotclientengine/rendercore/scene-layout/editor";
 import {
   collectImageStringAssetPaths,
   parseImageStringManifest,
@@ -216,6 +218,7 @@ export interface EditorProject {
   programmaticPopupIds: Set<string>;
   runtimeResourceBindings: Map<string, string>;
   audio: AudioCatalogManifestV1;
+  eventAudio: SceneLayoutEventAudioV1;
   gameModes: {
     activeModeId: string;
     initialMode: string;
@@ -261,6 +264,7 @@ export function createNewEditorProject(mode: EditorMode): EditorProject {
     programmaticPopupIds: new Set(),
     runtimeResourceBindings: new Map(),
     audio: { version: 1, effects: [], music: [], programmaticEffects: [] },
+    eventAudio: { version: 1, ignoreLegacyAudio: false, bindings: [] },
     gameModes: {
       activeModeId: "BaseGame",
       initialMode: "BaseGame",
@@ -974,10 +978,11 @@ export function editorProjectToManifest(
         }),
     },
   });
-  return upgradeSceneLayoutManifestToLatest({
+  const manifest = upgradeSceneLayoutManifestToLatest({
     ...base,
-    version: 4,
+    version: 5,
     audio: canonicalEditorAudioCatalog(project),
+    eventAudio: canonicalEditorEventAudio(project),
     gameModes: {
       ...base.gameModes,
       modes: base.gameModes.modes.map((mode) => {
@@ -988,6 +993,22 @@ export function editorProjectToManifest(
       }),
     },
   });
+  if (manifest.eventAudio.bindings.length > 0) {
+    const catalog = inspectSceneLayoutRuntimeEventCatalog({
+      manifest,
+      files: project.assets,
+    });
+    const available = new Set(
+      catalog.entries.map(({ descriptor }) => descriptor.address),
+    );
+    for (const binding of manifest.eventAudio.bindings) {
+      if (!available.has(binding.event))
+        throw new Error(`Event audio 播放 event 不存在：${binding.event}`);
+      if (binding.endEvent && !available.has(binding.endEvent))
+        throw new Error(`Event audio 结束 event 不存在：${binding.endEvent}`);
+    }
+  }
+  return manifest;
 }
 
 export function validateEditorTransitionEvent(
@@ -1247,7 +1268,12 @@ export function manifestToEditorProject(
       ),
     ),
   };
-  for (const binding of [...project.audio.music, ...project.audio.effects]) {
+  project.eventAudio = structuredClone(latest.eventAudio);
+  for (const binding of [
+    ...project.audio.music,
+    ...project.audio.effects,
+    ...project.eventAudio.bindings.map(({ audio }) => audio),
+  ]) {
     for (const source of binding.asset.sources) {
       requiredAsset(assets.get(source.path), source.path);
       registerResource({
@@ -1752,6 +1778,16 @@ function canonicalEditorAudioCatalog(
     music,
     programmaticEffects: project.audio.programmaticEffects,
   };
+}
+
+function canonicalEditorEventAudio(
+  project: EditorProject,
+): SceneLayoutEventAudioV1 {
+  assertEditorAudioSources(
+    project,
+    project.eventAudio.bindings.map(({ audio }) => audio),
+  );
+  return structuredClone(project.eventAudio);
 }
 
 function assertEditorAudioSources(

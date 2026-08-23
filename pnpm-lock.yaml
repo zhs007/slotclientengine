@@ -285,6 +285,9 @@ importers:
       '@slotclientengine/browserartifactio':
         specifier: workspace:*
         version: link:../../packages/browserartifactio
+      '@slotclientengine/editorcore':
+        specifier: workspace:*
+        version: link:../../packages/editorcore
       '@slotclientengine/editorresource':
         specifier: workspace:*
         version: link:../../packages/editorresource

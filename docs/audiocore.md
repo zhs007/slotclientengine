@@ -12,6 +12,10 @@ core 不创建 ticker、RAF、canvas 或全局 sound registry。宿主逐帧调�
 
 BGM 和 effect 是两套配置。Scene Layout v4 根音频目录同时保存 music asset、Layout 自有 effect 与 `programmaticEffects` allowlist；每个 mode 可不配置 BGM。已配置的 BGM 恒 loop，并用该 mode 的 `fadeOutSeconds`、`fadeInSeconds` 在成功 mode commit 后 crossfade。Splash 一般不配 BGM，但 schema 不禁止。
 
+Scene Layout v5 另外使用 AudioCore 的通用 event track。track 只描述 audio asset、`music | effect` 分类、`once | loop` 播放、voice policy 与 once focus，不拥有 Scene Layout event。Scene Layout 把 canonical 开始 event 和 loop 结束 event 绑定到 track；旧 v1–v4 会升级为空 binding 且 `ignoreLegacyAudio: false`。
+
+once focus 可独立降低 BGM，并在同 audio 与全部音效中选择一个范围；两类可同时启用，target gain 为 `0..1`。runtime 用 per-voice lease 组合，owner 自身不降低，重叠取最小 gain，lease 释放后恢复当前总线音量。`music` 与 `effect` 只是两条独立玩家音量总线；AudioCore 不据此猜测切歌或互斥播放。
+
 Popup v7 与 Symbol v3 只保存 package-local effect name 和 cue。例如 Popup 内配置 `coin`，当它在 Scene Layout 中以 `award` 绑定时，才生成 `award.coin`。nested editor 不保存或猜测全局前缀。代码只可通过 Scene Layout runtime 播放 allowlist 中的全局 route：
 
 ```ts

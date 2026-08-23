@@ -197,8 +197,32 @@ export function rewriteLayoutManifest(
     : undefined;
   return parseSceneLayoutManifestDocument({
     ...manifest,
-    ...(manifest.version === 4
+    ...(manifest.version === 4 || manifest.version === 5
       ? { audio: rewriteOptimizedAudioAssets(manifest.audio, mapping) }
+      : {}),
+    ...(manifest.version === 5
+      ? {
+          eventAudio: {
+            ...manifest.eventAudio,
+            bindings: manifest.eventAudio.bindings.map((binding) => ({
+              ...binding,
+              audio: {
+                ...binding.audio,
+                asset: {
+                  sources: binding.audio.asset.sources.map((source) => ({
+                    ...source,
+                    path: rewriteRef(source.path, mapping),
+                    mediaType: rewriteRef(source.path, mapping)
+                      .toLowerCase()
+                      .endsWith(".m4a")
+                      ? "audio/mp4"
+                      : source.mediaType,
+                  })),
+                },
+              },
+            })),
+          },
+        }
       : {}),
     nodes,
     ...(manifest.symbolPackage

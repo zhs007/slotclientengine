@@ -56,6 +56,27 @@ describe("optimized package flow", () => {
         ],
         programmaticEffects: ["click"],
       },
+      eventAudio: {
+        version: 1 as const,
+        ignoreLegacyAudio: false,
+        bindings: [
+          {
+            event: "gamelayout:/mode/Alpha/state/stable/entered" as const,
+            audio: {
+              name: "event-alert",
+              asset: {
+                sources: [
+                  { path: "alert.wav", mediaType: "audio/wav" as const },
+                ],
+              },
+              category: "effect" as const,
+              playback: "once" as const,
+              voices: { maxConcurrent: 1, overflow: "restart-oldest" as const },
+              focus: { bgm: { targetGain: 0.5 } },
+            },
+          },
+        ],
+      },
       gameModes: {
         ...latest.gameModes,
         modes: latest.gameModes!.modes.map((mode) =>
@@ -73,6 +94,7 @@ describe("optimized package flow", () => {
           ...logicalFixtureFiles(),
           ["base.wav", new Uint8Array([1, 2, 3])],
           ["click.wav", new Uint8Array([4, 5])],
+          ["alert.wav", new Uint8Array([6, 7])],
         ]),
       }),
     );
@@ -86,21 +108,24 @@ describe("optimized package flow", () => {
       fakeRunner(),
       fakeAudioRunner(),
     );
-    expect(result.convertedAudioCount).toBe(2);
+    expect(result.convertedAudioCount).toBe(3);
     const validated = await validateLayoutPackageBytes(
       new Uint8Array(await readFile(result.outputPath)),
     );
     expect(validated.files.has("base.m4a")).toBe(true);
     expect(validated.files.has("click.m4a")).toBe(true);
     expect(validated.files.has("base.wav")).toBe(false);
-    if (validated.manifest.version !== 4)
-      throw new Error("Expected Scene Layout v4.");
+    if (validated.manifest.version !== 5)
+      throw new Error("Expected Scene Layout v5.");
     expect(validated.manifest.audio.music[0]?.asset.sources).toEqual([
       { path: "base.m4a", mediaType: "audio/mp4" },
     ]);
     expect(validated.manifest.audio.effects[0]?.asset.sources).toEqual([
       { path: "click.m4a", mediaType: "audio/mp4" },
     ]);
+    expect(
+      validated.manifest.eventAudio.bindings[0]?.audio.asset.sources,
+    ).toEqual([{ path: "alert.m4a", mediaType: "audio/mp4" }]);
     const groups = parseSceneLayoutAssetGroups(
       JSON.parse(await readFile(result.assetsJsonPath, "utf8")),
     );
@@ -109,7 +134,7 @@ describe("optimized package flow", () => {
     expect(groups.optimization).toMatchObject({
       audioCodec: "aac-lc",
       audioContainer: "m4a",
-      convertedAudioCount: 2,
+      convertedAudioCount: 3,
       bgmBitrateKbps: 128,
       effectMonoBitrateKbps: 64,
       effectStereoBitrateKbps: 96,
@@ -117,8 +142,8 @@ describe("optimized package flow", () => {
     expect(
       groups.groups.find((group) => group.id === "audio:scene-layout"),
     ).toMatchObject({
-      requiredAssets: ["base.m4a", "click.m4a"],
-      incrementalAssets: ["base.m4a", "click.m4a"],
+      requiredAssets: ["alert.m4a", "base.m4a", "click.m4a"],
+      incrementalAssets: ["alert.m4a", "base.m4a", "click.m4a"],
     });
     expect(groups.initialAssets).not.toContain("base.m4a");
   });

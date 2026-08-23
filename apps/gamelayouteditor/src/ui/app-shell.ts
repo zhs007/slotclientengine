@@ -133,6 +133,7 @@ import {
 import { symbolsWorkspaceMarkup } from "./symbols-workspace.js";
 import { bigWinWorkspaceMarkup } from "./bigwin-workspace.js";
 import { projectWorkspaceMarkup } from "./project-workspace.js";
+import { mountProjectEventAudioDialog } from "./event-audio-dialog.js";
 import {
   createResourcePickerState,
   getResourcePickerCandidates,
@@ -266,6 +267,8 @@ export class GameLayoutEditorApp {
   #modeDialogNewType: "" | EditorProject["mode"] = "";
   #modeDialogRenameId = "";
   #modeDialogFeedback = "";
+  #eventAudioDialog: ReturnType<typeof mountProjectEventAudioDialog> | null =
+    null;
 
   constructor(root: HTMLElement) {
     this.#root = root;
@@ -323,6 +326,8 @@ export class GameLayoutEditorApp {
     this.#symbolImportBusy = false;
     if (this.#feedbackTimer) clearTimeout(this.#feedbackTimer);
     this.closePicker(false);
+    this.#eventAudioDialog?.destroy();
+    this.#eventAudioDialog = null;
     this.#unsubscribe?.();
     this.#preview?.destroy();
     this.#resourcePickerPreview.destroy();
@@ -1256,6 +1261,8 @@ export class GameLayoutEditorApp {
       tab.tabIndex = active ? 0 : -1;
     }
     const panel = this.requireElement("[data-workspace-panel]");
+    this.#eventAudioDialog?.destroy();
+    this.#eventAudioDialog = null;
     const symbolsPanel = this.requireElement("[data-symbols-workspace]");
     const bigWinPanel = this.requireElement("[data-bigwin-workspace]");
     const fixedTab =
@@ -1307,6 +1314,23 @@ export class GameLayoutEditorApp {
       if (to) to.value = this.#session.newTransitionToModeId;
     }
     if (!fixedTab) this.bindWorkspaceActions(snapshot.project);
+    if (this.#session.activeTab === "project") {
+      const host = panel.querySelector<HTMLElement>(
+        "[data-event-audio-dialog-host]",
+      );
+      if (host)
+        this.#eventAudioDialog = mountProjectEventAudioDialog({
+          root: host,
+          project: snapshot.project,
+          onConfirm: (bindings) =>
+            this.runTransaction((draft) => {
+              draft.eventAudio = {
+                ...draft.eventAudio,
+                bindings: structuredClone(bindings),
+              };
+            }, `已保存 ${bindings.length} 项全局 Event 音乐音效。`),
+        });
+    }
     panel
       .querySelectorAll<HTMLDetailsElement>("[data-inspector-section]")
       .forEach((details) =>
@@ -2385,6 +2409,22 @@ export class GameLayoutEditorApp {
           draft.id = (event.currentTarget as HTMLInputElement).value;
         }),
       );
+    panel
+      .querySelector<HTMLInputElement>("[data-ignore-legacy-audio]")
+      ?.addEventListener("change", (event) => {
+        const checked = (event.currentTarget as HTMLInputElement).checked;
+        this.runTransaction(
+          (draft) => {
+            draft.eventAudio = {
+              ...draft.eventAudio,
+              ignoreLegacyAudio: checked,
+            };
+          },
+          checked
+            ? "runtime 将忽略老版本自动音乐音效配置。"
+            : "runtime 将同时保留老版本自动音乐音效配置。",
+        );
+      });
     panel
       .querySelector<HTMLSelectElement>("[data-mode-bgm-asset]")
       ?.addEventListener("change", (event) => {

@@ -5,7 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@10.0.0",
   "scripts": {
-    "prepare:deps": "pnpm --filter @slotclientengine/editorresource build && pnpm --filter @slotclientengine/audiocore build && pnpm --filter @slotclientengine/vnicore build && pnpm --filter @slotclientengine/rendercore build",
+    "prepare:deps": "pnpm --filter @slotclientengine/editorresource build && pnpm --filter @slotclientengine/audiocore build && pnpm --filter @slotclientengine/vnicore build && pnpm --filter @slotclientengine/rendercore build && pnpm --filter @slotclientengine/editorcore build",
     "dev": "pnpm run prepare:deps && node ../../scripts/run-vite-dev.mjs",
     "build": "pnpm run prepare:deps && vite build",
     "build:task131": "pnpm run prepare:deps && ts-node-esm --project tsconfig.json scripts/build-task131-layout.ts",
@@ -22,6 +22,7 @@
     "@slotclientengine/audiocore": "workspace:*",
     "@slotclientengine/browserartifactio": "workspace:*",
     "@slotclientengine/editorresource": "workspace:*",
+    "@slotclientengine/editorcore": "workspace:*",
     "@slotclientengine/rendercore": "workspace:*",
     "@slotclientengine/vnicore": "workspace:*",
     "pixi.js": "^8.1.6"

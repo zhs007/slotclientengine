@@ -83,6 +83,7 @@ export interface EditorResourceReference {
     | "background"
     | "scene-transition"
     | "mode-bgm"
+    | "event-audio"
     | "programmatic-audio";
   readonly variants: readonly SceneLayoutVariantId[];
 }

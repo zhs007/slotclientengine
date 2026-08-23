@@ -16,6 +16,8 @@ Game Layout event group 使用独立的 `mountEditorGameLayoutEventDialog()`。�
 lifecycle 不由 EditorCore 预置。Dialog 左侧维护有序 event 列表，右侧一次只展开一个 catalog facet；候选较多时
 提供当前层搜索和可回退 breadcrumb，避免多层树状下拉。
 
+宿主也可传入固定 `sources` 与自定义 `inspectCatalog`，用当前尚未导出的 typed project 作为 event source；这种模式不复制 Game Layout event 编译器。可选 `configuration` adapter 为每行提供 create/clone/mount/validate/summarize 生命周期，配置跟随 row draft 一起取消或确认，宿主重渲染前必须 `destroy()`。asset picker 等业务配置仍由宿主实现，EditorCore 不接管业务 bytes。
+
 底层 logical identity 仍是 `@slotclientengine/editorresource` 的扁平 filename key；树是 owner 关系的视图，不是目录。Spine atlas page、VNI 图片和 package leaf 只能随其顶层 root 使用，不能独立绑定。需要复用时应单独导入顶层资源；相同 bytes 在 `assets.map.json` materialization 时共享 content-addressed payload，logical identity 不合并。
 
 ## Host 接入

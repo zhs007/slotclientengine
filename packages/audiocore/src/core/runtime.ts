@@ -1,6 +1,8 @@
 import type {
   AudioBgmFocusPolicyV1,
   AudioEffectBindingV1,
+  AudioEventTrackBindingV1,
+  AudioEventTrackFocusV1,
   AudioMusicBindingV1,
 } from "../data/index.js";
 import type {
@@ -17,6 +19,11 @@ export interface ResolvedAudioEffect {
 
 export interface ResolvedAudioMusic {
   readonly binding: AudioMusicBindingV1;
+  readonly sources: readonly AudioBackendSource[];
+}
+
+export interface ResolvedAudioEventTrack {
+  readonly binding: AudioEventTrackBindingV1;
   readonly sources: readonly AudioBackendSource[];
 }
 
@@ -58,6 +65,8 @@ export interface AudioRuntime {
     options?: { readonly delaySeconds?: number },
   ): AudioPlaybackHandle;
   stopEffect(route: string): void;
+  playTrack(name: string): AudioPlaybackHandle;
+  stopTrack(name: string): void;
   requestMusic(name: string | null): Promise<void>;
   observeMusic(listener: (event: AudioMusicLifecycleEvent) => void): () => void;
   update(deltaSeconds: number): void;
@@ -71,7 +80,8 @@ export interface AudioRuntime {
 
 interface PendingEffect {
   readonly handle: MutablePlaybackHandle;
-  readonly resolved: ResolvedAudioEffect;
+  readonly playbackKey: string;
+  readonly resolved: ResolvedAudioEffect | ResolvedAudioEventTrack;
   remainingSeconds: number;
   sound: AudioBackendSound | null;
   ready: boolean;
@@ -80,16 +90,19 @@ interface PendingEffect {
 
 interface ActiveEffect {
   readonly handle: MutablePlaybackHandle;
-  readonly resolved: ResolvedAudioEffect;
+  readonly playbackKey: string;
+  readonly resolved: ResolvedAudioEffect | ResolvedAudioEventTrack;
   readonly instance: AudioBackendInstance;
   readonly disposeEnded: () => void;
   readonly sequence: number;
 }
 
 interface MusicVoice {
+  readonly id: number;
   readonly name: string;
   readonly binding: AudioMusicBindingV1;
   readonly instance: AudioBackendInstance;
+  readonly sourceIdentity: string;
   transitionGain: number;
   startGain: number;
   targetGain: number;
@@ -136,11 +149,13 @@ export function createAudioRuntime(options: {
   readonly backend: AudioBackend;
   readonly effects: Readonly<Record<string, ResolvedAudioEffect>>;
   readonly music?: Readonly<Record<string, ResolvedAudioMusic>>;
+  readonly tracks?: Readonly<Record<string, ResolvedAudioEventTrack>>;
 }): AudioRuntime {
   return new DefaultAudioRuntime(
     options.backend,
     options.effects,
     options.music ?? {},
+    options.tracks ?? {},
   );
 }
 
@@ -148,6 +163,7 @@ class DefaultAudioRuntime implements AudioRuntime {
   readonly #backend: AudioBackend;
   readonly #effects: Readonly<Record<string, ResolvedAudioEffect>>;
   readonly #music: Readonly<Record<string, ResolvedAudioMusic>>;
+  readonly #tracks: Readonly<Record<string, ResolvedAudioEventTrack>>;
   readonly #sounds = new Map<string, AudioBackendSound>();
   readonly #preparing = new Map<string, Promise<AudioBackendSound>>();
   readonly #pending = new Map<number, PendingEffect>();
@@ -158,6 +174,7 @@ class DefaultAudioRuntime implements AudioRuntime {
     (event: AudioMusicLifecycleEvent) => void
   >();
   #nextId = 1;
+  #nextMusicVoiceId = -1;
   #sequence = 1;
   #masterMuted = false;
   #musicVolume = 1;
@@ -176,10 +193,12 @@ class DefaultAudioRuntime implements AudioRuntime {
     backend: AudioBackend,
     effects: Readonly<Record<string, ResolvedAudioEffect>>,
     music: Readonly<Record<string, ResolvedAudioMusic>>,
+    tracks: Readonly<Record<string, ResolvedAudioEventTrack>>,
   ) {
     this.#backend = backend;
     this.#effects = Object.freeze({ ...effects });
     this.#music = Object.freeze({ ...music });
+    this.#tracks = Object.freeze({ ...tracks });
   }
 
   async prepare(routes: readonly string[]): Promise<void> {
@@ -205,62 +224,28 @@ class DefaultAudioRuntime implements AudioRuntime {
       throw new Error(
         "audio effect delaySeconds must be finite and non-negative.",
       );
-    if (resolved.binding.playback === "loop") {
-      const existing = [
-        ...this.#pending.values(),
-        ...this.#active.values(),
-      ].find(
-        (entry) =>
-          entry.handle.route === route &&
-          entry.resolved.binding.playback === "loop",
-      );
-      if (existing) return existing.handle;
-    }
-    const current = this.activeForRoute(route);
-    if (
-      resolved.binding.playback === "once" &&
-      current.length >= resolved.binding.voices.maxConcurrent
-    ) {
-      if (resolved.binding.voices.overflow === "reject")
-        return this.failedHandle(
-          route,
-          new Error(`audio effect voice limit reached: ${route}`),
-        );
-      this.stopById(current[0]!.handle.id);
-    }
-    const id = this.#nextId++;
-    const handle = new MutablePlaybackHandle(id, route, () =>
-      this.stopById(id),
-    );
-    const pending: PendingEffect = {
-      handle,
-      resolved,
-      remainingSeconds: delaySeconds,
-      sound: null,
-      ready: false,
-      cancelled: false,
-    };
-    this.#pending.set(id, pending);
-    void this.prepareSound(`effect:${route}`, resolved.sources).then(
-      (sound) => {
-        if (this.#destroyed || pending.cancelled || !this.#pending.has(id))
-          return;
-        pending.sound = sound;
-        pending.ready = true;
-        this.tryStartPending(pending);
-      },
-      (error) => this.failPending(pending, error),
-    );
-    this.tryStartPending(pending);
-    return handle;
+    return this.startPlayback(`effect:${route}`, route, resolved, delaySeconds);
   }
 
   stopEffect(route: string): void {
     this.assertAlive();
     if (!this.#effects[route])
       throw new Error(`unknown audio effect route: ${route}`);
-    for (const entry of [...this.#pending.values(), ...this.#active.values()])
-      if (entry.handle.route === route) this.stopById(entry.handle.id);
+    this.stopPlaybackKey(`effect:${route}`);
+  }
+
+  playTrack(name: string): AudioPlaybackHandle {
+    this.assertAlive();
+    const resolved = this.#tracks[name];
+    if (!resolved) throw new Error(`unknown audio event track: ${name}`);
+    return this.startPlayback(`track:${name}`, name, resolved, 0);
+  }
+
+  stopTrack(name: string): void {
+    this.assertAlive();
+    if (!this.#tracks[name])
+      throw new Error(`unknown audio event track: ${name}`);
+    this.stopPlaybackKey(`track:${name}`);
   }
 
   async requestMusic(name: string | null): Promise<void> {
@@ -295,9 +280,11 @@ class DefaultAudioRuntime implements AudioRuntime {
       return;
     }
     const next: MusicVoice = {
+      id: this.#nextMusicVoiceId--,
       name,
       binding: resolved.binding,
       instance,
+      sourceIdentity: sourceIdentity(resolved.sources),
       transitionGain: 0,
       startGain: 0,
       targetGain: 1,
@@ -374,6 +361,7 @@ class DefaultAudioRuntime implements AudioRuntime {
   }
   setMusicVolume(volume: number): void {
     this.#musicVolume = unit(volume, "music volume");
+    this.applyEffectVolumes();
     this.applyMusicState();
   }
   setEffectVolume(volume: number): void {
@@ -421,6 +409,65 @@ class DefaultAudioRuntime implements AudioRuntime {
     for (const listener of [...this.#musicListeners]) listener(event);
   }
 
+  private startPlayback(
+    playbackKey: string,
+    route: string,
+    resolved: ResolvedAudioEffect | ResolvedAudioEventTrack,
+    delaySeconds: number,
+  ): AudioPlaybackHandle {
+    const binding = resolved.binding;
+    if (binding.playback === "loop") {
+      const existing = [
+        ...this.#pending.values(),
+        ...this.#active.values(),
+      ].find((entry) => entry.playbackKey === playbackKey);
+      if (existing) return existing.handle;
+    }
+    const current = this.activeForKey(playbackKey);
+    if (
+      binding.playback === "once" &&
+      current.length >= binding.voices.maxConcurrent
+    ) {
+      if (binding.voices.overflow === "reject")
+        return this.failedHandle(
+          route,
+          new Error(`audio voice limit reached: ${route}`),
+        );
+      this.stopById(current[0]!.handle.id);
+    }
+    const id = this.#nextId++;
+    const handle = new MutablePlaybackHandle(id, route, () =>
+      this.stopById(id),
+    );
+    const pending: PendingEffect = {
+      handle,
+      playbackKey,
+      resolved,
+      remainingSeconds: delaySeconds,
+      sound: null,
+      ready: false,
+      cancelled: false,
+    };
+    this.#pending.set(id, pending);
+    void this.prepareSound(playbackKey, resolved.sources).then(
+      (sound) => {
+        if (this.#destroyed || pending.cancelled || !this.#pending.has(id))
+          return;
+        pending.sound = sound;
+        pending.ready = true;
+        this.tryStartPending(pending);
+      },
+      (error) => this.failPending(pending, error),
+    );
+    this.tryStartPending(pending);
+    return handle;
+  }
+
+  private stopPlaybackKey(playbackKey: string): void {
+    for (const entry of [...this.#pending.values(), ...this.#active.values()])
+      if (entry.playbackKey === playbackKey) this.stopById(entry.handle.id);
+  }
+
   private prepareSound(
     key: string,
     sources: readonly AudioBackendSource[],
@@ -460,7 +507,7 @@ class DefaultAudioRuntime implements AudioRuntime {
     void Promise.resolve(
       pending.sound.play({
         loop: pending.resolved.binding.playback === "loop",
-        volume: this.effectGain(),
+        volume: 0,
       }),
     ).then(
       (instance) => {
@@ -476,17 +523,20 @@ class DefaultAudioRuntime implements AudioRuntime {
         );
         active = {
           handle: pending.handle,
+          playbackKey: pending.playbackKey,
           resolved: pending.resolved,
           instance,
           disposeEnded,
           sequence: this.#sequence++,
         };
         this.#active.set(pending.handle.id, active);
-        if (pending.resolved.binding.bgm.kind !== "keep") {
-          this.#focus.set(pending.handle.id, pending.resolved.binding.bgm);
-          this.recomputeFocus(pending.resolved.binding.bgm, "acquire");
+        const legacyFocus = legacyBgmFocus(pending.resolved);
+        if (legacyFocus && legacyFocus.kind !== "keep") {
+          this.#focus.set(pending.handle.id, legacyFocus);
+          this.recomputeFocus(legacyFocus, "acquire");
         }
         this.applyEffectVolumes();
+        this.applyMusicState();
       },
       (error) => pending.handle.settle("failed", error),
     );
@@ -524,11 +574,13 @@ class DefaultAudioRuntime implements AudioRuntime {
       this.recomputeFocus(focus, "release");
     }
     active.handle.settle(state);
+    this.applyEffectVolumes();
+    this.applyMusicState();
   }
 
-  private activeForRoute(route: string): (PendingEffect | ActiveEffect)[] {
+  private activeForKey(playbackKey: string): (PendingEffect | ActiveEffect)[] {
     return [...this.#pending.values(), ...this.#active.values()]
-      .filter((entry) => entry.handle.route === route)
+      .filter((entry) => entry.playbackKey === playbackKey)
       .sort(
         (a, b) =>
           ("sequence" in a ? a.sequence : a.handle.id) -
@@ -576,6 +628,7 @@ class DefaultAudioRuntime implements AudioRuntime {
     this.#focusElapsedSeconds = 0;
     this.#focusDurationSeconds = duration;
     if (duration === 0) this.#focusGain = target;
+    this.applyEffectVolumes();
     this.applyMusicState();
   }
 
@@ -605,21 +658,61 @@ class DefaultAudioRuntime implements AudioRuntime {
   }
 
   private applyEffectVolumes(): void {
-    const volume = this.effectGain();
-    for (const active of this.#active.values()) active.instance.volume = volume;
+    for (const active of this.#active.values()) {
+      const category = playbackCategory(active.resolved);
+      const base = this.#masterMuted
+        ? 0
+        : category === "music"
+          ? this.#musicVolume
+          : this.#effectVolume;
+      const legacyMusicFocus = category === "music" ? this.#focusGain : 1;
+      active.instance.volume =
+        base *
+        legacyMusicFocus *
+        this.eventFocusGain(
+          active.handle.id,
+          category,
+          sourceIdentity(active.resolved.sources),
+        );
+    }
   }
 
   private applyMusicState(): void {
     const base = this.#masterMuted ? 0 : this.#musicVolume;
     for (const voice of this.#musicVoices) {
       voice.instance.volume = base * voice.transitionGain * this.#focusGain;
+      voice.instance.volume *= this.eventFocusGain(
+        voice.id,
+        "music",
+        voice.sourceIdentity,
+      );
       if (this.#focusKind === "pause" && this.#focusGain === 0)
         voice.instance.paused = true;
     }
   }
 
-  private effectGain(): number {
-    return this.#masterMuted ? 0 : this.#effectVolume;
+  private eventFocusGain(
+    voiceId: number,
+    category: "music" | "effect",
+    identity: string,
+  ): number {
+    let gain = 1;
+    const targetSequence = this.#active.get(voiceId)?.sequence ?? Infinity;
+    for (const owner of this.#active.values()) {
+      if (owner.handle.id === voiceId) continue;
+      const focus = eventFocus(owner.resolved);
+      if (!focus) continue;
+      if (category === "music" && focus.bgm)
+        gain = Math.min(gain, focus.bgm.targetGain);
+      if (category === "effect" && focus.effects) {
+        const matches =
+          focus.effects.scope === "all" ||
+          (sourceIdentity(owner.resolved.sources) === identity &&
+            targetSequence < owner.sequence);
+        if (matches) gain = Math.min(gain, focus.effects.targetGain);
+      }
+    }
+    return gain;
   }
   private assertAlive(): void {
     if (this.#destroyed) throw new Error("audio runtime is destroyed.");
@@ -633,4 +726,26 @@ function unit(value: number, label: string): number {
 }
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function playbackCategory(
+  resolved: ResolvedAudioEffect | ResolvedAudioEventTrack,
+): "music" | "effect" {
+  return "category" in resolved.binding ? resolved.binding.category : "effect";
+}
+
+function legacyBgmFocus(
+  resolved: ResolvedAudioEffect | ResolvedAudioEventTrack,
+): AudioBgmFocusPolicyV1 | null {
+  return "bgm" in resolved.binding ? resolved.binding.bgm : null;
+}
+
+function eventFocus(
+  resolved: ResolvedAudioEffect | ResolvedAudioEventTrack,
+): AudioEventTrackFocusV1 | null {
+  return "focus" in resolved.binding ? resolved.binding.focus : null;
+}
+
+function sourceIdentity(sources: readonly AudioBackendSource[]): string {
+  return JSON.stringify(sources.map(({ url, mediaType }) => [url, mediaType]));
 }

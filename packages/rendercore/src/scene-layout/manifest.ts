@@ -34,7 +34,11 @@ export function parseSceneLayoutManifest(
   value: unknown,
 ): SceneLayoutManifestV1 {
   const sourceRecord = readRecord(value, "scene layout manifest");
-  if (sourceRecord.version === 3 || sourceRecord.version === 4)
+  if (
+    sourceRecord.version === 3 ||
+    sourceRecord.version === 4 ||
+    sourceRecord.version === 5
+  )
     return materializeInitialSceneLayoutManifest(
       upgradeSceneLayoutManifestToLatest(value),
     );
@@ -51,7 +55,11 @@ export function parseSceneLayoutManifestDocument(
   value: unknown,
 ): SceneLayoutManifest {
   const sourceRecord = readRecord(value, "scene layout manifest");
-  if (sourceRecord.version === 3 || sourceRecord.version === 4)
+  if (
+    sourceRecord.version === 3 ||
+    sourceRecord.version === 4 ||
+    sourceRecord.version === 5
+  )
     return upgradeSceneLayoutManifestToLatest(value);
   const normalized = normalizeLegacySceneLayoutPresentationOrders(value);
   const record = readRecord(normalized, "scene layout manifest");
@@ -184,8 +192,11 @@ export function collectSceneLayoutAssetPaths(
 ): readonly string[] {
   const parsed = parseSceneLayoutManifestDocument(manifest);
   const paths = new Set<string>();
-  if (parsed.version === 4)
+  if (parsed.version === 4 || parsed.version === 5)
     for (const path of collectAudioAssetPaths(parsed.audio)) paths.add(path);
+  if (parsed.version === 5)
+    for (const binding of parsed.eventAudio.bindings)
+      for (const source of binding.audio.asset.sources) paths.add(source.path);
   for (const node of parsed.nodes) {
     const resource = node.resource;
     if (resource.kind === "image") paths.add(resource.path);

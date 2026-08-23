@@ -226,7 +226,7 @@ Sprite 复用，不创建 snapshot、`Application`、canvas、DOM、RAF 或字�
 
 ## Scene Layout API
 
-`@slotclientengine/rendercore/scene-layout` 提供严格且向后兼容的 scene-layout v1–v4 parser、精确资源闭包和 production package runtime。package resource会把合法v1–v3规范化为v4并生成确定性的`runtimeAllocation`与空音频合同；原生v4必须完整且与typed引用严格一致。v4 按 mode 配置 optional loop BGM，在成功 commit 后 crossfade，并把 Popup/Symbol local effect 聚合为严格全局 route。
+`@slotclientengine/rendercore/scene-layout` 提供严格且向后兼容的 scene-layout v1–v5 parser、精确资源闭包和 production package runtime。package resource 会把合法 v1–v4 规范化为 v5，并生成确定性的 `runtimeAllocation`、空旧音频目录与默认 event-audio 合同；原生 v5 必须完整且与 typed 引用严格一致。v5 保留按 mode 配置的 optional loop BGM，并可把既有 canonical event 绑定到 AudioCore track；loop 要求 exact 结束 event，初始化成功后按 displayed、stable 顺序发布 initial mode entered。`ignoreLegacyAudio` 只 gate 自动 mode/Popup/Symbol producer，不影响显式程序 effect API。
 
 第一层统一使用`getSymbolArea()`、`getRenderLayer()`、`getRenderObject()`与`createRenderObject()`。authored object按image/Spine/VNI/image-string返回borrowed typed capability，可见性与mode/variant做AND且不开放position/destroy；program object从exact `runtimeResources`异步创建并由caller拥有。`getLayoutPoint/getLayoutAnchor/resolveLayoutAnchor`直接读写configured authored space，center-origin游戏无需复制Pixi左上角偏移。完整ref grammar、ownership、SymbolGroup几何、坐标映射与示例见[`docs/rendercore-layer-symbol-area-render-object-coordinate-guide.md`](../../docs/rendercore-layer-symbol-area-render-object-coordinate-guide.md)。
 

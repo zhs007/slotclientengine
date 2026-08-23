@@ -1,3 +1,4 @@
+import "@slotclientengine/editorcore/assets/ui.css";
 import "./styles.css";
 import { GameLayoutEditorApp } from "./ui/app-shell.js";
 

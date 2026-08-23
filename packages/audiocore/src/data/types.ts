@@ -53,6 +53,24 @@ export interface AudioMusicBindingV1 {
   readonly fadeInSeconds: number;
 }
 
+export interface AudioEventTrackFocusV1 {
+  readonly bgm?: { readonly targetGain: number };
+  readonly effects?: {
+    readonly scope: "same-audio" | "all";
+    readonly targetGain: number;
+  };
+}
+
+/** Generic authored track. Owners such as Scene Layout supply the trigger. */
+export interface AudioEventTrackBindingV1 {
+  readonly name: string;
+  readonly asset: AudioAssetV1;
+  readonly category: "music" | "effect";
+  readonly playback: "once" | "loop";
+  readonly voices: AudioVoicePolicyV1;
+  readonly focus: AudioEventTrackFocusV1;
+}
+
 export interface AudioEffectManifestV1 {
   readonly version: 1;
   readonly effects: readonly AudioEffectBindingV1[];
