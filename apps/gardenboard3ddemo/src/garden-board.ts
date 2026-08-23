@@ -212,6 +212,25 @@ export class GardenBoardRenderer {
       "#2c7330",
     );
     this.#textures.push(lightTextures, darkTextures);
+    const boardBase = new Mesh(
+      new RoundedBoxGeometry(
+        boardWidth + 0.26,
+        0.08,
+        boardDepth + 0.26,
+        4,
+        0.12,
+      ),
+      new MeshToonMaterial({
+        color: 0x52743a,
+        gradientMap: this.#boardToonGradient,
+        emissive: 0x183719,
+        emissiveIntensity: 0.035,
+      }),
+    );
+    boardBase.name = "cartoon-board-underlay";
+    boardBase.position.y = 0.005;
+    boardBase.receiveShadow = true;
+    boardBase.castShadow = true;
     const geometry = new RoundedBoxGeometry(
       BOARD.cellSize,
       BOARD.cellHeight,
@@ -281,7 +300,7 @@ export class GardenBoardRenderer {
     light.castShadow = true;
     dark.castShadow = true;
     outlines.renderOrder = -1;
-    this.#root.add(outlines, light, dark);
+    this.#root.add(boardBase, outlines, light, dark);
   }
 
   #createFoliage(): void {
