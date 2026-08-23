@@ -195,7 +195,7 @@ function createSurfaceTextures(options: SurfaceOptions): SurfaceTextureSet {
 
 function createToonStyleResources(): ToonStyleResources {
   const gradientMap = new DataTexture(
-    new Uint8Array([48, 112, 184, 255]),
+    new Uint8Array([36, 86, 146, 210]),
     4,
     1,
     RedFormat,
@@ -224,13 +224,14 @@ function makeToonMaterial(
   },
 ): MeshToonMaterial {
   return new MeshToonMaterial({
+    color: 0xb8b8b8,
     map: textures.albedo,
     gradientMap: style.gradientMap,
     bumpMap: textures.bump,
     bumpScale: options.bumpScale * 0.34,
     side: options.side ?? FrontSide,
     emissive: textures.baseColor,
-    emissiveIntensity: 0.06,
+    emissiveIntensity: 0.02,
   });
 }
 
@@ -392,14 +393,14 @@ function createDonut(
   const group = new Group();
   const doughTexture = createSurfaceTextures({
     seed: 0xd011,
-    base: "#C96F2D",
-    accent: "#F3B568",
+    base: "#B85E29",
+    accent: "#D99755",
     pattern: "pores",
   });
   const icingTexture = createSurfaceTextures({
     seed: 0x1c1c,
-    base: "#FF6FA3",
-    accent: "#FFB0C8",
+    base: "#E65F91",
+    accent: "#ED96B2",
     pattern: "mottle",
   });
   textures.push(doughTexture, icingTexture);
@@ -482,14 +483,14 @@ function createToast(
   const group = new Group();
   const crustTexture = createSurfaceTextures({
     seed: 0x70a57,
-    base: "#C96725",
-    accent: "#EC9645",
+    base: "#B35B22",
+    accent: "#D47E38",
     pattern: "ridges",
   });
   const crumbTexture = createSurfaceTextures({
     seed: 0xc2a6b,
-    base: "#FFD27B",
-    accent: "#D98A3D",
+    base: "#E4B75B",
+    accent: "#BE7132",
     pattern: "pores",
   });
   textures.push(crustTexture, crumbTexture);
@@ -547,8 +548,8 @@ function createBanana(
   const group = new Group();
   const peelTexture = createSurfaceTextures({
     seed: 0xba4a4a,
-    base: "#FFD83D",
-    accent: "#9B691C",
+    base: "#E0B82F",
+    accent: "#805516",
     pattern: "spots",
   });
   const tipTexture = createSurfaceTextures({
@@ -595,14 +596,14 @@ function createStrawberry(
   const group = new Group();
   const berryTexture = createSurfaceTextures({
     seed: 0x57a9,
-    base: "#EF3F36",
-    accent: "#FF7665",
+    base: "#D63831",
+    accent: "#E96156",
     pattern: "seeds",
   });
   const leafTexture = createSurfaceTextures({
     seed: 0x1eaf,
-    base: "#4E8D1B",
-    accent: "#86B934",
+    base: "#417B18",
+    accent: "#6D9D2B",
     pattern: "veins",
   });
   textures.push(berryTexture, leafTexture);
@@ -700,14 +701,14 @@ function createCarrot(
   const group = new Group();
   const rootTexture = createSurfaceTextures({
     seed: 0xca2207,
-    base: "#FF8B28",
-    accent: "#D45B15",
+    base: "#DF7420",
+    accent: "#B94A12",
     pattern: "ridges",
   });
   const leafTexture = createSurfaceTextures({
     seed: 0xca1eaf,
-    base: "#43891B",
-    accent: "#86B43A",
+    base: "#387718",
+    accent: "#6B982F",
     pattern: "veins",
   });
   textures.push(rootTexture, leafTexture);
