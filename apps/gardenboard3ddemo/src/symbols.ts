@@ -115,6 +115,26 @@ function createHoverShadowTexture(): CanvasTexture {
   gradient.addColorStop(1, "rgba(255, 255, 255, 0)");
   context.fillStyle = gradient;
   context.fillRect(0, 0, 128, 128);
+  const random = createRandom(0x5ad09);
+  context.globalCompositeOperation = "destination-out";
+  for (let index = 0; index < 46; index += 1) {
+    const angle = random.range(0, Math.PI * 2);
+    const radius = random.range(9, 56);
+    context.globalAlpha = random.range(0.025, 0.11);
+    context.beginPath();
+    context.ellipse(
+      64 + Math.cos(angle) * radius,
+      64 + Math.sin(angle) * radius,
+      random.range(2, 9),
+      random.range(1, 4),
+      angle,
+      0,
+      Math.PI * 2,
+    );
+    context.fill();
+  }
+  context.globalAlpha = 1;
+  context.globalCompositeOperation = "source-over";
   return new CanvasTexture(canvas);
 }
 
@@ -140,6 +160,7 @@ function createSurfaceTextures(options: SurfaceOptions): SurfaceTextureSet {
   bump.fillStyle = "#7b7b7b";
   bump.fillRect(0, 0, size, size);
 
+  const base = new Color(options.base);
   const accent = new Color(options.accent);
   const marks =
     options.pattern === "pores" ? 180 : options.pattern === "spots" ? 70 : 110;
@@ -200,6 +221,43 @@ function createSurfaceTextures(options: SurfaceOptions): SurfaceTextureSet {
   albedo.globalAlpha = 1;
   bump.globalAlpha = 1;
 
+  for (let index = 0; index < 20; index += 1) {
+    const wash = base
+      .clone()
+      .offsetHSL(
+        random.range(-0.018, 0.018),
+        random.range(-0.035, 0.025),
+        random.range(-0.12, 0.12),
+      );
+    albedo.fillStyle = `#${wash.getHexString()}`;
+    albedo.globalAlpha = random.range(0.018, 0.05);
+    albedo.beginPath();
+    albedo.ellipse(
+      random.range(0, size),
+      random.range(0, size),
+      random.range(8, 34),
+      random.range(3, 16),
+      random.range(0, Math.PI),
+      0,
+      Math.PI * 2,
+    );
+    albedo.fill();
+  }
+  for (let index = 0; index < 240; index += 1) {
+    const x = random.range(0, size);
+    const y = random.range(0, size);
+    const length = random.range(0.8, 4.2);
+    const value = Math.floor(random.range(210, 250));
+    albedo.strokeStyle = `rgb(${value}, ${value}, ${value - 8})`;
+    albedo.globalAlpha = random.range(0.025, 0.075);
+    albedo.lineWidth = random.range(0.35, 0.8);
+    albedo.beginPath();
+    albedo.moveTo(x, y);
+    albedo.lineTo(x + length, y + random.range(-0.5, 0.5));
+    albedo.stroke();
+  }
+  albedo.globalAlpha = 1;
+
   const albedoTexture = new CanvasTexture(albedoCanvas);
   const bumpTexture = new CanvasTexture(bumpCanvas);
   albedoTexture.colorSpace = SRGBColorSpace;
@@ -209,7 +267,7 @@ function createSurfaceTextures(options: SurfaceOptions): SurfaceTextureSet {
   return {
     albedo: albedoTexture,
     bump: bumpTexture,
-    baseColor: new Color(options.base),
+    baseColor: base,
     dispose: () => {
       albedoTexture.dispose();
       bumpTexture.dispose();
