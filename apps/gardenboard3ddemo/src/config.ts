@@ -16,9 +16,9 @@ export const VEGETATION = {
   grassCount: 7200,
   distantGrassCount: 5000,
   accentGrassCount: 150,
-  leafCount: 240,
-  flowerCount: 42,
-  accentFlowerCount: 14,
+  leafCount: 210,
+  flowerCount: 38,
+  accentFlowerCount: 10,
   seed: 0x6a17d39b,
 } as const;
 

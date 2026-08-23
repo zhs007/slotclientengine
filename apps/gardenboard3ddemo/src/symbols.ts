@@ -46,8 +46,17 @@ export const SYMBOL_TYPES = [
 const SYMBOL_STAGGER_SECONDS = 0.014;
 const SYMBOL_CAMERA_TILT_RADIANS = (Math.PI / 180) * 30;
 const SYMBOL_TILT_ROTATION_X = -Math.PI / 2 + SYMBOL_CAMERA_TILT_RADIANS;
+const HOVER_SHADOW_OPACITY = 0.14;
 
 export type SymbolType = (typeof SYMBOL_TYPES)[number];
+
+const SYMBOL_VISUAL_SCALE: Readonly<Record<SymbolType, number>> = {
+  donut: 1,
+  toast: 1,
+  banana: 1.08,
+  strawberry: 1.04,
+  carrot: 1.06,
+};
 
 export interface SymbolPlacement {
   readonly type: SymbolType;
@@ -86,12 +95,28 @@ interface AnimatedSymbol {
   readonly spinner: Group;
   readonly shadow: Mesh<CircleGeometry, MeshBasicMaterial>;
   readonly placement: SymbolPlacement;
+  readonly spinSpeed: number;
 }
 
 function requireContext(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
   const context = canvas.getContext("2d");
   if (!context) throw new Error("Canvas 2D context is unavailable.");
   return context;
+}
+
+function createHoverShadowTexture(): CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 128;
+  const context = requireContext(canvas);
+  const gradient = context.createRadialGradient(64, 64, 5, 64, 64, 64);
+  gradient.addColorStop(0, "rgba(255, 255, 255, 0.92)");
+  gradient.addColorStop(0.48, "rgba(255, 255, 255, 0.58)");
+  gradient.addColorStop(0.78, "rgba(255, 255, 255, 0.18)");
+  gradient.addColorStop(1, "rgba(255, 255, 255, 0)");
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, 128, 128);
+  return new CanvasTexture(canvas);
 }
 
 function configureTexture(texture: Texture): void {
@@ -195,7 +220,7 @@ function createSurfaceTextures(options: SurfaceOptions): SurfaceTextureSet {
 
 function createToonStyleResources(): ToonStyleResources {
   const gradientMap = new DataTexture(
-    new Uint8Array([36, 86, 146, 210]),
+    new Uint8Array([36, 98, 162, 210]),
     4,
     1,
     RedFormat,
@@ -483,14 +508,14 @@ function createToast(
   const group = new Group();
   const crustTexture = createSurfaceTextures({
     seed: 0x70a57,
-    base: "#B35B22",
-    accent: "#D47E38",
+    base: "#BD6629",
+    accent: "#DB8942",
     pattern: "ridges",
   });
   const crumbTexture = createSurfaceTextures({
     seed: 0xc2a6b,
-    base: "#E4B75B",
-    accent: "#BE7132",
+    base: "#EDC56B",
+    accent: "#C77B38",
     pattern: "pores",
   });
   textures.push(crustTexture, crumbTexture);
@@ -548,8 +573,8 @@ function createBanana(
   const group = new Group();
   const peelTexture = createSurfaceTextures({
     seed: 0xba4a4a,
-    base: "#E0B82F",
-    accent: "#805516",
+    base: "#E8C43B",
+    accent: "#875D1B",
     pattern: "spots",
   });
   const tipTexture = createSurfaceTextures({
@@ -701,8 +726,8 @@ function createCarrot(
   const group = new Group();
   const rootTexture = createSurfaceTextures({
     seed: 0xca2207,
-    base: "#DF7420",
-    accent: "#B94A12",
+    base: "#E77F2A",
+    accent: "#C05418",
     pattern: "ridges",
   });
   const leafTexture = createSurfaceTextures({
@@ -868,6 +893,7 @@ export class SymbolField extends Group {
   readonly #symbols: AnimatedSymbol[] = [];
   readonly #masters: ReadonlyMap<SymbolType, Group>;
   readonly #shadowGeometry = new CircleGeometry(0.34, 20);
+  readonly #shadowTexture = createHoverShadowTexture();
   #phase: SymbolFieldPhase = "entering";
   #phaseStartedAt: number | null = null;
   #lastUpdateAt: number | null = null;
@@ -914,6 +940,7 @@ export class SymbolField extends Group {
   disposeTextures(): void {
     this.#clearSymbols();
     this.#shadowGeometry.dispose();
+    this.#shadowTexture.dispose();
     for (const textures of this.#textures) textures.dispose();
     this.#toonStyle.gradientMap.dispose();
     this.#toonStyle.outlineMaterial.dispose();
@@ -940,6 +967,7 @@ export class SymbolField extends Group {
         this.#shadowGeometry,
         new MeshBasicMaterial({
           color: 0x173b16,
+          map: this.#shadowTexture,
           transparent: true,
           opacity: 0,
           depthWrite: false,
@@ -948,9 +976,16 @@ export class SymbolField extends Group {
       shadow.name = `${placement.type}-hover-shadow`;
       shadow.rotation.x = -Math.PI / 2;
       shadow.position.set(placement.x, BOARD.cellHeight + 0.025, placement.z);
-      shadow.scale.set(1, 0.58, 1);
+      shadow.scale.set(1.12, 0.65, 1.12);
       this.add(shadow, pivot);
-      this.#symbols.push({ pivot, tilt, spinner, shadow, placement });
+      this.#symbols.push({
+        pivot,
+        tilt,
+        spinner,
+        shadow,
+        placement,
+        spinSpeed: 0.56 * (1 + Math.sin(placement.phase * 1.91 + 0.43) * 0.08),
+      });
     }
   }
 
@@ -962,7 +997,8 @@ export class SymbolField extends Group {
       if (progress < 1) finished = false;
       const motion = sampleSymbolEntrance(progress);
       this.#applyIdleMotion(symbol, timeSeconds, motion.scale, motion.yOffset);
-      symbol.shadow.material.opacity = 0.2 * smoothstep(progress);
+      symbol.shadow.material.opacity =
+        HOVER_SHADOW_OPACITY * smoothstep(progress);
     }
     if (finished) {
       this.#phase = "idle";
@@ -978,7 +1014,7 @@ export class SymbolField extends Group {
       if (progress < 1) finished = false;
       const motion = sampleSymbolExit(progress);
       this.#applyIdleMotion(symbol, timeSeconds, motion.scale, motion.yOffset);
-      symbol.shadow.material.opacity = 0.2 * motion.scale;
+      symbol.shadow.material.opacity = HOVER_SHADOW_OPACITY * motion.scale;
     }
     if (!finished) return;
     const nextPlacements = this.#pendingPlacements;
@@ -999,13 +1035,17 @@ export class SymbolField extends Group {
     scaleFactor: number,
     yOffset = 0,
   ): void {
-    symbol.pivot.scale.setScalar(symbol.placement.scale * scaleFactor);
+    const visualScale = SYMBOL_VISUAL_SCALE[symbol.placement.type];
+    symbol.pivot.scale.setScalar(
+      symbol.placement.scale * visualScale * scaleFactor,
+    );
     symbol.pivot.position.y =
       BOARD.cellHeight +
       0.55 +
       Math.sin(timeSeconds * 1.25 + symbol.placement.phase) * 0.075 +
       yOffset;
-    symbol.spinner.rotation.z = symbol.placement.rotation - timeSeconds * 0.56;
+    symbol.spinner.rotation.z =
+      symbol.placement.rotation - timeSeconds * symbol.spinSpeed;
     symbol.tilt.rotation.x =
       SYMBOL_TILT_ROTATION_X +
       Math.sin(timeSeconds * 0.9 + symbol.placement.phase) * 0.065;
@@ -1013,7 +1053,8 @@ export class SymbolField extends Group {
       Math.sin(timeSeconds * 0.62 + symbol.placement.phase * 0.73) * 0.025;
     const shadowPulse =
       1 - Math.sin(timeSeconds * 1.25 + symbol.placement.phase) * 0.08;
-    symbol.shadow.scale.set(shadowPulse, shadowPulse * 0.58, shadowPulse);
+    const shadowScale = shadowPulse * visualScale * 1.12;
+    symbol.shadow.scale.set(shadowScale, shadowScale * 0.58, shadowScale);
   }
 
   #clearSymbols(): void {
