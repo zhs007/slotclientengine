@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { BOARD } from "../src/config.js";
-import { SYMBOL_TYPES, createSymbolPlacements } from "../src/symbols.js";
+import {
+  SYMBOL_TYPES,
+  createSymbolPlacements,
+  sampleSymbolEntrance,
+  sampleSymbolExit,
+} from "../src/symbols.js";
 
 describe("game symbol placement", () => {
   it("is deterministic and uses unique board cells", () => {
@@ -40,5 +45,40 @@ describe("game symbol placement", () => {
     expect(
       new Set(placements.map(({ column, row }) => `${column}:${row}`)).size,
     ).toBe(BOARD.columns * BOARD.rows);
+  });
+
+  it("staggers a full board from top to bottom, then left to right", () => {
+    const placements = createSymbolPlacements(
+      515151,
+      BOARD.columns * BOARD.rows,
+    );
+    const delayAt = (column: number, row: number) =>
+      placements.find(
+        (placement) => placement.column === column && placement.row === row,
+      )!.delay;
+    expect(delayAt(0, 0)).toBe(0);
+    expect(delayAt(0, 1)).toBeGreaterThan(delayAt(0, 0));
+    expect(delayAt(0, BOARD.rows - 1)).toBeLessThan(delayAt(1, 0));
+    expect(delayAt(BOARD.columns - 1, BOARD.rows - 1)).toBeGreaterThan(
+      delayAt(BOARD.columns - 1, BOARD.rows - 2),
+    );
+  });
+});
+
+describe("game symbol transition motion", () => {
+  it("pops upward while growing into place", () => {
+    expect(sampleSymbolEntrance(0)).toEqual({ scale: 0, yOffset: -0.2 });
+    expect(sampleSymbolEntrance(0.5).scale).toBeGreaterThan(0.5);
+    expect(sampleSymbolEntrance(0.5).yOffset).toBeGreaterThan(0);
+    expect(sampleSymbolEntrance(1).scale).toBeCloseTo(1);
+    expect(sampleSymbolEntrance(1).yOffset).toBeCloseTo(0);
+  });
+
+  it("jumps upward while shrinking out", () => {
+    expect(sampleSymbolExit(0)).toEqual({ scale: 1, yOffset: 0 });
+    expect(sampleSymbolExit(0.5).scale).toBeLessThan(1);
+    expect(sampleSymbolExit(0.5).yOffset).toBeGreaterThan(0);
+    expect(sampleSymbolExit(1).scale).toBe(0);
+    expect(sampleSymbolExit(1).yOffset).toBeCloseTo(0.12);
   });
 });
