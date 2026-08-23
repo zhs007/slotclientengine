@@ -1,0 +1,4 @@
+dist/
+node_modules/
+.img2threejs/
+object-sculpt-spec.json
