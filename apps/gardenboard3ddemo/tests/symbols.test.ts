@@ -62,6 +62,7 @@ describe("game symbol placement", () => {
     expect(delayAt(BOARD.columns - 1, BOARD.rows - 1)).toBeGreaterThan(
       delayAt(BOARD.columns - 1, BOARD.rows - 2),
     );
+    expect(delayAt(BOARD.columns - 1, BOARD.rows - 1)).toBeLessThan(0.9);
   });
 });
 
