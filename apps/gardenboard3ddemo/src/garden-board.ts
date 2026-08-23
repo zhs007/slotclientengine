@@ -203,8 +203,8 @@ export class GardenBoardRenderer {
   #createBoard(): void {
     const lightTextures = createCartoonTileTextures(
       0x481f2b,
-      "#69b83f",
-      "#3f8f32",
+      "#70c344",
+      "#439935",
     );
     const darkTextures = createCartoonTileTextures(
       0x229af1,

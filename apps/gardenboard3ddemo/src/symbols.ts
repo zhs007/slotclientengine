@@ -95,7 +95,6 @@ interface AnimatedSymbol {
   readonly spinner: Group;
   readonly shadow: Mesh<CircleGeometry, MeshBasicMaterial>;
   readonly placement: SymbolPlacement;
-  readonly spinSpeed: number;
 }
 
 function requireContext(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
@@ -508,14 +507,14 @@ function createToast(
   const group = new Group();
   const crustTexture = createSurfaceTextures({
     seed: 0x70a57,
-    base: "#BD6629",
-    accent: "#DB8942",
+    base: "#C96B25",
+    accent: "#E38A38",
     pattern: "ridges",
   });
   const crumbTexture = createSurfaceTextures({
     seed: 0xc2a6b,
-    base: "#EDC56B",
-    accent: "#C77B38",
+    base: "#F0C75F",
+    accent: "#CE7830",
     pattern: "pores",
   });
   textures.push(crustTexture, crumbTexture);
@@ -573,8 +572,8 @@ function createBanana(
   const group = new Group();
   const peelTexture = createSurfaceTextures({
     seed: 0xba4a4a,
-    base: "#E8C43B",
-    accent: "#875D1B",
+    base: "#ECCB35",
+    accent: "#8F5B12",
     pattern: "spots",
   });
   const tipTexture = createSurfaceTextures({
@@ -726,8 +725,8 @@ function createCarrot(
   const group = new Group();
   const rootTexture = createSurfaceTextures({
     seed: 0xca2207,
-    base: "#E77F2A",
-    accent: "#C05418",
+    base: "#ED7F24",
+    accent: "#C94E10",
     pattern: "ridges",
   });
   const leafTexture = createSurfaceTextures({
@@ -808,6 +807,68 @@ function shuffle<T>(items: T[], random: RandomSource): T[] {
   return items;
 }
 
+function assignBalancedSymbolTypes(
+  cells: readonly number[],
+  random: RandomSource,
+): ReadonlyMap<number, SymbolType> {
+  const orderedCells = [...cells].sort((left, right) => left - right);
+  const remainderOrder = shuffle([...SYMBOL_TYPES], random);
+  const baseCount = Math.floor(cells.length / SYMBOL_TYPES.length);
+  const extraCount = cells.length % SYMBOL_TYPES.length;
+  const targetCounts = new Map<SymbolType, number>(
+    SYMBOL_TYPES.map((type) => [
+      type,
+      baseCount + (remainderOrder.indexOf(type) < extraCount ? 1 : 0),
+    ]),
+  );
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const remaining = new Map(targetCounts);
+    const assigned = new Map<number, SymbolType>();
+    let failed = false;
+    for (const cell of orderedCells) {
+      const column = cell % BOARD.columns;
+      const forbidden = new Set<SymbolType>();
+      if (column > 0) {
+        const left = assigned.get(cell - 1);
+        if (left) forbidden.add(left);
+      }
+      const above = assigned.get(cell - BOARD.columns);
+      if (above) forbidden.add(above);
+      const candidates = SYMBOL_TYPES.filter(
+        (type) => (remaining.get(type) ?? 0) > 0 && !forbidden.has(type),
+      );
+      if (candidates.length === 0) {
+        failed = true;
+        break;
+      }
+      const maxRemaining = Math.max(
+        ...candidates.map((type) => remaining.get(type) ?? 0),
+      );
+      const preferred = candidates.filter(
+        (type) => (remaining.get(type) ?? 0) >= maxRemaining - 1,
+      );
+      const totalWeight = preferred.reduce(
+        (total, type) => total + (remaining.get(type) ?? 0),
+        0,
+      );
+      let ticket = random.integer(1, totalWeight);
+      let selected = preferred[preferred.length - 1];
+      for (const type of preferred) {
+        ticket -= remaining.get(type) ?? 0;
+        if (ticket <= 0) {
+          selected = type;
+          break;
+        }
+      }
+      assigned.set(cell, selected);
+      remaining.set(selected, (remaining.get(selected) ?? 0) - 1);
+    }
+    if (!failed && assigned.size === orderedCells.length) return assigned;
+  }
+  throw new Error("Unable to create a balanced non-adjacent symbol layout.");
+}
+
 export function createSymbolPlacements(
   seed: number,
   count: number,
@@ -823,14 +884,13 @@ export function createSymbolPlacements(
     Array.from({ length: capacity }, (_, index) => index),
     random,
   );
-  return cells.slice(0, count).map((cell, index) => {
+  const selectedCells = cells.slice(0, count);
+  const typesByCell = assignBalancedSymbolTypes(selectedCells, random);
+  return selectedCells.map((cell) => {
     const column = cell % BOARD.columns;
     const row = Math.floor(cell / BOARD.columns);
     return {
-      type:
-        index < SYMBOL_TYPES.length
-          ? SYMBOL_TYPES[index]
-          : SYMBOL_TYPES[random.integer(0, SYMBOL_TYPES.length - 1)],
+      type: typesByCell.get(cell)!,
       column,
       row,
       x:
@@ -984,7 +1044,6 @@ export class SymbolField extends Group {
         spinner,
         shadow,
         placement,
-        spinSpeed: 0.56 * (1 + Math.sin(placement.phase * 1.91 + 0.43) * 0.08),
       });
     }
   }
@@ -1045,7 +1104,9 @@ export class SymbolField extends Group {
       Math.sin(timeSeconds * 1.25 + symbol.placement.phase) * 0.075 +
       yOffset;
     symbol.spinner.rotation.z =
-      symbol.placement.rotation - timeSeconds * symbol.spinSpeed;
+      symbol.placement.rotation -
+      timeSeconds * 0.56 +
+      Math.sin(timeSeconds * 0.42 + symbol.placement.phase) * 0.075;
     symbol.tilt.rotation.x =
       SYMBOL_TILT_ROTATION_X +
       Math.sin(timeSeconds * 0.9 + symbol.placement.phase) * 0.065;
