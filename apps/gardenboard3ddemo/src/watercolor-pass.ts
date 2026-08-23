@@ -25,7 +25,7 @@ uniform sampler2D tDiffuse;
 uniform vec2 uTexelSize;
 varying vec2 vUv;
 
-float luminance(vec3 color) {
+float watercolorLuma(vec3 color) {
   return dot(color, vec3(0.2126, 0.7152, 0.0722));
 }
 
@@ -55,8 +55,8 @@ void main() {
 
   vec3 wash = center * 0.62 + (north + south + east + west) * 0.095;
   float edge = max(
-    abs(luminance(east) - luminance(west)),
-    abs(luminance(north) - luminance(south))
+    abs(watercolorLuma(east) - watercolorLuma(west)),
+    abs(watercolorLuma(north) - watercolorLuma(south))
   );
   float preserveDetail = smoothstep(0.018, 0.13, edge);
   vec3 color = mix(wash, center, 0.64 + preserveDetail * 0.36);
@@ -66,7 +66,7 @@ void main() {
   float fibre = sin(gl_FragCoord.y * 0.71 + broadGrain * 7.0) * 0.5 + 0.5;
   float paper = (broadGrain - 0.5) * 0.032 +
     (fineGrain - 0.5) * 0.026 + (fibre - 0.5) * 0.009;
-  float pigment = smoothstep(0.12, 0.82, 1.0 - luminance(color));
+  float pigment = smoothstep(0.12, 0.82, 1.0 - watercolorLuma(color));
   color *= 1.0 + paper - pigment * (fineGrain - 0.5) * 0.035;
 
   vec3 warmPaper = vec3(1.0, 0.985, 0.945);
