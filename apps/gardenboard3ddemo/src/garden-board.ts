@@ -76,7 +76,7 @@ export class GardenBoardRenderer {
   readonly #standaloneTextures: Texture[] = [];
   readonly #windMaterials: WindMaterialHandle[] = [];
   readonly #toonGradient = createToonGradient();
-  readonly #boardToonGradient = createToonGradient([66, 166, 255]);
+  readonly #boardToonGradient = createToonGradient([42, 108, 188]);
   readonly #flowers: FlowerField;
   readonly #symbols: SymbolField;
   #destroyed = false;
@@ -203,13 +203,13 @@ export class GardenBoardRenderer {
   #createBoard(): void {
     const lightTextures = createCartoonTileTextures(
       0x481f2b,
-      "#8be651",
-      "#50ad37",
+      "#69b83f",
+      "#3f8f32",
     );
     const darkTextures = createCartoonTileTextures(
       0x229af1,
-      "#5cc63e",
-      "#318c31",
+      "#4b9837",
+      "#2c7330",
     );
     this.#textures.push(lightTextures, darkTextures);
     const geometry = new RoundedBoxGeometry(
@@ -221,10 +221,11 @@ export class GardenBoardRenderer {
     );
     const makeMaterial = (textures: TurfTextureSet) =>
       new MeshToonMaterial({
+        color: 0xb5b5b5,
         map: textures.albedo,
         gradientMap: this.#boardToonGradient,
         emissive: 0x173d17,
-        emissiveIntensity: 0.08,
+        emissiveIntensity: 0.025,
       });
     const count = (BOARD.columns * BOARD.rows) / 2;
     const light = new InstancedMesh(
