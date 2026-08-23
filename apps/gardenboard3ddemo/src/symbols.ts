@@ -39,7 +39,7 @@ export const SYMBOL_TYPES = [
   "carrot",
 ] as const;
 
-const SYMBOL_STAGGER_SECONDS = 0.028;
+const SYMBOL_STAGGER_SECONDS = 0.014;
 
 export type SymbolType = (typeof SYMBOL_TYPES)[number];
 
@@ -889,7 +889,7 @@ export class SymbolField extends Group {
     let finished = true;
     for (const symbol of this.#symbols) {
       const localTime = elapsed - symbol.placement.delay;
-      const progress = clamp01(localTime / 0.62);
+      const progress = clamp01(localTime / 0.46);
       if (progress < 1) finished = false;
       const motion = sampleSymbolEntrance(progress);
       this.#applyIdleMotion(symbol, timeSeconds, motion.scale, motion.yOffset);
@@ -905,7 +905,7 @@ export class SymbolField extends Group {
     let finished = true;
     for (const symbol of this.#symbols) {
       const localTime = elapsed - symbol.placement.delay;
-      const progress = clamp01(localTime / 0.4);
+      const progress = clamp01(localTime / 0.3);
       if (progress < 1) finished = false;
       const motion = sampleSymbolExit(progress);
       this.#applyIdleMotion(symbol, timeSeconds, motion.scale, motion.yOffset);
@@ -936,11 +936,11 @@ export class SymbolField extends Group {
       0.55 +
       Math.sin(timeSeconds * 1.25 + symbol.placement.phase) * 0.075 +
       yOffset;
-    symbol.pivot.rotation.y = symbol.placement.rotation;
+    symbol.pivot.rotation.y = symbol.placement.rotation - timeSeconds * 0.56;
     symbol.pivot.rotation.x =
-      Math.sin(timeSeconds * 0.82 + symbol.placement.phase) * 0.11;
+      Math.sin(timeSeconds * 0.9 + symbol.placement.phase) * 0.095;
     symbol.pivot.rotation.z =
-      Math.sin(timeSeconds * 0.58 + symbol.placement.phase * 0.73) * 0.045;
+      Math.sin(timeSeconds * 0.62 + symbol.placement.phase * 0.73) * 0.025;
     const shadowPulse =
       1 - Math.sin(timeSeconds * 1.25 + symbol.placement.phase) * 0.08;
     symbol.shadow.scale.set(shadowPulse, shadowPulse * 0.58, shadowPulse);
