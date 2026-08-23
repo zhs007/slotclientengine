@@ -74,6 +74,15 @@ void main() {
   color *= 1.0 - smoothstep(0.045, 0.2, edge) *
     (0.025 + broadGrain * 0.025);
 
+  vec2 sunDelta = (vUv - vec2(0.07, 0.94)) * vec2(0.82, 1.0);
+  float sunDistance = length(sunDelta);
+  float sunWash = 1.0 - smoothstep(0.08, 0.92, sunDistance);
+  float sunCore = 1.0 - smoothstep(0.0, 0.34, sunDistance);
+  vec3 sunTint = vec3(1.0, 0.9, 0.5);
+  color *= mix(vec3(1.0), vec3(1.055, 1.025, 0.94), sunWash * 0.34);
+  color += sunTint * (sunWash * 0.055 + sunCore * 0.13) *
+    (0.86 + broadGrain * 0.14);
+
   gl_FragColor = vec4(color, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
