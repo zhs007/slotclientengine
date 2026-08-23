@@ -75,6 +75,10 @@ export class GardenBoardRenderer {
       createSymbolPlacements(createSessionSeed(), SYMBOLS.count),
     );
     this.#root.add(this.#symbols);
+    this.#renderer.domElement.addEventListener(
+      "pointerdown",
+      this.#replaceSymbols,
+    );
     this.#createFoliage();
     this.#flowers = this.#createFlowers();
     this.#createLighting();
@@ -98,6 +102,10 @@ export class GardenBoardRenderer {
     if (this.#destroyed) return;
     this.#destroyed = true;
     this.#renderer.setAnimationLoop(null);
+    this.#renderer.domElement.removeEventListener(
+      "pointerdown",
+      this.#replaceSymbols,
+    );
     this.#root.traverse((object) => {
       if (!(object instanceof Mesh) && !(object instanceof InstancedMesh))
         return;
@@ -121,6 +129,13 @@ export class GardenBoardRenderer {
     this.#flowers.update(timeSeconds);
     this.#symbols.update(timeSeconds);
     this.#renderer.render(this.#scene, this.#camera);
+  };
+
+  readonly #replaceSymbols = (): void => {
+    if (this.#destroyed) return;
+    this.#symbols.replace(
+      createSymbolPlacements(createSessionSeed(), SYMBOLS.count),
+    );
   };
 
   #createGround(): void {

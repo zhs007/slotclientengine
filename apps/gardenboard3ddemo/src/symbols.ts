@@ -39,6 +39,8 @@ export const SYMBOL_TYPES = [
   "carrot",
 ] as const;
 
+const SYMBOL_STAGGER_SECONDS = 0.028;
+
 export type SymbolType = (typeof SYMBOL_TYPES)[number];
 
 export interface SymbolPlacement {
@@ -758,7 +760,7 @@ export function createSymbolPlacements(
       scale: random.range(0.78, 0.9),
       phase: random.range(0, Math.PI * 2),
       rotation: random.range(-0.35, 0.35),
-      delay: (row + column) * 0.035 + random.range(0, 0.12),
+      delay: (column * BOARD.rows + row) * SYMBOL_STAGGER_SECONDS,
     };
   });
 }
@@ -769,33 +771,104 @@ function easeOutBack(value: number): number {
   return 1 + (overshoot + 1) * shifted ** 3 + overshoot * shifted ** 2;
 }
 
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(value, 1));
+}
+
+function smoothstep(value: number): number {
+  const clamped = clamp01(value);
+  return clamped * clamped * (3 - 2 * clamped);
+}
+
+export interface SymbolMotion {
+  readonly scale: number;
+  readonly yOffset: number;
+}
+
+export function sampleSymbolEntrance(progress: number): SymbolMotion {
+  const value = clamp01(progress);
+  return {
+    scale: value === 0 ? 0 : easeOutBack(value),
+    yOffset: -0.2 * (1 - smoothstep(value)) + Math.sin(Math.PI * value) * 0.16,
+  };
+}
+
+export function sampleSymbolExit(progress: number): SymbolMotion {
+  const value = clamp01(progress);
+  return {
+    scale: 1 - smoothstep((value - 0.08) / 0.92),
+    yOffset: Math.sin(Math.PI * value) * 0.3 + value * 0.12,
+  };
+}
+
+type SymbolFieldPhase = "entering" | "idle" | "exiting";
+
 export class SymbolField extends Group {
   readonly #textures: SurfaceTextureSet[] = [];
   readonly #symbols: AnimatedSymbol[] = [];
-  #startedAt: number | null = null;
+  readonly #masters: ReadonlyMap<SymbolType, Group>;
+  readonly #shadowGeometry = new CircleGeometry(0.34, 20);
+  #phase: SymbolFieldPhase = "entering";
+  #phaseStartedAt: number | null = null;
+  #lastUpdateAt: number | null = null;
+  #pendingPlacements: readonly SymbolPlacement[] | null = null;
 
   constructor(placements: readonly SymbolPlacement[]) {
     super();
     this.name = "animated-game-symbols";
-    const masters = new Map<SymbolType, Group>([
+    this.#masters = new Map<SymbolType, Group>([
       ["donut", createDonut(this.#textures)],
       ["toast", createToast(this.#textures)],
       ["banana", createBanana(this.#textures)],
       ["strawberry", createStrawberry(this.#textures)],
       ["carrot", createCarrot(this.#textures)],
     ]);
-    const shadowGeometry = new CircleGeometry(0.34, 20);
+    this.#populate(placements);
+  }
+
+  replace(placements: readonly SymbolPlacement[]): boolean {
+    if (this.#phase !== "idle" || this.#lastUpdateAt === null) return false;
+    this.#pendingPlacements = [...placements];
+    this.#phase = "exiting";
+    this.#phaseStartedAt = this.#lastUpdateAt;
+    return true;
+  }
+
+  update(timeSeconds: number): void {
+    this.#lastUpdateAt = timeSeconds;
+    this.#phaseStartedAt ??= timeSeconds;
+    const elapsed = timeSeconds - this.#phaseStartedAt;
+    if (this.#phase === "exiting") {
+      this.#updateExiting(elapsed, timeSeconds);
+      return;
+    }
+    if (this.#phase === "entering") {
+      this.#updateEntering(elapsed, timeSeconds);
+      return;
+    }
+    for (const symbol of this.#symbols) {
+      this.#applyIdleMotion(symbol, timeSeconds, 1);
+    }
+  }
+
+  disposeTextures(): void {
+    this.#clearSymbols();
+    this.#shadowGeometry.dispose();
+    for (const textures of this.#textures) textures.dispose();
+  }
+
+  #populate(placements: readonly SymbolPlacement[]): void {
     for (const placement of placements) {
       const pivot = new Group();
       pivot.name = `${placement.type}-symbol`;
       pivot.position.set(placement.x, BOARD.cellHeight + 0.55, placement.z);
       pivot.rotation.y = placement.rotation;
       pivot.scale.setScalar(0);
-      const model = masters.get(placement.type)!.clone(true);
+      const model = this.#masters.get(placement.type)!.clone(true);
       model.rotation.x = -0.12;
       pivot.add(model);
       const shadow = new Mesh(
-        shadowGeometry,
+        this.#shadowGeometry,
         new MeshBasicMaterial({
           color: 0x173b16,
           transparent: true,
@@ -812,29 +885,73 @@ export class SymbolField extends Group {
     }
   }
 
-  update(timeSeconds: number): void {
-    this.#startedAt ??= timeSeconds;
-    const elapsed = timeSeconds - this.#startedAt;
+  #updateEntering(elapsed: number, timeSeconds: number): void {
+    let finished = true;
     for (const symbol of this.#symbols) {
       const localTime = elapsed - symbol.placement.delay;
-      const progress = Math.max(0, Math.min(localTime / 0.62, 1));
-      const entranceScale = progress === 0 ? 0 : easeOutBack(progress);
-      const scale = symbol.placement.scale * entranceScale;
-      symbol.pivot.scale.setScalar(scale);
-      symbol.pivot.position.y =
-        BOARD.cellHeight +
-        0.55 +
-        Math.sin(elapsed * 1.25 + symbol.placement.phase) * 0.075;
-      symbol.pivot.rotation.y = symbol.placement.rotation - elapsed * 0.48;
-      symbol.shadow.material.opacity = 0.2 * Math.min(progress, 1);
-      const shadowPulse =
-        1 - Math.sin(elapsed * 1.25 + symbol.placement.phase) * 0.08;
-      symbol.shadow.scale.set(shadowPulse, shadowPulse * 0.58, shadowPulse);
+      const progress = clamp01(localTime / 0.62);
+      if (progress < 1) finished = false;
+      const motion = sampleSymbolEntrance(progress);
+      this.#applyIdleMotion(symbol, timeSeconds, motion.scale, motion.yOffset);
+      symbol.shadow.material.opacity = 0.2 * smoothstep(progress);
+    }
+    if (finished) {
+      this.#phase = "idle";
+      this.#phaseStartedAt = timeSeconds;
     }
   }
 
-  disposeTextures(): void {
-    for (const textures of this.#textures) textures.dispose();
+  #updateExiting(elapsed: number, timeSeconds: number): void {
+    let finished = true;
+    for (const symbol of this.#symbols) {
+      const localTime = elapsed - symbol.placement.delay;
+      const progress = clamp01(localTime / 0.4);
+      if (progress < 1) finished = false;
+      const motion = sampleSymbolExit(progress);
+      this.#applyIdleMotion(symbol, timeSeconds, motion.scale, motion.yOffset);
+      symbol.shadow.material.opacity = 0.2 * motion.scale;
+    }
+    if (!finished) return;
+    const nextPlacements = this.#pendingPlacements;
+    this.#pendingPlacements = null;
+    this.#clearSymbols();
+    if (!nextPlacements) {
+      this.#phase = "idle";
+      return;
+    }
+    this.#populate(nextPlacements);
+    this.#phase = "entering";
+    this.#phaseStartedAt = timeSeconds;
+  }
+
+  #applyIdleMotion(
+    symbol: AnimatedSymbol,
+    timeSeconds: number,
+    scaleFactor: number,
+    yOffset = 0,
+  ): void {
+    symbol.pivot.scale.setScalar(symbol.placement.scale * scaleFactor);
+    symbol.pivot.position.y =
+      BOARD.cellHeight +
+      0.55 +
+      Math.sin(timeSeconds * 1.25 + symbol.placement.phase) * 0.075 +
+      yOffset;
+    symbol.pivot.rotation.y = symbol.placement.rotation;
+    symbol.pivot.rotation.x =
+      Math.sin(timeSeconds * 0.82 + symbol.placement.phase) * 0.11;
+    symbol.pivot.rotation.z =
+      Math.sin(timeSeconds * 0.58 + symbol.placement.phase * 0.73) * 0.045;
+    const shadowPulse =
+      1 - Math.sin(timeSeconds * 1.25 + symbol.placement.phase) * 0.08;
+    symbol.shadow.scale.set(shadowPulse, shadowPulse * 0.58, shadowPulse);
+  }
+
+  #clearSymbols(): void {
+    for (const symbol of this.#symbols) {
+      this.remove(symbol.pivot, symbol.shadow);
+      symbol.shadow.material.dispose();
+    }
+    this.#symbols.length = 0;
   }
 }
 
