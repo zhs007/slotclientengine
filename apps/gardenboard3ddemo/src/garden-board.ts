@@ -203,13 +203,13 @@ export class GardenBoardRenderer {
   #createBoard(): void {
     const lightTextures = createCartoonTileTextures(
       0x481f2b,
-      "#70c344",
-      "#439935",
+      "#78cc49",
+      "#4aa23a",
     );
     const darkTextures = createCartoonTileTextures(
       0x229af1,
-      "#4b9837",
-      "#2c7330",
+      "#55a340",
+      "#347e35",
     );
     this.#textures.push(lightTextures, darkTextures);
     const boardBase = new Mesh(
@@ -240,11 +240,11 @@ export class GardenBoardRenderer {
     );
     const makeMaterial = (textures: TurfTextureSet) =>
       new MeshToonMaterial({
-        color: 0xb5b5b5,
+        color: 0xc2c2c2,
         map: textures.albedo,
         gradientMap: this.#boardToonGradient,
-        emissive: 0x173d17,
-        emissiveIntensity: 0.025,
+        emissive: 0x245c21,
+        emissiveIntensity: 0.04,
       });
     const count = (BOARD.columns * BOARD.rows) / 2;
     const light = new InstancedMesh(

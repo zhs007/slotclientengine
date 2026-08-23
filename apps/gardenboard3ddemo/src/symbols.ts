@@ -219,7 +219,7 @@ function createSurfaceTextures(options: SurfaceOptions): SurfaceTextureSet {
 
 function createToonStyleResources(): ToonStyleResources {
   const gradientMap = new DataTexture(
-    new Uint8Array([36, 98, 162, 210]),
+    new Uint8Array([48, 112, 174, 220]),
     4,
     1,
     RedFormat,
@@ -248,14 +248,14 @@ function makeToonMaterial(
   },
 ): MeshToonMaterial {
   return new MeshToonMaterial({
-    color: 0xb8b8b8,
+    color: 0xc8c8c8,
     map: textures.albedo,
     gradientMap: style.gradientMap,
     bumpMap: textures.bump,
     bumpScale: options.bumpScale * 0.34,
     side: options.side ?? FrontSide,
     emissive: textures.baseColor,
-    emissiveIntensity: 0.02,
+    emissiveIntensity: 0.035,
   });
 }
 
@@ -266,6 +266,8 @@ function makeSolidToonMaterial(
   return new MeshToonMaterial({
     color,
     gradientMap: style.gradientMap,
+    emissive: color,
+    emissiveIntensity: 0.018,
   });
 }
 
