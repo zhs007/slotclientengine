@@ -33,10 +33,11 @@ uniform float uWindAmplitude;`,
   vec3 windOrigin = vec3(0.0);
 #endif
 float windMask = smoothstep(0.02, 0.86, max(position.y, 0.0));
-float windPrimary = sin(uWindTime * 1.35 + windOrigin.x * 1.73 + windOrigin.z * 1.19);
-float windDetail = sin(uWindTime * 2.7 + windOrigin.x * 0.61 - windOrigin.z * 2.13) * 0.32;
-transformed.x += (windPrimary + windDetail) * uWindAmplitude * windMask * windMask;
-transformed.z += cos(uWindTime * 1.08 + windOrigin.z * 1.51) * uWindAmplitude * 0.42 * windMask;`,
+float windPrimary = sin(uWindTime * 1.65 + windOrigin.x * 1.73 + windOrigin.z * 1.19);
+float windDetail = sin(uWindTime * 3.4 + windOrigin.x * 0.61 - windOrigin.z * 2.13) * 0.38;
+float windGust = 0.78 + sin(uWindTime * 0.48 + windOrigin.x * 0.17) * 0.22;
+transformed.x += (windPrimary + windDetail) * uWindAmplitude * windGust * windMask * windMask;
+transformed.z += cos(uWindTime * 1.36 + windOrigin.z * 1.51) * uWindAmplitude * 0.5 * windMask;`,
       );
   };
   material.customProgramCacheKey = () => `garden-wind-${amplitude}`;

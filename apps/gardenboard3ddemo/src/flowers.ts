@@ -1,4 +1,5 @@
 import {
+  Color,
   CylinderGeometry,
   Group,
   InstancedMesh,
@@ -11,8 +12,20 @@ import {
 } from "three";
 import type { PlantPlacement } from "./layout.js";
 
-const PETALS_PER_FLOWER = 8;
+const MAX_PETALS_PER_FLOWER = 10;
 const UP = new Vector3(0, 1, 0);
+const FLOWER_STYLES = [
+  { petals: 8, width: 0.13, thickness: 0.055, length: 0.27, centre: 0.14 },
+  { petals: 5, width: 0.19, thickness: 0.072, length: 0.21, centre: 0.17 },
+  { petals: 10, width: 0.105, thickness: 0.048, length: 0.3, centre: 0.12 },
+  { petals: 6, width: 0.16, thickness: 0.064, length: 0.24, centre: 0.15 },
+] as const;
+const PETAL_COLORS = [
+  0xffc6d7, 0xff7898, 0xe4c3ff, 0x8bc8f2, 0xffefb0, 0xffaa5f, 0xfaf8ec,
+  0xcf8ee8,
+];
+const CENTRE_COLORS = [0xffba2f, 0xffd65a, 0xf08b28, 0x8a5428];
+const STEM_COLORS = [0x65a83b, 0x4e9335, 0x79b64b, 0x3f7f38];
 
 export class FlowerField extends Group {
   readonly #placements: readonly PlantPlacement[];
@@ -43,14 +56,14 @@ export class FlowerField extends Group {
     this.#petals = new InstancedMesh(
       new SphereGeometry(1, 9, 5),
       new MeshBasicMaterial({
-        color: 0xffc6d7,
+        color: 0xffffff,
       }),
-      placements.length * PETALS_PER_FLOWER,
+      placements.length * MAX_PETALS_PER_FLOWER,
     );
     this.#centres = new InstancedMesh(
       new SphereGeometry(1, 10, 6),
       new MeshBasicMaterial({
-        color: 0xffba2f,
+        color: 0xffffff,
       }),
       placements.length,
     );
@@ -58,15 +71,40 @@ export class FlowerField extends Group {
     this.#petals.castShadow = true;
     this.#centres.castShadow = true;
     this.add(this.#stems, this.#petals, this.#centres);
+    placements.forEach((placement, flowerIndex) => {
+      const paletteIndex = placement.paletteIndex;
+      this.#stems.setColorAt(
+        flowerIndex,
+        new Color(STEM_COLORS[paletteIndex % STEM_COLORS.length]),
+      );
+      this.#centres.setColorAt(
+        flowerIndex,
+        new Color(CENTRE_COLORS[paletteIndex % CENTRE_COLORS.length]),
+      );
+      for (let petal = 0; petal < MAX_PETALS_PER_FLOWER; petal += 1) {
+        const petalColor = new Color(
+          PETAL_COLORS[paletteIndex % PETAL_COLORS.length],
+        ).offsetHSL(0, 0, petal % 2 === 0 ? 0.025 : -0.018);
+        this.#petals.setColorAt(
+          flowerIndex * MAX_PETALS_PER_FLOWER + petal,
+          petalColor,
+        );
+      }
+    });
+    this.#stems.instanceColor!.needsUpdate = true;
+    this.#petals.instanceColor!.needsUpdate = true;
+    this.#centres.instanceColor!.needsUpdate = true;
     this.update(0);
   }
 
   update(timeSeconds: number): void {
     this.#placements.forEach((placement, flowerIndex) => {
+      const style =
+        FLOWER_STYLES[placement.paletteIndex % FLOWER_STYLES.length];
       const height = 0.52 + placement.scale * 0.42;
-      const sway = Math.sin(timeSeconds * 1.18 + placement.phase) * 0.1;
+      const sway = Math.sin(timeSeconds * 1.42 + placement.phase) * 0.18;
       const crossSway =
-        Math.sin(timeSeconds * 1.73 + placement.phase * 1.7) * 0.045;
+        Math.sin(timeSeconds * 2.05 + placement.phase * 1.7) * 0.09;
       this.#root.set(placement.x, 0.01, placement.z);
       this.#crown.set(
         placement.x + sway * placement.scale,
@@ -85,9 +123,16 @@ export class FlowerField extends Group {
       this.#stems.setMatrixAt(flowerIndex, this.#matrix);
 
       const crownScale = placement.scale * 0.86;
-      for (let petal = 0; petal < PETALS_PER_FLOWER; petal += 1) {
-        const angle =
-          placement.rotation + (petal / PETALS_PER_FLOWER) * Math.PI * 2;
+      for (let petal = 0; petal < MAX_PETALS_PER_FLOWER; petal += 1) {
+        const instanceIndex = flowerIndex * MAX_PETALS_PER_FLOWER + petal;
+        if (petal >= style.petals) {
+          this.#quaternion.identity();
+          this.#scale.setScalar(0);
+          this.#matrix.compose(this.#crown, this.#quaternion, this.#scale);
+          this.#petals.setMatrixAt(instanceIndex, this.#matrix);
+          continue;
+        }
+        const angle = placement.rotation + (petal / style.petals) * Math.PI * 2;
         const radius = 0.17 * crownScale;
         const position = new Vector3(
           this.#crown.x + Math.cos(angle) * radius,
@@ -96,18 +141,15 @@ export class FlowerField extends Group {
         );
         this.#quaternion.setFromAxisAngle(UP, -angle);
         this.#scale.set(
-          0.13 * crownScale,
-          0.055 * crownScale,
-          0.27 * crownScale,
+          style.width * crownScale,
+          style.thickness * crownScale,
+          style.length * crownScale,
         );
         this.#matrix.compose(position, this.#quaternion, this.#scale);
-        this.#petals.setMatrixAt(
-          flowerIndex * PETALS_PER_FLOWER + petal,
-          this.#matrix,
-        );
+        this.#petals.setMatrixAt(instanceIndex, this.#matrix);
       }
       this.#quaternion.identity();
-      this.#scale.setScalar(0.14 * crownScale);
+      this.#scale.setScalar(style.centre * crownScale);
       this.#scale.y *= 0.72;
       this.#matrix.compose(
         new Vector3(this.#crown.x, this.#crown.y + 0.065, this.#crown.z),

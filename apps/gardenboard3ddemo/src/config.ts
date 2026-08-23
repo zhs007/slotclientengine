@@ -13,9 +13,12 @@ export const GROUND = {
 } as const;
 
 export const VEGETATION = {
-  grassCount: 620,
-  leafCount: 170,
+  grassCount: 7200,
+  distantGrassCount: 5000,
+  accentGrassCount: 150,
+  leafCount: 240,
   flowerCount: 42,
+  accentFlowerCount: 14,
   seed: 0x6a17d39b,
 } as const;
 

@@ -11,10 +11,12 @@ import {
   Mesh,
   MeshStandardMaterial,
   Object3D,
-  OrthographicCamera,
   PCFShadowMap,
+  PerspectiveCamera,
   Scene,
   SRGBColorSpace,
+  TextureLoader,
+  type Texture,
   Vector3,
   WebGLRenderer,
 } from "three";
@@ -30,9 +32,10 @@ import { createWindMaterial, type WindMaterialHandle } from "./wind.js";
 export class GardenBoardRenderer {
   readonly #renderer: WebGLRenderer;
   readonly #scene = new Scene();
-  readonly #camera = new OrthographicCamera();
+  readonly #camera = new PerspectiveCamera(36, 1, 0.1, 80);
   readonly #root = new Group();
   readonly #textures: TurfTextureSet[] = [];
+  readonly #standaloneTextures: Texture[] = [];
   readonly #windMaterials: WindMaterialHandle[] = [];
   readonly #flowers: FlowerField;
   #destroyed = false;
@@ -50,7 +53,7 @@ export class GardenBoardRenderer {
     this.#renderer.shadowMap.type = PCFShadowMap;
     host.append(this.#renderer.domElement);
     this.#scene.background = new Color(0x4b8934);
-    this.#scene.fog = new FogExp2(0x224c1c, 0.026);
+    this.#scene.fog = new FogExp2(0x4b8934, 0.018);
     this.#root.name = "garden-board-environment";
     this.#scene.add(this.#root);
     this.#createGround();
@@ -58,8 +61,8 @@ export class GardenBoardRenderer {
     this.#createFoliage();
     this.#flowers = this.#createFlowers();
     this.#createLighting();
-    this.#camera.position.set(0, 18.5, 12.8);
-    this.#camera.lookAt(new Vector3(0, 0.1, 0));
+    this.#camera.position.set(0, 18, 14.5);
+    this.#camera.lookAt(new Vector3(0, 0.12, 1.65));
     this.resize(host.clientWidth, host.clientHeight);
     this.#renderer.setAnimationLoop(this.#renderFrame);
   }
@@ -68,15 +71,7 @@ export class GardenBoardRenderer {
     if (this.#destroyed) return;
     const safeWidth = Math.max(Math.floor(width), 1);
     const safeHeight = Math.max(Math.floor(height), 1);
-    const aspect = safeWidth / safeHeight;
-    const viewHeight = 18.8;
-    const viewWidth = viewHeight * aspect;
-    this.#camera.left = -viewWidth / 2;
-    this.#camera.right = viewWidth / 2;
-    this.#camera.top = viewHeight / 2;
-    this.#camera.bottom = -viewHeight / 2;
-    this.#camera.near = 0.1;
-    this.#camera.far = 80;
+    this.#camera.aspect = safeWidth / safeHeight;
     this.#camera.updateProjectionMatrix();
     this.#renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.65));
     this.#renderer.setSize(safeWidth, safeHeight, false);
@@ -96,6 +91,7 @@ export class GardenBoardRenderer {
       for (const material of materials) material.dispose();
     });
     for (const texture of this.#textures) texture.dispose();
+    for (const texture of this.#standaloneTextures) texture.dispose();
     this.#renderer.dispose();
     this.#renderer.domElement.remove();
   }
@@ -109,8 +105,8 @@ export class GardenBoardRenderer {
   };
 
   #createGround(): void {
-    const surfaceWidth = GROUND.width + 3.4;
-    const surfaceDepth = GROUND.depth + 4.8;
+    const surfaceWidth = GROUND.width + 60;
+    const surfaceDepth = GROUND.depth + 110;
     const textures = createTurfTextures(
       0x18f36a,
       "#397b25",
@@ -203,25 +199,62 @@ export class GardenBoardRenderer {
   }
 
   #createFoliage(): void {
-    const grassPlacements = createPerimeterPlacements({
+    const nearGrassPlacements = createPerimeterPlacements({
       count: VEGETATION.grassCount,
       seed: VEGETATION.seed,
-      boardClearance: 0.06,
+      boardClearance: BOARD.cellSize,
       edgeInset: 0.16,
-      scaleRange: [0.58, 1.35],
-      paletteSize: 4,
+      areaWidth: 15,
+      areaDepth: 28,
+      scaleRange: [0.58, 1.38],
+      paletteSize: 8,
     });
+    const distantGrassPlacements = createPerimeterPlacements({
+      count: VEGETATION.distantGrassCount,
+      seed: VEGETATION.seed ^ 0x3f62a,
+      boardClearance: 1.1,
+      edgeInset: 0.16,
+      areaWidth: 22,
+      zRange: [-25, -6.5],
+      scaleRange: [0.42, 0.92],
+      paletteSize: 8,
+    });
+    const accentGrassPlacements = createPerimeterPlacements({
+      count: VEGETATION.accentGrassCount,
+      seed: VEGETATION.seed ^ 0x8d31f,
+      boardClearance: 0.14,
+      edgeInset: 0.04,
+      areaWidth: boardWidth + BOARD.cellSize * 2,
+      areaDepth: boardDepth + BOARD.cellSize * 2,
+      scaleRange: [0.36, 0.72],
+      paletteSize: 8,
+    });
+    const grassPlacements = [
+      ...nearGrassPlacements,
+      ...distantGrassPlacements,
+      ...accentGrassPlacements,
+    ];
     const leafPlacements = createPerimeterPlacements({
       count: VEGETATION.leafCount,
       seed: VEGETATION.seed ^ 0x7b219,
-      boardClearance: 0.22,
+      boardClearance: BOARD.cellSize,
       edgeInset: 0.08,
-      scaleRange: [0.7, 1.5],
-      paletteSize: 4,
+      scaleRange: [0.65, 1.35],
+      paletteSize: 6,
     });
+    const grassAlbedo = new TextureLoader().load(
+      "/textures/grass-blade-albedo.png",
+    );
+    grassAlbedo.colorSpace = SRGBColorSpace;
+    grassAlbedo.anisotropy = Math.min(
+      this.#renderer.capabilities.getMaxAnisotropy(),
+      8,
+    );
+    this.#standaloneTextures.push(grassAlbedo);
     const grassWind = createWindMaterial(
       {
         color: 0xffffff,
+        map: grassAlbedo,
         emissive: 0x245c18,
         emissiveIntensity: 1.1,
         roughness: 0.82,
@@ -229,11 +262,12 @@ export class GardenBoardRenderer {
         side: DoubleSide,
         vertexColors: true,
       },
-      0.105,
+      0.22,
     );
     const leafWind = createWindMaterial(
       {
         color: 0xffffff,
+        map: grassAlbedo,
         emissive: 0x276b25,
         emissiveIntensity: 1.05,
         roughness: 0.74,
@@ -241,11 +275,11 @@ export class GardenBoardRenderer {
         side: DoubleSide,
         vertexColors: true,
       },
-      0.14,
+      0.27,
     );
     this.#windMaterials.push(grassWind, leafWind);
     const grass = new InstancedMesh(
-      createGrassClumpGeometry(0.19, 0.72),
+      createGrassClumpGeometry(0.21, 0.7),
       grassWind.material,
       grassPlacements.length,
     );
@@ -257,8 +291,13 @@ export class GardenBoardRenderer {
     grass.name = "instanced-wind-grass";
     leaves.name = "instanced-wind-broad-leaves";
     const dummy = new Object3D();
-    const grassPalette = [0x54a831, 0x67bb38, 0x438f2c, 0x78c542];
-    const leafPalette = [0x3d9138, 0x51a845, 0x347f34, 0x65b34e];
+    const grassPalette = [
+      0x68ad3e, 0x78bc49, 0x4b9237, 0x8bc957, 0x417f3c, 0x9acb64, 0x617f35,
+      0x58a34a,
+    ];
+    const leafPalette = [
+      0x3d9138, 0x51a845, 0x347f34, 0x65b34e, 0x477e45, 0x718f3e,
+    ];
     grassPlacements.forEach((placement, index) => {
       dummy.position.set(placement.x, 0.01, placement.z);
       dummy.rotation.set(0, placement.rotation, 0);
@@ -290,14 +329,25 @@ export class GardenBoardRenderer {
   }
 
   #createFlowers(): FlowerField {
-    const placements = createPerimeterPlacements({
+    const outerPlacements = createPerimeterPlacements({
       count: VEGETATION.flowerCount,
       seed: VEGETATION.seed ^ 0x4ab79,
-      boardClearance: 0.36,
+      boardClearance: BOARD.cellSize,
       edgeInset: 0.35,
       scaleRange: [0.7, 1.28],
-      paletteSize: 5,
+      paletteSize: 8,
     });
+    const accentPlacements = createPerimeterPlacements({
+      count: VEGETATION.accentFlowerCount,
+      seed: VEGETATION.seed ^ 0xc5117,
+      boardClearance: 0.22,
+      edgeInset: 0.08,
+      areaWidth: boardWidth + BOARD.cellSize * 2,
+      areaDepth: boardDepth + BOARD.cellSize * 2,
+      scaleRange: [0.52, 0.9],
+      paletteSize: 8,
+    });
+    const placements = [...outerPlacements, ...accentPlacements];
     const flowers = new FlowerField(placements);
     this.#root.add(flowers);
     return flowers;

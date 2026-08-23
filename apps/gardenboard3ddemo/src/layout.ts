@@ -15,6 +15,9 @@ export interface PlacementOptions {
   readonly seed: number;
   readonly boardClearance: number;
   readonly edgeInset: number;
+  readonly areaWidth?: number;
+  readonly areaDepth?: number;
+  readonly zRange?: readonly [number, number];
   readonly scaleRange: readonly [number, number];
   readonly paletteSize: number;
 }
@@ -35,13 +38,16 @@ export function createPerimeterPlacements(
 ): readonly PlantPlacement[] {
   const random = createRandom(options.seed);
   const placements: PlantPlacement[] = [];
-  const maxX = GROUND.width / 2 - options.edgeInset;
-  const maxZ = GROUND.depth / 2 - options.edgeInset;
+  const maxX = (options.areaWidth ?? GROUND.width) / 2 - options.edgeInset;
+  const defaultMaxZ =
+    (options.areaDepth ?? GROUND.depth) / 2 - options.edgeInset;
+  const minZ = options.zRange?.[0] ?? -defaultMaxZ;
+  const maxZ = options.zRange?.[1] ?? defaultMaxZ;
   let attempts = 0;
   while (placements.length < options.count && attempts < options.count * 80) {
     attempts += 1;
     const x = random.range(-maxX, maxX);
-    const z = random.range(-maxZ, maxZ);
+    const z = random.range(minZ, maxZ);
     if (!isOutsideBoard(x, z, options.boardClearance)) continue;
     placements.push({
       x,
