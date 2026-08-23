@@ -149,19 +149,19 @@ export function createCartoonTileTextures(
 
   const base = new Color(baseColor);
   const accent = new Color(accentColor);
-  for (let index = 0; index < 22; index += 1) {
+  for (let index = 0; index < 8; index += 1) {
     const patchColor = base
       .clone()
       .lerp(accent, random.range(0.18, 0.5))
       .offsetHSL(random.range(-0.018, 0.018), 0, random.range(-0.025, 0.035));
     albedoContext.fillStyle = `#${patchColor.getHexString()}`;
-    albedoContext.globalAlpha = random.range(0.08, 0.18);
+    albedoContext.globalAlpha = random.range(0.045, 0.1);
     albedoContext.beginPath();
     albedoContext.ellipse(
       random.range(0, size),
       random.range(0, size),
-      random.range(18, 54),
-      random.range(12, 36),
+      random.range(28, 62),
+      random.range(20, 46),
       random.range(0, Math.PI),
       0,
       Math.PI * 2,
@@ -169,34 +169,24 @@ export function createCartoonTileTextures(
     albedoContext.fill();
   }
 
-  for (let index = 0; index < 68; index += 1) {
+  for (let index = 0; index < 20; index += 1) {
     const x = random.range(5, size - 5);
     const y = random.range(5, size - 5);
-    const height = random.range(4, 12);
-    const lean = random.range(-4, 4);
+    const height = random.range(7, 15);
+    const lean = random.range(-5, 5);
     const strokeColor = accent
       .clone()
       .offsetHSL(random.range(-0.02, 0.02), 0, random.range(-0.04, 0.05));
     albedoContext.strokeStyle = `#${strokeColor.getHexString()}`;
-    albedoContext.globalAlpha = random.range(0.18, 0.34);
+    albedoContext.globalAlpha = random.range(0.22, 0.38);
     albedoContext.lineCap = "round";
     albedoContext.lineJoin = "round";
-    albedoContext.lineWidth = random.range(2.2, 4.8);
+    albedoContext.lineWidth = random.range(3.2, 5.8);
     albedoContext.beginPath();
     albedoContext.moveTo(x - 2.5, y + 1.5);
     albedoContext.lineTo(x + lean * 0.35, y - height * 0.45);
     albedoContext.lineTo(x + lean, y - height);
     albedoContext.stroke();
-
-    const bumpValue = Math.floor(random.range(134, 168));
-    bumpContext.strokeStyle = `rgb(${bumpValue}, ${bumpValue}, ${bumpValue})`;
-    bumpContext.globalAlpha = 0.32;
-    bumpContext.lineCap = "round";
-    bumpContext.lineWidth = random.range(1.8, 3.6);
-    bumpContext.beginPath();
-    bumpContext.moveTo(x - 2.5, y + 1.5);
-    bumpContext.lineTo(x + lean, y - height);
-    bumpContext.stroke();
   }
   albedoContext.globalAlpha = 1;
   bumpContext.globalAlpha = 1;
