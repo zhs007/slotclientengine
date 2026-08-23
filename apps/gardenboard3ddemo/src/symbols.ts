@@ -1,4 +1,5 @@
 import {
+  BackSide,
   BufferAttribute,
   BufferGeometry,
   CanvasTexture,
@@ -7,6 +8,7 @@ import {
   Color,
   ConeGeometry,
   CylinderGeometry,
+  DataTexture,
   DoubleSide,
   ExtrudeGeometry,
   FrontSide,
@@ -15,14 +17,17 @@ import {
   LatheGeometry,
   Mesh,
   MeshBasicMaterial,
-  MeshStandardMaterial,
+  MeshToonMaterial,
+  NearestFilter,
   Object3D,
   RepeatWrapping,
+  RedFormat,
   Shape,
   ShapeGeometry,
   SphereGeometry,
   SRGBColorSpace,
   TorusGeometry,
+  UnsignedByteType,
   Vector2,
   Vector3,
   type Texture,
@@ -56,7 +61,6 @@ export interface SymbolPlacement {
 
 interface SurfaceTextureSet {
   readonly albedo: CanvasTexture;
-  readonly roughness: CanvasTexture;
   readonly bump: CanvasTexture;
   readonly baseColor: Color;
   dispose(): void;
@@ -67,6 +71,11 @@ interface SurfaceOptions {
   readonly base: string;
   readonly accent: string;
   readonly pattern: "pores" | "mottle" | "spots" | "seeds" | "ridges" | "veins";
+}
+
+interface ToonStyleResources {
+  readonly gradientMap: DataTexture;
+  readonly outlineMaterial: MeshBasicMaterial;
 }
 
 interface AnimatedSymbol {
@@ -91,19 +100,15 @@ function createSurfaceTextures(options: SurfaceOptions): SurfaceTextureSet {
   const size = 256;
   const random = createRandom(options.seed);
   const albedoCanvas = document.createElement("canvas");
-  const roughnessCanvas = document.createElement("canvas");
   const bumpCanvas = document.createElement("canvas");
-  for (const canvas of [albedoCanvas, roughnessCanvas, bumpCanvas]) {
+  for (const canvas of [albedoCanvas, bumpCanvas]) {
     canvas.width = size;
     canvas.height = size;
   }
   const albedo = requireContext(albedoCanvas);
-  const roughness = requireContext(roughnessCanvas);
   const bump = requireContext(bumpCanvas);
   albedo.fillStyle = options.base;
   albedo.fillRect(0, 0, size, size);
-  roughness.fillStyle = "#d4d4d4";
-  roughness.fillRect(0, 0, size, size);
   bump.fillStyle = "#7b7b7b";
   bump.fillRect(0, 0, size, size);
 
@@ -145,19 +150,6 @@ function createSurfaceTextures(options: SurfaceOptions): SurfaceTextureSet {
       albedo.fill();
     }
 
-    const roughValue = Math.floor(random.range(190, 236));
-    roughness.fillStyle = `rgb(${roughValue}, ${roughValue}, ${roughValue})`;
-    roughness.globalAlpha = random.range(0.18, 0.44);
-    roughness.beginPath();
-    roughness.arc(
-      x + random.range(-2, 2),
-      y + random.range(-2, 2),
-      radius * 1.2,
-      0,
-      Math.PI * 2,
-    );
-    roughness.fill();
-
     const bumpValue = Math.floor(
       options.pattern === "pores"
         ? random.range(70, 115)
@@ -178,49 +170,87 @@ function createSurfaceTextures(options: SurfaceOptions): SurfaceTextureSet {
     bump.fill();
   }
   albedo.globalAlpha = 1;
-  roughness.globalAlpha = 1;
   bump.globalAlpha = 1;
 
   const albedoTexture = new CanvasTexture(albedoCanvas);
-  const roughnessTexture = new CanvasTexture(roughnessCanvas);
   const bumpTexture = new CanvasTexture(bumpCanvas);
   albedoTexture.colorSpace = SRGBColorSpace;
-  for (const texture of [albedoTexture, roughnessTexture, bumpTexture]) {
+  for (const texture of [albedoTexture, bumpTexture]) {
     configureTexture(texture);
   }
   return {
     albedo: albedoTexture,
-    roughness: roughnessTexture,
     bump: bumpTexture,
     baseColor: new Color(options.base),
     dispose: () => {
       albedoTexture.dispose();
-      roughnessTexture.dispose();
       bumpTexture.dispose();
     },
   };
 }
 
-function makeStandardMaterial(
+function createToonStyleResources(): ToonStyleResources {
+  const gradientMap = new DataTexture(
+    new Uint8Array([48, 112, 184, 255]),
+    4,
+    1,
+    RedFormat,
+    UnsignedByteType,
+  );
+  gradientMap.minFilter = NearestFilter;
+  gradientMap.magFilter = NearestFilter;
+  gradientMap.generateMipmaps = false;
+  gradientMap.needsUpdate = true;
+  return {
+    gradientMap,
+    outlineMaterial: new MeshBasicMaterial({
+      color: 0x2c2438,
+      side: BackSide,
+      toneMapped: false,
+    }),
+  };
+}
+
+function makeToonMaterial(
   textures: SurfaceTextureSet,
+  style: ToonStyleResources,
   options: {
-    readonly roughness: number;
     readonly bumpScale: number;
     readonly side?: typeof DoubleSide;
   },
-): MeshStandardMaterial {
-  return new MeshStandardMaterial({
+): MeshToonMaterial {
+  return new MeshToonMaterial({
     map: textures.albedo,
-    roughnessMap: textures.roughness,
+    gradientMap: style.gradientMap,
     bumpMap: textures.bump,
-    roughness: Math.max(options.roughness, 0.72),
-    bumpScale: options.bumpScale * 0.42,
-    metalness: 0,
+    bumpScale: options.bumpScale * 0.34,
     side: options.side ?? FrontSide,
     emissive: textures.baseColor,
-    emissiveIntensity: 0.12,
-    flatShading: true,
+    emissiveIntensity: 0.06,
   });
+}
+
+function makeSolidToonMaterial(
+  color: number,
+  style: ToonStyleResources,
+): MeshToonMaterial {
+  return new MeshToonMaterial({
+    color,
+    gradientMap: style.gradientMap,
+  });
+}
+
+function addToonOutline(
+  mesh: Mesh,
+  style: ToonStyleResources,
+  scale = 1.045,
+): void {
+  const outline = new Mesh(mesh.geometry, style.outlineMaterial);
+  outline.name = `${mesh.name || "symbol-part"}-outline`;
+  outline.scale.setScalar(scale);
+  outline.castShadow = false;
+  outline.receiveShadow = false;
+  mesh.add(outline);
 }
 
 function registerMesh(mesh: Mesh): Mesh {
@@ -335,7 +365,10 @@ function createLeafGeometry(): ShapeGeometry {
   return new ShapeGeometry(shape, 5);
 }
 
-function createDonut(textures: SurfaceTextureSet[]): Group {
+function createDonut(
+  textures: SurfaceTextureSet[],
+  style: ToonStyleResources,
+): Group {
   const group = new Group();
   const doughTexture = createSurfaceTextures({
     seed: 0xd011,
@@ -353,30 +386,26 @@ function createDonut(textures: SurfaceTextureSet[]): Group {
   const dough = registerMesh(
     new Mesh(
       new TorusGeometry(0.31, 0.145, 10, 22),
-      makeStandardMaterial(doughTexture, { roughness: 0.72, bumpScale: 0.018 }),
+      makeToonMaterial(doughTexture, style, { bumpScale: 0.018 }),
     ),
   );
   const icing = registerMesh(
     new Mesh(
       new TorusGeometry(0.31, 0.123, 9, 22),
-      makeStandardMaterial(icingTexture, {
-        roughness: 0.74,
-        bumpScale: 0.012,
-      }),
+      makeToonMaterial(icingTexture, style, { bumpScale: 0.012 }),
     ),
   );
   icing.position.z = 0.09;
   icing.scale.set(1.01, 1.01, 0.72);
+  dough.name = "donut-dough";
+  icing.name = "donut-icing";
+  addToonOutline(dough, style, 1.055);
+  addToonOutline(icing, style, 1.04);
   group.add(dough, icing);
 
   const sprinkleGeometry = new CylinderGeometry(0.014, 0.014, 0.09, 6);
   const sprinkleMaterials = [0xffdf48, 0x56c9ee, 0xffffff, 0x7aca35].map(
-    (color) =>
-      new MeshStandardMaterial({
-        color,
-        roughness: 0.78,
-        flatShading: true,
-      }),
+    (color) => makeSolidToonMaterial(color, style),
   );
   const random = createRandom(0x5a12);
   const sprinkleCount = 11;
@@ -426,7 +455,10 @@ function createDonut(textures: SurfaceTextureSet[]): Group {
   return group;
 }
 
-function createToast(textures: SurfaceTextureSet[]): Group {
+function createToast(
+  textures: SurfaceTextureSet[],
+  style: ToonStyleResources,
+): Group {
   const group = new Group();
   const crustTexture = createSurfaceTextures({
     seed: 0x70a57,
@@ -455,7 +487,7 @@ function createToast(textures: SurfaceTextureSet[]): Group {
         }),
         crustDepth,
       ),
-      makeStandardMaterial(crustTexture, { roughness: 0.7, bumpScale: 0.022 }),
+      makeToonMaterial(crustTexture, style, { bumpScale: 0.022 }),
     ),
   );
   const crumbDepth = 0.065;
@@ -470,20 +502,28 @@ function createToast(textures: SurfaceTextureSet[]): Group {
     }),
     crumbDepth,
   );
-  const crumbMaterial = makeStandardMaterial(crumbTexture, {
-    roughness: 0.82,
+  const crumbMaterial = makeToonMaterial(crumbTexture, style, {
     bumpScale: 0.032,
   });
   const front = registerMesh(new Mesh(crumbGeometry, crumbMaterial));
   const back = registerMesh(new Mesh(crumbGeometry, crumbMaterial));
   front.position.z = 0.145;
   back.position.z = -0.145;
+  crust.name = "toast-crust";
+  front.name = "toast-front";
+  back.name = "toast-back";
+  addToonOutline(crust, style, 1.05);
+  addToonOutline(front, style, 1.035);
+  addToonOutline(back, style, 1.035);
   group.add(crust, front, back);
   group.name = "toast-model";
   return group;
 }
 
-function createBanana(textures: SurfaceTextureSet[]): Group {
+function createBanana(
+  textures: SurfaceTextureSet[],
+  style: ToonStyleResources,
+): Group {
   const group = new Group();
   const peelTexture = createSurfaceTextures({
     seed: 0xba4a4a,
@@ -501,15 +541,13 @@ function createBanana(textures: SurfaceTextureSet[]): Group {
   const peel = registerMesh(
     new Mesh(
       createTaperedTubeGeometry(),
-      makeStandardMaterial(peelTexture, {
-        roughness: 0.75,
-        bumpScale: 0.016,
-      }),
+      makeToonMaterial(peelTexture, style, { bumpScale: 0.016 }),
     ),
   );
+  peel.name = "banana-peel";
+  addToonOutline(peel, style, 1.055);
   group.add(peel);
-  const tipMaterial = makeStandardMaterial(tipTexture, {
-    roughness: 0.84,
+  const tipMaterial = makeToonMaterial(tipTexture, style, {
     bumpScale: 0.025,
   });
   const tipGeometry = new SphereGeometry(0.075, 10, 8);
@@ -517,16 +555,23 @@ function createBanana(textures: SurfaceTextureSet[]): Group {
   leftTip.position.set(-0.455, 0.205, 0);
   leftTip.scale.set(0.72, 1.35, 0.72);
   leftTip.rotation.z = -0.4;
+  leftTip.name = "banana-left-tip";
+  addToonOutline(leftTip, style, 1.065);
   const rightTip = registerMesh(new Mesh(tipGeometry, tipMaterial));
   rightTip.position.set(0.46, 0.225, 0);
   rightTip.scale.set(0.66, 1.5, 0.66);
   rightTip.rotation.z = 0.25;
+  rightTip.name = "banana-right-tip";
+  addToonOutline(rightTip, style, 1.065);
   group.add(leftTip, rightTip);
   group.name = "banana-model";
   return group;
 }
 
-function createStrawberry(textures: SurfaceTextureSet[]): Group {
+function createStrawberry(
+  textures: SurfaceTextureSet[],
+  style: ToonStyleResources,
+): Group {
   const group = new Group();
   const berryTexture = createSurfaceTextures({
     seed: 0x57a9,
@@ -555,22 +600,15 @@ function createStrawberry(textures: SurfaceTextureSet[]): Group {
   const berry = registerMesh(
     new Mesh(
       berryGeometry,
-      makeStandardMaterial(berryTexture, {
-        roughness: 0.76,
-        bumpScale: 0.018,
-      }),
+      makeToonMaterial(berryTexture, style, { bumpScale: 0.018 }),
     ),
   );
+  berry.name = "strawberry-berry";
+  addToonOutline(berry, style, 1.052);
   group.add(berry);
 
   const seedGeometry = new SphereGeometry(0.029, 7, 5);
-  const seedMaterial = new MeshStandardMaterial({
-    color: 0xf6d56b,
-    emissive: 0x3d2b0b,
-    emissiveIntensity: 0.12,
-    roughness: 0.78,
-    flatShading: true,
-  });
+  const seedMaterial = makeSolidToonMaterial(0xf6d56b, style);
   const seedRows = [
     [-0.31, 0.22, 3],
     [-0.11, 0.34, 4],
@@ -613,8 +651,7 @@ function createStrawberry(textures: SurfaceTextureSet[]): Group {
   group.add(seeds);
 
   const leafGeometry = createLeafGeometry();
-  const leafMaterial = makeStandardMaterial(leafTexture, {
-    roughness: 0.72,
+  const leafMaterial = makeToonMaterial(leafTexture, style, {
     bumpScale: 0.022,
     side: DoubleSide,
   });
@@ -629,12 +666,17 @@ function createStrawberry(textures: SurfaceTextureSet[]): Group {
     new Mesh(new CylinderGeometry(0.035, 0.045, 0.2, 8), leafMaterial),
   );
   stem.position.y = 0.51;
+  stem.name = "strawberry-stem";
+  addToonOutline(stem, style, 1.06);
   group.add(stem);
   group.name = "strawberry-model";
   return group;
 }
 
-function createCarrot(textures: SurfaceTextureSet[]): Group {
+function createCarrot(
+  textures: SurfaceTextureSet[],
+  style: ToonStyleResources,
+): Group {
   const group = new Group();
   const rootTexture = createSurfaceTextures({
     seed: 0xca2207,
@@ -662,18 +704,13 @@ function createCarrot(textures: SurfaceTextureSet[]): Group {
   const root = registerMesh(
     new Mesh(
       new LatheGeometry(profile, 16),
-      makeStandardMaterial(rootTexture, {
-        roughness: 0.76,
-        bumpScale: 0.025,
-      }),
+      makeToonMaterial(rootTexture, style, { bumpScale: 0.025 }),
     ),
   );
+  root.name = "carrot-root";
+  addToonOutline(root, style, 1.052);
   group.add(root);
-  const grooveMaterial = new MeshStandardMaterial({
-    color: 0xbd4c0e,
-    roughness: 0.82,
-    flatShading: true,
-  });
+  const grooveMaterial = makeSolidToonMaterial(0xbd4c0e, style);
   for (const [radius, y, arc] of [
     [0.245, -0.02, 0.75],
     [0.205, -0.2, 0.62],
@@ -690,8 +727,7 @@ function createCarrot(textures: SurfaceTextureSet[]): Group {
     group.add(groove);
   }
   const leafGeometry = createLeafGeometry();
-  const leafMaterial = makeStandardMaterial(leafTexture, {
-    roughness: 0.75,
+  const leafMaterial = makeToonMaterial(leafTexture, style, {
     bumpScale: 0.026,
     side: DoubleSide,
   });
@@ -710,6 +746,8 @@ function createCarrot(textures: SurfaceTextureSet[]): Group {
     new Mesh(new ConeGeometry(0.16, 0.14, 10), leafMaterial),
   );
   crown.position.y = 0.28;
+  crown.name = "carrot-crown";
+  addToonOutline(crown, style, 1.06);
   group.add(crown);
   group.rotation.z = -0.58;
   group.name = "carrot-model";
@@ -805,6 +843,7 @@ type SymbolFieldPhase = "entering" | "idle" | "exiting";
 
 export class SymbolField extends Group {
   readonly #textures: SurfaceTextureSet[] = [];
+  readonly #toonStyle = createToonStyleResources();
   readonly #symbols: AnimatedSymbol[] = [];
   readonly #masters: ReadonlyMap<SymbolType, Group>;
   readonly #shadowGeometry = new CircleGeometry(0.34, 20);
@@ -817,11 +856,11 @@ export class SymbolField extends Group {
     super();
     this.name = "animated-game-symbols";
     this.#masters = new Map<SymbolType, Group>([
-      ["donut", createDonut(this.#textures)],
-      ["toast", createToast(this.#textures)],
-      ["banana", createBanana(this.#textures)],
-      ["strawberry", createStrawberry(this.#textures)],
-      ["carrot", createCarrot(this.#textures)],
+      ["donut", createDonut(this.#textures, this.#toonStyle)],
+      ["toast", createToast(this.#textures, this.#toonStyle)],
+      ["banana", createBanana(this.#textures, this.#toonStyle)],
+      ["strawberry", createStrawberry(this.#textures, this.#toonStyle)],
+      ["carrot", createCarrot(this.#textures, this.#toonStyle)],
     ]);
     this.#populate(placements);
   }
@@ -855,6 +894,8 @@ export class SymbolField extends Group {
     this.#clearSymbols();
     this.#shadowGeometry.dispose();
     for (const textures of this.#textures) textures.dispose();
+    this.#toonStyle.gradientMap.dispose();
+    this.#toonStyle.outlineMaterial.dispose();
   }
 
   #populate(placements: readonly SymbolPlacement[]): void {
@@ -865,7 +906,7 @@ export class SymbolField extends Group {
       pivot.rotation.y = placement.rotation;
       pivot.scale.setScalar(0);
       const model = this.#masters.get(placement.type)!.clone(true);
-      model.rotation.x = -0.12;
+      model.rotation.x = -Math.PI / 2;
       pivot.add(model);
       const shadow = new Mesh(
         this.#shadowGeometry,
