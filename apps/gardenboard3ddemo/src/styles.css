@@ -1,6 +1,6 @@
 :root {
   color-scheme: dark;
-  background: #4b8934;
+  background: #639b3d;
   font-family: system-ui, sans-serif;
 }
 
@@ -19,7 +19,7 @@ body,
 
 #app {
   position: relative;
-  background: #4b8934;
+  background: #639b3d;
 }
 
 .garden-canvas {

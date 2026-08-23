@@ -93,13 +93,13 @@ export class GardenBoardRenderer {
     });
     this.#renderer.domElement.className = "garden-canvas";
     this.#renderer.outputColorSpace = SRGBColorSpace;
-    this.#renderer.setClearColor(0x4b8934, 1);
+    this.#renderer.setClearColor(0x639b3d, 1);
     this.#renderer.shadowMap.enabled = true;
     this.#renderer.shadowMap.type = PCFShadowMap;
     this.#standaloneTextures.push(this.#toonGradient, this.#boardToonGradient);
     host.append(this.#renderer.domElement);
-    this.#scene.background = new Color(0x4b8934);
-    this.#scene.fog = new FogExp2(0x4b8934, 0.018);
+    this.#scene.background = new Color(0x639b3d);
+    this.#scene.fog = new FogExp2(0x639b3d, 0.018);
     this.#root.name = "garden-board-environment";
     this.#scene.add(this.#root);
     this.#createGround();
@@ -182,7 +182,7 @@ export class GardenBoardRenderer {
     const surfaceDepth = GROUND.depth + 110;
     const textures = createTurfTextures(
       0x18f36a,
-      "#397b25",
+      "#559335",
       surfaceWidth / 2.4,
       surfaceDepth / 2.4,
     );
@@ -372,7 +372,7 @@ export class GardenBoardRenderer {
       {
         color: 0xffffff,
         map: grassAlbedo,
-        emissive: 0x245c18,
+        emissive: 0x3c6818,
         emissiveIntensity: 1.1,
         roughness: 0.82,
         metalness: 0,
@@ -385,7 +385,7 @@ export class GardenBoardRenderer {
       {
         color: 0xffffff,
         map: grassAlbedo,
-        emissive: 0x276b25,
+        emissive: 0x416e22,
         emissiveIntensity: 1.05,
         roughness: 0.74,
         metalness: 0,
@@ -429,11 +429,11 @@ export class GardenBoardRenderer {
     leafOutlines.name = "selective-wind-leaf-outlines";
     const dummy = new Object3D();
     const grassPalette = [
-      0x68ad3e, 0x78bc49, 0x4b9237, 0x8bc957, 0x417f3c, 0x9acb64, 0x617f35,
-      0x58a34a,
+      0x7cba43, 0x92c957, 0x62a33a, 0xa4d260, 0x568d39, 0xb0d56c, 0x778f36,
+      0x6eaf49,
     ];
     const leafPalette = [
-      0x3d9138, 0x51a845, 0x347f34, 0x65b34e, 0x477e45, 0x718f3e,
+      0x55983b, 0x68ad45, 0x438536, 0x7cba4e, 0x62843c, 0x879d43,
     ];
     grassPlacements.forEach((placement, index) => {
       dummy.position.set(placement.x, 0.01, placement.z);
@@ -497,9 +497,9 @@ export class GardenBoardRenderer {
   }
 
   #createLighting(): void {
-    const hemisphere = new HemisphereLight(0xd7f1c8, 0x28551f, 2.25);
-    const ambient = new AmbientLight(0x8fc979, 0.35);
-    const key = new DirectionalLight(0xfff1c9, 3.4);
+    const hemisphere = new HemisphereLight(0xfff0b5, 0x5b7027, 2.55);
+    const ambient = new AmbientLight(0xb9d577, 0.46);
+    const key = new DirectionalLight(0xffffcb, 3.8);
     key.position.set(-7, 15, 9);
     key.castShadow = true;
     key.shadow.mapSize.set(2048, 2048);
@@ -510,7 +510,7 @@ export class GardenBoardRenderer {
     key.shadow.camera.near = 2;
     key.shadow.camera.far = 40;
     key.shadow.bias = -0.00045;
-    const fill = new DirectionalLight(0x9ecbff, 0.75);
+    const fill = new DirectionalLight(0xd5e8a6, 0.82);
     fill.position.set(7, 9, -8);
     this.#scene.add(hemisphere, ambient, key, fill);
   }
