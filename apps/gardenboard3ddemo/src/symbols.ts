@@ -44,6 +44,7 @@ export const SYMBOL_TYPES = [
 ] as const;
 
 const SYMBOL_STAGGER_SECONDS = 0.014;
+const SYMBOL_CAMERA_TILT_RADIANS = (Math.PI / 180) * 12;
 
 export type SymbolType = (typeof SYMBOL_TYPES)[number];
 
@@ -243,11 +244,27 @@ function makeSolidToonMaterial(
 function addToonOutline(
   mesh: Mesh,
   style: ToonStyleResources,
-  scale = 1.045,
+  thickness = 0.02,
 ): void {
-  const outline = new Mesh(mesh.geometry, style.outlineMaterial);
+  const outlineGeometry = mesh.geometry.clone();
+  const positions = outlineGeometry.getAttribute("position");
+  const normals = outlineGeometry.getAttribute("normal");
+  if (!positions || !normals || positions.count !== normals.count) {
+    throw new Error("Toon outlines require matching position and normal data.");
+  }
+  for (let index = 0; index < positions.count; index += 1) {
+    positions.setXYZ(
+      index,
+      positions.getX(index) + normals.getX(index) * thickness,
+      positions.getY(index) + normals.getY(index) * thickness,
+      positions.getZ(index) + normals.getZ(index) * thickness,
+    );
+  }
+  positions.needsUpdate = true;
+  outlineGeometry.computeBoundingBox();
+  outlineGeometry.computeBoundingSphere();
+  const outline = new Mesh(outlineGeometry, style.outlineMaterial);
   outline.name = `${mesh.name || "symbol-part"}-outline`;
-  outline.scale.setScalar(scale);
   outline.castShadow = false;
   outline.receiveShadow = false;
   mesh.add(outline);
@@ -341,7 +358,7 @@ function createTaperedTubeGeometry(): BufferGeometry {
     for (let radial = 0; radial < radialSegments; radial += 1) {
       const a = segment * (radialSegments + 1) + radial;
       const b = a + radialSegments + 1;
-      indices.push(a, b, a + 1, b, b + 1, a + 1);
+      indices.push(a, a + 1, b, b, a + 1, b + 1);
     }
   }
   const geometry = new BufferGeometry();
@@ -399,8 +416,8 @@ function createDonut(
   icing.scale.set(1.01, 1.01, 0.72);
   dough.name = "donut-dough";
   icing.name = "donut-icing";
-  addToonOutline(dough, style, 1.055);
-  addToonOutline(icing, style, 1.04);
+  addToonOutline(dough, style, 0.022);
+  addToonOutline(icing, style, 0.016);
   group.add(dough, icing);
 
   const sprinkleGeometry = new CylinderGeometry(0.014, 0.014, 0.09, 6);
@@ -512,9 +529,9 @@ function createToast(
   crust.name = "toast-crust";
   front.name = "toast-front";
   back.name = "toast-back";
-  addToonOutline(crust, style, 1.05);
-  addToonOutline(front, style, 1.035);
-  addToonOutline(back, style, 1.035);
+  addToonOutline(crust, style, 0.022);
+  addToonOutline(front, style, 0.014);
+  addToonOutline(back, style, 0.014);
   group.add(crust, front, back);
   group.name = "toast-model";
   return group;
@@ -545,7 +562,7 @@ function createBanana(
     ),
   );
   peel.name = "banana-peel";
-  addToonOutline(peel, style, 1.055);
+  addToonOutline(peel, style, 0.022);
   group.add(peel);
   const tipMaterial = makeToonMaterial(tipTexture, style, {
     bumpScale: 0.025,
@@ -556,13 +573,13 @@ function createBanana(
   leftTip.scale.set(0.72, 1.35, 0.72);
   leftTip.rotation.z = -0.4;
   leftTip.name = "banana-left-tip";
-  addToonOutline(leftTip, style, 1.065);
+  addToonOutline(leftTip, style, 0.007);
   const rightTip = registerMesh(new Mesh(tipGeometry, tipMaterial));
   rightTip.position.set(0.46, 0.225, 0);
   rightTip.scale.set(0.66, 1.5, 0.66);
   rightTip.rotation.z = 0.25;
   rightTip.name = "banana-right-tip";
-  addToonOutline(rightTip, style, 1.065);
+  addToonOutline(rightTip, style, 0.007);
   group.add(leftTip, rightTip);
   group.name = "banana-model";
   return group;
@@ -604,7 +621,7 @@ function createStrawberry(
     ),
   );
   berry.name = "strawberry-berry";
-  addToonOutline(berry, style, 1.052);
+  addToonOutline(berry, style, 0.02);
   group.add(berry);
 
   const seedGeometry = new SphereGeometry(0.029, 7, 5);
@@ -667,7 +684,7 @@ function createStrawberry(
   );
   stem.position.y = 0.51;
   stem.name = "strawberry-stem";
-  addToonOutline(stem, style, 1.06);
+  addToonOutline(stem, style, 0.006);
   group.add(stem);
   group.name = "strawberry-model";
   return group;
@@ -708,7 +725,7 @@ function createCarrot(
     ),
   );
   root.name = "carrot-root";
-  addToonOutline(root, style, 1.052);
+  addToonOutline(root, style, 0.018);
   group.add(root);
   const grooveMaterial = makeSolidToonMaterial(0xbd4c0e, style);
   for (const [radius, y, arc] of [
@@ -747,7 +764,7 @@ function createCarrot(
   );
   crown.position.y = 0.28;
   crown.name = "carrot-crown";
-  addToonOutline(crown, style, 1.06);
+  addToonOutline(crown, style, 0.008);
   group.add(crown);
   group.rotation.z = -0.58;
   group.name = "carrot-model";
@@ -906,7 +923,7 @@ export class SymbolField extends Group {
       pivot.rotation.y = placement.rotation;
       pivot.scale.setScalar(0);
       const model = this.#masters.get(placement.type)!.clone(true);
-      model.rotation.x = -Math.PI / 2;
+      model.rotation.x = -Math.PI / 2 + SYMBOL_CAMERA_TILT_RADIANS;
       pivot.add(model);
       const shadow = new Mesh(
         this.#shadowGeometry,
