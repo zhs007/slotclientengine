@@ -23,10 +23,10 @@ const FLOWER_STYLES = [
   { petals: 6, width: 0.16, thickness: 0.064, length: 0.24, centre: 0.15 },
 ] as const;
 const PETAL_COLORS = [
-  0xffc6d7, 0xff7898, 0xe4c3ff, 0x8bc8f2, 0xffefb0, 0xffaa5f, 0xfaf8ec,
-  0xcf8ee8,
+  0xe6b3c2, 0xe06a87, 0xcbb0df, 0x78afd2, 0xe3d59a, 0xe39a55, 0xe9e2d2,
+  0xb97ccb,
 ];
-const CENTRE_COLORS = [0xffba2f, 0xffd65a, 0xf08b28, 0x8a5428];
+const CENTRE_COLORS = [0xe2a52b, 0xe6bd4b, 0xd77b24, 0x774a29];
 const STEM_COLORS = [0x65a83b, 0x4e9335, 0x79b64b, 0x3f7f38];
 
 export class FlowerField extends Group {
@@ -60,7 +60,7 @@ export class FlowerField extends Group {
     this.#petals = new InstancedMesh(
       new SphereGeometry(1, 9, 5),
       new MeshToonMaterial({
-        color: 0xffffff,
+        color: 0xededed,
         gradientMap: toonGradient,
       }),
       placements.length * MAX_PETALS_PER_FLOWER,
@@ -68,7 +68,7 @@ export class FlowerField extends Group {
     this.#centres = new InstancedMesh(
       new SphereGeometry(1, 10, 6),
       new MeshToonMaterial({
-        color: 0xffffff,
+        color: 0xededed,
         gradientMap: toonGradient,
       }),
       placements.length,

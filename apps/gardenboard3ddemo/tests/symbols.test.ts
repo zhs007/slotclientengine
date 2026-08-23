@@ -47,6 +47,32 @@ describe("game symbol placement", () => {
     ).toBe(BOARD.columns * BOARD.rows);
   });
 
+  it("balances a full board without orthogonally adjacent matches", () => {
+    for (let seed = 0; seed < 24; seed += 1) {
+      const placements = createSymbolPlacements(
+        seed,
+        BOARD.columns * BOARD.rows,
+      );
+      for (const type of SYMBOL_TYPES) {
+        expect(
+          placements.filter((placement) => placement.type === type),
+        ).toHaveLength(12);
+      }
+      const typeAt = new Map(
+        placements.map((placement) => [
+          `${placement.column}:${placement.row}`,
+          placement.type,
+        ]),
+      );
+      for (const placement of placements) {
+        const right = typeAt.get(`${placement.column + 1}:${placement.row}`);
+        const below = typeAt.get(`${placement.column}:${placement.row + 1}`);
+        if (right) expect(right).not.toBe(placement.type);
+        if (below) expect(below).not.toBe(placement.type);
+      }
+    }
+  });
+
   it("staggers a full board from top to bottom, then left to right", () => {
     const placements = createSymbolPlacements(
       515151,
