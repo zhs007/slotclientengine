@@ -21,13 +21,25 @@ import {
   WebGLRenderer,
 } from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
-import { BOARD, boardDepth, boardWidth, GROUND, VEGETATION } from "./config.js";
+import {
+  BOARD,
+  boardDepth,
+  boardWidth,
+  GROUND,
+  SYMBOLS,
+  VEGETATION,
+} from "./config.js";
 import { FlowerField } from "./flowers.js";
 import { createBladeGeometry, createGrassClumpGeometry } from "./geometry.js";
 import { createPerimeterPlacements } from "./layout.js";
 import { createRandom } from "./random.js";
 import { createTurfTextures, type TurfTextureSet } from "./textures.js";
 import { createWindMaterial, type WindMaterialHandle } from "./wind.js";
+import {
+  createSessionSeed,
+  createSymbolPlacements,
+  SymbolField,
+} from "./symbols.js";
 
 export class GardenBoardRenderer {
   readonly #renderer: WebGLRenderer;
@@ -38,6 +50,7 @@ export class GardenBoardRenderer {
   readonly #standaloneTextures: Texture[] = [];
   readonly #windMaterials: WindMaterialHandle[] = [];
   readonly #flowers: FlowerField;
+  readonly #symbols: SymbolField;
   #destroyed = false;
 
   constructor(host: HTMLElement) {
@@ -58,6 +71,10 @@ export class GardenBoardRenderer {
     this.#scene.add(this.#root);
     this.#createGround();
     this.#createBoard();
+    this.#symbols = new SymbolField(
+      createSymbolPlacements(createSessionSeed(), SYMBOLS.count),
+    );
+    this.#root.add(this.#symbols);
     this.#createFoliage();
     this.#flowers = this.#createFlowers();
     this.#createLighting();
@@ -92,6 +109,7 @@ export class GardenBoardRenderer {
     });
     for (const texture of this.#textures) texture.dispose();
     for (const texture of this.#standaloneTextures) texture.dispose();
+    this.#symbols.disposeTextures();
     this.#renderer.dispose();
     this.#renderer.domElement.remove();
   }
@@ -101,6 +119,7 @@ export class GardenBoardRenderer {
     const timeSeconds = timeMilliseconds / 1000;
     for (const handle of this.#windMaterials) handle.setTime(timeSeconds);
     this.#flowers.update(timeSeconds);
+    this.#symbols.update(timeSeconds);
     this.#renderer.render(this.#scene, this.#camera);
   };
 
