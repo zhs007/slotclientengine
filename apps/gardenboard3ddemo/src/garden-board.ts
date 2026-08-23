@@ -1,6 +1,7 @@
 import {
   AmbientLight,
   Color,
+  DataTexture,
   DirectionalLight,
   DoubleSide,
   FogExp2,
@@ -10,12 +11,16 @@ import {
   Matrix4,
   Mesh,
   MeshStandardMaterial,
+  MeshToonMaterial,
+  NearestFilter,
   Object3D,
   PCFShadowMap,
   PerspectiveCamera,
+  RedFormat,
   Scene,
   SRGBColorSpace,
   TextureLoader,
+  UnsignedByteType,
   type Texture,
   Vector3,
   WebGLRenderer,
@@ -33,13 +38,32 @@ import { FlowerField } from "./flowers.js";
 import { createBladeGeometry, createGrassClumpGeometry } from "./geometry.js";
 import { createPerimeterPlacements } from "./layout.js";
 import { createRandom } from "./random.js";
-import { createTurfTextures, type TurfTextureSet } from "./textures.js";
+import {
+  createCartoonTileTextures,
+  createTurfTextures,
+  type TurfTextureSet,
+} from "./textures.js";
 import { createWindMaterial, type WindMaterialHandle } from "./wind.js";
 import {
   createSessionSeed,
   createSymbolPlacements,
   SymbolField,
 } from "./symbols.js";
+
+function createToonGradient(): DataTexture {
+  const gradient = new DataTexture(
+    new Uint8Array([52, 122, 198, 255]),
+    4,
+    1,
+    RedFormat,
+    UnsignedByteType,
+  );
+  gradient.minFilter = NearestFilter;
+  gradient.magFilter = NearestFilter;
+  gradient.generateMipmaps = false;
+  gradient.needsUpdate = true;
+  return gradient;
+}
 
 export class GardenBoardRenderer {
   readonly #renderer: WebGLRenderer;
@@ -49,6 +73,7 @@ export class GardenBoardRenderer {
   readonly #textures: TurfTextureSet[] = [];
   readonly #standaloneTextures: Texture[] = [];
   readonly #windMaterials: WindMaterialHandle[] = [];
+  readonly #toonGradient = createToonGradient();
   readonly #flowers: FlowerField;
   readonly #symbols: SymbolField;
   #destroyed = false;
@@ -64,6 +89,7 @@ export class GardenBoardRenderer {
     this.#renderer.setClearColor(0x4b8934, 1);
     this.#renderer.shadowMap.enabled = true;
     this.#renderer.shadowMap.type = PCFShadowMap;
+    this.#standaloneTextures.push(this.#toonGradient);
     host.append(this.#renderer.domElement);
     this.#scene.background = new Color(0x4b8934);
     this.#scene.fog = new FogExp2(0x4b8934, 0.018);
@@ -172,8 +198,16 @@ export class GardenBoardRenderer {
   }
 
   #createBoard(): void {
-    const lightTextures = createTurfTextures(0x481f2b, "#83c83a", 1.6, 1.6);
-    const darkTextures = createTurfTextures(0x229af1, "#5bab2a", 1.6, 1.6);
+    const lightTextures = createCartoonTileTextures(
+      0x481f2b,
+      "#82d94a",
+      "#4eae34",
+    );
+    const darkTextures = createCartoonTileTextures(
+      0x229af1,
+      "#59bc38",
+      "#318c2d",
+    );
     this.#textures.push(lightTextures, darkTextures);
     const geometry = new RoundedBoxGeometry(
       BOARD.cellSize,
@@ -183,13 +217,11 @@ export class GardenBoardRenderer {
       0.085,
     );
     const makeMaterial = (textures: TurfTextureSet) =>
-      new MeshStandardMaterial({
+      new MeshToonMaterial({
         map: textures.albedo,
-        roughnessMap: textures.roughness,
         bumpMap: textures.bump,
-        bumpScale: 0.035,
-        roughness: 0.88,
-        metalness: 0,
+        bumpScale: 0.008,
+        gradientMap: this.#toonGradient,
       });
     const count = (BOARD.columns * BOARD.rows) / 2;
     const light = new InstancedMesh(
@@ -311,7 +343,21 @@ export class GardenBoardRenderer {
       },
       0.27,
     );
-    this.#windMaterials.push(grassWind, leafWind);
+    const leafOutlineWind = createWindMaterial(
+      {
+        color: 0x26352a,
+        emissive: 0x26352a,
+        emissiveIntensity: 1.15,
+        roughness: 1,
+        metalness: 0,
+        side: DoubleSide,
+        polygonOffset: true,
+        polygonOffsetFactor: 1,
+        polygonOffsetUnits: 1,
+      },
+      0.27,
+    );
+    this.#windMaterials.push(grassWind, leafWind, leafOutlineWind);
     const grass = new InstancedMesh(
       createGrassClumpGeometry(0.21, 0.7),
       grassWind.material,
@@ -322,8 +368,14 @@ export class GardenBoardRenderer {
       leafWind.material,
       leafPlacements.length,
     );
+    const leafOutlines = new InstancedMesh(
+      createBladeGeometry(0.82, 1.27),
+      leafOutlineWind.material,
+      leafPlacements.length,
+    );
     grass.name = "instanced-wind-grass";
     leaves.name = "instanced-wind-broad-leaves";
+    leafOutlines.name = "selective-wind-leaf-outlines";
     const dummy = new Object3D();
     const grassPalette = [
       0x68ad3e, 0x78bc49, 0x4b9237, 0x8bc957, 0x417f3c, 0x9acb64, 0x617f35,
@@ -352,14 +404,20 @@ export class GardenBoardRenderer {
       dummy.updateMatrix();
       leaves.setMatrixAt(index, dummy.matrix);
       leaves.setColorAt(index, new Color(leafPalette[placement.paletteIndex]));
+      const shouldOutline = placement.scale >= 0.92 && index % 3 !== 1;
+      dummy.scale.setScalar(shouldOutline ? placement.scale : 0);
+      dummy.updateMatrix();
+      leafOutlines.setMatrixAt(index, dummy.matrix);
     });
     grass.instanceMatrix.needsUpdate = true;
     leaves.instanceMatrix.needsUpdate = true;
+    leafOutlines.instanceMatrix.needsUpdate = true;
     grass.instanceColor!.needsUpdate = true;
     leaves.instanceColor!.needsUpdate = true;
     grass.receiveShadow = true;
     leaves.receiveShadow = true;
-    this.#root.add(grass, leaves);
+    leafOutlines.renderOrder = -1;
+    this.#root.add(grass, leafOutlines, leaves);
   }
 
   #createFlowers(): FlowerField {
@@ -382,7 +440,7 @@ export class GardenBoardRenderer {
       paletteSize: 8,
     });
     const placements = [...outerPlacements, ...accentPlacements];
-    const flowers = new FlowerField(placements);
+    const flowers = new FlowerField(placements, this.#toonGradient);
     this.#root.add(flowers);
     return flowers;
   }

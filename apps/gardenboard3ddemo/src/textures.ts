@@ -122,3 +122,100 @@ export function createTurfTextures(
     },
   };
 }
+
+export function createCartoonTileTextures(
+  seed: number,
+  baseColor: string,
+  accentColor: string,
+): TurfTextureSet {
+  const size = 256;
+  const random = createRandom(seed);
+  const albedoCanvas = document.createElement("canvas");
+  const roughnessCanvas = document.createElement("canvas");
+  const bumpCanvas = document.createElement("canvas");
+  for (const canvas of [albedoCanvas, roughnessCanvas, bumpCanvas]) {
+    canvas.width = size;
+    canvas.height = size;
+  }
+  const albedoContext = requireContext(albedoCanvas);
+  const roughnessContext = requireContext(roughnessCanvas);
+  const bumpContext = requireContext(bumpCanvas);
+  albedoContext.fillStyle = baseColor;
+  albedoContext.fillRect(0, 0, size, size);
+  roughnessContext.fillStyle = "#e4e4e4";
+  roughnessContext.fillRect(0, 0, size, size);
+  bumpContext.fillStyle = "#808080";
+  bumpContext.fillRect(0, 0, size, size);
+
+  const base = new Color(baseColor);
+  const accent = new Color(accentColor);
+  for (let index = 0; index < 22; index += 1) {
+    const patchColor = base
+      .clone()
+      .lerp(accent, random.range(0.18, 0.5))
+      .offsetHSL(random.range(-0.018, 0.018), 0, random.range(-0.025, 0.035));
+    albedoContext.fillStyle = `#${patchColor.getHexString()}`;
+    albedoContext.globalAlpha = random.range(0.08, 0.18);
+    albedoContext.beginPath();
+    albedoContext.ellipse(
+      random.range(0, size),
+      random.range(0, size),
+      random.range(18, 54),
+      random.range(12, 36),
+      random.range(0, Math.PI),
+      0,
+      Math.PI * 2,
+    );
+    albedoContext.fill();
+  }
+
+  for (let index = 0; index < 68; index += 1) {
+    const x = random.range(5, size - 5);
+    const y = random.range(5, size - 5);
+    const height = random.range(4, 12);
+    const lean = random.range(-4, 4);
+    const strokeColor = accent
+      .clone()
+      .offsetHSL(random.range(-0.02, 0.02), 0, random.range(-0.04, 0.05));
+    albedoContext.strokeStyle = `#${strokeColor.getHexString()}`;
+    albedoContext.globalAlpha = random.range(0.18, 0.34);
+    albedoContext.lineCap = "round";
+    albedoContext.lineJoin = "round";
+    albedoContext.lineWidth = random.range(2.2, 4.8);
+    albedoContext.beginPath();
+    albedoContext.moveTo(x - 2.5, y + 1.5);
+    albedoContext.lineTo(x + lean * 0.35, y - height * 0.45);
+    albedoContext.lineTo(x + lean, y - height);
+    albedoContext.stroke();
+
+    const bumpValue = Math.floor(random.range(134, 168));
+    bumpContext.strokeStyle = `rgb(${bumpValue}, ${bumpValue}, ${bumpValue})`;
+    bumpContext.globalAlpha = 0.32;
+    bumpContext.lineCap = "round";
+    bumpContext.lineWidth = random.range(1.8, 3.6);
+    bumpContext.beginPath();
+    bumpContext.moveTo(x - 2.5, y + 1.5);
+    bumpContext.lineTo(x + lean, y - height);
+    bumpContext.stroke();
+  }
+  albedoContext.globalAlpha = 1;
+  bumpContext.globalAlpha = 1;
+
+  const albedo = new CanvasTexture(albedoCanvas);
+  const roughness = new CanvasTexture(roughnessCanvas);
+  const bump = new CanvasTexture(bumpCanvas);
+  albedo.colorSpace = SRGBColorSpace;
+  configure(albedo, 1, 1);
+  configure(roughness, 1, 1);
+  configure(bump, 1, 1);
+  return {
+    albedo,
+    roughness,
+    bump,
+    dispose: () => {
+      albedo.dispose();
+      roughness.dispose();
+      bump.dispose();
+    },
+  };
+}

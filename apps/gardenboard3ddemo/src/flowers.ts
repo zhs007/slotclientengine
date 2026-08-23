@@ -1,13 +1,15 @@
 import {
+  BackSide,
   Color,
   CylinderGeometry,
   Group,
   InstancedMesh,
   Matrix4,
   MeshBasicMaterial,
-  MeshStandardMaterial,
+  MeshToonMaterial,
   Quaternion,
   SphereGeometry,
+  type Texture,
   Vector3,
 } from "three";
 import type { PlantPlacement } from "./layout.js";
@@ -32,6 +34,8 @@ export class FlowerField extends Group {
   readonly #stems: InstancedMesh;
   readonly #petals: InstancedMesh;
   readonly #centres: InstancedMesh;
+  readonly #petalOutlines: InstancedMesh;
+  readonly #centreOutlines: InstancedMesh;
   readonly #matrix = new Matrix4();
   readonly #quaternion = new Quaternion();
   readonly #scale = new Vector3();
@@ -39,38 +43,66 @@ export class FlowerField extends Group {
   readonly #crown = new Vector3();
   readonly #direction = new Vector3();
 
-  constructor(placements: readonly PlantPlacement[]) {
+  constructor(placements: readonly PlantPlacement[], toonGradient: Texture) {
     super();
     this.name = "wind-animated-flowers";
     this.#placements = placements;
     this.#stems = new InstancedMesh(
       new CylinderGeometry(0.035, 0.047, 1, 6, 4),
-      new MeshStandardMaterial({
+      new MeshToonMaterial({
         color: 0x69a83a,
+        gradientMap: toonGradient,
         emissive: 0x1f4815,
-        emissiveIntensity: 0.8,
-        roughness: 0.86,
+        emissiveIntensity: 0.22,
       }),
       placements.length,
     );
     this.#petals = new InstancedMesh(
       new SphereGeometry(1, 9, 5),
-      new MeshBasicMaterial({
+      new MeshToonMaterial({
         color: 0xffffff,
+        gradientMap: toonGradient,
       }),
       placements.length * MAX_PETALS_PER_FLOWER,
     );
     this.#centres = new InstancedMesh(
       new SphereGeometry(1, 10, 6),
-      new MeshBasicMaterial({
+      new MeshToonMaterial({
         color: 0xffffff,
+        gradientMap: toonGradient,
+      }),
+      placements.length,
+    );
+    this.#petalOutlines = new InstancedMesh(
+      new SphereGeometry(1, 9, 5),
+      new MeshBasicMaterial({
+        color: 0x34283b,
+        side: BackSide,
+        toneMapped: false,
+      }),
+      placements.length * MAX_PETALS_PER_FLOWER,
+    );
+    this.#centreOutlines = new InstancedMesh(
+      new SphereGeometry(1, 10, 6),
+      new MeshBasicMaterial({
+        color: 0x34283b,
+        side: BackSide,
+        toneMapped: false,
       }),
       placements.length,
     );
     this.#stems.castShadow = true;
     this.#petals.castShadow = true;
     this.#centres.castShadow = true;
-    this.add(this.#stems, this.#petals, this.#centres);
+    this.#petalOutlines.renderOrder = -1;
+    this.#centreOutlines.renderOrder = -1;
+    this.add(
+      this.#stems,
+      this.#petalOutlines,
+      this.#petals,
+      this.#centreOutlines,
+      this.#centres,
+    );
     placements.forEach((placement, flowerIndex) => {
       const paletteIndex = placement.paletteIndex;
       this.#stems.setColorAt(
@@ -101,6 +133,7 @@ export class FlowerField extends Group {
     this.#placements.forEach((placement, flowerIndex) => {
       const style =
         FLOWER_STYLES[placement.paletteIndex % FLOWER_STYLES.length];
+      const shouldOutline = placement.scale >= 0.82;
       const height = 0.52 + placement.scale * 0.42;
       const sway = Math.sin(timeSeconds * 1.42 + placement.phase) * 0.18;
       const crossSway =
@@ -130,6 +163,7 @@ export class FlowerField extends Group {
           this.#scale.setScalar(0);
           this.#matrix.compose(this.#crown, this.#quaternion, this.#scale);
           this.#petals.setMatrixAt(instanceIndex, this.#matrix);
+          this.#petalOutlines.setMatrixAt(instanceIndex, this.#matrix);
           continue;
         }
         const angle = placement.rotation + (petal / style.petals) * Math.PI * 2;
@@ -147,6 +181,9 @@ export class FlowerField extends Group {
         );
         this.#matrix.compose(position, this.#quaternion, this.#scale);
         this.#petals.setMatrixAt(instanceIndex, this.#matrix);
+        this.#scale.multiplyScalar(shouldOutline ? 1.1 : 0);
+        this.#matrix.compose(position, this.#quaternion, this.#scale);
+        this.#petalOutlines.setMatrixAt(instanceIndex, this.#matrix);
       }
       this.#quaternion.identity();
       this.#scale.setScalar(style.centre * crownScale);
@@ -157,14 +194,29 @@ export class FlowerField extends Group {
         this.#scale,
       );
       this.#centres.setMatrixAt(flowerIndex, this.#matrix);
+      this.#scale.multiplyScalar(shouldOutline ? 1.12 : 0);
+      this.#matrix.compose(
+        new Vector3(this.#crown.x, this.#crown.y + 0.065, this.#crown.z),
+        this.#quaternion,
+        this.#scale,
+      );
+      this.#centreOutlines.setMatrixAt(flowerIndex, this.#matrix);
     });
     this.#stems.instanceMatrix.needsUpdate = true;
     this.#petals.instanceMatrix.needsUpdate = true;
     this.#centres.instanceMatrix.needsUpdate = true;
+    this.#petalOutlines.instanceMatrix.needsUpdate = true;
+    this.#centreOutlines.instanceMatrix.needsUpdate = true;
   }
 
   dispose(): void {
-    for (const mesh of [this.#stems, this.#petals, this.#centres]) {
+    for (const mesh of [
+      this.#stems,
+      this.#petals,
+      this.#centres,
+      this.#petalOutlines,
+      this.#centreOutlines,
+    ]) {
       mesh.geometry.dispose();
       const materials = Array.isArray(mesh.material)
         ? mesh.material
