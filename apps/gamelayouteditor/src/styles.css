@@ -1143,6 +1143,10 @@ dialog:not(.resource-picker) .button-row {
   gap: 12px;
 }
 
+.event-audio-project-actions .editor-event-dialog {
+  width: 80vw;
+}
+
 .event-audio-project-actions label,
 .event-audio-fields > label,
 .event-audio-fields fieldset {
@@ -1172,4 +1176,10 @@ dialog:not(.resource-picker) .button-row {
 .event-audio-fields fieldset legend,
 .event-audio-fields fieldset .hint {
   grid-column: 1 / -1;
+}
+
+@media (max-width: 840px) {
+  .event-audio-project-actions .editor-event-dialog {
+    width: calc(100vw - 24px);
+  }
 }
