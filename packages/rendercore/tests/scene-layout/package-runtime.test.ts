@@ -216,10 +216,21 @@ const gameConfig = {
 
 const symbolManifest = {
   version: 1,
-  states: [],
+  states: ["win"],
   symbols: {
-    A: { normal: "./a.png", scale: 1, renderPriority: 1 },
-    B: { normal: "./b.png", scale: 1 },
+    A: {
+      normal: "./a.png",
+      win: "./a.png",
+      scale: 1,
+      renderPriority: 1,
+      animations: { win: { kind: "builtin", durationSeconds: 0.58 } },
+    },
+    B: {
+      normal: "./b.png",
+      win: "./b.png",
+      scale: 1,
+      animations: { win: { kind: "builtin", durationSeconds: 0.58 } },
+    },
   },
 };
 
@@ -619,6 +630,165 @@ describe("scene layout package runtime", () => {
   });
 
   for (const renderMode of ["standard", "grid-cell"] as const) {
+    it(`emits distinct batch and occurrence symbol-state events on ${renderMode} reels`, async () => {
+      const load = vi
+        .spyOn(Assets, "load")
+        .mockResolvedValue(Texture.WHITE as never);
+      const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+      const backend = new EventAudioBackend();
+      try {
+        const batchA =
+          "gamelayout:/symbol-package/demo-symbols/symbolsstatebatch/A/win";
+        const manifest = upgradeSceneLayoutManifestToLatest(
+          layoutManifest(renderMode),
+        );
+        const packageFiles = files();
+        packageFiles.set("assets/batch-win.mp3", new Uint8Array([4]));
+        const resource = await createSceneLayoutPackageResource({
+          manifest: {
+            ...manifest,
+            eventAudio: {
+              version: 1,
+              ignoreLegacyAudio: false,
+              bindings: [
+                {
+                  event: batchA,
+                  audio: {
+                    name: "batch-win",
+                    asset: {
+                      sources: [
+                        {
+                          path: "assets/batch-win.mp3",
+                          mediaType: "audio/mpeg",
+                        },
+                      ],
+                    },
+                    category: "effect",
+                    playback: "once",
+                    voices: { maxConcurrent: 1, overflow: "restart-oldest" },
+                    focus: {},
+                  },
+                },
+              ],
+            },
+          },
+          files: packageFiles,
+        });
+        const runtime = createSceneLayoutPackageRuntime({
+          resource,
+          audioBackend: backend,
+        });
+        await runtime.init({
+          reels: {
+            main: {
+              scene: [
+                [1, 1],
+                [0, 0],
+              ],
+              localPhaseYs: [0, 0],
+            },
+          },
+        });
+        await runtime.unlockAudio();
+        const batchB =
+          "gamelayout:/symbol-package/demo-symbols/symbolsstatebatch/B/win";
+        const occurrenceB =
+          "gamelayout:/symbol-package/demo-symbols/symbol/B/instance/reel/main/x/0/y/0/state/win/entered";
+        const observed: Array<{ address: string; detail: unknown }> = [];
+        const disposers = [batchA, batchB, occurrenceB].map((address) =>
+          runtime.addresses.bind(address, (event) => observed.push(event)),
+        );
+
+        await runtime.playMainReelSymbolStateBatch([
+          {
+            positions: [
+              { x: 0, y: 0 },
+              { x: 1, y: 0 },
+            ],
+            state: "win",
+            options: { transitionMode: "immediate", completion: "entered" },
+          },
+          {
+            positions: [{ x: 0, y: 0 }],
+            symbol: "B",
+            state: "win",
+            options: { transitionMode: "immediate", completion: "entered" },
+          },
+        ]);
+
+        expect(observed.slice(0, 2).map(({ address }) => address)).toEqual([
+          batchA,
+          batchB,
+        ]);
+        expect(observed[0]?.detail).toEqual({
+          eventFamily: "symbols-state-batch",
+          symbolPackageId: "demo-symbols",
+          symbol: "A",
+          state: "win",
+        });
+        for (let index = 0; index < 5; index += 1) await Promise.resolve();
+        expect(backend.sounds).toHaveLength(1);
+        expect(backend.sounds[0]?.instances).toHaveLength(1);
+        expect(observed.some(({ address }) => address === occurrenceB)).toBe(
+          true,
+        );
+
+        const eventCount = observed.length;
+        expect(() =>
+          runtime.playMainReelSymbolStateBatch([
+            {
+              positions: [{ x: 0, y: 1 }],
+              symbol: "A",
+              state: "win",
+              options: {
+                transitionMode: "immediate",
+                completion: "entered",
+              },
+            },
+          ]),
+        ).toThrow(/symbol "A" is not present/);
+        expect(observed).toHaveLength(eventCount);
+        expect(
+          runtime.getMainReelSymbolStateSnapshots([{ x: 0, y: 1 }])[0]
+            ?.requestedState,
+        ).toBe("normal");
+
+        const abortController = new AbortController();
+        abortController.abort();
+        const abortedEventCount = observed.length;
+        let abortedError: unknown;
+        try {
+          await runtime.playMainReelSymbolStateBatch(
+            [
+              {
+                positions: [{ x: 1, y: 1 }],
+                state: "win",
+                options: {
+                  transitionMode: "immediate",
+                  completion: "entered",
+                },
+              },
+            ],
+            { signal: abortController.signal },
+          );
+        } catch (error) {
+          abortedError = error;
+        }
+        expect(abortedError).toMatchObject({ name: "AbortError" });
+        expect(observed).toHaveLength(abortedEventCount);
+        expect(
+          runtime.getMainReelSymbolStateSnapshots([{ x: 1, y: 1 }])[0]
+            ?.requestedState,
+        ).toBe("normal");
+
+        for (const dispose of disposers) dispose();
+        runtime.destroy();
+      } finally {
+        load.mockRestore();
+        unload.mockRestore();
+      }
+    });
+
     it(`creates, orders and resets the ${renderMode} reel from package contracts`, async () => {
       const load = vi
         .spyOn(Assets, "load")

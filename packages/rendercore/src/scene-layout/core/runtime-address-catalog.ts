@@ -11,6 +11,7 @@ export type GameLayoutRuntimeEventFamily =
   | "variant"
   | "node-animation"
   | "symbol-state"
+  | "symbols-state-batch"
   | "mode-state"
   | "transition-lifecycle"
   | "transition-effect-event"
@@ -134,9 +135,17 @@ export function compileGameLayoutRuntimeEventCatalog(
   }
 
   const mainReel = source.manifest.reels.main;
-  for (const bindingId of Object.keys(
-    source.manifest.symbolPackages ?? {},
-  ).sort(compare)) {
+  const legacySymbolBindingId = source.manifest.symbolPackage?.manifest
+    .split("/")
+    .at(-2);
+  if (source.manifest.symbolPackage && !legacySymbolBindingId)
+    throw new SceneLayoutError(
+      `Cannot derive legacy symbol package event binding: ${source.manifest.symbolPackage.manifest}.`,
+    );
+  const symbolBindingIds = legacySymbolBindingId
+    ? [legacySymbolBindingId]
+    : Object.keys(source.manifest.symbolPackages ?? {});
+  for (const bindingId of symbolBindingIds.sort(compare)) {
     if (!mainReel)
       throw new SceneLayoutError(
         `Symbol package "${bindingId}" requires the main reel.`,
@@ -147,7 +156,29 @@ export function compileGameLayoutRuntimeEventCatalog(
         `Symbol package event catalog source is missing binding: ${bindingId}.`,
       );
     for (const symbol of [...symbolPackage.symbols].sort(compare))
-      for (const state of symbolPackage.states)
+      for (const state of symbolPackage.states) {
+        add({
+          segments: [
+            "symbol-package",
+            bindingId,
+            "symbolsstatebatch",
+            symbol,
+            state,
+          ],
+          owner: ["symbol-package", bindingId],
+          family: "symbols-state-batch",
+          facets: [
+            ["symbol-package", bindingId],
+            ["symbol", symbol],
+            ["state", state],
+          ],
+          detail: {
+            eventFamily: "symbols-state-batch",
+            symbolPackageId: bindingId,
+            symbol,
+            state,
+          },
+        });
         for (const edge of ["entered", "exited"])
           addSymbolAddresses({
             add,
@@ -158,6 +189,7 @@ export function compileGameLayoutRuntimeEventCatalog(
             columns: mainReel.columns,
             rows: mainReel.rows,
           });
+      }
   }
 
   for (const mode of source.manifest.gameModes.modes) {

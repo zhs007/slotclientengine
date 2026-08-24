@@ -430,6 +430,19 @@ describe("default adapters", () => {
         ),
     );
     expect(columnWin).toBeDefined();
+    const batchWin = catalog.entries.find(
+      (entry) =>
+        entry.family === "symbols-state-batch" &&
+        entry.descriptor.address ===
+          "gamelayout:/symbol-package/base/symbolsstatebatch/A/win",
+    );
+    expect(batchWin).toMatchObject({
+      facets: [
+        { key: "symbol-package", value: "base" },
+        { key: "symbol", value: "A" },
+        { key: "state", value: "win" },
+      ],
+    });
     expect(catalog.entries.some(({ family }) => family === "variant")).toBe(
       true,
     );
@@ -452,6 +465,8 @@ describe("default adapters", () => {
     rootSelect.dispatchEvent(new Event("change", { bubbles: true }));
     await flush();
     click(required(host, '[data-event-action="add"]'));
+    expect(host.textContent).toContain("Symbol 状态");
+    expect(host.textContent).toContain("批量图标状态");
     pickEventChoice(host, "symbol-state", "family");
     for (const value of ["base", "A", "win", "column", "1", "entered"])
       pickEventChoice(host, value, "pick");

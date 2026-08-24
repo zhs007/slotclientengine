@@ -996,7 +996,7 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
     transitionMode?: import("../symbol/index.js").SymbolStateTransitionMode,
   ): void;
   playMainReelSymbolStateBatch(
-    requests: readonly import("../reel/index.js").VisibleSymbolStatePlaybackRequest[],
+    requests: readonly SceneLayoutMainReelSymbolStatePlaybackRequest[],
     options?: import("../reel/index.js").VisibleSymbolStatePlaybackBatchOptions,
   ): Promise<void>;
   setMainReelSymbolPresentationValue(
@@ -1180,3 +1180,9 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
     | import("../popup/core/types.js").AwardCelebrationPhase
     | null;
 }
+
+export type SceneLayoutMainReelSymbolStatePlaybackRequest =
+  import("../reel/index.js").VisibleSymbolStatePlaybackRequest & {
+    /** Event identity override; omitted resolves the lowest symbol code in positions. */
+    readonly symbol?: string;
+  };

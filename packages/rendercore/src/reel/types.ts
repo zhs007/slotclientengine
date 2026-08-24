@@ -331,9 +331,21 @@ export interface RenderReelSymbolStateTransition {
   readonly resolvedState: SymbolStateId;
 }
 
+export interface RenderReelSymbolStateBatchPosition {
+  readonly x: number;
+  readonly y: number;
+  readonly code: number;
+}
+
+export interface RenderReelSymbolStateBatchRequest {
+  readonly request: VisibleSymbolStatePlaybackRequest;
+  readonly positions: readonly RenderReelSymbolStateBatchPosition[];
+}
+
 export interface RenderReelSymbolStateObserver {
   hasAnyInterest(symbol: string): boolean;
   observe(transition: RenderReelSymbolStateTransition): void;
+  observeBatch?(requests: readonly RenderReelSymbolStateBatchRequest[]): void;
 }
 
 export interface RenderReelSpinOptions {

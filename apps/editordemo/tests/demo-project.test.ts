@@ -4,6 +4,7 @@ import {
 } from "@slotclientengine/browserartifactio";
 import { createDefaultEditorAssetsController } from "@slotclientengine/editorcore/assets/adapters";
 import { createEditorAssetsController } from "@slotclientengine/editorcore/assets/core";
+import { mountEditorGameLayoutEventDialog } from "@slotclientengine/editorcore/assets/ui";
 import { describe, expect, it } from "vitest";
 import {
   DEMO_PROJECT_PATH,
@@ -102,6 +103,58 @@ describe("demo host", () => {
       "win.png",
     );
     expect(renamed.programs).toEqual({ coin: "win.png" });
+  });
+});
+
+describe("demo Game Layout event dialog", () => {
+  it("shows occurrence and batch symbol-state as distinct event families", async () => {
+    const root = document.createElement("div");
+    document.body.append(root);
+    const entry = (family: "symbol-state" | "symbols-state-batch") => {
+      const ownerAddress: `gamelayout:/${string}` =
+        "gamelayout:/symbol-package/base";
+      const address: `gamelayout:/${string}` =
+        family === "symbol-state"
+          ? "gamelayout:/symbol-package/base/symbol/A/instance/reel/main/x/0/y/0/state/win/entered"
+          : "gamelayout:/symbol-package/base/symbolsstatebatch/A/win";
+      return {
+        descriptor: {
+          address,
+          kind: "event" as const,
+          ownerAddress,
+          authored: true,
+          capability: "event" as const,
+          detail: { eventFamily: family },
+        },
+        family,
+        facets: [
+          { key: "symbol-package", value: "base" },
+          { key: "symbol", value: "A" },
+          { key: "state", value: "win" },
+        ],
+        dispatchAddresses: [address],
+      };
+    };
+    const dialog = mountEditorGameLayoutEventDialog({
+      root,
+      sources: [{ key: "layout.manifest.json", label: "Demo Layout" }],
+      inspectCatalog: () => ({
+        rootKey: "layout.manifest.json",
+        entries: [entry("symbol-state"), entry("symbols-state-batch")],
+      }),
+      onConfirm() {},
+    });
+
+    dialog.open();
+    const sourceSelect =
+      root.querySelector<HTMLSelectElement>("[data-event-root]")!;
+    sourceSelect.value = "layout.manifest.json";
+    sourceSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    await expect.poll(() => root.textContent).toContain("2 个可侦听 event");
+    root.querySelector<HTMLButtonElement>('[data-event-action="add"]')!.click();
+    expect(root.textContent).toContain("Symbol 状态");
+    expect(root.textContent).toContain("批量图标状态");
+    dialog.destroy();
   });
 });
 

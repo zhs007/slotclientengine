@@ -62,6 +62,7 @@ import type {
   SymbolPlayerPoolStats,
   RenderVisibleSymbolGeometrySnapshot,
   RenderVisibleSymbolStateSnapshot,
+  RenderReelSymbolStateBatchRequest,
   SymbolPlayerPool,
   GridCellCascadeDropPlan,
   GridCellCascadeValueMatrix,
@@ -119,6 +120,7 @@ interface PresentationMountedNode {
 export class RenderReelSet extends Container implements ReelSpin {
   readonly reels: readonly RenderReel[];
   readonly #symbolPool: SymbolPlayerPool | null;
+  readonly #symbolStateObserver: RenderReelSetOptions["symbolStateObserver"];
   readonly #slotLayer: Container;
   readonly #cascadeMask: Graphics;
   readonly #occurrenceGenerations = new WeakMap<SymbolPlayer, number>();
@@ -171,6 +173,7 @@ export class RenderReelSet extends Container implements ReelSpin {
     this.sortableChildren = true;
     assertLayoutMatchesReels(options.layout, options.reels.getReelCount());
     this.#symbolPool = createSymbolPlayerPool(options.symbolPool);
+    this.#symbolStateObserver = options.symbolStateObserver;
     const reelSpinDirection = options.reelSpin?.direction ?? "forward";
     if (reelSpinDirection !== "forward" && reelSpinDirection !== "backward")
       throw new ReelError(
@@ -1142,13 +1145,13 @@ export class RenderReelSet extends Container implements ReelSpin {
         "Visible symbol state playback batch must not be empty.",
       );
     }
-    const prepared = requests.flatMap((request) => {
+    const preparedRequests = requests.map((request) => {
       if (request.positions.length === 0) {
         throw new ReelError(
           "Visible symbol playback positions must not be empty.",
         );
       }
-      return normalizeCascadePositions(
+      const prepared = normalizeCascadePositions(
         request.positions,
         this.reels.length,
         this.reels[0]?.layout.visibleRows ?? 0,
@@ -1166,17 +1169,39 @@ export class RenderReelSet extends Container implements ReelSpin {
         );
         return { position, reel, request };
       });
+      return Object.freeze({ request, prepared: Object.freeze(prepared) });
     });
+    const batchObservation = Object.freeze(
+      preparedRequests.map(
+        ({ request, prepared }): RenderReelSymbolStateBatchRequest =>
+          Object.freeze({
+            request,
+            positions: Object.freeze(
+              prepared.map(({ position, reel }) =>
+                Object.freeze({
+                  ...position,
+                  code: reel.getVisibleSymbolStateSnapshot(position.y).code,
+                }),
+              ),
+            ),
+          }),
+      ),
+    );
     return startSymbolStatePlaybackBatch(
-      prepared.map(
-        ({ position, reel, request }) =>
-          (signal) =>
-            reel.playVisibleSymbolState(position.y, request.state, {
-              ...request.options,
-              signal,
-            }),
+      preparedRequests.flatMap(({ prepared }) =>
+        prepared.map(
+          ({ position, reel, request }) =>
+            (signal) =>
+              reel.playVisibleSymbolState(position.y, request.state, {
+                ...request.options,
+                signal,
+              }),
+        ),
       ),
       options?.signal,
+      this.#symbolStateObserver?.observeBatch
+        ? () => this.#symbolStateObserver!.observeBatch!(batchObservation)
+        : undefined,
     );
   }
 

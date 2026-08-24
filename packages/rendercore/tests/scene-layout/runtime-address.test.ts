@@ -222,6 +222,36 @@ describe("Game Layout runtime address", () => {
     } as const;
     const compiled = compileGameLayoutRuntimeEventCatalog(source);
     expect(
+      compiled.entries.find(
+        ({ descriptor }) =>
+          descriptor.address ===
+          "gamelayout:/symbol-package/base/symbolsstatebatch/WL/win",
+      ),
+    ).toMatchObject({
+      family: "symbols-state-batch",
+      facets: [
+        { key: "symbol-package", value: "base" },
+        { key: "symbol", value: "WL" },
+        { key: "state", value: "win" },
+      ],
+      descriptor: {
+        detail: {
+          eventFamily: "symbols-state-batch",
+          symbolPackageId: "base",
+          symbol: "WL",
+          state: "win",
+        },
+      },
+    });
+    expect(
+      compiled.entries.some(
+        ({ descriptor, family }) =>
+          family === "symbol-state" &&
+          descriptor.address ===
+            "gamelayout:/symbol-package/base/symbol/WL/instance/reel/main/x/0/y/0/state/win/entered",
+      ),
+    ).toBe(true);
+    expect(
       compiled.entries.some(({ descriptor }) =>
         descriptor.address.includes("/bgm/lifecycle/"),
       ),
