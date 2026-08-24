@@ -910,13 +910,17 @@ export class RenderReelSet extends Container implements ReelSpin {
   ): void {
     if (!Array.isArray(dimmedPositions) || dimmedPositions.length === 0)
       throw new ReelError("dimmed positions must not be empty.");
-    this.applyVisibleSymbolDimming(dimmedPositions, dimmingAlpha, "dimmed");
+    this.applyVisibleSymbolDimming(
+      dimmedPositions,
+      dimmingAlpha,
+      "dimmed-additive",
+    );
   }
 
   private applyVisibleSymbolDimming(
     positions: readonly { readonly x: number; readonly y: number }[],
     dimmingAlpha: number,
-    selection: "highlighted" | "dimmed",
+    selection: "highlighted" | "dimmed-additive",
   ): void {
     this.assertStopped("set visible symbol dimming");
     if (!Number.isFinite(dimmingAlpha) || dimmingAlpha < 0 || dimmingAlpha > 1)
@@ -933,7 +937,9 @@ export class RenderReelSet extends Container implements ReelSpin {
         if (slot.windowY < 0 || slot.windowY >= reel.layout.visibleRows)
           continue;
         const isSelected = selected.has(`${reel.xIndex},${slot.windowY}`);
-        const isDimmed = selection === "dimmed" ? isSelected : !isSelected;
+        if (selection === "dimmed-additive" && !isSelected) continue;
+        const isDimmed =
+          selection === "dimmed-additive" ? isSelected : !isSelected;
         reel.setSlotBrightness(slot.windowY, isDimmed ? 1 - dimmingAlpha : 1);
       }
   }

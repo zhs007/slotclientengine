@@ -1230,13 +1230,17 @@ export class RenderGridCellReelSet
     dimmedPositions: readonly { readonly x: number; readonly y: number }[],
     dimmingAlpha: number,
   ): void {
-    this.applyVisibleSymbolDimming(dimmedPositions, dimmingAlpha, "dimmed");
+    this.applyVisibleSymbolDimming(
+      dimmedPositions,
+      dimmingAlpha,
+      "dimmed-additive",
+    );
   }
 
   private applyVisibleSymbolDimming(
     positions: readonly { readonly x: number; readonly y: number }[],
     dimmingAlpha: number,
-    selection: "highlighted" | "dimmed",
+    selection: "highlighted" | "dimmed-additive",
   ): void {
     this.assertStopped("set visible symbol dimming");
     if (
@@ -1254,7 +1258,9 @@ export class RenderGridCellReelSet
     for (const cell of this.#cells) {
       const key = `${cell.coordinate.x},${cell.coordinate.y}`;
       const isSelected = selected.has(key);
-      const isDimmed = selection === "dimmed" ? isSelected : !isSelected;
+      if (selection === "dimmed-additive" && !isSelected) continue;
+      const isDimmed =
+        selection === "dimmed-additive" ? isSelected : !isSelected;
       cell.dimOverlay.y = 0;
       cell.dimOverlay.alpha = 1;
       cell.dimOverlay.renderable = true;
