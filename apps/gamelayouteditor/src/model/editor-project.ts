@@ -13,10 +13,6 @@ import {
   type SceneLayoutVariantId,
 } from "@slotclientengine/rendercore/scene-layout/data";
 import {
-  collectSceneLayoutPackagePaths,
-  inspectSceneLayoutRuntimeEventCatalog,
-} from "@slotclientengine/rendercore/scene-layout/editor";
-import {
   collectImageStringAssetPaths,
   parseImageStringManifest,
 } from "@slotclientengine/rendercore/image-string/data";
@@ -47,6 +43,7 @@ import {
   type EditorVniLayoutResource,
   type EditorVideoLayoutResource,
 } from "./editor-resource.js";
+import { inspectEditorWorkspaceRuntimeEventCatalog } from "./editor-runtime-event-catalog.js";
 import { assertCanonicalEditorNodeId } from "./node-id.js";
 
 type EditorLayoutResourceDraft =
@@ -997,16 +994,9 @@ export function editorProjectToManifest(
     },
   });
   if (manifest.eventAudio.bindings.length > 0) {
-    const closurePaths = collectSceneLayoutPackagePaths({
+    const catalog = inspectEditorWorkspaceRuntimeEventCatalog({
       manifest,
-      files: project.assets,
-      allowExtraFiles: true,
-    });
-    const catalog = inspectSceneLayoutRuntimeEventCatalog({
-      manifest,
-      files: new Map(
-        closurePaths.map((path) => [path, project.assets.get(path)!] as const),
-      ),
+      workspaceFiles: project.assets,
     });
     const available = new Set(
       catalog.entries.map(({ descriptor }) => descriptor.address),
