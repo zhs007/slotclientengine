@@ -51,6 +51,15 @@ export interface EditorGameLayoutEventDialog<TConfiguration = never> {
   destroy(): void;
 }
 
+export interface EditorGameLayoutEventPickerDialog {
+  readonly element: HTMLDialogElement;
+  readonly trigger: HTMLButtonElement;
+  open(): void;
+  close(): void;
+  setValue(value: EditorGameLayoutEventItem | null): void;
+  destroy(): void;
+}
+
 export interface MountEditorGameLayoutEventDialogOptions<
   TProject,
   TConfiguration = never,
@@ -69,8 +78,29 @@ export interface MountEditorGameLayoutEventDialogOptions<
     rootKey: string,
   ) => EditorGameLayoutEventCatalog | Promise<EditorGameLayoutEventCatalog>;
   readonly configuration?: EditorGameLayoutEventConfigurationAdapter<TConfiguration>;
+  readonly selectionMode?: "group" | "single";
   readonly onConfirm: (
     value: EditorConfiguredGameLayoutEventGroup<TConfiguration>,
+  ) => void | Promise<void>;
+}
+
+export interface MountEditorGameLayoutEventPickerDialogOptions<TProject> {
+  readonly root: HTMLElement;
+  readonly rootKey: string;
+  readonly controller?: EditorAssetsController<TProject>;
+  readonly sources?: readonly {
+    readonly key: string;
+    readonly label: string;
+  }[];
+  readonly subscribe?: (listener: () => void) => () => void;
+  readonly value?: EditorGameLayoutEventItem | null;
+  readonly title?: string;
+  readonly triggerLabel?: string;
+  readonly inspectCatalog?: (
+    rootKey: string,
+  ) => EditorGameLayoutEventCatalog | Promise<EditorGameLayoutEventCatalog>;
+  readonly onConfirm: (
+    value: EditorGameLayoutEventItem,
   ) => void | Promise<void>;
 }
 
@@ -88,6 +118,7 @@ export function mountEditorGameLayoutEventDialog<
 ): EditorGameLayoutEventDialog<TConfiguration> {
   if (!options.controller && !options.sources)
     throw new Error("Editor Event Dialog 需要 controller 或固定 sources。");
+  const singleSelection = options.selectionMode === "single";
   const cloneConfiguration = (
     value: TConfiguration | undefined,
   ): TConfiguration | undefined =>
@@ -140,7 +171,7 @@ export function mountEditorGameLayoutEventDialog<
         <footer class="editor-event-dialog-footer">
           <p data-event-status role="status"></p>
           <button type="button" data-event-cancel>取消</button>
-          <button type="button" data-event-confirm>确认</button>
+          <button type="button" data-event-confirm ${singleSelection ? "hidden" : ""}>确认</button>
         </footer>
       </form>
     </dialog>`;
@@ -413,6 +444,14 @@ export function mountEditorGameLayoutEventDialog<
           ? {}
           : { configuration: cloneConfiguration(rowConfiguration) }),
       };
+      if (singleSelection) {
+        draft.events = [configured];
+        resetRowEditor();
+        status = "";
+        render();
+        void onConfirm();
+        return;
+      }
       if (editIndex === null) draft.events.push(configured);
       else draft.events[editIndex] = configured;
       resetRowEditor();
@@ -442,6 +481,7 @@ export function mountEditorGameLayoutEventDialog<
       if (next.rootKey !== rootKey)
         throw new Error(`event catalog root 不匹配：${next.rootKey}`);
       catalog = next;
+      activateSingleSelection();
       status = invalidEvents().length
         ? "ZIP 已更新；红色 event 已失效，请移除或重新选择。"
         : "";
@@ -454,6 +494,24 @@ export function mountEditorGameLayoutEventDialog<
         render();
       }
     }
+  }
+
+  function activateSingleSelection(): void {
+    if (!singleSelection || !catalog) return;
+    const item = draft.events[0];
+    const entry = catalog.entries.find(
+      ({ descriptor }) => descriptor.address === item?.address,
+    );
+    editorActive = true;
+    editIndex = entry ? 0 : null;
+    selection = entry
+      ? {
+          family: entry.family,
+          facets: entry.facets.map(({ key, value }) => ({ key, value })),
+          query: "",
+        }
+      : emptySelection();
+    rowConfiguration = cloneConfiguration(item?.configuration);
   }
 
   async function copyAddress(address: string): Promise<void> {
@@ -490,13 +548,17 @@ export function mountEditorGameLayoutEventDialog<
       </section>
       ${pendingRootKey ? `<section class="editor-event-warning">切换到 <code>${escapeHtml(pendingRootKey || "未选择")}</code> 将移除组内全部 event。<button type="button" data-event-action="confirm-root-change">清空并切换</button><button type="button" data-event-action="cancel-root-change">保留当前组</button></section>` : ""}
       ${catalogError ? `<section class="editor-event-error"><strong>无法读取 Game Layout event</strong><p>${escapeHtml(catalogError)}</p></section>` : ""}
-      <div class="editor-event-workspace">
-        <section class="editor-event-list" aria-label="Event 列表">
+      <div class="editor-event-workspace ${singleSelection ? "single" : ""}">
+        ${
+          singleSelection
+            ? ""
+            : `<section class="editor-event-list" aria-label="Event 列表">
           <header><strong>Event 组</strong><span>${draft.events.length} 项</span><button type="button" data-event-action="add" ${!catalog || editorActive ? "disabled" : ""}>添加 Event</button></header>
           <ol>
             ${draft.events.map((item, index) => renderEventRow(item, index, invalid.has(item.address))).join("") || `<li class="editor-event-empty">尚未添加 event。</li>`}
           </ol>
-        </section>
+        </section>`
+        }
         <section class="editor-event-editor" aria-label="渐进式 Event 选择器">
           ${renderProgressiveEditor()}
         </section>
@@ -555,17 +617,17 @@ export function mountEditorGameLayoutEventDialog<
     if (!catalog)
       return `<div class="editor-event-placeholder">修复 ZIP 检查错误后才能选择 event。</div>`;
     if (!editorActive)
-      return `<div class="editor-event-placeholder">从左侧添加或修改一个 event。选择器每次只展开一个层级。</div>`;
+      return `<div class="editor-event-placeholder">${singleSelection ? "正在准备 Event 选择器…" : "从左侧添加或修改一个 event。选择器每次只展开一个层级。"}</div>`;
     const families = [...new Set(catalog.entries.map(({ family }) => family))];
     const breadcrumbs = selection.family
       ? `<button type="button" data-event-action="family-back">${escapeHtml(familyLabel(selection.family))}</button>${selection.facets.map((facet, index) => `<button type="button" data-event-action="truncate" data-count="${index}">${escapeHtml(facetLabel(facet.key))}: ${escapeHtml(facet.value)}</button>`).join("")}`
       : "";
     const selected = selectedEntry();
     const next = nextFacet();
-    return `<header><strong>${editIndex === null ? "添加 Event" : `修改第 ${editIndex + 1} 项`}</strong><button type="button" data-event-action="cancel-row">取消编辑</button></header>
+    return `<header><strong>${singleSelection ? "选择 Event" : editIndex === null ? "添加 Event" : `修改第 ${editIndex + 1} 项`}</strong>${singleSelection ? "" : '<button type="button" data-event-action="cancel-row">取消编辑</button>'}</header>
       <nav class="editor-event-breadcrumbs" aria-label="当前选择路径">${breadcrumbs || "尚未选择类型"}</nav>
       ${!selection.family ? `<div class="editor-event-choices"><h3>选择 Event 类型</h3>${families.map((family) => `<button type="button" data-event-action="family" data-value="${escapeHtml(family)}"><strong>${escapeHtml(familyLabel(family))}</strong><span>${catalog!.entries.filter((entry) => entry.family === family).length} 个选项</span></button>`).join("")}</div>` : selected ? `<div class="editor-event-result"><strong>选择完成</strong><code>${escapeHtml(selected.descriptor.address)}</code><button type="button" data-event-action="copy" data-address="${escapeHtml(selected.descriptor.address)}">复制 canonical address</button><dl>${selected.facets.map(({ key, value }) => `<dt>${escapeHtml(facetLabel(key))}</dt><dd>${escapeHtml(value)}</dd>`).join("")}</dl></div>${options.configuration ? '<section class="editor-event-configuration" data-event-configuration></section>' : ""}` : next ? renderNextFacet(next) : `<div class="editor-event-error">当前选择路径无法唯一确定 event。</div>`}
-      <footer><button type="button" data-event-action="save-row" ${selected ? "" : "disabled"}>${editIndex === null ? "添加到组" : "保存修改"}</button></footer>`;
+      <footer><button type="button" data-event-action="save-row" ${selected ? "" : "disabled"}>${singleSelection ? "选定 Event" : editIndex === null ? "添加到组" : "保存修改"}</button></footer>`;
   }
 
   function renderNextFacet(next: { key: string; values: string[] }): string {
@@ -694,6 +756,45 @@ export function mountEditorGameLayoutEventDialog<
   function assertAlive(): void {
     if (destroyed) throw new Error("EditorGameLayoutEventDialog 已销毁。");
   }
+}
+
+export function mountEditorGameLayoutEventPickerDialog<TProject>(
+  options: MountEditorGameLayoutEventPickerDialogOptions<TProject>,
+): EditorGameLayoutEventPickerDialog {
+  const groupDialog = mountEditorGameLayoutEventDialog<TProject>({
+    root: options.root,
+    ...(options.controller ? { controller: options.controller } : {}),
+    ...(options.sources ? { sources: options.sources } : {}),
+    ...(options.subscribe ? { subscribe: options.subscribe } : {}),
+    value: {
+      rootKey: options.rootKey,
+      events: options.value ? [options.value] : [],
+    },
+    title: options.title ?? "选择 Event",
+    triggerLabel: options.triggerLabel ?? "选择 Event",
+    ...(options.inspectCatalog
+      ? { inspectCatalog: options.inspectCatalog }
+      : {}),
+    selectionMode: "single",
+    async onConfirm(value) {
+      const selected = value.events[0];
+      if (!selected) throw new Error("Event 选择器没有选定 event。");
+      await options.onConfirm(selected);
+    },
+  });
+  return Object.freeze({
+    element: groupDialog.element,
+    trigger: groupDialog.trigger,
+    open: groupDialog.open,
+    close: groupDialog.close,
+    setValue(value: EditorGameLayoutEventItem | null) {
+      groupDialog.setValue({
+        rootKey: options.rootKey,
+        events: value ? [value] : [],
+      });
+    },
+    destroy: groupDialog.destroy,
+  });
 }
 
 function emptySelection(): ProgressiveSelection {

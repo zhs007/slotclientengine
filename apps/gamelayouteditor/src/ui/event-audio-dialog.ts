@@ -1,6 +1,8 @@
 import {
   mountEditorGameLayoutEventDialog,
+  mountEditorGameLayoutEventPickerDialog,
   type EditorGameLayoutEventDialog,
+  type EditorGameLayoutEventPickerDialog,
 } from "@slotclientengine/editorcore/assets/ui";
 import {
   inspectSceneLayoutRuntimeEventCatalog,
@@ -134,7 +136,16 @@ function mountConfiguration(
   catalogEntries: readonly GameLayoutRuntimeEventCatalogEntry[],
 ): () => void {
   let value = structuredClone(context.value);
+  let endEventPicker: EditorGameLayoutEventPickerDialog | null = null;
+  let endEventPickerPortal: HTMLDivElement | null = null;
+  const destroyEndEventPicker = () => {
+    endEventPicker?.destroy();
+    endEventPicker = null;
+    endEventPickerPortal?.remove();
+    endEventPickerPortal = null;
+  };
   const render = () => {
+    destroyEndEventPicker();
     const audio = value.audio;
     const sourcePath = audio.asset.sources[0]?.path ?? "";
     const bgmGain = audio.focus.bgm?.targetGain ?? 0.5;
@@ -144,8 +155,58 @@ function mountConfiguration(
       <label>素材<select data-event-audio-field="asset"><option value="">请选择已上传的 audio asset</option>${audioResources.map((resource) => `<option value="${escapeHtml(resource.path)}" ${resource.path === sourcePath ? "selected" : ""}>${escapeHtml(resource.path)}</option>`).join("")}</select></label>
       <label>类型<select data-event-audio-field="category"><option value="music" ${audio.category === "music" ? "selected" : ""}>音乐 (BGM)</option><option value="effect" ${audio.category === "effect" ? "selected" : ""}>音效</option></select></label>
       <label>播放<select data-event-audio-field="playback"><option value="loop" ${audio.playback === "loop" ? "selected" : ""}>循环</option><option value="once" ${audio.playback === "once" ? "selected" : ""}>单次</option></select></label>
-      ${audio.playback === "loop" ? `<label>结束 Event<select data-event-audio-field="endEvent"><option value="">请选择结束 event</option>${eventOptions(context.entry, value.endEvent, catalogEntries)}</select></label><p class="hint">循环音乐和循环音效都必须由另一个精确 event 结束。</p>` : `<fieldset><legend>播放期间降低其它声音</legend><label><input type="checkbox" data-event-audio-field="duckBgm" ${audio.focus.bgm ? "checked" : ""}/>降低 BGM</label><label>保留 BGM 音量<input type="number" min="0" max="100" step="1" data-event-audio-field="bgmGain" value="${Math.round(bgmGain * 100)}" />%</label><label>音效影响范围<select data-event-audio-field="effectsScope"><option value="none" ${effectsScope === "none" ? "selected" : ""}>不影响</option><option value="same-audio" ${effectsScope === "same-audio" ? "selected" : ""}>同 audio</option><option value="all" ${effectsScope === "all" ? "selected" : ""}>全部音效</option></select></label><label>保留音效音量<input type="number" min="0" max="100" step="1" data-event-audio-field="effectsGain" value="${Math.round(effectsGain * 100)}" />%</label><p class="hint">BGM 可与一种音效影响范围同时启用；同 audio 与全部音效互斥。</p></fieldset>`}
+      ${audio.playback === "loop" ? `<label>结束 Event<div class="event-audio-end-event" data-event-audio-end-event></div></label><p class="hint">循环音乐和循环音效都必须由另一个精确 event 结束。</p>` : `<fieldset><legend>播放期间降低其它声音</legend><label><input type="checkbox" data-event-audio-field="duckBgm" ${audio.focus.bgm ? "checked" : ""}/>降低 BGM</label><label>保留 BGM 音量<input type="number" min="0" max="100" step="1" data-event-audio-field="bgmGain" value="${Math.round(bgmGain * 100)}" />%</label><label>音效影响范围<select data-event-audio-field="effectsScope"><option value="none" ${effectsScope === "none" ? "selected" : ""}>不影响</option><option value="same-audio" ${effectsScope === "same-audio" ? "selected" : ""}>同 audio</option><option value="all" ${effectsScope === "all" ? "selected" : ""}>全部音效</option></select></label><label>保留音效音量<input type="number" min="0" max="100" step="1" data-event-audio-field="effectsGain" value="${Math.round(effectsGain * 100)}" />%</label><p class="hint">BGM 可与一种音效影响范围同时启用；同 audio 与全部音效互斥。</p></fieldset>`}
     </div>`;
+    if (audio.playback === "loop") {
+      const control = root.querySelector<HTMLElement>(
+        "[data-event-audio-end-event]",
+      );
+      if (!control) throw new Error("结束 Event 控件挂载失败。");
+      const selected = catalogEntries.find(
+        ({ descriptor }) => descriptor.address === value.endEvent,
+      );
+      endEventPickerPortal = document.createElement("div");
+      endEventPickerPortal.className = "event-audio-event-picker-portal";
+      document.body.append(endEventPickerPortal);
+      endEventPicker = mountEditorGameLayoutEventPickerDialog({
+        root: endEventPickerPortal,
+        rootKey: CURRENT_PROJECT_ROOT,
+        sources: [
+          { key: CURRENT_PROJECT_ROOT, label: "当前 Game Layout 项目" },
+        ],
+        value: selected
+          ? {
+              address: selected.descriptor.address,
+              descriptor: selected.descriptor,
+            }
+          : null,
+        title: "选择结束 Event",
+        triggerLabel: value.endEvent ?? "选择结束 Event",
+        inspectCatalog: () => ({
+          rootKey: CURRENT_PROJECT_ROOT,
+          entries: catalogEntries.filter(
+            ({ descriptor }) =>
+              descriptor.address !== context.entry.descriptor.address,
+          ),
+        }),
+        onConfirm(item) {
+          value = {
+            audio: value.audio,
+            endEvent: item.address,
+          };
+          context.setValue(structuredClone(value));
+          render();
+        },
+      });
+      control.append(endEventPicker.trigger);
+      if (value.endEvent) {
+        const clear = document.createElement("button");
+        clear.type = "button";
+        clear.dataset.eventAudioClearEndEvent = "";
+        clear.textContent = "清除";
+        control.append(clear);
+      }
+    }
   };
   const onChange = (event: Event) => {
     const field = (event.target as HTMLElement).dataset.eventAudioField;
@@ -188,13 +249,6 @@ function mountConfiguration(
           ? { endEvent: value.endEvent }
           : {}),
       };
-    } else if (field === "endEvent") {
-      value = {
-        audio: value.audio,
-        ...(target.value
-          ? { endEvent: target.value as GameLayoutRuntimeAddress }
-          : {}),
-      };
     } else {
       let bgm = value.audio.focus.bgm
         ? { ...value.audio.focus.bgm }
@@ -232,25 +286,21 @@ function mountConfiguration(
     context.setValue(structuredClone(value));
     render();
   };
+  const onClick = (event: Event) => {
+    const target = event.target as HTMLElement;
+    if (!target.matches("[data-event-audio-clear-end-event]")) return;
+    value = { audio: value.audio };
+    context.setValue(structuredClone(value));
+    render();
+  };
   root.addEventListener("change", onChange);
+  root.addEventListener("click", onClick);
   render();
-  return () => root.removeEventListener("change", onChange);
-}
-
-function eventOptions(
-  current: GameLayoutRuntimeEventCatalogEntry,
-  selected: GameLayoutRuntimeAddress | undefined,
-  catalog: readonly GameLayoutRuntimeEventCatalogEntry[],
-): string {
-  return catalog
-    .filter(
-      ({ descriptor }) => descriptor.address !== current.descriptor.address,
-    )
-    .map(
-      ({ descriptor }) =>
-        `<option value="${escapeHtml(descriptor.address)}" ${descriptor.address === selected ? "selected" : ""}>${escapeHtml(descriptor.address)}</option>`,
-    )
-    .join("");
+  return () => {
+    destroyEndEventPicker();
+    root.removeEventListener("change", onChange);
+    root.removeEventListener("click", onClick);
+  };
 }
 
 function validateConfiguration(
