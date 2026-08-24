@@ -204,6 +204,8 @@ export class SymbolCatalogModel implements SymbolCatalog {
       stateTextures: loadedStateTextures,
       requiredStateTextures: this.#requiredStateTextures,
       animationResolver: options.animationResolver ?? this.#animationResolver,
+      landingAppearEnabled:
+        this.#symbolAnimationCapabilities[symbol]?.includes("appear") === true,
       renderPriority: normalizeSymbolRenderPriority(
         options.renderPriority ?? this.#symbolRenderPriorities.get(symbol) ?? 0,
         symbol,
