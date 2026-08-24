@@ -1,10 +1,10 @@
 export const BOARD = {
   columns: 5,
   rows: 6,
-  cellSize: 1.22,
+  cellSize: 1.42,
   cellGap: 0.075,
   cellHeight: 0.12,
-  zOffset: 2.35,
+  zOffset: -0.55,
 } as const;
 
 export const ROOM = {

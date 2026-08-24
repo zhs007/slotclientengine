@@ -1,4 +1,5 @@
 import {
+  BackSide,
   BoxGeometry,
   CircleGeometry,
   ConeGeometry,
@@ -11,6 +12,7 @@ import {
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  MeshToonMaterial,
   Shape,
   SphereGeometry,
   TorusGeometry,
@@ -20,6 +22,7 @@ import type { BufferGeometry, Material } from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { BOARD, boardDepth, boardWidth } from "./config.js";
 import { createRandom, type RandomSource } from "./random.js";
+import type { CastleTextureLibrary } from "./textures.js";
 
 export const SYMBOL_TYPES = [
   "chest",
@@ -54,55 +57,83 @@ interface AnimatedSymbol {
 }
 
 interface Palette {
-  readonly stoneDark: MeshStandardMaterial;
-  readonly steel: MeshStandardMaterial;
-  readonly steelDark: MeshStandardMaterial;
-  readonly gold: MeshStandardMaterial;
-  readonly wood: MeshStandardMaterial;
-  readonly purple: MeshStandardMaterial;
-  readonly green: MeshStandardMaterial;
-  readonly blue: MeshStandardMaterial;
-  readonly skin: MeshStandardMaterial;
-  readonly beard: MeshStandardMaterial;
-  readonly plume: MeshStandardMaterial;
+  readonly stoneDark: Material;
+  readonly steel: Material;
+  readonly steelDark: Material;
+  readonly gold: Material;
+  readonly wood: Material;
+  readonly purple: Material;
+  readonly green: Material;
+  readonly blue: Material;
+  readonly skin: Material;
+  readonly beard: Material;
+  readonly plume: Material;
 }
 
-function stylized(
+function toon(
   color: number,
-  metalness = 0,
-  roughness = 0.7,
+  textures: CastleTextureLibrary,
   emissiveIntensity = 0.025,
-): MeshStandardMaterial {
-  return new MeshStandardMaterial({
+): MeshToonMaterial {
+  return new MeshToonMaterial({
     color,
-    metalness,
-    roughness,
-    flatShading: true,
+    gradientMap: textures.toonGradient,
     emissive: color,
     emissiveIntensity,
   });
 }
 
-function createPalette(): Palette {
+function metal(
+  color: number,
+  textures: CastleTextureLibrary,
+  metalness: number,
+  roughness: number,
+): MeshStandardMaterial {
+  return new MeshStandardMaterial({
+    color,
+    metalness,
+    roughness,
+    bumpMap: textures.metalDetail,
+    bumpScale: 0.018,
+    flatShading: true,
+  });
+}
+
+function createPalette(textures: CastleTextureLibrary): Palette {
+  const wood = toon(0xffffff, textures);
+  wood.map = textures.woodAlbedo;
+  wood.bumpMap = textures.woodDetail;
+  wood.bumpScale = 0.022;
   return {
-    stoneDark: stylized(0x292635, 0.05, 0.86),
-    steel: stylized(0xb4bac2, 0.82, 0.32),
-    steelDark: stylized(0x444650, 0.72, 0.42),
-    gold: stylized(0xe09b1c, 0.7, 0.3, 0.07),
-    wood: stylized(0x81401f, 0, 0.8),
-    purple: stylized(0x912bc2, 0.04, 0.24, 0.12),
-    green: stylized(0x4d9a20, 0.03, 0.28, 0.08),
-    blue: stylized(0x118acc, 0.08, 0.22, 0.12),
-    skin: stylized(0xb96b3e, 0, 0.72),
-    beard: stylized(0x382421, 0, 0.9),
-    plume: stylized(0x4b2792, 0, 0.8, 0.04),
+    stoneDark: toon(0x30283b, textures),
+    steel: metal(0xc7c7d0, textures, 0.78, 0.32),
+    steelDark: metal(0x4c4655, textures, 0.7, 0.42),
+    gold: metal(0xf0a51b, textures, 0.68, 0.28),
+    wood,
+    purple: toon(0xac2ee1, textures, 0.16),
+    green: toon(0x61b326, textures, 0.11),
+    blue: toon(0x159cde, textures, 0.16),
+    skin: toon(0xd27a45, textures),
+    beard: toon(0x3f2924, textures),
+    plume: toon(0x5c2cad, textures, 0.05),
   };
 }
+
+const symbolOutlineMaterial = new MeshBasicMaterial({
+  color: 0x18121f,
+  side: BackSide,
+  toneMapped: false,
+});
 
 function part(geometry: BufferGeometry, material: Material): Mesh {
   const mesh = new Mesh(geometry, material);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
+  const outline = new Mesh(geometry, symbolOutlineMaterial);
+  outline.scale.setScalar(1.035);
+  outline.castShadow = false;
+  outline.receiveShadow = false;
+  mesh.add(outline);
   return mesh;
 }
 
@@ -378,7 +409,7 @@ export function createSymbolPlacements(
         BOARD.cellSize / 2 +
         row * (BOARD.cellSize + BOARD.cellGap) +
         BOARD.zOffset,
-      scale: random.range(0.72, 0.84),
+      scale: random.range(0.93, 1.05),
       phase: random.range(0, Math.PI * 2),
       rotation: random.range(-0.18, 0.18),
       delay: (row * BOARD.columns + column) * 0.018,
@@ -420,8 +451,8 @@ export function sampleSymbolExit(progress: number): SymbolMotion {
 type Phase = "entering" | "idle" | "exiting";
 
 export class SymbolField extends Group {
-  readonly #palette = createPalette();
-  readonly #masters = createModels(this.#palette);
+  readonly #palette: Palette;
+  readonly #masters: ReadonlyMap<SymbolType, Group>;
   readonly #symbols: AnimatedSymbol[] = [];
   readonly #shadowGeometry = new CircleGeometry(0.38, 20);
   readonly #shadowMaterial = new MeshBasicMaterial({
@@ -435,8 +466,13 @@ export class SymbolField extends Group {
   #lastUpdateAt: number | null = null;
   #pending: readonly SymbolPlacement[] | null = null;
 
-  constructor(placements: readonly SymbolPlacement[]) {
+  constructor(
+    placements: readonly SymbolPlacement[],
+    textures: CastleTextureLibrary,
+  ) {
     super();
+    this.#palette = createPalette(textures);
+    this.#masters = createModels(this.#palette);
     this.name = "animated-castle-symbols";
     this.#populate(placements);
   }
@@ -475,6 +511,7 @@ export class SymbolField extends Group {
     }
     for (const geometry of geometries) geometry.dispose();
     for (const material of Object.values(this.#palette)) material.dispose();
+    symbolOutlineMaterial.dispose();
   }
 
   #populate(placements: readonly SymbolPlacement[]): void {
