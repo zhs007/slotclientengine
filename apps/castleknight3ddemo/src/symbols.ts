@@ -23,6 +23,11 @@ import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.j
 import { BOARD, boardDepth, boardWidth } from "./config.js";
 import { createRandom, type RandomSource } from "./random.js";
 import { createCartoonTreasureChest } from "./reconstructed-props.js";
+import {
+  createCartoonBattleAxeSymbol,
+  createCartoonCrownSymbol,
+  createCartoonSpellbookSymbol,
+} from "./reconstructed-symbols.js";
 import type { CastleTextureLibrary } from "./textures.js";
 
 export const SYMBOL_TYPES = [
@@ -34,6 +39,9 @@ export const SYMBOL_TYPES = [
   "gem",
   "sword",
   "king",
+  "battleAxe",
+  "spellbook",
+  "crown",
 ] as const;
 
 export type SymbolType = (typeof SYMBOL_TYPES)[number];
@@ -71,6 +79,8 @@ interface Palette {
   readonly skin: Material;
   readonly beard: Material;
   readonly plume: Material;
+  readonly leather: Material;
+  readonly parchment: Material;
 }
 
 function toon(
@@ -113,6 +123,14 @@ function createPalette(textures: CastleTextureLibrary): Palette {
   chestWood.bumpScale = 0.032;
   const chestGold = metal(0xffffff, textures, 0.68, 0.31);
   chestGold.map = textures.chestGoldAlbedo;
+  const leather = toon(0xffffff, textures);
+  leather.map = textures.crimsonLeatherAlbedo;
+  leather.bumpMap = textures.fabricDetail;
+  leather.bumpScale = 0.018;
+  const parchment = toon(0xffffff, textures);
+  parchment.map = textures.parchmentPagesAlbedo;
+  parchment.bumpMap = textures.fabricDetail;
+  parchment.bumpScale = 0.012;
   return {
     stoneDark: toon(0x30283b, textures),
     steel: metal(0xc7c7d0, textures, 0.78, 0.32),
@@ -127,6 +145,8 @@ function createPalette(textures: CastleTextureLibrary): Palette {
     skin: toon(0xd27a45, textures),
     beard: toon(0x3f2924, textures),
     plume: toon(0x5c2cad, textures, 0.05),
+    leather,
+    parchment,
   };
 }
 
@@ -305,6 +325,17 @@ function createKing(palette: Palette): Group {
 }
 
 function createModels(palette: Palette): ReadonlyMap<SymbolType, Group> {
+  const reconstructedMaterials = {
+    wood: palette.wood,
+    steel: palette.steel,
+    iron: palette.steelDark,
+    gold: palette.gold,
+    leather: palette.leather,
+    parchment: palette.parchment,
+    purple: palette.purple,
+    blue: palette.blue,
+    outline: symbolOutlineMaterial,
+  };
   return new Map<SymbolType, Group>([
     ["chest", createChest(palette)],
     ["helmet", createHelmet(palette)],
@@ -314,6 +345,9 @@ function createModels(palette: Palette): ReadonlyMap<SymbolType, Group> {
     ["gem", createGem(palette)],
     ["sword", createSword(palette)],
     ["king", createKing(palette)],
+    ["battleAxe", createCartoonBattleAxeSymbol(reconstructedMaterials)],
+    ["spellbook", createCartoonSpellbookSymbol(reconstructedMaterials)],
+    ["crown", createCartoonCrownSymbol(reconstructedMaterials)],
   ]);
 }
 

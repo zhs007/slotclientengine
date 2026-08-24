@@ -1,5 +1,6 @@
 import {
   AmbientLight,
+  BackSide,
   Color,
   DirectionalLight,
   MeshBasicMaterial,
@@ -12,6 +13,11 @@ import {
   WebGLRenderer,
 } from "three";
 import {
+  createCartoonCastleChandelier,
+  createCartoonCastleThrone,
+  createCartoonThroneDais,
+} from "./reconstructed-furnishings.js";
+import {
   createCartoonCastleBench,
   createCartoonCastleWallSection,
   createCartoonOakBarrel,
@@ -19,6 +25,11 @@ import {
   createCartoonWallTorch,
   createRoundCastleColumn,
 } from "./reconstructed-props.js";
+import {
+  createCartoonBattleAxeSymbol,
+  createCartoonCrownSymbol,
+  createCartoonSpellbookSymbol,
+} from "./reconstructed-symbols.js";
 import {
   createCastleTextureLibrary,
   type CastleTextureLibrary,
@@ -30,7 +41,13 @@ export type PropPreviewKind =
   | "bench"
   | "barrel"
   | "wall"
-  | "torch";
+  | "torch"
+  | "stair"
+  | "throne"
+  | "chandelier"
+  | "battleAxe"
+  | "spellbook"
+  | "crown";
 
 export class PropPreviewRenderer {
   readonly #renderer = new WebGLRenderer({ antialias: true, alpha: false });
@@ -166,6 +183,16 @@ export class PropPreviewRenderer {
             flatShading: true,
           })
         : new MeshBasicMaterial({ color: 0x6c6476 });
+      const steel = textured
+        ? new MeshStandardMaterial({
+            color: 0xc9c9d2,
+            bumpMap: this.#textureLibrary?.metalDetail,
+            bumpScale: 0.014,
+            metalness: 0.8,
+            roughness: 0.3,
+            flatShading: true,
+          })
+        : new MeshBasicMaterial({ color: 0xbfc0c9 });
       const gold = textured
         ? new MeshStandardMaterial({
             color: 0xd49119,
@@ -195,6 +222,29 @@ export class PropPreviewRenderer {
             gradientMap,
           })
         : new MeshBasicMaterial({ color: 0x493c54 });
+      const leather = textured
+        ? new MeshToonMaterial({
+            color: 0xffffff,
+            map: this.#textureLibrary?.crimsonLeatherAlbedo,
+            bumpMap: this.#textureLibrary?.fabricDetail,
+            bumpScale: 0.018,
+            gradientMap,
+          })
+        : new MeshBasicMaterial({ color: 0x7c1d2c });
+      const parchment = textured
+        ? new MeshToonMaterial({
+            color: 0xffffff,
+            map: this.#textureLibrary?.parchmentPagesAlbedo,
+            gradientMap,
+          })
+        : new MeshBasicMaterial({ color: 0xd7b979 });
+      const purple = new MeshBasicMaterial({ color: 0x8f32d2 });
+      const blue = new MeshBasicMaterial({ color: 0x169bd8 });
+      const candle = new MeshBasicMaterial({ color: 0xf0d39a });
+      const outline = new MeshBasicMaterial({
+        color: 0x18121f,
+        side: BackSide,
+      });
 
       if (kind === "bench") {
         const bench = createCartoonCastleBench({ wood, woodDark, iron });
@@ -225,7 +275,7 @@ export class PropPreviewRenderer {
         this.#scene.add(wall);
         this.#camera.position.set(0, 0.55, 10.5);
         this.#camera.lookAt(0, 0, 0);
-      } else {
+      } else if (kind === "torch") {
         const torch = createCartoonWallTorch({ iron, ironLight, gold });
         torch.scale.setScalar(2.8);
         torch.rotation.y = sideView ? Math.PI / 2 : -Math.PI * 0.18;
@@ -233,6 +283,67 @@ export class PropPreviewRenderer {
         this.#scene.add(torch);
         this.#camera.position.set(0, 1.2, 7.6);
         this.#camera.lookAt(0, 0.1, 0);
+      } else if (kind === "stair") {
+        const stair = createCartoonThroneDais({ stone, stoneDark, gold });
+        stair.scale.setScalar(0.92);
+        stair.rotation.y = sideView ? Math.PI / 2 : -Math.PI * 0.15;
+        stair.position.y = -1.7;
+        this.#scene.add(stair);
+        this.#camera.position.set(0, 2.4, 10.5);
+        this.#camera.lookAt(0, -0.25, 0);
+      } else if (kind === "throne") {
+        const throne = createCartoonCastleThrone({
+          wood,
+          woodDark,
+          leather,
+          gold,
+          gem: purple,
+        });
+        throne.scale.setScalar(1.25);
+        throne.rotation.y = sideView ? Math.PI / 2 : -Math.PI * 0.14;
+        throne.position.y = -2.5;
+        this.#scene.add(throne);
+        this.#camera.position.set(0, 1.15, 9.8);
+        this.#camera.lookAt(0, 0.15, 0);
+      } else if (kind === "chandelier") {
+        const chandelier = createCartoonCastleChandelier({
+          iron,
+          ironLight,
+          gold,
+          candle,
+          gem: purple,
+        });
+        chandelier.scale.setScalar(1.35);
+        chandelier.rotation.y = sideView ? Math.PI / 2 : -Math.PI * 0.14;
+        chandelier.position.y = -2;
+        this.#scene.add(chandelier);
+        this.#camera.position.set(0, 1.1, 10.8);
+        this.#camera.lookAt(0, 0.15, 0);
+      } else {
+        const materials = {
+          wood,
+          steel,
+          iron,
+          gold,
+          leather,
+          parchment,
+          purple,
+          blue,
+          outline,
+        };
+        const symbol =
+          kind === "battleAxe"
+            ? createCartoonBattleAxeSymbol(materials)
+            : kind === "spellbook"
+              ? createCartoonSpellbookSymbol(materials)
+              : createCartoonCrownSymbol(materials);
+        symbol.scale.setScalar(
+          kind === "battleAxe" ? 1.85 : kind === "spellbook" ? 2.35 : 2.1,
+        );
+        symbol.rotation.y = sideView ? Math.PI / 2 : -Math.PI * 0.12;
+        this.#scene.add(symbol);
+        this.#camera.position.set(0, 0.9, 8.4);
+        this.#camera.lookAt(0, 0, 0);
       }
     }
     this.#animationFrame = requestAnimationFrame(this.#render);

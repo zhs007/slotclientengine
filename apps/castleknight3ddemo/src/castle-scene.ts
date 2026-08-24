@@ -4,7 +4,6 @@ import {
   BoxGeometry,
   Color,
   ConeGeometry,
-  CylinderGeometry,
   DirectionalLight,
   DodecahedronGeometry,
   ExtrudeGeometry,
@@ -34,6 +33,11 @@ import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.j
 import { CartoonPass } from "./cartoon-pass.js";
 import { BOARD, boardDepth, boardWidth, ROOM } from "./config.js";
 import { createRandom } from "./random.js";
+import {
+  createCartoonCastleChandelier,
+  createCartoonCastleThrone,
+  createCartoonThroneDais,
+} from "./reconstructed-furnishings.js";
 import {
   createCartoonCastleBench,
   createCartoonCastleWallSection,
@@ -75,6 +79,7 @@ interface CastleMaterials {
   readonly ironLight: Material;
   readonly gold: Material;
   readonly banner: Material;
+  readonly leather: Material;
   readonly bannerGold: Material;
   readonly purpleGlass: Material;
   readonly candle: Material;
@@ -346,6 +351,11 @@ export class CastleKnightRenderer {
         bumpMap: textures.fabricDetail,
         bumpScale: 0.016,
       }),
+      leather: toon(0xffffff, textures.toonGradient, {
+        map: textures.crimsonLeatherAlbedo,
+        bumpMap: textures.fabricDetail,
+        bumpScale: 0.02,
+      }),
       bannerGold: standard(0xc58418, 0.56, 0.4, textures.metalDetail),
       purpleGlass: new MeshStandardMaterial({
         color: 0x4932a8,
@@ -469,67 +479,23 @@ export class CastleKnightRenderer {
   }
 
   #createThroneArea(): void {
-    for (let index = 0; index < 3; index += 1) {
-      const step = sceneMesh(
-        new RoundedBoxGeometry(5.2 - index * 0.72, 0.32, 1.2, 2, 0.08),
-        this.#materials.stoneDark,
-      );
-      step.position.set(0, 0.22 + index * 0.3, -7.5 - index * 0.58);
-      this.#root.add(step);
-    }
-    const dais = sceneMesh(
-      new RoundedBoxGeometry(3.1, 0.42, 2.35, 3, 0.1),
-      this.#materials.stoneDark,
-    );
-    dais.position.set(0, 0.82, -9.25);
+    const dais = createCartoonThroneDais({
+      stone: this.#materials.stone,
+      stoneDark: this.#materials.stoneDark,
+      gold: this.#materials.gold,
+    });
+    dais.position.set(0, 0, -8.05);
     this.#root.add(dais);
 
-    const throne = new Group();
-    const seat = sceneMesh(
-      new RoundedBoxGeometry(1.35, 0.45, 1.05, 3, 0.08),
-      this.#materials.woodDark,
-    );
-    seat.position.y = 0.75;
-    const back = sceneMesh(
-      new RoundedBoxGeometry(1.5, 2.65, 0.42, 4, 0.12),
-      this.#materials.banner,
-    );
-    back.position.set(0, 1.98, -0.38);
-    const frame = sceneMesh(
-      new RoundedBoxGeometry(1.78, 2.9, 0.3, 3, 0.09),
-      this.#materials.gold,
-    );
-    frame.position.set(0, 1.98, -0.55);
-    back.renderOrder = 1;
-    for (const x of [-0.82, 0.82]) {
-      const post = sceneMesh(
-        new CylinderGeometry(0.14, 0.18, 3.2, 8),
-        this.#materials.gold,
-      );
-      post.position.set(x, 1.85, -0.4);
-      throne.add(post);
-      const cap = sceneMesh(
-        new ConeGeometry(0.22, 0.48, 6),
-        this.#materials.gold,
-      );
-      cap.position.set(x, 3.63, -0.4);
-      throne.add(cap);
-    }
-    for (const x of [-0.86, 0.86]) {
-      const arm = sceneMesh(
-        new RoundedBoxGeometry(0.28, 0.3, 1.05, 2, 0.06),
-        this.#materials.gold,
-      );
-      arm.position.set(x, 1.05, 0.05);
-      throne.add(arm);
-    }
-    const jewel = sceneMesh(
-      new DodecahedronGeometry(0.19, 0),
-      this.#materials.purpleGlass,
-    );
-    jewel.position.set(0, 2.66, -0.12);
-    throne.add(frame, back, seat, jewel);
-    throne.position.set(0, 0.75, -9.45);
+    const throne = createCartoonCastleThrone({
+      wood: this.#materials.wood,
+      woodDark: this.#materials.woodDark,
+      leather: this.#materials.leather,
+      gold: this.#materials.gold,
+      gem: this.#materials.purpleGlass,
+    });
+    throne.scale.setScalar(0.78);
+    throne.position.set(0, 1.54, -9.65);
     this.#root.add(throne);
 
     const windowShape = new Shape();
@@ -621,43 +587,30 @@ export class CastleKnightRenderer {
   }
 
   #createChandelier(): void {
-    const group = new Group();
-    const ring = sceneMesh(
-      new TorusGeometry(1.55, 0.13, 8, 24),
-      this.#materials.iron,
-    );
-    ring.rotation.x = Math.PI / 2;
-    ring.position.y = 6.25;
-    group.add(ring);
-    for (let index = 0; index < 10; index += 1) {
-      const angle = (index / 10) * Math.PI * 2;
-      const candle = sceneMesh(
-        new CylinderGeometry(0.065, 0.075, 0.42, 8),
-        this.#materials.candle,
-      );
-      candle.position.set(Math.cos(angle) * 1.55, 6.55, Math.sin(angle) * 1.55);
-      group.add(candle);
+    const chandelier = createCartoonCastleChandelier({
+      iron: this.#materials.iron,
+      ironLight: this.#materials.ironLight,
+      gold: this.#materials.gold,
+      candle: this.#materials.candle,
+      gem: this.#materials.purpleGlass,
+    });
+    chandelier.position.set(0, 7.2, -4.45);
+    this.#root.add(chandelier);
+    chandelier.updateMatrixWorld(true);
+    for (let index = 0; index < 8; index += 1) {
+      const socket = chandelier.getObjectByName(`flame-socket-${index + 1}`);
+      if (!socket)
+        throw new Error(`Chandelier flame socket ${index + 1} is missing.`);
+      const position = socket.getWorldPosition(new Vector3());
       this.#addFlame(
-        group,
-        candle.position.x,
-        6.89,
-        candle.position.z,
-        0.35,
+        this.#root,
+        position.x,
+        position.y,
+        position.z,
+        0.36,
         index,
       );
     }
-    for (const angle of [0, (Math.PI * 2) / 3, (Math.PI * 4) / 3]) {
-      const chain = sceneMesh(
-        new CylinderGeometry(0.035, 0.035, 3.1, 6),
-        this.#materials.iron,
-      );
-      chain.position.set(Math.cos(angle) * 0.78, 7.55, Math.sin(angle) * 0.78);
-      chain.rotation.z = Math.cos(angle) * 0.22;
-      chain.rotation.x = Math.sin(angle) * 0.22;
-      group.add(chain);
-    }
-    group.position.set(0, 1.05, -4.45);
-    this.#root.add(group);
   }
 
   #createTorches(): void {
