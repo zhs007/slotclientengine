@@ -541,6 +541,10 @@ interface SceneLayoutRenderObjectBase {
   readonly motion: SceneLayoutRenderObjectMotion;
   /** Program visibility is ANDed with authored variant/game-mode visibility. */
   setVisible(visible: boolean): void;
+  /** Returns an exact opaque Spine slot or VNI text-layer parent. */
+  getChildLayer(
+    ref: import("../presentation/index.js").RenderObjectChildLayerRef,
+  ): import("../presentation/index.js").RenderObjectLayer;
 }
 
 export type SceneLayoutRenderObjectMotionAxis = "x" | "y" | "both";
@@ -823,22 +827,29 @@ export type SceneLayoutPopupOpenRequest =
   | {
       readonly address: import("./data/runtime-address.js").GameLayoutRuntimeAddress;
       readonly type: "award-celebration";
+      readonly instanceId?: string;
       readonly betAmountRaw: number;
       readonly winAmountRaw: number;
     }
   | {
       readonly address: import("./data/runtime-address.js").GameLayoutRuntimeAddress;
       readonly type: "spine";
+      readonly instanceId?: string;
       readonly text?: string;
     }
   | {
       readonly address: import("./data/runtime-address.js").GameLayoutRuntimeAddress;
       readonly type: "single-state";
+      readonly instanceId?: string;
     };
 
 export interface SceneLayoutPopupSession {
   readonly address: import("./data/runtime-address.js").GameLayoutRuntimeAddress;
   readonly type: SceneLayoutPopupBinding["type"];
+  /** Canonical live identity when the request supplied instanceId. */
+  readonly instanceAddress:
+    | import("./data/runtime-address.js").GameLayoutRuntimeAddress
+    | null;
   /** Current scheduler-owned lifecycle state for this exact request. */
   readonly state: SceneLayoutPopupSessionState;
   /** Resolves after this queued request becomes active and reaches its first stable presentation. */
@@ -967,12 +978,14 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   /** Creates a detached, caller-owned object from an exact program resource name. */
   createRenderObject(
     name: string,
+    options?: { readonly instanceId?: string },
   ): Promise<import("../presentation/index.js").RenderObject>;
   /** Creates a detached image-string-backed number object from an exact program resource name. */
   createImgNumberRenderObject(
     name: string,
     options: {
       readonly text: string;
+      readonly instanceId?: string;
       readonly anchor?: { readonly x: number; readonly y: number };
     },
   ): Promise<import("../presentation/index.js").ImgNumberRenderObject>;

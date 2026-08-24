@@ -124,6 +124,7 @@ import {
   createGameLayoutRuntimeAddresses,
   type GameLayoutRuntimeAddressController,
   type GameLayoutRuntimeAddresses,
+  type GameLayoutRuntimeResourceEndpoint,
 } from "./core/runtime-address.js";
 import {
   formatGameLayoutRuntimeAddress,
@@ -230,6 +231,12 @@ interface ProgrammaticPopupSessionController {
   readonly finished: PopupSessionDeferred;
   state: SceneLayoutPopupSessionState;
   readonly session: SceneLayoutPopupSession;
+  popupInstance?: {
+    readonly root: Container;
+    readonly layerController: RenderObjectLayerController;
+    readonly unregister: () => void;
+    readonly address: GameLayoutRuntimeAddress;
+  };
   activation?: PendingPopupActivation;
 }
 
@@ -2765,8 +2772,25 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
 
   createRenderObject(
     name: string,
+    options: { readonly instanceId?: string } = {},
   ): Promise<import("../presentation/index.js").RenderObject> {
     this.assertReady();
+    if (options.instanceId !== undefined) {
+      const spec = this.#document.runtimeResources?.[name];
+      if (!spec)
+        return Promise.reject(
+          new SceneLayoutError(
+            `Unknown scene layout runtime resource: ${name}.`,
+          ),
+        );
+      const endpoint = this.addresses.resolve(
+        formatGameLayoutRuntimeAddress("resource", spec.kind, name),
+        "resource-factory",
+      ) as GameLayoutRuntimeResourceEndpoint;
+      return endpoint.create({ instanceId: options.instanceId }) as Promise<
+        import("../presentation/index.js").RenderObject
+      >;
+    }
     return this.#renderObjectFactory.createRenderObject(name);
   }
 
@@ -2774,10 +2798,20 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     name: string,
     options: {
       readonly text: string;
+      readonly instanceId?: string;
       readonly anchor?: { readonly x: number; readonly y: number };
     },
   ): Promise<import("../presentation/index.js").ImgNumberRenderObject> {
     this.assertReady();
+    if (options.instanceId !== undefined) {
+      const endpoint = this.addresses.resolve(
+        formatGameLayoutRuntimeAddress("resource", "image-string", name),
+        "resource-factory",
+      ) as GameLayoutRuntimeResourceEndpoint;
+      return endpoint.create(options) as Promise<
+        import("../presentation/index.js").ImgNumberRenderObject
+      >;
+    }
     return this.#renderObjectFactory.createImgNumberRenderObject(name, options);
   }
 
@@ -4459,6 +4493,14 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       typeof request.text !== "string"
     )
       throw new SceneLayoutError("Spine Popup text must be a string.");
+    if (
+      request.instanceId !== undefined &&
+      (typeof request.instanceId !== "string" ||
+        request.instanceId.length === 0)
+    )
+      throw new SceneLayoutError(
+        "Popup instanceId must be a non-empty exact string.",
+      );
     return id;
   }
 
@@ -4472,10 +4514,42 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     const presented = createPopupSessionDeferred();
     const finished = createPopupSessionDeferred();
     const sessionId = this.#nextPopupSessionId++;
+    let popupInstance:
+      | ProgrammaticPopupSessionController["popupInstance"]
+      | undefined;
+    if (capturedRequest.instanceId !== undefined) {
+      const root = new Container();
+      root.label = `scene-layout-popup-instance:${id}:${capturedRequest.instanceId}`;
+      root.sortableChildren = true;
+      root.visible = false;
+      this.#popupRenderLayerRoot.addChild(root);
+      const layerController = this.createLayerController(
+        root,
+        `scene layout Popup "${id}" instance "${capturedRequest.instanceId}" root layer`,
+      );
+      try {
+        const registration = this.#addressController.registerPopupInstance(
+          id,
+          capturedRequest.instanceId,
+          layerController.layer,
+        );
+        popupInstance = {
+          root,
+          layerController,
+          unregister: registration.unregister,
+          address: registration.address,
+        };
+      } catch (error) {
+        root.parent?.removeChild(root);
+        root.destroy({ children: false });
+        throw error;
+      }
+    }
     let controller!: ProgrammaticPopupSessionController;
     const session = Object.freeze({
       address: capturedRequest.address,
       type: capturedRequest.type,
+      instanceAddress: popupInstance?.address ?? null,
       get state() {
         return controller.state;
       },
@@ -4496,6 +4570,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       finished,
       state: "queued",
       session,
+      ...(popupInstance ? { popupInstance } : {}),
     };
     this.#programmaticPopupSessions.set(sessionId, controller);
     this.emitProgrammaticPopupSessionState(controller, null);
@@ -4547,6 +4622,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       } else if (request.type === "spine") {
         this.getSpinePopup(controller.id).start(request.text);
       } else this.getSingleStatePopup(controller.id).start();
+      if (controller.popupInstance)
+        controller.popupInstance.root.visible = true;
     } catch (error) {
       this.popupRuntime(controller.id, request.type).dismissImmediately();
       throw asSceneLayoutError(error);
@@ -4612,6 +4689,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         ),
       );
     this.setProgrammaticPopupSessionState(controller, "finished");
+    this.releaseProgrammaticPopupInstance(controller);
     controller.finished.resolve();
     this.#programmaticPopupSessions.delete(controller.sessionId);
     if (this.#activeProgrammaticPopup?.sessionId === controller.sessionId)
@@ -4629,6 +4707,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     )
       return;
     this.setProgrammaticPopupSessionState(controller, "failed");
+    this.releaseProgrammaticPopupInstance(controller);
     controller.presented.reject(error);
     controller.finished.reject(error);
     this.#programmaticPopupSessions.delete(controller.sessionId);
@@ -4657,6 +4736,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       controller.activation = undefined;
     }
     this.setProgrammaticPopupSessionState(controller, "cancelled");
+    this.releaseProgrammaticPopupInstance(controller);
     controller.presented.reject(
       new SceneLayoutError(
         `Popup session ${controller.sessionId} was cancelled before presentation.`,
@@ -4665,6 +4745,18 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     controller.finished.resolve();
     this.#programmaticPopupSessions.delete(controller.sessionId);
     this.drainPopupActivations();
+  }
+
+  private releaseProgrammaticPopupInstance(
+    controller: ProgrammaticPopupSessionController,
+  ): void {
+    const instance = controller.popupInstance;
+    if (!instance) return;
+    controller.popupInstance = undefined;
+    instance.unregister();
+    instance.layerController.detachAll();
+    instance.root.parent?.removeChild(instance.root);
+    instance.root.destroy({ children: false });
   }
 
   private closeProgrammaticPopupSession(

@@ -7,6 +7,11 @@ import type {
   RenderObject,
   RenderObjectLayer,
 } from "../../presentation/index.js";
+import {
+  getRenderObjectAdapter,
+  registerRenderObjectCleanup,
+} from "../../presentation/render-object.js";
+import { validateOfficialSpineResource } from "../../spine/runtime-player.js";
 import type { PopupStringNodeHandle } from "../../popup/core/index.js";
 import type { PopupManifest } from "../../popup/data/index.js";
 import { SceneLayoutError } from "../errors.js";
@@ -52,6 +57,9 @@ export interface GameLayoutStructuralEndpoint extends EndpointBase<
 export interface GameLayoutRenderObjectEndpoint extends EndpointBase<"render-object"> {
   get(): SceneLayoutRenderObject;
 }
+export interface GameLayoutRenderObjectInstanceEndpoint extends EndpointBase<"render-object-instance"> {
+  get(): RenderObject;
+}
 export interface GameLayoutRenderLayerEndpoint extends EndpointBase<"layer"> {
   get(): RenderObjectLayer;
 }
@@ -61,6 +69,7 @@ export interface GameLayoutReelEndpoint extends EndpointBase<"reel"> {
 export interface GameLayoutPopupLayerEndpoint extends EndpointBase<"popup-layer"> {
   get(): RenderObject;
 }
+export interface GameLayoutPopupInstanceEndpoint extends EndpointBase<"popup-instance"> {}
 export interface GameLayoutPopupStringEndpoint extends EndpointBase<"popup-string"> {
   readonly stringKind: "text" | "image-string";
   readonly name: string;
@@ -77,6 +86,7 @@ export interface GameLayoutAudioMusicEndpoint extends EndpointBase<"audio-music"
 export interface GameLayoutRuntimeResourceEndpoint extends EndpointBase<"resource-factory"> {
   readonly resourceKind: string;
   create(options?: {
+    readonly instanceId?: string;
     readonly text?: string;
     readonly anchor?: { readonly x: number; readonly y: number };
   }): Promise<RenderObject | ImgNumberRenderObject>;
@@ -85,9 +95,11 @@ export interface GameLayoutEventEndpoint extends EndpointBase<"event"> {}
 export type GameLayoutRuntimeEndpoint =
   | GameLayoutStructuralEndpoint
   | GameLayoutRenderObjectEndpoint
+  | GameLayoutRenderObjectInstanceEndpoint
   | GameLayoutRenderLayerEndpoint
   | GameLayoutReelEndpoint
   | GameLayoutPopupLayerEndpoint
+  | GameLayoutPopupInstanceEndpoint
   | GameLayoutPopupStringEndpoint
   | GameLayoutAudioEffectEndpoint
   | GameLayoutAudioMusicEndpoint
@@ -102,11 +114,20 @@ export interface GameLayoutRuntimeAddresses {
     address: string,
     expectedKind?: GameLayoutRuntimeAddressKind,
   ): GameLayoutRuntimeEndpoint;
+  mount(
+    parentAddress: string,
+    child: RenderObject,
+    options?: { readonly order?: number },
+  ): GameLayoutRuntimeMount;
+  addressOf(child: RenderObject): GameLayoutRuntimeAddress;
   bind(address: string, listener: GameLayoutRuntimeEventListener): () => void;
   wait(
     address: string,
     options?: GameLayoutRuntimeWaitOptions,
   ): Promise<GameLayoutRuntimeEvent>;
+}
+export interface GameLayoutRuntimeMount {
+  detach(): void;
 }
 interface RuntimeBridge {
   getRenderObject(id: string): SceneLayoutRenderObject | null;
@@ -146,6 +167,14 @@ export interface GameLayoutRuntimeAddressController {
       | GameLayoutRuntimeEvent["detail"]
       | (() => GameLayoutRuntimeEvent["detail"]),
   ): void;
+  registerPopupInstance(
+    popupId: string,
+    instanceId: string,
+    rootLayer: RenderObjectLayer,
+  ): {
+    readonly address: GameLayoutRuntimeAddress;
+    unregister(): void;
+  };
   destroy(): void;
 }
 
@@ -156,6 +185,12 @@ export function createGameLayoutRuntimeAddresses(
   const manifest = (resource.runtimeManifest ??
     resource.manifest) as SceneLayoutPackageResource["runtimeManifest"];
   const entries = new Map<GameLayoutRuntimeAddress, CatalogEntry>();
+  const liveEntries = new Map<GameLayoutRuntimeAddress, CatalogEntry>();
+  const reservedInstanceAddresses = new Set<GameLayoutRuntimeAddress>();
+  const instanceAddressByObject = new WeakMap<
+    RenderObject,
+    GameLayoutRuntimeAddress
+  >();
   const eventMetadata = new Map<
     GameLayoutRuntimeAddress,
     RuntimeEventAddressMetadata
@@ -191,6 +226,139 @@ export function createGameLayoutRuntimeAddresses(
         dispatchAddresses: Object.freeze([address]),
       });
     return address;
+  };
+  const addLive = (
+    segments: readonly string[],
+    kind: GameLayoutRuntimeAddressKind,
+    owner: readonly string[],
+    endpoint: (
+      descriptor: GameLayoutRuntimeAddressDescriptor,
+    ) => GameLayoutRuntimeEndpoint,
+    detail?: GameLayoutRuntimeAddressDescriptor["detail"],
+  ): GameLayoutRuntimeAddress => {
+    const address = formatGameLayoutRuntimeAddress(...segments);
+    if (entries.has(address) || liveEntries.has(address))
+      throw new SceneLayoutError(
+        `Duplicate live Game Layout runtime address: ${address}.`,
+      );
+    const descriptor = Object.freeze({
+      address,
+      kind,
+      ownerAddress: formatGameLayoutRuntimeAddress(...owner),
+      authored: false,
+      capability: "caller-owned",
+      ...(detail ? { detail: Object.freeze({ ...detail }) } : {}),
+    }) satisfies GameLayoutRuntimeAddressDescriptor;
+    liveEntries.set(address, {
+      descriptor,
+      endpoint: () => endpoint(descriptor),
+    });
+    return address;
+  };
+  const reserveInstance = (
+    segments: readonly string[],
+  ): GameLayoutRuntimeAddress => {
+    const address = formatGameLayoutRuntimeAddress(...segments);
+    if (
+      entries.has(address) ||
+      liveEntries.has(address) ||
+      reservedInstanceAddresses.has(address)
+    )
+      throw new SceneLayoutError(
+        `Duplicate live Game Layout runtime instance: ${address}.`,
+      );
+    reservedInstanceAddresses.add(address);
+    return address;
+  };
+  const registerResourceInstance = (
+    name: string,
+    resourceKind: string,
+    instanceId: string,
+    object: RenderObject,
+  ): GameLayoutRuntimeAddress => {
+    const owner = ["resource", resourceKind, name];
+    const baseSegments = [...owner, "instance", instanceId];
+    const baseAddress = formatGameLayoutRuntimeAddress(...baseSegments);
+    if (!reservedInstanceAddresses.delete(baseAddress))
+      throw new SceneLayoutError(
+        `Game Layout runtime instance was not reserved: ${baseAddress}.`,
+      );
+    const registeredAddresses: GameLayoutRuntimeAddress[] = [];
+    const requireLiveObject = (): RenderObject => {
+      if (!liveEntries.has(baseAddress))
+        throw new SceneLayoutError(
+          `Game Layout runtime instance is stale: ${baseAddress}.`,
+        );
+      getRenderObjectAdapter(object).assertUsable();
+      return object;
+    };
+    try {
+      registeredAddresses.push(
+        addLive(
+          baseSegments,
+          "render-object-instance",
+          owner,
+          (descriptor) =>
+            Object.freeze({
+              kind: "render-object-instance",
+              descriptor,
+              get: requireLiveObject,
+            }),
+          { resourceKind, resourceKey: name, instanceId },
+        ),
+      );
+      const loaded =
+        resourceKind === "spine"
+          ? resource.getLoadedRuntimeResource(name, "spine")
+          : resourceKind === "vni"
+            ? resource.getLoadedRuntimeResource(name, "vni")
+            : resourceKind === "image"
+              ? resource.getLoadedRuntimeResource(name, "image")
+              : null;
+      const childRefs:
+        | readonly { readonly kind: "spine-slot"; readonly id: string }[]
+        | readonly { readonly kind: "vni-text-layer"; readonly id: string }[] =
+        loaded?.kind === "spine"
+          ? validateOfficialSpineResource({
+              resource: loaded,
+              requiredAnimations: [],
+            }).slotNames.map((id) => ({ kind: "spine-slot" as const, id }))
+          : loaded?.kind === "vni"
+            ? (loaded.project.layers ?? [])
+                .filter((layer) => layer.type === "text")
+                .map((layer) => ({
+                  kind: "vni-text-layer" as const,
+                  id: layer.id,
+                }))
+            : [];
+      for (const ref of childRefs) {
+        const discriminator = ref.kind === "spine-slot" ? "slot" : "text-layer";
+        const segments = [...baseSegments, discriminator, ref.id];
+        registeredAddresses.push(
+          addLive(segments, "layer", baseSegments, (descriptor) =>
+            Object.freeze({
+              kind: "layer",
+              descriptor,
+              get: () =>
+                requireLiveObject().getChildLayer(
+                  ref.kind === "spine-slot"
+                    ? { kind: "spine-slot", slot: ref.id }
+                    : { kind: "vni-text-layer", layerId: ref.id },
+                ),
+            }),
+          ),
+        );
+      }
+    } catch (error) {
+      for (const address of registeredAddresses) liveEntries.delete(address);
+      throw error;
+    }
+    instanceAddressByObject.set(object, baseAddress);
+    registerRenderObjectCleanup(object, () => {
+      for (const address of registeredAddresses) liveEntries.delete(address);
+      instanceAddressByObject.delete(object);
+    });
+    return baseAddress;
   };
   const structural = (
     descriptor: GameLayoutRuntimeAddressDescriptor,
@@ -248,6 +416,51 @@ export function createGameLayoutRuntimeAddresses(
             get: () => bridge.getRenderLayer(`node:${node.id}:${placement}`),
           }),
       );
+    const authoredSpineResource = resource.layout?.spineResources?.[node.id];
+    const childRefs =
+      node.resource.kind === "spine" && authoredSpineResource
+        ? validateOfficialSpineResource({
+            resource: authoredSpineResource,
+            requiredAnimations: [],
+          }).slotNames.map((id) => ({ kind: "spine-slot" as const, id }))
+        : node.resource.kind === "vni"
+          ? (
+              resource.layout?.vniResources?.[node.resource.project]?.project
+                .layers ?? []
+            )
+              .filter((layer) => layer.type === "text")
+              .map((layer) => ({
+                kind: "vni-text-layer" as const,
+                id: layer.id,
+              }))
+          : [];
+    for (const ref of childRefs) {
+      const discriminator = ref.kind === "spine-slot" ? "slot" : "text-layer";
+      add(
+        [...owner, discriminator, ref.id],
+        "layer",
+        owner,
+        "borrowed",
+        (descriptor) =>
+          Object.freeze({
+            kind: "layer",
+            descriptor,
+            get: () => {
+              bridge.assertReady();
+              const object = bridge.getRenderObject(node.id);
+              if (!object)
+                throw new SceneLayoutError(
+                  `Authored render object is unavailable: ${descriptor.address}.`,
+                );
+              return object.getChildLayer(
+                ref.kind === "spine-slot"
+                  ? { kind: "spine-slot", slot: ref.id }
+                  : { kind: "vni-text-layer", layerId: ref.id },
+              );
+            },
+          }),
+      );
+    }
   }
   for (const reelId of Object.keys(manifest.reels).sort()) {
     const owner = ["reel", reelId];
@@ -380,26 +593,85 @@ export function createGameLayoutRuntimeAddresses(
           descriptor,
           resourceKind: spec.kind,
           create: (options?: {
+            readonly instanceId?: string;
             readonly text?: string;
             readonly anchor?: { readonly x: number; readonly y: number };
           }) => {
+            if (
+              options?.instanceId !== undefined &&
+              (typeof options.instanceId !== "string" ||
+                options.instanceId.length === 0)
+            )
+              throw new SceneLayoutError(
+                `Runtime resource instanceId must be a non-empty exact string: ${descriptor.address}.`,
+              );
             if (spec.kind === "image-string") {
               if (options?.text === undefined)
                 throw new SceneLayoutError(
                   `Image-string resource requires text: ${descriptor.address}.`,
                 );
-              return bridge.createImgNumberRenderObject(name, {
-                text: options.text,
-                ...(options.anchor ? { anchor: options.anchor } : {}),
-              });
+              return createAddressedResourceObject(
+                () =>
+                  bridge.createImgNumberRenderObject(name, {
+                    text: options.text!,
+                    ...(options.anchor ? { anchor: options.anchor } : {}),
+                  }),
+                name,
+                spec.kind,
+                options.instanceId,
+              );
             }
             if (options?.text !== undefined || options?.anchor !== undefined)
               throw new SceneLayoutError(
                 `Resource does not accept image-string options: ${descriptor.address}.`,
               );
-            return bridge.createRenderObject(name);
+            return createAddressedResourceObject(
+              () => bridge.createRenderObject(name),
+              name,
+              spec.kind,
+              options?.instanceId,
+            );
           },
         }),
+    );
+  }
+
+  function createAddressedResourceObject<T extends RenderObject>(
+    create: () => Promise<T>,
+    name: string,
+    resourceKind: string,
+    instanceId: string | undefined,
+  ): Promise<T> {
+    if (instanceId === undefined) return create();
+    const baseSegments = [
+      "resource",
+      resourceKind,
+      name,
+      "instance",
+      instanceId,
+    ];
+    const reserved = reserveInstance(baseSegments);
+    let creation: Promise<T>;
+    try {
+      creation = create();
+    } catch (error) {
+      reservedInstanceAddresses.delete(reserved);
+      throw error;
+    }
+    return creation.then(
+      (object) => {
+        try {
+          registerResourceInstance(name, resourceKind, instanceId, object);
+          return object;
+        } catch (error) {
+          object.destroy();
+          throw error;
+        }
+      },
+      (error) => {
+        reservedInstanceAddresses.delete(reserved);
+        throw error;
+      },
     );
   }
 
@@ -469,7 +741,7 @@ export function createGameLayoutRuntimeAddresses(
         error instanceof Error ? error.message : String(error),
       );
     }
-    const entry = entries.get(address);
+    const entry = entries.get(address) ?? liveEntries.get(address);
     if (!entry)
       throw new SceneLayoutError(
         `Unknown Game Layout runtime address: ${address}.`,
@@ -484,7 +756,12 @@ export function createGameLayoutRuntimeAddresses(
           "Game Layout runtime address resolver is destroyed.",
         );
       return Object.freeze(
-        [...entries.values()]
+        [
+          ...entries.values(),
+          ...[...liveEntries.values()].sort((a, b) =>
+            a.descriptor.address.localeCompare(b.descriptor.address, "en"),
+          ),
+        ]
           .map(({ descriptor }) => descriptor)
           .filter(
             (descriptor) => !options?.kind || descriptor.kind === options.kind,
@@ -501,6 +778,52 @@ export function createGameLayoutRuntimeAddresses(
           `Game Layout runtime address kind mismatch: expected ${expectedKind}, received ${entry.descriptor.kind}.`,
         );
       return entry.endpoint();
+    },
+    mount(
+      parentAddress: string,
+      child: RenderObject,
+      options: { readonly order?: number } = {},
+    ) {
+      const entry = requireEntry(parentAddress);
+      if (entry.descriptor.kind !== "layer")
+        throw new SceneLayoutError(
+          `Game Layout runtime address is not a mount parent: ${entry.descriptor.address}.`,
+        );
+      const order = options.order ?? 0;
+      if (!Number.isSafeInteger(order))
+        throw new SceneLayoutError(
+          "RenderObject mount order must be a safe integer.",
+        );
+      const adapter = getRenderObjectAdapter(child);
+      adapter.assertUsable();
+      if (!adapter.owned)
+        throw new SceneLayoutError("Borrowed RenderObject cannot be mounted.");
+      if (adapter.view.parent)
+        throw new SceneLayoutError(
+          "RenderObject is already attached to another parent.",
+        );
+      const endpoint = entry.endpoint() as GameLayoutRenderLayerEndpoint;
+      const layer = endpoint.get();
+      layer.add(child, order);
+      let active = true;
+      let unregisterCleanup = () => {};
+      const detach = (): void => {
+        if (!active) return;
+        active = false;
+        unregisterCleanup();
+        if (adapter.view.parent) layer.remove(child);
+      };
+      unregisterCleanup = registerRenderObjectCleanup(child, detach);
+      return Object.freeze({ detach });
+    },
+    addressOf(child: RenderObject) {
+      getRenderObjectAdapter(child).assertUsable();
+      const address = instanceAddressByObject.get(child);
+      if (!address || !liveEntries.has(address))
+        throw new SceneLayoutError(
+          "RenderObject has no live Game Layout runtime instance address.",
+        );
+      return address;
     },
     bind(value: string, listener: GameLayoutRuntimeEventListener) {
       const entry = requireEntry(value);
@@ -538,9 +861,81 @@ export function createGameLayoutRuntimeAddresses(
     ) {
       eventManager.emit(address, detail);
     },
+    registerPopupInstance(
+      popupId: string,
+      instanceId: string,
+      rootLayer: RenderObjectLayer,
+    ) {
+      if (destroyed)
+        throw new SceneLayoutError(
+          "Game Layout runtime address resolver is destroyed.",
+        );
+      if (typeof instanceId !== "string" || instanceId.length === 0)
+        throw new SceneLayoutError(
+          "Popup instanceId must be a non-empty exact string.",
+        );
+      const owner = ["popup", popupId];
+      const ownerAddress = formatGameLayoutRuntimeAddress(...owner);
+      if (!entries.has(ownerAddress))
+        throw new SceneLayoutError(
+          `Unknown Game Layout Popup owner: ${ownerAddress}.`,
+        );
+      const baseSegments = [...owner, "instance", instanceId];
+      const baseAddress = reserveInstance(baseSegments);
+      reservedInstanceAddresses.delete(baseAddress);
+      const registered: GameLayoutRuntimeAddress[] = [];
+      let live = true;
+      const assertLive = (): void => {
+        if (!live || !liveEntries.has(baseAddress))
+          throw new SceneLayoutError(
+            `Game Layout Popup instance is stale: ${baseAddress}.`,
+          );
+      };
+      try {
+        registered.push(
+          addLive(
+            baseSegments,
+            "popup-instance",
+            owner,
+            (descriptor) =>
+              Object.freeze({ kind: "popup-instance", descriptor }),
+            { popupId, instanceId },
+          ),
+        );
+        registered.push(
+          addLive(
+            [...baseSegments, "layer", "root"],
+            "layer",
+            baseSegments,
+            (descriptor) =>
+              Object.freeze({
+                kind: "layer",
+                descriptor,
+                get: () => {
+                  assertLive();
+                  return rootLayer;
+                },
+              }),
+          ),
+        );
+      } catch (error) {
+        for (const address of registered) liveEntries.delete(address);
+        throw error;
+      }
+      return Object.freeze({
+        address: baseAddress,
+        unregister: () => {
+          if (!live) return;
+          live = false;
+          for (const address of registered) liveEntries.delete(address);
+        },
+      });
+    },
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      liveEntries.clear();
+      reservedInstanceAddresses.clear();
       eventManager.destroy();
     },
   });

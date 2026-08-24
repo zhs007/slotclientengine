@@ -128,7 +128,34 @@ effect.destroy();
 
 游戏宿主仍必须持续调用 Scene Layout/runtime 的 `update(deltaSeconds)`；Promise 不会自行启动 RAF/ticker。
 
-## 3. ImgNumber 绑定到 Spine Slot
+## 3. Address 统一挂载与实例身份
+
+新代码优先通过一个入口挂到 Scene、ReelArea、Popup session、Spine slot 或 VNI 文字层：
+
+```ts
+const spine = await runtime.createRenderObject("win-board-spine", {
+  instanceId: "board-main",
+});
+const amount = await runtime.createImgNumberRenderObject("win-digits", {
+  text: "12500",
+});
+
+runtime.addresses.mount(
+  "gamelayout:/resource/spine/win-board-spine/instance/board-main/slot/win_amount",
+  amount,
+  { order: 10 },
+);
+```
+
+`instanceId` 是创建 program RenderObject 或 program Popup request 时的可选调用身份。传入后才能形成 live
+instance address，并可用 `addresses.addressOf(object)` 反查；不传仍可使用对象引用和旧 layer API，但不能按 instance
+address 定位。ID 在同一个 resource/Popup owner 下必须 live-unique，`"gamelayout"` 没有特殊含义；destroy/session结束后可复用。
+
+对象引用已经在手里时，可以用 `getChildLayer({kind:"spine-slot",slot})` 或
+`getChildLayer({kind:"vni-text-layer",layerId})` 取得同一个 opaque parent。`order` 只排 exact parent 内的程序 child。
+mount handle 的 `detach()` 幂等且不 destroy child；child/parent/runtime destroy 和 Popup session 收尾也会自动解除关系。
+
+## 4. ImgNumber 绑定到 Spine Slot（兼容接口）
 
 ### API
 
@@ -188,7 +215,7 @@ spine.destroy();
 绑定使用 Spine slot，不是 bone。底层复用 official Spine player 唯一的 slot wrapper，child 的 dynamic
 ImgNumber pivot、局部 position 和 scale 不会被 slot matrix 覆盖。
 
-## 4. RenderObject 与 Symbol 切换渲染层
+## 5. RenderObject 与 Symbol 切换渲染层
 
 ### API
 
@@ -252,7 +279,7 @@ occurrence 拉出 reel。
 - 不用它移动 rolling Sprite；rolling 阶段使用 cell/reel attachment 或稳定 cell Anchor；
 - source/target runtime destroyed、object detached/stale/foreign、order 非安全整数时显式失败。
 
-## 5. 最小清理清单
+## 6. 最小清理清单
 
 游戏创建 owned 对象后，正常结束按关系反向清理：
 
@@ -268,7 +295,7 @@ object.destroy();
 `restore()`/`detach()` 幂等。`remove()` 只负责 layer parent，不 destroy；`stop()` 只停止 playback，不
 detach/destroy。runtime destroy 会清理关系，但不应作为日常 cleanup 方案。
 
-## 6. API 选择速查
+## 7. API 选择速查
 
 | 需求                               | API                                                 |
 | ---------------------------------- | --------------------------------------------------- |

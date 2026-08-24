@@ -9,6 +9,7 @@ export type {
   CloneableRenderObjectAdapter,
   RenderObject,
   RenderObjectAdapter,
+  RenderObjectChildLayerRef,
   RenderObjectSpineSlotAdapter,
   RenderObjectPlayOptions,
   RenderPoint,
@@ -62,3 +63,5 @@ export type {
   RenderObjectLayerMove,
   RenderObjectLayerMoveOptions,
 } from "./render-object-layer.js";
+export { createRenderObjectChildLayer } from "./render-object-child-layer.js";
+export type { RenderObjectChildLayerController } from "./render-object-child-layer.js";

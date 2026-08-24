@@ -12,6 +12,10 @@ reel presentation layer 或 exact Spine slot 管理的 owned object 可用 `anim
 顺时针角度，也可用 `fadeIn()` / `fadeOut()`；fade 不改变 `visible`。游戏继续用 `await` / `Promise.all()` 编排，
 不需要建立 timeline DSL。settled borrowed Symbol/part 必须先 clone，不能借 motion 绕过 reel owner。
 
+统一父节点组合使用 `runtime.addresses.mount()`；程序 resource/Popup 可选传显式 `instanceId`，再用 live
+instance address、`addresses.addressOf()` 或 `RenderObject.getChildLayer()` 精确定位 Spine slot/VNI text layer。ID 不传时保持
+匿名兼容路径，重复 live ID 失败；mount/detach 不转移 caller-owned child 的 destroy ownership。
+
 ## Scene-layout 零代码模板
 
 `@slotclientengine/gameframeworks/scene-layout-template` 是 app-facing 的唯一模板入口。

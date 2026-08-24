@@ -139,6 +139,11 @@ Area、Scene Layout顶层和exact named node attachment统一使用增量兼容�
 `layer.add(node, order?)/remove(node)`保持不变；新`getAnchor/resolveAnchor/addAt`允许用opaque anchor按调用时
 transform对齐object；`moveHere(node,{order})`可把已挂载 RenderObject 或 settled Symbol 原子切到目标层并保持视觉原点，返回幂等 `restore()`。
 `SceneLayoutPackageRuntime.getRenderLayer(ref)`统一取得stable、`main.top|win|bottom`与exact node attachment；canonical node可用裸id或`.child|before|after`，旧带点号node使用`node:<legacyId>`。
+
+`SceneLayoutPackageRuntime.addresses.mount(parentAddress, child, {order})` 是统一的 address-native parent 入口，覆盖
+Scene/ReelArea 图层、authored/program Spine exact slot、authored/program VNI exact text layer和显式 `instanceId` 的程序
+Popup root。`createRenderObject(name,{instanceId})`、image-string factory options 与 Popup request 的 ID 都是可选的；传入后可用
+`addresses.addressOf()`/live instance address 定位，重复 live ID 显式失败，destroy/session结束后注销。mount只detach，不取得child destroy ownership。
 旧`getLayer/getNode/attachChild/attachRelative` borrowed Container seam继续兼容既有host/editor，不要求游戏批量迁移。
 
 程序 Spine/VNI `RenderObject.play(name?, {loop:true})` 在首圈完成后 resolve 并继续后台循环，调用方用

@@ -12,6 +12,7 @@ import {
   type RenderObjectMotionBinding,
   type RenderObjectMotionPropertyAdapter,
 } from "./render-object-motion.js";
+import type { RenderObjectLayer } from "./render-object-layer.js";
 
 export interface RenderObjectPlayOptions {
   readonly signal?: AbortSignal;
@@ -29,6 +30,17 @@ export interface RenderScale {
   readonly y: number;
 }
 
+export type RenderObjectChildLayerRef =
+  | {
+      readonly kind: "spine-slot";
+      readonly slot: string;
+      readonly followSlotColor?: boolean;
+    }
+  | {
+      readonly kind: "vni-text-layer";
+      readonly layerId: string;
+    };
+
 export interface RenderObject {
   setPosition(position: RenderPoint): void;
   /** Sets local opacity in the inclusive 0..1 range. */
@@ -41,6 +53,8 @@ export interface RenderObject {
   readonly motion: RenderObjectMotion;
   play(name?: string, options?: RenderObjectPlayOptions): Promise<void>;
   stop(): void;
+  /** Returns an exact opaque child parent owned by this RenderObject. */
+  getChildLayer(ref: RenderObjectChildLayerRef): RenderObjectLayer;
   getAnchor(): RenderAnchor;
   destroy(): void;
 }
@@ -58,6 +72,7 @@ export interface RenderObjectAdapter {
   play?(name?: string, options?: RenderObjectPlayOptions): Promise<void>;
   stop?(): void;
   readonly spineSlots?: RenderObjectSpineSlotAdapter;
+  getChildLayer?(ref: RenderObjectChildLayerRef): RenderObjectLayer;
   destroy(): void;
 }
 
@@ -82,6 +97,7 @@ export interface RegisteredRenderObjectAdapter {
   play?(name?: string, options?: RenderObjectPlayOptions): Promise<void>;
   stop?(): void;
   readonly spineSlots?: RenderObjectSpineSlotAdapter;
+  getChildLayer?(ref: RenderObjectChildLayerRef): RenderObjectLayer;
   readonly motionChildren: Set<RenderObject>;
   readonly motionBinding: RenderObjectMotionBinding;
   readonly motionAdapter: RenderObjectMotionPropertyAdapter;
@@ -134,6 +150,7 @@ function createRenderObjectBase(adapter: RenderObjectAdapter): RenderObject {
     ...(adapter.play ? { play: adapter.play } : {}),
     ...(adapter.stop ? { stop: adapter.stop } : {}),
     ...(adapter.spineSlots ? { spineSlots: adapter.spineSlots } : {}),
+    ...(adapter.getChildLayer ? { getChildLayer: adapter.getChildLayer } : {}),
     motionChildren: new Set<RenderObject>(),
     motionBinding,
     motionAdapter: Object.freeze({
@@ -247,6 +264,18 @@ function createRenderObjectBase(adapter: RenderObjectAdapter): RenderObject {
     stop: () => {
       assertUsable();
       adapter.stop?.();
+    },
+    getChildLayer: (ref: RenderObjectChildLayerRef) => {
+      assertUsable();
+      if (!ref || typeof ref !== "object")
+        throw new SymbolAnimationError(
+          "RenderObject child layer reference is required.",
+        );
+      if (!adapter.getChildLayer)
+        throw new SymbolAnimationError(
+          "RenderObject does not expose child layers.",
+        );
+      return adapter.getChildLayer(ref);
     },
     getAnchor: () => {
       assertUsable();
