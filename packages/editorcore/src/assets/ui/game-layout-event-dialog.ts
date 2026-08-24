@@ -814,7 +814,6 @@ const FAMILY_LABELS: Readonly<Record<string, string>> = Object.freeze({
   "node-animation": "节点动画",
   "symbol-state": "Symbol 状态",
   "mode-state": "游戏模式状态",
-  "mode-bgm": "模式 BGM",
   "transition-lifecycle": "模式切换",
   "transition-effect-event": "切换特效 Event",
   "transition-effect-lifecycle": "切换特效生命周期",
@@ -822,7 +821,6 @@ const FAMILY_LABELS: Readonly<Record<string, string>> = Object.freeze({
   "popup-phase": "Popup 阶段",
   "popup-tier": "Popup Tier",
   "popup-segment": "Popup Segment",
-  "audio-music": "音乐生命周期",
   "resource-animation": "Runtime 动画资源",
 });
 

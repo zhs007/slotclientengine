@@ -219,9 +219,18 @@ describe("Game Layout runtime address", () => {
       manifest,
       symbolPackages: { base: { symbols: ["WL"], states: ["win"] } },
       popupManifests: {},
-      audioMusicNames: ["base"],
     } as const;
     const compiled = compileGameLayoutRuntimeEventCatalog(source);
+    expect(
+      compiled.entries.some(({ descriptor }) =>
+        descriptor.address.includes("/bgm/lifecycle/"),
+      ),
+    ).toBe(false);
+    expect(
+      compiled.entries.some(({ descriptor }) =>
+        descriptor.address.includes("/audio/music/"),
+      ),
+    ).toBe(false);
     const controller = createGameLayoutRuntimeAddresses(
       {
         manifest,

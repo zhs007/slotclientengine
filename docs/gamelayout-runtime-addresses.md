@@ -46,14 +46,12 @@ gamelayout:/reel/main
 gamelayout:/reel/main/layer/win
 gamelayout:/mode/BaseGame
 gamelayout:/mode/BaseGame/bgm
-gamelayout:/mode/BaseGame/bgm/lifecycle/started
 gamelayout:/transition/BaseGame/FreeGame
 gamelayout:/transition/BaseGame/FreeGame/effect/spine/event/Start
 gamelayout:/popup/free-entry
 gamelayout:/popup/free-entry/layer/title
 gamelayout:/popup/free-entry/string/image-string/imgnumber-0
 gamelayout:/audio/music/base-bgm
-gamelayout:/audio/music/base-bgm/lifecycle/stopped
 gamelayout:/audio/effect/award.coin
 gamelayout:/resource/spine/Nearwin1
 ```
@@ -315,22 +313,10 @@ await playback.finished;
 // coin.stop() 会停止同 route 的 pending/active instance。
 ```
 
-未绑定的 Editor audio asset 没有 runtime address。BGM 地址来自导出的 exact music name 与 mode binding，
-不能通过地址绕过 mode owner 主动换曲。可监听两种等价 owner 视角：
-
-```ts
-runtime.addresses.bind(
-  "gamelayout:/audio/music/base-bgm/lifecycle/started",
-  onBaseMusicStarted,
-);
-runtime.addresses.bind(
-  "gamelayout:/mode/BaseGame/bgm/lifecycle/stopped",
-  onBaseModeMusicStopped,
-);
-```
-
-`started` 只在 backend loop instance 成功创建并由 AudioRuntime 接管后发生；`stopped` 只在 fade-out 到零、
-instance 已 stop 后发生。同一首 BGM 的 mode 切换不会制造重复 start/stop，mute/pause/duck 也不等于 stop。
+未绑定的 Editor audio asset 没有 runtime address。legacy BGM 地址来自导出的 exact music name 与 mode binding，
+不能通过地址绕过 mode owner 主动换曲；这些 structural endpoint 只提供 owner/snapshot 定位，不生成可绑定的
+music 或 mode-BGM lifecycle event。event audio 应使用 `mode/<id>/state/stable/entered|exited` 等业务状态边界驱动，
+避免音频自身再次触发音乐或音效。
 
 ## 生命周期和错误处理
 
