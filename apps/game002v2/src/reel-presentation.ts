@@ -4,6 +4,7 @@ import {
   createGridCellEffectResourceFromLoadedSpine,
   deriveGridCellEffectPoolCapacities,
   parseReelManifest,
+  type GridCellEffectPlaybackObserver,
   type GridCellEffectResourceMap,
   type ParsedReelManifest,
 } from "@slotclientengine/rendercore";
@@ -29,6 +30,7 @@ export async function prepareGame002v2ReelPresentation(
         id,
         createGridCellEffectResourceFromLoadedSpine({
           id,
+          runtimeResourceKey: key,
           resource: loaded,
           animationName: spec.animation,
           loopCount: spec.loopCount,
@@ -58,6 +60,7 @@ export async function prepareGame002v2ReelPresentation(
 export function createGame002v2EffectController(
   resource: SceneLayoutPackageResource,
   presentation: Game002v2ReelPresentation,
+  observePlayback: GridCellEffectPlaybackObserver,
 ) {
   const geometry = resource.manifest.reels.main;
   if (!geometry)
@@ -71,6 +74,7 @@ export function createGame002v2EffectController(
     cellHeight: geometry.cellSize.height,
     columnGap: geometry.gap.x,
     rowGap: geometry.gap.y,
+    observePlayback,
   });
 }
 

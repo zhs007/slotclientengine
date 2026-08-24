@@ -17,6 +17,7 @@ const SPINE_FLOAT_COMPLETION_MARGIN_SECONDS = 1e-9;
 
 export interface GridCellEffectResource {
   readonly id: string;
+  readonly runtimeResourceKey?: string;
   readonly playerResource: OfficialSpinePlayerResource;
   readonly animationName: string;
   readonly officialDurationSeconds: number;
@@ -33,6 +34,7 @@ export type GridCellEffectResourceMap = Readonly<
 
 export function createGridCellEffectResourceFromLoadedSpine(options: {
   readonly id: string;
+  readonly runtimeResourceKey?: string;
   readonly resource: OfficialSpinePlayerResource;
   readonly animationName: string;
   readonly loopCount: number;
@@ -41,6 +43,14 @@ export function createGridCellEffectResourceFromLoadedSpine(options: {
 }): GridCellEffectResource {
   if (typeof options.id !== "string" || options.id.length === 0)
     throw new ReelError("grid cell effect id must be non-empty.");
+  if (
+    options.runtimeResourceKey !== undefined &&
+    (typeof options.runtimeResourceKey !== "string" ||
+      options.runtimeResourceKey.trim().length === 0)
+  )
+    throw new ReelError(
+      "grid cell effect runtimeResourceKey must be non-empty when provided.",
+    );
   if (!Number.isSafeInteger(options.loopCount) || options.loopCount <= 0)
     throw new ReelError("grid cell effect loopCount must be positive.");
   if (
@@ -57,6 +67,9 @@ export function createGridCellEffectResourceFromLoadedSpine(options: {
     );
   return resolveLoadedEffect({
     id: options.id,
+    ...(options.runtimeResourceKey !== undefined
+      ? { runtimeResourceKey: options.runtimeResourceKey }
+      : {}),
     playerResource: options.resource,
     animationName: options.animationName,
     loopCount: options.loopCount,
@@ -162,6 +175,7 @@ function resolveEffect(
 
 function resolveLoadedEffect(options: {
   readonly id: string;
+  readonly runtimeResourceKey?: string;
   readonly playerResource: OfficialSpinePlayerResource;
   readonly animationName: string;
   readonly loopCount: number;
@@ -186,6 +200,9 @@ function resolveLoadedEffect(options: {
     SPINE_FLOAT_COMPLETION_MARGIN_SECONDS;
   return Object.freeze({
     id: options.id,
+    ...(options.runtimeResourceKey !== undefined
+      ? { runtimeResourceKey: options.runtimeResourceKey }
+      : {}),
     playerResource: options.playerResource,
     animationName: options.animationName,
     officialDurationSeconds,

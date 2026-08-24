@@ -640,14 +640,6 @@ export class RenderGridCellReelSet
     }
     assertNonNegativeNumber(dimming.fadeInMs, "continuous dimming fadeInMs");
     assertNonNegativeNumber(dimming.fadeOutMs, "continuous dimming fadeOutMs");
-    for (const position of positions) {
-      const cell = this.getCell(position.x, position.y);
-      if (!cell.occupied) {
-        throw new ReelError(
-          `Continuous grid spin position (${position.x},${position.y}) is empty.`,
-        );
-      }
-    }
     this.interruptAreaPresentation();
     for (const cell of this.#cells) {
       const selected = keys.has(
@@ -936,13 +928,18 @@ export class RenderGridCellReelSet
           if (!cell.hasStartedThisSpin && this.#elapsedMs >= startAtMs) {
             const waitingDeltaMs = Math.max(0, startAtMs - previousElapsedMs);
             if (waitingDeltaMs > 0) cell.reel.update(waitingDeltaMs / 1000);
+            const localPhaseY = active.localPhaseYByKey.get(key);
+            if (!cell.occupied) {
+              cell.reel.resetToY(
+                localPhaseY ?? cell.reel.getSnapshot().currentY,
+              );
+              cell.occupied = true;
+            }
             cell.reel.startContinuous({
               reels: active.reels,
               direction: active.direction,
               speedSymbolsPerSecond: active.speedSymbolsPerSecond,
-              ...(active.localPhaseYByKey.has(key)
-                ? { localPhaseY: active.localPhaseYByKey.get(key)! }
-                : {}),
+              ...(localPhaseY === undefined ? {} : { localPhaseY }),
             });
             cell.phase = "spinning";
             cell.hasStartedThisSpin = true;
@@ -3307,11 +3304,6 @@ export class RenderGridCellReelSet
 
     if (cell.phase === "waiting" && elapsedMs >= planCell.startAtMs) {
       if (!cell.occupied) {
-        if (!plan.selective) {
-          throw new ReelError(
-            `Full grid spin cell (${planCell.x},${planCell.y}) is empty.`,
-          );
-        }
         cell.reel.resetToY(planCell.axisPlan.startY);
         cell.occupied = true;
       }
@@ -3794,13 +3786,16 @@ function createDimmingRows(
 }
 
 function resetReelSlotSymbolsAndRequestLandingState(cell: RuntimeCell): void {
+  let hasVisibleSymbol = false;
   for (const slot of cell.reel.getSlotRenderViews()) {
-    slot.symbol?.reset();
-    if (slot.windowY !== 0 || !slot.symbol) continue;
-    if (cell.targetLandingState)
-      slot.symbol.requestState(cell.targetLandingState, "immediate");
-    else slot.symbol.requestLandingAppear("immediate");
+    if (slot.windowY === 0) hasVisibleSymbol = !!slot.symbol;
+    else slot.symbol?.reset();
   }
+  if (!hasVisibleSymbol) return;
+  cell.reel.resetVisibleSymbolForLanding(
+    0,
+    cell.targetLandingState ?? undefined,
+  );
 }
 
 function validateGridEmptyTargets(

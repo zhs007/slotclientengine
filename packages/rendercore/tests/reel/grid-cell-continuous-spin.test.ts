@@ -83,6 +83,63 @@ describe("grid-cell continuous spin", () => {
     });
   });
 
+  it("materializes a public-strip symbol when targetless rolling starts from a hole", () => {
+    const reel = createSet();
+    reel.resetToScene(
+      [
+        [1, 0, -1],
+        [2, 1, 0],
+      ],
+      [0, 1],
+    );
+
+    reel.startContinuous({
+      direction: "forward",
+      speedSymbolsPerSecond: 20,
+    });
+    const update = reel.update(0.05);
+
+    expect(update.startedCells).toContainEqual({
+      x: 0,
+      y: 2,
+      orderIndex: 2,
+    });
+    expect(
+      reel.getSnapshot().cells.find(({ x, y }) => x === 0 && y === 2),
+    ).toMatchObject({ occupied: true, phase: "spinning" });
+
+    reel.settleContinuous(createPlan());
+    for (let index = 0; index < 30 && reel.getSnapshot().spinning; index += 1)
+      reel.update(0.05);
+    expect(reel.getSnapshot().visibleScene).toEqual(TARGET);
+  });
+
+  it("settles an initial hole when the response arrives before its staggered start", () => {
+    const reel = createSet();
+    reel.resetToScene(
+      [
+        [1, 0, -1],
+        [2, 1, 0],
+      ],
+      [0, 1],
+    );
+
+    reel.startContinuous({
+      direction: "forward",
+      speedSymbolsPerSecond: 20,
+      startStepMs: 10,
+    });
+    reel.settleContinuous(createPlan());
+
+    for (let index = 0; index < 30 && reel.getSnapshot().spinning; index += 1)
+      reel.update(0.05);
+    expect(reel.getSnapshot()).toMatchObject({
+      spinning: false,
+      completed: true,
+      visibleScene: TARGET,
+    });
+  });
+
   it("keeps unselected occurrences held and cancels targetless rolling", () => {
     const reel = createSet();
     reel.resetToScene(INITIAL, [0, 1]);

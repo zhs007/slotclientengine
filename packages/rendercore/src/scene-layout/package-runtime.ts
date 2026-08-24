@@ -45,6 +45,7 @@ import {
   createReelSpinPlan,
   createShuffledGridCellReelOffsetMatrix,
   createShuffledGridCellReelPhaseMatrix,
+  type GridCellEffectPlaybackObserver,
   type SymbolPresentationValueMatrix,
   type RenderReelSymbolStateObserver,
   type RenderReelSymbolStateTransition,
@@ -278,7 +279,9 @@ export function createSceneLayoutPackageRuntime(options: {
   readonly areaSpinFunction?: import("../reel/index.js").AreaSpinFunction;
   readonly symbolValueTextBindings?: import("../symbol/index.js").SymbolValueTextBindingMap;
   readonly gridCellPresentation?: {
-    readonly createEffectController?: () => import("../reel/index.js").GridCellEffectController;
+    readonly createEffectController?: (options: {
+      readonly observePlayback: GridCellEffectPlaybackObserver;
+    }) => import("../reel/index.js").GridCellEffectController;
     readonly presentationValueResolver?: import("../reel/index.js").GridCellSymbolPresentationValueResolver;
   };
   /** Typed factory for a business-configured grid-cell reel transferred to package ownership. */
@@ -368,7 +371,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     | undefined;
   readonly #gridCellPresentation:
     | {
-        readonly createEffectController?: () => import("../reel/index.js").GridCellEffectController;
+        readonly createEffectController?: (options: {
+          readonly observePlayback: GridCellEffectPlaybackObserver;
+        }) => import("../reel/index.js").GridCellEffectController;
         readonly presentationValueResolver?: import("../reel/index.js").GridCellSymbolPresentationValueResolver;
       }
     | undefined;
@@ -486,7 +491,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       | undefined,
     gridCellPresentation:
       | {
-          readonly createEffectController?: () => import("../reel/index.js").GridCellEffectController;
+          readonly createEffectController?: (options: {
+            readonly observePlayback: GridCellEffectPlaybackObserver;
+          }) => import("../reel/index.js").GridCellEffectController;
           readonly presentationValueResolver?: import("../reel/index.js").GridCellSymbolPresentationValueResolver;
         }
       | undefined,
@@ -3970,8 +3977,12 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         : {}),
       ...(this.#gridCellPresentation?.createEffectController
         ? {
-            effectController:
-              this.#gridCellPresentation.createEffectController(),
+            effectController: this.#gridCellPresentation.createEffectController(
+              {
+                observePlayback: (event) =>
+                  this.observeRuntimeSpinePlayback(event),
+              },
+            ),
           }
         : {}),
       ...(this.#gridCellPresentation?.presentationValueResolver
