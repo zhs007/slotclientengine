@@ -779,14 +779,17 @@ export class SymbolPlayer extends VisualEntity<void> {
       // The semantic state changed, but both states resolve to the same live
       // animation. Keep the current player and timeline instead of resetting
       // an equivalent animation (for example normal Loop -> dropdown Loop).
-      previousAni.adoptContinuation?.(nextAni);
-      nextAni.destroy?.();
+      // Synchronize the semantic attachment target first: Spine continuation
+      // re-publishes the still-live player using the new state, and the
+      // image-string controller must already accept that state when it does.
       this.#imageStringController?.syncState(
         this.getImageStringPresentationState(snapshot),
       );
       this.#valueController?.syncState(
         this.getImageStringPresentationState(snapshot),
       );
+      previousAni.adoptContinuation?.(nextAni);
+      nextAni.destroy?.();
       return false;
     }
     this.#currentAni = nextAni;

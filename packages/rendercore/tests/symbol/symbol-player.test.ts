@@ -293,6 +293,52 @@ describe("SymbolPlayer", () => {
     expect(destroys).toBe(3);
   });
 
+  it("synchronizes image-string state before adopting an equivalent live animation", () => {
+    let synchronizedState = "";
+    let stateObservedByContinuation = "";
+    const symbolPlayer = new SymbolPlayer({
+      definition: createDefinition(),
+      texture: Texture.WHITE,
+      animationResolver: (context) => ({
+        stateId: context.resolvedState,
+        playback: context.state.playback,
+        continuityKey:
+          context.resolvedState === "normal" ||
+          context.resolvedState === "dropdown"
+            ? "same-spine-loop"
+            : context.resolvedState,
+        reset: () => undefined,
+        update: () => ({ loopCompleted: false, onceCompleted: false }),
+        adoptContinuation: () => {
+          stateObservedByContinuation = synchronizedState;
+        },
+      }),
+      imageStringControllerFactory: () => ({
+        getNodeNames: () => Object.freeze([]),
+        setText: () => undefined,
+        getText: () => "",
+        cloneText: () => {
+          throw new Error("not used");
+        },
+        getTextView: () => {
+          throw new Error("not used");
+        },
+        syncState: (state) => {
+          synchronizedState = state;
+        },
+        resetForPoolRelease: () => undefined,
+        destroy: () => undefined,
+      }),
+    });
+
+    expect(synchronizedState).toBe("normal");
+    symbolPlayer.requestState("dropdown");
+
+    expect(stateObservedByContinuation).toBe("dropdown");
+    expect(synchronizedState).toBe("dropdown");
+    symbolPlayer.destroy();
+  });
+
   it("keeps paytable data and reuses one main sprite texture across states", () => {
     const symbolPlayer = new SymbolPlayer({
       definition: createDefinition(),
