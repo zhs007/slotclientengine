@@ -153,6 +153,8 @@ export function createSymbolHandle(source: SymbolHandleSource): SymbolHandle {
     code: source.symbol.code,
     symbol: source.symbol.symbol,
     kind: "symbol" as const,
+    getChildLayer: (ref: Parameters<RenderObject["getChildLayer"]>[0]) =>
+      baseNode.getChildLayer(ref),
     getPosition: () => {
       assertUsable();
       if (!source.getPosition)
@@ -361,6 +363,8 @@ export function createEmptySymbolHandle(
     code: -1,
     symbol: "__empty__",
     kind: "empty" as const,
+    getChildLayer: (ref: Parameters<RenderObject["getChildLayer"]>[0]) =>
+      baseNode.getChildLayer(ref),
     getPosition: () => {
       assertUsable();
       if (!source.getPosition)

@@ -54,8 +54,17 @@ export function createRenderObjectLayer(options: {
   readonly label: string;
   readonly assertUsable?: () => void;
   readonly createError?: (message: string) => Error;
-  readonly motionRuntime: RenderObjectMotionRuntime;
+  readonly motionRuntime?: RenderObjectMotionRuntime;
+  /** @internal Child layers use their owning RenderObject as the update clock. */
+  readonly attachMotion?: (node: RenderObject) => RenderObjectMotionAttachment;
 }): RenderObjectLayerController {
+  if (!options.motionRuntime && !options.attachMotion)
+    throw new SymbolAnimationError(
+      `${options.label} requires a RenderObject motion owner.`,
+    );
+  const attachMotion =
+    options.attachMotion ??
+    ((node: RenderObject) => options.motionRuntime!.attach(node));
   const mounted = new Map<RenderObject, Container>();
   const createError =
     options.createError ??
@@ -108,13 +117,13 @@ export function createRenderObjectLayer(options: {
       if (position) objectView.position.set(position.x, position.y);
       objectView.zIndex = order;
       target.addChild(objectView);
-      motionAttachment = options.motionRuntime.attach(node);
+      motionAttachment = attachMotion(node);
       mounted.set(node, objectView);
       layerRegistrations.set(objectView, {
         target,
         mounted,
         node,
-        motionRuntime: options.motionRuntime,
+        attachMotion,
         motionAttachment,
       });
     } catch (error) {
@@ -201,13 +210,13 @@ export function createRenderObjectLayer(options: {
         objectView.position.set(targetPosition.x, targetPosition.y);
         objectView.zIndex = order;
         target.addChild(objectView);
-        targetMotionAttachment = options.motionRuntime.attach(node);
+        targetMotionAttachment = attachMotion(node);
         mounted.set(node, objectView);
         layerRegistrations.set(objectView, {
           target,
           mounted,
           node,
-          motionRuntime: options.motionRuntime,
+          attachMotion,
           motionAttachment: targetMotionAttachment,
         });
         committed = true;
@@ -219,7 +228,7 @@ export function createRenderObjectLayer(options: {
           objectView.zIndex = previous.zIndex;
           previous.source.addChild(objectView);
           if (sourceLayer) {
-            const restoredMotionAttachment = sourceLayer.motionRuntime?.attach(
+            const restoredMotionAttachment = sourceLayer.attachMotion(
               sourceLayer.node,
             );
             sourceLayer.mounted.set(sourceLayer.node, objectView);
@@ -244,7 +253,7 @@ export function createRenderObjectLayer(options: {
         objectView.zIndex = previous.zIndex;
         previous.source.addChild(objectView);
         if (sourceLayer) {
-          const restoredMotionAttachment = sourceLayer.motionRuntime?.attach(
+          const restoredMotionAttachment = sourceLayer.attachMotion(
             sourceLayer.node,
           );
           sourceLayer.mounted.set(sourceLayer.node, objectView);
@@ -291,7 +300,7 @@ interface LayerRegistration {
   readonly target: Container;
   readonly mounted: Map<RenderObject, Container>;
   readonly node: RenderObject;
-  readonly motionRuntime: RenderObjectMotionRuntime;
+  readonly attachMotion: (node: RenderObject) => RenderObjectMotionAttachment;
   readonly motionAttachment: RenderObjectMotionAttachment | null;
 }
 

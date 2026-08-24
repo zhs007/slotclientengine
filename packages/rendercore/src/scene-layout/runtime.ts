@@ -47,6 +47,7 @@ import type {
   SceneLayoutSpineSlotObjectAttachment,
   SceneLayoutSpineSlotObjectBinding,
 } from "./types.js";
+import type { RenderObjectChildLayerRef } from "../presentation/render-object.js";
 import {
   createRenderObjectLayer,
   type RenderObjectLayer,
@@ -116,6 +117,13 @@ export interface SceneLayoutVniPlayer {
   update(deltaSeconds: number): void;
   destroy(): void;
   getDisplayObject(): Container;
+  attachNodeToTextLayer?(options: {
+    readonly id: string;
+    readonly layerId: string;
+    readonly node: Container;
+    readonly destroyOnDetach?: boolean;
+    readonly hideOriginal?: boolean;
+  }): () => void;
 }
 
 interface RuntimeNode {
@@ -211,6 +219,17 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   readonly #authoredNodeActive = new Map<string, boolean>();
   readonly #programNodeVisible = new Map<string, boolean>();
   readonly #renderObjects = new Map<string, SceneLayoutRenderObject>();
+  readonly #nodeChildLayers = new Map<
+    string,
+    Map<
+      string,
+      {
+        readonly controller: RenderObjectLayerController;
+        readonly view: Container;
+        readonly detach: () => void;
+      }
+    >
+  >();
   readonly #renderObjectMotionRuntime: RenderObjectMotionRuntime;
   #manifest: SceneLayoutResource["manifest"];
   #snapshot: SceneLayoutSnapshot | null = null;
@@ -577,6 +596,8 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     const common = {
       getAnchor: () => this.getNodeRenderLayer(nodeId).getAnchor(),
       motion: this.createNodeMotion(nodeId),
+      getChildLayer: (ref: RenderObjectChildLayerRef) =>
+        this.getNodeChildLayer(nodeId, ref),
       setVisible: (visible: boolean) => {
         this.assertReady();
         if (typeof visible !== "boolean")
@@ -669,6 +690,95 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     }
     if (object) this.#renderObjects.set(nodeId, object);
     return object;
+  }
+
+  private getNodeChildLayer(
+    nodeId: string,
+    ref: RenderObjectChildLayerRef,
+  ): RenderObjectLayer {
+    this.assertReady();
+    const node = this.requireNode(nodeId);
+    const discriminator = ref.kind === "spine-slot" ? "slot" : "text-layer";
+    const exactId = ref.kind === "spine-slot" ? ref.slot : ref.layerId;
+    if (typeof exactId !== "string" || exactId.length === 0)
+      throw new SceneLayoutError(
+        `Scene layout node "${nodeId}" child layer requires a non-empty exact name.`,
+      );
+    const colorKey =
+      ref.kind === "spine-slot"
+        ? `:${(ref.followSlotColor ?? true) ? "color" : "plain"}`
+        : "";
+    const key = `${discriminator}:${exactId}${colorKey}`;
+    let layers = this.#nodeChildLayers.get(nodeId);
+    const existing = layers?.get(key);
+    if (existing) return existing.controller.layer;
+    if (ref.kind === "spine-slot") {
+      for (const existingKey of layers?.keys() ?? [])
+        if (existingKey.startsWith(`slot:${exactId}:`))
+          throw new SceneLayoutError(
+            `Scene layout Spine node "${nodeId}" slot "${exactId}" already uses a different followSlotColor value.`,
+          );
+    }
+    const view = new Container();
+    view.label = `scene-layout-node:${nodeId}:${discriminator}:${exactId}`;
+    view.sortableChildren = true;
+    let detach: () => void;
+    if (ref.kind === "spine-slot") {
+      if (node.spec.resource.kind !== "spine" || !node.player)
+        throw new SceneLayoutError(
+          `Scene layout node "${nodeId}" does not expose Spine slot child layers.`,
+        );
+      const player = requireSpineSlotPlayer(node.player, nodeId);
+      player.attachSlotObject({
+        slot: ref.slot,
+        object: view,
+        followSlotColor: ref.followSlotColor ?? true,
+      });
+      detach = () => player.removeSlotObject(view);
+    } else {
+      if (node.spec.resource.kind !== "vni" || !node.vniPlayer)
+        throw new SceneLayoutError(
+          `Scene layout node "${nodeId}" does not expose VNI text-layer child layers.`,
+        );
+      const resource = this.#resource.vniResources[node.spec.resource.project];
+      if (
+        !resource?.project.layers.some(
+          (layer) => layer.id === ref.layerId && layer.type === "text",
+        )
+      )
+        throw new SceneLayoutError(
+          `Unknown VNI text layer "${ref.layerId}" for scene layout node "${nodeId}".`,
+        );
+      if (!node.vniPlayer.attachNodeToTextLayer)
+        throw new SceneLayoutError(
+          `Scene layout VNI node "${nodeId}" does not support text-layer attachment.`,
+        );
+      detach = node.vniPlayer.attachNodeToTextLayer({
+        id: `rendercore-authored-${nodeId}-${ref.layerId}`,
+        layerId: ref.layerId,
+        node: view,
+        destroyOnDetach: false,
+        hideOriginal: true,
+      });
+    }
+    let controller: RenderObjectLayerController;
+    try {
+      controller = createRenderObjectLayer({
+        view,
+        label: view.label,
+        assertUsable: () => this.assertReady(),
+        createError: (message) => new SceneLayoutError(message),
+        motionRuntime: this.#renderObjectMotionRuntime,
+      });
+    } catch (error) {
+      detach();
+      view.destroy({ children: false });
+      throw error;
+    }
+    layers ??= new Map();
+    layers.set(key, { controller, view, detach });
+    this.#nodeChildLayers.set(nodeId, layers);
+    return controller.layer;
   }
 
   attachChild(options: AttachChildOptions): () => void {
@@ -869,6 +979,13 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   }
 
   private releaseNodeResources(): void {
+    for (const layers of this.#nodeChildLayers.values())
+      for (const layer of layers.values()) {
+        layer.controller.detachAll();
+        layer.detach();
+        layer.view.destroy({ children: false });
+      }
+    this.#nodeChildLayers.clear();
     for (const node of this.#nodes) {
       node.programMotionAttachment?.detach();
       node.programMotionAttachment = null;

@@ -42,6 +42,8 @@ await transition;
 gamelayout:/layer/layout
 gamelayout:/node/basegame-background
 gamelayout:/node/basegame-background/layer/child
+gamelayout:/node/conveyor/slot/amount
+gamelayout:/node/banner/text-layer/title
 gamelayout:/reel/main
 gamelayout:/reel/main/layer/win
 gamelayout:/mode/BaseGame
@@ -54,6 +56,9 @@ gamelayout:/popup/free-entry/string/image-string/imgnumber-0
 gamelayout:/audio/music/base-bgm
 gamelayout:/audio/effect/award.coin
 gamelayout:/resource/spine/Nearwin1
+gamelayout:/resource/spine/Nearwin1/instance/nearwin-left
+gamelayout:/resource/spine/Nearwin1/instance/nearwin-left/slot/amount
+gamelayout:/popup/free-entry/instance/help-1/layer/root
 ```
 
 动态 segment 使用 canonical percent encoding。禁止相对地址、空 segment、`.`、`..`、query、fragment、
@@ -88,7 +93,7 @@ const background = endpoint.get();
 background.setVisible(true);
 ```
 
-- `list()` 返回按 manifest 编译的 immutable descriptor catalog，不要求对象当前 active。
+- `list()` 返回 immutable snapshot：静态 manifest catalog 加调用时仍 live 的显式 instance；旧 snapshot 不会随后变化。
 - `describe()` 只返回 owner、kind、capability 和少量稳定 metadata，不返回 manifest/raw config。
 - `resolve(address, expectedKind)` 同时验证地址存在且 kind 精确匹配。
 - borrowed endpoint 在使用时检查 runtime 状态；销毁后调用显式失败。
@@ -140,6 +145,20 @@ const winNumber = await numberFactory.create({
 });
 ```
 
+需要用 address 唯一定位程序对象时，在创建时显式传 `instanceId`：
+
+```ts
+const nearwin = await runtime.createRenderObject("Nearwin1", {
+  instanceId: "nearwin-left",
+});
+const instanceAddress = runtime.addresses.addressOf(nearwin);
+// gamelayout:/resource/spine/Nearwin1/instance/nearwin-left
+```
+
+`instanceId` 可不传；不传保持旧的匿名 caller-owned 对象，但 `addressOf()` 会显式失败。ID 是 owner address 下的 exact
+segment，`"gamelayout"` 只是一个合法普通值；相同 resource owner 下同时存活的重复 ID 在资源 prepare 前失败，不同 owner
+可复用同名。对象 destroy 后地址立即注销，旧 endpoint 变为 stale，ID 可以重新使用。runtime 不生成 UUID，也不把 ID 写入 manifest。
+
 image-string factory 强制要求 `text`；其它 kind 禁止传 image-string options。返回对象由调用者 detach/destroy。
 兼容接口 `createRenderObject()` 与 `createImgNumberRenderObject()` 仍可使用。程序图片沿用 package
 `coordinateOrigin`：`center` 时图片中心是对象原点，挂到 Spine slot 或其它 anchor 时无需由游戏手工减去
@@ -148,6 +167,33 @@ image-string factory 强制要求 `text`；其它 kind 禁止传 image-string op
 在 Game Layout Editor 中导入 ImgNumber ZIP 后，在资源详情填写程序键（例如 `win-amount`）并点击
 “设为程序资源”；展开详情即可复制由共享 formatter 生成的
 `gamelayout:/resource/image-string/win-amount`。未绑定的 ImgNumber 不会显示程序工厂地址，也不会仅因导入而进入 production closure。
+
+## 统一 parent mount
+
+所有安全父节点都解析为同一个 opaque `RenderObjectLayer`，程序侧优先使用一次 address-native mount：
+
+```ts
+const child = await runtime.createImgNumberRenderObject("WinNumber", {
+  text: "1280",
+});
+const handle = runtime.addresses.mount(
+  "gamelayout:/resource/spine/Nearwin1/instance/nearwin-left/slot/amount",
+  child,
+  { order: 10 },
+);
+
+handle.detach(); // 幂等；只 detach，不 destroy child
+child.destroy();
+```
+
+parent 可以是 `layer/<layout|reel|transition|popup>`、reel `bottom/top/win`、node `before/child/after`、authored/program
+Spine exact slot、authored/program VNI exact text layer，以及带显式 ID 的程序 Popup `.../instance/<id>/layer/root`。
+`order` 缺省 `0` 且必须是 safe integer，只在该 exact parent 内排序；不会跨 Spine slot 改 draw order，也不会改 authored
+全局 order。unknown/wrong-kind/stale parent、borrowed/already-mounted child 都显式失败。child destroy、parent destroy、
+Popup session 结束或 runtime destroy 会清理 attachment，但 caller-owned child 的 destroy ownership 不转移。
+
+对象引用场景也可直接调用 `spineOrVni.getChildLayer({kind:"spine-slot",slot:"amount"})` 或
+`getChildLayer({kind:"vni-text-layer",layerId:"title"})`；相同 exact ref 返回稳定 façade，不支持的 kind 和 unknown exact 名称失败。
 
 ## Authored loop Spine
 
@@ -259,13 +305,21 @@ const address = formatGameLayoutRuntimeAddress("popup", "help-panel");
 const session = runtime.enqueuePopup({
   address,
   type: "single-state",
+  instanceId: "help-1",
 });
+
+if (!session.instanceAddress) throw new Error("missing Popup identity");
+const badgeMount = runtime.addresses.mount(
+  `${session.instanceAddress}/layer/root`,
+  helpBadge,
+);
 
 await session.presented;
 await delayTime(2);
 // 默认等待该类型的正式 end/dismiss 流程；cleanup 可用 session.cancel()。
 await session.close();
 await session.finished;
+badgeMount.detach();
 ```
 
 `enqueuePopup()` 会同时校验 owner 地址存在、binding type 与请求输入；Award 还严格校验 raw 金额。程序 Popup、mode award 与
@@ -275,6 +329,9 @@ pending 或 mode transition 时失败。session 的 `close()` 只操作自身 id
 每个 binding 的 player 在 runtime 初始化时创建一次并跨请求复用；全部 Scene Layout Popup 共用一个 runtime-owned 压暗层，按当前 manifest
 更新颜色、透明度和 visibleStates。`getActivePopupAddress()` 只返回当前 active owner 或 `null`。全局 `closePopup()` 保留给不持有 session
 的宿主 cleanup；session 不拥有 player，caller 不得 destroy package-owned Popup。
+
+`instanceId` 同样可省略；省略时 `session.instanceAddress === null`。显式 ID 的 queued session 在返回时就注册 root parent，
+因此可以预先 mount；只有 active session 的 group 可见。finished/cancelled/failed 后地址注销并 detach 全部 child，同一 ID 随后可复用。
 
 ## Popup 深层字符串
 

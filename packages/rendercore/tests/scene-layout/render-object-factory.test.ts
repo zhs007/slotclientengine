@@ -1,7 +1,10 @@
 import { Container, Sprite, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
 import type { ImageStringResource } from "../../src/image-string/core/index.js";
-import { getRenderObjectAdapter } from "../../src/presentation/render-object.js";
+import {
+  createRenderObject,
+  getRenderObjectAdapter,
+} from "../../src/presentation/render-object.js";
 import { createRenderObjectMotionRuntime } from "../../src/presentation/render-object-motion.js";
 import { attachRenderObjectToSpineSlot } from "../../src/presentation/spine-slot-attachment.js";
 import { createSceneLayoutRenderObjectFactory } from "../../src/scene-layout/render-object-factory.js";
@@ -58,6 +61,7 @@ function createResource(options?: {
       kind: "vni" as const,
       project: {
         stage: { duration: 0.2 },
+        layers: [{ id: "amount", type: "text" }],
         exportProfile: { id: "runtime", purpose: "runtime", assetScale: 1 },
       } as never,
       assetUrls: {},
@@ -169,6 +173,7 @@ class ManualVniPlayer {
   updates = 0;
   loops: boolean[] = [];
   destroyed = false;
+  readonly mounts = new Map<string, Container>();
   init() {
     return Promise.resolve();
   }
@@ -189,9 +194,73 @@ class ManualVniPlayer {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
+  attachNodeToTextLayer(options: {
+    readonly id: string;
+    readonly layerId: string;
+    readonly node: Container;
+  }) {
+    if (options.layerId !== "amount") throw new Error("unknown text layer");
+    this.mounts.set(options.id, options.node);
+    return () => {
+      this.mounts.delete(options.id);
+      options.node.parent?.removeChild(options.node);
+    };
+  }
 }
 
 describe("Scene Layout named RenderObject factory", () => {
+  it("exposes stable exact Spine slot and VNI text-layer parents", async () => {
+    const spinePlayer = new ManualSpinePlayer();
+    const vniPlayer = new ManualVniPlayer();
+    const factory = createSceneLayoutRenderObjectFactory({
+      resource: createResource(),
+      dependencies: {
+        createSpinePlayer: () => spinePlayer,
+        createVniPlayer: () => vniPlayer,
+      },
+    });
+    const spine = await factory.createRenderObject("nearwin1");
+    const spineLayer = spine.getChildLayer({
+      kind: "spine-slot",
+      slot: "amount",
+    });
+    expect(spine.getChildLayer({ kind: "spine-slot", slot: "amount" })).toBe(
+      spineLayer,
+    );
+    const spineChildView = new Container();
+    const spineChild = createRenderObject({
+      view: spineChildView,
+      destroy: () => spineChildView.destroy(),
+    });
+    spineLayer.add(spineChild, 2);
+    expect(spinePlayer.slots.size).toBe(1);
+    expect(spineChildView.parent?.parent).toBe(spinePlayer.view);
+
+    const vni = await factory.createRenderObject("sparkle");
+    const vniLayer = vni.getChildLayer({
+      kind: "vni-text-layer",
+      layerId: "amount",
+    });
+    const vniChildView = new Container();
+    const vniChild = createRenderObject({
+      view: vniChildView,
+      destroy: () => vniChildView.destroy(),
+    });
+    vniLayer.add(vniChild);
+    expect(vniPlayer.mounts.size).toBe(1);
+    expect(() =>
+      vni.getChildLayer({ kind: "vni-text-layer", layerId: "missing" }),
+    ).toThrow(/Unknown VNI text layer/);
+
+    spine.destroy();
+    vni.destroy();
+    expect(spineChildView.parent).toBeNull();
+    expect(vniChildView.parent).toBeNull();
+    spineChild.destroy();
+    vniChild.destroy();
+    factory.destroy();
+  });
+
   it("resolves lazy runtime resource specs from the canonical manifest", async () => {
     const resource = createResource({ lazyRuntimeResources: true });
     expect(resource.manifest.runtimeResources).toBeUndefined();

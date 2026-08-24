@@ -2,8 +2,13 @@ import { VNIRuntime } from "@slotclientengine/vnicore/core";
 import { Assets, Container, Sprite, type Texture } from "pixi.js";
 import { createManagedImgNumberRenderObject } from "../presentation/imgnumber-render-object.js";
 import {
+  createRenderObjectChildLayer,
+  type RenderObjectChildLayerController,
+} from "../presentation/render-object-child-layer.js";
+import {
   createRenderObject,
   type RenderObject,
+  type RenderObjectChildLayerRef,
   type RenderObjectPlayOptions,
 } from "../presentation/render-object.js";
 import type { ImgNumberRenderObject } from "../presentation/imgnumber-render-object.js";
@@ -27,7 +32,16 @@ interface NamedVniPlayer {
   update(deltaSeconds: number): void;
   destroy(): void;
   onPlaybackComplete(listener: () => void): () => void;
+  attachNodeToTextLayer?(options: {
+    readonly id: string;
+    readonly layerId: string;
+    readonly node: Container;
+    readonly destroyOnDetach?: boolean;
+    readonly hideOriginal?: boolean;
+  }): () => void;
 }
+
+let nextVniChildLayerId = 1;
 
 export interface SceneLayoutRenderObjectFactoryDependencies {
   readonly loadTexture?: (url: string) => Promise<Texture>;
@@ -276,6 +290,41 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
       endLifecycle(outcome);
     };
     const slotPlayer = isSpineSlotPlayer(player) ? player : null;
+    const childLayers = new Map<string, RenderObjectChildLayerController>();
+    const getChildLayer = (ref: RenderObjectChildLayerRef) => {
+      if (ref.kind !== "spine-slot" || !slotPlayer)
+        throw new SceneLayoutError(
+          `Scene layout Spine runtime resource "${name}" only exposes exact Spine slot child layers.`,
+        );
+      if (typeof ref.slot !== "string" || ref.slot.length === 0)
+        throw new SceneLayoutError(
+          "Spine slot name must be a non-empty exact name.",
+        );
+      const followSlotColor = ref.followSlotColor ?? true;
+      const key = `${ref.slot}\u0000${followSlotColor ? "color" : "plain"}`;
+      const existing = childLayers.get(key);
+      if (existing) return existing.layer;
+      for (const existingKey of childLayers.keys())
+        if (existingKey.startsWith(`${ref.slot}\u0000`))
+          throw new SceneLayoutError(
+            `Spine slot child layer "${ref.slot}" already uses a different followSlotColor value.`,
+          );
+      let controller!: RenderObjectChildLayerController;
+      controller = createRenderObjectChildLayer({
+        owner: object,
+        label: `scene-layout-runtime-spine:${name}:slot:${ref.slot}`,
+        attach: (view) =>
+          slotPlayer.attachSlotObject({
+            slot: ref.slot,
+            object: view,
+            followSlotColor,
+          }),
+        detach: (view) => slotPlayer.removeSlotObject(view),
+        createError: (message) => new SceneLayoutError(message),
+      });
+      childLayers.set(key, controller);
+      return controller.layer;
+    };
     object = createRenderObject({
       view: player.view,
       update: (deltaSeconds) => {
@@ -347,6 +396,7 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
         endLifecycle("destroyed");
         player.destroy();
       },
+      getChildLayer,
       ...(slotPlayer
         ? {
             spineSlots: {
@@ -384,6 +434,12 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
       throw error;
     }
     const initializedPlayer = player;
+    const textLayerIds = new Set(
+      (resource.project.layers ?? [])
+        .filter((layer) => layer.type === "text")
+        .map((layer) => layer.id),
+    );
+    const childLayers = new Map<string, RenderObjectChildLayerController>();
     let active = createPendingPlayback();
     let loopFirstCycleRemaining: number | null = null;
     const disposeComplete = initializedPlayer.onPlaybackComplete(() => {
@@ -396,6 +452,41 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
       initializedPlayer.restart();
       loopFirstCycleRemaining = null;
       active = rejectPendingPlayback(active, reason);
+    };
+    const getChildLayer = (ref: RenderObjectChildLayerRef) => {
+      if (ref.kind !== "vni-text-layer")
+        throw new SceneLayoutError(
+          `Scene layout VNI runtime resource "${name}" only exposes exact VNI text-layer child layers.`,
+        );
+      if (!textLayerIds.has(ref.layerId))
+        throw new SceneLayoutError(
+          `Unknown VNI text layer "${ref.layerId}" for runtime resource "${name}".`,
+        );
+      if (!initializedPlayer.attachNodeToTextLayer)
+        throw new SceneLayoutError(
+          `Scene layout VNI runtime resource "${name}" does not support text-layer attachment.`,
+        );
+      const existing = childLayers.get(ref.layerId);
+      if (existing) return existing.layer;
+      const mountedId = `rendercore-child-layer-${nextVniChildLayerId++}`;
+      let dispose = () => {};
+      const controller = createRenderObjectChildLayer({
+        owner: object,
+        label: `scene-layout-runtime-vni:${name}:text-layer:${ref.layerId}`,
+        attach: (view) => {
+          dispose = initializedPlayer.attachNodeToTextLayer!({
+            id: mountedId,
+            layerId: ref.layerId,
+            node: view,
+            destroyOnDetach: false,
+            hideOriginal: true,
+          });
+        },
+        detach: () => dispose(),
+        createError: (message) => new SceneLayoutError(message),
+      });
+      childLayers.set(ref.layerId, controller);
+      return controller.layer;
     };
     object = createRenderObject({
       view: host,
@@ -436,6 +527,7 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
         stop(
           `Scene layout VNI runtime resource "${name}" playback was stopped.`,
         ),
+      getChildLayer,
       destroy: () => {
         this.#objects.delete(object);
         active = rejectPendingPlayback(

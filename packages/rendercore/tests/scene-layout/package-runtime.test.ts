@@ -11,6 +11,7 @@ import {
   RenderReelSet,
 } from "../../src/reel/index.js";
 import { createRenderObject } from "../../src/presentation/index.js";
+import { getRenderObjectAdapter } from "../../src/presentation/render-object.js";
 import type { RendercoreSpinePlayer } from "../../src/spine/runtime-player.js";
 import {
   createSceneLayoutPackageResource,
@@ -1749,13 +1750,37 @@ describe("scene layout package runtime", () => {
       const first = runtime.openPopup({
         address,
         type: "award-celebration",
+        instanceId: "gamelayout",
         betAmountRaw: 100,
         winAmountRaw: 1_000,
       });
       expect(first).toMatchObject({
         address,
         type: "award-celebration",
+        instanceAddress: "gamelayout:/popup/celebration/instance/gamelayout",
       });
+      const popupChildView = new Container();
+      const popupChild = createRenderObject({
+        view: popupChildView,
+        destroy: () => popupChildView.destroy(),
+      });
+      const popupMount = runtime.addresses.mount(
+        `${first.instanceAddress}/layer/root`,
+        popupChild,
+        { order: 3 },
+      );
+      expect(getRenderObjectAdapter(popupChild).view.parent?.visible).toBe(
+        true,
+      );
+      expect(() =>
+        runtime.enqueuePopup({
+          address,
+          type: "award-celebration",
+          instanceId: "gamelayout",
+          betAmountRaw: 100,
+          winAmountRaw: 2_000,
+        }),
+      ).toThrow(/Duplicate live/);
       expect(runtime.getActivePopupAddress()).toBe(address);
       expect(runtime.getAwardCelebrationPopup("celebration")).toBe(
         cachedPlayer,
@@ -1778,6 +1803,14 @@ describe("scene layout package runtime", () => {
         runtime.update(1);
       await expect(closed).resolves.toBeUndefined();
       await expect(first.finished).resolves.toBeUndefined();
+      expect(popupChildView.parent).toBeNull();
+      popupMount.detach();
+      expect(() =>
+        runtime.addresses.describe(
+          "gamelayout:/popup/celebration/instance/gamelayout",
+        ),
+      ).toThrow(/Unknown/);
+      popupChild.destroy();
       expect(runtime.getActivePopupAddress()).toBeNull();
 
       const second = runtime.openPopup({
