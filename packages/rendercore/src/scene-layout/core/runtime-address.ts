@@ -675,22 +675,29 @@ export function createGameLayoutRuntimeAddresses(
     );
   }
 
+  const eventSymbolPackages = { ...resource.symbolPackages };
+  if (manifest.symbolPackage) {
+    const legacyBindingId = manifest.symbolPackage.manifest.split("/").at(-2);
+    if (!legacyBindingId || !resource.symbolPackage)
+      throw new SceneLayoutError(
+        `Cannot resolve legacy symbol package event binding: ${manifest.symbolPackage.manifest}.`,
+      );
+    eventSymbolPackages[legacyBindingId] = resource.symbolPackage;
+  }
   const eventCatalog = compileGameLayoutRuntimeEventCatalog({
     manifest,
     symbolPackages: Object.fromEntries(
-      Object.entries(resource.symbolPackages ?? {}).map(
-        ([id, symbolPackage]) => [
-          id,
-          Object.freeze({
-            symbols: Object.freeze(
-              Object.keys(symbolPackage.symbolManifest.symbols),
-            ),
-            states: Object.freeze(
-              symbolPackage.statePreset.states.map((state) => state.id),
-            ),
-          }),
-        ],
-      ),
+      Object.entries(eventSymbolPackages).map(([id, symbolPackage]) => [
+        id,
+        Object.freeze({
+          symbols: Object.freeze(
+            Object.keys(symbolPackage.symbolManifest.symbols),
+          ),
+          states: Object.freeze(
+            symbolPackage.statePreset.states.map((state) => state.id),
+          ),
+        }),
+      ]),
     ),
     popupManifests: Object.fromEntries(
       Object.entries(resource.popupPackages).map(([id, popup]) => [

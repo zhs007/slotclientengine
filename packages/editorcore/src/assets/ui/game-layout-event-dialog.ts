@@ -813,6 +813,7 @@ const FAMILY_LABELS: Readonly<Record<string, string>> = Object.freeze({
   variant: "画面变体",
   "node-animation": "节点动画",
   "symbol-state": "Symbol 状态",
+  "symbols-state-batch": "批量图标状态",
   "mode-state": "游戏模式状态",
   "transition-lifecycle": "模式切换",
   "transition-effect-event": "切换特效 Event",

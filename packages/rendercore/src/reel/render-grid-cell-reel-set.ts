@@ -1448,8 +1448,8 @@ export class RenderGridCellReelSet
         "Visible symbol state playback batch must not be empty.",
       );
     }
-    const prepared = requests.flatMap((request) =>
-      normalizePositions(
+    const preparedRequests = requests.map((request) => {
+      const prepared = normalizePositions(
         request.positions,
         this.#columns,
         this.#rows,
@@ -1475,19 +1475,40 @@ export class RenderGridCellReelSet
           request.state,
           playbackOptions,
         );
-        return { cell, request };
-      }),
+        return { position, cell, request };
+      });
+      return Object.freeze({ request, prepared: Object.freeze(prepared) });
+    });
+    const batchObservation = Object.freeze(
+      preparedRequests.map(({ request, prepared }) =>
+        Object.freeze({
+          request,
+          positions: Object.freeze(
+            prepared.map(({ position, cell }) =>
+              Object.freeze({
+                ...position,
+                code: cell.reel.getVisibleSymbolStateSnapshot(0).code,
+              }),
+            ),
+          ),
+        }),
+      ),
     );
     return startSymbolStatePlaybackBatch(
-      prepared.map(
-        ({ cell, request }) =>
-          (signal) =>
-            cell.reel.playVisibleSymbolState(0, request.state, {
-              ...request.options,
-              signal,
-            }),
+      preparedRequests.flatMap(({ prepared }) =>
+        prepared.map(
+          ({ cell, request }) =>
+            (signal) =>
+              cell.reel.playVisibleSymbolState(0, request.state, {
+                ...request.options,
+                signal,
+              }),
+        ),
       ),
       options?.signal,
+      this.#symbolStateObserver?.observeBatch
+        ? () => this.#symbolStateObserver!.observeBatch!(batchObservation)
+        : undefined,
     );
   }
 

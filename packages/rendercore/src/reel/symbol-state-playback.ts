@@ -1,10 +1,12 @@
 export function startSymbolStatePlaybackBatch(
   starters: readonly ((signal: AbortSignal) => Promise<void>)[],
   signal?: AbortSignal,
+  beforeStart?: () => void,
 ): Promise<void> {
   if (signal?.aborted) {
     return Promise.reject(asAbortError(signal.reason));
   }
+  beforeStart?.();
   const controller = new AbortController();
   const abortListener = signal
     ? () => controller.abort(signal.reason)

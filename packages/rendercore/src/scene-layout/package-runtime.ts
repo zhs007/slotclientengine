@@ -46,6 +46,7 @@ import {
   createShuffledGridCellReelOffsetMatrix,
   createShuffledGridCellReelPhaseMatrix,
   type GridCellEffectPlaybackObserver,
+  type RenderReelSymbolStateBatchRequest,
   type SymbolPresentationValueMatrix,
   type RenderReelSymbolStateObserver,
   type RenderReelSymbolStateTransition,
@@ -89,6 +90,7 @@ import type {
   SceneLayoutInitialReelScene,
   SceneLayoutGridCellSpinPlanStage,
   SceneLayoutMainReelContinuousSpinInput,
+  SceneLayoutMainReelSymbolStatePlaybackRequest,
   SceneLayoutMainReelSpinInput,
   SceneLayoutNodeStateSnapshot,
   SceneLayoutNodeRenderLayerPlacement,
@@ -1609,47 +1611,14 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   }
 
   playMainReelSymbolStateBatch(
-    requests: readonly import("../reel/index.js").VisibleSymbolStatePlaybackRequest[],
+    requests: readonly SceneLayoutMainReelSymbolStatePlaybackRequest[],
     options?: import("../reel/index.js").VisibleSymbolStatePlaybackBatchOptions,
   ): Promise<void> {
     this.assertReady();
-    const reel = this.requireReel("main");
-    const bindingId = this.#activeSymbolPackageId;
-    const symbolPackage = bindingId
-      ? (this.#resource.symbolPackages[bindingId] ??
-        this.#resource.symbolPackage)
-      : null;
-    if (!this.#eventAudio.ignoreLegacyAudio && bindingId && symbolPackage) {
-      for (const request of requests) {
-        const snapshots = reel.getVisibleSymbolStateSnapshots(
-          request.positions,
-        );
-        for (const snapshot of snapshots) {
-          const cueOwner = `${bindingId}:${snapshot.x}:${snapshot.y}`;
-          this.cancelPendingAudioHandles(
-            this.#symbolAudioHandles.get(cueOwner),
-          );
-          this.#symbolAudioHandles.delete(cueOwner);
-          if (snapshot.code < 0) continue;
-          const symbol = symbolPackage.gameConfig.getPaytableEntry(
-            snapshot.code,
-          )?.symbol;
-          const cues = symbol
-            ? (symbolPackage.symbolManifest.symbols[symbol]?.audioCues.filter(
-                (candidate) => candidate.state === request.state,
-              ) ?? [])
-            : [];
-          if (cues.length > 0)
-            this.#symbolAudioHandles.set(
-              cueOwner,
-              cues.map((cue) =>
-                this.#audio.playEffect(`${bindingId}.${cue.effect}`),
-              ),
-            );
-        }
-      }
-    }
-    return reel.playVisibleSymbolStateBatch(requests, options);
+    return this.requireReel("main").playVisibleSymbolStateBatch(
+      requests,
+      options,
+    );
   }
 
   playEffect(route: string): AudioPlaybackHandle {
@@ -3904,7 +3873,112 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       observe: (transition: RenderReelSymbolStateTransition) => {
         this.emitSymbolStateTransition(bindingId, transition);
       },
+      observeBatch: (requests: readonly RenderReelSymbolStateBatchRequest[]) =>
+        this.emitSymbolStateBatch(bindingId, requests),
     });
+  }
+
+  private emitSymbolStateBatch(
+    bindingId: string,
+    requests: readonly RenderReelSymbolStateBatchRequest[],
+  ): void {
+    const symbolPackage =
+      this.#resource.symbolPackages[bindingId] ?? this.#resource.symbolPackage;
+    if (!symbolPackage)
+      throw new SceneLayoutError(
+        `Symbol state batch package is unavailable: ${bindingId}.`,
+      );
+    const resolved = requests.map(({ request, positions }, requestIndex) => {
+      const sceneRequest =
+        request as SceneLayoutMainReelSymbolStatePlaybackRequest;
+      if (positions.length === 0)
+        throw new SceneLayoutError(
+          `Symbol state batch request[${requestIndex}] has no positions.`,
+        );
+      let symbol: string;
+      if (sceneRequest.symbol !== undefined) {
+        if (typeof sceneRequest.symbol !== "string")
+          throw new SceneLayoutError(
+            `Symbol state batch request[${requestIndex}].symbol must be a string.`,
+          );
+        symbol = sceneRequest.symbol;
+        const code = symbolPackage.gameConfig.getSymbolCode(symbol);
+        if (code === undefined || !symbolPackage.symbolManifest.symbols[symbol])
+          throw new SceneLayoutError(
+            `Symbol state batch request[${requestIndex}] has unknown symbol "${symbol}".`,
+          );
+        if (!positions.some((position) => position.code === code))
+          throw new SceneLayoutError(
+            `Symbol state batch request[${requestIndex}] symbol "${symbol}" is not present in its positions.`,
+          );
+      } else {
+        let code = Number.POSITIVE_INFINITY;
+        for (const position of positions) code = Math.min(code, position.code);
+        if (!Number.isSafeInteger(code) || code < 0)
+          throw new SceneLayoutError(
+            `Symbol state batch request[${requestIndex}] cannot resolve a symbol from its positions.`,
+          );
+        const paytableEntry = symbolPackage.gameConfig.getPaytableEntry(code);
+        symbol = paytableEntry?.symbol ?? "";
+        if (!symbol || !symbolPackage.symbolManifest.symbols[symbol])
+          throw new SceneLayoutError(
+            `Symbol state batch request[${requestIndex}] cannot map symbol code ${code}.`,
+          );
+      }
+      const address = formatGameLayoutRuntimeAddress(
+        "symbol-package",
+        bindingId,
+        "symbolsstatebatch",
+        symbol,
+        request.state,
+      );
+      this.addresses.resolve(address, "event");
+      return Object.freeze({ address, request, positions, symbol });
+    });
+    for (const { address, request, symbol } of resolved)
+      this.#addressController.emit(address, () => ({
+        eventFamily: "symbols-state-batch",
+        symbolPackageId: bindingId,
+        symbol,
+        state: request.state,
+      }));
+    if (!this.#eventAudio.ignoreLegacyAudio)
+      this.playLegacySymbolBatchAudio(bindingId, symbolPackage, resolved);
+  }
+
+  private playLegacySymbolBatchAudio(
+    bindingId: string,
+    symbolPackage: SymbolPackageResource,
+    requests: readonly {
+      readonly request: import("../reel/index.js").VisibleSymbolStatePlaybackRequest;
+      readonly positions: readonly {
+        readonly x: number;
+        readonly y: number;
+        readonly code: number;
+      }[];
+    }[],
+  ): void {
+    for (const { request, positions } of requests)
+      for (const position of positions) {
+        const cueOwner = `${bindingId}:${position.x}:${position.y}`;
+        this.cancelPendingAudioHandles(this.#symbolAudioHandles.get(cueOwner));
+        this.#symbolAudioHandles.delete(cueOwner);
+        const symbol = symbolPackage.gameConfig.getPaytableEntry(
+          position.code,
+        )?.symbol;
+        const cues = symbol
+          ? (symbolPackage.symbolManifest.symbols[symbol]?.audioCues.filter(
+              (candidate) => candidate.state === request.state,
+            ) ?? [])
+          : [];
+        if (cues.length > 0)
+          this.#symbolAudioHandles.set(
+            cueOwner,
+            cues.map((cue) =>
+              this.#audio.playEffect(`${bindingId}.${cue.effect}`),
+            ),
+          );
+      }
   }
 
   private emitSymbolStateTransition(

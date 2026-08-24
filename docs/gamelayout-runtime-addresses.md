@@ -386,6 +386,35 @@ EditorCore 的 event group dialog 只把 catalog facets 用作渐进式筛选，
 Symbol 的全部、指定列、指定行和指定 cell 分别选择 catalog 已有的 `*/*`、`x/*`、`*/y`、`x/y` entry；selector
 不会变成 `bind()/wait()` 的额外参数，也不会生成 catalog 外的组合。
 
+Symbol 状态包含两类互不替代的 event：
+
+- `gamelayout:/symbol-package/<binding-id>/symbol/<symbol>/instance/reel/main/x/<x>/y/<y>/state/<state>/entered|exited`
+  表示一个已落定 occurrence 的实际状态边界，保留 exact 坐标和 wildcard 订阅。
+- `gamelayout:/symbol-package/<binding-id>/symbolsstatebatch/<symbol>/<state>` 表示一次批量播放请求；每个 request
+  只发一个 occurrence，不含坐标，也不等待逐图标 animation 完成。
+
+`playMainReelSymbolStateBatch()` 的每个 request 可显式传 `symbol`。显式值必须属于当前 Symbols package，且对应 code
+必须实际出现在该 request 的 positions 中；省略时从预检后的 positions 选择最小 symbol code 对应的 symbol。runtime 会先完成
+整批坐标、state、代表 symbol 与 event address 预检，再按 request 顺序发出全部 batch event，最后才启动逐图标状态切换：
+
+```ts
+await runtime.playMainReelSymbolStateBatch([
+  {
+    positions: winPositions,
+    symbol: "WL", // 可省略；省略时取 positions 中最小 symbol code
+    state: "win",
+    options: {
+      transitionMode: "immediate",
+      completion: "once-complete",
+    },
+  },
+]);
+```
+
+因此同一组中奖图标可只给 batch event 绑定一次音效，同时仍保留逐 occurrence 的 symbol-state event 给其它表现逻辑。
+同地址的两个 request 仍是两个 occurrence；空 positions、未知或不在 positions 中的显式 symbol、未知 state、已 abort
+signal 都不会产生 batch event 或部分启动。
+
 | capability                              | ownership                      | 失效边界                                              |
 | --------------------------------------- | ------------------------------ | ----------------------------------------------------- |
 | authored RenderObject/RenderObjectLayer | runtime-owned borrowed         | runtime destroy；active owner 还受 mode/reel 状态约束 |

@@ -62,6 +62,10 @@
 - Popup 字体与其它 payload 一样按完整 SHA-256 物理去重；logical filename key 与 owner 引用不得从 hash path 反推或合并。
 - Popup 必须保持 `popup/data → popup/core → popup/editor` 单向分层：data 拥有 v1–v8 strict source parser、唯一默认 latest normalizer与纯引用合同；core 拥有 production resolved-resource prepare、focus/presentation、layer、string registry、金额、input与 award/Spine/single-state 状态机；editor 只组合 mapped standalone package、namespace/materialize 和同 Core snapshot wrapper。任何 editor/game runtime 都必须用默认 loader把受支持版本转为latest。
 
+## Game Layout Event
+
+- EditorCore 的 Game Layout event selector 直接消费 RenderCore shared catalog，并把 `symbol-state` 与 `symbols-state-batch` 显示为两个独立 family；Editordemo 与 Game Layout Editor 不维护 app-local event family 表或按 address 猜测标签。
+
 ## Symbols Editor
 
 - 内层 symbol-state-textures manifest 的 canonical authoring 版本为 v3：沿用 v2 state lifecycle，并新增 package-local audio effect/cue。打开合法 v1/v2 时只调用 rendercore 的统一 upgrader；新导出恒写 v3，editor preview/Replay 不按 state 名判断。
