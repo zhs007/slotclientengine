@@ -16,9 +16,11 @@ import {
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  MeshToonMaterial,
   Object3D,
   PCFShadowMap,
   PerspectiveCamera,
+  PlaneGeometry,
   PointLight,
   Scene,
   Shape,
@@ -27,8 +29,9 @@ import {
   Vector2,
   WebGLRenderer,
 } from "three";
-import type { BufferGeometry, Material } from "three";
+import type { BufferGeometry, Material, Texture } from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { CartoonPass } from "./cartoon-pass.js";
 import { BOARD, boardDepth, boardWidth, ROOM } from "./config.js";
 import { createRandom } from "./random.js";
 import {
@@ -36,7 +39,10 @@ import {
   createSymbolPlacements,
   SymbolField,
 } from "./symbols.js";
-import { createStoneTextures, type StoneTextureSet } from "./textures.js";
+import {
+  createCastleTextureLibrary,
+  type CastleTextureLibrary,
+} from "./textures.js";
 
 interface FlameHandle {
   readonly core: Mesh;
@@ -47,32 +53,55 @@ interface FlameHandle {
 }
 
 interface CastleMaterials {
-  readonly stone: MeshStandardMaterial;
-  readonly stoneLight: MeshStandardMaterial;
-  readonly stoneDark: MeshStandardMaterial;
-  readonly mortar: MeshStandardMaterial;
-  readonly wood: MeshStandardMaterial;
-  readonly woodDark: MeshStandardMaterial;
-  readonly iron: MeshStandardMaterial;
-  readonly gold: MeshStandardMaterial;
-  readonly banner: MeshStandardMaterial;
-  readonly bannerGold: MeshStandardMaterial;
-  readonly purpleGlass: MeshStandardMaterial;
-  readonly candle: MeshStandardMaterial;
-  readonly flame: MeshBasicMaterial;
-  readonly flameCore: MeshBasicMaterial;
+  readonly wall: Material;
+  readonly floor: Material;
+  readonly stone: Material;
+  readonly stoneLight: Material;
+  readonly stoneDark: Material;
+  readonly mortar: Material;
+  readonly wood: Material;
+  readonly woodDark: Material;
+  readonly iron: Material;
+  readonly gold: Material;
+  readonly banner: Material;
+  readonly bannerGold: Material;
+  readonly purpleGlass: Material;
+  readonly candle: Material;
+  readonly flame: Material;
+  readonly flameCore: Material;
 }
 
 function standard(
   color: number,
   metalness = 0,
   roughness = 0.8,
+  bumpMap?: Texture,
 ): MeshStandardMaterial {
   return new MeshStandardMaterial({
     color,
     metalness,
     roughness,
     flatShading: true,
+    ...(bumpMap ? { bumpMap, bumpScale: 0.024 } : {}),
+  });
+}
+
+function toon(
+  color: number,
+  gradientMap: Texture,
+  options: {
+    readonly map?: Texture;
+    readonly bumpMap?: Texture;
+    readonly bumpScale?: number;
+  } = {},
+): MeshToonMaterial {
+  return new MeshToonMaterial({
+    color,
+    gradientMap,
+    ...(options.map ? { map: options.map } : {}),
+    ...(options.bumpMap
+      ? { bumpMap: options.bumpMap, bumpScale: options.bumpScale ?? 0 }
+      : {}),
   });
 }
 
@@ -99,10 +128,12 @@ export class CastleKnightRenderer {
   readonly #scene = new Scene();
   readonly #camera = new PerspectiveCamera(39, 1, 0.1, 80);
   readonly #root = new Group();
-  readonly #textures: StoneTextureSet[] = [];
+  readonly #cartoonPass = new CartoonPass();
   readonly #flames: FlameHandle[] = [];
   readonly #pointer = new Vector2();
   readonly #cameraOffset = new Vector2();
+  readonly #drawingBufferSize = new Vector2();
+  readonly #textureLibrary: CastleTextureLibrary;
   readonly #symbols: SymbolField;
   readonly #materials: CastleMaterials;
   #destroyed = false;
@@ -124,6 +155,9 @@ export class CastleKnightRenderer {
     this.#scene.background = new Color(0x090713);
     this.#scene.fog = new FogExp2(0x0a0814, 0.018);
     this.#scene.add(this.#root);
+    this.#textureLibrary = createCastleTextureLibrary(
+      this.#renderer.capabilities.getMaxAnisotropy(),
+    );
     this.#materials = this.#createMaterials();
     this.#createFloor();
     this.#createWalls();
@@ -134,7 +168,10 @@ export class CastleKnightRenderer {
     this.#createChandelier();
     this.#createTorches();
     this.#createLighting();
-    this.#symbols = new SymbolField(createSymbolPlacements(0x6a17d39b));
+    this.#symbols = new SymbolField(
+      createSymbolPlacements(0x6a17d39b),
+      this.#textureLibrary,
+    );
     this.#root.add(this.#symbols);
 
     host.addEventListener("pointermove", this.#onPointerMove);
@@ -157,6 +194,11 @@ export class CastleKnightRenderer {
     this.#camera.updateProjectionMatrix();
     this.#renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.7));
     this.#renderer.setSize(safeWidth, safeHeight, false);
+    this.#renderer.getDrawingBufferSize(this.#drawingBufferSize);
+    this.#cartoonPass.setSize(
+      this.#drawingBufferSize.x,
+      this.#drawingBufferSize.y,
+    );
   }
 
   destroy(host: HTMLElement): void {
@@ -175,7 +217,8 @@ export class CastleKnightRenderer {
       for (const material of materials) material.dispose();
     });
     this.#symbols.disposeResources();
-    for (const texture of this.#textures) texture.dispose();
+    this.#textureLibrary.dispose();
+    this.#cartoonPass.dispose();
     this.#renderer.dispose();
     this.#renderer.domElement.remove();
   }
@@ -202,7 +245,7 @@ export class CastleKnightRenderer {
       15.8 - this.#cameraOffset.y * 0.18,
       17.9 + this.#cameraOffset.y * 0.32,
     );
-    this.#camera.lookAt(this.#cameraOffset.x * 0.25, 0.25, -2.45);
+    this.#camera.lookAt(this.#cameraOffset.x * 0.25, 0.25, -2.7);
     for (const flame of this.#flames) {
       const flicker =
         1 +
@@ -212,33 +255,54 @@ export class CastleKnightRenderer {
       flame.halo.scale.setScalar(0.9 + flicker * 0.12);
       flame.light.intensity = flame.baseIntensity * flicker;
     }
-    this.#renderer.render(this.#scene, this.#camera);
+    this.#cartoonPass.render(this.#renderer, this.#scene, this.#camera);
   };
 
   #createMaterials(): CastleMaterials {
-    const stoneTextures = createStoneTextures(0x51a7e, "#69616c", 5, 9);
-    this.#textures.push(stoneTextures);
-    const stone = new MeshStandardMaterial({
-      color: 0xc3b8bd,
-      map: stoneTextures.albedo,
-      roughnessMap: stoneTextures.roughness,
-      bumpMap: stoneTextures.bump,
-      bumpScale: 0.075,
-      roughness: 0.93,
-      metalness: 0,
-      flatShading: true,
+    const textures = this.#textureLibrary;
+    const stone = toon(0xa99cae, textures.toonGradient, {
+      bumpMap: textures.stoneDetail,
+      bumpScale: 0.055,
     });
     return {
+      wall: toon(0xffffff, textures.toonGradient, {
+        map: textures.wallAlbedo,
+        bumpMap: textures.stoneDetail,
+        bumpScale: 0.045,
+      }),
+      floor: toon(0xffffff, textures.toonGradient, {
+        map: textures.floorAlbedo,
+        bumpMap: textures.stoneDetail,
+        bumpScale: 0.035,
+      }),
       stone,
-      stoneLight: standard(0x928b97, 0, 0.92),
-      stoneDark: standard(0x494352, 0, 0.96),
-      mortar: standard(0x17141f, 0, 1),
-      wood: standard(0x6c321c, 0, 0.8),
-      woodDark: standard(0x301a19, 0, 0.9),
-      iron: standard(0x292a31, 0.82, 0.44),
-      gold: standard(0xc77b11, 0.72, 0.31),
-      banner: standard(0x47152b, 0, 0.88),
-      bannerGold: standard(0xb87612, 0.56, 0.42),
+      stoneLight: toon(0xc0b2c1, textures.toonGradient, {
+        bumpMap: textures.stoneDetail,
+        bumpScale: 0.045,
+      }),
+      stoneDark: toon(0x554a60, textures.toonGradient, {
+        bumpMap: textures.stoneDetail,
+        bumpScale: 0.045,
+      }),
+      mortar: toon(0x211b2a, textures.toonGradient),
+      wood: toon(0xffffff, textures.toonGradient, {
+        map: textures.woodAlbedo,
+        bumpMap: textures.woodDetail,
+        bumpScale: 0.027,
+      }),
+      woodDark: toon(0x6b5664, textures.toonGradient, {
+        map: textures.woodAlbedo,
+        bumpMap: textures.woodDetail,
+        bumpScale: 0.03,
+      }),
+      iron: standard(0x33313c, 0.82, 0.42, textures.metalDetail),
+      gold: standard(0xd49119, 0.72, 0.29, textures.metalDetail),
+      banner: toon(0xffffff, textures.toonGradient, {
+        map: textures.fabricAlbedo,
+        bumpMap: textures.fabricDetail,
+        bumpScale: 0.016,
+      }),
+      bannerGold: standard(0xc58418, 0.56, 0.4, textures.metalDetail),
       purpleGlass: new MeshStandardMaterial({
         color: 0x4932a8,
         emissive: 0x38288e,
@@ -246,7 +310,7 @@ export class CastleKnightRenderer {
         roughness: 0.38,
         metalness: 0.05,
       }),
-      candle: standard(0xe5c28c, 0, 0.78),
+      candle: toon(0xf2d19b, textures.toonGradient),
       flame: new MeshBasicMaterial({ color: 0xff7a0b, toneMapped: false }),
       flameCore: new MeshBasicMaterial({ color: 0xffe379, toneMapped: false }),
     };
@@ -259,60 +323,28 @@ export class CastleKnightRenderer {
     );
     slab.position.y = -ROOM.floorHeight / 2;
     this.#root.add(slab);
-    const random = createRandom(0x5704e);
-    const columns = 10;
-    const rows = 18;
-    const tileWidth = ROOM.width / columns;
-    const tileDepth = ROOM.depth / rows;
-    const geometry = new RoundedBoxGeometry(
-      tileWidth - 0.08,
-      0.12,
-      tileDepth - 0.08,
-      2,
-      0.05,
+    const floor = sceneMesh(
+      new PlaneGeometry(ROOM.width - 0.08, ROOM.depth - 0.08),
+      this.#materials.floor,
     );
-    const tiles = new InstancedMesh(
-      geometry,
-      this.#materials.stone,
-      columns * rows,
-    );
-    const dummy = new Object3D();
-    for (let row = 0; row < rows; row += 1) {
-      for (let column = 0; column < columns; column += 1) {
-        const index = row * columns + column;
-        dummy.position.set(
-          -ROOM.width / 2 + tileWidth / 2 + column * tileWidth,
-          random.range(0.025, 0.085),
-          -ROOM.depth / 2 + tileDepth / 2 + row * tileDepth,
-        );
-        dummy.rotation.set(
-          random.range(-0.018, 0.018),
-          random.range(-0.014, 0.014),
-          random.range(-0.012, 0.012),
-        );
-        dummy.scale.set(
-          random.range(0.96, 1.01),
-          random.range(0.82, 1.15),
-          random.range(0.96, 1.01),
-        );
-        dummy.updateMatrix();
-        tiles.setMatrixAt(index, dummy.matrix);
-        tiles.setColorAt(
-          index,
-          new Color(0x625d68).offsetHSL(0, 0, random.range(-0.11, 0.08)),
-        );
-      }
-    }
-    tiles.instanceMatrix.needsUpdate = true;
-    tiles.instanceColor!.needsUpdate = true;
-    tiles.receiveShadow = true;
-    this.#root.add(tiles);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = 0.018;
+    floor.castShadow = false;
+    this.#root.add(floor);
   }
 
   #createWalls(): void {
+    const backWall = sceneMesh(
+      new PlaneGeometry(ROOM.width, ROOM.wallHeight),
+      this.#materials.wall,
+    );
+    backWall.position.set(0, ROOM.wallHeight / 2, -ROOM.depth / 2 + 0.18);
+    backWall.castShadow = false;
+    this.#root.add(backWall);
+
     const blockGeometry = new RoundedBoxGeometry(1.16, 0.72, 0.58, 2, 0.055);
     const random = createRandom(0xca571e);
-    const blocks = new InstancedMesh(blockGeometry, this.#materials.stone, 220);
+    const blocks = new InstancedMesh(blockGeometry, this.#materials.stone, 80);
     const dummy = new Object3D();
     let index = 0;
     const addBlock = (x: number, y: number, z: number, rotationY = 0) => {
@@ -331,15 +363,6 @@ export class CastleKnightRenderer {
       );
       index += 1;
     };
-    for (let row = 0; row < 12; row += 1) {
-      for (let column = 0; column < 11; column += 1) {
-        addBlock(
-          -5.8 + column * 1.16 + (row % 2) * 0.58,
-          0.45 + row * 0.71,
-          -ROOM.depth / 2 + 0.16,
-        );
-      }
-    }
     for (const side of [-1, 1]) {
       for (let row = 0; row < 8; row += 1) {
         for (let depth = 0; depth < 5; depth += 1) {
@@ -689,9 +712,9 @@ export class CastleKnightRenderer {
   }
 
   #createLighting(): void {
-    const hemisphere = new HemisphereLight(0x9383d0, 0x26181b, 2.15);
-    const ambient = new AmbientLight(0x635772, 1.52);
-    const moon = new DirectionalLight(0x8f83ff, 3.4);
+    const hemisphere = new HemisphereLight(0x9c8be0, 0x25161c, 1.18);
+    const ambient = new AmbientLight(0x6b5c7b, 0.72);
+    const moon = new DirectionalLight(0x8f83ff, 2.35);
     moon.position.set(-3, 11, -8);
     moon.castShadow = true;
     moon.shadow.mapSize.set(2048, 2048);
@@ -702,8 +725,12 @@ export class CastleKnightRenderer {
     moon.shadow.camera.near = 2;
     moon.shadow.camera.far = 35;
     moon.shadow.bias = -0.0005;
-    const key = new DirectionalLight(0xffb45b, 3.35);
+    const key = new DirectionalLight(0xffb45b, 3.7);
     key.position.set(-5, 10, 9);
-    this.#scene.add(hemisphere, ambient, moon, key);
+    const throneGlow = new PointLight(0x6047ff, 8.5, 12, 2);
+    throneGlow.position.set(0, 4.8, -9.6);
+    const boardGlow = new PointLight(0xff8c3e, 4.2, 13, 2);
+    boardGlow.position.set(-1.8, 4.5, 3.6);
+    this.#scene.add(hemisphere, ambient, moon, key, throneGlow, boardGlow);
   }
 }
