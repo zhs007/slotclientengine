@@ -4,6 +4,7 @@ import { Texture } from "pixi.js";
 import { describe, expect, it } from "vitest";
 import {
   SymbolAssetError,
+  createAppearSymbolAni,
   createDefaultSymbolAnimationResolver,
   createDefaultSymbolStatePreset,
   createSymbolCatalog,
@@ -115,6 +116,34 @@ describe("createSymbolCatalog", () => {
       "spinBlur",
       "disabled",
     ]);
+  });
+
+  it("enables landing appear from the symbol's explicit appear capability", () => {
+    const fallback = createDefaultSymbolAnimationResolver();
+    const catalog = createSymbolCatalog({
+      gameConfig: createGameConfig(game2Config),
+      assets: { S00: Texture.WHITE, S0: Texture.WHITE },
+      symbolAnimationCapabilities: {
+        S00: ["appear"],
+      },
+      animationResolver: (context) =>
+        context.resolvedState === "appear"
+          ? createAppearSymbolAni(context, { durationSeconds: 0.1 })
+          : fallback(context),
+    });
+    const enabled = catalog.createSymbolPlayer("S00");
+    const disabled = catalog.createSymbolPlayer("S0");
+
+    expect(enabled.requestLandingAppear("immediate")).toBe(true);
+    expect(enabled.getStateSnapshot()).toMatchObject({
+      requestedState: "appear",
+      resolvedState: "appear",
+    });
+    expect(disabled.requestLandingAppear("immediate")).toBe(false);
+    expect(disabled.getStateSnapshot().resolvedState).toBe("normal");
+
+    enabled.destroy();
+    disabled.destroy();
   });
 
   it("applies catalog render priorities and supports single-symbol overrides", () => {
