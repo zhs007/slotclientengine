@@ -10,3 +10,7 @@ coverage
 .vscode/*.code-workspace
 *.tsbuildinfo
 *.zip
+tasks/castleknight3ddemo-img2threejs/**/*.png
+tasks/castleknight3ddemo-img2threejs/**/*.jpg
+tasks/castleknight3ddemo-img2threejs/**/*.jpeg
+tasks/castleknight3ddemo-img2threejs/**/*.webp

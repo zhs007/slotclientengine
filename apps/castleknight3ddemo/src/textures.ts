@@ -194,43 +194,43 @@ export function createCastleTextureLibrary(
   const anisotropy = Math.min(maxAnisotropy, 8);
   const textures: Omit<CastleTextureLibrary, "dispose"> = {
     wallAlbedo: loadAlbedo(
-      "/textures/cartoon-wall-stone.png",
+      "/textures/cartoon-wall-stone.webp",
       2.25,
       1.45,
       anisotropy,
     ),
     floorAlbedo: loadAlbedo(
-      "/textures/cartoon-floor-stone.png",
+      "/textures/cartoon-floor-stone.webp",
       2.15,
       3.8,
       anisotropy,
     ),
     woodAlbedo: loadAlbedo(
-      "/textures/cartoon-dark-wood.png",
+      "/textures/cartoon-dark-wood.webp",
       1.25,
       1.25,
       anisotropy,
     ),
     chestWoodAlbedo: loadAlbedo(
-      "/textures/cartoon-chest-walnut.png",
+      "/textures/cartoon-chest-walnut.webp",
       1,
       1,
       anisotropy,
     ),
     chestGoldAlbedo: loadAlbedo(
-      "/textures/cartoon-hammered-gold.png",
+      "/textures/cartoon-hammered-gold.webp",
       1.35,
       1.35,
       anisotropy,
     ),
     columnStoneAlbedo: loadAlbedo(
-      "/textures/cartoon-column-purple-stone.png",
+      "/textures/cartoon-column-purple-stone.webp",
       1,
       1.4,
       anisotropy,
     ),
     fabricAlbedo: loadAlbedo(
-      "/textures/cartoon-burgundy-fabric.png",
+      "/textures/cartoon-burgundy-fabric.webp",
       1.4,
       2.8,
       anisotropy,
