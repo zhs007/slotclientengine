@@ -759,6 +759,21 @@ export class RenderReel extends Container {
     }
   }
 
+  resetVisibleSymbolForLanding(windowY: number, state?: SymbolStateId): void {
+    const slot = this.getVisibleSlot(windowY);
+    if (slot.kind === "empty" || !slot.symbol) {
+      throw new ReelError(
+        `Cannot reset landing state for empty visible symbol at reel ${this.xIndex}, y ${windowY}.`,
+      );
+    }
+
+    slot.symbol.reset();
+    const before = this.captureObservedState(slot.symbol);
+    if (state) slot.symbol.requestState(state, "immediate");
+    else slot.symbol.requestLandingAppear("immediate");
+    this.observeCapturedState(windowY, slot.symbol, before);
+  }
+
   validateVisibleSymbolStatePlayback(
     windowY: number,
     state: SymbolStateId,

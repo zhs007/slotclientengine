@@ -130,7 +130,9 @@
   不得通过 clamp 丢弃长帧时间或轮询完成状态。
 - grid-cell targetless pre-roll 必须复用 manifest timing 的 stable start group cadence；响应早于全部格启动时，
   pending cell 保留剩余 cadence 后进入 target-aware spin。落点 appear immediate 进入，不等待刚 reset 的
-  stable loop boundary；低 FPS ticker 必须分片消费完整受控 elapsed delta，不得通过截断单帧时间拉长业务等待。
+  stable loop boundary；稳定画面的 `-1` hole 允许直接进入 full/continuous spin，并在自身 start boundary
+  从该次公开本地轮带 phase 物化滚动 symbol，响应早于 start 时由后续 target-aware start 执行相同物化，app
+  不得预填伪造 symbol；低 FPS ticker 必须分片消费完整受控 elapsed delta，不得通过截断单帧时间拉长业务等待。
 - 不读取、缓存、输出或推断服务器真实轮带，也不消费服务器 randomNumbers 作为本地视觉随机源。
 - 测试服 `lstrand` 只能由 gameframeworks 的显式 opt-in、instance-scoped
   console contract 覆盖下一次实际发出的 spin；消费后立即清除，不持久化、不自动
@@ -215,6 +217,7 @@
 - authored non-state-machine Spine 的程序播放只接受 exact animation，并复用 Scene Layout 唯一 update/completion drain；once、首圈 loop、abort、stop、supersede 与 destroy 边界必须收敛。caller-owned detached RenderObject 可按 exact slot 批量绑定，失败恢复原 attachment，detach/child destroy/runtime destroy 清理关系且不转移 child ownership；state-machine node 不得绕过 `requestState()`。
 - Game Layout production对象统一通过owner-first `gamelayout:/` runtime address定位；地址只从canonical manifest及nested owner identity派生，不写回manifest，不允许JSON Pointer、filename/path/hash、alias或raw display/audio fallback。package runtime只公开可枚举descriptor、strict kind endpoint与bind/wait事件；Spine transition event必须复用唯一official update drain并在target scene提交后派发，BGM lifecycle必须对应backend instance真实start及fade-out stop。
 - Game Layout runtime离散状态事件由每个package runtime唯一manager在成功commit后同步派发；symbol occurrence的reel/x/y instance及`*`坐标通配必须直接属于canonical address，禁止放入bind/wait额外selector。exact symbol dispatch只查询预编译的exact/exact、exact/_、_/exact、*/*地址；无相关订阅时不得构造occurrence/detail或在reel update热路径格式化/解析地址。
+- grid-cell 落点 appear/显式 landing state 必须经过 reel symbol observer 派发 public grid occurrence；从 Scene Layout runtime resource 构造的 pooled grid-cell Spine effect 必须复用该 resource 的唯一 animation lifecycle address，不得因 app typed factory 或 player pool 绕过 event-audio。
 - Scene Layout 顶层`popups`是三类Popup的programmatic导出目录，不要求mode/transition直接引用。production普通请求通过exact owner address调用`enqueuePopup`，programmatic、mode award和transition prelude进入同一FIFO且任一时刻只有一个active Popup；当前项完整关闭后才启动下一项，不替换或叠加。`openPopup`只保留为显式fail-fast立即入口。每个session拥有identity-safe close/cancel与presented/finished边界，stale session不得关闭后来项。每个binding只缓存一个package-owned player，关闭后复用；同一package runtime全部Popup共用一个runtime-owned backdrop display object，并按active manifest更新，caller不持有或destroy raw player/backdrop。
 - package-level layout variant event 必须来自成功提交后的 snapshot diff；首次 apply、同 variant resize 与失败 apply 不派发，detail 只携带 previous/current variant identity，不把 raw window resize 当作 variant commit。
 - Gamelayout authored point由Scene Layout按当前snapshot和configured origin统一换算；logical viewport不是CSS/device viewport。跨parent只通过opaque Anchor和target-local解析，不向app公开world point、Matrix或visual bounds。SymbolGroup只可读取input-order odd middle、members/bounds center与稳定cell footprint，不能从当前display bounds推导业务rect。

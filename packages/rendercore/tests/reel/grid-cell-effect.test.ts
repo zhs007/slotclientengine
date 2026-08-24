@@ -6,6 +6,7 @@ import {
   createGridCellEffectResourcesFromManifest,
   deriveGridCellEffectPoolCapacities,
   parseReelManifest,
+  type GridCellEffectPlaybackEvent,
   type GridCellEffectResource,
 } from "../../src/reel/index.js";
 import type { RendercoreSpinePlayer } from "../../src/spine/runtime-player.js";
@@ -74,6 +75,7 @@ describe("grid cell effect resources and controller", () => {
   it("adapts an already loaded package Spine resource without path maps", () => {
     const resource = createGridCellEffectResourceFromLoadedSpine({
       id: "loaded",
+      runtimeResourceKey: "nearwin1",
       resource: {
         skeleton: TEST_EFFECT_SKELETON,
         atlasText: TEST_EFFECT_ATLAS,
@@ -87,6 +89,7 @@ describe("grid cell effect resources and controller", () => {
 
     expect(resource).toMatchObject({
       id: "loaded",
+      runtimeResourceKey: "nearwin1",
       animationName: "Loop",
       durationSeconds: 0.5,
     });
@@ -285,6 +288,61 @@ describe("grid cell effect resources and controller", () => {
     controller.destroy();
     expect(players.every((player) => player.destroyed)).toBe(true);
     expect(() => controller.update(0)).toThrow(/destroyed/);
+  });
+
+  it("observes runtime-resource Spine lifecycle for completed, stopped and destroyed effects", () => {
+    const base = createFakeResources().normal;
+    const events: GridCellEffectPlaybackEvent[] = [];
+    const controller = createGridCellEffectController({
+      resources: {
+        normal: Object.freeze({
+          ...base,
+          runtimeResourceKey: "nearwin1",
+        }),
+      },
+      capacities: { normal: 1 },
+      columns: 1,
+      rows: 1,
+      cellWidth: 10,
+      cellHeight: 10,
+      createPlayer: () => new FakePlayer(0.1),
+      observePlayback: (event) => events.push(event),
+    });
+    controller.prepare();
+
+    controller.startScheduledEffect({
+      effectId: "normal",
+      position: { x: 0, y: 0 },
+      loopCount: 1,
+    });
+    controller.update(0.1);
+    controller.startScheduledEffect({
+      effectId: "normal",
+      position: { x: 0, y: 0 },
+      loopCount: 1,
+    });
+    controller.cancelAll();
+    controller.startScheduledEffect({
+      effectId: "normal",
+      position: { x: 0, y: 0 },
+      loopCount: 1,
+    });
+    controller.destroy();
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        resourceKey: "nearwin1",
+        animation: "Loop",
+        phase: "started",
+        x: 0,
+        y: 0,
+      }),
+      expect.objectContaining({ phase: "ended", outcome: "completed" }),
+      expect.objectContaining({ phase: "started" }),
+      expect.objectContaining({ phase: "ended", outcome: "stopped" }),
+      expect.objectContaining({ phase: "started" }),
+      expect.objectContaining({ phase: "ended", outcome: "destroyed" }),
+    ]);
   });
 
   it("waits for async preparation and rejects invalid pool lifecycle inputs", async () => {

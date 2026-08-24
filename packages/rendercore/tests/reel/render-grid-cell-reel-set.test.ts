@@ -883,6 +883,39 @@ describe("RenderGridCellReelSet", () => {
     ).toBe(true);
   });
 
+  it("observes landing appear state at the public grid coordinate", () => {
+    const transitions: Parameters<
+      RenderReelSymbolStateObserver["observe"]
+    >[0][] = [];
+    const observer: RenderReelSymbolStateObserver = {
+      hasAnyInterest: () => true,
+      observe: (transition) => transitions.push(transition),
+    };
+    const reelSet = createGridReelSet(
+      { landingAppearSymbols: ["A", "B"] },
+      undefined,
+      undefined,
+      observer,
+    );
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
+    reelSet.spin(createPlan());
+
+    let result = reelSet.update(0);
+    for (let index = 0; index < 30 && !result.completed; index += 1) {
+      result = reelSet.update(0.05);
+    }
+
+    expect(transitions).toContainEqual(
+      expect.objectContaining({
+        x: 0,
+        y: 0,
+        previousResolvedState: "normal",
+        resolvedState: "appear",
+      }),
+    );
+    reelSet.destroy();
+  });
+
   it("starts a configured state at each cell landing while later cells still spin", () => {
     const reelSet = createGridReelSet();
     reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);

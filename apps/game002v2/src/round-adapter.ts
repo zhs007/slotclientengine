@@ -153,10 +153,11 @@ class DirectRoundAdapter implements SlotGameAdapter {
         bounceStrength: this.#reelPresentation.manifest.spin.bounceStrength,
       },
       gridCellPresentation: {
-        createEffectController: () =>
+        createEffectController: ({ observePlayback }) =>
           createGame002v2EffectController(
             this.#resource,
             this.#reelPresentation,
+            observePlayback,
           ),
         presentationValueResolver:
           createGame002v2DefaultSceneValueResolver(symbols),

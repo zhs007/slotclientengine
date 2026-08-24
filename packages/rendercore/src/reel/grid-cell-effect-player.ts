@@ -32,6 +32,21 @@ export interface GridCellEffectUpdateResult {
   }>[];
 }
 
+export interface GridCellEffectPlaybackEvent {
+  readonly resourceKey: string;
+  readonly effectId: string;
+  readonly animation: string;
+  readonly loop: true;
+  readonly phase: "started" | "ended";
+  readonly outcome?: "completed" | "stopped" | "destroyed";
+  readonly x: number;
+  readonly y: number;
+}
+
+export type GridCellEffectPlaybackObserver = (
+  event: GridCellEffectPlaybackEvent,
+) => void;
+
 export interface GridCellEffectController {
   readonly container: Container;
   prepare(): Promise<void> | void;
@@ -73,6 +88,7 @@ export function createGridCellEffectController(options: {
   readonly createPlayer?: (
     resource: GridCellEffectResource,
   ) => RendercoreSpinePlayer;
+  readonly observePlayback?: GridCellEffectPlaybackObserver;
 }): GridCellEffectController {
   return new GridCellEffectControllerImpl(options);
 }
@@ -87,6 +103,7 @@ class GridCellEffectControllerImpl implements GridCellEffectController {
   readonly #cellHeight: number;
   readonly #columnGap: number;
   readonly #rowGap: number;
+  readonly #observePlayback: GridCellEffectPlaybackObserver | undefined;
   readonly #mask: Graphics;
   #prepared = false;
   #preparing = false;
@@ -104,6 +121,7 @@ class GridCellEffectControllerImpl implements GridCellEffectController {
     readonly createPlayer?: (
       resource: GridCellEffectResource,
     ) => RendercoreSpinePlayer;
+    readonly observePlayback?: GridCellEffectPlaybackObserver;
   }) {
     this.#columns = assertPositiveSafeInteger(options.columns, "columns");
     this.#rows = assertPositiveSafeInteger(options.rows, "rows");
@@ -114,6 +132,7 @@ class GridCellEffectControllerImpl implements GridCellEffectController {
       "columnGap",
     );
     this.#rowGap = assertNonNegativeFinite(options.rowGap ?? 0, "rowGap");
+    this.#observePlayback = options.observePlayback;
     const createPlayer =
       options.createPlayer ??
       ((resource: GridCellEffectResource) =>
@@ -252,6 +271,7 @@ class GridCellEffectControllerImpl implements GridCellEffectController {
       animationName: entry.resource.animationName,
       loop: true,
     });
+    this.observePlayback(entry, { phase: "started" });
   }
 
   update(deltaSeconds: number): GridCellEffectUpdateResult {
@@ -293,7 +313,7 @@ class GridCellEffectControllerImpl implements GridCellEffectController {
               x: entry.x,
               y: entry.y,
             });
-            this.release(entry);
+            this.release(entry, "completed");
           }
           continue;
         }
@@ -326,7 +346,7 @@ class GridCellEffectControllerImpl implements GridCellEffectController {
   cancelAll(): void {
     if (this.#destroyed) return;
     for (const entry of this.#entries) {
-      if (entry.active) this.release(entry);
+      if (entry.active) this.release(entry, "stopped");
     }
   }
 
@@ -352,7 +372,9 @@ class GridCellEffectControllerImpl implements GridCellEffectController {
 
   destroy(): void {
     if (this.#destroyed) return;
-    this.cancelAll();
+    for (const entry of this.#entries) {
+      if (entry.active) this.release(entry, "destroyed");
+    }
     this.#destroyed = true;
     for (const entry of this.#entries) entry.player.destroy();
     this.container.mask = null;
@@ -360,7 +382,11 @@ class GridCellEffectControllerImpl implements GridCellEffectController {
     this.container.destroy({ children: true });
   }
 
-  private release(entry: PoolEntry): void {
+  private release(
+    entry: PoolEntry,
+    outcome: "completed" | "stopped" | "destroyed",
+  ): void {
+    this.observePlayback(entry, { phase: "ended", outcome });
     entry.player.reset();
     entry.player.view.renderable = false;
     entry.active = false;
@@ -368,6 +394,28 @@ class GridCellEffectControllerImpl implements GridCellEffectController {
     entry.y = -1;
     entry.requiredLoops = 0;
     entry.elapsedSeconds = 0;
+  }
+
+  private observePlayback(
+    entry: PoolEntry,
+    lifecycle:
+      | { readonly phase: "started" }
+      | {
+          readonly phase: "ended";
+          readonly outcome: "completed" | "stopped" | "destroyed";
+        },
+  ): void {
+    if (!entry.resource.runtimeResourceKey) return;
+    this.#observePlayback?.({
+      resourceKey: entry.resource.runtimeResourceKey,
+      effectId: entry.resource.id,
+      animation: entry.resource.animationName,
+      loop: true,
+      phase: lifecycle.phase,
+      ...(lifecycle.phase === "ended" ? { outcome: lifecycle.outcome } : {}),
+      x: entry.x,
+      y: entry.y,
+    });
   }
 
   private assertReady(): void {
