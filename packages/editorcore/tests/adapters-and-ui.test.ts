@@ -30,6 +30,7 @@ import {
   createDefaultEditorAssetPreview,
   mountEditorAssetsDialog,
   mountEditorGameLayoutEventDialog,
+  mountEditorGameLayoutEventPickerDialog,
   mountEditorAssetsView,
 } from "../src/assets/ui/index.js";
 
@@ -525,6 +526,30 @@ describe("default adapters", () => {
       events: [{ configuration: { gain: 25 } }],
     });
     configuredDialog.destroy();
+
+    const pickerHost = document.createElement("div");
+    document.body.append(pickerHost);
+    let pickedAddress = "";
+    const picker = mountEditorGameLayoutEventPickerDialog({
+      root: pickerHost,
+      rootKey,
+      sources: [{ key: rootKey, label: "当前项目" }],
+      inspectCatalog: () => catalog,
+      onConfirm(value) {
+        pickedAddress = value.address;
+      },
+    });
+    picker.open();
+    await flush();
+    expect(pickerHost.querySelector('[data-event-action="add"]')).toBeNull();
+    expect(pickerHost.textContent).toContain("选择 Event");
+    pickEventChoice(pickerHost, "symbol-state", "family");
+    for (const value of ["base", "A", "win", "column", "1", "entered"])
+      pickEventChoice(pickerHost, value, "pick");
+    click(required(pickerHost, '[data-event-action="save-row"]'));
+    await flush();
+    expect(pickedAddress).toBe(columnWin!.descriptor.address);
+    picker.destroy();
 
     const second = await controller.prepareImport([
       source(

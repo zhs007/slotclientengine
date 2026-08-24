@@ -475,6 +475,9 @@
   grid-template-columns: minmax(360px, 0.9fr) minmax(400px, 1.1fr);
   min-height: 0;
 }
+.editor-event-workspace.single {
+  grid-template-columns: minmax(0, 1fr);
+}
 .editor-event-list,
 .editor-event-editor {
   min-width: 0;
