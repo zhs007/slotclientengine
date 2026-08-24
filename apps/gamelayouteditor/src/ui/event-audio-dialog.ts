@@ -4,10 +4,7 @@ import {
   type EditorGameLayoutEventDialog,
   type EditorGameLayoutEventPickerDialog,
 } from "@slotclientengine/editorcore/assets/ui";
-import {
-  inspectSceneLayoutRuntimeEventCatalog,
-  type GameLayoutRuntimeEventCatalogEntry,
-} from "@slotclientengine/rendercore/scene-layout/editor";
+import type { GameLayoutRuntimeEventCatalogEntry } from "@slotclientengine/rendercore/scene-layout/editor";
 import type {
   SceneLayoutEventAudioBindingV1,
   GameLayoutRuntimeAddress,
@@ -18,6 +15,7 @@ import {
   type EditorProject,
 } from "../model/editor-project.js";
 import type { EditorAudioLayoutResource } from "../model/editor-resource.js";
+import { inspectEditorWorkspaceRuntimeEventCatalog } from "../model/editor-runtime-event-catalog.js";
 
 const CURRENT_PROJECT_ROOT = "layout.manifest.json";
 interface EventAudioConfiguration {
@@ -65,9 +63,9 @@ export function mountProjectEventAudioDialog(options: {
     title: "全局 Event 音乐音效",
     triggerLabel: "编辑音乐音效",
     inspectCatalog() {
-      const catalog = inspectSceneLayoutRuntimeEventCatalog({
+      const catalog = inspectEditorWorkspaceRuntimeEventCatalog({
         manifest: editorProjectToManifest(options.project),
-        files: options.project.assets,
+        workspaceFiles: options.project.assets,
       });
       catalogEntries = catalog.entries;
       return { rootKey: CURRENT_PROJECT_ROOT, entries: catalog.entries };
