@@ -90,7 +90,13 @@ function bootstrap(): void {
     previewKind === "bench" ||
     previewKind === "barrel" ||
     previewKind === "wall" ||
-    previewKind === "torch"
+    previewKind === "torch" ||
+    previewKind === "stair" ||
+    previewKind === "throne" ||
+    previewKind === "chandelier" ||
+    previewKind === "battleAxe" ||
+    previewKind === "spellbook" ||
+    previewKind === "crown"
   ) {
     bootstrapPropPreview(root, previewKind);
     return;
