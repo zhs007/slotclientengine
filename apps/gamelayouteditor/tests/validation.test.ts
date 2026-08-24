@@ -303,20 +303,21 @@ describe("filename-key layout resource commands", () => {
       zipBytes: imageStringZip(),
     });
     expect(resource).toMatchObject({
-      id: "image-string.manifest.json",
+      id: "digits-image-string.manifest.json",
       kind: "image-string",
-      manifestPath: "image-string.manifest.json",
+      manifestPath: "digits-image-string.manifest.json",
     });
+    expect(resource.assetPaths).toEqual(["digits-0.png", "digits-1.png"]);
     expect(project.assets.has(resource.manifestPath)).toBe(true);
     addLayerFromResource({
       project,
-      resourceId: "image-string.manifest.json",
+      resourceId: "digits-image-string.manifest.json",
       nodeId: "amount-a",
       variants: ["default"],
     });
     addLayerFromResource({
       project,
-      resourceId: "image-string.manifest.json",
+      resourceId: "digits-image-string.manifest.json",
       nodeId: "amount-b",
       variants: ["default"],
     });
@@ -350,18 +351,47 @@ describe("filename-key layout resource commands", () => {
       assignBackgroundResource({
         project,
         variant: "default",
-        resourceId: "image-string.manifest.json",
+        resourceId: "digits-image-string.manifest.json",
       }),
     ).toThrow(/背景|尺寸/);
     const beforeReplacement = cloneEditorProject(project);
     await expect(
       replaceImageStringResource({
         project,
-        resourceId: "image-string.manifest.json",
+        resourceId: "digits-image-string.manifest.json",
         zipBytes: imageStringZip({ glyphs: ["0"] }),
       }),
     ).rejects.toThrow(/缺少 glyph/);
     expect(project).toEqual(beforeReplacement);
+  });
+
+  it("keeps standalone image-string packages isolated by project id", async () => {
+    const project = createNewEditorProject("maximized-focus");
+    const digits = await importImageStringZip({
+      project,
+      zipBytes: imageStringZip({ id: "digits" }),
+    });
+    const score = await importImageStringZip({
+      project,
+      zipBytes: imageStringZip({ id: "score" }),
+    });
+
+    expect([digits.id, score.id]).toEqual([
+      "digits-image-string.manifest.json",
+      "score-image-string.manifest.json",
+    ]);
+    expect([...project.resources.keys()].sort()).toEqual([
+      "digits-image-string.manifest.json",
+      "score-image-string.manifest.json",
+    ]);
+    expect([...project.assets.keys()].sort()).toEqual([
+      "digits-0.png",
+      "digits-1.png",
+      "digits-image-string.manifest.json",
+      "score-0.png",
+      "score-1.png",
+      "score-image-string.manifest.json",
+    ]);
   });
 
   it("configures directed scene transitions with exact animation events", async () => {
@@ -1598,12 +1628,9 @@ describe("filename-key layout resource commands", () => {
     await expect(
       replaceImageStringResource({
         project: nestedIdProject,
-        resourceId: "image-string.manifest.json",
+        resourceId: "digits-image-string.manifest.json",
         zipBytes: imageStringZip({ id: "other" }),
       }),
-    ).resolves.toMatchObject({
-      id: "image-string.manifest.json",
-      manifest: { id: "other" },
-    });
+    ).rejects.toThrow(/root filename key/);
   });
 });

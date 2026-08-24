@@ -228,15 +228,19 @@ export async function importImageStringZip(options: {
   const rewritten = structuredClone(manifest) as {
     glyphs: Record<string, { path: string }>;
   };
+  const keyPrefix = manifest.id;
   const mapping = new Map<string, string>();
   for (const glyph of Object.values(rewritten.glyphs))
     if (!mapping.has(glyph.path))
-      mapping.set(glyph.path, basenameFromSourcePath(glyph.path));
-  assertNoEditorAssetKeyAliases([...mapping.values()]);
+      mapping.set(
+        glyph.path,
+        `${keyPrefix}-${basenameFromSourcePath(glyph.path)}`,
+      );
+  const rootKey = `${keyPrefix}-image-string.manifest.json`;
+  assertNoEditorAssetKeyAliases([rootKey, ...mapping.values()]);
   for (const glyph of Object.values(rewritten.glyphs))
     glyph.path = mapping.get(glyph.path)!;
   const flatManifest = parseImageStringManifest(rewritten);
-  const rootKey = "image-string.manifest.json";
   const resource: EditorImageStringLayoutResource = Object.freeze({
     id: rootKey,
     kind: "image-string",
