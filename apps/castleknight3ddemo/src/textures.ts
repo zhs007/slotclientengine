@@ -18,6 +18,9 @@ export interface CastleTextureLibrary {
   readonly chestWoodAlbedo: Texture;
   readonly chestGoldAlbedo: Texture;
   readonly columnStoneAlbedo: Texture;
+  readonly oakStavesAlbedo: Texture;
+  readonly cutStoneAlbedo: Texture;
+  readonly forgedIronAlbedo: Texture;
   readonly fabricAlbedo: Texture;
   readonly stoneDetail: CanvasTexture;
   readonly woodDetail: CanvasTexture;
@@ -227,6 +230,24 @@ export function createCastleTextureLibrary(
       "/textures/cartoon-column-purple-stone.webp",
       1,
       1.4,
+      anisotropy,
+    ),
+    oakStavesAlbedo: loadAlbedo(
+      "/textures/cartoon-oak-staves.webp",
+      1.15,
+      1.55,
+      anisotropy,
+    ),
+    cutStoneAlbedo: loadAlbedo(
+      "/textures/cartoon-castle-cut-stone.webp",
+      1.2,
+      1.2,
+      anisotropy,
+    ),
+    forgedIronAlbedo: loadAlbedo(
+      "/textures/cartoon-forged-iron.webp",
+      1.25,
+      1.25,
       anisotropy,
     ),
     fabricAlbedo: loadAlbedo(
