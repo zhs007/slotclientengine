@@ -1,0 +1,709 @@
+import {
+  ACESFilmicToneMapping,
+  AmbientLight,
+  BoxGeometry,
+  Color,
+  ConeGeometry,
+  CylinderGeometry,
+  DirectionalLight,
+  DodecahedronGeometry,
+  ExtrudeGeometry,
+  FogExp2,
+  Group,
+  HemisphereLight,
+  InstancedMesh,
+  Matrix4,
+  Mesh,
+  MeshBasicMaterial,
+  MeshStandardMaterial,
+  Object3D,
+  PCFShadowMap,
+  PerspectiveCamera,
+  PointLight,
+  Scene,
+  Shape,
+  SRGBColorSpace,
+  TorusGeometry,
+  Vector2,
+  WebGLRenderer,
+} from "three";
+import type { BufferGeometry, Material } from "three";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { BOARD, boardDepth, boardWidth, ROOM } from "./config.js";
+import { createRandom } from "./random.js";
+import {
+  createSessionSeed,
+  createSymbolPlacements,
+  SymbolField,
+} from "./symbols.js";
+import { createStoneTextures, type StoneTextureSet } from "./textures.js";
+
+interface FlameHandle {
+  readonly core: Mesh;
+  readonly halo: Mesh;
+  readonly light: PointLight;
+  readonly phase: number;
+  readonly baseIntensity: number;
+}
+
+interface CastleMaterials {
+  readonly stone: MeshStandardMaterial;
+  readonly stoneLight: MeshStandardMaterial;
+  readonly stoneDark: MeshStandardMaterial;
+  readonly mortar: MeshStandardMaterial;
+  readonly wood: MeshStandardMaterial;
+  readonly woodDark: MeshStandardMaterial;
+  readonly iron: MeshStandardMaterial;
+  readonly gold: MeshStandardMaterial;
+  readonly banner: MeshStandardMaterial;
+  readonly bannerGold: MeshStandardMaterial;
+  readonly purpleGlass: MeshStandardMaterial;
+  readonly candle: MeshStandardMaterial;
+  readonly flame: MeshBasicMaterial;
+  readonly flameCore: MeshBasicMaterial;
+}
+
+function standard(
+  color: number,
+  metalness = 0,
+  roughness = 0.8,
+): MeshStandardMaterial {
+  return new MeshStandardMaterial({
+    color,
+    metalness,
+    roughness,
+    flatShading: true,
+  });
+}
+
+function sceneMesh(geometry: BufferGeometry, material: Material): Mesh {
+  const mesh = new Mesh(geometry, material);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+function makeBannerShape(): Shape {
+  const shape = new Shape();
+  shape.moveTo(-0.72, 1.7);
+  shape.lineTo(0.72, 1.7);
+  shape.lineTo(0.72, -1.2);
+  shape.lineTo(0, -1.72);
+  shape.lineTo(-0.72, -1.2);
+  shape.closePath();
+  return shape;
+}
+
+export class CastleKnightRenderer {
+  readonly #renderer: WebGLRenderer;
+  readonly #scene = new Scene();
+  readonly #camera = new PerspectiveCamera(39, 1, 0.1, 80);
+  readonly #root = new Group();
+  readonly #textures: StoneTextureSet[] = [];
+  readonly #flames: FlameHandle[] = [];
+  readonly #pointer = new Vector2();
+  readonly #cameraOffset = new Vector2();
+  readonly #symbols: SymbolField;
+  readonly #materials: CastleMaterials;
+  #destroyed = false;
+
+  constructor(host: HTMLElement) {
+    this.#renderer = new WebGLRenderer({
+      antialias: true,
+      alpha: false,
+      powerPreference: "high-performance",
+    });
+    this.#renderer.domElement.className = "castle-canvas";
+    this.#renderer.outputColorSpace = SRGBColorSpace;
+    this.#renderer.toneMapping = ACESFilmicToneMapping;
+    this.#renderer.toneMappingExposure = 1.38;
+    this.#renderer.shadowMap.enabled = true;
+    this.#renderer.shadowMap.type = PCFShadowMap;
+    host.prepend(this.#renderer.domElement);
+
+    this.#scene.background = new Color(0x090713);
+    this.#scene.fog = new FogExp2(0x0a0814, 0.018);
+    this.#scene.add(this.#root);
+    this.#materials = this.#createMaterials();
+    this.#createFloor();
+    this.#createWalls();
+    this.#createBoard();
+    this.#createThroneArea();
+    this.#createArchitecture();
+    this.#createFurniture();
+    this.#createChandelier();
+    this.#createTorches();
+    this.#createLighting();
+    this.#symbols = new SymbolField(createSymbolPlacements(0x6a17d39b));
+    this.#root.add(this.#symbols);
+
+    host.addEventListener("pointermove", this.#onPointerMove);
+    host.addEventListener("pointerleave", this.#onPointerLeave);
+    this.resize(host.clientWidth, host.clientHeight);
+    this.#renderer.setAnimationLoop(this.#renderFrame);
+  }
+
+  spin(): boolean {
+    return this.#symbols.replace(createSymbolPlacements(createSessionSeed()));
+  }
+
+  resize(width: number, height: number): void {
+    if (this.#destroyed) return;
+    const safeWidth = Math.max(1, Math.floor(width));
+    const safeHeight = Math.max(1, Math.floor(height));
+    const aspect = safeWidth / safeHeight;
+    this.#camera.aspect = aspect;
+    this.#camera.fov = aspect < 0.82 ? 40 : aspect < 1.2 ? 36 : 31;
+    this.#camera.updateProjectionMatrix();
+    this.#renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.7));
+    this.#renderer.setSize(safeWidth, safeHeight, false);
+  }
+
+  destroy(host: HTMLElement): void {
+    if (this.#destroyed) return;
+    this.#destroyed = true;
+    this.#renderer.setAnimationLoop(null);
+    host.removeEventListener("pointermove", this.#onPointerMove);
+    host.removeEventListener("pointerleave", this.#onPointerLeave);
+    this.#root.traverse((object) => {
+      if (!(object instanceof Mesh) && !(object instanceof InstancedMesh))
+        return;
+      object.geometry.dispose();
+      const materials = Array.isArray(object.material)
+        ? object.material
+        : [object.material];
+      for (const material of materials) material.dispose();
+    });
+    this.#symbols.disposeResources();
+    for (const texture of this.#textures) texture.dispose();
+    this.#renderer.dispose();
+    this.#renderer.domElement.remove();
+  }
+
+  readonly #onPointerMove = (event: PointerEvent): void => {
+    const bounds = this.#renderer.domElement.getBoundingClientRect();
+    this.#pointer.set(
+      ((event.clientX - bounds.left) / Math.max(bounds.width, 1)) * 2 - 1,
+      ((event.clientY - bounds.top) / Math.max(bounds.height, 1)) * 2 - 1,
+    );
+  };
+
+  readonly #onPointerLeave = (): void => {
+    this.#pointer.set(0, 0);
+  };
+
+  readonly #renderFrame = (timeMilliseconds: number): void => {
+    if (this.#destroyed) return;
+    const time = timeMilliseconds / 1000;
+    this.#symbols.update(time);
+    this.#cameraOffset.lerp(this.#pointer, 0.025);
+    this.#camera.position.set(
+      this.#cameraOffset.x * 0.42,
+      15.8 - this.#cameraOffset.y * 0.18,
+      17.9 + this.#cameraOffset.y * 0.32,
+    );
+    this.#camera.lookAt(this.#cameraOffset.x * 0.25, 0.25, -2.45);
+    for (const flame of this.#flames) {
+      const flicker =
+        1 +
+        Math.sin(time * 8.7 + flame.phase) * 0.1 +
+        Math.sin(time * 13.1 + flame.phase * 1.7) * 0.055;
+      flame.core.scale.set(0.86 / flicker, flicker, 0.86 / flicker);
+      flame.halo.scale.setScalar(0.9 + flicker * 0.12);
+      flame.light.intensity = flame.baseIntensity * flicker;
+    }
+    this.#renderer.render(this.#scene, this.#camera);
+  };
+
+  #createMaterials(): CastleMaterials {
+    const stoneTextures = createStoneTextures(0x51a7e, "#69616c", 5, 9);
+    this.#textures.push(stoneTextures);
+    const stone = new MeshStandardMaterial({
+      color: 0xc3b8bd,
+      map: stoneTextures.albedo,
+      roughnessMap: stoneTextures.roughness,
+      bumpMap: stoneTextures.bump,
+      bumpScale: 0.075,
+      roughness: 0.93,
+      metalness: 0,
+      flatShading: true,
+    });
+    return {
+      stone,
+      stoneLight: standard(0x928b97, 0, 0.92),
+      stoneDark: standard(0x494352, 0, 0.96),
+      mortar: standard(0x17141f, 0, 1),
+      wood: standard(0x6c321c, 0, 0.8),
+      woodDark: standard(0x301a19, 0, 0.9),
+      iron: standard(0x292a31, 0.82, 0.44),
+      gold: standard(0xc77b11, 0.72, 0.31),
+      banner: standard(0x47152b, 0, 0.88),
+      bannerGold: standard(0xb87612, 0.56, 0.42),
+      purpleGlass: new MeshStandardMaterial({
+        color: 0x4932a8,
+        emissive: 0x38288e,
+        emissiveIntensity: 1.1,
+        roughness: 0.38,
+        metalness: 0.05,
+      }),
+      candle: standard(0xe5c28c, 0, 0.78),
+      flame: new MeshBasicMaterial({ color: 0xff7a0b, toneMapped: false }),
+      flameCore: new MeshBasicMaterial({ color: 0xffe379, toneMapped: false }),
+    };
+  }
+
+  #createFloor(): void {
+    const slab = sceneMesh(
+      new BoxGeometry(ROOM.width, ROOM.floorHeight, ROOM.depth),
+      this.#materials.mortar,
+    );
+    slab.position.y = -ROOM.floorHeight / 2;
+    this.#root.add(slab);
+    const random = createRandom(0x5704e);
+    const columns = 10;
+    const rows = 18;
+    const tileWidth = ROOM.width / columns;
+    const tileDepth = ROOM.depth / rows;
+    const geometry = new RoundedBoxGeometry(
+      tileWidth - 0.08,
+      0.12,
+      tileDepth - 0.08,
+      2,
+      0.05,
+    );
+    const tiles = new InstancedMesh(
+      geometry,
+      this.#materials.stone,
+      columns * rows,
+    );
+    const dummy = new Object3D();
+    for (let row = 0; row < rows; row += 1) {
+      for (let column = 0; column < columns; column += 1) {
+        const index = row * columns + column;
+        dummy.position.set(
+          -ROOM.width / 2 + tileWidth / 2 + column * tileWidth,
+          random.range(0.025, 0.085),
+          -ROOM.depth / 2 + tileDepth / 2 + row * tileDepth,
+        );
+        dummy.rotation.set(
+          random.range(-0.018, 0.018),
+          random.range(-0.014, 0.014),
+          random.range(-0.012, 0.012),
+        );
+        dummy.scale.set(
+          random.range(0.96, 1.01),
+          random.range(0.82, 1.15),
+          random.range(0.96, 1.01),
+        );
+        dummy.updateMatrix();
+        tiles.setMatrixAt(index, dummy.matrix);
+        tiles.setColorAt(
+          index,
+          new Color(0x625d68).offsetHSL(0, 0, random.range(-0.11, 0.08)),
+        );
+      }
+    }
+    tiles.instanceMatrix.needsUpdate = true;
+    tiles.instanceColor!.needsUpdate = true;
+    tiles.receiveShadow = true;
+    this.#root.add(tiles);
+  }
+
+  #createWalls(): void {
+    const blockGeometry = new RoundedBoxGeometry(1.16, 0.72, 0.58, 2, 0.055);
+    const random = createRandom(0xca571e);
+    const blocks = new InstancedMesh(blockGeometry, this.#materials.stone, 220);
+    const dummy = new Object3D();
+    let index = 0;
+    const addBlock = (x: number, y: number, z: number, rotationY = 0) => {
+      dummy.position.set(x, y, z);
+      dummy.rotation.set(0, rotationY, random.range(-0.018, 0.018));
+      dummy.scale.set(
+        random.range(0.93, 1.04),
+        random.range(0.93, 1.04),
+        random.range(0.9, 1.03),
+      );
+      dummy.updateMatrix();
+      blocks.setMatrixAt(index, dummy.matrix);
+      blocks.setColorAt(
+        index,
+        new Color(0x4f4a59).offsetHSL(0, 0, random.range(-0.07, 0.08)),
+      );
+      index += 1;
+    };
+    for (let row = 0; row < 12; row += 1) {
+      for (let column = 0; column < 11; column += 1) {
+        addBlock(
+          -5.8 + column * 1.16 + (row % 2) * 0.58,
+          0.45 + row * 0.71,
+          -ROOM.depth / 2 + 0.16,
+        );
+      }
+    }
+    for (const side of [-1, 1]) {
+      for (let row = 0; row < 8; row += 1) {
+        for (let depth = 0; depth < 5; depth += 1) {
+          addBlock(
+            side * (ROOM.width / 2 - 0.15),
+            0.45 + row * 0.72,
+            -9.3 + depth * 3.4 + (row % 2) * 0.45,
+            Math.PI / 2,
+          );
+        }
+      }
+    }
+    blocks.count = index;
+    blocks.instanceMatrix.needsUpdate = true;
+    blocks.instanceColor!.needsUpdate = true;
+    blocks.castShadow = true;
+    blocks.receiveShadow = true;
+    this.#root.add(blocks);
+  }
+
+  #createBoard(): void {
+    const underlay = sceneMesh(
+      new RoundedBoxGeometry(boardWidth + 0.32, 0.1, boardDepth + 0.32, 3, 0.1),
+      this.#materials.stoneDark,
+    );
+    underlay.position.set(0, 0.14, BOARD.zOffset);
+    this.#root.add(underlay);
+    const random = createRandom(0xb04ad);
+    const tileGeometry = new RoundedBoxGeometry(
+      BOARD.cellSize,
+      BOARD.cellHeight,
+      BOARD.cellSize,
+      3,
+      0.07,
+    );
+    const boardTiles = new InstancedMesh(
+      tileGeometry,
+      this.#materials.stoneLight,
+      BOARD.columns * BOARD.rows,
+    );
+    const matrix = new Matrix4();
+    let index = 0;
+    for (let row = 0; row < BOARD.rows; row += 1) {
+      for (let column = 0; column < BOARD.columns; column += 1) {
+        const x =
+          -boardWidth / 2 +
+          BOARD.cellSize / 2 +
+          column * (BOARD.cellSize + BOARD.cellGap);
+        const z =
+          -boardDepth / 2 +
+          BOARD.cellSize / 2 +
+          row * (BOARD.cellSize + BOARD.cellGap) +
+          BOARD.zOffset;
+        matrix.makeTranslation(x, 0.24, z);
+        boardTiles.setMatrixAt(index, matrix);
+        boardTiles.setColorAt(
+          index,
+          new Color(0x6f6972).offsetHSL(0, 0, random.range(-0.055, 0.055)),
+        );
+        index += 1;
+      }
+    }
+    boardTiles.instanceMatrix.needsUpdate = true;
+    boardTiles.instanceColor!.needsUpdate = true;
+    boardTiles.castShadow = true;
+    boardTiles.receiveShadow = true;
+    this.#root.add(boardTiles);
+  }
+
+  #createThroneArea(): void {
+    for (let index = 0; index < 3; index += 1) {
+      const step = sceneMesh(
+        new RoundedBoxGeometry(5.2 - index * 0.72, 0.32, 1.2, 2, 0.08),
+        this.#materials.stoneDark,
+      );
+      step.position.set(0, 0.22 + index * 0.3, -7.5 - index * 0.58);
+      this.#root.add(step);
+    }
+    const dais = sceneMesh(
+      new RoundedBoxGeometry(3.1, 0.42, 2.35, 3, 0.1),
+      this.#materials.stoneDark,
+    );
+    dais.position.set(0, 0.82, -9.25);
+    this.#root.add(dais);
+
+    const throne = new Group();
+    const seat = sceneMesh(
+      new RoundedBoxGeometry(1.35, 0.45, 1.05, 3, 0.08),
+      this.#materials.woodDark,
+    );
+    seat.position.y = 0.75;
+    const back = sceneMesh(
+      new RoundedBoxGeometry(1.5, 2.65, 0.42, 4, 0.12),
+      this.#materials.banner,
+    );
+    back.position.set(0, 1.98, -0.38);
+    const frame = sceneMesh(
+      new RoundedBoxGeometry(1.78, 2.9, 0.3, 3, 0.09),
+      this.#materials.gold,
+    );
+    frame.position.set(0, 1.98, -0.55);
+    back.renderOrder = 1;
+    for (const x of [-0.82, 0.82]) {
+      const post = sceneMesh(
+        new CylinderGeometry(0.14, 0.18, 3.2, 8),
+        this.#materials.gold,
+      );
+      post.position.set(x, 1.85, -0.4);
+      throne.add(post);
+      const cap = sceneMesh(
+        new ConeGeometry(0.22, 0.48, 6),
+        this.#materials.gold,
+      );
+      cap.position.set(x, 3.63, -0.4);
+      throne.add(cap);
+    }
+    for (const x of [-0.86, 0.86]) {
+      const arm = sceneMesh(
+        new RoundedBoxGeometry(0.28, 0.3, 1.05, 2, 0.06),
+        this.#materials.gold,
+      );
+      arm.position.set(x, 1.05, 0.05);
+      throne.add(arm);
+    }
+    const jewel = sceneMesh(
+      new DodecahedronGeometry(0.19, 0),
+      this.#materials.purpleGlass,
+    );
+    jewel.position.set(0, 2.66, -0.12);
+    throne.add(frame, back, seat, jewel);
+    throne.position.set(0, 0.75, -9.45);
+    this.#root.add(throne);
+
+    const windowShape = new Shape();
+    windowShape.moveTo(-0.5, -1.2);
+    windowShape.lineTo(0.5, -1.2);
+    windowShape.lineTo(0.5, 0.55);
+    windowShape.quadraticCurveTo(0, 1.35, -0.5, 0.55);
+    windowShape.closePath();
+    const window = sceneMesh(
+      new ExtrudeGeometry(windowShape, { depth: 0.04, bevelEnabled: false }),
+      this.#materials.purpleGlass,
+    );
+    window.position.set(0, 4.75, -11.14);
+    this.#root.add(window);
+  }
+
+  #createArchitecture(): void {
+    for (const x of [-4.7, -2.75, 2.75, 4.7]) {
+      const pillar = new Group();
+      const base = sceneMesh(
+        new RoundedBoxGeometry(1.05, 0.56, 1.1, 3, 0.08),
+        this.#materials.stoneDark,
+      );
+      base.position.y = 0.3;
+      pillar.add(base);
+      for (let index = 0; index < 6; index += 1) {
+        const block = sceneMesh(
+          new RoundedBoxGeometry(0.82, 0.72, 0.8, 2, 0.055),
+          index % 2 === 0 ? this.#materials.stoneLight : this.#materials.stone,
+        );
+        block.position.y = 0.9 + index * 0.68;
+        block.rotation.y = (index % 2) * 0.08;
+        pillar.add(block);
+      }
+      const capital = sceneMesh(
+        new RoundedBoxGeometry(1.18, 0.42, 1.16, 2, 0.07),
+        this.#materials.stoneDark,
+      );
+      capital.position.y = 5.05;
+      pillar.add(capital);
+      pillar.position.set(x, 0, -5.25);
+      this.#root.add(pillar);
+    }
+
+    for (const x of [-3.85, 3.85]) {
+      const arch = sceneMesh(
+        new TorusGeometry(1.55, 0.36, 7, 18, Math.PI),
+        this.#materials.stoneDark,
+      );
+      arch.position.set(x, 5.15, -10.95);
+      this.#root.add(arch);
+    }
+    const centerArch = sceneMesh(
+      new TorusGeometry(2.25, 0.42, 7, 20, Math.PI),
+      this.#materials.stoneDark,
+    );
+    centerArch.position.set(0, 6.15, -10.9);
+    this.#root.add(centerArch);
+
+    for (const x of [-4.25, 4.25]) {
+      const banner = sceneMesh(
+        new ExtrudeGeometry(makeBannerShape(), {
+          depth: 0.055,
+          bevelEnabled: true,
+          bevelSize: 0.035,
+          bevelThickness: 0.02,
+          bevelSegments: 1,
+        }),
+        this.#materials.banner,
+      );
+      banner.position.set(x, 4.8, -10.82);
+      const emblem = sceneMesh(
+        new DodecahedronGeometry(0.31, 0),
+        this.#materials.bannerGold,
+      );
+      emblem.scale.set(0.55, 1.2, 0.28);
+      emblem.position.set(x, 4.92, -10.68);
+      this.#root.add(banner, emblem);
+    }
+  }
+
+  #createFurniture(): void {
+    for (const side of [-1, 1]) {
+      const table = new Group();
+      const top = sceneMesh(
+        new RoundedBoxGeometry(1.55, 0.18, 0.72, 2, 0.05),
+        this.#materials.wood,
+      );
+      top.position.y = 0.85;
+      table.add(top);
+      for (const x of [-0.58, 0.58]) {
+        for (const z of [-0.23, 0.23]) {
+          const leg = sceneMesh(
+            new BoxGeometry(0.13, 0.82, 0.13),
+            this.#materials.woodDark,
+          );
+          leg.position.set(x, 0.42, z);
+          table.add(leg);
+        }
+      }
+      table.position.set(side * 4.75, 0, -1.8);
+      table.rotation.y = side * -0.12;
+      this.#root.add(table);
+
+      const barrel = new Group();
+      const body = sceneMesh(
+        new CylinderGeometry(0.42, 0.42, 0.88, 10),
+        this.#materials.wood,
+      );
+      barrel.add(body);
+      for (const y of [-0.31, 0.31]) {
+        const band = sceneMesh(
+          new TorusGeometry(0.43, 0.045, 5, 10),
+          this.#materials.iron,
+        );
+        band.rotation.x = Math.PI / 2;
+        band.position.y = y;
+        barrel.add(band);
+      }
+      barrel.position.set(side * 5.25, 0.48, 3.15);
+      this.#root.add(barrel);
+    }
+  }
+
+  #createChandelier(): void {
+    const group = new Group();
+    const ring = sceneMesh(
+      new TorusGeometry(1.55, 0.13, 8, 24),
+      this.#materials.iron,
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 6.25;
+    group.add(ring);
+    for (let index = 0; index < 10; index += 1) {
+      const angle = (index / 10) * Math.PI * 2;
+      const candle = sceneMesh(
+        new CylinderGeometry(0.065, 0.075, 0.42, 8),
+        this.#materials.candle,
+      );
+      candle.position.set(Math.cos(angle) * 1.55, 6.55, Math.sin(angle) * 1.55);
+      group.add(candle);
+      this.#addFlame(
+        group,
+        candle.position.x,
+        6.89,
+        candle.position.z,
+        0.35,
+        index,
+      );
+    }
+    for (const angle of [0, (Math.PI * 2) / 3, (Math.PI * 4) / 3]) {
+      const chain = sceneMesh(
+        new CylinderGeometry(0.035, 0.035, 3.1, 6),
+        this.#materials.iron,
+      );
+      chain.position.set(Math.cos(angle) * 0.78, 7.55, Math.sin(angle) * 0.78);
+      chain.rotation.z = Math.cos(angle) * 0.22;
+      chain.rotation.x = Math.sin(angle) * 0.22;
+      group.add(chain);
+    }
+    group.position.set(0, 1.05, -4.45);
+    this.#root.add(group);
+  }
+
+  #createTorches(): void {
+    const positions = [
+      [-5.65, 2.5, -6.8],
+      [5.65, 2.5, -6.8],
+      [-5.65, 2.15, 0.4],
+      [5.65, 2.15, 0.4],
+      [-4.15, 1.45, -8.9],
+      [4.15, 1.45, -8.9],
+    ] as const;
+    positions.forEach(([x, y, z], index) => {
+      const holder = sceneMesh(
+        new CylinderGeometry(0.18, 0.28, 0.38, 8),
+        this.#materials.iron,
+      );
+      holder.position.set(x, y, z);
+      this.#root.add(holder);
+      this.#addFlame(this.#root, x, y + 0.48, z, 1.05, index + 20);
+    });
+  }
+
+  #addFlame(
+    parent: Group,
+    x: number,
+    y: number,
+    z: number,
+    intensity: number,
+    phase: number,
+  ): void {
+    const core = sceneMesh(
+      new ConeGeometry(0.12, 0.5, 7),
+      this.#materials.flameCore,
+    );
+    core.position.set(x, y, z);
+    core.castShadow = false;
+    const halo = sceneMesh(
+      new ConeGeometry(0.18, 0.58, 7),
+      this.#materials.flame,
+    );
+    halo.scale.set(0.9, 1.08, 0.9);
+    halo.position.set(x, y - 0.04, z);
+    halo.castShadow = false;
+    const light = new PointLight(0xff8127, intensity * 2.4, 6.5, 2);
+    light.position.set(x, y, z);
+    parent.add(halo, core, light);
+    this.#flames.push({
+      core,
+      halo,
+      light,
+      phase,
+      baseIntensity: intensity * 2.4,
+    });
+  }
+
+  #createLighting(): void {
+    const hemisphere = new HemisphereLight(0x9383d0, 0x26181b, 2.15);
+    const ambient = new AmbientLight(0x635772, 1.52);
+    const moon = new DirectionalLight(0x8f83ff, 3.4);
+    moon.position.set(-3, 11, -8);
+    moon.castShadow = true;
+    moon.shadow.mapSize.set(2048, 2048);
+    moon.shadow.camera.left = -8;
+    moon.shadow.camera.right = 8;
+    moon.shadow.camera.top = 12;
+    moon.shadow.camera.bottom = -4;
+    moon.shadow.camera.near = 2;
+    moon.shadow.camera.far = 35;
+    moon.shadow.bias = -0.0005;
+    const key = new DirectionalLight(0xffb45b, 3.35);
+    key.position.set(-5, 10, 9);
+    this.#scene.add(hemisphere, ambient, moon, key);
+  }
+}
