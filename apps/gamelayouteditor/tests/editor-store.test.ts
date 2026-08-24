@@ -92,9 +92,22 @@ describe("EditorStore", () => {
         },
       ],
     };
+    project.assets.set("assets/unbound.mp3", new Uint8Array([4, 5, 6]));
+    project.resources.set("assets/unbound.mp3", {
+      id: "assets/unbound.mp3",
+      kind: "audio",
+      path: "assets/unbound.mp3",
+      mediaType: "audio/mpeg",
+    });
 
     const exported = editorProjectToManifest(project);
     expect(exported.eventAudio).toEqual(project.eventAudio);
+    expect(
+      exported.eventAudio.bindings.flatMap((binding) =>
+        binding.audio.asset.sources.map(({ path }) => path),
+      ),
+    ).not.toContain("assets/unbound.mp3");
+    expect(new EditorStore(project).getSnapshot().errors).toEqual([]);
     const imported = manifestToEditorProject(exported, project.assets);
     expect(imported.eventAudio).toEqual(project.eventAudio);
     expect(imported.resources.get("assets/event-base.mp3")).toMatchObject({

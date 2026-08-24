@@ -12,7 +12,10 @@ import {
   type SceneLayoutRuntimeResourceSpec,
   type SceneLayoutVariantId,
 } from "@slotclientengine/rendercore/scene-layout/data";
-import { inspectSceneLayoutRuntimeEventCatalog } from "@slotclientengine/rendercore/scene-layout/editor";
+import {
+  collectSceneLayoutPackagePaths,
+  inspectSceneLayoutRuntimeEventCatalog,
+} from "@slotclientengine/rendercore/scene-layout/editor";
 import {
   collectImageStringAssetPaths,
   parseImageStringManifest,
@@ -994,9 +997,16 @@ export function editorProjectToManifest(
     },
   });
   if (manifest.eventAudio.bindings.length > 0) {
-    const catalog = inspectSceneLayoutRuntimeEventCatalog({
+    const closurePaths = collectSceneLayoutPackagePaths({
       manifest,
       files: project.assets,
+      allowExtraFiles: true,
+    });
+    const catalog = inspectSceneLayoutRuntimeEventCatalog({
+      manifest,
+      files: new Map(
+        closurePaths.map((path) => [path, project.assets.get(path)!] as const),
+      ),
     });
     const available = new Set(
       catalog.entries.map(({ descriptor }) => descriptor.address),
