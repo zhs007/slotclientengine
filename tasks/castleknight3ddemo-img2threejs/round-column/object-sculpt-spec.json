@@ -1,0 +1,2683 @@
+{
+  "targetName": "Cartoon Round Castle Column",
+  "targetId": "cartoon-round-castle-column",
+  "schemaVersion": "2.1",
+  "terminologyProfile": {
+    "domain": "real-time procedural Three.js asset",
+    "geometryTerms": [
+      "silhouette",
+      "topology",
+      "primitive",
+      "bevel",
+      "chamfer",
+      "taper",
+      "bend",
+      "boolean cut",
+      "edge loop",
+      "surface normal",
+      "displacement"
+    ],
+    "materialTerms": [
+      "albedo",
+      "baseColor",
+      "roughness",
+      "metalness",
+      "normal map",
+      "bump map",
+      "ambient occlusion",
+      "cavity dirt",
+      "edge wear",
+      "clearcoat"
+    ],
+    "lightingTerms": [
+      "key light",
+      "fill light",
+      "rim light",
+      "HDRI/environment reflection",
+      "contact shadow"
+    ],
+    "descriptionRule": "Use measurable 3D graphics terms. Avoid vague words unless they are paired with concrete geometry/material/shader parameters."
+  },
+  "sourceImage": "/Users/zerro/.codex/worktrees/460b/slotclientengine/tasks/castleknight3ddemo-img2threejs/round-column/hero-reference.png",
+  "referenceCamera": {
+    "solved": true,
+    "fovDegrees": 34,
+    "aspect": 1.25,
+    "orientation": {
+      "yaw": -28,
+      "pitch": -14,
+      "roll": 0
+    },
+    "positionHint": [
+      3,
+      2.2,
+      5
+    ],
+    "note": "Near-orthographic three-quarter reconstruction review camera inferred from the generated hero view."
+  },
+  "suitability": "pass",
+  "scores": {
+    "object_isolation": 3,
+    "silhouette_readability": 3,
+    "depth_inference": 3,
+    "primitive_decomposition": 3,
+    "material_procedurality": 3,
+    "occlusion_risk": 1,
+    "interaction_fit": 3
+  },
+  "preSpecAssessment": {
+    "objectClass": {
+      "primaryType": "round castle column",
+      "primaryDomain": "object",
+      "formLanguage": [
+        "architectural",
+        "hard-surface",
+        "radial",
+        "stylized"
+      ],
+      "structureKind": [
+        "repeated modules",
+        "layered axial stack",
+        "radial hierarchy"
+      ],
+      "motionPotential": [
+        "static prop",
+        "detachable structural sections"
+      ],
+      "materialFamilies": [
+        "stone"
+      ],
+      "notes": "A repeated hall architecture prop with explodable base, drum, capital and slab groups."
+    },
+    "complexity": {
+      "tier": "complex",
+      "scores": {
+        "silhouetteComplexity": 2,
+        "componentCount": 3,
+        "hierarchyDepth": 2,
+        "repetitionDensity": 3,
+        "materialLayerCount": 2,
+        "localDetailDensity": 2,
+        "occlusionRisk": 1,
+        "actionReadinessNeed": 1
+      },
+      "estimatedCounts": {
+        "macroComponents": 4,
+        "mesoComponents": 15,
+        "microFeatureGroups": 5,
+        "materialLayers": 3,
+        "repetitionSystems": 3
+      },
+      "reasoning": [
+        "The axial stack includes stepped base courses, transition rings, five drum modules, neck rings, a radial bracket system and two slab courses.",
+        "Fidelity depends on repeated shaft flutes, radial capital brackets and localized stone wear rather than one cylinder primitive."
+      ]
+    },
+    "specDepthDecision": {
+      "requiredDepth": "complex",
+      "minimumComponentLevels": [
+        "macro",
+        "meso",
+        "micro"
+      ],
+      "needsRepetitionSystems": true,
+      "needsMaterialLocalOverrides": true,
+      "needsMultipleReviewViews": true,
+      "needsActionReadyHierarchy": true,
+      "rationale": "Choose simple/moderate/complex/ultra-complex from observed structure, not from a hardcoded domain."
+    },
+    "unknownsToResolveBeforeImplementation": [],
+    "detailInventory": {
+      "scanMethod": "component-zones",
+      "targetMinDetails": 10,
+      "note": "Enumerate every identity-defining small detail before authoring the spec. Each detail must map to a component.localFeatures entry or material.localOverrides entry, never prose only. Use forge/stage1_intake/build_detail_inventory.py to scan zones.",
+      "details": [
+        {
+          "id": "top-slab",
+          "kind": "bevel",
+          "description": "top slab",
+          "mapsTo": {
+            "type": "component.localFeatures",
+            "ref": "top-slab/projecting-octagonal-course"
+          },
+          "confidence": 0.9
+        },
+        {
+          "id": "capital-brackets",
+          "kind": "contour",
+          "description": "capital brackets",
+          "mapsTo": {
+            "type": "component.localFeatures",
+            "ref": "capital-brackets/radial-leaf-array"
+          },
+          "confidence": 0.9
+        },
+        {
+          "id": "capital-cavities",
+          "kind": "stain",
+          "description": "capital cavities",
+          "mapsTo": {
+            "type": "material.localOverrides",
+            "ref": "stone-dark-material/capital-cavity-darkening"
+          },
+          "confidence": 0.9
+        },
+        {
+          "id": "neck-rings",
+          "kind": "ridge",
+          "description": "neck rings",
+          "mapsTo": {
+            "type": "component.localFeatures",
+            "ref": "capital-rings/double-neck-transition"
+          },
+          "confidence": 0.9
+        },
+        {
+          "id": "five-drum-seams",
+          "kind": "seam",
+          "description": "five drum seams",
+          "mapsTo": {
+            "type": "component.localFeatures",
+            "ref": "shaft-drums/five-segment-stack"
+          },
+          "confidence": 0.9
+        },
+        {
+          "id": "shaft-fluting",
+          "kind": "groove",
+          "description": "shaft fluting",
+          "mapsTo": {
+            "type": "component.localFeatures",
+            "ref": "shaft-drums/radial-flute-array"
+          },
+          "confidence": 0.9
+        },
+        {
+          "id": "base-rings",
+          "kind": "ridge",
+          "description": "base rings",
+          "mapsTo": {
+            "type": "component.localFeatures",
+            "ref": "base-rings/triple-radius-transition"
+          },
+          "confidence": 0.9
+        },
+        {
+          "id": "octagonal-base",
+          "kind": "contour",
+          "description": "octagonal base",
+          "mapsTo": {
+            "type": "component.localFeatures",
+            "ref": "root/two-course-octagonal-plinth"
+          },
+          "confidence": 0.9
+        },
+        {
+          "id": "stone-mottling",
+          "kind": "stain",
+          "description": "stone mottling",
+          "mapsTo": {
+            "type": "material.localOverrides",
+            "ref": "stone-material/mauve-mottling"
+          },
+          "confidence": 0.9
+        },
+        {
+          "id": "stone-chips",
+          "kind": "chip",
+          "description": "stone chips",
+          "mapsTo": {
+            "type": "material.localOverrides",
+            "ref": "stone-material/sparse-chips-cracks"
+          },
+          "confidence": 0.9
+        }
+      ]
+    },
+    "anatomy": {
+      "applies": false,
+      "styleHeads": 0,
+      "proportions": {
+        "headUnit": 0,
+        "torso": 0,
+        "legs": 0,
+        "shoulderWidth": 0,
+        "hipWidth": 0
+      },
+      "pose": {
+        "type": "unassessed",
+        "jointAngles": {}
+      },
+      "faceLandmarks": {
+        "eyeLine": 0,
+        "eyeSpacing": 0,
+        "noseBase": 0,
+        "mouthLine": 0,
+        "hairline": 0
+      },
+      "features": [],
+      "confidence": 0,
+      "note": "Only meaningful when objectClass.primaryDomain is character or hybrid. Set applies=true and fill from forge/stage1_intake/extract_landmarks.py. See grimoire/character/reconstruction.md and grimoire/character/likeness_maximization.md."
+    },
+    "sourceImage": "/Users/zerro/.codex/worktrees/460b/slotclientengine/tasks/castleknight3ddemo-img2threejs/round-column/hero-reference.png"
+  },
+  "qualityContract": {
+    "qualityBar": "complex",
+    "definitionOfDone": [
+      "The column clearly reads as circular at scene scale: broad two-course octagonal base, concentric transition rings, five fluted drum sections, broadened radial leaf capital and a thick beveled top slab in purple-gray hand-hewn stone."
+    ],
+    "minimumSpecDepth": {
+      "macroComponents": 3,
+      "mesoComponents": 5,
+      "microFeatureGroups": 10,
+      "materialLayers": 3,
+      "repetitionSystems": 3,
+      "reviewViewpoints": 4
+    },
+    "featureGroups": [
+      {
+        "id": "overall-silhouette",
+        "name": "Circular shaft and stepped silhouette",
+        "required": true,
+        "qualityCriteria": [
+          "A narrow circular five-drum shaft sits between a broad octagonal base and a widened capital; no square stacked shaft blocks remain."
+        ],
+        "evidenceRefs": [
+          "full-object"
+        ],
+        "failureModes": [
+          "model reads as a generic placeholder instead of the reference object",
+          "major proportions are guessed without evidence"
+        ]
+      },
+      {
+        "id": "primary-structure",
+        "name": "Axial stack and radial capital hierarchy",
+        "required": true,
+        "qualityCriteria": [
+          "Base courses, rings, each shaft drum, neck rings, radial bracket repetitions and slab courses remain separately addressable sections."
+        ],
+        "evidenceRefs": [
+          "full-object"
+        ],
+        "failureModes": [
+          "large visible parts are merged into one mesh",
+          "component hierarchy is too shallow for the observed complexity"
+        ]
+      },
+      {
+        "id": "attachment-joint-correctness",
+        "name": "Attachment and joint correctness",
+        "required": true,
+        "qualityCriteria": [
+          "Every visible child appendage, branch, limb, handle, connector, tube, cable, horn, wing, leg, or hinged part has an attachment contract with parent socket, localStart/localEnd, contact type, embed/overlap, and gap tolerance."
+        ],
+        "evidenceRefs": [
+          "full-object"
+        ],
+        "failureModes": [
+          "child part root floats away from the parent",
+          "branch/limb/tube is centered in space instead of pivoting from its root",
+          "parent-child transform mixes world and local coordinates"
+        ]
+      },
+      {
+        "id": "surface-material-response",
+        "name": "Surface material response",
+        "required": true,
+        "qualityCriteria": [
+          "Albedo zones, roughness, normal/bump/displacement intent, cavity dirt, edge wear, and local overrides are specified where visible.",
+          "Important materials define independent albedo, roughness, height/normal, and AO responses instead of reusing one texture for unrelated PBR channels.",
+          "Surface response is decomposed into macro, meso, and micro frequency bands with scale and amplitude tied to object scale."
+        ],
+        "evidenceRefs": [
+          "full-object"
+        ],
+        "failureModes": [
+          "surface looks like flat plastic",
+          "local material variation is missing or not tied to image evidence"
+        ]
+      },
+      {
+        "id": "reference-lookdev",
+        "name": "Reference color, material, and lighting response",
+        "required": true,
+        "qualityCriteria": [
+          "Material-pass names the reference-derived albedo palette, roughness variation, tactile normal/bump/displacement response, and local masks.",
+          "When a source image is available, run reference PBR extraction and require confidence >= 0.7 before treating maps as implementation-ready.",
+          "Lighting-pass names key/fill/rim or environment light, exposure, tone mapping, background, and contact shadow behavior.",
+          "Neutral, grazing-angle, and reference-matched renders prove that surface relief survives relighting and is not painted into albedo."
+        ],
+        "evidenceRefs": [
+          "full-object"
+        ],
+        "failureModes": [
+          "model has acceptable shape but reads as flat shaded or plastic",
+          "colors are a generic average instead of reference-observed local color zones",
+          "lighting is evenly ambient and cannot reproduce the source value range"
+        ]
+      }
+    ],
+    "visualDeltaChecks": [
+      "silhouette and negative-space delta",
+      "component hierarchy depth delta",
+      "repetition density and distribution delta",
+      "material albedo/roughness/normal response delta",
+      "local feature placement and scale delta"
+    ],
+    "antiShallowSpecRules": [
+      "Do not proceed to code if qualityContract.qualityBar is unassessed.",
+      "Do not proceed to code if the spec only contains a root component for a moderate or complex object.",
+      "Do not proceed to code if required featureGroups are not represented by componentTree, materials, or repetitionSystems.",
+      "Do not proceed to code if visible local features are described only in prose and not attached to components/materials/evidenceRefs.",
+      "Do not proceed past structural-pass if attached child parts lack attachment.parentSocket, localStart, localEnd, embedDepth/overlap, and gapTolerance.",
+      "Do not pass material look-dev when albedo is reused as roughness, height, normal, or AO.",
+      "Do not pass material look-dev without macro, meso, and micro surface frequency bands for close-up materials.",
+      "Do not pass reference-fidelity material look-dev from a source image without usable referencePbr maps or an explicit documented limitation.",
+      "Do not patch a spec with extracted PBR maps when extraction confidence is below the target threshold unless the user explicitly accepts lower fidelity.",
+      "Do not place adjacent separate-geometry parts below 0.02 world-unit seam overlap (source: grimoire/build/geometry_patterns.md).",
+      "Do not satisfy raised or recessed relief, fasteners, or grip structure with a map alone when the feature affects form; use geometry or displacement (source: grimoire/build/geometry_patterns.md).",
+      "Adjacent components must overlap by at least 0.02 world units at shared seams (source: grimoire/build/geometry_patterns.md).",
+      "Raised or recessed relief and fasteners must be geometry, instanced micro-parts, or displacement; a map alone is an approximation (source: grimoire/build/geometry_patterns.md)."
+    ],
+    "mustNotDo": [
+      "Do not proceed to code if qualityContract.qualityBar is unassessed.",
+      "Do not proceed to code if the spec only contains a root component for a moderate or complex object.",
+      "Do not proceed to code if required featureGroups are not represented by componentTree, materials, or repetitionSystems.",
+      "Do not proceed to code if visible local features are described only in prose and not attached to components/materials/evidenceRefs.",
+      "Do not proceed past structural-pass if attached child parts lack attachment.parentSocket, localStart, localEnd, embedDepth/overlap, and gapTolerance.",
+      "Do not pass material look-dev when albedo is reused as roughness, height, normal, or AO.",
+      "Do not pass material look-dev without macro, meso, and micro surface frequency bands for close-up materials.",
+      "Do not pass reference-fidelity material look-dev from a source image without usable referencePbr maps or an explicit documented limitation.",
+      "Do not patch a spec with extracted PBR maps when extraction confidence is below the target threshold unless the user explicitly accepts lower fidelity.",
+      "Do not place adjacent separate-geometry parts below 0.02 world-unit seam overlap (source: grimoire/build/geometry_patterns.md).",
+      "Do not satisfy raised or recessed relief, fasteners, or grip structure with a map alone when the feature affects form; use geometry or displacement (source: grimoire/build/geometry_patterns.md).",
+      "Adjacent components must overlap by at least 0.02 world units at shared seams (source: grimoire/build/geometry_patterns.md).",
+      "Raised or recessed relief and fasteners must be geometry, instanced micro-parts, or displacement; a map alone is an approximation (source: grimoire/build/geometry_patterns.md)."
+    ]
+  },
+  "qualityTargets": {
+    "targetFidelity": 0.7,
+    "mustMatch": [
+      "macro silhouette and proportions",
+      "primary material albedo/roughness response",
+      "reference-derived PBR material response at or above 0.7 confidence when source pixels are usable",
+      "most recognizable local features"
+    ],
+    "niceToHave": [
+      "micro scratches, stains, chips, and dirt masks",
+      "secondary lighting match"
+    ],
+    "fpsTarget": 60,
+    "reviewViewpoints": [
+      "front",
+      "three-quarter",
+      "side",
+      "thickness-axis",
+      "long-axis"
+    ]
+  },
+  "selfCorrectLoop": {
+    "enabled": true,
+    "visualAcceptance": {
+      "reviewer": "ai-vision",
+      "threshold": 0.7,
+      "comparisonArtifactRequired": true,
+      "layerScoresRequired": true,
+      "codePixelDiffIsAcceptanceAuthority": false,
+      "scoringRule": "AI vision must inspect a side-by-side reference/render sheet and score the current pass from 0 to 1. Pixel-diff code may assist diagnostics but cannot approve a pass.",
+      "requiredLayerScores": [
+        "silhouetteProportion",
+        "componentStructure",
+        "formDetail",
+        "materialSurface",
+        "lightingCamera"
+      ],
+      "featureReviewPolicy": {
+        "enabled": true,
+        "reviewUnit": "semantic-subsystem",
+        "maxCriticalFeaturesPerPass": 5,
+        "maxImportantFeaturesPerPass": 3,
+        "criticalDefaultThreshold": 0.8,
+        "importantAverageThreshold": 0.65,
+        "adaptiveEscalation": true,
+        "singleImagePairOnly": true,
+        "selectionRule": "Choose only the most visually salient, identity-defining, user-prioritized, or high-risk semantic systems. Group repeated parts instead of reviewing every mesh. AI vision scores every selected feature from the same full reference/render pair."
+      }
+    },
+    "reviewAfterPasses": [
+      "blockout",
+      "structural-pass",
+      "form-refinement",
+      "material-pass",
+      "surface-pass",
+      "lighting-pass",
+      "interaction-pass",
+      "optimization-pass"
+    ],
+    "allowedActions": [
+      "continue",
+      "refine-spec",
+      "refine-code",
+      "request-input",
+      "stop"
+    ],
+    "specRefineTriggers": [
+      "missing component",
+      "wrong primitive family",
+      "wrong proportions",
+      "material layer under-specified",
+      "local feature not traceable to viewEvidence",
+      "reference ambiguity discovered during implementation"
+    ],
+    "codeRefineTriggers": [
+      "spec is adequate but generated geometry/material does not match",
+      "browser render differs from reference",
+      "performance budget exceeded",
+      "lighting hides geometry or material response"
+    ],
+    "stopCriteria": [
+      "target fidelity reached or user accepts current approximation",
+      "remaining gaps require new reference images or manual art"
+    ],
+    "screenshotPolicy": {
+      "requiredForPasses": [
+        "blockout",
+        "structural-pass",
+        "form-refinement",
+        "material-pass",
+        "surface-pass",
+        "lighting-pass",
+        "interaction-pass"
+      ],
+      "preferredCapture": "in-app-browser-screenshot",
+      "fallbackCapture": "user-supplied-screenshot-path",
+      "minimumEvidence": "Each visual pass needs a reference image, rendered screenshot, side-by-side comparison sheet, AI vision score, layer scores, and critique before choosing continue.",
+      "reviewPairRule": "Compare the same camera/viewpoint whenever possible; do not judge a front reference against a random render angle.",
+      "acceptanceAuthority": "AI vision review of the comparison sheet. Code-generated pixel similarity is not sufficient evidence."
+    }
+  },
+  "featureReviewTargets": [
+    {
+      "id": "round-shaft-silhouette",
+      "name": "Circular tapered five-drum shaft silhouette",
+      "tier": "critical",
+      "passIds": [
+        "blockout",
+        "form-refinement"
+      ],
+      "minimumScore": 0.84,
+      "mustPass": true,
+      "componentRefs": [
+        "root",
+        "shaft-drums"
+      ],
+      "evidenceRefs": [
+        "full-object"
+      ]
+    },
+    {
+      "id": "stepped-base-system",
+      "name": "Octagonal base and concentric transition system",
+      "tier": "critical",
+      "passIds": [
+        "structural-pass",
+        "form-refinement"
+      ],
+      "minimumScore": 0.8,
+      "mustPass": true,
+      "componentRefs": [
+        "root",
+        "base-rings"
+      ],
+      "evidenceRefs": [
+        "full-object"
+      ]
+    },
+    {
+      "id": "radial-capital-system",
+      "name": "Radial bracket capital and projecting top slab",
+      "tier": "critical",
+      "passIds": [
+        "structural-pass",
+        "form-refinement"
+      ],
+      "minimumScore": 0.82,
+      "mustPass": true,
+      "componentRefs": [
+        "capital-stack",
+        "capital-brackets",
+        "top-slab"
+      ],
+      "evidenceRefs": [
+        "full-object"
+      ]
+    },
+    {
+      "id": "purple-stone-lookdev",
+      "name": "Purple-gray stone mottling, seams and bevel response",
+      "tier": "important",
+      "passIds": [
+        "material-pass",
+        "surface-pass"
+      ],
+      "minimumScore": 0.72,
+      "mustPass": false,
+      "componentRefs": [
+        "root",
+        "shaft-drums",
+        "capital-stack"
+      ],
+      "evidenceRefs": [
+        "full-object"
+      ]
+    }
+  ],
+  "sculptPipeline": {
+    "passGateMode": "locked-sequential",
+    "passOrder": [
+      "blockout",
+      "structural-pass",
+      "form-refinement",
+      "material-pass",
+      "surface-pass",
+      "lighting-pass",
+      "interaction-pass",
+      "optimization-pass"
+    ],
+    "currentPass": "structural-pass",
+    "completedPasses": [
+      "blockout"
+    ],
+    "lastCompletedPass": "blockout",
+    "blockedReason": "",
+    "nextRequiredEvidence": [
+      "Macro, meso, and repeated structures meet qualityContract.minimumSpecDepth.",
+      "Parent-child relations, joints, seams, sockets, and contact points are explicit.",
+      "Every attached child appendage/connector has parentSocket, localStart/localEnd, contactType, embedDepth or overlap, and gapTolerance.",
+      "AI vision comparison score meets selfCorrectLoop.visualAcceptance.threshold.",
+      "attachment contracts for child appendages/connectors",
+      "no floating child roots/joints in the browser screenshot",
+      "browser render screenshot from your agent's browser/screenshot tool",
+      "side-by-side reference/render comparison sheet for AI vision review",
+      "banded interior difference vs the reference baseline (forge/stage4_review/interior_difference.py --from/--to per region)",
+      "AI vision score at or above the visual acceptance threshold",
+      "all critical semantic feature scores from the shared image pair at or above their thresholds",
+      "self-correction review appended with action=continue before the next pass"
+    ]
+  },
+  "lookDevTargets": {
+    "qualityPriority": "stylized-realtime",
+    "materialPass": {
+      "albedoPaletteRequired": true,
+      "roughnessVariationRequired": true,
+      "normalOrBumpRequired": true,
+      "localOverridesRequired": true,
+      "minimumTextureResolution": 1024,
+      "preferredTextureResolution": 2048,
+      "independentMapChannels": [
+        "albedo",
+        "roughness",
+        "height",
+        "normal",
+        "ambient-occlusion"
+      ],
+      "requiredSurfaceFrequencyBands": [
+        "macro",
+        "meso",
+        "micro"
+      ],
+      "geometryReliefRequiredWhenSilhouetteAffected": true,
+      "referencePbrExtraction": {
+        "requiredWhenSourceImagePresent": false,
+        "targetThreshold": 0.7,
+        "stopOnLowConfidence": false,
+        "script": "forge/stage1_intake/extract_pbr_evidence.py",
+        "acceptedLimitation": "single-image extraction is reference-derived inference, not exact photogrammetry"
+      },
+      "mustAvoid": [
+        "single flat albedo per material",
+        "uniform roughness",
+        "albedo texture reused as roughness/height/normal/AO",
+        "single-frequency random noise",
+        "plastic-looking smooth bark, stone, cloth, foliage, or aged material",
+        "local color/detail described only in prose without material masks",
+        "claiming exact PBR recovery when confidence is below the target threshold"
+      ]
+    },
+    "lightingPass": {
+      "requiredTerms": [
+        "key light",
+        "fill light",
+        "rim or environment light",
+        "exposure",
+        "tone mapping",
+        "background",
+        "contact shadow"
+      ],
+      "mustAvoid": [
+        "ambient-only lighting",
+        "flat value range",
+        "missing contact shadow",
+        "reference lighting copied without separating material readability"
+      ]
+    },
+    "screenshotReview": [
+      "Compare albedo palette and local color zones.",
+      "Compare roughness/normal/bump response under light.",
+      "Compare cavity dirt, edge wear, stains, moss, scratches, or other local masks.",
+      "Compare key/fill/rim structure, exposure, tone mapping, background, and contact shadows.",
+      "Capture a neutral-light render to verify material readability without reference lighting.",
+      "Capture a grazing-light close-up to expose flat normals, uniform roughness, tiling, and plastic highlights.",
+      "Capture a reference-matched render from the same camera framing as the source."
+    ]
+  },
+  "actionReadiness": {
+    "contract": "Every macro/meso component should be generated as a stable named Object3D pivot node with a mesh child, action metadata, optional sockets, collider proxy, and destruction metadata.",
+    "defaultRigType": "action-ready-static-rig",
+    "rootMotionNode": "root",
+    "requiredComponentFields": [
+      "id",
+      "parent",
+      "transform",
+      "attachment for child appendages, connectors, limbs, tubes, handles, legs, horns, wings, branches, or cables",
+      "actionProfile.animationRole",
+      "actionProfile.pivot",
+      "actionProfile.collider",
+      "actionProfile.destruction"
+    ],
+    "transformChannels": [
+      "translate",
+      "rotate",
+      "scale",
+      "bend",
+      "twist",
+      "detach",
+      "visibility",
+      "material-state"
+    ],
+    "authoringRules": [
+      "Do not collapse independently movable parts into one mesh.",
+      "Put transforms on component pivot groups, not only on raw meshes.",
+      "For attached child parts, put the pivot at the semantic root/socket and build visible geometry from localStart to localEnd.",
+      "Represent hinge, socket, detachable, and breakable intent even when no animation is implemented yet.",
+      "Use simplified collider proxies for runtime physics instead of visual mesh colliders by default."
+    ],
+    "destructionPolicy": {
+      "defaultBreakable": false,
+      "fractureGroupNaming": "Use stable semantic names such as body-shell, left-hinge, glass-panel, branch-segment.",
+      "debrisStrategy": "Prefer detachable component groups and a small number of procedural fragments over random mesh explosion."
+    }
+  },
+  "assumptions": [
+    "Radial symmetry makes the generated side and rear reference views structurally equivalent.",
+    "Crack and chip placement is deterministic but approximate because marks vary between views.",
+    "Dimensions are normalized to the existing castle hall rather than architectural measurements."
+  ],
+  "coordinateFrame": {
+    "front": "camera-facing side in the reference image",
+    "up": "image up direction",
+    "scaleReference": "unit scale; adjust after first browser render"
+  },
+  "silhouette": {
+    "boundingShape": "tall tapered circular shaft between broad octagonal base and widened capital",
+    "aspectRatios": [
+      "height:shaft-diameter=6.5",
+      "base-width:shaft-diameter=1.75"
+    ],
+    "symmetry": "eight-fold radial symmetry",
+    "dominantCurves": [
+      "concentric base rings",
+      "tapered drum shaft",
+      "flared capital"
+    ],
+    "negativeSpaces": [
+      "cavity gaps between capital brackets",
+      "recessed drum seams"
+    ],
+    "landmarks": [
+      "five shaft drums",
+      "eight capital brackets",
+      "two-course octagonal base"
+    ]
+  },
+  "viewEvidence": [
+    {
+      "id": "full-object",
+      "view": "primary",
+      "imageRegion": {
+        "x": 0,
+        "y": 0,
+        "width": 1,
+        "height": 1,
+        "units": "normalized"
+      },
+      "observations": [
+        "isolated connected silhouette",
+        "circular shaft confirmed by three-quarter view",
+        "base-to-capital axial stack fully visible"
+      ],
+      "confidence": 0.98
+    }
+  ],
+  "componentTree": [
+    {
+      "id": "root",
+      "name": "Octagonal base stack",
+      "level": "macro",
+      "role": "main assembly",
+      "importance": 1,
+      "confidence": 0.92,
+      "primitive": "extrude",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "Two rigid eight-sided plinth courses have countable faces and stepped bevels.",
+      "geometryDescriptor": {
+        "topologyIntent": "stylized real-time prop with silhouette-readable bevels",
+        "edgeTreatment": {
+          "type": "bevel",
+          "bevelRadius": 0.035,
+          "segments": 2
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "faceted vertex normals with beveled transitions"
+      },
+      "parent": null,
+      "attachment": null,
+      "dimensions": {
+        "width": 2.05,
+        "height": 0.62,
+        "depth": 2.05,
+        "units": "relative",
+        "confidence": 0.92
+      },
+      "transform": {
+        "position": [
+          0,
+          0.31,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static-section",
+        "pivot": {
+          "mode": "center",
+          "localPosition": [
+            0,
+            0,
+            0
+          ],
+          "axis": [
+            0,
+            1,
+            0
+          ],
+          "confidence": 0.9
+        },
+        "transformChannels": {
+          "translate": true,
+          "rotate": true,
+          "scale": true,
+          "detach": false,
+          "visibility": true,
+          "materialState": true
+        },
+        "sockets": [],
+        "collider": {
+          "type": "box",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "isTrigger": false
+        },
+        "constraints": [],
+        "destruction": {
+          "breakable": false,
+          "fractureGroup": "root",
+          "seamRefs": [],
+          "detachableFragments": [],
+          "breakImpulse": 1,
+          "debrisMaterial": "matching-surface"
+        }
+      },
+      "material": "stone-material",
+      "materialLayers": [
+        "stone-material"
+      ],
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(91, 72, 112, 1)",
+        "secondaryAlbedo": "rgba(151, 111, 155, 1)",
+        "materialClass": "stone",
+        "materialClassConfidence": 0.95,
+        "evidenceRefs": [
+          "full-object"
+        ]
+      },
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [
+        {
+          "id": "two-course-octagonal-plinth",
+          "description": "two course octagonal plinth",
+          "geometryIntent": "explicit geometry or bounded procedural surface response",
+          "evidenceRefs": [
+            "full-object"
+          ]
+        },
+        {
+          "id": "sparse-chips-cracks",
+          "description": "sparse chips cracks",
+          "geometryIntent": "explicit geometry or bounded procedural surface response",
+          "evidenceRefs": [
+            "full-object"
+          ]
+        }
+      ],
+      "surfaceDetail": {
+        "macroRoughness": 0.2,
+        "microRoughness": 0.12,
+        "bumpAmplitude": 0.025,
+        "normalPattern": "independent procedural detail",
+        "displacementPattern": "none",
+        "occlusionPattern": "crease and contact weighted",
+        "edgeWearPattern": "exposed bevel crests only",
+        "notes": "Keep relief readable at slot-symbol scale."
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout"
+    },
+    {
+      "id": "shaft-drums",
+      "name": "Five circular shaft drums",
+      "level": "macro",
+      "role": "shaft assembly",
+      "importance": 1,
+      "confidence": 0.92,
+      "primitive": "lathe",
+      "topologyClass": "continuous-sculpt",
+      "topologyRationale": "The rotationally symmetric tapered shaft profile varies continuously around the vertical axis and is divided by intentional drum seams.",
+      "geometryDescriptor": {
+        "topologyIntent": "stylized real-time prop with silhouette-readable bevels",
+        "edgeTreatment": {
+          "type": "bevel",
+          "bevelRadius": 0.035,
+          "segments": 2
+        },
+        "deformationStack": [],
+        "uvStrategy": "cylindrical projection",
+        "normalStrategy": "faceted vertex normals with beveled transitions"
+      },
+      "parent": "root",
+      "attachment": null,
+      "dimensions": {
+        "width": 1.12,
+        "height": 3.45,
+        "depth": 1.12,
+        "units": "relative",
+        "confidence": 0.92
+      },
+      "transform": {
+        "position": [
+          0,
+          2.28,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static-section",
+        "pivot": {
+          "mode": "center",
+          "localPosition": [
+            0,
+            0,
+            0
+          ],
+          "axis": [
+            0,
+            1,
+            0
+          ],
+          "confidence": 0.9
+        },
+        "transformChannels": {
+          "translate": true,
+          "rotate": true,
+          "scale": true,
+          "detach": true,
+          "visibility": true,
+          "materialState": true
+        },
+        "sockets": [],
+        "collider": {
+          "type": "cylinder",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "isTrigger": false
+        },
+        "constraints": [],
+        "destruction": {
+          "breakable": true,
+          "fractureGroup": "shaft-drums",
+          "seamRefs": [],
+          "detachableFragments": [],
+          "breakImpulse": 1,
+          "debrisMaterial": "matching-surface"
+        }
+      },
+      "material": "stone-material",
+      "materialLayers": [
+        "stone-material"
+      ],
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(91, 72, 112, 1)",
+        "secondaryAlbedo": "rgba(151, 111, 155, 1)",
+        "materialClass": "stone",
+        "materialClassConfidence": 0.95,
+        "evidenceRefs": [
+          "full-object"
+        ]
+      },
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [
+        {
+          "id": "five-segment-stack",
+          "description": "five segment stack",
+          "geometryIntent": "explicit geometry or bounded procedural surface response",
+          "evidenceRefs": [
+            "full-object"
+          ]
+        },
+        {
+          "id": "radial-flute-array",
+          "description": "radial flute array",
+          "geometryIntent": "explicit geometry or bounded procedural surface response",
+          "evidenceRefs": [
+            "full-object"
+          ]
+        }
+      ],
+      "surfaceDetail": {
+        "macroRoughness": 0.2,
+        "microRoughness": 0.12,
+        "bumpAmplitude": 0.025,
+        "normalPattern": "independent procedural detail",
+        "displacementPattern": "none",
+        "occlusionPattern": "crease and contact weighted",
+        "edgeWearPattern": "exposed bevel crests only",
+        "notes": "Keep relief readable at slot-symbol scale."
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout"
+    },
+    {
+      "id": "capital-stack",
+      "name": "Ornate widened capital",
+      "level": "macro",
+      "role": "capital assembly",
+      "importance": 1,
+      "confidence": 0.92,
+      "primitive": "lathe",
+      "topologyClass": "continuous-sculpt",
+      "topologyRationale": "The neck and bowl transition form one rotationally symmetric widening profile beneath separate radial brackets.",
+      "geometryDescriptor": {
+        "topologyIntent": "stylized real-time prop with silhouette-readable bevels",
+        "edgeTreatment": {
+          "type": "bevel",
+          "bevelRadius": 0.035,
+          "segments": 2
+        },
+        "deformationStack": [],
+        "uvStrategy": "cylindrical projection",
+        "normalStrategy": "faceted vertex normals with beveled transitions"
+      },
+      "parent": "shaft-drums",
+      "attachment": null,
+      "dimensions": {
+        "width": 1.65,
+        "height": 0.82,
+        "depth": 1.65,
+        "units": "relative",
+        "confidence": 0.92
+      },
+      "transform": {
+        "position": [
+          0,
+          2.1,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static-section",
+        "pivot": {
+          "mode": "center",
+          "localPosition": [
+            0,
+            0,
+            0
+          ],
+          "axis": [
+            0,
+            1,
+            0
+          ],
+          "confidence": 0.9
+        },
+        "transformChannels": {
+          "translate": true,
+          "rotate": true,
+          "scale": true,
+          "detach": true,
+          "visibility": true,
+          "materialState": true
+        },
+        "sockets": [],
+        "collider": {
+          "type": "cylinder",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "isTrigger": false
+        },
+        "constraints": [],
+        "destruction": {
+          "breakable": true,
+          "fractureGroup": "capital-stack",
+          "seamRefs": [],
+          "detachableFragments": [],
+          "breakImpulse": 1,
+          "debrisMaterial": "matching-surface"
+        }
+      },
+      "material": "stone-dark-material",
+      "materialLayers": [
+        "stone-dark-material"
+      ],
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(48, 37, 67, 1)",
+        "secondaryAlbedo": "rgba(91, 72, 112, 1)",
+        "materialClass": "stone",
+        "materialClassConfidence": 0.95,
+        "evidenceRefs": [
+          "full-object"
+        ]
+      },
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [
+        {
+          "id": "capital-cavity-darkening",
+          "description": "capital cavity darkening",
+          "geometryIntent": "explicit geometry or bounded procedural surface response",
+          "evidenceRefs": [
+            "full-object"
+          ]
+        },
+        {
+          "id": "flared-profile",
+          "description": "flared profile",
+          "geometryIntent": "explicit geometry or bounded procedural surface response",
+          "evidenceRefs": [
+            "full-object"
+          ]
+        }
+      ],
+      "surfaceDetail": {
+        "macroRoughness": 0.2,
+        "microRoughness": 0.12,
+        "bumpAmplitude": 0.025,
+        "normalPattern": "independent procedural detail",
+        "displacementPattern": "none",
+        "occlusionPattern": "crease and contact weighted",
+        "edgeWearPattern": "exposed bevel crests only",
+        "notes": "Keep relief readable at slot-symbol scale."
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout"
+    },
+    {
+      "id": "base-rings",
+      "name": "Triple base transition rings",
+      "level": "meso",
+      "role": "transition rings",
+      "importance": 0.82,
+      "confidence": 0.92,
+      "primitive": "torus",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "Three rigid circular ring courses socket the shaft into the octagonal plinth.",
+      "geometryDescriptor": {
+        "topologyIntent": "stylized real-time prop with silhouette-readable bevels",
+        "edgeTreatment": {
+          "type": "bevel",
+          "bevelRadius": 0.035,
+          "segments": 2
+        },
+        "deformationStack": [],
+        "uvStrategy": "cylindrical projection",
+        "normalStrategy": "faceted vertex normals with beveled transitions"
+      },
+      "parent": "root",
+      "attachment": null,
+      "dimensions": {
+        "width": 1.48,
+        "height": 0.34,
+        "depth": 1.48,
+        "units": "relative",
+        "confidence": 0.92
+      },
+      "transform": {
+        "position": [
+          0,
+          0.55,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static-section",
+        "pivot": {
+          "mode": "center",
+          "localPosition": [
+            0,
+            0,
+            0
+          ],
+          "axis": [
+            0,
+            1,
+            0
+          ],
+          "confidence": 0.9
+        },
+        "transformChannels": {
+          "translate": true,
+          "rotate": true,
+          "scale": true,
+          "detach": true,
+          "visibility": true,
+          "materialState": true
+        },
+        "sockets": [],
+        "collider": {
+          "type": "torus",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "isTrigger": false
+        },
+        "constraints": [],
+        "destruction": {
+          "breakable": true,
+          "fractureGroup": "base-rings",
+          "seamRefs": [],
+          "detachableFragments": [],
+          "breakImpulse": 1,
+          "debrisMaterial": "matching-surface"
+        }
+      },
+      "material": "stone-material",
+      "materialLayers": [
+        "stone-material"
+      ],
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(91, 72, 112, 1)",
+        "secondaryAlbedo": "rgba(151, 111, 155, 1)",
+        "materialClass": "stone",
+        "materialClassConfidence": 0.95,
+        "evidenceRefs": [
+          "full-object"
+        ]
+      },
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [
+        {
+          "id": "triple-radius-transition",
+          "description": "triple radius transition",
+          "geometryIntent": "explicit geometry or bounded procedural surface response",
+          "evidenceRefs": [
+            "full-object"
+          ]
+        }
+      ],
+      "surfaceDetail": {
+        "macroRoughness": 0.2,
+        "microRoughness": 0.12,
+        "bumpAmplitude": 0.025,
+        "normalPattern": "independent procedural detail",
+        "displacementPattern": "none",
+        "occlusionPattern": "crease and contact weighted",
+        "edgeWearPattern": "exposed bevel crests only",
+        "notes": "Keep relief readable at slot-symbol scale."
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "structural-pass"
+    },
+    {
+      "id": "drum-seams",
+      "name": "Drum seam rings",
+      "level": "meso",
+      "role": "shaft seams",
+      "importance": 0.82,
+      "confidence": 0.92,
+      "primitive": "torus",
+      "topologyClass": "surface-relief",
+      "topologyRationale": "Narrow circular bands interrupt the shaft surface at each drum boundary without replacing the main volume.",
+      "geometryDescriptor": {
+        "topologyIntent": "stylized real-time prop with silhouette-readable bevels",
+        "edgeTreatment": {
+          "type": "bevel",
+          "bevelRadius": 0.035,
+          "segments": 2
+        },
+        "deformationStack": [],
+        "uvStrategy": "cylindrical projection",
+        "normalStrategy": "faceted vertex normals with beveled transitions"
+      },
+      "parent": "shaft-drums",
+      "attachment": null,
+      "dimensions": {
+        "width": 1.14,
+        "height": 0.06,
+        "depth": 1.14,
+        "units": "relative",
+        "confidence": 0.92
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static-section",
+        "pivot": {
+          "mode": "center",
+          "localPosition": [
+            0,
+            0,
+            0
+          ],
+          "axis": [
+            0,
+            1,
+            0
+          ],
+          "confidence": 0.9
+        },
+        "transformChannels": {
+          "translate": true,
+          "rotate": true,
+          "scale": true,
+          "detach": true,
+          "visibility": true,
+          "materialState": true
+        },
+        "sockets": [],
+        "collider": {
+          "type": "torus",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "isTrigger": false
+        },
+        "constraints": [],
+        "destruction": {
+          "breakable": true,
+          "fractureGroup": "drum-seams",
+          "seamRefs": [],
+          "detachableFragments": [],
+          "breakImpulse": 1,
+          "debrisMaterial": "matching-surface"
+        }
+      },
+      "material": "stone-dark-material",
+      "materialLayers": [
+        "stone-dark-material"
+      ],
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(48, 37, 67, 1)",
+        "secondaryAlbedo": "rgba(91, 72, 112, 1)",
+        "materialClass": "stone",
+        "materialClassConfidence": 0.95,
+        "evidenceRefs": [
+          "full-object"
+        ]
+      },
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [
+        {
+          "id": "five-drum-boundaries",
+          "description": "five drum boundaries",
+          "geometryIntent": "explicit geometry or bounded procedural surface response",
+          "evidenceRefs": [
+            "full-object"
+          ]
+        }
+      ],
+      "surfaceDetail": {
+        "macroRoughness": 0.2,
+        "microRoughness": 0.12,
+        "bumpAmplitude": 0.025,
+        "normalPattern": "independent procedural detail",
+        "displacementPattern": "none",
+        "occlusionPattern": "crease and contact weighted",
+        "edgeWearPattern": "exposed bevel crests only",
+        "notes": "Keep relief readable at slot-symbol scale."
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "structural-pass"
+    },
+    {
+      "id": "capital-rings",
+      "name": "Double capital neck rings",
+      "level": "meso",
+      "role": "capital transition",
+      "importance": 0.82,
+      "confidence": 0.92,
+      "primitive": "torus",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "Two rounded circular rings bridge the shaft radius to the bracket capital.",
+      "geometryDescriptor": {
+        "topologyIntent": "stylized real-time prop with silhouette-readable bevels",
+        "edgeTreatment": {
+          "type": "bevel",
+          "bevelRadius": 0.035,
+          "segments": 2
+        },
+        "deformationStack": [],
+        "uvStrategy": "cylindrical projection",
+        "normalStrategy": "faceted vertex normals with beveled transitions"
+      },
+      "parent": "capital-stack",
+      "attachment": null,
+      "dimensions": {
+        "width": 1.42,
+        "height": 0.28,
+        "depth": 1.42,
+        "units": "relative",
+        "confidence": 0.92
+      },
+      "transform": {
+        "position": [
+          0,
+          -0.32,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static-section",
+        "pivot": {
+          "mode": "center",
+          "localPosition": [
+            0,
+            0,
+            0
+          ],
+          "axis": [
+            0,
+            1,
+            0
+          ],
+          "confidence": 0.9
+        },
+        "transformChannels": {
+          "translate": true,
+          "rotate": true,
+          "scale": true,
+          "detach": true,
+          "visibility": true,
+          "materialState": true
+        },
+        "sockets": [],
+        "collider": {
+          "type": "torus",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "isTrigger": false
+        },
+        "constraints": [],
+        "destruction": {
+          "breakable": true,
+          "fractureGroup": "capital-rings",
+          "seamRefs": [],
+          "detachableFragments": [],
+          "breakImpulse": 1,
+          "debrisMaterial": "matching-surface"
+        }
+      },
+      "material": "stone-material",
+      "materialLayers": [
+        "stone-material"
+      ],
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(91, 72, 112, 1)",
+        "secondaryAlbedo": "rgba(151, 111, 155, 1)",
+        "materialClass": "stone",
+        "materialClassConfidence": 0.95,
+        "evidenceRefs": [
+          "full-object"
+        ]
+      },
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [
+        {
+          "id": "double-neck-transition",
+          "description": "double neck transition",
+          "geometryIntent": "explicit geometry or bounded procedural surface response",
+          "evidenceRefs": [
+            "full-object"
+          ]
+        }
+      ],
+      "surfaceDetail": {
+        "macroRoughness": 0.2,
+        "microRoughness": 0.12,
+        "bumpAmplitude": 0.025,
+        "normalPattern": "independent procedural detail",
+        "displacementPattern": "none",
+        "occlusionPattern": "crease and contact weighted",
+        "edgeWearPattern": "exposed bevel crests only",
+        "notes": "Keep relief readable at slot-symbol scale."
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "structural-pass"
+    },
+    {
+      "id": "capital-brackets",
+      "name": "Radial geometric leaf brackets",
+      "level": "meso",
+      "role": "capital ornaments",
+      "importance": 0.82,
+      "confidence": 0.92,
+      "primitive": "extrude",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "Each leaf bracket is a rigid faceted wedge with an extruded polygon profile and radial repetition.",
+      "geometryDescriptor": {
+        "topologyIntent": "stylized real-time prop with silhouette-readable bevels",
+        "edgeTreatment": {
+          "type": "bevel",
+          "bevelRadius": 0.035,
+          "segments": 2
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "faceted vertex normals with beveled transitions"
+      },
+      "parent": "capital-stack",
+      "attachment": null,
+      "dimensions": {
+        "width": 0.36,
+        "height": 0.58,
+        "depth": 0.24,
+        "units": "relative",
+        "confidence": 0.92
+      },
+      "transform": {
+        "position": [
+          0,
+          0.18,
+          0.72
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static-section",
+        "pivot": {
+          "mode": "center",
+          "localPosition": [
+            0,
+            0,
+            0
+          ],
+          "axis": [
+            0,
+            1,
+            0
+          ],
+          "confidence": 0.9
+        },
+        "transformChannels": {
+          "translate": true,
+          "rotate": true,
+          "scale": true,
+          "detach": true,
+          "visibility": true,
+          "materialState": true
+        },
+        "sockets": [],
+        "collider": {
+          "type": "box",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "isTrigger": false
+        },
+        "constraints": [],
+        "destruction": {
+          "breakable": true,
+          "fractureGroup": "capital-brackets",
+          "seamRefs": [],
+          "detachableFragments": [],
+          "breakImpulse": 1,
+          "debrisMaterial": "matching-surface"
+        }
+      },
+      "material": "stone-material",
+      "materialLayers": [
+        "stone-material"
+      ],
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(91, 72, 112, 1)",
+        "secondaryAlbedo": "rgba(151, 111, 155, 1)",
+        "materialClass": "stone",
+        "materialClassConfidence": 0.95,
+        "evidenceRefs": [
+          "full-object"
+        ]
+      },
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [
+        {
+          "id": "radial-leaf-array",
+          "description": "radial leaf array",
+          "geometryIntent": "explicit geometry or bounded procedural surface response",
+          "evidenceRefs": [
+            "full-object"
+          ]
+        }
+      ],
+      "surfaceDetail": {
+        "macroRoughness": 0.2,
+        "microRoughness": 0.12,
+        "bumpAmplitude": 0.025,
+        "normalPattern": "independent procedural detail",
+        "displacementPattern": "none",
+        "occlusionPattern": "crease and contact weighted",
+        "edgeWearPattern": "exposed bevel crests only",
+        "notes": "Keep relief readable at slot-symbol scale."
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "structural-pass"
+    },
+    {
+      "id": "top-slab",
+      "name": "Projecting octagonal top slab",
+      "level": "meso",
+      "role": "bearing slab",
+      "importance": 0.82,
+      "confidence": 0.92,
+      "primitive": "extrude",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "The wide eight-sided slab has rigid countable faces and a broad perimeter bevel.",
+      "geometryDescriptor": {
+        "topologyIntent": "stylized real-time prop with silhouette-readable bevels",
+        "edgeTreatment": {
+          "type": "bevel",
+          "bevelRadius": 0.035,
+          "segments": 2
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "faceted vertex normals with beveled transitions"
+      },
+      "parent": "capital-stack",
+      "attachment": null,
+      "dimensions": {
+        "width": 1.95,
+        "height": 0.34,
+        "depth": 1.95,
+        "units": "relative",
+        "confidence": 0.92
+      },
+      "transform": {
+        "position": [
+          0,
+          0.62,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static-section",
+        "pivot": {
+          "mode": "center",
+          "localPosition": [
+            0,
+            0,
+            0
+          ],
+          "axis": [
+            0,
+            1,
+            0
+          ],
+          "confidence": 0.9
+        },
+        "transformChannels": {
+          "translate": true,
+          "rotate": true,
+          "scale": true,
+          "detach": true,
+          "visibility": true,
+          "materialState": true
+        },
+        "sockets": [],
+        "collider": {
+          "type": "box",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "isTrigger": false
+        },
+        "constraints": [],
+        "destruction": {
+          "breakable": true,
+          "fractureGroup": "top-slab",
+          "seamRefs": [],
+          "detachableFragments": [],
+          "breakImpulse": 1,
+          "debrisMaterial": "matching-surface"
+        }
+      },
+      "material": "stone-material",
+      "materialLayers": [
+        "stone-material"
+      ],
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(91, 72, 112, 1)",
+        "secondaryAlbedo": "rgba(151, 111, 155, 1)",
+        "materialClass": "stone",
+        "materialClassConfidence": 0.95,
+        "evidenceRefs": [
+          "full-object"
+        ]
+      },
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [
+        {
+          "id": "projecting-octagonal-course",
+          "description": "projecting octagonal course",
+          "geometryIntent": "explicit geometry or bounded procedural surface response",
+          "evidenceRefs": [
+            "full-object"
+          ]
+        },
+        {
+          "id": "broad-bevel",
+          "description": "broad bevel",
+          "geometryIntent": "explicit geometry or bounded procedural surface response",
+          "evidenceRefs": [
+            "full-object"
+          ]
+        }
+      ],
+      "surfaceDetail": {
+        "macroRoughness": 0.2,
+        "microRoughness": 0.12,
+        "bumpAmplitude": 0.025,
+        "normalPattern": "independent procedural detail",
+        "displacementPattern": "none",
+        "occlusionPattern": "crease and contact weighted",
+        "edgeWearPattern": "exposed bevel crests only",
+        "notes": "Keep relief readable at slot-symbol scale."
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "structural-pass"
+    }
+  ],
+  "materials": [
+    {
+      "id": "stone-material",
+      "name": "Purple-gray hand-hewn stone",
+      "type": "toon",
+      "shaderModel": "MeshToonMaterial",
+      "baseColor": "#5B4870",
+      "color": "#5B4870",
+      "albedo": {
+        "dominant": "#5B4870",
+        "secondary": [
+          "#976F9B"
+        ],
+        "samplingNotes": "Observed from generated hero reference."
+      },
+      "colorVariation": {
+        "palette": [
+          "#5B4870",
+          "#976F9B"
+        ],
+        "pattern": "bounded hand-painted mottling",
+        "amplitude": 0.12,
+        "heightCorrelation": 0.2
+      },
+      "roughness": {
+        "base": 0.88,
+        "variation": 0.12,
+        "map": "independent-procedural-field",
+        "localResponse": "higher in cavities and lower on bevel crests"
+      },
+      "metalness": {
+        "base": 0,
+        "variation": 0
+      },
+      "normal": {
+        "pattern": "independent-detail-field",
+        "strength": 0.22,
+        "scale": 20,
+        "space": "tangent"
+      },
+      "bump": {
+        "pattern": "independent-height-field",
+        "amplitude": 0.025,
+        "scale": 16
+      },
+      "ambientOcclusion": {
+        "cavityStrength": 0.28,
+        "contactShadowBias": 0.36,
+        "notes": "Creases and overlapping reinforcement contacts."
+      },
+      "wear": {
+        "edgeWear": 0.12,
+        "scratches": [
+          "sparse directional marks"
+        ],
+        "chips": [
+          "selected exposed corners"
+        ]
+      },
+      "dirt": {
+        "amount": 0.05,
+        "cavityBias": 0.7,
+        "color": "#211926"
+      },
+      "localOverrides": [
+        {
+          "id": "mauve-mottling",
+          "description": "mauve mottling",
+          "evidenceRefs": [
+            "full-object"
+          ]
+        },
+        {
+          "id": "sparse-chips-cracks",
+          "description": "sparse chips cracks",
+          "evidenceRefs": [
+            "full-object"
+          ]
+        },
+        {
+          "id": "warm-bevel-highlights",
+          "description": "warm bevel highlights",
+          "evidenceRefs": [
+            "full-object"
+          ]
+        }
+      ],
+      "shaderNotes": [
+        "Albedo, roughness and height responses remain independent.",
+        "Use the shared project toon gradient for dielectric surfaces."
+      ]
+    },
+    {
+      "id": "stone-dark-material",
+      "name": "Violet seam and cavity stone",
+      "type": "toon",
+      "shaderModel": "MeshToonMaterial",
+      "baseColor": "#302543",
+      "color": "#302543",
+      "albedo": {
+        "dominant": "#302543",
+        "secondary": [
+          "#5B4870"
+        ],
+        "samplingNotes": "Observed from generated hero reference."
+      },
+      "colorVariation": {
+        "palette": [
+          "#302543",
+          "#5B4870"
+        ],
+        "pattern": "bounded hand-painted mottling",
+        "amplitude": 0.12,
+        "heightCorrelation": 0.2
+      },
+      "roughness": {
+        "base": 0.93,
+        "variation": 0.12,
+        "map": "independent-procedural-field",
+        "localResponse": "higher in cavities and lower on bevel crests"
+      },
+      "metalness": {
+        "base": 0,
+        "variation": 0
+      },
+      "normal": {
+        "pattern": "independent-detail-field",
+        "strength": 0.22,
+        "scale": 20,
+        "space": "tangent"
+      },
+      "bump": {
+        "pattern": "independent-height-field",
+        "amplitude": 0.025,
+        "scale": 16
+      },
+      "ambientOcclusion": {
+        "cavityStrength": 0.28,
+        "contactShadowBias": 0.36,
+        "notes": "Creases and overlapping reinforcement contacts."
+      },
+      "wear": {
+        "edgeWear": 0.12,
+        "scratches": [
+          "sparse directional marks"
+        ],
+        "chips": [
+          "selected exposed corners"
+        ]
+      },
+      "dirt": {
+        "amount": 0.05,
+        "cavityBias": 0.7,
+        "color": "#211926"
+      },
+      "localOverrides": [
+        {
+          "id": "capital-cavity-darkening",
+          "description": "capital cavity darkening",
+          "evidenceRefs": [
+            "full-object"
+          ]
+        },
+        {
+          "id": "drum-seam-darkening",
+          "description": "drum seam darkening",
+          "evidenceRefs": [
+            "full-object"
+          ]
+        }
+      ],
+      "shaderNotes": [
+        "Albedo, roughness and height responses remain independent.",
+        "Use the shared project toon gradient for dielectric surfaces."
+      ]
+    },
+    {
+      "id": "stone-highlight-material",
+      "name": "Mauve exposed bevel stone",
+      "type": "toon",
+      "shaderModel": "MeshToonMaterial",
+      "baseColor": "#A57CA8",
+      "color": "#A57CA8",
+      "albedo": {
+        "dominant": "#A57CA8",
+        "secondary": [
+          "#765B88"
+        ],
+        "samplingNotes": "Observed from generated hero reference."
+      },
+      "colorVariation": {
+        "palette": [
+          "#A57CA8",
+          "#765B88"
+        ],
+        "pattern": "bounded hand-painted mottling",
+        "amplitude": 0.12,
+        "heightCorrelation": 0.2
+      },
+      "roughness": {
+        "base": 0.82,
+        "variation": 0.12,
+        "map": "independent-procedural-field",
+        "localResponse": "higher in cavities and lower on bevel crests"
+      },
+      "metalness": {
+        "base": 0,
+        "variation": 0
+      },
+      "normal": {
+        "pattern": "independent-detail-field",
+        "strength": 0.22,
+        "scale": 20,
+        "space": "tangent"
+      },
+      "bump": {
+        "pattern": "independent-height-field",
+        "amplitude": 0.025,
+        "scale": 16
+      },
+      "ambientOcclusion": {
+        "cavityStrength": 0.28,
+        "contactShadowBias": 0.36,
+        "notes": "Creases and overlapping reinforcement contacts."
+      },
+      "wear": {
+        "edgeWear": 0.12,
+        "scratches": [
+          "sparse directional marks"
+        ],
+        "chips": [
+          "selected exposed corners"
+        ]
+      },
+      "dirt": {
+        "amount": 0.05,
+        "cavityBias": 0.7,
+        "color": "#211926"
+      },
+      "localOverrides": [
+        {
+          "id": "selected-bevel-crests",
+          "description": "selected bevel crests",
+          "evidenceRefs": [
+            "full-object"
+          ]
+        }
+      ],
+      "shaderNotes": [
+        "Albedo, roughness and height responses remain independent.",
+        "Use the shared project toon gradient for dielectric surfaces."
+      ]
+    }
+  ],
+  "repetitionSystems": [
+    {
+      "id": "capital-leaf-array",
+      "name": "capital leaf array",
+      "level": "meso",
+      "parent": "capital-stack",
+      "primitive": "extrude",
+      "material": "stone-material",
+      "count": 8,
+      "placement": {
+        "mode": "radial",
+        "axis": [
+          0,
+          1,
+          0
+        ],
+        "radius": 1.34,
+        "startAngleDeg": 0
+      },
+      "instanceScale": [
+        0.28,
+        0.55,
+        0.18
+      ],
+      "distributionRule": "even radial spacing with mirrored visual balance",
+      "buildsGeometry": true,
+      "evidenceRefs": [
+        "full-object"
+      ]
+    },
+    {
+      "id": "shaft-flute-array",
+      "name": "shaft flute array",
+      "level": "micro",
+      "parent": "shaft-drums",
+      "primitive": "box",
+      "material": "stone-highlight-material",
+      "count": 12,
+      "placement": {
+        "mode": "radial",
+        "axis": [
+          0,
+          1,
+          0
+        ],
+        "radius": 1.02,
+        "startAngleDeg": 0
+      },
+      "instanceScale": [
+        0.035,
+        1.6,
+        0.055
+      ],
+      "distributionRule": "even radial spacing with mirrored visual balance",
+      "buildsGeometry": true,
+      "evidenceRefs": [
+        "full-object"
+      ]
+    },
+    {
+      "id": "drum-seam-array",
+      "name": "drum seam array",
+      "level": "meso",
+      "parent": "shaft-drums",
+      "primitive": "torus",
+      "material": "stone-dark-material",
+      "count": 4,
+      "placement": {
+        "mode": "radial",
+        "axis": [
+          0,
+          1,
+          0
+        ],
+        "radius": 0.08,
+        "startAngleDeg": 0
+      },
+      "instanceScale": [
+        0.58,
+        0.055,
+        0.58
+      ],
+      "distributionRule": "even radial spacing with mirrored visual balance",
+      "buildsGeometry": true,
+      "evidenceRefs": [
+        "full-object"
+      ]
+    }
+  ],
+  "buildPasses": [
+    {
+      "id": "blockout",
+      "goal": "Match macro silhouette and proportions.",
+      "componentRefs": [
+        "root",
+        "shaft-drums",
+        "capital-stack",
+        "base-rings",
+        "drum-seams",
+        "capital-rings",
+        "capital-brackets",
+        "top-slab"
+      ],
+      "acceptance": [
+        "Silhouette reads correctly without materials.",
+        "Quality contract has named all required macro feature groups before code generation.",
+        "AI vision comparison score meets selfCorrectLoop.visualAcceptance.threshold."
+      ]
+    },
+    {
+      "id": "structural-pass",
+      "goal": "Build the component hierarchy implied by the pre-spec complexity assessment.",
+      "componentRefs": [
+        "root",
+        "shaft-drums",
+        "capital-stack",
+        "base-rings",
+        "drum-seams",
+        "capital-rings",
+        "capital-brackets",
+        "top-slab"
+      ],
+      "acceptance": [
+        "Macro, meso, and repeated structures meet qualityContract.minimumSpecDepth.",
+        "Parent-child relations, joints, seams, sockets, and contact points are explicit.",
+        "Every attached child appendage/connector has parentSocket, localStart/localEnd, contactType, embedDepth or overlap, and gapTolerance.",
+        "AI vision comparison score meets selfCorrectLoop.visualAcceptance.threshold."
+      ]
+    },
+    {
+      "id": "form-refinement",
+      "goal": "Refine shape, deformation, bevels, tapers, curves, asymmetry, and visible local geometry.",
+      "componentRefs": [
+        "root",
+        "shaft-drums",
+        "capital-stack",
+        "base-rings",
+        "drum-seams",
+        "capital-rings",
+        "capital-brackets",
+        "top-slab"
+      ],
+      "acceptance": [
+        "Important visible forms are represented in component geometryDescriptor, deformations, localFeatures, or repetitionSystems.",
+        "Endpoint-based child parts are rooted at their attachment sockets and do not visibly float away from parents.",
+        "AI vision comparison score meets selfCorrectLoop.visualAcceptance.threshold."
+      ]
+    },
+    {
+      "id": "material-pass",
+      "goal": "Match material color, roughness, bump, and local variation.",
+      "componentRefs": [
+        "root",
+        "shaft-drums",
+        "capital-stack",
+        "base-rings",
+        "drum-seams",
+        "capital-rings",
+        "capital-brackets",
+        "top-slab"
+      ],
+      "acceptance": [
+        "Reference-derived albedo palette records dominant, secondary, and accent colors per visible material.",
+        "Each important material defines roughness variation and at least one normal/bump/displacement response.",
+        "Local material overrides, dirt/wear/stains/moss/chips/scratches or equivalent masks are tied to evidenceRefs.",
+        "Thin, transparent, reflective, wet, or fibrous materials document alpha/transmission/clearcoat/metalness/fiber response when relevant.",
+        "Generated preview uses procedural albedo/roughness/bump texture or vertex color variation instead of one flat color.",
+        "Generated preview uses independent PBR maps at 1024px or higher for the quality-first tier.",
+        "If source pixels are available, referencePbr extraction passed at confidence >= 0.7 or the pass is stopped/requesting better references.",
+        "Macro, meso, and micro surface frequency bands are visible at the intended review distance without obvious tiling.",
+        "AI vision comparison score meets selfCorrectLoop.visualAcceptance.threshold."
+      ]
+    },
+    {
+      "id": "surface-pass",
+      "goal": "Add procedural surface locality such as normal/bump/displacement, AO, dirt, stains, chips, grain, moss, scratches, and wear.",
+      "componentRefs": [
+        "root",
+        "shaft-drums",
+        "capital-stack",
+        "base-rings",
+        "drum-seams",
+        "capital-rings",
+        "capital-brackets",
+        "top-slab"
+      ],
+      "acceptance": [
+        "Every required material feature group has local overrides or surfaceDetail tied to evidenceRefs.",
+        "A grazing-angle close-up proves that normal/height detail breaks highlights naturally and does not read as smooth plastic.",
+        "AI vision comparison score meets selfCorrectLoop.visualAcceptance.threshold."
+      ]
+    },
+    {
+      "id": "lighting-pass",
+      "goal": "Make material and form readable under neutral turntable lighting plus optional reference lighting.",
+      "componentRefs": [
+        "root",
+        "shaft-drums",
+        "capital-stack",
+        "base-rings",
+        "drum-seams",
+        "capital-rings",
+        "capital-brackets",
+        "top-slab"
+      ],
+      "acceptance": [
+        "lightingFromPhoto identifies key light direction/color/intensity, fill light, rim or environment light, and ambient color.",
+        "Exposure, tone mapping, background color/gradient, shadow softness, and contact shadow behavior are specified.",
+        "Lighting does not hide geometry/material gaps and screenshots can be compared fairly to the reference.",
+        "Neutral, grazing, and reference-matched lighting checks distinguish material errors from lighting errors.",
+        "AI vision comparison score meets selfCorrectLoop.visualAcceptance.threshold."
+      ]
+    },
+    {
+      "id": "interaction-pass",
+      "goal": "Make the model ready for future animation, transformation, physics, or destruction.",
+      "componentRefs": [
+        "root",
+        "shaft-drums",
+        "capital-stack",
+        "base-rings",
+        "drum-seams",
+        "capital-rings",
+        "capital-brackets",
+        "top-slab"
+      ],
+      "acceptance": [
+        "Macro and movable meso components have stable pivot nodes.",
+        "Sockets, collider proxies, and destruction metadata are present for future runtime actions.",
+        "AI vision comparison score meets selfCorrectLoop.visualAcceptance.threshold."
+      ]
+    },
+    {
+      "id": "optimization-pass",
+      "goal": "Protect runtime performance after visual fidelity is accepted.",
+      "componentRefs": [
+        "root",
+        "shaft-drums",
+        "capital-stack",
+        "base-rings",
+        "drum-seams",
+        "capital-rings",
+        "capital-brackets",
+        "top-slab"
+      ],
+      "acceptance": [
+        "Triangle count, draw calls, instancing, LOD strategy, and FPS target are documented or verified.",
+        "Repeated detail is instanced or simplified where possible without breaking silhouette/material believability."
+      ]
+    }
+  ],
+  "visualEvidence": [
+    {
+      "timestamp": "2026-08-24T05:41:09.166111+00:00",
+      "passId": "blockout",
+      "estimatedFidelity": 0.82,
+      "aiVisionScore": 0.82,
+      "visualAcceptanceThreshold": 0.7,
+      "layerScores": {
+        "silhouetteProportion": 0.88,
+        "componentStructure": 0.84,
+        "formDetail": 0.8,
+        "materialSurface": 0.83,
+        "lightingCamera": 0.82
+      },
+      "featureReviews": [
+        {
+          "id": "round-shaft-silhouette",
+          "score": 0.9
+        }
+      ],
+      "referenceScreenshot": "/Users/zerro/.codex/worktrees/460b/slotclientengine/tasks/castleknight3ddemo-img2threejs/round-column/hero-reference.png",
+      "renderScreenshot": "/Users/zerro/.codex/worktrees/460b/slotclientengine/tasks/castleknight3ddemo-img2threejs/round-column/final-front.jpg",
+      "comparisonImage": "/Users/zerro/.codex/worktrees/460b/slotclientengine/tasks/castleknight3ddemo-img2threejs/round-column/comparison.png",
+      "cameraView": "front three-quarter and side",
+      "notes": "Final textured gate and separate unlit map-stripped gate both reviewed across two angles.",
+      "aiVisionNotes": "Generated purple stone map adds painterly variation without hiding the procedural drum, flute, and capital geometry. Map-stripped captures confirm a genuine round non-planar model."
+    }
+  ],
+  "reviewHistory": [
+    {
+      "timestamp": "2026-08-24T05:41:09.166111+00:00",
+      "passId": "blockout",
+      "estimatedFidelity": 0.82,
+      "aiVisionScore": 0.82,
+      "visualAcceptanceThreshold": 0.7,
+      "layerScores": {
+        "silhouetteProportion": 0.88,
+        "componentStructure": 0.84,
+        "formDetail": 0.8,
+        "materialSurface": 0.83,
+        "lightingCamera": 0.82
+      },
+      "featureReviews": [
+        {
+          "id": "round-shaft-silhouette",
+          "score": 0.9
+        }
+      ],
+      "action": "continue",
+      "summary": "Textured runtime column is a full segmented round form with fluting, seams, layered base, and radial capital.",
+      "matched": [
+        "octagonal layered base",
+        "round multi-drum shaft",
+        "vertical fluting",
+        "dark circular seams",
+        "radial leaf capital",
+        "projecting top slab",
+        "purple-gray hand-painted texture",
+        "two-angle volumetric hold"
+      ],
+      "mismatches": [
+        "reference capital leaves are chunkier and show stronger hand-painted edge wear",
+        "runtime stone texture is slightly more vertically banded"
+      ],
+      "specFixes": [],
+      "codeFixes": [],
+      "evidence": [
+        "/Users/zerro/.codex/worktrees/460b/slotclientengine/tasks/castleknight3ddemo-img2threejs/round-column/blockout-front.jpg",
+        "/Users/zerro/.codex/worktrees/460b/slotclientengine/tasks/castleknight3ddemo-img2threejs/round-column/blockout-side.jpg",
+        "/Users/zerro/.codex/worktrees/460b/slotclientengine/tasks/castleknight3ddemo-img2threejs/round-column/final-front.jpg",
+        "/Users/zerro/.codex/worktrees/460b/slotclientengine/tasks/castleknight3ddemo-img2threejs/round-column/final-side.jpg",
+        "/Users/zerro/.codex/worktrees/460b/slotclientengine/tasks/castleknight3ddemo-img2threejs/scene-render-textured.jpg"
+      ],
+      "mapStrippedRender": "/Users/zerro/.codex/worktrees/460b/slotclientengine/tasks/castleknight3ddemo-img2threejs/round-column/blockout-front.jpg",
+      "reviewViewpoints": [
+        "long-axis",
+        "thickness-axis"
+      ],
+      "visualEvidence": {
+        "referenceScreenshot": "/Users/zerro/.codex/worktrees/460b/slotclientengine/tasks/castleknight3ddemo-img2threejs/round-column/hero-reference.png",
+        "renderScreenshot": "/Users/zerro/.codex/worktrees/460b/slotclientengine/tasks/castleknight3ddemo-img2threejs/round-column/final-front.jpg",
+        "comparisonImage": "/Users/zerro/.codex/worktrees/460b/slotclientengine/tasks/castleknight3ddemo-img2threejs/round-column/comparison.png",
+        "cameraView": "front three-quarter and side",
+        "notes": "Final textured gate and separate unlit map-stripped gate both reviewed across two angles.",
+        "aiVisionNotes": "Generated purple stone map adds painterly variation without hiding the procedural drum, flute, and capital geometry. Map-stripped captures confirm a genuine round non-planar model."
+      }
+    }
+  ],
+  "lodPlan": [
+    {
+      "tier": "near",
+      "distance": 0,
+      "strategy": "full component tree and material layers"
+    },
+    {
+      "tier": "far",
+      "distance": 30,
+      "strategy": "merge static components and reduce local feature geometry"
+    }
+  ],
+  "performanceBudget": {
+    "qualityPriority": "reference-fidelity",
+    "targetTriangles": 12000,
+    "maxDrawCalls": 160,
+    "textureSize": 2048,
+    "fpsTarget": 30,
+    "optimizationPolicy": "Reach accepted visual fidelity first, then optimize without removing reference-critical geometry or surface layers.",
+    "drawCallsTarget": 18
+  },
+  "lightingFromPhoto": [
+    "warm key light from camera-left with soft shadow edge",
+    "cool violet fill light from rear/right",
+    "subtle rim light for silhouette separation",
+    "ACES filmic tone mapping, exposure 1.25, neutral background and contact shadow"
+  ],
+  "proceduralStrategy": [
+    "Build named macro and meso pivot groups from primitives, Shape extrusions and radial repetition systems.",
+    "Use deterministic procedural detail maps and toon-gradient shading; do not download or extract a mesh.",
+    "Keep independently movable or detachable structural sections as separate Object3D nodes."
+  ],
+  "animationAnchors": [
+    "root pivot node supports whole-object translation, rotation, scale, and visibility changes",
+    "component pivot groups support later local transforms without rebuilding geometry"
+  ],
+  "destructionAnchors": [
+    "actionProfile.destruction.fractureGroup marks detachable or breakable component sets",
+    "component seams and sockets define plausible break points instead of random explosions"
+  ],
+  "risks": [],
+  "localSpecSearch": {
+    "collection": "core_3d",
+    "query": "Cartoon Round Castle Column architectural round column drum shaft fluting octagonal base radial capital brackets stone procedural Three.js",
+    "index": {
+      "status": "hit",
+      "reason": "current",
+      "fingerprint": "6857e5ab528b42ac12f4f411f862610a0bffce8e47aee3610a7603c318072fe8"
+    },
+    "matches": [
+      {
+        "record_id": "core.shader-mapping-customshadermaterial-csm-weathering-hooks",
+        "file_path": "docs/raw/img2threejs-skill-dataset.json",
+        "heading": null,
+        "key_path": "categories.rendering_shader_mapping[1]",
+        "score": 5.738848549391,
+        "snippets": [
+          "Extension library exposing csm_* output variables to inject procedural noise/masks into an otherwise-standard lit material, used for dynamic tarnish/patina effects. Thư viện mở rộng cung cấp các biến đầu ra csm_* để chèn nhiễu/mặt nạ thủ tục vào ..."
+        ],
+        "source_refs": [
+          {
+            "path": "docs/raw/img2threejs-skill-dataset.json",
+            "heading": null,
+            "key_path": "categories.rendering_shader_mapping[1]"
+          }
+        ],
+        "evidence_refs": [
+          {
+            "kind": "source",
+            "ref": "docs/raw/img2threejs-skill-dataset.json",
+            "note": "img2threejs NotebookLM research distillation"
+          }
+        ]
+      },
+      {
+        "record_id": "core.shader-mapping-cylindergeometry-barrels-round-components",
+        "file_path": "docs/raw/img2threejs-skill-dataset.json",
+        "heading": null,
+        "key_path": "categories.rendering_shader_mapping[4]",
+        "score": 4.769929262018,
+        "snippets": [
+          "... part. Ánh xạ tới mọi bộ phận có tiết diện tròn dạng nòng. Recognition cues: Long uniform-cross-section round part (barrel, suppressor, muzzle brake body, cleaning rod, magazine tube) Dấu hiệu nhận diện: Bộ phận tròn có tiết ..."
+        ],
+        "source_refs": [
+          {
+            "path": "docs/raw/img2threejs-skill-dataset.json",
+            "heading": null,
+            "key_path": "categories.rendering_shader_mapping[4]"
+          }
+        ],
+        "evidence_refs": [
+          {
+            "kind": "source",
+            "ref": "docs/raw/img2threejs-skill-dataset.json",
+            "note": "img2threejs NotebookLM research distillation"
+          }
+        ]
+      },
+      {
+        "record_id": "core.uv-strategy",
+        "file_path": "grimoire/glossary/3d_vocabulary.md",
+        "heading": "Geometry And Topology",
+        "key_path": null,
+        "score": 4.011652417667,
+        "snippets": [
+          "UV strategy can use generated procedural coordinates, cylindrical projection, triplanar-like mapping, or atlas-ready unwrapped regions."
+        ],
+        "source_refs": [
+          {
+            "path": "grimoire/glossary/3d_vocabulary.md",
+            "heading": "Geometry And Topology",
+            "key_path": null
+          }
+        ],
+        "evidence_refs": [
+          {
+            "kind": "source",
+            "ref": "grimoire/glossary/3d_vocabulary.md"
+          },
+          {
+            "kind": "notebooklm-research",
+            "ref": "notebooklm:4b03c2f9-8393-411f-b5b4-039ab9532843",
+            "note": "Validated generic schema vocabulary; numeric claims remain backed by local source_refs."
+          }
+        ]
+      }
+    ]
+  },
+  "tier1Results": [
+    {
+      "passed": false,
+      "checks": {
+        "silhouetteIoU": 0.2403,
+        "aspectRatioDelta": 0.686,
+        "scaleDelta": 1.0327,
+        "bilateralSymmetryError": 0.0,
+        "colorDelta": {
+          "checked": 8,
+          "maxDeltaE": 6.64,
+          "perComponent": [
+            {
+              "componentId": null,
+              "deltaE": 6.64
+            },
+            {
+              "componentId": null,
+              "deltaE": 6.64
+            },
+            {
+              "componentId": null,
+              "deltaE": 4.45
+            },
+            {
+              "componentId": null,
+              "deltaE": 6.64
+            },
+            {
+              "componentId": null,
+              "deltaE": 4.45
+            },
+            {
+              "componentId": null,
+              "deltaE": 6.64
+            },
+            {
+              "componentId": null,
+              "deltaE": 6.64
+            },
+            {
+              "componentId": null,
+              "deltaE": 6.64
+            }
+          ],
+          "gated": false
+        }
+      },
+      "failures": [
+        "silhouette IoU 0.240 is below threshold 0.85",
+        "aspect-ratio delta 0.686 exceeds threshold 0.05",
+        "scale delta 1.033 exceeds threshold 0.08"
+      ],
+      "maskWarnings": [
+        "render: image is not clearly isolated from background; using most pixels as material evidence"
+      ],
+      "renderHash": "96d7f3bfb1b95e01",
+      "passId": "blockout",
+      "mapStrippedRender": "/Users/zerro/.codex/worktrees/460b/slotclientengine/tasks/castleknight3ddemo-img2threejs/round-column/blockout-front.jpg"
+    }
+  ]
+}

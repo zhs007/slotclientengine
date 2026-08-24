@@ -1,0 +1,120 @@
+{
+  "sourceImage": "/Users/zerro/.codex/worktrees/460b/slotclientengine/tasks/castleknight3ddemo-img2threejs/treasure-chest/hero-reference.png",
+  "zonesDir": "/Users/zerro/.codex/worktrees/460b/slotclientengine/tasks/castleknight3ddemo-img2threejs/treasure-chest/detail-inventory",
+  "detailInventory": {
+    "scanMethod": "grid-3x3",
+    "targetMinDetails": 10,
+    "details": [
+      {
+        "id": "arched-lid-profile",
+        "kind": "silhouette-relief",
+        "description": "Half-cylinder lid with four raised longitudinal plank courses and recessed seams.",
+        "region": { "x": 0.18, "y": 0.08, "width": 0.64, "height": 0.35, "units": "normalized" },
+        "scale": "macro",
+        "affects": "geometry",
+        "mapsTo": { "type": "component.localFeatures", "ref": "lid-shell:arched-plank-courses" },
+        "evidenceRef": "detail-inventory/zone-r0c1.png",
+        "confidence": 0.98
+      },
+      {
+        "id": "gold-lid-hoops",
+        "kind": "repeated-reinforcement",
+        "description": "Two thick faceted gold hoops wrap the lid profile and terminate in square shoulder blocks.",
+        "region": { "x": 0.14, "y": 0.05, "width": 0.72, "height": 0.4, "units": "normalized" },
+        "scale": "meso",
+        "affects": "geometry",
+        "mapsTo": { "type": "component.localFeatures", "ref": "lid-hoops:faceted-arched-bands" },
+        "evidenceRef": "detail-inventory/zone-r0c0.png",
+        "confidence": 0.97
+      },
+      {
+        "id": "wood-grain",
+        "kind": "directional-relief",
+        "description": "Irregular horizontal hand-painted grain and shallow gouges follow each plank course.",
+        "region": { "x": 0.28, "y": 0.13, "width": 0.44, "height": 0.62, "units": "normalized" },
+        "scale": "micro",
+        "affects": "albedo-and-bump",
+        "mapsTo": { "type": "material.localOverrides", "ref": "wood-material:directional-grain" },
+        "evidenceRef": "detail-inventory/zone-r1c1.png",
+        "confidence": 0.94
+      },
+      {
+        "id": "gold-corner-cage",
+        "kind": "layered-frame",
+        "description": "Vertical corner posts connect projecting top and bottom rails through rounded square guard blocks.",
+        "region": { "x": 0.12, "y": 0.33, "width": 0.76, "height": 0.5, "units": "normalized" },
+        "scale": "meso",
+        "affects": "geometry",
+        "mapsTo": { "type": "component.localFeatures", "ref": "corner-cage:rail-post-overlaps" },
+        "evidenceRef": "detail-inventory/zone-r1c0.png",
+        "confidence": 0.96
+      },
+      {
+        "id": "gem-lock",
+        "kind": "faceted-inset",
+        "description": "Large violet faceted gem is embedded in a pointed double-layer gold escutcheon centered on the front.",
+        "region": { "x": 0.35, "y": 0.35, "width": 0.3, "height": 0.34, "units": "normalized" },
+        "scale": "meso",
+        "affects": "geometry-and-material",
+        "mapsTo": { "type": "component.localFeatures", "ref": "front-lock:layered-gem-escutcheon" },
+        "evidenceRef": "detail-inventory/zone-r1c1.png",
+        "confidence": 0.99
+      },
+      {
+        "id": "gem-highlight",
+        "kind": "emissive-facet",
+        "description": "Three bright facet lines converge near the gem upper center with a darker violet perimeter.",
+        "region": { "x": 0.42, "y": 0.4, "width": 0.16, "height": 0.2, "units": "normalized" },
+        "scale": "micro",
+        "affects": "albedo-emissive",
+        "mapsTo": { "type": "material.localOverrides", "ref": "gem-material:facet-value-zones" },
+        "evidenceRef": "detail-inventory/zone-r1c1.png",
+        "confidence": 0.96
+      },
+      {
+        "id": "iron-hardware",
+        "kind": "hinge-and-strap-cluster",
+        "description": "Dark iron side and rear hinge plates overlap the wood shell with stepped rectangular silhouettes.",
+        "region": { "x": 0.65, "y": 0.35, "width": 0.25, "height": 0.3, "units": "normalized" },
+        "scale": "meso",
+        "affects": "geometry",
+        "mapsTo": { "type": "component.localFeatures", "ref": "hinges:stepped-plate-cluster" },
+        "evidenceRef": "detail-inventory/zone-r1c2.png",
+        "confidence": 0.92
+      },
+      {
+        "id": "rivet-system",
+        "kind": "repeated-fasteners",
+        "description": "Round domed rivets sit on corner guards, iron plates and lower rail blocks with mirrored distribution.",
+        "region": { "x": 0.12, "y": 0.3, "width": 0.78, "height": 0.55, "units": "normalized" },
+        "scale": "micro",
+        "affects": "geometry",
+        "mapsTo": { "type": "component.localFeatures", "ref": "rivet-system:domed-fastener-layout" },
+        "evidenceRef": "detail-inventory/zone-r2c2.png",
+        "confidence": 0.95
+      },
+      {
+        "id": "hammered-gold",
+        "kind": "surface-variation",
+        "description": "Gold surfaces carry broad low-contrast hammered value patches and bright bevel edges.",
+        "region": { "x": 0.1, "y": 0.08, "width": 0.8, "height": 0.78, "units": "normalized" },
+        "scale": "micro",
+        "affects": "roughness-and-albedo",
+        "mapsTo": { "type": "material.localOverrides", "ref": "gold-material:hammered-edge-wear" },
+        "evidenceRef": "detail-inventory/zone-r0c2.png",
+        "confidence": 0.9
+      },
+      {
+        "id": "base-corner-feet",
+        "kind": "projecting-foot-blocks",
+        "description": "Four rounded gold corner feet project beyond the lower body and anchor the bottom rail.",
+        "region": { "x": 0.12, "y": 0.65, "width": 0.76, "height": 0.24, "units": "normalized" },
+        "scale": "meso",
+        "affects": "geometry",
+        "mapsTo": { "type": "component.localFeatures", "ref": "corner-cage:projecting-foot-blocks" },
+        "evidenceRef": "detail-inventory/zone-r2c1.png",
+        "confidence": 0.96
+      }
+    ]
+  }
+}

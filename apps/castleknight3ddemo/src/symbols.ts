@@ -22,6 +22,7 @@ import type { BufferGeometry, Material } from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { BOARD, boardDepth, boardWidth } from "./config.js";
 import { createRandom, type RandomSource } from "./random.js";
+import { createCartoonTreasureChest } from "./reconstructed-props.js";
 import type { CastleTextureLibrary } from "./textures.js";
 
 export const SYMBOL_TYPES = [
@@ -61,7 +62,9 @@ interface Palette {
   readonly steel: Material;
   readonly steelDark: Material;
   readonly gold: Material;
+  readonly chestGold: Material;
   readonly wood: Material;
+  readonly chestWood: Material;
   readonly purple: Material;
   readonly green: Material;
   readonly blue: Material;
@@ -104,12 +107,20 @@ function createPalette(textures: CastleTextureLibrary): Palette {
   wood.map = textures.woodAlbedo;
   wood.bumpMap = textures.woodDetail;
   wood.bumpScale = 0.022;
+  const chestWood = toon(0xffffff, textures);
+  chestWood.map = textures.chestWoodAlbedo;
+  chestWood.bumpMap = textures.woodDetail;
+  chestWood.bumpScale = 0.032;
+  const chestGold = metal(0xffffff, textures, 0.68, 0.31);
+  chestGold.map = textures.chestGoldAlbedo;
   return {
     stoneDark: toon(0x30283b, textures),
     steel: metal(0xc7c7d0, textures, 0.78, 0.32),
     steelDark: metal(0x4c4655, textures, 0.7, 0.42),
     gold: metal(0xf0a51b, textures, 0.68, 0.28),
+    chestGold,
     wood,
+    chestWood,
     purple: toon(0xac2ee1, textures, 0.16),
     green: toon(0x61b326, textures, 0.11),
     blue: toon(0x159cde, textures, 0.16),
@@ -138,27 +149,13 @@ function part(geometry: BufferGeometry, material: Material): Mesh {
 }
 
 function createChest(palette: Palette): Group {
-  const group = new Group();
-  const base = part(
-    new RoundedBoxGeometry(0.82, 0.46, 0.56, 3, 0.075),
-    palette.wood,
-  );
-  base.position.y = -0.1;
-  const lid = part(new CylinderGeometry(0.3, 0.3, 0.82, 10), palette.wood);
-  lid.rotation.z = Math.PI / 2;
-  lid.scale.z = 0.82;
-  lid.position.y = 0.2;
-  group.add(base, lid);
-  for (const x of [-0.29, 0.29]) {
-    const band = part(new BoxGeometry(0.075, 0.6, 0.58), palette.gold);
-    band.position.set(x, 0.02, 0);
-    group.add(band);
-  }
-  const lock = part(new DodecahedronGeometry(0.11, 0), palette.purple);
-  lock.scale.set(0.72, 1, 0.45);
-  lock.position.set(0, -0.04, 0.32);
-  group.add(lock);
-  group.name = "treasure-chest";
+  const group = createCartoonTreasureChest({
+    wood: palette.chestWood,
+    gold: palette.chestGold,
+    iron: palette.steelDark,
+    gem: palette.purple,
+  });
+  group.scale.set(1.16, 1.03, 1.06);
   return group;
 }
 
