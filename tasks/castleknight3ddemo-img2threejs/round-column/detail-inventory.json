@@ -1,0 +1,120 @@
+{
+  "sourceImage": "/Users/zerro/.codex/worktrees/460b/slotclientengine/tasks/castleknight3ddemo-img2threejs/round-column/hero-reference.png",
+  "zonesDir": "/Users/zerro/.codex/worktrees/460b/slotclientengine/tasks/castleknight3ddemo-img2threejs/round-column/detail-inventory",
+  "detailInventory": {
+    "scanMethod": "grid-3x3",
+    "targetMinDetails": 10,
+    "details": [
+      {
+        "id": "top-slab",
+        "kind": "beveled-octagonal-course",
+        "description": "Thick eight-sided bearing slab projects beyond the capital with a broad rounded bevel.",
+        "region": { "x": 0.27, "y": 0.04, "width": 0.46, "height": 0.12, "units": "normalized" },
+        "scale": "macro",
+        "affects": "geometry",
+        "mapsTo": { "type": "component.localFeatures", "ref": "top-slab:projecting-octagonal-course" },
+        "evidenceRef": "detail-inventory/zone-r0c1.png",
+        "confidence": 0.98
+      },
+      {
+        "id": "capital-brackets",
+        "kind": "radial-repetition",
+        "description": "Eight chunky geometric leaf brackets radiate around the capital neck and support the slab.",
+        "region": { "x": 0.28, "y": 0.1, "width": 0.44, "height": 0.19, "units": "normalized" },
+        "scale": "meso",
+        "affects": "geometry",
+        "mapsTo": { "type": "component.localFeatures", "ref": "capital-brackets:radial-leaf-array" },
+        "evidenceRef": "detail-inventory/zone-r0c1.png",
+        "confidence": 0.95
+      },
+      {
+        "id": "capital-cavities",
+        "kind": "cavity-shadow",
+        "description": "Deep violet gaps separate the leaf brackets from the upper ring and adjacent brackets.",
+        "region": { "x": 0.3, "y": 0.12, "width": 0.4, "height": 0.15, "units": "normalized" },
+        "scale": "micro",
+        "affects": "geometry-and-albedo",
+        "mapsTo": { "type": "material.localOverrides", "ref": "stone-material:capital-cavity-darkening" },
+        "evidenceRef": "detail-inventory/zone-r0c1.png",
+        "confidence": 0.91
+      },
+      {
+        "id": "neck-rings",
+        "kind": "concentric-ring-stack",
+        "description": "Two rounded torus-like neck rings transition from shaft radius to the widened bracket capital.",
+        "region": { "x": 0.34, "y": 0.23, "width": 0.32, "height": 0.08, "units": "normalized" },
+        "scale": "meso",
+        "affects": "geometry",
+        "mapsTo": { "type": "component.localFeatures", "ref": "capital-rings:double-neck-transition" },
+        "evidenceRef": "detail-inventory/zone-r0c1.png",
+        "confidence": 0.97
+      },
+      {
+        "id": "five-drum-seams",
+        "kind": "axial-module-seams",
+        "description": "Five circular shaft drums are separated by narrow recessed horizontal seams.",
+        "region": { "x": 0.35, "y": 0.27, "width": 0.3, "height": 0.48, "units": "normalized" },
+        "scale": "meso",
+        "affects": "geometry",
+        "mapsTo": { "type": "component.localFeatures", "ref": "shaft-drums:five-segment-stack" },
+        "evidenceRef": "detail-inventory/zone-r1c1.png",
+        "confidence": 0.99
+      },
+      {
+        "id": "shaft-fluting",
+        "kind": "vertical-relief-repetition",
+        "description": "Shallow rounded vertical flutes repeat around every drum and terminate before each seam.",
+        "region": { "x": 0.36, "y": 0.28, "width": 0.28, "height": 0.46, "units": "normalized" },
+        "scale": "micro",
+        "affects": "geometry",
+        "mapsTo": { "type": "component.localFeatures", "ref": "shaft-drums:radial-flute-array" },
+        "evidenceRef": "detail-inventory/zone-r1c1.png",
+        "confidence": 0.95
+      },
+      {
+        "id": "base-rings",
+        "kind": "concentric-transition",
+        "description": "Three circular rings of decreasing radius socket the first shaft drum into the octagonal base.",
+        "region": { "x": 0.31, "y": 0.71, "width": 0.38, "height": 0.12, "units": "normalized" },
+        "scale": "meso",
+        "affects": "geometry",
+        "mapsTo": { "type": "component.localFeatures", "ref": "base-rings:triple-radius-transition" },
+        "evidenceRef": "detail-inventory/zone-r2c1.png",
+        "confidence": 0.98
+      },
+      {
+        "id": "octagonal-base",
+        "kind": "stepped-plinth",
+        "description": "Two broad octagonal plinth courses decrease in radius upward and carry oversized beveled edges.",
+        "region": { "x": 0.25, "y": 0.78, "width": 0.5, "height": 0.18, "units": "normalized" },
+        "scale": "macro",
+        "affects": "geometry",
+        "mapsTo": { "type": "component.localFeatures", "ref": "base-stack:two-course-octagonal-plinth" },
+        "evidenceRef": "detail-inventory/zone-r2c1.png",
+        "confidence": 0.99
+      },
+      {
+        "id": "stone-mottling",
+        "kind": "surface-variation",
+        "description": "Muted purple-gray stone has warmer mauve patches on exposed faces and darker violet seams.",
+        "region": { "x": 0.27, "y": 0.04, "width": 0.46, "height": 0.92, "units": "normalized" },
+        "scale": "micro",
+        "affects": "albedo-and-roughness",
+        "mapsTo": { "type": "material.localOverrides", "ref": "stone-material:mauve-mottling" },
+        "evidenceRef": "detail-inventory/zone-r1c1.png",
+        "confidence": 0.9
+      },
+      {
+        "id": "stone-chips",
+        "kind": "localized-edge-wear",
+        "description": "Sparse small chips and hairline cracks interrupt selected base, shaft and top-slab bevels.",
+        "region": { "x": 0.25, "y": 0.04, "width": 0.5, "height": 0.92, "units": "normalized" },
+        "scale": "micro",
+        "affects": "geometry-and-bump",
+        "mapsTo": { "type": "material.localOverrides", "ref": "stone-material:sparse-chips-cracks" },
+        "evidenceRef": "detail-inventory/zone-r2c1.png",
+        "confidence": 0.82
+      }
+    ]
+  }
+}

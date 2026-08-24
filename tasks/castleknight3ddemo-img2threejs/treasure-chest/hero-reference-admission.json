@@ -1,0 +1,14 @@
+{
+  "admitted": true,
+  "reasons": [],
+  "provenance": {
+    "viewpoint": "reference",
+    "sourcePath": "/Users/zerro/.codex/worktrees/460b/slotclientengine/tasks/castleknight3ddemo-img2threejs/treasure-chest/hero-reference.png",
+    "width": 1402,
+    "height": 1122,
+    "foregroundCoverage": 0.4763,
+    "largestComponentFraction": 1.0,
+    "pHash": 17227864656022831952,
+    "duplicateOfHash": null
+  }
+}

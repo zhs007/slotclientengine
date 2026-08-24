@@ -1,0 +1,16 @@
+{
+  "admitted": false,
+  "reasons": [
+    "mask coherence: largest connected blob is 0.27 of foreground < 0.6 (fragmented/scattered subject — ambiguous)"
+  ],
+  "provenance": {
+    "viewpoint": "reference",
+    "sourcePath": "/Users/zerro/.codex/worktrees/460b/slotclientengine/tasks/castleknight3ddemo-img2threejs/treasure-chest/reference.png",
+    "width": 1402,
+    "height": 1122,
+    "foregroundCoverage": 0.5195,
+    "largestComponentFraction": 0.2678,
+    "pHash": 13807906361060425729,
+    "duplicateOfHash": null
+  }
+}

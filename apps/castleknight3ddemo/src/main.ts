@@ -1,4 +1,5 @@
 import { CastleKnightRenderer } from "./castle-scene.js";
+import { PropPreviewRenderer, type PropPreviewKind } from "./prop-preview.js";
 import "./styles.css";
 
 function button(
@@ -82,6 +83,11 @@ function createHud(root: HTMLElement, game: CastleKnightRenderer): HTMLElement {
 function bootstrap(): void {
   const root = document.getElementById("app");
   if (!root) throw new Error("Missing #app root.");
+  const previewKind = new URLSearchParams(location.search).get("prop");
+  if (previewKind === "chest" || previewKind === "column") {
+    bootstrapPropPreview(root, previewKind);
+    return;
+  }
   const game = new CastleKnightRenderer(root);
   root.append(createHud(root, game));
   const resize = () => game.resize(root.clientWidth, root.clientHeight);
@@ -93,6 +99,25 @@ function bootstrap(): void {
     () => {
       resizeObserver.disconnect();
       game.destroy(root);
+    },
+    { once: true },
+  );
+}
+
+function bootstrapPropPreview(root: HTMLElement, kind: PropPreviewKind): void {
+  const parameters = new URLSearchParams(location.search);
+  const sideView = parameters.get("view") === "side";
+  const textured = parameters.get("mode") === "final";
+  const preview = new PropPreviewRenderer(root, kind, sideView, textured);
+  const resize = () => preview.resize(root.clientWidth, root.clientHeight);
+  const resizeObserver = new ResizeObserver(resize);
+  resizeObserver.observe(root);
+  resize();
+  window.addEventListener(
+    "beforeunload",
+    () => {
+      resizeObserver.disconnect();
+      preview.destroy(root);
     },
     { once: true },
   );

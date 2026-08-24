@@ -34,6 +34,7 @@ import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.j
 import { CartoonPass } from "./cartoon-pass.js";
 import { BOARD, boardDepth, boardWidth, ROOM } from "./config.js";
 import { createRandom } from "./random.js";
+import { createRoundCastleColumn } from "./reconstructed-props.js";
 import {
   createSessionSeed,
   createSymbolPlacements,
@@ -58,6 +59,9 @@ interface CastleMaterials {
   readonly stone: Material;
   readonly stoneLight: Material;
   readonly stoneDark: Material;
+  readonly columnStone: Material;
+  readonly columnStoneLight: Material;
+  readonly columnStoneDark: Material;
   readonly mortar: Material;
   readonly wood: Material;
   readonly woodDark: Material;
@@ -283,6 +287,21 @@ export class CastleKnightRenderer {
       stoneDark: toon(0x554a60, textures.toonGradient, {
         bumpMap: textures.stoneDetail,
         bumpScale: 0.045,
+      }),
+      columnStone: toon(0xffffff, textures.toonGradient, {
+        map: textures.columnStoneAlbedo,
+        bumpMap: textures.stoneDetail,
+        bumpScale: 0.055,
+      }),
+      columnStoneLight: toon(0xc4b4ca, textures.toonGradient, {
+        map: textures.columnStoneAlbedo,
+        bumpMap: textures.stoneDetail,
+        bumpScale: 0.045,
+      }),
+      columnStoneDark: toon(0x5d5064, textures.toonGradient, {
+        map: textures.columnStoneAlbedo,
+        bumpMap: textures.stoneDetail,
+        bumpScale: 0.05,
       }),
       mortar: toon(0x211b2a, textures.toonGradient),
       wood: toon(0xffffff, textures.toonGradient, {
@@ -511,29 +530,14 @@ export class CastleKnightRenderer {
   }
 
   #createArchitecture(): void {
+    const columnMaster = createRoundCastleColumn({
+      stone: this.#materials.columnStone,
+      stoneLight: this.#materials.columnStoneLight,
+      stoneDark: this.#materials.columnStoneDark,
+    });
+    columnMaster.scale.setScalar(0.96);
     for (const x of [-4.7, -2.75, 2.75, 4.7]) {
-      const pillar = new Group();
-      const base = sceneMesh(
-        new RoundedBoxGeometry(1.05, 0.56, 1.1, 3, 0.08),
-        this.#materials.stoneDark,
-      );
-      base.position.y = 0.3;
-      pillar.add(base);
-      for (let index = 0; index < 6; index += 1) {
-        const block = sceneMesh(
-          new RoundedBoxGeometry(0.82, 0.72, 0.8, 2, 0.055),
-          index % 2 === 0 ? this.#materials.stoneLight : this.#materials.stone,
-        );
-        block.position.y = 0.9 + index * 0.68;
-        block.rotation.y = (index % 2) * 0.08;
-        pillar.add(block);
-      }
-      const capital = sceneMesh(
-        new RoundedBoxGeometry(1.18, 0.42, 1.16, 2, 0.07),
-        this.#materials.stoneDark,
-      );
-      capital.position.y = 5.05;
-      pillar.add(capital);
+      const pillar = columnMaster.clone(true);
       pillar.position.set(x, 0, -5.25);
       this.#root.add(pillar);
     }

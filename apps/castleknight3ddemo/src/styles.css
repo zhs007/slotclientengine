@@ -24,6 +24,16 @@ body,
   overflow: hidden;
 }
 
+#app.prop-preview {
+  background: #e5dfd8;
+}
+
+.prop-preview-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 button {
   font: inherit;
 }
