@@ -12,7 +12,11 @@ import {
   WebGLRenderer,
 } from "three";
 import {
+  createCartoonCastleBench,
+  createCartoonCastleWallSection,
+  createCartoonOakBarrel,
   createCartoonTreasureChest,
+  createCartoonWallTorch,
   createRoundCastleColumn,
 } from "./reconstructed-props.js";
 import {
@@ -20,7 +24,13 @@ import {
   type CastleTextureLibrary,
 } from "./textures.js";
 
-export type PropPreviewKind = "chest" | "column";
+export type PropPreviewKind =
+  | "chest"
+  | "column"
+  | "bench"
+  | "barrel"
+  | "wall"
+  | "torch";
 
 export class PropPreviewRenderer {
   readonly #renderer = new WebGLRenderer({ antialias: true, alpha: false });
@@ -87,7 +97,7 @@ export class PropPreviewRenderer {
       this.#scene.add(chest);
       this.#camera.position.set(0, 2.25, 7.2);
       this.#camera.lookAt(0, 0.2, 0);
-    } else {
+    } else if (kind === "column") {
       const stoneMap = this.#textureLibrary?.columnStoneAlbedo;
       const gradientMap = this.#textureLibrary?.toonGradient;
       const column = createRoundCastleColumn({
@@ -118,6 +128,112 @@ export class PropPreviewRenderer {
       this.#scene.add(column);
       this.#camera.position.set(sideView ? 5.4 : 3.8, 0.8, 10.8);
       this.#camera.lookAt(0, 0, 0);
+    } else {
+      const gradientMap = this.#textureLibrary?.toonGradient;
+      const wood = textured
+        ? new MeshToonMaterial({
+            color: 0xffffff,
+            map: this.#textureLibrary?.oakStavesAlbedo,
+            bumpMap: this.#textureLibrary?.woodDetail,
+            bumpScale: 0.03,
+            gradientMap,
+          })
+        : new MeshBasicMaterial({ color: 0x9b5527 });
+      const woodDark = textured
+        ? new MeshToonMaterial({
+            color: 0x735067,
+            map: this.#textureLibrary?.woodAlbedo,
+            gradientMap,
+          })
+        : new MeshBasicMaterial({ color: 0x5c3540 });
+      const iron = textured
+        ? new MeshStandardMaterial({
+            color: 0xffffff,
+            map: this.#textureLibrary?.forgedIronAlbedo,
+            bumpMap: this.#textureLibrary?.metalDetail,
+            bumpScale: 0.02,
+            metalness: 0.78,
+            roughness: 0.4,
+            flatShading: true,
+          })
+        : new MeshBasicMaterial({ color: 0x34303d });
+      const ironLight = textured
+        ? new MeshStandardMaterial({
+            color: 0x777080,
+            map: this.#textureLibrary?.forgedIronAlbedo,
+            metalness: 0.72,
+            roughness: 0.33,
+            flatShading: true,
+          })
+        : new MeshBasicMaterial({ color: 0x6c6476 });
+      const gold = textured
+        ? new MeshStandardMaterial({
+            color: 0xd49119,
+            metalness: 0.72,
+            roughness: 0.29,
+            flatShading: true,
+          })
+        : new MeshBasicMaterial({ color: 0xd49119 });
+      const stone = textured
+        ? new MeshToonMaterial({
+            color: 0xffffff,
+            map: this.#textureLibrary?.cutStoneAlbedo,
+            gradientMap,
+          })
+        : new MeshBasicMaterial({ color: 0x887a95 });
+      const stoneLight = textured
+        ? new MeshToonMaterial({
+            color: 0xc8b8d0,
+            map: this.#textureLibrary?.cutStoneAlbedo,
+            gradientMap,
+          })
+        : new MeshBasicMaterial({ color: 0xa696b4 });
+      const stoneDark = textured
+        ? new MeshToonMaterial({
+            color: 0x665573,
+            map: this.#textureLibrary?.cutStoneAlbedo,
+            gradientMap,
+          })
+        : new MeshBasicMaterial({ color: 0x493c54 });
+
+      if (kind === "bench") {
+        const bench = createCartoonCastleBench({ wood, woodDark, iron });
+        bench.scale.setScalar(2.6);
+        bench.rotation.y = sideView ? Math.PI / 2 : -Math.PI * 0.18;
+        bench.position.y = -1.35;
+        this.#scene.add(bench);
+        this.#camera.position.set(0, 1.6, 8.5);
+        this.#camera.lookAt(0, -0.15, 0);
+      } else if (kind === "barrel") {
+        const barrel = createCartoonOakBarrel({ wood, woodDark, iron });
+        barrel.scale.setScalar(2.25);
+        barrel.rotation.y = sideView ? Math.PI / 2 : -Math.PI * 0.16;
+        barrel.position.y = -1.55;
+        this.#scene.add(barrel);
+        this.#camera.position.set(0, 1.4, 7.8);
+        this.#camera.lookAt(0, 0, 0);
+      } else if (kind === "wall") {
+        const wall = createCartoonCastleWallSection({
+          stone,
+          stoneLight,
+          stoneDark,
+          mortar: new MeshBasicMaterial({ color: 0x241c2b }),
+        });
+        wall.scale.setScalar(0.84);
+        wall.rotation.y = sideView ? Math.PI / 2 : -Math.PI * 0.14;
+        wall.position.y = -2.7;
+        this.#scene.add(wall);
+        this.#camera.position.set(0, 0.55, 10.5);
+        this.#camera.lookAt(0, 0, 0);
+      } else {
+        const torch = createCartoonWallTorch({ iron, ironLight, gold });
+        torch.scale.setScalar(2.8);
+        torch.rotation.y = sideView ? Math.PI / 2 : -Math.PI * 0.18;
+        torch.position.y = -0.15;
+        this.#scene.add(torch);
+        this.#camera.position.set(0, 1.2, 7.6);
+        this.#camera.lookAt(0, 0.1, 0);
+      }
     }
     this.#animationFrame = requestAnimationFrame(this.#render);
   }

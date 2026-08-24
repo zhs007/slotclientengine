@@ -17,7 +17,6 @@ import {
   MeshBasicMaterial,
   MeshStandardMaterial,
   MeshToonMaterial,
-  Object3D,
   PCFShadowMap,
   PerspectiveCamera,
   PlaneGeometry,
@@ -27,6 +26,7 @@ import {
   SRGBColorSpace,
   TorusGeometry,
   Vector2,
+  Vector3,
   WebGLRenderer,
 } from "three";
 import type { BufferGeometry, Material, Texture } from "three";
@@ -34,7 +34,13 @@ import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.j
 import { CartoonPass } from "./cartoon-pass.js";
 import { BOARD, boardDepth, boardWidth, ROOM } from "./config.js";
 import { createRandom } from "./random.js";
-import { createRoundCastleColumn } from "./reconstructed-props.js";
+import {
+  createCartoonCastleBench,
+  createCartoonCastleWallSection,
+  createCartoonOakBarrel,
+  createCartoonWallTorch,
+  createRoundCastleColumn,
+} from "./reconstructed-props.js";
 import {
   createSessionSeed,
   createSymbolPlacements,
@@ -66,6 +72,7 @@ interface CastleMaterials {
   readonly wood: Material;
   readonly woodDark: Material;
   readonly iron: Material;
+  readonly ironLight: Material;
   readonly gold: Material;
   readonly banner: Material;
   readonly bannerGold: Material;
@@ -80,6 +87,7 @@ function standard(
   metalness = 0,
   roughness = 0.8,
   bumpMap?: Texture,
+  map?: Texture,
 ): MeshStandardMaterial {
   return new MeshStandardMaterial({
     color,
@@ -87,6 +95,7 @@ function standard(
     roughness,
     flatShading: true,
     ...(bumpMap ? { bumpMap, bumpScale: 0.024 } : {}),
+    ...(map ? { map } : {}),
   });
 }
 
@@ -264,7 +273,8 @@ export class CastleKnightRenderer {
 
   #createMaterials(): CastleMaterials {
     const textures = this.#textureLibrary;
-    const stone = toon(0xa99cae, textures.toonGradient, {
+    const stone = toon(0xffffff, textures.toonGradient, {
+      map: textures.cutStoneAlbedo,
       bumpMap: textures.stoneDetail,
       bumpScale: 0.055,
     });
@@ -280,11 +290,13 @@ export class CastleKnightRenderer {
         bumpScale: 0.035,
       }),
       stone,
-      stoneLight: toon(0xc0b2c1, textures.toonGradient, {
+      stoneLight: toon(0xc8b8d0, textures.toonGradient, {
+        map: textures.cutStoneAlbedo,
         bumpMap: textures.stoneDetail,
         bumpScale: 0.045,
       }),
-      stoneDark: toon(0x554a60, textures.toonGradient, {
+      stoneDark: toon(0x665573, textures.toonGradient, {
+        map: textures.cutStoneAlbedo,
         bumpMap: textures.stoneDetail,
         bumpScale: 0.045,
       }),
@@ -303,9 +315,9 @@ export class CastleKnightRenderer {
         bumpMap: textures.stoneDetail,
         bumpScale: 0.05,
       }),
-      mortar: toon(0x211b2a, textures.toonGradient),
+      mortar: toon(0x30263b, textures.toonGradient),
       wood: toon(0xffffff, textures.toonGradient, {
-        map: textures.woodAlbedo,
+        map: textures.oakStavesAlbedo,
         bumpMap: textures.woodDetail,
         bumpScale: 0.027,
       }),
@@ -314,7 +326,20 @@ export class CastleKnightRenderer {
         bumpMap: textures.woodDetail,
         bumpScale: 0.03,
       }),
-      iron: standard(0x33313c, 0.82, 0.42, textures.metalDetail),
+      iron: standard(
+        0xffffff,
+        0.82,
+        0.42,
+        textures.metalDetail,
+        textures.forgedIronAlbedo,
+      ),
+      ironLight: standard(
+        0x777080,
+        0.76,
+        0.35,
+        textures.metalDetail,
+        textures.forgedIronAlbedo,
+      ),
       gold: standard(0xd49119, 0.72, 0.29, textures.metalDetail),
       banner: toon(0xffffff, textures.toonGradient, {
         map: textures.fabricAlbedo,
@@ -361,45 +386,37 @@ export class CastleKnightRenderer {
     backWall.castShadow = false;
     this.#root.add(backWall);
 
-    const blockGeometry = new RoundedBoxGeometry(1.16, 0.72, 0.58, 2, 0.055);
-    const random = createRandom(0xca571e);
-    const blocks = new InstancedMesh(blockGeometry, this.#materials.stone, 80);
-    const dummy = new Object3D();
-    let index = 0;
-    const addBlock = (x: number, y: number, z: number, rotationY = 0) => {
-      dummy.position.set(x, y, z);
-      dummy.rotation.set(0, rotationY, random.range(-0.018, 0.018));
-      dummy.scale.set(
-        random.range(0.93, 1.04),
-        random.range(0.93, 1.04),
-        random.range(0.9, 1.03),
-      );
-      dummy.updateMatrix();
-      blocks.setMatrixAt(index, dummy.matrix);
-      blocks.setColorAt(
-        index,
-        new Color(0x4f4a59).offsetHSL(0, 0, random.range(-0.07, 0.08)),
-      );
-      index += 1;
-    };
+    const plainWall = createCartoonCastleWallSection(
+      {
+        stone: this.#materials.stone,
+        stoneLight: this.#materials.stoneLight,
+        stoneDark: this.#materials.stoneDark,
+        mortar: this.#materials.mortar,
+      },
+      false,
+    );
+    const pilasterWall = createCartoonCastleWallSection({
+      stone: this.#materials.stone,
+      stoneLight: this.#materials.stoneLight,
+      stoneDark: this.#materials.stoneDark,
+      mortar: this.#materials.mortar,
+    });
+    plainWall.scale.y = 1.42;
+    pilasterWall.scale.y = 1.42;
     for (const side of [-1, 1]) {
-      for (let row = 0; row < 8; row += 1) {
-        for (let depth = 0; depth < 5; depth += 1) {
-          addBlock(
-            side * (ROOM.width / 2 - 0.15),
-            0.45 + row * 0.72,
-            -9.3 + depth * 3.4 + (row % 2) * 0.45,
-            Math.PI / 2,
-          );
-        }
+      for (let sectionIndex = 0; sectionIndex < 7; sectionIndex += 1) {
+        const wall = (sectionIndex % 2 === 1 ? pilasterWall : plainWall).clone(
+          true,
+        );
+        wall.position.set(
+          side * (ROOM.width / 2 - 0.14),
+          0,
+          -9.78 + sectionIndex * 3.26,
+        );
+        wall.rotation.y = (side * -Math.PI) / 2;
+        this.#root.add(wall);
       }
     }
-    blocks.count = index;
-    blocks.instanceMatrix.needsUpdate = true;
-    blocks.instanceColor!.needsUpdate = true;
-    blocks.castShadow = true;
-    blocks.receiveShadow = true;
-    this.#root.add(blocks);
   }
 
   #createBoard(): void {
@@ -580,44 +597,25 @@ export class CastleKnightRenderer {
   }
 
   #createFurniture(): void {
+    const benchMaster = createCartoonCastleBench({
+      wood: this.#materials.wood,
+      woodDark: this.#materials.woodDark,
+      iron: this.#materials.iron,
+    });
+    const barrelMaster = createCartoonOakBarrel({
+      wood: this.#materials.wood,
+      woodDark: this.#materials.woodDark,
+      iron: this.#materials.iron,
+    });
     for (const side of [-1, 1]) {
-      const table = new Group();
-      const top = sceneMesh(
-        new RoundedBoxGeometry(1.55, 0.18, 0.72, 2, 0.05),
-        this.#materials.wood,
-      );
-      top.position.y = 0.85;
-      table.add(top);
-      for (const x of [-0.58, 0.58]) {
-        for (const z of [-0.23, 0.23]) {
-          const leg = sceneMesh(
-            new BoxGeometry(0.13, 0.82, 0.13),
-            this.#materials.woodDark,
-          );
-          leg.position.set(x, 0.42, z);
-          table.add(leg);
-        }
-      }
-      table.position.set(side * 4.75, 0, -1.8);
-      table.rotation.y = side * -0.12;
-      this.#root.add(table);
+      const bench = benchMaster.clone(true);
+      bench.position.set(side * 4.75, 0, -1.8);
+      bench.rotation.y = side * -0.12;
+      this.#root.add(bench);
 
-      const barrel = new Group();
-      const body = sceneMesh(
-        new CylinderGeometry(0.42, 0.42, 0.88, 10),
-        this.#materials.wood,
-      );
-      barrel.add(body);
-      for (const y of [-0.31, 0.31]) {
-        const band = sceneMesh(
-          new TorusGeometry(0.43, 0.045, 5, 10),
-          this.#materials.iron,
-        );
-        band.rotation.x = Math.PI / 2;
-        band.position.y = y;
-        barrel.add(band);
-      }
-      barrel.position.set(side * 5.25, 0.48, 3.15);
+      const barrel = barrelMaster.clone(true);
+      barrel.position.set(side * 5.08, 0, 3.15);
+      barrel.rotation.y = side * 0.18;
       this.#root.add(barrel);
     }
   }
@@ -663,22 +661,36 @@ export class CastleKnightRenderer {
   }
 
   #createTorches(): void {
-    const positions = [
-      [-5.65, 2.5, -6.8],
-      [5.65, 2.5, -6.8],
-      [-5.65, 2.15, 0.4],
-      [5.65, 2.15, 0.4],
-      [-4.15, 1.45, -8.9],
-      [4.15, 1.45, -8.9],
+    const torchMaster = createCartoonWallTorch({
+      iron: this.#materials.iron,
+      ironLight: this.#materials.ironLight,
+      gold: this.#materials.gold,
+    });
+    const placements = [
+      [-6.08, 2.3, -6.8, Math.PI / 2],
+      [6.08, 2.3, -6.8, -Math.PI / 2],
+      [-6.08, 2.05, 0.4, Math.PI / 2],
+      [6.08, 2.05, 0.4, -Math.PI / 2],
+      [-4.15, 1.55, -11.28, 0],
+      [4.15, 1.55, -11.28, 0],
     ] as const;
-    positions.forEach(([x, y, z], index) => {
-      const holder = sceneMesh(
-        new CylinderGeometry(0.18, 0.28, 0.38, 8),
-        this.#materials.iron,
+    placements.forEach(([x, y, z, rotationY], index) => {
+      const torch = torchMaster.clone(true);
+      torch.position.set(x, y, z);
+      torch.rotation.y = rotationY;
+      this.#root.add(torch);
+      torch.updateMatrixWorld(true);
+      const flameSocket = torch.getObjectByName("flame-socket");
+      if (!flameSocket) throw new Error("Wall torch flame socket is missing.");
+      const flamePosition = flameSocket.getWorldPosition(new Vector3());
+      this.#addFlame(
+        this.#root,
+        flamePosition.x,
+        flamePosition.y,
+        flamePosition.z,
+        1.05,
+        index + 20,
       );
-      holder.position.set(x, y, z);
-      this.#root.add(holder);
-      this.#addFlame(this.#root, x, y + 0.48, z, 1.05, index + 20);
     });
   }
 

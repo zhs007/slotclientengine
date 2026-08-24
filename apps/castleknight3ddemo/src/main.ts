@@ -84,7 +84,14 @@ function bootstrap(): void {
   const root = document.getElementById("app");
   if (!root) throw new Error("Missing #app root.");
   const previewKind = new URLSearchParams(location.search).get("prop");
-  if (previewKind === "chest" || previewKind === "column") {
+  if (
+    previewKind === "chest" ||
+    previewKind === "column" ||
+    previewKind === "bench" ||
+    previewKind === "barrel" ||
+    previewKind === "wall" ||
+    previewKind === "torch"
+  ) {
     bootstrapPropPreview(root, previewKind);
     return;
   }
