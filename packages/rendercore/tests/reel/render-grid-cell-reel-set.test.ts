@@ -663,15 +663,17 @@ describe("RenderGridCellReelSet", () => {
       selectedDimming.find((cell) => cell.x === 1 && cell.y === 1),
     ).toMatchObject({ dimmingAlpha: 0, symbolDimmingAlpha: 1 });
     reelSet.setSymbolDimming([{ x: 0, y: 2 }], 0.4);
-    const replacedDimming = reelSet.getSnapshot().cells;
-    expect(
-      replacedDimming.find((cell) => cell.x === 0 && cell.y === 0),
-    ).toMatchObject({ dimmingAlpha: 0, symbolDimmingAlpha: 1 });
-    const replacement = replacedDimming.find(
+    const accumulatedDimming = reelSet.getSnapshot().cells;
+    const retained = accumulatedDimming.find(
+      (cell) => cell.x === 0 && cell.y === 0,
+    );
+    expect(retained?.dimmingAlpha).toBe(0.75);
+    expect(retained?.symbolDimmingAlpha).toBeCloseTo(0.25, 2);
+    const added = accumulatedDimming.find(
       (cell) => cell.x === 0 && cell.y === 2,
     );
-    expect(replacement?.dimmingAlpha).toBe(0.4);
-    expect(replacement?.symbolDimmingAlpha).toBeCloseTo(0.6, 2);
+    expect(added?.dimmingAlpha).toBe(0.4);
+    expect(added?.symbolDimmingAlpha).toBeCloseTo(0.6, 2);
     reelSet.releaseVisibleSymbols([{ x: 1, y: 1 }]);
     reelSet.setSymbolDimming([{ x: 1, y: 1 }], 0.7);
     expect(

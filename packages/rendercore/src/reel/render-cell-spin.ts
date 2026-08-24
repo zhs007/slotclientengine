@@ -398,10 +398,9 @@ export class RenderCellSpin extends Container implements CellSpin {
         throw new ReelError(`dimmed positions contains duplicate ${key}.`);
       selected.add(key);
     }
-    for (const cell of this.#cells) {
-      const isDimmed = selected.has(keyOf(cell.position));
-      cell.reel.setSlotBrightness(0, isDimmed ? 1 - dimmingAlpha : 1);
-    }
+    for (const cell of this.#cells)
+      if (selected.has(keyOf(cell.position)))
+        cell.reel.setSlotBrightness(0, 1 - dimmingAlpha);
   }
 
   clearSymbolDimming(): void {

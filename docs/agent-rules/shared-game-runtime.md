@@ -77,7 +77,7 @@
   默认或typed game spin function。`present(..., { repeat: true })` 在首轮 callback 完成后 resolve并由 area 继续后台
   重复，operation handler 不得为 lingering loop 自建 deferred Promise 或 `while(true)`。symbols 主层、raw Container
   和完整geometry不向游戏开放。
-- SymbolArea统一拥有按settled position替换式设置/清除cell dimming的能力，空格同样必须显示压暗；standard ReelArea、CellSpin与legacy grid-cell
+- SymbolArea统一拥有按settled position累加设置/整体清除cell dimming的能力；重复设置只新增或更新本次坐标，不恢复此前坐标，空格同样必须显示压暗；standard ReelArea、CellSpin与legacy grid-cell
   必须保持同一`dimmed positions + alpha`合同，具体tint/overlay表现由各自reel owner实现。旧highlighted positions接口只作
   configured round与legacy grid-cell兼容，不作为新游戏入口。
 - RenderCore第一层的opaque `RenderObjectLayer`统一area、Scene顶层和exact named node attachment；保留既有add/remove并增加
