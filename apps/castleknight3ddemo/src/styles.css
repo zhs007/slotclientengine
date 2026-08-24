@@ -1,0 +1,370 @@
+:root {
+  color-scheme: dark;
+  background: #090713;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+button {
+  font: inherit;
+}
+
+#app {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 50% 25%, #2b1f53 0, transparent 42%), #090713;
+}
+
+.castle-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.game-hud {
+  position: absolute;
+  z-index: 2;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: clamp(122px, 15vh, 178px);
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    transparent 0,
+    rgba(5, 4, 12, 0.58) 34%,
+    #07060d 100%
+  );
+}
+
+.hud-panel {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(22px, 3.2vh, 42px);
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) clamp(94px, 11vw, 134px) minmax(
+      170px,
+      1fr
+    );
+  align-items: center;
+  width: min(88vw, 940px);
+  min-height: 82px;
+  padding: 10px clamp(18px, 3vw, 48px);
+  transform: translateX(-50%);
+  pointer-events: auto;
+  background:
+    linear-gradient(180deg, #28232e 0 8%, #100e16 9% 78%, #211c29 79%), #100e16;
+  border: 4px solid #3e3945;
+  border-radius: 28px;
+  box-shadow:
+    inset 0 0 0 3px #131018,
+    inset 0 3px 0 rgba(193, 175, 209, 0.18),
+    0 12px 28px rgba(0, 0, 0, 0.68);
+}
+
+.hud-panel::before,
+.hud-panel::after {
+  position: absolute;
+  top: 50%;
+  width: 30px;
+  height: 46px;
+  content: "";
+  background: #28232f;
+  border: 4px solid #47404e;
+  transform: translateY(-50%) rotate(45deg);
+  z-index: -1;
+}
+
+.hud-panel::before {
+  left: -18px;
+}
+
+.hud-panel::after {
+  right: -18px;
+}
+
+.hud-group {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.hud-group-balance {
+  justify-content: flex-start;
+}
+
+.hud-group-bet {
+  justify-content: flex-end;
+}
+
+.hud-value {
+  display: flex;
+  min-width: 112px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 3px 14px;
+}
+
+.hud-value span {
+  color: #c88222;
+  font-size: clamp(11px, 1.2vw, 15px);
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+
+.hud-value strong {
+  color: #f5eee8;
+  font-size: clamp(18px, 2.2vw, 29px);
+  line-height: 1;
+  text-shadow: 0 2px 0 #000;
+}
+
+.coin-emblem {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+  place-items: center;
+  color: #f6c95d;
+  font-size: 28px;
+  font-weight: 900;
+  background: radial-gradient(
+    circle,
+    #9f5b0b 0 47%,
+    #d99a25 49% 62%,
+    #4b2c0d 64%
+  );
+  border: 3px solid #dda635;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 3px #5a3106;
+}
+
+.spin-control,
+.small-control,
+.round-control {
+  display: grid;
+  place-items: center;
+  color: #e6a52c;
+  cursor: pointer;
+  background: radial-gradient(circle at 42% 35%, #34303a, #121017 64%);
+  border: 4px solid #4c4651;
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0 0 3px #0c0a0f,
+    0 4px 10px rgba(0, 0, 0, 0.55);
+  transition:
+    transform 140ms ease,
+    filter 140ms ease;
+}
+
+.spin-control:hover,
+.small-control:hover,
+.round-control:hover {
+  filter: brightness(1.25);
+  transform: scale(1.045);
+}
+
+.spin-control:active,
+.small-control:active,
+.round-control:active {
+  transform: scale(0.94);
+}
+
+.spin-control {
+  width: clamp(94px, 11vw, 134px);
+  height: clamp(94px, 11vw, 134px);
+  margin: -36px auto;
+  color: #f3b52d;
+  font-size: clamp(54px, 6vw, 76px);
+  line-height: 1;
+  background: radial-gradient(
+    circle,
+    #332409 0 41%,
+    #0c0b10 44% 67%,
+    #302b34 69%
+  );
+  border-width: 6px;
+  border-color: #49434a;
+  text-shadow: 0 3px 0 #5f3304;
+}
+
+.spin-control.is-spinning {
+  animation: spin-feedback 620ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+.small-control {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  color: #c68120;
+  font-size: 29px;
+  border-width: 3px;
+}
+
+.round-control {
+  position: absolute;
+  bottom: 12px;
+  width: 72px;
+  height: 72px;
+  pointer-events: auto;
+  font-size: 34px;
+}
+
+.menu-control {
+  left: 16px;
+}
+
+.turbo-control {
+  right: 16px;
+  color: #f4b22d;
+  font-size: 48px;
+  font-weight: 900;
+}
+
+.turbo-control.is-active {
+  color: #fff2a5;
+  filter: brightness(1.4);
+  box-shadow:
+    inset 0 0 0 3px #0c0a0f,
+    0 0 22px rgba(245, 175, 38, 0.65);
+}
+
+.interaction-hint {
+  position: absolute;
+  right: 50%;
+  bottom: calc(clamp(122px, 15vh, 178px) - 28px);
+  padding: 7px 14px;
+  color: #cbbbd4;
+  font-size: 12px;
+  white-space: nowrap;
+  background: rgba(11, 8, 18, 0.78);
+  border: 1px solid rgba(181, 149, 199, 0.25);
+  border-radius: 999px;
+  opacity: 0;
+  transform: translateX(50%) translateY(8px);
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.show-hint .interaction-hint {
+  opacity: 1;
+  transform: translateX(50%) translateY(0);
+}
+
+.fatal-error {
+  margin: 0;
+  padding: 2rem;
+  color: #fff4dc;
+  white-space: pre-wrap;
+}
+
+@keyframes spin-feedback {
+  from {
+    transform: rotate(0);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 650px) {
+  .game-hud {
+    height: 126px;
+  }
+
+  .hud-panel {
+    bottom: 24px;
+    grid-template-columns: 1fr 88px 1fr;
+    width: calc(100vw - 104px);
+    min-height: 70px;
+    padding: 7px 12px;
+    border-width: 3px;
+  }
+
+  .spin-control {
+    width: 92px;
+    height: 92px;
+    margin: -24px auto;
+    font-size: 52px;
+  }
+
+  .coin-emblem,
+  .small-control {
+    width: 38px;
+    height: 38px;
+  }
+
+  .coin-emblem {
+    font-size: 20px;
+  }
+
+  .hud-value {
+    min-width: 0;
+    padding: 3px 7px;
+  }
+
+  .hud-value strong {
+    font-size: 16px;
+  }
+
+  .hud-value span {
+    font-size: 9px;
+  }
+
+  .small-control {
+    font-size: 23px;
+    border-width: 2px;
+  }
+
+  .round-control {
+    bottom: 13px;
+    width: 54px;
+    height: 54px;
+    font-size: 27px;
+    border-width: 3px;
+  }
+
+  .menu-control {
+    left: 7px;
+  }
+
+  .turbo-control {
+    right: 7px;
+    font-size: 39px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
