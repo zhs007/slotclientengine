@@ -426,7 +426,6 @@ export function createGameLayoutRuntimeAddresses(
         popup.manifest,
       ]),
     ),
-    audioMusicNames: Object.freeze(Object.keys(resource.audioMusic ?? {})),
   });
   for (const entry of eventCatalog.entries) {
     if (entries.has(entry.descriptor.address))

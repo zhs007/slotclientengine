@@ -77,9 +77,6 @@ export function inspectSceneLayoutRuntimeEventCatalog(
     manifest,
     symbolPackages,
     popupManifests,
-    audioMusicNames: Object.freeze(
-      manifest.audio.music.map((binding) => binding.name),
-    ),
   });
 }
 

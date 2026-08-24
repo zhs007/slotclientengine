@@ -12,7 +12,6 @@ export type GameLayoutRuntimeEventFamily =
   | "node-animation"
   | "symbol-state"
   | "mode-state"
-  | "mode-bgm"
   | "transition-lifecycle"
   | "transition-effect-event"
   | "transition-effect-lifecycle"
@@ -20,7 +19,6 @@ export type GameLayoutRuntimeEventFamily =
   | "popup-phase"
   | "popup-tier"
   | "popup-segment"
-  | "audio-music"
   | "resource-animation";
 
 export interface GameLayoutRuntimeEventFacet {
@@ -54,7 +52,6 @@ export interface GameLayoutRuntimeEventCatalogSource {
     >
   >;
   readonly popupManifests: Readonly<Record<string, PopupManifest>>;
-  readonly audioMusicNames: readonly string[];
 }
 
 export function compileGameLayoutRuntimeEventCatalog(
@@ -177,18 +174,6 @@ export function compileGameLayoutRuntimeEventCatalog(
             ["edge", edge],
           ],
         });
-    if (mode.bgm)
-      for (const lifecycle of ["started", "stopped"])
-        add({
-          segments: [...owner, "bgm", "lifecycle", lifecycle],
-          owner: [...owner, "bgm"],
-          family: "mode-bgm",
-          facets: [
-            ["mode", mode.id],
-            ["music", mode.bgm],
-            ["lifecycle", lifecycle],
-          ],
-        });
   }
 
   for (const transition of source.manifest.gameModes.transitions ?? []) {
@@ -309,20 +294,6 @@ export function compileGameLayoutRuntimeEventCatalog(
             ],
           });
     }
-  }
-
-  for (const music of [...source.audioMusicNames].sort(compare)) {
-    const owner = ["audio", "music", music];
-    for (const lifecycle of ["started", "stopped"])
-      add({
-        segments: [...owner, "lifecycle", lifecycle],
-        owner,
-        family: "audio-music",
-        facets: [
-          ["music", music],
-          ["lifecycle", lifecycle],
-        ],
-      });
   }
 
   for (const [name, spec] of Object.entries(
