@@ -219,17 +219,17 @@
       "sourceByteLength": 64375
     },
     "bonusgame1.png": {
-      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:BonusGame",
+      "owner": "initial",
       "sourceByteLength": 423278
     },
     "bonusgame2.png": {
-      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:BonusGame",
+      "owner": "initial",
       "sourceByteLength": 1178225
     },
     "car.atlas": {
@@ -416,43 +416,43 @@
     },
     "fg.atlas": {
       "byteLength": 279,
-      "chunk": "mode:FreeGame",
+      "chunk": "initial",
       "entry": "assets/874d7cce632917b5dd51e92a6548d8ab2b6c1304520f519ad4a7d0c534ae4966.atlas",
       "kind": "metadata",
       "mediaType": "text/plain",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "sha256": "874d7cce632917b5dd51e92a6548d8ab2b6c1304520f519ad4a7d0c534ae4966"
     },
     "fg.json": {
       "byteLength": 179720,
-      "chunk": "mode:FreeGame",
+      "chunk": "initial",
       "entry": "assets/913a58fc7afdd59cd172453d814ba9ce32057a68f45fa7a0d8eff407cf866840.json",
       "kind": "metadata",
       "mediaType": "application/json",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "sha256": "913a58fc7afdd59cd172453d814ba9ce32057a68f45fa7a0d8eff407cf866840"
     },
     "fg.png": {
       "byteLength": 21494,
       "kind": "external",
       "mediaType": "image/webp",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "path": "assets/03ffe56331f09257b10c81bc3a85b3ae7f5af5a7e7a5fddb78385a3b0b2b4a42.webp",
       "sha256": "03ffe56331f09257b10c81bc3a85b3ae7f5af5a7e7a5fddb78385a3b0b2b4a42",
       "sourceByteLength": 120562
     },
     "free10.jpg": {
-      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "atlas": "atlas-initial-ac1b5c09-1",
       "kind": "atlas-frame",
       "mediaType": "image/jpeg",
-      "owner": "mode:BonusGame",
+      "owner": "initial",
       "sourceByteLength": 587149
     },
     "free11.jpg": {
-      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "atlas": "atlas-initial-ac1b5c09-1",
       "kind": "atlas-frame",
       "mediaType": "image/jpeg",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "sourceByteLength": 644334
     },
     "free13.jpg": {
@@ -470,17 +470,17 @@
       "sourceByteLength": 933506
     },
     "freegame1.png": {
-      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "sourceByteLength": 409154
     },
     "freegame2.png": {
-      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "sourceByteLength": 1497732
     },
     "gd1.png": {
@@ -1009,112 +1009,112 @@
       "sha256": "3a256e4bc99246ddbdeed0a8d988bdf70b68bc3dd27a56a1f7b5dc2ffdd96b70"
     },
     "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-0.png": {
-      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "sourceByteLength": 23748
     },
     "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-1.png": {
-      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "sourceByteLength": 16632
     },
     "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-2-2.png": {
-      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "sourceByteLength": 23179
     },
     "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-2.png": {
-      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "sourceByteLength": 6906
     },
     "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-3-2.png": {
-      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "sourceByteLength": 24613
     },
     "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-3.png": {
-      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "sourceByteLength": 5445
     },
     "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-4-2.png": {
-      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "sourceByteLength": 18731
     },
     "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-4.png": {
-      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "sourceByteLength": 11927
     },
     "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-5.png": {
-      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "sourceByteLength": 22329
     },
     "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-6.png": {
-      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "sourceByteLength": 24008
     },
     "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-7.png": {
-      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "sourceByteLength": 16617
     },
     "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-8.png": {
-      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "sourceByteLength": 24226
     },
     "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-9.png": {
-      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "sourceByteLength": 23452
     },
     "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-compliment_more.json": {
       "byteLength": 206111,
-      "chunk": "mode:FreeGame",
+      "chunk": "initial",
       "entry": "assets/e6b2a8c3fd65a64a3980e4ce7ce71a93d7bf951c61248a88390f0424a414e52c.json",
       "kind": "metadata",
       "mediaType": "application/json",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "sha256": "e6b2a8c3fd65a64a3980e4ce7ce71a93d7bf951c61248a88390f0424a414e52c"
     },
     "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-image-string.manifest.json": {
       "byteLength": 3381,
-      "chunk": "mode:FreeGame",
+      "chunk": "initial",
       "entry": "assets/a7a364dbf04f6e4190f1f1d3bb34ec58116c7230fbb1a3b0a33a1091b470927d.json",
       "kind": "metadata",
       "mediaType": "application/json",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "sha256": "a7a364dbf04f6e4190f1f1d3bb34ec58116c7230fbb1a3b0a33a1091b470927d"
     },
     "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-pop_ups.atlas": {
@@ -1130,141 +1130,141 @@
       "byteLength": 757926,
       "kind": "external",
       "mediaType": "image/webp",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "path": "assets/1dda57f183fe72be0f0927f71931697d9b0553ff50eda3d0dcfbe690cca9e7ab.webp",
       "sha256": "1dda57f183fe72be0f0927f71931697d9b0553ff50eda3d0dcfbe690cca9e7ab",
       "sourceByteLength": 5914600
     },
     "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-popup.manifest.json": {
       "byteLength": 2903,
-      "chunk": "mode:FreeGame",
+      "chunk": "initial",
       "entry": "assets/285665c7fea95253989d0d73009a698be8c9d45a0bc09bad8570f2bf659f4d58.json",
       "kind": "metadata",
       "mediaType": "application/json",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "sha256": "285665c7fea95253989d0d73009a698be8c9d45a0bc09bad8570f2bf659f4d58"
     },
     "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-x.png": {
-      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "sourceByteLength": 17007
     },
     "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60.png": {
-      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "sourceByteLength": 5648
     },
     "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-0.png": {
-      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:BonusGame",
+      "owner": "initial",
       "sourceByteLength": 23748
     },
     "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-1.png": {
-      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:BonusGame",
+      "owner": "initial",
       "sourceByteLength": 16632
     },
     "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-2-2.png": {
-      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:BonusGame",
+      "owner": "initial",
       "sourceByteLength": 23179
     },
     "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-2.png": {
-      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:BonusGame",
+      "owner": "initial",
       "sourceByteLength": 6906
     },
     "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-3-2.png": {
-      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:BonusGame",
+      "owner": "initial",
       "sourceByteLength": 24613
     },
     "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-3.png": {
-      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:BonusGame",
+      "owner": "initial",
       "sourceByteLength": 5445
     },
     "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-4-2.png": {
-      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:BonusGame",
+      "owner": "initial",
       "sourceByteLength": 18731
     },
     "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-4.png": {
-      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:BonusGame",
+      "owner": "initial",
       "sourceByteLength": 11927
     },
     "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-5.png": {
-      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:BonusGame",
+      "owner": "initial",
       "sourceByteLength": 22329
     },
     "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-6.png": {
-      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:BonusGame",
+      "owner": "initial",
       "sourceByteLength": 24008
     },
     "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-7.png": {
-      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:BonusGame",
+      "owner": "initial",
       "sourceByteLength": 16617
     },
     "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-8.png": {
-      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:BonusGame",
+      "owner": "initial",
       "sourceByteLength": 24226
     },
     "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-9.png": {
-      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:BonusGame",
+      "owner": "initial",
       "sourceByteLength": 23452
     },
     "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-compliment.json": {
       "byteLength": 173876,
-      "chunk": "mode:BonusGame",
+      "chunk": "initial",
       "entry": "assets/3eb125d8dab50ff2e63ca985b52706a39e82bf9d0dd196a2362e45a05629d084.json",
       "kind": "metadata",
       "mediaType": "application/json",
-      "owner": "mode:BonusGame",
+      "owner": "initial",
       "sha256": "3eb125d8dab50ff2e63ca985b52706a39e82bf9d0dd196a2362e45a05629d084"
     },
     "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-image-string.manifest.json": {
       "byteLength": 3381,
-      "chunk": "mode:BonusGame",
+      "chunk": "initial",
       "entry": "assets/9321c01ab7b8315c1203072f1395c23b8927613684d231883206e5819496e2ec.json",
       "kind": "metadata",
       "mediaType": "application/json",
-      "owner": "mode:BonusGame",
+      "owner": "initial",
       "sha256": "9321c01ab7b8315c1203072f1395c23b8927613684d231883206e5819496e2ec"
     },
     "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-pop_ups.atlas": {
@@ -1280,32 +1280,32 @@
       "byteLength": 757926,
       "kind": "external",
       "mediaType": "image/webp",
-      "owner": "mode:BonusGame",
+      "owner": "initial",
       "path": "assets/1dda57f183fe72be0f0927f71931697d9b0553ff50eda3d0dcfbe690cca9e7ab.webp",
       "sha256": "1dda57f183fe72be0f0927f71931697d9b0553ff50eda3d0dcfbe690cca9e7ab",
       "sourceByteLength": 5914600
     },
     "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-popup.manifest.json": {
       "byteLength": 2860,
-      "chunk": "mode:BonusGame",
+      "chunk": "initial",
       "entry": "assets/f0c82526c9af9110d59ee20babe0d2b74d47d4c93dcb5207a5d208a0492fd3ef.json",
       "kind": "metadata",
       "mediaType": "application/json",
-      "owner": "mode:BonusGame",
+      "owner": "initial",
       "sha256": "f0c82526c9af9110d59ee20babe0d2b74d47d4c93dcb5207a5d208a0492fd3ef"
     },
     "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-x.png": {
-      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:BonusGame",
+      "owner": "initial",
       "sourceByteLength": 17007
     },
     "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60.png": {
-      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "mode:BonusGame",
+      "owner": "initial",
       "sourceByteLength": 5648
     },
     "pkg-9-minecart2-10_1_asset_image_ms7b3znr_i.disabled.png": {
@@ -2279,14 +2279,32 @@
           "x": 2144,
           "y": 6
         },
+        "bonusgame1.png": {
+          "height": 149,
+          "rotated": false,
+          "sourceHeight": 149,
+          "sourceWidth": 2000,
+          "width": 2000,
+          "x": 6,
+          "y": 2269
+        },
+        "bonusgame2.png": {
+          "height": 728,
+          "rotated": false,
+          "sourceHeight": 728,
+          "sourceWidth": 2000,
+          "width": 2000,
+          "x": 6,
+          "y": 2426
+        },
         "d1.png": {
           "height": 1017,
           "rotated": true,
           "sourceHeight": 243,
           "sourceWidth": 1017,
           "width": 243,
-          "x": 2079,
-          "y": 1212
+          "x": 2144,
+          "y": 787
         },
         "d1bf7175c00e6fdbd661c39c1c2458616dc57c51d3ba1fd8df7b3e1f549e9cc2.png": {
           "height": 218,
@@ -2298,13 +2316,13 @@
           "y": 6
         },
         "d2.png": {
-          "height": 130,
-          "rotated": false,
+          "height": 885,
+          "rotated": true,
           "sourceHeight": 130,
           "sourceWidth": 885,
-          "width": 885,
-          "x": 6,
-          "y": 2269
+          "width": 130,
+          "x": 2014,
+          "y": 1812
         },
         "dbd7baf96994aa0cf361e2e39532c89ddac3b281e6d30ae16b380b05afa10976.png": {
           "height": 44,
@@ -2316,58 +2334,58 @@
           "y": 146
         },
         "f-bonus.png": {
-          "height": 146,
-          "rotated": false,
+          "height": 172,
+          "rotated": true,
           "sourceHeight": 146,
           "sourceWidth": 172,
-          "width": 172,
-          "x": 2014,
-          "y": 2237
+          "width": 146,
+          "x": 1131,
+          "y": 6
         },
         "f-coin.png": {
-          "height": 130,
-          "rotated": false,
+          "height": 172,
+          "rotated": true,
           "sourceHeight": 130,
           "sourceWidth": 172,
-          "width": 172,
-          "x": 899,
-          "y": 2269
+          "width": 130,
+          "x": 1285,
+          "y": 6
         },
         "f-collect.png": {
-          "height": 160,
-          "rotated": false,
+          "height": 174,
+          "rotated": true,
           "sourceHeight": 160,
           "sourceWidth": 174,
-          "width": 174,
-          "x": 2194,
-          "y": 2237
+          "width": 160,
+          "x": 1423,
+          "y": 6
         },
         "f-ding.png": {
-          "height": 130,
-          "rotated": false,
+          "height": 172,
+          "rotated": true,
           "sourceHeight": 130,
           "sourceWidth": 172,
-          "width": 172,
-          "x": 1079,
-          "y": 2269
+          "width": 130,
+          "x": 1591,
+          "y": 6
         },
         "f-exp.png": {
-          "height": 130,
-          "rotated": false,
+          "height": 172,
+          "rotated": true,
           "sourceHeight": 130,
           "sourceWidth": 172,
-          "width": 172,
-          "x": 1259,
-          "y": 2269
+          "width": 130,
+          "x": 1729,
+          "y": 6
         },
         "f-jk.png": {
-          "height": 130,
-          "rotated": false,
+          "height": 172,
+          "rotated": true,
           "sourceHeight": 130,
           "sourceWidth": 172,
-          "width": 172,
-          "x": 1439,
-          "y": 2269
+          "width": 130,
+          "x": 1867,
+          "y": 6
         },
         "f-light.png": {
           "height": 130,
@@ -2375,8 +2393,8 @@
           "sourceHeight": 130,
           "sourceWidth": 172,
           "width": 172,
-          "x": 1619,
-          "y": 2269
+          "x": 2152,
+          "y": 1812
         },
         "f-multi.png": {
           "height": 130,
@@ -2384,8 +2402,8 @@
           "sourceHeight": 130,
           "sourceWidth": 172,
           "width": 172,
-          "x": 1799,
-          "y": 2269
+          "x": 2152,
+          "y": 1950
         },
         "f-normal.png": {
           "height": 8,
@@ -2393,44 +2411,44 @@
           "sourceHeight": 8,
           "sourceWidth": 8,
           "width": 8,
-          "x": 1979,
-          "y": 2391
+          "x": 232,
+          "y": 190
         },
         "f-sc.png": {
-          "height": 172,
-          "rotated": true,
+          "height": 130,
+          "rotated": false,
           "sourceHeight": 130,
           "sourceWidth": 172,
-          "width": 130,
-          "x": 1131,
-          "y": 6
+          "width": 172,
+          "x": 2152,
+          "y": 2088
         },
         "f-up.png": {
-          "height": 172,
-          "rotated": true,
+          "height": 130,
+          "rotated": false,
           "sourceHeight": 130,
           "sourceWidth": 172,
-          "width": 130,
-          "x": 1269,
-          "y": 6
+          "width": 172,
+          "x": 2152,
+          "y": 2226
         },
         "f-wild.png": {
-          "height": 172,
-          "rotated": true,
+          "height": 143,
+          "rotated": false,
           "sourceHeight": 143,
           "sourceWidth": 172,
-          "width": 143,
-          "x": 1407,
-          "y": 6
+          "width": 172,
+          "x": 2152,
+          "y": 2364
         },
         "fd66f6f1eb79b96d2e8ac58a20788b5ce6809babb23d84647ca82c5a697e2080.png": {
-          "height": 793,
-          "rotated": false,
+          "height": 1057,
+          "rotated": true,
           "sourceHeight": 793,
           "sourceWidth": 1057,
-          "width": 1057,
-          "x": 6,
-          "y": 2407
+          "width": 793,
+          "x": 2436,
+          "y": 6
         },
         "free14.png": {
           "height": 2000,
@@ -2438,8 +2456,26 @@
           "sourceHeight": 471,
           "sourceWidth": 2000,
           "width": 471,
-          "x": 2436,
-          "y": 6
+          "x": 2395,
+          "y": 1071
+        },
+        "freegame1.png": {
+          "height": 2000,
+          "rotated": true,
+          "sourceHeight": 149,
+          "sourceWidth": 2000,
+          "width": 149,
+          "x": 2874,
+          "y": 1071
+        },
+        "freegame2.png": {
+          "height": 657,
+          "rotated": false,
+          "sourceHeight": 657,
+          "sourceWidth": 2000,
+          "width": 2000,
+          "x": 6,
+          "y": 3162
         },
         "gd1.png": {
           "height": 2000,
@@ -2447,8 +2483,8 @@
           "sourceHeight": 149,
           "sourceWidth": 2000,
           "width": 149,
-          "x": 2915,
-          "y": 6
+          "x": 3031,
+          "y": 1071
         },
         "gd3.png": {
           "height": 2000,
@@ -2456,7 +2492,7 @@
           "sourceHeight": 135,
           "sourceWidth": 2000,
           "width": 135,
-          "x": 3072,
+          "x": 3237,
           "y": 6
         },
         "pkg-17-award-celebration-0.png": {
@@ -2465,8 +2501,8 @@
           "sourceHeight": 43,
           "sourceWidth": 31,
           "width": 31,
-          "x": 941,
-          "y": 123
+          "x": 2395,
+          "y": 787
         },
         "pkg-17-award-celebration-1_asset_image_mrabdwbe_11.png": {
           "height": 217,
@@ -2474,8 +2510,8 @@
           "sourceHeight": 217,
           "sourceWidth": 217,
           "width": 217,
-          "x": 1558,
-          "y": 6
+          "x": 2152,
+          "y": 2515
         },
         "pkg-17-award-celebration-1_asset_image_mraeg23u_46.png": {
           "height": 50,
@@ -2483,8 +2519,8 @@
           "sourceHeight": 50,
           "sourceWidth": 50,
           "width": 50,
-          "x": 2376,
-          "y": 787
+          "x": 564,
+          "y": 146
         },
         "pkg-17-award-celebration-1_asset_image_mrag7g66_53.png": {
           "height": 28,
@@ -2492,8 +2528,8 @@
           "sourceHeight": 28,
           "sourceWidth": 31,
           "width": 31,
-          "x": 941,
-          "y": 174
+          "x": 2395,
+          "y": 838
         },
         "pkg-17-award-celebration-1_asset_image_mrbqoiso_14.png": {
           "height": 50,
@@ -2501,8 +2537,8 @@
           "sourceHeight": 50,
           "sourceWidth": 50,
           "width": 50,
-          "x": 2376,
-          "y": 845
+          "x": 2332,
+          "y": 1812
         },
         "pkg-17-award-celebration-1_asset_image_mrbtzde9_26.png": {
           "height": 62,
@@ -2511,25 +2547,25 @@
           "sourceWidth": 62,
           "width": 61,
           "x": 1131,
-          "y": 186
+          "y": 188
         },
         "pkg-17-award-celebration-1_asset_image_mroedq99_k.png": {
-          "height": 121,
-          "rotated": false,
+          "height": 143,
+          "rotated": true,
           "sourceHeight": 121,
           "sourceWidth": 143,
-          "width": 143,
-          "x": 671,
-          "y": 72
+          "width": 121,
+          "x": 2014,
+          "y": 1425
         },
         "pkg-17-award-celebration-1_asset_image_mrswriz7_15.png": {
-          "height": 121,
-          "rotated": false,
+          "height": 143,
+          "rotated": true,
           "sourceHeight": 121,
           "sourceWidth": 143,
-          "width": 143,
-          "x": 1995,
-          "y": 2391
+          "width": 121,
+          "x": 2014,
+          "y": 1576
         },
         "pkg-17-award-celebration-1.png": {
           "height": 43,
@@ -2537,8 +2573,8 @@
           "sourceHeight": 43,
           "sourceWidth": 31,
           "width": 31,
-          "x": 941,
-          "y": 210
+          "x": 2395,
+          "y": 874
         },
         "pkg-17-award-celebration-2_asset_image_mra2b5fo_v.png": {
           "height": 217,
@@ -2546,8 +2582,8 @@
           "sourceHeight": 217,
           "sourceWidth": 217,
           "width": 217,
-          "x": 1783,
-          "y": 6
+          "x": 2014,
+          "y": 2740
         },
         "pkg-17-award-celebration-2_asset_image_mrafbzli_4s.png": {
           "height": 217,
@@ -2555,8 +2591,8 @@
           "sourceHeight": 217,
           "sourceWidth": 217,
           "width": 217,
-          "x": 2144,
-          "y": 787
+          "x": 2014,
+          "y": 2965
         },
         "pkg-17-award-celebration-2_asset_image_mrnag3e6_y.png": {
           "height": 217,
@@ -2564,8 +2600,8 @@
           "sourceHeight": 217,
           "sourceWidth": 217,
           "width": 217,
-          "x": 1071,
-          "y": 2520
+          "x": 2014,
+          "y": 3190
         },
         "pkg-17-award-celebration-2_asset_image_mruhasg6_6y.png": {
           "height": 50,
@@ -2573,17 +2609,17 @@
           "sourceHeight": 50,
           "sourceWidth": 50,
           "width": 50,
-          "x": 2376,
-          "y": 903
+          "x": 622,
+          "y": 146
         },
         "pkg-17-award-celebration-2_asset_image_mrvjlrl5_1c.png": {
-          "height": 143,
-          "rotated": true,
+          "height": 121,
+          "rotated": false,
           "sourceHeight": 121,
           "sourceWidth": 143,
-          "width": 121,
-          "x": 2144,
-          "y": 1012
+          "width": 143,
+          "x": 2239,
+          "y": 2740
         },
         "pkg-17-award-celebration-2-2.png": {
           "height": 43,
@@ -2591,8 +2627,8 @@
           "sourceHeight": 43,
           "sourceWidth": 31,
           "width": 31,
-          "x": 2146,
-          "y": 2391
+          "x": 2395,
+          "y": 925
         },
         "pkg-17-award-celebration-2.png": {
           "height": 43,
@@ -2609,8 +2645,8 @@
           "sourceHeight": 200,
           "sourceWidth": 200,
           "width": 200,
-          "x": 2330,
-          "y": 2014
+          "x": 2014,
+          "y": 3415
         },
         "pkg-17-award-celebration-3_asset_image_mra4066k_2t.png": {
           "height": 200,
@@ -2618,8 +2654,8 @@
           "sourceHeight": 200,
           "sourceWidth": 200,
           "width": 200,
-          "x": 1071,
-          "y": 2745
+          "x": 2222,
+          "y": 3415
         },
         "pkg-17-award-celebration-3_asset_image_mraepcja_4a.png": {
           "height": 200,
@@ -2627,8 +2663,8 @@
           "sourceHeight": 200,
           "sourceWidth": 200,
           "width": 200,
-          "x": 1071,
-          "y": 2953
+          "x": 2239,
+          "y": 3079
         },
         "pkg-17-award-celebration-3_asset_image_mrsvyeba_t.png": {
           "height": 217,
@@ -2636,8 +2672,8 @@
           "sourceHeight": 217,
           "sourceWidth": 217,
           "width": 217,
-          "x": 1279,
-          "y": 2745
+          "x": 2430,
+          "y": 3287
         },
         "pkg-17-award-celebration-3_asset_image_mrvifkgo_10.png": {
           "height": 200,
@@ -2645,8 +2681,8 @@
           "sourceHeight": 200,
           "sourceWidth": 200,
           "width": 200,
-          "x": 1296,
-          "y": 2520
+          "x": 2447,
+          "y": 3079
         },
         "pkg-17-award-celebration-3_asset_image_mrvii5u7_11.png": {
           "height": 200,
@@ -2654,8 +2690,8 @@
           "sourceHeight": 200,
           "sourceWidth": 200,
           "width": 200,
-          "x": 1279,
-          "y": 2970
+          "x": 2430,
+          "y": 3512
         },
         "pkg-17-award-celebration-3_asset_image_mrvkgm8n_1p.png": {
           "height": 121,
@@ -2663,8 +2699,8 @@
           "sourceHeight": 121,
           "sourceWidth": 143,
           "width": 143,
-          "x": 2273,
-          "y": 1012
+          "x": 2239,
+          "y": 2869
         },
         "pkg-17-award-celebration-3-2.png": {
           "height": 43,
@@ -2672,541 +2708,10 @@
           "sourceHeight": 43,
           "sourceWidth": 31,
           "width": 31,
-          "x": 2369,
-          "y": 961
+          "x": 2395,
+          "y": 976
         },
         "pkg-17-award-celebration-3.png": {
-          "height": 43,
-          "rotated": false,
-          "sourceHeight": 43,
-          "sourceWidth": 13,
-          "width": 13,
-          "x": 2408,
-          "y": 961
-        },
-        "pkg-17-award-celebration-4_asset_image_mra40b5o_2u.png": {
-          "height": 200,
-          "rotated": false,
-          "sourceHeight": 200,
-          "sourceWidth": 200,
-          "width": 200,
-          "x": 1487,
-          "y": 2970
-        },
-        "pkg-17-award-celebration-4-2.png": {
-          "height": 31,
-          "rotated": true,
-          "sourceHeight": 43,
-          "sourceWidth": 31,
-          "width": 43,
-          "x": 1071,
-          "y": 3161
-        },
-        "pkg-17-award-celebration-4.png": {
-          "height": 31,
-          "rotated": true,
-          "sourceHeight": 43,
-          "sourceWidth": 31,
-          "width": 43,
-          "x": 1122,
-          "y": 3161
-        },
-        "pkg-17-award-celebration-5_asset_image_mra5cnug_3j.png": {
-          "height": 217,
-          "rotated": false,
-          "sourceHeight": 217,
-          "sourceWidth": 217,
-          "width": 217,
-          "x": 1695,
-          "y": 2407
-        },
-        "pkg-17-award-celebration-5.png": {
-          "height": 31,
-          "rotated": true,
-          "sourceHeight": 43,
-          "sourceWidth": 31,
-          "width": 43,
-          "x": 1173,
-          "y": 3161
-        },
-        "pkg-17-award-celebration-6_asset_image_mruguywn_6c.png": {
-          "height": 232,
-          "rotated": false,
-          "sourceHeight": 232,
-          "sourceWidth": 232,
-          "width": 232,
-          "x": 1504,
-          "y": 2632
-        },
-        "pkg-17-award-celebration-6.png": {
-          "height": 31,
-          "rotated": true,
-          "sourceHeight": 43,
-          "sourceWidth": 31,
-          "width": 43,
-          "x": 1224,
-          "y": 3161
-        },
-        "pkg-17-award-celebration-7_asset_image_mradoe0d_2d.png": {
-          "height": 250,
-          "rotated": false,
-          "sourceHeight": 250,
-          "sourceWidth": 250,
-          "width": 250,
-          "x": 1695,
-          "y": 2872
-        },
-        "pkg-17-award-celebration-7.png": {
-          "height": 43,
-          "rotated": false,
-          "sourceHeight": 43,
-          "sourceWidth": 31,
-          "width": 31,
-          "x": 1953,
-          "y": 2407
-        },
-        "pkg-17-award-celebration-8_asset_image_mrsovy46_8.png": {
-          "height": 250,
-          "rotated": false,
-          "sourceHeight": 250,
-          "sourceWidth": 250,
-          "width": 250,
-          "x": 1920,
-          "y": 2520
-        },
-        "pkg-17-award-celebration-8.png": {
-          "height": 31,
-          "rotated": true,
-          "sourceHeight": 43,
-          "sourceWidth": 31,
-          "width": 43,
-          "x": 2144,
-          "y": 1163
-        },
-        "pkg-17-award-celebration-9.png": {
-          "height": 31,
-          "rotated": true,
-          "sourceHeight": 43,
-          "sourceWidth": 31,
-          "width": 43,
-          "x": 2195,
-          "y": 1163
-        },
-        "pkg-17-award-celebration-a1_asset_image_mrbtoj8d_24.png": {
-          "height": 200,
-          "rotated": false,
-          "sourceHeight": 200,
-          "sourceWidth": 200,
-          "width": 200,
-          "x": 1953,
-          "y": 2778
-        },
-        "pkg-17-award-celebration-a1_asset_image_mrbv0c6j_3i.png": {
-          "height": 200,
-          "rotated": false,
-          "sourceHeight": 200,
-          "sourceWidth": 200,
-          "width": 200,
-          "x": 1953,
-          "y": 2986
-        },
-        "pkg-17-award-celebration-a5_asset_image_mrmzli4d_l.png": {
-          "height": 200,
-          "rotated": false,
-          "sourceHeight": 200,
-          "sourceWidth": 200,
-          "width": 200,
-          "x": 2161,
-          "y": 2778
-        },
-        "pkg-17-award-celebration-mw_stone4_asset_image_mrvj5wui_12.png": {
-          "height": 88,
-          "rotated": false,
-          "sourceHeight": 88,
-          "sourceWidth": 106,
-          "width": 106,
-          "x": 1504,
-          "y": 2872
-        },
-        "pkg-17-award-celebration-mw_stone6_asset_image_mrae841s_3r.png": {
-          "height": 86,
-          "rotated": true,
-          "sourceHeight": 80,
-          "sourceWidth": 86,
-          "width": 80,
-          "x": 1744,
-          "y": 2778
-        },
-        "pkg-17-award-celebration-qq_20260708150336_asset_image_mruhr4v9_70.png": {
-          "height": 231,
-          "rotated": false,
-          "sourceHeight": 231,
-          "sourceWidth": 457,
-          "width": 457,
-          "x": 2178,
-          "y": 2442
-        },
-        "pkg-17-award-celebration-qq_20260708150407_asset_image_mrn9w17x_u.png": {
-          "height": 203,
-          "rotated": false,
-          "sourceHeight": 203,
-          "sourceWidth": 456,
-          "width": 456,
-          "x": 2376,
-          "y": 2222
-        },
-        "pkg-17-award-celebration-qq_20260708150411_asset_image_mrn9wwcn_w.png": {
-          "height": 689,
-          "rotated": true,
-          "sourceHeight": 257,
-          "sourceWidth": 689,
-          "width": 257,
-          "x": 2643,
-          "y": 2433
-        },
-        "pkg-17-award-celebration-qq_20260708150413_asset_image_mrn9wskj_v.png": {
-          "height": 502,
-          "rotated": true,
-          "sourceHeight": 213,
-          "sourceWidth": 502,
-          "width": 213,
-          "x": 2369,
-          "y": 2681
-        },
-        "pkg-17-award-celebration-qq_20260708150417_asset_image_mrug3f9y_1j.png": {
-          "height": 713,
-          "rotated": true,
-          "sourceHeight": 251,
-          "sourceWidth": 713,
-          "width": 251,
-          "x": 2908,
-          "y": 2014
-        },
-        "pkg-17-award-celebration-qq_20260708150419_asset_image_mrug3kr9_1k.png": {
-          "height": 453,
-          "rotated": true,
-          "sourceHeight": 208,
-          "sourceWidth": 453,
-          "width": 208,
-          "x": 2908,
-          "y": 2735
-        },
-        "pkg-17-award-celebration-shine_asset_image_mrbrfpft_1m.png": {
-          "height": 62,
-          "rotated": true,
-          "sourceHeight": 61,
-          "sourceWidth": 62,
-          "width": 61,
-          "x": 2273,
-          "y": 1141
-        },
-        "pkg-17-award-celebration-sw_stone1_asset_image_mrebxd3p_a.png": {
-          "height": 54,
-          "rotated": false,
-          "sourceHeight": 54,
-          "sourceWidth": 57,
-          "width": 57,
-          "x": 2014,
-          "y": 1425
-        },
-        "pkg-17-award-celebration-sw_stone1_asset_image_mrug1gve_1h.png": {
-          "height": 54,
-          "rotated": false,
-          "sourceHeight": 54,
-          "sourceWidth": 57,
-          "width": 57,
-          "x": 1920,
-          "y": 2458
-        },
-        "pkg-17-award-celebration-sw_stone7_asset_image_mrvkal6r_1i.png": {
-          "height": 74,
-          "rotated": true,
-          "sourceHeight": 69,
-          "sourceWidth": 74,
-          "width": 69,
-          "x": 1618,
-          "y": 2872
-        },
-        "pkg-17-award-celebration-sw_stone9_asset_image_mrvkkyjs_1v.png": {
-          "height": 90,
-          "rotated": true,
-          "sourceHeight": 76,
-          "sourceWidth": 90,
-          "width": 76,
-          "x": 1832,
-          "y": 2632
-        },
-        "pkg-17-award-celebration-x.png": {
-          "height": 31,
-          "rotated": true,
-          "sourceHeight": 43,
-          "sourceWidth": 31,
-          "width": 43,
-          "x": 2590,
-          "y": 2681
-        },
-        "pkg-17-award-celebration.png": {
-          "height": 31,
-          "rotated": true,
-          "sourceHeight": 43,
-          "sourceWidth": 31,
-          "width": 43,
-          "x": 2590,
-          "y": 2720
-        },
-        "pkg-9-minecart2-10_1_asset_image_ms7b3znr_i.disabled.png": {
-          "height": 130,
-          "rotated": false,
-          "sourceHeight": 130,
-          "sourceWidth": 172,
-          "width": 172,
-          "x": 1504,
-          "y": 2407
-        },
-        "pkg-9-minecart2-10_1_asset_image_ms7b3znr_i.png": {
-          "height": 130,
-          "rotated": false,
-          "sourceHeight": 130,
-          "sourceWidth": 172,
-          "width": 172,
-          "x": 2161,
-          "y": 2986
-        },
-        "pkg-9-minecart2-10_1_asset_image_ms7b3znr_i.spinBlur.png": {
-          "height": 172,
-          "rotated": true,
-          "sourceHeight": 130,
-          "sourceWidth": 172,
-          "width": 130,
-          "x": 2538,
-          "y": 2014
-        },
-        "pkg-9-minecart2-a_1_asset_image_ms7afho8_3.disabled.png": {
-          "height": 172,
-          "rotated": true,
-          "sourceHeight": 130,
-          "sourceWidth": 172,
-          "width": 130,
-          "x": 2676,
-          "y": 2014
-        },
-        "pkg-9-minecart2-a_1_asset_image_ms7afho8_3.png": {
-          "height": 130,
-          "rotated": false,
-          "sourceHeight": 130,
-          "sourceWidth": 172,
-          "width": 172,
-          "x": 6,
-          "y": 3208
-        },
-        "pkg-9-minecart2-a_1_asset_image_ms7afho8_3.spinBlur.png": {
-          "height": 130,
-          "rotated": false,
-          "sourceHeight": 130,
-          "sourceWidth": 172,
-          "width": 172,
-          "x": 186,
-          "y": 3208
-        },
-        "pkg-9-minecart2-BO.disabled.png": {
-          "height": 160,
-          "rotated": false,
-          "sourceHeight": 160,
-          "sourceWidth": 180,
-          "width": 180,
-          "x": 1275,
-          "y": 3178
-        },
-        "pkg-9-minecart2-BO.png": {
-          "height": 160,
-          "rotated": false,
-          "sourceHeight": 160,
-          "sourceWidth": 180,
-          "width": 180,
-          "x": 1463,
-          "y": 3178
-        },
-        "pkg-9-minecart2-BO.spinBlur.png": {
-          "height": 160,
-          "rotated": false,
-          "sourceHeight": 160,
-          "sourceWidth": 180,
-          "width": 180,
-          "x": 1651,
-          "y": 3178
-        },
-        "pkg-9-minecart2-CL.disabled.png": {
-          "height": 160,
-          "rotated": false,
-          "sourceHeight": 160,
-          "sourceWidth": 174,
-          "width": 174,
-          "x": 2161,
-          "y": 3124
-        },
-        "pkg-9-minecart2-CL.png": {
-          "height": 174,
-          "rotated": true,
-          "sourceHeight": 160,
-          "sourceWidth": 174,
-          "width": 160,
-          "x": 2590,
-          "y": 3130
-        },
-        "pkg-9-minecart2-CL.spinBlur.png": {
-          "height": 174,
-          "rotated": true,
-          "sourceHeight": 160,
-          "sourceWidth": 174,
-          "width": 160,
-          "x": 3215,
-          "y": 6
-        },
-        "pkg-9-minecart2-CO.disabled.png": {
-          "height": 130,
-          "rotated": false,
-          "sourceHeight": 130,
-          "sourceWidth": 172,
-          "width": 172,
-          "x": 366,
-          "y": 3208
-        },
-        "pkg-9-minecart2-CO.spinBlur.png": {
-          "height": 130,
-          "rotated": false,
-          "sourceHeight": 130,
-          "sourceWidth": 172,
-          "width": 172,
-          "x": 546,
-          "y": 3208
-        },
-        "pkg-9-minecart2-coin_0000_0.png": {
-          "height": 31,
-          "rotated": true,
-          "sourceHeight": 43,
-          "sourceWidth": 31,
-          "width": 43,
-          "x": 2590,
-          "y": 2759
-        },
-        "pkg-9-minecart2-coin_0001_1.png": {
-          "height": 31,
-          "rotated": true,
-          "sourceHeight": 43,
-          "sourceWidth": 31,
-          "width": 43,
-          "x": 2590,
-          "y": 2798
-        },
-        "pkg-9-minecart2-coin_0002_2.png": {
-          "height": 31,
-          "rotated": true,
-          "sourceHeight": 43,
-          "sourceWidth": 31,
-          "width": 43,
-          "x": 2590,
-          "y": 2837
-        },
-        "pkg-9-minecart2-coin_0003_3.png": {
-          "height": 31,
-          "rotated": true,
-          "sourceHeight": 43,
-          "sourceWidth": 31,
-          "width": 43,
-          "x": 2590,
-          "y": 2876
-        },
-        "pkg-9-minecart2-coin_0004_4.png": {
-          "height": 31,
-          "rotated": true,
-          "sourceHeight": 43,
-          "sourceWidth": 31,
-          "width": 43,
-          "x": 2590,
-          "y": 2915
-        },
-        "pkg-9-minecart2-coin_0005_5.png": {
-          "height": 31,
-          "rotated": true,
-          "sourceHeight": 43,
-          "sourceWidth": 31,
-          "width": 43,
-          "x": 2590,
-          "y": 2954
-        },
-        "pkg-9-minecart2-coin_0006_6.png": {
-          "height": 31,
-          "rotated": true,
-          "sourceHeight": 43,
-          "sourceWidth": 31,
-          "width": 43,
-          "x": 2590,
-          "y": 2993
-        },
-        "pkg-9-minecart2-coin_0007_7.png": {
-          "height": 31,
-          "rotated": true,
-          "sourceHeight": 43,
-          "sourceWidth": 31,
-          "width": 43,
-          "x": 2590,
-          "y": 3032
-        },
-        "pkg-9-minecart2-coin_0008_8.png": {
-          "height": 31,
-          "rotated": true,
-          "sourceHeight": 43,
-          "sourceWidth": 31,
-          "width": 43,
-          "x": 2590,
-          "y": 3071
-        },
-        "pkg-9-minecart2-coin_0009_9.png": {
-          "height": 43,
-          "rotated": false,
-          "sourceHeight": 43,
-          "sourceWidth": 31,
-          "width": 31,
-          "x": 1839,
-          "y": 3292
-        },
-        "pkg-9-minecart2-coin_0010_x.png": {
-          "height": 43,
-          "rotated": false,
-          "sourceHeight": 43,
-          "sourceWidth": 31,
-          "width": 31,
-          "x": 1878,
-          "y": 3292
-        },
-        "pkg-9-minecart2-coin_0011_-.png": {
-          "height": 43,
-          "rotated": false,
-          "sourceHeight": 43,
-          "sourceWidth": 31,
-          "width": 31,
-          "x": 1917,
-          "y": 3292
-        },
-        "pkg-9-minecart2-coin_0012_+.png": {
-          "height": 43,
-          "rotated": false,
-          "sourceHeight": 43,
-          "sourceWidth": 31,
-          "width": 31,
-          "x": 1956,
-          "y": 3292
-        },
-        "pkg-9-minecart2-coin_0013_,.png": {
-          "height": 43,
-          "rotated": false,
-          "sourceHeight": 43,
-          "sourceWidth": 13,
-          "width": 13,
-          "x": 1920,
-          "y": 2407
-        },
-        "pkg-9-minecart2-coin_0014_..png": {
           "height": 13,
           "rotated": true,
           "sourceHeight": 43,
@@ -3215,533 +2720,275 @@
           "x": 889,
           "y": 233
         },
-        "pkg-9-minecart2-H1.disabled.png": {
-          "height": 130,
+        "pkg-17-award-celebration-4_asset_image_mra40b5o_2u.png": {
+          "height": 200,
           "rotated": false,
-          "sourceHeight": 130,
-          "sourceWidth": 174,
-          "width": 174,
-          "x": 726,
-          "y": 3208
+          "sourceHeight": 200,
+          "sourceWidth": 200,
+          "width": 200,
+          "x": 2638,
+          "y": 3512
         },
-        "pkg-9-minecart2-H1.png": {
-          "height": 130,
+        "pkg-17-award-celebration-4-2.png": {
+          "height": 43,
           "rotated": false,
-          "sourceHeight": 130,
-          "sourceWidth": 174,
-          "width": 174,
-          "x": 908,
-          "y": 3208
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 941,
+          "y": 123
         },
-        "pkg-9-minecart2-H1.spinBlur.png": {
-          "height": 130,
+        "pkg-17-award-celebration-4.png": {
+          "height": 43,
           "rotated": false,
-          "sourceHeight": 130,
-          "sourceWidth": 174,
-          "width": 174,
-          "x": 1090,
-          "y": 3200
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 941,
+          "y": 174
         },
-        "pkg-9-minecart2-H2.disabled.png": {
-          "height": 174,
+        "pkg-17-award-celebration-5_asset_image_mra5cnug_3j.png": {
+          "height": 217,
+          "rotated": false,
+          "sourceHeight": 217,
+          "sourceWidth": 217,
+          "width": 217,
+          "x": 2655,
+          "y": 3079
+        },
+        "pkg-17-award-celebration-5.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 3188,
+          "y": 1071
+        },
+        "pkg-17-award-celebration-6_asset_image_mruguywn_6c.png": {
+          "height": 232,
+          "rotated": false,
+          "sourceHeight": 232,
+          "sourceWidth": 232,
+          "width": 232,
+          "x": 2880,
+          "y": 3079
+        },
+        "pkg-17-award-celebration-6.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 3188,
+          "y": 1122
+        },
+        "pkg-17-award-celebration-7_asset_image_mradoe0d_2d.png": {
+          "height": 250,
+          "rotated": false,
+          "sourceHeight": 250,
+          "sourceWidth": 250,
+          "width": 250,
+          "x": 3120,
+          "y": 3079
+        },
+        "pkg-17-award-celebration-7.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 3188,
+          "y": 1173
+        },
+        "pkg-17-award-celebration-8_asset_image_mrsovy46_8.png": {
+          "height": 250,
+          "rotated": false,
+          "sourceHeight": 250,
+          "sourceWidth": 250,
+          "width": 250,
+          "x": 2846,
+          "y": 3319
+        },
+        "pkg-17-award-celebration-8.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 3188,
+          "y": 1224
+        },
+        "pkg-17-award-celebration-9.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 3188,
+          "y": 1275
+        },
+        "pkg-17-award-celebration-a1_asset_image_mrbtoj8d_24.png": {
+          "height": 200,
+          "rotated": false,
+          "sourceHeight": 200,
+          "sourceWidth": 200,
+          "width": 200,
+          "x": 2846,
+          "y": 3577
+        },
+        "pkg-17-award-celebration-a1_asset_image_mrbv0c6j_3i.png": {
+          "height": 200,
+          "rotated": false,
+          "sourceHeight": 200,
+          "sourceWidth": 200,
+          "width": 200,
+          "x": 3054,
+          "y": 3577
+        },
+        "pkg-17-award-celebration-a5_asset_image_mrmzli4d_l.png": {
+          "height": 200,
+          "rotated": false,
+          "sourceHeight": 200,
+          "sourceWidth": 200,
+          "width": 200,
+          "x": 3104,
+          "y": 3337
+        },
+        "pkg-17-award-celebration-mw_stone4_asset_image_mrvj5wui_12.png": {
+          "height": 88,
+          "rotated": false,
+          "sourceHeight": 88,
+          "sourceWidth": 106,
+          "width": 106,
+          "x": 3262,
+          "y": 3545
+        },
+        "pkg-17-award-celebration-mw_stone6_asset_image_mrae841s_3r.png": {
+          "height": 86,
           "rotated": true,
-          "sourceHeight": 130,
-          "sourceWidth": 174,
-          "width": 130,
-          "x": 2758,
-          "y": 3130
+          "sourceHeight": 80,
+          "sourceWidth": 86,
+          "width": 80,
+          "x": 2014,
+          "y": 3720
         },
-        "pkg-9-minecart2-H2.png": {
-          "height": 130,
-          "rotated": false,
-          "sourceHeight": 130,
-          "sourceWidth": 174,
-          "width": 174,
-          "x": 2896,
-          "y": 3196
-        },
-        "pkg-9-minecart2-H2.spinBlur.png": {
-          "height": 130,
-          "rotated": false,
-          "sourceHeight": 130,
-          "sourceWidth": 174,
-          "width": 174,
-          "x": 3078,
-          "y": 3196
-        },
-        "pkg-9-minecart2-H3.disabled.png": {
-          "height": 130,
-          "rotated": false,
-          "sourceHeight": 130,
-          "sourceWidth": 174,
-          "width": 174,
-          "x": 2343,
-          "y": 3191
-        },
-        "pkg-9-minecart2-H3.png": {
-          "height": 174,
+        "pkg-17-award-celebration-qq_20260708150336_asset_image_mruhr4v9_70.png": {
+          "height": 457,
           "rotated": true,
-          "sourceHeight": 130,
-          "sourceWidth": 174,
-          "width": 130,
-          "x": 3215,
-          "y": 188
-        },
-        "pkg-9-minecart2-H3.spinBlur.png": {
-          "height": 174,
-          "rotated": true,
-          "sourceHeight": 130,
-          "sourceWidth": 174,
-          "width": 130,
-          "x": 3215,
-          "y": 370
-        },
-        "pkg-9-minecart2-H4.disabled.png": {
-          "height": 174,
-          "rotated": true,
-          "sourceHeight": 130,
-          "sourceWidth": 174,
-          "width": 130,
-          "x": 3215,
-          "y": 552
-        },
-        "pkg-9-minecart2-H4.png": {
-          "height": 174,
-          "rotated": true,
-          "sourceHeight": 130,
-          "sourceWidth": 174,
-          "width": 130,
-          "x": 3215,
-          "y": 734
-        },
-        "pkg-9-minecart2-H4.spinBlur.png": {
-          "height": 174,
-          "rotated": true,
-          "sourceHeight": 130,
-          "sourceWidth": 174,
-          "width": 130,
-          "x": 3215,
-          "y": 916
-        },
-        "pkg-9-minecart2-H5.disabled.png": {
-          "height": 174,
-          "rotated": true,
-          "sourceHeight": 130,
-          "sourceWidth": 174,
-          "width": 130,
-          "x": 3215,
-          "y": 1098
-        },
-        "pkg-9-minecart2-H5.png": {
-          "height": 174,
-          "rotated": true,
-          "sourceHeight": 130,
-          "sourceWidth": 174,
-          "width": 130,
-          "x": 3215,
-          "y": 1280
-        },
-        "pkg-9-minecart2-H5.spinBlur.png": {
-          "height": 174,
-          "rotated": true,
-          "sourceHeight": 130,
-          "sourceWidth": 174,
-          "width": 130,
-          "x": 3215,
-          "y": 1462
-        },
-        "pkg-9-minecart2-j_1_asset_image_ms7b5jc0_s.disabled.png": {
-          "height": 172,
-          "rotated": true,
-          "sourceHeight": 130,
-          "sourceWidth": 172,
-          "width": 130,
-          "x": 3215,
-          "y": 1644
-        },
-        "pkg-9-minecart2-j_1_asset_image_ms7b5jc0_s.png": {
-          "height": 172,
-          "rotated": true,
-          "sourceHeight": 130,
-          "sourceWidth": 172,
-          "width": 130,
-          "x": 3215,
-          "y": 1824
-        },
-        "pkg-9-minecart2-j_1_asset_image_ms7b5jc0_s.spinBlur.png": {
-          "height": 172,
-          "rotated": true,
-          "sourceHeight": 130,
-          "sourceWidth": 172,
-          "width": 130,
-          "x": 3215,
-          "y": 2004
-        },
-        "pkg-9-minecart2-k_1_asset_image_ms7b77jg_12.disabled.png": {
-          "height": 130,
-          "rotated": false,
-          "sourceHeight": 130,
-          "sourceWidth": 172,
-          "width": 172,
-          "x": 3167,
-          "y": 2184
-        },
-        "pkg-9-minecart2-k_1_asset_image_ms7b77jg_12.png": {
-          "height": 130,
-          "rotated": false,
-          "sourceHeight": 130,
-          "sourceWidth": 172,
-          "width": 172,
-          "x": 3167,
-          "y": 2322
-        },
-        "pkg-9-minecart2-k_1_asset_image_ms7b77jg_12.spinBlur.png": {
-          "height": 130,
-          "rotated": false,
-          "sourceHeight": 130,
-          "sourceWidth": 172,
-          "width": 172,
-          "x": 3167,
-          "y": 2460
-        },
-        "pkg-9-minecart2-q_1_asset_image_ms7b9y2n_1c.disabled.png": {
-          "height": 130,
-          "rotated": false,
-          "sourceHeight": 130,
-          "sourceWidth": 172,
-          "width": 172,
-          "x": 3167,
-          "y": 2598
-        },
-        "pkg-9-minecart2-q_1_asset_image_ms7b9y2n_1c.png": {
-          "height": 130,
-          "rotated": false,
-          "sourceHeight": 130,
-          "sourceWidth": 172,
-          "width": 172,
-          "x": 3124,
-          "y": 2736
-        },
-        "pkg-9-minecart2-q_1_asset_image_ms7b9y2n_1c.spinBlur.png": {
-          "height": 130,
-          "rotated": false,
-          "sourceHeight": 130,
-          "sourceWidth": 172,
-          "width": 172,
-          "x": 3124,
-          "y": 2874
-        },
-        "pkg-9-minecart2-SC.disabled.png": {
-          "height": 150,
-          "rotated": false,
-          "sourceHeight": 150,
-          "sourceWidth": 180,
-          "width": 180,
-          "x": 3124,
-          "y": 3012
-        },
-        "pkg-9-minecart2-SC.png": {
-          "height": 150,
-          "rotated": false,
-          "sourceHeight": 150,
-          "sourceWidth": 180,
-          "width": 180,
-          "x": 6,
-          "y": 3346
-        },
-        "pkg-9-minecart2-SC.spinBlur.png": {
-          "height": 150,
-          "rotated": false,
-          "sourceHeight": 150,
-          "sourceWidth": 180,
-          "width": 180,
-          "x": 194,
-          "y": 3346
-        },
-        "pkg-9-minecart2-WL.disabled.png": {
-          "height": 180,
-          "rotated": false,
-          "sourceHeight": 180,
-          "sourceWidth": 174,
-          "width": 174,
-          "x": 2525,
-          "y": 3312
-        },
-        "pkg-9-minecart2-WL.png": {
-          "height": 174,
-          "rotated": true,
-          "sourceHeight": 180,
-          "sourceWidth": 174,
-          "width": 180,
-          "x": 2707,
-          "y": 3312
-        },
-        "pkg-9-minecart2-WL.spinBlur.png": {
-          "height": 180,
-          "rotated": false,
-          "sourceHeight": 180,
-          "sourceWidth": 174,
-          "width": 174,
-          "x": 1995,
-          "y": 3292
-        },
-        "sd1.png": {
-          "height": 2000,
-          "rotated": true,
-          "sourceHeight": 167,
-          "sourceWidth": 2000,
-          "width": 167,
-          "x": 3383,
+          "sourceHeight": 231,
+          "sourceWidth": 457,
+          "width": 231,
+          "x": 3380,
           "y": 6
         },
-        "x.png": {
+        "pkg-17-award-celebration-qq_20260708150407_asset_image_mrn9w17x_u.png": {
+          "height": 456,
+          "rotated": true,
+          "sourceHeight": 203,
+          "sourceWidth": 456,
+          "width": 203,
+          "x": 3376,
+          "y": 3337
+        },
+        "pkg-17-award-celebration-qq_20260708150411_asset_image_mrn9wwcn_w.png": {
+          "height": 689,
+          "rotated": true,
+          "sourceHeight": 257,
+          "sourceWidth": 689,
+          "width": 257,
+          "x": 3188,
+          "y": 2014
+        },
+        "pkg-17-award-celebration-qq_20260708150413_asset_image_mrn9wskj_v.png": {
+          "height": 502,
+          "rotated": true,
+          "sourceHeight": 213,
+          "sourceWidth": 502,
+          "width": 213,
+          "x": 3380,
+          "y": 471
+        },
+        "pkg-17-award-celebration-qq_20260708150417_asset_image_mrug3f9y_1j.png": {
+          "height": 713,
+          "rotated": true,
+          "sourceHeight": 251,
+          "sourceWidth": 713,
+          "width": 251,
+          "x": 3619,
+          "y": 6
+        },
+        "pkg-17-award-celebration-qq_20260708150419_asset_image_mrug3kr9_1k.png": {
+          "height": 208,
+          "rotated": false,
+          "sourceHeight": 208,
+          "sourceWidth": 453,
+          "width": 453,
+          "x": 3380,
+          "y": 981
+        },
+        "pkg-17-award-celebration-shine_asset_image_mrbrfpft_1m.png": {
+          "height": 62,
+          "rotated": true,
+          "sourceHeight": 61,
+          "sourceWidth": 62,
+          "width": 61,
+          "x": 1200,
+          "y": 188
+        },
+        "pkg-17-award-celebration-sw_stone1_asset_image_mrebxd3p_a.png": {
+          "height": 54,
+          "rotated": false,
+          "sourceHeight": 54,
+          "sourceWidth": 57,
+          "width": 57,
+          "x": 2079,
+          "y": 1212
+        },
+        "pkg-17-award-celebration-sw_stone1_asset_image_mrug1gve_1h.png": {
+          "height": 54,
+          "rotated": false,
+          "sourceHeight": 54,
+          "sourceWidth": 57,
+          "width": 57,
+          "x": 2079,
+          "y": 1274
+        },
+        "pkg-17-award-celebration-sw_stone7_asset_image_mrvkal6r_1i.png": {
+          "height": 74,
+          "rotated": true,
+          "sourceHeight": 69,
+          "sourceWidth": 74,
+          "width": 69,
+          "x": 2014,
+          "y": 1727
+        },
+        "pkg-17-award-celebration-sw_stone9_asset_image_mrvkkyjs_1v.png": {
+          "height": 90,
+          "rotated": true,
+          "sourceHeight": 76,
+          "sourceWidth": 90,
+          "width": 76,
+          "x": 2102,
+          "y": 3720
+        },
+        "pkg-17-award-celebration-x.png": {
           "height": 31,
           "rotated": true,
           "sourceHeight": 43,
           "sourceWidth": 31,
           "width": 43,
-          "x": 1744,
-          "y": 2730
-        }
-      },
-      "id": "atlas-initial-ac1b5c09-0",
-      "image": {
-        "byteLength": 1386858,
-        "height": 3502,
-        "mediaType": "image/webp",
-        "path": "assets/9bb6b8dcc4c486e4612bb1b2f58ad84b834af578de560b74c24a57294ff38cce.webp",
-        "sha256": "9bb6b8dcc4c486e4612bb1b2f58ad84b834af578de560b74c24a57294ff38cce",
-        "width": 3556
-      },
-      "owner": "initial"
-    },
-    {
-      "frames": {
-        "free13.jpg": {
-          "height": 2000,
-          "rotated": false,
-          "sourceHeight": 2000,
-          "sourceWidth": 2000,
-          "width": 2000,
-          "x": 6,
-          "y": 6
-        }
-      },
-      "id": "atlas-initial-ac1b5c09-1",
-      "image": {
-        "byteLength": 419370,
-        "height": 2012,
-        "mediaType": "image/webp",
-        "path": "assets/567fda91e41916ac56846f258961ca3a4df062b6309f92016b68225d6f290394.webp",
-        "sha256": "567fda91e41916ac56846f258961ca3a4df062b6309f92016b68225d6f290394",
-        "width": 2012
-      },
-      "owner": "initial"
-    },
-    {
-      "frames": {
-        "bonusgame1.png": {
-          "height": 149,
-          "rotated": false,
-          "sourceHeight": 149,
-          "sourceWidth": 2000,
-          "width": 2000,
-          "x": 6,
-          "y": 6
+          "x": 2091,
+          "y": 1727
         },
-        "bonusgame2.png": {
-          "height": 728,
-          "rotated": false,
-          "sourceHeight": 728,
-          "sourceWidth": 2000,
-          "width": 2000,
-          "x": 6,
-          "y": 163
-        },
-        "free10.jpg": {
-          "height": 2000,
-          "rotated": false,
-          "sourceHeight": 2000,
-          "sourceWidth": 2000,
-          "width": 2000,
-          "x": 6,
-          "y": 899
-        },
-        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-0.png": {
-          "height": 141,
-          "rotated": false,
-          "sourceHeight": 141,
-          "sourceWidth": 109,
-          "width": 109,
-          "x": 2014,
-          "y": 6
-        },
-        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-1.png": {
-          "height": 141,
-          "rotated": false,
-          "sourceHeight": 141,
-          "sourceWidth": 109,
-          "width": 109,
-          "x": 2014,
-          "y": 155
-        },
-        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-2-2.png": {
-          "height": 141,
-          "rotated": false,
-          "sourceHeight": 141,
-          "sourceWidth": 109,
-          "width": 109,
-          "x": 2014,
-          "y": 304
-        },
-        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-2.png": {
-          "height": 44,
-          "rotated": false,
-          "sourceHeight": 44,
-          "sourceWidth": 109,
-          "width": 109,
-          "x": 2014,
-          "y": 453
-        },
-        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-3-2.png": {
-          "height": 141,
-          "rotated": false,
-          "sourceHeight": 141,
-          "sourceWidth": 109,
-          "width": 109,
-          "x": 2014,
-          "y": 505
-        },
-        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-3.png": {
-          "height": 159,
-          "rotated": false,
-          "sourceHeight": 159,
-          "sourceWidth": 45,
-          "width": 45,
-          "x": 2014,
-          "y": 654
-        },
-        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-4-2.png": {
-          "height": 141,
-          "rotated": false,
-          "sourceHeight": 141,
-          "sourceWidth": 109,
-          "width": 109,
-          "x": 2014,
-          "y": 821
-        },
-        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-4.png": {
-          "height": 109,
-          "rotated": false,
-          "sourceHeight": 109,
-          "sourceWidth": 109,
-          "width": 109,
-          "x": 2014,
-          "y": 970
-        },
-        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-5.png": {
-          "height": 141,
-          "rotated": false,
-          "sourceHeight": 141,
-          "sourceWidth": 109,
-          "width": 109,
-          "x": 2014,
-          "y": 1087
-        },
-        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-6.png": {
-          "height": 141,
-          "rotated": false,
-          "sourceHeight": 141,
-          "sourceWidth": 109,
-          "width": 109,
-          "x": 2014,
-          "y": 1236
-        },
-        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-7.png": {
-          "height": 141,
-          "rotated": false,
-          "sourceHeight": 141,
-          "sourceWidth": 109,
-          "width": 109,
-          "x": 2014,
-          "y": 1385
-        },
-        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-8.png": {
-          "height": 141,
-          "rotated": false,
-          "sourceHeight": 141,
-          "sourceWidth": 109,
-          "width": 109,
-          "x": 2014,
-          "y": 1534
-        },
-        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-9.png": {
-          "height": 141,
-          "rotated": false,
-          "sourceHeight": 141,
-          "sourceWidth": 109,
-          "width": 109,
-          "x": 2014,
-          "y": 1683
-        },
-        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-x.png": {
-          "height": 100,
+        "pkg-17-award-celebration.png": {
+          "height": 31,
           "rotated": true,
-          "sourceHeight": 104,
-          "sourceWidth": 100,
-          "width": 104,
-          "x": 2014,
-          "y": 1832
-        },
-        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60.png": {
-          "height": 141,
-          "rotated": false,
-          "sourceHeight": 141,
-          "sourceWidth": 45,
-          "width": 45,
-          "x": 2067,
-          "y": 654
-        }
-      },
-      "id": "atlas-mode-bonusgame-67d8bd77-0",
-      "image": {
-        "byteLength": 441990,
-        "height": 2905,
-        "mediaType": "image/webp",
-        "path": "assets/b3d7b02c252de27a7fcbe4502bf3b0f3f3a0947414a2295f5f93711967ab08ef.webp",
-        "sha256": "b3d7b02c252de27a7fcbe4502bf3b0f3f3a0947414a2295f5f93711967ab08ef",
-        "width": 2129
-      },
-      "owner": "mode:BonusGame"
-    },
-    {
-      "frames": {
-        "free11.jpg": {
-          "height": 2000,
-          "rotated": false,
-          "sourceHeight": 2000,
-          "sourceWidth": 2000,
-          "width": 2000,
-          "x": 6,
-          "y": 6
-        },
-        "freegame1.png": {
-          "height": 2000,
-          "rotated": true,
-          "sourceHeight": 149,
-          "sourceWidth": 2000,
-          "width": 149,
-          "x": 2014,
-          "y": 6
-        },
-        "freegame2.png": {
-          "height": 657,
-          "rotated": false,
-          "sourceHeight": 657,
-          "sourceWidth": 2000,
-          "width": 2000,
-          "x": 6,
-          "y": 2014
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 2091,
+          "y": 1766
         },
         "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-0.png": {
           "height": 109,
@@ -3749,8 +2996,8 @@
           "sourceHeight": 141,
           "sourceWidth": 109,
           "width": 141,
-          "x": 2014,
-          "y": 2014
+          "x": 2239,
+          "y": 3287
         },
         "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-1.png": {
           "height": 109,
@@ -3758,8 +3005,8 @@
           "sourceHeight": 141,
           "sourceWidth": 109,
           "width": 141,
-          "x": 2014,
-          "y": 2131
+          "x": 680,
+          "y": 72
         },
         "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-2-2.png": {
           "height": 109,
@@ -3767,44 +3014,44 @@
           "sourceHeight": 141,
           "sourceWidth": 109,
           "width": 141,
-          "x": 2014,
-          "y": 2248
+          "x": 2655,
+          "y": 3304
         },
         "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-2.png": {
-          "height": 44,
-          "rotated": false,
+          "height": 109,
+          "rotated": true,
           "sourceHeight": 44,
           "sourceWidth": 109,
-          "width": 109,
-          "x": 2014,
-          "y": 2365
+          "width": 44,
+          "x": 829,
+          "y": 72
         },
         "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-3-2.png": {
-          "height": 109,
-          "rotated": true,
+          "height": 141,
+          "rotated": false,
           "sourceHeight": 141,
           "sourceWidth": 109,
-          "width": 141,
-          "x": 2014,
-          "y": 2417
+          "width": 109,
+          "x": 2186,
+          "y": 3623
         },
         "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-3.png": {
-          "height": 159,
-          "rotated": false,
+          "height": 45,
+          "rotated": true,
           "sourceHeight": 159,
           "sourceWidth": 45,
-          "width": 45,
-          "x": 2171,
-          "y": 6
+          "width": 159,
+          "x": 2186,
+          "y": 3772
         },
         "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-4-2.png": {
-          "height": 109,
-          "rotated": true,
+          "height": 141,
+          "rotated": false,
           "sourceHeight": 141,
           "sourceWidth": 109,
-          "width": 141,
-          "x": 2014,
-          "y": 2534
+          "width": 109,
+          "x": 2303,
+          "y": 3623
         },
         "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-4.png": {
           "height": 109,
@@ -3812,17 +3059,17 @@
           "sourceHeight": 109,
           "sourceWidth": 109,
           "width": 109,
-          "x": 2224,
-          "y": 6
+          "x": 3601,
+          "y": 727
         },
         "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-5.png": {
-          "height": 141,
-          "rotated": false,
+          "height": 109,
+          "rotated": true,
           "sourceHeight": 141,
           "sourceWidth": 109,
-          "width": 109,
-          "x": 2224,
-          "y": 123
+          "width": 141,
+          "x": 3718,
+          "y": 727
         },
         "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-6.png": {
           "height": 109,
@@ -3830,8 +3077,8 @@
           "sourceHeight": 141,
           "sourceWidth": 109,
           "width": 141,
-          "x": 2171,
-          "y": 272
+          "x": 3601,
+          "y": 844
         },
         "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-7.png": {
           "height": 109,
@@ -3839,26 +3086,26 @@
           "sourceHeight": 141,
           "sourceWidth": 109,
           "width": 141,
-          "x": 2171,
-          "y": 389
+          "x": 3587,
+          "y": 1197
         },
         "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-8.png": {
-          "height": 109,
-          "rotated": true,
+          "height": 141,
+          "rotated": false,
           "sourceHeight": 141,
           "sourceWidth": 109,
-          "width": 141,
-          "x": 2171,
-          "y": 506
+          "width": 109,
+          "x": 3453,
+          "y": 1197
         },
         "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-9.png": {
-          "height": 109,
-          "rotated": true,
+          "height": 141,
+          "rotated": false,
           "sourceHeight": 141,
           "sourceWidth": 109,
-          "width": 141,
-          "x": 2171,
-          "y": 623
+          "width": 109,
+          "x": 3736,
+          "y": 1197
         },
         "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-x.png": {
           "height": 100,
@@ -3866,29 +3113,754 @@
           "sourceHeight": 104,
           "sourceWidth": 100,
           "width": 104,
-          "x": 2171,
-          "y": 740
+          "x": 3262,
+          "y": 3641
         },
         "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60.png": {
+          "height": 45,
+          "rotated": true,
+          "sourceHeight": 141,
+          "sourceWidth": 45,
+          "width": 141,
+          "x": 3587,
+          "y": 1314
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-0.png": {
           "height": 141,
           "rotated": false,
           "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 109,
+          "x": 3453,
+          "y": 1346
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-1.png": {
+          "height": 141,
+          "rotated": false,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 109,
+          "x": 3736,
+          "y": 1346
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-2-2.png": {
+          "height": 109,
+          "rotated": true,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 141,
+          "x": 3587,
+          "y": 1367
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-2.png": {
+          "height": 44,
+          "rotated": false,
+          "sourceHeight": 44,
+          "sourceWidth": 109,
+          "width": 109,
+          "x": 2353,
+          "y": 3772
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-3-2.png": {
+          "height": 109,
+          "rotated": true,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 141,
+          "x": 3587,
+          "y": 1484
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-3.png": {
+          "height": 45,
+          "rotated": true,
+          "sourceHeight": 159,
           "sourceWidth": 45,
-          "width": 45,
-          "x": 2283,
-          "y": 740
+          "width": 159,
+          "x": 2014,
+          "y": 3623
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-4-2.png": {
+          "height": 141,
+          "rotated": false,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 109,
+          "x": 3453,
+          "y": 1495
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-4.png": {
+          "height": 109,
+          "rotated": false,
+          "sourceHeight": 109,
+          "sourceWidth": 109,
+          "width": 109,
+          "x": 3750,
+          "y": 844
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-5.png": {
+          "height": 141,
+          "rotated": false,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 109,
+          "x": 3736,
+          "y": 1495
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-6.png": {
+          "height": 109,
+          "rotated": true,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 141,
+          "x": 3587,
+          "y": 1601
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-7.png": {
+          "height": 141,
+          "rotated": false,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 109,
+          "x": 3453,
+          "y": 1644
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-8.png": {
+          "height": 141,
+          "rotated": false,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 109,
+          "x": 3736,
+          "y": 1644
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-9.png": {
+          "height": 109,
+          "rotated": true,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 141,
+          "x": 3587,
+          "y": 1718
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-x.png": {
+          "height": 100,
+          "rotated": true,
+          "sourceHeight": 104,
+          "sourceWidth": 100,
+          "width": 104,
+          "x": 3453,
+          "y": 1793
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60.png": {
+          "height": 45,
+          "rotated": true,
+          "sourceHeight": 141,
+          "sourceWidth": 45,
+          "width": 141,
+          "x": 1269,
+          "y": 186
+        },
+        "pkg-9-minecart2-10_1_asset_image_ms7b3znr_i.disabled.png": {
+          "height": 172,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 130,
+          "x": 3736,
+          "y": 1793
+        },
+        "pkg-9-minecart2-10_1_asset_image_ms7b3znr_i.png": {
+          "height": 172,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 130,
+          "x": 3587,
+          "y": 1835
+        },
+        "pkg-9-minecart2-10_1_asset_image_ms7b3znr_i.spinBlur.png": {
+          "height": 172,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 130,
+          "x": 3725,
+          "y": 1973
+        },
+        "pkg-9-minecart2-a_1_asset_image_ms7afho8_3.disabled.png": {
+          "height": 172,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 130,
+          "x": 3587,
+          "y": 2015
+        },
+        "pkg-9-minecart2-a_1_asset_image_ms7afho8_3.png": {
+          "height": 172,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 130,
+          "x": 3725,
+          "y": 2153
+        },
+        "pkg-9-minecart2-a_1_asset_image_ms7afho8_3.spinBlur.png": {
+          "height": 172,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 130,
+          "x": 3587,
+          "y": 2195
+        },
+        "pkg-9-minecart2-BO.disabled.png": {
+          "height": 160,
+          "rotated": false,
+          "sourceHeight": 160,
+          "sourceWidth": 180,
+          "width": 180,
+          "x": 3587,
+          "y": 2375
+        },
+        "pkg-9-minecart2-BO.png": {
+          "height": 160,
+          "rotated": false,
+          "sourceHeight": 160,
+          "sourceWidth": 180,
+          "width": 180,
+          "x": 3587,
+          "y": 2543
+        },
+        "pkg-9-minecart2-BO.spinBlur.png": {
+          "height": 160,
+          "rotated": false,
+          "sourceHeight": 160,
+          "sourceWidth": 180,
+          "width": 180,
+          "x": 3587,
+          "y": 2711
+        },
+        "pkg-9-minecart2-CL.disabled.png": {
+          "height": 174,
+          "rotated": true,
+          "sourceHeight": 160,
+          "sourceWidth": 174,
+          "width": 160,
+          "x": 3188,
+          "y": 2879
+        },
+        "pkg-9-minecart2-CL.png": {
+          "height": 160,
+          "rotated": false,
+          "sourceHeight": 160,
+          "sourceWidth": 174,
+          "width": 174,
+          "x": 3188,
+          "y": 2711
+        },
+        "pkg-9-minecart2-CL.spinBlur.png": {
+          "height": 174,
+          "rotated": true,
+          "sourceHeight": 160,
+          "sourceWidth": 174,
+          "width": 160,
+          "x": 3356,
+          "y": 2879
+        },
+        "pkg-9-minecart2-CO.disabled.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 172,
+          "x": 3370,
+          "y": 2711
+        },
+        "pkg-9-minecart2-CO.spinBlur.png": {
+          "height": 172,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 130,
+          "x": 3378,
+          "y": 3061
+        },
+        "pkg-9-minecart2-coin_0000_0.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 2420,
+          "y": 3720
+        },
+        "pkg-9-minecart2-coin_0001_1.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 2459,
+          "y": 3720
+        },
+        "pkg-9-minecart2-coin_0002_2.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 2388,
+          "y": 3287
+        },
+        "pkg-9-minecart2-coin_0003_3.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 2804,
+          "y": 3304
+        },
+        "pkg-9-minecart2-coin_0004_4.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 2470,
+          "y": 3785
+        },
+        "pkg-9-minecart2-coin_0005_5.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 3725,
+          "y": 2333
+        },
+        "pkg-9-minecart2-coin_0006_6.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 2388,
+          "y": 3338
+        },
+        "pkg-9-minecart2-coin_0007_7.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 2804,
+          "y": 3355
+        },
+        "pkg-9-minecart2-coin_0008_8.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 2521,
+          "y": 3785
+        },
+        "pkg-9-minecart2-coin_0009_9.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 2804,
+          "y": 3406
+        },
+        "pkg-9-minecart2-coin_0010_x.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 2572,
+          "y": 3785
+        },
+        "pkg-9-minecart2-coin_0011_-.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 2623,
+          "y": 3785
+        },
+        "pkg-9-minecart2-coin_0012_+.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 2674,
+          "y": 3785
+        },
+        "pkg-9-minecart2-coin_0013_,.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 13,
+          "width": 13,
+          "x": 3565,
+          "y": 1793
+        },
+        "pkg-9-minecart2-coin_0014_..png": {
+          "height": 13,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 13,
+          "width": 43,
+          "x": 1269,
+          "y": 239
+        },
+        "pkg-9-minecart2-H1.disabled.png": {
+          "height": 174,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 130,
+          "x": 3516,
+          "y": 3061
+        },
+        "pkg-9-minecart2-H1.png": {
+          "height": 174,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 130,
+          "x": 3524,
+          "y": 2879
+        },
+        "pkg-9-minecart2-H1.spinBlur.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 174,
+          "x": 3662,
+          "y": 2879
+        },
+        "pkg-9-minecart2-H2.disabled.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 174,
+          "x": 3662,
+          "y": 3017
+        },
+        "pkg-9-minecart2-H2.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 174,
+          "x": 3654,
+          "y": 3155
+        },
+        "pkg-9-minecart2-H2.spinBlur.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 174,
+          "x": 3587,
+          "y": 3293
+        },
+        "pkg-9-minecart2-H3.disabled.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 174,
+          "x": 3587,
+          "y": 3431
+        },
+        "pkg-9-minecart2-H3.png": {
+          "height": 174,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 130,
+          "x": 3587,
+          "y": 3569
+        },
+        "pkg-9-minecart2-H3.spinBlur.png": {
+          "height": 174,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 130,
+          "x": 3725,
+          "y": 3569
+        },
+        "pkg-9-minecart2-H4.disabled.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 174,
+          "x": 6,
+          "y": 3827
+        },
+        "pkg-9-minecart2-H4.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 174,
+          "x": 188,
+          "y": 3827
+        },
+        "pkg-9-minecart2-H4.spinBlur.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 174,
+          "x": 370,
+          "y": 3827
+        },
+        "pkg-9-minecart2-H5.disabled.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 174,
+          "x": 552,
+          "y": 3827
+        },
+        "pkg-9-minecart2-H5.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 174,
+          "x": 734,
+          "y": 3827
+        },
+        "pkg-9-minecart2-H5.spinBlur.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 174,
+          "x": 916,
+          "y": 3827
+        },
+        "pkg-9-minecart2-j_1_asset_image_ms7b5jc0_s.disabled.png": {
+          "height": 172,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 130,
+          "x": 2725,
+          "y": 3785
+        },
+        "pkg-9-minecart2-j_1_asset_image_ms7b5jc0_s.png": {
+          "height": 172,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 130,
+          "x": 2863,
+          "y": 3785
+        },
+        "pkg-9-minecart2-j_1_asset_image_ms7b5jc0_s.spinBlur.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 172,
+          "x": 1098,
+          "y": 3827
+        },
+        "pkg-9-minecart2-k_1_asset_image_ms7b77jg_12.disabled.png": {
+          "height": 172,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 130,
+          "x": 3001,
+          "y": 3785
+        },
+        "pkg-9-minecart2-k_1_asset_image_ms7b77jg_12.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 172,
+          "x": 1278,
+          "y": 3827
+        },
+        "pkg-9-minecart2-k_1_asset_image_ms7b77jg_12.spinBlur.png": {
+          "height": 172,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 130,
+          "x": 3139,
+          "y": 3785
+        },
+        "pkg-9-minecart2-q_1_asset_image_ms7b9y2n_1c.disabled.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 172,
+          "x": 1458,
+          "y": 3827
+        },
+        "pkg-9-minecart2-q_1_asset_image_ms7b9y2n_1c.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 172,
+          "x": 1638,
+          "y": 3827
+        },
+        "pkg-9-minecart2-q_1_asset_image_ms7b9y2n_1c.spinBlur.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 172,
+          "x": 1818,
+          "y": 3827
+        },
+        "pkg-9-minecart2-SC.disabled.png": {
+          "height": 150,
+          "rotated": false,
+          "sourceHeight": 150,
+          "sourceWidth": 180,
+          "width": 180,
+          "x": 3277,
+          "y": 3801
+        },
+        "pkg-9-minecart2-SC.png": {
+          "height": 150,
+          "rotated": false,
+          "sourceHeight": 150,
+          "sourceWidth": 180,
+          "width": 180,
+          "x": 3465,
+          "y": 3801
+        },
+        "pkg-9-minecart2-SC.spinBlur.png": {
+          "height": 180,
+          "rotated": true,
+          "sourceHeight": 150,
+          "sourceWidth": 180,
+          "width": 150,
+          "x": 3653,
+          "y": 3751
+        },
+        "pkg-9-minecart2-WL.disabled.png": {
+          "height": 180,
+          "rotated": false,
+          "sourceHeight": 180,
+          "sourceWidth": 174,
+          "width": 174,
+          "x": 3878,
+          "y": 6
+        },
+        "pkg-9-minecart2-WL.png": {
+          "height": 180,
+          "rotated": false,
+          "sourceHeight": 180,
+          "sourceWidth": 174,
+          "width": 174,
+          "x": 3878,
+          "y": 194
+        },
+        "pkg-9-minecart2-WL.spinBlur.png": {
+          "height": 180,
+          "rotated": false,
+          "sourceHeight": 180,
+          "sourceWidth": 174,
+          "width": 174,
+          "x": 3878,
+          "y": 382
+        },
+        "sd1.png": {
+          "height": 2000,
+          "rotated": true,
+          "sourceHeight": 167,
+          "sourceWidth": 2000,
+          "width": 167,
+          "x": 3878,
+          "y": 570
+        },
+        "x.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 3277,
+          "y": 3749
         }
       },
-      "id": "atlas-mode-freegame-325c3c43-0",
+      "id": "atlas-initial-ac1b5c09-0",
       "image": {
-        "byteLength": 542456,
-        "height": 2677,
+        "byteLength": 1743740,
+        "height": 3963,
         "mediaType": "image/webp",
-        "path": "assets/71fcee679d1de4f8a3ad621e3bb58c0250672922a83a0acba6b0e33c268b0e4d.webp",
-        "sha256": "71fcee679d1de4f8a3ad621e3bb58c0250672922a83a0acba6b0e33c268b0e4d",
-        "width": 2339
+        "path": "assets/4945810e8443cfc9e8c6da97da14631b11941808aefc9757ff8c3ded479c7865.webp",
+        "sha256": "4945810e8443cfc9e8c6da97da14631b11941808aefc9757ff8c3ded479c7865",
+        "width": 4058
       },
-      "owner": "mode:FreeGame"
+      "owner": "initial"
+    },
+    {
+      "frames": {
+        "free10.jpg": {
+          "height": 2000,
+          "rotated": false,
+          "sourceHeight": 2000,
+          "sourceWidth": 2000,
+          "width": 2000,
+          "x": 6,
+          "y": 6
+        },
+        "free11.jpg": {
+          "height": 2000,
+          "rotated": false,
+          "sourceHeight": 2000,
+          "sourceWidth": 2000,
+          "width": 2000,
+          "x": 2014,
+          "y": 6
+        },
+        "free13.jpg": {
+          "height": 2000,
+          "rotated": false,
+          "sourceHeight": 2000,
+          "sourceWidth": 2000,
+          "width": 2000,
+          "x": 6,
+          "y": 2014
+        }
+      },
+      "id": "atlas-initial-ac1b5c09-1",
+      "image": {
+        "byteLength": 1050644,
+        "height": 4020,
+        "mediaType": "image/webp",
+        "path": "assets/5a2e58fd1eef1d0366e47710eb40ecd673147883302fab0f3eb7edb72ebe8f49.webp",
+        "sha256": "5a2e58fd1eef1d0366e47710eb40ecd673147883302fab0f3eb7edb72ebe8f49",
+        "width": 4020
+      },
+      "owner": "initial"
     }
   ],
   "chunks": [
@@ -3901,8 +3873,11 @@
       "externalAssets": [
         "bg.png",
         "car.png",
+        "fg.png",
         "pkg-38-popup-115ec31d7fdc4a0bbcfe823240183f60-pop_ups.png",
         "pkg-38-popup-125ec31d7fdc4a0bbcfe823240183f60-pop_ups.png",
+        "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-pop_ups.png",
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-pop_ups.png",
         "pkg-9-minecart2-Symbol.png",
         "reel_collect.png",
         "reel_conveyor.png",
@@ -3910,50 +3885,31 @@
       ],
       "id": "initial",
       "metadata": {
-        "byteLength": 255309,
+        "byteLength": 291683,
         "mediaType": "application/zip",
-        "path": "chunks/initial-ac1b5c09.ddb461e9f0eeca69c80c79afbbdb765fc5e7b5ff72a50e88554c4d105715eaf2.zip",
-        "sha256": "ddb461e9f0eeca69c80c79afbbdb765fc5e7b5ff72a50e88554c4d105715eaf2"
+        "path": "chunks/initial-ac1b5c09.833896188ccd35cfc445a993928759310f14a91855df69b282739127b5cba36e.zip",
+        "sha256": "833896188ccd35cfc445a993928759310f14a91855df69b282739127b5cba36e"
       },
       "owner": "initial"
     },
     {
-      "atlases": [
-        "atlas-mode-freegame-325c3c43-0"
-      ],
+      "atlases": [],
       "dependencies": [
         "initial"
       ],
-      "externalAssets": [
-        "fg.png",
-        "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-pop_ups.png"
-      ],
+      "externalAssets": [],
       "id": "mode:FreeGame",
-      "metadata": {
-        "byteLength": 24713,
-        "mediaType": "application/zip",
-        "path": "chunks/mode-freegame-325c3c43.686c13d1bbac93c9116e0ac8b0aa988dd004ac52b23f045c91f6a63475c3ff43.zip",
-        "sha256": "686c13d1bbac93c9116e0ac8b0aa988dd004ac52b23f045c91f6a63475c3ff43"
-      },
+      "metadata": null,
       "owner": "mode:FreeGame"
     },
     {
-      "atlases": [
-        "atlas-mode-bonusgame-67d8bd77-0"
-      ],
+      "atlases": [],
       "dependencies": [
         "initial"
       ],
-      "externalAssets": [
-        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-pop_ups.png"
-      ],
+      "externalAssets": [],
       "id": "mode:BonusGame",
-      "metadata": {
-        "byteLength": 11853,
-        "mediaType": "application/zip",
-        "path": "chunks/mode-bonusgame-67d8bd77.000c9f4d6d2357f07022701e2345108e0adb4e6574fe8514796f6fa61199ded7.zip",
-        "sha256": "000c9f4d6d2357f07022701e2345108e0adb4e6574fe8514796f6fa61199ded7"
-      },
+      "metadata": null,
       "owner": "mode:BonusGame"
     },
     {
