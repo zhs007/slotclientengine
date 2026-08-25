@@ -1408,8 +1408,10 @@ function resolveRuntimeMappedSceneLayoutPackageFiles(options: {
     if (bytes) virtual.set(key, bytes.slice());
   }
   const effectiveManifest = options.allowMissingRuntimeResources
-    ? parseSceneLayoutManifestDocument({
-        ...options.manifest,
+    ? parseSceneLayoutManifest({
+        ...(options.manifest.version === 1
+          ? options.manifest
+          : materializeInitialSceneLayoutManifest(options.manifest)),
         runtimeResources: undefined,
       })
     : options.manifest;

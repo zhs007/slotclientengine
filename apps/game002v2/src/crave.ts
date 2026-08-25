@@ -25,8 +25,8 @@ export function createCraveLoadingResources(): readonly GameLoadingResource[] {
         });
         return Object.freeze({ kind: "crave-delivery", resource });
       },
-      async dispose(value: LoadedCraveDelivery) {
-        await value.resource.destroy();
+      async dispose(value: unknown) {
+        if (isLoadedCraveDelivery(value)) await value.resource.destroy();
       },
     }),
   ]);

@@ -3,6 +3,8 @@ import {
   createSceneLayoutPackageResourceFromResolvedFiles,
   upgradeSceneLayoutManifestToLatest,
 } from "../../src/scene-layout/index.js";
+import { resolveSceneLayoutPackageFiles } from "../../src/scene-layout/package-resource.js";
+import { createMappedPackageFiles } from "../editor-assets-map-fixture.js";
 import { game002LayoutFixture } from "./fixtures.js";
 
 const encode = (value: unknown) =>
@@ -29,6 +31,41 @@ function jsonManifest() {
 }
 
 describe("scene layout package JSON data", () => {
+  it("resolves a mapped v5 initial closure without parsing deferred allocation as empty", async () => {
+    const source = jsonManifest();
+    const manifest = {
+      ...source,
+      nodes: source.nodes.map((node) => ({
+        ...node,
+        resource:
+          node.resource.kind === "image"
+            ? { ...node.resource, path: "bg.png" }
+            : node.resource,
+      })),
+      runtimeResources: {
+        "spin-config": { kind: "json" as const, path: "spin-config.json" },
+      },
+    };
+    const mapped = await createMappedPackageFiles({
+      controls: new Map([["layout.manifest.json", encode(manifest)]]),
+      assets: new Map([
+        ["bg.png", new Uint8Array([1])],
+        ["spin-config.json", encode({ reels: [] })],
+      ]),
+    });
+    const partial = new Map(mapped.files);
+    partial.delete(mapped.map.files["spin-config.json"]!.path);
+
+    const resolved = await resolveSceneLayoutPackageFiles({
+      manifest,
+      files: partial,
+      allowMissingRuntimeResources: true,
+    });
+
+    expect(resolved.has("bg.png")).toBe(true);
+    expect(resolved.has("spin-config.json")).toBe(false);
+  });
+
   it("shares one lazy load and exposes the same frozen value through both APIs", async () => {
     const bytes = encode({
       localReels: [["A", "B"]],

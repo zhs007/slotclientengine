@@ -26,8 +26,9 @@ export function createGame003v2LoadingResources(
         );
         return Object.freeze({ kind: "minecart2-delivery", resource });
       },
-      async dispose(value: LoadedMinecart2Delivery) {
-        await value.resource.package.destroy();
+      async dispose(value: unknown) {
+        if (isLoadedMinecart2Delivery(value))
+          await value.resource.package.destroy();
       },
     }),
   ]);
