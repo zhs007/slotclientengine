@@ -518,7 +518,7 @@ function chooseAssetOwners(
   const modeOrder = source.manifest.gameModes!.modes.map((mode) => mode.id);
   const owners = new Map<string, string>();
   for (const key of source.sourceEntries.keys()) {
-    if (initial.has(key) || isPackageLifetimeAsset(key, groups)) {
+    if (initial.has(key)) {
       owners.set(key, "initial");
       continue;
     }
@@ -547,18 +547,6 @@ function chooseAssetOwners(
     owners.set(key, "initial");
   }
   return owners;
-}
-
-function isPackageLifetimeAsset(
-  key: string,
-  groups: ReturnType<typeof createIdentityAssetGroups>["groups"],
-): boolean {
-  return groups.some(
-    (group) =>
-      group.kind !== "audio" &&
-      group.kind !== "runtime-resource" &&
-      group.requiredAssets.includes(key),
-  );
 }
 
 function ownerDependencies(

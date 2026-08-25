@@ -167,9 +167,7 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
 
   applyViewport(viewportSize: RenderViewportSize): SceneLayoutSnapshot {
     this.assertReady();
-    const snapshot = this.#runtime.applyViewport(viewportSize);
-    this.applyPopupPlacements(snapshot.variantId, viewportSize);
-    return snapshot;
+    return this.#runtime.applyViewport(viewportSize);
   }
 
   applyArtSpace(): void {
@@ -180,39 +178,8 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
         "Scene layout art-space presentation requires maximized-focus adaptation.",
       );
     }
-    const snapshot = this.#runtime.applyArtSpace();
-    const artSize = snapshot.artSize;
+    this.#runtime.applyArtSpace();
     this.#backgroundContainer.position.set(0, 0);
-    this.applyPopupPlacements(snapshot.variantId, artSize);
-  }
-
-  private applyPopupPlacements(
-    variantId: SceneLayoutSnapshot["variantId"],
-    viewportSize: RenderViewportSize,
-  ): void {
-    for (const id of Object.keys(this.#resource.popupPackages)) {
-      const binding = this.#resource.manifest.popups?.[id];
-      const popup =
-        binding?.type === "spine"
-          ? this.#runtime.getSpinePopup(id)
-          : binding?.type === "single-state"
-            ? this.#runtime.getSingleStatePopup(id)
-            : this.#runtime.getAwardCelebrationPopup(id);
-      const placement = binding?.placements[variantId];
-      if (!binding || !placement) {
-        throw new SceneLayoutError(
-          `Scene layout popup "${id}" has no ${variantId} placement.`,
-        );
-      }
-      if (popup.applyViewport) popup.applyViewport(viewportSize, placement);
-      else {
-        popup.container.position.set(
-          viewportSize.width / 2 + placement.x,
-          viewportSize.height / 2 + placement.y,
-        );
-        popup.container.scale.set(placement.scale);
-      }
-    }
   }
 
   update(deltaSeconds: number): void {

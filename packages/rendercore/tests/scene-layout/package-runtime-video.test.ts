@@ -172,6 +172,7 @@ describe("scene layout package video-blackout transition", () => {
     state.runtime = {
       container,
       init: vi.fn(async () => undefined),
+      prepareNodes: vi.fn(async () => undefined),
       applyViewport: vi.fn(() => snapshot()),
       commitPreparedGeometryManifest: vi.fn(() => null),
       update: vi.fn(),
@@ -302,8 +303,10 @@ describe("scene layout package video-blackout transition", () => {
 
     resolveAssets();
     await assets;
-    await Promise.resolve();
-    runtime.update(0);
+    await vi.waitFor(() => {
+      runtime.update(0);
+      expect(player.playCalls).toBe(1);
+    });
     expect(player.playCalls).toBe(1);
     expect(player.unlockCalls).toBe(1);
     expect(errors).toEqual([]);

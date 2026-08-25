@@ -1220,101 +1220,101 @@
       "sourceByteLength": 28662
     },
     "pkg-15-congratulations-0.png": {
-      "atlas": "atlas-initial-ac1b5c09-0",
+      "atlas": "atlas-mode-freegame-325c3c43-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "sourceByteLength": 26523
     },
     "pkg-15-congratulations-1.png": {
-      "atlas": "atlas-initial-ac1b5c09-0",
+      "atlas": "atlas-mode-freegame-325c3c43-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "sourceByteLength": 17442
     },
     "pkg-15-congratulations-2-2.png": {
-      "atlas": "atlas-initial-ac1b5c09-0",
+      "atlas": "atlas-mode-freegame-325c3c43-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "sourceByteLength": 26147
     },
     "pkg-15-congratulations-2.png": {
-      "atlas": "atlas-initial-ac1b5c09-0",
+      "atlas": "atlas-mode-freegame-325c3c43-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "sourceByteLength": 7562
     },
     "pkg-15-congratulations-3-2.png": {
-      "atlas": "atlas-initial-ac1b5c09-0",
+      "atlas": "atlas-mode-freegame-325c3c43-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "sourceByteLength": 25805
     },
     "pkg-15-congratulations-3.png": {
-      "atlas": "atlas-initial-ac1b5c09-0",
+      "atlas": "atlas-mode-freegame-325c3c43-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "sourceByteLength": 6600
     },
     "pkg-15-congratulations-4-2.png": {
-      "atlas": "atlas-initial-ac1b5c09-0",
+      "atlas": "atlas-mode-freegame-325c3c43-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "sourceByteLength": 24677
     },
     "pkg-15-congratulations-4.png": {
-      "atlas": "atlas-initial-ac1b5c09-0",
+      "atlas": "atlas-mode-freegame-325c3c43-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "sourceByteLength": 16350
     },
     "pkg-15-congratulations-5.png": {
-      "atlas": "atlas-initial-ac1b5c09-0",
+      "atlas": "atlas-mode-freegame-325c3c43-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "sourceByteLength": 26097
     },
     "pkg-15-congratulations-6.png": {
-      "atlas": "atlas-initial-ac1b5c09-0",
+      "atlas": "atlas-mode-freegame-325c3c43-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "sourceByteLength": 27988
     },
     "pkg-15-congratulations-7.png": {
-      "atlas": "atlas-initial-ac1b5c09-0",
+      "atlas": "atlas-mode-freegame-325c3c43-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "sourceByteLength": 23680
     },
     "pkg-15-congratulations-8.png": {
-      "atlas": "atlas-initial-ac1b5c09-0",
+      "atlas": "atlas-mode-freegame-325c3c43-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "sourceByteLength": 28601
     },
     "pkg-15-congratulations-9.png": {
-      "atlas": "atlas-initial-ac1b5c09-0",
+      "atlas": "atlas-mode-freegame-325c3c43-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "sourceByteLength": 28259
     },
     "pkg-15-congratulations-bg_2.png": {
       "byteLength": 214952,
       "kind": "external",
       "mediaType": "image/webp",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "path": "assets/c2002cfdd8b71b25980ab8e05825df24895572093826ca2cb37b93accfc4a54d.webp",
       "sha256": "c2002cfdd8b71b25980ab8e05825df24895572093826ca2cb37b93accfc4a54d",
       "sourceByteLength": 8809957
@@ -1323,7 +1323,7 @@
       "byteLength": 168608,
       "kind": "external",
       "mediaType": "image/webp",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "path": "assets/a15460ec8b2c2f339ee98925cea932a1b3e976461b8086d0983ba021d4970c1f.webp",
       "sha256": "a15460ec8b2c2f339ee98925cea932a1b3e976461b8086d0983ba021d4970c1f",
       "sourceByteLength": 2927978
@@ -1332,7 +1332,7 @@
       "byteLength": 141340,
       "kind": "external",
       "mediaType": "image/webp",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "path": "assets/6def80561701a6d1797cdab099b8413a8310ed4f5ab91a4d7972596f16657e06.webp",
       "sha256": "6def80561701a6d1797cdab099b8413a8310ed4f5ab91a4d7972596f16657e06",
       "sourceByteLength": 2640496
@@ -1341,7 +1341,7 @@
       "byteLength": 500874,
       "kind": "external",
       "mediaType": "image/webp",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "path": "assets/e629bf373c90ad9529803491b85c57cb4f9af2c34aaf757d4306277c19469c3e.webp",
       "sha256": "e629bf373c90ad9529803491b85c57cb4f9af2c34aaf757d4306277c19469c3e",
       "sourceByteLength": 2289858
@@ -1350,7 +1350,7 @@
       "byteLength": 397268,
       "kind": "external",
       "mediaType": "image/webp",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "path": "assets/4cc24a9ac1404c5601d3c7ef19abdbc7cbb6ca34a9668f5b1e52bb8f438b2e66.webp",
       "sha256": "4cc24a9ac1404c5601d3c7ef19abdbc7cbb6ca34a9668f5b1e52bb8f438b2e66",
       "sourceByteLength": 1609003
@@ -1359,7 +1359,7 @@
       "byteLength": 425376,
       "kind": "external",
       "mediaType": "image/webp",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "path": "assets/ed90412ba74d8916de7e125e2bf53f7cbd15e4ed15c0acbc557e226a9f23f5a4.webp",
       "sha256": "ed90412ba74d8916de7e125e2bf53f7cbd15e4ed15c0acbc557e226a9f23f5a4",
       "sourceByteLength": 3350465
@@ -1368,7 +1368,7 @@
       "byteLength": 157182,
       "kind": "external",
       "mediaType": "image/webp",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "path": "assets/f6d4c736264ff50882ef93b30d7f55a6630ac6bafa9f9cc2805fecc3f8e6b453.webp",
       "sha256": "f6d4c736264ff50882ef93b30d7f55a6630ac6bafa9f9cc2805fecc3f8e6b453",
       "sourceByteLength": 1333900
@@ -1386,59 +1386,59 @@
       "byteLength": 298070,
       "kind": "external",
       "mediaType": "image/webp",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "path": "assets/65446afeb3c8e2e4cf43d85cd3f1111ab2c104b757b853ef4876840e06841fc7.webp",
       "sha256": "65446afeb3c8e2e4cf43d85cd3f1111ab2c104b757b853ef4876840e06841fc7",
       "sourceByteLength": 8910623
     },
     "pkg-15-congratulations-congratulations.json": {
       "byteLength": 81552,
-      "chunk": "initial",
+      "chunk": "mode:FreeGame",
       "entry": "assets/96139af8cb646186d5dc238148e11b9317e0f7d520cd82d704311f31b66ed481.json",
       "kind": "metadata",
       "mediaType": "application/json",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "sha256": "96139af8cb646186d5dc238148e11b9317e0f7d520cd82d704311f31b66ed481"
     },
     "pkg-15-congratulations-fredoka-bold.ttf": {
       "byteLength": 49748,
-      "chunk": "initial",
+      "chunk": "mode:FreeGame",
       "entry": "assets/d5b9534228a0359dad311598dd57e3d14111ce44aee9d8aac6aeca349bcbffea.ttf",
       "kind": "metadata",
       "mediaType": "font/ttf",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "sha256": "d5b9534228a0359dad311598dd57e3d14111ce44aee9d8aac6aeca349bcbffea"
     },
     "pkg-15-congratulations-image-string.manifest.json": {
       "byteLength": 3035,
-      "chunk": "initial",
+      "chunk": "mode:FreeGame",
       "entry": "assets/46e5aa8a67d7f3d178770729d040c000261beb535da9d5c48160aeddde0100b9.json",
       "kind": "metadata",
       "mediaType": "application/json",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "sha256": "46e5aa8a67d7f3d178770729d040c000261beb535da9d5c48160aeddde0100b9"
     },
     "pkg-15-congratulations-popup.manifest.json": {
       "byteLength": 3358,
-      "chunk": "initial",
+      "chunk": "mode:FreeGame",
       "entry": "assets/d6c454b1715b99dcbc542a2d616be1ec6d152cc27a410ff88eb548ba4ea724a7.json",
       "kind": "metadata",
       "mediaType": "application/json",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "sha256": "d6c454b1715b99dcbc542a2d616be1ec6d152cc27a410ff88eb548ba4ea724a7"
     },
     "pkg-15-congratulations-x.png": {
-      "atlas": "atlas-initial-ac1b5c09-0",
+      "atlas": "atlas-mode-freegame-325c3c43-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "sourceByteLength": 22770
     },
     "pkg-15-congratulations.png": {
-      "atlas": "atlas-initial-ac1b5c09-0",
+      "atlas": "atlas-mode-freegame-325c3c43-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
-      "owner": "initial",
+      "owner": "mode:FreeGame",
       "sourceByteLength": 10325
     },
     "pkg-17-award-celebration-0.png": {
@@ -1653,7 +1653,7 @@
       "sourceByteLength": 55456
     },
     "pkg-17-award-celebration-image_asset_image_msy5k1q6_9.jpg": {
-      "atlas": "atlas-initial-ac1b5c09-1",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/jpeg",
       "owner": "initial",
@@ -1667,7 +1667,7 @@
       "sourceByteLength": 1035219
     },
     "pkg-17-award-celebration-image_asset_image_msybhpr1_11.png": {
-      "atlas": "atlas-initial-ac1b5c09-1",
+      "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
       "mediaType": "image/png",
       "owner": "initial",
@@ -3039,7 +3039,7 @@
           "x": 1110,
           "y": 6
         },
-        "pkg-15-congratulations-0.png": {
+        "pkg-17-award-celebration-0.png": {
           "height": 116,
           "rotated": true,
           "sourceHeight": 132,
@@ -3048,106 +3048,79 @@
           "x": 1106,
           "y": 420
         },
-        "pkg-15-congratulations-1.png": {
-          "height": 135,
+        "pkg-17-award-celebration-01_asset_image_mrxcn5qm_n.png": {
+          "height": 130,
           "rotated": false,
-          "sourceHeight": 135,
-          "sourceWidth": 116,
-          "width": 116,
-          "x": 1122,
-          "y": 544
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 1110,
+          "y": 972
         },
-        "pkg-15-congratulations-2-2.png": {
-          "height": 135,
+        "pkg-17-award-celebration-02_asset_image_mrxcn5qo_o.png": {
+          "height": 130,
           "rotated": false,
-          "sourceHeight": 135,
-          "sourceWidth": 116,
-          "width": 116,
-          "x": 1122,
-          "y": 687
-        },
-        "pkg-15-congratulations-2.png": {
-          "height": 42,
-          "rotated": true,
-          "sourceHeight": 135,
-          "sourceWidth": 42,
-          "width": 135,
-          "x": 1085,
-          "y": 1145
-        },
-        "pkg-15-congratulations-3-2.png": {
-          "height": 135,
-          "rotated": false,
-          "sourceHeight": 135,
-          "sourceWidth": 116,
-          "width": 116,
-          "x": 1122,
-          "y": 830
-        },
-        "pkg-15-congratulations-3.png": {
-          "height": 135,
-          "rotated": false,
-          "sourceHeight": 135,
-          "sourceWidth": 39,
-          "width": 39,
-          "x": 896,
-          "y": 1151
-        },
-        "pkg-15-congratulations-4-2.png": {
-          "height": 116,
-          "rotated": true,
-          "sourceHeight": 135,
-          "sourceWidth": 116,
-          "width": 135,
-          "x": 943,
-          "y": 1195
-        },
-        "pkg-15-congratulations-4.png": {
-          "height": 135,
-          "rotated": false,
-          "sourceHeight": 135,
-          "sourceWidth": 95,
-          "width": 95,
-          "x": 1142,
-          "y": 973
-        },
-        "pkg-15-congratulations-5.png": {
-          "height": 116,
-          "rotated": true,
-          "sourceHeight": 135,
-          "sourceWidth": 116,
-          "width": 135,
-          "x": 1086,
-          "y": 1195
-        },
-        "pkg-15-congratulations-6.png": {
-          "height": 135,
-          "rotated": false,
-          "sourceHeight": 135,
-          "sourceWidth": 116,
-          "width": 116,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
           "x": 1110,
           "y": 144
         },
-        "pkg-15-congratulations-7.png": {
-          "height": 116,
-          "rotated": true,
-          "sourceHeight": 135,
-          "sourceWidth": 116,
-          "width": 135,
-          "x": 1229,
-          "y": 1116
+        "pkg-17-award-celebration-03_asset_image_mrxcn5qq_p.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 1110,
+          "y": 282
         },
-        "pkg-15-congratulations-8.png": {
+        "pkg-17-award-celebration-04_asset_image_mrxcn5qu_q.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 1106,
+          "y": 544
+        },
+        "pkg-17-award-celebration-05_asset_image_mrxcn5qw_r.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 1106,
+          "y": 682
+        },
+        "pkg-17-award-celebration-06_asset_image_mrxcn5qx_s.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 1085,
+          "y": 1145
+        },
+        "pkg-17-award-celebration-1_asset_image_mryc5k3f_3.png": {
+          "height": 142,
+          "rotated": false,
+          "sourceHeight": 142,
+          "sourceWidth": 117,
+          "width": 117,
+          "x": 1122,
+          "y": 820
+        },
+        "pkg-17-award-celebration-1.png": {
           "height": 135,
           "rotated": false,
           "sourceHeight": 135,
           "sourceWidth": 116,
           "width": 116,
-          "x": 1245,
-          "y": 973
+          "x": 896,
+          "y": 1152
         },
-        "pkg-15-congratulations-9.png": {
+        "pkg-17-award-celebration-2-2.png": {
           "height": 135,
           "rotated": false,
           "sourceHeight": 135,
@@ -3156,122 +3129,14 @@
           "x": 1248,
           "y": 6
         },
-        "pkg-15-congratulations-x.png": {
-          "height": 135,
-          "rotated": false,
-          "sourceHeight": 135,
-          "sourceWidth": 116,
-          "width": 116,
-          "x": 1246,
-          "y": 149
-        },
-        "pkg-15-congratulations.png": {
-          "height": 135,
-          "rotated": false,
-          "sourceHeight": 135,
-          "sourceWidth": 98,
-          "width": 98,
-          "x": 1246,
-          "y": 292
-        },
-        "pkg-17-award-celebration-0.png": {
-          "height": 132,
-          "rotated": false,
-          "sourceHeight": 132,
-          "sourceWidth": 116,
-          "width": 116,
-          "x": 1246,
-          "y": 435
-        },
-        "pkg-17-award-celebration-01_asset_image_mrxcn5qm_n.png": {
-          "height": 130,
-          "rotated": false,
-          "sourceHeight": 130,
-          "sourceWidth": 130,
-          "width": 130,
-          "x": 6,
-          "y": 1330
-        },
-        "pkg-17-award-celebration-02_asset_image_mrxcn5qo_o.png": {
-          "height": 130,
-          "rotated": false,
-          "sourceHeight": 130,
-          "sourceWidth": 130,
-          "width": 130,
-          "x": 144,
-          "y": 1330
-        },
-        "pkg-17-award-celebration-03_asset_image_mrxcn5qq_p.png": {
-          "height": 130,
-          "rotated": false,
-          "sourceHeight": 130,
-          "sourceWidth": 130,
-          "width": 130,
-          "x": 282,
-          "y": 1330
-        },
-        "pkg-17-award-celebration-04_asset_image_mrxcn5qu_q.png": {
-          "height": 130,
-          "rotated": false,
-          "sourceHeight": 130,
-          "sourceWidth": 130,
-          "width": 130,
-          "x": 420,
-          "y": 1330
-        },
-        "pkg-17-award-celebration-05_asset_image_mrxcn5qw_r.png": {
-          "height": 130,
-          "rotated": false,
-          "sourceHeight": 130,
-          "sourceWidth": 130,
-          "width": 130,
-          "x": 558,
-          "y": 1330
-        },
-        "pkg-17-award-celebration-06_asset_image_mrxcn5qx_s.png": {
-          "height": 130,
-          "rotated": false,
-          "sourceHeight": 130,
-          "sourceWidth": 130,
-          "width": 130,
-          "x": 696,
-          "y": 1330
-        },
-        "pkg-17-award-celebration-1_asset_image_mryc5k3f_3.png": {
-          "height": 142,
-          "rotated": false,
-          "sourceHeight": 142,
-          "sourceWidth": 117,
-          "width": 117,
-          "x": 1246,
-          "y": 575
-        },
-        "pkg-17-award-celebration-1.png": {
-          "height": 116,
+        "pkg-17-award-celebration-2.png": {
+          "height": 42,
           "rotated": true,
           "sourceHeight": 135,
-          "sourceWidth": 116,
-          "width": 135,
-          "x": 1229,
-          "y": 1240
-        },
-        "pkg-17-award-celebration-2-2.png": {
-          "height": 135,
-          "rotated": false,
-          "sourceHeight": 135,
-          "sourceWidth": 116,
-          "width": 116,
-          "x": 1246,
-          "y": 725
-        },
-        "pkg-17-award-celebration-2.png": {
-          "height": 135,
-          "rotated": false,
-          "sourceHeight": 135,
           "sourceWidth": 42,
-          "width": 42,
-          "x": 896,
-          "y": 1319
+          "width": 135,
+          "x": 1223,
+          "y": 1110
         },
         "pkg-17-award-celebration-3-2.png": {
           "height": 135,
@@ -3279,17 +3144,17 @@
           "sourceHeight": 135,
           "sourceWidth": 116,
           "width": 116,
-          "x": 946,
-          "y": 1319
+          "x": 1248,
+          "y": 149
         },
         "pkg-17-award-celebration-3.png": {
-          "height": 135,
-          "rotated": false,
+          "height": 39,
+          "rotated": true,
           "sourceHeight": 135,
           "sourceWidth": 39,
-          "width": 39,
-          "x": 1070,
-          "y": 1319
+          "width": 135,
+          "x": 1020,
+          "y": 1283
         },
         "pkg-17-award-celebration-4-2.png": {
           "height": 135,
@@ -3297,17 +3162,17 @@
           "sourceHeight": 135,
           "sourceWidth": 116,
           "width": 116,
-          "x": 1352,
+          "x": 1248,
           "y": 292
         },
         "pkg-17-award-celebration-4.png": {
-          "height": 135,
-          "rotated": false,
+          "height": 95,
+          "rotated": true,
           "sourceHeight": 135,
           "sourceWidth": 95,
-          "width": 95,
-          "x": 1370,
-          "y": 149
+          "width": 135,
+          "x": 1223,
+          "y": 1160
         },
         "pkg-17-award-celebration-5.png": {
           "height": 135,
@@ -3315,7 +3180,7 @@
           "sourceHeight": 135,
           "sourceWidth": 116,
           "width": 116,
-          "x": 1372,
+          "x": 1248,
           "y": 435
         },
         "pkg-17-award-celebration-6.png": {
@@ -3324,8 +3189,8 @@
           "sourceHeight": 135,
           "sourceWidth": 116,
           "width": 116,
-          "x": 1372,
-          "y": 6
+          "x": 1248,
+          "y": 578
         },
         "pkg-17-award-celebration-7.png": {
           "height": 135,
@@ -3333,8 +3198,8 @@
           "sourceHeight": 135,
           "sourceWidth": 116,
           "width": 116,
-          "x": 1372,
-          "y": 578
+          "x": 1248,
+          "y": 721
         },
         "pkg-17-award-celebration-8.png": {
           "height": 135,
@@ -3342,8 +3207,8 @@
           "sourceHeight": 135,
           "sourceWidth": 116,
           "width": 116,
-          "x": 1372,
-          "y": 721
+          "x": 1248,
+          "y": 864
         },
         "pkg-17-award-celebration-9.png": {
           "height": 135,
@@ -3351,35 +3216,35 @@
           "sourceHeight": 135,
           "sourceWidth": 116,
           "width": 116,
-          "x": 1372,
-          "y": 864
+          "x": 896,
+          "y": 1295
         },
         "pkg-17-award-celebration-big_1_asset_image_mrvydhi0_6_asset_image_msy21in5_23.png": {
-          "height": 210,
-          "rotated": false,
+          "height": 518,
+          "rotated": true,
           "sourceHeight": 210,
           "sourceWidth": 518,
-          "width": 518,
-          "x": 6,
-          "y": 1468
-        },
-        "pkg-17-award-celebration-big_asset_image_mrvyd851_4.png": {
-          "height": 551,
-          "rotated": true,
-          "sourceHeight": 251,
-          "sourceWidth": 551,
-          "width": 251,
-          "x": 1496,
+          "width": 210,
+          "x": 1372,
           "y": 6
         },
-        "pkg-17-award-celebration-big_asset_image_mrvydp4q_8.png": {
-          "height": 1087,
+        "pkg-17-award-celebration-big_asset_image_mrvyd851_4.png": {
+          "height": 251,
           "rotated": false,
+          "sourceHeight": 251,
+          "sourceWidth": 551,
+          "width": 551,
+          "x": 1020,
+          "y": 1330
+        },
+        "pkg-17-award-celebration-big_asset_image_mrvydp4q_8.png": {
+          "height": 1204,
+          "rotated": true,
           "sourceHeight": 1087,
           "sourceWidth": 1204,
-          "width": 1204,
-          "x": 6,
-          "y": 1686
+          "width": 1087,
+          "x": 1590,
+          "y": 6
         },
         "pkg-17-award-celebration-big_asset_image_mrvyds1c_a.png": {
           "height": 1126,
@@ -3387,17 +3252,26 @@
           "sourceHeight": 1124,
           "sourceWidth": 1126,
           "width": 1124,
-          "x": 1755,
-          "y": 6
+          "x": 6,
+          "y": 1589
         },
         "pkg-17-award-celebration-image_asset_image_mrxd8l5y_y.png": {
-          "height": 842,
-          "rotated": true,
+          "height": 326,
+          "rotated": false,
           "sourceHeight": 326,
           "sourceWidth": 842,
-          "width": 326,
-          "x": 1372,
-          "y": 1007
+          "width": 842,
+          "x": 1579,
+          "y": 1218
+        },
+        "pkg-17-award-celebration-image_asset_image_msy5k1q6_9.jpg": {
+          "height": 1402,
+          "rotated": false,
+          "sourceHeight": 1402,
+          "sourceWidth": 1360,
+          "width": 1360,
+          "x": 2685,
+          "y": 6
         },
         "pkg-17-award-celebration-image_asset_image_msybhgdb_10.png": {
           "height": 848,
@@ -3405,292 +3279,8 @@
           "sourceHeight": 848,
           "sourceWidth": 847,
           "width": 847,
-          "x": 1218,
-          "y": 1857
-        },
-        "pkg-17-award-celebration-mega_asset_image_msybgpcg_w.png": {
-          "height": 271,
-          "rotated": false,
-          "sourceHeight": 271,
-          "sourceWidth": 724,
-          "width": 724,
-          "x": 2073,
-          "y": 1140
-        },
-        "pkg-17-award-celebration-mega_asset_image_msybgwg4_x.png": {
-          "height": 709,
-          "rotated": true,
-          "sourceHeight": 282,
-          "sourceWidth": 709,
-          "width": 282,
-          "x": 1706,
-          "y": 1140
-        },
-        "pkg-17-award-celebration-super_1_asset_image_msy5aeky_3.png": {
-          "height": 315,
-          "rotated": false,
-          "sourceHeight": 315,
-          "sourceWidth": 795,
-          "width": 795,
-          "x": 2073,
-          "y": 1419
-        },
-        "pkg-17-award-celebration-super_asset_image_msy5benk_4.png": {
-          "height": 815,
-          "rotated": true,
-          "sourceHeight": 237,
-          "sourceWidth": 815,
-          "width": 237,
-          "x": 2073,
-          "y": 1742
-        },
-        "pkg-17-award-celebration-super_asset_image_msy5dn68_7.png": {
-          "height": 857,
-          "rotated": true,
-          "sourceHeight": 866,
-          "sourceWidth": 857,
-          "width": 866,
-          "x": 6,
-          "y": 2781
-        },
-        "pkg-17-award-celebration-u6570-u5b57-u5e95-u5149.png": {
-          "height": 842,
-          "rotated": true,
-          "sourceHeight": 326,
-          "sourceWidth": 842,
-          "width": 326,
-          "x": 880,
-          "y": 2781
-        },
-        "pkg-17-award-celebration-win_1_asset_image_mrvyehti_c_asset_image_msy243n4_47.png": {
-          "height": 205,
-          "rotated": false,
-          "sourceHeight": 205,
-          "sourceWidth": 565,
-          "width": 565,
-          "x": 532,
-          "y": 1468
-        },
-        "pkg-17-award-celebration-win_2_asset_image_msy5cz7g_5.png": {
-          "height": 235,
-          "rotated": false,
-          "sourceHeight": 235,
-          "sourceWidth": 602,
-          "width": 602,
-          "x": 2073,
-          "y": 2565
-        },
-        "pkg-17-award-celebration-win_3_asset_image_msy5d8f0_6.png": {
-          "height": 574,
-          "rotated": true,
-          "sourceHeight": 207,
-          "sourceWidth": 574,
-          "width": 207,
-          "x": 2318,
-          "y": 1742
-        },
-        "pkg-17-award-celebration-win_4_asset_image_msybh31u_y.png": {
-          "height": 602,
-          "rotated": true,
-          "sourceHeight": 235,
-          "sourceWidth": 602,
-          "width": 235,
-          "x": 2533,
-          "y": 1742
-        },
-        "pkg-17-award-celebration-win_asset_image_mrvyel4c_e_asset_image_mswv3cm9_1o.png": {
-          "height": 602,
-          "rotated": true,
-          "sourceHeight": 235,
-          "sourceWidth": 602,
-          "width": 235,
-          "x": 1214,
-          "y": 2808
-        },
-        "pkg-17-award-celebration-win_asset_image_msybh78g_z.png": {
-          "height": 220,
-          "rotated": false,
-          "sourceHeight": 220,
-          "sourceWidth": 584,
-          "width": 584,
-          "x": 1214,
-          "y": 3418
-        },
-        "pkg-17-award-celebration-x.png": {
-          "height": 116,
-          "rotated": true,
-          "sourceHeight": 135,
-          "sourceWidth": 116,
-          "width": 135,
-          "x": 1218,
-          "y": 1364
-        },
-        "pkg-17-award-celebration.png": {
-          "height": 135,
-          "rotated": false,
-          "sourceHeight": 135,
-          "sourceWidth": 98,
-          "width": 98,
-          "x": 2776,
-          "y": 1742
-        },
-        "pkg-18-popup-freegamesadd-0.png": {
-          "height": 106,
-          "rotated": false,
-          "sourceHeight": 106,
-          "sourceWidth": 74,
-          "width": 74,
-          "x": 2805,
-          "y": 1140
-        },
-        "pkg-18-popup-freegamesadd-1_asset_image_msztk3gd_v.png": {
-          "height": 117,
-          "rotated": true,
-          "sourceHeight": 142,
-          "sourceWidth": 117,
-          "width": 142,
-          "x": 1218,
-          "y": 1488
-        },
-        "pkg-18-popup-freegamesadd-1.png": {
-          "height": 59,
-          "rotated": true,
-          "sourceHeight": 106,
-          "sourceWidth": 59,
-          "width": 106,
-          "x": 1105,
-          "y": 1613
-        },
-        "pkg-18-popup-freegamesadd-2.png": {
-          "height": 106,
-          "rotated": false,
-          "sourceHeight": 106,
-          "sourceWidth": 74,
-          "width": 74,
-          "x": 2805,
-          "y": 1254
-        },
-        "pkg-18-popup-freegamesadd-3.png": {
-          "height": 74,
-          "rotated": true,
-          "sourceHeight": 106,
-          "sourceWidth": 74,
-          "width": 106,
-          "x": 1246,
-          "y": 868
-        },
-        "pkg-18-popup-freegamesadd-4.png": {
-          "height": 71,
-          "rotated": true,
-          "sourceHeight": 106,
-          "sourceWidth": 71,
-          "width": 106,
-          "x": 1218,
-          "y": 2713
-        },
-        "pkg-18-popup-freegamesadd-5.png": {
-          "height": 106,
-          "rotated": false,
-          "sourceHeight": 106,
-          "sourceWidth": 66,
-          "width": 66,
-          "x": 1996,
-          "y": 1140
-        },
-        "pkg-18-popup-freegamesadd-6.png": {
-          "height": 106,
-          "rotated": false,
-          "sourceHeight": 106,
-          "sourceWidth": 68,
-          "width": 68,
-          "x": 1996,
-          "y": 1254
-        },
-        "pkg-18-popup-freegamesadd-7.png": {
-          "height": 70,
-          "rotated": true,
-          "sourceHeight": 106,
-          "sourceWidth": 70,
-          "width": 106,
-          "x": 1332,
-          "y": 2713
-        },
-        "pkg-18-popup-freegamesadd-8.png": {
-          "height": 71,
-          "rotated": true,
-          "sourceHeight": 106,
-          "sourceWidth": 71,
-          "width": 106,
-          "x": 1446,
-          "y": 2713
-        },
-        "pkg-18-popup-freegamesadd-9.png": {
-          "height": 106,
-          "rotated": false,
-          "sourceHeight": 106,
-          "sourceWidth": 68,
-          "width": 68,
-          "x": 1996,
-          "y": 1368
-        },
-        "pkg-18-popup-freegamesadd-freegames_asset_image_mszswhtn_5.png": {
-          "height": 471,
-          "rotated": true,
-          "sourceHeight": 74,
-          "sourceWidth": 471,
-          "width": 74,
-          "x": 2776,
-          "y": 1885
-        },
-        "pkg-18-popup-freegamesadd-freegames_asset_image_mszswkfe_7.png": {
-          "height": 353,
-          "rotated": false,
-          "sourceHeight": 353,
-          "sourceWidth": 1212,
-          "width": 1212,
-          "x": 1457,
-          "y": 2808
-        },
-        "pkg-18-popup-freegamesadd.png": {
-          "height": 106,
-          "rotated": false,
-          "sourceHeight": 106,
-          "sourceWidth": 65,
-          "width": 65,
-          "x": 1996,
-          "y": 1482
-        },
-        "x.png": {
-          "height": 116,
-          "rotated": true,
-          "sourceHeight": 135,
-          "sourceWidth": 116,
-          "width": 135,
-          "x": 1219,
-          "y": 1613
-        }
-      },
-      "id": "atlas-initial-ac1b5c09-0",
-      "image": {
-        "byteLength": 2082754,
-        "height": 3644,
-        "mediaType": "image/webp",
-        "path": "assets/94eae7b3e29f473965a8c44c196280fd52d1cbdd4c163043c711334c0207ebd8.webp",
-        "sha256": "94eae7b3e29f473965a8c44c196280fd52d1cbdd4c163043c711334c0207ebd8",
-        "width": 2885
-      },
-      "owner": "initial"
-    },
-    {
-      "frames": {
-        "pkg-17-award-celebration-image_asset_image_msy5k1q6_9.jpg": {
-          "height": 1402,
-          "rotated": false,
-          "sourceHeight": 1402,
-          "sourceWidth": 1360,
-          "width": 1360,
-          "x": 6,
-          "y": 6
+          "x": 1138,
+          "y": 1589
         },
         "pkg-17-award-celebration-image_asset_image_msybhpr1_11.png": {
           "height": 1348,
@@ -3698,9 +3288,284 @@
           "sourceHeight": 1348,
           "sourceWidth": 1493,
           "width": 1493,
-          "x": 1374,
-          "y": 6
+          "x": 2429,
+          "y": 1416
         },
+        "pkg-17-award-celebration-mega_asset_image_msybgpcg_w.png": {
+          "height": 271,
+          "rotated": false,
+          "sourceHeight": 271,
+          "sourceWidth": 724,
+          "width": 724,
+          "x": 1138,
+          "y": 2445
+        },
+        "pkg-17-award-celebration-mega_asset_image_msybgwg4_x.png": {
+          "height": 709,
+          "rotated": true,
+          "sourceHeight": 282,
+          "sourceWidth": 709,
+          "width": 282,
+          "x": 1993,
+          "y": 1552
+        },
+        "pkg-17-award-celebration-super_1_asset_image_msy5aeky_3.png": {
+          "height": 315,
+          "rotated": false,
+          "sourceHeight": 315,
+          "sourceWidth": 795,
+          "width": 795,
+          "x": 6,
+          "y": 2772
+        },
+        "pkg-17-award-celebration-super_asset_image_msy5benk_4.png": {
+          "height": 237,
+          "rotated": false,
+          "sourceHeight": 237,
+          "sourceWidth": 815,
+          "width": 815,
+          "x": 6,
+          "y": 1330
+        },
+        "pkg-17-award-celebration-super_asset_image_msy5dn68_7.png": {
+          "height": 866,
+          "rotated": false,
+          "sourceHeight": 866,
+          "sourceWidth": 857,
+          "width": 857,
+          "x": 6,
+          "y": 3095
+        },
+        "pkg-17-award-celebration-u6570-u5b57-u5e95-u5149.png": {
+          "height": 326,
+          "rotated": false,
+          "sourceHeight": 326,
+          "sourceWidth": 842,
+          "width": 842,
+          "x": 809,
+          "y": 2724
+        },
+        "pkg-17-award-celebration-win_1_asset_image_mrvyehti_c_asset_image_msy243n4_47.png": {
+          "height": 565,
+          "rotated": true,
+          "sourceHeight": 205,
+          "sourceWidth": 565,
+          "width": 205,
+          "x": 1372,
+          "y": 532
+        },
+        "pkg-17-award-celebration-win_2_asset_image_msy5cz7g_5.png": {
+          "height": 235,
+          "rotated": false,
+          "sourceHeight": 235,
+          "sourceWidth": 602,
+          "width": 602,
+          "x": 1659,
+          "y": 2724
+        },
+        "pkg-17-award-celebration-win_3_asset_image_msy5d8f0_6.png": {
+          "height": 574,
+          "rotated": true,
+          "sourceHeight": 207,
+          "sourceWidth": 574,
+          "width": 207,
+          "x": 871,
+          "y": 3058
+        },
+        "pkg-17-award-celebration-win_4_asset_image_msybh31u_y.png": {
+          "height": 235,
+          "rotated": false,
+          "sourceHeight": 235,
+          "sourceWidth": 602,
+          "width": 602,
+          "x": 871,
+          "y": 3640
+        },
+        "pkg-17-award-celebration-win_asset_image_mrvyel4c_e_asset_image_mswv3cm9_1o.png": {
+          "height": 235,
+          "rotated": false,
+          "sourceHeight": 235,
+          "sourceWidth": 602,
+          "width": 602,
+          "x": 1086,
+          "y": 3058
+        },
+        "pkg-17-award-celebration-win_asset_image_msybh78g_z.png": {
+          "height": 220,
+          "rotated": false,
+          "sourceHeight": 220,
+          "sourceWidth": 584,
+          "width": 584,
+          "x": 1086,
+          "y": 3301
+        },
+        "pkg-17-award-celebration-x.png": {
+          "height": 116,
+          "rotated": true,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 135,
+          "x": 2283,
+          "y": 1552
+        },
+        "pkg-17-award-celebration.png": {
+          "height": 98,
+          "rotated": true,
+          "sourceHeight": 135,
+          "sourceWidth": 98,
+          "width": 135,
+          "x": 2283,
+          "y": 1676
+        },
+        "pkg-18-popup-freegamesadd-0.png": {
+          "height": 74,
+          "rotated": true,
+          "sourceHeight": 106,
+          "sourceWidth": 74,
+          "width": 106,
+          "x": 3930,
+          "y": 1416
+        },
+        "pkg-18-popup-freegamesadd-1_asset_image_msztk3gd_v.png": {
+          "height": 142,
+          "rotated": false,
+          "sourceHeight": 142,
+          "sourceWidth": 117,
+          "width": 117,
+          "x": 871,
+          "y": 3883
+        },
+        "pkg-18-popup-freegamesadd-1.png": {
+          "height": 59,
+          "rotated": true,
+          "sourceHeight": 106,
+          "sourceWidth": 59,
+          "width": 106,
+          "x": 1223,
+          "y": 1263
+        },
+        "pkg-18-popup-freegamesadd-2.png": {
+          "height": 74,
+          "rotated": true,
+          "sourceHeight": 106,
+          "sourceWidth": 74,
+          "width": 106,
+          "x": 1659,
+          "y": 2967
+        },
+        "pkg-18-popup-freegamesadd-3.png": {
+          "height": 74,
+          "rotated": true,
+          "sourceHeight": 106,
+          "sourceWidth": 74,
+          "width": 106,
+          "x": 3930,
+          "y": 1498
+        },
+        "pkg-18-popup-freegamesadd-4.png": {
+          "height": 71,
+          "rotated": true,
+          "sourceHeight": 106,
+          "sourceWidth": 71,
+          "width": 106,
+          "x": 3930,
+          "y": 1580
+        },
+        "pkg-18-popup-freegamesadd-5.png": {
+          "height": 66,
+          "rotated": true,
+          "sourceHeight": 106,
+          "sourceWidth": 66,
+          "width": 106,
+          "x": 3930,
+          "y": 1659
+        },
+        "pkg-18-popup-freegamesadd-6.png": {
+          "height": 68,
+          "rotated": true,
+          "sourceHeight": 106,
+          "sourceWidth": 68,
+          "width": 106,
+          "x": 3930,
+          "y": 1733
+        },
+        "pkg-18-popup-freegamesadd-7.png": {
+          "height": 70,
+          "rotated": true,
+          "sourceHeight": 106,
+          "sourceWidth": 70,
+          "width": 106,
+          "x": 3930,
+          "y": 1809
+        },
+        "pkg-18-popup-freegamesadd-8.png": {
+          "height": 71,
+          "rotated": true,
+          "sourceHeight": 106,
+          "sourceWidth": 71,
+          "width": 106,
+          "x": 3930,
+          "y": 1887
+        },
+        "pkg-18-popup-freegamesadd-9.png": {
+          "height": 68,
+          "rotated": true,
+          "sourceHeight": 106,
+          "sourceWidth": 68,
+          "width": 106,
+          "x": 3930,
+          "y": 1966
+        },
+        "pkg-18-popup-freegamesadd-freegames_asset_image_mszswhtn_5.png": {
+          "height": 471,
+          "rotated": true,
+          "sourceHeight": 74,
+          "sourceWidth": 471,
+          "width": 74,
+          "x": 1481,
+          "y": 3529
+        },
+        "pkg-18-popup-freegamesadd-freegames_asset_image_mszswkfe_7.png": {
+          "height": 1212,
+          "rotated": true,
+          "sourceHeight": 353,
+          "sourceWidth": 1212,
+          "width": 353,
+          "x": 2269,
+          "y": 2772
+        },
+        "pkg-18-popup-freegamesadd.png": {
+          "height": 65,
+          "rotated": true,
+          "sourceHeight": 106,
+          "sourceWidth": 65,
+          "width": 106,
+          "x": 3930,
+          "y": 2042
+        },
+        "x.png": {
+          "height": 116,
+          "rotated": true,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 135,
+          "x": 2283,
+          "y": 1782
+        }
+      },
+      "id": "atlas-initial-ac1b5c09-0",
+      "image": {
+        "byteLength": 2458308,
+        "height": 4031,
+        "mediaType": "image/webp",
+        "path": "assets/a5a07ec8d4cecbee4d812d796a9bd6f97021f8fe958837738b48e4208d3219bf.webp",
+        "sha256": "a5a07ec8d4cecbee4d812d796a9bd6f97021f8fe958837738b48e4208d3219bf",
+        "width": 4051
+      },
+      "owner": "initial"
+    },
+    {
+      "frames": {
         "pkg-17-award-celebration-superwin_asset_image_msy5dzp3_8.png": {
           "height": 1302,
           "rotated": false,
@@ -3708,19 +3573,168 @@
           "sourceWidth": 1510,
           "width": 1510,
           "x": 6,
-          "y": 1416
+          "y": 6
         }
       },
       "id": "atlas-initial-ac1b5c09-1",
       "image": {
-        "byteLength": 799698,
-        "height": 2724,
+        "byteLength": 379196,
+        "height": 1314,
         "mediaType": "image/webp",
-        "path": "assets/79670f954dd421d7180d11f8c42708c7590a02c5f3eb2f9bec6bd6a47911a8ba.webp",
-        "sha256": "79670f954dd421d7180d11f8c42708c7590a02c5f3eb2f9bec6bd6a47911a8ba",
-        "width": 2873
+        "path": "assets/f0100c91ea5a53a0dd514c48a88827c3d8f0856284d1a4112b298017b1c0fe28.webp",
+        "sha256": "f0100c91ea5a53a0dd514c48a88827c3d8f0856284d1a4112b298017b1c0fe28",
+        "width": 1522
       },
       "owner": "initial"
+    },
+    {
+      "frames": {
+        "pkg-15-congratulations-0.png": {
+          "height": 132,
+          "rotated": false,
+          "sourceHeight": 132,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 6,
+          "y": 6
+        },
+        "pkg-15-congratulations-1.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 130,
+          "y": 6
+        },
+        "pkg-15-congratulations-2-2.png": {
+          "height": 116,
+          "rotated": true,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 135,
+          "x": 6,
+          "y": 149
+        },
+        "pkg-15-congratulations-2.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 42,
+          "width": 42,
+          "x": 254,
+          "y": 6
+        },
+        "pkg-15-congratulations-3-2.png": {
+          "height": 116,
+          "rotated": true,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 135,
+          "x": 149,
+          "y": 149
+        },
+        "pkg-15-congratulations-3.png": {
+          "height": 39,
+          "rotated": true,
+          "sourceHeight": 135,
+          "sourceWidth": 39,
+          "width": 135,
+          "x": 6,
+          "y": 273
+        },
+        "pkg-15-congratulations-4-2.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 304,
+          "y": 6
+        },
+        "pkg-15-congratulations-4.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 95,
+          "width": 95,
+          "x": 292,
+          "y": 149
+        },
+        "pkg-15-congratulations-5.png": {
+          "height": 116,
+          "rotated": true,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 135,
+          "x": 149,
+          "y": 273
+        },
+        "pkg-15-congratulations-6.png": {
+          "height": 116,
+          "rotated": true,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 135,
+          "x": 6,
+          "y": 320
+        },
+        "pkg-15-congratulations-7.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 292,
+          "y": 292
+        },
+        "pkg-15-congratulations-8.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 395,
+          "y": 149
+        },
+        "pkg-15-congratulations-9.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 428,
+          "y": 6
+        },
+        "pkg-15-congratulations-x.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 416,
+          "y": 292
+        },
+        "pkg-15-congratulations.png": {
+          "height": 98,
+          "rotated": true,
+          "sourceHeight": 135,
+          "sourceWidth": 98,
+          "width": 135,
+          "x": 149,
+          "y": 397
+        }
+      },
+      "id": "atlas-mode-freegame-325c3c43-0",
+      "image": {
+        "byteLength": 51326,
+        "height": 548,
+        "mediaType": "image/webp",
+        "path": "assets/b7ef24deaf6a1ec812a90ffb5d0096dbeea1797ef620fb2647eed36f42641396.webp",
+        "sha256": "b7ef24deaf6a1ec812a90ffb5d0096dbeea1797ef620fb2647eed36f42641396",
+        "width": 550
+      },
+      "owner": "mode:FreeGame"
     }
   ],
   "chunks": [
@@ -3741,14 +3755,6 @@
         "bg.png",
         "pkg-10-game002-s3-Symbol_2.png",
         "pkg-10-game002-s3-Symbol.png",
-        "pkg-15-congratulations-bg_2.png",
-        "pkg-15-congratulations-bg_3.png",
-        "pkg-15-congratulations-bg_4.png",
-        "pkg-15-congratulations-bg_5.png",
-        "pkg-15-congratulations-bg_6.png",
-        "pkg-15-congratulations-bg_7.png",
-        "pkg-15-congratulations-bg_8.png",
-        "pkg-15-congratulations-bg.png",
         "pkg-2-fg-bg_2.png",
         "pkg-2-fg-bg_3.png",
         "pkg-2-fg-bg_4.png",
@@ -3762,21 +3768,37 @@
       ],
       "id": "initial",
       "metadata": {
-        "byteLength": 330223,
+        "byteLength": 295527,
         "mediaType": "application/zip",
-        "path": "chunks/initial-ac1b5c09.77314cce8108903ea8c9512230e4af6b44b720581b746f851b2f73282e7af018.zip",
-        "sha256": "77314cce8108903ea8c9512230e4af6b44b720581b746f851b2f73282e7af018"
+        "path": "chunks/initial-ac1b5c09.c535efcd6fcf84661b870ac7991a6044607c15bc28d564222d52cbe8283008af.zip",
+        "sha256": "c535efcd6fcf84661b870ac7991a6044607c15bc28d564222d52cbe8283008af"
       },
       "owner": "initial"
     },
     {
-      "atlases": [],
+      "atlases": [
+        "atlas-mode-freegame-325c3c43-0"
+      ],
       "dependencies": [
         "initial"
       ],
-      "externalAssets": [],
+      "externalAssets": [
+        "pkg-15-congratulations-bg_2.png",
+        "pkg-15-congratulations-bg_3.png",
+        "pkg-15-congratulations-bg_4.png",
+        "pkg-15-congratulations-bg_5.png",
+        "pkg-15-congratulations-bg_6.png",
+        "pkg-15-congratulations-bg_7.png",
+        "pkg-15-congratulations-bg_8.png",
+        "pkg-15-congratulations-bg.png"
+      ],
       "id": "mode:FreeGame",
-      "metadata": null,
+      "metadata": {
+        "byteLength": 34780,
+        "mediaType": "application/zip",
+        "path": "chunks/mode-freegame-325c3c43.44f444852cc2c42f6485f80c6157b001efe5cae4044e6f0d9895b139c164297f.zip",
+        "sha256": "44f444852cc2c42f6485f80c6157b001efe5cae4044e6f0d9895b139c164297f"
+      },
       "owner": "mode:FreeGame"
     },
     {

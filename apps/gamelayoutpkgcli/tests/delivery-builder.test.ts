@@ -11,7 +11,7 @@ import {
 } from "./fixtures.js";
 
 describe("Scene Layout CDN delivery builder", () => {
-  it("owns package-lifetime assets by initial, keeps mode readiness chunks, atlases before WebP and preserves media bytes", async () => {
+  it("owns assets by earliest mode, atlases before WebP and preserves media bytes", async () => {
     const original = logicalFixtureFiles();
     const alpha = await image(200, 80, "#ff0000");
     const beta = await image(40, 40, "#00ff00", "jpeg");
@@ -57,14 +57,7 @@ describe("Scene Layout CDN delivery builder", () => {
     });
     expect(delivery.manifest.assets["beta.jpg"]).toMatchObject({
       kind: "atlas-frame",
-      owner: "initial",
-    });
-    expect(
-      delivery.manifest.chunks.find((chunk) => chunk.id === "mode:Beta"),
-    ).toMatchObject({
-      metadata: null,
-      atlases: [],
-      externalAssets: [],
+      owner: "mode:Beta",
     });
     expect(
       delivery.manifest.atlases.some((atlas) =>

@@ -94,6 +94,10 @@ class DeliveryChunkLoader {
   readonly #chunks: ReadonlyMap<string, SceneLayoutDeliveryChunkV1>;
   readonly #entryOwners = new Map<string, string>();
   readonly #loads = new Map<string, Promise<ReadonlyMap<string, Uint8Array>>>();
+  readonly #archiveLoads = new Map<
+    string,
+    Promise<ReadonlyMap<string, Uint8Array>>
+  >();
   readonly #loaded = new Set<string>();
   readonly #textures: DeliveryTextures;
   #destroyed = false;
@@ -119,6 +123,24 @@ class DeliveryChunkLoader {
 
   async loadInitial(): Promise<Map<string, Uint8Array>> {
     const files = new Map(await this.#loadChunk(this.#manifest.initialChunk));
+    const catalogs = await Promise.all(
+      this.#manifest.chunks
+        .filter(
+          (chunk) =>
+            chunk.id !== this.#manifest.initialChunk &&
+            chunk.owner !== "media" &&
+            chunk.metadata !== null,
+        )
+        .map((chunk) => this.#loadArchiveOnce(chunk)),
+    );
+    for (const archive of catalogs)
+      for (const [path, bytes] of archive) {
+        if (files.has(path))
+          throw new SceneLayoutError(
+            `Scene Layout delivery metadata path is duplicated across chunks: ${path}.`,
+          );
+        files.set(path, bytes.slice());
+      }
     if (!files.has("layout.manifest.json") || !files.has("assets.map.json"))
       throw new SceneLayoutError(
         "Scene Layout initial delivery chunk must contain layout.manifest.json and assets.map.json.",
@@ -153,7 +175,12 @@ class DeliveryChunkLoader {
       throw new SceneLayoutError(
         `Scene Layout delivery metadata route was not found: ${logicalKey}.`,
       );
-    const archive = await this.#loadChunk(asset.chunk);
+    const chunk = this.#chunks.get(asset.chunk);
+    if (!chunk)
+      throw new SceneLayoutError(
+        `Scene Layout delivery chunk was not found: ${asset.chunk}.`,
+      );
+    const archive = await this.#loadArchiveOnce(chunk);
     const bytes = archive.get(asset.entry);
     if (!bytes)
       throw new SceneLayoutError(
@@ -206,13 +233,23 @@ class DeliveryChunkLoader {
       chunk.dependencies.map((dependency) => this.#loadChunk(dependency)),
     );
     const [archive] = await Promise.all([
-      this.#loadArchive(chunk),
+      this.#loadArchiveOnce(chunk),
       this.#textures.loadChunk(chunk),
     ]);
     if (this.#destroyed)
       throw new SceneLayoutError("Scene Layout delivery was destroyed.");
     this.#loaded.add(chunk.id);
     return archive;
+  }
+
+  #loadArchiveOnce(
+    chunk: SceneLayoutDeliveryChunkV1,
+  ): Promise<ReadonlyMap<string, Uint8Array>> {
+    const existing = this.#archiveLoads.get(chunk.id);
+    if (existing) return existing;
+    const pending = this.#loadArchive(chunk);
+    this.#archiveLoads.set(chunk.id, pending);
+    return pending;
   }
 
   async #loadArchive(

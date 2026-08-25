@@ -245,6 +245,7 @@ describe("scene layout package event-driven game-mode transition", () => {
     state.runtime = {
       container,
       init: vi.fn(async () => undefined),
+      prepareNodes: vi.fn(async () => undefined),
       applyViewport: vi.fn(() => snapshot()),
       commitPreparedGeometryManifest: vi.fn(() => null),
       update: vi.fn(),
@@ -309,7 +310,7 @@ describe("scene layout package event-driven game-mode transition", () => {
     runtime.applyViewport({ width: 800, height: 600 });
     state.runtime.setNodeActive.mockClear();
     const pending = runtime.requestGameMode("FreeGame");
-    await Promise.resolve();
+    await vi.waitFor(() => expect(players[0]?.plays).toHaveLength(1));
     const player = players[0];
     expect(player.plays).toEqual([{ animationName: "BG_FG", loop: false }]);
     expect(player.view.position).toMatchObject({ x: 100, y: 200 });
@@ -398,7 +399,7 @@ describe("scene layout package event-driven game-mode transition", () => {
     const { runtime, players } = createRuntime();
     await runtime.init();
     const pending = runtime.requestGameMode("FreeGame");
-    await Promise.resolve();
+    await vi.waitFor(() => expect(players[0]?.plays).toHaveLength(1));
     players[0].results.push({
       completed: true,
       events: [{ name: "SwitchScene" }],
@@ -413,7 +414,7 @@ describe("scene layout package event-driven game-mode transition", () => {
     const { runtime, players } = createRuntime();
     await runtime.init();
     const pending = runtime.requestGameMode("FreeGame");
-    await Promise.resolve();
+    await vi.waitFor(() => expect(players[0]?.plays).toHaveLength(1));
     players[0].results.push({ completed: true, events: [] });
     runtime.update(1);
     await expect(pending).rejects.toThrow(/completed without switch event/);
@@ -429,7 +430,7 @@ describe("scene layout package event-driven game-mode transition", () => {
     const { runtime, players } = createRuntime();
     await runtime.init();
     const pending = runtime.requestGameMode("FreeGame");
-    await Promise.resolve();
+    await vi.waitFor(() => expect(players[0]?.plays).toHaveLength(1));
     runtime.destroy();
     await expect(pending).rejects.toThrow(/destroyed during/);
     expect(players[0].destroyed).toBe(true);
@@ -440,7 +441,7 @@ describe("scene layout package event-driven game-mode transition", () => {
     await runtime.init();
     runtime.applyViewport({ width: 800, height: 600 });
     const pending = runtime.requestGameMode("FreeGame");
-    await Promise.resolve();
+    await vi.waitFor(() => expect(popups[0]?.phase).toBe("loop"));
     expect(popups[0].phase).toBe("loop");
     expect(players[0].plays).toEqual([]);
     expect(runtime.getGameModeSnapshot()).toMatchObject({
@@ -519,6 +520,7 @@ describe("scene layout package event-driven game-mode transition", () => {
     expect(runtime.getGameModeSnapshot().activePreludePopup).toBe("free-entry");
     popups[0].phase = "complete";
     runtime.update(0.1);
+    await vi.waitFor(() => expect(players[0]?.plays).toHaveLength(1));
     players[0].results.push({
       completed: true,
       events: [{ name: "SwitchScene" }],
@@ -637,6 +639,52 @@ describe("scene layout package event-driven game-mode transition", () => {
       completed: true,
       events: [{ name: "SwitchScene" }],
     });
+    runtime.update(0.1);
+    await pending;
+    runtime.destroy();
+  });
+
+  it("prepares transition Popups with their source-mode delivery chunk", async () => {
+    const resource = packageResource(true, true, "none") as any;
+    resource.manifest.gameModes.transitions.push({
+      from: "FreeGame",
+      to: "BaseGame",
+      preludePopup: "base-entry",
+      overlay: { kind: "none" },
+    });
+    resource.manifest.popups["base-entry"] = {
+      type: "spine",
+      manifest: "base-entry-popup.manifest.json",
+      order: 2001,
+      placements: { default: { x: 0, y: 0, scale: 1 } },
+    };
+    resource.popupPackages["base-entry"] = {
+      manifest: { type: "spine" },
+    };
+    const loadGameMode = vi.fn(async () => undefined);
+    resource.delivery = {
+      isGameModeReady: () => false,
+      loadGameMode,
+    };
+    const popups: FakeSpinePopupRuntime[] = [];
+    const runtime = createSceneLayoutPackageRuntime({
+      resource,
+      createSpinePopupRuntime: () => {
+        const popup = new FakeSpinePopupRuntime();
+        popups.push(popup);
+        return popup;
+      },
+    });
+
+    await runtime.init();
+    expect(popups).toHaveLength(1);
+
+    const pending = runtime.requestGameMode("FreeGame");
+    await vi.waitFor(() => {
+      expect(loadGameMode).toHaveBeenCalledWith("FreeGame");
+      expect(popups).toHaveLength(2);
+    });
+    popups[0]!.phase = "complete";
     runtime.update(0.1);
     await pending;
     runtime.destroy();

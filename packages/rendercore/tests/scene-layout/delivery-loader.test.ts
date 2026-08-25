@@ -45,18 +45,16 @@ describe("Scene Layout delivery loader", () => {
     state.packageOptions = null;
   });
 
-  it("returns after initial, prioritizes media background work, and lets an active mode preempt it", async () => {
+  it("loads mode metadata catalogs before create, then prioritizes media and lets an active mode preempt payload readiness", async () => {
     const media = deferred<Response>();
-    const free = deferred<Response>();
-    const bonus = deferred<Response>();
     const requested: string[] = [];
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       requested.push(url);
       if (url.endsWith("initial.zip")) return response([1]);
       if (url.endsWith("intro.mp4")) return media.promise;
-      if (url.endsWith("free.zip")) return free.promise;
-      if (url.endsWith("bonus.zip")) return bonus.promise;
+      if (url.endsWith("free.zip")) return response([2]);
+      if (url.endsWith("bonus.zip")) return response([3]);
       throw new Error(`unexpected URL: ${url}`);
     }) as unknown as typeof fetch;
 
@@ -68,37 +66,33 @@ describe("Scene Layout delivery loader", () => {
 
     expect(requested).toEqual([
       "https://cdn.example/game/initial.zip",
+      "https://cdn.example/game/free.zip",
+      "https://cdn.example/game/bonus.zip",
       "https://cdn.example/game/intro.mp4",
     ]);
     expect(state.packageOptions.lazyRuntimeResources).toBe(true);
     expect([...state.packageOptions.files.keys()]).toEqual([
       "layout.manifest.json",
       "assets.map.json",
+      "free.json",
+      "bonus.json",
       "intro.mp4",
     ]);
     expect(resource.delivery?.isGameModeReady("BaseGame")).toBe(true);
     expect(resource.delivery?.isGameModeReady("FreeGame")).toBe(false);
 
     const activeMode = resource.delivery!.loadGameMode("FreeGame");
-    await vi.waitFor(() =>
-      expect(requested).toContain("https://cdn.example/game/free.zip"),
-    );
-    expect(requested).not.toContain("https://cdn.example/game/bonus.zip");
+    await activeMode;
+    expect(resource.delivery?.isGameModeReady("FreeGame")).toBe(true);
 
     media.resolve(response([9]));
-    await Promise.resolve();
-    expect(requested).not.toContain("https://cdn.example/game/bonus.zip");
-    free.resolve(response([2]));
-    await activeMode;
     await vi.waitFor(() =>
-      expect(requested).toContain("https://cdn.example/game/bonus.zip"),
+      expect(resource.delivery?.isGameModeReady("BonusGame")).toBe(true),
     );
-    expect(resource.delivery?.isGameModeReady("FreeGame")).toBe(true);
     await expect(
       state.packageOptions.loadRuntimeResourceBytes("free.json"),
     ).resolves.toEqual(new Uint8Array([22]));
 
-    bonus.resolve(response([3]));
     await resource.delivery!.loadGameMode("BonusGame");
     await resource.destroy();
   });

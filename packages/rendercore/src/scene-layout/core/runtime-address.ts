@@ -418,12 +418,12 @@ export function createGameLayoutRuntimeAddresses(
       );
     const authoredSpineResource = resource.layout?.spineResources?.[node.id];
     const childRefs =
-      node.resource.kind === "spine" && authoredSpineResource
+      node.resource?.kind === "spine" && authoredSpineResource
         ? validateOfficialSpineResource({
             resource: authoredSpineResource,
             requiredAnimations: [],
           }).slotNames.map((id) => ({ kind: "spine-slot" as const, id }))
-        : node.resource.kind === "vni"
+        : node.resource?.kind === "vni"
           ? (
               resource.layout?.vniResources?.[node.resource.project]?.project
                 .layers ?? []

@@ -84,6 +84,8 @@ import {
 
 export interface CreateSceneLayoutRuntimeOptions {
   readonly resource: SceneLayoutResource;
+  /** @internal Package runtimes may defer non-initial mode node preparation. */
+  readonly initialNodeIds?: readonly string[];
   readonly loadTexture?: (url: string) => Promise<Texture>;
   readonly unloadTexture?: (url: string) => Promise<void>;
   readonly createSpinePlayer?: (options: {
@@ -149,6 +151,7 @@ interface RuntimeNode {
   programMotion: RenderObjectMotion | null;
   programMotionAttachment: RenderObjectMotionAttachment | null;
   readonly programMotionBinding: RenderObjectMotionBinding;
+  prepared: boolean;
   homeX: number;
   homeY: number;
   homeScale: number;
@@ -209,6 +212,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   readonly #observeSpinePlayback?: (
     event: SceneLayoutSpinePlaybackEvent,
   ) => void;
+  readonly #initialNodeIds: readonly string[] | null;
   readonly #nodes: readonly RuntimeNode[];
   readonly #nodesById: ReadonlyMap<string, RuntimeNode>;
   readonly #artMask = new Graphics();
@@ -278,6 +282,9 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
         });
       });
     this.#observeSpinePlayback = options.observeSpinePlayback;
+    this.#initialNodeIds = options.initialNodeIds
+      ? Object.freeze([...options.initialNodeIds])
+      : null;
     this.container.label = `scene-layout:${options.resource.manifest.id}`;
     this.container.sortableChildren = false;
     const nodes = options.resource.manifest.nodes.map((spec) => {
@@ -310,6 +317,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
         programMotion: null,
         programMotionAttachment: null,
         programMotionBinding: createRenderObjectMotionBinding(),
+        prepared: false,
         homeX: 0,
         homeY: 0,
         homeScale: 1,
@@ -367,7 +375,9 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     }
     this.#initializing = true;
     try {
-      await settleAllInOrder(this.#nodes.map((node) => this.initNode(node)));
+      await this.prepareNodesInternal(
+        this.#initialNodeIds ?? this.#nodes.map((node) => node.spec.id),
+      );
       this.assertAlive();
       this.#initialized = true;
     } catch (error) {
@@ -376,6 +386,12 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     } finally {
       this.#initializing = false;
     }
+  }
+
+  /** @internal Package runtimes call this only after the exact owner chunk is ready. */
+  async prepareNodes(nodeIds: readonly string[]): Promise<void> {
+    this.assertReady();
+    await this.prepareNodesInternal(nodeIds);
   }
 
   applyViewport(viewportSize: RenderViewportSize): SceneLayoutSnapshot {
@@ -414,11 +430,12 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       const spec = this.requireCurrentNode(node.spec.id);
       const placement = spec.placements[snapshot.variantId];
       const active =
+        node.prepared &&
         this.#authoredNodeActive.get(node.spec.id) !== false &&
         this.#programNodeVisible.get(node.spec.id) !== false;
       node.slot.visible = Boolean(placement) && active;
       node.slot.renderable = Boolean(placement) && active;
-      if (placement) {
+      if (placement && node.prepared) {
         applyNodePlacementTransform(
           node,
           this.#resource,
@@ -985,6 +1002,45 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     node.named.addChild(player.view);
   }
 
+  private async prepareNodesInternal(
+    nodeIds: readonly string[],
+  ): Promise<void> {
+    const candidates = [...new Set(nodeIds)].map((id) => this.requireNode(id));
+    const pending = candidates.filter((node) => !node.prepared);
+    if (pending.length === 0) return;
+    try {
+      await settleAllInOrder(
+        pending.map((node) =>
+          this.initNode(node).then(() => {
+            node.prepared = true;
+          }),
+        ),
+      );
+      this.assertAlive();
+      if (this.#snapshot) {
+        for (const node of pending) {
+          const spec = this.requireCurrentNode(node.spec.id);
+          const placement = spec.placements[this.#snapshot.variantId];
+          if (placement)
+            applyNodePlacementTransform(
+              node,
+              this.#resource,
+              this.#manifest,
+              this.#snapshot.variantId,
+              placement,
+            );
+          this.refreshNodeVisibility(node);
+        }
+      }
+    } catch (error) {
+      for (const node of pending) {
+        this.releaseNodeResource(node);
+        node.prepared = false;
+      }
+      throw asSceneLayoutError(error);
+    }
+  }
+
   private releaseNodeResources(): void {
     for (const layers of this.#nodeChildLayers.values())
       for (const layer of layers.values()) {
@@ -993,31 +1049,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
         layer.view.destroy({ children: false });
       }
     this.#nodeChildLayers.clear();
-    for (const node of this.#nodes) {
-      node.programMotionAttachment?.detach();
-      node.programMotionAttachment = null;
-      node.programMotion = null;
-      node.motionState = createNeutralNodeMotionState();
-      node.slotObjectAttachment?.detach();
-      node.slotObjectAttachment = null;
-      this.rejectNodeProgramPlayback(
-        node,
-        `Scene layout Spine node "${node.spec.id}" was destroyed during playback.`,
-        "destroyed",
-      );
-      node.stateController?.destroy(
-        `Scene layout Spine node "${node.spec.id}" was destroyed.`,
-      );
-      node.stateController = null;
-      node.player?.destroy();
-      node.player = null;
-      node.vniPlayer?.destroy();
-      node.vniPlayer = null;
-      node.imageString?.destroy();
-      node.imageString = null;
-      node.texture = null;
-      node.named.removeChildren();
-    }
+    for (const node of this.#nodes) this.releaseNodeResource(node);
     const textureUrls = [...this.#loadedTextureUrls];
     this.#loadedTextureUrls.clear();
     this.#texturesByUrl.clear();
@@ -1029,6 +1061,35 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
         // Resource release is best-effort and must remain idempotent.
       }
     }
+  }
+
+  private releaseNodeResource(node: RuntimeNode): void {
+    node.programMotionAttachment?.detach();
+    node.programMotionAttachment = null;
+    node.programMotion = null;
+    node.motionState = createNeutralNodeMotionState();
+    node.slotObjectAttachment?.detach();
+    node.slotObjectAttachment = null;
+    this.rejectNodeProgramPlayback(
+      node,
+      `Scene layout Spine node "${node.spec.id}" was destroyed during playback.`,
+      "destroyed",
+    );
+    node.stateController?.destroy(
+      `Scene layout Spine node "${node.spec.id}" was destroyed.`,
+    );
+    node.stateController = null;
+    node.player?.destroy();
+    node.player = null;
+    node.vniPlayer?.destroy();
+    node.vniPlayer = null;
+    node.imageString?.destroy();
+    node.imageString = null;
+    node.imageSprite?.destroy({ texture: false });
+    node.imageSprite = null;
+    node.texture = null;
+    node.named.removeChildren();
+    node.prepared = false;
   }
 
   private loadTextureOnce(url: string): Promise<Texture> {
@@ -1557,6 +1618,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       : undefined;
     const visible =
       Boolean(placement) &&
+      node.prepared &&
       this.#authoredNodeActive.get(node.spec.id) !== false &&
       this.#programNodeVisible.get(node.spec.id) !== false;
     node.slot.visible = visible;

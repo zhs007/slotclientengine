@@ -237,6 +237,49 @@ describe("scene layout runtime", () => {
     runtime.destroy();
   });
 
+  it("prepares only initial owner nodes until a delivery mode becomes ready", async () => {
+    const manifest = parseSceneLayoutManifest({
+      ...game002LayoutFixture,
+      nodes: [
+        game002LayoutFixture.nodes[0],
+        {
+          ...game002LayoutFixture.nodes[0],
+          id: "free-bg",
+          order: 1,
+          resource: {
+            ...game002LayoutFixture.nodes[0].resource,
+            path: "assets/free-bg.png",
+          },
+        },
+      ],
+    });
+    const loadTexture = vi.fn(async () => Texture.WHITE);
+    const runtime = createPreparedSceneLayoutRuntime({
+      resource: createSceneLayoutResource({
+        manifest,
+        imageModules: {
+          "assets/bg.png": "memory:bg",
+          "assets/free-bg.png": "memory:free-bg",
+        },
+      }),
+      initialNodeIds: ["bg"],
+      loadTexture,
+      unloadTexture: async () => undefined,
+    });
+
+    await runtime.init();
+    expect(loadTexture).toHaveBeenCalledTimes(1);
+    expect(loadTexture).toHaveBeenCalledWith("memory:bg");
+
+    await runtime.prepareNodes(["free-bg"]);
+    expect(loadTexture).toHaveBeenCalledTimes(2);
+    expect(loadTexture).toHaveBeenLastCalledWith("memory:free-bg");
+
+    await runtime.prepareNodes(["free-bg"]);
+    expect(loadTexture).toHaveBeenCalledTimes(2);
+    runtime.destroy();
+  });
+
   it("creates an independent manual VNI player and only advances it while renderable", async () => {
     const manifest = parseSceneLayoutManifest({
       ...game002LayoutFixture,

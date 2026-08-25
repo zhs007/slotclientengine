@@ -559,6 +559,13 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#formatPopupAmount = formatPopupAmount;
     this.#layout = createPreparedSceneLayoutRuntime({
       resource: resource.layout,
+      ...(resource.delivery
+        ? {
+            initialNodeIds: this.resolveOwnedNodeIds(
+              this.#document.gameModes?.initialMode ?? null,
+            ),
+          }
+        : {}),
       observeSpinePlayback: (event) => this.observeAuthoredSpinePlayback(event),
     });
     this.#audio = createAudioRuntime({
@@ -731,7 +738,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         );
 
       const layoutPromise = this.#layout.init();
-      const allBindings = this.resolveAllSymbolBindings();
+      const allBindings = this.#resource.delivery
+        ? activeBinding
+          ? Object.freeze([activeBinding])
+          : Object.freeze([])
+        : this.resolveAllSymbolBindings();
       if (this.#createGridCellReel && allBindings.length > 1)
         throw new SceneLayoutError(
           "Injected grid-cell reel factory cannot own multiple symbol package bindings.",
@@ -779,51 +790,15 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
                 }
               }),
             );
-      const popupEntries = Object.entries(this.#resource.popupPackages).map(
-        ([id, resource]) => {
-          const popup =
-            resource.manifest.type === "spine"
-              ? this.#createSpinePopupRuntime({
-                  resource,
-                  backdropController: this.#popupBackdrop,
-                  observeState: (transition) =>
-                    this.observePopupState(id, transition),
-                })
-              : resource.manifest.type === "single-state"
-                ? createSingleStatePopupRuntime({
-                    resource,
-                    backdropController: this.#popupBackdrop,
-                    observeState: (transition) =>
-                      this.observePopupState(id, transition),
-                  })
-                : createAwardCelebrationRuntime({
-                    resource,
-                    formatAmount: this.#formatPopupAmount,
-                    backdropController: this.#popupBackdrop,
-                    observeState: (transition) =>
-                      this.observePopupState(id, transition),
-                  });
-          if (resource.manifest.type === "spine")
-            this.#spinePopups.set(id, popup as SpinePopupRuntime);
-          else if (resource.manifest.type === "single-state")
-            this.#singleStatePopups.set(id, popup as SingleStatePopupRuntime);
-          else this.#popups.set(id, popup as AwardCelebrationRuntime);
-          return Object.freeze({
-            id,
-            resource,
-            popup,
-            initPromise: Promise.resolve().then(async () => {
-              await popup.init();
-              this.assertAlive();
-            }),
-          });
-        },
-      );
+      const popupIds = this.#resource.delivery
+        ? this.resolveOwnedPopupIds(initialModeId)
+        : Object.keys(this.#resource.popupPackages);
+      const popupPromises = popupIds.map((id) => this.preparePopup(id));
 
       await settleAllInOrder([
         layoutPromise,
         ...reelPromises,
-        ...popupEntries.map((entry) => entry.initPromise),
+        ...popupPromises,
       ]);
       this.assertAlive();
       if (activeBinding && !this.#presentationOnly) {
@@ -856,15 +831,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         this.#stableSymbolPackageId = activeBinding.id;
       }
       this.commitModeVisibility(initialMode);
-      for (const { id, popup } of popupEntries) {
-        const binding = this.#manifest.popups?.[id];
-        if (!binding)
-          throw new SceneLayoutError(
-            `Scene layout popup "${id}" has no manifest binding.`,
-          );
-        popup.container.zIndex = binding.order;
-        this.#popupRoot.addChild(popup.container);
-      }
       this.#popupRoot.sortChildren();
       this.#displayedMode = initialModeId;
       this.#stableMode = initialModeId;
@@ -2377,12 +2343,14 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#modeRequestInProgress = true;
     let prepared: PreparedModeTarget | null = null;
     try {
-      if (bindingChanged && targetBinding)
+      if (bindingChanged && targetBinding) {
+        await this.ensureDeliveryGameMode(target.id);
         prepared = await this.prepareTargetReelEntry(
           targetBinding,
           targetInput,
           false,
         );
+      }
       this.commitModeGeometry(target.id);
       if (bindingChanged) {
         if (prepared) {
@@ -3268,12 +3236,14 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       );
     let prepared: PreparedModeTarget | null = null;
     try {
-      if (bindingChanged && targetBinding)
+      if (bindingChanged && targetBinding) {
+        await this.ensureDeliveryGameMode(target.id);
         prepared = await this.prepareTargetReelEntry(
           targetBinding,
           targetInput,
           recreateReel,
         );
+      }
       const common = {
         spec: transition,
         geometry,
@@ -3774,7 +3744,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
 
   private observeActivePreludeAssets(active: ActiveModePrelude): void {
     if (active.assetsReady || !this.#resource.delivery) return;
-    void this.#resource.delivery.loadGameMode(active.prepared.target.id).then(
+    void this.ensureDeliveryGameMode(active.prepared.target.id).then(
       () => {
         active.assetsReady = true;
       },
@@ -3805,7 +3775,135 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   }
 
   private ensureDeliveryGameMode(modeId: string): Promise<void> {
-    return this.#resource.delivery?.loadGameMode(modeId) ?? Promise.resolve();
+    if (!this.#resource.delivery) return Promise.resolve();
+    return this.#resource.delivery.loadGameMode(modeId).then(async () => {
+      await Promise.all([
+        this.#layout.prepareNodes(this.resolveOwnedNodeIds(modeId)),
+        ...this.resolveOwnedPopupIds(modeId).map((id) => this.preparePopup(id)),
+      ]);
+    });
+  }
+
+  private resolveOwnedNodeIds(modeId: string | null): readonly string[] {
+    const gameModes = this.#document.gameModes;
+    if (!gameModes || modeId === null)
+      return Object.freeze(this.#manifest.nodes.map((node) => node.id));
+    const backgroundOwners = new Map<string, string>();
+    for (const mode of gameModes.modes)
+      for (const nodeId of Object.values(mode.backgroundNodes ?? {}))
+        if (!backgroundOwners.has(nodeId))
+          backgroundOwners.set(nodeId, mode.id);
+    return Object.freeze(
+      this.#manifest.nodes.flatMap((node) => {
+        const owner =
+          backgroundOwners.get(node.id) ??
+          node.gameMode ??
+          gameModes.initialMode;
+        return owner === modeId ? [node.id] : [];
+      }),
+    );
+  }
+
+  private resolveOwnedPopupIds(modeId: string | null): readonly string[] {
+    const gameModes = this.#document.gameModes;
+    if (!gameModes || modeId === null)
+      return Object.freeze(Object.keys(this.#resource.popupPackages));
+    const ownerById = new Map<string, string>();
+    for (const mode of gameModes.modes) {
+      if (mode.awardCelebrationPopup)
+        ownerById.set(
+          mode.awardCelebrationPopup,
+          ownerById.get(mode.awardCelebrationPopup) ?? mode.id,
+        );
+      for (const transition of gameModes.transitions ?? [])
+        if (transition.from === mode.id && transition.preludePopup)
+          ownerById.set(
+            transition.preludePopup,
+            ownerById.get(transition.preludePopup) ?? mode.id,
+          );
+    }
+    return Object.freeze(
+      Object.keys(this.#resource.popupPackages).filter(
+        (id) => (ownerById.get(id) ?? gameModes.initialMode) === modeId,
+      ),
+    );
+  }
+
+  private async preparePopup(id: string): Promise<void> {
+    if (
+      this.#popups.has(id) ||
+      this.#spinePopups.has(id) ||
+      this.#singleStatePopups.has(id)
+    )
+      return;
+    const resource = this.#resource.popupPackages[id];
+    if (!resource)
+      throw new SceneLayoutError(
+        `Scene layout popup resource "${id}" is unavailable.`,
+      );
+    const popup =
+      resource.manifest.type === "spine"
+        ? this.#createSpinePopupRuntime({
+            resource,
+            backdropController: this.#popupBackdrop,
+            observeState: (transition) =>
+              this.observePopupState(id, transition),
+          })
+        : resource.manifest.type === "single-state"
+          ? createSingleStatePopupRuntime({
+              resource,
+              backdropController: this.#popupBackdrop,
+              observeState: (transition) =>
+                this.observePopupState(id, transition),
+            })
+          : createAwardCelebrationRuntime({
+              resource,
+              formatAmount: this.#formatPopupAmount,
+              backdropController: this.#popupBackdrop,
+              observeState: (transition) =>
+                this.observePopupState(id, transition),
+            });
+    try {
+      await popup.init();
+      this.assertAlive();
+      if (resource.manifest.type === "spine")
+        this.#spinePopups.set(id, popup as SpinePopupRuntime);
+      else if (resource.manifest.type === "single-state")
+        this.#singleStatePopups.set(id, popup as SingleStatePopupRuntime);
+      else this.#popups.set(id, popup as AwardCelebrationRuntime);
+      const binding = this.#manifest.popups?.[id];
+      if (!binding)
+        throw new SceneLayoutError(
+          `Scene layout popup "${id}" has no manifest binding.`,
+        );
+      popup.container.zIndex = binding.order;
+      this.#popupRoot.addChild(popup.container);
+      this.#popupRoot.sortChildren();
+      if (this.#viewportSize) {
+        const snapshot = this.#layout.getSnapshot();
+        const placement = binding.placements[snapshot.variantId];
+        if (!placement)
+          throw new SceneLayoutError(
+            `Scene layout popup "${id}" has no ${snapshot.variantId} placement.`,
+          );
+        if (popup.applyViewport)
+          popup.applyViewport(this.#viewportSize, placement);
+        else {
+          popup.container.position.set(
+            this.#viewportSize.width / 2 + placement.x,
+            this.#viewportSize.height / 2 + placement.y,
+          );
+          popup.container.scale.set(placement.scale);
+        }
+      }
+    } catch (error) {
+      this.#popups.delete(id);
+      this.#spinePopups.delete(id);
+      this.#singleStatePopups.delete(id);
+      popup.container.parent?.removeChild(popup.container);
+      popup.destroy();
+      throw asSceneLayoutError(error);
+    }
   }
 
   private failActivePrelude(
