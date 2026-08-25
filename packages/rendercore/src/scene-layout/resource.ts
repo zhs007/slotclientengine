@@ -10,6 +10,10 @@ import type { ImageStringResource } from "../image-string/core/index.js";
 import { loadImageStringResourceFromUrl } from "../image-string/package-runtime.js";
 import { SceneLayoutError } from "./errors.js";
 import {
+  parseSceneLayoutJsonData,
+  type SceneLayoutJsonData,
+} from "./data/json-data.js";
+import {
   collectSceneLayoutAssetPaths,
   parseSceneLayoutManifest,
 } from "./manifest.js";
@@ -26,6 +30,7 @@ export interface CreateSceneLayoutResourceOptions {
   readonly atlasModules?: Readonly<Record<string, string>>;
   readonly textureModules?: Readonly<Record<string, string>>;
   readonly videoModules?: Readonly<Record<string, string>>;
+  readonly jsonDataModules?: Readonly<Record<string, SceneLayoutJsonData>>;
   readonly ownedObjectUrls?: readonly string[];
   readonly imageStringResources?: Readonly<Record<string, ImageStringResource>>;
   readonly vniResources?: Readonly<
@@ -48,6 +53,7 @@ export function createSceneLayoutResource(
   const atlasModules = normalizeMap(options.atlasModules);
   const textureModules = normalizeMap(options.textureModules);
   const videoModules = normalizeMap(options.videoModules);
+  const jsonDataModules = normalizeMap(options.jsonDataModules);
   const imagePaths = new Set<string>();
   const skeletonPaths = new Set<string>();
   const atlasPaths = new Set<string>();
@@ -66,6 +72,7 @@ export function createSceneLayoutResource(
   > = options.vniResources ?? Object.freeze({});
   const vniProjectPaths = new Set<string>();
   const videoPaths = new Set<string>();
+  const jsonDataPaths = new Set<string>();
   const imageUrls: Record<string, string> = {};
   const spineResources: Record<
     string,
@@ -247,6 +254,18 @@ export function createSceneLayoutResource(
       });
       continue;
     }
+    if (spec.kind === "json") {
+      jsonDataPaths.add(spec.path);
+      runtimeResources[key] = Object.freeze({
+        kind: "json",
+        value: requireValue(
+          jsonDataModules,
+          spec.path,
+          `scene layout runtime JSON data "${key}"`,
+        ),
+      });
+      continue;
+    }
     skeletonPaths.add(spec.skeleton);
     atlasPaths.add(spec.atlas);
     const skeleton = requireValue(
@@ -356,6 +375,11 @@ export function createSceneLayoutResource(
   assertExactKeys(textureModules, texturePaths, "scene layout texture modules");
   assertExactKeys(videoModules, videoPaths, "scene layout video modules");
   assertExactKeys(
+    jsonDataModules,
+    jsonDataPaths,
+    "scene layout JSON data modules",
+  );
+  assertExactKeys(
     imageStringResources,
     imageStringPaths,
     "scene layout image-string resources",
@@ -455,6 +479,7 @@ export async function loadSceneLayoutResourceFromUrl(options: {
   const atlasModules: Record<string, string> = {};
   const textureModules: Record<string, string> = {};
   const videoModules: Record<string, string> = {};
+  const jsonDataModules: Record<string, SceneLayoutJsonData> = {};
   const ownedObjectUrls: string[] = [];
   const imageStringResources: Record<string, ImageStringResource> = {};
   const vniResources: Record<
@@ -464,7 +489,7 @@ export async function loadSceneLayoutResourceFromUrl(options: {
   try {
     const resourceByPath = new Map<
       string,
-      "image" | "skeleton" | "atlas" | "texture" | "video"
+      "image" | "skeleton" | "atlas" | "texture" | "video" | "json-data"
     >();
     for (const node of manifest.nodes) {
       const resource = node.resource;
@@ -487,6 +512,10 @@ export async function loadSceneLayoutResourceFromUrl(options: {
       }
       if (resource.kind === "video") {
         resourceByPath.set(resource.path, "video");
+        continue;
+      }
+      if (resource.kind === "json") {
+        resourceByPath.set(resource.path, "json-data");
         continue;
       }
       if (resource.kind === "image-string" || resource.kind === "vni") continue;
@@ -627,6 +656,11 @@ export async function loadSceneLayoutResourceFromUrl(options: {
         );
         ownedObjectUrls.push(objectUrl);
         videoModules[path] = objectUrl;
+      } else if (kind === "json-data") {
+        jsonDataModules[path] = parseSceneLayoutJsonData(
+          new Uint8Array(await response.arrayBuffer()),
+          path,
+        );
       } else {
         const blob = await response.blob();
         const decoded = await (options.decodeImage ?? decodeBrowserImageBlob)(
@@ -659,6 +693,7 @@ export async function loadSceneLayoutResourceFromUrl(options: {
       atlasModules,
       textureModules,
       videoModules,
+      jsonDataModules,
       ownedObjectUrls,
       imageStringResources,
       vniResources,

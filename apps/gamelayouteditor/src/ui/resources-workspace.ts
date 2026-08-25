@@ -51,9 +51,10 @@ export function resourcesWorkspaceMarkup(options: {
         <div><h2 id="assets-heading">扁平资源库</h2><span>${project.resources.size} 个 filename-key roots</span></div>
         <div class="toolbar-actions">
           <button type="button" data-upload-resources>导入资源 / ZIP</button>
+          <button type="button" data-upload-json-data>导入 JSON data</button>
         </div>
         <label class="search-field">搜索 id / path<input type="search" data-resource-query value="${escapeHtml(session.resourceQuery)}" /></label>
-        <label>类型<select data-resource-type><option value="all">全部</option><option value="image" ${session.resourceType === "image" ? "selected" : ""}>Image</option><option value="spine" ${session.resourceType === "spine" ? "selected" : ""}>Spine</option><option value="vni" ${session.resourceType === "vni" ? "selected" : ""}>VNI</option><option value="image-string" ${session.resourceType === "image-string" ? "selected" : ""}>Image String</option><option value="video" ${session.resourceType === "video" ? "selected" : ""}>Video</option><option value="audio" ${session.resourceType === "audio" ? "selected" : ""}>Audio</option></select></label>
+        <label>类型<select data-resource-type><option value="all">全部</option><option value="image" ${session.resourceType === "image" ? "selected" : ""}>Image</option><option value="spine" ${session.resourceType === "spine" ? "selected" : ""}>Spine</option><option value="vni" ${session.resourceType === "vni" ? "selected" : ""}>VNI</option><option value="image-string" ${session.resourceType === "image-string" ? "selected" : ""}>Image String</option><option value="json" ${session.resourceType === "json" ? "selected" : ""}>JSON Data</option><option value="video" ${session.resourceType === "video" ? "selected" : ""}>Video</option><option value="audio" ${session.resourceType === "audio" ? "selected" : ""}>Audio</option></select></label>
         <label>导出状态<select data-resource-status><option value="all">全部</option><option value="referenced" ${session.resourceStatus === "referenced" ? "selected" : ""}>Scene 已引用</option><option value="runtime" ${session.resourceStatus === "runtime" ? "selected" : ""}>程序资源</option><option value="unused" ${session.resourceStatus === "unused" ? "selected" : ""}>不会导出</option><option value="error" ${session.resourceStatus === "error" ? "selected" : ""}>错误</option></select></label>
       </div>
       <div class="resource-list" data-resource-list>
@@ -91,7 +92,7 @@ function resourceRowMarkup(
   const preview =
     resource.kind === "image" && thumbnailUrl
       ? `<img src="${escapeHtml(thumbnailUrl)}" alt="" />`
-      : `<span aria-hidden="true">${resource.kind === "spine" ? "SP" : resource.kind === "vni" ? "VNI" : resource.kind === "image-string" ? "TXT" : resource.kind === "video" ? "MP4" : resource.kind === "audio" ? "AU" : "IMG"}</span>`;
+      : `<span aria-hidden="true">${resource.kind === "spine" ? "SP" : resource.kind === "vni" ? "VNI" : resource.kind === "image-string" ? "TXT" : resource.kind === "json" ? "JSON" : resource.kind === "video" ? "MP4" : resource.kind === "audio" ? "AU" : "IMG"}</span>`;
   return `<article class="resource-row" data-resource-row="${escapeHtml(resource.id)}">
     <div class="resource-summary">
       <div class="resource-thumbnail">${preview}</div>
@@ -99,9 +100,10 @@ function resourceRowMarkup(
       <button type="button" data-toggle-resource="${escapeHtml(resource.id)}" aria-expanded="${expanded}">${expanded ? "收起" : "详情"}</button>
     </div>
     <div class="resource-actions">
-      ${resource.kind === "video" || resource.kind === "audio" ? "" : `<button type="button" data-resource-add-layer="${escapeHtml(resource.id)}">添加为图层</button>`}
-      ${resource.kind === "image-string" || resource.kind === "video" || resource.kind === "vni" || resource.kind === "audio" ? "" : project.mode === "maximized-focus" ? `<button type="button" data-resource-background="default" data-resource-id="${escapeHtml(resource.id)}">设为背景</button>` : `<button type="button" data-resource-background="landscape" data-resource-id="${escapeHtml(resource.id)}">设为横版背景</button><button type="button" data-resource-background="portrait" data-resource-id="${escapeHtml(resource.id)}">设为竖版背景</button>`}
+      ${resource.kind === "video" || resource.kind === "audio" || resource.kind === "json" ? "" : `<button type="button" data-resource-add-layer="${escapeHtml(resource.id)}">添加为图层</button>`}
+      ${resource.kind === "image-string" || resource.kind === "video" || resource.kind === "vni" || resource.kind === "audio" || resource.kind === "json" ? "" : project.mode === "maximized-focus" ? `<button type="button" data-resource-background="default" data-resource-id="${escapeHtml(resource.id)}">设为背景</button>` : `<button type="button" data-resource-background="landscape" data-resource-id="${escapeHtml(resource.id)}">设为横版背景</button><button type="button" data-resource-background="portrait" data-resource-id="${escapeHtml(resource.id)}">设为竖版背景</button>`}
       ${resource.kind === "audio" ? `<label>程序音效名<input data-audio-effect-name="${escapeHtml(resource.id)}" value="${escapeHtml(suggestAudioBindingName(resource.id))}" placeholder="例如 near-win" /></label><button type="button" data-bind-audio-effect="${escapeHtml(resource.id)}">添加程序音效</button>${programmaticEffects.map(({ name }) => `<span><code>${escapeHtml(name)}</code> <button type="button" data-preview-audio-effect="${escapeHtml(name)}">试听</button><button type="button" data-stop-audio-effect="${escapeHtml(name)}">停止</button><button type="button" data-unbind-audio-effect="${escapeHtml(name)}">取消</button></span>`).join("")}` : `<label>程序键<input data-runtime-resource-key="${escapeHtml(resource.id)}" value="${escapeHtml(runtimeKey ?? suggestRuntimeResourceKey(resource.id))}" placeholder="例如 nearwin" /></label><button type="button" data-runtime-resource-action="${escapeHtml(resource.id)}" data-runtime-bound="${runtimeKey !== null}">${runtimeKey ? "取消强制导出" : "设为程序资源"}</button>`}
+      ${resource.kind === "json" ? `<button type="button" data-replace-resource="${escapeHtml(resource.id)}">替换 JSON data</button>` : ""}
       <button type="button" class="danger" data-delete-resource="${escapeHtml(resource.id)}" ${references.length > 0 ? `title="被 ${references.map((reference) => reference.nodeId).join(", ")} 引用"` : ""}>删除</button>
     </div>
     ${
@@ -141,14 +143,16 @@ function resourceDetailsMarkup(
             ? `<li>video: ${escapeHtml(resource.path)}</li><li>${resource.size.width}×${resource.size.height} · ${resource.durationSeconds.toFixed(3)}s · audio ${escapeHtml(String(resource.hasAudio))}</li>`
             : resource.kind === "audio"
               ? `<li>audio: ${escapeHtml(resource.path)}</li><li>media type: ${escapeHtml(resource.mediaType)}</li>`
-              : `<li>manifest: ${escapeHtml(resource.manifestPath)}</li><li>${resource.assetPaths.length} glyph assets</li>`;
+              : resource.kind === "json"
+                ? `<li>JSON data: ${escapeHtml(resource.path)}</li><li>root: ${resource.rootKind} · opaque program asset</li>`
+                : `<li>manifest: ${escapeHtml(resource.manifestPath)}</li><li>${resource.assetPaths.length} glyph assets</li>`;
   const animations =
     resource.kind === "spine"
       ? `<p><strong>Animations：</strong>${resource.animationNames.map(escapeHtml).join(", ")}</p>`
       : "";
   const runtimeAddress =
-    runtimeKey && resource.kind !== "audio"
+    runtimeKey && resource.kind !== "audio" && resource.kind !== "json"
       ? formatGameLayoutRuntimeAddress("resource", resource.kind, runtimeKey)
       : null;
-  return `<div class="resource-details"><ul>${dependencies}</ul>${animations}<p><strong>Typed 引用：</strong>${references.length > 0 ? references.map((reference) => `${escapeHtml(reference.nodeId)} (${reference.role}${reference.variants.length ? `: ${reference.variants.join(", ")}` : ""})`).join("；") : "无"}</p><p><strong>程序使用：</strong>${resource.kind === "audio" ? (programmaticEffects.length ? programmaticEffects.map(escapeHtml).join(", ") : references.length === 0 ? "未绑定，不会导出" : "未绑定；由 mode BGM 引用导出") : runtimeKey ? `${escapeHtml(runtimeKey)}（强制导出）` : references.length === 0 ? "未引用，不会导出且没有程序地址" : "未设置；由 Scene 引用导出，但没有程序工厂地址"}</p>${runtimeAddress ? runtimeAddressMarkup(resource.kind === "image-string" ? "ImgNumber factory runtime address" : "Program resource runtime address", runtimeAddress, "由程序键派生；地址不写入 manifest。") : ""}</div>`;
+  return `<div class="resource-details"><ul>${dependencies}</ul>${animations}<p><strong>Typed 引用：</strong>${references.length > 0 ? references.map((reference) => `${escapeHtml(reference.nodeId)} (${reference.role}${reference.variants.length ? `: ${reference.variants.join(", ")}` : ""})`).join("；") : "无"}</p><p><strong>程序使用：</strong>${resource.kind === "audio" ? (programmaticEffects.length ? programmaticEffects.map(escapeHtml).join(", ") : references.length === 0 ? "未绑定，不会导出" : "未绑定；由 mode BGM 引用导出") : resource.kind === "json" ? (runtimeKey ? `${escapeHtml(runtimeKey)}（通过 loadJsonData API 读取）` : "未绑定，不会导出；JSON data 没有渲染地址") : runtimeKey ? `${escapeHtml(runtimeKey)}（强制导出）` : references.length === 0 ? "未引用，不会导出且没有程序地址" : "未设置；由 Scene 引用导出，但没有程序工厂地址"}</p>${runtimeAddress ? runtimeAddressMarkup(resource.kind === "image-string" ? "ImgNumber factory runtime address" : "Program resource runtime address", runtimeAddress, "由程序键派生；地址不写入 manifest。") : ""}</div>`;
 }

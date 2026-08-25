@@ -99,6 +99,7 @@
 ## Layout Editor dependency
 
 - Gamelayout Editor 只编辑和导出 Scene Layout latest v5；打开合法 v1–v4 时先调用 RenderCore 共享 upgrader 生成默认 `runtimeAllocation`、空旧音频目录与默认 event-audio 合同，再执行 Editor node-id migration 并原子复验。每次导出都由 RenderCore 从 typed draft 重建并 strict 复验 allocation 与 event catalog 引用；旧 mode id、initial、edge、dependency 和旧音频数据保持，不自动插入 Splash。
+- Gamelayout Editor 导入的 JSON data 是 opaque、program-only asset：整批先严格验证 UTF-8、JSON 语法与 object/array root，再原子提交；只有显式 runtime program key binding 才进入 export closure。它不得进入画布、Picker、preview、RenderObject 或地址系统；mapped ZIP、重导与 optimizer 只能结构化改写 owner path，必须保持 payload bytes。
 - EditorCore event dialog 的固定 source 与 typed row configuration 扩展只管理 dialog draft/lifecycle；宿主仍拥有 project、asset picker 和业务 schema。Gamelayout Editor 的 event audio 配置只能选择 Assets 已提交的 audio，不在 dialog 内上传或复制 bytes；project panel 重渲染前必须销毁旧 dialog。
 - BGM 只由 Game Layout Editor 按 mode 从已导入 audio asset 中可选配置，新绑定固定 loop，并在 production preview 试听；root 程序音效同样从 audio asset 显式命名并进入 programmatic allowlist，不复用通用 runtime-resource 键。effect 在 Popup/Symbol owner 中只使用 local name，组合到 Scene Layout 时才按 binding id 形成 `award.coin` 一类 route。未被 cue 引用但允许程序播放的 route 必须进入显式 programmatic allowlist；未绑定 audio asset 不进入 production ZIP。
 - Game Layout Editor必须从shared formatter派生并显示/copy所选authored owner的canonical `gamelayout:/` runtime address；地址不可手输、不可写入manifest或另存alias表。未绑定audio asset没有runtime address，transition Spine event地址必须包含exact from/to edge与configured event。

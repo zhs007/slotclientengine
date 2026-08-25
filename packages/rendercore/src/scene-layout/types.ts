@@ -4,6 +4,7 @@ import type {
   VNIProjectConfig,
 } from "@slotclientengine/vnicore/data";
 import type { ImageStringResource } from "../image-string/core/index.js";
+import type { SceneLayoutJsonData } from "./data/json-data.js";
 import type { SymbolPackageResource } from "../symbol/package.js";
 import type { PopupPackageResource } from "../popup/core/types.js";
 import type {
@@ -118,12 +119,18 @@ export interface SceneLayoutRuntimeVideoResourceSpec {
   readonly mimeType: "video/mp4";
 }
 
+export interface SceneLayoutRuntimeJsonResourceSpec {
+  readonly kind: "json";
+  readonly path: string;
+}
+
 export type SceneLayoutRuntimeResourceSpec =
   | SceneLayoutImageResourceSpec
   | SceneLayoutRuntimeSpineResourceSpec
   | SceneLayoutRuntimeImageStringResourceSpec
   | SceneLayoutRuntimeVniResourceSpec
-  | SceneLayoutRuntimeVideoResourceSpec;
+  | SceneLayoutRuntimeVideoResourceSpec
+  | SceneLayoutRuntimeJsonResourceSpec;
 
 export interface SceneLayoutNode {
   readonly id: string;
@@ -440,6 +447,10 @@ export type SceneLayoutRuntimeResource =
       readonly kind: "video";
       readonly url: string;
       readonly mimeType: "video/mp4";
+    }
+  | {
+      readonly kind: "json";
+      readonly value: SceneLayoutJsonData;
     };
 
 interface OfficialSpineRuntimeResource {
@@ -504,6 +515,7 @@ export interface SceneLayoutPackageResource {
     key: string,
     kind: Kind,
   ): Promise<Extract<SceneLayoutRuntimeResource, { readonly kind: Kind }>>;
+  loadJsonData(key: string): Promise<SceneLayoutJsonData>;
   destroy(): Promise<void> | void;
 }
 

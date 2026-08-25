@@ -51,6 +51,7 @@ export interface EditorUiSession {
     | "spine"
     | "vni"
     | "image-string"
+    | "json"
     | "video"
     | "audio";
   resourceStatus: "all" | "referenced" | "runtime" | "unused" | "error";

@@ -152,6 +152,9 @@ describe("optimized package flow", () => {
     const root = await makeRoot();
     const input = join(root, "layout.zip");
     const baseManifest = layoutFixture();
+    const spinConfigBytes = new TextEncoder().encode(
+      '{"kind":"popup","path":"nearwin.png","reels":[["A","B"]]}\n',
+    );
     await writeFile(
       input,
       await createMappedLayoutZip({
@@ -179,11 +182,16 @@ describe("optimized package flow", () => {
               path: "nearwin.png",
               size: { width: 1, height: 1 },
             },
+            "spin.config": {
+              kind: "json",
+              path: "spin-config.json",
+            },
           },
         },
         logicalFiles: new Map([
           ...logicalFixtureFiles(),
           ["nearwin.png", new Uint8Array([0x89, 0x50, 0x4e, 0x47, 9])],
+          ["spin-config.json", spinConfigBytes],
         ]),
       }),
     );
@@ -207,6 +215,9 @@ describe("optimized package flow", () => {
     expect(validated.files.has("alpha.webp")).toBe(true);
     expect(validated.files.has("beta.webp")).toBe(true);
     expect(validated.files.has("alpha.png")).toBe(false);
+    expect(validated.files.get("spin-config.json")).toStrictEqual(
+      spinConfigBytes,
+    );
     const groups = parseSceneLayoutAssetGroups(
       JSON.parse(await readFile(result.assetsJsonPath, "utf8")),
     );
@@ -229,6 +240,17 @@ describe("optimized package flow", () => {
       resourceKind: "image",
       requiredAssets: ["nearwin.webp"],
       incrementalAssets: ["nearwin.webp"],
+    });
+    expect(
+      groups.groups.find(
+        (group) => group.id === "runtime-resource:spin.config",
+      ),
+    ).toMatchObject({
+      kind: "runtime-resource",
+      resourceKey: "spin.config",
+      resourceKind: "json",
+      requiredAssets: ["spin-config.json"],
+      incrementalAssets: ["spin-config.json"],
     });
     expect(
       groups.groups.find((group) => group.id === "mode:Beta")

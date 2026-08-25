@@ -214,7 +214,11 @@ export function collectSceneLayoutAssetPaths(
   for (const popup of Object.values(parsed.popups ?? {}))
     paths.add(popup.manifest);
   for (const resource of Object.values(parsed.runtimeResources ?? {})) {
-    if (resource.kind === "image" || resource.kind === "video")
+    if (
+      resource.kind === "image" ||
+      resource.kind === "video" ||
+      resource.kind === "json"
+    )
       paths.add(resource.path);
     else if (resource.kind === "image-string") paths.add(resource.manifest);
     else if (resource.kind === "vni") paths.add(resource.project);
@@ -598,7 +602,17 @@ function parseRuntimeResources(
       });
       continue;
     }
-    fail(`${label}.kind must be image, spine, image-string, vni, or video.`);
+    if (resource.kind === "json") {
+      known(resource, ["kind", "path"], label);
+      resources[key] = deepFreeze({
+        kind: "json",
+        path: localPath(resource.path, `${label}.path`, new Set([".json"])),
+      });
+      continue;
+    }
+    fail(
+      `${label}.kind must be image, spine, image-string, vni, video, or json.`,
+    );
   }
   return deepFreeze(resources);
 }
@@ -834,7 +848,9 @@ function validatePathClosure(
   }
   for (const resource of Object.values(runtimeResources ?? {})) {
     paths.push(
-      ...(resource.kind === "image" || resource.kind === "video"
+      ...(resource.kind === "image" ||
+      resource.kind === "video" ||
+      resource.kind === "json"
         ? [resource.path]
         : resource.kind === "image-string"
           ? [resource.manifest]

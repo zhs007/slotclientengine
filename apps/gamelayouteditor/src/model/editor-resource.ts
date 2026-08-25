@@ -59,6 +59,14 @@ export interface EditorAudioLayoutResource {
   readonly provenance?: EditorResourceProvenance;
 }
 
+export interface EditorJsonLayoutResource {
+  readonly id: string;
+  readonly kind: "json";
+  readonly path: string;
+  readonly rootKind: "object" | "array";
+  readonly provenance?: EditorResourceProvenance;
+}
+
 export interface EditorVniLayoutResource {
   readonly id: string;
   readonly kind: "vni";
@@ -74,6 +82,7 @@ export type EditorLayoutResource =
   | EditorImageStringLayoutResource
   | EditorVniLayoutResource
   | EditorAudioLayoutResource
+  | EditorJsonLayoutResource
   | EditorVideoLayoutResource;
 
 export interface EditorResourceReference {
@@ -95,6 +104,7 @@ export function editorResourcePrimaryPath(
   if (resource.kind === "spine") return resource.skeleton;
   if (resource.kind === "video") return resource.path;
   if (resource.kind === "audio") return resource.path;
+  if (resource.kind === "json") return resource.path;
   if (resource.kind === "vni") return resource.projectPath;
   return resource.manifestPath;
 }
@@ -111,6 +121,7 @@ export function editorResourcePaths(
     ];
   if (resource.kind === "video") return [resource.path];
   if (resource.kind === "audio") return [resource.path];
+  if (resource.kind === "json") return [resource.path];
   if (resource.kind === "vni")
     return [resource.projectPath, ...resource.assetPaths];
   return [resource.manifestPath, ...resource.assetPaths];
@@ -163,6 +174,13 @@ export function editorResourceSignature(
       kind: resource.kind,
       path: resource.path,
       mediaType: resource.mediaType,
+    });
+  }
+  if (resource.kind === "json") {
+    return JSON.stringify({
+      kind: resource.kind,
+      path: resource.path,
+      rootKind: resource.rootKind,
     });
   }
   if (resource.kind === "vni") {

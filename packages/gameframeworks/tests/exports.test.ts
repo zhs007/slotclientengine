@@ -7,6 +7,10 @@ import {
   findComponentSteps,
   prepareSlotGameLiveSession,
 } from "../src/index.js";
+import type {
+  SceneLayoutJsonData,
+  SceneLayoutPackageResource,
+} from "../src/index.js";
 import { assertSlotGameStaticConfig } from "../src/static-config/index.js";
 
 describe("exports", () => {
@@ -28,4 +32,53 @@ describe("exports", () => {
       "./dist/gameframeworks.css",
     );
   });
+
+  it("exposes the Scene Layout JSON data API through the facade types", () => {
+    const load = (
+      resource: Pick<SceneLayoutPackageResource, "loadJsonData">,
+    ): Promise<SceneLayoutJsonData> => resource.loadJsonData("spin-config");
+    expect(typeof load).toBe("function");
+    expect(
+      parseSpinConfig({
+        localReels: [["A", "B"]],
+        numberWeights: [{ value: 10, weight: 2 }],
+      }),
+    ).toEqual({
+      localReels: [["A", "B"]],
+      numberWeights: [{ value: 10, weight: 2 }],
+    });
+    expect(() => parseSpinConfig({ localReels: [["A", 2]] })).toThrow(
+      /localReels/,
+    );
+  });
 });
+
+function parseSpinConfig(value: SceneLayoutJsonData) {
+  if (Array.isArray(value)) throw new Error("spin config 必须是 object。");
+  const record = value as Record<string, unknown>;
+  if (
+    !Array.isArray(record.localReels) ||
+    record.localReels.some(
+      (reel) =>
+        !Array.isArray(reel) ||
+        reel.some((symbol) => typeof symbol !== "string"),
+    )
+  )
+    throw new Error("spin config localReels 非法。");
+  if (
+    record.numberWeights !== undefined &&
+    (!Array.isArray(record.numberWeights) ||
+      record.numberWeights.some((item) => {
+        if (typeof item !== "object" || item === null) return true;
+        const weight = item as Record<string, unknown>;
+        return (
+          typeof weight.value !== "number" ||
+          !Number.isFinite(weight.value) ||
+          typeof weight.weight !== "number" ||
+          !Number.isFinite(weight.weight)
+        );
+      }))
+  )
+    throw new Error("spin config numberWeights 非法。");
+  return value;
+}

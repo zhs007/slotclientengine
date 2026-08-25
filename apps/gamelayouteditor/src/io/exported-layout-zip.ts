@@ -310,6 +310,7 @@ export async function normalizeMappedLayoutFilenameKeys(
   readonly manifest: SceneLayoutManifestLatest;
   readonly assets: ReadonlyMap<string, Uint8Array>;
 }> {
+  const opaqueJsonDataPaths = collectJsonDataPaths(manifestValue);
   const mapping = createCanonicalFilenameMapping(
     logicalAssets,
     collectExactSymbolDependencyKeys(manifestValue, logicalAssets),
@@ -322,7 +323,10 @@ export async function normalizeMappedLayoutFilenameKeys(
   const assets = new Map<string, Uint8Array>();
   for (const [sourceKey, sourceBytes] of logicalAssets) {
     let bytes = sourceBytes.slice();
-    if (sourceKey.toLowerCase().endsWith(".json")) {
+    if (
+      sourceKey.toLowerCase().endsWith(".json") &&
+      !opaqueJsonDataPaths.has(sourceKey)
+    ) {
       const raw = parseJson(sourceBytes, sourceKey);
       if (isPathBearingJson(raw) || looksLikeVniProject(raw))
         bytes = new TextEncoder().encode(
@@ -353,6 +357,7 @@ async function flattenLayoutClosure(
   manifest: SceneLayoutManifest,
   closure: ReadonlyMap<string, Uint8Array>,
 ) {
+  const opaqueJsonDataPaths = collectJsonDataPaths(manifest);
   const mapping = createCanonicalFilenameMapping(
     closure,
     collectExactSymbolDependencyKeys(manifest, closure),
@@ -409,6 +414,7 @@ async function flattenLayoutClosure(
   }
   for (const [sourcePath, bytes] of closure) {
     if (!sourcePath.toLowerCase().endsWith(".json")) continue;
+    if (opaqueJsonDataPaths.has(sourcePath)) continue;
     const raw = parseJson(bytes, sourcePath);
     if (!isPathBearingJson(raw) || looksLikeVniProject(raw)) continue;
     const rewrite = (reference: string): string => {
@@ -754,7 +760,11 @@ function rewriteLayoutManifestFilenameKeys(
   const runtimeResources = value.runtimeResources
     ? Object.fromEntries(
         Object.entries(value.runtimeResources).map(([id, resource]) => {
-          if (resource.kind === "image" || resource.kind === "video")
+          if (
+            resource.kind === "image" ||
+            resource.kind === "video" ||
+            resource.kind === "json"
+          )
             return [id, { ...resource, path: key(resource.path) }];
           if (resource.kind === "image-string")
             return [id, { ...resource, manifest: key(resource.manifest) }];
@@ -818,6 +828,25 @@ function rewriteLayoutManifestFilenameKeys(
         }
       : {}),
   });
+}
+
+function collectJsonDataPaths(manifest: unknown): ReadonlySet<string> {
+  if (!isPlainRecord(manifest)) return new Set();
+  const resources = manifest.runtimeResources;
+  if (!isPlainRecord(resources)) return new Set();
+  const paths = new Set<string>();
+  for (const resource of Object.values(resources))
+    if (
+      isPlainRecord(resource) &&
+      resource.kind === "json" &&
+      typeof resource.path === "string"
+    )
+      paths.add(resource.path);
+  return paths;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function layoutMediaType(key: string): string {

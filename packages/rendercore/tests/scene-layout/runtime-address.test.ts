@@ -9,6 +9,30 @@ import { compileGameLayoutRuntimeEventCatalog } from "../../src/scene-layout/cor
 import { singleStatePopupFixture } from "../popup/fixtures.js";
 
 describe("Game Layout runtime address", () => {
+  it("does not publish JSON program data as a render factory address", () => {
+    const controller = createGameLayoutRuntimeAddresses(
+      {
+        manifest: {
+          nodes: [],
+          reels: {},
+          runtimeResources: {
+            "spin-config": { kind: "json", path: "spin-config.json" },
+          },
+          gameModes: { modes: [], transitions: [] },
+        },
+        popupPackages: {},
+      } as any,
+      {} as any,
+    );
+    expect(controller.addresses.list({ kind: "resource-factory" })).toEqual([]);
+    expect(() =>
+      controller.addresses.describe(
+        formatGameLayoutRuntimeAddress("resource", "json", "spin-config"),
+      ),
+    ).toThrow(/Unknown Game Layout runtime address/);
+    controller.destroy();
+  });
+
   it("publishes the global orientation variant event through bind and wait", async () => {
     const controller = createGameLayoutRuntimeAddresses(
       {
