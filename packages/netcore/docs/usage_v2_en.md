@@ -309,7 +309,7 @@ messages; it is not a complete server session object.
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | `userbaseinfo`   | `pid`, `uid`, `nickname`, `balance`, `token`, `currency`, `jurisdiction`                                                                |
 | `gameuserinfo`   | `ctrlid`, `lastctrlid`, `playerState`                                                                                                   |
-| `gamecfg`        | `defaultLinebet`, `linebets`, `gamecfgVer`, `gamecfgCoreVer`, `gamecfgData`, `linesOptions`                                             |
+| `gamecfg`        | `defaultLinebet`, `linebets`, `maxBetBootsBuy`, `maxTotalBetLimit`, `gamecfgVer`, `gamecfgCoreVer`, `gamecfgData`, `linesOptions`       |
 | `gamemoduleinfo` | `gameid`, `lastGMI`, `lastPlayIndex`, `lastPlayWin`, `lastTotalWin`, `lastResultsCount`, `optionals`, `defaultScene`, `clientParameter` |
 
 `defaultScene` is simplified with `transformSceneData(data)` into `number[][]`.

@@ -16,6 +16,8 @@ const mockReplayData = {
     bet: 1,
     totalbet: 450,
     lines: 450,
+    maxBetBootsBuy: 2000,
+    maxTotalBetLimit: 5000,
     currency: 'USD',
     gameType: 'slot',
     payTables: { A: [0, 0, 10] },
@@ -116,6 +118,8 @@ describe('SlotcraftClient Replay Mode', () => {
       expect(userInfo.replayBootstrap).toEqual(mockReplayData.playCtrlParam);
       expect(userInfo.balance).toBe(mockReplayData.playCtrlParam.balance);
       expect(userInfo.currency).toBe(mockReplayData.playCtrlParam.currency);
+      expect(userInfo.maxBetBootsBuy).toBe(mockReplayData.playCtrlParam.maxBetBootsBuy);
+      expect(userInfo.maxTotalBetLimit).toBe(mockReplayData.playCtrlParam.maxTotalBetLimit);
       expect(userInfo.lastGMI).toBeUndefined();
       expect(Object.isFrozen(userInfo.replayBootstrap)).toBe(true);
       expect(Object.isFrozen(userInfo.replayBootstrap?.payTables)).toBe(true);

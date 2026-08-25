@@ -221,6 +221,8 @@ export interface ReplayBootstrapInfo {
   bet?: number;
   totalbet?: number;
   lines?: number;
+  maxBetBootsBuy?: number;
+  maxTotalBetLimit?: number;
   currency?: string;
   gameType?: string;
   payTables?: Readonly<Record<string, unknown>>;
