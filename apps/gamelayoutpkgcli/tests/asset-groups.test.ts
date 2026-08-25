@@ -248,6 +248,45 @@ describe("asset-groups versioned parser", () => {
     ).toEqual([]);
   });
 
+  it("creates an independent runtime group for opaque JSON data", () => {
+    const key = "spin-config.json";
+    const manifest = {
+      ...layoutFixture(),
+      runtimeResources: {
+        "spin.config": { kind: "json", path: key },
+      },
+    } as const;
+    const groups = createSceneLayoutAssetGroups({
+      manifest,
+      files: new Map([[key, text({ reels: [["A", "B"]] })]]),
+      sourceZipBytes: 4,
+      output: outputFixture([
+        "alpha.png",
+        "beta.jpg",
+        "shared.webp",
+        "alpha-to-beta.mp4",
+        "beta-to-alpha.mp4",
+        key,
+      ]),
+      quality: 80,
+      cwebpVersion: "test",
+      convertedImageCount: 0,
+      ...audioOptimizationFixture(),
+    });
+    expect(
+      groups.groups.find(
+        (group) => group.id === "runtime-resource:spin.config",
+      ),
+    ).toMatchObject({
+      kind: "runtime-resource",
+      resourceKey: "spin.config",
+      resourceKind: "json",
+      requiredAssets: [key],
+      incrementalAssets: [key],
+    });
+    expect(groups.initialAssets).not.toContain(key);
+  });
+
   it("keeps audio in its deferred group even when the initial mode uses BGM", () => {
     const keys = ["base.png", "base.mp3", "click.ogg"];
     const manifest = {
@@ -333,11 +372,13 @@ function outputFixture(keys: readonly string[]) {
           bytes: new Uint8Array([1]),
           sourceByteLength: 1,
           converted: false,
-          mediaType: key.endsWith(".png")
-            ? "image/png"
-            : key.endsWith(".mp3")
-              ? "audio/mpeg"
-              : "audio/ogg",
+          mediaType: key.endsWith(".json")
+            ? "application/json"
+            : key.endsWith(".png")
+              ? "image/png"
+              : key.endsWith(".mp3")
+                ? "audio/mpeg"
+                : "audio/ogg",
         },
       ]),
     ),
@@ -348,11 +389,13 @@ function outputFixture(keys: readonly string[]) {
           key,
           {
             path: key,
-            mediaType: key.endsWith(".png")
-              ? "image/png"
-              : key.endsWith(".mp3")
-                ? "audio/mpeg"
-                : "audio/ogg",
+            mediaType: key.endsWith(".json")
+              ? "application/json"
+              : key.endsWith(".png")
+                ? "image/png"
+                : key.endsWith(".mp3")
+                  ? "audio/mpeg"
+                  : "audio/ogg",
             sha256: "a".repeat(64),
             byteLength: 1,
           },

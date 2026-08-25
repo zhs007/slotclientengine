@@ -89,6 +89,7 @@ ZIP 与 JSON 作为一对提交，第二个文件提交失败时会回滚第一�
   strict 规范化为 latest v8；v7/v8 typed audio 与三种 Popup 的资源引用均结构化改写，CLI 不加载 mapped editor
   workspace 或 Pixi runtime；
 - Spine atlas page logical name、VNI `originalName` 和业务 identity 保持不变；
+- root `runtimeResources` 显式声明的 JSON data 只结构化改写其 filename key/path；payload 作为 opaque program data 原样保留，不按 Popup、VNI 或图片路径启发式改写内容；
 - Popup 的 WOFF2/WOFF/TTF/OTF 字体引用保持不变，并继续按 payload SHA-256 去重；
 - `assets.map.json` 的 path、SHA-256、media type 和 byte length 按优化后 bytes
   重新生成；

@@ -533,7 +533,11 @@ function runtimeResourceClosure(
   files: ReadonlyMap<string, Uint8Array>,
 ): readonly string[] {
   const keys = new Set<string>();
-  if (resource.kind === "image" || resource.kind === "video") {
+  if (
+    resource.kind === "image" ||
+    resource.kind === "video" ||
+    resource.kind === "json"
+  ) {
     keys.add(resource.path);
   } else if (resource.kind === "image-string") {
     keys.add(resource.manifest);

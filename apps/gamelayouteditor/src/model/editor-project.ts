@@ -1,5 +1,6 @@
 import {
   materializeSceneLayoutManifestForMode,
+  parseSceneLayoutJsonData,
   parseSceneLayoutManifest,
   parseSceneLayoutManifestDocument,
   upgradeSceneLayoutManifestToLatest,
@@ -38,6 +39,7 @@ import {
   type EditorImageLayoutResource,
   type EditorAudioLayoutResource,
   type EditorImageStringLayoutResource,
+  type EditorJsonLayoutResource,
   type EditorLayoutResource,
   type EditorSpineLayoutResource,
   type EditorVniLayoutResource,
@@ -52,6 +54,7 @@ type EditorLayoutResourceDraft =
   | Omit<EditorSpineLayoutResource, "id">
   | Omit<EditorImageStringLayoutResource, "id">
   | Omit<EditorVniLayoutResource, "id">
+  | Omit<EditorJsonLayoutResource, "id">
   | Omit<EditorVideoLayoutResource, "id">;
 
 export type EditorMode = "maximized-focus" | "orientation-focus";
@@ -634,7 +637,11 @@ export function resolveEditorNodeResource(
       loop: node.playback.loop,
     };
   }
-  if (resource.kind === "video" || resource.kind === "audio")
+  if (
+    resource.kind === "video" ||
+    resource.kind === "audio" ||
+    resource.kind === "json"
+  )
     throw new Error(
       `${resource.kind} 资源 ${resource.id} 不能创建 scene node。`,
     );
@@ -663,10 +670,22 @@ export function editorProjectToPreviewManifest(
 ): SceneLayoutManifest | null {
   try {
     const manifest = editorProjectToManifest(project);
+    const visualRuntimeResources = Object.fromEntries(
+      Object.entries(manifest.runtimeResources ?? {}).filter(
+        ([, resource]) => resource.kind !== "json",
+      ),
+    );
+    const visualManifest = {
+      ...manifest,
+      runtimeResources:
+        Object.keys(visualRuntimeResources).length > 0
+          ? visualRuntimeResources
+          : undefined,
+    };
     const preview = includeSymbolPackage
-      ? manifest
+      ? visualManifest
       : {
-          ...manifest,
+          ...visualManifest,
           symbolPackage: undefined,
           symbolPackages: undefined,
           gameModes: {
@@ -1086,11 +1105,13 @@ export function manifestToEditorProject(
           ? resourceDraft.path
           : resourceDraft.kind === "spine"
             ? resourceDraft.skeleton
-            : resourceDraft.kind === "vni"
-              ? resourceDraft.projectPath
-              : resourceDraft.kind === "video"
-                ? resourceDraft.path
-                : resourceDraft.manifestPath;
+            : resourceDraft.kind === "json"
+              ? resourceDraft.path
+              : resourceDraft.kind === "vni"
+                ? resourceDraft.projectPath
+                : resourceDraft.kind === "video"
+                  ? resourceDraft.path
+                  : resourceDraft.manifestPath;
     const temporary = {
       ...resourceDraft,
       id: resourceKey,
@@ -1731,6 +1752,7 @@ function editorResourceToRuntimeSpec(
 ): SceneLayoutRuntimeResourceSpec {
   if (resource.kind === "image")
     return { kind: "image", path: resource.path, size: resource.size };
+  if (resource.kind === "json") return { kind: "json", path: resource.path };
   if (resource.kind === "image-string")
     return { kind: "image-string", manifest: resource.manifestPath };
   if (resource.kind === "vni")
@@ -1835,6 +1857,17 @@ function manifestRuntimeResourceToEditorResource(
     }
   >,
 ): EditorLayoutResourceDraft {
+  if (resource.kind === "json") {
+    const value = parseSceneLayoutJsonData(
+      requiredAsset(assets.get(resource.path), resource.path),
+      resource.path,
+    );
+    return {
+      kind: "json",
+      path: resource.path,
+      rootKind: Array.isArray(value) ? "array" : "object",
+    };
+  }
   if (resource.kind === "video") {
     const metadata = videoMetadata.get(resource.path);
     if (!metadata)

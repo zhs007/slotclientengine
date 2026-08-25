@@ -51,10 +51,18 @@ export function rewriteLayoutPackageReferences(options: {
     options.manifest,
     sourceFiles,
   );
+  const opaqueJsonDataKeys = new Set(
+    Object.values(options.manifest.runtimeResources ?? {}).flatMap(
+      (resource) => (resource.kind === "json" ? [resource.path] : []),
+    ),
+  );
   const assets = new Map<string, OptimizedLogicalAsset>();
   for (const asset of options.optimization.assets.values()) {
     let bytes = asset.bytes;
-    if (asset.sourceKey.toLowerCase().endsWith(".json")) {
+    if (
+      asset.sourceKey.toLowerCase().endsWith(".json") &&
+      !opaqueJsonDataKeys.has(asset.sourceKey)
+    ) {
       const raw = parseJson(bytes, asset.sourceKey);
       let rewritten: unknown | undefined;
       if (symbolManifestKeys.has(asset.sourceKey)) {
@@ -165,7 +173,11 @@ export function rewriteLayoutManifest(
   const runtimeResources = manifest.runtimeResources
     ? Object.fromEntries(
         Object.entries(manifest.runtimeResources).map(([id, resource]) => {
-          if (resource.kind === "image" || resource.kind === "video")
+          if (
+            resource.kind === "image" ||
+            resource.kind === "video" ||
+            resource.kind === "json"
+          )
             return [
               id,
               { ...resource, path: rewriteRef(resource.path, mapping) },

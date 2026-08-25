@@ -78,7 +78,7 @@
 ## Resource lifecycle
 
 - owned MP4、Spine、VNI project/assets、image、symbols 和 popup dependencies 都进入 exact closure；runtime 复用精确 bytes。
-- 不属于 scene node/transition、但由程序读取的资源必须通过根 manifest 的唯一稳定程序键声明为 typed runtime resource；五类现有 root 均按正向 exact closure 导出。runtime consumer 按 canonical runtime manifest 的 key/kind 严格解析，即使 initial layout view 为 lazy prepare 而省略这些声明也不得误判 unknown；不得猜 filename 或 physical hash path。
+- 不属于 scene node/transition、但由程序读取的资源必须通过根 manifest 的唯一稳定程序键声明为 typed runtime resource；各类 root 均按正向 exact closure 导出。`json` root 只承载 opaque program data，runtime 只验证 JSON object/array、返回 deep-frozen value，不解释业务 schema，也不生成 RenderObject、Object URL 或 runtime address。runtime consumer 按 canonical runtime manifest 的 key/kind 严格解析，即使 initial layout view 为 lazy prepare 而省略这些声明也不得误判 unknown；不得猜 filename 或 physical hash path。
 - production export 先从 layout 收集实际引用的 root，再按有向依赖计算 exact closure。共享 atlas/贴图可由任一被用到的 Spine JSON root 带入；同批未引用的 sibling JSON root 不得因共享 leaf 被反向导出。
 - 替换或重绑资源必须保留稳定 node identity、order、各 variant placement/visibility，并尽可能保留仍兼容的 animation、loop 与 image-string 配置。资源尺寸变化不得重置 reel placement 或 focus 四边外扩量；更新 artSize 后必须从 main reel 重新派生 focusRect，但不得以结果与新 art size 不互相包含为由失败。
 - 相同 symbols binding 的 mode 切换默认保留 reel、scene 和 player；只有显式 `recreateReel` 才重建。
@@ -101,7 +101,7 @@
 - WebP 后处理必须结构化改写 layout 与 nested owner manifest/VNI 的 typed 图片引用，重新生成完整 content-addressed payload 和 `assets.map.json`，再用 production package parser 复验；不得扫描任意 JSON 字符串猜路径。
 - 资源分组从完整 typed dependency graph 推导，不硬编码 BaseGame、FreeGame、Symbols 或 BigWin 文件名。transition 归属 source mode并包含其 prelude Popup closure；initial 集合包含 shared、initial mode、其 symbols 和从 initial mode 发出的 transition。未被 mode、transition 或显式 programmatic binding 引用的 package 不得进入 production ZIP/group。
 - 全局或 legacy 普通 node 归 shared 并进入每个 mode closure；声明 exact `gameMode` 的普通 node 只归该 mode。background ownership 仍来自 mode binding，order 不参与 owner 推导。
-- 没有显式 mode ownership 的 runtime resource 归 shared/initial；共享 Spine atlas/texture leaf 可去重，但 leaf 不反向拥有或带入未声明的 sibling skeleton root。
+- 每个 runtime resource 形成独立 deferred group，不并入 initial/shared；共享 Spine atlas/texture leaf 可去重，但 leaf 不反向拥有或带入未声明的 sibling skeleton root。typed JSON data 的 group closure 只含其 exact path，优化器可改写 filename key/path，但不得解析、格式化或改写 payload 内容。
 - 每个 group 同时保存完整 `requiredAssets` 与相对 initial 的 `incrementalAssets`；完整闭包允许重叠，但全部优化资源必须至少被一个 group 覆盖。
 - versioned asset-groups JSON 是 ZIP 外的独立交付物，不进入 production ZIP；它可供后续合图或 loading 优化消费，但 CLI 本身不修改 runtime loading 行为。
 - 音频形成独立 `audio:scene-layout` group，必须从 `initialAssets` 排除；实际引用仍保留在 production ZIP 与 typed closure 中，由 mode/effect owner 在运行期按需准备。

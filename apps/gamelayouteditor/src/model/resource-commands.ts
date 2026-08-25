@@ -1,4 +1,7 @@
-import type { SceneLayoutVariantId } from "@slotclientengine/rendercore/scene-layout/data";
+import {
+  parseSceneLayoutJsonData,
+  type SceneLayoutVariantId,
+} from "@slotclientengine/rendercore/scene-layout/data";
 import {
   parseImageStringManifest,
   resolveImageStringPackageFiles,
@@ -55,6 +58,7 @@ import {
   type EditorLayoutResource,
   type EditorAudioLayoutResource,
   type EditorImageStringLayoutResource,
+  type EditorJsonLayoutResource,
   type EditorResourceReference,
   type EditorSpineLayoutResource,
   type EditorVideoLayoutResource,
@@ -349,6 +353,32 @@ export async function uploadAudioResources(options: {
   return Object.freeze(prepared.map(({ resource }) => resource));
 }
 
+export async function uploadJsonDataResources(options: {
+  readonly project: EditorProject;
+  readonly files: readonly File[];
+}): Promise<readonly EditorJsonLayoutResource[]> {
+  if (options.files.length === 0)
+    throw new Error("至少选择一个 JSON data 文件。");
+  if (options.files.some((file) => !file.name.toLowerCase().endsWith(".json")))
+    throw new Error("JSON data 导入只接受 .json 文件。");
+  createBoundedSourceIndex(options.files, EDITOR_SOURCE_LIMITS);
+  const prepared = await Promise.all(
+    options.files.map((file) => prepareJsonDataResource({ file })),
+  );
+  const candidate = cloneEditorProject(options.project);
+  for (const item of prepared) {
+    const existing = candidate.resources.get(item.resource.id);
+    if (existing) commitResourceReplacement(candidate, existing, item);
+    else {
+      assertNewResourceAvailable(candidate, item.resource);
+      commitNewResource(candidate, item);
+    }
+  }
+  options.project.resources = candidate.resources;
+  options.project.assets = candidate.assets;
+  return Object.freeze(prepared.map(({ resource }) => resource));
+}
+
 export async function uploadSpineResource(options: {
   readonly project: EditorProject;
   readonly files: readonly File[];
@@ -473,6 +503,25 @@ export async function replaceAudioResource(options: {
   if (sourceKey !== current.path)
     throw new Error(`替换音频必须保持 filename key：${current.path}`);
   const prepared = await prepareAudioResource({
+    file: options.file,
+    resourceId: current.id,
+  });
+  commitResourceReplacement(options.project, current, prepared);
+  return prepared.resource;
+}
+
+export async function replaceJsonDataResource(options: {
+  readonly project: EditorProject;
+  readonly resourceId: string;
+  readonly file: File;
+}): Promise<EditorJsonLayoutResource> {
+  const current = requireResource(options.project, options.resourceId);
+  if (current.kind !== "json")
+    throw new Error("资源类型必须保持为 JSON data。");
+  const path = canonicalizeUploadFileName(options.file.name);
+  if (path !== current.path)
+    throw new Error(`替换 JSON data 必须保持 filename key：${current.path}`);
+  const prepared = await prepareJsonDataResource({
     file: options.file,
     resourceId: current.id,
   });
@@ -1521,6 +1570,34 @@ async function prepareAudioResource(options: {
   };
 }
 
+async function prepareJsonDataResource(options: {
+  readonly file: File;
+  readonly resourceId?: string;
+}): Promise<
+  PreparedResource & { readonly resource: EditorJsonLayoutResource }
+> {
+  createBoundedSourceIndex([options.file], EDITOR_SOURCE_LIMITS);
+  const path = canonicalizeUploadFileName(options.file.name);
+  if (!path.toLowerCase().endsWith(".json"))
+    throw new Error("JSON data filename 必须使用 .json 扩展名。");
+  const bytes = new Uint8Array(await options.file.arrayBuffer());
+  const value = parseSceneLayoutJsonData(bytes, path);
+  return {
+    resource: {
+      id: options.resourceId ?? requiredResourceId(options.file.name),
+      kind: "json",
+      path,
+      rootKind: Array.isArray(value) ? "array" : "object",
+      provenance: {
+        sourceNames: Object.freeze([options.file.name]),
+        sourceKind: "files",
+        batchLabel: `json-data:${options.file.name}`,
+      },
+    },
+    assets: new Map([[path, bytes]]),
+  };
+}
+
 async function prepareSpineResource(options: {
   readonly files: readonly File[];
   readonly resourceId?: string;
@@ -2102,6 +2179,8 @@ export function describeResource(resource: EditorLayoutResource): string {
     return `${resource.path} · ${resource.size.width}×${resource.size.height} · ${resource.durationSeconds.toFixed(3)}s · audio ${String(resource.hasAudio)}`;
   if (resource.kind === "audio")
     return `${resource.path} · ${resource.mediaType}`;
+  if (resource.kind === "json")
+    return `${resource.path} · ${resource.rootKind} · program-only`;
   if (resource.kind === "vni")
     return `${resource.projectPath} · ${resource.project.stage.width}×${resource.project.stage.height} · ${resource.project.stage.duration}s · ${resource.assetPaths.length} assets`;
   return `${editorResourcePrimaryPath(resource)} · ${resource.animationNames.length} animations${resource.bounds ? ` · export bounds ${resource.bounds.width}×${resource.bounds.height}（非 art size）` : " · 无 export bounds"}`;

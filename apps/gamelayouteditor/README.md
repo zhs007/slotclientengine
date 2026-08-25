@@ -31,6 +31,8 @@ SymbolsEditor 编辑。
 
 资源 Tab 和上下文 Picker 都调用同一个“导入资源”流程，支持多文件与 ZIP。image、audio、MP4、Spine、VNI runtime bundle、ImgNumber、Symbols 和 Popup 的所有 root/leaf 进入一个扁平 filename-key namespace；ZIP 内目录只用于识别 exact source closure，提交前会被结构化抹平。VNI bundle 只接受 `purpose=runtime` 发布包；只有一个 runtime 时自动选中，多个 runtime 必须明确选择 profile。
 
+Assets 工具栏另有明确的“导入 JSON data”动作，可原子导入一个或多个顶层为 object/array 的 `.json` 文件。它们是 opaque、program-only assets：不会进入画布、背景或资源 Picker，也没有 preview 和渲染地址。只有设置唯一程序键后才进入 production ZIP，runtime 通过 `SceneLayoutPackageResource.loadJsonData(key)` 读取；取消绑定后，无其它引用的数据恢复为不导出。替换要求保持同一 filename key 并重新严格校验，导出、重导和 optimizer 都保留原始 JSON bytes，不扫描或改写其中看似资源路径的字符串。
+
 MP3、OGG、WAV、M4A、AAC 和 WebM 音频先作为未绑定 asset 导入；扩展名、signature 和显式 MIME 必须一致，`.mp4` 固定保留给视频。当前 mode 的 BGM 在 Layout inspector 选择，新绑定恒为 loop，可编辑 fade in/out；程序音效在 audio asset 行以 strict local name 显式登记。音频不会创建 scene node，也不使用通用 `runtimeResources` 程序键。预览必须先点“启用声音”，随后 initial/authoring/production mode 切换与 effect 试听都走同一个 production package runtime；preview 重建会把已解锁会话应用到新 runtime。
 
 node/background/transition 直接引用 filename key 或 typed key 组合。node id、package id、mode id 仍是业务身份，但不是第二个资源 id。多个 mode/variant 可引用同一 `BG.jpg`，覆盖一次即可更新全部 bytes，同时各自的稳定 node id 与 placement 保持独立。
@@ -51,7 +53,7 @@ main reel 只提供横竖屏 `x/y` placement，不提供整体缩放。双背景
 
 Popup Spine 的 atlas page logical name 不随物理 filename key 前缀化。导入提交前会用完整 SHA-256 比较 Popup 与 Layout 自有 Spine 中同名的 atlas/texture；同名不同 bytes 时列出冲突，由用户取消整次导入或确认继续隔离导入，不自动覆盖、改名或推断 skeleton JSON 兼容性。
 
-资源列表可把任一已识别的 image、Spine、VNI、ImgNumber 或 MP4 root 设为“程序资源”。程序键默认取 root filename 去扩展名并转小写；手工输入也会 trim 并转小写。最终键必须唯一，以字母或数字开头，且只允许字母、数字、点、下划线和连字符。该资源即使没有 Scene 引用也会写入 production ZIP。取消绑定后，若没有其它引用，它恢复为不会导出。程序键和 typed resource spec 保存在 `layout.manifest.json` 的 `runtimeResources`，ZIP 重新导入或图片优化后仍保持不变。展开已绑定资源的详情可复制 canonical 地址；ImgNumber 例如 `gamelayout:/resource/image-string/win-amount`。Audio 使用上一段的 `audio.effects` / `programmaticEffects` typed binding，不进入这套通用程序资源 union。
+资源列表可把任一已识别的 image、Spine、VNI、ImgNumber、MP4 或 JSON data root 设为“程序资源”。程序键默认取 root filename 去扩展名并转小写；手工输入也会 trim 并转小写。最终键必须唯一，以字母或数字开头，且只允许字母、数字、点、下划线和连字符。该资源即使没有 Scene 引用也会写入 production ZIP。取消绑定后，若没有其它引用，它恢复为不会导出。程序键和 typed resource spec 保存在 `layout.manifest.json` 的 `runtimeResources`，ZIP 重新导入或图片优化后仍保持不变。展开已绑定渲染资源的详情可复制 canonical 地址；ImgNumber 例如 `gamelayout:/resource/image-string/win-amount`。JSON data 只显示 `loadJsonData` API 提示，不生成地址。Audio 使用上一段的 `audio.effects` / `programmaticEffects` typed binding，不进入这套通用程序资源 union。
 
 手工验收例子：导入一个 ImgNumber ZIP，在资源行填写 `win-amount` 并点“设为程序资源”，展开详情复制 factory 地址；再导入一个未绑定 mode/transition 的 Popup ZIP，在 Popup 工作区点“设为程序 Popup”，复制 `gamelayout:/popup/<id>`，点播放后状态区应显示该 exact 地址。Popup active 时再次播放应明确报错，点“立即关闭”后应可用同一地址再次播放。导出并重导 ZIP 后，两项程序用途和地址应保持。
 

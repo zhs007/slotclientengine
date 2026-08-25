@@ -71,6 +71,10 @@ function createResource(options?: {
       url: "blob:intro",
       mimeType: "video/mp4" as const,
     },
+    spinConfig: {
+      kind: "json" as const,
+      value: Object.freeze({ localReels: Object.freeze([["A"]]) }),
+    },
   } satisfies Readonly<Record<string, SceneLayoutRuntimeResource>>;
   const runtimeManifest = {
     id: "factory-test",
@@ -94,6 +98,7 @@ function createResource(options?: {
         path: "intro.mp4",
         mimeType: "video/mp4",
       },
+      spinConfig: { kind: "json", path: "spin-config.json" },
     },
   } as unknown as SceneLayoutPackageResource["runtimeManifest"];
   return {
@@ -118,6 +123,7 @@ function createResource(options?: {
       const resource = resources[key as keyof typeof resources];
       return resource?.kind === kind ? (resource as never) : null;
     },
+    loadJsonData: async () => resources.spinConfig.value,
     destroy() {},
   } as unknown as SceneLayoutPackageResource;
 }
@@ -209,6 +215,19 @@ class ManualVniPlayer {
 }
 
 describe("Scene Layout named RenderObject factory", () => {
+  it("rejects JSON program data from every render-object API", async () => {
+    const factory = createSceneLayoutRenderObjectFactory({
+      resource: createResource(),
+    });
+    await expect(factory.createRenderObject("spinConfig")).rejects.toThrow(
+      /JSON data; use loadJsonData/,
+    );
+    await expect(
+      factory.createImgNumberRenderObject("spinConfig", { text: "1" }),
+    ).rejects.toThrow(/json, not image-string/);
+    factory.destroy();
+  });
+
   it("exposes stable exact Spine slot and VNI text-layer parents", async () => {
     const spinePlayer = new ManualSpinePlayer();
     const vniPlayer = new ManualVniPlayer();

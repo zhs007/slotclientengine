@@ -233,6 +233,8 @@ Sprite 复用，不创建 snapshot、`Application`、canvas、DOM、RAF 或字�
 
 `@slotclientengine/rendercore/scene-layout` 提供严格且向后兼容的 scene-layout v1–v5 parser、精确资源闭包和 production package runtime。package resource 会把合法 v1–v4 规范化为 v5，并生成确定性的 `runtimeAllocation`、空旧音频目录与默认 event-audio 合同；原生 v5 必须完整且与 typed 引用严格一致。v5 保留按 mode 配置的 optional loop BGM，并可把既有 canonical event 绑定到 AudioCore track；loop 要求 exact 结束 event，初始化成功后按 displayed、stable 顺序发布 initial mode entered。`ignoreLegacyAudio` 只 gate 自动 mode/Popup/Symbol producer，不影响显式程序 effect API。
 
+`runtimeResources` 也可声明 `{ kind: "json", path }` 的 program-only 数据，例如本地公开轮带或权重表。`SceneLayoutPackageResource.loadJsonData(exactKey)` 会按需读取、严格解析并返回深度冻结的 JSON object/array；业务 schema 仍由 app 紧接着验证。JSON 不产生 Object URL、RenderObject 或 `gamelayout:/resource/...` 地址。此扩展不升级 manifest version：旧 v1–v5 仍直接可读且不会生成迁移数据，Editor 仍只导出 latest v5。
+
 第一层统一使用`getSymbolArea()`、`getRenderLayer()`、`getRenderObject()`与`createRenderObject()`。authored object按image/Spine/VNI/image-string返回borrowed typed capability，可见性与mode/variant做AND且不开放position/destroy；program object从exact `runtimeResources`异步创建并由caller拥有。`getLayoutPoint/getLayoutAnchor/resolveLayoutAnchor`直接读写configured authored space，center-origin游戏无需复制Pixi左上角偏移。完整ref grammar、ownership、SymbolGroup几何、坐标映射与示例见[`docs/rendercore-layer-symbol-area-render-object-coordinate-guide.md`](../../docs/rendercore-layer-symbol-area-render-object-coordinate-guide.md)。
 
 外部`applyGeometryManifest()`仍在mutation前校验immutable structure；package-owned mode target已经过manifest parse与transition prepare，switch commit直接应用prepared geometry、visibility和背景层序，不在热路径重复解析或全结构比较。lazy runtime resource的exact key/kind来自canonical runtime manifest，initial layout view省略程序资源只影响prepare时机，不改变可创建对象目录。

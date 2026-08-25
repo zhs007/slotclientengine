@@ -6,6 +6,7 @@ import {
   editorResourcePrimaryPath,
   type EditorLayoutResource,
   type EditorAudioLayoutResource,
+  type EditorJsonLayoutResource,
   type EditorVideoLayoutResource,
 } from "../model/editor-resource.js";
 import { getLayoutResourceReferences } from "../model/resource-commands.js";
@@ -95,8 +96,13 @@ export function getResourcePickerCandidates(
         resource,
       ): resource is Exclude<
         EditorLayoutResource,
-        EditorVideoLayoutResource | EditorAudioLayoutResource
-      > => resource.kind !== "video" && resource.kind !== "audio",
+        | EditorVideoLayoutResource
+        | EditorAudioLayoutResource
+        | EditorJsonLayoutResource
+      > =>
+        resource.kind !== "video" &&
+        resource.kind !== "audio" &&
+        resource.kind !== "json",
     )
     .filter((resource) => state.type === "all" || resource.kind === state.type)
     .filter((resource) => {
@@ -116,7 +122,9 @@ function candidateFromResource(
   project: EditorProject,
   resource: Exclude<
     EditorLayoutResource,
-    EditorVideoLayoutResource | EditorAudioLayoutResource
+    | EditorVideoLayoutResource
+    | EditorAudioLayoutResource
+    | EditorJsonLayoutResource
   >,
   context: LayoutResourceBindingContext,
 ): LayoutResourcePickerCandidate {

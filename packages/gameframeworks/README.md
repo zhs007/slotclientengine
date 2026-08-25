@@ -4,6 +4,8 @@
 
 facade 同时公开 Scene Layout package runtime 与 slot operation coordinator 的 app-facing factory/type；游戏可以注入只含异步 `start` 的 typed 业务 handler，但无需从 package 内部 display tree 重建 root/reel 层级。
 
+Scene Layout 的 program-only JSON 数据也由 facade 暴露类型。游戏在创建画面 runtime 前可调用 `packageResource.loadJsonData("spin-config")`，再交给 app-owned strict parser。数据源选择必须由 app 配置显式决定：选择 `gameConfig` 时继续使用现有 Symbols game config；选择 `gameLayout` 时才加载 exact JSON key。两者没有自动优先级、同名覆盖或 fallback，解析后的公开本地轮带/权重表再传给既有 reel/value resolver API。
+
 facade re-export `gamelayout:/` runtime address formatter、parser、resolver 与 endpoint/event 类型。
 程序接入见 [`docs/gamelayout-runtime-addresses.md`](../../docs/gamelayout-runtime-addresses.md)。
 

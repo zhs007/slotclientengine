@@ -158,6 +158,10 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
       throw new SceneLayoutError(
         `Scene layout runtime resource "${name}" is video and cannot create a RenderObject.`,
       );
+    if (spec.kind === "json")
+      throw new SceneLayoutError(
+        `Scene layout runtime resource "${name}" is JSON data; use loadJsonData().`,
+      );
     const resource = await this.#resource.loadRuntimeResource(name, spec.kind);
     this.assertAlive();
     switch (resource.kind) {

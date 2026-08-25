@@ -51,6 +51,10 @@ import type { PopupPackageResource } from "../popup/core/types.js";
 import { validateOfficialSpineResource } from "../spine/runtime-player.js";
 import { SceneLayoutError } from "./errors.js";
 import {
+  parseSceneLayoutJsonData,
+  type SceneLayoutJsonData,
+} from "./data/json-data.js";
+import {
   collectSceneLayoutAssetPaths,
   parseSceneLayoutManifest,
   parseSceneLayoutManifestDocument,
@@ -556,6 +560,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
     const atlasModules: Record<string, string> = {};
     const textureModules: Record<string, string> = {};
     const videoModules: Record<string, string> = {};
+    const jsonDataModules: Record<string, SceneLayoutJsonData> = {};
     for (const node of manifest.nodes) {
       const resource = node.resource;
       if (resource.kind === "image-string") continue;
@@ -659,6 +664,13 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
         );
         continue;
       }
+      if (resource.kind === "json") {
+        jsonDataModules[resource.path] ??= parseSceneLayoutJsonData(
+          requireBytes(files, resource.path),
+          resource.path,
+        );
+        continue;
+      }
       skeletonModules[resource.skeleton] ??= parseJsonBytes(
         requireBytes(files, resource.skeleton),
         resource.skeleton,
@@ -727,6 +739,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
       atlasModules,
       textureModules,
       videoModules,
+      jsonDataModules,
       imageStringResources: imageStrings,
       vniResources,
       ownedObjectUrls: objectUrls,
@@ -828,6 +841,9 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
           Extract<SceneLayoutRuntimeResource, { readonly kind: Kind }>
         >;
       },
+      async loadJsonData(key: string): Promise<SceneLayoutJsonData> {
+        return (await this.loadRuntimeResource(key, "json")).value;
+      },
       destroy(): void {
         if (destroyed) return;
         destroyed = true;
@@ -876,12 +892,15 @@ async function prepareLazyRuntimeResource(options: {
   readonly decodeImage?: DecodeImageStringImage;
 }): Promise<SceneLayoutRuntimeResource> {
   const { key, spec, files, mapped, objectUrls } = options;
+  const fetchLazyBytes = async (path: string): Promise<Uint8Array> => {
+    if (!options.loadRuntimeResourceBytes)
+      throw new SceneLayoutError(`Missing package file: ${path}.`);
+    return options.loadRuntimeResourceBytes(path);
+  };
   const requireLazyBytes = async (path: string): Promise<Uint8Array> => {
     const existing = options.lazyFiles.get(path);
     if (existing) return existing;
-    if (!options.loadRuntimeResourceBytes)
-      throw new SceneLayoutError(`Missing package file: ${path}.`);
-    const loaded = await options.loadRuntimeResourceBytes(path);
+    const loaded = await fetchLazyBytes(path);
     options.lazyFiles.set(path, loaded.slice());
     return loaded;
   };
@@ -895,6 +914,16 @@ async function prepareLazyRuntimeResource(options: {
       ),
       size: spec.size,
     });
+  if (spec.kind === "json") {
+    const existing = options.lazyFiles.get(spec.path);
+    const bytes = existing ?? (await fetchLazyBytes(spec.path));
+    const value = parseSceneLayoutJsonData(bytes, spec.path);
+    if (!existing) options.lazyFiles.set(spec.path, bytes.slice());
+    return Object.freeze({
+      kind: "json",
+      value,
+    });
+  }
   if (spec.kind === "video") {
     const bytes = await requireLazyBytes(spec.path);
     if (

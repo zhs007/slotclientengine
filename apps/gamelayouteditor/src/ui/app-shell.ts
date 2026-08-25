@@ -65,6 +65,7 @@ import {
   replaceImageResource,
   replaceAudioResource,
   replaceImageStringResource,
+  replaceJsonDataResource,
   replaceSpineResource,
   replaceVideoResource,
   setLayerVariantVisibility,
@@ -81,6 +82,7 @@ import {
   getRuntimeResourceKey,
   normalizeRuntimeResourceKey,
   uploadImageResource,
+  uploadJsonDataResources,
   uploadAudioResources,
   uploadSpineResources,
   uploadVideoResource,
@@ -1963,6 +1965,9 @@ export class GameLayoutEditorApp {
     panel
       .querySelector("[data-upload-resources]")
       ?.addEventListener("click", () => void this.uploadResources(false));
+    panel
+      .querySelector("[data-upload-json-data]")
+      ?.addEventListener("click", () => void this.uploadJsonData());
     const query = panel.querySelector<HTMLInputElement>(
       "[data-resource-query]",
     );
@@ -1983,6 +1988,7 @@ export class GameLayoutEditorApp {
         | "spine"
         | "vni"
         | "image-string"
+        | "json"
         | "video"
         | "audio";
       this.renderWorkspace(this.#store.getSnapshot());
@@ -3181,6 +3187,30 @@ export class GameLayoutEditorApp {
     }
   }
 
+  private async uploadJsonData(): Promise<void> {
+    const files = await pickFiles(".json,application/json", true);
+    if (files.length === 0) return;
+    try {
+      assertCanonicalUploadFileNames(files);
+      const project = cloneEditorProject(this.#store.getSnapshot().project);
+      const resources = await uploadJsonDataResources({ project, files });
+      if (
+        !confirmImportReview(
+          project,
+          resources.map(({ id }) => id),
+          files,
+        )
+      )
+        return;
+      this.#store.replace(project);
+      this.showFeedback(
+        `导入审查确认 ${resources.length} 个 opaque JSON data assets；尚未绑定程序键。`,
+      );
+    } catch (error) {
+      this.#store.setExternalError(error);
+    }
+  }
+
   private selectImportedPickerResource(
     project: EditorProject,
     resourceKey: string,
@@ -3213,7 +3243,9 @@ export class GameLayoutEditorApp {
             ? ".mp4,video/mp4"
             : current.kind === "audio"
               ? ".mp3,.ogg,.wav,.m4a,.aac,.webm,audio/*"
-              : ".zip,application/zip",
+              : current.kind === "json"
+                ? ".json,application/json"
+                : ".zip,application/zip",
       current.kind === "spine",
     );
     if (files.length === 0) return;
@@ -3246,6 +3278,14 @@ export class GameLayoutEditorApp {
           if (files.length !== 1)
             throw new Error("audio 替换必须选择一个同 filename key 文件。");
           await replaceAudioResource({ project, resourceId, file: files[0] });
+        } else if (current.kind === "json") {
+          if (files.length !== 1)
+            throw new Error("JSON data 替换必须选择一个同 filename key 文件。");
+          await replaceJsonDataResource({
+            project,
+            resourceId,
+            file: files[0],
+          });
         } else if (current.kind === "vni") {
           if (files.length !== 1)
             throw new Error("VNI 替换必须选择一个 bundle ZIP。");

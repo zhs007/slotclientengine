@@ -5,6 +5,7 @@ export * from "../manifest-v3.js";
 export * from "../runtime-allocation.js";
 export * from "../geometry.js";
 export * from "./package-limits.js";
+export * from "./json-data.js";
 
 export type {
   SceneLayoutVariantId,
@@ -24,6 +25,7 @@ export type {
   SceneLayoutRuntimeImageStringResourceSpec,
   SceneLayoutRuntimeVniResourceSpec,
   SceneLayoutRuntimeVideoResourceSpec,
+  SceneLayoutRuntimeJsonResourceSpec,
   SceneLayoutRuntimeResourceSpec,
   SceneLayoutNode,
   SceneLayoutReelGrid,

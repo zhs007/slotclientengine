@@ -3,6 +3,7 @@ import { upgradeSceneLayoutManifestToLatest } from "@slotclientengine/rendercore
 import {
   rewriteImageStringManifest,
   rewriteLayoutManifest,
+  rewriteLayoutPackageReferences,
   rewritePopupManifest,
   rewriteOptimizedAudioAssets,
   rewriteSymbolManifest,
@@ -198,6 +199,48 @@ describe("typed asset reference rewriting", () => {
       kind: "image",
       path: "alpha.webp",
     });
+  });
+
+  it("rewrites an opaque JSON data filename without rewriting its bytes", () => {
+    const bytes = new TextEncoder().encode(
+      '{"kind":"popup","path":"alpha.png","assets":["symbol.png"]}\n',
+    );
+    const manifest = {
+      ...layoutFixture(),
+      runtimeResources: {
+        "spin.config": { kind: "json", path: "spin-config.json" },
+      },
+    } as const;
+    const rewritten = rewriteLayoutPackageReferences({
+      manifest,
+      optimization: {
+        keyMapping: new Map([
+          ["spin-config.json", "spin-config.hash.json"],
+          ["alpha.png", "alpha.webp"],
+          ["symbol.png", "symbol.webp"],
+        ]),
+        assets: new Map([
+          [
+            "spin-config.hash.json",
+            {
+              key: "spin-config.hash.json",
+              sourceKey: "spin-config.json",
+              bytes,
+              sourceByteLength: bytes.byteLength,
+              converted: false,
+              mediaType: "application/json",
+            },
+          ],
+        ]),
+      },
+    });
+    expect(rewritten.manifest.runtimeResources?.["spin.config"]).toEqual({
+      kind: "json",
+      path: "spin-config.hash.json",
+    });
+    expect(rewritten.assets.get("spin-config.hash.json")?.bytes).toStrictEqual(
+      bytes,
+    );
   });
 
   it("rewrites symbol package and all declared symbol image fields", () => {
