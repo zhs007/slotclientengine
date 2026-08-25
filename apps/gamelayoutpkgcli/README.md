@@ -1,17 +1,22 @@
 # gamelayoutpkgcli
 
-`apps/gamelayoutpkgcli` 是本地 Scene Layout production ZIP 后处理工具。它使用本机
-`cwebp` 把包内 PNG/JPEG 转成 WebP，并使用本机 FFmpeg/FFprobe 把 typed BGM/音效统一优化为
-M4A 容器中的 AAC-LC；随后结构化改写所有受支持的资源引用，重新生成 content-addressed
-payload 与 `assets.map.json`，并在 ZIP 外输出一份可供后续 loading 优化使用的资源分组 JSON。
+`apps/gamelayoutpkgcli` 是本地 Scene Layout production ZIP 后处理工具，提供两种显式输出：
 
-本工具不改美术源 ZIP，不实现合图，也不修改 runtime loading 策略。
+- `--delivery-dir` 生成 runtime/CDN 直接消费的 versioned delivery 目录。它从 typed dependency graph
+  推导 `initial` 与各 GameMode 的唯一 physical owner；非 Spine 图片先用 MaxRects（允许 rotation）合图，
+  再把整张 atlas 单次转换成 WebP；JSON、VNI project、Spine `.atlas` 等元数据进入 owner ZIP；
+  Spine page 保持独立图片；音频和视频保持输入 bytes 与格式不变并作为独立 CDN 文件。
+- 不传 `--delivery-dir` 时保留 legacy 单 ZIP 优化模式：逐图片转 WebP、typed 音频转 AAC-LC/M4A，
+  并输出 asset-groups JSON。
+
+两种模式都不修改美术源 ZIP。CDN delivery 由 RenderCore 的
+`loadSceneLayoutDeliveryFromUrl()` 直接加载，不要求 game app 维护逐文件 import 表。
 
 ## 前置条件
 
 - Node.js 24 和仓库使用的 `pnpm`。
 - 本机可执行 `cwebp -version`。默认从 `PATH` 查找，也可用 `--cwebp` 指定绝对路径。
-- production ZIP 含音频时，本机可执行 `ffmpeg -version` 与 `ffprobe -version`。默认从
+- legacy 单 ZIP 模式含音频时，本机可执行 `ffmpeg -version` 与 `ffprobe -version`。默认从
   `PATH` 查找，也可分别用 `--ffmpeg` / `--ffprobe` 指定绝对路径。macOS 可使用
   `brew install ffmpeg webp`；FFmpeg 自带本任务使用的 native AAC encoder。
 - 输入必须是当前 filename-key、mapped、version 1 的 Scene Layout production ZIP；
@@ -20,7 +25,7 @@ payload 与 `assets.map.json`，并在 ZIP 外输出一份可供后续 loading �
 WebP 转换当前使用 `cwebp -quiet -q <quality>`，因此是有损压缩。默认质量为 `80`。
 上线前仍需由美术人工抽查画质，尤其是透明边缘、渐变、文字和细线。
 
-音频输出固定为 AAC-LC + M4A，不提供 codec fallback：BGM 默认 `128 kbps`，mono effect
+legacy 单 ZIP 模式的音频输出固定为 AAC-LC + M4A，不提供 codec fallback：BGM 默认 `128 kbps`，mono effect
 默认 `64 kbps`，其它 effect 默认 `96 kbps`。CLI 不传 `-ac` 或 `-ar`，转码后严格复验
 声道数和采样率没有变化。已经是 `.m4a` / `audio/mp4` / AAC-LC 且探测码率不高于目标
 105%（容纳 AAC mux/probe 的正常码率浮动）的文件原样保留；其它格式或无法证明合规的文件
@@ -42,7 +47,19 @@ pnpm --filter gamelayoutpkgcli build
 
 ```bash
 pnpm --filter gamelayoutpkgcli start -- \
-  --input /absolute/path/game-layout.zip
+  --input /absolute/path/game-layout.zip \
+  --delivery-dir /absolute/path/cdn/game-layout \
+  --quality 80
+```
+
+校验已生成目录与当前输入和参数 byte-equal：
+
+```bash
+pnpm --filter gamelayoutpkgcli start -- \
+  --input /absolute/path/game-layout.zip \
+  --delivery-dir /absolute/path/cdn/game-layout \
+  --quality 80 \
+  --check
 ```
 
 也可以直接运行开发入口：
@@ -64,6 +81,12 @@ pnpm --filter gamelayoutpkgcli dev -- \
 参数：
 
 - `--input <zip>`：必填，源 Scene Layout ZIP。
+- `--delivery-dir <directory>`：启用 CDN delivery 模式；目标必须不存在，工具以 staging directory
+  原子提交。配合 `--check` 时目标必须存在且不会写入。
+- `--check`：重新执行同一 deterministic pipeline，并逐文件校验现有 delivery 目录。
+- `--atlas-max-size <256..8192>`：atlas 最大边长，默认 `4096`。
+- `--atlas-padding <0..32>`：frame 间距，默认 `4`。
+- `--atlas-extrude <0..16>`：透明边缘挤出像素，默认 `2`。
 - `--output <zip>`：可选，默认与输入同目录，文件名加 `.optimized.zip`。
 - `--assets-json <json>`：可选，默认与输入同目录，文件名加
   `.assets-groups.json`。
@@ -75,10 +98,30 @@ pnpm --filter gamelayoutpkgcli dev -- \
 - `--effect-mono-bitrate <8..512>`：可选，mono effect 整数 kbps，默认 `64`。
 - `--effect-stereo-bitrate <8..512>`：可选，非 mono effect 整数 kbps，默认 `96`。
 
-输入、ZIP 输出和 JSON 输出必须是三个不同路径。任何输出已存在时工具都会拒绝覆盖；
-ZIP 与 JSON 作为一对提交，第二个文件提交失败时会回滚第一个文件。
+legacy 模式的输入、ZIP 输出和 JSON 输出必须是三个不同路径。任何输出已存在时工具都会拒绝覆盖；
+ZIP 与 JSON 作为一对提交，第二个文件提交失败时会回滚第一个文件。delivery 模式的输入与目标目录
+也必须不同；生成时拒绝覆盖，`--check` 时只读比较。
 
-## 输出合同
+## CDN delivery 输出合同
+
+目录根只有 `delivery.manifest.json`、`chunks/*.zip` 与 `assets/*`：
+
+- physical owner 只允许 `initial`、manifest 顺序中的 `mode:<id>` 与 `media`。同一 logical asset
+  只存一份；跨 mode 资源由最早 mode 持有，初始闭包始终优先归 `initial`；没有明确 mode owner
+  的全局/程序资源保守归 `initial`。
+- 每个 owner 至多一个 metadata ZIP；`initial` ZIP 同时包含 `layout.manifest.json` 与
+  `assets.map.json`。logical key 保持不变，现有 layout、Symbols、Popup、VNI 和 Spine manifest
+  不需要为合图改写业务引用。
+- 非 Spine raster 按 owner 合图。packing 对解码后的 RGBA 执行，支持 90° rotation，不 trim；
+  padding/extrude 在 WebP 编码前写入 atlas，因此 PNG/JPEG 不会先单图有损再二次合图编码。
+- Spine atlas page 不进入通用 atlas，保持一页一文件并可转 WebP；runtime 仍按 typed texture map
+  绑定，不按 basename 猜测。
+- audio/video 不转码、不进 ZIP、不进 atlas；`delivery.manifest.json` 记录其独立 CDN path，runtime
+  直接保留 URL，允许浏览器按媒体能力请求/流式加载。
+- 所有 physical 文件 content-addressed；manifest 记录大小、SHA-256、atlas frame、rotation、owner
+  和 dependency。runtime 将 map 仅作为 logical route 使用，CLI 的 `--check` 承担完整交付 parity。
+
+## Legacy 单 ZIP 输出合同
 
 优化 ZIP 仍是标准 Scene Layout production package：
 

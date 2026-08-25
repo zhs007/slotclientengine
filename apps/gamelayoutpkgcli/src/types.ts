@@ -220,6 +220,8 @@ export type SceneLayoutAssetGroups =
 
 export interface GamelayoutPkgCliOptions {
   readonly inputPath: string;
+  readonly deliveryDirectory?: string;
+  readonly check?: boolean;
   readonly outputPath?: string;
   readonly assetsJsonPath?: string;
   readonly quality: number;
@@ -229,10 +231,15 @@ export interface GamelayoutPkgCliOptions {
   readonly bgmBitrateKbps?: number;
   readonly effectMonoBitrateKbps?: number;
   readonly effectStereoBitrateKbps?: number;
+  readonly maxAtlasSize?: number;
+  readonly atlasPadding?: number;
+  readonly atlasExtrude?: number;
 }
 
 export interface ResolvedGamelayoutPkgCliOptions {
   readonly inputPath: string;
+  readonly deliveryDirectory?: string;
+  readonly check: boolean;
   readonly outputPath: string;
   readonly assetsJsonPath: string;
   readonly quality: number;
@@ -242,4 +249,7 @@ export interface ResolvedGamelayoutPkgCliOptions {
   readonly bgmBitrateKbps: number;
   readonly effectMonoBitrateKbps: number;
   readonly effectStereoBitrateKbps: number;
+  readonly maxAtlasSize: number;
+  readonly atlasPadding: number;
+  readonly atlasExtrude: number;
 }

@@ -10,6 +10,6 @@
 
 - 游戏 live 初始化在 loading `99%` 回调中校验配置并准备 session。
 - `100%` 后才创建 framework/Pixi 画面，并复用同一个 prepared session，禁止 loading 前挂载或双 WebSocket。
-- Scene Layout 的 BGM/音效不得进入 splash 初始资源进度或 `99%/100%` gate；它们保留在 production package 的独立音频分组中，由 mode/effect owner 在运行期按需准备。此合同不保证底层一定采用网络流式解码。
+- Scene Layout delivery 的 BGM/音效/视频不得进入 metadata ZIP、atlas 或 splash 初始资源进度；它们保持独立 CDN URL 与原 production bytes，由浏览器媒体层按实际播放需要请求。此合同保留流式加载能力，但不保证所有浏览器或 backend 都采用同一种流式解码策略。
 - Loading UI 的视觉 gate 不决定 live session 是否完成；enter 成功后由 controller 统一 exit/destroy。
 - game002v2 注入 Leo UI，game003v2 注入 simple UI。

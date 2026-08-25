@@ -103,9 +103,12 @@
 - 全局或 legacy 普通 node 归 shared 并进入每个 mode closure；声明 exact `gameMode` 的普通 node 只归该 mode。background ownership 仍来自 mode binding，order 不参与 owner 推导。
 - 没有显式 mode ownership 的 runtime resource 归 shared/initial；共享 Spine atlas/texture leaf 可去重，但 leaf 不反向拥有或带入未声明的 sibling skeleton root。
 - 每个 group 同时保存完整 `requiredAssets` 与相对 initial 的 `incrementalAssets`；完整闭包允许重叠，但全部优化资源必须至少被一个 group 覆盖。
-- versioned asset-groups JSON 是 ZIP 外的独立交付物，不进入 production ZIP；它可供后续合图或 loading 优化消费，但 CLI 本身不修改 runtime loading 行为。
-- 音频形成独立 `audio:scene-layout` group，必须从 `initialAssets` 排除；实际引用仍保留在 production ZIP 与 typed closure 中，由 mode/effect owner 在运行期按需准备。
-- `gamelayoutpkgcli` 的 production 音频后处理固定输出 M4A/AAC-LC：从 Scene Layout、Symbols、Popup typed audio binding 收集 exact source，结构化同步改写 path/mediaType，重新生成 content-addressed payload/map 并 strict 复验；不得扫描扩展名猜 owner、处理 video 内嵌音轨、自动改声道/采样率或静默保留失败输入。已证明为目标码率以内的 AAC-LC/M4A 可原样保留；其它输入由显式 FFmpeg/FFprobe transaction 转码，版本与码率进入 versioned asset-groups metadata。
+- `gamelayoutpkgcli --delivery-dir` 输出 versioned CDN delivery：physical owner 只允许 `initial`、manifest 顺序的 `mode:<id>` 与 `media`；同一 asset 只由一个 owner 保存，跨 mode 由最早 mode 持有，initial closure 始终优先，没有显式 mode owner 的全局/程序资源归 initial。
+- delivery 中非 Spine raster 必须按 owner 在 RGBA 阶段先用允许 rotation 的 MaxRects 合图，再把最终 atlas 单次编码为 WebP；不得先逐图有损 WebP 再合图。Spine page 保持独立，JSON/VNI/`.atlas` 等元数据进入 owner ZIP。
+- delivery 的音频和视频保持 production input bytes、codec 与 container 不变，作为独立 content-addressed CDN 文件，不进 metadata ZIP 或通用 atlas。runtime 保留外部 URL，不创建媒体 Blob；具体浏览器流式策略不写入 manifest。
+- delivery manifest、metadata ZIP、atlas frame/rotation 与 external route 是 versioned strict contract；CLI 必须提供 deterministic `--check` parity。RenderCore 负责从 delivery 还原 logical mapped package、注册 atlas 子纹理并把 Spine/media 路由到外部 URL，game app 不复制 parser 或逐文件表。
+- 不带 `--delivery-dir` 的 legacy 单 ZIP/asset-groups 模式仍可逐图片 WebP 并把 typed 音频固定输出 M4A/AAC-LC；不得与 byte-preserving delivery 模式混用。
+- `assets/fixtures/*-mapped` 只为 Editor/Viewer 和测试保存历史 mapped package，不得成为 game app `publicDir`、production fallback 或 delivery runtime 的第二资源来源。
 
 ## Popup placement
 

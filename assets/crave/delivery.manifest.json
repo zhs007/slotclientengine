@@ -1,0 +1,3728 @@
+{
+  "assets": {
+    "0.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 26523
+    },
+    "1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 17442
+    },
+    "2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 26147
+    },
+    "3.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 25805
+    },
+    "4.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 24677
+    },
+    "5.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 26097
+    },
+    "6.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 27988
+    },
+    "7.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 23680
+    },
+    "8.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 28601
+    },
+    "9.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 28259
+    },
+    "asset-2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 7562
+    },
+    "asset-3.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6600
+    },
+    "asset-4.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 16350
+    },
+    "asset.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 10325
+    },
+    "basegame.mp3": {
+      "byteLength": 1353730,
+      "kind": "external",
+      "mediaType": "audio/mpeg",
+      "owner": "media",
+      "path": "assets/5fa6273443b4095e988b0409bce7c62a725f40a3443f0653bdeeb0a35164940b.mp3",
+      "sha256": "5fa6273443b4095e988b0409bce7c62a725f40a3443f0653bdeeb0a35164940b",
+      "sourceByteLength": 1353730
+    },
+    "bg_2.png": {
+      "byteLength": 215176,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/042771793f201974e6ab582acf19ed84d88aa9992d01f8bc141792870cb887cc.webp",
+      "sha256": "042771793f201974e6ab582acf19ed84d88aa9992d01f8bc141792870cb887cc",
+      "sourceByteLength": 8813931
+    },
+    "bg_3.png": {
+      "byteLength": 168608,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/a15460ec8b2c2f339ee98925cea932a1b3e976461b8086d0983ba021d4970c1f.webp",
+      "sha256": "a15460ec8b2c2f339ee98925cea932a1b3e976461b8086d0983ba021d4970c1f",
+      "sourceByteLength": 2927978
+    },
+    "bg_4.png": {
+      "byteLength": 141340,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/6def80561701a6d1797cdab099b8413a8310ed4f5ab91a4d7972596f16657e06.webp",
+      "sha256": "6def80561701a6d1797cdab099b8413a8310ed4f5ab91a4d7972596f16657e06",
+      "sourceByteLength": 2640496
+    },
+    "bg_5.png": {
+      "byteLength": 500874,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/e629bf373c90ad9529803491b85c57cb4f9af2c34aaf757d4306277c19469c3e.webp",
+      "sha256": "e629bf373c90ad9529803491b85c57cb4f9af2c34aaf757d4306277c19469c3e",
+      "sourceByteLength": 2289858
+    },
+    "bg_6.png": {
+      "byteLength": 397268,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/4cc24a9ac1404c5601d3c7ef19abdbc7cbb6ca34a9668f5b1e52bb8f438b2e66.webp",
+      "sha256": "4cc24a9ac1404c5601d3c7ef19abdbc7cbb6ca34a9668f5b1e52bb8f438b2e66",
+      "sourceByteLength": 1609003
+    },
+    "bg_7.png": {
+      "byteLength": 418668,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/f210788733c92bf17b215e85fb4cbcdf3497b0489509f9bb7a64eeb2e7bf3675.webp",
+      "sha256": "f210788733c92bf17b215e85fb4cbcdf3497b0489509f9bb7a64eeb2e7bf3675",
+      "sourceByteLength": 3338856
+    },
+    "bg_8.png": {
+      "byteLength": 157182,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/f6d4c736264ff50882ef93b30d7f55a6630ac6bafa9f9cc2805fecc3f8e6b453.webp",
+      "sha256": "f6d4c736264ff50882ef93b30d7f55a6630ac6bafa9f9cc2805fecc3f8e6b453",
+      "sourceByteLength": 1333900
+    },
+    "bg.atlas": {
+      "byteLength": 2788,
+      "chunk": "initial",
+      "entry": "assets/24e833a5836844aab876186e8e1b758fb4859d47afca0d53aebf0ea2601cc17a.atlas",
+      "kind": "metadata",
+      "mediaType": "text/plain",
+      "owner": "initial",
+      "sha256": "24e833a5836844aab876186e8e1b758fb4859d47afca0d53aebf0ea2601cc17a"
+    },
+    "bg.json": {
+      "byteLength": 1232345,
+      "chunk": "initial",
+      "entry": "assets/bc5dcdce795345790a8c9d11593a6242008211fbc765e8e9b7c171034ddbbd18.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "bc5dcdce795345790a8c9d11593a6242008211fbc765e8e9b7c171034ddbbd18"
+    },
+    "bg.png": {
+      "byteLength": 299238,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/f7e68b83c21d20bf589516e7a917134f3531eb844004ec4aa6d6eea6fe2f8dad.webp",
+      "sha256": "f7e68b83c21d20bf589516e7a917134f3531eb844004ec4aa6d6eea6fe2f8dad",
+      "sourceByteLength": 8915362
+    },
+    "freegame.mp3": {
+      "byteLength": 1371152,
+      "kind": "external",
+      "mediaType": "audio/mpeg",
+      "owner": "media",
+      "path": "assets/6f28c3c342a06bf8d12124f748ad7d8e084d55a0bc3dce40d572114c8c7b9de7.mp3",
+      "sha256": "6f28c3c342a06bf8d12124f748ad7d8e084d55a0bc3dce40d572114c8c7b9de7",
+      "sourceByteLength": 1371152
+    },
+    "image-string.manifest.json": {
+      "byteLength": 2708,
+      "chunk": "initial",
+      "entry": "assets/c456b7c76987ed7e5190c8bcd1438c1362dc7683ca18e66fce3815e33ebab657.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "c456b7c76987ed7e5190c8bcd1438c1362dc7683ca18e66fce3815e33ebab657"
+    },
+    "nearwin1.json": {
+      "byteLength": 39759,
+      "chunk": "initial",
+      "entry": "assets/cf5a467a0bcc74bf345c1557e9f20179f9232f2f869184df7cfa146b13c3fc3a.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "cf5a467a0bcc74bf345c1557e9f20179f9232f2f869184df7cfa146b13c3fc3a"
+    },
+    "nearwin1.mp3": {
+      "byteLength": 2921,
+      "kind": "external",
+      "mediaType": "audio/mpeg",
+      "owner": "media",
+      "path": "assets/ef33df8ed972d35d311646de953700f46ba011be206a7e49833068d48e83b88d.mp3",
+      "sha256": "ef33df8ed972d35d311646de953700f46ba011be206a7e49833068d48e83b88d",
+      "sourceByteLength": 2921
+    },
+    "nearwin2.json": {
+      "byteLength": 8095,
+      "chunk": "initial",
+      "entry": "assets/719906d9428a0fb06417729c0eb4e4c1a8b53dc784d245ef0d510c778e46f982.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "719906d9428a0fb06417729c0eb4e4c1a8b53dc784d245ef0d510c778e46f982"
+    },
+    "nearwin3.json": {
+      "byteLength": 8140,
+      "chunk": "initial",
+      "entry": "assets/cbf498fb9d026e38558648d01a8af4af6bd9063ea53d2df60efb1764339e5129.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "cbf498fb9d026e38558648d01a8af4af6bd9063ea53d2df60efb1764339e5129"
+    },
+    "nearwin4.json": {
+      "byteLength": 93161,
+      "chunk": "initial",
+      "entry": "assets/2015e01adb2cf10860a55aab92fa7d619c25b60bb5770ed44c9e8f604e7690fa.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "2015e01adb2cf10860a55aab92fa7d619c25b60bb5770ed44c9e8f604e7690fa"
+    },
+    "pkg-10-game002-s3-AF_spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 21248
+    },
+    "pkg-10-game002-s3-AF.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 13805
+    },
+    "pkg-10-game002-s3-AF.json": {
+      "byteLength": 78614,
+      "chunk": "initial",
+      "entry": "assets/2955dd1364cde7ebb510a1496b8581bc8b613430dc468f50cb965224303f59a1.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "2955dd1364cde7ebb510a1496b8581bc8b613430dc468f50cb965224303f59a1"
+    },
+    "pkg-10-game002-s3-AF.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 50100
+    },
+    "pkg-10-game002-s3-BN.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 7029
+    },
+    "pkg-10-game002-s3-BN.json": {
+      "byteLength": 788,
+      "chunk": "initial",
+      "entry": "assets/a39c73d311d308b3b4454574582557168ee18e47f1438b86832f848c0e8c3da3.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "a39c73d311d308b3b4454574582557168ee18e47f1438b86832f848c0e8c3da3"
+    },
+    "pkg-10-game002-s3-BN.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 11046
+    },
+    "pkg-10-game002-s3-BN.spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 26349
+    },
+    "pkg-10-game002-s3-CM_spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 15388
+    },
+    "pkg-10-game002-s3-CM.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 9461
+    },
+    "pkg-10-game002-s3-CM.json": {
+      "byteLength": 153979,
+      "chunk": "initial",
+      "entry": "assets/562bcebbd10db8162022ac32e3069ed5def28d44020c9960c2a640e1aa87c616.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "562bcebbd10db8162022ac32e3069ed5def28d44020c9960c2a640e1aa87c616"
+    },
+    "pkg-10-game002-s3-CM.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 45973
+    },
+    "pkg-10-game002-s3-CN_1.json": {
+      "byteLength": 133557,
+      "chunk": "initial",
+      "entry": "assets/70c82016e834189f2c78924581c7d1f7f8e6591cfeac8243e7a87bb837d44bd6.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "70c82016e834189f2c78924581c7d1f7f8e6591cfeac8243e7a87bb837d44bd6"
+    },
+    "pkg-10-game002-s3-CN_2.json": {
+      "byteLength": 134071,
+      "chunk": "initial",
+      "entry": "assets/d24a2d0fb9c4319a7c1a305702fe1bdceccbbdeb50c245d4ded76aec735af7af.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "d24a2d0fb9c4319a7c1a305702fe1bdceccbbdeb50c245d4ded76aec735af7af"
+    },
+    "pkg-10-game002-s3-CN_3.json": {
+      "byteLength": 135026,
+      "chunk": "initial",
+      "entry": "assets/39966907a7f9cba1409431f0ae0f943554d0f4486f545ebaf080e4a582655eef.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "39966907a7f9cba1409431f0ae0f943554d0f4486f545ebaf080e4a582655eef"
+    },
+    "pkg-10-game002-s3-CN_4.json": {
+      "byteLength": 125975,
+      "chunk": "initial",
+      "entry": "assets/ab4d04ab19953f59dae02d97e4fd9f2baf259906c43893a44c7f2b8cd61dc47f.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "ab4d04ab19953f59dae02d97e4fd9f2baf259906c43893a44c7f2b8cd61dc47f"
+    },
+    "pkg-10-game002-s3-CN.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 26341
+    },
+    "pkg-10-game002-s3-CN.spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 58432
+    },
+    "pkg-10-game002-s3-CO_spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 27930
+    },
+    "pkg-10-game002-s3-CO.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 16499
+    },
+    "pkg-10-game002-s3-CO.json": {
+      "byteLength": 91483,
+      "chunk": "initial",
+      "entry": "assets/c5dcf0f36725e04dc9b169fb472f4b015a6a82f1f4ab7017e64c0651166143c7.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "c5dcf0f36725e04dc9b169fb472f4b015a6a82f1f4ab7017e64c0651166143c7"
+    },
+    "pkg-10-game002-s3-CO.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 43831
+    },
+    "pkg-10-game002-s3-gameconfig.json": {
+      "byteLength": 9675,
+      "chunk": "initial",
+      "entry": "assets/1f1b3120837a15fc1f3191b13d689f3d332aed0e1d1bc05d2ac4be1eb4dbf819.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "1f1b3120837a15fc1f3191b13d689f3d332aed0e1d1bc05d2ac4be1eb4dbf819"
+    },
+    "pkg-10-game002-s3-H1.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 14380
+    },
+    "pkg-10-game002-s3-H1.json": {
+      "byteLength": 46892,
+      "chunk": "initial",
+      "entry": "assets/244610b5c9d7366ff27313e20548c43f4e34f6291ea02d3a9f3e6a206c4bef77.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "244610b5c9d7366ff27313e20548c43f4e34f6291ea02d3a9f3e6a206c4bef77"
+    },
+    "pkg-10-game002-s3-H1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 24377
+    },
+    "pkg-10-game002-s3-H1.spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 38539
+    },
+    "pkg-10-game002-s3-H2.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 13236
+    },
+    "pkg-10-game002-s3-H2.json": {
+      "byteLength": 46892,
+      "chunk": "initial",
+      "entry": "assets/473d742e54dae8bcf9df78c49c065bab2b906524dbd1143cc7dcf087946b3118.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "473d742e54dae8bcf9df78c49c065bab2b906524dbd1143cc7dcf087946b3118"
+    },
+    "pkg-10-game002-s3-H2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 22767
+    },
+    "pkg-10-game002-s3-H2.spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 33785
+    },
+    "pkg-10-game002-s3-L1.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 11897
+    },
+    "pkg-10-game002-s3-L1.json": {
+      "byteLength": 46886,
+      "chunk": "initial",
+      "entry": "assets/8ea700a9f6165bb8c933ed31fa10414a2c708f7f29363c2b3370fce86737ff3f.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "8ea700a9f6165bb8c933ed31fa10414a2c708f7f29363c2b3370fce86737ff3f"
+    },
+    "pkg-10-game002-s3-L1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 19740
+    },
+    "pkg-10-game002-s3-L1.spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 32362
+    },
+    "pkg-10-game002-s3-L2.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 11046
+    },
+    "pkg-10-game002-s3-L2.json": {
+      "byteLength": 46886,
+      "chunk": "initial",
+      "entry": "assets/9f804d7f93706a129368f1c014c8ab84ce9754931bea72a8afe9c5f94fcb169e.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "9f804d7f93706a129368f1c014c8ab84ce9754931bea72a8afe9c5f94fcb169e"
+    },
+    "pkg-10-game002-s3-L2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 17525
+    },
+    "pkg-10-game002-s3-L2.spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 30559
+    },
+    "pkg-10-game002-s3-L3.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 11793
+    },
+    "pkg-10-game002-s3-L3.json": {
+      "byteLength": 46886,
+      "chunk": "initial",
+      "entry": "assets/7b98f59140ec952818831c426a9db361ce2ff2ddf63ecde33bc0db34f05be015.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "7b98f59140ec952818831c426a9db361ce2ff2ddf63ecde33bc0db34f05be015"
+    },
+    "pkg-10-game002-s3-L3.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 19264
+    },
+    "pkg-10-game002-s3-L3.spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 31832
+    },
+    "pkg-10-game002-s3-L4.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 11665
+    },
+    "pkg-10-game002-s3-L4.json": {
+      "byteLength": 46886,
+      "chunk": "initial",
+      "entry": "assets/c10b06de3c0cb48fb4b7df4be2e25ced62f93ee9934105f0f44d0e5b661a3f5c.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "c10b06de3c0cb48fb4b7df4be2e25ced62f93ee9934105f0f44d0e5b661a3f5c"
+    },
+    "pkg-10-game002-s3-L4.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 19188
+    },
+    "pkg-10-game002-s3-L4.spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 30638
+    },
+    "pkg-10-game002-s3-new-image-string-00-0.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2485
+    },
+    "pkg-10-game002-s3-new-image-string-00-1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2844
+    },
+    "pkg-10-game002-s3-new-image-string-00-2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2328
+    },
+    "pkg-10-game002-s3-new-image-string-00-3.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2712
+    },
+    "pkg-10-game002-s3-new-image-string-00-4.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 1902
+    },
+    "pkg-10-game002-s3-new-image-string-00-5.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2283
+    },
+    "pkg-10-game002-s3-new-image-string-00-6.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2403
+    },
+    "pkg-10-game002-s3-new-image-string-00-7.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2027
+    },
+    "pkg-10-game002-s3-new-image-string-00-8.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2472
+    },
+    "pkg-10-game002-s3-new-image-string-00-9.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2456
+    },
+    "pkg-10-game002-s3-new-image-string-00.image-string.manifest.json": {
+      "byteLength": 2217,
+      "chunk": "initial",
+      "entry": "assets/aa3619605afcc5bd62bafec6db6e005f31faf361ff3b9e2f373666ffffa7178f.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "aa3619605afcc5bd62bafec6db6e005f31faf361ff3b9e2f373666ffffa7178f"
+    },
+    "pkg-10-game002-s3-new-image-string-002-0-1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3287
+    },
+    "pkg-10-game002-s3-new-image-string-002-1-1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2539
+    },
+    "pkg-10-game002-s3-new-image-string-002-2-1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2991
+    },
+    "pkg-10-game002-s3-new-image-string-002-3-1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3232
+    },
+    "pkg-10-game002-s3-new-image-string-002-4-1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2904
+    },
+    "pkg-10-game002-s3-new-image-string-002-5-1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3026
+    },
+    "pkg-10-game002-s3-new-image-string-002-6-1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3040
+    },
+    "pkg-10-game002-s3-new-image-string-002-7-1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3052
+    },
+    "pkg-10-game002-s3-new-image-string-002-8-1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3098
+    },
+    "pkg-10-game002-s3-new-image-string-002-9-1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3097
+    },
+    "pkg-10-game002-s3-new-image-string-002.image-string.manifest.json": {
+      "byteLength": 2248,
+      "chunk": "initial",
+      "entry": "assets/2ca9e045775b7654be93e8ec1fdcfb271a3d25d0e4f99cb5fce60a00f4e8db63.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "2ca9e045775b7654be93e8ec1fdcfb271a3d25d0e4f99cb5fce60a00f4e8db63"
+    },
+    "pkg-10-game002-s3-new-image-string-003-0-2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3175
+    },
+    "pkg-10-game002-s3-new-image-string-003-1-2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2590
+    },
+    "pkg-10-game002-s3-new-image-string-003-2-2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3047
+    },
+    "pkg-10-game002-s3-new-image-string-003-3-2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3276
+    },
+    "pkg-10-game002-s3-new-image-string-003-4-2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2884
+    },
+    "pkg-10-game002-s3-new-image-string-003-5-2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3040
+    },
+    "pkg-10-game002-s3-new-image-string-003-6-2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3104
+    },
+    "pkg-10-game002-s3-new-image-string-003-7-2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2973
+    },
+    "pkg-10-game002-s3-new-image-string-003-8-2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3142
+    },
+    "pkg-10-game002-s3-new-image-string-003-9-2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3120
+    },
+    "pkg-10-game002-s3-new-image-string-003.image-string.manifest.json": {
+      "byteLength": 2248,
+      "chunk": "initial",
+      "entry": "assets/dfc8e2c699c1e7013ae12ebf4540cf7b2a753c6ec521080105c1c0d95d65235e.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "dfc8e2c699c1e7013ae12ebf4540cf7b2a753c6ec521080105c1c0d95d65235e"
+    },
+    "pkg-10-game002-s3-new-image-string-2-0.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2493
+    },
+    "pkg-10-game002-s3-new-image-string-2-1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2840
+    },
+    "pkg-10-game002-s3-new-image-string-2-2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3303
+    },
+    "pkg-10-game002-s3-new-image-string-2-3.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2726
+    },
+    "pkg-10-game002-s3-new-image-string-2-4.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3071
+    },
+    "pkg-10-game002-s3-new-image-string-2-5.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2295
+    },
+    "pkg-10-game002-s3-new-image-string-2-6.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2401
+    },
+    "pkg-10-game002-s3-new-image-string-2-7.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3136
+    },
+    "pkg-10-game002-s3-new-image-string-2-8.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2462
+    },
+    "pkg-10-game002-s3-new-image-string-2-9.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3402
+    },
+    "pkg-10-game002-s3-new-image-string-2-x.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3084
+    },
+    "pkg-10-game002-s3-new-image-string-2.image-string.manifest.json": {
+      "byteLength": 2408,
+      "chunk": "initial",
+      "entry": "assets/bae2350faf22122a8b00dfad2fdf96940737b564d414b31b53e0077d7b465625.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "bae2350faf22122a8b00dfad2fdf96940737b564d414b31b53e0077d7b465625"
+    },
+    "pkg-10-game002-s3-new-image-string-3-0.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3664
+    },
+    "pkg-10-game002-s3-new-image-string-3-1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3243
+    },
+    "pkg-10-game002-s3-new-image-string-3-2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3720
+    },
+    "pkg-10-game002-s3-new-image-string-3-5.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3805
+    },
+    "pkg-10-game002-s3-new-image-string-3-x.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3495
+    },
+    "pkg-10-game002-s3-new-image-string-3.image-string.manifest.json": {
+      "byteLength": 1196,
+      "chunk": "initial",
+      "entry": "assets/9ffe3a68b6d2873462c53bf9b71101dacf89b6a43d463991f3a2af76e39c858b.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "9ffe3a68b6d2873462c53bf9b71101dacf89b6a43d463991f3a2af76e39c858b"
+    },
+    "pkg-10-game002-s3-new-image-string-4-+.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3180
+    },
+    "pkg-10-game002-s3-new-image-string-4-1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3336
+    },
+    "pkg-10-game002-s3-new-image-string-4-2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3852
+    },
+    "pkg-10-game002-s3-new-image-string-4.image-string.manifest.json": {
+      "byteLength": 792,
+      "chunk": "initial",
+      "entry": "assets/42cd57a0a12ae6e716153ac5b7d167c7bac5a09c897cd585d337df051d990f77.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "42cd57a0a12ae6e716153ac5b7d167c7bac5a09c897cd585d337df051d990f77"
+    },
+    "pkg-10-game002-s3-sheep_drink.mp3": {
+      "byteLength": 17109,
+      "kind": "external",
+      "mediaType": "audio/mpeg",
+      "owner": "media",
+      "path": "assets/fe14855ee5ab2b9155b1c57d6fc186563142540fa4b422e33031a52491921288.mp3",
+      "sha256": "fe14855ee5ab2b9155b1c57d6fc186563142540fa4b422e33031a52491921288",
+      "sourceByteLength": 17109
+    },
+    "pkg-10-game002-s3-sheep_open.mp3": {
+      "byteLength": 14249,
+      "kind": "external",
+      "mediaType": "audio/mpeg",
+      "owner": "media",
+      "path": "assets/c261814ff8edfdc5323848ec4c3b295a968ad9511c0c8c1ff5725621d1e56fdd.mp3",
+      "sha256": "c261814ff8edfdc5323848ec4c3b295a968ad9511c0c8c1ff5725621d1e56fdd",
+      "sourceByteLength": 14249
+    },
+    "pkg-10-game002-s3-sheep_shake.mp3": {
+      "byteLength": 38620,
+      "kind": "external",
+      "mediaType": "audio/mpeg",
+      "owner": "media",
+      "path": "assets/3ce414c3df309e5d0e8d518b3d943b540ebc5b18b26b7dd3b3868273ccda8018.mp3",
+      "sha256": "3ce414c3df309e5d0e8d518b3d943b540ebc5b18b26b7dd3b3868273ccda8018",
+      "sourceByteLength": 38620
+    },
+    "pkg-10-game002-s3-sheepmmmmm.mp3": {
+      "byteLength": 15136,
+      "kind": "external",
+      "mediaType": "audio/mpeg",
+      "owner": "media",
+      "path": "assets/8a21910a5c634a8e0d2fec0d363e466529cc225768d21e09e7d5d90ed6df8070.mp3",
+      "sha256": "8a21910a5c634a8e0d2fec0d363e466529cc225768d21e09e7d5d90ed6df8070",
+      "sourceByteLength": 15136
+    },
+    "pkg-10-game002-s3-Symbol_2.png": {
+      "byteLength": 6710,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/5b4f01d5966990cfe9823fc322cad56526d97e33ff0c2e3b24e993dcc9222568.webp",
+      "sha256": "5b4f01d5966990cfe9823fc322cad56526d97e33ff0c2e3b24e993dcc9222568",
+      "sourceByteLength": 40116
+    },
+    "pkg-10-game002-s3-symbol-state-textures.manifest.json": {
+      "byteLength": 58894,
+      "chunk": "initial",
+      "entry": "assets/3c3a2ea89988cb3224c257ba00114361f9948acb89ff1f7f8f61f3a87c1abeb7.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "3c3a2ea89988cb3224c257ba00114361f9948acb89ff1f7f8f61f3a87c1abeb7"
+    },
+    "pkg-10-game002-s3-Symbol.atlas": {
+      "byteLength": 6771,
+      "chunk": "initial",
+      "entry": "assets/fbbdf86583323101744db5f9fc4814211d746c4d2af617d7506db97c1ca18ee6.atlas",
+      "kind": "metadata",
+      "mediaType": "text/plain",
+      "owner": "initial",
+      "sha256": "fbbdf86583323101744db5f9fc4814211d746c4d2af617d7506db97c1ca18ee6"
+    },
+    "pkg-10-game002-s3-Symbol.png": {
+      "byteLength": 706726,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/a2b523621ae5c6b50b1396b2ad9251ab5c408ecec1653af295dbe5ac2d295b33.webp",
+      "sha256": "a2b523621ae5c6b50b1396b2ad9251ab5c408ecec1653af295dbe5ac2d295b33",
+      "sourceByteLength": 4424896
+    },
+    "pkg-10-game002-s3-SymbolDrop_bottle.mp3": {
+      "byteLength": 9257,
+      "kind": "external",
+      "mediaType": "audio/mpeg",
+      "owner": "media",
+      "path": "assets/80b0d36fc0fccfe5012082362a99275f6308b8f6283824c533a96afdfe9950f7.mp3",
+      "sha256": "80b0d36fc0fccfe5012082362a99275f6308b8f6283824c533a96afdfe9950f7",
+      "sourceByteLength": 9257
+    },
+    "pkg-10-game002-s3-SymbolDrop_Normal.mp3": {
+      "byteLength": 4135,
+      "kind": "external",
+      "mediaType": "audio/mpeg",
+      "owner": "media",
+      "path": "assets/1c4c8060eb96daa3f87f35f68d89c16dba471ea1c05d2b347e525e0b466ec47e.mp3",
+      "sha256": "1c4c8060eb96daa3f87f35f68d89c16dba471ea1c05d2b347e525e0b466ec47e",
+      "sourceByteLength": 4135
+    },
+    "pkg-10-game002-s3-symbols.package.json": {
+      "byteLength": 5629,
+      "chunk": "initial",
+      "entry": "assets/2bb4037a94ec699c2005f930e112dda0f7f7fe5a3351afd0ba2133a75ad3474c.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "2bb4037a94ec699c2005f930e112dda0f7f7fe5a3351afd0ba2133a75ad3474c"
+    },
+    "pkg-10-game002-s3-WL_spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 31947
+    },
+    "pkg-10-game002-s3-WL.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 18424
+    },
+    "pkg-10-game002-s3-WL.json": {
+      "byteLength": 535811,
+      "chunk": "initial",
+      "entry": "assets/5a31566e0003f5278f32a2f34077522475754b665bd2bae88f08dea5ab4cb942.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "5a31566e0003f5278f32a2f34077522475754b665bd2bae88f08dea5ab4cb942"
+    },
+    "pkg-10-game002-s3-WL.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 37161
+    },
+    "pkg-10-game002-s3-WM_spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 24373
+    },
+    "pkg-10-game002-s3-WM.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 14377
+    },
+    "pkg-10-game002-s3-WM.json": {
+      "byteLength": 99421,
+      "chunk": "initial",
+      "entry": "assets/146719e6bc1406cbb2ed57c0531e2777211f21eb73fe792bd1a45f84d41a9cf9.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "146719e6bc1406cbb2ed57c0531e2777211f21eb73fe792bd1a45f84d41a9cf9"
+    },
+    "pkg-10-game002-s3-WM.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 28662
+    },
+    "pkg-15-congratulations-0.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 26523
+    },
+    "pkg-15-congratulations-1.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 17442
+    },
+    "pkg-15-congratulations-2-2.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 26147
+    },
+    "pkg-15-congratulations-2.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 7562
+    },
+    "pkg-15-congratulations-3-2.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 25805
+    },
+    "pkg-15-congratulations-3.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 6600
+    },
+    "pkg-15-congratulations-4-2.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 24677
+    },
+    "pkg-15-congratulations-4.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 16350
+    },
+    "pkg-15-congratulations-5.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 26097
+    },
+    "pkg-15-congratulations-6.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 27988
+    },
+    "pkg-15-congratulations-7.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 23680
+    },
+    "pkg-15-congratulations-8.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 28601
+    },
+    "pkg-15-congratulations-9.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 28259
+    },
+    "pkg-15-congratulations-bg_2.png": {
+      "byteLength": 214952,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "mode:FreeGame",
+      "path": "assets/c2002cfdd8b71b25980ab8e05825df24895572093826ca2cb37b93accfc4a54d.webp",
+      "sha256": "c2002cfdd8b71b25980ab8e05825df24895572093826ca2cb37b93accfc4a54d",
+      "sourceByteLength": 8809957
+    },
+    "pkg-15-congratulations-bg_3.png": {
+      "byteLength": 168608,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "mode:FreeGame",
+      "path": "assets/a15460ec8b2c2f339ee98925cea932a1b3e976461b8086d0983ba021d4970c1f.webp",
+      "sha256": "a15460ec8b2c2f339ee98925cea932a1b3e976461b8086d0983ba021d4970c1f",
+      "sourceByteLength": 2927978
+    },
+    "pkg-15-congratulations-bg_4.png": {
+      "byteLength": 141340,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "mode:FreeGame",
+      "path": "assets/6def80561701a6d1797cdab099b8413a8310ed4f5ab91a4d7972596f16657e06.webp",
+      "sha256": "6def80561701a6d1797cdab099b8413a8310ed4f5ab91a4d7972596f16657e06",
+      "sourceByteLength": 2640496
+    },
+    "pkg-15-congratulations-bg_5.png": {
+      "byteLength": 500874,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "mode:FreeGame",
+      "path": "assets/e629bf373c90ad9529803491b85c57cb4f9af2c34aaf757d4306277c19469c3e.webp",
+      "sha256": "e629bf373c90ad9529803491b85c57cb4f9af2c34aaf757d4306277c19469c3e",
+      "sourceByteLength": 2289858
+    },
+    "pkg-15-congratulations-bg_6.png": {
+      "byteLength": 397268,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "mode:FreeGame",
+      "path": "assets/4cc24a9ac1404c5601d3c7ef19abdbc7cbb6ca34a9668f5b1e52bb8f438b2e66.webp",
+      "sha256": "4cc24a9ac1404c5601d3c7ef19abdbc7cbb6ca34a9668f5b1e52bb8f438b2e66",
+      "sourceByteLength": 1609003
+    },
+    "pkg-15-congratulations-bg_7.png": {
+      "byteLength": 425376,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "mode:FreeGame",
+      "path": "assets/ed90412ba74d8916de7e125e2bf53f7cbd15e4ed15c0acbc557e226a9f23f5a4.webp",
+      "sha256": "ed90412ba74d8916de7e125e2bf53f7cbd15e4ed15c0acbc557e226a9f23f5a4",
+      "sourceByteLength": 3350465
+    },
+    "pkg-15-congratulations-bg_8.png": {
+      "byteLength": 157182,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "mode:FreeGame",
+      "path": "assets/f6d4c736264ff50882ef93b30d7f55a6630ac6bafa9f9cc2805fecc3f8e6b453.webp",
+      "sha256": "f6d4c736264ff50882ef93b30d7f55a6630ac6bafa9f9cc2805fecc3f8e6b453",
+      "sourceByteLength": 1333900
+    },
+    "pkg-15-congratulations-bg.atlas": {
+      "byteLength": 2788,
+      "chunk": "mode:FreeGame",
+      "entry": "assets/24e833a5836844aab876186e8e1b758fb4859d47afca0d53aebf0ea2601cc17a.atlas",
+      "kind": "metadata",
+      "mediaType": "text/plain",
+      "owner": "mode:FreeGame",
+      "sha256": "24e833a5836844aab876186e8e1b758fb4859d47afca0d53aebf0ea2601cc17a"
+    },
+    "pkg-15-congratulations-bg.png": {
+      "byteLength": 298070,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "mode:FreeGame",
+      "path": "assets/65446afeb3c8e2e4cf43d85cd3f1111ab2c104b757b853ef4876840e06841fc7.webp",
+      "sha256": "65446afeb3c8e2e4cf43d85cd3f1111ab2c104b757b853ef4876840e06841fc7",
+      "sourceByteLength": 8910623
+    },
+    "pkg-15-congratulations-congratulations.json": {
+      "byteLength": 81552,
+      "chunk": "mode:FreeGame",
+      "entry": "assets/96139af8cb646186d5dc238148e11b9317e0f7d520cd82d704311f31b66ed481.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "mode:FreeGame",
+      "sha256": "96139af8cb646186d5dc238148e11b9317e0f7d520cd82d704311f31b66ed481"
+    },
+    "pkg-15-congratulations-fredoka-bold.ttf": {
+      "byteLength": 49748,
+      "chunk": "mode:FreeGame",
+      "entry": "assets/d5b9534228a0359dad311598dd57e3d14111ce44aee9d8aac6aeca349bcbffea.ttf",
+      "kind": "metadata",
+      "mediaType": "font/ttf",
+      "owner": "mode:FreeGame",
+      "sha256": "d5b9534228a0359dad311598dd57e3d14111ce44aee9d8aac6aeca349bcbffea"
+    },
+    "pkg-15-congratulations-image-string.manifest.json": {
+      "byteLength": 3035,
+      "chunk": "mode:FreeGame",
+      "entry": "assets/46e5aa8a67d7f3d178770729d040c000261beb535da9d5c48160aeddde0100b9.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "mode:FreeGame",
+      "sha256": "46e5aa8a67d7f3d178770729d040c000261beb535da9d5c48160aeddde0100b9"
+    },
+    "pkg-15-congratulations-popup.manifest.json": {
+      "byteLength": 3358,
+      "chunk": "mode:FreeGame",
+      "entry": "assets/d6c454b1715b99dcbc542a2d616be1ec6d152cc27a410ff88eb548ba4ea724a7.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "mode:FreeGame",
+      "sha256": "d6c454b1715b99dcbc542a2d616be1ec6d152cc27a410ff88eb548ba4ea724a7"
+    },
+    "pkg-15-congratulations-x.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 22770
+    },
+    "pkg-15-congratulations.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 10325
+    },
+    "pkg-17-award-celebration-0.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 26523
+    },
+    "pkg-17-award-celebration-01_asset_image_mrxcn5qm_n.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 22973
+    },
+    "pkg-17-award-celebration-02_asset_image_mrxcn5qo_o.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 17237
+    },
+    "pkg-17-award-celebration-03_asset_image_mrxcn5qq_p.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 12952
+    },
+    "pkg-17-award-celebration-04_asset_image_mrxcn5qu_q.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 8223
+    },
+    "pkg-17-award-celebration-05_asset_image_mrxcn5qw_r.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 11563
+    },
+    "pkg-17-award-celebration-06_asset_image_mrxcn5qx_s.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 16563
+    },
+    "pkg-17-award-celebration-1_asset_image_mryc5k3f_3.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6230
+    },
+    "pkg-17-award-celebration-1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 17442
+    },
+    "pkg-17-award-celebration-2-2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 26147
+    },
+    "pkg-17-award-celebration-2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 7562
+    },
+    "pkg-17-award-celebration-3-2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 25805
+    },
+    "pkg-17-award-celebration-3.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6600
+    },
+    "pkg-17-award-celebration-4-2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 24677
+    },
+    "pkg-17-award-celebration-4.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 16350
+    },
+    "pkg-17-award-celebration-5.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 26097
+    },
+    "pkg-17-award-celebration-6.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 27988
+    },
+    "pkg-17-award-celebration-7.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 23680
+    },
+    "pkg-17-award-celebration-8.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 28601
+    },
+    "pkg-17-award-celebration-9.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 28259
+    },
+    "pkg-17-award-celebration-big_1_asset_image_mrvydhi0_6_asset_image_msy21in5_23.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 139872
+    },
+    "pkg-17-award-celebration-big_asset_image_mrvyd851_4.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 239044
+    },
+    "pkg-17-award-celebration-big_asset_image_mrvydp4q_8.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 492655
+    },
+    "pkg-17-award-celebration-big_asset_image_mrvyds1c_a.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 1329593
+    },
+    "pkg-17-award-celebration-bigwin.mp3": {
+      "byteLength": 113322,
+      "kind": "external",
+      "mediaType": "audio/mpeg",
+      "owner": "media",
+      "path": "assets/2a59a45f025cbf6dc8e6a291070423595ebe5fe93aba4e17fa75a000a8f2fd66.mp3",
+      "sha256": "2a59a45f025cbf6dc8e6a291070423595ebe5fe93aba4e17fa75a000a8f2fd66",
+      "sourceByteLength": 113322
+    },
+    "pkg-17-award-celebration-crave_bigwin.json": {
+      "byteLength": 68096,
+      "chunk": "initial",
+      "entry": "assets/f5a49a323dd76e5a64c1019a8a8bcefff81f05be133b679c0b9b2e77ac023d87.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "f5a49a323dd76e5a64c1019a8a8bcefff81f05be133b679c0b9b2e77ac023d87"
+    },
+    "pkg-17-award-celebration-crave_megawin2.json": {
+      "byteLength": 70981,
+      "chunk": "initial",
+      "entry": "assets/082cec3cd570ae55292fde0f5cc69cc1229564f86952de59c245888263b0ecd2.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "082cec3cd570ae55292fde0f5cc69cc1229564f86952de59c245888263b0ecd2"
+    },
+    "pkg-17-award-celebration-crave_superwin2.json": {
+      "byteLength": 70556,
+      "chunk": "initial",
+      "entry": "assets/47ff599f701b0eecb7d3575cc4ed1cba9565720567fa7beabdd19b7179a499c4.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "47ff599f701b0eecb7d3575cc4ed1cba9565720567fa7beabdd19b7179a499c4"
+    },
+    "pkg-17-award-celebration-image_asset_image_mrxd8l5y_y.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 55456
+    },
+    "pkg-17-award-celebration-image_asset_image_msy5k1q6_9.jpg": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/jpeg",
+      "owner": "initial",
+      "sourceByteLength": 317737
+    },
+    "pkg-17-award-celebration-image_asset_image_msybhgdb_10.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 1035219
+    },
+    "pkg-17-award-celebration-image_asset_image_msybhpr1_11.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 1172695
+    },
+    "pkg-17-award-celebration-image-string.manifest.json": {
+      "byteLength": 3065,
+      "chunk": "initial",
+      "entry": "assets/23222638de5a904092aaab892cfd8cb829b513fb83d6637a68b8d7bdd95ece63.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "23222638de5a904092aaab892cfd8cb829b513fb83d6637a68b8d7bdd95ece63"
+    },
+    "pkg-17-award-celebration-mega_asset_image_msybgpcg_w.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 318910
+    },
+    "pkg-17-award-celebration-mega_asset_image_msybgwg4_x.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 180414
+    },
+    "pkg-17-award-celebration-megawin.mp3": {
+      "byteLength": 110634,
+      "kind": "external",
+      "mediaType": "audio/mpeg",
+      "owner": "media",
+      "path": "assets/eb64e3e65c995a088031430e7db80361887f40853035b3ed72aa012ae0498df5.mp3",
+      "sha256": "eb64e3e65c995a088031430e7db80361887f40853035b3ed72aa012ae0498df5",
+      "sourceByteLength": 110634
+    },
+    "pkg-17-award-celebration-popup.manifest.json": {
+      "byteLength": 9221,
+      "chunk": "initial",
+      "entry": "assets/9f26c24b1c68cf7f957139764d38c0c4fa7b2757c0730a78876af3af0f85375e.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "9f26c24b1c68cf7f957139764d38c0c4fa7b2757c0730a78876af3af0f85375e"
+    },
+    "pkg-17-award-celebration-super_1_asset_image_msy5aeky_3.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 205521
+    },
+    "pkg-17-award-celebration-super_asset_image_msy5benk_4.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 335798
+    },
+    "pkg-17-award-celebration-super_asset_image_msy5dn68_7.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 1189577
+    },
+    "pkg-17-award-celebration-superwin_asset_image_msy5dzp3_8.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 1473956
+    },
+    "pkg-17-award-celebration-superwin.mp3": {
+      "byteLength": 110442,
+      "kind": "external",
+      "mediaType": "audio/mpeg",
+      "owner": "media",
+      "path": "assets/2f4230889edfaf5972098bdb0170ba090ab1bb399f00cdf1065b369dd52d93b2.mp3",
+      "sha256": "2f4230889edfaf5972098bdb0170ba090ab1bb399f00cdf1065b369dd52d93b2",
+      "sourceByteLength": 110442
+    },
+    "pkg-17-award-celebration-u6570-u5b57-u5e95-u5149.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 55456
+    },
+    "pkg-17-award-celebration-win_1_asset_image_mrvyehti_c_asset_image_msy243n4_47.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 150146
+    },
+    "pkg-17-award-celebration-win_2_asset_image_msy5cz7g_5.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 240422
+    },
+    "pkg-17-award-celebration-win_3_asset_image_msy5d8f0_6.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 129609
+    },
+    "pkg-17-award-celebration-win_4_asset_image_msybh31u_y.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 226877
+    },
+    "pkg-17-award-celebration-win_asset_image_mrvyel4c_e_asset_image_mswv3cm9_1o.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 240422
+    },
+    "pkg-17-award-celebration-win_asset_image_msybh78g_z.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 128417
+    },
+    "pkg-17-award-celebration-x.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 22770
+    },
+    "pkg-17-award-celebration.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 10325
+    },
+    "pkg-18-popup-freegamesadd-0.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 7763
+    },
+    "pkg-18-popup-freegamesadd-1_asset_image_msztk3gd_v.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6230
+    },
+    "pkg-18-popup-freegamesadd-1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 4716
+    },
+    "pkg-18-popup-freegamesadd-2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6789
+    },
+    "pkg-18-popup-freegamesadd-3.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 7601
+    },
+    "pkg-18-popup-freegamesadd-4.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 5774
+    },
+    "pkg-18-popup-freegamesadd-5.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6898
+    },
+    "pkg-18-popup-freegamesadd-6.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 7001
+    },
+    "pkg-18-popup-freegamesadd-7.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6060
+    },
+    "pkg-18-popup-freegamesadd-8.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6909
+    },
+    "pkg-18-popup-freegamesadd-9.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 7141
+    },
+    "pkg-18-popup-freegamesadd-freegames_asset_image_mszswhtn_5.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 23274
+    },
+    "pkg-18-popup-freegamesadd-freegames_asset_image_mszswkfe_7.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 133403
+    },
+    "pkg-18-popup-freegamesadd-freegames2.json": {
+      "byteLength": 15189,
+      "chunk": "initial",
+      "entry": "assets/37670ae8a8af06252f259ec151d3a029b4de5923d0bfd3e8a8d0b63ff2e38c21.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "37670ae8a8af06252f259ec151d3a029b4de5923d0bfd3e8a8d0b63ff2e38c21"
+    },
+    "pkg-18-popup-freegamesadd-image-string.manifest.json": {
+      "byteLength": 2295,
+      "chunk": "initial",
+      "entry": "assets/c1cb1d3f9d3255d5b195103ad3d11e9dc6a1fefc335f146372360289621cc0fc.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "c1cb1d3f9d3255d5b195103ad3d11e9dc6a1fefc335f146372360289621cc0fc"
+    },
+    "pkg-18-popup-freegamesadd-popup.manifest.json": {
+      "byteLength": 1813,
+      "chunk": "initial",
+      "entry": "assets/84ca4cd7a68eba9a49dfe1b22257c5cb7b156d83d994cd2326210ce340128a10.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "84ca4cd7a68eba9a49dfe1b22257c5cb7b156d83d994cd2326210ce340128a10"
+    },
+    "pkg-18-popup-freegamesadd.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 5015
+    },
+    "pkg-2-fg-bg_2.png": {
+      "byteLength": 214952,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/c2002cfdd8b71b25980ab8e05825df24895572093826ca2cb37b93accfc4a54d.webp",
+      "sha256": "c2002cfdd8b71b25980ab8e05825df24895572093826ca2cb37b93accfc4a54d",
+      "sourceByteLength": 8809957
+    },
+    "pkg-2-fg-bg_3.png": {
+      "byteLength": 168608,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/a15460ec8b2c2f339ee98925cea932a1b3e976461b8086d0983ba021d4970c1f.webp",
+      "sha256": "a15460ec8b2c2f339ee98925cea932a1b3e976461b8086d0983ba021d4970c1f",
+      "sourceByteLength": 2927978
+    },
+    "pkg-2-fg-bg_4.png": {
+      "byteLength": 141340,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/6def80561701a6d1797cdab099b8413a8310ed4f5ab91a4d7972596f16657e06.webp",
+      "sha256": "6def80561701a6d1797cdab099b8413a8310ed4f5ab91a4d7972596f16657e06",
+      "sourceByteLength": 2640496
+    },
+    "pkg-2-fg-bg_5.png": {
+      "byteLength": 500874,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/e629bf373c90ad9529803491b85c57cb4f9af2c34aaf757d4306277c19469c3e.webp",
+      "sha256": "e629bf373c90ad9529803491b85c57cb4f9af2c34aaf757d4306277c19469c3e",
+      "sourceByteLength": 2289858
+    },
+    "pkg-2-fg-bg_6.png": {
+      "byteLength": 397268,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/4cc24a9ac1404c5601d3c7ef19abdbc7cbb6ca34a9668f5b1e52bb8f438b2e66.webp",
+      "sha256": "4cc24a9ac1404c5601d3c7ef19abdbc7cbb6ca34a9668f5b1e52bb8f438b2e66",
+      "sourceByteLength": 1609003
+    },
+    "pkg-2-fg-bg_7.png": {
+      "byteLength": 418668,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/f210788733c92bf17b215e85fb4cbcdf3497b0489509f9bb7a64eeb2e7bf3675.webp",
+      "sha256": "f210788733c92bf17b215e85fb4cbcdf3497b0489509f9bb7a64eeb2e7bf3675",
+      "sourceByteLength": 3338856
+    },
+    "pkg-2-fg-bg_8.png": {
+      "byteLength": 157182,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/f6d4c736264ff50882ef93b30d7f55a6630ac6bafa9f9cc2805fecc3f8e6b453.webp",
+      "sha256": "f6d4c736264ff50882ef93b30d7f55a6630ac6bafa9f9cc2805fecc3f8e6b453",
+      "sourceByteLength": 1333900
+    },
+    "pkg-2-fg-bg.atlas": {
+      "byteLength": 2788,
+      "chunk": "initial",
+      "entry": "assets/24e833a5836844aab876186e8e1b758fb4859d47afca0d53aebf0ea2601cc17a.atlas",
+      "kind": "metadata",
+      "mediaType": "text/plain",
+      "owner": "initial",
+      "sha256": "24e833a5836844aab876186e8e1b758fb4859d47afca0d53aebf0ea2601cc17a"
+    },
+    "pkg-2-fg-bg.png": {
+      "byteLength": 298070,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/65446afeb3c8e2e4cf43d85cd3f1111ab2c104b757b853ef4876840e06841fc7.webp",
+      "sha256": "65446afeb3c8e2e4cf43d85cd3f1111ab2c104b757b853ef4876840e06841fc7",
+      "sourceByteLength": 8910623
+    },
+    "pkg-2-fg-fg.json": {
+      "byteLength": 313552,
+      "chunk": "initial",
+      "entry": "assets/b537766e12e3853bab80e3b61bd76136e49f7446c311d6aefb5dd6b864e7320d.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "b537766e12e3853bab80e3b61bd76136e49f7446c311d6aefb5dd6b864e7320d"
+    },
+    "pkg-2-fg-popup.manifest.json": {
+      "byteLength": 1103,
+      "chunk": "initial",
+      "entry": "assets/a5719485724b297806a2735ec8ae6f853f2c6b783dfdf83a771a6fe269cd2fbb.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "a5719485724b297806a2735ec8ae6f853f2c6b783dfdf83a771a6fe269cd2fbb"
+    },
+    "sheep_open.mp3": {
+      "byteLength": 14249,
+      "kind": "external",
+      "mediaType": "audio/mpeg",
+      "owner": "media",
+      "path": "assets/c261814ff8edfdc5323848ec4c3b295a968ad9511c0c8c1ff5725621d1e56fdd.mp3",
+      "sha256": "c261814ff8edfdc5323848ec4c3b295a968ad9511c0c8c1ff5725621d1e56fdd",
+      "sourceByteLength": 14249
+    },
+    "symbol_2.png": {
+      "byteLength": 6986,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/dbff7d04a8e4d4ff3b0313c0790f72c906efa5f806180be120b5d7aa512729a3.webp",
+      "sha256": "dbff7d04a8e4d4ff3b0313c0790f72c906efa5f806180be120b5d7aa512729a3",
+      "sourceByteLength": 39746
+    },
+    "symbol.atlas": {
+      "byteLength": 6704,
+      "chunk": "initial",
+      "entry": "assets/d739f97af6d9f6f4fc54c05a0ba6dccccdf59b13f55b78c04a468e3d13a9481a.atlas",
+      "kind": "metadata",
+      "mediaType": "text/plain",
+      "owner": "initial",
+      "sha256": "d739f97af6d9f6f4fc54c05a0ba6dccccdf59b13f55b78c04a468e3d13a9481a"
+    },
+    "symbol.png": {
+      "byteLength": 703350,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/80e64f432219344ab0e82f267854b005629856f4282fb1feffc864bd22638745.webp",
+      "sha256": "80e64f432219344ab0e82f267854b005629856f4282fb1feffc864bd22638745",
+      "sourceByteLength": 4452900
+    },
+    "x.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 22770
+    }
+  },
+  "atlases": [
+    {
+      "frames": {
+        "0.png": {
+          "height": 132,
+          "rotated": false,
+          "sourceHeight": 132,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 6,
+          "y": 6
+        },
+        "1.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 130,
+          "y": 6
+        },
+        "2.png": {
+          "height": 116,
+          "rotated": true,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 135,
+          "x": 6,
+          "y": 149
+        },
+        "3.png": {
+          "height": 116,
+          "rotated": true,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 135,
+          "x": 149,
+          "y": 149
+        },
+        "4.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 254,
+          "y": 6
+        },
+        "5.png": {
+          "height": 116,
+          "rotated": true,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 135,
+          "x": 6,
+          "y": 273
+        },
+        "6.png": {
+          "height": 116,
+          "rotated": true,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 135,
+          "x": 149,
+          "y": 273
+        },
+        "7.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 378,
+          "y": 6
+        },
+        "8.png": {
+          "height": 116,
+          "rotated": true,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 135,
+          "x": 292,
+          "y": 149
+        },
+        "9.png": {
+          "height": 116,
+          "rotated": true,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 135,
+          "x": 292,
+          "y": 273
+        },
+        "asset-2.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 42,
+          "width": 42,
+          "x": 435,
+          "y": 149
+        },
+        "asset-3.png": {
+          "height": 39,
+          "rotated": true,
+          "sourceHeight": 135,
+          "sourceWidth": 39,
+          "width": 135,
+          "x": 6,
+          "y": 397
+        },
+        "asset-4.png": {
+          "height": 95,
+          "rotated": true,
+          "sourceHeight": 135,
+          "sourceWidth": 95,
+          "width": 135,
+          "x": 6,
+          "y": 444
+        },
+        "asset.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 98,
+          "width": 98,
+          "x": 149,
+          "y": 397
+        },
+        "pkg-10-game002-s3-AF_spinBlur.png": {
+          "height": 170,
+          "rotated": false,
+          "sourceHeight": 170,
+          "sourceWidth": 170,
+          "width": 170,
+          "x": 502,
+          "y": 6
+        },
+        "pkg-10-game002-s3-AF.disabled.png": {
+          "height": 170,
+          "rotated": false,
+          "sourceHeight": 170,
+          "sourceWidth": 170,
+          "width": 170,
+          "x": 485,
+          "y": 184
+        },
+        "pkg-10-game002-s3-AF.png": {
+          "height": 170,
+          "rotated": false,
+          "sourceHeight": 170,
+          "sourceWidth": 170,
+          "width": 170,
+          "x": 435,
+          "y": 362
+        },
+        "pkg-10-game002-s3-BN.disabled.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 255,
+          "y": 397
+        },
+        "pkg-10-game002-s3-BN.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 6,
+          "y": 547
+        },
+        "pkg-10-game002-s3-BN.spinBlur.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 144,
+          "y": 547
+        },
+        "pkg-10-game002-s3-CM_spinBlur.png": {
+          "height": 170,
+          "rotated": false,
+          "sourceHeight": 170,
+          "sourceWidth": 170,
+          "width": 170,
+          "x": 680,
+          "y": 6
+        },
+        "pkg-10-game002-s3-CM.disabled.png": {
+          "height": 170,
+          "rotated": false,
+          "sourceHeight": 170,
+          "sourceWidth": 170,
+          "width": 170,
+          "x": 663,
+          "y": 184
+        },
+        "pkg-10-game002-s3-CM.png": {
+          "height": 170,
+          "rotated": false,
+          "sourceHeight": 170,
+          "sourceWidth": 170,
+          "width": 170,
+          "x": 613,
+          "y": 362
+        },
+        "pkg-10-game002-s3-CN.disabled.png": {
+          "height": 200,
+          "rotated": false,
+          "sourceHeight": 200,
+          "sourceWidth": 200,
+          "width": 200,
+          "x": 6,
+          "y": 685
+        },
+        "pkg-10-game002-s3-CN.spinBlur.png": {
+          "height": 200,
+          "rotated": false,
+          "sourceHeight": 200,
+          "sourceWidth": 200,
+          "width": 200,
+          "x": 214,
+          "y": 685
+        },
+        "pkg-10-game002-s3-CO_spinBlur.png": {
+          "height": 170,
+          "rotated": false,
+          "sourceHeight": 170,
+          "sourceWidth": 170,
+          "width": 170,
+          "x": 422,
+          "y": 540
+        },
+        "pkg-10-game002-s3-CO.disabled.png": {
+          "height": 170,
+          "rotated": false,
+          "sourceHeight": 170,
+          "sourceWidth": 170,
+          "width": 170,
+          "x": 600,
+          "y": 540
+        },
+        "pkg-10-game002-s3-CO.png": {
+          "height": 170,
+          "rotated": false,
+          "sourceHeight": 170,
+          "sourceWidth": 170,
+          "width": 170,
+          "x": 858,
+          "y": 6
+        },
+        "pkg-10-game002-s3-H1.disabled.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 282,
+          "y": 535
+        },
+        "pkg-10-game002-s3-H1.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 422,
+          "y": 718
+        },
+        "pkg-10-game002-s3-H1.spinBlur.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 560,
+          "y": 718
+        },
+        "pkg-10-game002-s3-H2.disabled.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 698,
+          "y": 718
+        },
+        "pkg-10-game002-s3-H2.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 778,
+          "y": 540
+        },
+        "pkg-10-game002-s3-H2.spinBlur.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 791,
+          "y": 362
+        },
+        "pkg-10-game002-s3-L1.disabled.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 841,
+          "y": 184
+        },
+        "pkg-10-game002-s3-L1.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 836,
+          "y": 678
+        },
+        "pkg-10-game002-s3-L1.spinBlur.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 6,
+          "y": 893
+        },
+        "pkg-10-game002-s3-L2.disabled.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 144,
+          "y": 893
+        },
+        "pkg-10-game002-s3-L2.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 282,
+          "y": 893
+        },
+        "pkg-10-game002-s3-L2.spinBlur.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 420,
+          "y": 893
+        },
+        "pkg-10-game002-s3-L3.disabled.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 558,
+          "y": 856
+        },
+        "pkg-10-game002-s3-L3.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 696,
+          "y": 856
+        },
+        "pkg-10-game002-s3-L3.spinBlur.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 834,
+          "y": 856
+        },
+        "pkg-10-game002-s3-L4.disabled.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 6,
+          "y": 1031
+        },
+        "pkg-10-game002-s3-L4.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 144,
+          "y": 1031
+        },
+        "pkg-10-game002-s3-L4.spinBlur.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 282,
+          "y": 1031
+        },
+        "pkg-10-game002-s3-new-image-string-00-0.png": {
+          "height": 36,
+          "rotated": true,
+          "sourceHeight": 49,
+          "sourceWidth": 36,
+          "width": 49,
+          "x": 979,
+          "y": 184
+        },
+        "pkg-10-game002-s3-new-image-string-00-1.png": {
+          "height": 30,
+          "rotated": true,
+          "sourceHeight": 48,
+          "sourceWidth": 30,
+          "width": 48,
+          "x": 979,
+          "y": 228
+        },
+        "pkg-10-game002-s3-new-image-string-00-2.png": {
+          "height": 36,
+          "rotated": true,
+          "sourceHeight": 48,
+          "sourceWidth": 36,
+          "width": 48,
+          "x": 979,
+          "y": 266
+        },
+        "pkg-10-game002-s3-new-image-string-00-3.png": {
+          "height": 36,
+          "rotated": true,
+          "sourceHeight": 49,
+          "sourceWidth": 36,
+          "width": 49,
+          "x": 979,
+          "y": 310
+        },
+        "pkg-10-game002-s3-new-image-string-00-4.png": {
+          "height": 35,
+          "rotated": true,
+          "sourceHeight": 48,
+          "sourceWidth": 35,
+          "width": 48,
+          "x": 974,
+          "y": 354
+        },
+        "pkg-10-game002-s3-new-image-string-00-5.png": {
+          "height": 32,
+          "rotated": true,
+          "sourceHeight": 49,
+          "sourceWidth": 32,
+          "width": 49,
+          "x": 791,
+          "y": 500
+        },
+        "pkg-10-game002-s3-new-image-string-00-6.png": {
+          "height": 49,
+          "rotated": false,
+          "sourceHeight": 49,
+          "sourceWidth": 34,
+          "width": 34,
+          "x": 393,
+          "y": 397
+        },
+        "pkg-10-game002-s3-new-image-string-00-7.png": {
+          "height": 48,
+          "rotated": false,
+          "sourceHeight": 48,
+          "sourceWidth": 34,
+          "width": 34,
+          "x": 393,
+          "y": 454
+        },
+        "pkg-10-game002-s3-new-image-string-00-8.png": {
+          "height": 49,
+          "rotated": false,
+          "sourceHeight": 49,
+          "sourceWidth": 35,
+          "width": 35,
+          "x": 929,
+          "y": 322
+        },
+        "pkg-10-game002-s3-new-image-string-00-9.png": {
+          "height": 48,
+          "rotated": false,
+          "sourceHeight": 48,
+          "sourceWidth": 34,
+          "width": 34,
+          "x": 929,
+          "y": 379
+        },
+        "pkg-10-game002-s3-new-image-string-002-0-1.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 49,
+          "sourceWidth": 31,
+          "width": 49,
+          "x": 778,
+          "y": 678
+        },
+        "pkg-10-game002-s3-new-image-string-002-1-1.png": {
+          "height": 21,
+          "rotated": true,
+          "sourceHeight": 48,
+          "sourceWidth": 21,
+          "width": 48,
+          "x": 974,
+          "y": 397
+        },
+        "pkg-10-game002-s3-new-image-string-002-2-1.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 48,
+          "sourceWidth": 31,
+          "width": 48,
+          "x": 836,
+          "y": 816
+        },
+        "pkg-10-game002-s3-new-image-string-002-3-1.png": {
+          "height": 30,
+          "rotated": true,
+          "sourceHeight": 49,
+          "sourceWidth": 30,
+          "width": 49,
+          "x": 848,
+          "y": 500
+        },
+        "pkg-10-game002-s3-new-image-string-002-4-1.png": {
+          "height": 30,
+          "rotated": true,
+          "sourceHeight": 48,
+          "sourceWidth": 30,
+          "width": 48,
+          "x": 841,
+          "y": 322
+        },
+        "pkg-10-game002-s3-new-image-string-002-5-1.png": {
+          "height": 27,
+          "rotated": true,
+          "sourceHeight": 49,
+          "sourceWidth": 27,
+          "width": 49,
+          "x": 422,
+          "y": 856
+        },
+        "pkg-10-game002-s3-new-image-string-002-6-1.png": {
+          "height": 28,
+          "rotated": true,
+          "sourceHeight": 49,
+          "sourceWidth": 28,
+          "width": 49,
+          "x": 479,
+          "y": 856
+        },
+        "pkg-10-game002-s3-new-image-string-002-7-1.png": {
+          "height": 30,
+          "rotated": true,
+          "sourceHeight": 48,
+          "sourceWidth": 30,
+          "width": 48,
+          "x": 892,
+          "y": 816
+        },
+        "pkg-10-game002-s3-new-image-string-002-8-1.png": {
+          "height": 29,
+          "rotated": true,
+          "sourceHeight": 49,
+          "sourceWidth": 29,
+          "width": 49,
+          "x": 905,
+          "y": 500
+        },
+        "pkg-10-game002-s3-new-image-string-002-9-1.png": {
+          "height": 28,
+          "rotated": true,
+          "sourceHeight": 48,
+          "sourceWidth": 28,
+          "width": 48,
+          "x": 948,
+          "y": 816
+        },
+        "pkg-10-game002-s3-new-image-string-003-0-2.png": {
+          "height": 30,
+          "rotated": true,
+          "sourceHeight": 49,
+          "sourceWidth": 30,
+          "width": 49,
+          "x": 974,
+          "y": 426
+        },
+        "pkg-10-game002-s3-new-image-string-003-1-2.png": {
+          "height": 48,
+          "rotated": false,
+          "sourceHeight": 48,
+          "sourceWidth": 20,
+          "width": 20,
+          "x": 1004,
+          "y": 464
+        },
+        "pkg-10-game002-s3-new-image-string-003-2-2.png": {
+          "height": 48,
+          "rotated": false,
+          "sourceHeight": 48,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 962,
+          "y": 464
+        },
+        "pkg-10-game002-s3-new-image-string-003-3-2.png": {
+          "height": 30,
+          "rotated": true,
+          "sourceHeight": 49,
+          "sourceWidth": 30,
+          "width": 49,
+          "x": 974,
+          "y": 520
+        },
+        "pkg-10-game002-s3-new-image-string-003-4-2.png": {
+          "height": 30,
+          "rotated": true,
+          "sourceHeight": 48,
+          "sourceWidth": 30,
+          "width": 48,
+          "x": 916,
+          "y": 537
+        },
+        "pkg-10-game002-s3-new-image-string-003-5-2.png": {
+          "height": 27,
+          "rotated": true,
+          "sourceHeight": 49,
+          "sourceWidth": 27,
+          "width": 49,
+          "x": 974,
+          "y": 558
+        },
+        "pkg-10-game002-s3-new-image-string-003-6-2.png": {
+          "height": 28,
+          "rotated": true,
+          "sourceHeight": 49,
+          "sourceWidth": 28,
+          "width": 49,
+          "x": 916,
+          "y": 575
+        },
+        "pkg-10-game002-s3-new-image-string-003-7-2.png": {
+          "height": 29,
+          "rotated": true,
+          "sourceHeight": 48,
+          "sourceWidth": 29,
+          "width": 48,
+          "x": 974,
+          "y": 593
+        },
+        "pkg-10-game002-s3-new-image-string-003-8-2.png": {
+          "height": 29,
+          "rotated": true,
+          "sourceHeight": 49,
+          "sourceWidth": 29,
+          "width": 49,
+          "x": 916,
+          "y": 611
+        },
+        "pkg-10-game002-s3-new-image-string-003-9-2.png": {
+          "height": 28,
+          "rotated": true,
+          "sourceHeight": 48,
+          "sourceWidth": 28,
+          "width": 48,
+          "x": 974,
+          "y": 630
+        },
+        "pkg-10-game002-s3-new-image-string-2-0.png": {
+          "height": 36,
+          "rotated": true,
+          "sourceHeight": 49,
+          "sourceWidth": 36,
+          "width": 49,
+          "x": 974,
+          "y": 666
+        },
+        "pkg-10-game002-s3-new-image-string-2-1.png": {
+          "height": 30,
+          "rotated": true,
+          "sourceHeight": 49,
+          "sourceWidth": 30,
+          "width": 49,
+          "x": 974,
+          "y": 710
+        },
+        "pkg-10-game002-s3-new-image-string-2-2.png": {
+          "height": 36,
+          "rotated": true,
+          "sourceHeight": 49,
+          "sourceWidth": 36,
+          "width": 49,
+          "x": 974,
+          "y": 748
+        },
+        "pkg-10-game002-s3-new-image-string-2-3.png": {
+          "height": 49,
+          "rotated": false,
+          "sourceHeight": 49,
+          "sourceWidth": 36,
+          "width": 36,
+          "x": 435,
+          "y": 292
+        },
+        "pkg-10-game002-s3-new-image-string-2-4.png": {
+          "height": 35,
+          "rotated": true,
+          "sourceHeight": 49,
+          "sourceWidth": 35,
+          "width": 49,
+          "x": 972,
+          "y": 852
+        },
+        "pkg-10-game002-s3-new-image-string-2-5.png": {
+          "height": 32,
+          "rotated": true,
+          "sourceHeight": 49,
+          "sourceWidth": 32,
+          "width": 49,
+          "x": 972,
+          "y": 895
+        },
+        "pkg-10-game002-s3-new-image-string-2-6.png": {
+          "height": 34,
+          "rotated": true,
+          "sourceHeight": 49,
+          "sourceWidth": 34,
+          "width": 49,
+          "x": 972,
+          "y": 935
+        },
+        "pkg-10-game002-s3-new-image-string-2-7.png": {
+          "height": 34,
+          "rotated": true,
+          "sourceHeight": 49,
+          "sourceWidth": 34,
+          "width": 49,
+          "x": 972,
+          "y": 977
+        },
+        "pkg-10-game002-s3-new-image-string-2-8.png": {
+          "height": 49,
+          "rotated": false,
+          "sourceHeight": 49,
+          "sourceWidth": 35,
+          "width": 35,
+          "x": 420,
+          "y": 1031
+        },
+        "pkg-10-game002-s3-new-image-string-2-9.png": {
+          "height": 49,
+          "rotated": false,
+          "sourceHeight": 49,
+          "sourceWidth": 34,
+          "width": 34,
+          "x": 420,
+          "y": 1088
+        },
+        "pkg-10-game002-s3-new-image-string-2-x.png": {
+          "height": 49,
+          "rotated": false,
+          "sourceHeight": 49,
+          "sourceWidth": 35,
+          "width": 35,
+          "x": 462,
+          "y": 1088
+        },
+        "pkg-10-game002-s3-new-image-string-3-0.png": {
+          "height": 49,
+          "rotated": false,
+          "sourceHeight": 49,
+          "sourceWidth": 36,
+          "width": 36,
+          "x": 463,
+          "y": 1031
+        },
+        "pkg-10-game002-s3-new-image-string-3-1.png": {
+          "height": 49,
+          "rotated": false,
+          "sourceHeight": 49,
+          "sourceWidth": 29,
+          "width": 29,
+          "x": 505,
+          "y": 1088
+        },
+        "pkg-10-game002-s3-new-image-string-3-2.png": {
+          "height": 49,
+          "rotated": false,
+          "sourceHeight": 49,
+          "sourceWidth": 36,
+          "width": 36,
+          "x": 507,
+          "y": 1031
+        },
+        "pkg-10-game002-s3-new-image-string-3-5.png": {
+          "height": 49,
+          "rotated": false,
+          "sourceHeight": 49,
+          "sourceWidth": 32,
+          "width": 32,
+          "x": 542,
+          "y": 1088
+        },
+        "pkg-10-game002-s3-new-image-string-3-x.png": {
+          "height": 49,
+          "rotated": false,
+          "sourceHeight": 49,
+          "sourceWidth": 35,
+          "width": 35,
+          "x": 551,
+          "y": 1031
+        },
+        "pkg-10-game002-s3-new-image-string-4-+.png": {
+          "height": 49,
+          "rotated": false,
+          "sourceHeight": 49,
+          "sourceWidth": 32,
+          "width": 32,
+          "x": 582,
+          "y": 1088
+        },
+        "pkg-10-game002-s3-new-image-string-4-1.png": {
+          "height": 29,
+          "rotated": true,
+          "sourceHeight": 49,
+          "sourceWidth": 29,
+          "width": 49,
+          "x": 558,
+          "y": 994
+        },
+        "pkg-10-game002-s3-new-image-string-4-2.png": {
+          "height": 49,
+          "rotated": false,
+          "sourceHeight": 49,
+          "sourceWidth": 36,
+          "width": 36,
+          "x": 594,
+          "y": 1031
+        },
+        "pkg-10-game002-s3-WL_spinBlur.png": {
+          "height": 170,
+          "rotated": false,
+          "sourceHeight": 170,
+          "sourceWidth": 170,
+          "width": 170,
+          "x": 1036,
+          "y": 6
+        },
+        "pkg-10-game002-s3-WL.disabled.png": {
+          "height": 170,
+          "rotated": false,
+          "sourceHeight": 170,
+          "sourceWidth": 170,
+          "width": 170,
+          "x": 1036,
+          "y": 184
+        },
+        "pkg-10-game002-s3-WL.png": {
+          "height": 170,
+          "rotated": false,
+          "sourceHeight": 170,
+          "sourceWidth": 170,
+          "width": 170,
+          "x": 1032,
+          "y": 362
+        },
+        "pkg-10-game002-s3-WM_spinBlur.png": {
+          "height": 170,
+          "rotated": false,
+          "sourceHeight": 170,
+          "sourceWidth": 170,
+          "width": 170,
+          "x": 1031,
+          "y": 540
+        },
+        "pkg-10-game002-s3-WM.disabled.png": {
+          "height": 170,
+          "rotated": false,
+          "sourceHeight": 170,
+          "sourceWidth": 170,
+          "width": 170,
+          "x": 1031,
+          "y": 718
+        },
+        "pkg-10-game002-s3-WM.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 638,
+          "y": 1019
+        },
+        "pkg-17-award-celebration-0.png": {
+          "height": 132,
+          "rotated": false,
+          "sourceHeight": 132,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 776,
+          "y": 1019
+        },
+        "pkg-17-award-celebration-01_asset_image_mrxcn5qm_n.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 900,
+          "y": 1019
+        },
+        "pkg-17-award-celebration-02_asset_image_mrxcn5qo_o.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 1038,
+          "y": 896
+        },
+        "pkg-17-award-celebration-03_asset_image_mrxcn5qq_p.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 6,
+          "y": 1169
+        },
+        "pkg-17-award-celebration-04_asset_image_mrxcn5qu_q.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 144,
+          "y": 1169
+        },
+        "pkg-17-award-celebration-05_asset_image_mrxcn5qw_r.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 282,
+          "y": 1169
+        },
+        "pkg-17-award-celebration-06_asset_image_mrxcn5qx_s.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 130,
+          "width": 130,
+          "x": 420,
+          "y": 1159
+        },
+        "pkg-17-award-celebration-1_asset_image_mryc5k3f_3.png": {
+          "height": 142,
+          "rotated": false,
+          "sourceHeight": 142,
+          "sourceWidth": 117,
+          "width": 117,
+          "x": 900,
+          "y": 1157
+        },
+        "pkg-17-award-celebration-1.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 558,
+          "y": 1159
+        },
+        "pkg-17-award-celebration-2-2.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 682,
+          "y": 1159
+        },
+        "pkg-17-award-celebration-2.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 42,
+          "width": 42,
+          "x": 806,
+          "y": 1159
+        },
+        "pkg-17-award-celebration-3-2.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 1025,
+          "y": 1157
+        },
+        "pkg-17-award-celebration-3.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 39,
+          "width": 39,
+          "x": 1149,
+          "y": 1034
+        },
+        "pkg-17-award-celebration-4-2.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 1214,
+          "y": 6
+        },
+        "pkg-17-award-celebration-4.png": {
+          "height": 95,
+          "rotated": true,
+          "sourceHeight": 135,
+          "sourceWidth": 95,
+          "width": 135,
+          "x": 1176,
+          "y": 896
+        },
+        "pkg-17-award-celebration-5.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 1214,
+          "y": 149
+        },
+        "pkg-17-award-celebration-6.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 1214,
+          "y": 292
+        },
+        "pkg-17-award-celebration-7.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 1210,
+          "y": 435
+        },
+        "pkg-17-award-celebration-8.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 1209,
+          "y": 578
+        },
+        "pkg-17-award-celebration-9.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 1209,
+          "y": 721
+        },
+        "pkg-17-award-celebration-big_1_asset_image_mrvydhi0_6_asset_image_msy21in5_23.png": {
+          "height": 210,
+          "rotated": false,
+          "sourceHeight": 210,
+          "sourceWidth": 518,
+          "width": 518,
+          "x": 6,
+          "y": 1307
+        },
+        "pkg-17-award-celebration-big_asset_image_mrvyd851_4.png": {
+          "height": 551,
+          "rotated": true,
+          "sourceHeight": 251,
+          "sourceWidth": 551,
+          "width": 251,
+          "x": 1338,
+          "y": 6
+        },
+        "pkg-17-award-celebration-big_asset_image_mrvydp4q_8.png": {
+          "height": 1087,
+          "rotated": false,
+          "sourceHeight": 1087,
+          "sourceWidth": 1204,
+          "width": 1204,
+          "x": 6,
+          "y": 1525
+        },
+        "pkg-17-award-celebration-big_asset_image_mrvyds1c_a.png": {
+          "height": 1126,
+          "rotated": true,
+          "sourceHeight": 1124,
+          "sourceWidth": 1126,
+          "width": 1124,
+          "x": 1597,
+          "y": 6
+        },
+        "pkg-17-award-celebration-image_asset_image_mrxd8l5y_y.png": {
+          "height": 326,
+          "rotated": false,
+          "sourceHeight": 326,
+          "sourceWidth": 842,
+          "width": 842,
+          "x": 1149,
+          "y": 1177
+        },
+        "pkg-17-award-celebration-image_asset_image_msy5k1q6_9.jpg": {
+          "height": 1360,
+          "rotated": true,
+          "sourceHeight": 1402,
+          "sourceWidth": 1360,
+          "width": 1402,
+          "x": 6,
+          "y": 2620
+        },
+        "pkg-17-award-celebration-image_asset_image_msybhgdb_10.png": {
+          "height": 848,
+          "rotated": false,
+          "sourceHeight": 848,
+          "sourceWidth": 847,
+          "width": 847,
+          "x": 1218,
+          "y": 1511
+        },
+        "pkg-17-award-celebration-image_asset_image_msybhpr1_11.png": {
+          "height": 1493,
+          "rotated": true,
+          "sourceHeight": 1348,
+          "sourceWidth": 1493,
+          "width": 1348,
+          "x": 2729,
+          "y": 6
+        },
+        "pkg-17-award-celebration-mega_asset_image_msybgpcg_w.png": {
+          "height": 724,
+          "rotated": true,
+          "sourceHeight": 271,
+          "sourceWidth": 724,
+          "width": 271,
+          "x": 2073,
+          "y": 1140
+        },
+        "pkg-17-award-celebration-mega_asset_image_msybgwg4_x.png": {
+          "height": 709,
+          "rotated": true,
+          "sourceHeight": 282,
+          "sourceWidth": 709,
+          "width": 282,
+          "x": 2352,
+          "y": 1140
+        },
+        "pkg-17-award-celebration-super_1_asset_image_msy5aeky_3.png": {
+          "height": 315,
+          "rotated": false,
+          "sourceHeight": 315,
+          "sourceWidth": 795,
+          "width": 795,
+          "x": 2642,
+          "y": 1507
+        },
+        "pkg-17-award-celebration-super_asset_image_msy5benk_4.png": {
+          "height": 237,
+          "rotated": false,
+          "sourceHeight": 237,
+          "sourceWidth": 815,
+          "width": 815,
+          "x": 1218,
+          "y": 2367
+        },
+        "pkg-17-award-celebration-super_asset_image_msy5dn68_7.png": {
+          "height": 866,
+          "rotated": false,
+          "sourceHeight": 866,
+          "sourceWidth": 857,
+          "width": 857,
+          "x": 1416,
+          "y": 2612
+        },
+        "pkg-17-award-celebration-superwin_asset_image_msy5dzp3_8.png": {
+          "height": 1510,
+          "rotated": true,
+          "sourceHeight": 1302,
+          "sourceWidth": 1510,
+          "width": 1302,
+          "x": 2642,
+          "y": 1830
+        },
+        "pkg-17-award-celebration-u6570-u5b57-u5e95-u5149.png": {
+          "height": 842,
+          "rotated": true,
+          "sourceHeight": 326,
+          "sourceWidth": 842,
+          "width": 326,
+          "x": 2281,
+          "y": 1872
+        },
+        "pkg-17-award-celebration-win_1_asset_image_mrvyehti_c_asset_image_msy243n4_47.png": {
+          "height": 205,
+          "rotated": false,
+          "sourceHeight": 205,
+          "sourceWidth": 565,
+          "width": 565,
+          "x": 532,
+          "y": 1307
+        },
+        "pkg-17-award-celebration-win_2_asset_image_msy5cz7g_5.png": {
+          "height": 602,
+          "rotated": true,
+          "sourceHeight": 235,
+          "sourceWidth": 602,
+          "width": 235,
+          "x": 1334,
+          "y": 565
+        },
+        "pkg-17-award-celebration-win_3_asset_image_msy5d8f0_6.png": {
+          "height": 207,
+          "rotated": false,
+          "sourceHeight": 207,
+          "sourceWidth": 574,
+          "width": 574,
+          "x": 3445,
+          "y": 1507
+        },
+        "pkg-17-award-celebration-win_4_asset_image_msybh31u_y.png": {
+          "height": 602,
+          "rotated": true,
+          "sourceHeight": 235,
+          "sourceWidth": 602,
+          "width": 235,
+          "x": 2281,
+          "y": 3348
+        },
+        "pkg-17-award-celebration-win_asset_image_mrvyel4c_e_asset_image_mswv3cm9_1o.png": {
+          "height": 602,
+          "rotated": true,
+          "sourceHeight": 235,
+          "sourceWidth": 602,
+          "width": 235,
+          "x": 2281,
+          "y": 2722
+        },
+        "pkg-17-award-celebration-win_asset_image_msybh78g_z.png": {
+          "height": 584,
+          "rotated": true,
+          "sourceHeight": 220,
+          "sourceWidth": 584,
+          "width": 220,
+          "x": 2524,
+          "y": 3348
+        },
+        "pkg-17-award-celebration-x.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 3952,
+          "y": 1722
+        },
+        "pkg-17-award-celebration.png": {
+          "height": 98,
+          "rotated": true,
+          "sourceHeight": 135,
+          "sourceWidth": 98,
+          "width": 135,
+          "x": 3445,
+          "y": 1722
+        },
+        "pkg-18-popup-freegamesadd-0.png": {
+          "height": 74,
+          "rotated": true,
+          "sourceHeight": 106,
+          "sourceWidth": 74,
+          "width": 106,
+          "x": 2524,
+          "y": 2722
+        },
+        "pkg-18-popup-freegamesadd-1_asset_image_msztk3gd_v.png": {
+          "height": 142,
+          "rotated": false,
+          "sourceHeight": 142,
+          "sourceWidth": 117,
+          "width": 117,
+          "x": 3952,
+          "y": 1865
+        },
+        "pkg-18-popup-freegamesadd-1.png": {
+          "height": 59,
+          "rotated": true,
+          "sourceHeight": 106,
+          "sourceWidth": 59,
+          "width": 106,
+          "x": 2524,
+          "y": 2804
+        },
+        "pkg-18-popup-freegamesadd-2.png": {
+          "height": 74,
+          "rotated": true,
+          "sourceHeight": 106,
+          "sourceWidth": 74,
+          "width": 106,
+          "x": 2524,
+          "y": 2871
+        },
+        "pkg-18-popup-freegamesadd-3.png": {
+          "height": 74,
+          "rotated": true,
+          "sourceHeight": 106,
+          "sourceWidth": 74,
+          "width": 106,
+          "x": 2524,
+          "y": 2953
+        },
+        "pkg-18-popup-freegamesadd-4.png": {
+          "height": 71,
+          "rotated": true,
+          "sourceHeight": 106,
+          "sourceWidth": 71,
+          "width": 106,
+          "x": 2524,
+          "y": 3035
+        },
+        "pkg-18-popup-freegamesadd-5.png": {
+          "height": 106,
+          "rotated": false,
+          "sourceHeight": 106,
+          "sourceWidth": 66,
+          "width": 66,
+          "x": 1999,
+          "y": 1140
+        },
+        "pkg-18-popup-freegamesadd-6.png": {
+          "height": 68,
+          "rotated": true,
+          "sourceHeight": 106,
+          "sourceWidth": 68,
+          "width": 106,
+          "x": 2524,
+          "y": 3114
+        },
+        "pkg-18-popup-freegamesadd-7.png": {
+          "height": 70,
+          "rotated": true,
+          "sourceHeight": 106,
+          "sourceWidth": 70,
+          "width": 106,
+          "x": 2524,
+          "y": 3190
+        },
+        "pkg-18-popup-freegamesadd-8.png": {
+          "height": 71,
+          "rotated": true,
+          "sourceHeight": 106,
+          "sourceWidth": 71,
+          "width": 106,
+          "x": 2524,
+          "y": 3268
+        },
+        "pkg-18-popup-freegamesadd-9.png": {
+          "height": 106,
+          "rotated": false,
+          "sourceHeight": 106,
+          "sourceWidth": 68,
+          "width": 68,
+          "x": 1038,
+          "y": 1034
+        },
+        "pkg-18-popup-freegamesadd-freegames_asset_image_mszswhtn_5.png": {
+          "height": 471,
+          "rotated": true,
+          "sourceHeight": 74,
+          "sourceWidth": 471,
+          "width": 74,
+          "x": 1416,
+          "y": 3486
+        },
+        "pkg-18-popup-freegamesadd-freegames_asset_image_mszswkfe_7.png": {
+          "height": 353,
+          "rotated": false,
+          "sourceHeight": 353,
+          "sourceWidth": 1212,
+          "width": 1212,
+          "x": 2752,
+          "y": 3348
+        },
+        "pkg-18-popup-freegamesadd.png": {
+          "height": 106,
+          "rotated": false,
+          "sourceHeight": 106,
+          "sourceWidth": 65,
+          "width": 65,
+          "x": 1999,
+          "y": 1254
+        },
+        "x.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 3952,
+          "y": 2015
+        }
+      },
+      "id": "atlas-initial-ac1b5c09-0",
+      "image": {
+        "byteLength": 2811610,
+        "height": 3986,
+        "mediaType": "image/webp",
+        "path": "assets/2e9656c234b4d405aec93752e7e7e377baaa91ee62d2a40a619f07e1b11f7acb.webp",
+        "sha256": "2e9656c234b4d405aec93752e7e7e377baaa91ee62d2a40a619f07e1b11f7acb",
+        "width": 4083
+      },
+      "owner": "initial"
+    },
+    {
+      "frames": {
+        "pkg-15-congratulations-0.png": {
+          "height": 132,
+          "rotated": false,
+          "sourceHeight": 132,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 6,
+          "y": 6
+        },
+        "pkg-15-congratulations-1.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 130,
+          "y": 6
+        },
+        "pkg-15-congratulations-2-2.png": {
+          "height": 116,
+          "rotated": true,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 135,
+          "x": 6,
+          "y": 149
+        },
+        "pkg-15-congratulations-2.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 42,
+          "width": 42,
+          "x": 254,
+          "y": 6
+        },
+        "pkg-15-congratulations-3-2.png": {
+          "height": 116,
+          "rotated": true,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 135,
+          "x": 149,
+          "y": 149
+        },
+        "pkg-15-congratulations-3.png": {
+          "height": 39,
+          "rotated": true,
+          "sourceHeight": 135,
+          "sourceWidth": 39,
+          "width": 135,
+          "x": 6,
+          "y": 273
+        },
+        "pkg-15-congratulations-4-2.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 304,
+          "y": 6
+        },
+        "pkg-15-congratulations-4.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 95,
+          "width": 95,
+          "x": 292,
+          "y": 149
+        },
+        "pkg-15-congratulations-5.png": {
+          "height": 116,
+          "rotated": true,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 135,
+          "x": 149,
+          "y": 273
+        },
+        "pkg-15-congratulations-6.png": {
+          "height": 116,
+          "rotated": true,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 135,
+          "x": 6,
+          "y": 320
+        },
+        "pkg-15-congratulations-7.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 292,
+          "y": 292
+        },
+        "pkg-15-congratulations-8.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 395,
+          "y": 149
+        },
+        "pkg-15-congratulations-9.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 428,
+          "y": 6
+        },
+        "pkg-15-congratulations-x.png": {
+          "height": 135,
+          "rotated": false,
+          "sourceHeight": 135,
+          "sourceWidth": 116,
+          "width": 116,
+          "x": 416,
+          "y": 292
+        },
+        "pkg-15-congratulations.png": {
+          "height": 98,
+          "rotated": true,
+          "sourceHeight": 135,
+          "sourceWidth": 98,
+          "width": 135,
+          "x": 149,
+          "y": 397
+        }
+      },
+      "id": "atlas-mode-freegame-325c3c43-0",
+      "image": {
+        "byteLength": 51326,
+        "height": 548,
+        "mediaType": "image/webp",
+        "path": "assets/b7ef24deaf6a1ec812a90ffb5d0096dbeea1797ef620fb2647eed36f42641396.webp",
+        "sha256": "b7ef24deaf6a1ec812a90ffb5d0096dbeea1797ef620fb2647eed36f42641396",
+        "width": 550
+      },
+      "owner": "mode:FreeGame"
+    }
+  ],
+  "chunks": [
+    {
+      "atlases": [
+        "atlas-initial-ac1b5c09-0"
+      ],
+      "dependencies": [],
+      "externalAssets": [
+        "bg_2.png",
+        "bg_3.png",
+        "bg_4.png",
+        "bg_5.png",
+        "bg_6.png",
+        "bg_7.png",
+        "bg_8.png",
+        "bg.png",
+        "pkg-10-game002-s3-Symbol_2.png",
+        "pkg-10-game002-s3-Symbol.png",
+        "pkg-2-fg-bg_2.png",
+        "pkg-2-fg-bg_3.png",
+        "pkg-2-fg-bg_4.png",
+        "pkg-2-fg-bg_5.png",
+        "pkg-2-fg-bg_6.png",
+        "pkg-2-fg-bg_7.png",
+        "pkg-2-fg-bg_8.png",
+        "pkg-2-fg-bg.png",
+        "symbol_2.png",
+        "symbol.png"
+      ],
+      "id": "initial",
+      "metadata": {
+        "byteLength": 294885,
+        "mediaType": "application/zip",
+        "path": "chunks/initial-ac1b5c09.12800a5e39f4fa1784c92db371cbf8eed8daccc69c670a135d746774daaa31fc.zip",
+        "sha256": "12800a5e39f4fa1784c92db371cbf8eed8daccc69c670a135d746774daaa31fc"
+      },
+      "owner": "initial"
+    },
+    {
+      "atlases": [
+        "atlas-mode-freegame-325c3c43-0"
+      ],
+      "dependencies": [
+        "initial"
+      ],
+      "externalAssets": [
+        "pkg-15-congratulations-bg_2.png",
+        "pkg-15-congratulations-bg_3.png",
+        "pkg-15-congratulations-bg_4.png",
+        "pkg-15-congratulations-bg_5.png",
+        "pkg-15-congratulations-bg_6.png",
+        "pkg-15-congratulations-bg_7.png",
+        "pkg-15-congratulations-bg_8.png",
+        "pkg-15-congratulations-bg.png"
+      ],
+      "id": "mode:FreeGame",
+      "metadata": {
+        "byteLength": 35990,
+        "mediaType": "application/zip",
+        "path": "chunks/mode-freegame-325c3c43.7524a219b76369a837b4801a99cf46bf3c416773a56827a6d86ec4571b129f08.zip",
+        "sha256": "7524a219b76369a837b4801a99cf46bf3c416773a56827a6d86ec4571b129f08"
+      },
+      "owner": "mode:FreeGame"
+    },
+    {
+      "atlases": [],
+      "dependencies": [],
+      "externalAssets": [
+        "basegame.mp3",
+        "freegame.mp3",
+        "nearwin1.mp3",
+        "pkg-10-game002-s3-sheep_drink.mp3",
+        "pkg-10-game002-s3-sheep_open.mp3",
+        "pkg-10-game002-s3-sheep_shake.mp3",
+        "pkg-10-game002-s3-sheepmmmmm.mp3",
+        "pkg-10-game002-s3-SymbolDrop_bottle.mp3",
+        "pkg-10-game002-s3-SymbolDrop_Normal.mp3",
+        "pkg-17-award-celebration-bigwin.mp3",
+        "pkg-17-award-celebration-megawin.mp3",
+        "pkg-17-award-celebration-superwin.mp3",
+        "sheep_open.mp3"
+      ],
+      "id": "media",
+      "metadata": null,
+      "owner": "media"
+    }
+  ],
+  "initialChunk": "initial",
+  "initialMode": "BaseGame",
+  "kind": "scene-layout-delivery",
+  "layoutId": "new-layout",
+  "version": 1
+}

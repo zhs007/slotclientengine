@@ -10,11 +10,14 @@ import {
   sampleRandomReelScene,
 } from "../src/preview/random-reel-scene.js";
 
-const craveRoot = resolve(process.cwd(), "../../assets/crave");
+const craveRoot = resolve(process.cwd(), "../../assets/fixtures/crave-mapped");
 const craveMap = JSON.parse(
   readFileSync(resolve(craveRoot, "assets.map.json"), "utf8"),
 ) as { readonly files: Readonly<Record<string, { readonly path: string }>> };
-const minecart2Root = resolve(process.cwd(), "../../assets/minecart2");
+const minecart2Root = resolve(
+  process.cwd(),
+  "../../assets/fixtures/minecart2-mapped",
+);
 const minecart2Map = JSON.parse(
   readFileSync(resolve(minecart2Root, "assets.map.json"), "utf8"),
 ) as { readonly files: Readonly<Record<string, { readonly path: string }>> };
@@ -38,14 +41,16 @@ describe("production public reel preview compatibility", () => {
     {
       gameConfig: () => readJson("../../../assets/gamecfg002/gameconfig.json"),
       symbolManifest: () =>
-        readCraveJson("symbol-state-textures.manifest.json"),
+        readCraveJson("pkg-10-game002-s3-symbol-state-textures.manifest.json"),
       reelSet: "reels-001",
       columns: 6,
     },
     {
-      gameConfig: () => readMinecart2Json("gameconfig.json"),
+      gameConfig: () => readMinecart2Json("pkg-9-minecart2-gameconfig.json"),
       symbolManifest: () =>
-        readMinecart2Json("symbol-state-textures.manifest.json"),
+        readMinecart2Json(
+          "pkg-9-minecart2-symbol-state-textures.manifest.json",
+        ),
       reelSet: "bg-reel01",
       columns: 5,
     },

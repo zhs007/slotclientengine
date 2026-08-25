@@ -1,6 +1,6 @@
 import rawGame002GameConfig from "../../../assets/gamecfg002/gameconfig.json";
-import craveAssetsMap from "../../../assets/crave/assets.map.json";
-import minecart2AssetsMap from "../../../assets/minecart2/assets.map.json";
+import craveAssetsMap from "../../../assets/fixtures/crave-mapped/assets.map.json";
+import minecart2AssetsMap from "../../../assets/fixtures/minecart2-mapped/assets.map.json";
 import {
   createDefaultSymbolAnimationResolver,
   createSymbolManifestAnimationResolver,
@@ -51,15 +51,15 @@ export interface SymbolSetConfig {
 }
 
 const craveJsonPhysicalModules = import.meta.glob(
-  "../../../assets/crave/assets/*.json",
+  "../../../assets/fixtures/crave-mapped/assets/*.json",
   { eager: true, import: "default" },
 ) as Record<string, unknown>;
 const craveAtlasPhysicalModules = import.meta.glob(
-  "../../../assets/crave/assets/*.atlas",
+  "../../../assets/fixtures/crave-mapped/assets/*.atlas",
   { eager: true, import: "default", query: "?raw" },
 ) as Record<string, string>;
 const craveImagePhysicalModules = import.meta.glob(
-  "../../../assets/crave/assets/*.{webp,png,jpg,jpeg}",
+  "../../../assets/fixtures/crave-mapped/assets/*.{webp,png,jpg,jpeg}",
   { eager: true, import: "default", query: "?url" },
 ) as Record<string, string>;
 const craveLogicalJsonModules = mapCraveLogicalModules(
@@ -110,15 +110,15 @@ const symbolValueImageStringImageModules = filterCraveModules(
   /^[0-9]-1\.webp$/u,
 );
 const minecart2JsonPhysicalModules = import.meta.glob(
-  "../../../assets/minecart2/assets/*.json",
+  "../../../assets/fixtures/minecart2-mapped/assets/*.json",
   { eager: true, import: "default" },
 ) as Record<string, unknown>;
 const minecart2AtlasPhysicalModules = import.meta.glob(
-  "../../../assets/minecart2/assets/*.atlas",
+  "../../../assets/fixtures/minecart2-mapped/assets/*.atlas",
   { eager: true, import: "default", query: "?raw" },
 ) as Record<string, string>;
 const minecart2ImagePhysicalModules = import.meta.glob(
-  "../../../assets/minecart2/assets/*.{webp,png,jpg,jpeg}",
+  "../../../assets/fixtures/minecart2-mapped/assets/*.{webp,png,jpg,jpeg}",
   { eager: true, import: "default", query: "?url" },
 ) as Record<string, string>;
 const game003S1JsonModules = mapPackageLogicalModules(

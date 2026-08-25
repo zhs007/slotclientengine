@@ -1,0 +1,3976 @@
+{
+  "assets": {
+    "0.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6751
+    },
+    "1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 5952
+    },
+    "2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6544
+    },
+    "2a3b14312b68630df119aa32fc410861fcde3c5e04a0cfd3096bccbb9c2e55ad.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 4154
+    },
+    "3.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6655
+    },
+    "4.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6233
+    },
+    "467790a895d324579b5f218b6e71e7665e81bf6e7c9a57c1897945fffe03408f.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 30010
+    },
+    "5.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6523
+    },
+    "6.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6565
+    },
+    "7.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 5974
+    },
+    "8.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6660
+    },
+    "82d3d16d974db64d572a42faff4f66114448c22980c591ac4b1c03b5edfd996b.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 17768
+    },
+    "8344f2009c6ae78c6dd75562edb248be94521ca9edfe6df9a20de89ab7b43e42.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 22832
+    },
+    "9.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6581
+    },
+    "932e18103485cfa6112cbb70f00a5030b7c9fd234d2fab6a7ab7f3ab406adfcb.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 17950
+    },
+    "9a3f4d78ffe6a5c8bc4b2b973069adca13725aa2a8d3e831c1d6f59ccacd72cb.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 14351
+    },
+    "9ba676a65e7ee29f27e3af0f2075efaad54546971ece268708163128eb2f027f.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 29623
+    },
+    "a6.jpg": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/jpeg",
+      "owner": "initial",
+      "sourceByteLength": 589758
+    },
+    "ae8c1696406cab5daeeda40c44d51fb2dbcbb441c4acc3b28a61e8fd26461e34.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 29977
+    },
+    "asset-2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2301
+    },
+    "asset-3.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2176
+    },
+    "asset-4.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 5745
+    },
+    "asset.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 4662
+    },
+    "b6.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 163118
+    },
+    "b7.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 165143
+    },
+    "bee187d3863feb8de735ddc11e4381d3e8384c3e9d3493eef2b151f3c04727bd.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 202326
+    },
+    "bg_landscape.json": {
+      "byteLength": 120709,
+      "chunk": "initial",
+      "entry": "assets/51414a3ba4c16047e30aceee093afabcfc89b081f7b694af5035c7e002a97b42.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "51414a3ba4c16047e30aceee093afabcfc89b081f7b694af5035c7e002a97b42"
+    },
+    "bg_portrait.json": {
+      "byteLength": 125913,
+      "chunk": "initial",
+      "entry": "assets/09efb4a95d2a500f931a49077d332d060b493c395cd9d2efd2ca38ade52df28a.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "09efb4a95d2a500f931a49077d332d060b493c395cd9d2efd2ca38ade52df28a"
+    },
+    "bg.atlas": {
+      "byteLength": 158,
+      "chunk": "initial",
+      "entry": "assets/018671f3cecfb0ce03bda7e0e4fc65b8b2efe5e733046e73d845f62f0492a4f9.atlas",
+      "kind": "metadata",
+      "mediaType": "text/plain",
+      "owner": "initial",
+      "sha256": "018671f3cecfb0ce03bda7e0e4fc65b8b2efe5e733046e73d845f62f0492a4f9"
+    },
+    "bg.png": {
+      "byteLength": 9396,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/87065f759daaee4e6e717652fcc3f7ea6b66db7879f58ee806a0ab8a59f5bd7b.webp",
+      "sha256": "87065f759daaee4e6e717652fcc3f7ea6b66db7879f58ee806a0ab8a59f5bd7b",
+      "sourceByteLength": 64375
+    },
+    "bonusgame1.png": {
+      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:BonusGame",
+      "sourceByteLength": 423278
+    },
+    "bonusgame2.png": {
+      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:BonusGame",
+      "sourceByteLength": 1178225
+    },
+    "car.atlas": {
+      "byteLength": 286,
+      "chunk": "initial",
+      "entry": "assets/96cb4be5a34215e0db306f0c488afabc273578c381feb0e40d16e80fd5b7fb90.atlas",
+      "kind": "metadata",
+      "mediaType": "text/plain",
+      "owner": "initial",
+      "sha256": "96cb4be5a34215e0db306f0c488afabc273578c381feb0e40d16e80fd5b7fb90"
+    },
+    "car.json": {
+      "byteLength": 57460,
+      "chunk": "initial",
+      "entry": "assets/177d24f3b2f17314400366117b596c3bbd84d279238fa56bb5a0457300e9c9df.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "177d24f3b2f17314400366117b596c3bbd84d279238fa56bb5a0457300e9c9df"
+    },
+    "car.png": {
+      "byteLength": 38776,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/d3a14aa3b7d5a8c80f64fe99838ea2212985b04b1c7be0ce14f1dbae558e90e9.webp",
+      "sha256": "d3a14aa3b7d5a8c80f64fe99838ea2212985b04b1c7be0ce14f1dbae558e90e9",
+      "sourceByteLength": 305830
+    },
+    "conveyor_1.json": {
+      "byteLength": 48154,
+      "chunk": "initial",
+      "entry": "assets/6b7502e3df31d1d92abeee1c27aa72981f3199e4183a324b8689bfb93abe848c.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "6b7502e3df31d1d92abeee1c27aa72981f3199e4183a324b8689bfb93abe848c"
+    },
+    "conveyor_2.json": {
+      "byteLength": 47811,
+      "chunk": "initial",
+      "entry": "assets/8b3837aa3cc4218a6039f53d20e0442fcede5e2bbe7c47ee3695505f7985026a.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "8b3837aa3cc4218a6039f53d20e0442fcede5e2bbe7c47ee3695505f7985026a"
+    },
+    "conveyor_3.json": {
+      "byteLength": 35807,
+      "chunk": "initial",
+      "entry": "assets/c95f18beaaf79271e67baa7928e400c4a6ead44dc45395c4aeaca2c5edc12ff1.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "c95f18beaaf79271e67baa7928e400c4a6ead44dc45395c4aeaca2c5edc12ff1"
+    },
+    "d1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 236187
+    },
+    "d1bf7175c00e6fdbd661c39c1c2458616dc57c51d3ba1fd8df7b3e1f549e9cc2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 30187
+    },
+    "d2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 24361
+    },
+    "dbd7baf96994aa0cf361e2e39532c89ddac3b281e6d30ae16b380b05afa10976.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 13856
+    },
+    "f-bonus.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 201757
+    },
+    "f-coin.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 26241
+    },
+    "f-collect.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 50380
+    },
+    "f-ding.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 185108
+    },
+    "f-exp.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 196982
+    },
+    "f-jk.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 33028
+    },
+    "f-light.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 186628
+    },
+    "f-multi.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 192168
+    },
+    "f-normal.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 99
+    },
+    "f-sc.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 209283
+    },
+    "f-up.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 40434
+    },
+    "f-wild.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 61944
+    },
+    "fd66f6f1eb79b96d2e8ac58a20788b5ce6809babb23d84647ca82c5a697e2080.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 1108918
+    },
+    "feature.json": {
+      "byteLength": 41644,
+      "chunk": "initial",
+      "entry": "assets/a9500a4974f1b4e6211b668b2e74432686a000514176b2b4e3652956a78330d3.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "a9500a4974f1b4e6211b668b2e74432686a000514176b2b4e3652956a78330d3"
+    },
+    "fg.atlas": {
+      "byteLength": 279,
+      "chunk": "mode:FreeGame",
+      "entry": "assets/874d7cce632917b5dd51e92a6548d8ab2b6c1304520f519ad4a7d0c534ae4966.atlas",
+      "kind": "metadata",
+      "mediaType": "text/plain",
+      "owner": "mode:FreeGame",
+      "sha256": "874d7cce632917b5dd51e92a6548d8ab2b6c1304520f519ad4a7d0c534ae4966"
+    },
+    "fg.json": {
+      "byteLength": 179720,
+      "chunk": "mode:FreeGame",
+      "entry": "assets/913a58fc7afdd59cd172453d814ba9ce32057a68f45fa7a0d8eff407cf866840.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "mode:FreeGame",
+      "sha256": "913a58fc7afdd59cd172453d814ba9ce32057a68f45fa7a0d8eff407cf866840"
+    },
+    "fg.png": {
+      "byteLength": 21494,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "mode:FreeGame",
+      "path": "assets/03ffe56331f09257b10c81bc3a85b3ae7f5af5a7e7a5fddb78385a3b0b2b4a42.webp",
+      "sha256": "03ffe56331f09257b10c81bc3a85b3ae7f5af5a7e7a5fddb78385a3b0b2b4a42",
+      "sourceByteLength": 120562
+    },
+    "free10.jpg": {
+      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/jpeg",
+      "owner": "mode:BonusGame",
+      "sourceByteLength": 587149
+    },
+    "free11.jpg": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/jpeg",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 644334
+    },
+    "free13.jpg": {
+      "atlas": "atlas-initial-ac1b5c09-1",
+      "kind": "atlas-frame",
+      "mediaType": "image/jpeg",
+      "owner": "initial",
+      "sourceByteLength": 712410
+    },
+    "free14.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 933506
+    },
+    "freegame1.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 409154
+    },
+    "freegame2.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 1497732
+    },
+    "gd1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 450950
+    },
+    "gd3.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 306902
+    },
+    "image-string.manifest.json": {
+      "byteLength": 2681,
+      "chunk": "initial",
+      "entry": "assets/36a17e9b71a909830196e6f3cbbbbbe52bd5ca95a1308b06427e588074ced66a.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "36a17e9b71a909830196e6f3cbbbbbe52bd5ca95a1308b06427e588074ced66a"
+    },
+    "pkg-17-award-celebration-0.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6751
+    },
+    "pkg-17-award-celebration-1_asset_image_mrabdwbe_11.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 45452
+    },
+    "pkg-17-award-celebration-1_asset_image_mraeg23u_46.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3374
+    },
+    "pkg-17-award-celebration-1_asset_image_mrag7g66_53.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3142
+    },
+    "pkg-17-award-celebration-1_asset_image_mrbqoiso_14.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 3276
+    },
+    "pkg-17-award-celebration-1_asset_image_mrbtzde9_26.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 7122
+    },
+    "pkg-17-award-celebration-1_asset_image_mroedq99_k.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 163428
+    },
+    "pkg-17-award-celebration-1_asset_image_mrswriz7_15.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 163428
+    },
+    "pkg-17-award-celebration-1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 5952
+    },
+    "pkg-17-award-celebration-2_asset_image_mra2b5fo_v.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 64048
+    },
+    "pkg-17-award-celebration-2_asset_image_mrafbzli_4s.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 64048
+    },
+    "pkg-17-award-celebration-2_asset_image_mrnag3e6_y.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 48139
+    },
+    "pkg-17-award-celebration-2_asset_image_mruhasg6_6y.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2929
+    },
+    "pkg-17-award-celebration-2_asset_image_mrvjlrl5_1c.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 163436
+    },
+    "pkg-17-award-celebration-2-2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6544
+    },
+    "pkg-17-award-celebration-2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2301
+    },
+    "pkg-17-award-celebration-3_asset_image_mr8u0of5_1f.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 13322
+    },
+    "pkg-17-award-celebration-3_asset_image_mra4066k_2t.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 18954
+    },
+    "pkg-17-award-celebration-3_asset_image_mraepcja_4a.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 13322
+    },
+    "pkg-17-award-celebration-3_asset_image_mrsvyeba_t.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 16375
+    },
+    "pkg-17-award-celebration-3_asset_image_mrvifkgo_10.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 19536
+    },
+    "pkg-17-award-celebration-3_asset_image_mrvii5u7_11.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 19536
+    },
+    "pkg-17-award-celebration-3_asset_image_mrvkgm8n_1p.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 163376
+    },
+    "pkg-17-award-celebration-3-2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6655
+    },
+    "pkg-17-award-celebration-3.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2176
+    },
+    "pkg-17-award-celebration-4_asset_image_mra40b5o_2u.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 26118
+    },
+    "pkg-17-award-celebration-4-2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6233
+    },
+    "pkg-17-award-celebration-4.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 5745
+    },
+    "pkg-17-award-celebration-5_asset_image_mra5cnug_3j.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 49476
+    },
+    "pkg-17-award-celebration-5.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6523
+    },
+    "pkg-17-award-celebration-6_asset_image_mruguywn_6c.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 43946
+    },
+    "pkg-17-award-celebration-6.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6565
+    },
+    "pkg-17-award-celebration-7_asset_image_mradoe0d_2d.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 39486
+    },
+    "pkg-17-award-celebration-7.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 5974
+    },
+    "pkg-17-award-celebration-8_asset_image_mrsovy46_8.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 37086
+    },
+    "pkg-17-award-celebration-8.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6660
+    },
+    "pkg-17-award-celebration-9.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6581
+    },
+    "pkg-17-award-celebration-a1_asset_image_mrbtoj8d_24.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 18041
+    },
+    "pkg-17-award-celebration-a1_asset_image_mrbv0c6j_3i.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 18041
+    },
+    "pkg-17-award-celebration-a5_asset_image_mrmzli4d_l.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 18042
+    },
+    "pkg-17-award-celebration-big_win0721.json": {
+      "byteLength": 49625,
+      "chunk": "initial",
+      "entry": "assets/936af7c6a40fd174e882a8a65e44cd20115c276a377fc1de05e52a8bc28484d0.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "936af7c6a40fd174e882a8a65e44cd20115c276a377fc1de05e52a8bc28484d0"
+    },
+    "pkg-17-award-celebration-image-string.manifest.json": {
+      "byteLength": 3038,
+      "chunk": "initial",
+      "entry": "assets/a70ef3a17ee27155800c426273fb749106c51214b984156c618f935d842ca40f.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "a70ef3a17ee27155800c426273fb749106c51214b984156c618f935d842ca40f"
+    },
+    "pkg-17-award-celebration-mega_win0721.json": {
+      "byteLength": 64033,
+      "chunk": "initial",
+      "entry": "assets/1ff347ccd96d29fd8303e19d0d9366db2001b5015eb93d4c8deefd72d1cb758e.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "1ff347ccd96d29fd8303e19d0d9366db2001b5015eb93d4c8deefd72d1cb758e"
+    },
+    "pkg-17-award-celebration-mw_stone4_asset_image_mrvj5wui_12.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 162406
+    },
+    "pkg-17-award-celebration-mw_stone6_asset_image_mrae841s_3r.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 158922
+    },
+    "pkg-17-award-celebration-popup.manifest.json": {
+      "byteLength": 5731,
+      "chunk": "initial",
+      "entry": "assets/a2d3a3159d4f5846a423d2026053df069be3435dc6b93b3e7443f6a6677af008.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "a2d3a3159d4f5846a423d2026053df069be3435dc6b93b3e7443f6a6677af008"
+    },
+    "pkg-17-award-celebration-qq_20260708150336_asset_image_mruhr4v9_70.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 186431
+    },
+    "pkg-17-award-celebration-qq_20260708150407_asset_image_mrn9w17x_u.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 156335
+    },
+    "pkg-17-award-celebration-qq_20260708150411_asset_image_mrn9wwcn_w.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 296216
+    },
+    "pkg-17-award-celebration-qq_20260708150413_asset_image_mrn9wskj_v.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 176060
+    },
+    "pkg-17-award-celebration-qq_20260708150417_asset_image_mrug3f9y_1j.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 304709
+    },
+    "pkg-17-award-celebration-qq_20260708150419_asset_image_mrug3kr9_1k.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 162351
+    },
+    "pkg-17-award-celebration-shine_asset_image_mrbrfpft_1m.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 5861
+    },
+    "pkg-17-award-celebration-super_win0721.json": {
+      "byteLength": 62091,
+      "chunk": "initial",
+      "entry": "assets/70a03284b09a0ffa018e216fd69ff8a0dcaabfd78eb79e4f76191371c1a01108.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "70a03284b09a0ffa018e216fd69ff8a0dcaabfd78eb79e4f76191371c1a01108"
+    },
+    "pkg-17-award-celebration-sw_stone1_asset_image_mrebxd3p_a.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 154437
+    },
+    "pkg-17-award-celebration-sw_stone1_asset_image_mrug1gve_1h.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 154437
+    },
+    "pkg-17-award-celebration-sw_stone7_asset_image_mrvkal6r_1i.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 156981
+    },
+    "pkg-17-award-celebration-sw_stone9_asset_image_mrvkkyjs_1v.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 159281
+    },
+    "pkg-17-award-celebration-x.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6091
+    },
+    "pkg-17-award-celebration.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 4662
+    },
+    "pkg-38-popup-115ec31d7fdc4a0bbcfe823240183f60-freegames.json": {
+      "byteLength": 121991,
+      "chunk": "initial",
+      "entry": "assets/a47f85ddaf62cab4b0a3d40a248164af18a1eb75dbf1f4185e6a5e0dab7a33ba.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "a47f85ddaf62cab4b0a3d40a248164af18a1eb75dbf1f4185e6a5e0dab7a33ba"
+    },
+    "pkg-38-popup-115ec31d7fdc4a0bbcfe823240183f60-pop_ups.atlas": {
+      "byteLength": 2836,
+      "chunk": "initial",
+      "entry": "assets/616c278c7cf00cf3deb8c7717035128875d3e12100e58c182d214b79ba7d5e98.atlas",
+      "kind": "metadata",
+      "mediaType": "text/plain",
+      "owner": "initial",
+      "sha256": "616c278c7cf00cf3deb8c7717035128875d3e12100e58c182d214b79ba7d5e98"
+    },
+    "pkg-38-popup-115ec31d7fdc4a0bbcfe823240183f60-pop_ups.png": {
+      "byteLength": 757926,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/1dda57f183fe72be0f0927f71931697d9b0553ff50eda3d0dcfbe690cca9e7ab.webp",
+      "sha256": "1dda57f183fe72be0f0927f71931697d9b0553ff50eda3d0dcfbe690cca9e7ab",
+      "sourceByteLength": 5914600
+    },
+    "pkg-38-popup-115ec31d7fdc4a0bbcfe823240183f60-popup.manifest.json": {
+      "byteLength": 1220,
+      "chunk": "initial",
+      "entry": "assets/cc0d5795525f9f12868df702318fa5cb65f07e3144f2a8c6aef5c61f03162247.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "cc0d5795525f9f12868df702318fa5cb65f07e3144f2a8c6aef5c61f03162247"
+    },
+    "pkg-38-popup-125ec31d7fdc4a0bbcfe823240183f60-bonusgame.json": {
+      "byteLength": 210224,
+      "chunk": "initial",
+      "entry": "assets/f7ed24ac58ba7d968f5f327503f6c796198f624a4b95f80c263f2491c6500f65.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "f7ed24ac58ba7d968f5f327503f6c796198f624a4b95f80c263f2491c6500f65"
+    },
+    "pkg-38-popup-125ec31d7fdc4a0bbcfe823240183f60-pop_ups.atlas": {
+      "byteLength": 2836,
+      "chunk": "initial",
+      "entry": "assets/616c278c7cf00cf3deb8c7717035128875d3e12100e58c182d214b79ba7d5e98.atlas",
+      "kind": "metadata",
+      "mediaType": "text/plain",
+      "owner": "initial",
+      "sha256": "616c278c7cf00cf3deb8c7717035128875d3e12100e58c182d214b79ba7d5e98"
+    },
+    "pkg-38-popup-125ec31d7fdc4a0bbcfe823240183f60-pop_ups.png": {
+      "byteLength": 757926,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/1dda57f183fe72be0f0927f71931697d9b0553ff50eda3d0dcfbe690cca9e7ab.webp",
+      "sha256": "1dda57f183fe72be0f0927f71931697d9b0553ff50eda3d0dcfbe690cca9e7ab",
+      "sourceByteLength": 5914600
+    },
+    "pkg-38-popup-125ec31d7fdc4a0bbcfe823240183f60-popup.manifest.json": {
+      "byteLength": 1221,
+      "chunk": "initial",
+      "entry": "assets/3a256e4bc99246ddbdeed0a8d988bdf70b68bc3dd27a56a1f7b5dc2ffdd96b70.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "3a256e4bc99246ddbdeed0a8d988bdf70b68bc3dd27a56a1f7b5dc2ffdd96b70"
+    },
+    "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-0.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 23748
+    },
+    "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-1.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 16632
+    },
+    "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-2-2.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 23179
+    },
+    "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-2.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 6906
+    },
+    "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-3-2.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 24613
+    },
+    "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-3.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 5445
+    },
+    "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-4-2.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 18731
+    },
+    "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-4.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 11927
+    },
+    "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-5.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 22329
+    },
+    "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-6.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 24008
+    },
+    "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-7.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 16617
+    },
+    "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-8.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 24226
+    },
+    "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-9.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 23452
+    },
+    "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-compliment_more.json": {
+      "byteLength": 206111,
+      "chunk": "mode:FreeGame",
+      "entry": "assets/e6b2a8c3fd65a64a3980e4ce7ce71a93d7bf951c61248a88390f0424a414e52c.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "mode:FreeGame",
+      "sha256": "e6b2a8c3fd65a64a3980e4ce7ce71a93d7bf951c61248a88390f0424a414e52c"
+    },
+    "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-image-string.manifest.json": {
+      "byteLength": 3381,
+      "chunk": "mode:FreeGame",
+      "entry": "assets/a7a364dbf04f6e4190f1f1d3bb34ec58116c7230fbb1a3b0a33a1091b470927d.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "mode:FreeGame",
+      "sha256": "a7a364dbf04f6e4190f1f1d3bb34ec58116c7230fbb1a3b0a33a1091b470927d"
+    },
+    "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-pop_ups.atlas": {
+      "byteLength": 2836,
+      "chunk": "mode:FreeGame",
+      "entry": "assets/616c278c7cf00cf3deb8c7717035128875d3e12100e58c182d214b79ba7d5e98.atlas",
+      "kind": "metadata",
+      "mediaType": "text/plain",
+      "owner": "mode:FreeGame",
+      "sha256": "616c278c7cf00cf3deb8c7717035128875d3e12100e58c182d214b79ba7d5e98"
+    },
+    "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-pop_ups.png": {
+      "byteLength": 757926,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "mode:FreeGame",
+      "path": "assets/1dda57f183fe72be0f0927f71931697d9b0553ff50eda3d0dcfbe690cca9e7ab.webp",
+      "sha256": "1dda57f183fe72be0f0927f71931697d9b0553ff50eda3d0dcfbe690cca9e7ab",
+      "sourceByteLength": 5914600
+    },
+    "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-popup.manifest.json": {
+      "byteLength": 2903,
+      "chunk": "mode:FreeGame",
+      "entry": "assets/285665c7fea95253989d0d73009a698be8c9d45a0bc09bad8570f2bf659f4d58.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "mode:FreeGame",
+      "sha256": "285665c7fea95253989d0d73009a698be8c9d45a0bc09bad8570f2bf659f4d58"
+    },
+    "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-x.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 17007
+    },
+    "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60.png": {
+      "atlas": "atlas-mode-freegame-325c3c43-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:FreeGame",
+      "sourceByteLength": 5648
+    },
+    "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-0.png": {
+      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:BonusGame",
+      "sourceByteLength": 23748
+    },
+    "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-1.png": {
+      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:BonusGame",
+      "sourceByteLength": 16632
+    },
+    "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-2-2.png": {
+      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:BonusGame",
+      "sourceByteLength": 23179
+    },
+    "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-2.png": {
+      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:BonusGame",
+      "sourceByteLength": 6906
+    },
+    "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-3-2.png": {
+      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:BonusGame",
+      "sourceByteLength": 24613
+    },
+    "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-3.png": {
+      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:BonusGame",
+      "sourceByteLength": 5445
+    },
+    "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-4-2.png": {
+      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:BonusGame",
+      "sourceByteLength": 18731
+    },
+    "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-4.png": {
+      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:BonusGame",
+      "sourceByteLength": 11927
+    },
+    "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-5.png": {
+      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:BonusGame",
+      "sourceByteLength": 22329
+    },
+    "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-6.png": {
+      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:BonusGame",
+      "sourceByteLength": 24008
+    },
+    "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-7.png": {
+      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:BonusGame",
+      "sourceByteLength": 16617
+    },
+    "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-8.png": {
+      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:BonusGame",
+      "sourceByteLength": 24226
+    },
+    "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-9.png": {
+      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:BonusGame",
+      "sourceByteLength": 23452
+    },
+    "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-compliment.json": {
+      "byteLength": 173876,
+      "chunk": "mode:BonusGame",
+      "entry": "assets/3eb125d8dab50ff2e63ca985b52706a39e82bf9d0dd196a2362e45a05629d084.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "mode:BonusGame",
+      "sha256": "3eb125d8dab50ff2e63ca985b52706a39e82bf9d0dd196a2362e45a05629d084"
+    },
+    "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-image-string.manifest.json": {
+      "byteLength": 3381,
+      "chunk": "mode:BonusGame",
+      "entry": "assets/9321c01ab7b8315c1203072f1395c23b8927613684d231883206e5819496e2ec.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "mode:BonusGame",
+      "sha256": "9321c01ab7b8315c1203072f1395c23b8927613684d231883206e5819496e2ec"
+    },
+    "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-pop_ups.atlas": {
+      "byteLength": 2836,
+      "chunk": "mode:BonusGame",
+      "entry": "assets/616c278c7cf00cf3deb8c7717035128875d3e12100e58c182d214b79ba7d5e98.atlas",
+      "kind": "metadata",
+      "mediaType": "text/plain",
+      "owner": "mode:BonusGame",
+      "sha256": "616c278c7cf00cf3deb8c7717035128875d3e12100e58c182d214b79ba7d5e98"
+    },
+    "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-pop_ups.png": {
+      "byteLength": 757926,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "mode:BonusGame",
+      "path": "assets/1dda57f183fe72be0f0927f71931697d9b0553ff50eda3d0dcfbe690cca9e7ab.webp",
+      "sha256": "1dda57f183fe72be0f0927f71931697d9b0553ff50eda3d0dcfbe690cca9e7ab",
+      "sourceByteLength": 5914600
+    },
+    "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-popup.manifest.json": {
+      "byteLength": 2860,
+      "chunk": "mode:BonusGame",
+      "entry": "assets/f0c82526c9af9110d59ee20babe0d2b74d47d4c93dcb5207a5d208a0492fd3ef.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "mode:BonusGame",
+      "sha256": "f0c82526c9af9110d59ee20babe0d2b74d47d4c93dcb5207a5d208a0492fd3ef"
+    },
+    "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-x.png": {
+      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:BonusGame",
+      "sourceByteLength": 17007
+    },
+    "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60.png": {
+      "atlas": "atlas-mode-bonusgame-67d8bd77-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "mode:BonusGame",
+      "sourceByteLength": 5648
+    },
+    "pkg-9-minecart2-10_1_asset_image_ms7b3znr_i.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 19626
+    },
+    "pkg-9-minecart2-10_1_asset_image_ms7b3znr_i.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 26846
+    },
+    "pkg-9-minecart2-10_1_asset_image_ms7b3znr_i.spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 27834
+    },
+    "pkg-9-minecart2-a_1_asset_image_ms7afho8_3.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 14136
+    },
+    "pkg-9-minecart2-a_1_asset_image_ms7afho8_3.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 21424
+    },
+    "pkg-9-minecart2-a_1_asset_image_ms7afho8_3.spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 19168
+    },
+    "pkg-9-minecart2-BN.json": {
+      "byteLength": 53740,
+      "chunk": "initial",
+      "entry": "assets/b28d782437afaa0ddd80fda0eadaeefdfc081722b155c7f5ed575318b6bddbc6.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "b28d782437afaa0ddd80fda0eadaeefdfc081722b155c7f5ed575318b6bddbc6"
+    },
+    "pkg-9-minecart2-BO.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 32142
+    },
+    "pkg-9-minecart2-BO.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 47767
+    },
+    "pkg-9-minecart2-BO.spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 40842
+    },
+    "pkg-9-minecart2-CL.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 28690
+    },
+    "pkg-9-minecart2-CL.json": {
+      "byteLength": 250323,
+      "chunk": "initial",
+      "entry": "assets/5c9c7f73853d8ef634dbfededc87b654013a2c299f71386008a0a979b90a5daa.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "5c9c7f73853d8ef634dbfededc87b654013a2c299f71386008a0a979b90a5daa"
+    },
+    "pkg-9-minecart2-CL.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 50223
+    },
+    "pkg-9-minecart2-CL.spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 45181
+    },
+    "pkg-9-minecart2-CN.json": {
+      "byteLength": 50514,
+      "chunk": "initial",
+      "entry": "assets/f72677270c41e4aa824118080eb5276bf20f75c1d81a003ef1444b950ddfa964.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "f72677270c41e4aa824118080eb5276bf20f75c1d81a003ef1444b950ddfa964"
+    },
+    "pkg-9-minecart2-CO.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 14793
+    },
+    "pkg-9-minecart2-CO.spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 41288
+    },
+    "pkg-9-minecart2-coin_0000_0.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6317
+    },
+    "pkg-9-minecart2-coin_0001_1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 5680
+    },
+    "pkg-9-minecart2-coin_0002_2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6171
+    },
+    "pkg-9-minecart2-coin_0003_3.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6370
+    },
+    "pkg-9-minecart2-coin_0004_4.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 5930
+    },
+    "pkg-9-minecart2-coin_0005_5.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6195
+    },
+    "pkg-9-minecart2-coin_0006_6.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 5323
+    },
+    "pkg-9-minecart2-coin_0007_7.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 5713
+    },
+    "pkg-9-minecart2-coin_0008_8.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6300
+    },
+    "pkg-9-minecart2-coin_0009_9.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6274
+    },
+    "pkg-9-minecart2-coin_0010_x.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 5783
+    },
+    "pkg-9-minecart2-coin_0011_-.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 4503
+    },
+    "pkg-9-minecart2-coin_0012_+.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 5525
+    },
+    "pkg-9-minecart2-coin_0013_,.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2252
+    },
+    "pkg-9-minecart2-coin_0014_..png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 2155
+    },
+    "pkg-9-minecart2-gameconfig.json": {
+      "byteLength": 19878,
+      "chunk": "initial",
+      "entry": "assets/b6fda4721b421914b8999f742c03800707b0e38b24268d36641bede50ef5c93d.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "b6fda4721b421914b8999f742c03800707b0e38b24268d36641bede50ef5c93d"
+    },
+    "pkg-9-minecart2-H1.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 28394
+    },
+    "pkg-9-minecart2-H1.json": {
+      "byteLength": 248528,
+      "chunk": "initial",
+      "entry": "assets/df5d0f4fa39140e7d62592daafe337d463cb1e3341cf9eb4d2ffd3a145784287.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "df5d0f4fa39140e7d62592daafe337d463cb1e3341cf9eb4d2ffd3a145784287"
+    },
+    "pkg-9-minecart2-H1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 51840
+    },
+    "pkg-9-minecart2-H1.spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 41350
+    },
+    "pkg-9-minecart2-H2.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 28705
+    },
+    "pkg-9-minecart2-H2.json": {
+      "byteLength": 69388,
+      "chunk": "initial",
+      "entry": "assets/e1d54818c574eda0952749bb924e4479301ffe6c3ae11d0498d44dc8ea488fd5.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "e1d54818c574eda0952749bb924e4479301ffe6c3ae11d0498d44dc8ea488fd5"
+    },
+    "pkg-9-minecart2-H2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 53337
+    },
+    "pkg-9-minecart2-H2.spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 40622
+    },
+    "pkg-9-minecart2-H3.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 27672
+    },
+    "pkg-9-minecart2-H3.json": {
+      "byteLength": 18722,
+      "chunk": "initial",
+      "entry": "assets/3dd0ec3c814395966e2d49acc4d68ff20e5672b22157ae0fd68f7e8c6593e7ea.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "3dd0ec3c814395966e2d49acc4d68ff20e5672b22157ae0fd68f7e8c6593e7ea"
+    },
+    "pkg-9-minecart2-H3.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 47106
+    },
+    "pkg-9-minecart2-H3.spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 36788
+    },
+    "pkg-9-minecart2-H4.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 28706
+    },
+    "pkg-9-minecart2-H4.json": {
+      "byteLength": 22289,
+      "chunk": "initial",
+      "entry": "assets/1cdab0fa46ddd95b1729fe948aae8d2cf15b36e4f3322e9d0cc25dbae03d549e.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "1cdab0fa46ddd95b1729fe948aae8d2cf15b36e4f3322e9d0cc25dbae03d549e"
+    },
+    "pkg-9-minecart2-H4.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 50354
+    },
+    "pkg-9-minecart2-H4.spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 38066
+    },
+    "pkg-9-minecart2-H5.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 29015
+    },
+    "pkg-9-minecart2-H5.json": {
+      "byteLength": 27160,
+      "chunk": "initial",
+      "entry": "assets/94a6fbdb51ecf236b7494bbb4466025491719f8760a94b821dd169f212e326e2.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "94a6fbdb51ecf236b7494bbb4466025491719f8760a94b821dd169f212e326e2"
+    },
+    "pkg-9-minecart2-H5.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 46601
+    },
+    "pkg-9-minecart2-H5.spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 35943
+    },
+    "pkg-9-minecart2-image-string.manifest.json": {
+      "byteLength": 3049,
+      "chunk": "initial",
+      "entry": "assets/39db6da83a4f2da7d220b4a122d8e45ee127ca170d7d9d6a578971df073f4663.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "39db6da83a4f2da7d220b4a122d8e45ee127ca170d7d9d6a578971df073f4663"
+    },
+    "pkg-9-minecart2-j_1_asset_image_ms7b5jc0_s.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 12585
+    },
+    "pkg-9-minecart2-j_1_asset_image_ms7b5jc0_s.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 17436
+    },
+    "pkg-9-minecart2-j_1_asset_image_ms7b5jc0_s.spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 16764
+    },
+    "pkg-9-minecart2-k_1_asset_image_ms7b77jg_12.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 17327
+    },
+    "pkg-9-minecart2-k_1_asset_image_ms7b77jg_12.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 24792
+    },
+    "pkg-9-minecart2-k_1_asset_image_ms7b77jg_12.spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 22635
+    },
+    "pkg-9-minecart2-l1.json": {
+      "byteLength": 3253,
+      "chunk": "initial",
+      "entry": "assets/5a25b12b4a2e5349a7c9e1792c7e85027b06a2f4ba3aec8ae0ce16e0b1fe29fc.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "5a25b12b4a2e5349a7c9e1792c7e85027b06a2f4ba3aec8ae0ce16e0b1fe29fc"
+    },
+    "pkg-9-minecart2-l2.json": {
+      "byteLength": 3260,
+      "chunk": "initial",
+      "entry": "assets/d6a8e7655e094453f50924b3d501bbd854dffab38c5a4b0ef2b092e017f3bb2b.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "d6a8e7655e094453f50924b3d501bbd854dffab38c5a4b0ef2b092e017f3bb2b"
+    },
+    "pkg-9-minecart2-l3.json": {
+      "byteLength": 3260,
+      "chunk": "initial",
+      "entry": "assets/917c7ddcd4c48a2a1c90656eb787605cba9a6bf98dc3da9453af9e8846a07d5b.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "917c7ddcd4c48a2a1c90656eb787605cba9a6bf98dc3da9453af9e8846a07d5b"
+    },
+    "pkg-9-minecart2-l4.json": {
+      "byteLength": 3253,
+      "chunk": "initial",
+      "entry": "assets/7769ecc8df0dd36665bb4a0de9f809b1c846501c4c0ba9e2e1061d7766bc8366.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "7769ecc8df0dd36665bb4a0de9f809b1c846501c4c0ba9e2e1061d7766bc8366"
+    },
+    "pkg-9-minecart2-l5.json": {
+      "byteLength": 3256,
+      "chunk": "initial",
+      "entry": "assets/78c737a6b87e7e5abb99f552d59fa729787d880273445c753de888343f93b873.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "78c737a6b87e7e5abb99f552d59fa729787d880273445c753de888343f93b873"
+    },
+    "pkg-9-minecart2-q_1_asset_image_ms7b9y2n_1c.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 16900
+    },
+    "pkg-9-minecart2-q_1_asset_image_ms7b9y2n_1c.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 24847
+    },
+    "pkg-9-minecart2-q_1_asset_image_ms7b9y2n_1c.spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 23119
+    },
+    "pkg-9-minecart2-SC.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 35014
+    },
+    "pkg-9-minecart2-SC.json": {
+      "byteLength": 116682,
+      "chunk": "initial",
+      "entry": "assets/91bf125ae4105ab6075f19d5efca48d6609ff22cf4053b102d9b599610315acc.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "91bf125ae4105ab6075f19d5efca48d6609ff22cf4053b102d9b599610315acc"
+    },
+    "pkg-9-minecart2-SC.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 60949
+    },
+    "pkg-9-minecart2-SC.spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 51276
+    },
+    "pkg-9-minecart2-symbol-state-textures.manifest.json": {
+      "byteLength": 23995,
+      "chunk": "initial",
+      "entry": "assets/5bbe2e4599e162737b938daef1f2535e57f439fe4d5ddbfc9c0ff6587139bc05.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "5bbe2e4599e162737b938daef1f2535e57f439fe4d5ddbfc9c0ff6587139bc05"
+    },
+    "pkg-9-minecart2-Symbol.atlas": {
+      "byteLength": 7035,
+      "chunk": "initial",
+      "entry": "assets/4f411e823c127151815c8483d07ae808ba7851039f55c8003a51aae3da266a1a.atlas",
+      "kind": "metadata",
+      "mediaType": "text/plain",
+      "owner": "initial",
+      "sha256": "4f411e823c127151815c8483d07ae808ba7851039f55c8003a51aae3da266a1a"
+    },
+    "pkg-9-minecart2-Symbol.png": {
+      "byteLength": 777072,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/98200eb1708d1a6c054c9a844e74900876d0472b5200c60945130c58bd0f48aa.webp",
+      "sha256": "98200eb1708d1a6c054c9a844e74900876d0472b5200c60945130c58bd0f48aa",
+      "sourceByteLength": 4908606
+    },
+    "pkg-9-minecart2-symbols.package.json": {
+      "byteLength": 3428,
+      "chunk": "initial",
+      "entry": "assets/cc22192ba8c82c09c6e20c8d4baa2c1835e80df031797dcce044ff8feac00099.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "cc22192ba8c82c09c6e20c8d4baa2c1835e80df031797dcce044ff8feac00099"
+    },
+    "pkg-9-minecart2-WL.disabled.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 31530
+    },
+    "pkg-9-minecart2-WL.json": {
+      "byteLength": 162991,
+      "chunk": "initial",
+      "entry": "assets/acbde1c59e1ccd0dc7a947df047941595e45a75192800b27a7b5f124b1561564.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "acbde1c59e1ccd0dc7a947df047941595e45a75192800b27a7b5f124b1561564"
+    },
+    "pkg-9-minecart2-WL.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 56230
+    },
+    "pkg-9-minecart2-WL.spinBlur.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 49504
+    },
+    "reel_collect.atlas": {
+      "byteLength": 2260,
+      "chunk": "initial",
+      "entry": "assets/a69768bf5f98f20884709145abc2ee56550694b61429f090549317696bb1f476.atlas",
+      "kind": "metadata",
+      "mediaType": "text/plain",
+      "owner": "initial",
+      "sha256": "a69768bf5f98f20884709145abc2ee56550694b61429f090549317696bb1f476"
+    },
+    "reel_collect.json": {
+      "byteLength": 305267,
+      "chunk": "initial",
+      "entry": "assets/82abb7641baecd8c0db67cc9937f1dcd11f45c85cd556c1a678d4def9e7f94fd.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "82abb7641baecd8c0db67cc9937f1dcd11f45c85cd556c1a678d4def9e7f94fd"
+    },
+    "reel_collect.png": {
+      "byteLength": 293744,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/42f97318d167ff0547d294659bdc47e70c01f8c775613c99c53970047448a664.webp",
+      "sha256": "42f97318d167ff0547d294659bdc47e70c01f8c775613c99c53970047448a664",
+      "sourceByteLength": 1514283
+    },
+    "reel_conveyor.atlas": {
+      "byteLength": 504,
+      "chunk": "initial",
+      "entry": "assets/eb1721839bbd01f0ee8db95f0789fedb57138accf1b6c0ec6c322536cf311dfc.atlas",
+      "kind": "metadata",
+      "mediaType": "text/plain",
+      "owner": "initial",
+      "sha256": "eb1721839bbd01f0ee8db95f0789fedb57138accf1b6c0ec6c322536cf311dfc"
+    },
+    "reel_conveyor.png": {
+      "byteLength": 34826,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/5b18a9d57f82123c7cde3ca340ab8956e3f6db343e6e241b563ed82ed0388563.webp",
+      "sha256": "5b18a9d57f82123c7cde3ca340ab8956e3f6db343e6e241b563ed82ed0388563",
+      "sourceByteLength": 145884
+    },
+    "reel_nearwin2.json": {
+      "byteLength": 151863,
+      "chunk": "initial",
+      "entry": "assets/b5014d0128ef11671a970339ff2ece5586c53e5eaeecd5beba0e97a2af56c902.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "b5014d0128ef11671a970339ff2ece5586c53e5eaeecd5beba0e97a2af56c902"
+    },
+    "sd1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 252626
+    },
+    "searchlight.json": {
+      "byteLength": 5889,
+      "chunk": "initial",
+      "entry": "assets/e3d5105ce5b2b099cb5a94502e4f9bb77ea40b4ec658bc4a67c00b97a418faa5.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "e3d5105ce5b2b099cb5a94502e4f9bb77ea40b4ec658bc4a67c00b97a418faa5"
+    },
+    "snow.json": {
+      "byteLength": 14610,
+      "chunk": "initial",
+      "entry": "assets/8e35d37ddb5ca782edb7abcbbb675900c79852d420a6f79e6365dcd68e8d252f.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "8e35d37ddb5ca782edb7abcbbb675900c79852d420a6f79e6365dcd68e8d252f"
+    },
+    "specialfeature.atlas": {
+      "byteLength": 1874,
+      "chunk": "initial",
+      "entry": "assets/4a287f3242c7e7dd9fa44acdef4dc946f8562d95f5ba6e8153478fb070526dfe.atlas",
+      "kind": "metadata",
+      "mediaType": "text/plain",
+      "owner": "initial",
+      "sha256": "4a287f3242c7e7dd9fa44acdef4dc946f8562d95f5ba6e8153478fb070526dfe"
+    },
+    "specialfeature.png": {
+      "byteLength": 314670,
+      "kind": "external",
+      "mediaType": "image/webp",
+      "owner": "initial",
+      "path": "assets/d8dbb239afe30beaa618bfbf7e0c81536ee59a3a3eeead31e7a75f9a483b6d58.webp",
+      "sha256": "d8dbb239afe30beaa618bfbf7e0c81536ee59a3a3eeead31e7a75f9a483b6d58",
+      "sourceByteLength": 1570358
+    },
+    "topick.json": {
+      "byteLength": 17915,
+      "chunk": "initial",
+      "entry": "assets/5b717701542c42d939289dfa76b88c9bba9b06ad86d2b21959bb71959dac32b0.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "5b717701542c42d939289dfa76b88c9bba9b06ad86d2b21959bb71959dac32b0"
+    },
+    "video_4.mp4": {
+      "byteLength": 2695303,
+      "kind": "external",
+      "mediaType": "video/mp4",
+      "owner": "media",
+      "path": "assets/44cc293c3920f6e4af2b072d9c0c121cee4aca626542c51249c322dc70dc7fee.mp4",
+      "sha256": "44cc293c3920f6e4af2b072d9c0c121cee4aca626542c51249c322dc70dc7fee",
+      "sourceByteLength": 2695303
+    },
+    "video3.mp4": {
+      "byteLength": 3740043,
+      "kind": "external",
+      "mediaType": "video/mp4",
+      "owner": "media",
+      "path": "assets/da8f8f78f66a2ff63649c21d7495bbef8dba222862b69d2ac96dc30e2f6be714.mp4",
+      "sha256": "da8f8f78f66a2ff63649c21d7495bbef8dba222862b69d2ac96dc30e2f6be714",
+      "sourceByteLength": 3740043
+    },
+    "x.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 6091
+    }
+  },
+  "atlases": [
+    {
+      "frames": {
+        "0.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 6,
+          "y": 6
+        },
+        "1.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 45,
+          "y": 6
+        },
+        "2.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 6,
+          "y": 57
+        },
+        "2a3b14312b68630df119aa32fc410861fcde3c5e04a0cfd3096bccbb9c2e55ad.png": {
+          "height": 58,
+          "rotated": false,
+          "sourceHeight": 58,
+          "sourceWidth": 891,
+          "width": 891,
+          "x": 84,
+          "y": 6
+        },
+        "3.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 6,
+          "y": 96
+        },
+        "4.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 57,
+          "y": 72
+        },
+        "467790a895d324579b5f218b6e71e7665e81bf6e7c9a57c1897945fffe03408f.png": {
+          "height": 66,
+          "rotated": false,
+          "sourceHeight": 66,
+          "sourceWidth": 218,
+          "width": 218,
+          "x": 6,
+          "y": 135
+        },
+        "5.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 96,
+          "y": 72
+        },
+        "6.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 135,
+          "y": 72
+        },
+        "7.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 174,
+          "y": 72
+        },
+        "8.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 213,
+          "y": 72
+        },
+        "82d3d16d974db64d572a42faff4f66114448c22980c591ac4b1c03b5edfd996b.png": {
+          "height": 44,
+          "rotated": false,
+          "sourceHeight": 44,
+          "sourceWidth": 153,
+          "width": 153,
+          "x": 232,
+          "y": 123
+        },
+        "8344f2009c6ae78c6dd75562edb248be94521ca9edfe6df9a20de89ab7b43e42.png": {
+          "height": 44,
+          "rotated": false,
+          "sourceHeight": 44,
+          "sourceWidth": 875,
+          "width": 875,
+          "x": 6,
+          "y": 209
+        },
+        "9.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 252,
+          "y": 72
+        },
+        "932e18103485cfa6112cbb70f00a5030b7c9fd234d2fab6a7ab7f3ab406adfcb.png": {
+          "height": 153,
+          "rotated": true,
+          "sourceHeight": 44,
+          "sourceWidth": 153,
+          "width": 44,
+          "x": 889,
+          "y": 72
+        },
+        "9a3f4d78ffe6a5c8bc4b2b973069adca13725aa2a8d3e831c1d6f59ccacd72cb.png": {
+          "height": 110,
+          "rotated": true,
+          "sourceHeight": 44,
+          "sourceWidth": 110,
+          "width": 44,
+          "x": 393,
+          "y": 72
+        },
+        "9ba676a65e7ee29f27e3af0f2075efaad54546971ece268708163128eb2f027f.png": {
+          "height": 66,
+          "rotated": false,
+          "sourceHeight": 66,
+          "sourceWidth": 218,
+          "width": 218,
+          "x": 445,
+          "y": 72
+        },
+        "a6.jpg": {
+          "height": 2000,
+          "rotated": false,
+          "sourceHeight": 2000,
+          "sourceWidth": 2000,
+          "width": 2000,
+          "x": 6,
+          "y": 261
+        },
+        "ae8c1696406cab5daeeda40c44d51fb2dbcbb441c4acc3b28a61e8fd26461e34.png": {
+          "height": 218,
+          "rotated": true,
+          "sourceHeight": 66,
+          "sourceWidth": 218,
+          "width": 66,
+          "x": 983,
+          "y": 6
+        },
+        "asset-2.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 13,
+          "width": 13,
+          "x": 291,
+          "y": 72
+        },
+        "asset-3.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 13,
+          "width": 13,
+          "x": 312,
+          "y": 72
+        },
+        "asset-4.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 333,
+          "y": 72
+        },
+        "asset.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 941,
+          "y": 72
+        },
+        "b6.png": {
+          "height": 1411,
+          "rotated": true,
+          "sourceHeight": 57,
+          "sourceWidth": 1411,
+          "width": 57,
+          "x": 2014,
+          "y": 6
+        },
+        "b7.png": {
+          "height": 1198,
+          "rotated": true,
+          "sourceHeight": 57,
+          "sourceWidth": 1198,
+          "width": 57,
+          "x": 2079,
+          "y": 6
+        },
+        "bee187d3863feb8de735ddc11e4381d3e8384c3e9d3493eef2b151f3c04727bd.png": {
+          "height": 773,
+          "rotated": false,
+          "sourceHeight": 773,
+          "sourceWidth": 284,
+          "width": 284,
+          "x": 2144,
+          "y": 6
+        },
+        "d1.png": {
+          "height": 1017,
+          "rotated": true,
+          "sourceHeight": 243,
+          "sourceWidth": 1017,
+          "width": 243,
+          "x": 2079,
+          "y": 1212
+        },
+        "d1bf7175c00e6fdbd661c39c1c2458616dc57c51d3ba1fd8df7b3e1f549e9cc2.png": {
+          "height": 218,
+          "rotated": true,
+          "sourceHeight": 66,
+          "sourceWidth": 218,
+          "width": 66,
+          "x": 1057,
+          "y": 6
+        },
+        "d2.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 885,
+          "width": 885,
+          "x": 6,
+          "y": 2269
+        },
+        "dbd7baf96994aa0cf361e2e39532c89ddac3b281e6d30ae16b380b05afa10976.png": {
+          "height": 44,
+          "rotated": false,
+          "sourceHeight": 44,
+          "sourceWidth": 111,
+          "width": 111,
+          "x": 445,
+          "y": 146
+        },
+        "f-bonus.png": {
+          "height": 146,
+          "rotated": false,
+          "sourceHeight": 146,
+          "sourceWidth": 172,
+          "width": 172,
+          "x": 2014,
+          "y": 2237
+        },
+        "f-coin.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 172,
+          "x": 899,
+          "y": 2269
+        },
+        "f-collect.png": {
+          "height": 160,
+          "rotated": false,
+          "sourceHeight": 160,
+          "sourceWidth": 174,
+          "width": 174,
+          "x": 2194,
+          "y": 2237
+        },
+        "f-ding.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 172,
+          "x": 1079,
+          "y": 2269
+        },
+        "f-exp.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 172,
+          "x": 1259,
+          "y": 2269
+        },
+        "f-jk.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 172,
+          "x": 1439,
+          "y": 2269
+        },
+        "f-light.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 172,
+          "x": 1619,
+          "y": 2269
+        },
+        "f-multi.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 172,
+          "x": 1799,
+          "y": 2269
+        },
+        "f-normal.png": {
+          "height": 8,
+          "rotated": false,
+          "sourceHeight": 8,
+          "sourceWidth": 8,
+          "width": 8,
+          "x": 1979,
+          "y": 2391
+        },
+        "f-sc.png": {
+          "height": 172,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 130,
+          "x": 1131,
+          "y": 6
+        },
+        "f-up.png": {
+          "height": 172,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 130,
+          "x": 1269,
+          "y": 6
+        },
+        "f-wild.png": {
+          "height": 172,
+          "rotated": true,
+          "sourceHeight": 143,
+          "sourceWidth": 172,
+          "width": 143,
+          "x": 1407,
+          "y": 6
+        },
+        "fd66f6f1eb79b96d2e8ac58a20788b5ce6809babb23d84647ca82c5a697e2080.png": {
+          "height": 793,
+          "rotated": false,
+          "sourceHeight": 793,
+          "sourceWidth": 1057,
+          "width": 1057,
+          "x": 6,
+          "y": 2407
+        },
+        "free14.png": {
+          "height": 2000,
+          "rotated": true,
+          "sourceHeight": 471,
+          "sourceWidth": 2000,
+          "width": 471,
+          "x": 2436,
+          "y": 6
+        },
+        "gd1.png": {
+          "height": 2000,
+          "rotated": true,
+          "sourceHeight": 149,
+          "sourceWidth": 2000,
+          "width": 149,
+          "x": 2915,
+          "y": 6
+        },
+        "gd3.png": {
+          "height": 2000,
+          "rotated": true,
+          "sourceHeight": 135,
+          "sourceWidth": 2000,
+          "width": 135,
+          "x": 3072,
+          "y": 6
+        },
+        "pkg-17-award-celebration-0.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 941,
+          "y": 123
+        },
+        "pkg-17-award-celebration-1_asset_image_mrabdwbe_11.png": {
+          "height": 217,
+          "rotated": false,
+          "sourceHeight": 217,
+          "sourceWidth": 217,
+          "width": 217,
+          "x": 1558,
+          "y": 6
+        },
+        "pkg-17-award-celebration-1_asset_image_mraeg23u_46.png": {
+          "height": 50,
+          "rotated": false,
+          "sourceHeight": 50,
+          "sourceWidth": 50,
+          "width": 50,
+          "x": 2376,
+          "y": 787
+        },
+        "pkg-17-award-celebration-1_asset_image_mrag7g66_53.png": {
+          "height": 28,
+          "rotated": false,
+          "sourceHeight": 28,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 941,
+          "y": 174
+        },
+        "pkg-17-award-celebration-1_asset_image_mrbqoiso_14.png": {
+          "height": 50,
+          "rotated": false,
+          "sourceHeight": 50,
+          "sourceWidth": 50,
+          "width": 50,
+          "x": 2376,
+          "y": 845
+        },
+        "pkg-17-award-celebration-1_asset_image_mrbtzde9_26.png": {
+          "height": 62,
+          "rotated": true,
+          "sourceHeight": 61,
+          "sourceWidth": 62,
+          "width": 61,
+          "x": 1131,
+          "y": 186
+        },
+        "pkg-17-award-celebration-1_asset_image_mroedq99_k.png": {
+          "height": 121,
+          "rotated": false,
+          "sourceHeight": 121,
+          "sourceWidth": 143,
+          "width": 143,
+          "x": 671,
+          "y": 72
+        },
+        "pkg-17-award-celebration-1_asset_image_mrswriz7_15.png": {
+          "height": 121,
+          "rotated": false,
+          "sourceHeight": 121,
+          "sourceWidth": 143,
+          "width": 143,
+          "x": 1995,
+          "y": 2391
+        },
+        "pkg-17-award-celebration-1.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 941,
+          "y": 210
+        },
+        "pkg-17-award-celebration-2_asset_image_mra2b5fo_v.png": {
+          "height": 217,
+          "rotated": false,
+          "sourceHeight": 217,
+          "sourceWidth": 217,
+          "width": 217,
+          "x": 1783,
+          "y": 6
+        },
+        "pkg-17-award-celebration-2_asset_image_mrafbzli_4s.png": {
+          "height": 217,
+          "rotated": false,
+          "sourceHeight": 217,
+          "sourceWidth": 217,
+          "width": 217,
+          "x": 2144,
+          "y": 787
+        },
+        "pkg-17-award-celebration-2_asset_image_mrnag3e6_y.png": {
+          "height": 217,
+          "rotated": false,
+          "sourceHeight": 217,
+          "sourceWidth": 217,
+          "width": 217,
+          "x": 1071,
+          "y": 2520
+        },
+        "pkg-17-award-celebration-2_asset_image_mruhasg6_6y.png": {
+          "height": 50,
+          "rotated": false,
+          "sourceHeight": 50,
+          "sourceWidth": 50,
+          "width": 50,
+          "x": 2376,
+          "y": 903
+        },
+        "pkg-17-award-celebration-2_asset_image_mrvjlrl5_1c.png": {
+          "height": 143,
+          "rotated": true,
+          "sourceHeight": 121,
+          "sourceWidth": 143,
+          "width": 121,
+          "x": 2144,
+          "y": 1012
+        },
+        "pkg-17-award-celebration-2-2.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 2146,
+          "y": 2391
+        },
+        "pkg-17-award-celebration-2.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 13,
+          "width": 13,
+          "x": 372,
+          "y": 72
+        },
+        "pkg-17-award-celebration-3_asset_image_mr8u0of5_1f.png": {
+          "height": 200,
+          "rotated": false,
+          "sourceHeight": 200,
+          "sourceWidth": 200,
+          "width": 200,
+          "x": 2330,
+          "y": 2014
+        },
+        "pkg-17-award-celebration-3_asset_image_mra4066k_2t.png": {
+          "height": 200,
+          "rotated": false,
+          "sourceHeight": 200,
+          "sourceWidth": 200,
+          "width": 200,
+          "x": 1071,
+          "y": 2745
+        },
+        "pkg-17-award-celebration-3_asset_image_mraepcja_4a.png": {
+          "height": 200,
+          "rotated": false,
+          "sourceHeight": 200,
+          "sourceWidth": 200,
+          "width": 200,
+          "x": 1071,
+          "y": 2953
+        },
+        "pkg-17-award-celebration-3_asset_image_mrsvyeba_t.png": {
+          "height": 217,
+          "rotated": false,
+          "sourceHeight": 217,
+          "sourceWidth": 217,
+          "width": 217,
+          "x": 1279,
+          "y": 2745
+        },
+        "pkg-17-award-celebration-3_asset_image_mrvifkgo_10.png": {
+          "height": 200,
+          "rotated": false,
+          "sourceHeight": 200,
+          "sourceWidth": 200,
+          "width": 200,
+          "x": 1296,
+          "y": 2520
+        },
+        "pkg-17-award-celebration-3_asset_image_mrvii5u7_11.png": {
+          "height": 200,
+          "rotated": false,
+          "sourceHeight": 200,
+          "sourceWidth": 200,
+          "width": 200,
+          "x": 1279,
+          "y": 2970
+        },
+        "pkg-17-award-celebration-3_asset_image_mrvkgm8n_1p.png": {
+          "height": 121,
+          "rotated": false,
+          "sourceHeight": 121,
+          "sourceWidth": 143,
+          "width": 143,
+          "x": 2273,
+          "y": 1012
+        },
+        "pkg-17-award-celebration-3-2.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 2369,
+          "y": 961
+        },
+        "pkg-17-award-celebration-3.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 13,
+          "width": 13,
+          "x": 2408,
+          "y": 961
+        },
+        "pkg-17-award-celebration-4_asset_image_mra40b5o_2u.png": {
+          "height": 200,
+          "rotated": false,
+          "sourceHeight": 200,
+          "sourceWidth": 200,
+          "width": 200,
+          "x": 1487,
+          "y": 2970
+        },
+        "pkg-17-award-celebration-4-2.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 1071,
+          "y": 3161
+        },
+        "pkg-17-award-celebration-4.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 1122,
+          "y": 3161
+        },
+        "pkg-17-award-celebration-5_asset_image_mra5cnug_3j.png": {
+          "height": 217,
+          "rotated": false,
+          "sourceHeight": 217,
+          "sourceWidth": 217,
+          "width": 217,
+          "x": 1695,
+          "y": 2407
+        },
+        "pkg-17-award-celebration-5.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 1173,
+          "y": 3161
+        },
+        "pkg-17-award-celebration-6_asset_image_mruguywn_6c.png": {
+          "height": 232,
+          "rotated": false,
+          "sourceHeight": 232,
+          "sourceWidth": 232,
+          "width": 232,
+          "x": 1504,
+          "y": 2632
+        },
+        "pkg-17-award-celebration-6.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 1224,
+          "y": 3161
+        },
+        "pkg-17-award-celebration-7_asset_image_mradoe0d_2d.png": {
+          "height": 250,
+          "rotated": false,
+          "sourceHeight": 250,
+          "sourceWidth": 250,
+          "width": 250,
+          "x": 1695,
+          "y": 2872
+        },
+        "pkg-17-award-celebration-7.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 1953,
+          "y": 2407
+        },
+        "pkg-17-award-celebration-8_asset_image_mrsovy46_8.png": {
+          "height": 250,
+          "rotated": false,
+          "sourceHeight": 250,
+          "sourceWidth": 250,
+          "width": 250,
+          "x": 1920,
+          "y": 2520
+        },
+        "pkg-17-award-celebration-8.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 2144,
+          "y": 1163
+        },
+        "pkg-17-award-celebration-9.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 2195,
+          "y": 1163
+        },
+        "pkg-17-award-celebration-a1_asset_image_mrbtoj8d_24.png": {
+          "height": 200,
+          "rotated": false,
+          "sourceHeight": 200,
+          "sourceWidth": 200,
+          "width": 200,
+          "x": 1953,
+          "y": 2778
+        },
+        "pkg-17-award-celebration-a1_asset_image_mrbv0c6j_3i.png": {
+          "height": 200,
+          "rotated": false,
+          "sourceHeight": 200,
+          "sourceWidth": 200,
+          "width": 200,
+          "x": 1953,
+          "y": 2986
+        },
+        "pkg-17-award-celebration-a5_asset_image_mrmzli4d_l.png": {
+          "height": 200,
+          "rotated": false,
+          "sourceHeight": 200,
+          "sourceWidth": 200,
+          "width": 200,
+          "x": 2161,
+          "y": 2778
+        },
+        "pkg-17-award-celebration-mw_stone4_asset_image_mrvj5wui_12.png": {
+          "height": 88,
+          "rotated": false,
+          "sourceHeight": 88,
+          "sourceWidth": 106,
+          "width": 106,
+          "x": 1504,
+          "y": 2872
+        },
+        "pkg-17-award-celebration-mw_stone6_asset_image_mrae841s_3r.png": {
+          "height": 86,
+          "rotated": true,
+          "sourceHeight": 80,
+          "sourceWidth": 86,
+          "width": 80,
+          "x": 1744,
+          "y": 2778
+        },
+        "pkg-17-award-celebration-qq_20260708150336_asset_image_mruhr4v9_70.png": {
+          "height": 231,
+          "rotated": false,
+          "sourceHeight": 231,
+          "sourceWidth": 457,
+          "width": 457,
+          "x": 2178,
+          "y": 2442
+        },
+        "pkg-17-award-celebration-qq_20260708150407_asset_image_mrn9w17x_u.png": {
+          "height": 203,
+          "rotated": false,
+          "sourceHeight": 203,
+          "sourceWidth": 456,
+          "width": 456,
+          "x": 2376,
+          "y": 2222
+        },
+        "pkg-17-award-celebration-qq_20260708150411_asset_image_mrn9wwcn_w.png": {
+          "height": 689,
+          "rotated": true,
+          "sourceHeight": 257,
+          "sourceWidth": 689,
+          "width": 257,
+          "x": 2643,
+          "y": 2433
+        },
+        "pkg-17-award-celebration-qq_20260708150413_asset_image_mrn9wskj_v.png": {
+          "height": 502,
+          "rotated": true,
+          "sourceHeight": 213,
+          "sourceWidth": 502,
+          "width": 213,
+          "x": 2369,
+          "y": 2681
+        },
+        "pkg-17-award-celebration-qq_20260708150417_asset_image_mrug3f9y_1j.png": {
+          "height": 713,
+          "rotated": true,
+          "sourceHeight": 251,
+          "sourceWidth": 713,
+          "width": 251,
+          "x": 2908,
+          "y": 2014
+        },
+        "pkg-17-award-celebration-qq_20260708150419_asset_image_mrug3kr9_1k.png": {
+          "height": 453,
+          "rotated": true,
+          "sourceHeight": 208,
+          "sourceWidth": 453,
+          "width": 208,
+          "x": 2908,
+          "y": 2735
+        },
+        "pkg-17-award-celebration-shine_asset_image_mrbrfpft_1m.png": {
+          "height": 62,
+          "rotated": true,
+          "sourceHeight": 61,
+          "sourceWidth": 62,
+          "width": 61,
+          "x": 2273,
+          "y": 1141
+        },
+        "pkg-17-award-celebration-sw_stone1_asset_image_mrebxd3p_a.png": {
+          "height": 54,
+          "rotated": false,
+          "sourceHeight": 54,
+          "sourceWidth": 57,
+          "width": 57,
+          "x": 2014,
+          "y": 1425
+        },
+        "pkg-17-award-celebration-sw_stone1_asset_image_mrug1gve_1h.png": {
+          "height": 54,
+          "rotated": false,
+          "sourceHeight": 54,
+          "sourceWidth": 57,
+          "width": 57,
+          "x": 1920,
+          "y": 2458
+        },
+        "pkg-17-award-celebration-sw_stone7_asset_image_mrvkal6r_1i.png": {
+          "height": 74,
+          "rotated": true,
+          "sourceHeight": 69,
+          "sourceWidth": 74,
+          "width": 69,
+          "x": 1618,
+          "y": 2872
+        },
+        "pkg-17-award-celebration-sw_stone9_asset_image_mrvkkyjs_1v.png": {
+          "height": 90,
+          "rotated": true,
+          "sourceHeight": 76,
+          "sourceWidth": 90,
+          "width": 76,
+          "x": 1832,
+          "y": 2632
+        },
+        "pkg-17-award-celebration-x.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 2590,
+          "y": 2681
+        },
+        "pkg-17-award-celebration.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 2590,
+          "y": 2720
+        },
+        "pkg-9-minecart2-10_1_asset_image_ms7b3znr_i.disabled.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 172,
+          "x": 1504,
+          "y": 2407
+        },
+        "pkg-9-minecart2-10_1_asset_image_ms7b3znr_i.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 172,
+          "x": 2161,
+          "y": 2986
+        },
+        "pkg-9-minecart2-10_1_asset_image_ms7b3znr_i.spinBlur.png": {
+          "height": 172,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 130,
+          "x": 2538,
+          "y": 2014
+        },
+        "pkg-9-minecart2-a_1_asset_image_ms7afho8_3.disabled.png": {
+          "height": 172,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 130,
+          "x": 2676,
+          "y": 2014
+        },
+        "pkg-9-minecart2-a_1_asset_image_ms7afho8_3.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 172,
+          "x": 6,
+          "y": 3208
+        },
+        "pkg-9-minecart2-a_1_asset_image_ms7afho8_3.spinBlur.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 172,
+          "x": 186,
+          "y": 3208
+        },
+        "pkg-9-minecart2-BO.disabled.png": {
+          "height": 160,
+          "rotated": false,
+          "sourceHeight": 160,
+          "sourceWidth": 180,
+          "width": 180,
+          "x": 1275,
+          "y": 3178
+        },
+        "pkg-9-minecart2-BO.png": {
+          "height": 160,
+          "rotated": false,
+          "sourceHeight": 160,
+          "sourceWidth": 180,
+          "width": 180,
+          "x": 1463,
+          "y": 3178
+        },
+        "pkg-9-minecart2-BO.spinBlur.png": {
+          "height": 160,
+          "rotated": false,
+          "sourceHeight": 160,
+          "sourceWidth": 180,
+          "width": 180,
+          "x": 1651,
+          "y": 3178
+        },
+        "pkg-9-minecart2-CL.disabled.png": {
+          "height": 160,
+          "rotated": false,
+          "sourceHeight": 160,
+          "sourceWidth": 174,
+          "width": 174,
+          "x": 2161,
+          "y": 3124
+        },
+        "pkg-9-minecart2-CL.png": {
+          "height": 174,
+          "rotated": true,
+          "sourceHeight": 160,
+          "sourceWidth": 174,
+          "width": 160,
+          "x": 2590,
+          "y": 3130
+        },
+        "pkg-9-minecart2-CL.spinBlur.png": {
+          "height": 174,
+          "rotated": true,
+          "sourceHeight": 160,
+          "sourceWidth": 174,
+          "width": 160,
+          "x": 3215,
+          "y": 6
+        },
+        "pkg-9-minecart2-CO.disabled.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 172,
+          "x": 366,
+          "y": 3208
+        },
+        "pkg-9-minecart2-CO.spinBlur.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 172,
+          "x": 546,
+          "y": 3208
+        },
+        "pkg-9-minecart2-coin_0000_0.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 2590,
+          "y": 2759
+        },
+        "pkg-9-minecart2-coin_0001_1.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 2590,
+          "y": 2798
+        },
+        "pkg-9-minecart2-coin_0002_2.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 2590,
+          "y": 2837
+        },
+        "pkg-9-minecart2-coin_0003_3.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 2590,
+          "y": 2876
+        },
+        "pkg-9-minecart2-coin_0004_4.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 2590,
+          "y": 2915
+        },
+        "pkg-9-minecart2-coin_0005_5.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 2590,
+          "y": 2954
+        },
+        "pkg-9-minecart2-coin_0006_6.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 2590,
+          "y": 2993
+        },
+        "pkg-9-minecart2-coin_0007_7.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 2590,
+          "y": 3032
+        },
+        "pkg-9-minecart2-coin_0008_8.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 2590,
+          "y": 3071
+        },
+        "pkg-9-minecart2-coin_0009_9.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 1839,
+          "y": 3292
+        },
+        "pkg-9-minecart2-coin_0010_x.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 1878,
+          "y": 3292
+        },
+        "pkg-9-minecart2-coin_0011_-.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 1917,
+          "y": 3292
+        },
+        "pkg-9-minecart2-coin_0012_+.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 31,
+          "x": 1956,
+          "y": 3292
+        },
+        "pkg-9-minecart2-coin_0013_,.png": {
+          "height": 43,
+          "rotated": false,
+          "sourceHeight": 43,
+          "sourceWidth": 13,
+          "width": 13,
+          "x": 1920,
+          "y": 2407
+        },
+        "pkg-9-minecart2-coin_0014_..png": {
+          "height": 13,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 13,
+          "width": 43,
+          "x": 889,
+          "y": 233
+        },
+        "pkg-9-minecart2-H1.disabled.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 174,
+          "x": 726,
+          "y": 3208
+        },
+        "pkg-9-minecart2-H1.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 174,
+          "x": 908,
+          "y": 3208
+        },
+        "pkg-9-minecart2-H1.spinBlur.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 174,
+          "x": 1090,
+          "y": 3200
+        },
+        "pkg-9-minecart2-H2.disabled.png": {
+          "height": 174,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 130,
+          "x": 2758,
+          "y": 3130
+        },
+        "pkg-9-minecart2-H2.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 174,
+          "x": 2896,
+          "y": 3196
+        },
+        "pkg-9-minecart2-H2.spinBlur.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 174,
+          "x": 3078,
+          "y": 3196
+        },
+        "pkg-9-minecart2-H3.disabled.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 174,
+          "x": 2343,
+          "y": 3191
+        },
+        "pkg-9-minecart2-H3.png": {
+          "height": 174,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 130,
+          "x": 3215,
+          "y": 188
+        },
+        "pkg-9-minecart2-H3.spinBlur.png": {
+          "height": 174,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 130,
+          "x": 3215,
+          "y": 370
+        },
+        "pkg-9-minecart2-H4.disabled.png": {
+          "height": 174,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 130,
+          "x": 3215,
+          "y": 552
+        },
+        "pkg-9-minecart2-H4.png": {
+          "height": 174,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 130,
+          "x": 3215,
+          "y": 734
+        },
+        "pkg-9-minecart2-H4.spinBlur.png": {
+          "height": 174,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 130,
+          "x": 3215,
+          "y": 916
+        },
+        "pkg-9-minecart2-H5.disabled.png": {
+          "height": 174,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 130,
+          "x": 3215,
+          "y": 1098
+        },
+        "pkg-9-minecart2-H5.png": {
+          "height": 174,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 130,
+          "x": 3215,
+          "y": 1280
+        },
+        "pkg-9-minecart2-H5.spinBlur.png": {
+          "height": 174,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 174,
+          "width": 130,
+          "x": 3215,
+          "y": 1462
+        },
+        "pkg-9-minecart2-j_1_asset_image_ms7b5jc0_s.disabled.png": {
+          "height": 172,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 130,
+          "x": 3215,
+          "y": 1644
+        },
+        "pkg-9-minecart2-j_1_asset_image_ms7b5jc0_s.png": {
+          "height": 172,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 130,
+          "x": 3215,
+          "y": 1824
+        },
+        "pkg-9-minecart2-j_1_asset_image_ms7b5jc0_s.spinBlur.png": {
+          "height": 172,
+          "rotated": true,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 130,
+          "x": 3215,
+          "y": 2004
+        },
+        "pkg-9-minecart2-k_1_asset_image_ms7b77jg_12.disabled.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 172,
+          "x": 3167,
+          "y": 2184
+        },
+        "pkg-9-minecart2-k_1_asset_image_ms7b77jg_12.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 172,
+          "x": 3167,
+          "y": 2322
+        },
+        "pkg-9-minecart2-k_1_asset_image_ms7b77jg_12.spinBlur.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 172,
+          "x": 3167,
+          "y": 2460
+        },
+        "pkg-9-minecart2-q_1_asset_image_ms7b9y2n_1c.disabled.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 172,
+          "x": 3167,
+          "y": 2598
+        },
+        "pkg-9-minecart2-q_1_asset_image_ms7b9y2n_1c.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 172,
+          "x": 3124,
+          "y": 2736
+        },
+        "pkg-9-minecart2-q_1_asset_image_ms7b9y2n_1c.spinBlur.png": {
+          "height": 130,
+          "rotated": false,
+          "sourceHeight": 130,
+          "sourceWidth": 172,
+          "width": 172,
+          "x": 3124,
+          "y": 2874
+        },
+        "pkg-9-minecart2-SC.disabled.png": {
+          "height": 150,
+          "rotated": false,
+          "sourceHeight": 150,
+          "sourceWidth": 180,
+          "width": 180,
+          "x": 3124,
+          "y": 3012
+        },
+        "pkg-9-minecart2-SC.png": {
+          "height": 150,
+          "rotated": false,
+          "sourceHeight": 150,
+          "sourceWidth": 180,
+          "width": 180,
+          "x": 6,
+          "y": 3346
+        },
+        "pkg-9-minecart2-SC.spinBlur.png": {
+          "height": 150,
+          "rotated": false,
+          "sourceHeight": 150,
+          "sourceWidth": 180,
+          "width": 180,
+          "x": 194,
+          "y": 3346
+        },
+        "pkg-9-minecart2-WL.disabled.png": {
+          "height": 180,
+          "rotated": false,
+          "sourceHeight": 180,
+          "sourceWidth": 174,
+          "width": 174,
+          "x": 2525,
+          "y": 3312
+        },
+        "pkg-9-minecart2-WL.png": {
+          "height": 174,
+          "rotated": true,
+          "sourceHeight": 180,
+          "sourceWidth": 174,
+          "width": 180,
+          "x": 2707,
+          "y": 3312
+        },
+        "pkg-9-minecart2-WL.spinBlur.png": {
+          "height": 180,
+          "rotated": false,
+          "sourceHeight": 180,
+          "sourceWidth": 174,
+          "width": 174,
+          "x": 1995,
+          "y": 3292
+        },
+        "sd1.png": {
+          "height": 2000,
+          "rotated": true,
+          "sourceHeight": 167,
+          "sourceWidth": 2000,
+          "width": 167,
+          "x": 3383,
+          "y": 6
+        },
+        "x.png": {
+          "height": 31,
+          "rotated": true,
+          "sourceHeight": 43,
+          "sourceWidth": 31,
+          "width": 43,
+          "x": 1744,
+          "y": 2730
+        }
+      },
+      "id": "atlas-initial-ac1b5c09-0",
+      "image": {
+        "byteLength": 1386858,
+        "height": 3502,
+        "mediaType": "image/webp",
+        "path": "assets/9bb6b8dcc4c486e4612bb1b2f58ad84b834af578de560b74c24a57294ff38cce.webp",
+        "sha256": "9bb6b8dcc4c486e4612bb1b2f58ad84b834af578de560b74c24a57294ff38cce",
+        "width": 3556
+      },
+      "owner": "initial"
+    },
+    {
+      "frames": {
+        "free13.jpg": {
+          "height": 2000,
+          "rotated": false,
+          "sourceHeight": 2000,
+          "sourceWidth": 2000,
+          "width": 2000,
+          "x": 6,
+          "y": 6
+        }
+      },
+      "id": "atlas-initial-ac1b5c09-1",
+      "image": {
+        "byteLength": 419370,
+        "height": 2012,
+        "mediaType": "image/webp",
+        "path": "assets/567fda91e41916ac56846f258961ca3a4df062b6309f92016b68225d6f290394.webp",
+        "sha256": "567fda91e41916ac56846f258961ca3a4df062b6309f92016b68225d6f290394",
+        "width": 2012
+      },
+      "owner": "initial"
+    },
+    {
+      "frames": {
+        "bonusgame1.png": {
+          "height": 149,
+          "rotated": false,
+          "sourceHeight": 149,
+          "sourceWidth": 2000,
+          "width": 2000,
+          "x": 6,
+          "y": 6
+        },
+        "bonusgame2.png": {
+          "height": 728,
+          "rotated": false,
+          "sourceHeight": 728,
+          "sourceWidth": 2000,
+          "width": 2000,
+          "x": 6,
+          "y": 163
+        },
+        "free10.jpg": {
+          "height": 2000,
+          "rotated": false,
+          "sourceHeight": 2000,
+          "sourceWidth": 2000,
+          "width": 2000,
+          "x": 6,
+          "y": 899
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-0.png": {
+          "height": 141,
+          "rotated": false,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 109,
+          "x": 2014,
+          "y": 6
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-1.png": {
+          "height": 141,
+          "rotated": false,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 109,
+          "x": 2014,
+          "y": 155
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-2-2.png": {
+          "height": 141,
+          "rotated": false,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 109,
+          "x": 2014,
+          "y": 304
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-2.png": {
+          "height": 44,
+          "rotated": false,
+          "sourceHeight": 44,
+          "sourceWidth": 109,
+          "width": 109,
+          "x": 2014,
+          "y": 453
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-3-2.png": {
+          "height": 141,
+          "rotated": false,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 109,
+          "x": 2014,
+          "y": 505
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-3.png": {
+          "height": 159,
+          "rotated": false,
+          "sourceHeight": 159,
+          "sourceWidth": 45,
+          "width": 45,
+          "x": 2014,
+          "y": 654
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-4-2.png": {
+          "height": 141,
+          "rotated": false,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 109,
+          "x": 2014,
+          "y": 821
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-4.png": {
+          "height": 109,
+          "rotated": false,
+          "sourceHeight": 109,
+          "sourceWidth": 109,
+          "width": 109,
+          "x": 2014,
+          "y": 970
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-5.png": {
+          "height": 141,
+          "rotated": false,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 109,
+          "x": 2014,
+          "y": 1087
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-6.png": {
+          "height": 141,
+          "rotated": false,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 109,
+          "x": 2014,
+          "y": 1236
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-7.png": {
+          "height": 141,
+          "rotated": false,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 109,
+          "x": 2014,
+          "y": 1385
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-8.png": {
+          "height": 141,
+          "rotated": false,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 109,
+          "x": 2014,
+          "y": 1534
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-9.png": {
+          "height": 141,
+          "rotated": false,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 109,
+          "x": 2014,
+          "y": 1683
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-x.png": {
+          "height": 100,
+          "rotated": true,
+          "sourceHeight": 104,
+          "sourceWidth": 100,
+          "width": 104,
+          "x": 2014,
+          "y": 1832
+        },
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60.png": {
+          "height": 141,
+          "rotated": false,
+          "sourceHeight": 141,
+          "sourceWidth": 45,
+          "width": 45,
+          "x": 2067,
+          "y": 654
+        }
+      },
+      "id": "atlas-mode-bonusgame-67d8bd77-0",
+      "image": {
+        "byteLength": 441990,
+        "height": 2905,
+        "mediaType": "image/webp",
+        "path": "assets/b3d7b02c252de27a7fcbe4502bf3b0f3f3a0947414a2295f5f93711967ab08ef.webp",
+        "sha256": "b3d7b02c252de27a7fcbe4502bf3b0f3f3a0947414a2295f5f93711967ab08ef",
+        "width": 2129
+      },
+      "owner": "mode:BonusGame"
+    },
+    {
+      "frames": {
+        "free11.jpg": {
+          "height": 2000,
+          "rotated": false,
+          "sourceHeight": 2000,
+          "sourceWidth": 2000,
+          "width": 2000,
+          "x": 6,
+          "y": 6
+        },
+        "freegame1.png": {
+          "height": 2000,
+          "rotated": true,
+          "sourceHeight": 149,
+          "sourceWidth": 2000,
+          "width": 149,
+          "x": 2014,
+          "y": 6
+        },
+        "freegame2.png": {
+          "height": 657,
+          "rotated": false,
+          "sourceHeight": 657,
+          "sourceWidth": 2000,
+          "width": 2000,
+          "x": 6,
+          "y": 2014
+        },
+        "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-0.png": {
+          "height": 109,
+          "rotated": true,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 141,
+          "x": 2014,
+          "y": 2014
+        },
+        "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-1.png": {
+          "height": 109,
+          "rotated": true,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 141,
+          "x": 2014,
+          "y": 2131
+        },
+        "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-2-2.png": {
+          "height": 109,
+          "rotated": true,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 141,
+          "x": 2014,
+          "y": 2248
+        },
+        "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-2.png": {
+          "height": 44,
+          "rotated": false,
+          "sourceHeight": 44,
+          "sourceWidth": 109,
+          "width": 109,
+          "x": 2014,
+          "y": 2365
+        },
+        "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-3-2.png": {
+          "height": 109,
+          "rotated": true,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 141,
+          "x": 2014,
+          "y": 2417
+        },
+        "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-3.png": {
+          "height": 159,
+          "rotated": false,
+          "sourceHeight": 159,
+          "sourceWidth": 45,
+          "width": 45,
+          "x": 2171,
+          "y": 6
+        },
+        "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-4-2.png": {
+          "height": 109,
+          "rotated": true,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 141,
+          "x": 2014,
+          "y": 2534
+        },
+        "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-4.png": {
+          "height": 109,
+          "rotated": false,
+          "sourceHeight": 109,
+          "sourceWidth": 109,
+          "width": 109,
+          "x": 2224,
+          "y": 6
+        },
+        "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-5.png": {
+          "height": 141,
+          "rotated": false,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 109,
+          "x": 2224,
+          "y": 123
+        },
+        "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-6.png": {
+          "height": 109,
+          "rotated": true,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 141,
+          "x": 2171,
+          "y": 272
+        },
+        "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-7.png": {
+          "height": 109,
+          "rotated": true,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 141,
+          "x": 2171,
+          "y": 389
+        },
+        "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-8.png": {
+          "height": 109,
+          "rotated": true,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 141,
+          "x": 2171,
+          "y": 506
+        },
+        "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-9.png": {
+          "height": 109,
+          "rotated": true,
+          "sourceHeight": 141,
+          "sourceWidth": 109,
+          "width": 141,
+          "x": 2171,
+          "y": 623
+        },
+        "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-x.png": {
+          "height": 100,
+          "rotated": true,
+          "sourceHeight": 104,
+          "sourceWidth": 100,
+          "width": 104,
+          "x": 2171,
+          "y": 740
+        },
+        "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60.png": {
+          "height": 141,
+          "rotated": false,
+          "sourceHeight": 141,
+          "sourceWidth": 45,
+          "width": 45,
+          "x": 2283,
+          "y": 740
+        }
+      },
+      "id": "atlas-mode-freegame-325c3c43-0",
+      "image": {
+        "byteLength": 542456,
+        "height": 2677,
+        "mediaType": "image/webp",
+        "path": "assets/71fcee679d1de4f8a3ad621e3bb58c0250672922a83a0acba6b0e33c268b0e4d.webp",
+        "sha256": "71fcee679d1de4f8a3ad621e3bb58c0250672922a83a0acba6b0e33c268b0e4d",
+        "width": 2339
+      },
+      "owner": "mode:FreeGame"
+    }
+  ],
+  "chunks": [
+    {
+      "atlases": [
+        "atlas-initial-ac1b5c09-0",
+        "atlas-initial-ac1b5c09-1"
+      ],
+      "dependencies": [],
+      "externalAssets": [
+        "bg.png",
+        "car.png",
+        "pkg-38-popup-115ec31d7fdc4a0bbcfe823240183f60-pop_ups.png",
+        "pkg-38-popup-125ec31d7fdc4a0bbcfe823240183f60-pop_ups.png",
+        "pkg-9-minecart2-Symbol.png",
+        "reel_collect.png",
+        "reel_conveyor.png",
+        "specialfeature.png"
+      ],
+      "id": "initial",
+      "metadata": {
+        "byteLength": 255309,
+        "mediaType": "application/zip",
+        "path": "chunks/initial-ac1b5c09.ddb461e9f0eeca69c80c79afbbdb765fc5e7b5ff72a50e88554c4d105715eaf2.zip",
+        "sha256": "ddb461e9f0eeca69c80c79afbbdb765fc5e7b5ff72a50e88554c4d105715eaf2"
+      },
+      "owner": "initial"
+    },
+    {
+      "atlases": [
+        "atlas-mode-freegame-325c3c43-0"
+      ],
+      "dependencies": [
+        "initial"
+      ],
+      "externalAssets": [
+        "fg.png",
+        "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-pop_ups.png"
+      ],
+      "id": "mode:FreeGame",
+      "metadata": {
+        "byteLength": 25977,
+        "mediaType": "application/zip",
+        "path": "chunks/mode-freegame-325c3c43.a082808e44e33a7b863a5abf9dbe3d3c4f5ca2055120ced4d2ade0d1bd9420c0.zip",
+        "sha256": "a082808e44e33a7b863a5abf9dbe3d3c4f5ca2055120ced4d2ade0d1bd9420c0"
+      },
+      "owner": "mode:FreeGame"
+    },
+    {
+      "atlases": [
+        "atlas-mode-bonusgame-67d8bd77-0"
+      ],
+      "dependencies": [
+        "initial"
+      ],
+      "externalAssets": [
+        "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-pop_ups.png"
+      ],
+      "id": "mode:BonusGame",
+      "metadata": {
+        "byteLength": 13117,
+        "mediaType": "application/zip",
+        "path": "chunks/mode-bonusgame-67d8bd77.1bc20efaf5947b150654fdfc48df278d4e06ab16b16a4bf0625889be7676becc.zip",
+        "sha256": "1bc20efaf5947b150654fdfc48df278d4e06ab16b16a4bf0625889be7676becc"
+      },
+      "owner": "mode:BonusGame"
+    },
+    {
+      "atlases": [],
+      "dependencies": [],
+      "externalAssets": [
+        "video_4.mp4",
+        "video3.mp4"
+      ],
+      "id": "media",
+      "metadata": null,
+      "owner": "media"
+    }
+  ],
+  "initialChunk": "initial",
+  "initialMode": "BaseGame",
+  "kind": "scene-layout-delivery",
+  "layoutId": "new-layout",
+  "version": 1
+}

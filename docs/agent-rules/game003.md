@@ -5,14 +5,12 @@
 ## 固定入口与资源 ownership
 
 - `apps/game003v2` 严格只支持显式 `skin=2`；回合必须先 finalize immutable `SlotOperationPlanV2`，再由 rendercore coordinator 执行。
-- 唯一正式美术、layout、公开轮带、symbol 与 popup 输入是 `assets/minecart2` 的 mapped Scene Layout package；不得新增旧皮肤目录、平铺资源副本或 fallback。
+- 唯一正式美术、layout、公开轮带、symbol 与 popup 输入是 `assets/minecart2` 的 Scene Layout CDN delivery；app 只加载 delivery manifest 并委托 RenderCore，不得新增旧皮肤目录、逐文件表、平铺资源副本或 fallback。
 - symbol package id、reelSet 与 popup id 只从当前 package 的 initial mode typed binding 读取；不得锁定历史 `game003-s1` 或猜测 namespace。
-- `assets/minecart2` 的当前美术 files/bytes 是 game003 权威交付；首次可由优化
-  ZIP 完整接收，之后允许美术直接替换/增加文件。game runtime/build 天然不比对
-  map `sha256`/`byteLength`、不因未引用 entry/file 阻断，不依赖 app 传 policy 才
-  关闭 integrity gate；实际引用 logical key 仍必须路由到安全存在的 path 并通过
-  资源 parser/decoder。资源分组和 generated Vite URL 表由对应工具同步，生成物
-  禁止手改。
+- `assets/minecart2` 的当前 delivery files/bytes 是 game003 权威交付，由
+  `gamelayoutpkgcli --delivery-dir` 从 production ZIP 生成并用 `--check` 校验。game runtime/build
+  不比对 manifest hash/size；实际引用 logical key 仍必须路由到安全存在的 metadata、atlas frame
+  或 external path 并通过资源 parser/decoder。生成物禁止手改。
 - live server 与 gamecode 来自 `config/game-runtime.manifest.json`，URL 中 `serverUrl` 显式失败。
 - 首屏遵守 `loading-ui.md`：99% 准备 package ownership 和 live session，100% 后创建 framework/Pixi；失败与 destroy 都必须释放 resource/session ownership。
 

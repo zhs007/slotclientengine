@@ -2,58 +2,48 @@ import type {
   GameLoadingResource,
   GameLoadingResourceContext,
 } from "@slotclientengine/gameloading";
-import { createSceneLayoutPackageResource } from "@slotclientengine/rendercore/scene-layout/core";
-import craveMap from "../../../assets/crave/assets.map.json" with { type: "json" };
+import { loadSceneLayoutDeliveryFromUrl } from "@slotclientengine/rendercore/scene-layout/core";
 
-const ROOT_FILES = Object.freeze(["layout.manifest.json", "assets.map.json"]);
-const mappedFiles: Readonly<Record<string, { readonly path: string }>> =
-  craveMap.files;
+const DELIVERY_MANIFEST = "delivery.manifest.json";
+const DELIVERY_RESOURCE_ID = `crave:${DELIVERY_MANIFEST}`;
 
 export function createCraveLoadingResources(): readonly GameLoadingResource[] {
-  const paths = [
-    ...ROOT_FILES,
-    ...new Set(Object.values(mappedFiles).map((entry) => entry.path)),
-  ];
-  return Object.freeze(
-    paths.map((path) =>
-      Object.freeze({
-        id: `crave:${path}`,
-        url: path,
-        kind: "binary" as const,
-        async load({ signal }: GameLoadingResourceContext) {
-          const response = await fetch(new URL(path, document.baseURI), {
-            signal,
-          });
-          if (response.status === 404) return null;
-          if (!response.ok)
-            throw new Error(`Crave fetch failed (${response.status}): ${path}`);
-          return response.arrayBuffer();
-        },
-      }),
-    ),
-  );
+  return Object.freeze([
+    Object.freeze({
+      id: DELIVERY_RESOURCE_ID,
+      url: DELIVERY_MANIFEST,
+      kind: "binary" as const,
+      async load({ signal }: GameLoadingResourceContext) {
+        const response = await fetch(
+          new URL(DELIVERY_MANIFEST, document.baseURI),
+          { signal },
+        );
+        if (response.status === 404) return null;
+        if (!response.ok)
+          throw new Error(
+            `Crave fetch failed (${response.status}): ${DELIVERY_MANIFEST}`,
+          );
+        return response.arrayBuffer();
+      },
+    }),
+  ]);
 }
 
 export async function createCraveResource(
   loaded: ReadonlyMap<string, unknown>,
+  signal?: AbortSignal,
 ) {
-  const files = new Map<string, Uint8Array>();
-  for (const path of [
-    ...ROOT_FILES,
-    ...new Set(Object.values(mappedFiles).map((entry) => entry.path)),
-  ]) {
-    const value = loaded.get(`crave:${path}`);
-    if (value instanceof ArrayBuffer)
-      files.set(path, new Uint8Array(value.slice(0)));
-  }
-  return createSceneLayoutPackageResource({
-    files,
-    lazyRuntimeResources: true,
-    loadRuntimeResourceBytes: async (logicalKey) => {
-      const path = mappedFiles[logicalKey]?.path;
-      const bytes = path ? files.get(path) : undefined;
-      if (!bytes) throw new Error(`Missing Crave resource: ${logicalKey}`);
-      return bytes.slice();
-    },
+  const value = loaded.get(DELIVERY_RESOURCE_ID);
+  if (!(value instanceof ArrayBuffer))
+    throw new Error("Crave delivery manifest was not loaded.");
+  return loadSceneLayoutDeliveryFromUrl({
+    manifestUrl: new URL(DELIVERY_MANIFEST, document.baseURI),
+    manifestBytes: new Uint8Array(value.slice(0)),
+    ...(signal
+      ? {
+          fetchImpl: ((input: RequestInfo | URL, init?: RequestInit) =>
+            globalThis.fetch(input, { ...init, signal })) as typeof fetch,
+        }
+      : {}),
   });
 }

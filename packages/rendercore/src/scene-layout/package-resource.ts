@@ -261,6 +261,7 @@ export async function createSceneLayoutPackageResource(options: {
   readonly loadRuntimeResourceBytes?: (
     logicalKey: string,
   ) => Promise<Uint8Array>;
+  readonly resolveAssetUrl?: (logicalKey: string) => string | undefined;
 }): Promise<SceneLayoutPackageResource> {
   const manifestValue =
     options.manifest ??
@@ -283,6 +284,9 @@ export async function createSceneLayoutPackageResource(options: {
     loadSymbolTextures: options.loadSymbolTextures,
     lazyRuntimeResources: options.lazyRuntimeResources,
     ...(loadRuntimeResourceBytes ? { loadRuntimeResourceBytes } : {}),
+    ...(options.resolveAssetUrl
+      ? { resolveAssetUrl: options.resolveAssetUrl }
+      : {}),
   });
 }
 
@@ -295,6 +299,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
   readonly loadRuntimeResourceBytes?: (
     logicalKey: string,
   ) => Promise<Uint8Array>;
+  readonly resolveAssetUrl?: (logicalKey: string) => string | undefined;
 }): Promise<SceneLayoutPackageResource> {
   const sourceManifestValue =
     options.manifest ??
@@ -336,6 +341,9 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
             ...(options.decodeImage
               ? { decodeImage: options.decodeImage }
               : {}),
+            ...(options.resolveAssetUrl
+              ? { resolveAssetUrl: options.resolveAssetUrl }
+              : {}),
           })
         : await createImageStringResourceFromFiles({
             files: preparedFiles,
@@ -362,6 +370,9 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
             files: mappedImageStringFiles(files, resource.manifest),
             ...(options.decodeImage
               ? { decodeImage: options.decodeImage }
+              : {}),
+            ...(options.resolveAssetUrl
+              ? { resolveAssetUrl: options.resolveAssetUrl }
               : {}),
           })
         : await createImageStringResourceFromFiles({
@@ -395,6 +406,9 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
         packageManifest: nestedManifest,
         files: preparedFiles,
         loadTextures: options.loadSymbolTextures,
+        ...(options.resolveAssetUrl
+          ? { resolveAssetUrl: options.resolveAssetUrl }
+          : {}),
       });
       if (manifest.symbolPackage) symbolPackage = resource;
       else symbolPackages[bindingId] = resource;
@@ -422,6 +436,9 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
             ? mappedPopupFiles(files, popup.manifest, nestedManifest)
             : nestedFiles,
           ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
+          ...(options.resolveAssetUrl
+            ? { resolveAssetUrl: options.resolveAssetUrl }
+            : {}),
         });
     }
 
@@ -439,12 +456,14 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
       const cacheKey = `${filePath}\0${mediaType}`;
       let url = audioUrls.get(cacheKey);
       if (!url) {
-        url = createObjectUrl(
-          requireBytes(files, filePath),
-          filePath,
-          objectUrls,
-          mediaType,
-        );
+        url =
+          options.resolveAssetUrl?.(filePath) ??
+          createObjectUrl(
+            requireBytes(files, filePath),
+            filePath,
+            objectUrls,
+            mediaType,
+          );
         audioUrls.set(cacheKey, url);
       }
       return url;
@@ -570,11 +589,13 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
             const filePath = mapped
               ? asset.path
               : resolvePackagePath(resource.project, asset.path);
-            assetUrls[asset.path] = createObjectUrl(
-              requireBytes(files, filePath),
-              filePath,
-              objectUrls,
-            );
+            assetUrls[asset.path] =
+              options.resolveAssetUrl?.(filePath) ??
+              createObjectUrl(
+                requireBytes(files, filePath),
+                filePath,
+                objectUrls,
+              );
           }
           vniResources[resource.project] = Object.freeze({
             project,
@@ -584,11 +605,13 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
         continue;
       }
       if (resource.kind === "image") {
-        imageModules[resource.path] ??= createObjectUrl(
-          requireBytes(files, resource.path),
-          resource.path,
-          objectUrls,
-        );
+        imageModules[resource.path] ??=
+          options.resolveAssetUrl?.(resource.path) ??
+          createObjectUrl(
+            requireBytes(files, resource.path),
+            resource.path,
+            objectUrls,
+          );
         continue;
       }
       skeletonModules[resource.skeleton] ??= parseJsonBytes(
@@ -600,11 +623,9 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
         resource.atlas,
       );
       for (const path of Object.values(resource.textures)) {
-        textureModules[path] ??= createObjectUrl(
-          requireBytes(files, path),
-          path,
-          objectUrls,
-        );
+        textureModules[path] ??=
+          options.resolveAssetUrl?.(path) ??
+          createObjectUrl(requireBytes(files, path), path, objectUrls);
       }
     }
     for (const resource of options.lazyRuntimeResources
@@ -622,11 +643,13 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
             const filePath = mapped
               ? asset.path
               : resolvePackagePath(resource.project, asset.path);
-            assetUrls[asset.path] = createObjectUrl(
-              requireBytes(files, filePath),
-              filePath,
-              objectUrls,
-            );
+            assetUrls[asset.path] =
+              options.resolveAssetUrl?.(filePath) ??
+              createObjectUrl(
+                requireBytes(files, filePath),
+                filePath,
+                objectUrls,
+              );
           }
           vniResources[resource.project] = Object.freeze({
             project,
@@ -636,27 +659,28 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
         continue;
       }
       if (resource.kind === "image") {
-        imageModules[resource.path] ??= createObjectUrl(
-          requireBytes(files, resource.path),
-          resource.path,
-          objectUrls,
-        );
+        imageModules[resource.path] ??=
+          options.resolveAssetUrl?.(resource.path) ??
+          createObjectUrl(
+            requireBytes(files, resource.path),
+            resource.path,
+            objectUrls,
+          );
         continue;
       }
       if (resource.kind === "video") {
-        const bytes = requireBytes(files, resource.path);
+        const resolved = options.resolveAssetUrl?.(resource.path);
+        const bytes = resolved ? undefined : requireBytes(files, resource.path);
         if (
-          bytes.byteLength < 12 ||
-          String.fromCharCode(...bytes.slice(4, 8)) !== "ftyp"
+          bytes &&
+          (bytes.byteLength < 12 ||
+            String.fromCharCode(...bytes.slice(4, 8)) !== "ftyp")
         )
           throw new SceneLayoutError(
             `Scene runtime video is not an ISO MP4: ${resource.path}.`,
           );
-        videoModules[resource.path] ??= createObjectUrl(
-          bytes,
-          resource.path,
-          objectUrls,
-        );
+        videoModules[resource.path] ??=
+          resolved ?? createObjectUrl(bytes!, resource.path, objectUrls);
         continue;
       }
       skeletonModules[resource.skeleton] ??= parseJsonBytes(
@@ -668,29 +692,26 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
         resource.atlas,
       );
       for (const path of Object.values(resource.textures))
-        textureModules[path] ??= createObjectUrl(
-          requireBytes(files, path),
-          path,
-          objectUrls,
-        );
+        textureModules[path] ??=
+          options.resolveAssetUrl?.(path) ??
+          createObjectUrl(requireBytes(files, path), path, objectUrls);
     }
     for (const transition of manifest.gameModes?.transitions ?? []) {
       if ("kind" in transition.overlay) continue;
       const resource = transition.overlay.resource;
       if (resource.kind === "video") {
-        const bytes = requireBytes(files, resource.path);
+        const resolved = options.resolveAssetUrl?.(resource.path);
+        const bytes = resolved ? undefined : requireBytes(files, resource.path);
         if (
-          bytes.byteLength < 12 ||
-          String.fromCharCode(...bytes.slice(4, 8)) !== "ftyp"
+          bytes &&
+          (bytes.byteLength < 12 ||
+            String.fromCharCode(...bytes.slice(4, 8)) !== "ftyp")
         )
           throw new SceneLayoutError(
             `Scene transition video is not an ISO MP4: ${resource.path}.`,
           );
-        videoModules[resource.path] ??= createObjectUrl(
-          bytes,
-          resource.path,
-          objectUrls,
-        );
+        videoModules[resource.path] ??=
+          resolved ?? createObjectUrl(bytes!, resource.path, objectUrls);
         continue;
       }
       skeletonModules[resource.skeleton] ??= parseJsonBytes(
@@ -702,11 +723,9 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
         resource.atlas,
       );
       for (const path of Object.values(resource.textures)) {
-        textureModules[path] ??= createObjectUrl(
-          requireBytes(files, path),
-          path,
-          objectUrls,
-        );
+        textureModules[path] ??=
+          options.resolveAssetUrl?.(path) ??
+          createObjectUrl(requireBytes(files, path), path, objectUrls);
       }
     }
 
@@ -802,6 +821,9 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
             ...(options.decodeImage
               ? { decodeImage: options.decodeImage }
               : {}),
+            ...(options.resolveAssetUrl
+              ? { resolveAssetUrl: options.resolveAssetUrl }
+              : {}),
           }).then(
             (resource) => {
               if (destroyed) {
@@ -874,6 +896,7 @@ async function prepareLazyRuntimeResource(options: {
   readonly objectUrls: string[];
   readonly lazyImageStrings: ImageStringResource[];
   readonly decodeImage?: DecodeImageStringImage;
+  readonly resolveAssetUrl?: (logicalKey: string) => string | undefined;
 }): Promise<SceneLayoutRuntimeResource> {
   const { key, spec, files, mapped, objectUrls } = options;
   const requireLazyBytes = async (path: string): Promise<Uint8Array> => {
@@ -888,25 +911,29 @@ async function prepareLazyRuntimeResource(options: {
   if (spec.kind === "image")
     return Object.freeze({
       kind: "image",
-      url: createObjectUrl(
-        await requireLazyBytes(spec.path),
-        spec.path,
-        objectUrls,
-      ),
+      url:
+        options.resolveAssetUrl?.(spec.path) ??
+        createObjectUrl(
+          await requireLazyBytes(spec.path),
+          spec.path,
+          objectUrls,
+        ),
       size: spec.size,
     });
   if (spec.kind === "video") {
-    const bytes = await requireLazyBytes(spec.path);
+    const resolved = options.resolveAssetUrl?.(spec.path);
+    const bytes = resolved ? undefined : await requireLazyBytes(spec.path);
     if (
-      bytes.byteLength < 12 ||
-      String.fromCharCode(...bytes.slice(4, 8)) !== "ftyp"
+      bytes &&
+      (bytes.byteLength < 12 ||
+        String.fromCharCode(...bytes.slice(4, 8)) !== "ftyp")
     )
       throw new SceneLayoutError(
         `Scene runtime video is not an ISO MP4: ${spec.path}.`,
       );
     return Object.freeze({
       kind: "video",
-      url: createObjectUrl(bytes, spec.path, objectUrls),
+      url: resolved ?? createObjectUrl(bytes!, spec.path, objectUrls),
       mimeType: "video/mp4",
     });
   }
@@ -921,11 +948,9 @@ async function prepareLazyRuntimeResource(options: {
     );
     const textureUrls: Record<string, string> = {};
     for (const [page, path] of Object.entries(spec.textures))
-      textureUrls[page] = createObjectUrl(
-        await requireLazyBytes(path),
-        path,
-        objectUrls,
-      );
+      textureUrls[page] =
+        options.resolveAssetUrl?.(path) ??
+        createObjectUrl(await requireLazyBytes(path), path, objectUrls);
     try {
       validateOfficialSpineResource({
         resource: { skeleton, atlasText, textureUrls },
@@ -953,11 +978,9 @@ async function prepareLazyRuntimeResource(options: {
       const path = mapped
         ? asset.path
         : resolvePackagePath(spec.project, asset.path);
-      assetUrls[asset.path] = createObjectUrl(
-        await requireLazyBytes(path),
-        path,
-        objectUrls,
-      );
+      assetUrls[asset.path] =
+        options.resolveAssetUrl?.(path) ??
+        createObjectUrl(await requireLazyBytes(path), path, objectUrls);
     }
     return Object.freeze({
       kind: "vni",
@@ -980,6 +1003,9 @@ async function prepareLazyRuntimeResource(options: {
         manifest: imageStringManifestValue,
         files: mappedImageStringFiles(options.lazyFiles, spec.manifest),
         ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
+        ...(options.resolveAssetUrl
+          ? { resolveAssetUrl: options.resolveAssetUrl }
+          : {}),
       })
     : await createImageStringResourceFromFiles({
         files: extractPrefixedFiles(files, directoryOf(spec.manifest)),

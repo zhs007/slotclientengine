@@ -1,4 +1,4 @@
-import { Assets, Sprite, Text, type Texture } from "pixi.js";
+import { Assets, Cache, Sprite, Text, type Texture } from "pixi.js";
 import { validateImageStringText } from "../image-string/data/index.js";
 import { createRenderMappedImageString } from "../symbol-image-string/mapped-display.js";
 import { SymbolAssetError } from "../symbol/errors.js";
@@ -150,7 +150,11 @@ export async function createSymbolValueDisplay(options: {
         `Symbol "${options.resource.symbol}" image display resource is invalid.`,
       );
     }
-    const sprite = new Sprite(await Assets.load<Texture>(url));
+    const sprite = new Sprite(
+      url.startsWith("scene-layout-delivery:") && Cache.has(url)
+        ? Cache.get<Texture>(url)
+        : await Assets.load<Texture>(url),
+    );
     sprite.anchor.set(0.5);
     sprite.position.set(spec.x, spec.y);
     return createStaticHandle({

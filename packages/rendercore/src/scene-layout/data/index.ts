@@ -5,6 +5,7 @@ export * from "../manifest-v3.js";
 export * from "../runtime-allocation.js";
 export * from "../geometry.js";
 export * from "./package-limits.js";
+export * from "./delivery.js";
 
 export type {
   SceneLayoutVariantId,

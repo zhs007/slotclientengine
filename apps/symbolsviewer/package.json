@@ -5,8 +5,8 @@
   "type": "module",
   "packageManager": "pnpm@10.0.0",
   "scripts": {
-    "generate:symbol-value-resources": "node -e \"console.log('game002 symbol resources are resolved from assets/crave/assets.map.json')\"",
-    "check:symbol-value-resources": "node -e \"console.log('game002 symbol resources are resolved from assets/crave/assets.map.json')\"",
+    "generate:symbol-value-resources": "node -e \"console.log('viewer fixtures are resolved from assets/fixtures/*-mapped/assets.map.json')\"",
+    "check:symbol-value-resources": "node -e \"console.log('viewer fixtures are resolved from assets/fixtures/*-mapped/assets.map.json')\"",
     "prepare:deps": "pnpm --filter @slotclientengine/rendercore build",
     "build": "pnpm run generate:symbol-value-resources && pnpm run prepare:deps && vite build",
     "dev": "pnpm run generate:symbol-value-resources && pnpm run prepare:deps && node ../../scripts/run-vite-dev.mjs",

@@ -5,7 +5,7 @@ import {
   SpineTexture,
   TextureAtlas,
 } from "@esotericsoftware/spine-pixi-v8";
-import { Assets, Container, type Texture } from "pixi.js";
+import { Assets, Cache, Container, type Texture } from "pixi.js";
 import { readSupportedSpineSkeletonVersion } from "./version.js";
 
 export interface RendercoreSpinePlayer {
@@ -442,10 +442,13 @@ async function loadOfficialSpineTexture(
 ): Promise<Texture> {
   let texture: Texture | null | undefined;
   try {
-    texture = (await Assets.load({
-      src: url,
-      parser: "loadTextures",
-    })) as Texture | null | undefined;
+    texture =
+      url.startsWith("scene-layout-delivery:") && Cache.has(url)
+        ? Cache.get<Texture>(url)
+        : ((await Assets.load({
+            src: url,
+            parser: "loadTextures",
+          })) as Texture | null | undefined);
   } catch (error) {
     throw createError(
       `Spine texture failed to load from "${url}": ${formatError(error)}.`,

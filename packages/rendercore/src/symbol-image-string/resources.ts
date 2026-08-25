@@ -15,7 +15,7 @@ import type {
   SymbolImageStringResourceMap,
   SymbolImageStringResourcePool,
 } from "./types.js";
-import { Assets, type Texture } from "pixi.js";
+import { Assets, Cache, type Texture } from "pixi.js";
 import type { SymbolImageStringSpecialValueImageSpec } from "../symbol/manifest.js";
 import type { SymbolImageStringSpecialImageResource } from "./mapped-display.js";
 
@@ -84,10 +84,13 @@ export async function createSymbolImageStringResourcePool(options: {
           `Image-string special value image is missing: ${packagePath}.`,
         );
       }
-      const texture = (await Assets.load({
-        src: module,
-        parser: "loadTextures",
-      })) as Texture | null | undefined;
+      const texture =
+        module.startsWith("scene-layout-delivery:") && Cache.has(module)
+          ? Cache.get<Texture>(module)
+          : ((await Assets.load({
+              src: module,
+              parser: "loadTextures",
+            })) as Texture | null | undefined);
       if (!texture?.source) {
         throw new SymbolAssetError(
           `Image-string special value image failed to load: ${packagePath}.`,

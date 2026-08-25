@@ -3035,10 +3035,13 @@ async function loadPixiTextureFromUrl(
   url: string,
   context: string,
 ): Promise<PIXI.Texture> {
-  const texture = (await PIXI.Assets.load({
-    src: url,
-    parser: "loadTextures",
-  })) as PIXI.Texture | null | undefined;
+  const texture =
+    url.startsWith("scene-layout-delivery:") && PIXI.Cache.has(url)
+      ? PIXI.Cache.get<PIXI.Texture>(url)
+      : ((await PIXI.Assets.load({
+          src: url,
+          parser: "loadTextures",
+        })) as PIXI.Texture | null | undefined);
   assertLoadedTexture(texture, context);
   return texture;
 }

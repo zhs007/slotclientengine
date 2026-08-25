@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const root = resolve(process.cwd(), "../../assets/crave");
+const root = resolve(process.cwd(), "../../assets/fixtures/crave-mapped");
 const map = JSON.parse(
   readFileSync(resolve(root, "assets.map.json"), "utf8"),
 ) as { readonly files: Readonly<Record<string, { readonly path: string }>> };

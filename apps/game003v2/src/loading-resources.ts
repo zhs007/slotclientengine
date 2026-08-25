@@ -8,7 +8,7 @@ export function createGame003v2LoadingResources(
   return Object.freeze([
     Object.freeze({
       id: MINECART2_MANIFEST_RESOURCE_ID,
-      url: new URL("layout.manifest.json", documentBaseUrl).href,
+      url: new URL("delivery.manifest.json", documentBaseUrl).href,
       kind: "binary" as const,
     }),
   ]);
