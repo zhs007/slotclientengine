@@ -678,6 +678,7 @@ describe("scene layout package event-driven game-mode transition", () => {
 
     await runtime.init();
     expect(popups).toHaveLength(1);
+    expect(() => runtime.update(0.1)).not.toThrow();
 
     const pending = runtime.requestGameMode("FreeGame");
     await vi.waitFor(() => {

@@ -1105,8 +1105,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       const popup = this.popupRuntime(id, binding.type);
       if (popup.isPlaying()) popup.requestDismiss();
     }
-    for (const [id, binding] of Object.entries(this.#document.popups ?? {}))
-      if (!this.popupRuntime(id, binding.type).isPlaying()) {
+    for (const [id, binding] of Object.entries(this.#document.popups ?? {})) {
+      const popup = this.loadedPopupRuntime(id, binding.type);
+      if (popup && !popup.isPlaying()) {
         if (this.#activeProgrammaticPopup?.id === id) {
           const controller = this.#programmaticPopupSessions.get(
             this.#activeProgrammaticPopup.sessionId,
@@ -1116,6 +1117,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         if (this.#activePopupId === id) this.completeActiveAwardCelebration(id);
         this.settlePopupCompletion(id);
       }
+    }
     this.updatePopupAudioCues();
     this.updateActivePrelude();
     this.updateActiveTransition(deltaSeconds);
@@ -4744,6 +4746,19 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     if (type === "award-celebration") return this.getAwardCelebrationPopup(id);
     if (type === "spine") return this.getSpinePopup(id);
     return this.getSingleStatePopup(id);
+  }
+
+  private loadedPopupRuntime(
+    id: string,
+    type: SceneLayoutPopupOpenRequest["type"],
+  ):
+    | AwardCelebrationRuntime
+    | SpinePopupRuntime
+    | SingleStatePopupRuntime
+    | null {
+    if (type === "award-celebration") return this.#popups.get(id) ?? null;
+    if (type === "spine") return this.#spinePopups.get(id) ?? null;
+    return this.#singleStatePopups.get(id) ?? null;
   }
 
   private validateProgrammaticPopupRequest(
