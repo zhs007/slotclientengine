@@ -11,10 +11,9 @@ import { GAME003V2_CONFIG } from "./config.js";
 import { parseGame003v2Launch } from "./launch.js";
 import {
   createGame003v2LoadingResources,
-  readMinecart2Manifest,
+  readMinecart2Resource,
 } from "./loading-resources.js";
 import { formatGame003v2Amount } from "./money.js";
-import { prepareGame003v2Resource } from "./resource.js";
 import { createGame003v2RoundAdapter } from "./round-adapter.js";
 import "./styles.css";
 
@@ -43,11 +42,7 @@ const loading = createGameLoading({
   },
   onBeforeComplete: async ({ loadedResources, readinessResult, signal }) => {
     if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-    const resource = await prepareGame003v2Resource(
-      new URL("delivery.manifest.json", document.baseURI),
-      readMinecart2Manifest(loadedResources),
-      signal,
-    );
+    const resource = readMinecart2Resource(loadedResources);
     return Object.freeze({ ...readinessResult, resource });
   },
   onEnterGame: async ({ prepareResult }) => {

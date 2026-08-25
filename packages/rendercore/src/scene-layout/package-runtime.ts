@@ -263,6 +263,11 @@ interface ActiveModePrelude {
   readonly prepared: PreparedModeTransition;
   readonly popupId: string;
   readonly restorePopupStrings: () => void;
+  assetsReady: boolean;
+  assetsFailure: SceneLayoutError | null;
+  videoUnlockStarted: boolean;
+  videoUnlocked: boolean;
+  videoUnlockFailure: SceneLayoutError | null;
   phase: "popup" | "awaiting-video-start";
   readonly resolve: () => void;
   readonly reject: (error: SceneLayoutError) => void;
@@ -2029,6 +2034,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.assertReady();
     const prelude = this.#activePrelude;
     if (prelude?.phase === "popup") {
+      this.unlockActivePreludeVideo(prelude);
       this.requestDismissGameModePrelude();
       return handledPopupInteraction();
     }
@@ -3425,10 +3431,18 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
             prepared,
             popupId,
             restorePopupStrings,
+            assetsReady:
+              this.#resource.delivery?.isGameModeReady(prepared.target.id) ??
+              true,
+            assetsFailure: null,
+            videoUnlockStarted: false,
+            videoUnlocked: prepared.kind !== "video",
+            videoUnlockFailure: null,
             phase: "popup",
             resolve,
             reject,
           };
+          this.observeActivePreludeAssets(this.#activePrelude);
           this.refreshPopupPointerInteraction();
         },
         cancel: (error) => {
@@ -3489,6 +3503,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#targetSymbolPackageId = prepared.targetSymbolPackageId;
     let committed = false;
     try {
+      await this.ensureDeliveryGameMode(prepared.target.id);
       this.emitTransitionLifecycle(prepared, "started");
       this.commitPreparedTarget(prepared);
       committed = true;
@@ -3523,6 +3538,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#preparedTransition = null;
     let started = false;
     try {
+      await this.ensureDeliveryGameMode(prepared.target.id);
       prepared.player.play({
         animationName: overlay.animation,
         loop: false,
@@ -3573,7 +3589,12 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#modeRequestInProgress = true;
     let started = false;
     try {
-      await playPromise;
+      if (this.#resource.delivery)
+        await Promise.all([
+          playPromise,
+          this.ensureDeliveryGameMode(prepared.target.id),
+        ]);
+      else await playPromise;
       this.assertReady();
       if (this.#preparedTransition !== prepared)
         throw new SceneLayoutError(
@@ -3695,8 +3716,39 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   private updateActivePrelude(): void {
     const active = this.#activePrelude;
     if (!active) return;
+    if (active.assetsFailure) {
+      this.failActivePrelude(active, active.assetsFailure);
+      return;
+    }
+    if (active.videoUnlockFailure) {
+      this.failActivePrelude(active, active.videoUnlockFailure);
+      return;
+    }
     const popup = this.getSpinePopup(active.popupId);
     if (popup.getPhase() !== "complete") return;
+    if (!active.assetsReady) return;
+    if (active.prepared.kind === "video" && active.videoUnlockStarted) {
+      if (!active.videoUnlocked) return;
+      active.restorePopupStrings();
+      this.#activePrelude = null;
+      this.refreshPopupPointerInteraction();
+      this.#preparedTransition = active.prepared;
+      const continuation = this.startPreparedVideoTransition(
+        active.prepared,
+        active.prepared.player.play(),
+      );
+      void continuation.then(
+        () => {
+          active.resolve();
+          this.drainPopupActivations();
+        },
+        (error) => {
+          active.reject(error);
+          this.drainPopupActivations();
+        },
+      );
+      return;
+    }
     active.restorePopupStrings();
     if (active.prepared.kind === "video") {
       active.phase = "awaiting-video-start";
@@ -3718,6 +3770,42 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         this.drainPopupActivations();
       },
     );
+  }
+
+  private observeActivePreludeAssets(active: ActiveModePrelude): void {
+    if (active.assetsReady || !this.#resource.delivery) return;
+    void this.#resource.delivery.loadGameMode(active.prepared.target.id).then(
+      () => {
+        active.assetsReady = true;
+      },
+      (error: unknown) => {
+        active.assetsFailure = asSceneLayoutError(error);
+      },
+    );
+  }
+
+  private unlockActivePreludeVideo(active: ActiveModePrelude): void {
+    if (active.prepared.kind !== "video" || active.videoUnlockStarted) return;
+    active.videoUnlockStarted = true;
+    let pending: Promise<void>;
+    try {
+      pending = active.prepared.player.unlock();
+    } catch (error) {
+      active.videoUnlockFailure = asSceneLayoutError(error);
+      return;
+    }
+    void pending.then(
+      () => {
+        active.videoUnlocked = true;
+      },
+      (error: unknown) => {
+        active.videoUnlockFailure = asSceneLayoutError(error);
+      },
+    );
+  }
+
+  private ensureDeliveryGameMode(modeId: string): Promise<void> {
+    return this.#resource.delivery?.loadGameMode(modeId) ?? Promise.resolve();
   }
 
   private failActivePrelude(

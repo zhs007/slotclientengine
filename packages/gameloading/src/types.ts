@@ -6,6 +6,7 @@ export interface GameLoadingResource<T = unknown> {
   readonly kind?: GameLoadingResourceKind;
   readonly weight?: number;
   readonly load?: (context: GameLoadingResourceContext) => Promise<T> | T;
+  readonly dispose?: (value: T) => Promise<void> | void;
 }
 
 export type GameLoadingResourceKind =

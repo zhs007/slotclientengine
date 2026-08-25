@@ -51,7 +51,7 @@ const loading = createGameLoading<PreparedGame, Game002v2Readiness>({
   },
   onBeforeComplete: async ({ loadedResources, readinessResult, signal }) => {
     if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-    const resource = await createCraveResource(loadedResources, signal);
+    const resource = await createCraveResource(loadedResources);
     try {
       const reelPresentation = await prepareGame002v2ReelPresentation(resource);
       return Object.freeze({

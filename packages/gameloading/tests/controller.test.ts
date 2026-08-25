@@ -149,6 +149,69 @@ describe("game loading controller", () => {
     expect(dispose).not.toHaveBeenCalled();
   });
 
+  it("disposes loaded resource ownership before finalization and transfers it after success", async () => {
+    const failedValue = Object.freeze({ id: "failed" });
+    const failedDispose = vi.fn();
+    const failure = new Error("prepare failed");
+    const failed = createGameLoading({
+      root: createRoot(),
+      ui: createFakeUi().factory,
+      resources: [
+        {
+          id: "resource",
+          load: () => failedValue,
+          dispose: failedDispose,
+        },
+      ],
+      onBeforeComplete: () => {
+        throw failure;
+      },
+      onEnterGame: () => undefined,
+    });
+    await expect(failed.start()).rejects.toBe(failure);
+    expect(failedDispose).toHaveBeenCalledOnce();
+    expect(failedDispose).toHaveBeenCalledWith(failedValue);
+    failed.destroy();
+    expect(failedDispose).toHaveBeenCalledOnce();
+
+    const transferredDispose = vi.fn();
+    const transferred = createGameLoading({
+      root: createRoot(),
+      ui: createFakeUi().factory,
+      resources: [
+        {
+          id: "resource",
+          load: () => "owned",
+          dispose: transferredDispose,
+        },
+      ],
+      onBeforeComplete: () => "prepared",
+      onEnterGame: () => undefined,
+    });
+    await transferred.start();
+    transferred.destroy();
+    expect(transferredDispose).not.toHaveBeenCalled();
+  });
+
+  it("disposes a resource that fulfills after loading was aborted", async () => {
+    const pending = createDeferred<{ readonly id: string }>();
+    const dispose = vi.fn();
+    const loading = createGameLoading({
+      root: createRoot(),
+      ui: createFakeUi().factory,
+      resources: [{ id: "resource", load: () => pending.promise, dispose }],
+      onBeforeComplete: () => undefined,
+      onEnterGame: () => undefined,
+    });
+    const start = loading.start();
+    loading.destroy();
+    await start;
+    const value = Object.freeze({ id: "late" });
+    pending.resolve(value);
+    await waitFor(() => dispose.mock.calls.length === 1);
+    expect(dispose).toHaveBeenCalledWith(value);
+  });
+
   it("publishes immutable weighted snapshots and waits for both completion gates", async () => {
     const root = createRoot();
     const first = createDeferred<string>();
@@ -491,6 +554,14 @@ describe("game loading controller", () => {
     expect(() =>
       createGameLoading({ ...base, resources: [{ id: "a" }] }),
     ).toThrow(/URL or custom load/);
+    expect(() =>
+      createGameLoading({
+        ...base,
+        resources: [
+          { id: "a", load: () => undefined, dispose: "bad" as never },
+        ],
+      }),
+    ).toThrow(/dispose/);
     expect(() =>
       createGameLoading({
         ...base,

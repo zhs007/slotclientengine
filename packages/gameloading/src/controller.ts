@@ -42,6 +42,8 @@ class GameLoadingController<
   #hasReadinessResult = false;
   #readinessDisposed = false;
   #readinessTransferred = false;
+  #resourcesTransferred = false;
+  readonly #disposedResourceIds = new Set<string>();
 
   constructor(options: GameLoadingOptions<TPrepareResult, TReadinessResult>) {
     validateOptions(options);
@@ -75,6 +77,7 @@ class GameLoadingController<
     this.#destroyed = true;
     this.#abortController.abort();
     void this.#disposeReadinessResult();
+    void this.#disposeLoadedResources();
     this.#destroyUi();
     this.#options.root.hidden = true;
   }
@@ -110,6 +113,7 @@ class GameLoadingController<
         return;
       }
       this.#readinessTransferred = true;
+      this.#resourcesTransferred = true;
 
       this.#publish("entering-game", 100, null);
       await waitWithAbort(
@@ -142,6 +146,7 @@ class GameLoadingController<
       const normalized = toError(error);
       this.#abortController.abort();
       await this.#disposeReadinessResult();
+      await this.#disposeLoadedResources();
       this.#options.root.hidden = false;
       try {
         this.#publish("error", this.#progress, normalized.message);
@@ -172,7 +177,10 @@ class GameLoadingController<
           loadedResources: this.#loadedResources,
           signal: this.#abortController.signal,
         });
-        if (this.#destroyed || this.#abortController.signal.aborted) return;
+        if (this.#destroyed || this.#abortController.signal.aborted) {
+          await this.#disposeResourceValue(resource, value);
+          return;
+        }
         this.#loadedResources.set(resource.id, value);
         completedWeight += weight;
         if (completedWeight >= totalWeight) {
@@ -238,6 +246,32 @@ class GameLoadingController<
       await this.#options.readiness.dispose(
         this.#readinessResult as TReadinessResult,
       );
+    } catch {
+      // Cleanup failures never replace the authoritative loading failure.
+    }
+  }
+
+  async #disposeLoadedResources(): Promise<void> {
+    if (this.#resourcesTransferred) return;
+    await Promise.all(
+      this.#resources.map(async ({ resource }) => {
+        if (!this.#loadedResources.has(resource.id)) return;
+        await this.#disposeResourceValue(
+          resource,
+          this.#loadedResources.get(resource.id),
+        );
+      }),
+    );
+  }
+
+  async #disposeResourceValue(
+    resource: GameLoadingResource,
+    value: unknown,
+  ): Promise<void> {
+    if (this.#disposedResourceIds.has(resource.id)) return;
+    this.#disposedResourceIds.add(resource.id);
+    try {
+      await resource.dispose?.(value);
     } catch {
       // Cleanup failures never replace the authoritative loading failure.
     }
@@ -452,6 +486,13 @@ function normalizeResources(
           `Game loading resource "${resource.id}" requires a URL or custom load().`,
         );
       }
+      if (
+        resource.dispose !== undefined &&
+        typeof resource.dispose !== "function"
+      )
+        throw new Error(
+          `Game loading resource "${resource.id}" dispose must be a function when provided.`,
+        );
       return Object.freeze({ resource, weight });
     }),
   );

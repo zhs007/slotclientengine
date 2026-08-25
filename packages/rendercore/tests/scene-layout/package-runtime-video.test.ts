@@ -21,6 +21,7 @@ class FakeVideoPlayer implements SceneLayoutTransitionVideoPlayer {
   ended = false;
   fatalError: SceneLayoutError | null = null;
   prepared = false;
+  unlockCalls = 0;
   playCalls = 0;
   destroyed = false;
   rejectPlay = false;
@@ -28,6 +29,10 @@ class FakeVideoPlayer implements SceneLayoutTransitionVideoPlayer {
 
   async prepare() {
     this.prepared = true;
+  }
+  unlock() {
+    this.unlockCalls += 1;
+    return Promise.resolve();
   }
   play() {
     this.playCalls += 1;
@@ -51,12 +56,15 @@ class FakeVideoPlayer implements SceneLayoutTransitionVideoPlayer {
 class FakePreludePopup {
   readonly container = new Container();
   phase: "idle" | "loop" | "complete" = "idle";
+  dismissRequests = 0;
   async init() {}
   start() {
     this.phase = "loop";
   }
   update() {}
-  requestDismiss() {}
+  requestDismiss() {
+    this.dismissRequests += 1;
+  }
   dismissImmediately() {
     this.phase = "complete";
   }
@@ -83,7 +91,14 @@ function snapshot() {
   };
 }
 
-function createRuntime(player: FakeVideoPlayer, prelude?: FakePreludePopup) {
+function createRuntime(
+  player: FakeVideoPlayer,
+  prelude?: FakePreludePopup,
+  delivery?: {
+    readonly isGameModeReady: (modeId: string) => boolean;
+    readonly loadGameMode: (modeId: string) => Promise<void>;
+  },
+) {
   const hash = "b".repeat(64);
   return createSceneLayoutPackageRuntime({
     resource: {
@@ -143,6 +158,7 @@ function createRuntime(player: FakeVideoPlayer, prelude?: FakePreludePopup) {
       popupPackages: prelude
         ? { "free-entry": { manifest: { type: "spine" } } }
         : {},
+      ...(delivery ? { delivery } : {}),
       destroy: vi.fn(),
     } as never,
     createVideoTransitionPlayer: () => player,
@@ -233,10 +249,22 @@ describe("scene layout package video-blackout transition", () => {
     runtime.destroy();
   });
 
-  it("waits for a second trusted gesture after a video prelude completes", async () => {
+  it("latches one popup click and advances automatically after target assets finish", async () => {
     const player = new FakeVideoPlayer();
     const popup = new FakePreludePopup();
-    const runtime = createRuntime(player, popup);
+    let assetsReady = false;
+    let resolveAssets!: () => void;
+    const assets = new Promise<void>((resolve) => {
+      resolveAssets = () => {
+        assetsReady = true;
+        resolve();
+      };
+    });
+    const loadGameMode = vi.fn(() => assets);
+    const runtime = createRuntime(player, popup, {
+      isGameModeReady: () => assetsReady,
+      loadGameMode,
+    });
     await runtime.init();
     runtime.applyViewport({ width: 600, height: 800 });
     await runtime.prepareGameModeTransition("FreeGame");
@@ -246,13 +274,8 @@ describe("scene layout package video-blackout transition", () => {
       transitionPhase: "popup",
       activePreludePopup: "free-entry",
     });
-    popup.phase = "complete";
-    runtime.update(0.1);
-    expect(runtime.getGameModeSnapshot()).toMatchObject({
-      stableMode: "BaseGame",
-      transitionKind: "video",
-      transitionPhase: "awaiting-video-start",
-    });
+    expect(loadGameMode).toHaveBeenCalledOnce();
+
     const popupPresentation = runtime.getPopupPresentation();
     const canvas = new EventTarget();
     const keyboard = new EventTarget();
@@ -264,10 +287,29 @@ describe("scene layout package video-blackout transition", () => {
     });
     expect(popupPresentation.eventMode).toBe("none");
     keyboard.dispatchEvent(new Event("keydown"));
-    expect(player.playCalls).toBe(1);
-    expect(popupPresentation.eventMode).toBe("none");
-    expect(errors).toEqual([]);
+    expect(popup.dismissRequests).toBe(1);
+    expect(player.unlockCalls).toBe(1);
+    expect(player.playCalls).toBe(0);
+
+    popup.phase = "complete";
+    runtime.update(0.1);
+    expect(runtime.getGameModeSnapshot()).toMatchObject({
+      stableMode: "BaseGame",
+      transitionKind: "video",
+      transitionPhase: "popup",
+    });
+    expect(player.playCalls).toBe(0);
+
+    resolveAssets();
+    await assets;
     await Promise.resolve();
+    runtime.update(0);
+    expect(player.playCalls).toBe(1);
+    expect(player.unlockCalls).toBe(1);
+    expect(errors).toEqual([]);
+    await vi.waitFor(() =>
+      expect(runtime.container.children.at(-1)?.visible).toBe(true),
+    );
     player.currentTimeSeconds = 4;
     player.ended = true;
     runtime.update(0);

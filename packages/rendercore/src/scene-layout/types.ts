@@ -507,6 +507,8 @@ export interface SceneLayoutPackageResource {
   readonly runtimeResources: Readonly<
     Record<string, SceneLayoutRuntimeResource>
   >;
+  /** Present only for CDN delivery resources split by ownership chunk. */
+  readonly delivery?: SceneLayoutDeliveryResource;
   getLoadedRuntimeResource<Kind extends SceneLayoutRuntimeResource["kind"]>(
     key: string,
     kind: Kind,
@@ -517,6 +519,11 @@ export interface SceneLayoutPackageResource {
   ): Promise<Extract<SceneLayoutRuntimeResource, { readonly kind: Kind }>>;
   loadJsonData(key: string): Promise<SceneLayoutJsonData>;
   destroy(): Promise<void> | void;
+}
+
+export interface SceneLayoutDeliveryResource {
+  isGameModeReady(modeId: string): boolean;
+  loadGameMode(modeId: string): Promise<void>;
 }
 
 export type SceneLayoutLayerId = "layout" | "reel" | "transition" | "popup";

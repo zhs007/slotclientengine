@@ -14,14 +14,12 @@ export interface Game003v2Resource {
 
 export async function prepareGame003v2Resource(
   manifestUrl: string | URL,
-  manifestBytes: Uint8Array,
   signal: AbortSignal,
 ): Promise<Game003v2Resource> {
   const fetchImpl = ((input: RequestInfo | URL, init?: RequestInit) =>
     globalThis.fetch(input, { ...init, signal })) as typeof fetch;
   const resource = await loadSceneLayoutDeliveryFromUrl({
     manifestUrl,
-    manifestBytes,
     fetchImpl,
   });
   try {

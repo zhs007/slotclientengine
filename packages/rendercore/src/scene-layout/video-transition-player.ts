@@ -11,6 +11,8 @@ export interface SceneLayoutTransitionVideoPlayer {
   readonly ended: boolean;
   readonly fatalError: SceneLayoutError | null;
   prepare(): Promise<void>;
+  /** Consumes a trusted gesture without advancing visible playback. */
+  unlock(): Promise<void>;
   /** Invokes the underlying audible media play() before returning. */
   play(): Promise<void>;
   applyViewport(viewportSize: RenderViewportSize): void;
@@ -193,6 +195,27 @@ class BrowserSceneLayoutTransitionVideoPlayer implements SceneLayoutTransitionVi
       },
       (error: unknown) => {
         this.emitDiagnostic("play-rejected", formatError(error));
+        throw asSceneLayoutError(error);
+      },
+    );
+  }
+
+  unlock(): Promise<void> {
+    this.assertAlive();
+    if (!this.#prepared)
+      throw new SceneLayoutError("Scene transition video is not prepared.");
+    configureAudibleInlineVideo(this.#video);
+    this.#video.currentTime = 0;
+    this.emitDiagnostic("unlock-invoked");
+    const result = this.#video.play();
+    return Promise.resolve(result).then(
+      () => {
+        this.#video.pause();
+        this.#video.currentTime = 0;
+        this.emitDiagnostic("unlock-resolved");
+      },
+      (error: unknown) => {
+        this.emitDiagnostic("unlock-rejected", formatError(error));
         throw asSceneLayoutError(error);
       },
     );

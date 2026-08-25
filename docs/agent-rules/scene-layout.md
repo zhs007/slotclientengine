@@ -108,6 +108,8 @@
 - delivery atlas frame 的 Runtime 尺寸合同以 Pixi `Texture.width/height` 的 logical frame/orig 为准，不得用共享 atlas page 的 `TextureSource.width/height` 代替；frame logical size 与 manifest 不一致时仍显式失败。
 - delivery 的音频和视频保持 production input bytes、codec 与 container 不变，作为独立 content-addressed CDN 文件，不进 metadata ZIP 或通用 atlas。runtime 保留外部 URL，不创建媒体 Blob；具体浏览器流式策略不写入 manifest。
 - delivery manifest、metadata ZIP、atlas frame/rotation 与 external route 是 versioned strict contract；CLI 必须提供 deterministic `--check` parity。RenderCore 负责从 delivery 还原 logical mapped package、注册 atlas 子纹理并把 Spine/media 路由到外部 URL，game app 不复制 parser 或逐文件表。
+- RenderCore delivery loader 只把 initial chunk 纳入首屏 barrier；initial ready 后先后台预取独立 media owner，再按 manifest 顺序预取其它 mode owner。实际 mode 切换可复用或抢占同一 chunk Promise，提交 target scene 前必须等待 exact mode owner ready。
+- transition prelude Popup 的用户确认必须锁存：点击立即正常驱动 Popup 退场和全部 frame update；若 target mode assets 未 ready，只阻塞后续 scene commit。assets ready 后自动推进，不得吞掉点击或要求二次点击；video transition 必须在该 trusted gesture 内完成 audible media unlock。
 - 不带 `--delivery-dir` 的 legacy 单 ZIP/asset-groups 模式仍可逐图片 WebP 并把 typed 音频固定输出 M4A/AAC-LC；不得与 byte-preserving delivery 模式混用。
 - `assets/fixtures/*-mapped` 只为 Editor/Viewer 和测试保存历史 mapped package，不得成为 game app `publicDir`、production fallback 或 delivery runtime 的第二资源来源。
 
