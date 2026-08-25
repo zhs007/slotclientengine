@@ -184,6 +184,17 @@ export interface UserInfo {
   defaultScene?: number[][];
   // A generic parameter that can be sent from client to server.
   clientParameter?: string;
+  // Optional: Maximum bet limit for a single spin.
+  maxTotalBetLimit?: number;
+  // Optional: Maximum bet limit for a single spin.
+  maxBetBootsBuy?: number;
+  //replay
+  totalbet?: number;
+  lines?: number;
+  gameType?: string;
+  payTables?: Record<string, unknown>;
+  servTime?: number;
+  giftfree?: Record<string, unknown>;
 }
 
 /**
@@ -206,7 +217,11 @@ export interface SpinParams {
   // Allow extra ctrlparam fields if needed
   [key: string]: any;
 }
-
+export interface GetBalanceParams {
+  cmdid: string;
+  gameid: number;
+  userbaseinfo: [string];
+}
 /**
  * Defines the public interface for a Slotcraft client implementation.
  * This allows for different implementations (e.g., live WebSocket vs. replay from JSON)
@@ -222,6 +237,7 @@ export interface ISlotcraftClientImpl {
   selectOptional(index: number): Promise<any>;
   selectSomething(clientParameter: string): Promise<any>;
   disconnect(): void;
+  getBalance(params: GetBalanceParams): Promise<any>;
   send(cmdid: string, params: any): Promise<any>;
   on(event: string, callback: (...args: any[]) => void): void;
   off(event: string, callback: (...args: any[]) => void): void;

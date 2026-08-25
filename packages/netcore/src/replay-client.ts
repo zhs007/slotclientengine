@@ -1,6 +1,6 @@
 import { EventEmitter } from './event-emitter';
-import {
-  ConnectionState,
+import { ConnectionState } from './types';
+import type {
   ISlotcraftClientImpl,
   SlotcraftClientOptions,
   SpinParams,
@@ -8,6 +8,7 @@ import {
   StateChangePayload,
   RawMessagePayload,
   Logger,
+  GetBalanceParams,
 } from './types';
 import { transformSceneData } from './utils';
 
@@ -21,7 +22,6 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
 
   constructor(options: SlotcraftClientOptions) {
     this.options = { ...options };
-
     this.userInfo.token = options.token;
     this.userInfo.gamecode = options.gamecode;
     this.userInfo.businessid = options.businessid ?? '';
@@ -29,7 +29,6 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
     this.userInfo.jurisdiction = options.jurisdiction ?? 'MT';
     this.userInfo.language = options.language ?? 'en';
     this.userInfo.clientParameter = '';
-
     if (options.logger === null) {
       this.logger = { log: () => {}, warn: () => {}, error: () => {} };
     } else {
@@ -95,7 +94,12 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
       // Simulate login
       this.setState(ConnectionState.LOGGING_IN);
       this.userInfo.balance = this.replayData.playCtrlParam?.balance ?? 0;
+      this.userInfo.totalbet = this.replayData.playCtrlParam?.totalbet ?? 0;
+      this.userInfo.lines = this.replayData.playCtrlParam?.lines ?? 0;
+      this.userInfo.currency = this.replayData.playCtrlParam?.currency ?? 'EUR';
+      this.userInfo.lastGMI = this.replayData;
       this.setState(ConnectionState.LOGGED_IN);
+  
     } catch (error) {
       this.setState(ConnectionState.DISCONNECTED);
       this.emitter.emit('error', error);
@@ -127,7 +131,7 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
     return Promise.resolve({ isok: true, cmdid: 'comeingame3' });
   }
 
-  public async spin(params: SpinParams): Promise<any> {
+  public async spin(_params: SpinParams): Promise<any> {
     if (this.state !== ConnectionState.IN_GAME) {
       this.logger.warn(`Spin called in non-standard state: ${this.state}.`);
     }
@@ -161,8 +165,10 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
 
     return Promise.resolve({ gmi, totalwin, results: resultsCount });
   }
-
-  public async collect(playIndex?: number): Promise<any> {
+  public getBalance(_params: GetBalanceParams): Promise<any> {
+    return Promise.resolve(_params);
+  }
+  public async collect(_playIndex?: number): Promise<any> {
     if (this.state !== ConnectionState.SPINEND) {
       throw new Error(`Cannot collect in state: ${this.state}`);
     }
@@ -172,7 +178,7 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
     return Promise.resolve({ isok: true, cmdid: 'collect' });
   }
 
-  public async selectOptional(index: number): Promise<any> {
+  public async selectOptional(index: number,lstrand?:number[]): Promise<any> {
     // The provided example does not have an optional choice scenario.
     // This method can be expanded if needed for more complex replays.
     if (this.state !== ConnectionState.WAITTING_PLAYER) {
@@ -180,7 +186,7 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
     }
     // In a real implementation, we would use the index to select from `userInfo.optionals`
     // and then potentially process another stage of the replay data.
-    this.logger.log(`Selected option ${index}. In replay, this concludes the action.`);
+    this.logger.log(`Selected option ${index} ${lstrand}. In replay, this concludes the action.`);
     this.setState(ConnectionState.IN_GAME);
     return Promise.resolve({ isok: true, cmdid: 'gamectrl3' });
   }

@@ -10,6 +10,7 @@ import {
   SpinParams,
   Logger,
   ISlotcraftClientImpl,
+  GetBalanceParams
 } from './types';
 
 type PendingRequest = {
@@ -226,7 +227,13 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
       return { gmi, totalwin, results };
     });
   }
-
+  public getBalance(params: GetBalanceParams): Promise<unknown> {
+    return this._enqueueOperation(async () => {
+      const { cmdid, gameid, userbaseinfo } = params;
+      const raw = await this.send(cmdid, { gameid, userbaseinfo });
+      return raw;
+    });
+  }
   public collect(playIndex?: number): Promise<any> {
     return this._enqueueOperation(async () => {
       // Collect can be called after a spin ends (SPINEND) or at any time while in the game
@@ -397,7 +404,11 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
 
     const message = JSON.stringify({ cmdid, ...params });
     this.emitRawMessage('SEND', message);
-    this.connection.send(message);
+    const sent = this.connection.send(message);
+    if (!sent) {
+      this.logger.error(`WebSocket is not open. Message dropped: ${cmdid}`);
+      return Promise.reject(new Error(`WebSocket is not open. Cannot send: ${cmdid}`));
+    }
 
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -441,6 +452,13 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
 
       // Start processing the queue if it's not already running.
       this._processQueue();
+      // Fallback: if _processQueue returned immediately (isProcessingQueue was true),
+      // schedule a retry to ensure the queued operation is eventually processed.
+      setTimeout(() => {
+        if (this.operationQueue.length > 0 && !this.isProcessingQueue) {
+          this._processQueue();
+        }
+      }, 0);
     });
   }
 
@@ -465,6 +483,10 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
       }
     } finally {
       this.isProcessingQueue = false;
+      // Re-check for operations that may have been queued during the await gap
+      if (this.operationQueue.length > 0) {
+        this._processQueue();
+      }
     }
   }
 
@@ -542,7 +564,13 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
             if (msg.isok) {
               promise.resolve(msg);
             } else {
-              promise.reject(new Error(`Command '${msg.cmdid}' failed.`));
+              if (this.state === ConnectionState.SPINNING) {
+                this.setState(ConnectionState.IN_GAME);
+              }
+              //new Error(msg.errmsg ?? `Command '${msg.cmdid}' failed.`)
+              promise.reject();
+              this.pendingRequests.delete(msg.cmdid);
+              continue;
             }
             this.pendingRequests.delete(msg.cmdid);
           }

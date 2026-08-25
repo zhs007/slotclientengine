@@ -1,6 +1,7 @@
 import { SlotcraftClientLive } from './live-client';
 import { SlotcraftClientReplay } from './replay-client';
 import {
+  GetBalanceParams,
   ConnectionState,
   ISlotcraftClientImpl,
   SlotcraftClientOptions,
@@ -41,7 +42,9 @@ export class SlotcraftClient implements ISlotcraftClientImpl {
   public spin(params: SpinParams): Promise<any> {
     return this.implementation.spin(params);
   }
-
+  public getBalance(params: GetBalanceParams): Promise<any> {
+    return this.implementation.getBalance(params);
+  }
   public collect(playIndex?: number): Promise<any> {
     return this.implementation.collect(playIndex);
   }
