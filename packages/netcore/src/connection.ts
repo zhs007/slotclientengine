@@ -5,6 +5,7 @@
 export class Connection {
   private url: string;
   private ws: WebSocket | null = null;
+  private readonly binaryType: BinaryType | null;
 
   /**
    * Public callbacks to be set by the consumer of this class.
@@ -17,9 +18,12 @@ export class Connection {
   /**
    * Creates an instance of the Connection class.
    * @param url The WebSocket server URL.
+   * @param binaryType 可选,显式指定二进制消息的投递格式;
+   * 不传则保持浏览器默认('blob')。二进制加密通道时 type为 'arraybuffer'。
    */
-  constructor(url: string) {
+  constructor(url: string, binaryType?: BinaryType) {
     this.url = url;
+    this.binaryType = binaryType ?? null;
   }
 
   /**
@@ -33,6 +37,9 @@ export class Connection {
 
     // Since this library is for the frontend, we assume WebSocket is available globally.
     this.ws = new WebSocket(this.url);
+    if (this.binaryType) {
+      this.ws.binaryType = this.binaryType;
+    }
 
     this.ws.onopen = () => {
       this.onOpen?.();
@@ -63,10 +70,10 @@ export class Connection {
 
   /**
    * Sends data over the WebSocket connection.
-   * @param data The string data to send.
+   * @param data 文本消息(string)或二进制 payload(ArrayBuffer)。
    * @returns {boolean} True if data was sent, false if the connection is not open.
    */
-  public send(data: string): boolean {
+  public send(data: string | ArrayBuffer): boolean {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(data);
       return true;

@@ -103,6 +103,9 @@ export interface SlotcraftClientOptions {
    * stable state that preceded the transient operation state.
    */
   operationFailureRecovery?: OperationFailureRecoveryOptions;
+  
+  /** Optional: Whether the server messages are in binary format. Defaults to false. */
+  isWsBinary?: boolean;
 }
 
 /** High-level operations that enter a transient state while awaiting a command reply. */
@@ -221,8 +224,6 @@ export interface ReplayBootstrapInfo {
   bet?: number;
   totalbet?: number;
   lines?: number;
-  maxBetBootsBuy?: number;
-  maxTotalBetLimit?: number;
   currency?: string;
   gameType?: string;
   payTables?: Readonly<Record<string, unknown>>;

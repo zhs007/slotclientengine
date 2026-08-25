@@ -1,4 +1,4 @@
-import { transformSceneData } from './utils';
+import { transformSceneData,encrypt, importAesKey, decrypt} from './utils';
 import { Connection } from './connection';
 import { EventEmitter } from './event-emitter';
 import {
@@ -48,6 +48,7 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
   private logger: Logger;
   private operationFailureRecovery: Record<RecoverableOperation, OperationFailureRecoveryStrategy>;
 
+  private isWsBinary: boolean = false;
   private reconnectAttempts = 0;
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private userInfo: UserInfo = {};
@@ -82,11 +83,10 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
     this.options = {
       maxReconnectAttempts: 10,
       reconnectDelay: 1000,
-      requestTimeout: 10000,
+      requestTimeout: 1,//10000
       ...options,
     };
     this.operationFailureRecovery = this.resolveFailureRecovery(options.operationFailureRecovery);
-
     // Cache token, gamecode, and other context from constructor options
     this.userInfo.token = options.token;
     this.userInfo.gamecode = options.gamecode;
@@ -95,7 +95,7 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
     this.userInfo.jurisdiction = options.jurisdiction ?? 'MT';
     this.userInfo.language = options.language ?? 'en';
     this.userInfo.clientParameter = '';
-
+    this.isWsBinary = options.isWsBinary ?? false;
     if (options.logger === null) {
       // If logger is explicitly null, use a no-op logger
       this.logger = { log: () => {}, warn: () => {}, error: () => {} };
@@ -103,8 +103,13 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
       // Otherwise, use the provided logger or default to the console
       this.logger = options.logger || console;
     }
-
-    this.connection = new Connection(this.options.url);
+    if(this.isWsBinary){
+      this.options.url = `${this.options.url}?token=${options.token}`
+    }
+    this.connection = new Connection(
+      this.options.url,
+      this.isWsBinary ? 'arraybuffer' : undefined,
+    );
     this.setupConnectionHandlers();
   }
 
@@ -389,7 +394,7 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
     this._rejectAllQueuedOperations('Client disconnected.');
   }
 
-  public send(cmdid: string, params: any = {}): Promise<any> {
+  public async send(cmdid: string, params: any = {}): Promise<any> {
     // P1: Restrict commands during LOGGING_IN state.
     if (this.state === ConnectionState.LOGGING_IN && cmdid !== 'flblogin') {
       return Promise.reject(new Error(`Only 'flblogin' is allowed during LOGGING_IN state.`));
@@ -417,8 +422,14 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
       return Promise.reject(new Error(`A request with cmdid '${cmdid}' is already pending.`));
     }
 
-    const message = JSON.stringify({ cmdid, ...params });
+    let message = JSON.stringify({ cmdid, ...params });
     this.emitRawMessage('SEND', message);
+    if (this.isWsBinary) {
+      const token = this.userInfo.token || '';
+      const rawKey = new TextEncoder().encode(token);
+      const cryptoKey = await importAesKey(rawKey);
+      message = await encrypt(message, cryptoKey);
+    }
     const sent = this.connection.send(message);
     if (!sent) {
       this.logger.error(`WebSocket is not open. Message dropped: ${cmdid}`);
@@ -610,11 +621,18 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
     }
   }
 
-  private handleMessage(event: MessageEvent): void {
-    this.emitRawMessage('RECV', event.data);
+  private async handleMessage(event: MessageEvent): Promise<void> {
+    let data = event.data;
+    if (this.isWsBinary) {
+      const token = this.userInfo.token || '';
+      const rawKey = new TextEncoder().encode(token);
+      const cryptoKey = await importAesKey(rawKey);
+      data = await decrypt(data, cryptoKey);
+    }
+    this.emitRawMessage('RECV', data);
     try {
       // P2: Parse JSON only once.
-      const parsedData = JSON.parse(event.data);
+      const parsedData = JSON.parse(data);
       const messages = Array.isArray(parsedData) ? parsedData : [parsedData];
 
       for (const msg of messages) {
@@ -856,10 +874,6 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
         if (typeof msg.defaultLinebet === 'number')
           this.userInfo.defaultLinebet = msg.defaultLinebet;
         if (Array.isArray(msg.linebets)) this.userInfo.linebets = msg.linebets;
-        if (typeof msg.maxBetBootsBuy === 'number')
-          this.userInfo.maxBetBootsBuy = msg.maxBetBootsBuy;
-        if (typeof msg.maxTotalBetLimit === 'number')
-          this.userInfo.maxTotalBetLimit = msg.maxTotalBetLimit;
         if (typeof msg.ver === 'string') this.userInfo.gamecfgVer = msg.ver;
         if (typeof msg.coreVer === 'string') this.userInfo.gamecfgCoreVer = msg.coreVer;
         if (typeof msg.data === 'string') {
@@ -889,6 +903,10 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
         if (typeof msg.lastctrlid === 'number') this.userInfo.lastctrlid = msg.lastctrlid;
         // Cache the latest playerState object as-is
         if (msg.playerState !== undefined) this.userInfo.playerState = msg.playerState;
+        break;
+      }
+      case 'collectinfo': {
+        this.userInfo.balance = msg.gold;
         break;
       }
       default:
