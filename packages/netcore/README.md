@@ -21,6 +21,8 @@ This package is not documented as a standalone published npm package. Consume it
 - Emits lifecycle, raw network, and passive message events.
 - Retries live connections after unexpected disconnects.
 - Supports replay mode when the URL points to an HTTP(S) JSON snapshot.
+- Exposes replay startup data through `getUserInfo().replayBootstrap` after `connect()` and before the first spin.
+- Supports per-operation `restore` or `disconnect` recovery for failed live operations.
 
 ## Workspace Usage
 
@@ -86,6 +88,7 @@ run().catch(console.error);
 - `connect(token?)`: establish connection and login.
 - `enterGame(gamecode?)`: enter the target game.
 - `spin(params)`: execute one in-game action.
+- `getBalance(params)`: run a caller-specified balance command; replay mode provides static interface compatibility.
 - `collect(playIndex?)`: collect the current or derived play result.
 - `selectOptional(index)`: resolve a pending player-choice state.
 - `selectSomething(clientParameter)`: send a generic string parameter to the server-side `selectany` flow.
@@ -114,6 +117,7 @@ Workspace-wide validation is available through root scripts:
 - `docs/usage_en.md`: concise integration notes
 - `docs/usage_zh.md`: 中文集成说明
 - `docs/frontend-ws-doc-en.md`: protocol-oriented WebSocket notes
+- `docs/replay-bootstrap-failure-recovery-zh.md`: replay bootstrap and live failure recovery configuration (Chinese)
 - `examples/example001.ts`: development example for local debugging
 
 ### `transformSceneData(data)` Utility

@@ -22,8 +22,8 @@ describe('SlotcraftClient Integration Tests', () => {
     return client;
   };
 
-  const connectAndEnterGame = async () => {
-    client = getClient();
+  const connectAndEnterGame = async (overrides: Partial<SlotcraftClientOptions> = {}) => {
+    client = getClient(overrides);
     server.on('flblogin', (msg, ws) => {
       server.send(ws, { msgid: 'cmdret', cmdid: 'flblogin', isok: true });
     });
@@ -660,9 +660,100 @@ describe('SlotcraftClient Integration Tests', () => {
         server.send(ws, { msgid: 'cmdret', cmdid: 'collect', isok: false });
       });
 
-      await expect(client.collect(0)).rejects.toThrow("Command 'collect' failed.");
+      const failure = await client.collect(0).catch((error) => error);
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure.message).toBe("Command 'collect' failed.");
       // Should revert to SPINEND to allow a retry
       expect(client.getState()).toBe(ConnectionState.SPINEND);
+    });
+
+    it('should restore IN_GAME with the server error when a spin is rejected', async () => {
+      await connectAndEnterGame();
+      server.on('gamectrl3', (msg, ws) => {
+        server.send(ws, {
+          msgid: 'cmdret',
+          cmdid: msg.cmdid,
+          isok: false,
+          errmsg: 'Insufficient balance',
+        });
+      });
+
+      const failure = await client.spin({ bet: 1, lines: 1 }).catch((error) => error);
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure.message).toBe('Insufficient balance');
+      expect(client.getState()).toBe(ConnectionState.IN_GAME);
+
+      server.on('gamectrl3', (msg, ws) => {
+        server.send(ws, { msgid: 'cmdret', cmdid: msg.cmdid, isok: true });
+      });
+      await expect(client.spin({ bet: 1, lines: 1 })).resolves.toBeDefined();
+      expect(client.getState()).toBe(ConnectionState.IN_GAME);
+    });
+
+    it('should restore WAITTING_PLAYER when a player choice is rejected', async () => {
+      await connectAndEnterGame();
+      const implementation = (client as any).implementation as any;
+      implementation.userInfo.optionals = [{ command: 'choose', param: 'left' }];
+      implementation.userInfo.curSpinParams = { bet: 1, lines: 1, times: 1 };
+      implementation.setState(ConnectionState.WAITTING_PLAYER);
+      server.on('gamectrl3', (msg, ws) => {
+        server.send(ws, {
+          msgid: 'cmdret',
+          cmdid: msg.cmdid,
+          isok: false,
+          errmsg: 'Choice rejected',
+        });
+      });
+
+      await expect(client.selectOptional(0)).rejects.toThrow('Choice rejected');
+      expect(client.getState()).toBe(ConnectionState.WAITTING_PLAYER);
+    });
+
+    it('should restore LOGGED_IN when enterGame is rejected', async () => {
+      client = getClient();
+      server.on('flblogin', (msg, ws) => {
+        server.send(ws, { msgid: 'cmdret', cmdid: msg.cmdid, isok: true });
+      });
+      await client.connect(TEST_TOKEN);
+      server.on('comeingame3', (msg, ws) => {
+        server.send(ws, {
+          msgid: 'cmdret',
+          cmdid: msg.cmdid,
+          isok: false,
+          errmsg: 'Game unavailable',
+        });
+      });
+
+      await expect(client.enterGame(TEST_GAME_CODE)).rejects.toThrow('Game unavailable');
+      expect(client.getState()).toBe(ConnectionState.LOGGED_IN);
+    });
+
+    it('should disconnect on failure when configured for the operation', async () => {
+      await connectAndEnterGame({
+        operationFailureRecovery: { spin: 'disconnect' },
+      });
+      server.on('gamectrl3', (msg, ws) => {
+        server.send(ws, { msgid: 'cmdret', cmdid: msg.cmdid, isok: false });
+      });
+
+      await expect(client.spin({ bet: 1, lines: 1 })).rejects.toThrow(
+        "Command 'gamectrl3' failed."
+      );
+      expect(client.getState()).toBe(ConnectionState.DISCONNECTED);
+    });
+
+    it('should reject unknown failure recovery configuration', () => {
+      expect(() =>
+        getClient({
+          operationFailureRecovery: { spin: 'preserve' as any },
+        })
+      ).toThrow('Invalid operationFailureRecovery strategy for spin: preserve');
+
+      expect(() =>
+        getClient({
+          operationFailureRecovery: { unknown: 'restore' } as any,
+        })
+      ).toThrow('Unknown operationFailureRecovery operation: unknown');
     });
   });
 

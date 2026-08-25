@@ -10,8 +10,27 @@ import {
   SpinParams,
   Logger,
   ISlotcraftClientImpl,
-  GetBalanceParams
+  GetBalanceParams,
+  OperationFailureRecoveryOptions,
+  OperationFailureRecoveryStrategy,
+  RecoverableOperation,
 } from './types';
+
+const RECOVERABLE_OPERATION_STATES: Readonly<Record<RecoverableOperation, ConnectionState>> = {
+  enterGame: ConnectionState.ENTERING_GAME,
+  spin: ConnectionState.SPINNING,
+  collect: ConnectionState.COLLECTING,
+  selectOptional: ConnectionState.PLAYER_CHOICING,
+};
+
+const DEFAULT_FAILURE_RECOVERY: Readonly<
+  Record<RecoverableOperation, OperationFailureRecoveryStrategy>
+> = {
+  enterGame: 'restore',
+  spin: 'restore',
+  collect: 'restore',
+  selectOptional: 'restore',
+};
 
 type PendingRequest = {
   resolve: (value: any) => void;
@@ -27,6 +46,7 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
   private emitter = new EventEmitter();
   private pendingRequests = new Map<string, PendingRequest>();
   private logger: Logger;
+  private operationFailureRecovery: Record<RecoverableOperation, OperationFailureRecoveryStrategy>;
 
   private reconnectAttempts = 0;
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -65,6 +85,7 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
       requestTimeout: 10000,
       ...options,
     };
+    this.operationFailureRecovery = this.resolveFailureRecovery(options.operationFailureRecovery);
 
     // Cache token, gamecode, and other context from constructor options
     this.userInfo.token = options.token;
@@ -163,15 +184,15 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
       }
       this.userInfo.gamecode = gamecodeToUse;
 
-      // The client is now entering the game. The final state (IN_GAME, SPINEND, etc.)
-      // will be determined by the cmdret handler for 'comeingame3', which processes
-      // the server's response and handles any potential "resume" scenarios.
-      this.setState(ConnectionState.ENTERING_GAME);
-      return this.send('comeingame3', {
-        gamecode: gamecodeToUse,
-        tableid: '',
-        isreconnect: false,
-      });
+      // The final success state is determined by the cmdret handler. A rejected
+      // operation follows the configured recovery strategy.
+      return this.runRecoverableOperation('enterGame', () =>
+        this.send('comeingame3', {
+          gamecode: gamecodeToUse,
+          tableid: '',
+          isreconnect: false,
+        })
+      );
     });
   }
 
@@ -215,9 +236,9 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
       // Cache the spin params for potential player choice follow-up
       this.userInfo.curSpinParams = { bet, lines, times };
       this.userInfo.optionals = [];
-      this.setState(ConnectionState.SPINNING);
-
-      await this.send('gamectrl3', { gameid, ctrlid, ctrlname, ctrlparam });
+      await this.runRecoverableOperation('spin', () =>
+        this.send('gamectrl3', { gameid, ctrlid, ctrlname, ctrlparam })
+      );
 
       // By protocol, gamemoduleinfo should have arrived before cmdret.
       // Return the latest cached GMI snapshot and simple aggregates.
@@ -265,19 +286,13 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
         throw new Error('playIndex is not available and could not be derived.');
       }
 
-      this.setState(ConnectionState.COLLECTING);
-
-      try {
+      const result = await this.runRecoverableOperation('collect', async () => {
         const res = await this.send('collect', { gameid, playIndex: indexToCollect });
-        // On successful collection, always return to the main IN_GAME state.
-        this.setState(ConnectionState.IN_GAME);
         return res;
-      } catch (err) {
-        // If collection fails, revert to the SPINEND state to allow for a retry.
-        // This is important for ensuring wins are properly acknowledged.
-        this.setState(ConnectionState.SPINEND);
-        throw err;
-      }
+      });
+      // On successful collection, always return to the main IN_GAME state.
+      this.setState(ConnectionState.IN_GAME);
+      return result;
     });
   }
 
@@ -303,14 +318,14 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
         commandParam: selection.param,
       };
 
-      // After selection, we are in a new "choicing" state, awaiting the result.
-      this.setState(ConnectionState.PLAYER_CHOICING);
-      await this.send('gamectrl3', {
-        gameid,
-        ctrlid,
-        ctrlname: 'selectfree',
-        ctrlparam,
-      });
+      await this.runRecoverableOperation('selectOptional', () =>
+        this.send('gamectrl3', {
+          gameid,
+          ctrlid,
+          ctrlname: 'selectfree',
+          ctrlparam,
+        })
+      );
 
       // Similar to spin, return the latest GMI info
       const gmi = this.userInfo.lastGMI;
@@ -431,6 +446,52 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
   }
 
   // --- Private Handlers ---
+
+  private resolveFailureRecovery(
+    overrides?: OperationFailureRecoveryOptions
+  ): Record<RecoverableOperation, OperationFailureRecoveryStrategy> {
+    if (overrides) {
+      for (const [operation, strategy] of Object.entries(overrides)) {
+        if (!Object.prototype.hasOwnProperty.call(RECOVERABLE_OPERATION_STATES, operation)) {
+          throw new Error(`Unknown operationFailureRecovery operation: ${operation}`);
+        }
+        if (strategy !== 'restore' && strategy !== 'disconnect') {
+          throw new Error(
+            `Invalid operationFailureRecovery strategy for ${operation}: ${String(strategy)}`
+          );
+        }
+      }
+    }
+
+    return {
+      ...DEFAULT_FAILURE_RECOVERY,
+      ...overrides,
+    };
+  }
+
+  private async runRecoverableOperation<T>(
+    operation: RecoverableOperation,
+    executor: () => Promise<T>
+  ): Promise<T> {
+    const transientState = RECOVERABLE_OPERATION_STATES[operation];
+    const restoreState = this.state;
+    this.setState(transientState);
+
+    try {
+      return await executor();
+    } catch (error) {
+      // A disconnect/reconnect may already have replaced the transient state.
+      // Never overwrite that newer transport state with an operation rollback.
+      if (this.state === transientState) {
+        if (this.operationFailureRecovery[operation] === 'restore') {
+          this.setState(restoreState);
+        } else {
+          this.disconnect();
+        }
+      }
+      throw error;
+    }
+  }
 
   private _enqueueOperation<T>(executor: () => Promise<T>): Promise<T> {
     return new Promise<T>((resolve, reject) => {
@@ -564,11 +625,11 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
             if (msg.isok) {
               promise.resolve(msg);
             } else {
-              if (this.state === ConnectionState.SPINNING) {
-                this.setState(ConnectionState.IN_GAME);
-              }
-              //new Error(msg.errmsg ?? `Command '${msg.cmdid}' failed.`)
-              promise.reject();
+              const message =
+                typeof msg.errmsg === 'string' && msg.errmsg.length > 0
+                  ? msg.errmsg
+                  : `Command '${msg.cmdid}' failed.`;
+              promise.reject(new Error(message));
               this.pendingRequests.delete(msg.cmdid);
               continue;
             }

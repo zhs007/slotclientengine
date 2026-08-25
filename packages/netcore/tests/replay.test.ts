@@ -13,6 +13,14 @@ const mockReplayData = {
   gameid: 61146,
   playCtrlParam: {
     balance: 730959,
+    bet: 1,
+    totalbet: 450,
+    lines: 450,
+    currency: 'USD',
+    gameType: 'slot',
+    payTables: { A: [0, 0, 10] },
+    servTime: 123456,
+    giftfree: { active: false },
   },
   gmi: {
     defaultScene: { values: [{ values: [1, 2] }] },
@@ -101,6 +109,18 @@ describe('SlotcraftClient Replay Mode', () => {
       expect(mockFetch).toHaveBeenCalledWith('https://example.com/replay.json');
     });
 
+    it('should expose replay bootstrap data without committing the spin result', async () => {
+      await client.connect();
+
+      const userInfo = client.getUserInfo();
+      expect(userInfo.replayBootstrap).toEqual(mockReplayData.playCtrlParam);
+      expect(userInfo.balance).toBe(mockReplayData.playCtrlParam.balance);
+      expect(userInfo.currency).toBe(mockReplayData.playCtrlParam.currency);
+      expect(userInfo.lastGMI).toBeUndefined();
+      expect(Object.isFrozen(userInfo.replayBootstrap)).toBe(true);
+      expect(Object.isFrozen(userInfo.replayBootstrap?.payTables)).toBe(true);
+    });
+
     it('should enter game and transition to IN_GAME', async () => {
       await client.connect();
       await client.enterGame();
@@ -157,6 +177,23 @@ describe('SlotcraftClient Replay Mode', () => {
     it('should reject connect() if token is missing', async () => {
       client = getClient({ token: undefined });
       await expect(client.connect()).rejects.toThrow('Token must be provided');
+    });
+
+    it('should reject invalid typed replay bootstrap fields', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            msgid: 'gamemoduleinfo',
+            playCtrlParam: { totalbet: '450' },
+          }),
+      });
+      client = getClient();
+
+      await expect(client.connect()).rejects.toThrow(
+        'Invalid replay playCtrlParam.totalbet: expected a finite number.'
+      );
+      expect(client.getState()).toBe(ConnectionState.DISCONNECTED);
     });
 
     it('should reject enterGame() before connect', async () => {

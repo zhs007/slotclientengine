@@ -9,6 +9,7 @@ import type {
   RawMessagePayload,
   Logger,
   GetBalanceParams,
+  ReplayBootstrapInfo,
 } from './types';
 import { transformSceneData } from './utils';
 
@@ -93,13 +94,14 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
 
       // Simulate login
       this.setState(ConnectionState.LOGGING_IN);
-      this.userInfo.balance = this.replayData.playCtrlParam?.balance ?? 0;
-      this.userInfo.totalbet = this.replayData.playCtrlParam?.totalbet ?? 0;
-      this.userInfo.lines = this.replayData.playCtrlParam?.lines ?? 0;
-      this.userInfo.currency = this.replayData.playCtrlParam?.currency ?? 'EUR';
-      this.userInfo.lastGMI = this.replayData;
+      this.userInfo.replayBootstrap = this.createReplayBootstrap(this.replayData);
+      if (typeof this.userInfo.replayBootstrap?.balance === 'number') {
+        this.userInfo.balance = this.userInfo.replayBootstrap.balance;
+      }
+      if (typeof this.userInfo.replayBootstrap?.currency === 'string') {
+        this.userInfo.currency = this.userInfo.replayBootstrap.currency;
+      }
       this.setState(ConnectionState.LOGGED_IN);
-  
     } catch (error) {
       this.setState(ConnectionState.DISCONNECTED);
       this.emitter.emit('error', error);
@@ -178,7 +180,7 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
     return Promise.resolve({ isok: true, cmdid: 'collect' });
   }
 
-  public async selectOptional(index: number,lstrand?:number[]): Promise<any> {
+  public async selectOptional(index: number, lstrand?: number[]): Promise<any> {
     // The provided example does not have an optional choice scenario.
     // This method can be expanded if needed for more complex replays.
     if (this.state !== ConnectionState.WAITTING_PLAYER) {
@@ -232,6 +234,54 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
   private emitRawMessage(direction: 'SEND' | 'RECV', message: string): void {
     const payload: RawMessagePayload = { direction, message };
     this.emitter.emit('raw_message', payload);
+  }
+
+  private createReplayBootstrap(msg: any): ReplayBootstrapInfo | undefined {
+    if (msg?.msgid !== 'gamemoduleinfo') return undefined;
+
+    const source = msg.playCtrlParam;
+    if (source === undefined) return undefined;
+    if (source === null || typeof source !== 'object' || Array.isArray(source)) {
+      throw new Error('Invalid replay playCtrlParam: expected an object.');
+    }
+
+    const bootstrap: ReplayBootstrapInfo = {};
+    const copyNumber = (key: 'balance' | 'bet' | 'totalbet' | 'lines' | 'servTime') => {
+      const value = source[key];
+      if (value === undefined) return;
+      if (typeof value !== 'number' || !Number.isFinite(value)) {
+        throw new Error(`Invalid replay playCtrlParam.${key}: expected a finite number.`);
+      }
+      bootstrap[key] = value;
+    };
+    const copyString = (key: 'currency' | 'gameType') => {
+      const value = source[key];
+      if (value === undefined) return;
+      if (typeof value !== 'string') {
+        throw new Error(`Invalid replay playCtrlParam.${key}: expected a string.`);
+      }
+      bootstrap[key] = value;
+    };
+    const copyRecord = (key: 'payTables' | 'giftfree') => {
+      const value = source[key];
+      if (value === undefined) return;
+      if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error(`Invalid replay playCtrlParam.${key}: expected an object.`);
+      }
+      bootstrap[key] = Object.freeze({ ...value });
+    };
+
+    copyNumber('balance');
+    copyNumber('bet');
+    copyNumber('totalbet');
+    copyNumber('lines');
+    copyNumber('servTime');
+    copyString('currency');
+    copyString('gameType');
+    copyRecord('payTables');
+    copyRecord('giftfree');
+
+    return Object.keys(bootstrap).length > 0 ? Object.freeze(bootstrap) : undefined;
   }
 
   /** Caches config-like properties that should be available before the first spin. */

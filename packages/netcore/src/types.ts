@@ -97,7 +97,27 @@ export interface SlotcraftClientOptions {
    * collect-required states explicitly.
    */
   autoCollectIntermediateResults?: boolean;
+  /**
+   * Live-mode recovery strategy for high-level operations rejected by the server
+   * or transport. Each operation defaults to `restore`, which returns to the
+   * stable state that preceded the transient operation state.
+   */
+  operationFailureRecovery?: OperationFailureRecoveryOptions;
 }
+
+/** High-level operations that enter a transient state while awaiting a command reply. */
+export type RecoverableOperation = 'enterGame' | 'spin' | 'collect' | 'selectOptional';
+
+/**
+ * `restore` returns to the stable state captured before the operation.
+ * `disconnect` closes the client when the failed command makes the session untrustworthy.
+ */
+export type OperationFailureRecoveryStrategy = 'restore' | 'disconnect';
+
+/** Per-operation live command failure recovery overrides. */
+export type OperationFailureRecoveryOptions = Readonly<
+  Partial<Record<RecoverableOperation, OperationFailureRecoveryStrategy>>
+>;
 
 /**
  * Defines the structure for event listeners.
@@ -188,13 +208,24 @@ export interface UserInfo {
   maxTotalBetLimit?: number;
   // Optional: Maximum bet limit for a single spin.
   maxBetBootsBuy?: number;
-  //replay
+  /** Replay-only data available after connect(), before the first spin is committed. */
+  replayBootstrap?: ReplayBootstrapInfo;
+}
+
+/**
+ * Strict startup data projected from a replay file's playCtrlParam object.
+ * It is separate from lastGMI because loading a replay does not commit its spin result.
+ */
+export interface ReplayBootstrapInfo {
+  balance?: number;
+  bet?: number;
   totalbet?: number;
   lines?: number;
+  currency?: string;
   gameType?: string;
-  payTables?: Record<string, unknown>;
+  payTables?: Readonly<Record<string, unknown>>;
   servTime?: number;
-  giftfree?: Record<string, unknown>;
+  giftfree?: Readonly<Record<string, unknown>>;
 }
 
 /**

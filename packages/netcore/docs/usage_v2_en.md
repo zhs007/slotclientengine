@@ -139,6 +139,7 @@ const options: SlotcraftClientOptions = {
 | `maxReconnectAttempts`           | no          | `10`      | live reconnect attempts after unclean close                      |
 | `reconnectDelay`                 | no          | `1000`    | initial reconnect delay in milliseconds, exponential up to 30000 |
 | `autoCollectIntermediateResults` | no          | `true`    | live auto-collect for intermediate result stages                 |
+| `operationFailureRecovery`       | live only   | `restore` | per-operation `restore` or `disconnect` failure strategy         |
 | `fetch`                          | replay only | none      | replay JSON loader in non-browser environments                   |
 | `logger`                         | no          | `console` | set to `null` to disable internal logging                        |
 
@@ -313,6 +314,10 @@ messages; it is not a complete server session object.
 
 `defaultScene` is simplified with `transformSceneData(data)` into `number[][]`.
 
+Replay `connect()` additionally projects typed `playCtrlParam` startup fields into
+`UserInfo.replayBootstrap`. This data is available before the first spin; `lastGMI`
+remains unset until `spin()` commits the replay result.
+
 ## Error Handling And Codes
 
 Netcore exposes three error channels:
@@ -384,6 +389,7 @@ debugging with a JSON snapshot, not for live server play.
 Replay mode behavior:
 
 - `connect()` fetches the JSON file and simulates login.
+- `connect()` exposes typed `playCtrlParam` fields through `UserInfo.replayBootstrap`.
 - `enterGame()` pre-caches config-like fields and moves to `IN_GAME`.
 - `spin()` processes the replay snapshot and returns `{ gmi, totalwin, results }`.
 - `collect()` simulates a successful collect from `SPINEND`.

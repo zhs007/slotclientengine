@@ -21,6 +21,8 @@
 - 提供 `state`、`message`、`raw_message`、`disconnect` 等事件。
 - 联机模式下支持异常断线后的重连。
 - URL 为 HTTP(S) 时可切换到回放模式，用静态 JSON 调试游戏流程。
+- Replay 在 `connect()` 后通过 `getUserInfo().replayBootstrap` 提供首轮 spin 前的下注、币种和余额等启动数据。
+- Live 高层操作失败时支持按操作配置恢复稳定状态或断开连接。
 
 ## 在 workspace 中使用
 
@@ -86,11 +88,26 @@ run().catch(console.error);
 - `connect(token?)`：建立连接并完成登录。
 - `enterGame(gamecode?)`：进入目标游戏。
 - `spin(params)`：执行一次局内操作。
+- `getBalance(params)`：执行调用方指定的余额查询命令；Replay 模式仅作静态接口兼容。
 - `collect(playIndex?)`：领取当前或推导出的结果。
 - `selectOptional(index)`：处理等待玩家选择的状态。
 - `selectSomething(clientParameter)`：向服务端 `selectany` 流程发送字符串参数。
 - `send(cmdid, params)`：直接发送底层命令。
 - `getState()`、`getUserInfo()`：读取运行时状态和缓存。
+
+### 操作失败恢复配置
+
+`operationFailureRecovery` 可为 `enterGame`、`spin`、`collect`、`selectOptional` 分别配置 `restore` 或 `disconnect`。默认全部为 `restore`；例如 spin 因余额不足失败时会恢复到 `IN_GAME`，错误仍由 Promise 抛出。
+
+```ts
+const client = new SlotcraftClient({
+  url: 'wss://your-game-server.example/ws',
+  operationFailureRecovery: {
+    spin: 'restore',
+    enterGame: 'disconnect',
+  },
+});
+```
 
 ## 开发命令
 
@@ -114,6 +131,7 @@ run().catch(console.error);
 - `docs/usage_en.md`：简明英文集成说明
 - `docs/usage_zh.md`：简明中文集成说明
 - `docs/frontend-ws-doc-en.md`：偏协议层的 WebSocket 说明
+- `docs/replay-bootstrap-failure-recovery-zh.md`：Replay 启动数据与 Live 操作失败恢复配置
 - `examples/example001.ts`：本地调试示例
 
 `collect` 操作是游戏循环中的一个关键部分，用于正式确认来自服务器的结果，通常是赢奖。
