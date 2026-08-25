@@ -260,6 +260,50 @@
       "owner": "initial",
       "sha256": "2015e01adb2cf10860a55aab92fa7d619c25b60bb5770ed44c9e8f604e7690fa"
     },
+    "new-image-string-0.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 13817
+    },
+    "new-image-string-1.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 8510
+    },
+    "new-image-string-2.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 13427
+    },
+    "new-image-string-5.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 13262
+    },
+    "new-image-string-image-string.manifest.json": {
+      "byteLength": 1105,
+      "chunk": "initial",
+      "entry": "assets/362a3b7e8a09f6b090664b696d8bce9b9319cca37db5b58a8cc7ba063fd4aac6.json",
+      "kind": "metadata",
+      "mediaType": "application/json",
+      "owner": "initial",
+      "sha256": "362a3b7e8a09f6b090664b696d8bce9b9319cca37db5b58a8cc7ba063fd4aac6"
+    },
+    "new-image-string-x.png": {
+      "atlas": "atlas-initial-ac1b5c09-0",
+      "kind": "atlas-frame",
+      "mediaType": "image/png",
+      "owner": "initial",
+      "sourceByteLength": 13252
+    },
     "pkg-10-game002-s3-AF_spinBlur.png": {
       "atlas": "atlas-initial-ac1b5c09-0",
       "kind": "atlas-frame",
@@ -1062,13 +1106,13 @@
       "sourceByteLength": 40116
     },
     "pkg-10-game002-s3-symbol-state-textures.manifest.json": {
-      "byteLength": 58894,
+      "byteLength": 59051,
       "chunk": "initial",
-      "entry": "assets/3c3a2ea89988cb3224c257ba00114361f9948acb89ff1f7f8f61f3a87c1abeb7.json",
+      "entry": "assets/d33ed1b8695a793af0efc2839715834bdac1d080e98a9ae11db59e13b4fb61e5.json",
       "kind": "metadata",
       "mediaType": "application/json",
       "owner": "initial",
-      "sha256": "3c3a2ea89988cb3224c257ba00114361f9948acb89ff1f7f8f61f3a87c1abeb7"
+      "sha256": "d33ed1b8695a793af0efc2839715834bdac1d080e98a9ae11db59e13b4fb61e5"
     },
     "pkg-10-game002-s3-Symbol.atlas": {
       "byteLength": 6771,
@@ -1331,11 +1375,11 @@
     },
     "pkg-15-congratulations-bg.atlas": {
       "byteLength": 2788,
-      "chunk": "mode:FreeGame",
+      "chunk": "initial",
       "entry": "assets/24e833a5836844aab876186e8e1b758fb4859d47afca0d53aebf0ea2601cc17a.atlas",
       "kind": "metadata",
       "mediaType": "text/plain",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "sha256": "24e833a5836844aab876186e8e1b758fb4859d47afca0d53aebf0ea2601cc17a"
     },
     "pkg-15-congratulations-bg.png": {
@@ -1692,7 +1736,7 @@
       "sourceByteLength": 1189577
     },
     "pkg-17-award-celebration-superwin_asset_image_msy5dzp3_8.png": {
-      "atlas": "atlas-initial-ac1b5c09-0",
+      "atlas": "atlas-initial-ac1b5c09-1",
       "kind": "atlas-frame",
       "mediaType": "image/png",
       "owner": "initial",
@@ -2167,13 +2211,58 @@
           "x": 149,
           "y": 397
         },
+        "new-image-string-0.png": {
+          "height": 127,
+          "rotated": true,
+          "sourceHeight": 181,
+          "sourceWidth": 127,
+          "width": 181,
+          "x": 255,
+          "y": 397
+        },
+        "new-image-string-1.png": {
+          "height": 182,
+          "rotated": false,
+          "sourceHeight": 182,
+          "sourceWidth": 106,
+          "width": 106,
+          "x": 502,
+          "y": 6
+        },
+        "new-image-string-2.png": {
+          "height": 181,
+          "rotated": false,
+          "sourceHeight": 181,
+          "sourceWidth": 128,
+          "width": 128,
+          "x": 444,
+          "y": 292
+        },
+        "new-image-string-5.png": {
+          "height": 113,
+          "rotated": true,
+          "sourceHeight": 181,
+          "sourceWidth": 113,
+          "width": 181,
+          "x": 6,
+          "y": 547
+        },
+        "new-image-string-x.png": {
+          "height": 123,
+          "rotated": true,
+          "sourceHeight": 181,
+          "sourceWidth": 123,
+          "width": 181,
+          "x": 255,
+          "y": 532
+        },
         "pkg-10-game002-s3-AF_spinBlur.png": {
           "height": 170,
           "rotated": false,
           "sourceHeight": 170,
           "sourceWidth": 170,
           "width": 170,
-          "x": 502,
+          "x": 616,
           "y": 6
         },
         "pkg-10-game002-s3-AF.disabled.png": {
@@ -2182,7 +2271,7 @@
           "sourceHeight": 170,
           "sourceWidth": 170,
           "width": 170,
-          "x": 485,
+          "x": 616,
           "y": 184
         },
         "pkg-10-game002-s3-AF.png": {
@@ -2191,8 +2280,8 @@
           "sourceHeight": 170,
           "sourceWidth": 170,
           "width": 170,
-          "x": 435,
-          "y": 362
+          "x": 444,
+          "y": 481
         },
         "pkg-10-game002-s3-BN.disabled.png": {
           "height": 130,
@@ -2200,8 +2289,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 255,
-          "y": 397
+          "x": 622,
+          "y": 362
         },
         "pkg-10-game002-s3-BN.png": {
           "height": 130,
@@ -2209,8 +2298,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 6,
-          "y": 547
+          "x": 622,
+          "y": 500
         },
         "pkg-10-game002-s3-BN.spinBlur.png": {
           "height": 130,
@@ -2218,8 +2307,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 144,
-          "y": 547
+          "x": 6,
+          "y": 668
         },
         "pkg-10-game002-s3-CM_spinBlur.png": {
           "height": 170,
@@ -2227,7 +2316,7 @@
           "sourceHeight": 170,
           "sourceWidth": 170,
           "width": 170,
-          "x": 680,
+          "x": 794,
           "y": 6
         },
         "pkg-10-game002-s3-CM.disabled.png": {
@@ -2236,7 +2325,7 @@
           "sourceHeight": 170,
           "sourceWidth": 170,
           "width": 170,
-          "x": 663,
+          "x": 794,
           "y": 184
         },
         "pkg-10-game002-s3-CM.png": {
@@ -2245,7 +2334,7 @@
           "sourceHeight": 170,
           "sourceWidth": 170,
           "width": 170,
-          "x": 613,
+          "x": 760,
           "y": 362
         },
         "pkg-10-game002-s3-CN.disabled.png": {
@@ -2254,8 +2343,8 @@
           "sourceHeight": 200,
           "sourceWidth": 200,
           "width": 200,
-          "x": 6,
-          "y": 685
+          "x": 760,
+          "y": 540
         },
         "pkg-10-game002-s3-CN.spinBlur.png": {
           "height": 200,
@@ -2263,8 +2352,8 @@
           "sourceHeight": 200,
           "sourceWidth": 200,
           "width": 200,
-          "x": 214,
-          "y": 685
+          "x": 6,
+          "y": 806
         },
         "pkg-10-game002-s3-CO_spinBlur.png": {
           "height": 170,
@@ -2272,8 +2361,8 @@
           "sourceHeight": 170,
           "sourceWidth": 170,
           "width": 170,
-          "x": 422,
-          "y": 540
+          "x": 214,
+          "y": 748
         },
         "pkg-10-game002-s3-CO.disabled.png": {
           "height": 170,
@@ -2281,8 +2370,8 @@
           "sourceHeight": 170,
           "sourceWidth": 170,
           "width": 170,
-          "x": 600,
-          "y": 540
+          "x": 392,
+          "y": 748
         },
         "pkg-10-game002-s3-CO.png": {
           "height": 170,
@@ -2290,8 +2379,8 @@
           "sourceHeight": 170,
           "sourceWidth": 170,
           "width": 170,
-          "x": 858,
-          "y": 6
+          "x": 570,
+          "y": 659
         },
         "pkg-10-game002-s3-H1.disabled.png": {
           "height": 130,
@@ -2299,8 +2388,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 282,
-          "y": 535
+          "x": 570,
+          "y": 837
         },
         "pkg-10-game002-s3-H1.png": {
           "height": 130,
@@ -2308,8 +2397,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 422,
-          "y": 718
+          "x": 708,
+          "y": 837
         },
         "pkg-10-game002-s3-H1.spinBlur.png": {
           "height": 130,
@@ -2317,8 +2406,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 560,
-          "y": 718
+          "x": 972,
+          "y": 6
         },
         "pkg-10-game002-s3-H2.disabled.png": {
           "height": 130,
@@ -2326,8 +2415,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 698,
-          "y": 718
+          "x": 972,
+          "y": 144
         },
         "pkg-10-game002-s3-H2.png": {
           "height": 130,
@@ -2335,8 +2424,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 778,
-          "y": 540
+          "x": 972,
+          "y": 282
         },
         "pkg-10-game002-s3-H2.spinBlur.png": {
           "height": 130,
@@ -2344,8 +2433,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 791,
-          "y": 362
+          "x": 968,
+          "y": 420
         },
         "pkg-10-game002-s3-L1.disabled.png": {
           "height": 130,
@@ -2353,8 +2442,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 841,
-          "y": 184
+          "x": 968,
+          "y": 558
         },
         "pkg-10-game002-s3-L1.png": {
           "height": 130,
@@ -2362,8 +2451,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 836,
-          "y": 678
+          "x": 968,
+          "y": 696
         },
         "pkg-10-game002-s3-L1.spinBlur.png": {
           "height": 130,
@@ -2371,8 +2460,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 6,
-          "y": 893
+          "x": 846,
+          "y": 834
         },
         "pkg-10-game002-s3-L2.disabled.png": {
           "height": 130,
@@ -2380,8 +2469,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 144,
-          "y": 893
+          "x": 6,
+          "y": 1014
         },
         "pkg-10-game002-s3-L2.png": {
           "height": 130,
@@ -2389,8 +2478,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 282,
-          "y": 893
+          "x": 144,
+          "y": 1014
         },
         "pkg-10-game002-s3-L2.spinBlur.png": {
           "height": 130,
@@ -2398,8 +2487,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 420,
-          "y": 893
+          "x": 282,
+          "y": 975
         },
         "pkg-10-game002-s3-L3.disabled.png": {
           "height": 130,
@@ -2407,8 +2496,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 558,
-          "y": 856
+          "x": 420,
+          "y": 926
         },
         "pkg-10-game002-s3-L3.png": {
           "height": 130,
@@ -2416,8 +2505,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 696,
-          "y": 856
+          "x": 558,
+          "y": 975
         },
         "pkg-10-game002-s3-L3.spinBlur.png": {
           "height": 130,
@@ -2425,8 +2514,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 834,
-          "y": 856
+          "x": 696,
+          "y": 975
         },
         "pkg-10-game002-s3-L4.disabled.png": {
           "height": 130,
@@ -2434,8 +2523,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 6,
-          "y": 1031
+          "x": 834,
+          "y": 975
         },
         "pkg-10-game002-s3-L4.png": {
           "height": 130,
@@ -2443,8 +2532,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 144,
-          "y": 1031
+          "x": 972,
+          "y": 972
         },
         "pkg-10-game002-s3-L4.spinBlur.png": {
           "height": 130,
@@ -2452,8 +2541,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 282,
-          "y": 1031
+          "x": 984,
+          "y": 834
         },
         "pkg-10-game002-s3-new-image-string-00-0.png": {
           "height": 36,
@@ -2461,8 +2550,8 @@
           "sourceHeight": 49,
           "sourceWidth": 36,
           "width": 49,
-          "x": 979,
-          "y": 184
+          "x": 195,
+          "y": 540
         },
         "pkg-10-game002-s3-new-image-string-00-1.png": {
           "height": 30,
@@ -2470,8 +2559,8 @@
           "sourceHeight": 48,
           "sourceWidth": 30,
           "width": 48,
-          "x": 979,
-          "y": 228
+          "x": 282,
+          "y": 1113
         },
         "pkg-10-game002-s3-new-image-string-00-2.png": {
           "height": 36,
@@ -2479,8 +2568,8 @@
           "sourceHeight": 48,
           "sourceWidth": 36,
           "width": 48,
-          "x": 979,
-          "y": 266
+          "x": 195,
+          "y": 584
         },
         "pkg-10-game002-s3-new-image-string-00-3.png": {
           "height": 36,
@@ -2488,8 +2577,8 @@
           "sourceHeight": 49,
           "sourceWidth": 36,
           "width": 49,
-          "x": 979,
-          "y": 310
+          "x": 195,
+          "y": 628
         },
         "pkg-10-game002-s3-new-image-string-00-4.png": {
           "height": 35,
@@ -2497,26 +2586,26 @@
           "sourceHeight": 48,
           "sourceWidth": 35,
           "width": 48,
-          "x": 974,
-          "y": 354
+          "x": 214,
+          "y": 926
         },
         "pkg-10-game002-s3-new-image-string-00-5.png": {
-          "height": 32,
-          "rotated": true,
-          "sourceHeight": 49,
-          "sourceWidth": 32,
-          "width": 49,
-          "x": 791,
-          "y": 500
-        },
-        "pkg-10-game002-s3-new-image-string-00-6.png": {
           "height": 49,
           "rotated": false,
           "sourceHeight": 49,
+          "sourceWidth": 32,
+          "width": 32,
+          "x": 580,
+          "y": 362
+        },
+        "pkg-10-game002-s3-new-image-string-00-6.png": {
+          "height": 34,
+          "rotated": true,
+          "sourceHeight": 49,
           "sourceWidth": 34,
-          "width": 34,
-          "x": 393,
-          "y": 397
+          "width": 49,
+          "x": 972,
+          "y": 1110
         },
         "pkg-10-game002-s3-new-image-string-00-7.png": {
           "height": 48,
@@ -2524,26 +2613,26 @@
           "sourceHeight": 48,
           "sourceWidth": 34,
           "width": 34,
-          "x": 393,
-          "y": 454
+          "x": 580,
+          "y": 419
         },
         "pkg-10-game002-s3-new-image-string-00-8.png": {
-          "height": 49,
-          "rotated": false,
+          "height": 35,
+          "rotated": true,
           "sourceHeight": 49,
           "sourceWidth": 35,
-          "width": 35,
-          "x": 929,
-          "y": 322
+          "width": 49,
+          "x": 214,
+          "y": 969
         },
         "pkg-10-game002-s3-new-image-string-00-9.png": {
-          "height": 48,
-          "rotated": false,
+          "height": 34,
+          "rotated": true,
           "sourceHeight": 48,
           "sourceWidth": 34,
-          "width": 34,
-          "x": 929,
-          "y": 379
+          "width": 48,
+          "x": 1029,
+          "y": 1110
         },
         "pkg-10-game002-s3-new-image-string-002-0-1.png": {
           "height": 31,
@@ -2551,17 +2640,17 @@
           "sourceHeight": 49,
           "sourceWidth": 31,
           "width": 49,
-          "x": 778,
-          "y": 678
+          "x": 338,
+          "y": 1113
         },
         "pkg-10-game002-s3-new-image-string-002-1-1.png": {
-          "height": 21,
-          "rotated": true,
+          "height": 48,
+          "rotated": false,
           "sourceHeight": 48,
           "sourceWidth": 21,
-          "width": 48,
-          "x": 974,
-          "y": 397
+          "width": 21,
+          "x": 938,
+          "y": 362
         },
         "pkg-10-game002-s3-new-image-string-002-2-1.png": {
           "height": 31,
@@ -2569,8 +2658,8 @@
           "sourceHeight": 48,
           "sourceWidth": 31,
           "width": 48,
-          "x": 836,
-          "y": 816
+          "x": 395,
+          "y": 1113
         },
         "pkg-10-game002-s3-new-image-string-002-3-1.png": {
           "height": 30,
@@ -2578,8 +2667,8 @@
           "sourceHeight": 49,
           "sourceWidth": 30,
           "width": 49,
-          "x": 848,
-          "y": 500
+          "x": 451,
+          "y": 1113
         },
         "pkg-10-game002-s3-new-image-string-002-4-1.png": {
           "height": 30,
@@ -2587,26 +2676,26 @@
           "sourceHeight": 48,
           "sourceWidth": 30,
           "width": 48,
-          "x": 841,
-          "y": 322
+          "x": 508,
+          "y": 1113
         },
         "pkg-10-game002-s3-new-image-string-002-5-1.png": {
-          "height": 27,
-          "rotated": true,
+          "height": 49,
+          "rotated": false,
           "sourceHeight": 49,
           "sourceWidth": 27,
-          "width": 49,
-          "x": 422,
-          "y": 856
+          "width": 27,
+          "x": 580,
+          "y": 196
         },
         "pkg-10-game002-s3-new-image-string-002-6-1.png": {
-          "height": 28,
-          "rotated": true,
+          "height": 49,
+          "rotated": false,
           "sourceHeight": 49,
           "sourceWidth": 28,
-          "width": 49,
-          "x": 479,
-          "y": 856
+          "width": 28,
+          "x": 580,
+          "y": 253
         },
         "pkg-10-game002-s3-new-image-string-002-7-1.png": {
           "height": 30,
@@ -2614,8 +2703,8 @@
           "sourceHeight": 48,
           "sourceWidth": 30,
           "width": 48,
-          "x": 892,
-          "y": 816
+          "x": 564,
+          "y": 1113
         },
         "pkg-10-game002-s3-new-image-string-002-8-1.png": {
           "height": 29,
@@ -2623,8 +2712,8 @@
           "sourceHeight": 49,
           "sourceWidth": 29,
           "width": 49,
-          "x": 905,
-          "y": 500
+          "x": 620,
+          "y": 1113
         },
         "pkg-10-game002-s3-new-image-string-002-9-1.png": {
           "height": 28,
@@ -2632,8 +2721,8 @@
           "sourceHeight": 48,
           "sourceWidth": 28,
           "width": 48,
-          "x": 948,
-          "y": 816
+          "x": 677,
+          "y": 1113
         },
         "pkg-10-game002-s3-new-image-string-003-0-2.png": {
           "height": 30,
@@ -2641,8 +2730,8 @@
           "sourceHeight": 49,
           "sourceWidth": 30,
           "width": 49,
-          "x": 974,
-          "y": 426
+          "x": 733,
+          "y": 1113
         },
         "pkg-10-game002-s3-new-image-string-003-1-2.png": {
           "height": 48,
@@ -2650,17 +2739,17 @@
           "sourceHeight": 48,
           "sourceWidth": 20,
           "width": 20,
-          "x": 1004,
-          "y": 464
+          "x": 938,
+          "y": 418
         },
         "pkg-10-game002-s3-new-image-string-003-2-2.png": {
-          "height": 48,
-          "rotated": false,
+          "height": 31,
+          "rotated": true,
           "sourceHeight": 48,
           "sourceWidth": 31,
-          "width": 31,
-          "x": 962,
-          "y": 464
+          "width": 48,
+          "x": 790,
+          "y": 1113
         },
         "pkg-10-game002-s3-new-image-string-003-3-2.png": {
           "height": 30,
@@ -2668,8 +2757,8 @@
           "sourceHeight": 49,
           "sourceWidth": 30,
           "width": 49,
-          "x": 974,
-          "y": 520
+          "x": 846,
+          "y": 1113
         },
         "pkg-10-game002-s3-new-image-string-003-4-2.png": {
           "height": 30,
@@ -2677,8 +2766,8 @@
           "sourceHeight": 48,
           "sourceWidth": 30,
           "width": 48,
-          "x": 916,
-          "y": 537
+          "x": 903,
+          "y": 1113
         },
         "pkg-10-game002-s3-new-image-string-003-5-2.png": {
           "height": 27,
@@ -2686,8 +2775,8 @@
           "sourceHeight": 49,
           "sourceWidth": 27,
           "width": 49,
-          "x": 974,
-          "y": 558
+          "x": 1085,
+          "y": 1110
         },
         "pkg-10-game002-s3-new-image-string-003-6-2.png": {
           "height": 28,
@@ -2695,8 +2784,8 @@
           "sourceHeight": 49,
           "sourceWidth": 28,
           "width": 49,
-          "x": 916,
-          "y": 575
+          "x": 270,
+          "y": 926
         },
         "pkg-10-game002-s3-new-image-string-003-7-2.png": {
           "height": 29,
@@ -2704,8 +2793,8 @@
           "sourceHeight": 48,
           "sourceWidth": 29,
           "width": 48,
-          "x": 974,
-          "y": 593
+          "x": 420,
+          "y": 1064
         },
         "pkg-10-game002-s3-new-image-string-003-8-2.png": {
           "height": 29,
@@ -2713,8 +2802,8 @@
           "sourceHeight": 49,
           "sourceWidth": 29,
           "width": 49,
-          "x": 916,
-          "y": 611
+          "x": 327,
+          "y": 926
         },
         "pkg-10-game002-s3-new-image-string-003-9-2.png": {
           "height": 28,
@@ -2722,17 +2811,17 @@
           "sourceHeight": 48,
           "sourceWidth": 28,
           "width": 48,
-          "x": 974,
-          "y": 630
+          "x": 476,
+          "y": 1064
         },
         "pkg-10-game002-s3-new-image-string-2-0.png": {
-          "height": 36,
-          "rotated": true,
+          "height": 49,
+          "rotated": false,
           "sourceHeight": 49,
           "sourceWidth": 36,
-          "width": 49,
-          "x": 974,
-          "y": 666
+          "width": 36,
+          "x": 144,
+          "y": 668
         },
         "pkg-10-game002-s3-new-image-string-2-1.png": {
           "height": 30,
@@ -2740,8 +2829,8 @@
           "sourceHeight": 49,
           "sourceWidth": 30,
           "width": 49,
-          "x": 974,
-          "y": 710
+          "x": 144,
+          "y": 725
         },
         "pkg-10-game002-s3-new-image-string-2-2.png": {
           "height": 36,
@@ -2749,8 +2838,8 @@
           "sourceHeight": 49,
           "sourceWidth": 36,
           "width": 49,
-          "x": 974,
-          "y": 748
+          "x": 188,
+          "y": 672
         },
         "pkg-10-game002-s3-new-image-string-2-3.png": {
           "height": 49,
@@ -2758,8 +2847,8 @@
           "sourceHeight": 49,
           "sourceWidth": 36,
           "width": 36,
-          "x": 435,
-          "y": 292
+          "x": 245,
+          "y": 672
         },
         "pkg-10-game002-s3-new-image-string-2-4.png": {
           "height": 35,
@@ -2767,35 +2856,35 @@
           "sourceHeight": 49,
           "sourceWidth": 35,
           "width": 49,
-          "x": 972,
-          "y": 852
+          "x": 144,
+          "y": 763
         },
         "pkg-10-game002-s3-new-image-string-2-5.png": {
-          "height": 32,
-          "rotated": true,
+          "height": 49,
+          "rotated": false,
           "sourceHeight": 49,
           "sourceWidth": 32,
-          "width": 49,
-          "x": 972,
-          "y": 895
+          "width": 32,
+          "x": 289,
+          "y": 663
         },
         "pkg-10-game002-s3-new-image-string-2-6.png": {
-          "height": 34,
-          "rotated": true,
+          "height": 49,
+          "rotated": false,
           "sourceHeight": 49,
           "sourceWidth": 34,
-          "width": 49,
-          "x": 972,
-          "y": 935
+          "width": 34,
+          "x": 329,
+          "y": 663
         },
         "pkg-10-game002-s3-new-image-string-2-7.png": {
-          "height": 34,
-          "rotated": true,
+          "height": 49,
+          "rotated": false,
           "sourceHeight": 49,
           "sourceWidth": 34,
-          "width": 49,
-          "x": 972,
-          "y": 977
+          "width": 34,
+          "x": 371,
+          "y": 663
         },
         "pkg-10-game002-s3-new-image-string-2-8.png": {
           "height": 49,
@@ -2803,8 +2892,8 @@
           "sourceHeight": 49,
           "sourceWidth": 35,
           "width": 35,
-          "x": 420,
-          "y": 1031
+          "x": 413,
+          "y": 663
         },
         "pkg-10-game002-s3-new-image-string-2-9.png": {
           "height": 49,
@@ -2812,8 +2901,8 @@
           "sourceHeight": 49,
           "sourceWidth": 34,
           "width": 34,
-          "x": 420,
-          "y": 1088
+          "x": 748,
+          "y": 748
         },
         "pkg-10-game002-s3-new-image-string-2-x.png": {
           "height": 49,
@@ -2821,8 +2910,8 @@
           "sourceHeight": 49,
           "sourceWidth": 35,
           "width": 35,
-          "x": 462,
-          "y": 1088
+          "x": 790,
+          "y": 748
         },
         "pkg-10-game002-s3-new-image-string-3-0.png": {
           "height": 49,
@@ -2830,8 +2919,8 @@
           "sourceHeight": 49,
           "sourceWidth": 36,
           "width": 36,
-          "x": 463,
-          "y": 1031
+          "x": 833,
+          "y": 748
         },
         "pkg-10-game002-s3-new-image-string-3-1.png": {
           "height": 49,
@@ -2839,8 +2928,8 @@
           "sourceHeight": 49,
           "sourceWidth": 29,
           "width": 29,
-          "x": 505,
-          "y": 1088
+          "x": 877,
+          "y": 748
         },
         "pkg-10-game002-s3-new-image-string-3-2.png": {
           "height": 49,
@@ -2848,8 +2937,8 @@
           "sourceHeight": 49,
           "sourceWidth": 36,
           "width": 36,
-          "x": 507,
-          "y": 1031
+          "x": 914,
+          "y": 748
         },
         "pkg-10-game002-s3-new-image-string-3-5.png": {
           "height": 49,
@@ -2857,26 +2946,26 @@
           "sourceHeight": 49,
           "sourceWidth": 32,
           "width": 32,
-          "x": 542,
-          "y": 1088
+          "x": 456,
+          "y": 659
         },
         "pkg-10-game002-s3-new-image-string-3-x.png": {
-          "height": 49,
-          "rotated": false,
+          "height": 35,
+          "rotated": true,
           "sourceHeight": 49,
           "sourceWidth": 35,
-          "width": 35,
-          "x": 551,
-          "y": 1031
+          "width": 49,
+          "x": 496,
+          "y": 659
         },
         "pkg-10-game002-s3-new-image-string-4-+.png": {
-          "height": 49,
-          "rotated": false,
+          "height": 32,
+          "rotated": true,
           "sourceHeight": 49,
           "sourceWidth": 32,
-          "width": 32,
-          "x": 582,
-          "y": 1088
+          "width": 49,
+          "x": 496,
+          "y": 702
         },
         "pkg-10-game002-s3-new-image-string-4-1.png": {
           "height": 29,
@@ -2884,8 +2973,8 @@
           "sourceHeight": 49,
           "sourceWidth": 29,
           "width": 49,
-          "x": 558,
-          "y": 994
+          "x": 485,
+          "y": 196
         },
         "pkg-10-game002-s3-new-image-string-4-2.png": {
           "height": 49,
@@ -2893,8 +2982,8 @@
           "sourceHeight": 49,
           "sourceWidth": 36,
           "width": 36,
-          "x": 594,
-          "y": 1031
+          "x": 485,
+          "y": 233
         },
         "pkg-10-game002-s3-WL_spinBlur.png": {
           "height": 170,
@@ -2902,8 +2991,8 @@
           "sourceHeight": 170,
           "sourceWidth": 170,
           "width": 170,
-          "x": 1036,
-          "y": 6
+          "x": 6,
+          "y": 1152
         },
         "pkg-10-game002-s3-WL.disabled.png": {
           "height": 170,
@@ -2911,8 +3000,8 @@
           "sourceHeight": 170,
           "sourceWidth": 170,
           "width": 170,
-          "x": 1036,
-          "y": 184
+          "x": 184,
+          "y": 1152
         },
         "pkg-10-game002-s3-WL.png": {
           "height": 170,
@@ -2920,8 +3009,8 @@
           "sourceHeight": 170,
           "sourceWidth": 170,
           "width": 170,
-          "x": 1032,
-          "y": 362
+          "x": 362,
+          "y": 1152
         },
         "pkg-10-game002-s3-WM_spinBlur.png": {
           "height": 170,
@@ -2929,8 +3018,8 @@
           "sourceHeight": 170,
           "sourceWidth": 170,
           "width": 170,
-          "x": 1031,
-          "y": 540
+          "x": 540,
+          "y": 1152
         },
         "pkg-10-game002-s3-WM.disabled.png": {
           "height": 170,
@@ -2938,8 +3027,8 @@
           "sourceHeight": 170,
           "sourceWidth": 170,
           "width": 170,
-          "x": 1031,
-          "y": 718
+          "x": 718,
+          "y": 1152
         },
         "pkg-10-game002-s3-WM.png": {
           "height": 130,
@@ -2947,17 +3036,17 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 638,
-          "y": 1019
+          "x": 1110,
+          "y": 6
         },
         "pkg-17-award-celebration-0.png": {
-          "height": 132,
-          "rotated": false,
+          "height": 116,
+          "rotated": true,
           "sourceHeight": 132,
           "sourceWidth": 116,
-          "width": 116,
-          "x": 776,
-          "y": 1019
+          "width": 132,
+          "x": 1106,
+          "y": 420
         },
         "pkg-17-award-celebration-01_asset_image_mrxcn5qm_n.png": {
           "height": 130,
@@ -2965,8 +3054,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 900,
-          "y": 1019
+          "x": 1110,
+          "y": 972
         },
         "pkg-17-award-celebration-02_asset_image_mrxcn5qo_o.png": {
           "height": 130,
@@ -2974,8 +3063,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 1038,
-          "y": 896
+          "x": 1110,
+          "y": 144
         },
         "pkg-17-award-celebration-03_asset_image_mrxcn5qq_p.png": {
           "height": 130,
@@ -2983,8 +3072,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 6,
-          "y": 1169
+          "x": 1110,
+          "y": 282
         },
         "pkg-17-award-celebration-04_asset_image_mrxcn5qu_q.png": {
           "height": 130,
@@ -2992,8 +3081,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 144,
-          "y": 1169
+          "x": 1106,
+          "y": 544
         },
         "pkg-17-award-celebration-05_asset_image_mrxcn5qw_r.png": {
           "height": 130,
@@ -3001,8 +3090,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 282,
-          "y": 1169
+          "x": 1106,
+          "y": 682
         },
         "pkg-17-award-celebration-06_asset_image_mrxcn5qx_s.png": {
           "height": 130,
@@ -3010,8 +3099,8 @@
           "sourceHeight": 130,
           "sourceWidth": 130,
           "width": 130,
-          "x": 420,
-          "y": 1159
+          "x": 1085,
+          "y": 1145
         },
         "pkg-17-award-celebration-1_asset_image_mryc5k3f_3.png": {
           "height": 142,
@@ -3019,8 +3108,8 @@
           "sourceHeight": 142,
           "sourceWidth": 117,
           "width": 117,
-          "x": 900,
-          "y": 1157
+          "x": 1122,
+          "y": 820
         },
         "pkg-17-award-celebration-1.png": {
           "height": 135,
@@ -3028,8 +3117,8 @@
           "sourceHeight": 135,
           "sourceWidth": 116,
           "width": 116,
-          "x": 558,
-          "y": 1159
+          "x": 896,
+          "y": 1152
         },
         "pkg-17-award-celebration-2-2.png": {
           "height": 135,
@@ -3037,17 +3126,17 @@
           "sourceHeight": 135,
           "sourceWidth": 116,
           "width": 116,
-          "x": 682,
-          "y": 1159
+          "x": 1248,
+          "y": 6
         },
         "pkg-17-award-celebration-2.png": {
-          "height": 135,
-          "rotated": false,
+          "height": 42,
+          "rotated": true,
           "sourceHeight": 135,
           "sourceWidth": 42,
-          "width": 42,
-          "x": 806,
-          "y": 1159
+          "width": 135,
+          "x": 1223,
+          "y": 1110
         },
         "pkg-17-award-celebration-3-2.png": {
           "height": 135,
@@ -3055,17 +3144,17 @@
           "sourceHeight": 135,
           "sourceWidth": 116,
           "width": 116,
-          "x": 1025,
-          "y": 1157
+          "x": 1248,
+          "y": 149
         },
         "pkg-17-award-celebration-3.png": {
-          "height": 135,
-          "rotated": false,
+          "height": 39,
+          "rotated": true,
           "sourceHeight": 135,
           "sourceWidth": 39,
-          "width": 39,
-          "x": 1149,
-          "y": 1034
+          "width": 135,
+          "x": 1020,
+          "y": 1283
         },
         "pkg-17-award-celebration-4-2.png": {
           "height": 135,
@@ -3073,8 +3162,8 @@
           "sourceHeight": 135,
           "sourceWidth": 116,
           "width": 116,
-          "x": 1214,
-          "y": 6
+          "x": 1248,
+          "y": 292
         },
         "pkg-17-award-celebration-4.png": {
           "height": 95,
@@ -3082,8 +3171,8 @@
           "sourceHeight": 135,
           "sourceWidth": 95,
           "width": 135,
-          "x": 1176,
-          "y": 896
+          "x": 1223,
+          "y": 1160
         },
         "pkg-17-award-celebration-5.png": {
           "height": 135,
@@ -3091,8 +3180,8 @@
           "sourceHeight": 135,
           "sourceWidth": 116,
           "width": 116,
-          "x": 1214,
-          "y": 149
+          "x": 1248,
+          "y": 435
         },
         "pkg-17-award-celebration-6.png": {
           "height": 135,
@@ -3100,8 +3189,8 @@
           "sourceHeight": 135,
           "sourceWidth": 116,
           "width": 116,
-          "x": 1214,
-          "y": 292
+          "x": 1248,
+          "y": 578
         },
         "pkg-17-award-celebration-7.png": {
           "height": 135,
@@ -3109,8 +3198,8 @@
           "sourceHeight": 135,
           "sourceWidth": 116,
           "width": 116,
-          "x": 1210,
-          "y": 435
+          "x": 1248,
+          "y": 721
         },
         "pkg-17-award-celebration-8.png": {
           "height": 135,
@@ -3118,8 +3207,8 @@
           "sourceHeight": 135,
           "sourceWidth": 116,
           "width": 116,
-          "x": 1209,
-          "y": 578
+          "x": 1248,
+          "y": 864
         },
         "pkg-17-award-celebration-9.png": {
           "height": 135,
@@ -3127,35 +3216,35 @@
           "sourceHeight": 135,
           "sourceWidth": 116,
           "width": 116,
-          "x": 1209,
-          "y": 721
+          "x": 896,
+          "y": 1295
         },
         "pkg-17-award-celebration-big_1_asset_image_mrvydhi0_6_asset_image_msy21in5_23.png": {
-          "height": 210,
-          "rotated": false,
+          "height": 518,
+          "rotated": true,
           "sourceHeight": 210,
           "sourceWidth": 518,
-          "width": 518,
-          "x": 6,
-          "y": 1307
-        },
-        "pkg-17-award-celebration-big_asset_image_mrvyd851_4.png": {
-          "height": 551,
-          "rotated": true,
-          "sourceHeight": 251,
-          "sourceWidth": 551,
-          "width": 251,
-          "x": 1338,
+          "width": 210,
+          "x": 1372,
           "y": 6
         },
-        "pkg-17-award-celebration-big_asset_image_mrvydp4q_8.png": {
-          "height": 1087,
+        "pkg-17-award-celebration-big_asset_image_mrvyd851_4.png": {
+          "height": 251,
           "rotated": false,
+          "sourceHeight": 251,
+          "sourceWidth": 551,
+          "width": 551,
+          "x": 1020,
+          "y": 1330
+        },
+        "pkg-17-award-celebration-big_asset_image_mrvydp4q_8.png": {
+          "height": 1204,
+          "rotated": true,
           "sourceHeight": 1087,
           "sourceWidth": 1204,
-          "width": 1204,
-          "x": 6,
-          "y": 1525
+          "width": 1087,
+          "x": 1590,
+          "y": 6
         },
         "pkg-17-award-celebration-big_asset_image_mrvyds1c_a.png": {
           "height": 1126,
@@ -3163,8 +3252,8 @@
           "sourceHeight": 1124,
           "sourceWidth": 1126,
           "width": 1124,
-          "x": 1597,
-          "y": 6
+          "x": 6,
+          "y": 1589
         },
         "pkg-17-award-celebration-image_asset_image_mrxd8l5y_y.png": {
           "height": 326,
@@ -3172,17 +3261,17 @@
           "sourceHeight": 326,
           "sourceWidth": 842,
           "width": 842,
-          "x": 1149,
-          "y": 1177
+          "x": 1579,
+          "y": 1218
         },
         "pkg-17-award-celebration-image_asset_image_msy5k1q6_9.jpg": {
-          "height": 1360,
-          "rotated": true,
+          "height": 1402,
+          "rotated": false,
           "sourceHeight": 1402,
           "sourceWidth": 1360,
-          "width": 1402,
-          "x": 6,
-          "y": 2620
+          "width": 1360,
+          "x": 2685,
+          "y": 6
         },
         "pkg-17-award-celebration-image_asset_image_msybhgdb_10.png": {
           "height": 848,
@@ -3190,26 +3279,26 @@
           "sourceHeight": 848,
           "sourceWidth": 847,
           "width": 847,
-          "x": 1218,
-          "y": 1511
+          "x": 1138,
+          "y": 1589
         },
         "pkg-17-award-celebration-image_asset_image_msybhpr1_11.png": {
-          "height": 1493,
-          "rotated": true,
+          "height": 1348,
+          "rotated": false,
           "sourceHeight": 1348,
           "sourceWidth": 1493,
-          "width": 1348,
-          "x": 2729,
-          "y": 6
+          "width": 1493,
+          "x": 2429,
+          "y": 1416
         },
         "pkg-17-award-celebration-mega_asset_image_msybgpcg_w.png": {
-          "height": 724,
-          "rotated": true,
+          "height": 271,
+          "rotated": false,
           "sourceHeight": 271,
           "sourceWidth": 724,
-          "width": 271,
-          "x": 2073,
-          "y": 1140
+          "width": 724,
+          "x": 1138,
+          "y": 2445
         },
         "pkg-17-award-celebration-mega_asset_image_msybgwg4_x.png": {
           "height": 709,
@@ -3217,8 +3306,8 @@
           "sourceHeight": 282,
           "sourceWidth": 709,
           "width": 282,
-          "x": 2352,
-          "y": 1140
+          "x": 1993,
+          "y": 1552
         },
         "pkg-17-award-celebration-super_1_asset_image_msy5aeky_3.png": {
           "height": 315,
@@ -3226,8 +3315,8 @@
           "sourceHeight": 315,
           "sourceWidth": 795,
           "width": 795,
-          "x": 2642,
-          "y": 1507
+          "x": 6,
+          "y": 2772
         },
         "pkg-17-award-celebration-super_asset_image_msy5benk_4.png": {
           "height": 237,
@@ -3235,8 +3324,8 @@
           "sourceHeight": 237,
           "sourceWidth": 815,
           "width": 815,
-          "x": 1218,
-          "y": 2367
+          "x": 6,
+          "y": 1330
         },
         "pkg-17-award-celebration-super_asset_image_msy5dn68_7.png": {
           "height": 866,
@@ -3244,89 +3333,80 @@
           "sourceHeight": 866,
           "sourceWidth": 857,
           "width": 857,
-          "x": 1416,
-          "y": 2612
-        },
-        "pkg-17-award-celebration-superwin_asset_image_msy5dzp3_8.png": {
-          "height": 1510,
-          "rotated": true,
-          "sourceHeight": 1302,
-          "sourceWidth": 1510,
-          "width": 1302,
-          "x": 2642,
-          "y": 1830
+          "x": 6,
+          "y": 3095
         },
         "pkg-17-award-celebration-u6570-u5b57-u5e95-u5149.png": {
-          "height": 842,
-          "rotated": true,
+          "height": 326,
+          "rotated": false,
           "sourceHeight": 326,
           "sourceWidth": 842,
-          "width": 326,
-          "x": 2281,
-          "y": 1872
+          "width": 842,
+          "x": 809,
+          "y": 2724
         },
         "pkg-17-award-celebration-win_1_asset_image_mrvyehti_c_asset_image_msy243n4_47.png": {
-          "height": 205,
-          "rotated": false,
+          "height": 565,
+          "rotated": true,
           "sourceHeight": 205,
           "sourceWidth": 565,
-          "width": 565,
-          "x": 532,
-          "y": 1307
+          "width": 205,
+          "x": 1372,
+          "y": 532
         },
         "pkg-17-award-celebration-win_2_asset_image_msy5cz7g_5.png": {
-          "height": 602,
-          "rotated": true,
+          "height": 235,
+          "rotated": false,
           "sourceHeight": 235,
           "sourceWidth": 602,
-          "width": 235,
-          "x": 1334,
-          "y": 565
+          "width": 602,
+          "x": 1659,
+          "y": 2724
         },
         "pkg-17-award-celebration-win_3_asset_image_msy5d8f0_6.png": {
-          "height": 207,
-          "rotated": false,
+          "height": 574,
+          "rotated": true,
           "sourceHeight": 207,
           "sourceWidth": 574,
-          "width": 574,
-          "x": 3445,
-          "y": 1507
+          "width": 207,
+          "x": 871,
+          "y": 3058
         },
         "pkg-17-award-celebration-win_4_asset_image_msybh31u_y.png": {
-          "height": 602,
-          "rotated": true,
+          "height": 235,
+          "rotated": false,
           "sourceHeight": 235,
           "sourceWidth": 602,
-          "width": 235,
-          "x": 2281,
-          "y": 3348
+          "width": 602,
+          "x": 871,
+          "y": 3640
         },
         "pkg-17-award-celebration-win_asset_image_mrvyel4c_e_asset_image_mswv3cm9_1o.png": {
-          "height": 602,
-          "rotated": true,
+          "height": 235,
+          "rotated": false,
           "sourceHeight": 235,
           "sourceWidth": 602,
-          "width": 235,
-          "x": 2281,
-          "y": 2722
+          "width": 602,
+          "x": 1086,
+          "y": 3058
         },
         "pkg-17-award-celebration-win_asset_image_msybh78g_z.png": {
-          "height": 584,
-          "rotated": true,
+          "height": 220,
+          "rotated": false,
           "sourceHeight": 220,
           "sourceWidth": 584,
-          "width": 220,
-          "x": 2524,
-          "y": 3348
+          "width": 584,
+          "x": 1086,
+          "y": 3301
         },
         "pkg-17-award-celebration-x.png": {
-          "height": 135,
-          "rotated": false,
+          "height": 116,
+          "rotated": true,
           "sourceHeight": 135,
           "sourceWidth": 116,
-          "width": 116,
-          "x": 3952,
-          "y": 1722
+          "width": 135,
+          "x": 2283,
+          "y": 1552
         },
         "pkg-17-award-celebration.png": {
           "height": 98,
@@ -3334,8 +3414,8 @@
           "sourceHeight": 135,
           "sourceWidth": 98,
           "width": 135,
-          "x": 3445,
-          "y": 1722
+          "x": 2283,
+          "y": 1676
         },
         "pkg-18-popup-freegamesadd-0.png": {
           "height": 74,
@@ -3343,8 +3423,8 @@
           "sourceHeight": 106,
           "sourceWidth": 74,
           "width": 106,
-          "x": 2524,
-          "y": 2722
+          "x": 3930,
+          "y": 1416
         },
         "pkg-18-popup-freegamesadd-1_asset_image_msztk3gd_v.png": {
           "height": 142,
@@ -3352,8 +3432,8 @@
           "sourceHeight": 142,
           "sourceWidth": 117,
           "width": 117,
-          "x": 3952,
-          "y": 1865
+          "x": 871,
+          "y": 3883
         },
         "pkg-18-popup-freegamesadd-1.png": {
           "height": 59,
@@ -3361,8 +3441,8 @@
           "sourceHeight": 106,
           "sourceWidth": 59,
           "width": 106,
-          "x": 2524,
-          "y": 2804
+          "x": 1223,
+          "y": 1263
         },
         "pkg-18-popup-freegamesadd-2.png": {
           "height": 74,
@@ -3370,8 +3450,8 @@
           "sourceHeight": 106,
           "sourceWidth": 74,
           "width": 106,
-          "x": 2524,
-          "y": 2871
+          "x": 1659,
+          "y": 2967
         },
         "pkg-18-popup-freegamesadd-3.png": {
           "height": 74,
@@ -3379,8 +3459,8 @@
           "sourceHeight": 106,
           "sourceWidth": 74,
           "width": 106,
-          "x": 2524,
-          "y": 2953
+          "x": 3930,
+          "y": 1498
         },
         "pkg-18-popup-freegamesadd-4.png": {
           "height": 71,
@@ -3388,17 +3468,17 @@
           "sourceHeight": 106,
           "sourceWidth": 71,
           "width": 106,
-          "x": 2524,
-          "y": 3035
+          "x": 3930,
+          "y": 1580
         },
         "pkg-18-popup-freegamesadd-5.png": {
-          "height": 106,
-          "rotated": false,
+          "height": 66,
+          "rotated": true,
           "sourceHeight": 106,
           "sourceWidth": 66,
-          "width": 66,
-          "x": 1999,
-          "y": 1140
+          "width": 106,
+          "x": 3930,
+          "y": 1659
         },
         "pkg-18-popup-freegamesadd-6.png": {
           "height": 68,
@@ -3406,8 +3486,8 @@
           "sourceHeight": 106,
           "sourceWidth": 68,
           "width": 106,
-          "x": 2524,
-          "y": 3114
+          "x": 3930,
+          "y": 1733
         },
         "pkg-18-popup-freegamesadd-7.png": {
           "height": 70,
@@ -3415,8 +3495,8 @@
           "sourceHeight": 106,
           "sourceWidth": 70,
           "width": 106,
-          "x": 2524,
-          "y": 3190
+          "x": 3930,
+          "y": 1809
         },
         "pkg-18-popup-freegamesadd-8.png": {
           "height": 71,
@@ -3424,17 +3504,17 @@
           "sourceHeight": 106,
           "sourceWidth": 71,
           "width": 106,
-          "x": 2524,
-          "y": 3268
+          "x": 3930,
+          "y": 1887
         },
         "pkg-18-popup-freegamesadd-9.png": {
-          "height": 106,
-          "rotated": false,
+          "height": 68,
+          "rotated": true,
           "sourceHeight": 106,
           "sourceWidth": 68,
-          "width": 68,
-          "x": 1038,
-          "y": 1034
+          "width": 106,
+          "x": 3930,
+          "y": 1966
         },
         "pkg-18-popup-freegamesadd-freegames_asset_image_mszswhtn_5.png": {
           "height": 471,
@@ -3442,45 +3522,68 @@
           "sourceHeight": 74,
           "sourceWidth": 471,
           "width": 74,
-          "x": 1416,
-          "y": 3486
+          "x": 1481,
+          "y": 3529
         },
         "pkg-18-popup-freegamesadd-freegames_asset_image_mszswkfe_7.png": {
-          "height": 353,
-          "rotated": false,
+          "height": 1212,
+          "rotated": true,
           "sourceHeight": 353,
           "sourceWidth": 1212,
-          "width": 1212,
-          "x": 2752,
-          "y": 3348
+          "width": 353,
+          "x": 2269,
+          "y": 2772
         },
         "pkg-18-popup-freegamesadd.png": {
-          "height": 106,
-          "rotated": false,
+          "height": 65,
+          "rotated": true,
           "sourceHeight": 106,
           "sourceWidth": 65,
-          "width": 65,
-          "x": 1999,
-          "y": 1254
+          "width": 106,
+          "x": 3930,
+          "y": 2042
         },
         "x.png": {
-          "height": 135,
-          "rotated": false,
+          "height": 116,
+          "rotated": true,
           "sourceHeight": 135,
           "sourceWidth": 116,
-          "width": 116,
-          "x": 3952,
-          "y": 2015
+          "width": 135,
+          "x": 2283,
+          "y": 1782
         }
       },
       "id": "atlas-initial-ac1b5c09-0",
       "image": {
-        "byteLength": 2811610,
-        "height": 3986,
+        "byteLength": 2458308,
+        "height": 4031,
         "mediaType": "image/webp",
-        "path": "assets/2e9656c234b4d405aec93752e7e7e377baaa91ee62d2a40a619f07e1b11f7acb.webp",
-        "sha256": "2e9656c234b4d405aec93752e7e7e377baaa91ee62d2a40a619f07e1b11f7acb",
-        "width": 4083
+        "path": "assets/a5a07ec8d4cecbee4d812d796a9bd6f97021f8fe958837738b48e4208d3219bf.webp",
+        "sha256": "a5a07ec8d4cecbee4d812d796a9bd6f97021f8fe958837738b48e4208d3219bf",
+        "width": 4051
+      },
+      "owner": "initial"
+    },
+    {
+      "frames": {
+        "pkg-17-award-celebration-superwin_asset_image_msy5dzp3_8.png": {
+          "height": 1302,
+          "rotated": false,
+          "sourceHeight": 1302,
+          "sourceWidth": 1510,
+          "width": 1510,
+          "x": 6,
+          "y": 6
+        }
+      },
+      "id": "atlas-initial-ac1b5c09-1",
+      "image": {
+        "byteLength": 379196,
+        "height": 1314,
+        "mediaType": "image/webp",
+        "path": "assets/f0100c91ea5a53a0dd514c48a88827c3d8f0856284d1a4112b298017b1c0fe28.webp",
+        "sha256": "f0100c91ea5a53a0dd514c48a88827c3d8f0856284d1a4112b298017b1c0fe28",
+        "width": 1522
       },
       "owner": "initial"
     },
@@ -3637,7 +3740,8 @@
   "chunks": [
     {
       "atlases": [
-        "atlas-initial-ac1b5c09-0"
+        "atlas-initial-ac1b5c09-0",
+        "atlas-initial-ac1b5c09-1"
       ],
       "dependencies": [],
       "externalAssets": [
@@ -3664,10 +3768,10 @@
       ],
       "id": "initial",
       "metadata": {
-        "byteLength": 294885,
+        "byteLength": 295527,
         "mediaType": "application/zip",
-        "path": "chunks/initial-ac1b5c09.12800a5e39f4fa1784c92db371cbf8eed8daccc69c670a135d746774daaa31fc.zip",
-        "sha256": "12800a5e39f4fa1784c92db371cbf8eed8daccc69c670a135d746774daaa31fc"
+        "path": "chunks/initial-ac1b5c09.c535efcd6fcf84661b870ac7991a6044607c15bc28d564222d52cbe8283008af.zip",
+        "sha256": "c535efcd6fcf84661b870ac7991a6044607c15bc28d564222d52cbe8283008af"
       },
       "owner": "initial"
     },
@@ -3690,10 +3794,10 @@
       ],
       "id": "mode:FreeGame",
       "metadata": {
-        "byteLength": 35990,
+        "byteLength": 34780,
         "mediaType": "application/zip",
-        "path": "chunks/mode-freegame-325c3c43.7524a219b76369a837b4801a99cf46bf3c416773a56827a6d86ec4571b129f08.zip",
-        "sha256": "7524a219b76369a837b4801a99cf46bf3c416773a56827a6d86ec4571b129f08"
+        "path": "chunks/mode-freegame-325c3c43.44f444852cc2c42f6485f80c6157b001efe5cae4044e6f0d9895b139c164297f.zip",
+        "sha256": "44f444852cc2c42f6485f80c6157b001efe5cae4044e6f0d9895b139c164297f"
       },
       "owner": "mode:FreeGame"
     },
