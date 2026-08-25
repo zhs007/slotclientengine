@@ -1,0 +1,234 @@
+:root {
+  color: #f5ead8;
+  background: #05050b;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-width: 320px;
+  background:
+    radial-gradient(
+      circle at 50% -20%,
+      rgba(92, 48, 78, 0.25),
+      transparent 42%
+    ),
+    #05050b;
+}
+
+button {
+  font: inherit;
+}
+
+.demo-shell {
+  width: min(1600px, 100%);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 24px clamp(18px, 3.4vw, 58px) 28px;
+}
+
+.topbar,
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.topbar {
+  min-height: 94px;
+  padding: 2px 4px 18px;
+}
+
+.eyebrow {
+  margin: 0 0 9px;
+  color: #a58a6b;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.24em;
+}
+
+h1 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(26px, 2.5vw, 40px);
+  font-weight: 400;
+  letter-spacing: 0.05em;
+}
+
+h1 span {
+  margin-left: 10px;
+  color: #7c687f;
+  font-size: 0.48em;
+  font-style: italic;
+  letter-spacing: 0.12em;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #8f8490;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+}
+
+.status i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #eab85c;
+  box-shadow: 0 0 14px #ffbb4d;
+}
+
+.stage-shell {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  max-height: calc(100vh - 230px);
+  margin: 0 auto;
+  border: 1px solid rgba(208, 163, 89, 0.25);
+  border-radius: 5px;
+  background: #070713;
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.55),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.025);
+}
+
+.stage-host,
+.stage-host canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.stage-host canvas {
+  display: block;
+  touch-action: none;
+}
+
+.legend {
+  position: absolute;
+  right: 25px;
+  bottom: 19px;
+  display: flex;
+  gap: 18px;
+  color: rgba(187, 168, 183, 0.55);
+  font-size: 8px;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  pointer-events: none;
+}
+
+.legend span {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.legend b {
+  color: rgba(230, 186, 102, 0.78);
+  font-family: Georgia, serif;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.toolbar {
+  min-height: 88px;
+  padding: 18px 4px 0;
+}
+
+.toolbar p {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+}
+
+.toolbar strong {
+  color: #dac39c;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+}
+
+.toolbar p span {
+  color: #766d79;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+}
+
+.actions button {
+  min-width: 112px;
+  padding: 11px 17px;
+  border: 1px solid #b4803f;
+  border-radius: 3px;
+  color: #1a1013;
+  background: linear-gradient(135deg, #f1d58d, #c88a3d);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  transition:
+    transform 140ms ease,
+    filter 140ms ease;
+}
+
+.actions button:hover {
+  filter: brightness(1.12);
+  transform: translateY(-1px);
+}
+
+.actions button:active {
+  transform: translateY(1px);
+}
+
+.actions button.secondary {
+  color: #b9a8b5;
+  border-color: #443648;
+  background: #15101a;
+}
+
+@media (max-width: 680px) {
+  .demo-shell {
+    padding-inline: 12px;
+  }
+
+  .status,
+  .legend,
+  .toolbar p span {
+    display: none;
+  }
+
+  .toolbar {
+    align-items: flex-end;
+  }
+
+  .actions button {
+    min-width: auto;
+    padding-inline: 12px;
+  }
+}
