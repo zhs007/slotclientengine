@@ -240,7 +240,7 @@ export async function importImageStringZip(options: {
         glyph.path,
         `${keyPrefix}-${basenameFromSourcePath(glyph.path)}`,
       );
-  const rootKey = `${keyPrefix}-image-string.manifest.json`;
+  const rootKey = `${keyPrefix}.image-string.manifest.json`;
   assertNoEditorAssetKeyAliases([rootKey, ...mapping.values()]);
   for (const glyph of Object.values(rewritten.glyphs))
     glyph.path = mapping.get(glyph.path)!;

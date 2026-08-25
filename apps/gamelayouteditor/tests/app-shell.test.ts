@@ -1923,17 +1923,17 @@ describe("GameLayoutEditorApp workspace", () => {
     await vi.waitFor(() =>
       expect(
         root.querySelector(
-          '[data-resource-row="digits-image-string.manifest.json"]',
+          '[data-resource-row="digits.image-string.manifest.json"]',
         ),
       ).toBeTruthy(),
     );
     const background = root.querySelector(
-      '[data-resource-row="digits-image-string.manifest.json"] [data-resource-background]',
+      '[data-resource-row="digits.image-string.manifest.json"] [data-resource-background]',
     ) as HTMLButtonElement;
     expect(background).toBeNull();
     (
       root.querySelector(
-        '[data-resource-add-layer="digits-image-string.manifest.json"]',
+        '[data-resource-add-layer="digits.image-string.manifest.json"]',
       ) as HTMLButtonElement
     ).click();
     const dialog = root.querySelector(

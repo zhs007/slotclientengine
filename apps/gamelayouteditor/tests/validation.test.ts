@@ -303,21 +303,21 @@ describe("filename-key layout resource commands", () => {
       zipBytes: imageStringZip(),
     });
     expect(resource).toMatchObject({
-      id: "digits-image-string.manifest.json",
+      id: "digits.image-string.manifest.json",
       kind: "image-string",
-      manifestPath: "digits-image-string.manifest.json",
+      manifestPath: "digits.image-string.manifest.json",
     });
     expect(resource.assetPaths).toEqual(["digits-0.png", "digits-1.png"]);
     expect(project.assets.has(resource.manifestPath)).toBe(true);
     addLayerFromResource({
       project,
-      resourceId: "digits-image-string.manifest.json",
+      resourceId: "digits.image-string.manifest.json",
       nodeId: "amount-a",
       variants: ["default"],
     });
     addLayerFromResource({
       project,
-      resourceId: "digits-image-string.manifest.json",
+      resourceId: "digits.image-string.manifest.json",
       nodeId: "amount-b",
       variants: ["default"],
     });
@@ -351,14 +351,14 @@ describe("filename-key layout resource commands", () => {
       assignBackgroundResource({
         project,
         variant: "default",
-        resourceId: "digits-image-string.manifest.json",
+        resourceId: "digits.image-string.manifest.json",
       }),
     ).toThrow(/背景|尺寸/);
     const beforeReplacement = cloneEditorProject(project);
     await expect(
       replaceImageStringResource({
         project,
-        resourceId: "digits-image-string.manifest.json",
+        resourceId: "digits.image-string.manifest.json",
         zipBytes: imageStringZip({ glyphs: ["0"] }),
       }),
     ).rejects.toThrow(/缺少 glyph/);
@@ -377,20 +377,20 @@ describe("filename-key layout resource commands", () => {
     });
 
     expect([digits.id, score.id]).toEqual([
-      "digits-image-string.manifest.json",
-      "score-image-string.manifest.json",
+      "digits.image-string.manifest.json",
+      "score.image-string.manifest.json",
     ]);
     expect([...project.resources.keys()].sort()).toEqual([
-      "digits-image-string.manifest.json",
-      "score-image-string.manifest.json",
+      "digits.image-string.manifest.json",
+      "score.image-string.manifest.json",
     ]);
     expect([...project.assets.keys()].sort()).toEqual([
       "digits-0.png",
       "digits-1.png",
-      "digits-image-string.manifest.json",
+      "digits.image-string.manifest.json",
       "score-0.png",
       "score-1.png",
-      "score-image-string.manifest.json",
+      "score.image-string.manifest.json",
     ]);
   });
 
@@ -1628,7 +1628,7 @@ describe("filename-key layout resource commands", () => {
     await expect(
       replaceImageStringResource({
         project: nestedIdProject,
-        resourceId: "digits-image-string.manifest.json",
+        resourceId: "digits.image-string.manifest.json",
         zipBytes: imageStringZip({ id: "other" }),
       }),
     ).rejects.toThrow(/root filename key/);
