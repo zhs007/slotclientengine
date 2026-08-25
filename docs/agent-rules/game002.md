@@ -7,9 +7,8 @@
 - `apps/game002v2` 是从 Scene Layout package runtime 直接编排的精简实现；它读取
   server step 后直接调用 spin、Symbols state、mode transition 和 Popup API，不生成
   facts/draft/plan/payload，不使用 mutation contract、operation registry 或 rollback。
-- v2 只把 `assets/crave/assets.map.json` 当 logical key 到 physical path 的路由表；运行时
-  不读取或比对 sha256、byteLength、content-addressed filename，也不因 404 orphan 阻断。
-  实际被 Scene Layout/Symbols/Popup 引用的资源缺失时由对应 runtime 自然失败。
+- v2 只读取 `assets/crave/delivery.manifest.json` 并委托 RenderCore 解析 metadata ZIP、logical map、
+  atlas frame/rotation 与 external URL；app 不维护逐文件表，也不读取或比对交付 hash/size。
 - 背景、Symbols 内部动画绑定、FreeGame 有向转场和 Popup 流程全部由 Gamelayout package
   拥有。v2 只保留业务 component 到 semantic Symbols state 的调用顺序；不得直接操作
   Spine/VNI player 或 display tree。
@@ -39,15 +38,13 @@
 ## 固定入口和资源
 
 - game002 只有一个 Scene Layout package，不提供 skin 选择；URL 传入 `skin` 即
-  显式失败。运行时固定读取 CDN 上 `assets/crave` 的解包目录，按 manifest/map
-  加载文件，不下载或在浏览器解压 ZIP。layout、background、focus、grid geometry、
+  显式失败。运行时固定读取 CDN 上 `assets/crave` 的 delivery 目录；只在浏览器解压小型 metadata ZIP，
+  atlas/Spine/media 保持 CDN 文件。layout、background、focus、grid geometry、
   symbols、公开本地轮带、transition 和 award popup 只从该包取得。
-- 解包目录不得生成逐文件 TypeScript `?url` import。Vite dev/build 与 CDN 均原样
-  提供 package root；替换编辑器导出后，loading 从 `assets.map.json` 的 physical
-  path 动态生成去重 URL。不存在的 orphan physical path 可延迟到实际引用时失败，
-  不得让过期生成源码在 Vite import-analysis 阶段阻断。
+- delivery 目录不得生成逐文件 TypeScript `?url` import。Vite dev/build 与 CDN 均原样
+  提供 package root；交付必须由 `gamelayoutpkgcli --delivery-dir` 生成并用 `--check` 校验。
 - `assets/crave` 的当前美术 files/bytes 是 game002 权威交付；game runtime/build
-  天然不比对 map `sha256`/`byteLength`、不因未引用 entry/file 阻断，不依赖 app
+  天然不比对 delivery `sha256`/`byteLength`、不因未引用 entry/file 阻断，不依赖 app
   传 policy 才关闭 integrity gate。实际引用的 logical key 仍必须路由到安全存在的
   path，并通过对应资源 parser/decoder；不猜测未声明资源。
 - `apps/game002v2/config/reel-presentation.manifest.json` 只保存 game002v2 转轮时序和 Nearwin 程序资源键；Nearwin1/2 是 app 唯一显式 prepare 的美术资源，只来自 `assets/crave` 并通过 typed runtime-resource API 加载。其它 layout/presentation/transition/popup 由 Scene Layout package 直接驱动；未请求的 Nearwin3 不 prepare。

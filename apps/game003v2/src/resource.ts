@@ -1,5 +1,5 @@
 import {
-  loadSceneLayoutPackageFromUrl,
+  loadSceneLayoutDeliveryFromUrl,
   type SceneLayoutPackageResource,
 } from "@slotclientengine/rendercore/scene-layout/core";
 import type { SymbolPackageResource } from "@slotclientengine/rendercore/symbol/core";
@@ -19,7 +19,7 @@ export async function prepareGame003v2Resource(
 ): Promise<Game003v2Resource> {
   const fetchImpl = ((input: RequestInfo | URL, init?: RequestInit) =>
     globalThis.fetch(input, { ...init, signal })) as typeof fetch;
-  const resource = await loadSceneLayoutPackageFromUrl({
+  const resource = await loadSceneLayoutDeliveryFromUrl({
     manifestUrl,
     manifestBytes,
     fetchImpl,

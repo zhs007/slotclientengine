@@ -244,6 +244,13 @@ Sprite 复用，不创建 snapshot、`Application`、canvas、DOM、RAF 或字�
 extract、严格 path collision、assets map hash/size/media/orphan 与 nested exact closure
 校验，不执行 editor Finder-wrapper/legacy migration。
 
+`loadSceneLayoutDeliveryFromUrl()` 是 CDN delivery runtime 边界：先 strict 解析
+`delivery.manifest.json`，按 initial 优先顺序 bounded 解压各 GameMode metadata ZIP，再从 WebP atlas
+建立 Pixi 子纹理（含 rotation/original size），并把 Spine page、音频和视频保留为独立 CDN URL。
+它把 delivery 恢复成同一 logical filename-key package resource；game app 不需要改 layout、Symbols、
+Popup、VNI manifest，也不维护 physical 文件表。delivery hash/byte parity 由 CLI `--check` 负责，
+runtime 仍只在消费点对缺失 path、schema、decoder 和 renderer capability 显式失败。
+
 `createSymbolPackageReelRegistry()` 将 package catalog、paytable code、value controller
 与 cell size 组装成共享 reel registry；`createSceneLayoutPresentationSurface()` 用于
 “manifest-owned layout/background/popup + app-owned reel/round target”的组合，继续

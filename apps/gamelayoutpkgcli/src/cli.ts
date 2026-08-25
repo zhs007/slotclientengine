@@ -6,6 +6,11 @@ import {
 import { optimizeLayoutAudio, nodeAudioToolRunner } from "./audio-optimizer.js";
 import { optimizeLayoutImages, nodeCwebpRunner } from "./image-optimizer.js";
 import {
+  buildSceneLayoutDelivery,
+  checkSceneLayoutDeliveryDirectory,
+  commitSceneLayoutDeliveryDirectory,
+} from "./delivery-builder.js";
+import {
   readAndValidateLayoutPackage,
   validateLayoutPackageBytes,
 } from "./package-reader.js";
@@ -23,6 +28,16 @@ export async function runGamelayoutPkgCli(
 ): Promise<void> {
   try {
     const options = resolveCliOptions(parseCliArgs(argv));
+    if (options.deliveryDirectory) {
+      const result = await publishSceneLayoutDeliveryFile(options);
+      console.log(
+        `gamelayoutpkg CDN 交付目录${options.check ? "校验" : "生成"}成功：${result.outputDirectory}`,
+      );
+      console.log(
+        `Atlas ${result.atlasCount} 张、合图帧 ${result.atlasFrameCount} 个、外置资源 ${result.externalAssetCount} 个。`,
+      );
+      return;
+    }
     const result = await optimizeLayoutPackageFile(options);
     console.log(`gamelayoutpkg 优化成功：${result.outputPath}`);
     console.log(`资源分组 JSON：${result.assetsJsonPath}`);
@@ -41,8 +56,10 @@ export async function runGamelayoutPkgCli(
 export function parseCliArgs(argv: readonly string[]): GamelayoutPkgCliOptions {
   const args = argv[0] === "--" ? argv.slice(1) : argv;
   const values = new Map<string, string>();
+  let check = false;
   const supported = new Set([
     "--input",
+    "--delivery-dir",
     "--output",
     "--assets-json",
     "--quality",
@@ -52,10 +69,19 @@ export function parseCliArgs(argv: readonly string[]): GamelayoutPkgCliOptions {
     "--bgm-bitrate",
     "--effect-mono-bitrate",
     "--effect-stereo-bitrate",
+    "--atlas-max-size",
+    "--atlas-padding",
+    "--atlas-extrude",
+    "--check",
   ]);
   for (let index = 0; index < args.length; index += 1) {
     const flag = args[index]!;
     if (!supported.has(flag)) throw new Error(`未知参数：${flag}`);
+    if (flag === "--check") {
+      if (check) throw new Error("--check 不能重复提供。");
+      check = true;
+      continue;
+    }
     if (values.has(flag)) throw new Error(`${flag} 不能重复提供。`);
     const value = args[index + 1];
     if (!value || value.startsWith("--"))
@@ -80,8 +106,19 @@ export function parseCliArgs(argv: readonly string[]): GamelayoutPkgCliOptions {
     "--effect-stereo-bitrate",
     96,
   );
+  const maxAtlasSize = parseInteger(
+    values,
+    "--atlas-max-size",
+    4096,
+    256,
+    8192,
+  );
+  const atlasPadding = parseInteger(values, "--atlas-padding", 4, 0, 32);
+  const atlasExtrude = parseInteger(values, "--atlas-extrude", 2, 0, 16);
   return Object.freeze({
     inputPath,
+    deliveryDirectory: values.get("--delivery-dir"),
+    check,
     outputPath: values.get("--output"),
     assetsJsonPath: values.get("--assets-json"),
     quality,
@@ -91,6 +128,9 @@ export function parseCliArgs(argv: readonly string[]): GamelayoutPkgCliOptions {
     bgmBitrateKbps,
     effectMonoBitrateKbps,
     effectStereoBitrateKbps,
+    maxAtlasSize,
+    atlasPadding,
+    atlasExtrude,
   });
 }
 
@@ -110,11 +150,23 @@ export function resolveCliOptions(
   const assetsJsonPath = resolve(
     options.assetsJsonPath ?? resolve(directory, `${stem}.assets-groups.json`),
   );
-  const paths = [inputPath, outputPath, assetsJsonPath];
+  const deliveryDirectory = options.deliveryDirectory
+    ? resolve(options.deliveryDirectory)
+    : undefined;
+  if (options.check && !deliveryDirectory)
+    throw new Error("--check 只能与 --delivery-dir 一起使用。");
+  const paths = [
+    inputPath,
+    outputPath,
+    assetsJsonPath,
+    deliveryDirectory,
+  ].filter((path): path is string => path !== undefined);
   if (new Set(paths).size !== paths.length)
     throw new Error("input、output 和 assets-json 路径必须互不相同。");
   return Object.freeze({
     inputPath,
+    ...(deliveryDirectory ? { deliveryDirectory } : {}),
+    check: options.check ?? false,
     outputPath,
     assetsJsonPath,
     quality: options.quality,
@@ -124,6 +176,48 @@ export function resolveCliOptions(
     bgmBitrateKbps: options.bgmBitrateKbps ?? 128,
     effectMonoBitrateKbps: options.effectMonoBitrateKbps ?? 64,
     effectStereoBitrateKbps: options.effectStereoBitrateKbps ?? 96,
+    maxAtlasSize: options.maxAtlasSize ?? 4096,
+    atlasPadding: options.atlasPadding ?? 4,
+    atlasExtrude: options.atlasExtrude ?? 2,
+  });
+}
+
+export async function publishSceneLayoutDeliveryFile(
+  options: ResolvedGamelayoutPkgCliOptions,
+  cwebpRunner: CwebpRunner = nodeCwebpRunner,
+): Promise<{
+  readonly outputDirectory: string;
+  readonly atlasCount: number;
+  readonly atlasFrameCount: number;
+  readonly externalAssetCount: number;
+}> {
+  if (!options.deliveryDirectory)
+    throw new Error("CDN 交付模式必须提供 --delivery-dir。");
+  const source = await readAndValidateLayoutPackage(options.inputPath);
+  const delivery = await buildSceneLayoutDelivery({
+    source,
+    quality: options.quality,
+    cwebpExecutable: options.cwebpExecutable,
+    cwebpRunner,
+    maxAtlasSize: options.maxAtlasSize,
+    atlasPadding: options.atlasPadding,
+    atlasExtrude: options.atlasExtrude,
+  });
+  if (options.check)
+    await checkSceneLayoutDeliveryDirectory({
+      outputDirectory: options.deliveryDirectory,
+      delivery,
+    });
+  else
+    await commitSceneLayoutDeliveryDirectory({
+      outputDirectory: options.deliveryDirectory,
+      delivery,
+    });
+  return Object.freeze({
+    outputDirectory: options.deliveryDirectory,
+    atlasCount: delivery.atlasCount,
+    atlasFrameCount: delivery.atlasFrameCount,
+    externalAssetCount: delivery.externalAssetCount,
   });
 }
 
@@ -202,5 +296,20 @@ function parseBitrate(
   const value = Number(raw);
   if (!Number.isSafeInteger(value) || value < 8 || value > 512)
     throw new Error(`${flag} 必须是 8..512 的整数 kbps。`);
+  return value;
+}
+
+function parseInteger(
+  values: ReadonlyMap<string, string>,
+  flag: string,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number {
+  const raw = values.get(flag);
+  if (raw === undefined) return fallback;
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value < minimum || value > maximum)
+    throw new Error(`${flag} 必须是 ${minimum}..${maximum} 的整数。`);
   return value;
 }

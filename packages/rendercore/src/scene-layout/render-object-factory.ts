@@ -1,5 +1,5 @@
 import { VNIRuntime } from "@slotclientengine/vnicore/core";
-import { Assets, Container, Sprite, type Texture } from "pixi.js";
+import { Assets, Cache, Container, Sprite, type Texture } from "pixi.js";
 import { createManagedImgNumberRenderObject } from "../presentation/imgnumber-render-object.js";
 import {
   createRenderObjectChildLayer,
@@ -647,10 +647,13 @@ function isSpineSlotPlayer(
 }
 
 async function loadRenderObjectTexture(url: string): Promise<Texture> {
-  const texture = (await Assets.load({
-    src: url,
-    parser: "loadTextures",
-  })) as Texture | null | undefined;
+  const texture =
+    url.startsWith("scene-layout-delivery:") && Cache.has(url)
+      ? Cache.get<Texture>(url)
+      : ((await Assets.load({
+          src: url,
+          parser: "loadTextures",
+        })) as Texture | null | undefined);
   if (!texture?.source)
     throw new SceneLayoutError(
       "Scene layout runtime image failed to load a valid Pixi texture.",

@@ -1,4 +1,4 @@
-import { Assets, Texture } from "pixi.js";
+import { Assets, Cache, Texture } from "pixi.js";
 import {
   assertVNIProject,
   resolveProjectAssetUrls,
@@ -41,6 +41,7 @@ export async function createPopupPackageResourceFromResolvedFiles(options: {
   readonly decodeImage?: DecodeImageStringImage;
   readonly loadTexture?: (url: string, path: string) => Promise<Texture>;
   readonly loadFont?: PopupFontLoader;
+  readonly resolveAssetUrl?: (path: string) => string | undefined;
 }): Promise<PopupPackageResource<PopupManifestV8>> {
   const manifest = loadPopupManifest(
     options.manifest ?? parseJson(requireBytes(options.files, ROOT), ROOT),
@@ -67,6 +68,9 @@ export async function createPopupPackageResourceFromResolvedFiles(options: {
               ...(options.loadTexture
                 ? { loadTexture: options.loadTexture }
                 : {}),
+              ...(options.resolveAssetUrl
+                ? { resolveAssetUrl: options.resolveAssetUrl }
+                : {}),
             })
           : await createImageStringResourceFromFiles({
               files: extractPrefix(
@@ -90,10 +94,16 @@ export async function createPopupPackageResourceFromResolvedFiles(options: {
             imageStringResource.manifest,
           );
       } else if (spec.kind === "image") {
-        const url = objectUrl(requireBytes(files, spec.path), spec.path, urls);
-        const texture = await (options.loadTexture
-          ? options.loadTexture(url, spec.path)
-          : Assets.load<Texture>({ src: url, parser: "loadTextures" }));
+        const resolvedUrl = options.resolveAssetUrl?.(spec.path);
+        const url =
+          resolvedUrl ??
+          objectUrl(requireBytes(files, spec.path), spec.path, urls);
+        const texture =
+          url.startsWith("scene-layout-delivery:") && Cache.has(url)
+            ? Cache.get<Texture>(url)
+            : await (options.loadTexture
+                ? options.loadTexture(url, spec.path)
+                : Assets.load<Texture>({ src: url, parser: "loadTextures" }));
         if (
           texture.width !== spec.size.width ||
           texture.height !== spec.size.height
@@ -101,7 +111,7 @@ export async function createPopupPackageResourceFromResolvedFiles(options: {
           throw new Error(
             `popup image size mismatch ${spec.path}: expected ${spec.size.width}x${spec.size.height}, got ${texture.width}x${texture.height}.`,
           );
-        ownedTextures.add(texture);
+        if (!resolvedUrl) ownedTextures.add(texture);
         prepared[id] = { kind: "image", texture };
       } else if (spec.kind === "font") {
         const font = await acquirePopupFont({
@@ -116,15 +126,14 @@ export async function createPopupPackageResourceFromResolvedFiles(options: {
           parseJson(requireBytes(files, spec.project), spec.project),
         );
         const assetUrls: Record<string, string> = {};
-        for (const asset of project.assets)
-          assetUrls[asset.path] = objectUrl(
-            requireBytes(
-              files,
-              mapped ? asset.path : resolveRelative(spec.project, asset.path),
-            ),
-            asset.path,
-            urls,
-          );
+        for (const asset of project.assets) {
+          const path = mapped
+            ? asset.path
+            : resolveRelative(spec.project, asset.path);
+          assetUrls[asset.path] =
+            options.resolveAssetUrl?.(path) ??
+            objectUrl(requireBytes(files, path), asset.path, urls);
+        }
         prepared[id] = {
           kind: "vni",
           project,
@@ -139,7 +148,8 @@ export async function createPopupPackageResourceFromResolvedFiles(options: {
         const textureUrls = Object.fromEntries(
           Object.entries(spec.textures).map(([page, path]) => [
             page,
-            objectUrl(requireBytes(files, path), path, urls),
+            options.resolveAssetUrl?.(path) ??
+              objectUrl(requireBytes(files, path), path, urls),
           ]),
         );
         const spine = { skeleton, atlasText, textureUrls };
@@ -177,6 +187,7 @@ async function createMappedNestedImageStringResource(options: {
   readonly files: ReadonlyMap<string, Uint8Array>;
   readonly decodeImage?: DecodeImageStringImage;
   readonly loadTexture?: (url: string, path: string) => Promise<Texture>;
+  readonly resolveAssetUrl?: (path: string) => string | undefined;
 }) {
   const manifest = parseImageStringManifest(
     parseJson(
@@ -197,6 +208,9 @@ async function createMappedNestedImageStringResource(options: {
     files: nested,
     ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
     ...(options.loadTexture ? { loadTexture: options.loadTexture } : {}),
+    ...(options.resolveAssetUrl
+      ? { resolveAssetUrl: options.resolveAssetUrl }
+      : {}),
   });
 }
 

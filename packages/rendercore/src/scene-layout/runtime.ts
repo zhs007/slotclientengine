@@ -1,4 +1,11 @@
-import { Assets, Container, Graphics, Sprite, type Texture } from "pixi.js";
+import {
+  Assets,
+  Cache,
+  Container,
+  Graphics,
+  Sprite,
+  type Texture,
+} from "pixi.js";
 import { VNIRuntime } from "@slotclientengine/vnicore/core";
 import {
   assertValidSpineDeltaSeconds,
@@ -1794,10 +1801,13 @@ function resolveNodePlacementPosition(
 }
 
 async function loadSceneLayoutTexture(url: string): Promise<Texture> {
-  const texture = (await Assets.load({
-    src: url,
-    parser: "loadTextures",
-  })) as Texture | null | undefined;
+  const texture =
+    url.startsWith("scene-layout-delivery:") && Cache.has(url)
+      ? Cache.get<Texture>(url)
+      : ((await Assets.load({
+          src: url,
+          parser: "loadTextures",
+        })) as Texture | null | undefined);
   if (!texture?.source) {
     throw new SceneLayoutError(
       "Scene layout image failed to load a valid Pixi texture.",

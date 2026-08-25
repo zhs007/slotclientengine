@@ -477,6 +477,7 @@ export async function createSymbolPackageResourceFromResolvedFiles(options: {
   readonly packageManifest: unknown;
   readonly files: ReadonlyMap<string, Uint8Array>;
   readonly loadTextures?: boolean;
+  readonly resolveAssetUrl?: (path: string) => string | undefined;
 }): Promise<SymbolPackageResource> {
   const parsedPackageManifest = parseSymbolPackageManifest(
     options.packageManifest,
@@ -523,6 +524,7 @@ export async function createSymbolPackageResourceFromResolvedFiles(options: {
       files,
       urls,
       textureUrls,
+      options.resolveAssetUrl,
     );
     if (options.loadTextures !== false) {
       await Promise.all(
@@ -916,6 +918,7 @@ function createPackageModules(
   files: ReadonlyMap<string, Uint8Array>,
   urls: ObjectUrlRegistry,
   textureUrls: string[],
+  resolveAssetUrl?: (path: string) => string | undefined,
 ): {
   imageModules: Record<string, string>;
   vniProjectModules: Record<string, unknown>;
@@ -932,11 +935,12 @@ function createPackageModules(
     const bytes = files.get(path)!;
     const lower = path.toLowerCase();
     if (/\.(?:png|jpe?g|webp)$/u.test(lower)) {
-      const url = urls.create(
-        new Blob([bytes as BlobPart], { type: mimeType(path) }),
-      );
+      const resolved = resolveAssetUrl?.(path);
+      const url =
+        resolved ??
+        urls.create(new Blob([bytes as BlobPart], { type: mimeType(path) }));
       imageModules[path] = url;
-      textureUrls.push(url);
+      if (!resolved) textureUrls.push(url);
     } else if (lower.endsWith(".atlas")) {
       atlasModules[path] = decodeUtf8(bytes, path);
     } else if (lower.endsWith(".json")) {
@@ -1044,10 +1048,13 @@ async function loadTexture(value: string | Texture): Promise<Texture> {
 }
 
 async function loadPackageTexture(url: string): Promise<Texture> {
-  const texture = (await Assets.load({
-    src: url,
-    parser: "loadTextures",
-  })) as Texture | null | undefined;
+  const texture =
+    url.startsWith("scene-layout-delivery:") && Cache.has(url)
+      ? Cache.get<Texture>(url)
+      : ((await Assets.load({
+          src: url,
+          parser: "loadTextures",
+        })) as Texture | null | undefined);
   if (!texture?.source) {
     throw new SymbolAssetError(
       `symbol package image failed to load a valid Pixi texture: ${url}.`,

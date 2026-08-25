@@ -71,7 +71,10 @@ interface PopupManifest {
   >;
 }
 
-export const MINECART2_ROOT = resolve(process.cwd(), "../../assets/minecart2");
+export const MINECART2_ROOT = resolve(
+  process.cwd(),
+  "../../assets/fixtures/minecart2-mapped",
+);
 
 const MINECART2_ASSETS_MAP = JSON.parse(
   readFileSync(resolve(MINECART2_ROOT, "assets.map.json"), "utf8"),

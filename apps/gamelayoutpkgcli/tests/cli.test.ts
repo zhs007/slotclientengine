@@ -9,6 +9,8 @@ describe("gamelayoutpkg CLI", () => {
   it("parses required/default and explicit options", () => {
     expect(parseCliArgs(["--input", "layout.zip"])).toEqual({
       inputPath: "layout.zip",
+      deliveryDirectory: undefined,
+      check: false,
       outputPath: undefined,
       assetsJsonPath: undefined,
       quality: 80,
@@ -18,6 +20,9 @@ describe("gamelayoutpkg CLI", () => {
       bgmBitrateKbps: 128,
       effectMonoBitrateKbps: 64,
       effectStereoBitrateKbps: 96,
+      maxAtlasSize: 4096,
+      atlasPadding: 4,
+      atlasExtrude: 2,
     });
     expect(
       parseCliArgs([
@@ -42,6 +47,15 @@ describe("gamelayoutpkg CLI", () => {
         "56",
         "--effect-stereo-bitrate",
         "88",
+        "--delivery-dir",
+        "cdn-layout",
+        "--atlas-max-size",
+        "2048",
+        "--atlas-padding",
+        "6",
+        "--atlas-extrude",
+        "3",
+        "--check",
       ]),
     ).toMatchObject({
       quality: 72.5,
@@ -51,6 +65,11 @@ describe("gamelayoutpkg CLI", () => {
       bgmBitrateKbps: 120,
       effectMonoBitrateKbps: 56,
       effectStereoBitrateKbps: 88,
+      deliveryDirectory: "cdn-layout",
+      check: true,
+      maxAtlasSize: 2048,
+      atlasPadding: 6,
+      atlasExtrude: 3,
     });
   });
 
@@ -74,12 +93,23 @@ describe("gamelayoutpkg CLI", () => {
     expect(() =>
       parseCliArgs(["--input", "a.zip", "--effect-mono-bitrate", "64.5"]),
     ).toThrow(/整数/);
+    expect(() =>
+      parseCliArgs(["--input", "a.zip", "--atlas-max-size", "9000"]),
+    ).toThrow(/256\.\.8192/);
+    expect(() =>
+      resolveCliOptions(parseCliArgs(["--input", "a.zip", "--check"])),
+    ).toThrow(/delivery-dir/);
   });
 
   it("derives sibling outputs and rejects aliased paths", () => {
     const resolved = resolveCliOptions(parseCliArgs(["--input", "a.zip"]));
     expect(resolved.outputPath).toMatch(/a\.optimized\.zip$/u);
     expect(resolved.assetsJsonPath).toMatch(/a\.assets-groups\.json$/u);
+    expect(
+      resolveCliOptions(
+        parseCliArgs(["--input", "a.zip", "--delivery-dir", "delivery"]),
+      ).deliveryDirectory,
+    ).toMatch(/delivery$/u);
     expect(() =>
       resolveCliOptions({
         inputPath: "same.zip",

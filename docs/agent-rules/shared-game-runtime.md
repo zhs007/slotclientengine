@@ -225,7 +225,7 @@
 - package-level layout variant event 必须来自成功提交后的 snapshot diff；首次 apply、同 variant resize 与失败 apply 不派发，detail 只携带 previous/current variant identity，不把 raw window resize 当作 variant commit。
 - Gamelayout authored point由Scene Layout按当前snapshot和configured origin统一换算；logical viewport不是CSS/device viewport。跨parent只通过opaque Anchor和target-local解析，不向app公开world point、Matrix或visual bounds。SymbolGroup只可读取input-order odd middle、members/bounds center与稳定cell footprint，不能从当前display bounds推导业务rect。
 - scene-layout node、main reel 与 Popup binding order 必须是全局唯一安全整数；Popup order 必须高于全部 art/reel order，并在当前 scene 的 `popup` layer 内排序。旧单 Popup v1 缺少 order 时规范化为 `2000`，多个缺省 Popup 的重复值显式失败。
-- `gamelayoutpkgcli` 为每个 runtime resource 输出独立增量组，未请求程序资源不得并入 initial/shared。
+- CDN Scene Layout delivery 只按 `initial`、manifest GameMode 顺序与独立 `media` 形成 physical owner；跨 mode 资源优先归最早 mode，无法从 typed graph 证明 mode owner 的全局/程序资源归 initial。RenderCore 独占 delivery manifest、metadata ZIP、atlas frame/rotation 与 external URL 解析，游戏不得复制。
 - `columnGap`/`rowGap` 等 manifest geometry 必须一致作用于 standard/grid-cell reel、mask、effect、cascade 和 geometry snapshot。
 - 游戏静态 YAML 只承载可发布的美术和静态配置，不承载 token、cookie、服务器真实轮带或本轮下注。
 - YAML 保留中文注释说明字段用途和坐标基准；注释不作为构建逻辑。

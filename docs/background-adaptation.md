@@ -498,7 +498,7 @@ offsetY = 0
 - DOM frame 计算：[`packages/uiframeworks/src/layout.ts`](../packages/uiframeworks/src/layout.ts)
 - framework frame policy 类型：[`packages/gameframeworks/src/types.ts`](../packages/gameframeworks/src/types.ts)
 - game002 单背景示例：[`apps/game002/src/game-layout.ts`](../apps/game002/src/game-layout.ts)
-- game002 gamelayout package：[`assets/crave/layout.manifest.json`](../assets/crave/layout.manifest.json)
+- game002 历史 mapped fixture：[`assets/fixtures/crave-mapped/layout.manifest.json`](../assets/fixtures/crave-mapped/layout.manifest.json)；production 游戏使用 `assets/crave/delivery.manifest.json`。
 - rendercore background public API：[`packages/rendercore/src/background`](../packages/rendercore/src/background)
 - game003 双背景示例：[`apps/game003/src/game-layout.ts`](../apps/game003/src/game-layout.ts)
 - game003 YAML 示例：[`apps/game003/config/game-static.yaml`](../apps/game003/config/game-static.yaml)

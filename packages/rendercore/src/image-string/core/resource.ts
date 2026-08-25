@@ -1,4 +1,4 @@
-import { Assets, Texture } from "pixi.js";
+import { Assets, Cache, Texture } from "pixi.js";
 import { ImageStringError } from "../data/errors.js";
 import {
   collectImageStringAssetPaths,
@@ -45,9 +45,12 @@ export async function createImageStringResource(options: {
       throw new ImageStringError(
         `image-string imageModules 缺少有效资源：${path}`,
       );
-    const texture = await (options.loadTexture
-      ? options.loadTexture(module, path)
-      : Assets.load<Texture>({ src: module, parser: "loadTextures" }));
+    const texture =
+      module.startsWith("scene-layout-delivery:") && Cache.has(module)
+        ? Cache.get<Texture>(module)
+        : await (options.loadTexture
+            ? options.loadTexture(module, path)
+            : Assets.load<Texture>({ src: module, parser: "loadTextures" }));
     textures[path] = texture;
     if (options.ownTextures !== false) {
       if (options.loadTexture) ownedTextures.add(texture);
@@ -100,6 +103,7 @@ export async function createImageStringResourceFromResolvedFiles(options: {
   readonly files: ReadonlyMap<string, Uint8Array>;
   readonly decodeImage?: DecodeImageStringImage;
   readonly loadTexture?: (url: string, path: string) => Promise<Texture>;
+  readonly resolveAssetUrl?: (path: string) => string | undefined;
 }): Promise<ImageStringResource> {
   const manifest = parseImageStringManifest(options.manifest);
   assertExactImageStringKeys(
@@ -112,8 +116,15 @@ export async function createImageStringResourceFromResolvedFiles(options: {
   );
   const objectUrls = new LocalObjectUrlOwner();
   const imageModules: Record<string, string> = {};
+  const externallyResolved = new Set<string>();
   try {
     for (const [character, glyph] of Object.entries(manifest.glyphs)) {
+      const resolvedUrl = options.resolveAssetUrl?.(glyph.path);
+      if (resolvedUrl) {
+        imageModules[glyph.path] = resolvedUrl;
+        externallyResolved.add(glyph.path);
+        continue;
+      }
       const blob = new Blob([copyArrayBuffer(options.files.get(glyph.path)!)], {
         type: mimeTypeForPath(glyph.path),
       });
@@ -128,13 +139,22 @@ export async function createImageStringResourceFromResolvedFiles(options: {
       );
       imageModules[glyph.path] = objectUrls.create(blob);
     }
-    return await createImageStringResource({
+    const resource = await createImageStringResource({
       manifest,
       imageModules,
       ownedObjectUrls: objectUrls,
-      ownTextures: true,
+      ownTextures: options.resolveAssetUrl ? false : true,
       loadTexture: options.loadTexture,
     });
+    for (const [character, glyph] of Object.entries(manifest.glyphs)) {
+      if (!externallyResolved.has(glyph.path)) continue;
+      assertDecodedSize(
+        resource.textures[glyph.path]!,
+        glyph.size,
+        `glyph ${JSON.stringify(character)} (${glyph.path})`,
+      );
+    }
+    return resource;
   } catch (error) {
     objectUrls.destroy();
     throw imageStringError(error);

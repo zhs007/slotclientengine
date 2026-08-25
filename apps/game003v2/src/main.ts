@@ -44,7 +44,7 @@ const loading = createGameLoading({
   onBeforeComplete: async ({ loadedResources, readinessResult, signal }) => {
     if (signal.aborted) throw new DOMException("Aborted", "AbortError");
     const resource = await prepareGame003v2Resource(
-      new URL("layout.manifest.json", document.baseURI),
+      new URL("delivery.manifest.json", document.baseURI),
       readMinecart2Manifest(loadedResources),
       signal,
     );
