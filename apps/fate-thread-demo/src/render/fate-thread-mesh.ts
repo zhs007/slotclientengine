@@ -11,6 +11,8 @@ interface RibbonLayerOptions {
   blendMode: "normal" | "add" | "screen";
 }
 
+const RENDER_SUBDIVISIONS = 4;
+
 class RibbonLayer {
   readonly mesh: MeshSimple;
   readonly #vertices: Float32Array;
@@ -82,13 +84,20 @@ export class FateThreadMesh extends Container {
   readonly #halo: RibbonLayer;
   readonly #aura: RibbonLayer;
   readonly #core: RibbonLayer;
+  readonly #renderPoints: PointLike[];
 
-  constructor(pointCount: number) {
+  constructor(physicsPointCount: number) {
     super();
+    const renderPointCount =
+      (physicsPointCount - 1) * RENDER_SUBDIVISIONS + 1;
+    this.#renderPoints = Array.from({ length: renderPointCount }, () => ({
+      x: 0,
+      y: 0,
+    }));
     const textures = createProceduralThreadTextures();
     this.#halo = new RibbonLayer({
       texture: textures.glow,
-      pointCount,
+      pointCount: renderPointCount,
       width: 25,
       repeatLength: 210,
       flowSpeed: 0.16,
@@ -97,7 +106,7 @@ export class FateThreadMesh extends Container {
     });
     this.#aura = new RibbonLayer({
       texture: textures.glow,
-      pointCount,
+      pointCount: renderPointCount,
       width: 11,
       repeatLength: 180,
       flowSpeed: 0.23,
@@ -106,7 +115,7 @@ export class FateThreadMesh extends Container {
     });
     this.#core = new RibbonLayer({
       texture: textures.core,
-      pointCount,
+      pointCount: renderPointCount,
       width: 4.5,
       repeatLength: 150,
       flowSpeed: 0.42,
@@ -118,12 +127,59 @@ export class FateThreadMesh extends Container {
   }
 
   update(points: readonly PointLike[], elapsedSeconds: number): void {
-    this.#halo.update(points, elapsedSeconds);
-    this.#aura.update(points, elapsedSeconds * 1.07);
-    this.#core.update(points, elapsedSeconds);
+    resampleCatmullRom(points, RENDER_SUBDIVISIONS, this.#renderPoints);
+    this.#halo.update(this.#renderPoints, elapsedSeconds);
+    this.#aura.update(this.#renderPoints, elapsedSeconds * 1.07);
+    this.#core.update(this.#renderPoints, elapsedSeconds);
     this.#halo.mesh.alpha = 0.2 + Math.sin(elapsedSeconds * 1.9) * 0.035;
     this.#aura.mesh.alpha = 0.42 + Math.sin(elapsedSeconds * 2.7) * 0.055;
   }
+}
+
+function resampleCatmullRom(
+  points: readonly PointLike[],
+  subdivisions: number,
+  output: PointLike[],
+): void {
+  const lastPointIndex = points.length - 1;
+  for (let index = 0; index < lastPointIndex; index += 1) {
+    const p0 = points[Math.max(0, index - 1)];
+    const p1 = points[index];
+    const p2 = points[index + 1];
+    const p3 = points[Math.min(lastPointIndex, index + 2)];
+
+    for (let step = 0; step < subdivisions; step += 1) {
+      const t = step / subdivisions;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      const target = output[index * subdivisions + step];
+      target.x = catmullRom(p0.x, p1.x, p2.x, p3.x, t, t2, t3);
+      target.y = catmullRom(p0.y, p1.y, p2.y, p3.y, t, t2, t3);
+    }
+  }
+
+  const finalPoint = points[lastPointIndex];
+  const finalTarget = output[output.length - 1];
+  finalTarget.x = finalPoint.x;
+  finalTarget.y = finalPoint.y;
+}
+
+function catmullRom(
+  p0: number,
+  p1: number,
+  p2: number,
+  p3: number,
+  t: number,
+  t2: number,
+  t3: number,
+): number {
+  return (
+    0.5 *
+    (2 * p1 +
+      (-p0 + p2) * t +
+      (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
+      (-p0 + 3 * p1 - 3 * p2 + p3) * t3)
+  );
 }
 
 function buildTriangleIndices(pointCount: number): Uint32Array {
