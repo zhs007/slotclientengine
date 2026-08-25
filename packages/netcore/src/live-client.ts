@@ -83,7 +83,7 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
     this.options = {
       maxReconnectAttempts: 10,
       reconnectDelay: 1000,
-      requestTimeout: 1,//10000
+      requestTimeout: 10000,//
       ...options,
     };
     this.operationFailureRecovery = this.resolveFailureRecovery(options.operationFailureRecovery);
