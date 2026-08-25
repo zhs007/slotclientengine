@@ -168,6 +168,16 @@ export function parseSceneLayoutDeliveryManifest(
         fail(`atlas asset ${key} has no frame in ${asset.atlas}`);
     }
   }
+  const metadataOwnerByEntry = new Map<string, string>();
+  for (const [key, asset] of Object.entries(assets)) {
+    if (asset.kind !== "metadata") continue;
+    const owner = metadataOwnerByEntry.get(asset.entry);
+    if (owner !== undefined && owner !== asset.owner)
+      fail(
+        `metadata entry ${asset.entry} is assigned to multiple owners: ${owner}, ${asset.owner} (asset ${key})`,
+      );
+    metadataOwnerByEntry.set(asset.entry, asset.owner);
+  }
   const declaredExternal: string[] = [];
   for (const chunk of chunks)
     for (const key of chunk.externalAssets) {

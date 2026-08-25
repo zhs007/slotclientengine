@@ -1,4 +1,4 @@
-import { Assets, Container, Sprite, Texture } from "pixi.js";
+import { Assets, Container, Rectangle, Sprite, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
 import {
   createSceneLayoutResource,
@@ -731,6 +731,38 @@ describe("scene layout runtime", () => {
       expect(unloadTexture).toHaveBeenCalledWith(url);
     runtime.destroy();
     expect(unloadTexture).toHaveBeenCalledTimes(preparedUrls.length);
+  });
+
+  it("validates an atlas frame by its logical texture size instead of its page size", async () => {
+    const manifest = {
+      ...game002LayoutFixture,
+      nodes: game002LayoutFixture.nodes.map((node) => ({
+        ...node,
+        resource: { ...node.resource, size: { width: 2000, height: 2000 } },
+      })),
+    };
+    const resource = createSceneLayoutResource({
+      manifest,
+      imageModules: { "assets/bg.png": "memory:atlas-frame" },
+    });
+    const page = Texture.WHITE.source;
+    const frame = new Texture({
+      source: page,
+      frame: new Rectangle(0, 0, 1, 1),
+      orig: new Rectangle(0, 0, 2000, 2000),
+    });
+    expect([page.width, page.height]).not.toEqual([2000, 2000]);
+    const runtime = createSceneLayoutRuntime({
+      resource,
+      loadTexture: async () => frame,
+      unloadTexture: async () => undefined,
+    });
+
+    await expect(runtime.init()).resolves.toBeUndefined();
+    const sprite = runtime.getNode("bg").children[0] as Sprite;
+    expect([sprite.texture.width, sprite.texture.height]).toEqual([2000, 2000]);
+    runtime.destroy();
+    frame.destroy(false);
   });
 
   it("forces the Pixi texture parser for extensionless Blob URLs and rejects null textures", async () => {

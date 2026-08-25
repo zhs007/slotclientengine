@@ -222,11 +222,11 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
         `Scene layout runtime image "${name}" failed to load a valid Pixi texture.`,
       );
     if (
-      texture.source.width !== resource.size.width ||
-      texture.source.height !== resource.size.height
+      texture.width !== resource.size.width ||
+      texture.height !== resource.size.height
     )
       throw new SceneLayoutError(
-        `Scene layout runtime image "${name}" size mismatch: expected ${resource.size.width}x${resource.size.height}, actual ${texture.source.width}x${texture.source.height}.`,
+        `Scene layout runtime image "${name}" size mismatch: expected ${resource.size.width}x${resource.size.height}, actual ${texture.width}x${texture.height}.`,
       );
     const sprite = new Sprite(texture);
     sprite.anchor.set(

@@ -1,4 +1,4 @@
-import { Container, Sprite, Texture } from "pixi.js";
+import { Container, Rectangle, Sprite, Texture, TextureSource } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
 import type { ImageStringResource } from "../../src/image-string/core/index.js";
 import {
@@ -321,6 +321,29 @@ describe("Scene Layout named RenderObject factory", () => {
     expect(amount.getText()).toBe("1");
     factory.destroy();
     expect(() => amount.getText()).toThrow(/destroyed|已销毁/u);
+  });
+
+  it("validates a runtime image by its atlas frame size instead of its page size", async () => {
+    const source = new TextureSource({ width: 32, height: 24 });
+    const frame = new Texture({
+      source,
+      frame: new Rectangle(0, 0, 1, 1),
+      orig: new Rectangle(0, 0, 1, 1),
+    });
+    const factory = createSceneLayoutRenderObjectFactory({
+      resource: createResource(),
+      dependencies: { loadTexture: async () => frame },
+    });
+
+    const image = await factory.createRenderObject("badge");
+    const sprite = getRenderObjectAdapter(image).view as Sprite;
+    expect([sprite.texture.width, sprite.texture.height]).toEqual([1, 1]);
+    expect([sprite.texture.source.width, sprite.texture.source.height]).toEqual(
+      [32, 24],
+    );
+    image.destroy();
+    factory.destroy();
+    frame.destroy(true);
   });
 
   it("aligns runtime images to the package coordinate origin", async () => {

@@ -893,8 +893,8 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
           `Scene layout image "${node.spec.resource.path}" failed to load a valid Pixi texture.`,
         );
       }
-      const width = texture.source.width;
-      const height = texture.source.height;
+      const width = texture.width;
+      const height = texture.height;
       if (
         width !== node.spec.resource.size.width ||
         height !== node.spec.resource.size.height

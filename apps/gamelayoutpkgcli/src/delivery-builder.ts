@@ -183,24 +183,44 @@ export async function buildSceneLayoutDelivery(
   ensureChunk("initial");
 
   const mapEntries: Record<string, EditorAssetsMapEntry> = {};
-  for (const [key, value] of metadata) {
-    const path = allocateContentAddressedPath({
-      digest: await sha256Hex(value.bytes),
-      extension: canonicalExtensionOfEditorAssetKey(key),
-    });
-    ensureChunk(value.owner).metadata.set(path, value.bytes);
+  const metadataRecords = await Promise.all(
+    [...metadata].map(async ([key, value]) => {
+      const sha256 = await sha256Hex(value.bytes);
+      return Object.freeze({
+        key,
+        value,
+        sha256,
+        path: allocateContentAddressedPath({
+          digest: sha256,
+          extension: canonicalExtensionOfEditorAssetKey(key),
+        }),
+      });
+    }),
+  );
+  const metadataOwnerByPath = new Map<string, string>();
+  for (const record of metadataRecords) {
+    const current = metadataOwnerByPath.get(record.path);
+    if (
+      current === undefined ||
+      compareOwnerPriority(options.source, record.value.owner, current) < 0
+    )
+      metadataOwnerByPath.set(record.path, record.value.owner);
+  }
+  for (const { key, value, path, sha256 } of metadataRecords) {
+    const owner = metadataOwnerByPath.get(path)!;
+    ensureChunk(owner).metadata.set(path, value.bytes);
     mapEntries[key] = {
       path,
-      sha256: await sha256Hex(value.bytes),
+      sha256,
       mediaType: value.mediaType,
       byteLength: value.bytes.byteLength,
     };
     assetRoutes[key] = {
       kind: "metadata",
-      owner: value.owner,
-      chunk: value.owner,
+      owner,
+      chunk: owner,
       entry: path,
-      sha256: mapEntries[key]!.sha256,
+      sha256,
       byteLength: value.bytes.byteLength,
       mediaType: value.mediaType,
     };
@@ -550,6 +570,16 @@ function orderOwners(
     ...preferred.filter((owner) => owners.delete(owner)),
     ...[...owners].sort(compare),
   ]);
+}
+
+function compareOwnerPriority(
+  source: ValidatedLayoutPackage,
+  left: string,
+  right: string,
+): number {
+  if (left === right) return 0;
+  const ordered = orderOwners(source, [left, right]);
+  return ordered[0] === left ? -1 : 1;
 }
 
 function packImages(

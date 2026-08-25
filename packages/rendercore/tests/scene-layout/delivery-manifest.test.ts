@@ -39,6 +39,53 @@ describe("Scene Layout delivery manifest", () => {
       }),
     ).toThrow(/unsafe/);
   });
+
+  it("rejects one physical metadata entry assigned to multiple chunk owners", () => {
+    const valid = fixture();
+    const entry = `assets/${hash}.atlas`;
+    expect(() =>
+      parseSceneLayoutDeliveryManifest({
+        ...valid,
+        chunks: [
+          ...valid.chunks,
+          {
+            id: "mode:FreeGame",
+            owner: "mode:FreeGame",
+            dependencies: ["initial"],
+            metadata: {
+              path: `chunks/free.${hash}.zip`,
+              sha256: hash,
+              byteLength: 1,
+              mediaType: "application/zip",
+            },
+            atlases: [],
+            externalAssets: [],
+          },
+        ],
+        assets: {
+          ...valid.assets,
+          "base.atlas": {
+            kind: "metadata",
+            owner: "initial",
+            chunk: "initial",
+            entry,
+            sha256: hash,
+            byteLength: 1,
+            mediaType: "text/plain",
+          },
+          "free.atlas": {
+            kind: "metadata",
+            owner: "mode:FreeGame",
+            chunk: "mode:FreeGame",
+            entry,
+            sha256: hash,
+            byteLength: 1,
+            mediaType: "text/plain",
+          },
+        },
+      }),
+    ).toThrow(/metadata entry.*multiple owners/);
+  });
 });
 
 function fixture() {

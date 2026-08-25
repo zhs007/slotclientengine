@@ -1119,11 +1119,11 @@
     },
     "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-pop_ups.atlas": {
       "byteLength": 2836,
-      "chunk": "mode:FreeGame",
+      "chunk": "initial",
       "entry": "assets/616c278c7cf00cf3deb8c7717035128875d3e12100e58c182d214b79ba7d5e98.atlas",
       "kind": "metadata",
       "mediaType": "text/plain",
-      "owner": "mode:FreeGame",
+      "owner": "initial",
       "sha256": "616c278c7cf00cf3deb8c7717035128875d3e12100e58c182d214b79ba7d5e98"
     },
     "pkg-38-popup-135ec31d7fdc4a0bbcfe823240183f60-pop_ups.png": {
@@ -1269,11 +1269,11 @@
     },
     "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-pop_ups.atlas": {
       "byteLength": 2836,
-      "chunk": "mode:BonusGame",
+      "chunk": "initial",
       "entry": "assets/616c278c7cf00cf3deb8c7717035128875d3e12100e58c182d214b79ba7d5e98.atlas",
       "kind": "metadata",
       "mediaType": "text/plain",
-      "owner": "mode:BonusGame",
+      "owner": "initial",
       "sha256": "616c278c7cf00cf3deb8c7717035128875d3e12100e58c182d214b79ba7d5e98"
     },
     "pkg-38-popup-145ec31d7fdc4a0bbcfe823240183f60-pop_ups.png": {
@@ -3930,10 +3930,10 @@
       ],
       "id": "mode:FreeGame",
       "metadata": {
-        "byteLength": 25977,
+        "byteLength": 24713,
         "mediaType": "application/zip",
-        "path": "chunks/mode-freegame-325c3c43.a082808e44e33a7b863a5abf9dbe3d3c4f5ca2055120ced4d2ade0d1bd9420c0.zip",
-        "sha256": "a082808e44e33a7b863a5abf9dbe3d3c4f5ca2055120ced4d2ade0d1bd9420c0"
+        "path": "chunks/mode-freegame-325c3c43.686c13d1bbac93c9116e0ac8b0aa988dd004ac52b23f045c91f6a63475c3ff43.zip",
+        "sha256": "686c13d1bbac93c9116e0ac8b0aa988dd004ac52b23f045c91f6a63475c3ff43"
       },
       "owner": "mode:FreeGame"
     },
@@ -3949,10 +3949,10 @@
       ],
       "id": "mode:BonusGame",
       "metadata": {
-        "byteLength": 13117,
+        "byteLength": 11853,
         "mediaType": "application/zip",
-        "path": "chunks/mode-bonusgame-67d8bd77.1bc20efaf5947b150654fdfc48df278d4e06ab16b16a4bf0625889be7676becc.zip",
-        "sha256": "1bc20efaf5947b150654fdfc48df278d4e06ab16b16a4bf0625889be7676becc"
+        "path": "chunks/mode-bonusgame-67d8bd77.000c9f4d6d2357f07022701e2345108e0adb4e6574fe8514796f6fa61199ded7.zip",
+        "sha256": "000c9f4d6d2357f07022701e2345108e0adb4e6574fe8514796f6fa61199ded7"
       },
       "owner": "mode:BonusGame"
     },

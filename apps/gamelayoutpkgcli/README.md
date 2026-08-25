@@ -108,7 +108,8 @@ ZIP 与 JSON 作为一对提交，第二个文件提交失败时会回滚第一�
 
 - physical owner 只允许 `initial`、manifest 顺序中的 `mode:<id>` 与 `media`。同一 logical asset
   只存一份；跨 mode 资源由最早 mode 持有，初始闭包始终优先归 `initial`；没有明确 mode owner
-  的全局/程序资源保守归 `initial`。
+  的全局/程序资源保守归 `initial`。多个 logical key 映射到同一 content-addressed metadata path
+  时也必须先合并 physical owner，不能把同一路径写入多个 owner ZIP。
 - 每个 owner 至多一个 metadata ZIP；`initial` ZIP 同时包含 `layout.manifest.json` 与
   `assets.map.json`。logical key 保持不变，现有 layout、Symbols、Popup、VNI 和 Spine manifest
   不需要为合图改写业务引用。
