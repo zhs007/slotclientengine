@@ -184,6 +184,14 @@ export function createGameLayoutRuntimeAddresses(
 ): GameLayoutRuntimeAddressController {
   const manifest = (resource.runtimeManifest ??
     resource.manifest) as SceneLayoutPackageResource["runtimeManifest"];
+  const popupManifests =
+    resource.popupManifests ??
+    Object.fromEntries(
+      Object.entries(resource.popupPackages).map(([id, popup]) => [
+        id,
+        popup.manifest,
+      ]),
+    );
   const entries = new Map<GameLayoutRuntimeAddress, CatalogEntry>();
   const liveEntries = new Map<GameLayoutRuntimeAddress, CatalogEntry>();
   const reservedInstanceAddresses = new Set<GameLayoutRuntimeAddress>();
@@ -516,14 +524,14 @@ export function createGameLayoutRuntimeAddresses(
     const effectOwner = [...owner, "effect", effectKind];
     add(effectOwner, "transition", owner, "structural", structural);
   }
-  for (const [popupId, popup] of Object.entries(resource.popupPackages).sort(
+  for (const [popupId, popup] of Object.entries(popupManifests).sort(
     ([a], [b]) => a.localeCompare(b, "en"),
   )) {
     const owner = ["popup", popupId];
     add(owner, "popup", null, "structural", structural, {
-      popupType: popup.manifest.type,
+      popupType: popup.type,
     });
-    const nested = collectPopupAddresses(popup.manifest);
+    const nested = collectPopupAddresses(popup);
     for (const layerId of nested.layers)
       add(
         [...owner, "layer", layerId],
@@ -700,12 +708,7 @@ export function createGameLayoutRuntimeAddresses(
         }),
       ]),
     ),
-    popupManifests: Object.fromEntries(
-      Object.entries(resource.popupPackages).map(([id, popup]) => [
-        id,
-        popup.manifest,
-      ]),
-    ),
+    popupManifests,
   });
   for (const entry of eventCatalog.entries) {
     if (entries.has(entry.descriptor.address))

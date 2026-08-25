@@ -1884,6 +1884,39 @@ describe("scene layout package runtime", () => {
     }
   });
 
+  it("keeps Popup catalogs available while deferring Popup image preparation", async () => {
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    const fixture = popupLayoutFixture();
+    const decodeImage = vi.fn(async () => ({ width: 1, height: 1 }));
+    try {
+      const resource = await createSceneLayoutPackageResource({
+        ...fixture,
+        lazyPopupResources: true,
+        decodeImage,
+      });
+
+      expect(resource.popupManifests?.celebration?.type).toBe(
+        "award-celebration",
+      );
+      expect(resource.popupPackages).toEqual({});
+      expect(decodeImage).not.toHaveBeenCalled();
+      expect(load).not.toHaveBeenCalled();
+
+      const popup = await resource.loadPopupPackage!("celebration");
+      expect(popup.manifest.type).toBe("award-celebration");
+      expect(decodeImage).toHaveBeenCalled();
+      expect(load).toHaveBeenCalled();
+      expect(resource.getLoadedPopupPackage!("celebration")).toBe(popup);
+      await resource.destroy();
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
+  });
+
   it("opens one exact Popup address, drains one close, and reuses the cached player", async () => {
     const load = vi
       .spyOn(Assets, "load")

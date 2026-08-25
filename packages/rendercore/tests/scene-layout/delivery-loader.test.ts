@@ -71,6 +71,7 @@ describe("Scene Layout delivery loader", () => {
       "https://cdn.example/game/intro.mp4",
     ]);
     expect(state.packageOptions.lazyRuntimeResources).toBe(true);
+    expect(state.packageOptions.lazyPopupResources).toBe(true);
     expect([...state.packageOptions.files.keys()]).toEqual([
       "layout.manifest.json",
       "assets.map.json",

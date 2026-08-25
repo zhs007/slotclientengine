@@ -34,7 +34,10 @@ import {
   type SingleStatePopupRuntime,
   type SpinePopupRuntime,
 } from "../popup/core/index.js";
-import type { AwardCelebrationSnapshot } from "../popup/core/types.js";
+import type {
+  AwardCelebrationSnapshot,
+  PopupPackageResource,
+} from "../popup/core/types.js";
 import { inspectAwardCelebrationRuntime } from "../popup/award-player.js";
 import {
   RenderGridCellReelSet,
@@ -792,7 +795,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
             );
       const popupIds = this.#resource.delivery
         ? this.resolveOwnedPopupIds(initialModeId)
-        : Object.keys(this.#resource.popupPackages);
+        : Object.keys(this.popupPackageManifests());
       const popupPromises = popupIds.map((id) => this.preparePopup(id));
 
       await settleAllInOrder([
@@ -3032,10 +3035,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       this.#popupAudioStates.clear();
       return;
     }
-    for (const [popupId, resource] of Object.entries(
-      this.#resource.popupPackages,
+    for (const [popupId, manifest] of Object.entries(
+      this.popupPackageManifests(),
     )) {
-      if (!("audio" in resource.manifest)) continue;
+      if (!("audio" in manifest)) continue;
       let target: string | null = null;
       const award = this.#popups.get(popupId);
       if (award?.isPlaying()) {
@@ -3060,7 +3063,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       this.#popupAudioHandles.delete(popupId);
       this.#popupAudioStates.set(popupId, target);
       const handles: AudioPlaybackHandle[] = [];
-      for (const cue of resource.manifest.audio.cues) {
+      for (const cue of manifest.audio.cues) {
         const cueTarget =
           cue.target.kind === "segment"
             ? `segment:${cue.target.segment}`
@@ -3807,7 +3810,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   private resolveOwnedPopupIds(modeId: string | null): readonly string[] {
     const gameModes = this.#document.gameModes;
     if (!gameModes || modeId === null)
-      return Object.freeze(Object.keys(this.#resource.popupPackages));
+      return Object.freeze(Object.keys(this.popupPackageManifests()));
     const ownerById = new Map<string, string>();
     for (const mode of gameModes.modes) {
       if (mode.awardCelebrationPopup)
@@ -3823,7 +3826,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           );
     }
     return Object.freeze(
-      Object.keys(this.#resource.popupPackages).filter(
+      Object.keys(this.popupPackageManifests()).filter(
         (id) => (ownerById.get(id) ?? gameModes.initialMode) === modeId,
       ),
     );
@@ -3836,7 +3839,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       this.#singleStatePopups.has(id)
     )
       return;
-    const resource = this.#resource.popupPackages[id];
+    const resource = this.#resource.loadPopupPackage
+      ? await this.#resource.loadPopupPackage(id)
+      : this.#resource.popupPackages[id];
+    this.assertAlive();
     if (!resource)
       throw new SceneLayoutError(
         `Scene layout popup resource "${id}" is unavailable.`,
@@ -3904,6 +3910,20 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       popup.destroy();
       throw asSceneLayoutError(error);
     }
+  }
+
+  private popupPackageManifests(): Readonly<
+    Record<string, PopupPackageResource["manifest"]>
+  > {
+    return (
+      this.#resource.popupManifests ??
+      Object.fromEntries(
+        Object.entries(this.#resource.popupPackages).map(([id, popup]) => [
+          id,
+          popup.manifest,
+        ]),
+      )
+    );
   }
 
   private failActivePrelude(

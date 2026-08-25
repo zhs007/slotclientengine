@@ -46,6 +46,7 @@ import {
 import {
   collectPopupDirectPaths,
   loadPopupManifest,
+  type PopupManifestV8,
 } from "../popup/data/index.js";
 import type { PopupPackageResource } from "../popup/core/types.js";
 import { validateOfficialSpineResource } from "../spine/runtime-player.js";
@@ -262,6 +263,7 @@ export async function createSceneLayoutPackageResource(options: {
   readonly decodeImage?: DecodeImageStringImage;
   readonly loadSymbolTextures?: boolean;
   readonly lazyRuntimeResources?: boolean;
+  readonly lazyPopupResources?: boolean;
   readonly loadRuntimeResourceBytes?: (
     logicalKey: string,
   ) => Promise<Uint8Array>;
@@ -287,6 +289,7 @@ export async function createSceneLayoutPackageResource(options: {
     ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
     loadSymbolTextures: options.loadSymbolTextures,
     lazyRuntimeResources: options.lazyRuntimeResources,
+    lazyPopupResources: options.lazyPopupResources,
     ...(loadRuntimeResourceBytes ? { loadRuntimeResourceBytes } : {}),
     ...(options.resolveAssetUrl
       ? { resolveAssetUrl: options.resolveAssetUrl }
@@ -300,6 +303,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
   readonly decodeImage?: DecodeImageStringImage;
   readonly loadSymbolTextures?: boolean;
   readonly lazyRuntimeResources?: boolean;
+  readonly lazyPopupResources?: boolean;
   readonly loadRuntimeResourceBytes?: (
     logicalKey: string,
   ) => Promise<Uint8Array>;
@@ -319,6 +323,14 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
   let symbolPackage: SymbolPackageResource | null = null;
   const symbolPackages: Record<string, SymbolPackageResource> = {};
   const popupPackages: Record<string, PopupPackageResource> = {};
+  const popupManifests: Record<string, PopupManifestV8> = {};
+  const popupDefinitions: Record<
+    string,
+    {
+      readonly bindingManifest: string;
+      readonly manifest: PopupManifestV8;
+    }
+  > = {};
   const vniResources: Record<
     string,
     { readonly project: VNIProjectConfig; readonly assetUrls: AssetUrlManifest }
@@ -419,31 +431,49 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
       validateBinding(manifest, binding, resource);
     }
 
-    for (const [popupId, popup] of Object.entries(manifest.popups ?? {})) {
+    const createPopupResource = async (definition: {
+      readonly bindingManifest: string;
+      readonly manifest: PopupManifestV8;
+    }): Promise<PopupPackageResource> => {
       const nestedFiles = extractPrefixedFiles(
         files,
-        directoryOf(popup.manifest),
+        directoryOf(definition.bindingManifest),
       );
+      return createPopupPackageResourceFromResolvedFiles({
+        manifest: definition.manifest,
+        files: mapped
+          ? mappedPopupFiles(
+              files,
+              definition.bindingManifest,
+              definition.manifest,
+            )
+          : nestedFiles,
+        ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
+        ...(options.resolveAssetUrl
+          ? { resolveAssetUrl: options.resolveAssetUrl }
+          : {}),
+      });
+    };
+    for (const [popupId, popup] of Object.entries(manifest.popups ?? {})) {
       const nestedManifest = loadPopupManifest(
         parseJsonBytes(
           requireBytes(
-            mapped ? files : nestedFiles,
+            mapped
+              ? files
+              : extractPrefixedFiles(files, directoryOf(popup.manifest)),
             mapped ? popup.manifest : "popup.manifest.json",
           ),
           popup.manifest,
         ),
       ).manifest;
-      popupPackages[popupId] =
-        await createPopupPackageResourceFromResolvedFiles({
-          manifest: nestedManifest,
-          files: mapped
-            ? mappedPopupFiles(files, popup.manifest, nestedManifest)
-            : nestedFiles,
-          ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
-          ...(options.resolveAssetUrl
-            ? { resolveAssetUrl: options.resolveAssetUrl }
-            : {}),
-        });
+      popupManifests[popupId] = nestedManifest;
+      const definition = Object.freeze({
+        bindingManifest: popup.manifest,
+        manifest: nestedManifest,
+      });
+      popupDefinitions[popupId] = definition;
+      if (!options.lazyPopupResources)
+        popupPackages[popupId] = await createPopupResource(definition);
     }
 
     const audioUrls = new Map<string, string>();
@@ -542,13 +572,13 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
         addEffect(`${bindingId}.${effect.name}`, effect, binding.manifest);
     }
     for (const [popupId, binding] of Object.entries(manifest.popups ?? {})) {
-      const popup = popupPackages[popupId];
-      if (!popup)
+      const popupManifest = popupManifests[popupId];
+      if (!popupManifest)
         throw new SceneLayoutError(
-          `Popup package resource "${popupId}" is unavailable for audio aggregation.`,
+          `Popup package manifest "${popupId}" is unavailable for audio aggregation.`,
         );
-      if (!("audio" in popup.manifest)) continue;
-      for (const effect of popup.manifest.audio.effects)
+      if (!("audio" in popupManifest)) continue;
+      for (const effect of popupManifest.audio.effects)
         addEffect(`${popupId}.${effect.name}`, effect, binding.manifest);
     }
     const programmaticAudioEffects = new Set(
@@ -767,6 +797,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
       ...layout.runtimeResources,
     };
     const runtimeLoads = new Map<string, Promise<SceneLayoutRuntimeResource>>();
+    const popupLoads = new Map<string, Promise<PopupPackageResource>>();
     const lazyFiles = new Map(files);
     const lazyImageStrings: ImageStringResource[] = [];
     let destroyed = false;
@@ -777,7 +808,47 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
       imageStrings: Object.freeze({ ...imageStrings }),
       symbolPackage,
       symbolPackages: Object.freeze({ ...symbolPackages }),
+      popupManifests: Object.freeze({ ...popupManifests }),
       popupPackages: Object.freeze({ ...popupPackages }),
+      getLoadedPopupPackage(id: string): PopupPackageResource | null {
+        return popupPackages[id] ?? null;
+      },
+      loadPopupPackage(id: string): Promise<PopupPackageResource> {
+        if (destroyed)
+          return Promise.reject(
+            new SceneLayoutError(
+              "Scene layout package resource was destroyed.",
+            ),
+          );
+        const loaded = popupPackages[id];
+        if (loaded) return Promise.resolve(loaded);
+        const existing = popupLoads.get(id);
+        if (existing) return existing;
+        const definition = popupDefinitions[id];
+        if (!definition)
+          return Promise.reject(
+            new SceneLayoutError(
+              `Scene layout Popup package "${id}" is unavailable.`,
+            ),
+          );
+        const pending = createPopupResource(definition).then(
+          async (resource) => {
+            if (destroyed) {
+              await resource.destroy();
+              throw new SceneLayoutError(
+                "Scene layout package resource was destroyed during Popup loading.",
+              );
+            }
+            popupPackages[id] = resource;
+            return resource;
+          },
+        );
+        popupLoads.set(id, pending);
+        void pending
+          .finally(() => popupLoads.delete(id))
+          .catch(() => undefined);
+        return pending;
+      },
       audioEffects: Object.freeze(audioEffects),
       audioMusic: Object.freeze(audioMusic),
       audioEventTracks: Object.freeze(audioEventTracks),
@@ -866,15 +937,21 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
       async loadJsonData(key: string): Promise<SceneLayoutJsonData> {
         return (await this.loadRuntimeResource(key, "json")).value;
       },
-      destroy(): void {
-        if (destroyed) return;
+      destroy(): Promise<void> {
+        if (destroyed) return Promise.resolve();
         destroyed = true;
         layout.destroy();
         symbolPackage?.destroy();
         for (const resource of Object.values(symbolPackages))
           resource.destroy();
-        for (const popup of Object.values(popupPackages)) void popup.destroy();
+        const popupDestructions = Object.values(popupPackages).map((popup) =>
+          Promise.resolve(popup.destroy()),
+        );
         for (const resource of lazyImageStrings) void resource.destroy();
+        return Promise.allSettled([
+          ...popupLoads.values(),
+          ...popupDestructions,
+        ]).then(() => undefined);
       },
     });
   } catch (error) {

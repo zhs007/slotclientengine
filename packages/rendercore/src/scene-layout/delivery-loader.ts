@@ -48,6 +48,7 @@ export async function loadSceneLayoutDeliveryFromUrl(options: {
       resolveAssetUrl: (logicalKey) => delivery.resolve(logicalKey),
       loadSymbolTextures: options.loadSymbolTextures,
       lazyRuntimeResources: true,
+      lazyPopupResources: true,
       loadRuntimeResourceBytes: (logicalKey) =>
         delivery.loadMetadataAsset(logicalKey),
     });

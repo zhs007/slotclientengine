@@ -498,7 +498,14 @@ export interface SceneLayoutPackageResource {
   readonly imageStrings: Readonly<Record<string, ImageStringResource>>;
   readonly symbolPackage: SymbolPackageResource | null;
   readonly symbolPackages: Readonly<Record<string, SymbolPackageResource>>;
+  /** Parsed Popup catalogs; delivery resources expose these before image preparation. */
+  readonly popupManifests?: Readonly<
+    Record<string, PopupPackageResource["manifest"]>
+  >;
+  /** Eager Popup resources for legacy packages; delivery may keep this initially empty. */
   readonly popupPackages: Readonly<Record<string, PopupPackageResource>>;
+  getLoadedPopupPackage?(id: string): PopupPackageResource | null;
+  loadPopupPackage?(id: string): Promise<PopupPackageResource>;
   /** Fully-qualified effect routes aggregated at the Scene Layout boundary. */
   readonly audioEffects: Readonly<Record<string, ResolvedAudioEffect>>;
   readonly audioMusic: Readonly<Record<string, ResolvedAudioMusic>>;
