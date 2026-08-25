@@ -173,12 +173,20 @@ describe('SlotcraftClient Integration Tests', () => {
         msgid: 'userbaseinfo',
         userbaseinfo: { gold: 500, nickname: 'player1' },
       });
-      server.broadcast({ msgid: 'gamecfg', defaultLinebet: 5, linebets: [1, 5, 10] });
+      server.broadcast({
+        msgid: 'gamecfg',
+        defaultLinebet: 5,
+        linebets: [1, 5, 10],
+        maxBetBootsBuy: 2000,
+        maxTotalBetLimit: 5000,
+      });
       await vi.waitFor(() => expect(client.getUserInfo().balance).toBe(500));
       const info = client.getUserInfo();
       expect(info.nickname).toBe('player1');
       expect(info.defaultLinebet).toBe(5);
       expect(info.linebets).toEqual([1, 5, 10]);
+      expect(info.maxBetBootsBuy).toBe(2000);
+      expect(info.maxTotalBetLimit).toBe(5000);
     });
   });
 

@@ -14,6 +14,8 @@ HTTP(S) URL 使用 Replay 模式。`connect()` 获取静态 JSON 后会从 `play
     "bet": 1,
     "totalbet": 450,
     "lines": 450,
+    "maxBetBootsBuy": 2000,
+    "maxTotalBetLimit": 5000,
     "currency": "USD",
     "gameType": "slot",
     "payTables": {},
@@ -39,6 +41,9 @@ buildGameUI({
   currency: bootstrap.currency,
 });
 
+const maxBetBootsBuy = client.getUserInfo().maxBetBootsBuy ?? -1;
+const maxTotalBetLimit = client.getUserInfo().maxTotalBetLimit ?? -1;
+
 await client.enterGame();
 ```
 
@@ -52,6 +57,10 @@ await client.enterGame();
 `connect()` 不会把整个 Replay envelope 写进 `lastGMI`。这样 `lastGMI` 始终保持 GMI 数据形状，也不会让游戏误判首轮结果已经播放。
 
 `playCtrlParam` 缺失时 `replayBootstrap` 为 `undefined`。已声明字段一旦存在就必须符合类型；例如字符串形式的 `totalbet` 会让 `connect()` 显式失败，不做数值猜测或默认币种回退。对象字段会被浅复制并冻结。
+
+`balance`、`currency`、`maxBetBootsBuy`、`maxTotalBetLimit` 是 Live/Replay 共用的 `UserInfo` 字段。Replay 解析后会把它们从 `replayBootstrap` 投影到顶层；Live 则从 `userbaseinfo` 或 `gamecfg` 更新同名字段。缺失值保持 `undefined`，`-1` 等业务默认值由游戏层决定。
+
+Replay 字段由 `REPLAY_BOOTSTRAP_FIELD_SCHEMA` 集中声明类型以及是否投影到顶层 `UserInfo`。以后增加启动字段时，需要同步扩展 `ReplayBootstrapInfo` 和该 schema；`satisfies Record<keyof ReplayBootstrapInfo, ...>` 会在编译期阻止遗漏 schema 项，解析器负责统一的运行时严格校验。
 
 ## Live 操作失败恢复
 

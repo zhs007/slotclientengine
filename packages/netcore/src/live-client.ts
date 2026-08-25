@@ -856,6 +856,10 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
         if (typeof msg.defaultLinebet === 'number')
           this.userInfo.defaultLinebet = msg.defaultLinebet;
         if (Array.isArray(msg.linebets)) this.userInfo.linebets = msg.linebets;
+        if (typeof msg.maxBetBootsBuy === 'number')
+          this.userInfo.maxBetBootsBuy = msg.maxBetBootsBuy;
+        if (typeof msg.maxTotalBetLimit === 'number')
+          this.userInfo.maxTotalBetLimit = msg.maxTotalBetLimit;
         if (typeof msg.ver === 'string') this.userInfo.gamecfgVer = msg.ver;
         if (typeof msg.coreVer === 'string') this.userInfo.gamecfgCoreVer = msg.coreVer;
         if (typeof msg.data === 'string') {

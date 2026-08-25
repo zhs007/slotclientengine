@@ -13,6 +13,25 @@ import type {
 } from './types';
 import { transformSceneData } from './utils';
 
+type ReplayBootstrapFieldRule = {
+  kind: 'number' | 'string' | 'record';
+  projectToUserInfo?: true;
+};
+
+const REPLAY_BOOTSTRAP_FIELD_SCHEMA = {
+  balance: { kind: 'number', projectToUserInfo: true },
+  bet: { kind: 'number' },
+  totalbet: { kind: 'number' },
+  lines: { kind: 'number' },
+  maxBetBootsBuy: { kind: 'number', projectToUserInfo: true },
+  maxTotalBetLimit: { kind: 'number', projectToUserInfo: true },
+  currency: { kind: 'string', projectToUserInfo: true },
+  gameType: { kind: 'string' },
+  payTables: { kind: 'record' },
+  servTime: { kind: 'number' },
+  giftfree: { kind: 'record' },
+} as const satisfies Record<keyof ReplayBootstrapInfo, ReplayBootstrapFieldRule>;
+
 export class SlotcraftClientReplay implements ISlotcraftClientImpl {
   private options: SlotcraftClientOptions;
   private state: ConnectionState = ConnectionState.IDLE;
@@ -95,12 +114,7 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
       // Simulate login
       this.setState(ConnectionState.LOGGING_IN);
       this.userInfo.replayBootstrap = this.createReplayBootstrap(this.replayData);
-      if (typeof this.userInfo.replayBootstrap?.balance === 'number') {
-        this.userInfo.balance = this.userInfo.replayBootstrap.balance;
-      }
-      if (typeof this.userInfo.replayBootstrap?.currency === 'string') {
-        this.userInfo.currency = this.userInfo.replayBootstrap.currency;
-      }
+      this.applyReplayBootstrapToUserInfo(this.userInfo.replayBootstrap);
       this.setState(ConnectionState.LOGGED_IN);
     } catch (error) {
       this.setState(ConnectionState.DISCONNECTED);
@@ -246,42 +260,53 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
     }
 
     const bootstrap: ReplayBootstrapInfo = {};
-    const copyNumber = (key: 'balance' | 'bet' | 'totalbet' | 'lines' | 'servTime') => {
+    const output = bootstrap as Record<keyof ReplayBootstrapInfo, unknown>;
+    const fields = Object.entries(REPLAY_BOOTSTRAP_FIELD_SCHEMA) as Array<
+      [keyof ReplayBootstrapInfo, ReplayBootstrapFieldRule]
+    >;
+
+    for (const [key, rule] of fields) {
       const value = source[key];
-      if (value === undefined) return;
-      if (typeof value !== 'number' || !Number.isFinite(value)) {
-        throw new Error(`Invalid replay playCtrlParam.${key}: expected a finite number.`);
+      if (value === undefined) continue;
+
+      if (rule.kind === 'number') {
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+          throw new Error(`Invalid replay playCtrlParam.${key}: expected a finite number.`);
+        }
+        output[key] = value;
+        continue;
       }
-      bootstrap[key] = value;
-    };
-    const copyString = (key: 'currency' | 'gameType') => {
-      const value = source[key];
-      if (value === undefined) return;
-      if (typeof value !== 'string') {
-        throw new Error(`Invalid replay playCtrlParam.${key}: expected a string.`);
+
+      if (rule.kind === 'string') {
+        if (typeof value !== 'string') {
+          throw new Error(`Invalid replay playCtrlParam.${key}: expected a string.`);
+        }
+        output[key] = value;
+        continue;
       }
-      bootstrap[key] = value;
-    };
-    const copyRecord = (key: 'payTables' | 'giftfree') => {
-      const value = source[key];
-      if (value === undefined) return;
+
       if (value === null || typeof value !== 'object' || Array.isArray(value)) {
         throw new Error(`Invalid replay playCtrlParam.${key}: expected an object.`);
       }
-      bootstrap[key] = Object.freeze({ ...value });
-    };
-
-    copyNumber('balance');
-    copyNumber('bet');
-    copyNumber('totalbet');
-    copyNumber('lines');
-    copyNumber('servTime');
-    copyString('currency');
-    copyString('gameType');
-    copyRecord('payTables');
-    copyRecord('giftfree');
+      output[key] = Object.freeze({ ...value });
+    }
 
     return Object.keys(bootstrap).length > 0 ? Object.freeze(bootstrap) : undefined;
+  }
+
+  private applyReplayBootstrapToUserInfo(bootstrap?: ReplayBootstrapInfo): void {
+    if (!bootstrap) return;
+
+    const bootstrapValues = bootstrap as Record<keyof ReplayBootstrapInfo, unknown>;
+    const userInfo = this.userInfo as Record<string, unknown>;
+    const fields = Object.entries(REPLAY_BOOTSTRAP_FIELD_SCHEMA) as Array<
+      [keyof ReplayBootstrapInfo, ReplayBootstrapFieldRule]
+    >;
+    for (const [key, rule] of fields) {
+      if (!rule.projectToUserInfo) continue;
+      const value = bootstrapValues[key];
+      if (value !== undefined) userInfo[key] = value;
+    }
   }
 
   /** Caches config-like properties that should be available before the first spin. */
