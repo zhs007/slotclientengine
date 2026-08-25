@@ -42,6 +42,10 @@ class FakeVideoPlayer implements SceneLayoutTransitionVideoPlayer {
       : Promise.resolve();
   }
   applyViewport(size: { width: number; height: number }) {
+    if (this.destroyed)
+      throw new SceneLayoutError(
+        "Scene transition video player was destroyed.",
+      );
     this.view.position.set(size.width / 2, size.height / 2);
     this.view.scale.set(
       Math.min(size.width / this.width, size.height / this.height),

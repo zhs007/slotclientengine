@@ -4025,13 +4025,13 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
 
   private completeActiveTransition(active: ActiveModeTransition): void {
     if (this.#activeTransition !== active) return;
-    active.player.destroy();
     if (active.kind === "video") this.hideVideoBlackout();
     this.setStableMode(active.target.id);
     this.#stableSymbolPackageId = this.#activeSymbolPackageId;
     this.#targetMode = null;
     this.#targetSymbolPackageId = null;
     this.refreshCommittedGeometryPresentation();
+    active.player.destroy();
     this.emitTransitionLifecycle(active, "ended");
     if (active.kind === "video")
       this.#addressController.emit(
