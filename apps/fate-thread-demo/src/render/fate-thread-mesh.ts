@@ -89,7 +89,7 @@ export class FateThreadMesh extends Container {
     this.#halo = new RibbonLayer({
       texture: textures.glow,
       pointCount,
-      width: 38,
+      width: 25,
       repeatLength: 210,
       flowSpeed: 0.16,
       alpha: 0.23,
@@ -98,7 +98,7 @@ export class FateThreadMesh extends Container {
     this.#aura = new RibbonLayer({
       texture: textures.glow,
       pointCount,
-      width: 19,
+      width: 11,
       repeatLength: 180,
       flowSpeed: 0.23,
       alpha: 0.46,
@@ -107,7 +107,7 @@ export class FateThreadMesh extends Container {
     this.#core = new RibbonLayer({
       texture: textures.core,
       pointCount,
-      width: 8,
+      width: 4.5,
       repeatLength: 150,
       flowSpeed: 0.42,
       alpha: 1,
