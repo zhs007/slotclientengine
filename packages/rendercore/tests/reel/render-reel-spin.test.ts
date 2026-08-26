@@ -173,13 +173,22 @@ describe("RenderReelSet ReelSpin", () => {
       [2, 1, 2],
     ]);
     const view = new Container();
-    const node = createRenderObject({ view, destroy: () => view.destroy() });
+    let nodeElapsed = 0;
+    const node = createRenderObject({
+      view,
+      update: (deltaSeconds) => {
+        nodeElapsed += deltaSeconds;
+      },
+      destroy: () => view.destroy(),
+    });
     const reel = spin.getReel(0);
-    reel.add(node, 3);
+    reel.addCentered(node, 3);
     expect(view.parent).not.toBeNull();
+    expect(view.position).toMatchObject({ x: 7.5, y: 18 });
 
     spin.start(0);
     spin.update(0.2);
+    expect(nodeElapsed).toBeCloseTo(0.2);
     const settled = spin.settle(
       0,
       { symbols: [2, 2, 1] },
@@ -189,6 +198,8 @@ describe("RenderReelSet ReelSpin", () => {
     await settled;
     expect(spin.getVisibleScene()[0]).toEqual([2, 2, 1]);
     reel.remove(node);
+    spin.update(0.1);
+    expect(nodeElapsed).toBeCloseTo(1.2);
 
     spin.start(1);
     spin.update(0.1);
@@ -574,7 +585,11 @@ describe("RenderReelSet ReelSpin", () => {
           settle: async (x) => {
             calls.push(`settle:${x}`);
           },
-          getReel: () => ({ add: () => undefined, remove: () => undefined }),
+          getReel: () => ({
+            add: () => undefined,
+            addCentered: () => undefined,
+            remove: () => undefined,
+          }),
           getSymbol: () => {
             throw new Error("unused");
           },

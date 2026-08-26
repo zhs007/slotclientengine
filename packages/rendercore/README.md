@@ -122,7 +122,8 @@ Standard `RenderReelSet` 同时实现无 public plan 的逐列 `ReelSpin`：`rol
 取消活动列。不同列可并发，同列冲突显式失败；`roll/settle` 只在整列原子落停、每个
 `getSymbol({x,y})` 已可用后 resolve。跨列 stagger/full/held 由 operation handler 使用 frame delay
 和 `Promise.all()` 组合，不增加 `ReelSpinPlan`。`getReel(x)` 是稳定 reel-space `RenderObject`
-attachment 入口。
+attachment 入口：`add()` 保留对象自己的 local position，`addCentered()` 把对象原点精确放在可见 reel window 中心；
+两者都把对象接入 reel-owned update clock，`remove()` 同步解除帧推进。
 active `ReelSpinSession` 的 `SpinningReel.setRollingSpeed()` 只调整仍处于 targetless continuous rolling 的
 该列速度；不会改变其它列、公开轮带 phase、方向或已经建立的 landing target/plan。stale、已落停、已进入 settle
 或非正 finite speed 会显式失败，业务 anticipation 的 symbol 条件和 cadence 继续由 app 编排。

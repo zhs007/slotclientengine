@@ -23,6 +23,8 @@ export interface ReelRollStartOptions {
 
 export interface ReelRender {
   add(node: RenderObject, order?: number): void;
+  /** Mounts the node at the exact center of this reel's visible window. */
+  addCentered(node: RenderObject, order?: number): void;
   remove(node: RenderObject): void;
 }
 
