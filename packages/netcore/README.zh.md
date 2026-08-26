@@ -144,6 +144,7 @@ const client = new SlotcraftClient({
 - `docs/usage_en.md`：简明英文集成说明
 - `docs/usage_zh.md`：简明中文集成说明
 - `docs/frontend-ws-doc-en.md`：偏协议层的 WebSocket 说明
+- `docs/binary-websocket-fix-zh.md`：加密二进制功能的修改原因、协议假设和真实服务器测试清单
 - `docs/replay-bootstrap-failure-recovery-zh.md`：Replay 启动数据与 Live 操作失败恢复配置
 - `examples/example001.ts`：本地调试示例
 
