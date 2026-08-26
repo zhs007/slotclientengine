@@ -45,6 +45,7 @@
 - Minecart2 把已启动的 End Promise 保持在 awaited operation 链中，失败后再清理池化对象，避免产生 playback stopped 的未处理 rejection并保留原始 operation error。
 - 新增 RenderCore partial-session replacement 与 Minecart2 replacement-failure 回归测试。修复后 RenderCore 定向 `24` tests、Minecart2 定向 `51` tests及 RenderCore typecheck通过；浏览器需用户重新验收。
 - 按用户后续视觉要求调整 Up：不再逐列 End/替换，而是等待全部轮子停稳、延迟配置值 `0.5` 秒、播放全部 `Topick_End`，待 End 全部完成后单批次替换 symbol；Wild 逐列流程不变。Minecart2 定向 `51` tests通过，浏览器仍待用户验收。
+- 用户再次验收发现 `feature bar expected up but selected normal`：compiler已从本轮 `bg-up` 生成 Up operation，但正常状态的 FeatureBar仍把上一队列 `features[0]` 当作本轮最终玩法。修复为本轮响应 `curFeature` 最终定案，上一队列只负责响应前的传送带预测；响应返回前不启动预测玩法，响应较慢或预测不一致时也只播放实际玩法。Minecart2 定向 `51` tests通过，浏览器需继续验收。
 
 ## 计划偏差与剩余风险
 

@@ -77,7 +77,7 @@ piximinecart2 git status --short --untracked-files=all: clean
 - 仓库中没有 task 237 的计划/报告；task 239 与外部当前代码确认 task 237 的结果位于 commit
   `074de42` 及后续 `feature-bar-conveyor.ts`：Car 到达中心后把 feature image 挂入单例 program
   `feature` Spine 的 `Icon`，播放 exact `Feature`，普通轮当前以 0.5 秒 gate 放行落停。
-- `FeatureBarConveyor` 当前拥有初始化/普通轮、上一 queue `features[0]`、variant、pickup、Car、中央
+- `FeatureBarConveyor` 任务开始时拥有初始化/普通轮、上一 queue `features[0]`、variant、pickup、Car、中央
   Feature、cancel/destroy；`round-adapter.ts#land()` 在 gate 后用 `area.spin.land()` 一次落完整盘。
 - `round-compiler.ts` 当前只把最后触发的 `bg-spin|bg-addbo` scene 编译为 `slot:spin`，因此用户样例的
   `scenes[1]` 尚未进入 final plan；win/BO 也仍基于变化前 scene。
@@ -101,8 +101,9 @@ piximinecart2 git status --short --untracked-files=all: clean
 
 ### 需求解释
 
-1. 当前玩法仍由既有 `FeatureBarConveyor` 的初始化/上一 queue规则决定；server history中的 exact
-   `bg-up`/`bg-addwilds` 是本轮落点变化证据。两者同时出现、与当前 up/wild玩法不匹配或缺最终 scene时失败。
+1. 当前实际玩法以本轮响应的 exact `curFeature` 为准；上一 queue `features[0]` 只在响应到达前驱动传送带，
+   本轮 `features` 作为下一轮队列。server history中的 exact `bg-up`/`bg-addwilds` 是本轮落点变化证据；
+   两者同时出现、与当前 up/wild玩法不匹配或缺最终 scene时失败。
 2. 组件顶层 `pos` 是扁平 x/y pair；`basicComponentData.usedScenes` 必须选择唯一最终 scene。compiler只在
    pos处取得目标 code/value，并确保非 pos cell没有未表现的变化；这属于最小执行完整性，不建立升级表。
 3. app定义两个 exact scene-landing operation kind；operation保存 render-ready landing snapshot、pos和最终
