@@ -123,6 +123,8 @@ Standard `RenderReelSet` 同时实现无 public plan 的逐列 `ReelSpin`：`rol
 `getSymbol({x,y})` 已可用后 resolve。跨列 stagger/full/held 由 operation handler 使用 frame delay
 和 `Promise.all()` 组合，不增加 `ReelSpinPlan`。`getReel(x)` 是稳定 reel-space `RenderObject`
 attachment 入口。
+单个 session reel 的 `land()` resolve 后，该列立即成为 settled occurrence，可在其它 session reels仍滚动时通过
+`getSymbol()`/`replaceSymbols()`读取或原子替换；replacement batch只要包含尚未落停的目标列就完整失败。
 
 `getSymbolArea("main")` 返回 standard reel 与 Crave legacy grid-cell 共同的 `PresentableSymbolArea`，公开
 `getSymbol()`、`bottom|top|win` 安全图层和 `present(async context => ...)`。`getReelArea("main")` 只返回

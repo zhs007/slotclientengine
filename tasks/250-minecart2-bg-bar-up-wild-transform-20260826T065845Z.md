@@ -38,6 +38,13 @@
 - Wild：Start 完成后 normal WL 在 symbol 上、topick 下；第 2 列落停且 End 完成后无闪跳 handoff，正式 WL 播放 appear 后回 normal。
 - 回归：normal/其它 feature 的 0.5 秒 gate、首次初始化、横竖屏、连续 spin、取消/退出、多轮触发池数量稳定。
 
+### 浏览器反馈修复
+
+- 用户首次浏览器验收发现：第 0 列落停后，其它列仍滚动时，standard reel 的全盘 `assertStopped()` 阻止该列 `replaceSymbols()`；失败清理又在未收敛 `Topick_End` 时归池，产生 playback stopped 的未处理 rejection。
+- 修复为与 grid-cell 一致的目标粒度合同：只拒绝 replacement batch 中尚未落停的目标列，已落停列可在其它 session reels 活跃时原子替换；cascade dropdown 仍全局禁止替换。
+- Minecart2 在 replacement/abort 失败时先 stop 并 await 已启动的 End Promise，再清理池化对象，保留原始 operation error。
+- 新增 RenderCore partial-session replacement 与 Minecart2 replacement-failure 回归测试。修复后 RenderCore 定向 `24` tests、Minecart2 定向 `51` tests及 RenderCore typecheck通过；浏览器需用户重新验收。
+
 ## 计划偏差与剩余风险
 
 - 按用户执行期确认，把原候选的多入口 API 收敛为单一 `create({ pooled })` 与 `destroy()`；image-string 也进入同地址池。这是有意的合同简化。

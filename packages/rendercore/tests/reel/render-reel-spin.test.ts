@@ -64,6 +64,33 @@ describe("RenderReelSet ReelSpin", () => {
     expect(controller.getActive()).toBeNull();
     expect(() => session.getReel(1)).toThrow(/not pending/);
   });
+
+  it("replaces a landed column while other session reels remain active", async () => {
+    const spin = createSpin();
+    spin.resetToVisibleScene([
+      [1, 2, 1],
+      [2, 1, 2],
+    ]);
+    const session = spin.getSpinSessionController().start();
+    const first = session
+      .getReel(0)
+      .land({ symbols: [2, 2, 1] }, { durationMs: 100 });
+    spin.update(0.1);
+    await first;
+
+    expect(
+      spin.replaceSymbol({ x: 0, y: 0 }, { code: 1, value: null }),
+    ).toMatchObject({ code: 1 });
+    expect(() =>
+      spin.replaceSymbol({ x: 1, y: 0 }, { code: 1, value: null }),
+    ).toThrow(/before its reel has landed/u);
+
+    const second = session
+      .getReel(1)
+      .land({ symbols: [1, 1, 2] }, { durationMs: 100 });
+    spin.update(0.1);
+    await second;
+  });
   it("rolls columns concurrently and resolves after exact landing", async () => {
     const spin = createSpin();
     spin.resetToVisibleScene([

@@ -97,6 +97,7 @@
   Container或Matrix。解析结果是调用时快照，长期presentation/motion继续持有Anchor并在使用时转换，不缓存跨transform坐标。
 - standard ReelSpin、CellSpin与legacy grid-cell统一提供与occurrence解耦的稳定cell-center Anchor；它在rolling/部分落停期间可解析，
   settled后与同格Symbol中心一致。rolling `getSymbol()`、stale occurrence与leased Symbol仍显式失败。
+- standard ReelSpinSession的单列`land()` resolve即建立该列settled occurrence；其它列仍active时可读取或原子替换已落停列，但replacement batch含任一未落停目标列必须在commit前完整失败。cascade/dropdown等全盘mutation仍要求对应owner停止。
 - game runtime的program Spine/VNI RenderObject可显式`play(...,{loop:true})`；Promise在首圈完成后resolve且循环继续，直到stop、supersede或destroy。
   detached owned RenderObject只可按exact Spine slot通过opaque attachment绑定，不猜slot/root且不转移destroy ownership。RenderObject局部opacity/rotation/scale可通过strict opaque setter或同一motion capability修改；fade只缓动opacity，不改visible，旋转使用不归一化的顺时针度数，负scale表示对应轴镜像。direct setter、新motion、abort、detach、owner interruption与destroy必须确定性cancel/reject旧transaction且不泄漏；Spine attachment不解释或改写child transform。
 - registered RenderObjectLayer可原子移动已挂载RenderObject并保持视觉原点；settled borrowed Symbol临时换层必须在spin、replacement、release或destroy前由reel owner恢复，
