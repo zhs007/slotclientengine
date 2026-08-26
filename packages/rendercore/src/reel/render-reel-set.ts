@@ -773,7 +773,10 @@ export class RenderReelSet extends Container implements ReelSpin {
   replaceSymbols(replacements: readonly SymbolReplacement[]) {
     if (replacements.length === 0)
       throw new ReelError("Symbol replacement batch must not be empty.");
-    this.assertStopped("replace visible symbols");
+    if (this.#activeDrop)
+      throw new ReelError(
+        "Cannot replace visible symbols while cascade dropdown is active.",
+      );
     const keys = new Set<string>();
     const prepared: Array<{
       readonly reel: RenderReel;
@@ -800,6 +803,14 @@ export class RenderReelSet extends Container implements ReelSpin {
         )
           throw new ReelError(
             `visible symbol y ${position.y} is out of range.`,
+          );
+        if (
+          reel.getPhase() !== "stopped" ||
+          this.#atomicActive.has(position.x) ||
+          (this.#spinPlan !== null && !this.#startedAxes.has(position.x))
+        )
+          throw new ReelError(
+            `Cannot replace symbol at (${position.x},${position.y}) before its reel has landed.`,
           );
         const current = reel.getSlotRenderView(position.y);
         if (target.code === -1 && (target.value ?? null) !== null)

@@ -5,7 +5,7 @@
 - UTC 完成时间：`2026-08-26T06:58:45Z`
 - slotclientengine 基线：`7530d40c31c1d8d3ddcaad2ea5a5f996c4198687`（detached HEAD）
 - piximinecart2 基线：`9e1501477f323d420956468e6476781b8e6e3db3`（`rgs`）
-- 已完成 RenderCore 通用对象池、canonical resource/symbol factory、Minecart2 Up/Wild compiler、Feature barrier、逐列 landing、Topick/WL 表现与自动测试。
+- 已完成 RenderCore 通用对象池、canonical resource/symbol factory、Minecart2 Up/Wild compiler、Feature barrier、受控 landing、Topick/WL 表现与自动测试。
 - 浏览器视觉验收按用户要求未代做，状态为待用户验收。
 
 ## 最终合同
@@ -14,7 +14,7 @@
 - 永久与池化对象都调用 `destroy()`：前者真正释放，后者 detach、stop/cancel、复位并回到 canonical address 唯一池；旧句柄 stale。
 - 池空池起步并按并发峰值惰性增长。image-string 不按 text 分池，每次取出重新设置 `text/anchor`，已测试同一地址 `100 -> 50` 复用。
 - exact symbol factory 为 `gamelayout:/symbol-package/<binding-id>/symbol/<symbol>`；Minecart2 WL 从 active `minecart2` package 创建，不读取资源 bytes 或硬编码 code `0`。
-- `bg-up`/`bg-addwilds` 从组件顶层 `pos` 和唯一 `usedScenes` final scene 编译；Up 在 `Topick_End` 启动时替换，Wild 在 End 完成后完成 preview 到正式 WL 的 handoff，再播放 `appear -> normal`。
+- `bg-up`/`bg-addwilds` 从组件顶层 `pos` 和唯一 `usedScenes` final scene 编译；Up 在全轮停稳后等待 0.5 秒，全部 `Topick_End` 完成后一次性替换；Wild 在 End 完成后完成 preview 到正式 WL 的 handoff，再播放 `appear -> normal`。
 
 ## 主要改动
 
@@ -34,9 +34,18 @@
 
 ## 浏览器验收（待用户）
 
-- Up：完整 Feature 后三个目标格同时 Start/Loop；第 0 列与第 1 列分别落停时 End 并升级，之后才进入 win。
+- Up：完整 Feature 后三个目标格同时 Start/Loop；全部轮子停稳后保持 Loop 0.5 秒，再同时播放 End；End 完成后三格一次性升级，之后才进入 win。
 - Wild：Start 完成后 normal WL 在 symbol 上、topick 下；第 2 列落停且 End 完成后无闪跳 handoff，正式 WL 播放 appear 后回 normal。
 - 回归：normal/其它 feature 的 0.5 秒 gate、首次初始化、横竖屏、连续 spin、取消/退出、多轮触发池数量稳定。
+
+### 浏览器反馈修复
+
+- 用户首次浏览器验收发现：第 0 列落停后，其它列仍滚动时，standard reel 的全盘 `assertStopped()` 阻止该列 `replaceSymbols()`；失败清理又在未收敛 `Topick_End` 时归池，产生 playback stopped 的未处理 rejection。
+- 修复为与 grid-cell 一致的目标粒度合同：只拒绝 replacement batch 中尚未落停的目标列，已落停列可在其它 session reels 活跃时原子替换；cascade dropdown 仍全局禁止替换。
+- Minecart2 把已启动的 End Promise 保持在 awaited operation 链中，失败后再清理池化对象，避免产生 playback stopped 的未处理 rejection并保留原始 operation error。
+- 新增 RenderCore partial-session replacement 与 Minecart2 replacement-failure 回归测试。修复后 RenderCore 定向 `24` tests、Minecart2 定向 `51` tests及 RenderCore typecheck通过；浏览器需用户重新验收。
+- 按用户后续视觉要求调整 Up：不再逐列 End/替换，而是等待全部轮子停稳、延迟配置值 `0.5` 秒、播放全部 `Topick_End`，待 End 全部完成后单批次替换 symbol；Wild 逐列流程不变。Minecart2 定向 `51` tests通过，浏览器仍待用户验收。
+- 用户再次验收发现 `feature bar expected up but selected normal`：compiler已从本轮 `bg-up` 生成 Up operation，但正常状态的 FeatureBar仍把上一队列 `features[0]` 当作本轮最终玩法。修复为本轮响应 `curFeature` 最终定案，上一队列只负责响应前的传送带预测；响应返回前不启动预测玩法，响应较慢或预测不一致时也只播放实际玩法。Minecart2 定向 `51` tests通过，浏览器需继续验收。
 
 ## 计划偏差与剩余风险
 
