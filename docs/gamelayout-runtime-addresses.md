@@ -160,7 +160,10 @@ image-string 的 `text/anchor` 在每次取出时重新设置，因此 `"100"`�
 
 active Symbols package 还发布 exact 程序工厂
 `gamelayout:/symbol-package/<binding-id>/symbol/<symbol>`。它从 canonical symbol catalog 创建 normal
-程序对象，支持同一 `create({ pooled })` 合同；unknown、inactive binding 或 symbol 显式失败。
+程序对象，支持同一 `create({ pooled, presentationValue })` 合同；`presentationValue` 必须是 positive safe
+integer 或 `null`，并在对象返回前驱动 canonical value/ImgNumber controller。每次池化 checkout 都重新应用
+本次值，省略时重置为 `null`，不会泄漏上次使用者的数值。其它 runtime resource factory 收到
+`presentationValue` 显式失败；unknown、inactive binding 或 symbol 同样显式失败。
 
 需要用 address 唯一定位程序对象时，在创建时显式传 `instanceId`：
 

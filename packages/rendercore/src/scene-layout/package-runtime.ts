@@ -60,7 +60,10 @@ import {
   type SymbolCatalogModel,
   type SymbolPackageResource,
 } from "../symbol/index.js";
-import { createSymbolHandle } from "../symbol/symbol-handle.js";
+import {
+  createSymbolHandle,
+  type SymbolHandle,
+} from "../symbol/symbol-handle.js";
 import type { RenderViewportSize } from "../viewport/index.js";
 import {
   createOfficialSpinePlayer,
@@ -630,8 +633,12 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       createRenderObject: (name) => this.createRenderObject(name),
       createImgNumberRenderObject: (name, options) =>
         this.createImgNumberRenderObject(name, options),
-      createSymbolRenderObject: (bindingId, symbol) =>
-        this.createProgramSymbolRenderObject(bindingId, symbol),
+      createSymbolRenderObject: (bindingId, symbol, presentationValue) =>
+        this.createProgramSymbolRenderObject(
+          bindingId,
+          symbol,
+          presentationValue,
+        ),
       assertReady: () => this.assertReady(),
     });
     this.addresses = this.#addressController.addresses;
@@ -1401,7 +1408,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   private async createProgramSymbolRenderObject(
     bindingId: string,
     symbol: string,
-  ): Promise<import("../presentation/index.js").RenderObject> {
+    presentationValue: number | null,
+  ): Promise<SymbolHandle> {
     this.assertReady();
     if (this.#activeSymbolPackageId !== bindingId)
       throw new SceneLayoutError(
@@ -1453,7 +1461,14 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         },
       };
     };
-    return createSymbolHandle(createSource());
+    const handle = createSymbolHandle(createSource());
+    try {
+      handle.setValue(presentationValue);
+      return handle;
+    } catch (error) {
+      handle.destroy();
+      throw error;
+    }
   }
 
   private spinMainReelToSceneInternal(

@@ -151,7 +151,9 @@ Popup root。`createRenderObject(name,{instanceId})`、image-string factory opti
 canonical resource factory 与 exact
 `gamelayout:/symbol-package/<binding-id>/symbol/<symbol>` 工厂统一只提供
 `create({pooled?: boolean})`：默认对象由调用方永久拥有；池化对象调用同一个 `destroy()` 后复位并归还该 address
-唯一的惰性池。image-string 每次取出都重新应用 `text/anchor`，池不按字符串拆分；runtime destroy永久释放池实例。
+唯一的惰性池。image-string 每次取出都重新应用 `text/anchor`，池不按字符串拆分；exact symbol factory
+额外接受 `presentationValue`，每次永久/池化创建都在返回前严格应用，省略时明确重置为 `null`。其它 resource
+kind 拒绝该字段，runtime destroy永久释放池实例。
 池化句柄归还后 stale，且不能与 live `instanceId` 同时使用。
 
 程序 Spine/VNI `RenderObject.play(name?, {loop:true})` 在首圈完成后 resolve 并继续后台循环，调用方用
