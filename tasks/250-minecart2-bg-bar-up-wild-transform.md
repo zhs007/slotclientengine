@@ -7,8 +7,9 @@
 在 `/Users/zerro/gitee.com/piximinecart2` 的 Minecart2 当前 `bg-bar` 流程中接入 `up` 与
 `wild` 两种落点变化表现，并先在 slotclientengine 建立所需的通用 RenderObject 地址池能力：中央
 `feature.json` 的 `Feature` 播放完成后，在服务器组件 `pos` 指定的仍在滚动的 cell 上播放
-`topick.json` 的 `Topick_Start -> Topick_Loop -> Topick_End`；对应列落停时按服务器最终 scene
-提交目标 symbol。wild 额外在 topick 下、主转轮 symbol 上显示 WL，并在结束边界切换到正式盘面 WL 的
+`topick.json` 的 `Topick_Start -> Topick_Loop -> Topick_End`。Up 等全部轮子停稳后继续 Loop 0.5 秒，
+再播放 End，并在 End 完成后按服务器最终 scene 一次性提交目标 symbol；Wild 仍在对应列落停后结束，
+额外在 topick 下、主转轮 symbol 上显示 WL，并在结束边界切换到正式盘面 WL 的
 `appear -> normal`。
 
 ### 完成定义
@@ -18,13 +19,14 @@
 - [ ] `bg-addwilds` 使用其顶层 `pos` 与唯一最终 scene；样例 `(2,0)` 按 game config 的 exact
       `WL` code 从 `10` 变为 WL，不硬编码 `0`。
 - [ ] up/wild 都在中央 `Feature` 完成后，为全部目标 cell 同时启动 `Topick_Start`，完成后进入
-      `Topick_Loop`，并在各自列真实落停后独立播放一次 `Topick_End`。
-- [ ] up 在对应 `Topick_End` 开始时原子替换为最终 scene symbol，End 完成后清理 topick；wild 在
+      `Topick_Loop`。Up 等全部列真实落停并额外等待 0.5 秒后统一播放 `Topick_End`；Wild 在各自列
+      真实落停后独立播放一次 `Topick_End`。
+- [ ] up 等全部目标 `Topick_End` 完成后一次性原子替换为最终 scene symbol并清理 topick；wild 在
       `Topick_Start` 完成后显示 normal WL 预览，`Topick_End` 完成后以正式盘面 WL 替换被压住的
       source symbol，移除预览并播放一次 `appear`，随后明确回到 `normal`。
 - [ ] normal 及其它 feature、首次初始化、0.5 秒普通 feature landing gate、中奖、BO collection、
       award 与 mode transition 既有行为保持；只有带 exact `bg-up`/`bg-addwilds` 的 up/wild 轮次改用
-      Feature 完成边界与逐列变化 landing。
+      Feature 完成边界与受控变化 landing。
 - [ ] RenderCore canonical factory address 只保留 `create({ pooled?: boolean })`，默认创建永久对象；每个地址只有
       一个空池起步、`pooled: true` 时按并发峰值惰性增长；两者统一调用 `RenderObject.destroy()`，底层分别永久释放或自动复位回池，
       runtime destroy 永久释放池实例。
@@ -103,14 +105,16 @@ piximinecart2 git status --short --untracked-files=all: clean
    `bg-up`/`bg-addwilds` 是本轮落点变化证据。两者同时出现、与当前 up/wild玩法不匹配或缺最终 scene时失败。
 2. 组件顶层 `pos` 是扁平 x/y pair；`basicComponentData.usedScenes` 必须选择唯一最终 scene。compiler只在
    pos处取得目标 code/value，并确保非 pos cell没有未表现的变化；这属于最小执行完整性，不建立升级表。
-3. up/wild 的变化与逐列 landing交叠，不拆成“全盘落停后再统一变更”。app定义两个 exact
-   scene-landing operation kind；operation保存 render-ready landing snapshot、pos和最终 output，单一 handler
-   在 Promise 完成前拥有 Topick、逐列 settle、逐 cell replacement与最终 scene commit。
+3. app定义两个 exact scene-landing operation kind；operation保存 render-ready landing snapshot、pos和最终
+   output，单一 handler在 Promise 完成前拥有 Topick、逐列 settle与最终 scene commit。Wild 的变化与逐列
+   landing交叠；Up 明确拆成全部列落停、0.5 秒观察、统一 End、End 完成后一次性 replacement 四个阶段。
 4. 无 up/wild变化继续编译现有 `slot:spin`。带变化时后续 win、award、BO collection与transition都以
    operation final output为输入，不再读取变化前 scene。
 5. up/wild 不再在中央 Feature 播放 0.5 秒后提前落停：先完整等待 exact `Feature`，再准备全部 cell effect并
-   等全部 `Topick_Start` 进入 Loop，之后才按既有 left-to-right/stagger开始逐列 land。其它 feature保留 0.5 秒。
-6. 同一列多个目标 cell在该列 `SpinningReel.land()` resolve后并行结束；不同列自然按真实落停先后结束。
+   等全部 `Topick_Start` 进入 Loop，之后才按既有 left-to-right/stagger开始逐列 land。Up 的额外 0.5 秒从
+   全部 `land()` resolve后开始计算；其它 feature保留既有 gate。
+6. Wild 同一列多个目标 cell在该列 `SpinningReel.land()` resolve后并行结束，不同列按真实落停先后结束；
+   Up 的全部目标 End 与 replacement不按列拆分。
 
 ### 关键决策
 
@@ -232,8 +236,9 @@ AGENTS.md
      等完整Feature，其他feature继续0.5秒，初始化/cancel/variant/destroy仍只结算一次。
    - adapter预转改由active ReelSpinSession拥有；普通landing复用同一left-to-right/stagger helper，up/wild handler先
      create pooled/mount并行播放Start->Loop，再逐列land。
-   - 新controller按列处理目标：up在End开始原子replace；wild在Start完成显示normal preview，End完成后preview到
-     settled WL handoff、appear once、normal；每个finally都detach/destroy。
+   - 新controller处理目标：up等全轮停稳、再等配置的0.5秒、并行播放全部End，End全部完成后单批次replace；
+     wild按列在Start完成显示normal preview，End完成后preview到settled WL handoff、appear once、normal；
+     每个finally都detach/destroy。
 6. **测试、文档与收尾**
    - shared测试保护pool与address public合同；app测试保护Feature/Topick/column/mutation顺序、normal回归、abort、
      partial failure、next-spin和destroy。
@@ -272,8 +277,8 @@ git diff --check && git -C /Users/zerro/gitee.com/piximinecart2 diff --check
 
 ### 人工验收
 
-1. up样例：中央Feature完整结束后，三个目标cell的Topick Start->Loop均在滚动盘面上；第0列落停时
-   `(0,1)/(0,3)`各自End并变目标，第1列落停时`(1,4)`再变化，之后才进入wins。
+1. up样例：中央Feature完整结束后，三个目标cell的Topick Start->Loop均在滚动盘面上；全部轮子停稳后
+   保持Loop 0.5秒，再让三个目标同时播放End；End完整结束后三个symbol一次性变成最终目标，之后才进入wins。
 2. wild样例：`(2,0)` Topick Start完成后normal WL显示在滚动symbol上方、topick下方；第2列落停并完成End后，
    source消失，WL无闪跳地播放appear并回normal。
 3. normal、非up/wild feature、首次初始化、横竖屏切换、连续spin、网络取消与退出重进无时序回退、重复对象、
@@ -325,7 +330,7 @@ tasks/250-minecart2-bg-bar-up-wild-transform-<utctime>.md
 - Topick skeleton高于单cell，跨cell/转轮mask与不同方向布局的视觉覆盖只能在真实浏览器确认。
 - Feature completion、variant change、响应、Start、逐列settle、End和next-spin可能同帧交错；epoch/AbortSignal/池化句柄
   必须共同阻止旧continuation影响新轮。
-- combined landing handler逐列commit后若后续列失败，遵循fail-stop不倒放；报告必须明确当时已commit位置和用户可见状态。
+- Wild逐列commit后若后续列失败，遵循fail-stop不倒放；Up在End全部完成后才单批次commit，replacement前失败不留下部分升级。
 - 外部rendercore已有主仓未含的hole修复；同步命令或格式化若误做整目录覆盖会产生回归，必须按计划做变更文件parity。
 
 ### 假设
