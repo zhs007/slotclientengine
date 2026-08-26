@@ -48,6 +48,12 @@ describe("RenderReelSet ReelSpin", () => {
     });
     const session = controller.start();
     expect(session.getPendingReels().map((reel) => reel.x)).toEqual([0, 1]);
+    session.getReel(0).setRollingSpeed(20);
+    spin.update(0.1);
+    expect(spin.getSnapshot().reels[0]?.currentY).toBeCloseTo(-2);
+    expect(() => session.getReel(0).setRollingSpeed(0)).toThrow(
+      /positive finite/,
+    );
     const first = session
       .getReel(0)
       .land({ symbols: [2, 2, 1] }, { durationMs: 100, minimumSpinCycles: 1 });
@@ -56,6 +62,8 @@ describe("RenderReelSet ReelSpin", () => {
       2, 2, 1,
     ]);
     expect(session.getPendingReels().map((reel) => reel.x)).toEqual([1]);
+    expect(() => session.getReel(0)).toThrow(/not pending/);
+    expect(() => session.reels[0]?.setRollingSpeed(20)).toThrow(/stale/);
     const second = session
       .getReel(1)
       .land({ symbols: [1, 1, 2] }, { durationMs: 100, minimumSpinCycles: 1 });
@@ -559,6 +567,7 @@ describe("RenderReelSet ReelSpin", () => {
         reels: {
           start: () => undefined,
           cancel: () => undefined,
+          setContinuousSpeed: () => undefined,
           roll: async (x) => {
             calls.push(`roll:${x}`);
           },

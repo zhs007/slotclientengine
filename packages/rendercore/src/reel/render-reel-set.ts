@@ -1626,6 +1626,16 @@ export class RenderReelSet extends Container implements ReelSpin {
     }
   }
 
+  setContinuousSpeed(x: number, speedSymbolsPerSecond: number): void {
+    const reel = this.getReelAt(x);
+    const active = this.#atomicActive.get(x);
+    if (!active || active.mode !== "continuous")
+      throw new ReelError(
+        `Cannot change reel ${x} speed without targetless rolling.`,
+      );
+    reel.setContinuousSpeed(speedSymbolsPerSecond);
+  }
+
   settle(
     x: number,
     target: ReelRollTarget,

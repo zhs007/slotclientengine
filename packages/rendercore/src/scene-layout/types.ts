@@ -942,6 +942,29 @@ export interface SceneLayoutMainReelContinuousSpinInput {
   readonly dimmingActivatedAtStart?: boolean;
 }
 
+/** A package-scoped camera contribution composed with other active sessions. */
+export interface SceneLayoutCameraEffectTarget {
+  /** Uniform scene zoom. One is neutral and values below one are rejected. */
+  readonly zoomScale: number;
+  /** Maximum horizontal shake displacement in viewport pixels. */
+  readonly shakeX: number;
+  /** Maximum vertical shake displacement in viewport pixels. */
+  readonly shakeY: number;
+  /** Oscillation frequency used while either shake displacement is non-zero. */
+  readonly shakeFrequencyHz: number;
+  /** Time used to interpolate from the current contribution to this target. */
+  readonly transitionSeconds: number;
+}
+
+export interface SceneLayoutCameraEffectSession {
+  /** Retargets this owner without disturbing other active camera owners. */
+  setTarget(target: SceneLayoutCameraEffectTarget): void;
+  /** Smoothly returns this owner to neutral and resolves after ownership is released. */
+  finish(options?: { readonly durationSeconds?: number }): Promise<void>;
+  /** Immediately releases this owner's contribution. */
+  cancel(): void;
+}
+
 export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   /** Canonical owner-first lookup, capability, and event subscription SPI. */
   readonly addresses: import("./core/runtime-address.js").GameLayoutRuntimeAddresses;
@@ -961,6 +984,11 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   setAudioMuted(muted: boolean): void;
   setMusicVolume(volume: number): void;
   setEffectVolume(volume: number): void;
+  /** Starts an independently owned camera contribution on the main scene only. */
+  startCameraEffect(
+    target: SceneLayoutCameraEffectTarget,
+    options?: { readonly signal?: AbortSignal },
+  ): SceneLayoutCameraEffectSession;
   /** True only after the first exact server-authorized main scene is committed. */
   hasCommittedMainReelScene(): boolean;
   /** Confirms that an ownership-transferred host reel has atomically committed its initial scene. */

@@ -33,6 +33,7 @@ export interface ReelSpin extends SymbolArea {
     options?: ReelRollOptions,
   ): Promise<void>;
   start(x: number, options?: ReelRollStartOptions): void;
+  setContinuousSpeed(x: number, speedSymbolsPerSecond: number): void;
   settle(
     x: number,
     target: ReelRollTarget,

@@ -71,6 +71,10 @@ import {
 } from "../spine/runtime-player.js";
 import { SceneLayoutError } from "./errors.js";
 import {
+  createSceneLayoutCameraEffectController,
+  type SceneLayoutCameraEffectController,
+} from "./camera-effect.js";
+import {
   assertSceneLayoutGeometryCompatible,
   parseSceneLayoutManifest,
   parseSceneLayoutManifestDocument,
@@ -92,6 +96,8 @@ import type {
   ResolvedSceneLayoutReelGrid,
   SceneLayoutGameMode,
   SceneLayoutGameModeV2,
+  SceneLayoutCameraEffectSession,
+  SceneLayoutCameraEffectTarget,
   SceneLayoutGameModeTransition,
   SceneLayoutGameModeRequestOptions,
   SceneLayoutGameModeSnapshot,
@@ -428,6 +434,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #popupAudioHandles = new Map<string, AudioPlaybackHandle[]>();
   readonly #symbolAudioHandles = new Map<string, AudioPlaybackHandle[]>();
   readonly #popupRoot = new Container();
+  readonly #cameraRoot = new Container();
+  readonly #cameraEffects: SceneLayoutCameraEffectController;
   readonly #popupBackdrop: PopupBackdropController;
   readonly #transitionRoot = new Container();
   readonly #popupRenderLayerRoot = new Container();
@@ -674,6 +682,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     gameModeSnapshotReaders.set(this, () => this.getGameModeSnapshot());
     this.container = new Container();
     this.container.label = `scene-layout-package:${resource.manifest.id}`;
+    this.#cameraRoot.label = "scene-layout-camera-root";
+    this.#cameraRoot.addChild(this.#layout.container);
+    this.#cameraEffects = createSceneLayoutCameraEffectController(
+      this.#cameraRoot,
+    );
     this.#popupRoot.label = "scene-layout-popup-root";
     this.#popupRoot.sortableChildren = true;
     this.#popupRoot.eventMode = "none";
@@ -716,7 +729,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#videoBlackoutRoot.visible = false;
     this.#videoBlackoutRoot.addChild(this.#videoBlackout);
     this.container.addChild(
-      this.#layout.container,
+      this.#cameraRoot,
       this.#popupRoot,
       this.#transitionRoot,
       this.#videoBlackoutRoot,
@@ -880,6 +893,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     viewportSize: RenderViewportSize,
   ): SceneLayoutSnapshot {
     this.#viewportSize = Object.freeze({ ...viewportSize });
+    this.#cameraEffects.applyViewport(viewportSize.width, viewportSize.height);
     this.#popupRoot.hitArea = new Rectangle(
       0,
       0,
@@ -1040,6 +1054,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     if (this.#audioFailure) throw this.#audioFailure;
     this.syncStableModeMusic();
     this.#audio.update(deltaSeconds);
+    this.#cameraEffects.update(deltaSeconds);
     this.updatePresentationDelayWaiters(deltaSeconds);
     this.#layout.update(deltaSeconds);
     this.#renderObjectMotionRuntime.update(deltaSeconds);
@@ -2840,6 +2855,14 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     return this.#renderObjectFactory.createImgNumberRenderObject(name, options);
   }
 
+  startCameraEffect(
+    target: SceneLayoutCameraEffectTarget,
+    options?: { readonly signal?: AbortSignal },
+  ): SceneLayoutCameraEffectSession {
+    this.assertReady();
+    return this.#cameraEffects.start(target, options);
+  }
+
   requestNodeState(nodeId: string, state: string): Promise<void> {
     this.assertReady();
     return this.#layout.requestNodeState(nodeId, state);
@@ -2961,6 +2984,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#addressController.destroy();
     this.#renderObjectFactory.destroy();
     this.#audio.destroy();
+    this.#cameraEffects.destroy();
     this.#layout.destroy();
     this.#resource.destroy();
     this.#initialized = false;
