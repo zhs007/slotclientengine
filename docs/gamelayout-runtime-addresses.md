@@ -143,7 +143,24 @@ const winNumber = await numberFactory.create({
   text: "1280",
   anchor: { x: 0.5, y: 0.5 },
 });
+
+const pooledNumber = await numberFactory.create({
+  pooled: true,
+  text: "50",
+  anchor: { x: 0.5, y: 0.5 },
+});
+// 使用完成后统一 destroy；池化对象归还该 address 的池，永久对象真正释放。
+pooledNumber.destroy();
 ```
+
+`pooled` 默认为 `false`。每个 canonical factory address 只有一个空池起步，按同时取用的峰值惰性增长；
+image-string 的 `text/anchor` 在每次取出时重新设置，因此 `"100"`、`"50"` 不会产生两个池。
+池化句柄 `destroy()` 后立即 stale，runtime destroy 会永久释放该地址全部 idle/active 实例。
+`pooled: true` 与 live `instanceId` 互斥。
+
+active Symbols package 还发布 exact 程序工厂
+`gamelayout:/symbol-package/<binding-id>/symbol/<symbol>`。它从 canonical symbol catalog 创建 normal
+程序对象，支持同一 `create({ pooled })` 合同；unknown、inactive binding 或 symbol 显式失败。
 
 需要用 address 唯一定位程序对象时，在创建时显式传 `instanceId`：
 

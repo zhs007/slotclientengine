@@ -146,6 +146,12 @@ Popup root。`createRenderObject(name,{instanceId})`、image-string factory opti
 `addresses.addressOf()`/live instance address 定位，重复 live ID 显式失败，destroy/session结束后注销。mount只detach，不取得child destroy ownership。
 旧`getLayer/getNode/attachChild/attachRelative` borrowed Container seam继续兼容既有host/editor，不要求游戏批量迁移。
 
+canonical resource factory 与 exact
+`gamelayout:/symbol-package/<binding-id>/symbol/<symbol>` 工厂统一只提供
+`create({pooled?: boolean})`：默认对象由调用方永久拥有；池化对象调用同一个 `destroy()` 后复位并归还该 address
+唯一的惰性池。image-string 每次取出都重新应用 `text/anchor`，池不按字符串拆分；runtime destroy永久释放池实例。
+池化句柄归还后 stale，且不能与 live `instanceId` 同时使用。
+
 程序 Spine/VNI `RenderObject.play(name?, {loop:true})` 在首圈完成后 resolve 并继续后台循环，调用方用
 `stop()` 结束。`attachRenderObjectToSpineSlot()` 可把 detached owned ImgNumber/RenderObject 绑定到 program
 Spine 的 exact slot；不转移 destroy ownership。完整 game runtime API 和 cleanup 示例见

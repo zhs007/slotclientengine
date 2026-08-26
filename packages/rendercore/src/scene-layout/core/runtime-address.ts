@@ -8,6 +8,11 @@ import type {
   RenderObjectLayer,
 } from "../../presentation/index.js";
 import {
+  createRenderObjectPool,
+  type CreateRenderObjectPoolOptions,
+  type RenderObjectPool,
+} from "../../presentation/render-object-pool.js";
+import {
   getRenderObjectAdapter,
   registerRenderObjectCleanup,
 } from "../../presentation/render-object.js";
@@ -89,6 +94,7 @@ export interface GameLayoutRuntimeResourceEndpoint extends EndpointBase<"resourc
     readonly instanceId?: string;
     readonly text?: string;
     readonly anchor?: { readonly x: number; readonly y: number };
+    readonly pooled?: boolean;
   }): Promise<RenderObject | ImgNumberRenderObject>;
 }
 export interface GameLayoutEventEndpoint extends EndpointBase<"event"> {}
@@ -151,6 +157,10 @@ interface RuntimeBridge {
       readonly anchor?: { readonly x: number; readonly y: number };
     },
   ): Promise<ImgNumberRenderObject>;
+  createSymbolRenderObject?(
+    symbolPackageId: string,
+    symbol: string,
+  ): Promise<RenderObject>;
   assertReady(): void;
 }
 interface CatalogEntry {
@@ -204,6 +214,10 @@ export function createGameLayoutRuntimeAddresses(
     RuntimeEventAddressMetadata
   >();
   const symbolInterestGroups = new Map<string, Map<string, string>>();
+  const factoryPools = new Map<
+    GameLayoutRuntimeAddress,
+    RenderObjectPool<RenderObject>
+  >();
   let destroyed = false;
   const add = (
     segments: readonly string[],
@@ -379,6 +393,26 @@ export function createGameLayoutRuntimeAddresses(
   const eventEndpoint = (
     descriptor: GameLayoutRuntimeAddressDescriptor,
   ): GameLayoutEventEndpoint => Object.freeze({ kind: "event", descriptor });
+  const requirePool = <T extends RenderObject>(
+    descriptor: GameLayoutRuntimeAddressDescriptor,
+    options: CreateRenderObjectPoolOptions<T>,
+  ): RenderObjectPool<T> => {
+    let pool = factoryPools.get(descriptor.address) as
+      | RenderObjectPool<T>
+      | undefined;
+    if (!pool) {
+      pool = createRenderObjectPool({
+        ...options,
+        createError: (message) =>
+          new SceneLayoutError(`${descriptor.address}: ${message}`),
+      });
+      factoryPools.set(
+        descriptor.address,
+        pool as RenderObjectPool<RenderObject>,
+      );
+    }
+    return pool;
+  };
 
   for (const id of ["layout", "reel", "transition", "popup"])
     add(["layer", id], "layer", null, "borrowed", (descriptor) =>
@@ -501,6 +535,64 @@ export function createGameLayoutRuntimeAddresses(
       "structural",
       structural,
     );
+    const symbolPackage = resource.symbolPackages[id];
+    if (!symbolPackage)
+      throw new SceneLayoutError(
+        `Scene layout symbol package resource is unavailable: ${id}.`,
+      );
+    for (const symbol of Object.keys(
+      symbolPackage.symbolManifest.symbols,
+    ).sort()) {
+      const owner = ["symbol-package", id];
+      add(
+        [...owner, "symbol", symbol],
+        "resource-factory",
+        owner,
+        "caller-owned",
+        (descriptor) => {
+          const create = (): Promise<RenderObject> => {
+            if (!bridge.createSymbolRenderObject)
+              return Promise.reject(
+                new SceneLayoutError(
+                  `Symbol RenderObject factory is unavailable: ${descriptor.address}.`,
+                ),
+              );
+            return bridge.createSymbolRenderObject(id, symbol);
+          };
+          return Object.freeze({
+            kind: "resource-factory",
+            descriptor,
+            resourceKind: "symbol",
+            create: (options?: {
+              readonly instanceId?: string;
+              readonly text?: string;
+              readonly anchor?: { readonly x: number; readonly y: number };
+              readonly pooled?: boolean;
+            }) => {
+              if (
+                options?.instanceId !== undefined ||
+                options?.text !== undefined ||
+                options?.anchor !== undefined
+              )
+                throw new SceneLayoutError(
+                  `Symbol factory only accepts the pooled option: ${descriptor.address}.`,
+                );
+              if (
+                options?.pooled !== undefined &&
+                typeof options.pooled !== "boolean"
+              )
+                throw new SceneLayoutError(
+                  `Symbol factory pooled option must be boolean: ${descriptor.address}.`,
+                );
+              return options?.pooled
+                ? requirePool(descriptor, { create }).create()
+                : create();
+            },
+          });
+        },
+        { resourceKind: "symbol", symbolPackageId: id, symbol },
+      );
+    }
   }
   for (const mode of manifest.gameModes?.modes ?? []) {
     const owner = ["mode", mode.id];
@@ -605,7 +697,19 @@ export function createGameLayoutRuntimeAddresses(
             readonly instanceId?: string;
             readonly text?: string;
             readonly anchor?: { readonly x: number; readonly y: number };
+            readonly pooled?: boolean;
           }) => {
+            if (
+              options?.pooled !== undefined &&
+              typeof options.pooled !== "boolean"
+            )
+              throw new SceneLayoutError(
+                `Runtime resource pooled option must be boolean: ${descriptor.address}.`,
+              );
+            if (options?.pooled && options.instanceId !== undefined)
+              throw new SceneLayoutError(
+                `Pooled runtime resource cannot have an instanceId: ${descriptor.address}.`,
+              );
             if (
               options?.instanceId !== undefined &&
               (typeof options.instanceId !== "string" ||
@@ -619,6 +723,28 @@ export function createGameLayoutRuntimeAddresses(
                 throw new SceneLayoutError(
                   `Image-string resource requires text: ${descriptor.address}.`,
                 );
+              if (options.pooled) {
+                const text = options.text;
+                const anchor = options.anchor ?? { x: 0.5, y: 0.5 };
+                return requirePool<ImgNumberRenderObject>(descriptor, {
+                  create: () =>
+                    bridge.createImgNumberRenderObject(name, { text, anchor }),
+                  decorate: (base, source) =>
+                    Object.freeze({
+                      ...base,
+                      setText: (value: string) => source.setText(value),
+                      getText: () => source.getText(),
+                      setAnchor: (value: {
+                        readonly x: number;
+                        readonly y: number;
+                      }) => source.setAnchor(value),
+                      clone: () => source.clone(),
+                    }),
+                }).create((object) => {
+                  object.setAnchor(anchor);
+                  object.setText(text);
+                });
+              }
               return createAddressedResourceObject(
                 () =>
                   bridge.createImgNumberRenderObject(name, {
@@ -634,6 +760,10 @@ export function createGameLayoutRuntimeAddresses(
               throw new SceneLayoutError(
                 `Resource does not accept image-string options: ${descriptor.address}.`,
               );
+            if (options?.pooled)
+              return requirePool(descriptor, {
+                create: () => bridge.createRenderObject(name),
+              }).create();
             return createAddressedResourceObject(
               () => bridge.createRenderObject(name),
               name,
@@ -945,6 +1075,8 @@ export function createGameLayoutRuntimeAddresses(
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      for (const pool of factoryPools.values()) pool.destroy();
+      factoryPools.clear();
       liveEntries.clear();
       reservedInstanceAddresses.clear();
       eventManager.destroy();

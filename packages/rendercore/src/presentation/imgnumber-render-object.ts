@@ -10,6 +10,7 @@ import {
 export interface ImgNumberRenderObject extends CloneableRenderObject {
   setText(text: string): void;
   getText(): string;
+  setAnchor(anchor: { readonly x: number; readonly y: number }): void;
   clone(): ImgNumberRenderObject;
 }
 
@@ -63,6 +64,8 @@ export function createManagedImgNumberRenderObject(
     ...base,
     setText: (text: string) => renderer.setText(text),
     getText: () => renderer.getText(),
+    setAnchor: (anchor: { readonly x: number; readonly y: number }) =>
+      renderer.setAnchor(anchor),
     clone,
   }) satisfies ImgNumberRenderObject;
   registerRenderObjectAlias(object, getRenderObjectAdapter(base));

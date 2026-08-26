@@ -56,9 +56,11 @@ import {
 } from "../reel/index.js";
 import {
   createSymbolPackageReelRegistryFromCatalog,
+  createSymbolPackageValueControllerFactory,
   type SymbolCatalogModel,
   type SymbolPackageResource,
 } from "../symbol/index.js";
+import { createSymbolHandle } from "../symbol/symbol-handle.js";
 import type { RenderViewportSize } from "../viewport/index.js";
 import {
   createOfficialSpinePlayer,
@@ -628,6 +630,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       createRenderObject: (name) => this.createRenderObject(name),
       createImgNumberRenderObject: (name, options) =>
         this.createImgNumberRenderObject(name, options),
+      createSymbolRenderObject: (bindingId, symbol) =>
+        this.createProgramSymbolRenderObject(bindingId, symbol),
       assertReady: () => this.assertReady(),
     });
     this.addresses = this.#addressController.addresses;
@@ -1392,6 +1396,64 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     if (!(reel instanceof RenderReelSet))
       throw new SceneLayoutError("Standard reel spin session is unavailable.");
     return reel.getSpinSessionController();
+  }
+
+  private async createProgramSymbolRenderObject(
+    bindingId: string,
+    symbol: string,
+  ): Promise<import("../presentation/index.js").RenderObject> {
+    this.assertReady();
+    if (this.#activeSymbolPackageId !== bindingId)
+      throw new SceneLayoutError(
+        `Symbol package "${bindingId}" is not the active symbol package.`,
+      );
+    const binding = this.resolveAllSymbolBindings().find(
+      (candidate) => candidate.id === bindingId,
+    );
+    if (!binding)
+      throw new SceneLayoutError(
+        `Scene layout symbol package "${bindingId}" is unavailable.`,
+      );
+    if (!binding.resource.symbolManifest.symbols[symbol])
+      throw new SceneLayoutError(
+        `Scene layout symbol package "${bindingId}" has no exact symbol "${symbol}".`,
+      );
+    const catalog =
+      this.#reelEntries.get(bindingId)?.catalog ??
+      (await binding.resource.createCatalog());
+    this.assertReady();
+    if (this.#activeSymbolPackageId !== bindingId)
+      throw new SceneLayoutError(
+        `Symbol package "${bindingId}" stopped being active during creation.`,
+      );
+
+    const createSource = (): Parameters<typeof createSymbolHandle>[0] => {
+      const player = catalog.createSymbolPlayer(symbol, {
+        valueControllerFactory: createSymbolPackageValueControllerFactory(
+          binding.resource,
+          symbol,
+        ),
+        valueTextBindings: this.#symbolValueTextBindings?.[symbol],
+      });
+      let released = false;
+      return {
+        symbol: player,
+        owned: true,
+        assertUsable: () => {
+          if (released)
+            throw new SceneLayoutError(
+              `Program symbol RenderObject is stale: ${bindingId}/${symbol}.`,
+            );
+        },
+        clone: createSource,
+        release: () => {
+          if (released) return;
+          released = true;
+          player.destroy();
+        },
+      };
+    };
+    return createSymbolHandle(createSource());
   }
 
   private spinMainReelToSceneInternal(

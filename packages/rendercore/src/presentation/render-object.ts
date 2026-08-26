@@ -343,3 +343,23 @@ function runRenderObjectCleanup(adapter: RegisteredRenderObjectAdapter): void {
   cleanupByAdapter.delete(adapter);
   for (const cleanup of [...callbacks]) cleanup();
 }
+
+/** @internal RenderObject pools reset a live instance without changing destroy semantics. */
+export function resetRenderObjectForReuse(object: RenderObject): void {
+  const adapter = getRenderObjectAdapter(object);
+  adapter.assertUsable();
+  runRenderObjectCleanup(adapter);
+  cancelRenderObjectMotion(
+    adapter.motionBinding,
+    "RenderObject motion was cancelled while returning to its pool.",
+  );
+  adapter.stop?.();
+  const view = adapter.view;
+  view.parent?.removeChild(view);
+  view.position.set(0, 0);
+  view.alpha = 1;
+  view.angle = 0;
+  view.scale.set(1, 1);
+  view.visible = true;
+  view.zIndex = 0;
+}

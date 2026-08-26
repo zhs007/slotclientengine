@@ -184,6 +184,11 @@ Spine、VNI、粒子、光效、图片和后续 typed custom node 应统一表�
 position/visibility/play/stop/anchor/destroy；`CloneableRenderObject` 额外提供 clone。whole symbol、value part和
 exact-name text part共享该合同，part通过严格discriminated selector取得，不使用字符串猜测或唯一节点fallback。
 
+通用 `RenderObjectPool` 空池起步，按并发峰值惰性增长。canonical address factory 用
+`create({ pooled: true })` 返回一次性 façade；调用统一的 `destroy()` 会先取消播放/motion、detach cleanup并复位
+position/opacity/rotation/scale/visibility/order，再归还该 address 唯一池，旧 façade 随即 stale。默认
+`create()` 仍是永久 caller-owned 对象；池不解释玩法、symbol code或业务字符串。
+
 游戏附加节点不能直接放入现有 animation-owned overlay。RenderCore 需要稳定的自定义 attachment layer，避免
 symbol state 切换、Spine/VNI player 重建或 value presentation 同步误删游戏节点。
 

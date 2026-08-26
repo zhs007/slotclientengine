@@ -15,6 +15,11 @@ export type {
   RenderPoint,
   RenderScale,
 } from "./render-object.js";
+export { createRenderObjectPool } from "./render-object-pool.js";
+export type {
+  CreateRenderObjectPoolOptions,
+  RenderObjectPool,
+} from "./render-object-pool.js";
 export {
   createRenderObjectMotionRuntime,
   prepareRenderObjectMotionEasing,

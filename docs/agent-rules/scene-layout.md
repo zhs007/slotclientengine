@@ -89,6 +89,7 @@
 - app/editor 不复制 event drain、official Spine player、image-string、background visibility、reel placement 或 transition state machine。
 - authored loop Spine 的 exact animation await/stop 与 caller-owned RenderObject exact-slot batch attachment 由 production runtime 持有；不公开 player/Container，不猜 animation/slot alias，失败、supersede、abort、child/runtime destroy 必须清理或回滚。
 - authored node、program resource与显式identity的program Popup可把exact child parent发布为owner-first runtime address；Spine slot、VNI text layer和Popup session root都复用opaque `RenderObjectLayer`。Popup queued instance可预挂但必须保持不可见，只有active instance显示；finished/cancelled/failed/destroy必须注销地址并detach caller child，不得污染缓存player的下一次session。
+- package runtime按canonical resource factory address拥有唯一RenderObject池，并从active Symbols catalog发布exact `gamelayout:/symbol-package/<binding-id>/symbol/<symbol>`工厂；二者统一支持`create({pooled})/destroy()`，不得让app读取manifest bytes、猜默认symbol或维护第二份资源表。image-string池每次取出重设text/anchor，不按内容分桶。
 - 所有authored Scene Layout RenderObject共享RenderCore manual-clock motion；manifest placement/visibility仍是唯一home owner，程序position与rotation按offset叠加、x/y scale按factor相乘、opacity只作用于authored slot且不得把0等同hidden。多属性命令先完整preflight再同帧提交；variant或geometry replacement、reset与destroy必须cancel pending Promise并把program transform复位neutral，不改变既有resource node的直接parent拓扑。
 - `gamelayout:/event/variant-changed` 只描述 package runtime 已提交的 variant edge；首次 apply、同 variant resize 与失败 apply 不产生 occurrence，app 不以 raw viewport listener 复制第二套 variant 判定。
 - 游戏程序对象优先使用rendercore additive `getRenderLayer()`或exact node
