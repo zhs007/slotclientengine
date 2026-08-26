@@ -6,6 +6,7 @@ import type { ImgNumberRenderObject } from "../../src/presentation/index.js";
 import {
   createRenderObject,
   getRenderObjectAdapter,
+  registerRenderObjectAlias,
 } from "../../src/presentation/render-object.js";
 import { createRenderObjectLayer } from "../../src/presentation/render-object-layer.js";
 import { createRenderObjectMotionRuntime } from "../../src/presentation/render-object-motion.js";
@@ -13,6 +14,7 @@ import {
   createGameLayoutRuntimeAddresses,
   type GameLayoutRuntimeResourceEndpoint,
 } from "../../src/scene-layout/core/runtime-address.js";
+import type { SymbolHandle } from "../../src/symbol/symbol-handle.js";
 
 describe("Game Layout runtime address pools", () => {
   it("isolates canonical factory pools, reuses destroyed handles, and destroys instances", async () => {
@@ -24,6 +26,7 @@ describe("Game Layout runtime address pools", () => {
       motionRuntime: motion,
     }).layer;
     const created = new Map<string, Container[]>();
+    const symbolPresentationValues: (number | null)[] = [];
     const digitsResource: ImageStringResource = {
       manifest: {
         version: 1,
@@ -57,6 +60,33 @@ describe("Game Layout runtime address pools", () => {
       values.push(view);
       created.set(key, values);
       return createRenderObject({ view, destroy: () => view.destroy() });
+    };
+    const createSymbol = (
+      key: string,
+      presentationValue: number | null,
+    ): SymbolHandle => {
+      const base = create(key);
+      let value: number | null = null;
+      const object = Object.freeze({
+        ...base,
+        setValue: (next: number | null) => {
+          if (next !== null && (!Number.isSafeInteger(next) || next <= 0))
+            throw new Error(
+              "Render symbol presentation value must be a positive safe integer or null.",
+            );
+          value = next;
+          symbolPresentationValues.push(next);
+        },
+        getValue: () => value,
+      }) as unknown as SymbolHandle;
+      registerRenderObjectAlias(object, getRenderObjectAdapter(base));
+      try {
+        object.setValue(presentationValue);
+        return object;
+      } catch (error) {
+        object.destroy();
+        throw error;
+      }
     };
     const manifest = {
       nodes: [],
@@ -116,8 +146,8 @@ describe("Game Layout runtime address pools", () => {
           created.set("resource:digits", values);
           return object;
         },
-        createSymbolRenderObject: async (binding, symbol) =>
-          create(`symbol:${binding}:${symbol}`),
+        createSymbolRenderObject: async (binding, symbol, presentationValue) =>
+          createSymbol(`symbol:${binding}:${symbol}`, presentationValue),
         assertReady() {},
       },
     );
@@ -149,12 +179,34 @@ describe("Game Layout runtime address pools", () => {
     expect(getRenderObjectAdapter(reused).view).toBe(firstView);
     expect(created.get("resource:topick")).toHaveLength(1);
 
-    const wild = await symbol.create({ pooled: true });
+    const wild = await symbol.create({
+      pooled: true,
+      presentationValue: 10,
+    });
     expect(getRenderObjectAdapter(wild).view).not.toBe(firstView);
     expect(created.get("symbol:base:WL")).toHaveLength(1);
+    expect(symbolPresentationValues).toEqual([null, 10]);
+    wild.destroy();
+    const reusedWild = await symbol.create({
+      pooled: true,
+      presentationValue: 20,
+    });
+    expect(getRenderObjectAdapter(reusedWild).view).toBe(
+      created.get("symbol:base:WL")![0],
+    );
+    expect(symbolPresentationValues.at(-1)).toBe(20);
+    reusedWild.destroy();
+    const resetWild = await symbol.create({ pooled: true });
+    expect(symbolPresentationValues.at(-1)).toBeNull();
     expect(() =>
       symbol.create({ pooled: true, instanceId: "not-allowed" }),
-    ).toThrow(/only accepts the pooled option/);
+    ).toThrow(/only accepts pooled and presentationValue options/);
+    expect(() => topick.create({ presentationValue: 10 })).toThrow(
+      /does not accept presentationValue/,
+    );
+    await expect(symbol.create({ presentationValue: 0 })).rejects.toThrow(
+      /positive safe integer or null/,
+    );
 
     const oneHundred = (await digits.create({
       pooled: true,
@@ -176,7 +228,7 @@ describe("Game Layout runtime address pools", () => {
 
     reused.destroy();
     controller.destroy();
-    expect(() => wild.setVisible(true)).toThrow(/destroyed/);
+    expect(() => resetWild.setVisible(true)).toThrow(/destroyed/);
     expect(firstView.destroyed).toBe(true);
     expect(created.get("symbol:base:WL")![0]!.destroyed).toBe(true);
     motion.destroy();

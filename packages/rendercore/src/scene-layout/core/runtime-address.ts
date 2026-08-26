@@ -7,6 +7,7 @@ import type {
   RenderObject,
   RenderObjectLayer,
 } from "../../presentation/index.js";
+import type { SymbolHandle } from "../../symbol/symbol-handle.js";
 import {
   createRenderObjectPool,
   type CreateRenderObjectPoolOptions,
@@ -95,6 +96,7 @@ export interface GameLayoutRuntimeResourceEndpoint extends EndpointBase<"resourc
     readonly text?: string;
     readonly anchor?: { readonly x: number; readonly y: number };
     readonly pooled?: boolean;
+    readonly presentationValue?: number | null;
   }): Promise<RenderObject | ImgNumberRenderObject>;
 }
 export interface GameLayoutEventEndpoint extends EndpointBase<"event"> {}
@@ -160,7 +162,8 @@ interface RuntimeBridge {
   createSymbolRenderObject?(
     symbolPackageId: string,
     symbol: string,
-  ): Promise<RenderObject>;
+    presentationValue: number | null,
+  ): Promise<SymbolHandle>;
   assertReady(): void;
 }
 interface CatalogEntry {
@@ -550,14 +553,20 @@ export function createGameLayoutRuntimeAddresses(
         owner,
         "caller-owned",
         (descriptor) => {
-          const create = (): Promise<RenderObject> => {
+          const create = (
+            presentationValue: number | null,
+          ): Promise<SymbolHandle> => {
             if (!bridge.createSymbolRenderObject)
               return Promise.reject(
                 new SceneLayoutError(
                   `Symbol RenderObject factory is unavailable: ${descriptor.address}.`,
                 ),
               );
-            return bridge.createSymbolRenderObject(id, symbol);
+            return bridge.createSymbolRenderObject(
+              id,
+              symbol,
+              presentationValue,
+            );
           };
           return Object.freeze({
             kind: "resource-factory",
@@ -568,6 +577,7 @@ export function createGameLayoutRuntimeAddresses(
               readonly text?: string;
               readonly anchor?: { readonly x: number; readonly y: number };
               readonly pooled?: boolean;
+              readonly presentationValue?: number | null;
             }) => {
               if (
                 options?.instanceId !== undefined ||
@@ -575,7 +585,7 @@ export function createGameLayoutRuntimeAddresses(
                 options?.anchor !== undefined
               )
                 throw new SceneLayoutError(
-                  `Symbol factory only accepts the pooled option: ${descriptor.address}.`,
+                  `Symbol factory only accepts pooled and presentationValue options: ${descriptor.address}.`,
                 );
               if (
                 options?.pooled !== undefined &&
@@ -584,9 +594,12 @@ export function createGameLayoutRuntimeAddresses(
                 throw new SceneLayoutError(
                   `Symbol factory pooled option must be boolean: ${descriptor.address}.`,
                 );
+              const presentationValue = options?.presentationValue ?? null;
               return options?.pooled
-                ? requirePool(descriptor, { create }).create()
-                : create();
+                ? requirePool<SymbolHandle>(descriptor, {
+                    create: () => create(null),
+                  }).create((object) => object.setValue(presentationValue))
+                : create(presentationValue);
             },
           });
         },
@@ -698,7 +711,12 @@ export function createGameLayoutRuntimeAddresses(
             readonly text?: string;
             readonly anchor?: { readonly x: number; readonly y: number };
             readonly pooled?: boolean;
+            readonly presentationValue?: number | null;
           }) => {
+            if (options?.presentationValue !== undefined)
+              throw new SceneLayoutError(
+                `Runtime resource does not accept presentationValue: ${descriptor.address}.`,
+              );
             if (
               options?.pooled !== undefined &&
               typeof options.pooled !== "boolean"
