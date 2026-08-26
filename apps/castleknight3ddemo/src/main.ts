@@ -1,3 +1,4 @@
+import { loadCastleBarrelModel } from "./barrel-model.js";
 import { CastleKnightRenderer } from "./castle-scene.js";
 import { PropPreviewRenderer, type PropPreviewKind } from "./prop-preview.js";
 import "./styles.css";
@@ -80,7 +81,7 @@ function createHud(root: HTMLElement, game: CastleKnightRenderer): HTMLElement {
   return hud;
 }
 
-function bootstrap(): void {
+async function bootstrap(): Promise<void> {
   const root = document.getElementById("app");
   if (!root) throw new Error("Missing #app root.");
   const previewKind = new URLSearchParams(location.search).get("prop");
@@ -98,10 +99,10 @@ function bootstrap(): void {
     previewKind === "spellbook" ||
     previewKind === "crown"
   ) {
-    bootstrapPropPreview(root, previewKind);
+    await bootstrapPropPreview(root, previewKind);
     return;
   }
-  const game = new CastleKnightRenderer(root);
+  const game = new CastleKnightRenderer(root, await loadCastleBarrelModel());
   root.append(createHud(root, game));
   const resize = () => game.resize(root.clientWidth, root.clientHeight);
   const resizeObserver = new ResizeObserver(resize);
@@ -117,11 +118,21 @@ function bootstrap(): void {
   );
 }
 
-function bootstrapPropPreview(root: HTMLElement, kind: PropPreviewKind): void {
+async function bootstrapPropPreview(
+  root: HTMLElement,
+  kind: PropPreviewKind,
+): Promise<void> {
   const parameters = new URLSearchParams(location.search);
   const sideView = parameters.get("view") === "side";
   const textured = parameters.get("mode") === "final";
-  const preview = new PropPreviewRenderer(root, kind, sideView, textured);
+  const barrelModel = kind === "barrel" ? await loadCastleBarrelModel() : null;
+  const preview = new PropPreviewRenderer(
+    root,
+    kind,
+    sideView,
+    textured,
+    barrelModel,
+  );
   const resize = () => preview.resize(root.clientWidth, root.clientHeight);
   const resizeObserver = new ResizeObserver(resize);
   resizeObserver.observe(root);
@@ -136,9 +147,7 @@ function bootstrapPropPreview(root: HTMLElement, kind: PropPreviewKind): void {
   );
 }
 
-try {
-  bootstrap();
-} catch (error) {
+void bootstrap().catch((error: unknown) => {
   console.error("castleknight3ddemo bootstrap failed", error);
   const root = document.getElementById("app");
   if (root) {
@@ -148,4 +157,4 @@ try {
       error instanceof Error ? error.message : String(error);
     root.replaceChildren(message);
   }
-}
+});

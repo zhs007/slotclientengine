@@ -41,7 +41,6 @@ import {
 import {
   createCartoonCastleBench,
   createCartoonCastleWallSection,
-  createCartoonOakBarrel,
   createCartoonWallTorch,
   createRoundCastleColumn,
 } from "./reconstructed-props.js";
@@ -156,7 +155,7 @@ export class CastleKnightRenderer {
   readonly #materials: CastleMaterials;
   #destroyed = false;
 
-  constructor(host: HTMLElement) {
+  constructor(host: HTMLElement, barrelModel: Group) {
     this.#renderer = new WebGLRenderer({
       antialias: true,
       alpha: false,
@@ -182,7 +181,7 @@ export class CastleKnightRenderer {
     this.#createBoard();
     this.#createThroneArea();
     this.#createArchitecture();
-    this.#createFurniture();
+    this.#createFurniture(barrelModel);
     this.#createChandelier();
     this.#createTorches();
     this.#createLighting();
@@ -562,13 +561,8 @@ export class CastleKnightRenderer {
     }
   }
 
-  #createFurniture(): void {
+  #createFurniture(barrelModel: Group): void {
     const benchMaster = createCartoonCastleBench({
-      wood: this.#materials.wood,
-      woodDark: this.#materials.woodDark,
-      iron: this.#materials.iron,
-    });
-    const barrelMaster = createCartoonOakBarrel({
       wood: this.#materials.wood,
       woodDark: this.#materials.woodDark,
       iron: this.#materials.iron,
@@ -579,7 +573,7 @@ export class CastleKnightRenderer {
       bench.rotation.y = side * -0.12;
       this.#root.add(bench);
 
-      const barrel = barrelMaster.clone(true);
+      const barrel = barrelModel.clone(true);
       barrel.position.set(side * 5.08, 0, 3.15);
       barrel.rotation.y = side * 0.18;
       this.#root.add(barrel);

@@ -12,6 +12,7 @@ import {
   Vector2,
   WebGLRenderer,
 } from "three";
+import type { Group } from "three";
 import {
   createCartoonCastleChandelier,
   createCartoonCastleThrone,
@@ -20,7 +21,6 @@ import {
 import {
   createCartoonCastleBench,
   createCartoonCastleWallSection,
-  createCartoonOakBarrel,
   createCartoonTreasureChest,
   createCartoonWallTorch,
   createRoundCastleColumn,
@@ -62,6 +62,7 @@ export class PropPreviewRenderer {
     kind: PropPreviewKind,
     sideView: boolean,
     textured: boolean,
+    barrelModel: Group | null,
   ) {
     this.#renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.#renderer.outputColorSpace = SRGBColorSpace;
@@ -255,7 +256,8 @@ export class PropPreviewRenderer {
         this.#camera.position.set(0, 1.6, 8.5);
         this.#camera.lookAt(0, -0.15, 0);
       } else if (kind === "barrel") {
-        const barrel = createCartoonOakBarrel({ wood, woodDark, iron });
+        if (!barrelModel) throw new Error("Castle barrel GLB is not loaded.");
+        const barrel = barrelModel.clone(true);
         barrel.scale.setScalar(2.25);
         barrel.rotation.y = sideView ? Math.PI / 2 : -Math.PI * 0.16;
         barrel.position.y = -1.55;
