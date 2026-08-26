@@ -26,7 +26,6 @@ import {
   createRoundCastleColumn,
 } from "./reconstructed-props.js";
 import {
-  createCartoonBattleAxeSymbol,
   createCartoonCrownSymbol,
   createCartoonSpellbookSymbol,
 } from "./reconstructed-symbols.js";
@@ -63,6 +62,7 @@ export class PropPreviewRenderer {
     sideView: boolean,
     textured: boolean,
     barrelModel: Group | null,
+    battleAxeModel: Group | null,
   ) {
     this.#renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.#renderer.outputColorSpace = SRGBColorSpace;
@@ -333,12 +333,18 @@ export class PropPreviewRenderer {
           blue,
           outline,
         };
-        const symbol =
-          kind === "battleAxe"
-            ? createCartoonBattleAxeSymbol(materials)
-            : kind === "spellbook"
+        let symbol: Group;
+        if (kind === "battleAxe") {
+          if (!battleAxeModel) {
+            throw new Error("Castle battle axe GLB is not loaded.");
+          }
+          symbol = battleAxeModel.clone(true);
+        } else {
+          symbol =
+            kind === "spellbook"
               ? createCartoonSpellbookSymbol(materials)
               : createCartoonCrownSymbol(materials);
+        }
         symbol.scale.setScalar(
           kind === "battleAxe" ? 1.85 : kind === "spellbook" ? 2.35 : 2.1,
         );

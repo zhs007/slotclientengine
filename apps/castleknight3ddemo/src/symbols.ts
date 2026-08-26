@@ -24,7 +24,6 @@ import { BOARD, boardDepth, boardWidth } from "./config.js";
 import { createRandom, type RandomSource } from "./random.js";
 import { createCartoonTreasureChest } from "./reconstructed-props.js";
 import {
-  createCartoonBattleAxeSymbol,
   createCartoonCrownSymbol,
   createCartoonSpellbookSymbol,
 } from "./reconstructed-symbols.js";
@@ -324,7 +323,10 @@ function createKing(palette: Palette): Group {
   return group;
 }
 
-function createModels(palette: Palette): ReadonlyMap<SymbolType, Group> {
+function createModels(
+  palette: Palette,
+  battleAxeModel: Group,
+): ReadonlyMap<SymbolType, Group> {
   const reconstructedMaterials = {
     wood: palette.wood,
     steel: palette.steel,
@@ -345,7 +347,7 @@ function createModels(palette: Palette): ReadonlyMap<SymbolType, Group> {
     ["gem", createGem(palette)],
     ["sword", createSword(palette)],
     ["king", createKing(palette)],
-    ["battleAxe", createCartoonBattleAxeSymbol(reconstructedMaterials)],
+    ["battleAxe", battleAxeModel],
     ["spellbook", createCartoonSpellbookSymbol(reconstructedMaterials)],
     ["crown", createCartoonCrownSymbol(reconstructedMaterials)],
   ]);
@@ -500,10 +502,11 @@ export class SymbolField extends Group {
   constructor(
     placements: readonly SymbolPlacement[],
     textures: CastleTextureLibrary,
+    battleAxeModel: Group,
   ) {
     super();
     this.#palette = createPalette(textures);
-    this.#masters = createModels(this.#palette);
+    this.#masters = createModels(this.#palette, battleAxeModel);
     this.name = "animated-castle-symbols";
     this.#populate(placements);
   }
