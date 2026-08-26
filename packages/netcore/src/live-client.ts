@@ -1,4 +1,4 @@
-import { transformSceneData,encrypt, importAesKey, decrypt} from './utils';
+import { decrypt, encrypt, importAesKey, transformSceneData } from './utils';
 import { Connection } from './connection';
 import { EventEmitter } from './event-emitter';
 import {
@@ -48,7 +48,9 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
   private logger: Logger;
   private operationFailureRecovery: Record<RecoverableOperation, OperationFailureRecoveryStrategy>;
 
-  private isWsBinary: boolean = false;
+  private readonly isWsBinary: boolean;
+  private binaryCryptoKey: CryptoKey | null = null;
+  private incomingMessageQueue: Promise<void> = Promise.resolve();
   private reconnectAttempts = 0;
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private userInfo: UserInfo = {};
@@ -83,7 +85,7 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
     this.options = {
       maxReconnectAttempts: 10,
       reconnectDelay: 1000,
-      requestTimeout: 10000,//
+      requestTimeout: 10000,
       ...options,
     };
     this.operationFailureRecovery = this.resolveFailureRecovery(options.operationFailureRecovery);
@@ -103,13 +105,7 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
       // Otherwise, use the provided logger or default to the console
       this.logger = options.logger || console;
     }
-    if(this.isWsBinary){
-      this.options.url = `${this.options.url}?token=${options.token}`
-    }
-    this.connection = new Connection(
-      this.options.url,
-      this.isWsBinary ? 'arraybuffer' : undefined,
-    );
+    this.connection = new Connection(this.options.url, this.isWsBinary ? 'arraybuffer' : undefined);
     this.setupConnectionHandlers();
   }
 
@@ -148,6 +144,8 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
         throw new Error('Token must be provided either in the constructor or to connect()');
       }
       this.userInfo.token = tokenToUse;
+
+      await this.prepareTransport(tokenToUse);
 
       this.setState(ConnectionState.CONNECTING);
 
@@ -394,7 +392,7 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
     this._rejectAllQueuedOperations('Client disconnected.');
   }
 
-  public async send(cmdid: string, params: any = {}): Promise<any> {
+  public send(cmdid: string, params: any = {}): Promise<any> {
     // P1: Restrict commands during LOGGING_IN state.
     if (this.state === ConnectionState.LOGGING_IN && cmdid !== 'flblogin') {
       return Promise.reject(new Error(`Only 'flblogin' is allowed during LOGGING_IN state.`));
@@ -422,28 +420,38 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
       return Promise.reject(new Error(`A request with cmdid '${cmdid}' is already pending.`));
     }
 
-    let message = JSON.stringify({ cmdid, ...params });
+    const message = JSON.stringify({ cmdid, ...params });
     this.emitRawMessage('SEND', message);
-    if (this.isWsBinary) {
-      const token = this.userInfo.token || '';
-      const rawKey = new TextEncoder().encode(token);
-      const cryptoKey = await importAesKey(rawKey);
-      message = await encrypt(message, cryptoKey);
-    }
-    const sent = this.connection.send(message);
-    if (!sent) {
-      this.logger.error(`WebSocket is not open. Message dropped: ${cmdid}`);
-      return Promise.reject(new Error(`WebSocket is not open. Cannot send: ${cmdid}`));
-    }
 
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pendingRequests.delete(cmdid);
-        reject(new Error(`Request timed out for cmdid: ${cmdid}`));
-      }, this.options.requestTimeout);
-
-      this.pendingRequests.set(cmdid, { resolve, reject, timer });
+    let resolveResponse!: (value: any) => void;
+    let rejectResponse!: (reason?: any) => void;
+    const response = new Promise<any>((resolve, reject) => {
+      resolveResponse = resolve;
+      rejectResponse = reject;
     });
+    const pendingRequest: PendingRequest = {
+      resolve: resolveResponse,
+      reject: rejectResponse,
+      timer: setTimeout(() => {
+        if (this.pendingRequests.get(cmdid) !== pendingRequest) {
+          return;
+        }
+        this.pendingRequests.delete(cmdid);
+        rejectResponse(new Error(`Request timed out for cmdid: ${cmdid}`));
+      }, this.options.requestTimeout),
+    };
+
+    this.pendingRequests.set(cmdid, pendingRequest);
+    void this.dispatchMessage(cmdid, message, pendingRequest).catch((error: unknown) => {
+      if (this.pendingRequests.get(cmdid) !== pendingRequest) {
+        return;
+      }
+      clearTimeout(pendingRequest.timer);
+      this.pendingRequests.delete(cmdid);
+      pendingRequest.reject(error);
+    });
+
+    return response;
   }
 
   public on(event: string, callback: (...args: any[]) => void) {
@@ -457,6 +465,45 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
   }
 
   // --- Private Handlers ---
+
+  private async prepareTransport(token: string): Promise<void> {
+    if (!this.isWsBinary) {
+      this.binaryCryptoKey = null;
+      this.connection.setUrl(this.options.url);
+      return;
+    }
+
+    const rawKey = new TextEncoder().encode(token);
+    const cryptoKey = await importAesKey(rawKey);
+    const url = new URL(this.options.url);
+    url.searchParams.set('token', token);
+
+    this.binaryCryptoKey = cryptoKey;
+    this.connection.setUrl(url.toString());
+  }
+
+  private async dispatchMessage(
+    cmdid: string,
+    message: string,
+    pendingRequest: PendingRequest
+  ): Promise<void> {
+    let payload: string | ArrayBuffer = message;
+    if (this.isWsBinary) {
+      if (!this.binaryCryptoKey) {
+        throw new Error('Binary WebSocket transport is not prepared.');
+      }
+      payload = await encrypt(message, this.binaryCryptoKey);
+    }
+
+    if (this.pendingRequests.get(cmdid) !== pendingRequest) {
+      return;
+    }
+
+    if (!this.connection.send(payload)) {
+      this.logger.error(`WebSocket is not open. Message dropped: ${cmdid}`);
+      throw new Error(`WebSocket is not open. Cannot send: ${cmdid}`);
+    }
+  }
 
   private resolveFailureRecovery(
     overrides?: OperationFailureRecoveryOptions
@@ -569,7 +616,16 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
 
   private setupConnectionHandlers(): void {
     this.connection.onOpen = this.handleOpen.bind(this);
-    this.connection.onMessage = this.handleMessage.bind(this);
+    this.connection.onMessage = (event) => {
+      this.incomingMessageQueue = this.incomingMessageQueue
+        .then(() => this.handleMessage(event))
+        .catch((error: unknown) => {
+          const messageError =
+            error instanceof Error ? error : new Error('Failed to process server message');
+          this.logger.error('Failed to process server message:', messageError);
+          this.emitter.emit('error', messageError);
+        });
+    };
     this.connection.onClose = this.handleClose.bind(this);
     this.connection.onError = this.handleError.bind(this);
   }
@@ -622,16 +678,22 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
   }
 
   private async handleMessage(event: MessageEvent): Promise<void> {
-    let data = event.data;
+    let data: unknown = event.data;
     if (this.isWsBinary) {
-      const token = this.userInfo.token || '';
-      const rawKey = new TextEncoder().encode(token);
-      const cryptoKey = await importAesKey(rawKey);
-      data = await decrypt(data, cryptoKey);
+      if (!this.binaryCryptoKey) {
+        throw new Error('Binary WebSocket transport is not prepared.');
+      }
+      if (!(data instanceof ArrayBuffer)) {
+        throw new Error('Binary WebSocket message must be an ArrayBuffer.');
+      }
+      data = await decrypt(data, this.binaryCryptoKey);
+    }
+    if (typeof data !== 'string') {
+      throw new Error('WebSocket message must be text.');
     }
     this.emitRawMessage('RECV', data);
+
     try {
-      // P2: Parse JSON only once.
       const parsedData = JSON.parse(data);
       const messages = Array.isArray(parsedData) ? parsedData : [parsedData];
 
@@ -774,8 +836,10 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
         }
       }
     } catch (error) {
-      this.logger.error('Failed to parse server message:', event.data);
-      this.emitter.emit('error', new Error('Failed to parse server message'));
+      if (error instanceof SyntaxError) {
+        throw new Error('Failed to parse server message');
+      }
+      throw error;
     }
   }
 
@@ -874,6 +938,10 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
         if (typeof msg.defaultLinebet === 'number')
           this.userInfo.defaultLinebet = msg.defaultLinebet;
         if (Array.isArray(msg.linebets)) this.userInfo.linebets = msg.linebets;
+        if (typeof msg.maxBetBootsBuy === 'number')
+          this.userInfo.maxBetBootsBuy = msg.maxBetBootsBuy;
+        if (typeof msg.maxTotalBetLimit === 'number')
+          this.userInfo.maxTotalBetLimit = msg.maxTotalBetLimit;
         if (typeof msg.ver === 'string') this.userInfo.gamecfgVer = msg.ver;
         if (typeof msg.coreVer === 'string') this.userInfo.gamecfgCoreVer = msg.coreVer;
         if (typeof msg.data === 'string') {
@@ -906,7 +974,7 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
         break;
       }
       case 'collectinfo': {
-        this.userInfo.balance = msg.gold;
+        if (typeof msg.gold === 'number') this.userInfo.balance = msg.gold;
         break;
       }
       default:
@@ -955,7 +1023,27 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
     this.reconnectTimeout = setTimeout(
       () => {
         this.logger.log(`Attempting to reconnect... (attempt ${this.reconnectAttempts})`);
-        this.connection.connect();
+        const token = this.userInfo.token;
+        if (!token) {
+          const error = new Error('Cannot reconnect without a token.');
+          this.logger.error(error.message);
+          this.emitter.emit('error', error);
+          this.disconnect();
+          return;
+        }
+        void this.prepareTransport(token)
+          .then(() => {
+            if (this.state === ConnectionState.RECONNECTING) {
+              this.connection.connect();
+            }
+          })
+          .catch((error: unknown) => {
+            const reconnectError =
+              error instanceof Error ? error : new Error('Failed to prepare reconnect transport.');
+            this.logger.error('Failed to prepare reconnect transport:', reconnectError);
+            this.emitter.emit('error', reconnectError);
+            this.disconnect();
+          });
       },
       Math.min(delay, 30000)
     );

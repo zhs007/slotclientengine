@@ -70,6 +70,10 @@ console.log(result);
 
 When the constructor receives an `http://` or `https://` URL, the client uses replay mode instead of live WebSocket mode. In Node.js you must provide `options.fetch`.
 
+## Encrypted Binary WebSocket Mode
+
+For servers implementing the token-authenticated AES-GCM transport, set `isWsBinary: true`. Supply a token that encodes to exactly 32 UTF-8 bytes either in the constructor or to `connect(token)`. The client preserves existing URL query parameters, adds the token safely, requests `arraybuffer` messages, and processes decrypted messages serially.
+
 ## Development Commands
 
 Run from the repository root:

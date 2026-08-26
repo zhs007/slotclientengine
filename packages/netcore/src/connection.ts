@@ -26,6 +26,14 @@ export class Connection {
     this.binaryType = binaryType ?? null;
   }
 
+  /** Updates the URL used by the next connection attempt. */
+  public setUrl(url: string): void {
+    if (this.ws) {
+      throw new Error('Cannot change WebSocket URL while a connection is active.');
+    }
+    this.url = url;
+  }
+
   /**
    * Initiates the WebSocket connection.
    */
@@ -36,24 +44,28 @@ export class Connection {
     }
 
     // Since this library is for the frontend, we assume WebSocket is available globally.
-    this.ws = new WebSocket(this.url);
+    const ws = new WebSocket(this.url);
+    this.ws = ws;
     if (this.binaryType) {
-      this.ws.binaryType = this.binaryType;
+      ws.binaryType = this.binaryType;
     }
 
-    this.ws.onopen = () => {
+    ws.onopen = () => {
       this.onOpen?.();
     };
 
-    this.ws.onclose = (event: CloseEvent) => {
+    ws.onclose = (event: CloseEvent) => {
+      if (this.ws === ws) {
+        this.ws = null;
+      }
       this.onClose?.(event);
     };
 
-    this.ws.onmessage = (event: MessageEvent) => {
+    ws.onmessage = (event: MessageEvent) => {
       this.onMessage?.(event);
     };
 
-    this.ws.onerror = (event: Event) => {
+    ws.onerror = (event: Event) => {
       this.onError?.(event);
     };
   }

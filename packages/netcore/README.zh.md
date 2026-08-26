@@ -95,6 +95,19 @@ run().catch(console.error);
 - `send(cmdid, params)`：直接发送底层命令。
 - `getState()`、`getUserInfo()`：读取运行时状态和缓存。
 
+### WebSocket 加密二进制模式
+
+只有服务端实现了 token 鉴权的 AES-GCM 协议时才启用 `isWsBinary: true`。构造参数或 `connect(token)` 传入的 token 按 UTF-8 编码后必须恰好为 32 字节。客户端使用 `URLSearchParams` 把该 token 加入 WebSocket URL，请求 `arraybuffer` 消息格式，并在当前 socket 生命周期内使用同一密钥。收到的加密消息会严格按 WebSocket 投递顺序串行解密和处理。
+
+```ts
+const client = new SlotcraftClient({
+  url: 'wss://your-game-server.example/ws?client=web',
+  isWsBinary: true,
+});
+
+await client.connect('12345678901234567890123456789012');
+```
+
 ### 操作失败恢复配置
 
 `operationFailureRecovery` 可为 `enterGame`、`spin`、`collect`、`selectOptional` 分别配置 `restore` 或 `disconnect`。默认全部为 `restore`；例如 spin 因余额不足失败时会恢复到 `IN_GAME`，错误仍由 Promise 抛出。

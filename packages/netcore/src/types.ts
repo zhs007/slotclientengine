@@ -103,8 +103,12 @@ export interface SlotcraftClientOptions {
    * stable state that preceded the transient operation state.
    */
   operationFailureRecovery?: OperationFailureRecoveryOptions;
-  
-  /** Optional: Whether the server messages are in binary format. Defaults to false. */
+
+  /**
+   * Optional: Use the token-authenticated AES-GCM binary WebSocket protocol.
+   * The token supplied to the constructor or connect() must encode to exactly 32 UTF-8 bytes.
+   * Defaults to false.
+   */
   isWsBinary?: boolean;
 }
 
@@ -224,6 +228,8 @@ export interface ReplayBootstrapInfo {
   bet?: number;
   totalbet?: number;
   lines?: number;
+  maxBetBootsBuy?: number;
+  maxTotalBetLimit?: number;
   currency?: string;
   gameType?: string;
   payTables?: Readonly<Record<string, unknown>>;

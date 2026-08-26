@@ -47,25 +47,26 @@ export function transformSceneData(data: RawSceneData | null | undefined): numbe
 
   return data.values.map((row) => (row && Array.isArray(row.values) ? row.values : []));
 }
-
-
 // 导入密钥
 export async function importAesKey(rawKey: Uint8Array): Promise<CryptoKey> {
   if (rawKey.length !== 32) {
     throw new Error(`AES‑256 expects a 32‑byte key; actual key length: ${rawKey.length}`);
   }
-  return window.crypto.subtle.importKey('raw', rawKey as BufferSource, { name: 'AES-GCM' }, false, [
-    'encrypt',
-    'decrypt',
-  ]);
+  return globalThis.crypto.subtle.importKey(
+    'raw',
+    rawKey as BufferSource,
+    { name: 'AES-GCM' },
+    false,
+    ['encrypt', 'decrypt']
+  );
 }
 
 // 加密
-export async function encrypt(plainText: string, cryptoKey: CryptoKey): Promise<any> {
-  const iv = window.crypto.getRandomValues(new Uint8Array(16));
+export async function encrypt(plainText: string, cryptoKey: CryptoKey): Promise<ArrayBuffer> {
+  const iv = globalThis.crypto.getRandomValues(new Uint8Array(16));
   const encoded = new TextEncoder().encode(plainText);
 
-  const encrypted = await window.crypto.subtle.encrypt(
+  const encrypted = await globalThis.crypto.subtle.encrypt(
     {
       name: 'AES-GCM',
       iv,
@@ -98,7 +99,7 @@ export async function decrypt(encryptedBuffer: ArrayBuffer, cryptoKey: CryptoKey
   encryptedWithTag.set(ciphertext, 0);
   encryptedWithTag.set(authTag, ciphertext.length);
 
-  const decrypted = await window.crypto.subtle.decrypt(
+  const decrypted = await globalThis.crypto.subtle.decrypt(
     {
       name: 'AES-GCM',
       iv,
