@@ -48,6 +48,12 @@ describe("RenderReelSet ReelSpin", () => {
     });
     const session = controller.start();
     expect(session.getPendingReels().map((reel) => reel.x)).toEqual([0, 1]);
+    session.getReel(0).setRollingSpeed(20);
+    spin.update(0.1);
+    expect(spin.getSnapshot().reels[0]?.currentY).toBeCloseTo(-2);
+    expect(() => session.getReel(0).setRollingSpeed(0)).toThrow(
+      /positive finite/,
+    );
     const first = session
       .getReel(0)
       .land({ symbols: [2, 2, 1] }, { durationMs: 100, minimumSpinCycles: 1 });
@@ -56,6 +62,8 @@ describe("RenderReelSet ReelSpin", () => {
       2, 2, 1,
     ]);
     expect(session.getPendingReels().map((reel) => reel.x)).toEqual([1]);
+    expect(() => session.getReel(0)).toThrow(/not pending/);
+    expect(() => session.reels[0]?.setRollingSpeed(20)).toThrow(/stale/);
     const second = session
       .getReel(1)
       .land({ symbols: [1, 1, 2] }, { durationMs: 100, minimumSpinCycles: 1 });
@@ -165,13 +173,22 @@ describe("RenderReelSet ReelSpin", () => {
       [2, 1, 2],
     ]);
     const view = new Container();
-    const node = createRenderObject({ view, destroy: () => view.destroy() });
+    let nodeElapsed = 0;
+    const node = createRenderObject({
+      view,
+      update: (deltaSeconds) => {
+        nodeElapsed += deltaSeconds;
+      },
+      destroy: () => view.destroy(),
+    });
     const reel = spin.getReel(0);
-    reel.add(node, 3);
+    reel.addCentered(node, 3);
     expect(view.parent).not.toBeNull();
+    expect(view.position).toMatchObject({ x: 7.5, y: 18 });
 
     spin.start(0);
     spin.update(0.2);
+    expect(nodeElapsed).toBeCloseTo(0.2);
     const settled = spin.settle(
       0,
       { symbols: [2, 2, 1] },
@@ -181,6 +198,8 @@ describe("RenderReelSet ReelSpin", () => {
     await settled;
     expect(spin.getVisibleScene()[0]).toEqual([2, 2, 1]);
     reel.remove(node);
+    spin.update(0.1);
+    expect(nodeElapsed).toBeCloseTo(1.2);
 
     spin.start(1);
     spin.update(0.1);
@@ -559,13 +578,18 @@ describe("RenderReelSet ReelSpin", () => {
         reels: {
           start: () => undefined,
           cancel: () => undefined,
+          setContinuousSpeed: () => undefined,
           roll: async (x) => {
             calls.push(`roll:${x}`);
           },
           settle: async (x) => {
             calls.push(`settle:${x}`);
           },
-          getReel: () => ({ add: () => undefined, remove: () => undefined }),
+          getReel: () => ({
+            add: () => undefined,
+            addCentered: () => undefined,
+            remove: () => undefined,
+          }),
           getSymbol: () => {
             throw new Error("unused");
           },

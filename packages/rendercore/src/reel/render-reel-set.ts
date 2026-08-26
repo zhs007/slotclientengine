@@ -23,6 +23,7 @@ import {
 } from "../presentation/render-object-layer.js";
 import {
   createRenderObjectMotionRuntime,
+  type RenderObjectMotionAttachment,
   type RenderObjectMotionRuntime,
 } from "../presentation/render-object-motion.js";
 import type {
@@ -127,7 +128,7 @@ export class RenderReelSet extends Container implements ReelSpin {
   readonly #atomicActive = new Map<number, ActiveAtomicReel>();
   readonly #reelAttachments: readonly {
     readonly layer: Container;
-    readonly mounted: Set<RenderObject>;
+    readonly mounted: Map<RenderObject, RenderObjectMotionAttachment>;
   }[];
   readonly #reelSpinDefaults: Required<
     NonNullable<RenderReelSetOptions["reelSpin"]>
@@ -271,7 +272,10 @@ export class RenderReelSet extends Container implements ReelSpin {
         layer.x = reel.x;
         layer.sortableChildren = true;
         this.addChild(layer);
-        return { layer, mounted: new Set<RenderObject>() };
+        return {
+          layer,
+          mounted: new Map<RenderObject, RenderObjectMotionAttachment>(),
+        };
       }),
     );
     this.addChild(topLayer);
@@ -329,10 +333,12 @@ export class RenderReelSet extends Container implements ReelSpin {
     for (const active of [...this.#atomicActive.values()])
       this.failAtomic(active, new ReelError("ReelSpin was destroyed."));
     for (const attachment of this.#reelAttachments) {
-      for (const node of attachment.mounted)
+      for (const [node, motionAttachment] of attachment.mounted) {
+        motionAttachment.detach();
         getRenderObjectAdapter(node).view.parent?.removeChild(
           getRenderObjectAdapter(node).view,
         );
+      }
       attachment.mounted.clear();
     }
     for (const controller of this.#areaLayerControllers.values())
@@ -1626,6 +1632,16 @@ export class RenderReelSet extends Container implements ReelSpin {
     }
   }
 
+  setContinuousSpeed(x: number, speedSymbolsPerSecond: number): void {
+    const reel = this.getReelAt(x);
+    const active = this.#atomicActive.get(x);
+    if (!active || active.mode !== "continuous")
+      throw new ReelError(
+        `Cannot change reel ${x} speed without targetless rolling.`,
+      );
+    reel.setContinuousSpeed(speedSymbolsPerSecond);
+  }
+
   settle(
     x: number,
     target: ReelRollTarget,
@@ -1666,28 +1682,61 @@ export class RenderReelSet extends Container implements ReelSpin {
   }
 
   getReel(x: number): ReelRender {
-    this.getReelAt(x);
+    const reel = this.getReelAt(x);
     const attachment = this.#reelAttachments[x]!;
-    return Object.freeze({
-      add: (node: RenderObject, order = 0) => {
-        this.assertAlive();
-        if (!Number.isSafeInteger(order))
-          throw new ReelError("Reel node order must be an integer.");
-        if (attachment.mounted.has(node))
-          throw new ReelError("RenderObject is already attached to this reel.");
-        const adapter = getRenderObjectAdapter(node);
-        if (adapter.view.parent)
-          throw new ReelError(
-            "RenderObject is already attached to another parent.",
-          );
+    const mount = (
+      node: RenderObject,
+      order: number,
+      position?: RenderPoint,
+    ): void => {
+      this.assertAlive();
+      if (!Number.isSafeInteger(order))
+        throw new ReelError("Reel node order must be an integer.");
+      if (attachment.mounted.has(node))
+        throw new ReelError("RenderObject is already attached to this reel.");
+      const adapter = getRenderObjectAdapter(node);
+      if (adapter.view.parent)
+        throw new ReelError(
+          "RenderObject is already attached to another parent.",
+        );
+      const previous = Object.freeze({
+        x: adapter.view.x,
+        y: adapter.view.y,
+        zIndex: adapter.view.zIndex,
+      });
+      let motionAttachment: RenderObjectMotionAttachment | null = null;
+      try {
+        if (position) adapter.view.position.set(position.x, position.y);
         adapter.view.zIndex = order;
         attachment.layer.addChild(adapter.view);
-        attachment.mounted.add(node);
-      },
+        motionAttachment = this.#renderObjectMotionRuntime.attach(node);
+        attachment.mounted.set(node, motionAttachment);
+      } catch (error) {
+        motionAttachment?.detach();
+        removeViewFromParent(adapter.view);
+        adapter.view.position.set(previous.x, previous.y);
+        adapter.view.zIndex = previous.zIndex;
+        throw error;
+      }
+    };
+    return Object.freeze({
+      add: (node: RenderObject, order = 0) => mount(node, order),
+      addCentered: (node: RenderObject, order = 0) =>
+        mount(node, order, {
+          x: reel.layout.cellWidth / 2,
+          y:
+            (reel.layout.getCellY(0) +
+              reel.layout.getCellY(reel.layout.visibleRows - 1) +
+              reel.layout.cellHeight) /
+            2,
+        }),
       remove: (node: RenderObject) => {
         this.assertAlive();
-        if (!attachment.mounted.delete(node))
+        const motionAttachment = attachment.mounted.get(node);
+        if (!motionAttachment)
           throw new ReelError("RenderObject is not attached to this reel.");
+        attachment.mounted.delete(node);
+        motionAttachment.detach();
         getRenderObjectAdapter(node).view.parent?.removeChild(
           getRenderObjectAdapter(node).view,
         );
@@ -2062,6 +2111,10 @@ export class RenderReelSet extends Container implements ReelSpin {
         );
     }
   }
+}
+
+function removeViewFromParent(view: Container): void {
+  view.parent?.removeChild(view);
 }
 
 function normalizeCascadePositions(

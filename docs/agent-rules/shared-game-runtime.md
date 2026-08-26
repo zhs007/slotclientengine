@@ -131,6 +131,9 @@
 - standard ReelSpin 的跨列 targetless start 可由同步 hook 同帧逐列调用；response landing cadence 留在
   operation handler 的 frame delay。consumer 必须传递完整受控 elapsed delta，由 rendercore 内部切片，
   不得通过 clamp 丢弃长帧时间或轮询完成状态。
+- active standard ReelSpinSession 可按单列显式调整 continuous rolling speed；该能力只修改仍在 rolling 的
+  列，不改变已经建立的 landing plan、target、方向或其它列。stale、已落停或非 continuous 列必须显式失败，
+  anticipation 的触发条件、强弱档位和停止节奏仍由 game app 编排。
 - grid-cell targetless pre-roll 必须复用 manifest timing 的 stable start group cadence；响应早于全部格启动时，
   pending cell 保留剩余 cadence 后进入 target-aware spin。落点 appear immediate 进入，不等待刚 reset 的
   stable loop boundary；稳定画面的 `-1` hole 允许直接进入 full/continuous spin，并在自身 start boundary
@@ -177,6 +180,9 @@
 ## Background、viewport 与 UI
 
 - rendercore 拥有通用 art-size、focus-rect、visible viewport、background manifest/resource resolver、Spine state machine 和完整 art clip 算法；app 只配置 art、focus、resource 和显式 state。
+- Scene Layout package camera effect 使用独立 owner session 贡献 main scene 的 uniform zoom 与 shake；多个 session
+  确定性组合，结束、abort、destroy 和 viewport 重排必须释放或重基准化各自贡献。camera root 不得包含 popup、
+  mode transition 或 video blackout；最后一个 session 结束后必须回到 1x、零位移的 neutral transform。
 - artSize 只描述背景 art，focusRect 只描述适配重点区域；两者及 reel authored rect 不要求互相包含。RenderCore 不以越出 art 为配置错误，viewport 可扩展到 art 外并把未覆盖、裁切或不可见的实际结果交给 editor/runtime 呈现。
 - Scene Layout mode切换可改变adaptation类型与active variants；target geometry/background/reel/presentation必须在同一commit边界生效，失败保持source snapshot和稳定render façade。正方形viewport保持现有方向，首次正方形为landscape。
 - 宿主已经统一承担 viewport/focus transform 时，scene-layout presentation surface 必须使用完整 authored art space（原点 `0,0`）；不得在背景内部再次执行 maximized-focus 偏移。

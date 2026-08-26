@@ -23,6 +23,8 @@ export interface ReelRollStartOptions {
 
 export interface ReelRender {
   add(node: RenderObject, order?: number): void;
+  /** Mounts the node at the exact center of this reel's visible window. */
+  addCentered(node: RenderObject, order?: number): void;
   remove(node: RenderObject): void;
 }
 
@@ -33,6 +35,7 @@ export interface ReelSpin extends SymbolArea {
     options?: ReelRollOptions,
   ): Promise<void>;
   start(x: number, options?: ReelRollStartOptions): void;
+  setContinuousSpeed(x: number, speedSymbolsPerSecond: number): void;
   settle(
     x: number,
     target: ReelRollTarget,

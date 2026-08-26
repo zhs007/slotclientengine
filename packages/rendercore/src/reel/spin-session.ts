@@ -18,6 +18,7 @@ import type { SymbolPosition } from "./symbol-area.js";
 export interface SpinningReel {
   readonly x: number;
   readonly overlay: ReelRender;
+  setRollingSpeed(speedSymbolsPerSecond: number): void;
   land(target: ReelRollTarget, options?: ReelRollOptions): Promise<SymbolGroup>;
   cancel(): void;
 }
@@ -89,6 +90,11 @@ export function createReelSpinSessionController(options: {
           const spinning = Object.freeze({
             x,
             overlay: options.reels.getReel(x),
+            setRollingSpeed: (speedSymbolsPerSecond: number) => {
+              if (active !== session || pending.get(x) !== spinning)
+                throw new ReelError(`Spinning reel ${x} is stale.`);
+              options.reels.setContinuousSpeed(x, speedSymbolsPerSecond);
+            },
             land: async (
               target: ReelRollTarget,
               landOptions?: ReelRollOptions,

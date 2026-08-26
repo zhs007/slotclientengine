@@ -270,6 +270,22 @@ export class RenderReel extends Container {
     this.renderAtY(this.#currentY, "spinBlur");
   }
 
+  setContinuousSpeed(speedSymbolsPerSecond: number): void {
+    const continuous = this.#continuousSpin;
+    if (!continuous || this.#phase !== "spinning") {
+      throw new ReelError(
+        `Cannot change continuous reel ${this.xIndex} speed without an active continuous spin.`,
+      );
+    }
+    this.#continuousSpin = {
+      ...continuous,
+      speedSymbolsPerSecond: normalizePositiveFiniteNumber(
+        speedSymbolsPerSecond,
+        "speedSymbolsPerSecond",
+      ),
+    };
+  }
+
   settleContinuous(
     plan: ReelAxisSpinPlan,
     options: RenderReelSpinOptions = {},

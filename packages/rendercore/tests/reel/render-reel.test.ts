@@ -70,6 +70,32 @@ describe("RenderReel", () => {
     }).toThrow(/localPhaseY.*safe integer/);
   });
 
+  it("changes only an active continuous reel speed", () => {
+    const reel = new RenderReel({
+      reels: createBasicReels(),
+      x: 0,
+      layout: createBasicLayout(),
+      registry: createBasicRegistry(),
+    });
+    reel.resetToVisibleSymbols([1, 0, 2], 0);
+    expect(() => reel.setContinuousSpeed(5)).toThrow(/active continuous spin/);
+    reel.startContinuous({
+      direction: "forward",
+      speedSymbolsPerSecond: 10,
+    });
+    reel.update(0.1);
+    expect(reel.getCurrentY()).toBeCloseTo(1);
+    reel.setContinuousSpeed(4);
+    reel.update(0.5);
+    expect(reel.getCurrentY()).toBeCloseTo(3);
+    expect(() => reel.setContinuousSpeed(0)).toThrow(/positive finite/);
+    expect(() => reel.setContinuousSpeed(Number.NaN)).toThrow(
+      /positive finite/,
+    );
+    reel.cancelContinuous();
+    expect(() => reel.setContinuousSpeed(4)).toThrow(/active continuous spin/);
+  });
+
   it("uses per-spin public reels while rolling and keeps the response scene as the landing target", () => {
     const localReels = new LogicReelsModel("local-spin", [
       [1, 1, 1, 1, 1, 1, 1, 1],

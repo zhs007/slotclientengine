@@ -122,7 +122,11 @@ Standard `RenderReelSet` 同时实现无 public plan 的逐列 `ReelSpin`：`rol
 取消活动列。不同列可并发，同列冲突显式失败；`roll/settle` 只在整列原子落停、每个
 `getSymbol({x,y})` 已可用后 resolve。跨列 stagger/full/held 由 operation handler 使用 frame delay
 和 `Promise.all()` 组合，不增加 `ReelSpinPlan`。`getReel(x)` 是稳定 reel-space `RenderObject`
-attachment 入口。
+attachment 入口：`add()` 保留对象自己的 local position，`addCentered()` 把对象原点精确放在可见 reel window 中心；
+两者都把对象接入 reel-owned update clock，`remove()` 同步解除帧推进。
+active `ReelSpinSession` 的 `SpinningReel.setRollingSpeed()` 只调整仍处于 targetless continuous rolling 的
+该列速度；不会改变其它列、公开轮带 phase、方向或已经建立的 landing target/plan。stale、已落停、已进入 settle
+或非正 finite speed 会显式失败，业务 anticipation 的 symbol 条件和 cadence 继续由 app 编排。
 单个 session reel 的 `land()` resolve 后，该列立即成为 settled occurrence，可在其它 session reels仍滚动时通过
 `getSymbol()`/`replaceSymbols()`读取或原子替换；replacement batch只要包含尚未落停的目标列就完整失败。
 
@@ -246,6 +250,11 @@ Sprite 复用，不创建 snapshot、`Application`、canvas、DOM、RAF 或字�
 `runtimeResources` 也可声明 `{ kind: "json", path }` 的 program-only 数据，例如本地公开轮带或权重表。`SceneLayoutPackageResource.loadJsonData(exactKey)` 会按需读取、严格解析并返回深度冻结的 JSON object/array；业务 schema 仍由 app 紧接着验证。JSON 不产生 Object URL、RenderObject 或 `gamelayout:/resource/...` 地址。此扩展不升级 manifest version：旧 v1–v5 仍直接可读且不会生成迁移数据，Editor 仍只导出 latest v5。
 
 第一层统一使用`getSymbolArea()`、`getRenderLayer()`、`getRenderObject()`与`createRenderObject()`。authored object按image/Spine/VNI/image-string返回borrowed typed capability，可见性与mode/variant做AND且不开放position/destroy；program object从exact `runtimeResources`异步创建并由caller拥有。`getLayoutPoint/getLayoutAnchor/resolveLayoutAnchor`直接读写configured authored space，center-origin游戏无需复制Pixi左上角偏移。完整ref grammar、ownership、SymbolGroup几何、坐标映射与示例见[`docs/rendercore-layer-symbol-area-render-object-coordinate-guide.md`](../../docs/rendercore-layer-symbol-area-render-object-coordinate-guide.md)。
+
+`startCameraEffect(target,{signal})` 返回 package-owned camera session，统一用宿主 `update(deltaSeconds)` 推进 main scene 的
+uniform zoom、deterministic shake、target upgrade 和 release。多个 session 按 owner 独立组合；`finish()` 平滑回到 neutral，
+`cancel()`/abort/destroy 立即释放。camera root 只包 layout 主场景，Popup、mode transition 和 video blackout 保持 viewport-space
+稳定；viewport/variant 重排会重建中心 baseline，但保留各 active session 的相对贡献。
 
 外部`applyGeometryManifest()`仍在mutation前校验immutable structure；package-owned mode target已经过manifest parse与transition prepare，switch commit直接应用prepared geometry、visibility和背景层序，不在热路径重复解析或全结构比较。lazy runtime resource的exact key/kind来自canonical runtime manifest，initial layout view省略程序资源只影响prepare时机，不改变可创建对象目录。
 
