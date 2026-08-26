@@ -155,7 +155,7 @@ export class CastleKnightRenderer {
   readonly #materials: CastleMaterials;
   #destroyed = false;
 
-  constructor(host: HTMLElement, barrelModel: Group) {
+  constructor(host: HTMLElement, barrelModel: Group, battleAxeModel: Group) {
     this.#renderer = new WebGLRenderer({
       antialias: true,
       alpha: false,
@@ -188,6 +188,7 @@ export class CastleKnightRenderer {
     this.#symbols = new SymbolField(
       createSymbolPlacements(0x6a17d39b),
       this.#textureLibrary,
+      battleAxeModel,
     );
     this.#root.add(this.#symbols);
 
