@@ -1,5 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { AddressInfo } from 'net';
+import { decrypt, encrypt, importAesKey } from '../src/utils';
 
 // A handler function for incoming messages.
 // It can optionally send a response back to the client.
@@ -14,26 +15,42 @@ export class MockServer {
   public wss: WebSocketServer | null = null;
   private handlers = new Map<string, MessageHandler>(); // cmdid -> handler
   public clients: Set<WebSocket> = new Set();
+  public lastRequestUrl: string | null = null;
+  private binaryCryptoKey: CryptoKey | null = null;
 
   /**
    * Starts the WebSocket server on a given or random available port.
    * @param port The port to listen on. If 0 or undefined, a random port is used.
    * @returns {Promise<number>} A promise that resolves with the port number.
    */
-  public start(port: number = 0): Promise<number> {
+  public async start(port: number = 0, binaryToken?: string): Promise<number> {
+    this.binaryCryptoKey = binaryToken
+      ? await importAesKey(new TextEncoder().encode(binaryToken))
+      : null;
+
     return new Promise((resolve, reject) => {
       this.wss = new WebSocketServer({ host: '127.0.0.1', port });
       this.wss.once('error', reject);
 
-      this.wss.on('connection', (ws: WebSocket) => {
+      this.wss.on('connection', (ws: WebSocket, request) => {
+        this.lastRequestUrl = request.url ?? null;
         this.clients.add(ws);
 
-        ws.on('message', (message: Buffer) => {
+        ws.on('message', async (message: Buffer) => {
           try {
-            const data = JSON.parse(message.toString());
+            const text = this.binaryCryptoKey
+              ? await decrypt(
+                  message.buffer.slice(
+                    message.byteOffset,
+                    message.byteOffset + message.byteLength
+                  ) as ArrayBuffer,
+                  this.binaryCryptoKey
+                )
+              : message.toString();
+            const data = JSON.parse(text);
             const handler = this.handlers.get(data.cmdid);
             if (handler) {
-              handler(data, ws, this);
+              await handler(data, ws, this);
             }
           } catch (e) {
             console.error('MockServer: Error parsing message', e);
@@ -64,6 +81,8 @@ export class MockServer {
       this.wss.close();
       this.wss = null;
       this.handlers.clear();
+      this.binaryCryptoKey = null;
+      this.lastRequestUrl = null;
     }
   }
 
@@ -81,9 +100,11 @@ export class MockServer {
    * @param ws The WebSocket client instance.
    * @param message The message object to send (will be stringified).
    */
-  public send(ws: WebSocket, message: any): void {
+  public async send(ws: WebSocket, message: any): Promise<void> {
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(message));
+      const text = JSON.stringify(message);
+      const payload = this.binaryCryptoKey ? await encrypt(text, this.binaryCryptoKey) : text;
+      ws.send(payload);
     }
   }
 
@@ -91,10 +112,8 @@ export class MockServer {
    * Broadcasts a message to all connected clients.
    * @param message The message object to send.
    */
-  public broadcast(message: any): void {
-    for (const client of this.clients) {
-      this.send(client, message);
-    }
+  public async broadcast(message: any): Promise<void> {
+    await Promise.all([...this.clients].map((client) => this.send(client, message)));
   }
 
   /**

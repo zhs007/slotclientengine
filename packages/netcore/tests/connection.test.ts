@@ -49,6 +49,29 @@ describe('Connection', () => {
     expect(mockWebSocket).toHaveBeenCalledWith(TEST_URL);
   });
 
+  it('should update the URL before connecting', () => {
+    const updatedUrl = 'ws://localhost:9090?token=updated';
+    connection.setUrl(updatedUrl);
+    connection.connect();
+
+    expect(mockWebSocket).toHaveBeenCalledWith(updatedUrl);
+  });
+
+  it('should reject URL changes while a connection is active', () => {
+    connection.connect();
+
+    expect(() => connection.setUrl('ws://localhost:9090')).toThrow(
+      'Cannot change WebSocket URL while a connection is active.'
+    );
+  });
+
+  it('should configure binary delivery before receiving messages', () => {
+    connection = new Connection(TEST_URL, 'arraybuffer');
+    connection.connect();
+
+    expect(getMockInstance().binaryType).toBe('arraybuffer');
+  });
+
   it('should call ws.close() on disconnect', () => {
     connection.connect();
     const instance = getMockInstance();

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { transformSceneData } from '../src/utils';
+import { decrypt, encrypt, importAesKey, transformSceneData } from '../src/utils';
 
 describe('transformSceneData', () => {
   it('should transform valid scene data into a 2D array', () => {
@@ -58,5 +58,18 @@ describe('transformSceneData', () => {
     };
     const expected = [[1, 2], [], [3, 4]];
     expect(transformSceneData(sceneData)).toEqual(expected);
+  });
+
+  it('should round-trip AES-GCM binary messages', async () => {
+    const key = await importAesKey(new TextEncoder().encode('12345678901234567890123456789012'));
+    const encrypted = await encrypt('{"cmdid":"spin"}', key);
+
+    await expect(decrypt(encrypted, key)).resolves.toBe('{"cmdid":"spin"}');
+  });
+
+  it('should reject tokens that are not valid AES-256 keys', async () => {
+    await expect(importAesKey(new TextEncoder().encode('too-short'))).rejects.toThrow(
+      'AES‑256 expects a 32‑byte key'
+    );
   });
 });

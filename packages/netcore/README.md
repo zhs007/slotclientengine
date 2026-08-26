@@ -95,6 +95,19 @@ run().catch(console.error);
 - `send(cmdid, params)`: send a lower-level command directly.
 - `getState()` and `getUserInfo()`: inspect runtime state and caches.
 
+### Encrypted binary WebSocket mode
+
+Set `isWsBinary: true` only for servers implementing the token-authenticated AES-GCM protocol. The token passed in the constructor or to `connect(token)` must encode to exactly 32 UTF-8 bytes. The client adds that token to the WebSocket URL with `URLSearchParams`, requests `arraybuffer` delivery, and uses the same key for the lifetime of that socket. Incoming encrypted messages are decrypted and processed serially in WebSocket delivery order.
+
+```ts
+const client = new SlotcraftClient({
+  url: 'wss://your-game-server.example/ws?client=web',
+  isWsBinary: true,
+});
+
+await client.connect('12345678901234567890123456789012');
+```
+
 ## Development Commands
 
 Run from the repository root:

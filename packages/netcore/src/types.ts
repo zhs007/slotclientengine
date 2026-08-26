@@ -103,6 +103,13 @@ export interface SlotcraftClientOptions {
    * stable state that preceded the transient operation state.
    */
   operationFailureRecovery?: OperationFailureRecoveryOptions;
+
+  /**
+   * Optional: Use the token-authenticated AES-GCM binary WebSocket protocol.
+   * The token supplied to the constructor or connect() must encode to exactly 32 UTF-8 bytes.
+   * Defaults to false.
+   */
+  isWsBinary?: boolean;
 }
 
 /** High-level operations that enter a transient state while awaiting a command reply. */

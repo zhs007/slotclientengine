@@ -70,6 +70,10 @@ console.log(result);
 
 当构造参数中的 URL 为 `http://` 或 `https://` 时，客户端会切换到回放模式，而不是实时 WebSocket 模式。在 Node.js 环境下需要显式提供 `options.fetch`。
 
+## WebSocket 加密二进制模式
+
+服务端实现 token 鉴权的 AES-GCM 传输协议时，可以设置 `isWsBinary: true`。构造参数或 `connect(token)` 传入的 token 按 UTF-8 编码后必须恰好为 32 字节。客户端会保留已有 URL 查询参数并安全加入 token，请求 `arraybuffer` 消息格式，并串行处理解密后的消息。
+
 ## 开发命令
 
 从仓库根目录执行：
