@@ -6,7 +6,7 @@
 
 在 `/Users/zerro/gitee.com/piximinecart2` 的 Minecart2 当前 `bg-bar` 流程中接入
 `collect` 与 `jackpot` 两种当前玩法：中央 `feature.json#Feature` 完整结束后，Collect 先沿第一轴
-自上而下执行五格、每格 120ms 的 `topick.json#Topick_Loop` 扫描，再对该轴最终 scene 中的 CO
+自上而下执行五格、每格 120ms 的 `topick.json#Topick_Loop` 扫描，再对该轴最终 scene 中的 CL
 执行任务 250 的 Topick/preview 落停流程；Jackpot 仅在 exact `bg-addjk` 存在时，以其 `pos` 和唯一
 final scene 执行 Topick/CO handoff，并让 CO ImgNumber 使用 `bg-gencoins.otherScene` 的同坐标值。
 
@@ -19,12 +19,12 @@ shared 变更文件同步到 piximinecart2，再实现 app 业务编译和播放
 - [ ] Collect 当前玩法等待中央 `Feature` 完整结束；随后只在第一轴 `(x=0)` 按
       `(0,0) -> (0,1) -> ... -> (0,4)` 顺序播放 exact `Topick_Loop`，每格显示 120ms 后消失，任意
       时刻至多存在一个扫描 Topick，五格结束前不开始停轴。
-- [ ] Collect 扫描结束后，从 immutable landing output 按 active game config 的 exact `CO` code
-      计算第一轴全部 CO 坐标；无 CO 时直接按既有 left-to-right cadence 落停，有 CO 时全部目标执行
-      `Topick_Start -> Topick_Loop` 和带正确 presentation value 的 normal CO preview，目标列落停后
-      `Topick_End`，再清理 preview/topick，露出已正式落停的同一个 CO/value，不做同值 replacement。
-- [ ] 用户 Collect 样例按当前 game config 解析时，CO code 为 `11`，实际位于 `(2,0)/(2,1)`；因为
-      需求明确限定第一轴，该样例只执行五格扫描后普通落停，不把 code `12` 猜成 CO，也不跨轴搜索。
+- [ ] Collect 扫描结束后，从 immutable landing output 按 active game config 的 exact `CL` code
+      计算第一轴全部 CL 坐标；无 CL 时直接按既有 left-to-right cadence 落停，有 CL 时全部目标执行
+      `Topick_Start -> Topick_Loop` 和 normal CL preview，目标列落停后 `Topick_End`，再清理
+      preview/topick，露出已正式落停的同一个 CL，不做 replacement或读取presentation value。
+- [ ] 用户 Collect 样例按当前 game config 解析时，CL code 为 `12`，位于第一轴 `(0,0)`；第三轴的
+      code `11` 是 CO，与 Collect 目标无关。样例必须执行五格扫描后对 `(0,0)` 运行 CL Topick/preview。
 - [ ] Jackpot 当前玩法缺少 exact `bg-addjk` 时不进入特殊 operation，继续既有普通 feature landing
       gate；存在时等待完整 `Feature`，使用 `bg-spin` 唯一 scene 作为 initial、`bg-addjk.pos` 与唯一
       `usedScenes` scene 作为 final output。
@@ -49,8 +49,8 @@ shared 变更文件同步到 piximinecart2，再实现 app 业务编译和播放
 - RenderCore Game Layout exact symbol factory 的 typed `presentationValue` checkout、pool reuse/reset 和
   strict option validation。
 - Minecart2 step 0 exact `bg-bar.curFeature=collect|jackpot` 选择、`bg-addjk` source/scene/pos 解析、
-  CO code/value 解析与 immutable scene-landing operation。
-- Collect 五格 120ms Topick_Loop 扫描、第一轴 CO 目标计算、CO preview/正式 occurrence handoff。
+  Collect CL code 与 Jackpot CO code/value 解析及 immutable scene-landing operation。
+- Collect 五格 120ms Topick_Loop 扫描、第一轴 CL 目标计算、CL preview/正式 occurrence handoff。
 - Jackpot `bg-spin -> bg-addjk` initial/final handoff、CO preview value、replacement 与 `appear -> normal`。
 - 任务 250/252 controller、Feature barrier、operation registry 的最小扩展，以及 parser-shape fixture、
   定向测试、shared parity、Minecart2 README 和执行报告。
@@ -58,9 +58,9 @@ shared 变更文件同步到 piximinecart2，再实现 app 业务编译和播放
 ### 不包含
 
 - 不实现或改变 `scatter/nail/expand`，不重做 Up/Wild/Coin/Bonus，不改变 `bg-bar.features` 下一轮 queue。
-- 不把 `bg-collector.val`、result type/pos、中奖 symbol 或 `usedFeatures` 当作 Collect CO 目标；目标只来自
-  final landing scene 第一轴的 exact CO。
-- 不把第一轴扩张为全部五轴，不把样例 code `12` alias 成 CO，不按 authored skeleton 名 `CN` 猜逻辑 symbol。
+- 不把 `bg-collector.val`、result type/pos、中奖 symbol 或 `usedFeatures` 当作 Collect CL 目标；目标只来自
+  final landing scene 第一轴的 exact CL。
+- 不把第一轴扩张为全部五轴，不把第三轴 CO 当成 Collect 目标，不按 authored skeleton 名猜逻辑 symbol。
 - 不修改服务器协议/protobuf、真实轮带、下注、结果金额、win group、jackpot 金额或 BonusGame 业务。
 - 不新增 gameplay DSL、Topick plan、reel state machine、raw Pixi/Spine/SymbolPlayer 入口或第二份资源表。
 - 不修改 Scene Layout/Symbols/ImgNumber manifest schema、production ZIP、delivery bytes/assets map、YAML、
@@ -96,14 +96,14 @@ piximinecart2 git status --short --untracked-files=all: clean
   调用 `setValue()`。`RenderObjectPool.create(prepare)` 已支持每次 checkout 在返回前重设底层对象，无需修改
   pool 算法。
 - 当前 delivery 的权威资源事实：Topick exact animations 为
-  `Topick_Start/Topick_Loop/Topick_End/Topick_Line`；active binding id 为 `minecart2`；CO 逻辑 symbol code
-  来自 game config（当前 `11`），其 authored skeleton 名为 CN，公开 `normal/appear/end/loop/win`，
+  `Topick_Start/Topick_Loop/Topick_End/Topick_Line`；active binding id 为 `minecart2`；CL 逻辑 symbol code
+  为 `12`，公开 `normal/appear/collect_start/collect_idle/collect_end` 且没有 ImgNumber；CO 逻辑 symbol code
+  来自 game config（当前 `11`），公开 `normal/appear/end/loop/win`，
   `appear` 使用 exact `Start`；exact `image-value` ImgNumber node 同时绑定 `normal/appear/win`。
 - 用户 Jackpot 样例有 `bg-addjk.pos=[4,2]`、`usedScenes=[1]`：scene 0 的 `(4,2)=8`，scene 1 的
   `(4,2)=11`，`bg-gencoins.usedOtherScenes=[0]` 且 otherScene `(4,2)=10`。非 target scene cell 不变。
-- 用户 Collect 样例的 `curFeature=collect`、唯一 landing scene 的 CO code `11` 位于
-  `(2,0)/(2,1)`，对应 otherScene 为 `2/20`；第一轴 `(x=0)` 为 `[12,1,1,1,1]`，因此样例本身不覆盖
-  “第一轴存在 CO”的第二阶段。
+- 用户 Collect 样例的 `curFeature=collect`、唯一 landing scene 的 CL code `12` 位于第一轴 `(0,0)`；
+  `(2,0)/(2,1)` 的 code `11` 与 otherScene `2/20` 是 CO 数据，不属于 Collect 目标。
 - 任务 252 报告记录 Minecart2 定向测试和 build 通过；外部 typecheck 当时仅被任务前已有 BridgeCore/
   device-detector NodeNext import 与 implicit-any 错误阻断，执行时需重新最小化判断，不为这些错误改本任务生产代码。
 
@@ -116,9 +116,9 @@ piximinecart2 git status --short --untracked-files=all: clean
 2. “第一轴”按仓库 column-major scene 合同解释为 `x=0`，“最上面”是 `y=0`；五格扫描固定覆盖当前
    5×5 main reel 的 `y=0..4`。用户给出的 120ms 进入 versioned app runtime config，不散落成测试/handler 常量。
 3. Collect 的扫描阶段只播放 exact `Topick_Loop`，每格到时立即 stop/detach/destroy，再创建下一次池化句柄；
-   不补播用户未要求的 Start/End。扫描后的 CO 阶段才完整复用任务 250 的 Start/Loop/End + preview 流程。
-4. Collect landing initial/output 相同；CO preview 只是正式目标落停前的遮盖，不触发 replacement。目标列 settle
-   后 End 完成，移除 preview 即露出 reel owner 已提交的正式 CO/value，避免同 code/value 二次创建。
+   不补播用户未要求的 Start/End。扫描后的 CL 阶段才完整复用任务 250 的 Start/Loop/End + preview 流程。
+4. Collect landing initial/output 相同；CL preview 只是正式目标落停前的遮盖，不触发 replacement。目标列 settle
+   后 End 完成，移除 preview 即露出 reel owner 已提交的正式 CL，不读取 `bg-gencoins` value。
 5. Jackpot 只有 `curFeature=jackpot` 且 exact `bg-addjk` 存在时才是 special landing；缺 component 走普通
    landing/0.5s gate。component 存在却 feature 不匹配、scene/pos/value 非法时显式失败，不能静默忽略。
 6. Jackpot 的 `bg-spin` 唯一 scene 是视觉 initial，`bg-addjk` 唯一 scene 是 operation final output；pos cell
@@ -137,9 +137,9 @@ piximinecart2 git status --short --untracked-files=all: clean
 2. **Collect 与 Jackpot 使用两个 app-owned operation kind，共用 controller primitives。**
    - 新增 exact `game003:collect-landing` 与 `game003:jackpot-landing` version 2；payload 仍只保存 feature、
      render-ready target positions 和 initial snapshot，output 是后续 operations 的唯一 scene/value 输入。
-   - controller 增加 scan policy 与 CO preview policy，不复制逐列 landing、pool cleanup 或 replacement state machine。
+   - controller 增加 scan policy 与 CL/CO preview policy，不复制逐列 landing、pool cleanup 或 replacement state machine。
 3. **Collect 目标只从 final scene 的第一轴计算。** 不读取 result.pos、`bg-collector` 或其它轴；使用 game config
-   exact CO code。无目标仍编译 collect landing，因为五格扫描是玩法固定前奏。
+   exact CL code。无目标仍编译 collect landing，因为五格扫描是玩法固定前奏。
 4. **Jackpot server 数据在 mutation 前完整编译。** source bindings 增加 exact `addjk`；component 顶层 pos 用
    `parseExactPositionPairs()`，唯一 scene 用既有 component scene query，shape/bounds/duplicate/non-target drift/
    required CO/value 全部在 immutable plan 前失败。
@@ -149,18 +149,18 @@ piximinecart2 git status --short --untracked-files=all: clean
 ## 5. 职责与合同
 
 - **LogicCore/BridgeCore**：继续提供 frozen component/raw scene/position query、snapshot/finalizer；不认识
-  collect/jackpot/bg-addjk/CO/Topick，预计不修改。
+  collect/jackpot/bg-addjk/CL/CO/Topick，预计不修改。
 - **RenderCore**：symbol package runtime 创建带 value controller 的 owned SymbolHandle；runtime address factory
   负责 strict typed option、checkout prepare、pool stale/reset/destroy，不认识 Minecart2 玩法。
-- **Minecart2 compiler**：拥有 current feature、component 名、第一轴 CO policy、initial/final scene、CO value 与
+- **Minecart2 compiler**：拥有 current feature、component 名、第一轴 CL policy、initial/final scene、Jackpot CO value 与
   operation/output 顺序；不硬编码 symbol code、坐标样例或数值。
 - **Minecart2 controller**：拥有 Feature barrier、Collect 扫描、Topick/preview、逐列 settle、replacement、
   appear/normal 时序；不接触 raw display tree/player。
 - **资源生命周期**：package runtime 拥有 canonical factory pool；当前 operation 拥有 scan Topick、target Topick
-  和 CO preview 句柄。create/mount 中途失败回收已创建项；成功、reject、abort、next-spin、destroy 均只释放一次。
+  和 CL/CO preview 句柄。create/mount 中途失败回收已创建项；成功、reject、abort、next-spin、destroy 均只释放一次。
 - **失败策略**：unknown feature/component 组合、非唯一 scene、非法 pos、错误 target symbol、缺/非法 CO value、
   factory option/kind 错误、stale handle 和异步播放/落停/mutation 失败全部显式 reject。
-- **禁止行为**：不增加 CN/CO alias、首项/default value、路径猜测、placeholder、无 component 效果降级、
+- **禁止行为**：不增加 symbol alias、首项/default value、路径猜测、placeholder、无 component 效果降级、
   第二份 symbol/resource 表、服务器真实轮带读取或 app-owned reel/player/pool 实现。
 
 ## 6. 文件范围
@@ -228,21 +228,21 @@ pnpm-workspace.yaml
 3. **编译 Collect/Jackpot immutable landing**
    - source bindings 加入 exact `bg-addjk`；landing final candidate 纳入其 history 顺序，同时保持 bg-spin/bg-addbo
      既有语义。
-   - `curFeature=collect` 总是生成专用 landing，按 output scene 第一轴收集 CO positions并携带已有
-     `bg-gencoins` presentation values；样例和额外“第一轴有 CO”fixture分别保护 absence/presence。
+   - `curFeature=collect` 总是生成专用 landing，按 output scene 第一轴收集 exact CL positions；用户样例
+     `(0,0)=12` 直接保护 presence，另构造第一轴无 CL 保护 absence，Collect 不读取 `bg-gencoins` value。
    - `curFeature=jackpot + bg-addjk` 以 exact bg-spin构造 initial，以pos/final scene/otherScene构造 output；验证
      only-pos change、target CO与positive value。无addjk保持普通 landing；错误feature/component组合显式失败。
    - definitions/finalizer确保后续 wins、award、BO collection/transition只消费 special landing output。
 4. **扩展 Feature barrier 与 Collect/Jackpot controller**
    - 允许 collect以及有addjk的jackpot请求完整 Feature barrier；jackpot无addjk仍走普通0.5s gate。
-   - Collect按runtime config的0.12s逐格创建/挂载/Loop/stop/release scan Topick；扫描完成后无CO直接land，
-     有CO则批量Topick Start/Loop与带对应value的CO preview，再按目标列settle/End/cleanup。
+   - Collect按runtime config的0.12s逐格创建/挂载/Loop/stop/release scan Topick；扫描完成后无CL直接land，
+     有CL则批量Topick Start/Loop与CL preview，再按目标列settle/End/cleanup。
    - Jackpot批量创建Topick与带final value的CO preview，落initial；目标列settle后End、replace final CO/value、
      preview cleanup、正式CO `appear -> normal`。保留Up/Wild/Coin/Bonus现有policy和layer order。
 5. **接入 registry、测试、文档与收尾**
    - 注册两个 exact kind/version；next-spin/cancel/destroy统一终止scan、Feature、Topick、preview和active session。
    - 把用户两份样例压缩成真实 parser fixture；用可控Promise/host delay验证精确时序、value与cleanup，不使用
-     wall-clock sleep。resource测试保护CO appear/image-value和Topick Loop能力，source boundary保护业务字面量只在app。
+     wall-clock sleep。resource测试保护CL normal/appear、CO appear/image-value和Topick Loop能力，source boundary保护业务字面量只在app。
    - 更新 Minecart2 README，运行L2定向验收，生成UTC中文报告并分别记录自动化与浏览器结果。
 
 ## 8. 测试与验收
@@ -251,7 +251,7 @@ pnpm-workspace.yaml
 
 - fixture必须经过 `createSlotGameLogicResult()` 真实 parser，不只手写编译后 operation；保留
   `historyComponents/mapComponents/scenes/otherScenes/pos/curFeature` 的协议 shape，删除随机数等无关字段。
-- compiler覆盖 Collect第一轴 CO 有/无、其它轴 CO 不误触发、Jackpot addjk 有/无、feature mismatch、非唯一scene、
+- compiler覆盖 Collect第一轴 CL 有/无、其它轴 CL和任意CO不误触发、Jackpot addjk 有/无、feature mismatch、非唯一scene、
   空/重复/越界pos、non-target drift、target非CO、缺失/非法value；同时保护既有四种special landing顺序。
 - controller使用可控 Feature/Topick/reel/appear Promise和 `context.delay()`；精确断言五个0.12s delay、扫描不重叠、
   第五格完成前zero land、全部Start后才land、目标列settle后才End/replace。
@@ -281,16 +281,16 @@ typecheck、外部直接consumer测试/typecheck/build和两个独立worktree的
 
 ### 人工验收
 
-1. Collect 样例：完整 Feature 后第一轴从上到下每格只显示约120ms Loop，五格无重叠；因第一轴无CO，随后
-   正常逐列落停，第三轴的 CO `2/20` 正常显示但不触发第一轴特效。
-2. 第一轴含一个/多个CO的Collect真实局：扫描后目标同时Start/Loop并显示正确ImgNumber CO preview；第一轴
-   settle后各End并无闪跳地露出正式同值CO，其它轴cadence正常。
+1. Collect 样例：完整 Feature 后第一轴从上到下每格只显示约120ms Loop，五格无重叠；随后第一轴 `(0,0)`
+   的 exact CL 同时Start/Loop并显示CL preview，第一轴settle后End并无闪跳地露出正式CL。
+2. 第一轴无CL或含多个CL的真实局：无目标时扫描后普通落停；多目标时全部使用CL preview且不显示ImgNumber，
+   第三轴的 CO `2/20` 不触发Collect特效。
 3. Jackpot无`bg-addjk`：保持普通0.5s feature gate，无Topick/CO preview/replacement。
 4. Jackpot样例：完整Feature后`(4,2)`显示Topick与值`10`的CO preview；第4轴先落code8，End后无闪跳变成
    正式CO且仍显示10，播放`appear -> normal`，随后既有wins/award正常。
 5. 横竖屏、连续Collect/Jackpot、低FPS、取消/刷新/退出重进：anchor/layer正确，无残影、旧value、重复对象、
    旧round提交或无界池增长。
-6. 注入资源/value/动画失败：回合显式失败，未完成reel取消，Topick/CO均清理，不进入后续win/award。
+6. 注入资源/value/动画失败：回合显式失败，未完成reel取消，Topick/CL/CO均清理，不进入后续win/award。
 
 ### 独立验收建议
 
@@ -333,33 +333,32 @@ tasks/253-minecart2-bg-bar-collect-jackpot-landing-<utctime>.md
 
 ### 风险
 
-- Collect样例与“第一轴有CO”的文字场景不一致；计划严格遵守第一轴，不用样例其它轴假冒presence测试，真实
-  第一轴CO局或等价parser fixture仍是第二阶段验收所需证据。
-- CO preview和正式occurrence都带ImgNumber；pool checkout若未每次重设value会跨局泄漏，handoff顺序错误会出现
-  双数字/闪跳，只能由shared单测加真实浏览器共同证明。
-- 低FPS下120ms扫描、Topick尺寸/遮罩/layer和CO preview到正式occurrence的视觉连续性不能由单测替代。
+- Collect样例第一轴 `(0,0)=12` 是 exact CL；第三轴 code 11 是 CO，不能因其带 `2/20` value而误选为Collect目标。
+- Jackpot CO preview和正式occurrence都带ImgNumber；pool checkout若未每次重设value会跨局泄漏，handoff顺序错误会出现
+  双数字/闪跳，只能由shared单测加真实浏览器共同证明。Collect CL 不带 ImgNumber。
+- 低FPS下120ms扫描、Topick尺寸/遮罩/layer和CL preview到正式occurrence的视觉连续性不能由单测替代。
 - Jackpot目标列发生partial replacement；后续列失败时不能倒放已提交CO，必须fail-stop并清理剩余临时对象。
 - `bg-gencoins`当前是step级value矩阵，不是`bg-addjk`自己的otherScene；compiler必须按final CO坐标投影，不能
   把non-CO auxiliary值解释为ImgNumber。
 
 ### 假设
 
-- 用户所说“CN”指active Symbol package中由CN skeleton呈现的逻辑`CO`；业务始终按game config exact CO查询。
-- Collect“第一轴”是column-major `x=0`，“最上面”是`y=0`；扫描到`y=4`后才进入CO Topick阶段。
-- Collect CO preview使用final snapshot同坐标presentation value并在End后移除，不替换已落停的同code/value CO。
+- Jackpot 业务始终按 active game config 的 exact `CO` 查询，不存在逻辑 `CN` 图标或别名。
+- Collect“第一轴”是column-major `x=0`，“最上面”是`y=0`；扫描到`y=4`后才进入CL Topick阶段。
+- Collect CL preview不带presentation value并在End后移除，不替换已落停的同code CL。
 - Jackpot无`bg-addjk`的“不需要特殊处理”沿用普通feature 0.5秒gate，而不是等待完整Feature后增加空操作。
 
 ### 待确认
 
-无；Collect样例不含第一轴CO被作为明确absence基线，presence路径由严格按game config构造的parser fixture与真实局验收，
-不需要猜测或修改用户定义的坐标边界。
+无；用户已更正Collect exact symbol为CL，样例 `(0,0)=12` 是presence基线，absence路径由严格按game config
+构造的parser fixture验收，不需要猜测或修改坐标边界。
 
 ## 13. 完成清单
 
 - [ ] Collect/Jackpot目标和无目标/缺component路径均已满足。
 - [ ] 实际修改未超范围，或偏差已在报告说明。
-- [ ] symbol factory value、component/scene/pos/CO、immutable output与operation顺序符合计划。
-- [ ] scan/Topick/CO pool、partial commit、abort和destroy生命周期正确。
+- [ ] symbol factory value、component/scene/pos/CL/CO、immutable output与operation顺序符合计划。
+- [ ] scan/Topick/CL/CO pool、partial commit、abort和destroy生命周期正确。
 - [ ] Up/Wild/Coin/Bonus、其它feature、win/award/BO/mode transition回归受保护。
 - [ ] shared已按主仓先行、定向验证、逐文件同步和parity完成。
 - [ ] 指定自动化验收通过或基线阻断已最小化，真实浏览器结果单独记录。

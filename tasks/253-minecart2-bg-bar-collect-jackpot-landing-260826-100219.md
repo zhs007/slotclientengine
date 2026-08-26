@@ -15,6 +15,9 @@ slotclientengine 改动在本地 `codex/task-253-collect-jackpot` 分支完成�
 
 ## 2. 最终实现
 
+> 2026-08-26 用户更正：Collect 的 exact symbol 是 `CL`，不是 `CO`；Jackpot 的 exact symbol 是 `CO`，
+> 不存在逻辑 `CN` 图标。以下内容已按最终合同修订。
+
 ### RenderCore shared contract
 
 - `GameLayoutRuntimeResourceEndpoint.create()` 增加 `presentationValue?: number | null`；exact symbol factory
@@ -41,10 +44,10 @@ tasks/253-minecart2-bg-bar-collect-jackpot-landing-260826-100219.md
 ### Minecart2 Collect / Jackpot
 
 - compiler 注册 `game003:collect-landing` 与 `game003:jackpot-landing`，source/final scene 候选加入 exact
-  `bg-addjk`，并严格校验 current feature、component、唯一 scene、pos、non-target drift、目标 CO 和正整数 value。
+  `bg-addjk`；Collect按exact CL校验，Jackpot严格校验component、唯一scene、pos、non-target drift、目标CO和正整数value。
 - Collect 总是生成专用 landing；完整 Feature 后按配置 `collectSweepStepSeconds=0.12` 对第一列
-  `(0,0)..(0,4)` 串行播放五次 pooled `Topick_Loop`，扫完才允许停轴。只选择第一列最终 CO；无目标走普通
-  landing，有目标使用带 value 的 CO preview 和 Topick Start/Loop/End，End 后只清理临时对象，不重复 replacement。
+  `(0,0)..(0,4)` 串行播放五次 pooled `Topick_Loop`，扫完才允许停轴。只选择第一列最终 CL；无目标走普通
+  landing，有目标使用CL preview和Topick Start/Loop/End，End后只清理临时对象，不做replacement或读取value。
 - Jackpot 只有 exact `bg-addjk` 存在时进入特殊 landing：`bg-spin` 是 initial，`bg-addjk` 是 final；目标使用
   `bg-gencoins.otherScene` 同坐标 value。目标列落 initial 后 End，再原子替换正式 CO/value并播放
   `appear -> normal`。缺少 `bg-addjk` 时保持普通 landing。
@@ -78,8 +81,8 @@ apps/minecart2/README.md
 
 ## 3. 关键决策与计划偏差
 
-- Collect 用户样例中的 CO 位于第三列，因此按需求严格作为“第一列无 CO”路径；另用同一真实 parser fixture
-  构造第一列 CO/value，覆盖 presence 路径，没有猜测 code 12 或跨列搜索。
+- Collect 用户样例第一列 `(0,0)=12` 是 exact CL，因此直接覆盖 presence 路径；第三列 code 11 与 values 2/20
+  是 CO 数据，不会被 Collect 误选。absence 路径由把第一列 CL 改成 CO 的真实 parser fixture覆盖。
 - `runtime-address-pool.test.ts` 已覆盖 bridge、checkout prepare、invalid value 和 destroy，未再修改计划中标为
   “仅需要时”的 `package-runtime.test.ts`。
 - 没有新增独立 round-adapter 测试文件；现有 registry 循环最小扩展，Minecart2 全量 76 测试和生产 build 已覆盖
@@ -117,16 +120,15 @@ build和全量测试均通过。
 
 ## 5. 待用户浏览器验收
 
-1. Collect absence 样例：完整 Feature 后第一列五格自上而下各约 120ms、无重叠；第三列 CO 2/20 正常落下，
-   但不触发第一列 CO 特效。
-2. 第一列含一个/多个 CO 的 Collect：扫描后目标 Topick/带值 CO preview 正确，第一列 settle + End 后无闪跳地
-   露出同值正式 CO。
+1. Collect 用户样例：完整 Feature 后第一列五格自上而下各约 120ms、无重叠；随后 `(0,0)` 使用Topick与CL
+   preview，第一列settle + End后无闪跳露出正式CL。第三列CO 2/20不触发Collect特效。
+2. 第一列无CL或含多个CL：无目标时扫描后普通落停；多目标全部使用CL preview且不显示ImgNumber。
 3. Jackpot 无 `bg-addjk` 保持普通 gate；用户 Jackpot 样例在 `(4,2)` 先显示值 10 preview，End 后正式
    CO/value 10 执行 `appear -> normal`。
 4. 横竖屏、连续局、低 FPS、取消/刷新/退出重进无残影、旧 value、重复对象或旧 round 提交。
 
 ## 6. 剩余风险
 
-- 120ms 视觉节奏、Topick layer/尺寸和 preview 到正式 CO 的无闪跳连续性只能由真实浏览器确认。
+- 120ms 视觉节奏、Topick layer/尺寸和 CL preview 到正式 CL 的无闪跳连续性只能由真实浏览器确认。
 - typecheck 与 package 级 format:check 的上述基线错误仍存在，但不属于任务 253 范围。
 - piximinecart2 改动保留在当前 `rgs` 工作区，未提交；用户只要求 engine 修改提交本地分支。
