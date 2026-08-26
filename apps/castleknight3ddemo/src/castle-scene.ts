@@ -39,7 +39,6 @@ import {
   createCartoonThroneDais,
 } from "./reconstructed-furnishings.js";
 import {
-  createCartoonCastleBench,
   createCartoonCastleWallSection,
   createCartoonWallTorch,
   createRoundCastleColumn,
@@ -155,7 +154,12 @@ export class CastleKnightRenderer {
   readonly #materials: CastleMaterials;
   #destroyed = false;
 
-  constructor(host: HTMLElement, barrelModel: Group, battleAxeModel: Group) {
+  constructor(
+    host: HTMLElement,
+    barrelModel: Group,
+    battleAxeModel: Group,
+    benchModel: Group,
+  ) {
     this.#renderer = new WebGLRenderer({
       antialias: true,
       alpha: false,
@@ -181,7 +185,7 @@ export class CastleKnightRenderer {
     this.#createBoard();
     this.#createThroneArea();
     this.#createArchitecture();
-    this.#createFurniture(barrelModel);
+    this.#createFurniture(benchModel, barrelModel);
     this.#createChandelier();
     this.#createTorches();
     this.#createLighting();
@@ -562,14 +566,9 @@ export class CastleKnightRenderer {
     }
   }
 
-  #createFurniture(barrelModel: Group): void {
-    const benchMaster = createCartoonCastleBench({
-      wood: this.#materials.wood,
-      woodDark: this.#materials.woodDark,
-      iron: this.#materials.iron,
-    });
+  #createFurniture(benchModel: Group, barrelModel: Group): void {
     for (const side of [-1, 1]) {
-      const bench = benchMaster.clone(true);
+      const bench = benchModel.clone(true);
       bench.position.set(side * 4.75, 0, -1.8);
       bench.rotation.y = side * -0.12;
       this.#root.add(bench);

@@ -19,7 +19,6 @@ import {
   createCartoonThroneDais,
 } from "./reconstructed-furnishings.js";
 import {
-  createCartoonCastleBench,
   createCartoonCastleWallSection,
   createCartoonTreasureChest,
   createCartoonWallTorch,
@@ -63,6 +62,7 @@ export class PropPreviewRenderer {
     textured: boolean,
     barrelModel: Group | null,
     battleAxeModel: Group | null,
+    benchModel: Group | null,
   ) {
     this.#renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.#renderer.outputColorSpace = SRGBColorSpace;
@@ -248,7 +248,8 @@ export class PropPreviewRenderer {
       });
 
       if (kind === "bench") {
-        const bench = createCartoonCastleBench({ wood, woodDark, iron });
+        if (!benchModel) throw new Error("Castle bench GLB is not loaded.");
+        const bench = benchModel.clone(true);
         bench.scale.setScalar(2.6);
         bench.rotation.y = sideView ? Math.PI / 2 : -Math.PI * 0.18;
         bench.position.y = -1.35;
