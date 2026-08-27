@@ -5,6 +5,7 @@
 - 已在 `codex/task-254-reel-anticipation` 完成 RenderCore 通用能力，并同步到 `piximinecart2/packages/rendercore`。
 - 第一轴落停出现 CL 后，未落停轴进入普通期待；物理已落停列累计出现 2 个 SC 后，剩余未落停轴进入更强期待。CL 后仍可单调升级到 SC 强期待。
 - `reel_nearwin2` 使用 exact `Loop`、`{ pooled: true }`，按 240ms 波次挂到每一轴可见窗口中心；对象由 reel-owned update clock 推进，并在该轴 `land()` resolve 时立即移除、停止、销毁并归还 pool。
+- 2026-08-27 视觉跟进：轮到某轴落停时，nearwin 先做 X `1.025→1.05→1.025→1.05`、Y `1.05→1.1→1.05→1.1` 双回弹；随后只 settle 当前轴，等它物理停稳后再推进下一轴，玩法 post-land Promise 继续独立并发。
 - 期待中的转速、settle 时长和列间停顿均放慢；普通/强期待分别使用不同摄像机推进和确定性抖动参数。全部物理列落停后，摄像机平滑回到 neutral，再结束本轮期待。
 - 期待物理落停与 feature/gameplay 后处理分开收集；后续列不等待前一列玩法效果完成。
 - 修复响应计划以 `next-spin` 接管时误取消当前 pre-spin anticipation session 的生命周期问题。
@@ -21,11 +22,12 @@
 
 - wave 间隔：240ms
 - 最短可见时长：180ms
-- 普通期待：22 symbols/s、1550ms settle、300ms stop delay、1.04x zoom、(2, 1.2) shake、9Hz
-- 强期待：14 symbols/s、1850ms settle、380ms stop delay、1.08x zoom、(5, 3) shake、13Hz
+- 回弹：120ms expand、100ms contract、140ms rebound；Y 增量严格为 X 的两倍
+- 普通期待：22 symbols/s、1700ms settle、360ms stop delay、1.04x zoom、(2, 1.2) shake、9Hz
+- 强期待：14 symbols/s、2000ms settle、460ms stop delay、1.08x zoom、(5, 3) shake、13Hz
 - 摄像机释放：普通 220ms、强期待 260ms
 
-配置由 `apps/minecart2/config/game-runtime.manifest.json` v3 单一持有，app parser 严格校验强期待必须更慢、更久且视觉更强。
+配置由 `apps/minecart2/config/game-runtime.manifest.json` v4 单一持有，app parser 严格校验强期待必须更慢、更久且视觉更强，并校验回弹 peak/base 与 X/Y 增量关系。
 
 ## 验收
 
