@@ -1,5 +1,6 @@
 import { loadCastleBarrelModel } from "./barrel-model.js";
 import { loadCastleBattleAxeModel } from "./battle-axe-model.js";
+import { loadCastleBenchModel } from "./bench-model.js";
 import { CastleKnightRenderer } from "./castle-scene.js";
 import { PropPreviewRenderer, type PropPreviewKind } from "./prop-preview.js";
 import "./styles.css";
@@ -103,11 +104,17 @@ async function bootstrap(): Promise<void> {
     await bootstrapPropPreview(root, previewKind);
     return;
   }
-  const [barrelModel, battleAxeModel] = await Promise.all([
+  const [barrelModel, battleAxeModel, benchModel] = await Promise.all([
     loadCastleBarrelModel(),
     loadCastleBattleAxeModel(),
+    loadCastleBenchModel(),
   ]);
-  const game = new CastleKnightRenderer(root, barrelModel, battleAxeModel);
+  const game = new CastleKnightRenderer(
+    root,
+    barrelModel,
+    battleAxeModel,
+    benchModel,
+  );
   root.append(createHud(root, game));
   const resize = () => game.resize(root.clientWidth, root.clientHeight);
   const resizeObserver = new ResizeObserver(resize);
@@ -133,6 +140,7 @@ async function bootstrapPropPreview(
   const barrelModel = kind === "barrel" ? await loadCastleBarrelModel() : null;
   const battleAxeModel =
     kind === "battleAxe" ? await loadCastleBattleAxeModel() : null;
+  const benchModel = kind === "bench" ? await loadCastleBenchModel() : null;
   const preview = new PropPreviewRenderer(
     root,
     kind,
@@ -140,6 +148,7 @@ async function bootstrapPropPreview(
     textured,
     barrelModel,
     battleAxeModel,
+    benchModel,
   );
   const resize = () => preview.resize(root.clientWidth, root.clientHeight);
   const resizeObserver = new ResizeObserver(resize);
