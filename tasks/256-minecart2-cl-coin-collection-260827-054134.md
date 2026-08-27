@@ -8,6 +8,7 @@
 - Minecart2 工作区：`/Users/zerro/gitee.com/piximinecart2`，保留在用户现有 `rgs` 分支，未替用户提交。
 - exact `bg-coinwins` 现在编译为 landing 后、普通 `game003:wins` 前的独立 `game003:coin-collect` state mutation；样例顺序为 CL `(0,3)` 收集 CO `(4,1)=1`、`(4,2)=750`，最终累计 `751`。
 - 后续真实下注数据确认 `cashWin` 是随下注/币值换算的现金金额，因此不与 raw CO value 合计比较；strict parity 只覆盖同单位的 component `wins/coinWin`、CO value、数量和 result role。
+- 后续真实回合确认 `usedResults` 可包含多个 CL group。compiler 现在为每组生成独立 `game003:coin-collect`，每个 CL 分别计数和获奖；同一 CO 被多组引用时每组各创建一个飞行 clone，原 CO 只在最后引用完成后提交为 hole。
 - CO 按 result position 顺序执行 `win -> normal clone flight -> end -> hole commit`，CL 执行一次 `collect_start -> collect_idle`，全部收集后执行 `collect_end -> win`。普通 wins、award、BO 收集和 mode transition 消费去除 CO 后的 snapshot。
 - CL 上只创建一个初始空字符串的字体计数器；每枚 CO 到达期间进行有界、单调、整数 count-up。
 
@@ -34,7 +35,7 @@
 
 - RenderCore 定向 Vitest：2 files，16 tests passed。
 - `pnpm --filter @slotclientengine/rendercore typecheck`。
-- Minecart2 全量 Vitest：9 files，87 tests passed。
+- Minecart2 全量 Vitest：9 files，90 tests passed（含 bet-scaled cashWin、多 CL/shared CO compiler 与非最终 CO 恢复）。
 - Minecart2 build。
 - `gamelayoutpkgcli` build。
 - `layout32.zip --delivery-dir assets/minecart2 --quality 80 --check`：成功；Atlas 4 张、合图帧 213 个、外置资源 14 个。

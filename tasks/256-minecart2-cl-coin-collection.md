@@ -19,16 +19,17 @@ award、BO collection 与 mode transition。
 
 - [ ] 没有 exact `bg-coinwins` 时 operation trace、landing、普通中奖、award、BO collection、transition 和下一次
       spin 保持现状，不因盘面存在 CL/CO 自行触发收集。
-- [ ] exact `bg-coinwins` 只接受一份 `usedResults` group；result positions 在当前 established landing scene
-      中必须恰好包含一个 active game config 的 CL 和至少一个 CO，CO 顺序保持 result `pos` 顺序。
+- [ ] exact `bg-coinwins` 接受一份或多份 `usedResults` group；每组 result positions 在当前 established landing scene
+      中必须恰好包含一个不重复的 active game config CL 和至少一个 CO，组顺序与 CO 顺序保持服务器顺序。
 - [ ] 用户样例严格编译为 collector `(0,3)`，CO `(4,1)=1`、`(4,2)=750`，累计值 `751`；不硬编码
       symbol code、坐标、数量或金额。
-- [ ] compiler 在任何画面 mutation 前验证每个 CO 的正 safe-integer presentation value、CO 数量与
-      `symbolNum`、value 合计与 `wins`/component coin win 一致；未知或矛盾数据显式失败。
+- [ ] compiler 在任何画面 mutation 前验证每个 CO 的正 safe-integer presentation value、每组 CO 数量与
+      result `symbolNums`、所有组 value 合计与 component `wins/coinWin` 一致；`cashWin` 与 raw component
+      `symbolNum` 不作为跨下注/跨组 parity。
 - [ ] round plan 在 landing 后、`game003:wins` 前插入独立 `game003:coin-collect` state-mutation；其 output
       只把被收集 CO 的 scene/value 改为 `-1/-1`，CL 和其它 cell 不变，后续 operation 从该 output 继续。
 - [ ] CL 严格执行 `collect_start` once 完成后进入 `collect_idle`；随后 CO 串行执行
-      `win` once、normal owned clone 飞向 CL、到达后 `end` once，每枚完成后对应盘面 cell 提交为 hole。
+      `win` once、normal owned clone 飞向 CL、到达后 `end` once；仅该 CO 的最后 collector 引用完成后提交为 hole。
 - [ ] 每枚飞行中的 CO clone 只挂一个 RenderCore-owned emitter，纹理只取 exact runtime resource
       `256-co-gold-particle-128`；到达后调用 graceful end 停止继续发射，
       存量粒子继续 update 至 live count 为零后才销毁 effect。正常完成路径禁止 `stop/reset/restart/destroy` 硬切粒子。
@@ -68,7 +69,7 @@ award、BO collection 与 mode transition。
 - 不从盘面扫描全部 CL/CO 代替 `usedResults`；不收集 result positions 之外的 CO。
 - 不推断 `collectorNum` 的服务器业务含义；当前坐标角色由 result positions 对 established scene 中 exact CL/CO
   code 的严格分类确定。若未来要消费 `collectorNum`，需由新的服务器合同和 fixture 定义。
-- 不实现多个 result group、多个 CL、零 CO、跨 step 或跨 collector 收集；这些输入本任务显式失败。
+- 不实现单组多个 CL、零 CO 或跨 step 收集；多个 result group/CL 按组生成独立 operation，共享 CO 在每组各飞一次、最后引用后才移除。
 - 不改变普通 `bg-wins` 金额、carousel repeat、total award、BO collection target/squib 或 BonusGame transition。
 - 不新增 RenderCore gameplay DSL、standard-reel transfer API、raw Pixi Container/SymbolPlayer 入口或第二套 ticker；
   shared 扩展只表达通用 image-backed particle emit/end/drain，不出现 CL/CO/金币语义。
@@ -143,15 +144,16 @@ piximinecart2: HEAD 7da2613ca9c8da559bd97d716bc566b0345e02ae; rgs ahead origin/r
      不变，coordinator 在成功后把 output 传给普通 wins。
    - 不把它塞进 `game003:wins`，避免 presentation operation 隐式改变 coordinator state。
 2. **业务 strict parser 留在 Minecart2，通用粒子 primitive 先补主仓。**
-   - BridgeCore 通用 helper 只解析 used result 和坐标；app 校验 exact component、single group、CL/CO role、
-     `result.symbol`、`symbolNums`、positive value、safe sum 与 component totals。
+   - BridgeCore 通用 helper 只解析 used result 和坐标；app 校验 exact component、每组 CL/CO role、collector 唯一性、
+     `result.symbol`、`symbolNums`、positive value、safe aggregate sum 与 component totals。
    - shared package不出现Minecart2语义；RenderCore仅新增从exact image resource创建的typed pooled emitter、anchor follow、
      graceful end和awaitable drain，先在主仓实现/测试，再逐文件同步external package。
 3. **复用通用 clone/motion/Text API，不新增 standard reel transfer。**
    - source/target 都是当前 settled `SymbolHandle` anchor，owned clone 可由 presentation scope 挂载、移动和销毁。
    - mutation 仍由 area owner 提交，app 不 reparent raw display、不复制 SymbolPlayer、不创建 RAF/GSAP ticker。
-4. **逐枚 commit，失败采用 fail-stop。**
-   - 每枚 CO 的 win、flight、end、count-up 完成后提交自身 hole，再进入下一枚；这与用户看到的逐个消失一致。
+4. **按 collector/CO 顺序 commit，失败采用 fail-stop。**
+   - 每枚 CO 的 win、flight、end、count-up 完成后再进入下一枚；共享 CO 的非最终 collector 飞行恢复原 occurrence，
+     最后一次引用才提交 hole。每个 collector operation 完整结束后才进入下一组。
    - 当前枚失败时恢复尚未提交原 occurrence；之前完成的 hole 不倒放。operation reject 后 coordinator 不执行 wins，
      符合 shared runtime 的 partial commit fail-stop，而不是伪造跨多段视觉 rollback。
 5. **counter 是 app-owned临时字体文字。**
@@ -244,13 +246,14 @@ gamelayoutpkgcli检查delivery。若typed API实际落点还需相邻文件，�
      pool cap/backpressure及abort/destroy cleanup；更新最小README/领域规则。
    - 主仓测试通过后逐文件同步到piximinecart2，并以diff/parity和external同测试证明一致；不得在external先行实现。
 3. **编译 `bg-coinwins` strict state mutation**
-   - 在 source selection 中加入独立 exact `bg-coinwins` binding；仅 component 存在时读取 single used result group。
+   - 在 source selection 中加入独立 exact `bg-coinwins` binding；仅 component 存在时按 used result 顺序读取一组或多组。
    - 以 established snapshot 的 game-config code 分类唯一 CL 与有序 CO，读取每个 CO presentation value；验证
-     `result.symbol`、`symbolNums`、component `wins` 与 basic coin/cash totals，并安全求和。
-   - 用 `genRemoveOperation()`生成 `game003:coin-collect`：payload冻结 collector、ordered
-     `{position,amount}` 与 total，output只将这些 CO改为`-1/-1`；把后续 win/BO 的 scene/value输入切到 collection output。
+     `result.symbol`、`symbolNums`、component `wins/coinWin` totals，并安全求和；不比较 bet-scaled `cashWin`。
+   - 用 `genRemoveOperation()`为每组生成 `game003:coin-collect`：payload冻结 collector、ordered
+     `{position,amount,removeAfterCollection}` 与 total，output只将最后引用的 CO改为`-1/-1`；把后续 group/win/BO
+     的 scene/value输入串到前一 collection output。
    - 扩展 definitions并用用户样例 fixture 断言 plan 顺序、payload和 snapshot closure；覆盖 absent、multiple group/CL、
-     non-CO member、missing/zero/overflow value、count/total drift和 result越界。
+     shared CO last-use removal、non-CO member、missing/zero/overflow value、count/total drift和 result越界。
 4. **实现串行 CL/CO presentation transaction**
    - 新建 `coin-collection.ts` 负责 operation/payload/output preflight，取得 exact collector与 ordered CO handles。
    - CL await `collect_start` 后 immediate进入 `collect_idle`；创建一次空 counter并通过 top presentation layer锚到 CL。
@@ -358,7 +361,8 @@ RenderCore测试、Minecart compiler/handler定向测试、Minecart build、deli
 
 ### 风险
 
-- 仅有一份`bg-coinwins`样例；multiple result/collector和`collectorNum`语义未成合同，显式拒绝，后续形态需新fixture。
+- 初始仅有一份`bg-coinwins`样例；执行中由真实回合确认 multiple result/collector。当前按 usedResults 拆分独立获奖，
+  shared CO 最后一次引用才移除；`collectorNum` 与 raw `symbolNum` 的跨组语义仍不猜测、不参与画面合同。
 - CO `end`不挂ImgNumber，字体counter在视觉上必须及时承接value；offset、font size、count-up节奏和curve需真实浏览器调校。
 - 自然drain会让短时间内多个effect并存；必须以≤2 runtime和≤48 live/emitter硬预算限制峰值，超限采用oldest-drain
   backpressure，不能为了视觉连贯允许无界积压，也不能为了性能在正常路径硬切粒子。
