@@ -6,6 +6,7 @@
 - 第一轴落停出现 CL 后，未落停轴进入普通期待；物理已落停列累计出现 2 个 SC 后，剩余未落停轴进入更强期待。CL 后仍可单调升级到 SC 强期待。
 - `reel_nearwin2` 使用 exact `Loop`、`{ pooled: true }`，按 240ms 波次挂到每一轴可见窗口中心；对象由 reel-owned update clock 推进，并在该轴 `land()` resolve 时立即移除、停止、销毁并归还 pool。
 - 2026-08-27 视觉跟进：第一根期待轴落停前，nearwin 先做 X `1.05→1.1→1.05→1.1`、Y `1.1→1.2→1.1→1.2` 双回弹；之后每根期待轴的 X/Y scale 在前一根基础上线性增加 0.05，CL→SC 升级不重置递增序号。随后只 settle 当前轴，等它物理停稳后再推进下一轴，玩法 post-land Promise 继续独立并发。
+- 强期待触发边界按物理落停顺序选择前两个 SC occurrence，立即切到 manifest-owned exact `nearwin`（Spine `NearWin` loop）；全部 reel 物理停稳后把同一批 occurrence 恢复为 exact `normal`，取消和失败路径也执行恢复清理。
 - 期待中的转速、settle 时长和列间停顿均放慢；普通/强期待分别使用不同摄像机推进和确定性抖动参数。全部物理列落停后，摄像机平滑回到 neutral，再结束本轮期待。
 - 期待物理落停与 feature/gameplay 后处理分开收集；后续列不等待前一列玩法效果完成。
 - 修复响应计划以 `next-spin` 接管时误取消当前 pre-spin anticipation session 的生命周期问题。
