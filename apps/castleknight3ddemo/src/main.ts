@@ -4,6 +4,7 @@ import { loadCastleBenchModel } from "./bench-model.js";
 import { CastleKnightRenderer } from "./castle-scene.js";
 import { PropPreviewRenderer, type PropPreviewKind } from "./prop-preview.js";
 import { loadCastleThroneDaisModel } from "./throne-dais-model.js";
+import { loadCastleThroneModel } from "./throne-model.js";
 import "./styles.css";
 
 function button(
@@ -105,19 +106,26 @@ async function bootstrap(): Promise<void> {
     await bootstrapPropPreview(root, previewKind);
     return;
   }
-  const [barrelModel, battleAxeModel, benchModel, throneDaisModel] =
-    await Promise.all([
-      loadCastleBarrelModel(),
-      loadCastleBattleAxeModel(),
-      loadCastleBenchModel(),
-      loadCastleThroneDaisModel(),
-    ]);
+  const [
+    barrelModel,
+    battleAxeModel,
+    benchModel,
+    throneDaisModel,
+    throneModel,
+  ] = await Promise.all([
+    loadCastleBarrelModel(),
+    loadCastleBattleAxeModel(),
+    loadCastleBenchModel(),
+    loadCastleThroneDaisModel(),
+    loadCastleThroneModel(),
+  ]);
   const game = new CastleKnightRenderer(
     root,
     barrelModel,
     battleAxeModel,
     benchModel,
     throneDaisModel,
+    throneModel,
   );
   root.append(createHud(root, game));
   const resize = () => game.resize(root.clientWidth, root.clientHeight);
@@ -147,6 +155,7 @@ async function bootstrapPropPreview(
   const benchModel = kind === "bench" ? await loadCastleBenchModel() : null;
   const throneDaisModel =
     kind === "stair" ? await loadCastleThroneDaisModel() : null;
+  const throneModel = kind === "throne" ? await loadCastleThroneModel() : null;
   const preview = new PropPreviewRenderer(
     root,
     kind,
@@ -156,6 +165,7 @@ async function bootstrapPropPreview(
     battleAxeModel,
     benchModel,
     throneDaisModel,
+    throneModel,
   );
   const resize = () => preview.resize(root.clientWidth, root.clientHeight);
   const resizeObserver = new ResizeObserver(resize);
