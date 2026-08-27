@@ -36,7 +36,6 @@ import { createRandom } from "./random.js";
 import {
   createCartoonCastleChandelier,
   createCartoonCastleThrone,
-  createCartoonThroneDais,
 } from "./reconstructed-furnishings.js";
 import {
   createCartoonCastleWallSection,
@@ -159,6 +158,7 @@ export class CastleKnightRenderer {
     barrelModel: Group,
     battleAxeModel: Group,
     benchModel: Group,
+    throneDaisModel: Group,
   ) {
     this.#renderer = new WebGLRenderer({
       antialias: true,
@@ -183,7 +183,7 @@ export class CastleKnightRenderer {
     this.#createFloor();
     this.#createWalls();
     this.#createBoard();
-    this.#createThroneArea();
+    this.#createThroneArea(throneDaisModel);
     this.#createArchitecture();
     this.#createFurniture(benchModel, barrelModel);
     this.#createChandelier();
@@ -482,12 +482,8 @@ export class CastleKnightRenderer {
     this.#root.add(boardTiles);
   }
 
-  #createThroneArea(): void {
-    const dais = createCartoonThroneDais({
-      stone: this.#materials.stone,
-      stoneDark: this.#materials.stoneDark,
-      gold: this.#materials.gold,
-    });
+  #createThroneArea(throneDaisModel: Group): void {
+    const dais = throneDaisModel.clone(true);
     dais.position.set(0, 0, -8.05);
     this.#root.add(dais);
 

@@ -16,7 +16,6 @@ import type { Group } from "three";
 import {
   createCartoonCastleChandelier,
   createCartoonCastleThrone,
-  createCartoonThroneDais,
 } from "./reconstructed-furnishings.js";
 import {
   createCartoonCastleWallSection,
@@ -63,6 +62,7 @@ export class PropPreviewRenderer {
     barrelModel: Group | null,
     battleAxeModel: Group | null,
     benchModel: Group | null,
+    throneDaisModel: Group | null,
   ) {
     this.#renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.#renderer.outputColorSpace = SRGBColorSpace;
@@ -287,7 +287,10 @@ export class PropPreviewRenderer {
         this.#camera.position.set(0, 1.2, 7.6);
         this.#camera.lookAt(0, 0.1, 0);
       } else if (kind === "stair") {
-        const stair = createCartoonThroneDais({ stone, stoneDark, gold });
+        if (!throneDaisModel) {
+          throw new Error("Castle throne dais GLB is not loaded.");
+        }
+        const stair = throneDaisModel.clone(true);
         stair.scale.setScalar(0.92);
         stair.rotation.y = sideView ? Math.PI / 2 : -Math.PI * 0.15;
         stair.position.y = -1.7;
