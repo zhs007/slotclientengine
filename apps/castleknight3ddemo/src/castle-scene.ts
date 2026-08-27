@@ -33,10 +33,7 @@ import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.j
 import { CartoonPass } from "./cartoon-pass.js";
 import { BOARD, boardDepth, boardWidth, ROOM } from "./config.js";
 import { createRandom } from "./random.js";
-import {
-  createCartoonCastleChandelier,
-  createCartoonCastleThrone,
-} from "./reconstructed-furnishings.js";
+import { createCartoonCastleChandelier } from "./reconstructed-furnishings.js";
 import {
   createCartoonCastleWallSection,
   createCartoonWallTorch,
@@ -159,6 +156,7 @@ export class CastleKnightRenderer {
     battleAxeModel: Group,
     benchModel: Group,
     throneDaisModel: Group,
+    throneModel: Group,
   ) {
     this.#renderer = new WebGLRenderer({
       antialias: true,
@@ -183,7 +181,7 @@ export class CastleKnightRenderer {
     this.#createFloor();
     this.#createWalls();
     this.#createBoard();
-    this.#createThroneArea(throneDaisModel);
+    this.#createThroneArea(throneDaisModel, throneModel);
     this.#createArchitecture();
     this.#createFurniture(benchModel, barrelModel);
     this.#createChandelier();
@@ -482,19 +480,12 @@ export class CastleKnightRenderer {
     this.#root.add(boardTiles);
   }
 
-  #createThroneArea(throneDaisModel: Group): void {
+  #createThroneArea(throneDaisModel: Group, throneModel: Group): void {
     const dais = throneDaisModel.clone(true);
     dais.position.set(0, 0, -8.05);
     this.#root.add(dais);
 
-    const throne = createCartoonCastleThrone({
-      wood: this.#materials.wood,
-      woodDark: this.#materials.woodDark,
-      leather: this.#materials.leather,
-      gold: this.#materials.gold,
-      gem: this.#materials.purpleGlass,
-    });
-    throne.scale.setScalar(0.78);
+    const throne = throneModel.clone(true);
     throne.position.set(0, 1.54, -9.65);
     this.#root.add(throne);
 

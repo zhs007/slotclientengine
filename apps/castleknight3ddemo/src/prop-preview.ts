@@ -13,10 +13,7 @@ import {
   WebGLRenderer,
 } from "three";
 import type { Group } from "three";
-import {
-  createCartoonCastleChandelier,
-  createCartoonCastleThrone,
-} from "./reconstructed-furnishings.js";
+import { createCartoonCastleChandelier } from "./reconstructed-furnishings.js";
 import {
   createCartoonCastleWallSection,
   createCartoonTreasureChest,
@@ -63,6 +60,7 @@ export class PropPreviewRenderer {
     battleAxeModel: Group | null,
     benchModel: Group | null,
     throneDaisModel: Group | null,
+    throneModel: Group | null,
   ) {
     this.#renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.#renderer.outputColorSpace = SRGBColorSpace;
@@ -157,13 +155,6 @@ export class PropPreviewRenderer {
             gradientMap,
           })
         : new MeshBasicMaterial({ color: 0x9b5527 });
-      const woodDark = textured
-        ? new MeshToonMaterial({
-            color: 0x735067,
-            map: this.#textureLibrary?.woodAlbedo,
-            gradientMap,
-          })
-        : new MeshBasicMaterial({ color: 0x5c3540 });
       const iron = textured
         ? new MeshStandardMaterial({
             color: 0xffffff,
@@ -298,16 +289,11 @@ export class PropPreviewRenderer {
         this.#camera.position.set(0, 2.4, 10.5);
         this.#camera.lookAt(0, -0.25, 0);
       } else if (kind === "throne") {
-        const throne = createCartoonCastleThrone({
-          wood,
-          woodDark,
-          leather,
-          gold,
-          gem: purple,
-        });
+        if (!throneModel) throw new Error("Castle throne GLB is not loaded.");
+        const throne = throneModel.clone(true);
         throne.scale.setScalar(1.25);
         throne.rotation.y = sideView ? Math.PI / 2 : -Math.PI * 0.14;
-        throne.position.y = -2.5;
+        throne.position.y = -2;
         this.#scene.add(throne);
         this.#camera.position.set(0, 1.15, 9.8);
         this.#camera.lookAt(0, 0.15, 0);
