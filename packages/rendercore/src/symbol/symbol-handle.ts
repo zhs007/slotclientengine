@@ -37,6 +37,9 @@ export interface SymbolHandle extends CloneableRenderObject {
   readonly symbol: string;
   readonly kind: "symbol" | "empty";
   getPosition(): RenderPoint;
+  /** Returns this handle's current display origin, independent of SymbolArea ownership. */
+  getSelfAnchor(): RenderAnchor;
+  /** Returns the settled SymbolArea occurrence anchor. */
   getAnchor(): RenderAnchor;
   setState(
     state: SymbolStateId,
@@ -162,6 +165,10 @@ export function createSymbolHandle(source: SymbolHandleSource): SymbolHandle {
           "SymbolHandle has no SymbolArea position.",
         );
       return source.getPosition();
+    },
+    getSelfAnchor: () => {
+      assertUsable();
+      return baseNode.getAnchor();
     },
     getAnchor: () => {
       assertUsable();
@@ -372,6 +379,10 @@ export function createEmptySymbolHandle(
           "SymbolHandle has no SymbolArea position.",
         );
       return source.getPosition();
+    },
+    getSelfAnchor: () => {
+      assertUsable();
+      return baseNode.getAnchor();
     },
     getAnchor: () => {
       assertUsable();

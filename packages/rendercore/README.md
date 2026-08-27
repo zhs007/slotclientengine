@@ -84,6 +84,7 @@ attachment；land Promise resolve 后统一通过 `getSymbol()` 取得 exact sym
 `setState()` / `playState()`、读写 presentation value、`add/remove` 通用 `RenderObject`，以及
 创建独立 player/display identity 的 `clone()`。facade 捕获 exact symbol：尚未落地、leased、replacement/release 后的 stale 引用都会显式失败，不按相同坐标重绑；hole 返回 exact Empty SymbolHandle，而不是失败。reel 内 symbol 是
 borrowed，不能 destroy；clone 是 owned `RenderObject`，由调用方 remove 后 destroy。
+`SymbolHandle.getAnchor()` 始终表示 settled `SymbolArea` occurrence，因此 owned clone 会显式失败；需要让粒子、跟随物或其它程序对象追踪移动中的 clone 时，先取得一次 `clone.getSelfAnchor()`，该 opaque anchor 会随 clone 的当前 display origin 更新。
 
 `RenderObject` 是 Container-backed 的 opaque capability，不是 Pixi `Container` 子类，也不公开
 `parent/children/worldTransform`。`SymbolHandle`、普通文字对象以及 symbol 的 value/text part 使用同一

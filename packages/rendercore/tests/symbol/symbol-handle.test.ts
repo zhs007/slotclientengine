@@ -105,8 +105,13 @@ describe("SymbolHandle", () => {
     const clone = symbol.clone();
     expect(clone).not.toBe(symbol);
     expect(clone.code).toBe(symbol.code);
-    symbol.add(clone);
-    symbol.remove(clone);
+    expect(() => clone.getAnchor()).toThrow(/no SymbolArea anchor/);
+    const cloneAnchor = clone.getSelfAnchor();
+    const top = area.getLayer("top");
+    top.add(clone);
+    clone.setPosition({ x: 123, y: 456 });
+    expect(top.resolveAnchor(cloneAnchor)).toEqual({ x: 123, y: 456 });
+    top.remove(clone);
     clone.destroy();
     expect(() => clone.setState("normal")).toThrow(/destroyed|stale/);
     expect(() => symbol.destroy()).toThrow(/Borrowed/);
