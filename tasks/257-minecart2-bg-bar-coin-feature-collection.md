@@ -36,7 +36,7 @@
 - [ ] 每枚飞行 clone 都挂接任务 256 的 exact `256-co-gold-particle-128` RenderCore trail；到达只停止发射，存量粒子
       自然排空，下一枚 CO 不等待上一条 drain，最终 operation 在 presentation scope 退出前统一等待 pending trails。
 - [ ] 同一份 `coinCollection.trail` 默认调为明显偏强、便于浏览器往回校准的初始目标：`maxParticles=96`、`emissionRate=180`、
-      `sizeMinPixels=28`、`sizeMaxPixels=64`，保持 `maxConcurrent=2` 和现有 0.32–0.55 秒寿命；浏览器通过后再按观感回调，
+      `sizeMinPixels=28`、`sizeMaxPixels=64`，移除 app-level trail 并发数量限制并保持现有 0.32–0.55 秒寿命；浏览器通过后再按观感回调，
       并在执行报告记录最终值。任务 256 CL flow 与任务 257 collector-less flow 必须同时消费该唯一配置。
 - [ ] 全部 CO 完成后立即移除并销毁计数器，collector-less operation resolve；此后才播放既有普通 symbol win 首轮，
       award、BO collection 与 mode transition 维持当前相对顺序。
@@ -106,7 +106,7 @@ piximinecart2 git status --short --untracked-files=all: clean
   parity；fixed-capacity pool、anchor follow、`stopEmissionAndDrain()`和hard cleanup已满足新流程，本任务不需要新增
   shared能力或同步shared package。
 - 当前唯一trail配置原为每emitter 32粒子、42粒子/秒、8–18 px、0.32–0.55秒寿命、最多2条并发；首轮调至
-  48粒子、72粒子/秒、16–36 px 后用户仍确认不明显，因此本轮将app parser预算提高到每emitter最多96粒子，仍保持最多2条并发和最长0.6秒寿命。
+  48粒子、72粒子/秒、16–36 px 后用户仍确认不明显，因此本轮将app parser预算提高到每emitter最多96粒子并移除trail数量限制，仍保持最长0.6秒寿命。
 - 当前 delivery main reel 为 manifest-owned 5×5、cell `172×130`；精确数值只用于基线理解，运行时 target 必须由
   ReelArea geometry计算，不能复制这些数值。
 
@@ -125,7 +125,7 @@ piximinecart2 git status --short --untracked-files=all: clean
 5. “0不用显示”通过counter初始text `""`实现；逻辑累计仍从0开始。每枚CO到达后的`end`与count-up同时开始，二者都
    完成后才提交hole。
 6. 新流程复用任务256同一条金色trail：emitter跟随normal clone，到达调用graceful end，已发射粒子自然排空；新旧流程
-   共享一份config和并发backpressure，不能复制第二套参数或用hard destroy制造尾迹硬切。
+   共享一份config且不等待前序trail排空，不能复制第二套参数或用hard destroy制造尾迹硬切。
 
 ### 关键决策
 
@@ -145,7 +145,7 @@ piximinecart2 git status --short --untracked-files=all: clean
 4. **counter target属于geometry/config，不属于Scene Layout新资源。**
    - 唯一新增定位配置是finite non-negative `targetOffsetDownPixels`；字体、count-up、flight path/easing和trail复用当前严格
      `coinCollection`配置，不复制style、timing、resource或particle参数表。
-   - trail参数先调为96 max particles、180/s、28–64 px，寿命和最多2条并发保持不变；先提供明显偏强的浏览器基线，
+   - trail参数先调为96 max particles、180/s、28–64 px，寿命保持不变且不限制同时draining的trail数量；先提供明显偏强的浏览器基线，
      仍受96 hard cap约束，视觉通过后再从versioned config往回调。
    - 目标计算失败、anchor不可解析或配置非法时在隐藏任何CO前显式失败。
 5. **逐枚提交、整operation fail-stop。**
@@ -158,7 +158,7 @@ piximinecart2 git status --short --untracked-files=all: clean
   `bg-coinwins2`、CO/CL、字体位置或动画名，预计不修改。
 - **Minecart2 compiler**：拥有feature/component匹配、CO scene scan/value totals、歧义component拒绝、operation顺序、
   collector-less payload及post-collection output。
-- **Minecart2 handler**：拥有bottom-center target、CO exact states、串行顺序、count-up、trail并发barrier、逐枚commit与
+- **Minecart2 handler**：拥有bottom-center target、CO exact states、串行顺序、count-up、最终trail drain barrier、逐枚commit与
   cleanup；不重新解析server component或扫描display tree。
 - **RenderCore**：继续拥有borrowed/owned handle identity、opaque anchor、manual-clock motion、TextRenderObject、
   presentation scope和symbol mutation；无需新增public API。
@@ -230,7 +230,7 @@ pnpm-workspace.yaml
      串到新output，并由finalizer证明closure。
 3. **抽取可复用的app-local单枚CO流程**
    - 保持任务256 public handler/payload不变，把counter创建、bounded count-up、normal clone motion、end与逐枚commit拆为
-     strict内部helper；既有CL流程继续传collector state，两个流程共用trail创建、capacity backpressure和final drain，
+     strict内部helper；既有CL流程继续传collector state，两个流程共用trail创建和final drain，
      任务256的自然排空时序不得改变。
    - 新流程从ReelArea bottom row解析center/cellHeight，应用config offset得到target；创建一次空counter并与clone共用target。
 4. **实现并注册`bg-coinwins2`收集handler**
@@ -242,7 +242,7 @@ pnpm-workspace.yaml
    - 在adapter registry注册exact kind/version，使landing→collection→normal wins形成真实Promise barrier。
 5. **配置、测试与文档**
    - 在versioned runtime config增加并strict parse `targetOffsetDownPixels`；把唯一trail参数初始调到
-     `96 particles / 180 per second / 28–64 px`，复用既有resource、lifetime和并发，不增加第二份trail表。
+     `96 particles / 180 per second / 28–64 px`，复用既有resource和lifetime，不限制draining trail数量，也不增加第二份trail表。
    - compiler测试覆盖trigger/absence、CL ignored、scan顺序、values/totals、component互斥、output closure和普通wins顺序；
      handler测试覆盖状态/计数/commit顺序、single counter、failure/abort/cleanup和任务256回归。
    - 更新README说明`bg-coinwins2` landing与collection两阶段、与`bg-coinwins`区别、CL ignore、value来源、hole及失败边界。
@@ -261,8 +261,8 @@ pnpm-workspace.yaml
 - handler使用可控`playState/move/delay/trail drain` Promise，不用wall-clock sleep；断言单一counter identity、初始空字符串、
   无0、单调有界整数step、每枚最终精确值及总和。
 - 精确断言每枚 `win complete → normal clone → move → end+count-up → hole → next CO`；普通wins在counter销毁前不得开始。
-- 复验两个流程都把同一config传给exact particle factory；arrival后停止新增粒子、drain不阻塞下一CO、capacity为2时等待最早
-  drain、最终resolve前live归零，调大/加密参数仍通过parser hard budget。
+- 复验两个流程都把同一config传给exact particle factory；arrival后停止新增粒子、任意数量的drain均不阻塞下一CO、
+  最终resolve前live归零，调大/加密参数仍通过单trail parser hard budget。
 - failure测试区分当前未提交CO的visibility恢复与前序已提交hole不倒放；abort/destroy后无clone/counter/trail/listener残留。
 - 保留任务256 CL collection全部现有断言，尤其collector states、shared CO、particle natural drain和failure cleanup，防止抽取helper
   改变旧行为。

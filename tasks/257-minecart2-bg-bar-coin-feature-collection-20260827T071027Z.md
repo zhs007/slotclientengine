@@ -20,8 +20,8 @@
 ## 粒子调整
 
 - 新流程与任务 256 的 CL/CO 流程共用同一 exact 粒子资源和 trail 配置，不复制第二套效果。
-- 首轮 48 粒子、72 粒子/秒、16–36 px 经浏览器确认仍不明显；当前强效果校准值提高为单 emitter 最多 96 粒子、180 粒子/秒、28–64 px。寿命仍为 0.32–0.55 秒，同时最多保留 2 条 emitting/draining trail，视觉通过后再从 versioned config 往回调。
-- 第三枚 CO 开始前会等待最早 trail drain 完成，保持 `maxConcurrent=2` 的硬上限；正常完成只停止发射并自然 drain，abort/失败才 hard cleanup。
+- 首轮 48 粒子、72 粒子/秒、16–36 px 经浏览器确认仍不明显；当前强效果校准值提高为单 emitter 最多 96 粒子、180 粒子/秒、28–64 px。寿命仍为 0.32–0.55 秒，视觉通过后再从 versioned config 往回调。
+- 不再限制同时 emitting/draining 的 trail 数量；任意前序 trail 的自然消散都不会阻塞下一枚 CO，全部 CO 完成后统一等待所有 trail drain。正常完成只停止发射并自然 drain，abort/失败才 hard cleanup。
 
 ## 文件
 
