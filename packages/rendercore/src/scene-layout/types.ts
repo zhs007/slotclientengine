@@ -1034,6 +1034,14 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
     name: string,
     options?: { readonly instanceId?: string },
   ): Promise<import("../presentation/index.js").RenderObject>;
+  /** Creates a detached, fixed-capacity trail from an exact image resource. */
+  createParticleTrailRenderObject(
+    name: string,
+    options: {
+      readonly emitter: import("../presentation/index.js").RenderAnchor;
+      readonly config: import("../presentation/index.js").ParticleTrailConfig;
+    },
+  ): Promise<import("../presentation/index.js").ParticleTrailRenderObject>;
   /** Creates a detached image-string-backed number object from an exact program resource name. */
   createImgNumberRenderObject(
     name: string,

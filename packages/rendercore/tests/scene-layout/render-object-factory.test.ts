@@ -323,6 +323,46 @@ describe("Scene Layout named RenderObject factory", () => {
     expect(() => amount.getText()).toThrow(/destroyed|已销毁/u);
   });
 
+  it("creates a fixed-capacity particle trail only from an exact image resource", async () => {
+    const emitterView = new Container();
+    const emitter = createRenderObject({
+      view: emitterView,
+      owned: false,
+      destroy: () => undefined,
+    });
+    const factory = createSceneLayoutRenderObjectFactory({
+      resource: createResource(),
+      dependencies: { loadTexture: async () => Texture.WHITE },
+    });
+    const config = {
+      maxParticles: 4,
+      emissionRate: 20,
+      lifetimeSeconds: { min: 0.2, max: 0.3 },
+      speedPixelsPerSecond: { min: 0, max: 10 },
+      sizePixels: { min: 4, max: 8 },
+      directionDegrees: 0,
+      spreadDegrees: 360,
+      gravityPixelsPerSecondSquared: 0,
+      seed: 256,
+    } as const;
+
+    const trail = await factory.createParticleTrailRenderObject("badge", {
+      emitter: emitter.getAnchor(),
+      config,
+    });
+    expect(getRenderObjectAdapter(trail).view.children).toHaveLength(4);
+    await expect(
+      factory.createParticleTrailRenderObject("nearwin1", {
+        emitter: emitter.getAnchor(),
+        config,
+      }),
+    ).rejects.toThrow(/not image/u);
+
+    trail.destroy();
+    factory.destroy();
+    emitterView.destroy();
+  });
+
   it("validates a runtime image by its atlas frame size instead of its page size", async () => {
     const source = new TextureSource({ width: 32, height: 24 });
     const frame = new Texture({

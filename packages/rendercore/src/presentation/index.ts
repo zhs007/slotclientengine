@@ -48,6 +48,13 @@ export type {
   CreateTextRenderObjectOptions,
   TextRenderObject,
 } from "./text-render-object.js";
+export { createParticleTrailRenderObject } from "./particle-trail-render-object.js";
+export type {
+  CreateParticleTrailRenderObjectOptions,
+  ParticleTrailConfig,
+  ParticleTrailRange,
+  ParticleTrailRenderObject,
+} from "./particle-trail-render-object.js";
 export { createImgNumberRenderObject } from "./imgnumber-render-object.js";
 export type {
   CreateImgNumberRenderObjectOptions,
