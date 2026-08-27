@@ -35,7 +35,6 @@ import { BOARD, boardDepth, boardWidth, ROOM } from "./config.js";
 import { createRandom } from "./random.js";
 import { createCartoonCastleChandelier } from "./reconstructed-furnishings.js";
 import {
-  createCartoonCastleWallSection,
   createCartoonWallTorch,
   createRoundCastleColumn,
 } from "./reconstructed-props.js";
@@ -58,7 +57,6 @@ interface FlameHandle {
 }
 
 interface CastleMaterials {
-  readonly wall: Material;
   readonly floor: Material;
   readonly stone: Material;
   readonly stoneLight: Material;
@@ -157,6 +155,7 @@ export class CastleKnightRenderer {
     benchModel: Group,
     throneDaisModel: Group,
     throneModel: Group,
+    wallModel: Group,
   ) {
     this.#renderer = new WebGLRenderer({
       antialias: true,
@@ -179,7 +178,7 @@ export class CastleKnightRenderer {
     );
     this.#materials = this.#createMaterials();
     this.#createFloor();
-    this.#createWalls();
+    this.#createWalls(wallModel);
     this.#createBoard();
     this.#createThroneArea(throneDaisModel, throneModel);
     this.#createArchitecture();
@@ -286,11 +285,6 @@ export class CastleKnightRenderer {
       bumpScale: 0.055,
     });
     return {
-      wall: toon(0xffffff, textures.toonGradient, {
-        map: textures.wallAlbedo,
-        bumpMap: textures.stoneDetail,
-        bumpScale: 0.045,
-      }),
       floor: toon(0xffffff, textures.toonGradient, {
         map: textures.floorAlbedo,
         bumpMap: textures.stoneDetail,
@@ -389,41 +383,22 @@ export class CastleKnightRenderer {
     this.#root.add(floor);
   }
 
-  #createWalls(): void {
-    const backWall = sceneMesh(
-      new PlaneGeometry(ROOM.width, ROOM.wallHeight),
-      this.#materials.wall,
-    );
-    backWall.position.set(0, ROOM.wallHeight / 2, -ROOM.depth / 2 + 0.18);
-    backWall.castShadow = false;
-    this.#root.add(backWall);
+  #createWalls(wallModel: Group): void {
+    for (const x of [-ROOM.width / 4, ROOM.width / 4]) {
+      const wall = wallModel.clone(true);
+      wall.scale.x = 0.78;
+      wall.position.set(x, 0, -ROOM.depth / 2 - 0.55);
+      this.#root.add(wall);
+    }
 
-    const plainWall = createCartoonCastleWallSection(
-      {
-        stone: this.#materials.stone,
-        stoneLight: this.#materials.stoneLight,
-        stoneDark: this.#materials.stoneDark,
-        mortar: this.#materials.mortar,
-      },
-      false,
-    );
-    const pilasterWall = createCartoonCastleWallSection({
-      stone: this.#materials.stone,
-      stoneLight: this.#materials.stoneLight,
-      stoneDark: this.#materials.stoneDark,
-      mortar: this.#materials.mortar,
-    });
-    plainWall.scale.y = 1.42;
-    pilasterWall.scale.y = 1.42;
     for (const side of [-1, 1]) {
-      for (let sectionIndex = 0; sectionIndex < 7; sectionIndex += 1) {
-        const wall = (sectionIndex % 2 === 1 ? pilasterWall : plainWall).clone(
-          true,
-        );
+      for (let sectionIndex = 0; sectionIndex < 3; sectionIndex += 1) {
+        const wall = wallModel.clone(true);
+        wall.scale.x = 0.93;
         wall.position.set(
-          side * (ROOM.width / 2 - 0.14),
+          side * (ROOM.width / 2 + 0.55),
           0,
-          -9.78 + sectionIndex * 3.26,
+          -ROOM.depth / 3 + sectionIndex * (ROOM.depth / 3),
         );
         wall.rotation.y = (side * -Math.PI) / 2;
         this.#root.add(wall);

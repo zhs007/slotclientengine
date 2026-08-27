@@ -12,7 +12,6 @@ import type { Texture } from "three";
 import { createRandom } from "./random.js";
 
 export interface CastleTextureLibrary {
-  readonly wallAlbedo: Texture;
   readonly floorAlbedo: Texture;
   readonly woodAlbedo: Texture;
   readonly chestWoodAlbedo: Texture;
@@ -198,12 +197,6 @@ export function createCastleTextureLibrary(
 ): CastleTextureLibrary {
   const anisotropy = Math.min(maxAnisotropy, 8);
   const textures: Omit<CastleTextureLibrary, "dispose"> = {
-    wallAlbedo: loadAlbedo(
-      "/textures/cartoon-wall-stone.webp",
-      2.25,
-      1.45,
-      anisotropy,
-    ),
     floorAlbedo: loadAlbedo(
       "/textures/cartoon-floor-stone.webp",
       2.15,

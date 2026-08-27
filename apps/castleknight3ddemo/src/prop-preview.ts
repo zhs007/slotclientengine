@@ -15,7 +15,6 @@ import {
 import type { Group } from "three";
 import { createCartoonCastleChandelier } from "./reconstructed-furnishings.js";
 import {
-  createCartoonCastleWallSection,
   createCartoonTreasureChest,
   createCartoonWallTorch,
   createRoundCastleColumn,
@@ -61,6 +60,7 @@ export class PropPreviewRenderer {
     benchModel: Group | null,
     throneDaisModel: Group | null,
     throneModel: Group | null,
+    wallModel: Group | null,
   ) {
     this.#renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.#renderer.outputColorSpace = SRGBColorSpace;
@@ -193,27 +193,6 @@ export class PropPreviewRenderer {
             flatShading: true,
           })
         : new MeshBasicMaterial({ color: 0xd49119 });
-      const stone = textured
-        ? new MeshToonMaterial({
-            color: 0xffffff,
-            map: this.#textureLibrary?.cutStoneAlbedo,
-            gradientMap,
-          })
-        : new MeshBasicMaterial({ color: 0x887a95 });
-      const stoneLight = textured
-        ? new MeshToonMaterial({
-            color: 0xc8b8d0,
-            map: this.#textureLibrary?.cutStoneAlbedo,
-            gradientMap,
-          })
-        : new MeshBasicMaterial({ color: 0xa696b4 });
-      const stoneDark = textured
-        ? new MeshToonMaterial({
-            color: 0x665573,
-            map: this.#textureLibrary?.cutStoneAlbedo,
-            gradientMap,
-          })
-        : new MeshBasicMaterial({ color: 0x493c54 });
       const leather = textured
         ? new MeshToonMaterial({
             color: 0xffffff,
@@ -257,13 +236,9 @@ export class PropPreviewRenderer {
         this.#camera.position.set(0, 1.4, 7.8);
         this.#camera.lookAt(0, 0, 0);
       } else if (kind === "wall") {
-        const wall = createCartoonCastleWallSection({
-          stone,
-          stoneLight,
-          stoneDark,
-          mortar: new MeshBasicMaterial({ color: 0x241c2b }),
-        });
-        wall.scale.setScalar(0.84);
+        if (!wallModel) throw new Error("Castle wall GLB is not loaded.");
+        const wall = wallModel.clone(true);
+        wall.scale.setScalar(0.6);
         wall.rotation.y = sideView ? Math.PI / 2 : -Math.PI * 0.14;
         wall.position.y = -2.7;
         this.#scene.add(wall);
