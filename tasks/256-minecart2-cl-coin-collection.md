@@ -107,7 +107,8 @@ piximinecart2: HEAD 7da2613ca9c8da559bd97d716bc566b0345e02ae; rgs ahead origin/r
   不需要改变 engine completion contract。
 - 用户样例 established scene 的 CL `(0,3)` code `12`，CO `(4,1)/(4,2)` code `11`；otherScene value
   分别为 `1/750`。`bg-coinwins.usedResults=[0]` 的 result `pos` 为上述三点，`symbol=12`、`symbolNums=2`，
-  component `wins/coinWin/cashWin=751`。
+  component `wins/coinWin/cashWin=751`；这是该 fixture 的具体数值，不代表三者同单位。执行中确认 `cashWin`
+  会随下注/币值换算，只允许 `wins/coinWin` 与 raw CO presentation value 合计做 parity。
 - 用户已于2026-08-27导出`/Users/zerro/Downloads/minecart2/layout32.zip`并更新delivery；initial chunk中的
   Layout manifest将exact key`256-co-gold-particle-128`声明为128×128 image runtime resource，且路由到onDemand组。
 - delivery asset保留logical path`256-co-gold-particle-128.png`、sourceByteLength 18903并进入atlas；

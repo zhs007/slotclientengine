@@ -7,6 +7,7 @@
 - engine 基线：`7105c3bc325219d8d28cf971e94cdead50534a7b`
 - Minecart2 工作区：`/Users/zerro/gitee.com/piximinecart2`，保留在用户现有 `rgs` 分支，未替用户提交。
 - exact `bg-coinwins` 现在编译为 landing 后、普通 `game003:wins` 前的独立 `game003:coin-collect` state mutation；样例顺序为 CL `(0,3)` 收集 CO `(4,1)=1`、`(4,2)=750`，最终累计 `751`。
+- 后续真实下注数据确认 `cashWin` 是随下注/币值换算的现金金额，因此不与 raw CO value 合计比较；strict parity 只覆盖同单位的 component `wins/coinWin`、CO value、数量和 result role。
 - CO 按 result position 顺序执行 `win -> normal clone flight -> end -> hole commit`，CL 执行一次 `collect_start -> collect_idle`，全部收集后执行 `collect_end -> win`。普通 wins、award、BO 收集和 mode transition 消费去除 CO 后的 snapshot。
 - CL 上只创建一个初始空字符串的字体计数器；每枚 CO 到达期间进行有界、单调、整数 count-up。
 
