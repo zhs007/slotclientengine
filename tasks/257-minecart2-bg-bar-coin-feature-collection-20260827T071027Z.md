@@ -15,6 +15,7 @@
 - 服务器偶发返回的 `CL` 不参与本流程，也不会被清除或改变状态；若 `bg-coinwins2` 与旧的 `bg-coinwins` 同时出现，则在画面 mutation 前显式失败，避免重复消费 CO。
 - 转轮下方创建单一字体计数器，初始 0 使用空字符串不显示。每枚 CO 串行执行 `win -> normal clone 飞行 -> end + 数字递增`；到达后立即把原盘面位置提交为 `-1/-1` hole。
 - 所有 CO 到达后移除计数器，等待残余粒子自然消散，再开始普通 symbols 获奖；后续 award、BO、mode transition 和下一次 spin 均消费去除 CO 后的 snapshot。
+- 浏览器真实 `coin + bg-addbo` 响应确认 BO collection 会继承前序 CO holes；BO handler 现在只检查本轮 payload 指定的 BO positions 是 canonical `-1/-1`，不再扫描或限制其它坐标。
 - 异常时 presentation scope 清理 clone、计数器和 trail；尚未提交为 hole 的原 CO 恢复可见，已经提交的 mutation 不回滚。
 
 ## 粒子调整
@@ -35,7 +36,7 @@
 通过：
 
 - 定向 Vitest：5 files，69 tests passed。
-- Minecart2 全量 Vitest：9 files，97 tests passed（含浏览器样例暴露的 `bg-spin -> bg-addbo -> bg-addjk` latest initial 回归）。
+- Minecart2 全量 Vitest：9 files，99 tests passed（含 `bg-spin -> bg-addbo -> bg-addjk` latest initial，以及 coin collection 与 BO collection 同轮串行和 inherited holes 回归）。
 - `pnpm --filter minecart2 build`。
 - Minecart2 `git diff --check`。
 - 构建后工作区仅保留预期的 10 个 Minecart2 源码、配置、测试和 README 修改，没有生成额外 tracked 文件。
