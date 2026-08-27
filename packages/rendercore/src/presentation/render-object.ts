@@ -14,6 +14,17 @@ import {
 } from "./render-object-motion.js";
 import type { RenderObjectLayer } from "./render-object-layer.js";
 
+export type RenderObjectAlignment =
+  | "top-left"
+  | "top-center"
+  | "top-right"
+  | "center-left"
+  | "center"
+  | "center-right"
+  | "bottom-left"
+  | "bottom-center"
+  | "bottom-right";
+
 export interface RenderObjectPlayOptions {
   readonly signal?: AbortSignal;
   /** Plays continuously. The returned Promise resolves after the first loop. */
@@ -28,6 +39,33 @@ export interface RenderPoint {
 export interface RenderScale {
   readonly x: number;
   readonly y: number;
+}
+
+export function computeAlignmentOffset(
+  alignment: RenderObjectAlignment,
+  size: {readonly width: number; readonly height: number},
+): {readonly x: number; readonly y: number} {
+  const {width, height} = size;
+  switch (alignment) {
+    case "top-left":
+      return {x: 0, y: 0};
+    case "top-center":
+      return {x: width * 0.5, y: 0};
+    case "top-right":
+      return {x: width, y: 0};
+    case "center-left":
+      return {x: 0, y: height * 0.5};
+    case "center":
+      return {x: width * 0.5, y: height * 0.5};
+    case "center-right":
+      return {x: width, y: height * 0.5};
+    case "bottom-left":
+      return {x: 0, y: height};
+    case "bottom-center":
+      return {x: width * 0.5, y: height};
+    case "bottom-right":
+      return {x: width, y: height};
+  }
 }
 
 export type RenderObjectChildLayerRef =
@@ -55,7 +93,7 @@ export interface RenderObject {
   stop(): void;
   /** Returns an exact opaque child parent owned by this RenderObject. */
   getChildLayer(ref: RenderObjectChildLayerRef): RenderObjectLayer;
-  getAnchor(): RenderAnchor;
+  getAnchor(alignment?: RenderObjectAlignment): RenderAnchor;
   destroy(): void;
 }
 
@@ -277,9 +315,18 @@ function createRenderObjectBase(adapter: RenderObjectAdapter): RenderObject {
         );
       return adapter.getChildLayer(ref);
     },
-    getAnchor: () => {
+    getAnchor: (alignment?: RenderObjectAlignment) => {
       assertUsable();
-      return createContainerRenderAnchor(() => registered.view);
+      const view = registered.view;
+      if (!alignment || alignment === "top-left")
+        return createContainerRenderAnchor(() => view);
+      const getSize = (): {readonly width: number; readonly height: number} => ({
+        width: view.width ?? 0,
+        height: view.height ?? 0,
+      });
+      const getPoint = (): RenderPoint =>
+        computeAlignmentOffset(alignment, getSize());
+      return createContainerRenderAnchor(() => view, getPoint);
     },
     destroy: () => {
       if (destroyed) return;

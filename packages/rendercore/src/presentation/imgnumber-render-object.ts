@@ -1,17 +1,21 @@
 import type { ImageStringResource } from "../image-string/core/index.js";
 import { createRenderImageString } from "../image-string/core/index.js";
 import {
+  computeAlignmentOffset,
   createCloneableRenderObject,
   getRenderObjectAdapter,
   registerRenderObjectAlias,
   type CloneableRenderObject,
+  type RenderObjectAlignment,
 } from "./render-object.js";
+import {createContainerRenderAnchor, type RenderAnchor} from "./render-anchor.js";
 
 export interface ImgNumberRenderObject extends CloneableRenderObject {
   setText(text: string): void;
   getText(): string;
   setAnchor(anchor: { readonly x: number; readonly y: number }): void;
   clone(): ImgNumberRenderObject;
+  getAnchor(alignment?: RenderObjectAlignment): RenderAnchor;
 }
 
 export interface CreateImgNumberRenderObjectOptions {
@@ -50,6 +54,22 @@ export function createManagedImgNumberRenderObject(
       lifecycle,
     );
   };
+  const getAnchor = (alignment?: RenderObjectAlignment): RenderAnchor => {
+    const adapter = getRenderObjectAdapter(base);
+    if (destroyed) return createContainerRenderAnchor(() => adapter.view);
+    if (!alignment || alignment === "top-left")
+      return createContainerRenderAnchor(() => adapter.view);
+    const geometry = renderer.getGeometry();
+    const bounds = geometry.logicalBounds;
+    const size = {width: bounds.width, height: bounds.height};
+    const offset = computeAlignmentOffset(alignment, size);
+    const origin = {x: bounds.x, y: bounds.y};
+    const getPoint = (): {readonly x: number; readonly y: number} => ({
+      x: origin.x + offset.x,
+      y: origin.y + offset.y,
+    });
+    return createContainerRenderAnchor(() => adapter.view, getPoint);
+  };
   const base = createCloneableRenderObject({
     view: renderer.container,
     clone,
@@ -67,6 +87,7 @@ export function createManagedImgNumberRenderObject(
     setAnchor: (anchor: { readonly x: number; readonly y: number }) =>
       renderer.setAnchor(anchor),
     clone,
+    getAnchor,
   }) satisfies ImgNumberRenderObject;
   registerRenderObjectAlias(object, getRenderObjectAdapter(base));
   lifecycle.onCreate?.(object);
