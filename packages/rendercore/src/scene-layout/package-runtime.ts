@@ -2834,6 +2834,20 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     return this.#renderObjectFactory.createRenderObject(name);
   }
 
+  createParticleTrailRenderObject(
+    name: string,
+    options: {
+      readonly emitter: import("../presentation/index.js").RenderAnchor;
+      readonly config: import("../presentation/index.js").ParticleTrailConfig;
+    },
+  ): Promise<import("../presentation/index.js").ParticleTrailRenderObject> {
+    this.assertReady();
+    return this.#renderObjectFactory.createParticleTrailRenderObject(
+      name,
+      options,
+    );
+  }
+
   createImgNumberRenderObject(
     name: string,
     options: {

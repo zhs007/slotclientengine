@@ -11,6 +11,12 @@ import {
   type RenderObjectChildLayerRef,
   type RenderObjectPlayOptions,
 } from "../presentation/render-object.js";
+import {
+  createParticleTrailRenderObject,
+  type ParticleTrailConfig,
+  type ParticleTrailRenderObject,
+} from "../presentation/particle-trail-render-object.js";
+import type { RenderAnchor } from "../presentation/render-anchor.js";
 import type { ImgNumberRenderObject } from "../presentation/imgnumber-render-object.js";
 import {
   createOfficialSpinePlayer,
@@ -78,6 +84,13 @@ export interface SceneLayoutRuntimeSpinePlaybackEvent {
 
 export interface SceneLayoutRenderObjectFactory {
   createRenderObject(name: string): Promise<RenderObject>;
+  createParticleTrailRenderObject(
+    name: string,
+    options: {
+      readonly emitter: RenderAnchor;
+      readonly config: ParticleTrailConfig;
+    },
+  ): Promise<ParticleTrailRenderObject>;
   createImgNumberRenderObject(
     name: string,
     options: {
@@ -201,6 +214,45 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
         onDestroy: (object) => this.#objects.delete(object),
       },
     );
+  }
+
+  async createParticleTrailRenderObject(
+    name: string,
+    options: {
+      readonly emitter: RenderAnchor;
+      readonly config: ParticleTrailConfig;
+    },
+  ): Promise<ParticleTrailRenderObject> {
+    this.assertAlive();
+    const spec = this.requireSpec(name);
+    if (spec.kind !== "image")
+      throw new SceneLayoutError(
+        `Scene layout particle trail resource "${name}" is ${spec.kind}, not image.`,
+      );
+    const resource = await this.#resource.loadRuntimeResource(name, "image");
+    const texture = await this.#loadTexture(resource.url);
+    this.assertAlive();
+    if (!texture?.source)
+      throw new SceneLayoutError(
+        `Scene layout runtime image "${name}" failed to load a valid Pixi texture.`,
+      );
+    if (
+      texture.width !== resource.size.width ||
+      texture.height !== resource.size.height
+    )
+      throw new SceneLayoutError(
+        `Scene layout runtime image "${name}" size mismatch: expected ${resource.size.width}x${resource.size.height}, actual ${texture.width}x${texture.height}.`,
+      );
+    let object!: ParticleTrailRenderObject;
+    object = createParticleTrailRenderObject({
+      texture,
+      emitter: options.emitter,
+      config: options.config,
+      label: `scene-layout-particle-trail:${name}`,
+      onDestroy: () => this.#objects.delete(object),
+    });
+    this.register({ object });
+    return object;
   }
 
   destroy(): void {

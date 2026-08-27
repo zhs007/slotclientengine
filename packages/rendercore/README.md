@@ -868,6 +868,8 @@ for (const transfer of transfers) {
 
 `SceneLayoutPackageRuntime.createRenderObject(name)` 从 package manifest 的 exact `runtimeResources` name 创建 detached、caller-owned `RenderObject`，支持 image、official Spine 和 VNI；不会把 name 当路径或猜 kind。Spine/VNI 实例由创建它的 package runtime 在 `update(deltaSeconds)` 中推进，object destroy 会注销并释放 player，runtime destroy 会清理剩余实例。image-string 必须使用 typed `createImgNumberRenderObject(name, {text, anchor?})`，video 不支持此对象 factory。
 
+`createParticleTrailRenderObject(name,{emitter,config})`只接受exact image runtime resource，创建固定容量、共享纹理的pooled trail。它挂到受管`RenderObjectLayer`后由同一个owner clock采样opaque emitter anchor并生成world-space粒子；`stopEmissionAndDrain()`只停止新发射，存量粒子按自身lifetime继续更新，归零后Promise才resolve。正常完成必须等待该Promise后destroy；abort/runtime destroy可直接强制清理。配置必须显式给出capacity、rate、lifetime、speed、size、direction/spread、gravity与seed，游戏不得自建Pixi ticker或无界粒子队列。
+
 `ImgNumberRenderObject` 是 image-string-backed `CloneableRenderObject`，提供 `setText/getText` 并继承 `setPosition/setVisible/getAnchor/destroy`。它不公开 raw Pixi container；文字变化继续使用 image-string 的原子 glyph validation 与动态 anchor，clone 共享 package-owned resource 但拥有独立 renderer 和生命周期。
 
 Crave 的 Nearwin1/2 与图标中奖迁移示例见 [`docs/crave-named-render-object-migration.md`](../../docs/crave-named-render-object-migration.md)。

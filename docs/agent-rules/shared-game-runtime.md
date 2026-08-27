@@ -93,6 +93,7 @@
 - caller-owned program resource与program Popup只有在调用方显式提供owner-local `instanceId`时才注册live runtime address；不自动分配identity。重复live ID在prepare前失败，destroy/session结束后注销并允许复用。安全parent统一解析为`RenderObjectLayer`并由address mount处理safe-integer local order、owner clock和detach-only cleanup；Spine slot/VNI text layer必须使用exact typed ref和单一stable group，不开放raw display tree。
 - canonical resource/symbol factory用`create({pooled?:boolean})`区分永久与池化对象，并统一以`destroy()`释放或归还；exact symbol factory额外接受通用`presentationValue`，在返回前通过canonical Symbol value controller严格应用，省略时重置为`null`，其它resource kind必须拒绝该字段。每个exact address只有一个空池起步并按并发峰值惰性增长，不按image-string text或业务值拆池。每次取出必须重新应用typed options，归还后句柄stale，runtime destroy永久释放idle/active实例；live `instanceId`不得池化。
 - 带object-owned playback update的RenderObject只在挂载到registered layer或attachment后继承该owner clock；remove/detach暂停驱动，重新挂载后继续，destroy必须解绑。borrowed reel Symbol仍只由reel owner驱动，临时换层不得取得第二个update clock；游戏不手动调用或注册update。
+- image-backed program particle trail由rendercore从exact Scene Layout image runtime resource创建并持有固定容量sprite pool；它在registered layer的owner clock内采样opaque emitter anchor、保存world-space粒子并执行有界emission/lifetime。正常到达只停止新发射，存量粒子必须自然更新到live count为零后才destroy；只有abort、owner interruption或runtime destroy允许强制清理。游戏不得接触texture/raw Pixi、逐粒子分配ticker或建立无界drain队列。
 - 确需数值坐标时，`ReelArea.resolveAnchor()`只把有效RenderAnchor解析为该area本地RenderPoint；不开放world coordinate、raw
   Container或Matrix。解析结果是调用时快照，长期presentation/motion继续持有Anchor并在使用时转换，不缓存跨transform坐标。
 - standard ReelSpin、CellSpin与legacy grid-cell统一提供与occurrence解耦的稳定cell-center Anchor；它在rolling/部分落停期间可解析，
