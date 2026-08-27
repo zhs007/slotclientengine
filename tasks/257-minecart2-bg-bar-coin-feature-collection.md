@@ -35,8 +35,8 @@
       normal 闪帧、残影、stale handle 或重复计数。
 - [ ] 每枚飞行 clone 都挂接任务 256 的 exact `256-co-gold-particle-128` RenderCore trail；到达只停止发射，存量粒子
       自然排空，下一枚 CO 不等待上一条 drain，最终 operation 在 presentation scope 退出前统一等待 pending trails。
-- [ ] 同一份 `coinCollection.trail` 默认调为更明显且仍有界的初始目标：`maxParticles=48`、`emissionRate=72`、
-      `sizeMinPixels=16`、`sizeMaxPixels=36`，保持 `maxConcurrent=2` 和现有 0.32–0.55 秒寿命；浏览器仅在现有预算内微调，
+- [ ] 同一份 `coinCollection.trail` 默认调为明显偏强、便于浏览器往回校准的初始目标：`maxParticles=96`、`emissionRate=180`、
+      `sizeMinPixels=28`、`sizeMaxPixels=64`，保持 `maxConcurrent=2` 和现有 0.32–0.55 秒寿命；浏览器通过后再按观感回调，
       并在执行报告记录最终值。任务 256 CL flow 与任务 257 collector-less flow 必须同时消费该唯一配置。
 - [ ] 全部 CO 完成后立即移除并销毁计数器，collector-less operation resolve；此后才播放既有普通 symbol win 首轮，
       award、BO collection 与 mode transition 维持当前相对顺序。
@@ -105,8 +105,8 @@ piximinecart2 git status --short --untracked-files=all: clean
 - 主仓与 piximinecart2 的 task 256 相关 `particle-trail-render-object.ts`、`symbol-handle.ts`、`symbol-area.ts` 当前逐文件
   parity；fixed-capacity pool、anchor follow、`stopEmissionAndDrain()`和hard cleanup已满足新流程，本任务不需要新增
   shared能力或同步shared package。
-- 当前唯一trail配置为每emitter 32粒子、42粒子/秒、8–18 px、0.32–0.55秒寿命、最多2条并发；用户已确认视觉上
-  偏小且偏少。现有parser预算允许每emitter最多48粒子、最多2条并发、最长0.6秒寿命，可先在不改engine的边界内调优。
+- 当前唯一trail配置原为每emitter 32粒子、42粒子/秒、8–18 px、0.32–0.55秒寿命、最多2条并发；首轮调至
+  48粒子、72粒子/秒、16–36 px 后用户仍确认不明显，因此本轮将app parser预算提高到每emitter最多96粒子，仍保持最多2条并发和最长0.6秒寿命。
 - 当前 delivery main reel 为 manifest-owned 5×5、cell `172×130`；精确数值只用于基线理解，运行时 target 必须由
   ReelArea geometry计算，不能复制这些数值。
 
@@ -145,8 +145,8 @@ piximinecart2 git status --short --untracked-files=all: clean
 4. **counter target属于geometry/config，不属于Scene Layout新资源。**
    - 唯一新增定位配置是finite non-negative `targetOffsetDownPixels`；字体、count-up、flight path/easing和trail复用当前严格
      `coinCollection`配置，不复制style、timing、resource或particle参数表。
-   - 现有trail参数先调为48 max particles、72/s、16–36 px，寿命和最多2条并发保持不变；这些值让稳态live count约40，
-     仍受48 hard cap约束。真实浏览器只允许在parser既有预算内微调。
+   - trail参数先调为96 max particles、180/s、28–64 px，寿命和最多2条并发保持不变；先提供明显偏强的浏览器基线，
+     仍受96 hard cap约束，视觉通过后再从versioned config往回调。
    - 目标计算失败、anchor不可解析或配置非法时在隐藏任何CO前显式失败。
 5. **逐枚提交、整operation fail-stop。**
    - 每枚完成后立即成为hole，前序成功不倒放；当前枚及尚未开始的CO在失败时保持/恢复可见，coordinator阻止普通wins。
@@ -242,7 +242,7 @@ pnpm-workspace.yaml
    - 在adapter registry注册exact kind/version，使landing→collection→normal wins形成真实Promise barrier。
 5. **配置、测试与文档**
    - 在versioned runtime config增加并strict parse `targetOffsetDownPixels`；把唯一trail参数初始调到
-     `48 particles / 72 per second / 16–36 px`，复用既有resource、lifetime、并发和hard budget，不增加第二份trail表。
+     `96 particles / 180 per second / 28–64 px`，复用既有resource、lifetime和并发，不增加第二份trail表。
    - compiler测试覆盖trigger/absence、CL ignored、scan顺序、values/totals、component互斥、output closure和普通wins顺序；
      handler测试覆盖状态/计数/commit顺序、single counter、failure/abort/cleanup和任务256回归。
    - 更新README说明`bg-coinwins2` landing与collection两阶段、与`bg-coinwins`区别、CL ignore、value来源、hole及失败边界。
@@ -355,8 +355,8 @@ shared是否保持未修改以及剩余风险；不收集无关coverage、历史
 
 - `bg-coinwins2.symbolNum`表示本轮全部CO数量，raw `wins`和basic `coinWin`与CO presentation values同单位；现有synthetic
   fixture的`36/4`支持该解释，但执行仍须以可用真实payload优先校正。
-- 新流程与任务256复用同一金色粒子拖尾和唯一配置；默认先采用48粒子cap、72/s、16–36 px，最终视觉值可在既有预算内
-  微调并记录。
+- 新流程与任务256复用同一金色粒子拖尾和唯一配置；浏览器首轮先采用96粒子cap、180/s、28–64 px，最终视觉值从该强基线
+  往回调整并记录。
 - `bg-coinwins2`与`bg-coinwins`正常不会同轮出现；出现时按歧义server数据显式失败。
 
 ### 待确认
