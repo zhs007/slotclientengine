@@ -956,8 +956,12 @@ class AwardCelebrationEditorPlayer implements AwardCelebrationPlayer {
   getSnapshot() {
     return inspectAwardCelebrationRuntime(this.#runtime);
   }
-  setTextWidthGuidesVisible(visible: boolean) {
-    setPopupTextWidthGuidesInTree(this.#runtime.container, visible);
+  setTextWidthGuidesVisible(visible: boolean, canvasPixelsPerViewportUnit = 1) {
+    setPopupTextWidthGuidesInTree(
+      this.#runtime.container,
+      visible,
+      canvasPixelsPerViewportUnit,
+    );
   }
   getPhase() {
     return this.#runtime.getPhase();

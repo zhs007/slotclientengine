@@ -5,7 +5,7 @@ import { addLayer, createPopupEditorProject } from "../src/model/project.js";
 const preview = {
   init: vi.fn(async () => {}),
   destroy: vi.fn(),
-  rebuild: vi.fn(async () => {}),
+  rebuild: vi.fn(async (_project?: unknown) => {}),
   setInput: vi.fn(),
   setAmountFormat: vi.fn(
     (format: { fractionDigits: number; useGrouping: boolean }) => {
@@ -107,7 +107,7 @@ vi.mock("../src/io/popup-zip.js", () => ({
 describe("PopupEditorApp", () => {
   function createProject(
     root: HTMLElement,
-    type: "award-celebration" | "spine" = "award-celebration",
+    type: "award-celebration" | "spine" | "single-state" = "award-celebration",
   ) {
     root.querySelector<HTMLButtonElement>("#create-project")!.click();
     root.querySelector<HTMLInputElement>("#create-project-name")!.value =
@@ -184,6 +184,90 @@ describe("PopupEditorApp", () => {
       root.querySelector<HTMLButtonElement>("[data-add-layer]")!.disabled,
     ).toBe(true);
     app.destroy();
+  });
+
+  it("rebuilds once after a continuous field commits and cancels stale timers", async () => {
+    vi.useFakeTimers();
+    const { PopupEditorApp } = await import("../src/ui/app-shell.js");
+    const root = document.querySelector<HTMLElement>("#app")!;
+    const app = new PopupEditorApp(root);
+    try {
+      await app.init();
+      createProject(root, "single-state");
+      await vi.advanceTimersByTimeAsync(120);
+      preview.rebuild.mockClear();
+
+      root.querySelector<HTMLButtonElement>('[data-tab="tiers"]')!.click();
+      root.querySelector<HTMLButtonElement>("#add-single-text")!.click();
+      await vi.advanceTimersByTimeAsync(120);
+      preview.rebuild.mockClear();
+
+      const fontSize = root.querySelector<HTMLInputElement>(
+        '[data-single-field="fontSize"]',
+      )!;
+      for (let value = 70; value < 80; value += 1) {
+        fontSize.value = String(value);
+        fontSize.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      await vi.advanceTimersByTimeAsync(500);
+      expect(preview.rebuild).not.toHaveBeenCalled();
+
+      fontSize.dispatchEvent(new Event("change"));
+      await vi.advanceTimersByTimeAsync(119);
+      expect(preview.rebuild).not.toHaveBeenCalled();
+      await vi.runOnlyPendingTimersAsync();
+      expect(preview.rebuild).toHaveBeenCalledTimes(1);
+
+      preview.rebuild.mockClear();
+      const fillPicker = root.querySelector<HTMLInputElement>(
+        '[data-color-picker-owner="single"][data-color-picker-field="fillColor"]',
+      )!;
+      const fillColor = root.querySelector<HTMLInputElement>(
+        '[data-single-field="fillColor"]',
+      )!;
+      fillPicker.value = "#123456";
+      fillPicker.dispatchEvent(new Event("input"));
+      expect(fillColor.value).toBe("#123456");
+      await vi.advanceTimersByTimeAsync(500);
+      expect(preview.rebuild).not.toHaveBeenCalled();
+      fillPicker.dispatchEvent(new Event("change"));
+      await vi.advanceTimersByTimeAsync(120);
+      expect(preview.rebuild).toHaveBeenCalledTimes(1);
+
+      preview.rebuild.mockClear();
+      fontSize.value = "95";
+      fontSize.dispatchEvent(new Event("change"));
+      fontSize.value = "96";
+      fontSize.dispatchEvent(new Event("change"));
+      await vi.advanceTimersByTimeAsync(120);
+      expect(preview.rebuild).toHaveBeenCalledTimes(1);
+      expect(
+        (
+          preview.rebuild.mock.calls[0]![0] as ReturnType<
+            typeof createPopupEditorProject
+          >
+        ).singleState.layers[0],
+      ).toMatchObject({ style: { fontSize: 96 } });
+
+      preview.rebuild.mockClear();
+      root.querySelector<HTMLButtonElement>('[data-tab="project"]')!.click();
+      const projectId = root.querySelector<HTMLInputElement>("#project-id")!;
+      projectId.value = "Bad_Id";
+      projectId.dispatchEvent(new Event("input"));
+      projectId.dispatchEvent(new Event("change"));
+      await vi.advanceTimersByTimeAsync(500);
+      expect(preview.rebuild).not.toHaveBeenCalled();
+
+      projectId.value = "good-id";
+      projectId.dispatchEvent(new Event("input"));
+      projectId.dispatchEvent(new Event("change"));
+      root.querySelector<HTMLButtonElement>("#close-project")!.click();
+      await vi.advanceTimersByTimeAsync(500);
+      expect(preview.rebuild).not.toHaveBeenCalled();
+    } finally {
+      app.destroy();
+      vi.useRealTimers();
+    }
   });
 
   it("configures multiple audio effects inside each Popup state", async () => {
@@ -582,7 +666,7 @@ describe("PopupEditorApp", () => {
       '[data-overlay-field="curvedEnabled"]',
     )!;
     curved.checked = true;
-    curved.dispatchEvent(new Event("input", { bubbles: true }));
+    curved.dispatchEvent(new Event("change"));
     expect(
       root.querySelector<HTMLInputElement>('[data-overlay-field="arcDegrees"]')!
         .value,
@@ -597,6 +681,7 @@ describe("PopupEditorApp", () => {
     fillPicker.value = "#123456";
     fillPicker.dispatchEvent(new Event("input"));
     expect(fillColor.value).toBe("#123456");
+    fillPicker.dispatchEvent(new Event("change"));
     expect(font.value).toBe("Prompt.woff2");
 
     for (const field of ["strokeEnabled", "shadowEnabled"]) {

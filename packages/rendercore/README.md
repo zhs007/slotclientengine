@@ -222,7 +222,7 @@ symbol 的对应 anchor；飞行本身不会推断或提交目标 value。
 
 Popup 使用三个显式入口：`popup/data` 提供 v1–v9 strict source parser、纯数据校验、引用闭包和唯一默认 latest normalizer；`popup/core` 提供 production resolved-resource prepare、轻量 Runtime、presentation 与宿主 input binding；`popup/editor` 组合前两层，提供 mapped standalone package、namespace/materialize 与完整 snapshot wrapper。旧的混合 `popup` 入口和 rendercore root Popup wildcard export 已移除。
 
-`loadPopupManifest()` 接受任一受支持版本，先按 source version strict validate，再确定性升级并复验为 `LATEST_POPUP_MANIFEST_VERSION`（当前为 v8）。v8 新增无强制图层的 `single-state`，并保留 v7 package-local audio 合同；未知未来版本继续显式失败。
+`loadPopupManifest()` 接受任一受支持版本，先按 source version strict validate，再确定性升级并复验为 `LATEST_POPUP_MANIFEST_VERSION`（当前为 v9）。v8 新增无强制图层的 `single-state`，v9 为字体文字增加 required `widthRange`，并保留 v7 package-local audio 合同；未知未来版本继续显式失败。
 
 三类 Popup 都只有一份 Core 状态。游戏和 Scene Layout 从 `@slotclientengine/rendercore/popup/core` 使用 `createAwardCelebrationRuntime()` / `createSpinePopupRuntime()` / `createSingleStatePopupRuntime()`：`update(deltaSeconds): void` 只推进状态，阶段判断使用 `getPhase()` / `isPlaying()`，不会构造完整 snapshot。Popup Editor 从 `@slotclientengine/rendercore/popup/editor` 使用 player wrapper；wrapper 委托同一个 Runtime，并额外提供 `update() -> snapshot` 与 `getSnapshot()`。游戏 facade 不导出 editor package adapter、factory/player 或 snapshot。
 
@@ -234,7 +234,7 @@ Award Popup 不滚动 base 金额：`winAmountRaw <= betAmountRaw` 时直接提�
 
 Scene Layout package runtime 以 `enqueuePopup(request)` 作为三类 Popup 的普通 production 编排入口，程序 Popup、mode award 和 transition prelude 进入同一个 FIFO；runtime 任一时刻只激活一个 Popup，完整关闭后自动启动下一项，不叠加或替换。`openPopup(request)` 保留为严格立即打开入口，已有 active、pending 或 mode transition 时显式失败。请求必须携带 task 228 exact `gamelayout:/popup/<id>` 地址和与 binding 一致的 discriminated input。session 公开动态 `state`、首个稳定展示边界 `presented`、完整结束边界 `finished` 及 identity-safe `close()/cancel()`；旧 session 不会关闭后续 Popup。每个导出 binding 的 player 在 package 生命周期中缓存一个并在关闭后复用，Scene Layout 内全部 player 共用一个 host-owned backdrop Graphics，active owner 切换时只更新该层的 manifest color/alpha/visibleStates。raw `get*Popup()` 仅为 editor diagnostics 和迁移兼容保留并标记 deprecated。Game Layout Editor 需要完整 award 诊断值时，从 `@slotclientengine/rendercore/scene-layout/editor` 创建 inspector；inspector 借用现有 package runtime，不创建第二份 Popup 或 Scene 状态。
 
-字体文字 renderer 支持可选 package font（省略时才使用系统字体）、字号、字距、canonical color、纯色/线性渐变、描边、投影、Unicode grapheme 弧排、anchor 与原子 `setText()`。三类 player 都公开稳定的 `textNodes` / `imageStringNodes`，并可按 exact name 或各 kind 零基 index 取得 handle；业务绑定优先使用 exact name。覆盖 string 跨档位和重复播放保持，`resetText()` 恢复 manifest/自动金额值，destroy 后 handle 失效。
+字体文字 renderer 支持可选 package font（省略时才使用系统字体）、字号、字距、canonical color、纯色/线性渐变、描边、投影、Unicode grapheme 弧排、anchor、`widthRange` 与原子 `setText()`。Popup editor player 的 `setTextWidthGuidesVisible()` 只在既有 production display tree 上附加 session-only guide：max/min 是蓝色与黄色完整矩形，区间内带静态斜线，主框按宿主 canvas scale 保持 6px/4px 目标线宽并始终位于文字之上；关闭时立即移除，不进入 production Runtime、manifest 或 package。三类 player 都公开稳定的 `textNodes` / `imageStringNodes`，并可按 exact name 或各 kind 零基 index 取得 handle；业务绑定优先使用 exact name。覆盖 string 跨档位和重复播放保持，`resetText()` 恢复 manifest/自动金额值，destroy 后 handle 失效。
 
 Scene Layout transition prelude 可在 `requestGameMode(modeId, { preludePopupStrings })` 中按 `text | image-string` 和 exact name 接收本轮最终 string。runtime 在 Popup start 前应用这些值，并在 complete、失败、取消或 destroy 后恢复调用前 handle 状态；该输入不进入 transition resource prepare/cache identity。需要跨播放保持或在 active Popup 中更新时，继续使用 player 的 exact handle `setText/resetText`。
 

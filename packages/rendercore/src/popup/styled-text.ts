@@ -14,6 +14,7 @@ import type {
   PopupTextWidthRange,
 } from "./types.js";
 import { resolvePopupTextFontSize } from "./text-width-fit.js";
+import { createPopupTextWidthGuidePlan } from "./text-width-guide.js";
 
 export interface PopupStyledTextLayout {
   readonly authoredFontSize: number;
@@ -32,7 +33,10 @@ export interface PopupStyledTextRenderer {
     readonly style: PopupTextStyle;
     readonly anchor: PopupAnchor;
   }): void;
-  setWidthGuideVisible(visible: boolean): void;
+  setWidthGuideVisible(
+    visible: boolean,
+    canvasPixelsPerLocalUnit?: number,
+  ): void;
   destroy(): void;
 }
 
@@ -42,13 +46,39 @@ const styledTextRenderers = new WeakMap<Container, PopupStyledTextRenderer>();
 export function setPopupTextWidthGuidesInTree(
   root: Container,
   visible: boolean,
+  canvasPixelsPerViewportUnit = 1,
 ): void {
-  const pending: Container[] = [root];
+  if (
+    !Number.isFinite(canvasPixelsPerViewportUnit) ||
+    canvasPixelsPerViewportUnit <= 0
+  )
+    throw new Error("popup text width guide viewport scale must be positive.");
+  const pending: Array<{
+    readonly container: Container;
+    readonly canvasPixelsPerLocalUnit: number;
+  }> = [
+    {
+      container: root,
+      canvasPixelsPerLocalUnit:
+        canvasPixelsPerViewportUnit * localDisplayScale(root),
+    },
+  ];
   while (pending.length) {
     const current = pending.pop()!;
-    styledTextRenderers.get(current)?.setWidthGuideVisible(visible);
-    for (const child of current.children)
-      if (child instanceof Container) pending.push(child);
+    styledTextRenderers
+      .get(current.container)
+      ?.setWidthGuideVisible(
+        visible && current.canvasPixelsPerLocalUnit > 0,
+        current.canvasPixelsPerLocalUnit || 1,
+      );
+    for (const child of current.container.children) {
+      if (!(child instanceof Container)) continue;
+      pending.push({
+        container: child,
+        canvasPixelsPerLocalUnit:
+          current.canvasPixelsPerLocalUnit * localDisplayScale(child),
+      });
+    }
   }
 }
 
@@ -67,6 +97,7 @@ export function createPopupStyledText(options: {
   let active = build(text, family, style, anchor);
   let guide: Graphics | null = null;
   let guideVisible = false;
+  let guideCanvasPixelsPerLocalUnit = 1;
   let destroyed = false;
   container.addChild(active.container);
 
@@ -217,20 +248,38 @@ export function createPopupStyledText(options: {
     guide.eventMode = "none";
     guide.clear();
     const range = style.widthRange!;
-    const top = -active.layout.height * anchor.y;
     const height = Math.max(1, active.layout.height);
-    const maxLeft = -range.maxWidth * anchor.x;
-    const minLeft = -range.minWidth * anchor.x;
+    const plan = createPopupTextWidthGuidePlan({
+      range,
+      height,
+      anchor,
+      canvasPixelsPerLocalUnit: guideCanvasPixelsPerLocalUnit,
+    });
+    for (const line of plan.hatchLines)
+      guide.moveTo(line.x1, line.y1).lineTo(line.x2, line.y2);
     guide
-      .rect(maxLeft, top, range.maxWidth, height)
-      .stroke({ color: 0x5d7cff, width: 1 });
+      .stroke({
+        color: 0x5d7cff,
+        width: plan.hatchStrokeWidth,
+        alpha: 0.36,
+      })
+      .rect(
+        plan.maxRect.x,
+        plan.maxRect.y,
+        plan.maxRect.width,
+        plan.maxRect.height,
+      )
+      .stroke({ color: 0x5d7cff, width: plan.maxStrokeWidth, alpha: 1 });
     guide
-      .moveTo(minLeft, top)
-      .lineTo(minLeft, top + height)
-      .moveTo(minLeft + range.minWidth, top)
-      .lineTo(minLeft + range.minWidth, top + height)
-      .stroke({ color: 0xffcc66, width: 1 });
-    if (guide.parent !== container) container.addChildAt(guide, 0);
+      .rect(
+        plan.minRect.x,
+        plan.minRect.y,
+        plan.minRect.width,
+        plan.minRect.height,
+      )
+      .stroke({ color: 0xffcc66, width: plan.minStrokeWidth, alpha: 1 });
+    if (guide.parent !== container) container.addChild(guide);
+    else container.setChildIndex(guide, container.children.length - 1);
   }
 
   const renderer: PopupStyledTextRenderer = Object.freeze({
@@ -264,9 +313,10 @@ export function createPopupStyledText(options: {
       anchor = next.anchor;
       redrawGuide();
     },
-    setWidthGuideVisible(visible: boolean) {
+    setWidthGuideVisible(visible: boolean, canvasPixelsPerLocalUnit = 1) {
       assertUsable();
       guideVisible = visible;
+      guideCanvasPixelsPerLocalUnit = canvasPixelsPerLocalUnit;
       redrawGuide();
     },
     destroy() {
@@ -285,6 +335,13 @@ export function createPopupStyledText(options: {
   function assertUsable() {
     if (destroyed) throw new Error("popup styled text renderer was destroyed.");
   }
+}
+
+function localDisplayScale(container: Container): number {
+  const x = Math.abs(container.scale.x);
+  const y = Math.abs(container.scale.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return 0;
+  return Math.min(x, y);
 }
 
 export function validatePopupStyledText(value: string): string {

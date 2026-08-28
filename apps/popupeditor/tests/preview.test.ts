@@ -132,7 +132,10 @@ describe("PopupPreview", () => {
       "popup-preview-gradient",
     );
     await preview.rebuild({} as never);
-    expect(player.setTextWidthGuidesVisible).toHaveBeenLastCalledWith(true);
+    expect(player.setTextWidthGuidesVisible).toHaveBeenLastCalledWith(
+      true,
+      0.375,
+    );
     const formatAmount = vi.mocked(createAwardCelebrationPlayer).mock
       .calls[0]![0].formatAmount!;
     expect(formatAmount(1234567)).toBe("1234567");
@@ -154,7 +157,10 @@ describe("PopupPreview", () => {
     expect(player.requestAdvance).toHaveBeenCalledTimes(2);
     expect(editingKey.defaultPrevented).toBe(false);
     preview.setViewport(1920, 1080, 0.5, false);
-    expect(player.setTextWidthGuidesVisible).toHaveBeenLastCalledWith(false);
+    expect(player.setTextWidthGuidesVisible).toHaveBeenLastCalledWith(
+      false,
+      0.5,
+    );
     expect(player.applyViewport).toHaveBeenLastCalledWith({
       width: 1920,
       height: 1080,

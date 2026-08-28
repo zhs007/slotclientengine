@@ -386,8 +386,12 @@ class SpinePopupEditorPlayer implements SpinePopupPlayer {
   getSnapshot() {
     return inspectSpinePopupRuntime(this.#runtime);
   }
-  setTextWidthGuidesVisible(visible: boolean) {
-    setPopupTextWidthGuidesInTree(this.#runtime.container, visible);
+  setTextWidthGuidesVisible(visible: boolean, canvasPixelsPerViewportUnit = 1) {
+    setPopupTextWidthGuidesInTree(
+      this.#runtime.container,
+      visible,
+      canvasPixelsPerViewportUnit,
+    );
   }
   getPhase() {
     return this.#runtime.getPhase();

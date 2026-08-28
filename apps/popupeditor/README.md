@@ -16,7 +16,9 @@ VNI bundle 只导入 `purpose=runtime` 的运行发布包：唯一 runtime 自�
 
 所有获奖档位与普通 Spine overlay 都可添加多个命名字体文字和 manual ImgNumber。字体文字可明确选择已导入的 WOFF2/WOFF/TTF/OTF；未选择资源时才使用 `system-ui, sans-serif`。文字支持单行默认文案、字号、字距、色板或 canonical color string、纯色/线性渐变、描边、投影、正负 Curved Text、anchor 与旋转；还可配置 local typographic `minWidth/maxWidth`，`0/0` 表示关闭，启用时 runtime 只调字号使文字落入区间。普通 Spine overlay 还可编辑三阶段可见性。每个获奖档仍必须恰好有一个 exact id 为 `win-amount` 的 ImgNumber，再次添加 ImgNumber 会创建可独立命名和设值的 manual 节点。游戏通过 exact layer name 获取 rendercore handle 并原子 `setText()/resetText()`；Editor 预览不提供临时节点覆盖入口。
 
-production preview 使用与 runtime 相同的无界 maximized-focus transform：重点区域始终完整可见，宿主宽高比所需的额外空间以 focus 几何中心向外扩展，宿主 placement 再叠加到该矩阵。预览 canvas 后方的颜色持续按红、蓝、黄、绿循环，只用于观察适配和全屏 backdrop，不进入 project、manifest 或 ZIP。guides 开启时还显示文字 `widthRange` 的局部参考框，关闭时立即移除；参考框同样不持久化。production canvas/keyboard binding 仍负责 award advance 与 Spine dismiss，但 input、textarea、select、button 和 contenteditable 的键盘事件会透传，不再阻止表单输入。文字标量输入就地提交并异步重建 player，不替换当前 inspector DOM。
+production preview 使用与 runtime 相同的无界 maximized-focus transform：重点区域始终完整可见，宿主宽高比所需的额外空间以 focus 几何中心向外扩展，宿主 placement 再叠加到该矩阵。预览 canvas 后方的颜色持续按红、蓝、黄、绿循环，只用于观察适配和全屏 backdrop，不进入 project、manifest 或 ZIP。guides 开启时，启用 `widthRange` 的文字上方显示蓝色 max、黄色 min 两个完整粗框和静态斜线；线宽按当前 preview scale 补偿，关闭 guides 后连同 viewport、中心和重点区域参考线一起立即移除，所有 guide 都不持久化。production canvas/keyboard binding 仍负责 award advance 与 Spine dismiss，但 input、textarea、select、button 和 contenteditable 的键盘事件会透传，不再阻止表单输入。
+
+authoring 的文字、数字与颜色输入在一次字段编辑完成并产生原生 `change` 后才提交 project；连续键入或拖动 color picker 只更新当前 DOM，不逐字符 materialize package。select、checkbox 与结构按钮仍在完成选择/点击后提交。合法 commit 会在短合并窗口后自动 rebuild 最后一个 snapshot，invalid commit 保留上一份成功 preview 并显示 diagnostics；viewport、zoom、guides、preview bet/win 与金额格式继续直接更新 session，不 rebuild player。`Play / Replay` 只播放或重播已准备好的 production player，不是 Build 按钮。
 
 项目页的 `project id` 在输入时即时执行与 production manifest 相同的 lowercase kebab-case 校验，非法值显示红框与就地错误，preview/export 仍严格拒绝。按钮统一提供 hover、按下、键盘 focus 和 disabled 反馈；顶部 tab 与档位 tab 另外保留明确选中态。
 

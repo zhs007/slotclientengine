@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { DOMAdapter, FillGradient, Text } from "pixi.js";
+import { DOMAdapter, FillGradient, Graphics, Text } from "pixi.js";
 import {
   createPopupStyledText,
   validatePopupStyledText,
@@ -139,8 +139,25 @@ describe("popup styled text", () => {
     expect(straight.layout.authoredFontSize).toBe(100);
     expect(straight.layout.effectiveFontSize).toBeCloseTo(50);
     expect(straight.layout.width).toBeCloseTo(200);
-    straight.setWidthGuideVisible(true);
+    straight.setWidthGuideVisible(true, 0.5);
     expect(straight.container.children).toHaveLength(2);
+    const guide = straight.container.children.at(-1);
+    expect(guide).toBeInstanceOf(Graphics);
+    expect(guide?.eventMode).toBe("none");
+    straight.setText("SHORT");
+    expect(straight.container.children.at(-1)).toBe(guide);
+    straight.setPresentation({
+      family: "system-ui",
+      style: {
+        ...style,
+        fontSize: 80,
+        letterSpacing: 0,
+        arcDegrees: 0,
+        widthRange: { minWidth: 120, maxWidth: 200 },
+      },
+      anchor: { x: 0, y: 1 },
+    });
+    expect(straight.container.children.at(-1)).toBe(guide);
     straight.setWidthGuideVisible(false);
     expect(straight.container.children).toHaveLength(1);
     straight.destroy();
