@@ -6,6 +6,7 @@ import { loadCastleChandelierModel } from "./chandelier-model.js";
 import { loadCastleChestModel } from "./chest-model.js";
 import { loadCastleColumnModel } from "./column-model.js";
 import { PropPreviewRenderer, type PropPreviewKind } from "./prop-preview.js";
+import { loadCastlePurplePotionModel } from "./purple-potion-model.js";
 import { loadCastleSpellbookModel } from "./spellbook-model.js";
 import { loadCastleSwordModel } from "./sword-model.js";
 import { loadCastleThroneDaisModel } from "./throne-dais-model.js";
@@ -108,6 +109,7 @@ async function bootstrap(): Promise<void> {
     previewKind === "sword" ||
     previewKind === "battleAxe" ||
     previewKind === "spellbook" ||
+    previewKind === "purplePotion" ||
     previewKind === "crown"
   ) {
     await bootstrapPropPreview(root, previewKind);
@@ -125,6 +127,7 @@ async function bootstrap(): Promise<void> {
     chandelierModel,
     chestModel,
     spellbookModel,
+    purplePotionModel,
   ] = await Promise.all([
     loadCastleBarrelModel(),
     loadCastleBattleAxeModel(),
@@ -137,6 +140,7 @@ async function bootstrap(): Promise<void> {
     loadCastleChandelierModel(),
     loadCastleChestModel(),
     loadCastleSpellbookModel(),
+    loadCastlePurplePotionModel(),
   ]);
   const game = new CastleKnightRenderer(
     root,
@@ -151,6 +155,7 @@ async function bootstrap(): Promise<void> {
     chandelierModel,
     chestModel,
     spellbookModel,
+    purplePotionModel,
   );
   root.append(createHud(root, game));
   const resize = () => game.resize(root.clientWidth, root.clientHeight);
@@ -189,6 +194,8 @@ async function bootstrapPropPreview(
   const chestModel = kind === "chest" ? await loadCastleChestModel() : null;
   const spellbookModel =
     kind === "spellbook" ? await loadCastleSpellbookModel() : null;
+  const purplePotionModel =
+    kind === "purplePotion" ? await loadCastlePurplePotionModel() : null;
   const preview = new PropPreviewRenderer(
     root,
     kind,
@@ -205,6 +212,7 @@ async function bootstrapPropPreview(
     chandelierModel,
     chestModel,
     spellbookModel,
+    purplePotionModel,
   );
   const resize = () => preview.resize(root.clientWidth, root.clientHeight);
   const resizeObserver = new ResizeObserver(resize);

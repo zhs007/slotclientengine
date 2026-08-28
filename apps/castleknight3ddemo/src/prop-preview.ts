@@ -33,6 +33,7 @@ export type PropPreviewKind =
   | "sword"
   | "battleAxe"
   | "spellbook"
+  | "purplePotion"
   | "crown";
 
 export class PropPreviewRenderer {
@@ -59,6 +60,7 @@ export class PropPreviewRenderer {
     chandelierModel: Group | null,
     chestModel: Group | null,
     spellbookModel: Group | null,
+    purplePotionModel: Group | null,
   ) {
     this.#renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.#renderer.outputColorSpace = SRGBColorSpace;
@@ -96,6 +98,16 @@ export class PropPreviewRenderer {
       spellbook.rotation.y = sideView ? Math.PI / 2 : -Math.PI * 0.12;
       this.#scene.add(spellbook);
       this.#camera.position.set(0, 3.6, 7.2);
+      this.#camera.lookAt(0, 0, 0);
+    } else if (kind === "purplePotion") {
+      if (!purplePotionModel) {
+        throw new Error("Castle purple potion GLB is not loaded.");
+      }
+      const purplePotion = purplePotionModel.clone(true);
+      purplePotion.scale.setScalar(2.5);
+      purplePotion.rotation.y = sideView ? Math.PI / 2 : -Math.PI * 0.12;
+      this.#scene.add(purplePotion);
+      this.#camera.position.set(0, 1.1, 7.4);
       this.#camera.lookAt(0, 0, 0);
     } else if (kind === "column") {
       if (!columnModel) throw new Error("Castle column GLB is not loaded.");
