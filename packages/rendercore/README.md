@@ -232,6 +232,8 @@ Scene Layout package runtime 以 `enqueuePopup(request)` 作为三类 Popup 的�
 
 Scene Layout transition prelude 可在 `requestGameMode(modeId, { preludePopupStrings })` 中按 `text | image-string` 和 exact name 接收本轮最终 string。runtime 在 Popup start 前应用这些值，并在 complete、失败、取消或 destroy 后恢复调用前 handle 状态；该输入不进入 transition resource prepare/cache identity。需要跨播放保持或在 active Popup 中更新时，继续使用 player 的 exact handle `setText/resetText`。
 
+游戏在重入等已由宿主确认“跳过表现”的场景可调用 `requestGameMode(modeId, { immediate: true })`。runtime 仍要求当前 mode 到 target 的显式 direct edge，并先完整准备 target delivery、geometry 和必要 reel，再原子提交 background、mode-scoped node、reel 及 displayed/stable mode；它不会显示该 edge 的 prelude Popup、创建或播放 Spine/video overlay，也不要求 video trusted gesture prepare。被跳过的 Popup、transition lifecycle、configured Spine event 和 video lifecycle 均不发布，真实 mode displayed/stable（以及由此驱动的 BGM）event 仍按 commit 发布。`immediate` 与 `preludePopupStrings` 互斥，且不能取消已开始的 Popup/transition；省略或传 `false` 时保持完整正常转场。
+
 ## Image String API
 
 Image String 使用三个显式入口：`image-string/data` 提供 v1 schema、strict parser 与纯校验；

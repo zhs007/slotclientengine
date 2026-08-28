@@ -254,6 +254,65 @@ describe("scene layout package video-blackout transition", () => {
     runtime.destroy();
   });
 
+  it("switches immediately without preparing or playing video", async () => {
+    const player = new FakeVideoPlayer();
+    const runtime = createRuntime(player);
+    await runtime.init();
+
+    await runtime.requestGameMode("FreeGame", { immediate: true });
+
+    expect(player.prepared).toBe(false);
+    expect(player.unlockCalls).toBe(0);
+    expect(player.playCalls).toBe(0);
+    expect(player.destroyed).toBe(false);
+    expect(runtime.getGameModeSnapshot()).toMatchObject({
+      stableMode: "FreeGame",
+      displayedMode: "FreeGame",
+      targetMode: null,
+      transitionKind: null,
+    });
+    runtime.destroy();
+  });
+
+  it("reuses prepared video target ownership without playing the media", async () => {
+    const player = new FakeVideoPlayer();
+    const runtime = createRuntime(player);
+    await runtime.init();
+    await runtime.prepareGameModeTransition("FreeGame");
+    expect(player.prepared).toBe(true);
+
+    await runtime.requestGameMode("FreeGame", { immediate: true });
+
+    expect(player.unlockCalls).toBe(0);
+    expect(player.playCalls).toBe(0);
+    expect(player.destroyed).toBe(true);
+    expect(runtime.getStableGameMode()).toBe("FreeGame");
+    runtime.destroy();
+  });
+
+  it("keeps the source stable when immediate target delivery fails", async () => {
+    const player = new FakeVideoPlayer();
+    const runtime = createRuntime(player, undefined, {
+      isGameModeReady: () => false,
+      loadGameMode: vi.fn(() => Promise.reject(new Error("chunk failed"))),
+    });
+    await runtime.init();
+
+    await expect(
+      runtime.requestGameMode("FreeGame", { immediate: true }),
+    ).rejects.toThrow(/chunk failed/);
+
+    expect(player.prepared).toBe(false);
+    expect(player.playCalls).toBe(0);
+    expect(runtime.getGameModeSnapshot()).toMatchObject({
+      stableMode: "BaseGame",
+      displayedMode: "BaseGame",
+      targetMode: null,
+      transitionKind: null,
+    });
+    runtime.destroy();
+  });
+
   it("latches one popup click and advances automatically after target assets finish", async () => {
     const player = new FakeVideoPlayer();
     const popup = new FakePreludePopup();

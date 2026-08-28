@@ -99,6 +99,7 @@ import type {
   SceneLayoutCameraEffectSession,
   SceneLayoutCameraEffectTarget,
   SceneLayoutGameModeTransition,
+  SceneLayoutGameModePrepareOptions,
   SceneLayoutGameModeRequestOptions,
   SceneLayoutGameModeSnapshot,
   SceneLayoutInitialReelScene,
@@ -185,6 +186,15 @@ interface PreparedModeTransitionBase {
   readonly bindingChanged: boolean;
   readonly targetSymbolPackageId: string | null;
   readonly optionsSignature: string;
+}
+
+interface PreparedModeTargetPlan extends Omit<
+  PreparedModeTransitionBase,
+  "prepared"
+> {
+  readonly targetBinding: ResolvedSymbolBinding | null;
+  readonly targetInput: SceneLayoutInitialReelScene | undefined;
+  readonly recreateReel: boolean;
 }
 
 type PreparedModeTransition =
@@ -2403,9 +2413,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
 
   async selectAuthoringGameMode(
     modeId: string,
-    options: SceneLayoutGameModeRequestOptions = {},
+    options: SceneLayoutGameModePrepareOptions = {},
   ): Promise<void> {
     this.assertCanPrepareTransition();
+    assertGameModePrepareOptions(options);
     const target = this.requireMode(modeId);
     if (modeId === this.#stableMode) {
       if (options.recreateReel === true || options.reels?.main)
@@ -2481,9 +2492,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
 
   async prepareGameModeTransition(
     modeId: string,
-    options: SceneLayoutGameModeRequestOptions = {},
+    options: SceneLayoutGameModePrepareOptions = {},
   ): Promise<void> {
     this.assertCanPrepareTransition(true);
+    assertGameModePrepareOptions(options);
     const signature = requestOptionsSignature(options);
     if (
       this.#preparedTransition?.target.id === modeId &&
@@ -2526,6 +2538,21 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     let transition: SceneLayoutGameModeTransition;
     try {
       this.assertCanPrepareTransition(true);
+      assertGameModePrepareOptions(options);
+      if (
+        options.immediate !== undefined &&
+        typeof options.immediate !== "boolean"
+      )
+        throw new SceneLayoutError(
+          "immediate must be a boolean when provided.",
+        );
+      if (
+        options.immediate === true &&
+        options.preludePopupStrings !== undefined
+      )
+        throw new SceneLayoutError(
+          "Immediate game mode requests must not include preludePopupStrings.",
+        );
       this.requireMode(modeId);
       if (modeId === this.#stableMode && options.recreateReel !== true) {
         if (options.preludePopupStrings?.length)
@@ -2539,7 +2566,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         return Promise.resolve();
       }
       transition = this.findTransition(modeId);
-      if (!transition.preludePopup)
+      if (options.immediate === true || !transition.preludePopup)
         this.assertNoPopupWork("change scene layout game mode");
       if (options.preludePopupStrings?.length && !transition.preludePopup)
         throw new SceneLayoutError(
@@ -2549,6 +2576,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       return Promise.reject(asSceneLayoutError(error));
     }
     const signature = requestOptionsSignature(options);
+    if (options.immediate === true)
+      return this.startImmediateModeSwitch(modeId, options, signature);
     if (
       !("kind" in transition.overlay) &&
       transition.overlay.resource.kind === "video"
@@ -3315,65 +3344,38 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
 
   private async buildPreparedTransition(
     modeId: string,
-    options: SceneLayoutGameModeRequestOptions,
+    options: SceneLayoutGameModePrepareOptions,
     optionsSignature: string,
     onSpinePrepared?: (
       prepared: Extract<PreparedModeTransition, { readonly kind: "spine" }>,
     ) => void,
   ): Promise<PreparedModeTransition> {
-    const transition = this.findTransition(modeId);
-    const source = this.requireMode(this.#stableMode!);
-    const target = this.requireMode(modeId);
-    const geometry = materializeModeGeometry(this.#document, target.id);
-    if (
-      options.recreateReel !== undefined &&
-      typeof options.recreateReel !== "boolean"
-    )
-      throw new SceneLayoutError(
-        "recreateReel must be a boolean when provided.",
-      );
-    const recreateReel = options.recreateReel === true;
-    const sourceBinding = this.resolveModeSymbolBinding(source);
-    const targetBinding = this.resolveModeSymbolBinding(target);
-    if (recreateReel && !targetBinding)
-      throw new SceneLayoutError(
-        `Scene layout game mode "${target.id}" has no symbol package to recreate.`,
-      );
-    const bindingChanged =
-      sourceBinding?.id !== targetBinding?.id || recreateReel;
-    if (this.#presentationOnly && bindingChanged)
-      throw new SceneLayoutError(
-        "Presentation-only scene layout runtime requires source and target modes to share one symbol package binding.",
-      );
-    const targetInput = options.reels?.main;
-    if (!bindingChanged && targetInput)
-      throw new SceneLayoutError(
-        "Game modes sharing a symbol package must not receive reels.main input.",
-      );
-    if (!targetBinding && targetInput)
-      throw new SceneLayoutError(
-        `Scene layout game mode "${target.id}" has no symbol package and must not receive reels.main input.`,
-      );
+    const plan = this.createPreparedModeTargetPlan(
+      modeId,
+      options,
+      optionsSignature,
+    );
     let prepared: PreparedModeTarget | null = null;
     try {
-      if (bindingChanged && targetBinding) {
-        await this.ensureDeliveryGameMode(target.id);
+      if (plan.bindingChanged && plan.targetBinding) {
+        await this.ensureDeliveryGameMode(plan.target.id);
         prepared = await this.prepareTargetReelEntry(
-          targetBinding,
-          targetInput,
-          recreateReel,
+          plan.targetBinding,
+          plan.targetInput,
+          plan.recreateReel,
         );
       }
-      const common = {
-        spec: transition,
-        geometry,
-        source,
-        target,
+      const common: PreparedModeTransitionBase = {
+        spec: plan.spec,
+        geometry: plan.geometry,
+        source: plan.source,
+        target: plan.target,
         prepared,
-        bindingChanged,
-        targetSymbolPackageId: targetBinding?.id ?? null,
-        optionsSignature,
+        bindingChanged: plan.bindingChanged,
+        targetSymbolPackageId: plan.targetSymbolPackageId,
+        optionsSignature: plan.optionsSignature,
       };
+      const transition = common.spec;
       const overlay = transition.overlay;
       if ("kind" in overlay) return { ...common, kind: "none" as const };
       if ("fadeOutSeconds" in overlay) {
@@ -3412,11 +3414,125 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         throw error;
       }
       const result = { ...common, kind: "spine" as const, player };
-      onSpinePrepared?.(result);
+      try {
+        onSpinePrepared?.(result);
+      } catch (error) {
+        player.destroy();
+        throw error;
+      }
       return result;
     } catch (error) {
       this.releasePreparedTarget(prepared);
       throw error;
+    }
+  }
+
+  private createPreparedModeTargetPlan(
+    modeId: string,
+    options: SceneLayoutGameModePrepareOptions,
+    optionsSignature: string,
+  ): PreparedModeTargetPlan {
+    const transition = this.findTransition(modeId);
+    const source = this.requireMode(this.#stableMode!);
+    const target = this.requireMode(modeId);
+    const geometry = materializeModeGeometry(this.#document, target.id);
+    const recreateReel = options.recreateReel === true;
+    const sourceBinding = this.resolveModeSymbolBinding(source);
+    const targetBinding = this.resolveModeSymbolBinding(target);
+    if (recreateReel && !targetBinding)
+      throw new SceneLayoutError(
+        `Scene layout game mode "${target.id}" has no symbol package to recreate.`,
+      );
+    const bindingChanged =
+      sourceBinding?.id !== targetBinding?.id || recreateReel;
+    if (this.#presentationOnly && bindingChanged)
+      throw new SceneLayoutError(
+        "Presentation-only scene layout runtime requires source and target modes to share one symbol package binding.",
+      );
+    const targetInput = options.reels?.main;
+    if (!bindingChanged && targetInput)
+      throw new SceneLayoutError(
+        "Game modes sharing a symbol package must not receive reels.main input.",
+      );
+    if (!targetBinding && targetInput)
+      throw new SceneLayoutError(
+        `Scene layout game mode "${target.id}" has no symbol package and must not receive reels.main input.`,
+      );
+    return {
+      spec: transition,
+      geometry,
+      source,
+      target,
+      bindingChanged,
+      targetSymbolPackageId: targetBinding?.id ?? null,
+      optionsSignature,
+      targetBinding,
+      targetInput,
+      recreateReel,
+    };
+  }
+
+  private async startImmediateModeSwitch(
+    modeId: string,
+    options: SceneLayoutGameModePrepareOptions,
+    signature: string,
+  ): Promise<void> {
+    this.assertCanPrepareTransition();
+    let prepared: PreparedModeTransitionBase | null = null;
+    const cached = this.#preparedTransition;
+    if (cached?.target.id === modeId && cached.optionsSignature === signature) {
+      this.#preparedTransition = null;
+      this.releasePreparedTransitionPresentation(cached);
+      prepared = cached;
+    } else {
+      this.releasePreparedTransition(cached);
+      this.#preparedTransition = null;
+    }
+    this.#modeRequestInProgress = true;
+    let committed = false;
+    try {
+      if (!prepared) {
+        const plan = this.createPreparedModeTargetPlan(
+          modeId,
+          options,
+          signature,
+        );
+        let target: PreparedModeTarget | null = null;
+        if (plan.bindingChanged && plan.targetBinding) {
+          await this.ensureDeliveryGameMode(plan.target.id);
+          target = await this.prepareTargetReelEntry(
+            plan.targetBinding,
+            plan.targetInput,
+            plan.recreateReel,
+          );
+        }
+        prepared = {
+          spec: plan.spec,
+          geometry: plan.geometry,
+          source: plan.source,
+          target: plan.target,
+          prepared: target,
+          bindingChanged: plan.bindingChanged,
+          targetSymbolPackageId: plan.targetSymbolPackageId,
+          optionsSignature: plan.optionsSignature,
+        };
+      }
+      await this.ensureDeliveryGameMode(prepared.target.id);
+      this.assertReady();
+      this.commitPreparedTarget(prepared);
+      committed = true;
+      this.setStableMode(prepared.target.id);
+      this.#stableSymbolPackageId = this.#activeSymbolPackageId;
+    } catch (error) {
+      if (!committed) this.releasePreparedTarget(prepared?.prepared ?? null);
+      else {
+        this.#stableMode = prepared!.target.id;
+        this.#stableSymbolPackageId = this.#activeSymbolPackageId;
+      }
+      throw asSceneLayoutError(error);
+    } finally {
+      this.#modeRequestInProgress = false;
+      this.drainPopupActivations();
     }
   }
 
@@ -3750,8 +3866,14 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     prepared: PreparedModeTransition | null,
   ): void {
     if (!prepared) return;
-    if (prepared.kind !== "none") prepared.player.destroy();
+    this.releasePreparedTransitionPresentation(prepared);
     this.releasePreparedTarget(prepared.prepared);
+  }
+
+  private releasePreparedTransitionPresentation(
+    prepared: PreparedModeTransition,
+  ): void {
+    if (prepared.kind !== "none") prepared.player.destroy();
   }
 
   private updateActiveTransition(deltaSeconds: number): void {
@@ -5484,12 +5606,22 @@ function validateLandingStates(
 }
 
 function requestOptionsSignature(
-  options: SceneLayoutGameModeRequestOptions,
+  options: SceneLayoutGameModePrepareOptions,
 ): string {
   return JSON.stringify({
     recreateReel: options.recreateReel === true,
     reels: options.reels ?? null,
   });
+}
+
+function assertGameModePrepareOptions(
+  options: SceneLayoutGameModePrepareOptions,
+): void {
+  if (
+    options.recreateReel !== undefined &&
+    typeof options.recreateReel !== "boolean"
+  )
+    throw new SceneLayoutError("recreateReel must be a boolean when provided.");
 }
 
 function applyPopupStringInputs(

@@ -4,6 +4,8 @@
 
 facade 同时公开 Scene Layout package runtime 与 slot operation coordinator 的 app-facing factory/type；游戏可以注入只含异步 `start` 的 typed 业务 handler，但无需从 package 内部 display tree 重建 root/reel 层级。
 
+facade 同时导出 `SceneLayoutGameModePrepareOptions` 与 `SceneLayoutGameModeRequestOptions`。正常 mode request 保持 manifest 声明的 Popup/Spine/video 流程；宿主已明确选择跳过表现时可传 `{ immediate: true }`，runtime 仍校验 direct edge并原子准备/提交target，但不播放或伪造被跳过的transition event。真实 displayed/stable mode event继续发布，`immediate`不能与`preludePopupStrings`同时使用，也不能抢占已开始的转场。
+
 Scene Layout 的 program-only JSON 数据也由 facade 暴露类型。游戏在创建画面 runtime 前可调用 `packageResource.loadJsonData("spin-config")`，再交给 app-owned strict parser。数据源选择必须由 app 配置显式决定：选择 `gameConfig` 时继续使用现有 Symbols game config；选择 `gameLayout` 时才加载 exact JSON key。两者没有自动优先级、同名覆盖或 fallback，解析后的公开本地轮带/权重表再传给既有 reel/value resolver API。
 
 facade re-export `gamelayout:/` runtime address formatter、parser、resolver 与 endpoint/event 类型。

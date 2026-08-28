@@ -748,6 +748,94 @@ describe("scene layout package event-driven game-mode transition", () => {
     runtime.destroy();
   });
 
+  it("commits immediately without playing Popup or transition events", async () => {
+    const { runtime, players, popups } = createRuntime(true, true);
+    await runtime.init();
+    const events: string[] = [];
+    const addresses = [
+      "gamelayout:/transition/BaseGame/FreeGame/lifecycle/started",
+      "gamelayout:/transition/BaseGame/FreeGame/lifecycle/switched",
+      "gamelayout:/transition/BaseGame/FreeGame/lifecycle/ended",
+      "gamelayout:/transition/BaseGame/FreeGame/effect/spine/event/SwitchScene",
+      "gamelayout:/mode/BaseGame/state/displayed/exited",
+      "gamelayout:/mode/FreeGame/state/displayed/entered",
+      "gamelayout:/mode/BaseGame/state/stable/exited",
+      "gamelayout:/mode/FreeGame/state/stable/entered",
+    ];
+    const disposers = addresses.map((address) =>
+      runtime.addresses.bind(address, (event) => events.push(event.address)),
+    );
+
+    await runtime.requestGameMode("FreeGame", { immediate: true });
+
+    expect(players).toHaveLength(0);
+    expect(popups).toHaveLength(1);
+    expect(popups[0].startSnapshots).toEqual([]);
+    expect(runtime.getGameModeSnapshot()).toMatchObject({
+      stableMode: "FreeGame",
+      displayedMode: "FreeGame",
+      targetMode: null,
+      phase: "stable",
+      transition: null,
+      transitionKind: null,
+      activePreludePopup: null,
+    });
+    expect(events).toEqual([
+      "gamelayout:/mode/BaseGame/state/displayed/exited",
+      "gamelayout:/mode/FreeGame/state/displayed/entered",
+      "gamelayout:/mode/BaseGame/state/stable/exited",
+      "gamelayout:/mode/FreeGame/state/stable/entered",
+    ]);
+    expect(state.runtime.setNodeActive.mock.calls).toContainEqual([
+      "free-only",
+      true,
+    ]);
+    for (const dispose of disposers) dispose();
+    runtime.destroy();
+  });
+
+  it("reuses a prepared target while destroying its skipped overlay", async () => {
+    const { runtime, players } = createRuntime();
+    await runtime.init();
+    await runtime.prepareGameModeTransition("FreeGame");
+    expect(players).toHaveLength(1);
+    expect(players[0].destroyed).toBe(false);
+
+    await runtime.requestGameMode("FreeGame", { immediate: true });
+
+    expect(players).toHaveLength(1);
+    expect(players[0].plays).toEqual([]);
+    expect(players[0].destroyed).toBe(true);
+    expect(runtime.getStableGameMode()).toBe("FreeGame");
+    runtime.destroy();
+  });
+
+  it("strictly validates immediate request options and direct edges", async () => {
+    const withPrelude = createRuntime(true, true);
+    await withPrelude.runtime.init();
+    await expect(
+      withPrelude.runtime.requestGameMode("FreeGame", {
+        immediate: true,
+        preludePopupStrings: [],
+      }),
+    ).rejects.toThrow(/must not include preludePopupStrings/);
+    await expect(
+      withPrelude.runtime.requestGameMode("FreeGame", {
+        immediate: "yes",
+      } as never),
+    ).rejects.toThrow(/immediate must be a boolean/);
+    expect(withPrelude.runtime.getStableGameMode()).toBe("BaseGame");
+    withPrelude.runtime.destroy();
+
+    const withoutEdge = createRuntime(false);
+    await withoutEdge.runtime.init();
+    await expect(
+      withoutEdge.runtime.requestGameMode("FreeGame", { immediate: true }),
+    ).rejects.toThrow(/No direct scene transition/);
+    expect(withoutEdge.players).toHaveLength(0);
+    withoutEdge.runtime.destroy();
+  });
+
   it("commits an explicit no-effect edge directly or after its optional popup", async () => {
     const direct = createRuntime(true, false, "none");
     await direct.runtime.init();

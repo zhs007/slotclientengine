@@ -30,7 +30,7 @@ import type { RenderAnchor, RenderObjectLayer } from "../presentation/index.js";
 
 export type SceneLayoutPresentationGameModeRequestOptions = Pick<
   SceneLayoutGameModeRequestOptions,
-  "preludePopupStrings"
+  "immediate" | "preludePopupStrings"
 >;
 
 export interface SceneLayoutPresentationSurface {

@@ -1370,7 +1370,8 @@ describe("scene layout package runtime", () => {
       expect(runtime.getReelPresentation("main")).toBe(baseReel);
       expect(runtime.getGameModeSnapshot().stableMode).toBe("BaseGame");
 
-      await completeModeRequest(runtime, "FreeGame", {
+      await runtime.requestGameMode("FreeGame", {
+        immediate: true,
         reels: { main: baseInput },
       });
       const freeReel = runtime.getReelPresentation("main");
