@@ -2,8 +2,10 @@ import { loadCastleBarrelModel } from "./barrel-model.js";
 import { loadCastleBattleAxeModel } from "./battle-axe-model.js";
 import { loadCastleBenchModel } from "./bench-model.js";
 import { CastleKnightRenderer } from "./castle-scene.js";
+import { loadCastleChandelierModel } from "./chandelier-model.js";
 import { loadCastleColumnModel } from "./column-model.js";
 import { PropPreviewRenderer, type PropPreviewKind } from "./prop-preview.js";
+import { loadCastleSwordModel } from "./sword-model.js";
 import { loadCastleThroneDaisModel } from "./throne-dais-model.js";
 import { loadCastleThroneModel } from "./throne-model.js";
 import { loadCastleWallModel } from "./wall-model.js";
@@ -101,6 +103,7 @@ async function bootstrap(): Promise<void> {
     previewKind === "stair" ||
     previewKind === "throne" ||
     previewKind === "chandelier" ||
+    previewKind === "sword" ||
     previewKind === "battleAxe" ||
     previewKind === "spellbook" ||
     previewKind === "crown"
@@ -116,6 +119,8 @@ async function bootstrap(): Promise<void> {
     throneModel,
     wallModel,
     columnModel,
+    swordModel,
+    chandelierModel,
   ] = await Promise.all([
     loadCastleBarrelModel(),
     loadCastleBattleAxeModel(),
@@ -124,6 +129,8 @@ async function bootstrap(): Promise<void> {
     loadCastleThroneModel(),
     loadCastleWallModel(),
     loadCastleColumnModel(),
+    loadCastleSwordModel(),
+    loadCastleChandelierModel(),
   ]);
   const game = new CastleKnightRenderer(
     root,
@@ -134,6 +141,8 @@ async function bootstrap(): Promise<void> {
     throneModel,
     wallModel,
     columnModel,
+    swordModel,
+    chandelierModel,
   );
   root.append(createHud(root, game));
   const resize = () => game.resize(root.clientWidth, root.clientHeight);
@@ -160,12 +169,15 @@ async function bootstrapPropPreview(
   const barrelModel = kind === "barrel" ? await loadCastleBarrelModel() : null;
   const battleAxeModel =
     kind === "battleAxe" ? await loadCastleBattleAxeModel() : null;
+  const swordModel = kind === "sword" ? await loadCastleSwordModel() : null;
   const benchModel = kind === "bench" ? await loadCastleBenchModel() : null;
   const throneDaisModel =
     kind === "stair" ? await loadCastleThroneDaisModel() : null;
   const throneModel = kind === "throne" ? await loadCastleThroneModel() : null;
   const wallModel = kind === "wall" ? await loadCastleWallModel() : null;
   const columnModel = kind === "column" ? await loadCastleColumnModel() : null;
+  const chandelierModel =
+    kind === "chandelier" ? await loadCastleChandelierModel() : null;
   const preview = new PropPreviewRenderer(
     root,
     kind,
@@ -173,11 +185,13 @@ async function bootstrapPropPreview(
     textured,
     barrelModel,
     battleAxeModel,
+    swordModel,
     benchModel,
     throneDaisModel,
     throneModel,
     wallModel,
     columnModel,
+    chandelierModel,
   );
   const resize = () => preview.resize(root.clientWidth, root.clientHeight);
   const resizeObserver = new ResizeObserver(resize);

@@ -13,7 +13,6 @@ import {
   WebGLRenderer,
 } from "three";
 import type { Group } from "three";
-import { createCartoonCastleChandelier } from "./reconstructed-furnishings.js";
 import {
   createCartoonTreasureChest,
   createCartoonWallTorch,
@@ -37,6 +36,7 @@ export type PropPreviewKind =
   | "stair"
   | "throne"
   | "chandelier"
+  | "sword"
   | "battleAxe"
   | "spellbook"
   | "crown";
@@ -56,11 +56,13 @@ export class PropPreviewRenderer {
     textured: boolean,
     barrelModel: Group | null,
     battleAxeModel: Group | null,
+    swordModel: Group | null,
     benchModel: Group | null,
     throneDaisModel: Group | null,
     throneModel: Group | null,
     wallModel: Group | null,
     columnModel: Group | null,
+    chandelierModel: Group | null,
   ) {
     this.#renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.#renderer.outputColorSpace = SRGBColorSpace;
@@ -189,7 +191,6 @@ export class PropPreviewRenderer {
         : new MeshBasicMaterial({ color: 0xd7b979 });
       const purple = new MeshBasicMaterial({ color: 0x8f32d2 });
       const blue = new MeshBasicMaterial({ color: 0x169bd8 });
-      const candle = new MeshBasicMaterial({ color: 0xf0d39a });
       const outline = new MeshBasicMaterial({
         color: 0x18121f,
         side: BackSide,
@@ -251,16 +252,13 @@ export class PropPreviewRenderer {
         this.#camera.position.set(0, 1.15, 9.8);
         this.#camera.lookAt(0, 0.15, 0);
       } else if (kind === "chandelier") {
-        const chandelier = createCartoonCastleChandelier({
-          iron,
-          ironLight,
-          gold,
-          candle,
-          gem: purple,
-        });
-        chandelier.scale.setScalar(1.35);
+        if (!chandelierModel) {
+          throw new Error("Castle chandelier GLB is not loaded.");
+        }
+        const chandelier = chandelierModel.clone(true);
+        chandelier.scale.setScalar(0.8);
         chandelier.rotation.y = sideView ? Math.PI / 2 : -Math.PI * 0.14;
-        chandelier.position.y = -2;
+        chandelier.position.y = 0;
         this.#scene.add(chandelier);
         this.#camera.position.set(0, 1.1, 10.8);
         this.#camera.lookAt(0, 0.15, 0);
@@ -282,6 +280,10 @@ export class PropPreviewRenderer {
             throw new Error("Castle battle axe GLB is not loaded.");
           }
           symbol = battleAxeModel.clone(true);
+        } else if (kind === "sword") {
+          if (!swordModel) throw new Error("Castle sword GLB is not loaded.");
+          symbol = swordModel.clone(true);
+          symbol.rotation.z = -0.72;
         } else {
           symbol =
             kind === "spellbook"
@@ -289,7 +291,13 @@ export class PropPreviewRenderer {
               : createCartoonCrownSymbol(materials);
         }
         symbol.scale.setScalar(
-          kind === "battleAxe" ? 1.85 : kind === "spellbook" ? 2.35 : 2.1,
+          kind === "battleAxe"
+            ? 1.85
+            : kind === "sword"
+              ? 3
+              : kind === "spellbook"
+                ? 2.35
+                : 2.1,
         );
         symbol.rotation.y = sideView ? Math.PI / 2 : -Math.PI * 0.12;
         this.#scene.add(symbol);

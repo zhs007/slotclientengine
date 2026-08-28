@@ -5,7 +5,6 @@ import {
   ConeGeometry,
   CylinderGeometry,
   DodecahedronGeometry,
-  ExtrudeGeometry,
   Group,
   IcosahedronGeometry,
   LatheGeometry,
@@ -13,7 +12,6 @@ import {
   MeshBasicMaterial,
   MeshStandardMaterial,
   MeshToonMaterial,
-  Shape,
   SphereGeometry,
   TorusGeometry,
   Vector2,
@@ -260,38 +258,6 @@ function createGem(palette: Palette): Group {
   return group;
 }
 
-function createSword(palette: Palette): Group {
-  const group = new Group();
-  const shape = new Shape();
-  shape.moveTo(-0.11, -0.2);
-  shape.lineTo(-0.11, 0.42);
-  shape.lineTo(0, 0.67);
-  shape.lineTo(0.11, 0.42);
-  shape.lineTo(0.11, -0.2);
-  shape.closePath();
-  const blade = part(
-    new ExtrudeGeometry(shape, {
-      depth: 0.075,
-      bevelEnabled: true,
-      bevelSize: 0.025,
-      bevelThickness: 0.018,
-      bevelSegments: 1,
-    }),
-    palette.steel,
-  );
-  blade.position.z = -0.035;
-  const guard = part(new BoxGeometry(0.58, 0.09, 0.14), palette.gold);
-  guard.position.y = -0.22;
-  const grip = part(new CylinderGeometry(0.065, 0.075, 0.32, 7), palette.wood);
-  grip.position.y = -0.42;
-  const pommel = part(new DodecahedronGeometry(0.1, 0), palette.gold);
-  pommel.position.y = -0.6;
-  group.add(blade, guard, grip, pommel);
-  group.rotation.z = -0.72;
-  group.name = "silver-sword";
-  return group;
-}
-
 function createKing(palette: Palette): Group {
   const group = new Group();
   const head = part(new SphereGeometry(0.34, 10, 8), palette.skin);
@@ -326,6 +292,7 @@ function createKing(palette: Palette): Group {
 function createModels(
   palette: Palette,
   battleAxeModel: Group,
+  swordModel: Group,
 ): ReadonlyMap<SymbolType, Group> {
   const reconstructedMaterials = {
     wood: palette.wood,
@@ -338,6 +305,9 @@ function createModels(
     blue: palette.blue,
     outline: symbolOutlineMaterial,
   };
+  const sword = swordModel.clone(true);
+  sword.scale.setScalar(1.25);
+  sword.rotation.z = -0.72;
   return new Map<SymbolType, Group>([
     ["chest", createChest(palette)],
     ["helmet", createHelmet(palette)],
@@ -345,7 +315,7 @@ function createModels(
     ["purplePotion", createPotion(palette, palette.purple, "purple-potion")],
     ["greenPotion", createPotion(palette, palette.green, "green-potion")],
     ["gem", createGem(palette)],
-    ["sword", createSword(palette)],
+    ["sword", sword],
     ["king", createKing(palette)],
     ["battleAxe", battleAxeModel],
     ["spellbook", createCartoonSpellbookSymbol(reconstructedMaterials)],
@@ -503,10 +473,11 @@ export class SymbolField extends Group {
     placements: readonly SymbolPlacement[],
     textures: CastleTextureLibrary,
     battleAxeModel: Group,
+    swordModel: Group,
   ) {
     super();
     this.#palette = createPalette(textures);
-    this.#masters = createModels(this.#palette, battleAxeModel);
+    this.#masters = createModels(this.#palette, battleAxeModel, swordModel);
     this.name = "animated-castle-symbols";
     this.#populate(placements);
   }

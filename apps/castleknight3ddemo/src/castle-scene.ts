@@ -33,7 +33,6 @@ import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.j
 import { CartoonPass } from "./cartoon-pass.js";
 import { BOARD, boardDepth, boardWidth, ROOM } from "./config.js";
 import { createRandom } from "./random.js";
-import { createCartoonCastleChandelier } from "./reconstructed-furnishings.js";
 import { createCartoonWallTorch } from "./reconstructed-props.js";
 import {
   createSessionSeed,
@@ -68,7 +67,6 @@ interface CastleMaterials {
   readonly leather: Material;
   readonly bannerGold: Material;
   readonly purpleGlass: Material;
-  readonly candle: Material;
   readonly flame: Material;
   readonly flameCore: Material;
 }
@@ -151,6 +149,8 @@ export class CastleKnightRenderer {
     throneModel: Group,
     wallModel: Group,
     columnModel: Group,
+    swordModel: Group,
+    chandelierModel: Group,
   ) {
     this.#renderer = new WebGLRenderer({
       antialias: true,
@@ -178,13 +178,14 @@ export class CastleKnightRenderer {
     this.#createThroneArea(throneDaisModel, throneModel);
     this.#createArchitecture(columnModel);
     this.#createFurniture(benchModel, barrelModel);
-    this.#createChandelier();
+    this.#createChandelier(chandelierModel);
     this.#createTorches();
     this.#createLighting();
     this.#symbols = new SymbolField(
       createSymbolPlacements(0x6a17d39b),
       this.#textureLibrary,
       battleAxeModel,
+      swordModel,
     );
     this.#root.add(this.#symbols);
 
@@ -340,7 +341,6 @@ export class CastleKnightRenderer {
         roughness: 0.38,
         metalness: 0.05,
       }),
-      candle: toon(0xf2d19b, textures.toonGradient),
       flame: new MeshBasicMaterial({ color: 0xff7a0b, toneMapped: false }),
       flameCore: new MeshBasicMaterial({ color: 0xffe379, toneMapped: false }),
     };
@@ -517,31 +517,11 @@ export class CastleKnightRenderer {
     }
   }
 
-  #createChandelier(): void {
-    const chandelier = createCartoonCastleChandelier({
-      iron: this.#materials.iron,
-      ironLight: this.#materials.ironLight,
-      gold: this.#materials.gold,
-      candle: this.#materials.candle,
-      gem: this.#materials.purpleGlass,
-    });
-    chandelier.position.set(0, 7.2, -4.45);
+  #createChandelier(chandelierModel: Group): void {
+    const chandelier = chandelierModel.clone(true);
+    chandelier.scale.setScalar(0.9);
+    chandelier.position.set(0, 8.1, -4.45);
     this.#root.add(chandelier);
-    chandelier.updateMatrixWorld(true);
-    for (let index = 0; index < 8; index += 1) {
-      const socket = chandelier.getObjectByName(`flame-socket-${index + 1}`);
-      if (!socket)
-        throw new Error(`Chandelier flame socket ${index + 1} is missing.`);
-      const position = socket.getWorldPosition(new Vector3());
-      this.#addFlame(
-        this.#root,
-        position.x,
-        position.y,
-        position.z,
-        0.36,
-        index,
-      );
-    }
   }
 
   #createTorches(): void {
