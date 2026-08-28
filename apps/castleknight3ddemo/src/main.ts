@@ -4,6 +4,7 @@ import { loadCastleBenchModel } from "./bench-model.js";
 import { CastleKnightRenderer } from "./castle-scene.js";
 import { loadCastleColumnModel } from "./column-model.js";
 import { PropPreviewRenderer, type PropPreviewKind } from "./prop-preview.js";
+import { loadCastleSwordModel } from "./sword-model.js";
 import { loadCastleThroneDaisModel } from "./throne-dais-model.js";
 import { loadCastleThroneModel } from "./throne-model.js";
 import { loadCastleWallModel } from "./wall-model.js";
@@ -101,6 +102,7 @@ async function bootstrap(): Promise<void> {
     previewKind === "stair" ||
     previewKind === "throne" ||
     previewKind === "chandelier" ||
+    previewKind === "sword" ||
     previewKind === "battleAxe" ||
     previewKind === "spellbook" ||
     previewKind === "crown"
@@ -116,6 +118,7 @@ async function bootstrap(): Promise<void> {
     throneModel,
     wallModel,
     columnModel,
+    swordModel,
   ] = await Promise.all([
     loadCastleBarrelModel(),
     loadCastleBattleAxeModel(),
@@ -124,6 +127,7 @@ async function bootstrap(): Promise<void> {
     loadCastleThroneModel(),
     loadCastleWallModel(),
     loadCastleColumnModel(),
+    loadCastleSwordModel(),
   ]);
   const game = new CastleKnightRenderer(
     root,
@@ -134,6 +138,7 @@ async function bootstrap(): Promise<void> {
     throneModel,
     wallModel,
     columnModel,
+    swordModel,
   );
   root.append(createHud(root, game));
   const resize = () => game.resize(root.clientWidth, root.clientHeight);
@@ -160,6 +165,7 @@ async function bootstrapPropPreview(
   const barrelModel = kind === "barrel" ? await loadCastleBarrelModel() : null;
   const battleAxeModel =
     kind === "battleAxe" ? await loadCastleBattleAxeModel() : null;
+  const swordModel = kind === "sword" ? await loadCastleSwordModel() : null;
   const benchModel = kind === "bench" ? await loadCastleBenchModel() : null;
   const throneDaisModel =
     kind === "stair" ? await loadCastleThroneDaisModel() : null;
@@ -173,6 +179,7 @@ async function bootstrapPropPreview(
     textured,
     barrelModel,
     battleAxeModel,
+    swordModel,
     benchModel,
     throneDaisModel,
     throneModel,

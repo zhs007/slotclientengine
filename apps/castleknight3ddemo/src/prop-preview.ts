@@ -37,6 +37,7 @@ export type PropPreviewKind =
   | "stair"
   | "throne"
   | "chandelier"
+  | "sword"
   | "battleAxe"
   | "spellbook"
   | "crown";
@@ -56,6 +57,7 @@ export class PropPreviewRenderer {
     textured: boolean,
     barrelModel: Group | null,
     battleAxeModel: Group | null,
+    swordModel: Group | null,
     benchModel: Group | null,
     throneDaisModel: Group | null,
     throneModel: Group | null,
@@ -282,6 +284,10 @@ export class PropPreviewRenderer {
             throw new Error("Castle battle axe GLB is not loaded.");
           }
           symbol = battleAxeModel.clone(true);
+        } else if (kind === "sword") {
+          if (!swordModel) throw new Error("Castle sword GLB is not loaded.");
+          symbol = swordModel.clone(true);
+          symbol.rotation.z = -0.72;
         } else {
           symbol =
             kind === "spellbook"
@@ -289,7 +295,13 @@ export class PropPreviewRenderer {
               : createCartoonCrownSymbol(materials);
         }
         symbol.scale.setScalar(
-          kind === "battleAxe" ? 1.85 : kind === "spellbook" ? 2.35 : 2.1,
+          kind === "battleAxe"
+            ? 1.85
+            : kind === "sword"
+              ? 3
+              : kind === "spellbook"
+                ? 2.35
+                : 2.1,
         );
         symbol.rotation.y = sideView ? Math.PI / 2 : -Math.PI * 0.12;
         this.#scene.add(symbol);

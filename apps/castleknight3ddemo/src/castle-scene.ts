@@ -151,6 +151,7 @@ export class CastleKnightRenderer {
     throneModel: Group,
     wallModel: Group,
     columnModel: Group,
+    swordModel: Group,
   ) {
     this.#renderer = new WebGLRenderer({
       antialias: true,
@@ -185,6 +186,7 @@ export class CastleKnightRenderer {
       createSymbolPlacements(0x6a17d39b),
       this.#textureLibrary,
       battleAxeModel,
+      swordModel,
     );
     this.#root.add(this.#symbols);
 

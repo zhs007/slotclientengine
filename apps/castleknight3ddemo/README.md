@@ -1,7 +1,7 @@
 # castleknight3ddemo
 
 Three.js 卡通渲染城堡骑士棋盘 demo。场景包含 5×6 中世纪符号棋盘、石砌王座大厅、拱门与立柱、
-旗帜、吊灯、火把和可交互的老虎机风格 HUD。场景模型主要由代码生成，板凳、木桶、战斧、王座台阶、王座、墙体和立柱使用压缩后的外部 GLB，
+旗帜、吊灯、火把和可交互的老虎机风格 HUD。场景模型主要由代码生成，板凳、木桶、战斧、剑、王座台阶、王座、墙体和立柱使用压缩后的外部 GLB，
 墙面、地面、木材与织物使用项目内的
 手绘无缝贴图，细节纹理、toon gradient、轮廓线和屏幕空间合成效果在运行时生成。
 
@@ -20,9 +20,9 @@ pnpm --filter castleknight3ddemo dev
 ```
 
 开发时可用
-`?prop=chest|column|bench|barrel|wall|torch|stair|throne|chandelier|battleAxe|spellbook|crown`
+`?prop=chest|column|bench|barrel|wall|torch|stair|throne|chandelier|sword|battleAxe|spellbook|crown`
 查看对应道具的无贴图结构门禁；追加 `&mode=final` 查看最终贴图，追加 `&view=side` 检查侧视体积。
-外部 GLB 板凳、木桶、战斧、王座台阶、王座、墙体和立柱始终显示模型自带的 PBR 材质。
+外部 GLB 板凳、木桶、战斧、剑、王座台阶、王座、墙体和立柱始终显示模型自带的 PBR 材质。
 
 定向验收：
 
