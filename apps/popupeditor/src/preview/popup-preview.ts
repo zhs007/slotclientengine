@@ -282,7 +282,6 @@ export class PopupPreview {
     this.#previewRoot.position.set(x, y);
     this.#previewRoot.scale.set(scale);
     if (this.#player) {
-      this.#player.setTextWidthGuidesVisible(this.#showGuides);
       this.#presentationSnapshot = this.#player.applyViewport
         ? this.#player.applyViewport(this.#size)
         : null;
@@ -291,6 +290,7 @@ export class PopupPreview {
           this.#size.width / 2,
           this.#size.height / 2,
         );
+      this.#player.setTextWidthGuidesVisible(this.#showGuides, scale);
     } else {
       this.#presentationSnapshot = null;
     }

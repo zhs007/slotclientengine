@@ -103,8 +103,7 @@ export class PopupEditorApp {
     this.renderWorkspace(this.#store.project);
   }
   destroy() {
-    if (this.#previewTimer) clearTimeout(this.#previewTimer);
-    this.#previewGeneration += 1;
+    this.cancelScheduledPreview();
     this.#preview?.destroy();
   }
   private renderWorkspace(project: PopupEditorProject) {
@@ -159,16 +158,6 @@ export class PopupEditorApp {
     }
   }
   private bindGlobal() {
-    this.required("workspace").addEventListener("input", (event) => {
-      const input = event.target;
-      if (!(input instanceof HTMLInputElement)) return;
-      if (
-        input.matches(
-          "[data-overlay-field], [data-layer-field], [data-single-field], [data-project-field], [data-spine-popup-field]",
-        )
-      )
-        input.dispatchEvent(new Event("change"));
-    });
     this.#root
       .querySelectorAll<HTMLButtonElement>("[data-tab]")
       .forEach((button) =>
@@ -285,7 +274,7 @@ export class PopupEditorApp {
       .querySelector<HTMLButtonElement>("#close-project")
       ?.addEventListener("click", () => {
         this.#hasProject = false;
-        this.#previewGeneration += 1;
+        this.cancelScheduledPreview();
         this.#preview?.reset();
         this.renderWorkspace(this.#store.project);
       });
@@ -887,8 +876,8 @@ export class PopupEditorApp {
       );
     this.#root
       .querySelectorAll<HTMLInputElement>("[data-color-picker-owner]")
-      .forEach((picker) =>
-        picker.addEventListener("input", () => {
+      .forEach((picker) => {
+        const syncColorText = () => {
           const owner = picker.dataset.colorPickerOwner!;
           const id = picker.dataset.colorPickerId!;
           const field = picker.dataset.colorPickerField!;
@@ -897,22 +886,34 @@ export class PopupEditorApp {
           );
           if (!input) throw new Error("颜色 string input 不存在。");
           input.value = picker.value;
-          input.dispatchEvent(new Event("change"));
-        }),
-      );
+          return input;
+        };
+        picker.addEventListener("input", () => {
+          syncColorText();
+        });
+        picker.addEventListener("change", () => {
+          syncColorText().dispatchEvent(new Event("change"));
+        });
+      });
     this.#root
       .querySelectorAll<HTMLInputElement>("[data-project-color-picker]")
-      .forEach((picker) =>
-        picker.addEventListener("input", () => {
+      .forEach((picker) => {
+        const syncColorText = () => {
           const field = picker.dataset.projectColorPicker!;
           const input = this.#root.querySelector<HTMLInputElement>(
             `[data-project-field="${field}"]`,
           );
           if (!input) throw new Error("项目颜色 string input 不存在。");
           input.value = picker.value;
-          input.dispatchEvent(new Event("change"));
-        }),
-      );
+          return input;
+        };
+        picker.addEventListener("input", () => {
+          syncColorText();
+        });
+        picker.addEventListener("change", () => {
+          syncColorText().dispatchEvent(new Event("change"));
+        });
+      });
     const id = this.#root.querySelector<HTMLInputElement>("#project-id");
     if (id) {
       syncProjectIdValidity(id);
@@ -1090,12 +1091,16 @@ export class PopupEditorApp {
     project: PopupEditorProject,
     errors: readonly string[],
   ) {
-    if (this.#previewTimer) clearTimeout(this.#previewTimer);
+    if (this.#previewTimer) {
+      clearTimeout(this.#previewTimer);
+      this.#previewTimer = null;
+    }
     this.#preview?.cancelPendingRebuild();
     const generation = ++this.#previewGeneration;
     if (!this.#hasProject || errors.length) return;
     const snapshot = clonePopupEditorProject(project);
     this.#previewTimer = setTimeout(() => {
+      if (generation !== this.#previewGeneration) return;
       this.#previewTimer = null;
       void this.#preview!.rebuild(snapshot).catch((error) => {
         if (generation !== this.#previewGeneration) return;
@@ -1103,6 +1108,15 @@ export class PopupEditorApp {
         this.renderDiagnostics();
       });
     }, 120);
+  }
+
+  private cancelScheduledPreview() {
+    if (this.#previewTimer) {
+      clearTimeout(this.#previewTimer);
+      this.#previewTimer = null;
+    }
+    this.#previewGeneration += 1;
+    this.#preview?.cancelPendingRebuild();
   }
 
   private async importPopupAudio(
@@ -1370,6 +1384,10 @@ function singleStateLayerMarkup(
           .replaceAll("data-overlay-id", "data-single-id")
           .replaceAll("data-overlay-field", "data-single-field")
           .replaceAll("data-overlay-fill-kind", "data-single-fill-kind")
+          .replaceAll(
+            'data-color-picker-owner="overlay"',
+            'data-color-picker-owner="single"',
+          )
       : "";
   const specific =
     layer.kind === "image"
