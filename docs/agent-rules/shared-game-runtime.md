@@ -87,7 +87,7 @@
   在同一manual-clock transaction中支持position、`[0,1]` opacity、x/y scale、clockwise degree rotation及多属性并行；
   position复用line/cubic path，所有属性共享duration/easing。它不取得盘面commit；游戏仍用普通for/await/Promise.all，
   不新增presentation/motion plan或业务DSL。
-- RenderObject是Container-backed的opaque public capability，不继承或公开raw Pixi Container。`SymbolHandle.getAnchor()`只表示settled SymbolArea occurrence，owned clone追踪必须使用独立的`getSelfAnchor()`；后者跟随clone当前display origin且不伪造盘面归属。whole Symbol、普通文字及
+- RenderObject是Container-backed的opaque public capability，不继承或公开raw Pixi Container。RenderObject的`getAnchor()`省略参数时表示既有display origin；显式九宫格alignment按当前local/logical bounds解析live anchor，必须跟随动态view、scale和ImgNumber文本geometry，不能缓存Container或bounds。`SymbolHandle.getAnchor()`只表示settled SymbolArea occurrence，owned clone追踪必须使用独立的`getSelfAnchor()`；后者跟随clone当前display origin且不伪造盘面归属。whole Symbol、普通文字及
   symbol value/text part统一使用clone/getAnchor/mount/transfer；part只通过strict `{kind:"value"}`或
   `{kind:"text",name}`取得，不猜唯一node、不在value/text间fallback。盘面Symbol/part为borrowed，只有owned clone可transfer或destroy。
 - caller-owned program resource与program Popup只有在调用方显式提供owner-local `instanceId`时才注册live runtime address；不自动分配identity。重复live ID在prepare前失败，destroy/session结束后注销并允许复用。安全parent统一解析为`RenderObjectLayer`并由address mount处理safe-integer local order、owner clock和detach-only cleanup；Spine slot/VNI text layer必须使用exact typed ref和单一stable group，不开放raw display tree。

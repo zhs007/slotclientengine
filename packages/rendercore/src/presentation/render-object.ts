@@ -14,6 +14,17 @@ import {
 } from "./render-object-motion.js";
 import type { RenderObjectLayer } from "./render-object-layer.js";
 
+export type RenderObjectAlignment =
+  | "top-left"
+  | "top-center"
+  | "top-right"
+  | "center-left"
+  | "center"
+  | "center-right"
+  | "bottom-left"
+  | "bottom-center"
+  | "bottom-right";
+
 export interface RenderObjectPlayOptions {
   readonly signal?: AbortSignal;
   /** Plays continuously. The returned Promise resolves after the first loop. */
@@ -55,7 +66,11 @@ export interface RenderObject {
   stop(): void;
   /** Returns an exact opaque child parent owned by this RenderObject. */
   getChildLayer(ref: RenderObjectChildLayerRef): RenderObjectLayer;
-  getAnchor(): RenderAnchor;
+  /**
+   * Returns the display origin when alignment is omitted, or a live point in
+   * the object's current local bounds when alignment is provided.
+   */
+  getAnchor(alignment?: RenderObjectAlignment): RenderAnchor;
   destroy(): void;
 }
 
@@ -66,6 +81,13 @@ export interface CloneableRenderObject extends RenderObject {
 export interface RenderObjectAdapter {
   readonly view: Container | (() => Container);
   readonly owned?: boolean;
+  /** Supplies logical bounds when Pixi visual bounds are not the object contract. */
+  readonly getAlignmentBounds?: (view: Container) => {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+  };
   assertUsable?(): void;
   /** Advances object-owned playback while the object is mounted to an owner clock. */
   update?(deltaSeconds: number): void;
@@ -277,9 +299,19 @@ function createRenderObjectBase(adapter: RenderObjectAdapter): RenderObject {
         );
       return adapter.getChildLayer(ref);
     },
-    getAnchor: () => {
+    getAnchor: (alignment?: RenderObjectAlignment) => {
       assertUsable();
-      return createContainerRenderAnchor(() => registered.view);
+      if (alignment === undefined)
+        return createContainerRenderAnchor(() => registered.view);
+      assertRenderObjectAlignment(alignment);
+      return createContainerRenderAnchor(
+        () => registered.view,
+        (view) =>
+          resolveAlignmentPoint(
+            alignment,
+            adapter.getAlignmentBounds?.(view) ?? view.getLocalBounds(),
+          ),
+      );
     },
     destroy: () => {
       if (destroyed) return;
@@ -301,6 +333,71 @@ function createRenderObjectBase(adapter: RenderObjectAdapter): RenderObject {
   }) satisfies RenderObject;
   adapters.set(object, registered);
   return object;
+}
+
+function assertRenderObjectAlignment(alignment: RenderObjectAlignment): void {
+  switch (alignment) {
+    case "top-left":
+    case "top-center":
+    case "top-right":
+    case "center-left":
+    case "center":
+    case "center-right":
+    case "bottom-left":
+    case "bottom-center":
+    case "bottom-right":
+      return;
+    default:
+      throw new SymbolAnimationError(
+        `Unknown RenderObject alignment "${String(alignment)}".`,
+      );
+  }
+}
+
+function resolveAlignmentPoint(
+  alignment: RenderObjectAlignment,
+  bounds: {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+  },
+): RenderPoint {
+  if (
+    !Number.isFinite(bounds.x) ||
+    !Number.isFinite(bounds.y) ||
+    !Number.isFinite(bounds.width) ||
+    !Number.isFinite(bounds.height) ||
+    bounds.width < 0 ||
+    bounds.height < 0
+  )
+    throw new SymbolAnimationError(
+      "RenderObject alignment bounds must be finite with non-negative size.",
+    );
+  const centerX = bounds.x + bounds.width * 0.5;
+  const right = bounds.x + bounds.width;
+  const centerY = bounds.y + bounds.height * 0.5;
+  const bottom = bounds.y + bounds.height;
+  switch (alignment) {
+    case "top-left":
+      return { x: bounds.x, y: bounds.y };
+    case "top-center":
+      return { x: centerX, y: bounds.y };
+    case "top-right":
+      return { x: right, y: bounds.y };
+    case "center-left":
+      return { x: bounds.x, y: centerY };
+    case "center":
+      return { x: centerX, y: centerY };
+    case "center-right":
+      return { x: right, y: centerY };
+    case "bottom-left":
+      return { x: bounds.x, y: bottom };
+    case "bottom-center":
+      return { x: centerX, y: bottom };
+    case "bottom-right":
+      return { x: right, y: bottom };
+  }
 }
 
 export function getRenderObjectAdapter(

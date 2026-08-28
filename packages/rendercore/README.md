@@ -88,7 +88,9 @@ borrowed，不能 destroy；clone 是 owned `RenderObject`，由调用方 remove
 
 `RenderObject` 是 Container-backed 的 opaque capability，不是 Pixi `Container` 子类，也不公开
 `parent/children/worldTransform`。`SymbolHandle`、普通文字对象以及 symbol 的 value/text part 使用同一
-`getAnchor()/clone()/transfer()` 组合；只有可复制对象暴露 `clone()`。例如：
+`getAnchor()/clone()/transfer()` 组合；只有可复制对象暴露 `clone()`。`getAnchor()` 省略参数时保持既有
+display origin 语义；传入 `top-left`、`center`、`bottom-right` 等九宫格 alignment 时返回当前对象边界中的
+live anchor，后续对象缩放、动态 view 切换或 ImgNumber 文本尺寸变化都会在 resolve 时生效。例如：
 
 ```ts
 const source = area.getSymbol(position);

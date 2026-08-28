@@ -1,6 +1,7 @@
-import { Texture } from "pixi.js";
+import { Container, Texture } from "pixi.js";
 import { describe, expect, it } from "vitest";
 import type { ImageStringResource } from "../../src/image-string/core/index.js";
+import { resolveRenderAnchor } from "../../src/presentation/render-anchor.js";
 import { createImgNumberRenderObject } from "../../src/presentation/imgnumber-render-object.js";
 import { getRenderObjectAdapter } from "../../src/presentation/render-object.js";
 
@@ -40,6 +41,26 @@ function createDigitsResource(): ImageStringResource {
 }
 
 describe("ImgNumberRenderObject", () => {
+  it("keeps aligned anchors live as text geometry changes", () => {
+    const root = new Container();
+    const object = createImgNumberRenderObject({
+      resource: createDigitsResource(),
+      text: "1",
+      anchor: { x: 0, y: 0 },
+    });
+    const view = getRenderObjectAdapter(object).view;
+    root.addChild(view);
+    object.setPosition({ x: 12, y: 34 });
+    const bottomRight = object.getAnchor("bottom-right");
+
+    expect(resolveRenderAnchor(bottomRight, root)).toEqual({ x: 18, y: 44 });
+    object.setText("00");
+    expect(resolveRenderAnchor(bottomRight, root)).toEqual({ x: 29, y: 44 });
+
+    object.destroy();
+    expect(() => object.getAnchor("center")).toThrow(/destroyed/);
+  });
+
   it("keeps position separate from dynamic image-string anchoring", () => {
     const resource = createDigitsResource();
     const object = createImgNumberRenderObject({
