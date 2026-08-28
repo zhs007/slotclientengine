@@ -6,6 +6,7 @@ import type {
   AudioBackendSound,
 } from "@slotclientengine/audiocore/core";
 import {
+  RenderCellSpin,
   RenderGridCellReelSet,
   RenderReel,
   RenderReelSet,
@@ -489,6 +490,82 @@ function popupLayoutFixture() {
 }
 
 describe("scene layout package runtime", () => {
+  it("owns and updates a temporary main-reel CellSpin overlay", async () => {
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    try {
+      const resource = await createSceneLayoutPackageResource({
+        manifest: layoutManifest("standard"),
+        files: files(),
+      });
+      const runtime = createSceneLayoutPackageRuntime({ resource });
+      await runtime.init({
+        reels: {
+          main: {
+            scene: [
+              [1, 1],
+              [0, 0],
+            ],
+            localPhaseYs: [0, 0],
+          },
+        },
+      });
+      const session = runtime.createMainReelCellSpin({
+        localReels: [
+          [1, 1, 1, 1, 1, 0],
+          [1, 1, 1, 1, 1, 0],
+        ],
+        initialScene: [
+          [1, -1],
+          [0, -1],
+        ],
+        durationMs: 100,
+        minimumSpinCycles: 1,
+      });
+      const overlay = session.cells as RenderCellSpin;
+      expect(overlay.parent).not.toBeNull();
+
+      const landings = [
+        session.cells.roll({ x: 0, y: 0 }, { code: 0 }),
+        session.cells.roll({ x: 1, y: 0 }, { code: 1 }),
+      ];
+      runtime.update(0.1);
+      await Promise.all(landings);
+      expect(session.cells.getSymbol({ x: 0, y: 0 }).code).toBe(0);
+      expect(session.cells.getSymbol({ x: 1, y: 0 }).code).toBe(1);
+      expect(runtime.getReelArea("main").getSymbol({ x: 0, y: 1 }).code).toBe(
+        1,
+      );
+
+      session.destroy();
+      expect(overlay.parent).toBeNull();
+      expect(() => session.cells.getSymbol({ x: 0, y: 0 })).toThrow(
+        /destroyed/,
+      );
+      session.destroy();
+
+      const runtimeOwned = runtime.createMainReelCellSpin({
+        localReels: [
+          [1, 0],
+          [1, 0],
+        ],
+        initialScene: [
+          [1, -1],
+          [-1, -1],
+        ],
+      });
+      runtime.destroy();
+      expect(() => runtimeOwned.cells.getSymbol({ x: 0, y: 0 })).toThrow(
+        /destroyed/,
+      );
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
+  });
+
   it("emits one committed variant event and ignores initial or same-variant resize", async () => {
     const load = vi
       .spyOn(Assets, "load")
