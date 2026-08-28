@@ -52,6 +52,7 @@ export function createManagedImgNumberRenderObject(
   };
   const base = createCloneableRenderObject({
     view: renderer.container,
+    getAlignmentBounds: () => renderer.getGeometry().logicalBounds,
     clone,
     destroy: () => {
       if (destroyed) return;

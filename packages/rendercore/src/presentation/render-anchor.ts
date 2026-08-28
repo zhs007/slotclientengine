@@ -25,13 +25,13 @@ const adapters = new WeakMap<RenderAnchor, RenderAnchorAdapter>();
 
 export function createContainerRenderAnchor(
   owner: Container | (() => Container),
-  getPoint: () => RenderPoint = () => ({ x: 0, y: 0 }),
+  getPoint: (owner: Container) => RenderPoint = () => ({ x: 0, y: 0 }),
 ): RenderAnchor {
   const anchor = Object.freeze({ kind: "render-anchor" as const });
   adapters.set(anchor, {
     resolve: (target) => {
       const resolvedOwner = typeof owner === "function" ? owner() : owner;
-      const point = getPoint();
+      const point = getPoint(resolvedOwner);
       assertPoint(point);
       const global = resolvedOwner.toGlobal(point);
       const local = target.toLocal(global);

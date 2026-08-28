@@ -8,6 +8,7 @@ export type {
   CloneableRenderObject,
   CloneableRenderObjectAdapter,
   RenderObject,
+  RenderObjectAlignment,
   RenderObjectAdapter,
   RenderObjectChildLayerRef,
   RenderObjectSpineSlotAdapter,
