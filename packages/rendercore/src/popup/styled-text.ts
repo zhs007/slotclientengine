@@ -2,22 +2,54 @@ import {
   CanvasTextMetrics,
   Container,
   FillGradient,
+  Graphics,
   Text,
   TextStyle,
   type TextStyleOptions,
 } from "pixi.js";
-import type { PopupAnchor, PopupTextFill, PopupTextStyle } from "./types.js";
+import type {
+  PopupAnchor,
+  PopupTextFill,
+  PopupTextStyle,
+  PopupTextWidthRange,
+} from "./types.js";
+import { resolvePopupTextFontSize } from "./text-width-fit.js";
+
+export interface PopupStyledTextLayout {
+  readonly authoredFontSize: number;
+  readonly effectiveFontSize: number;
+  readonly width: number;
+  readonly height: number;
+}
 
 export interface PopupStyledTextRenderer {
   readonly container: Container;
   readonly text: string;
+  readonly layout: PopupStyledTextLayout;
   setText(text: string): void;
   setPresentation(options: {
     readonly family: string;
     readonly style: PopupTextStyle;
     readonly anchor: PopupAnchor;
   }): void;
+  setWidthGuideVisible(visible: boolean): void;
   destroy(): void;
+}
+
+const styledTextRenderers = new WeakMap<Container, PopupStyledTextRenderer>();
+
+/** @internal Editor-only traversal over the existing production display tree. */
+export function setPopupTextWidthGuidesInTree(
+  root: Container,
+  visible: boolean,
+): void {
+  const pending: Container[] = [root];
+  while (pending.length) {
+    const current = pending.pop()!;
+    styledTextRenderers.get(current)?.setWidthGuideVisible(visible);
+    for (const child of current.children)
+      if (child instanceof Container) pending.push(child);
+  }
 }
 
 export function createPopupStyledText(options: {
@@ -32,18 +64,66 @@ export function createPopupStyledText(options: {
   let style = options.style;
   let anchor = options.anchor;
   const container = new Container();
-  let active = build(text);
+  let active = build(text, family, style, anchor);
+  let guide: Graphics | null = null;
+  let guideVisible = false;
   let destroyed = false;
   container.addChild(active.container);
 
-  function build(value: string): PreparedStyledText {
-    if (style.arcDegrees === 0) {
-      const gradient = createGradient(style.fill);
-      const textStyle = new TextStyle(toTextStyle(family, style, gradient));
+  function measureWidth(
+    value: string,
+    candidateFamily: string,
+    candidateStyle: PopupTextStyle,
+  ): number {
+    const measurementStyle = new TextStyle(
+      toTextStyle(candidateFamily, candidateStyle, null),
+    );
+    try {
+      const measure =
+        options.measureText ??
+        ((part: string, style: TextStyle) =>
+          CanvasTextMetrics.measureText(part, style).width);
+      if (candidateStyle.arcDegrees === 0)
+        return validateMetric(measure(value, measurementStyle));
+      const graphemes = segmentGraphemes(value);
+      const widths = graphemes.map((part) =>
+        validateMetric(measure(part, measurementStyle)),
+      );
+      return curvedGeometry(widths, candidateStyle).bounds.width;
+    } finally {
+      measurementStyle.destroy();
+    }
+  }
+
+  function build(
+    value: string,
+    nextFamily: string,
+    nextStyle: PopupTextStyle,
+    nextAnchor: PopupAnchor,
+  ): PreparedStyledText {
+    const fit = resolvePopupTextFontSize({
+      authoredFontSize: nextStyle.fontSize,
+      widthRange: nextStyle.widthRange,
+      empty: value.length === 0,
+      measureWidth: (fontSize) =>
+        measureWidth(value, nextFamily, { ...nextStyle, fontSize }),
+    });
+    const effectiveStyle = { ...nextStyle, fontSize: fit.fontSize };
+    if (effectiveStyle.arcDegrees === 0) {
+      const gradient = createGradient(effectiveStyle.fill);
+      const textStyle = new TextStyle(
+        toTextStyle(nextFamily, effectiveStyle, gradient),
+      );
       const display = new Text({ text: value, style: textStyle });
-      display.anchor.set(anchor.x, anchor.y);
+      display.anchor.set(nextAnchor.x, nextAnchor.y);
       return {
         container: display,
+        layout: Object.freeze({
+          authoredFontSize: nextStyle.fontSize,
+          effectiveFontSize: fit.fontSize,
+          width: fit.width,
+          height: fit.fontSize,
+        }),
         destroy() {
           display.destroy();
           gradient?.destroy();
@@ -51,54 +131,39 @@ export function createPopupStyledText(options: {
         },
       };
     }
+
     const group = new Container();
     const graphemes = segmentGraphemes(value);
-    const measurementStyle = new TextStyle(toTextStyle(family, style, null));
+    const measurementStyle = new TextStyle(
+      toTextStyle(nextFamily, effectiveStyle, null),
+    );
     const measure =
       options.measureText ??
       ((part: string, style: TextStyle) =>
         CanvasTextMetrics.measureText(part, style).width);
-    const widths = graphemes.map((part) => measure(part, measurementStyle));
-    if (widths.some((width) => !Number.isFinite(width) || width < 0)) {
-      measurementStyle.destroy();
-      throw new Error(
-        "popup styled text metrics must be finite and non-negative.",
+    let widths: readonly number[];
+    try {
+      widths = graphemes.map((part) =>
+        validateMetric(measure(part, measurementStyle)),
       );
+    } finally {
+      measurementStyle.destroy();
     }
-    const spacing = style.letterSpacing;
-    const total = Math.max(
-      0,
-      widths.reduce((sum, width) => sum + width, 0) +
-        spacing * Math.max(0, widths.length - 1),
+    const geometry = curvedGeometry(widths, effectiveStyle);
+    const gradient = createGradient(effectiveStyle.fill);
+    const textStyle = new TextStyle(
+      toTextStyle(nextFamily, effectiveStyle, gradient),
     );
-    const gradient = createGradient(style.fill);
-    const textStyle = new TextStyle(toTextStyle(family, style, gradient));
     const graphemeStyles: TextStyle[] = [];
-    measurementStyle.destroy();
-    const arcRadians = (style.arcDegrees * Math.PI) / 180;
-    const radius = total === 0 ? 0 : total / Math.abs(arcRadians);
-    let cursor = -total / 2;
-    const boxes: Array<{
-      readonly x: number;
-      readonly y: number;
-      readonly width: number;
-      readonly rotation: number;
-    }> = [];
     for (let index = 0; index < graphemes.length; index += 1) {
-      const width = widths[index]!;
-      const center = cursor + width / 2;
-      const angle = radius === 0 ? 0 : center / radius;
       const graphemeStyle = gradient ? textStyle.clone() : textStyle;
       if (gradient) {
-        // Pixi renders every grapheme into its own canvas. Give each canvas the
-        // complete uncurved text bounds and its offset within those bounds so
-        // the local gradient remains continuous before the glyph is curved.
         graphemeStyle._gradientBounds = {
-          width: Math.max(1, total),
-          height: Math.max(1, style.fontSize),
+          width: Math.max(1, geometry.total),
+          height: Math.max(1, fit.fontSize),
         };
         graphemeStyle._gradientOffset = {
-          x: -(cursor + total / 2),
+          x: -(geometry.cursors[index]! + geometry.total / 2),
           y: 0,
         };
         graphemeStyles.push(graphemeStyle);
@@ -108,27 +173,23 @@ export function createPopupStyledText(options: {
         style: graphemeStyle,
       });
       display.anchor.set(0.5, 0.5);
-      display.position.set(
-        Math.sin(angle) * radius,
-        Math.sign(arcRadians) * radius * (1 - Math.cos(angle)),
-      );
-      display.rotation = Math.sign(arcRadians) * angle;
+      const box = geometry.boxes[index]!;
+      display.position.set(box.x, box.y);
+      display.rotation = box.rotation;
       group.addChild(display);
-      boxes.push({
-        x: display.x,
-        y: display.y,
-        width,
-        rotation: display.rotation,
-      });
-      cursor += width + spacing;
     }
-    const bounds = approximateBounds(boxes, style.fontSize);
     group.pivot.set(
-      bounds.x + bounds.width * anchor.x,
-      bounds.y + bounds.height * anchor.y,
+      geometry.bounds.x + geometry.bounds.width * nextAnchor.x,
+      geometry.bounds.y + geometry.bounds.height * nextAnchor.y,
     );
     return {
       container: group,
+      layout: Object.freeze({
+        authoredFontSize: nextStyle.fontSize,
+        effectiveFontSize: fit.fontSize,
+        width: geometry.bounds.width,
+        height: geometry.bounds.height,
+      }),
       destroy() {
         group.destroy({ children: true });
         for (const graphemeStyle of graphemeStyles) graphemeStyle.destroy();
@@ -138,21 +199,56 @@ export function createPopupStyledText(options: {
     };
   }
 
-  return Object.freeze({
+  function commit(prepared: PreparedStyledText): void {
+    container.addChild(prepared.container);
+    container.removeChild(active.container);
+    active.destroy();
+    active = prepared;
+    redrawGuide();
+  }
+
+  function redrawGuide(): void {
+    if (!guideVisible || !enabledRange(style.widthRange)) {
+      guide?.destroy();
+      guide = null;
+      return;
+    }
+    guide ??= new Graphics();
+    guide.eventMode = "none";
+    guide.clear();
+    const range = style.widthRange!;
+    const top = -active.layout.height * anchor.y;
+    const height = Math.max(1, active.layout.height);
+    const maxLeft = -range.maxWidth * anchor.x;
+    const minLeft = -range.minWidth * anchor.x;
+    guide
+      .rect(maxLeft, top, range.maxWidth, height)
+      .stroke({ color: 0x5d7cff, width: 1 });
+    guide
+      .moveTo(minLeft, top)
+      .lineTo(minLeft, top + height)
+      .moveTo(minLeft + range.minWidth, top)
+      .lineTo(minLeft + range.minWidth, top + height)
+      .stroke({ color: 0xffcc66, width: 1 });
+    if (guide.parent !== container) container.addChildAt(guide, 0);
+  }
+
+  const renderer: PopupStyledTextRenderer = Object.freeze({
     container,
     get text() {
       assertUsable();
       return text;
     },
+    get layout() {
+      assertUsable();
+      return active.layout;
+    },
     setText(value: string) {
       assertUsable();
       const validated = validatePopupStyledText(value);
       if (validated === text) return;
-      const prepared = build(validated);
-      container.addChild(prepared.container);
-      container.removeChild(active.container);
-      active.destroy();
-      active = prepared;
+      const prepared = build(validated, family, style, anchor);
+      commit(prepared);
       text = validated;
     },
     setPresentation(next: {
@@ -161,22 +257,30 @@ export function createPopupStyledText(options: {
       readonly anchor: PopupAnchor;
     }) {
       assertUsable();
+      const prepared = build(text, next.family, next.style, next.anchor);
+      commit(prepared);
       family = next.family;
       style = next.style;
       anchor = next.anchor;
-      const prepared = build(text);
-      container.addChild(prepared.container);
-      container.removeChild(active.container);
-      active.destroy();
-      active = prepared;
+      redrawGuide();
+    },
+    setWidthGuideVisible(visible: boolean) {
+      assertUsable();
+      guideVisible = visible;
+      redrawGuide();
     },
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      styledTextRenderers.delete(container);
+      guide?.destroy();
+      guide = null;
       active.destroy();
       container.destroy({ children: false });
     },
   });
+  styledTextRenderers.set(container, renderer);
+  return renderer;
 
   function assertUsable() {
     if (destroyed) throw new Error("popup styled text renderer was destroyed.");
@@ -194,6 +298,7 @@ export function validatePopupStyledText(value: string): string {
 
 interface PreparedStyledText {
   readonly container: Container;
+  readonly layout: PopupStyledTextLayout;
   destroy(): void;
 }
 
@@ -250,6 +355,43 @@ function segmentGraphemes(value: string): readonly string[] {
   );
 }
 
+function curvedGeometry(widths: readonly number[], style: PopupTextStyle) {
+  const spacing = style.letterSpacing;
+  const total = Math.max(
+    0,
+    widths.reduce((sum, width) => sum + width, 0) +
+      spacing * Math.max(0, widths.length - 1),
+  );
+  const arcRadians = (style.arcDegrees * Math.PI) / 180;
+  const radius = total === 0 ? 0 : total / Math.abs(arcRadians);
+  let cursor = -total / 2;
+  const cursors: number[] = [];
+  const boxes: Array<{
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly rotation: number;
+  }> = [];
+  for (const width of widths) {
+    cursors.push(cursor);
+    const center = cursor + width / 2;
+    const angle = radius === 0 ? 0 : center / radius;
+    boxes.push({
+      x: Math.sin(angle) * radius,
+      y: Math.sign(arcRadians) * radius * (1 - Math.cos(angle)),
+      width,
+      rotation: Math.sign(arcRadians) * angle,
+    });
+    cursor += width + spacing;
+  }
+  return Object.freeze({
+    total,
+    cursors: Object.freeze(cursors),
+    boxes: Object.freeze(boxes),
+    bounds: approximateBounds(boxes, style.fontSize),
+  });
+}
+
 function approximateBounds(
   boxes: readonly {
     readonly x: number;
@@ -278,4 +420,18 @@ function approximateBounds(
       }
   }
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+function validateMetric(width: number): number {
+  if (!Number.isFinite(width) || width < 0)
+    throw new Error(
+      "popup styled text metrics must be finite and non-negative.",
+    );
+  return width;
+}
+
+function enabledRange(
+  range: PopupTextWidthRange | undefined,
+): range is PopupTextWidthRange {
+  return Boolean(range && range.minWidth > 0 && range.maxWidth > 0);
 }

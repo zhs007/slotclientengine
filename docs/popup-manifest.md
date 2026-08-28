@@ -1,8 +1,8 @@
-# Popup package v1–v8
+# Popup package v1–v9
 
 `popup.manifest.json` 是获奖庆祝、普通 Spine 弹窗与单状态自由弹窗的唯一 production 合同。独立 `<id>-popup.zip` 最终由 Game Layout Editor 原样 vendor 到 Scene Layout package。
 
-rendercore 继续解析全部历史版本。`@slotclientengine/rendercore/popup/data` 的 `loadPopupManifest()` 是唯一默认入口：它先按 source version strict validate，再确定性升级并 strict revalidate 为 `LATEST_POPUP_MANIFEST_VERSION`（当前 v8），同时返回 `sourceVersion` 供迁移提示。游戏、所有 editor 与 CLI 都不在默认流程自行挑选版本 upgrader；未知未来版本显式失败。Popup Editor 新建项目固定使用 v8；导入合法 v1–v7 ZIP 时先完成 source package 的 map/hash/closure 与 resource 校验，再原子迁移为 v8。迁移失败不打开半迁移项目，后续 preview/export 只生成 v8。历史版本只包含获奖庆祝与普通 Spine 类型；`single-state` 从 v8 开始存在，不能降级到旧版本。
+rendercore 继续解析全部历史版本。`@slotclientengine/rendercore/popup/data` 的 `loadPopupManifest()` 是唯一默认入口：它先按 source version strict validate，再确定性升级并 strict revalidate 为 `LATEST_POPUP_MANIFEST_VERSION`（当前 v9），同时返回 `sourceVersion` 供迁移提示。游戏、所有 editor 与 CLI 都不在默认流程自行挑选版本 upgrader；未知未来版本显式失败。Popup Editor 新建项目固定使用 v9；导入合法 v1–v8 ZIP 时先完成 source package 的 map/hash/closure 与 resource 校验，再原子迁移为 v9。迁移失败不打开半迁移项目，后续 preview/export 只生成 v9。历史版本只包含获奖庆祝与普通 Spine 类型；`single-state` 从 v8 开始存在，不能降级到旧版本。
 
 ## v2 presentation 扩展
 
@@ -129,15 +129,21 @@ single-state 支持 image、text、image-string、VNI 与 official Spine 五种 
 
 非空 layer 必须引用 `resources` 中 kind 匹配的资源；未被 layer 闭包使用的资源仍按 production strict closure 拒绝。Spine autoplay 保存 exact `animation/loop`；VNI autoplay 使用既有 `once | segmented` union。静态 image/text/image-string 不接受 autoplay。
 
+## v9 字体文字宽度拟合
+
+v9 要求每个 `text` layer 的 `style` 显式保存 `widthRange: { minWidth, maxWidth }`。`0/0` 是唯一关闭值；启用时两项都必须是正有限数，且 `minWidth <= maxWidth`。缺字段、单边为 `0`、反向区间或未知字段都会 strict 失败。合法 v1–v8 source 必须先按原版本 strict 解析，latest normalizer 再给每个文字层补入 `0/0` 并复验为 v9，因此旧包视觉行为不变，Popup Editor 再导出时自然写出 v9。
+
+runtime 以文字的 local typographic width 为准：未达到 `minWidth` 时增大字号，超过 `maxWidth` 时减小字号，区间内保持 authored `fontSize`。拟合只改变本次渲染的 effective font size，不回写 manifest，不使用换行、截断或横向缩放；描边、投影和 layer transform 不参与宽度判定。直排与 grapheme 弧排走同一确定性求解边界，空字符串保持 authored 字号且宽度为 `0`。Popup Editor 的 guides 开关会在文字局部坐标中显示最小/最大宽度参考框；该辅助框只属于编辑会话，不进入 project、manifest 或 ZIP。
+
 ## 坐标、档位与输入
 
-- popup 中心为 `(0, 0)`，向右/向下为正；v1/v2 使用 `designViewport`，v3–v8 只由 focus 建立无界 maximized-focus production transform。
+- popup 中心为 `(0, 0)`，向右/向下为正；v1/v2 使用 `designViewport`，v3–v9 只由 focus 建立无界 maximized-focus production transform。
 - layout 为每个 active variant 保存相对 viewport center 的 `x/y/scale`。
 - 游戏只提交 safe integer `betAmountRaw` 和 `winAmountRaw`；preview 的 bet、win、zoom、guides 不进入 manifest。
 - 档位固定为 `base -> standard -> bigwin -> superwin -> megawin`。`base` 截止 `1×bet`，`standard` 截止 bigwin threshold，后三档 threshold multiplier 显式且严格递增。边界相等时进入对应档，runtime 用 BigInt 比较。
 - 每档必须有非空 `layers`，且必须恰好包含一个 `image-string + win-amount` 图层。v6 金额层的 exact id 固定为 `win-amount`；整场只维持一个 renderer/runtime，跨档更新文本、transform 和显式资源绑定。
-- 每档还可声明任意数量的命名 `text` 和 `binding="manual"` ImgNumber。名称在同档唯一；跨档同名节点视为一个逻辑节点且必须保持 kind 一致。`text` 可省略字体资源或精确引用 package font，并严格保存单行默认文案、字号、字距、纯色或线性渐变、可选描边/投影、`-180..180` 度弧排、anchor、rotation 与可见 segment。游戏应按 exact name 获取 node handle 并调用 `setText()/resetText()`；不得按 label、order 或资源名猜测。manual ImgNumber 保存默认 string、anchor、rotation 与可见 segment。
-- v1/v2/v3 每档严格按全局唯一的 `order` 升序叠放；v4–v8 按 resolved parent 分组校验和排序，数值越小越靠下。跨档时单一金额 renderer 会移动到新档的 resolved parent，不会创建第二个实例。
+- 每档还可声明任意数量的命名 `text` 和 `binding="manual"` ImgNumber。名称在同档唯一；跨档同名节点视为一个逻辑节点且必须保持 kind 一致。`text` 可省略字体资源或精确引用 package font，并严格保存单行默认文案、字号、字距、纯色或线性渐变、可选描边/投影、`-180..180` 度弧排、v9 `widthRange`、anchor、rotation 与可见 segment。游戏应按 exact name 获取 node handle 并调用 `setText()/resetText()`；不得按 label、order 或资源名猜测。manual ImgNumber 保存默认 string、anchor、rotation 与可见 segment。
+- v1/v2/v3 每档严格按全局唯一的 `order` 升序叠放；v4–v9 按 resolved parent 分组校验和排序，数值越小越靠下。跨档时单一金额 renderer 会移动到新档的 resolved parent，不会创建第二个实例。
 - v1/v2/v3 ImgNumber layer 的 `parent` 是 `{ "kind": "popup-root" }` 或
   `{ "kind": "vni-text-layer", "vniLayerId": "...", "textLayerId": "..." }`。后者只能引用
   同档 VNI layer 和该 project 内 exact `type="text"` layer；ImgNumber 的 `x/y/scale/anchor`

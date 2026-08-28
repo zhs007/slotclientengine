@@ -18,7 +18,7 @@ mode 默认开启；关闭的 mode 不显示 reel guide、不能绑定 Symbols�
 双背景 mode 的 landscape/portrait 各有独立 focus。预览尺寸宽高相等时维持当前方向；首次以
 正方形启动时选择 landscape。
 
-award-celebration Popup 作为自包含 dependency，通过 `rendercore/popup/editor` 完成 standalone ZIP 校验、flatten、namespace 与 vendor。任一受支持的 Popup v1–v8 都先按 source strict 校验，再由默认 loader 转成 latest v8；Popup/Symbol 音效保持 local name，直到 Scene Layout 按 binding id 聚合为全局 route。画面和音频预览继续只走 Scene Layout production runtime/inspector。
+award-celebration Popup 作为自包含 dependency，通过 `rendercore/popup/editor` 完成 standalone ZIP 校验、flatten、namespace 与 vendor。任一受支持的 Popup v1–v9 都先按 source strict 校验，再由默认 loader 转成 latest v9；Popup/Symbol 音效保持 local name，直到 Scene Layout 按 binding id 聚合为全局 route。画面和音频预览继续只走 Scene Layout production runtime/inspector。
 三类 Popup 都可在 Popup 工作区设为“程序 Popup”。这只负责让没有 mode/transition 直接引用的 package 仍进入 production `popups`；已有直接引用的 Popup 本来就可从相同 canonical 地址打开。普通 Spine 仍可在具体转场中选择。Popup root 的 placement、order 与统一 open/close 预览由 Layout Editor 配置并随 layout vendor；一个 preview runtime 同时只允许一个 active Popup。
 若 package 带单行 prompt，Popup 工作区可输入临时预览文案；留空使用 package 默认值。字体、渲染区域和 image/Spine/VNI overlay 保持只读，须回 Popup Editor 修改。相同字体 bytes 与其它 payload 一样在最终 `assets.map.json` 中按 SHA-256 物理去重。
 

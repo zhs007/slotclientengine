@@ -12,7 +12,7 @@ import {
   type PopupAudioV1,
   type PopupOverlayLayer,
   type PopupResourceSpec,
-  type SingleStatePopupLayerV8,
+  type SingleStatePopupLayerV9,
   type PopupVisibilityState,
 } from "@slotclientengine/rendercore/popup/editor";
 import { validateOfficialSpineResource } from "@slotclientengine/rendercore";
@@ -50,7 +50,7 @@ export interface PopupSpineAttachmentTarget {
   readonly slotNames: readonly string[];
 }
 export interface PopupEditorProject {
-  formatVersion: 8;
+  formatVersion: 9;
   name: string;
   type: "award-celebration" | "spine" | "single-state";
   id: string;
@@ -87,7 +87,7 @@ export interface PopupEditorProject {
     overlays: PopupOverlayLayer[];
   };
   singleState: {
-    layers: SingleStatePopupLayerV8[];
+    layers: SingleStatePopupLayerV9[];
   };
 }
 
@@ -191,7 +191,7 @@ export function createPopupEditorProject(
     layers: [],
   });
   return {
-    formatVersion: 8,
+    formatVersion: 9,
     name: options.name ?? "Untitled Popup",
     type: options.type ?? "award-celebration",
     id: options.id ?? "untitled-popup",
@@ -289,7 +289,7 @@ export function clonePopupEditorProject(
 
 export function projectToManifest(project: PopupEditorProject): PopupManifest {
   const common = {
-    version: 8 as const,
+    version: 9 as const,
     kind: "popup" as const,
     id: project.id,
     name: project.name,
@@ -354,7 +354,7 @@ export function projectToManifest(project: PopupEditorProject): PopupManifest {
   if (project.type === "spine") {
     if (project.spine.prompt.enabled)
       throw new Error(
-        "v6 项目不能导出 legacy prompt；请先迁移为命名的字体文字 overlay。",
+        "v9 项目不能导出 legacy prompt；请先迁移为命名的字体文字 overlay。",
       );
     const resourceKey = project.spine.resource;
     if (!resourceKey)
@@ -467,6 +467,7 @@ export function migratePopupPromptToTextLayer(
       letterSpacing: 0,
       fill: { kind: "solid", color: prompt.fill },
       arcDegrees: 0,
+      widthRange: { minWidth: 0, maxWidth: 0 },
     },
     visibleStates: ["start", "loop"],
   });
@@ -616,7 +617,7 @@ export function addSingleStateLayer(
     alpha: 1,
     attachment: { kind: "popup-root" as const },
   };
-  const layer: SingleStatePopupLayerV8 =
+  const layer: SingleStatePopupLayerV9 =
     resource.kind === "image-string"
       ? {
           ...base,
@@ -719,6 +720,7 @@ function defaultPopupTextStyle() {
       angleDegrees: 90,
     },
     arcDegrees: 0,
+    widthRange: { minWidth: 0, maxWidth: 0 },
   };
 }
 
@@ -785,6 +787,7 @@ export function addLayer(
           angleDegrees: 90,
         },
         arcDegrees: 0,
+        widthRange: { minWidth: 0, maxWidth: 0 },
       },
     };
   else if (resource.kind === "image")
@@ -853,6 +856,7 @@ export function addAwardTextLayer(
           angleDegrees: 90,
         },
         arcDegrees: 0,
+        widthRange: { minWidth: 0, maxWidth: 0 },
       },
     },
   ];
@@ -937,7 +941,7 @@ export function getPopupSpineAttachmentTargets(
 }
 
 export function assertPopupLayerCanDelete(
-  layers: readonly (PopupLayer | PopupOverlayLayer | SingleStatePopupLayerV8)[],
+  layers: readonly (PopupLayer | PopupOverlayLayer | SingleStatePopupLayerV9)[],
   layerId: string,
 ): void {
   const dependents = layers
@@ -965,7 +969,7 @@ export function validatePopupEditorAttachments(
     layers: readonly (
       | PopupLayer
       | PopupOverlayLayer
-      | SingleStatePopupLayerV8
+      | SingleStatePopupLayerV9
     )[],
     label: string,
     allowMainSpine: boolean,

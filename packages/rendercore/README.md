@@ -218,7 +218,7 @@ symbol 的对应 anchor；飞行本身不会推断或提交目标 value。
 
 ## Popup API
 
-Popup 使用三个显式入口：`popup/data` 提供 v1–v8 strict source parser、纯数据校验、引用闭包和唯一默认 latest normalizer；`popup/core` 提供 production resolved-resource prepare、轻量 Runtime、presentation 与宿主 input binding；`popup/editor` 组合前两层，提供 mapped standalone package、namespace/materialize 与完整 snapshot wrapper。旧的混合 `popup` 入口和 rendercore root Popup wildcard export 已移除。
+Popup 使用三个显式入口：`popup/data` 提供 v1–v9 strict source parser、纯数据校验、引用闭包和唯一默认 latest normalizer；`popup/core` 提供 production resolved-resource prepare、轻量 Runtime、presentation 与宿主 input binding；`popup/editor` 组合前两层，提供 mapped standalone package、namespace/materialize 与完整 snapshot wrapper。旧的混合 `popup` 入口和 rendercore root Popup wildcard export 已移除。
 
 `loadPopupManifest()` 接受任一受支持版本，先按 source version strict validate，再确定性升级并复验为 `LATEST_POPUP_MANIFEST_VERSION`（当前为 v8）。v8 新增无强制图层的 `single-state`，并保留 v7 package-local audio 合同；未知未来版本继续显式失败。
 

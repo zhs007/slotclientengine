@@ -8,6 +8,7 @@ import type {
   AwardCelebrationPopupManifestV6,
   AwardCelebrationPopupManifestV7,
   AwardCelebrationPopupManifestV8,
+  AwardCelebrationPopupManifestV9,
   AwardCelebrationSpec,
   AwardCelebrationTier,
   AwardTierPresentation,
@@ -22,6 +23,7 @@ import type {
   PopupManifestV6,
   PopupManifestV7,
   PopupManifestV8,
+  PopupManifestV9,
   PopupOverlayLayer,
   PopupLayerAttachment,
   PopupPromptSpec,
@@ -31,7 +33,9 @@ import type {
   PopupTextStyle,
   PopupVisibilityState,
   SingleStatePopupLayerV8,
+  SingleStatePopupLayerV9,
   SingleStatePopupManifestV8,
+  SingleStatePopupManifestV9,
   SpinePopupManifestV1,
   SpinePopupManifestV2,
   SpinePopupManifestV3,
@@ -40,6 +44,7 @@ import type {
   SpinePopupManifestV6,
   SpinePopupManifestV7,
   SpinePopupManifestV8,
+  SpinePopupManifestV9,
 } from "./types.js";
 import { validatePopupLayerAttachmentGraph } from "./attachment.js";
 import { assertPopupFilenameKey, assertPopupPackagePath } from "./path.js";
@@ -72,6 +77,9 @@ interface ParsePopupManifest {
   (value: AwardCelebrationPopupManifestV8): AwardCelebrationPopupManifestV8;
   (value: SpinePopupManifestV8): SpinePopupManifestV8;
   (value: SingleStatePopupManifestV8): SingleStatePopupManifestV8;
+  (value: AwardCelebrationPopupManifestV9): AwardCelebrationPopupManifestV9;
+  (value: SpinePopupManifestV9): SpinePopupManifestV9;
+  (value: SingleStatePopupManifestV9): SingleStatePopupManifestV9;
   (value: PopupManifestV1): PopupManifestV1;
   (value: PopupManifestV2): PopupManifestV2;
   (value: PopupManifestV3): PopupManifestV3;
@@ -80,6 +88,7 @@ interface ParsePopupManifest {
   (value: PopupManifestV6): PopupManifestV6;
   (value: PopupManifestV7): PopupManifestV7;
   (value: PopupManifestV8): PopupManifestV8;
+  (value: PopupManifestV9): PopupManifestV9;
   (value: unknown): PopupManifest;
 }
 
@@ -93,9 +102,10 @@ export const parsePopupManifest = ((value: unknown): PopupManifest => {
     record.version !== 5 &&
     record.version !== 6 &&
     record.version !== 7 &&
-    record.version !== 8
+    record.version !== 8 &&
+    record.version !== 9
   )
-    fail("popup manifest.version must be 1, 2, 3, 4, 5, 6, 7, or 8.");
+    fail("popup manifest.version must be 1, 2, 3, 4, 5, 6, 7, 8, or 9.");
   const version = record.version;
   const modern = version !== 1;
   const commonKeys = [
@@ -126,8 +136,8 @@ export const parsePopupManifest = ((value: unknown): PopupManifest => {
     fail(
       'popup manifest.type must be "award-celebration", "spine", or "single-state".',
     );
-  if (record.type === "single-state" && version !== 8)
-    fail("single-state popup requires manifest version 8.");
+  if (record.type === "single-state" && version < 8)
+    fail("single-state popup requires manifest version 8 or later.");
   const id = validatePopupId(record.id);
   const viewport =
     version === 1 || version === 2
@@ -200,7 +210,11 @@ export const parsePopupManifest = ((value: unknown): PopupManifest => {
     return freeze({ ...base, type: "spine" as const, spine }) as PopupManifest;
   }
   if (record.type === "single-state") {
-    const singleState = parseSingleStatePopup(record.singleState, resources);
+    const singleState = parseSingleStatePopup(
+      record.singleState,
+      resources,
+      version as 8 | 9,
+    );
     const used = new Set(
       singleState.layers.flatMap((layer) =>
         "resource" in layer && layer.resource ? [layer.resource] : [],
@@ -242,7 +256,7 @@ export const parsePopupManifest = ((value: unknown): PopupManifest => {
 function parseSpinePopup(
   value: unknown,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8,
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9,
 ) {
   const record = object(value, "spine");
   keys(
@@ -364,7 +378,7 @@ function parsePrompt(
 function parseOverlays(
   value: unknown,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8,
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9,
 ): readonly PopupOverlayLayer[] {
   if (!Array.isArray(value)) fail("spine.overlays must be an array.");
   const overlays = value.map((raw, index) => {
@@ -408,13 +422,21 @@ function parseOverlays(
 function parseSingleStatePopup(
   value: unknown,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-): SingleStatePopupManifestV8["singleState"] {
+  version: 8 | 9,
+):
+  | SingleStatePopupManifestV8["singleState"]
+  | SingleStatePopupManifestV9["singleState"] {
   const record = object(value, "singleState");
   keys(record, ["layers"], "singleState");
   if (!Array.isArray(record.layers))
     fail("singleState.layers must be an array.");
   const layers = record.layers.map((raw, index) =>
-    parseSingleStateLayer(raw, `singleState.layers[${index}]`, resources),
+    parseSingleStateLayer(
+      raw,
+      `singleState.layers[${index}]`,
+      resources,
+      version,
+    ),
   );
   unique(
     layers.map(({ id }) => id),
@@ -436,7 +458,8 @@ function parseSingleStateLayer(
   value: unknown,
   label: string,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-): SingleStatePopupLayerV8 {
+  version: 8 | 9,
+): SingleStatePopupLayerV8 | SingleStatePopupLayerV9 {
   const record = object(value, label);
   const kind = record.kind;
   const hasResource = Object.hasOwn(record, "resource");
@@ -516,7 +539,7 @@ function parseSingleStateLayer(
       kind: "text" as const,
       defaultText: singleLine(record.defaultText, `${label}.defaultText`),
       anchor: parsedAnchor,
-      style: parseTextStyle(record.style, `${label}.style`),
+      style: parseTextStyle(record.style, `${label}.style`, version),
     });
   }
   if (kind === "vni") {
@@ -845,7 +868,7 @@ function parseResource(value: unknown, label: string): PopupResourceSpec {
 function parseAwardCelebration(
   value: unknown,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8,
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9,
 ): AwardCelebrationSpec {
   const record = object(value, "awardCelebration");
   keys(record, ["base", "standard", "celebrationTiers"], "awardCelebration");
@@ -904,7 +927,7 @@ function parseTier(
   value: unknown,
   label: string,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8,
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9,
 ): AwardTierPresentation {
   const record = object(value, label);
   const allowed = [
@@ -973,7 +996,7 @@ function parseLayer(
   value: unknown,
   label: string,
   resources: Readonly<Record<string, PopupResourceSpec>>,
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8,
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9,
   visibilityStates: readonly (
     | PopupSegment
     | import("./types.js").AwardTierId
@@ -1156,7 +1179,7 @@ function parseLayer(
         x: unit(anchor.x, `${label}.anchor.x`),
         y: unit(anchor.y, `${label}.anchor.y`),
       },
-      style: parseTextStyle(record.style, `${label}.style`),
+      style: parseTextStyle(record.style, `${label}.style`, version),
       ...(version >= 5
         ? {}
         : {
@@ -1328,7 +1351,11 @@ function parseVisibilityStates<State extends PopupVisibilityState>(
   unique(values, label);
   return Object.freeze(states.filter((item) => values.includes(item)));
 }
-function parseTextStyle(value: unknown, label: string): PopupTextStyle {
+function parseTextStyle(
+  value: unknown,
+  label: string,
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9,
+): PopupTextStyle {
   const record = object(value, label);
   keys(
     record,
@@ -1339,6 +1366,7 @@ function parseTextStyle(value: unknown, label: string): PopupTextStyle {
       ...(Object.hasOwn(record, "stroke") ? ["stroke"] : []),
       ...(Object.hasOwn(record, "shadow") ? ["shadow"] : []),
       "arcDegrees",
+      ...(version === 9 ? ["widthRange"] : []),
     ],
     label,
   );
@@ -1410,6 +1438,26 @@ function parseTextStyle(value: unknown, label: string): PopupTextStyle {
   const arcDegrees = finite(record.arcDegrees, `${label}.arcDegrees`);
   if (arcDegrees < -180 || arcDegrees > 180)
     fail(`${label}.arcDegrees must be between -180 and 180.`);
+  const widthRange =
+    version === 9
+      ? (() => {
+          const raw = object(record.widthRange, `${label}.widthRange`);
+          keys(raw, ["minWidth", "maxWidth"], `${label}.widthRange`);
+          const minWidth = nonNegative(
+            raw.minWidth,
+            `${label}.widthRange.minWidth`,
+          );
+          const maxWidth = nonNegative(
+            raw.maxWidth,
+            `${label}.widthRange.maxWidth`,
+          );
+          if ((minWidth === 0) !== (maxWidth === 0))
+            fail(`${label}.widthRange must be 0/0 or positive/positive.`);
+          if (minWidth > maxWidth)
+            fail(`${label}.widthRange.minWidth must not exceed maxWidth.`);
+          return freeze({ minWidth, maxWidth });
+        })()
+      : undefined;
   return freeze({
     fontSize: positive(record.fontSize, `${label}.fontSize`),
     letterSpacing: finite(record.letterSpacing, `${label}.letterSpacing`),
@@ -1417,6 +1465,7 @@ function parseTextStyle(value: unknown, label: string): PopupTextStyle {
     ...(stroke ? { stroke } : {}),
     ...(shadow ? { shadow } : {}),
     arcDegrees,
+    ...(widthRange ? { widthRange } : {}),
   });
 }
 function validateStringNodeNames(

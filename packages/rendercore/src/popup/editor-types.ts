@@ -14,12 +14,14 @@ export interface AwardCelebrationPlayer extends Omit<
 > {
   update(deltaSeconds: number): AwardCelebrationSnapshot;
   getSnapshot(): AwardCelebrationSnapshot;
+  setTextWidthGuidesVisible(visible: boolean): void;
 }
 
 /** Complete inspection surface for editor and diagnostic consumers. */
 export interface SpinePopupPlayer extends Omit<SpinePopupRuntime, "update"> {
   update(deltaSeconds: number): SpinePopupSnapshot;
   getSnapshot(): SpinePopupSnapshot;
+  setTextWidthGuidesVisible(visible: boolean): void;
 }
 
 /** Complete inspection surface for editor and diagnostic consumers. */
@@ -29,4 +31,5 @@ export interface SingleStatePopupPlayer extends Omit<
 > {
   update(deltaSeconds: number): SingleStatePopupSnapshot;
   getSnapshot(): SingleStatePopupSnapshot;
+  setTextWidthGuidesVisible(visible: boolean): void;
 }

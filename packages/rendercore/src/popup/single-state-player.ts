@@ -13,6 +13,7 @@ import type {
 } from "./types.js";
 import type { SingleStatePopupPlayer } from "./editor-types.js";
 import { createPopupStringNodeRegistry } from "./string-node-registry.js";
+import { setPopupTextWidthGuidesInTree } from "./styled-text.js";
 import {
   createSpinePopupOverlayRuntime,
   type SpinePopupOverlayRuntime,
@@ -323,6 +324,9 @@ class SingleStatePopupEditorPlayer implements SingleStatePopupPlayer {
   }
   getSnapshot() {
     return inspectSingleStatePopupRuntime(this.#runtime);
+  }
+  setTextWidthGuidesVisible(visible: boolean) {
+    setPopupTextWidthGuidesInTree(this.#runtime.container, visible);
   }
   getPhase() {
     return this.#runtime.getPhase();

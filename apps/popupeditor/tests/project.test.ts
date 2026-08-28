@@ -42,11 +42,15 @@ describe("popup editor filename-key project", () => {
     const project = createPopupEditorProject({ type: "single-state" });
     expect(project.backdrop.visibleStates).toEqual(["active"]);
     expect(projectToManifest(project)).toMatchObject({
-      version: 8,
+      version: 9,
       type: "single-state",
       singleState: { layers: [] },
     });
     addSingleStateTextLayer(project);
+    expect(project.singleState.layers[0]).toMatchObject({
+      kind: "text",
+      style: { widthRange: { minWidth: 0, maxWidth: 0 } },
+    });
     renameSingleStateLayer(project, "text-0", "headline");
     project.resources.set("hero", {
       rootKey: "hero",
@@ -234,13 +238,13 @@ describe("popup editor filename-key project", () => {
     const imported = await importPopupZip(createDeterministicZip(entries), {
       prepare: false,
     });
-    expect(imported.formatVersion).toBe(8);
+    expect(imported.formatVersion).toBe(9);
     expect(imported.spine.prompt.font).toBeNull();
     expect(imported.spine.prompt.enabled).toBe(false);
     expect(imported.spine.overlays).toContainEqual(
       expect.objectContaining({ id: "prompt", kind: "text", name: "prompt" }),
     );
-    expect(projectToManifest(imported)).toMatchObject({ version: 8 });
+    expect(projectToManifest(imported)).toMatchObject({ version: 9 });
     expect(projectToManifest(imported)).not.toHaveProperty("designViewport");
 
     manifest.version = 2;
@@ -263,14 +267,15 @@ describe("popup editor filename-key project", () => {
     expect(importedLegacyV2.spine.overlays).toContainEqual(
       expect.objectContaining({ id: "prompt", kind: "text", name: "prompt" }),
     );
-    const canonicalV8 = projectToManifest(importedLegacyV2);
-    expect(canonicalV8.version).toBe(8);
-    expect(canonicalV8).not.toHaveProperty("designViewport");
-    if (canonicalV8.type !== "spine") throw new Error("Expected spine popup.");
-    expect(canonicalV8.spine).not.toHaveProperty("prompt");
-    expect(canonicalV8.spine.overlays?.[0]).toMatchObject({
+    const canonicalV9 = projectToManifest(importedLegacyV2);
+    expect(canonicalV9.version).toBe(9);
+    expect(canonicalV9).not.toHaveProperty("designViewport");
+    if (canonicalV9.type !== "spine") throw new Error("Expected spine popup.");
+    expect(canonicalV9.spine).not.toHaveProperty("prompt");
+    expect(canonicalV9.spine.overlays?.[0]).toMatchObject({
       attachment: { kind: "popup-root" },
       visibleStates: ["start", "loop"],
+      style: { widthRange: { minWidth: 0, maxWidth: 0 } },
     });
   });
 

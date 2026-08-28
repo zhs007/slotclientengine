@@ -15,7 +15,7 @@ import type {
   AwardTierId,
   PopupLayer,
   PopupOverlayLayer,
-  SingleStatePopupLayerV8,
+  SingleStatePopupLayerV9,
   PopupVisibilityState,
 } from "@slotclientengine/rendercore/popup/editor";
 import type { PopupAudioCueV1 } from "@slotclientengine/rendercore/popup/data";
@@ -449,7 +449,7 @@ export class PopupEditorApp {
               );
               if (!layer) throw new Error("single-state 图层不存在。");
               (
-                layer as { attachment: SingleStatePopupLayerV8["attachment"] }
+                layer as { attachment: SingleStatePopupLayerV9["attachment"] }
               ).attachment = parseSingleStateParent(select.value);
             }),
           ),
@@ -467,7 +467,7 @@ export class PopupEditorApp {
               if (!layer || layer.attachment.kind !== "spine-slot")
                 throw new Error("single-state Spine slot 挂接不存在。");
               (
-                layer as { attachment: SingleStatePopupLayerV8["attachment"] }
+                layer as { attachment: SingleStatePopupLayerV9["attachment"] }
               ).attachment = {
                 ...layer.attachment,
                 slot: select.value,
@@ -1351,7 +1351,7 @@ function singleStateMarkup(project: PopupEditorProject) {
 }
 
 function singleStateLayerMarkup(
-  layer: SingleStatePopupLayerV8,
+  layer: SingleStatePopupLayerV9,
   project: PopupEditorProject,
 ) {
   const input = (field: string, value: string | number, type = "number") =>
@@ -1385,7 +1385,7 @@ function singleStateLayerMarkup(
 }
 
 function singleStateParentMarkup(
-  layer: SingleStatePopupLayerV8,
+  layer: SingleStatePopupLayerV9,
   project: PopupEditorProject,
 ) {
   const attachment = layer.attachment;
@@ -1442,7 +1442,7 @@ function singleStateParentMarkup(
 
 function parseSingleStateParent(
   value: string,
-): SingleStatePopupLayerV8["attachment"] {
+): SingleStatePopupLayerV9["attachment"] {
   if (value === "popup-root") return { kind: "popup-root" };
   const [kind, encodedLayer, encodedChild] = value.split(":");
   if (kind === "vni" && encodedLayer && encodedChild)
@@ -1584,6 +1584,7 @@ function createFontTextLayer(
         angleDegrees: 90,
       },
       arcDegrees: 0,
+      widthRange: { minWidth: 0, maxWidth: 0 },
     },
     visibleStates: [...visibleStates],
   };
@@ -1615,6 +1616,11 @@ function updateTextStyleField(
   }
   if (["fontSize", "letterSpacing", "arcDegrees"].includes(field)) {
     mutable.style[field] = Number(input.value);
+    return true;
+  }
+  if (["minWidth", "maxWidth"].includes(field)) {
+    mutable.style.widthRange ??= { minWidth: 0, maxWidth: 0 };
+    mutable.style.widthRange[field] = Number(input.value);
     return true;
   }
   if (field === "fillColor") {
@@ -1741,7 +1747,8 @@ function textStyleMarkup(
         };
   const fillKindAttribute =
     owner === "overlay" ? "data-overlay-fill-kind" : "data-layer-fill-kind";
-  return `${input("fontSize", style.fontSize)}${input("letterSpacing", style.letterSpacing)}<label><input ${idAttribute}="${id}" ${fieldAttribute}="curvedEnabled" type="checkbox" ${style.arcDegrees === 0 ? "" : "checked"}/>Curved Text</label><label>弧度（-180..180°）<input ${idAttribute}="${id}" ${fieldAttribute}="arcDegrees" type="number" min="-180" max="180" step="1" value="${style.arcDegrees}"/></label><label>fill<select ${fillKindAttribute}="${id}"><option value="solid" ${style.fill.kind === "solid" ? "selected" : ""}>纯色</option><option value="linear-gradient" ${style.fill.kind === "linear-gradient" ? "selected" : ""}>线性渐变</option></select></label>${colorInput("起始 / 纯色", "fillColor", style.fill.kind === "solid" ? style.fill.color : style.fill.stops[0]!.color)}${colorInput("渐变结束色", "gradientEndColor", gradient.stops.at(-1)!.color)}${input("gradientAngle", gradient.angleDegrees)}<label><input ${idAttribute}="${id}" ${fieldAttribute}="strokeEnabled" type="checkbox" ${style.stroke ? "checked" : ""}/>描边</label>${colorInput("描边颜色", "strokeColor", style.stroke?.color ?? "#000000")}${input("strokeWidth", style.stroke?.width ?? 0)}<label><input ${idAttribute}="${id}" ${fieldAttribute}="shadowEnabled" type="checkbox" ${style.shadow ? "checked" : ""}/>投影</label>${colorInput("投影颜色", "shadowColor", style.shadow?.color ?? "#000000")}${input("shadowAlpha", style.shadow?.alpha ?? 0.6)}${input("shadowBlur", style.shadow?.blur ?? 4)}${input("shadowDistance", style.shadow?.distance ?? 6)}${input("shadowAngle", style.shadow?.angleDegrees ?? 90)}`;
+  const widthRange = style.widthRange ?? { minWidth: 0, maxWidth: 0 };
+  return `${input("fontSize", style.fontSize)}${input("letterSpacing", style.letterSpacing)}<fieldset><legend>文字宽度拟合</legend>${input("minWidth", widthRange.minWidth)}${input("maxWidth", widthRange.maxWidth)}<small>minWidth/maxWidth 同为 0 时关闭；启用时两者都必须大于 0，且最小值不能超过最大值。</small></fieldset><label><input ${idAttribute}="${id}" ${fieldAttribute}="curvedEnabled" type="checkbox" ${style.arcDegrees === 0 ? "" : "checked"}/>Curved Text</label><label>弧度（-180..180°）<input ${idAttribute}="${id}" ${fieldAttribute}="arcDegrees" type="number" min="-180" max="180" step="1" value="${style.arcDegrees}"/></label><label>fill<select ${fillKindAttribute}="${id}"><option value="solid" ${style.fill.kind === "solid" ? "selected" : ""}>纯色</option><option value="linear-gradient" ${style.fill.kind === "linear-gradient" ? "selected" : ""}>线性渐变</option></select></label>${colorInput("起始 / 纯色", "fillColor", style.fill.kind === "solid" ? style.fill.color : style.fill.stops[0]!.color)}${colorInput("渐变结束色", "gradientEndColor", gradient.stops.at(-1)!.color)}${input("gradientAngle", gradient.angleDegrees)}<label><input ${idAttribute}="${id}" ${fieldAttribute}="strokeEnabled" type="checkbox" ${style.stroke ? "checked" : ""}/>描边</label>${colorInput("描边颜色", "strokeColor", style.stroke?.color ?? "#000000")}${input("strokeWidth", style.stroke?.width ?? 0)}<label><input ${idAttribute}="${id}" ${fieldAttribute}="shadowEnabled" type="checkbox" ${style.shadow ? "checked" : ""}/>投影</label>${colorInput("投影颜色", "shadowColor", style.shadow?.color ?? "#000000")}${input("shadowAlpha", style.shadow?.alpha ?? 0.6)}${input("shadowBlur", style.shadow?.blur ?? 4)}${input("shadowDistance", style.shadow?.distance ?? 6)}${input("shadowAngle", style.shadow?.angleDegrees ?? 90)}`;
 }
 
 function spineAnimationNames(project: PopupEditorProject): readonly string[] {

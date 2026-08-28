@@ -53,14 +53,14 @@
 
 - `apps/popupeditor` 输出 strict `award-celebration`、普通 `spine` 或 `single-state` popup package；三种类型使用互斥 schema，不保留无关字段。
 - Popup Editor 启动时没有隐式项目；项目只能通过“创建项目”dialog（名称与固定类型）或单独导入 Popup ZIP 建立。项目 ZIP 与资源导入是两个入口，资源入口中 VNI/ImgNumber 只接受各自 Editor 导出的 ZIP，Spine 必须以完整 JSON/atlas/texture 组导入。同名不同 bytes 必须由用户逐项选择覆盖或自动 suffix 保留两份，不能默认提交。
-- Popup v8 沿用 v7 的 focus、backdrop、audio 与 strict attachment，并新增零到多图层的 `single-state`；其 exact layer id 同时是 Editor name、runtime name 与地址 segment，Spine/VNI autoplay 可省略，父节点只能引用同 Popup 已存在图层。Popup Editor 新建项目固定为 v8；合法 v1–v7 ZIP 必须先按原版本 strict 校验与 prepare，再原子迁移为 v8，后续 preview/export 只写 v8。
+- Popup v9 沿用 v8 的三种互斥类型，并要求每个 text style 显式保存 `widthRange`；`0/0` 唯一表示关闭，正数区间由 runtime 只调字号拟合 local typographic width。Popup Editor 新建项目固定为 v9；合法 v1–v8 ZIP 必须先按原版本 strict 校验与 prepare，再给全部文字层补 `0/0`、原子迁移为 v9，后续 preview/export 只写 v9。Editor guides 中的宽度参考框是 session-only，不进入持久合同。
 - Popup Editor 独立预览页拥有唯一的 Pixi Application/canvas，并把 rendercore Popup player 的 Container 挂入其中；rendercore Popup 与游戏/Scene Layout consumer 不得创建 canvas、Renderer、ticker 或 RAF。预览在合法配置变化后自动 rebuild，不提供 Build、advance、dismiss 或 immediate-dismiss UI；普通交互只来自完整 preview canvas 或 keyboard input。
 - 新 Popup v6 authoring 不提供独立 Spine prompt；旧 prompt 在 v1/v2 导入迁移时结构化转换为 `name=prompt` 的字体文字 overlay，冲突使整次导入失败。award 各档与 Spine overlay 都可声明多个命名字体文字和 manual ImgNumber；文字省略 resource 时使用系统字体，显式选择时只接受 package-owned WOFF2/WOFF/TTF/OTF，失效引用不降级。award 的状态由档位 presence 表达，Editor 必须提供显式 stable-id 复用操作而不得按资源猜测合并；每个档仍必须恰好有一个 exact id 为 `win-amount` 的金额层。
 - Popup v4–v8 的 image、字体文字、ImgNumber、VNI 与 Spine layer 可挂 Popup root 或同作用域 official Spine exact slot；普通 Spine Popup 还可挂主 Spine，ImgNumber 保留 VNI text-layer attachment。Editor 候选必须来自 shared Spine/VNI strict metadata，不猜首项；循环 target、跨作用域引用、缺 slot、同父 order 冲突、覆盖后失效与删除被引用 target 都阻止 transaction，不自动回根。
 - VNI export bundle 只把 `purpose=runtime` 作为运行候选：唯一 runtime 自动选择，多个 runtime 才枚举；禁止手输 profile id，`purpose=editing` 不进入候选。
 - popup package 使用完整 SHA-256 content-addressed owned payload，并保持 exact closure。
 - Popup 字体与其它 payload 一样按完整 SHA-256 物理去重；logical filename key 与 owner 引用不得从 hash path 反推或合并。
-- Popup 必须保持 `popup/data → popup/core → popup/editor` 单向分层：data 拥有 v1–v8 strict source parser、唯一默认 latest normalizer与纯引用合同；core 拥有 production resolved-resource prepare、focus/presentation、layer、string registry、金额、input与 award/Spine/single-state 状态机；editor 只组合 mapped standalone package、namespace/materialize 和同 Core snapshot wrapper。任何 editor/game runtime 都必须用默认 loader把受支持版本转为latest。
+- Popup 必须保持 `popup/data → popup/core → popup/editor` 单向分层：data 拥有 v1–v9 strict source parser、唯一默认 latest normalizer与纯引用合同；core 拥有 production resolved-resource prepare、focus/presentation、layer、string registry、金额、input与 award/Spine/single-state 状态机；editor 只组合 mapped standalone package、namespace/materialize 和同 Core snapshot wrapper。任何 editor/game runtime 都必须用默认 loader把受支持版本转为latest。
 
 ## Game Layout Event
 
