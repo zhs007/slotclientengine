@@ -128,6 +128,25 @@ describe("atomic slot operation generators", () => {
     expect(transfer.output.values).toEqual([[3, 2, 4]]);
   });
 
+  it("changes a canonical hole value to null when a symbol fills the cell", () => {
+    const input = createSlotOperationSnapshot({
+      scene: [[-1]],
+      values: [[-1]],
+      symbolCodes: symbols,
+    });
+
+    const change = genChg({
+      kind: "game:fill-hole",
+      type: "change",
+      source,
+      input,
+      changes: [{ position: { x: 0, y: 0 }, outputCode: 0, outputValue: null }],
+      symbolCodes: symbols,
+    });
+
+    expect(change.output).toEqual({ scene: [[0]], values: [[null]] });
+  });
+
   it("strictly validates positioned snapshots and symbol catalogs", () => {
     const create = (
       symbolCodes: Readonly<Record<string, number>>,

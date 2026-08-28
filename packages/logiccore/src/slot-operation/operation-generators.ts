@@ -362,12 +362,18 @@ export function applySlotOperationChanges(options: {
   }
   const scene = options.input.scene.map((column, x) =>
     Object.freeze(
-      column.map((code, y) => changes.get(`${x},${y}`)?.outputCode ?? code),
+      column.map((code, y) => {
+        const change = changes.get(`${x},${y}`);
+        return change === undefined ? code : change.outputCode;
+      }),
     ),
   );
   const values = options.input.values.map((column, x) =>
     Object.freeze(
-      column.map((value, y) => changes.get(`${x},${y}`)?.outputValue ?? value),
+      column.map((value, y) => {
+        const change = changes.get(`${x},${y}`);
+        return change === undefined ? value : change.outputValue;
+      }),
     ),
   );
   return freezeSnapshot(scene, values);
