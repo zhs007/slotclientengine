@@ -150,7 +150,13 @@ describe("scene layout presentation surface", () => {
             nodeStates: {},
           },
         ],
-        transitions: [],
+        transitions: [
+          {
+            from: "BaseGame",
+            to: "FreeGame",
+            overlay: { kind: "none" as const },
+          },
+        ],
       },
     };
     const resource = await createSceneLayoutPackageResource({
@@ -182,6 +188,23 @@ describe("scene layout presentation surface", () => {
     surface.applyArtSpace();
     expect(surface.backgroundContainer.position).toMatchObject({ x: 0, y: 0 });
     surface.update(1 / 60);
+    await surface.requestGameMode("FreeGame", { immediate: true });
+    expect(surface.getGameModeSnapshot()).toMatchObject({
+      stableMode: "FreeGame",
+      displayedMode: "FreeGame",
+    });
+    expect(
+      surface.backgroundContainer.getChildByLabel(
+        "scene-layout-slot:base",
+        true,
+      )?.visible,
+    ).toBe(false);
+    expect(
+      surface.backgroundContainer.getChildByLabel(
+        "scene-layout-slot:free",
+        true,
+      )?.visible,
+    ).toBe(true);
     surface.destroy();
     surface.destroy();
     expect(() => surface.update(1 / 60)).toThrow(/destroyed/);

@@ -237,6 +237,8 @@ transition 是独立有向边：
 
 三分支字段严格互斥。runtime 只准备当前 stable source 到所选 target 的直接边；缺边不瞬切、不反向复用、不寻路。Spine event、video media-time fadeStart 或 none direct commit 边界原子切换 background/reel/displayed mode；prepare/once/ended/play rejection 均可 rollback。audible `play()` 必须在 trusted pointer/key 调用栈内同步触发，不自动静音或 wall-clock fallback。带 Popup 的 video 在 Popup complete 后进入 `awaiting-video-start`，下一次 host-bound 真实用户手势由统一主操作同步启动视频；一次输入不得同时进入 DOM binding 与 Pixi fallback。
 
+production consumer 可对已有 direct edge 显式调用 `requestGameMode(target, { immediate: true })`，在完整 target prepare 后跳过该 edge 的 prelude Popup 与 none/Spine/video presentation并直接原子提交稳定mode。该参数不进入manifest或prepare/cache identity，不允许缺edge fallback，也不取消已开始的Popup/transition；与`preludePopupStrings`同时提供时显式失败。被跳过的transition/Popup/effect event不发布，实际mode displayed/stable及其BGM event仍在commit后发布。video immediate request不需要先调用`prepareGameModeTransition()`；默认或`immediate:false`继续遵守trusted gesture合同。
+
 编辑器可以调用独立的 authoring stable-mode selection 来直接查看目标稳定画面；该入口不要求 transition edge，也不播放 overlay，并与 production `requestGameMode()` 分离。它仍使用同一 mode visibility commit；相同 Symbols binding 保留当前 reel/player/sample，不同 binding 必须先提供并成功准备目标公开 scene。
 
 ## 安全与确定性

@@ -821,12 +821,17 @@ export interface SceneLayoutGameModeSnapshot {
   readonly activeBackgroundNodes: readonly string[];
 }
 
-export interface SceneLayoutGameModeRequestOptions {
+export interface SceneLayoutGameModePrepareOptions {
   /** Explicitly rebuilds even when source and target use the same binding. */
   readonly recreateReel?: boolean;
   readonly reels?: Readonly<
     Partial<Record<"main", SceneLayoutInitialReelScene>>
   >;
+}
+
+export interface SceneLayoutGameModeRequestOptions extends SceneLayoutGameModePrepareOptions {
+  /** Commits the target mode without playing its Popup or transition effect. */
+  readonly immediate?: boolean;
   /** Final strings applied only for this request's transition prelude Popup. */
   readonly preludePopupStrings?: readonly SceneLayoutPopupStringInput[];
 }
@@ -1191,7 +1196,7 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
    */
   selectAuthoringGameMode(
     modeId: string,
-    options?: SceneLayoutGameModeRequestOptions,
+    options?: SceneLayoutGameModePrepareOptions,
   ): Promise<void>;
   /**
    * Prepares the complete target scene and transition media without changing
@@ -1200,14 +1205,15 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
    */
   prepareGameModeTransition(
     modeId: string,
-    options?: SceneLayoutGameModeRequestOptions,
+    options?: SceneLayoutGameModePrepareOptions,
   ): Promise<void>;
   /** Cancels a prepared transition that has not started. */
   cancelPreparedGameModeTransition(): void;
   /**
-   * Starts a prepared video transition. Call this directly from the trusted
-   * pointer/click listener: the implementation invokes audible video.play()
-   * synchronously before its first await. Spine transitions may prepare lazily.
+   * Starts a prepared video transition. Call normal video requests directly
+   * from the trusted pointer/click listener: the implementation invokes audible
+   * video.play() synchronously before its first await. Spine transitions may
+   * prepare lazily. immediate skips all transition presentation.
    */
   requestGameMode(
     modeId: string,

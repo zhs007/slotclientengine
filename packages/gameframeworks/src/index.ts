@@ -52,6 +52,8 @@ export {
 } from "@slotclientengine/rendercore";
 export type {
   SceneLayoutLayerId,
+  SceneLayoutGameModePrepareOptions,
+  SceneLayoutGameModeRequestOptions,
   SceneLayoutPackageResource,
   SceneLayoutPackageRuntime,
   SceneLayoutPopupCloseOptions,
