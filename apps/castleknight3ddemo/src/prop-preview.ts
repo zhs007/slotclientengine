@@ -17,7 +17,6 @@ import { createCartoonCastleChandelier } from "./reconstructed-furnishings.js";
 import {
   createCartoonTreasureChest,
   createCartoonWallTorch,
-  createRoundCastleColumn,
 } from "./reconstructed-props.js";
 import {
   createCartoonCrownSymbol,
@@ -61,6 +60,7 @@ export class PropPreviewRenderer {
     throneDaisModel: Group | null,
     throneModel: Group | null,
     wallModel: Group | null,
+    columnModel: Group | null,
   ) {
     this.#renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.#renderer.outputColorSpace = SRGBColorSpace;
@@ -114,31 +114,9 @@ export class PropPreviewRenderer {
       this.#camera.position.set(0, 2.25, 7.2);
       this.#camera.lookAt(0, 0.2, 0);
     } else if (kind === "column") {
-      const stoneMap = this.#textureLibrary?.columnStoneAlbedo;
-      const gradientMap = this.#textureLibrary?.toonGradient;
-      const column = createRoundCastleColumn({
-        stone: textured
-          ? new MeshToonMaterial({
-              color: 0xffffff,
-              map: stoneMap,
-              gradientMap,
-            })
-          : new MeshBasicMaterial({ color: 0x6d5879 }),
-        stoneLight: textured
-          ? new MeshToonMaterial({
-              color: 0xc4b4ca,
-              map: stoneMap,
-              gradientMap,
-            })
-          : new MeshBasicMaterial({ color: 0x8a7195 }),
-        stoneDark: textured
-          ? new MeshToonMaterial({
-              color: 0x5d5064,
-              map: stoneMap,
-              gradientMap,
-            })
-          : new MeshBasicMaterial({ color: 0x3c3146 }),
-      });
+      if (!columnModel) throw new Error("Castle column GLB is not loaded.");
+      const column = columnModel.clone(true);
+      column.scale.set(1.5, 1, 1.5);
       column.rotation.y = sideView ? Math.PI * 0.32 : -Math.PI * 0.12;
       column.position.y = -2.65;
       this.#scene.add(column);

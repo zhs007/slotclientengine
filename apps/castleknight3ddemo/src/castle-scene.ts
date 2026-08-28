@@ -34,10 +34,7 @@ import { CartoonPass } from "./cartoon-pass.js";
 import { BOARD, boardDepth, boardWidth, ROOM } from "./config.js";
 import { createRandom } from "./random.js";
 import { createCartoonCastleChandelier } from "./reconstructed-furnishings.js";
-import {
-  createCartoonWallTorch,
-  createRoundCastleColumn,
-} from "./reconstructed-props.js";
+import { createCartoonWallTorch } from "./reconstructed-props.js";
 import {
   createSessionSeed,
   createSymbolPlacements,
@@ -61,9 +58,6 @@ interface CastleMaterials {
   readonly stone: Material;
   readonly stoneLight: Material;
   readonly stoneDark: Material;
-  readonly columnStone: Material;
-  readonly columnStoneLight: Material;
-  readonly columnStoneDark: Material;
   readonly mortar: Material;
   readonly wood: Material;
   readonly woodDark: Material;
@@ -156,6 +150,7 @@ export class CastleKnightRenderer {
     throneDaisModel: Group,
     throneModel: Group,
     wallModel: Group,
+    columnModel: Group,
   ) {
     this.#renderer = new WebGLRenderer({
       antialias: true,
@@ -181,7 +176,7 @@ export class CastleKnightRenderer {
     this.#createWalls(wallModel);
     this.#createBoard();
     this.#createThroneArea(throneDaisModel, throneModel);
-    this.#createArchitecture();
+    this.#createArchitecture(columnModel);
     this.#createFurniture(benchModel, barrelModel);
     this.#createChandelier();
     this.#createTorches();
@@ -300,21 +295,6 @@ export class CastleKnightRenderer {
         map: textures.cutStoneAlbedo,
         bumpMap: textures.stoneDetail,
         bumpScale: 0.045,
-      }),
-      columnStone: toon(0xffffff, textures.toonGradient, {
-        map: textures.columnStoneAlbedo,
-        bumpMap: textures.stoneDetail,
-        bumpScale: 0.055,
-      }),
-      columnStoneLight: toon(0xc4b4ca, textures.toonGradient, {
-        map: textures.columnStoneAlbedo,
-        bumpMap: textures.stoneDetail,
-        bumpScale: 0.045,
-      }),
-      columnStoneDark: toon(0x5d5064, textures.toonGradient, {
-        map: textures.columnStoneAlbedo,
-        bumpMap: textures.stoneDetail,
-        bumpScale: 0.05,
       }),
       mortar: toon(0x30263b, textures.toonGradient),
       wood: toon(0xffffff, textures.toonGradient, {
@@ -478,15 +458,10 @@ export class CastleKnightRenderer {
     this.#root.add(window);
   }
 
-  #createArchitecture(): void {
-    const columnMaster = createRoundCastleColumn({
-      stone: this.#materials.columnStone,
-      stoneLight: this.#materials.columnStoneLight,
-      stoneDark: this.#materials.columnStoneDark,
-    });
-    columnMaster.scale.setScalar(0.96);
+  #createArchitecture(columnModel: Group): void {
     for (const x of [-4.7, -2.75, 2.75, 4.7]) {
-      const pillar = columnMaster.clone(true);
+      const pillar = columnModel.clone(true);
+      pillar.scale.set(1.5, 1, 1.5);
       pillar.position.set(x, 0, -5.25);
       this.#root.add(pillar);
     }
