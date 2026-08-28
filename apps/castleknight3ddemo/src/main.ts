@@ -5,6 +5,7 @@ import { CastleKnightRenderer } from "./castle-scene.js";
 import { loadCastleChandelierModel } from "./chandelier-model.js";
 import { loadCastleChestModel } from "./chest-model.js";
 import { loadCastleColumnModel } from "./column-model.js";
+import { loadCastleHelmetModel } from "./helmet-model.js";
 import { PropPreviewRenderer, type PropPreviewKind } from "./prop-preview.js";
 import { loadCastlePurplePotionModel } from "./purple-potion-model.js";
 import { loadCastleSpellbookModel } from "./spellbook-model.js";
@@ -110,6 +111,7 @@ async function bootstrap(): Promise<void> {
     previewKind === "battleAxe" ||
     previewKind === "spellbook" ||
     previewKind === "purplePotion" ||
+    previewKind === "helmet" ||
     previewKind === "crown"
   ) {
     await bootstrapPropPreview(root, previewKind);
@@ -128,6 +130,7 @@ async function bootstrap(): Promise<void> {
     chestModel,
     spellbookModel,
     purplePotionModel,
+    helmetModel,
   ] = await Promise.all([
     loadCastleBarrelModel(),
     loadCastleBattleAxeModel(),
@@ -141,6 +144,7 @@ async function bootstrap(): Promise<void> {
     loadCastleChestModel(),
     loadCastleSpellbookModel(),
     loadCastlePurplePotionModel(),
+    loadCastleHelmetModel(),
   ]);
   const game = new CastleKnightRenderer(
     root,
@@ -156,6 +160,7 @@ async function bootstrap(): Promise<void> {
     chestModel,
     spellbookModel,
     purplePotionModel,
+    helmetModel,
   );
   root.append(createHud(root, game));
   const resize = () => game.resize(root.clientWidth, root.clientHeight);
@@ -196,6 +201,7 @@ async function bootstrapPropPreview(
     kind === "spellbook" ? await loadCastleSpellbookModel() : null;
   const purplePotionModel =
     kind === "purplePotion" ? await loadCastlePurplePotionModel() : null;
+  const helmetModel = kind === "helmet" ? await loadCastleHelmetModel() : null;
   const preview = new PropPreviewRenderer(
     root,
     kind,
@@ -213,6 +219,7 @@ async function bootstrapPropPreview(
     chestModel,
     spellbookModel,
     purplePotionModel,
+    helmetModel,
   );
   const resize = () => preview.resize(root.clientWidth, root.clientHeight);
   const resizeObserver = new ResizeObserver(resize);

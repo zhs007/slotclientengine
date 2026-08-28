@@ -1,6 +1,5 @@
 import {
   BackSide,
-  BoxGeometry,
   CircleGeometry,
   ConeGeometry,
   CylinderGeometry,
@@ -17,7 +16,6 @@ import {
   Vector2,
 } from "three";
 import type { BufferGeometry, Material } from "three";
-import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { BOARD, boardDepth, boardWidth } from "./config.js";
 import { createRandom, type RandomSource } from "./random.js";
 import { createCartoonCrownSymbol } from "./reconstructed-symbols.js";
@@ -26,18 +24,15 @@ import type { CastleTextureLibrary } from "./textures.js";
 export const SYMBOL_TYPES = [
   "chest",
   "helmet",
-  "shield",
   "purplePotion",
-  "greenPotion",
-  "gem",
   "sword",
-  "king",
   "battleAxe",
   "spellbook",
-  "crown",
 ] as const;
 
-export type SymbolType = (typeof SYMBOL_TYPES)[number];
+type HiddenSymbolType = "shield" | "greenPotion" | "gem" | "king" | "crown";
+
+export type SymbolType = (typeof SYMBOL_TYPES)[number] | HiddenSymbolType;
 
 export interface SymbolPlacement {
   readonly type: SymbolType;
@@ -69,7 +64,6 @@ interface Palette {
   readonly blue: Material;
   readonly skin: Material;
   readonly beard: Material;
-  readonly plume: Material;
   readonly leather: Material;
 }
 
@@ -122,7 +116,6 @@ function createPalette(textures: CastleTextureLibrary): Palette {
     blue: toon(0x159cde, textures, 0.16),
     skin: toon(0xd27a45, textures),
     beard: toon(0x3f2924, textures),
-    plume: toon(0x5c2cad, textures, 0.05),
     leather,
   };
 }
@@ -143,32 +136,6 @@ function part(geometry: BufferGeometry, material: Material): Mesh {
   outline.receiveShadow = false;
   mesh.add(outline);
   return mesh;
-}
-
-function createHelmet(palette: Palette): Group {
-  const group = new Group();
-  const dome = part(
-    new SphereGeometry(0.39, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.62),
-    palette.steel,
-  );
-  const face = part(
-    new RoundedBoxGeometry(0.62, 0.42, 0.18, 2, 0.05),
-    palette.steelDark,
-  );
-  face.position.set(0, -0.17, 0.29);
-  const slit = part(new BoxGeometry(0.43, 0.055, 0.035), palette.stoneDark);
-  slit.position.set(0, -0.08, 0.4);
-  const nose = part(new BoxGeometry(0.075, 0.34, 0.11), palette.steel);
-  nose.position.set(0, -0.12, 0.42);
-  const crest = part(
-    new TorusGeometry(0.28, 0.08, 6, 10, Math.PI),
-    palette.plume,
-  );
-  crest.rotation.z = Math.PI / 2;
-  crest.position.y = 0.42;
-  group.add(dome, face, slit, nose, crest);
-  group.name = "knight-helmet";
-  return group;
 }
 
 function createShield(palette: Palette): Group {
@@ -265,6 +232,7 @@ function createModels(
   chestModel: Group,
   spellbookModel: Group,
   purplePotionModel: Group,
+  helmetModel: Group,
 ): ReadonlyMap<SymbolType, Group> {
   const reconstructedMaterials = {
     wood: palette.wood,
@@ -283,9 +251,10 @@ function createModels(
   chest.scale.setScalar(1.15);
   const spellbook = spellbookModel.clone(true);
   const purplePotion = purplePotionModel.clone(true);
+  const helmet = helmetModel.clone(true);
   return new Map<SymbolType, Group>([
     ["chest", chest],
-    ["helmet", createHelmet(palette)],
+    ["helmet", helmet],
     ["shield", createShield(palette)],
     ["purplePotion", purplePotion],
     ["greenPotion", createPotion(palette, palette.green, "green-potion")],
@@ -452,6 +421,7 @@ export class SymbolField extends Group {
     chestModel: Group,
     spellbookModel: Group,
     purplePotionModel: Group,
+    helmetModel: Group,
   ) {
     super();
     this.#palette = createPalette(textures);
@@ -462,6 +432,7 @@ export class SymbolField extends Group {
       chestModel,
       spellbookModel,
       purplePotionModel,
+      helmetModel,
     );
     this.name = "animated-castle-symbols";
     this.#populate(placements);
