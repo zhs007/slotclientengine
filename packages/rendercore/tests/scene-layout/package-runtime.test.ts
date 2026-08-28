@@ -514,12 +514,12 @@ describe("scene layout package runtime", () => {
       });
       const session = runtime.createMainReelCellSpin({
         localReels: [
-          [1, 1, 1, 1, 1, 0],
-          [1, 1, 1, 1, 1, 0],
+          [-1, -1, -1, -1, -1, 0],
+          [-1, -1, -1, -1, -1, 0],
         ],
         initialScene: [
-          [1, -1],
-          [0, -1],
+          [-1, -1],
+          [-1, -1],
         ],
         durationMs: 100,
         minimumSpinCycles: 1,
@@ -529,12 +529,12 @@ describe("scene layout package runtime", () => {
 
       const landings = [
         session.cells.roll({ x: 0, y: 0 }, { code: 0 }),
-        session.cells.roll({ x: 1, y: 0 }, { code: 1 }),
+        session.cells.roll({ x: 1, y: 0 }, { code: -1 }),
       ];
       runtime.update(0.1);
       await Promise.all(landings);
       expect(session.cells.getSymbol({ x: 0, y: 0 }).code).toBe(0);
-      expect(session.cells.getSymbol({ x: 1, y: 0 }).code).toBe(1);
+      expect(session.cells.getSymbol({ x: 1, y: 0 }).code).toBe(-1);
       expect(runtime.getReelArea("main").getSymbol({ x: 0, y: 1 }).code).toBe(
         1,
       );
