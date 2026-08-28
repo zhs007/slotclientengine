@@ -957,6 +957,26 @@ export interface SceneLayoutMainReelContinuousSpinInput {
   readonly dimmingActivatedAtStart?: boolean;
 }
 
+/** Public local-strip configuration for a temporary per-cell spin overlay. */
+export interface SceneLayoutMainReelCellSpinOptions {
+  /** X-first public visual reel strips. They never replace server-authorized scene data. */
+  readonly localReels: readonly (readonly number[])[];
+  /** X-first overlay scene. Use -1 for cells that must stay on the settled main reel. */
+  readonly initialScene: readonly (readonly number[])[];
+  readonly initialPresentationValues?: readonly (readonly (number | null)[])[];
+  readonly direction?: import("../reel/index.js").ReelSpinDirection;
+  readonly durationMs?: number;
+  readonly speedSymbolsPerSecond?: number;
+  readonly minimumSpinCycles?: number;
+  readonly bounceStrength?: number;
+}
+
+/** Runtime-owned CellSpin overlay. The caller must release it after landing or abort. */
+export interface SceneLayoutMainReelCellSpinSession {
+  readonly cells: import("../reel/index.js").CellSpin;
+  destroy(): void;
+}
+
 /** A package-scoped camera contribution composed with other active sessions. */
 export interface SceneLayoutCameraEffectTarget {
   /** Uniform scene zoom. One is neutral and values below one are rejected. */
@@ -1027,6 +1047,10 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   }[];
   /** Cancels targetless rolling without fabricating a landing target. */
   cancelMainReelContinuousSpin(): void;
+  /** Creates an independently owned CellSpin overlay aligned to the main reel. */
+  createMainReelCellSpin(
+    options: SceneLayoutMainReelCellSpinOptions,
+  ): SceneLayoutMainReelCellSpinSession;
   /** Returns the instance-scoped symbol area; currently only "main" exists. */
   getSymbolArea(
     reelId: string,

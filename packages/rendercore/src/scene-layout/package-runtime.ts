@@ -42,7 +42,9 @@ import type {
 import { inspectAwardCelebrationRuntime } from "../popup/award-player.js";
 import {
   RenderGridCellReelSet,
+  RenderCellSpin,
   RenderReelSet,
+  createRenderCellSpin,
   createGridCellOrder,
   createGridCellReelSpinPlan,
   createReelLayout,
@@ -107,6 +109,8 @@ import type {
   SceneLayoutInitialReelScene,
   SceneLayoutGridCellSpinPlanStage,
   SceneLayoutMainReelContinuousSpinInput,
+  SceneLayoutMainReelCellSpinOptions,
+  SceneLayoutMainReelCellSpinSession,
   SceneLayoutMainReelSymbolStatePlaybackRequest,
   SceneLayoutMainReelSpinInput,
   SceneLayoutNodeStateSnapshot,
@@ -224,6 +228,11 @@ interface PackagePresentationDelayWaiter {
   readonly reject: (error: Error) => void;
   readonly signal?: AbortSignal;
   readonly abortListener?: () => void;
+}
+
+interface ActiveMainReelCellSpinSession {
+  readonly spin: RenderCellSpin;
+  readonly destroy: () => void;
 }
 
 interface ActiveAwardCelebrationWaiter {
@@ -463,6 +472,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #reelEntries = new Map<string, ReelEntry>();
   #mainReelSceneCommitted = false;
   readonly #mainReelOverlays = new Set<Container>();
+  readonly #mainReelCellSpins = new Set<ActiveMainReelCellSpinSession>();
   #activeSymbolPackageId: string | null = null;
   #stableSymbolPackageId: string | null = null;
   #targetSymbolPackageId: string | null = null;
@@ -1090,6 +1100,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         this.#reel.update(deltaSeconds);
       }
     }
+    for (const session of this.#mainReelCellSpins)
+      session.spin.update(deltaSeconds);
     for (const [id, popup] of this.#popups)
       if (popup.isPlaying())
         try {
@@ -1407,6 +1419,86 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     const reel = this.requireReel("main");
     reel.cancelContinuous();
     this.clearMainReelLandingPositions();
+  }
+
+  createMainReelCellSpin(
+    options: SceneLayoutMainReelCellSpinOptions,
+  ): SceneLayoutMainReelCellSpinSession {
+    this.assertReady();
+    if (this.isMainReelSpinning())
+      throw new SceneLayoutError(
+        "Cannot create a main reel CellSpin while the main reel is spinning.",
+      );
+    const bindingId = this.#activeSymbolPackageId;
+    const entry = bindingId ? this.#reelEntries.get(bindingId) : undefined;
+    if (!entry)
+      throw new SceneLayoutError(
+        "Main reel CellSpin requires an active prepared symbol package.",
+      );
+    const geometry = this.#manifest.reels.main;
+    if (!geometry)
+      throw new SceneLayoutError(
+        "Main reel CellSpin requires main reel geometry.",
+      );
+    const reels = new LogicReelsModel(
+      "scene-layout-main-cell-spin",
+      options.localReels,
+    );
+    const registry = createSymbolPackageReelRegistryFromCatalog(
+      entry.resource,
+      entry.catalog,
+      { valueTextBindings: this.#symbolValueTextBindings },
+    );
+    let spin: RenderCellSpin | null = null;
+    let detach: (() => void) | null = null;
+    try {
+      spin = createRenderCellSpin({
+        reels,
+        registry,
+        initialScene: options.initialScene,
+        ...(options.initialPresentationValues
+          ? { initialPresentationValues: options.initialPresentationValues }
+          : {}),
+        cellWidth: geometry.cellSize.width,
+        cellHeight: geometry.cellSize.height,
+        columnGap: geometry.gap.x,
+        rowGap: geometry.gap.y,
+        ...(options.direction ? { direction: options.direction } : {}),
+        ...(options.durationMs === undefined
+          ? {}
+          : { durationMs: options.durationMs }),
+        ...(options.speedSymbolsPerSecond === undefined
+          ? {}
+          : { speedSymbolsPerSecond: options.speedSymbolsPerSecond }),
+        ...(options.minimumSpinCycles === undefined
+          ? {}
+          : { minimumSpinCycles: options.minimumSpinCycles }),
+        ...(options.bounceStrength === undefined
+          ? {}
+          : { bounceStrength: options.bounceStrength }),
+      });
+      detach = this.attachMainReelOverlay(spin);
+      let active = true;
+      const session: ActiveMainReelCellSpinSession = {
+        spin,
+        destroy: () => {
+          if (!active) return;
+          active = false;
+          this.#mainReelCellSpins.delete(session);
+          detach?.();
+          spin?.destroy();
+        },
+      };
+      this.#mainReelCellSpins.add(session);
+      return Object.freeze({
+        cells: spin,
+        destroy: session.destroy,
+      });
+    } catch (error) {
+      detach?.();
+      spin?.destroy();
+      throw asSceneLayoutError(error);
+    }
   }
 
   getSymbolArea(reelId: string) {
@@ -3033,6 +3125,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#reelEntries.clear();
     this.#reel = null;
     this.#mainReelSceneCommitted = false;
+    for (const session of [...this.#mainReelCellSpins]) session.destroy();
     for (const overlay of this.#mainReelOverlays)
       overlay.parent?.removeChild(overlay);
     this.#mainReelOverlays.clear();

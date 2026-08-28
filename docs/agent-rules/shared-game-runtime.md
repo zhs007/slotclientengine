@@ -54,6 +54,10 @@
   refill、stagger 和 anticipation 由 operation handler 以 frame delay、Promise 与明确业务事实编排。
   不新增 CellSpinPlan/RefillPlan 或 renderer 业务 predicate。game002v2 的 GridCellReelSpinPlan 仅为
   legacy compatibility，新能力不得继续扩展该 surface。
+- standard 主轮上的临时逐格玩法通过 Scene Layout runtime 创建对齐主轮几何、复用当前 Symbols binding
+  的受控 CellSpin overlay session；runtime 统一逐帧 update，app 在落停、失败或 abort 后显式 destroy。
+  未参与格使用 `-1` overlay hole 并继续由 settled 主轮持有；公开本地轮带只驱动过程表现，最终 target
+  必须来自服务端 execution plan。
 - 新普通转使用无 public plan 的 ReelSpin `roll/start/settle/cancel` 逐列原子接口；不同列并发、
   full/held/stagger/barrier 由 operation handler 以 frame delay 和 Promise 编排。落停 Promise resolve 时
   整列 `getSymbol()` 必须可用。standard legacy batch façade只能复用同一 RenderReel 单轴运动 owner，
