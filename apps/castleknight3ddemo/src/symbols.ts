@@ -20,11 +20,7 @@ import type { BufferGeometry, Material } from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { BOARD, boardDepth, boardWidth } from "./config.js";
 import { createRandom, type RandomSource } from "./random.js";
-import { createCartoonTreasureChest } from "./reconstructed-props.js";
-import {
-  createCartoonCrownSymbol,
-  createCartoonSpellbookSymbol,
-} from "./reconstructed-symbols.js";
+import { createCartoonCrownSymbol } from "./reconstructed-symbols.js";
 import type { CastleTextureLibrary } from "./textures.js";
 
 export const SYMBOL_TYPES = [
@@ -67,9 +63,7 @@ interface Palette {
   readonly steel: Material;
   readonly steelDark: Material;
   readonly gold: Material;
-  readonly chestGold: Material;
   readonly wood: Material;
-  readonly chestWood: Material;
   readonly purple: Material;
   readonly green: Material;
   readonly blue: Material;
@@ -77,7 +71,6 @@ interface Palette {
   readonly beard: Material;
   readonly plume: Material;
   readonly leather: Material;
-  readonly parchment: Material;
 }
 
 function toon(
@@ -114,28 +107,16 @@ function createPalette(textures: CastleTextureLibrary): Palette {
   wood.map = textures.woodAlbedo;
   wood.bumpMap = textures.woodDetail;
   wood.bumpScale = 0.022;
-  const chestWood = toon(0xffffff, textures);
-  chestWood.map = textures.chestWoodAlbedo;
-  chestWood.bumpMap = textures.woodDetail;
-  chestWood.bumpScale = 0.032;
-  const chestGold = metal(0xffffff, textures, 0.68, 0.31);
-  chestGold.map = textures.chestGoldAlbedo;
   const leather = toon(0xffffff, textures);
   leather.map = textures.crimsonLeatherAlbedo;
   leather.bumpMap = textures.fabricDetail;
   leather.bumpScale = 0.018;
-  const parchment = toon(0xffffff, textures);
-  parchment.map = textures.parchmentPagesAlbedo;
-  parchment.bumpMap = textures.fabricDetail;
-  parchment.bumpScale = 0.012;
   return {
     stoneDark: toon(0x30283b, textures),
     steel: metal(0xc7c7d0, textures, 0.78, 0.32),
     steelDark: metal(0x4c4655, textures, 0.7, 0.42),
     gold: metal(0xf0a51b, textures, 0.68, 0.28),
-    chestGold,
     wood,
-    chestWood,
     purple: toon(0xac2ee1, textures, 0.16),
     green: toon(0x61b326, textures, 0.11),
     blue: toon(0x159cde, textures, 0.16),
@@ -143,7 +124,6 @@ function createPalette(textures: CastleTextureLibrary): Palette {
     beard: toon(0x3f2924, textures),
     plume: toon(0x5c2cad, textures, 0.05),
     leather,
-    parchment,
   };
 }
 
@@ -163,17 +143,6 @@ function part(geometry: BufferGeometry, material: Material): Mesh {
   outline.receiveShadow = false;
   mesh.add(outline);
   return mesh;
-}
-
-function createChest(palette: Palette): Group {
-  const group = createCartoonTreasureChest({
-    wood: palette.chestWood,
-    gold: palette.chestGold,
-    iron: palette.steelDark,
-    gem: palette.purple,
-  });
-  group.scale.set(1.16, 1.03, 1.06);
-  return group;
 }
 
 function createHelmet(palette: Palette): Group {
@@ -293,6 +262,8 @@ function createModels(
   palette: Palette,
   battleAxeModel: Group,
   swordModel: Group,
+  chestModel: Group,
+  spellbookModel: Group,
 ): ReadonlyMap<SymbolType, Group> {
   const reconstructedMaterials = {
     wood: palette.wood,
@@ -300,7 +271,6 @@ function createModels(
     iron: palette.steelDark,
     gold: palette.gold,
     leather: palette.leather,
-    parchment: palette.parchment,
     purple: palette.purple,
     blue: palette.blue,
     outline: symbolOutlineMaterial,
@@ -308,8 +278,11 @@ function createModels(
   const sword = swordModel.clone(true);
   sword.scale.setScalar(1.25);
   sword.rotation.z = -0.72;
+  const chest = chestModel.clone(true);
+  chest.scale.setScalar(1.15);
+  const spellbook = spellbookModel.clone(true);
   return new Map<SymbolType, Group>([
-    ["chest", createChest(palette)],
+    ["chest", chest],
     ["helmet", createHelmet(palette)],
     ["shield", createShield(palette)],
     ["purplePotion", createPotion(palette, palette.purple, "purple-potion")],
@@ -318,7 +291,7 @@ function createModels(
     ["sword", sword],
     ["king", createKing(palette)],
     ["battleAxe", battleAxeModel],
-    ["spellbook", createCartoonSpellbookSymbol(reconstructedMaterials)],
+    ["spellbook", spellbook],
     ["crown", createCartoonCrownSymbol(reconstructedMaterials)],
   ]);
 }
@@ -474,10 +447,18 @@ export class SymbolField extends Group {
     textures: CastleTextureLibrary,
     battleAxeModel: Group,
     swordModel: Group,
+    chestModel: Group,
+    spellbookModel: Group,
   ) {
     super();
     this.#palette = createPalette(textures);
-    this.#masters = createModels(this.#palette, battleAxeModel, swordModel);
+    this.#masters = createModels(
+      this.#palette,
+      battleAxeModel,
+      swordModel,
+      chestModel,
+      spellbookModel,
+    );
     this.name = "animated-castle-symbols";
     this.#populate(placements);
   }

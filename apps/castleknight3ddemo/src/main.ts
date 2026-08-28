@@ -3,8 +3,10 @@ import { loadCastleBattleAxeModel } from "./battle-axe-model.js";
 import { loadCastleBenchModel } from "./bench-model.js";
 import { CastleKnightRenderer } from "./castle-scene.js";
 import { loadCastleChandelierModel } from "./chandelier-model.js";
+import { loadCastleChestModel } from "./chest-model.js";
 import { loadCastleColumnModel } from "./column-model.js";
 import { PropPreviewRenderer, type PropPreviewKind } from "./prop-preview.js";
+import { loadCastleSpellbookModel } from "./spellbook-model.js";
 import { loadCastleSwordModel } from "./sword-model.js";
 import { loadCastleThroneDaisModel } from "./throne-dais-model.js";
 import { loadCastleThroneModel } from "./throne-model.js";
@@ -121,6 +123,8 @@ async function bootstrap(): Promise<void> {
     columnModel,
     swordModel,
     chandelierModel,
+    chestModel,
+    spellbookModel,
   ] = await Promise.all([
     loadCastleBarrelModel(),
     loadCastleBattleAxeModel(),
@@ -131,6 +135,8 @@ async function bootstrap(): Promise<void> {
     loadCastleColumnModel(),
     loadCastleSwordModel(),
     loadCastleChandelierModel(),
+    loadCastleChestModel(),
+    loadCastleSpellbookModel(),
   ]);
   const game = new CastleKnightRenderer(
     root,
@@ -143,6 +149,8 @@ async function bootstrap(): Promise<void> {
     columnModel,
     swordModel,
     chandelierModel,
+    chestModel,
+    spellbookModel,
   );
   root.append(createHud(root, game));
   const resize = () => game.resize(root.clientWidth, root.clientHeight);
@@ -178,6 +186,9 @@ async function bootstrapPropPreview(
   const columnModel = kind === "column" ? await loadCastleColumnModel() : null;
   const chandelierModel =
     kind === "chandelier" ? await loadCastleChandelierModel() : null;
+  const chestModel = kind === "chest" ? await loadCastleChestModel() : null;
+  const spellbookModel =
+    kind === "spellbook" ? await loadCastleSpellbookModel() : null;
   const preview = new PropPreviewRenderer(
     root,
     kind,
@@ -192,6 +203,8 @@ async function bootstrapPropPreview(
     wallModel,
     columnModel,
     chandelierModel,
+    chestModel,
+    spellbookModel,
   );
   const resize = () => preview.resize(root.clientWidth, root.clientHeight);
   const resizeObserver = new ResizeObserver(resize);

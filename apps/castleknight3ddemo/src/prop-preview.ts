@@ -13,14 +13,8 @@ import {
   WebGLRenderer,
 } from "three";
 import type { Group } from "three";
-import {
-  createCartoonTreasureChest,
-  createCartoonWallTorch,
-} from "./reconstructed-props.js";
-import {
-  createCartoonCrownSymbol,
-  createCartoonSpellbookSymbol,
-} from "./reconstructed-symbols.js";
+import { createCartoonWallTorch } from "./reconstructed-props.js";
+import { createCartoonCrownSymbol } from "./reconstructed-symbols.js";
 import {
   createCastleTextureLibrary,
   type CastleTextureLibrary,
@@ -63,6 +57,8 @@ export class PropPreviewRenderer {
     wallModel: Group | null,
     columnModel: Group | null,
     chandelierModel: Group | null,
+    chestModel: Group | null,
+    spellbookModel: Group | null,
   ) {
     this.#renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.#renderer.outputColorSpace = SRGBColorSpace;
@@ -83,38 +79,24 @@ export class PropPreviewRenderer {
     }
 
     if (kind === "chest") {
-      const chestWood = textured
-        ? new MeshToonMaterial({
-            color: 0xffffff,
-            map: this.#textureLibrary?.chestWoodAlbedo,
-            bumpMap: this.#textureLibrary?.woodDetail,
-            bumpScale: 0.032,
-            gradientMap: this.#textureLibrary?.toonGradient,
-          })
-        : new MeshBasicMaterial({ color: 0x8c4625 });
-      const chestGold = textured
-        ? new MeshStandardMaterial({
-            color: 0xffffff,
-            map: this.#textureLibrary?.chestGoldAlbedo,
-            bumpMap: this.#textureLibrary?.metalDetail,
-            bumpScale: 0.018,
-            metalness: 0.68,
-            roughness: 0.31,
-            flatShading: true,
-          })
-        : new MeshBasicMaterial({ color: 0xd18a19 });
-      const chest = createCartoonTreasureChest({
-        wood: chestWood,
-        gold: chestGold,
-        iron: new MeshBasicMaterial({ color: 0x3d3942 }),
-        gem: new MeshBasicMaterial({ color: 0x8f32d2 }),
-      });
-      chest.scale.set(3.4, 3, 3);
+      if (!chestModel) throw new Error("Castle chest GLB is not loaded.");
+      const chest = chestModel.clone(true);
+      chest.scale.setScalar(3.1);
       chest.rotation.y = sideView ? Math.PI * 0.52 : -Math.PI * 0.18;
-      chest.position.y = 0.25;
+      chest.position.y = 0.45;
       this.#scene.add(chest);
       this.#camera.position.set(0, 2.25, 7.2);
       this.#camera.lookAt(0, 0.2, 0);
+    } else if (kind === "spellbook") {
+      if (!spellbookModel) {
+        throw new Error("Castle spellbook GLB is not loaded.");
+      }
+      const spellbook = spellbookModel.clone(true);
+      spellbook.scale.setScalar(2.5);
+      spellbook.rotation.y = sideView ? Math.PI / 2 : -Math.PI * 0.12;
+      this.#scene.add(spellbook);
+      this.#camera.position.set(0, 3.6, 7.2);
+      this.#camera.lookAt(0, 0, 0);
     } else if (kind === "column") {
       if (!columnModel) throw new Error("Castle column GLB is not loaded.");
       const column = columnModel.clone(true);
@@ -182,13 +164,6 @@ export class PropPreviewRenderer {
             gradientMap,
           })
         : new MeshBasicMaterial({ color: 0x7c1d2c });
-      const parchment = textured
-        ? new MeshToonMaterial({
-            color: 0xffffff,
-            map: this.#textureLibrary?.parchmentPagesAlbedo,
-            gradientMap,
-          })
-        : new MeshBasicMaterial({ color: 0xd7b979 });
       const purple = new MeshBasicMaterial({ color: 0x8f32d2 });
       const blue = new MeshBasicMaterial({ color: 0x169bd8 });
       const outline = new MeshBasicMaterial({
@@ -269,7 +244,6 @@ export class PropPreviewRenderer {
           iron,
           gold,
           leather,
-          parchment,
           purple,
           blue,
           outline,
@@ -285,19 +259,10 @@ export class PropPreviewRenderer {
           symbol = swordModel.clone(true);
           symbol.rotation.z = -0.72;
         } else {
-          symbol =
-            kind === "spellbook"
-              ? createCartoonSpellbookSymbol(materials)
-              : createCartoonCrownSymbol(materials);
+          symbol = createCartoonCrownSymbol(materials);
         }
         symbol.scale.setScalar(
-          kind === "battleAxe"
-            ? 1.85
-            : kind === "sword"
-              ? 3
-              : kind === "spellbook"
-                ? 2.35
-                : 2.1,
+          kind === "battleAxe" ? 1.85 : kind === "sword" ? 3 : 2.1,
         );
         symbol.rotation.y = sideView ? Math.PI / 2 : -Math.PI * 0.12;
         this.#scene.add(symbol);

@@ -20,8 +20,10 @@ import {
   PerspectiveCamera,
   PlaneGeometry,
   PointLight,
+  PMREMGenerator,
   Scene,
   Shape,
+  SpotLight,
   SRGBColorSpace,
   TorusGeometry,
   Vector2,
@@ -29,6 +31,7 @@ import {
   WebGLRenderer,
 } from "three";
 import type { BufferGeometry, Material, Texture } from "three";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { CartoonPass } from "./cartoon-pass.js";
 import { BOARD, boardDepth, boardWidth, ROOM } from "./config.js";
@@ -136,6 +139,7 @@ export class CastleKnightRenderer {
   readonly #cameraOffset = new Vector2();
   readonly #drawingBufferSize = new Vector2();
   readonly #textureLibrary: CastleTextureLibrary;
+  readonly #environmentMap: Texture;
   readonly #symbols: SymbolField;
   readonly #materials: CastleMaterials;
   #destroyed = false;
@@ -151,6 +155,8 @@ export class CastleKnightRenderer {
     columnModel: Group,
     swordModel: Group,
     chandelierModel: Group,
+    chestModel: Group,
+    spellbookModel: Group,
   ) {
     this.#renderer = new WebGLRenderer({
       antialias: true,
@@ -167,6 +173,16 @@ export class CastleKnightRenderer {
 
     this.#scene.background = new Color(0x090713);
     this.#scene.fog = new FogExp2(0x0a0814, 0.018);
+    const roomEnvironment = new RoomEnvironment();
+    const pmremGenerator = new PMREMGenerator(this.#renderer);
+    this.#environmentMap = pmremGenerator.fromScene(
+      roomEnvironment,
+      0.04,
+    ).texture;
+    roomEnvironment.dispose();
+    pmremGenerator.dispose();
+    this.#scene.environment = this.#environmentMap;
+    this.#scene.environmentIntensity = 0.38;
     this.#scene.add(this.#root);
     this.#textureLibrary = createCastleTextureLibrary(
       this.#renderer.capabilities.getMaxAnisotropy(),
@@ -186,6 +202,8 @@ export class CastleKnightRenderer {
       this.#textureLibrary,
       battleAxeModel,
       swordModel,
+      chestModel,
+      spellbookModel,
     );
     this.#root.add(this.#symbols);
 
@@ -233,6 +251,7 @@ export class CastleKnightRenderer {
     });
     this.#symbols.disposeResources();
     this.#textureLibrary.dispose();
+    this.#environmentMap.dispose();
     this.#cartoonPass.dispose();
     this.#renderer.dispose();
     this.#renderer.domElement.remove();
@@ -592,9 +611,9 @@ export class CastleKnightRenderer {
   }
 
   #createLighting(): void {
-    const hemisphere = new HemisphereLight(0x9c8be0, 0x25161c, 1.18);
-    const ambient = new AmbientLight(0x6b5c7b, 0.72);
-    const moon = new DirectionalLight(0x8f83ff, 2.35);
+    const hemisphere = new HemisphereLight(0xb8b7da, 0x332429, 1.45);
+    const ambient = new AmbientLight(0x8c7f91, 0.48);
+    const moon = new DirectionalLight(0xa69bff, 1.75);
     moon.position.set(-3, 11, -8);
     moon.castShadow = true;
     moon.shadow.mapSize.set(2048, 2048);
@@ -605,12 +624,34 @@ export class CastleKnightRenderer {
     moon.shadow.camera.near = 2;
     moon.shadow.camera.far = 35;
     moon.shadow.bias = -0.0005;
-    const key = new DirectionalLight(0xffb45b, 3.7);
+    const key = new DirectionalLight(0xffc993, 2.85);
     key.position.set(-5, 10, 9);
-    const throneGlow = new PointLight(0x6047ff, 8.5, 12, 2);
+    const fill = new DirectionalLight(0xb8c8ff, 1.25);
+    fill.position.set(5, 6, 11);
+    const chandelierKey = new SpotLight(
+      0xffc176,
+      42,
+      18,
+      Math.PI * 0.31,
+      0.72,
+      1.65,
+    );
+    chandelierKey.position.set(0, 7.45, -4.45);
+    chandelierKey.target.position.set(0, 0, BOARD.zOffset);
+    const throneGlow = new PointLight(0x7562ff, 5.2, 12, 2);
     throneGlow.position.set(0, 4.8, -9.6);
-    const boardGlow = new PointLight(0xff8c3e, 4.2, 13, 2);
-    boardGlow.position.set(-1.8, 4.5, 3.6);
-    this.#scene.add(hemisphere, ambient, moon, key, throneGlow, boardGlow);
+    const boardGlow = new PointLight(0xffa35c, 2.4, 13, 2);
+    boardGlow.position.set(0, 4.5, 3.6);
+    this.#scene.add(
+      hemisphere,
+      ambient,
+      moon,
+      key,
+      fill,
+      chandelierKey,
+      chandelierKey.target,
+      throneGlow,
+      boardGlow,
+    );
   }
 }
