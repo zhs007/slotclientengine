@@ -20,10 +20,7 @@ import type { BufferGeometry, Material } from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { BOARD, boardDepth, boardWidth } from "./config.js";
 import { createRandom, type RandomSource } from "./random.js";
-import {
-  createCartoonCrownSymbol,
-  createCartoonSpellbookSymbol,
-} from "./reconstructed-symbols.js";
+import { createCartoonCrownSymbol } from "./reconstructed-symbols.js";
 import type { CastleTextureLibrary } from "./textures.js";
 
 export const SYMBOL_TYPES = [
@@ -74,7 +71,6 @@ interface Palette {
   readonly beard: Material;
   readonly plume: Material;
   readonly leather: Material;
-  readonly parchment: Material;
 }
 
 function toon(
@@ -115,10 +111,6 @@ function createPalette(textures: CastleTextureLibrary): Palette {
   leather.map = textures.crimsonLeatherAlbedo;
   leather.bumpMap = textures.fabricDetail;
   leather.bumpScale = 0.018;
-  const parchment = toon(0xffffff, textures);
-  parchment.map = textures.parchmentPagesAlbedo;
-  parchment.bumpMap = textures.fabricDetail;
-  parchment.bumpScale = 0.012;
   return {
     stoneDark: toon(0x30283b, textures),
     steel: metal(0xc7c7d0, textures, 0.78, 0.32),
@@ -132,7 +124,6 @@ function createPalette(textures: CastleTextureLibrary): Palette {
     beard: toon(0x3f2924, textures),
     plume: toon(0x5c2cad, textures, 0.05),
     leather,
-    parchment,
   };
 }
 
@@ -272,6 +263,7 @@ function createModels(
   battleAxeModel: Group,
   swordModel: Group,
   chestModel: Group,
+  spellbookModel: Group,
 ): ReadonlyMap<SymbolType, Group> {
   const reconstructedMaterials = {
     wood: palette.wood,
@@ -279,7 +271,6 @@ function createModels(
     iron: palette.steelDark,
     gold: palette.gold,
     leather: palette.leather,
-    parchment: palette.parchment,
     purple: palette.purple,
     blue: palette.blue,
     outline: symbolOutlineMaterial,
@@ -289,6 +280,7 @@ function createModels(
   sword.rotation.z = -0.72;
   const chest = chestModel.clone(true);
   chest.scale.setScalar(1.15);
+  const spellbook = spellbookModel.clone(true);
   return new Map<SymbolType, Group>([
     ["chest", chest],
     ["helmet", createHelmet(palette)],
@@ -299,7 +291,7 @@ function createModels(
     ["sword", sword],
     ["king", createKing(palette)],
     ["battleAxe", battleAxeModel],
-    ["spellbook", createCartoonSpellbookSymbol(reconstructedMaterials)],
+    ["spellbook", spellbook],
     ["crown", createCartoonCrownSymbol(reconstructedMaterials)],
   ]);
 }
@@ -456,6 +448,7 @@ export class SymbolField extends Group {
     battleAxeModel: Group,
     swordModel: Group,
     chestModel: Group,
+    spellbookModel: Group,
   ) {
     super();
     this.#palette = createPalette(textures);
@@ -464,6 +457,7 @@ export class SymbolField extends Group {
       battleAxeModel,
       swordModel,
       chestModel,
+      spellbookModel,
     );
     this.name = "animated-castle-symbols";
     this.#populate(placements);

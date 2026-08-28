@@ -19,7 +19,6 @@ export interface CastleTextureLibrary {
   readonly forgedIronAlbedo: Texture;
   readonly fabricAlbedo: Texture;
   readonly crimsonLeatherAlbedo: Texture;
-  readonly parchmentPagesAlbedo: Texture;
   readonly stoneDetail: CanvasTexture;
   readonly woodDetail: CanvasTexture;
   readonly fabricDetail: CanvasTexture;
@@ -234,12 +233,6 @@ export function createCastleTextureLibrary(
       "/textures/cartoon-crimson-leather.webp",
       1.3,
       1.3,
-      anisotropy,
-    ),
-    parchmentPagesAlbedo: loadAlbedo(
-      "/textures/cartoon-parchment-pages.webp",
-      1.1,
-      2.4,
       anisotropy,
     ),
     stoneDetail: createDetailTexture(0x570ae, "stone", 1.2, 1.2, anisotropy),

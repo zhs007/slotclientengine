@@ -19,10 +19,13 @@ export interface ReconstructedSymbolMaterials {
   readonly iron: Material;
   readonly gold: Material;
   readonly leather: Material;
-  readonly parchment: Material;
   readonly purple: Material;
   readonly blue: Material;
   readonly outline: Material;
+}
+
+interface ReconstructedSpellbookMaterials extends ReconstructedSymbolMaterials {
+  readonly parchment: Material;
 }
 
 function symbolMesh(
@@ -158,7 +161,7 @@ export function createCartoonBattleAxeSymbol(
 }
 
 export function createCartoonSpellbookSymbol(
-  materials: ReconstructedSymbolMaterials,
+  materials: ReconstructedSpellbookMaterials,
 ): Group {
   const root = new Group();
   root.name = "img2threejs-cartoon-spellbook-symbol";

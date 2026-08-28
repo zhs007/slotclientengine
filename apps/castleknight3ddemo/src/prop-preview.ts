@@ -14,10 +14,7 @@ import {
 } from "three";
 import type { Group } from "three";
 import { createCartoonWallTorch } from "./reconstructed-props.js";
-import {
-  createCartoonCrownSymbol,
-  createCartoonSpellbookSymbol,
-} from "./reconstructed-symbols.js";
+import { createCartoonCrownSymbol } from "./reconstructed-symbols.js";
 import {
   createCastleTextureLibrary,
   type CastleTextureLibrary,
@@ -61,6 +58,7 @@ export class PropPreviewRenderer {
     columnModel: Group | null,
     chandelierModel: Group | null,
     chestModel: Group | null,
+    spellbookModel: Group | null,
   ) {
     this.#renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.#renderer.outputColorSpace = SRGBColorSpace;
@@ -89,6 +87,16 @@ export class PropPreviewRenderer {
       this.#scene.add(chest);
       this.#camera.position.set(0, 2.25, 7.2);
       this.#camera.lookAt(0, 0.2, 0);
+    } else if (kind === "spellbook") {
+      if (!spellbookModel) {
+        throw new Error("Castle spellbook GLB is not loaded.");
+      }
+      const spellbook = spellbookModel.clone(true);
+      spellbook.scale.setScalar(2.5);
+      spellbook.rotation.y = sideView ? Math.PI / 2 : -Math.PI * 0.12;
+      this.#scene.add(spellbook);
+      this.#camera.position.set(0, 3.6, 7.2);
+      this.#camera.lookAt(0, 0, 0);
     } else if (kind === "column") {
       if (!columnModel) throw new Error("Castle column GLB is not loaded.");
       const column = columnModel.clone(true);
@@ -156,13 +164,6 @@ export class PropPreviewRenderer {
             gradientMap,
           })
         : new MeshBasicMaterial({ color: 0x7c1d2c });
-      const parchment = textured
-        ? new MeshToonMaterial({
-            color: 0xffffff,
-            map: this.#textureLibrary?.parchmentPagesAlbedo,
-            gradientMap,
-          })
-        : new MeshBasicMaterial({ color: 0xd7b979 });
       const purple = new MeshBasicMaterial({ color: 0x8f32d2 });
       const blue = new MeshBasicMaterial({ color: 0x169bd8 });
       const outline = new MeshBasicMaterial({
@@ -243,7 +244,6 @@ export class PropPreviewRenderer {
           iron,
           gold,
           leather,
-          parchment,
           purple,
           blue,
           outline,
@@ -259,19 +259,10 @@ export class PropPreviewRenderer {
           symbol = swordModel.clone(true);
           symbol.rotation.z = -0.72;
         } else {
-          symbol =
-            kind === "spellbook"
-              ? createCartoonSpellbookSymbol(materials)
-              : createCartoonCrownSymbol(materials);
+          symbol = createCartoonCrownSymbol(materials);
         }
         symbol.scale.setScalar(
-          kind === "battleAxe"
-            ? 1.85
-            : kind === "sword"
-              ? 3
-              : kind === "spellbook"
-                ? 2.35
-                : 2.1,
+          kind === "battleAxe" ? 1.85 : kind === "sword" ? 3 : 2.1,
         );
         symbol.rotation.y = sideView ? Math.PI / 2 : -Math.PI * 0.12;
         this.#scene.add(symbol);
