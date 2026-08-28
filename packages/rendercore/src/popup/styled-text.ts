@@ -71,11 +71,9 @@ export function createPopupStyledText(options: {
       widths.reduce((sum, width) => sum + width, 0) +
         spacing * Math.max(0, widths.length - 1),
     );
-    const gradient = createGradient(style.fill, {
-      width: total,
-      height: style.fontSize,
-    });
+    const gradient = createGradient(style.fill);
     const textStyle = new TextStyle(toTextStyle(family, style, gradient));
+    const graphemeStyles: TextStyle[] = [];
     measurementStyle.destroy();
     const arcRadians = (style.arcDegrees * Math.PI) / 180;
     const radius = total === 0 ? 0 : total / Math.abs(arcRadians);
@@ -90,7 +88,25 @@ export function createPopupStyledText(options: {
       const width = widths[index]!;
       const center = cursor + width / 2;
       const angle = radius === 0 ? 0 : center / radius;
-      const display = new Text({ text: graphemes[index]!, style: textStyle });
+      const graphemeStyle = gradient ? textStyle.clone() : textStyle;
+      if (gradient) {
+        // Pixi renders every grapheme into its own canvas. Give each canvas the
+        // complete uncurved text bounds and its offset within those bounds so
+        // the local gradient remains continuous before the glyph is curved.
+        graphemeStyle._gradientBounds = {
+          width: Math.max(1, total),
+          height: Math.max(1, style.fontSize),
+        };
+        graphemeStyle._gradientOffset = {
+          x: -(cursor + total / 2),
+          y: 0,
+        };
+        graphemeStyles.push(graphemeStyle);
+      }
+      const display = new Text({
+        text: graphemes[index]!,
+        style: graphemeStyle,
+      });
       display.anchor.set(0.5, 0.5);
       display.position.set(
         Math.sin(angle) * radius,
@@ -115,6 +131,7 @@ export function createPopupStyledText(options: {
       container: group,
       destroy() {
         group.destroy({ children: true });
+        for (const graphemeStyle of graphemeStyles) graphemeStyle.destroy();
         gradient?.destroy();
         textStyle.destroy();
       },
@@ -212,31 +229,17 @@ function toTextStyle(
   };
 }
 
-function createGradient(
-  fill: PopupTextFill,
-  globalBounds?: { readonly width: number; readonly height: number },
-): FillGradient | null {
+function createGradient(fill: PopupTextFill): FillGradient | null {
   if (fill.kind === "solid") return null;
   const radians = (fill.angleDegrees * Math.PI) / 180;
   const dx = Math.cos(radians) / 2;
   const dy = Math.sin(radians) / 2;
-  const extent = globalBounds
-    ? Math.max(
-        1,
-        Math.abs(dx * 2) * globalBounds.width +
-          Math.abs(dy * 2) * globalBounds.height,
-      )
-    : 1;
   return new FillGradient({
     type: "linear",
-    start: globalBounds
-      ? { x: -dx * extent, y: -dy * extent }
-      : { x: 0.5 - dx, y: 0.5 - dy },
-    end: globalBounds
-      ? { x: dx * extent, y: dy * extent }
-      : { x: 0.5 + dx, y: 0.5 + dy },
+    start: { x: 0.5 - dx, y: 0.5 - dy },
+    end: { x: 0.5 + dx, y: 0.5 + dy },
     colorStops: fill.stops.map((stop) => ({ ...stop })),
-    textureSpace: globalBounds ? "global" : "local",
+    textureSpace: "local",
   });
 }
 

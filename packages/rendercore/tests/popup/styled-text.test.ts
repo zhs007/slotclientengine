@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { DOMAdapter, FillGradient, Text } from "pixi.js";
 import {
   createPopupStyledText,
   validatePopupStyledText,
@@ -115,5 +116,56 @@ describe("popup styled text", () => {
     });
     expect(emptyArc.container.children[0]!.children).toHaveLength(0);
     emptyArc.destroy();
+  });
+
+  it("keeps one continuous local gradient across curved graphemes", () => {
+    const createCanvas = vi
+      .spyOn(DOMAdapter.get(), "createCanvas")
+      .mockImplementation((width = 0, height = 0) => {
+        const gradient = { addColorStop: vi.fn() };
+        const context = {
+          createLinearGradient: () => gradient,
+          fillRect: vi.fn(),
+          fillStyle: "",
+        };
+        return { width, height, getContext: () => context } as never;
+      });
+    const renderer = createPopupStyledText({
+      family: "sans-serif",
+      text: "ABC",
+      style: {
+        ...style,
+        fill: {
+          kind: "linear-gradient",
+          angleDegrees: 90,
+          stops: [
+            { offset: 0, color: "#fff1a8" },
+            { offset: 1, color: "#ff9900" },
+          ],
+        },
+      },
+      anchor: { x: 0.5, y: 0.5 },
+      measureText: () => 20,
+    });
+
+    const graphemes = renderer.container.children[0]!.children as Text[];
+    expect(graphemes).toHaveLength(3);
+    const gradients = graphemes.map(({ style }) => style._fill.fill);
+    expect(gradients[0]).toBeInstanceOf(FillGradient);
+    expect(gradients[1]).toBe(gradients[0]);
+    expect((gradients[0] as FillGradient).textureSpace).toBe("local");
+    expect(graphemes.map(({ style }) => style._gradientBounds)).toEqual([
+      { width: 68, height: 64 },
+      { width: 68, height: 64 },
+      { width: 68, height: 64 },
+    ]);
+    expect(graphemes.map(({ style }) => style._gradientOffset)).toEqual([
+      { x: -0, y: 0 },
+      { x: -24, y: 0 },
+      { x: -48, y: 0 },
+    ]);
+
+    renderer.destroy();
+    createCanvas.mockRestore();
   });
 });
