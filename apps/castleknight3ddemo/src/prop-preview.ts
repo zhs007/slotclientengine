@@ -34,6 +34,7 @@ export type PropPreviewKind =
   | "battleAxe"
   | "spellbook"
   | "purplePotion"
+  | "helmet"
   | "crown";
 
 export class PropPreviewRenderer {
@@ -61,6 +62,7 @@ export class PropPreviewRenderer {
     chestModel: Group | null,
     spellbookModel: Group | null,
     purplePotionModel: Group | null,
+    helmetModel: Group | null,
   ) {
     this.#renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.#renderer.outputColorSpace = SRGBColorSpace;
@@ -107,6 +109,14 @@ export class PropPreviewRenderer {
       purplePotion.scale.setScalar(2.5);
       purplePotion.rotation.y = sideView ? Math.PI / 2 : -Math.PI * 0.12;
       this.#scene.add(purplePotion);
+      this.#camera.position.set(0, 1.1, 7.4);
+      this.#camera.lookAt(0, 0, 0);
+    } else if (kind === "helmet") {
+      if (!helmetModel) throw new Error("Castle helmet GLB is not loaded.");
+      const helmet = helmetModel.clone(true);
+      helmet.scale.setScalar(2.5);
+      helmet.rotation.y = sideView ? Math.PI / 2 : -Math.PI * 0.12;
+      this.#scene.add(helmet);
       this.#camera.position.set(0, 1.1, 7.4);
       this.#camera.lookAt(0, 0, 0);
     } else if (kind === "column") {

@@ -18,8 +18,10 @@ describe("castle symbol layout", () => {
     ).toBe(first.length);
   });
 
-  it("balances every medieval symbol without orthogonal matches", () => {
+  it("balances only active GLB symbols without orthogonal matches", () => {
     const placements = createSymbolPlacements(987654);
+    const activeTypes = new Set<string>(SYMBOL_TYPES);
+    expect(placements.every(({ type }) => activeTypes.has(type))).toBe(true);
     const counts = SYMBOL_TYPES.map(
       (type) =>
         placements.filter((placement) => placement.type === type).length,
