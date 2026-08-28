@@ -22,10 +22,14 @@ runtime.startAwardCelebrationForCurrentMode(input);
 替换为：
 
 ```ts
-await runtime.playAwardCelebrationForCurrentMode(input);
+await runtime.playAwardCelebrationForCurrentMode({
+  ...input,
+  formatMoney: (amountRaw) => uiBridge.formatMoney(amountRaw),
+  amountDurationScale: 0.8,
+});
 ```
 
-新 Promise 在完整庆祝生命周期结束后 resolve。宿主 ticker 必须继续调用 `runtime.update(deltaSeconds)`；现有 Crave ticker 已满足。
+`formatMoney` 是每次播放必填的 formatter，接收与 `betAmountRaw/winAmountRaw` 相同单位的当前 raw amount；Crave 应复用 `uiBridge` 已配置的实际币种格式。`amountDurationScale` 可省略，默认 `1`；`0.8` 只把数字计数与最终减速时间缩短到 80%，不加速 VNI/Spine。新 Promise 在完整庆祝生命周期结束后 resolve。宿主 ticker 必须继续调用 `runtime.update(deltaSeconds)`；现有 Crave ticker 已满足。
 
 ### 进入免费游戏
 
@@ -36,6 +40,8 @@ if (triggerAwardRaw > 0) {
   await runtime.playAwardCelebrationForCurrentMode({
     betAmountRaw: logic.getBet() * logic.getLines(),
     winAmountRaw: triggerAwardRaw,
+    formatMoney: (amountRaw) => uiBridge.formatMoney(amountRaw),
+    amountDurationScale: 0.8,
   });
 }
 await runtime.prepareGameModeTransition("FreeGame");
@@ -53,6 +59,8 @@ if (freeGameAwardRaw > 0) {
   await runtime.playAwardCelebrationForCurrentMode({
     betAmountRaw: logic.getBet() * logic.getLines(),
     winAmountRaw: freeGameAwardRaw,
+    formatMoney: (amountRaw) => uiBridge.formatMoney(amountRaw),
+    amountDurationScale: 0.8,
   });
 }
 await runtime.prepareGameModeTransition("BaseGame");

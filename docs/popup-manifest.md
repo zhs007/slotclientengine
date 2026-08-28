@@ -86,9 +86,11 @@ v6 保留 backdrop 的类型化 `visibleStates`，普通 Spine Popup 也继续�
 
 v1–v5 award 升级时以 layer 所在 tier 为状态权威并移除 layer visibility，不会因旧五档全选而把 celebration 效果提前放进 base/standard。旧包跨 tier 复用同一 id 但稳定 identity 冲突时，upgrader 使用确定的 state-qualified id，并同步重写该 tier 内 attachment target。导出的 v6 再导入不会发生第二次变化。
 
-award 的分段 VNI 收到最终关闭请求时立即从 exact `loopEndTime` 启动非循环 end range，不等待当前 loop 完成；end 和粒子 drain 完成后 Popup 隐藏并进入 complete。tier 切换则立即隐藏 outgoing tier，避免旧 bigwin 在新档背后继续显示。普通 Spine Popup 的三阶段点击边界不受此规则影响。
+award 的分段 VNI 收到最终关闭请求时立即从 exact `loopEndTime` 启动非循环 end range，不等待当前 loop 完成；end 和粒子 drain 完成后 Popup 隐藏并进入 complete。自然计数或玩家 advance 触发 tier 切换时都立即隐藏 outgoing tier 并显示新档，不等待旧动画 completion；outgoing tier 在不可见状态继续 official end/update/drain，避免旧 bigwin 在新档背后继续显示且不泄漏资源。普通 Spine Popup 的三阶段点击边界不受此规则影响。
 
 award 不执行 base 金额滚动：最终获奖小于等于 bet 时直接显示 final 并进入 end；最终获奖大于 bet 时直接进入 standard，并从 exact bet 开始计数。每档 `countDurationSeconds` 标定该档完整 canonical threshold span 的 nominal rate，例如 standard 恒以 `bet → bigwin threshold` 的完整跨度计算；只到 2 倍 bet 时沿用这条完整曲线的前段，不把 `bet → 2bet` 拉满 standard duration。Core 在每次 start 时只预计算常量数量的连续曲线 descriptor，使非最终阶段内与跨档速度持续增加；megawin 没有下一 threshold，使用最近封闭 celebration span 作为 nominal 标定单位。
+
+runtime 可在单次 start 时传入正有限 `amountDurationScale`；省略为 `1`，`0.8` 表示把基准计数和 terminal braking 的全部时间坐标缩短到 80%。该值不写入 manifest，不改变 threshold、brake distance 或 VNI/Spine/粒子/音频速度。Scene Layout `playAwardCelebrationForCurrentMode()` 的 `formatMoney(amountRaw)` 同样是 per-request runtime 输入；formatter 接收当前 floored raw amount，结果必须是非空字符串，FIFO 请求之间不得复用覆盖值。
 
 award 的玩家 advance 同时推进金额和画面档位。final 以前每次点击把共享 `win-amount` 与 active tier 同步跳到下一个实际可达的 bigwin/superwin/megawin threshold。没有非最终里程碑时，点击进入预计算的 final braking tail；自然播放也使用同一尾段，只有这里减速并展示最后数字变化。庆祝档仍处于 `start` segment 时 advance 也立即生效，不等待 start/loop 边界或第二次点击。
 

@@ -1,5 +1,6 @@
 export type {
   AwardCelebrationInput,
+  AwardCelebrationPlaybackOptions,
   AwardCelebrationPhase,
   AwardCelebrationRuntime,
   PopupHostPlacement,

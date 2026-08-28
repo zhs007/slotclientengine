@@ -7,6 +7,7 @@ import type { ImageStringResource } from "../image-string/core/index.js";
 import type { SceneLayoutJsonData } from "./data/json-data.js";
 import type { SymbolPackageResource } from "../symbol/package.js";
 import type { PopupPackageResource } from "../popup/core/types.js";
+import type { PopupAmountFormatter } from "../popup/data/types.js";
 import type {
   ResolvedAudioEffect,
   ResolvedAudioEventTrack,
@@ -836,6 +837,15 @@ export interface SceneLayoutGameModeRequestOptions extends SceneLayoutGameModePr
   readonly preludePopupStrings?: readonly SceneLayoutPopupStringInput[];
 }
 
+export interface SceneLayoutAwardCelebrationPlayInput {
+  readonly betAmountRaw: number;
+  readonly winAmountRaw: number;
+  /** Formats each floored raw amount for this playback only. */
+  readonly formatMoney: PopupAmountFormatter;
+  /** Multiplies only the amount motion duration; values below 1 play it faster. */
+  readonly amountDurationScale?: number;
+}
+
 export type SceneLayoutPopupStringInput =
   | {
       readonly kind: "text";
@@ -1235,10 +1245,9 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
     readonly winAmountRaw: number;
   }): void;
   /** Plays the current mode award celebration and resolves after its complete lifecycle. */
-  playAwardCelebrationForCurrentMode(input: {
-    readonly betAmountRaw: number;
-    readonly winAmountRaw: number;
-  }): Promise<void>;
+  playAwardCelebrationForCurrentMode(
+    input: SceneLayoutAwardCelebrationPlayInput,
+  ): Promise<void>;
   /** Advances the active mode popup according to its production interaction contract. */
   requestAdvanceAwardCelebration(): void;
   /** Immediately clears the active mode popup and its pending end lifecycle. */
