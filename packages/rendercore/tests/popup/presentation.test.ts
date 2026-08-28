@@ -84,6 +84,35 @@ describe("popup presentation host contract", () => {
     presentation.destroy();
   });
 
+  it("keeps symmetric modern Popup content centered in every page orientation", () => {
+    const presentation = createPopupPresentation({
+      version: 3,
+      kind: "popup",
+      type: "spine",
+      id: "symmetric-popup",
+      name: "Symmetric Popup",
+      adaptation: {
+        mode: "maximized-focus",
+        focus: { left: 540, right: 540, top: 960, bottom: 960 },
+      },
+      backdrop: { enabled: true, color: "#000000", alpha: 0.5 },
+      resources: {},
+      spine: {} as never,
+    });
+
+    for (const viewportSize of [
+      { width: 1920, height: 1080 },
+      { width: 1080, height: 1920 },
+      { width: 1200, height: 1200 },
+      { width: 2560, height: 720 },
+    ]) {
+      const snapshot = presentation.applyViewport(viewportSize);
+      expect(snapshot.contentPosition.x).toBeCloseTo(viewportSize.width / 2);
+      expect(snapshot.contentPosition.y).toBeCloseTo(viewportSize.height / 2);
+    }
+    presentation.destroy();
+  });
+
   it("contains and centers a portrait design in landscape and square viewports", () => {
     const presentation = createPopupPresentation({
       version: 2,

@@ -12,13 +12,16 @@ describe("scene layout frame geometry", () => {
       manifest: game002LayoutFixture,
       pageSize: { width: 1920, height: 1080 },
     });
-    expect(landscape).toMatchObject({
-      frameDesignSize: { width: 2000, height: 1200 },
-      scale: 0.9,
-      cssSize: { width: 1800, height: 1080 },
-      offsetX: 60,
-      offsetY: 0,
-    });
+    expect(landscape.frameDesignSize.width).toBeCloseTo(
+      (1200 * 1920) / 1080,
+      10,
+    );
+    expect(landscape.frameDesignSize.height).toBe(1200);
+    expect(landscape.scale).toBeCloseTo(0.9, 10);
+    expect(landscape.cssSize.width).toBeCloseTo(1920, 10);
+    expect(landscape.cssSize.height).toBeCloseTo(1080, 10);
+    expect(landscape.offsetX).toBeCloseTo(0, 10);
+    expect(landscape.offsetY).toBe(0);
 
     const portrait = resolveSceneLayoutFrameViewport({
       manifest: game002LayoutFixture,
@@ -29,6 +32,42 @@ describe("scene layout frame geometry", () => {
     expect(portrait.cssSize).toEqual({ width: 390, height: 844 });
     expect(portrait.offsetX).toBe(0);
     expect(portrait.offsetY).toBe(0);
+  });
+
+  it("keeps single-focus frame and camera geometry independent of artSize", () => {
+    const resizedArtManifest = structuredClone(game002LayoutFixture) as any;
+    resizedArtManifest.adaptation.artSize = { width: 320, height: 480 };
+    const pageSize = { width: 1920, height: 1080 };
+
+    const baselineFrame = resolveSceneLayoutFrameViewport({
+      manifest: game002LayoutFixture,
+      pageSize,
+    });
+    const resizedFrame = resolveSceneLayoutFrameViewport({
+      manifest: resizedArtManifest,
+      pageSize,
+    });
+    expect(resizedFrame).toEqual(baselineFrame);
+
+    const baselineScene = resolveSceneLayoutViewport({
+      manifest: game002LayoutFixture,
+      viewportSize: baselineFrame.frameDesignSize,
+    });
+    const resizedScene = resolveSceneLayoutViewport({
+      manifest: resizedArtManifest,
+      viewportSize: resizedFrame.frameDesignSize,
+    });
+    expect({
+      viewportSize: resizedScene.viewportSize,
+      visibleRect: resizedScene.visibleRect,
+      worldOffset: resizedScene.worldOffset,
+      focusRectInViewport: resizedScene.focusRectInViewport,
+    }).toEqual({
+      viewportSize: baselineScene.viewportSize,
+      visibleRect: baselineScene.visibleRect,
+      worldOffset: baselineScene.worldOffset,
+      focusRectInViewport: baselineScene.focusRectInViewport,
+    });
   });
 
   it("maximizes the selected game003 orientation focus", () => {
@@ -64,6 +103,49 @@ describe("scene layout frame geometry", () => {
     expect(scene.variantId).toBe("portrait");
     expect(scene.viewportSize).toEqual(portrait.frameDesignSize);
     expect(scene.focusRectInViewport.width).toBe(1130);
+  });
+
+  it("keeps orientation-focus frame and camera geometry independent of artSize", () => {
+    const resizedArtManifest = structuredClone(game003LayoutFixture) as any;
+    resizedArtManifest.adaptation.variants.landscape.artSize = {
+      width: 400,
+      height: 300,
+    };
+    resizedArtManifest.adaptation.variants.portrait.artSize = {
+      width: 300,
+      height: 400,
+    };
+    const pageSize = { width: 1920, height: 1080 };
+
+    const baselineFrame = resolveSceneLayoutFrameViewport({
+      manifest: game003LayoutFixture,
+      pageSize,
+    });
+    const resizedFrame = resolveSceneLayoutFrameViewport({
+      manifest: resizedArtManifest,
+      pageSize,
+    });
+    expect(resizedFrame).toEqual(baselineFrame);
+
+    const baselineScene = resolveSceneLayoutViewport({
+      manifest: game003LayoutFixture,
+      viewportSize: baselineFrame.frameDesignSize,
+    });
+    const resizedScene = resolveSceneLayoutViewport({
+      manifest: resizedArtManifest,
+      viewportSize: resizedFrame.frameDesignSize,
+    });
+    expect({
+      viewportSize: resizedScene.viewportSize,
+      visibleRect: resizedScene.visibleRect,
+      worldOffset: resizedScene.worldOffset,
+      focusRectInViewport: resizedScene.focusRectInViewport,
+    }).toEqual({
+      viewportSize: baselineScene.viewportSize,
+      visibleRect: baselineScene.visibleRect,
+      worldOffset: baselineScene.worldOffset,
+      focusRectInViewport: baselineScene.focusRectInViewport,
+    });
   });
 
   it("regresses layout25 portrait focus at a 299 x 466 page", () => {
