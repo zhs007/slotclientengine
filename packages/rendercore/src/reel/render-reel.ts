@@ -1336,6 +1336,14 @@ export class RenderReel extends Container {
     code: number,
     value: number | null,
   ): void {
+    if (code === -1) {
+      if (value !== null)
+        throw new ReelError(
+          "Rolling empty symbol only accepts a null presentation value.",
+        );
+      this.hideRollingValue(slot);
+      return;
+    }
     if (value === null) {
       if (this.#registry.requiresPresentationValueByCode(code)) {
         throw new ReelError(
