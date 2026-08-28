@@ -34,11 +34,7 @@ import { CartoonPass } from "./cartoon-pass.js";
 import { BOARD, boardDepth, boardWidth, ROOM } from "./config.js";
 import { createRandom } from "./random.js";
 import { createCartoonCastleChandelier } from "./reconstructed-furnishings.js";
-import {
-  createCartoonCastleWallSection,
-  createCartoonWallTorch,
-  createRoundCastleColumn,
-} from "./reconstructed-props.js";
+import { createCartoonWallTorch } from "./reconstructed-props.js";
 import {
   createSessionSeed,
   createSymbolPlacements,
@@ -58,14 +54,10 @@ interface FlameHandle {
 }
 
 interface CastleMaterials {
-  readonly wall: Material;
   readonly floor: Material;
   readonly stone: Material;
   readonly stoneLight: Material;
   readonly stoneDark: Material;
-  readonly columnStone: Material;
-  readonly columnStoneLight: Material;
-  readonly columnStoneDark: Material;
   readonly mortar: Material;
   readonly wood: Material;
   readonly woodDark: Material;
@@ -157,6 +149,8 @@ export class CastleKnightRenderer {
     benchModel: Group,
     throneDaisModel: Group,
     throneModel: Group,
+    wallModel: Group,
+    columnModel: Group,
   ) {
     this.#renderer = new WebGLRenderer({
       antialias: true,
@@ -179,10 +173,10 @@ export class CastleKnightRenderer {
     );
     this.#materials = this.#createMaterials();
     this.#createFloor();
-    this.#createWalls();
+    this.#createWalls(wallModel);
     this.#createBoard();
     this.#createThroneArea(throneDaisModel, throneModel);
-    this.#createArchitecture();
+    this.#createArchitecture(columnModel);
     this.#createFurniture(benchModel, barrelModel);
     this.#createChandelier();
     this.#createTorches();
@@ -286,11 +280,6 @@ export class CastleKnightRenderer {
       bumpScale: 0.055,
     });
     return {
-      wall: toon(0xffffff, textures.toonGradient, {
-        map: textures.wallAlbedo,
-        bumpMap: textures.stoneDetail,
-        bumpScale: 0.045,
-      }),
       floor: toon(0xffffff, textures.toonGradient, {
         map: textures.floorAlbedo,
         bumpMap: textures.stoneDetail,
@@ -306,21 +295,6 @@ export class CastleKnightRenderer {
         map: textures.cutStoneAlbedo,
         bumpMap: textures.stoneDetail,
         bumpScale: 0.045,
-      }),
-      columnStone: toon(0xffffff, textures.toonGradient, {
-        map: textures.columnStoneAlbedo,
-        bumpMap: textures.stoneDetail,
-        bumpScale: 0.055,
-      }),
-      columnStoneLight: toon(0xc4b4ca, textures.toonGradient, {
-        map: textures.columnStoneAlbedo,
-        bumpMap: textures.stoneDetail,
-        bumpScale: 0.045,
-      }),
-      columnStoneDark: toon(0x5d5064, textures.toonGradient, {
-        map: textures.columnStoneAlbedo,
-        bumpMap: textures.stoneDetail,
-        bumpScale: 0.05,
       }),
       mortar: toon(0x30263b, textures.toonGradient),
       wood: toon(0xffffff, textures.toonGradient, {
@@ -389,41 +363,22 @@ export class CastleKnightRenderer {
     this.#root.add(floor);
   }
 
-  #createWalls(): void {
-    const backWall = sceneMesh(
-      new PlaneGeometry(ROOM.width, ROOM.wallHeight),
-      this.#materials.wall,
-    );
-    backWall.position.set(0, ROOM.wallHeight / 2, -ROOM.depth / 2 + 0.18);
-    backWall.castShadow = false;
-    this.#root.add(backWall);
+  #createWalls(wallModel: Group): void {
+    for (const x of [-ROOM.width / 4, ROOM.width / 4]) {
+      const wall = wallModel.clone(true);
+      wall.scale.x = 0.78;
+      wall.position.set(x, 0, -ROOM.depth / 2 - 0.55);
+      this.#root.add(wall);
+    }
 
-    const plainWall = createCartoonCastleWallSection(
-      {
-        stone: this.#materials.stone,
-        stoneLight: this.#materials.stoneLight,
-        stoneDark: this.#materials.stoneDark,
-        mortar: this.#materials.mortar,
-      },
-      false,
-    );
-    const pilasterWall = createCartoonCastleWallSection({
-      stone: this.#materials.stone,
-      stoneLight: this.#materials.stoneLight,
-      stoneDark: this.#materials.stoneDark,
-      mortar: this.#materials.mortar,
-    });
-    plainWall.scale.y = 1.42;
-    pilasterWall.scale.y = 1.42;
     for (const side of [-1, 1]) {
-      for (let sectionIndex = 0; sectionIndex < 7; sectionIndex += 1) {
-        const wall = (sectionIndex % 2 === 1 ? pilasterWall : plainWall).clone(
-          true,
-        );
+      for (let sectionIndex = 0; sectionIndex < 3; sectionIndex += 1) {
+        const wall = wallModel.clone(true);
+        wall.scale.x = 0.93;
         wall.position.set(
-          side * (ROOM.width / 2 - 0.14),
+          side * (ROOM.width / 2 + 0.55),
           0,
-          -9.78 + sectionIndex * 3.26,
+          -ROOM.depth / 3 + sectionIndex * (ROOM.depth / 3),
         );
         wall.rotation.y = (side * -Math.PI) / 2;
         this.#root.add(wall);
@@ -503,15 +458,10 @@ export class CastleKnightRenderer {
     this.#root.add(window);
   }
 
-  #createArchitecture(): void {
-    const columnMaster = createRoundCastleColumn({
-      stone: this.#materials.columnStone,
-      stoneLight: this.#materials.columnStoneLight,
-      stoneDark: this.#materials.columnStoneDark,
-    });
-    columnMaster.scale.setScalar(0.96);
+  #createArchitecture(columnModel: Group): void {
     for (const x of [-4.7, -2.75, 2.75, 4.7]) {
-      const pillar = columnMaster.clone(true);
+      const pillar = columnModel.clone(true);
+      pillar.scale.set(1.5, 1, 1.5);
       pillar.position.set(x, 0, -5.25);
       this.#root.add(pillar);
     }

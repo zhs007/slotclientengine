@@ -2,9 +2,11 @@ import { loadCastleBarrelModel } from "./barrel-model.js";
 import { loadCastleBattleAxeModel } from "./battle-axe-model.js";
 import { loadCastleBenchModel } from "./bench-model.js";
 import { CastleKnightRenderer } from "./castle-scene.js";
+import { loadCastleColumnModel } from "./column-model.js";
 import { PropPreviewRenderer, type PropPreviewKind } from "./prop-preview.js";
 import { loadCastleThroneDaisModel } from "./throne-dais-model.js";
 import { loadCastleThroneModel } from "./throne-model.js";
+import { loadCastleWallModel } from "./wall-model.js";
 import "./styles.css";
 
 function button(
@@ -112,12 +114,16 @@ async function bootstrap(): Promise<void> {
     benchModel,
     throneDaisModel,
     throneModel,
+    wallModel,
+    columnModel,
   ] = await Promise.all([
     loadCastleBarrelModel(),
     loadCastleBattleAxeModel(),
     loadCastleBenchModel(),
     loadCastleThroneDaisModel(),
     loadCastleThroneModel(),
+    loadCastleWallModel(),
+    loadCastleColumnModel(),
   ]);
   const game = new CastleKnightRenderer(
     root,
@@ -126,6 +132,8 @@ async function bootstrap(): Promise<void> {
     benchModel,
     throneDaisModel,
     throneModel,
+    wallModel,
+    columnModel,
   );
   root.append(createHud(root, game));
   const resize = () => game.resize(root.clientWidth, root.clientHeight);
@@ -156,6 +164,8 @@ async function bootstrapPropPreview(
   const throneDaisModel =
     kind === "stair" ? await loadCastleThroneDaisModel() : null;
   const throneModel = kind === "throne" ? await loadCastleThroneModel() : null;
+  const wallModel = kind === "wall" ? await loadCastleWallModel() : null;
+  const columnModel = kind === "column" ? await loadCastleColumnModel() : null;
   const preview = new PropPreviewRenderer(
     root,
     kind,
@@ -166,6 +176,8 @@ async function bootstrapPropPreview(
     benchModel,
     throneDaisModel,
     throneModel,
+    wallModel,
+    columnModel,
   );
   const resize = () => preview.resize(root.clientWidth, root.clientHeight);
   const resizeObserver = new ResizeObserver(resize);
