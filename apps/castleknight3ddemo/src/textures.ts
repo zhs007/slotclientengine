@@ -14,8 +14,6 @@ import { createRandom } from "./random.js";
 export interface CastleTextureLibrary {
   readonly floorAlbedo: Texture;
   readonly woodAlbedo: Texture;
-  readonly chestWoodAlbedo: Texture;
-  readonly chestGoldAlbedo: Texture;
   readonly oakStavesAlbedo: Texture;
   readonly cutStoneAlbedo: Texture;
   readonly forgedIronAlbedo: Texture;
@@ -206,18 +204,6 @@ export function createCastleTextureLibrary(
       "/textures/cartoon-dark-wood.webp",
       1.25,
       1.25,
-      anisotropy,
-    ),
-    chestWoodAlbedo: loadAlbedo(
-      "/textures/cartoon-chest-walnut.webp",
-      1,
-      1,
-      anisotropy,
-    ),
-    chestGoldAlbedo: loadAlbedo(
-      "/textures/cartoon-hammered-gold.webp",
-      1.35,
-      1.35,
       anisotropy,
     ),
     oakStavesAlbedo: loadAlbedo(

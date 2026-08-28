@@ -47,7 +47,7 @@ const fragmentShader = /* glsl */ `
 
     vec2 vignetteUv = (vUv - 0.5) * vec2(0.76, 1.0);
     float vignette = smoothstep(0.38, 0.72, length(vignetteUv));
-    color *= 1.0 - vignette * 0.19;
+    color *= 1.0 - vignette * 0.09;
 
     gl_FragColor = vec4(color, 1.0);
     #include <tonemapping_fragment>

@@ -13,10 +13,7 @@ import {
   WebGLRenderer,
 } from "three";
 import type { Group } from "three";
-import {
-  createCartoonTreasureChest,
-  createCartoonWallTorch,
-} from "./reconstructed-props.js";
+import { createCartoonWallTorch } from "./reconstructed-props.js";
 import {
   createCartoonCrownSymbol,
   createCartoonSpellbookSymbol,
@@ -63,6 +60,7 @@ export class PropPreviewRenderer {
     wallModel: Group | null,
     columnModel: Group | null,
     chandelierModel: Group | null,
+    chestModel: Group | null,
   ) {
     this.#renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.#renderer.outputColorSpace = SRGBColorSpace;
@@ -83,35 +81,11 @@ export class PropPreviewRenderer {
     }
 
     if (kind === "chest") {
-      const chestWood = textured
-        ? new MeshToonMaterial({
-            color: 0xffffff,
-            map: this.#textureLibrary?.chestWoodAlbedo,
-            bumpMap: this.#textureLibrary?.woodDetail,
-            bumpScale: 0.032,
-            gradientMap: this.#textureLibrary?.toonGradient,
-          })
-        : new MeshBasicMaterial({ color: 0x8c4625 });
-      const chestGold = textured
-        ? new MeshStandardMaterial({
-            color: 0xffffff,
-            map: this.#textureLibrary?.chestGoldAlbedo,
-            bumpMap: this.#textureLibrary?.metalDetail,
-            bumpScale: 0.018,
-            metalness: 0.68,
-            roughness: 0.31,
-            flatShading: true,
-          })
-        : new MeshBasicMaterial({ color: 0xd18a19 });
-      const chest = createCartoonTreasureChest({
-        wood: chestWood,
-        gold: chestGold,
-        iron: new MeshBasicMaterial({ color: 0x3d3942 }),
-        gem: new MeshBasicMaterial({ color: 0x8f32d2 }),
-      });
-      chest.scale.set(3.4, 3, 3);
+      if (!chestModel) throw new Error("Castle chest GLB is not loaded.");
+      const chest = chestModel.clone(true);
+      chest.scale.setScalar(3.1);
       chest.rotation.y = sideView ? Math.PI * 0.52 : -Math.PI * 0.18;
-      chest.position.y = 0.25;
+      chest.position.y = 0.45;
       this.#scene.add(chest);
       this.#camera.position.set(0, 2.25, 7.2);
       this.#camera.lookAt(0, 0.2, 0);
