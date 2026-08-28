@@ -1122,6 +1122,9 @@ describe("scene layout package runtime", () => {
         random: () => samples[sampleIndex++]!,
       });
       runtime.update(0.05);
+      expect(() => runtime.stopMainReelGridCellSpinImmediately()).toThrow(
+        /target-aware spin/,
+      );
       expect(runtime.drainMainReelStartedPositions()).toHaveLength(4);
       expect(sampleIndex).toBe(4);
       expect(
@@ -1158,6 +1161,18 @@ describe("scene layout package runtime", () => {
         ),
       ).toBe(true);
       atomicSettle.mockRestore();
+      const immediatelyLanded = runtime.stopMainReelGridCellSpinImmediately();
+      expect(immediatelyLanded).toEqual([
+        { x: 0, y: 0 },
+        { x: 0, y: 1 },
+        { x: 1, y: 0 },
+        { x: 1, y: 1 },
+      ]);
+      expect(runtime.drainMainReelLandingPositions()).toEqual(
+        immediatelyLanded.map(({ x, y }) => ({ x, y })),
+      );
+      expect(runtime.drainMainReelActivationPositions()).toEqual([]);
+      expect(runtime.getMainReelSceneSnapshot()).toEqual(target.scene);
       for (
         let index = 0;
         index < 20 && runtime.isMainReelSpinning();

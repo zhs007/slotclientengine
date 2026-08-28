@@ -1020,6 +1020,11 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   ): void;
   /** Injects the exact response target into the active continuous spin. */
   settleMainReelContinuousSpin(input: SceneLayoutMainReelSpinInput): void;
+  /** Immediately commits every remaining target-aware grid-cell landing. */
+  stopMainReelGridCellSpinImmediately(): readonly {
+    readonly x: number;
+    readonly y: number;
+  }[];
   /** Cancels targetless rolling without fabricating a landing target. */
   cancelMainReelContinuousSpin(): void;
   /** Returns the instance-scoped symbol area; currently only "main" exists. */

@@ -237,6 +237,7 @@ export class RenderGridCellReelSet
   implements SymbolArea, PresentableSymbolArea
 {
   readonly #reels: LogicReels;
+  readonly #registry: ReelSymbolRegistry;
   readonly #columns: number;
   readonly #rows: number;
   readonly #cellWidth: number;
@@ -280,6 +281,7 @@ export class RenderGridCellReelSet
   #completedEffects = new Set<string>();
   #activationGateOpen = false;
   #dimmingActivated = false;
+  #spinStoppedImmediately = false;
   #elapsedMs = 0;
   #activeTransferCleanup: (() => void) | null = null;
   #activeScopedTransfer: ActiveScopedTransfer | null = null;
@@ -309,6 +311,7 @@ export class RenderGridCellReelSet
       );
     }
     this.#reels = options.reels;
+    this.#registry = options.registry;
     this.#order = parseOrder(options.order, this.#columns, this.#rows);
 
     const cells = this.#order.map((coordinate) =>
@@ -440,6 +443,7 @@ export class RenderGridCellReelSet
     this.#completedEffects.clear();
     this.#activationGateOpen = false;
     this.#dimmingActivated = false;
+    this.#spinStoppedImmediately = false;
     this.#elapsedMs = 0;
 
     for (const cell of this.#cells) {
@@ -544,6 +548,7 @@ export class RenderGridCellReelSet
     this.#completedEffects.clear();
     this.#activationGateOpen = plan.activationGate === null;
     this.#dimmingActivated = plan.dimmingActivatedAtStart;
+    this.#spinStoppedImmediately = false;
     for (const cell of this.#cells) {
       const planCell =
         planCellsByKey.get(
@@ -673,6 +678,7 @@ export class RenderGridCellReelSet
       dimming,
       dimmingActivatedAtStart: options.dimmingActivatedAtStart === true,
     };
+    this.#spinStoppedImmediately = false;
     this.#elapsedMs = 0;
   }
 
@@ -809,6 +815,7 @@ export class RenderGridCellReelSet
     this.#completedEffects.clear();
     this.#activationGateOpen = plan.activationGate === null;
     this.#dimmingActivated = plan.dimmingActivatedAtStart;
+    this.#spinStoppedImmediately = false;
   }
 
   cancelContinuous(): void {
@@ -834,6 +841,63 @@ export class RenderGridCellReelSet
 
   isContinuousSpinning(): boolean {
     return this.#continuousSpin !== null;
+  }
+
+  /**
+   * Commits every remaining target-aware grid cell without advancing spin-only
+   * timing. Landing state playback still completes on later update ticks.
+   */
+  stopSpinImmediately(): readonly GridCellCoordinate[] {
+    const plan = this.#spinPlan;
+    if (!plan) {
+      throw new ReelError(
+        "Cannot stop a grid cell spin immediately without an active target-aware spin.",
+      );
+    }
+
+    const remaining = this.#cells.filter(
+      (cell) =>
+        cell.planCell !== null &&
+        !cell.hasLandedThisSpin &&
+        (cell.phase === "waiting" || cell.phase === "spinning"),
+    );
+    this.preflightImmediateLanding(remaining);
+
+    this.#spinStoppedImmediately = true;
+    this.#effectController?.cancelAll();
+    this.#startedEffects.clear();
+    this.#completedEffects.clear();
+    this.#activationGateOpen = false;
+    this.#dimmingActivated = false;
+
+    for (const cell of remaining) {
+      const planCell = cell.planCell!;
+      cell.reel.resetToVisibleSymbols(
+        planCell.targetVisibleSymbols,
+        planCell.axisPlan.finalY,
+        [cell.targetPresentationValue],
+      );
+      cell.occupied = planCell.targetVisibleSymbols[0] !== -1;
+      resetReelSlotSymbolsAndRequestLandingState(cell);
+      cell.phase = "landed";
+      cell.hasLandedThisSpin = true;
+      cell.fadeOutElapsedMs = 0;
+      cell.fadeOutStartAlpha = 0;
+    }
+
+    for (const cell of this.#cells) {
+      if (!cell.planCell) continue;
+      cell.dimOverlay.alpha = 0;
+      cell.dimOverlay.y = 0;
+      cell.dimOverlay.renderable = false;
+      resetReelSlotSymbolDimming(cell);
+      this.setCellClipMask(cell, false);
+      this.syncCellRenderOrder(cell);
+      if (cell.phase === "landed" && !hasActiveLandingAppear(cell))
+        cell.phase = "completed";
+    }
+
+    return freezeCoordinates(remaining.map((cell) => cell.coordinate));
   }
 
   spinSelective(
@@ -1000,6 +1064,7 @@ export class RenderGridCellReelSet
     if (completed) {
       this.#spinPlan = null;
       this.#spinReels = null;
+      this.#spinStoppedImmediately = false;
     }
 
     if (started.length === 0 && landed.length === 0 && activated.length === 0) {
@@ -3100,7 +3165,8 @@ export class RenderGridCellReelSet
 
     while (firstBoundary || cursorMs < endMs) {
       firstBoundary = false;
-      this.startEffectsAtBoundary(plan, cursorMs);
+      if (!this.#spinStoppedImmediately)
+        this.startEffectsAtBoundary(plan, cursorMs);
       this.updateCellsAndCollectEdges(
         plan,
         cursorMs,
@@ -3426,6 +3492,36 @@ export class RenderGridCellReelSet
       cell.dimOverlay.alpha = 0;
       cell.dimOverlay.renderable = false;
       cell.phase = "completed";
+    }
+  }
+
+  private preflightImmediateLanding(cells: readonly RuntimeCell[]): void {
+    const prepared: Array<{
+      readonly reel: RenderReel;
+      readonly occurrence: RenderReelVisibleOccurrence;
+    }> = [];
+    try {
+      for (const cell of cells) {
+        const planCell = cell.planCell!;
+        const code = planCell.targetVisibleSymbols[0]!;
+        if (
+          code === -1 ||
+          this.#registry.getEntryByCode(code).kind !== "textured"
+        )
+          continue;
+        const occurrence = cell.reel.createDetachedOccurrence(
+          code,
+          cell.targetPresentationValue,
+        );
+        prepared.push({ reel: cell.reel, occurrence });
+        occurrence.symbol.reset();
+        if (cell.targetLandingState)
+          occurrence.symbol.requestState(cell.targetLandingState, "immediate");
+        else occurrence.symbol.requestLandingAppear("immediate");
+      }
+    } finally {
+      for (const item of prepared.toReversed())
+        item.reel.releaseDetachedOccurrence(item.occurrence);
     }
   }
 

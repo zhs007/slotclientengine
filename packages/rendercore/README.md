@@ -819,6 +819,14 @@ free-game 连续段和 refill 继续调用普通 target-aware spin API，不等�
 该合同同时支持 standard `RenderReelSet` 和 grid-cell；standard 复用每轴 `RenderReel`
 continuous primitive，并显式拒绝 positions/dimming 等 grid-cell-only 输入。
 
+已有服务器目标的 legacy grid-cell spin 可调用
+`RenderGridCellReelSet.stopSpinImmediately()`；Scene Layout 对应入口是
+`stopMainReelGridCellSpinImmediately()`。命令同步提交所有尚未 landing 的选中格并返回本次新落停坐标，
+立即移除 rolling、clip、bounce、dimming、scheduled/active cell effect 和 activation 等 spin-only
+表现，但保留 exact target、显式 landing state 或 manifest `appear`，并继续等待真实 once 完成。
+targetless continuous、standard reel、idle、dropdown 与 effect sweep 都会显式拒绝；refill/cascade
+是否响应 quick-stop 由游戏 activity routing 决定，不能借此命令跳过。
+
 `createGridCellOrder({ mode: "top-down-left-right" })` 生成 `(0,0),(0,1)...(0,rows-1),(1,0)...` 的稳定顺序。`createGridCellReelSpinPlan()` 对每个 cell 计算 `startAtMs`、`stopAtMs`、`durationMs`、`axisPlan`、`targetVisibleSymbols` 和目标暗度；默认每个 cell 的最终 y 使用 `reels.normalizeY(x, finalYs[x] + y)`。selective `positions` 可以全部提供非负、从 0 开始且非递减的 `startGroupIndex`；相同 group 的 cell 共享 `startGroupIndex * startStepMs` 起播边界，而 stop timeline 仍按 positions 稳定顺序计算，因此能做同时启动的波纹而不改变既有逐格停轴 cadence。省略 group 时继续使用原来的逐格 sequence index。dimming resolver 同时接收通用 `activated` 布尔上下文；plan 可用 `dimmingActivatedAtStart` 设置起始状态，存在 activation gate 时 runtime 会在 gate 真实 landing edge 切为 `true`。滚动 strip 和 landing fade 都用当前 code 与当前状态重新解析暗度，不缓存业务 symbol 结论。运行时每帧仍对临时 spin strip 中当前真实 slot code 调用同一 resolver，而不是只看 endpoint 或 cell 序号；resolver 必须返回 `[0,1]`，游戏语义由调用方负责，rendercore 不认识具体 symbol 名。如果传入 `cellReelOffsets`，则使用 `reels.normalizeY(x, finalYs[x] + y + cellReelOffsets[x][y])`，让同一列内不同格子也能使用更分散的本地轮带窗口滚动。`createGridCellReelOffsetMatrix()` 适合固定线性 offset；`createShuffledGridCellReelOffsetMatrix()` 则对每一列做 partial Fisher-Yates，从该列完整本地公开轮带相位中为各格无重复抽取相位。调用方每次创建 spin plan 时重新调用即可获得新的视觉相位；注入的 random 必须返回 `[0,1)`，不能使用服务器随机数。两种 helper 都不打乱 symbol 顺序。`targetVisibleSymbols` 仍会注入临时 spin strip 的落点窗口，因此完成后的 `getVisibleScene()` 能还原目标 scene。调用方可以用本地公开轮带提供滚动内容，再把服务器本轮目标窗口叠加到临时 strip，不需要也不应该暴露服务器真实轮带。
 
 `createShuffledGridCellReelPhaseMatrix()` 复用同一 partial Fisher–Yates，但直接返回每格可用于

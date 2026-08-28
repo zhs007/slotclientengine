@@ -1383,6 +1383,25 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.spinMainReelToSceneInternal(input, true);
   }
 
+  stopMainReelGridCellSpinImmediately(): readonly {
+    readonly x: number;
+    readonly y: number;
+  }[] {
+    this.assertReady();
+    const reel = this.requireReel("main");
+    if (!(reel instanceof RenderGridCellReelSet)) {
+      throw new SceneLayoutError(
+        "Immediate main reel stop requires a grid-cell runtime.",
+      );
+    }
+    const positions = Object.freeze(
+      reel.stopSpinImmediately().map(({ x, y }) => Object.freeze({ x, y })),
+    );
+    for (const position of positions)
+      this.recordMainReelLanding(position.x, position.y);
+    return positions;
+  }
+
   cancelMainReelContinuousSpin(): void {
     this.assertReady();
     const reel = this.requireReel("main");
