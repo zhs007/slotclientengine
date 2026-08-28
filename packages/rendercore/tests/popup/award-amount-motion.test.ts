@@ -54,6 +54,71 @@ describe("award amount motion", () => {
     );
   });
 
+  it("scales the complete amount timeline without changing its shape", () => {
+    const manifest = popupFixture();
+    const input = { betAmountRaw: 100, winAmountRaw: 6000 };
+    const stages = createAwardCountStages(manifest, input);
+    const baseline = createAwardAmountMotionPlan(manifest, input, stages)!;
+    const scaled = createAwardAmountMotionPlan(manifest, input, stages, 0.8)!;
+
+    expect(scaled.finalTierId).toBe(baseline.finalTierId);
+    expect(scaled.terminalBrake).toMatchObject({
+      tierId: baseline.terminalBrake.tierId,
+      startAmountRaw: baseline.terminalBrake.startAmountRaw,
+      finalAmountRaw: baseline.terminalBrake.finalAmountRaw,
+    });
+    expect(scaled.terminalBrake.durationSeconds).toBeCloseTo(
+      baseline.terminalBrake.durationSeconds * 0.8,
+    );
+    for (const [index, stage] of scaled.stages.entries()) {
+      const original = baseline.stages[index]!;
+      expect(stage.fromAmountRaw).toBe(original.fromAmountRaw);
+      expect(stage.toAmountRaw).toBe(original.toAmountRaw);
+      expect(stage.configuredDurationSeconds).toBeCloseTo(
+        original.configuredDurationSeconds * 0.8,
+      );
+      expect(stage.effectiveCanonicalDurationSeconds).toBeCloseTo(
+        original.effectiveCanonicalDurationSeconds * 0.8,
+      );
+      expect(stage.startRateRawPerSecond).toBeCloseTo(
+        original.startRateRawPerSecond / 0.8,
+      );
+      expect(stage.endRateRawPerSecond).toBeCloseTo(
+        original.endRateRawPerSecond / 0.8,
+      );
+      expect(stage.accelerationRawPerSecondSquared).toBeCloseTo(
+        original.accelerationRawPerSecondSquared / 0.8 ** 2,
+      );
+      const sampleAmount =
+        original.fromAmountRaw +
+        Math.floor((original.toAmountRaw - original.fromAmountRaw) * 0.5);
+      const originalElapsed = awardAmountMotionElapsedForAmount(
+        original,
+        sampleAmount,
+      );
+      expect(
+        awardAmountMotionElapsedForAmount(stage, sampleAmount),
+      ).toBeCloseTo(originalElapsed * 0.8);
+      expect(
+        awardAmountMotionAmountAtElapsed(stage, originalElapsed * 0.8),
+      ).toBeCloseTo(
+        awardAmountMotionAmountAtElapsed(original, originalElapsed),
+      );
+    }
+    const brakeElapsed = baseline.terminalBrake.durationSeconds * 0.6;
+    expect(
+      awardAmountTerminalBrakeAmountAtElapsed(
+        scaled.terminalBrake,
+        brakeElapsed * 0.8,
+      ),
+    ).toBeCloseTo(
+      awardAmountTerminalBrakeAmountAtElapsed(
+        baseline.terminalBrake,
+        brakeElapsed,
+      ),
+    );
+  });
+
   it("accelerates before the single terminal braking tail", () => {
     const manifest = popupFixture();
     const input = { betAmountRaw: 100, winAmountRaw: 200 };
@@ -165,4 +230,20 @@ describe("award amount motion", () => {
       ),
     ).toThrow(/threshold exceeds/);
   });
+
+  it.each([0, -0.8, Number.NaN, Number.POSITIVE_INFINITY])(
+    "rejects invalid amount duration scale %s",
+    (scale) => {
+      const manifest = popupFixture();
+      const input = { betAmountRaw: 100, winAmountRaw: 6000 };
+      expect(() =>
+        createAwardAmountMotionPlan(
+          manifest,
+          input,
+          createAwardCountStages(manifest, input),
+          scale,
+        ),
+      ).toThrow(/amountDurationScale/);
+    },
+  );
 });

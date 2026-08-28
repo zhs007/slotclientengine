@@ -1824,19 +1824,42 @@ describe("scene layout package runtime", () => {
         y: 0.8,
       });
       expect(popup.container.zIndex).toBe(2000);
+      await expect(
+        runtime.playAwardCelebrationForCurrentMode({
+          betAmountRaw: 100,
+          winAmountRaw: 6000,
+        } as never),
+      ).rejects.toThrow(/formatMoney must be a function/);
+      await expect(
+        runtime.playAwardCelebrationForCurrentMode({
+          betAmountRaw: 100,
+          winAmountRaw: 6000,
+          formatMoney: String,
+          amountDurationScale: 0,
+        }),
+      ).rejects.toThrow(/amountDurationScale/);
+      const firstFormatMoney = vi.fn((amountRaw: number) => `$${amountRaw}`);
+      const secondFormatMoney = vi.fn((amountRaw: number) => `${amountRaw}`);
       const celebrationComplete = runtime.playAwardCelebrationForCurrentMode({
         betAmountRaw: 100,
         winAmountRaw: 6000,
+        formatMoney: firstFormatMoney,
+        amountDurationScale: 0.8,
       });
       expect(inspector.getActiveAwardCelebrationSnapshot()).toMatchObject({
         phase: "counting",
         finalAmountRaw: 6000,
+        formattedAmount: "$100",
       });
       expect(runtime.getActiveAwardCelebrationPhase()).toBe("counting");
       const queuedCelebration = runtime.playAwardCelebrationForCurrentMode({
         betAmountRaw: 100,
         winAmountRaw: 3000,
+        formatMoney: secondFormatMoney,
+        amountDurationScale: 2,
       });
+      expect(firstFormatMoney).toHaveBeenCalled();
+      expect(secondFormatMoney).not.toHaveBeenCalled();
       await expect(runtime.requestGameMode("FreeGame")).rejects.toThrow(
         /while an award celebration is active/,
       );
@@ -1872,6 +1895,11 @@ describe("scene layout package runtime", () => {
       runtime.update(10);
       await expect(celebrationComplete).resolves.toBeUndefined();
       expect(runtime.getActiveAwardCelebrationPhase()).toBe("counting");
+      expect(inspector.getActiveAwardCelebrationSnapshot()).toMatchObject({
+        displayedAmountRaw: 100,
+        formattedAmount: "100",
+      });
+      expect(secondFormatMoney).toHaveBeenCalled();
       runtime.dismissActiveAwardCelebrationImmediately();
       await expect(queuedCelebration).resolves.toBeUndefined();
       expect(popupPresentation.eventMode).toBe("none");

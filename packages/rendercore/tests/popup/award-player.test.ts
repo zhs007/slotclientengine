@@ -80,6 +80,7 @@ describe("award celebration player", () => {
         tier.layers.find(({ kind }) => kind === "vni") as { resource: string }
       ).resource = "bigwin";
     const configure = vi.fn();
+    const update = vi.fn();
     let vniCreations = 0;
     const player = createAwardCelebrationPlayer({
       resource: { ...legacy, manifest },
@@ -87,16 +88,24 @@ describe("award celebration player", () => {
         const runtime = fakeLayer(layer.kind === "vni");
         if (layer.kind !== "vni") return runtime;
         vniCreations += 1;
-        return { ...runtime, configure };
+        return {
+          ...runtime,
+          configure,
+          update(deltaSeconds: number) {
+            update(deltaSeconds);
+            runtime.update(deltaSeconds);
+          },
+        };
       },
     });
     await player.init();
     expect(vniCreations).toBe(1);
-    player.start({ betAmountRaw: 100, winAmountRaw: 5000 });
+    player.start({ betAmountRaw: 100, winAmountRaw: 6000 });
     player.requestAdvance();
-    player.update(3);
     player.requestAdvance();
-    player.update(3);
+    expect(player.getSnapshot().endingLayerCount).toBe(0);
+    player.update(0.1);
+    expect(update).toHaveBeenCalledTimes(1);
     player.requestAdvance();
     expect(configure).toHaveBeenCalledTimes(3);
     player.destroy();
@@ -427,6 +436,74 @@ describe("award celebration player", () => {
     player.destroy();
   });
 
+  it("scopes an amount formatter override to one playback", async () => {
+    const defaultFormat = vi.fn((amountRaw: number) => `default:${amountRaw}`);
+    const firstFormat = vi.fn((amountRaw: number) => `first:${amountRaw}`);
+    const player = createAwardCelebrationPlayer({
+      resource: fakeResource(),
+      formatAmount: defaultFormat,
+      layerFactory: ({ layer }) => fakeLayer(layer.kind === "vni"),
+    });
+    await player.init();
+
+    player.start(
+      { betAmountRaw: 100, winAmountRaw: 50 },
+      { formatAmount: firstFormat, amountDurationScale: 0.8 },
+    );
+    expect(player.getSnapshot().formattedAmount).toBe("first:50");
+    player.update(1);
+    expect(player.getSnapshot().phase).toBe("complete");
+
+    player.start({ betAmountRaw: 100, winAmountRaw: 50 });
+    expect(player.getSnapshot().formattedAmount).toBe("default:50");
+    expect(firstFormat).toHaveBeenCalledTimes(1);
+    expect(defaultFormat).toHaveBeenCalledWith(50);
+    player.destroy();
+  });
+
+  it("applies the amount duration scale without scaling tier animation updates", async () => {
+    const createPlayer = async (amountDurationScale: number) => {
+      const animatedUpdates: number[] = [];
+      const player = createAwardCelebrationPlayer({
+        resource: fakeResource(),
+        layerFactory: ({ layer }) => {
+          const runtime = fakeLayer(layer.kind === "vni");
+          return layer.kind === "vni"
+            ? {
+                ...runtime,
+                update(deltaSeconds: number) {
+                  animatedUpdates.push(deltaSeconds);
+                  runtime.update(deltaSeconds);
+                },
+              }
+            : runtime;
+        },
+      });
+      await player.init();
+      player.start(
+        { betAmountRaw: 100, winAmountRaw: 2000 },
+        { amountDurationScale },
+      );
+      player.requestAdvance();
+      return { player, animatedUpdates };
+    };
+    const baseline = await createPlayer(1);
+    const faster = await createPlayer(0.8);
+
+    baseline.player.update(0.5);
+    faster.player.update(0.4);
+
+    expect(faster.player.getSnapshot()).toMatchObject({
+      phase: baseline.player.getSnapshot().phase,
+      activeTierId: baseline.player.getSnapshot().activeTierId,
+      displayedAmountRaw: baseline.player.getSnapshot().displayedAmountRaw,
+    });
+    expect(baseline.animatedUpdates).toEqual([0.5]);
+    expect(faster.animatedUpdates).toEqual([0.4]);
+    baseline.player.destroy();
+    faster.player.destroy();
+  });
+
   it("does not reformat or recommit an unchanged amount on stable frames", async () => {
     const formatAmount = vi.fn((amountRaw: number) => String(amountRaw));
     const updateAmount = vi.fn();
@@ -679,6 +756,57 @@ describe("award celebration player", () => {
     player.destroy();
   });
 
+  it("hides an unfinished tier immediately when scaled counting crosses naturally", async () => {
+    const containers = new Map<string, Container>();
+    const ended: string[] = [];
+    const updates = new Map<string, number>();
+    const player = createAwardCelebrationPlayer({
+      resource: fakeResource(),
+      layerFactory: ({ layer, tierId }) => {
+        const runtime = fakeLayer(layer.kind === "vni");
+        if (layer.kind !== "vni") return runtime;
+        containers.set(tierId, runtime.container);
+        updates.set(tierId, 0);
+        return {
+          ...runtime,
+          update(deltaSeconds: number) {
+            updates.set(tierId, updates.get(tierId)! + deltaSeconds);
+            runtime.update(deltaSeconds);
+          },
+          isLoopReady: () => false,
+          requestEnd() {
+            ended.push(tierId);
+            runtime.requestEnd();
+          },
+          isEndComplete: () => false,
+        };
+      },
+    });
+    await player.init();
+    player.start(
+      { betAmountRaw: 100, winAmountRaw: 3500 },
+      { amountDurationScale: 0.1 },
+    );
+    player.requestAdvance();
+    expect(player.getSnapshot().activeTierId).toBe("bigwin");
+
+    player.update(0.2);
+
+    expect(player.getSnapshot().activeTierId).toBe("superwin");
+    const contentRoot = player.container.children[0] as Container;
+    const bigwinTier = contentRoot.children[2] as Container;
+    const superwinTier = contentRoot.children[3] as Container;
+    expect(containers.get("bigwin")!.parent).toBe(bigwinTier);
+    expect(containers.get("superwin")!.parent).toBe(superwinTier);
+    expect(bigwinTier.visible).toBe(false);
+    expect(superwinTier.visible).toBe(true);
+    expect(ended).toContain("bigwin");
+    const hiddenElapsed = updates.get("bigwin")!;
+    player.update(0.01);
+    expect(updates.get("bigwin")).toBeGreaterThan(hiddenElapsed);
+    player.destroy();
+  });
+
   it("keeps amount progression stable across frame slicing", async () => {
     const createPlayer = async () => {
       const player = createAwardCelebrationPlayer({
@@ -720,6 +848,30 @@ describe("award celebration player", () => {
     ).toThrow(/formatter must return a non-empty string/);
     player.destroy();
   });
+
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    "rejects invalid playback amount duration scale %s without leaking its formatter",
+    async (amountDurationScale) => {
+      const player = createAwardCelebrationPlayer({
+        resource: fakeResource(),
+        formatAmount: (amountRaw) => `default:${amountRaw}`,
+        layerFactory: ({ layer }) => fakeLayer(layer.kind === "vni"),
+      });
+      await player.init();
+      expect(() =>
+        player.start(
+          { betAmountRaw: 100, winAmountRaw: 200 },
+          {
+            amountDurationScale,
+            formatAmount: (amountRaw) => `invalid:${amountRaw}`,
+          },
+        ),
+      ).toThrow(/amountDurationScale/);
+      player.start({ betAmountRaw: 100, winAmountRaw: 50 });
+      expect(player.getSnapshot().formattedAmount).toBe("default:50");
+      player.destroy();
+    },
+  );
 });
 
 function fakeResource(): PopupPackageResource<AwardCelebrationPopupManifestV1> {

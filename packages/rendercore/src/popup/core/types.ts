@@ -8,6 +8,7 @@ import type { OfficialSpinePlayerResource } from "../../spine/runtime-player.js"
 import type { RenderObject } from "../../presentation/render-object.js";
 import type {
   AwardTierId,
+  PopupAmountFormatter,
   PopupManifest,
   PopupSegment,
   PopupSize,
@@ -68,6 +69,11 @@ export interface PopupPresentationSnapshot {
 export interface AwardCelebrationInput {
   readonly betAmountRaw: number;
   readonly winAmountRaw: number;
+}
+export interface AwardCelebrationPlaybackOptions {
+  readonly formatAmount?: PopupAmountFormatter | undefined;
+  /** Multiplies only the amount motion timeline; values below 1 play it faster. */
+  readonly amountDurationScale?: number | undefined;
 }
 export type AwardCelebrationPhase =
   | "idle"
@@ -130,7 +136,10 @@ export interface AwardCelebrationRuntime {
     placement?: PopupHostPlacement,
   ): PopupPresentationSnapshot;
   init(): Promise<void>;
-  start(input: AwardCelebrationInput): void;
+  start(
+    input: AwardCelebrationInput,
+    options?: AwardCelebrationPlaybackOptions,
+  ): void;
   update(deltaSeconds: number): void;
   /** Advances to the next non-final tier milestone or the final braking tail, without waiting for the active start segment. */
   requestAdvance(): void;

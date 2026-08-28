@@ -41,8 +41,10 @@ export function createAwardAmountMotionPlan(
   manifest: Extract<PopupManifest, { readonly type: "award-celebration" }>,
   input: AwardCelebrationInput,
   stages: readonly AwardCountStage[],
+  amountDurationScale = 1,
 ): AwardAmountMotionPlan | null {
   validateAwardAmountInput(input);
+  validateAwardAmountDurationScale(amountDurationScale);
   if (input.winAmountRaw <= input.betAmountRaw) return null;
 
   const countStages = stages.filter(
@@ -186,11 +188,12 @@ export function createAwardAmountMotionPlan(
     durationSeconds,
   });
 
-  return Object.freeze({
+  const plan = Object.freeze({
     stages: Object.freeze(motionStages),
     terminalBrake,
     finalTierId: stages.at(-1)!.tierId,
   });
+  return scaleAwardAmountMotionPlan(plan, amountDurationScale);
 }
 
 export function awardAmountMotionElapsedForAmount(
@@ -288,6 +291,56 @@ export function validateAwardAmountInput(input: AwardCelebrationInput): void {
     throw new Error("betAmountRaw must be a positive safe integer.");
   if (!Number.isSafeInteger(input.winAmountRaw) || input.winAmountRaw < 0)
     throw new Error("winAmountRaw must be a non-negative safe integer.");
+}
+
+export function validateAwardAmountDurationScale(scale: number): void {
+  if (!Number.isFinite(scale) || scale <= 0)
+    throw new Error(
+      "award amountDurationScale must be finite and greater than zero.",
+    );
+}
+
+function scaleAwardAmountMotionPlan(
+  plan: AwardAmountMotionPlan,
+  scale: number,
+): AwardAmountMotionPlan {
+  if (scale === 1) return plan;
+  const stages = plan.stages.map((stage) => {
+    const scaled = {
+      ...stage,
+      configuredDurationSeconds: stage.configuredDurationSeconds * scale,
+      effectiveCanonicalDurationSeconds:
+        stage.effectiveCanonicalDurationSeconds * scale,
+      startRateRawPerSecond: stage.startRateRawPerSecond / scale,
+      endRateRawPerSecond: stage.endRateRawPerSecond / scale,
+      accelerationRawPerSecondSquared:
+        stage.accelerationRawPerSecondSquared / (scale * scale),
+    };
+    if (
+      !Number.isFinite(scaled.configuredDurationSeconds) ||
+      !Number.isFinite(scaled.effectiveCanonicalDurationSeconds) ||
+      !Number.isFinite(scaled.startRateRawPerSecond) ||
+      !Number.isFinite(scaled.endRateRawPerSecond) ||
+      !Number.isFinite(scaled.accelerationRawPerSecondSquared)
+    )
+      throw new Error(
+        `award amountDurationScale produces a non-finite ${stage.tierId} motion.`,
+      );
+    return freezeMotionStage(scaled);
+  });
+  const terminalBrake = Object.freeze({
+    ...plan.terminalBrake,
+    durationSeconds: plan.terminalBrake.durationSeconds * scale,
+  });
+  if (!Number.isFinite(terminalBrake.durationSeconds))
+    throw new Error(
+      "award amountDurationScale produces a non-finite terminal brake.",
+    );
+  return Object.freeze({
+    stages: Object.freeze(stages),
+    terminalBrake,
+    finalTierId: plan.finalTierId,
+  });
 }
 
 function freezeMotionStage(

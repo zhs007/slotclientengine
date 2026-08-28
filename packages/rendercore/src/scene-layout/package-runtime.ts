@@ -26,6 +26,7 @@ import {
   handledPopupInteraction,
   unhandledPopupInteraction,
   type AwardCelebrationRuntime,
+  type AwardCelebrationPlaybackOptions,
   type PopupBackdropController,
   type PopupInteractionDispatchResult,
   type PopupRuntimeStateObserver,
@@ -101,6 +102,7 @@ import type {
   SceneLayoutGameModeTransition,
   SceneLayoutGameModePrepareOptions,
   SceneLayoutGameModeRequestOptions,
+  SceneLayoutAwardCelebrationPlayInput,
   SceneLayoutGameModeSnapshot,
   SceneLayoutInitialReelScene,
   SceneLayoutGridCellSpinPlanStage,
@@ -2698,10 +2700,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.enqueueAwardCelebration(mode.awardCelebrationPopup, input, null);
   }
 
-  playAwardCelebrationForCurrentMode(input: {
-    readonly betAmountRaw: number;
-    readonly winAmountRaw: number;
-  }): Promise<void> {
+  playAwardCelebrationForCurrentMode(
+    input: SceneLayoutAwardCelebrationPlayInput,
+  ): Promise<void> {
     try {
       this.assertReady();
       const modes = this.requireGameModes();
@@ -2710,6 +2711,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           "Cannot start an award celebration during a game mode transition.",
         );
       this.assertAwardCelebrationInput(input);
+      this.assertAwardCelebrationPlaybackInput(input);
       const mode = modes.modes.find(
         (candidate) => candidate.id === this.#stableMode,
       )!;
@@ -2720,8 +2722,15 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       const completion = createPopupSessionDeferred();
       this.enqueueAwardCelebration(
         mode.awardCelebrationPopup,
-        input,
+        Object.freeze({
+          betAmountRaw: input.betAmountRaw,
+          winAmountRaw: input.winAmountRaw,
+        }),
         completion,
+        Object.freeze({
+          formatAmount: input.formatMoney,
+          amountDurationScale: input.amountDurationScale,
+        }),
       );
       return completion.promise;
     } catch (error) {
@@ -5344,6 +5353,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     popupId: string,
     input: { readonly betAmountRaw: number; readonly winAmountRaw: number },
     completion: PopupSessionDeferred | null,
+    playbackOptions?: AwardCelebrationPlaybackOptions,
   ): void {
     let scheduling = true;
     let synchronousFailure: SceneLayoutError | null = null;
@@ -5352,7 +5362,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       start: () => {
         const popup = this.getAwardCelebrationPopup(popupId);
         try {
-          popup.start(input);
+          popup.start(input, playbackOptions);
         } catch (error) {
           popup.dismissImmediately();
           throw asSceneLayoutError(error);
@@ -5394,6 +5404,21 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     if (!Number.isSafeInteger(input.winAmountRaw) || input.winAmountRaw < 0)
       throw new SceneLayoutError(
         "winAmountRaw must be a non-negative safe integer.",
+      );
+  }
+
+  private assertAwardCelebrationPlaybackInput(
+    input: SceneLayoutAwardCelebrationPlayInput,
+  ): void {
+    if (typeof input.formatMoney !== "function")
+      throw new SceneLayoutError("formatMoney must be a function.");
+    if (
+      input.amountDurationScale !== undefined &&
+      (!Number.isFinite(input.amountDurationScale) ||
+        input.amountDurationScale <= 0)
+    )
+      throw new SceneLayoutError(
+        "amountDurationScale must be finite and greater than zero.",
       );
   }
 
