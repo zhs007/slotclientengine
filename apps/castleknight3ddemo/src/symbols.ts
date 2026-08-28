@@ -264,6 +264,7 @@ function createModels(
   swordModel: Group,
   chestModel: Group,
   spellbookModel: Group,
+  purplePotionModel: Group,
 ): ReadonlyMap<SymbolType, Group> {
   const reconstructedMaterials = {
     wood: palette.wood,
@@ -281,11 +282,12 @@ function createModels(
   const chest = chestModel.clone(true);
   chest.scale.setScalar(1.15);
   const spellbook = spellbookModel.clone(true);
+  const purplePotion = purplePotionModel.clone(true);
   return new Map<SymbolType, Group>([
     ["chest", chest],
     ["helmet", createHelmet(palette)],
     ["shield", createShield(palette)],
-    ["purplePotion", createPotion(palette, palette.purple, "purple-potion")],
+    ["purplePotion", purplePotion],
     ["greenPotion", createPotion(palette, palette.green, "green-potion")],
     ["gem", createGem(palette)],
     ["sword", sword],
@@ -449,6 +451,7 @@ export class SymbolField extends Group {
     swordModel: Group,
     chestModel: Group,
     spellbookModel: Group,
+    purplePotionModel: Group,
   ) {
     super();
     this.#palette = createPalette(textures);
@@ -458,6 +461,7 @@ export class SymbolField extends Group {
       swordModel,
       chestModel,
       spellbookModel,
+      purplePotionModel,
     );
     this.name = "animated-castle-symbols";
     this.#populate(placements);

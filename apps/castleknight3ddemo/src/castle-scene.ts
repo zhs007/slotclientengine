@@ -157,6 +157,7 @@ export class CastleKnightRenderer {
     chandelierModel: Group,
     chestModel: Group,
     spellbookModel: Group,
+    purplePotionModel: Group,
   ) {
     this.#renderer = new WebGLRenderer({
       antialias: true,
@@ -204,6 +205,7 @@ export class CastleKnightRenderer {
       swordModel,
       chestModel,
       spellbookModel,
+      purplePotionModel,
     );
     this.#root.add(this.#symbols);
 
