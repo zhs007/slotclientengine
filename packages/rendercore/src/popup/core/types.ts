@@ -132,7 +132,7 @@ export interface AwardCelebrationRuntime {
   init(): Promise<void>;
   start(input: AwardCelebrationInput): void;
   update(deltaSeconds: number): void;
-  /** Advances to the next reachable amount/tier milestone; reaching the final amount starts graceful dismissal. */
+  /** Advances to the next non-final tier milestone or the final braking tail, without waiting for the active start segment. */
   requestAdvance(): void;
   /** Commits the final amount and starts the graceful end lifecycle. */
   requestDismiss(): void;

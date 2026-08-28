@@ -3,6 +3,11 @@ import type {
   AwardTierId,
   PopupManifest,
 } from "./types.js";
+import {
+  awardThresholdRaw,
+  compareAwardThreshold,
+  validateAwardAmountInput,
+} from "./award-amount-motion.js";
 
 export interface AwardCountStage {
   readonly tierId: AwardTierId;
@@ -86,21 +91,13 @@ export function compareThreshold(
   betRaw: number,
   multiplier: number,
 ): -1 | 0 | 1 {
-  const left = BigInt(winRaw);
-  const right = BigInt(betRaw) * BigInt(multiplier);
-  return left < right ? -1 : left > right ? 1 : 0;
+  return compareAwardThreshold(winRaw, betRaw, multiplier);
 }
 
 export function validateAwardInput(input: AwardCelebrationInput): void {
-  if (!Number.isSafeInteger(input.betAmountRaw) || input.betAmountRaw <= 0)
-    throw new Error("betAmountRaw must be a positive safe integer.");
-  if (!Number.isSafeInteger(input.winAmountRaw) || input.winAmountRaw < 0)
-    throw new Error("winAmountRaw must be a non-negative safe integer.");
+  validateAwardAmountInput(input);
 }
 
 function thresholdRaw(betRaw: number, multiplier: number): bigint {
-  const value = BigInt(betRaw) * BigInt(multiplier);
-  if (value > BigInt(Number.MAX_SAFE_INTEGER))
-    throw new Error("reached popup threshold exceeds safe integer range.");
-  return value;
+  return BigInt(awardThresholdRaw(betRaw, multiplier));
 }

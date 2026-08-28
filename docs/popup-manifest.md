@@ -88,7 +88,9 @@ v1–v5 award 升级时以 layer 所在 tier 为状态权威并移除 layer visi
 
 award 的分段 VNI 收到最终关闭请求时立即从 exact `loopEndTime` 启动非循环 end range，不等待当前 loop 完成；end 和粒子 drain 完成后 Popup 隐藏并进入 complete。tier 切换则立即隐藏 outgoing tier，避免旧 bigwin 在新档背后继续显示。普通 Spine Popup 的三阶段点击边界不受此规则影响。
 
-award 的玩家 advance 同时推进金额和画面档位。bigwin 以前点击时，未达到 bigwin 的获奖直接进入最后实际可达的 base/standard 档并提交最终金额；达到 bigwin 及以上则把共享 `win-amount` 与 active tier 同步跳到 bigwin 阈值。进入 bigwin 后每次点击只跳到下一个实际可达的 superwin/megawin 阈值；没有下一档时提交最终金额。自动播放仍按每档 `countDurationSeconds` 连续计数。
+award 不执行 base 金额滚动：最终获奖小于等于 bet 时直接显示 final 并进入 end；最终获奖大于 bet 时直接进入 standard，并从 exact bet 开始计数。每档 `countDurationSeconds` 标定该档完整 canonical threshold span 的 nominal rate，例如 standard 恒以 `bet → bigwin threshold` 的完整跨度计算；只到 2 倍 bet 时沿用这条完整曲线的前段，不把 `bet → 2bet` 拉满 standard duration。Core 在每次 start 时只预计算常量数量的连续曲线 descriptor，使非最终阶段内与跨档速度持续增加；megawin 没有下一 threshold，使用最近封闭 celebration span 作为 nominal 标定单位。
+
+award 的玩家 advance 同时推进金额和画面档位。final 以前每次点击把共享 `win-amount` 与 active tier 同步跳到下一个实际可达的 bigwin/superwin/megawin threshold。没有非最终里程碑时，点击进入预计算的 final braking tail；自然播放也使用同一尾段，只有这里减速并展示最后数字变化。庆祝档仍处于 `start` segment 时 advance 也立即生效，不等待 start/loop 边界或第二次点击。
 
 最终金额提交后立即进入 `dismissing`，最后 active tier 直接播放 end，并在动画与粒子 drain 完成后隐藏 Popup、进入 `complete`，不需要玩家或宿主再发一次关闭输入。`requestDismiss()` 会先提交最终金额再执行同一正式 end/drain；`dismissImmediately()` 仍用于失败或 destroy 的同步清理。
 
@@ -280,9 +282,9 @@ const player = createAwardCelebrationRuntime({ resource });
 await player.init();
 player.start({ betAmountRaw: 100, winAmountRaw: 6000 });
 player.update(deltaSeconds);
-// 玩家点击：金额与 big/super/mega 画面同步跳到下一个可达里程碑。
+// 玩家点击：同步跳到下一个非最终里程碑，或进入 final 减速尾段。
 player.requestAdvance();
-// 最终档继续 loop；下一次 spin 前由宿主清理。
+// 需要宿主立刻清理时使用 immediate；自然播放会在 final 后自动 end/complete。
 player.dismissImmediately();
 
 player.getTextNode("congratulations").setText("恭喜获奖！");

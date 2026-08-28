@@ -1850,6 +1850,12 @@ describe("scene layout package runtime", () => {
       runtime.requestAdvanceAwardCelebration();
       runtime.requestAdvanceAwardCelebration();
       expect(inspector.getActiveAwardCelebrationSnapshot()).toMatchObject({
+        phase: "counting",
+        activeTierId: "megawin",
+        displayedAmountRaw: 5840,
+      });
+      runtime.update(1);
+      expect(inspector.getActiveAwardCelebrationSnapshot()).toMatchObject({
         phase: "dismissing",
         activeTierId: "megawin",
         activeSegment: "end",

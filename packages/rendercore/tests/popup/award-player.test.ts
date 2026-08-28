@@ -29,7 +29,7 @@ describe("award celebration player", () => {
     expect(transitions).toEqual(
       expect.arrayContaining([
         { kind: "phase", previous: "idle", current: "counting" },
-        expect.objectContaining({ kind: "tier", current: "base" }),
+        expect.objectContaining({ kind: "tier", current: "standard" }),
       ]),
     );
     runtime.destroy();
@@ -202,8 +202,8 @@ describe("award celebration player", () => {
     player.start({ betAmountRaw: 100, winAmountRaw: 5000 });
     expect(player.getSnapshot()).toMatchObject({
       phase: "counting",
-      activeTierId: "base",
-      displayedAmountRaw: 0,
+      activeTierId: "standard",
+      displayedAmountRaw: 100,
     });
     player.requestAdvance();
     expect(player.getSnapshot()).toMatchObject({
@@ -232,6 +232,13 @@ describe("award celebration player", () => {
     player.requestAdvance();
     expect(player.getSnapshot()).toMatchObject({
       phase: "counting",
+      activeTierId: "superwin",
+      displayedAmountRaw: 4840,
+      formattedAmount: "$48.40",
+    });
+    player.update(1);
+    expect(player.getSnapshot()).toMatchObject({
+      phase: "dismissing",
       activeTierId: "megawin",
       displayedAmountRaw: 5000,
       formattedAmount: "$50.00",
@@ -242,14 +249,7 @@ describe("award celebration player", () => {
       layerContainers.get("megawin:vni"),
     ]);
     expect(amountRebinds).toBe(4);
-    player.requestAdvance();
-    expect(player.getSnapshot()).toMatchObject({
-      phase: "dismissing",
-      activeTierId: "megawin",
-      activeSegment: "end",
-      displayedAmountRaw: 5000,
-      formattedAmount: "$50.00",
-    });
+    expect(player.getSnapshot().activeSegment).toBe("end");
     player.update(0.2);
     player.requestAdvance();
     expect(player.getSnapshot().phase).toBe("complete");
@@ -299,7 +299,7 @@ describe("award celebration player", () => {
     player.destroy();
   });
 
-  it("jumps from a celebration tier to final when no next tier is reachable", async () => {
+  it("jumps from a celebration tier into the final braking tail", async () => {
     const player = createAwardCelebrationPlayer({
       resource: fakeResource(),
       layerFactory: ({ layer }) => fakeLayer(layer.kind === "vni"),
@@ -315,6 +315,13 @@ describe("award celebration player", () => {
 
     player.requestAdvance();
 
+    expect(player.getSnapshot()).toMatchObject({
+      phase: "counting",
+      activeTierId: "bigwin",
+      displayedAmountRaw: 1880,
+      formattedAmount: "$18.80",
+    });
+    player.update(1);
     expect(player.getSnapshot()).toMatchObject({
       phase: "dismissing",
       activeTierId: "bigwin",
@@ -339,9 +346,12 @@ describe("award celebration player", () => {
     expect(() => player.start({ betAmountRaw: 100, winAmountRaw: 1 })).toThrow(
       /already playing/,
     );
-    player.update(2);
-    expect(player.getSnapshot().activeTierId).toBe("standard");
-    player.update(2);
+    expect(player.getSnapshot()).toMatchObject({
+      phase: "counting",
+      activeTierId: "standard",
+      displayedAmountRaw: 100,
+    });
+    player.update(0);
     expect(player.getSnapshot()).toMatchObject({
       phase: "dismissing",
       displayedAmountRaw: 101,
@@ -583,16 +593,115 @@ describe("award celebration player", () => {
     player.update(0.2);
     expect(player.getSnapshot()).toMatchObject({
       phase: "counting",
+      activeTierId: "standard",
+    });
+    player.update(3);
+    expect(player.getSnapshot()).toMatchObject({
+      phase: "dismissing",
       activeTierId: "bigwin",
     });
     expect(bigwinContainer.visible).toBe(true);
-    player.update(3);
-    expect(player.getSnapshot().phase).toBe("dismissing");
-    expect(bigwinContainer.visible).toBe(true);
-    player.update(0);
+    player.update(0.1);
     expect(player.getSnapshot().phase).toBe("complete");
     expect(bigwinContainer.visible).toBe(false);
     player.destroy();
+  });
+
+  it.each([
+    [50, "$0.50"],
+    [100, "$1.00"],
+  ])(
+    "skips base counting and commits win=%s only once",
+    async (winAmountRaw, formattedAmount) => {
+      const amountWrites: string[] = [];
+      const player = createAwardCelebrationPlayer({
+        resource: fakeResource(),
+        layerFactory: ({ layer }) => {
+          const runtime = fakeLayer(layer.kind === "vni");
+          return layer.kind === "image-string"
+            ? {
+                ...runtime,
+                updateAmount(text: string) {
+                  amountWrites.push(text);
+                },
+              }
+            : runtime;
+        },
+      });
+      await player.init();
+      amountWrites.length = 0;
+
+      player.start({ betAmountRaw: 100, winAmountRaw });
+
+      expect(player.getSnapshot()).toMatchObject({
+        phase: "dismissing",
+        activeTierId: "base",
+        displayedAmountRaw: winAmountRaw,
+        formattedAmount,
+      });
+      expect(amountWrites).toEqual([formattedAmount]);
+      player.destroy();
+    },
+  );
+
+  it("advances out of a celebration start segment on the first click", async () => {
+    const ended: string[] = [];
+    const player = createAwardCelebrationPlayer({
+      resource: fakeResource(),
+      layerFactory: ({ layer, tierId }) => {
+        const runtime = fakeLayer(layer.kind === "vni");
+        if (layer.kind !== "vni") return runtime;
+        return {
+          ...runtime,
+          isLoopReady: () => false,
+          requestEnd() {
+            ended.push(tierId);
+            runtime.requestEnd();
+          },
+        };
+      },
+    });
+    await player.init();
+    player.start({ betAmountRaw: 100, winAmountRaw: 6000 });
+    player.requestAdvance();
+    expect(player.getSnapshot()).toMatchObject({
+      activeTierId: "bigwin",
+      activeSegment: "start",
+    });
+
+    player.requestAdvance();
+
+    expect(player.getSnapshot()).toMatchObject({
+      activeTierId: "superwin",
+      displayedAmountRaw: 3000,
+    });
+    expect(ended).toContain("bigwin");
+    player.destroy();
+  });
+
+  it("keeps amount progression stable across frame slicing", async () => {
+    const createPlayer = async () => {
+      const player = createAwardCelebrationPlayer({
+        resource: fakeResource(),
+        layerFactory: ({ layer }) => fakeLayer(layer.kind === "vni"),
+      });
+      await player.init();
+      player.start({ betAmountRaw: 100, winAmountRaw: 2000 });
+      return player;
+    };
+    const whole = await createPlayer();
+    const sliced = await createPlayer();
+
+    whole.update(3.2);
+    for (let index = 0; index < 32; index += 1) sliced.update(0.1);
+
+    expect(whole.getSnapshot()).toMatchObject({
+      phase: sliced.getSnapshot().phase,
+      activeTierId: sliced.getSnapshot().activeTierId,
+      displayedAmountRaw: sliced.getSnapshot().displayedAmountRaw,
+    });
+    whole.destroy();
+    sliced.destroy();
   });
 
   it.each([

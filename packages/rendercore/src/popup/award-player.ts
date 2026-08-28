@@ -9,6 +9,15 @@ import {
   createAwardCountStages,
   type AwardCountStage,
 } from "./award-sequence.js";
+import {
+  awardAmountMotionAmountAtElapsed,
+  awardAmountMotionElapsedForAmount,
+  awardAmountTerminalBrakeAmountAtElapsed,
+  awardAmountTerminalBrakeElapsedForAmount,
+  createAwardAmountMotionPlan,
+  type AwardAmountMotionPlan,
+  type AwardAmountMotionStage,
+} from "./award-amount-motion.js";
 import { formatPopupAmount } from "./amount-format.js";
 import { createPopupStringNodeRegistry } from "./string-node-registry.js";
 import { createPopupStyledText } from "./styled-text.js";
@@ -157,6 +166,8 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
   #destroyed = false;
   #phase: AwardCelebrationSnapshot["phase"] = "idle";
   #stages: readonly AwardCountStage[] = [];
+  #motionPlan: AwardAmountMotionPlan | null = null;
+  #motionMode: "stage" | "braking" | null = null;
   #stageIndex = -1;
   #elapsed = 0;
   #displayed = 0;
@@ -241,17 +252,30 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     this.clearPlayback();
     this.#presentation.setActive(true);
     this.#final = input.winAmountRaw;
-    this.#displayed = 0;
-    this.#lastAutomaticAmount = 0;
-    this.#lastFormattedAmount = this.formatAmount(0);
-    this.#nodes.setAutomaticText("win-amount", this.#lastFormattedAmount);
     this.#stages = createAwardCountStages(this.#resource.manifest, input);
     if (!this.#stages.length) {
+      this.#displayed = 0;
+      this.updateAmount();
       this.setPhase("complete");
       this.#presentation.setActive(false);
       return;
     }
-    this.startNextStage();
+    this.#motionPlan = createAwardAmountMotionPlan(
+      this.#resource.manifest,
+      input,
+      this.#stages,
+    );
+    if (!this.#motionPlan) {
+      this.startStage(0, this.#final);
+      this.beginDismissing();
+      return;
+    }
+    const standardIndex = this.#stages.findIndex(
+      (stage) => stage.tierId === "standard",
+    );
+    if (standardIndex < 0)
+      throw new Error("award amount motion is missing its standard stage.");
+    this.startStage(standardIndex, input.betAmountRaw);
   }
   update(deltaSeconds: number): void {
     this.assertReady();
@@ -268,42 +292,25 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
       return;
     }
     if (this.#phase !== "counting" || !this.#active) return;
-    const stage = this.#stages[this.#stageIndex]!;
-    this.#elapsed = Math.min(
-      stage.durationSeconds,
-      this.#elapsed + deltaSeconds,
-    );
-    const progress =
-      stage.durationSeconds === 0 ? 1 : this.#elapsed / stage.durationSeconds;
-    this.#displayed =
-      stage.fromAmountRaw +
-      Math.floor((stage.toAmountRaw - stage.fromAmountRaw) * progress);
-    this.updateAmount();
-    if (progress >= 1) this.finishStage();
+    this.updateAmountMotion(deltaSeconds);
   }
   requestAdvance(): void {
     this.assertReady();
     if (!this.isPlaying()) return;
     if (this.#phase !== "counting") return;
-    const current = this.#stages[this.#stageIndex]!;
+    if (this.#motionMode === "braking") return;
     const nextCelebration = this.#stages.findIndex(
       (stage, index) =>
         index > this.#stageIndex &&
-        !["base", "standard"].includes(stage.tierId),
+        !["base", "standard"].includes(stage.tierId) &&
+        stage.fromAmountRaw < this.#final,
     );
-    if (["base", "standard"].includes(current.tierId)) {
-      if (nextCelebration >= 0) {
-        this.startStage(
-          nextCelebration,
-          this.#stages[nextCelebration]!.fromAmountRaw,
-        );
-      } else this.finishAtFinalAmount();
-      return;
-    }
-    if (this.#stageIndex + 1 < this.#stages.length) {
-      const nextIndex = this.#stageIndex + 1;
-      this.startStage(nextIndex, this.#stages[nextIndex]!.fromAmountRaw);
-    } else this.finishAtFinalAmount();
+    if (nextCelebration >= 0)
+      this.startStage(
+        nextCelebration,
+        this.#stages[nextCelebration]!.fromAmountRaw,
+      );
+    else this.beginTerminalBraking();
   }
   requestDismiss(): void {
     this.assertReady();
@@ -567,6 +574,7 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
   private startStage(stageIndex: number, displayedAmountRaw: number) {
     const stage = this.#stages[stageIndex]!;
     this.#elapsed = 0;
+    this.#motionMode = "stage";
     this.#displayed = displayedAmountRaw;
     this.updateAmount();
     this.#stageIndex = stageIndex;
@@ -604,13 +612,93 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     }
     this.beginDismissing();
   }
-  private finishStage() {
-    if (this.#stageIndex + 1 < this.#stages.length) this.transitionToNext();
-    else this.finishAtFinalAmount();
-  }
   private transitionToNext() {
     this.setActiveTier(null);
     this.startNextStage();
+  }
+  private updateAmountMotion(deltaSeconds: number) {
+    if (!this.#motionPlan || !this.#motionMode)
+      throw new Error("award amount motion is unavailable while counting.");
+    let remaining = deltaSeconds;
+    const maxTransitions = this.#stages.length + 2;
+    for (let transition = 0; transition < maxTransitions; transition += 1) {
+      if (this.#phase !== "counting") return;
+      if (this.#motionMode === "braking") {
+        const brake = this.#motionPlan.terminalBrake;
+        const available = Math.max(0, brake.durationSeconds - this.#elapsed);
+        const consumed = Math.min(remaining, available);
+        this.#elapsed += consumed;
+        remaining -= consumed;
+        this.#displayed = Math.floor(
+          awardAmountTerminalBrakeAmountAtElapsed(brake, this.#elapsed),
+        );
+        this.updateAmount();
+        if (this.#elapsed < brake.durationSeconds) return;
+        this.finishAtFinalAmount();
+        return;
+      }
+
+      const stage = this.currentMotionStage();
+      const brake = this.#motionPlan.terminalBrake;
+      const targetAmountRaw =
+        stage.tierId === brake.tierId
+          ? brake.startAmountRaw
+          : stage.toAmountRaw;
+      const targetElapsed = awardAmountMotionElapsedForAmount(
+        stage,
+        targetAmountRaw,
+      );
+      const available = Math.max(0, targetElapsed - this.#elapsed);
+      const consumed = Math.min(remaining, available);
+      this.#elapsed += consumed;
+      remaining -= consumed;
+      this.#displayed = Math.floor(
+        awardAmountMotionAmountAtElapsed(stage, this.#elapsed, targetAmountRaw),
+      );
+      this.updateAmount();
+      if (this.#elapsed < targetElapsed) return;
+      this.#displayed = targetAmountRaw;
+      this.updateAmount();
+      if (stage.tierId === brake.tierId) {
+        this.#motionMode = "braking";
+        this.#elapsed = 0;
+      } else {
+        this.transitionToNext();
+      }
+    }
+    throw new Error("award amount motion exceeded its transition bound.");
+  }
+  private beginTerminalBraking() {
+    if (!this.#motionPlan)
+      throw new Error("award amount terminal braking is unavailable.");
+    const brake = this.#motionPlan.terminalBrake;
+    const brakingStageIndex = this.#stages.findIndex(
+      (stage) => stage.tierId === brake.tierId,
+    );
+    if (brakingStageIndex < 0)
+      throw new Error("award amount terminal braking tier is unavailable.");
+    const brakingAmount = Math.max(this.#displayed, brake.startAmountRaw);
+    if (this.#stageIndex !== brakingStageIndex)
+      this.startStage(brakingStageIndex, brakingAmount);
+    else {
+      this.#displayed = brakingAmount;
+      this.updateAmount();
+    }
+    this.#motionMode = "braking";
+    this.#elapsed = awardAmountTerminalBrakeElapsedForAmount(
+      brake,
+      brakingAmount,
+    );
+    if (this.#elapsed >= brake.durationSeconds) this.finishAtFinalAmount();
+  }
+  private currentMotionStage(): AwardAmountMotionStage {
+    const tierId = this.#stages[this.#stageIndex]?.tierId;
+    const stage = this.#motionPlan?.stages.find(
+      (candidate) => candidate.tierId === tierId,
+    );
+    if (!stage)
+      throw new Error(`award amount motion stage is unavailable: ${tierId}.`);
+    return stage;
   }
   private updateTier(tier: TierRuntime, delta: number) {
     for (const layer of tier.layers) layer.update(delta);
@@ -639,7 +727,6 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     this.#lastAutomaticAmount = amount;
     this.#lastFormattedAmount = this.formatAmount(amount);
     this.#nodes.setAutomaticText("win-amount", this.#lastFormattedAmount);
-    this.#amount?.updateAmount(this.amountText());
   }
   private amountText() {
     return this.#nodes.getImageStringNode("win-amount").text;
@@ -683,6 +770,8 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     this.#showing.clear();
     this.#ending = [];
     this.#stages = [];
+    this.#motionPlan = null;
+    this.#motionMode = null;
     this.#stageIndex = -1;
     this.#lastAutomaticAmount = null;
     this.#lastFormattedAmount = "";
